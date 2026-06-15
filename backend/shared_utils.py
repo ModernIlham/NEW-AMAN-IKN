@@ -310,14 +310,16 @@ def compute_changes(old_doc: dict, new_data: dict) -> list:
         new_list = new_data.get(field, []) or []
         old_count = len(old_list) if isinstance(old_list, list) else 0
         new_count = len(new_list) if isinstance(new_list, list) else 0
-        if old_count != new_count:
-            if field == "photos":
+        if field == "photos":
+            if old_count != new_count:
                 changes.append({"field": "photos", "from": f"{old_count} foto", "to": f"{new_count} foto"})
-            elif field == "document_checklist":
-                old_checked = sum(1 for d in old_list if isinstance(d, dict) and d.get("checked", False))
-                new_checked = sum(1 for d in new_list if isinstance(d, dict) and d.get("checked", False))
-                if old_checked != new_checked:
-                    changes.append({"field": "document_checklist", "from": f"{old_checked} dok selesai", "to": f"{new_checked} dok selesai"})
+        elif field == "document_checklist":
+            # Track completion changes (checking/unchecking a document) even when
+            # the number of checklist items is unchanged.
+            old_checked = sum(1 for d in old_list if isinstance(d, dict) and d.get("checked", False))
+            new_checked = sum(1 for d in new_list if isinstance(d, dict) and d.get("checked", False))
+            if old_checked != new_checked:
+                changes.append({"field": "document_checklist", "from": f"{old_checked} dok selesai", "to": f"{new_checked} dok selesai"})
     return changes
 
 # --- Thumbnail Generation ---
