@@ -1,0 +1,641 @@
+import React, { memo, useState, useCallback, useRef, useMemo, useEffect } from "react";
+import {
+  X, Loader2, CheckSquare, Tag, MapPin, Wrench, ClipboardList,
+  Sticker, Building2, Camera, FileCheck, Receipt,
+  Calendar, DollarSign, Navigation, Package, Truck,
+  LocateFixed, Search, FileUp, FileText, Check, ChevronDown,
+  Eraser, Trash2,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { compressImageFile } from "../../lib/imageCompression";
+import { compressPdfFile } from "../../lib/pdfCompression";
+import { toast } from "sonner";
+import { DEFAULT_DOC_ITEMS } from "./DocumentChecklist";
+
+const STIKER_STATUSES = ["Belum Terpasang", "Sudah Terpasang"];
+const STIKER_SIZES = ["Kecil", "Sedang", "Besar"];
+const CONDITIONS = ["Baik", "Rusak Ringan", "Rusak Berat"];
+const INVENTORY_STATUSES = ["Belum Diinventarisasi", "Ditemukan", "Tidak Ditemukan", "Berlebih", "Sengketa"];
+
+/** Searchable category dropdown for batch edit */
+function BatchCategorySelect({ categories, value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (open) setTimeout(() => inputRef.current?.focus(), 100);
+  }, [open]);
+
+  const filtered = useMemo(() => {
+    const cats = Array.isArray(categories) ? categories : [];
+    if (!q.trim()) return cats.slice(0, 150);
+    const s = q.toLowerCase();
+    return cats.filter(c => (c.label || '').toLowerCase().includes(s) || (c.kode_aset || '').toLowerCase().includes(s)).slice(0, 150);
+  }, [categories, q]);
+
+  const isClear = value === "__clear__";
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button type="button" className={`flex items-center justify-between w-full h-7 px-2 text-xs border rounded-md hover:bg-accent ${isClear ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700 text-red-600 dark:text-red-400' : 'bg-background'}`} data-testid="batch-category-select">
+          <span className="truncate">{isClear ? "— Kosongkan —" : value && value !== "__none__" ? value : "— Tidak diubah —"}</span>
+          <ChevronDown className="w-3 h-3 flex-shrink-0 ml-1 text-muted-foreground" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[260px] p-0" align="start">
+        <div className="p-2 border-b">
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+            <Input ref={inputRef} placeholder="Cari kategori..." value={q} onChange={e => setQ(e.target.value)} className="pl-7 h-7 text-xs" />
+          </div>
+        </div>
+        <ScrollArea className="h-[200px]">
+          <div className="p-1">
+            <button onClick={() => { onChange("__none__"); setOpen(false); setQ(""); }} className={`w-full flex items-center gap-1.5 px-2 py-1 text-xs rounded hover:bg-muted ${!value || value === "__none__" ? "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300" : ""}`}>
+              <Check className={`w-3 h-3 ${!value || value === "__none__" ? "opacity-100" : "opacity-0"}`} />— Tidak diubah —
+            </button>
+            <button onClick={() => { onChange("__clear__"); setOpen(false); setQ(""); }} className={`w-full flex items-center gap-1.5 px-2 py-1 text-xs rounded hover:bg-red-50 dark:hover:bg-red-900/30 ${isClear ? "bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400" : "text-red-500"}`}>
+              <Eraser className={`w-3 h-3 ${isClear ? "opacity-100" : "opacity-50"}`} />— Kosongkan —
+            </button>
+            <div className="border-t my-0.5" />
+            {filtered.map(c => (
+              <button key={c.id || c.label} onClick={() => { onChange(c.label); setOpen(false); setQ(""); }}
+                className={`w-full flex items-center gap-1.5 px-2 py-1 text-xs rounded hover:bg-muted text-left ${value === c.label ? "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300" : ""}`}>
+                <Check className={`w-3 h-3 flex-shrink-0 ${value === c.label ? "opacity-100" : "opacity-0"}`} />
+                <span className="truncate">{c.kode_aset ? `${c.kode_aset} - ${c.label}` : c.label}</span>
+              </button>
+            ))}
+            {filtered.length === 0 && <div className="text-xs text-center text-muted-foreground py-2">Tidak ditemukan</div>}
+          </div>
+        </ScrollArea>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** Clearable text input for batch edit */
+function ClearableInput({ value, onChange, onClear, isClear, ...props }) {
+  if (isClear) {
+    return (
+      <div className="flex items-center h-7 px-2 text-xs border rounded-md bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700">
+        <Eraser className="w-3 h-3 text-red-500 mr-1 flex-shrink-0" />
+        <span className="text-red-600 dark:text-red-400 flex-1 text-[10px]">Akan dikosongkan</span>
+        <button type="button" onClick={onClear} className="text-red-400 hover:text-red-600 ml-1" title="Batalkan kosongkan">
+          <X className="w-3 h-3" />
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="flex gap-0.5">
+      <Input className="h-7 text-xs flex-1" value={value || ""} onChange={onChange} {...props} />
+      <button type="button" onClick={onClear} className="h-7 w-7 flex items-center justify-center rounded-md border border-border hover:bg-red-50 dark:hover:bg-red-900/30 hover:border-red-300 dark:hover:border-red-700 text-muted-foreground hover:text-red-500 transition-colors flex-shrink-0" title="Kosongkan field ini" data-testid="clear-field-btn">
+        <Eraser className="w-3 h-3" />
+      </button>
+    </div>
+  );
+}
+
+/** Select with clear option */
+function ClearableSelect({ value, onValueChange, children, placeholder, ...props }) {
+  const isClear = value === "__clear__";
+  return (
+    <Select value={value || "__none__"} onValueChange={onValueChange} {...props}>
+      <SelectTrigger className={`h-7 text-xs ${isClear ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700 text-red-600 dark:text-red-400' : ''}`}>
+        <SelectValue placeholder={placeholder || "—"} />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="__none__">— Tidak diubah —</SelectItem>
+        <SelectItem value="__clear__" className="text-red-500">
+          <span className="flex items-center gap-1"><Eraser className="w-3 h-3" />Kosongkan</span>
+        </SelectItem>
+        {children}
+      </SelectContent>
+    </Select>
+  );
+}
+
+const BatchEditPanel = memo(function BatchEditPanel({
+  selectedCount, categories, onApply, onClose, updating, activity, assets, selectedAssets,
+}) {
+  const [updates, setUpdates] = useState({});
+  const [photoPreview, setPhotoPreview] = useState(null);
+  const [gpsLoading, setGpsLoading] = useState(false);
+  const [showMore, setShowMore] = useState(false);
+  const [clearPhotos, setClearPhotos] = useState(false);
+  const [clearDocChecklist, setClearDocChecklist] = useState(false);
+  const photoInputRef = useRef(null);
+
+  // Collect unique doc checklist item names from selected assets
+  const docItemNames = useMemo(() => {
+    if (!assets || !selectedAssets) return DEFAULT_DOC_ITEMS;
+    const names = new Set(DEFAULT_DOC_ITEMS);
+    const selectedIds = selectedAssets instanceof Set ? selectedAssets : new Set(selectedAssets);
+    (assets || []).forEach(a => {
+      if (selectedIds.has(a.id) && a.document_checklist) {
+        a.document_checklist.forEach(item => {
+          if (item.name) names.add(item.name);
+        });
+      }
+    });
+    return Array.from(names);
+  }, [assets, selectedAssets]);
+
+  // Doc checklist state: active items + their files
+  const [docItems, setDocItems] = useState([]);
+
+  // Rebuild doc items when docItemNames changes
+  useEffect(() => {
+    setDocItems(docItemNames.map(name => ({
+      name, _active: false, checked: false, photos: [], documents: [],
+    })));
+  }, [docItemNames]);
+
+  // Extract eselon data from activity
+  const eselon1List = (activity?.eselon1 || []).map(e => typeof e === 'string' ? { nama: e, eselon2: [] } : e);
+  const selectedEselon1 = updates.eselon1 || "";
+  const eselon2List = eselon1List.find(e => e.nama === selectedEselon1)?.eselon2 || [];
+
+  const setField = useCallback((field, value) => {
+    setUpdates(prev => {
+      // __clear__ is a valid value — means "clear this field"
+      if (value === "__clear__") {
+        return { ...prev, [field]: "__clear__" };
+      }
+      if (value === undefined || value === null || value === "" || value === "__none__") {
+        const next = { ...prev };
+        delete next[field];
+        return next;
+      }
+      return { ...prev, [field]: value };
+    });
+  }, []);
+
+  // Toggle clear mode for text fields
+  const toggleClearField = useCallback((field) => {
+    setUpdates(prev => {
+      if (prev[field] === "__clear__") {
+        const next = { ...prev };
+        delete next[field];
+        return next;
+      }
+      return { ...prev, [field]: "__clear__" };
+    });
+  }, []);
+
+  // GPS fetch
+  const fetchGPS = useCallback(() => {
+    if (!navigator.geolocation) { toast.error("GPS tidak didukung di browser ini"); return; }
+    setGpsLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        setUpdates(prev => ({
+          ...prev,
+          koordinat_latitude: pos.coords.latitude.toFixed(6),
+          koordinat_longitude: pos.coords.longitude.toFixed(6),
+        }));
+        setGpsLoading(false);
+        toast.success("Koordinat GPS berhasil diambil");
+      },
+      err => {
+        setGpsLoading(false);
+        if (err.code === 1) toast.error("Akses lokasi ditolak. Izinkan di pengaturan browser.");
+        else toast.error("Gagal mendapatkan lokasi GPS");
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }, []);
+
+  // Photo upload (with client-side compression for fast upload)
+  const handlePhotoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) { toast.error("Foto terlalu besar (maks 15MB)"); return; }
+    if (!file.type.startsWith('image/')) { toast.error("File harus berupa gambar"); return; }
+    const toastId = toast.loading("Mengompresi foto...");
+    try {
+      const compressed = await compressImageFile(file);
+      setPhotoPreview(compressed);
+      setUpdates(prev => ({ ...prev, batch_photo: compressed }));
+      setClearPhotos(false);
+      toast.dismiss(toastId);
+    } catch (err) {
+      toast.dismiss(toastId);
+      toast.error(`Gagal memproses foto: ${err.message || err}`);
+    }
+    e.target.value = "";
+  };
+
+  const removePhoto = () => {
+    setPhotoPreview(null);
+    setUpdates(prev => { const next = { ...prev }; delete next.batch_photo; return next; });
+  };
+
+  // Doc checklist toggle + file upload
+  const toggleDocItem = (idx) => {
+    setDocItems(prev => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], _active: !next[idx]._active, checked: !next[idx]._active, photos: !next[idx]._active ? next[idx].photos : [], documents: !next[idx]._active ? next[idx].documents : [] };
+      return next;
+    });
+  };
+
+  const handleDocFileUpload = async (idx, e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    for (const file of files) {
+      if (file.size > 25 * 1024 * 1024) { toast.error(`${file.name} terlalu besar (maks 25MB)`); continue; }
+      try {
+        if (file.type === 'application/pdf') {
+          // PDFs: compress via backend (iLoveAPI → WhipDoc fallback)
+          const tId = toast.loading(`Mengompres ${file.name}...`);
+          const { dataUrl, originalBytes, compressedBytes, method, savingsPercent, error } =
+            await compressPdfFile(file);
+          if (error) {
+            toast.warning(`${file.name}: kompresi gagal, file asli digunakan`, { id: tId });
+          } else if (savingsPercent > 0) {
+            toast.success(
+              `${file.name}: ${(originalBytes/1024/1024).toFixed(1)}MB → ${(compressedBytes/1024/1024).toFixed(1)}MB (-${savingsPercent}% via ${method})`,
+              { id: tId }
+            );
+          } else {
+            toast.success(`${file.name} berhasil diupload`, { id: tId });
+          }
+          setDocItems(prev => {
+            const next = [...prev];
+            if ((next[idx].documents || []).length >= 1) { toast.error("Maks 1 PDF per item"); return prev; }
+            next[idx] = { ...next[idx], documents: [...(next[idx].documents || []), { name: file.name, data: dataUrl }] };
+            return next;
+          });
+        } else if (file.type.startsWith('image/')) {
+          // Images: compress client-side first
+          const compressed = await compressImageFile(file);
+          setDocItems(prev => {
+            const next = [...prev];
+            if ((next[idx].photos || []).length >= 3) { toast.error("Maks 3 foto per item"); return prev; }
+            next[idx] = { ...next[idx], photos: [...(next[idx].photos || []), compressed] };
+            return next;
+          });
+          toast.success(`${file.name} berhasil diupload`);
+        }
+      } catch (err) {
+        toast.error(`Gagal memproses ${file.name}: ${err.message || err}`);
+      }
+    }
+    e.target.value = "";
+  };
+
+  const removeDocFile = (idx, type, fileIdx) => {
+    setDocItems(prev => {
+      const next = [...prev];
+      if (type === 'photo') next[idx] = { ...next[idx], photos: (next[idx].photos || []).filter((_, i) => i !== fileIdx) };
+      else next[idx] = { ...next[idx], documents: (next[idx].documents || []).filter((_, i) => i !== fileIdx) };
+      return next;
+    });
+  };
+
+  const handleApply = () => {
+    const finalUpdates = { ...updates };
+
+    // Add active doc checklist items with their files
+    const activeItems = docItems.filter(d => d._active);
+    if (activeItems.length > 0) {
+      finalUpdates.document_checklist_items = activeItems.map(d => ({
+        name: d.name, checked: d.checked,
+        photos: d.photos || [], documents: d.documents || [],
+      }));
+    }
+
+    // Add clear flags
+    if (clearPhotos) finalUpdates.clear_photos = true;
+    if (clearDocChecklist) finalUpdates.clear_document_checklist = true;
+
+    // Count how many fields are being changed
+    const clearFieldCount = Object.values(updates).filter(v => v === "__clear__").length;
+    const setFieldCount = Object.keys(updates).filter(k => updates[k] !== "__clear__").length;
+    const totalChanges = clearFieldCount + setFieldCount + activeItems.length + (clearPhotos ? 1 : 0) + (clearDocChecklist ? 1 : 0);
+
+    if (totalChanges === 0) {
+      toast.error("Tidak ada perubahan yang dipilih");
+      return;
+    }
+
+    // Confirmation for destructive clear actions
+    const clearActions = [];
+    if (clearPhotos) clearActions.push("semua foto");
+    if (clearDocChecklist) clearActions.push("semua dokumen kelengkapan");
+    if (clearFieldCount > 0) clearActions.push(`${clearFieldCount} field data`);
+
+    if (clearActions.length > 0) {
+      if (!window.confirm(`Anda akan mengosongkan ${clearActions.join(", ")} dari ${selectedCount} aset. Lanjutkan?`)) return;
+    }
+
+    onApply(finalUpdates);
+  };
+
+  const activeDocCount = docItems.filter(d => d._active).length;
+  const clearCount = Object.values(updates).filter(v => v === "__clear__").length + (clearPhotos ? 1 : 0) + (clearDocChecklist ? 1 : 0);
+  const setCount = Object.keys(updates).filter(k => updates[k] !== "__clear__").length + activeDocCount;
+  const hasUpdates = setCount > 0 || clearCount > 0;
+
+  return (
+    <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 print:hidden" data-testid="batch-edit-panel">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <CheckSquare className="w-4 h-4 text-blue-600" />
+          <span className="text-sm font-medium text-blue-800 dark:text-blue-300">
+            {selectedCount} aset dipilih — Ubah Massal
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          <button onClick={() => setShowMore(!showMore)} className="text-[10px] text-blue-600 dark:text-blue-400 hover:underline px-2 py-0.5" data-testid="batch-toggle-more">
+            {showMore ? "Tampilkan Sedikit" : "Tampilkan Semua Field"}
+          </button>
+          <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={onClose}><X className="w-3.5 h-3.5" /></Button>
+        </div>
+      </div>
+
+      {/* Primary Fields */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+        {/* Kategori - with search */}
+        <div className="space-y-0.5">
+          <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Tag className="w-2.5 h-2.5" />Kategori</label>
+          <BatchCategorySelect categories={categories} value={updates.category} onChange={v => setField("category", v)} />
+        </div>
+
+        {/* Lokasi */}
+        <div className="space-y-0.5">
+          <label className="text-[10px] text-muted-foreground flex items-center gap-1"><MapPin className="w-2.5 h-2.5" />Lokasi</label>
+          <ClearableInput placeholder="—" value={updates.location === "__clear__" ? "" : updates.location} isClear={updates.location === "__clear__"} onChange={e => setField("location", e.target.value)} onClear={() => toggleClearField("location")} />
+        </div>
+
+        {/* Eselon I */}
+        <div className="space-y-0.5">
+          <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Building2 className="w-2.5 h-2.5" />Eselon I</label>
+          <ClearableSelect value={updates.eselon1 || "__none__"} onValueChange={v => { setField("eselon1", v); if (v === "__clear__" || v === "__none__") setField("eselon2", undefined); }}>
+            {eselon1List.map(e => <SelectItem key={e.nama} value={e.nama}>{e.nama}</SelectItem>)}
+          </ClearableSelect>
+        </div>
+
+        {/* Eselon II */}
+        <div className="space-y-0.5">
+          <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Building2 className="w-2.5 h-2.5" />Eselon II</label>
+          <ClearableSelect value={updates.eselon2 || "__none__"} onValueChange={v => setField("eselon2", v)} disabled={!selectedEselon1 || selectedEselon1 === "__clear__" || eselon2List.length === 0} placeholder={selectedEselon1 && selectedEselon1 !== "__clear__" ? "—" : "Pilih Eselon I dulu"}>
+            {eselon2List.map(e2 => <SelectItem key={e2} value={e2}>{e2}</SelectItem>)}
+          </ClearableSelect>
+        </div>
+
+        {/* Kondisi */}
+        <div className="space-y-0.5">
+          <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Wrench className="w-2.5 h-2.5" />Kondisi</label>
+          <ClearableSelect value={updates.condition || "__none__"} onValueChange={v => setField("condition", v)}>
+            {CONDITIONS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+          </ClearableSelect>
+        </div>
+
+        {/* Status Inventaris */}
+        <div className="space-y-0.5">
+          <label className="text-[10px] text-muted-foreground flex items-center gap-1"><ClipboardList className="w-2.5 h-2.5" />Status Inventaris</label>
+          <ClearableSelect value={updates.inventory_status || "__none__"} onValueChange={v => setField("inventory_status", v)}>
+            {INVENTORY_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+          </ClearableSelect>
+        </div>
+
+        {/* Stiker Status */}
+        <div className="space-y-0.5">
+          <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Sticker className="w-2.5 h-2.5" />Status Stiker</label>
+          <ClearableSelect value={updates.stiker_status || "__none__"} onValueChange={v => setField("stiker_status", v)}>
+            {STIKER_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+          </ClearableSelect>
+        </div>
+
+        {/* Stiker Ukuran */}
+        <div className="space-y-0.5">
+          <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Sticker className="w-2.5 h-2.5" />Ukuran Stiker</label>
+          <ClearableSelect value={updates.stiker_ukuran || "__none__"} onValueChange={v => setField("stiker_ukuran", v)}>
+            {STIKER_SIZES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+          </ClearableSelect>
+        </div>
+      </div>
+
+      {/* Extended Fields */}
+      {showMore && (
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 mt-2 pt-2 border-t border-blue-200 dark:border-blue-800">
+            <div className="space-y-0.5">
+              <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Receipt className="w-2.5 h-2.5" />Nomor SPM</label>
+              <ClearableInput placeholder="—" value={updates.nomor_spm === "__clear__" ? "" : updates.nomor_spm} isClear={updates.nomor_spm === "__clear__"} onChange={e => setField("nomor_spm", e.target.value)} onClear={() => toggleClearField("nomor_spm")} />
+            </div>
+            <div className="space-y-0.5">
+              <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Truck className="w-2.5 h-2.5" />Perolehan Dari</label>
+              <ClearableInput placeholder="—" value={updates.perolehan_dari_nama === "__clear__" ? "" : updates.perolehan_dari_nama} isClear={updates.perolehan_dari_nama === "__clear__"} onChange={e => setField("perolehan_dari_nama", e.target.value)} onClear={() => toggleClearField("perolehan_dari_nama")} />
+            </div>
+            <div className="space-y-0.5">
+              <label className="text-[10px] text-muted-foreground flex items-center gap-1"><FileCheck className="w-2.5 h-2.5" />Nomor Kontrak</label>
+              <ClearableInput placeholder="—" value={updates.nomor_kontrak === "__clear__" ? "" : updates.nomor_kontrak} isClear={updates.nomor_kontrak === "__clear__"} onChange={e => setField("nomor_kontrak", e.target.value)} onClear={() => toggleClearField("nomor_kontrak")} />
+            </div>
+            <div className="space-y-0.5">
+              <label className="text-[10px] text-muted-foreground flex items-center gap-1"><FileCheck className="w-2.5 h-2.5" />Bukti Perolehan (BAST)</label>
+              <ClearableInput placeholder="—" value={updates.nomor_bukti_perolehan === "__clear__" ? "" : updates.nomor_bukti_perolehan} isClear={updates.nomor_bukti_perolehan === "__clear__"} onChange={e => setField("nomor_bukti_perolehan", e.target.value)} onClear={() => toggleClearField("nomor_bukti_perolehan")} />
+            </div>
+            <div className="space-y-0.5">
+              <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Package className="w-2.5 h-2.5" />Supplier</label>
+              <ClearableInput placeholder="—" value={updates.supplier === "__clear__" ? "" : updates.supplier} isClear={updates.supplier === "__clear__"} onChange={e => setField("supplier", e.target.value)} onClear={() => toggleClearField("supplier")} />
+            </div>
+            <div className="space-y-0.5">
+              <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Calendar className="w-2.5 h-2.5" />Tanggal Beli</label>
+              <ClearableInput type="date" value={updates.purchase_date === "__clear__" ? "" : updates.purchase_date} isClear={updates.purchase_date === "__clear__"} onChange={e => setField("purchase_date", e.target.value)} onClear={() => toggleClearField("purchase_date")} />
+            </div>
+            <div className="space-y-0.5">
+              <label className="text-[10px] text-muted-foreground flex items-center gap-1"><DollarSign className="w-2.5 h-2.5" />Harga (Rp)</label>
+              <ClearableInput type="number" placeholder="—" value={updates.purchase_price === "__clear__" ? "" : updates.purchase_price} isClear={updates.purchase_price === "__clear__"} onChange={e => setField("purchase_price", e.target.value)} onClear={() => toggleClearField("purchase_price")} />
+            </div>
+            <div className="space-y-0.5">
+              <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Tag className="w-2.5 h-2.5" />Brand</label>
+              <ClearableInput placeholder="—" value={updates.brand === "__clear__" ? "" : updates.brand} isClear={updates.brand === "__clear__"} onChange={e => setField("brand", e.target.value)} onClear={() => toggleClearField("brand")} />
+            </div>
+            <div className="space-y-0.5">
+              <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Tag className="w-2.5 h-2.5" />Model</label>
+              <ClearableInput placeholder="—" value={updates.model === "__clear__" ? "" : updates.model} isClear={updates.model === "__clear__"} onChange={e => setField("model", e.target.value)} onClear={() => toggleClearField("model")} />
+            </div>
+
+            {/* Latitude + GPS */}
+            <div className="space-y-0.5">
+              <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Navigation className="w-2.5 h-2.5" />Latitude</label>
+              <ClearableInput placeholder="—" value={updates.koordinat_latitude === "__clear__" ? "" : updates.koordinat_latitude} isClear={updates.koordinat_latitude === "__clear__"} onChange={e => setField("koordinat_latitude", e.target.value)} onClear={() => toggleClearField("koordinat_latitude")} />
+            </div>
+            {/* Longitude + GPS button */}
+            <div className="space-y-0.5">
+              <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Navigation className="w-2.5 h-2.5" />Longitude</label>
+              <div className="flex gap-0.5">
+                {updates.koordinat_longitude === "__clear__" ? (
+                  <div className="flex items-center h-7 px-2 text-xs border rounded-md bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700 flex-1">
+                    <Eraser className="w-3 h-3 text-red-500 mr-1 flex-shrink-0" />
+                    <span className="text-red-600 dark:text-red-400 flex-1 text-[10px]">Akan dikosongkan</span>
+                    <button type="button" onClick={() => toggleClearField("koordinat_longitude")} className="text-red-400 hover:text-red-600 ml-1"><X className="w-3 h-3" /></button>
+                  </div>
+                ) : (
+                  <>
+                    <Input className="h-7 text-xs flex-1" placeholder="—" value={updates.koordinat_longitude || ""} onChange={e => setField("koordinat_longitude", e.target.value)} />
+                    <button type="button" onClick={() => toggleClearField("koordinat_longitude")} className="h-7 w-7 flex items-center justify-center rounded-md border border-border hover:bg-red-50 dark:hover:bg-red-900/30 hover:border-red-300 dark:hover:border-red-700 text-muted-foreground hover:text-red-500 transition-colors flex-shrink-0" title="Kosongkan field ini">
+                      <Eraser className="w-3 h-3" />
+                    </button>
+                  </>
+                )}
+                <button
+                  type="button"
+                  onClick={fetchGPS}
+                  disabled={gpsLoading}
+                  className="h-7 px-2 flex items-center gap-1 text-[10px] bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded-md border border-emerald-300 dark:border-emerald-700 hover:bg-emerald-200 dark:hover:bg-emerald-900/50 transition-colors"
+                  data-testid="batch-gps-btn"
+                  title="Ambil lokasi GPS saat ini"
+                >
+                  {gpsLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <LocateFixed className="w-3 h-3" />}
+                  <span className="hidden sm:inline">GPS</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Batch Photo Upload + Clear */}
+          <div className="mt-2 pt-2 border-t border-blue-200 dark:border-blue-800">
+            <label className="text-[10px] text-muted-foreground flex items-center gap-1 mb-1"><Camera className="w-2.5 h-2.5" />Foto</label>
+            {clearPhotos ? (
+              <div className="flex items-center gap-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-md">
+                <Trash2 className="w-4 h-4 text-red-500 flex-shrink-0" />
+                <span className="text-xs text-red-600 dark:text-red-400 flex-1">Semua foto akan dihapus dari {selectedCount} aset</span>
+                <button onClick={() => setClearPhotos(false)} className="text-red-400 hover:text-red-600"><X className="w-4 h-4" /></button>
+              </div>
+            ) : photoPreview ? (
+              <div className="flex items-center gap-2">
+                <img src={photoPreview} alt="preview" className="w-12 h-12 object-cover rounded border" />
+                <span className="text-xs text-muted-foreground">Foto akan ditambahkan ke {selectedCount} aset</span>
+                <button onClick={removePhoto} className="text-red-500 hover:text-red-700 ml-auto"><X className="w-4 h-4" /></button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <label className="flex-1 flex items-center justify-center gap-2 text-xs text-blue-600 dark:text-blue-400 bg-blue-100/50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-md p-2 cursor-pointer border border-dashed border-blue-300 dark:border-blue-700" data-testid="batch-photo-upload">
+                  <Camera className="w-4 h-4" />Tambah Foto
+                  <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
+                </label>
+                <button
+                  onClick={() => setClearPhotos(true)}
+                  className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-md px-3 py-2 border border-dashed border-red-300 dark:border-red-700 transition-colors"
+                  data-testid="batch-clear-photos-btn"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />Hapus Foto
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Document Checklist with file upload + Clear */}
+          <div className="mt-2 pt-2 border-t border-blue-200 dark:border-blue-800">
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[10px] text-muted-foreground flex items-center gap-1">
+                <FileCheck className="w-2.5 h-2.5" />Kelengkapan Dokumen & Peralatan
+                {activeDocCount > 0 && <span className="text-[9px] bg-blue-200 dark:bg-blue-800/50 text-blue-700 dark:text-blue-300 px-1 rounded-full ml-1">{activeDocCount} aktif</span>}
+              </label>
+              {!clearDocChecklist && (
+                <button
+                  onClick={() => setClearDocChecklist(true)}
+                  className="flex items-center gap-1 text-[10px] text-red-500 hover:text-red-700 hover:underline"
+                  data-testid="batch-clear-docs-btn"
+                >
+                  <Trash2 className="w-3 h-3" />Hapus Semua Dokumen
+                </button>
+              )}
+            </div>
+
+            {clearDocChecklist ? (
+              <div className="flex items-center gap-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-md">
+                <Trash2 className="w-4 h-4 text-red-500 flex-shrink-0" />
+                <span className="text-xs text-red-600 dark:text-red-400 flex-1">Semua dokumen kelengkapan akan dihapus dari {selectedCount} aset</span>
+                <button onClick={() => setClearDocChecklist(false)} className="text-red-400 hover:text-red-600"><X className="w-4 h-4" /></button>
+              </div>
+            ) : (
+              <>
+                <div className="space-y-1.5 max-h-[300px] overflow-y-auto">
+                  {docItems.map((item, idx) => (
+                    <div key={idx}
+                      className={`rounded-md border transition-all ${item._active ? 'border-blue-400 dark:border-blue-600 bg-blue-50 dark:bg-blue-900/30' : 'border-border bg-card hover:bg-muted/50'}`}
+                      data-testid={`batch-doc-item-${idx}`}
+                    >
+                      {/* Toggle row */}
+                      <div className="flex items-center gap-2 p-1.5 cursor-pointer" onClick={() => toggleDocItem(idx)}>
+                        <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${item._active ? 'bg-blue-500 border-blue-500 text-white' : 'border-border'}`}>
+                          {item._active && <Check className="w-2.5 h-2.5" />}
+                        </div>
+                        <span className={`text-[11px] flex-1 ${item._active ? 'text-blue-800 dark:text-blue-300 font-medium' : 'text-muted-foreground'}`}>{item.name}</span>
+                        {item._active && ((item.photos?.length || 0) + (item.documents?.length || 0) > 0) && (
+                          <span className="text-[9px] bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 px-1 rounded">{(item.photos?.length || 0) + (item.documents?.length || 0)} file</span>
+                        )}
+                      </div>
+
+                      {/* Upload area when active */}
+                      {item._active && (
+                        <div className="px-2 pb-2 space-y-1.5">
+                          <label className="flex items-center justify-center gap-1 text-[10px] text-blue-600 dark:text-blue-400 bg-blue-100/50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded px-2 py-1 cursor-pointer border border-dashed border-blue-300 dark:border-blue-700">
+                            <FileUp className="w-3 h-3" />Upload Foto/PDF untuk semua aset
+                            <input type="file" accept="image/*,.pdf" multiple className="hidden" onChange={e => handleDocFileUpload(idx, e)} />
+                          </label>
+                          <div className="text-[9px] text-muted-foreground">Maks 3 foto + 1 PDF per item</div>
+
+                          {/* Uploaded files preview */}
+                          {((item.photos?.length || 0) + (item.documents?.length || 0) > 0) && (
+                            <div className="space-y-1">
+                              {(item.photos || []).map((photo, pi) => (
+                                <div key={`p${pi}`} className="flex items-center gap-1.5 bg-card rounded p-1 border border-border">
+                                  <img src={photo} alt="" className="w-8 h-8 object-cover rounded" />
+                                  <span className="text-[9px] text-muted-foreground flex-1">Foto {pi + 1}</span>
+                                  <button type="button" onClick={() => removeDocFile(idx, 'photo', pi)} className="text-red-400 hover:text-red-600"><X className="w-3 h-3" /></button>
+                                </div>
+                              ))}
+                              {(item.documents || []).map((doc, di) => (
+                                <div key={`d${di}`} className="flex items-center gap-1.5 bg-red-50 dark:bg-red-900/20 rounded p-1 border border-red-200 dark:border-red-700">
+                                  <FileText className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0" />
+                                  <span className="text-[9px] text-red-700 dark:text-red-400 flex-1 truncate">{doc.name}</span>
+                                  <button type="button" onClick={() => removeDocFile(idx, 'doc', di)} className="text-red-400 hover:text-red-600"><X className="w-3 h-3" /></button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[9px] text-muted-foreground mt-1">Klik item untuk mengaktifkan, lalu upload foto/PDF yang akan diterapkan ke semua aset terpilih</p>
+              </>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Action Buttons */}
+      <div className="flex items-center gap-2 mt-3">
+        <Button onClick={handleApply} disabled={!hasUpdates || updating} className="bg-blue-600 hover:bg-blue-700 text-white h-8 text-xs" data-testid="batch-apply-btn">
+          {updating ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <CheckSquare className="w-3 h-3 mr-1" />}
+          Terapkan ke {selectedCount} aset
+        </Button>
+        <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onClose}>Batal</Button>
+        <span className="text-[10px] text-muted-foreground ml-auto">
+          {setCount > 0 && <span className="text-blue-600 dark:text-blue-400">{setCount} diubah</span>}
+          {setCount > 0 && clearCount > 0 && <span className="mx-1">·</span>}
+          {clearCount > 0 && <span className="text-red-500">{clearCount} dikosongkan</span>}
+          {setCount === 0 && clearCount === 0 && "Pilih field untuk diubah"}
+        </span>
+      </div>
+    </div>
+  );
+});
+
+export default BatchEditPanel;

@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mockup v4 - Mode Galeri Foto Aset</title>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+<style>
+  :root {
+    --bg:#f1f5f9;--card:#ffffff;--text:#1e293b;--muted:#64748b;
+    --border:#e2e8f0;--accent:#3b82f6;
+    --green:#10b981;--green-l:#d1fae5;--green-b:#6ee7b7;
+    --amber:#f59e0b;--amber-l:#fef3c7;--amber-b:#fcd34d;
+    --red:#ef4444;--red-l:#fee2e2;--red-b:#fca5a5;
+    --purple:#8b5cf6;--purple-l:#ede9fe;--purple-b:#c4b5fd;
+    --rose:#f43f5e;--rose-l:#ffe4e6;--rose-b:#fda4af;
+    --slate-l:#f1f5f9;--slate-b:#cbd5e1;
+  }
+  html.dark {
+    --bg:#0f172a;--card:#1e293b;--text:#e2e8f0;--muted:#94a3b8;
+    --border:#334155;--accent:#60a5fa;
+    --green-l:rgba(16,185,129,.15);--green-b:#065f46;
+    --amber-l:rgba(245,158,11,.15);--amber-b:#92400e;
+    --red-l:rgba(239,68,68,.15);--red-b:#991b1b;
+    --purple-l:rgba(139,92,246,.15);--purple-b:#5b21b6;
+    --rose-l:rgba(244,63,94,.15);--rose-b:#9f1239;
+    --slate-l:rgba(100,116,139,.15);--slate-b:#475569;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;transition:background .3s,color .3s}
+
+  .header{background:var(--card);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
+  .header h1{font-size:15px;font-weight:700;display:flex;align-items:center;gap:6px}
+  .header h1 span{color:var(--muted);font-weight:400;font-size:12px}
+  .header-right{display:flex;align-items:center;gap:8px}
+  .view-toggle{display:flex;background:var(--bg);border-radius:8px;padding:3px;gap:2px}
+  .view-toggle button{border:none;background:transparent;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:500;color:var(--muted);display:flex;align-items:center;gap:6px;transition:all .2s}
+  .view-toggle button.active{background:var(--card);color:var(--accent);box-shadow:0 1px 3px rgba(0,0,0,.06)}
+  .dark-toggle{border:1px solid var(--border);background:var(--card);width:32px;height:32px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px;transition:all .2s}
+  .dark-toggle:hover{color:var(--text);background:var(--bg)}
+
+  .stats-bar{display:flex;gap:6px;padding:10px 20px;overflow-x:auto}
+  .stat-chip{display:flex;align-items:center;gap:5px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:11px;white-space:nowrap;flex-shrink:0;transition:background .3s}
+  .stat-chip .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+  .stat-chip strong{font-size:13px;font-weight:700}
+
+  .gallery-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;padding:4px 20px 40px}
+  @media(max-width:1400px){.gallery-grid{grid-template-columns:repeat(4,1fr)}}
+  @media(max-width:1024px){.gallery-grid{grid-template-columns:repeat(3,1fr)}}
+  @media(max-width:768px){.gallery-grid{grid-template-columns:repeat(2,1fr);gap:10px;padding:4px 12px 40px}}
+
+  /* Card */
+  .asset-card{background:var(--card);border-radius:12px;overflow:hidden;cursor:pointer;transition:all .25s;position:relative;border-left:4px solid transparent}
+  .asset-card:hover{transform:translateY(-3px);box-shadow:0 12px 28px rgba(0,0,0,.12)}
+  .asset-card.inv-ditemukan{border-left-color:var(--green)}
+  .asset-card.inv-tidak-ditemukan{border-left-color:var(--red)}
+  .asset-card.inv-berlebih{border-left-color:var(--purple)}
+  .asset-card.inv-sengketa{border-left-color:var(--rose)}
+  .asset-card.inv-belum{border-left-color:var(--slate-b)}
+
+  /* Photo */
+  .card-photo{position:relative;width:100%;aspect-ratio:4/3;background:#1e293b;overflow:hidden}
+  .card-photo img{width:100%;height:100%;object-fit:cover;transition:transform .4s}
+  .asset-card:hover .card-photo img{transform:scale(1.05)}
+  .no-photo{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:#64748b;gap:6px;background:var(--bg)}
+  .no-photo i{font-size:24px}.no-photo span{font-size:10px}
+
+  /* Top badges */
+  .badge-topleft{position:absolute;top:6px;left:6px;z-index:2;display:flex;flex-direction:column;gap:3px}
+  .badge{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:5px;font-size:9px;font-weight:700;backdrop-filter:blur(8px);letter-spacing:.3px}
+  .badge i{font-size:7px}
+  .badge-green{background:rgba(16,185,129,.9);color:#fff}.badge-amber{background:rgba(245,158,11,.9);color:#fff}.badge-red{background:rgba(239,68,68,.9);color:#fff}.badge-purple{background:rgba(139,92,246,.9);color:#fff}.badge-rose{background:rgba(244,63,94,.9);color:#fff}.badge-slate{background:rgba(100,116,139,.85);color:#fff}
+  .badge-topright{position:absolute;top:6px;right:6px;z-index:2}
+  .condition-badge{padding:2px 7px;border-radius:5px;font-size:9px;font-weight:700;backdrop-filter:blur(8px)}
+
+  /* Bottom gradient overlay for code/NUP */
+  .photo-gradient-bottom{position:absolute;bottom:0;left:0;right:0;height:50%;background:linear-gradient(to top,rgba(0,0,0,.7) 0%,rgba(0,0,0,.35) 50%,transparent 100%);pointer-events:none;z-index:1}
+  .photo-overlay-bottom{position:absolute;bottom:0;left:0;right:0;z-index:2;padding:6px 8px;display:flex;align-items:flex-end;justify-content:space-between}
+  .asset-code-overlay{font-size:10px;font-weight:800;color:#fff;letter-spacing:.4px;text-shadow:0 1px 4px rgba(0,0,0,.6);font-family:'SF Mono','Fira Code',monospace;line-height:1.3}
+  .asset-code-overlay .nup{display:block;font-size:9px;font-weight:600;opacity:.85}
+  .photo-count{display:flex;align-items:center;gap:3px;font-size:9px;color:rgba(255,255,255,.85);background:rgba(0,0,0,.4);backdrop-filter:blur(4px);padding:2px 6px;border-radius:8px}
+  .photo-count i{font-size:8px}
+  .stiker-badge{position:absolute;bottom:28px;right:6px;z-index:3;background:rgba(16,185,129,.9);color:#fff;font-size:8px;font-weight:700;padding:2px 5px;border-radius:4px;backdrop-filter:blur(4px);display:flex;align-items:center;gap:2px}
+  .stiker-badge i{font-size:7px}
+
+  /* SPM hover overlay */
+  .spm-overlay{position:absolute;inset:0;z-index:4;background:rgba(0,0,0,.75);backdrop-filter:blur(4px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;opacity:0;transition:opacity .25s;pointer-events:none}
+  .asset-card:hover .spm-overlay{opacity:1}
+  .spm-overlay .spm-label{font-size:8px;font-weight:600;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:1px}
+  .spm-overlay .spm-value{font-size:14px;font-weight:800;color:#fff;font-family:'SF Mono','Fira Code',monospace;letter-spacing:.5px}
+  .spm-overlay .spm-date{font-size:10px;color:rgba(255,255,255,.6)}
+  .spm-overlay .spm-hint{font-size:9px;color:rgba(255,255,255,.35);margin-top:4px}
+
+  /* Year badge - top right */
+  .year-badge{padding:2px 7px;border-radius:5px;font-size:9px;font-weight:700;background:rgba(0,0,0,.5);color:#fff;backdrop-filter:blur(8px);font-family:'SF Mono','Fira Code',monospace;letter-spacing:.5px}
+
+  /* Card body */
+  .card-body{padding:8px 10px 6px;background:var(--card)}
+  .asset-name{font-size:12px;font-weight:600;color:var(--text);line-height:1.3;margin-bottom:3px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .asset-meta{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px}
+  .meta-tag{display:inline-flex;align-items:center;gap:3px;font-size:9px;color:var(--muted);background:var(--bg);padding:2px 6px;border-radius:4px;transition:background .3s}
+  .meta-tag i{font-size:7px}
+  .user-tag{display:inline-flex;align-items:center;gap:3px;font-size:9px;color:var(--accent);background:rgba(59,130,246,.08);padding:2px 6px;border-radius:4px;font-weight:500;transition:background .3s}
+  html.dark .user-tag{background:rgba(96,165,250,.1);color:#93c5fd}
+  .user-tag i{font-size:7px}
+  .asset-value{font-size:11px;font-weight:700;color:var(--accent);display:flex;align-items:center;gap:3px}
+  .asset-value i{font-size:8px}
+
+  /* Doc strip */
+  .doc-strip{padding:5px 10px;background:var(--card);border-top:1px solid var(--border);display:flex;gap:5px;flex-wrap:wrap}
+  .doc-strip-label{font-size:8px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;width:100%;margin-bottom:1px}
+  .dchk{display:flex;align-items:center;gap:3px;font-size:9px;color:var(--muted)}
+  .dchk.done{color:var(--green)} html.dark .dchk.done{color:#6ee7b7}
+  .dchk i{font-size:8px}
+
+  /* Equip strip */
+  .equip-strip{padding:5px 10px;background:var(--card);border-top:1px solid var(--border)}
+  .equip-strip-label{font-size:8px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;display:flex;align-items:center;gap:4px}
+  .eq-count{font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px}
+  .eq-count.complete{background:var(--green-l);color:var(--green)} html.dark .eq-count.complete{color:#6ee7b7}
+  .eq-count.partial{background:var(--amber-l);color:var(--amber)} html.dark .eq-count.partial{color:#fcd34d}
+  .eq-count.empty{background:var(--bg);color:var(--muted)}
+  .equip-items{display:flex;gap:3px;flex-wrap:wrap}
+  .eq-pill{display:inline-flex;align-items:center;gap:2px;font-size:8px;padding:2px 5px;border-radius:4px;font-weight:500;transition:all .2s}
+  .eq-pill.checked{background:var(--green-l);color:var(--green);border:1px solid var(--green-b)} html.dark .eq-pill.checked{color:#6ee7b7}
+  .eq-pill.unchecked{background:var(--bg);color:var(--muted);border:1px solid var(--border);opacity:.6}
+  .eq-pill i{font-size:7px}
+
+  /* INV strip */
+  .inv-strip{display:flex;align-items:center;gap:4px;padding:4px 10px;font-size:9px;font-weight:600;background:var(--card);border-top:1px solid var(--border)}
+  .inv-strip i{font-size:9px}
+  .inv-strip.s-ditemukan{color:#15803d} html.dark .inv-strip.s-ditemukan{color:#6ee7b7}
+  .inv-strip.s-tidak-ditemukan{color:#b91c1c} html.dark .inv-strip.s-tidak-ditemukan{color:#fca5a5}
+  .inv-strip.s-berlebih{color:#7c3aed} html.dark .inv-strip.s-berlebih{color:#c4b5fd}
+  .inv-strip.s-sengketa{color:#e11d48} html.dark .inv-strip.s-sengketa{color:#fda4af}
+  .inv-strip.s-belum{color:#64748b} html.dark .inv-strip.s-belum{color:#94a3b8}
+
+  .card-footer{display:flex;border-top:1px solid var(--border);background:var(--card)}
+  .card-footer button{flex:1;border:none;background:transparent;padding:6px;cursor:pointer;font-size:10px;color:var(--muted);display:flex;align-items:center;justify-content:center;gap:3px;transition:all .15s}
+  .card-footer button:hover{background:var(--bg);color:var(--text)}
+  .card-footer button:not(:last-child){border-right:1px solid var(--border)}
+  .card-footer .be:hover{color:var(--accent)}.card-footer .bp:hover{color:var(--purple)}.card-footer .bd:hover{color:var(--red)}
+
+  /* LIGHTBOX */
+  .lightbox{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:100;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(10px);opacity:0;pointer-events:none;transition:opacity .3s}
+  .lightbox.active{opacity:1;pointer-events:all}
+  .lb-close{position:absolute;top:16px;right:16px;background:rgba(255,255,255,.12);border:none;color:#fff;width:36px;height:36px;border-radius:50%;cursor:pointer;font-size:16px;backdrop-filter:blur(4px);z-index:5;transition:background .2s}
+  .lb-close:hover{background:rgba(255,255,255,.25)}
+  .lb-container{position:relative;max-width:80vw;max-height:78vh;display:flex;align-items:center;justify-content:center}
+  .lb-container img{max-width:80vw;max-height:62vh;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.5);transition:opacity .3s;object-fit:contain}
+  .lb-nav{position:absolute;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.15);border:none;color:#fff;width:40px;height:40px;border-radius:50%;cursor:pointer;font-size:16px;backdrop-filter:blur(4px);z-index:5;transition:background .2s}
+  .lb-nav:hover{background:rgba(255,255,255,.3)}
+  .lb-prev{left:-56px}.lb-next{right:-56px}
+  @media(max-width:768px){.lb-prev{left:8px}.lb-next{right:8px}.lb-container img{max-width:92vw;max-height:50vh}}
+  .lb-dots{position:absolute;bottom:-28px;left:50%;transform:translateX(-50%);display:flex;gap:6px}
+  .lb-dot{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.3);border:none;cursor:pointer;transition:all .2s}
+  .lb-dot.active{background:#fff;transform:scale(1.2)}
+  .lb-info{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.65);backdrop-filter:blur(12px);color:#fff;padding:10px 18px 12px;border-radius:14px;text-align:center;min-width:360px;max-width:92vw}
+  .lb-info h3{font-size:13px;font-weight:700}
+  .lb-info .lb-sub{font-size:10px;opacity:.7;margin-top:2px}
+  .lb-sections{display:flex;gap:14px;justify-content:center;margin-top:8px;flex-wrap:wrap}
+  .lb-section{text-align:left}
+  .lb-section-title{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;opacity:.5;margin-bottom:4px}
+  .lb-section-items{display:flex;gap:5px;flex-wrap:wrap}
+  .lb-chk{font-size:9px;display:flex;align-items:center;gap:3px;opacity:.5;padding:2px 6px;border-radius:4px;background:rgba(255,255,255,.05)}
+  .lb-chk.done{color:#6ee7b7;opacity:1;background:rgba(16,185,129,.15)}
+  .lb-chk i{font-size:8px}
+
+  .mockup-banner{background:linear-gradient(135deg,#3b82f6,#8b5cf6);color:#fff;text-align:center;padding:6px;font-size:10px;font-weight:600;letter-spacing:1px}
+</style>
+</head>
+<body>
+<div class="mockup-banner">MOCKUP v4 — GALERI + KELENGKAPAN + SPM HOVER + PENGGUNA</div>
+
+<div class="header">
+  <h1><i class="fa-solid fa-boxes-stacked" style="color:var(--accent)"></i> Inventarisasi 2025 <span>24 aset</span></h1>
+  <div class="header-right">
+    <div class="view-toggle">
+      <button><i class="fa-solid fa-list"></i> List</button>
+      <button class="active"><i class="fa-solid fa-grip"></i> Galeri</button>
+    </div>
+    <button class="dark-toggle" onclick="toggleDark()" id="darkBtn"><i class="fa-solid fa-moon"></i></button>
+  </div>
+</div>
+
+<div class="stats-bar">
+  <div class="stat-chip"><div class="dot" style="background:#3b82f6"></div>Total <strong>24</strong></div>
+  <div class="stat-chip"><div class="dot" style="background:#10b981"></div>Ditemukan <strong>16</strong></div>
+  <div class="stat-chip"><div class="dot" style="background:#ef4444"></div>Tidak Ditemukan <strong>3</strong></div>
+  <div class="stat-chip"><div class="dot" style="background:#8b5cf6"></div>Berlebih <strong>2</strong></div>
+  <div class="stat-chip"><div class="dot" style="background:#f43f5e"></div>Sengketa <strong>2</strong></div>
+  <div class="stat-chip"><div class="dot" style="background:#64748b"></div>Belum <strong>1</strong></div>
+</div>
+
+<div class="gallery-grid" id="gallery"></div>
+
+<div class="lightbox" id="lightbox">
+  <button class="lb-close" onclick="closeLb()"><i class="fa-solid fa-xmark"></i></button>
+  <button class="lb-nav lb-prev" onclick="lbNav(-1)"><i class="fa-solid fa-chevron-left"></i></button>
+  <div class="lb-container"><img id="lb-img" src="" alt=""><div class="lb-dots" id="lb-dots"></div></div>
+  <button class="lb-nav lb-next" onclick="lbNav(1)"><i class="fa-solid fa-chevron-right"></i></button>
+  <div class="lb-info">
+    <h3 id="lb-name"></h3>
+    <p class="lb-sub" id="lb-code"></p>
+    <div class="lb-sections" id="lb-sections"></div>
+  </div>
+</div>
+
+<script>
+const P=[
+  "https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=800&h=600&fit=crop",
+  "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=800&h=600&fit=crop",
+  "https://images.unsplash.com/photo-1587614382346-4ec70e388b28?w=800&h=600&fit=crop",
+  "https://images.unsplash.com/photo-1612815154858-60aa4c59eaa6?w=800&h=600&fit=crop",
+  "https://images.unsplash.com/photo-1585338107529-13afc5f02586?w=800&h=600&fit=crop",
+  "https://images.unsplash.com/photo-1580480055273-228ff5388ef8?w=800&h=600&fit=crop",
+  "https://images.unsplash.com/photo-1478720568477-152d9b164e26?w=800&h=600&fit=crop",
+  "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800&h=600&fit=crop",
+  "https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?w=800&h=600&fit=crop",
+  "https://images.unsplash.com/photo-1601737487795-dab272f52420?w=800&h=600&fit=crop",
+  "https://images.unsplash.com/photo-1532619675605-1ede6c2ed2b0?w=800&h=600&fit=crop",
+  "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=800&h=600&fit=crop",
+];
+
+const assets=[
+  {code:"AST-2025-001",nup:1,name:"Laptop Dell Latitude 5540",cond:"Baik",status:"Aktif",inv:"Ditemukan",value:"Rp 15.200.000",loc:"Ruang IT",year:"2025",user:"Budi Santoso",spm:"SPM-2025/0142",spmDate:"12 Jan 2025",pc:3,stiker:true,docs:{foto:true,ba:true,sptjm:false,koreksi:false},equip:{"Buku Manual":true,"Charger/Adapter":true,"Kabel USB":true,"Kartu Garansi":true,"CD Driver":false},imgs:[P[0],P[1],P[2]]},
+  {code:"AST-2025-002",nup:2,name:"Printer HP LaserJet Pro M404dn",cond:"Rusak Ringan",status:"Maintenance",inv:"Ditemukan",value:"Rp 4.850.000",loc:"Ruang Admin",year:"2024",user:"Siti Rahayu",spm:"SPM-2024/0387",spmDate:"5 Mar 2024",pc:2,stiker:true,docs:{foto:true,ba:false,sptjm:false,koreksi:false},equip:{"Buku Manual":false,"Charger/Adapter":true,"Kabel USB":true,"Kartu Garansi":false,"CD Driver":true},imgs:[P[3],P[11]]},
+  {code:"AST-2025-003",nup:3,name:"AC Daikin Split 2 PK Inverter",cond:"Baik",status:"Aktif",inv:"Sengketa",value:"Rp 8.500.000",loc:"Ruang Rapat",year:"2023",user:"Ahmad Wijaya",spm:"SPM-2023/0215",spmDate:"20 Jul 2023",pc:1,stiker:false,docs:{foto:true,ba:true,sptjm:true,koreksi:false},equip:{"Buku Manual":true,"Remote":true,"Kartu Garansi":true},imgs:[P[4]]},
+  {code:"AST-2025-004",nup:4,name:"Meja Kerja Kayu Jati 160cm",cond:"Baik",status:"Aktif",inv:"Tidak Ditemukan",value:"Rp 3.200.000",loc:"Lt. 2",year:"2022",user:"Dewi Lestari",spm:"SPM-2022/0098",spmDate:"15 Feb 2022",pc:0,stiker:false,docs:{foto:false,ba:true,sptjm:true,koreksi:false},equip:{},imgs:[]},
+  {code:"AST-2025-005",nup:5,name:"Kursi Ergonomis Herman Miller Aeron",cond:"Baik",status:"Aktif",inv:"Ditemukan",value:"Rp 12.800.000",loc:"Ruang Direktur",year:"2025",user:"Ir. Hasan",spm:"SPM-2025/0201",spmDate:"3 Feb 2025",pc:4,stiker:true,docs:{foto:true,ba:true,sptjm:true,koreksi:true},equip:{"Buku Manual":true,"Kartu Garansi":true,"Tool Kit":true},imgs:[P[5],P[0],P[11],P[2]]},
+  {code:"AST-2025-006",nup:6,name:"Proyektor Epson EB-X51",cond:"Rusak Berat",status:"Tidak Aktif",inv:"Sengketa",value:"Rp 7.900.000",loc:"Gudang",year:"2021",user:"Rina Wati",spm:"SPM-2021/0455",spmDate:"8 Nov 2021",pc:2,stiker:false,docs:{foto:true,ba:true,sptjm:false,koreksi:true},equip:{"Buku Manual":false,"Remote":false,"Kabel HDMI":true,"Tas Proyektor":false},imgs:[P[6],P[7]]},
+  {code:"AST-2025-007",nup:7,name:"Server Rack HP ProLiant DL380 Gen10",cond:"Baik",status:"Aktif",inv:"Berlebih",value:"Rp 45.000.000",loc:"Server Room",year:"2024",user:"Tim IT",spm:"SPM-2024/0512",spmDate:"22 Sep 2024",pc:5,stiker:true,docs:{foto:true,ba:false,sptjm:false,koreksi:false},equip:{"Buku Manual":true,"Rail Kit":true,"Kabel Power":true,"Kartu Garansi":true,"CD Driver":true},imgs:[P[7],P[8],P[9],P[10],P[11]]},
+  {code:"AST-2025-008",nup:8,name:'Monitor LG UltraWide 34" Curved',cond:"Baik",status:"Aktif",inv:"Ditemukan",value:"Rp 6.500.000",loc:"Ruang Design",year:"2025",user:"Fajar Prasetyo",spm:"SPM-2025/0067",spmDate:"18 Jan 2025",pc:1,stiker:true,docs:{foto:true,ba:false,sptjm:false,koreksi:false},equip:{"Buku Manual":false,"Kabel HDMI":true,"Kabel Power":true,"Kartu Garansi":false},imgs:[P[8]]},
+  {code:"AST-2025-009",nup:9,name:"UPS APC Smart-UPS 3000VA",cond:"Baik",status:"Aktif",inv:"Ditemukan",value:"Rp 9.200.000",loc:"Server Room",year:"2023",user:"Tim IT",spm:"SPM-2023/0331",spmDate:"14 Aug 2023",pc:1,stiker:true,docs:{foto:true,ba:true,sptjm:false,koreksi:false},equip:{"Buku Manual":true,"Kabel Power":true,"Kartu Garansi":true,"CD Driver":true,"Baterai Cadangan":false},imgs:[P[9]]},
+  {code:"AST-2025-010",nup:10,name:"Filling Cabinet 4 Laci Besi Lion",cond:"Baik",status:"Aktif",inv:"Belum",value:"Rp 2.100.000",loc:"Arsip",year:"2020",user:"Andi Kurniawan",spm:"SPM-2020/0189",spmDate:"6 May 2020",pc:0,stiker:false,docs:{foto:false,ba:false,sptjm:false,koreksi:false},equip:{"Kunci":true,"Buku Manual":false},imgs:[]},
+  {code:"AST-2025-011",nup:11,name:"Whiteboard Magnetic 120x240cm",cond:"Baik",status:"Aktif",inv:"Ditemukan",value:"Rp 850.000",loc:"Ruang Rapat",year:"2024",user:"Admin Umum",spm:"SPM-2024/0278",spmDate:"10 Jun 2024",pc:2,stiker:false,docs:{foto:true,ba:false,sptjm:false,koreksi:false},equip:{"Spidol":true,"Penghapus":true},imgs:[P[10],P[4]]},
+  {code:"AST-2025-012",nup:12,name:"Scanner Fujitsu ScanSnap iX1600",cond:"Baik",status:"Aktif",inv:"Ditemukan",value:"Rp 5.600.000",loc:"Ruang Admin",year:"2025",user:"Siti Rahayu",spm:"SPM-2025/0088",spmDate:"25 Jan 2025",pc:1,stiker:true,docs:{foto:true,ba:false,sptjm:false,koreksi:false},equip:{"Buku Manual":true,"Kabel USB":true,"Charger/Adapter":true,"Kartu Garansi":false,"CD Driver":true},imgs:[P[11]]},
+];
+
+const cc={"Baik":"badge-green","Rusak Ringan":"badge-amber","Rusak Berat":"badge-red"};
+const sb={"Aktif":"badge-green","Maintenance":"badge-amber","Tidak Aktif":"badge-red"};
+const ii={"Ditemukan":"fa-circle-check","Tidak Ditemukan":"fa-circle-xmark","Berlebih":"fa-triangle-exclamation","Sengketa":"fa-gavel","Belum":"fa-clock"};
+const invCls={"Ditemukan":"inv-ditemukan","Tidak Ditemukan":"inv-tidak-ditemukan","Berlebih":"inv-berlebih","Sengketa":"inv-sengketa","Belum":"inv-belum"};
+const invS={"Ditemukan":"s-ditemukan","Tidak Ditemukan":"s-tidak-ditemukan","Berlebih":"s-berlebih","Sengketa":"s-sengketa","Belum":"s-belum"};
+
+function renderGallery(){
+  document.getElementById('gallery').innerHTML=assets.map((a,i)=>{
+    const mainImg=a.imgs[0]||'';
+    const dI=[{k:'foto',l:'Foto',i:'fa-camera'},{k:'ba',l:'BA',i:'fa-file-lines'},{k:'sptjm',l:'SPTJM',i:'fa-shield'},{k:'koreksi',l:'Koreksi',i:'fa-pen'}];
+    const eqKeys=Object.keys(a.equip);
+    const eqDone=eqKeys.filter(k=>a.equip[k]).length;
+    const eqTotal=eqKeys.length;
+    const eqCls=eqTotal===0?'empty':eqDone===eqTotal?'complete':'partial';
+
+    return `<div class="asset-card ${invCls[a.inv]||''}" onclick="openLb(${i})">
+      <div class="card-photo">
+        ${mainImg?`<img src="${mainImg}" alt="${a.name}" loading="lazy">`:`<div class="no-photo"><i class="fa-solid fa-camera-retro"></i><span>Belum ada foto</span></div>`}
+        <div class="badge-topleft">
+          <span class="badge ${sb[a.status]}"><i class="fa-solid fa-circle"></i> ${a.status}</span>
+          <span class="condition-badge ${cc[a.cond]}">${a.cond}</span>
+        </div>
+        <div class="badge-topright"><span class="year-badge">${a.year}</span></div>
+        <div class="photo-gradient-bottom"></div>
+        <div class="photo-overlay-bottom">
+          <span class="asset-code-overlay">${a.code}<span class="nup">NUP: ${a.nup}</span></span>
+          ${a.pc>0?`<span class="photo-count"><i class="fa-solid fa-images"></i> ${a.pc}</span>`:''}
+        </div>
+        ${a.stiker?`<div class="stiker-badge"><i class="fa-solid fa-qrcode"></i> Stiker</div>`:''}
+        <div class="spm-overlay">
+          <span class="spm-label">Nomor SPM</span>
+          <span class="spm-value">${a.spm}</span>
+          <span class="spm-date"><i class="fa-regular fa-calendar"></i> ${a.spmDate}</span>
+          <span class="spm-hint">Klik untuk buka galeri foto</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="asset-name">${a.name}</div>
+        <div class="asset-meta">
+          <span class="meta-tag"><i class="fa-solid fa-location-dot"></i> ${a.loc}</span>
+          <span class="meta-tag"><i class="fa-solid fa-images"></i> ${a.pc} foto</span>
+          <span class="user-tag"><i class="fa-solid fa-user"></i> ${a.user}</span>
+        </div>
+        <div class="asset-value"><i class="fa-solid fa-tag"></i> ${a.value}</div>
+      </div>
+      <div class="doc-strip">
+        <span class="doc-strip-label">Dokumen</span>
+        ${dI.map(d=>`<span class="dchk ${a.docs[d.k]?'done':''}"><i class="fa-solid ${a.docs[d.k]?'fa-circle-check':'fa-circle-xmark'}"></i> ${d.l}</span>`).join('')}
+      </div>
+      <div class="equip-strip">
+        <div class="equip-strip-label">Kelengkapan <span class="eq-count ${eqCls}">${eqDone}/${eqTotal}</span></div>
+        ${eqTotal>0?`<div class="equip-items">${eqKeys.map(k=>`<span class="eq-pill ${a.equip[k]?'checked':'unchecked'}"><i class="fa-solid ${a.equip[k]?'fa-check':'fa-xmark'}"></i> ${k}</span>`).join('')}</div>`:`<span style="font-size:9px;color:var(--muted);opacity:.5">Tidak ada data</span>`}
+      </div>
+      <div class="inv-strip ${invS[a.inv]||''}"><i class="fa-solid ${ii[a.inv]}"></i> ${a.inv}</div>
+      <div class="card-footer">
+        <button class="be" onclick="event.stopPropagation()"><i class="fa-solid fa-pen"></i> Edit</button>
+        <button class="bp" onclick="event.stopPropagation()"><i class="fa-solid fa-credit-card"></i> Kartu</button>
+        <button class="bd" onclick="event.stopPropagation()"><i class="fa-solid fa-trash"></i> Hapus</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+let lbIdx=0,lbAsset=null;
+function openLb(ai){lbAsset=assets[ai];lbIdx=0;if(!lbAsset.imgs.length)return;updateLb();document.getElementById('lightbox').classList.add('active')}
+function closeLb(){document.getElementById('lightbox').classList.remove('active')}
+function lbNav(dir){if(!lbAsset)return;lbIdx=(lbIdx+dir+lbAsset.imgs.length)%lbAsset.imgs.length;updateLb()}
+function lbGoTo(i){lbIdx=i;updateLb()}
+function updateLb(){
+  if(!lbAsset)return;
+  document.getElementById('lb-img').src=lbAsset.imgs[lbIdx];
+  document.getElementById('lb-name').textContent=lbAsset.name;
+  document.getElementById('lb-code').textContent=`${lbAsset.code} | NUP: ${lbAsset.nup} — ${lbAsset.user} — ${lbAsset.loc} — ${lbAsset.value}`;
+  document.getElementById('lb-dots').innerHTML=lbAsset.imgs.map((_,i)=>`<button class="lb-dot ${i===lbIdx?'active':''}" onclick="event.stopPropagation();lbGoTo(${i})"></button>`).join('');
+  const dI=[{k:'foto',l:'Foto Aset'},{k:'ba',l:'Berita Acara'},{k:'sptjm',l:'SPTJM'},{k:'koreksi',l:'Surat Koreksi'}];
+  const eqKeys=Object.keys(lbAsset.equip);
+  document.getElementById('lb-sections').innerHTML=`
+    <div class="lb-section"><div class="lb-section-title">Dokumen</div><div class="lb-section-items">${dI.map(d=>`<span class="lb-chk ${lbAsset.docs[d.k]?'done':''}"><i class="fa-solid ${lbAsset.docs[d.k]?'fa-circle-check':'fa-circle-xmark'}"></i> ${d.l}</span>`).join('')}</div></div>
+    <div class="lb-section"><div class="lb-section-title">Kelengkapan (${eqKeys.filter(k=>lbAsset.equip[k]).length}/${eqKeys.length})</div><div class="lb-section-items">${eqKeys.length?eqKeys.map(k=>`<span class="lb-chk ${lbAsset.equip[k]?'done':''}"><i class="fa-solid ${lbAsset.equip[k]?'fa-check':'fa-xmark'}"></i> ${k}</span>`).join(''):'<span class="lb-chk">-</span>'}</div></div>
+    <div class="lb-section"><div class="lb-section-title">SPM</div><div class="lb-section-items"><span class="lb-chk done"><i class="fa-solid fa-file-invoice"></i> ${lbAsset.spm} (${lbAsset.spmDate})</span></div></div>`;
+}
+
+document.addEventListener('keydown',e=>{if(!document.getElementById('lightbox').classList.contains('active'))return;if(e.key==='Escape')closeLb();if(e.key==='ArrowLeft')lbNav(-1);if(e.key==='ArrowRight')lbNav(1)});
+let tx=0;
+document.getElementById('lightbox').addEventListener('touchstart',e=>{tx=e.touches[0].clientX},{passive:true});
+document.getElementById('lightbox').addEventListener('touchend',e=>{const d=e.changedTouches[0].clientX-tx;if(Math.abs(d)>50){d>0?lbNav(-1):lbNav(1)}},{passive:true});
+function toggleDark(){document.documentElement.classList.toggle('dark');const d=document.documentElement.classList.contains('dark');document.getElementById('darkBtn').innerHTML=d?'<i class="fa-solid fa-sun"></i>':'<i class="fa-solid fa-moon"></i>'}
+renderGallery();
+</script>
+</body>
+</html>

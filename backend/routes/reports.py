@@ -1,0 +1,2410 @@
+"""
+Report generation routes.
+Extracted from server.py to reduce monolithic file size.
+Contains: Rekapitulasi, DBHI, RHI, BAHI, SP, LHI, Executive Summary,
+          Berita Acara, SPTJM, Surat Koreksi, and Report Settings.
+"""
+import io
+import os
+import logging
+import base64
+from typing import Optional, List
+from datetime import datetime
+from pathlib import Path
+
+# Template directory - relative to this file's location (works on any server)
+TEMPLATES_DIR = str(Path(__file__).resolve().parent.parent / "templates")
+
+from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi.responses import StreamingResponse, HTMLResponse
+from pydantic import BaseModel
+
+from db import db
+
+logger = logging.getLogger(__name__)
+
+reports_router = APIRouter()
+
+
+# ============================================================================
+# REKAPITULASI
+# ============================================================================
+
+@reports_router.get("/inventory-activities/{activity_id}/rekapitulasi")
+async def get_rekapitulasi(activity_id: str):
+    """Get inventory rekapitulasi summary for an activity"""
+    activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
+    if not activity:
+        raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+
+    assets = await db.assets.find({"activity_id": activity_id}, {"_id": 0}).to_list(100000)
+
+    total = len(assets)
+    ditemukan = [a for a in assets if a.get("inventory_status") == "Ditemukan"]
+    tidak_ditemukan = [a for a in assets if a.get("inventory_status") == "Tidak Ditemukan"]
+    belum = [a for a in assets if a.get("inventory_status", "Belum Diinventarisasi") == "Belum Diinventarisasi"]
+    berlebih = [a for a in assets if a.get("inventory_status") == "Berlebih"]
+    sengketa = [a for a in assets if a.get("inventory_status") == "Sengketa"]
+
+    def safe_price(a):
+        try: return float(a.get("purchase_price", 0) or 0)
+        except: return 0
+
+    kesalahan_pencatatan = [a for a in tidak_ditemukan if a.get("klasifikasi_tidak_ditemukan") == "Kesalahan Pencatatan"]
+    tidak_ditemukan_lainnya = [a for a in tidak_ditemukan if a.get("klasifikasi_tidak_ditemukan") == "Tidak Ditemukan Lainnya"]
+
+    sub_breakdown = {}
+    for a in tidak_ditemukan:
+        sub = a.get("sub_klasifikasi", "Belum Dikategorikan") or "Belum Dikategorikan"
+        if sub not in sub_breakdown:
+            sub_breakdown[sub] = {"count": 0, "value": 0}
+        sub_breakdown[sub]["count"] += 1
+        sub_breakdown[sub]["value"] += safe_price(a)
+
+    return {
+        "activity": {
+            "id": activity.get("id"),
+            "nama_kegiatan": activity.get("nama_kegiatan"),
+            "nomor_surat": activity.get("nomor_surat"),
+            "nomor_berita_acara": activity.get("nomor_berita_acara", ""),
+            "tanggal_berita_acara": activity.get("tanggal_berita_acara", ""),
+        },
+        "total_bmn_diteliti": total,
+        "total_nilai_diteliti": sum(safe_price(a) for a in assets),
+        "ditemukan": {
+            "count": len(ditemukan),
+            "value": sum(safe_price(a) for a in ditemukan),
+            "kondisi_baik": {
+                "count": len([a for a in ditemukan if a.get("condition") == "Baik"]),
+                "value": sum(safe_price(a) for a in ditemukan if a.get("condition") == "Baik")
+            },
+            "kondisi_rusak_ringan": {
+                "count": len([a for a in ditemukan if a.get("condition") == "Rusak Ringan"]),
+                "value": sum(safe_price(a) for a in ditemukan if a.get("condition") == "Rusak Ringan")
+            },
+            "kondisi_rusak_berat": {
+                "count": len([a for a in ditemukan if a.get("condition") == "Rusak Berat"]),
+                "value": sum(safe_price(a) for a in ditemukan if a.get("condition") == "Rusak Berat")
+            }
+        },
+        "tidak_ditemukan": {
+            "count": len(tidak_ditemukan),
+            "value": sum(safe_price(a) for a in tidak_ditemukan),
+            "kesalahan_pencatatan": {
+                "count": len(kesalahan_pencatatan),
+                "value": sum(safe_price(a) for a in kesalahan_pencatatan)
+            },
+            "tidak_ditemukan_lainnya": {
+                "count": len(tidak_ditemukan_lainnya),
+                "value": sum(safe_price(a) for a in tidak_ditemukan_lainnya)
+            }
+        },
+        "belum_diinventarisasi": {
+            "count": len(belum),
+            "value": sum(safe_price(a) for a in belum)
+        },
+        "berlebih": {
+            "count": len(berlebih),
+            "value": sum(safe_price(a) for a in berlebih)
+        },
+        "sengketa": {
+            "count": len(sengketa),
+            "value": sum(safe_price(a) for a in sengketa)
+        },
+        "sub_breakdown": sub_breakdown
+    }
+
+
+# ============================================================================
+# BERITA ACARA PDF
+# ============================================================================
+
+@reports_router.get("/inventory-activities/{activity_id}/berita-acara-pdf")
+async def generate_berita_acara_pdf(activity_id: str):
+    """Generate Berita Acara Tim Internal Penelitian BMN Tidak Ditemukan (PDF)"""
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors as rl_colors
+    from reportlab.lib.units import mm as rl_mm, cm as rl_cm
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY
+
+    activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
+    if not activity:
+        raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+
+    assets = await db.assets.find({"activity_id": activity_id}, {"_id": 0}).to_list(100000)
+    tidak_ditemukan = [a for a in assets if a.get("inventory_status") == "Tidak Ditemukan"]
+    ditemukan = [a for a in assets if a.get("inventory_status") == "Ditemukan"]
+
+    def safe_price(a):
+        try: return float(a.get("purchase_price", 0) or 0)
+        except: return 0
+
+    def fmt_rp(val):
+        try: return f"Rp {int(val):,}".replace(",", ".")
+        except: return "Rp 0"
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=2*rl_cm, rightMargin=2*rl_cm, topMargin=2*rl_cm, bottomMargin=2*rl_cm)
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle('TitleBA', parent=styles['Title'], fontSize=13, spaceAfter=6, alignment=TA_CENTER, fontName='Helvetica-Bold')
+    subtitle_style = ParagraphStyle('SubtitleBA', parent=styles['Normal'], fontSize=10, spaceAfter=12, alignment=TA_CENTER)
+    normal_style = ParagraphStyle('NormalBA', parent=styles['Normal'], fontSize=9, spaceAfter=4, alignment=TA_JUSTIFY, leading=13)
+    small_style = ParagraphStyle('SmallBA', parent=styles['Normal'], fontSize=8, leading=10)
+    bold_style = ParagraphStyle('BoldBA', parent=styles['Normal'], fontSize=9, fontName='Helvetica-Bold', spaceAfter=4)
+
+    elements = []
+
+    # Header
+    elements.append(Paragraph("BERITA ACARA", title_style))
+    elements.append(Paragraph("TIM INTERNAL PENELITIAN BMN TIDAK DITEMUKAN", title_style))
+    nomor_ba = activity.get("nomor_berita_acara", "-")
+    elements.append(Paragraph(f"Nomor: {nomor_ba}", subtitle_style))
+    elements.append(Spacer(1, 6*rl_mm))
+
+    # Intro paragraph
+    tgl_ba = activity.get("tanggal_berita_acara", "-")
+    kasatker = activity.get("kasatker_nama", "-")
+    alamat = activity.get("alamat_satker", "-")
+    intro = f"""Pada hari ini, berdasarkan Surat Tugas Nomor {activity.get('nomor_surat', '-')}, 
+    kami Tim Internal yang ditunjuk untuk melakukan penelitian terhadap BMN yang tidak ditemukan 
+    pada kegiatan inventarisasi "{activity.get('nama_kegiatan', '-')}", 
+    menyampaikan hasil penelitian sebagai berikut:"""
+    elements.append(Paragraph(intro, normal_style))
+    elements.append(Spacer(1, 4*rl_mm))
+
+    # Tim Inventarisasi (Internal)
+    tim_inti = activity.get("tim_inti", [])
+    tim_pembantu_list_rhi = activity.get("tim_pembantu", [])
+    if tim_inti or tim_pembantu_list_rhi:
+        elements.append(Paragraph("<b>I. TIM INVENTARISASI (INTERNAL)</b>", bold_style))
+        inv_style = TableStyle([('BACKGROUND', (0,0), (-1,0), rl_colors.HexColor('#92400e')), ('TEXTCOLOR', (0,0), (-1,0), rl_colors.white), ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'), ('FONTSIZE', (0,0), (-1,-1), 8), ('GRID', (0,0), (-1,-1), 0.5, rl_colors.grey), ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('ALIGN', (0,0), (0,-1), 'CENTER')])
+        if tim_inti:
+            elements.append(Paragraph("<b>Tim Inti (Pelaksana)</b>", small_style))
+            ti_data = [['No', 'Peran', 'Nama', 'Jabatan', 'NIP/NIK', 'Unit']]
+            for i, m in enumerate(tim_inti):
+                ti_data.append([str(i+1), 'Ketua Tim' if m.get('is_ketua') else 'Anggota', m.get('nama', '-'), m.get('jabatan', '-'), m.get('nip', '-'), m.get('unit', '-')])
+            ti_table = Table(ti_data, colWidths=[25, 55, 120, 100, 80, 80])
+            ti_table.setStyle(inv_style)
+            elements.append(ti_table)
+            elements.append(Spacer(1, 2*rl_mm))
+        if tim_pembantu_list_rhi:
+            elements.append(Paragraph("<b>Tim Pembantu</b>", small_style))
+            tp2_data = [['No', 'Peran', 'Nama', 'Jabatan', 'NIP/NIK', 'Unit']]
+            for i, m in enumerate(tim_pembantu_list_rhi):
+                tp2_data.append([str(i+1), 'Ketua Tim' if m.get('is_ketua') else 'Anggota', m.get('nama', '-'), m.get('jabatan', '-'), m.get('nip', '-'), m.get('unit', '-')])
+            tp2_table = Table(tp2_data, colWidths=[25, 55, 120, 100, 80, 80])
+            tp2_table.setStyle(inv_style)
+            elements.append(tp2_table)
+        elements.append(Spacer(1, 4*rl_mm))
+
+    # Tim Peneliti (Eksternal)
+    elements.append(Paragraph("<b>II. TIM PENELITI (EKSTERNAL)</b>", bold_style))
+    tim = activity.get("tim_peneliti", [])
+    if tim:
+        tim_data = [['No', 'Nama', 'Jabatan']]
+        for i, m in enumerate(tim):
+            tim_data.append([str(i+1), m.get('nama', '-'), m.get('jabatan', '-')])
+        tim_table = Table(tim_data, colWidths=[30, 200, 200])
+        tim_table.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), rl_colors.HexColor('#1e40af')),
+            ('TEXTCOLOR', (0,0), (-1,0), rl_colors.white),
+            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0,0), (-1,-1), 8),
+            ('GRID', (0,0), (-1,-1), 0.5, rl_colors.grey),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('ALIGN', (0,0), (0,-1), 'CENTER'),
+        ]))
+        elements.append(tim_table)
+    else:
+        elements.append(Paragraph("Tim peneliti belum ditentukan.", small_style))
+    elements.append(Spacer(1, 4*rl_mm))
+
+    # Tim Pendukung (Eksternal)
+    tim_pendukung = activity.get("tim_pendukung", [])
+    if tim_pendukung:
+        elements.append(Paragraph("<b>II.b. TIM PENDUKUNG (EKSTERNAL)</b>", bold_style))
+        tp_data = [['No', 'Nama', 'Jabatan', 'NIP', 'Dari Pihak']]
+        for i, m in enumerate(tim_pendukung):
+            tp_data.append([str(i+1), m.get('nama', '-'), m.get('jabatan', '-'), m.get('nip', '-'), m.get('dari_pihak', '-')])
+        tp_table = Table(tp_data, colWidths=[25, 130, 120, 80, 100])
+        tp_table.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), rl_colors.HexColor('#6b21a8')),
+            ('TEXTCOLOR', (0,0), (-1,0), rl_colors.white),
+            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0,0), (-1,-1), 8),
+            ('GRID', (0,0), (-1,-1), 0.5, rl_colors.grey),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('ALIGN', (0,0), (0,-1), 'CENTER'),
+        ]))
+        elements.append(tp_table)
+        elements.append(Spacer(1, 4*rl_mm))
+
+    # Rekapitulasi
+    elements.append(Paragraph("<b>III. REKAPITULASI HASIL PENELITIAN</b>", bold_style))
+    total = len(assets)
+    total_val = sum(safe_price(a) for a in assets)
+    found_val = sum(safe_price(a) for a in ditemukan)
+    notfound_val = sum(safe_price(a) for a in tidak_ditemukan)
+
+    kesalahan = [a for a in tidak_ditemukan if a.get("klasifikasi_tidak_ditemukan") == "Kesalahan Pencatatan"]
+    lainnya = [a for a in tidak_ditemukan if a.get("klasifikasi_tidak_ditemukan") == "Tidak Ditemukan Lainnya"]
+
+    rekap_data = [
+        ['No', 'Uraian', 'Jumlah NUP', 'Nilai (Rp)'],
+        ['1', 'BMN yang Diteliti', str(total), fmt_rp(total_val)],
+        ['2', 'BMN Ditemukan', str(len(ditemukan)), fmt_rp(found_val)],
+        ['3', 'BMN Tidak Ditemukan', str(len(tidak_ditemukan)), fmt_rp(notfound_val)],
+        ['', '  a. Kesalahan Pencatatan', str(len(kesalahan)), fmt_rp(sum(safe_price(a) for a in kesalahan))],
+        ['', '  b. Tidak Ditemukan Lainnya', str(len(lainnya)), fmt_rp(sum(safe_price(a) for a in lainnya))],
+    ]
+    rekap_table = Table(rekap_data, colWidths=[30, 220, 70, 110])
+    rekap_table.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), rl_colors.HexColor('#1e40af')),
+        ('TEXTCOLOR', (0,0), (-1,0), rl_colors.white),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0,0), (-1,-1), 8),
+        ('GRID', (0,0), (-1,-1), 0.5, rl_colors.grey),
+        ('ALIGN', (0,0), (0,-1), 'CENTER'),
+        ('ALIGN', (2,0), (3,-1), 'CENTER'),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('BACKGROUND', (0,3), (-1,3), rl_colors.HexColor('#fef2f2')),
+    ]))
+    elements.append(rekap_table)
+    elements.append(Spacer(1, 4*rl_mm))
+
+    # Rincian BMN Tidak Ditemukan
+    if tidak_ditemukan:
+        elements.append(Paragraph("<b>III. RINCIAN BMN TIDAK DITEMUKAN</b>", bold_style))
+        detail_data = [['No', 'Kode Barang', 'NUP', 'Nama BMN', 'Klasifikasi', 'Sub Klasifikasi', 'Nilai (Rp)']]
+        for i, a in enumerate(tidak_ditemukan):
+            detail_data.append([
+                str(i+1),
+                a.get('asset_code', '-'),
+                str(a.get('NUP', '-')),
+                Paragraph(a.get('asset_name', '-'), small_style),
+                Paragraph(a.get('klasifikasi_tidak_ditemukan', '-'), small_style),
+                Paragraph(a.get('sub_klasifikasi', '-'), small_style),
+                fmt_rp(safe_price(a))
+            ])
+        detail_table = Table(detail_data, colWidths=[25, 70, 30, 100, 75, 75, 65])
+        detail_table.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), rl_colors.HexColor('#991b1b')),
+            ('TEXTCOLOR', (0,0), (-1,0), rl_colors.white),
+            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0,0), (-1,-1), 7),
+            ('GRID', (0,0), (-1,-1), 0.5, rl_colors.grey),
+            ('ALIGN', (0,0), (0,-1), 'CENTER'),
+            ('ALIGN', (2,0), (2,-1), 'CENTER'),
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ]))
+        elements.append(detail_table)
+        elements.append(Spacer(1, 4*rl_mm))
+
+    # Kesimpulan
+    elements.append(Paragraph("<b>IV. KESIMPULAN</b>", bold_style))
+    kesimpulan_text = activity.get("kesimpulan", "Belum ada kesimpulan.")
+    elements.append(Paragraph(kesimpulan_text or "Belum ada kesimpulan.", normal_style))
+    elements.append(Spacer(1, 8*rl_mm))
+
+    # Signatures
+    elements.append(Paragraph("Demikian Berita Acara ini dibuat dengan sebenar-benarnya.", normal_style))
+    elements.append(Spacer(1, 6*rl_mm))
+
+    sign_data = [
+        ['Mengetahui,', '', 'Tim Peneliti,'],
+        ['Kasatker', '', 'Ketua Tim'],
+        ['', '', ''],
+        ['', '', ''],
+        [f'{kasatker}', '', tim[0].get('nama', '_______________') if tim else '_______________'],
+        [f'NIP. {activity.get("kasatker_nip", "-")}', '', ''],
+    ]
+    sign_table = Table(sign_data, colWidths=[180, 80, 180])
+    sign_table.setStyle(TableStyle([
+        ('FONTSIZE', (0,0), (-1,-1), 9),
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('FONTNAME', (0,4), (0,4), 'Helvetica-Bold'),
+        ('FONTNAME', (2,4), (2,4), 'Helvetica-Bold'),
+        ('LINEBELOW', (0,4), (0,4), 1, rl_colors.black),
+        ('LINEBELOW', (2,4), (2,4), 1, rl_colors.black),
+    ]))
+    elements.append(sign_table)
+
+    doc.build(elements)
+    buffer.seek(0)
+
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=Berita_Acara_{activity_id[:8]}.pdf"}
+    )
+
+
+# ============================================================================
+# SPTJM PDF
+# ============================================================================
+
+@reports_router.get("/inventory-activities/{activity_id}/sptjm-pdf")
+async def generate_sptjm_pdf(activity_id: str):
+    """Generate SPTJM (Surat Pernyataan Tanggung Jawab Mutlak) PDF"""
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors as rl_colors
+    from reportlab.lib.units import mm as rl_mm, cm as rl_cm
+    from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY
+
+    activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
+    if not activity:
+        raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+
+    assets = await db.assets.find({"activity_id": activity_id}, {"_id": 0}).to_list(100000)
+    tidak_ditemukan = [a for a in assets if a.get("inventory_status") == "Tidak Ditemukan"]
+
+    def safe_price(a):
+        try: return float(a.get("purchase_price", 0) or 0)
+        except: return 0
+
+    def fmt_rp(val):
+        try: return f"Rp {int(val):,}".replace(",", ".")
+        except: return "Rp 0"
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=2.5*rl_cm, rightMargin=2.5*rl_cm, topMargin=2*rl_cm, bottomMargin=2*rl_cm)
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle('TitleSPTJM', parent=styles['Title'], fontSize=13, spaceAfter=6, alignment=TA_CENTER, fontName='Helvetica-Bold')
+    normal_style = ParagraphStyle('NormalSPTJM', parent=styles['Normal'], fontSize=10, spaceAfter=6, alignment=TA_JUSTIFY, leading=14)
+    small_style = ParagraphStyle('SmallSPTJM', parent=styles['Normal'], fontSize=8, leading=10)
+
+    elements = []
+
+    kasatker = activity.get("kasatker_nama", "_______________")
+    nip = activity.get("kasatker_nip", "_______________")
+    jabatan = activity.get("kasatker_jabatan", "Kepala Satuan Kerja")
+    alamat = activity.get("alamat_satker", "_______________")
+    total_notfound = len(tidak_ditemukan)
+    total_val_notfound = sum(safe_price(a) for a in tidak_ditemukan)
+
+    # Header
+    elements.append(Paragraph("SURAT PERNYATAAN TANGGUNG JAWAB MUTLAK", title_style))
+    elements.append(Spacer(1, 8*rl_mm))
+
+    # Body
+    body = f"""Yang bertanda tangan di bawah ini:<br/><br/>
+    Nama &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: <b>{kasatker}</b><br/>
+    NIP &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: {nip}<br/>
+    Jabatan &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: {jabatan}<br/>
+    Alamat &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: {alamat}<br/><br/>
+    Menyatakan dengan sesungguhnya bahwa:<br/><br/>
+    1. Saya bertanggung jawab penuh atas pengelolaan Barang Milik Negara (BMN) yang berada 
+    dalam penguasaan Satuan Kerja yang saya pimpin.<br/><br/>
+    2. Berdasarkan hasil inventarisasi pada kegiatan "<b>{activity.get('nama_kegiatan', '-')}</b>" 
+    (Nomor Surat: {activity.get('nomor_surat', '-')}), terdapat <b>{total_notfound}</b> NUP BMN 
+    dengan total nilai <b>{fmt_rp(total_val_notfound)}</b> yang tidak ditemukan.<br/><br/>
+    3. Saya bersedia menerima sanksi sesuai ketentuan peraturan perundang-undangan yang berlaku 
+    apabila di kemudian hari pernyataan ini tidak benar.<br/><br/>
+    Demikian Surat Pernyataan ini dibuat dengan sebenar-benarnya untuk dipergunakan sebagaimana mestinya."""
+    elements.append(Paragraph(body, normal_style))
+    elements.append(Spacer(1, 6*rl_mm))
+
+    # Lampiran rincian
+    if tidak_ditemukan:
+        elements.append(Paragraph("<b>Lampiran: Rincian BMN Tidak Ditemukan</b>", normal_style))
+        detail_data = [['No', 'Kode Barang', 'NUP', 'Nama BMN', 'Nilai (Rp)']]
+        for i, a in enumerate(tidak_ditemukan):
+            detail_data.append([
+                str(i+1), a.get('asset_code', '-'), str(a.get('NUP', '-')),
+                Paragraph(a.get('asset_name', '-'), small_style), fmt_rp(safe_price(a))
+            ])
+        detail_data.append(['', '', '', Paragraph('<b>TOTAL</b>', small_style), fmt_rp(total_val_notfound)])
+        dt = Table(detail_data, colWidths=[30, 80, 35, 190, 90])
+        dt.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), rl_colors.HexColor('#1e40af')),
+            ('TEXTCOLOR', (0,0), (-1,0), rl_colors.white),
+            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0,0), (-1,-1), 8),
+            ('GRID', (0,0), (-1,-1), 0.5, rl_colors.grey),
+            ('ALIGN', (0,0), (0,-1), 'CENTER'),
+            ('ALIGN', (2,0), (2,-1), 'CENTER'),
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ('BACKGROUND', (0,-1), (-1,-1), rl_colors.HexColor('#f0f9ff')),
+        ]))
+        elements.append(dt)
+
+    elements.append(Spacer(1, 10*rl_mm))
+
+    # Signature
+    tgl = activity.get("tanggal_berita_acara", "_______________")
+    sign_data = [
+        [f'Dibuat di: {alamat}', ''],
+        [f'Pada tanggal: {tgl}', ''],
+        ['', ''],
+        ['Yang membuat pernyataan,', ''],
+        ['', ''],
+        ['', ''],
+        ['', ''],
+        [f'{kasatker}', ''],
+        [f'NIP. {nip}', ''],
+    ]
+    sign_table = Table(sign_data, colWidths=[300, 130])
+    sign_table.setStyle(TableStyle([
+        ('FONTSIZE', (0,0), (-1,-1), 10),
+        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+        ('FONTNAME', (0,7), (0,7), 'Helvetica-Bold'),
+        ('LINEBELOW', (0,7), (0,7), 1, rl_colors.black),
+    ]))
+    elements.append(sign_table)
+
+    doc.build(elements)
+    buffer.seek(0)
+
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=SPTJM_{activity_id[:8]}.pdf"}
+    )
+
+
+# ============================================================================
+# SURAT KOREKSI PDF
+# ============================================================================
+
+@reports_router.get("/inventory-activities/{activity_id}/surat-koreksi-pdf")
+async def generate_surat_koreksi_pdf(activity_id: str):
+    """Generate Surat Pernyataan Koreksi Pencatatan PDF"""
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors as rl_colors
+    from reportlab.lib.units import mm as rl_mm, cm as rl_cm
+    from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY
+
+    activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
+    if not activity:
+        raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+
+    assets = await db.assets.find({"activity_id": activity_id}, {"_id": 0}).to_list(100000)
+    koreksi_assets = [a for a in assets if a.get("inventory_status") == "Tidak Ditemukan" and a.get("klasifikasi_tidak_ditemukan") == "Kesalahan Pencatatan"]
+
+    def safe_price(a):
+        try: return float(a.get("purchase_price", 0) or 0)
+        except: return 0
+
+    def fmt_rp(val):
+        try: return f"Rp {int(val):,}".replace(",", ".")
+        except: return "Rp 0"
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=2.5*rl_cm, rightMargin=2.5*rl_cm, topMargin=2*rl_cm, bottomMargin=2*rl_cm)
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle('TitleKoreksi', parent=styles['Title'], fontSize=13, spaceAfter=6, alignment=TA_CENTER, fontName='Helvetica-Bold')
+    normal_style = ParagraphStyle('NormalKoreksi', parent=styles['Normal'], fontSize=10, spaceAfter=6, alignment=TA_JUSTIFY, leading=14)
+    small_style = ParagraphStyle('SmallKoreksi', parent=styles['Normal'], fontSize=8, leading=10)
+
+    elements = []
+
+    kasatker = activity.get("kasatker_nama", "_______________")
+    nip = activity.get("kasatker_nip", "_______________")
+    jabatan = activity.get("kasatker_jabatan", "Kepala Satuan Kerja")
+    alamat = activity.get("alamat_satker", "_______________")
+    total_koreksi = len(koreksi_assets)
+    total_val = sum(safe_price(a) for a in koreksi_assets)
+
+    # Header
+    elements.append(Paragraph("SURAT PERNYATAAN", title_style))
+    elements.append(Paragraph("KOREKSI PENCATATAN BARANG MILIK NEGARA", title_style))
+    elements.append(Spacer(1, 8*rl_mm))
+
+    # Body
+    body = f"""Yang bertanda tangan di bawah ini:<br/><br/>
+    Nama &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: <b>{kasatker}</b><br/>
+    NIP &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: {nip}<br/>
+    Jabatan &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: {jabatan}<br/>
+    Alamat &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: {alamat}<br/><br/>
+    Dengan ini menyatakan bahwa berdasarkan hasil inventarisasi pada kegiatan 
+    "<b>{activity.get('nama_kegiatan', '-')}</b>" (Nomor Surat: {activity.get('nomor_surat', '-')}), 
+    terdapat <b>{total_koreksi}</b> NUP BMN dengan total nilai <b>{fmt_rp(total_val)}</b> 
+    yang teridentifikasi sebagai kesalahan pencatatan dan memerlukan koreksi.<br/><br/>
+    Koreksi pencatatan tersebut meliputi perubahan data BMN pada aplikasi SIMAK-BMN 
+    sesuai dengan hasil penelitian Tim Internal."""
+    elements.append(Paragraph(body, normal_style))
+    elements.append(Spacer(1, 4*rl_mm))
+
+    # Rincian
+    if koreksi_assets:
+        elements.append(Paragraph("<b>Rincian BMN yang Memerlukan Koreksi Pencatatan:</b>", normal_style))
+        detail_data = [['No', 'Kode Barang', 'NUP', 'Nama BMN', 'Jenis Koreksi', 'Uraian', 'Nilai (Rp)']]
+        for i, a in enumerate(koreksi_assets):
+            detail_data.append([
+                str(i+1), a.get('asset_code', '-'), str(a.get('NUP', '-')),
+                Paragraph(a.get('asset_name', '-'), small_style),
+                Paragraph(a.get('sub_klasifikasi', '-'), small_style),
+                Paragraph(a.get('uraian_tidak_ditemukan', '-'), small_style),
+                fmt_rp(safe_price(a))
+            ])
+        detail_data.append(['', '', '', '', '', Paragraph('<b>TOTAL</b>', small_style), fmt_rp(total_val)])
+        dt = Table(detail_data, colWidths=[22, 60, 28, 80, 70, 95, 60])
+        dt.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), rl_colors.HexColor('#92400e')),
+            ('TEXTCOLOR', (0,0), (-1,0), rl_colors.white),
+            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0,0), (-1,-1), 7),
+            ('GRID', (0,0), (-1,-1), 0.5, rl_colors.grey),
+            ('ALIGN', (0,0), (0,-1), 'CENTER'),
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ('BACKGROUND', (0,-1), (-1,-1), rl_colors.HexColor('#fffbeb')),
+        ]))
+        elements.append(dt)
+    else:
+        elements.append(Paragraph("Tidak ada BMN yang memerlukan koreksi pencatatan.", normal_style))
+
+    elements.append(Spacer(1, 6*rl_mm))
+    elements.append(Paragraph("Demikian Surat Pernyataan ini dibuat dengan sebenar-benarnya.", normal_style))
+    elements.append(Spacer(1, 10*rl_mm))
+
+    # Signature
+    tgl = activity.get("tanggal_berita_acara", "_______________")
+    sign_data = [
+        [f'Dibuat di: {alamat}', ''],
+        [f'Pada tanggal: {tgl}', ''],
+        ['', ''],
+        ['Yang membuat pernyataan,', ''],
+        ['', ''], ['', ''], ['', ''],
+        [f'{kasatker}', ''],
+        [f'NIP. {nip}', ''],
+    ]
+    sign_table = Table(sign_data, colWidths=[300, 130])
+    sign_table.setStyle(TableStyle([
+        ('FONTSIZE', (0,0), (-1,-1), 10),
+        ('FONTNAME', (0,7), (0,7), 'Helvetica-Bold'),
+        ('LINEBELOW', (0,7), (0,7), 1, rl_colors.black),
+    ]))
+    elements.append(sign_table)
+
+    doc.build(elements)
+    buffer.seek(0)
+
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=Surat_Koreksi_{activity_id[:8]}.pdf"}
+    )
+
+
+# ============================================================================
+# DBHI PDF REPORTS (LKPP 85/2025)
+# ============================================================================
+
+DBHI_TYPES = {
+    "kondisi-baik": {
+        "title": "DAFTAR BARANG HASIL INVENTARISASI BMN\nKONDISI BAIK",
+        "filter": lambda a: a.get("inventory_status") == "Ditemukan" and a.get("condition") == "Baik",
+        "extra_cols": False,
+    },
+    "kondisi-rusak-ringan": {
+        "title": "DAFTAR BARANG HASIL INVENTARISASI BMN\nKONDISI RUSAK RINGAN",
+        "filter": lambda a: a.get("inventory_status") == "Ditemukan" and a.get("condition") == "Rusak Ringan",
+        "extra_cols": False,
+    },
+    "kondisi-rusak-berat": {
+        "title": "DAFTAR BARANG HASIL INVENTARISASI BMN\nKONDISI RUSAK BERAT",
+        "filter": lambda a: a.get("inventory_status") == "Ditemukan" and a.get("condition") == "Rusak Berat",
+        "extra_cols": False,
+    },
+    "berlebih": {
+        "title": "DAFTAR BARANG HASIL INVENTARISASI BMN\nBMN BERLEBIH",
+        "filter": lambda a: a.get("inventory_status") == "Berlebih",
+        "extra_cols": "berlebih",
+    },
+    "tidak-ditemukan": {
+        "title": "DAFTAR BARANG HASIL INVENTARISASI BMN\nBMN TIDAK DITEMUKAN",
+        "filter": lambda a: a.get("inventory_status") == "Tidak Ditemukan",
+        "extra_cols": "tidak_ditemukan",
+    },
+    "sengketa": {
+        "title": "DAFTAR BARANG HASIL INVENTARISASI BMN\nBMN DALAM SENGKETA",
+        "filter": lambda a: a.get("inventory_status") == "Sengketa",
+        "extra_cols": "sengketa",
+    },
+}
+
+
+@reports_router.get("/inventory-activities/{activity_id}/dbhi/{dbhi_type}")
+async def generate_dbhi_pdf(activity_id: str, dbhi_type: str):
+    """Generate DBHI (Daftar Barang Hasil Inventarisasi) PDF by type"""
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib import colors as rl_colors
+    from reportlab.lib.units import mm as rl_mm, cm as rl_cm
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+
+    if dbhi_type not in DBHI_TYPES:
+        raise HTTPException(status_code=400, detail=f"Tipe DBHI tidak valid. Pilih: {', '.join(DBHI_TYPES.keys())}")
+
+    dbhi_config = DBHI_TYPES[dbhi_type]
+
+    activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
+    if not activity:
+        raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+
+    all_assets = await db.assets.find({"activity_id": activity_id}, {"_id": 0}).to_list(100000)
+    filtered = [a for a in all_assets if dbhi_config["filter"](a)]
+
+    def safe_price(a):
+        try:
+            return float(a.get("purchase_price", 0) or 0)
+        except (ValueError, TypeError):
+            return 0.0
+
+    def fmt_rp(val):
+        try:
+            return f"{int(val):,}".replace(",", ".")
+        except (ValueError, TypeError):
+            return "0"
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), leftMargin=1.5*rl_cm, rightMargin=1.5*rl_cm, topMargin=1.5*rl_cm, bottomMargin=1.5*rl_cm)
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle('DBHITitle', parent=styles['Title'], fontSize=12, spaceAfter=2, alignment=TA_CENTER, fontName='Helvetica-Bold', leading=16)
+    subtitle_style = ParagraphStyle('DBHISub', parent=styles['Normal'], fontSize=9, spaceAfter=8, alignment=TA_CENTER)
+    cell_style = ParagraphStyle('DBHICell', parent=styles['Normal'], fontSize=7, leading=9, alignment=TA_LEFT)
+    cell_center = ParagraphStyle('DBHICellC', parent=styles['Normal'], fontSize=7, leading=9, alignment=TA_CENTER)
+    cell_right = ParagraphStyle('DBHICellR', parent=styles['Normal'], fontSize=7, leading=9, alignment=TA_RIGHT)
+    header_style = ParagraphStyle('DBHIHeader', parent=styles['Normal'], fontSize=7, leading=9, fontName='Helvetica-Bold', alignment=TA_CENTER, textColor=rl_colors.white)
+    footer_style = ParagraphStyle('DBHIFooter', parent=styles['Normal'], fontSize=8, leading=10)
+    info_style = ParagraphStyle('DBHIInfo', parent=styles['Normal'], fontSize=8, spaceAfter=2, leading=11)
+
+    elements = []
+
+    # Title
+    for line in dbhi_config["title"].split("\n"):
+        elements.append(Paragraph(line, title_style))
+
+    # Activity info
+    satker = activity.get("kasatker", {})
+    satker_name = satker.get("nama", activity.get("nama_kegiatan", "-"))
+    nomor_sk = activity.get("nomor_surat", "-")
+    tgl = activity.get("tanggal_mulai", "-")
+    elements.append(Spacer(1, 4*rl_mm))
+    elements.append(Paragraph(f"Satuan Kerja: {satker_name}", info_style))
+    elements.append(Paragraph(f"Nomor SK: {nomor_sk} &nbsp;&nbsp;|&nbsp;&nbsp; Tanggal: {tgl}", info_style))
+    elements.append(Spacer(1, 4*rl_mm))
+
+    # Build table headers based on type
+    extra = dbhi_config["extra_cols"]
+    if extra == "berlebih":
+        headers = ["No", "Kode Barang", "NUP", "Nama Barang", "Tahun\nPerolehan", "Kondisi", "Nilai (Rp)", "Lokasi", "Keterangan\nBerlebih", "Asal Usul", "Tindak Lanjut"]
+        col_widths = [22, 72, 28, 110, 42, 48, 62, 80, 90, 80, 80]
+    elif extra == "tidak_ditemukan":
+        headers = ["No", "Kode Barang", "NUP", "Nama Barang", "Tahun\nPerolehan", "Nilai (Rp)", "Lokasi", "Klasifikasi", "Sub Klasifikasi", "Uraian", "Tindak Lanjut"]
+        col_widths = [22, 72, 28, 100, 42, 62, 70, 70, 80, 80, 80]
+    elif extra == "sengketa":
+        headers = ["No", "Kode Barang", "NUP", "Nama Barang", "Tahun\nPerolehan", "Kondisi", "Nilai (Rp)", "Lokasi", "No. Perkara", "Pihak\nBersengketa", "Keterangan\nSengketa"]
+        col_widths = [22, 72, 28, 100, 42, 48, 62, 70, 70, 80, 80]
+    else:
+        headers = ["No", "Kode Barang", "NUP", "Nama Barang", "Merk/Tipe", "Tahun\nPerolehan", "Nilai (Rp)", "Lokasi", "Keterangan"]
+        col_widths = [25, 80, 30, 130, 80, 45, 72, 110, 110]
+
+    header_row = [Paragraph(h.replace("\n", "<br/>"), header_style) for h in headers]
+    table_data = [header_row]
+
+    total_nilai = 0
+    for idx, asset in enumerate(filtered, 1):
+        val = safe_price(asset)
+        total_nilai += val
+        year = str(asset.get("purchase_date", ""))[:4] if asset.get("purchase_date") else "-"
+
+        if extra == "berlebih":
+            row = [
+                Paragraph(str(idx), cell_center),
+                Paragraph(str(asset.get("asset_code", "-")), cell_style),
+                Paragraph(str(asset.get("NUP", "-")), cell_center),
+                Paragraph(str(asset.get("asset_name", "-")), cell_style),
+                Paragraph(year, cell_center),
+                Paragraph(str(asset.get("condition", "-")), cell_center),
+                Paragraph(fmt_rp(val), cell_right),
+                Paragraph(str(asset.get("location", "-")), cell_style),
+                Paragraph(str(asset.get("keterangan_berlebih", "-")), cell_style),
+                Paragraph(str(asset.get("asal_usul_berlebih", "-")), cell_style),
+                Paragraph(str(asset.get("tindak_lanjut", "-")), cell_style),
+            ]
+        elif extra == "tidak_ditemukan":
+            row = [
+                Paragraph(str(idx), cell_center),
+                Paragraph(str(asset.get("asset_code", "-")), cell_style),
+                Paragraph(str(asset.get("NUP", "-")), cell_center),
+                Paragraph(str(asset.get("asset_name", "-")), cell_style),
+                Paragraph(year, cell_center),
+                Paragraph(fmt_rp(val), cell_right),
+                Paragraph(str(asset.get("location", "-")), cell_style),
+                Paragraph(str(asset.get("klasifikasi_tidak_ditemukan", "-")), cell_style),
+                Paragraph(str(asset.get("sub_klasifikasi", "-")), cell_style),
+                Paragraph(str(asset.get("uraian_tidak_ditemukan", "-")), cell_style),
+                Paragraph(str(asset.get("tindak_lanjut", "-")), cell_style),
+            ]
+        elif extra == "sengketa":
+            row = [
+                Paragraph(str(idx), cell_center),
+                Paragraph(str(asset.get("asset_code", "-")), cell_style),
+                Paragraph(str(asset.get("NUP", "-")), cell_center),
+                Paragraph(str(asset.get("asset_name", "-")), cell_style),
+                Paragraph(year, cell_center),
+                Paragraph(str(asset.get("condition", "-")), cell_center),
+                Paragraph(fmt_rp(val), cell_right),
+                Paragraph(str(asset.get("location", "-")), cell_style),
+                Paragraph(str(asset.get("nomor_perkara", "-")), cell_style),
+                Paragraph(str(asset.get("pihak_bersengketa", "-")), cell_style),
+                Paragraph(str(asset.get("keterangan_sengketa", "-")), cell_style),
+            ]
+        else:
+            row = [
+                Paragraph(str(idx), cell_center),
+                Paragraph(str(asset.get("asset_code", "-")), cell_style),
+                Paragraph(str(asset.get("NUP", "-")), cell_center),
+                Paragraph(str(asset.get("asset_name", "-")), cell_style),
+                Paragraph(f"{asset.get('brand', '')} {asset.get('model', '')}".strip() or "-", cell_style),
+                Paragraph(year, cell_center),
+                Paragraph(fmt_rp(val), cell_right),
+                Paragraph(str(asset.get("location", "-")), cell_style),
+                Paragraph(str(asset.get("notes", "-")), cell_style),
+            ]
+        table_data.append(row)
+
+    # Total row
+    if extra == "berlebih":
+        total_row = [Paragraph("", cell_style)] * 6 + [Paragraph(f"<b>{fmt_rp(total_nilai)}</b>", cell_right)] + [Paragraph("", cell_style)] * 4
+    elif extra == "tidak_ditemukan":
+        total_row = [Paragraph("", cell_style)] * 5 + [Paragraph(f"<b>{fmt_rp(total_nilai)}</b>", cell_right)] + [Paragraph("", cell_style)] * 5
+    elif extra == "sengketa":
+        total_row = [Paragraph("", cell_style)] * 6 + [Paragraph(f"<b>{fmt_rp(total_nilai)}</b>", cell_right)] + [Paragraph("", cell_style)] * 4
+    else:
+        total_row = [Paragraph("", cell_style)] * 6 + [Paragraph(f"<b>{fmt_rp(total_nilai)}</b>", cell_right)] + [Paragraph("", cell_style)] * 2
+
+    total_row[0] = Paragraph(f"<b>Total: {len(filtered)} item</b>", cell_style)
+    table_data.append(total_row)
+
+    table = Table(table_data, colWidths=col_widths, repeatRows=1)
+
+    header_bg = rl_colors.HexColor("#1e3a5f")
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), header_bg),
+        ('TEXTCOLOR', (0, 0), (-1, 0), rl_colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 7),
+        ('FONTSIZE', (0, 1), (-1, -1), 7),
+        ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('GRID', (0, 0), (-1, -1), 0.5, rl_colors.HexColor("#cccccc")),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -2), [rl_colors.white, rl_colors.HexColor("#f8f9fa")]),
+        ('BACKGROUND', (0, -1), (-1, -1), rl_colors.HexColor("#e8f0fe")),
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ('LEFTPADDING', (0, 0), (-1, -1), 4),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+    ]))
+    elements.append(table)
+
+    # Signature section
+    elements.append(Spacer(1, 12*rl_mm))
+    kasatker_nama = satker.get("nama_pejabat", "________________________")
+    kasatker_nip = satker.get("nip", "________________________")
+
+    sign_data = [
+        [Paragraph("", footer_style), Paragraph(".................., .......................", footer_style)],
+        [Paragraph("", footer_style), Paragraph("Kepala Satuan Kerja,", footer_style)],
+        [Paragraph("", footer_style), Paragraph("", footer_style)],
+        [Paragraph("", footer_style), Paragraph("", footer_style)],
+        [Paragraph("", footer_style), Paragraph(f"<b>{kasatker_nama}</b>", footer_style)],
+        [Paragraph("", footer_style), Paragraph(f"NIP. {kasatker_nip}", footer_style)],
+    ]
+    sign_table = Table(sign_data, colWidths=[400, 250])
+    sign_table.setStyle(TableStyle([
+        ('ALIGN', (1, 0), (1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+    ]))
+    elements.append(sign_table)
+
+    doc.build(elements)
+    buffer.seek(0)
+
+    filename = f"DBHI_{dbhi_type}_{activity_id[:8]}.pdf"
+    return StreamingResponse(buffer, media_type="application/pdf",
+                             headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+# ============================================================================
+# RHI PDF
+# ============================================================================
+
+@reports_router.get("/inventory-activities/{activity_id}/rhi-pdf")
+async def generate_rhi_pdf(activity_id: str):
+    """Generate RHI (Rekapitulasi Hasil Inventarisasi BMN) PDF"""
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib import colors as rl_colors
+    from reportlab.lib.units import mm as rl_mm, cm as rl_cm
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+
+    activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
+    if not activity:
+        raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+
+    assets = await db.assets.find({"activity_id": activity_id}, {"_id": 0}).to_list(100000)
+
+    def safe_price(a):
+        try: return float(a.get("purchase_price", 0) or 0)
+        except: return 0.0
+
+    def fmt_rp(val):
+        try: return f"{int(val):,}".replace(",", ".")
+        except: return "0"
+
+    total_all = assets
+    ditemukan = [a for a in assets if a.get("inventory_status") == "Ditemukan"]
+    tidak_ditemukan = [a for a in assets if a.get("inventory_status") == "Tidak Ditemukan"]
+    berlebih = [a for a in assets if a.get("inventory_status") == "Berlebih"]
+    sengketa = [a for a in assets if a.get("inventory_status") == "Sengketa"]
+    belum = [a for a in assets if a.get("inventory_status", "Belum Diinventarisasi") == "Belum Diinventarisasi"]
+
+    baik = [a for a in ditemukan if a.get("condition") == "Baik"]
+    rusak_ringan = [a for a in ditemukan if a.get("condition") == "Rusak Ringan"]
+    rusak_berat = [a for a in ditemukan if a.get("condition") == "Rusak Berat"]
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), leftMargin=1.5*rl_cm, rightMargin=1.5*rl_cm, topMargin=1.5*rl_cm, bottomMargin=1.5*rl_cm)
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle('RHITitle', parent=styles['Title'], fontSize=13, spaceAfter=2, alignment=TA_CENTER, fontName='Helvetica-Bold', leading=17)
+    info_style = ParagraphStyle('RHIInfo', parent=styles['Normal'], fontSize=8, spaceAfter=2, leading=11)
+    cell_style = ParagraphStyle('RHICell', parent=styles['Normal'], fontSize=8, leading=10, alignment=TA_LEFT)
+    cell_center = ParagraphStyle('RHICellC', parent=styles['Normal'], fontSize=8, leading=10, alignment=TA_CENTER)
+    cell_right = ParagraphStyle('RHICellR', parent=styles['Normal'], fontSize=8, leading=10, alignment=TA_RIGHT)
+    header_style = ParagraphStyle('RHIHeader', parent=styles['Normal'], fontSize=8, leading=10, fontName='Helvetica-Bold', alignment=TA_CENTER, textColor=rl_colors.white)
+    footer_style = ParagraphStyle('RHIFooter', parent=styles['Normal'], fontSize=8, leading=11)
+
+    elements = []
+    elements.append(Paragraph("REKAPITULASI HASIL INVENTARISASI", title_style))
+    elements.append(Paragraph("BARANG MILIK NEGARA (RHI)", title_style))
+
+    satker = activity.get("kasatker", {})
+    satker_name = satker.get("nama", activity.get("nama_kegiatan", "-"))
+    elements.append(Spacer(1, 3*rl_mm))
+    elements.append(Paragraph(f"Satuan Kerja: {satker_name}", info_style))
+    elements.append(Paragraph(f"Nomor SK: {activity.get('nomor_surat', '-')} | Periode: {activity.get('tanggal_mulai', '-')} s.d. {activity.get('tanggal_selesai', '-')}", info_style))
+    elements.append(Spacer(1, 4*rl_mm))
+
+    headers = ["No", "Kategori Hasil Inventarisasi", "Jumlah\n(NUP)", "Nilai (Rp)", "Persentase"]
+    header_row = [Paragraph(h.replace("\n", "<br/>"), header_style) for h in headers]
+
+    rows_data = [
+        ("A", "BMN DITEMUKAN", len(ditemukan), sum(safe_price(a) for a in ditemukan)),
+        ("  1", "   Kondisi Baik", len(baik), sum(safe_price(a) for a in baik)),
+        ("  2", "   Kondisi Rusak Ringan", len(rusak_ringan), sum(safe_price(a) for a in rusak_ringan)),
+        ("  3", "   Kondisi Rusak Berat", len(rusak_berat), sum(safe_price(a) for a in rusak_berat)),
+        ("B", "BMN TIDAK DITEMUKAN", len(tidak_ditemukan), sum(safe_price(a) for a in tidak_ditemukan)),
+        ("C", "BMN BERLEBIH", len(berlebih), sum(safe_price(a) for a in berlebih)),
+        ("D", "BMN DALAM SENGKETA", len(sengketa), sum(safe_price(a) for a in sengketa)),
+        ("E", "BELUM DIINVENTARISASI", len(belum), sum(safe_price(a) for a in belum)),
+    ]
+
+    total_count = len(total_all)
+    total_value = sum(safe_price(a) for a in total_all)
+    main_categories = {"A", "B", "C", "D", "E"}
+
+    table_data = [header_row]
+    for no, label, count, value in rows_data:
+        pct = f"{(count/total_count*100):.1f}%" if total_count > 0 else "0%"
+        is_main = no.strip() in main_categories
+        style_l = ParagraphStyle('RHICellBold', parent=cell_style, fontName='Helvetica-Bold') if is_main else cell_style
+        style_r = ParagraphStyle('RHICellBoldR', parent=cell_right, fontName='Helvetica-Bold') if is_main else cell_right
+        style_c = ParagraphStyle('RHICellBoldC', parent=cell_center, fontName='Helvetica-Bold') if is_main else cell_center
+        table_data.append([
+            Paragraph(str(no), style_c),
+            Paragraph(label, style_l),
+            Paragraph(str(count), style_c),
+            Paragraph(fmt_rp(value), style_r),
+            Paragraph(pct, style_c),
+        ])
+
+    pct_total = "100%" if total_count > 0 else "0%"
+    table_data.append([
+        Paragraph("", cell_center),
+        Paragraph("<b>TOTAL BMN DITELITI</b>", cell_style),
+        Paragraph(f"<b>{total_count}</b>", cell_center),
+        Paragraph(f"<b>{fmt_rp(total_value)}</b>", cell_right),
+        Paragraph(f"<b>{pct_total}</b>", cell_center),
+    ])
+
+    col_widths = [35, 280, 65, 120, 65]
+    table = Table(table_data, colWidths=col_widths, repeatRows=1)
+
+    header_bg = rl_colors.HexColor("#1e3a5f")
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), header_bg),
+        ('TEXTCOLOR', (0, 0), (-1, 0), rl_colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('GRID', (0, 0), (-1, -1), 0.5, rl_colors.HexColor("#cccccc")),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -2), [rl_colors.white, rl_colors.HexColor("#f8f9fa")]),
+        ('BACKGROUND', (0, -1), (-1, -1), rl_colors.HexColor("#e8f0fe")),
+        ('BACKGROUND', (0, 1), (-1, 1), rl_colors.HexColor("#e8f5e9")),
+        ('BACKGROUND', (0, 5), (-1, 5), rl_colors.HexColor("#ffebee")),
+        ('BACKGROUND', (0, 6), (-1, 6), rl_colors.HexColor("#f3e5f5")),
+        ('BACKGROUND', (0, 7), (-1, 7), rl_colors.HexColor("#fce4ec")),
+        ('BACKGROUND', (0, 8), (-1, 8), rl_colors.HexColor("#f5f5f5")),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('LEFTPADDING', (0, 0), (-1, -1), 6),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+    ]))
+    elements.append(table)
+
+    # Signature
+    elements.append(Spacer(1, 12*rl_mm))
+    kasatker_nama = satker.get("nama_pejabat", "________________________")
+    kasatker_nip = satker.get("nip", "________________________")
+    sign_data = [
+        [Paragraph("", footer_style), Paragraph(".................., .......................", footer_style)],
+        [Paragraph("", footer_style), Paragraph("Kepala Satuan Kerja,", footer_style)],
+        [Paragraph("", footer_style), Paragraph("", footer_style)],
+        [Paragraph("", footer_style), Paragraph("", footer_style)],
+        [Paragraph("", footer_style), Paragraph(f"<b>{kasatker_nama}</b>", footer_style)],
+        [Paragraph("", footer_style), Paragraph(f"NIP. {kasatker_nip}", footer_style)],
+    ]
+    sign_table = Table(sign_data, colWidths=[380, 250])
+    sign_table.setStyle(TableStyle([('ALIGN', (1, 0), (1, -1), 'CENTER'), ('VALIGN', (0, 0), (-1, -1), 'MIDDLE')]))
+    elements.append(sign_table)
+
+    doc.build(elements)
+    buffer.seek(0)
+    return StreamingResponse(buffer, media_type="application/pdf",
+                             headers={"Content-Disposition": f'attachment; filename="RHI_{activity_id[:8]}.pdf"'})
+
+
+# ============================================================================
+# BAHI PDF
+# ============================================================================
+
+@reports_router.get("/inventory-activities/{activity_id}/bahi-pdf")
+async def generate_bahi_pdf(activity_id: str):
+    """Generate BAHI (Berita Acara Hasil Inventarisasi BMN) PDF"""
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors as rl_colors
+    from reportlab.lib.units import mm as rl_mm, cm as rl_cm
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY
+
+    activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
+    if not activity:
+        raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+
+    assets = await db.assets.find({"activity_id": activity_id}, {"_id": 0}).to_list(100000)
+
+    def safe_price(a):
+        try: return float(a.get("purchase_price", 0) or 0)
+        except: return 0.0
+
+    def fmt_rp(val):
+        try: return f"Rp {int(val):,}".replace(",", ".")
+        except: return "Rp 0"
+
+    total_all = len(assets)
+    ditemukan = [a for a in assets if a.get("inventory_status") == "Ditemukan"]
+    tidak_ditemukan = [a for a in assets if a.get("inventory_status") == "Tidak Ditemukan"]
+    berlebih = [a for a in assets if a.get("inventory_status") == "Berlebih"]
+    sengketa = [a for a in assets if a.get("inventory_status") == "Sengketa"]
+    baik = [a for a in ditemukan if a.get("condition") == "Baik"]
+    rusak_ringan = [a for a in ditemukan if a.get("condition") == "Rusak Ringan"]
+    rusak_berat = [a for a in ditemukan if a.get("condition") == "Rusak Berat"]
+
+    satker = activity.get("kasatker", {})
+    satker_name = satker.get("nama", activity.get("nama_kegiatan", "-"))
+    kasatker_nama = satker.get("nama_pejabat", "________________________")
+    kasatker_nip = satker.get("nip", "________________________")
+    kasatker_jabatan = satker.get("jabatan", "Kepala Satuan Kerja")
+    tim = activity.get("tim_peneliti", [])
+    tim_pendukung_list = activity.get("tim_pendukung", [])
+    nomor_sk = activity.get("nomor_surat", "-")
+    tgl_mulai = activity.get("tanggal_mulai", "-")
+    tgl_selesai = activity.get("tanggal_selesai", "-")
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=2.5*rl_cm, rightMargin=2.5*rl_cm, topMargin=2*rl_cm, bottomMargin=2*rl_cm)
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle('BAHITitle', parent=styles['Title'], fontSize=13, spaceAfter=4, alignment=TA_CENTER, fontName='Helvetica-Bold', leading=17)
+    subtitle_style = ParagraphStyle('BAHISub', parent=styles['Normal'], fontSize=10, spaceAfter=8, alignment=TA_CENTER)
+    normal_style = ParagraphStyle('BAHINormal', parent=styles['Normal'], fontSize=10, spaceAfter=6, alignment=TA_JUSTIFY, leading=14)
+    bold_style = ParagraphStyle('BAHIBold', parent=styles['Normal'], fontSize=10, fontName='Helvetica-Bold', spaceAfter=4)
+    indent_style = ParagraphStyle('BAHIIndent', parent=normal_style, leftIndent=20, spaceAfter=2)
+    footer_style = ParagraphStyle('BAHIFooter', parent=styles['Normal'], fontSize=10, leading=13)
+    small_style = ParagraphStyle('BAHISmall', parent=styles['Normal'], fontSize=9, leading=12)
+
+    elements = []
+
+    elements.append(Paragraph("BERITA ACARA", title_style))
+    elements.append(Paragraph("HASIL INVENTARISASI BARANG MILIK NEGARA", title_style))
+    elements.append(Spacer(1, 2*rl_mm))
+    ba = activity.get("berita_acara", {})
+    ba_nomor = ba.get("nomor", "......./......./........")
+    elements.append(Paragraph(f"Nomor: {ba_nomor}", subtitle_style))
+    elements.append(Spacer(1, 6*rl_mm))
+
+    elements.append(Paragraph(
+        f"Pada hari ini, .................., tanggal .................. bulan .................. "
+        f"tahun ...................., bertempat di {satker_name}, kami yang bertanda tangan di bawah ini:",
+        normal_style))
+    elements.append(Spacer(1, 3*rl_mm))
+
+    id_data = [
+        ["Nama", f": {kasatker_nama}"],
+        ["Jabatan", f": {kasatker_jabatan}"],
+        ["Unit Organisasi", f": {satker_name}"],
+    ]
+    for label, value in id_data:
+        elements.append(Paragraph(f"<b>{label}</b> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{value}", indent_style))
+
+    elements.append(Spacer(1, 3*rl_mm))
+    elements.append(Paragraph(
+        f"Berdasarkan Surat Keputusan Nomor {nomor_sk}, telah dilaksanakan kegiatan inventarisasi "
+        f"Barang Milik Negara (BMN) di lingkungan {satker_name} pada periode {tgl_mulai} s.d. {tgl_selesai}.",
+        normal_style))
+    elements.append(Spacer(1, 3*rl_mm))
+
+    elements.append(Paragraph("<b>Adapun hasil inventarisasi adalah sebagai berikut:</b>", normal_style))
+    elements.append(Spacer(1, 2*rl_mm))
+
+    summary_items = [
+        f"Jumlah BMN yang diteliti: <b>{total_all} NUP</b> dengan nilai total <b>{fmt_rp(sum(safe_price(a) for a in assets))}</b>",
+        f"BMN Ditemukan: <b>{len(ditemukan)} NUP</b> ({fmt_rp(sum(safe_price(a) for a in ditemukan))})",
+        f"&nbsp;&nbsp;&nbsp;a. Kondisi Baik: <b>{len(baik)} NUP</b> ({fmt_rp(sum(safe_price(a) for a in baik))})",
+        f"&nbsp;&nbsp;&nbsp;b. Kondisi Rusak Ringan: <b>{len(rusak_ringan)} NUP</b> ({fmt_rp(sum(safe_price(a) for a in rusak_ringan))})",
+        f"&nbsp;&nbsp;&nbsp;c. Kondisi Rusak Berat: <b>{len(rusak_berat)} NUP</b> ({fmt_rp(sum(safe_price(a) for a in rusak_berat))})",
+        f"BMN Tidak Ditemukan: <b>{len(tidak_ditemukan)} NUP</b> ({fmt_rp(sum(safe_price(a) for a in tidak_ditemukan))})",
+        f"BMN Berlebih: <b>{len(berlebih)} NUP</b> ({fmt_rp(sum(safe_price(a) for a in berlebih))})",
+        f"BMN Dalam Sengketa: <b>{len(sengketa)} NUP</b> ({fmt_rp(sum(safe_price(a) for a in sengketa))})",
+    ]
+    for idx, item in enumerate(summary_items, 1):
+        prefix = f"{idx}. " if not item.startswith("&nbsp;") else ""
+        elements.append(Paragraph(f"{prefix}{item}", indent_style))
+
+    elements.append(Spacer(1, 4*rl_mm))
+
+    elements.append(Paragraph("<b>Hasil inventarisasi sebagaimana tercantum dalam Laporan Hasil Inventarisasi (LHI) yang terdiri dari:</b>", normal_style))
+    attachments = [
+        "Rekapitulasi Hasil Inventarisasi BMN (RHI);",
+        "Daftar Barang Hasil Inventarisasi BMN (DBHI) Kondisi Baik;",
+        "DBHI Kondisi Rusak Ringan;",
+        "DBHI Kondisi Rusak Berat;",
+        "DBHI BMN Berlebih;",
+        "DBHI BMN Tidak Ditemukan;",
+        "DBHI BMN Dalam Sengketa;",
+        "Surat Pernyataan Hasil Inventarisasi BMN;",
+        "Surat Pernyataan Pelaksanaan Inventarisasi BMN.",
+    ]
+    for idx, att in enumerate(attachments, 1):
+        elements.append(Paragraph(f"&nbsp;&nbsp;&nbsp;{idx}. {att}", indent_style))
+
+    elements.append(Spacer(1, 4*rl_mm))
+    elements.append(Paragraph(
+        "Demikian Berita Acara Hasil Inventarisasi ini dibuat dengan sebenar-benarnya "
+        "dan dapat dipertanggungjawabkan.",
+        normal_style))
+
+    elements.append(Spacer(1, 10*rl_mm))
+
+    if tim:
+        elements.append(Paragraph("<b>Tim Pelaksana Inventarisasi:</b>", bold_style))
+        for i, member in enumerate(tim, 1):
+            elements.append(Paragraph(f"{i}. {member} &nbsp;&nbsp;&nbsp;(.......................)", small_style))
+        elements.append(Spacer(1, 4*rl_mm))
+
+    if tim_pendukung_list:
+        elements.append(Paragraph("<b>Tim Pendukung:</b>", bold_style))
+        for i, member in enumerate(tim_pendukung_list, 1):
+            if isinstance(member, dict):
+                name = member.get('nama', '-')
+            else:
+                name = str(member)
+            elements.append(Paragraph(f"{i}. {name} &nbsp;&nbsp;&nbsp;(.......................)", small_style))
+        elements.append(Spacer(1, 6*rl_mm))
+
+    sign_data = [
+        [Paragraph("", footer_style), Paragraph(".................., .......................", footer_style)],
+        [Paragraph("Mengetahui,", footer_style), Paragraph("Yang membuat Berita Acara,", footer_style)],
+        [Paragraph("", footer_style), Paragraph("", footer_style)],
+        [Paragraph("", footer_style), Paragraph("", footer_style)],
+        [Paragraph(f"<b>{kasatker_nama}</b>", footer_style), Paragraph(f"<b>{tim[0] if tim else '________________________'}</b>", footer_style)],
+        [Paragraph(f"NIP. {kasatker_nip}", footer_style), Paragraph("NIP. ........................", footer_style)],
+    ]
+    sign_table = Table(sign_data, colWidths=[230, 230])
+    sign_table.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+    ]))
+    elements.append(sign_table)
+
+    doc.build(elements)
+    buffer.seek(0)
+    return StreamingResponse(buffer, media_type="application/pdf",
+                             headers={"Content-Disposition": f'attachment; filename="BAHI_{activity_id[:8]}.pdf"'})
+
+
+# ============================================================================
+# SP HASIL PDF
+# ============================================================================
+
+@reports_router.get("/inventory-activities/{activity_id}/sp-hasil-pdf")
+async def generate_sp_hasil_pdf(activity_id: str):
+    """Generate Surat Pernyataan Hasil Inventarisasi BMN PDF"""
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors as rl_colors
+    from reportlab.lib.units import mm as rl_mm, cm as rl_cm
+    from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY
+
+    activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
+    if not activity:
+        raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+
+    satker = activity.get("kasatker", {})
+    satker_name = satker.get("nama", activity.get("nama_kegiatan", "-"))
+    kasatker_nama = satker.get("nama_pejabat", "________________________")
+    kasatker_nip = satker.get("nip", "________________________")
+    kasatker_jabatan = satker.get("jabatan", "Kepala Satuan Kerja")
+    nomor_sk = activity.get("nomor_surat", "-")
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=2.5*rl_cm, rightMargin=2.5*rl_cm, topMargin=2.5*rl_cm, bottomMargin=2.5*rl_cm)
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle('SPHTitle', parent=styles['Title'], fontSize=13, spaceAfter=4, alignment=TA_CENTER, fontName='Helvetica-Bold', leading=17)
+    normal_style = ParagraphStyle('SPHNormal', parent=styles['Normal'], fontSize=10, spaceAfter=6, alignment=TA_JUSTIFY, leading=14)
+    indent_style = ParagraphStyle('SPHIndent', parent=normal_style, leftIndent=20, spaceAfter=4)
+    footer_style = ParagraphStyle('SPHFooter', parent=styles['Normal'], fontSize=10, leading=13)
+
+    elements = []
+
+    elements.append(Paragraph("SURAT PERNYATAAN", title_style))
+    elements.append(Paragraph("HASIL INVENTARISASI BARANG MILIK NEGARA", title_style))
+    elements.append(Spacer(1, 10*rl_mm))
+
+    elements.append(Paragraph("Yang bertanda tangan di bawah ini:", normal_style))
+    elements.append(Spacer(1, 2*rl_mm))
+
+    id_items = [
+        ("Nama", kasatker_nama),
+        ("Jabatan", kasatker_jabatan),
+        ("Unit Organisasi", satker_name),
+    ]
+    for label, value in id_items:
+        elements.append(Paragraph(f"<b>{label}</b> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: {value}", indent_style))
+
+    elements.append(Spacer(1, 4*rl_mm))
+    elements.append(Paragraph("<b>Menyatakan dengan sesungguhnya bahwa:</b>", normal_style))
+    elements.append(Spacer(1, 2*rl_mm))
+
+    statements = [
+        f"Telah melaksanakan kegiatan inventarisasi Barang Milik Negara (BMN) di lingkungan "
+        f"{satker_name} sesuai dengan Pedoman Inventarisasi Barang Milik Negara sebagaimana diatur "
+        f"dalam Surat Keputusan Nomor {nomor_sk}.",
+
+        "Hasil inventarisasi sebagaimana tercantum dalam Laporan Hasil Inventarisasi (LHI) yang meliputi "
+        "Rekapitulasi Hasil Inventarisasi (RHI) dan Daftar Barang Hasil Inventarisasi (DBHI) beserta "
+        "seluruh lampirannya adalah <b>benar dan akurat</b> sesuai dengan kondisi serta keberadaan BMN "
+        "pada saat pelaksanaan inventarisasi.",
+
+        "Pernyataan ini dibuat untuk dipergunakan sebagaimana mestinya.",
+    ]
+    for idx, stmt in enumerate(statements, 1):
+        elements.append(Paragraph(f"{idx}. &nbsp;{stmt}", indent_style))
+
+    elements.append(Spacer(1, 4*rl_mm))
+    elements.append(Paragraph(
+        "Apabila di kemudian hari terdapat kekeliruan dalam pernyataan ini, maka kami bersedia "
+        "untuk bertanggung jawab sesuai dengan ketentuan peraturan perundang-undangan yang berlaku.",
+        normal_style))
+
+    elements.append(Spacer(1, 12*rl_mm))
+    sign_data = [
+        [Paragraph("", footer_style), Paragraph(".................., .......................", footer_style)],
+        [Paragraph("", footer_style), Paragraph("Yang membuat pernyataan,", footer_style)],
+        [Paragraph("", footer_style), Paragraph("", footer_style)],
+        [Paragraph("", footer_style), Paragraph("", footer_style)],
+        [Paragraph("", footer_style), Paragraph("", footer_style)],
+        [Paragraph("", footer_style), Paragraph(f"<b>{kasatker_nama}</b>", footer_style)],
+        [Paragraph("", footer_style), Paragraph(f"{kasatker_jabatan}", footer_style)],
+        [Paragraph("", footer_style), Paragraph(f"NIP. {kasatker_nip}", footer_style)],
+    ]
+    sign_table = Table(sign_data, colWidths=[220, 250])
+    sign_table.setStyle(TableStyle([('ALIGN', (1, 0), (1, -1), 'CENTER'), ('VALIGN', (0, 0), (-1, -1), 'MIDDLE')]))
+    elements.append(sign_table)
+
+    doc.build(elements)
+    buffer.seek(0)
+    return StreamingResponse(buffer, media_type="application/pdf",
+                             headers={"Content-Disposition": f'attachment; filename="SP_Hasil_{activity_id[:8]}.pdf"'})
+
+
+# ============================================================================
+# SP PELAKSANAAN PDF
+# ============================================================================
+
+@reports_router.get("/inventory-activities/{activity_id}/sp-pelaksanaan-pdf")
+async def generate_sp_pelaksanaan_pdf(activity_id: str):
+    """Generate Surat Pernyataan Pelaksanaan Inventarisasi BMN PDF"""
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors as rl_colors
+    from reportlab.lib.units import mm as rl_mm, cm as rl_cm
+    from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY
+
+    activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
+    if not activity:
+        raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+
+    satker = activity.get("kasatker", {})
+    satker_name = satker.get("nama", activity.get("nama_kegiatan", "-"))
+    kasatker_nama = satker.get("nama_pejabat", "________________________")
+    kasatker_nip = satker.get("nip", "________________________")
+    kasatker_jabatan = satker.get("jabatan", "Kepala Satuan Kerja")
+    nomor_sk = activity.get("nomor_surat", "-")
+    tgl_mulai = activity.get("tanggal_mulai", "-")
+    tgl_selesai = activity.get("tanggal_selesai", "-")
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=2.5*rl_cm, rightMargin=2.5*rl_cm, topMargin=2.5*rl_cm, bottomMargin=2.5*rl_cm)
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle('SPPTitle', parent=styles['Title'], fontSize=13, spaceAfter=4, alignment=TA_CENTER, fontName='Helvetica-Bold', leading=17)
+    normal_style = ParagraphStyle('SPPNormal', parent=styles['Normal'], fontSize=10, spaceAfter=6, alignment=TA_JUSTIFY, leading=14)
+    indent_style = ParagraphStyle('SPPIndent', parent=normal_style, leftIndent=20, spaceAfter=4)
+    footer_style = ParagraphStyle('SPPFooter', parent=styles['Normal'], fontSize=10, leading=13)
+
+    elements = []
+
+    elements.append(Paragraph("SURAT PERNYATAAN", title_style))
+    elements.append(Paragraph("PELAKSANAAN INVENTARISASI BARANG MILIK NEGARA", title_style))
+    elements.append(Spacer(1, 10*rl_mm))
+
+    elements.append(Paragraph("Yang bertanda tangan di bawah ini:", normal_style))
+    elements.append(Spacer(1, 2*rl_mm))
+
+    id_items = [
+        ("Nama", kasatker_nama),
+        ("Jabatan", kasatker_jabatan),
+        ("Unit Organisasi", satker_name),
+    ]
+    for label, value in id_items:
+        elements.append(Paragraph(f"<b>{label}</b> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: {value}", indent_style))
+
+    elements.append(Spacer(1, 4*rl_mm))
+    elements.append(Paragraph("<b>Menyatakan dengan sesungguhnya bahwa:</b>", normal_style))
+    elements.append(Spacer(1, 2*rl_mm))
+
+    statements = [
+        f"Telah melaksanakan kegiatan inventarisasi Barang Milik Negara (BMN) di lingkungan "
+        f"{satker_name} sesuai dengan tahapan dan prosedur yang diatur dalam Pedoman Inventarisasi "
+        f"Barang Milik Negara sebagaimana diatur dalam Surat Keputusan Nomor {nomor_sk}, "
+        f"pada periode {tgl_mulai} s.d. {tgl_selesai}.",
+
+        "Pelaksanaan inventarisasi telah dilakukan secara <b>tertib, lengkap, dan akuntabel</b>, "
+        "meliputi tahap persiapan, pelaksanaan pendataan, identifikasi, pelaporan, dan tindak lanjut.",
+
+        "Seluruh data dan informasi yang terkait dengan pelaksanaan inventarisasi telah dikumpulkan "
+        "dan didokumentasikan dengan baik.",
+
+        "Pernyataan ini dibuat untuk dipergunakan sebagaimana mestinya.",
+    ]
+    for idx, stmt in enumerate(statements, 1):
+        elements.append(Paragraph(f"{idx}. &nbsp;{stmt}", indent_style))
+
+    elements.append(Spacer(1, 4*rl_mm))
+    elements.append(Paragraph(
+        "Apabila di kemudian hari terdapat kekeliruan dalam pernyataan ini, maka kami bersedia "
+        "untuk bertanggung jawab sesuai dengan ketentuan peraturan perundang-undangan yang berlaku.",
+        normal_style))
+
+    elements.append(Spacer(1, 12*rl_mm))
+    sign_data = [
+        [Paragraph("", footer_style), Paragraph(".................., .......................", footer_style)],
+        [Paragraph("", footer_style), Paragraph("Yang membuat pernyataan,", footer_style)],
+        [Paragraph("", footer_style), Paragraph("", footer_style)],
+        [Paragraph("", footer_style), Paragraph("", footer_style)],
+        [Paragraph("", footer_style), Paragraph("", footer_style)],
+        [Paragraph("", footer_style), Paragraph(f"<b>{kasatker_nama}</b>", footer_style)],
+        [Paragraph("", footer_style), Paragraph(f"{kasatker_jabatan}", footer_style)],
+        [Paragraph("", footer_style), Paragraph(f"NIP. {kasatker_nip}", footer_style)],
+    ]
+    sign_table = Table(sign_data, colWidths=[220, 250])
+    sign_table.setStyle(TableStyle([('ALIGN', (1, 0), (1, -1), 'CENTER'), ('VALIGN', (0, 0), (-1, -1), 'MIDDLE')]))
+    elements.append(sign_table)
+
+    doc.build(elements)
+    buffer.seek(0)
+    return StreamingResponse(buffer, media_type="application/pdf",
+                             headers={"Content-Disposition": f'attachment; filename="SP_Pelaksanaan_{activity_id[:8]}.pdf"'})
+
+
+# ============================================================================
+# REPORT SETTINGS (Logo, Cover Page)
+# ============================================================================
+
+class ReportSettingsUpdate(BaseModel):
+    nama_instansi: Optional[str] = ""
+    nama_unit_organisasi: Optional[str] = ""
+    alamat_instansi: Optional[str] = ""
+    judul_laporan: Optional[str] = "LAPORAN HASIL INVENTARISASI"
+    subjudul_laporan: Optional[str] = "BARANG MILIK NEGARA (BMN)"
+    tahun_anggaran: Optional[str] = ""
+    catatan_kaki: Optional[str] = ""
+
+
+@reports_router.get("/report-settings")
+async def get_report_settings():
+    """Get report settings (logo, cover page text)"""
+    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0})
+    if not settings:
+        return {
+            "type": "global",
+            "logo_url": "",
+            "nama_instansi": "",
+            "nama_unit_organisasi": "",
+            "alamat_instansi": "",
+            "judul_laporan": "LAPORAN HASIL INVENTARISASI",
+            "subjudul_laporan": "BARANG MILIK NEGARA (BMN)",
+            "tahun_anggaran": "",
+            "catatan_kaki": "",
+        }
+    return settings
+
+
+@reports_router.put("/report-settings")
+async def update_report_settings(data: ReportSettingsUpdate):
+    """Update report settings (text fields only)"""
+    update_data = {k: v for k, v in data.dict().items() if v is not None}
+    update_data["type"] = "global"
+    await db.report_settings.update_one(
+        {"type": "global"},
+        {"$set": update_data},
+        upsert=True
+    )
+    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0})
+    return settings
+
+
+@reports_router.post("/report-settings/logo")
+async def upload_report_logo(file: UploadFile = File(...)):
+    """Upload/replace the institution logo for report cover page"""
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="File harus berupa gambar (PNG/JPG)")
+
+    content = await file.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Ukuran file maksimal 5MB")
+
+    b64 = base64.b64encode(content).decode("utf-8")
+    logo_url = f"data:{file.content_type};base64,{b64}"
+
+    await db.report_settings.update_one(
+        {"type": "global"},
+        {"$set": {"logo_url": logo_url, "type": "global"}},
+        upsert=True
+    )
+    return {"message": "Logo berhasil diupload", "logo_url": logo_url}
+
+
+@reports_router.delete("/report-settings/logo")
+async def delete_report_logo():
+    """Remove the institution logo"""
+    await db.report_settings.update_one(
+        {"type": "global"},
+        {"$set": {"logo_url": ""}},
+        upsert=True
+    )
+    return {"message": "Logo berhasil dihapus"}
+
+
+# ============================================================================
+# COVER PAGE HELPER
+# ============================================================================
+
+async def _generate_cover_page(activity, settings):
+    """Generate LHI cover page PDF as BytesIO buffer"""
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RLImage, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors as rl_colors
+    from reportlab.lib.units import mm as rl_mm, cm as rl_cm
+    from reportlab.lib.enums import TA_CENTER
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=3*rl_cm, rightMargin=3*rl_cm, topMargin=3*rl_cm, bottomMargin=3*rl_cm)
+
+    styles = getSampleStyleSheet()
+    instansi_style = ParagraphStyle('CoverInstansi', parent=styles['Normal'], fontSize=14, alignment=TA_CENTER, fontName='Helvetica-Bold', leading=18, spaceAfter=2)
+    unit_style = ParagraphStyle('CoverUnit', parent=styles['Normal'], fontSize=11, alignment=TA_CENTER, leading=14, spaceAfter=2)
+    alamat_style = ParagraphStyle('CoverAlamat', parent=styles['Normal'], fontSize=9, alignment=TA_CENTER, leading=12, textColor=rl_colors.HexColor("#555555"))
+    title_style = ParagraphStyle('CoverTitle', parent=styles['Title'], fontSize=20, alignment=TA_CENTER, fontName='Helvetica-Bold', leading=26, spaceAfter=4, textColor=rl_colors.HexColor("#1a365d"))
+    subtitle_style = ParagraphStyle('CoverSubtitle', parent=styles['Normal'], fontSize=14, alignment=TA_CENTER, fontName='Helvetica-Bold', leading=18, textColor=rl_colors.HexColor("#2d3748"))
+    info_style = ParagraphStyle('CoverInfo', parent=styles['Normal'], fontSize=11, alignment=TA_CENTER, leading=15)
+    tahun_style = ParagraphStyle('CoverTahun', parent=styles['Normal'], fontSize=16, alignment=TA_CENTER, fontName='Helvetica-Bold', leading=20, textColor=rl_colors.HexColor("#1a365d"))
+    footer_style = ParagraphStyle('CoverFooter', parent=styles['Normal'], fontSize=9, alignment=TA_CENTER, leading=12, textColor=rl_colors.HexColor("#718096"))
+
+    elements = []
+
+    # Logo
+    logo_url = settings.get("logo_url", "")
+    if logo_url and logo_url.startswith("data:"):
+        try:
+            header, b64data = logo_url.split(",", 1)
+            logo_bytes = base64.b64decode(b64data)
+            logo_buffer = io.BytesIO(logo_bytes)
+            logo_img = RLImage(logo_buffer, width=80, height=80)
+            logo_img.hAlign = 'CENTER'
+            elements.append(logo_img)
+            elements.append(Spacer(1, 6*rl_mm))
+        except Exception:
+            pass
+
+    # Institution name
+    nama_instansi = settings.get("nama_instansi", "")
+    if nama_instansi:
+        elements.append(Paragraph(nama_instansi.upper(), instansi_style))
+
+    nama_unit = settings.get("nama_unit_organisasi", "")
+    if nama_unit:
+        elements.append(Paragraph(nama_unit, unit_style))
+
+    alamat = settings.get("alamat_instansi", "")
+    if alamat:
+        elements.append(Paragraph(alamat, alamat_style))
+
+    if nama_instansi or nama_unit or alamat:
+        elements.append(Spacer(1, 2*rl_mm))
+        line_data = [[""]]
+        line_table = Table(line_data, colWidths=[380])
+        line_table.setStyle(TableStyle([
+            ('LINEBELOW', (0, 0), (-1, 0), 1.5, rl_colors.HexColor("#1a365d")),
+            ('TOPPADDING', (0, 0), (-1, -1), 0),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+        ]))
+        elements.append(line_table)
+
+    elements.append(Spacer(1, 30*rl_mm))
+
+    judul = settings.get("judul_laporan", "LAPORAN HASIL INVENTARISASI")
+    subjudul = settings.get("subjudul_laporan", "BARANG MILIK NEGARA (BMN)")
+    elements.append(Paragraph(judul, title_style))
+    elements.append(Paragraph(subjudul, subtitle_style))
+
+    elements.append(Spacer(1, 15*rl_mm))
+
+    satker = activity.get("kasatker", {})
+    satker_name = satker.get("nama", activity.get("nama_kegiatan", "-"))
+    nomor_sk = activity.get("nomor_surat", "-")
+    tgl_mulai = activity.get("tanggal_mulai", "-")
+    tgl_selesai = activity.get("tanggal_selesai", "-")
+
+    details = [
+        f"Satuan Kerja: {satker_name}",
+        f"Nomor SK: {nomor_sk}",
+        f"Periode: {tgl_mulai} s.d. {tgl_selesai}",
+    ]
+    for detail in details:
+        elements.append(Paragraph(detail, info_style))
+
+    elements.append(Spacer(1, 20*rl_mm))
+
+    tahun = settings.get("tahun_anggaran", "")
+    if tahun:
+        elements.append(Paragraph(f"TAHUN ANGGARAN {tahun}", tahun_style))
+    else:
+        elements.append(Paragraph("TAHUN ANGGARAN ............", tahun_style))
+
+    elements.append(Spacer(1, 30*rl_mm))
+    catatan = settings.get("catatan_kaki", "")
+    if catatan:
+        elements.append(Paragraph(catatan, footer_style))
+
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer
+
+
+# ============================================================================
+# EXECUTIVE SUMMARY (HTML preview + PDF via weasyprint)
+# ============================================================================
+
+async def _build_executive_summary_data(activity_id: str):
+    """Build all data needed for the executive summary template"""
+    activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
+    if not activity:
+        return None
+    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    all_assets = await db.assets.find({"activity_id": activity_id}, {"_id": 0}).to_list(100000)
+    categories = await db.categories.find({}, {"_id": 0}).to_list(10000)
+    cat_map = {c.get("kode_aset", ""): c.get("label", "") for c in categories}
+
+    def sp(a):
+        try: return float(a.get("purchase_price", 0) or 0)
+        except: return 0.0
+    def fmt(v):
+        try: return f"{int(v):,}".replace(",", ".")
+        except: return "0"
+    def pct(part, total):
+        return round(part / total * 100, 1) if total > 0 else 0
+
+    ditemukan = [a for a in all_assets if a.get("inventory_status") == "Ditemukan"]
+    tidak = [a for a in all_assets if a.get("inventory_status") == "Tidak Ditemukan"]
+    berlebih = [a for a in all_assets if a.get("inventory_status") == "Berlebih"]
+    sengketa = [a for a in all_assets if a.get("inventory_status") == "Sengketa"]
+    belum = [a for a in all_assets if a.get("inventory_status", "Belum Diinventarisasi") == "Belum Diinventarisasi"]
+    baik = [a for a in ditemukan if a.get("condition") == "Baik"]
+    rr = [a for a in ditemukan if a.get("condition") == "Rusak Ringan"]
+    rb = [a for a in ditemukan if a.get("condition") == "Rusak Berat"]
+    td_kes = [a for a in tidak if a.get("klasifikasi_tidak_ditemukan") == "Kesalahan Pencatatan"]
+    td_lain = [a for a in tidak if a.get("klasifikasi_tidak_ditemukan") != "Kesalahan Pencatatan"]
+
+    tc = len(all_assets)
+    tv = sum(sp(a) for a in all_assets)
+    st_terpasang = len([a for a in ditemukan if a.get("stiker_status") == "Sudah Terpasang"])
+    st_belum = len(ditemukan) - st_terpasang
+    st_pct = int(st_terpasang / len(ditemukan) * 100) if len(ditemukan) > 0 else 0
+    circumference = 2 * 3.14159 * 32
+    st_dash = circumference
+    st_offset = circumference * (1 - st_pct / 100)
+
+    satker = activity.get("kasatker", {})
+    satker_name = satker.get("nama", activity.get("nama_kegiatan", "-"))
+    tim = activity.get("tim_peneliti", []) or []
+    tim_pendukung = activity.get("tim_pendukung", []) or []
+    tim_inti = activity.get("tim_inti", []) or []
+    tim_pembantu = activity.get("tim_pembantu", []) or []
+    pj_nama = activity.get("penanggung_jawab", "") or ""
+    pj_jabatan = activity.get("penanggung_jawab_jabatan", "") or ""
+    pj_nip = activity.get("penanggung_jawab_nip", "") or ""
+
+    # Determine if the inventory period is currently active ("ON PROGRESS")
+    is_in_progress = False
+    tgl_mulai_raw = activity.get("tanggal_mulai", "")
+    tgl_selesai_raw = activity.get("tanggal_selesai", "")
+    today = datetime.now()
+    try:
+        from datetime import date as date_type
+        def parse_date(d):
+            if not d:
+                return None
+            for dfmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d %B %Y", "%d %b %Y"):
+                try:
+                    return datetime.strptime(str(d).strip(), dfmt).date()
+                except ValueError:
+                    continue
+            return None
+        d_mulai = parse_date(tgl_mulai_raw)
+        d_selesai = parse_date(tgl_selesai_raw)
+        if d_mulai and d_selesai:
+            is_in_progress = d_mulai <= today.date() <= d_selesai
+        elif d_mulai and not d_selesai:
+            is_in_progress = d_mulai <= today.date()
+    except Exception:
+        is_in_progress = False
+
+    # Build per-category breakdown (ALL categories, not truncated)
+    cat_breakdown = {}
+    for a in all_assets:
+        cat_code = a.get("category", "")
+        cat_label = cat_map.get(cat_code, cat_code or "Tanpa Kategori")
+        if cat_label not in cat_breakdown:
+            cat_breakdown[cat_label] = {"count": 0, "value": 0, "conditions": {}, "statuses": {}}
+        cat_breakdown[cat_label]["count"] += 1
+        cat_breakdown[cat_label]["value"] += sp(a)
+        cond = a.get("condition", "") or "Belum Dinilai"
+        cat_breakdown[cat_label]["conditions"][cond] = cat_breakdown[cat_label]["conditions"].get(cond, 0) + 1
+        stat = a.get("inventory_status", "Belum Diinventarisasi")
+        cat_breakdown[cat_label]["statuses"][stat] = cat_breakdown[cat_label]["statuses"].get(stat, 0) + 1
+    # Sort by count descending
+    cat_breakdown_sorted = sorted(cat_breakdown.items(), key=lambda x: x[1]["count"], reverse=True)
+
+    # Build per-location breakdown (ALL locations)
+    loc_breakdown = {}
+    for a in all_assets:
+        loc = a.get("location", "") or "Tanpa Lokasi"
+        if loc not in loc_breakdown:
+            loc_breakdown[loc] = {"count": 0, "value": 0}
+        loc_breakdown[loc]["count"] += 1
+        loc_breakdown[loc]["value"] += sp(a)
+    loc_breakdown_sorted = sorted(loc_breakdown.items(), key=lambda x: x[1]["count"], reverse=True)
+
+    # Build per-eselon1 breakdown
+    eselon1_breakdown = {}
+    for a in all_assets:
+        e1 = a.get("eselon1", "") or "Tanpa Eselon I"
+        if e1 not in eselon1_breakdown:
+            eselon1_breakdown[e1] = {"count": 0, "value": 0}
+        eselon1_breakdown[e1]["count"] += 1
+        eselon1_breakdown[e1]["value"] += sp(a)
+    eselon1_breakdown_sorted = sorted(eselon1_breakdown.items(), key=lambda x: x[1]["count"], reverse=True)
+
+    # Build year distribution
+    year_breakdown = {}
+    for a in all_assets:
+        yr = a.get("purchase_date", "") or ""
+        yr_str = str(yr)[:4] if len(str(yr)) >= 4 else "Tidak Diketahui"
+        if yr_str not in year_breakdown:
+            year_breakdown[yr_str] = {"count": 0, "value": 0}
+        year_breakdown[yr_str]["count"] += 1
+        year_breakdown[yr_str]["value"] += sp(a)
+    year_breakdown_sorted = sorted(year_breakdown.items(), key=lambda x: x[0], reverse=True)
+
+    # Document completeness stats
+    total_doc_items = 0
+    total_doc_checked = 0
+    for a in all_assets:
+        doc_ck = a.get("document_checklist", []) or []
+        total_doc_items += len(doc_ck)
+        total_doc_checked += sum(1 for d in doc_ck if d.get("checked"))
+    doc_completeness_pct = round(total_doc_checked / total_doc_items * 100, 1) if total_doc_items > 0 else 0
+
+    # Photo coverage stats
+    assets_with_photos = sum(1 for a in all_assets if len(a.get("photos", []) or []) > 0)
+    photo_coverage_pct = round(assets_with_photos / tc * 100, 1) if tc > 0 else 0
+
+    # GPS coverage stats
+    assets_with_gps = sum(1 for a in all_assets if a.get("koordinat_latitude") and a.get("koordinat_longitude"))
+    gps_coverage_pct = round(assets_with_gps / tc * 100, 1) if tc > 0 else 0
+
+    # Pre-calculate chart bar widths for ALL categories
+    cat_max_count = max((c[1]["count"] for c in cat_breakdown_sorted), default=1)
+    cat_chart = [{"name": c[0][:30], "count": c[1]["count"], "value": c[1]["value"], "bar_pct": round(c[1]["count"] / cat_max_count * 100)} for c in cat_breakdown_sorted]
+
+    # Pre-calculate chart bar widths for ALL locations
+    loc_max_count = max((l[1]["count"] for l in loc_breakdown_sorted), default=1)
+    loc_chart = [{"name": l[0][:30], "count": l[1]["count"], "value": l[1]["value"], "bar_pct": round(l[1]["count"] / loc_max_count * 100)} for l in loc_breakdown_sorted]
+
+    # Year chart data (sorted by year ascending for chart)
+    year_sorted_asc = sorted(year_breakdown.items(), key=lambda x: x[0])
+    yr_max_count = max((y[1]["count"] for y in year_sorted_asc), default=1)
+    year_chart = [{"name": y[0], "count": y[1]["count"], "value": y[1]["value"], "bar_pct": round(y[1]["count"] / yr_max_count * 100)} for y in year_sorted_asc]
+
+    # Eselon chart
+    e1_max = max((e[1]["count"] for e in eselon1_breakdown_sorted), default=1)
+    eselon_chart = [{"name": e[0][:25], "count": e[1]["count"], "value": e[1]["value"], "bar_pct": round(e[1]["count"] / e1_max * 100)} for e in eselon1_breakdown_sorted[:10]]
+
+    # Status pie chart data (for SVG donut)
+    status_pie = []
+    status_items = [
+        ("Ditemukan", len(ditemukan), "#22c55e"),
+        ("Tidak Ditemukan", len(tidak), "#ef4444"),
+        ("Berlebih", len(berlebih), "#f59e0b"),
+        ("Sengketa", len(sengketa), "#a855f7"),
+        ("Belum Inventarisasi", len(belum), "#94a3b8"),
+    ]
+    cumulative_pct = 0
+    for name, count, color in status_items:
+        if count > 0:
+            p = round(count / tc * 100, 1) if tc > 0 else 0
+            status_pie.append({"name": name, "count": count, "pct": p, "color": color, "offset": cumulative_pct})
+            cumulative_pct += p
+
+    # Condition pie chart data
+    condition_pie = []
+    cond_items = [
+        ("Baik", len(baik), "#22c55e"),
+        ("Rusak Ringan", len(rr), "#f59e0b"),
+        ("Rusak Berat", len(rb), "#ef4444"),
+    ]
+    cond_total = len(ditemukan)
+    cond_cumulative = 0
+    for name, count, color in cond_items:
+        if count > 0:
+            p = round(count / cond_total * 100, 1) if cond_total > 0 else 0
+            condition_pie.append({"name": name, "count": count, "pct": p, "color": color, "offset": cond_cumulative})
+            cond_cumulative += p
+
+    # Condition by top categories (cross-analysis)
+    cond_by_cat = []
+    for cat_name, cat_data in cat_breakdown_sorted[:8]:
+        conditions = cat_data.get("conditions", {})
+        total_cat = cat_data["count"]
+        cond_by_cat.append({
+            "name": cat_name[:20],
+            "total": total_cat,
+            "baik": conditions.get("Baik", 0),
+            "rr": conditions.get("Rusak Ringan", 0),
+            "rb": conditions.get("Rusak Berat", 0),
+            "baik_pct": round(conditions.get("Baik", 0) / total_cat * 100) if total_cat > 0 else 0,
+            "rr_pct": round(conditions.get("Rusak Ringan", 0) / total_cat * 100) if total_cat > 0 else 0,
+            "rb_pct": round(conditions.get("Rusak Berat", 0) / total_cat * 100) if total_cat > 0 else 0,
+        })
+
+    simpulan = []
+    if tc > 0:
+        simpulan.append({"color": "#1e40af", "text": f"Dari <strong>{tc} NUP</strong> BMN senilai <strong>Rp {fmt(tv)}</strong>, sebanyak <strong>{pct(len(ditemukan), tc)}%</strong> ({len(ditemukan)} NUP) berhasil ditemukan."})
+        if len(tidak) > 0:
+            simpulan.append({"color": "#ef4444", "text": f"<strong>{len(tidak)} NUP</strong> (Rp {fmt(sum(sp(a) for a in tidak))}) tidak ditemukan: <strong>{len(td_kes)}</strong> kesalahan pencatatan, <strong>{len(td_lain)}</strong> tidak ditemukan fisik."})
+        if len(berlebih) > 0:
+            simpulan.append({"color": "#f59e0b", "text": f"<strong>{len(berlebih)} NUP</strong> BMN berlebih senilai <strong>Rp {fmt(sum(sp(a) for a in berlebih))}</strong>. Akan didaftarkan ke Daftar BMN."})
+        if len(sengketa) > 0:
+            simpulan.append({"color": "#a855f7", "text": f"<strong>{len(sengketa)} NUP</strong> BMN dalam sengketa senilai <strong>Rp {fmt(sum(sp(a) for a in sengketa))}</strong>. Koordinasi bagian hukum diperlukan."})
+        if len(belum) > 0:
+            simpulan.append({"color": "#94a3b8", "text": f"<strong>{len(belum)} NUP</strong> ({pct(len(belum), tc)}%) belum diinventarisasi. Perlu tindak lanjut segera."})
+        if len(ditemukan) > 0:
+            simpulan.append({"color": "#22c55e", "text": f"Stiker terpasang pada <strong>{st_terpasang} dari {len(ditemukan)}</strong> NUP (<strong>{st_pct}%</strong>). {f'Masih ada <strong>{st_belum}</strong> NUP belum dipasang stiker.' if st_belum > 0 else 'Seluruh BMN sudah terpasang stiker.'}"})
+        simpulan.append({"color": "#0ea5e9", "text": f"Kelengkapan dokumen: <strong>{doc_completeness_pct}%</strong> terisi. Dokumentasi foto: <strong>{photo_coverage_pct}%</strong> aset terfoto. GPS: <strong>{gps_coverage_pct}%</strong> terkoordinat."})
+        if is_in_progress:
+            simpulan.append({"color": "#f97316", "text": "<strong>CATATAN:</strong> Laporan ini dibuat saat periode inventarisasi <strong>masih berlangsung</strong>. Data dapat berubah hingga periode berakhir."})
+        simpulan.append({"color": "#0f172a", "text": "Seluruh hasil inventarisasi didokumentasikan dalam <strong>LHI</strong> (BAHI, RHI, 6 DBHI, Surat Pernyataan)."})
+
+    asset_rows = []
+    for a in all_assets:
+        photos = a.get("photos", []) or []
+        cover_idx = a.get("thumbnail_index", 0) or 0
+        photo_url = photos[cover_idx] if photos and cover_idx < len(photos) else (photos[0] if photos else None)
+        stiker_idx = a.get("stiker_photo_index")
+        stiker_url = photos[stiker_idx] if stiker_idx is not None and photos and stiker_idx < len(photos) else None
+
+        inv_status = a.get("inventory_status", "Belum Diinventarisasi")
+        condition = a.get("condition", "") or ""
+        cond_badge, cond_class = "", ""
+        if inv_status == "Ditemukan" and condition:
+            cond_map = {"Baik": ("Baik", "badge-baik"), "Rusak Ringan": ("R.Ringan", "badge-ringan"), "Rusak Berat": ("R.Berat", "badge-berat")}
+            if condition in cond_map:
+                cond_badge, cond_class = cond_map[condition]
+        stat_map = {"Ditemukan": ("Ditemukan", "badge-ditemukan"), "Tidak Ditemukan": ("Tidak Ditemukan", "badge-tidak"), "Berlebih": ("Berlebih", "badge-berlebih"), "Sengketa": ("Sengketa", "badge-sengketa")}
+        stat_badge, stat_class = stat_map.get(inv_status, (inv_status, ""))
+
+        detail_parts = []
+        if inv_status == "Tidak Ditemukan":
+            klas = a.get("klasifikasi_tidak_ditemukan", "")
+            sub = a.get("sub_klasifikasi", "")
+            if klas: detail_parts.append(f'<div class="cell-sub"><span class="label">Klasifikasi:</span> {klas}</div>')
+            if sub: detail_parts.append(f'<div class="cell-sub"><span class="label">Sub:</span> {sub}</div>')
+        elif inv_status == "Berlebih":
+            asal = a.get("asal_usul_berlebih", "")
+            if asal: detail_parts.append(f'<div class="cell-sub"><span class="label">Asal:</span> {asal}</div>')
+        elif inv_status == "Sengketa":
+            perkara = a.get("nomor_perkara", "")
+            pihak = a.get("pihak_bersengketa", "")
+            if perkara: detail_parts.append(f'<div class="cell-sub"><span class="label">Perkara:</span> {perkara}</div>')
+            if pihak: detail_parts.append(f'<div class="cell-sub"><span class="label">Pihak:</span> {pihak}</div>')
+        if inv_status == "Ditemukan" and condition == "Rusak Berat":
+            tl = a.get("tindak_lanjut", "")
+            if tl: detail_parts.append(f'<div class="cell-sub"><span class="label">Tindak Lanjut:</span> {tl}</div>')
+
+        doc_ck = a.get("document_checklist", []) or []
+        checked = [d.get("name", "") for d in doc_ck if d.get("checked")]
+        kelengkapan = ", ".join(checked) if checked else "-"
+        year = a.get("purchase_date", "") or ""
+        if len(str(year)) >= 4: year = str(year)[:4]
+        lat = a.get("koordinat_latitude", "") or ""
+        lng = a.get("koordinat_longitude", "") or ""
+        coords = f"{lat}, {lng}" if lat and lng else ""
+        brand = a.get("brand", "") or ""
+        model = a.get("model", "") or ""
+
+        asset_rows.append({
+            "asset_code": a.get("asset_code", "-"), "nup": a.get("NUP", "-"),
+            "category_label": cat_map.get(a.get("category", ""), a.get("category", "-")) or "-",
+            "asset_name": a.get("asset_name", "-") or "-", "brand_model": f"{brand} {model}".strip() or "-",
+
+            "year": year or "-", "value_fmt": fmt(sp(a)),
+            "condition_badge": cond_badge, "condition_badge_class": cond_class,
+            "status_badge": stat_badge, "status_badge_class": stat_class,
+            "status_detail": "\n".join(detail_parts) if detail_parts else "",
+            "location": a.get("location", "") or "-", "user": a.get("user", "") or "-",
+            "coords": coords, "kelengkapan": kelengkapan,
+            "notes": (a.get("notes", "") or a.get("kronologis", "") or "-"),
+            "photo_url": photo_url, "stiker_url": stiker_url,
+        })
+
+    items_per_page = 150  # 75 per column * 2 columns
+    cat_pages = max(0, -(-len(cat_chart) // items_per_page)) if cat_chart else 0
+    loc_pages = max(0, -(-len(loc_chart) // items_per_page)) if loc_chart else 0
+
+    # Split asset rows into pages (max 18 per page to avoid WeasyPrint table-break bug)
+    assets_per_page = 18
+    asset_pages = []
+    for i in range(0, len(asset_rows), assets_per_page):
+        asset_pages.append(asset_rows[i:i + assets_per_page])
+
+    total_pages = 2 + cat_pages + loc_pages + 1 + max(1, len(asset_pages))
+
+    return {
+        "logo_url": settings.get("logo_url", ""),
+        "nama_instansi": settings.get("nama_instansi", ""),
+        "nama_unit": settings.get("nama_unit_organisasi", ""),
+        "alamat_instansi": settings.get("alamat_instansi", ""),
+        "tahun_anggaran": settings.get("tahun_anggaran", ""),
+        "satker_name": satker_name,
+        "nomor_sk": activity.get("nomor_surat", "-"),
+        "tgl_mulai": activity.get("tanggal_mulai", "-"),
+        "tgl_selesai": activity.get("tanggal_selesai", "-"),
+        "tanggal_cetak": datetime.now().strftime("%d %B %Y"),
+        "total_count": tc, "total_value_fmt": fmt(tv),
+        "cnt_ditemukan": len(ditemukan), "val_ditemukan_fmt": fmt(sum(sp(a) for a in ditemukan)), "pct_ditemukan": pct(len(ditemukan), tc),
+        "cnt_tidak": len(tidak), "val_tidak_fmt": fmt(sum(sp(a) for a in tidak)), "pct_tidak": pct(len(tidak), tc),
+        "cnt_berlebih": len(berlebih), "val_berlebih_fmt": fmt(sum(sp(a) for a in berlebih)), "pct_berlebih": pct(len(berlebih), tc),
+        "cnt_sengketa": len(sengketa), "val_sengketa_fmt": fmt(sum(sp(a) for a in sengketa)), "pct_sengketa": pct(len(sengketa), tc),
+        "cnt_belum": len(belum), "val_belum_fmt": fmt(sum(sp(a) for a in belum)), "pct_belum": pct(len(belum), tc),
+        "cnt_baik": len(baik), "val_baik_fmt": fmt(sum(sp(a) for a in baik)), "pct_baik": pct(len(baik), tc),
+        "cnt_rusak_ringan": len(rr), "val_rusak_ringan_fmt": fmt(sum(sp(a) for a in rr)), "pct_rusak_ringan": pct(len(rr), tc),
+        "cnt_rusak_berat": len(rb), "val_rusak_berat_fmt": fmt(sum(sp(a) for a in rb)), "pct_rusak_berat": pct(len(rb), tc),
+        "cnt_td_kes": len(td_kes), "val_td_kes_fmt": fmt(sum(sp(a) for a in td_kes)), "pct_td_kes": pct(len(td_kes), tc),
+        "cnt_td_lain": len(td_lain), "val_td_lain_fmt": fmt(sum(sp(a) for a in td_lain)), "pct_td_lain": pct(len(td_lain), tc),
+        "pct_baik_of_found": round(len(baik) / len(ditemukan) * 100, 1) if len(ditemukan) > 0 else 0,
+        "pct_rr_of_found": round(len(rr) / len(ditemukan) * 100, 1) if len(ditemukan) > 0 else 0,
+        "pct_rb_of_found": round(len(rb) / len(ditemukan) * 100, 1) if len(ditemukan) > 0 else 0,
+        "stiker_terpasang": st_terpasang, "stiker_belum": st_belum, "stiker_pct": st_pct,
+        "stiker_dash": f"{circumference:.2f}", "stiker_offset": f"{st_offset:.2f}",
+        "simpulan": simpulan, "tim": tim[:5], "tim_pendukung": tim_pendukung[:5],
+        "tim_inti": tim_inti, "tim_pembantu": tim_pembantu,
+        "pj_nama": pj_nama, "pj_jabatan": pj_jabatan, "pj_nip": pj_nip,
+        "assets": asset_rows, "asset_pages": asset_pages, "total_pages": total_pages,
+        "is_in_progress": is_in_progress,
+        "cat_breakdown": cat_breakdown_sorted,
+        "loc_breakdown": loc_breakdown_sorted,
+        "eselon1_breakdown": eselon1_breakdown_sorted,
+        "year_breakdown": year_breakdown_sorted,
+        "doc_completeness_pct": doc_completeness_pct,
+        "photo_coverage_pct": photo_coverage_pct,
+        "gps_coverage_pct": gps_coverage_pct,
+        "assets_with_photos": assets_with_photos,
+        "assets_with_gps": assets_with_gps,
+        "cat_chart": cat_chart,
+        "loc_chart": loc_chart,
+        "year_chart": year_chart,
+        "eselon_chart": eselon_chart,
+        "status_pie": status_pie,
+        "condition_pie": condition_pie,
+        "cond_by_cat": cond_by_cat,
+    }
+
+
+@reports_router.get("/inventory-activities/{activity_id}/executive-summary-html")
+async def executive_summary_html(activity_id: str):
+    """Serve Executive Summary as interactive HTML preview with real data"""
+    from jinja2 import Environment, FileSystemLoader
+    data = await _build_executive_summary_data(activity_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+    data["preview"] = True
+    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+    template = env.get_template("executive_summary.html")
+    html = template.render(**data)
+    return HTMLResponse(content=html)
+
+
+@reports_router.get("/inventory-activities/{activity_id}/executive-summary-pdf")
+async def generate_executive_summary_pdf(activity_id: str):
+    """Generate Executive Summary PDF (Part 1: Summary only, no data detail)."""
+    from jinja2 import Environment, FileSystemLoader
+    import weasyprint
+
+    data = await _build_executive_summary_data(activity_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+    data["preview"] = False
+
+    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+
+    # Render summary pages only (no asset data pages)
+    summary_data = {**data, "asset_pages": [], "assets": []}
+    template = env.get_template("executive_summary.html")
+    html = template.render(**summary_data)
+    pdf_bytes = weasyprint.HTML(string=html).write_pdf()
+
+    filename = f"Laporan_Eksekutif_{activity_id[:8]}.pdf"
+    return StreamingResponse(io.BytesIO(pdf_bytes), media_type="application/pdf",
+                             headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+@reports_router.get("/inventory-activities/{activity_id}/executive-data-pdf")
+async def generate_executive_data_pdf(activity_id: str, page: int = 1):
+    """Generate Executive Summary Data PDF (Part 2: Asset detail pages).
+    
+    Each page contains up to 499 assets. page=1 -> assets 1-499, page=2 -> 500-998, etc.
+    """
+    from jinja2 import Environment, FileSystemLoader
+    import weasyprint
+
+    data = await _build_executive_summary_data(activity_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+
+    items_per_download = 499
+    all_assets = data.get("assets", [])
+    total_assets = len(all_assets)
+    total_data_pages = max(1, -(-total_assets // items_per_download))
+
+    if page < 1 or page > total_data_pages:
+        raise HTTPException(status_code=400, detail=f"Halaman {page} tidak valid. Total: {total_data_pages}")
+
+    start_idx = (page - 1) * items_per_download
+    end_idx = min(start_idx + items_per_download, total_assets)
+    chunk_assets = all_assets[start_idx:end_idx]
+
+    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+    template = env.get_template("executive_summary_data.html")
+    html = template.render(
+        chunk_assets=chunk_assets,
+        total_chunk=len(chunk_assets),
+        total_all=total_assets,
+        satker_name=data["satker_name"],
+        total_value_fmt=data["total_value_fmt"],
+        global_offset=start_idx,
+        data_page_num=page,
+        total_data_pages=total_data_pages,
+    )
+    pdf_bytes = weasyprint.HTML(string=html).write_pdf()
+
+    filename = f"Data_Aset_{start_idx+1}-{end_idx}_{activity_id[:8]}.pdf"
+    return StreamingResponse(io.BytesIO(pdf_bytes), media_type="application/pdf",
+                             headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+@reports_router.get("/inventory-activities/{activity_id}/executive-data-info")
+async def executive_data_info(activity_id: str):
+    """Return info about how many data download pages are available."""
+    data = await _build_executive_summary_data(activity_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+    
+    total_assets = len(data.get("assets", []))
+    items_per_download = 499
+    total_pages = max(0, -(-total_assets // items_per_download)) if total_assets > 0 else 0
+    
+    pages = []
+    for p in range(1, total_pages + 1):
+        start = (p - 1) * items_per_download + 1
+        end = min(p * items_per_download, total_assets)
+        pages.append({"page": p, "start": start, "end": end, "count": end - start + 1})
+    
+    return {"total_assets": total_assets, "total_pages": total_pages, "pages": pages}
+
+
+# ============================================================================
+# LAPORAN PER SATKER - Full Report with Cover, Analysis, Data
+# ============================================================================
+
+async def _build_satker_report_v2(activity_id: str):
+    """Build data for per-satker report — aggregates ALL activities with same kode_satker"""
+    source_act = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
+    if not source_act:
+        return None
+    kode_satker = source_act.get("kode_satker", "")
+    if not kode_satker:
+        satker_acts = [source_act]
+    else:
+        satker_acts = await db.inventory_activities.find({"kode_satker": kode_satker}, {"_id": 0}).sort("created_at", -1).to_list(100)
+
+    act_ids = [a.get("id") for a in satker_acts if a.get("id")]
+    all_assets = await db.assets.find({"activity_id": {"$in": act_ids}}, {"_id": 0}).to_list(100000)
+    categories = await db.categories.find({}, {"_id": 0}).to_list(10000)
+    cat_map = {c.get("kode_aset", ""): c.get("label", "") for c in categories}
+    act_name_map = {a.get("id", ""): a.get("nama_kegiatan", "") for a in satker_acts}
+
+    def sp(a):
+        try: return float(a.get("purchase_price", 0) or 0)
+        except: return 0.0
+    def fmt(v):
+        try: return f"{int(v):,}".replace(",", ".")
+        except: return "0"
+    def pct(part, total):
+        return round(part / total * 100, 1) if total > 0 else 0
+
+    tc = len(all_assets)
+    tv = sum(sp(a) for a in all_assets)
+    ditemukan = [a for a in all_assets if a.get("inventory_status") == "Ditemukan"]
+    tidak = [a for a in all_assets if a.get("inventory_status") == "Tidak Ditemukan"]
+    berlebih = [a for a in all_assets if a.get("inventory_status") == "Berlebih"]
+    sengketa = [a for a in all_assets if a.get("inventory_status") == "Sengketa"]
+    belum = [a for a in all_assets if a.get("inventory_status", "Belum Diinventarisasi") == "Belum Diinventarisasi"]
+    baik = [a for a in ditemukan if a.get("condition") == "Baik"]
+    rr = [a for a in ditemukan if a.get("condition") == "Rusak Ringan"]
+    rb = [a for a in ditemukan if a.get("condition") == "Rusak Berat"]
+    st_terpasang = len([a for a in ditemukan if a.get("stiker_status") == "Sudah Terpasang"])
+    st_pct = int(st_terpasang / len(ditemukan) * 100) if ditemukan else 0
+    dok_scores = []
+    for a in all_assets:
+        ck = a.get("document_checklist", []) or []
+        if ck:
+            checked = sum(1 for d in ck if d.get("checked"))
+            dok_scores.append(checked / len(ck) * 100)
+    dok_pct = round(sum(dok_scores) / len(dok_scores), 1) if dok_scores else 0
+
+    # Charts
+    cond_colors = {"Baik": "#059669", "Rusak Ringan": "#d97706", "Rusak Berat": "#dc2626"}
+    chart_kondisi = [{"name": n, "count": len(i), "pct": pct(len(i), len(ditemukan)) if ditemukan else 0, "color": cond_colors.get(n, "#64748b")} for n, i in [("Baik", baik), ("Rusak Ringan", rr), ("Rusak Berat", rb)]]
+    stat_colors = {"Ditemukan": "#2563eb", "Tidak Ditemukan": "#dc2626", "Berlebih": "#d97706", "Sengketa": "#7c3aed", "Belum": "#94a3b8"}
+    chart_status = [{"name": n, "count": len(i), "pct": pct(len(i), tc), "color": stat_colors.get(n, "#64748b")} for n, i in [("Ditemukan", ditemukan), ("Tidak Ditemukan", tidak), ("Berlebih", berlebih), ("Sengketa", sengketa), ("Belum", belum)] if i]
+
+    from collections import Counter
+    cat_counter = Counter(a.get("category", "Lainnya") for a in all_assets)
+    cat_vals = {}
+    for a in all_assets:
+        c = a.get("category", "Lainnya")
+        cat_vals[c] = cat_vals.get(c, 0) + sp(a)
+    chart_kategori = [{"name": (cat_map.get(c, c) or c)[:20], "count": cnt, "pct": pct(cnt, tc), "val_fmt": fmt(cat_vals.get(c, 0))} for c, cnt in cat_counter.most_common(10)]
+
+    loc_counter = Counter(a.get("location", "-") or "-" for a in all_assets)
+    chart_lokasi = [{"name": l[:20], "count": cnt, "pct": pct(cnt, tc)} for l, cnt in loc_counter.most_common(10)]
+
+    es1_counter = Counter(a.get("eselon1", "") for a in all_assets if a.get("eselon1"))
+    es1_vals = {}
+    for a in all_assets:
+        e = a.get("eselon1", "")
+        if e: es1_vals[e] = es1_vals.get(e, 0) + sp(a)
+    chart_eselon1 = [{"name": e[:25], "count": cnt, "pct": pct(cnt, tc), "val_fmt": fmt(es1_vals.get(e, 0))} for e, cnt in es1_counter.most_common(10)]
+
+    # Per kegiatan chart
+    act_counter = Counter(a.get("activity_id", "") for a in all_assets)
+    act_vals = {}
+    for a in all_assets:
+        aid = a.get("activity_id", "")
+        act_vals[aid] = act_vals.get(aid, 0) + sp(a)
+    chart_per_kegiatan = [{"name": act_name_map.get(aid, aid)[:25], "count": cnt, "pct": pct(cnt, tc), "val_fmt": fmt(act_vals.get(aid, 0))} for aid, cnt in act_counter.most_common(10)]
+
+    # Asset rows
+    cond_map = {"Baik": ("Baik", "b-ok"), "Rusak Ringan": ("R.Ringan", "b-rr"), "Rusak Berat": ("R.Berat", "b-rb")}
+    stat_map = {"Ditemukan": ("Ditemukan", "b-found"), "Tidak Ditemukan": ("Tdk Ditemukan", "b-miss"), "Berlebih": ("Berlebih", "b-extra"), "Sengketa": ("Sengketa", "b-dispute"), "Belum Diinventarisasi": ("Belum", "b-pending")}
+    asset_rows = []
+    for a in all_assets:
+        inv = a.get("inventory_status", "Belum Diinventarisasi")
+        cond = a.get("condition", "") or ""
+        cb, cc = cond_map.get(cond, ("", "")) if inv == "Ditemukan" and cond else ("", "")
+        sb, sc = stat_map.get(inv, (inv, ""))
+        year = str(a.get("purchase_date", "") or "")[:4]
+        brand = a.get("brand", "") or ""
+        model = a.get("model", "") or ""
+        asset_rows.append({
+            "asset_code": a.get("asset_code", "-"), "nup": a.get("NUP", "-"),
+            "asset_name": a.get("asset_name", "-"), "category": (cat_map.get(a.get("category", ""), a.get("category", "-")) or a.get("category", "-")),
+            "brand_model": f"{brand} {model}".strip() or "-",
+            "eselon1": a.get("eselon1", ""), "eselon2": a.get("eselon2", ""),
+            "location": a.get("location", "-"), "year": year or "-", "value_fmt": fmt(sp(a)),
+            "cond_badge": cb, "cond_cls": cc, "stat_badge": sb, "stat_cls": sc,
+            "stiker": a.get("stiker_status", "Belum Terpasang"),
+            "kegiatan_nama": act_name_map.get(a.get("activity_id", ""), "-")[:20],
+        })
+
+    # Dok rows
+    dok_headers_set = set()
+    for a in all_assets:
+        for d in (a.get("document_checklist", []) or []):
+            dok_headers_set.add(d.get("name", ""))
+    dok_headers = sorted(dok_headers_set)
+    dok_rows = []
+    for a in all_assets[:100]:
+        ck = {d.get("name", ""): d.get("checked", False) for d in (a.get("document_checklist", []) or [])}
+        checks = [ck.get(h, False) for h in dok_headers]
+        score = sum(1 for c in checks if c)
+        dok_rows.append({"code": a.get("asset_code", "-"), "name": a.get("asset_name", "-")[:30], "checks": checks, "score": score, "total": len(dok_headers)})
+
+    # Eselon list (from first activity that has data, or merge)
+    eselon_list = []
+    for act in satker_acts:
+        for es in (act.get("eselon1", []) or []):
+            if isinstance(es, dict):
+                eselon_list.append({"nama": es.get("nama", ""), "eselon2": es.get("eselon2", [])})
+            elif isinstance(es, str) and es:
+                eselon_list.append({"nama": es, "eselon2": []})
+        if eselon_list:
+            break
+
+    # Kegiatan list
+    kegiatan_list = []
+    for act in satker_acts:
+        aid = act.get("id", "")
+        act_assets = [a for a in all_assets if a.get("activity_id") == aid]
+        kegiatan_list.append({
+            "nomor_surat": act.get("nomor_surat", "-"),
+            "nama_kegiatan": act.get("nama_kegiatan", "-"),
+            "periode": f"{act.get('tanggal_mulai', '-')} s/d {act.get('tanggal_selesai', '-')}",
+            "pj": act.get("penanggung_jawab", "-"),
+            "count": len(act_assets),
+            "value_fmt": fmt(sum(sp(a) for a in act_assets)),
+        })
+
+    # Personil (highest rank first)
+    personil = []
+    seen_names = set()
+    kasatker_added = False
+    for act in satker_acts:
+        if act.get("kasatker_nama") and act["kasatker_nama"] not in seen_names:
+            if not kasatker_added:
+                personil.append({"is_header": True, "section": "Pimpinan Satuan Kerja"})
+                kasatker_added = True
+            personil.append({"is_header": False, "primary": True, "role": act.get("kasatker_jabatan", "Kepala Satuan Kerja"), "name": act["kasatker_nama"], "nip": act.get("kasatker_nip", ""), "jabatan": ""})
+            seen_names.add(act["kasatker_nama"])
+
+    pj_added = False
+    for act in satker_acts:
+        if act.get("penanggung_jawab") and act["penanggung_jawab"] not in seen_names:
+            if not pj_added:
+                personil.append({"is_header": True, "section": "Penanggung Jawab Inventarisasi"})
+                pj_added = True
+            personil.append({"is_header": False, "primary": False, "role": f"PJ — {act.get('nama_kegiatan', '')[:40]}", "name": act["penanggung_jawab"], "nip": "", "jabatan": ""})
+            seen_names.add(act["penanggung_jawab"])
+
+    tim_added = False
+    for act in satker_acts:
+        for t in (act.get("tim_peneliti", []) or []):
+            if isinstance(t, dict) and t.get("nama") and t["nama"] not in seen_names:
+                if not tim_added:
+                    personil.append({"is_header": True, "section": "Tim Peneliti"})
+                    tim_added = True
+                personil.append({"is_header": False, "primary": False, "role": "Anggota Tim", "name": t["nama"], "nip": t.get("nip", ""), "jabatan": t.get("jabatan", "")})
+                seen_names.add(t["nama"])
+
+    tp_added = False
+    for act in satker_acts:
+        for t in (act.get("tim_pendukung", []) or []):
+            if isinstance(t, dict) and t.get("nama") and t["nama"] not in seen_names:
+                if not tp_added:
+                    personil.append({"is_header": True, "section": "Tim Pendukung"})
+                    tp_added = True
+                personil.append({"is_header": False, "primary": False, "role": "Pendukung", "name": t["nama"], "nip": t.get("nip", ""), "jabatan": t.get("jabatan", "")})
+                seen_names.add(t["nama"])
+
+    # Simpulan
+    simpulan = []
+    if tc > 0:
+        simpulan.append({"color": "#1e40af", "text": f"Dari <strong>{tc} NUP</strong> BMN senilai <strong>Rp {fmt(tv)}</strong>, sebanyak <strong>{pct(len(ditemukan), tc)}%</strong> berhasil ditemukan."})
+        if tidak: simpulan.append({"color": "#dc2626", "text": f"<strong>{len(tidak)} NUP</strong> tidak ditemukan senilai <strong>Rp {fmt(sum(sp(a) for a in tidak))}</strong>."})
+        if berlebih: simpulan.append({"color": "#d97706", "text": f"<strong>{len(berlebih)} NUP</strong> BMN berlebih senilai <strong>Rp {fmt(sum(sp(a) for a in berlebih))}</strong>."})
+        if sengketa: simpulan.append({"color": "#7c3aed", "text": f"<strong>{len(sengketa)} NUP</strong> BMN dalam sengketa."})
+        simpulan.append({"color": "#059669", "text": f"Stiker terpasang pada <strong>{st_terpasang} dari {len(ditemukan)}</strong> NUP (<strong>{st_pct}%</strong>)."})
+        simpulan.append({"color": "#0ea5e9", "text": f"Rata-rata kelengkapan dokumen: <strong>{dok_pct}%</strong>."})
+
+    return {
+        "kode_satker": source_act.get("kode_satker", "-"), "nama_satker": source_act.get("nama_satker", "-"),
+        "alamat_satker": source_act.get("alamat_satker", "-"),
+        "tanggal_cetak": datetime.now().strftime("%d %B %Y"),
+        "total_kegiatan": len(satker_acts), "total_count": tc, "total_value_fmt": fmt(tv),
+        "cnt_ditemukan": len(ditemukan), "pct_ditemukan": pct(len(ditemukan), tc),
+        "cnt_tidak": len(tidak), "pct_tidak": pct(len(tidak), tc),
+        "cnt_berlebih": len(berlebih), "pct_berlebih": pct(len(berlebih), tc),
+        "cnt_sengketa": len(sengketa), "pct_sengketa": pct(len(sengketa), tc),
+        "cnt_belum": len(belum), "pct_belum": pct(len(belum), tc),
+        "stiker_terpasang": st_terpasang, "stiker_pct": st_pct, "dok_pct": dok_pct,
+        "eselon_list": eselon_list, "kegiatan_list": kegiatan_list,
+        "chart_kondisi": chart_kondisi, "chart_status": chart_status,
+        "chart_kategori": chart_kategori, "chart_lokasi": chart_lokasi,
+        "chart_eselon1": chart_eselon1, "chart_per_kegiatan": chart_per_kegiatan,
+        "assets": asset_rows, "dok_headers": dok_headers, "dok_rows": dok_rows,
+        "personil": personil, "simpulan": simpulan,
+        "tim": [t for act in satker_acts for t in (act.get("tim_peneliti", []) or []) if isinstance(t, dict)],
+        "tim_pendukung": [t for act in satker_acts for t in (act.get("tim_pendukung", []) or []) if isinstance(t, dict)],
+        "tim_inti": [t for act in satker_acts for t in (act.get("tim_inti", []) or []) if isinstance(t, dict)],
+        "tim_pembantu": [t for act in satker_acts for t in (act.get("tim_pembantu", []) or []) if isinstance(t, dict)],
+        "kesimpulan": source_act.get("kesimpulan", ""),
+    }
+
+
+@reports_router.get("/inventory-activities/{activity_id}/laporan-satker-html")
+async def laporan_satker_html(activity_id: str):
+    """Serve Laporan per Satker as interactive HTML preview - aggregates ALL activities for this satker"""
+    from jinja2 import Environment, FileSystemLoader
+    data = await _build_satker_report_v2(activity_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+    data["preview"] = True
+    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+    template = env.get_template("laporan_satker_v2.html")
+    html = template.render(**data)
+    return HTMLResponse(content=html)
+
+
+@reports_router.get("/inventory-activities/{activity_id}/laporan-satker-pdf")
+async def laporan_satker_pdf(activity_id: str):
+    """Generate Laporan per Satker as PDF using weasyprint"""
+    from jinja2 import Environment, FileSystemLoader
+    import weasyprint
+    data = await _build_satker_report_v2(activity_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+    data["preview"] = False
+    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+    template = env.get_template("laporan_satker_v2.html")
+    html_content = template.render(**data)
+    pdf_bytes = weasyprint.HTML(string=html_content).write_pdf()
+    output = io.BytesIO(pdf_bytes)
+    filename = f"Laporan_Inventarisasi_{data['kode_satker']}_{activity_id[:8]}.pdf"
+    return StreamingResponse(output, media_type="application/pdf",
+                             headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+# ============================================================================
+# LHI - LAPORAN HASIL INVENTARISASI LENGKAP
+# ============================================================================
+
+async def _get_pdf_buffer_from_response(response):
+    """Extract BytesIO buffer from StreamingResponse body_iterator"""
+    content = b""
+    async for chunk in response.body_iterator:
+        if isinstance(chunk, bytes):
+            content += chunk
+        else:
+            content += chunk.encode()
+    return io.BytesIO(content)
+
+
+@reports_router.get("/inventory-activities/{activity_id}/lhi-pdf")
+async def generate_lhi_pdf(activity_id: str):
+    """Generate LHI (Laporan Hasil Inventarisasi BMN) - Complete package PDF
+    Combines: Cover Page + BAHI + RHI + 6 DBHI + SP Hasil + SP Pelaksanaan
+    """
+    from PyPDF2 import PdfMerger
+
+    activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
+    if not activity:
+        raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+
+    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+
+    merger = PdfMerger()
+
+    # 1. Cover page
+    try:
+        cover_buffer = await _generate_cover_page(activity, settings)
+        if cover_buffer.getbuffer().nbytes > 0:
+            merger.append(cover_buffer)
+    except Exception as e:
+        logger.warning(f"LHI: Failed to generate cover page: {e}")
+
+    # 2. Generate all PDFs in order as per LKPP 85/2025
+    pdf_sections = [
+        ("BAHI", generate_bahi_pdf, {"activity_id": activity_id}),
+        ("RHI", generate_rhi_pdf, {"activity_id": activity_id}),
+        ("DBHI Kondisi Baik", generate_dbhi_pdf, {"activity_id": activity_id, "dbhi_type": "kondisi-baik"}),
+        ("DBHI Rusak Ringan", generate_dbhi_pdf, {"activity_id": activity_id, "dbhi_type": "kondisi-rusak-ringan"}),
+        ("DBHI Rusak Berat", generate_dbhi_pdf, {"activity_id": activity_id, "dbhi_type": "kondisi-rusak-berat"}),
+        ("DBHI Berlebih", generate_dbhi_pdf, {"activity_id": activity_id, "dbhi_type": "berlebih"}),
+        ("DBHI Tidak Ditemukan", generate_dbhi_pdf, {"activity_id": activity_id, "dbhi_type": "tidak-ditemukan"}),
+        ("DBHI Sengketa", generate_dbhi_pdf, {"activity_id": activity_id, "dbhi_type": "sengketa"}),
+        ("SP Hasil", generate_sp_hasil_pdf, {"activity_id": activity_id}),
+        ("SP Pelaksanaan", generate_sp_pelaksanaan_pdf, {"activity_id": activity_id}),
+    ]
+
+    for section_name, gen_func, kwargs in pdf_sections:
+        try:
+            response = await gen_func(**kwargs)
+            pdf_buffer = await _get_pdf_buffer_from_response(response)
+            if pdf_buffer.getbuffer().nbytes > 0:
+                merger.append(pdf_buffer)
+        except Exception as e:
+            logger.warning(f"LHI: Failed to generate {section_name}: {e}")
+            continue
+
+    output = io.BytesIO()
+    merger.write(output)
+    merger.close()
+    output.seek(0)
+
+    if output.getbuffer().nbytes == 0:
+        raise HTTPException(status_code=500, detail="Gagal generate LHI - tidak ada data")
+
+    filename = f"LHI_Lengkap_{activity_id[:8]}.pdf"
+    return StreamingResponse(output, media_type="application/pdf",
+                             headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+# ============================================================================
+# BATCH PDF ZIP DOWNLOAD
+# ============================================================================
+
+class BatchPDFRequest(BaseModel):
+    types: List[str]
+
+BATCH_PDF_MAP = {
+    "rhi": ("RHI", generate_rhi_pdf),
+    "bahi": ("BAHI", generate_bahi_pdf),
+    "sp-hasil": ("SP_Hasil", generate_sp_hasil_pdf),
+    "sp-pelaksanaan": ("SP_Pelaksanaan", generate_sp_pelaksanaan_pdf),
+    "berita-acara": ("Berita_Acara", generate_berita_acara_pdf),
+    "sptjm": ("SPTJM", generate_sptjm_pdf),
+    "surat-koreksi": ("Surat_Koreksi", generate_surat_koreksi_pdf),
+    "executive-summary": ("Laporan_Eksekutif", generate_executive_summary_pdf),
+}
+
+BATCH_DBHI_TYPES = [
+    "kondisi-baik", "kondisi-rusak-ringan", "kondisi-rusak-berat",
+    "berlebih", "tidak-ditemukan", "sengketa"
+]
+
+
+@reports_router.post("/inventory-activities/{activity_id}/batch-pdf-zip")
+async def batch_download_pdf_zip(activity_id: str, request: BatchPDFRequest):
+    """Generate a ZIP file containing multiple selected PDF reports"""
+    import zipfile
+
+    activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
+    if not activity:
+        raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+
+    if not request.types:
+        raise HTTPException(status_code=400, detail="Pilih minimal satu laporan")
+
+    zip_buffer = io.BytesIO()
+    generated = []
+    errors = []
+
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for report_type in request.types:
+            try:
+                if report_type.startswith("dbhi-"):
+                    dbhi_type = report_type[5:]
+                    if dbhi_type in BATCH_DBHI_TYPES:
+                        response = await generate_dbhi_pdf(activity_id, dbhi_type)
+                        pdf_buffer = await _get_pdf_buffer_from_response(response)
+                        filename = f"DBHI_{dbhi_type.replace('-', '_')}_{activity_id[:8]}.pdf"
+                        zf.writestr(filename, pdf_buffer.getvalue())
+                        generated.append(filename)
+                    continue
+
+                if report_type == "cover":
+                    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+                    cover_buffer = await _generate_cover_page(activity, settings)
+                    if cover_buffer.getbuffer().nbytes > 0:
+                        zf.writestr(f"Sampul_LHI_{activity_id[:8]}.pdf", cover_buffer.getvalue())
+                        generated.append("Sampul_LHI.pdf")
+                    continue
+
+                if report_type in BATCH_PDF_MAP:
+                    label, gen_func = BATCH_PDF_MAP[report_type]
+                    response = await gen_func(activity_id)
+                    pdf_buffer = await _get_pdf_buffer_from_response(response)
+                    filename = f"{label}_{activity_id[:8]}.pdf"
+                    zf.writestr(filename, pdf_buffer.getvalue())
+                    generated.append(filename)
+
+            except Exception as e:
+                logger.warning(f"Batch ZIP: Failed to generate {report_type}: {e}")
+                errors.append(f"{report_type}: {str(e)}")
+
+    if not generated:
+        raise HTTPException(status_code=500, detail="Tidak ada laporan yang berhasil di-generate")
+
+    zip_buffer.seek(0)
+    filename = f"Laporan_Batch_{activity_id[:8]}.zip"
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+

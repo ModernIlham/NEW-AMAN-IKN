@@ -1,0 +1,176 @@
+/* App specific styles */
+
+/* Sidebar form styling */
+.sidebar-form {
+  @apply space-y-3;
+}
+
+.sidebar-form label {
+  @apply block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1;
+}
+
+.sidebar-form input,
+.sidebar-form select,
+.sidebar-form textarea {
+  @apply w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm 
+         text-slate-900 shadow-sm transition-all duration-200
+         focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none;
+}
+
+.sidebar-form select {
+  @apply appearance-none bg-no-repeat bg-right pr-8;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+  background-size: 16px;
+  background-position: right 8px center;
+}
+
+/* Photo upload area */
+.photo-upload-area {
+  @apply relative border-2 border-dashed border-slate-300 rounded-lg 
+         bg-slate-50 hover:bg-slate-100 hover:border-blue-400 
+         transition-all duration-200 cursor-pointer;
+}
+
+.photo-upload-area.has-image {
+  @apply border-solid border-slate-200;
+}
+
+/* Data table styles */
+.data-table {
+  @apply w-full text-sm text-left;
+}
+
+.data-table thead {
+  @apply bg-slate-50 border-b border-slate-200;
+}
+
+.data-table th {
+  @apply px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider;
+}
+
+.data-table tbody tr {
+  @apply border-b border-slate-100 hover:bg-blue-50/50 transition-colors;
+}
+
+.data-table td {
+  @apply px-4 py-3;
+}
+
+/* Status badges */
+.status-badge {
+  @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border;
+}
+
+.status-badge.active {
+  @apply bg-emerald-50 text-emerald-700 border-emerald-200;
+}
+
+.status-badge.stored {
+  @apply bg-slate-100 text-slate-600 border-slate-200;
+}
+
+.status-badge.loaned {
+  @apply bg-amber-50 text-amber-700 border-amber-200;
+}
+
+.condition-badge {
+  @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border;
+}
+
+.condition-badge.good {
+  @apply bg-emerald-50 text-emerald-700 border-emerald-200;
+}
+
+.condition-badge.minor {
+  @apply bg-amber-50 text-amber-700 border-amber-200;
+}
+
+.condition-badge.major {
+  @apply bg-red-50 text-red-700 border-red-200;
+}
+
+/* Button variants */
+.btn-primary {
+  @apply bg-slate-900 text-white hover:bg-slate-800 
+         shadow-sm rounded-md px-4 py-2 font-medium text-sm 
+         transition-all duration-200 active:scale-95
+         focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2;
+}
+
+.btn-secondary {
+  @apply bg-white text-slate-700 border border-slate-200 
+         hover:bg-slate-50 hover:text-slate-900 
+         rounded-md px-4 py-2 font-medium text-sm
+         transition-all duration-200;
+}
+
+.btn-accent {
+  @apply bg-blue-600 text-white hover:bg-blue-700 
+         shadow-sm rounded-md px-4 py-2 font-medium text-sm 
+         transition-all duration-200 active:scale-95;
+}
+
+.btn-ghost {
+  @apply bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900 
+         rounded-md px-3 py-2 text-sm transition-all duration-200;
+}
+
+.btn-destructive {
+  @apply bg-white text-red-600 border border-red-200 
+         hover:bg-red-50 hover:text-red-700 
+         rounded-md px-4 py-2 font-medium text-sm;
+}
+
+/* Card styling */
+.app-card {
+  @apply bg-white border border-slate-200 rounded-lg shadow-sm;
+}
+
+.app-card-hover {
+  @apply hover:border-blue-500/50 hover:shadow-md transition-all duration-200;
+}
+
+/* Edit mode highlight */
+.edit-mode {
+  @apply ring-2 ring-amber-400 ring-offset-2;
+}
+
+/* Dropdown styling */
+.dropdown-content {
+  @apply absolute z-50 mt-1 w-full bg-white border border-slate-200 
+         rounded-lg shadow-lg max-h-60 overflow-auto;
+}
+
+.dropdown-item {
+  @apply w-full text-left px-3 py-2 text-sm hover:bg-blue-50 
+         cursor-pointer transition-colors;
+}
+
+.dropdown-item.selected {
+  @apply bg-blue-50 text-blue-700;
+}
+
+/* Loading spinner */
+.spinner {
+  @apply animate-spin rounded-full border-2 border-slate-200 border-t-blue-600;
+}
+
+/* Empty state */
+.empty-state {
+  @apply flex flex-col items-center justify-center py-12 text-slate-400;
+}
+
+/* Header actions */
+.header-action-btn {
+  @apply inline-flex items-center gap-2 px-3 py-2 text-sm font-medium 
+         rounded-md transition-all duration-200;
+}
+
+/* Modal overlay */
+.modal-overlay {
+  @apply fixed inset-0 bg-black/50 backdrop-blur-sm z-50;
+}
+
+.modal-content {
+  @apply bg-white rounded-lg shadow-xl max-w-md w-full mx-4;
+}
