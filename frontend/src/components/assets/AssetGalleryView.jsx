@@ -1,4 +1,5 @@
 import React, { memo, useState, useCallback, useRef, useEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Loader2, X, ChevronLeft, ChevronRight, MapPin, Tag, User, Building2, QrCode, ClipboardCheck, Calendar, FileCheck, FileX, StickyNote } from "lucide-react";
 import AssetGalleryCard from "./AssetGalleryCard";
@@ -52,6 +53,14 @@ const Lightbox = memo(({ asset, onClose, onEdit }) => {
     return () => window.removeEventListener("keydown", handler);
   }, [photos.length, onClose]);
 
+  // Lock background scroll while the lightbox is open (stops the page
+  // behind from scrolling / "bocor" under the popup on mobile).
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
   const onTouchStart = useCallback((e) => { startX.current = e.touches[0].clientX; }, []);
   const onTouchEnd = useCallback((e) => {
     const diff = e.changedTouches[0].clientX - startX.current;
@@ -68,7 +77,7 @@ const Lightbox = memo(({ asset, onClose, onEdit }) => {
   const docChecked = a.doc_checked || 0;
   const docTotal = a.doc_total || 0;
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-[100] bg-black/92 backdrop-blur-md flex flex-col items-center justify-center"
       onClick={onClose}
@@ -78,7 +87,7 @@ const Lightbox = memo(({ asset, onClose, onEdit }) => {
     >
       {/* Close button */}
       <button
-        className="absolute top-3 right-3 z-10 w-8 h-8 rounded-full bg-white/12 hover:bg-white/25 text-white flex items-center justify-center backdrop-blur-sm transition-colors"
+        className="absolute top-3 right-3 z-10 w-9 h-9 rounded-full bg-black/50 hover:bg-black/70 text-white ring-1 ring-white/40 shadow-lg flex items-center justify-center backdrop-blur-sm transition-colors"
         onClick={onClose}
         data-testid="lightbox-close"
       >
@@ -99,10 +108,10 @@ const Lightbox = memo(({ asset, onClose, onEdit }) => {
             />
             {photos.length > 1 && (
               <>
-                <button className="absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/15 hover:bg-white/30 text-white flex items-center justify-center" onClick={(e) => { e.stopPropagation(); setIdx(i => (i - 1 + photos.length) % photos.length); }}>
+                <button className="absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/50 hover:bg-black/70 text-white ring-1 ring-white/40 shadow-lg flex items-center justify-center backdrop-blur-sm transition-colors" onClick={(e) => { e.stopPropagation(); setIdx(i => (i - 1 + photos.length) % photos.length); }}>
                   <ChevronLeft className="w-6 h-6" />
                 </button>
-                <button className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/15 hover:bg-white/30 text-white flex items-center justify-center" onClick={(e) => { e.stopPropagation(); setIdx(i => (i + 1) % photos.length); }}>
+                <button className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/50 hover:bg-black/70 text-white ring-1 ring-white/40 shadow-lg flex items-center justify-center backdrop-blur-sm transition-colors" onClick={(e) => { e.stopPropagation(); setIdx(i => (i + 1) % photos.length); }}>
                   <ChevronRight className="w-6 h-6" />
                 </button>
                 <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/50 text-white text-xs px-2 py-0.5 rounded-full backdrop-blur-sm">
@@ -158,7 +167,8 @@ const Lightbox = memo(({ asset, onClose, onEdit }) => {
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 });
 Lightbox.displayName = "Lightbox";
@@ -205,8 +215,11 @@ const AssetGalleryView = memo(({
   const ROW_HEIGHT = useMemo(() => {
     if (!containerWidth || !columns) return 320;
     const cardWidth = Math.max(160, (containerWidth - GAP * (columns - 1)) / columns);
-    const photoH = cardWidth * (3 / 4); // aspect-[4/3]
-    const bodyH = 122;   // name(2L) + user + eselon + location + price + padding
+    // Mobile (<640px -> 2 cols) uses a shorter photo + slightly tighter body
+    // so more cards fit on small screens; sm+ keeps the roomier 4/3 layout.
+    const isMobile = columns <= 2;
+    const photoH = cardWidth * (isMobile ? 10 / 16 : 3 / 4); // aspect-[16/10] vs [4/3]
+    const bodyH = isMobile ? 112 : 122;  // name(2L) + user + eselon + location + price + padding
     const footerH = 30;  // icon row with border-t
     return Math.ceil(photoH + bodyH + footerH + GAP);
   }, [containerWidth, columns]);
@@ -285,7 +298,7 @@ const AssetGalleryView = memo(({
         ref={containerRef}
         className="overflow-y-auto overflow-x-hidden"
         style={{
-          height: 'calc(100vh - 280px)',
+          height: 'calc(100dvh - 280px)',
           contain: 'layout style',
         }}
         data-testid="gallery-grid"
