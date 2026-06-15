@@ -68,7 +68,7 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
 
       {/* ===== PHOTO AREA (click → lightbox) ===== */}
       <div
-        className="relative w-full aspect-[4/3] bg-muted overflow-hidden flex-shrink-0 cursor-pointer"
+        className="relative w-full aspect-[16/10] sm:aspect-[4/3] bg-muted overflow-hidden flex-shrink-0 cursor-pointer"
         onClick={() => { if (!isLockedByOther && hasPhoto && onOpenLightbox) onOpenLightbox(asset); }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
@@ -159,7 +159,7 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
         onClick={() => { if (!isLockedByOther) onEdit?.(asset); }}
       >
         {/* Asset name */}
-        <h3 className="text-[11px] sm:text-xs font-semibold text-foreground leading-snug line-clamp-2 mb-1 min-h-[2rem]" title={asset.asset_name}>
+        <h3 className="text-[11px] sm:text-xs font-semibold text-foreground leading-snug line-clamp-2 mb-1 min-h-[1.5rem] sm:min-h-[2rem]" title={asset.asset_name}>
           {asset.asset_name || "-"}
         </h3>
 
