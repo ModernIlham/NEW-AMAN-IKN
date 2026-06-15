@@ -219,7 +219,7 @@ const AssetGalleryView = memo(({
     // so more cards fit on small screens; sm+ keeps the roomier 4/3 layout.
     const isMobile = columns <= 2;
     const photoH = cardWidth * (isMobile ? 10 / 16 : 3 / 4); // aspect-[16/10] vs [4/3]
-    const bodyH = isMobile ? 112 : 122;  // name(2L) + user + eselon + location + price + padding
+    const bodyH = isMobile ? 106 : 122;  // name(2L) + user + eselon + location + price + padding
     const footerH = 30;  // icon row with border-t
     return Math.ceil(photoH + bodyH + footerH + GAP);
   }, [containerWidth, columns]);
@@ -296,9 +296,8 @@ const AssetGalleryView = memo(({
       {/* Virtualized Gallery Grid */}
       <div
         ref={containerRef}
-        className="overflow-y-auto overflow-x-hidden"
+        className="overflow-y-auto overflow-x-hidden h-[calc(100dvh-170px)] sm:h-[calc(100dvh-280px)]"
         style={{
-          height: 'calc(100dvh - 280px)',
           contain: 'layout style',
         }}
         data-testid="gallery-grid"
