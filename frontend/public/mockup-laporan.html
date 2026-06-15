@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>Mockup Desain - Laporan Inventarisasi BMN</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+  :root {
+    --navy: #0f2b46;
+    --navy-light: #1a3a5c;
+    --accent: #2563eb;
+    --accent-light: #dbeafe;
+    --success: #059669;
+    --success-bg: #ecfdf5;
+    --danger: #dc2626;
+    --danger-bg: #fef2f2;
+    --warning: #d97706;
+    --warning-bg: #fffbeb;
+    --purple: #7c3aed;
+    --purple-bg: #f5f3ff;
+    --border: #e2e8f0;
+    --text: #1e293b;
+    --text-light: #64748b;
+    --bg-stripe: #f8fafc;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', sans-serif; background: #e5e7eb; color: var(--text); }
+
+  .page-break-note {
+    text-align: center; padding: 16px; color: #94a3b8; font-size: 12px;
+    border-top: 2px dashed #cbd5e1; border-bottom: 2px dashed #cbd5e1;
+    background: #f1f5f9; margin: 0; letter-spacing: 1px; text-transform: uppercase;
+  }
+
+  /* ============== PAGE 1: EXECUTIVE SUMMARY ============== */
+  .page {
+    width: 297mm; min-height: 210mm; /* A4 landscape */
+    background: white; margin: 20px auto; box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+    padding: 0; overflow: hidden; position: relative;
+  }
+
+  .exec-header {
+    background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%);
+    padding: 24px 32px; display: flex; align-items: center; gap: 20px;
+    color: white; position: relative; overflow: hidden;
+  }
+  .exec-header::after {
+    content: ''; position: absolute; right: -40px; top: -40px;
+    width: 200px; height: 200px; border-radius: 50%;
+    background: rgba(255,255,255,0.03); pointer-events: none;
+  }
+  .exec-header .logo { width: 56px; height: 56px; border-radius: 8px; background: white; padding: 4px; flex-shrink: 0; }
+  .exec-header .logo img { width: 100%; height: 100%; object-fit: contain; }
+  .exec-header .titles h1 { font-size: 18px; font-weight: 700; letter-spacing: 0.5px; }
+  .exec-header .titles h2 { font-size: 13px; font-weight: 400; opacity: 0.85; margin-top: 2px; }
+  .exec-header .meta { margin-left: auto; text-align: right; font-size: 11px; opacity: 0.8; line-height: 1.6; }
+  .exec-header .meta strong { font-weight: 600; opacity: 1; }
+
+  .exec-body { padding: 20px 32px 24px; }
+
+  /* Summary cards row */
+  .summary-row {
+    display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 16px;
+  }
+  .s-card {
+    border-radius: 8px; padding: 12px 14px; position: relative; overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .s-card .s-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 4px; }
+  .s-card .s-count { font-size: 22px; font-weight: 800; line-height: 1; }
+  .s-card .s-value { font-size: 10px; margin-top: 3px; opacity: 0.7; }
+  .s-card .s-pct { position: absolute; top: 10px; right: 12px; font-size: 11px; font-weight: 700; opacity: 0.5; }
+
+  .s-card.total { background: var(--accent-light); border-color: #93c5fd; color: var(--accent); }
+  .s-card.found { background: var(--success-bg); border-color: #86efac; color: var(--success); }
+  .s-card.notfound { background: var(--danger-bg); border-color: #fca5a5; color: var(--danger); }
+  .s-card.excess { background: var(--purple-bg); border-color: #c4b5fd; color: var(--purple); }
+  .s-card.dispute { background: #fff1f2; border-color: #fda4af; color: #e11d48; }
+  .s-card.pending { background: #f8fafc; border-color: var(--border); color: var(--text-light); }
+
+  /* Two column layout */
+  .exec-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+
+  .exec-section { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .exec-section .sec-title {
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+    padding: 8px 14px; background: #f8fafc; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .exec-section .sec-title .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .exec-section .sec-body { padding: 12px 14px; }
+
+  /* Condition breakdown mini table */
+  .mini-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .mini-table th { text-align: left; font-weight: 600; color: var(--text-light); font-size: 9px; text-transform: uppercase; padding: 4px 8px; border-bottom: 1px solid var(--border); }
+  .mini-table td { padding: 6px 8px; border-bottom: 1px solid #f1f5f9; }
+  .mini-table tr:last-child td { border-bottom: none; }
+  .mini-table .cat-label { display: flex; align-items: center; gap: 6px; }
+  .mini-table .cat-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+  .mini-table .right { text-align: right; font-variant-numeric: tabular-nums; }
+  .mini-table .bold { font-weight: 700; }
+  .mini-table .sub-row td { padding-left: 28px; color: var(--text-light); font-size: 10px; }
+  .mini-table .total-row { background: #f8fafc; }
+  .mini-table .total-row td { font-weight: 700; border-top: 2px solid var(--border); }
+
+  /* Progress bar */
+  .progress-bar-wrap { margin-bottom: 4px; }
+  .progress-bar { height: 10px; background: #f1f5f9; border-radius: 5px; overflow: hidden; display: flex; }
+  .progress-bar .seg { height: 100%; transition: width 0.3s; }
+  .progress-legend { display: flex; gap: 12px; margin-top: 6px; flex-wrap: wrap; }
+  .progress-legend span { font-size: 9px; display: flex; align-items: center; gap: 4px; color: var(--text-light); }
+  .progress-legend .ldot { width: 8px; height: 8px; border-radius: 2px; }
+
+  /* Conclusion section */
+  .conclusion-list { list-style: none; padding: 0; }
+  .conclusion-list li { font-size: 11px; padding: 5px 0; border-bottom: 1px solid #f1f5f9; display: flex; align-items: flex-start; gap: 8px; line-height: 1.5; }
+  .conclusion-list li:last-child { border-bottom: none; }
+  .conclusion-list .num { background: var(--navy); color: white; width: 18px; height: 18px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; flex-shrink: 0; margin-top: 1px; }
+
+  /* Footer */
+  .exec-footer {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    padding: 10px 32px; background: #f8fafc; border-top: 1px solid var(--border);
+    display: flex; justify-content: space-between; font-size: 9px; color: var(--text-light);
+  }
+
+  /* ============== PAGE 2+: DATA TABLE ============== */
+  .data-header {
+    background: var(--navy); color: white; padding: 14px 24px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .data-header h2 { font-size: 13px; font-weight: 700; }
+  .data-header .page-info { font-size: 10px; opacity: 0.7; }
+
+  .data-body { padding: 0; }
+
+  /* The main data table */
+  .inv-table { width: 100%; border-collapse: collapse; font-size: 9px; }
+  .inv-table thead th {
+    background: var(--navy); color: white; font-weight: 600;
+    padding: 7px 5px; text-align: center; font-size: 8px; text-transform: uppercase;
+    letter-spacing: 0.3px; border-right: 1px solid rgba(255,255,255,0.1);
+    white-space: nowrap; position: sticky; top: 0;
+  }
+  .inv-table thead th:last-child { border-right: none; }
+
+  .inv-table tbody td {
+    padding: 4px 5px; border-bottom: 1px solid #e8ecf1;
+    vertical-align: middle; line-height: 1.3;
+  }
+  .inv-table tbody tr:nth-child(even) { background: var(--bg-stripe); }
+  .inv-table tbody tr:hover { background: #eef2ff; }
+
+  /* Photo cell */
+  .photo-cell { width: 52px; padding: 3px !important; }
+  .photo-cell .photo-wrap {
+    width: 46px; height: 46px; border-radius: 4px; overflow: hidden;
+    border: 1px solid var(--border); background: #f8fafc;
+  }
+  .photo-cell .photo-wrap img { width: 100%; height: 100%; object-fit: cover; }
+
+  .stiker-cell { width: 46px; padding: 3px !important; }
+  .stiker-cell .stiker-wrap {
+    width: 40px; height: 40px; border-radius: 4px; overflow: hidden;
+    border: 1.5px solid var(--success); background: var(--success-bg); position: relative;
+  }
+  .stiker-cell .stiker-wrap img { width: 100%; height: 100%; object-fit: cover; }
+  .stiker-cell .stiker-badge {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: var(--success); color: white; font-size: 6px;
+    text-align: center; padding: 1px 0; font-weight: 700; letter-spacing: 0.3px;
+  }
+  .stiker-cell .no-stiker {
+    width: 40px; height: 40px; border-radius: 4px;
+    border: 1px dashed #cbd5e1; background: #f8fafc;
+    display: flex; align-items: center; justify-content: center;
+    color: #cbd5e1; font-size: 7px; text-align: center;
+  }
+
+  /* Status badges */
+  .badge {
+    display: inline-block; padding: 2px 6px; border-radius: 3px;
+    font-size: 8px; font-weight: 600; white-space: nowrap;
+  }
+  .badge-found { background: var(--success-bg); color: var(--success); }
+  .badge-notfound { background: var(--danger-bg); color: var(--danger); }
+  .badge-excess { background: var(--purple-bg); color: var(--purple); }
+  .badge-dispute { background: #fff1f2; color: #e11d48; }
+  .badge-good { background: #ecfdf5; color: #059669; }
+  .badge-light { background: #fef9c3; color: #a16207; }
+  .badge-heavy { background: #fee2e2; color: #b91c1c; }
+  .badge-stiker { background: #d1fae5; color: #065f46; }
+  .badge-nostiker { background: #f1f5f9; color: #94a3b8; }
+
+  .text-mono { font-family: 'Courier New', monospace; font-size: 8.5px; }
+  .text-right { text-align: right; }
+  .text-center { text-align: center; }
+  .text-ellip { max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .text-wrap-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; max-height: 24px; }
+  .rupiah { font-variant-numeric: tabular-nums; }
+
+  .data-footer {
+    padding: 10px 24px; background: #f8fafc; border-top: 1px solid var(--border);
+    display: flex; justify-content: space-between; font-size: 9px; color: var(--text-light);
+  }
+
+  /* Page indicator */
+  .design-note {
+    max-width: 297mm; margin: 0 auto 0; padding: 12px 20px;
+    background: #1e293b; color: #94a3b8; font-size: 11px; border-radius: 8px 8px 0 0;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .design-note strong { color: #e2e8f0; }
+  .design-note .tag { background: #2563eb; color: white; padding: 2px 8px; border-radius: 4px; font-size: 9px; font-weight: 700; }
+</style>
+</head>
+<body>
+
+<!-- =============== DESIGN NOTES =============== -->
+<div class="design-note">
+  <span class="tag">MOCKUP</span>
+  <span>Rancangan Desain Laporan Inventarisasi BMN - <strong>Format Landscape A4</strong> - Untuk preview & approval sebelum implementasi PDF</span>
+</div>
+
+<!-- =============== PAGE 1: EXECUTIVE SUMMARY =============== -->
+<div class="page">
+  <!-- Header with logo & info -->
+  <div class="exec-header">
+    <div class="logo">
+      <img src="https://customer-assets.emergentagent.com/job_ba484b79-0227-4276-83da-fe59d2ffef0c/artifacts/f71flb8z_Logo_Nusantara.svg.png" alt="Logo">
+    </div>
+    <div class="titles">
+      <h1>LAPORAN EKSEKUTIF HASIL INVENTARISASI BMN</h1>
+      <h2>Otorita Ibu Kota Nusantara - Penajam Paser Utara, Kalimantan Timur</h2>
+    </div>
+    <div class="meta">
+      <div><strong>SK:</strong> ST-001/2024</div>
+      <div><strong>Periode:</strong> 01 Jan 2024 - 31 Des 2024</div>
+      <div><strong>Dicetak:</strong> 24 Februari 2025</div>
+    </div>
+  </div>
+
+  <div class="exec-body">
+    <!-- Summary Cards -->
+    <div class="summary-row">
+      <div class="s-card total">
+        <div class="s-label">Total BMN Diteliti</div>
+        <div class="s-count">156</div>
+        <div class="s-value">Rp 8.450.000.000</div>
+        <div class="s-pct">100%</div>
+      </div>
+      <div class="s-card found">
+        <div class="s-label">Ditemukan</div>
+        <div class="s-count">128</div>
+        <div class="s-value">Rp 7.120.000.000</div>
+        <div class="s-pct">82.1%</div>
+      </div>
+      <div class="s-card notfound">
+        <div class="s-label">Tidak Ditemukan</div>
+        <div class="s-count">18</div>
+        <div class="s-value">Rp 890.000.000</div>
+        <div class="s-pct">11.5%</div>
+      </div>
+      <div class="s-card excess">
+        <div class="s-label">Berlebih</div>
+        <div class="s-count">6</div>
+        <div class="s-value">Rp 280.000.000</div>
+        <div class="s-pct">3.8%</div>
+      </div>
+      <div class="s-card dispute">
+        <div class="s-label">Sengketa</div>
+        <div class="s-count">2</div>
+        <div class="s-value">Rp 120.000.000</div>
+        <div class="s-pct">1.3%</div>
+      </div>
+      <div class="s-card pending">
+        <div class="s-label">Belum Inventarisasi</div>
+        <div class="s-count">2</div>
+        <div class="s-value">Rp 40.000.000</div>
+        <div class="s-pct">1.3%</div>
+      </div>
+    </div>
+
+    <!-- Progress Bar -->
+    <div class="progress-bar-wrap">
+      <div class="progress-bar">
+        <div class="seg" style="width:82.1%;background:var(--success)"></div>
+        <div class="seg" style="width:11.5%;background:var(--danger)"></div>
+        <div class="seg" style="width:3.8%;background:var(--purple)"></div>
+        <div class="seg" style="width:1.3%;background:#e11d48"></div>
+        <div class="seg" style="width:1.3%;background:#cbd5e1"></div>
+      </div>
+      <div class="progress-legend">
+        <span><span class="ldot" style="background:var(--success)"></span>Ditemukan 82.1%</span>
+        <span><span class="ldot" style="background:var(--danger)"></span>Tidak Ditemukan 11.5%</span>
+        <span><span class="ldot" style="background:var(--purple)"></span>Berlebih 3.8%</span>
+        <span><span class="ldot" style="background:#e11d48"></span>Sengketa 1.3%</span>
+        <span><span class="ldot" style="background:#cbd5e1"></span>Belum 1.3%</span>
+      </div>
+    </div>
+
+    <!-- Two Column Detail -->
+    <div class="exec-cols">
+      <!-- LEFT: Breakdown Kondisi -->
+      <div class="exec-section">
+        <div class="sec-title"><span class="dot" style="background:var(--accent)"></span> Rekapitulasi per Kategori</div>
+        <div class="sec-body">
+          <table class="mini-table">
+            <thead><tr><th>Kategori</th><th class="right">NUP</th><th class="right">Nilai (Rp)</th><th class="right">%</th></tr></thead>
+            <tbody>
+              <tr><td><span class="cat-label"><span class="cat-dot" style="background:var(--success)"></span><strong>A. BMN Ditemukan</strong></span></td><td class="right bold">128</td><td class="right bold rupiah">7.120.000.000</td><td class="right bold">82.1%</td></tr>
+              <tr class="sub-row"><td>1. Kondisi Baik</td><td class="right">98</td><td class="right rupiah">5.800.000.000</td><td class="right">62.8%</td></tr>
+              <tr class="sub-row"><td>2. Rusak Ringan</td><td class="right">22</td><td class="right rupiah">950.000.000</td><td class="right">14.1%</td></tr>
+              <tr class="sub-row"><td>3. Rusak Berat</td><td class="right">8</td><td class="right rupiah">370.000.000</td><td class="right">5.1%</td></tr>
+              <tr><td><span class="cat-label"><span class="cat-dot" style="background:var(--danger)"></span><strong>B. Tidak Ditemukan</strong></span></td><td class="right bold">18</td><td class="right bold rupiah">890.000.000</td><td class="right bold">11.5%</td></tr>
+              <tr class="sub-row"><td>- Kesalahan Pencatatan</td><td class="right">12</td><td class="right rupiah">580.000.000</td><td class="right">7.7%</td></tr>
+              <tr class="sub-row"><td>- Tidak Ditemukan Lainnya</td><td class="right">6</td><td class="right rupiah">310.000.000</td><td class="right">3.8%</td></tr>
+              <tr><td><span class="cat-label"><span class="cat-dot" style="background:var(--purple)"></span><strong>C. Berlebih</strong></span></td><td class="right bold">6</td><td class="right bold rupiah">280.000.000</td><td class="right bold">3.8%</td></tr>
+              <tr><td><span class="cat-label"><span class="cat-dot" style="background:#e11d48"></span><strong>D. Sengketa</strong></span></td><td class="right bold">2</td><td class="right bold rupiah">120.000.000</td><td class="right bold">1.3%</td></tr>
+              <tr><td><span class="cat-label"><span class="cat-dot" style="background:#cbd5e1"></span><strong>E. Belum</strong></span></td><td class="right bold">2</td><td class="right bold rupiah">40.000.000</td><td class="right bold">1.3%</td></tr>
+              <tr class="total-row"><td><strong>TOTAL</strong></td><td class="right bold">156</td><td class="right bold rupiah">8.450.000.000</td><td class="right bold">100%</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- RIGHT: Simpulan & Tindak Lanjut -->
+      <div class="exec-section">
+        <div class="sec-title"><span class="dot" style="background:var(--warning)"></span> Simpulan & Tindak Lanjut</div>
+        <div class="sec-body">
+          <ol class="conclusion-list">
+            <li>
+              <span class="num">1</span>
+              <span>Dari <strong>156 NUP</strong> BMN yang diteliti senilai <strong>Rp 8,45 Miliar</strong>, sebanyak <strong>82,1%</strong> berhasil ditemukan dan teridentifikasi dengan baik.</span>
+            </li>
+            <li>
+              <span class="num">2</span>
+              <span><strong>18 NUP</strong> BMN tidak ditemukan: 12 NUP karena <em>kesalahan pencatatan</em> (akan dikoreksi di SIMAK-BMN) dan 6 NUP karena <em>tidak ditemukan fisiknya</em> (akan diproses penghapusan via SPTJM).</span>
+            </li>
+            <li>
+              <span class="num">3</span>
+              <span><strong>6 NUP</strong> BMN berlebih ditemukan tidak tercatat di SIMAK-BMN senilai <strong>Rp 280 Juta</strong>. Akan didaftarkan ke Daftar BMN sesuai prosedur.</span>
+            </li>
+            <li>
+              <span class="num">4</span>
+              <span><strong>2 NUP</strong> BMN dalam sengketa sedang menunggu putusan pengadilan. Koordinasi dengan bagian hukum terus dilakukan.</span>
+            </li>
+            <li>
+              <span class="num">5</span>
+              <span>Stiker inventarisasi telah terpasang pada <strong>124 dari 128 NUP</strong> BMN yang ditemukan (97%). Sisa 4 NUP akan dipasang pada pekan berikutnya.</span>
+            </li>
+            <li>
+              <span class="num">6</span>
+              <span>Seluruh hasil inventarisasi telah didokumentasikan dalam <strong>LHI</strong> yang terdiri dari BAHI, RHI, 6 DBHI, dan Surat Pernyataan.</span>
+            </li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="exec-footer">
+    <span>Dicetak dari Sistem Inventaris Aset Terpadu</span>
+    <span>Halaman 1 dari 4</span>
+  </div>
+</div>
+
+<!-- Page break note -->
+<div class="page-break-note" style="max-width:297mm;margin:0 auto;">--- Halaman Baru: Data Inventarisasi Lengkap ---</div>
+
+<!-- =============== PAGE 2+: DATA TABLE =============== -->
+<div class="page" style="min-height: auto;">
+  <div class="data-header">
+    <h2>DATA INVENTARISASI BMN - DETAIL PER ASET</h2>
+    <div class="page-info">Satker: Otorita Ibu Kota Nusantara | Halaman 2 dari 4</div>
+  </div>
+  <div class="data-body">
+    <table class="inv-table">
+      <thead>
+        <tr>
+          <th style="width:28px">No</th>
+          <th style="width:52px">Foto</th>
+          <th style="width:46px">Stiker</th>
+          <th style="width:78px">Kode Barang</th>
+          <th style="width:28px">NUP</th>
+          <th style="width:100px">Nama Barang</th>
+          <th style="width:70px">Merk/Tipe</th>
+          <th style="width:40px">Tahun</th>
+          <th style="width:72px">Nilai (Rp)</th>
+          <th style="width:55px">Kondisi</th>
+          <th style="width:68px">Lokasi</th>
+          <th style="width:62px">Status<br>Inventarisasi</th>
+          <th style="width:55px">Stiker<br>Status</th>
+          <th style="width:95px">Keterangan</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- Row 1 - Ditemukan, Kondisi Baik, Stiker Terpasang -->
+        <tr>
+          <td class="text-center">1</td>
+          <td class="photo-cell"><div class="photo-wrap"><img src="https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=100&h=100&fit=crop" alt=""></div></td>
+          <td class="stiker-cell"><div class="stiker-wrap"><img src="https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=100&h=100&fit=crop" alt=""><div class="stiker-badge">STIKER</div></div></td>
+          <td class="text-mono">3030103001</td>
+          <td class="text-center">2</td>
+          <td><div class="text-wrap-2"><strong>Laptop Dell Latitude 5420</strong></div></td>
+          <td class="text-ellip">Dell Latitude 5420</td>
+          <td class="text-center">2024</td>
+          <td class="text-right rupiah">15.000.000</td>
+          <td class="text-center"><span class="badge badge-good">Baik</span></td>
+          <td class="text-ellip">Ruang IT Lt.3</td>
+          <td class="text-center"><span class="badge badge-found">Ditemukan</span></td>
+          <td class="text-center"><span class="badge badge-stiker">Terpasang</span></td>
+          <td><div class="text-wrap-2">BMN dalam kondisi baik, berfungsi normal</div></td>
+        </tr>
+        <!-- Row 2 - Ditemukan, Rusak Ringan -->
+        <tr>
+          <td class="text-center">2</td>
+          <td class="photo-cell"><div class="photo-wrap"><img src="https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?w=100&h=100&fit=crop" alt=""></div></td>
+          <td class="stiker-cell"><div class="stiker-wrap"><img src="https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?w=100&h=100&fit=crop" alt=""><div class="stiker-badge">STIKER</div></div></td>
+          <td class="text-mono">3050201003</td>
+          <td class="text-center">1</td>
+          <td><div class="text-wrap-2"><strong>AC Split Daikin 2 PK</strong></div></td>
+          <td class="text-ellip">Daikin FTV50</td>
+          <td class="text-center">2022</td>
+          <td class="text-right rupiah">8.500.000</td>
+          <td class="text-center"><span class="badge badge-light">R.Ringan</span></td>
+          <td class="text-ellip">Ruang Rapat A</td>
+          <td class="text-center"><span class="badge badge-found">Ditemukan</span></td>
+          <td class="text-center"><span class="badge badge-stiker">Terpasang</span></td>
+          <td><div class="text-wrap-2">Remote rusak, unit berfungsi</div></td>
+        </tr>
+        <!-- Row 3 - Tidak Ditemukan -->
+        <tr>
+          <td class="text-center">3</td>
+          <td class="photo-cell"><div class="photo-wrap" style="background:#fef2f2;display:flex;align-items:center;justify-content:center;color:#fca5a5;font-size:8px;">Tidak ada</div></td>
+          <td class="stiker-cell"><div class="no-stiker">-</div></td>
+          <td class="text-mono">3030104002</td>
+          <td class="text-center">5</td>
+          <td><div class="text-wrap-2"><strong>Printer HP LaserJet Pro</strong></div></td>
+          <td class="text-ellip">HP M404dn</td>
+          <td class="text-center">2021</td>
+          <td class="text-right rupiah">4.200.000</td>
+          <td class="text-center">-</td>
+          <td class="text-ellip">Gudang B</td>
+          <td class="text-center"><span class="badge badge-notfound">Tdk Ditemukan</span></td>
+          <td class="text-center"><span class="badge badge-nostiker">Belum</span></td>
+          <td><div class="text-wrap-2">Pencatatan Ganda - koreksi SIMAK-BMN</div></td>
+        </tr>
+        <!-- Row 4 - Berlebih -->
+        <tr>
+          <td class="text-center">4</td>
+          <td class="photo-cell"><div class="photo-wrap"><img src="https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=100&h=100&fit=crop" alt=""></div></td>
+          <td class="stiker-cell"><div class="no-stiker">-</div></td>
+          <td class="text-mono">3050105007</td>
+          <td class="text-center">-</td>
+          <td><div class="text-wrap-2"><strong>Meja Kerja Kayu Jati</strong></div></td>
+          <td class="text-ellip">IKEA MALM</td>
+          <td class="text-center">N/A</td>
+          <td class="text-right rupiah">3.500.000</td>
+          <td class="text-center"><span class="badge badge-good">Baik</span></td>
+          <td class="text-ellip">Ruang Admin</td>
+          <td class="text-center"><span class="badge badge-excess">Berlebih</span></td>
+          <td class="text-center"><span class="badge badge-nostiker">Belum</span></td>
+          <td><div class="text-wrap-2">Tidak tercatat di SIMAK-BMN, asal: hibah</div></td>
+        </tr>
+        <!-- Row 5 - Sengketa -->
+        <tr>
+          <td class="text-center">5</td>
+          <td class="photo-cell"><div class="photo-wrap"><img src="https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=100&h=100&fit=crop" alt=""></div></td>
+          <td class="stiker-cell"><div class="no-stiker">-</div></td>
+          <td class="text-mono">4010102001</td>
+          <td class="text-center">1</td>
+          <td><div class="text-wrap-2"><strong>Tanah Kavling Blok C-12</strong></div></td>
+          <td class="text-ellip">-</td>
+          <td class="text-center">2019</td>
+          <td class="text-right rupiah">850.000.000</td>
+          <td class="text-center">-</td>
+          <td class="text-ellip">Blok C-12</td>
+          <td class="text-center"><span class="badge badge-dispute">Sengketa</span></td>
+          <td class="text-center"><span class="badge badge-nostiker">Belum</span></td>
+          <td><div class="text-wrap-2">Perkara: 45/PDT/2024 - PT XYZ</div></td>
+        </tr>
+        <!-- Row 6 -->
+        <tr>
+          <td class="text-center">6</td>
+          <td class="photo-cell"><div class="photo-wrap"><img src="https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=100&h=100&fit=crop" alt=""></div></td>
+          <td class="stiker-cell"><div class="stiker-wrap"><img src="https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=100&h=100&fit=crop" alt=""><div class="stiker-badge">STIKER</div></div></td>
+          <td class="text-mono">3060101004</td>
+          <td class="text-center">3</td>
+          <td><div class="text-wrap-2"><strong>Kursi Kerja Ergonomis</strong></div></td>
+          <td class="text-ellip">Herman Miller Aeron</td>
+          <td class="text-center">2023</td>
+          <td class="text-right rupiah">12.500.000</td>
+          <td class="text-center"><span class="badge badge-good">Baik</span></td>
+          <td class="text-ellip">Ruang Direksi</td>
+          <td class="text-center"><span class="badge badge-found">Ditemukan</span></td>
+          <td class="text-center"><span class="badge badge-stiker">Terpasang</span></td>
+          <td><div class="text-wrap-2">-</div></td>
+        </tr>
+        <!-- Row 7 - Rusak Berat -->
+        <tr>
+          <td class="text-center">7</td>
+          <td class="photo-cell"><div class="photo-wrap"><img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=100&h=100&fit=crop" alt=""></div></td>
+          <td class="stiker-cell"><div class="stiker-wrap"><img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=100&h=100&fit=crop" alt=""><div class="stiker-badge">STIKER</div></div></td>
+          <td class="text-mono">3030108002</td>
+          <td class="text-center">1</td>
+          <td><div class="text-wrap-2"><strong>Server Rack HP ProLiant DL380</strong></div></td>
+          <td class="text-ellip">HP DL380 Gen10</td>
+          <td class="text-center">2020</td>
+          <td class="text-right rupiah">85.000.000</td>
+          <td class="text-center"><span class="badge badge-heavy">R.Berat</span></td>
+          <td class="text-ellip">Server Room</td>
+          <td class="text-center"><span class="badge badge-found">Ditemukan</span></td>
+          <td class="text-center"><span class="badge badge-stiker">Terpasang</span></td>
+          <td><div class="text-wrap-2">Motherboard rusak, tidak ekonomis diperbaiki</div></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="data-footer">
+    <span>Menampilkan 7 dari 156 BMN | Total Nilai: Rp 978.700.000</span>
+    <span>Halaman 2 dari 4</span>
+  </div>
+</div>
+
+<div style="max-width:297mm;margin:20px auto;padding:20px 24px;background:#1e293b;color:#94a3b8;font-size:11px;border-radius:8px;line-height:1.8;">
+  <strong style="color:#e2e8f0;font-size:13px;">Catatan Desain:</strong><br>
+  <span style="color:#60a5fa">Halaman 1:</span> Ringkasan eksekutif 1 halaman penuh - semua informasi kunci dalam sekali pandang<br>
+  <span style="color:#60a5fa">Halaman 2+:</span> Data detail per aset - foto & foto stiker berukuran seragam (46x46px / 40x40px), semua info muat dalam 1 baris per aset<br>
+  <span style="color:#60a5fa">Foto:</span> Foto utama (cover) + foto stiker ditampilkan berdampingan. Foto di-crop square dan ukuran seragam<br>
+  <span style="color:#60a5fa">Kolom:</span> No | Foto | Stiker | Kode Barang | NUP | Nama Barang | Merk/Tipe | Tahun | Nilai | Kondisi | Lokasi | Status Inventarisasi | Stiker Status | Keterangan<br>
+  <span style="color:#60a5fa">Warna:</span> Badge warna-warni sesuai status (hijau=ditemukan, merah=tidak ditemukan, ungu=berlebih, pink=sengketa)<br>
+  <span style="color:#60a5fa">Format:</span> Landscape A4 untuk memaksimalkan ruang kolom
+</div>
+
+</body>
+</html>

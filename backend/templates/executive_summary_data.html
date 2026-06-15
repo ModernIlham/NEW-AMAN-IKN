@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Data Detail Per Aset</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', -apple-system, sans-serif; color: #1e293b; padding: 0; background: #fff; }
+
+        @page { size: A4 landscape; margin: 8mm 8mm 2mm 8mm; }
+
+        .data-header { background: linear-gradient(135deg, #0c1f3f, #1a3461); padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; }
+        .data-header h2 { font-size: 14px; font-weight: 700; color: #fff; letter-spacing: 1.5px; text-transform: uppercase; }
+        .data-header-meta { font-size: 10px; color: #94a3b8; }
+        .data-header-meta strong { color: #e2e8f0; }
+
+        .data-table-wrapper { padding: 4mm 8mm 2mm; }
+        .data-table { width: 100%; border-collapse: collapse; font-size: 9px; table-layout: fixed; }
+        .data-table thead { display: table-header-group; }
+        .data-table thead th { background: #0f172a; color: #e2e8f0; padding: 6px 4px; font-weight: 600; font-size: 7px; text-transform: uppercase; letter-spacing: 0.3px; text-align: center; border: 1px solid #1e293b; }
+
+        .data-table tbody tr {
+            border-bottom: 1px solid #f1f5f9;
+            height: 68px;
+            max-height: 68px;
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
+        .data-table tbody tr:nth-child(even) { background: #fafbfd; }
+        .data-table tbody td {
+            padding: 3px 4px;
+            vertical-align: top;
+            border: 1px solid #f1f5f9;
+            font-size: 8px;
+            color: #334155;
+            overflow: hidden;
+            height: 68px;
+            max-height: 68px;
+        }
+        .data-table td.center { text-align: center; }
+        .data-table td.right { text-align: right; }
+
+        .photo-cell { text-align: center; }
+        .photo-img { width: 58px; height: 58px; object-fit: cover; border-radius: 4px; border: 1px solid #e2e8f0; display: block; margin: 0 auto; }
+        .photo-empty { width: 58px; height: 58px; border-radius: 4px; background: #f1f5f9; display: flex; align-items: center; justify-content: center; margin: 0 auto; color: #94a3b8; font-size: 7px; }
+        .stiker-cell { text-align: center; }
+        .stiker-img { width: 40px; height: 40px; object-fit: cover; border-radius: 3px; border: 1px solid #e2e8f0; display: block; margin: 0 auto; }
+        .stiker-badge-mini { font-size: 5.5px; background: #16a34a; color: #fff; padding: 1px 3px; border-radius: 2px; display: inline-block; margin-top: 2px; font-weight: 700; }
+        .stiker-empty { width: 40px; height: 40px; border-radius: 3px; background: #f1f5f9; display: flex; align-items: center; justify-content: center; margin: 0 auto; color: #cbd5e1; font-size: 7px; }
+
+        /* Text cells: allow wrap, clip at fixed row height, fade to ellipsis at bottom */
+        .cell-clip {
+            max-height: 60px;
+            overflow: hidden;
+            position: relative;
+        }
+        /* Fade-out overlay when content overflows */
+        .cell-clip::after {
+            content: '...';
+            position: absolute;
+            bottom: 0; right: 0;
+            background: linear-gradient(90deg, transparent, #fff 40%);
+            padding: 0 4px 0 12px;
+            font-size: 7px; color: #94a3b8;
+        }
+        .data-table tbody tr:nth-child(even) .cell-clip::after {
+            background: linear-gradient(90deg, transparent, #fafbfd 40%);
+        }
+
+        .cell-main { font-size: 8px; font-weight: 600; color: #0f172a; margin-bottom: 2px; word-wrap: break-word; overflow-wrap: break-word; }
+        .cell-sub { font-size: 7px; color: #64748b; line-height: 1.4; word-wrap: break-word; overflow-wrap: break-word; }
+        .cell-sub .label { color: #94a3b8; font-weight: 500; }
+        .cell-code { font-family: 'Courier New', monospace; font-size: 7.5px; font-weight: 600; color: #0f172a; margin-bottom: 1px; word-wrap: break-word; overflow-wrap: break-word; }
+        .cell-badge-row { display: flex; gap: 3px; flex-wrap: wrap; margin-top: 2px; }
+        .cell-coords { font-size: 6.5px; color: #94a3b8; font-family: 'Courier New', monospace; margin-top: 2px; word-wrap: break-word; overflow-wrap: break-word; }
+        .cell-divider { border-top: 1px dashed #e2e8f0; margin: 2px 0; }
+
+        .badge { display: inline-block; padding: 1px 4px; border-radius: 3px; font-size: 6.5px; font-weight: 600; white-space: nowrap; }
+        .badge-baik { background: #dcfce7; color: #166534; }
+        .badge-ringan { background: #fef3c7; color: #92400e; }
+        .badge-berat { background: #fee2e2; color: #991b1b; }
+        .badge-ditemukan { background: #dbeafe; color: #1e40af; }
+        .badge-tidak { background: #fee2e2; color: #991b1b; }
+        .badge-berlebih { background: #faf5ff; color: #7c3aed; }
+        .badge-sengketa { background: #fce7f3; color: #be185d; }
+
+        .data-footer { position: fixed; bottom: 0; left: 0; width: 100%; padding: 6px 24px; display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border-top: 1px solid #e2e8f0; font-size: 9px; color: #64748b; }
+        .data-footer strong { color: #0f172a; }
+    </style>
+</head>
+<body>
+
+<div class="data-header">
+    <h2>Data Inventarisasi BMN &mdash; Detail Per Aset{% if data_page_num %} (Bagian {{ data_page_num }}{% if total_data_pages %}/{{ total_data_pages }}{% endif %}){% endif %}</h2>
+    <div class="data-header-meta"><strong>Satker: {{ satker_name }}</strong></div>
+</div>
+
+<div class="data-table-wrapper">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th style="width:3%;">No</th>
+                <th style="width:8%;">Foto</th>
+                <th style="width:6%;">Stiker</th>
+                <th style="width:12%;">Identitas Barang</th>
+                <th style="width:14%;">Nama Barang</th>
+                <th style="width:4%;">Tahun</th>
+                <th style="width:8%;">Nilai (Rp)</th>
+                <th style="width:15%;">Kondisi & Status</th>
+                <th style="width:12%;">Lokasi & Pengguna</th>
+                <th style="width:10%;">Kelengkapan Dok.</th>
+                <th style="width:8%;">Keterangan</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for a in chunk_assets %}
+            <tr>
+                <td class="center">{{ global_offset + loop.index }}</td>
+                <td class="photo-cell">
+                    {% if a.photo_url %}<img src="{{ a.photo_url }}" class="photo-img" alt="Foto" />
+                    {% else %}<div class="photo-empty">No Foto</div>{% endif %}
+                </td>
+                <td class="stiker-cell">
+                    {% if a.stiker_url %}<img src="{{ a.stiker_url }}" class="stiker-img" alt="Stiker" /><div class="stiker-badge-mini">STIKER</div>
+                    {% else %}<div class="stiker-empty">-</div>{% endif %}
+                </td>
+                <td><div class="cell-clip">
+                    <div class="cell-code">{{ a.asset_code }} NUP {{ a.nup or '-' }}</div>
+                    <div class="cell-sub"><span class="label">Kat:</span> {{ a.category_label }}</div>
+                </div></td>
+                <td><div class="cell-clip">
+                    <div class="cell-main">{{ a.asset_name }}</div>
+                    <div class="cell-sub"><span class="label">Merk:</span> {{ a.brand_model }}</div>
+                </div></td>
+                <td class="center">{{ a.year or '-' }}</td>
+                <td class="right" style="font-weight:600;">{{ a.value_fmt }}</td>
+                <td><div class="cell-clip">
+                    <div class="cell-badge-row">
+                        {% if a.condition_badge %}<span class="badge {{ a.condition_badge_class }}">{{ a.condition_badge }}</span>{% endif %}
+                        {% if a.status_badge %}<span class="badge {{ a.status_badge_class }}">{{ a.status_badge }}</span>{% endif %}
+                    </div>
+                    {% if a.status_detail %}<div class="cell-divider"></div><div class="cell-sub">{{ a.status_detail }}</div>{% endif %}
+                </div></td>
+                <td><div class="cell-clip">
+                    <div class="cell-main" style="font-weight:500;">{{ a.location or '-' }}</div>
+                    <div class="cell-sub"><span class="label">Pengguna:</span> {{ a.user or '-' }}</div>
+                    {% if a.coords %}<div class="cell-coords">{{ a.coords }}</div>{% endif %}
+                </div></td>
+                <td><div class="cell-clip"><div class="cell-sub" style="line-height:1.5;">{{ a.kelengkapan or '-' }}</div></div></td>
+                <td><div class="cell-clip" style="font-size:7px;">{{ a.notes or '-' }}</div></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="data-footer">
+    <div>Menampilkan <strong>{{ global_offset + 1 }}-{{ global_offset + total_chunk }}</strong> dari <strong>{{ total_all }}</strong> BMN &nbsp;|&nbsp; Total Nilai: <strong>Rp {{ total_value_fmt }}</strong></div>
+    <div>Bagian {{ data_page_num }}/{{ total_data_pages }}</div>
+</div>
+
+</body>
+</html>

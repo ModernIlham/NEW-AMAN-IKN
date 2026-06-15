@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laporan Eksekutif Hasil Inventarisasi BMN</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: {% if preview %}#e8ecf1{% else %}#fff{% endif %};
+            color: #1e293b;
+            {% if preview %}padding: 40px 20px;{% else %}padding: 0;{% endif %}
+        }
+
+        {% if preview %}
+        .separator {
+            text-align: center; padding: 30px 0; color: #94a3b8;
+            font-size: 12px; letter-spacing: 3px; text-transform: uppercase;
+        }
+        .separator::before, .separator::after { content: '---'; margin: 0 10px; color: #cbd5e1; }
+        {% else %}
+        .separator { display: none; }
+        {% endif %}
+
+        /* =================== COVER PAGE =================== */
+        .cover-page {
+            width: 794px; height: 1123px;
+            {% if preview %}margin: 0 auto 60px;{% else %}margin: 0 auto;{% endif %}
+            background: #fff; position: relative; overflow: hidden;
+            {% if preview %}box-shadow: 0 25px 60px rgba(0,0,0,0.15); border-radius: 4px;{% endif %}
+            page-break-after: always;
+        }
+        .cover-bg { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(170deg, #0c1f3f 0%, #162d54 40%, #1a3461 100%); }
+        .cover-accent-top, .cover-accent-bottom { position: absolute; left: 0; right: 0; height: 8px; background: linear-gradient(90deg, #c9a84c, #e8c76a, #c9a84c); }
+        .cover-accent-top { top: 0; }
+        .cover-accent-bottom { bottom: 0; }
+        .cover-border-inner { position: absolute; top: 30px; left: 30px; right: 30px; bottom: 30px; border: 2px solid rgba(201,168,76,0.3); border-radius: 2px; }
+        .cover-border-outer { position: absolute; top: 24px; left: 24px; right: 24px; bottom: 24px; border: 1px solid rgba(201,168,76,0.15); }
+        .cover-content { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: 80px 60px; text-align: center; }
+        .cover-logo { width: 120px; height: 120px; border-radius: 50%; background: rgba(255,255,255,0.08); border: 3px solid rgba(201,168,76,0.5); display: flex; align-items: center; justify-content: center; margin-bottom: 40px; overflow: hidden; }
+        .cover-logo img { width: 90px; height: 90px; object-fit: contain; }
+        .cover-logo svg { width: 70px; height: 70px; }
+        .cover-divider { width: 200px; height: 2px; background: linear-gradient(90deg, transparent, #c9a84c, transparent); margin: 28px 0; }
+        .cover-title-main { font-size: 30px; font-weight: 800; color: #fff; letter-spacing: 3px; line-height: 1.3; text-transform: uppercase; }
+        .cover-title-sub { font-size: 18px; font-weight: 600; color: #c9a84c; letter-spacing: 4px; margin-top: 8px; text-transform: uppercase; }
+        .cover-instansi { font-size: 16px; font-weight: 500; color: #94a3b8; margin-top: 30px; line-height: 1.6; }
+        .cover-instansi strong { color: #e2e8f0; font-weight: 600; }
+        .cover-meta-box { margin-top: 50px; border: 1px solid rgba(201,168,76,0.3); border-radius: 4px; padding: 20px 40px; background: rgba(255,255,255,0.03); }
+        .cover-meta-row { display: flex; justify-content: space-between; gap: 40px; font-size: 13px; color: #94a3b8; margin: 6px 0; }
+        .cover-meta-row span:first-child { color: #64748b; min-width: 140px; text-align: left; }
+        .cover-meta-row span:last-child { color: #e2e8f0; font-weight: 500; }
+        .cover-classification { position: absolute; bottom: 50px; font-size: 11px; letter-spacing: 3px; color: rgba(201,168,76,0.5); text-transform: uppercase; }
+
+        /* =================== SHARED PAGE STYLES =================== */
+        .exec-page {
+            width: 794px; min-height: 1123px;
+            {% if preview %}margin: 0 auto 60px;{% else %}margin: 0 auto;{% endif %}
+            background: #fff; overflow: hidden;
+            {% if preview %}box-shadow: 0 25px 60px rgba(0,0,0,0.15); border-radius: 4px;{% endif %}
+            page-break-after: always;
+            display: flex; flex-direction: column;
+        }
+        .exec-header { background: linear-gradient(135deg, #0c1f3f, #1a3461); padding: 16px 28px; display: flex; align-items: center; gap: 14px; }
+        .exec-header-logo { width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.1); border: 2px solid rgba(201,168,76,0.5); display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden; }
+        .exec-header-logo img { width: 26px; height: 26px; object-fit: contain; }
+        .exec-header-text { flex: 1; }
+        .exec-header-text h1 { font-size: 13px; font-weight: 700; color: #fff; letter-spacing: 1.5px; text-transform: uppercase; }
+        .exec-header-text p { font-size: 9.5px; color: #94a3b8; margin-top: 2px; }
+        .exec-header-meta { text-align: right; flex-shrink: 0; }
+        .exec-header-meta div { font-size: 9px; color: #94a3b8; line-height: 1.6; }
+        .exec-header-meta strong { color: #e2e8f0; }
+        .exec-body { padding: 18px 26px 20px; flex: 1; }
+        .exec-footer { background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 8px 26px; display: flex; justify-content: space-between; align-items: center; font-size: 7.5px; color: #94a3b8; margin-top: auto; }
+
+        /* ON PROGRESS Banner */
+        .on-progress-banner { background: linear-gradient(135deg, #f97316, #ea580c); color: #fff; padding: 6px 20px; display: flex; align-items: center; gap: 8px; font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+        .on-progress-dot { width: 8px; height: 8px; border-radius: 50%; background: #fff; }
+
+        /* Section Title */
+        .section-title { font-size: 10px; font-weight: 700; color: #0f172a; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+        .section-title .dot { width: 8px; height: 8px; border-radius: 2px; }
+        .page-title { font-size: 12px; font-weight: 800; color: #0f172a; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 2px solid #e2e8f0; display: flex; align-items: center; gap: 8px; }
+        .page-title .dot { width: 10px; height: 10px; border-radius: 2px; }
+
+        /* Summary Cards */
+        .summary-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+        .s-card { border-radius: 6px; padding: 10px 12px; position: relative; border: 1px solid; }
+        .s-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; }
+        .s-card-label { font-size: 7.5px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; }
+        .s-card-pct { font-size: 9px; font-weight: 700; }
+        .s-card-value { font-size: 24px; font-weight: 800; line-height: 1; margin-bottom: 2px; }
+        .s-card-money { font-size: 8px; color: #64748b; font-weight: 500; }
+        .s-card.total { background: #eff6ff; border-color: #bfdbfe; }
+        .s-card.total .s-card-label, .s-card.total .s-card-pct { color: #1e40af; }
+        .s-card.total .s-card-value { color: #1e3a8a; }
+        .s-card.found { background: #f0fdf4; border-color: #bbf7d0; }
+        .s-card.found .s-card-label, .s-card.found .s-card-pct { color: #166534; }
+        .s-card.found .s-card-value { color: #14532d; }
+        .s-card.notfound { background: #fef2f2; border-color: #fecaca; }
+        .s-card.notfound .s-card-label, .s-card.notfound .s-card-pct { color: #991b1b; }
+        .s-card.notfound .s-card-value { color: #7f1d1d; }
+        .s-card.surplus { background: #fffbeb; border-color: #fde68a; }
+        .s-card.surplus .s-card-label, .s-card.surplus .s-card-pct { color: #92400e; }
+        .s-card.surplus .s-card-value { color: #78350f; }
+        .s-card.dispute { background: #faf5ff; border-color: #e9d5ff; }
+        .s-card.dispute .s-card-label, .s-card.dispute .s-card-pct { color: #6b21a8; }
+        .s-card.dispute .s-card-value { color: #581c87; }
+        .s-card.pending { background: #f8fafc; border-color: #e2e8f0; }
+        .s-card.pending .s-card-label, .s-card.pending .s-card-pct { color: #475569; }
+        .s-card.pending .s-card-value { color: #334155; }
+
+        /* Progress Bar */
+        .progress-section { margin-bottom: 14px; }
+        .progress-bar { height: 12px; border-radius: 6px; display: flex; overflow: hidden; background: #f1f5f9; }
+        .progress-bar .seg { height: 100%; }
+        .progress-legend { display: flex; gap: 12px; margin-top: 5px; flex-wrap: wrap; }
+        .legend-item { display: flex; align-items: center; gap: 4px; font-size: 8px; color: #64748b; }
+        .legend-dot { width: 7px; height: 7px; border-radius: 2px; }
+
+        /* Two Columns */
+        .exec-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+
+        /* Rekapitulasi Table */
+        .rekap-table { width: 100%; border-collapse: collapse; font-size: 8.5px; }
+        .rekap-table thead th { background: #0f172a; color: #e2e8f0; padding: 5px 6px; text-align: left; font-weight: 600; font-size: 7.5px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .rekap-table thead th:nth-child(2), .rekap-table thead th:nth-child(3), .rekap-table thead th:nth-child(4) { text-align: right; }
+        .rekap-table tbody td { padding: 4px 6px; border-bottom: 1px solid #f1f5f9; }
+        .rekap-table tbody td:nth-child(2), .rekap-table tbody td:nth-child(3), .rekap-table tbody td:nth-child(4) { text-align: right; }
+        .rekap-table .cat-row td { font-weight: 700; background: #f8fafc; }
+        .rekap-table .sub-row td { color: #64748b; font-size: 8px; padding-left: 16px; }
+        .rekap-table .total-row td { font-weight: 800; background: #0f172a; color: #fff; border: none; }
+        .cat-indicator { display: inline-block; width: 5px; height: 5px; border-radius: 1px; margin-right: 4px; vertical-align: middle; }
+
+        /* Simpulan */
+        .simpulan-list { list-style: none; }
+        .simpulan-item { display: flex; gap: 6px; margin-bottom: 6px; font-size: 8px; line-height: 1.5; color: #475569; }
+        .simpulan-num { width: 16px; height: 16px; border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 7px; font-weight: 700; color: #fff; flex-shrink: 0; margin-top: 1px; }
+        .simpulan-item strong { color: #0f172a; }
+
+        /* Info Grid */
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+        .info-box { border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 12px; }
+        .info-box-title { font-size: 8.5px; font-weight: 700; color: #0f172a; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; display: flex; align-items: center; gap: 5px; }
+        .mini-bar-row { display: flex; align-items: center; gap: 5px; margin-bottom: 4px; font-size: 8px; }
+        .mini-bar-label { width: 80px; color: #64748b; flex-shrink: 0; font-size: 8px; }
+        .mini-bar-track { flex: 1; height: 10px; background: #f1f5f9; border-radius: 5px; overflow: hidden; }
+        .mini-bar-fill { height: 100%; border-radius: 5px; }
+        .mini-bar-val { width: 55px; text-align: right; font-weight: 600; color: #334155; font-size: 7.5px; }
+
+        /* Stiker Ring */
+        .sticker-ring-container { display: flex; align-items: center; gap: 12px; }
+        .ring-chart { position: relative; width: 70px; height: 70px; }
+        .ring-chart svg { transform: rotate(-90deg); }
+        .ring-center-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; }
+        .ring-center-text .val { font-size: 16px; font-weight: 800; color: #0f172a; line-height: 1; }
+        .ring-center-text .lbl { font-size: 6.5px; color: #64748b; text-transform: uppercase; }
+        .sticker-details { font-size: 8px; color: #475569; line-height: 1.7; }
+        .sticker-details strong { color: #0f172a; }
+
+        /* =================== CHART STYLES =================== */
+        .chart-section { margin-bottom: 16px; }
+        .chart-box { border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px 14px; }
+        .chart-title { font-size: 9px; font-weight: 700; color: #0f172a; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; display: flex; align-items: center; gap: 5px; }
+        .chart-title .cdot { width: 7px; height: 7px; border-radius: 2px; }
+
+        /* Horizontal Bar Chart */
+        .hbar-row { display: flex; align-items: center; gap: 4px; margin-bottom: 5px; }
+        .hbar-label { width: 120px; font-size: 7.5px; color: #334155; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; padding-right: 6px; }
+        .hbar-track { flex: 1; height: 16px; background: #f1f5f9; border-radius: 3px; overflow: hidden; position: relative; }
+        .hbar-fill { height: 100%; border-radius: 3px; display: flex; align-items: center; padding-left: 4px; }
+        .hbar-fill-text { font-size: 6.5px; font-weight: 700; color: #fff; white-space: nowrap; }
+        .hbar-val { width: 40px; font-size: 7.5px; font-weight: 700; color: #0f172a; text-align: right; }
+        .hbar-money { width: 75px; font-size: 6.5px; color: #64748b; text-align: right; }
+
+        /* Compact Distribution Table (for two-column layout) */
+        .dist-table { width: 100%; border-collapse: collapse; font-size: 6.5px; }
+        .dist-table th { background: #f8fafc; padding: 2px 4px; text-align: left; font-size: 5.5px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.3px; border-bottom: 1px solid #e2e8f0; }
+        .dist-table th.r { text-align: right; }
+        .dist-table td { padding: 1.5px 4px; border-bottom: 1px solid #f8fafc; line-height: 1.3; }
+        .dist-table tr:nth-child(even) { background: #fafbfd; }
+        .dist-table .num { width: 16px; text-align: center; font-weight: 700; color: #94a3b8; font-size: 5.5px; }
+        .dist-table .bar-cell { width: 50px; padding: 1px 2px; }
+        .dist-mini-bar { height: 6px; border-radius: 2px; min-width: 2px; }
+        .dist-table .name-cell { font-weight: 500; color: #1e293b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 130px; }
+        .dist-table .val-cell { text-align: right; font-weight: 700; color: #0f172a; white-space: nowrap; }
+        .dist-table .money-cell { text-align: right; color: #64748b; font-size: 6px; white-space: nowrap; }
+        .dist-table .summary-row td { background: #0f172a; color: #fff; font-weight: 700; font-size: 6.5px; padding: 3px 4px; border: none; }
+        .dist-table .summary-row td.r { text-align: right; }
+
+        /* Full-width Distribution Table (for single-column layout, ≤ 75 items) */
+        .dist-table-full { width: 100%; border-collapse: collapse; font-size: 7px; }
+        .dist-table-full th { background: #f1f5f9; padding: 2.5px 8px; text-align: left; font-size: 6px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.4px; border-bottom: 2px solid #e2e8f0; }
+        .dist-table-full th.r { text-align: right; }
+        .dist-table-full td { padding: 1px 8px; border-bottom: 1px solid #f1f5f9; line-height: 1.3; }
+        .dist-table-full tr:nth-child(even) { background: #fafbfd; }
+        .dist-table-full .num { width: 28px; text-align: center; font-weight: 700; color: #94a3b8; font-size: 6px; }
+        .dist-table-full .bar-cell { width: 100px; padding: 1px 4px; }
+        .dist-table-full .dist-mini-bar { height: 8px; border-radius: 3px; min-width: 2px; }
+        .dist-table-full .name-cell { font-weight: 500; color: #1e293b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .dist-table-full .val-cell { text-align: right; font-weight: 700; color: #0f172a; white-space: nowrap; }
+        .dist-table-full .money-cell { text-align: right; color: #64748b; font-size: 6.5px; white-space: nowrap; }
+        .dist-table-full .summary-row td { background: #0f172a; color: #fff; font-weight: 700; font-size: 7px; padding: 3px 8px; border: none; }
+        .dist-table-full .summary-row td.r { text-align: right; }
+
+        /* SVG Donut */
+        .donut-container { display: flex; align-items: center; gap: 16px; }
+        .donut-legend { font-size: 8px; color: #475569; line-height: 2; }
+        .donut-legend-item { display: flex; align-items: center; gap: 5px; }
+        .donut-legend-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+        .donut-legend-text { flex: 1; }
+        .donut-legend-val { font-weight: 700; color: #0f172a; min-width: 30px; text-align: right; }
+
+        /* Stacked bar */
+        .sbar-row { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
+        .sbar-label { width: 100px; font-size: 7px; color: #334155; flex-shrink: 0; text-align: right; padding-right: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .sbar-track { flex: 1; height: 14px; display: flex; overflow: hidden; border-radius: 3px; background: #f1f5f9; }
+        .sbar-seg { height: 100%; }
+        .sbar-count { width: 30px; font-size: 7px; font-weight: 700; color: #0f172a; text-align: right; }
+
+        /* Coverage */
+        .coverage-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+        .coverage-label { font-size: 8px; color: #475569; width: 100px; flex-shrink: 0; }
+        .coverage-track { flex: 1; height: 14px; background: #f1f5f9; border-radius: 6px; overflow: hidden; }
+        .coverage-fill { height: 100%; border-radius: 6px; }
+        .coverage-pct { font-size: 9px; font-weight: 700; color: #0f172a; width: 40px; text-align: right; }
+
+        /* Tim */
+        .tim-section { margin-top: 14px; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 12px; }
+        .tim-header { font-size: 8.5px; font-weight: 700; color: #0f172a; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; display: flex; align-items: center; gap: 5px; }
+        .tim-grid { display: grid; grid-template-columns: repeat({{ [tim|length, 5]|min }}, 1fr); gap: 8px; }
+        .tim-card { background: #f8fafc; border-radius: 4px; padding: 6px 8px; text-align: center; }
+        .tim-card .role { font-size: 7px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+        .tim-card .name { font-size: 8px; font-weight: 600; color: #0f172a; }
+        .tim-card .nip { font-size: 7px; color: #64748b; }
+
+        /* =================== DATA TABLE PAGE (Landscape) =================== */
+        .data-page {
+            {% if preview %}width: 1123px; margin: 0 auto 60px; box-shadow: 0 25px 60px rgba(0,0,0,0.15); border-radius: 4px;{% else %}width: 100%;{% endif %}
+            min-height: 794px;
+            background: #fff; overflow: hidden;
+            page-break-before: always;
+            page: landscape-page;
+            display: flex; flex-direction: column;
+        }
+        @page landscape-page { size: A4 landscape; margin: 8mm; }
+
+        .data-header { background: linear-gradient(135deg, #0c1f3f, #1a3461); padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; }
+        .data-header h2 { font-size: 14px; font-weight: 700; color: #fff; letter-spacing: 1.5px; text-transform: uppercase; }
+        .data-header-meta { font-size: 10px; color: #94a3b8; }
+        .data-header-meta strong { color: #e2e8f0; }
+        .data-table-wrapper { padding: 8mm; overflow: hidden; flex: 1; }
+        .data-table { width: 100%; border-collapse: collapse; font-size: 9px; table-layout: fixed; }
+        .data-table thead th { background: #0f172a; color: #e2e8f0; padding: 6px 4px; font-weight: 600; font-size: 7px; text-transform: uppercase; letter-spacing: 0.3px; text-align: center; border: 1px solid #1e293b; word-wrap: break-word; overflow-wrap: break-word; }
+        .data-table tbody tr { border-bottom: 1px solid #f1f5f9; }
+        .data-table tbody tr:nth-child(even) { background: #fafbfd; }
+        .data-table tbody td { padding: 5px 4px; vertical-align: middle; border: 1px solid #f1f5f9; font-size: 8px; color: #334155; word-wrap: break-word; overflow-wrap: break-word; overflow: hidden; }
+        .data-table td.center { text-align: center; }
+        .data-table td.right { text-align: right; }
+
+        .photo-cell { text-align: center; }
+        .photo-img { width: 58px; height: 58px; object-fit: cover; border-radius: 4px; border: 1px solid #e2e8f0; display: block; margin: 0 auto; }
+        .photo-empty { width: 58px; height: 58px; border-radius: 4px; background: #f1f5f9; display: flex; align-items: center; justify-content: center; margin: 0 auto; color: #94a3b8; font-size: 7px; }
+        .stiker-cell { text-align: center; }
+        .stiker-img { width: 40px; height: 40px; object-fit: cover; border-radius: 3px; border: 1px solid #e2e8f0; display: block; margin: 0 auto; }
+        .stiker-badge-mini { font-size: 5.5px; background: #16a34a; color: #fff; padding: 1px 3px; border-radius: 2px; display: inline-block; margin-top: 2px; font-weight: 700; }
+        .stiker-empty { width: 40px; height: 40px; border-radius: 3px; background: #f1f5f9; display: flex; align-items: center; justify-content: center; margin: 0 auto; color: #cbd5e1; font-size: 7px; }
+
+        .badge { display: inline-block; padding: 1px 4px; border-radius: 3px; font-size: 6.5px; font-weight: 600; white-space: nowrap; }
+        .badge-baik { background: #dcfce7; color: #166534; }
+        .badge-ringan { background: #fef3c7; color: #92400e; }
+        .badge-berat { background: #fee2e2; color: #991b1b; }
+        .badge-ditemukan { background: #dbeafe; color: #1e40af; }
+        .badge-tidak { background: #fee2e2; color: #991b1b; }
+        .badge-berlebih { background: #faf5ff; color: #7c3aed; }
+        .badge-sengketa { background: #fce7f3; color: #be185d; }
+
+        .cell-main { font-size: 8px; font-weight: 600; color: #0f172a; margin-bottom: 2px; word-wrap: break-word; overflow-wrap: break-word; }
+        .cell-sub { font-size: 7px; color: #64748b; line-height: 1.4; word-wrap: break-word; overflow-wrap: break-word; }
+        .cell-sub .label { color: #94a3b8; font-weight: 500; }
+        .cell-code { font-family: 'Courier New', monospace; font-size: 7.5px; font-weight: 600; color: #0f172a; margin-bottom: 1px; word-wrap: break-word; overflow-wrap: break-word; }
+        .cell-badge-row { display: flex; gap: 3px; flex-wrap: wrap; margin-top: 2px; }
+        .cell-coords { font-size: 6.5px; color: #94a3b8; font-family: 'Courier New', monospace; margin-top: 2px; word-wrap: break-word; }
+        .cell-divider { border-top: 1px dashed #e2e8f0; margin: 2px 0; }
+
+        .data-footer { padding: 10px 24px; display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border-top: 1px solid #e2e8f0; font-size: 9px; color: #64748b; margin-top: auto; }
+        .data-footer strong { color: #0f172a; }
+
+        /* Print styles for weasyprint */
+        @page { size: A4 portrait; margin: 0; }
+    </style>
+</head>
+<body>
+
+<!-- =================== PAGE 1: COVER =================== -->
+<div class="cover-page">
+    <div class="cover-bg"></div>
+    <div class="cover-accent-top"></div>
+    <div class="cover-accent-bottom"></div>
+    <div class="cover-border-outer"></div>
+    <div class="cover-border-inner"></div>
+    <div class="cover-content">
+        <div class="cover-logo">
+            {% if logo_url %}
+            <img src="{{ logo_url }}" alt="Logo" />
+            {% else %}
+            <svg viewBox="0 0 100 100" fill="none"><circle cx="50" cy="30" r="14" stroke="#c9a84c" stroke-width="3" fill="none"/><rect x="20" y="48" width="60" height="4" rx="2" fill="#c9a84c"/><rect x="24" y="56" width="8" height="28" rx="1" fill="#c9a84c" opacity="0.8"/><rect x="36" y="56" width="8" height="28" rx="1" fill="#c9a84c" opacity="0.8"/><rect x="56" y="56" width="8" height="28" rx="1" fill="#c9a84c" opacity="0.8"/><rect x="68" y="56" width="8" height="28" rx="1" fill="#c9a84c" opacity="0.8"/><rect x="16" y="86" width="68" height="4" rx="2" fill="#c9a84c"/></svg>
+            {% endif %}
+        </div>
+        <div class="cover-divider"></div>
+        <div class="cover-title-main">Laporan Eksekutif<br>Hasil Inventarisasi BMN</div>
+        <div class="cover-title-sub">Barang Milik Negara</div>
+        <div class="cover-divider"></div>
+        <div class="cover-instansi">
+            <strong>{{ nama_instansi or 'Instansi' }}</strong><br>
+            {{ alamat_instansi or '' }}
+        </div>
+        <div class="cover-meta-box">
+            <div class="cover-meta-row"><span>Nomor SK</span><span>{{ nomor_sk }}</span></div>
+            <div class="cover-meta-row"><span>Periode Inventarisasi</span><span>{{ tgl_mulai }} - {{ tgl_selesai }}</span></div>
+            <div class="cover-meta-row"><span>Tahun Anggaran</span><span>{{ tahun_anggaran or '-' }}</span></div>
+            <div class="cover-meta-row"><span>Tanggal Cetak</span><span>{{ tanggal_cetak }}</span></div>
+        </div>
+        <div class="cover-classification">Dokumen Resmi &mdash; Laporan Hasil Inventarisasi</div>
+    </div>
+</div>
+
+{% if preview %}<div class="separator">Halaman 2: Ringkasan Eksekutif</div>{% endif %}
+
+<!-- =================== PAGE 2: EXECUTIVE SUMMARY =================== -->
+<div class="exec-page">
+    <div class="exec-header">
+        <div class="exec-header-logo">{% if logo_url %}<img src="{{ logo_url }}" alt="Logo" />{% endif %}</div>
+        <div class="exec-header-text">
+            <h1>Laporan Eksekutif Hasil Inventarisasi BMN</h1>
+            <p>{{ satker_name }} &mdash; {{ alamat_instansi or '' }}</p>
+        </div>
+        <div class="exec-header-meta">
+            <div><strong>SK: {{ nomor_sk }}</strong></div>
+            <div>Periode: {{ tgl_mulai }} - {{ tgl_selesai }}</div>
+            <div>Dicetak: {{ tanggal_cetak }}</div>
+        </div>
+    </div>
+
+    {% if is_in_progress %}
+    <div class="on-progress-banner">
+        <div class="on-progress-dot"></div>
+        <span>ON PROGRESS &mdash; Periode Inventarisasi Masih Berlangsung ({{ tgl_mulai }} s.d. {{ tgl_selesai }})</span>
+    </div>
+    {% endif %}
+
+    <div class="exec-body">
+        <div class="summary-cards">
+            <div class="s-card total">
+                <div class="s-card-header"><div class="s-card-label">Total BMN Diteliti</div><div class="s-card-pct">100%</div></div>
+                <div class="s-card-value">{{ total_count }}</div>
+                <div class="s-card-money">Rp {{ total_value_fmt }}</div>
+            </div>
+            <div class="s-card found">
+                <div class="s-card-header"><div class="s-card-label">Ditemukan</div><div class="s-card-pct">{{ pct_ditemukan }}%</div></div>
+                <div class="s-card-value">{{ cnt_ditemukan }}</div>
+                <div class="s-card-money">Rp {{ val_ditemukan_fmt }}</div>
+            </div>
+            <div class="s-card notfound">
+                <div class="s-card-header"><div class="s-card-label">Tidak Ditemukan</div><div class="s-card-pct">{{ pct_tidak }}%</div></div>
+                <div class="s-card-value">{{ cnt_tidak }}</div>
+                <div class="s-card-money">Rp {{ val_tidak_fmt }}</div>
+            </div>
+            <div class="s-card surplus">
+                <div class="s-card-header"><div class="s-card-label">Berlebih</div><div class="s-card-pct">{{ pct_berlebih }}%</div></div>
+                <div class="s-card-value">{{ cnt_berlebih }}</div>
+                <div class="s-card-money">Rp {{ val_berlebih_fmt }}</div>
+            </div>
+            <div class="s-card dispute">
+                <div class="s-card-header"><div class="s-card-label">Sengketa</div><div class="s-card-pct">{{ pct_sengketa }}%</div></div>
+                <div class="s-card-value">{{ cnt_sengketa }}</div>
+                <div class="s-card-money">Rp {{ val_sengketa_fmt }}</div>
+            </div>
+            <div class="s-card pending">
+                <div class="s-card-header"><div class="s-card-label">Belum Inventarisasi</div><div class="s-card-pct">{{ pct_belum }}%</div></div>
+                <div class="s-card-value">{{ cnt_belum }}</div>
+                <div class="s-card-money">Rp {{ val_belum_fmt }}</div>
+            </div>
+        </div>
+
+        <div class="progress-section">
+            <div class="progress-bar">
+                {% if pct_ditemukan > 0 %}<div class="seg" style="width:{{ pct_ditemukan }}%;background:#22c55e;"></div>{% endif %}
+                {% if pct_tidak > 0 %}<div class="seg" style="width:{{ pct_tidak }}%;background:#ef4444;"></div>{% endif %}
+                {% if pct_berlebih > 0 %}<div class="seg" style="width:{{ pct_berlebih }}%;background:#f59e0b;"></div>{% endif %}
+                {% if pct_sengketa > 0 %}<div class="seg" style="width:{{ pct_sengketa }}%;background:#a855f7;"></div>{% endif %}
+                {% if pct_belum > 0 %}<div class="seg" style="width:{{ pct_belum }}%;background:#94a3b8;"></div>{% endif %}
+            </div>
+            <div class="progress-legend">
+                <div class="legend-item"><div class="legend-dot" style="background:#22c55e"></div>Ditemukan {{ pct_ditemukan }}%</div>
+                <div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div>Tidak Ditemukan {{ pct_tidak }}%</div>
+                <div class="legend-item"><div class="legend-dot" style="background:#f59e0b"></div>Berlebih {{ pct_berlebih }}%</div>
+                <div class="legend-item"><div class="legend-dot" style="background:#a855f7"></div>Sengketa {{ pct_sengketa }}%</div>
+                <div class="legend-item"><div class="legend-dot" style="background:#94a3b8"></div>Belum {{ pct_belum }}%</div>
+            </div>
+        </div>
+
+        <div class="exec-columns">
+            <div>
+                <div class="section-title"><div class="dot" style="background:#1e40af"></div>Rekapitulasi Per Kategori</div>
+                <table class="rekap-table">
+                    <thead><tr><th>Kategori</th><th>NUP</th><th>Nilai (Rp)</th><th>%</th></tr></thead>
+                    <tbody>
+                        <tr class="cat-row"><td><span class="cat-indicator" style="background:#22c55e"></span>A. BMN Ditemukan</td><td>{{ cnt_ditemukan }}</td><td>{{ val_ditemukan_fmt }}</td><td>{{ pct_ditemukan }}%</td></tr>
+                        <tr class="sub-row"><td>1. Kondisi Baik</td><td>{{ cnt_baik }}</td><td>{{ val_baik_fmt }}</td><td>{{ pct_baik }}%</td></tr>
+                        <tr class="sub-row"><td>2. Rusak Ringan</td><td>{{ cnt_rusak_ringan }}</td><td>{{ val_rusak_ringan_fmt }}</td><td>{{ pct_rusak_ringan }}%</td></tr>
+                        <tr class="sub-row"><td>3. Rusak Berat</td><td>{{ cnt_rusak_berat }}</td><td>{{ val_rusak_berat_fmt }}</td><td>{{ pct_rusak_berat }}%</td></tr>
+                        <tr class="cat-row"><td><span class="cat-indicator" style="background:#ef4444"></span>B. Tidak Ditemukan</td><td>{{ cnt_tidak }}</td><td>{{ val_tidak_fmt }}</td><td>{{ pct_tidak }}%</td></tr>
+                        <tr class="sub-row"><td>- Kesalahan Pencatatan</td><td>{{ cnt_td_kes }}</td><td>{{ val_td_kes_fmt }}</td><td>{{ pct_td_kes }}%</td></tr>
+                        <tr class="sub-row"><td>- Tidak Ditemukan Lainnya</td><td>{{ cnt_td_lain }}</td><td>{{ val_td_lain_fmt }}</td><td>{{ pct_td_lain }}%</td></tr>
+                        <tr class="cat-row"><td><span class="cat-indicator" style="background:#f59e0b"></span>C. Berlebih</td><td>{{ cnt_berlebih }}</td><td>{{ val_berlebih_fmt }}</td><td>{{ pct_berlebih }}%</td></tr>
+                        <tr class="cat-row"><td><span class="cat-indicator" style="background:#a855f7"></span>D. Sengketa</td><td>{{ cnt_sengketa }}</td><td>{{ val_sengketa_fmt }}</td><td>{{ pct_sengketa }}%</td></tr>
+                        <tr class="cat-row"><td><span class="cat-indicator" style="background:#94a3b8"></span>E. Belum Inventarisasi</td><td>{{ cnt_belum }}</td><td>{{ val_belum_fmt }}</td><td>{{ pct_belum }}%</td></tr>
+                        <tr class="total-row"><td>TOTAL</td><td>{{ total_count }}</td><td>{{ total_value_fmt }}</td><td>100%</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div>
+                <div class="section-title"><div class="dot" style="background:#f59e0b"></div>Simpulan & Tindak Lanjut</div>
+                <ul class="simpulan-list">
+                    {% for s in simpulan %}
+                    <li class="simpulan-item">
+                        <div class="simpulan-num" style="background:{{ s.color }}">{{ loop.index }}</div>
+                        <div>{{ s.text }}</div>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+
+        <div class="info-grid">
+            <div class="info-box">
+                <div class="info-box-title"><div class="dot" style="background:#22c55e;width:7px;height:7px;border-radius:2px;"></div>Rincian Kondisi BMN Ditemukan ({{ cnt_ditemukan }} NUP)</div>
+                <div class="mini-bar-row"><div class="mini-bar-label">Baik</div><div class="mini-bar-track"><div class="mini-bar-fill" style="width:{{ pct_baik_of_found }}%;background:#22c55e;"></div></div><div class="mini-bar-val">{{ cnt_baik }} ({{ pct_baik_of_found }}%)</div></div>
+                <div class="mini-bar-row"><div class="mini-bar-label">Rusak Ringan</div><div class="mini-bar-track"><div class="mini-bar-fill" style="width:{{ pct_rr_of_found }}%;background:#f59e0b;"></div></div><div class="mini-bar-val">{{ cnt_rusak_ringan }} ({{ pct_rr_of_found }}%)</div></div>
+                <div class="mini-bar-row"><div class="mini-bar-label">Rusak Berat</div><div class="mini-bar-track"><div class="mini-bar-fill" style="width:{{ pct_rb_of_found }}%;background:#ef4444;"></div></div><div class="mini-bar-val">{{ cnt_rusak_berat }} ({{ pct_rb_of_found }}%)</div></div>
+            </div>
+            <div class="info-box">
+                <div class="info-box-title"><div class="dot" style="background:#1e40af;width:7px;height:7px;border-radius:2px;"></div>Status Pemasangan Stiker</div>
+                <div class="sticker-ring-container">
+                    <div class="ring-chart">
+                        <svg viewBox="0 0 80 80" width="70" height="70">
+                            <circle cx="40" cy="40" r="32" fill="none" stroke="#e2e8f0" stroke-width="8"/>
+                            <circle cx="40" cy="40" r="32" fill="none" stroke="#22c55e" stroke-width="8"
+                                stroke-dasharray="{{ stiker_dash }}" stroke-dashoffset="{{ stiker_offset }}" stroke-linecap="round"/>
+                        </svg>
+                        <div class="ring-center-text"><div class="val">{{ stiker_pct }}%</div><div class="lbl">Terpasang</div></div>
+                    </div>
+                    <div class="sticker-details">
+                        <div><strong>{{ stiker_terpasang }}</strong> NUP &mdash; Stiker Terpasang</div>
+                        <div><strong>{{ stiker_belum }}</strong> NUP &mdash; Belum Terpasang</div>
+                        <div style="margin-top:3px;color:#94a3b8;font-size:7px;">Dari {{ cnt_ditemukan }} BMN ditemukan</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="exec-footer">
+        <div>Laporan Eksekutif Hasil Inventarisasi BMN &mdash; {{ satker_name }}</div>
+        <div>Halaman 2 dari {{ total_pages }}</div>
+    </div>
+</div>
+
+{% if preview %}<div class="separator">Halaman 3+: Analisis Distribusi Aset</div>{% endif %}
+
+<!-- =================== PAGE 3+: DYNAMIC DISTRIBUTION CHARTS =================== -->
+{% set items_per_col = 75 %}
+{% set items_per_page = items_per_col * 2 %}
+
+{% if cat_chart|length > 0 %}
+{% for page_start in range(0, cat_chart|length, items_per_page) %}
+{% set page_items = cat_chart[page_start:page_start + items_per_page] %}
+{% set use_two_cols = page_items|length > items_per_col %}
+{% set half = ((page_items|length + 1) // 2) if use_two_cols else page_items|length %}
+{% set col1 = page_items[:half] %}
+{% set col2 = page_items[half:] if use_two_cols else [] %}
+<div class="exec-page">
+    <div class="exec-header">
+        <div class="exec-header-logo">{% if logo_url %}<img src="{{ logo_url }}" alt="Logo" />{% endif %}</div>
+        <div class="exec-header-text">
+            <h1>Distribusi Kategori Aset{% if cat_chart|length > items_per_page %} ({{ page_start + 1 }}-{{ [page_start + items_per_page, cat_chart|length]|min }} dari {{ cat_chart|length }}){% endif %}</h1>
+            <p>{{ satker_name }} &mdash; {{ total_count }} NUP | Rp {{ total_value_fmt }}</p>
+        </div>
+        <div class="exec-header-meta"><div><strong>SK: {{ nomor_sk }}</strong></div><div>{{ tanggal_cetak }}</div></div>
+    </div>
+    <div class="exec-body">
+        <div class="chart-title"><div class="cdot" style="background:#3b82f6"></div>Seluruh Kategori Aset ({{ cat_chart|length }} kategori){% if cat_chart|length > items_per_page %} &mdash; Hal {{ loop.index }}{% endif %}</div>
+        <div style="display:grid;grid-template-columns:{% if use_two_cols %}1fr 1fr{% else %}1fr{% endif %};gap:10px;">
+            <table class="{% if use_two_cols %}dist-table{% else %}dist-table-full{% endif %}">
+                <thead><tr><th class="num">#</th><th>Kategori</th><th class="bar-cell"></th><th class="r">NUP</th><th class="r">Nilai (Rp)</th></tr></thead>
+                <tbody>
+                {% for c in col1 %}
+                <tr><td class="num">{{ page_start + loop.index }}</td><td class="name-cell" title="{{ c.name }}">{{ c.name }}</td><td class="bar-cell"><div class="dist-mini-bar" style="width:{{ c.bar_pct }}%;background:{{ ['#3b82f6','#2563eb','#1d4ed8','#60a5fa','#93c5fd'][loop.index0 % 5] }};"></div></td><td class="val-cell">{{ c.count }}</td><td class="money-cell">{{ '{:,.0f}'.format(c.value).replace(',', '.') }}</td></tr>
+                {% endfor %}
+                {% if not use_two_cols %}
+                <tr class="summary-row"><td colspan="3">Total ({{ col1|length }} kategori)</td><td class="r">{{ col1|sum(attribute='count') }}</td><td class="r">{{ '{:,.0f}'.format(col1|sum(attribute='value')).replace(',', '.') }}</td></tr>
+                {% endif %}
+                </tbody>
+            </table>
+            {% if use_two_cols %}
+            <table class="dist-table">
+                <thead><tr><th class="num">#</th><th>Kategori</th><th class="bar-cell"></th><th class="r">NUP</th><th class="r">Nilai (Rp)</th></tr></thead>
+                <tbody>
+                {% for c in col2 %}
+                <tr><td class="num">{{ page_start + half + loop.index }}</td><td class="name-cell" title="{{ c.name }}">{{ c.name }}</td><td class="bar-cell"><div class="dist-mini-bar" style="width:{{ c.bar_pct }}%;background:{{ ['#3b82f6','#2563eb','#1d4ed8','#60a5fa','#93c5fd'][loop.index0 % 5] }};"></div></td><td class="val-cell">{{ c.count }}</td><td class="money-cell">{{ '{:,.0f}'.format(c.value).replace(',', '.') }}</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% endif %}
+        </div>
+        {% if use_two_cols %}
+        <div style="margin-top:6px;background:#0f172a;color:#fff;font-size:7px;font-weight:700;padding:3px 8px;border-radius:3px;display:flex;justify-content:space-between;">
+            <span>Total Halaman Ini ({{ page_items|length }} kategori)</span>
+            <span>{{ page_items|sum(attribute='count') }} NUP &mdash; Rp {{ '{:,.0f}'.format(page_items|sum(attribute='value')).replace(',', '.') }}</span>
+        </div>
+        {% endif %}
+    </div>
+    <div class="exec-footer"><div>Laporan Eksekutif &mdash; {{ satker_name }}</div><div>Kategori {{ page_start + 1 }}-{{ [page_start + items_per_page, cat_chart|length]|min }} | Total Hal Ini: {{ page_items|sum(attribute='count') }} NUP &mdash; Rp {{ '{:,.0f}'.format(page_items|sum(attribute='value')).replace(',', '.') }}</div></div>
+</div>
+{% endfor %}
+{% endif %}
+
+{% if loc_chart|length > 0 %}
+{% for page_start in range(0, loc_chart|length, items_per_page) %}
+{% set page_items = loc_chart[page_start:page_start + items_per_page] %}
+{% set use_two_cols = page_items|length > items_per_col %}
+{% set half = ((page_items|length + 1) // 2) if use_two_cols else page_items|length %}
+{% set col1 = page_items[:half] %}
+{% set col2 = page_items[half:] if use_two_cols else [] %}
+<div class="exec-page">
+    <div class="exec-header">
+        <div class="exec-header-logo">{% if logo_url %}<img src="{{ logo_url }}" alt="Logo" />{% endif %}</div>
+        <div class="exec-header-text">
+            <h1>Distribusi Lokasi Aset{% if loc_chart|length > items_per_page %} ({{ page_start + 1 }}-{{ [page_start + items_per_page, loc_chart|length]|min }} dari {{ loc_chart|length }}){% endif %}</h1>
+            <p>{{ satker_name }} &mdash; {{ total_count }} NUP</p>
+        </div>
+        <div class="exec-header-meta"><div><strong>SK: {{ nomor_sk }}</strong></div><div>{{ tanggal_cetak }}</div></div>
+    </div>
+    <div class="exec-body">
+        <div class="chart-title"><div class="cdot" style="background:#10b981"></div>Seluruh Lokasi Aset ({{ loc_chart|length }} lokasi){% if loc_chart|length > items_per_page %} &mdash; Hal {{ loop.index }}{% endif %}</div>
+        <div style="display:grid;grid-template-columns:{% if use_two_cols %}1fr 1fr{% else %}1fr{% endif %};gap:10px;">
+            <table class="{% if use_two_cols %}dist-table{% else %}dist-table-full{% endif %}">
+                <thead><tr><th class="num">#</th><th>Lokasi</th><th class="bar-cell"></th><th class="r">NUP</th><th class="r">Nilai (Rp)</th></tr></thead>
+                <tbody>
+                {% for l in col1 %}
+                <tr><td class="num">{{ page_start + loop.index }}</td><td class="name-cell" title="{{ l.name }}">{{ l.name }}</td><td class="bar-cell"><div class="dist-mini-bar" style="width:{{ l.bar_pct }}%;background:{{ ['#10b981','#059669','#047857','#34d399','#6ee7b7'][loop.index0 % 5] }};"></div></td><td class="val-cell">{{ l.count }}</td><td class="money-cell">{{ '{:,.0f}'.format(l.value).replace(',', '.') }}</td></tr>
+                {% endfor %}
+                {% if not use_two_cols %}
+                <tr class="summary-row"><td colspan="3">Total ({{ col1|length }} lokasi)</td><td class="r">{{ col1|sum(attribute='count') }}</td><td class="r">{{ '{:,.0f}'.format(col1|sum(attribute='value')).replace(',', '.') }}</td></tr>
+                {% endif %}
+                </tbody>
+            </table>
+            {% if use_two_cols %}
+            <table class="dist-table">
+                <thead><tr><th class="num">#</th><th>Lokasi</th><th class="bar-cell"></th><th class="r">NUP</th><th class="r">Nilai (Rp)</th></tr></thead>
+                <tbody>
+                {% for l in col2 %}
+                <tr><td class="num">{{ page_start + half + loop.index }}</td><td class="name-cell" title="{{ l.name }}">{{ l.name }}</td><td class="bar-cell"><div class="dist-mini-bar" style="width:{{ l.bar_pct }}%;background:{{ ['#10b981','#059669','#047857','#34d399','#6ee7b7'][loop.index0 % 5] }};"></div></td><td class="val-cell">{{ l.count }}</td><td class="money-cell">{{ '{:,.0f}'.format(l.value).replace(',', '.') }}</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% endif %}
+        </div>
+        {% if use_two_cols %}
+        <div style="margin-top:6px;background:#0f172a;color:#fff;font-size:7px;font-weight:700;padding:3px 8px;border-radius:3px;display:flex;justify-content:space-between;">
+            <span>Total Halaman Ini ({{ page_items|length }} lokasi)</span>
+            <span>{{ page_items|sum(attribute='count') }} NUP &mdash; Rp {{ '{:,.0f}'.format(page_items|sum(attribute='value')).replace(',', '.') }}</span>
+        </div>
+        {% endif %}
+    </div>
+    <div class="exec-footer"><div>Laporan Eksekutif &mdash; {{ satker_name }}</div><div>Lokasi {{ page_start + 1 }}-{{ [page_start + items_per_page, loc_chart|length]|min }} dari {{ loc_chart|length }}</div></div>
+</div>
+{% endfor %}
+{% endif %}
+
+{% if preview %}<div class="separator">Analisis Lanjutan, Tim & Cakupan</div>{% endif %}
+
+<!-- =================== ANALYSIS, COVERAGE & TIM PAGE =================== -->
+<div class="exec-page">
+    <div class="exec-header">
+        <div class="exec-header-logo">{% if logo_url %}<img src="{{ logo_url }}" alt="Logo" />{% endif %}</div>
+        <div class="exec-header-text">
+            <h1>Analisis Lanjutan, Tim & Cakupan Data</h1>
+            <p>{{ satker_name }}</p>
+        </div>
+        <div class="exec-header-meta"><div><strong>SK: {{ nomor_sk }}</strong></div><div>{{ tanggal_cetak }}</div></div>
+    </div>
+    <div class="exec-body">
+        <div class="info-grid">
+            {% if year_chart|length > 0 %}
+            <div class="chart-box">
+                <div class="chart-title"><div class="cdot" style="background:#f59e0b"></div>Distribusi Per Tahun Perolehan ({{ year_chart|length }} tahun)</div>
+                {% for y in year_chart %}
+                <div class="hbar-row">
+                    <div class="hbar-label" style="width:70px;font-weight:700;">{{ y.name }}</div>
+                    <div class="hbar-track"><div class="hbar-fill" style="width:{{ y.bar_pct }}%;background:{{ ['#f59e0b','#d97706','#b45309','#fbbf24','#fcd34d'][loop.index0 % 5] }};"><span class="hbar-fill-text">{% if y.bar_pct > 20 %}{{ y.count }}{% endif %}</span></div></div>
+                    <div class="hbar-val">{{ y.count }} NUP</div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if eselon_chart|length > 0 %}
+            <div class="chart-box">
+                <div class="chart-title"><div class="cdot" style="background:#8b5cf6"></div>Distribusi Per Eselon I ({{ eselon_chart|length }} unit)</div>
+                {% for e in eselon_chart %}
+                <div class="hbar-row">
+                    <div class="hbar-label" style="width:100px;">{{ e.name }}</div>
+                    <div class="hbar-track"><div class="hbar-fill" style="width:{{ e.bar_pct }}%;background:{{ ['#8b5cf6','#7c3aed','#6d28d9','#a78bfa','#c4b5fd'][loop.index0 % 5] }};"><span class="hbar-fill-text">{% if e.bar_pct > 20 %}{{ e.count }}{% endif %}</span></div></div>
+                    <div class="hbar-val">{{ e.count }} NUP</div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
+        {% if cond_by_cat|length > 0 and cnt_ditemukan > 0 %}
+        <div class="chart-section">
+            <div class="chart-box">
+                <div class="chart-title"><div class="cdot" style="background:#f59e0b"></div>Kondisi Aset Per Kategori (Top {{ cond_by_cat|length }})</div>
+                <div style="display:flex;gap:12px;margin-bottom:6px;">
+                    <div style="display:flex;align-items:center;gap:3px;font-size:7px;color:#64748b;"><div style="width:8px;height:8px;background:#22c55e;border-radius:2px;"></div>Baik</div>
+                    <div style="display:flex;align-items:center;gap:3px;font-size:7px;color:#64748b;"><div style="width:8px;height:8px;background:#f59e0b;border-radius:2px;"></div>Rusak Ringan</div>
+                    <div style="display:flex;align-items:center;gap:3px;font-size:7px;color:#64748b;"><div style="width:8px;height:8px;background:#ef4444;border-radius:2px;"></div>Rusak Berat</div>
+                </div>
+                {% for c in cond_by_cat %}
+                <div class="sbar-row">
+                    <div class="sbar-label">{{ c.name }}</div>
+                    <div class="sbar-track">
+                        {% if c.baik_pct > 0 %}<div class="sbar-seg" style="width:{{ c.baik_pct }}%;background:#22c55e;"></div>{% endif %}
+                        {% if c.rr_pct > 0 %}<div class="sbar-seg" style="width:{{ c.rr_pct }}%;background:#f59e0b;"></div>{% endif %}
+                        {% if c.rb_pct > 0 %}<div class="sbar-seg" style="width:{{ c.rb_pct }}%;background:#ef4444;"></div>{% endif %}
+                        {% set other_pct = 100 - c.baik_pct - c.rr_pct - c.rb_pct %}
+                        {% if other_pct > 0 %}<div class="sbar-seg" style="width:{{ other_pct }}%;background:#e2e8f0;"></div>{% endif %}
+                    </div>
+                    <div class="sbar-count">{{ c.total }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% if status_pie|length > 0 %}
+        <div class="info-grid">
+            <div class="chart-box">
+                <div class="chart-title"><div class="cdot" style="background:#0f172a"></div>Komposisi Status Inventarisasi</div>
+                <div class="donut-container">
+                    <svg viewBox="0 0 120 120" width="100" height="100">
+                        {% set circumference = 314.159 %}
+                        {% for s in status_pie %}
+                        <circle cx="60" cy="60" r="50" fill="none" stroke="{{ s.color }}" stroke-width="18"
+                            stroke-dasharray="{{ (s.pct / 100 * circumference)|round(2) }} {{ circumference }}"
+                            stroke-dashoffset="{{ (-s.offset / 100 * circumference)|round(2) }}"
+                            transform="rotate(-90 60 60)" />
+                        {% endfor %}
+                        <circle cx="60" cy="60" r="35" fill="#fff"/>
+                        <text x="60" y="57" text-anchor="middle" font-size="16" font-weight="800" fill="#0f172a">{{ total_count }}</text>
+                        <text x="60" y="70" text-anchor="middle" font-size="7" fill="#64748b" font-weight="500">TOTAL NUP</text>
+                    </svg>
+                    <div class="donut-legend">
+                        {% for s in status_pie %}
+                        <div class="donut-legend-item"><div class="donut-legend-dot" style="background:{{ s.color }}"></div><div class="donut-legend-text">{{ s.name }}</div><div class="donut-legend-val">{{ s.count }} ({{ s.pct }}%)</div></div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            <div class="chart-box">
+                <div class="chart-title"><div class="cdot" style="background:#0ea5e9"></div>Cakupan Pendataan</div>
+                <div class="coverage-bar"><div class="coverage-label">Dokumentasi Foto</div><div class="coverage-track"><div class="coverage-fill" style="width:{{ photo_coverage_pct }}%;background:#3b82f6;"></div></div><div class="coverage-pct">{{ photo_coverage_pct }}%</div></div>
+                <div class="coverage-bar"><div class="coverage-label">Koordinat GPS</div><div class="coverage-track"><div class="coverage-fill" style="width:{{ gps_coverage_pct }}%;background:#10b981;"></div></div><div class="coverage-pct">{{ gps_coverage_pct }}%</div></div>
+                <div class="coverage-bar"><div class="coverage-label">Kelengkapan Dokumen</div><div class="coverage-track"><div class="coverage-fill" style="width:{{ doc_completeness_pct }}%;background:#f59e0b;"></div></div><div class="coverage-pct">{{ doc_completeness_pct }}%</div></div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Penanggung Jawab -->
+        {% if pj_nama %}
+        <div class="tim-section" style="border-color:#0ea5e9;">
+            <div class="tim-header"><div class="dot" style="background:#0ea5e9;width:7px;height:7px;border-radius:2px;"></div>Penanggung Jawab</div>
+            <div class="tim-grid" style="grid-template-columns:1fr;">
+                <div class="tim-card" style="background:#f0f9ff;text-align:left;display:flex;gap:10px;align-items:center;">
+                    <div><div class="name" style="font-size:9px;">{{ pj_nama }}</div><div class="role">{{ pj_jabatan or '-' }}</div><div class="nip">NIP. {{ pj_nip or '-' }}</div></div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Tim Inventarisasi (Internal) -->
+        {% if tim_inti|length > 0 or tim_pembantu|length > 0 %}
+        <div class="tim-section" style="border-color:#f59e0b;">
+            <div class="tim-header"><div class="dot" style="background:#d97706;width:7px;height:7px;border-radius:2px;"></div>Tim Inventarisasi (Internal)</div>
+            {% if tim_inti|length > 0 %}
+            <div style="font-size:7.5px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:0.5px;margin:6px 0 4px;">Tim Inti (Pelaksana)</div>
+            <table style="width:100%;border-collapse:collapse;font-size:8px;margin-bottom:8px;">
+                <thead><tr style="background:#fffbeb;"><th style="padding:3px 5px;text-align:left;font-size:7px;color:#92400e;border-bottom:1px solid #fde68a;">Peran</th><th style="padding:3px 5px;text-align:left;font-size:7px;color:#92400e;border-bottom:1px solid #fde68a;">Nama</th><th style="padding:3px 5px;text-align:left;font-size:7px;color:#92400e;border-bottom:1px solid #fde68a;">Jabatan</th><th style="padding:3px 5px;text-align:left;font-size:7px;color:#92400e;border-bottom:1px solid #fde68a;">NIP/NIK</th><th style="padding:3px 5px;text-align:left;font-size:7px;color:#92400e;border-bottom:1px solid #fde68a;">Unit</th></tr></thead>
+                <tbody>{% for t in tim_inti %}<tr style="border-bottom:1px solid #f5f5f4;"><td style="padding:3px 5px;font-weight:{% if t.is_ketua %}700{% else %}400{% endif %};color:{% if t.is_ketua %}#92400e{% else %}#334155{% endif %};">{% if t.is_ketua %}Ketua Tim{% else %}Anggota{% endif %}</td><td style="padding:3px 5px;font-weight:600;">{{ t.nama or '-' }}</td><td style="padding:3px 5px;">{{ t.jabatan or '-' }}</td><td style="padding:3px 5px;">{{ t.nip or '-' }}</td><td style="padding:3px 5px;">{{ t.unit or '-' }}</td></tr>{% endfor %}</tbody>
+            </table>
+            {% endif %}
+            {% if tim_pembantu|length > 0 %}
+            <div style="font-size:7.5px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:0.5px;margin:6px 0 4px;">Tim Pembantu</div>
+            <table style="width:100%;border-collapse:collapse;font-size:8px;">
+                <thead><tr style="background:#fffbeb;"><th style="padding:3px 5px;text-align:left;font-size:7px;color:#92400e;border-bottom:1px solid #fde68a;">Peran</th><th style="padding:3px 5px;text-align:left;font-size:7px;color:#92400e;border-bottom:1px solid #fde68a;">Nama</th><th style="padding:3px 5px;text-align:left;font-size:7px;color:#92400e;border-bottom:1px solid #fde68a;">Jabatan</th><th style="padding:3px 5px;text-align:left;font-size:7px;color:#92400e;border-bottom:1px solid #fde68a;">NIP/NIK</th><th style="padding:3px 5px;text-align:left;font-size:7px;color:#92400e;border-bottom:1px solid #fde68a;">Unit</th></tr></thead>
+                <tbody>{% for t in tim_pembantu %}<tr style="border-bottom:1px solid #f5f5f4;"><td style="padding:3px 5px;font-weight:{% if t.is_ketua %}700{% else %}400{% endif %};color:{% if t.is_ketua %}#92400e{% else %}#334155{% endif %};">{% if t.is_ketua %}Ketua Tim{% else %}Anggota{% endif %}</td><td style="padding:3px 5px;font-weight:600;">{{ t.nama or '-' }}</td><td style="padding:3px 5px;">{{ t.jabatan or '-' }}</td><td style="padding:3px 5px;">{{ t.nip or '-' }}</td><td style="padding:3px 5px;">{{ t.unit or '-' }}</td></tr>{% endfor %}</tbody>
+            </table>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Tim Peneliti (Eksternal) -->
+        {% if tim %}
+        <div class="tim-section">
+            <div class="tim-header"><div class="dot" style="background:#0f172a;width:7px;height:7px;border-radius:2px;"></div>Tim Peneliti (Eksternal)</div>
+            <div class="tim-grid">
+                {% for t in tim %}
+                <div class="tim-card"><div class="role">{{ t.jabatan or '-' }}</div><div class="name">{{ t.nama or '-' }}</div><div class="nip">NIP. {{ t.nip or '-' }}</div></div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Tim Pendukung (Eksternal) -->
+        {% if tim_pendukung %}
+        <div class="tim-section" style="border-color:#e9d5ff;">
+            <div class="tim-header"><div class="dot" style="background:#7c3aed;width:7px;height:7px;border-radius:2px;"></div>Tim Pendukung (Eksternal)</div>
+            <table style="width:100%;border-collapse:collapse;font-size:8px;">
+                <thead><tr style="background:#faf5ff;"><th style="padding:3px 5px;text-align:left;font-size:7px;color:#7c3aed;border-bottom:1px solid #e9d5ff;">Nama</th><th style="padding:3px 5px;text-align:left;font-size:7px;color:#7c3aed;border-bottom:1px solid #e9d5ff;">Jabatan</th><th style="padding:3px 5px;text-align:left;font-size:7px;color:#7c3aed;border-bottom:1px solid #e9d5ff;">NIP</th><th style="padding:3px 5px;text-align:left;font-size:7px;color:#7c3aed;border-bottom:1px solid #e9d5ff;">Dari Pihak</th></tr></thead>
+                <tbody>{% for t in tim_pendukung %}<tr style="border-bottom:1px solid #f5f3ff;"><td style="padding:3px 5px;font-weight:600;">{{ t.nama or '-' }}</td><td style="padding:3px 5px;">{{ t.jabatan or '-' }}</td><td style="padding:3px 5px;">{{ t.nip or '-' }}</td><td style="padding:3px 5px;color:#7c3aed;font-weight:500;">{{ t.dari_pihak or '-' }}</td></tr>{% endfor %}</tbody>
+            </table>
+        </div>
+        {% endif %}
+    </div>
+    <div class="exec-footer"><div>Laporan Eksekutif Hasil Inventarisasi BMN &mdash; {{ satker_name }}</div><div>Analisis & Tim</div></div>
+</div>
+
+
+</body>
+</html>
