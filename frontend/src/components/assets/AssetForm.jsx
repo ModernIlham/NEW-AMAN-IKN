@@ -735,11 +735,12 @@ const AssetForm = memo(({
     e.preventDefault();
     if (!formData.asset_code || !formData.asset_name) { toast.error("Kode dan Nama Aset wajib"); return; }
     
-    // Validate lat/long: required if has photos or inventory status is not "Belum Diinventarisasi"
-    const hasPhotos = currentPhotoCount > 0;
+    // Validate lat/long: required ONLY once the asset is inventoried
+    // (status != "Belum Diinventarisasi"). Uploading a photo alone never
+    // forces GPS, so a "Belum Diinventarisasi" asset saves without coordinates.
     const isInventoried = formData.inventory_status && formData.inventory_status !== "Belum Diinventarisasi";
-    if ((hasPhotos || isInventoried) && (!formData.koordinat_latitude || !formData.koordinat_longitude)) {
-      toast.error("Koordinat Latitude & Longitude wajib diisi jika sudah ada foto atau status inventarisasi sudah berubah");
+    if (isInventoried && (!formData.koordinat_latitude || !formData.koordinat_longitude)) {
+      toast.error("Koordinat Latitude & Longitude wajib diisi jika status inventarisasi sudah berubah");
       setFormSection("basic");
       return;
     }
