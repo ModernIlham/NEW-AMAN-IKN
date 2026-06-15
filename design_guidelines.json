@@ -1,0 +1,162 @@
+{
+  "project_name": "InventoryMaster_Slate",
+  "design_philosophy": {
+    "identity": "The Swiss Architect",
+    "core_principles": [
+      "Clarity is Power: Data density without clutter.",
+      "Slate & Structure: Use cool neutrals to make data pop.",
+      "Action-First: The form and table are the heroes.",
+      "Modernist Grid: Rigid alignment, subtle borders."
+    ],
+    "archetype": "Archetype 4: Swiss & High-Contrast (Modified for Slate Blue)",
+    "vibe": "Professional, Reliable, Crisp, Efficient."
+  },
+  "typography": {
+    "font_family": {
+      "headings": "Manrope, sans-serif",
+      "body": "IBM Plex Sans, sans-serif",
+      "mono": "JetBrains Mono, monospace"
+    },
+    "scale": {
+      "h1": "text-3xl font-bold tracking-tight text-slate-900",
+      "h2": "text-2xl font-semibold tracking-tight text-slate-800",
+      "h3": "text-xl font-semibold text-slate-800",
+      "body": "text-sm text-slate-600 leading-relaxed",
+      "caption": "text-xs text-slate-500 font-medium uppercase tracking-wider"
+    },
+    "imports": [
+      "https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap"
+    ]
+  },
+  "colors": {
+    "theme": "light",
+    "palette": {
+      "primary": {
+        "DEFAULT": "#0F172A", 
+        "foreground": "#F8FAFC",
+        "hover": "#1E293B"
+      },
+      "secondary": {
+        "DEFAULT": "#F1F5F9",
+        "foreground": "#0F172A",
+        "hover": "#E2E8F0"
+      },
+      "accent": {
+        "DEFAULT": "#3B82F6", 
+        "foreground": "#FFFFFF",
+        "hover": "#2563EB"
+      },
+      "background": {
+        "DEFAULT": "#F8FAFC",
+        "paper": "#FFFFFF",
+        "subtle": "#F1F5F9"
+      },
+      "border": {
+        "DEFAULT": "#E2E8F0",
+        "subtle": "#F1F5F9"
+      },
+      "muted": {
+        "DEFAULT": "#64748B",
+        "foreground": "#94A3B8"
+      },
+      "status": {
+        "success": "#10B981",
+        "warning": "#F59E0B",
+        "error": "#EF4444",
+        "info": "#3B82F6"
+      }
+    },
+    "gradients": {
+      "sidebar": "linear-gradient(180deg, #0F172A 0%, #1E293B 100%)",
+      "glass": "rgba(255, 255, 255, 0.8)"
+    }
+  },
+  "layout": {
+    "structure": "sidebar_content_split",
+    "spacing_scale": {
+      "container_padding": "p-6 md:p-8",
+      "section_gap": "gap-6",
+      "item_gap": "gap-3"
+    },
+    "sidebar": {
+      "width": "w-72",
+      "behavior": "sticky h-screen top-0 overflow-y-auto border-r border-slate-200 bg-white"
+    },
+    "main_content": {
+      "width": "flex-1",
+      "behavior": "min-h-screen bg-slate-50"
+    },
+    "grid_system": "grid grid-cols-1 md:grid-cols-12 gap-6"
+  },
+  "components": {
+    "cards": {
+      "style": "bg-white border border-slate-200 shadow-sm rounded-lg",
+      "hover": "hover:border-blue-500/50 hover:shadow-md transition-all duration-200"
+    },
+    "buttons": {
+      "primary": "bg-slate-900 text-white hover:bg-slate-800 shadow-sm rounded-md px-4 py-2 font-medium text-sm transition-transform active:scale-95",
+      "secondary": "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:text-slate-900 rounded-md px-4 py-2 font-medium text-sm",
+      "ghost": "bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900 rounded-md px-3 py-2 text-sm",
+      "destructive": "bg-white text-red-600 border border-red-200 hover:bg-red-50 hover:text-red-700 rounded-md px-4 py-2 font-medium text-sm"
+    },
+    "inputs": {
+      "style": "bg-white border border-slate-300 text-slate-900 text-sm rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 shadow-sm transition-all",
+      "label": "block mb-1.5 text-sm font-medium text-slate-700"
+    },
+    "tables": {
+      "container": "w-full text-sm text-left text-slate-600 border-collapse",
+      "header": "text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200 py-3 px-4 font-semibold tracking-wider",
+      "row": "bg-white border-b border-slate-100 hover:bg-slate-50/80 transition-colors",
+      "cell": "py-3 px-4 font-medium text-slate-900"
+    }
+  },
+  "visual_enhancers": {
+    "glassmorphism": "backdrop-blur-md bg-white/80 border-b border-white/20",
+    "shadows": {
+      "soft": "0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)",
+      "medium": "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)"
+    },
+    "borders": {
+      "subtle": "border border-slate-200"
+    }
+  },
+  "icons": {
+    "library": "lucide-react",
+    "style": "stroke-width={1.5} size={18}"
+  },
+  "motion": {
+    "transitions": "transition-all duration-200 ease-in-out",
+    "hover_lift": "hover:-translate-y-0.5"
+  },
+  "accessibility": {
+    "focus_ring": "focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500",
+    "contrast_check": "Ensure text is slate-600 or darker on white backgrounds."
+  },
+  "specific_instructions": {
+    "login_page": {
+      "layout": "split_screen",
+      "left_panel": "bg-slate-900 text-white flex flex-col justify-between p-12 relative overflow-hidden",
+      "right_panel": "flex items-center justify-center p-8 bg-white",
+      "visuals": "Add a subtle abstract geometric pattern (CSS only) to the left panel."
+    },
+    "dashboard_page": {
+      "layout": "h-screen flex overflow-hidden bg-slate-50",
+      "sidebar": "w-80 border-r border-slate-200 bg-white flex-shrink-0 flex flex-col overflow-y-auto p-6",
+      "content": "flex-1 flex flex-col min-w-0 overflow-hidden",
+      "header": "h-16 border-b border-slate-200 bg-white/80 backdrop-blur-sm flex items-center justify-between px-8 sticky top-0 z-10",
+      "main_area": "flex-1 overflow-y-auto p-8",
+      "sidebar_form_style": "space-y-4"
+    }
+  },
+  "asset_paths": {
+    "logo": "/assets/logo.svg",
+    "placeholder": "/assets/placeholder.png"
+  },
+  "universal_guidelines": [
+    "Avoid gradients for main backgrounds; use them only for subtle accent borders or active states.",
+    "Use 'Slate' colors (slate-50 to slate-900) for all neutrals. Do not use pure gray.",
+    "Form inputs in the sidebar must be compact (py-2) to fit more content.",
+    "The data table must handle overflow horizontally with a scrollbar if needed.",
+    "Use Shadcn UI components but override the radius to 'rounded-md' for a sharper look."
+  ]
+}
