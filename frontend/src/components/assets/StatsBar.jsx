@@ -1,5 +1,5 @@
 import React, { memo } from "react";
-import { CloudOff } from "lucide-react";
+import { CloudOff, LayoutDashboard, ClipboardCheck } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 
 const StatsBar = memo(({ stats, inventoryMode, setInventoryMode, isOnline, pendingCount }) => (
@@ -47,17 +47,19 @@ const StatsBar = memo(({ stats, inventoryMode, setInventoryMode, isOnline, pendi
       </div>
     </div>
 
-    {/* Mobile Portrait (< sm): Compact inline stats */}
-    <div className="sm:hidden flex items-center gap-2.5 bg-card rounded-xl border border-border px-3 py-2 text-xs overflow-x-auto shadow-elev-1" data-testid="stats-mobile-inline">
-      <span className="font-bold text-foreground whitespace-nowrap">{stats.totalAssets.toLocaleString('id-ID')} aset</span>
-      <span className="text-border">|</span>
-      <span className="font-bold text-blue-600 dark:text-blue-400 whitespace-nowrap">Rp {stats.totalValue}</span>
-      <span className="text-border">|</span>
-      <span className="text-emerald-600 dark:text-emerald-400 whitespace-nowrap">{stats.activeCount} aktif</span>
-      <div className="ml-auto flex items-center gap-2 flex-shrink-0 pl-2.5 border-l border-border">
-        <span className="text-[10px] text-muted-foreground whitespace-nowrap">{inventoryMode ? 'Inventarisasi' : 'Dashboard'}</span>
-        <Switch checked={inventoryMode} onCheckedChange={setInventoryMode} className="scale-75" data-testid="inventory-mode-toggle" />
-      </div>
+    {/* Mobile Portrait (< sm): clear icon-only mode toggle (no stats clutter) */}
+    <div className="sm:hidden flex justify-end" data-testid="stats-mobile-inline">
+      <button
+        type="button"
+        onClick={() => setInventoryMode(!inventoryMode)}
+        aria-pressed={inventoryMode}
+        title={inventoryMode ? 'Mode Inventarisasi - ketuk untuk Dashboard' : 'Ketuk untuk Mode Inventarisasi'}
+        data-testid="inventory-mode-toggle"
+        className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 shadow-elev-1 font-semibold text-sm transition-colors ${inventoryMode ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-card border-border text-foreground'}`}
+      >
+        {inventoryMode ? <ClipboardCheck className="w-5 h-5" /> : <LayoutDashboard className="w-5 h-5" />}
+        <span>{inventoryMode ? 'Inventarisasi' : 'Dashboard'}</span>
+      </button>
     </div>
   </div>
 ));

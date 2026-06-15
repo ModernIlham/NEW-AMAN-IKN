@@ -296,7 +296,7 @@ const AssetGalleryView = memo(({
       {/* Virtualized Gallery Grid */}
       <div
         ref={containerRef}
-        className="overflow-y-auto overflow-x-hidden h-[calc(100dvh-170px)] sm:h-[calc(100dvh-280px)]"
+        className="overflow-y-auto overflow-x-hidden h-[calc(100dvh-140px)] sm:h-[calc(100dvh-280px)]"
         style={{
           contain: 'layout style',
         }}
