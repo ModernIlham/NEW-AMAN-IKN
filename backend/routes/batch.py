@@ -318,14 +318,21 @@ async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user
 
     invalidate_asset_cache()
 
-    # Broadcast WebSocket notification
+    # Broadcast WebSocket notification. notify_asset_change's signature is
+    # (activity_id, event_type, asset_data, user_name, user_id=None) and it
+    # broadcasts per-activity. The previous call passed a single dict, which
+    # raised TypeError (swallowed below) so batch updates never reached other
+    # viewers. Broadcast to the affected assets' activity instead.
     try:
-        await notify_asset_change({
-            "type": "batch_update",
-            "count": updated_count,
-            "fields": field_names_list,
-            "user": x_user_name or "system"
-        })
+        bcast_asset = await db.assets.find_one(
+            {"id": data.asset_ids[0]}, {"_id": 0, "activity_id": 1}
+        ) if data.asset_ids else None
+        await notify_asset_change(
+            (bcast_asset or {}).get("activity_id", ""),
+            "batch_update",
+            {"count": updated_count, "fields": field_names_list},
+            x_user_name or "system",
+        )
     except Exception:
         pass
 
