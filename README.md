@@ -12,6 +12,9 @@
 
 **Live:** [https://amanikn-inventarisasi.com](https://amanikn-inventarisasi.com)
 
+**Riwayat perubahan:** lihat [`CHANGELOG.md`](./CHANGELOG.md) untuk catatan lengkap
+tiap rilis/PR (termasuk catatan teknis penting soal aturan tap-target 44px di ≤1023px).
+
 ---
 
 ## 🆕 Highlight Rilis v2.1 (Juli 2025)
