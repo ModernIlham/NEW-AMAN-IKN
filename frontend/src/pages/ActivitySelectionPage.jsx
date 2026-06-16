@@ -950,7 +950,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                 <button
                   type="button"
                   onClick={(e) => handleStatusRibbonClick(e, act)}
-                  className={`absolute top-0 left-0 ${ribbonStyle} text-[10px] font-semibold pl-3 pr-3 py-0.5 rounded-br-lg shadow flex items-center gap-1 hover:brightness-110 transition-all z-10 cursor-pointer`}
+                  className={`absolute top-0 left-0 ${ribbonStyle} text-[10px] font-semibold pl-3 pr-3 py-0.5 rounded-br-lg shadow flex items-center gap-1 min-h-0 min-w-0 leading-none hover:brightness-110 transition-all z-10 cursor-pointer`}
                   title="Klik untuk validasi status kegiatan"
                   data-testid={`activity-status-ribbon-${act.id}`}
                 >
