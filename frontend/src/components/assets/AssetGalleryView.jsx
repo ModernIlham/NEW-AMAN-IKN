@@ -79,7 +79,7 @@ const Lightbox = memo(({ asset, onClose, onEdit }) => {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex flex-col items-center justify-center"
+      className="fixed inset-0 z-[100] bg-black/40 backdrop-blur-md flex flex-col items-center justify-center"
       onClick={onClose}
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
@@ -97,7 +97,7 @@ const Lightbox = memo(({ asset, onClose, onEdit }) => {
       {/* Photo area */}
       <div className="relative flex-1 flex items-center justify-center w-full max-w-4xl px-4" onClick={(e) => e.stopPropagation()}>
         {loading ? (
-          <Loader2 className="w-10 h-10 text-white animate-spin" />
+          <Loader2 className="w-10 h-10 text-slate-700 dark:text-white animate-spin" />
         ) : photos.length > 0 ? (
           <>
             <img
@@ -121,35 +121,35 @@ const Lightbox = memo(({ asset, onClose, onEdit }) => {
             )}
           </>
         ) : (
-          <div className="text-white/50 text-sm">Tidak ada foto</div>
+          <div className="text-slate-700 dark:text-white/60 text-sm font-medium">Tidak ada foto</div>
         )}
       </div>
 
       {/* Info panel */}
       <div className="w-full max-w-4xl px-4 pb-4 pt-2" onClick={(e) => e.stopPropagation()}>
-        <div className="bg-slate-900/90 backdrop-blur-lg rounded-xl p-3 border border-white/15 shadow-xl">
+        <div className="bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl rounded-xl p-3 border border-white/50 dark:border-white/15 shadow-xl">
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0 space-y-1.5">
-              <h3 className="text-white font-semibold text-sm truncate">{a.name || "Tanpa Nama"}</h3>
-              <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-white/80">
+              <h3 className="text-slate-900 dark:text-white font-semibold text-sm truncate">{a.name || "Tanpa Nama"}</h3>
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-700 dark:text-white/80">
                 {a.asset_code && <span className="flex items-center gap-0.5"><QrCode className="w-3 h-3" /> {a.asset_code}</span>}
                 {a.nup && <span>NUP: {a.nup}</span>}
                 {a.location && <span className="flex items-center gap-0.5"><MapPin className="w-3 h-3" /> {a.location}</span>}
                 {a.category && <span className="flex items-center gap-0.5"><Tag className="w-3 h-3" /> {a.category}</span>}
                 {a.person_responsible && <span className="flex items-center gap-0.5"><User className="w-3 h-3" /> {a.person_responsible}</span>}
-                {price && <span className="text-emerald-300">{price}</span>}
+                {price && <span className="font-semibold text-emerald-700 dark:text-emerald-300">{price}</span>}
               </div>
               <div className="flex flex-wrap gap-1.5 mt-1">
-                {a.condition && <span className={`text-[10px] px-1.5 py-0.5 rounded-full text-white ${a.condition === 'Baik' ? 'bg-emerald-600/60' : a.condition === 'Rusak Ringan' ? 'bg-amber-600/60' : 'bg-red-600/60'}`}>{a.condition}</span>}
-                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${invStatus === 'Ditemukan' ? 'bg-emerald-600/40 text-emerald-200' : invStatus === 'Tidak Ditemukan' ? 'bg-red-600/40 text-red-200' : 'bg-slate-600/40 text-slate-200'}`}>{invStatus}</span>
+                {a.condition && <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${a.condition === 'Baik' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-600/50 dark:text-emerald-100' : a.condition === 'Rusak Ringan' ? 'bg-amber-100 text-amber-700 dark:bg-amber-600/50 dark:text-amber-100' : 'bg-red-100 text-red-700 dark:bg-red-600/50 dark:text-red-100'}`}>{a.condition}</span>}
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${invStatus === 'Ditemukan' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-600/40 dark:text-emerald-200' : invStatus === 'Tidak Ditemukan' ? 'bg-red-100 text-red-700 dark:bg-red-600/40 dark:text-red-200' : 'bg-slate-200 text-slate-700 dark:bg-slate-600/40 dark:text-slate-200'}`}>{invStatus}</span>
                 {docTotal > 0 && (
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full flex items-center gap-0.5 ${docChecked === docTotal ? 'bg-emerald-600/40 text-emerald-200' : 'bg-amber-600/40 text-amber-200'}`}>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full flex items-center gap-0.5 font-medium ${docChecked === docTotal ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-600/40 dark:text-emerald-200' : 'bg-amber-100 text-amber-700 dark:bg-amber-600/40 dark:text-amber-200'}`}>
                     {docChecked === docTotal ? <FileCheck className="w-2.5 h-2.5" /> : <FileX className="w-2.5 h-2.5" />}
                     Dok {docChecked}/{docTotal}
                   </span>
                 )}
                 {a.stiker_status && (
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${a.stiker_status === 'Sudah Terpasang' ? 'bg-violet-600/40 text-violet-200' : 'bg-slate-600/40 text-slate-200'}`}>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${a.stiker_status === 'Sudah Terpasang' ? 'bg-violet-100 text-violet-700 dark:bg-violet-600/40 dark:text-violet-200' : 'bg-slate-200 text-slate-700 dark:bg-slate-600/40 dark:text-slate-200'}`}>
                     <StickyNote className="w-2.5 h-2.5 inline mr-0.5" />
                     {a.stiker_status === 'Sudah Terpasang' ? 'Stiker ✓' : 'Stiker ✗'}
                   </span>
