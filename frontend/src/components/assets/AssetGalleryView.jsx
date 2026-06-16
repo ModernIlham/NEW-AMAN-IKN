@@ -204,7 +204,13 @@ const AssetGalleryView = memo(({
 }) => {
   const [lightboxAsset, setLightboxAsset] = useState(null);
   const containerRef = useRef(null);
-  const [columns, setColumns] = useState(4);
+  // Mobile-first initial guess (based on viewport) so phones never flash a
+  // 4-column grid before the ResizeObserver measures the real container width.
+  // A 4-col first paint squeezes each card to ~65px and clips the footer's
+  // last action icon (Hapus) on small screens.
+  const [columns, setColumns] = useState(() =>
+    typeof window !== "undefined" ? getColumnCount(window.innerWidth) : 2
+  );
   const [containerWidth, setContainerWidth] = useState(0);
   const GAP = 12; // gap-3 = 12px
 

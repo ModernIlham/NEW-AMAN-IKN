@@ -198,13 +198,16 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
         )}
       </div>
 
-      {/* ===== FOOTER: Status icons + Actions (all icon-only with tooltips) ===== */}
-      <div className={`flex items-center border-t ${isEditing ? 'border-amber-300 dark:border-amber-700' : 'border-border'} flex-shrink-0 px-0.5`}>
+      {/* ===== FOOTER: Status icons + Actions (all icon-only with tooltips) =====
+          overflow-hidden + min-w-0 buttons + flex-shrink-0 icons → the row stays
+          tidy and the last action (Hapus) never gets clipped on small phones,
+          even if a card is squeezed very narrow. */}
+      <div className={`flex items-stretch justify-between gap-px overflow-hidden border-t ${isEditing ? 'border-amber-300 dark:border-amber-700' : 'border-border'} flex-shrink-0 px-0.5`}>
         {/* Status Inventarisasi */}
         <Tooltip delayDuration={150}>
           <TooltipTrigger asChild>
-            <button className={`flex-1 flex items-center justify-center py-1.5 transition-colors ${invInfo.cls}`} onClick={e => e.stopPropagation()} data-testid={`gallery-inv-${asset.id}`}>
-              <ClipboardCheck className="w-3.5 h-3.5" />
+            <button className={`flex-1 min-w-0 min-h-0 flex items-center justify-center py-1.5 rounded-md transition-colors ${invInfo.cls}`} onClick={e => e.stopPropagation()} data-testid={`gallery-inv-${asset.id}`}>
+              <ClipboardCheck className="w-3.5 h-3.5 flex-shrink-0" />
             </button>
           </TooltipTrigger>
           <TooltipContent side="top" className="text-[10px]">Inventarisasi: {asset.inventory_status || "Belum"}</TooltipContent>
@@ -213,8 +216,8 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
         {/* Stiker status */}
         <Tooltip delayDuration={150}>
           <TooltipTrigger asChild>
-            <button className={`flex-1 flex items-center justify-center py-1.5 transition-colors ${stikerOk ? 'text-emerald-500' : 'text-slate-400'}`} onClick={e => e.stopPropagation()} data-testid={`gallery-stiker-${asset.id}`}>
-              <QrCode className="w-3.5 h-3.5" />
+            <button className={`flex-1 min-w-0 min-h-0 flex items-center justify-center py-1.5 rounded-md transition-colors ${stikerOk ? 'text-emerald-500' : 'text-slate-400'}`} onClick={e => e.stopPropagation()} data-testid={`gallery-stiker-${asset.id}`}>
+              <QrCode className="w-3.5 h-3.5 flex-shrink-0" />
             </button>
           </TooltipTrigger>
           <TooltipContent side="top" className="text-[10px]">Stiker: {asset.stiker_status || "Belum dipasang"}</TooltipContent>
@@ -225,11 +228,11 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
           <Tooltip delayDuration={200}>
             <TooltipTrigger asChild>
               <button
-                className={`flex-1 flex items-center justify-center py-1.5 transition-colors ${dokComplete ? 'text-emerald-500' : dokPartial ? 'text-amber-500' : 'text-red-400'}`}
+                className={`flex-1 min-w-0 min-h-0 flex items-center justify-center py-1.5 rounded-md transition-colors ${dokComplete ? 'text-emerald-500' : dokPartial ? 'text-amber-500' : 'text-red-400'}`}
                 onClick={e => e.stopPropagation()}
                 data-testid={`gallery-dok-${asset.id}`}
               >
-                {dokComplete ? <FileCheck className="w-3.5 h-3.5" /> : <FileX className="w-3.5 h-3.5" />}
+                {dokComplete ? <FileCheck className="w-3.5 h-3.5 flex-shrink-0" /> : <FileX className="w-3.5 h-3.5 flex-shrink-0" />}
               </button>
             </TooltipTrigger>
             <TooltipContent side="top" className="bg-slate-900 text-white max-w-[260px] p-3" onClick={e => e.stopPropagation()}>
@@ -267,24 +270,24 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
             </TooltipContent>
           </Tooltip>
         ) : (
-          <div className="flex-1 flex items-center justify-center py-1.5 text-slate-300 dark:text-slate-600">
-            <FileX className="w-3.5 h-3.5" />
+          <div className="flex-1 min-w-0 flex items-center justify-center py-1.5 text-slate-300 dark:text-slate-600">
+            <FileX className="w-3.5 h-3.5 flex-shrink-0" />
           </div>
         )}
 
         {/* Divider */}
-        <div className="w-px h-4 bg-border mx-0.5" />
+        <div className="w-px h-4 self-center bg-border mx-0.5 flex-shrink-0" />
 
         {/* Cetak Kartu */}
         {onPrintCard && (
           <Tooltip delayDuration={150}>
             <TooltipTrigger asChild>
               <button
-                className="flex-1 flex items-center justify-center py-1.5 text-muted-foreground hover:text-purple-600 transition-colors"
+                className="flex-1 min-w-0 min-h-0 flex items-center justify-center py-1.5 rounded-md text-muted-foreground hover:text-purple-600 hover:bg-purple-500/10 transition-colors"
                 onClick={e => { e.stopPropagation(); onPrintCard(asset.id); }}
                 data-testid={`gallery-card-btn-${asset.id}`}
               >
-                <CreditCard className="w-3.5 h-3.5" />
+                <CreditCard className="w-3.5 h-3.5 flex-shrink-0" />
               </button>
             </TooltipTrigger>
             <TooltipContent side="top" className="text-[10px]">Cetak Kartu</TooltipContent>
@@ -296,11 +299,11 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
           <Tooltip delayDuration={150}>
             <TooltipTrigger asChild>
               <button
-                className="flex-1 flex items-center justify-center py-1.5 text-muted-foreground hover:text-red-600 transition-colors"
+                className="flex-1 min-w-0 min-h-0 flex items-center justify-center py-1.5 rounded-md text-muted-foreground hover:text-red-600 hover:bg-red-500/10 transition-colors"
                 onClick={e => { e.stopPropagation(); onDelete(asset.id); }}
                 data-testid={`gallery-delete-${asset.id}`}
               >
-                <Trash2 className="w-3.5 h-3.5" />
+                <Trash2 className="w-3.5 h-3.5 flex-shrink-0" />
               </button>
             </TooltipTrigger>
             <TooltipContent side="top" className="text-[10px]">Hapus Aset</TooltipContent>
