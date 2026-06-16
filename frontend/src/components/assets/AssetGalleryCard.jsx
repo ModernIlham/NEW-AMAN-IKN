@@ -206,7 +206,7 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
         {/* Status Inventarisasi */}
         <Tooltip delayDuration={150}>
           <TooltipTrigger asChild>
-            <button className={`flex-1 min-w-0 flex items-center justify-center py-1.5 rounded-md transition-colors ${invInfo.cls}`} onClick={e => e.stopPropagation()} data-testid={`gallery-inv-${asset.id}`}>
+            <button className={`flex-1 min-w-0 min-h-0 flex items-center justify-center py-1.5 rounded-md transition-colors ${invInfo.cls}`} onClick={e => e.stopPropagation()} data-testid={`gallery-inv-${asset.id}`}>
               <ClipboardCheck className="w-3.5 h-3.5 flex-shrink-0" />
             </button>
           </TooltipTrigger>
@@ -216,7 +216,7 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
         {/* Stiker status */}
         <Tooltip delayDuration={150}>
           <TooltipTrigger asChild>
-            <button className={`flex-1 min-w-0 flex items-center justify-center py-1.5 rounded-md transition-colors ${stikerOk ? 'text-emerald-500' : 'text-slate-400'}`} onClick={e => e.stopPropagation()} data-testid={`gallery-stiker-${asset.id}`}>
+            <button className={`flex-1 min-w-0 min-h-0 flex items-center justify-center py-1.5 rounded-md transition-colors ${stikerOk ? 'text-emerald-500' : 'text-slate-400'}`} onClick={e => e.stopPropagation()} data-testid={`gallery-stiker-${asset.id}`}>
               <QrCode className="w-3.5 h-3.5 flex-shrink-0" />
             </button>
           </TooltipTrigger>
@@ -228,7 +228,7 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
           <Tooltip delayDuration={200}>
             <TooltipTrigger asChild>
               <button
-                className={`flex-1 min-w-0 flex items-center justify-center py-1.5 rounded-md transition-colors ${dokComplete ? 'text-emerald-500' : dokPartial ? 'text-amber-500' : 'text-red-400'}`}
+                className={`flex-1 min-w-0 min-h-0 flex items-center justify-center py-1.5 rounded-md transition-colors ${dokComplete ? 'text-emerald-500' : dokPartial ? 'text-amber-500' : 'text-red-400'}`}
                 onClick={e => e.stopPropagation()}
                 data-testid={`gallery-dok-${asset.id}`}
               >
@@ -283,7 +283,7 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
           <Tooltip delayDuration={150}>
             <TooltipTrigger asChild>
               <button
-                className="flex-1 min-w-0 flex items-center justify-center py-1.5 rounded-md text-muted-foreground hover:text-purple-600 hover:bg-purple-500/10 transition-colors"
+                className="flex-1 min-w-0 min-h-0 flex items-center justify-center py-1.5 rounded-md text-muted-foreground hover:text-purple-600 hover:bg-purple-500/10 transition-colors"
                 onClick={e => { e.stopPropagation(); onPrintCard(asset.id); }}
                 data-testid={`gallery-card-btn-${asset.id}`}
               >
@@ -299,7 +299,7 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
           <Tooltip delayDuration={150}>
             <TooltipTrigger asChild>
               <button
-                className="flex-1 min-w-0 flex items-center justify-center py-1.5 rounded-md text-muted-foreground hover:text-red-600 hover:bg-red-500/10 transition-colors"
+                className="flex-1 min-w-0 min-h-0 flex items-center justify-center py-1.5 rounded-md text-muted-foreground hover:text-red-600 hover:bg-red-500/10 transition-colors"
                 onClick={e => { e.stopPropagation(); onDelete(asset.id); }}
                 data-testid={`gallery-delete-${asset.id}`}
               >
