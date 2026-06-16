@@ -4,12 +4,12 @@ import uuid
 import logging
 from datetime import datetime, timezone
 from typing import List
-from fastapi import APIRouter, HTTPException, UploadFile, File, Request, Header
+from fastapi import APIRouter, HTTPException, UploadFile, File, Request, Header, Depends
 import csv as csv_module
 
 from db import db
 from models import AssetCreate
-from auth_utils import get_current_user
+from auth_utils import require_user
 from shared_utils import (
     limiter, invalidate_asset_cache, log_audit, create_thumbnail,
     VALID_INVENTORY_STATUSES, VALID_KLASIFIKASI, VALID_SUB_KLASIFIKASI_ALL,
@@ -200,7 +200,7 @@ def parse_excel_content(content: bytes) -> tuple:
 
 @imports_router.post("/import")
 @limiter.limit("3/minute")
-async def import_assets(request: Request, file: UploadFile = File(...), force_update: bool = False, activity_id: str = ""):
+async def import_assets(request: Request, file: UploadFile = File(...), force_update: bool = False, activity_id: str = "", _user: dict = Depends(require_user)):
     """Import assets from CSV or Excel file with comprehensive validation"""
     if not activity_id:
         raise HTTPException(status_code=400, detail="activity_id diperlukan untuk import")

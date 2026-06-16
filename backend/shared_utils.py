@@ -11,6 +11,7 @@ import random
 import string
 import asyncio
 from datetime import datetime, timezone
+from pymongo.errors import DuplicateKeyError
 from typing import Optional, List
 from pathlib import Path
 
@@ -243,6 +244,39 @@ async def store_idempotent_response(key: str, response: dict, status_code: int =
         )
     except Exception as e:
         logger.warning(f"Failed to cache idempotent response: {e}")
+
+
+async def reserve_idempotency_key(key: str, stale_seconds: int = 30) -> str:
+    """Atomically claim an idempotency key BEFORE doing the work, so two
+    concurrent requests with the same key can't both execute.
+
+    Returns "new" (proceed), "done" (a completed response is cached -> replay),
+    or "pending" (another request is in flight -> the caller should 409).
+    Fail-open: any infra error returns "new" so idempotency never blocks a
+    legitimate request.
+    """
+    if not key:
+        return "new"
+    now = datetime.now(timezone.utc)
+    try:
+        await db.idempotency_keys.insert_one({"key": key, "created_at": now})
+        return "new"
+    except DuplicateKeyError:
+        doc = await db.idempotency_keys.find_one({"key": key}, {"_id": 0, "response": 1, "created_at": 1})
+        if doc and doc.get("response") is not None:
+            return "done"
+        ca = doc.get("created_at") if doc else None
+        if ca is not None:
+            if ca.tzinfo is None:
+                ca = ca.replace(tzinfo=timezone.utc)
+            if (now - ca).total_seconds() > stale_seconds:
+                # Previous holder likely failed/abandoned -> take the slot over.
+                await db.idempotency_keys.update_one({"key": key}, {"$set": {"created_at": now}})
+                return "new"
+        return "pending"
+    except Exception as e:
+        logger.warning(f"reserve_idempotency_key failed open: {e}")
+        return "new"
 
 
 

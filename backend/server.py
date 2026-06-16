@@ -12,7 +12,7 @@ import logging
 from pathlib import Path
 from dotenv import load_dotenv
 
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, Depends
 from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
@@ -213,9 +213,10 @@ async def get_inventory_classifications():
 # ============================================================================
 
 from models import ResetConfirmation
+from auth_utils import require_admin
 
 @api_router.delete("/system/reset-all")
-async def reset_all_data(data: ResetConfirmation):
+async def reset_all_data(data: ResetConfirmation, _admin: dict = Depends(require_admin)):
     admin_user = await db.users.find_one({"id": data.admin_id})
     if not admin_user or admin_user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Hanya admin yang dapat melakukan reset sistem")
