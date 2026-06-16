@@ -13,15 +13,16 @@ const StatsBar = memo(({ stats, inventoryMode, setInventoryMode, isOnline, pendi
       </div>
     )}
 
-    {/* Large Desktop (lg+): Full 4-column stats + toggle in header */}
-    <div className="hidden lg:grid grid-cols-4 gap-3">
+    {/* Large Desktop (lg+): stats grid. Total Nilai gets a wider column
+        (1.6fr) because the rupiah figure is far longer than the count cards. */}
+    <div className="hidden lg:grid grid-cols-[1fr_1.6fr_1fr_1fr] gap-3">
       {[
         { label: "Total Aset", value: stats.totalAssets.toLocaleString('id-ID'), color: "text-foreground" },
         { label: "Total Nilai", value: `Rp ${stats.totalValue}`, color: "text-blue-600 dark:text-blue-400" },
         { label: "Aktif", value: stats.activeCount.toLocaleString('id-ID'), color: "text-emerald-600 dark:text-emerald-400" },
         { label: "Maintenance", value: stats.maintenanceCount.toLocaleString('id-ID'), color: "text-amber-600 dark:text-amber-400" },
       ].map((s, i) => (
-        <div key={i} className="bg-card rounded-xl border border-border p-3.5 shadow-elev-1 hover:shadow-elev-2 transition-shadow duration-180" data-testid={`stat-card-${i}`}>
+        <div key={i} className="min-w-0 bg-card rounded-xl border border-border p-3.5 shadow-elev-1 hover:shadow-elev-2 transition-shadow duration-180" data-testid={`stat-card-${i}`}>
           <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">{s.label}</div>
           <div className={`text-2xl font-bold ${s.color} mt-1`}>{s.value}</div>
         </div>
@@ -36,9 +37,9 @@ const StatsBar = memo(({ stats, inventoryMode, setInventoryMode, isOnline, pendi
         { label: "Aktif", value: stats.activeCount.toLocaleString('id-ID'), color: "text-emerald-600 dark:text-emerald-400" },
         { label: "Maintenance", value: stats.maintenanceCount.toLocaleString('id-ID'), color: "text-amber-600 dark:text-amber-400" },
       ].map((s, i) => (
-        <div key={i} className="flex-1 bg-card rounded-xl border border-border px-2.5 py-2 shadow-elev-1" data-testid={`stat-card-compact-${i}`}>
+        <div key={i} className={`${i === 1 ? 'flex-[1.7]' : 'flex-1'} min-w-0 bg-card rounded-xl border border-border px-2.5 py-2 shadow-elev-1`} data-testid={`stat-card-compact-${i}`}>
           <div className="text-[9px] text-muted-foreground font-medium uppercase tracking-wider leading-tight">{s.label}</div>
-          <div className={`text-base font-bold ${s.color} mt-0.5`}>{s.value}</div>
+          <div className={`text-base font-bold ${s.color} mt-0.5 truncate`}>{s.value}</div>
         </div>
       ))}
       <div className="flex-shrink-0 bg-card rounded-xl border border-border px-2.5 py-2 flex items-center gap-1.5 shadow-elev-1" data-testid="inventory-mode-toggle-tablet-wrapper">
