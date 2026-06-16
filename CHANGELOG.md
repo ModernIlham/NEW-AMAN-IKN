@@ -1,0 +1,193 @@
+# Changelog — AMAN IKN
+
+Catatan perubahan aplikasi **AMAN** (Aplikasi Manajemen Aset Negara) IKN, dari
+awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
+**terbaru** ke yang **terlama**. Setiap entri merujuk ke nomor Pull Request
+(`#n`) dan commit pada branch `main`.
+
+> Format tanggal: `YYYY-MM-DD`. Semua perubahan UI di bawah sudah di-`yarn build`
+> (craco) hingga sukses sebelum di-merge.
+
+---
+
+## ⚠️ Catatan teknis penting — aturan tap-target 44px global
+
+Banyak bug tata letak di layar kecil (PR #7, #9, #11 — dan berpotensi muncul lagi)
+berakar dari **satu** aturan global di `frontend/src/index.css`:
+
+```css
+/* Mobile touch targets */
+@media (max-width: 1023px) {
+  button, a { min-height: 44px; min-width: 44px; }
+}
+```
+
+Aturan ini bagus untuk tombol berdiri sendiri (target sentuh WCAG ~44px), tetapi
+**memaksa SETIAP `<button>`/`<a>` di ≤1023px menjadi minimal 44×44px** — termasuk:
+
+- baris ikon padat (footer kartu galeri),
+- badge berbentuk tombol (ribbon status kegiatan),
+- kontrol kecil seperti `Switch` (Radix `Switch` merender sebuah `<button>`).
+
+Akibatnya elemen-elemen itu membengkak → meluber, terpotong, atau menutupi
+elemen lain — **hanya** di ≤1023px (di atas itu aturan mati, jadi terlihat normal).
+
+### Pola perbaikan baku
+
+Tambahkan utility **`min-w-0 min-h-0`** pada elemen yang terdampak. Selector
+class (`.min-w-0` = `0,0,1,0`) menang atas selector tipe (`button` = `0,0,0,1`),
+jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
+
+- ikon-tombol di dalam strip/baris padat,
+- badge/ribbon yang kebetulan berupa `<button>`,
+- `Switch`/kontrol kecil yang tak boleh ikut 44px.
+
+> Jika nanti ada lagi elemen mobile yang "tiba-tiba kebesaran/menutupi" di
+> ≤1023px, **cek dulu apakah itu `<button>`/`<a>`** — kemungkinan besar penyebabnya
+> aturan ini. Solusinya `min-w-0 min-h-0` (dan kalau perlu `leading-none`).
+
+---
+
+## [#11] Stats: tombol toggle Inventarisasi ringkas & seragam — 2026-06-16
+`a3fdf5c`
+
+- **Masalah:** di bar stat compact (tablet / HP-landscape, sm–lg / ≤1023px),
+  kartu toggle "Inventarisasi" lebih **tinggi** dari kartu stat lain karena
+  `Switch` (Radix `<button>`) dipaksa 44×44 oleh aturan global di atas.
+- **Perbaikan (`StatsBar.jsx`):**
+  - Hapus label teks "Inventarisasi" → cukup tombol toggle (hemat ruang);
+    aksesibilitas dijaga via `aria-label` + `title`.
+  - `min-h-0 min-w-0` pada `Switch` → kembali ke ukuran natural (`h-5 w-9`).
+  - Baris compact dibuat `items-stretch` → kartu toggle setinggi kartu stat lain,
+    switch di tengah.
+
+## [#10] Stats: ruang lebih untuk "Total Nilai" di semua ukuran — 2026-06-16
+`091ea1c`
+
+- **Masalah:** angka rupiah ("Total Nilai") jauh lebih panjang dari kartu jumlah,
+  tapi mendapat lebar yang sama → terasa sempit.
+- **Perbaikan (`StatsBar.jsx`):**
+  - Desktop (lg+): grid `grid-cols-4` → `grid-cols-[1fr_1.6fr_1fr_1fr]`
+    (kolom Total Nilai **1.6×**); `min-w-0` agar nilai sangat panjang membungkus,
+    bukan meluber.
+  - Tablet/HP-landscape (sm–lg): kartu Total Nilai `flex-[1.7]` vs `flex-1`,
+    plus `min-w-0` + `truncate` sebagai pengaman.
+  - HP portrait (<sm): kartu stat memang tidak ditampilkan (hanya toggle).
+
+## [#9] Kegiatan: badge status tidak lagi menutupi nomor surat — 2026-06-16
+`2526f3a`
+
+- **Masalah:** di ≤1023px, ribbon status (`Belum Dimulai`/`On Going`/…) — sebuah
+  `<button>` `absolute top-0 left-0` — dipaksa setinggi 44px oleh aturan global,
+  sehingga melewati jarak aman `pt-5` konten dan **menutupi baris nomor surat**.
+- **Perbaikan (`ActivitySelectionPage.jsx`):** tambah `min-h-0 min-w-0 leading-none`
+  pada tombol ribbon → kembali ke tinggi natural (~16px), nomor surat tampil penuh.
+
+## [#8] List mobile: baris menyatu + "Barang Serupa" jadi batas scroll — 2026-06-16
+`2170fd8`
+
+- **Masalah A:** tiap kartu (`AssetMobileCard`) memakai `rounded-lg mb-1.5` → ada
+  celah 6px di antara setiap baris.
+- **Masalah B:** `VirtualizedMobileCards` berada di alur halaman biasa, jadi
+  seluruh list (dan panel di atasnya, termasuk *Barang Serupa*) ikut ter-scroll
+  hilang ke atas.
+- **Perbaikan:**
+  - `AssetMobileCard.jsx`: buang `rounded-lg` + `mb-1.5` → list rapi & menerus
+    (pembatas baris tetap dari `border-y`).
+  - `VirtualizedMobileCards.jsx`: bungkus dengan container scroll tinggi-tetap
+    **sama dengan galeri** (`h-[calc(100dvh-140px)] sm:h-[calc(100dvh-280px)]`),
+    dan `IntersectionObserver` infinite-scroll di-`root`-kan ke container itu →
+    saat scroll, "Barang Serupa" mendarat di atas sebagai batas; muat-lebih-banyak
+    tetap jalan.
+
+## [#7] Galeri: ikon aksi kartu rapi & "Hapus" selalu tampil di HP — 2026-06-16
+`8b2a829`
+
+- **Masalah:** footer kartu galeri berisi 5 tombol ikon; aturan global memaksa
+  tiap `<button>` ≥44px → 5×44=220px ke kartu ~158px → baris meluber dan
+  `overflow-hidden` kartu **memotong ikon Hapus**. Terjadi di semua lebar HP
+  (termasuk 375px).
+- **Perbaikan:**
+  - `AssetGalleryCard.jsx`: tiap tombol ikon footer `min-w-0 min-h-0`
+    (+ `flex-shrink-0` pada ikon, `overflow-hidden` & jarak rata pada baris,
+    hover state lembut) → strip rapi, semua ikon tampil.
+  - `AssetGalleryView.jsx`: seed jumlah kolom **mobile-first** dari lebar viewport
+    (default 2) → hilangkan "kedip" grid 4 kolom sesaat saat load.
+
+## [#6] Pengamanan auth + integritas data — 2026-06-16
+`e8e1074`
+
+- **Auth endpoint destruktif:** endpoint yang sebelumnya jalan **tanpa verifikasi
+  token** kini di-gate (frontend sudah mengirim `Authorization: Bearer` via
+  interceptor axios global):
+  - `require_user`: `POST /import`, `DELETE /assets/bulk-delete/{id}`,
+    `PUT /assets/batch-update`, `POST /categories/import-bulk`,
+    `POST /categories/import`.
+  - `require_admin`: semua `/users/*` dan `DELETE /system/reset-all`
+    (catatan: `change-password`/`change-role` sebelumnya tanpa auth sama sekali).
+- **Idempotency race:** `reserve_idempotency_key()` mengklaim `Idempotency-Key`
+  secara atomik sebelum bekerja (request kedua dengan key sama → `409`).
+  **Fail-open** saat error infra; reservasi basi (>30s) bisa diambil alih.
+- **Merge checklist:** PATCH `document_checklist` dulu mencocokkan item by-name via
+  dict (item duplikat/kosong bisa saling tertukar / kehilangan foto). Sekarang
+  mengonsumsi item existing by-name **berurutan** (deque) → duplikat aman.
+
+## [#5] Testing + perbaikan audit log & broadcast batch — 2026-06-16
+`e58e00d`
+
+- **Audit log:** `compute_changes` dulu hanya mencatat penyelesaian dokumen saat
+  **jumlah** item checklist berubah → centang/uncentang item yang sudah ada (jumlah
+  tetap) tidak tercatat. Diperbaiki + test regresi.
+- **Batch update WebSocket:** `batch.py` memanggil `notify_asset_change` dengan 1
+  dict, padahal signature 5 argumen → `TypeError` (ditelan) sehingga viewer lain
+  tak dapat refresh realtime setelah batch edit. Kini dipanggil benar.
+- **Test:** tambah `backend/check_pure_logic.py` (auth hashing+JWT, `decode_data_url`,
+  thumbnail/`_prepare_image`, `compute_changes`, formatter export, model pydantic,
+  template Jinja2).
+
+## [#4] Mobile: toggle mode ikon + scroll galeri berhenti di "Barang Serupa" — 2026-06-16
+`b6e79fc`
+
+- **StatsBar (HP):** toolbar atas diganti **satu tombol toggle ikon** yang jelas
+  (Dashboard ↔ Inventarisasi).
+- **Galeri:** offset window-scroll mobile diperbesar (170 → 140) supaya saat
+  discroll ke bawah, "Barang Serupa" mendarat di dekat atas dan galeri mengisi
+  sisanya. (Mekanisme ini kemudian disamakan untuk list mode di #8.)
+
+## [#3] GPS opsional saat "Belum Diinventarisasi" + galeri mobile lebih padat — 2026-06-16
+`546cce8`
+
+- Tidak lagi mewajibkan titik GPS ketika status inventarisasi masih
+  "Belum Diinventarisasi".
+- Galeri mobile dibuat lebih padat (lebih banyak kartu per layar).
+
+## [#2] Galeri mobile: densitas + popup foto (portal, scroll-lock, tombol) — 2026-06-16
+`161e2d6`
+
+- Perbaikan densitas galeri mobile dan popup foto: render via portal,
+  penguncian scroll saat popup terbuka, serta tombol-tombolnya.
+
+## [#1] Inisialisasi aplikasi AMAN — 2026-06-16
+`36f8019`
+
+- Menambahkan aplikasi AMAN secara lengkap, memperbaiki timeout export XLSX, dan
+  merapikan repo.
+
+---
+
+## Peta file UI yang sering disentuh
+
+| Area | File |
+| --- | --- |
+| Kartu galeri (footer ikon, dll.) | `frontend/src/components/assets/AssetGalleryCard.jsx` |
+| Galeri (grid virtual, kolom, scroll) | `frontend/src/components/assets/AssetGalleryView.jsx` |
+| Kartu list mobile | `frontend/src/components/assets/AssetMobileCard.jsx` |
+| List mobile (scroll/infinite) | `frontend/src/components/assets/VirtualizedMobileCards.jsx` |
+| Bar statistik + toggle inventarisasi | `frontend/src/components/assets/StatsBar.jsx` |
+| Halaman pemilihan kegiatan (badge status) | `frontend/src/pages/ActivitySelectionPage.jsx` |
+| Aturan global mobile (tap-target 44px) | `frontend/src/index.css` (≤1023px) |
+
+## Breakpoint (Tailwind, lihat `frontend/tailwind.config.js`)
+
+`xs 0` → `sm 640` → `md 768` → `lg 1024` → `xl 1280` → `2xl 1536`.
+Aturan tap-target 44px aktif pada **≤1023px** (di bawah `lg`).
