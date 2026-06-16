@@ -127,11 +127,11 @@ const Lightbox = memo(({ asset, onClose, onEdit }) => {
 
       {/* Info panel */}
       <div className="w-full max-w-4xl px-4 pb-4 pt-2" onClick={(e) => e.stopPropagation()}>
-        <div className="bg-white/10 backdrop-blur-lg rounded-xl p-3 border border-white/10">
+        <div className="bg-slate-900/90 backdrop-blur-lg rounded-xl p-3 border border-white/15 shadow-xl">
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0 space-y-1.5">
               <h3 className="text-white font-semibold text-sm truncate">{a.name || "Tanpa Nama"}</h3>
-              <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-white/60">
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-white/80">
                 {a.asset_code && <span className="flex items-center gap-0.5"><QrCode className="w-3 h-3" /> {a.asset_code}</span>}
                 {a.nup && <span>NUP: {a.nup}</span>}
                 {a.location && <span className="flex items-center gap-0.5"><MapPin className="w-3 h-3" /> {a.location}</span>}
