@@ -29,8 +29,9 @@ const StatsBar = memo(({ stats, inventoryMode, setInventoryMode, isOnline, pendi
       ))}
     </div>
 
-    {/* Tablet / Phone Landscape (sm to lg): Compact stats + inline toggle */}
-    <div className="hidden sm:flex lg:hidden items-center gap-2">
+    {/* Tablet / Phone Landscape (sm to lg): Compact stats + inline toggle.
+        items-stretch so the toggle card matches the stat cards' height. */}
+    <div className="hidden sm:flex lg:hidden items-stretch gap-2">
       {[
         { label: "Total Aset", value: stats.totalAssets.toLocaleString('id-ID'), color: "text-foreground" },
         { label: "Total Nilai", value: `Rp ${stats.totalValue}`, color: "text-blue-600 dark:text-blue-400" },
@@ -42,9 +43,8 @@ const StatsBar = memo(({ stats, inventoryMode, setInventoryMode, isOnline, pendi
           <div className={`text-base font-bold ${s.color} mt-0.5 truncate`}>{s.value}</div>
         </div>
       ))}
-      <div className="flex-shrink-0 bg-card rounded-xl border border-border px-2.5 py-2 flex items-center gap-1.5 shadow-elev-1" data-testid="inventory-mode-toggle-tablet-wrapper">
-        <span className="text-[9px] text-muted-foreground font-medium uppercase tracking-wider leading-tight whitespace-nowrap">Inventarisasi</span>
-        <Switch checked={inventoryMode} onCheckedChange={setInventoryMode} className="scale-75" data-testid="inventory-mode-toggle-tablet" />
+      <div className="flex-shrink-0 bg-card rounded-xl border border-border px-3 flex items-center justify-center shadow-elev-1" title="Mode Inventarisasi" data-testid="inventory-mode-toggle-tablet-wrapper">
+        <Switch checked={inventoryMode} onCheckedChange={setInventoryMode} aria-label="Mode Inventarisasi" className="min-h-0 min-w-0" data-testid="inventory-mode-toggle-tablet" />
       </div>
     </div>
 
