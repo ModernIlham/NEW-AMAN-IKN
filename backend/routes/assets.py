@@ -3,6 +3,7 @@ import uuid
 import base64
 import logging
 import asyncio
+from collections import deque
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Request
 
@@ -13,7 +14,7 @@ from shared_utils import (
     log_audit, compute_changes, create_thumbnail, create_gallery_thumbnail,
     store_photo_to_gridfs, get_photo_from_gridfs, delete_photo_from_gridfs,
     generate_photo_thumbnail,
-    get_idempotent_response, store_idempotent_response,
+    get_idempotent_response, store_idempotent_response, reserve_idempotency_key,
 )
 from routes.websocket import notify_asset_change
 
@@ -451,6 +452,14 @@ async def create_asset(asset: AssetCreate, request: Request):
         if cached and cached.get("response"):
             logger.info(f"Idempotent replay for key {idem_key[:8]}...")
             return AssetResponse(**cached["response"])
+        # Atomically claim the key so concurrent duplicates can't both run.
+        _idem = await reserve_idempotency_key(idem_key)
+        if _idem == "done":
+            cached = await get_idempotent_response(idem_key)
+            if cached and cached.get("response"):
+                return AssetResponse(**cached["response"])
+        elif _idem == "pending":
+            raise HTTPException(status_code=409, detail="Permintaan dengan kunci idempotensi ini sedang diproses, coba lagi sebentar")
 
     # Check uniqueness: asset_code + NUP within same activity
     existing_query = {
@@ -941,6 +950,13 @@ async def patch_asset(asset_id: str, request: Request):
         if cached and cached.get("response"):
             logger.info(f"Idempotent PATCH replay for key {idem_key[:8]}...")
             return AssetResponse(**cached["response"])
+        _idem = await reserve_idempotency_key(idem_key)
+        if _idem == "done":
+            cached = await get_idempotent_response(idem_key)
+            if cached and cached.get("response"):
+                return AssetResponse(**cached["response"])
+        elif _idem == "pending":
+            raise HTTPException(status_code=409, detail="Permintaan dengan kunci idempotensi ini sedang diproses, coba lagi sebentar")
 
     body = await request.json()
     existing = await db.assets.find_one({"id": asset_id})
@@ -1132,11 +1148,16 @@ async def patch_asset(asset_id: str, request: Request):
     # base64 bytes; we resolve those sentinels against the existing doc here.
     if "document_checklist" in update_data:
         existing_checklist = existing.get("document_checklist", []) or []
-        existing_by_name = {(it.get("name") or ""): it for it in existing_checklist}
+        # Consume each existing item at most once, in order, so duplicate or
+        # empty checklist-item names can't cross-wire / lose photos on edit.
+        existing_by_name = {}
+        for _it in existing_checklist:
+            existing_by_name.setdefault((_it.get("name") or ""), deque()).append(_it)
         new_checklist = []
         for item in (update_data["document_checklist"] or []):
             name = item.get("name", "") or ""
-            orig_item = existing_by_name.get(name) or {}
+            _q = existing_by_name.get(name)
+            orig_item = _q.popleft() if _q else {}
             orig_photos = orig_item.get("photos", []) or []
             orig_docs = orig_item.get("documents", []) or []
             orig_thumbs = orig_item.get("photo_thumbnails", []) or []

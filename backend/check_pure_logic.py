@@ -139,5 +139,9 @@ for tpl in os.listdir("templates"):
     except TemplateSyntaxError as e:
         ok(False, f"template syntax error: {tpl}", str(e))
 
+section("idempotency: reserve_idempotency_key fast-path (no key, no DB)")
+import asyncio as _aio
+ok(_aio.run(su.reserve_idempotency_key("")) == "new", "reserve_idempotency_key('') -> 'new'")
+
 print(f"\n==================  PASSED {P}  FAILED {F}  ==================")
 sys.exit(1 if F else 0)

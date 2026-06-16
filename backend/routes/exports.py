@@ -10,7 +10,8 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
+from auth_utils import require_user
 from fastapi.responses import StreamingResponse
 
 from reportlab.lib.pagesizes import A4
@@ -200,7 +201,7 @@ async def get_asset_doc_file(asset_id: str, item_idx: int, file_type: str, file_
 
 @exports_router.delete("/assets/bulk-delete/{activity_id}")
 @limiter.limit("3/minute")
-async def bulk_delete_assets(request: Request, activity_id: str):
+async def bulk_delete_assets(request: Request, activity_id: str, _user: dict = Depends(require_user)):
     """Delete all assets for a specific activity"""
     activity = await db.inventory_activities.find_one({"id": activity_id})
     if not activity:

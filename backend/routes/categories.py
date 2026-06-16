@@ -5,7 +5,8 @@ import logging
 import asyncio
 import csv as csv_module
 from typing import List
-from fastapi import APIRouter, HTTPException, UploadFile, File, Request
+from fastapi import APIRouter, HTTPException, UploadFile, File, Request, Depends
+from auth_utils import require_user
 
 from db import db
 from models import CategoryCreate
@@ -93,7 +94,7 @@ async def delete_all_categories():
 
 @categories_router.post("/categories/import-bulk")
 @limiter.limit("3/minute")
-async def import_categories_bulk(request: Request, file: UploadFile = File(...)):
+async def import_categories_bulk(request: Request, file: UploadFile = File(...), _user: dict = Depends(require_user)):
     """Bulk import categories from Excel/CSV with progress tracking. Returns job_id for progress polling."""
     filename = file.filename.lower()
     if not (filename.endswith('.csv') or filename.endswith('.xlsx') or filename.endswith('.xls')):
@@ -250,7 +251,7 @@ async def get_import_progress(job_id: str):
     return import_progress[job_id]
 
 @categories_router.post("/categories/import")
-async def import_categories(categories: List[CategoryCreate]):
+async def import_categories(categories: List[CategoryCreate], _user: dict = Depends(require_user)):
     """Legacy bulk import categories from JSON"""
     imported = 0
     for cat in categories:

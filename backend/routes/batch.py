@@ -9,11 +9,12 @@ import base64
 import logging
 from datetime import datetime, timezone, timedelta
 from typing import List
-from fastapi import APIRouter, HTTPException, Request, Header
+from fastapi import APIRouter, HTTPException, Request, Header, Depends
 from pydantic import BaseModel
 from pymongo import UpdateOne, ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
+from auth_utils import require_user
 from db import db
 from shared_utils import (
     invalidate_asset_cache, log_audit,
@@ -150,7 +151,7 @@ BATCH_ALLOWED_FIELDS = {
 BATCH_SPECIAL_FIELDS = {"batch_photo", "document_checklist_items"}
 
 @batch_router.put("/assets/batch-update")
-async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user_id: str = Header(None), x_user_name: str = Header(None), x_session_id: str = Header(None)):
+async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user_id: str = Header(None), x_user_name: str = Header(None), x_session_id: str = Header(None), _user: dict = Depends(require_user)):
     """Batch update multiple assets with the same field values."""
     if not data.asset_ids:
         raise HTTPException(status_code=400, detail="Tidak ada aset yang dipilih")

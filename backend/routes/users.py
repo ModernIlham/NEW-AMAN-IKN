@@ -1,11 +1,11 @@
 """User management routes (admin functions)."""
 import logging
 from datetime import datetime, timezone
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 
 from db import db
 from models import UserUpdate
-from auth_utils import hash_password
+from auth_utils import hash_password, require_admin
 
 logger = logging.getLogger(__name__)
 users_router = APIRouter()
@@ -40,7 +40,7 @@ async def get_all_users(admin_id: str = ""):
     return users
 
 @users_router.put("/users/{user_id}/toggle-active")
-async def toggle_user_active(user_id: str, admin_id: str = ""):
+async def toggle_user_active(user_id: str, admin_id: str = "", _admin: dict = Depends(require_admin)):
     """Toggle user active status (admin only, cannot toggle self)"""
     if admin_id:
         if admin_id == user_id:
@@ -58,7 +58,7 @@ async def toggle_user_active(user_id: str, admin_id: str = ""):
     return {"message": f"User {'dinonaktifkan' if current_active else 'diaktifkan'}", "is_active": not current_active}
 
 @users_router.put("/users/{user_id}/change-password")
-async def change_user_password(user_id: str, data: dict):
+async def change_user_password(user_id: str, data: dict, _admin: dict = Depends(require_admin)):
     """Change user password"""
     new_password = data.get("new_password", "")
     if not new_password or len(new_password) < 4:
@@ -73,7 +73,7 @@ async def change_user_password(user_id: str, data: dict):
     return {"message": "Password berhasil diubah"}
 
 @users_router.put("/users/{user_id}/update-name")
-async def update_user_name(user_id: str, data: UserUpdate, admin_id: str = ""):
+async def update_user_name(user_id: str, data: UserUpdate, admin_id: str = "", _admin: dict = Depends(require_admin)):
     """Update user name (admin only, or self)"""
     user = await db.users.find_one({"id": user_id})
     if not user:
@@ -87,7 +87,7 @@ async def update_user_name(user_id: str, data: UserUpdate, admin_id: str = ""):
     return {"message": "Nama berhasil diubah", "name": new_name}
 
 @users_router.delete("/users/{user_id}")
-async def delete_user(user_id: str, admin_id: str = ""):
+async def delete_user(user_id: str, admin_id: str = "", _admin: dict = Depends(require_admin)):
     """Delete a user (admin only, cannot delete self)"""
     if admin_id:
         if admin_id == user_id:
@@ -104,7 +104,7 @@ async def delete_user(user_id: str, admin_id: str = ""):
     return {"message": "User berhasil dihapus"}
 
 @users_router.put("/users/{user_id}/change-role")
-async def change_user_role(user_id: str, data: dict):
+async def change_user_role(user_id: str, data: dict, _admin: dict = Depends(require_admin)):
     """Change user role (admin only)"""
     admin_id = data.get("admin_id", "")
     new_role = data.get("new_role") or data.get("role", "user")
