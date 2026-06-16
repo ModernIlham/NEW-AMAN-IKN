@@ -24,13 +24,17 @@ const VirtualizedMobileCards = memo(({
 }) => {
   const observerRef = useRef(null);
   const loadMoreRef = useRef(null);
-  
-  // Intersection Observer for infinite scroll
+  // Own scroll container (mirrors AssetGalleryView) so "Barang Serupa" and the
+  // panels above settle at the top when scrolling down, instead of the whole
+  // list scrolling away with the page.
+  const scrollRef = useRef(null);
+
+  // Intersection Observer for infinite scroll — rooted on our scroll container
   useEffect(() => {
     if (!onLoadMore) return;
-    
+
     const options = {
-      root: null,
+      root: scrollRef.current,
       rootMargin: '100px',
       threshold: 0.1
     };
@@ -54,7 +58,12 @@ const VirtualizedMobileCards = memo(({
   }, [onLoadMore, hasMore, isLoadingMore]);
 
   return (
-    <div className="space-y-0">
+    <div
+      ref={scrollRef}
+      className="overflow-y-auto overflow-x-hidden h-[calc(100dvh-140px)] sm:h-[calc(100dvh-280px)]"
+      style={{ contain: "layout style" }}
+    >
+      <div className="space-y-0">
       {/* Asset Cards */}
       {assets.map((asset) => {
         const lock = rowLocks[asset.id];
@@ -96,6 +105,7 @@ const VirtualizedMobileCards = memo(({
             </span>
           </div>
         )}
+      </div>
       </div>
     </div>
   );
