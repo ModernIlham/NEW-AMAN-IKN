@@ -79,7 +79,7 @@ const Lightbox = memo(({ asset, onClose, onEdit }) => {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] bg-black/92 backdrop-blur-md flex flex-col items-center justify-center"
+      className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex flex-col items-center justify-center"
       onClick={onClose}
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
@@ -127,7 +127,7 @@ const Lightbox = memo(({ asset, onClose, onEdit }) => {
 
       {/* Info panel */}
       <div className="w-full max-w-4xl px-4 pb-4 pt-2" onClick={(e) => e.stopPropagation()}>
-        <div className="bg-white/8 backdrop-blur-lg rounded-xl p-3 border border-white/10">
+        <div className="bg-white/10 backdrop-blur-lg rounded-xl p-3 border border-white/10">
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0 space-y-1.5">
               <h3 className="text-white font-semibold text-sm truncate">{a.name || "Tanpa Nama"}</h3>
