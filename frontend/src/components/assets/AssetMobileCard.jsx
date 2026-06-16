@@ -69,7 +69,7 @@ const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, lockedBy, syncS
   const spmData = formatSPM(asset.nomor_spm);
   
   return (
-    <div className="relative overflow-hidden rounded-lg mb-1.5">
+    <div className="relative overflow-hidden">
       {/* Left action - SPM Info (swipe right to reveal) */}
       <div 
         className="absolute inset-y-0 left-0 w-24 flex items-center justify-center"
