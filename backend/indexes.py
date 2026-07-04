@@ -40,6 +40,9 @@ async def create_indexes() -> None:
         await db.assets.create_index([("category", 1), ("asset_name", 1)])
         await db.assets.create_index([("activity_id", 1), ("created_at", -1)])
         await db.assets.create_index([("activity_id", 1), ("category", 1), ("created_at", -1)])
+        # Offline snapshot delta sync: /assets/offline-snapshot filters by
+        # activity_id + updated_at > since
+        await db.assets.create_index([("activity_id", 1), ("updated_at", -1)])
         try:
             await db.assets.create_index([
                 ("asset_name", "text"), ("asset_code", "text"),

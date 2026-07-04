@@ -1,0 +1,271 @@
+/**
+ * Offline read-cache (snapshot) for the asset list — inventory mode.
+ *
+ * The write path already survives offline via useOptimisticQueue (IndexedDB
+ * save queue + auto-flush on reconnect). This module adds the READ path: a
+ * per-activity snapshot of the *list projection* (NO photos, NO full
+ * document_checklist — verified server-side by GET /assets/offline-snapshot
+ * which projects with the same LIST_PROJECTION as GET /assets) so the
+ * dashboard list still loads with zero connectivity.
+ *
+ * Security policy:
+ * - Snapshot is scoped by userId + activityId (meta store); a login by a
+ *   DIFFERENT user must call ensureSnapshotOwner() → clearAllSnapshots().
+ * - TTL 7 days: an older snapshot is never served (treated as absent).
+ * - Manual logout clears everything (clearAllSnapshots from App.js);
+ *   auto-401/idle logout does NOT — field data protection.
+ */
+import { openDB } from "idb";
+import axios from "axios";
+
+const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+
+const DB_NAME = "aman_offline_snapshot";
+const DB_VERSION = 1;
+const ASSET_STORE = "assets"; // keyed by asset id, indexed by activity_id
+const META_STORE = "meta";    // keyed by activityId → {activityId, userId, lastSync, count}
+
+const PAGE_LIMIT = 1000;
+// Refuse to serve a snapshot older than this — stale field data is worse
+// than an explicit "reconnect to resync" message.
+export const SNAPSHOT_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 hari
+
+// Fields we allow into the snapshot store — mirrors the backend
+// LIST_PROJECTION. Anything else (full photos, document_checklist, photo
+// blobs from optimistic payloads) is stripped before writing.
+const SNAPSHOT_FIELDS = [
+  "id", "asset_code", "NUP", "asset_name", "category", "brand", "model",
+  "kode_register", "serial_number", "purchase_date", "purchase_price",
+  "location", "eselon1", "eselon2", "user", "condition", "status",
+  "nomor_spm", "perolehan_dari_nama", "nomor_kontrak", "nomor_bukti_perolehan",
+  "supplier", "notes", "thumbnail", "thumbnail_index", "gallery_thumbnail",
+  "created_at", "updated_at", "activity_id", "version",
+  "stiker_status", "stiker_ukuran", "stiker_photo_index",
+  "inventory_status", "klasifikasi_tidak_ditemukan", "sub_klasifikasi",
+  "uraian_tidak_ditemukan", "tindak_lanjut",
+  "koordinat_latitude", "koordinat_longitude", "kronologis",
+  "photo_count", "doc_total", "doc_checked", "doc_summary",
+];
+
+function getDB() {
+  return openDB(DB_NAME, DB_VERSION, {
+    upgrade(db) {
+      if (!db.objectStoreNames.contains(ASSET_STORE)) {
+        const store = db.createObjectStore(ASSET_STORE, { keyPath: "id" });
+        store.createIndex("by-activity", "activity_id", { unique: false });
+      }
+      if (!db.objectStoreNames.contains(META_STORE)) {
+        db.createObjectStore(META_STORE, { keyPath: "activityId" });
+      }
+    },
+  });
+}
+
+// Ask the browser to protect our IndexedDB from storage-pressure eviction.
+// Request at most once per session — repeated calls can re-prompt on some
+// browsers.
+let persistRequested = false;
+async function requestPersistentStorage() {
+  if (persistRequested) return;
+  persistRequested = true;
+  try {
+    if (navigator.storage?.persist) await navigator.storage.persist();
+  } catch {
+    // Best-effort — snapshot still works, just evictable under pressure.
+  }
+}
+
+// Keep only list-projection fields (never photos / full checklist).
+function toSnapshotRow(row) {
+  const clean = {};
+  for (const f of SNAPSHOT_FIELDS) {
+    if (row[f] !== undefined) clean[f] = row[f];
+  }
+  return clean;
+}
+
+function isExpired(meta) {
+  if (!meta?.lastSync) return true;
+  const age = Date.now() - new Date(meta.lastSync).getTime();
+  return !Number.isFinite(age) || age > SNAPSHOT_TTL_MS;
+}
+
+/** Raw meta record for an activity ({activityId, userId, lastSync, count}) or null. */
+export async function snapshotMeta(activityId) {
+  if (!activityId) return null;
+  try {
+    return (await (await getDB()).get(META_STORE, activityId)) || null;
+  } catch {
+    return null;
+  }
+}
+
+/** True when a snapshot exists but is past its 7-day TTL. */
+export function isSnapshotExpired(meta) {
+  return !!meta && isExpired(meta);
+}
+
+/**
+ * Sync the snapshot for one activity. Delta when possible (since=lastSync),
+ * full otherwise. onProgress({loaded, total, pct}) fires per page.
+ * Returns {count, lastSync}.
+ */
+export async function syncSnapshot(activityId, userId, onProgress, { forceFull = false } = {}) {
+  if (!activityId || !userId) throw new Error("activityId dan userId wajib diisi");
+  await requestPersistentStorage();
+
+  const db = await getDB();
+  const meta = await db.get(META_STORE, activityId);
+  // Delta only when the snapshot belongs to this user and is still fresh —
+  // otherwise resync from scratch (also the different-user defense in depth;
+  // the primary guard is ensureSnapshotOwner on login).
+  const canDelta = !forceFull && !!meta && meta.userId === userId && !isExpired(meta);
+  const since = canDelta ? meta.lastSync : "";
+  const fullSync = !since;
+
+  let lastSyncCursor = null; // server_time of the FIRST page = next delta cursor
+  const fetchedIds = fullSync ? new Set() : null;
+  let skip = 0;
+  let total = 0;
+  let loaded = 0;
+
+  for (;;) {
+    const params = new URLSearchParams({ activity_id: activityId, skip: String(skip), limit: String(PAGE_LIMIT) });
+    if (since) params.append("since", since);
+    const r = await axios.get(`${API}/assets/offline-snapshot?${params.toString()}`);
+    const { items = [], deleted_ids: deletedIds = [], requires_full_refresh: needsFull } = r.data || {};
+    total = r.data?.total ?? total;
+    if (lastSyncCursor === null) lastSyncCursor = r.data?.server_time || new Date().toISOString();
+
+    // A bulk delete happened since our cursor — tombstones don't carry ids
+    // for it, so restart as a full sync (reconciles all deletes).
+    if (needsFull && !fullSync) {
+      return syncSnapshot(activityId, userId, onProgress, { forceFull: true });
+    }
+
+    // Apply tombstones (first delta page only carries them)
+    if (deletedIds.length) {
+      const tx = db.transaction(ASSET_STORE, "readwrite");
+      for (const id of deletedIds) tx.store.delete(id);
+      await tx.done;
+    }
+
+    if (items.length) {
+      const tx = db.transaction(ASSET_STORE, "readwrite");
+      for (const item of items) {
+        const row = toSnapshotRow(item);
+        if (row.id && row.activity_id === activityId) {
+          tx.store.put(row);
+          fetchedIds?.add(row.id);
+        }
+      }
+      await tx.done;
+      loaded += items.length;
+    }
+
+    onProgress?.({ loaded, total, pct: total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : 100 });
+
+    if (items.length < PAGE_LIMIT) break;
+    skip += PAGE_LIMIT;
+  }
+
+  // Full sync: reconcile deletes — drop rows of this activity the server no
+  // longer returned (no tombstone log needed for this path).
+  if (fullSync && fetchedIds) {
+    const existing = await db.getAllKeysFromIndex(ASSET_STORE, "by-activity", activityId);
+    const stale = existing.filter((id) => !fetchedIds.has(id));
+    if (stale.length) {
+      const tx = db.transaction(ASSET_STORE, "readwrite");
+      for (const id of stale) tx.store.delete(id);
+      await tx.done;
+    }
+  }
+
+  const count = (await db.getAllKeysFromIndex(ASSET_STORE, "by-activity", activityId)).length;
+  const newMeta = { activityId, userId, lastSync: lastSyncCursor, count };
+  await db.put(META_STORE, newMeta);
+  return { count, lastSync: lastSyncCursor };
+}
+
+/**
+ * All snapshot rows for an activity, sorted created_at desc.
+ * Returns null when no servable snapshot exists (absent OR past the 7-day
+ * TTL — check isSnapshotExpired(await snapshotMeta(id)) to tell them apart).
+ */
+export async function getSnapshotAssets(activityId) {
+  if (!activityId) return null;
+  try {
+    const db = await getDB();
+    const meta = await db.get(META_STORE, activityId);
+    if (!meta || isExpired(meta)) return null; // TTL: expired = absent
+    const rows = await db.getAllFromIndex(ASSET_STORE, "by-activity", activityId);
+    rows.sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")));
+    return rows;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Upsert one (optimistically edited) row so an offline reload shows the
+ * change. No-ops unless a snapshot already exists for the activity, and
+ * always strips non-projection fields (photos etc.) before writing.
+ */
+export async function upsertSnapshotAsset(activityId, row) {
+  if (!activityId || !row?.id) return;
+  try {
+    const db = await getDB();
+    const meta = await db.get(META_STORE, activityId);
+    if (!meta) return; // no snapshot for this activity — nothing to keep fresh
+    const clean = toSnapshotRow({ ...row, activity_id: activityId });
+    await db.put(ASSET_STORE, clean);
+  } catch {
+    // Best-effort cache maintenance — the queue still holds the real change.
+  }
+}
+
+/** Remove one activity's snapshot (rows + meta). */
+export async function clearSnapshot(activityId) {
+  if (!activityId) return;
+  try {
+    const db = await getDB();
+    const keys = await db.getAllKeysFromIndex(ASSET_STORE, "by-activity", activityId);
+    const tx = db.transaction([ASSET_STORE, META_STORE], "readwrite");
+    for (const id of keys) tx.objectStore(ASSET_STORE).delete(id);
+    tx.objectStore(META_STORE).delete(activityId);
+    await tx.done;
+  } catch {
+    // ignore — worst case the TTL retires it
+  }
+}
+
+/** Wipe every snapshot (all activities). Used on manual logout / user switch. */
+export async function clearAllSnapshots() {
+  try {
+    const db = await getDB();
+    const tx = db.transaction([ASSET_STORE, META_STORE], "readwrite");
+    tx.objectStore(ASSET_STORE).clear();
+    tx.objectStore(META_STORE).clear();
+    await tx.done;
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Login guard: if any stored snapshot belongs to a DIFFERENT user, wipe all
+ * snapshots first — cached asset data must never leak across accounts on a
+ * shared device. Same-user re-login keeps the cache (field data protection).
+ */
+export async function ensureSnapshotOwner(userId) {
+  if (!userId) return;
+  try {
+    const db = await getDB();
+    const metas = await db.getAll(META_STORE);
+    if (metas.some((m) => m?.userId && m.userId !== userId)) {
+      await clearAllSnapshots();
+    }
+  } catch {
+    // ignore
+  }
+}

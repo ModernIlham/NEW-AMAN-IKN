@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import axios from "axios";
 import { getApiError } from "@/lib/utils";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
+import { syncSnapshot, getSnapshotAssets, snapshotMeta, isSnapshotExpired, upsertSnapshotAsset } from "@/lib/offlineSnapshot";
 
 // Import refactored components
 import {
@@ -49,6 +50,66 @@ import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useDragDropImport } from "@/hooks/useDragDropImport";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+
+// ============================================================================
+// OFFLINE READ PATH — client-side filter/sort over the local snapshot.
+// Mirrors the server behavior of GET /assets (routes/assets.py) as closely
+// as feasible so switching between live and cached data feels identical.
+// ============================================================================
+// Same fields the server-side multi-field search covers
+const SNAPSHOT_SEARCH_FIELDS = [
+  "asset_code", "asset_name", "serial_number", "location", "brand", "model",
+  "category", "eselon1", "eselon2", "user", "supplier", "condition", "status",
+  "nomor_spm", "kode_register", "notes",
+];
+
+function filterSnapshotRows(rows, { search, category, filters }) {
+  let out = rows;
+  if (search) {
+    const q = search.toLowerCase();
+    out = out.filter(r => SNAPSHOT_SEARCH_FIELDS.some(f => String(r[f] ?? "").toLowerCase().includes(q)));
+  }
+  if (category && category !== "Semua") out = out.filter(r => r.category === category);
+  if (filters) {
+    const eq = (field, val) => { if (val) out = out.filter(r => String(r[field] ?? "") === val); };
+    const sub = (field, val) => { if (val) { const v = val.toLowerCase(); out = out.filter(r => String(r[field] ?? "").toLowerCase().includes(v)); } };
+    eq("condition", filters.condition);
+    eq("status", filters.status);
+    sub("location", filters.location);
+    sub("eselon1", filters.eselon1);
+    sub("eselon2", filters.eselon2);
+    eq("stiker_status", filters.stiker);
+    eq("inventory_status", filters.inventoryStatus);
+    sub("nomor_spm", filters.nomorSpm);
+    sub("supplier", filters.perolehanDari);
+    const pMin = parseFloat(filters.priceMin);
+    const pMax = parseFloat(filters.priceMax);
+    if (!Number.isNaN(pMin)) out = out.filter(r => (Number(r.purchase_price) || 0) >= pMin);
+    if (!Number.isNaN(pMax)) out = out.filter(r => (Number(r.purchase_price) || 0) <= pMax);
+  }
+  return out;
+}
+
+function sortSnapshotRows(rows, sortBy) {
+  const s = (v) => String(v ?? "");
+  const n = (v) => Number(v) || 0;
+  const cmp = {
+    newest: (a, b) => s(b.created_at).localeCompare(s(a.created_at)),
+    oldest: (a, b) => s(a.created_at).localeCompare(s(b.created_at)),
+    name_asc: (a, b) => s(a.asset_name).localeCompare(s(b.asset_name)),
+    name_desc: (a, b) => s(b.asset_name).localeCompare(s(a.asset_name)),
+    price_asc: (a, b) => n(a.purchase_price) - n(b.purchase_price),
+    price_desc: (a, b) => n(b.purchase_price) - n(a.purchase_price),
+    category_asc: (a, b) => s(a.category).localeCompare(s(b.category)),
+    category_desc: (a, b) => s(b.category).localeCompare(s(a.category)),
+    location_asc: (a, b) => s(a.location).localeCompare(s(b.location)),
+    eselon1_asc: (a, b) => s(a.eselon1).localeCompare(s(b.eselon1)),
+    condition_asc: (a, b) => s(a.condition).localeCompare(s(b.condition)),
+    status_asc: (a, b) => s(a.status).localeCompare(s(b.status)),
+  }[sortBy];
+  // Rows arrive already newest-first from getSnapshotAssets
+  return cmp ? [...rows].sort(cmp) : rows;
+}
 
 // Lazy-loaded dialogs (loaded on demand when user opens them)
 const LazyImportDialog = lazy(() => import("@/components/assets/ImportDialog"));
@@ -182,9 +243,24 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
   });
   const { isOnline } = useOfflineSync({ onSyncComplete: onWsAssetChange });
 
+  // === OFFLINE READ CACHE (snapshot) ===
+  // snapshotState → progres sinkron di InventoryProgressBar
+  // offlineServed → banner "Mode offline — menampilkan data tersimpan"
+  const [snapshotState, setSnapshotState] = useState(null);
+  const [offlineServed, setOfflineServed] = useState(false);
+  const [offlineLastSync, setOfflineLastSync] = useState(null);
+  // Ref mirrors so plain fetch functions / stale closures read fresh values
+  const isOnlineRef = useRef(isOnline);
+  isOnlineRef.current = isOnline;
+  const offlineServedRef = useRef(false);
+  offlineServedRef.current = offlineServed;
+
   // Targeted row update after save (no full refresh while editing!)
   const handleRowSynced = useCallback((assetKey, serverData, isEdit) => {
     if (!serverData) return;
+    // Keep the offline snapshot fresh with the confirmed server row (no-op
+    // when no snapshot exists; heavy fields are stripped before writing).
+    if (serverData.activity_id) upsertSnapshotAsset(serverData.activity_id, serverData);
     if (isEdit) {
       // Update the specific row in the local list with server data
       setAssets(prev => prev.map(a => a.id === assetKey ? { ...a, ...serverData } : a));
@@ -362,7 +438,59 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
   }, []);
 
   // === DATA FETCHING ===
+  // OFFLINE READ PATH: serve the list from the local snapshot (filter/sort/
+  // paginate client-side). Returns true when data was served. TTL >7 hari
+  // diperlakukan seperti tidak ada snapshot (pesan kedaluwarsa).
+  const serveFromSnapshot = async (page, size, search, category, sort, appendMobile = false) => {
+    if (!activity?.id) return false;
+    try {
+      const rows = await getSnapshotAssets(activity.id);
+      if (!rows) {
+        const meta = await snapshotMeta(activity.id);
+        if (isSnapshotExpired(meta)) {
+          toast.error("Data offline kedaluwarsa, hubungkan internet untuk sinkron ulang", { id: "snapshot-expired", duration: 6000 });
+        }
+        return false;
+      }
+      const filtered = sortSnapshotRows(filterSnapshotRows(rows, { search, category, filters }), sort);
+      const totalFiltered = filtered.length;
+      const totalPg = Math.max(1, Math.ceil(totalFiltered / size));
+      const pg = Math.max(1, Math.min(page, totalPg));
+      const pageItems = filtered.slice((pg - 1) * size, pg * size);
+      // Unsynced offline CREATEs live only in the save queue — merge them on
+      // page 1 exactly like doFetch does after a live refetch.
+      const pendingRows = pg === 1 ? getPendingItems()
+        .filter(it => !it.isEdit && it.payload && it.payload.activity_id === activity?.id)
+        .map(it => ({ ...it.payload, id: it.tempId, thumbnail: it.payload.photo || null, created_at: it.queuedAt || new Date().toISOString() }))
+        .filter(row => !pageItems.some(a => a.id === row.id)) : [];
+      const merged = pendingRows.length ? [...pendingRows, ...pageItems] : pageItems;
+      setAssets(merged);
+      setTotalItems(totalFiltered);
+      setTotalPages(totalPg);
+      setCurrentPage(pg);
+      if (appendMobile && pg > 1) {
+        setMobileAssets(prev => [...prev, ...pageItems]);
+        setMobileCurrentPage(pg);
+      } else {
+        setMobileAssets(merged);
+        setMobileCurrentPage(pg);
+      }
+      const meta = await snapshotMeta(activity.id);
+      setOfflineLastSync(meta?.lastSync || null);
+      setOfflineServed(true);
+      setLoadingMessage(`Mode offline — menampilkan ${merged.length} dari ${totalFiltered} aset tersimpan`);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   const doFetch = async (page, size, search, category, sort, appendMobile = false) => {
+    // Offline: don't wait for a network timeout — serve the snapshot directly.
+    if (!isOnlineRef.current) {
+      const served = await serveFromSnapshot(page, size, search, category, sort, appendMobile);
+      if (served) return;
+    }
     try {
       setLoadingMessage(`Memuat halaman ${page}...`);
       const params = new URLSearchParams();
@@ -392,14 +520,24 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
         setMobileAssets(merged);
         setMobileCurrentPage(1);
       }
+      setOfflineServed(false); // live data on screen again
       setLoadingMessage(`Berhasil memuat ${newItems.length} dari ${r.data.total || 0} aset`);
-    } catch { toast.error("Gagal memuat data"); }
+    } catch {
+      // Network failed (offline / server unreachable) → fall back to snapshot
+      const served = await serveFromSnapshot(page, size, search, category, sort, appendMobile);
+      if (!served) toast.error("Gagal memuat data");
+    }
   };
 
   const loadMoreMobile = async () => {
     if (mobileLoading || mobileCurrentPage >= totalPages) return;
     setMobileLoading(true);
     const nextPage = mobileCurrentPage + 1;
+    // Offline: append the next page straight from the snapshot
+    if (!isOnlineRef.current) {
+      const served = await serveFromSnapshot(nextPage, pageSize, debouncedSearch, filterCategory, sortBy, true);
+      if (served) { setMobileLoading(false); return; }
+    }
     try {
       const params = new URLSearchParams();
       if (debouncedSearch) params.append("search", debouncedSearch);
@@ -412,7 +550,10 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
       const r = await axios.get(`${API}/assets?${params.toString()}`);
       setMobileAssets(prev => [...prev, ...(r.data.items || [])]);
       setMobileCurrentPage(nextPage);
-    } catch { toast.error("Gagal memuat data lanjutan"); }
+    } catch {
+      const served = await serveFromSnapshot(nextPage, pageSize, debouncedSearch, filterCategory, sortBy, true);
+      if (!served) toast.error("Gagal memuat data lanjutan");
+    }
     finally { setMobileLoading(false); }
   };
 
@@ -448,6 +589,41 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
     }
     return work;
   };
+  const refreshDataRef = useRef(refreshData);
+  refreshDataRef.current = refreshData;
+
+  // === OFFLINE SNAPSHOT SYNC ===
+  // Runs when inventory mode turns ON, and again on every 'online' recovery
+  // while inventory mode is active (isOnline false→true re-runs the effect).
+  // Background + non-blocking; progress shows in InventoryProgressBar.
+  useEffect(() => {
+    if (!inventoryMode || !isOnline || !activity?.id || !user?.id) return;
+    let cancelled = false;
+    setSnapshotState({ phase: "syncing", pct: 0 });
+    syncSnapshot(activity.id, user.id, (p) => {
+      if (!cancelled) setSnapshotState({ phase: "syncing", pct: p.pct });
+    })
+      .then(({ count, lastSync }) => {
+        if (cancelled) return;
+        setSnapshotState({ phase: "ready", count, lastSync });
+        setOfflineLastSync(lastSync);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setSnapshotState({ phase: "error" });
+        if (process.env.NODE_ENV !== "production") {
+          console.warn("[dashboard] Snapshot sync failed:", e?.message);
+        }
+      });
+    return () => { cancelled = true; };
+  }, [inventoryMode, isOnline, activity?.id, user?.id]);
+
+  // On reconnect while the list is showing snapshot data: the save queue
+  // already auto-flushes (useOptimisticQueue) and the effect above runs the
+  // delta sync — here we swap the visible list back to live server data.
+  useEffect(() => {
+    if (isOnline && offlineServedRef.current) refreshDataRef.current?.();
+  }, [isOnline]);
 
   // Initial data fetch
   useEffect(() => {
@@ -557,6 +733,13 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
     if (isEdit && editId) {
       setAssets(prev => prev.map(a => a.id === editId ? { ...a, ...payload, thumbnail: payload.photo || a.thumbnail } : a));
       setMobileAssets(prev => prev.map(a => a.id === editId ? { ...a, ...payload, thumbnail: payload.photo || a.thumbnail } : a));
+      // Offline: mirror the optimistic edit into the read snapshot so a
+      // reload (served from snapshot) still shows it. Heavy fields (photo,
+      // checklist) are stripped by the lib; the queue holds the real payload.
+      if (!isOnlineRef.current && activity?.id) {
+        const cached = assetsStateRef.current.find(a => a.id === editId);
+        upsertSnapshotAsset(activity.id, { ...(cached || {}), ...payload, id: editId });
+      }
       // Row stays locked until save completes (unlocked by onItemSaved callback)
     } else {
       const tempAsset = { ...payload, id: assetId, thumbnail: payload.photo || null, created_at: new Date().toISOString() };
@@ -572,7 +755,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
       // removed only via dismissSync → onItemDismissed.
     });
     toast.info(isEdit ? "Menyimpan perubahan..." : "Menambahkan aset...", { duration: 1500 });
-  }, [enqueueOptimistic, assets]);
+  }, [enqueueOptimistic, assets, activity?.id]);
 
   // Save current asset in background + navigate to next/prev row
   const handleSaveAndNavigate = useCallback(async (payload, isEdit, editId, direction, usePatch = false) => {
@@ -582,6 +765,12 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
     if (isEdit && editId) {
       setAssets(prev => prev.map(a => a.id === editId ? { ...a, ...payload, thumbnail: payload.photo || a.thumbnail } : a));
       setMobileAssets(prev => prev.map(a => a.id === editId ? { ...a, ...payload, thumbnail: payload.photo || a.thumbnail } : a));
+      // Offline: mirror the optimistic edit into the read snapshot (see
+      // handleOptimisticSubmit for rationale).
+      if (!isOnlineRef.current && activity?.id) {
+        const cached = assetsStateRef.current.find(a => a.id === editId);
+        upsertSnapshotAsset(activity.id, { ...(cached || {}), ...payload, id: editId });
+      }
     } else {
       const tempAsset = { ...payload, id: assetId, thumbnail: payload.photo || null, created_at: new Date().toISOString() };
       setAssets(prev => [tempAsset, ...prev]);
@@ -620,7 +809,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
       setEditAssetForForm(null);
       setIsSidebarOpen(false);
     }
-  }, [assets, lockAsset, enqueueOptimistic, rowLocks, sessionId]);
+  }, [assets, lockAsset, enqueueOptimistic, rowLocks, sessionId, activity?.id]);
 
   const handleDelete = useCallback(async id => {
     if (!window.confirm("Hapus aset ini?")) return;
@@ -798,7 +987,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
           </div>
 
           <div className="p-3 sm:p-4 space-y-3">
-            <StatsBar stats={stats} inventoryMode={inventoryMode} setInventoryMode={setInventoryMode} isOnline={isOnline} pendingCount={pendingCount} />
+            <StatsBar stats={stats} inventoryMode={inventoryMode} setInventoryMode={setInventoryMode} isOnline={isOnline} pendingCount={pendingCount} snapshotServed={offlineServed} snapshotLastSync={offlineLastSync} />
             {inventoryMode && (
               <InventoryProgressBar
                 activityId={activity?.id}
@@ -807,6 +996,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
                 isOnline={isOnline} pendingCount={pendingCount}
                 rowLocks={rowLocks} sessionId={sessionId}
                 refreshKey={progressRefreshKey}
+                snapshotState={snapshotState}
               />
             )}
             <DashboardToolbar
@@ -909,18 +1099,38 @@ export default function DashboardPage({ user, onLogout, dark, toggleDark, onShow
     const storedId = localStorage.getItem('currentActivityId');
     if (storedId) {
       axios.get(`${API}/inventory-activities/${storedId}`)
-        .then(r => setSelectedActivity(r.data))
-        .catch(() => localStorage.removeItem('currentActivityId'));
+        .then(r => {
+          setSelectedActivity(r.data);
+          try { localStorage.setItem('currentActivity', JSON.stringify(r.data)); } catch {}
+        })
+        .catch((err) => {
+          // Offline reload (no server response): fall back to the cached
+          // activity object so the dashboard — and its offline snapshot —
+          // can still open. A real server answer (404 etc.) clears the id.
+          if (!err?.response) {
+            try {
+              const cached = localStorage.getItem('currentActivity');
+              const parsed = cached ? JSON.parse(cached) : null;
+              if (parsed?.id === storedId) { setSelectedActivity(parsed); return; }
+            } catch {}
+          }
+          localStorage.removeItem('currentActivityId');
+          localStorage.removeItem('currentActivity');
+        });
     }
   }, []);
 
   const handleSelectActivity = (activity) => {
     setSelectedActivity(activity);
-    try { localStorage.setItem('currentActivityId', activity.id); } catch {}
+    try {
+      localStorage.setItem('currentActivityId', activity.id);
+      // Cached copy lets an offline reload reopen this activity's dashboard
+      localStorage.setItem('currentActivity', JSON.stringify(activity));
+    } catch {}
   };
 
-  const handleBack = () => { setSelectedActivity(null); localStorage.removeItem('currentActivityId'); };
-  const handleLogout = () => { localStorage.removeItem('currentActivityId'); onLogout(); };
+  const handleBack = () => { setSelectedActivity(null); localStorage.removeItem('currentActivityId'); localStorage.removeItem('currentActivity'); };
+  const handleLogout = () => { localStorage.removeItem('currentActivityId'); localStorage.removeItem('currentActivity'); onLogout(); };
 
   if (!selectedActivity) return <ActivitySelectionPage user={user} onLogout={handleLogout} onSelectActivity={handleSelectActivity} />;
   return <AssetManagementPage user={user} onLogout={handleLogout} activity={selectedActivity} onBack={handleBack} dark={dark} toggleDark={toggleDark} onShowInfo={onShowInfo} />;
