@@ -48,18 +48,27 @@ const StatsBar = memo(({ stats, inventoryMode, setInventoryMode, isOnline, pendi
       </div>
     </div>
 
-    {/* Mobile Portrait (< sm): clear icon-only mode toggle (no stats clutter) */}
-    <div className="sm:hidden flex justify-end" data-testid="stats-mobile-inline">
+    {/* Mobile Portrait (< sm): full-width segmented mode switch. Matches the
+        toolbar cards below (same width/radius) so the row has no dead space —
+        the old right-floating button left a large empty gap to its left. */}
+    <div className="sm:hidden grid grid-cols-2 gap-1 p-1 rounded-xl border border-border bg-card shadow-elev-1" data-testid="stats-mobile-inline">
       <button
         type="button"
-        onClick={() => setInventoryMode(!inventoryMode)}
-        aria-pressed={inventoryMode}
-        title={inventoryMode ? 'Mode Inventarisasi - ketuk untuk Dashboard' : 'Ketuk untuk Mode Inventarisasi'}
-        data-testid="inventory-mode-toggle"
-        className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 shadow-elev-1 font-semibold text-sm transition-colors ${inventoryMode ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-card border-border text-foreground'}`}
+        onClick={() => setInventoryMode(false)}
+        aria-pressed={!inventoryMode}
+        data-testid="inventory-mode-toggle-dashboard"
+        className={`min-h-0 min-w-0 flex items-center justify-center gap-1.5 h-9 rounded-lg text-xs font-semibold transition-colors ${!inventoryMode ? 'bg-blue-600 text-white shadow-sm' : 'text-muted-foreground'}`}
       >
-        {inventoryMode ? <ClipboardCheck className="w-5 h-5" /> : <LayoutDashboard className="w-5 h-5" />}
-        <span>{inventoryMode ? 'Inventarisasi' : 'Dashboard'}</span>
+        <LayoutDashboard className="w-4 h-4 flex-shrink-0" /> Dashboard
+      </button>
+      <button
+        type="button"
+        onClick={() => setInventoryMode(true)}
+        aria-pressed={inventoryMode}
+        data-testid="inventory-mode-toggle"
+        className={`min-h-0 min-w-0 flex items-center justify-center gap-1.5 h-9 rounded-lg text-xs font-semibold transition-colors ${inventoryMode ? 'bg-emerald-600 text-white shadow-sm' : 'text-muted-foreground'}`}
+      >
+        <ClipboardCheck className="w-4 h-4 flex-shrink-0" /> Inventarisasi
       </button>
     </div>
   </div>

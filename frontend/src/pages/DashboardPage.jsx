@@ -822,7 +822,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
                   (previously inset-0 resolved against the viewport because
                   no ancestor was positioned). */}
               {pageLoading && (
-                <ListLoadingSkeleton rows={Math.min(pageSize, 12)} message={loadingMessage} />
+                <ListLoadingSkeleton rows={Math.min(pageSize, 12)} message={loadingMessage} variant={viewMode === 'gallery' ? 'gallery' : 'list'} />
               )}
 
               {selectedAssets.size > 0 && (<>
