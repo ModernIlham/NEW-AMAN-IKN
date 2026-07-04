@@ -26,7 +26,9 @@ export function useOfflineSync({ onSyncComplete }) {
 
   // Monitor online/offline status
   useEffect(() => {
-    const handleOnline = () => { setIsOnline(true); toast.success("Koneksi kembali. Menyinkronkan data..."); };
+    // Note: pending saves live in useOptimisticQueue (which auto-flushes on
+    // 'online'), so this toast only reports connectivity — no sync claim here.
+    const handleOnline = () => { setIsOnline(true); toast.success("Koneksi internet kembali pulih."); };
     const handleOffline = () => { setIsOnline(false); toast.warning("Koneksi terputus. Mode offline aktif."); };
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);

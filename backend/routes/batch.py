@@ -27,7 +27,9 @@ logger = logging.getLogger(__name__)
 batch_router = APIRouter()
 
 # --- Row Locking for Concurrent Editing (Persistent via MongoDB) ---
-LOCK_TTL_SECONDS = 300  # 5 minutes
+# 60s: the 15s frontend heartbeat tolerates 3 missed beats, and a crashed
+# client frees the row in <=1 minute (was 5 minutes).
+LOCK_TTL_SECONDS = 60
 
 class LockRequest(BaseModel):
     asset_id: str

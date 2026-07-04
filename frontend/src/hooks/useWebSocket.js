@@ -15,6 +15,9 @@ export function useWebSocket({ activityId, userId, userName, onAssetChange, onLo
   const mountedRef = useRef(true);
   const failCountRef = useRef(0);
   const openTimeRef = useRef(0);
+  const hasConnectedRef = useRef(false);
+  const connectedRef = useRef(false);
+  const lastEventRef = useRef(0);
 
   // Use refs for callbacks to avoid dependency issues
   const cbRefs = useRef({ onAssetChange, onLocksUpdate, userId });
@@ -45,8 +48,9 @@ export function useWebSocket({ activityId, userId, userName, onAssetChange, onLo
     function tryConnect() {
       if (!mountedRef.current) return;
 
-      // If 3 quick failures, WebSocket is not supported here - stop trying
-      if (failCountRef.current >= 3) {
+      // Only a truly unsupported environment (no WebSocket global) disables
+      // real-time sync. Transient failures keep retrying with capped backoff.
+      if (typeof WebSocket === "undefined") {
         console.info("WebSocket not available in this environment. Real-time sync disabled.");
         return;
       }
@@ -62,7 +66,17 @@ export function useWebSocket({ activityId, userId, userName, onAssetChange, onLo
         ws.onopen = () => {
           if (!mountedRef.current) { ws.close(); return; }
           openTimeRef.current = Date.now();
+          lastEventRef.current = Date.now();
           setConnected(true);
+          connectedRef.current = true;
+
+          // Catch-up on RE-connect (not first connect): events broadcast while
+          // we were down are lost, so refetch once. Routed through the parent's
+          // edit-guard + debounce (onWsAssetChange in DashboardPage).
+          if (hasConnectedRef.current) {
+            cbRefs.current.onAssetChange?.();
+          }
+          hasConnectedRef.current = true;
 
           if (pingTimer.current) clearInterval(pingTimer.current);
           pingTimer.current = setInterval(() => {
@@ -73,6 +87,7 @@ export function useWebSocket({ activityId, userId, userName, onAssetChange, onLo
         };
 
         ws.onmessage = (event) => {
+          lastEventRef.current = Date.now();
           try {
             const msg = JSON.parse(event.data);
             const { onAssetChange: oac, onLocksUpdate: olu, userId: uid } = cbRefs.current;
@@ -121,18 +136,15 @@ export function useWebSocket({ activityId, userId, userName, onAssetChange, onLo
         ws.onclose = () => {
           if (!mountedRef.current) return;
           setConnected(false);
+          connectedRef.current = false;
           if (pingTimer.current) { clearInterval(pingTimer.current); pingTimer.current = null; }
 
           const lived = Date.now() - (openTimeRef.current || 0);
           if (lived < STABLE_MS) {
-            // Connection died too fast - environment doesn't support WS
+            // Connection died quickly — keep retrying with exponential backoff
+            // capped at 60s (never disable permanently; outages recover).
             failCountRef.current++;
-            if (failCountRef.current >= 3) {
-              console.info("WebSocket not supported. Disabling.");
-              return;
-            }
-            // Quick backoff then retry
-            const delay = 3000 * Math.pow(2, failCountRef.current);
+            const delay = Math.min(3000 * Math.pow(2, failCountRef.current), 60000);
             reconnectTimer.current = setTimeout(tryConnect, delay);
           } else {
             // Was a stable connection - reset fail count and reconnect normally
@@ -144,13 +156,28 @@ export function useWebSocket({ activityId, userId, userName, onAssetChange, onLo
         ws.onerror = () => { /* onclose handles it */ };
       } catch {
         failCountRef.current++;
+        const delay = Math.min(3000 * Math.pow(2, failCountRef.current), 60000);
+        reconnectTimer.current = setTimeout(tryConnect, delay);
       }
     }
 
     tryConnect();
 
+    // Tab becomes visible while disconnected (or stale: no server traffic for
+    // >60s) → the user likely missed colleagues' changes; trigger the same
+    // deferred refetch path used for WS events.
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible") return;
+      if (!connectedRef.current || Date.now() - lastEventRef.current > 60000) {
+        lastEventRef.current = Date.now(); // don't refire on rapid tab flips
+        cbRefs.current.onAssetChange?.();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
     return () => {
       mountedRef.current = false;
+      document.removeEventListener("visibilitychange", onVisibility);
       doCleanup();
     };
   }, [activityId, userId, userName, doCleanup]);

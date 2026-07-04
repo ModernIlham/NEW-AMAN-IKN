@@ -89,11 +89,13 @@ export function useRowLocking({ activityId, user, wsSend }) {
       activeLocksRef.current.delete(assetId);
     }
 
-    wsSend({ type: "unlock", asset_id: assetId });
     try {
       await axios.post(`${API}/assets/unlock`, { asset_id: assetId }, {
         headers: { "x-user-id": user?.id, "x-session-id": sessionId }
       });
+      // Broadcast only AFTER the server confirmed the unlock — otherwise peers
+      // see the row as free while the lock is still held server-side.
+      wsSend({ type: "unlock", asset_id: assetId });
     } catch (e) {
       // Unlock best-effort — server TTL will auto-expire the lock anyway.
       if (process.env.NODE_ENV !== "production") {

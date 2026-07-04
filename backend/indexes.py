@@ -61,9 +61,18 @@ async def create_indexes() -> None:
         # OTP store TTL index - auto-cleanup after 10min
         await db.otp_store.create_index("email", unique=True)
         await db.otp_store.create_index("created_at", expireAfterSeconds=660)
-        # Idempotency keys TTL index - auto-cleanup after 5min
+        # Idempotency keys TTL index - auto-cleanup after 24h (offline queues can
+        # replay far beyond 5 minutes; keys must stay reserved until then)
         await db.idempotency_keys.create_index("key", unique=True)
-        await db.idempotency_keys.create_index("created_at", expireAfterSeconds=300)
+        try:
+            # Older deployments created this TTL with 300s under the auto name —
+            # drop it so the 24h TTL below can be created without option conflict
+            await db.idempotency_keys.drop_index("created_at_1")
+        except Exception:
+            pass
+        await db.idempotency_keys.create_index(
+            "created_at", expireAfterSeconds=86400, name="idem_created_at_ttl_24h"
+        )
         # Inventory activity indexes — required for fast list sort and satker filters
         # (without these the /inventory-activities and /satker-list calls do full COLLSCAN,
         # which is why the activity list page loaded slowly on deployed data).
