@@ -242,12 +242,17 @@ async def reset_all_data(data: ResetConfirmation, _admin: dict = Depends(require
     deleted_activities = await db.inventory_activities.delete_many({})
     deleted_categories = await db.categories.delete_many({})
     deleted_audit_logs = await db.audit_logs.delete_many({})
+    # Riwayat pengesahan (kartu inventarisasi) dan counter tiket ikut direset —
+    # tanpa ini kartu masih menampilkan riwayat kegiatan yang sudah dihapus.
+    deleted_history = await db.inventory_history.delete_many({})
+    await db.counters.delete_many({})
 
     logger.warning(f"SYSTEM RESET by admin {admin_user.get('username')}: "
                    f"Deleted {deleted_assets.deleted_count} assets, "
                    f"{deleted_activities.deleted_count} activities, "
                    f"{deleted_categories.deleted_count} categories, "
-                   f"{deleted_audit_logs.deleted_count} audit logs")
+                   f"{deleted_audit_logs.deleted_count} audit logs, "
+                   f"{deleted_history.deleted_count} history records")
 
     return {
         "message": "Semua data berhasil dihapus. Sistem telah direset.",
@@ -255,7 +260,8 @@ async def reset_all_data(data: ResetConfirmation, _admin: dict = Depends(require
             "assets": deleted_assets.deleted_count,
             "activities": deleted_activities.deleted_count,
             "categories": deleted_categories.deleted_count,
-            "audit_logs": deleted_audit_logs.deleted_count
+            "audit_logs": deleted_audit_logs.deleted_count,
+            "inventory_history": deleted_history.deleted_count
         }
     }
 

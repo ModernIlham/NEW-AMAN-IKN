@@ -48,6 +48,92 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#28] Lingkup satker kartu, pengguna melekat-ke + BAST, validasi & backup parity — 2026-07-04
+
+- **Kartu Inventarisasi per satker**: record `inventory_history` kini menyimpan
+  kode/nama satker; query kartu difilter satker kegiatan aktif (record lama
+  tanpa satker tetap tampil, ditandai legacy); satker tampil di header & baris.
+- **Pengguna "Melekat ke"** (Individual/Jabatan/Operasional) + nama jabatan
+  kondisional; **Nomor BAST + unggah dokumen BAST** per aset (PDF/JPG/PNG/WEBP
+  ≤10MB, GridFS, preview setelah simpan, 423 saat terkunci, tanpa bump OCC).
+  Field mengalir ke PATCH diff, list projection, snapshot offline, import,
+  audit `TRACKED_FIELDS`, dan ekspor CSV (45 kolom) + XLSX.
+- **Validasi pengesahan tambahan**: nol aset kategori dummy; semua aset wajib
+  kode register, Eselon I/II, lokasi, dan pengguna — baris merah/hijau per
+  syarat di dialog pengesahan; detail 400 teritemisasi pada `/sahkan`.
+- **Pemeriksaan sistem lintas-fitur** (celah integrasi diperbaiki): whitelist
+  snapshot offline kini membawa field pengguna/BAST (edit & tampilan offline
+  tidak kehilangan nilainya); antrian offline **tidak auto-retry** simpanan
+  yang ditolak 423 (kegiatan terkunci) — toast/pesan kunci jelas, hanya
+  retry/dismiss manual; audit log untuk unggah/hapus dokumen pengesahan;
+  label aksi "Pengesahan" + label field baru di panel audit; template import
+  CSV/XLSX ikut memuat 3 kolom pengguna/BAST (dropdown Melekat Ke); reset
+  sistem (HAPUS SEMUA) kini juga menghapus `inventory_history` + `counters`.
+- **Paritas backup & restore**: backup kini mencakup `inventory_history` dan
+  `counters` (sequence tiket — `_id` string dipertahankan); restore membangun
+  ulang counter tiket dari `ticket_number` kegiatan (anti nomor duplikat saat
+  restore backup lama) dan membangun ulang semua index; alasan skip koleksi
+  transient (row_locks, otp_store, idempotency_keys, ws_events, backup_jobs)
+  terdokumentasi. GridFS satu bucket `fs` — foto aset, dokumen kegiatan,
+  dokumen pengesahan, dan BAST otomatis tercakup `export_gridfs`.
+- **Dokumentasi**: `docs/PENGESAHAN.md` — alur tiket → pengesahan → kunci →
+  kartu inventarisasi + format QR untuk operator.
+
+## [#27] Tiket kegiatan, alur pengesahan + kunci, kartu inventarisasi, QR — 2026-07-04
+
+- **Nomor tiket kegiatan** `INV-{tahun}-{seq}` (counter atomik di koleksi
+  `counters`; backfill startup/lazy untuk kegiatan lama) — tampil di kartu
+  kegiatan & header dashboard.
+- **Pengesahan**: layak hanya bila semua aset sudah diinventarisasi & berfoto
+  (dan total > 0); admin unggah ≥1 PDF bertanda tangan (GridFS, cek `%PDF`,
+  ≤20MB) lalu `POST /sahkan` mengunci kegiatan secara atomik + menulis satu
+  record `inventory_history` per aset (tiket, kegiatan, tanggal, identitas,
+  snapshot status/kondisi/lokasi/pengguna).
+- **Kunci ditegakkan server-side**: create/PUT/PATCH/DELETE/batch-update/
+  bulk-delete/import (+ hapus kegiatan) → **423 "Kegiatan sudah disahkan dan
+  terkunci"**; frontend menampilkan banner tersegel dengan tiket dan
+  menyembunyikan edit/hapus/import/batch/FAB; antrian menampilkan 423 dengan
+  jelas pada simpanan background.
+- **Kartu Inventarisasi**: `GET /assets/kartu-inventarisasi` per
+  `kode_register` atau `asset_code`+`NUP` → riwayat lintas kegiatan; dialog
+  lazy dari header form edit & aksi baris tabel desktop.
+- **QR**: hasil scan berawalan `#` dipakai verbatim sebagai kode_register;
+  kartu cetak kini memuat QR asli berisi `#{kode_register}` (ReportLab
+  QrCodeWidget — tanpa dependensi baru, fallback placeholder).
+
+## [#26] Foto sebagai URL streaming cacheable + ruang teks baris maksimal — 2026-07-04
+
+- **Media tidak lagi base64-in-JSON**: `GET /assets/{id}/photos/{i}` mendukung
+  `?thumb=1` (thumbnail tersimpan per foto, generate on-the-fly untuk aset
+  lama); ketiga endpoint streaming media mengirim `Cache-Control: private,
+  max-age=86400` + ETag berbasis versi (304 If-None-Match).
+- **Form edit tanpa roundtrip `/media`**: strip foto dibangun dari URL
+  thumbnail per-index (`?thumb=1&v={version}`) dari `photo_count`/`version`
+  fetch ringan — tiap `<img>` lazy-load progresif & ter-cache browser
+  (`?v=` mem-bust cache setelah tiap edit); lightbox render foto pertama
+  begitu byte-nya tiba (fallback data-URI dipertahankan).
+- **UI list**: batas lebar keras (120/60/80px) kartu mobile dihapus —
+  kategori/lokasi/eselon kini flex `min-w-0` (teks penuh tampil, ellipsis
+  hanya saat benar-benar sempit); kolom Eselon/Lokasi tabel desktop xl
+  berubah dari `w-20` tetap ke `flex-1 min-w-0` proporsional.
+
+## [#25] Perbaikan offline: form edit dari cache + guard photo_ops destruktif — 2026-07-04
+
+- **Edit offline berfungsi**: form edit kini terinisialisasi dari baris cache
+  (snapshot offline) saat `GET /assets/{id}` tak terjangkau — dulu hanya toast
+  error dan form kosong tak bisa disimpan. Simpan lewat PATCH diff
+  non-destruktif dengan `If-Match` dari versi baris cache; notice amber bahwa
+  foto/checklist penuh butuh koneksi. Error server nyata (404/401) tetap
+  lewat jalur error eksplisit.
+- **Guard data-loss laten**: bila media belum termuat, menambah foto tidak
+  lagi mengirim `photo_ops keep:[]` yang menghapus semua foto lama
+  server-side (`mediaLoadedRef` + `_photoCount` mempertahankan foto existing
+  per index).
+- Offline tanpa/kadaluarsa snapshot: pesan actionable ("Aktifkan Mode
+  Inventarisasi saat online…") alih-alih "Gagal memuat data"; progress bar
+  inventarisasi menampilkan angka terakhir yang diketahui per kegiatan
+  (bukan 0/0).
+
 ## [#24] Laporan resmi: satu sistem desain rapi & profesional — 2026-07-04
 
 Kedelapan laporan resmi ReportLab (Berita Acara, SPTJM, Surat Koreksi, DBHI ×6,

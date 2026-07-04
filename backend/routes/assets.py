@@ -5,7 +5,7 @@ import logging
 import asyncio
 from collections import deque
 from datetime import datetime, timezone
-from fastapi import APIRouter, HTTPException, Request, Depends
+from fastapi import APIRouter, HTTPException, Request, Depends, UploadFile, File
 from fastapi.responses import Response
 
 from db import db, fs_bucket
@@ -18,6 +18,7 @@ from shared_utils import (
     generate_photo_thumbnail,
     get_idempotent_response, store_idempotent_response, reserve_idempotency_key,
     ensure_activity_not_sealed,
+    get_document_from_gridfs, delete_document_from_gridfs,
 )
 from routes.websocket import notify_asset_change
 
@@ -65,6 +66,8 @@ LIST_PROJECTION = {
     "category": 1, "brand": 1, "model": 1, "kode_register": 1,
     "serial_number": 1, "purchase_date": 1, "purchase_price": 1,
     "location": 1, "eselon1": 1, "eselon2": 1, "user": 1, "condition": 1,
+    "pengguna_melekat_ke": 1, "pengguna_jabatan": 1, "nomor_bast": 1,
+    "bast_file_id": 1, "bast_filename": 1,
     "status": 1, "nomor_spm": 1, "perolehan_dari_nama": 1,
     "nomor_kontrak": 1, "nomor_bukti_perolehan": 1, "supplier": 1,
     "notes": 1, "thumbnail": 1, "thumbnail_index": 1,
@@ -945,6 +948,140 @@ async def get_asset_photo_full(asset_id: str, photo_index: int, request: Request
 
     raise HTTPException(status_code=404, detail="Foto tidak ditemukan")
 
+
+# ============================================================================
+# DOKUMEN BAST (Berita Acara Serah Terima) — satu file per aset di GridFS.
+# Posture sama dengan pengesahan-dokumen (routes/pengesahan.py): upload
+# ter-gate auth (admin/user), GET publik + Cache-Control agar bisa dibuka
+# via window.open() yang tidak dapat membawa Authorization header.
+# ============================================================================
+MAX_BAST_BYTES = 10 * 1024 * 1024  # 10MB
+_BAST_MEDIA_TYPES = {
+    ".pdf": "application/pdf",
+    ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+    ".png": "image/png", ".webp": "image/webp",
+}
+
+
+def _bast_ext(filename: str) -> str:
+    name = (filename or "").lower()
+    for ext in _BAST_MEDIA_TYPES:
+        if name.endswith(ext):
+            return ext
+    return ""
+
+
+@assets_router.post("/assets/{asset_id}/bast")
+async def upload_asset_bast(
+    asset_id: str,
+    request: Request,
+    file: UploadFile = File(...),
+    user: dict = Depends(require_user),
+):
+    """Unggah dokumen BAST (PDF/gambar, maks 10MB) — menggantikan yang lama."""
+    existing = await db.assets.find_one(
+        {"id": asset_id},
+        {"_id": 0, "id": 1, "activity_id": 1, "asset_code": 1, "asset_name": 1,
+         "NUP": 1, "bast_file_id": 1},
+    )
+    if not existing:
+        raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    # Kegiatan yang sudah disahkan terkunci — sama seperti mutasi aset lain
+    await ensure_activity_not_sealed(existing.get("activity_id"))
+
+    filename = (file.filename or "bast.pdf").strip() or "bast.pdf"
+    ext = _bast_ext(filename)
+    if not ext:
+        raise HTTPException(status_code=400, detail="Dokumen BAST harus PDF atau gambar (JPG/PNG/WEBP)")
+
+    file_bytes = await file.read()
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="File kosong")
+    if len(file_bytes) > MAX_BAST_BYTES:
+        raise HTTPException(status_code=400, detail="Ukuran dokumen BAST maksimal 10MB")
+    if ext == ".pdf" and not file_bytes[:5].startswith(b"%PDF"):
+        raise HTTPException(status_code=400, detail="File bukan PDF yang valid")
+
+    # Simpan ke GridFS (pola sama dengan pengesahan-dokumen)
+    from bson import ObjectId
+    file_id = ObjectId()
+    try:
+        grid_in = fs_bucket.open_upload_stream_with_id(
+            file_id,
+            filename=filename,
+            metadata={"content_type": _BAST_MEDIA_TYPES[ext], "size": len(file_bytes),
+                      "kind": "bast", "asset_id": asset_id},
+        )
+        await grid_in.write(file_bytes)
+        await grid_in.close()
+    except Exception as e:
+        logger.error(f"GridFS store BAST gagal: {e}")
+        raise HTTPException(status_code=500, detail="Gagal menyimpan dokumen BAST")
+
+    old_file_id = existing.get("bast_file_id") or ""
+    # Sengaja TIDAK menaikkan `version` (OCC): unggah BAST terjadi saat form
+    # edit masih terbuka — bump version akan membuat PATCH berikutnya 409.
+    # Cache-busting GET memakai bast_file_id yang selalu baru per unggahan.
+    result = await db.assets.update_one(
+        {"id": asset_id},
+        {"$set": {
+            "bast_file_id": str(file_id),
+            "bast_filename": filename,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
+    )
+    if result.matched_count == 0:
+        await delete_document_from_gridfs(str(file_id))
+        raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    if old_file_id:
+        await delete_document_from_gridfs(old_file_id)
+
+    invalidate_asset_cache()
+    audit_user = request.headers.get("X-Audit-User", user.get("name") or user.get("username") or "unknown")
+    await log_audit(
+        "update", existing.get("activity_id", ""), asset_id,
+        existing.get("asset_code", ""), existing.get("asset_name", ""),
+        audit_user, detail=f"Dokumen BAST diunggah: {filename}", nup=existing.get("NUP", "") or "",
+    )
+    logger.info(f"BAST diunggah untuk aset {asset_id}: {filename}")
+    return {
+        "message": "Dokumen BAST berhasil diunggah",
+        "bast_file_id": str(file_id),
+        "bast_filename": filename,
+    }
+
+
+@assets_router.get("/assets/{asset_id}/bast")
+async def get_asset_bast(asset_id: str, request: Request):
+    """Stream dokumen BAST aset. GET publik — dikonsumsi window.open()
+    (tidak bisa membawa Authorization header), posture sama dengan endpoint
+    media lain. ETag berbasis bast_file_id (unik per unggahan) → cacheable."""
+    asset = await db.assets.find_one(
+        {"id": asset_id}, {"_id": 0, "bast_file_id": 1, "bast_filename": 1}
+    )
+    if not asset:
+        raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    file_id = asset.get("bast_file_id") or ""
+    if not file_id:
+        raise HTTPException(status_code=404, detail="Aset belum memiliki dokumen BAST")
+
+    etag = f'"bast-{file_id}"'
+    not_modified = _not_modified(request, etag)
+    if not_modified:
+        return not_modified
+
+    file_bytes = await get_document_from_gridfs(file_id)
+    if not file_bytes:
+        raise HTTPException(status_code=404, detail="File BAST tidak tersedia")
+    name = asset.get("bast_filename", "bast.pdf") or "bast.pdf"
+    media_type = _BAST_MEDIA_TYPES.get(_bast_ext(name), "application/octet-stream")
+    return Response(
+        content=file_bytes,
+        media_type=media_type,
+        headers=_media_headers(etag, {"Content-Disposition": f'inline; filename="{name}"'}),
+    )
+
+
 @assets_router.put("/assets/{asset_id}", response_model=AssetResponse)
 async def update_asset(asset_id: str, asset: AssetCreate, request: Request):
     """Update an existing asset. Supports OCC via If-Match header (expected version).
@@ -1129,6 +1266,7 @@ PATCHABLE_FIELDS = {
     "asset_code", "NUP", "asset_name", "category", "brand", "model",
     "kode_register", "serial_number", "purchase_date", "purchase_price",
     "location", "eselon1", "eselon2", "user", "condition", "status",
+    "pengguna_melekat_ke", "pengguna_jabatan", "nomor_bast",
     "nomor_spm", "perolehan_dari_nama", "nomor_kontrak",
     "nomor_bukti_perolehan", "supplier", "notes",
     "photos", "photo", "thumbnail_index", "document_checklist",

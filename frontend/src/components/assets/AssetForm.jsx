@@ -1,9 +1,9 @@
 import React, { memo, useState, useCallback, useRef, useEffect, useMemo, startTransition } from "react";
-import { 
-  Plus, Edit3, X, Camera, Trash2, Check, ChevronDown, 
+import {
+  Plus, Edit3, X, Camera, Trash2, Check, ChevronDown,
   Package, Briefcase, ShieldCheck, Settings, Tag, Save, Loader2, ClipboardList,
   Info, ChevronRight, BookOpen, Wrench, ArrowRight, HelpCircle, MapPin, LocateFixed,
-  ChevronLeft, CloudOff,
+  ChevronLeft, CloudOff, Upload, Eye, UserRound,
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -16,7 +16,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import { DocumentChecklist, DEFAULT_DOC_ITEMS } from "./DocumentChecklist";
-import InventoryFieldSheet from "./InventoryFieldSheet";
+import InventoryFieldSheet, { PENGGUNA_MELEKAT_OPTIONS, PENGGUNA_NAME_LABELS } from "./InventoryFieldSheet";
 import { toast } from "sonner";
 import axios from "axios";
 import { getApiError } from "../../lib/utils";
@@ -347,6 +347,8 @@ function buildEditFormData(a, activityId) {
     brand: a.brand || "", model: a.model || "", kode_register: a.kode_register || "",
     serial_number: a.serial_number || "", purchase_date: a.purchase_date || "", purchase_price: a.purchase_price || "",
     location: a.location || "", eselon1: a.eselon1 || "", eselon2: a.eselon2 || "", user: a.user || "",
+    pengguna_melekat_ke: a.pengguna_melekat_ke || "", pengguna_jabatan: a.pengguna_jabatan || "",
+    nomor_bast: a.nomor_bast || "",
     condition: a.condition || "Baik", status: a.status || "Aktif",
     nomor_spm: a.nomor_spm || "", perolehan_dari_nama: a.perolehan_dari_nama || "",
     nomor_kontrak: a.nomor_kontrak || "", nomor_bukti_perolehan: a.nomor_bukti_perolehan || "",
@@ -403,11 +405,19 @@ const AssetForm = memo(({
   
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
+  const bastInputRef = useRef(null);
+
+  // Dokumen BAST tersimpan di server (GridFS): {file_id, filename} — hanya
+  // bermakna pada mode edit (unggah butuh asset id).
+  const [bastInfo, setBastInfo] = useState(null);
+  const [bastUploading, setBastUploading] = useState(false);
 
   const emptyForm = useMemo(() => ({
     asset_code: "", NUP: "", asset_name: "", category: "", brand: "", model: "",
     kode_register: "", serial_number: "", purchase_date: "", purchase_price: "",
-    location: "", eselon1: "", eselon2: "", user: "", condition: "Baik", status: "Aktif",
+    location: "", eselon1: "", eselon2: "", user: "",
+    pengguna_melekat_ke: "", pengguna_jabatan: "", nomor_bast: "",
+    condition: "Baik", status: "Aktif",
     nomor_spm: "", perolehan_dari_nama: "", nomor_kontrak: "",
     nomor_bukti_perolehan: "", supplier: "", notes: "", photos: [],
     thumbnail_index: 0,
@@ -482,6 +492,8 @@ const AssetForm = memo(({
       setChecklistFullLoading(false);
       checklistFetchStartedRef.current = false;
       setPhotoItems([]);
+      setBastInfo(null);
+      setBastUploading(false);
       let cancelled = false;
       // OFFLINE FALLBACK: initialize the form from the cached list row (the
       // offline snapshot / list projection carries every text field incl.
@@ -491,6 +503,7 @@ const AssetForm = memo(({
       const initFromCacheRow = () => {
         const lightData = buildEditFormData(editAsset, activity?.id);
         setAssetVersion(Number(editAsset.version) || 1);
+        setBastInfo(editAsset.bast_file_id ? { file_id: editAsset.bast_file_id, filename: editAsset.bast_filename || "" } : null);
         setFormData(lightData);
         // Diff baseline = same cached row, so submit PATCHes only what the
         // user actually changed while offline.
@@ -508,6 +521,7 @@ const AssetForm = memo(({
           if (cancelled) return;
           const a = r.data;
           const lightData = buildEditFormData(a, activity?.id);
+          setBastInfo(a.bast_file_id ? { file_id: a.bast_file_id, filename: a.bast_filename || "" } : null);
           setFormData(lightData);
           setIsFormLoading(false);
 
@@ -576,6 +590,8 @@ const AssetForm = memo(({
       setChecklistFullLoading(false);
       checklistFetchStartedRef.current = false;
       setPhotoItems([]);
+      setBastInfo(null);
+      setBastUploading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editAsset?.id, activity?.id]);
@@ -596,6 +612,8 @@ const AssetForm = memo(({
     setChecklistFullLoading(false);
     checklistFetchStartedRef.current = false;
     setPhotoItems([]);
+    setBastInfo(null);
+    setBastUploading(false);
   }, [emptyForm]);
 
   // Auto-fill GPS coordinates from device location
@@ -765,6 +783,60 @@ const AssetForm = memo(({
     }));
   }, []);
 
+  // Pengguna "melekat ke": klik ulang pilihan yang sama = batal pilih;
+  // nama jabatan hanya relevan bila melekat ke Jabatan.
+  // Dipakai oleh form penuh DAN InventoryFieldSheet.
+  const handlePenggunaMelekatChange = useCallback(v => {
+    setFormData(p => {
+      const next = p.pengguna_melekat_ke === v ? "" : v;
+      return {
+        ...p,
+        pengguna_melekat_ke: next,
+        ...(next !== "Jabatan" ? { pengguna_jabatan: "" } : {}),
+      };
+    });
+  }, []);
+
+  // Unggah dokumen BAST (PDF/gambar, maks 10MB) — hanya mode edit (butuh id).
+  // Posture sama dengan unggah dokumen pengesahan (PengesahanDialog).
+  const handleBastUpload = useCallback(async e => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !editId) return;
+    const name = (file.name || "").toLowerCase();
+    if (!name.endsWith(".pdf") && !/\.(jpe?g|png|webp)$/.test(name)) {
+      toast.error("Dokumen BAST harus PDF atau gambar (JPG/PNG/WEBP)");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) { toast.error("Ukuran dokumen BAST maksimal 10MB"); return; }
+    setBastUploading(true);
+    try {
+      const uploadData = new FormData();
+      uploadData.append("file", file);
+      const token = localStorage.getItem("token");
+      const r = await axios.post(`${API}/assets/${editId}/bast`, uploadData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+          Authorization: `Bearer ${token}`,
+          ...getAuditHeaders(),
+        },
+        timeout: 120000,
+      });
+      setBastInfo({ file_id: r.data?.bast_file_id || "", filename: r.data?.bast_filename || file.name });
+      toast.success(`Dokumen BAST "${file.name}" berhasil diunggah`);
+    } catch (err) {
+      toast.error(getApiError(err, "Gagal mengunggah dokumen BAST"));
+    } finally {
+      setBastUploading(false);
+    }
+  }, [editId]);
+
+  const handleBastPreview = useCallback(() => {
+    if (!editId) return;
+    // bast_file_id unik per unggahan → cache-buster alami untuk GET publik
+    window.open(`${API}/assets/${editId}/bast${bastInfo?.file_id ? `?v=${bastInfo.file_id}` : ""}`, "_blank");
+  }, [editId, bastInfo?.file_id]);
+
   const openCamera = useCallback(() => cameraInputRef.current?.click(), []);
   const openGallery = useCallback(() => fileInputRef.current?.click(), []);
 
@@ -913,6 +985,16 @@ const AssetForm = memo(({
       setFormSection("basic");
       return;
     }
+
+    // Pengguna terstruktur: bila melekat ke Jabatan, nama jabatan wajib diisi.
+    // Input jabatan hanya ada di form lengkap — buka form lengkap bila save
+    // datang dari sheet mode inventarisasi lapangan.
+    if (formData.pengguna_melekat_ke === "Jabatan" && !(formData.pengguna_jabatan || "").trim()) {
+      toast.error("Nama jabatan wajib diisi bila pengguna melekat ke Jabatan");
+      setFormSection("basic");
+      setShowFullForm(true);
+      return;
+    }
     
     // Validate (server round-trip) — skip saat offline: simpan langsung masuk
     // antrean dan backend tetap memvalidasi ulang saat tersinkron.
@@ -940,6 +1022,7 @@ const AssetForm = memo(({
           "asset_code", "NUP", "asset_name", "category", "brand", "model",
           "kode_register", "serial_number", "purchase_date", "purchase_price",
           "location", "eselon1", "eselon2", "user", "condition", "status",
+          "pengguna_melekat_ke", "pengguna_jabatan", "nomor_bast",
           "nomor_spm", "perolehan_dari_nama", "nomor_kontrak",
           "nomor_bukti_perolehan", "supplier", "notes",
           "stiker_status", "stiker_ukuran",
@@ -1258,6 +1341,7 @@ const AssetForm = memo(({
               onSubKlasifikasiChange={v => handleSelectChange("sub_klasifikasi", v)}
               onStikerStatusChange={handleStikerStatusChange}
               onStikerUkuranChange={v => handleSelectChange("stiker_ukuran", v)}
+              onPenggunaMelekatChange={handlePenggunaMelekatChange}
               onOpenCamera={openCamera}
               onOpenGallery={openGallery}
               onFetchGPS={fetchGPS}
@@ -1376,8 +1460,73 @@ const AssetForm = memo(({
                   </select>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1"><Label className="text-xs">Pengguna</Label><Input name="user" value={formData.user} onChange={handleInputChange} className="h-8" /></div>
+              {/* Pengguna — melekat ke Individual/Jabatan/Operasional + BAST */}
+              <div className="p-2 bg-muted rounded-lg space-y-2" data-testid="pengguna-section">
+                <div className="flex items-center gap-1.5"><UserRound className="w-3.5 h-3.5 text-muted-foreground" /><Label className="text-xs font-medium">Pengguna</Label></div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-muted-foreground">Melekat ke</Label>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {PENGGUNA_MELEKAT_OPTIONS.map(o => (
+                      <button
+                        key={o} type="button"
+                        aria-pressed={formData.pengguna_melekat_ke === o}
+                        onClick={() => handlePenggunaMelekatChange(o)}
+                        data-testid={`pengguna-melekat-${o}`}
+                        className={`h-7 rounded-md border text-[10px] font-semibold leading-tight px-1 transition-colors ${
+                          formData.pengguna_melekat_ke === o
+                            ? "bg-blue-600 border-blue-600 text-white"
+                            : "bg-card border-border text-foreground/80 hover:bg-accent"
+                        }`}
+                      >
+                        {o}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {formData.pengguna_melekat_ke === "Jabatan" && (
+                  <div className="space-y-1">
+                    <Label className="text-xs">Nama Jabatan *</Label>
+                    <Input name="pengguna_jabatan" value={formData.pengguna_jabatan} onChange={handleInputChange} placeholder="Contoh: Kepala Subbagian Umum" className="h-8" data-testid="input-pengguna-jabatan" />
+                  </div>
+                )}
+                <div className="space-y-1">
+                  <Label className="text-xs">{PENGGUNA_NAME_LABELS[formData.pengguna_melekat_ke] || "Pengguna"}</Label>
+                  <Input name="user" value={formData.user} onChange={handleInputChange} className="h-8" data-testid="input-pengguna-nama" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Nomor BAST</Label>
+                  <div className="flex gap-1.5">
+                    <Input name="nomor_bast" value={formData.nomor_bast} onChange={handleInputChange} placeholder="Nomor BAST" className="h-8 flex-1 min-w-0" data-testid="input-nomor-bast" />
+                    {isEditing && (
+                      <Button
+                        type="button" variant="outline" size="sm"
+                        className="h-8 px-2 text-[10px] flex-shrink-0"
+                        onClick={() => bastInputRef.current?.click()}
+                        disabled={bastUploading}
+                        title="Unggah dokumen BAST (PDF/gambar, maks 10MB)"
+                        data-testid="bast-upload-btn"
+                      >
+                        {bastUploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+                        <span className="ml-1">{bastUploading ? "Unggah..." : "Upload BAST"}</span>
+                      </Button>
+                    )}
+                  </div>
+                  {isEditing && bastInfo?.file_id && (
+                    <button
+                      type="button"
+                      onClick={handleBastPreview}
+                      data-testid="bast-preview-btn"
+                      className="flex items-center gap-1 text-[11px] text-blue-600 dark:text-blue-400 hover:underline max-w-full"
+                    >
+                      <Eye className="w-3 h-3 flex-shrink-0" />
+                      <span className="truncate">Preview{bastInfo.filename ? `: ${bastInfo.filename}` : " BAST"}</span>
+                    </button>
+                  )}
+                  {!isEditing && (
+                    <p className="text-[9px] text-muted-foreground italic">Simpan aset terlebih dahulu untuk mengunggah file BAST.</p>
+                  )}
+                </div>
+                <input ref={bastInputRef} type="file" accept=".pdf,image/jpeg,image/png,image/webp" className="hidden" onChange={handleBastUpload} data-testid="bast-file-input" />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1"><Label className="text-xs">Kondisi</Label>

@@ -54,7 +54,7 @@ function getQueueDB() {
 
 // Strip non-serializable fields (resolve/reject) before storing/persisting
 function toPlainItem(item, statusKey) {
-  const { tempId, payload, isEdit, editId, usePatch, baseVersion, idempotencyKey, hadConflict, queuedAt } = item;
+  const { tempId, payload, isEdit, editId, usePatch, baseVersion, idempotencyKey, hadConflict, locked, queuedAt } = item;
   return {
     statusKey,
     tempId,
@@ -65,6 +65,9 @@ function toPlainItem(item, statusKey) {
     baseVersion: baseVersion ?? null,
     idempotencyKey: idempotencyKey ?? null,
     hadConflict: !!hadConflict,
+    // 423 Locked (kegiatan disahkan): retry otomatis tidak akan pernah
+    // berhasil — auto-flush melewati item ini; hanya retry/dismiss manual.
+    locked: !!locked,
     queuedAt: queuedAt || new Date().toISOString(),
   };
 }
@@ -268,14 +271,18 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
       // 423 Locked: kegiatan sudah disahkan — retry tidak akan pernah berhasil,
       // jadi tampilkan toast yang jelas (save berjalan di background sehingga
       // form sudah tertutup dan tidak bisa menampilkan errornya sendiri).
-      if (err?.response?.status === 423) {
+      const isLocked = err?.response?.status === 423;
+      if (isLocked) {
         toast.error(errorMsg || "Kegiatan sudah disahkan dan terkunci", { duration: 6000 });
       }
       updateStatus(statusKey, "failed", errorMsg);
 
       // Re-register + persist so retry/rehydrate always have the payload (a
       // prior success of the same statusKey may have removed the entry).
-      const stored = toPlainItem(item, statusKey);
+      // `locked` mengikuti kegagalan TERAKHIR: item 423 tidak ikut auto-flush
+      // (lihat flushPending) agar antrian offline tidak me-replay + toast
+      // berulang setiap reconnect terhadap kegiatan yang sudah terkunci.
+      const stored = toPlainItem({ ...item, locked: isLocked }, statusKey);
       failedItemsRef.current[statusKey] = stored;
       persistQueueItem(stored, statusKey);
 
@@ -363,6 +370,9 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
     flushGuardRef.current = true;
     setTimeout(() => { flushGuardRef.current = false; }, 3000);
     Object.keys(failedItemsRef.current).forEach((key) => {
+      // 423 Locked (kegiatan disahkan): jangan auto-retry — hasilnya pasti
+      // 423 lagi. Item tetap tersimpan; user memutuskan retry/dismiss manual.
+      if (failedItemsRef.current[key]?.locked) return;
       if (statusesRef.current[key]?.status === "failed") retry(key);
     });
     processNext(); // anything still queued in memory (in-flight guard: activeCountRef)
@@ -418,7 +428,12 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
       if (toRegister.length === 0) return;
       toRegister.forEach((rec) => {
         failedItemsRef.current[rec.statusKey] = rec;
-        updateStatus(rec.statusKey, "failed", "Belum tersinkron — perubahan tersimpan di perangkat ini");
+        updateStatus(
+          rec.statusKey, "failed",
+          rec.locked
+            ? "Kegiatan sudah disahkan dan terkunci — perubahan tidak dapat disimpan"
+            : "Belum tersinkron — perubahan tersimpan di perangkat ini"
+        );
       });
       onRehydrateRef.current?.(toRegister);
       if (navigator.onLine) flushRef.current?.();

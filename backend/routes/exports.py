@@ -254,7 +254,7 @@ async def export_csv(request: Request, activity_id: Optional[str] = None, base_u
                 yield f"# Eselon I: {nama_es1} | Eselon II: {', '.join(eselon2_list)}\n"
             yield "#\n"
         
-        yield "asset_code,NUP,asset_name,category,brand,model,kode_register,serial_number,purchase_date,purchase_price,location,eselon1,eselon2,user,condition,status,nomor_spm,perolehan_dari_nama,nomor_kontrak,nomor_bukti_perolehan,supplier,notes,stiker_status,stiker_ukuran,inventory_status,klasifikasi_tidak_ditemukan,sub_klasifikasi,uraian_tidak_ditemukan,tindak_lanjut,koordinat_latitude,koordinat_longitude,kronologis,keterangan_berlebih,asal_usul_berlebih,nomor_perkara,pihak_bersengketa,keterangan_sengketa,jumlah_foto,tanggal_input,kelengkapan_items,link_foto_kelengkapan,link_pdf_kelengkapan\n"
+        yield "asset_code,NUP,asset_name,category,brand,model,kode_register,serial_number,purchase_date,purchase_price,location,eselon1,eselon2,user,pengguna_melekat_ke,pengguna_jabatan,nomor_bast,condition,status,nomor_spm,perolehan_dari_nama,nomor_kontrak,nomor_bukti_perolehan,supplier,notes,stiker_status,stiker_ukuran,inventory_status,klasifikasi_tidak_ditemukan,sub_klasifikasi,uraian_tidak_ditemukan,tindak_lanjut,koordinat_latitude,koordinat_longitude,kronologis,keterangan_berlebih,asal_usul_berlebih,nomor_perkara,pihak_bersengketa,keterangan_sengketa,jumlah_foto,tanggal_input,kelengkapan_items,link_foto_kelengkapan,link_pdf_kelengkapan\n"
         
         projection = {"_id": 0, "photo": 0, "photos": 0, "thumbnail": 0, "photo_thumbnails": 0}
         cursor = db.assets.find(query, projection).batch_size(500)
@@ -278,7 +278,10 @@ async def export_csv(request: Request, activity_id: Optional[str] = None, base_u
                 asset.get('purchase_date', ''), str(asset.get('purchase_price', '')),
                 asset.get('location', ''),
                 asset.get('eselon1', ''), asset.get('eselon2', ''),
-                asset.get('user', ''), asset.get('condition', ''),
+                asset.get('user', ''),
+                asset.get('pengguna_melekat_ke', ''), asset.get('pengguna_jabatan', ''),
+                asset.get('nomor_bast', ''),
+                asset.get('condition', ''),
                 asset.get('status', ''), asset.get('nomor_spm', ''),
                 asset.get('perolehan_dari_nama', ''), asset.get('nomor_kontrak', ''),
                 asset.get('nomor_bukti_perolehan', ''), asset.get('supplier', ''),
@@ -589,27 +592,28 @@ async def export_xlsx(request: Request, activity_id: Optional[str] = None, base_
         'align': 'left', 'valign': 'vcenter', 'border': 1, 'font_color': 'blue', 'underline': 1
     })
     
-    headers = ['Foto', 'Foto Stiker', 'Kode Aset', 'NUP', 'Nama Aset', 'Kategori', 'Brand', 'Model', 
+    headers = ['Foto', 'Foto Stiker', 'Kode Aset', 'NUP', 'Nama Aset', 'Kategori', 'Brand', 'Model',
                'Kode Register', 'Serial Number', 'Tgl Beli', 'Harga', 'Lokasi', 'Eselon I', 'Eselon II',
-               'Pengguna', 'Kondisi', 'Status', 'Stiker Status', 'Ukuran Stiker',
+               'Pengguna', 'Melekat Ke', 'Jabatan Pengguna', 'Nomor BAST',
+               'Kondisi', 'Status', 'Stiker Status', 'Ukuran Stiker',
                'Nomor SPM', 'Perolehan Dari',
                'Nomor Kontrak', 'Bukti Perolehan', 'Supplier', 'Catatan',
                'Status Inventarisasi', 'Klasifikasi', 'Sub Klasifikasi', 'Uraian Tidak Ditemukan', 'Tindak Lanjut',
                'Latitude', 'Longitude', 'Kronologis',
                'Keterangan Berlebih', 'Asal Usul Berlebih', 'Nomor Perkara', 'Pihak Bersengketa', 'Keterangan Sengketa',
                'Jumlah Foto', 'Tanggal Input']
-    
+
     for col, header in enumerate(headers):
         worksheet.write(0, col, header, header_format)
-    
+
     worksheet.set_column(0, 0, 20)  # Foto
     worksheet.set_column(1, 1, 20)  # Foto Stiker
     worksheet.set_column(2, 2, 15)  # Kode Aset
     worksheet.set_column(3, 3, 8)   # NUP
     worksheet.set_column(4, 4, 25)  # Nama Aset
-    worksheet.set_column(5, 38, 14)
-    worksheet.set_column(39, 39, 12) # Jumlah Foto
-    worksheet.set_column(40, 40, 18) # Tanggal Input
+    worksheet.set_column(5, 41, 14)
+    worksheet.set_column(42, 42, 12) # Jumlah Foto
+    worksheet.set_column(43, 43, 18) # Tanggal Input
     
     # === SHEET 2: Kelengkapan Dokumen ===
     doc_sheet = workbook.add_worksheet('Kelengkapan Dokumen')
@@ -695,35 +699,38 @@ async def export_xlsx(request: Request, activity_id: Optional[str] = None, base_
         worksheet.write(row, 13, asset.get('eselon1', ''), cell_format)
         worksheet.write(row, 14, asset.get('eselon2', ''), cell_format)
         worksheet.write(row, 15, asset.get('user', ''), cell_format)
-        worksheet.write(row, 16, asset.get('condition', ''), cell_format)
-        worksheet.write(row, 17, asset.get('status', ''), cell_format)
-        worksheet.write(row, 18, asset.get('stiker_status', 'Belum Terpasang'), cell_format)
-        worksheet.write(row, 19, asset.get('stiker_ukuran', ''), cell_format)
-        worksheet.write(row, 20, asset.get('nomor_spm', ''), cell_format)
-        worksheet.write(row, 21, asset.get('perolehan_dari_nama', ''), cell_format)
-        worksheet.write(row, 22, asset.get('nomor_kontrak', ''), cell_format)
-        worksheet.write(row, 23, asset.get('nomor_bukti_perolehan', ''), cell_format)
-        worksheet.write(row, 24, asset.get('supplier', ''), cell_format)
-        worksheet.write(row, 25, asset.get('notes', ''), cell_format)
-        worksheet.write(row, 26, asset.get('inventory_status', 'Belum Diinventarisasi'), cell_format)
-        worksheet.write(row, 27, asset.get('klasifikasi_tidak_ditemukan', ''), cell_format)
-        worksheet.write(row, 28, asset.get('sub_klasifikasi', ''), cell_format)
-        worksheet.write(row, 29, asset.get('uraian_tidak_ditemukan', ''), cell_format)
-        worksheet.write(row, 30, asset.get('tindak_lanjut', ''), cell_format)
-        worksheet.write(row, 31, asset.get('koordinat_latitude', ''), cell_format)
-        worksheet.write(row, 32, asset.get('koordinat_longitude', ''), cell_format)
-        worksheet.write(row, 33, asset.get('kronologis', ''), cell_format)
-        worksheet.write(row, 34, asset.get('keterangan_berlebih', ''), cell_format)
-        worksheet.write(row, 35, asset.get('asal_usul_berlebih', ''), cell_format)
-        worksheet.write(row, 36, asset.get('nomor_perkara', ''), cell_format)
-        worksheet.write(row, 37, asset.get('pihak_bersengketa', ''), cell_format)
-        worksheet.write(row, 38, asset.get('keterangan_sengketa', ''), cell_format)
-        
+        worksheet.write(row, 16, asset.get('pengguna_melekat_ke', ''), cell_format)
+        worksheet.write(row, 17, asset.get('pengguna_jabatan', ''), cell_format)
+        worksheet.write(row, 18, asset.get('nomor_bast', ''), cell_format)
+        worksheet.write(row, 19, asset.get('condition', ''), cell_format)
+        worksheet.write(row, 20, asset.get('status', ''), cell_format)
+        worksheet.write(row, 21, asset.get('stiker_status', 'Belum Terpasang'), cell_format)
+        worksheet.write(row, 22, asset.get('stiker_ukuran', ''), cell_format)
+        worksheet.write(row, 23, asset.get('nomor_spm', ''), cell_format)
+        worksheet.write(row, 24, asset.get('perolehan_dari_nama', ''), cell_format)
+        worksheet.write(row, 25, asset.get('nomor_kontrak', ''), cell_format)
+        worksheet.write(row, 26, asset.get('nomor_bukti_perolehan', ''), cell_format)
+        worksheet.write(row, 27, asset.get('supplier', ''), cell_format)
+        worksheet.write(row, 28, asset.get('notes', ''), cell_format)
+        worksheet.write(row, 29, asset.get('inventory_status', 'Belum Diinventarisasi'), cell_format)
+        worksheet.write(row, 30, asset.get('klasifikasi_tidak_ditemukan', ''), cell_format)
+        worksheet.write(row, 31, asset.get('sub_klasifikasi', ''), cell_format)
+        worksheet.write(row, 32, asset.get('uraian_tidak_ditemukan', ''), cell_format)
+        worksheet.write(row, 33, asset.get('tindak_lanjut', ''), cell_format)
+        worksheet.write(row, 34, asset.get('koordinat_latitude', ''), cell_format)
+        worksheet.write(row, 35, asset.get('koordinat_longitude', ''), cell_format)
+        worksheet.write(row, 36, asset.get('kronologis', ''), cell_format)
+        worksheet.write(row, 37, asset.get('keterangan_berlebih', ''), cell_format)
+        worksheet.write(row, 38, asset.get('asal_usul_berlebih', ''), cell_format)
+        worksheet.write(row, 39, asset.get('nomor_perkara', ''), cell_format)
+        worksheet.write(row, 40, asset.get('pihak_bersengketa', ''), cell_format)
+        worksheet.write(row, 41, asset.get('keterangan_sengketa', ''), cell_format)
+
         # Jumlah Foto
         photo_count = len(asset.get('photo_gridfs_ids', []) or asset.get('photos', []))
-        worksheet.write(row, 39, photo_count, cell_format)
+        worksheet.write(row, 42, photo_count, cell_format)
         # Tanggal Input
-        worksheet.write(row, 40, asset.get('created_at', ''), cell_format)
+        worksheet.write(row, 43, asset.get('created_at', ''), cell_format)
         
         # Write document checklist to separate sheet - ONLY items with checked=True (✓ Ada)
         checklist = asset.get('document_checklist', [])
