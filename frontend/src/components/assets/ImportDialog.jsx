@@ -9,6 +9,7 @@ import {
 import { toast } from "sonner";
 import axios from "axios";
 import { getApiError } from "../../lib/utils";
+import { downloadFileWithProgress } from "../../lib/downloadFile";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -62,8 +63,8 @@ function ImportDialog({ open, onClose, onSuccess, activityId, preloadFile }) {
     finally { setImporting(false); }
   };
   
-  const dlCSV = async () => { try { const r = await axios.get(`${API}/templates/csv`, { responseType: 'blob' }); const u = URL.createObjectURL(new Blob([r.data])); const a = document.createElement('a'); a.href = u; a.download = 'template_import_aset.csv'; a.click(); toast.success("Template CSV didownload"); } catch { toast.error("Gagal download"); } };
-  const dlXlsx = async () => { try { const r = await axios.get(`${API}/templates/xlsx`, { responseType: 'blob' }); const u = URL.createObjectURL(new Blob([r.data])); const a = document.createElement('a'); a.href = u; a.download = 'template_import_aset.xlsx'; a.click(); toast.success("Template Excel didownload"); } catch { toast.error("Gagal download"); } };
+  const dlCSV = async () => { try { await downloadFileWithProgress(`${API}/templates/csv`, 'template_import_aset.csv', { label: "Template CSV" }); } catch { /* toast error sudah ditangani helper */ } };
+  const dlXlsx = async () => { try { await downloadFileWithProgress(`${API}/templates/xlsx`, 'template_import_aset.xlsx', { label: "Template Excel" }); } catch { /* toast error sudah ditangani helper */ } };
   
   const reset = () => { setResult(null); setImporting(false); if (fileRef.current) fileRef.current.value = ""; onClose(); };
   

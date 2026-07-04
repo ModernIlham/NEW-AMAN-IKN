@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import axios from "axios";
 import { getApiError } from "@/lib/utils";
+import { downloadFileWithProgress } from "@/lib/downloadFile";
 
 // Import refactored components
 import {
@@ -634,35 +635,18 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
     if (!activity?.id) { toast.error("Pilih kegiatan inventarisasi terlebih dahulu"); return; }
     if (totalItems === 0) { toast.error("Tidak ada data aset untuk diexport"); return; }
     setExporting(true);
-    toast.info(`Memproses export ${fmt.toUpperCase()}... Mohon tunggu.`, { duration: 5000 });
     try {
-      const r = await axios.get(`${API}/export/${fmt}?activity_id=${activity.id}&base_url=${encodeURIComponent(process.env.REACT_APP_BACKEND_URL || '')}`, { responseType: 'blob', timeout: 300000 });
-      const blob = new Blob([r.data]);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `inventory_${activity.nama_kegiatan || 'export'}.${fmt === 'xlsx' ? 'xlsx' : fmt}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
-      toast.success(`Export ${fmt.toUpperCase()} berhasil`);
-    } catch (err) {
-      console.error('Export error:', err);
-      let errorMsg = 'Gagal export';
-      try {
-        if (err.response?.data instanceof Blob) {
-          const text = await err.response.data.text();
-          const json = JSON.parse(text);
-          errorMsg = json.detail || errorMsg;
-        } else if (err.response?.data?.detail) {
-          errorMsg = err.response.data.detail;
+      await downloadFileWithProgress(
+        `${API}/export/${fmt}?activity_id=${activity.id}&base_url=${encodeURIComponent(process.env.REACT_APP_BACKEND_URL || '')}`,
+        `inventory_${activity.nama_kegiatan || 'export'}.${fmt === 'xlsx' ? 'xlsx' : fmt}`,
+        {
+          label: `Export ${fmt.toUpperCase()}`,
+          timeout: 300000,
+          timeoutMessage: 'Export timeout - data terlalu besar. Coba export dengan filter kategori.',
         }
-      } catch {}
-      if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
-        errorMsg = 'Export timeout - data terlalu besar. Coba export dengan filter kategori.';
-      }
-      toast.error(errorMsg);
+      );
+    } catch (err) {
+      console.error('Export error:', err); // toast error sudah ditangani helper
     } finally { setExporting(false); }
   }, [activity, totalItems]);
 
@@ -670,28 +654,13 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
     if (!activity?.id) { toast.error("Pilih kegiatan inventarisasi terlebih dahulu"); return; }
     setExporting(true);
     try {
-      const r = await axios.get(`${API}/inventory-activities/${activity.id}/executive-summary-pdf`, { responseType: 'blob' });
-      const blob = new Blob([r.data]);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `Laporan_Eksekutif_${activity.nama_kegiatan || 'BMN'}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
-      toast.success("Download Laporan Eksekutif berhasil");
+      await downloadFileWithProgress(
+        `${API}/inventory-activities/${activity.id}/executive-summary-pdf`,
+        `Laporan_Eksekutif_${activity.nama_kegiatan || 'BMN'}.pdf`,
+        { label: "Laporan Eksekutif" }
+      );
     } catch (err) {
-      console.error('Executive PDF export error:', err);
-      let errorMsg = 'Gagal download Laporan Eksekutif';
-      try {
-        if (err.response?.data instanceof Blob) {
-          const text = await err.response.data.text();
-          const json = JSON.parse(text);
-          errorMsg = json.detail || errorMsg;
-        }
-      } catch {}
-      toast.error(errorMsg);
+      console.error('Executive PDF export error:', err); // toast error sudah ditangani helper
     } finally { setExporting(false); }
   }, [activity]);
 

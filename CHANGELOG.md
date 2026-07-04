@@ -48,6 +48,22 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#20] Toggle kolom di laporan Barang Serupa + progres unduhan seragam — 2026-07-04
+
+- **Laporan Eksekutif per Barang Serupa kini ikut toggle kolom tambahan**
+  (SPM/Perolehan/Kontrak/BAST/Supplier/S-N): nilai unik antar anggota kelompok
+  ditampilkan ringkas di bawah Nama Barang (maks 3 + "+N lainnya"); param
+  `detail_fields` yang sama dengan laporan data aset.
+- **Progres unduhan seragam di seluruh aplikasi**: helper baru
+  `downloadFileWithProgress` (toast: "Mengunduh … 2,4 MB (47%)"; tanpa persen
+  bila server tak mengirim total; format KB/MB Indonesia) dipakai di **11 titik
+  download**: export CSV/XLSX, laporan eksekutif + data per halaman + Barang
+  Serupa, LHI/RHI/BAHI/SP/dokumen pendukung, 6 jenis DBHI, batch ZIP, laporan
+  satker, template import CSV/XLSX, dan unduhan InfoPage (PPT/DOCX).
+- Pengecualian sengaja: unduhan **backup** tetap anchor native — pendekatan
+  blob terdokumentasi gagal di produksi untuk file ratusan MB; progres sudah
+  ditampilkan UI unduhan browser.
+
 ## [#19] Lembar Inventarisasi Lapangan eksklusif (redesign) — 2026-07-04
 
 Menggantikan panel "Aksi Cepat" tempelan (#18) dengan **tampilan input lapangan

@@ -2158,13 +2158,18 @@ def _compact_nup_ranges(nups):
     return ", ".join(parts) if parts else "-"
 
 
-async def _build_executive_grouped_data(activity_id: str):
+async def _build_executive_grouped_data(activity_id: str, detail_fields=None):
     """Build data for Laporan Eksekutif per Barang Serupa (grouped assets).
 
     Group key sama dengan /api/assets/groups (batch.py) TAPI tanpa filter
     count>=2 dan tanpa limit — aset tunggal jadi kelompok sendiri sehingga
     jumlah unit seluruh kelompok = total aset kegiatan.
+
+    detail_fields: optional set of EXEC_DETAIL_FIELDS keys — per kelompok,
+    nilai DISTINCT anggota untuk field tersebut ditampilkan sebagai baris
+    tambahan di bawah Nama Barang (maks 3 nilai, sisanya "+N lainnya").
     """
+    detail_fields = detail_fields or set()
     activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
     if not activity:
         return None
@@ -2198,6 +2203,12 @@ async def _build_executive_grouped_data(activity_id: str):
                 "inventory_status": "$inventory_status",
                 "category": "$category",
                 "purchase_price": "$purchase_price",
+                "nomor_spm": "$nomor_spm",
+                "perolehan_dari_nama": "$perolehan_dari_nama",
+                "nomor_kontrak": "$nomor_kontrak",
+                "nomor_bukti_perolehan": "$nomor_bukti_perolehan",
+                "supplier": "$supplier",
+                "serial_number": "$serial_number",
             }}
         }},
         {"$sort": {"_id.asset_code": 1, "_id.asset_name": 1, "_id.purchase_date": 1}},
@@ -2269,6 +2280,24 @@ async def _build_executive_grouped_data(activity_id: str):
         year = str(key.get("purchase_date", ""))[:4] if key.get("purchase_date") else ""
         category = members[0].get("category", "") if members else ""
 
+        # Baris detail opsional (di-toggle via query param detail_fields):
+        # nilai DISTINCT antar anggota, maks 3 ditampilkan lalu "+N lainnya"
+        detail_lines = []
+        for dkey, dlabel, dfield in EXEC_DETAIL_FIELDS:
+            if dkey not in detail_fields:
+                continue
+            distinct = []
+            for m in members:
+                val = str(m.get(dfield) or "").strip()
+                if val and val not in distinct:
+                    distinct.append(val)
+            if not distinct:
+                continue
+            value = ", ".join(distinct[:3])
+            if len(distinct) > 3:
+                value += f" +{len(distinct) - 3} lainnya"
+            detail_lines.append({"label": dlabel, "value": value})
+
         rows.append({
             "asset_code": key.get("asset_code") or "-",
             "category_label": cat_map.get(category, category) or "-",
@@ -2282,6 +2311,7 @@ async def _build_executive_grouped_data(activity_id: str):
             "kondisi_summary": kondisi or "-",
             "status_summary": status or "-",
             "photo_url": photo_map.get(g.get("rep_id")),
+            "detail_lines": detail_lines,
         })
 
     satker = activity.get("kasatker", {})
@@ -2302,10 +2332,10 @@ async def _build_executive_grouped_data(activity_id: str):
 
 
 @reports_router.get("/inventory-activities/{activity_id}/executive-grouped-html")
-async def executive_grouped_html(activity_id: str):
+async def executive_grouped_html(activity_id: str, detail_fields: str = ""):
     """Serve Laporan Eksekutif per Barang Serupa as HTML preview"""
     from jinja2 import Environment, FileSystemLoader
-    data = await _build_executive_grouped_data(activity_id)
+    data = await _build_executive_grouped_data(activity_id, _parse_detail_fields(detail_fields))
     if not data:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
     env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
@@ -2315,12 +2345,12 @@ async def executive_grouped_html(activity_id: str):
 
 
 @reports_router.get("/inventory-activities/{activity_id}/executive-grouped-pdf")
-async def generate_executive_grouped_pdf(activity_id: str):
+async def generate_executive_grouped_pdf(activity_id: str, detail_fields: str = ""):
     """Generate Laporan Eksekutif per Barang Serupa (grouped assets) PDF"""
     from jinja2 import Environment, FileSystemLoader
     import weasyprint
 
-    data = await _build_executive_grouped_data(activity_id)
+    data = await _build_executive_grouped_data(activity_id, _parse_detail_fields(detail_fields))
     if not data:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
 
