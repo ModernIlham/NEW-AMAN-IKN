@@ -3,7 +3,7 @@ import {
   Plus, Edit3, X, Camera, Trash2, Check, ChevronDown, 
   Package, Briefcase, ShieldCheck, Settings, Tag, Save, Loader2, ClipboardList,
   Info, ChevronRight, BookOpen, Wrench, ArrowRight, HelpCircle, MapPin, LocateFixed,
-  ChevronLeft,
+  ChevronLeft, CloudOff,
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -330,6 +330,49 @@ const compressPhotos = async (photos) => {
   return compressed;
 };
 
+/**
+ * Map a server asset row (GET /assets/{id}?exclude_media=true) OR a cached
+ * list-projection row (offline snapshot / list state) to the edit form shape.
+ * Both carry the same text fields; media (photos, full checklist) is loaded
+ * separately. Missing fields default exactly like the empty-form branches.
+ */
+function buildEditFormData(a, activityId) {
+  const existingCL = Array.isArray(a.document_checklist) ? a.document_checklist : [];
+  const mergedChecklist = [
+    ...DEFAULT_DOC_ITEMS.map(name => existingCL.find(i => i.name === name) || { name, checked: false, notes: "", photos: [], documents: [] }),
+    ...existingCL.filter(i => !DEFAULT_DOC_ITEMS.includes(i.name))
+  ];
+  return {
+    asset_code: a.asset_code || "", NUP: a.NUP || "", asset_name: a.asset_name || "", category: a.category || "",
+    brand: a.brand || "", model: a.model || "", kode_register: a.kode_register || "",
+    serial_number: a.serial_number || "", purchase_date: a.purchase_date || "", purchase_price: a.purchase_price || "",
+    location: a.location || "", eselon1: a.eselon1 || "", eselon2: a.eselon2 || "", user: a.user || "",
+    condition: a.condition || "Baik", status: a.status || "Aktif",
+    nomor_spm: a.nomor_spm || "", perolehan_dari_nama: a.perolehan_dari_nama || "",
+    nomor_kontrak: a.nomor_kontrak || "", nomor_bukti_perolehan: a.nomor_bukti_perolehan || "",
+    supplier: a.supplier || "", notes: a.notes || "", photos: [],
+    thumbnail_index: a.thumbnail_index || 0,
+    stiker_status: a.stiker_status || "Belum Terpasang",
+    stiker_ukuran: a.stiker_ukuran || "",
+    stiker_photo_index: a.stiker_photo_index != null ? a.stiker_photo_index : null,
+    inventory_status: a.inventory_status || "Belum Diinventarisasi",
+    klasifikasi_tidak_ditemukan: a.klasifikasi_tidak_ditemukan || "",
+    sub_klasifikasi: a.sub_klasifikasi || "",
+    uraian_tidak_ditemukan: a.uraian_tidak_ditemukan || "",
+    tindak_lanjut: a.tindak_lanjut || "",
+    koordinat_latitude: a.koordinat_latitude || "",
+    koordinat_longitude: a.koordinat_longitude || "",
+    kronologis: a.kronologis || "",
+    keterangan_berlebih: a.keterangan_berlebih || "",
+    asal_usul_berlebih: a.asal_usul_berlebih || "",
+    nomor_perkara: a.nomor_perkara || "",
+    pihak_bersengketa: a.pihak_bersengketa || "",
+    keterangan_sengketa: a.keterangan_sengketa || "",
+    document_checklist: mergedChecklist,
+    activity_id: activityId || null
+  };
+}
+
 const AssetForm = memo(({ 
   isOpen, 
   onClose, 
@@ -378,11 +421,19 @@ const AssetForm = memo(({
   const [formData, setFormData] = useState(emptyForm);
   const [editId, setEditId] = useState(null);
   const [isFormLoading, setIsFormLoading] = useState(false);
+  // Offline edit: form initialized from the cached list row (offline snapshot)
+  // because GET /assets/{id} was unreachable — shows a notice, media unavailable.
+  const [offlineNotice, setOfflineNotice] = useState(false);
 
   // Dirty tracking: store original data + modification flags
   const originalDataRef = useRef(null);
   const photosModifiedRef = useRef(false);
   const checklistModifiedRef = useRef(false);
+  // True once the /media thumbnail list for the CURRENT edit target loaded.
+  // While false, photoItems does NOT reflect the photos stored server-side —
+  // photo_ops must then keep every existing photo by index or a save that
+  // merely ADDS a photo would silently delete all the old ones.
+  const mediaLoadedRef = useRef(false);
 
   // Lazy load: full checklist data (with photo data URLs and PDF data URLs) is
   // only fetched once the user opens the "Dokumen" tab — keeps initial form
@@ -416,54 +467,41 @@ const AssetForm = memo(({
       setShowFullForm(false);
       setFormErrors([]);
       setIsSubmitting(false);
+      setOfflineNotice(false);
       originalDataRef.current = null;
       photosModifiedRef.current = false;
       checklistModifiedRef.current = false;
+      mediaLoadedRef.current = false;
       setChecklistFullLoaded(false);
       setChecklistFullLoading(false);
       checklistFetchStartedRef.current = false;
       setPhotoItems([]);
       let cancelled = false;
+      // OFFLINE FALLBACK: initialize the form from the cached list row (the
+      // offline snapshot / list projection carries every text field incl.
+      // version). Media (photos, full checklist) stays unloaded — the guards
+      // in handleSubmit keep the save non-destructive for those. Saving flows
+      // through the optimistic queue with baseVersion from this same row.
+      const initFromCacheRow = () => {
+        const lightData = buildEditFormData(editAsset, activity?.id);
+        setFormData(lightData);
+        // Diff baseline = same cached row, so submit PATCHes only what the
+        // user actually changed while offline.
+        originalDataRef.current = { ...lightData, _photoCount: Number(editAsset.photo_count) || 0 };
+        setOfflineNotice(true);
+        setIsFormLoading(false);
+      };
       (async () => {
+        // Known-offline: the GET below cannot succeed — open from cache
+        // immediately (no error toast, no unusable form).
+        if (!navigator.onLine) { initFromCacheRow(); return; }
         try {
           // Phase 1: Fetch lightweight data (no base64 photos/documents)
           const r = await axios.get(`${API}/assets/${editAsset.id}?exclude_media=true`);
           if (cancelled) return;
           const a = r.data;
-          const existingCL = a.document_checklist || [];
-          const mergedLight = [
-            ...DEFAULT_DOC_ITEMS.map(name => existingCL.find(i => i.name === name) || { name, checked: false, notes: "", photos: [], documents: [] }),
-            ...existingCL.filter(i => !DEFAULT_DOC_ITEMS.includes(i.name))
-          ];
-          const lightData = {
-            asset_code: a.asset_code, NUP: a.NUP || "", asset_name: a.asset_name, category: a.category,
-            brand: a.brand || "", model: a.model || "", kode_register: a.kode_register || "",
-            serial_number: a.serial_number || "", purchase_date: a.purchase_date || "", purchase_price: a.purchase_price || "",
-            location: a.location || "", eselon1: a.eselon1 || "", eselon2: a.eselon2 || "", user: a.user || "",
-            condition: a.condition || "Baik", status: a.status || "Aktif",
-            nomor_spm: a.nomor_spm || "", perolehan_dari_nama: a.perolehan_dari_nama || "",
-            nomor_kontrak: a.nomor_kontrak || "", nomor_bukti_perolehan: a.nomor_bukti_perolehan || "",
-            supplier: a.supplier || "", notes: a.notes || "", photos: [],
-            thumbnail_index: a.thumbnail_index || 0,
-            stiker_status: a.stiker_status || "Belum Terpasang",
-            stiker_ukuran: a.stiker_ukuran || "",
-            stiker_photo_index: a.stiker_photo_index != null ? a.stiker_photo_index : null,
-            inventory_status: a.inventory_status || "Belum Diinventarisasi",
-            klasifikasi_tidak_ditemukan: a.klasifikasi_tidak_ditemukan || "",
-            sub_klasifikasi: a.sub_klasifikasi || "",
-            uraian_tidak_ditemukan: a.uraian_tidak_ditemukan || "",
-            tindak_lanjut: a.tindak_lanjut || "",
-            koordinat_latitude: a.koordinat_latitude || "",
-            koordinat_longitude: a.koordinat_longitude || "",
-            kronologis: a.kronologis || "",
-            keterangan_berlebih: a.keterangan_berlebih || "",
-            asal_usul_berlebih: a.asal_usul_berlebih || "",
-            nomor_perkara: a.nomor_perkara || "",
-            pihak_bersengketa: a.pihak_bersengketa || "",
-            keterangan_sengketa: a.keterangan_sengketa || "",
-            document_checklist: mergedLight,
-            activity_id: activity?.id || null
-          };
+          const lightData = buildEditFormData(a, activity?.id);
+          const mergedLight = lightData.document_checklist;
           setFormData(lightData);
           setIsFormLoading(false);
 
@@ -478,6 +516,7 @@ const AssetForm = memo(({
             // Build photoItems from server thumbnails
             const items = thumbs.map((thumb, i) => ({ type: 'existing', thumbnail: thumb, originalIndex: i }));
             setPhotoItems(items);
+            mediaLoadedRef.current = true;
 
             // Update formData.photos with thumbnails (for photo count display)
             // We use photoItems for rendering, but keep photos array length correct for validation
@@ -497,9 +536,23 @@ const AssetForm = memo(({
               setFormData(prev => ({ ...prev, photos: placeholderPhotos, document_checklist: mergedFull }));
             });
           } catch {
-            originalDataRef.current = lightData;
+            // Media list unavailable — remember the server-side photo count so
+            // photo_ops can still preserve the existing photos on save.
+            originalDataRef.current = { ...lightData, _photoCount: Number(a.photo_count) || 0 };
           }
-        } catch { if (!cancelled) { toast.error("Gagal memuat data aset"); setIsFormLoading(false); setIsSubmitting(false); } }
+        } catch (err) {
+          if (cancelled) return;
+          if (!err?.response) {
+            // Network-level failure (offline / server unreachable) → cache row
+            initFromCacheRow();
+          } else {
+            // Server answered with an error (404 asset deleted, 401, …) —
+            // cached data would be misleading here; keep the explicit error.
+            toast.error("Gagal memuat data aset");
+            setIsFormLoading(false);
+            setIsSubmitting(false);
+          }
+        }
       })();
       return () => { cancelled = true; };
     } else {
@@ -512,9 +565,11 @@ const AssetForm = memo(({
       setCategorySearch("");
       setIsSubmitting(false);
       setIsFormLoading(false);
+      setOfflineNotice(false);
       originalDataRef.current = null;
       photosModifiedRef.current = false;
       checklistModifiedRef.current = false;
+      mediaLoadedRef.current = false;
       setChecklistFullLoaded(false);
       setChecklistFullLoading(false);
       checklistFetchStartedRef.current = false;
@@ -529,9 +584,11 @@ const AssetForm = memo(({
     setFormSection("basic");
     setFormErrors([]);
     setCategorySearch("");
+    setOfflineNotice(false);
     originalDataRef.current = null;
     photosModifiedRef.current = false;
     checklistModifiedRef.current = false;
+    mediaLoadedRef.current = false;
     setChecklistFullLoaded(false);
     setChecklistFullLoading(false);
     checklistFetchStartedRef.current = false;
@@ -627,7 +684,9 @@ const AssetForm = memo(({
           checklistFetchStartedRef.current = false;
           const msg = err?.code === "ECONNABORTED"
             ? "Waktu muat habis (60s). Cek koneksi atau hubungi admin."
-            : `Gagal memuat data dokumen aset${err?.response?.status ? ` (HTTP ${err.response.status})` : ""}`;
+            : !err?.response
+              ? "Checklist dokumen butuh koneksi — buka kembali tab ini saat online."
+              : `Gagal memuat data dokumen aset (HTTP ${err.response.status})`;
           toast.error(msg);
         }
       } finally {
@@ -902,6 +961,14 @@ const AssetForm = memo(({
         if (photosModifiedRef.current) {
           const keepIndices = [];
           const newPhotosToAdd = [];
+          // Thumbnail list never loaded (offline edit from cache, or /media
+          // failed): photoItems only holds NEW photos, so an empty keep[]
+          // would wipe every existing server photo. Preserve them all by
+          // index — offline edits can only ADD photos, never remove.
+          if (!mediaLoadedRef.current) {
+            const known = Number(originalDataRef.current?._photoCount) || 0;
+            for (let i = 0; i < known; i++) keepIndices.push(i);
+          }
           for (const item of photoItems) {
             if (item.type === 'existing') {
               keepIndices.push(item.originalIndex);
@@ -1134,6 +1201,16 @@ const AssetForm = memo(({
           <div className="mx-3 mt-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg p-2 flex-shrink-0">
             <p className="text-xs font-medium text-red-700 dark:text-red-400 mb-1">Validasi gagal:</p>
             {formErrors.map((e, i) => <p key={i} className="text-[11px] text-red-600 dark:text-red-400">{e}</p>)}
+          </div>
+        )}
+
+        {/* Offline: form initialized from the cached list row */}
+        {!isFormLoading && isEditing && offlineNotice && (
+          <div className="mx-3 mt-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg px-2.5 py-1.5 flex items-start gap-1.5 flex-shrink-0" data-testid="offline-form-notice">
+            <CloudOff className="w-3.5 h-3.5 mt-0.5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+            <p className="text-[11px] leading-snug text-amber-700 dark:text-amber-300">
+              Data dimuat dari cache offline — foto &amp; checklist penuh tidak tersedia sampai online. Perubahan tetap bisa disimpan dan akan disinkronkan otomatis.
+            </p>
           </div>
         )}
 

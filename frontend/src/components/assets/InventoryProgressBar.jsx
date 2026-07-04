@@ -35,10 +35,25 @@ const InventoryProgressBar = memo(({ activityId, inventoryStatusFilter, onFilter
   useEffect(() => {
     if (!activityId) return;
     let cancelled = false;
+    // Offline / fetch gagal: tampilkan angka terakhir yang diketahui dari
+    // cache lokal alih-alih 0/0 — progres bersifat indikatif, tanpa toast error.
+    try {
+      const cached = JSON.parse(localStorage.getItem(`aman_rekap_${activityId}`) || "null");
+      if (cached) setRekap(prev => prev || cached);
+    } catch { /* cache rusak — abaikan */ }
     const fetchRekap = async () => {
       try {
         const r = await axios.get(`${API}/inventory-activities/${activityId}/rekapitulasi`);
-        if (!cancelled) setRekap(r.data);
+        if (!cancelled) {
+          setRekap(r.data);
+          // Simpan hanya dua angka yang dipakai bar ini — hemat localStorage
+          try {
+            localStorage.setItem(`aman_rekap_${activityId}`, JSON.stringify({
+              total_bmn_diteliti: r.data?.total_bmn_diteliti || 0,
+              belum_diinventarisasi: { count: r.data?.belum_diinventarisasi?.count || 0 },
+            }));
+          } catch { /* kuota penuh — abaikan */ }
+        }
       } catch { /* progres bersifat pelengkap — abaikan kegagalan */ }
     };
     fetchRekap();

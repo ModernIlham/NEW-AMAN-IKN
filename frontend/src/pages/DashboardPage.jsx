@@ -525,7 +525,19 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
     } catch {
       // Network failed (offline / server unreachable) → fall back to snapshot
       const served = await serveFromSnapshot(page, size, search, category, sort, appendMobile);
-      if (!served) toast.error("Gagal memuat data");
+      if (!served) {
+        const meta = await snapshotMeta(activity?.id);
+        if (isSnapshotExpired(meta)) {
+          // serveFromSnapshot already toasted "Data offline kedaluwarsa…"
+          setLoadingMessage("Data offline kedaluwarsa — hubungkan internet untuk sinkron ulang");
+        } else if (!isOnlineRef.current || !navigator.onLine) {
+          // Offline with no snapshot yet — actionable message, not a generic error
+          toast.error("Anda sedang offline dan belum ada data tersimpan untuk kegiatan ini. Aktifkan Mode Inventarisasi saat online untuk menyiapkan data offline.", { id: "offline-no-snapshot", duration: 7000 });
+          setLoadingMessage("Mode offline — data tersimpan belum tersedia");
+        } else {
+          toast.error("Gagal memuat data");
+        }
+      }
     }
   };
 
