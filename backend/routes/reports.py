@@ -110,6 +110,241 @@ def _kop_surat_flowables(settings, doc_width):
 
 
 # ============================================================================
+# SHARED REPORT DESIGN SYSTEM (official ReportLab reports)
+# ============================================================================
+# Uniform typography, title blocks, tables, signature blocks, margins and
+# page footers for the official reports: Berita Acara Tim Internal, SPTJM,
+# Surat Koreksi, DBHI, RHI, BAHI, SP Hasil, SP Pelaksanaan.
+# Styling/layout only -- report content is produced by each builder.
+
+_PALETTE = {
+    "header_bg": "#f1f5f9",   # table header / total-row background
+    "grid": "#cbd5e1",        # table grid lines + footer rule
+    "zebra": "#f8fafc",       # alternate row background on large tables
+    "ink": "#1e293b",         # dark slate text (table headers)
+    "muted": "#64748b",       # small gray text / page footer
+}
+
+REPORT_STYLES = None  # lazily-built shared stylesheet, see _get_report_styles()
+
+
+def _get_report_styles():
+    """REPORT_STYLES: one shared getSampleStyleSheet-derived style set used by
+    every official ReportLab report (Helvetica family throughout)."""
+    global REPORT_STYLES
+    if REPORT_STYLES is not None:
+        return REPORT_STYLES
+
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib import colors as rl_colors
+    from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT, TA_RIGHT
+
+    ss = getSampleStyleSheet()
+    ink = rl_colors.HexColor(_PALETTE["ink"])
+    muted = rl_colors.HexColor(_PALETTE["muted"])
+
+    REPORT_STYLES = {
+        # Document title block
+        'DocTitle': ParagraphStyle('DocTitle', parent=ss['Title'], fontName='Helvetica-Bold',
+                                   fontSize=12, leading=15, alignment=TA_CENTER,
+                                   spaceBefore=0, spaceAfter=2),
+        'DocSubtitle': ParagraphStyle('DocSubtitle', parent=ss['Normal'], fontSize=10,
+                                      leading=13, alignment=TA_CENTER, spaceAfter=2),
+        'DocNumber': ParagraphStyle('DocNumber', parent=ss['Normal'], fontSize=9.5,
+                                    leading=12.5, alignment=TA_CENTER, spaceAfter=2),
+        # Running text
+        'Body': ParagraphStyle('Body', parent=ss['Normal'], fontSize=9.5, leading=13,
+                               alignment=TA_JUSTIFY, spaceAfter=4),
+        'BodyIndent': ParagraphStyle('BodyIndent', parent=ss['Normal'], fontSize=9.5,
+                                     leading=13, alignment=TA_JUSTIFY, leftIndent=20,
+                                     spaceAfter=3),
+        'Heading': ParagraphStyle('Heading', parent=ss['Normal'], fontName='Helvetica-Bold',
+                                  fontSize=9.5, leading=13, spaceBefore=6, spaceAfter=4),
+        'Small': ParagraphStyle('Small', parent=ss['Normal'], fontSize=8, leading=10,
+                                textColor=muted),
+        'Meta': ParagraphStyle('Meta', parent=ss['Normal'], fontSize=8.5, leading=11.5,
+                               textColor=ink, spaceAfter=2),
+        # Table cells
+        'TableHeader': ParagraphStyle('TableHeader', parent=ss['Normal'], fontName='Helvetica-Bold',
+                                      fontSize=8.5, leading=10.5, alignment=TA_CENTER, textColor=ink),
+        'Cell': ParagraphStyle('Cell', parent=ss['Normal'], fontSize=8.5, leading=10.5,
+                               alignment=TA_LEFT),
+        'CellCenter': ParagraphStyle('CellCenter', parent=ss['Normal'], fontSize=8.5,
+                                     leading=10.5, alignment=TA_CENTER),
+        'CellRight': ParagraphStyle('CellRight', parent=ss['Normal'], fontSize=8.5,
+                                    leading=10.5, alignment=TA_RIGHT),
+        'CellBold': ParagraphStyle('CellBold', parent=ss['Normal'], fontName='Helvetica-Bold',
+                                   fontSize=8.5, leading=10.5, alignment=TA_LEFT),
+        'CellBoldCenter': ParagraphStyle('CellBoldCenter', parent=ss['Normal'], fontName='Helvetica-Bold',
+                                         fontSize=8.5, leading=10.5, alignment=TA_CENTER),
+        'CellBoldRight': ParagraphStyle('CellBoldRight', parent=ss['Normal'], fontName='Helvetica-Bold',
+                                        fontSize=8.5, leading=10.5, alignment=TA_RIGHT),
+        # Signature block
+        'Signature': ParagraphStyle('Signature', parent=ss['Normal'], fontSize=9.5,
+                                    leading=13, alignment=TA_CENTER),
+    }
+    return REPORT_STYLES
+
+
+def _std_doc(buffer, landscape_mode=False):
+    """SimpleDocTemplate with the uniform report margins (2cm sides, 1.6cm top/bottom)."""
+    from reportlab.platypus import SimpleDocTemplate
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.units import cm as rl_cm
+    return SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(A4) if landscape_mode else A4,
+        leftMargin=2 * rl_cm, rightMargin=2 * rl_cm,
+        topMargin=1.6 * rl_cm, bottomMargin=1.6 * rl_cm,
+    )
+
+
+def _title_block(judul, nomor=None, subjudul=None):
+    """Centered document title flowables (multi-line judul via '\\n'), with
+    optional subtitle and 'Nomor: ...' line, plus consistent trailing space."""
+    from reportlab.platypus import Paragraph, Spacer
+    from reportlab.lib.units import mm as rl_mm
+    st = _get_report_styles()
+    flow = []
+    for line in str(judul).split("\n"):
+        flow.append(Paragraph(line.upper(), st['DocTitle']))
+    if subjudul:
+        flow.append(Paragraph(str(subjudul), st['DocSubtitle']))
+    if nomor:
+        flow.append(Paragraph(f"Nomor: {nomor}", st['DocNumber']))
+    flow.append(Spacer(1, 6 * rl_mm))
+    return flow
+
+
+def _std_table_style(header=True, zebra=False, total_row=False, extra=None):
+    """Uniform TableStyle: light header band, thin grid, tight padding,
+    VALIGN TOP, 8.5pt text. Optional zebra striping and bold total row.
+    Per-column alignment (e.g. right-aligned numerics) via `extra` commands."""
+    from reportlab.platypus import TableStyle
+    from reportlab.lib import colors as rl_colors
+    grid = rl_colors.HexColor(_PALETTE["grid"])
+    header_bg = rl_colors.HexColor(_PALETTE["header_bg"])
+    zebra_bg = rl_colors.HexColor(_PALETTE["zebra"])
+    cmds = [
+        ('GRID', (0, 0), (-1, -1), 0.5, grid),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('FONTSIZE', (0, 0), (-1, -1), 8.5),
+        ('LEFTPADDING', (0, 0), (-1, -1), 4),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+    ]
+    body_start = 0
+    if header:
+        body_start = 1
+        cmds += [
+            ('BACKGROUND', (0, 0), (-1, 0), header_bg),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, 0), 'MIDDLE'),
+        ]
+    if zebra:
+        body_end = -2 if total_row else -1
+        cmds.append(('ROWBACKGROUNDS', (0, body_start), (-1, body_end),
+                     [rl_colors.white, zebra_bg]))
+    if total_row:
+        cmds += [
+            ('BACKGROUND', (0, -1), (-1, -1), header_bg),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ]
+    if extra:
+        cmds += list(extra)
+    return TableStyle(cmds)
+
+
+def _fit_col_widths(widths, avail):
+    """Scale relative column widths so the table spans the available width."""
+    total = float(sum(widths))
+    if total <= 0:
+        return widths
+    return [w * avail / total for w in widths]
+
+
+def _signature_block(signers, doc_width):
+    """Tidy, uniform signature layout as an invisible-borders table.
+
+    signers: list of 1..2 dicts with optional keys:
+      pre    -- list[str] lines above the header (e.g. 'tempat, tanggal')
+      header -- str (e.g. 'Mengetahui,' / 'Yang membuat pernyataan,')
+      role   -- str below header (e.g. 'Kepala Satuan Kerja')
+      nama   -- str signatory name (rendered bold + underlined)
+      after  -- list[str] lines below the name (e.g. jabatan, 'NIP. ...')
+    One signer renders right-aligned; two render left/right.
+    """
+    from reportlab.platypus import Table, TableStyle, Paragraph, Spacer, KeepTogether
+    from reportlab.lib.units import mm as rl_mm
+    st = _get_report_styles()
+    sig = st['Signature']
+
+    max_pre = max((len(s.get('pre') or []) for s in signers), default=0)
+    has_header = any(s.get('header') for s in signers)
+    has_role = any(s.get('role') for s in signers)
+    max_after = max((len(s.get('after') or []) for s in signers), default=0)
+
+    def _col(s):
+        flow = []
+        pre = list(s.get('pre') or [])
+        for _ in range(max_pre - len(pre)):
+            flow.append(Paragraph('&nbsp;', sig))
+        for line in pre:
+            flow.append(Paragraph(line, sig))
+        if has_header:
+            flow.append(Paragraph(s.get('header') or '&nbsp;', sig))
+        if has_role:
+            flow.append(Paragraph(s.get('role') or '&nbsp;', sig))
+        flow.append(Spacer(1, 15 * rl_mm))  # 3-line gap for wet signature
+        flow.append(Paragraph(f"<b><u>{s.get('nama', '')}</u></b>", sig))
+        after = list(s.get('after') or [])
+        for line in after:
+            flow.append(Paragraph(line, sig))
+        for _ in range(max_after - len(after)):
+            flow.append(Paragraph('&nbsp;', sig))
+        return flow
+
+    if len(signers) == 1:
+        cells = [["", _col(signers[0])]]
+        col_widths = [doc_width * 0.55, doc_width * 0.45]
+    else:
+        cells = [[_col(signers[0]), "", _col(signers[1])]]
+        col_widths = [doc_width * 0.42, doc_width * 0.16, doc_width * 0.42]
+
+    table = Table(cells, colWidths=col_widths)
+    table.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+    ]))
+    return [KeepTogether(table)]
+
+
+def _page_footer_factory(report_name):
+    """Build the onPage callback: thin rule, report name (left, small gray)
+    and 'Halaman X' (right) on every page."""
+    def _page_footer(canvas, doc):
+        from reportlab.lib import colors as rl_colors
+        canvas.saveState()
+        x0 = doc.leftMargin
+        x1 = doc.leftMargin + doc.width
+        y = doc.bottomMargin - 16
+        canvas.setStrokeColor(rl_colors.HexColor(_PALETTE["grid"]))
+        canvas.setLineWidth(0.5)
+        canvas.line(x0, y + 9, x1, y + 9)
+        canvas.setFont('Helvetica', 7)
+        canvas.setFillColor(rl_colors.HexColor(_PALETTE["muted"]))
+        canvas.drawString(x0, y, report_name)
+        canvas.drawRightString(x1, y, f"Halaman {canvas.getPageNumber()}")
+        canvas.restoreState()
+    return _page_footer
+
+
+# ============================================================================
 # REKAPITULASI
 # ============================================================================
 
@@ -205,12 +440,8 @@ async def get_rekapitulasi(activity_id: str):
 @reports_router.get("/inventory-activities/{activity_id}/berita-acara-pdf")
 async def generate_berita_acara_pdf(activity_id: str):
     """Generate Berita Acara Tim Internal Penelitian BMN Tidak Ditemukan (PDF)"""
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib import colors as rl_colors
-    from reportlab.lib.units import mm as rl_mm, cm as rl_cm
-    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY
+    from reportlab.platypus import Table, Paragraph, Spacer
+    from reportlab.lib.units import mm as rl_mm
 
     activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
     if not activity:
@@ -230,24 +461,19 @@ async def generate_berita_acara_pdf(activity_id: str):
         except: return "Rp 0"
 
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=2*rl_cm, rightMargin=2*rl_cm, topMargin=2*rl_cm, bottomMargin=2*rl_cm)
-
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('TitleBA', parent=styles['Title'], fontSize=13, spaceAfter=6, alignment=TA_CENTER, fontName='Helvetica-Bold')
-    subtitle_style = ParagraphStyle('SubtitleBA', parent=styles['Normal'], fontSize=10, spaceAfter=12, alignment=TA_CENTER)
-    normal_style = ParagraphStyle('NormalBA', parent=styles['Normal'], fontSize=9, spaceAfter=4, alignment=TA_JUSTIFY, leading=13)
-    small_style = ParagraphStyle('SmallBA', parent=styles['Normal'], fontSize=8, leading=10)
-    bold_style = ParagraphStyle('BoldBA', parent=styles['Normal'], fontSize=9, fontName='Helvetica-Bold', spaceAfter=4)
+    doc = _std_doc(buffer)
+    st = _get_report_styles()
+    normal_style = st['Body']
+    small_style = st['Small']
+    cell_style = st['Cell']
+    bold_style = st['Heading']
 
     elements = []
     elements.extend(_kop_surat_flowables(settings, doc.width))
 
     # Header
-    elements.append(Paragraph("BERITA ACARA", title_style))
-    elements.append(Paragraph("TIM INTERNAL PENELITIAN BMN TIDAK DITEMUKAN", title_style))
     nomor_ba = activity.get("nomor_berita_acara", "-")
-    elements.append(Paragraph(f"Nomor: {nomor_ba}", subtitle_style))
-    elements.append(Spacer(1, 6*rl_mm))
+    elements.extend(_title_block("BERITA ACARA\nTIM INTERNAL PENELITIAN BMN TIDAK DITEMUKAN", nomor=nomor_ba))
 
     # Intro paragraph
     tgl_ba = activity.get("tanggal_berita_acara", "-")
@@ -265,13 +491,14 @@ async def generate_berita_acara_pdf(activity_id: str):
     tim_pembantu_list_rhi = activity.get("tim_pembantu", [])
     if tim_inti or tim_pembantu_list_rhi:
         elements.append(Paragraph("<b>I. TIM INVENTARISASI (INTERNAL)</b>", bold_style))
-        inv_style = TableStyle([('BACKGROUND', (0,0), (-1,0), rl_colors.HexColor('#92400e')), ('TEXTCOLOR', (0,0), (-1,0), rl_colors.white), ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'), ('FONTSIZE', (0,0), (-1,-1), 8), ('GRID', (0,0), (-1,-1), 0.5, rl_colors.grey), ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('ALIGN', (0,0), (0,-1), 'CENTER')])
+        inv_style = _std_table_style(extra=[('ALIGN', (0, 0), (0, -1), 'CENTER')])
+        tim_col_widths = _fit_col_widths([25, 55, 110, 95, 95, 80], doc.width)
         if tim_inti:
             elements.append(Paragraph("<b>Tim Inti (Pelaksana)</b>", small_style))
             ti_data = [['No', 'Peran', 'Nama', 'Jabatan', 'NIP/NIK', 'Unit']]
             for i, m in enumerate(tim_inti):
-                ti_data.append([str(i+1), 'Ketua Tim' if m.get('is_ketua') else 'Anggota', m.get('nama', '-'), m.get('jabatan', '-'), m.get('nip', '-'), m.get('unit', '-')])
-            ti_table = Table(ti_data, colWidths=[25, 55, 120, 100, 80, 80])
+                ti_data.append([str(i+1), 'Ketua Tim' if m.get('is_ketua') else 'Anggota', Paragraph(m.get('nama', '-'), cell_style), Paragraph(m.get('jabatan', '-'), cell_style), Paragraph(str(m.get('nip', '-')), cell_style), Paragraph(m.get('unit', '-'), cell_style)])
+            ti_table = Table(ti_data, colWidths=tim_col_widths, repeatRows=1)
             ti_table.setStyle(inv_style)
             elements.append(ti_table)
             elements.append(Spacer(1, 2*rl_mm))
@@ -279,8 +506,8 @@ async def generate_berita_acara_pdf(activity_id: str):
             elements.append(Paragraph("<b>Tim Pembantu</b>", small_style))
             tp2_data = [['No', 'Peran', 'Nama', 'Jabatan', 'NIP/NIK', 'Unit']]
             for i, m in enumerate(tim_pembantu_list_rhi):
-                tp2_data.append([str(i+1), 'Ketua Tim' if m.get('is_ketua') else 'Anggota', m.get('nama', '-'), m.get('jabatan', '-'), m.get('nip', '-'), m.get('unit', '-')])
-            tp2_table = Table(tp2_data, colWidths=[25, 55, 120, 100, 80, 80])
+                tp2_data.append([str(i+1), 'Ketua Tim' if m.get('is_ketua') else 'Anggota', Paragraph(m.get('nama', '-'), cell_style), Paragraph(m.get('jabatan', '-'), cell_style), Paragraph(str(m.get('nip', '-')), cell_style), Paragraph(m.get('unit', '-'), cell_style)])
+            tp2_table = Table(tp2_data, colWidths=tim_col_widths, repeatRows=1)
             tp2_table.setStyle(inv_style)
             elements.append(tp2_table)
         elements.append(Spacer(1, 4*rl_mm))
@@ -291,17 +518,9 @@ async def generate_berita_acara_pdf(activity_id: str):
     if tim:
         tim_data = [['No', 'Nama', 'Jabatan']]
         for i, m in enumerate(tim):
-            tim_data.append([str(i+1), m.get('nama', '-'), m.get('jabatan', '-')])
-        tim_table = Table(tim_data, colWidths=[30, 200, 200])
-        tim_table.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), rl_colors.HexColor('#1e40af')),
-            ('TEXTCOLOR', (0,0), (-1,0), rl_colors.white),
-            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0,0), (-1,-1), 8),
-            ('GRID', (0,0), (-1,-1), 0.5, rl_colors.grey),
-            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-            ('ALIGN', (0,0), (0,-1), 'CENTER'),
-        ]))
+            tim_data.append([str(i+1), Paragraph(m.get('nama', '-'), cell_style), Paragraph(m.get('jabatan', '-'), cell_style)])
+        tim_table = Table(tim_data, colWidths=_fit_col_widths([30, 200, 200], doc.width), repeatRows=1)
+        tim_table.setStyle(_std_table_style(extra=[('ALIGN', (0, 0), (0, -1), 'CENTER')]))
         elements.append(tim_table)
     else:
         elements.append(Paragraph("Tim peneliti belum ditentukan.", small_style))
@@ -313,17 +532,9 @@ async def generate_berita_acara_pdf(activity_id: str):
         elements.append(Paragraph("<b>II.b. TIM PENDUKUNG (EKSTERNAL)</b>", bold_style))
         tp_data = [['No', 'Nama', 'Jabatan', 'NIP', 'Dari Pihak']]
         for i, m in enumerate(tim_pendukung):
-            tp_data.append([str(i+1), m.get('nama', '-'), m.get('jabatan', '-'), m.get('nip', '-'), m.get('dari_pihak', '-')])
-        tp_table = Table(tp_data, colWidths=[25, 130, 120, 80, 100])
-        tp_table.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), rl_colors.HexColor('#6b21a8')),
-            ('TEXTCOLOR', (0,0), (-1,0), rl_colors.white),
-            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0,0), (-1,-1), 8),
-            ('GRID', (0,0), (-1,-1), 0.5, rl_colors.grey),
-            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-            ('ALIGN', (0,0), (0,-1), 'CENTER'),
-        ]))
+            tp_data.append([str(i+1), Paragraph(m.get('nama', '-'), cell_style), Paragraph(m.get('jabatan', '-'), cell_style), Paragraph(str(m.get('nip', '-')), cell_style), Paragraph(m.get('dari_pihak', '-'), cell_style)])
+        tp_table = Table(tp_data, colWidths=_fit_col_widths([25, 125, 110, 95, 100], doc.width), repeatRows=1)
+        tp_table.setStyle(_std_table_style(extra=[('ALIGN', (0, 0), (0, -1), 'CENTER')]))
         elements.append(tp_table)
         elements.append(Spacer(1, 4*rl_mm))
 
@@ -345,17 +556,11 @@ async def generate_berita_acara_pdf(activity_id: str):
         ['', '  a. Kesalahan Pencatatan', str(len(kesalahan)), fmt_rp(sum(safe_price(a) for a in kesalahan))],
         ['', '  b. Tidak Ditemukan Lainnya', str(len(lainnya)), fmt_rp(sum(safe_price(a) for a in lainnya))],
     ]
-    rekap_table = Table(rekap_data, colWidths=[30, 220, 70, 110])
-    rekap_table.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), rl_colors.HexColor('#1e40af')),
-        ('TEXTCOLOR', (0,0), (-1,0), rl_colors.white),
-        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0,0), (-1,-1), 8),
-        ('GRID', (0,0), (-1,-1), 0.5, rl_colors.grey),
-        ('ALIGN', (0,0), (0,-1), 'CENTER'),
-        ('ALIGN', (2,0), (3,-1), 'CENTER'),
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('BACKGROUND', (0,3), (-1,3), rl_colors.HexColor('#fef2f2')),
+    rekap_table = Table(rekap_data, colWidths=_fit_col_widths([30, 220, 70, 110], doc.width), repeatRows=1)
+    rekap_table.setStyle(_std_table_style(extra=[
+        ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+        ('ALIGN', (2, 1), (2, -1), 'CENTER'),
+        ('ALIGN', (3, 1), (3, -1), 'RIGHT'),
     ]))
     elements.append(rekap_table)
     elements.append(Spacer(1, 4*rl_mm))
@@ -369,21 +574,16 @@ async def generate_berita_acara_pdf(activity_id: str):
                 str(i+1),
                 a.get('asset_code', '-'),
                 str(a.get('NUP', '-')),
-                Paragraph(a.get('asset_name', '-'), small_style),
-                Paragraph(a.get('klasifikasi_tidak_ditemukan', '-'), small_style),
-                Paragraph(a.get('sub_klasifikasi', '-'), small_style),
+                Paragraph(a.get('asset_name', '-'), cell_style),
+                Paragraph(a.get('klasifikasi_tidak_ditemukan', '-'), cell_style),
+                Paragraph(a.get('sub_klasifikasi', '-'), cell_style),
                 fmt_rp(safe_price(a))
             ])
-        detail_table = Table(detail_data, colWidths=[25, 70, 30, 100, 75, 75, 65])
-        detail_table.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), rl_colors.HexColor('#991b1b')),
-            ('TEXTCOLOR', (0,0), (-1,0), rl_colors.white),
-            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0,0), (-1,-1), 7),
-            ('GRID', (0,0), (-1,-1), 0.5, rl_colors.grey),
-            ('ALIGN', (0,0), (0,-1), 'CENTER'),
-            ('ALIGN', (2,0), (2,-1), 'CENTER'),
-            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        detail_table = Table(detail_data, colWidths=_fit_col_widths([25, 70, 30, 100, 75, 75, 65], doc.width), repeatRows=1)
+        detail_table.setStyle(_std_table_style(zebra=True, extra=[
+            ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+            ('ALIGN', (2, 1), (2, -1), 'CENTER'),
+            ('ALIGN', (6, 1), (6, -1), 'RIGHT'),
         ]))
         elements.append(detail_table)
         elements.append(Spacer(1, 4*rl_mm))
@@ -398,27 +598,15 @@ async def generate_berita_acara_pdf(activity_id: str):
     elements.append(Paragraph("Demikian Berita Acara ini dibuat dengan sebenar-benarnya.", normal_style))
     elements.append(Spacer(1, 6*rl_mm))
 
-    sign_data = [
-        ['Mengetahui,', '', 'Tim Peneliti,'],
-        ['Kasatker', '', 'Ketua Tim'],
-        ['', '', ''],
-        ['', '', ''],
-        [f'{kasatker}', '', tim[0].get('nama', '_______________') if tim else '_______________'],
-        [f'NIP. {activity.get("kasatker_nip", "-")}', '', ''],
-    ]
-    sign_table = Table(sign_data, colWidths=[180, 80, 180])
-    sign_table.setStyle(TableStyle([
-        ('FONTSIZE', (0,0), (-1,-1), 9),
-        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-        ('FONTNAME', (0,4), (0,4), 'Helvetica-Bold'),
-        ('FONTNAME', (2,4), (2,4), 'Helvetica-Bold'),
-        ('LINEBELOW', (0,4), (0,4), 1, rl_colors.black),
-        ('LINEBELOW', (2,4), (2,4), 1, rl_colors.black),
-    ]))
-    elements.append(sign_table)
+    elements.extend(_signature_block([
+        {'header': 'Mengetahui,', 'role': 'Kasatker', 'nama': kasatker,
+         'after': [f'NIP. {activity.get("kasatker_nip", "-")}']},
+        {'header': 'Tim Peneliti,', 'role': 'Ketua Tim',
+         'nama': tim[0].get('nama', '_______________') if tim else '_______________'},
+    ], doc.width))
 
-    doc.build(elements)
+    footer = _page_footer_factory("Berita Acara Tim Internal Penelitian BMN Tidak Ditemukan")
+    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
     buffer.seek(0)
 
     return StreamingResponse(
@@ -435,12 +623,8 @@ async def generate_berita_acara_pdf(activity_id: str):
 @reports_router.get("/inventory-activities/{activity_id}/sptjm-pdf")
 async def generate_sptjm_pdf(activity_id: str):
     """Generate SPTJM (Surat Pernyataan Tanggung Jawab Mutlak) PDF"""
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib import colors as rl_colors
-    from reportlab.lib.units import mm as rl_mm, cm as rl_cm
-    from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY
+    from reportlab.platypus import Table, Paragraph, Spacer
+    from reportlab.lib.units import mm as rl_mm
 
     activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
     if not activity:
@@ -459,12 +643,10 @@ async def generate_sptjm_pdf(activity_id: str):
         except: return "Rp 0"
 
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=2.5*rl_cm, rightMargin=2.5*rl_cm, topMargin=2*rl_cm, bottomMargin=2*rl_cm)
-
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('TitleSPTJM', parent=styles['Title'], fontSize=13, spaceAfter=6, alignment=TA_CENTER, fontName='Helvetica-Bold')
-    normal_style = ParagraphStyle('NormalSPTJM', parent=styles['Normal'], fontSize=10, spaceAfter=6, alignment=TA_JUSTIFY, leading=14)
-    small_style = ParagraphStyle('SmallSPTJM', parent=styles['Normal'], fontSize=8, leading=10)
+    doc = _std_doc(buffer)
+    st = _get_report_styles()
+    normal_style = st['Body']
+    cell_style = st['Cell']
 
     elements = []
     elements.extend(_kop_surat_flowables(settings, doc.width))
@@ -477,8 +659,7 @@ async def generate_sptjm_pdf(activity_id: str):
     total_val_notfound = sum(safe_price(a) for a in tidak_ditemukan)
 
     # Header
-    elements.append(Paragraph("SURAT PERNYATAAN TANGGUNG JAWAB MUTLAK", title_style))
-    elements.append(Spacer(1, 8*rl_mm))
+    elements.extend(_title_block("SURAT PERNYATAAN TANGGUNG JAWAB MUTLAK"))
 
     # Body
     body = f"""Yang bertanda tangan di bawah ini:<br/><br/>
@@ -500,25 +681,19 @@ async def generate_sptjm_pdf(activity_id: str):
 
     # Lampiran rincian
     if tidak_ditemukan:
-        elements.append(Paragraph("<b>Lampiran: Rincian BMN Tidak Ditemukan</b>", normal_style))
+        elements.append(Paragraph("<b>Lampiran: Rincian BMN Tidak Ditemukan</b>", st['Heading']))
         detail_data = [['No', 'Kode Barang', 'NUP', 'Nama BMN', 'Nilai (Rp)']]
         for i, a in enumerate(tidak_ditemukan):
             detail_data.append([
                 str(i+1), a.get('asset_code', '-'), str(a.get('NUP', '-')),
-                Paragraph(a.get('asset_name', '-'), small_style), fmt_rp(safe_price(a))
+                Paragraph(a.get('asset_name', '-'), cell_style), fmt_rp(safe_price(a))
             ])
-        detail_data.append(['', '', '', Paragraph('<b>TOTAL</b>', small_style), fmt_rp(total_val_notfound)])
-        dt = Table(detail_data, colWidths=[30, 80, 35, 190, 90])
-        dt.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), rl_colors.HexColor('#1e40af')),
-            ('TEXTCOLOR', (0,0), (-1,0), rl_colors.white),
-            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0,0), (-1,-1), 8),
-            ('GRID', (0,0), (-1,-1), 0.5, rl_colors.grey),
-            ('ALIGN', (0,0), (0,-1), 'CENTER'),
-            ('ALIGN', (2,0), (2,-1), 'CENTER'),
-            ('VALIGN', (0,0), (-1,-1), 'TOP'),
-            ('BACKGROUND', (0,-1), (-1,-1), rl_colors.HexColor('#f0f9ff')),
+        detail_data.append(['', '', '', Paragraph('<b>TOTAL</b>', cell_style), fmt_rp(total_val_notfound)])
+        dt = Table(detail_data, colWidths=_fit_col_widths([30, 80, 35, 190, 90], doc.width), repeatRows=1)
+        dt.setStyle(_std_table_style(zebra=True, total_row=True, extra=[
+            ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+            ('ALIGN', (2, 1), (2, -1), 'CENTER'),
+            ('ALIGN', (4, 1), (4, -1), 'RIGHT'),
         ]))
         elements.append(dt)
 
@@ -526,27 +701,15 @@ async def generate_sptjm_pdf(activity_id: str):
 
     # Signature
     tgl = activity.get("tanggal_berita_acara", "_______________")
-    sign_data = [
-        [f'Dibuat di: {alamat}', ''],
-        [f'Pada tanggal: {tgl}', ''],
-        ['', ''],
-        ['Yang membuat pernyataan,', ''],
-        ['', ''],
-        ['', ''],
-        ['', ''],
-        [f'{kasatker}', ''],
-        [f'NIP. {nip}', ''],
-    ]
-    sign_table = Table(sign_data, colWidths=[300, 130])
-    sign_table.setStyle(TableStyle([
-        ('FONTSIZE', (0,0), (-1,-1), 10),
-        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
-        ('FONTNAME', (0,7), (0,7), 'Helvetica-Bold'),
-        ('LINEBELOW', (0,7), (0,7), 1, rl_colors.black),
-    ]))
-    elements.append(sign_table)
+    elements.extend(_signature_block([
+        {'pre': [f'Dibuat di: {alamat}', f'Pada tanggal: {tgl}'],
+         'header': 'Yang membuat pernyataan,',
+         'nama': kasatker,
+         'after': [f'NIP. {nip}']},
+    ], doc.width))
 
-    doc.build(elements)
+    footer = _page_footer_factory("Surat Pernyataan Tanggung Jawab Mutlak (SPTJM)")
+    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
     buffer.seek(0)
 
     return StreamingResponse(
@@ -563,12 +726,8 @@ async def generate_sptjm_pdf(activity_id: str):
 @reports_router.get("/inventory-activities/{activity_id}/surat-koreksi-pdf")
 async def generate_surat_koreksi_pdf(activity_id: str):
     """Generate Surat Pernyataan Koreksi Pencatatan PDF"""
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib import colors as rl_colors
-    from reportlab.lib.units import mm as rl_mm, cm as rl_cm
-    from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY
+    from reportlab.platypus import Table, Paragraph, Spacer
+    from reportlab.lib.units import mm as rl_mm
 
     activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
     if not activity:
@@ -587,12 +746,10 @@ async def generate_surat_koreksi_pdf(activity_id: str):
         except: return "Rp 0"
 
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=2.5*rl_cm, rightMargin=2.5*rl_cm, topMargin=2*rl_cm, bottomMargin=2*rl_cm)
-
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('TitleKoreksi', parent=styles['Title'], fontSize=13, spaceAfter=6, alignment=TA_CENTER, fontName='Helvetica-Bold')
-    normal_style = ParagraphStyle('NormalKoreksi', parent=styles['Normal'], fontSize=10, spaceAfter=6, alignment=TA_JUSTIFY, leading=14)
-    small_style = ParagraphStyle('SmallKoreksi', parent=styles['Normal'], fontSize=8, leading=10)
+    doc = _std_doc(buffer)
+    st = _get_report_styles()
+    normal_style = st['Body']
+    cell_style = st['Cell']
 
     elements = []
     elements.extend(_kop_surat_flowables(settings, doc.width))
@@ -605,9 +762,7 @@ async def generate_surat_koreksi_pdf(activity_id: str):
     total_val = sum(safe_price(a) for a in koreksi_assets)
 
     # Header
-    elements.append(Paragraph("SURAT PERNYATAAN", title_style))
-    elements.append(Paragraph("KOREKSI PENCATATAN BARANG MILIK NEGARA", title_style))
-    elements.append(Spacer(1, 8*rl_mm))
+    elements.extend(_title_block("SURAT PERNYATAAN\nKOREKSI PENCATATAN BARANG MILIK NEGARA"))
 
     # Body
     body = f"""Yang bertanda tangan di bawah ini:<br/><br/>
@@ -626,27 +781,22 @@ async def generate_surat_koreksi_pdf(activity_id: str):
 
     # Rincian
     if koreksi_assets:
-        elements.append(Paragraph("<b>Rincian BMN yang Memerlukan Koreksi Pencatatan:</b>", normal_style))
+        elements.append(Paragraph("<b>Rincian BMN yang Memerlukan Koreksi Pencatatan:</b>", st['Heading']))
         detail_data = [['No', 'Kode Barang', 'NUP', 'Nama BMN', 'Jenis Koreksi', 'Uraian', 'Nilai (Rp)']]
         for i, a in enumerate(koreksi_assets):
             detail_data.append([
                 str(i+1), a.get('asset_code', '-'), str(a.get('NUP', '-')),
-                Paragraph(a.get('asset_name', '-'), small_style),
-                Paragraph(a.get('sub_klasifikasi', '-'), small_style),
-                Paragraph(a.get('uraian_tidak_ditemukan', '-'), small_style),
+                Paragraph(a.get('asset_name', '-'), cell_style),
+                Paragraph(a.get('sub_klasifikasi', '-'), cell_style),
+                Paragraph(a.get('uraian_tidak_ditemukan', '-'), cell_style),
                 fmt_rp(safe_price(a))
             ])
-        detail_data.append(['', '', '', '', '', Paragraph('<b>TOTAL</b>', small_style), fmt_rp(total_val)])
-        dt = Table(detail_data, colWidths=[22, 60, 28, 80, 70, 95, 60])
-        dt.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), rl_colors.HexColor('#92400e')),
-            ('TEXTCOLOR', (0,0), (-1,0), rl_colors.white),
-            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0,0), (-1,-1), 7),
-            ('GRID', (0,0), (-1,-1), 0.5, rl_colors.grey),
-            ('ALIGN', (0,0), (0,-1), 'CENTER'),
-            ('VALIGN', (0,0), (-1,-1), 'TOP'),
-            ('BACKGROUND', (0,-1), (-1,-1), rl_colors.HexColor('#fffbeb')),
+        detail_data.append(['', '', '', '', '', Paragraph('<b>TOTAL</b>', cell_style), fmt_rp(total_val)])
+        dt = Table(detail_data, colWidths=_fit_col_widths([22, 60, 28, 80, 70, 95, 60], doc.width), repeatRows=1)
+        dt.setStyle(_std_table_style(zebra=True, total_row=True, extra=[
+            ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+            ('ALIGN', (2, 1), (2, -1), 'CENTER'),
+            ('ALIGN', (6, 1), (6, -1), 'RIGHT'),
         ]))
         elements.append(dt)
     else:
@@ -658,24 +808,15 @@ async def generate_surat_koreksi_pdf(activity_id: str):
 
     # Signature
     tgl = activity.get("tanggal_berita_acara", "_______________")
-    sign_data = [
-        [f'Dibuat di: {alamat}', ''],
-        [f'Pada tanggal: {tgl}', ''],
-        ['', ''],
-        ['Yang membuat pernyataan,', ''],
-        ['', ''], ['', ''], ['', ''],
-        [f'{kasatker}', ''],
-        [f'NIP. {nip}', ''],
-    ]
-    sign_table = Table(sign_data, colWidths=[300, 130])
-    sign_table.setStyle(TableStyle([
-        ('FONTSIZE', (0,0), (-1,-1), 10),
-        ('FONTNAME', (0,7), (0,7), 'Helvetica-Bold'),
-        ('LINEBELOW', (0,7), (0,7), 1, rl_colors.black),
-    ]))
-    elements.append(sign_table)
+    elements.extend(_signature_block([
+        {'pre': [f'Dibuat di: {alamat}', f'Pada tanggal: {tgl}'],
+         'header': 'Yang membuat pernyataan,',
+         'nama': kasatker,
+         'after': [f'NIP. {nip}']},
+    ], doc.width))
 
-    doc.build(elements)
+    footer = _page_footer_factory("Surat Pernyataan Koreksi Pencatatan Barang Milik Negara")
+    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
     buffer.seek(0)
 
     return StreamingResponse(
@@ -726,12 +867,8 @@ DBHI_TYPES = {
 @reports_router.get("/inventory-activities/{activity_id}/dbhi/{dbhi_type}")
 async def generate_dbhi_pdf(activity_id: str, dbhi_type: str):
     """Generate DBHI (Daftar Barang Hasil Inventarisasi) PDF by type"""
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.pagesizes import A4, landscape
-    from reportlab.lib import colors as rl_colors
-    from reportlab.lib.units import mm as rl_mm, cm as rl_cm
-    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+    from reportlab.platypus import Table, Paragraph, Spacer
+    from reportlab.lib.units import mm as rl_mm
 
     if dbhi_type not in DBHI_TYPES:
         raise HTTPException(status_code=400, detail=f"Tipe DBHI tidak valid. Pilih: {', '.join(DBHI_TYPES.keys())}")
@@ -759,31 +896,25 @@ async def generate_dbhi_pdf(activity_id: str, dbhi_type: str):
             return "0"
 
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), leftMargin=1.5*rl_cm, rightMargin=1.5*rl_cm, topMargin=1.5*rl_cm, bottomMargin=1.5*rl_cm)
-
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('DBHITitle', parent=styles['Title'], fontSize=12, spaceAfter=2, alignment=TA_CENTER, fontName='Helvetica-Bold', leading=16)
-    subtitle_style = ParagraphStyle('DBHISub', parent=styles['Normal'], fontSize=9, spaceAfter=8, alignment=TA_CENTER)
-    cell_style = ParagraphStyle('DBHICell', parent=styles['Normal'], fontSize=7, leading=9, alignment=TA_LEFT)
-    cell_center = ParagraphStyle('DBHICellC', parent=styles['Normal'], fontSize=7, leading=9, alignment=TA_CENTER)
-    cell_right = ParagraphStyle('DBHICellR', parent=styles['Normal'], fontSize=7, leading=9, alignment=TA_RIGHT)
-    header_style = ParagraphStyle('DBHIHeader', parent=styles['Normal'], fontSize=7, leading=9, fontName='Helvetica-Bold', alignment=TA_CENTER, textColor=rl_colors.white)
-    footer_style = ParagraphStyle('DBHIFooter', parent=styles['Normal'], fontSize=8, leading=10)
-    info_style = ParagraphStyle('DBHIInfo', parent=styles['Normal'], fontSize=8, spaceAfter=2, leading=11)
+    doc = _std_doc(buffer, landscape_mode=True)
+    st = _get_report_styles()
+    cell_style = st['Cell']
+    cell_center = st['CellCenter']
+    cell_right = st['CellRight']
+    header_style = st['TableHeader']
+    info_style = st['Meta']
 
     elements = []
     elements.extend(_kop_surat_flowables(settings, doc.width))
 
     # Title
-    for line in dbhi_config["title"].split("\n"):
-        elements.append(Paragraph(line, title_style))
+    elements.extend(_title_block(dbhi_config["title"]))
 
     # Activity info
     satker = activity.get("kasatker", {})
     satker_name = satker.get("nama", activity.get("nama_kegiatan", "-"))
     nomor_sk = activity.get("nomor_surat", "-")
     tgl = activity.get("tanggal_mulai", "-")
-    elements.append(Spacer(1, 4*rl_mm))
     elements.append(Paragraph(f"Satuan Kerja: {satker_name}", info_style))
     elements.append(Paragraph(f"Nomor SK: {nomor_sk} &nbsp;&nbsp;|&nbsp;&nbsp; Tanggal: {tgl}", info_style))
     elements.append(Spacer(1, 4*rl_mm))
@@ -881,25 +1012,11 @@ async def generate_dbhi_pdf(activity_id: str, dbhi_type: str):
     total_row[0] = Paragraph(f"<b>Total: {len(filtered)} item</b>", cell_style)
     table_data.append(total_row)
 
-    table = Table(table_data, colWidths=col_widths, repeatRows=1)
-
-    header_bg = rl_colors.HexColor("#1e3a5f")
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), header_bg),
-        ('TEXTCOLOR', (0, 0), (-1, 0), rl_colors.white),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 7),
-        ('FONTSIZE', (0, 1), (-1, -1), 7),
-        ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('GRID', (0, 0), (-1, -1), 0.5, rl_colors.HexColor("#cccccc")),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -2), [rl_colors.white, rl_colors.HexColor("#f8f9fa")]),
-        ('BACKGROUND', (0, -1), (-1, -1), rl_colors.HexColor("#e8f0fe")),
-        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
-        ('TOPPADDING', (0, 0), (-1, -1), 3),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-        ('LEFTPADDING', (0, 0), (-1, -1), 4),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+    # Kolom nilai pada baris total (label "Total" di-span hingga sebelum kolom nilai)
+    val_col = 5 if extra == "tidak_ditemukan" else 6
+    table = Table(table_data, colWidths=_fit_col_widths(col_widths, doc.width), repeatRows=1)
+    table.setStyle(_std_table_style(zebra=True, total_row=True, extra=[
+        ('SPAN', (0, -1), (val_col - 1, -1)),
     ]))
     elements.append(table)
 
@@ -908,22 +1025,15 @@ async def generate_dbhi_pdf(activity_id: str, dbhi_type: str):
     kasatker_nama = satker.get("nama_pejabat", "________________________")
     kasatker_nip = satker.get("nip", "________________________")
 
-    sign_data = [
-        [Paragraph("", footer_style), Paragraph(".................., .......................", footer_style)],
-        [Paragraph("", footer_style), Paragraph("Kepala Satuan Kerja,", footer_style)],
-        [Paragraph("", footer_style), Paragraph("", footer_style)],
-        [Paragraph("", footer_style), Paragraph("", footer_style)],
-        [Paragraph("", footer_style), Paragraph(f"<b>{kasatker_nama}</b>", footer_style)],
-        [Paragraph("", footer_style), Paragraph(f"NIP. {kasatker_nip}", footer_style)],
-    ]
-    sign_table = Table(sign_data, colWidths=[400, 250])
-    sign_table.setStyle(TableStyle([
-        ('ALIGN', (1, 0), (1, -1), 'CENTER'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-    ]))
-    elements.append(sign_table)
+    elements.extend(_signature_block([
+        {'pre': ['.................., .......................'],
+         'header': 'Kepala Satuan Kerja,',
+         'nama': kasatker_nama,
+         'after': [f'NIP. {kasatker_nip}']},
+    ], doc.width))
 
-    doc.build(elements)
+    footer = _page_footer_factory(dbhi_config["title"].replace("\n", " - "))
+    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
     buffer.seek(0)
 
     filename = f"DBHI_{dbhi_type}_{activity_id[:8]}.pdf"
@@ -938,12 +1048,8 @@ async def generate_dbhi_pdf(activity_id: str, dbhi_type: str):
 @reports_router.get("/inventory-activities/{activity_id}/rhi-pdf")
 async def generate_rhi_pdf(activity_id: str):
     """Generate RHI (Rekapitulasi Hasil Inventarisasi BMN) PDF"""
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.pagesizes import A4, landscape
-    from reportlab.lib import colors as rl_colors
-    from reportlab.lib.units import mm as rl_mm, cm as rl_cm
-    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+    from reportlab.platypus import Table, Paragraph, Spacer
+    from reportlab.lib.units import mm as rl_mm
 
     activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
     if not activity:
@@ -972,25 +1078,20 @@ async def generate_rhi_pdf(activity_id: str):
     rusak_berat = [a for a in ditemukan if a.get("condition") == "Rusak Berat"]
 
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), leftMargin=1.5*rl_cm, rightMargin=1.5*rl_cm, topMargin=1.5*rl_cm, bottomMargin=1.5*rl_cm)
-
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('RHITitle', parent=styles['Title'], fontSize=13, spaceAfter=2, alignment=TA_CENTER, fontName='Helvetica-Bold', leading=17)
-    info_style = ParagraphStyle('RHIInfo', parent=styles['Normal'], fontSize=8, spaceAfter=2, leading=11)
-    cell_style = ParagraphStyle('RHICell', parent=styles['Normal'], fontSize=8, leading=10, alignment=TA_LEFT)
-    cell_center = ParagraphStyle('RHICellC', parent=styles['Normal'], fontSize=8, leading=10, alignment=TA_CENTER)
-    cell_right = ParagraphStyle('RHICellR', parent=styles['Normal'], fontSize=8, leading=10, alignment=TA_RIGHT)
-    header_style = ParagraphStyle('RHIHeader', parent=styles['Normal'], fontSize=8, leading=10, fontName='Helvetica-Bold', alignment=TA_CENTER, textColor=rl_colors.white)
-    footer_style = ParagraphStyle('RHIFooter', parent=styles['Normal'], fontSize=8, leading=11)
+    doc = _std_doc(buffer, landscape_mode=True)
+    st = _get_report_styles()
+    info_style = st['Meta']
+    cell_style = st['Cell']
+    cell_center = st['CellCenter']
+    cell_right = st['CellRight']
+    header_style = st['TableHeader']
 
     elements = []
     elements.extend(_kop_surat_flowables(settings, doc.width))
-    elements.append(Paragraph("REKAPITULASI HASIL INVENTARISASI", title_style))
-    elements.append(Paragraph("BARANG MILIK NEGARA (RHI)", title_style))
+    elements.extend(_title_block("REKAPITULASI HASIL INVENTARISASI\nBARANG MILIK NEGARA (RHI)"))
 
     satker = activity.get("kasatker", {})
     satker_name = satker.get("nama", activity.get("nama_kegiatan", "-"))
-    elements.append(Spacer(1, 3*rl_mm))
     elements.append(Paragraph(f"Satuan Kerja: {satker_name}", info_style))
     elements.append(Paragraph(f"Nomor SK: {activity.get('nomor_surat', '-')} | Periode: {activity.get('tanggal_mulai', '-')} s.d. {activity.get('tanggal_selesai', '-')}", info_style))
     elements.append(Spacer(1, 4*rl_mm))
@@ -1017,9 +1118,9 @@ async def generate_rhi_pdf(activity_id: str):
     for no, label, count, value in rows_data:
         pct = f"{(count/total_count*100):.1f}%" if total_count > 0 else "0%"
         is_main = no.strip() in main_categories
-        style_l = ParagraphStyle('RHICellBold', parent=cell_style, fontName='Helvetica-Bold') if is_main else cell_style
-        style_r = ParagraphStyle('RHICellBoldR', parent=cell_right, fontName='Helvetica-Bold') if is_main else cell_right
-        style_c = ParagraphStyle('RHICellBoldC', parent=cell_center, fontName='Helvetica-Bold') if is_main else cell_center
+        style_l = st['CellBold'] if is_main else cell_style
+        style_r = st['CellBoldRight'] if is_main else cell_right
+        style_c = st['CellBoldCenter'] if is_main else cell_center
         table_data.append([
             Paragraph(str(no), style_c),
             Paragraph(label, style_l),
@@ -1037,49 +1138,24 @@ async def generate_rhi_pdf(activity_id: str):
         Paragraph(f"<b>{pct_total}</b>", cell_center),
     ])
 
-    col_widths = [35, 280, 65, 120, 65]
+    col_widths = _fit_col_widths([35, 280, 65, 120, 65], doc.width)
     table = Table(table_data, colWidths=col_widths, repeatRows=1)
-
-    header_bg = rl_colors.HexColor("#1e3a5f")
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), header_bg),
-        ('TEXTCOLOR', (0, 0), (-1, 0), rl_colors.white),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, -1), 8),
-        ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('GRID', (0, 0), (-1, -1), 0.5, rl_colors.HexColor("#cccccc")),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -2), [rl_colors.white, rl_colors.HexColor("#f8f9fa")]),
-        ('BACKGROUND', (0, -1), (-1, -1), rl_colors.HexColor("#e8f0fe")),
-        ('BACKGROUND', (0, 1), (-1, 1), rl_colors.HexColor("#e8f5e9")),
-        ('BACKGROUND', (0, 5), (-1, 5), rl_colors.HexColor("#ffebee")),
-        ('BACKGROUND', (0, 6), (-1, 6), rl_colors.HexColor("#f3e5f5")),
-        ('BACKGROUND', (0, 7), (-1, 7), rl_colors.HexColor("#fce4ec")),
-        ('BACKGROUND', (0, 8), (-1, 8), rl_colors.HexColor("#f5f5f5")),
-        ('TOPPADDING', (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-        ('LEFTPADDING', (0, 0), (-1, -1), 6),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
-    ]))
+    table.setStyle(_std_table_style(zebra=True, total_row=True))
     elements.append(table)
 
     # Signature
     elements.append(Spacer(1, 12*rl_mm))
     kasatker_nama = satker.get("nama_pejabat", "________________________")
     kasatker_nip = satker.get("nip", "________________________")
-    sign_data = [
-        [Paragraph("", footer_style), Paragraph(".................., .......................", footer_style)],
-        [Paragraph("", footer_style), Paragraph("Kepala Satuan Kerja,", footer_style)],
-        [Paragraph("", footer_style), Paragraph("", footer_style)],
-        [Paragraph("", footer_style), Paragraph("", footer_style)],
-        [Paragraph("", footer_style), Paragraph(f"<b>{kasatker_nama}</b>", footer_style)],
-        [Paragraph("", footer_style), Paragraph(f"NIP. {kasatker_nip}", footer_style)],
-    ]
-    sign_table = Table(sign_data, colWidths=[380, 250])
-    sign_table.setStyle(TableStyle([('ALIGN', (1, 0), (1, -1), 'CENTER'), ('VALIGN', (0, 0), (-1, -1), 'MIDDLE')]))
-    elements.append(sign_table)
+    elements.extend(_signature_block([
+        {'pre': ['.................., .......................'],
+         'header': 'Kepala Satuan Kerja,',
+         'nama': kasatker_nama,
+         'after': [f'NIP. {kasatker_nip}']},
+    ], doc.width))
 
-    doc.build(elements)
+    footer = _page_footer_factory("Rekapitulasi Hasil Inventarisasi Barang Milik Negara (RHI)")
+    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
     buffer.seek(0)
     return StreamingResponse(buffer, media_type="application/pdf",
                              headers={"Content-Disposition": f'attachment; filename="RHI_{activity_id[:8]}.pdf"'})
@@ -1092,12 +1168,8 @@ async def generate_rhi_pdf(activity_id: str):
 @reports_router.get("/inventory-activities/{activity_id}/bahi-pdf")
 async def generate_bahi_pdf(activity_id: str):
     """Generate BAHI (Berita Acara Hasil Inventarisasi BMN) PDF"""
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib import colors as rl_colors
-    from reportlab.lib.units import mm as rl_mm, cm as rl_cm
-    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY
+    from reportlab.platypus import Paragraph, Spacer
+    from reportlab.lib.units import mm as rl_mm
 
     activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
     if not activity:
@@ -1135,27 +1207,19 @@ async def generate_bahi_pdf(activity_id: str):
     tgl_selesai = activity.get("tanggal_selesai", "-")
 
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=2.5*rl_cm, rightMargin=2.5*rl_cm, topMargin=2*rl_cm, bottomMargin=2*rl_cm)
-
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('BAHITitle', parent=styles['Title'], fontSize=13, spaceAfter=4, alignment=TA_CENTER, fontName='Helvetica-Bold', leading=17)
-    subtitle_style = ParagraphStyle('BAHISub', parent=styles['Normal'], fontSize=10, spaceAfter=8, alignment=TA_CENTER)
-    normal_style = ParagraphStyle('BAHINormal', parent=styles['Normal'], fontSize=10, spaceAfter=6, alignment=TA_JUSTIFY, leading=14)
-    bold_style = ParagraphStyle('BAHIBold', parent=styles['Normal'], fontSize=10, fontName='Helvetica-Bold', spaceAfter=4)
-    indent_style = ParagraphStyle('BAHIIndent', parent=normal_style, leftIndent=20, spaceAfter=2)
-    footer_style = ParagraphStyle('BAHIFooter', parent=styles['Normal'], fontSize=10, leading=13)
-    small_style = ParagraphStyle('BAHISmall', parent=styles['Normal'], fontSize=9, leading=12)
+    doc = _std_doc(buffer)
+    st = _get_report_styles()
+    normal_style = st['Body']
+    bold_style = st['Heading']
+    indent_style = st['BodyIndent']
+    small_style = st['Body']
 
     elements = []
     elements.extend(_kop_surat_flowables(settings, doc.width))
 
-    elements.append(Paragraph("BERITA ACARA", title_style))
-    elements.append(Paragraph("HASIL INVENTARISASI BARANG MILIK NEGARA", title_style))
-    elements.append(Spacer(1, 2*rl_mm))
     ba = activity.get("berita_acara", {})
     ba_nomor = ba.get("nomor", "......./......./........")
-    elements.append(Paragraph(f"Nomor: {ba_nomor}", subtitle_style))
-    elements.append(Spacer(1, 6*rl_mm))
+    elements.extend(_title_block("BERITA ACARA\nHASIL INVENTARISASI BARANG MILIK NEGARA", nomor=ba_nomor))
 
     elements.append(Paragraph(
         f"Pada hari ini, .................., tanggal .................. bulan .................. "
@@ -1236,22 +1300,18 @@ async def generate_bahi_pdf(activity_id: str):
             elements.append(Paragraph(f"{i}. {name} &nbsp;&nbsp;&nbsp;(.......................)", small_style))
         elements.append(Spacer(1, 6*rl_mm))
 
-    sign_data = [
-        [Paragraph("", footer_style), Paragraph(".................., .......................", footer_style)],
-        [Paragraph("Mengetahui,", footer_style), Paragraph("Yang membuat Berita Acara,", footer_style)],
-        [Paragraph("", footer_style), Paragraph("", footer_style)],
-        [Paragraph("", footer_style), Paragraph("", footer_style)],
-        [Paragraph(f"<b>{kasatker_nama}</b>", footer_style), Paragraph(f"<b>{tim[0] if tim else '________________________'}</b>", footer_style)],
-        [Paragraph(f"NIP. {kasatker_nip}", footer_style), Paragraph("NIP. ........................", footer_style)],
-    ]
-    sign_table = Table(sign_data, colWidths=[230, 230])
-    sign_table.setStyle(TableStyle([
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-    ]))
-    elements.append(sign_table)
+    elements.extend(_signature_block([
+        {'header': 'Mengetahui,',
+         'nama': kasatker_nama,
+         'after': [f'NIP. {kasatker_nip}']},
+        {'pre': ['.................., .......................'],
+         'header': 'Yang membuat Berita Acara,',
+         'nama': tim[0] if tim else '________________________',
+         'after': ['NIP. ........................']},
+    ], doc.width))
 
-    doc.build(elements)
+    footer = _page_footer_factory("Berita Acara Hasil Inventarisasi Barang Milik Negara (BAHI)")
+    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
     buffer.seek(0)
     return StreamingResponse(buffer, media_type="application/pdf",
                              headers={"Content-Disposition": f'attachment; filename="BAHI_{activity_id[:8]}.pdf"'})
@@ -1264,12 +1324,8 @@ async def generate_bahi_pdf(activity_id: str):
 @reports_router.get("/inventory-activities/{activity_id}/sp-hasil-pdf")
 async def generate_sp_hasil_pdf(activity_id: str):
     """Generate Surat Pernyataan Hasil Inventarisasi BMN PDF"""
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib import colors as rl_colors
-    from reportlab.lib.units import mm as rl_mm, cm as rl_cm
-    from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY
+    from reportlab.platypus import Paragraph, Spacer
+    from reportlab.lib.units import mm as rl_mm
 
     activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
     if not activity:
@@ -1284,20 +1340,15 @@ async def generate_sp_hasil_pdf(activity_id: str):
     nomor_sk = activity.get("nomor_surat", "-")
 
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=2.5*rl_cm, rightMargin=2.5*rl_cm, topMargin=2.5*rl_cm, bottomMargin=2.5*rl_cm)
-
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('SPHTitle', parent=styles['Title'], fontSize=13, spaceAfter=4, alignment=TA_CENTER, fontName='Helvetica-Bold', leading=17)
-    normal_style = ParagraphStyle('SPHNormal', parent=styles['Normal'], fontSize=10, spaceAfter=6, alignment=TA_JUSTIFY, leading=14)
-    indent_style = ParagraphStyle('SPHIndent', parent=normal_style, leftIndent=20, spaceAfter=4)
-    footer_style = ParagraphStyle('SPHFooter', parent=styles['Normal'], fontSize=10, leading=13)
+    doc = _std_doc(buffer)
+    st = _get_report_styles()
+    normal_style = st['Body']
+    indent_style = st['BodyIndent']
 
     elements = []
     elements.extend(_kop_surat_flowables(settings, doc.width))
 
-    elements.append(Paragraph("SURAT PERNYATAAN", title_style))
-    elements.append(Paragraph("HASIL INVENTARISASI BARANG MILIK NEGARA", title_style))
-    elements.append(Spacer(1, 10*rl_mm))
+    elements.extend(_title_block("SURAT PERNYATAAN\nHASIL INVENTARISASI BARANG MILIK NEGARA"))
 
     elements.append(Paragraph("Yang bertanda tangan di bawah ini:", normal_style))
     elements.append(Spacer(1, 2*rl_mm))
@@ -1336,21 +1387,15 @@ async def generate_sp_hasil_pdf(activity_id: str):
         normal_style))
 
     elements.append(Spacer(1, 12*rl_mm))
-    sign_data = [
-        [Paragraph("", footer_style), Paragraph(".................., .......................", footer_style)],
-        [Paragraph("", footer_style), Paragraph("Yang membuat pernyataan,", footer_style)],
-        [Paragraph("", footer_style), Paragraph("", footer_style)],
-        [Paragraph("", footer_style), Paragraph("", footer_style)],
-        [Paragraph("", footer_style), Paragraph("", footer_style)],
-        [Paragraph("", footer_style), Paragraph(f"<b>{kasatker_nama}</b>", footer_style)],
-        [Paragraph("", footer_style), Paragraph(f"{kasatker_jabatan}", footer_style)],
-        [Paragraph("", footer_style), Paragraph(f"NIP. {kasatker_nip}", footer_style)],
-    ]
-    sign_table = Table(sign_data, colWidths=[220, 250])
-    sign_table.setStyle(TableStyle([('ALIGN', (1, 0), (1, -1), 'CENTER'), ('VALIGN', (0, 0), (-1, -1), 'MIDDLE')]))
-    elements.append(sign_table)
+    elements.extend(_signature_block([
+        {'pre': ['.................., .......................'],
+         'header': 'Yang membuat pernyataan,',
+         'nama': kasatker_nama,
+         'after': [f'{kasatker_jabatan}', f'NIP. {kasatker_nip}']},
+    ], doc.width))
 
-    doc.build(elements)
+    footer = _page_footer_factory("Surat Pernyataan Hasil Inventarisasi Barang Milik Negara")
+    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
     buffer.seek(0)
     return StreamingResponse(buffer, media_type="application/pdf",
                              headers={"Content-Disposition": f'attachment; filename="SP_Hasil_{activity_id[:8]}.pdf"'})
@@ -1363,12 +1408,8 @@ async def generate_sp_hasil_pdf(activity_id: str):
 @reports_router.get("/inventory-activities/{activity_id}/sp-pelaksanaan-pdf")
 async def generate_sp_pelaksanaan_pdf(activity_id: str):
     """Generate Surat Pernyataan Pelaksanaan Inventarisasi BMN PDF"""
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib import colors as rl_colors
-    from reportlab.lib.units import mm as rl_mm, cm as rl_cm
-    from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY
+    from reportlab.platypus import Paragraph, Spacer
+    from reportlab.lib.units import mm as rl_mm
 
     activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
     if not activity:
@@ -1385,20 +1426,15 @@ async def generate_sp_pelaksanaan_pdf(activity_id: str):
     tgl_selesai = activity.get("tanggal_selesai", "-")
 
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=2.5*rl_cm, rightMargin=2.5*rl_cm, topMargin=2.5*rl_cm, bottomMargin=2.5*rl_cm)
-
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('SPPTitle', parent=styles['Title'], fontSize=13, spaceAfter=4, alignment=TA_CENTER, fontName='Helvetica-Bold', leading=17)
-    normal_style = ParagraphStyle('SPPNormal', parent=styles['Normal'], fontSize=10, spaceAfter=6, alignment=TA_JUSTIFY, leading=14)
-    indent_style = ParagraphStyle('SPPIndent', parent=normal_style, leftIndent=20, spaceAfter=4)
-    footer_style = ParagraphStyle('SPPFooter', parent=styles['Normal'], fontSize=10, leading=13)
+    doc = _std_doc(buffer)
+    st = _get_report_styles()
+    normal_style = st['Body']
+    indent_style = st['BodyIndent']
 
     elements = []
     elements.extend(_kop_surat_flowables(settings, doc.width))
 
-    elements.append(Paragraph("SURAT PERNYATAAN", title_style))
-    elements.append(Paragraph("PELAKSANAAN INVENTARISASI BARANG MILIK NEGARA", title_style))
-    elements.append(Spacer(1, 10*rl_mm))
+    elements.extend(_title_block("SURAT PERNYATAAN\nPELAKSANAAN INVENTARISASI BARANG MILIK NEGARA"))
 
     elements.append(Paragraph("Yang bertanda tangan di bawah ini:", normal_style))
     elements.append(Spacer(1, 2*rl_mm))
@@ -1439,21 +1475,15 @@ async def generate_sp_pelaksanaan_pdf(activity_id: str):
         normal_style))
 
     elements.append(Spacer(1, 12*rl_mm))
-    sign_data = [
-        [Paragraph("", footer_style), Paragraph(".................., .......................", footer_style)],
-        [Paragraph("", footer_style), Paragraph("Yang membuat pernyataan,", footer_style)],
-        [Paragraph("", footer_style), Paragraph("", footer_style)],
-        [Paragraph("", footer_style), Paragraph("", footer_style)],
-        [Paragraph("", footer_style), Paragraph("", footer_style)],
-        [Paragraph("", footer_style), Paragraph(f"<b>{kasatker_nama}</b>", footer_style)],
-        [Paragraph("", footer_style), Paragraph(f"{kasatker_jabatan}", footer_style)],
-        [Paragraph("", footer_style), Paragraph(f"NIP. {kasatker_nip}", footer_style)],
-    ]
-    sign_table = Table(sign_data, colWidths=[220, 250])
-    sign_table.setStyle(TableStyle([('ALIGN', (1, 0), (1, -1), 'CENTER'), ('VALIGN', (0, 0), (-1, -1), 'MIDDLE')]))
-    elements.append(sign_table)
+    elements.extend(_signature_block([
+        {'pre': ['.................., .......................'],
+         'header': 'Yang membuat pernyataan,',
+         'nama': kasatker_nama,
+         'after': [f'{kasatker_jabatan}', f'NIP. {kasatker_nip}']},
+    ], doc.width))
 
-    doc.build(elements)
+    footer = _page_footer_factory("Surat Pernyataan Pelaksanaan Inventarisasi Barang Milik Negara")
+    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
     buffer.seek(0)
     return StreamingResponse(buffer, media_type="application/pdf",
                              headers={"Content-Disposition": f'attachment; filename="SP_Pelaksanaan_{activity_id[:8]}.pdf"'})

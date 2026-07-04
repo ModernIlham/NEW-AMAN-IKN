@@ -48,6 +48,18 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#24] Laporan resmi: satu sistem desain rapi & profesional — 2026-07-04
+
+Kedelapan laporan resmi ReportLab (Berita Acara, SPTJM, Surat Koreksi, DBHI ×6,
+RHI, BAHI, SP Hasil, SP Pelaksanaan) kini memakai **satu sistem desain bersama**
+(isi/teks hukum tidak diubah): blok judul+nomor seragam di bawah kop; gaya tabel
+tunggal (header abu muda tebal, grid tipis, header berulang tiap halaman, zebra
+lembut untuk DBHI/RHI, angka rata kanan, baris total tebal); blok tanda tangan
+seragam (nama tebal bergaris bawah + NIP); **footer tiap halaman** (nama laporan
++ "Halaman X"); margin & tipografi Helvetica konsisten. Perbaikan nyata ikut:
+sel NIP/nama panjang kini membungkus (dulu meluber), label total tak lagi patah
+di tabel kosong. Laporan eksekutif tidak disentuh (sudah baik).
+
 ## [#23] Cache baca offline: mode inventarisasi berfungsi penuh tanpa koneksi — 2026-07-04
 
 - **Snapshot data kegiatan** (proyeksi list + thumbnail, tanpa foto penuh) ke
