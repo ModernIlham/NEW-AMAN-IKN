@@ -838,7 +838,9 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
     finally { setIsDeleting(null); }
   }, []);
 
-  // Kartu Inventarisasi — riwayat pengesahan lintas kegiatan per identitas aset
+  // Kartu Inventarisasi — riwayat pengesahan lintas kegiatan per identitas aset.
+  // kode_satker kegiatan aktif ikut dikirim agar riwayat dibatasi pada satuan
+  // kerja yang sama (identitas aset yang sama di satker lain tidak tampil).
   const handleOpenKartu = useCallback((asset) => {
     if (!asset) return;
     setKartuIdentity({
@@ -846,8 +848,10 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
       asset_code: asset.asset_code || "",
       NUP: asset.NUP || "",
       asset_name: asset.asset_name || "",
+      kode_satker: activity?.kode_satker || "",
+      nama_satker: activity?.nama_satker || "",
     });
-  }, []);
+  }, [activity?.kode_satker, activity?.nama_satker]);
 
   // === UI HANDLERS ===
   const handleAnalyticsToggle = useCallback(() => setAnalyticsOpen(prev => !prev), []);

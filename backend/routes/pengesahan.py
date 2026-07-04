@@ -108,6 +108,11 @@ async def backfill_ticket_numbers() -> int:
 # ELIGIBILITY (syarat pengesahan)
 # ============================================================================
 
+def _empty_field_filter(field: str) -> dict:
+    """Filter: field kosong (\"\"), null, atau tidak ada sama sekali."""
+    return {"$or": [{field: {"$in": ["", None]}}, {field: {"$exists": False}}]}
+
+
 async def _pengesahan_counts(activity_id: str) -> dict:
     """Hitung syarat pengesahan — filter identik dengan /completion-status."""
     pending_filter = {
@@ -127,12 +132,57 @@ async def _pengesahan_counts(activity_id: str) -> dict:
     pending = await db.assets.count_documents(pending_filter)
     no_photo = await db.assets.count_documents(no_photo_filter)
     total = await db.assets.count_documents({"activity_id": activity_id})
-    return {
+    # Syarat data lengkap tambahan:
+    #   - tidak boleh ada aset kategori "dummy" yang tersisa
+    #   - semua aset punya kode_register, eselon (I atau II), lokasi, dan pengguna
+    kategori_dummy = await db.assets.count_documents({
+        "activity_id": activity_id,
+        "category": {"$regex": "dummy", "$options": "i"},
+    })
+    tanpa_kode_register = await db.assets.count_documents({
+        "activity_id": activity_id, **_empty_field_filter("kode_register"),
+    })
+    tanpa_eselon = await db.assets.count_documents({
+        "activity_id": activity_id,
+        "$and": [_empty_field_filter("eselon1"), _empty_field_filter("eselon2")],
+    })
+    tanpa_lokasi = await db.assets.count_documents({
+        "activity_id": activity_id, **_empty_field_filter("location"),
+    })
+    tanpa_pengguna = await db.assets.count_documents({
+        "activity_id": activity_id, **_empty_field_filter("user"),
+    })
+    counts = {
         "belum_diinventarisasi": pending,
         "tanpa_foto": no_photo,
+        "kategori_dummy": kategori_dummy,
+        "tanpa_kode_register": tanpa_kode_register,
+        "tanpa_eselon": tanpa_eselon,
+        "tanpa_lokasi": tanpa_lokasi,
+        "tanpa_pengguna": tanpa_pengguna,
         "total": total,
-        "eligible": pending == 0 and no_photo == 0 and total > 0,
     }
+    counts["eligible"] = total > 0 and all(
+        counts[k] == 0 for k in (
+            "belum_diinventarisasi", "tanpa_foto", "kategori_dummy",
+            "tanpa_kode_register", "tanpa_eselon", "tanpa_lokasi", "tanpa_pengguna",
+        )
+    )
+    return counts
+
+
+def _pengesahan_problems(counts: dict) -> list:
+    """Daftar masalah (Indonesia) untuk counts yang belum nol — dipakai pesan 400."""
+    labels = [
+        ("belum_diinventarisasi", "aset belum diinventarisasi"),
+        ("tanpa_foto", "aset tanpa foto"),
+        ("kategori_dummy", "aset masih berkategori dummy"),
+        ("tanpa_kode_register", "aset tanpa kode register"),
+        ("tanpa_eselon", "aset tanpa Eselon I/II"),
+        ("tanpa_lokasi", "aset tanpa lokasi"),
+        ("tanpa_pengguna", "aset tanpa pengguna"),
+    ]
+    return [f"{counts[key]} {label}" for key, label in labels if counts.get(key)]
 
 
 def _dokumen_meta(activity: dict) -> list:
@@ -329,7 +379,7 @@ async def sahkan_activity(activity_id: str, request: Request, admin: dict = Depe
     activity = await db.inventory_activities.find_one(
         {"id": activity_id},
         {"_id": 0, "id": 1, "nama_kegiatan": 1, "created_at": 1, "ticket_number": 1,
-         "status_pengesahan": 1, "pengesahan_dokumen": 1},
+         "status_pengesahan": 1, "pengesahan_dokumen": 1, "kode_satker": 1, "nama_satker": 1},
     )
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
@@ -342,10 +392,7 @@ async def sahkan_activity(activity_id: str, request: Request, admin: dict = Depe
     if not counts["eligible"]:
         raise HTTPException(
             status_code=400,
-            detail=(
-                f"Belum memenuhi syarat pengesahan: {counts['belum_diinventarisasi']} aset belum "
-                f"diinventarisasi, {counts['tanpa_foto']} aset tanpa foto"
-            ),
+            detail="Belum memenuhi syarat pengesahan: " + ", ".join(_pengesahan_problems(counts)),
         )
     if not (activity.get("pengesahan_dokumen") or []):
         raise HTTPException(status_code=400, detail="Unggah minimal 1 dokumen pengesahan (PDF bertanda tangan) terlebih dahulu")
@@ -367,8 +414,12 @@ async def sahkan_activity(activity_id: str, request: Request, admin: dict = Depe
     if result.matched_count == 0:
         raise HTTPException(status_code=400, detail="Kegiatan sudah disahkan sebelumnya")
 
-    # Tulis SATU record riwayat per aset kegiatan ini
+    # Tulis SATU record riwayat per aset kegiatan ini. kode_satker/nama_satker
+    # kegiatan ikut disalin agar Kartu Inventarisasi bisa memfilter riwayat
+    # identitas aset yang sama per satuan kerja.
     activity_name = activity.get("nama_kegiatan", "")
+    kode_satker = activity.get("kode_satker", "") or ""
+    nama_satker = activity.get("nama_satker", "") or ""
     history_docs = []
     cursor = db.assets.find({"activity_id": activity_id}, _HISTORY_ASSET_PROJECTION)
     async for a in cursor:
@@ -377,6 +428,8 @@ async def sahkan_activity(activity_id: str, request: Request, admin: dict = Depe
             "activity_id": activity_id,
             "ticket_number": ticket_number,
             "activity_name": activity_name,
+            "kode_satker": kode_satker,
+            "nama_satker": nama_satker,
             "tanggal_pengesahan": disahkan_at,
             "asset_id": a.get("id", ""),
             "asset_code": a.get("asset_code", ""),
@@ -413,34 +466,49 @@ async def sahkan_activity(activity_id: str, request: Request, admin: dict = Depe
 # ============================================================================
 
 @pengesahan_router.get("/assets/kartu-inventarisasi")
-async def get_kartu_inventarisasi(kode_register: str = "", asset_code: str = "", NUP: str = ""):
+async def get_kartu_inventarisasi(kode_register: str = "", asset_code: str = "", NUP: str = "", kode_satker: str = ""):
     """Riwayat pengesahan sebuah aset lintas kegiatan.
 
     Identitas: prioritas kode_register; fallback (asset_code, NUP).
+    kode_satker (opsional, dikirim frontend dari kegiatan aktif): riwayat
+    dibatasi pada satuan kerja yang SAMA — identitas aset yang kebetulan sama
+    di satker lain tidak ikut tampil. Record lama tanpa kode_satker (ditulis
+    sebelum field ini ada) tetap disertakan; frontend menandainya sebagai legacy.
     NOTE: route ini dideklarasikan di router yang dimuat SEBELUM assets_router
     agar tidak tertangkap /assets/{asset_id}.
     """
     kode_register = (kode_register or "").strip()
     asset_code = (asset_code or "").strip()
     NUP = (NUP or "").strip()
+    kode_satker = (kode_satker or "").strip()
 
     if kode_register:
-        query = {"kode_register": kode_register}
+        identity_query = {"kode_register": kode_register}
     elif asset_code:
-        query = {"asset_code": asset_code}
+        identity_query = {"asset_code": asset_code}
         if NUP:
-            query["NUP"] = NUP
+            identity_query["NUP"] = NUP
     else:
         raise HTTPException(status_code=400, detail="Isi kode_register atau asset_code untuk mencari kartu inventarisasi")
+
+    query = dict(identity_query)
+    if kode_satker:
+        query["$or"] = [
+            {"kode_satker": kode_satker},
+            # Legacy: record ditulis sebelum kode_satker dicatat — tetap tampil
+            {"kode_satker": {"$in": ["", None]}},
+            {"kode_satker": {"$exists": False}},
+        ]
 
     history = await db.inventory_history.find(query, {"_id": 0}).sort(
         [("tanggal_pengesahan", -1), ("ticket_number", -1)]
     ).to_list(200)
 
-    # Header identitas: aset terbaru dengan identitas yang sama; fallback ke
-    # record riwayat teratas bila asetnya sudah tidak ada.
+    # Header identitas: aset terbaru dengan identitas yang sama (tanpa filter
+    # satker — aset tidak menyimpan kode_satker); fallback ke record riwayat
+    # teratas bila asetnya sudah tidak ada.
     asset = await db.assets.find_one(
-        query,
+        identity_query,
         {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "kode_register": 1,
          "asset_name": 1, "category": 1, "location": 1, "user": 1, "eselon1": 1},
         sort=[("created_at", -1)],
@@ -462,5 +530,5 @@ async def get_kartu_inventarisasi(kode_register: str = "", asset_code: str = "",
         "asset": asset,
         "history": history,
         "total": len(history),
-        "query": {"kode_register": kode_register, "asset_code": asset_code, "NUP": NUP},
+        "query": {"kode_register": kode_register, "asset_code": asset_code, "NUP": NUP, "kode_satker": kode_satker},
     }

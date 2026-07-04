@@ -71,6 +71,12 @@ class AssetCreate(BaseModel):
     eselon1: Optional[str] = ""
     eselon2: Optional[str] = ""
     user: Optional[str] = ""
+    # Pengguna terstruktur: melekat ke "Individual" | "Jabatan" | "Operasional".
+    # `user` tetap menyimpan NAMA orangnya (label UI menyesuaikan pilihan);
+    # `pengguna_jabatan` hanya terisi bila melekat ke Jabatan.
+    pengguna_melekat_ke: Optional[str] = ""
+    pengguna_jabatan: Optional[str] = ""
+    nomor_bast: Optional[str] = ""
     condition: Optional[str] = "Baik"
     status: Optional[str] = "Aktif"
     nomor_spm: Optional[str] = ""
@@ -128,6 +134,13 @@ class AssetResponse(BaseModel):
     eselon1: Optional[str] = ""
     eselon2: Optional[str] = ""
     user: Optional[str] = ""
+    # Pengguna terstruktur (lihat AssetCreate)
+    pengguna_melekat_ke: Optional[str] = ""
+    pengguna_jabatan: Optional[str] = ""
+    nomor_bast: Optional[str] = ""
+    # Dokumen BAST (GridFS) — diisi server oleh POST /assets/{id}/bast
+    bast_file_id: Optional[str] = ""
+    bast_filename: Optional[str] = ""
     condition: Optional[str] = "Baik"
     status: Optional[str] = "Aktif"
     nomor_spm: Optional[str] = ""

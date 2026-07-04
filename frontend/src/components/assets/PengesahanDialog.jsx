@@ -25,6 +25,18 @@ const formatTanggal = (iso) => {
   }
 };
 
+// Syarat pengesahan — key mengikuti payload GET /pengesahan-status.
+// Baris hijau bila count 0, merah bila masih ada aset yang belum memenuhi.
+const REQUIREMENTS = [
+  { key: "belum_diinventarisasi", ok: "Semua aset sudah diinventarisasi", fail: (n) => `${n} aset belum diinventarisasi` },
+  { key: "tanpa_foto", ok: "Semua aset memiliki foto", fail: (n) => `${n} aset tanpa foto` },
+  { key: "kategori_dummy", ok: "Tidak ada aset kategori dummy", fail: (n) => `${n} aset masih berkategori dummy` },
+  { key: "tanpa_kode_register", ok: "Semua aset memiliki kode register", fail: (n) => `${n} aset tanpa kode register` },
+  { key: "tanpa_eselon", ok: "Semua aset memiliki Eselon I/II", fail: (n) => `${n} aset tanpa Eselon I/II` },
+  { key: "tanpa_lokasi", ok: "Semua aset memiliki lokasi", fail: (n) => `${n} aset tanpa lokasi` },
+  { key: "tanpa_pengguna", ok: "Semua aset memiliki pengguna", fail: (n) => `${n} aset tanpa pengguna` },
+];
+
 /**
  * Dialog Pengesahan Kegiatan:
  *  1. Cek kelayakan (semua aset terinventarisasi + berfoto) via
@@ -139,7 +151,7 @@ export default function PengesahanDialog({ open, activity, isAdmin, onClose, onS
           <DialogDescription className="text-xs text-muted-foreground">
             {disahkan
               ? "Kegiatan telah disahkan dan seluruh data aset terkunci."
-              : "Sahkan kegiatan setelah semua aset terinventarisasi, berfoto, dan dokumen pengesahan bertanda tangan diunggah."}
+              : "Sahkan kegiatan setelah semua aset terinventarisasi, berfoto, berdata lengkap (kode register, eselon, lokasi, pengguna, tanpa kategori dummy), dan dokumen pengesahan bertanda tangan diunggah."}
           </DialogDescription>
         </DialogHeader>
 
@@ -180,28 +192,39 @@ export default function PengesahanDialog({ open, activity, isAdmin, onClose, onS
               </div>
             </div>
 
-            {/* Ringkasan syarat */}
-            <div className="grid grid-cols-3 gap-2 text-center">
-              <div className="p-2 rounded-lg bg-muted">
-                <div className="text-lg font-bold text-foreground">{status.total}</div>
-                <div className="text-[10px] text-muted-foreground uppercase">Total Aset</div>
+            {/* Syarat pengesahan — baris hijau/merah per kriteria */}
+            <div className="rounded-lg border border-border overflow-hidden" data-testid="pengesahan-requirements">
+              <div className="flex items-center justify-between px-2.5 py-1.5 bg-muted">
+                <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Syarat Pengesahan</span>
+                <span className="text-[11px] font-bold text-foreground tabular-nums">{status.total} aset</span>
               </div>
-              <div className={`p-2 rounded-lg ${status.belum_diinventarisasi === 0 ? "bg-emerald-50 dark:bg-emerald-900/30" : "bg-amber-50 dark:bg-amber-900/30"}`}>
-                <div className={`text-lg font-bold ${status.belum_diinventarisasi === 0 ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}`}>{status.belum_diinventarisasi}</div>
-                <div className="text-[10px] text-muted-foreground uppercase">Belum Diinv.</div>
-              </div>
-              <div className={`p-2 rounded-lg ${status.tanpa_foto === 0 ? "bg-emerald-50 dark:bg-emerald-900/30" : "bg-amber-50 dark:bg-amber-900/30"}`}>
-                <div className={`text-lg font-bold ${status.tanpa_foto === 0 ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}`}>{status.tanpa_foto}</div>
-                <div className="text-[10px] text-muted-foreground uppercase">Tanpa Foto</div>
+              <div className="divide-y divide-border">
+                {status.total === 0 && (
+                  <div className="flex items-center gap-2 px-2.5 py-1.5 bg-red-50 dark:bg-red-900/20">
+                    <AlertTriangle className="w-3.5 h-3.5 text-red-600 dark:text-red-400 flex-shrink-0" />
+                    <span className="text-xs text-red-700 dark:text-red-300">Kegiatan belum memiliki aset</span>
+                  </div>
+                )}
+                {REQUIREMENTS.map((req) => {
+                  const n = Number(status[req.key] || 0);
+                  const ok = n === 0;
+                  return (
+                    <div
+                      key={req.key}
+                      className={`flex items-center gap-2 px-2.5 py-1.5 ${ok ? "bg-emerald-50/60 dark:bg-emerald-900/15" : "bg-red-50 dark:bg-red-900/20"}`}
+                      data-testid={`pengesahan-req-${req.key}`}
+                    >
+                      {ok
+                        ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                        : <X className="w-3.5 h-3.5 text-red-600 dark:text-red-400 flex-shrink-0" />}
+                      <span className={`text-xs ${ok ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300 font-medium"}`}>
+                        {ok ? req.ok : req.fail(n)}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
-            {!disahkan && (status.belum_diinventarisasi > 0 || status.tanpa_foto > 0 || status.total === 0) && (
-              <div className="text-xs text-muted-foreground space-y-1 p-2 bg-muted/50 rounded">
-                {status.total === 0 && <p>• Kegiatan belum memiliki aset</p>}
-                {status.belum_diinventarisasi > 0 && <p>• {status.belum_diinventarisasi} aset masih berstatus "Belum Diinventarisasi"</p>}
-                {status.tanpa_foto > 0 && <p>• {status.tanpa_foto} aset belum memiliki foto bukti</p>}
-              </div>
-            )}
 
             {/* Dokumen pengesahan */}
             <div className="space-y-2">
@@ -283,7 +306,7 @@ export default function PengesahanDialog({ open, activity, isAdmin, onClose, onS
                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50"
                 disabled={!canSahkan}
                 onClick={() => setSahkanStep(true)}
-                title={!status.eligible ? "Semua aset harus terinventarisasi dan berfoto" : dokumen.length === 0 ? "Unggah minimal 1 dokumen pengesahan" : ""}
+                title={!status.eligible ? "Lengkapi semua syarat pengesahan terlebih dahulu" : dokumen.length === 0 ? "Unggah minimal 1 dokumen pengesahan" : ""}
                 data-testid="pengesahan-sahkan-btn"
               >
                 <ShieldCheck className="w-4 h-4 mr-1.5" />

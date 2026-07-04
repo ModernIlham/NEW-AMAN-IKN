@@ -31,6 +31,15 @@ const CONDITION_OPTIONS = [
   { value: "Rusak Berat", selected: "bg-red-600 border-red-600 text-white" },
 ];
 
+// Pengguna "melekat ke" — nilai HARUS sama dengan form penuh (AssetForm) dan
+// backend (pengguna_melekat_ke). Label input nama menyesuaikan pilihan.
+export const PENGGUNA_MELEKAT_OPTIONS = ["Individual", "Jabatan", "Operasional"];
+export const PENGGUNA_NAME_LABELS = {
+  Individual: "Nama Pengguna",
+  Jabatan: "Nama Pejabat",
+  Operasional: "Nama Penanggung Jawab",
+};
+
 // Nilai HARUS sama persis dengan opsi Select pada form penuh (AssetForm).
 const SUB_KLASIFIKASI_OPTIONS = {
   "Kesalahan Pencatatan": [
@@ -103,6 +112,7 @@ const InventoryFieldSheet = ({
   onSubKlasifikasiChange,
   onStikerStatusChange,
   onStikerUkuranChange,
+  onPenggunaMelekatChange,
   onOpenCamera,
   onOpenGallery,
   onFetchGPS,
@@ -373,8 +383,24 @@ const InventoryFieldSheet = ({
                 <Input name="location" value={formData.location || ""} onChange={onInputChange} className="h-9 text-xs" />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Pengguna</Label>
-                <Input name="user" value={formData.user || ""} onChange={onInputChange} className="h-9 text-xs" />
+                <Label className="text-xs">Pengguna Melekat ke</Label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {PENGGUNA_MELEKAT_OPTIONS.map(o => (
+                    <SegButton
+                      key={o}
+                      selected={formData.pengguna_melekat_ke === o}
+                      selectedClass="bg-blue-600 border-blue-600 text-white"
+                      onClick={() => onPenggunaMelekatChange(o)}
+                      testId={`sheet-melekat-${o}`}
+                    >
+                      {o}
+                    </SegButton>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">{PENGGUNA_NAME_LABELS[formData.pengguna_melekat_ke] || "Pengguna"}</Label>
+                <Input name="user" value={formData.user || ""} onChange={onInputChange} className="h-9 text-xs" data-testid="sheet-pengguna-input" />
               </div>
               {hasGps ? (
                 <div className="flex items-center gap-1.5 min-w-0">
