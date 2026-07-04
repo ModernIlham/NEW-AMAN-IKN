@@ -20,7 +20,7 @@ import InventoryFieldSheet from "./InventoryFieldSheet";
 import { toast } from "sonner";
 import axios from "axios";
 import { getApiError } from "../../lib/utils";
-import { compressImageFile, generateThumbnailFromDataUrl, dataUrlBytes } from "../../lib/imageCompression";
+import { compressImageFile, compressDataUrl, generateThumbnailFromDataUrl, dataUrlBytes } from "../../lib/imageCompression";
 
 // ============================================================================
 // INVENTORY CLASSIFICATION INFO DATA (SE 17/SE/M/2024)
@@ -292,22 +292,40 @@ function getAuditHeaders() {
   }
 }
 
-const compressPhotos = async (photos) => {
-  // Photos are already client-compressed via compressImageFile().
-  // Only call server-side Tinify for photos that are still large (>500KB) —
-  // saves bandwidth + Tinify quota for the common case.
-  const SKIP_THRESHOLD = 500 * 1024; // bytes
-  const compressed = [];
-  for (const photo of photos) {
-    const bytes = dataUrlBytes(photo);
-    if (bytes > 0 && bytes <= SKIP_THRESHOLD) {
-      compressed.push(photo);
-      continue;
-    }
+// Photos are already client-compressed via compressImageFile() at capture time.
+// Only photos that are still large (>500KB) go through server-side Tinify —
+// saves bandwidth + Tinify quota for the common case.
+const SKIP_THRESHOLD = 500 * 1024; // bytes
+
+const compressOnePhoto = async (photo) => {
+  const bytes = dataUrlBytes(photo);
+  if (bytes > 0 && bytes <= SKIP_THRESHOLD) return photo;
+
+  // 1) Server-side Tinify — best ratio, but needs connectivity
+  if (navigator.onLine) {
     try {
       const r = await axios.post(`${API}/compress-image`, { image_data: photo });
-      compressed.push(r.data.success ? r.data.compressed_data : photo);
-    } catch { compressed.push(photo); }
+      if (r.data.success && r.data.compressed_data) return r.data.compressed_data;
+    } catch { /* jatuh ke kompresi lokal di bawah */ }
+  }
+
+  // 2) Offline / server gagal: kompresi lokal via canvas (resize 1920px, JPEG
+  //    q0.85) — mencegah base64 mentah menembus batas payload 14MB saat offline
+  try {
+    const local = await compressDataUrl(photo, { maxDim: 1920, quality: 0.85 });
+    // Jangan pernah hasilkan output lebih besar dari aslinya
+    if (dataUrlBytes(local) < bytes) return local;
+    return photo;
+  } catch {
+    // 3) Canvas juga gagal (format tak didukung) — terpaksa kirim apa adanya
+    return photo;
+  }
+};
+
+const compressPhotos = async (photos) => {
+  const compressed = [];
+  for (const photo of photos) {
+    compressed.push(await compressOnePhoto(photo));
   }
   return compressed;
 };
@@ -834,12 +852,15 @@ const AssetForm = memo(({
       return;
     }
     
-    // Validate
-    try {
-      const url = isEditing && editId ? `${API}/assets/validate?exclude_id=${editId}` : `${API}/assets/validate`;
-      const r = await axios.post(url, formData);
-      if (!r.data.valid) { setFormErrors(r.data.errors); toast.error("Data tidak valid"); return; }
-    } catch { /* allow submission if validation endpoint fails */ }
+    // Validate (server round-trip) — skip saat offline: simpan langsung masuk
+    // antrean dan backend tetap memvalidasi ulang saat tersinkron.
+    if (navigator.onLine) {
+      try {
+        const url = isEditing && editId ? `${API}/assets/validate?exclude_id=${editId}` : `${API}/assets/validate`;
+        const r = await axios.post(url, formData);
+        if (!r.data.valid) { setFormErrors(r.data.errors); toast.error("Data tidak valid"); return; }
+      } catch { /* allow submission if validation endpoint fails */ }
+    }
     
     setIsSubmitting(true);
     
@@ -885,11 +906,9 @@ const AssetForm = memo(({
             if (item.type === 'existing') {
               keepIndices.push(item.originalIndex);
             } else if (item.type === 'new' && item.newData) {
-              // Compress new photos before sending
-              try {
-                const r = await axios.post(`${API}/compress-image`, { image_data: item.newData });
-                newPhotosToAdd.push(r.data.success ? r.data.compressed_data : item.newData);
-              } catch { newPhotosToAdd.push(item.newData); }
+              // Compress new photos before sending (server-side Tinify, dengan
+              // fallback kompresi lokal via canvas saat offline/gagal)
+              newPhotosToAdd.push(await compressOnePhoto(item.newData));
             }
           }
           if (newPhotosToAdd.length > 0) toast.info("Mengompres foto baru...", { duration: 2000 });
@@ -911,10 +930,7 @@ const AssetForm = memo(({
               if (typeof photo === "string" && photo.startsWith("__existing__:")) {
                 compressedItemPhotos.push(photo);
               } else {
-                try {
-                  const r = await axios.post(`${API}/compress-image`, { image_data: photo });
-                  compressedItemPhotos.push(r.data.success ? r.data.compressed_data : photo);
-                } catch { compressedItemPhotos.push(photo); }
+                compressedItemPhotos.push(await compressOnePhoto(photo));
               }
             }
             // Documents: pass through sentinels untouched. New uploads ship

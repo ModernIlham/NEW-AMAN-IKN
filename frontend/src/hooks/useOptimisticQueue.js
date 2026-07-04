@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import axios from "axios";
 import { openDB } from "idb";
 import { getApiError } from "../lib/utils";
+import { checkReachable, REACHABILITY_RETRY_MS } from "../lib/connectivity";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -363,11 +364,34 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
   const flushRef = useRef(flushPending);
   useEffect(() => { flushRef.current = flushPending; });
 
-  // Auto-flush when connectivity returns
+  // Auto-flush when connectivity returns. The 'online' event only means a
+  // network interface came up — verify the backend really answers first, or
+  // every queued save would fail again immediately. Retry after 10s while
+  // the browser says online but the server is unreachable.
   useEffect(() => {
-    const handleOnline = () => flushRef.current?.();
+    let cancelled = false;
+    let retryTimer = null;
+
+    const verifyAndFlush = async () => {
+      const reachable = await checkReachable();
+      if (cancelled) return;
+      if (reachable) {
+        flushRef.current?.();
+      } else {
+        retryTimer = setTimeout(verifyAndFlush, REACHABILITY_RETRY_MS);
+      }
+    };
+
+    const handleOnline = () => {
+      if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+      verifyAndFlush();
+    };
     window.addEventListener("online", handleOnline);
-    return () => window.removeEventListener("online", handleOnline);
+    return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+      window.removeEventListener("online", handleOnline);
+    };
   }, []);
 
   // Rehydrate persisted items once on mount: register them as 'failed' so the

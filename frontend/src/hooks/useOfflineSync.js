@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { openDB } from "idb";
 import { toast } from "sonner";
 import axios from "axios";
+import { checkReachable, REACHABILITY_RETRY_MS } from "../lib/connectivity";
 
 const DB_NAME = "inventory_offline";
 const DB_VERSION = 1;
@@ -28,11 +29,37 @@ export function useOfflineSync({ onSyncComplete }) {
   useEffect(() => {
     // Note: pending saves live in useOptimisticQueue (which auto-flushes on
     // 'online'), so this toast only reports connectivity — no sync claim here.
-    const handleOnline = () => { setIsOnline(true); toast.success("Koneksi internet kembali pulih."); };
-    const handleOffline = () => { setIsOnline(false); toast.warning("Koneksi terputus. Mode offline aktif."); };
+    // The 'online' event only means a network interface came up — verify the
+    // backend actually answers before declaring online (captive portal, dead
+    // Wi-Fi, server down). Unreachable → stay offline and retry after 10s.
+    let cancelled = false;
+    let retryTimer = null;
+
+    const verifyOnline = async () => {
+      const reachable = await checkReachable();
+      if (cancelled) return;
+      if (reachable) {
+        setIsOnline(true);
+        toast.success("Koneksi internet kembali pulih.");
+      } else {
+        retryTimer = setTimeout(verifyOnline, REACHABILITY_RETRY_MS);
+      }
+    };
+
+    const handleOnline = () => {
+      if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+      verifyOnline();
+    };
+    const handleOffline = () => {
+      if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+      setIsOnline(false);
+      toast.warning("Koneksi terputus. Mode offline aktif.");
+    };
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
     return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };

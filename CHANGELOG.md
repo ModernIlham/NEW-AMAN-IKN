@@ -48,6 +48,22 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#22] Tindak lanjut pematangan: kompresi offline, reachability, presence, WS auth — 2026-07-04
+
+- **Kompresi foto offline**: bila server kompresi tak terjangkau/offline, foto
+  dikompres lokal via canvas (1920px, q0.85) — base64 mentah hanya bila canvas
+  gagal; berlaku di create, edit, dan foto checklist. Validasi pra-simpan
+  dilewati saat offline (backend tetap memvalidasi saat sinkron).
+- **Ping reachability**: `GET /api/health` baru; status online & auto-flush
+  antrian diverifikasi dulu (timeout 3 dtk, retry 10 dtk) — Wi-Fi tanpa uplink
+  tidak lagi mengaku online.
+- **Presence lintas-worker**: daftar user online = gabungan snapshot semua
+  worker via event bus (snapshot join/leave + periodik 30 dtk, kadaluarsa 60
+  dtk, konvergensi cepat saat kontak pertama).
+- **Autentikasi WebSocket**: koneksi WS wajib JWT (`?token=`); identitas
+  diambil dari token, bukan parameter klien; token invalid ditutup kode 4401
+  tanpa reconnect-loop.
+
 ## [#21] Pematangan kolaborasi & offline (hasil review menyeluruh) — 2026-07-04
 
 Review mendalam stack kolaborasi + offline menemukan beberapa cacat serius;
