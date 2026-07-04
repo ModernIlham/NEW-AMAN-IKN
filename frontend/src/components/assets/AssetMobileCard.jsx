@@ -205,21 +205,29 @@ const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, lockedBy, syncS
                 }`}>{asset.status}</span>
               </div>
             </div>
-            {/* Row 2: Category & Location */}
+            {/* Row 2: Category & Location — no fixed max-w caps: each item is a
+                min-w-0 flex child so the full text shows while there is room,
+                wraps to the next line where natural (flex-wrap), and only
+                truncates when a single value exceeds the whole row width. */}
             <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground flex-wrap">
-              <span className="truncate max-w-[120px]">{asset.category}</span>
-              {asset.location && <span className="flex items-center gap-0.5"><MapPin className="w-3 h-3 text-muted-foreground" /><span className="truncate max-w-[60px]">{asset.location}</span></span>}
+              <span className="truncate min-w-0">{asset.category}</span>
+              {asset.location && (
+                <span className="flex items-center gap-0.5 min-w-0">
+                  <MapPin className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                  <span className="truncate min-w-0">{asset.location}</span>
+                </span>
+              )}
             </div>
-            {/* Row 3: Eselon, Price, Stiker */}
+            {/* Row 3: Eselon, Price, Stiker — same flexible layout as row 2 */}
             <div className="flex items-center gap-2 mt-1 text-xs flex-wrap">
               {asset.eselon1 && (
-                <span className="flex items-center gap-0.5 text-muted-foreground">
-                  <Briefcase className="w-3 h-3 text-muted-foreground" />
-                  <span className="truncate max-w-[80px]">{asset.eselon1}</span>
+                <span className="flex items-center gap-0.5 text-muted-foreground min-w-0">
+                  <Briefcase className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                  <span className="truncate min-w-0">{asset.eselon1}</span>
                 </span>
               )}
               {priceFormatted && (
-                <span className="text-blue-600 font-medium">
+                <span className="text-blue-600 font-medium whitespace-nowrap flex-shrink-0">
                   Rp {priceFormatted}
                 </span>
               )}

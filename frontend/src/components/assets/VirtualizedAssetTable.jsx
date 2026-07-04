@@ -75,8 +75,11 @@ const VirtualizedAssetTable = memo(({ assets, editId, onEdit, onDelete, onPrintC
         <div className="w-10 flex-shrink-0 text-center">Foto</div>
         <div className="flex-[2] min-w-0 px-1">Identitas</div>
         <div className="flex-[2] min-w-0 px-1">Nama Barang</div>
-        <div className="hidden xl:block w-20 flex-shrink-0 px-1">Eselon</div>
-        <div className="hidden xl:block w-20 flex-shrink-0 px-1">Lokasi</div>
+        {/* Eselon/Lokasi: proportional (flex-1) instead of fixed w-20 — full
+            text shows on wide screens, truncation only when space runs out.
+            Header and body cells must keep identical classes to stay aligned. */}
+        <div className="hidden xl:block flex-1 min-w-0 px-1">Eselon</div>
+        <div className="hidden xl:block flex-1 min-w-0 px-1">Lokasi</div>
         <div className="hidden xl:block w-20 flex-shrink-0 px-1 text-right">Harga</div>
         <div className="w-14 flex-shrink-0 text-center">Kondisi</div>
         <div className="w-12 flex-shrink-0 text-center">Status</div>
@@ -243,10 +246,10 @@ const VirtualizedAssetTable = memo(({ assets, editId, onEdit, onDelete, onPrintC
                   {(a.brand || a.model) && <div className="text-[9px] text-muted-foreground truncate leading-tight">{[a.brand, a.model].filter(Boolean).join(' / ')}</div>}
                 </div>
 
-                {/* Eselon I/II - xl */}
-                <div className="hidden xl:block w-20 flex-shrink-0 px-1"><TruncatedCell text={a.eselon1 ? `${a.eselon1}${a.eselon2 ? ' / '+a.eselon2 : ''}` : ''} /></div>
+                {/* Eselon I/II - xl (flex-1: matches header, truncates only when needed) */}
+                <div className="hidden xl:block flex-1 min-w-0 px-1"><TruncatedCell text={a.eselon1 ? `${a.eselon1}${a.eselon2 ? ' / '+a.eselon2 : ''}` : ''} /></div>
                 {/* Lokasi - xl */}
-                <div className="hidden xl:block w-20 flex-shrink-0 px-1"><TruncatedCell text={a.location} /></div>
+                <div className="hidden xl:block flex-1 min-w-0 px-1"><TruncatedCell text={a.location} /></div>
                 {/* Harga - xl */}
                 <div className="hidden xl:block w-20 flex-shrink-0 px-1 text-right">
                   <span className="text-[10px] text-muted-foreground font-medium">{formatPrice(a.purchase_price)}</span>

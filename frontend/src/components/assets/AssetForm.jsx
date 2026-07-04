@@ -420,6 +420,10 @@ const AssetForm = memo(({
 
   const [formData, setFormData] = useState(emptyForm);
   const [editId, setEditId] = useState(null);
+  // Asset version (OCC): appended as ?v= cache-buster to all media streaming
+  // URLs (photo strip, checklist photos/PDFs) so the browser cache is busted
+  // whenever the asset changes.
+  const [assetVersion, setAssetVersion] = useState(1);
   const [isFormLoading, setIsFormLoading] = useState(false);
   // Offline edit: form initialized from the cached list row (offline snapshot)
   // because GET /assets/{id} was unreachable — shows a notice, media unavailable.
@@ -429,7 +433,8 @@ const AssetForm = memo(({
   const originalDataRef = useRef(null);
   const photosModifiedRef = useRef(false);
   const checklistModifiedRef = useRef(false);
-  // True once the /media thumbnail list for the CURRENT edit target loaded.
+  // True once the photo strip for the CURRENT edit target was built from the
+  // light fetch (photo_count → streaming thumbnail URLs).
   // While false, photoItems does NOT reflect the photos stored server-side —
   // photo_ops must then keep every existing photo by index or a save that
   // merely ADDS a photo would silently delete all the old ones.
@@ -484,6 +489,7 @@ const AssetForm = memo(({
       // through the optimistic queue with baseVersion from this same row.
       const initFromCacheRow = () => {
         const lightData = buildEditFormData(editAsset, activity?.id);
+        setAssetVersion(Number(editAsset.version) || 1);
         setFormData(lightData);
         // Diff baseline = same cached row, so submit PATCHes only what the
         // user actually changed while offline.
@@ -501,45 +507,39 @@ const AssetForm = memo(({
           if (cancelled) return;
           const a = r.data;
           const lightData = buildEditFormData(a, activity?.id);
-          const mergedLight = lightData.document_checklist;
           setFormData(lightData);
           setIsFormLoading(false);
 
-          // Phase 2: Fetch thumbnails from /media endpoint (tiny data, no full photos)
-          try {
-            const mr = await axios.get(`${API}/assets/${editAsset.id}/media`);
-            if (cancelled) return;
-            const media = mr.data;
-            const thumbs = media.photo_thumbnails || [];
-            const photoCount = media.photo_count || thumbs.length;
+          // Phase 2: Build the photo strip from streaming URLs — no /media
+          // roundtrip anymore. Each thumbnail is a plain <img> hitting
+          // GET /assets/{id}/photos/{i}?thumb=1, so images load independently
+          // (progressive) and are cached by the browser (the endpoint sends
+          // Cache-Control/ETag; ?v={version} busts the cache after every edit).
+          // These are public GET endpoints — same posture as the checklist
+          // photo/PDF streaming URLs — because <img> cannot send auth headers.
+          // Checklist metadata (checked/notes/counts) already came with the
+          // light fetch; thumbnails + sentinels load via /checklist-full when
+          // the "Dokumen" tab opens.
+          const photoCount = Number(a.photo_count) || 0;
+          const version = Number(a.version) || 1;
+          setAssetVersion(version);
+          const items = Array.from({ length: photoCount }, (_, i) => ({
+            type: 'existing',
+            thumbnail: `${API}/assets/${editAsset.id}/photos/${i}?thumb=1&v=${version}`,
+            originalIndex: i,
+          }));
+          setPhotoItems(items);
+          // photoItems now mirrors the server-side photo list (indices from the
+          // authoritative photo_count of the light fetch), so photo_ops can
+          // safely derive keep[] from it — same contract the /media load had.
+          mediaLoadedRef.current = true;
 
-            // Build photoItems from server thumbnails
-            const items = thumbs.map((thumb, i) => ({ type: 'existing', thumbnail: thumb, originalIndex: i }));
-            setPhotoItems(items);
-            mediaLoadedRef.current = true;
-
-            // Update formData.photos with thumbnails (for photo count display)
-            // We use photoItems for rendering, but keep photos array length correct for validation
-            const placeholderPhotos = Array(photoCount).fill("__existing__");
-
-            // Merge document_checklist media metadata
-            const mediaMap = {};
-            for (const m of (media.document_checklist_media || [])) { mediaMap[m.name] = m; }
-            const mergedFull = mergedLight.map(item => {
-              const m = mediaMap[item.name];
-              if (!m) return item;
-              return { ...item, photo_thumbnails: m.photo_thumbnails || [], photo_count: m.photo_count || 0, document_count: m.document_count || 0, documents: m.documents || [] };
-            });
-            const fullData = { ...lightData, photos: placeholderPhotos, document_checklist: mergedFull };
-            originalDataRef.current = { ...fullData, _photoCount: photoCount };
-            startTransition(() => {
-              setFormData(prev => ({ ...prev, photos: placeholderPhotos, document_checklist: mergedFull }));
-            });
-          } catch {
-            // Media list unavailable — remember the server-side photo count so
-            // photo_ops can still preserve the existing photos on save.
-            originalDataRef.current = { ...lightData, _photoCount: Number(a.photo_count) || 0 };
-          }
+          // Keep photos array length correct for validation / count display.
+          const placeholderPhotos = Array(photoCount).fill("__existing__");
+          originalDataRef.current = { ...lightData, photos: placeholderPhotos, _photoCount: photoCount };
+          startTransition(() => {
+            setFormData(prev => ({ ...prev, photos: placeholderPhotos }));
+          });
         } catch (err) {
           if (cancelled) return;
           if (!err?.response) {
@@ -559,6 +559,7 @@ const AssetForm = memo(({
       initializedIdRef.current = null;
       setFormData({...emptyForm});
       setEditId(null);
+      setAssetVersion(1);
       setFormSection("basic");
       setShowFullForm(false);
       setFormErrors([]);
@@ -581,6 +582,7 @@ const AssetForm = memo(({
   const resetForm = useCallback(() => {
     setFormData({...emptyForm});
     setEditId(null);
+    setAssetVersion(1);
     setFormSection("basic");
     setFormErrors([]);
     setCategorySearch("");
@@ -961,10 +963,10 @@ const AssetForm = memo(({
         if (photosModifiedRef.current) {
           const keepIndices = [];
           const newPhotosToAdd = [];
-          // Thumbnail list never loaded (offline edit from cache, or /media
-          // failed): photoItems only holds NEW photos, so an empty keep[]
-          // would wipe every existing server photo. Preserve them all by
-          // index — offline edits can only ADD photos, never remove.
+          // Photo strip never built (offline edit from cache — the light
+          // fetch never succeeded): photoItems only holds NEW photos, so an
+          // empty keep[] would wipe every existing server photo. Preserve
+          // them all by index — offline edits can only ADD photos, never remove.
           if (!mediaLoadedRef.current) {
             const known = Number(originalDataRef.current?._photoCount) || 0;
             for (let i = 0; i < known; i++) keepIndices.push(i);
@@ -1406,7 +1408,7 @@ const AssetForm = memo(({
                                 : 'border-border hover:border-emerald-300 opacity-60 hover:opacity-100'
                             }`}
                           >
-                            <img src={src} alt="" className="w-full h-full object-cover rounded" />
+                            <img src={src} alt="" loading="lazy" className="w-full h-full object-cover rounded bg-muted" />
                             {i === formData.stiker_photo_index && (
                               <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-emerald-500 text-white text-[7px] px-1 rounded whitespace-nowrap">Stiker</div>
                             )}
@@ -1603,7 +1605,7 @@ const AssetForm = memo(({
                     /* Edit mode: render from photoItems (thumbnails) */
                     photoItems.map((item, i) => (
                       <div key={i} className="relative group">
-                        <img src={item.thumbnail} alt="" className={`w-14 h-14 object-cover rounded cursor-pointer border-2 ${i === formData.thumbnail_index ? 'border-blue-500' : i === formData.stiker_photo_index ? 'border-emerald-500' : 'border-border'}`} onClick={() => setFormData(prev => ({ ...prev, thumbnail_index: i }))} data-testid={`photo-thumb-${i}`} />
+                        <img src={item.thumbnail} alt="" loading="lazy" className={`w-14 h-14 object-cover rounded cursor-pointer border-2 bg-muted ${i === formData.thumbnail_index ? 'border-blue-500' : i === formData.stiker_photo_index ? 'border-emerald-500' : 'border-border'}`} onClick={() => setFormData(prev => ({ ...prev, thumbnail_index: i }))} data-testid={`photo-thumb-${i}`} />
                         <button type="button" onClick={() => removePhoto(i)} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100"><X className="w-2.5 h-2.5" /></button>
                         {i === formData.thumbnail_index && <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-blue-500 text-white text-[8px] px-1 rounded">Cover</div>}
                         {i === formData.stiker_photo_index && i !== formData.thumbnail_index && <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-emerald-500 text-white text-[8px] px-1 rounded">Stiker</div>}
@@ -1656,6 +1658,7 @@ const AssetForm = memo(({
                   checklist={formData.document_checklist}
                   onChange={handleChecklistChange}
                   assetId={editId}
+                  assetVersion={assetVersion}
                 />
               )
             )}

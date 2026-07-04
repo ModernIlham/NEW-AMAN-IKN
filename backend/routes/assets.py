@@ -6,6 +6,7 @@ import asyncio
 from collections import deque
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Request, Depends
+from fastapi.responses import Response
 
 from db import db, fs_bucket
 from models import AssetCreate, AssetResponse
@@ -775,11 +776,41 @@ async def get_asset_checklist_full(asset_id: str):
     return {"document_checklist": normalized}
 
 
+# ============================================================================
+# MEDIA STREAMING (photos / checklist photos / checklist PDFs)
+#
+# Auth posture: these are deliberately PUBLIC GETs (no require_user) — they
+# are consumed by plain <img src="..."> tags and window.open(), neither of
+# which can attach Authorization headers. This mirrors the pre-existing
+# posture of every media endpoint in the app.
+#
+# Caching: responses are browser-cacheable. The frontend appends a
+# ?v={asset.version} cache-buster to every media URL, so any edit (which
+# bumps `version` via OCC) yields a brand-new URL and busts the cache. The
+# version-based ETag additionally lets the browser revalidate cheaply (304)
+# once max-age expires.
+# ============================================================================
+MEDIA_CACHE_CONTROL = "private, max-age=86400"
+
+
+def _media_headers(etag: str, extra: dict = None) -> dict:
+    headers = {"Cache-Control": MEDIA_CACHE_CONTROL, "ETag": etag}
+    if extra:
+        headers.update(extra)
+    return headers
+
+
+def _not_modified(request: Request, etag: str):
+    """Return a 304 Response when the client already holds this exact version."""
+    if request.headers.get("if-none-match", "").strip() == etag:
+        return Response(status_code=304, headers=_media_headers(etag))
+    return None
+
+
 @assets_router.get("/assets/{asset_id}/checklist/{item_idx}/photos/{photo_idx}")
-async def get_asset_checklist_photo(asset_id: str, item_idx: int, photo_idx: int):
+async def get_asset_checklist_photo(asset_id: str, item_idx: int, photo_idx: int, request: Request):
     """Stream a single inline checklist photo by item & photo index."""
-    from fastapi.responses import Response
-    asset = await db.assets.find_one({"id": asset_id}, {"_id": 0, "document_checklist": 1})
+    asset = await db.assets.find_one({"id": asset_id}, {"_id": 0, "document_checklist": 1, "version": 1})
     if not asset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
     checklist = asset.get("document_checklist", []) or []
@@ -788,6 +819,10 @@ async def get_asset_checklist_photo(asset_id: str, item_idx: int, photo_idx: int
     photos = (checklist[item_idx] or {}).get("photos", []) or []
     if photo_idx < 0 or photo_idx >= len(photos):
         raise HTTPException(status_code=404, detail="Foto tidak ditemukan")
+    etag = f'"cl-{asset_id}-{item_idx}-p{photo_idx}-v{int(asset.get("version", 1) or 1)}"'
+    not_modified = _not_modified(request, etag)
+    if not_modified:
+        return not_modified
     photo_b64 = photos[photo_idx]
     if not isinstance(photo_b64, str):
         raise HTTPException(status_code=500, detail="Format foto tidak valid")
@@ -802,15 +837,13 @@ async def get_asset_checklist_photo(asset_id: str, item_idx: int, photo_idx: int
         raw = base64.b64decode(data)
     except Exception:
         raise HTTPException(status_code=500, detail="Foto rusak")
-    return Response(content=raw, media_type="image/jpeg",
-                    headers={"Cache-Control": "private, max-age=600"})
+    return Response(content=raw, media_type="image/jpeg", headers=_media_headers(etag))
 
 
 @assets_router.get("/assets/{asset_id}/checklist/{item_idx}/documents/{doc_idx}")
-async def get_asset_checklist_document(asset_id: str, item_idx: int, doc_idx: int):
+async def get_asset_checklist_document(asset_id: str, item_idx: int, doc_idx: int, request: Request):
     """Stream a single inline checklist PDF by item & document index."""
-    from fastapi.responses import Response
-    asset = await db.assets.find_one({"id": asset_id}, {"_id": 0, "document_checklist": 1})
+    asset = await db.assets.find_one({"id": asset_id}, {"_id": 0, "document_checklist": 1, "version": 1})
     if not asset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
     checklist = asset.get("document_checklist", []) or []
@@ -819,6 +852,10 @@ async def get_asset_checklist_document(asset_id: str, item_idx: int, doc_idx: in
     docs = (checklist[item_idx] or {}).get("documents", []) or []
     if doc_idx < 0 or doc_idx >= len(docs):
         raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan")
+    etag = f'"cl-{asset_id}-{item_idx}-d{doc_idx}-v{int(asset.get("version", 1) or 1)}"'
+    not_modified = _not_modified(request, etag)
+    if not_modified:
+        return not_modified
     doc = docs[doc_idx] or {}
     data_url = doc.get("data", "") or ""
     if not data_url:
@@ -838,31 +875,60 @@ async def get_asset_checklist_document(asset_id: str, item_idx: int, doc_idx: in
     return Response(
         content=raw,
         media_type="application/pdf",
-        headers={
-            "Content-Disposition": f'inline; filename="{name}"',
-            "Cache-Control": "private, max-age=600",
-        },
+        headers=_media_headers(etag, {"Content-Disposition": f'inline; filename="{name}"'}),
     )
 
 
 @assets_router.get("/assets/{asset_id}/photos/{photo_index}")
-async def get_asset_photo_full(asset_id: str, photo_index: int):
-    """Stream a full-resolution photo from GridFS or fallback to inline base64."""
-    from fastapi.responses import Response
-    asset = await db.assets.find_one({"id": asset_id}, {"_id": 0, "photo_gridfs_ids": 1, "photos": 1})
+async def get_asset_photo_full(asset_id: str, photo_index: int, request: Request, thumb: int = 0):
+    """Stream a full-resolution photo from GridFS or fallback to inline base64.
+
+    ?thumb=1 returns the small per-photo thumbnail instead: the one stored in
+    `photo_thumbnails` at upload time, or (legacy assets without stored
+    thumbnails) one generated on the fly — same fallback /media uses, cheap
+    enough per request. The form's photo strip uses this so each thumbnail
+    loads progressively via <img src> and gets cached by the browser.
+    """
+    asset = await db.assets.find_one({"id": asset_id}, {
+        "_id": 0, "photo_gridfs_ids": 1, "photos": 1, "photo_thumbnails": 1, "version": 1
+    })
     if not asset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
-    
+
+    etag = f'"{asset_id}-p{photo_index}{"-t" if thumb else ""}-v{int(asset.get("version", 1) or 1)}"'
+    not_modified = _not_modified(request, etag)
+    if not_modified:
+        return not_modified
+
     gridfs_ids = asset.get("photo_gridfs_ids", []) or []
     photos = asset.get("photos", []) or []
-    
+
+    if thumb:
+        thumbnails = asset.get("photo_thumbnails", []) or []
+        thumb_b64 = thumbnails[photo_index] if 0 <= photo_index < len(thumbnails) else ""
+        if not thumb_b64:
+            # Legacy asset without stored per-photo thumbnails: generate on the fly
+            if photo_index < len(photos) and photos[photo_index]:
+                thumb_b64 = generate_photo_thumbnail(photos[photo_index]) or ""
+            elif photo_index < len(gridfs_ids) and gridfs_ids[photo_index]:
+                photo_bytes = await get_photo_from_gridfs(gridfs_ids[photo_index])
+                if photo_bytes:
+                    thumb_b64 = generate_photo_thumbnail(base64.b64encode(photo_bytes).decode("utf-8")) or ""
+        if thumb_b64:
+            data = thumb_b64.split(",", 1)[1] if thumb_b64.startswith("data:") else thumb_b64
+            try:
+                return Response(content=base64.b64decode(data), media_type="image/jpeg",
+                                headers=_media_headers(etag))
+            except Exception:
+                pass  # corrupt stored thumbnail — fall through to the full photo
+
     # Try GridFS first
     if photo_index < len(gridfs_ids) and gridfs_ids[photo_index]:
         photo_bytes = await get_photo_from_gridfs(gridfs_ids[photo_index])
         if photo_bytes:
             return Response(content=photo_bytes, media_type="image/jpeg",
-                          headers={"Cache-Control": "public, max-age=31536000"})
-    
+                            headers=_media_headers(etag))
+
     # Fallback to inline base64
     if photo_index < len(photos):
         photo_b64 = photos[photo_index]
@@ -871,8 +937,8 @@ async def get_asset_photo_full(asset_id: str, photo_index: int):
         else:
             data = photo_b64
         return Response(content=base64.b64decode(data), media_type="image/jpeg",
-                       headers={"Cache-Control": "public, max-age=31536000"})
-    
+                        headers=_media_headers(etag))
+
     raise HTTPException(status_code=404, detail="Foto tidak ditemukan")
 
 @assets_router.put("/assets/{asset_id}", response_model=AssetResponse)

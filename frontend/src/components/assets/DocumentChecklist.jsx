@@ -26,7 +26,11 @@ const DEFAULT_DOC_ITEMS = [
 //   - documents: [{name, idx}]
 // and renders photos via streaming URLs and PDFs via a streaming "Lihat" link.
 // New uploads still use base64 data URLs in the same array slots.
-const DocumentChecklist = memo(({ checklist, onChange, assetId }) => {
+//
+// `assetVersion` is appended as a ?v= cache-buster to every streaming URL:
+// the endpoints send long-lived Cache-Control/ETag headers, and any edit
+// bumps the asset version (OCC) so a fresh URL bypasses the stale cache.
+const DocumentChecklist = memo(({ checklist, onChange, assetId, assetVersion = 1 }) => {
   const [customItem, setCustomItem] = useState("");
   const [previewImg, setPreviewImg] = useState(null);
 
@@ -52,7 +56,7 @@ const DocumentChecklist = memo(({ checklist, onChange, assetId }) => {
       }
       const itemIdx = checklist.indexOf(item);
       if (assetId && itemIdx >= 0 && origIdx >= 0) {
-        return `${API}/assets/${assetId}/checklist/${itemIdx}/photos/${origIdx}`;
+        return `${API}/assets/${assetId}/checklist/${itemIdx}/photos/${origIdx}?v=${assetVersion}`;
       }
       return "";
     }
@@ -123,7 +127,7 @@ const DocumentChecklist = memo(({ checklist, onChange, assetId }) => {
           toast.error("Indeks dokumen tidak valid");
           return;
         }
-        const url = `${API}/assets/${assetId}/checklist/${itemIdx}/documents/${origIdx}`;
+        const url = `${API}/assets/${assetId}/checklist/${itemIdx}/documents/${origIdx}?v=${assetVersion}`;
         const w = window.open(url, "_blank");
         if (!w) {
           toast.error("Popup diblokir. Izinkan popup untuk melihat PDF.");
@@ -229,7 +233,7 @@ const DocumentChecklist = memo(({ checklist, onChange, assetId }) => {
                             {item.photos.map((photo, pi) => {
                               const src = photoSrcFor(item, photo, pi);
                               const previewSrc = isExistingPhoto(photo) && assetId
-                                ? `${API}/assets/${assetId}/checklist/${idx}/photos/${existingPhotoIdx(photo)}`
+                                ? `${API}/assets/${assetId}/checklist/${idx}/photos/${existingPhotoIdx(photo)}?v=${assetVersion}`
                                 : src;
                               return (
                                 <div key={pi} className="relative group">

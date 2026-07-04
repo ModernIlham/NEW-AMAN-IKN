@@ -335,7 +335,8 @@ const InventoryFieldSheet = ({
                     key={i}
                     src={item.thumbnail}
                     alt={`Foto ${i + 1}`}
-                    className="w-14 h-14 flex-shrink-0 object-cover rounded-lg border border-border"
+                    loading="lazy"
+                    className="w-14 h-14 flex-shrink-0 object-cover rounded-lg border border-border bg-muted"
                     data-testid={`sheet-photo-thumb-${i}`}
                   />
                 ))}
