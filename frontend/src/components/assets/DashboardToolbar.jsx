@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { CategorySelect, TinifyQuotaIndicator, TinifyQuotaMobile, AdvancedFilter } from "@/components/assets";
+import QrScanButton from "@/components/assets/QrScanButton";
 
 const DashboardToolbar = memo(function DashboardToolbar({
   searchInput, setSearchInput,
@@ -31,16 +32,19 @@ const DashboardToolbar = memo(function DashboardToolbar({
   return (
     <div className="bg-card rounded-lg border border-border p-1.5 sm:p-2.5 print:hidden" data-testid="dashboard-toolbar">
       <div className="flex flex-col gap-1.5 sm:gap-2">
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1.5 sm:top-2 w-3.5 h-3.5 sm:w-4 sm:h-4 text-muted-foreground" />
-          <Input
-            placeholder="Cari kode, nama, lokasi..."
-            value={searchInput}
-            onChange={e => setSearchInput(e.target.value)}
-            className="pl-8 sm:pl-9 h-7 sm:h-8 text-xs sm:text-sm"
-            data-testid="search-input"
-          />
+        {/* Search + Scan QR stiker */}
+        <div className="flex items-center gap-1.5">
+          <div className="relative flex-1">
+            <Search className="absolute left-2.5 top-1.5 sm:top-2 w-3.5 h-3.5 sm:w-4 sm:h-4 text-muted-foreground" />
+            <Input
+              placeholder="Cari kode, nama, lokasi..."
+              value={searchInput}
+              onChange={e => setSearchInput(e.target.value)}
+              className="pl-8 sm:pl-9 h-7 sm:h-8 text-xs sm:text-sm"
+              data-testid="search-input"
+            />
+          </div>
+          <QrScanButton onDetected={setSearchInput} />
         </div>
 
         {/* Desktop toolbar (lg+ only) */}

@@ -48,6 +48,31 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#18] Mode Inventarisasi Lapangan: progres, aksi cepat, scan QR, GPS cache — 2026-07-04
+
+Paket fitur untuk mempercepat input di lapangan (offline maupun kolaborasi online):
+
+- **Bar progres inventarisasi** (`InventoryProgressBar`, tampil saat mode
+  inventarisasi aktif): "Diinventarisasi X / Y" + persentase (refetch otomatis
+  setelah save background & tiap 60 dtk), chip filter cepat **Belum / Ditemukan
+  / Semua**, indikator offline + "N menunggu sinkron", dan badge **"N dikerjakan
+  rekan"** (dari row-lock sesi lain).
+- **Aksi Cepat Inventarisasi** di atas form (mode inventarisasi, saat edit):
+  tombol besar sekali-ketuk untuk Status (Ditemukan/Tidak Ditemukan/Berlebih/
+  Sengketa) dan Kondisi (Baik/RR/RB). Memakai logika clearing yang sama dengan
+  Select lama (field klasifikasi ikut bersih saat status berganti).
+- **"Salin dari aset sebelumnya"**: lokasi/eselon/pengguna aset yang baru
+  disimpan tersimpan di `localStorage`; satu ketukan mengisi field yang masih
+  kosong (tidak pernah menimpa isian).
+- **Scan QR/barcode** (`QrScanButton` di samping kolom cari): kamera belakang +
+  `BarcodeDetector`; hasil scan diekstrak (URL / `kode|NUP` / teks mentah) lalu
+  masuk ke pencarian multi-kolom. Tombol tersembunyi otomatis di browser yang
+  tak mendukung. Catatan: QR pada kartu cetak backend masih placeholder —
+  scanner ini menyasar stiker bersistem eksternal (SIMAK-BMN dsb.).
+- **Cache GPS**: fix terakhir (<5 menit) dipakai instan saat form butuh
+  koordinat, lalu diperbarui di background — GPS indoor tidak lagi menahan
+  input. (Tombol kamera langsung sudah ada sebelumnya — tidak diubah.)
+
 ## [#17] Laporan: Kop Surat di semua laporan resmi + Eksekutif per Barang Serupa + kolom detail opsional — 2026-06-16
 
 - **Kop Surat (issue 6):** helper `_kop_surat_flowables()` baru — logo instansi

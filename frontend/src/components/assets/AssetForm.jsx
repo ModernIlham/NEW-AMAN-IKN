@@ -3,7 +3,7 @@ import {
   Plus, Edit3, X, Camera, Trash2, Check, ChevronDown, 
   Package, Briefcase, ShieldCheck, Settings, Tag, Save, Loader2, ClipboardList,
   Info, ChevronRight, BookOpen, Wrench, ArrowRight, HelpCircle, MapPin, LocateFixed,
-  ChevronLeft,
+  ChevronLeft, Zap, Copy,
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -259,6 +259,20 @@ const StatusInfoCard = ({ status }) => {
   );
 };
 
+
+// Opsi tombol "Aksi Cepat Inventarisasi" (mode inventarisasi, edit aset).
+// Warna mengikuti skema status yang sudah dipakai aplikasi.
+const QUICK_STATUS_OPTIONS = [
+  { value: "Ditemukan", active: "bg-emerald-600 border-emerald-600 text-white", idle: "border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30" },
+  { value: "Tidak Ditemukan", active: "bg-red-600 border-red-600 text-white", idle: "border-red-300 dark:border-red-700 text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30" },
+  { value: "Berlebih", active: "bg-purple-600 border-purple-600 text-white", idle: "border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30" },
+  { value: "Sengketa", active: "bg-rose-600 border-rose-600 text-white", idle: "border-rose-300 dark:border-rose-700 text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/30" },
+];
+const QUICK_CONDITION_OPTIONS = [
+  { value: "Baik", active: "bg-emerald-600 border-emerald-600 text-white", idle: "border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30" },
+  { value: "Rusak Ringan", active: "bg-amber-500 border-amber-500 text-white", idle: "border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30" },
+  { value: "Rusak Berat", active: "bg-red-600 border-red-600 text-white", idle: "border-red-300 dark:border-red-700 text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30" },
+];
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -521,11 +535,10 @@ const AssetForm = memo(({
     setGpsLoading(true);
     navigator.geolocation.getCurrentPosition(
       pos => {
-        setFormData(p => ({
-          ...p,
-          koordinat_latitude: pos.coords.latitude.toFixed(6),
-          koordinat_longitude: pos.coords.longitude.toFixed(6)
-        }));
+        const lat = pos.coords.latitude.toFixed(6);
+        const lng = pos.coords.longitude.toFixed(6);
+        try { localStorage.setItem("aman_last_gps", JSON.stringify({ lat, lng, ts: Date.now() })); } catch {}
+        setFormData(p => ({ ...p, koordinat_latitude: lat, koordinat_longitude: lng }));
         setGpsLoading(false);
         toast.success("Koordinat GPS berhasil diambil");
       },
@@ -614,10 +627,32 @@ const AssetForm = memo(({
     return () => { cancelled = true; };
   }, [formSection, editId, isEditing]);
 
-  // Auto-get GPS only for EDIT mode when asset has no coords AND inventory mode is active
+  // Auto-get GPS only for EDIT mode when asset has no coords AND inventory mode is active.
+  // Cache GPS: bila fix terakhir masih segar (< 5 menit) pakai langsung agar form
+  // instan terisi, lalu tetap minta fix baru di background (hanya menimpa bila
+  // pengguna belum mengetik koordinat lain sejak nilai cache diterapkan).
   useEffect(() => {
     if (isOpen && isEditing && inventoryMode && !formData.koordinat_latitude && !formData.koordinat_longitude) {
-      fetchGPS();
+      let cached = null;
+      try { cached = JSON.parse(localStorage.getItem("aman_last_gps") || "null"); } catch {}
+      if (cached?.lat && cached?.lng && Date.now() - (cached.ts || 0) < 5 * 60 * 1000) {
+        const { lat, lng } = cached;
+        setFormData(p => (!p.koordinat_latitude && !p.koordinat_longitude) ? { ...p, koordinat_latitude: lat, koordinat_longitude: lng } : p);
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            pos => {
+              const freshLat = pos.coords.latitude.toFixed(6);
+              const freshLng = pos.coords.longitude.toFixed(6);
+              try { localStorage.setItem("aman_last_gps", JSON.stringify({ lat: freshLat, lng: freshLng, ts: Date.now() })); } catch {}
+              setFormData(p => (p.koordinat_latitude === lat && p.koordinat_longitude === lng) ? { ...p, koordinat_latitude: freshLat, koordinat_longitude: freshLng } : p);
+            },
+            () => {}, // fix baru gagal — nilai cache tetap dipakai
+            { enableHighAccuracy: true, timeout: 10000 }
+          );
+        }
+      } else {
+        fetchGPS();
+      }
     }
   }, [isOpen, isEditing, inventoryMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -628,6 +663,41 @@ const AssetForm = memo(({
 
   const handleSelectChange = useCallback((f, v) => {
     setFormData(p => ({ ...p, [f]: v }));
+  }, []);
+
+  // Ganti status inventarisasi + bersihkan field turunan yang tidak relevan.
+  // Dipakai oleh Select "Status Inventarisasi" DAN tombol Aksi Cepat.
+  const handleInventoryStatusChange = useCallback(v => {
+    setFormData(p => ({
+      ...p, inventory_status: v,
+      ...(v !== "Tidak Ditemukan" ? { klasifikasi_tidak_ditemukan: "", sub_klasifikasi: "", uraian_tidak_ditemukan: "", tindak_lanjut: "" } : {}),
+      ...(v !== "Berlebih" ? { keterangan_berlebih: "", asal_usul_berlebih: "" } : {}),
+      ...(v !== "Sengketa" ? { nomor_perkara: "", pihak_bersengketa: "", keterangan_sengketa: "" } : {}),
+      ...(v === "Ditemukan" || v === "Belum Diinventarisasi" ? { kronologis: "" } : {})
+    }));
+  }, []);
+
+  // "Samakan dengan sebelumnya": konteks lokasi/pengguna dari aset terakhir
+  // yang disimpan (localStorage 'aman_last_asset_ctx', ditulis saat submit).
+  const [lastCtx, setLastCtx] = useState(null);
+  useEffect(() => {
+    if (!(inventoryMode && isEditing)) return;
+    try { setLastCtx(JSON.parse(localStorage.getItem("aman_last_asset_ctx") || "null")); } catch { setLastCtx(null); }
+  }, [inventoryMode, isEditing, editAsset?.id]);
+
+  const applyLastCtx = useCallback(() => {
+    let ctx = null;
+    try { ctx = JSON.parse(localStorage.getItem("aman_last_asset_ctx") || "null"); } catch {}
+    if (!ctx) return;
+    // Hanya isi field yang masih kosong — jangan pernah menimpa isian pengguna
+    setFormData(p => ({
+      ...p,
+      ...(!p.location && ctx.location ? { location: ctx.location } : {}),
+      ...(!p.eselon1 && ctx.eselon1 ? { eselon1: ctx.eselon1 } : {}),
+      ...(!p.eselon2 && ctx.eselon2 ? { eselon2: ctx.eselon2 } : {}),
+      ...(!p.user && ctx.user ? { user: ctx.user } : {}),
+    }));
+    toast.success("Disalin dari aset sebelumnya");
   }, []);
 
   const handleChecklistChange = useCallback(u => { checklistModifiedRef.current = true; setFormData(p => ({...p, document_checklist: u})); }, []);
@@ -886,6 +956,15 @@ const AssetForm = memo(({
         return;
       }
       
+      // Simpan konteks lokasi/pengguna untuk "Samakan dengan sebelumnya"
+      try {
+        const ctx = {};
+        for (const k of ["location", "eselon1", "eselon2", "user"]) {
+          if (formData[k]) ctx[k] = formData[k];
+        }
+        if (Object.keys(ctx).length > 0) localStorage.setItem("aman_last_asset_ctx", JSON.stringify(ctx));
+      } catch {}
+
       // Optimistic mode: pass payload to parent, close immediately
       if (onOptimisticSubmit || onSaveAndNavigate) {
         const navDirection = navigationIntentRef.current;
@@ -1022,6 +1101,39 @@ const AssetForm = memo(({
         {/* Form */}
         {!isFormLoading && <div className="flex-1 overflow-y-auto">
           <form onSubmit={handleSubmit} className="p-3 space-y-2.5">
+            {/* Aksi Cepat Inventarisasi — mode inventarisasi + edit aset */}
+            {inventoryMode && isEditing && (
+              <div className="p-2 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg border border-emerald-200 dark:border-emerald-700 space-y-1.5" data-testid="inventory-quick-actions">
+                <div className="flex items-center gap-1.5">
+                  <Zap className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <Label className="text-xs font-medium text-emerald-800 dark:text-emerald-300">Aksi Cepat Inventarisasi</Label>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {QUICK_STATUS_OPTIONS.map(o => (
+                    <button key={o.value} type="button" onClick={() => handleInventoryStatusChange(o.value)}
+                      className={`flex-1 min-w-[45%] min-h-[40px] px-2 rounded-md border text-xs font-semibold transition-colors ${formData.inventory_status === o.value ? o.active : `bg-card ${o.idle}`}`}
+                      data-testid={`quick-status-${o.value}`}
+                    >{o.value}</button>
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {QUICK_CONDITION_OPTIONS.map(o => (
+                    <button key={o.value} type="button" onClick={() => handleSelectChange("condition", o.value)}
+                      className={`flex-1 min-h-[40px] px-2 rounded-md border text-xs font-semibold transition-colors ${formData.condition === o.value ? o.active : `bg-card ${o.idle}`}`}
+                      data-testid={`quick-condition-${o.value}`}
+                    >{o.value}</button>
+                  ))}
+                </div>
+                {lastCtx && (
+                  <button type="button" onClick={applyLastCtx}
+                    className="w-full min-h-[36px] px-2 rounded-md border border-blue-300 dark:border-blue-700 bg-card text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors"
+                    data-testid="copy-last-ctx-btn"
+                  >
+                    <Copy className="w-3.5 h-3.5" />Salin lokasi & pengguna dari aset sebelumnya
+                  </button>
+                )}
+              </div>
+            )}
             {formSection === "basic" && (<>
               <div className="space-y-1">
                 <Label className="text-xs">Kode Aset *</Label>
@@ -1205,15 +1317,7 @@ const AssetForm = memo(({
                     <span>{showGuide ? 'ON' : 'OFF'}</span>
                   </button>
                 </div>
-                <Select value={formData.inventory_status || "Belum Diinventarisasi"} onValueChange={v => {
-                  setFormData(p => ({
-                    ...p, inventory_status: v,
-                    ...(v !== "Tidak Ditemukan" ? { klasifikasi_tidak_ditemukan: "", sub_klasifikasi: "", uraian_tidak_ditemukan: "", tindak_lanjut: "" } : {}),
-                    ...(v !== "Berlebih" ? { keterangan_berlebih: "", asal_usul_berlebih: "" } : {}),
-                    ...(v !== "Sengketa" ? { nomor_perkara: "", pihak_bersengketa: "", keterangan_sengketa: "" } : {}),
-                    ...(v === "Ditemukan" || v === "Belum Diinventarisasi" ? { kronologis: "" } : {})
-                  }));
-                }}>
+                <Select value={formData.inventory_status || "Belum Diinventarisasi"} onValueChange={handleInventoryStatusChange}>
                   <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Belum Diinventarisasi">Belum Diinventarisasi</SelectItem>
