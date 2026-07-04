@@ -12,6 +12,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { useDarkMode } from "@/hooks/useDarkMode";
 import BackgroundTaskBar from "@/components/BackgroundTaskBar";
+import { clearAllSnapshots, ensureSnapshotOwner } from "@/lib/offlineSnapshot";
 import axios from "axios";
 
 // ============================================================================
@@ -157,12 +158,29 @@ function App() {
   }, []);
 
   const handleLogin = (userData, token) => {
+    // A DIFFERENT account logging in on this device must never see the
+    // previous user's cached offline snapshot — wipe it before the new
+    // session starts. Same-user re-login keeps the cache (best-effort async;
+    // the snapshot lib also refuses to delta-sync across user ids).
+    ensureSnapshotOwner(userData?.id);
     localStorage.setItem('token', token);
     localStorage.setItem('user', JSON.stringify(userData));
     setUser(userData);
   };
 
-  const handleLogout = () => forceLogout();
+  // SNAPSHOT CLEAR POLICY — manual logout only.
+  // This handler runs ONLY for the explicit "Keluar" button (DashboardPage
+  // handleLogout → onLogout → here): the user is done with the device, so the
+  // offline read cache is wiped (shared-device protection). Automatic
+  // logouts — 401 session expiry and the 30-minute idle timeout — call
+  // forceLogout(message) directly WITHOUT clearing snapshots: a surveyor in
+  // the field whose session expires offline must not lose the cached asset
+  // list (field data protection); it stays scoped to their userId and expires
+  // via the 7-day TTL anyway.
+  const handleLogout = () => {
+    clearAllSnapshots();
+    forceLogout();
+  };
 
   const [showInfo, setShowInfo] = useState(false);
 

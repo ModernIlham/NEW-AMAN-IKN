@@ -5,10 +5,11 @@ import logging
 import asyncio
 from collections import deque
 from datetime import datetime, timezone
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
 
 from db import db, fs_bucket
 from models import AssetCreate, AssetResponse
+from auth_utils import require_user
 from shared_utils import (
     invalidate_asset_cache, _cache_filter_opts, _cache_stats, _cache_analytics,
     log_audit, compute_changes, create_thumbnail, create_gallery_thumbnail,
@@ -52,6 +53,47 @@ def _build_cas_filter(asset_id: str, current_version: int) -> dict:
     return {"id": asset_id, "version": current_version}
 
 
+# OPTIMIZED: Lightweight list projection - excludes photos and document_checklist.
+# Photos and document_checklist are fetched separately when editing an asset;
+# this reduces response size by ~95% for assets with images. Shared by
+# GET /assets and GET /assets/offline-snapshot so the offline cache stores
+# EXACTLY the same (media-free) shape as the live list.
+LIST_PROJECTION = {
+    "_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
+    "category": 1, "brand": 1, "model": 1, "kode_register": 1,
+    "serial_number": 1, "purchase_date": 1, "purchase_price": 1,
+    "location": 1, "eselon1": 1, "eselon2": 1, "user": 1, "condition": 1,
+    "status": 1, "nomor_spm": 1, "perolehan_dari_nama": 1,
+    "nomor_kontrak": 1, "nomor_bukti_perolehan": 1, "supplier": 1,
+    "notes": 1, "thumbnail": 1, "thumbnail_index": 1,
+    "gallery_thumbnail": 1,
+    "created_at": 1, "updated_at": 1, "activity_id": 1,
+    "version": 1,  # OCC: client needs this to send If-Match on subsequent writes
+    "stiker_status": 1, "stiker_ukuran": 1, "stiker_photo_index": 1,
+    "inventory_status": 1, "klasifikasi_tidak_ditemukan": 1, "sub_klasifikasi": 1,
+    "uraian_tidak_ditemukan": 1, "tindak_lanjut": 1,
+    "koordinat_latitude": 1, "koordinat_longitude": 1, "kronologis": 1,
+    "photo_count": {"$size": {"$ifNull": ["$photos", []]}},
+    # Computed doc checklist summary (avoids sending full checklist data)
+    "doc_total": {"$size": {"$ifNull": ["$document_checklist", []]}},
+    "doc_checked": {"$size": {"$filter": {
+        "input": {"$ifNull": ["$document_checklist", []]},
+        "cond": {"$eq": ["$$this.checked", True]}
+    }}},
+    "doc_summary": {"$map": {
+        "input": {"$ifNull": ["$document_checklist", []]},
+        "as": "doc",
+        "in": {
+            "name": "$$doc.name",
+            "checked": "$$doc.checked",
+            "has_photos": {"$gt": [{"$size": {"$ifNull": ["$$doc.photos", []]}}, 0]},
+            "has_documents": {"$gt": [{"$size": {"$ifNull": ["$$doc.documents", []]}}, 0]},
+            "photo_count": {"$size": {"$ifNull": ["$$doc.photos", []]}},
+            "doc_count": {"$size": {"$ifNull": ["$$doc.documents", []]}}
+        }
+    }}
+    # EXCLUDED: "photos", "document_checklist" - fetched via GET /assets/{id}
+}
 
 
 @assets_router.get("/assets")
@@ -197,46 +239,9 @@ async def get_assets(
     }
     sort = sort_options.get(sort_by, [("created_at", -1)])
     
-    # OPTIMIZED: Lightweight projection - exclude photos and document_checklist from list
-    # Photos and document_checklist are fetched separately when editing an asset
-    # This reduces response size by ~95% for assets with images
-    projection = {
-        "_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
-        "category": 1, "brand": 1, "model": 1, "kode_register": 1, 
-        "serial_number": 1, "purchase_date": 1, "purchase_price": 1, 
-        "location": 1, "eselon1": 1, "eselon2": 1, "user": 1, "condition": 1, 
-        "status": 1, "nomor_spm": 1, "perolehan_dari_nama": 1,
-        "nomor_kontrak": 1, "nomor_bukti_perolehan": 1, "supplier": 1,
-        "notes": 1, "thumbnail": 1, "thumbnail_index": 1,
-        "gallery_thumbnail": 1,
-        "created_at": 1, "activity_id": 1,
-        "version": 1,  # OCC: client needs this to send If-Match on subsequent writes
-        "stiker_status": 1, "stiker_ukuran": 1, "stiker_photo_index": 1,
-        "inventory_status": 1, "klasifikasi_tidak_ditemukan": 1, "sub_klasifikasi": 1,
-        "uraian_tidak_ditemukan": 1, "tindak_lanjut": 1,
-        "koordinat_latitude": 1, "koordinat_longitude": 1, "kronologis": 1,
-        "photo_count": {"$size": {"$ifNull": ["$photos", []]}},
-        # Computed doc checklist summary (avoids sending full checklist data)
-        "doc_total": {"$size": {"$ifNull": ["$document_checklist", []]}},
-        "doc_checked": {"$size": {"$filter": {
-            "input": {"$ifNull": ["$document_checklist", []]},
-            "cond": {"$eq": ["$$this.checked", True]}
-        }}},
-        "doc_summary": {"$map": {
-            "input": {"$ifNull": ["$document_checklist", []]},
-            "as": "doc",
-            "in": {
-                "name": "$$doc.name",
-                "checked": "$$doc.checked",
-                "has_photos": {"$gt": [{"$size": {"$ifNull": ["$$doc.photos", []]}}, 0]},
-                "has_documents": {"$gt": [{"$size": {"$ifNull": ["$$doc.documents", []]}}, 0]},
-                "photo_count": {"$size": {"$ifNull": ["$$doc.photos", []]}},
-                "doc_count": {"$size": {"$ifNull": ["$$doc.documents", []]}}
-            }
-        }}
-        # EXCLUDED: "photos", "document_checklist" - fetched via GET /assets/{id}
-    }
-    
+    # Lightweight shared list projection (see LIST_PROJECTION above)
+    projection = LIST_PROJECTION
+
     # Clamp page_size - allow up to 500 for power users
     page_size = min(max(page_size, 10), 500)
     skip = (max(page, 1) - 1) * page_size
@@ -263,6 +268,91 @@ async def get_assets(
         "page_size": page_size,
         "total_pages": total_pages
     }
+
+
+@assets_router.get("/assets/offline-snapshot")
+async def get_assets_offline_snapshot(
+    activity_id: str,
+    since: str = "",
+    skip: int = 0,
+    limit: int = 1000,
+    _user: dict = Depends(require_user),
+):
+    """Delta feed for the client-side offline read cache (inventory mode).
+
+    Returns list-projection assets (LIST_PROJECTION — NO photos / full
+    document_checklist) for ONE activity, paged with skip/limit so 10k assets
+    stream in chunks of <= 1000. With `since` (ISO timestamp from a previous
+    response's `server_time`) only assets changed after that moment are
+    returned — creates/PUT/PATCH/batch all stamp `updated_at`.
+
+    Tombstones: there is no dedicated deletions log, but every single-asset
+    DELETE writes an audit entry (action='delete' with asset_id), so those are
+    returned as `deleted_ids`. Bulk deletes (action='bulk_delete') carry no
+    per-asset ids — when one happened after `since` we set
+    `requires_full_refresh` and the client re-syncs from scratch (a full
+    refresh reconciles deletes by definition).
+
+    Auth: gated by require_user like other protected endpoints, and strictly
+    scoped by activity_id (400 without it) so a snapshot can never leak
+    assets from another activity.
+    """
+    if not activity_id:
+        raise HTTPException(status_code=400, detail="activity_id wajib diisi")
+
+    limit = min(max(limit, 1), 1000)
+    skip = max(skip, 0)
+
+    # Capture server_time BEFORE querying: anything written while we stream
+    # pages is (re-)fetched by the next delta — upserts are idempotent.
+    server_time = datetime.now(timezone.utc).isoformat()
+
+    query = {"activity_id": activity_id}
+    if since:
+        # Legacy docs created before updated_at stamping existed only have
+        # created_at — cover both so a fresh row is never missed.
+        query["$or"] = [
+            {"updated_at": {"$gt": since}},
+            {"updated_at": {"$exists": False}, "created_at": {"$gt": since}},
+        ]
+
+    # Deterministic total order (created_at can tie on imports; id breaks the
+    # tie) so skip/limit pages never overlap or skip rows.
+    pipeline = [
+        {"$match": query},
+        {"$sort": {"created_at": -1, "id": 1}},
+        {"$skip": skip},
+        {"$limit": limit},
+        {"$project": LIST_PROJECTION},
+    ]
+    total, assets = await asyncio.gather(
+        db.assets.count_documents(query),
+        db.assets.aggregate(pipeline).to_list(limit),
+    )
+
+    # Tombstones only make sense for a delta, and only need to be sent once
+    # per sync run (first page).
+    deleted_ids = []
+    requires_full_refresh = False
+    if since and skip == 0:
+        tomb_query = {"action": "delete", "activity_id": activity_id, "timestamp": {"$gt": since}}
+        tombstones = await db.audit_logs.find(tomb_query, {"_id": 0, "asset_id": 1}).to_list(10000)
+        deleted_ids = [t["asset_id"] for t in tombstones if t.get("asset_id")]
+        bulk = await db.audit_logs.count_documents(
+            {"action": "bulk_delete", "activity_id": activity_id, "timestamp": {"$gt": since}}
+        )
+        requires_full_refresh = bulk > 0
+
+    return {
+        "items": assets,
+        "total": total,
+        "skip": skip,
+        "limit": limit,
+        "server_time": server_time,
+        "deleted_ids": deleted_ids,
+        "requires_full_refresh": requires_full_refresh,
+    }
+
 
 @assets_router.get("/assets/filter-options")
 async def get_filter_options(activity_id: str = ""):
@@ -545,6 +635,7 @@ async def create_asset(asset: AssetCreate, request: Request):
         "thumbnail_index": asset.thumbnail_index or 0,
         "document_checklist": [item.model_dump() for item in (asset.document_checklist or [])],
         "created_at": now,
+        "updated_at": now,  # delta cursor for /assets/offline-snapshot
         "version": 1,  # OCC: initial version
     }
     
@@ -880,7 +971,10 @@ async def update_asset(asset_id: str, asset: AssetCreate, request: Request):
         "gallery_thumbnail": gallery_thumbnail,
         "thumbnail_index": cover_idx,
         "document_checklist": [item.model_dump() for item in (asset.document_checklist or [])],
-        "created_at": existing["created_at"]
+        "created_at": existing["created_at"],
+        # Stamped on every write so the offline snapshot delta sync
+        # (GET /assets/offline-snapshot?since=...) picks this change up.
+        "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     
     try:
@@ -1248,6 +1342,10 @@ async def patch_asset(asset_id: str, request: Request):
 
     # Extract deferred rollback info before DB write
     deferred_delete_gids = update_data.pop("__rollback_old_removed_gids__", [])
+
+    # Stamped on every write so the offline snapshot delta sync
+    # (GET /assets/offline-snapshot?since=...) picks this change up.
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
 
     try:
         # Atomic CAS: only succeeds if version is still what client saw.

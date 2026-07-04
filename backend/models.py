@@ -162,6 +162,8 @@ class AssetResponse(BaseModel):
     pihak_bersengketa: Optional[str] = ""
     keterangan_sengketa: Optional[str] = ""
     created_at: str
+    # Stamped on every write — delta cursor for /assets/offline-snapshot
+    updated_at: Optional[str] = ""
     # Optimistic Concurrency Control — incremented on every write
     version: Optional[int] = 1
 

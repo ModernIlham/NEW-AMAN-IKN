@@ -1,8 +1,17 @@
 import React, { memo, useState, useEffect } from "react";
-import { CloudOff, Users } from "lucide-react";
+import { CloudOff, Users, Loader2, HardDriveDownload } from "lucide-react";
 import axios from "axios";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+
+// "04 Jul 14.30" — waktu sinkron terakhir snapshot offline
+function formatSyncTime(iso) {
+  try {
+    return new Date(iso).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return "-";
+  }
+}
 
 // Chip filter cepat — memakai path filter yang sama dengan AdvancedFilter
 // (handleAdvancedFilterChange) sehingga refetch + skeleton existing ikut jalan.
@@ -14,10 +23,11 @@ const QUICK_CHIPS = [
 
 /**
  * Bar progres mode inventarisasi lapangan: progres X/Y dari endpoint
- * rekapitulasi, chip filter cepat, dan indikator offline/antrian/rekan.
+ * rekapitulasi, chip filter cepat, indikator offline/antrian/rekan, dan
+ * status penyiapan data offline (snapshotState dari DashboardPage).
  * Dirender DashboardPage tepat di bawah StatsBar saat inventoryMode aktif.
  */
-const InventoryProgressBar = memo(({ activityId, inventoryStatusFilter, onFilterChange, isOnline, pendingCount, rowLocks, sessionId, refreshKey }) => {
+const InventoryProgressBar = memo(({ activityId, inventoryStatusFilter, onFilterChange, isOnline, pendingCount, rowLocks, sessionId, refreshKey, snapshotState }) => {
   const [rekap, setRekap] = useState(null);
 
   // Refetch saat activity berubah, saat refreshKey di-bump (save selesai),
@@ -74,6 +84,20 @@ const InventoryProgressBar = memo(({ activityId, inventoryStatusFilter, onFilter
           );
         })}
       </div>
+
+      {/* Status data offline (read cache) — ringkas & non-blocking */}
+      {snapshotState?.phase === "syncing" && (
+        <span className="flex items-center gap-1 text-[10px] font-medium text-blue-600 dark:text-blue-400 whitespace-nowrap" data-testid="snapshot-progress">
+          <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />
+          Menyiapkan data offline… {snapshotState.pct ?? 0}%
+        </span>
+      )}
+      {snapshotState?.phase === "ready" && (
+        <span className="flex items-center gap-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400 whitespace-nowrap" data-testid="snapshot-ready" title="Daftar aset dapat dibuka tanpa koneksi internet">
+          <HardDriveDownload className="w-3 h-3 flex-shrink-0" />
+          Data offline siap · {(snapshotState.count ?? 0).toLocaleString('id-ID')} aset · terakhir {formatSyncTime(snapshotState.lastSync)}
+        </span>
+      )}
 
       {/* Indikator offline / antrian sinkron / rekan */}
       {(!isOnline || pendingCount > 0 || peerCount > 0) && (

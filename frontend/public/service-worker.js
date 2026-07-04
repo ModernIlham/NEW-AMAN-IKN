@@ -1,16 +1,24 @@
 // ============================================================================
-// SERVICE WORKER v3 - OPTIMIZED
+// SERVICE WORKER v4 - OPTIMIZED + OFFLINE COLD-START
 // Strategy: Stale-While-Revalidate for static assets
 // Cache versioning with auto-cleanup
 // ============================================================================
 
-const CACHE_VERSION = 'v3';
+const CACHE_VERSION = 'v4';
 const STATIC_CACHE = `inventory-static-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `inventory-runtime-${CACHE_VERSION}`;
 
-// Pre-cache essential assets
+// Pre-cache the app shell so a COLD start with zero connectivity still boots
+// the SPA (the asset list itself then loads from the IndexedDB snapshot).
+// NOTE: the hashed /static/js|css chunks are NOT precached here — CRA renames
+// them every build and a plain public/ service worker can't know the hashes.
+// They are cached opportunistically (cache-first + stale-while-revalidate in
+// the fetch handler below) on first online visit, which in practice covers
+// offline reloads. Precaching the full build manifest would require Workbox
+// InjectManifest (CRA build integration) — out of scope here.
 const PRECACHE_URLS = [
   '/',
+  '/index.html',
   '/manifest.json',
 ];
 
@@ -62,7 +70,9 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // For navigation requests (HTML) - Network first, fallback to cache
+  // For navigation requests (HTML) - Network first, fallback to cached app
+  // shell ('/' then '/index.html' precached at install) so any SPA route
+  // opens offline, even from a cold start.
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
@@ -73,12 +83,18 @@ self.addEventListener('fetch', (event) => {
           }
           return response;
         })
-        .catch(() => caches.match('/').then(r => r || caches.match(request)))
+        .catch(() =>
+          caches.match('/')
+            .then(r => r || caches.match('/index.html'))
+            .then(r => r || caches.match(request))
+        )
     );
     return;
   }
 
-  // For static assets (JS, CSS, images, fonts) - Stale-While-Revalidate
+  // For static assets (JS, CSS, images, fonts — incl. same-origin /static/
+  // hashed chunks) - cache-first with Stale-While-Revalidate: cached copy is
+  // served immediately (works offline), network refresh updates the cache.
   if (isStaticAsset(url.pathname)) {
     event.respondWith(
       caches.match(request).then(cachedResponse => {

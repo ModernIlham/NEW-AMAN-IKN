@@ -2,13 +2,27 @@ import React, { memo } from "react";
 import { CloudOff, LayoutDashboard, ClipboardCheck } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 
-const StatsBar = memo(({ stats, inventoryMode, setInventoryMode, isOnline, pendingCount }) => (
+// "04 Jul 14.30" — waktu sinkron terakhir snapshot offline
+function formatSyncTime(iso) {
+  try {
+    return new Date(iso).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return "-";
+  }
+}
+
+const StatsBar = memo(({ stats, inventoryMode, setInventoryMode, isOnline, pendingCount, snapshotServed, snapshotLastSync }) => (
   <div className="print:hidden">
-    {/* Offline Banner */}
-    {!isOnline && (
+    {/* Offline Banner — juga tampil saat daftar disajikan dari snapshot
+        offline (server tak terjangkau meski browser mengaku online) */}
+    {(!isOnline || snapshotServed) && (
       <div className="flex items-center gap-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2 text-sm text-red-700 dark:text-red-400 mb-3" data-testid="offline-banner">
         <CloudOff className="w-4 h-4 flex-shrink-0" />
-        <span className="flex-1">Mode offline aktif. Perubahan akan disinkronkan saat koneksi kembali.</span>
+        <span className="flex-1">
+          {snapshotServed
+            ? `Mode offline — menampilkan data tersimpan${snapshotLastSync ? ` (terakhir sinkron ${formatSyncTime(snapshotLastSync)})` : ""}. Perubahan akan disinkronkan saat koneksi kembali.`
+            : "Mode offline aktif. Perubahan akan disinkronkan saat koneksi kembali."}
+        </span>
         {pendingCount > 0 && <span className="bg-red-600 text-white px-2 py-0.5 rounded-full text-xs font-bold">{pendingCount}</span>}
       </div>
     )}

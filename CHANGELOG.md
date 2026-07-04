@@ -48,6 +48,22 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#23] Cache baca offline: mode inventarisasi berfungsi penuh tanpa koneksi — 2026-07-04
+
+- **Snapshot data kegiatan** (proyeksi list + thumbnail, tanpa foto penuh) ke
+  IndexedDB saat mode inventarisasi ON — sinkron **delta** via `updated_at`
+  (endpoint ber-auth `GET /assets/offline-snapshot`, per-halaman 1000).
+- **Saat offline**: daftar/cari/filter/sort dilayani dari cache lokal dengan
+  banner "menampilkan data tersimpan (terakhir sinkron …)"; edit tetap lewat
+  antrian persisten dan ikut di-upsert ke cache; lock dilewati optimistik
+  (OCC menangkap konflik saat sinkron).
+- **Online kembali**: flush antrian → delta-sync → data live.
+- **Keamanan**: snapshot per user+kegiatan; dihapus saat logout manual & saat
+  user berbeda login di perangkat sama (auto-logout 401/idle sengaja TIDAK
+  menghapus — melindungi data lapangan); TTL 7 hari; `storage.persist()`.
+- **Service worker**: precache app-shell agar aplikasi bisa dibuka cold-start
+  saat offline.
+
 ## [#22] Tindak lanjut pematangan: kompresi offline, reachability, presence, WS auth — 2026-07-04
 
 - **Kompresi foto offline**: bila server kompresi tak terjangkau/offline, foto
