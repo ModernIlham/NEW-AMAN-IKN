@@ -48,6 +48,27 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#19] Lembar Inventarisasi Lapangan eksklusif (redesign) — 2026-07-04
+
+Menggantikan panel "Aksi Cepat" tempelan (#18) dengan **tampilan input lapangan
+eksklusif** (`InventoryFieldSheet`) yang mengambil alih seluruh body form saat
+mode inventarisasi + edit aset:
+
+- **Header identitas sticky** (read-only): kode aset mono + badge NUP + nama +
+  penghitung "X/Y" — petugas memverifikasi barang, bukan mengetik ulang.
+- **Kartu langkah bernomor** dengan bahasa visual seragam: 1 Status
+  Inventarisasi (segmented 2×2), 2 Kondisi Fisik (segmented 3), kartu
+  kondisional beraksen amber muncul sesuai status (Detail Tidak Ditemukan /
+  Berlebih / Sengketa / Tindak Lanjut Rusak Berat — field sama persis dengan
+  form penuh), 3 Foto (strip thumbnail + Kamera/Galeri), 4 Lokasi & Pengguna
+  (+ baris GPS + salin dari aset sebelumnya), 5 Stiker, 6 Catatan (lipat).
+- **Footer sticky**: "Simpan & Lanjut →" besar (jalur navigationIntent yang
+  sama), Simpan, dan "Form Lengkap" (semua field tetap bisa diakses; banner
+  "← Kembali ke Mode Cepat" di form penuh).
+- Field meja (harga, SPM, kontrak, dsb.) tidak tampil di alur cepat.
+- Logika simpan/validasi tidak diduplikasi — sheet murni presentasional di
+  dalam `<form>` AssetForm yang sama.
+
 ## [#18] Mode Inventarisasi Lapangan: progres, aksi cepat, scan QR, GPS cache — 2026-07-04
 
 Paket fitur untuk mempercepat input di lapangan (offline maupun kolaborasi online):
