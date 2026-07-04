@@ -83,6 +83,13 @@ async def create_indexes() -> None:
         await db.inventory_activities.create_index("kode_satker")
         await db.inventory_activities.create_index("nama_satker")
         await db.inventory_activities.create_index("nomor_surat")
+        # Pengesahan lock guard: setiap mutasi aset melakukan satu lookup
+        # {"id": ..., "status_pengesahan": "disahkan"} — id harus ber-indeks.
+        await db.inventory_activities.create_index("id", unique=True)
+        # Kartu inventarisasi: riwayat pengesahan dicari per identitas aset
+        await db.inventory_history.create_index("kode_register")
+        await db.inventory_history.create_index([("asset_code", 1), ("NUP", 1)])
+        await db.inventory_history.create_index("activity_id")
         logger.info("Database indexes created successfully")
     except Exception as e:
         logger.error(f"Error creating indexes: {e}")

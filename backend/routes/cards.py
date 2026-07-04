@@ -19,6 +19,8 @@ from reportlab.platypus import (
     Frame,
     Image as RLImage,
 )
+from reportlab.graphics.shapes import Drawing
+from reportlab.graphics.barcode import qr
 from PIL import Image as PILImage
 from PyPDF2 import PdfMerger
 
@@ -34,6 +36,25 @@ cards_router = APIRouter()
 # KTP size: 85.6mm x 54mm (ID-1 format per ISO/IEC 7810)
 KTP_WIDTH = 85.6 * mm
 KTP_HEIGHT = 54 * mm
+
+
+def build_qr_flowable(payload: str, size: float):
+    """QR asli (bukan placeholder) memakai barcode bawaan reportlab.
+
+    Payload format "#<kode register>" — QrScanButton di frontend mengenali
+    prefix '#' dan memakai sisanya verbatim sebagai kode_register.
+    Returns None bila pembuatan QR gagal (caller pakai fallback placeholder).
+    """
+    try:
+        widget = qr.QrCodeWidget(payload, barLevel="M", barBorder=1)
+        x0, y0, x1, y1 = widget.getBounds()
+        w, h = (x1 - x0) or 1, (y1 - y0) or 1
+        drawing = Drawing(size, size, transform=[size / w, 0, 0, size / h, 0, 0])
+        drawing.add(widget)
+        return drawing
+    except Exception as e:
+        logger.warning(f"[cards] QR generation failed for payload '{payload}': {e}")
+        return None
 
 def create_ktp_card_elements(asset):
     """Create front and back card for KTP size (85.6mm x 54mm) - compact informative design"""
@@ -206,8 +227,16 @@ def create_ktp_card_elements(asset):
     ft_style = ls('_ft', fontSize=3.5, textColor=gray, fontName='Helvetica', leading=4)
     ft_code = ls('_ftc', fontSize=5, textColor=navy, fontName='Courier-Bold', leading=5.5)
     
+    # QR asli berisi "#<kode register>" (fallback "#<kode>-<NUP>") — dipindai
+    # QrScanButton untuk mencari aset via kode_register verbatim.
+    raw_kreg = str(asset.get('kode_register') or '').strip()
+    raw_code = str(asset.get('asset_code') or '').strip()
+    raw_nup = str(asset.get('NUP') or '').strip()
+    qr_payload = f"#{raw_kreg}" if raw_kreg else f"#{raw_code}-{raw_nup}"
+    qr_el = build_qr_flowable(qr_payload, 8*mm) or Table([['QR']], colWidths=[8*mm], rowHeights=[8*mm])
+
     footer = Table([[
-        Table([['QR']], colWidths=[8*mm], rowHeights=[8*mm]),
+        qr_el,
         Table([
             [Paragraph(f"ID: {kreg if kreg != '-' else code}", ft_style)],
             [Paragraph(f"KODE: {code} | NUP: {nup}", ft_code)],

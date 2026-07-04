@@ -14,6 +14,9 @@ import { toast } from "sonner";
 export function extractScannedCode(text) {
   const raw = (text || "").trim();
   if (!raw) return "";
+  // Format QR kartu inventaris: "#<kode register>" — sisanya dipakai verbatim
+  // sebagai kode_register (hanya '#' yang dibuang, tanpa heuristik token).
+  if (raw.startsWith("#")) return raw.slice(1);
   if (/^https?:\/\//i.test(raw)) {
     // URL: pakai segmen path/query terakhir yang mirip kode
     try {

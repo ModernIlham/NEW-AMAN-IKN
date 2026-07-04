@@ -1,6 +1,6 @@
 import React, { useRef, memo } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Camera, Briefcase, MapPin, Tag, CreditCard, Trash2, History, ClipboardCheck, Lock, Cloud, CloudOff, Check, RotateCcw, Clock, Loader2, AlertTriangle } from "lucide-react";
+import { Camera, Briefcase, MapPin, Tag, CreditCard, Trash2, History, ClipboardCheck, Lock, Cloud, CloudOff, Check, RotateCcw, Clock, Loader2, AlertTriangle, BookOpen } from "lucide-react";
 import { Button } from "../ui/button";
 import {
   Tooltip,
@@ -41,7 +41,7 @@ const formatPrice = (price) => {
 // md-lg: Foto, Identitas, Nama, Kondisi, Status, INV, Actions
 // xl+: + Eselon, Lokasi, Harga, Dok, Stiker
 // ============================================================================
-const VirtualizedAssetTable = memo(({ assets, editId, onEdit, onDelete, onPrintCard, onViewAudit, pageSize, rowLocks = {}, currentSessionId, syncStatuses = {}, onRetrySync, onDismissSync, selectedAssets, onToggleSelect, onToggleSelectAll }) => {
+const VirtualizedAssetTable = memo(({ assets, editId, onEdit, onDelete, onPrintCard, onOpenKartu, onViewAudit, pageSize, rowLocks = {}, currentSessionId, syncStatuses = {}, onRetrySync, onDismissSync, selectedAssets, onToggleSelect, onToggleSelectAll }) => {
   const parentRef = useRef(null);
   const ROW_HEIGHT = 52;
   const HEADER_HEIGHT = 32;
@@ -86,7 +86,7 @@ const VirtualizedAssetTable = memo(({ assets, editId, onEdit, onDelete, onPrintC
         <div className="hidden xl:block w-9 flex-shrink-0 text-center">Dok</div>
         <div className="hidden xl:block w-10 flex-shrink-0 text-center">Stiker</div>
         <div className="w-9 flex-shrink-0 text-center">INV</div>
-        <div className="w-[52px] flex-shrink-0" />
+        <div className="w-[72px] flex-shrink-0" />
       </div>
 
       {/* Virtualized Body */}
@@ -295,8 +295,9 @@ const VirtualizedAssetTable = memo(({ assets, editId, onEdit, onDelete, onPrintC
                 </div>
 
                 {/* Actions */}
-                <div className="w-[52px] flex-shrink-0 flex items-center justify-end gap-0 pr-0.5" onClick={e => e.stopPropagation()}>
+                <div className="w-[72px] flex-shrink-0 flex items-center justify-end gap-0 pr-0.5" onClick={e => e.stopPropagation()}>
                   <button onClick={() => onPrintCard(a.id)} className="h-5 w-5 flex items-center justify-center rounded hover:bg-blue-50 dark:hover:bg-blue-900/30" title="Cetak"><CreditCard className="w-2.5 h-2.5 text-blue-500 dark:text-blue-400" /></button>
+                  {onOpenKartu && <button onClick={() => onOpenKartu(a)} className="h-5 w-5 flex items-center justify-center rounded hover:bg-emerald-50 dark:hover:bg-emerald-900/30" title="Kartu Inventarisasi" data-testid={`kartu-inventarisasi-btn-${a.id}`}><BookOpen className="w-2.5 h-2.5 text-emerald-500 dark:text-emerald-400" /></button>}
                   {onViewAudit && <button onClick={() => onViewAudit(a.id, a.asset_code)} className="h-5 w-5 flex items-center justify-center rounded hover:bg-amber-50 dark:hover:bg-amber-900/30" title="Riwayat"><History className="w-2.5 h-2.5 text-amber-500 dark:text-amber-400" /></button>}
                   {onDelete && <button onClick={() => onDelete(a.id)} className="h-5 w-5 flex items-center justify-center rounded hover:bg-red-50 dark:hover:bg-red-900/30"><Trash2 className="w-2.5 h-2.5 text-red-500 dark:text-red-400" /></button>}
                 </div>

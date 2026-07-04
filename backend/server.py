@@ -91,6 +91,13 @@ async def startup_event():
             logger.info(f"OCC backfill: set version=1 on {res.modified_count} legacy asset(s)")
     except Exception as e:
         logger.warning(f"OCC version backfill failed (non-fatal): {e}")
+    # Backfill nomor tiket kegiatan (INV-{tahun}-{seq}) untuk kegiatan lama.
+    # Idempotent & aman multi-worker (guard $exists per dokumen).
+    try:
+        from routes.pengesahan import backfill_ticket_numbers
+        await backfill_ticket_numbers()
+    except Exception as e:
+        logger.warning(f"Ticket number backfill failed (non-fatal, lazy backfill covers it): {e}")
     # Start cross-worker WebSocket event bus (capped collection + tailable cursor)
     try:
         from routes.websocket import start_event_bus
@@ -162,11 +169,13 @@ from routes.exports import exports_router
 from routes.pdf_compress import pdf_compress_router
 from routes.batch import batch_router
 from routes.documents import documents_router
+from routes.pengesahan import pengesahan_router
 
 api_router.include_router(auth_router)
 api_router.include_router(categories_router)
 api_router.include_router(batch_router)      # MUST be before assets_router (specific routes before {asset_id} catch-all)
 api_router.include_router(exports_router)    # MUST be before assets_router
+api_router.include_router(pengesahan_router)  # MUST be before assets_router (/assets/kartu-inventarisasi)
 api_router.include_router(assets_router)
 api_router.include_router(imports_router)
 api_router.include_router(templates_router)

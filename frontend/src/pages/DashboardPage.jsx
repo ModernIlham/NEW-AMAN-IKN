@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, memo, useReducer, lazy, Suspense } from "react";
 import {
   Package, Plus, X, ChevronDown, Loader2, Star,
-  Users, PanelLeftClose, PanelLeftOpen,
+  Users, PanelLeftClose, PanelLeftOpen, Lock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -114,24 +114,29 @@ function sortSnapshotRows(rows, sortBy) {
 // Lazy-loaded dialogs (loaded on demand when user opens them)
 const LazyImportDialog = lazy(() => import("@/components/assets/ImportDialog"));
 const LazyUserManagementDialog = lazy(() => import("@/components/assets/UserManagementDialog"));
+const LazyKartuInventarisasiDialog = lazy(() => import("@/components/assets/KartuInventarisasiDialog"));
 
 // ============================================================================
 // ASSET MANAGEMENT DASHBOARD (within Activity context)
 // ============================================================================
 function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDark, onShowInfo }) {
-  // RBAC permissions based on user role
+  // Kegiatan yang sudah disahkan: seluruh mutasi aset terkunci (backend
+  // menolak dengan 423; UI menyembunyikan aksi tulis lewat perms di bawah).
+  const sealed = activity?.status_pengesahan === "disahkan";
+
+  // RBAC permissions based on user role (+ sealed gating)
   const perms = useMemo(() => {
     const role = user?.role || "viewer";
     return {
-      canEdit: role === "admin" || role === "operator",
-      canDelete: role === "admin" || role === "operator",
-      canImport: role === "admin",
-      canBulkDelete: role === "admin",
+      canEdit: (role === "admin" || role === "operator") && !sealed,
+      canDelete: (role === "admin" || role === "operator") && !sealed,
+      canImport: role === "admin" && !sealed,
+      canBulkDelete: role === "admin" && !sealed,
       canManageUsers: role === "admin",
       canManageCategories: role === "admin",
       role,
     };
-  }, [user?.role]);
+  }, [user?.role, sealed]);
 
   // Set audit user header for all axios requests
   useEffect(() => {
@@ -200,6 +205,8 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
   const [auditOpen, setAuditOpen] = useState(false);
   const [auditAssetId, setAuditAssetId] = useState("");
   const [auditAssetCode, setAuditAssetCode] = useState("");
+  // Kartu Inventarisasi: identitas aset yang riwayatnya sedang dibuka
+  const [kartuIdentity, setKartuIdentity] = useState(null);
 
   // Dialog visibility - consolidated into single reducer
   const [dialogs, dispatchDialog] = useReducer((state, action) => {
@@ -827,8 +834,19 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
     if (!window.confirm("Hapus aset ini?")) return;
     setIsDeleting(id);
     try { await axios.delete(`${API}/assets/${id}`); toast.success("Dihapus"); refreshData(); }
-    catch { toast.error("Gagal hapus"); }
+    catch (err) { toast.error(getApiError(err, "Gagal hapus")); }
     finally { setIsDeleting(null); }
+  }, []);
+
+  // Kartu Inventarisasi — riwayat pengesahan lintas kegiatan per identitas aset
+  const handleOpenKartu = useCallback((asset) => {
+    if (!asset) return;
+    setKartuIdentity({
+      kode_register: asset.kode_register || "",
+      asset_code: asset.asset_code || "",
+      NUP: asset.NUP || "",
+      asset_name: asset.asset_name || "",
+    });
   }, []);
 
   // === UI HANDLERS ===
@@ -977,12 +995,12 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
         {/* ASSET FORM SIDEBAR - only for admin/operator */}
         {perms.canEdit && (
           <div className={`hidden lg:block ${formPanelVisible ? 'w-[320px] min-w-[320px]' : 'w-0 min-w-0 overflow-hidden'}`} style={{ transition: 'width 0.3s ease, min-width 0.3s ease', willChange: 'width', contain: 'layout style' }}>
-            <AssetForm isOpen={isSidebarOpen || formPanelVisible} onClose={handleFormClose} activity={activity} categories={categories} editAsset={editAssetForForm} onSubmitSuccess={handleFormSubmitSuccess} onOptimisticSubmit={handleOptimisticSubmit} onSaveAndNavigate={handleSaveAndNavigate} assetIndex={editAssetIndex} totalAssetsInView={assets.length} saveQueueLength={queueLength} inventoryMode={inventoryMode} onShowCategoryManager={perms.canManageCategories ? () => openDialog('categoryManager') : undefined} alwaysExpanded={formPanelVisible} />
+            <AssetForm isOpen={isSidebarOpen || formPanelVisible} onClose={handleFormClose} activity={activity} categories={categories} editAsset={editAssetForForm} onSubmitSuccess={handleFormSubmitSuccess} onOptimisticSubmit={handleOptimisticSubmit} onSaveAndNavigate={handleSaveAndNavigate} assetIndex={editAssetIndex} totalAssetsInView={assets.length} saveQueueLength={queueLength} inventoryMode={inventoryMode} onShowCategoryManager={perms.canManageCategories ? () => openDialog('categoryManager') : undefined} onOpenKartu={handleOpenKartu} alwaysExpanded={formPanelVisible} />
           </div>
         )}
         {perms.canEdit && (
           <div className="lg:hidden">
-            <AssetForm isOpen={isSidebarOpen} onClose={handleFormClose} activity={activity} categories={categories} editAsset={editAssetForForm} onSubmitSuccess={handleFormSubmitSuccess} onOptimisticSubmit={handleOptimisticSubmit} onSaveAndNavigate={handleSaveAndNavigate} assetIndex={editAssetIndex} totalAssetsInView={assets.length} saveQueueLength={queueLength} inventoryMode={inventoryMode} onShowCategoryManager={perms.canManageCategories ? () => openDialog('categoryManager') : undefined} />
+            <AssetForm isOpen={isSidebarOpen} onClose={handleFormClose} activity={activity} categories={categories} editAsset={editAssetForForm} onSubmitSuccess={handleFormSubmitSuccess} onOptimisticSubmit={handleOptimisticSubmit} onSaveAndNavigate={handleSaveAndNavigate} assetIndex={editAssetIndex} totalAssetsInView={assets.length} saveQueueLength={queueLength} inventoryMode={inventoryMode} onShowCategoryManager={perms.canManageCategories ? () => openDialog('categoryManager') : undefined} onOpenKartu={handleOpenKartu} />
           </div>
         )}
 
@@ -999,6 +1017,20 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
           </div>
 
           <div className="p-3 sm:p-4 space-y-3">
+            {/* Banner kegiatan disahkan — seluruh data terkunci */}
+            {sealed && (
+              <div className="flex items-start gap-2.5 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-300 dark:border-emerald-700 rounded-lg px-3 py-2.5" data-testid="sealed-banner">
+                <Lock className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
+                    Kegiatan telah disahkan{activity?.ticket_number ? ` (tiket ${activity.ticket_number})` : ""} — data terkunci
+                  </p>
+                  <p className="text-xs text-emerald-700/80 dark:text-emerald-400/80">
+                    Data aset tidak dapat ditambah, diubah, atau dihapus. Riwayat tercatat di Kartu Inventarisasi.
+                  </p>
+                </div>
+              </div>
+            )}
             <StatsBar stats={stats} inventoryMode={inventoryMode} setInventoryMode={setInventoryMode} isOnline={isOnline} pendingCount={pendingCount} snapshotServed={offlineServed} snapshotLastSync={offlineLastSync} />
             {inventoryMode && (
               <InventoryProgressBar
@@ -1053,7 +1085,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
               ) : (<>
                 <div className="relative hidden lg:block">
                   <TooltipProvider>
-                    <VirtualizedAssetTable assets={assets} editId={editAssetForForm?.id} onEdit={perms.canEdit ? handleEdit : undefined} onDelete={perms.canDelete ? handleDelete : undefined} onPrintCard={handlePrintCard} onViewAudit={handleViewAssetAudit} pageSize={pageSize} rowLocks={rowLocks} currentSessionId={sessionId} syncStatuses={syncStatuses} onRetrySync={retrySync} onDismissSync={dismissSync} selectedAssets={selectedAssets} onToggleSelect={perms.canEdit ? toggleSelectAsset : undefined} onToggleSelectAll={perms.canEdit ? toggleSelectAll : undefined} />
+                    <VirtualizedAssetTable assets={assets} editId={editAssetForForm?.id} onEdit={perms.canEdit ? handleEdit : undefined} onDelete={perms.canDelete ? handleDelete : undefined} onPrintCard={handlePrintCard} onOpenKartu={handleOpenKartu} onViewAudit={handleViewAssetAudit} pageSize={pageSize} rowLocks={rowLocks} currentSessionId={sessionId} syncStatuses={syncStatuses} onRetrySync={retrySync} onDismissSync={dismissSync} selectedAssets={selectedAssets} onToggleSelect={perms.canEdit ? toggleSelectAsset : undefined} onToggleSelectAll={perms.canEdit ? toggleSelectAll : undefined} />
                   </TooltipProvider>
                 </div>
                 <div className="lg:hidden">
@@ -1078,6 +1110,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
       <Suspense fallback={null}>
         {dialogs.import && <LazyImportDialog open={dialogs.import} onClose={handleImportClose} onSuccess={() => { clearDropFile(); refreshData(1); doFetchCategories(); }} activityId={activity?.id} preloadFile={dropFile} />}
         {dialogs.userManagement && <LazyUserManagementDialog open={dialogs.userManagement} onClose={() => closeDialog('userManagement')} currentUser={user} />}
+        {kartuIdentity && <LazyKartuInventarisasiDialog open={!!kartuIdentity} identity={kartuIdentity} onClose={() => setKartuIdentity(null)} />}
       </Suspense>
 
       {/* MOBILE FAB — placed at the root level (outside <main> and its `contain:

@@ -19,6 +19,7 @@ from db import db
 from shared_utils import (
     invalidate_asset_cache, log_audit,
     create_thumbnail, create_gallery_thumbnail,
+    SEALED_DETAIL,
 )
 from routes.websocket import notify_asset_change
 from routes.media import auto_compress_image
@@ -184,6 +185,19 @@ async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user
 
     if not clean_updates and not has_photo and not has_doc_checklist and not should_clear_photos and not should_clear_doc_checklist:
         raise HTTPException(status_code=400, detail="Tidak ada field valid untuk diupdate")
+
+    # Kegiatan yang sudah disahkan terkunci: kumpulkan activity_id target
+    # (distinct — batch hampir selalu 1 kegiatan) lalu satu lookup ber-indeks.
+    target_activity_ids = [
+        aid for aid in await db.assets.distinct("activity_id", {"id": {"$in": data.asset_ids}}) if aid
+    ]
+    if target_activity_ids:
+        sealed = await db.inventory_activities.find_one(
+            {"id": {"$in": target_activity_ids}, "status_pengesahan": "disahkan"},
+            {"_id": 0, "id": 1},
+        )
+        if sealed:
+            raise HTTPException(status_code=423, detail=SEALED_DETAIL)
 
     # Skip lock check for large batches (own batch action) — only check for small batches
     session_id = x_session_id or "unknown-session"

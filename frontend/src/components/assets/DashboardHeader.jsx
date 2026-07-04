@@ -25,7 +25,12 @@ const DashboardHeader = memo(({
             <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight truncate font-['Manrope']">
               {activity?.nama_kegiatan || 'Manajemen Aset'}
             </h1>
-            <p className="text-[10px] text-muted-foreground hidden sm:block truncate">{activity?.nomor_surat}</p>
+            <p className="text-[10px] text-muted-foreground hidden sm:flex items-center gap-1.5 truncate">
+              {activity?.ticket_number && (
+                <span className="font-mono font-semibold bg-slate-800 text-slate-100 dark:bg-slate-200 dark:text-slate-800 px-1 py-px rounded" data-testid="header-ticket-badge">{activity.ticket_number}</span>
+              )}
+              <span className="truncate">{activity?.nomor_surat}</span>
+            </p>
           </div>
         </div>
       </div>

@@ -206,7 +206,9 @@ async def bulk_delete_assets(request: Request, activity_id: str, _user: dict = D
     activity = await db.inventory_activities.find_one({"id": activity_id})
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan inventarisasi tidak ditemukan")
-    
+    if activity.get("status_pengesahan") == "disahkan":
+        raise HTTPException(status_code=423, detail="Kegiatan sudah disahkan dan terkunci")
+
     count = await db.assets.count_documents({"activity_id": activity_id})
     if count == 0:
         return {"message": "Tidak ada aset untuk dihapus", "deleted": 0}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
 import {
   Package, FileText,
   Plus, Trash2, Edit3, X, Camera, Settings, LogOut,
@@ -8,6 +8,7 @@ import {
   AlertTriangle, ShieldAlert, RotateCcw, Building2, Eye, Download,
   HardDrive, Upload, Shield, CheckCircle2, Database,
   Clock, PlayCircle, XCircle, Image as ImageIcon,
+  ShieldCheck, Lock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +24,9 @@ import { compressImageFile } from "@/lib/imageCompression";
 import { compressPdfFile } from "@/lib/pdfCompression";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+
+// Lazy: dialog pengesahan hanya dimuat saat dibuka (pola dialog lazy lain)
+const PengesahanDialog = lazy(() => import("@/components/assets/PengesahanDialog"));
 
 // ============================================================================
 // RESET ALL DIALOG - Hidden dangerous feature for admin only
@@ -434,6 +438,8 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
   const [completionDialog, setCompletionDialog] = useState(null); // { activity, data, loading }
   // Cached per-activity date-derived status (populated after first list load)
   const [statusCache, setStatusCache] = useState({}); // { [activityId]: {phase, status} }
+  // Dialog pengesahan (finalisasi) kegiatan
+  const [pengesahanActivity, setPengesahanActivity] = useState(null);
 
   const canManageActivities = user?.role === "admin" || user?.role === "operator";
   const isAdmin = user?.role === "admin";
@@ -907,9 +913,12 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
             ) : filteredActivities.map(act => {
               const cached = statusCache[act.id];
               const datePhase = computeDatePhase(act);
-              const computedStatus = cached?.computed_status || datePhase;
+              const isDisahkan = act.status_pengesahan === "disahkan";
+              const computedStatus = isDisahkan ? "disahkan" : (cached?.computed_status || datePhase);
               const ribbonStyle = (
-                computedStatus === "selesai"
+                computedStatus === "disahkan"
+                  ? "bg-emerald-600 text-white"
+                  : computedStatus === "selesai"
                   ? "bg-emerald-500 text-white"
                   : computedStatus === "belum_lengkap"
                   ? "bg-amber-500 text-white"
@@ -920,7 +929,9 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                   : "bg-slate-400 text-white"
               );
               const ribbonIcon = (
-                computedStatus === "selesai"
+                computedStatus === "disahkan"
+                  ? <Lock className="w-3 h-3" />
+                  : computedStatus === "selesai"
                   ? <CheckCircle2 className="w-3 h-3" />
                   : computedStatus === "belum_lengkap"
                   ? <AlertTriangle className="w-3 h-3" />
@@ -931,7 +942,9 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                   : <Clock className="w-3 h-3" />
               );
               const ribbonText = (
-                computedStatus === "selesai"
+                computedStatus === "disahkan"
+                  ? "Disahkan"
+                  : computedStatus === "selesai"
                   ? "Selesai"
                   : computedStatus === "belum_lengkap"
                   ? "Belum Lengkap"
@@ -951,21 +964,31 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                 {/* Status Ribbon - clickable to validate completion */}
                 <button
                   type="button"
-                  onClick={(e) => handleStatusRibbonClick(e, act)}
+                  onClick={(e) => {
+                    if (isDisahkan) { e.stopPropagation(); setPengesahanActivity(act); return; }
+                    handleStatusRibbonClick(e, act);
+                  }}
                   className={`absolute top-0 left-0 ${ribbonStyle} text-[10px] font-semibold pl-3 pr-3 py-0.5 rounded-br-lg shadow flex items-center gap-1 min-h-0 min-w-0 leading-none hover:brightness-110 transition-all z-10 cursor-pointer`}
-                  title="Klik untuk validasi status kegiatan"
+                  title={isDisahkan ? "Kegiatan telah disahkan — klik untuk detail pengesahan" : "Klik untuk validasi status kegiatan"}
                   data-testid={`activity-status-ribbon-${act.id}`}
                 >
                   {ribbonIcon}<span>{ribbonText}</span>
                 </button>
                 <div className="absolute top-3 right-3 flex items-center gap-1 z-10">
+                  {canManageActivities && (
+                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity bg-card/80 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-full shadow-sm" onClick={(e) => { e.stopPropagation(); setPengesahanActivity(act); }} title={isDisahkan ? "Detail Pengesahan" : "Pengesahan Kegiatan"} data-testid={`activity-pengesahan-btn-${act.id}`}>
+                      {isDisahkan ? <Lock className="w-3.5 h-3.5 text-emerald-600" /> : <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />}
+                    </Button>
+                  )}
                   {canManageActivities && (<>
                     <Button variant="ghost" size="sm" className="h-7 w-7 p-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity bg-card/80 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-full shadow-sm" onClick={(e) => handleEdit(e, act)} title="Edit Kegiatan">
                       <Edit3 className="w-3.5 h-3.5 text-blue-500" />
                     </Button>
-                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity bg-card/80 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-full shadow-sm" onClick={(e) => handleDelete(e, act.id)}>
-                      <Trash2 className="w-3.5 h-3.5 text-red-500" />
-                    </Button>
+                    {!isDisahkan && (
+                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity bg-card/80 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-full shadow-sm" onClick={(e) => handleDelete(e, act.id)}>
+                        <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                      </Button>
+                    )}
                   </>)}
                   <div className="w-6 h-6 flex items-center justify-center">
                     <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-blue-600 transition-colors" />
@@ -973,6 +996,9 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                 </div>
                 <div className="pr-24 sm:pr-20 pt-5">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    {act.ticket_number && (
+                      <span className="text-xs font-mono font-semibold bg-slate-800 text-slate-100 dark:bg-slate-200 dark:text-slate-800 px-2 py-0.5 rounded" data-testid={`activity-ticket-${act.id}`}>{act.ticket_number}</span>
+                    )}
                     <span className="text-xs font-mono bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 px-2 py-0.5 rounded">{act.nomor_surat}</span>
                     {act.kode_satker && (
                       <span className="text-xs font-mono bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 px-2 py-0.5 rounded flex items-center gap-1" data-testid={`activity-satker-${act.id}`}>
@@ -1366,12 +1392,25 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
 
       {/* Photo Lightbox */}
       {photoLightbox && (
-        <ActivityPhotoLightbox 
-          activityId={photoLightbox.activityId} 
-          initialIndex={photoLightbox.index} 
-          onClose={() => setPhotoLightbox(null)} 
+        <ActivityPhotoLightbox
+          activityId={photoLightbox.activityId}
+          initialIndex={photoLightbox.index}
+          onClose={() => setPhotoLightbox(null)}
         />
       )}
+
+      {/* Pengesahan (finalisasi) kegiatan — lazy loaded */}
+      <Suspense fallback={null}>
+        {pengesahanActivity && (
+          <PengesahanDialog
+            open={!!pengesahanActivity}
+            activity={pengesahanActivity}
+            isAdmin={isAdmin}
+            onClose={() => setPengesahanActivity(null)}
+            onSahkanSuccess={() => { fetchActivities(); }}
+          />
+        )}
+      </Suspense>
 
       {/* Completion Status Validation Dialog */}
       <Dialog open={!!completionDialog} onOpenChange={(o) => { if (!o) setCompletionDialog(null); }}>
