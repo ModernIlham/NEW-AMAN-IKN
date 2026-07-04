@@ -3,7 +3,7 @@ import {
   Plus, Edit3, X, Camera, Trash2, Check, ChevronDown, 
   Package, Briefcase, ShieldCheck, Settings, Tag, Save, Loader2, ClipboardList,
   Info, ChevronRight, BookOpen, Wrench, ArrowRight, HelpCircle, MapPin, LocateFixed,
-  ChevronLeft, Zap, Copy,
+  ChevronLeft,
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -16,6 +16,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import { DocumentChecklist, DEFAULT_DOC_ITEMS } from "./DocumentChecklist";
+import InventoryFieldSheet from "./InventoryFieldSheet";
 import { toast } from "sonner";
 import axios from "axios";
 import { getApiError } from "../../lib/utils";
@@ -260,20 +261,6 @@ const StatusInfoCard = ({ status }) => {
 };
 
 
-// Opsi tombol "Aksi Cepat Inventarisasi" (mode inventarisasi, edit aset).
-// Warna mengikuti skema status yang sudah dipakai aplikasi.
-const QUICK_STATUS_OPTIONS = [
-  { value: "Ditemukan", active: "bg-emerald-600 border-emerald-600 text-white", idle: "border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30" },
-  { value: "Tidak Ditemukan", active: "bg-red-600 border-red-600 text-white", idle: "border-red-300 dark:border-red-700 text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30" },
-  { value: "Berlebih", active: "bg-purple-600 border-purple-600 text-white", idle: "border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30" },
-  { value: "Sengketa", active: "bg-rose-600 border-rose-600 text-white", idle: "border-rose-300 dark:border-rose-700 text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/30" },
-];
-const QUICK_CONDITION_OPTIONS = [
-  { value: "Baik", active: "bg-emerald-600 border-emerald-600 text-white", idle: "border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30" },
-  { value: "Rusak Ringan", active: "bg-amber-500 border-amber-500 text-white", idle: "border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30" },
-  { value: "Rusak Berat", active: "bg-red-600 border-red-600 text-white", idle: "border-red-300 dark:border-red-700 text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30" },
-];
-
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const axiosLargeUpload = axios.create({
@@ -347,6 +334,9 @@ const AssetForm = memo(({
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
   const [categorySearch, setCategorySearch] = useState("");
   const [showGuide, setShowGuide] = useState(false);
+  // Mode inventarisasi lapangan: false = tampilan cepat (InventoryFieldSheet),
+  // true = form lengkap. Direset ke false setiap kali pindah aset.
+  const [showFullForm, setShowFullForm] = useState(false);
   const navigationIntentRef = useRef(null); // 'next' | 'prev' | null
   
   const fileInputRef = useRef(null);
@@ -405,6 +395,7 @@ const AssetForm = memo(({
       setIsFormLoading(true);
       setEditId(editAsset.id);
       setFormSection("basic");
+      setShowFullForm(false);
       setFormErrors([]);
       setIsSubmitting(false);
       originalDataRef.current = null;
@@ -498,6 +489,7 @@ const AssetForm = memo(({
       setFormData({...emptyForm});
       setEditId(null);
       setFormSection("basic");
+      setShowFullForm(false);
       setFormErrors([]);
       setCategorySearch("");
       setIsSubmitting(false);
@@ -666,7 +658,8 @@ const AssetForm = memo(({
   }, []);
 
   // Ganti status inventarisasi + bersihkan field turunan yang tidak relevan.
-  // Dipakai oleh Select "Status Inventarisasi" DAN tombol Aksi Cepat.
+  // Dipakai oleh Select "Status Inventarisasi" DAN tombol segmented di
+  // InventoryFieldSheet (mode inventarisasi lapangan).
   const handleInventoryStatusChange = useCallback(v => {
     setFormData(p => ({
       ...p, inventory_status: v,
@@ -676,6 +669,24 @@ const AssetForm = memo(({
       ...(v === "Ditemukan" || v === "Belum Diinventarisasi" ? { kronologis: "" } : {})
     }));
   }, []);
+
+  // Ganti klasifikasi "Tidak Ditemukan" + reset sub-klasifikasi turunannya.
+  // Dipakai oleh form penuh DAN InventoryFieldSheet.
+  const handleKlasifikasiChange = useCallback(v => {
+    setFormData(p => ({ ...p, klasifikasi_tidak_ditemukan: v, sub_klasifikasi: "" }));
+  }, []);
+
+  // Ganti status stiker + bersihkan foto stiker bila stiker belum terpasang.
+  // Dipakai oleh form penuh DAN InventoryFieldSheet.
+  const handleStikerStatusChange = useCallback(v => {
+    setFormData(p => ({
+      ...p, stiker_status: v,
+      ...(v !== "Sudah Terpasang" ? { stiker_photo_index: null } : {}),
+    }));
+  }, []);
+
+  const openCamera = useCallback(() => cameraInputRef.current?.click(), []);
+  const openGallery = useCallback(() => fileInputRef.current?.click(), []);
 
   // "Samakan dengan sebelumnya": konteks lokasi/pengguna dari aset terakhir
   // yang disimpan (localStorage 'aman_last_asset_ctx', ditulis saat submit).
@@ -1013,6 +1024,18 @@ const AssetForm = memo(({
     } finally { setIsSubmitting(false); }
   }, [formData, isEditing, editId, resetForm, onSubmitSuccess, onOptimisticSubmit, onSaveAndNavigate, onClose]);
 
+  // Tampilan eksklusif inventarisasi lapangan menggantikan seluruh body form.
+  const sheetMode = inventoryMode && isEditing && !showFullForm;
+
+  // "Simpan & Lanjut" hanya bermakna bila masih ada aset berikutnya.
+  // Guard ini identik dengan onClick tombol submit form penuh di bawah.
+  const canSaveNext = isEditing && !!onSaveAndNavigate && assetIndex >= 0 && assetIndex < totalAssetsInView - 1;
+  const queueNextIntent = useCallback(() => {
+    if (isEditing && onSaveAndNavigate && assetIndex >= 0 && assetIndex < totalAssetsInView - 1) {
+      navigationIntentRef.current = 'next';
+    }
+  }, [isEditing, onSaveAndNavigate, assetIndex, totalAssetsInView]);
+
   const filteredCategories = useMemo(() => {
     const cats = Array.isArray(categories) ? categories : [];
     if (!categorySearch) return cats.slice(0, 200);
@@ -1042,8 +1065,8 @@ const AssetForm = memo(({
           {!alwaysExpanded && <Button variant="ghost" size="sm" className="lg:hidden h-7 w-7 p-0" onClick={onClose}><X className="w-4 h-4" /></Button>}
         </div>
 
-        {/* Tabs */}
-        <div className="flex border-b border-border bg-muted flex-shrink-0">
+        {/* Tabs — disembunyikan pada mode inventarisasi lapangan (sheet) */}
+        {!sheetMode && <div className="flex border-b border-border bg-muted flex-shrink-0">
           {[
             { key: "basic", label: "Info Dasar", icon: Package },
             { key: "procurement", label: "Pengadaan", icon: Briefcase },
@@ -1057,7 +1080,7 @@ const AssetForm = memo(({
               <t.icon className="w-3.5 h-3.5" /><span className="hidden sm:inline">{t.label}</span>
             </button>
           ))}
-        </div>
+        </div>}
 
         {/* Loading Skeleton */}
         {isFormLoading && (
@@ -1098,41 +1121,53 @@ const AssetForm = memo(({
           </div>
         )}
 
+        {/* Mode inventarisasi lapangan — sheet eksklusif menggantikan body form.
+            Dirender di dalam <form onSubmit={handleSubmit}> agar tombol submit
+            sheet memakai jalur simpan/validasi yang sama persis. */}
+        {!isFormLoading && sheetMode && (
+          <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden min-h-0">
+            <InventoryFieldSheet
+              formData={formData}
+              photoItems={photoItems}
+              photoCount={currentPhotoCount}
+              isSubmitting={isSubmitting}
+              gpsLoading={gpsLoading}
+              lastCtx={lastCtx}
+              assetIndex={assetIndex}
+              totalAssetsInView={totalAssetsInView}
+              canSaveNext={canSaveNext}
+              onInputChange={handleInputChange}
+              onInventoryStatusChange={handleInventoryStatusChange}
+              onConditionChange={v => handleSelectChange("condition", v)}
+              onKlasifikasiChange={handleKlasifikasiChange}
+              onSubKlasifikasiChange={v => handleSelectChange("sub_klasifikasi", v)}
+              onStikerStatusChange={handleStikerStatusChange}
+              onStikerUkuranChange={v => handleSelectChange("stiker_ukuran", v)}
+              onOpenCamera={openCamera}
+              onOpenGallery={openGallery}
+              onFetchGPS={fetchGPS}
+              onApplyLastCtx={applyLastCtx}
+              onQueueNextIntent={queueNextIntent}
+              onShowFullForm={() => setShowFullForm(true)}
+            />
+            <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImageChange} className="hidden" />
+            <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleImageChange} className="hidden" />
+          </form>
+        )}
+
         {/* Form */}
-        {!isFormLoading && <div className="flex-1 overflow-y-auto">
+        {!isFormLoading && !sheetMode && <div className="flex-1 overflow-y-auto">
           <form onSubmit={handleSubmit} className="p-3 space-y-2.5">
-            {/* Aksi Cepat Inventarisasi — mode inventarisasi + edit aset */}
-            {inventoryMode && isEditing && (
-              <div className="p-2 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg border border-emerald-200 dark:border-emerald-700 space-y-1.5" data-testid="inventory-quick-actions">
-                <div className="flex items-center gap-1.5">
-                  <Zap className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                  <Label className="text-xs font-medium text-emerald-800 dark:text-emerald-300">Aksi Cepat Inventarisasi</Label>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {QUICK_STATUS_OPTIONS.map(o => (
-                    <button key={o.value} type="button" onClick={() => handleInventoryStatusChange(o.value)}
-                      className={`flex-1 min-w-[45%] min-h-[40px] px-2 rounded-md border text-xs font-semibold transition-colors ${formData.inventory_status === o.value ? o.active : `bg-card ${o.idle}`}`}
-                      data-testid={`quick-status-${o.value}`}
-                    >{o.value}</button>
-                  ))}
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {QUICK_CONDITION_OPTIONS.map(o => (
-                    <button key={o.value} type="button" onClick={() => handleSelectChange("condition", o.value)}
-                      className={`flex-1 min-h-[40px] px-2 rounded-md border text-xs font-semibold transition-colors ${formData.condition === o.value ? o.active : `bg-card ${o.idle}`}`}
-                      data-testid={`quick-condition-${o.value}`}
-                    >{o.value}</button>
-                  ))}
-                </div>
-                {lastCtx && (
-                  <button type="button" onClick={applyLastCtx}
-                    className="w-full min-h-[36px] px-2 rounded-md border border-blue-300 dark:border-blue-700 bg-card text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors"
-                    data-testid="copy-last-ctx-btn"
-                  >
-                    <Copy className="w-3.5 h-3.5" />Salin lokasi & pengguna dari aset sebelumnya
-                  </button>
-                )}
-              </div>
+            {/* Mode inventarisasi: kembali ke tampilan cepat dari form lengkap */}
+            {inventoryMode && isEditing && showFullForm && (
+              <button
+                type="button"
+                onClick={() => setShowFullForm(false)}
+                data-testid="back-to-quick-mode"
+                className="w-full h-9 flex items-center justify-center gap-1.5 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 text-xs font-semibold hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />Kembali ke Mode Cepat
+              </button>
             )}
             {formSection === "basic" && (<>
               <div className="space-y-1">
@@ -1247,10 +1282,7 @@ const AssetForm = memo(({
               <div className="p-2 bg-muted rounded-lg space-y-2">
                 <div className="flex items-center gap-1.5"><Tag className="w-3.5 h-3.5 text-muted-foreground" /><Label className="text-xs font-medium">Informasi Stiker</Label></div>
                 <div className="grid grid-cols-2 gap-2">
-                  <Select value={formData.stiker_status} onValueChange={v => {
-                    handleSelectChange("stiker_status", v);
-                    if (v !== "Sudah Terpasang") setFormData(p => ({ ...p, stiker_photo_index: null }));
-                  }}><SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                  <Select value={formData.stiker_status} onValueChange={handleStikerStatusChange}><SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
                     <SelectContent><SelectItem value="Belum Terpasang">Belum Terpasang</SelectItem><SelectItem value="Sudah Terpasang">Sudah Terpasang</SelectItem></SelectContent></Select>
                   <Input name="stiker_ukuran" value={formData.stiker_ukuran} onChange={handleInputChange} placeholder="Ukuran (5x3cm)" className="h-7 text-xs hidden" />
                   <Select value={formData.stiker_ukuran || ""} onValueChange={v => setFormData(p => ({...p, stiker_ukuran: v}))}>
@@ -1381,7 +1413,7 @@ const AssetForm = memo(({
                   <div className="space-y-2 pt-1 border-t border-amber-200 dark:border-amber-700">
                     <div className="space-y-1">
                       <Label className="text-[10px] text-amber-700 dark:text-amber-400">Klasifikasi</Label>
-                      <Select value={formData.klasifikasi_tidak_ditemukan || ""} onValueChange={v => setFormData(p => ({...p, klasifikasi_tidak_ditemukan: v, sub_klasifikasi: ""}))}>
+                      <Select value={formData.klasifikasi_tidak_ditemukan || ""} onValueChange={handleKlasifikasiChange}>
                         <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Pilih klasifikasi" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="Kesalahan Pencatatan">Kesalahan Pencatatan</SelectItem>
