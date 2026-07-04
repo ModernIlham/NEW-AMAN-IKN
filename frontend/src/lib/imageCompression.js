@@ -21,8 +21,6 @@
  * @returns {Promise<string>} base64 data URL (image/jpeg).
  */
 export function compressImageFile(file, opts = {}) {
-  const { maxDim = 1920, quality = 0.85, maxBytes = 900 * 1024 } = opts;
-
   return new Promise((resolve, reject) => {
     if (!file || !file.type || !file.type.startsWith("image/")) {
       reject(new Error("Not an image file"));
@@ -31,49 +29,68 @@ export function compressImageFile(file, opts = {}) {
 
     const reader = new FileReader();
     reader.onerror = () => reject(new Error("Gagal membaca file"));
-    reader.onload = () => {
-      const img = new Image();
-      img.onerror = () => reject(new Error("Gagal memuat gambar"));
-      img.onload = () => {
-        try {
-          // Calculate target dimensions preserving aspect ratio
-          let { width, height } = img;
-          if (width > maxDim || height > maxDim) {
-            if (width >= height) {
-              height = Math.round(height * (maxDim / width));
-              width = maxDim;
-            } else {
-              width = Math.round(width * (maxDim / height));
-              height = maxDim;
-            }
-          }
-
-          const canvas = document.createElement("canvas");
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext("2d");
-          // High-quality image smoothing
-          ctx.imageSmoothingEnabled = true;
-          ctx.imageSmoothingQuality = "high";
-          ctx.drawImage(img, 0, 0, width, height);
-
-          // Encode as JPEG and progressively lower quality until under maxBytes
-          let q = quality;
-          let dataUrl = canvas.toDataURL("image/jpeg", q);
-          // Rough size estimate: base64 string length * 0.75
-          const approxBytes = (s) => (s.length - (s.indexOf(",") + 1)) * 0.75;
-          while (approxBytes(dataUrl) > maxBytes && q > 0.4) {
-            q = Math.max(0.4, q - 0.1);
-            dataUrl = canvas.toDataURL("image/jpeg", q);
-          }
-          resolve(dataUrl);
-        } catch (e) {
-          reject(e);
-        }
-      };
-      img.src = reader.result;
-    };
+    reader.onload = () => compressDataUrl(reader.result, opts).then(resolve, reject);
     reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Compress an existing base64 data URL (resize + re-encode as JPEG via canvas).
+ * Used as the offline fallback when the server-side /compress-image endpoint
+ * is unreachable — the canvas pipeline is identical to compressImageFile().
+ * @param {string} srcDataUrl - Source image as a data URL.
+ * @param {Object} opts - Same options as compressImageFile (maxDim, quality, maxBytes).
+ * @returns {Promise<string>} base64 data URL (image/jpeg).
+ */
+export function compressDataUrl(srcDataUrl, opts = {}) {
+  const { maxDim = 1920, quality = 0.85, maxBytes = 900 * 1024 } = opts;
+
+  return new Promise((resolve, reject) => {
+    if (!srcDataUrl || typeof srcDataUrl !== "string" || !srcDataUrl.startsWith("data:image/")) {
+      reject(new Error("Bukan data URL gambar"));
+      return;
+    }
+
+    const img = new Image();
+    img.onerror = () => reject(new Error("Gagal memuat gambar"));
+    img.onload = () => {
+      try {
+        // Calculate target dimensions preserving aspect ratio
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          if (width >= height) {
+            height = Math.round(height * (maxDim / width));
+            width = maxDim;
+          } else {
+            width = Math.round(width * (maxDim / height));
+            height = maxDim;
+          }
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        // High-quality image smoothing
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Encode as JPEG and progressively lower quality until under maxBytes
+        let q = quality;
+        let dataUrl = canvas.toDataURL("image/jpeg", q);
+        // Rough size estimate: base64 string length * 0.75
+        const approxBytes = (s) => (s.length - (s.indexOf(",") + 1)) * 0.75;
+        while (approxBytes(dataUrl) > maxBytes && q > 0.4) {
+          q = Math.max(0.4, q - 0.1);
+          dataUrl = canvas.toDataURL("image/jpeg", q);
+        }
+        resolve(dataUrl);
+      } catch (e) {
+        reject(e);
+      }
+    };
+    img.src = srcDataUrl;
   });
 }
 

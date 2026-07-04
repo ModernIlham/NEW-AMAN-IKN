@@ -120,6 +120,12 @@ async def root_health_check():
     """Root-level health check for Kubernetes load balancer probes"""
     return {"status": "ok"}
 
+@api_router.get("/health")
+async def api_health_check():
+    """Lightweight reachability probe for the frontend's offline detection
+    (lib/connectivity.js). No auth, no DB — must stay instant and dependency-free."""
+    return {"ok": True}
+
 @api_router.get("/")
 async def health_check():
     return {

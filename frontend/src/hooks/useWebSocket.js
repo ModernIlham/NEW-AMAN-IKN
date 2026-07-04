@@ -57,7 +57,10 @@ export function useWebSocket({ activityId, userId, userName, onAssetChange, onLo
 
       doCleanup();
 
-      const url = `${WS_BASE}/ws/${activityId}?user_id=${encodeURIComponent(userId)}&user_name=${encodeURIComponent(userName || "Unknown")}`;
+      // Identity is derived server-side from the JWT — user_id/user_name query
+      // params are no longer sent (the backend would ignore them anyway).
+      const token = localStorage.getItem("token") || "";
+      const url = `${WS_BASE}/ws/${activityId}?token=${encodeURIComponent(token)}`;
 
       try {
         const ws = new WebSocket(url);
@@ -133,11 +136,19 @@ export function useWebSocket({ activityId, userId, userName, onAssetChange, onLo
           }
         };
 
-        ws.onclose = () => {
+        ws.onclose = (event) => {
           if (!mountedRef.current) return;
           setConnected(false);
           connectedRef.current = false;
           if (pingTimer.current) { clearInterval(pingTimer.current); pingTimer.current = null; }
+
+          // 4401 = server rejected the token (missing/invalid/expired). Do NOT
+          // reconnect-loop — a new token is needed first; the axios 401
+          // interceptor handles logout on the next API call.
+          if (event?.code === 4401) {
+            console.info("WebSocket ditolak: token tidak valid/kedaluwarsa. Real-time sync dinonaktifkan sampai login ulang.");
+            return;
+          }
 
           const lived = Date.now() - (openTimeRef.current || 0);
           if (lived < STABLE_MS) {
