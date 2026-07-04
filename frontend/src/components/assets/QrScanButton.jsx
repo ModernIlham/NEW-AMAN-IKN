@@ -98,8 +98,8 @@ const QrScanButton = memo(({ onDetected }) => {
 
   return (
     <>
-      <Button type="button" variant="outline" size="sm" onClick={startScan} className="h-7 sm:h-8 px-2 text-xs flex-shrink-0" title="Scan QR/barcode stiker aset" data-testid="qr-scan-btn">
-        <ScanLine className="w-3.5 h-3.5 sm:mr-1" />
+      <Button type="button" variant="outline" size="sm" onClick={startScan} className="h-9 w-9 p-0 sm:w-auto sm:px-2.5 lg:h-8 min-h-0 min-w-0 text-xs flex-shrink-0" title="Scan QR/barcode stiker aset" aria-label="Scan QR/barcode stiker aset" data-testid="qr-scan-btn">
+        <ScanLine className="w-4 h-4" />
         <span className="hidden sm:inline">Scan</span>
       </Button>
       {scanning && createPortal(

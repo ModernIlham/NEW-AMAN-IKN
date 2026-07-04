@@ -11,12 +11,42 @@ function formatSyncTime(iso) {
   }
 }
 
+/**
+ * Saklar segmen Dashboard | Inventarisasi (mobile portrait). Dipakai di dua
+ * tempat dengan testid yang sama: berdiri sendiri sebagai kartu di StatsBar
+ * (mode dashboard) dan menyatu di kartu header InventoryProgressBar (mode
+ * inventarisasi) — hanya satu instans yang dirender pada satu waktu.
+ */
+export const InventoryModeSwitch = memo(({ inventoryMode, setInventoryMode, className = "" }) => (
+  <div className={`grid grid-cols-2 ${className}`} data-testid="stats-mobile-inline">
+    <button
+      type="button"
+      onClick={() => setInventoryMode(false)}
+      aria-pressed={!inventoryMode}
+      data-testid="inventory-mode-toggle-dashboard"
+      className={`min-h-0 min-w-0 flex items-center justify-center gap-1.5 h-8 px-2 rounded-lg text-xs font-semibold transition-colors ${!inventoryMode ? 'bg-blue-600 text-white shadow-sm' : 'text-muted-foreground'}`}
+    >
+      <LayoutDashboard className="w-4 h-4 flex-shrink-0" /> Dashboard
+    </button>
+    <button
+      type="button"
+      onClick={() => setInventoryMode(true)}
+      aria-pressed={inventoryMode}
+      data-testid="inventory-mode-toggle"
+      className={`min-h-0 min-w-0 flex items-center justify-center gap-1.5 h-8 px-2 rounded-lg text-xs font-semibold transition-colors ${inventoryMode ? 'bg-emerald-600 text-white shadow-sm' : 'text-muted-foreground'}`}
+    >
+      <ClipboardCheck className="w-4 h-4 flex-shrink-0" /> Inventarisasi
+    </button>
+  </div>
+));
+InventoryModeSwitch.displayName = "InventoryModeSwitch";
+
 const StatsBar = memo(({ stats, inventoryMode, setInventoryMode, isOnline, pendingCount, snapshotServed, snapshotLastSync }) => (
   <div className="print:hidden">
     {/* Offline Banner — juga tampil saat daftar disajikan dari snapshot
         offline (server tak terjangkau meski browser mengaku online) */}
     {(!isOnline || snapshotServed) && (
-      <div className="flex items-center gap-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2 text-sm text-red-700 dark:text-red-400 mb-3" data-testid="offline-banner">
+      <div className="flex items-center gap-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl px-3 py-2 text-sm text-red-700 dark:text-red-400 mb-2 sm:mb-3" data-testid="offline-banner">
         <CloudOff className="w-4 h-4 flex-shrink-0" />
         <span className="flex-1">
           {snapshotServed
@@ -62,29 +92,16 @@ const StatsBar = memo(({ stats, inventoryMode, setInventoryMode, isOnline, pendi
       </div>
     </div>
 
-    {/* Mobile Portrait (< sm): full-width segmented mode switch. Matches the
-        toolbar cards below (same width/radius) so the row has no dead space —
-        the old right-floating button left a large empty gap to its left. */}
-    <div className="sm:hidden grid grid-cols-2 gap-1 p-1 rounded-xl border border-border bg-card shadow-elev-1" data-testid="stats-mobile-inline">
-      <button
-        type="button"
-        onClick={() => setInventoryMode(false)}
-        aria-pressed={!inventoryMode}
-        data-testid="inventory-mode-toggle-dashboard"
-        className={`min-h-0 min-w-0 flex items-center justify-center gap-1.5 h-9 rounded-lg text-xs font-semibold transition-colors ${!inventoryMode ? 'bg-blue-600 text-white shadow-sm' : 'text-muted-foreground'}`}
-      >
-        <LayoutDashboard className="w-4 h-4 flex-shrink-0" /> Dashboard
-      </button>
-      <button
-        type="button"
-        onClick={() => setInventoryMode(true)}
-        aria-pressed={inventoryMode}
-        data-testid="inventory-mode-toggle"
-        className={`min-h-0 min-w-0 flex items-center justify-center gap-1.5 h-9 rounded-lg text-xs font-semibold transition-colors ${inventoryMode ? 'bg-emerald-600 text-white shadow-sm' : 'text-muted-foreground'}`}
-      >
-        <ClipboardCheck className="w-4 h-4 flex-shrink-0" /> Inventarisasi
-      </button>
-    </div>
+    {/* Mobile Portrait (< sm): kartu saklar mode full-width. Saat mode
+        inventarisasi aktif, saklar pindah ke kartu header gabungan di
+        InventoryProgressBar — kartu ini tidak dirender agar tidak ganda. */}
+    {!inventoryMode && (
+      <InventoryModeSwitch
+        inventoryMode={inventoryMode}
+        setInventoryMode={setInventoryMode}
+        className="sm:hidden p-1 gap-1 rounded-xl border border-border bg-card shadow-sm"
+      />
+    )}
   </div>
 ));
 

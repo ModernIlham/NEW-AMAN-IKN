@@ -66,20 +66,20 @@ const AssetGroupsPanel = memo(({ activityId, isOpen, onToggle, onBatchEdit }) =>
   }, [onBatchEdit]);
 
   return (
-    <div className="bg-card rounded-lg border overflow-hidden" data-testid="asset-groups-panel">
+    <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="asset-groups-panel">
       <button
         onClick={onToggle}
-        className="w-full flex items-center justify-between px-4 py-2.5 bg-gradient-to-r from-violet-50 to-purple-50 hover:from-violet-100 hover:to-purple-100 dark:from-violet-900/30 dark:to-purple-900/30 dark:hover:from-violet-900/50 dark:hover:to-purple-900/50 transition-colors"
+        className="min-h-0 min-w-0 w-full flex items-center justify-between px-3 py-2 bg-gradient-to-r from-violet-50 to-purple-50 hover:from-violet-100 hover:to-purple-100 dark:from-violet-900/30 dark:to-purple-900/30 dark:hover:from-violet-900/50 dark:hover:to-purple-900/50 transition-colors"
         data-testid="asset-groups-toggle"
       >
-        <div className="flex items-center gap-2">
-          <Layers className="w-4 h-4 text-violet-600" />
+        <div className="flex items-center gap-2 min-w-0">
+          <Layers className="w-4 h-4 text-violet-600 flex-shrink-0" />
           <span className="text-sm font-semibold text-violet-800 dark:text-violet-300">Barang Serupa</span>
           {groups.length > 0 && (
             <span className="text-[10px] bg-violet-200 dark:bg-violet-800/50 text-violet-700 dark:text-violet-300 px-1.5 py-0.5 rounded-full font-medium">{groups.length} grup</span>
           )}
         </div>
-        {isOpen ? <ChevronDown className="w-4 h-4 text-violet-500 dark:text-violet-400" /> : <ChevronRight className="w-4 h-4 text-violet-500 dark:text-violet-400" />}
+        {isOpen ? <ChevronDown className="w-4 h-4 text-violet-500 dark:text-violet-400 flex-shrink-0" /> : <ChevronRight className="w-4 h-4 text-violet-500 dark:text-violet-400 flex-shrink-0" />}
       </button>
 
       {isOpen && (
