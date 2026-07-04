@@ -27,17 +27,28 @@ const Lightbox = memo(({ asset, onClose, onEdit }) => {
   useEffect(() => {
     if (!asset?.id) return;
     setLoading(true);
-    axios.get(`${API}/assets/${asset.id}`)
+    // Light fetch only (no base64 media): text fields + photo_count + version.
+    // Each photo then streams directly into <img src=".../photos/{i}?v=...">,
+    // so the first photo renders as soon as ITS bytes arrive (progressive) and
+    // the browser caches every photo — no more waiting for one huge JSON blob.
+    // ?v={version} busts the cache when the asset is edited; the endpoint is a
+    // public GET (like the other media streams) since <img> can't send auth
+    // headers. Legacy inline photos are handled server-side by the same URL.
+    axios.get(`${API}/assets/${asset.id}?exclude_media=true`)
       .then(r => {
         const data = r.data;
         setFullAsset(data);
-        const p = data.photos || [];
-        setPhotos(p.length > 0 ? p : (asset.thumbnail ? [asset.thumbnail] : []));
+        const count = Number(data.photo_count) || 0;
+        const version = Number(data.version) || 1;
+        const p = count > 0
+          ? Array.from({ length: count }, (_, i) => `${API}/assets/${asset.id}/photos/${i}?v=${version}`)
+          : (asset.thumbnail ? [asset.thumbnail] : []); // data-URI fallback (legacy inline cover)
+        setPhotos(p);
         setIdx(0);
       })
       .catch(() => {
         setFullAsset(asset);
-        setPhotos(asset.thumbnail ? [asset.thumbnail] : []);
+        setPhotos(asset.thumbnail ? [asset.thumbnail] : []); // data-URI support kept
         setIdx(0);
       })
       .finally(() => setLoading(false));
