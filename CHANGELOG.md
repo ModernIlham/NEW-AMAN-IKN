@@ -48,6 +48,45 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#17] Laporan: Kop Surat di semua laporan resmi + Eksekutif per Barang Serupa + kolom detail opsional — 2026-06-16
+
+- **Kop Surat (issue 6):** helper `_kop_surat_flowables()` baru — logo instansi
+  (dari pengaturan "Sampul") + nama instansi/unit/alamat + garis ganda klasik —
+  kini tampil di **semua 8 laporan resmi ReportLab**: Berita Acara, SPTJM,
+  Surat Koreksi, DBHI (6 jenis), RHI, BAHI, SP Hasil, SP Pelaksanaan. Kop
+  mengikuti pengaturan yang bisa diubah di panel "Sampul" (`ReportSettingsEditor`).
+- **Laporan Eksekutif per Barang Serupa (issue 8):** endpoint & tombol unduh
+  baru — aset dikelompokkan persis seperti panel Barang Serupa (kunci 6 kolom),
+  termasuk aset tunggal, sehingga **total unit = total seluruh aset**. Foto
+  perwakilan = anggota dengan **NUP terkecil**; NUP ditampilkan sebagai rentang
+  ringkas ("1-3, 5, 7"). Template baru `executive_grouped.html`.
+- **Kolom detail opsional (issue 9):** 6 toggle (SPM, Perolehan, Kontrak, BAST,
+  Supplier, S/N) di bagian Laporan Eksekutif — jika aktif, ditambahkan rapi ke
+  kolom "Kondisi & Status" laporan data aset (param `detail_fields`, tersimpan
+  di localStorage).
+
+## [#16] UX batch: input tak lagi terhapus, skeleton, auto-logout, dll — 2026-06-16
+`80ac0e2`
+
+- **Issue 1 (kritis):** ketikan hilang saat save background selesai → timer basi
+  `handleFormClose` kini hanya menutup edit miliknya; init form di-key by id.
+- **Issue 2/4/5:** skeleton loading (komponen `ListLoadingSkeleton`) untuk ganti
+  page size / pindah halaman / filter / sort; refresh background tetap senyap.
+- **Issue 3:** import — sel `status` kosong → "Aktif" (dan `condition` → "Baik").
+- **Issue 7:** interceptor 401 → logout + redirect login; idle 30 menit → logout.
+- **Issue 10:** kategori ber-label "dummy" → NUP otomatis via `GET /assets/next-nup`.
+
+## [#15] Lightbox: efek glass kembali + panel info adaptif tema — 2026-06-16
+`fba598f` — latar `bg-black/40` + blur; panel `bg-white/70`/`dark:bg-slate-900/70`;
+badge dua-warna kontras di kedua mode.
+
+## [#14] Lightbox: panel info gelap solid — 2026-06-16
+`f4943c3` — digantikan oleh #15 (permintaan: efek glass dipertahankan).
+
+## [#13] Lightbox: teks info tak terbaca di light mode — 2026-06-16
+`97a988f` — `bg-black/92`/`bg-white/8` (step opacity non-standar) tidak
+ter-generate Tailwind → overlay tak pernah gelap. Diganti step standar.
+
 ## [#11] Stats: tombol toggle Inventarisasi ringkas & seragam — 2026-06-16
 `a3fdf5c`
 
