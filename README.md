@@ -114,7 +114,7 @@ Perbaikan menyeluruh untuk kolaborasi multi-user & performa penyimpanan:
 
 ### Import & Export
 - **Import**: CSV/XLSX dengan validasi (kode aset, duplikasi, kategori)
-- **Export CSV**: 45 kolom, streaming, UTF-8
+- **Export CSV**: 46 kolom, streaming, UTF-8
 - **Export XLSX**: 4 sheets (Data Aset + Kelengkapan Dokumen + Data Kegiatan + Tim Inventarisasi) dengan foto HD embedded
 - **Export PDF**: Landscape A4 dengan foto thumbnail, summary box, color-coded
 

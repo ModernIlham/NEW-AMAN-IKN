@@ -37,7 +37,7 @@ const SNAPSHOT_FIELDS = [
   "id", "asset_code", "NUP", "asset_name", "category", "brand", "model",
   "kode_register", "serial_number", "purchase_date", "purchase_price",
   "location", "eselon1", "eselon2", "user", "condition", "status",
-  "pengguna_melekat_ke", "pengguna_jabatan", "nomor_bast",
+  "pengguna_melekat_ke", "pengguna_jabatan", "operasional_jenis", "nomor_bast",
   "bast_file_id", "bast_filename",
   "nomor_spm", "perolehan_dari_nama", "nomor_kontrak", "nomor_bukti_perolehan",
   "supplier", "notes", "thumbnail", "thumbnail_index", "gallery_thumbnail",

@@ -1,7 +1,7 @@
 import React, { memo } from "react";
 import {
   Package, ArrowLeft, Users, History, LogOut,
-  Wifi, WifiOff, Users2, RefreshCw, Moon, Sun, Info
+  Wifi, WifiOff, Users2, RefreshCw, Moon, Sun
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -18,7 +18,16 @@ const DashboardHeader = memo(({
           <ArrowLeft className="w-4 h-4 text-blue-600 dark:text-blue-400" />
         </Button>
         <div className="flex items-center gap-2 min-w-0 overflow-hidden">
-          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-600 to-blue-500 flex items-center justify-center flex-shrink-0 shadow-elev-1">
+          {/* Klik logo = buka halaman Info/PRD aplikasi */}
+          <div
+            className={`w-9 h-9 rounded-lg bg-gradient-to-br from-blue-600 to-blue-500 flex items-center justify-center flex-shrink-0 shadow-elev-1 ${onShowInfo ? "cursor-pointer" : ""}`}
+            {...(onShowInfo ? {
+              role: "button", tabIndex: 0, onClick: onShowInfo,
+              onKeyDown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onShowInfo(); } },
+              "aria-label": "Info aplikasi", title: "Info aplikasi",
+            } : {})}
+            data-testid="dashboard-logo"
+          >
             <Package className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
           </div>
           <div className="min-w-0 overflow-hidden">
@@ -71,16 +80,6 @@ const DashboardHeader = memo(({
         >
           {dark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
         </button>
-        {/* Info / PRD */}
-        {onShowInfo && (
-          <button
-            onClick={onShowInfo}
-            className="h-7 w-7 rounded-lg flex items-center justify-center transition-all duration-180 border bg-blue-500/10 border-blue-500/20 hover:bg-blue-500/20 hover:shadow-elev-1 text-blue-400"
-            title="Dokumentasi & PRD"
-          >
-            <Info className="w-3.5 h-3.5" />
-          </button>
-        )}
         {perms.canManageUsers && (
           <Button variant="ghost" size="sm" onClick={onOpenUserManagement} className="h-7 gap-1 text-xs hidden sm:flex">
             <Users className="w-3 h-3" /><span className="hidden md:inline">Users</span>

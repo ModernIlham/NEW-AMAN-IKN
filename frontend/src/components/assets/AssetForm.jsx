@@ -16,7 +16,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import { DocumentChecklist, DEFAULT_DOC_ITEMS } from "./DocumentChecklist";
-import InventoryFieldSheet, { PENGGUNA_MELEKAT_OPTIONS, PENGGUNA_NAME_LABELS } from "./InventoryFieldSheet";
+import InventoryFieldSheet, { PENGGUNA_MELEKAT_OPTIONS, PENGGUNA_NAME_LABELS, OPERASIONAL_JENIS_OPTIONS } from "./InventoryFieldSheet";
 import { toast } from "sonner";
 import axios from "axios";
 import { getApiError } from "../../lib/utils";
@@ -348,6 +348,7 @@ function buildEditFormData(a, activityId) {
     serial_number: a.serial_number || "", purchase_date: a.purchase_date || "", purchase_price: a.purchase_price || "",
     location: a.location || "", eselon1: a.eselon1 || "", eselon2: a.eselon2 || "", user: a.user || "",
     pengguna_melekat_ke: a.pengguna_melekat_ke || "", pengguna_jabatan: a.pengguna_jabatan || "",
+    operasional_jenis: a.operasional_jenis || "",
     nomor_bast: a.nomor_bast || "",
     condition: a.condition || "Baik", status: a.status || "Aktif",
     nomor_spm: a.nomor_spm || "", perolehan_dari_nama: a.perolehan_dari_nama || "",
@@ -416,7 +417,7 @@ const AssetForm = memo(({
     asset_code: "", NUP: "", asset_name: "", category: "", brand: "", model: "",
     kode_register: "", serial_number: "", purchase_date: "", purchase_price: "",
     location: "", eselon1: "", eselon2: "", user: "",
-    pengguna_melekat_ke: "", pengguna_jabatan: "", nomor_bast: "",
+    pengguna_melekat_ke: "", pengguna_jabatan: "", operasional_jenis: "", nomor_bast: "",
     condition: "Baik", status: "Aktif",
     nomor_spm: "", perolehan_dari_nama: "", nomor_kontrak: "",
     nomor_bukti_perolehan: "", supplier: "", notes: "", photos: [],
@@ -784,7 +785,8 @@ const AssetForm = memo(({
   }, []);
 
   // Pengguna "melekat ke": klik ulang pilihan yang sama = batal pilih;
-  // nama jabatan hanya relevan bila melekat ke Jabatan.
+  // nama jabatan hanya relevan bila melekat ke Jabatan, jenis operasional
+  // hanya relevan bila melekat ke Operasional.
   // Dipakai oleh form penuh DAN InventoryFieldSheet.
   const handlePenggunaMelekatChange = useCallback(v => {
     setFormData(p => {
@@ -793,8 +795,15 @@ const AssetForm = memo(({
         ...p,
         pengguna_melekat_ke: next,
         ...(next !== "Jabatan" ? { pengguna_jabatan: "" } : {}),
+        ...(next !== "Operasional" ? { operasional_jenis: "" } : {}),
       };
     });
+  }, []);
+
+  // Sub-opsi Operasional: klik ulang pilihan yang sama = batal pilih.
+  // Dipakai oleh form penuh DAN InventoryFieldSheet.
+  const handleOperasionalJenisChange = useCallback(v => {
+    setFormData(p => ({ ...p, operasional_jenis: p.operasional_jenis === v ? "" : v }));
   }, []);
 
   // Unggah dokumen BAST (PDF/gambar, maks 10MB) — hanya mode edit (butuh id).
@@ -1022,7 +1031,7 @@ const AssetForm = memo(({
           "asset_code", "NUP", "asset_name", "category", "brand", "model",
           "kode_register", "serial_number", "purchase_date", "purchase_price",
           "location", "eselon1", "eselon2", "user", "condition", "status",
-          "pengguna_melekat_ke", "pengguna_jabatan", "nomor_bast",
+          "pengguna_melekat_ke", "pengguna_jabatan", "operasional_jenis", "nomor_bast",
           "nomor_spm", "perolehan_dari_nama", "nomor_kontrak",
           "nomor_bukti_perolehan", "supplier", "notes",
           "stiker_status", "stiker_ukuran",
@@ -1342,6 +1351,7 @@ const AssetForm = memo(({
               onStikerStatusChange={handleStikerStatusChange}
               onStikerUkuranChange={v => handleSelectChange("stiker_ukuran", v)}
               onPenggunaMelekatChange={handlePenggunaMelekatChange}
+              onOperasionalJenisChange={handleOperasionalJenisChange}
               onOpenCamera={openCamera}
               onOpenGallery={openGallery}
               onFetchGPS={fetchGPS}
@@ -1487,6 +1497,29 @@ const AssetForm = memo(({
                   <div className="space-y-1">
                     <Label className="text-xs">Nama Jabatan *</Label>
                     <Input name="pengguna_jabatan" value={formData.pengguna_jabatan} onChange={handleInputChange} placeholder="Contoh: Kepala Subbagian Umum" className="h-8" data-testid="input-pengguna-jabatan" />
+                  </div>
+                )}
+                {formData.pengguna_melekat_ke === "Operasional" && (
+                  <div className="space-y-1">
+                    <Label className="text-xs">Jenis Operasional</Label>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {OPERASIONAL_JENIS_OPTIONS.map(o => (
+                        <button
+                          key={o} type="button"
+                          aria-pressed={formData.operasional_jenis === o}
+                          onClick={() => handleOperasionalJenisChange(o)}
+                          data-testid={`operasional-jenis-${o}`}
+                          className={`h-7 rounded-md border text-[10px] font-semibold leading-tight px-1 transition-colors ${
+                            formData.operasional_jenis === o
+                              ? "bg-blue-600 border-blue-600 text-white"
+                              : "bg-card border-border text-foreground/80 hover:bg-accent"
+                          }`}
+                        >
+                          {o}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[9px] text-muted-foreground italic">Ruangan = barang harus tetap berada di ruang tersebut.</p>
                   </div>
                 )}
                 <div className="space-y-1">

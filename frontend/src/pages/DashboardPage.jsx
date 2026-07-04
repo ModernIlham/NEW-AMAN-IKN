@@ -1181,6 +1181,6 @@ export default function DashboardPage({ user, onLogout, dark, toggleDark, onShow
   const handleBack = () => { setSelectedActivity(null); localStorage.removeItem('currentActivityId'); localStorage.removeItem('currentActivity'); };
   const handleLogout = () => { localStorage.removeItem('currentActivityId'); localStorage.removeItem('currentActivity'); onLogout(); };
 
-  if (!selectedActivity) return <ActivitySelectionPage user={user} onLogout={handleLogout} onSelectActivity={handleSelectActivity} />;
+  if (!selectedActivity) return <ActivitySelectionPage user={user} onLogout={handleLogout} onSelectActivity={handleSelectActivity} onShowInfo={onShowInfo} />;
   return <AssetManagementPage user={user} onLogout={handleLogout} activity={selectedActivity} onBack={handleBack} dark={dark} toggleDark={toggleDark} onShowInfo={onShowInfo} />;
 }

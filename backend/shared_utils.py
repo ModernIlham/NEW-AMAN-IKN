@@ -330,7 +330,7 @@ async def send_otp_email(email: str, otp: str, name: str = ""):
 TRACKED_FIELDS = [
     "asset_name", "category", "brand", "model", "kode_register", "serial_number",
     "purchase_date", "purchase_price", "location", "user",
-    "pengguna_melekat_ke", "pengguna_jabatan", "nomor_bast",
+    "pengguna_melekat_ke", "pengguna_jabatan", "operasional_jenis", "nomor_bast",
     "condition", "status", "NUP", "notes", "stiker_status", "stiker_ukuran", "stiker_photo_index",
     "nomor_spm", "perolehan_dari_nama", "nomor_kontrak", "nomor_bukti_perolehan", "supplier",
     "inventory_status", "klasifikasi_tidak_ditemukan", "sub_klasifikasi", "uraian_tidak_ditemukan", "tindak_lanjut",
