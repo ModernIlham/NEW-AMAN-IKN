@@ -416,6 +416,38 @@ async def get_assets_analytics(activity_id: str = ""):
     _cache_analytics[cache_key] = result
     return result
 
+
+# Must be declared BEFORE /assets/{asset_id} or "next-nup" would be captured
+# as an asset id by that route.
+@assets_router.get("/assets/next-nup")
+async def get_next_nup(activity_id: str = "", asset_code: str = "", category: str = ""):
+    """Next available numeric NUP for a category/asset_code within an activity.
+
+    Uniqueness in this app is (asset_code, NUP) per activity_id, so the next
+    number is computed over the same scope. NUP is stored as a string; values
+    that aren't parseable as integers are ignored via $convert onError.
+    """
+    query = {}
+    if activity_id:
+        query["activity_id"] = activity_id
+    if asset_code:
+        query["asset_code"] = asset_code
+    elif category:
+        query["category"] = category
+    else:
+        raise HTTPException(status_code=400, detail="asset_code atau category wajib diisi")
+
+    res = await db.assets.aggregate([
+        {"$match": query},
+        {"$group": {"_id": None, "max_nup": {"$max": {"$convert": {
+            "input": "$NUP", "to": "int", "onError": None, "onNull": None
+        }}}}}
+    ]).to_list(1)
+
+    max_nup = (res[0].get("max_nup") if res else None) or 0
+    return {"next_nup": str(max_nup + 1), "max_nup": str(max_nup)}
+
+
 # NOTE: Audit logs moved to routes/audit.py
 # NOTE: Image compression moved to routes/media.py
 

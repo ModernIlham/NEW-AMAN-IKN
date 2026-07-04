@@ -55,6 +55,16 @@ const supportingDocs = [
   { key: "surat-koreksi", label: "Surat Koreksi", icon: FileWarning },
 ];
 
+// Kolom tambahan opsional untuk kolom "Kondisi & Status" pada Data Aset eksekutif
+const detailFieldOptions = [
+  { key: "spm", label: "SPM" },
+  { key: "perolehan", label: "Perolehan" },
+  { key: "kontrak", label: "Kontrak" },
+  { key: "bast", label: "BAST" },
+  { key: "supplier", label: "Supplier" },
+  { key: "serial", label: "S/N" },
+];
+
 const allBatchItems = [
   { key: "cover", label: "Sampul LHI", group: "lhi" },
   { key: "rhi", label: "RHI", group: "resmi" },
@@ -101,6 +111,13 @@ export default function ReportDownloads({
   const [batchDownloading, setBatchDownloading] = useState(false);
   const [dataInfo, setDataInfo] = useState(null);
   const [dataDownloading, setDataDownloading] = useState(null);
+  const [groupedDownloading, setGroupedDownloading] = useState(false);
+  const [detailFields, setDetailFields] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("exec_detail_fields") || "[]");
+      return new Set(Array.isArray(saved) ? saved : []);
+    } catch { return new Set(); }
+  });
 
   // Fetch data page info when component mounts
   useEffect(() => {
@@ -110,11 +127,24 @@ export default function ReportDownloads({
       .catch(() => setDataInfo(null));
   }, [activityId]);
 
+  const toggleDetailField = (key) => {
+    setDetailFields(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      localStorage.setItem("exec_detail_fields", JSON.stringify(Array.from(next)));
+      return next;
+    });
+  };
+
+  const detailFieldsParam = detailFields.size > 0
+    ? `&detail_fields=${Array.from(detailFields).join(",")}`
+    : "";
+
   const handleDownloadDataPage = async (pageNum, startIdx, endIdx) => {
     setDataDownloading(pageNum);
     try {
       const r = await axios.get(
-        `${API}/inventory-activities/${activityId}/executive-data-pdf?page=${pageNum}`,
+        `${API}/inventory-activities/${activityId}/executive-data-pdf?page=${pageNum}${detailFieldsParam}`,
         { responseType: "blob" }
       );
       const url = window.URL.createObjectURL(new Blob([r.data]));
@@ -130,6 +160,29 @@ export default function ReportDownloads({
       toast.error("Gagal download: " + getApiError(err, err.message));
     } finally {
       setDataDownloading(null);
+    }
+  };
+
+  const handleDownloadGrouped = async () => {
+    setGroupedDownloading(true);
+    try {
+      const r = await axios.get(
+        `${API}/inventory-activities/${activityId}/executive-grouped-pdf`,
+        { responseType: "blob" }
+      );
+      const url = window.URL.createObjectURL(new Blob([r.data]));
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", "Laporan_Eksekutif_Barang_Serupa.pdf");
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success("Laporan Eksekutif per Barang Serupa berhasil diunduh");
+    } catch (err) {
+      toast.error("Gagal download: " + getApiError(err, err.message));
+    } finally {
+      setGroupedDownloading(false);
     }
   };
 
@@ -245,6 +298,28 @@ export default function ReportDownloads({
             {downloading === "executive-summary" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
             Ringkasan Eksekutif (Distribusi, Analisis, Tim)
           </button>
+          <button data-testid="download-executive-grouped" onClick={handleDownloadGrouped} disabled={!!downloading || groupedDownloading}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-gradient-to-r from-sky-600 to-cyan-600 hover:from-sky-700 hover:to-cyan-700 disabled:from-sky-300 disabled:to-cyan-300 dark:from-sky-700 dark:to-cyan-700 dark:hover:from-sky-600 dark:hover:to-cyan-600 text-white rounded-lg text-xs font-semibold transition-all shadow-sm">
+            {groupedDownloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+            Eksekutif per Barang Serupa (PDF)
+          </button>
+          {dataInfo && dataInfo.total_assets > 0 && (
+            <div className="flex flex-wrap items-center gap-1" data-testid="exec-detail-fields">
+              <span className="text-[10px] text-muted-foreground mr-0.5">Kolom tambahan:</span>
+              {detailFieldOptions.map(({ key, label }) => (
+                <label key={key} data-testid={`detail-field-${key}`}
+                  className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] cursor-pointer transition-colors border ${
+                    detailFields.has(key)
+                      ? "bg-teal-100 border-teal-300 text-teal-800 dark:bg-teal-900/40 dark:border-teal-600 dark:text-teal-300"
+                      : "bg-card border-border text-muted-foreground hover:bg-muted"
+                  }`}>
+                  <input type="checkbox" checked={detailFields.has(key)} onChange={() => toggleDetailField(key)} className="hidden" />
+                  {detailFields.has(key) && <Check className="w-2.5 h-2.5" />}
+                  {label}
+                </label>
+              ))}
+            </div>
+          )}
           {dataInfo && dataInfo.total_assets > 0 && (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
               {dataInfo.pages.map(p => (

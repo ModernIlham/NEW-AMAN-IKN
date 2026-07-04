@@ -5,10 +5,11 @@
 // Lazy loads pages for smaller initial bundle
 // ============================================================================
 
-import React, { useState, useEffect, useCallback, lazy, Suspense } from "react";
+import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import "@/App.css";
 import { Toaster } from "@/components/ui/sonner";
+import { toast } from "sonner";
 import { useDarkMode } from "@/hooks/useDarkMode";
 import BackgroundTaskBar from "@/components/BackgroundTaskBar";
 import axios from "axios";
@@ -37,10 +38,27 @@ function PageLoader() {
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
+// Auto-logout after this long without any user interaction. 30 minutes is the
+// common industry default for business apps (well under the 24h token TTL).
+const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const { dark, toggle: toggleDark } = useDarkMode();
+
+  // Session teardown shared by manual logout, 401 auto-logout, and idle
+  // timeout. Stable identity (useCallback []) so interceptors/timers can
+  // close over it safely. Deliberately keeps 'currentActivityId' so an
+  // expired session resumes in the same activity after re-login (the manual
+  // Keluar button clears it separately in DashboardPage).
+  const forceLogout = useCallback((message) => {
+    const hadSession = !!localStorage.getItem('token');
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setUser(null);
+    if (hadSession && message) toast.error(message, { duration: 6000 });
+  }, []);
 
   // Global axios interceptor: auto-attach JWT bearer token to every request.
   // Previously only specific call-sites (heartbeat, login) sent the token,
@@ -54,8 +72,48 @@ function App() {
       }
       return config;
     });
-    return () => axios.interceptors.request.eject(id);
-  }, []);
+    // Global 401 handler: an expired/invalid session logs the user out and
+    // routes to /login (via the user-state redirect). Skips /auth/ requests
+    // so a wrong password on the login form isn't treated as session expiry.
+    // 403 is intentionally NOT handled here — it includes legitimate RBAC
+    // denials (non-admin hitting an admin action) that must not log out.
+    const resId = axios.interceptors.response.use(
+      res => res,
+      error => {
+        const status = error?.response?.status;
+        const url = error?.config?.url || '';
+        if (status === 401 && !url.includes('/auth/')) {
+          forceLogout("Sesi Anda telah berakhir. Silakan login kembali.");
+        }
+        return Promise.reject(error);
+      }
+    );
+    return () => {
+      axios.interceptors.request.eject(id);
+      axios.interceptors.response.eject(resId);
+    };
+  }, [forceLogout]);
+
+  // Idle timeout: logout after IDLE_TIMEOUT_MS without interaction. Activity
+  // is sampled cheaply (timestamp ref + a 1-minute check interval) instead of
+  // resetting a timer on every mousemove.
+  const lastActivityRef = useRef(Date.now());
+  useEffect(() => {
+    if (!user) return;
+    lastActivityRef.current = Date.now();
+    const markActivity = () => { lastActivityRef.current = Date.now(); };
+    const events = ['mousedown', 'keydown', 'touchstart', 'scroll', 'mousemove'];
+    events.forEach(evt => window.addEventListener(evt, markActivity, { passive: true }));
+    const check = setInterval(() => {
+      if (Date.now() - lastActivityRef.current >= IDLE_TIMEOUT_MS) {
+        forceLogout("Anda keluar otomatis karena tidak ada aktivitas selama 30 menit.");
+      }
+    }, 60 * 1000);
+    return () => {
+      events.forEach(evt => window.removeEventListener(evt, markActivity));
+      clearInterval(check);
+    };
+  }, [user, forceLogout]);
 
   // Heartbeat for online/offline tracking
   const sendHeartbeat = useCallback(async () => {
@@ -104,11 +162,7 @@ function App() {
     setUser(userData);
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    setUser(null);
-  };
+  const handleLogout = () => forceLogout();
 
   const [showInfo, setShowInfo] = useState(false);
 

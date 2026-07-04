@@ -27,6 +27,89 @@ reports_router = APIRouter()
 
 
 # ============================================================================
+# KOP SURAT (LETTERHEAD) HELPER
+# ============================================================================
+
+def _kop_surat_flowables(settings, doc_width):
+    """Build classic Indonesian kop surat flowables for ReportLab reports.
+
+    Layout: logo kiri (jika ada), blok teks instansi di tengah
+    (nama_instansi bold, nama_unit_organisasi, alamat_instansi kecil),
+    lalu garis ganda tebal+tipis. Degrades gracefully: baris kosong
+    dilewati, tanpa logo -> teks saja. Returns [] bila settings kosong.
+    """
+    from reportlab.platypus import Table, TableStyle, Paragraph, Spacer, Image as RLImage, HRFlowable
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib import colors as rl_colors
+    from reportlab.lib.units import mm as rl_mm, cm as rl_cm
+    from reportlab.lib.enums import TA_CENTER
+    from reportlab.lib.utils import ImageReader
+
+    settings = settings or {}
+    nama_instansi = (settings.get("nama_instansi") or "").strip()
+    nama_unit = (settings.get("nama_unit_organisasi") or "").strip()
+    alamat = (settings.get("alamat_instansi") or "").strip()
+    logo_url = settings.get("logo_url", "") or ""
+
+    if not (nama_instansi or nama_unit or alamat or logo_url.startswith("data:")):
+        return []
+
+    styles = getSampleStyleSheet()
+    instansi_style = ParagraphStyle('KopInstansi', parent=styles['Normal'], fontSize=13, alignment=TA_CENTER, fontName='Helvetica-Bold', leading=16)
+    unit_style = ParagraphStyle('KopUnit', parent=styles['Normal'], fontSize=11, alignment=TA_CENTER, leading=14)
+    alamat_style = ParagraphStyle('KopAlamat', parent=styles['Normal'], fontSize=8, alignment=TA_CENTER, leading=10, textColor=rl_colors.HexColor("#444444"))
+
+    text_flow = []
+    if nama_instansi:
+        text_flow.append(Paragraph(nama_instansi.upper(), instansi_style))
+    if nama_unit:
+        text_flow.append(Paragraph(nama_unit, unit_style))
+    if alamat:
+        text_flow.append(Paragraph(alamat, alamat_style))
+
+    # Logo: decode data-URI base64 -> BytesIO -> Image (same approach as _generate_cover_page)
+    logo_img = None
+    if logo_url.startswith("data:"):
+        try:
+            header, b64data = logo_url.split(",", 1)
+            logo_bytes = base64.b64decode(b64data)
+            logo_buffer = io.BytesIO(logo_bytes)
+            iw, ih = ImageReader(io.BytesIO(logo_bytes)).getSize()
+            target_h = 1.8 * rl_cm
+            target_w = target_h * (iw / float(ih)) if ih else target_h
+            logo_img = RLImage(logo_buffer, width=target_w, height=target_h)
+        except Exception:
+            logo_img = None
+
+    flowables = []
+    if logo_img is not None and text_flow:
+        # Kolom kosong kanan selebar logo agar teks tetap di tengah halaman
+        side_w = max(logo_img.drawWidth + 2*rl_mm, 2.2*rl_cm)
+        kop_table = Table([[logo_img, text_flow, ""]], colWidths=[side_w, doc_width - 2*side_w, side_w])
+        kop_table.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('ALIGN', (0, 0), (0, 0), 'CENTER'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+            ('TOPPADDING', (0, 0), (-1, -1), 0),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+        ]))
+        flowables.append(kop_table)
+    elif logo_img is not None:
+        logo_img.hAlign = 'CENTER'
+        flowables.append(logo_img)
+    else:
+        flowables.extend(text_flow)
+
+    # Garis ganda khas kop surat: tebal + tipis
+    flowables.append(Spacer(1, 2*rl_mm))
+    flowables.append(HRFlowable(width="100%", thickness=2.2, color=rl_colors.black, spaceBefore=0, spaceAfter=1.5))
+    flowables.append(HRFlowable(width="100%", thickness=0.7, color=rl_colors.black, spaceBefore=0, spaceAfter=0))
+    flowables.append(Spacer(1, 5*rl_mm))
+    return flowables
+
+
+# ============================================================================
 # REKAPITULASI
 # ============================================================================
 
@@ -133,6 +216,7 @@ async def generate_berita_acara_pdf(activity_id: str):
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
 
+    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
     assets = await db.assets.find({"activity_id": activity_id}, {"_id": 0}).to_list(100000)
     tidak_ditemukan = [a for a in assets if a.get("inventory_status") == "Tidak Ditemukan"]
     ditemukan = [a for a in assets if a.get("inventory_status") == "Ditemukan"]
@@ -156,6 +240,7 @@ async def generate_berita_acara_pdf(activity_id: str):
     bold_style = ParagraphStyle('BoldBA', parent=styles['Normal'], fontSize=9, fontName='Helvetica-Bold', spaceAfter=4)
 
     elements = []
+    elements.extend(_kop_surat_flowables(settings, doc.width))
 
     # Header
     elements.append(Paragraph("BERITA ACARA", title_style))
@@ -361,6 +446,7 @@ async def generate_sptjm_pdf(activity_id: str):
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
 
+    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
     assets = await db.assets.find({"activity_id": activity_id}, {"_id": 0}).to_list(100000)
     tidak_ditemukan = [a for a in assets if a.get("inventory_status") == "Tidak Ditemukan"]
 
@@ -381,6 +467,7 @@ async def generate_sptjm_pdf(activity_id: str):
     small_style = ParagraphStyle('SmallSPTJM', parent=styles['Normal'], fontSize=8, leading=10)
 
     elements = []
+    elements.extend(_kop_surat_flowables(settings, doc.width))
 
     kasatker = activity.get("kasatker_nama", "_______________")
     nip = activity.get("kasatker_nip", "_______________")
@@ -487,6 +574,7 @@ async def generate_surat_koreksi_pdf(activity_id: str):
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
 
+    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
     assets = await db.assets.find({"activity_id": activity_id}, {"_id": 0}).to_list(100000)
     koreksi_assets = [a for a in assets if a.get("inventory_status") == "Tidak Ditemukan" and a.get("klasifikasi_tidak_ditemukan") == "Kesalahan Pencatatan"]
 
@@ -507,6 +595,7 @@ async def generate_surat_koreksi_pdf(activity_id: str):
     small_style = ParagraphStyle('SmallKoreksi', parent=styles['Normal'], fontSize=8, leading=10)
 
     elements = []
+    elements.extend(_kop_surat_flowables(settings, doc.width))
 
     kasatker = activity.get("kasatker_nama", "_______________")
     nip = activity.get("kasatker_nip", "_______________")
@@ -653,6 +742,7 @@ async def generate_dbhi_pdf(activity_id: str, dbhi_type: str):
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
 
+    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
     all_assets = await db.assets.find({"activity_id": activity_id}, {"_id": 0}).to_list(100000)
     filtered = [a for a in all_assets if dbhi_config["filter"](a)]
 
@@ -682,6 +772,7 @@ async def generate_dbhi_pdf(activity_id: str, dbhi_type: str):
     info_style = ParagraphStyle('DBHIInfo', parent=styles['Normal'], fontSize=8, spaceAfter=2, leading=11)
 
     elements = []
+    elements.extend(_kop_surat_flowables(settings, doc.width))
 
     # Title
     for line in dbhi_config["title"].split("\n"):
@@ -858,6 +949,7 @@ async def generate_rhi_pdf(activity_id: str):
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
 
+    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
     assets = await db.assets.find({"activity_id": activity_id}, {"_id": 0}).to_list(100000)
 
     def safe_price(a):
@@ -892,6 +984,7 @@ async def generate_rhi_pdf(activity_id: str):
     footer_style = ParagraphStyle('RHIFooter', parent=styles['Normal'], fontSize=8, leading=11)
 
     elements = []
+    elements.extend(_kop_surat_flowables(settings, doc.width))
     elements.append(Paragraph("REKAPITULASI HASIL INVENTARISASI", title_style))
     elements.append(Paragraph("BARANG MILIK NEGARA (RHI)", title_style))
 
@@ -1010,6 +1103,7 @@ async def generate_bahi_pdf(activity_id: str):
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
 
+    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
     assets = await db.assets.find({"activity_id": activity_id}, {"_id": 0}).to_list(100000)
 
     def safe_price(a):
@@ -1053,6 +1147,7 @@ async def generate_bahi_pdf(activity_id: str):
     small_style = ParagraphStyle('BAHISmall', parent=styles['Normal'], fontSize=9, leading=12)
 
     elements = []
+    elements.extend(_kop_surat_flowables(settings, doc.width))
 
     elements.append(Paragraph("BERITA ACARA", title_style))
     elements.append(Paragraph("HASIL INVENTARISASI BARANG MILIK NEGARA", title_style))
@@ -1180,6 +1275,7 @@ async def generate_sp_hasil_pdf(activity_id: str):
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
 
+    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
     satker = activity.get("kasatker", {})
     satker_name = satker.get("nama", activity.get("nama_kegiatan", "-"))
     kasatker_nama = satker.get("nama_pejabat", "________________________")
@@ -1197,6 +1293,7 @@ async def generate_sp_hasil_pdf(activity_id: str):
     footer_style = ParagraphStyle('SPHFooter', parent=styles['Normal'], fontSize=10, leading=13)
 
     elements = []
+    elements.extend(_kop_surat_flowables(settings, doc.width))
 
     elements.append(Paragraph("SURAT PERNYATAAN", title_style))
     elements.append(Paragraph("HASIL INVENTARISASI BARANG MILIK NEGARA", title_style))
@@ -1277,6 +1374,7 @@ async def generate_sp_pelaksanaan_pdf(activity_id: str):
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
 
+    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
     satker = activity.get("kasatker", {})
     satker_name = satker.get("nama", activity.get("nama_kegiatan", "-"))
     kasatker_nama = satker.get("nama_pejabat", "________________________")
@@ -1296,6 +1394,7 @@ async def generate_sp_pelaksanaan_pdf(activity_id: str):
     footer_style = ParagraphStyle('SPPFooter', parent=styles['Normal'], fontSize=10, leading=13)
 
     elements = []
+    elements.extend(_kop_surat_flowables(settings, doc.width))
 
     elements.append(Paragraph("SURAT PERNYATAAN", title_style))
     elements.append(Paragraph("PELAKSANAAN INVENTARISASI BARANG MILIK NEGARA", title_style))
@@ -1550,8 +1649,30 @@ async def _generate_cover_page(activity, settings):
 # EXECUTIVE SUMMARY (HTML preview + PDF via weasyprint)
 # ============================================================================
 
-async def _build_executive_summary_data(activity_id: str):
-    """Build all data needed for the executive summary template"""
+# Kolom tambahan opsional untuk kolom "Kondisi & Status" (key, label, field aset)
+EXEC_DETAIL_FIELDS = [
+    ("spm", "SPM", "nomor_spm"),
+    ("perolehan", "Perolehan", "perolehan_dari_nama"),
+    ("kontrak", "Kontrak", "nomor_kontrak"),
+    ("bast", "BAST", "nomor_bukti_perolehan"),
+    ("supplier", "Supplier", "supplier"),
+    ("serial", "S/N", "serial_number"),
+]
+
+
+def _parse_detail_fields(detail_fields: str):
+    """Parse comma-separated detail_fields query param into a set of valid keys"""
+    valid = {k for k, _, _ in EXEC_DETAIL_FIELDS}
+    return {f.strip() for f in (detail_fields or "").split(",") if f.strip()} & valid
+
+
+async def _build_executive_summary_data(activity_id: str, detail_fields=None):
+    """Build all data needed for the executive summary template.
+
+    detail_fields: optional set of EXEC_DETAIL_FIELDS keys — extra per-asset
+    fields to include in the "Kondisi & Status" column (empty = current behavior).
+    """
+    detail_fields = detail_fields or set()
     activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
     if not activity:
         return None
@@ -1806,6 +1927,12 @@ async def _build_executive_summary_data(activity_id: str):
             tl = a.get("tindak_lanjut", "")
             if tl: detail_parts.append(f'<div class="cell-sub"><span class="label">Tindak Lanjut:</span> {tl}</div>')
 
+        # Kolom tambahan opsional (di-toggle via query param detail_fields)
+        for key, label, field in EXEC_DETAIL_FIELDS:
+            if key in detail_fields:
+                val = a.get(field, "") or ""
+                if val: detail_parts.append(f'<div class="cell-sub"><span class="label">{label}:</span> {val}</div>')
+
         doc_ck = a.get("document_checklist", []) or []
         checked = [d.get("name", "") for d in doc_ck if d.get("checked")]
         kelengkapan = ", ".join(checked) if checked else "-"
@@ -1896,10 +2023,10 @@ async def _build_executive_summary_data(activity_id: str):
 
 
 @reports_router.get("/inventory-activities/{activity_id}/executive-summary-html")
-async def executive_summary_html(activity_id: str):
+async def executive_summary_html(activity_id: str, detail_fields: str = ""):
     """Serve Executive Summary as interactive HTML preview with real data"""
     from jinja2 import Environment, FileSystemLoader
-    data = await _build_executive_summary_data(activity_id)
+    data = await _build_executive_summary_data(activity_id, _parse_detail_fields(detail_fields))
     if not data:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
     data["preview"] = True
@@ -1910,12 +2037,12 @@ async def executive_summary_html(activity_id: str):
 
 
 @reports_router.get("/inventory-activities/{activity_id}/executive-summary-pdf")
-async def generate_executive_summary_pdf(activity_id: str):
+async def generate_executive_summary_pdf(activity_id: str, detail_fields: str = ""):
     """Generate Executive Summary PDF (Part 1: Summary only, no data detail)."""
     from jinja2 import Environment, FileSystemLoader
     import weasyprint
 
-    data = await _build_executive_summary_data(activity_id)
+    data = await _build_executive_summary_data(activity_id, _parse_detail_fields(detail_fields))
     if not data:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
     data["preview"] = False
@@ -1934,15 +2061,15 @@ async def generate_executive_summary_pdf(activity_id: str):
 
 
 @reports_router.get("/inventory-activities/{activity_id}/executive-data-pdf")
-async def generate_executive_data_pdf(activity_id: str, page: int = 1):
+async def generate_executive_data_pdf(activity_id: str, page: int = 1, detail_fields: str = ""):
     """Generate Executive Summary Data PDF (Part 2: Asset detail pages).
-    
+
     Each page contains up to 499 assets. page=1 -> assets 1-499, page=2 -> 500-998, etc.
     """
     from jinja2 import Environment, FileSystemLoader
     import weasyprint
 
-    data = await _build_executive_summary_data(activity_id)
+    data = await _build_executive_summary_data(activity_id, _parse_detail_fields(detail_fields))
     if not data:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
 
@@ -1978,9 +2105,9 @@ async def generate_executive_data_pdf(activity_id: str, page: int = 1):
 
 
 @reports_router.get("/inventory-activities/{activity_id}/executive-data-info")
-async def executive_data_info(activity_id: str):
+async def executive_data_info(activity_id: str, detail_fields: str = ""):
     """Return info about how many data download pages are available."""
-    data = await _build_executive_summary_data(activity_id)
+    data = await _build_executive_summary_data(activity_id, _parse_detail_fields(detail_fields))
     if not data:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
     
@@ -1995,6 +2122,216 @@ async def executive_data_info(activity_id: str):
         pages.append({"page": p, "start": start, "end": end, "count": end - start + 1})
     
     return {"total_assets": total_assets, "total_pages": total_pages, "pages": pages}
+
+
+# ============================================================================
+# EXECUTIVE GROUPED REPORT (Barang Serupa) - HTML preview + PDF via weasyprint
+# ============================================================================
+
+def _compact_nup_ranges(nups):
+    """Compact NUP list into ranges, e.g. ['1','2','3','5','7'] -> '1-3, 5, 7'.
+
+    NUP numerik diurutkan & run berurutan digabung; NUP non-numerik di akhir.
+    """
+    numeric, non_numeric = [], []
+    for n in nups:
+        s = str(n).strip() if n is not None else ""
+        if not s:
+            continue
+        try:
+            numeric.append(int(s))
+        except ValueError:
+            non_numeric.append(s)
+    parts = []
+    start = prev = None
+    for n in sorted(set(numeric)):
+        if start is None:
+            start = prev = n
+        elif n == prev + 1:
+            prev = n
+        else:
+            parts.append(str(start) if start == prev else f"{start}-{prev}")
+            start = prev = n
+    if start is not None:
+        parts.append(str(start) if start == prev else f"{start}-{prev}")
+    parts.extend(sorted(set(non_numeric)))
+    return ", ".join(parts) if parts else "-"
+
+
+async def _build_executive_grouped_data(activity_id: str):
+    """Build data for Laporan Eksekutif per Barang Serupa (grouped assets).
+
+    Group key sama dengan /api/assets/groups (batch.py) TAPI tanpa filter
+    count>=2 dan tanpa limit — aset tunggal jadi kelompok sendiri sehingga
+    jumlah unit seluruh kelompok = total aset kegiatan.
+    """
+    activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
+    if not activity:
+        return None
+    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    categories = await db.categories.find({}, {"_id": 0}).to_list(10000)
+    cat_map = {c.get("kode_aset", ""): c.get("label", "") for c in categories}
+
+    def sp(v):
+        try: return float(v or 0)
+        except (ValueError, TypeError): return 0.0
+    def fmt(v):
+        try: return f"{int(v):,}".replace(",", ".")
+        except (ValueError, TypeError): return "0"
+
+    pipeline = [
+        {"$match": {"activity_id": activity_id}},
+        {"$group": {
+            "_id": {
+                "asset_code": {"$ifNull": ["$asset_code", ""]},
+                "asset_name": {"$ifNull": ["$asset_name", ""]},
+                "purchase_date": {"$ifNull": ["$purchase_date", ""]},
+                "brand": {"$ifNull": ["$brand", ""]},
+                "model": {"$ifNull": ["$model", ""]},
+                "purchase_price": {"$ifNull": ["$purchase_price", 0]}
+            },
+            "count": {"$sum": 1},
+            "members": {"$push": {
+                "id": "$id",
+                "NUP": "$NUP",
+                "condition": "$condition",
+                "inventory_status": "$inventory_status",
+                "category": "$category",
+                "purchase_price": "$purchase_price",
+            }}
+        }},
+        {"$sort": {"_id.asset_code": 1, "_id.asset_name": 1, "_id.purchase_date": 1}},
+    ]
+    raw_groups = []
+    async for doc in db.assets.aggregate(pipeline):
+        raw_groups.append(doc)
+
+    def nup_key(m):
+        """Sort key: NUP numerik terkecil dulu, non-numerik di akhir"""
+        s = str(m.get("NUP", "") or "").strip()
+        try:
+            return (0, int(s), "")
+        except ValueError:
+            return (1, 0, s)
+
+    # Representative per group = member dengan NUP numerik terkecil
+    rep_ids = []
+    for g in raw_groups:
+        rep = min(g["members"], key=nup_key)
+        g["rep_id"] = rep.get("id")
+        if g["rep_id"]:
+            rep_ids.append(g["rep_id"])
+
+    # Batch-fetch foto sampul representative (satu query, hanya 1 foto per aset)
+    photo_map = {}
+    if rep_ids:
+        photo_pipeline = [
+            {"$match": {"id": {"$in": rep_ids}}},
+            {"$project": {"_id": 0, "id": 1, "cover_photo": {"$let": {
+                "vars": {"ph": {"$ifNull": ["$photos", []]}, "ti": {"$ifNull": ["$thumbnail_index", 0]}},
+                "in": {"$cond": [
+                    {"$and": [{"$gte": ["$$ti", 0]}, {"$lt": ["$$ti", {"$size": "$$ph"}]}]},
+                    {"$arrayElemAt": ["$$ph", "$$ti"]},
+                    {"$arrayElemAt": ["$$ph", 0]},
+                ]},
+            }}}},
+        ]
+        async for d in db.assets.aggregate(photo_pipeline):
+            photo_map[d["id"]] = d.get("cover_photo")
+
+    cond_abbr = [("Baik", "Baik"), ("Rusak Ringan", "RR"), ("Rusak Berat", "RB")]
+    stat_abbr = [("Ditemukan", "Ditemukan"), ("Tidak Ditemukan", "Tdk Ditemukan"),
+                 ("Berlebih", "Berlebih"), ("Sengketa", "Sengketa"),
+                 ("Belum Diinventarisasi", "Belum")]
+
+    rows = []
+    total_units = 0
+    total_value = 0.0
+    for g in raw_groups:
+        key = g["_id"]
+        members = g["members"]
+        count = g["count"]
+        group_value = sum(sp(m.get("purchase_price")) for m in members)
+        total_units += count
+        total_value += group_value
+
+        cond_counts = {}
+        stat_counts = {}
+        for m in members:
+            c = m.get("condition") or ""
+            if c: cond_counts[c] = cond_counts.get(c, 0) + 1
+            s = m.get("inventory_status") or "Belum Diinventarisasi"
+            stat_counts[s] = stat_counts.get(s, 0) + 1
+        kondisi = ", ".join(f"{cond_counts[name]} {abbr}" for name, abbr in cond_abbr if cond_counts.get(name))
+        status = ", ".join(f"{stat_counts[name]} {abbr}" for name, abbr in stat_abbr if stat_counts.get(name))
+
+        brand_model = f"{key.get('brand', '')} {key.get('model', '')}".strip()
+        year = str(key.get("purchase_date", ""))[:4] if key.get("purchase_date") else ""
+        category = members[0].get("category", "") if members else ""
+
+        rows.append({
+            "asset_code": key.get("asset_code") or "-",
+            "category_label": cat_map.get(category, category) or "-",
+            "asset_name": key.get("asset_name") or "-",
+            "brand_model": brand_model or "-",
+            "year": year or "-",
+            "nup_range": _compact_nup_ranges([m.get("NUP") for m in members]),
+            "count": count,
+            "unit_price_fmt": fmt(sp(key.get("purchase_price"))),
+            "group_value_fmt": fmt(group_value),
+            "kondisi_summary": kondisi or "-",
+            "status_summary": status or "-",
+            "photo_url": photo_map.get(g.get("rep_id")),
+        })
+
+    satker = activity.get("kasatker", {})
+    satker_name = satker.get("nama", activity.get("nama_kegiatan", "-"))
+
+    return {
+        "logo_url": settings.get("logo_url", ""),
+        "judul_laporan": settings.get("judul_laporan", "") or "LAPORAN HASIL INVENTARISASI",
+        "nama_instansi": settings.get("nama_instansi", ""),
+        "satker_name": satker_name,
+        "nomor_sk": activity.get("nomor_surat", "-"),
+        "tanggal_cetak": datetime.now().strftime("%d %B %Y"),
+        "rows": rows,
+        "total_groups": len(rows),
+        "total_units": total_units,
+        "total_value_fmt": fmt(total_value),
+    }
+
+
+@reports_router.get("/inventory-activities/{activity_id}/executive-grouped-html")
+async def executive_grouped_html(activity_id: str):
+    """Serve Laporan Eksekutif per Barang Serupa as HTML preview"""
+    from jinja2 import Environment, FileSystemLoader
+    data = await _build_executive_grouped_data(activity_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+    template = env.get_template("executive_grouped.html")
+    html = template.render(**data)
+    return HTMLResponse(content=html)
+
+
+@reports_router.get("/inventory-activities/{activity_id}/executive-grouped-pdf")
+async def generate_executive_grouped_pdf(activity_id: str):
+    """Generate Laporan Eksekutif per Barang Serupa (grouped assets) PDF"""
+    from jinja2 import Environment, FileSystemLoader
+    import weasyprint
+
+    data = await _build_executive_grouped_data(activity_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+
+    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+    template = env.get_template("executive_grouped.html")
+    html = template.render(**data)
+    pdf_bytes = weasyprint.HTML(string=html).write_pdf()
+
+    filename = "Laporan_Eksekutif_Barang_Serupa.pdf"
+    return StreamingResponse(io.BytesIO(pdf_bytes), media_type="application/pdf",
+                             headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
 # ============================================================================

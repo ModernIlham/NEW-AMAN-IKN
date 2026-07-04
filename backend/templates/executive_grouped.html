@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Laporan Eksekutif per Barang Serupa</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', -apple-system, sans-serif; color: #1e293b; padding: 0; background: #fff; }
+
+        @page { size: A4 landscape; margin: 8mm 8mm 2mm 8mm; }
+
+        .data-header { background: linear-gradient(135deg, #0c1f3f, #1a3461); padding: 12px 24px; display: flex; align-items: center; gap: 14px; }
+        .data-header-logo { width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.1); border: 2px solid rgba(201,168,76,0.5); display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden; }
+        .data-header-logo img { width: 26px; height: 26px; object-fit: contain; }
+        .data-header-text { flex: 1; }
+        .data-header-text h1 { font-size: 13px; font-weight: 700; color: #fff; letter-spacing: 1.5px; text-transform: uppercase; }
+        .data-header-text p { font-size: 9.5px; color: #94a3b8; margin-top: 2px; }
+        .data-header-meta { text-align: right; flex-shrink: 0; font-size: 9px; color: #94a3b8; line-height: 1.6; }
+        .data-header-meta strong { color: #e2e8f0; }
+
+        .data-table-wrapper { padding: 4mm 8mm 2mm; }
+        .data-table { width: 100%; border-collapse: collapse; font-size: 9px; table-layout: fixed; }
+        .data-table thead { display: table-header-group; }
+        .data-table thead th { background: #0f172a; color: #e2e8f0; padding: 6px 4px; font-weight: 600; font-size: 7px; text-transform: uppercase; letter-spacing: 0.3px; text-align: center; border: 1px solid #1e293b; }
+
+        .data-table tbody tr {
+            border-bottom: 1px solid #f1f5f9;
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
+        .data-table tbody tr:nth-child(even) { background: #fafbfd; }
+        .data-table tbody td {
+            padding: 3px 4px;
+            vertical-align: top;
+            border: 1px solid #f1f5f9;
+            font-size: 8px;
+            color: #334155;
+            overflow: hidden;
+        }
+        .data-table td.center { text-align: center; }
+        .data-table td.right { text-align: right; }
+
+        .photo-cell { text-align: center; }
+        .photo-img { width: 46px; height: 46px; object-fit: cover; border-radius: 4px; border: 1px solid #e2e8f0; display: block; margin: 0 auto; }
+        .photo-empty { width: 46px; height: 46px; border-radius: 4px; background: #f1f5f9; display: flex; align-items: center; justify-content: center; margin: 0 auto; color: #94a3b8; font-size: 7px; }
+        .photo-nup { font-size: 6px; color: #94a3b8; margin-top: 2px; }
+
+        .cell-main { font-size: 8px; font-weight: 600; color: #0f172a; margin-bottom: 2px; word-wrap: break-word; overflow-wrap: break-word; }
+        .cell-sub { font-size: 7px; color: #64748b; line-height: 1.4; word-wrap: break-word; overflow-wrap: break-word; }
+        .cell-sub .label { color: #94a3b8; font-weight: 500; }
+        .cell-code { font-family: 'Courier New', monospace; font-size: 7.5px; font-weight: 600; color: #0f172a; margin-bottom: 1px; word-wrap: break-word; overflow-wrap: break-word; }
+        .cell-nup { font-family: 'Courier New', monospace; font-size: 7.5px; color: #334155; word-wrap: break-word; overflow-wrap: break-word; }
+        .cell-count { font-size: 11px; font-weight: 800; color: #0f172a; }
+
+        .total-row td { background: #e8f0fe !important; border-top: 2px solid #1e3a5f; font-weight: 700; color: #0f172a; }
+
+        .data-footer { position: fixed; bottom: 0; left: 0; width: 100%; padding: 6px 24px; display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border-top: 1px solid #e2e8f0; font-size: 9px; color: #64748b; }
+        .data-footer strong { color: #0f172a; }
+    </style>
+</head>
+<body>
+
+<div class="data-header">
+    <div class="data-header-logo">{% if logo_url %}<img src="{{ logo_url }}" alt="Logo" />{% endif %}</div>
+    <div class="data-header-text">
+        <h1>{{ judul_laporan }} &mdash; Barang Serupa</h1>
+        <p>{{ nama_instansi or satker_name }} &mdash; Laporan Eksekutif per Kelompok Barang Serupa</p>
+    </div>
+    <div class="data-header-meta">
+        <div><strong>Satker: {{ satker_name }}</strong></div>
+        <div>SK: {{ nomor_sk }} &nbsp;|&nbsp; Dicetak: {{ tanggal_cetak }}</div>
+    </div>
+</div>
+
+<div class="data-table-wrapper">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th style="width:4%;">No</th>
+                <th style="width:8%;">Foto</th>
+                <th style="width:13%;">Kode &amp; Kategori</th>
+                <th style="width:17%;">Nama Barang</th>
+                <th style="width:12%;">NUP</th>
+                <th style="width:6%;">Jumlah</th>
+                <th style="width:9%;">Harga Satuan (Rp)</th>
+                <th style="width:9%;">Total Nilai (Rp)</th>
+                <th style="width:10%;">Kondisi</th>
+                <th style="width:12%;">Status Inventarisasi</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in rows %}
+            <tr>
+                <td class="center">{{ loop.index }}</td>
+                <td class="photo-cell">
+                    {% if r.photo_url %}<img src="{{ r.photo_url }}" class="photo-img" alt="Foto" />
+                    {% else %}<div class="photo-empty">No Foto</div>{% endif %}
+                    <div class="photo-nup">NUP terkecil</div>
+                </td>
+                <td>
+                    <div class="cell-code">{{ r.asset_code }}</div>
+                    <div class="cell-sub"><span class="label">Kat:</span> {{ r.category_label }}</div>
+                </td>
+                <td>
+                    <div class="cell-main">{{ r.asset_name }}</div>
+                    <div class="cell-sub"><span class="label">Merk:</span> {{ r.brand_model }} &nbsp;<span class="label">Thn:</span> {{ r.year }}</div>
+                </td>
+                <td><div class="cell-nup">{{ r.nup_range }}</div></td>
+                <td class="center"><span class="cell-count">{{ r.count }}</span></td>
+                <td class="right">{{ r.unit_price_fmt }}</td>
+                <td class="right" style="font-weight:600;">{{ r.group_value_fmt }}</td>
+                <td><div class="cell-sub">{{ r.kondisi_summary }}</div></td>
+                <td><div class="cell-sub">{{ r.status_summary }}</div></td>
+            </tr>
+            {% endfor %}
+            <tr class="total-row">
+                <td colspan="4">TOTAL: {{ total_groups }} kelompok barang serupa</td>
+                <td class="center">&nbsp;</td>
+                <td class="center">{{ total_units }}</td>
+                <td>&nbsp;</td>
+                <td class="right">{{ total_value_fmt }}</td>
+                <td colspan="2">&nbsp;</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<div class="data-footer">
+    <div><strong>{{ total_groups }}</strong> kelompok &nbsp;|&nbsp; <strong>{{ total_units }}</strong> unit BMN &nbsp;|&nbsp; Total Nilai: <strong>Rp {{ total_value_fmt }}</strong></div>
+    <div>Laporan Eksekutif per Barang Serupa &mdash; {{ satker_name }}</div>
+</div>
+
+</body>
+</html>
