@@ -31,6 +31,7 @@ const AuditLogPanel = lazy(() => import("@/components/assets/AuditLogPanel"));
 const AssetGroupsPanel = lazy(() => import("@/components/assets/AssetGroupsPanel"));
 import DashboardHeader from "@/components/assets/DashboardHeader";
 import StatsBar from "@/components/assets/StatsBar";
+import InventoryProgressBar from "@/components/assets/InventoryProgressBar";
 import DashboardToolbar from "@/components/assets/DashboardToolbar";
 import AssetPagination from "@/components/assets/AssetPagination";
 import ScrollToTop from "@/components/assets/ScrollToTop";
@@ -213,6 +214,17 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
   const { rowLocks, setRowLocks, sessionId, lockAsset, unlockAsset } = useRowLocking({
     activityId: activity?.id, user, wsSend,
   });
+
+  // Progres inventarisasi: bump refreshKey saat ada save yang baru selesai
+  // (transisi status → 'saved') agar InventoryProgressBar refetch rekapitulasi.
+  const [progressRefreshKey, setProgressRefreshKey] = useState(0);
+  const prevSavedIdsRef = useRef(new Set());
+  useEffect(() => {
+    const savedIds = Object.keys(syncStatuses).filter(id => syncStatuses[id]?.status === 'saved');
+    const hasNew = savedIds.some(id => !prevSavedIdsRef.current.has(id));
+    prevSavedIdsRef.current = new Set(savedIds);
+    if (hasNew) setProgressRefreshKey(k => k + 1);
+  }, [syncStatuses]);
 
   // === DRAG & DROP IMPORT ===
   const { isDragOverImport, dropFile, handleDragEnter, handleDragLeave, handleDragOver, handleDrop, clearDropFile } = useDragDropImport({
@@ -776,6 +788,16 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
 
           <div className="p-3 sm:p-4 space-y-3">
             <StatsBar stats={stats} inventoryMode={inventoryMode} setInventoryMode={setInventoryMode} isOnline={isOnline} pendingCount={pendingCount} />
+            {inventoryMode && (
+              <InventoryProgressBar
+                activityId={activity?.id}
+                inventoryStatusFilter={filters.inventoryStatus}
+                onFilterChange={handleAdvancedFilterChange}
+                isOnline={isOnline} pendingCount={pendingCount}
+                rowLocks={rowLocks} sessionId={sessionId}
+                refreshKey={progressRefreshKey}
+              />
+            )}
             <DashboardToolbar
               searchInput={searchInput} setSearchInput={setSearchInput} categories={categories} filterCategory={filterCategory} setFilterCategory={setFilterCategory}
               activeFilterCount={activeFilterCount} showAdvancedFilter={showAdvancedFilter} setShowAdvancedFilter={setShowAdvancedFilter}
