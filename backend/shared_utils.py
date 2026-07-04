@@ -16,6 +16,7 @@ from typing import Optional, List
 from pathlib import Path
 
 from cachetools import TTLCache
+from fastapi import HTTPException
 from PIL import Image as PILImage
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -25,6 +26,24 @@ import resend
 from db import db, fs_bucket
 
 logger = logging.getLogger(__name__)
+
+
+# --- Pengesahan lock guard ---
+# Backend adalah sumber kebenaran: SEMUA jalur mutasi aset (create/PUT/PATCH/
+# DELETE/batch/bulk-delete/import) wajib memanggil ini. Satu lookup kegiatan
+# ber-indeks (inventory_activities.id) — murah dan konsisten.
+SEALED_DETAIL = "Kegiatan sudah disahkan dan terkunci"
+
+
+async def ensure_activity_not_sealed(activity_id):
+    """Raise HTTP 423 (Locked) bila kegiatan sudah disahkan (status_pengesahan)."""
+    if not activity_id:
+        return
+    sealed = await db.inventory_activities.find_one(
+        {"id": activity_id, "status_pengesahan": "disahkan"}, {"_id": 0, "id": 1}
+    )
+    if sealed:
+        raise HTTPException(status_code=423, detail=SEALED_DETAIL)
 
 
 # --- Shared base64 / data-URL helpers ---

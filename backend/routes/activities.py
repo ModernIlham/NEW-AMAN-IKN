@@ -23,6 +23,7 @@ from shared_utils import (
     get_document_from_gridfs,
     delete_document_from_gridfs,
 )
+from routes.pengesahan import next_ticket_number, ensure_ticket_number
 
 logger = logging.getLogger(__name__)
 activities_router = APIRouter()
@@ -296,10 +297,16 @@ async def get_inventory_activities():
         }},
     ]).to_list(100)
     step1_time = time.time() - start
-    
+
     if not activities:
         return []
-    
+
+    # Backfill malas nomor tiket: hanya menyentuh DB untuk kegiatan lama yang
+    # belum punya ticket_number (startup backfill sudah menangani mayoritas).
+    for act in activities:
+        if not act.get("ticket_number"):
+            await ensure_ticket_number(act)
+
     activity_ids = [act.get("id") for act in activities if act.get("id")]
     
     stats_pipeline = [
@@ -463,6 +470,9 @@ async def create_inventory_activity(activity: InventoryActivityCreate):
         "total_assets": len(activity.asset_ids or []),
         "total_value": total_value,
         "summary": summary,
+        # Nomor tiket: berurutan per tahun, atomik via counters (pengesahan.py)
+        "ticket_number": await next_ticket_number(),
+        "status_pengesahan": "draft",
         "created_at": now
     }
     
@@ -517,6 +527,7 @@ async def get_inventory_activity(activity_id: str):
     activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+    activity = await ensure_ticket_number(activity)
     return _strip_doc_payload(activity)
 
 
@@ -704,6 +715,14 @@ async def update_inventory_activity(activity_id: str, activity: InventoryActivit
 @activities_router.delete("/inventory-activities/{activity_id}")
 async def delete_inventory_activity(activity_id: str):
     """Delete an inventory activity and all its assets"""
+    # Kegiatan yang sudah disahkan terkunci — hapus kegiatan mengkaskade ke
+    # semua asetnya, jadi wajib ditolak juga (konsisten dengan bulk-delete).
+    sealed = await db.inventory_activities.find_one(
+        {"id": activity_id, "status_pengesahan": "disahkan"}, {"_id": 0, "id": 1}
+    )
+    if sealed:
+        raise HTTPException(status_code=423, detail="Kegiatan sudah disahkan dan terkunci")
+
     # First load existing to clean up GridFS document blobs
     existing = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0, "documents": 1})
     if existing:

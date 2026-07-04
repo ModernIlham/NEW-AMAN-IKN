@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import axios from "axios";
 import { openDB } from "idb";
+import { toast } from "sonner";
 import { getApiError } from "../lib/utils";
 import { checkReachable, REACHABILITY_RETRY_MS } from "../lib/connectivity";
 
@@ -264,6 +265,12 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
       }
 
       const errorMsg = getApiError(err, err.code === "ECONNABORTED" ? "Koneksi timeout" : "Gagal menyimpan");
+      // 423 Locked: kegiatan sudah disahkan — retry tidak akan pernah berhasil,
+      // jadi tampilkan toast yang jelas (save berjalan di background sehingga
+      // form sudah tertutup dan tidak bisa menampilkan errornya sendiri).
+      if (err?.response?.status === 423) {
+        toast.error(errorMsg || "Kegiatan sudah disahkan dan terkunci", { duration: 6000 });
+      }
       updateStatus(statusKey, "failed", errorMsg);
 
       // Re-register + persist so retry/rehydrate always have the payload (a

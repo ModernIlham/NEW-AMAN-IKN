@@ -17,6 +17,7 @@ from shared_utils import (
     store_photo_to_gridfs, get_photo_from_gridfs, delete_photo_from_gridfs,
     generate_photo_thumbnail,
     get_idempotent_response, store_idempotent_response, reserve_idempotency_key,
+    ensure_activity_not_sealed,
 )
 from routes.websocket import notify_asset_change
 
@@ -584,6 +585,9 @@ async def create_asset(asset: AssetCreate, request: Request):
         elif _idem == "pending":
             raise HTTPException(status_code=409, detail="Permintaan dengan kunci idempotensi ini sedang diproses, coba lagi sebentar")
 
+    # Kegiatan yang sudah disahkan terkunci — tolak penambahan aset (423)
+    await ensure_activity_not_sealed(asset.activity_id)
+
     # Check uniqueness: asset_code + NUP within same activity
     existing_query = {
         "asset_code": asset.asset_code,
@@ -949,6 +953,12 @@ async def update_asset(asset_id: str, asset: AssetCreate, request: Request):
     if not existing:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
 
+    # Kegiatan yang sudah disahkan terkunci — cek activity asal DAN tujuan
+    # (bila aset dipindah antar kegiatan lewat PUT).
+    await ensure_activity_not_sealed(existing.get("activity_id"))
+    if asset.activity_id and asset.activity_id != existing.get("activity_id"):
+        await ensure_activity_not_sealed(asset.activity_id)
+
     # --- Optimistic Concurrency Control (OCC) ---
     # Client sends If-Match header with the version they loaded. If server has a
     # newer version, reject with 409 so client can show conflict-resolution UI.
@@ -1154,6 +1164,12 @@ async def patch_asset(asset_id: str, request: Request):
     existing = await db.assets.find_one({"id": asset_id})
     if not existing:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+
+    # Kegiatan yang sudah disahkan terkunci — cek activity asal DAN tujuan
+    await ensure_activity_not_sealed(existing.get("activity_id"))
+    body_activity_id = body.get("activity_id")
+    if body_activity_id and body_activity_id != existing.get("activity_id"):
+        await ensure_activity_not_sealed(body_activity_id)
 
     # --- Optimistic Concurrency Control ---
     if_match = request.headers.get("If-Match", "").strip().strip('"')
@@ -1488,7 +1504,10 @@ async def delete_asset(asset_id: str, request: Request):
     asset_doc = await db.assets.find_one({"id": asset_id}, {"_id": 0})
     if not asset_doc:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
-    
+
+    # Kegiatan yang sudah disahkan terkunci — tolak penghapusan aset (423)
+    await ensure_activity_not_sealed(asset_doc.get("activity_id"))
+
     result = await db.assets.delete_one({"id": asset_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")

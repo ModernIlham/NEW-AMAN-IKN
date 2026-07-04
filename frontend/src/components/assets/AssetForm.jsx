@@ -387,6 +387,7 @@ const AssetForm = memo(({
   saveQueueLength = 0,
   inventoryMode = false,
   onShowCategoryManager,
+  onOpenKartu,
   alwaysExpanded = false
 }) => {
   const [formSection, setFormSection] = useState("basic");
@@ -1147,7 +1148,26 @@ const AssetForm = memo(({
               {isEditing && <p className="text-[10px] text-amber-600 dark:text-amber-400 truncate max-w-[160px]">{formData.asset_code}</p>}
             </div>
           </div>
-          {!alwaysExpanded && <Button variant="ghost" size="sm" className="lg:hidden h-7 w-7 p-0" onClick={onClose}><X className="w-4 h-4" /></Button>}
+          <div className="flex items-center gap-1">
+            {isEditing && onOpenKartu && (
+              <Button
+                type="button" variant="ghost" size="sm"
+                className="h-7 gap-1 px-2 text-[10px] text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30"
+                onClick={() => onOpenKartu({
+                  kode_register: formData.kode_register,
+                  asset_code: formData.asset_code,
+                  NUP: formData.NUP,
+                  asset_name: formData.asset_name,
+                })}
+                title="Riwayat pengesahan aset ini lintas kegiatan"
+                data-testid="asset-form-kartu-btn"
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Kartu</span>
+              </Button>
+            )}
+            {!alwaysExpanded && <Button variant="ghost" size="sm" className="lg:hidden h-7 w-7 p-0" onClick={onClose}><X className="w-4 h-4" /></Button>}
+          </div>
         </div>
 
         {/* Tabs — disembunyikan pada mode inventarisasi lapangan (sheet) */}
