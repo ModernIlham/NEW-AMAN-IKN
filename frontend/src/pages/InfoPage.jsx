@@ -1,7 +1,6 @@
 import React, { useState, useCallback } from "react";
 import { ArrowLeft, Download, FileText, Presentation, ChevronDown, ChevronRight, Package, Shield, Users, Camera, Upload, BarChart3, FileSpreadsheet, Printer, RefreshCw, Globe, CheckCircle2, XCircle, Clock, Layers, Database, Server, Monitor, Wifi, Lock, Zap, BookOpen, DollarSign, Calendar, Target, AlertTriangle } from "lucide-react";
-import axios from "axios";
-import { toast } from "sonner";
+import { downloadFileWithProgress } from "../lib/downloadFile";
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -206,19 +205,11 @@ export default function InfoPage({ onBack }) {
     try {
       const endpoint = type === "ppt" ? "/api/documents/ppt" : "/api/documents/proposal";
       const filename = type === "ppt" ? "InventoryMaster_PRD_Presentation.pptx" : "Proposal_InventoryMaster_Pro.docx";
-      const r = await axios.get(`${API}${endpoint}`, { responseType: "blob", timeout: 60000 });
-      const url = URL.createObjectURL(new Blob([r.data]));
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 30000);
-      toast.success(`${type === "ppt" ? "Presentasi PPT" : "Proposal DOCX"} berhasil diunduh!`);
-    } catch {
-      toast.error("Gagal mengunduh dokumen");
-    } finally {
+      await downloadFileWithProgress(`${API}${endpoint}`, filename, {
+        label: type === "ppt" ? "Presentasi PPT" : "Proposal DOCX",
+        timeout: 60000,
+      });
+    } catch { /* toast error sudah ditangani helper */ } finally {
       setDownloading(null);
     }
   }, []);

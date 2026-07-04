@@ -105,6 +105,9 @@
                 <td>
                     <div class="cell-main">{{ r.asset_name }}</div>
                     <div class="cell-sub"><span class="label">Merk:</span> {{ r.brand_model }} &nbsp;<span class="label">Thn:</span> {{ r.year }}</div>
+                    {% for dl in r.detail_lines %}
+                    <div class="cell-sub"><span class="label">{{ dl.label }}:</span> {{ dl.value }}</div>
+                    {% endfor %}
                 </td>
                 <td><div class="cell-nup">{{ r.nup_range }}</div></td>
                 <td class="center"><span class="cell-count">{{ r.count }}</span></td>

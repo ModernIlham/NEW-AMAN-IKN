@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
-import { toast } from "sonner";
-import { getApiError } from "../../lib/utils";
+import { downloadFileWithProgress } from "../../lib/downloadFile";
 import { ChevronDown, ChevronUp, BarChart3, Loader2 } from "lucide-react";
 
 import SummaryCards from "./rekapitulasi/SummaryCards";
@@ -52,19 +51,13 @@ function RekapitulasiPanel({ activityId, isOpen, onToggle }) {
       };
       const endpoint = endpoints[type];
       if (!endpoint) return;
-      const r = await axios.get(`${API}/inventory-activities/${activityId}/${endpoint}`, { responseType: "blob" });
-      const url = window.URL.createObjectURL(new Blob([r.data]));
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute("download", `${filenames[type] || type}_${activityId.substring(0, 8)}.pdf`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-      toast.success(`${filenames[type] || type} berhasil diunduh`);
-    } catch (err) {
-      toast.error("Gagal download: " + getApiError(err, err.message));
-    } finally {
+      const name = filenames[type] || type;
+      await downloadFileWithProgress(
+        `${API}/inventory-activities/${activityId}/${endpoint}`,
+        `${name}_${activityId.substring(0, 8)}.pdf`,
+        { label: name }
+      );
+    } catch { /* toast error sudah ditangani helper */ } finally {
       setDownloading("");
     }
   };
@@ -72,19 +65,12 @@ function RekapitulasiPanel({ activityId, isOpen, onToggle }) {
   const handleDownloadDBHI = async (type, label) => {
     setDownloading(type);
     try {
-      const r = await axios.get(`${API}/inventory-activities/${activityId}/dbhi/${type}`, { responseType: "blob" });
-      const url = window.URL.createObjectURL(new Blob([r.data]));
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute("download", `DBHI_${label.replace(/\s/g, "_")}_${activityId.substring(0, 8)}.pdf`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-      toast.success(`DBHI ${label} berhasil diunduh`);
-    } catch (err) {
-      toast.error("Gagal download DBHI: " + getApiError(err, err.message));
-    } finally {
+      await downloadFileWithProgress(
+        `${API}/inventory-activities/${activityId}/dbhi/${type}`,
+        `DBHI_${label.replace(/\s/g, "_")}_${activityId.substring(0, 8)}.pdf`,
+        { label: `DBHI ${label}` }
+      );
+    } catch { /* toast error sudah ditangani helper */ } finally {
       setDownloading("");
     }
   };

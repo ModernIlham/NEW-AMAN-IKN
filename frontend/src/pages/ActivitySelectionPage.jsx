@@ -18,6 +18,7 @@ import {
 import { toast } from "sonner";
 import axios from "axios";
 import { getApiError } from "@/lib/utils";
+import { downloadFileWithProgress } from "@/lib/downloadFile";
 import { compressImageFile } from "@/lib/imageCompression";
 import { compressPdfFile } from "@/lib/pdfCompression";
 
@@ -879,11 +880,12 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                         const act = filteredActivities[0];
                         if (!act) return;
                         try {
-                          const r = await axios.get(`${API}/inventory-activities/${act.id}/laporan-satker-pdf`, { responseType: 'blob' });
-                          const url = URL.createObjectURL(new Blob([r.data]));
-                          const a = document.createElement('a'); a.href = url; a.download = `Laporan_${selectedSatker}.pdf`; a.click();
-                          toast.success("Download berhasil");
-                        } catch { toast.error("Gagal download laporan"); }
+                          await downloadFileWithProgress(
+                            `${API}/inventory-activities/${act.id}/laporan-satker-pdf`,
+                            `Laporan_${selectedSatker}.pdf`,
+                            { label: "Laporan Satker" }
+                          );
+                        } catch { /* toast error sudah ditangani helper */ }
                       }}
                       data-testid="btn-download-laporan-satker"
                     >

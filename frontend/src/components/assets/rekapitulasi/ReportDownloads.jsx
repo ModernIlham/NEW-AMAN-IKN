@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { toast } from "sonner";
-import { getApiError } from "../../../lib/utils";
+import { downloadFileWithProgress } from "../../../lib/downloadFile";
 import {
   Download, BarChart3, BookOpen, FileText, Shield, FileWarning,
   CheckCircle2, XCircle, AlertTriangle, Settings, Loader2,
@@ -55,7 +55,8 @@ const supportingDocs = [
   { key: "surat-koreksi", label: "Surat Koreksi", icon: FileWarning },
 ];
 
-// Kolom tambahan opsional untuk kolom "Kondisi & Status" pada Data Aset eksekutif
+// Kolom tambahan opsional untuk PDF Data Aset eksekutif (kolom "Kondisi &
+// Status") dan PDF Eksekutif per Barang Serupa (baris di bawah "Nama Barang")
 const detailFieldOptions = [
   { key: "spm", label: "SPM" },
   { key: "perolehan", label: "Perolehan" },
@@ -136,29 +137,18 @@ export default function ReportDownloads({
     });
   };
 
-  const detailFieldsParam = detailFields.size > 0
-    ? `&detail_fields=${Array.from(detailFields).join(",")}`
-    : "";
+  const detailFieldsValue = Array.from(detailFields).join(",");
+  const detailFieldsParam = detailFieldsValue ? `&detail_fields=${detailFieldsValue}` : "";
 
   const handleDownloadDataPage = async (pageNum, startIdx, endIdx) => {
     setDataDownloading(pageNum);
     try {
-      const r = await axios.get(
+      await downloadFileWithProgress(
         `${API}/inventory-activities/${activityId}/executive-data-pdf?page=${pageNum}${detailFieldsParam}`,
-        { responseType: "blob" }
+        `Data_Aset_${startIdx}-${endIdx}_${activityId.substring(0, 8)}.pdf`,
+        { label: `Data Aset ${startIdx}-${endIdx}` }
       );
-      const url = window.URL.createObjectURL(new Blob([r.data]));
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute("download", `Data_Aset_${startIdx}-${endIdx}_${activityId.substring(0, 8)}.pdf`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-      toast.success(`Data Aset ${startIdx}-${endIdx} berhasil diunduh`);
-    } catch (err) {
-      toast.error("Gagal download: " + getApiError(err, err.message));
-    } finally {
+    } catch { /* toast error sudah ditangani helper */ } finally {
       setDataDownloading(null);
     }
   };
@@ -166,22 +156,12 @@ export default function ReportDownloads({
   const handleDownloadGrouped = async () => {
     setGroupedDownloading(true);
     try {
-      const r = await axios.get(
-        `${API}/inventory-activities/${activityId}/executive-grouped-pdf`,
-        { responseType: "blob" }
+      await downloadFileWithProgress(
+        `${API}/inventory-activities/${activityId}/executive-grouped-pdf${detailFieldsValue ? `?detail_fields=${detailFieldsValue}` : ""}`,
+        "Laporan_Eksekutif_Barang_Serupa.pdf",
+        { label: "Laporan Eksekutif per Barang Serupa" }
       );
-      const url = window.URL.createObjectURL(new Blob([r.data]));
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute("download", "Laporan_Eksekutif_Barang_Serupa.pdf");
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-      toast.success("Laporan Eksekutif per Barang Serupa berhasil diunduh");
-    } catch (err) {
-      toast.error("Gagal download: " + getApiError(err, err.message));
-    } finally {
+    } catch { /* toast error sudah ditangani helper */ } finally {
       setGroupedDownloading(false);
     }
   };
@@ -201,25 +181,14 @@ export default function ReportDownloads({
     if (selected.size === 0) { toast.error("Pilih minimal satu laporan"); return; }
     setBatchDownloading(true);
     try {
-      const r = await axios.post(
+      await downloadFileWithProgress(
         `${API}/inventory-activities/${activityId}/batch-pdf-zip`,
-        { types: Array.from(selected) },
-        { responseType: "blob" }
+        `Laporan_Batch_${activityId.substring(0, 8)}.zip`,
+        { label: `Batch ZIP (${selected.size} laporan)`, method: "post", data: { types: Array.from(selected) } }
       );
-      const url = window.URL.createObjectURL(new Blob([r.data]));
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute("download", `Laporan_Batch_${activityId.substring(0, 8)}.zip`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-      toast.success(`${selected.size} laporan berhasil diunduh sebagai ZIP`);
       setBatchMode(false);
       setSelected(new Set());
-    } catch (err) {
-      toast.error("Gagal download batch: " + getApiError(err, err.message));
-    } finally {
+    } catch { /* toast error sudah ditangani helper */ } finally {
       setBatchDownloading(false);
     }
   };
@@ -305,7 +274,7 @@ export default function ReportDownloads({
           </button>
           {dataInfo && dataInfo.total_assets > 0 && (
             <div className="flex flex-wrap items-center gap-1" data-testid="exec-detail-fields">
-              <span className="text-[10px] text-muted-foreground mr-0.5">Kolom tambahan:</span>
+              <span className="text-[10px] text-muted-foreground mr-0.5">Kolom tambahan (Data Aset &amp; Barang Serupa):</span>
               {detailFieldOptions.map(({ key, label }) => (
                 <label key={key} data-testid={`detail-field-${key}`}
                   className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] cursor-pointer transition-colors border ${
