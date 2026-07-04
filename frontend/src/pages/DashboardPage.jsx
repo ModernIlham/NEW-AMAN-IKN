@@ -466,17 +466,16 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
     // completed around the same moment.
     const closingId = editAssetForForm?.id ?? null;
     setTimeout(() => {
-      let editingAnotherRow = false;
-      setEditAssetForForm(prev => {
-        if (prev == null || prev.id === closingId) return null;
-        editingAnotherRow = true; // a newer edit is open — leave it alone
-        return prev;
-      });
-      // Deferred refresh: sync with server now that editing is done — but
-      // never while a different row's form is open (it would reset typing).
-      // Don't consume the flags in that case: they stay set and are handled
-      // when the newer edit closes.
-      if (editingAnotherRow) return;
+      // editAssetRef mirrors editAssetForForm on every render, so it reflects
+      // whatever edit is open NOW (state updaters can't be read synchronously).
+      const activeEdit = editAssetRef.current;
+      if (activeEdit && activeEdit.id !== closingId) {
+        // A newer edit opened within the window — leave its form untouched and
+        // don't consume the refresh flags; they're handled on its own close.
+        return;
+      }
+      setEditAssetForForm(null);
+      // Deferred refresh: sync with server now that editing is done
       const queueNeedsRefresh = consumeRefreshFlag();
       const wsNeedsRefresh = wsNeedsRefreshRef.current;
       wsNeedsRefreshRef.current = false;
