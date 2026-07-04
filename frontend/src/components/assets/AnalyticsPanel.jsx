@@ -124,7 +124,7 @@ const AnalyticsPanel = memo(({ activityId, isOpen, onToggle, panelHeight, onDrag
     <div className="print:hidden select-none" data-testid="analytics-panel-wrapper">
       {/* Toggle bar - always visible */}
       <div
-        className="flex items-center justify-between bg-card border border-border rounded-lg px-3 py-1.5 cursor-pointer hover:bg-muted transition-colors"
+        className="flex items-center justify-between bg-card border border-border rounded-xl shadow-sm px-3 py-1.5 cursor-pointer hover:bg-muted transition-colors"
         onClick={onToggle}
         data-testid="analytics-toggle"
       >

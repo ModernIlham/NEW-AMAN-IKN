@@ -30,21 +30,36 @@ const DashboardToolbar = memo(function DashboardToolbar({
   viewMode, setViewMode,
 }) {
   return (
-    <div className="bg-card rounded-lg border border-border p-1.5 sm:p-2.5 print:hidden" data-testid="dashboard-toolbar">
+    <div className="bg-card rounded-xl border border-border shadow-sm p-2 sm:p-2.5 print:hidden" data-testid="dashboard-toolbar">
       <div className="flex flex-col gap-1.5 sm:gap-2">
-        {/* Search + Scan QR stiker */}
+        {/* Baris 1: Cari + Scan QR stiker (+ Filter Lanjutan di mobile/tablet) */}
         <div className="flex items-center gap-1.5">
-          <div className="relative flex-1">
-            <Search className="absolute left-2.5 top-1.5 sm:top-2 w-3.5 h-3.5 sm:w-4 sm:h-4 text-muted-foreground" />
+          <div className="relative flex-1 min-w-0">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
             <Input
               placeholder="Cari kode, nama, lokasi..."
               value={searchInput}
               onChange={e => setSearchInput(e.target.value)}
-              className="pl-8 sm:pl-9 h-7 sm:h-8 text-xs sm:text-sm"
+              className="pl-8 h-9 lg:h-8 text-sm"
               data-testid="search-input"
             />
           </div>
           <QrScanButton onDetected={setSearchInput} />
+          <Button
+            variant={activeFilterCount > 0 ? "default" : "outline"}
+            size="sm"
+            className={`lg:hidden h-9 w-9 p-0 min-h-0 min-w-0 relative flex-shrink-0 ${activeFilterCount > 0 ? "bg-blue-600" : ""}`}
+            onClick={() => setShowAdvancedFilter(!showAdvancedFilter)}
+            aria-label="Filter lanjutan"
+            data-testid="mobile-advanced-filter-btn"
+          >
+            <Filter className="w-4 h-4" />
+            {activeFilterCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-white text-blue-600 rounded-full w-4 h-4 flex items-center justify-center text-[9px] font-bold border border-blue-600">
+                {activeFilterCount}
+              </span>
+            )}
+          </Button>
         </div>
 
         {/* Desktop toolbar (lg+ only) */}
@@ -151,75 +166,60 @@ const DashboardToolbar = memo(function DashboardToolbar({
           </Button>
         </div>
 
-        {/* Mobile/Tablet toolbar - compact with wrapping */}
-        <div className="lg:hidden flex flex-col gap-1.5">
-          {/* Row 1: Category + Filter Lanjutan */}
-          <div className="flex items-center gap-1.5">
-            <CategorySelect
-              categories={categories}
-              value={filterCategory}
-              onValueChange={v => { setFilterCategory(v); refreshData(1); }}
-              placeholder="Kategori"
-              className="flex-1 min-w-[100px]"
-              size="compact"
-            />
-            <Button
-              variant={activeFilterCount > 0 ? "default" : "outline"}
-              size="sm"
-              className={`h-7 w-7 p-0 relative flex-shrink-0 ${activeFilterCount > 0 ? "bg-blue-600" : ""}`}
-              onClick={() => setShowAdvancedFilter(!showAdvancedFilter)}
-              data-testid="mobile-advanced-filter-btn"
-            >
-              <Filter className="w-3 h-3" />
-              {activeFilterCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-white text-blue-600 rounded-full w-3.5 h-3.5 flex items-center justify-center text-[8px] font-bold border border-blue-600">
-                  {activeFilterCount}
-                </span>
-              )}
-            </Button>
-          </div>
+        {/* Mobile/Tablet toolbar — satu baris kontrol ringkas (semua h-9) */}
+        <div className="lg:hidden flex items-center gap-1.5">
+          <CategorySelect
+            categories={categories}
+            value={filterCategory}
+            onValueChange={v => { setFilterCategory(v); refreshData(1); }}
+            placeholder="Kategori"
+            className="flex-1 min-w-0 h-9 min-h-0"
+            size="compact"
+          />
 
-          {/* Row 2: Sort + Tinify + View toggle + Settings */}
-          <div className="flex items-center gap-1">
-            <Select value={sortBy} onValueChange={v => { setSortBy(v); refreshData(1); }}>
-              <SelectTrigger className="w-[70px] h-7 text-[10px] px-1.5"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="newest">Terbaru</SelectItem>
-                <SelectItem value="oldest">Terlama</SelectItem>
-                <SelectItem value="name_asc">A-Z</SelectItem>
-                <SelectItem value="name_desc">Z-A</SelectItem>
-                <SelectItem value="price_asc">Harga ↑</SelectItem>
-                <SelectItem value="price_desc">Harga ↓</SelectItem>
-              </SelectContent>
-            </Select>
+          <Select value={sortBy} onValueChange={v => { setSortBy(v); refreshData(1); }}>
+            <SelectTrigger className="w-auto h-9 min-h-0 px-2 text-[11px] gap-1 flex-shrink-0" aria-label="Urutkan" data-testid="mobile-sort-select">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="newest">Terbaru</SelectItem>
+              <SelectItem value="oldest">Terlama</SelectItem>
+              <SelectItem value="name_asc">A-Z</SelectItem>
+              <SelectItem value="name_desc">Z-A</SelectItem>
+              <SelectItem value="price_asc">Harga ↑</SelectItem>
+              <SelectItem value="price_desc">Harga ↓</SelectItem>
+            </SelectContent>
+          </Select>
 
-            <TinifyQuotaMobile />
+          <TinifyQuotaMobile className="flex-shrink-0" />
 
-            {/* Mobile View Toggle */}
-            {viewMode !== undefined && setViewMode && (
-              <div className="flex bg-muted rounded-md p-0.5 gap-0.5">
-                <button
-                  className={`p-1 rounded ${viewMode === 'list' ? 'bg-card text-blue-600 shadow-sm' : 'text-muted-foreground'}`}
-                  onClick={() => setViewMode('list')}
-                >
-                  <List className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  className={`p-1 rounded ${viewMode === 'gallery' ? 'bg-card text-blue-600 shadow-sm' : 'text-muted-foreground'}`}
-                  onClick={() => setViewMode('gallery')}
-                >
-                  <LayoutGrid className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
+          {/* Mobile View Toggle */}
+          {viewMode !== undefined && setViewMode && (
+            <div className="flex bg-muted rounded-lg p-0.5 gap-0.5 flex-shrink-0" data-testid="view-mode-toggle-mobile">
+              <button
+                className={`min-h-0 min-w-0 h-8 w-8 flex items-center justify-center rounded-md transition-colors ${viewMode === 'list' ? 'bg-card text-blue-600 shadow-sm' : 'text-muted-foreground'}`}
+                onClick={() => setViewMode('list')}
+                aria-label="Tampilan daftar"
+                aria-pressed={viewMode === 'list'}
+              >
+                <List className="w-4 h-4" />
+              </button>
+              <button
+                className={`min-h-0 min-w-0 h-8 w-8 flex items-center justify-center rounded-md transition-colors ${viewMode === 'gallery' ? 'bg-card text-blue-600 shadow-sm' : 'text-muted-foreground'}`}
+                onClick={() => setViewMode('gallery')}
+                aria-label="Tampilan galeri"
+                aria-pressed={viewMode === 'gallery'}
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </button>
+            </div>
+          )}
 
-            <div className="flex-1"></div>
-
-            {/* Mobile actions dropdown */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="h-7 px-2">
-                <Settings className="w-3.5 h-3.5" />
+          {/* Mobile actions dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-9 w-9 p-0 min-h-0 min-w-0 flex-shrink-0" aria-label="Menu aksi lainnya">
+                <Settings className="w-4 h-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44">
@@ -255,7 +255,6 @@ const DashboardToolbar = memo(function DashboardToolbar({
               )}
             </DropdownMenuContent>
           </DropdownMenu>
-          </div>
         </div>
 
         {/* Advanced Filter Panel + Active Filter Badges */}

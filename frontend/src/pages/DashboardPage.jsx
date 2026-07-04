@@ -1020,10 +1020,10 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
             </div>
           </div>
 
-          <div className="p-3 sm:p-4 space-y-3">
+          <div className="p-3 sm:p-4 space-y-2 sm:space-y-3">
             {/* Banner kegiatan disahkan — seluruh data terkunci */}
             {sealed && (
-              <div className="flex items-start gap-2.5 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-300 dark:border-emerald-700 rounded-lg px-3 py-2.5" data-testid="sealed-banner">
+              <div className="flex items-start gap-2.5 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-300 dark:border-emerald-700 rounded-xl px-3 py-2" data-testid="sealed-banner">
                 <Lock className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
@@ -1045,6 +1045,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
                 rowLocks={rowLocks} sessionId={sessionId}
                 refreshKey={progressRefreshKey}
                 snapshotState={snapshotState}
+                inventoryMode={inventoryMode} setInventoryMode={setInventoryMode}
               />
             )}
             <DashboardToolbar

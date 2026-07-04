@@ -78,9 +78,9 @@ function RekapitulasiPanel({ activityId, isOpen, onToggle }) {
   const total = data?.total_bmn_diteliti || 0;
 
   return (
-    <div className="bg-card border border-border rounded-lg overflow-hidden mb-2 print:hidden" data-testid="rekapitulasi-panel">
+    <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden print:hidden" data-testid="rekapitulasi-panel">
       {/* Toggle Header */}
-      <button onClick={onToggle} className="w-full flex items-center justify-between px-4 py-2 hover:bg-muted transition-colors">
+      <button onClick={onToggle} className="min-h-0 min-w-0 w-full flex items-center justify-between px-3 py-2 hover:bg-muted transition-colors">
         <div className="flex items-center gap-2 text-sm font-medium text-foreground">
           <BarChart3 className="w-4 h-4 text-blue-600" />
           <span>Rekapitulasi Inventarisasi</span>
