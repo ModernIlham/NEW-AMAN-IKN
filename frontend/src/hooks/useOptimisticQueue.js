@@ -1,5 +1,6 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import axios from "axios";
+import { openDB } from "idb";
 import { getApiError } from "../lib/utils";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -32,13 +33,77 @@ function getAuditHeaders() {
 
 const MAX_CONCURRENT = 3;
 
+// --- Persistent save queue (IndexedDB) ---
+// Every queued/failed save is written through to IndexedDB so a crash, page
+// reload, or 401-logout → re-login doesn't lose the user's work. Items are
+// removed only when the server confirms the save or the user dismisses them.
+const QUEUE_DB_NAME = "aman_save_queue";
+const QUEUE_STORE = "items";
+
+function getQueueDB() {
+  return openDB(QUEUE_DB_NAME, 1, {
+    upgrade(db) {
+      if (!db.objectStoreNames.contains(QUEUE_STORE)) {
+        db.createObjectStore(QUEUE_STORE, { keyPath: "statusKey" });
+      }
+    },
+  });
+}
+
+// Strip non-serializable fields (resolve/reject) before storing/persisting
+function toPlainItem(item, statusKey) {
+  const { tempId, payload, isEdit, editId, usePatch, baseVersion, idempotencyKey, hadConflict, queuedAt } = item;
+  return {
+    statusKey,
+    tempId,
+    payload,
+    isEdit: !!isEdit,
+    editId: editId ?? null,
+    usePatch: !!usePatch,
+    baseVersion: baseVersion ?? null,
+    idempotencyKey: idempotencyKey ?? null,
+    hadConflict: !!hadConflict,
+    queuedAt: queuedAt || new Date().toISOString(),
+  };
+}
+
+async function persistQueueItem(item, statusKey) {
+  try {
+    const db = await getQueueDB();
+    await db.put(QUEUE_STORE, toPlainItem(item, statusKey));
+  } catch (e) {
+    // Best-effort: the in-memory queue keeps working without persistence.
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("[useOptimisticQueue] Failed to persist queue item:", e?.message);
+    }
+  }
+}
+
+async function removePersistedItem(statusKey) {
+  try {
+    const db = await getQueueDB();
+    await db.delete(QUEUE_STORE, statusKey);
+  } catch {
+    // ignore — TTL-less store, an orphan is re-deduped by idempotency key
+  }
+}
+
+async function loadPersistedItems() {
+  try {
+    const db = await getQueueDB();
+    return await db.getAll(QUEUE_STORE);
+  } catch {
+    return [];
+  }
+}
+
 // Generate a short idempotency key for each save attempt
 function genIdempotencyKey() {
   if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onConflict }) {
+export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onConflict, onItemDismissed, onRehydrate, getLatestVersion }) {
   const [syncStatuses, setSyncStatuses] = useState({});
   const [queueLength, setQueueLength] = useState(0);
   const queueRef = useRef([]);
@@ -47,17 +112,33 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
   const failTimersRef = useRef({});
   // Track whether a full refresh is needed (accumulated after saves complete)
   const needsRefreshRef = useRef(false);
+  // Synchronous mirror of syncStatuses so queue callbacks can read fresh state
+  const statusesRef = useRef({});
+  // editIds with a request in flight — same-asset saves are serialized behind them
+  const inFlightEditsRef = useRef(new Set());
+  // Last confirmed server version per editId (from a completed save's response)
+  const lastSavedVersionsRef = useRef({});
+  const flushGuardRef = useRef(false);
+  const rehydratedRef = useRef(false);
+
+  // Parent callbacks that may be recreated each render — read via refs
+  const getLatestVersionRef = useRef(getLatestVersion);
+  const onRehydrateRef = useRef(onRehydrate);
+  useEffect(() => {
+    getLatestVersionRef.current = getLatestVersion;
+    onRehydrateRef.current = onRehydrate;
+  });
 
   const updateStatus = useCallback((id, status, error) => {
-    setSyncStatuses(prev => ({ ...prev, [id]: { status, error: error || null, ts: Date.now() } }));
+    statusesRef.current = { ...statusesRef.current, [id]: { status, error: error || null, ts: Date.now() } };
+    setSyncStatuses(statusesRef.current);
   }, []);
 
   const clearStatus = useCallback((id) => {
-    setSyncStatuses(prev => {
-      const next = { ...prev };
-      delete next[id];
-      return next;
-    });
+    const next = { ...statusesRef.current };
+    delete next[id];
+    statusesRef.current = next;
+    setSyncStatuses(next);
   }, []);
 
   useEffect(() => {
@@ -70,12 +151,34 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
     if (activeCountRef.current >= MAX_CONCURRENT) return;
     if (queueRef.current.length === 0) return;
 
-    const item = queueRef.current.shift();
+    // Serialize same-asset saves: skip items whose editId is already in flight
+    // (a rapid double-save of one row would otherwise 409 against itself).
+    let idx = -1;
+    for (let i = 0; i < queueRef.current.length; i++) {
+      const it = queueRef.current[i];
+      if (it.isEdit && it.editId && inFlightEditsRef.current.has(it.editId)) {
+        it.awaitingPrior = true; // dispatched later with the prior save's returned version
+        continue;
+      }
+      idx = i;
+      break;
+    }
+    if (idx === -1) return; // everything left is waiting behind an in-flight same-asset save
+
+    const item = queueRef.current.splice(idx, 1)[0];
     setQueueLength(queueRef.current.length);
 
     const statusKey = item.isEdit ? item.editId : item.tempId;
     activeCountRef.current++;
+    if (item.isEdit && item.editId) inFlightEditsRef.current.add(item.editId);
     updateStatus(statusKey, "saving");
+
+    // A save that waited behind another save of the same asset must build on
+    // the version that save returned, otherwise it would self-409.
+    if (item.isEdit && item.awaitingPrior) {
+      const v = lastSavedVersionsRef.current[item.editId];
+      if (v != null) item.baseVersion = v;
+    }
 
     // Build per-request headers for OCC + idempotency + audit stamping
     const headers = {
@@ -99,7 +202,11 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
       }
 
       updateStatus(statusKey, "saved");
-      setTimeout(() => clearStatus(statusKey), 3000);
+      // Clear only if still 'saved' — a follow-up save of the same row may have
+      // set a newer status (queued/saving/failed) that this timer must not wipe
+      setTimeout(() => {
+        if (statusesRef.current[statusKey]?.status === "saved") clearStatus(statusKey);
+      }, 3000);
 
       // Unlock the saved row
       if (item.isEdit && item.editId) {
@@ -109,6 +216,9 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
       // Notify parent with server data for targeted row update (no full refresh!)
       const serverData = result?.data;
       if (serverData) {
+        if (item.isEdit && item.editId && serverData.version != null) {
+          lastSavedVersionsRef.current[item.editId] = serverData.version;
+        }
         onRowSynced?.(statusKey, serverData, item.isEdit);
       }
 
@@ -120,6 +230,7 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
         delete failTimersRef.current[statusKey];
       }
       delete failedItemsRef.current[statusKey];
+      removePersistedItem(statusKey); // confirmed by server — drop the persisted copy
 
       item.resolve?.(result);
     } catch (err) {
@@ -128,12 +239,21 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
       if (isConflict && item.isEdit && item.editId) {
         const conflictDetail = err.response?.data?.detail || {};
         updateStatus(statusKey, "conflict", conflictDetail.message || "Data telah diubah oleh pengguna lain.");
+        // Clear after a moment (mirrors the saved branch) so the row becomes
+        // clickable again — the user re-edits on the fresh server version
+        // that onConflict merges into the local list.
+        setTimeout(() => {
+          if (statusesRef.current[statusKey]?.status === "conflict") clearStatus(statusKey);
+        }, 4000);
         // Notify parent — they can refresh the row and optionally re-enqueue
         onConflict?.(item.editId, conflictDetail);
         // Unlock since save failed — let user re-acquire lock after refresh
         onItemFailed?.(item.editId);
-        // Keep failed item for potential manual retry after user review
-        failedItemsRef.current[statusKey] = item;
+        // Keep failed item for potential manual retry after user review.
+        // `hadConflict` makes retry() refresh the base version + mint a new key.
+        const stored = toPlainItem({ ...item, hadConflict: true }, statusKey);
+        failedItemsRef.current[statusKey] = stored;
+        persistQueueItem(stored, statusKey);
         if (failTimersRef.current[statusKey]) clearTimeout(failTimersRef.current[statusKey]);
         failTimersRef.current[statusKey] = setTimeout(() => {
           delete failTimersRef.current[statusKey];
@@ -145,6 +265,12 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
       const errorMsg = getApiError(err, err.code === "ECONNABORTED" ? "Koneksi timeout" : "Gagal menyimpan");
       updateStatus(statusKey, "failed", errorMsg);
 
+      // Re-register + persist so retry/rehydrate always have the payload (a
+      // prior success of the same statusKey may have removed the entry).
+      const stored = toPlainItem(item, statusKey);
+      failedItemsRef.current[statusKey] = stored;
+      persistQueueItem(stored, statusKey);
+
       if (item.isEdit && item.editId) {
         if (failTimersRef.current[statusKey]) clearTimeout(failTimersRef.current[statusKey]);
         failTimersRef.current[statusKey] = setTimeout(() => {
@@ -155,18 +281,25 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
 
       item.reject?.(err);
     } finally {
+      if (item.isEdit && item.editId) inFlightEditsRef.current.delete(item.editId);
       activeCountRef.current--;
       processNext();
     }
   }, [updateStatus, clearStatus, onItemSaved, onItemFailed, onRowSynced, onConflict]);
 
-  const enqueue = useCallback(({ tempId, payload, isEdit, editId, usePatch, baseVersion }) => {
+  const enqueue = useCallback(({ tempId, payload, isEdit, editId, usePatch, baseVersion, idempotencyKey }) => {
     const statusKey = isEdit ? editId : tempId;
-    // Generate one idempotency key per logical save — reused on retry so server dedupes
-    const idempotencyKey = genIdempotencyKey();
-    const item = { tempId, payload, isEdit, editId, usePatch, baseVersion, idempotencyKey };
+    // One idempotency key per logical save — REUSED on network-failure retry so
+    // the server dedupes. Conflict retries pass none, so a fresh key is minted
+    // (the stale key sits reserved server-side without a stored response).
+    const item = {
+      tempId, payload, isEdit, editId, usePatch, baseVersion,
+      idempotencyKey: idempotencyKey || genIdempotencyKey(),
+      queuedAt: new Date().toISOString(),
+    };
 
-    failedItemsRef.current[statusKey] = item;
+    failedItemsRef.current[statusKey] = toPlainItem(item, statusKey);
+    persistQueueItem(item, statusKey); // write-through: survives reload/crash
     updateStatus(statusKey, "queued");
 
     return new Promise((resolve, reject) => {
@@ -184,8 +317,17 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
       delete failTimersRef.current[id];
     }
     delete failedItemsRef.current[id];
-    // Reuse the same idempotency key for retry — server dedupes duplicate writes
-    enqueue(item);
+    const next = { ...item };
+    if (next.hadConflict || statusesRef.current[id]?.status === "conflict") {
+      // Conflict retry: rebuild on the CURRENT local row version (onConflict
+      // already merged the fresh server copy) and mint a NEW idempotency key.
+      const latest = getLatestVersionRef.current?.(next.editId);
+      if (latest != null) next.baseVersion = latest;
+      next.idempotencyKey = null;
+      next.hadConflict = false;
+    }
+    // Network-failure retries reuse the same idempotency key — server dedupes
+    enqueue(next).catch(() => { /* failure re-registers the item via processNext */ });
   }, [enqueue]);
 
   const dismiss = useCallback((id) => {
@@ -195,12 +337,63 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
     }
     const item = failedItemsRef.current[id];
     delete failedItemsRef.current[id];
+    removePersistedItem(id); // user explicitly discarded the change
     clearStatus(id);
     if (item?.isEdit && item?.editId) {
       onItemSaved?.(item.editId);
+    } else if (item) {
+      // Failed CREATE rows stay visible until dismissed — parent drops the temp row
+      onItemDismissed?.(id, item);
     }
     needsRefreshRef.current = true;
-  }, [clearStatus, onItemSaved]);
+  }, [clearStatus, onItemSaved, onItemDismissed]);
+
+  // Retry everything failed + kick the queue — used on reconnect, after
+  // rehydration, and by the header's manual sync button.
+  const flushPending = useCallback(() => {
+    if (flushGuardRef.current) return; // throttle rapid online/offline flaps
+    flushGuardRef.current = true;
+    setTimeout(() => { flushGuardRef.current = false; }, 3000);
+    Object.keys(failedItemsRef.current).forEach((key) => {
+      if (statusesRef.current[key]?.status === "failed") retry(key);
+    });
+    processNext(); // anything still queued in memory (in-flight guard: activeCountRef)
+  }, [retry, processNext]);
+
+  const flushRef = useRef(flushPending);
+  useEffect(() => { flushRef.current = flushPending; });
+
+  // Auto-flush when connectivity returns
+  useEffect(() => {
+    const handleOnline = () => flushRef.current?.();
+    window.addEventListener("online", handleOnline);
+    return () => window.removeEventListener("online", handleOnline);
+  }, []);
+
+  // Rehydrate persisted items once on mount: register them as 'failed' so the
+  // rows show the retry UI, hand them to the parent (pending CREATE rows must
+  // reappear in the list), then auto-retry if we're online. This also covers
+  // the 401-logout → re-login case (remount rehydrates).
+  useEffect(() => {
+    if (rehydratedRef.current) return;
+    rehydratedRef.current = true;
+    let cancelled = false;
+    (async () => {
+      const items = await loadPersistedItems();
+      if (cancelled || items.length === 0) return;
+      const toRegister = items.filter(rec =>
+        rec?.statusKey && rec?.payload && !failedItemsRef.current[rec.statusKey] && !statusesRef.current[rec.statusKey]
+      );
+      if (toRegister.length === 0) return;
+      toRegister.forEach((rec) => {
+        failedItemsRef.current[rec.statusKey] = rec;
+        updateStatus(rec.statusKey, "failed", "Belum tersinkron — perubahan tersimpan di perangkat ini");
+      });
+      onRehydrateRef.current?.(toRegister);
+      if (navigator.onLine) flushRef.current?.();
+    })();
+    return () => { cancelled = true; };
+  }, [updateStatus]);
 
   // Called by parent when editing session ends (form closed)
   // Returns true if a deferred refresh should happen
@@ -209,6 +402,22 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
     needsRefreshRef.current = false;
     return needed;
   }, []);
+
+  // Snapshot of unsynced items (queued/saving/failed/conflict) — lets the
+  // parent re-inject pending CREATE rows after a server refetch replaces the list.
+  const getPendingItems = useCallback(() => Object.values(failedItemsRef.current), []);
+
+  // Honest sync counters derived from real queue state
+  const { pendingCount, isSyncing } = useMemo(() => {
+    let pending = 0;
+    let saving = false;
+    Object.values(syncStatuses).forEach((s) => {
+      if (!s) return;
+      if (s.status === "queued" || s.status === "saving" || s.status === "failed" || s.status === "conflict") pending++;
+      if (s.status === "queued" || s.status === "saving") saving = true;
+    });
+    return { pendingCount: pending, isSyncing: saving };
+  }, [syncStatuses]);
 
   // Check if queue is completely idle (nothing queued or active)
   const isIdle = activeCountRef.current === 0 && queueRef.current.length === 0;
@@ -221,5 +430,9 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
     queueLength,
     consumeRefreshFlag,
     isIdle,
+    pendingCount,
+    isSyncing,
+    flushPending,
+    getPendingItems,
   };
 }

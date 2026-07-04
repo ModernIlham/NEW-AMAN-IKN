@@ -155,21 +155,32 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
   const editAssetRef = useRef(null);
   editAssetRef.current = editAssetForForm;
   const wsNeedsRefreshRef = useRef(false);
+  const wsRefreshTimerRef = useRef(null);
 
   const onWsAssetChange = useCallback(() => {
     // Deferred refresh: if user is editing, defer the refresh until form closes
     if (editAssetRef.current) {
       wsNeedsRefreshRef.current = true;
-    } else {
-      refreshData();
+      return;
     }
+    // Debounce (trailing 2s): a burst of WS events collapses into one refetch
+    if (wsRefreshTimerRef.current) clearTimeout(wsRefreshTimerRef.current);
+    wsRefreshTimerRef.current = setTimeout(() => {
+      wsRefreshTimerRef.current = null;
+      if (editAssetRef.current) {
+        wsNeedsRefreshRef.current = true; // editing started during the debounce window
+      } else {
+        refreshData();
+      }
+    }, 2000);
   }, []);
+  useEffect(() => () => { if (wsRefreshTimerRef.current) clearTimeout(wsRefreshTimerRef.current); }, []);
   const { onlineUsers, connected: wsConnected, sendMessage: wsSend } = useWebSocket({
     activityId: activity?.id, userId: user?.id,
     userName: user?.name || user?.username,
     onAssetChange: onWsAssetChange, onLocksUpdate: (locks) => setRowLocks(locks),
   });
-  const { isOnline, pendingCount, syncing, queueOperation, syncPending } = useOfflineSync({ onSyncComplete: onWsAssetChange });
+  const { isOnline } = useOfflineSync({ onSyncComplete: onWsAssetChange });
 
   // Targeted row update after save (no full refresh while editing!)
   const handleRowSynced = useCallback((assetKey, serverData, isEdit) => {
@@ -188,7 +199,27 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
     }
   }, []);
 
-  const { syncStatuses, enqueue: enqueueOptimistic, retry: retrySync, dismiss: dismissSync, queueLength, consumeRefreshFlag } = useOptimisticQueue({
+  // Latest known row versions — conflict retries and serialized same-asset
+  // saves must send the freshest If-Match, not the version captured at submit.
+  const assetsStateRef = useRef([]);
+  assetsStateRef.current = assets;
+  const getLatestVersion = useCallback((assetId) => assetsStateRef.current.find(a => a.id === assetId)?.version ?? null, []);
+
+  // Rehydrated offline CREATEs need their temp rows back so the retry UI has a row
+  const handleQueueRehydrate = useCallback((items) => {
+    const rows = items
+      .filter(it => !it.isEdit && it.payload && it.payload.activity_id === activity?.id)
+      .map(it => ({ ...it.payload, id: it.tempId, thumbnail: it.payload.photo || null, created_at: it.queuedAt || new Date().toISOString() }));
+    if (rows.length === 0) return;
+    setAssets(prev => [...rows.filter(r => !prev.some(a => a.id === r.id)), ...prev]);
+    setMobileAssets(prev => [...rows.filter(r => !prev.some(a => a.id === r.id)), ...prev]);
+    setTotalItems(prev => prev + rows.length);
+  }, [activity?.id]);
+
+  const {
+    syncStatuses, enqueue: enqueueOptimistic, retry: retrySync, dismiss: dismissSync,
+    queueLength, consumeRefreshFlag, pendingCount, isSyncing, flushPending, getPendingItems,
+  } = useOptimisticQueue({
     onItemSaved: (assetId) => unlockAsset(assetId),
     onItemFailed: (assetId) => unlockAsset(assetId),
     onRowSynced: handleRowSynced,
@@ -209,6 +240,15 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
         }
       });
     },
+    onItemDismissed: (tempId, item) => {
+      // User discarded a failed CREATE — remove its optimistic temp row
+      if (item?.isEdit) return;
+      setAssets(prev => prev.filter(a => a.id !== tempId));
+      setMobileAssets(prev => prev.filter(a => a.id !== tempId));
+      setTotalItems(prev => Math.max(0, prev - 1));
+    },
+    onRehydrate: handleQueueRehydrate,
+    getLatestVersion,
   });
 
   // === ROW LOCKING ===
@@ -335,14 +375,21 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
       buildFilterParams(params);
       const r = await axios.get(`${API}/assets?${params.toString()}`);
       const newItems = r.data.items || [];
-      setAssets(newItems);
+      // Keep unsynced CREATE rows visible: a refetch replaces the list, but
+      // rows still waiting in the save queue don't exist on the server yet.
+      const pendingRows = getPendingItems()
+        .filter(it => !it.isEdit && it.payload && it.payload.activity_id === activity?.id)
+        .map(it => ({ ...it.payload, id: it.tempId, thumbnail: it.payload.photo || null, created_at: it.queuedAt || new Date().toISOString() }))
+        .filter(row => !newItems.some(a => a.id === row.id));
+      const merged = pendingRows.length ? [...pendingRows, ...newItems] : newItems;
+      setAssets(merged);
       setTotalItems(r.data.total || 0);
       setTotalPages(r.data.total_pages || 1);
       setCurrentPage(r.data.page || 1);
       if (appendMobile && page > 1) {
         setMobileAssets(prev => [...prev, ...newItems]);
       } else {
-        setMobileAssets(newItems);
+        setMobileAssets(merged);
         setMobileCurrentPage(1);
       }
       setLoadingMessage(`Berhasil memuat ${newItems.length} dari ${r.data.total || 0} aset`);
@@ -520,11 +567,9 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
     setEditAssetForForm(null);
     setIsSidebarOpen(false);
     enqueueOptimistic({ tempId: assetId, payload, isEdit, editId: isEdit ? editId : undefined, usePatch, baseVersion }).catch(() => {
-      if (!isEdit) {
-        setAssets(prev => prev.filter(a => a.id !== assetId));
-        setMobileAssets(prev => prev.filter(a => a.id !== assetId));
-        setTotalItems(prev => Math.max(0, prev - 1));
-      }
+      // Save failed — KEEP the optimistic row so the retry/dismiss UI stays
+      // attached to it (syncStatuses[assetId] shows 'failed'). The temp row is
+      // removed only via dismissSync → onItemDismissed.
     });
     toast.info(isEdit ? "Menyimpan perubahan..." : "Menambahkan aset...", { duration: 1500 });
   }, [enqueueOptimistic, assets]);
@@ -545,11 +590,8 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
     }
     // 2) Enqueue background save
     enqueueOptimistic({ tempId: assetId, payload, isEdit, editId: isEdit ? editId : undefined, usePatch, baseVersion }).catch(() => {
-      if (!isEdit) {
-        setAssets(prev => prev.filter(a => a.id !== assetId));
-        setMobileAssets(prev => prev.filter(a => a.id !== assetId));
-        setTotalItems(prev => Math.max(0, prev - 1));
-      }
+      // Save failed — KEEP the optimistic row (retry/dismiss UI needs it);
+      // removed only via dismissSync → onItemDismissed.
     });
     toast.info("Menyimpan di background...", { duration: 1200 });
 
@@ -713,7 +755,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
         auditOpen={auditOpen} onAuditToggle={handleAuditToggle}
         onOpenUserManagement={() => openDialog('userManagement')}
         isOnline={isOnline} wsConnected={wsConnected} onlineUsers={onlineUsers}
-        pendingCount={pendingCount} syncing={syncing} onSync={syncPending}
+        pendingCount={pendingCount} syncing={isSyncing} onSync={flushPending}
         dark={dark} toggleDark={toggleDark}
         onShowInfo={onShowInfo}
       />

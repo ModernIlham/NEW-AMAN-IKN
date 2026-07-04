@@ -477,7 +477,7 @@ async def process_photos_for_storage(photos: list) -> dict:
 @assets_router.post("/assets", response_model=AssetResponse)
 async def create_asset(asset: AssetCreate, request: Request):
     """Create a new asset. Supports Idempotency-Key header to safely retry on network errors."""
-    # Idempotency check: if same key was seen in last 5 min, return cached response
+    # Idempotency check: if same key was seen within the TTL window (24h), return cached response
     idem_key = request.headers.get("Idempotency-Key", "")
     if idem_key:
         cached = await get_idempotent_response(idem_key)

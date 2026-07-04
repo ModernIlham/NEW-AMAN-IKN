@@ -213,9 +213,9 @@ async def delete_otp(email):
 # Replaced in-memory TTLCache with MongoDB collection `row_locks`
 # MongoDB TTL index auto-expires documents after `expires_at` passes
 
-# --- Idempotency Key Store (MongoDB-backed, 5min TTL) ---
+# --- Idempotency Key Store (MongoDB-backed, 24h TTL) ---
 # Used to prevent duplicate writes when clients retry after network failures.
-# TTL index on `created_at` (expireAfterSeconds=300) is created in server.py.
+# TTL index on `created_at` (expireAfterSeconds=86400) is created in indexes.py.
 
 async def get_idempotent_response(key: str) -> Optional[dict]:
     """Return cached response for a given idempotency key, or None."""

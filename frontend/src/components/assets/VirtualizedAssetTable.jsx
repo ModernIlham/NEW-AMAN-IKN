@@ -110,9 +110,9 @@ const VirtualizedAssetTable = memo(({ assets, editId, onEdit, onDelete, onPrintC
             return (
               <div
                 key={a.id}
-                onClick={onEdit && !locked && !isBusy && !isFailed && !isConflict ? () => onEdit(a) : undefined}
+                onClick={onEdit && !locked && !isBusy && !isFailed ? () => onEdit(a) : undefined}
                 className={`absolute left-0 right-0 flex items-center border-b border-border/50 transition-colors ${
-                  isConflict ? 'bg-orange-50 dark:bg-orange-900/20 border-l-2 border-l-orange-400 cursor-not-allowed opacity-80'
+                  isConflict ? 'bg-orange-50 dark:bg-orange-900/20 border-l-2 border-l-orange-400 cursor-pointer'
                   : isFailed ? 'bg-rose-50 dark:bg-rose-900/20 border-l-2 border-l-rose-400 cursor-not-allowed opacity-70'
                   : isSyncing ? 'bg-blue-50/50 dark:bg-blue-900/20 border-l-2 border-l-blue-400 cursor-not-allowed opacity-70'
                   : isQueued ? 'bg-amber-50/40 dark:bg-amber-900/10 border-l-2 border-l-amber-300 cursor-not-allowed opacity-60'
@@ -187,8 +187,8 @@ const VirtualizedAssetTable = memo(({ assets, editId, onEdit, onDelete, onPrintC
                     )}
                   </div>
                 )}
-                {/* Failed dismiss button */}
-                {isFailed && (
+                {/* Failed / conflict dismiss button */}
+                {(isFailed || isConflict) && (
                   <button
                     onClick={e => { e.stopPropagation(); onDismissSync?.(a.id); }}
                     className="absolute right-1 top-0.5 z-10 text-[8px] text-rose-400 hover:text-rose-600 px-1"

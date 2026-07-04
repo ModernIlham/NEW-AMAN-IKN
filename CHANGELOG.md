@@ -48,6 +48,35 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#21] Pematangan kolaborasi & offline (hasil review menyeluruh) — 2026-07-04
+
+Review mendalam stack kolaborasi + offline menemukan beberapa cacat serius;
+semuanya diperbaiki:
+
+- **Antrian simpan kini persisten (IndexedDB)** — sebelumnya hanya di RAM:
+  app ditutup/di-logout (401) = semua simpanan offline **hilang**. Kini
+  ter-rehydrate saat app dibuka lagi (baris + tombol retry muncul kembali)
+  dan **auto-flush saat online kembali**. Indikator "N menunggu sinkron" &
+  tombol Sync kini terhubung ke antrian sungguhan (dulu ke antrian mati).
+- **Create gagal tidak menghapus barisnya lagi** — baris tetap tampil dengan
+  status gagal + retry; hilang hanya lewat dismiss eksplisit.
+- **Konflik 409 tidak lagi mengunci baris permanen di desktop** — status
+  bersih otomatis (4 dtk), baris bisa diedit ulang; retry konflik memakai
+  versi terbaru + idempotency key baru (dulu selalu 409 lagi selamanya).
+- **Simpan ganda ke aset yang sama diserialisasi** — tak ada lagi 409 buatan
+  sendiri saat save-cepat dua kali pada baris yang sama.
+- **WebSocket**: reconnect kini melakukan satu catch-up refetch (event yang
+  terlewat tidak hilang), tidak pernah menyerah permanen (backoff s/d 60 dtk),
+  tab yang kembali visible + basi ikut refetch; refetch akibat event rekan
+  di-debounce 2 dtk (anti badai refetch N×N saat banyak user menyimpan).
+- **Backend**: TTL idempotency 5 menit → 24 jam (jeda offline realistis);
+  TTL row-lock 300 dtk → 60 dtk (crash membebaskan baris ≤1 menit); broadcast
+  unlock hanya setelah unlock DB sukses; bug fallback service-worker diperbaiki.
+
+Tindak lanjut terdokumentasi (belum dikerjakan): kompresi foto client-side
+saat offline, ping reachability (bukan hanya `navigator.onLine`), presence
+lintas worker, autentikasi WebSocket, perampingan payload thumbnail per view.
+
 ## [#20] Toggle kolom di laporan Barang Serupa + progres unduhan seragam — 2026-07-04
 
 - **Laporan Eksekutif per Barang Serupa kini ikut toggle kolom tambahan**
