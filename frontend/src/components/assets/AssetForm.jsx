@@ -379,9 +379,15 @@ const AssetForm = memo(({
   // Photo items: tracks each photo as {type: 'existing'|'new', thumbnail, originalIndex?, newData?}
   const [photoItems, setPhotoItems] = useState([]);
 
-  // Load edit data when editAsset changes — two-phase: light data first, then media separately
+  // Load edit data when editAsset changes — two-phase: light data first, then media separately.
+  // Keyed by editAsset?.id (not object identity) + an initialized-id guard, so
+  // list refreshes or re-clicks that merely re-point the same row can never
+  // re-run init and wipe in-progress typing.
+  const initializedIdRef = useRef(null);
   useEffect(() => {
     if (editAsset) {
+      if (initializedIdRef.current === editAsset.id) return; // same row already loaded — keep user's typing
+      initializedIdRef.current = editAsset.id;
       setIsFormLoading(true);
       setEditId(editAsset.id);
       setFormSection("basic");
@@ -474,6 +480,7 @@ const AssetForm = memo(({
       })();
       return () => { cancelled = true; };
     } else {
+      initializedIdRef.current = null;
       setFormData({...emptyForm});
       setEditId(null);
       setFormSection("basic");
@@ -489,7 +496,8 @@ const AssetForm = memo(({
       checklistFetchStartedRef.current = false;
       setPhotoItems([]);
     }
-  }, [editAsset, emptyForm, activity?.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editAsset?.id, activity?.id]);
 
   const resetForm = useCallback(() => {
     setFormData({...emptyForm});
@@ -1050,6 +1058,19 @@ const AssetForm = memo(({
                           <DropdownMenuItem key={c.id} onClick={() => {
                             handleSelectChange("category", c.label);
                             if (c.kode_aset) setFormData(p => ({ ...p, asset_code: c.kode_aset }));
+                            // Kategori "dummy": NUP dinomori otomatis (max+1 dalam
+                            // lingkup kode aset + kegiatan, sesuai kunci unik backend).
+                            if (/dummy/i.test(c.label || "")) {
+                              const params = new URLSearchParams({ activity_id: activity?.id || "" });
+                              if (c.kode_aset) params.set("asset_code", c.kode_aset);
+                              else params.set("category", c.label);
+                              axios.get(`${API}/assets/next-nup?${params}`)
+                                .then(res => {
+                                  const next = res?.data?.next_nup;
+                                  if (next) setFormData(p => p.NUP ? p : { ...p, NUP: next });
+                                })
+                                .catch(() => {});
+                            }
                             setCategoryDropdownOpen(false); setCategorySearch("");
                           }} className="flex items-start">
                             <span className="break-words text-xs leading-snug flex-1">{c.kode_aset ? `${c.kode_aset} - ${c.label}` : c.label}</span>

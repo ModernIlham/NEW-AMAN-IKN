@@ -34,6 +34,7 @@ import StatsBar from "@/components/assets/StatsBar";
 import DashboardToolbar from "@/components/assets/DashboardToolbar";
 import AssetPagination from "@/components/assets/AssetPagination";
 import ScrollToTop from "@/components/assets/ScrollToTop";
+import ListLoadingSkeleton from "@/components/assets/ListLoadingSkeleton";
 import ActivitySelectionPage from "@/pages/ActivitySelectionPage";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -371,11 +372,21 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
   const fetchParamsRef = useRef({ debouncedSearch, filterCategory, sortBy, pageSize, currentPage });
   fetchParamsRef.current = { debouncedSearch, filterCategory, sortBy, pageSize, currentPage };
 
-  const refreshData = (page) => {
+  // showLoading: user-initiated refetches (filter/sort/page-size) show the
+  // list skeleton; background refreshes (post-save sync, WS) stay silent so
+  // they never flash an overlay while someone is working.
+  const refreshData = (page, { showLoading = false } = {}) => {
     const p = fetchParamsRef.current;
     const pg = page !== undefined ? page : p.currentPage;
-    doFetch(pg, p.pageSize, p.debouncedSearch, p.filterCategory, p.sortBy);
-    doFetchStats(p.debouncedSearch, p.filterCategory);
+    const work = Promise.all([
+      doFetch(pg, p.pageSize, p.debouncedSearch, p.filterCategory, p.sortBy),
+      doFetchStats(p.debouncedSearch, p.filterCategory),
+    ]);
+    if (showLoading) {
+      setPageLoading(true);
+      work.finally(() => setPageLoading(false));
+    }
+    return work;
   };
 
   // Initial data fetch
@@ -390,7 +401,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
   const isInitialMount = useRef(true);
   useEffect(() => {
     if (isInitialMount.current) { isInitialMount.current = false; return; }
-    refreshData(1);
+    refreshData(1, { showLoading: true });
   }, [debouncedSearch, filterCategory, sortBy, pageSize, filters.condition, filters.status, filters.location, filters.eselon1, filters.eselon2, filters.stiker, filters.inventoryStatus, filters.priceMin, filters.priceMax]);
 
   const goToPage = async (p) => {
@@ -402,8 +413,11 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
   };
 
   const applyFilters = () => {
-    doFetch(1, pageSize, debouncedSearch, filterCategory, sortBy);
-    doFetchStats(debouncedSearch, filterCategory);
+    setPageLoading(true);
+    Promise.all([
+      doFetch(1, pageSize, debouncedSearch, filterCategory, sortBy),
+      doFetchStats(debouncedSearch, filterCategory),
+    ]).finally(() => setPageLoading(false));
     setShowAdvancedFilter(false);
   };
 
@@ -445,9 +459,24 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
       }
     }
     setIsSidebarOpen(false);
+    // Capture WHICH row this close belongs to. If the user opens another row
+    // within the 300ms window (fast row-to-row input), this stale timer must
+    // not clear that newer edit nor refresh the list under it — that was
+    // wiping in-progress input whenever the previous row's background save
+    // completed around the same moment.
+    const closingId = editAssetForForm?.id ?? null;
     setTimeout(() => {
-      setEditAssetForForm(null);
-      // Deferred refresh: sync with server now that editing is done
+      let editingAnotherRow = false;
+      setEditAssetForForm(prev => {
+        if (prev == null || prev.id === closingId) return null;
+        editingAnotherRow = true; // a newer edit is open — leave it alone
+        return prev;
+      });
+      // Deferred refresh: sync with server now that editing is done — but
+      // never while a different row's form is open (it would reset typing).
+      // Don't consume the flags in that case: they stay set and are handled
+      // when the newer edit closes.
+      if (editingAnotherRow) return;
       const queueNeedsRefresh = consumeRefreshFlag();
       const wsNeedsRefresh = wsNeedsRefreshRef.current;
       wsNeedsRefreshRef.current = false;
@@ -766,11 +795,13 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
               <LoadingIndicator message={loadingMessage} totalItems={totalItems} pageSize={pageSize} currentPage={currentPage} />
             ) : assets.length === 0 ? (
               <div className="text-center py-16"><Package className="w-12 h-12 mx-auto mb-3 text-muted-foreground" /><p className="text-muted-foreground">Data tidak ditemukan</p></div>
-            ) : (<>
+            ) : (<div className="relative">
+              {/* Skeleton overlay for page-size / pagination / filter / sort
+                  requests. The relative wrapper scopes it to the list area
+                  (previously inset-0 resolved against the viewport because
+                  no ancestor was positioned). */}
               {pageLoading && (
-                <div className="absolute inset-0 bg-background/80 z-10 flex items-center justify-center rounded-lg">
-                  <div className="flex flex-col items-center gap-2 bg-card p-4 rounded-xl shadow-lg border border-border"><Loader2 className="w-6 h-6 animate-spin text-blue-600" /><span className="text-sm text-muted-foreground">{loadingMessage}</span></div>
-                </div>
+                <ListLoadingSkeleton rows={Math.min(pageSize, 12)} message={loadingMessage} />
               )}
 
               {selectedAssets.size > 0 && (<>
@@ -798,7 +829,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
                   <AssetPagination currentPage={currentPage} totalPages={totalPages} totalItems={totalItems} pageSize={pageSize} setPageSize={setPageSize} goToPage={goToPage} />
                 </div>
               </>)}
-            </>)}
+            </div>)}
           </div>
         </main>
 
