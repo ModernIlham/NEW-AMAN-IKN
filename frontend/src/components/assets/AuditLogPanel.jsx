@@ -11,6 +11,8 @@ const ACTION_MAP = {
   delete: { label: "Hapus", color: "text-red-600", bg: "bg-red-500", dot: "bg-red-500" },
   bulk_delete: { label: "Hapus Massal", color: "text-red-600", bg: "bg-red-500", dot: "bg-red-500" },
   import: { label: "Import", color: "text-purple-600", bg: "bg-purple-500", dot: "bg-purple-500" },
+  sahkan: { label: "Pengesahan", color: "text-amber-600", bg: "bg-amber-500", dot: "bg-amber-500" },
+  pengesahan_dokumen: { label: "Dokumen Pengesahan", color: "text-amber-600", bg: "bg-amber-500", dot: "bg-amber-500" },
 };
 
 const FIELD_LABELS = {
@@ -24,6 +26,9 @@ const FIELD_LABELS = {
   koordinat_latitude: "Latitude", koordinat_longitude: "Longitude", kronologis: "Kronologis",
   nomor_spm: "No. SPM", perolehan_dari_nama: "Perolehan Dari", nomor_kontrak: "No. Kontrak",
   nomor_bukti_perolehan: "No. Bukti", supplier: "Supplier",
+  pengguna_melekat_ke: "Melekat Ke", pengguna_jabatan: "Jabatan Pengguna", nomor_bast: "No. BAST",
+  keterangan_berlebih: "Keterangan Berlebih", asal_usul_berlebih: "Asal Usul Berlebih",
+  nomor_perkara: "No. Perkara", pihak_bersengketa: "Pihak Bersengketa", keterangan_sengketa: "Keterangan Sengketa",
 };
 
 const timeAgo = (ts) => {

@@ -2,7 +2,7 @@
 
 > Sistem Inventarisasi Barang Milik Negara (BMN) berbasis web, standar pemerintah Indonesia (SE 17/SE/M/2024 & LKPP 85/2025)
 
-**Versi:** 2.1 (Juli 2025) — Multi-worker production-ready dengan kolaborasi real-time anti-corruption
+**Versi:** 2.2 (Juli 2026) — Pengesahan & kunci kegiatan, kartu inventarisasi, QR, mode offline penuh
 
 ---
 
@@ -17,7 +17,20 @@ tiap rilis/PR (termasuk catatan teknis penting soal aturan tap-target 44px di �
 
 ---
 
-## 🆕 Highlight Rilis v2.1 (Juli 2025)
+## 🆕 Highlight Rilis v2.2 (Juli 2026)
+
+- 🎫 **Nomor tiket kegiatan** `INV-{tahun}-{seq}` otomatis + **alur pengesahan**: unggah PDF bertanda tangan → sahkan → kegiatan **terkunci permanen** (semua mutasi ditolak 423). Lihat [`docs/PENGESAHAN.md`](./docs/PENGESAHAN.md).
+- 🗂️ **Kartu Inventarisasi** — riwayat pengesahan aset lintas kegiatan (per kode register / kode aset+NUP, terlingkup satker).
+- 📷 **QR kode register** pada kartu cetak (`#{kode_register}`) + scanner kamera di dashboard.
+- 📴 **Mode offline penuh** — snapshot list per kegiatan (IndexedDB, delta sync), antrian simpan persisten, edit dari cache; foto streaming URL cacheable (ETag/304).
+- 👤 **Pengguna "melekat ke"** (Individual/Jabatan/Operasional) + **dokumen BAST** per aset (unggah & preview).
+- 💾 **Backup mencakup semua koleksi** (termasuk riwayat pengesahan & counter tiket) + GridFS; restore membangun ulang index & counter tiket.
+
+Detail lengkap per PR di [`CHANGELOG.md`](./CHANGELOG.md) (#25–#28).
+
+---
+
+## Highlight Rilis v2.1 (Juli 2025)
 
 Perbaikan menyeluruh untuk kolaborasi multi-user & performa penyimpanan:
 
@@ -101,7 +114,7 @@ Perbaikan menyeluruh untuk kolaborasi multi-user & performa penyimpanan:
 
 ### Import & Export
 - **Import**: CSV/XLSX dengan validasi (kode aset, duplikasi, kategori)
-- **Export CSV**: 41 kolom, streaming, UTF-8
+- **Export CSV**: 45 kolom, streaming, UTF-8
 - **Export XLSX**: 4 sheets (Data Aset + Kelengkapan Dokumen + Data Kegiatan + Tim Inventarisasi) dengan foto HD embedded
 - **Export PDF**: Landscape A4 dengan foto thumbnail, summary box, color-coded
 

@@ -291,6 +291,11 @@ async def upload_pengesahan_dokumen(
         await delete_document_from_gridfs(doc_entry["gridfs_id"])
         raise HTTPException(status_code=423, detail="Kegiatan sudah disahkan dan terkunci")
 
+    await log_audit(
+        "pengesahan_dokumen", activity_id, "", "", "",
+        admin.get("name") or admin.get("username") or "admin",
+        detail=f"Dokumen pengesahan diunggah: {filename}",
+    )
     logger.info(f"Pengesahan dokumen diunggah untuk kegiatan {activity_id}: {filename}")
     return {
         "message": "Dokumen pengesahan berhasil diunggah",
@@ -302,7 +307,7 @@ async def upload_pengesahan_dokumen(
 async def delete_pengesahan_dokumen(
     activity_id: str,
     doc_id: str,
-    _admin: dict = Depends(require_admin),
+    admin: dict = Depends(require_admin),
 ):
     """Hapus dokumen pengesahan — hanya selama kegiatan masih draft."""
     activity = await db.inventory_activities.find_one(
@@ -324,6 +329,11 @@ async def delete_pengesahan_dokumen(
     )
     if target.get("gridfs_id"):
         await delete_document_from_gridfs(target["gridfs_id"])
+    await log_audit(
+        "pengesahan_dokumen", activity_id, "", "", "",
+        admin.get("name") or admin.get("username") or "admin",
+        detail=f"Dokumen pengesahan dihapus: {target.get('name', doc_id)}",
+    )
     return {"message": "Dokumen pengesahan dihapus"}
 
 

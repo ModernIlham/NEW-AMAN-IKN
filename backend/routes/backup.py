@@ -22,33 +22,66 @@ backup_router = APIRouter(prefix="/backup", tags=["backup"])
 UPLOADS_DIR = Path(__file__).parent.parent / "uploads"
 BACKUP_TEMP_DIR = Path(__file__).parent.parent / "backup_temp"
 BACKUP_TEMP_DIR.mkdir(exist_ok=True)
-APP_VERSION = "3.3.0"
+# 3.4.0: + inventory_history & counters (tiket kegiatan) dalam backup
+APP_VERSION = "3.4.0"
 
 # NOTE: Collection names MUST match what the rest of the app uses.
 # Historically `activities` was listed here by mistake — the real collection
 # is `inventory_activities`. Keeping both for backward compat on restore.
+#
+# Cakupan backup saat ini:
+#   - users, categories, inventory_activities (termasuk ticket_number,
+#     status_pengesahan, pengesahan_dokumen metadata), assets (termasuk
+#     pengguna_melekat_ke/nomor_bast/bast_file_id), report_settings,
+#     audit_logs, compression_quotas, pdf_compression_quotas
+#   - inventory_history: riwayat pengesahan per aset (dasar Kartu Inventarisasi)
+#   - counters: sequence nomor tiket kegiatan (INV-{tahun}-{seq}) — _id string
+#     dipertahankan (lihat KEEP_ID_COLLECTIONS)
+#   - GridFS (fs.files + fs.chunks): SEMUA file biner — foto aset, dokumen
+#     kegiatan, dokumen pengesahan (PDF), dan dokumen BAST memakai satu
+#     bucket default `fs` (db.py), jadi export_gridfs otomatis mencakup semuanya
+#   - uploads/: file di disk (logo laporan dll.)
 BACKUP_COLLECTIONS = [
     "users", "categories", "inventory_activities", "assets",
     "report_settings", "audit_logs",
     "compression_quotas", "pdf_compression_quotas",
+    "inventory_history", "counters",
 ]
+# Koleksi yang _id-nya bermakna (bukan ObjectId acak) dan harus ikut
+# di-backup/restore: counters memakai _id string "inventory_activity_ticket_{tahun}".
+KEEP_ID_COLLECTIONS = {"counters"}
 # Legacy name → canonical name map (used when reading older backups)
 LEGACY_COLLECTION_ALIASES = {
     "activities": "inventory_activities",
 }
+# Sengaja TIDAK di-backup (transient/derivable):
+#   - row_locks: lock edit per baris, TTL 60 dtk — tidak bermakna lintas restore
+#   - otp_store: OTP registrasi, TTL 11 menit
+#   - backup_jobs: progress job backup/restore itu sendiri
+#   - idempotency_keys: dedup replay antrian offline, TTL 24 jam — hanya valid
+#     terhadap state DB saat key dibuat; membawa key ke DB hasil restore justru
+#     bisa menelan save yang sah
+#   - ws_events: capped collection bus event WebSocket (realtime, best-effort)
+# Semua index (termasuk TTL) dibangun ulang oleh indexes.create_indexes()
+# setelah restore dan pada setiap startup server.
 SKIP_COLLECTIONS = ["row_locks", "otp_store", "backup_jobs", "idempotency_keys", "ws_events"]
 
 # In-memory lock to prevent concurrent backup/restore
 _active_lock = asyncio.Lock()
 
 
-def serialize_doc(doc):
-    """Convert MongoDB doc to JSON-serializable dict."""
+def serialize_doc(doc, keep_id: bool = False):
+    """Convert MongoDB doc to JSON-serializable dict.
+
+    keep_id: pertahankan `_id` (sebagai string) — wajib untuk koleksi yang
+    _id-nya bermakna (mis. `counters`); tanpa ini restore akan menghasilkan
+    dokumen counter tanpa key sehingga sequence tiket rusak.
+    """
     if doc is None:
         return None
     result = {}
     for k, v in doc.items():
-        if k == "_id":
+        if k == "_id" and not keep_id:
             continue
         if isinstance(v, ObjectId):
             result[k] = str(v)
@@ -98,6 +131,38 @@ async def cleanup_old_files():
                     f.unlink()
                 except Exception:
                     pass
+
+
+async def repair_ticket_counters():
+    """Pastikan counter tiket kegiatan >= sequence tertinggi yang sudah terpakai.
+
+    Dipanggil setelah restore: backup lama (< 3.4.0) tidak membawa counters.json,
+    padahal koleksi `counters` ikut di-wipe saat restore. Tanpa perbaikan ini
+    kegiatan baru bisa mendapat nomor tiket duplikat (INV-{tahun}-0001 lagi).
+    Aman dipanggil kapan pun ($max hanya menaikkan, tidak pernah menurunkan).
+    """
+    seq_by_year = {}
+    cursor = db.inventory_activities.find(
+        {"ticket_number": {"$regex": "^INV-"}}, {"_id": 0, "ticket_number": 1}
+    )
+    async for act in cursor:
+        parts = str(act.get("ticket_number", "")).split("-")
+        if len(parts) != 3:
+            continue
+        try:
+            year, seq = int(parts[1]), int(parts[2])
+        except ValueError:
+            continue
+        if seq > seq_by_year.get(year, 0):
+            seq_by_year[year] = seq
+    for year, seq in seq_by_year.items():
+        await db.counters.update_one(
+            {"_id": f"inventory_activity_ticket_{year}"},
+            {"$max": {"seq": seq}},
+            upsert=True,
+        )
+    if seq_by_year:
+        logger.info(f"Ticket counters repaired: {seq_by_year}")
 
 
 # ============================================================================
@@ -210,7 +275,7 @@ async def run_backup_task(job_id: str, username: str):
                 collection = db[col_name]
                 docs = []
                 async for doc in collection.find({}):
-                    docs.append(serialize_doc(doc))
+                    docs.append(serialize_doc(doc, keep_id=col_name in KEEP_ID_COLLECTIONS))
                 stats[col_name] = len(docs)
                 zf.writestr(f"{col_name}.json", json.dumps(docs, ensure_ascii=False, default=str))
                 logger.info(f"Backup [{job_id}]: {col_name} = {len(docs)} docs")
@@ -312,7 +377,7 @@ async def run_restore_task(job_id: str, zip_path: Path, username: str):
         for i, col_name in enumerate(BACKUP_COLLECTIONS):
             docs = []
             async for doc in db[col_name].find({}):
-                docs.append(serialize_doc(doc))
+                docs.append(serialize_doc(doc, keep_id=col_name in KEEP_ID_COLLECTIONS))
             safety_data[col_name] = docs
             pct = 10 + int(((i + 1) / len(BACKUP_COLLECTIONS)) * 15)
             await update_job(job_id, progress=pct, message=f"Safety backup: {col_name}...")
@@ -361,6 +426,11 @@ async def run_restore_task(job_id: str, zip_path: Path, username: str):
                         restore_stats[col_name] = 0
                     logger.info(f"Restore [{job_id}]: {col_name} = {restore_stats[col_name]} docs")
                     await asyncio.sleep(0)
+
+                # Backup lama tidak membawa counters.json — bangun ulang sequence
+                # tiket dari ticket_number kegiatan yang barusan direstore agar
+                # nomor tiket baru tidak duplikat.
+                await repair_ticket_counters()
 
                 # Restore GridFS (photos stored outside regular collections)
                 await update_job(job_id, progress=70, message="Memulihkan foto (GridFS)...")
@@ -651,7 +721,7 @@ async def create_backup_legacy(authorization: str = Header(None)):
         for col_name in BACKUP_COLLECTIONS:
             docs = []
             async for doc in db[col_name].find({}):
-                docs.append(serialize_doc(doc))
+                docs.append(serialize_doc(doc, keep_id=col_name in KEEP_ID_COLLECTIONS))
             stats[col_name] = len(docs)
             zf.writestr(f"{col_name}.json", json.dumps(docs, ensure_ascii=False, default=str))
         if UPLOADS_DIR.exists():
@@ -701,7 +771,7 @@ async def restore_backup_legacy(file: UploadFile = File(...), authorization: str
     for col_name in BACKUP_COLLECTIONS:
         docs = []
         async for doc in db[col_name].find({}):
-            docs.append(serialize_doc(doc))
+            docs.append(serialize_doc(doc, keep_id=col_name in KEEP_ID_COLLECTIONS))
         safety_data[col_name] = docs
     restore_stats = {}
     upload_files_restored = 0
@@ -732,6 +802,10 @@ async def restore_backup_legacy(file: UploadFile = File(...), authorization: str
             if safety_data.get(col_name):
                 await db[col_name].insert_many(safety_data[col_name])
         raise HTTPException(status_code=500, detail=f"Restore gagal, data dikembalikan. Error: {str(e)}")
+    try:
+        await repair_ticket_counters()
+    except Exception:
+        pass
     try:
         from indexes import create_indexes
         await create_indexes()
