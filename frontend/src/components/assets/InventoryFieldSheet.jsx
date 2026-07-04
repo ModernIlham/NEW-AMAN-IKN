@@ -39,6 +39,9 @@ export const PENGGUNA_NAME_LABELS = {
   Jabatan: "Nama Pejabat",
   Operasional: "Nama Penanggung Jawab",
 };
+// Sub-opsi bila melekat ke Operasional — nilai HARUS sama dengan backend
+// (operasional_jenis). "Ruangan" = barang harus tetap berada di ruang tsb.
+export const OPERASIONAL_JENIS_OPTIONS = ["Kegiatan/Acara/Kebutuhan", "Ruangan"];
 
 // Nilai HARUS sama persis dengan opsi Select pada form penuh (AssetForm).
 const SUB_KLASIFIKASI_OPTIONS = {
@@ -113,6 +116,7 @@ const InventoryFieldSheet = ({
   onStikerStatusChange,
   onStikerUkuranChange,
   onPenggunaMelekatChange,
+  onOperasionalJenisChange,
   onOpenCamera,
   onOpenGallery,
   onFetchGPS,
@@ -398,6 +402,25 @@ const InventoryFieldSheet = ({
                   ))}
                 </div>
               </div>
+              {formData.pengguna_melekat_ke === "Operasional" && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Jenis Operasional</Label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {OPERASIONAL_JENIS_OPTIONS.map(o => (
+                      <SegButton
+                        key={o}
+                        selected={formData.operasional_jenis === o}
+                        selectedClass="bg-blue-600 border-blue-600 text-white"
+                        onClick={() => onOperasionalJenisChange(o)}
+                        testId={`sheet-operasional-${o}`}
+                      >
+                        {o}
+                      </SegButton>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground italic">Ruangan = barang harus tetap berada di ruang tersebut.</p>
+                </div>
+              )}
               <div className="space-y-1">
                 <Label className="text-xs">{PENGGUNA_NAME_LABELS[formData.pengguna_melekat_ke] || "Pengguna"}</Label>
                 <Input name="user" value={formData.user || ""} onChange={onInputChange} className="h-9 text-xs" data-testid="sheet-pengguna-input" />

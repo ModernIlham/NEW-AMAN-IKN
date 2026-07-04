@@ -91,6 +91,12 @@ ASSET_TEMPLATE_SCHEMA = [
     {"field": "pengguna_jabatan", "required": False, "width": 24,
      "rule": "Nama jabatan — isi hanya bila pengguna_melekat_ke = Jabatan.",
      "sample1": "", "sample2": "", "dropdown": None},
+    {"field": "operasional_jenis", "required": False, "width": 24,
+     "rule": "Isi hanya bila pengguna_melekat_ke = Operasional. "
+             "Pilih: Kegiatan/Acara/Kebutuhan / Ruangan "
+             "(Ruangan = barang harus tetap berada di ruang tsb).",
+     "sample1": "", "sample2": "",
+     "dropdown": ["Kegiatan/Acara/Kebutuhan", "Ruangan"]},
     {"field": "nomor_bast", "required": False, "width": 24,
      "rule": "Nomor BAST serah terima ke pengguna (dokumen BAST diunggah lewat aplikasi).",
      "sample1": "", "sample2": "", "dropdown": None},

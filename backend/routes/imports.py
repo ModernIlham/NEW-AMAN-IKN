@@ -345,6 +345,7 @@ async def import_assets(request: Request, file: UploadFile = File(...), force_up
                 "user": str(row.get('user', '')).strip(),
                 "pengguna_melekat_ke": str(row.get('pengguna_melekat_ke', '')).strip(),
                 "pengguna_jabatan": str(row.get('pengguna_jabatan', '')).strip(),
+                "operasional_jenis": str(row.get('operasional_jenis', '')).strip(),
                 "nomor_bast": str(row.get('nomor_bast', '')).strip(),
                 "condition": str(row.get('condition', 'Baik')).strip() or "Baik",
                 "status": str(row.get('status', 'Aktif')).strip() or "Aktif",

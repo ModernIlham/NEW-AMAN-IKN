@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Package, Mail, Lock, ArrowRight, Loader2, Eye, EyeOff, User, ShieldCheck, RotateCcw, Info } from "lucide-react";
+import { Package, Mail, Lock, ArrowRight, Loader2, Eye, EyeOff, User, ShieldCheck, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -226,22 +226,19 @@ export default function LoginPage({ onLogin, onShowInfo }) {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
+  // Halaman Info/PRD dibuka lewat klik LOGO aplikasi (tanpa tombol Info terpisah)
+  const logoProps = onShowInfo ? {
+    role: "button", tabIndex: 0, onClick: onShowInfo,
+    onKeyDown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onShowInfo(); } },
+    "aria-label": "Info aplikasi", title: "Info aplikasi",
+  } : {};
+
   return (
     <div className="min-h-screen flex" data-testid="login-page">
-      {/* Info Icon - Top Right */}
-      {onShowInfo && (
-        <button
-          onClick={onShowInfo}
-          className="fixed top-4 right-4 z-50 w-10 h-10 bg-blue-500/20 border border-blue-500/30 rounded-full flex items-center justify-center text-blue-400 hover:bg-blue-500/30 hover:text-blue-300 transition-all shadow-lg backdrop-blur-sm"
-          title="Lihat PRD & Dokumentasi"
-        >
-          <Info className="w-5 h-5" />
-        </button>
-      )}
       {/* Left Panel - Branding */}
       <div className="hidden lg:flex lg:w-1/2 bg-slate-900 login-pattern relative overflow-hidden">
         <div className="relative z-10 flex flex-col justify-between p-12 w-full">
-          <div className="flex items-center gap-3">
+          <div className={`flex items-center gap-3 ${onShowInfo ? "cursor-pointer" : ""}`} data-testid="login-logo" {...logoProps}>
             <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center shadow-elev-2">
               <Package className="w-6 h-6 text-white" />
             </div>
@@ -280,7 +277,7 @@ export default function LoginPage({ onLogin, onShowInfo }) {
         ) : (
           <div className="w-full max-w-md space-y-8">
             {/* Mobile Logo */}
-            <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
+            <div className={`lg:hidden flex items-center justify-center gap-3 mb-8 ${onShowInfo ? "cursor-pointer" : ""}`} data-testid="login-logo-mobile" {...logoProps}>
               <div className="w-10 h-10 bg-gradient-to-br from-slate-900 to-slate-800 rounded-lg flex items-center justify-center shadow-elev-2">
                 <Package className="w-6 h-6 text-white" />
               </div>

@@ -418,7 +418,7 @@ function ActivityPhotoLightbox({ activityId, initialIndex = 0, onClose }) {
   );
 }
 
-export default function ActivitySelectionPage({ user, onLogout, onSelectActivity }) {
+export default function ActivitySelectionPage({ user, onLogout, onSelectActivity, onShowInfo }) {
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -810,7 +810,16 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
       <header className="bg-card border-b border-border px-4 py-3 sticky top-0 z-40 backdrop-blur-sm bg-card/95">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-blue-500 flex items-center justify-center shadow-elev-1">
+            {/* Klik logo = buka halaman Info/PRD aplikasi */}
+            <div
+              className={`w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-blue-500 flex items-center justify-center shadow-elev-1 ${onShowInfo ? "cursor-pointer" : ""}`}
+              {...(onShowInfo ? {
+                role: "button", tabIndex: 0, onClick: onShowInfo,
+                onKeyDown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onShowInfo(); } },
+                "aria-label": "Info aplikasi", title: "Info aplikasi",
+              } : {})}
+              data-testid="activity-page-logo"
+            >
               <BookOpen className="w-5 h-5 text-white" />
             </div>
             <div>
