@@ -568,22 +568,15 @@ def create_ktp_card_elements(asset, history=None):
 
     status_pill = pill(cond, GREEN if cond_baik else ORANGE, GREENBG if cond_baik else ORANGEBG, 26 * mm)
     aktivitas_pill = pill(stat, BLUE if stat_aktif else GRAY, BLUEBG if stat_aktif else STRIPEBG, 26 * mm)
-    nilai_val = Table([[
-        card_icon('rupiah', 3.8 * mm, GREEN),
-        Paragraph(price_str, ls('_np', fontSize=9.5, textColor=GREEN, fontName='Helvetica-Bold', leading=10)),
-    ]], colWidths=[4.8 * mm, info_w - 56 * mm - 4.8 * mm], rowHeights=[6.4 * mm])
-    nilai_val.setStyle(TableStyle([
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('LEFTPADDING', (0, 0), (0, 0), 0), ('RIGHTPADDING', (0, 0), (0, 0), 0.6 * mm),
-        ('LEFTPADDING', (1, 0), (1, 0), 0), ('RIGHTPADDING', (1, 0), (1, 0), 0),
-        ('TOPPADDING', (0, 0), (-1, -1), 0), ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
-    ]))
+    # Tanpa ikon — beri lebar penuh agar angka rupiah berdigit banyak tetap muat
+    # pada satu baris. Ukuran diperkecil ke 9pt untuk headroom nominal besar.
+    nilai_val = Paragraph(price_str, ls('_np', fontSize=9, textColor=GREEN, fontName='Helvetica-Bold', leading=10.5))
 
     badges = Table([[
-        labeled_col("STATUS", status_pill, 28 * mm),
-        labeled_col("AKTIVITAS", aktivitas_pill, 28 * mm),
-        labeled_col("NILAI PEROLEHAN", nilai_val, info_w - 56 * mm),
-    ]], colWidths=[28 * mm, 28 * mm, info_w - 56 * mm], rowHeights=[11 * mm])
+        labeled_col("STATUS", status_pill, 27 * mm),
+        labeled_col("AKTIVITAS", aktivitas_pill, 27 * mm),
+        labeled_col("NILAI PEROLEHAN", nilai_val, info_w - 54 * mm),
+    ]], colWidths=[27 * mm, 27 * mm, info_w - 54 * mm], rowHeights=[11 * mm])
     badges.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('LEFTPADDING', (0, 0), (-1, -1), 0),
