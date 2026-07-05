@@ -4,7 +4,7 @@ import {
   Sticker, Building2, Camera, FileCheck, Receipt,
   Calendar, DollarSign, Navigation, Package, Truck,
   LocateFixed, Search, FileUp, FileText, Check, ChevronDown,
-  Eraser, Trash2,
+  Eraser, Trash2, Power, UserRound, StickyNote,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,12 +17,17 @@ import { compressImageFile } from "../../lib/imageCompression";
 import { compressPdfFile } from "../../lib/pdfCompression";
 import { toast } from "sonner";
 import { DEFAULT_DOC_ITEMS } from "./DocumentChecklist";
+import {
+  PENGGUNA_MELEKAT_OPTIONS, PENGGUNA_NAME_LABELS, OPERASIONAL_JENIS_OPTIONS,
+} from "./InventoryFieldSheet";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 
 const STIKER_STATUSES = ["Belum Terpasang", "Sudah Terpasang"];
 const STIKER_SIZES = ["Kecil", "Sedang", "Besar"];
 const CONDITIONS = ["Baik", "Rusak Ringan", "Rusak Berat"];
 const INVENTORY_STATUSES = ["Belum Diinventarisasi", "Ditemukan", "Tidak Ditemukan", "Berlebih", "Sengketa"];
+// Selaras dengan opsi Status pada form aset (AssetForm).
+const ASSET_STATUSES = ["Aktif", "Idle", "Maintenance", "Nonaktif"];
 
 /** Searchable category dropdown for batch edit */
 function BatchCategorySelect({ categories, value, onChange }) {
@@ -190,6 +195,35 @@ const BatchEditPanel = memo(function BatchEditPanel({
         return next;
       }
       return { ...prev, [field]: "__clear__" };
+    });
+  }, []);
+
+  // Pengguna "melekat ke": klik ulang = batal (tidak diubah). Sub-field yang
+  // tak relevan dilepas dari daftar perubahan (mis. pindah ke Individual
+  // melepas jabatan & jenis operasional) — konsisten dengan form edit, tanpa
+  // memaksa pengosongan tersembunyi pada aset.
+  const setPenggunaMelekat = useCallback((v) => {
+    setUpdates(prev => {
+      const next = { ...prev };
+      if (prev.pengguna_melekat_ke === v) {
+        delete next.pengguna_melekat_ke;
+        delete next.pengguna_jabatan;
+        delete next.operasional_jenis;
+        return next;
+      }
+      next.pengguna_melekat_ke = v;
+      if (v !== "Jabatan") delete next.pengguna_jabatan;
+      if (v !== "Operasional") delete next.operasional_jenis;
+      return next;
+    });
+  }, []);
+
+  const setOperasionalJenis = useCallback((v) => {
+    setUpdates(prev => {
+      const next = { ...prev };
+      if (prev.operasional_jenis === v) delete next.operasional_jenis;
+      else next.operasional_jenis = v;
+      return next;
     });
   }, []);
 
@@ -433,6 +467,14 @@ const BatchEditPanel = memo(function BatchEditPanel({
             {STIKER_SIZES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
           </ClearableSelect>
         </div>
+
+        {/* Status Aset */}
+        <div className="space-y-0.5">
+          <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Power className="w-2.5 h-2.5" />Status Aset</label>
+          <ClearableSelect value={updates.status || "__none__"} onValueChange={v => setField("status", v)}>
+            {ASSET_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+          </ClearableSelect>
+        </div>
       </div>
 
       {/* Extended Fields */}
@@ -476,39 +518,84 @@ const BatchEditPanel = memo(function BatchEditPanel({
               <ClearableInput placeholder="—" value={updates.model === "__clear__" ? "" : updates.model} isClear={updates.model === "__clear__"} onChange={e => setField("model", e.target.value)} onClear={() => toggleClearField("model")} />
             </div>
 
-            {/* Latitude + GPS */}
+            {/* Catatan */}
             <div className="space-y-0.5">
-              <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Navigation className="w-2.5 h-2.5" />Latitude</label>
-              <ClearableInput placeholder="—" value={updates.koordinat_latitude === "__clear__" ? "" : updates.koordinat_latitude} isClear={updates.koordinat_latitude === "__clear__"} onChange={e => setField("koordinat_latitude", e.target.value)} onClear={() => toggleClearField("koordinat_latitude")} />
+              <label className="text-[10px] text-muted-foreground flex items-center gap-1"><StickyNote className="w-2.5 h-2.5" />Catatan</label>
+              <ClearableInput placeholder="—" value={updates.notes === "__clear__" ? "" : updates.notes} isClear={updates.notes === "__clear__"} onChange={e => setField("notes", e.target.value)} onClear={() => toggleClearField("notes")} />
             </div>
-            {/* Longitude + GPS button */}
-            <div className="space-y-0.5">
-              <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Navigation className="w-2.5 h-2.5" />Longitude</label>
-              <div className="flex gap-0.5">
-                {updates.koordinat_longitude === "__clear__" ? (
-                  <div className="flex items-center h-7 px-2 text-xs border rounded-md bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700 flex-1">
-                    <Eraser className="w-3 h-3 text-red-500 mr-1 flex-shrink-0" />
-                    <span className="text-red-600 dark:text-red-400 flex-1 text-[10px]">Akan dikosongkan</span>
-                    <button type="button" onClick={() => toggleClearField("koordinat_longitude")} className="text-red-400 hover:text-red-600 ml-1"><X className="w-3 h-3" /></button>
+
+            {/* Pengguna / Penanggung Jawab — struktur sama seperti form edit */}
+            <div className="col-span-2 sm:col-span-3 lg:col-span-4 space-y-1.5 p-2 rounded-md border border-blue-200 dark:border-blue-800 bg-background/50">
+              <label className="text-[10px] font-medium text-muted-foreground flex items-center gap-1"><UserRound className="w-2.5 h-2.5" />Pengguna / Penanggung Jawab</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {/* Melekat ke */}
+                <div className="space-y-0.5">
+                  <label className="text-[10px] text-muted-foreground">Melekat ke</label>
+                  <div className="grid grid-cols-3 gap-1">
+                    {PENGGUNA_MELEKAT_OPTIONS.map(o => (
+                      <button key={o} type="button" onClick={() => setPenggunaMelekat(o)}
+                        className={`h-7 rounded-md border text-[10px] font-semibold leading-tight px-1 transition-colors ${updates.pengguna_melekat_ke === o ? 'bg-blue-600 border-blue-600 text-white' : 'bg-background border-border text-foreground/80 hover:bg-accent'}`}>
+                        {o}
+                      </button>
+                    ))}
                   </div>
-                ) : (
-                  <>
-                    <Input className="h-7 text-xs flex-1" placeholder="—" value={updates.koordinat_longitude || ""} onChange={e => setField("koordinat_longitude", e.target.value)} />
-                    <button type="button" onClick={() => toggleClearField("koordinat_longitude")} className="h-7 w-7 flex items-center justify-center rounded-md border border-border hover:bg-red-50 dark:hover:bg-red-900/30 hover:border-red-300 dark:hover:border-red-700 text-muted-foreground hover:text-red-500 transition-colors flex-shrink-0" title="Kosongkan field ini">
-                      <Eraser className="w-3 h-3" />
-                    </button>
-                  </>
+                </div>
+                {/* Nama pengguna */}
+                <div className="space-y-0.5">
+                  <label className="text-[10px] text-muted-foreground">{PENGGUNA_NAME_LABELS[updates.pengguna_melekat_ke] || "Nama Pengguna"}</label>
+                  <ClearableInput placeholder="—" value={updates.user === "__clear__" ? "" : updates.user} isClear={updates.user === "__clear__"} onChange={e => setField("user", e.target.value)} onClear={() => toggleClearField("user")} />
+                </div>
+                {/* Nama Jabatan (bila melekat ke Jabatan) */}
+                {updates.pengguna_melekat_ke === "Jabatan" && (
+                  <div className="space-y-0.5">
+                    <label className="text-[10px] text-muted-foreground">Nama Jabatan</label>
+                    <ClearableInput placeholder="Contoh: Kepala Subbagian Umum" value={updates.pengguna_jabatan === "__clear__" ? "" : updates.pengguna_jabatan} isClear={updates.pengguna_jabatan === "__clear__"} onChange={e => setField("pengguna_jabatan", e.target.value)} onClear={() => toggleClearField("pengguna_jabatan")} />
+                  </div>
                 )}
+                {/* Jenis Operasional (bila melekat ke Operasional) */}
+                {updates.pengguna_melekat_ke === "Operasional" && (
+                  <div className="space-y-0.5">
+                    <label className="text-[10px] text-muted-foreground">Jenis Operasional</label>
+                    <div className="grid grid-cols-2 gap-1">
+                      {OPERASIONAL_JENIS_OPTIONS.map(o => (
+                        <button key={o} type="button" onClick={() => setOperasionalJenis(o)}
+                          className={`h-7 rounded-md border text-[9px] font-semibold leading-tight px-1 transition-colors ${updates.operasional_jenis === o ? 'bg-blue-600 border-blue-600 text-white' : 'bg-background border-border text-foreground/80 hover:bg-accent'}`}>
+                          {o}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {/* Nomor BAST */}
+                <div className="space-y-0.5">
+                  <label className="text-[10px] text-muted-foreground flex items-center gap-1"><FileCheck className="w-2.5 h-2.5" />Nomor BAST</label>
+                  <ClearableInput placeholder="—" value={updates.nomor_bast === "__clear__" ? "" : updates.nomor_bast} isClear={updates.nomor_bast === "__clear__"} onChange={e => setField("nomor_bast", e.target.value)} onClear={() => toggleClearField("nomor_bast")} />
+                </div>
+              </div>
+            </div>
+
+            {/* Koordinat GPS */}
+            <div className="col-span-2 sm:col-span-3 lg:col-span-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
+              <div className="space-y-0.5">
+                <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Navigation className="w-2.5 h-2.5" />Latitude</label>
+                <ClearableInput placeholder="—" value={updates.koordinat_latitude === "__clear__" ? "" : updates.koordinat_latitude} isClear={updates.koordinat_latitude === "__clear__"} onChange={e => setField("koordinat_latitude", e.target.value)} onClear={() => toggleClearField("koordinat_latitude")} />
+              </div>
+              <div className="space-y-0.5">
+                <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Navigation className="w-2.5 h-2.5" />Longitude</label>
+                <ClearableInput placeholder="—" value={updates.koordinat_longitude === "__clear__" ? "" : updates.koordinat_longitude} isClear={updates.koordinat_longitude === "__clear__"} onChange={e => setField("koordinat_longitude", e.target.value)} onClear={() => toggleClearField("koordinat_longitude")} />
+              </div>
+              <div className="space-y-0.5 col-span-2 sm:col-span-1">
+                <label className="text-[10px] text-muted-foreground">Ambil Otomatis</label>
                 <button
                   type="button"
                   onClick={fetchGPS}
                   disabled={gpsLoading}
-                  className="h-7 px-2 flex items-center gap-1 text-[10px] bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded-md border border-emerald-300 dark:border-emerald-700 hover:bg-emerald-200 dark:hover:bg-emerald-900/50 transition-colors"
+                  className="w-full h-7 px-2 flex items-center justify-center gap-1 text-[11px] font-medium bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded-md border border-emerald-300 dark:border-emerald-700 hover:bg-emerald-200 dark:hover:bg-emerald-900/50 transition-colors"
                   data-testid="batch-gps-btn"
                   title="Ambil lokasi GPS saat ini"
                 >
                   {gpsLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <LocateFixed className="w-3 h-3" />}
-                  <span className="hidden sm:inline">GPS</span>
+                  Ambil GPS
                 </button>
               </div>
             </div>
