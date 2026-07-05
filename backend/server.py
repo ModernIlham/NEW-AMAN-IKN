@@ -44,10 +44,23 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # GZip compression
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
-# CORS
+# CORS — env-driven allowlist (never wildcard while allow_credentials=True).
+# Reads ALLOWED_ORIGINS (comma-separated); falls back to the legacy CORS_ORIGINS
+# used by the Hostinger deployment, then to a safe default that covers the prod
+# domain (amanikn-inventarisasi.com, http+https) and local dev.
+_default_origins = [
+    "https://amanikn-inventarisasi.com",
+    "http://amanikn-inventarisasi.com",
+    "https://www.amanikn-inventarisasi.com",
+    "http://localhost:3000",
+]
+_origins_env = os.environ.get("ALLOWED_ORIGINS") or os.environ.get("CORS_ORIGINS") or ""
+ALLOWED_ORIGINS = [o.strip() for o in _origins_env.split(",") if o.strip()] or _default_origins
+logger.info(f"CORS allowed origins: {ALLOWED_ORIGINS}")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

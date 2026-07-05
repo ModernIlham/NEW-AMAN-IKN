@@ -1,5 +1,6 @@
 """Inventory activity CRUD routes."""
 import io
+import re
 import uuid
 import base64
 import logging
@@ -14,7 +15,7 @@ from PIL import Image as PILImage
 from bson import ObjectId  # noqa: F401  (kept for downstream import use)
 
 from db import db
-from auth_utils import require_user
+from auth_utils import require_user, require_admin
 from routes.media import auto_compress_image
 from routes.pdf_compress import compress_pdf_iloveapi, compress_pdf_whipdoc
 from shared_utils import (
@@ -22,6 +23,7 @@ from shared_utils import (
     store_document_to_gridfs,
     get_document_from_gridfs,
     delete_document_from_gridfs,
+    delete_photo_from_gridfs,
 )
 from routes.pengesahan import next_ticket_number, ensure_ticket_number
 
@@ -271,7 +273,7 @@ class InventoryActivityResponse(BaseModel):
     created_at: str
 
 @activities_router.get("/inventory-activities")
-async def get_inventory_activities():
+async def get_inventory_activities(_user: dict = Depends(require_user)):
     """Get all inventory activities with dynamic asset counts
     
     OPTIMIZED: Uses single aggregation query instead of N+1 queries.
@@ -338,7 +340,7 @@ async def get_inventory_activities():
     return activities
 
 @activities_router.get("/satker-list")
-async def get_satker_list():
+async def get_satker_list(_user: dict = Depends(require_user)):
     """Get unique satker pairs (kode_satker + nama_satker) for filter tabs"""
     pipeline = [
         {"$match": {"kode_satker": {"$exists": True, "$ne": ""}}},
@@ -354,7 +356,7 @@ async def get_satker_list():
     return result
 
 @activities_router.get("/satker-lookup")
-async def satker_lookup(kode: str = "", nama: str = ""):
+async def satker_lookup(kode: str = "", nama: str = "", _user: dict = Depends(require_user)):
     """Lookup satker by kode or nama for auto-fill consistency (includes eselon1)"""
     if kode:
         doc = await db.inventory_activities.find_one(
@@ -363,8 +365,10 @@ async def satker_lookup(kode: str = "", nama: str = ""):
         if doc:
             return {"kode_satker": doc.get("kode_satker", ""), "nama_satker": doc.get("nama_satker", ""), "eselon1": doc.get("eselon1", [])}
     if nama:
+        # re.escape the user input so an exact (anchored) case-insensitive match
+        # can't be abused for ReDoS or blow up on invalid regex metacharacters.
         doc = await db.inventory_activities.find_one(
-            {"nama_satker": {"$regex": f"^{nama}$", "$options": "i"}},
+            {"nama_satker": {"$regex": f"^{re.escape(nama)}$", "$options": "i"}},
             {"_id": 0, "kode_satker": 1, "nama_satker": 1, "eselon1": 1}
         )
         if doc:
@@ -372,7 +376,7 @@ async def satker_lookup(kode: str = "", nama: str = ""):
     return None
 
 @activities_router.post("/inventory-activities")
-async def create_inventory_activity(activity: InventoryActivityCreate):
+async def create_inventory_activity(activity: InventoryActivityCreate, _user: dict = Depends(require_user)):
     """Create a new inventory activity"""
     # Validate required satker fields
     if not activity.kode_satker.strip():
@@ -522,7 +526,7 @@ def _strip_doc_payload(activity: Optional[dict]) -> Optional[dict]:
     return activity
 
 @activities_router.get("/inventory-activities/{activity_id}")
-async def get_inventory_activity(activity_id: str):
+async def get_inventory_activity(activity_id: str, _user: dict = Depends(require_user)):
     """Get a single inventory activity (documents stripped of raw bytes)."""
     activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
     if not activity:
@@ -584,7 +588,8 @@ async def get_inventory_activity_document(
     raise HTTPException(status_code=404, detail="Konten dokumen tidak ditemukan")
 
 @activities_router.put("/inventory-activities/{activity_id}")
-async def update_inventory_activity(activity_id: str, activity: InventoryActivityCreate):
+async def update_inventory_activity(activity_id: str, activity: InventoryActivityCreate,
+                                    _user: dict = Depends(require_user)):
     """Update an existing inventory activity"""
     existing = await db.inventory_activities.find_one({"id": activity_id})
     if not existing:
@@ -713,8 +718,8 @@ async def update_inventory_activity(activity_id: str, activity: InventoryActivit
     return _strip_doc_payload(updated)
 
 @activities_router.delete("/inventory-activities/{activity_id}")
-async def delete_inventory_activity(activity_id: str):
-    """Delete an inventory activity and all its assets"""
+async def delete_inventory_activity(activity_id: str, _admin: dict = Depends(require_admin)):
+    """Delete an inventory activity and all its assets (admin only)"""
     # Kegiatan yang sudah disahkan terkunci — hapus kegiatan mengkaskade ke
     # semua asetnya, jadi wajib ditolak juga (konsisten dengan bulk-delete).
     sealed = await db.inventory_activities.find_one(
@@ -731,17 +736,46 @@ async def delete_inventory_activity(activity_id: str):
             if gid:
                 await delete_document_from_gridfs(gid)
 
+    # Cascade: gather + delete the GridFS blobs of every asset in this activity
+    # BEFORE delete_many wipes the docs (afterwards their blob ids are lost →
+    # orphans). Best-effort per blob; failures are logged, never fatal.
+    photo_gids, doc_gids = [], []
+    async for a in db.assets.find(
+        {"activity_id": activity_id},
+        {"_id": 0, "photo_gridfs_ids": 1, "bast_file_id": 1, "document_checklist": 1},
+    ):
+        photo_gids.extend([g for g in (a.get("photo_gridfs_ids") or []) if g])
+        if a.get("bast_file_id"):
+            doc_gids.append(a["bast_file_id"])
+        for item in (a.get("document_checklist") or []):
+            if isinstance(item, dict):
+                for d in (item.get("documents") or []):
+                    gid = d.get("gridfs_id") if isinstance(d, dict) else None
+                    if gid:
+                        doc_gids.append(gid)
+    for gid in photo_gids:
+        try:
+            await delete_photo_from_gridfs(gid)
+        except Exception as e:
+            logger.warning(f"delete_activity cascade: gagal hapus foto GridFS {gid}: {e}")
+    for gid in doc_gids:
+        try:
+            await delete_document_from_gridfs(gid)
+        except Exception as e:
+            logger.warning(f"delete_activity cascade: gagal hapus dokumen GridFS {gid}: {e}")
+
     result = await db.inventory_activities.delete_one({"id": activity_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
     # Delete all assets linked to this activity
     asset_result = await db.assets.delete_many({"activity_id": activity_id})
-    logger.info(f"Deleted activity {activity_id} and {asset_result.deleted_count} associated assets")
+    logger.info(f"Deleted activity {activity_id} and {asset_result.deleted_count} associated assets "
+                f"(freed {len(photo_gids)} photo + {len(doc_gids)} doc GridFS blobs)")
     return {"message": f"Kegiatan berhasil dihapus beserta {asset_result.deleted_count} data aset"}
 
 
 @activities_router.get("/inventory-activities/{activity_id}/completion-status")
-async def get_completion_status(activity_id: str):
+async def get_completion_status(activity_id: str, _user: dict = Depends(require_user)):
     """Validate whether an activity qualifies as 'Selesai'.
 
     Called ON-DEMAND when the user clicks the status ribbon on the activity

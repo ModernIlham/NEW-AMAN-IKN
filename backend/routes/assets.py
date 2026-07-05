@@ -1,4 +1,5 @@
 """Asset CRUD, filter options, stats, analytics."""
+import re
 import uuid
 import base64
 import logging
@@ -10,7 +11,7 @@ from fastapi.responses import Response
 
 from db import db, fs_bucket
 from models import AssetCreate, AssetResponse
-from auth_utils import require_user
+from auth_utils import require_user, require_admin, require_user_or_query_token
 from shared_utils import (
     invalidate_asset_cache, _cache_filter_opts, _cache_stats, _cache_analytics,
     log_audit, compute_changes, create_thumbnail, create_gallery_thumbnail,
@@ -28,6 +29,34 @@ assets_router = APIRouter()
 # ============================================================================
 # ASSET ROUTES
 # ============================================================================
+
+
+def _rx(term: str) -> dict:
+    """Case-insensitive substring match treating user input as a LITERAL
+    (re.escape). Prevents ReDoS + invalid-regex 500s from crafted input like
+    "(a+)+$" or "[" while preserving plain substring search semantics."""
+    return {"$regex": re.escape(term), "$options": "i"}
+
+
+async def _collect_asset_blob_ids(asset: dict) -> dict:
+    """Gather GridFS blob ids referenced by an asset so they can be deleted
+    alongside the doc (prevents orphaned blobs on delete). In this schema only
+    full-size photos (photo_gridfs_ids) and the BAST file live in GridFS;
+    checklist photos/PDFs are stored inline and vanish with the doc. Any
+    checklist doc `gridfs_id` is collected defensively for forward-compat."""
+    photo_ids = [g for g in (asset.get("photo_gridfs_ids") or []) if g]
+    doc_ids = []
+    bast_id = asset.get("bast_file_id") or ""
+    if bast_id:
+        doc_ids.append(bast_id)
+    for item in (asset.get("document_checklist") or []):
+        if not isinstance(item, dict):
+            continue
+        for d in (item.get("documents") or []):
+            gid = d.get("gridfs_id") if isinstance(d, dict) else None
+            if gid:
+                doc_ids.append(gid)
+    return {"photos": photo_ids, "documents": doc_ids}
 
 
 # NOTE: Row locking & batch operations moved to routes/batch.py
@@ -122,6 +151,7 @@ async def get_assets(
     price_max: float = None,
     nomor_spm: str = "",
     perolehan_dari: str = "",
+    _user: dict = Depends(require_user),
 ):
     """Get paginated assets with advanced filters - optimized for millions of records"""
     query = {}
@@ -143,31 +173,32 @@ async def get_assets(
         except ValueError:
             pass
         
+        rx = _rx(search)
         search_conditions = [
-            {"asset_code": {"$regex": search, "$options": "i"}},
-            {"asset_name": {"$regex": search, "$options": "i"}},
-            {"serial_number": {"$regex": search, "$options": "i"}},
-            {"location": {"$regex": search, "$options": "i"}},
-            {"brand": {"$regex": search, "$options": "i"}},
-            {"model": {"$regex": search, "$options": "i"}},
-            {"category": {"$regex": search, "$options": "i"}},
-            {"eselon1": {"$regex": search, "$options": "i"}},
-            {"eselon2": {"$regex": search, "$options": "i"}},
-            {"user": {"$regex": search, "$options": "i"}},
-            {"supplier": {"$regex": search, "$options": "i"}},
-            {"condition": {"$regex": search, "$options": "i"}},
-            {"status": {"$regex": search, "$options": "i"}},
-            {"nomor_spm": {"$regex": search, "$options": "i"}},
-            {"kode_register": {"$regex": search, "$options": "i"}},
-            {"notes": {"$regex": search, "$options": "i"}},
+            {"asset_code": rx},
+            {"asset_name": rx},
+            {"serial_number": rx},
+            {"location": rx},
+            {"brand": rx},
+            {"model": rx},
+            {"category": rx},
+            {"eselon1": rx},
+            {"eselon2": rx},
+            {"user": rx},
+            {"supplier": rx},
+            {"condition": rx},
+            {"status": rx},
+            {"nomor_spm": rx},
+            {"kode_register": rx},
+            {"notes": rx},
         ]
-        
+
         # Add numeric search for purchase_price if search looks like a number
         if search_as_number is not None:
             search_conditions.append({"purchase_price": search_as_number})
             # Also search as string (prices might be stored as strings)
             search_conditions.append({"purchase_price": search_as_string})
-            search_conditions.append({"purchase_price": {"$regex": f"^{search_as_string}", "$options": "i"}})
+            search_conditions.append({"purchase_price": {"$regex": f"^{re.escape(search_as_string)}", "$options": "i"}})
         
         query["$or"] = search_conditions
     
@@ -183,25 +214,25 @@ async def get_assets(
         query["status"] = status
     
     if location:
-        query["location"] = {"$regex": location, "$options": "i"}
-    
+        query["location"] = _rx(location)
+
     if eselon1_filter:
-        query["eselon1"] = {"$regex": eselon1_filter, "$options": "i"}
-    
+        query["eselon1"] = _rx(eselon1_filter)
+
     if eselon2_filter:
-        query["eselon2"] = {"$regex": eselon2_filter, "$options": "i"}
-    
+        query["eselon2"] = _rx(eselon2_filter)
+
     if stiker_status:
         query["stiker_status"] = stiker_status
-    
+
     if inventory_status:
         query["inventory_status"] = inventory_status
-    
+
     if nomor_spm:
-        query["nomor_spm"] = {"$regex": nomor_spm, "$options": "i"}
-    
+        query["nomor_spm"] = _rx(nomor_spm)
+
     if perolehan_dari:
-        query["supplier"] = {"$regex": perolehan_dari, "$options": "i"}
+        query["supplier"] = _rx(perolehan_dari)
     
     # Price range filter
     if price_min is not None or price_max is not None:
@@ -361,7 +392,7 @@ async def get_assets_offline_snapshot(
 
 
 @assets_router.get("/assets/filter-options")
-async def get_filter_options(activity_id: str = ""):
+async def get_filter_options(activity_id: str = "", _user: dict = Depends(require_user)):
     """Get distinct values for filter dropdowns (cached 3 min per activity)"""
     cache_key = activity_id or "__all__"
     if cache_key in _cache_filter_opts:
@@ -398,22 +429,24 @@ async def get_filter_options(activity_id: str = ""):
     return result
 
 @assets_router.get("/assets/stats")
-async def get_assets_stats(search: str = "", category: str = "", activity_id: str = ""):
+async def get_assets_stats(search: str = "", category: str = "", activity_id: str = "",
+                           _user: dict = Depends(require_user)):
     """Get aggregate stats (cached 1 min per unique query)"""
     cache_key = f"{activity_id}|{search}|{category}"
     if cache_key in _cache_stats:
         return _cache_stats[cache_key]
-    
+
     query = {}
     if activity_id:
         query["activity_id"] = activity_id
     if search:
+        rx = _rx(search)
         query["$or"] = [
-            {"asset_code": {"$regex": search, "$options": "i"}},
-            {"asset_name": {"$regex": search, "$options": "i"}},
-            {"serial_number": {"$regex": search, "$options": "i"}},
-            {"location": {"$regex": search, "$options": "i"}},
-            {"brand": {"$regex": search, "$options": "i"}},
+            {"asset_code": rx},
+            {"asset_name": rx},
+            {"serial_number": rx},
+            {"location": rx},
+            {"brand": rx},
         ]
     if category:
         query["category"] = category
@@ -451,7 +484,7 @@ async def get_assets_stats(search: str = "", category: str = "", activity_id: st
     return stats
 
 @assets_router.get("/assets/analytics")
-async def get_assets_analytics(activity_id: str = ""):
+async def get_assets_analytics(activity_id: str = "", _user: dict = Depends(require_user)):
     """Get analytics data for charts (cached 2 min per activity)"""
     cache_key = activity_id or "_all"
     if cache_key in _cache_analytics:
@@ -516,7 +549,8 @@ async def get_assets_analytics(activity_id: str = ""):
 # Must be declared BEFORE /assets/{asset_id} or "next-nup" would be captured
 # as an asset id by that route.
 @assets_router.get("/assets/next-nup")
-async def get_next_nup(activity_id: str = "", asset_code: str = "", category: str = ""):
+async def get_next_nup(activity_id: str = "", asset_code: str = "", category: str = "",
+                       _user: dict = Depends(require_user)):
     """Next available numeric NUP for a category/asset_code within an activity.
 
     Uniqueness in this app is (asset_code, NUP) per activity_id, so the next
@@ -571,7 +605,7 @@ async def process_photos_for_storage(photos: list) -> dict:
 
 
 @assets_router.post("/assets", response_model=AssetResponse)
-async def create_asset(asset: AssetCreate, request: Request):
+async def create_asset(asset: AssetCreate, request: Request, _user: dict = Depends(require_user)):
     """Create a new asset. Supports Idempotency-Key header to safely retry on network errors."""
     # Idempotency check: if same key was seen within the TTL window (24h), return cached response
     idem_key = request.headers.get("Idempotency-Key", "")
@@ -667,8 +701,10 @@ async def create_asset(asset: AssetCreate, request: Request):
     
     logger.info(f"Asset created: {asset.asset_code}")
     invalidate_asset_cache()
-    audit_user = request.headers.get("X-Audit-User", "unknown")
-    audit_user_id = request.headers.get("X-Audit-User-Id", "")
+    # Audit actor comes from the authenticated JWT identity (can't be spoofed);
+    # the X-Audit-User header is only a fallback hint.
+    audit_user = _user.get("name") or _user.get("username") or request.headers.get("X-Audit-User", "unknown")
+    audit_user_id = _user.get("id") or request.headers.get("X-Audit-User-Id", "")
     await log_audit("create", asset.activity_id, asset_id, asset.asset_code, asset.asset_name, audit_user, detail="Aset baru ditambahkan", nup=asset.NUP or "")
     await notify_asset_change(asset.activity_id, "asset_created", {"id": asset_id, "asset_code": asset.asset_code, "asset_name": asset.asset_name}, audit_user, user_id=audit_user_id)
 
@@ -679,7 +715,7 @@ async def create_asset(asset: AssetCreate, request: Request):
     return response
 
 @assets_router.get("/assets/{asset_id}", response_model=AssetResponse)
-async def get_asset(asset_id: str, exclude_media: bool = False):
+async def get_asset(asset_id: str, exclude_media: bool = False, _user: dict = Depends(require_user)):
     """Get a single asset by ID. Use ?exclude_media=true for a lightweight response without base64 photos/documents."""
     asset = await db.assets.find_one({"id": asset_id}, {"_id": 0})
     if not asset:
@@ -698,7 +734,7 @@ async def get_asset(asset_id: str, exclude_media: bool = False):
 
 
 @assets_router.get("/assets/{asset_id}/media")
-async def get_asset_media(asset_id: str):
+async def get_asset_media(asset_id: str, _user: dict = Depends(require_user)):
     """Return photo thumbnails + document_checklist media for the form.
     Full-size photos are in GridFS and accessed via /assets/{id}/photos/{index}."""
     asset = await db.assets.find_one({"id": asset_id}, {
@@ -742,7 +778,7 @@ async def get_asset_media(asset_id: str):
 
 
 @assets_router.get("/assets/{asset_id}/checklist-full")
-async def get_asset_checklist_full(asset_id: str):
+async def get_asset_checklist_full(asset_id: str, _user: dict = Depends(require_user)):
     """Return checklist metadata + thumbnails ONLY. Photo full bytes and PDF
     bytes are streamed via dedicated endpoints (see below) — embedding them
     inline produced multi-MB JSON responses that timed out at the proxy / hung
@@ -787,22 +823,25 @@ async def get_asset_checklist_full(asset_id: str):
 # ============================================================================
 # MEDIA STREAMING (photos / checklist photos / checklist PDFs)
 #
-# Auth posture: these are deliberately PUBLIC GETs (no require_user) — they
-# are consumed by plain <img src="..."> tags and window.open(), neither of
-# which can attach Authorization headers. This mirrors the pre-existing
-# posture of every media endpoint in the app.
+# Auth posture: these are consumed by plain <img src="..."> tags and
+# window.open(), neither of which can attach Authorization headers, so they
+# accept EITHER the header OR a ?token=<jwt> query param via
+# require_user_or_query_token. This closes the previous fully-anonymous read
+# hole while keeping <img>/window.open working (see auth_utils for the URL-in-
+# log tradeoff note). The frontend appends the token via lib/mediaUrl.js.
 #
 # Caching: responses are browser-cacheable. The frontend appends a
 # ?v={asset.version} cache-buster to every media URL, so any edit (which
 # bumps `version` via OCC) yields a brand-new URL and busts the cache. The
 # version-based ETag additionally lets the browser revalidate cheaply (304)
-# once max-age expires.
+# once max-age expires. X-Content-Type-Options: nosniff stops MIME sniffing.
 # ============================================================================
 MEDIA_CACHE_CONTROL = "private, max-age=86400"
 
 
 def _media_headers(etag: str, extra: dict = None) -> dict:
-    headers = {"Cache-Control": MEDIA_CACHE_CONTROL, "ETag": etag}
+    headers = {"Cache-Control": MEDIA_CACHE_CONTROL, "ETag": etag,
+               "X-Content-Type-Options": "nosniff"}
     if extra:
         headers.update(extra)
     return headers
@@ -816,7 +855,8 @@ def _not_modified(request: Request, etag: str):
 
 
 @assets_router.get("/assets/{asset_id}/checklist/{item_idx}/photos/{photo_idx}")
-async def get_asset_checklist_photo(asset_id: str, item_idx: int, photo_idx: int, request: Request):
+async def get_asset_checklist_photo(asset_id: str, item_idx: int, photo_idx: int, request: Request,
+                                    _user: dict = Depends(require_user_or_query_token)):
     """Stream a single inline checklist photo by item & photo index."""
     asset = await db.assets.find_one({"id": asset_id}, {"_id": 0, "document_checklist": 1, "version": 1})
     if not asset:
@@ -849,7 +889,8 @@ async def get_asset_checklist_photo(asset_id: str, item_idx: int, photo_idx: int
 
 
 @assets_router.get("/assets/{asset_id}/checklist/{item_idx}/documents/{doc_idx}")
-async def get_asset_checklist_document(asset_id: str, item_idx: int, doc_idx: int, request: Request):
+async def get_asset_checklist_document(asset_id: str, item_idx: int, doc_idx: int, request: Request,
+                                       _user: dict = Depends(require_user_or_query_token)):
     """Stream a single inline checklist PDF by item & document index."""
     asset = await db.assets.find_one({"id": asset_id}, {"_id": 0, "document_checklist": 1, "version": 1})
     if not asset:
@@ -888,7 +929,8 @@ async def get_asset_checklist_document(asset_id: str, item_idx: int, doc_idx: in
 
 
 @assets_router.get("/assets/{asset_id}/photos/{photo_index}")
-async def get_asset_photo_full(asset_id: str, photo_index: int, request: Request, thumb: int = 0):
+async def get_asset_photo_full(asset_id: str, photo_index: int, request: Request, thumb: int = 0,
+                               _user: dict = Depends(require_user_or_query_token)):
     """Stream a full-resolution photo from GridFS or fallback to inline base64.
 
     ?thumb=1 returns the small per-photo thumbnail instead: the one stored in
@@ -1038,7 +1080,8 @@ async def upload_asset_bast(
         await delete_document_from_gridfs(old_file_id)
 
     invalidate_asset_cache()
-    audit_user = request.headers.get("X-Audit-User", user.get("name") or user.get("username") or "unknown")
+    # Prefer the authenticated JWT identity over the spoofable header hint.
+    audit_user = user.get("name") or user.get("username") or request.headers.get("X-Audit-User", "unknown")
     await log_audit(
         "update", existing.get("activity_id", ""), asset_id,
         existing.get("asset_code", ""), existing.get("asset_name", ""),
@@ -1053,10 +1096,11 @@ async def upload_asset_bast(
 
 
 @assets_router.get("/assets/{asset_id}/bast")
-async def get_asset_bast(asset_id: str, request: Request):
-    """Stream dokumen BAST aset. GET publik — dikonsumsi window.open()
-    (tidak bisa membawa Authorization header), posture sama dengan endpoint
-    media lain. ETag berbasis bast_file_id (unik per unggahan) → cacheable."""
+async def get_asset_bast(asset_id: str, request: Request,
+                         _user: dict = Depends(require_user_or_query_token)):
+    """Stream dokumen BAST aset. Dikonsumsi window.open() (tidak bisa membawa
+    Authorization header) → menerima header ATAU ?token=<jwt>. ETag berbasis
+    bast_file_id (unik per unggahan) → cacheable."""
     asset = await db.assets.find_one(
         {"id": asset_id}, {"_id": 0, "bast_file_id": 1, "bast_filename": 1}
     )
@@ -1084,7 +1128,8 @@ async def get_asset_bast(asset_id: str, request: Request):
 
 
 @assets_router.put("/assets/{asset_id}", response_model=AssetResponse)
-async def update_asset(asset_id: str, asset: AssetCreate, request: Request):
+async def update_asset(asset_id: str, asset: AssetCreate, request: Request,
+                       _user: dict = Depends(require_user)):
     """Update an existing asset. Supports OCC via If-Match header (expected version).
     Returns 409 Conflict if another user modified the asset in the meantime."""
     existing = await db.assets.find_one({"id": asset_id})
@@ -1251,8 +1296,8 @@ async def update_asset(asset_id: str, asset: AssetCreate, request: Request):
 
     logger.info(f"Asset updated: {asset.asset_code}")
     invalidate_asset_cache()
-    audit_user = request.headers.get("X-Audit-User", "unknown")
-    audit_user_id = request.headers.get("X-Audit-User-Id", "")
+    audit_user = _user.get("name") or _user.get("username") or request.headers.get("X-Audit-User", "unknown")
+    audit_user_id = _user.get("id") or request.headers.get("X-Audit-User-Id", "")
     changes = compute_changes(existing, asset.model_dump())
     if changes:
         await log_audit("update", asset.activity_id, asset_id, asset.asset_code, asset.asset_name, audit_user, changes=changes, nup=asset.NUP or "")
@@ -1281,7 +1326,7 @@ PATCHABLE_FIELDS = {
 }
 
 @assets_router.patch("/assets/{asset_id}")
-async def patch_asset(asset_id: str, request: Request):
+async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(require_user)):
     """Partial update — only update the fields provided in the body.
     Supports OCC via If-Match header (expected version) and Idempotency-Key header."""
     # --- Idempotency: replay cached response if same key seen recently ---
@@ -1616,8 +1661,8 @@ async def patch_asset(asset_id: str, request: Request):
 
     logger.info(f"Asset patched: {asset_id} — fields: {list(update_data.keys())}")
     invalidate_asset_cache()
-    audit_user = request.headers.get("X-Audit-User", "unknown")
-    audit_user_id = request.headers.get("X-Audit-User-Id", "")
+    audit_user = _user.get("name") or _user.get("username") or request.headers.get("X-Audit-User", "unknown")
+    audit_user_id = _user.get("id") or request.headers.get("X-Audit-User-Id", "")
     merged = {**existing, **update_data}
     changes = compute_changes(existing, merged)
     if changes:
@@ -1638,8 +1683,8 @@ async def patch_asset(asset_id: str, request: Request):
     return response
 
 @assets_router.delete("/assets/{asset_id}")
-async def delete_asset(asset_id: str, request: Request):
-    """Delete an asset"""
+async def delete_asset(asset_id: str, request: Request, _admin: dict = Depends(require_admin)):
+    """Delete an asset (admin only)"""
     asset_doc = await db.assets.find_one({"id": asset_id}, {"_id": 0})
     if not asset_doc:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
@@ -1650,11 +1695,26 @@ async def delete_asset(asset_id: str, request: Request):
     result = await db.assets.delete_one({"id": asset_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
-    
+
+    # Clean up GridFS blobs the doc referenced so they don't leak as orphans.
+    # Best-effort: a blob-delete failure must NOT block the (already-done) doc
+    # delete — just log it.
+    blob_ids = await _collect_asset_blob_ids(asset_doc)
+    for gid in blob_ids["photos"]:
+        try:
+            await delete_photo_from_gridfs(gid)
+        except Exception as e:
+            logger.warning(f"delete_asset: gagal hapus foto GridFS {gid}: {e}")
+    for gid in blob_ids["documents"]:
+        try:
+            await delete_document_from_gridfs(gid)
+        except Exception as e:
+            logger.warning(f"delete_asset: gagal hapus dokumen GridFS {gid}: {e}")
+
     logger.info(f"Asset deleted: {asset_id}")
     invalidate_asset_cache()
-    audit_user = request.headers.get("X-Audit-User", "unknown")
-    audit_user_id = request.headers.get("X-Audit-User-Id", "")
+    audit_user = _admin.get("name") or _admin.get("username") or request.headers.get("X-Audit-User", "unknown")
+    audit_user_id = _admin.get("id") or request.headers.get("X-Audit-User-Id", "")
     await log_audit("delete", asset_doc.get("activity_id", ""), asset_id, asset_doc.get("asset_code", ""), asset_doc.get("asset_name", ""), audit_user, detail="Aset dihapus", nup=asset_doc.get("NUP", ""))
     # Real-time notification
     await notify_asset_change(asset_doc.get("activity_id", ""), "asset_deleted", {"id": asset_id, "asset_code": asset_doc.get("asset_code", "")}, audit_user, user_id=audit_user_id)
@@ -1663,7 +1723,7 @@ async def delete_asset(asset_id: str, request: Request):
 
 
 @assets_router.post("/assets/migrate-gridfs")
-async def migrate_photos_to_gridfs():
+async def migrate_photos_to_gridfs(_admin: dict = Depends(require_admin)):
     """Migrate existing inline base64 photos to GridFS + generate per-photo thumbnails.
     Safe to run multiple times — skips assets that already have gridfs_ids."""
     cursor = db.assets.find(

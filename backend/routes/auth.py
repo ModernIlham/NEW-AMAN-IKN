@@ -1,4 +1,5 @@
 """Authentication routes: register, login, OTP, heartbeat."""
+import os
 import uuid
 import logging
 from datetime import datetime, timezone
@@ -11,6 +12,19 @@ from shared_utils import limiter, generate_otp, send_otp_email, store_otp, get_o
 
 logger = logging.getLogger(__name__)
 auth_router = APIRouter()
+
+
+def _debug_otp_allowed() -> bool:
+    """Whether the OTP may be echoed back in the API response.
+
+    ONLY when ALLOW_DEBUG_OTP is explicitly truthy AND we are not running in
+    production. Otherwise the OTP is never returned to the client (a returned
+    OTP fully defeats email-based verification for anyone who can hit the API).
+    """
+    allow = os.environ.get("ALLOW_DEBUG_OTP", "").strip().lower() in ("1", "true", "yes", "on")
+    env = (os.environ.get("ENVIRONMENT") or os.environ.get("ENV") or "").strip().lower()
+    is_prod = env in ("production", "prod")
+    return allow and not is_prod
 
 @auth_router.post("/auth/register")
 @limiter.limit("5/minute")
@@ -121,14 +135,14 @@ async def request_otp(request: Request, data: OTPRequest):
     # Send OTP email
     email_sent = await send_otp_email(email, otp, data.name)
     
-    # Show debug OTP if email not configured OR if sending failed
-    show_debug_otp = not RESEND_API_KEY or not email_sent
-    
+    # Only expose the OTP when email delivery is unavailable AND debug echo is
+    # explicitly enabled for a non-production environment.
+    show_debug_otp = (not RESEND_API_KEY or not email_sent) and _debug_otp_allowed()
+
     return {
-        "message": "Kode OTP telah dikirim ke email" if email_sent else "Email gagal terkirim. Gunakan kode OTP di bawah.",
+        "message": "Kode OTP telah dikirim ke email" if email_sent else "Email gagal terkirim. Hubungi administrator.",
         "email": email,
         "otp_sent": email_sent,
-        # Show OTP for admin when email fails or not configured
         "debug_otp": otp if show_debug_otp else None
     }
 
@@ -150,10 +164,10 @@ async def resend_otp(request: Request, data: OTPVerify):
     await store_otp(email, otp, stored["user_data"])
     
     email_sent = await send_otp_email(email, otp, stored["user_data"].get("name", ""))
-    show_debug_otp = not RESEND_API_KEY or not email_sent
-    
+    show_debug_otp = (not RESEND_API_KEY or not email_sent) and _debug_otp_allowed()
+
     return {
-        "message": "Kode OTP baru telah dikirim" if email_sent else "Email gagal terkirim. Gunakan kode OTP di bawah.",
+        "message": "Kode OTP baru telah dikirim" if email_sent else "Email gagal terkirim. Hubungi administrator.",
         "email": email,
         "otp_sent": email_sent,
         "debug_otp": otp if show_debug_otp else None

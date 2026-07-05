@@ -6,6 +6,7 @@ import { Label } from "../ui/label";
 import { toast } from "sonner";
 import { compressImageFile } from "../../lib/imageCompression";
 import { compressPdfFile } from "../../lib/pdfCompression";
+import { authMediaUrl } from "../../lib/mediaUrl";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -56,7 +57,7 @@ const DocumentChecklist = memo(({ checklist, onChange, assetId, assetVersion = 1
       }
       const itemIdx = checklist.indexOf(item);
       if (assetId && itemIdx >= 0 && origIdx >= 0) {
-        return `${API}/assets/${assetId}/checklist/${itemIdx}/photos/${origIdx}?v=${assetVersion}`;
+        return authMediaUrl(`${API}/assets/${assetId}/checklist/${itemIdx}/photos/${origIdx}?v=${assetVersion}`);
       }
       return "";
     }
@@ -127,7 +128,7 @@ const DocumentChecklist = memo(({ checklist, onChange, assetId, assetVersion = 1
           toast.error("Indeks dokumen tidak valid");
           return;
         }
-        const url = `${API}/assets/${assetId}/checklist/${itemIdx}/documents/${origIdx}?v=${assetVersion}`;
+        const url = authMediaUrl(`${API}/assets/${assetId}/checklist/${itemIdx}/documents/${origIdx}?v=${assetVersion}`);
         const w = window.open(url, "_blank");
         if (!w) {
           toast.error("Popup diblokir. Izinkan popup untuk melihat PDF.");
@@ -233,7 +234,7 @@ const DocumentChecklist = memo(({ checklist, onChange, assetId, assetVersion = 1
                             {item.photos.map((photo, pi) => {
                               const src = photoSrcFor(item, photo, pi);
                               const previewSrc = isExistingPhoto(photo) && assetId
-                                ? `${API}/assets/${assetId}/checklist/${idx}/photos/${existingPhotoIdx(photo)}?v=${assetVersion}`
+                                ? authMediaUrl(`${API}/assets/${assetId}/checklist/${idx}/photos/${existingPhotoIdx(photo)}?v=${assetVersion}`)
                                 : src;
                               return (
                                 <div key={pi} className="relative group">

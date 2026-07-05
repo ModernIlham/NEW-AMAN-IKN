@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import axios from "axios";
 import { getApiError } from "@/lib/utils";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
+import { authMediaUrl } from "@/lib/mediaUrl";
 import { compressImageFile } from "@/lib/imageCompression";
 import { compressPdfFile } from "@/lib/pdfCompression";
 
@@ -882,7 +883,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                       className="h-8 text-xs gap-1.5"
                       onClick={() => {
                         const act = filteredActivities[0];
-                        if (act) window.open(`${process.env.REACT_APP_BACKEND_URL}/api/inventory-activities/${act.id}/laporan-satker-html`, '_blank');
+                        if (act) window.open(authMediaUrl(`${process.env.REACT_APP_BACKEND_URL}/api/inventory-activities/${act.id}/laporan-satker-html`), '_blank');
                       }}
                       data-testid="btn-preview-laporan-satker"
                     >

@@ -20,6 +20,7 @@ import InventoryFieldSheet, { PENGGUNA_MELEKAT_OPTIONS, PENGGUNA_NAME_LABELS, OP
 import { toast } from "sonner";
 import axios from "axios";
 import { getApiError } from "../../lib/utils";
+import { authMediaUrl } from "../../lib/mediaUrl";
 import { compressImageFile, compressDataUrl, generateThumbnailFromDataUrl, dataUrlBytes } from "../../lib/imageCompression";
 
 // ============================================================================
@@ -541,7 +542,7 @@ const AssetForm = memo(({
           setAssetVersion(version);
           const items = Array.from({ length: photoCount }, (_, i) => ({
             type: 'existing',
-            thumbnail: `${API}/assets/${editAsset.id}/photos/${i}?thumb=1&v=${version}`,
+            thumbnail: authMediaUrl(`${API}/assets/${editAsset.id}/photos/${i}?thumb=1&v=${version}`),
             originalIndex: i,
           }));
           setPhotoItems(items);
@@ -843,7 +844,7 @@ const AssetForm = memo(({
   const handleBastPreview = useCallback(() => {
     if (!editId) return;
     // bast_file_id unik per unggahan → cache-buster alami untuk GET publik
-    window.open(`${API}/assets/${editId}/bast${bastInfo?.file_id ? `?v=${bastInfo.file_id}` : ""}`, "_blank");
+    window.open(authMediaUrl(`${API}/assets/${editId}/bast${bastInfo?.file_id ? `?v=${bastInfo.file_id}` : ""}`), "_blank");
   }, [editId, bastInfo?.file_id]);
 
   const openCamera = useCallback(() => cameraInputRef.current?.click(), []);

@@ -7,20 +7,16 @@ import jwt
 import bcrypt
 import logging
 from datetime import datetime, timezone
-from fastapi import HTTPException, Header, Depends
+from fastapi import HTTPException, Header, Depends, Query
 from db import db
 
 logger = logging.getLogger(__name__)
 
-# Fail-fast in production: missing JWT_SECRET → log a loud warning. We keep a
-# weak default ONLY for local development; deployment .env MUST set this.
+# Fail-fast: JWT_SECRET MUST be provided by the environment. There is NO usable
+# hardcoded fallback — a predictable secret would let anyone forge admin tokens.
 JWT_SECRET = os.environ.get('JWT_SECRET')
 if not JWT_SECRET:
-    JWT_SECRET = 'inventory_secret_key_2024_DEV_ONLY_DO_NOT_USE_IN_PROD'
-    logger.warning(
-        "JWT_SECRET env var missing — using insecure dev fallback. "
-        "Set a strong secret in production .env immediately."
-    )
+    raise RuntimeError("JWT_SECRET wajib diset")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24
 
@@ -86,4 +82,28 @@ async def require_admin(user: dict = Depends(require_user)) -> dict:
     if user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Hanya admin yang dapat melakukan aksi ini")
     return user
+
+
+async def require_user_or_query_token(
+    authorization: str = Header(default="", alias="Authorization"),
+    token: str = Query(default=""),
+) -> dict:
+    """Auth gate that accepts EITHER an `Authorization: Bearer <jwt>` header OR
+    a `?token=<jwt>` query param (validated against the SAME JWT secret).
+
+    Needed for endpoints consumed by plain `<img src="...">` tags and
+    `window.open(...)`, neither of which can attach an Authorization header:
+    media streaming (photos / checklist files / BAST / pengesahan dokumen) and
+    the HTML/PDF report previews the frontend opens in a new tab.
+
+    SECURITY TRADEOFF: a JWT placed in the URL is captured by web-server and
+    proxy access logs. This is accepted as strictly better than the previous
+    posture (fully anonymous media/report reads); the token carries the normal
+    24h TTL. A short-lived, media-scoped token is a future improvement.
+    """
+    if authorization and authorization.startswith("Bearer "):
+        return await _decode_bearer(authorization)
+    if token:
+        return await _decode_bearer(f"Bearer {token}")
+    raise HTTPException(status_code=401, detail="Autentikasi diperlukan")
 

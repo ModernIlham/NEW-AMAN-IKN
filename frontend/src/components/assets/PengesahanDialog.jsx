@@ -10,6 +10,7 @@ import {
 import { toast } from "sonner";
 import axios from "axios";
 import { getApiError } from "@/lib/utils";
+import { authMediaUrl } from "@/lib/mediaUrl";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const MAX_PDF_MB = 20;
@@ -117,7 +118,7 @@ export default function PengesahanDialog({ open, activity, isAdmin, onClose, onS
   };
 
   const handleViewDoc = (doc) => {
-    window.open(`${API}/inventory-activities/${activity.id}/pengesahan-dokumen/${doc.id}`, "_blank");
+    window.open(authMediaUrl(`${API}/inventory-activities/${activity.id}/pengesahan-dokumen/${doc.id}`), "_blank");
   };
 
   const handleSahkan = async () => {

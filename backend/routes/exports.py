@@ -142,40 +142,45 @@ def format_document_checklist_for_xlsx(checklist: list, asset_id: str, base_url:
     
     return rows
 
+# NOTE (auth posture): this stays a PUBLIC stream — the CSV/XLSX exports embed
+# doc-file links meant to be opened later from a spreadsheet (no auth header/
+# token available there). We DO harden it: the served Content-Type is derived
+# from the file KIND (never the attacker-controllable stored data-URL MIME),
+# and X-Content-Type-Options: nosniff blocks browser MIME-sniffing.
+_DOCFILE_NOSNIFF = {"X-Content-Type-Options": "nosniff"}
+
+
 @exports_router.get("/assets/{asset_id}/doc-file/{item_idx}/{file_type}/{file_idx}")
 async def get_asset_doc_file(asset_id: str, item_idx: int, file_type: str, file_idx: int):
     """Get a specific file (photo or document) from document_checklist"""
     asset = await db.assets.find_one({"id": asset_id}, {"_id": 0, "document_checklist": 1})
     if not asset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
-    
+
     checklist = asset.get('document_checklist', [])
     if item_idx >= len(checklist):
         raise HTTPException(status_code=404, detail="Item tidak ditemukan")
-    
+
     item = checklist[item_idx]
-    
+
     if file_type == "photo":
         photos = item.get('photos', [])
         if file_idx >= len(photos):
             raise HTTPException(status_code=404, detail="Foto tidak ditemukan")
         photo_data = photos[file_idx]
-        
-        # Parse base64 data
-        if "base64," in photo_data:
-            header, encoded = photo_data.split("base64,", 1)
-            mime_type = header.replace("data:", "").replace(";", "")
-        else:
-            encoded = photo_data
-            mime_type = "image/jpeg"
-        
+
+        # Ignore any stored data-URL MIME — photos are always served as JPEG.
+        encoded = photo_data.split("base64,", 1)[1] if "base64," in photo_data else photo_data
         image_bytes = base64.b64decode(encoded)
         return StreamingResponse(
             io.BytesIO(image_bytes),
-            media_type=mime_type,
-            headers={"Content-Disposition": f"inline; filename=foto_{item_idx}_{file_idx}.jpg"}
+            media_type="image/jpeg",
+            headers={
+                "Content-Disposition": f"inline; filename=foto_{item_idx}_{file_idx}.jpg",
+                **_DOCFILE_NOSNIFF,
+            },
         )
-    
+
     elif file_type == "document":
         documents = item.get('documents', [])
         if file_idx >= len(documents):
@@ -183,20 +188,20 @@ async def get_asset_doc_file(asset_id: str, item_idx: int, file_type: str, file_
         doc = documents[file_idx]
         doc_data = doc.get('data', '')
         doc_name = doc.get('name', f'document_{file_idx}.pdf')
-        
-        # Parse base64 data
-        if "base64," in doc_data:
-            encoded = doc_data.split("base64,", 1)[1]
-        else:
-            encoded = doc_data
-        
+
+        # Documents are always PDFs — serve as application/pdf regardless of the
+        # stored data-URL MIME. `attachment` (not inline) is safer for docs.
+        encoded = doc_data.split("base64,", 1)[1] if "base64," in doc_data else doc_data
         doc_bytes = base64.b64decode(encoded)
         return StreamingResponse(
             io.BytesIO(doc_bytes),
             media_type="application/pdf",
-            headers={"Content-Disposition": f"inline; filename={doc_name}"}
+            headers={
+                "Content-Disposition": f'attachment; filename="{doc_name}"',
+                **_DOCFILE_NOSNIFF,
+            },
         )
-    
+
     raise HTTPException(status_code=400, detail="Tipe file tidak valid")
 
 @exports_router.delete("/assets/bulk-delete/{activity_id}")
@@ -227,7 +232,8 @@ async def bulk_delete_assets(request: Request, activity_id: str, _user: dict = D
 
 @exports_router.get("/export/csv")
 @limiter.limit("5/minute")
-async def export_csv(request: Request, activity_id: Optional[str] = None, base_url: str = ""):
+async def export_csv(request: Request, activity_id: Optional[str] = None, base_url: str = "",
+                     _user: dict = Depends(require_user)):
     """Export assets to CSV format - streaming for large datasets with document checklist"""
     query = {"activity_id": activity_id} if activity_id else {}
     total = await db.assets.count_documents(query)
@@ -320,7 +326,8 @@ async def export_csv(request: Request, activity_id: Optional[str] = None, base_u
 
 @exports_router.get("/export/pdf")
 @limiter.limit("3/minute")
-async def export_pdf(request: Request, activity_id: Optional[str] = None):
+async def export_pdf(request: Request, activity_id: Optional[str] = None,
+                     _user: dict = Depends(require_user)):
     """Export assets to professional PDF report with HD photos"""
     query = {"activity_id": activity_id} if activity_id else {}
     total = await db.assets.count_documents(query)
@@ -569,7 +576,8 @@ async def export_pdf(request: Request, activity_id: Optional[str] = None):
 
 @exports_router.get("/export/xlsx")
 @limiter.limit("3/minute")
-async def export_xlsx(request: Request, activity_id: Optional[str] = None, base_url: str = ""):
+async def export_xlsx(request: Request, activity_id: Optional[str] = None, base_url: str = "",
+                      _user: dict = Depends(require_user)):
     """Export assets to Excel format with thumbnails and document checklist - optimized for large datasets"""
     query = {"activity_id": activity_id} if activity_id else {}
     total = await db.assets.count_documents(query)

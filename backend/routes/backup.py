@@ -582,8 +582,9 @@ async def start_restore(
         content = await file.read()
         with open(zip_path, 'wb') as f:
             f.write(content)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Gagal menyimpan file: {str(e)}")
+    except Exception:
+        logger.exception("Restore: gagal menyimpan file upload")
+        raise HTTPException(status_code=400, detail="Gagal menyimpan file backup")
 
     # Quick validation
     try:
@@ -752,8 +753,9 @@ async def restore_backup_legacy(file: UploadFile = File(...), authorization: str
     try:
         content = await file.read()
         zip_buffer = io.BytesIO(content)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Gagal membaca file: {str(e)}")
+    except Exception:
+        logger.exception("Restore: gagal membaca file upload")
+        raise HTTPException(status_code=400, detail="Gagal membaca file backup")
     try:
         with zipfile.ZipFile(zip_buffer, 'r') as zf:
             names = zf.namelist()
@@ -796,12 +798,13 @@ async def restore_backup_legacy(file: UploadFile = File(...), authorization: str
                     with open(target, 'wb') as f:
                         f.write(zf.read(name))
                     upload_files_restored += 1
-    except Exception as e:
+    except Exception:
+        logger.exception("Restore gagal — mengembalikan data ke kondisi semula")
         for col_name in BACKUP_COLLECTIONS:
             await db[col_name].delete_many({})
             if safety_data.get(col_name):
                 await db[col_name].insert_many(safety_data[col_name])
-        raise HTTPException(status_code=500, detail=f"Restore gagal, data dikembalikan. Error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Restore gagal, data telah dikembalikan ke kondisi semula.")
     try:
         await repair_ticket_counters()
     except Exception:

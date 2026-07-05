@@ -1,9 +1,10 @@
 """Asset data validation route."""
 import logging
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 
 from db import db
 from models import AssetCreate
+from auth_utils import require_user
 from routes.imports import validate_import_row
 
 logger = logging.getLogger(__name__)
@@ -14,7 +15,7 @@ validation_router = APIRouter()
 # ============================================================================
 
 @validation_router.post("/assets/validate")
-async def validate_asset_data(asset: AssetCreate, exclude_id: str = ""):
+async def validate_asset_data(asset: AssetCreate, exclude_id: str = "", _user: dict = Depends(require_user)):
     """Validate asset data using the same rules as import. exclude_id is used when editing to skip self."""
     # Get ALL categories (not just 100)
     categories = await db.categories.find({}, {"_id": 0}).to_list(100000)
