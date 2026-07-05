@@ -17,6 +17,7 @@ import { compressImageFile } from "../../lib/imageCompression";
 import { compressPdfFile } from "../../lib/pdfCompression";
 import { toast } from "sonner";
 import { DEFAULT_DOC_ITEMS } from "./DocumentChecklist";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 
 const STIKER_STATUSES = ["Belum Terpasang", "Sudah Terpasang"];
 const STIKER_SIZES = ["Kecil", "Sedang", "Besar"];
@@ -133,6 +134,7 @@ const BatchEditPanel = memo(function BatchEditPanel({
   const [clearPhotos, setClearPhotos] = useState(false);
   const [clearDocChecklist, setClearDocChecklist] = useState(false);
   const photoInputRef = useRef(null);
+  const { confirm, confirmDialog } = useConfirm();
 
   // Collect unique doc checklist item names from selected assets
   const docItemNames = useMemo(() => {
@@ -302,7 +304,7 @@ const BatchEditPanel = memo(function BatchEditPanel({
     });
   };
 
-  const handleApply = () => {
+  const handleApply = async () => {
     const finalUpdates = { ...updates };
 
     // Add active doc checklist items with their files
@@ -335,7 +337,13 @@ const BatchEditPanel = memo(function BatchEditPanel({
     if (clearFieldCount > 0) clearActions.push(`${clearFieldCount} field data`);
 
     if (clearActions.length > 0) {
-      if (!window.confirm(`Anda akan mengosongkan ${clearActions.join(", ")} dari ${selectedCount} aset. Lanjutkan?`)) return;
+      const ok = await confirm({
+        title: "Kosongkan Data Massal",
+        description: `Anda akan mengosongkan ${clearActions.join(", ")} dari ${selectedCount} aset. Tindakan ini tidak dapat dibatalkan. Lanjutkan?`,
+        confirmLabel: "Ya, Kosongkan",
+        variant: "danger",
+      });
+      if (!ok) return;
     }
 
     onApply(finalUpdates);
@@ -348,6 +356,7 @@ const BatchEditPanel = memo(function BatchEditPanel({
 
   return (
     <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 print:hidden" data-testid="batch-edit-panel">
+      {confirmDialog}
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <CheckSquare className="w-4 h-4 text-blue-600" />

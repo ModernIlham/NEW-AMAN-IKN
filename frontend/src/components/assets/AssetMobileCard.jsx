@@ -1,11 +1,15 @@
 import React, { memo, useState, useRef } from "react";
-import { Camera, MapPin, Briefcase, Tag, Trash2, Lock, Cloud, Check, RotateCcw } from "lucide-react";
+import { Camera, MapPin, Briefcase, Tag, Trash2, Lock, Cloud, Check, RotateCcw, MoreVertical, BookOpen, History, CreditCard } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuTrigger, DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 
 // ============================================================================
 // MOBILE CARD WITH SWIPE GESTURES
 // OPTIMIZED: Only uses thumbnail from API (photos are lazy-loaded when editing)
 // ============================================================================
-const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, lockedBy, syncStatus, onRetrySync, onDismissSync, selected, onToggleSelect }) => {
+const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, onOpenKartu, onViewAudit, onPrintCard, lockedBy, syncStatus, onRetrySync, onDismissSync, selected, onToggleSelect }) => {
   const [swipeX, setSwipeX] = useState(0);
   const [startX, setStartX] = useState(0);
   const [isSwiping, setIsSwiping] = useState(false);
@@ -203,6 +207,48 @@ const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, lockedBy, syncS
                   asset.status === "Maintenance" ? "badge-warning" :
                   "badge-error"
                 }`}>{asset.status}</span>
+                {/* Aksi per-aset (paritas dengan tabel desktop): Kartu Inventarisasi,
+                    Riwayat, Cetak Kartu, Hapus. stopPropagation agar tak memicu
+                    edit-on-tap / swipe. */}
+                {(onOpenKartu || onViewAudit || onPrintCard || onDelete) && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={(e) => e.stopPropagation()}
+                        onTouchStart={(e) => e.stopPropagation()}
+                        className="min-h-0 min-w-0 h-7 w-7 -mr-1 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                        aria-label="Aksi lainnya"
+                        data-testid={`mobile-card-actions-${asset.id}`}
+                      >
+                        <MoreVertical className="w-4 h-4" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48" onClick={(e) => e.stopPropagation()}>
+                      {onOpenKartu && (
+                        <DropdownMenuItem onClick={() => onOpenKartu(asset)} data-testid={`mobile-kartu-btn-${asset.id}`}>
+                          <BookOpen className="w-4 h-4 mr-2 text-emerald-500" />Kartu Inventarisasi
+                        </DropdownMenuItem>
+                      )}
+                      {onViewAudit && (
+                        <DropdownMenuItem onClick={() => onViewAudit(asset.id, asset.asset_code)} data-testid={`mobile-audit-btn-${asset.id}`}>
+                          <History className="w-4 h-4 mr-2 text-amber-500" />Riwayat
+                        </DropdownMenuItem>
+                      )}
+                      {onPrintCard && (
+                        <DropdownMenuItem onClick={() => onPrintCard(asset.id)} data-testid={`mobile-print-btn-${asset.id}`}>
+                          <CreditCard className="w-4 h-4 mr-2 text-blue-500" />Cetak Kartu
+                        </DropdownMenuItem>
+                      )}
+                      {onDelete && (<>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => onDelete(asset.id)} className="text-red-600 focus:text-red-600" data-testid={`mobile-delete-btn-${asset.id}`}>
+                          <Trash2 className="w-4 h-4 mr-2" />Hapus
+                        </DropdownMenuItem>
+                      </>)}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
               </div>
             </div>
             {/* Row 2: Category & Location — no fixed max-w caps: each item is a

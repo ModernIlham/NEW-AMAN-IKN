@@ -82,7 +82,7 @@ const DashboardHeader = memo(({
         </button>
         {perms.canManageUsers && (
           <Button variant="ghost" size="sm" onClick={onOpenUserManagement} className="h-7 gap-1 text-xs hidden sm:flex">
-            <Users className="w-3 h-3" /><span className="hidden md:inline">Users</span>
+            <Users className="w-3 h-3" /><span className="hidden md:inline">Pengguna</span>
           </Button>
         )}
         <Button variant={auditOpen ? "default" : "ghost"} size="sm" onClick={onAuditToggle} className={`h-7 gap-1 text-xs ${auditOpen ? 'bg-blue-600 text-white hover:bg-blue-700' : ''}`} data-testid="audit-toggle-btn">

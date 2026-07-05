@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import axios from "axios";
 import { getApiError } from "@/lib/utils";
 import { authMediaUrl } from "@/lib/mediaUrl";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const MAX_PDF_MB = 20;
@@ -54,6 +55,7 @@ export default function PengesahanDialog({ open, activity, isAdmin, onClose, onS
   const [sahkanStep, setSahkanStep] = useState(false); // konfirmasi akhir
   const [sahkanLoading, setSahkanLoading] = useState(false);
   const fileRef = useRef(null);
+  const { confirm, confirmDialog } = useConfirm();
 
   const fetchStatus = useCallback(async () => {
     if (!activity?.id) return;
@@ -104,7 +106,13 @@ export default function PengesahanDialog({ open, activity, isAdmin, onClose, onS
   };
 
   const handleDeleteDoc = async (doc) => {
-    if (!window.confirm(`Hapus dokumen "${doc.name}"?`)) return;
+    const ok = await confirm({
+      title: "Hapus Dokumen",
+      description: `Dokumen "${doc.name}" akan dihapus dari daftar dokumen pengesahan. Lanjutkan?`,
+      confirmLabel: "Hapus",
+      variant: "danger",
+    });
+    if (!ok) return;
     try {
       const token = localStorage.getItem("token");
       await axios.delete(`${API}/inventory-activities/${activity.id}/pengesahan-dokumen/${doc.id}`, {
@@ -142,6 +150,8 @@ export default function PengesahanDialog({ open, activity, isAdmin, onClose, onS
   };
 
   return (
+    <>
+    {confirmDialog}
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose?.(); }}>
       <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto" data-testid="pengesahan-dialog">
         <DialogHeader>
@@ -318,5 +328,6 @@ export default function PengesahanDialog({ open, activity, isAdmin, onClose, onS
         )}
       </DialogContent>
     </Dialog>
+    </>
   );
 }

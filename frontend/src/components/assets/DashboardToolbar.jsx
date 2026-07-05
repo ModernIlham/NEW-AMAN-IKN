@@ -2,7 +2,7 @@ import React, { memo } from "react";
 import {
   Search, Filter, Download, Upload, Settings,
   Loader2, Trash2, Eye, FileText, FileSpreadsheet, CreditCard,
-  List, LayoutGrid,
+  List, LayoutGrid, ShieldCheck, Lock, CheckCircle2, AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,54 @@ import {
 import { CategorySelect, TinifyQuotaIndicator, TinifyQuotaMobile, AdvancedFilter } from "@/components/assets";
 import QrScanButton from "@/components/assets/QrScanButton";
 
+// Pill Pengesahan — entry point finalisasi kegiatan langsung dari dashboard.
+// State: (1) disahkan → badge terkunci "Disahkan · {tiket}", (2) siap disahkan →
+// hijau, (3) ada syarat belum → amber "{n} syarat belum". Admin only.
+function PengesahanPill({ pengesahan, sealed, ticket, onOpen, compact }) {
+  if (!pengesahan) return null; // status belum termuat / non-admin
+  const disahkan = sealed || pengesahan.disahkan;
+
+  if (disahkan) {
+    return (
+      <span
+        className="inline-flex items-center gap-1 h-8 px-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-700 text-emerald-700 dark:text-emerald-400 text-xs font-medium flex-shrink-0 whitespace-nowrap"
+        title={ticket ? `Kegiatan telah disahkan (tiket ${ticket}) — data terkunci` : "Kegiatan telah disahkan — data terkunci"}
+        data-testid="pengesahan-sealed-badge"
+      >
+        <Lock className="w-3.5 h-3.5" />
+        <span>Disahkan{ticket && !compact ? ` · ${ticket}` : ""}</span>
+      </span>
+    );
+  }
+
+  const eligible = pengesahan.eligible;
+  const tone = eligible
+    ? "border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-900/30"
+    : "border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-900/30";
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={onOpen}
+      className={`h-8 min-h-0 text-xs gap-1.5 flex-shrink-0 ${tone}`}
+      title={eligible ? "Kegiatan siap disahkan" : `${pengesahan.blockerCount} syarat pengesahan belum terpenuhi`}
+      data-testid="pengesahan-pill"
+    >
+      <ShieldCheck className="w-3.5 h-3.5" />
+      {!compact && <span className="whitespace-nowrap">Pengesahan</span>}
+      {eligible ? (
+        <span className="inline-flex items-center gap-0.5 whitespace-nowrap">
+          <CheckCircle2 className="w-3 h-3" />{!compact && " Siap disahkan"}
+        </span>
+      ) : (
+        <span className="inline-flex items-center gap-0.5 whitespace-nowrap">
+          <AlertTriangle className="w-3 h-3" />{compact ? pengesahan.blockerCount : ` ${pengesahan.blockerCount} syarat belum`}
+        </span>
+      )}
+    </Button>
+  );
+}
+
 const DashboardToolbar = memo(function DashboardToolbar({
   searchInput, setSearchInput,
   categories, filterCategory, setFilterCategory,
@@ -28,6 +76,7 @@ const DashboardToolbar = memo(function DashboardToolbar({
   resetAdvancedFilters, handleCategoryReset,
   refreshData,
   viewMode, setViewMode,
+  showPengesahan, pengesahan, sealed, pengesahanTicket, onOpenPengesahan,
 }) {
   return (
     <div className="bg-card rounded-xl border border-border shadow-sm p-2 sm:p-2.5 print:hidden" data-testid="dashboard-toolbar">
@@ -125,6 +174,15 @@ const DashboardToolbar = memo(function DashboardToolbar({
 
           <div className="flex-1"></div>
 
+          {showPengesahan && (
+            <PengesahanPill
+              pengesahan={pengesahan}
+              sealed={sealed}
+              ticket={pengesahanTicket}
+              onOpen={onOpenPengesahan}
+            />
+          )}
+
           <TinifyQuotaIndicator />
 
           <DropdownMenu>
@@ -192,6 +250,16 @@ const DashboardToolbar = memo(function DashboardToolbar({
           </Select>
 
           <TinifyQuotaMobile className="flex-shrink-0" />
+
+          {showPengesahan && (
+            <PengesahanPill
+              pengesahan={pengesahan}
+              sealed={sealed}
+              ticket={pengesahanTicket}
+              onOpen={onOpenPengesahan}
+              compact
+            />
+          )}
 
           {/* Mobile View Toggle */}
           {viewMode !== undefined && setViewMode && (

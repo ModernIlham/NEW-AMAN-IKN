@@ -5,12 +5,15 @@ import AssetMobileCard from "./AssetMobileCard";
 // ============================================================================
 // MOBILE INFINITE SCROLL CARDS - Auto loads more when scrolling to bottom
 // ============================================================================
-const VirtualizedMobileCards = memo(({ 
-  assets, 
-  editId, 
-  onEdit, 
-  onDelete, 
-  onLoadMore, 
+const VirtualizedMobileCards = memo(({
+  assets,
+  editId,
+  onEdit,
+  onDelete,
+  onOpenKartu,
+  onViewAudit,
+  onPrintCard,
+  onLoadMore,
   isLoadingMore = false,
   hasMore = true,
   totalItems = 0,
@@ -69,12 +72,15 @@ const VirtualizedMobileCards = memo(({
         const lock = rowLocks[asset.id];
         const isLockedByOther = lock && lock.session_id !== currentSessionId;
         return (
-          <AssetMobileCard 
+          <AssetMobileCard
             key={asset.id}
-            asset={asset} 
-            editId={editId} 
-            onEdit={isLockedByOther ? undefined : onEdit} 
+            asset={asset}
+            editId={editId}
+            onEdit={isLockedByOther ? undefined : onEdit}
             onDelete={isLockedByOther ? undefined : onDelete}
+            onOpenKartu={onOpenKartu}
+            onViewAudit={onViewAudit}
+            onPrintCard={onPrintCard}
             lockedBy={isLockedByOther ? lock.user_name : null}
             syncStatus={syncStatuses[asset.id]}
             onRetrySync={onRetrySync}
