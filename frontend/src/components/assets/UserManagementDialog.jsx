@@ -368,8 +368,8 @@ function UserManagementDialog({ open, onClose, currentUser }) {
             Users
             <span className="text-[10px] text-muted-foreground font-normal ml-1">{users.length}</span>
             <button 
-              onClick={() => onClose(false)} 
-              className="ml-auto p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              onClick={() => onClose(false)}
+              className="ml-auto inline-flex items-center justify-center p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
               data-testid="user-mgmt-close"
             >
               <X className="w-4 h-4" />
