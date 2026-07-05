@@ -1011,16 +1011,10 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
           </div>
         </div>
       )}
-      {/* Global loading overlay */}
-      {exporting && (
-        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[100] flex items-center justify-center">
-          <div className="bg-card rounded-2xl shadow-2xl px-8 py-6 flex flex-col items-center gap-3">
-            <Loader2 className="w-10 h-10 animate-spin text-blue-600" />
-            <p className="text-sm font-medium text-foreground">Mengexport data...</p>
-            <p className="text-xs text-muted-foreground">Mohon tunggu sebentar</p>
-          </div>
-        </div>
-      )}
+      {/* Export progress is surfaced non-blockingly via the download toast
+          (downloadFileWithProgress) + BackgroundTaskBar — no redundant
+          full-screen blocking overlay. `exporting` still disables the toolbar
+          export buttons to prevent double-submits. */}
       {/* HEADER */}
       <DashboardHeader
         activity={activity} user={user} perms={perms}
@@ -1118,7 +1112,36 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
             {loading ? (
               <LoadingIndicator message={loadingMessage} totalItems={totalItems} pageSize={pageSize} currentPage={currentPage} />
             ) : assets.length === 0 ? (
-              <div className="text-center py-16"><Package className="w-12 h-12 mx-auto mb-3 text-muted-foreground" /><p className="text-muted-foreground">Data tidak ditemukan</p></div>
+              (activeFilterCount > 0 || searchInput.trim()) ? (
+                /* Filter/pencarian aktif → hasil kosong, bukan berarti belum ada aset */
+                <div className="text-center py-16" data-testid="empty-filtered">
+                  <Package className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
+                  <p className="text-muted-foreground mb-3">Tidak ada aset yang cocok dengan filter</p>
+                  <Button
+                    variant="outline" size="sm"
+                    onClick={() => { setSearchInput(''); resetAdvancedFilters(); refreshData(1); }}
+                    data-testid="empty-reset-filter-btn"
+                  >
+                    Reset filter
+                  </Button>
+                </div>
+              ) : (
+                /* Benar-benar belum ada aset pada kegiatan ini */
+                <div className="text-center py-16" data-testid="empty-no-assets">
+                  <Package className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
+                  <p className="text-foreground/80 font-medium mb-1">Belum ada aset</p>
+                  <p className="text-xs text-muted-foreground mb-3">Tambah aset pertama untuk kegiatan ini.</p>
+                  {perms.canEdit && (
+                    <Button
+                      size="sm" className="bg-blue-600 hover:bg-blue-700 text-white gap-1"
+                      onClick={() => { setEditAssetForForm(null); setIsSidebarOpen(true); }}
+                      data-testid="empty-add-asset-btn"
+                    >
+                      <Plus className="w-4 h-4" />Tambah Aset
+                    </Button>
+                  )}
+                </div>
+              )
             ) : (<div className="relative">
               {/* Skeleton overlay for page-size / pagination / filter / sort
                   requests. The relative wrapper scopes it to the list area

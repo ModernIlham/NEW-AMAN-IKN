@@ -127,13 +127,21 @@ const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, onOpenKartu, on
       )}
       
       {/* Main card content */}
-      <div 
+      <div
         ref={cardRef}
         onClick={() => swipeX === 0 && onEdit && onEdit(asset)}
+        {...(onEdit ? {
+          role: "button",
+          tabIndex: 0,
+          "aria-label": `Edit aset ${asset.asset_code || ''}${asset.asset_name ? ' - ' + asset.asset_name : ''}`.trim(),
+          onKeyDown: (e) => {
+            if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onEdit(asset); }
+          },
+        } : {})}
         onTouchStart={onDelete ? handleTouchStart : undefined}
         onTouchMove={onDelete ? handleTouchMove : undefined}
         onTouchEnd={onDelete ? handleTouchEnd : undefined}
-        className={`bg-card p-2.5 ${onEdit && !syncStatus?.status?.match?.(/saving/) ? 'cursor-pointer' : ''} border-y relative ${
+        className={`bg-card p-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 ${onEdit && !syncStatus?.status?.match?.(/saving/) ? 'cursor-pointer' : ''} border-y relative ${
           syncStatus?.status === 'failed' ? "border-rose-300 bg-rose-50/50" :
           syncStatus?.status === 'saving' ? "border-blue-200 bg-blue-50/30 dark:border-blue-800 dark:bg-blue-900/20" :
           syncStatus?.status === 'saved' ? "border-emerald-200 bg-emerald-50/20 dark:border-emerald-800 dark:bg-emerald-900/20" :

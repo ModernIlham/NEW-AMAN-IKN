@@ -48,6 +48,35 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#33] UX ronde B: validasi inline, aksesibilitas, empty/error state — 2026-07-05
+
+- **Validasi inline**: error di form aset & kegiatan kini tampil di bawah field
+  terkait (border merah + teks bantuan + `aria-invalid`), auto-scroll & pindah
+  tab ke field pertama yang salah; toast jadi ringkasan singkat (bukan sumber
+  detail).
+- **Aksesibilitas**: baris tabel & kartu mobile bisa dioperasikan keyboard
+  (Enter/Space, `role=button`, focus-ring); target sentuh aksi baris 20→28px;
+  glyph status inventaris diberi label penuh + font dinaikkan; ukuran teks
+  data (badge) di dua tampilan list utama dinaikkan; overlay buatan-sendiri
+  (lightbox foto kegiatan, reset, restore) dapat `role=dialog aria-modal`,
+  autofocus, Escape, dan focus-restore.
+- **Empty/error state**: gagal muat kegiatan → kartu error + "Coba Lagi"
+  (bukan seolah tak ada kegiatan); daftar aset kosong dibedakan: filter aktif →
+  "tidak cocok" + Reset filter, vs kegiatan baru → "Belum ada aset" + CTA
+  tambah; overlay blocking ekspor yang redundan dihapus.
+
+## [#32] UX ronde A: pill pengesahan dashboard, dialog konfirmasi terpadu, paritas aksi mobile, branding — 2026-07-05
+
+- **Pengesahan di layar kerja**: pill toolbar (admin) — "Siap disahkan" / "{n}
+  syarat belum" / "Disahkan · {tiket}" — membuka dialog pengesahan langsung;
+  tombol di kartu kegiatan dibuat selalu terlihat.
+- **Dialog konfirmasi terpadu** (`ui/ConfirmDialog` + `useConfirm`): menggantikan
+  semua `window.confirm`; hapus kegiatan (cascade) butuh ketik "HAPUS".
+- **Paritas aksi mobile**: menu ⋯ (Kartu Inventarisasi / Riwayat / Cetak Kartu /
+  Hapus) setara aksi baris desktop.
+- **Branding/istilah**: wordmark AMAN, tahun copyright dinamis, "Users"→
+  "Pengguna", "Logout"→"Keluar".
+
 ## [#31] Pengerasan keamanan menyeluruh (hasil audit) — 2026-07-05
 
 > ⚠️ **Prasyarat deploy**: (1) `JWT_SECRET` **wajib** diset di environment —

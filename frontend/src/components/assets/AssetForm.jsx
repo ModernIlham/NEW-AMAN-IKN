@@ -377,9 +377,49 @@ function buildEditFormData(a, activityId) {
   };
 }
 
-const AssetForm = memo(({ 
-  isOpen, 
-  onClose, 
+// ============================================================================
+// INLINE FIELD VALIDATION
+// ============================================================================
+// Which form section (tab) each errorable field lives in — lets us switch to
+// the tab containing the first error before scrolling/focusing it.
+const FIELD_SECTION = {
+  asset_code: "basic", asset_name: "basic", NUP: "basic", category: "basic",
+  koordinat_latitude: "basic", koordinat_longitude: "basic",
+  pengguna_jabatan: "basic", condition: "basic", status: "basic",
+  kode_register: "basic", inventory_status: "basic",
+  stiker_status: "basic", stiker_ukuran: "basic",
+  nomor_spm: "procurement", perolehan_dari_nama: "procurement",
+  nomor_kontrak: "procurement", nomor_bukti_perolehan: "procurement",
+  supplier: "procurement",
+};
+
+// Best-effort mapping of a server /validate error STRING to the offending field
+// so it can be shown inline. Order matters (most specific first). Anything that
+// matches nothing here stays in the summary block. See routes/validation.py +
+// routes/imports.py:validate_import_row for the source strings.
+const SERVER_ERROR_FIELD_PATTERNS = [
+  [/kode register/i, "kode_register"],
+  [/kombinasi kode barang|\bNUP\b/i, "NUP"],
+  [/kode aset|kode barang|asset_code/i, "asset_code"],
+  [/nomor spm|\bspm\b/i, "nomor_spm"],
+  [/kategori|category/i, "category"],
+  [/kondisi|condition/i, "condition"],
+  [/stiker_ukuran|ukuran stiker/i, "stiker_ukuran"],
+  [/stiker_status|status stiker/i, "stiker_status"],
+  [/inventory_status|status inventaris/i, "inventory_status"],
+  [/\bstatus\b/i, "status"],
+];
+function mapServerErrorToField(msg) {
+  if (typeof msg !== "string") return null;
+  for (const [re, field] of SERVER_ERROR_FIELD_PATTERNS) {
+    if (re.test(msg)) return field;
+  }
+  return null;
+}
+
+const AssetForm = memo(({
+  isOpen,
+  onClose,
   activity,
   categories,
   editAsset,
@@ -396,6 +436,14 @@ const AssetForm = memo(({
 }) => {
   const [formSection, setFormSection] = useState("basic");
   const [formErrors, setFormErrors] = useState([]);
+  // Inline per-field validation: { [fieldName]: message }. Rendered as a red
+  // border + helper text beneath the offending input, cleared on change.
+  const [fieldErrors, setFieldErrors] = useState({});
+  // Bumped on a failed submit to trigger the scroll-to-first-error effect even
+  // when the target tab didn't change (setFormSection would be a no-op then).
+  const [errorScrollNonce, setErrorScrollNonce] = useState(0);
+  const pendingScrollFieldRef = useRef(null);
+  const formScrollRef = useRef(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
   const [categorySearch, setCategorySearch] = useState("");
@@ -484,6 +532,7 @@ const AssetForm = memo(({
       setFormSection("basic");
       setShowFullForm(false);
       setFormErrors([]);
+      setFieldErrors({});
       setIsSubmitting(false);
       setOfflineNotice(false);
       originalDataRef.current = null;
@@ -580,6 +629,7 @@ const AssetForm = memo(({
       setFormSection("basic");
       setShowFullForm(false);
       setFormErrors([]);
+      setFieldErrors({});
       setCategorySearch("");
       setIsSubmitting(false);
       setIsFormLoading(false);
@@ -604,6 +654,7 @@ const AssetForm = memo(({
     setAssetVersion(1);
     setFormSection("basic");
     setFormErrors([]);
+    setFieldErrors({});
     setCategorySearch("");
     setOfflineNotice(false);
     originalDataRef.current = null;
@@ -748,14 +799,56 @@ const AssetForm = memo(({
     }
   }, [isOpen, isEditing, inventoryMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Clear a single field's inline error (used on change so the red state
+  // disappears as soon as the user starts correcting the field).
+  const clearFieldError = useCallback((name) => {
+    setFieldErrors(prev => {
+      if (!prev[name]) return prev;
+      const next = { ...prev };
+      delete next[name];
+      return next;
+    });
+  }, []);
+
   const handleInputChange = useCallback(e => {
     const { name, value } = e.target;
     setFormData(p => ({ ...p, [name]: value }));
-  }, []);
+    clearFieldError(name);
+  }, [clearFieldError]);
 
   const handleSelectChange = useCallback((f, v) => {
     setFormData(p => ({ ...p, [f]: v }));
+    clearFieldError(f);
+  }, [clearFieldError]);
+
+  // Switch to the tab holding `fieldName`, then queue a scroll+focus to it.
+  const focusFieldError = useCallback((fieldName) => {
+    if (!fieldName) return;
+    const section = FIELD_SECTION[fieldName] || "basic";
+    // The jabatan input only exists in the full form — open it from the quick
+    // inventory sheet (parity with the previous setShowFullForm behavior).
+    if (fieldName === "pengguna_jabatan") setShowFullForm(true);
+    setFormSection(section);
+    pendingScrollFieldRef.current = fieldName;
+    setErrorScrollNonce(n => n + 1);
   }, []);
+
+  // Scroll the first errored field into view + focus it after the tab switch
+  // has rendered. Keyed on the nonce so it re-fires even for same-tab errors.
+  useEffect(() => {
+    const name = pendingScrollFieldRef.current;
+    if (!name) return;
+    const t = setTimeout(() => {
+      pendingScrollFieldRef.current = null;
+      const root = formScrollRef.current || document;
+      const el = root.querySelector(`[name="${name}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        try { el.focus({ preventScroll: true }); } catch { /* not focusable */ }
+      }
+    }, 60);
+    return () => clearTimeout(t);
+  }, [errorScrollNonce]);
 
   // Ganti status inventarisasi + bersihkan field turunan yang tidak relevan.
   // Dipakai oleh Select "Status Inventarisasi" DAN tombol segmented di
@@ -984,38 +1077,68 @@ const AssetForm = memo(({
 
   const handleSubmit = useCallback(async e => {
     e.preventDefault();
-    if (!formData.asset_code || !formData.asset_name) { toast.error("Kode dan Nama Aset wajib"); return; }
-    
+
+    // === Inline client-side validation ===
+    const errs = {};
+    if (!formData.asset_code) errs.asset_code = "Kode Aset wajib diisi";
+    if (!formData.asset_name) errs.asset_name = "Nama Aset wajib diisi";
+
     // Validate lat/long: required ONLY once the asset is inventoried
     // (status != "Belum Diinventarisasi"). Uploading a photo alone never
     // forces GPS, so a "Belum Diinventarisasi" asset saves without coordinates.
     const isInventoried = formData.inventory_status && formData.inventory_status !== "Belum Diinventarisasi";
-    if (isInventoried && (!formData.koordinat_latitude || !formData.koordinat_longitude)) {
-      toast.error("Koordinat Latitude & Longitude wajib diisi jika status inventarisasi sudah berubah");
-      setFormSection("basic");
+    if (isInventoried && !formData.koordinat_latitude) errs.koordinat_latitude = "Koordinat wajib diisi setelah inventarisasi";
+    if (isInventoried && !formData.koordinat_longitude) errs.koordinat_longitude = "Koordinat wajib diisi setelah inventarisasi";
+
+    // Pengguna terstruktur: bila melekat ke Jabatan, nama jabatan wajib diisi.
+    if (formData.pengguna_melekat_ke === "Jabatan" && !(formData.pengguna_jabatan || "").trim()) {
+      errs.pengguna_jabatan = "Nama jabatan wajib diisi bila pengguna melekat ke Jabatan";
+    }
+
+    if (Object.keys(errs).length > 0) {
+      setFieldErrors(errs);
+      setFormErrors([]);
+      // Prioritas gulir ke error pertama (urutan wajar dari atas form).
+      const order = ["asset_code", "asset_name", "koordinat_latitude", "koordinat_longitude", "pengguna_jabatan"];
+      focusFieldError(order.find(f => errs[f]) || Object.keys(errs)[0]);
+      toast.error(`Periksa ${Object.keys(errs).length} field yang belum benar`);
       return;
     }
 
-    // Pengguna terstruktur: bila melekat ke Jabatan, nama jabatan wajib diisi.
-    // Input jabatan hanya ada di form lengkap — buka form lengkap bila save
-    // datang dari sheet mode inventarisasi lapangan.
-    if (formData.pengguna_melekat_ke === "Jabatan" && !(formData.pengguna_jabatan || "").trim()) {
-      toast.error("Nama jabatan wajib diisi bila pengguna melekat ke Jabatan");
-      setFormSection("basic");
-      setShowFullForm(true);
-      return;
-    }
-    
     // Validate (server round-trip) — skip saat offline: simpan langsung masuk
     // antrean dan backend tetap memvalidasi ulang saat tersinkron.
     if (navigator.onLine) {
       try {
         const url = isEditing && editId ? `${API}/assets/validate?exclude_id=${editId}` : `${API}/assets/validate`;
         const r = await axios.post(url, formData);
-        if (!r.data.valid) { setFormErrors(r.data.errors); toast.error("Data tidak valid"); return; }
+        if (!r.data.valid) {
+          const serverErrors = Array.isArray(r.data.errors) ? r.data.errors : [];
+          // Map errors that identify a field → inline; keep the rest as a summary.
+          const mapped = {};
+          const unmapped = [];
+          for (const msg of serverErrors) {
+            const field = mapServerErrorToField(msg);
+            if (field && !mapped[field]) mapped[field] = msg;
+            else unmapped.push(msg);
+          }
+          setFieldErrors(mapped);
+          setFormErrors(unmapped);
+          const firstField = serverErrors.map(mapServerErrorToField).find(Boolean);
+          if (firstField) {
+            focusFieldError(firstField);
+          } else {
+            // Server hanya mengirim string generik → pertahankan blok ringkasan,
+            // tetap gulir ke atas form agar terlihat.
+            setFormSection("basic");
+            if (formScrollRef.current) formScrollRef.current.scrollTo({ top: 0, behavior: "smooth" });
+          }
+          const total = Object.keys(mapped).length + unmapped.length;
+          toast.error(Object.keys(mapped).length > 0 ? `Periksa ${total} field yang belum benar` : "Data tidak valid");
+          return;
+        }
       } catch { /* allow submission if validation endpoint fails */ }
     }
-    
+
     setIsSubmitting(true);
     
     try {
@@ -1201,7 +1324,7 @@ const AssetForm = memo(({
       else if (err.code === 'ECONNABORTED') errorMsg = "Koneksi timeout. Coba kurangi ukuran file.";
       toast.error(errorMsg);
     } finally { setIsSubmitting(false); }
-  }, [formData, isEditing, editId, resetForm, onSubmitSuccess, onOptimisticSubmit, onSaveAndNavigate, onClose]);
+  }, [formData, isEditing, editId, resetForm, onSubmitSuccess, onOptimisticSubmit, onSaveAndNavigate, onClose, focusFieldError]);
 
   // Tampilan eksklusif inventarisasi lapangan menggantikan seluruh body form.
   const sheetMode = inventoryMode && isEditing && !showFullForm;
@@ -1221,6 +1344,12 @@ const AssetForm = memo(({
     const s = categorySearch.toLowerCase();
     return cats.filter(c => (c.label||'').toLowerCase().includes(s) || (c.kode_aset||'').toLowerCase().includes(s)).slice(0, 200);
   }, [categories, categorySearch]);
+
+  // Inline error helpers: red border on the input + a small helper line under it.
+  const fieldErrCls = (name) => fieldErrors[name] ? " border-red-500 dark:border-red-500 focus-visible:ring-red-500" : "";
+  const renderFieldError = (name) => fieldErrors[name] ? (
+    <p className="text-[11px] text-red-600 dark:text-red-400 mt-0.5" data-testid={`field-error-${name}`}>{fieldErrors[name]}</p>
+  ) : null;
 
   return (
     <>
@@ -1366,7 +1495,7 @@ const AssetForm = memo(({
         )}
 
         {/* Form */}
-        {!isFormLoading && !sheetMode && <div className="flex-1 overflow-y-auto">
+        {!isFormLoading && !sheetMode && <div ref={formScrollRef} className="flex-1 overflow-y-auto">
           <form onSubmit={handleSubmit} className="p-3 space-y-2.5">
             {/* Mode inventarisasi: kembali ke tampilan cepat dari form lengkap */}
             {inventoryMode && isEditing && showFullForm && (
@@ -1382,13 +1511,14 @@ const AssetForm = memo(({
             {formSection === "basic" && (<>
               <div className="space-y-1">
                 <Label className="text-xs">Kode Aset *</Label>
-                <Input name="asset_code" value={formData.asset_code} onChange={handleInputChange} placeholder="Pilih kategori untuk mengisi otomatis" required className="h-8 bg-muted" readOnly={!!categories.find(c => c.kode_aset && c.label === formData.category)} />
+                <Input name="asset_code" value={formData.asset_code} onChange={handleInputChange} placeholder="Pilih kategori untuk mengisi otomatis" required className={`h-8 bg-muted${fieldErrCls("asset_code")}`} readOnly={!!categories.find(c => c.kode_aset && c.label === formData.category)} aria-invalid={!!fieldErrors.asset_code} />
+                {renderFieldError("asset_code")}
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1 min-w-0"><Label className="text-xs">NUP</Label><Input name="NUP" value={formData.NUP} onChange={handleInputChange} placeholder="1" className="h-8" /></div>
                 <div className="space-y-1 min-w-0"><Label className="text-xs">Serial Number</Label><Input name="serial_number" value={formData.serial_number} onChange={handleInputChange} className="h-8" /></div>
               </div>
-              <div className="space-y-1"><Label className="text-xs">Nama Aset *</Label><Input name="asset_name" value={formData.asset_name} onChange={handleInputChange} required className="h-8" /></div>
+              <div className="space-y-1"><Label className="text-xs">Nama Aset *</Label><Input name="asset_name" value={formData.asset_name} onChange={handleInputChange} required className={`h-8${fieldErrCls("asset_name")}`} aria-invalid={!!fieldErrors.asset_name} />{renderFieldError("asset_name")}</div>
               
               {/* Category */}
               <div className="space-y-1">
@@ -1414,7 +1544,7 @@ const AssetForm = memo(({
                         {filteredCategories.map(c => (
                           <DropdownMenuItem key={c.id} onClick={() => {
                             handleSelectChange("category", c.label);
-                            if (c.kode_aset) setFormData(p => ({ ...p, asset_code: c.kode_aset }));
+                            if (c.kode_aset) { setFormData(p => ({ ...p, asset_code: c.kode_aset })); clearFieldError("asset_code"); }
                             // Kategori "dummy": NUP dinomori otomatis (max+1 dalam
                             // lingkup kode aset + kegiatan, sesuai kunci unik backend).
                             if (/dummy/i.test(c.label || "")) {
@@ -1497,7 +1627,8 @@ const AssetForm = memo(({
                 {formData.pengguna_melekat_ke === "Jabatan" && (
                   <div className="space-y-1">
                     <Label className="text-xs">Nama Jabatan *</Label>
-                    <Input name="pengguna_jabatan" value={formData.pengguna_jabatan} onChange={handleInputChange} placeholder="Contoh: Kepala Subbagian Umum" className="h-8" data-testid="input-pengguna-jabatan" />
+                    <Input name="pengguna_jabatan" value={formData.pengguna_jabatan} onChange={handleInputChange} placeholder="Contoh: Kepala Subbagian Umum" className={`h-8${fieldErrCls("pengguna_jabatan")}`} aria-invalid={!!fieldErrors.pengguna_jabatan} data-testid="input-pengguna-jabatan" />
+                    {renderFieldError("pengguna_jabatan")}
                   </div>
                 )}
                 {formData.pengguna_melekat_ke === "Operasional" && (
@@ -1789,14 +1920,15 @@ const AssetForm = memo(({
                     <div className="space-y-0.5">
                       <Label className="text-[10px] text-muted-foreground">Latitude</Label>
                       <Input name="koordinat_latitude" value={formData.koordinat_latitude || ""} onChange={handleInputChange}
-                        placeholder="-6.175110" className="h-7 text-xs" />
+                        placeholder="-6.175110" className={`h-7 text-xs${fieldErrCls("koordinat_latitude")}`} aria-invalid={!!fieldErrors.koordinat_latitude} />
                     </div>
                     <div className="space-y-0.5">
                       <Label className="text-[10px] text-muted-foreground">Longitude</Label>
                       <Input name="koordinat_longitude" value={formData.koordinat_longitude || ""} onChange={handleInputChange}
-                        placeholder="106.865036" className="h-7 text-xs" />
+                        placeholder="106.865036" className={`h-7 text-xs${fieldErrCls("koordinat_longitude")}`} aria-invalid={!!fieldErrors.koordinat_longitude} />
                     </div>
                   </div>
+                  {(fieldErrors.koordinat_latitude || fieldErrors.koordinat_longitude) && renderFieldError(fieldErrors.koordinat_latitude ? "koordinat_latitude" : "koordinat_longitude")}
                 </div>
               </div>
               
