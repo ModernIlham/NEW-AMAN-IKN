@@ -82,11 +82,11 @@ const VirtualizedAssetTable = memo(({ assets, editId, onEdit, onDelete, onPrintC
         <div className="hidden xl:block flex-1 min-w-0 px-1">Lokasi</div>
         <div className="hidden xl:block w-20 flex-shrink-0 px-1 text-right">Harga</div>
         <div className="w-14 flex-shrink-0 text-center">Kondisi</div>
-        <div className="w-12 flex-shrink-0 text-center">Status</div>
+        <div className="w-14 flex-shrink-0 text-center">Status</div>
         <div className="hidden xl:block w-9 flex-shrink-0 text-center">Dok</div>
         <div className="hidden xl:block w-10 flex-shrink-0 text-center">Stiker</div>
         <div className="w-9 flex-shrink-0 text-center">INV</div>
-        <div className="w-[72px] flex-shrink-0" />
+        <div className="w-[116px] flex-shrink-0" />
       </div>
 
       {/* Virtualized Body */}
@@ -109,12 +109,24 @@ const VirtualizedAssetTable = memo(({ assets, editId, onEdit, onDelete, onPrintC
             const isFailed = sync?.status === "failed";
             const isConflict = sync?.status === "conflict";
             const isBusy = isQueued || isSyncing; // Row not clickable during queue/saving
+            // A row is operable (mouse + keyboard) only when editing is allowed
+            // and it isn't locked/queued/saving/failed. Conflict rows stay
+            // operable (reload-then-edit), matching the onClick guard below.
+            const rowClickable = !!onEdit && !locked && !isBusy && !isFailed;
 
             return (
               <div
                 key={a.id}
-                onClick={onEdit && !locked && !isBusy && !isFailed ? () => onEdit(a) : undefined}
-                className={`absolute left-0 right-0 flex items-center border-b border-border/50 transition-colors ${
+                onClick={rowClickable ? () => onEdit(a) : undefined}
+                {...(rowClickable ? {
+                  role: "button",
+                  tabIndex: 0,
+                  "aria-label": `Edit aset ${a.asset_code || ''}${a.asset_name ? ' - ' + a.asset_name : ''}`.trim(),
+                  onKeyDown: (e) => {
+                    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onEdit(a); }
+                  },
+                } : {})}
+                className={`absolute left-0 right-0 flex items-center border-b border-border/50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 ${
                   isConflict ? 'bg-orange-50 dark:bg-orange-900/20 border-l-2 border-l-orange-400 cursor-pointer'
                   : isFailed ? 'bg-rose-50 dark:bg-rose-900/20 border-l-2 border-l-rose-400 cursor-not-allowed opacity-70'
                   : isSyncing ? 'bg-blue-50/50 dark:bg-blue-900/20 border-l-2 border-l-blue-400 cursor-not-allowed opacity-70'
@@ -257,35 +269,41 @@ const VirtualizedAssetTable = memo(({ assets, editId, onEdit, onDelete, onPrintC
 
                 {/* Kondisi */}
                 <div className="w-14 flex-shrink-0 flex justify-center">
-                  <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full leading-none ${
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none ${
                     a.condition === "Baik" ? "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400" : a.condition === "Rusak Ringan" ? "bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400" : "bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400"
                   }`}>{a.condition === "Rusak Ringan" ? "R.Ringan" : a.condition === "Rusak Berat" ? "R.Berat" : (a.condition || '-')}</span>
                 </div>
 
-                {/* Status */}
-                <div className="w-12 flex-shrink-0 flex justify-center">
-                  <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full leading-none ${
+                {/* Status — column widened to w-14 + "Maintenance" abbreviated so
+                    the larger (legible) font never overflows into INV. */}
+                <div className="w-14 flex-shrink-0 flex justify-center">
+                  <span title={a.status || ''} className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none ${
                     a.status === "Aktif" ? "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400" :
                     a.status === "Idle" ? "bg-sky-50 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400" :
                     a.status === "Maintenance" ? "bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400" :
                     "bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400"
-                  }`}>{a.status || '-'}</span>
+                  }`}>{a.status === "Maintenance" ? "Maint." : (a.status || '-')}</span>
                 </div>
 
                 {/* Dok - xl */}
                 <div className="hidden xl:flex w-9 flex-shrink-0 justify-center">
-                  <span className={`text-[8px] font-medium px-1 py-0.5 rounded ${docsOk ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' : docC > 0 ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' : 'text-muted-foreground'}`}>
+                  <span className={`text-[10px] font-medium px-1 py-0.5 rounded ${docsOk ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' : docC > 0 ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' : 'text-muted-foreground'}`}>
                     {docT > 0 ? `${docC}/${docT}` : '-'}
                   </span>
                 </div>
                 {/* Stiker - xl */}
                 <div className="hidden xl:flex w-10 flex-shrink-0 justify-center">
-                  <span className={`text-[8px] font-medium px-1 py-0.5 rounded-full ${stiker ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}`}>{stiker ? 'Ya' : '-'}</span>
+                  <span className={`text-[10px] font-medium px-1 py-0.5 rounded-full ${stiker ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}`}>{stiker ? 'Ya' : '-'}</span>
                 </div>
 
-                {/* INV */}
+                {/* INV — single glyph is cryptic on its own, so expose the full
+                    status via title + aria-label (role=img) for a11y/tooltip. */}
                 <div className="w-9 flex-shrink-0 flex justify-center">
-                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold ${
+                  <span
+                    role="img"
+                    title={a.inventory_status || 'Belum Diinventarisasi'}
+                    aria-label={`Status inventarisasi: ${a.inventory_status || 'Belum Diinventarisasi'}`}
+                    className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold ${
                     a.inventory_status === "Ditemukan" ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400' :
                     a.inventory_status === "Tidak Ditemukan" ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400' :
                     a.inventory_status === "Berlebih" ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400' :
@@ -294,12 +312,13 @@ const VirtualizedAssetTable = memo(({ assets, editId, onEdit, onDelete, onPrintC
                   }`}>{a.inventory_status === "Ditemukan" ? '✓' : a.inventory_status === "Tidak Ditemukan" ? '✗' : a.inventory_status === "Berlebih" ? '+' : a.inventory_status === "Sengketa" ? '!' : '-'}</span>
                 </div>
 
-                {/* Actions */}
-                <div className="w-[72px] flex-shrink-0 flex items-center justify-end gap-0 pr-0.5" onClick={e => e.stopPropagation()}>
-                  <button onClick={() => onPrintCard(a.id)} className="h-5 w-5 flex items-center justify-center rounded hover:bg-blue-50 dark:hover:bg-blue-900/30" title="Cetak"><CreditCard className="w-2.5 h-2.5 text-blue-500 dark:text-blue-400" /></button>
-                  {onOpenKartu && <button onClick={() => onOpenKartu(a)} className="h-5 w-5 flex items-center justify-center rounded hover:bg-emerald-50 dark:hover:bg-emerald-900/30" title="Kartu Inventarisasi" data-testid={`kartu-inventarisasi-btn-${a.id}`}><BookOpen className="w-2.5 h-2.5 text-emerald-500 dark:text-emerald-400" /></button>}
-                  {onViewAudit && <button onClick={() => onViewAudit(a.id, a.asset_code)} className="h-5 w-5 flex items-center justify-center rounded hover:bg-amber-50 dark:hover:bg-amber-900/30" title="Riwayat"><History className="w-2.5 h-2.5 text-amber-500 dark:text-amber-400" /></button>}
-                  {onDelete && <button onClick={() => onDelete(a.id)} className="h-5 w-5 flex items-center justify-center rounded hover:bg-red-50 dark:hover:bg-red-900/30"><Trash2 className="w-2.5 h-2.5 text-red-500 dark:text-red-400" /></button>}
+                {/* Actions — hit targets bumped to 28px (h-7 w-7). min-h-0/min-w-0
+                    keeps the global ≤1023px 44px rule from overinflating them. */}
+                <div className="w-[116px] flex-shrink-0 flex items-center justify-end gap-0 pr-0.5" onClick={e => e.stopPropagation()}>
+                  <button onClick={() => onPrintCard(a.id)} className="min-h-0 min-w-0 h-7 w-7 flex items-center justify-center rounded hover:bg-blue-50 dark:hover:bg-blue-900/30" title="Cetak" aria-label={`Cetak kartu ${a.asset_code || ''}`.trim()}><CreditCard className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400" /></button>
+                  {onOpenKartu && <button onClick={() => onOpenKartu(a)} className="min-h-0 min-w-0 h-7 w-7 flex items-center justify-center rounded hover:bg-emerald-50 dark:hover:bg-emerald-900/30" title="Kartu Inventarisasi" aria-label={`Kartu inventarisasi ${a.asset_code || ''}`.trim()} data-testid={`kartu-inventarisasi-btn-${a.id}`}><BookOpen className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" /></button>}
+                  {onViewAudit && <button onClick={() => onViewAudit(a.id, a.asset_code)} className="min-h-0 min-w-0 h-7 w-7 flex items-center justify-center rounded hover:bg-amber-50 dark:hover:bg-amber-900/30" title="Riwayat" aria-label={`Riwayat ${a.asset_code || ''}`.trim()}><History className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" /></button>}
+                  {onDelete && <button onClick={() => onDelete(a.id)} className="min-h-0 min-w-0 h-7 w-7 flex items-center justify-center rounded hover:bg-red-50 dark:hover:bg-red-900/30" title="Hapus" aria-label={`Hapus ${a.asset_code || ''}`.trim()}><Trash2 className="w-3.5 h-3.5 text-red-500 dark:text-red-400" /></button>}
                 </div>
               </div>
             );

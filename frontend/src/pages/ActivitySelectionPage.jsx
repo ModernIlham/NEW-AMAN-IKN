@@ -38,6 +38,8 @@ function ResetAllDialog({ open, onClose, userId, onSuccess }) {
   const [resetting, setResetting] = useState(false);
   const [step, setStep] = useState(1);
   const inputRef = useRef(null);
+  const dialogRef = useRef(null);
+  const openerRef = useRef(null);
 
   const CONFIRM_WORD = "HAPUS SEMUA";
   const isConfirmed = confirmText === CONFIRM_WORD;
@@ -48,6 +50,21 @@ function ResetAllDialog({ open, onClose, userId, onSuccess }) {
       setStep(1);
       setResetting(false);
     }
+  }, [open]);
+
+  // Focus management: on open capture the opener + focus the first focusable
+  // inside the dialog; on close restore focus to the opener.
+  useEffect(() => {
+    if (open) {
+      openerRef.current = document.activeElement;
+      const t = setTimeout(() => {
+        const el = dialogRef.current?.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+        el?.focus();
+      }, 50);
+      return () => clearTimeout(t);
+    }
+    try { openerRef.current?.focus?.(); } catch { /* opener gone */ }
+    openerRef.current = null;
   }, [open]);
 
   useEffect(() => {
@@ -83,7 +100,7 @@ function ResetAllDialog({ open, onClose, userId, onSuccess }) {
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center" onKeyDown={handleKeyDown}>
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-md mx-4 bg-[#1a1a2e] border border-red-900/50 rounded-xl shadow-2xl shadow-red-900/20 overflow-hidden">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Reset seluruh sistem" className="relative w-full max-w-md mx-4 bg-[#1a1a2e] border border-red-900/50 rounded-xl shadow-2xl shadow-red-900/20 overflow-hidden">
         <div className="h-1 bg-gradient-to-r from-red-600 via-red-500 to-red-600" />
         {step === 1 ? (
           <div className="p-6">
@@ -191,6 +208,8 @@ function RestoreDialog({ open, onClose, token, onSuccess }) {
   const [submitting, setSubmitting] = useState(false);
   const inputRef = useRef(null);
   const fileRef = useRef(null);
+  const dialogRef = useRef(null);
+  const openerRef = useRef(null);
 
   const CONFIRM_WORD = "PULIHKAN DATA";
   const isConfirmed = confirmText === CONFIRM_WORD;
@@ -201,9 +220,28 @@ function RestoreDialog({ open, onClose, token, onSuccess }) {
     }
   }, [open]);
 
+  // Focus management: capture opener + autofocus first focusable on open,
+  // restore focus to the opener on close.
+  useEffect(() => {
+    if (open) {
+      openerRef.current = document.activeElement;
+      const t = setTimeout(() => {
+        const el = dialogRef.current?.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+        el?.focus();
+      }, 50);
+      return () => clearTimeout(t);
+    }
+    try { openerRef.current?.focus?.(); } catch { /* opener gone */ }
+    openerRef.current = null;
+  }, [open]);
+
   useEffect(() => {
     if (step === 2 && inputRef.current) setTimeout(() => inputRef.current?.focus(), 100);
   }, [step]);
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Escape' && !submitting) onClose();
+  };
 
   const handleFileSelect = (e) => {
     const f = e.target.files?.[0];
@@ -235,9 +273,9 @@ function RestoreDialog({ open, onClose, token, onSuccess }) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center" onKeyDown={handleKeyDown}>
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={submitting ? undefined : onClose} />
-      <div className="relative w-full max-w-md mx-4 bg-[#1a1a2e] border border-blue-900/50 rounded-xl shadow-2xl shadow-blue-900/20 overflow-hidden">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Pulihkan data sistem" className="relative w-full max-w-md mx-4 bg-[#1a1a2e] border border-blue-900/50 rounded-xl shadow-2xl shadow-blue-900/20 overflow-hidden">
         <div className="h-1 bg-gradient-to-r from-blue-600 via-cyan-500 to-blue-600" />
 
         {step === 1 && (
@@ -363,6 +401,19 @@ function ActivityPhotoLightbox({ activityId, initialIndex = 0, onClose }) {
   const [idx, setIdx] = useState(initialIndex);
   const [loading, setLoading] = useState(true);
   const API_URL = process.env.REACT_APP_BACKEND_URL;
+  const closeBtnRef = useRef(null);
+  const openerRef = useRef(null);
+
+  // Focus the close button on open (this overlay is mounted/unmounted by the
+  // parent), and restore focus to the opener when it unmounts.
+  useEffect(() => {
+    openerRef.current = document.activeElement;
+    const t = setTimeout(() => closeBtnRef.current?.focus(), 0);
+    return () => {
+      clearTimeout(t);
+      try { openerRef.current?.focus?.(); } catch { /* opener gone */ }
+    };
+  }, []);
 
   useEffect(() => {
     if (!activityId) return;
@@ -390,8 +441,8 @@ function ActivityPhotoLightbox({ activityId, initialIndex = 0, onClose }) {
   if (!activityId) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center" onClick={onClose}>
-      <button className="absolute top-4 right-4 z-10 w-9 h-9 rounded-full bg-white/10 hover:bg-white/25 text-white flex items-center justify-center" onClick={onClose}>
+    <div role="dialog" aria-modal="true" aria-label="Pratinjau foto kegiatan" className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center" onClick={onClose}>
+      <button ref={closeBtnRef} aria-label="Tutup pratinjau foto" className="absolute top-4 right-4 z-10 w-9 h-9 rounded-full bg-white/10 hover:bg-white/25 text-white flex items-center justify-center" onClick={onClose}>
         <X className="w-5 h-5" />
       </button>
       <div className="relative flex items-center justify-center w-full max-w-4xl px-4" onClick={e => e.stopPropagation()}>
@@ -457,6 +508,10 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
     kode_satker: '', nama_satker: '', eselon1: [],
   });
   const [saving, setSaving] = useState(false);
+  // Distinguishes a failed fetch (show retry) from a genuinely empty list.
+  const [fetchError, setFetchError] = useState(null);
+  // Inline required-field errors for the create/edit activity dialog.
+  const [formErrors, setFormErrors] = useState({});
   const [satkerList, setSatkerList] = useState([]);
   const [selectedSatker, setSelectedSatker] = useState('all');
   const [photoLightbox, setPhotoLightbox] = useState(null); // { activityId, index }
@@ -478,8 +533,12 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
     try {
       const r = await axios.get(`${API}/inventory-activities`);
       setActivities(r.data);
+      setFetchError(null);
     } catch (err) {
       console.error('Fetch activities error:', err);
+      // Keep an error state so the UI shows a retry card instead of the
+      // "no activities" empty state (which would falsely read as "you have none").
+      setFetchError(getApiError(err, "Gagal memuat daftar kegiatan"));
     }
     setLoading(false);
   };
@@ -594,11 +653,42 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
     }
   };
 
+  // Required-field validation shared by create & edit. Returns { field: msg }.
+  const validateActivityForm = () => {
+    const errs = {};
+    if (!form.nomor_surat.trim()) errs.nomor_surat = "Nomor surat wajib diisi";
+    if (!form.nama_kegiatan.trim()) errs.nama_kegiatan = "Nama kegiatan wajib diisi";
+    if (!form.kode_satker.trim()) errs.kode_satker = "Kode Satker wajib diisi";
+    if (!form.nama_satker.trim()) errs.nama_satker = "Nama Satker wajib diisi";
+    return errs;
+  };
+
+  const clearFormError = (name) => setFormErrors(prev => {
+    if (!prev[name]) return prev;
+    const next = { ...prev };
+    delete next[name];
+    return next;
+  });
+
+  // Scroll + focus the first missing field (top-to-bottom order) after render.
+  const focusFirstActivityError = (errs) => {
+    const first = ["nomor_surat", "nama_kegiatan", "kode_satker", "nama_satker"].find(f => errs[f]);
+    if (!first) return;
+    setTimeout(() => {
+      const el = document.querySelector(`[name="activity-${first}"]`);
+      if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); try { el.focus({ preventScroll: true }); } catch { /* noop */ } }
+    }, 50);
+  };
+
   const handleCreate = async () => {
-    if (!form.kode_satker.trim()) { toast.error("Kode Satker wajib diisi"); return; }
-    if (!form.nama_satker.trim()) { toast.error("Nama Satker wajib diisi"); return; }
-    if (!form.nomor_surat.trim()) { toast.error("Nomor surat wajib diisi"); return; }
-    if (!form.nama_kegiatan.trim()) { toast.error("Nama kegiatan wajib diisi"); return; }
+    const errs = validateActivityForm();
+    if (Object.keys(errs).length > 0) {
+      setFormErrors(errs);
+      toast.error(`Lengkapi ${Object.keys(errs).length} field wajib`);
+      focusFirstActivityError(errs);
+      return;
+    }
+    setFormErrors({});
     setSaving(true);
     try {
       const payload = { ...form, asset_ids: [] };
@@ -640,6 +730,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
       kode_satker: act.kode_satker || '', nama_satker: act.nama_satker || '',
       eselon1: act.eselon1 || [],
     });
+    setFormErrors({});
     setShowCreate(true);
   };
 
@@ -674,10 +765,14 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
   };
 
   const handleUpdate = async () => {
-    if (!form.kode_satker.trim()) { toast.error("Kode Satker wajib diisi"); return; }
-    if (!form.nama_satker.trim()) { toast.error("Nama Satker wajib diisi"); return; }
-    if (!form.nomor_surat.trim()) { toast.error("Nomor surat wajib diisi"); return; }
-    if (!form.nama_kegiatan.trim()) { toast.error("Nama kegiatan wajib diisi"); return; }
+    const errs = validateActivityForm();
+    if (Object.keys(errs).length > 0) {
+      setFormErrors(errs);
+      toast.error(`Lengkapi ${Object.keys(errs).length} field wajib`);
+      focusFirstActivityError(errs);
+      return;
+    }
+    setFormErrors({});
     setSaving(true);
     try {
       // Build payload: omit photos/documents when the user never opened them
@@ -786,6 +881,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
     setShowCreate(false);
     setEditingActivity(null);
     setForm({...emptyForm});
+    setFormErrors({});
     setPhotosLoaded(false); setDocsLoaded(false);
     setPhotoCount(0); setDocCount(0);
   };
@@ -851,7 +947,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
       <main className="max-w-4xl mx-auto p-4 sm:p-6">
         {canManageActivities && (
           <Button
-            onClick={() => { setEditingActivity(null); setForm({...emptyForm}); setShowCreate(true); }}
+            onClick={() => { setEditingActivity(null); setForm({...emptyForm}); setFormErrors({}); setShowCreate(true); }}
             className="w-full mb-6 h-14 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white text-lg font-semibold rounded-xl shadow-elev-2 hover:shadow-elev-3 transition-all duration-180 active:scale-[0.98]"
           >
             <Plus className="w-6 h-6 mr-2" />Buat Kegiatan Inventarisasi Baru
@@ -861,6 +957,16 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+          </div>
+        ) : fetchError ? (
+          /* Fetch gagal (jaringan/server) — bukan berarti belum ada kegiatan */
+          <div className="text-center py-20 bg-card rounded-2xl border border-red-200 dark:border-red-800" data-testid="activities-fetch-error">
+            <AlertTriangle className="w-16 h-16 mx-auto mb-4 text-red-400" />
+            <h3 className="text-lg font-semibold text-foreground/80 mb-2">Gagal Memuat Kegiatan</h3>
+            <p className="text-muted-foreground mb-4 px-4 break-words">{fetchError}</p>
+            <Button variant="outline" onClick={fetchActivities} className="gap-1.5" data-testid="activities-retry-btn">
+              <RotateCcw className="w-4 h-4" />Coba Lagi
+            </Button>
           </div>
         ) : activities.length === 0 ? (
           <div className="text-center py-20 bg-card rounded-2xl border border-border">
@@ -1126,8 +1232,16 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
           </DialogHeader>
           <div className="space-y-4 w-full min-w-0 overflow-hidden">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1"><Label>Nomor Surat *</Label><Input value={form.nomor_surat} onChange={e => setForm(p => ({...p, nomor_surat: e.target.value}))} placeholder="INV/001/2024" /></div>
-              <div className="space-y-1"><Label>Nama Kegiatan *</Label><Input value={form.nama_kegiatan} onChange={e => setForm(p => ({...p, nama_kegiatan: e.target.value}))} placeholder="Inventarisasi Aset Q1" /></div>
+              <div className="space-y-1">
+                <Label>Nomor Surat *</Label>
+                <Input name="activity-nomor_surat" value={form.nomor_surat} onChange={e => { setForm(p => ({...p, nomor_surat: e.target.value})); clearFormError('nomor_surat'); }} placeholder="INV/001/2024" className={formErrors.nomor_surat ? "border-red-500 focus-visible:ring-red-500" : ""} aria-invalid={!!formErrors.nomor_surat} />
+                {formErrors.nomor_surat && <p className="text-[11px] text-red-600 dark:text-red-400">{formErrors.nomor_surat}</p>}
+              </div>
+              <div className="space-y-1">
+                <Label>Nama Kegiatan *</Label>
+                <Input name="activity-nama_kegiatan" value={form.nama_kegiatan} onChange={e => { setForm(p => ({...p, nama_kegiatan: e.target.value})); clearFormError('nama_kegiatan'); }} placeholder="Inventarisasi Aset Q1" className={formErrors.nama_kegiatan ? "border-red-500 focus-visible:ring-red-500" : ""} aria-invalid={!!formErrors.nama_kegiatan} />
+                {formErrors.nama_kegiatan && <p className="text-[11px] text-red-600 dark:text-red-400">{formErrors.nama_kegiatan}</p>}
+              </div>
               <div className="space-y-1"><Label>Tanggal Mulai</Label><Input type="date" value={form.tanggal_mulai} onChange={e => setForm(p => ({...p, tanggal_mulai: e.target.value}))} /></div>
               <div className="space-y-1"><Label>Tanggal Selesai</Label><Input type="date" value={form.tanggal_selesai} onChange={e => setForm(p => ({...p, tanggal_selesai: e.target.value}))} /></div>
               <div className="space-y-1 sm:col-span-2">
@@ -1242,11 +1356,13 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div className="space-y-0.5">
                   <Label className="text-[10px] text-emerald-600 dark:text-emerald-400">Kode Satker <span className="text-red-500">*</span></Label>
-                  <Input value={form.kode_satker} onChange={e => handleKodeSatkerChange(e.target.value)} placeholder="Contoh: 001234" className="h-7 text-xs" data-testid="input-kode-satker" />
+                  <Input name="activity-kode_satker" value={form.kode_satker} onChange={e => { handleKodeSatkerChange(e.target.value); clearFormError('kode_satker'); }} placeholder="Contoh: 001234" className={`h-7 text-xs${formErrors.kode_satker ? ' border-red-500 focus-visible:ring-red-500' : ''}`} aria-invalid={!!formErrors.kode_satker} data-testid="input-kode-satker" />
+                  {formErrors.kode_satker && <p className="text-[11px] text-red-600 dark:text-red-400">{formErrors.kode_satker}</p>}
                 </div>
                 <div className="space-y-0.5">
                   <Label className="text-[10px] text-emerald-600 dark:text-emerald-400">Nama Satker <span className="text-red-500">*</span></Label>
-                  <Input value={form.nama_satker} onChange={e => handleNamaSatkerChange(e.target.value)} placeholder="Contoh: Kantor Wilayah Jakarta" className="h-7 text-xs" data-testid="input-nama-satker" />
+                  <Input name="activity-nama_satker" value={form.nama_satker} onChange={e => { handleNamaSatkerChange(e.target.value); clearFormError('nama_satker'); }} placeholder="Contoh: Kantor Wilayah Jakarta" className={`h-7 text-xs${formErrors.nama_satker ? ' border-red-500 focus-visible:ring-red-500' : ''}`} aria-invalid={!!formErrors.nama_satker} data-testid="input-nama-satker" />
+                  {formErrors.nama_satker && <p className="text-[11px] text-red-600 dark:text-red-400">{formErrors.nama_satker}</p>}
                 </div>
                 <div className="space-y-0.5"><Label className="text-[10px] text-emerald-600 dark:text-emerald-400">Nama Kasatker</Label><Input value={form.kasatker_nama} onChange={e => setForm(p => ({...p, kasatker_nama: e.target.value}))} placeholder="Nama Kepala Satker" className="h-7 text-xs" /></div>
                 <div className="space-y-0.5"><Label className="text-[10px] text-emerald-600 dark:text-emerald-400">NIP Kasatker</Label><Input value={form.kasatker_nip} onChange={e => setForm(p => ({...p, kasatker_nip: e.target.value}))} placeholder="NIP" className="h-7 text-xs" /></div>
