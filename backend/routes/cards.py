@@ -1,4 +1,16 @@
-"""KTP-style asset card PDF generation routes."""
+"""KTP-style asset card PDF generation routes.
+
+Kartu Inventarisasi dicetak sebagai 4 panel (grid 2x2) pada satu halaman A4
+landscape, dengan garis lipat (fold line) di tengah:
+
+    [A: Tampak Depan Hal 1]  |  [B: Tampak Depan Hal 2]
+    ------------- garis lipat (tampak depan & belakang) -------------
+    [C: Tampak Belakang Hal 1]  |  [D: Tampak Belakang Hal 2]
+
+Panel A: identitas aset + foto + QR.
+Panel B: detail administratif (tile grid).
+Panel C/D: riwayat inventarisasi (tabel 7 kolom, 3 baris per panel).
+"""
 import io
 import base64
 import logging
@@ -8,22 +20,22 @@ from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from auth_utils import require_user
 
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib import colors
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.styles import ParagraphStyle
 from reportlab.platypus import (
     Paragraph,
     Table,
     TableStyle,
     Frame,
+    Spacer,
     Image as RLImage,
 )
-from reportlab.graphics.shapes import Drawing
+from reportlab.graphics.shapes import Drawing, Rect
 from reportlab.graphics.barcode import qr
 from PIL import Image as PILImage
-from PyPDF2 import PdfMerger
 
 from db import db
 
@@ -31,12 +43,38 @@ logger = logging.getLogger(__name__)
 cards_router = APIRouter()
 
 # ============================================================================
-# ASSET CARD ENDPOINT (for printing inventory card - KTP SIZE)
+# ASSET CARD ENDPOINT (Kartu Inventarisasi — 4 panel fold layout, A4 landscape)
 # ============================================================================
 
-# KTP size: 85.6mm x 54mm (ID-1 format per ISO/IEC 7810)
-KTP_WIDTH = 85.6 * mm
-KTP_HEIGHT = 54 * mm
+# --- Color palette (navy / blue / green, mirip mockup) ---
+NAVY = colors.HexColor('#0f172a')
+BLUE = colors.HexColor('#2563eb')
+BLUEBG = colors.HexColor('#dbeafe')
+GREEN = colors.HexColor('#16a34a')
+GREENBG = colors.HexColor('#dcfce7')
+ORANGE = colors.HexColor('#ea580c')
+ORANGEBG = colors.HexColor('#ffedd5')
+GRAY = colors.HexColor('#64748b')
+LIGHTGRAY = colors.HexColor('#94a3b8')
+BORDER = colors.HexColor('#e2e8f0')
+STRIPEBG = colors.HexColor('#f8fafc')
+NOTEBG = colors.HexColor('#eff6ff')
+NOTEBORDER = colors.HexColor('#bfdbfe')
+WHITE = colors.white
+
+# --- Page / panel geometry (landscape A4, 2x2 grid with fold gaps) ---
+PAGE_W, PAGE_H = landscape(A4)          # 297mm x 210mm
+PANEL_MARGIN = 9 * mm                    # left/right outer margin
+TOP_M = 7 * mm
+BOT_M = 7 * mm
+FOLD_GAP_X = 14 * mm                      # vertical fold gutter (between columns)
+FOLD_GAP_Y = 12 * mm                      # horizontal fold gutter (between rows)
+CAP_H = 4.5 * mm                          # caption strip above each panel row
+PANEL_W = (PAGE_W - 2 * PANEL_MARGIN - FOLD_GAP_X) / 2
+PANEL_H = (PAGE_H - TOP_M - BOT_M - 2 * CAP_H - FOLD_GAP_Y) / 2
+FRAME_PAD = 2 * mm
+UW = PANEL_W - 2 * FRAME_PAD              # usable content width inside a panel
+UH = PANEL_H - 2 * FRAME_PAD              # usable content height inside a panel
 
 
 def build_qr_flowable(payload: str, size: float):
@@ -57,414 +95,606 @@ def build_qr_flowable(payload: str, size: float):
         logger.warning(f"[cards] QR generation failed for payload '{payload}': {e}")
         return None
 
-def create_ktp_card_elements(asset):
-    """Create front and back card for KTP size (85.6mm x 54mm) - compact informative design"""
-    
-    elements = {'front': [], 'back': []}
-    
-    # Colors
-    navy = colors.HexColor('#0f172a')
-    blue = colors.HexColor('#2563eb')
-    gray = colors.HexColor('#64748b')
-    lightgray = colors.HexColor('#94a3b8')
-    border = colors.HexColor('#e2e8f0')
-    stripebg = colors.HexColor('#f8fafc')
-    green = colors.HexColor('#16a34a')
-    greenbg = colors.HexColor('#dcfce7')
-    bluebg = colors.HexColor('#dbeafe')
-    
-    # Safe string helper
+
+def icon_box(fill, size=3 * mm, stroke=None):
+    """Ikon sederhana: kotak kecil membulat berwarna (pengganti icon font)."""
+    d = Drawing(size, size)
+    d.add(Rect(0, 0, size, size, rx=size * 0.28, ry=size * 0.28,
+               fillColor=fill, strokeColor=stroke or fill, strokeWidth=0.4))
+    return d
+
+
+def _fmt_date(v):
+    """tanggal_pengesahan bisa datetime atau ISO string → 'YYYY-MM-DD'."""
+    if not v:
+        return '-'
+    if isinstance(v, datetime):
+        return v.strftime('%Y-%m-%d')
+    sv = str(v).strip()
+    return sv[:10] if len(sv) >= 10 else (sv or '-')
+
+
+def _decode_photo_flowable(asset, width, height):
+    """Kembalikan RLImage foto cover aset (bila ada) atau placeholder 'FOTO'."""
+    placeholder = Table([['FOTO']], colWidths=[width], rowHeights=[height])
+    placeholder.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), STRIPEBG),
+        ('BOX', (0, 0), (-1, -1), 0.5, BORDER),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('TEXTCOLOR', (0, 0), (-1, -1), LIGHTGRAY),
+        ('ROUNDEDCORNERS', [5, 5, 5, 5]),
+    ]))
+
+    photos_list = asset.get('photos', []) or []
+    tidx = asset.get('thumbnail_index', 0) or 0
+    img_src = photos_list[tidx] if photos_list and tidx < len(photos_list) else asset.get('photo')
+    if not img_src:
+        return placeholder
+    try:
+        enc = img_src.split("base64,", 1)[1] if "base64," in img_src else img_src
+        ib = base64.b64decode(enc)
+        im = PILImage.open(io.BytesIO(ib))
+        if im.mode in ('RGBA', 'P'):
+            bg_img = PILImage.new('RGB', im.size, (255, 255, 255))
+            if im.mode == 'P':
+                im = im.convert('RGBA')
+            bg_img.paste(im, mask=im.split()[-1] if im.mode == 'RGBA' else None)
+            im = bg_img
+        im.thumbnail((400, 400), PILImage.LANCZOS)
+        buf = io.BytesIO()
+        im.save(buf, format="JPEG", quality=85)
+        buf.seek(0)
+        return RLImage(buf, width=width, height=height)
+    except Exception as e:
+        logger.debug(f"[cards] Photo processing skipped for asset: {e}")
+        return placeholder
+
+
+def create_ktp_card_elements(asset, history=None):
+    """Bangun 4 panel Kartu Inventarisasi.
+
+    Returns dict {'A': [...], 'B': [...], 'C': [...], 'D': [...]} — tiap nilai
+    adalah list flowable yang ditumpuk dalam Frame panel masing-masing.
+
+    history: list record inventory_history (raw). Dipetakan jadi baris tabel
+    riwayat. Panel C memakai 3 baris pertama, Panel D baris 4-6.
+    """
+    history = history or []
+
+    # --- Safe string helper ---
     def s(val, maxlen=50):
         if val is None or str(val).strip() in ('', 'None'):
             return '-'
         txt = str(val).strip()
-        return txt[:maxlen-2] + '..' if len(txt) > maxlen else txt
-    
-    # Extract data
-    code = s(asset.get('asset_code'), 15)
-    nup = s(asset.get('NUP'), 5)
-    name = s(asset.get('asset_name'), 45)
-    cat = s(asset.get('category'), 15)
-    sn = s(asset.get('serial_number'), 18)
-    brand = s(asset.get('brand'), 12)
-    mdl = s(asset.get('model'), 12)
-    cond = s(asset.get('condition'), 8)
-    stat = s(asset.get('status'), 8)
-    eselon1 = s(asset.get('eselon1'), 20)
-    eselon2 = s(asset.get('eselon2'), 20)
-    loc = s(asset.get('location'), 20)
-    usr = s(asset.get('user'), 35)
-    pdate = s(asset.get('purchase_date'), 12)
-    spm = s(asset.get('nomor_spm'), 20)
+        return txt[:maxlen - 2] + '..' if len(txt) > maxlen else txt
+
+    ls = ParagraphStyle
+
+    # --- Extract data ---
+    code = s(asset.get('asset_code'), 18)
+    nup = s(asset.get('NUP'), 8)
+    name = s(asset.get('asset_name'), 60)
+    cat = s(asset.get('category'), 22)
+    sn = s(asset.get('serial_number'), 22)
+    brand = s(asset.get('brand'), 16)
+    mdl = s(asset.get('model'), 16)
+    cond = s(asset.get('condition'), 14)
+    stat = s(asset.get('status'), 14)
+    eselon1 = s(asset.get('eselon1'), 40)
+    eselon2 = s(asset.get('eselon2'), 40)
+    loc = s(asset.get('location'), 34)
+    usr = s(asset.get('user'), 40)
+    pdate = s(asset.get('purchase_date'), 20)
+    spm = s(asset.get('nomor_spm'), 34)
     kontrak = s(asset.get('nomor_kontrak'), 40)
     bukti = s(asset.get('nomor_bukti_perolehan'), 40)
-    supplier = s(asset.get('supplier'), 25)
-    kreg = s(asset.get('kode_register'), 32)
-    
+    supplier = s(asset.get('supplier'), 34)
+    kreg = s(asset.get('kode_register'), 40)
+
     price = asset.get('purchase_price', 0)
     try:
         price_str = f"Rp {float(price or 0):,.0f}".replace(",", ".")
     except (ValueError, TypeError):
         price_str = "-"
-    
-    ls = ParagraphStyle
-    W = KTP_WIDTH - 2*mm  # Max usable width
-    
-    # ==================== FRONT CARD ====================
-    # Layout: Header 5mm | Body 39mm | Footer 10mm = 54mm
-    
-    # --- HEADER (5mm) - Navy bar with title and NUP ---
-    hdr = Table([[
-        Paragraph("KARTU INVENTARIS", ls('_hdr', fontSize=7, textColor=colors.white, fontName='Helvetica-Bold')),
-        Paragraph(f"NUP {nup}", ls('_nup', fontSize=6, textColor=colors.white, fontName='Courier-Bold', alignment=2))
-    ]], colWidths=[W*0.7, W*0.3], rowHeights=[5*mm])
-    hdr.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,-1), navy),
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('LEFTPADDING', (0,0), (0,0), 2*mm),
-        ('RIGHTPADDING', (1,0), (1,0), 2*mm),
-        ('TOPPADDING', (0,0), (-1,-1), 0),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 0),
+
+    id_display = kreg if kreg != '-' else code
+
+    # --- Shared paragraph styles ---
+    lbl_style = ls('_lbl', fontSize=5.5, textColor=GRAY, fontName='Helvetica', leading=6.5)
+    val_style = ls('_val', fontSize=7.5, textColor=NAVY, fontName='Helvetica-Bold', leading=9)
+
+    # --- Reusable field tile (icon + label + value) ---
+    def field_tile(icon_color, label, value, width, boxed=False, min_h=8 * mm):
+        t = Table([
+            [icon_box(icon_color, 2.6 * mm), Paragraph(label, lbl_style)],
+            [Paragraph(value, val_style)],
+        ], colWidths=[3.6 * mm, max(width - 3.6 * mm, 6 * mm)],
+            rowHeights=[3.2 * mm, min_h - 3.2 * mm])
+        style = [
+            ('SPAN', (0, 1), (1, 1)),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 1.5 * mm),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 1 * mm),
+            ('TOPPADDING', (0, 0), (-1, -1), 0.4 * mm),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 0.4 * mm),
+        ]
+        if boxed:
+            style += [
+                ('BOX', (0, 0), (-1, -1), 0.5, BORDER),
+                ('BACKGROUND', (0, 0), (-1, -1), STRIPEBG),
+                ('ROUNDEDCORNERS', [4, 4, 4, 4]),
+            ]
+        t.setStyle(TableStyle(style))
+        return t
+
+    def pill(text, txt_color, bg_color, width):
+        t = Table([[Paragraph(
+            text.upper(),
+            ls('_pill', fontSize=6.5, textColor=txt_color, fontName='Helvetica-Bold', alignment=1))]],
+            colWidths=[width], rowHeights=[5.5 * mm])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), bg_color),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('BOX', (0, 0), (-1, -1), 0.3, bg_color),
+            ('ROUNDEDCORNERS', [7, 7, 7, 7]),
+        ]))
+        return t
+
+    def panel_header(icon_color, title, right_text='', right_font='Courier-Bold', right_size=8):
+        cells = [icon_box(icon_color, 3.4 * mm),
+                 Paragraph(title, ls('_ph', fontSize=9, textColor=WHITE, fontName='Helvetica-Bold'))]
+        widths = [6 * mm, UW - 6 * mm]
+        if right_text:
+            cells.append(Paragraph(right_text, ls('_phr', fontSize=right_size, textColor=WHITE,
+                                                  fontName=right_font, alignment=2, leading=right_size + 1)))
+            widths = [6 * mm, UW - 6 * mm - 47 * mm, 47 * mm]
+        t = Table([cells], colWidths=widths, rowHeights=[9 * mm])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), NAVY),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (0, 0), 2.5 * mm),
+            ('LEFTPADDING', (1, 0), (-1, -1), 1.5 * mm),
+            ('RIGHTPADDING', (-1, 0), (-1, -1), 2.5 * mm),
+            ('ROUNDEDCORNERS', [5, 5, 0, 0]),
+        ]))
+        return t
+
+    elements = {'A': [], 'B': [], 'C': [], 'D': []}
+
+    # ==================================================================
+    # PANEL A — TAMPAK DEPAN HALAMAN 1 (identitas)
+    # ==================================================================
+    elements['A'].append(panel_header(WHITE, "KARTU INVENTARIS", f"NUP {nup}"))
+    elements['A'].append(Spacer(1, 2 * mm))
+
+    photo_w, photo_h = 33 * mm, 47 * mm
+    photo_el = _decode_photo_flowable(asset, photo_w, photo_h)
+
+    info_w = UW - photo_w - 4 * mm
+    half = (info_w - 2 * mm) / 2
+
+    spec_grid = Table([
+        [field_tile(BLUE, "KATEGORI", cat, half, min_h=8.5 * mm),
+         field_tile(GRAY, "S/N", sn, half, min_h=8.5 * mm)],
+        [field_tile(GREEN, "MEREK/MODEL", f"{brand} / {mdl}", half, min_h=8.5 * mm),
+         field_tile(ORANGE, "LOKASI", loc, half, min_h=8.5 * mm)],
+    ], colWidths=[half + 1 * mm, half + 1 * mm], rowHeights=[8.5 * mm, 8.5 * mm])
+    spec_grid.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 1 * mm),
     ]))
-    elements['front'].append(hdr)
-    
-    # --- BODY (39mm) - Photo left (17mm), Info right ---
-    photo_w = 17*mm
-    info_w = W - photo_w - 1*mm
-    
-    # Photo
-    photo_el = Table([['FOTO']], colWidths=[15*mm], rowHeights=[20*mm])
-    photo_el.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,-1), stripebg),
-        ('BOX', (0,0), (-1,-1), 0.3, border),
-        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('FONTSIZE', (0,0), (-1,-1), 5),
-        ('TEXTCOLOR', (0,0), (-1,-1), lightgray),
+
+    cond_baik = cond.lower().startswith('baik')
+    stat_aktif = stat.lower().startswith('aktif')
+    nilai_block = Table([
+        [Paragraph("NILAI PEROLEHAN", ls('_nl', fontSize=5.5, textColor=GRAY,
+                                         fontName='Helvetica', alignment=2))],
+        [Paragraph(price_str, ls('_np', fontSize=9, textColor=GREEN,
+                                 fontName='Helvetica-Bold', alignment=2, leading=10))],
+    ], colWidths=[info_w - 52 * mm])
+    nilai_block.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
     ]))
-    
-    photos_list = asset.get('photos', []) or []
-    tidx = asset.get('thumbnail_index', 0) or 0
-    img_src = photos_list[tidx] if photos_list and tidx < len(photos_list) else asset.get('photo')
-    if img_src:
-        try:
-            enc = img_src.split("base64,", 1)[1] if "base64," in img_src else img_src
-            ib = base64.b64decode(enc)
-            im = PILImage.open(io.BytesIO(ib))
-            if im.mode in ('RGBA', 'P'):
-                bg_img = PILImage.new('RGB', im.size, (255, 255, 255))
-                if im.mode == 'P':
-                    im = im.convert('RGBA')
-                bg_img.paste(im, mask=im.split()[-1] if im.mode == 'RGBA' else None)
-                im = bg_img
-            im.thumbnail((150, 150), PILImage.LANCZOS)
-            buf = io.BytesIO()
-            im.save(buf, format="JPEG", quality=85)
-            buf.seek(0)
-            photo_el = RLImage(buf, width=15*mm, height=20*mm)
-        except Exception as e:
-            logger.debug(f"[cards] Photo processing skipped for asset: {e}")
-    
-    # Info styles - compact
-    code_style = ls('_code', fontSize=10, textColor=navy, fontName='Courier-Bold', leading=11)
-    name_style = ls('_name', fontSize=5.5, textColor=navy, fontName='Helvetica-Bold', leading=6.5)
-    lbl_style = ls('_lbl', fontSize=3.5, textColor=gray, fontName='Helvetica', leading=4)
-    val_style = ls('_val', fontSize=4.5, textColor=navy, fontName='Helvetica-Bold', leading=5)
-    
-    # Specs grid - 2 columns, compact
-    half_w = (info_w - 2*mm) / 2
-    specs = Table([
-        [Paragraph("KATEGORI", lbl_style), Paragraph("S/N", lbl_style)],
-        [Paragraph(cat, val_style), Paragraph(sn, val_style)],
-        [Paragraph("MEREK/MODEL", lbl_style), Paragraph("LOKASI", lbl_style)],
-        [Paragraph(f"{brand}/{mdl}", val_style), Paragraph(loc, val_style)],
-    ], colWidths=[half_w, half_w], rowHeights=[2.5*mm, 4*mm, 2.5*mm, 4*mm])
-    specs.setStyle(TableStyle([
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-        ('TOPPADDING', (0,0), (-1,-1), 0),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 0),
-        ('LEFTPADDING', (0,0), (-1,-1), 0),
-    ]))
-    
-    # Status badges - inline
-    cond_color = green if cond.lower() == 'baik' else colors.HexColor('#ea580c')
-    stat_color = blue if stat.lower() == 'aktif' else gray
-    
+
     badges = Table([[
-        Paragraph(cond.upper(), ls('_bc', fontSize=4, textColor=cond_color, fontName='Helvetica-Bold')),
-        Paragraph(stat.upper(), ls('_bs', fontSize=4, textColor=stat_color, fontName='Helvetica-Bold')),
-        Paragraph(price_str, ls('_pr', fontSize=4, textColor=gray, fontName='Helvetica-Bold', alignment=2))
-    ]], colWidths=[12*mm, 12*mm, info_w - 26*mm], rowHeights=[4*mm])
+        pill(cond, GREEN if cond_baik else ORANGE, GREENBG if cond_baik else ORANGEBG, 24 * mm),
+        pill(stat, BLUE if stat_aktif else GRAY, BLUEBG if stat_aktif else STRIPEBG, 24 * mm),
+        nilai_block,
+    ]], colWidths=[25 * mm, 25 * mm, info_w - 50 * mm], rowHeights=[10 * mm])
     badges.setStyle(TableStyle([
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('BACKGROUND', (0,0), (0,0), greenbg if cond.lower() == 'baik' else colors.HexColor('#ffedd5')),
-        ('BACKGROUND', (1,0), (1,0), bluebg if stat.lower() == 'aktif' else stripebg),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (1, 0), 0),
+        ('RIGHTPADDING', (0, 0), (0, 0), 1.5 * mm),
+        ('LEFTPADDING', (2, 0), (2, 0), 2 * mm),
     ]))
-    
-    # Info column
-    info = Table([
-        [Paragraph(code, code_style)],
-        [Paragraph(name, name_style)],
-        [specs],
+
+    info_col = Table([
+        [Paragraph("KODE INVENTARIS", ls('_ki', fontSize=6, textColor=GRAY, fontName='Helvetica'))],
+        [Paragraph(code, ls('_code', fontSize=20, textColor=NAVY, fontName='Courier-Bold', leading=22))],
+        [Paragraph(name, ls('_name', fontSize=8.5, textColor=NAVY, fontName='Helvetica-Bold', leading=10))],
+        [Spacer(1, 1 * mm)],
+        [spec_grid],
         [badges],
-    ], colWidths=[info_w - 1*mm], rowHeights=[7*mm, 7*mm, 13*mm, 5*mm])
-    info.setStyle(TableStyle([
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-        ('TOPPADDING', (0,0), (-1,-1), 0.5*mm),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 0),
-        ('LEFTPADDING', (0,0), (-1,-1), 1*mm),
+    ], colWidths=[info_w], rowHeights=[4.5 * mm, 10 * mm, 7 * mm, 1 * mm, 18 * mm, 10 * mm])
+    info_col.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
     ]))
-    
-    # Combine photo + info
-    body = Table([[photo_el, info]], colWidths=[photo_w, info_w], rowHeights=[34*mm])
+
+    body = Table([[photo_el, info_col]], colWidths=[photo_w + 4 * mm, info_w],
+                 rowHeights=[51 * mm])
     body.setStyle(TableStyle([
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-        ('TOPPADDING', (0,0), (-1,-1), 1*mm),
-        ('LEFTPADDING', (0,0), (0,0), 1*mm),
+        ('VALIGN', (0, 0), (0, 0), 'TOP'),
+        ('VALIGN', (1, 0), (1, 0), 'TOP'),
+        ('LEFTPADDING', (0, 0), (0, 0), 0),
+        ('RIGHTPADDING', (0, 0), (0, 0), 4 * mm),
+        ('LEFTPADDING', (1, 0), (1, 0), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 1 * mm),
     ]))
-    elements['front'].append(body)
-    
-    # --- FOOTER (10mm) - QR + ID info ---
-    ft_style = ls('_ft', fontSize=3.5, textColor=gray, fontName='Helvetica', leading=4)
-    ft_code = ls('_ftc', fontSize=5, textColor=navy, fontName='Courier-Bold', leading=5.5)
-    
-    # QR asli berisi "#<kode register>" (fallback "#<kode>-<NUP>") — dipindai
-    # QrScanButton untuk mencari aset via kode_register verbatim.
+    elements['A'].append(body)
+    elements['A'].append(Spacer(1, 1.5 * mm))
+
+    # Footer strip: QR + ID info
     raw_kreg = str(asset.get('kode_register') or '').strip()
     raw_code = str(asset.get('asset_code') or '').strip()
     raw_nup = str(asset.get('NUP') or '').strip()
     qr_payload = f"#{raw_kreg}" if raw_kreg else f"#{raw_code}-{raw_nup}"
-    qr_el = build_qr_flowable(qr_payload, 8*mm) or Table([['QR']], colWidths=[8*mm], rowHeights=[8*mm])
+    qr_el = build_qr_flowable(qr_payload, 15 * mm) or Table([['QR']], colWidths=[15 * mm], rowHeights=[15 * mm])
 
-    footer = Table([[
-        qr_el,
-        Table([
-            [Paragraph(f"ID: {kreg if kreg != '-' else code}", ft_style)],
-            [Paragraph(f"KODE: {code} | NUP: {nup}", ft_code)],
-        ], colWidths=[W - 12*mm], rowHeights=[4*mm, 4.5*mm])
-    ]], colWidths=[10*mm, W - 10*mm], rowHeights=[10*mm])
+    id_block = Table([
+        [Paragraph(f"ID: {id_display}", ls('_fid', fontSize=7, textColor=GRAY, fontName='Helvetica', leading=8))],
+        [Paragraph(f"KODE: {code} &nbsp;|&nbsp; NUP: {nup}",
+                   ls('_fkd', fontSize=8, textColor=NAVY, fontName='Courier-Bold', leading=10))],
+    ], colWidths=[UW - 20 * mm])
+    id_block.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 0.5 * mm),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0.5 * mm),
+    ]))
+
+    footer = Table([[qr_el, id_block]], colWidths=[18 * mm, UW - 18 * mm], rowHeights=[17 * mm])
     footer.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,-1), stripebg),
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('LEFTPADDING', (0,0), (0,0), 1*mm),
-        ('BOX', (0,0), (0,0), 0.3, border),
-        ('BACKGROUND', (0,0), (0,0), colors.white),
-        ('LINEABOVE', (0,0), (-1,0), 0.3, border),
+        ('BACKGROUND', (0, 0), (-1, -1), STRIPEBG),
+        ('BOX', (0, 0), (-1, -1), 0.5, BORDER),
+        ('ROUNDEDCORNERS', [5, 5, 5, 5]),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ALIGN', (0, 0), (0, 0), 'CENTER'),
+        ('LEFTPADDING', (1, 0), (1, 0), 2 * mm),
+        ('TOPPADDING', (0, 0), (-1, -1), 1 * mm),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 1 * mm),
     ]))
-    elements['front'].append(footer)
-    
-    # ==================== BACK CARD ====================
-    # Layout: Header 4mm | Data 41mm | Footer 9mm = 54mm
-    
-    # --- HEADER (4mm) ---
-    bhdr = Table([[
-        Paragraph("DETAIL ADMINISTRATIF", ls('_bh', fontSize=5, textColor=colors.white, fontName='Helvetica-Bold'))
-    ]], colWidths=[W], rowHeights=[4*mm])
-    bhdr.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,-1), navy),
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('LEFTPADDING', (0,0), (-1,-1), 2*mm),
+    elements['A'].append(footer)
+
+    # ==================================================================
+    # PANEL B — TAMPAK DEPAN HALAMAN 2 (detail administratif)
+    # ==================================================================
+    elements['B'].append(panel_header(WHITE, "DETAIL ADMINISTRATIF"))
+    elements['B'].append(Spacer(1, 2.5 * mm))
+
+    colw = (UW - 3 * mm) / 2
+    tile_h = 9.5 * mm
+    gap = Spacer(1, 2 * mm)
+
+    left_tiles = [
+        field_tile(BLUE, "ESELON I", eselon1, colw, boxed=True, min_h=tile_h), gap,
+        field_tile(BLUE, "ESELON II", eselon2, colw, boxed=True, min_h=tile_h), gap,
+        field_tile(GREEN, "PENANGGUNG JAWAB", usr, colw, boxed=True, min_h=tile_h), gap,
+        field_tile(ORANGE, "TGL PEROLEHAN", pdate, colw, boxed=True, min_h=tile_h), gap,
+        field_tile(GRAY, "NO. KONTRAK", kontrak, colw, boxed=True, min_h=tile_h), gap,
+        field_tile(GRAY, "BUKTI PEROLEHAN", bukti, colw, boxed=True, min_h=tile_h),
+    ]
+    right_tiles = [
+        field_tile(ORANGE, "LOKASI", loc, colw, boxed=True, min_h=tile_h), gap,
+        field_tile(GRAY, "NO. SPM", spm, colw, boxed=True, min_h=tile_h), gap,
+        field_tile(GREEN, "SUPPLIER", supplier, colw, boxed=True, min_h=tile_h), gap,
+        field_tile(BLUE, "KATEGORI", cat, colw, boxed=True, min_h=tile_h),
+    ]
+
+    tiles_grid = Table([[left_tiles, right_tiles]], colWidths=[colw + 1.5 * mm, colw + 1.5 * mm])
+    tiles_grid.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (0, 0), 0),
+        ('RIGHTPADDING', (0, 0), (0, 0), 1.5 * mm),
+        ('LEFTPADDING', (1, 0), (1, 0), 1.5 * mm),
+        ('RIGHTPADDING', (1, 0), (1, 0), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
     ]))
-    elements['back'].append(bhdr)
-    
-    # --- DATA ROWS (41mm) - 6 rows ---
-    row_lbl = ls('_rl', fontSize=3, textColor=gray, fontName='Helvetica', leading=3.5)
-    row_val = ls('_rv', fontSize=4.5, textColor=navy, fontName='Helvetica-Bold', leading=5)
-    hw = W / 2 - 1*mm
-    
-    def row_cell(label, value, width=hw):
-        return Table([
-            [Paragraph(label, row_lbl)],
-            [Paragraph(value, row_val)]
-        ], colWidths=[width], rowHeights=[2.5*mm, 4*mm])
-    
-    def make_row(cells, bg_color, height=6.5*mm):
-        t = Table([cells], colWidths=[hw + 1*mm] * len(cells) if len(cells) > 1 else [W], rowHeights=[height])
-        t.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,-1), bg_color),
-            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-            ('LEFTPADDING', (0,0), (-1,-1), 1.5*mm),
-            ('TOPPADDING', (0,0), (-1,-1), 0.5*mm),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 0.5*mm),
-            ('LINEBELOW', (0,0), (-1,-1), 0.2, border),
+    elements['B'].append(tiles_grid)
+
+    # ==================================================================
+    # PANEL C / D — TAMPAK BELAKANG (riwayat inventarisasi)
+    # ==================================================================
+    mapped = []
+    for i, h in enumerate(history[:6]):
+        mapped.append({
+            'no': str(i + 1),
+            'tanggal': _fmt_date(h.get('tanggal_pengesahan')),
+            'kegiatan': s(h.get('activity_name'), 44),
+            'lokasi': s(h.get('location'), 24) if h.get('location') else '-',
+            'petugas': s(h.get('user'), 26) if h.get('user') else '-',
+            'kondisi': s(h.get('condition'), 12) if h.get('condition') else '-',
+            'ket': s(h.get('inventory_status'), 18) if h.get('inventory_status') else '-',
+        })
+
+    col_widths = [8 * mm, 18 * mm, 31 * mm, 20 * mm, 20 * mm, 12 * mm, UW - 109 * mm]
+    th = ls('_th', fontSize=6, textColor=GRAY, fontName='Helvetica-Bold', leading=7, alignment=1)
+    td = ls('_td', fontSize=6.5, textColor=NAVY, fontName='Helvetica', leading=7.5)
+    td_c = ls('_tdc', fontSize=6.5, textColor=NAVY, fontName='Helvetica', leading=7.5, alignment=1)
+    td_green = ls('_tdg', fontSize=6.5, textColor=GREEN, fontName='Helvetica-Bold', leading=7.5, alignment=1)
+
+    def riwayat_panel(rows, page_no):
+        header_cells = [Paragraph(x, th) for x in
+                        ["NO", "TANGGAL", "JENIS KEGIATAN", "LOKASI", "PETUGAS", "KONDISI", "KET."]]
+        data = [header_cells]
+        green_rows = []
+        for r in range(3):
+            if r < len(rows):
+                row = rows[r]
+                kondisi_style = td_green if row['kondisi'].lower().startswith('baik') else td_c
+                if row['kondisi'].lower().startswith('baik'):
+                    green_rows.append(r + 1)
+                data.append([
+                    Paragraph(row['no'], td_c),
+                    Paragraph(row['tanggal'], td_c),
+                    Paragraph(row['kegiatan'], td),
+                    Paragraph(row['lokasi'], td),
+                    Paragraph(row['petugas'], td),
+                    Paragraph(row['kondisi'], kondisi_style),
+                    Paragraph(row['ket'], td_c),
+                ])
+            else:
+                data.append([Paragraph('', td_c) for _ in range(7)])
+
+        tbl = Table(data, colWidths=col_widths, rowHeights=[7 * mm] + [12.5 * mm] * 3)
+        tbl.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f1f5f9')),
+            ('LINEBELOW', (0, 0), (-1, 0), 0.6, LIGHTGRAY),
+            ('GRID', (0, 0), (-1, -1), 0.3, BORDER),
+            ('BOX', (0, 0), (-1, -1), 0.6, BORDER),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 1.5 * mm),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 1 * mm),
+            ('ALIGN', (0, 0), (1, -1), 'CENTER'),
+            ('ALIGN', (5, 0), (6, -1), 'CENTER'),
         ]))
-        return t
-    
-    # Row 1: Eselon | Lokasi
-    elements['back'].append(make_row([row_cell("ESELON I", eselon1), row_cell("LOKASI", loc)], colors.white))
-    # Row 1.5: Eselon II
-    elements['back'].append(make_row([row_cell("ESELON II", eselon2, W - 2*mm)], stripebg))
-    # Row 2: User
-    elements['back'].append(make_row([row_cell("PENANGGUNG JAWAB", usr, W - 2*mm)], stripebg))
-    # Row 3: Tgl | SPM
-    elements['back'].append(make_row([row_cell("TGL PEROLEHAN", pdate), row_cell("NO. SPM", spm)], colors.white))
-    # Row 4: Kontrak
-    elements['back'].append(make_row([row_cell("NO. KONTRAK", kontrak, W - 2*mm)], stripebg))
-    # Row 5: BAST
-    elements['back'].append(make_row([row_cell("BUKTI PEROLEHAN", bukti, W - 2*mm)], colors.white))
-    # Row 6: Supplier | Catatan
-    elements['back'].append(make_row([row_cell("SUPPLIER", supplier), row_cell("KATEGORI", cat)], stripebg))
-    
-    # --- FOOTER (9mm) - Price ---
-    bft = Table([[
-        Paragraph(f"ID: {kreg if kreg != '-' else code}", ls('_bfi', fontSize=3, textColor=lightgray, fontName='Courier')),
-        Paragraph(price_str, ls('_bfp', fontSize=8, textColor=colors.HexColor('#22d3ee'), fontName='Courier-Bold', alignment=2))
-    ]], colWidths=[W*0.5, W*0.5], rowHeights=[9*mm])
-    bft.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,-1), navy),
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('LEFTPADDING', (0,0), (0,0), 2*mm),
-        ('RIGHTPADDING', (1,0), (1,0), 2*mm),
-    ]))
-    elements['back'].append(bft)
-    
+
+        note = Table([[
+            icon_box(BLUE, 3.2 * mm),
+            Paragraph("Catatan: Riwayat akan bertambah seiring dilakukan kegiatan inventarisasi.",
+                      ls('_note', fontSize=6, textColor=colors.HexColor('#1e40af'), fontName='Helvetica', leading=7.5)),
+            Paragraph(f"Halaman {page_no} dari 2",
+                      ls('_pg', fontSize=6.5, textColor=GRAY, fontName='Helvetica-Bold', alignment=2)),
+        ]], colWidths=[5 * mm, UW - 5 * mm - 26 * mm, 26 * mm], rowHeights=[8 * mm])
+        note.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), NOTEBG),
+            ('BOX', (0, 0), (-1, -1), 0.5, NOTEBORDER),
+            ('ROUNDEDCORNERS', [4, 4, 4, 4]),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (0, 0), 1.5 * mm),
+            ('RIGHTPADDING', (-1, 0), (-1, -1), 2 * mm),
+        ]))
+        subtitle = "Riwayat kegiatan inventarisasi barang ini"
+        return tbl, note, subtitle
+
+    tbl_c, note_c, sub = riwayat_panel(mapped[0:3], 1)
+    tbl_d, note_d, _ = riwayat_panel(mapped[3:6], 2)
+
+    elements['C'].append(panel_header(WHITE, "RIWAYAT INVENTARISASI", sub, right_font='Helvetica', right_size=6))
+    elements['C'].append(Spacer(1, 3 * mm))
+    elements['C'].append(tbl_c)
+    elements['C'].append(Spacer(1, 4 * mm))
+    elements['C'].append(note_c)
+
+    elements['D'].append(panel_header(WHITE, "RIWAYAT INVENTARISASI", sub, right_font='Helvetica', right_size=6))
+    elements['D'].append(Spacer(1, 3 * mm))
+    elements['D'].append(tbl_d)
+    elements['D'].append(Spacer(1, 4 * mm))
+    elements['D'].append(note_d)
+
     return elements
+
+
+# ============================================================================
+# Page rendering — 2x2 fold layout
+# ============================================================================
+
+_PANEL_CAPTIONS = {
+    'A': "TAMPAK DEPAN - HALAMAN 1",
+    'B': "TAMPAK DEPAN - HALAMAN 2",
+    'C': "TAMPAK BELAKANG - HALAMAN 1",
+    'D': "TAMPAK BELAKANG - HALAMAN 2",
+}
+
+
+def _panel_rects():
+    """Rect (x, y, w, h) tiap panel + koordinat garis lipat."""
+    col1_x = PANEL_MARGIN
+    col2_x = PANEL_MARGIN + PANEL_W + FOLD_GAP_X
+    x_fold = PANEL_MARGIN + PANEL_W + FOLD_GAP_X / 2
+
+    row1_cap_top = PAGE_H - TOP_M
+    row1_panel_top = row1_cap_top - CAP_H
+    row1_panel_bot = row1_panel_top - PANEL_H
+    y_fold = row1_panel_bot - FOLD_GAP_Y / 2
+    row2_cap_top = row1_panel_bot - FOLD_GAP_Y
+    row2_panel_top = row2_cap_top - CAP_H
+    row2_panel_bot = row2_panel_top - PANEL_H
+
+    return {
+        'A': (col1_x, row1_panel_bot, PANEL_W, PANEL_H),
+        'B': (col2_x, row1_panel_bot, PANEL_W, PANEL_H),
+        'C': (col1_x, row2_panel_bot, PANEL_W, PANEL_H),
+        'D': (col2_x, row2_panel_bot, PANEL_W, PANEL_H),
+        '_fold': (x_fold, y_fold, row1_panel_top, row2_panel_bot),
+        '_caps': {
+            'A': (col1_x, row1_panel_top), 'B': (col2_x, row1_panel_top),
+            'C': (col1_x, row2_panel_top), 'D': (col2_x, row2_panel_top),
+        },
+    }
+
+
+def _draw_card_page(c, elements):
+    """Gambar satu halaman 2x2 (4 panel) beserta garis lipat & caption."""
+    rects = _panel_rects()
+    x_fold, y_fold, fold_top, fold_bot = rects['_fold']
+
+    # Panel borders + captions
+    for key in ('A', 'B', 'C', 'D'):
+        x, y, w, h = rects[key]
+        c.setStrokeColor(BORDER)
+        c.setLineWidth(0.8)
+        c.roundRect(x, y, w, h, 3 * mm, stroke=1, fill=0)
+        cap_x, cap_y = rects['_caps'][key]
+        c.setFont('Helvetica-Bold', 7)
+        c.setFillColor(GRAY)
+        c.drawString(cap_x + 1 * mm, cap_y + 1.2 * mm, _PANEL_CAPTIONS[key])
+
+    # --- Fold lines (garis lipat) ---
+    c.setStrokeColor(LIGHTGRAY)
+    c.setLineWidth(0.6)
+    c.setDash([2, 2])
+    # Vertical fold between the two columns
+    c.line(x_fold, fold_bot - 2 * mm, x_fold, fold_top + 2 * mm)
+    # Horizontal fold between the two rows
+    c.line(PANEL_MARGIN, y_fold, PAGE_W - PANEL_MARGIN, y_fold)
+    c.setDash([])
+
+    # Fold labels
+    c.setFillColor(GRAY)
+    c.setFont('Helvetica', 6)
+    # Horizontal fold label — offset to the left column center so it does not
+    # collide with the vertical fold label at the page center.
+    h_label = "garis lipat (tampak depan & belakang)"
+    h_x = PANEL_MARGIN + PANEL_W / 2
+    lw = c.stringWidth(h_label, 'Helvetica', 6)
+    c.setFillColor(WHITE)
+    c.rect(h_x - lw / 2 - 2, y_fold - 1.6 * mm, lw + 4, 3.2 * mm, stroke=0, fill=1)
+    c.setFillColor(GRAY)
+    c.drawCentredString(h_x, y_fold - 0.7 * mm, h_label)
+    # Vertical fold label (rotated)
+    v_label = "— — garis lipat (halaman 1 & 2) — —"
+    c.saveState()
+    c.translate(x_fold, (fold_top + fold_bot) / 2)
+    c.rotate(90)
+    vw = c.stringWidth(v_label, 'Helvetica', 6)
+    c.setFillColor(WHITE)
+    c.rect(-vw / 2 - 2, -1.6 * mm, vw + 4, 3.2 * mm, stroke=0, fill=1)
+    c.setFillColor(GRAY)
+    c.drawCentredString(0, -0.7 * mm, v_label)
+    c.restoreState()
+
+    # --- Panel content frames ---
+    for key in ('A', 'B', 'C', 'D'):
+        x, y, w, h = rects[key]
+        frame = Frame(x, y, w, h,
+                      leftPadding=FRAME_PAD, rightPadding=FRAME_PAD,
+                      topPadding=FRAME_PAD, bottomPadding=FRAME_PAD,
+                      showBoundary=0)
+        frame.addFromList(list(elements[key]), c)
+
+
+async def _fetch_asset_history(asset):
+    """Ambil riwayat inventarisasi untuk identitas aset (robust; [] bila gagal).
+
+    Identitas: prioritas kode_register; fallback (asset_code, NUP). Bila aset
+    punya activity dengan kode_satker, riwayat dibatasi pada satker yang sama
+    (record legacy tanpa kode_satker tetap disertakan). Cap 6 record untuk dua
+    panel belakang.
+    """
+    try:
+        kreg = str(asset.get('kode_register') or '').strip()
+        if kreg:
+            identity_query = {"kode_register": kreg}
+        else:
+            identity_query = {
+                "asset_code": str(asset.get('asset_code') or '').strip(),
+                "NUP": str(asset.get('NUP') or '').strip(),
+            }
+        query = dict(identity_query)
+        try:
+            activity_id = asset.get('activity_id')
+            if activity_id:
+                activity = await db.inventory_activities.find_one(
+                    {"id": activity_id}, {"_id": 0, "kode_satker": 1})
+                kode_satker = str((activity or {}).get('kode_satker') or '').strip()
+                if kode_satker:
+                    query["$or"] = [
+                        {"kode_satker": kode_satker},
+                        {"kode_satker": {"$in": ["", None]}},
+                        {"kode_satker": {"$exists": False}},
+                    ]
+        except Exception as e:
+            logger.debug(f"[cards] satker scope skipped: {e}")
+
+        return await db.inventory_history.find(query, {"_id": 0}).sort(
+            [("tanggal_pengesahan", -1), ("ticket_number", -1)]
+        ).to_list(6)
+    except Exception as e:
+        logger.warning(f"[cards] history fetch failed: {e}")
+        return []
+
 
 @cards_router.get("/assets/{asset_id}/card")
 async def get_asset_card_pdf(asset_id: str, _user: dict = Depends(require_user)):
-    """Generate a printable KTP-sized inventory card PDF for a single asset (front + back)"""
+    """Kartu Inventarisasi (1 aset = 1 halaman A4 landscape, 4 panel fold)."""
     asset = await db.assets.find_one({"id": asset_id}, {"_id": 0})
     if not asset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
 
-    buffer = io.BytesIO()
+    history = await _fetch_asset_history(asset)
 
-    # Create PDF with A4 page containing the KTP card
-    c = canvas.Canvas(buffer, pagesize=A4)
-    page_w, page_h = A4
-    
-    # Center the card on page
-    x_offset = (page_w - KTP_WIDTH) / 2
-    y_offset_front = page_h - 50*mm - KTP_HEIGHT
-    y_offset_back = y_offset_front - KTP_HEIGHT - 10*mm
-    
-    # Draw card borders
-    c.setStrokeColor(colors.HexColor('#e2e8f0'))
-    c.setLineWidth(0.5)
-    
-    # Front card border
-    c.roundRect(x_offset - 2*mm, y_offset_front - 2*mm, KTP_WIDTH + 4*mm, KTP_HEIGHT + 4*mm, 2*mm)
-    
-    # Back card border
-    c.roundRect(x_offset - 2*mm, y_offset_back - 2*mm, KTP_WIDTH + 4*mm, KTP_HEIGHT + 4*mm, 2*mm)
-    
-    # Labels
-    c.setFont('Helvetica', 8)
-    c.setFillColor(colors.HexColor('#64748b'))
-    c.drawString(x_offset, y_offset_front + KTP_HEIGHT + 5*mm, "TAMPAK DEPAN")
-    c.drawString(x_offset, y_offset_back + KTP_HEIGHT + 5*mm, "TAMPAK BELAKANG")
-    
-    # Generate card elements
-    card_elements = create_ktp_card_elements(asset)
-    
-    # Build front card
-    frame_front = Frame(x_offset, y_offset_front, KTP_WIDTH, KTP_HEIGHT, leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0)
-    frame_front.addFromList(card_elements['front'], c)
-    
-    # Build back card
-    frame_back = Frame(x_offset, y_offset_back, KTP_WIDTH, KTP_HEIGHT, leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0)
-    frame_back.addFromList(card_elements['back'], c)
-    
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=landscape(A4))
+    elements = create_ktp_card_elements(asset, history)
+    _draw_card_page(c, elements)
     c.save()
     buffer.seek(0)
-    
+
     return StreamingResponse(
         buffer,
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename=kartu_inventaris_{asset_id}.pdf"}
     )
 
+
 @cards_router.post("/assets/cards/bulk")
 async def get_bulk_asset_cards(asset_ids: List[str], _user: dict = Depends(require_user)):
-    """Generate KTP-sized inventory cards for multiple assets"""
+    """Kartu Inventarisasi massal: satu halaman A4 landscape (4 panel fold) per aset."""
     if not asset_ids:
         raise HTTPException(status_code=400, detail="Tidak ada aset yang dipilih")
-    
+
     assets = await db.assets.find({"id": {"$in": asset_ids}}, {"_id": 0}).to_list(len(asset_ids))
     if not assets:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
-    
-    from reportlab.lib.pagesizes import A4
-    
+
     buffer = io.BytesIO()
-    c = canvas.Canvas(buffer, pagesize=A4)
-    page_w, page_h = A4
-    
-    # Layout: 2 columns x 2 rows of card pairs (front above back) per page
-    # Each pair: front card + back card vertically stacked
-    margin_x = 10*mm
-    margin_y = 12*mm
-    gap_x = 6*mm  # Horizontal gap between columns
-    gap_y = 4*mm  # Vertical gap between card pairs
-    gap_fb = 2*mm  # Gap between front and back
-    
-    # Calculate positions
-    # col_width = (page_w - 2*margin_x - gap_x) / 2  # reserved for future layout tuning
-    pair_height = KTP_HEIGHT * 2 + gap_fb
-    
-    cards_per_page = 4  # 2 columns x 2 rows
-    total_cards = len(assets)
-    
-    for page_idx in range((total_cards + cards_per_page - 1) // cards_per_page):
-        if page_idx > 0:
+    c = canvas.Canvas(buffer, pagesize=landscape(A4))
+
+    for idx, asset in enumerate(assets):
+        if idx > 0:
             c.showPage()
-        
-        # Page header
-        c.setFont('Helvetica-Bold', 10)
-        c.setFillColor(colors.HexColor('#1e40af'))
-        c.drawString(margin_x, page_h - margin_y + 2*mm, f"KARTU INVENTARIS - Hal {page_idx + 1}")
-        
-        start_idx = page_idx * cards_per_page
-        end_idx = min(start_idx + cards_per_page, total_cards)
-        
-        for local_idx, asset_idx in enumerate(range(start_idx, end_idx)):
-            asset = assets[asset_idx]
-            
-            col = local_idx % 2
-            row = local_idx // 2
-            
-            # Position calculations
-            x = margin_x + col * (KTP_WIDTH + gap_x)
-            y_top = page_h - margin_y - 8*mm - row * (pair_height + gap_y)
-            y_front = y_top - KTP_HEIGHT
-            y_back = y_front - gap_fb - KTP_HEIGHT
-            
-            # Draw cutting guides (dashed borders)
-            c.setStrokeColor(colors.HexColor('#94a3b8'))
-            c.setLineWidth(0.3)
-            c.setDash([1.5, 1.5])
-            c.rect(x, y_front, KTP_WIDTH, KTP_HEIGHT)
-            c.rect(x, y_back, KTP_WIDTH, KTP_HEIGHT)
-            c.setDash([])
-            
-            # Labels
-            c.setFont('Helvetica', 5)
-            c.setFillColor(colors.HexColor('#94a3b8'))
-            c.drawString(x + 1*mm, y_front + KTP_HEIGHT + 1*mm, "DEPAN")
-            c.drawString(x + 1*mm, y_back + KTP_HEIGHT + 1*mm, "BELAKANG")
-            
-            # Generate card elements
-            card_elements = create_ktp_card_elements(asset)
-            
-            # Draw front card using Frame
-            frame_front = Frame(x, y_front, KTP_WIDTH, KTP_HEIGHT, 
-                               leftPadding=1*mm, rightPadding=1*mm, topPadding=0, bottomPadding=0)
-            frame_front.addFromList(card_elements['front'].copy(), c)
-            
-            # Draw back card using Frame
-            frame_back = Frame(x, y_back, KTP_WIDTH, KTP_HEIGHT,
-                              leftPadding=1*mm, rightPadding=1*mm, topPadding=0, bottomPadding=0)
-            frame_back.addFromList(card_elements['back'].copy(), c)
-        
-        # Page footer
-        c.setFont('Helvetica', 6)
-        c.setFillColor(colors.HexColor('#94a3b8'))
-        c.drawString(margin_x, 6*mm, f"Total: {total_cards} kartu | Cetak: {datetime.now(timezone.utc).strftime('%d/%m/%Y %H:%M')} | Potong sesuai garis putus-putus")
-    
+        # Riwayat per aset (find per aset dapat diterima untuk jumlah wajar).
+        history = await _fetch_asset_history(asset)
+        elements = create_ktp_card_elements(asset, history)
+        _draw_card_page(c, elements)
+
     c.save()
     buffer.seek(0)
-    
-    logger.info(f"Generated bulk cards for {len(assets)} assets")
-    
+
+    logger.info(f"Generated bulk fold cards for {len(assets)} assets")
+
     return StreamingResponse(buffer, media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename=kartu_inventaris_massal_{len(assets)}.pdf"})
