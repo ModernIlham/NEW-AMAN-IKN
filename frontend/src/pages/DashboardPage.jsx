@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import axios from "axios";
 import { getApiError } from "@/lib/utils";
-import { downloadFileWithProgress } from "@/lib/downloadFile";
+import { downloadFileWithProgress, makeDownloadProgress } from "@/lib/downloadFile";
 import { authMediaUrl } from "@/lib/mediaUrl";
 import { syncSnapshot, getSnapshotAssets, snapshotMeta, isSnapshotExpired, upsertSnapshotAsset } from "@/lib/offlineSnapshot";
 
@@ -884,29 +884,29 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   }, [analyticsPanelHeight]);
 
   const handlePrintCard = useCallback(async assetId => {
+    const progress = makeDownloadProgress("kartu inventaris");
     try {
-      toast.info("Membuat kartu inventaris...");
-      const r = await axios.get(`${API}/assets/${assetId}/card`, { responseType: 'blob' });
+      const r = await axios.get(`${API}/assets/${assetId}/card`, { responseType: 'blob', onDownloadProgress: progress.onDownloadProgress });
       const blob = new Blob([r.data], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       const newWindow = window.open(url, '_blank');
-      if (!newWindow) { const a = document.createElement('a'); a.href = url; a.download = `kartu_inventaris_${assetId}.pdf`; document.body.appendChild(a); a.click(); document.body.removeChild(a); toast.success("Kartu inventaris berhasil didownload"); }
-      else toast.success("Kartu inventaris berhasil dibuat (ukuran KTP)");
+      if (!newWindow) { const a = document.createElement('a'); a.href = url; a.download = `kartu_inventaris_${assetId}.pdf`; document.body.appendChild(a); a.click(); document.body.removeChild(a); progress.success("Kartu inventaris berhasil diunduh"); }
+      else progress.success("Kartu inventaris berhasil dibuat (ukuran KTP)");
       setTimeout(() => URL.revokeObjectURL(url), 60000);
-    } catch (err) { console.error('Print card error:', err); toast.error(getApiError(err, "Gagal cetak kartu")); }
+    } catch (err) { console.error('Print card error:', err); progress.error(getApiError(err, "Gagal cetak kartu")); }
   }, []);
 
   const handlePrintBulkCards = useCallback(async () => {
     if (assets.length === 0) { toast.error("Tidak ada aset untuk dicetak"); return; }
+    const progress = makeDownloadProgress(`${assets.length} kartu inventaris`);
     try {
-      toast.info(`Membuat ${assets.length} kartu inventaris...`);
-      const r = await axios.post(`${API}/assets/cards/bulk`, assets.map(a => a.id), { responseType: 'blob' });
+      const r = await axios.post(`${API}/assets/cards/bulk`, assets.map(a => a.id), { responseType: 'blob', onDownloadProgress: progress.onDownloadProgress });
       const url = URL.createObjectURL(new Blob([r.data]));
       const newWindow = window.open(url, '_blank');
-      if (!newWindow) { const a = document.createElement('a'); a.href = url; a.download = `kartu_inventaris_massal_${assets.length}.pdf`; document.body.appendChild(a); a.click(); document.body.removeChild(a); toast.success(`${assets.length} kartu inventaris berhasil didownload`); }
-      else toast.success(`${assets.length} kartu inventaris berhasil dibuat`);
+      if (!newWindow) { const a = document.createElement('a'); a.href = url; a.download = `kartu_inventaris_massal_${assets.length}.pdf`; document.body.appendChild(a); a.click(); document.body.removeChild(a); progress.success(`${assets.length} kartu inventaris berhasil diunduh`); }
+      else progress.success(`${assets.length} kartu inventaris berhasil dibuat`);
       setTimeout(() => URL.revokeObjectURL(url), 60000);
-    } catch (err) { console.error('Bulk print error:', err); toast.error(getApiError(err, "Gagal cetak kartu massal")); }
+    } catch (err) { console.error('Bulk print error:', err); progress.error(getApiError(err, "Gagal cetak kartu massal")); }
   }, [assets]);
 
   const handleExport = useCallback(async fmt => {
