@@ -224,31 +224,38 @@ const DashboardToolbar = memo(function DashboardToolbar({
           </Button>
         </div>
 
-        {/* Mobile/Tablet toolbar — satu baris kontrol ringkas (semua h-9) */}
-        <div className="lg:hidden flex items-center gap-1.5">
-          <CategorySelect
-            categories={categories}
-            value={filterCategory}
-            onValueChange={v => { setFilterCategory(v); refreshData(1); }}
-            placeholder="Kategori"
-            className="flex-1 min-w-0 h-9 min-h-0"
-            size="compact"
-          />
+        {/* Mobile/Tablet toolbar — dua baris seimbang agar Kategori tidak tergencet.
+            Baris atas: Kategori (dominan, flex-1) + Urutan. Baris bawah: kuota +
+            pengesahan + toggle tampilan + menu aksi. */}
+        <div className="lg:hidden flex flex-col gap-1.5">
+          {/* Baris atas: Kategori + Urutan */}
+          <div className="flex items-center gap-1.5">
+            <CategorySelect
+              categories={categories}
+              value={filterCategory}
+              onValueChange={v => { setFilterCategory(v); refreshData(1); }}
+              placeholder="Semua Kategori"
+              className="flex-1 min-w-0 h-9 min-h-0"
+              size="compact"
+            />
 
-          <Select value={sortBy} onValueChange={v => { setSortBy(v); refreshData(1); }}>
-            <SelectTrigger className="w-auto h-9 min-h-0 px-2 text-[11px] gap-1 flex-shrink-0" aria-label="Urutkan" data-testid="mobile-sort-select">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="newest">Terbaru</SelectItem>
-              <SelectItem value="oldest">Terlama</SelectItem>
-              <SelectItem value="name_asc">A-Z</SelectItem>
-              <SelectItem value="name_desc">Z-A</SelectItem>
-              <SelectItem value="price_asc">Harga ↑</SelectItem>
-              <SelectItem value="price_desc">Harga ↓</SelectItem>
-            </SelectContent>
-          </Select>
+            <Select value={sortBy} onValueChange={v => { setSortBy(v); refreshData(1); }}>
+              <SelectTrigger className="w-auto max-w-[42%] h-9 min-h-0 px-2 text-[11px] gap-1 flex-shrink-0" aria-label="Urutkan" data-testid="mobile-sort-select">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="newest">Terbaru</SelectItem>
+                <SelectItem value="oldest">Terlama</SelectItem>
+                <SelectItem value="name_asc">A-Z</SelectItem>
+                <SelectItem value="name_desc">Z-A</SelectItem>
+                <SelectItem value="price_asc">Harga ↑</SelectItem>
+                <SelectItem value="price_desc">Harga ↓</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
+          {/* Baris bawah: kuota + pengesahan + tampilan + aksi */}
+          <div className="flex items-center gap-1.5">
           <TinifyQuotaMobile className="flex-shrink-0" />
 
           {showPengesahan && (
@@ -260,6 +267,8 @@ const DashboardToolbar = memo(function DashboardToolbar({
               compact
             />
           )}
+
+          <div className="flex-1" />
 
           {/* Mobile View Toggle */}
           {viewMode !== undefined && setViewMode && (
@@ -323,6 +332,7 @@ const DashboardToolbar = memo(function DashboardToolbar({
               )}
             </DropdownMenuContent>
           </DropdownMenu>
+          </div>
         </div>
 
         {/* Advanced Filter Panel + Active Filter Badges */}
