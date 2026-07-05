@@ -117,14 +117,8 @@ function sortSnapshotRows(rows, sortBy) {
 const LazyImportDialog = lazy(() => import("@/components/assets/ImportDialog"));
 const LazyUserManagementDialog = lazy(() => import("@/components/assets/UserManagementDialog"));
 const LazyKartuInventarisasiDialog = lazy(() => import("@/components/assets/KartuInventarisasiDialog"));
-const LazyPengesahanDialog = lazy(() => import("@/components/assets/PengesahanDialog"));
-
-// Blocker counters (subset of GET /pengesahan-status) used to summarise how many
-// of the pengesahan requirements are still unmet — mirrors PengesahanDialog's rows.
-const PENGESAHAN_BLOCKER_KEYS = [
-  "belum_diinventarisasi", "tanpa_foto", "kategori_dummy", "tanpa_kode_register",
-  "tanpa_eselon", "tanpa_lokasi", "tanpa_pengguna",
-];
+// Pengesahan (finalisasi kegiatan) hanya di halaman Kegiatan
+// (ActivitySelectionPage), tidak di halaman data.
 
 // ============================================================================
 // ASSET MANAGEMENT DASHBOARD (within Activity context)
@@ -219,9 +213,6 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   const [auditAssetCode, setAuditAssetCode] = useState("");
   // Kartu Inventarisasi: identitas aset yang riwayatnya sedang dibuka
   const [kartuIdentity, setKartuIdentity] = useState(null);
-  // Pengesahan (finalisasi kegiatan) — status kelayakan + dialog di dashboard
-  const [pengesahanStatus, setPengesahanStatus] = useState(null);
-  const [pengesahanOpen, setPengesahanOpen] = useState(false);
 
   // Dialog visibility - consolidated into single reducer
   const [dialogs, dispatchDialog] = useReducer((state, action) => {
@@ -365,34 +356,6 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     if (hasNew) setProgressRefreshKey(k => k + 1);
   }, [syncStatuses]);
 
-  // === PENGESAHAN STATUS (admin) ===
-  // Kelayakan pengesahan disurvei di dashboard agar admin punya entry point tanpa
-  // kembali ke ActivitySelectionPage. Refetch: saat mount, ganti kegiatan, dan
-  // setiap ada save baru selesai (progressRefreshKey ikut bump seperti progres).
-  const fetchPengesahanStatus = useCallback(async () => {
-    if (!activity?.id || !isAdmin) return;
-    try {
-      const r = await axios.get(`${API}/inventory-activities/${activity.id}/pengesahan-status`);
-      setPengesahanStatus(r.data);
-    } catch {
-      // Non-fatal: pill simply stays hidden until a fetch succeeds.
-    }
-  }, [activity?.id, isAdmin]);
-  useEffect(() => { fetchPengesahanStatus(); }, [fetchPengesahanStatus, progressRefreshKey]);
-
-  const pengesahanSummary = useMemo(() => {
-    if (!pengesahanStatus) return null;
-    const blockerCount = PENGESAHAN_BLOCKER_KEYS.reduce(
-      (n, k) => n + (Number(pengesahanStatus[k] || 0) > 0 ? 1 : 0), 0
-    );
-    const disahkan = (pengesahanStatus.status || pengesahanStatus.status_pengesahan) === "disahkan";
-    return {
-      eligible: !!pengesahanStatus.eligible,
-      disahkan,
-      ticket: pengesahanStatus.ticket_number || null,
-      blockerCount,
-    };
-  }, [pengesahanStatus]);
 
   // === DRAG & DROP IMPORT ===
   const { isDragOverImport, dropFile, handleDragEnter, handleDragLeave, handleDragOver, handleDrop, clearDropFile } = useDragDropImport({
@@ -1100,9 +1063,6 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
               assetsCount={assets.length} filters={filters} filterOptions={filterOptions} handleAdvancedFilterChange={handleAdvancedFilterChange}
               resetAdvancedFilters={resetAdvancedFilters} handleCategoryReset={() => { handleCategoryReset(); refreshData(1); }}
               refreshData={refreshData} viewMode={viewMode} setViewMode={setViewMode}
-              showPengesahan={isAdmin} pengesahan={pengesahanSummary} sealed={sealed}
-              pengesahanTicket={activity?.ticket_number || pengesahanSummary?.ticket}
-              onOpenPengesahan={() => setPengesahanOpen(true)}
             />
 
             {!inventoryMode && <Suspense fallback={null}><AnalyticsPanel activityId={activity?.id} isOpen={analyticsOpen} onToggle={handleAnalyticsToggle} panelHeight={analyticsPanelHeight} onDragStart={handleAnalyticsDragStart} /></Suspense>}
@@ -1192,17 +1152,6 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
         {dialogs.import && <LazyImportDialog open={dialogs.import} onClose={handleImportClose} onSuccess={() => { clearDropFile(); refreshData(1); doFetchCategories(); }} activityId={activity?.id} preloadFile={dropFile} />}
         {dialogs.userManagement && <LazyUserManagementDialog open={dialogs.userManagement} onClose={() => closeDialog('userManagement')} currentUser={user} />}
         {kartuIdentity && <LazyKartuInventarisasiDialog open={!!kartuIdentity} identity={kartuIdentity} onClose={() => setKartuIdentity(null)} />}
-        {/* Pengesahan dari dashboard: sukses → refresh activity (banner + write-lock)
-            dan refetch status pill. ActivitySelectionPage tetap punya dialognya sendiri. */}
-        {pengesahanOpen && (
-          <LazyPengesahanDialog
-            open={pengesahanOpen}
-            activity={activity}
-            isAdmin={isAdmin}
-            onClose={() => setPengesahanOpen(false)}
-            onSahkanSuccess={() => { onActivityRefresh?.(); fetchPengesahanStatus(); }}
-          />
-        )}
       </Suspense>
       {confirmDialog}
 
