@@ -48,19 +48,25 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
-## [#37] Kartu Inventarisasi cetak: penyempurnaan sesuai masukan — 2026-07-05
+## [#37] Kartu Inventarisasi cetak: presisi ke mockup + riwayat 8 baris — 2026-07-05
 
-- **Riwayat** kini menyimpan **petugas** = akun yang benar-benar melakukan
-  inventarisasi aset (dari audit-log per aset, fallback pelaku pengesahan) +
-  **nomor surat** kegiatan (backend `pengesahan.py`).
-- **Kartu (`cards.py`)**: NUP di pojok kanan atas dihapus (tetap di footer);
-  tile KATEGORI → **PEROLEHAN DARI**, tambah tile **KELENGKAPAN** (dokumen
-  checked/total + %); PENANGGUNG JAWAB = pengguna + konteks melekat-ke;
-  **ikon vektor asli** di semua label/tile/header (bukan kotak warna);
-  panel **saling menempel** dengan garis lipat silang di tengah & semua label
-  judul/garis-lipat dipindah ke tepi luar (mudah dilipat); tabel **riwayat
-  dipadatkan** jadi 5 kolom (NO · TIKET/TANGGAL · KEGIATAN lebar + No. Surat ·
-  PETUGAS · KONDISI) dengan tanggal compact. Kartu massal ikut disesuaikan.
+- **Riwayat** menyimpan: **petugas** (akun pelaku dari audit-log, fallback pelaku
+  pengesahan), **nomor surat**, **dokumen** (checklist checked/total), dan
+  **catatan** (notes aset) — semua di-snapshot saat pengesahan.
+- **Depan Hal 1** disesuaikan presisi ke mockup: header dua baris (KARTU
+  INVENTARIS + "Aset Tetap Milik Instansi"); **QR pindah ke kanan-atas** dekat
+  kode (bukan footer); placeholder "FOTO ASET 4:3" + ikon kamera; badge jadi
+  tiga kolom berlabel **STATUS · AKTIVITAS · NILAI PEROLEHAN**; footer **"ID
+  ASET"** kotak gelap + ikon perisai + kode register, dan KODE|NUP di kanan.
+- **Detail Administrasi**: KATEGORI → **PEROLEHAN DARI**, tile **KELENGKAPAN**
+  (checked/total + %), Penanggung Jawab = pengguna + konteks melekat-ke; ikon
+  vektor asli di semua label.
+- **Riwayat 5 kolom** hemat ruang: NO · TIKET/TANGGAL · KEGIATAN (nama + No.
+  Surat + Lokasi) · **PETUGAS/CATATAN** (catatan dapat ruang lebih) ·
+  **KONDISI/DOK**. Menampilkan **8 baris** (4/halaman); bila >8, hanya **8
+  terbaru** yang tampil (tertua mengalah), urut kronologis lama→baru.
+- Panel **saling menempel** + garis lipat silang + label judul di tepi luar.
+  Kartu massal memakai renderer sama.
 
 ## [#36] Redesain Kartu Inventarisasi cetak (4 panel + garis lipat + riwayat) — 2026-07-05
 

@@ -380,7 +380,7 @@ async def get_pengesahan_dokumen(activity_id: str, doc_id: str, request: Request
 _HISTORY_ASSET_PROJECTION = {
     "_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "kode_register": 1,
     "asset_name": 1, "inventory_status": 1, "condition": 1, "location": 1,
-    "user": 1, "eselon1": 1,
+    "user": 1, "eselon1": 1, "document_checklist": 1, "notes": 1,
 }
 
 
@@ -455,6 +455,13 @@ async def sahkan_activity(activity_id: str, request: Request, admin: dict = Depe
     history_docs = []
     cursor = db.assets.find({"activity_id": activity_id}, _HISTORY_ASSET_PROJECTION)
     async for a in cursor:
+        # Ringkasan kelengkapan dokumen aset (checked / total) untuk kolom
+        # DOKUMEN di kartu, dan catatan aset untuk kolom CATATAN.
+        dcl = a.get("document_checklist") or []
+        if not isinstance(dcl, list):
+            dcl = []
+        dokumen_total = len(dcl)
+        dokumen_checked = sum(1 for it in dcl if isinstance(it, dict) and it.get("checked"))
         history_docs.append({
             "id": str(uuid.uuid4()),
             "activity_id": activity_id,
@@ -476,6 +483,9 @@ async def sahkan_activity(activity_id: str, request: Request, admin: dict = Depe
             "location": a.get("location", ""),
             "user": a.get("user", ""),
             "eselon1": a.get("eselon1", ""),
+            "dokumen_checked": dokumen_checked,
+            "dokumen_total": dokumen_total,
+            "catatan": a.get("notes", "") or "",
         })
     if history_docs:
         await db.inventory_history.insert_many(history_docs)
