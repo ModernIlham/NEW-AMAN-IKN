@@ -15,15 +15,30 @@ from pathlib import Path
 # Template directory - relative to this file's location (works on any server)
 TEMPLATES_DIR = str(Path(__file__).resolve().parent.parent / "templates")
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File, Depends
 from fastapi.responses import StreamingResponse, HTMLResponse
 from pydantic import BaseModel
 
 from db import db
+from auth_utils import require_user, require_admin, require_user_or_query_token
+from markupsafe import Markup
 
 logger = logging.getLogger(__name__)
 
 reports_router = APIRouter()
+
+
+def _jinja_env():
+    """Jinja Environment with HTML/XML autoescaping ON for every report template.
+    Autoescape neutralises XSS from user-supplied asset/satker fields rendered
+    into the HTML/PDF reports; base64 image data-URIs are unaffected (the base64
+    alphabet has no HTML metacharacters). Server-built HTML (e.g. status_detail)
+    is passed through markupsafe.Markup so only that trusted markup stays raw."""
+    from jinja2 import Environment, FileSystemLoader, select_autoescape
+    return Environment(
+        loader=FileSystemLoader(TEMPLATES_DIR),
+        autoescape=select_autoescape(["html", "xml"]),
+    )
 
 
 # ============================================================================
@@ -349,7 +364,7 @@ def _page_footer_factory(report_name):
 # ============================================================================
 
 @reports_router.get("/inventory-activities/{activity_id}/rekapitulasi")
-async def get_rekapitulasi(activity_id: str):
+async def get_rekapitulasi(activity_id: str, _user: dict = Depends(require_user_or_query_token)):
     """Get inventory rekapitulasi summary for an activity"""
     activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
     if not activity:
@@ -438,7 +453,7 @@ async def get_rekapitulasi(activity_id: str):
 # ============================================================================
 
 @reports_router.get("/inventory-activities/{activity_id}/berita-acara-pdf")
-async def generate_berita_acara_pdf(activity_id: str):
+async def generate_berita_acara_pdf(activity_id: str, _user: dict = Depends(require_user_or_query_token)):
     """Generate Berita Acara Tim Internal Penelitian BMN Tidak Ditemukan (PDF)"""
     from reportlab.platypus import Table, Paragraph, Spacer
     from reportlab.lib.units import mm as rl_mm
@@ -621,7 +636,7 @@ async def generate_berita_acara_pdf(activity_id: str):
 # ============================================================================
 
 @reports_router.get("/inventory-activities/{activity_id}/sptjm-pdf")
-async def generate_sptjm_pdf(activity_id: str):
+async def generate_sptjm_pdf(activity_id: str, _user: dict = Depends(require_user_or_query_token)):
     """Generate SPTJM (Surat Pernyataan Tanggung Jawab Mutlak) PDF"""
     from reportlab.platypus import Table, Paragraph, Spacer
     from reportlab.lib.units import mm as rl_mm
@@ -724,7 +739,7 @@ async def generate_sptjm_pdf(activity_id: str):
 # ============================================================================
 
 @reports_router.get("/inventory-activities/{activity_id}/surat-koreksi-pdf")
-async def generate_surat_koreksi_pdf(activity_id: str):
+async def generate_surat_koreksi_pdf(activity_id: str, _user: dict = Depends(require_user_or_query_token)):
     """Generate Surat Pernyataan Koreksi Pencatatan PDF"""
     from reportlab.platypus import Table, Paragraph, Spacer
     from reportlab.lib.units import mm as rl_mm
@@ -865,7 +880,7 @@ DBHI_TYPES = {
 
 
 @reports_router.get("/inventory-activities/{activity_id}/dbhi/{dbhi_type}")
-async def generate_dbhi_pdf(activity_id: str, dbhi_type: str):
+async def generate_dbhi_pdf(activity_id: str, dbhi_type: str, _user: dict = Depends(require_user_or_query_token)):
     """Generate DBHI (Daftar Barang Hasil Inventarisasi) PDF by type"""
     from reportlab.platypus import Table, Paragraph, Spacer
     from reportlab.lib.units import mm as rl_mm
@@ -1046,7 +1061,7 @@ async def generate_dbhi_pdf(activity_id: str, dbhi_type: str):
 # ============================================================================
 
 @reports_router.get("/inventory-activities/{activity_id}/rhi-pdf")
-async def generate_rhi_pdf(activity_id: str):
+async def generate_rhi_pdf(activity_id: str, _user: dict = Depends(require_user_or_query_token)):
     """Generate RHI (Rekapitulasi Hasil Inventarisasi BMN) PDF"""
     from reportlab.platypus import Table, Paragraph, Spacer
     from reportlab.lib.units import mm as rl_mm
@@ -1166,7 +1181,7 @@ async def generate_rhi_pdf(activity_id: str):
 # ============================================================================
 
 @reports_router.get("/inventory-activities/{activity_id}/bahi-pdf")
-async def generate_bahi_pdf(activity_id: str):
+async def generate_bahi_pdf(activity_id: str, _user: dict = Depends(require_user_or_query_token)):
     """Generate BAHI (Berita Acara Hasil Inventarisasi BMN) PDF"""
     from reportlab.platypus import Paragraph, Spacer
     from reportlab.lib.units import mm as rl_mm
@@ -1322,7 +1337,7 @@ async def generate_bahi_pdf(activity_id: str):
 # ============================================================================
 
 @reports_router.get("/inventory-activities/{activity_id}/sp-hasil-pdf")
-async def generate_sp_hasil_pdf(activity_id: str):
+async def generate_sp_hasil_pdf(activity_id: str, _user: dict = Depends(require_user_or_query_token)):
     """Generate Surat Pernyataan Hasil Inventarisasi BMN PDF"""
     from reportlab.platypus import Paragraph, Spacer
     from reportlab.lib.units import mm as rl_mm
@@ -1406,7 +1421,7 @@ async def generate_sp_hasil_pdf(activity_id: str):
 # ============================================================================
 
 @reports_router.get("/inventory-activities/{activity_id}/sp-pelaksanaan-pdf")
-async def generate_sp_pelaksanaan_pdf(activity_id: str):
+async def generate_sp_pelaksanaan_pdf(activity_id: str, _user: dict = Depends(require_user_or_query_token)):
     """Generate Surat Pernyataan Pelaksanaan Inventarisasi BMN PDF"""
     from reportlab.platypus import Paragraph, Spacer
     from reportlab.lib.units import mm as rl_mm
@@ -1504,7 +1519,7 @@ class ReportSettingsUpdate(BaseModel):
 
 
 @reports_router.get("/report-settings")
-async def get_report_settings():
+async def get_report_settings(_user: dict = Depends(require_user)):
     """Get report settings (logo, cover page text)"""
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0})
     if not settings:
@@ -1523,7 +1538,7 @@ async def get_report_settings():
 
 
 @reports_router.put("/report-settings")
-async def update_report_settings(data: ReportSettingsUpdate):
+async def update_report_settings(data: ReportSettingsUpdate, _admin: dict = Depends(require_admin)):
     """Update report settings (text fields only)"""
     update_data = {k: v for k, v in data.dict().items() if v is not None}
     update_data["type"] = "global"
@@ -1537,7 +1552,7 @@ async def update_report_settings(data: ReportSettingsUpdate):
 
 
 @reports_router.post("/report-settings/logo")
-async def upload_report_logo(file: UploadFile = File(...)):
+async def upload_report_logo(file: UploadFile = File(...), _admin: dict = Depends(require_admin)):
     """Upload/replace the institution logo for report cover page"""
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="File harus berupa gambar (PNG/JPG)")
@@ -1558,7 +1573,7 @@ async def upload_report_logo(file: UploadFile = File(...)):
 
 
 @reports_router.delete("/report-settings/logo")
-async def delete_report_logo():
+async def delete_report_logo(_admin: dict = Depends(require_admin)):
     """Remove the institution logo"""
     await db.report_settings.update_one(
         {"type": "global"},
@@ -1939,29 +1954,34 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None):
         stat_map = {"Ditemukan": ("Ditemukan", "badge-ditemukan"), "Tidak Ditemukan": ("Tidak Ditemukan", "badge-tidak"), "Berlebih": ("Berlebih", "badge-berlebih"), "Sengketa": ("Sengketa", "badge-sengketa")}
         stat_badge, stat_class = stat_map.get(inv_status, (inv_status, ""))
 
+        # status_detail is server-built HTML (marked Markup below so autoescape
+        # leaves the wrapper tags intact). The interpolated USER values are still
+        # escaped individually via markupsafe.escape so a crafted asset field
+        # (e.g. pihak_bersengketa="<script>") can't inject markup.
+        from markupsafe import escape as _esc
         detail_parts = []
         if inv_status == "Tidak Ditemukan":
             klas = a.get("klasifikasi_tidak_ditemukan", "")
             sub = a.get("sub_klasifikasi", "")
-            if klas: detail_parts.append(f'<div class="cell-sub"><span class="label">Klasifikasi:</span> {klas}</div>')
-            if sub: detail_parts.append(f'<div class="cell-sub"><span class="label">Sub:</span> {sub}</div>')
+            if klas: detail_parts.append(f'<div class="cell-sub"><span class="label">Klasifikasi:</span> {_esc(klas)}</div>')
+            if sub: detail_parts.append(f'<div class="cell-sub"><span class="label">Sub:</span> {_esc(sub)}</div>')
         elif inv_status == "Berlebih":
             asal = a.get("asal_usul_berlebih", "")
-            if asal: detail_parts.append(f'<div class="cell-sub"><span class="label">Asal:</span> {asal}</div>')
+            if asal: detail_parts.append(f'<div class="cell-sub"><span class="label">Asal:</span> {_esc(asal)}</div>')
         elif inv_status == "Sengketa":
             perkara = a.get("nomor_perkara", "")
             pihak = a.get("pihak_bersengketa", "")
-            if perkara: detail_parts.append(f'<div class="cell-sub"><span class="label">Perkara:</span> {perkara}</div>')
-            if pihak: detail_parts.append(f'<div class="cell-sub"><span class="label">Pihak:</span> {pihak}</div>')
+            if perkara: detail_parts.append(f'<div class="cell-sub"><span class="label">Perkara:</span> {_esc(perkara)}</div>')
+            if pihak: detail_parts.append(f'<div class="cell-sub"><span class="label">Pihak:</span> {_esc(pihak)}</div>')
         if inv_status == "Ditemukan" and condition == "Rusak Berat":
             tl = a.get("tindak_lanjut", "")
-            if tl: detail_parts.append(f'<div class="cell-sub"><span class="label">Tindak Lanjut:</span> {tl}</div>')
+            if tl: detail_parts.append(f'<div class="cell-sub"><span class="label">Tindak Lanjut:</span> {_esc(tl)}</div>')
 
         # Kolom tambahan opsional (di-toggle via query param detail_fields)
         for key, label, field in EXEC_DETAIL_FIELDS:
             if key in detail_fields:
                 val = a.get(field, "") or ""
-                if val: detail_parts.append(f'<div class="cell-sub"><span class="label">{label}:</span> {val}</div>')
+                if val: detail_parts.append(f'<div class="cell-sub"><span class="label">{_esc(label)}:</span> {_esc(val)}</div>')
 
         doc_ck = a.get("document_checklist", []) or []
         checked = [d.get("name", "") for d in doc_ck if d.get("checked")]
@@ -1982,7 +2002,7 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None):
             "year": year or "-", "value_fmt": fmt(sp(a)),
             "condition_badge": cond_badge, "condition_badge_class": cond_class,
             "status_badge": stat_badge, "status_badge_class": stat_class,
-            "status_detail": "\n".join(detail_parts) if detail_parts else "",
+            "status_detail": Markup("\n".join(detail_parts)) if detail_parts else "",
             "location": a.get("location", "") or "-", "user": a.get("user", "") or "-",
             "coords": coords, "kelengkapan": kelengkapan,
             "notes": (a.get("notes", "") or a.get("kronologis", "") or "-"),
@@ -2028,7 +2048,10 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None):
         "pct_rb_of_found": round(len(rb) / len(ditemukan) * 100, 1) if len(ditemukan) > 0 else 0,
         "stiker_terpasang": st_terpasang, "stiker_belum": st_belum, "stiker_pct": st_pct,
         "stiker_dash": f"{circumference:.2f}", "stiker_offset": f"{st_offset:.2f}",
-        "simpulan": simpulan, "tim": tim[:5], "tim_pendukung": tim_pendukung[:5],
+        # simpulan[].text is trusted server-built HTML (only counts/percentages
+        # interpolated) → Markup so autoescape keeps the <strong> tags.
+        "simpulan": [{**s, "text": Markup(s["text"])} for s in simpulan],
+        "tim": tim[:5], "tim_pendukung": tim_pendukung[:5],
         "tim_inti": tim_inti, "tim_pembantu": tim_pembantu,
         "pj_nama": pj_nama, "pj_jabatan": pj_jabatan, "pj_nip": pj_nip,
         "assets": asset_rows, "asset_pages": asset_pages, "total_pages": total_pages,
@@ -2053,21 +2076,23 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None):
 
 
 @reports_router.get("/inventory-activities/{activity_id}/executive-summary-html")
-async def executive_summary_html(activity_id: str, detail_fields: str = ""):
+async def executive_summary_html(activity_id: str, detail_fields: str = "",
+                                 _user: dict = Depends(require_user_or_query_token)):
     """Serve Executive Summary as interactive HTML preview with real data"""
     from jinja2 import Environment, FileSystemLoader
     data = await _build_executive_summary_data(activity_id, _parse_detail_fields(detail_fields))
     if not data:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
     data["preview"] = True
-    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+    env = _jinja_env()
     template = env.get_template("executive_summary.html")
     html = template.render(**data)
     return HTMLResponse(content=html)
 
 
 @reports_router.get("/inventory-activities/{activity_id}/executive-summary-pdf")
-async def generate_executive_summary_pdf(activity_id: str, detail_fields: str = ""):
+async def generate_executive_summary_pdf(activity_id: str, detail_fields: str = "",
+                                         _user: dict = Depends(require_user_or_query_token)):
     """Generate Executive Summary PDF (Part 1: Summary only, no data detail)."""
     from jinja2 import Environment, FileSystemLoader
     import weasyprint
@@ -2077,7 +2102,7 @@ async def generate_executive_summary_pdf(activity_id: str, detail_fields: str = 
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
     data["preview"] = False
 
-    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+    env = _jinja_env()
 
     # Render summary pages only (no asset data pages)
     summary_data = {**data, "asset_pages": [], "assets": []}
@@ -2091,7 +2116,8 @@ async def generate_executive_summary_pdf(activity_id: str, detail_fields: str = 
 
 
 @reports_router.get("/inventory-activities/{activity_id}/executive-data-pdf")
-async def generate_executive_data_pdf(activity_id: str, page: int = 1, detail_fields: str = ""):
+async def generate_executive_data_pdf(activity_id: str, page: int = 1, detail_fields: str = "",
+                                      _user: dict = Depends(require_user_or_query_token)):
     """Generate Executive Summary Data PDF (Part 2: Asset detail pages).
 
     Each page contains up to 499 assets. page=1 -> assets 1-499, page=2 -> 500-998, etc.
@@ -2115,7 +2141,7 @@ async def generate_executive_data_pdf(activity_id: str, page: int = 1, detail_fi
     end_idx = min(start_idx + items_per_download, total_assets)
     chunk_assets = all_assets[start_idx:end_idx]
 
-    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+    env = _jinja_env()
     template = env.get_template("executive_summary_data.html")
     html = template.render(
         chunk_assets=chunk_assets,
@@ -2135,7 +2161,8 @@ async def generate_executive_data_pdf(activity_id: str, page: int = 1, detail_fi
 
 
 @reports_router.get("/inventory-activities/{activity_id}/executive-data-info")
-async def executive_data_info(activity_id: str, detail_fields: str = ""):
+async def executive_data_info(activity_id: str, detail_fields: str = "",
+                              _user: dict = Depends(require_user_or_query_token)):
     """Return info about how many data download pages are available."""
     data = await _build_executive_summary_data(activity_id, _parse_detail_fields(detail_fields))
     if not data:
@@ -2362,20 +2389,22 @@ async def _build_executive_grouped_data(activity_id: str, detail_fields=None):
 
 
 @reports_router.get("/inventory-activities/{activity_id}/executive-grouped-html")
-async def executive_grouped_html(activity_id: str, detail_fields: str = ""):
+async def executive_grouped_html(activity_id: str, detail_fields: str = "",
+                                 _user: dict = Depends(require_user_or_query_token)):
     """Serve Laporan Eksekutif per Barang Serupa as HTML preview"""
     from jinja2 import Environment, FileSystemLoader
     data = await _build_executive_grouped_data(activity_id, _parse_detail_fields(detail_fields))
     if not data:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
-    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+    env = _jinja_env()
     template = env.get_template("executive_grouped.html")
     html = template.render(**data)
     return HTMLResponse(content=html)
 
 
 @reports_router.get("/inventory-activities/{activity_id}/executive-grouped-pdf")
-async def generate_executive_grouped_pdf(activity_id: str, detail_fields: str = ""):
+async def generate_executive_grouped_pdf(activity_id: str, detail_fields: str = "",
+                                         _user: dict = Depends(require_user_or_query_token)):
     """Generate Laporan Eksekutif per Barang Serupa (grouped assets) PDF"""
     from jinja2 import Environment, FileSystemLoader
     import weasyprint
@@ -2384,7 +2413,7 @@ async def generate_executive_grouped_pdf(activity_id: str, detail_fields: str = 
     if not data:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
 
-    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+    env = _jinja_env()
     template = env.get_template("executive_grouped.html")
     html = template.render(**data)
     pdf_bytes = weasyprint.HTML(string=html).write_pdf()
@@ -2604,7 +2633,9 @@ async def _build_satker_report_v2(activity_id: str):
         "chart_kategori": chart_kategori, "chart_lokasi": chart_lokasi,
         "chart_eselon1": chart_eselon1, "chart_per_kegiatan": chart_per_kegiatan,
         "assets": asset_rows, "dok_headers": dok_headers, "dok_rows": dok_rows,
-        "personil": personil, "simpulan": simpulan,
+        "personil": personil,
+        # Trusted server-built HTML → Markup so autoescape keeps the <strong> tags.
+        "simpulan": [{**s, "text": Markup(s["text"])} for s in simpulan],
         "tim": [t for act in satker_acts for t in (act.get("tim_peneliti", []) or []) if isinstance(t, dict)],
         "tim_pendukung": [t for act in satker_acts for t in (act.get("tim_pendukung", []) or []) if isinstance(t, dict)],
         "tim_inti": [t for act in satker_acts for t in (act.get("tim_inti", []) or []) if isinstance(t, dict)],
@@ -2614,21 +2645,21 @@ async def _build_satker_report_v2(activity_id: str):
 
 
 @reports_router.get("/inventory-activities/{activity_id}/laporan-satker-html")
-async def laporan_satker_html(activity_id: str):
+async def laporan_satker_html(activity_id: str, _user: dict = Depends(require_user_or_query_token)):
     """Serve Laporan per Satker as interactive HTML preview - aggregates ALL activities for this satker"""
     from jinja2 import Environment, FileSystemLoader
     data = await _build_satker_report_v2(activity_id)
     if not data:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
     data["preview"] = True
-    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+    env = _jinja_env()
     template = env.get_template("laporan_satker_v2.html")
     html = template.render(**data)
     return HTMLResponse(content=html)
 
 
 @reports_router.get("/inventory-activities/{activity_id}/laporan-satker-pdf")
-async def laporan_satker_pdf(activity_id: str):
+async def laporan_satker_pdf(activity_id: str, _user: dict = Depends(require_user_or_query_token)):
     """Generate Laporan per Satker as PDF using weasyprint"""
     from jinja2 import Environment, FileSystemLoader
     import weasyprint
@@ -2636,7 +2667,7 @@ async def laporan_satker_pdf(activity_id: str):
     if not data:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
     data["preview"] = False
-    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+    env = _jinja_env()
     template = env.get_template("laporan_satker_v2.html")
     html_content = template.render(**data)
     pdf_bytes = weasyprint.HTML(string=html_content).write_pdf()
@@ -2662,7 +2693,7 @@ async def _get_pdf_buffer_from_response(response):
 
 
 @reports_router.get("/inventory-activities/{activity_id}/lhi-pdf")
-async def generate_lhi_pdf(activity_id: str):
+async def generate_lhi_pdf(activity_id: str, _user: dict = Depends(require_user_or_query_token)):
     """Generate LHI (Laporan Hasil Inventarisasi BMN) - Complete package PDF
     Combines: Cover Page + BAHI + RHI + 6 DBHI + SP Hasil + SP Pelaksanaan
     """
@@ -2746,7 +2777,8 @@ BATCH_DBHI_TYPES = [
 
 
 @reports_router.post("/inventory-activities/{activity_id}/batch-pdf-zip")
-async def batch_download_pdf_zip(activity_id: str, request: BatchPDFRequest):
+async def batch_download_pdf_zip(activity_id: str, request: BatchPDFRequest,
+                                 _user: dict = Depends(require_user)):
     """Generate a ZIP file containing multiple selected PDF reports"""
     import zipfile
 

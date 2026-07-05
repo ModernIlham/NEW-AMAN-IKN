@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import axios from "axios";
 import { getApiError } from "@/lib/utils";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
+import { authMediaUrl } from "@/lib/mediaUrl";
 import { syncSnapshot, getSnapshotAssets, snapshotMeta, isSnapshotExpired, upsertSnapshotAsset } from "@/lib/offlineSnapshot";
 
 // Import refactored components
@@ -931,7 +932,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
 
   const handlePreviewExecutive = useCallback(() => {
     if (!activity?.id) { toast.error("Pilih kegiatan inventarisasi terlebih dahulu"); return; }
-    window.open(`${process.env.REACT_APP_BACKEND_URL}/api/inventory-activities/${activity.id}/executive-summary-html`, '_blank');
+    window.open(authMediaUrl(`${process.env.REACT_APP_BACKEND_URL}/api/inventory-activities/${activity.id}/executive-summary-html`), '_blank');
   }, [activity]);
 
   // Compute current edit position for navigation

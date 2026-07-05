@@ -48,6 +48,42 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#31] Pengerasan keamanan menyeluruh (hasil audit) — 2026-07-05
+
+> ⚠️ **Prasyarat deploy**: (1) `JWT_SECRET` **wajib** diset di environment —
+> backend kini menolak boot tanpanya (menutup lubang secret hardcoded).
+> (2) Set `ALLOWED_ORIGINS` (koma) bila domain frontend ≠
+> `amanikn-inventarisasi.com`.
+
+Audit adversarial menemukan bahwa banyak API inti **belum terproteksi auth**;
+semua ditutup:
+
+- **Auth gating ~54 handler**: seluruh CRUD aset & kegiatan, list/stats/
+  analytics, ekspor CSV/PDF/XLSX, audit-log, semua generator laporan,
+  report-settings (tulis→admin), compress-image, kartu cetak, validasi —
+  kini `require_user`/`require_admin`. (Dulu bisa dihapus/dibaca **anonim**,
+  termasuk `DELETE /inventory-activities` yang cascade hapus semua aset.)
+- **JWT fail-fast** (tak ada lagi secret default), **CORS** dipin ke allowlist
+  env (bukan `*` + credentials).
+- **Auth media/preview via token** (`?token=`) untuk `<img>`/`window.open`
+  (foto, checklist, BAST, dokumen pengesahan, preview laporan) — dulu terbuka
+  anonim.
+- **XSS**: Jinja `autoescape` diaktifkan di 7 environment (nilai user di-escape;
+  HTML server-built dibungkus `Markup`); `doc-file` tak lagi menuruti MIME dari
+  data user (paksa image/pdf + `X-Content-Type-Options: nosniff`).
+- **ReDoS/regex injection**: input pencarian di-`re.escape` sebelum `$regex`.
+- **Orphan GridFS**: hapus aset/kegiatan kini membersihkan foto/BAST/checklist.
+- **Audit actor** diambil dari JWT (bukan header `X-Audit-User` yang bisa
+  dipalsu); audit-log dibatasi `page_size` ≤200.
+- **OTP debug** hanya keluar bila `ALLOW_DEBUG_OTP` & non-produksi; pesan error
+  ke klien digeneralkan (detail hanya di log server).
+
+Diverifikasi: 22/22 uji ASGI+mongomock (401 tanpa token, 200 dengan; delete
+admin-only; regex literal; cleanup GridFS; XSS ter-escape); `yarn build`
+bersih. Sisa yang di-defer terdokumentasi (mis. `doc-file` publik untuk tautan
+spreadsheet — dikeraskan MIME/nosniff, konten sama tersedia lewat endpoint
+checklist ber-token).
+
 ## [#28] Lingkup satker kartu, pengguna melekat-ke + BAST, validasi & backup parity — 2026-07-04
 
 - **Kartu Inventarisasi per satker**: record `inventory_history` kini menyimpan

@@ -13,12 +13,13 @@ import logging
 import asyncio
 from datetime import datetime, timezone
 from typing import Optional
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from PIL import Image as PILImage
 import httpx
 
 from db import db
+from auth_utils import require_user
 from shared_utils import TINIFY_API_KEY, TINIFY_AVAILABLE
 
 logger = logging.getLogger(__name__)
@@ -251,7 +252,7 @@ class CompressResponse(BaseModel):
 
 
 @media_router.post("/compress-image", response_model=CompressResponse)
-async def compress_image(request: CompressRequest):
+async def compress_image(request: CompressRequest, _user: dict = Depends(require_user)):
     """Compress image using fallback chain: Tinify → Compresto → Uploadcare → Pillow"""
     try:
         compressed_b64, method, original_size, compressed_size = await auto_compress_image(request.image_data)
@@ -262,9 +263,10 @@ async def compress_image(request: CompressRequest):
             compressed_size=compressed_size,
             method=method,
         )
-    except Exception as e:
-        logger.error(f"Compression error: {e}")
-        return CompressResponse(success=False, error=str(e))
+    except Exception:
+        # Never leak internal exception detail to the client; log it server-side.
+        logger.exception("Compression error")
+        return CompressResponse(success=False, error="Gagal mengompres gambar")
 
 
 @media_router.get("/compression-stats")

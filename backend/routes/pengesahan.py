@@ -21,7 +21,7 @@ from fastapi.responses import Response
 from pymongo import ReturnDocument
 
 from db import db, fs_bucket
-from auth_utils import require_admin
+from auth_utils import require_admin, require_user, require_user_or_query_token
 from shared_utils import log_audit, delete_document_from_gridfs, get_document_from_gridfs
 
 logger = logging.getLogger(__name__)
@@ -201,7 +201,7 @@ def _dokumen_meta(activity: dict) -> list:
 
 
 @pengesahan_router.get("/inventory-activities/{activity_id}/pengesahan-status")
-async def get_pengesahan_status(activity_id: str):
+async def get_pengesahan_status(activity_id: str, _user: dict = Depends(require_user)):
     """Status kelayakan pengesahan sebuah kegiatan (dipanggil saat dialog dibuka)."""
     activity = await db.inventory_activities.find_one(
         {"id": activity_id},
@@ -338,10 +338,11 @@ async def delete_pengesahan_dokumen(
 
 
 @pengesahan_router.get("/inventory-activities/{activity_id}/pengesahan-dokumen/{doc_id}")
-async def get_pengesahan_dokumen(activity_id: str, doc_id: str, request: Request):
-    """Stream dokumen pengesahan (PDF). GET publik — dikonsumsi window.open()
-    yang tidak bisa membawa Authorization header, mengikuti posture endpoint
-    media lain di aplikasi ini. Cacheable di browser (dokumen immutable)."""
+async def get_pengesahan_dokumen(activity_id: str, doc_id: str, request: Request,
+                                 _user: dict = Depends(require_user_or_query_token)):
+    """Stream dokumen pengesahan (PDF). Dikonsumsi window.open() yang tidak bisa
+    membawa Authorization header → menerima header ATAU ?token=<jwt>. Cacheable
+    di browser (dokumen immutable)."""
     activity = await db.inventory_activities.find_one(
         {"id": activity_id}, {"_id": 0, "pengesahan_dokumen": 1}
     )
@@ -476,7 +477,8 @@ async def sahkan_activity(activity_id: str, request: Request, admin: dict = Depe
 # ============================================================================
 
 @pengesahan_router.get("/assets/kartu-inventarisasi")
-async def get_kartu_inventarisasi(kode_register: str = "", asset_code: str = "", NUP: str = "", kode_satker: str = ""):
+async def get_kartu_inventarisasi(kode_register: str = "", asset_code: str = "", NUP: str = "", kode_satker: str = "",
+                                  _user: dict = Depends(require_user)):
     """Riwayat pengesahan sebuah aset lintas kegiatan.
 
     Identitas: prioritas kode_register; fallback (asset_code, NUP).

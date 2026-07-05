@@ -4,8 +4,9 @@ import base64
 import logging
 from datetime import datetime, timezone
 from typing import List
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
+from auth_utils import require_user
 
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
@@ -320,7 +321,7 @@ def create_ktp_card_elements(asset):
     return elements
 
 @cards_router.get("/assets/{asset_id}/card")
-async def get_asset_card_pdf(asset_id: str):
+async def get_asset_card_pdf(asset_id: str, _user: dict = Depends(require_user)):
     """Generate a printable KTP-sized inventory card PDF for a single asset (front + back)"""
     asset = await db.assets.find_one({"id": asset_id}, {"_id": 0})
     if not asset:
@@ -374,7 +375,7 @@ async def get_asset_card_pdf(asset_id: str):
     )
 
 @cards_router.post("/assets/cards/bulk")
-async def get_bulk_asset_cards(asset_ids: List[str]):
+async def get_bulk_asset_cards(asset_ids: List[str], _user: dict = Depends(require_user)):
     """Generate KTP-sized inventory cards for multiple assets"""
     if not asset_ids:
         raise HTTPException(status_code=400, detail="Tidak ada aset yang dipilih")

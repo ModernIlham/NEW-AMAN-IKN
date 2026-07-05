@@ -4,6 +4,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { Loader2, X, ChevronLeft, ChevronRight, MapPin, Tag, User, Building2, QrCode, ClipboardCheck, Calendar, FileCheck, FileX, StickyNote } from "lucide-react";
 import AssetGalleryCard from "./AssetGalleryCard";
 import { TooltipProvider } from "../ui/tooltip";
+import { authMediaUrl } from "../../lib/mediaUrl";
 import axios from "axios";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -41,7 +42,7 @@ const Lightbox = memo(({ asset, onClose, onEdit }) => {
         const count = Number(data.photo_count) || 0;
         const version = Number(data.version) || 1;
         const p = count > 0
-          ? Array.from({ length: count }, (_, i) => `${API}/assets/${asset.id}/photos/${i}?v=${version}`)
+          ? Array.from({ length: count }, (_, i) => authMediaUrl(`${API}/assets/${asset.id}/photos/${i}?v=${version}`))
           : (asset.thumbnail ? [asset.thumbnail] : []); // data-URI fallback (legacy inline cover)
         setPhotos(p);
         setIdx(0);
