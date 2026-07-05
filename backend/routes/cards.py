@@ -43,6 +43,7 @@ from reportlab.platypus import (
 from reportlab.graphics.shapes import (
     Drawing, Rect, Line, Circle, Polygon, PolyLine, String,
 )
+from reportlab.graphics import renderPDF
 from reportlab.graphics.barcode import qr
 from PIL import Image as PILImage
 
@@ -93,6 +94,12 @@ PANEL_H = GRID_H / 2
 FRAME_PAD = 2.6 * mm
 UW = PANEL_W - 2 * FRAME_PAD              # usable content width inside a panel
 UH = PANEL_H - 2 * FRAME_PAD             # usable content height inside a panel
+
+# Panel A "ribbon" header (digambar di canvas, bukan flowable):
+#   - thin top bar full-width (rounded top-left, siku top-right) setinggi HDR_BAR
+#   - banner tab kiri yang menjulur turun (tepi kanan diagonal) setinggi HDR_H
+PANEL_A_HDR_BAR = 6.4 * mm
+PANEL_A_HDR_H = 13.8 * mm
 
 
 def build_qr_flowable(payload: str, size: float):
@@ -444,13 +451,13 @@ def create_ktp_card_elements(asset, history=None):
     def pill(text, txt_color, bg_color, width):
         t = Table([[Paragraph(
             text.upper(),
-            ls('_pill', fontSize=6.5, textColor=txt_color, fontName='Helvetica-Bold', alignment=1))]],
-            colWidths=[width], rowHeights=[5.5 * mm])
+            ls('_pill', fontSize=6, textColor=txt_color, fontName='Helvetica-Bold', alignment=1))]],
+            colWidths=[width], rowHeights=[4.8 * mm])
         t.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, -1), bg_color),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('BOX', (0, 0), (-1, -1), 0.3, bg_color),
-            ('ROUNDEDCORNERS', [7, 7, 7, 7]),
+            ('ROUNDEDCORNERS', [6, 6, 6, 6]),
         ]))
         return t
 
@@ -494,9 +501,9 @@ def create_ktp_card_elements(asset, history=None):
     # PANEL A — TAMPAK DEPAN HALAMAN 1 (identitas)
     # Header 2 baris; QR di kanan-atas body (bukan footer); footer = ID ASET.
     # ==================================================================
-    elements['A'].append(panel_header('box', "KARTU INVENTARIS",
-                                       subtitle="Aset Tetap Milik Instansi"))
-    elements['A'].append(Spacer(1, 2 * mm))
+    # Header "ribbon" (top bar + banner tab diagonal + judul) digambar di canvas
+    # oleh _draw_panel_a_header; di sini cukup sisakan tinggi band-nya.
+    elements['A'].append(Spacer(1, PANEL_A_HDR_H - FRAME_PAD + 1.5 * mm))
 
     photo_w, photo_h = 33 * mm, 46 * mm
     photo_el = _decode_photo_flowable(asset, photo_w, photo_h)
@@ -513,19 +520,20 @@ def create_ktp_card_elements(asset, history=None):
     qr_el = build_qr_flowable(qr_payload, qr_size) or Table([['QR']], colWidths=[qr_size], rowHeights=[qr_size])
     qr_el.hAlign = 'RIGHT'
 
+    # Label "KODE INVENTARIS" digambar di canvas (band header, kanan diagonal);
+    # blok body hanya berisi nomor kode besar + nama aset (maks 2 baris).
     code_w = info_w - qr_size - 2.5 * mm
     code_block = Table([
-        [Paragraph("KODE INVENTARIS", ls('_ki', fontSize=6, textColor=GRAY, fontName='Helvetica'))],
-        [Paragraph(code, ls('_code', fontSize=18, textColor=NAVY, fontName='Courier-Bold', leading=20))],
-        [Paragraph(name, ls('_name', fontSize=8, textColor=NAVY, fontName='Helvetica-Bold', leading=9.5))],
-    ], colWidths=[code_w], rowHeights=[4.2 * mm, 8.6 * mm, 9 * mm])
+        [Paragraph(code, ls('_code', fontSize=16.5, textColor=NAVY, fontName='Courier-Bold', leading=18))],
+        [Paragraph(name, ls('_name', fontSize=7.5, textColor=NAVY, fontName='Helvetica-Bold', leading=9))],
+    ], colWidths=[code_w], rowHeights=[8.6 * mm, 9.4 * mm])
     code_block.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('LEFTPADDING', (0, 0), (-1, -1), 0), ('RIGHTPADDING', (0, 0), (-1, -1), 0),
         ('TOPPADDING', (0, 0), (-1, -1), 0), ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
     ]))
     top_area = Table([[code_block, qr_el]],
-                     colWidths=[code_w, qr_size + 2.5 * mm], rowHeights=[qr_size + 2 * mm])
+                     colWidths=[code_w, qr_size + 2.5 * mm], rowHeights=[18 * mm])
     top_area.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
@@ -534,11 +542,14 @@ def create_ktp_card_elements(asset, history=None):
         ('TOPPADDING', (0, 0), (-1, -1), 0), ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
     ]))
 
+    # Spec grid ringkas: nilai dibatasi agar tetap SATU baris (LOKASI lengkap
+    # tetap tampil utuh di Panel B). Cegah wrap yang menabrak baris badges.
+    loc_short = s(asset.get('location'), 26)
     spec_grid = Table([
         [field_tile('tag', BLUE, "KATEGORI", cat, half, min_h=8.5 * mm),
-         field_tile('barcode', GRAY, "S/N", sn, half, min_h=8.5 * mm)],
-        [field_tile('tag', GREEN, "MEREK/MODEL", f"{brand} / {mdl}", half, min_h=8.5 * mm),
-         field_tile('pin', ORANGE, "LOKASI", loc, half, min_h=8.5 * mm)],
+         field_tile('barcode', BLUE, "S/N", sn, half, min_h=8.5 * mm)],
+        [field_tile('tag', BLUE, "MEREK/MODEL", f"{brand} / {mdl}", half, min_h=8.5 * mm),
+         field_tile('pin', ORANGE, "LOKASI", loc_short, half, min_h=8.5 * mm)],
     ], colWidths=[half + 1 * mm, half + 1 * mm], rowHeights=[8.5 * mm, 8.5 * mm])
     spec_grid.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
@@ -566,17 +577,17 @@ def create_ktp_card_elements(asset, history=None):
         ]))
         return t
 
-    status_pill = pill(cond, GREEN if cond_baik else ORANGE, GREENBG if cond_baik else ORANGEBG, 26 * mm)
-    aktivitas_pill = pill(stat, BLUE if stat_aktif else GRAY, BLUEBG if stat_aktif else STRIPEBG, 26 * mm)
+    status_pill = pill(cond, GREEN if cond_baik else ORANGE, GREENBG if cond_baik else ORANGEBG, 22 * mm)
+    aktivitas_pill = pill(stat, BLUE if stat_aktif else GRAY, BLUEBG if stat_aktif else STRIPEBG, 22 * mm)
     # Tanpa ikon — beri lebar penuh agar angka rupiah berdigit banyak tetap muat
     # pada satu baris. Ukuran diperkecil ke 9pt untuk headroom nominal besar.
     nilai_val = Paragraph(price_str, ls('_np', fontSize=9, textColor=GREEN, fontName='Helvetica-Bold', leading=10.5))
 
     badges = Table([[
-        labeled_col("STATUS", status_pill, 27 * mm),
-        labeled_col("AKTIVITAS", aktivitas_pill, 27 * mm),
-        labeled_col("NILAI PEROLEHAN", nilai_val, info_w - 54 * mm),
-    ]], colWidths=[27 * mm, 27 * mm, info_w - 54 * mm], rowHeights=[11 * mm])
+        labeled_col("STATUS", status_pill, 24 * mm),
+        labeled_col("AKTIVITAS", aktivitas_pill, 24 * mm),
+        labeled_col("NILAI PEROLEHAN", nilai_val, info_w - 48 * mm),
+    ]], colWidths=[24 * mm, 24 * mm, info_w - 48 * mm], rowHeights=[11 * mm])
     badges.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('LEFTPADDING', (0, 0), (-1, -1), 0),
@@ -587,7 +598,7 @@ def create_ktp_card_elements(asset, history=None):
         [top_area],
         [spec_grid],
         [badges],
-    ], colWidths=[info_w], rowHeights=[qr_size + 2 * mm, 18 * mm, 11 * mm])
+    ], colWidths=[info_w], rowHeights=[18 * mm, 17 * mm, 11 * mm])
     info_col.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('LEFTPADDING', (0, 0), (-1, -1), 0),
@@ -609,42 +620,50 @@ def create_ktp_card_elements(asset, history=None):
     elements['A'].append(body)
     elements['A'].append(Spacer(1, 2 * mm))
 
-    # Footer: kotak navy "ID ASET" (shield + kode_register) | KODE / NUP di kanan
+    # Footer (bar abu-abu): kotak navy KECIL berisi ikon shield SAJA di kiri |
+    # "ID ASET" + kode register (mono, satu baris) | KODE / NUP di kanan.
     shield = card_icon('shield', 5 * mm, WHITE)
     shield.hAlign = 'CENTER'
-    box_w = 56 * mm
-    id_inner = Table([
-        [Paragraph("ID ASET", ls('_ida', fontSize=6, textColor=colors.HexColor('#93c5fd'),
-                                 fontName='Helvetica-Bold', leading=6.5))],
-        [Paragraph(esc(id_display), ls('_idv', fontSize=8, textColor=WHITE,
-                                       fontName='Courier-Bold', leading=9))],
-    ], colWidths=[box_w - 8.5 * mm])
-    id_inner.setStyle(TableStyle([
+    sq = 9 * mm
+    id_box = Table([[shield]], colWidths=[sq], rowHeights=[sq])
+    id_box.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), NAVY),
+        ('ROUNDEDCORNERS', [3.5, 3.5, 3.5, 3.5]),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0), ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 0), ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+    ]))
+
+    id_w = 57 * mm
+    id_block = Table([
+        [Paragraph("ID ASET", ls('_ida', fontSize=5.5, textColor=GRAY,
+                                 fontName='Helvetica-Bold', leading=6))],
+        [Paragraph(esc(id_display), ls('_idv', fontSize=7, textColor=NAVY,
+                                       fontName='Courier-Bold', leading=8))],
+    ], colWidths=[id_w])
+    id_block.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('LEFTPADDING', (0, 0), (-1, -1), 0), ('RIGHTPADDING', (0, 0), (-1, -1), 0),
-        ('TOPPADDING', (0, 0), (0, 0), 0), ('BOTTOMPADDING', (0, 0), (0, 0), 0.3 * mm),
+        ('TOPPADDING', (0, 0), (0, 0), 0), ('BOTTOMPADDING', (0, 0), (0, 0), 0.4 * mm),
         ('TOPPADDING', (0, 1), (0, 1), 0), ('BOTTOMPADDING', (0, 1), (0, 1), 0),
     ]))
-    id_aset_box = Table([[shield, id_inner]], colWidths=[6.5 * mm, box_w - 8.5 * mm], rowHeights=[11 * mm])
-    id_aset_box.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), NAVY),
-        ('ROUNDEDCORNERS', [4, 4, 4, 4]),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('LEFTPADDING', (0, 0), (0, 0), 1.5 * mm), ('RIGHTPADDING', (0, 0), (0, 0), 0.8 * mm),
-        ('LEFTPADDING', (1, 0), (1, 0), 0), ('RIGHTPADDING', (1, 0), (1, 0), 1.5 * mm),
-    ]))
 
-    kode_nup = Paragraph(f"KODE: {esc(code)} &nbsp;&nbsp;|&nbsp;&nbsp; NUP: {esc(nup)}",
-                         ls('_kn', fontSize=8.5, textColor=NAVY, fontName='Courier-Bold', leading=10))
+    kode_nup = Paragraph(f"KODE: {esc(code)}&nbsp;&nbsp;|&nbsp;&nbsp;NUP: {esc(nup)}",
+                         ls('_kn', fontSize=7.5, textColor=NAVY, fontName='Courier-Bold',
+                            alignment=2, leading=9))
 
-    footer = Table([[id_aset_box, kode_nup]], colWidths=[box_w, UW - box_w], rowHeights=[13 * mm])
+    footer = Table([[id_box, id_block, kode_nup]],
+                   colWidths=[sq + 3 * mm, id_w, UW - sq - 3 * mm - id_w],
+                   rowHeights=[12 * mm])
     footer.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, -1), STRIPEBG),
         ('BOX', (0, 0), (-1, -1), 0.5, BORDER),
         ('ROUNDEDCORNERS', [5, 5, 5, 5]),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('LEFTPADDING', (0, 0), (0, 0), 1 * mm), ('RIGHTPADDING', (0, 0), (0, 0), 0),
-        ('LEFTPADDING', (1, 0), (1, 0), 3 * mm),
+        ('LEFTPADDING', (0, 0), (0, 0), 1.6 * mm), ('RIGHTPADDING', (0, 0), (0, 0), 0),
+        ('LEFTPADDING', (1, 0), (1, 0), 2.4 * mm),
+        ('RIGHTPADDING', (2, 0), (2, 0), 3 * mm),
         ('TOPPADDING', (0, 0), (-1, -1), 1 * mm), ('BOTTOMPADDING', (0, 0), (-1, -1), 1 * mm),
     ]))
     elements['A'].append(footer)
@@ -661,20 +680,20 @@ def create_ktp_card_elements(asset, history=None):
     tile_h = 10.4 * mm
     full_w = UW - 3 * mm
 
-    pj_tile = field_tile('person', GREEN, "PENANGGUNG JAWAB (PENGGUNA)", pj_value,
+    pj_tile = field_tile('person', BLUE, "PENANGGUNG JAWAB (PENGGUNA)", pj_value,
                          full_w, boxed=True, min_h=tile_h, raw=True)
     tiles_data = [
         [pj_tile, ''],
         [field_tile('building', BLUE, "ESELON I", eselon1, colw, boxed=True, min_h=tile_h),
          field_tile('building', BLUE, "ESELON II", eselon2, colw, boxed=True, min_h=tile_h)],
-        [field_tile('inbox', GREEN, "PEROLEHAN DARI", perolehan, colw, boxed=True, min_h=tile_h),
-         field_tile('truck', GREEN, "SUPPLIER", supplier, colw, boxed=True, min_h=tile_h)],
-        [field_tile('calendar', ORANGE, "TGL PEROLEHAN", pdate, colw, boxed=True, min_h=tile_h),
+        [field_tile('inbox', BLUE, "PEROLEHAN DARI", perolehan, colw, boxed=True, min_h=tile_h),
+         field_tile('truck', BLUE, "SUPPLIER", supplier, colw, boxed=True, min_h=tile_h)],
+        [field_tile('calendar', BLUE, "TGL PEROLEHAN", pdate, colw, boxed=True, min_h=tile_h),
          field_tile('pin', ORANGE, "LOKASI", loc, colw, boxed=True, min_h=tile_h)],
-        [field_tile('file', GRAY, "NO. KONTRAK", kontrak, colw, boxed=True, min_h=tile_h),
-         field_tile('file', GRAY, "BAST", bast, colw, boxed=True, min_h=tile_h)],
-        [field_tile('file', GRAY, "NO. SPM", spm, colw, boxed=True, min_h=tile_h),
-         field_tile('check', BLUE, "KELENGKAPAN", kel_value, colw, boxed=True, min_h=tile_h, raw=True)],
+        [field_tile('file', BLUE, "NO. KONTRAK", kontrak, colw, boxed=True, min_h=tile_h),
+         field_tile('file', BLUE, "BAST", bast, colw, boxed=True, min_h=tile_h)],
+        [field_tile('file', BLUE, "NO. SPM", spm, colw, boxed=True, min_h=tile_h),
+         field_tile('check', GREEN, "KELENGKAPAN", kel_value, colw, boxed=True, min_h=tile_h, raw=True)],
     ]
     tiles_grid = Table(tiles_data, colWidths=[colw, colw],
                        rowHeights=[tile_h + 1.4 * mm] * 6)
@@ -857,6 +876,63 @@ def _panel_rects():
     }
 
 
+def _draw_panel_a_header(c, rect):
+    """Gambar 'ribbon' header Panel A langsung di canvas (bukan flowable).
+
+    Terdiri dari: (a) bar tipis navy selebar panel dengan sudut kiri-atas
+    membulat & kanan-atas siku; (b) banner tab navy di KIRI yang menjulur turun
+    dengan tepi kanan DIAGONAL (kesan pita terlipat). Judul putih (ikon heksagon
+    + 'KARTU INVENTARIS' + subjudul) diletakkan di atas banner; label 'KODE
+    INVENTARIS' di sisi kanan diagonal (di atas nomor kode pada body).
+    """
+    px, py, pw, ph = rect
+    top = py + ph
+    left = px
+    right = px + pw
+    r = 2 * mm                       # radius sudut = match outer cut border
+    bar_h = PANEL_A_HDR_BAR
+    band_h = PANEL_A_HDR_H
+    tab_top = left + 0.46 * pw       # x tepi kanan diagonal di dasar top-bar
+    tab_bot = left + 0.375 * pw      # x tepi kanan diagonal di dasar banner
+
+    c.saveState()
+    # Clip region atas panel: sudut kiri-atas membulat, kanan-atas siku.
+    clip = c.beginPath()
+    clip.moveTo(left, top - band_h - 2 * mm)
+    clip.lineTo(left, top - r)
+    clip.curveTo(left, top - 0.4477 * r, left + 0.4477 * r, top, left + r, top)
+    clip.lineTo(right, top)
+    clip.lineTo(right, top - band_h - 2 * mm)
+    clip.close()
+    c.clipPath(clip, stroke=0, fill=0)
+
+    c.setFillColor(NAVY)
+    c.rect(left, top - bar_h, pw, bar_h, stroke=0, fill=1)      # bar tipis full-width
+    tab = c.beginPath()                                          # banner tab diagonal
+    tab.moveTo(left, top - band_h)
+    tab.lineTo(left, top - bar_h)
+    tab.lineTo(tab_top, top - bar_h)
+    tab.lineTo(tab_bot, top - band_h)
+    tab.close()
+    c.drawPath(tab, stroke=0, fill=1)
+    c.restoreState()
+
+    # Judul putih di atas banner
+    icon = card_icon('box', 5 * mm, WHITE)
+    renderPDF.draw(icon, c, left + 2.6 * mm, top - 12.2 * mm)
+    c.setFillColor(WHITE)
+    c.setFont('Helvetica-Bold', 10.5)
+    c.drawString(left + 9 * mm, top - 9.6 * mm, "KARTU INVENTARIS")
+    c.setFillColor(colors.HexColor('#93c5fd'))
+    c.setFont('Helvetica', 6)
+    c.drawString(left + 9 * mm, top - 12.7 * mm, "Aset Tetap Milik Instansi")
+
+    # Label KODE INVENTARIS di kanan diagonal (di atas nomor kode pada body)
+    c.setFillColor(GRAY)
+    c.setFont('Helvetica', 6)
+    c.drawString(tab_top + 3.5 * mm, top - bar_h - 4.4 * mm, "KODE INVENTARIS")
+
+
 def _draw_card_page(c, elements):
     """Gambar satu halaman: blok 2x2 menyatu + salib garis lipat + caption margin."""
     rects = _panel_rects()
@@ -920,6 +996,10 @@ def _draw_card_page(c, elements):
         c.rotate(90)
         c.drawCentredString(0, -0.6 * mm, "garis lipat")
         c.restoreState()
+
+    # --- Ribbon header Panel A (canvas) — digambar sebelum frame agar konten
+    #     body (di bawah band) tetap tampil di atasnya. ---
+    _draw_panel_a_header(c, rects['A'])
 
     # --- Panel content frames (tanpa border per-panel; blok sudah kontigu) ---
     for key in ('A', 'B', 'C', 'D'):
