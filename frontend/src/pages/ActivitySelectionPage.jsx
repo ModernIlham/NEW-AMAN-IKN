@@ -23,6 +23,7 @@ import { downloadFileWithProgress } from "@/lib/downloadFile";
 import { authMediaUrl } from "@/lib/mediaUrl";
 import { compressImageFile } from "@/lib/imageCompression";
 import { compressPdfFile } from "@/lib/pdfCompression";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -444,6 +445,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
 
   const canManageActivities = user?.role === "admin" || user?.role === "operator";
   const isAdmin = user?.role === "admin";
+  const { confirm, confirmDialog } = useConfirm();
   const [form, setForm] = useState({
     nomor_surat: '', nama_kegiatan: '', deskripsi: '',
     tanggal_mulai: '', tanggal_selesai: '',
@@ -696,9 +698,18 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
     finally { setSaving(false); }
   };
 
-  const handleDelete = async (e, id) => {
+  const handleDelete = async (e, act) => {
     e.stopPropagation();
-    if (!window.confirm("Hapus kegiatan ini? Semua aset dalam kegiatan ini juga akan terhapus.")) return;
+    const id = typeof act === "object" ? act?.id : act;
+    const name = typeof act === "object" ? (act?.nama_kegiatan || "").trim() : "";
+    const ok = await confirm({
+      title: "Hapus Kegiatan",
+      description: `Kegiatan${name ? ` "${name}"` : ""} beserta SELURUH aset di dalamnya akan dihapus permanen. Tindakan ini tidak dapat dibatalkan.`,
+      confirmLabel: "Hapus Kegiatan",
+      variant: "danger",
+      requireText: "HAPUS",
+    });
+    if (!ok) return;
     try {
       await axios.delete(`${API}/inventory-activities/${id}`);
       toast.success("Kegiatan dihapus");
@@ -824,14 +835,14 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
               <BookOpen className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-foreground font-['Manrope']">Sistem Inventaris Aset</h1>
+              <h1 className="text-lg font-bold text-foreground font-['Manrope']">AMAN</h1>
               <p className="text-xs text-muted-foreground">Pilih Kegiatan Inventarisasi</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground hidden sm:block">{user?.name || user?.username}</span>
             <Button variant="outline" size="sm" onClick={onLogout} className="gap-1">
-              <LogOut className="w-4 h-4" /><span className="hidden sm:inline">Logout</span>
+              <LogOut className="w-4 h-4" /><span className="hidden sm:inline">Keluar</span>
             </Button>
           </div>
         </div>
@@ -986,16 +997,16 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                 </button>
                 <div className="absolute top-3 right-3 flex items-center gap-1 z-10">
                   {canManageActivities && (
-                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity bg-card/80 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-full shadow-sm" onClick={(e) => { e.stopPropagation(); setPengesahanActivity(act); }} title={isDisahkan ? "Detail Pengesahan" : "Pengesahan Kegiatan"} data-testid={`activity-pengesahan-btn-${act.id}`}>
+                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0 opacity-100 transition-opacity bg-card/80 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-full shadow-sm" onClick={(e) => { e.stopPropagation(); setPengesahanActivity(act); }} title={isDisahkan ? "Detail Pengesahan" : "Pengesahan Kegiatan"} data-testid={`activity-pengesahan-btn-${act.id}`}>
                       {isDisahkan ? <Lock className="w-3.5 h-3.5 text-emerald-600" /> : <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />}
                     </Button>
                   )}
                   {canManageActivities && (<>
-                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity bg-card/80 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-full shadow-sm" onClick={(e) => handleEdit(e, act)} title="Edit Kegiatan">
+                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0 opacity-100 transition-opacity bg-card/80 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-full shadow-sm" onClick={(e) => handleEdit(e, act)} title="Edit Kegiatan">
                       <Edit3 className="w-3.5 h-3.5 text-blue-500" />
                     </Button>
                     {!isDisahkan && (
-                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity bg-card/80 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-full shadow-sm" onClick={(e) => handleDelete(e, act.id)}>
+                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 opacity-100 transition-opacity bg-card/80 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-full shadow-sm" onClick={(e) => handleDelete(e, act)} title="Hapus Kegiatan">
                         <Trash2 className="w-3.5 h-3.5 text-red-500" />
                       </Button>
                     )}
@@ -1408,6 +1419,8 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
           onClose={() => setPhotoLightbox(null)}
         />
       )}
+
+      {confirmDialog}
 
       {/* Pengesahan (finalisasi) kegiatan — lazy loaded */}
       <Suspense fallback={null}>

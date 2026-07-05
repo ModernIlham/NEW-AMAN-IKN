@@ -19,6 +19,7 @@ import {
 import { toast } from "sonner";
 import axios from "axios";
 import { getApiError } from "../../lib/utils";
+import { useConfirm } from "../ui/ConfirmDialog";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -39,6 +40,7 @@ const UserRow = ({ user, isSelf, adminId, onRefresh, onUpdateLocalUser }) => {
   const [newPw, setNewPw] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [busy, setBusy] = useState(false);
+  const { confirm, confirmDialog } = useConfirm();
 
   const role = user.role || 'operator';
   const cfg = ROLES[role] || ROLES.viewer;
@@ -87,7 +89,14 @@ const UserRow = ({ user, isSelf, adminId, onRefresh, onUpdateLocalUser }) => {
   };
 
   const del = async () => {
-    if (isSelf || !window.confirm(`Hapus ${user.name}?`)) return;
+    if (isSelf) return;
+    const ok = await confirm({
+      title: "Hapus Pengguna",
+      description: `Pengguna "${user.name || user.username}" akan dihapus dari sistem. Lanjutkan?`,
+      confirmLabel: "Hapus",
+      variant: "danger",
+    });
+    if (!ok) return;
     try {
       await axios.delete(`${API}/users/${user.id}?admin_id=${adminId}`);
       toast.success("Dihapus");
@@ -97,6 +106,7 @@ const UserRow = ({ user, isSelf, adminId, onRefresh, onUpdateLocalUser }) => {
 
   return (
     <div className={`border-b border-border last:border-0 ${inactive ? 'opacity-40' : ''}`}>
+      {confirmDialog}
       {/* Main Row */}
       <div className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 hover:bg-muted/50 transition-colors ${isSelf ? 'bg-blue-50/30 dark:bg-blue-900/20' : ''}`}>
         {/* Avatar */}

@@ -6,11 +6,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { toast } from "sonner";
 import axios from "axios";
 import { getApiError } from "../../lib/utils";
+import { useConfirm } from "../ui/ConfirmDialog";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const CATEGORY_PAGE_SIZE = 50;
 
 const CategoryManagerDialog = memo(({ open, onClose, categories, onCategoriesChanged }) => {
+  const { confirm, confirmDialog } = useConfirm();
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newCategoryCode, setNewCategoryCode] = useState("");
   const [categorySearch, setCategorySearch] = useState("");
@@ -38,15 +40,27 @@ const CategoryManagerDialog = memo(({ open, onClose, categories, onCategoriesCha
   }, [newCategoryName, newCategoryCode, onCategoriesChanged]);
 
   const handleDeleteCategory = useCallback(async id => {
-    if (!window.confirm("Hapus kategori ini?")) return;
+    const ok = await confirm({
+      title: "Hapus Kategori",
+      description: "Kategori ini akan dihapus. Lanjutkan?",
+      confirmLabel: "Hapus",
+      variant: "danger",
+    });
+    if (!ok) return;
     try { await axios.delete(`${API}/categories/${id}`); toast.success("Dihapus"); onCategoriesChanged(); } catch { toast.error("Gagal"); }
-  }, [onCategoriesChanged]);
+  }, [onCategoriesChanged, confirm]);
 
   const handleDeleteAllCategories = useCallback(async () => {
-    if (!window.confirm("HAPUS SEMUA KATEGORI? Tindakan ini tidak bisa dibatalkan!")) return;
-    if (!window.confirm("Anda yakin? Semua data kategori akan dihapus permanen.")) return;
+    const ok = await confirm({
+      title: "Hapus Semua Kategori",
+      description: "Seluruh data kategori akan dihapus permanen. Tindakan ini tidak dapat dibatalkan.",
+      confirmLabel: "Hapus Semua",
+      variant: "danger",
+      requireText: "HAPUS SEMUA",
+    });
+    if (!ok) return;
     try { const r = await axios.delete(`${API}/categories-all`); toast.success(r.data.message); onCategoriesChanged(); } catch { toast.error("Gagal menghapus"); }
-  }, [onCategoriesChanged]);
+  }, [onCategoriesChanged, confirm]);
 
   const handleCategoryBulkImport = useCallback(async e => {
     const file = e.target.files?.[0]; if (!file) return;
@@ -91,6 +105,8 @@ const CategoryManagerDialog = memo(({ open, onClose, categories, onCategoriesCha
   }, [handleCategoryBulkImport]);
 
   return (
+    <>
+    {confirmDialog}
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader><DialogTitle className="flex items-center gap-2"><FolderOpen className="w-5 h-5 text-blue-600" />Kelola Kategori Aset</DialogTitle></DialogHeader>
@@ -226,6 +242,7 @@ const CategoryManagerDialog = memo(({ open, onClose, categories, onCategoriesCha
         </div>
       </DialogContent>
     </Dialog>
+    </>
   );
 });
 

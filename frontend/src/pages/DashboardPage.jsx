@@ -42,6 +42,7 @@ import ListLoadingSkeleton from "@/components/assets/ListLoadingSkeleton";
 import ActivitySelectionPage from "@/pages/ActivitySelectionPage";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useOfflineSync } from "@/hooks/useOfflineSync";
 import { useOptimisticQueue } from "@/hooks/useOptimisticQueue";
@@ -116,14 +117,24 @@ function sortSnapshotRows(rows, sortBy) {
 const LazyImportDialog = lazy(() => import("@/components/assets/ImportDialog"));
 const LazyUserManagementDialog = lazy(() => import("@/components/assets/UserManagementDialog"));
 const LazyKartuInventarisasiDialog = lazy(() => import("@/components/assets/KartuInventarisasiDialog"));
+const LazyPengesahanDialog = lazy(() => import("@/components/assets/PengesahanDialog"));
+
+// Blocker counters (subset of GET /pengesahan-status) used to summarise how many
+// of the pengesahan requirements are still unmet — mirrors PengesahanDialog's rows.
+const PENGESAHAN_BLOCKER_KEYS = [
+  "belum_diinventarisasi", "tanpa_foto", "kategori_dummy", "tanpa_kode_register",
+  "tanpa_eselon", "tanpa_lokasi", "tanpa_pengguna",
+];
 
 // ============================================================================
 // ASSET MANAGEMENT DASHBOARD (within Activity context)
 // ============================================================================
-function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDark, onShowInfo }) {
+function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefresh, dark, toggleDark, onShowInfo }) {
   // Kegiatan yang sudah disahkan: seluruh mutasi aset terkunci (backend
   // menolak dengan 423; UI menyembunyikan aksi tulis lewat perms di bawah).
   const sealed = activity?.status_pengesahan === "disahkan";
+  const isAdmin = (user?.role || "viewer") === "admin";
+  const { confirm, confirmDialog } = useConfirm();
 
   // RBAC permissions based on user role (+ sealed gating)
   const perms = useMemo(() => {
@@ -208,6 +219,9 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
   const [auditAssetCode, setAuditAssetCode] = useState("");
   // Kartu Inventarisasi: identitas aset yang riwayatnya sedang dibuka
   const [kartuIdentity, setKartuIdentity] = useState(null);
+  // Pengesahan (finalisasi kegiatan) — status kelayakan + dialog di dashboard
+  const [pengesahanStatus, setPengesahanStatus] = useState(null);
+  const [pengesahanOpen, setPengesahanOpen] = useState(false);
 
   // Dialog visibility - consolidated into single reducer
   const [dialogs, dispatchDialog] = useReducer((state, action) => {
@@ -350,6 +364,35 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
     prevSavedIdsRef.current = new Set(savedIds);
     if (hasNew) setProgressRefreshKey(k => k + 1);
   }, [syncStatuses]);
+
+  // === PENGESAHAN STATUS (admin) ===
+  // Kelayakan pengesahan disurvei di dashboard agar admin punya entry point tanpa
+  // kembali ke ActivitySelectionPage. Refetch: saat mount, ganti kegiatan, dan
+  // setiap ada save baru selesai (progressRefreshKey ikut bump seperti progres).
+  const fetchPengesahanStatus = useCallback(async () => {
+    if (!activity?.id || !isAdmin) return;
+    try {
+      const r = await axios.get(`${API}/inventory-activities/${activity.id}/pengesahan-status`);
+      setPengesahanStatus(r.data);
+    } catch {
+      // Non-fatal: pill simply stays hidden until a fetch succeeds.
+    }
+  }, [activity?.id, isAdmin]);
+  useEffect(() => { fetchPengesahanStatus(); }, [fetchPengesahanStatus, progressRefreshKey]);
+
+  const pengesahanSummary = useMemo(() => {
+    if (!pengesahanStatus) return null;
+    const blockerCount = PENGESAHAN_BLOCKER_KEYS.reduce(
+      (n, k) => n + (Number(pengesahanStatus[k] || 0) > 0 ? 1 : 0), 0
+    );
+    const disahkan = (pengesahanStatus.status || pengesahanStatus.status_pengesahan) === "disahkan";
+    return {
+      eligible: !!pengesahanStatus.eligible,
+      disahkan,
+      ticket: pengesahanStatus.ticket_number || null,
+      blockerCount,
+    };
+  }, [pengesahanStatus]);
 
   // === DRAG & DROP IMPORT ===
   const { isDragOverImport, dropFile, handleDragEnter, handleDragLeave, handleDragOver, handleDrop, clearDropFile } = useDragDropImport({
@@ -832,12 +875,18 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
   }, [assets, lockAsset, enqueueOptimistic, rowLocks, sessionId, activity?.id]);
 
   const handleDelete = useCallback(async id => {
-    if (!window.confirm("Hapus aset ini?")) return;
+    const ok = await confirm({
+      title: "Hapus Aset",
+      description: "Aset ini akan dihapus permanen. Lanjutkan?",
+      confirmLabel: "Hapus",
+      variant: "danger",
+    });
+    if (!ok) return;
     setIsDeleting(id);
     try { await axios.delete(`${API}/assets/${id}`); toast.success("Dihapus"); refreshData(); }
     catch (err) { toast.error(getApiError(err, "Gagal hapus")); }
     finally { setIsDeleting(null); }
-  }, []);
+  }, [confirm]);
 
   // Kartu Inventarisasi — riwayat pengesahan lintas kegiatan per identitas aset.
   // kode_satker kegiatan aktif ikut dikirim agar riwayat dibatasi pada satuan
@@ -1057,6 +1106,9 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
               assetsCount={assets.length} filters={filters} filterOptions={filterOptions} handleAdvancedFilterChange={handleAdvancedFilterChange}
               resetAdvancedFilters={resetAdvancedFilters} handleCategoryReset={() => { handleCategoryReset(); refreshData(1); }}
               refreshData={refreshData} viewMode={viewMode} setViewMode={setViewMode}
+              showPengesahan={isAdmin} pengesahan={pengesahanSummary} sealed={sealed}
+              pengesahanTicket={activity?.ticket_number || pengesahanSummary?.ticket}
+              onOpenPengesahan={() => setPengesahanOpen(true)}
             />
 
             {!inventoryMode && <Suspense fallback={null}><AnalyticsPanel activityId={activity?.id} isOpen={analyticsOpen} onToggle={handleAnalyticsToggle} panelHeight={analyticsPanelHeight} onDragStart={handleAnalyticsDragStart} /></Suspense>}
@@ -1095,7 +1147,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
                   </TooltipProvider>
                 </div>
                 <div className="lg:hidden">
-                  <VirtualizedMobileCards assets={mobileAssets} editId={editAssetForForm?.id} onEdit={perms.canEdit ? handleEdit : undefined} onDelete={perms.canDelete ? handleDelete : undefined} onLoadMore={loadMoreMobile} isLoadingMore={mobileLoading} hasMore={mobileCurrentPage < totalPages} totalItems={totalItems} rowLocks={rowLocks} currentSessionId={sessionId} syncStatuses={syncStatuses} onRetrySync={retrySync} onDismissSync={dismissSync} selectedAssets={selectedAssets} onToggleSelect={perms.canEdit ? toggleSelectAsset : undefined} />
+                  <VirtualizedMobileCards assets={mobileAssets} editId={editAssetForForm?.id} onEdit={perms.canEdit ? handleEdit : undefined} onDelete={perms.canDelete ? handleDelete : undefined} onOpenKartu={handleOpenKartu} onViewAudit={handleViewAssetAudit} onPrintCard={handlePrintCard} onLoadMore={loadMoreMobile} isLoadingMore={mobileLoading} hasMore={mobileCurrentPage < totalPages} totalItems={totalItems} rowLocks={rowLocks} currentSessionId={sessionId} syncStatuses={syncStatuses} onRetrySync={retrySync} onDismissSync={dismissSync} selectedAssets={selectedAssets} onToggleSelect={perms.canEdit ? toggleSelectAsset : undefined} />
                 </div>
                 <div className="hidden lg:block">
                   <AssetPagination currentPage={currentPage} totalPages={totalPages} totalItems={totalItems} pageSize={pageSize} setPageSize={setPageSize} goToPage={goToPage} />
@@ -1117,7 +1169,19 @@ function AssetManagementPage({ user, onLogout, activity, onBack, dark, toggleDar
         {dialogs.import && <LazyImportDialog open={dialogs.import} onClose={handleImportClose} onSuccess={() => { clearDropFile(); refreshData(1); doFetchCategories(); }} activityId={activity?.id} preloadFile={dropFile} />}
         {dialogs.userManagement && <LazyUserManagementDialog open={dialogs.userManagement} onClose={() => closeDialog('userManagement')} currentUser={user} />}
         {kartuIdentity && <LazyKartuInventarisasiDialog open={!!kartuIdentity} identity={kartuIdentity} onClose={() => setKartuIdentity(null)} />}
+        {/* Pengesahan dari dashboard: sukses → refresh activity (banner + write-lock)
+            dan refetch status pill. ActivitySelectionPage tetap punya dialognya sendiri. */}
+        {pengesahanOpen && (
+          <LazyPengesahanDialog
+            open={pengesahanOpen}
+            activity={activity}
+            isAdmin={isAdmin}
+            onClose={() => setPengesahanOpen(false)}
+            onSahkanSuccess={() => { onActivityRefresh?.(); fetchPengesahanStatus(); }}
+          />
+        )}
       </Suspense>
+      {confirmDialog}
 
       {/* MOBILE FAB — placed at the root level (outside <main> and its `contain:
           layout style` / `will-change: width` ancestors) so `position: fixed`
@@ -1183,6 +1247,20 @@ export default function DashboardPage({ user, onLogout, dark, toggleDark, onShow
   const handleBack = () => { setSelectedActivity(null); localStorage.removeItem('currentActivityId'); localStorage.removeItem('currentActivity'); };
   const handleLogout = () => { localStorage.removeItem('currentActivityId'); localStorage.removeItem('currentActivity'); onLogout(); };
 
+  // Re-fetch the active activity after pengesahan so the sealed banner + write-lock
+  // gating (driven by activity.status_pengesahan) kick in without a full reload.
+  const handleActivityRefresh = useCallback(async () => {
+    const id = selectedActivity?.id;
+    if (!id) return;
+    try {
+      const r = await axios.get(`${API}/inventory-activities/${id}`);
+      setSelectedActivity(r.data);
+      try { localStorage.setItem('currentActivity', JSON.stringify(r.data)); } catch {}
+    } catch {
+      // Non-fatal: keep the current activity object if the refresh fails.
+    }
+  }, [selectedActivity?.id]);
+
   if (!selectedActivity) return <ActivitySelectionPage user={user} onLogout={handleLogout} onSelectActivity={handleSelectActivity} onShowInfo={onShowInfo} />;
-  return <AssetManagementPage user={user} onLogout={handleLogout} activity={selectedActivity} onBack={handleBack} dark={dark} toggleDark={toggleDark} onShowInfo={onShowInfo} />;
+  return <AssetManagementPage user={user} onLogout={handleLogout} activity={selectedActivity} onBack={handleBack} onActivityRefresh={handleActivityRefresh} dark={dark} toggleDark={toggleDark} onShowInfo={onShowInfo} />;
 }

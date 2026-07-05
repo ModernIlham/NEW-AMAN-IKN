@@ -242,7 +242,10 @@ export default function LoginPage({ onLogin, onShowInfo }) {
             <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center shadow-elev-2">
               <Package className="w-6 h-6 text-white" />
             </div>
-            <span className="text-xl font-bold text-white font-['Manrope']">InventoryMaster</span>
+            <div className="flex flex-col leading-tight">
+              <span className="text-xl font-bold text-white font-['Manrope']">AMAN</span>
+              <span className="text-[11px] font-medium text-slate-300">Aplikasi Manajemen Aset Negara</span>
+            </div>
           </div>
           <div className="space-y-6">
             <h1 className="text-4xl font-bold text-white leading-tight font-['Manrope']">
@@ -260,7 +263,7 @@ export default function LoginPage({ onLogin, onShowInfo }) {
               ))}
             </div>
           </div>
-          <div className="text-muted-foreground text-sm">&copy; 2024 InventoryMaster Pro</div>
+          <div className="text-muted-foreground text-sm">&copy; {new Date().getFullYear()} AMAN — Aplikasi Manajemen Aset Negara</div>
         </div>
       </div>
 
@@ -281,7 +284,10 @@ export default function LoginPage({ onLogin, onShowInfo }) {
               <div className="w-10 h-10 bg-gradient-to-br from-slate-900 to-slate-800 rounded-lg flex items-center justify-center shadow-elev-2">
                 <Package className="w-6 h-6 text-white" />
               </div>
-              <span className="text-xl font-bold text-foreground font-['Manrope']">InventoryMaster</span>
+              <div className="flex flex-col leading-tight text-left">
+                <span className="text-xl font-bold text-foreground font-['Manrope']">AMAN</span>
+                <span className="text-[11px] font-medium text-muted-foreground">Aplikasi Manajemen Aset Negara</span>
+              </div>
             </div>
 
             <div className="text-center lg:text-left">
