@@ -380,7 +380,7 @@ async def get_pengesahan_dokumen(activity_id: str, doc_id: str, request: Request
 _HISTORY_ASSET_PROJECTION = {
     "_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "kode_register": 1,
     "asset_name": 1, "inventory_status": 1, "condition": 1, "location": 1,
-    "user": 1, "eselon1": 1,
+    "user": 1, "eselon1": 1, "document_checklist": 1, "notes": 1,
 }
 
 
@@ -390,7 +390,8 @@ async def sahkan_activity(activity_id: str, request: Request, admin: dict = Depe
     activity = await db.inventory_activities.find_one(
         {"id": activity_id},
         {"_id": 0, "id": 1, "nama_kegiatan": 1, "created_at": 1, "ticket_number": 1,
-         "status_pengesahan": 1, "pengesahan_dokumen": 1, "kode_satker": 1, "nama_satker": 1},
+         "nomor_surat": 1, "status_pengesahan": 1, "pengesahan_dokumen": 1,
+         "kode_satker": 1, "nama_satker": 1},
     )
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
@@ -429,19 +430,49 @@ async def sahkan_activity(activity_id: str, request: Request, admin: dict = Depe
     # kegiatan ikut disalin agar Kartu Inventarisasi bisa memfilter riwayat
     # identitas aset yang sama per satuan kerja.
     activity_name = activity.get("nama_kegiatan", "")
+    nomor_surat = activity.get("nomor_surat", "")
     kode_satker = activity.get("kode_satker", "") or ""
     nama_satker = activity.get("nama_satker", "") or ""
+
+    # Peta petugas per aset dari jejak audit: siapa yang sebenarnya melakukan
+    # inventarisasi (create/update terakhir) untuk tiap aset kegiatan ini.
+    # Satu agregasi (bukan N query) → petugas terakhir per asset_id. Bila gagal,
+    # fallback ke {} dan history_doc memakai disahkan_by.
+    perf_map = {}
+    try:
+        pipeline = [
+            {"$match": {"activity_id": activity_id, "asset_id": {"$ne": ""},
+                        "action": {"$in": ["create", "update"]}}},
+            {"$sort": {"timestamp": -1}},
+            {"$group": {"_id": "$asset_id", "username": {"$first": "$username"}}},
+        ]
+        async for row in db.audit_logs.aggregate(pipeline):
+            perf_map[row["_id"]] = row.get("username", "")
+    except Exception as e:
+        logger.warning(f"[sahkan] performer map aggregation failed: {e}")
+        perf_map = {}
+
     history_docs = []
     cursor = db.assets.find({"activity_id": activity_id}, _HISTORY_ASSET_PROJECTION)
     async for a in cursor:
+        # Ringkasan kelengkapan dokumen aset (checked / total) untuk kolom
+        # DOKUMEN di kartu, dan catatan aset untuk kolom CATATAN.
+        dcl = a.get("document_checklist") or []
+        if not isinstance(dcl, list):
+            dcl = []
+        dokumen_total = len(dcl)
+        dokumen_checked = sum(1 for it in dcl if isinstance(it, dict) and it.get("checked"))
         history_docs.append({
             "id": str(uuid.uuid4()),
             "activity_id": activity_id,
             "ticket_number": ticket_number,
             "activity_name": activity_name,
+            "nomor_surat": nomor_surat,
             "kode_satker": kode_satker,
             "nama_satker": nama_satker,
             "tanggal_pengesahan": disahkan_at,
+            "disahkan_by": disahkan_by,
+            "petugas": perf_map.get(a.get("id", "")) or disahkan_by,
             "asset_id": a.get("id", ""),
             "asset_code": a.get("asset_code", ""),
             "NUP": a.get("NUP", ""),
@@ -452,6 +483,9 @@ async def sahkan_activity(activity_id: str, request: Request, admin: dict = Depe
             "location": a.get("location", ""),
             "user": a.get("user", ""),
             "eselon1": a.get("eselon1", ""),
+            "dokumen_checked": dokumen_checked,
+            "dokumen_total": dokumen_total,
+            "catatan": a.get("notes", "") or "",
         })
     if history_docs:
         await db.inventory_history.insert_many(history_docs)
