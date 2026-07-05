@@ -48,6 +48,20 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#37] Kartu Inventarisasi cetak: penyempurnaan sesuai masukan — 2026-07-05
+
+- **Riwayat** kini menyimpan **petugas** = akun yang benar-benar melakukan
+  inventarisasi aset (dari audit-log per aset, fallback pelaku pengesahan) +
+  **nomor surat** kegiatan (backend `pengesahan.py`).
+- **Kartu (`cards.py`)**: NUP di pojok kanan atas dihapus (tetap di footer);
+  tile KATEGORI → **PEROLEHAN DARI**, tambah tile **KELENGKAPAN** (dokumen
+  checked/total + %); PENANGGUNG JAWAB = pengguna + konteks melekat-ke;
+  **ikon vektor asli** di semua label/tile/header (bukan kotak warna);
+  panel **saling menempel** dengan garis lipat silang di tengah & semua label
+  judul/garis-lipat dipindah ke tepi luar (mudah dilipat); tabel **riwayat
+  dipadatkan** jadi 5 kolom (NO · TIKET/TANGGAL · KEGIATAN lebar + No. Surat ·
+  PETUGAS · KONDISI) dengan tanggal compact. Kartu massal ikut disesuaikan.
+
 ## [#36] Redesain Kartu Inventarisasi cetak (4 panel + garis lipat + riwayat) — 2026-07-05
 
 Kartu inventarisasi cetak (`cards.py`) dirombak sesuai contoh desain: **4 panel

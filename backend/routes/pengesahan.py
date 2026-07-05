@@ -390,7 +390,8 @@ async def sahkan_activity(activity_id: str, request: Request, admin: dict = Depe
     activity = await db.inventory_activities.find_one(
         {"id": activity_id},
         {"_id": 0, "id": 1, "nama_kegiatan": 1, "created_at": 1, "ticket_number": 1,
-         "status_pengesahan": 1, "pengesahan_dokumen": 1, "kode_satker": 1, "nama_satker": 1},
+         "nomor_surat": 1, "status_pengesahan": 1, "pengesahan_dokumen": 1,
+         "kode_satker": 1, "nama_satker": 1},
     )
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
@@ -429,8 +430,28 @@ async def sahkan_activity(activity_id: str, request: Request, admin: dict = Depe
     # kegiatan ikut disalin agar Kartu Inventarisasi bisa memfilter riwayat
     # identitas aset yang sama per satuan kerja.
     activity_name = activity.get("nama_kegiatan", "")
+    nomor_surat = activity.get("nomor_surat", "")
     kode_satker = activity.get("kode_satker", "") or ""
     nama_satker = activity.get("nama_satker", "") or ""
+
+    # Peta petugas per aset dari jejak audit: siapa yang sebenarnya melakukan
+    # inventarisasi (create/update terakhir) untuk tiap aset kegiatan ini.
+    # Satu agregasi (bukan N query) → petugas terakhir per asset_id. Bila gagal,
+    # fallback ke {} dan history_doc memakai disahkan_by.
+    perf_map = {}
+    try:
+        pipeline = [
+            {"$match": {"activity_id": activity_id, "asset_id": {"$ne": ""},
+                        "action": {"$in": ["create", "update"]}}},
+            {"$sort": {"timestamp": -1}},
+            {"$group": {"_id": "$asset_id", "username": {"$first": "$username"}}},
+        ]
+        async for row in db.audit_logs.aggregate(pipeline):
+            perf_map[row["_id"]] = row.get("username", "")
+    except Exception as e:
+        logger.warning(f"[sahkan] performer map aggregation failed: {e}")
+        perf_map = {}
+
     history_docs = []
     cursor = db.assets.find({"activity_id": activity_id}, _HISTORY_ASSET_PROJECTION)
     async for a in cursor:
@@ -439,9 +460,12 @@ async def sahkan_activity(activity_id: str, request: Request, admin: dict = Depe
             "activity_id": activity_id,
             "ticket_number": ticket_number,
             "activity_name": activity_name,
+            "nomor_surat": nomor_surat,
             "kode_satker": kode_satker,
             "nama_satker": nama_satker,
             "tanggal_pengesahan": disahkan_at,
+            "disahkan_by": disahkan_by,
+            "petugas": perf_map.get(a.get("id", "")) or disahkan_by,
             "asset_id": a.get("id", ""),
             "asset_code": a.get("asset_code", ""),
             "NUP": a.get("NUP", ""),
