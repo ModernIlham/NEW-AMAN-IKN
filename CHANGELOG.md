@@ -48,6 +48,24 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#36] Redesain Kartu Inventarisasi cetak (4 panel + garis lipat + riwayat) — 2026-07-05
+
+Kartu inventarisasi cetak (`cards.py`) dirombak sesuai contoh desain: **4 panel
+dalam grid 2×2** pada satu halaman A4 landscape dengan **garis lipat** (dashed)
+— vertikal antara Halaman 1 & 2, horizontal antara Tampak Depan & Belakang —
+agar depan-belakang dan hal 1-2 menempel saat dilipat jadi kartu dua sisi:
+- **Depan Hal 1**: header "KARTU INVENTARIS" + NUP, foto, KODE INVENTARIS besar,
+  nama, grid spec (kategori/S-N/merek/lokasi), badge kondisi & status, Nilai
+  Perolehan, footer QR asli (`#kode_register`) + ID/Kode/NUP.
+- **Depan Hal 2**: "DETAIL ADMINISTRATIF" — tile eselon I/II, penanggung jawab,
+  tgl/kontrak/BAST, lokasi/SPM/supplier/kategori.
+- **Belakang Hal 1 & 2**: tabel "RIWAYAT INVENTARISASI" (No/Tanggal/Jenis
+  Kegiatan/Lokasi/Petugas/Kondisi/Ket, 3 baris/halaman, footer "Halaman X dari 2").
+- **Data riwayat** kini diambil dari `inventory_history` (per kode register /
+  kode+NUP, scope satker) — sebelumnya kartu tak memuat riwayat.
+Endpoint bulk memakai renderer sama (satu halaman lipat per aset). Diverifikasi
+dengan render PDF → raster PNG.
+
 ## [#33] UX ronde B: validasi inline, aksesibilitas, empty/error state — 2026-07-05
 
 - **Validasi inline**: error di form aset & kegiatan kini tampil di bawah field
