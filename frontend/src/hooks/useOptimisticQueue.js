@@ -9,6 +9,20 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const axiosLargeUpload = axios.create({ timeout: 120000, maxContentLength: 50 * 1024 * 1024, maxBodyLength: 50 * 1024 * 1024 });
 
+// This instance is created outside React, so it does NOT run the global
+// request interceptor registered in App.js — it must attach the JWT bearer
+// token itself, or every queued save hits the backend without an
+// Authorization header and 401s ("Invalid authorization header"). Read the
+// token at request time (not module-load) so it stays fresh after re-login.
+axiosLargeUpload.interceptors.request.use((config) => {
+  const token = localStorage.getItem("token");
+  if (token && !config.headers?.Authorization) {
+    config.headers = config.headers || {};
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 /**
  * Pull the current user from localStorage so we can stamp every mutation
  * request with `X-Audit-User` + `X-Audit-User-Id`. This axios instance is

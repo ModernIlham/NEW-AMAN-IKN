@@ -270,6 +270,19 @@ const axiosLargeUpload = axios.create({
   maxBodyLength: Infinity
 });
 
+// Separate instance → does NOT run App.js's global request interceptor, so it
+// must attach the JWT bearer token itself. Without this a direct save (the
+// path not routed through the optimistic queue) reaches the backend with no
+// Authorization header and 401s. Token is read at request time to stay fresh.
+axiosLargeUpload.interceptors.request.use((config) => {
+  const token = localStorage.getItem("token");
+  if (token && !config.headers?.Authorization) {
+    config.headers = config.headers || {};
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 /**
  * Pull the current user from localStorage so every asset save carries the
  * audit identity in request headers. This axios instance is separate from
