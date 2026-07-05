@@ -57,23 +57,17 @@ async function extractErrorMessage(err, timeoutMessage) {
 }
 
 /**
- * Unduh file dari `url` sebagai blob dengan toast progres, lalu picu
- * download browser dengan nama `filename`.
+ * Buat pelapor progres unduhan mandiri (toast sonner dengan id stabil).
  *
- * @param {string} url - URL endpoint (boleh sudah berisi query string).
- * @param {string} filename - Nama file yang disimpan browser.
- * @param {Object} [opts]
- * @param {string} [opts.label=filename] - Nama tampilan pada toast.
- * @param {Object} [opts.params] - Query params tambahan (axios `params`).
- * @param {"get"|"post"} [opts.method="get"] - POST untuk endpoint ber-body (mis. batch ZIP).
- * @param {*} [opts.data] - Body request saat method "post".
- * @param {number} [opts.timeout] - Timeout axios (ms).
- * @param {string} [opts.timeoutMessage] - Pesan khusus saat timeout.
- * @returns {Promise<import("axios").AxiosResponse>} respons axios (blob).
- * @throws error axios asli (setelah toast.error) agar caller bisa finally/cleanup.
+ * Dipakai oleh pemanggil yang butuh menampilkan progres tetapi ingin
+ * mengelola sendiri hasil unduhannya (mis. buka pratinjau PDF di tab baru,
+ * bukan langsung men-download). `onDownloadProgress` bisa langsung dipasang
+ * ke config axios; `success`/`error` menutup toast yang sama.
+ *
+ * @param {string} label - Nama tampilan pada toast (mis. "kartu inventaris").
+ * @returns {{onDownloadProgress: Function, success: Function, error: Function, toastId: string}}
  */
-export async function downloadFileWithProgress(url, filename, opts = {}) {
-  const { label = filename, params, method = "get", data, timeout, timeoutMessage } = opts;
+export function makeDownloadProgress(label) {
   const toastId = `download-${++downloadSeq}`;
   let lastUpdate = 0;
 
@@ -92,6 +86,33 @@ export async function downloadFileWithProgress(url, filename, opts = {}) {
   };
 
   toast.loading(`Mengunduh ${label}…`, { id: toastId });
+  return {
+    toastId,
+    onDownloadProgress,
+    success: (msg) => toast.success(msg || `${label} berhasil diunduh`, { id: toastId }),
+    error: (msg) => toast.error(msg || `Gagal mengunduh ${label}`, { id: toastId }),
+  };
+}
+
+/**
+ * Unduh file dari `url` sebagai blob dengan toast progres, lalu picu
+ * download browser dengan nama `filename`.
+ *
+ * @param {string} url - URL endpoint (boleh sudah berisi query string).
+ * @param {string} filename - Nama file yang disimpan browser.
+ * @param {Object} [opts]
+ * @param {string} [opts.label=filename] - Nama tampilan pada toast.
+ * @param {Object} [opts.params] - Query params tambahan (axios `params`).
+ * @param {"get"|"post"} [opts.method="get"] - POST untuk endpoint ber-body (mis. batch ZIP).
+ * @param {*} [opts.data] - Body request saat method "post".
+ * @param {number} [opts.timeout] - Timeout axios (ms).
+ * @param {string} [opts.timeoutMessage] - Pesan khusus saat timeout.
+ * @returns {Promise<import("axios").AxiosResponse>} respons axios (blob).
+ * @throws error axios asli (setelah toast.error) agar caller bisa finally/cleanup.
+ */
+export async function downloadFileWithProgress(url, filename, opts = {}) {
+  const { label = filename, params, method = "get", data, timeout, timeoutMessage } = opts;
+  const { toastId, onDownloadProgress } = makeDownloadProgress(label);
   try {
     const config = { responseType: "blob", onDownloadProgress };
     if (params) config.params = params;
