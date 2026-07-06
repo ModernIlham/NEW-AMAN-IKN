@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { ScanLine, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { useBackGuard } from "@/hooks/useBackGuard";
 
 /**
  * Ekstrak kode yang bisa dicari dari isi QR/barcode stiker.
@@ -55,6 +56,9 @@ const QrScanButton = memo(({ onDetected }) => {
 
   // Pastikan kamera mati saat komponen di-unmount
   useEffect(() => stopScan, [stopScan]);
+
+  // Back/Undo browser saat scanner terbuka → tutup scanner (bukan pindah halaman)
+  useBackGuard(stopScan, scanning);
 
   const startScan = useCallback(async () => {
     try {

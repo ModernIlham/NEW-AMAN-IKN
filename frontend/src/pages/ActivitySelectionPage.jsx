@@ -24,6 +24,7 @@ import { authMediaUrl } from "@/lib/mediaUrl";
 import { compressImageFile } from "@/lib/imageCompression";
 import { compressPdfFile } from "@/lib/pdfCompression";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { useBackGuard } from "@/hooks/useBackGuard";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -885,6 +886,23 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
     setPhotosLoaded(false); setDocsLoaded(false);
     setPhotoCount(0); setDocCount(0);
   };
+
+  // Tombol Back/Undo browser: jangan keluar aplikasi — tutup overlay teratas
+  // dulu; di daftar kegiatan tanpa dialog, Back tetap menahan di aplikasi.
+  const handleAppBack = useCallback(() => {
+    if (photoLightbox) { setPhotoLightbox(null); return; }
+    if (pengesahanActivity) { setPengesahanActivity(null); return; }
+    if (completionDialog) { setCompletionDialog(null); return; }
+    // Dialog buat & edit berbagi satu modal yang digerbang oleh `showCreate`
+    // (edit meng-set showCreate + editingActivity). Tutup lewat handleCloseDialog
+    // agar tidak menyisakan showCreate=true yang berubah jadi mode "Buat"
+    // (bisa membuat kegiatan duplikat bila disubmit).
+    if (showCreate || editingActivity) { handleCloseDialog(); return; }
+    if (showRestore) { setShowRestore(false); return; }
+    if (showResetAll) { setShowResetAll(false); return; }
+    /* tanpa dialog: tetap di halaman daftar kegiatan */
+  }, [photoLightbox, pengesahanActivity, completionDialog, showCreate, editingActivity, showRestore, showResetAll]); // eslint-disable-line react-hooks/exhaustive-deps
+  useBackGuard(handleAppBack);
 
   // Compute date-based status phase for a kegiatan card.
   // 'belum_dimulai' (gray) → 'berlangsung' (blue) → 'selesai_tanggal' (amber, needs validation)
