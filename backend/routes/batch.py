@@ -148,6 +148,9 @@ BATCH_ALLOWED_FIELDS = {
     "nomor_spm", "perolehan_dari_nama", "nomor_kontrak",
     "nomor_bukti_perolehan", "supplier", "purchase_date", "purchase_price",
     "koordinat_latitude", "koordinat_longitude", "brand", "model",
+    # Selaras dengan field yang bisa diedit di form aset (AssetForm):
+    "status", "user", "pengguna_melekat_ke", "pengguna_jabatan",
+    "operasional_jenis", "nomor_bast", "notes",
 }
 
 # Fields that need special handling (not simple $set)

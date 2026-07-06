@@ -223,11 +223,16 @@ const AuditLogPanel = memo(({ activityId, isOpen, onToggle, selectedAssetId, sel
   }, [isOpen, fetchLogs, selectedAssetId]);
 
   return (
-    <div
-      className={`bg-card border-l border-border flex flex-col transition-all duration-300 ease-in-out ${isOpen ? 'w-[340px] min-w-[340px]' : 'w-0 min-w-0 overflow-hidden'}`}
-      data-testid="audit-log-panel"
-    >
-      {isOpen && (
+    <>
+      {/* Mobile: drawer geser masuk dari kanan + backdrop redup (tap untuk
+          tutup) — persis seperti form edit. Desktop (lg): tetap panel flex
+          yang menggeser konten seperti sebelumnya. */}
+      {isOpen && <div className="fixed inset-0 bg-black/40 z-30 lg:hidden" onClick={onToggle} data-testid="audit-backdrop" />}
+      <div
+        className={`bg-card border-l border-border flex flex-col overflow-hidden h-full shadow-2xl lg:shadow-none transition-all duration-300 ease-in-out fixed lg:relative inset-y-0 right-0 z-40 lg:z-auto w-[85vw] sm:w-80 ${isOpen ? 'translate-x-0 lg:w-[340px] lg:min-w-[340px]' : 'translate-x-full lg:translate-x-0 lg:w-0 lg:min-w-0 lg:border-l-0'}`}
+        data-testid="audit-log-panel"
+      >
+        {isOpen && (
         <>
           {/* Header */}
           <div className="px-3 pt-3 pb-2 border-b border-border flex-shrink-0">
@@ -332,7 +337,8 @@ const AuditLogPanel = memo(({ activityId, isOpen, onToggle, selectedAssetId, sel
           )}
         </>
       )}
-    </div>
+      </div>
+    </>
   );
 });
 

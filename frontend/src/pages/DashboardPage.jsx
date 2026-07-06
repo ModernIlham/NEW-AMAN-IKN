@@ -399,6 +399,34 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
 
   const clearSelection = useCallback(() => { setSelectedAssets(new Set()); setShowBatchPanel(false); }, []);
 
+  // Verifikasi hasil scan barcode/QR terhadap kegiatan yang sedang dibuka.
+  // Bug sebelumnya: scan SELALU memunculkan notifikasi "berhasil" walau barang
+  // sebenarnya milik kegiatan lain (tidak ada di kegiatan ini). Kini kode yang
+  // terbaca dicek keberadaannya di kegiatan aktif dulu, baru beri notifikasi
+  // sukses/gagal yang akurat. Daftar tetap disaring seperti sebelumnya.
+  const handleScannedCode = useCallback(async (code) => {
+    const term = (code || "").trim();
+    if (!term) return;
+    setSearchInput(term);
+    if (!activity?.id) { toast.info(`Kode terbaca: ${term}`); return; }
+    const tId = toast.loading(`Memverifikasi ${term}…`);
+    try {
+      const r = await axios.get(`${API}/assets`, {
+        params: { activity_id: activity.id, search: term, page: 1, page_size: 10 },
+      });
+      if ((r.data?.total || 0) > 0) {
+        const a = (r.data.items || [])[0];
+        const nama = a?.asset_name || a?.asset_code || term;
+        toast.success(`Barang ditemukan: ${nama}`, { id: tId });
+      } else {
+        toast.error(`Barang "${term}" tidak ada di kegiatan ini`, { id: tId });
+      }
+    } catch {
+      // Offline / gagal jaringan: jangan klaim berhasil — beri info netral.
+      toast.info(`Kode terbaca: ${term} — periksa daftar hasil`, { id: tId });
+    }
+  }, [activity?.id, setSearchInput]);
+
   const handleBatchUpdate = useCallback(async (updates) => {
     if (selectedAssets.size === 0) return;
     setBatchUpdating(true);
@@ -1056,7 +1084,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
               />
             )}
             <DashboardToolbar
-              searchInput={searchInput} setSearchInput={setSearchInput} categories={categories} filterCategory={filterCategory} setFilterCategory={setFilterCategory}
+              searchInput={searchInput} setSearchInput={setSearchInput} onScanCode={handleScannedCode} categories={categories} filterCategory={filterCategory} setFilterCategory={setFilterCategory}
               activeFilterCount={activeFilterCount} showAdvancedFilter={showAdvancedFilter} setShowAdvancedFilter={setShowAdvancedFilter}
               sortBy={sortBy} setSortBy={setSortBy} exporting={exporting} handleExport={handleExport} handleExportExecutivePDF={handleExportExecutivePDF}
               handlePreviewExecutive={handlePreviewExecutive} perms={perms} openDialog={openDialog} handlePrintBulkCards={handlePrintBulkCards}

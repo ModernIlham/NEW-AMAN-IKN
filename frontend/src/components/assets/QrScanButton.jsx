@@ -86,7 +86,10 @@ const QrScanButton = memo(({ onDetected }) => {
         if (codes && codes.length > 0) {
           const code = extractScannedCode(codes[0].rawValue || "");
           stopScan();
-          if (code) { onDetected?.(code); toast.success(`Kode terbaca: ${code}`); }
+          // Jangan tampilkan notifikasi "berhasil" di sini — hasil scan belum
+          // tentu ada di kegiatan yang sedang dibuka. Penanganan (verifikasi ke
+          // kegiatan + notifikasi sukses/gagal) diserahkan ke onDetected.
+          if (code) onDetected?.(code);
           else toast.error("QR tidak berisi kode yang dikenali");
         }
       } catch { /* frame belum siap — coba lagi di tick berikutnya */ }

@@ -17,7 +17,7 @@ import { CategorySelect, TinifyQuotaIndicator, TinifyQuotaMobile, AdvancedFilter
 import QrScanButton from "@/components/assets/QrScanButton";
 
 const DashboardToolbar = memo(function DashboardToolbar({
-  searchInput, setSearchInput,
+  searchInput, setSearchInput, onScanCode,
   categories, filterCategory, setFilterCategory,
   activeFilterCount, showAdvancedFilter, setShowAdvancedFilter,
   sortBy, setSortBy,
@@ -44,7 +44,7 @@ const DashboardToolbar = memo(function DashboardToolbar({
               data-testid="search-input"
             />
           </div>
-          <QrScanButton onDetected={setSearchInput} />
+          <QrScanButton onDetected={onScanCode || setSearchInput} />
           <Button
             variant={activeFilterCount > 0 ? "default" : "outline"}
             size="sm"
