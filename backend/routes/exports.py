@@ -279,17 +279,20 @@ _KML_STATUS_COLORS = {
 }
 
 
-def _geo_coord(v):
+def _geo_coord(v, limit=180.0):
     try:
         n = float(str(v).strip().replace(",", "."))
-        return n if abs(n) <= 180 else None
+        return n if abs(n) <= limit else None
     except (ValueError, TypeError):
         return None
 
 
 def _geo_attrs(a: dict) -> list:
     """Pasangan (label, nilai) atribut informasi untuk KML/SHP."""
-    photo_count = len([g for g in (a.get("photo_gridfs_ids") or []) if g])
+    # photo_count dihitung pipeline (GridFS-first, fallback foto inline legacy)
+    photo_count = a.get("photo_count")
+    if photo_count is None:
+        photo_count = len([g for g in (a.get("photo_gridfs_ids") or []) if g])
     return [
         ("Kode Aset", a.get("asset_code") or ""),
         ("NUP", a.get("NUP") or ""),
@@ -436,12 +439,22 @@ async def export_geo(
         price_min=price_min, price_max=price_max, nomor_spm=nomor_spm,
         perolehan_dari=perolehan_dari, created_from=created_from, created_to=created_to,
     )
-    assets = await db.assets.find(query, _GEO_MEDIA_EXCLUDE)        .sort([("created_at", -1), ("id", 1)]).to_list(100000)
-
+    # Streaming cursor (bukan to_list) + photo_count GridFS-first dengan
+    # fallback foto inline legacy — konsisten dengan badge kamera di peta.
+    pipeline = [
+        {"$match": query},
+        {"$addFields": {"photo_count": {"$cond": [
+            {"$gt": [{"$size": {"$ifNull": ["$photo_gridfs_ids", []]}}, 0]},
+            {"$size": {"$ifNull": ["$photo_gridfs_ids", []]}},
+            {"$size": {"$ifNull": ["$photos", []]}},
+        ]}}},
+        {"$project": _GEO_MEDIA_EXCLUDE},
+        {"$sort": {"created_at": -1, "id": 1}},
+    ]
     features = []
-    for a in assets:
-        lat = _geo_coord(a.get("koordinat_latitude"))
-        lng = _geo_coord(a.get("koordinat_longitude"))
+    async for a in db.assets.aggregate(pipeline):
+        lat = _geo_coord(a.get("koordinat_latitude"), limit=90.0)   # lintang maks +-90
+        lng = _geo_coord(a.get("koordinat_longitude"), limit=180.0)
         if lat is None or lng is None:
             continue
         features.append({
@@ -450,6 +463,8 @@ async def export_geo(
             "status": a.get("inventory_status") or "Belum Diinventarisasi",
             "attrs": _geo_attrs(a),
         })
+        if len(features) >= 100000:
+            break
     if not features:
         raise HTTPException(status_code=404, detail="Tidak ada aset dengan titik koordinat sesuai filter")
 

@@ -49,10 +49,12 @@ def _jinja_env():
 def _kop_surat_flowables(settings, doc_width):
     """Build classic Indonesian kop surat flowables for ReportLab reports.
 
-    Layout: logo kiri (jika ada), blok teks instansi di tengah
-    (nama_instansi bold, nama_unit_organisasi, alamat_instansi kecil),
-    lalu garis ganda tebal+tipis. Degrades gracefully: baris kosong
-    dilewati, tanpa logo -> teks saja. Returns [] bila settings kosong.
+    Layout: logo kiri (jika ada), blok teks instansi di tengah —
+    nama_instansi (besar, reguler), nama_unit_organisasi + nama_sub_unit
+    (TEBAL, kapital), alamat_instansi kecil dan bisa multi-baris (tiap
+    Enter di pengaturan menjadi baris kop sendiri) — lalu garis ganda
+    tebal+tipis. Degrades gracefully: baris kosong dilewati, tanpa logo ->
+    teks saja. Returns [] bila settings kosong.
     """
     from reportlab.platypus import Table, TableStyle, Paragraph, Spacer, Image as RLImage, HRFlowable
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -734,7 +736,7 @@ async def generate_berita_acara_pdf(activity_id: str, _user: dict = Depends(requ
     elements.append(Spacer(1, 6*rl_mm))
 
     elements.extend(_signature_block([
-        {'header': 'Mengetahui,', 'role': 'Kasatker', 'nama': ident["kasatker_nama"],
+        {'header': 'Mengetahui,', 'role': ident["kasatker_jabatan"], 'nama': ident["kasatker_nama"],
          'after': [f'NIP. {ident["kasatker_nip"]}']},
         {'header': 'Tim Peneliti,', 'role': 'Ketua Tim',
          'nama': _member_nama(tim[0], '_______________') if tim else '_______________'},
@@ -1804,7 +1806,7 @@ async def _generate_cover_page(activity, settings):
         if _line.strip():
             elements.append(Paragraph(_line.strip(), alamat_style))
 
-    if nama_instansi or nama_unit or alamat:
+    if nama_instansi or nama_unit or nama_sub_unit or alamat:
         elements.append(Spacer(1, 2*rl_mm))
         line_data = [[""]]
         line_table = Table(line_data, colWidths=[380])

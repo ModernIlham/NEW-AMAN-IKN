@@ -365,7 +365,8 @@ const AssetMapFullView = memo(function AssetMapFullView({
               <span className="hidden sm:inline">Unduh</span>
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-44">
+          {/* z di atas overlay peta (z-[70]) — default konten radix z-50 */}
+          <DropdownMenuContent align="end" className="w-44 z-[80]">
             <DropdownMenuItem onClick={() => downloadGeo("kml")} data-testid="map-download-kml">
               <MapPinned className="w-4 h-4 mr-2" />KML (Google Earth)
             </DropdownMenuItem>

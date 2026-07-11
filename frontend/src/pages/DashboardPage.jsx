@@ -773,7 +773,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   useEffect(() => {
     if (isInitialMount.current) { isInitialMount.current = false; return; }
     refreshData(1, { showLoading: true });
-  }, [debouncedSearch, filterCategory, sortBy, pageSize, filters.condition, filters.status, filters.location, filters.eselon1, filters.eselon2, filters.stiker, filters.inventoryStatus, filters.priceMin, filters.priceMax]);
+  }, [debouncedSearch, filterCategory, sortBy, pageSize, filters.condition, filters.status, filters.location, filters.eselon1, filters.eselon2, filters.stiker, filters.inventoryStatus, filters.priceMin, filters.priceMax, filters.nomorSpm, filters.perolehanDari, filters.dateFrom, filters.dateTo]);
 
   const goToPage = async (p) => {
     const np = Math.max(1, Math.min(p, totalPages));

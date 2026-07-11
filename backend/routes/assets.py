@@ -260,17 +260,24 @@ def build_asset_search_query(
 
     # Rentang tanggal input (created_at tersimpan sebagai string ISO —
     # perbandingan leksikal aman untuk prefiks tanggal YYYY-MM-DD).
+    # Kedua batas divalidasi simetris; nilai tak valid diabaikan diam-diam
+    # (frontend selalu mengirim YYYY-MM-DD dari <input type=date>).
     if created_from or created_to:
         rng = {}
         cf = str(created_from or "").strip()[:10]
         ct = str(created_to or "").strip()[:10]
         if cf:
-            rng["$gte"] = cf
+            try:
+                datetime.strptime(cf, "%Y-%m-%d")
+                rng["$gte"] = cf
+            except (ValueError, OverflowError):
+                pass
         if ct:
             try:
-                # inklusif s.d. akhir hari: batas atas = hari berikutnya (eksklusif)
+                # inklusif s.d. akhir hari: batas atas = hari berikutnya (eksklusif).
+                # OverflowError: 9999-12-31 + 1 hari melewati datetime.MAXYEAR.
                 rng["$lt"] = (datetime.strptime(ct, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
-            except ValueError:
+            except (ValueError, OverflowError):
                 pass
         if rng:
             query["created_at"] = rng
