@@ -2,11 +2,13 @@
  * Registry modul Siklus Pengelolaan BMN — SATU sumber kebenaran untuk
  * "rumah modul" (ModuleHomePage) dan roadmap pengembangan bertahap.
  *
- * Siklus mengikuti PP 27/2014 jo. PP 28/2020: perencanaan → pengadaan →
- * penggunaan → pemanfaatan → pengamanan & pemeliharaan → penilaian →
- * pemindahtanganan → pemusnahan → penghapusan, dengan PENATAUSAHAAN
- * (pembukuan, inventarisasi, pelaporan) sebagai poros pencatatan dan
- * pembinaan-pengawasan-pengendalian melingkupi seluruh tahap.
+ * Mengikuti DIAGRAM RESMI Kemenkeu "Siklus Pengelolaan Barang Milik
+ * Negara/Daerah" (UU 1/2004, PP 27/2014 jo. PP 28/2020) — 12 tahap searah
+ * jarum jam: Perencanaan Kebutuhan → Penganggaran → Pengadaan → Penggunaan →
+ * Pemanfaatan → Penilaian → Pengamanan → Pemeliharaan → PENATAUSAHAAN →
+ * Pemindahtanganan → Pemusnahan → Penghapusan, dengan Pembinaan-Pengawasan-
+ * Pengendalian (wasdal) melingkupi seluruh siklus. Setiap tahap membawa
+ * PMK-nya sendiri (field `dasarHukum`).
  *
  * Posisi saat ini: Penatausahaan › Inventarisasi Aset (modul AKTIF).
  * Modul lain berstatus "segera" — kartunya sudah berdiri (rumah dibangun
@@ -20,7 +22,25 @@
  * fase:   urutan pengembangan (1 = sedang dimatangkan sekarang)
  */
 
+// ── Asas pengelolaan BMN (legenda diagram resmi) ──────────────────────
+export const ASAS_PENGELOLAAN = [
+  "Fungsional",
+  "Kepastian Hukum",
+  "Transparansi & Keterbukaan",
+  "Efisiensi",
+  "Akuntabilitas",
+  "Kepastian Nilai",
+];
+
+export const DASAR_HUKUM_UMUM = [
+  "UU 1/2004 — Perbendaharaan Negara",
+  "PP 27/2014 jo. PP 28/2020 — Pengelolaan BMN/D",
+];
+
 // ── Sub-modul PENATAUSAHAAN (poros — tempat kita berada) ──────────────
+// Dasar hukum tahap: PMK No. 181/PMK.06/2016 (Penatausahaan BMN).
+export const PENATAUSAHAAN_DASAR_HUKUM = "PMK No. 181/PMK.06/2016 — Penatausahaan BMN";
+
 export const PENATAUSAHAAN_SUBMODULES = [
   {
     id: "inventarisasi-aset",
@@ -33,6 +53,7 @@ export const PENATAUSAHAAN_SUBMODULES = [
       + "mode lapangan offline-first, kamera + scan QR, peta aset GIS, klasifikasi "
       + "ditemukan/tidak ditemukan/berlebih/sengketa, 13+ laporan resmi, hingga pengesahan "
       + "berkekuatan dokumen dan kunci kegiatan.",
+    dasarHukum: [PENATAUSAHAAN_DASAR_HUKUM, "SE-17/MK.1/2024 — Pelaksanaan Inventarisasi BMN"],
     fitur: [
       "Kegiatan inventarisasi ber-tiket (INV-{tahun}-{seq}) dengan tim & satker",
       "Mode lapangan: input sekali ketuk, kamera watermark, scan QR, GPS, offline penuh",
@@ -54,6 +75,7 @@ export const PENATAUSAHAAN_SUBMODULES = [
       "Pencatatan BMN ke dalam daftar barang: Daftar Barang Kuasa Pengguna (DBKP) per "
       + "golongan, Kartu Identitas Barang (KIB) untuk tanah/bangunan/kendaraan, saldo awal-"
       + "mutasi-saldo akhir per periode. Setiap transaksi modul lain otomatis membukukan diri.",
+    dasarHukum: [PENATAUSAHAAN_DASAR_HUKUM],
     fitur: [
       "DBKP per golongan/bidang/kelompok mengikuti kodefikasi BMN",
       "KIB A-F (tanah, bangunan, kendaraan, dst.) dengan detail khusus per jenis",
@@ -76,6 +98,7 @@ export const PENATAUSAHAAN_SUBMODULES = [
       + "dengan stok ber-batch FIFO (harga & kedaluwarsa per batch), transaksi masuk/keluar "
       + "terkelompok per dokumen sumber, gudang, dan stock opname berkala dengan penyesuaian "
       + "otomatis. Alur mengadopsi modul persediaan KERJA-BARENG yang sudah terbukti.",
+    dasarHukum: [PENATAUSAHAAN_DASAR_HUKUM],
     fitur: [
       "Master persediaan: kodefikasi 16 digit berawalan '1', NUP otomatis, satuan, foto",
       "Stok FIFO per batch — harga perolehan & tanggal kedaluwarsa melekat di batch",
@@ -101,6 +124,7 @@ export const PENATAUSAHAAN_SUBMODULES = [
       + "laporan kondisi barang, serta dukungan rekonsiliasi dengan SIMAK/SAKTI. Saat ini "
       + "13+ laporan inventarisasi sudah berjalan di modul Inventarisasi Aset; modul ini "
       + "akan menyatukannya menjadi arsip laporan lintas kegiatan & lintas periode.",
+    dasarHukum: [PENATAUSAHAAN_DASAR_HUKUM],
     fitur: [
       "LBKP semesteran/tahunan per golongan",
       "Arsip laporan lintas kegiatan dengan penomoran & riwayat",
@@ -113,30 +137,53 @@ export const PENATAUSAHAAN_SUBMODULES = [
   },
 ];
 
-// ── Tahap siklus BMN (di luar penatausahaan) ──────────────────────────
+// ── Tahap siklus BMN (di luar penatausahaan) — urutan sesuai diagram ──
 export const SIKLUS_MODULES = [
   {
     id: "perencanaan",
-    nama: "Perencanaan & Penganggaran",
+    nama: "Perencanaan Kebutuhan",
     urutan: 1,
     status: "segera",
     fase: 4,
-    ringkas: "RKBMN: kebutuhan pengadaan & pemeliharaan berbasis data aset.",
+    ringkas: "RKBMN & SBSK: kebutuhan pengadaan/pemeliharaan berbasis data aset.",
     deskripsi:
-      "Perencanaan Kebutuhan BMN (RKBMN): usulan kebutuhan pengadaan dan pemeliharaan "
-      + "dari unit, ditimbang terhadap standar barang & standar kebutuhan (SBSK) serta "
-      + "data eksisting hasil inventarisasi.",
+      "Perencanaan Kebutuhan BMN (RKBMN): usulan kebutuhan pengadaan dan pemeliharaan dari "
+      + "unit, ditimbang terhadap Standar Barang & Standar Kebutuhan (SBSK) serta data "
+      + "eksisting hasil inventarisasi.",
+    dasarHukum: [
+      "PMK No. 153/PMK.06/2021 — RKBMN",
+      "PMK 138 Tahun 2024 — SBSK",
+    ],
     fitur: [
-      "Usulan kebutuhan per unit + persetujuan berjenjang",
+      "Penyusunan RKBMN pengadaan & pemeliharaan per unit + persetujuan berjenjang",
+      "Analisis SBSK: sanding usulan vs standar barang & kebutuhan",
       "Sanding usulan vs data aset eksisting (jumlah, kondisi, umur)",
-      "Rekap RKBMN pengadaan & pemeliharaan siap ajukan",
     ],
     integrasi: ["Data kondisi & jumlah aset dari Inventarisasi menjadi dasar analisis kebutuhan"],
   },
   {
+    id: "penganggaran",
+    nama: "Penganggaran",
+    urutan: 2,
+    status: "segera",
+    fase: 4,
+    ringkas: "Menjembatani RKBMN ke anggaran (RKA) — integrasi perencanaan-penganggaran.",
+    deskripsi:
+      "Tindak lanjut RKBMN ke dalam penganggaran: pagu kebutuhan BMN per unit/tahun, "
+      + "penandaan usulan yang lolos anggaran, dan pemantauan realisasi terhadap rencana — "
+      + "titik 'Integrasi' pada siklus resmi Kemenkeu.",
+    dasarHukum: ["PMK No. 153/PMK.06/2021 — RKBMN (keterkaitan penganggaran)"],
+    fitur: [
+      "Pagu kebutuhan BMN per unit & tahun anggaran",
+      "Status usulan RKBMN: diusulkan → disetujui → dianggarkan → direalisasikan",
+      "Sanding realisasi pengadaan vs rencana & anggaran",
+    ],
+    integrasi: ["Menjembatani RKBMN (Perencanaan) dengan realisasi (Pengadaan)"],
+  },
+  {
     id: "pengadaan",
     nama: "Pengadaan",
-    urutan: 2,
+    urutan: 3,
     status: "segera",
     fase: 4,
     ringkas: "Perolehan baru: kontrak, BAST, penerimaan → otomatis masuk daftar aset.",
@@ -144,6 +191,7 @@ export const SIKLUS_MODULES = [
       "Pencatatan perolehan BMN baru (pembelian, hibah masuk, transfer masuk): dokumen "
       + "sumber (kontrak, SPM/SP2D, BAST), penerimaan barang, dan pendaftaran otomatis "
       + "ke master aset/persediaan — pola dokumen sumber mengadopsi KERJA-BARENG.",
+    dasarHukum: ["Perpres 16/2018 jo. Perpres 46/2025 — Pengadaan Barang/Jasa Pemerintah"],
     fitur: [
       "Registrasi perolehan per dokumen sumber (kontrak, PPK, penyedia, nilai)",
       "Penerimaan barang → auto-daftar ke master aset (kode + NUP) / stok persediaan",
@@ -154,55 +202,51 @@ export const SIKLUS_MODULES = [
   {
     id: "penggunaan",
     nama: "Penggunaan",
-    urutan: 3,
+    urutan: 4,
     status: "segera",
     fase: 3,
-    ringkas: "Penetapan status penggunaan & aset di tangan pegawai (BAST).",
+    ringkas: "PSP, alih status, penggunaan sementara/pihak lain/bersama, BMN idle.",
     deskripsi:
-      "Penetapan Status Penggunaan (PSP), penggunaan sementara, BMN idle, dan penatausahaan "
-      + "aset yang melekat ke pegawai/jabatan — melanjutkan data pengguna + BAST yang sudah "
-      + "dicatat modul inventarisasi.",
+      "Penggunaan BMN sesuai PMK 40 Tahun 2024: Penetapan Status Penggunaan (PSP), Alih "
+      + "Status Penggunaan, Penggunaan Sementara, Penggunaan BMN untuk dioperasikan Pihak "
+      + "Lain, dan Penggunaan Bersama — plus pemantauan BMN idle (PMK 120 Tahun 2024) dan "
+      + "penatausahaan aset di tangan pegawai (melanjutkan data pengguna + BAST inventarisasi).",
+    dasarHukum: [
+      "PMK 40 Tahun 2024 — Penggunaan BMN",
+      "PMK 120 Tahun 2024 — BMN Idle",
+    ],
     fitur: [
-      "Pengajuan & SK Penetapan Status Penggunaan",
+      "Pengajuan & SK Penetapan Status Penggunaan (PSP)",
+      "Alih status, penggunaan sementara, dioperasikan pihak lain, penggunaan bersama",
       "Daftar aset per pegawai/jabatan + BAST digital (benihnya sudah ada)",
-      "Pemantauan BMN idle & penggunaan sementara",
+      "Pemantauan & tindak lanjut BMN idle",
     ],
     integrasi: ["Field pengguna, NIP, jabatan, dan BAST dari modul inventarisasi menjadi data awal"],
   },
   {
     id: "pemanfaatan",
     nama: "Pemanfaatan",
-    urutan: 4,
-    status: "segera",
-    fase: 5,
-    ringkas: "Sewa, pinjam pakai, KSP/BGS — jadwal & PNBP.",
-    deskripsi:
-      "Pemanfaatan BMN oleh pihak lain: sewa, pinjam pakai, kerja sama pemanfaatan (KSP), "
-      + "bangun guna serah/bangun serah guna (BGS/BSG), dan KETUPI — dengan jadwal jatuh "
-      + "tempo dan pemantauan PNBP.",
-    fitur: [
-      "Registrasi perjanjian pemanfaatan per aset + arsip dokumen",
-      "Kalender jatuh tempo & pengingat perpanjangan",
-      "Pencatatan PNBP per perjanjian",
-    ],
-    integrasi: ["Status pemanfaatan tampil di detail aset & laporan"],
-  },
-  {
-    id: "pengamanan",
-    nama: "Pengamanan & Pemeliharaan",
     urutan: 5,
     status: "segera",
-    fase: 3,
-    ringkas: "Dokumen kepemilikan, jadwal & riwayat pemeliharaan per aset.",
+    fase: 5,
+    ringkas: "Sewa, Pinjam Pakai, KSP, BGS/BSG, KSPI, KETUPI — jadwal & PNBP.",
     deskripsi:
-      "Pengamanan fisik, administrasi, dan hukum (sertifikat, BPKB, dokumen kepemilikan) "
-      + "serta pemeliharaan: jadwal, riwayat, dan biaya pemeliharaan per aset.",
-    fitur: [
-      "Arsip dokumen kepemilikan per aset (sertifikat, BPKB, IMB)",
-      "Jadwal pemeliharaan berkala + riwayat & biaya",
-      "Pemantauan aset bermasalah (sengketa — datanya sudah dicatat inventarisasi)",
+      "Pemanfaatan BMN oleh pihak lain sesuai PMK No. 115/PMK.06/2020: Sewa, Pinjam Pakai, "
+      + "Kerjasama Pemanfaatan (KSP), Bangun Guna Serah (BGS), Bangun Serah Guna (BSG), "
+      + "Kerjasama Penyediaan Infrastruktur (KSPI), dan Kerjasama Terbatas Untuk Pembiayaan "
+      + "Infrastruktur (KETUPI) — termasuk Pemanfaatan dengan Fasilitas (PDF, PMK 18 Tahun "
+      + "2024), dengan jadwal jatuh tempo dan pemantauan PNBP.",
+    dasarHukum: [
+      "PMK No. 115/PMK.06/2020 — Pemanfaatan BMN",
+      "PMK 18 Tahun 2024 — Pemanfaatan dengan Fasilitas (PDF)",
     ],
-    integrasi: ["Data sengketa & kondisi dari inventarisasi menjadi daftar pantau"],
+    fitur: [
+      "Registrasi perjanjian per bentuk: Sewa / Pinjam Pakai / KSP / BGS / BSG / KSPI / KETUPI / PDF",
+      "Kalender jatuh tempo & pengingat perpanjangan",
+      "Pencatatan PNBP per perjanjian",
+      "Arsip dokumen perjanjian per aset",
+    ],
+    integrasi: ["Status pemanfaatan tampil di detail aset & laporan"],
   },
   {
     id: "penilaian",
@@ -210,10 +254,11 @@ export const SIKLUS_MODULES = [
     urutan: 6,
     status: "segera",
     fase: 5,
-    ringkas: "Nilai wajar, revaluasi, dan penyusutan.",
+    ringkas: "Nilai wajar, revaluasi BMN, dan penyusutan.",
     deskripsi:
       "Penilaian BMN untuk penyusunan neraca dan rencana pemindahtanganan/pemanfaatan: "
-      + "nilai wajar, revaluasi, dan perhitungan penyusutan per golongan.",
+      + "nilai wajar, Revaluasi BMN, dan perhitungan penyusutan per golongan.",
+    dasarHukum: ["PMK 97/PMK.06/2019 — Revaluasi BMN"],
     fitur: [
       "Pencatatan hasil penilaian/revaluasi per aset",
       "Penyusutan otomatis per golongan (masa manfaat standar)",
@@ -222,17 +267,59 @@ export const SIKLUS_MODULES = [
     integrasi: ["Nilai perolehan dari master aset; hasil menyuplai pembukuan & pelaporan"],
   },
   {
-    id: "pemindahtanganan",
-    nama: "Pemindahtanganan",
+    id: "pengamanan",
+    nama: "Pengamanan",
     urutan: 7,
     status: "segera",
-    fase: 6,
-    ringkas: "Penjualan, tukar-menukar, hibah keluar, PMPP.",
+    fase: 3,
+    ringkas: "Pengamanan fisik, administrasi, hukum + asuransi BMN.",
     deskripsi:
-      "Pemindahtanganan BMN: penjualan (lelang), tukar-menukar, hibah keluar, dan penyertaan "
-      + "modal pemerintah pusat — dari usulan, persetujuan, risalah, hingga BAST keluar.",
+      "Pengamanan BMN pada tiga lapis sesuai diagram resmi: Fisik (penjagaan, stiker, "
+      + "pagar), Administrasi (kelengkapan dokumen & pencatatan), dan Hukum (sertifikat, "
+      + "BPKB, dokumen kepemilikan) — ditambah Asuransi BMN untuk aset strategis.",
+    dasarHukum: ["PMK 97/PMK.06/2019 — Asuransi BMN (pengamanan aset tertentu)"],
     fitur: [
-      "Alur usulan → persetujuan → pelaksanaan per jenis pemindahtanganan",
+      "Arsip dokumen kepemilikan per aset (sertifikat, BPKB, IMB)",
+      "Dasbor kelengkapan pengamanan fisik / administrasi / hukum",
+      "Registrasi polis Asuransi BMN + masa berlaku",
+      "Pemantauan aset bermasalah (sengketa — datanya sudah dicatat inventarisasi)",
+    ],
+    integrasi: ["Data sengketa & kelengkapan dokumen dari inventarisasi menjadi daftar pantau"],
+  },
+  {
+    id: "pemeliharaan",
+    nama: "Pemeliharaan",
+    urutan: 8,
+    status: "segera",
+    fase: 3,
+    ringkas: "Jadwal, riwayat, dan biaya pemeliharaan per aset.",
+    deskripsi:
+      "Pemeliharaan BMN agar selalu dalam kondisi siap pakai: jadwal pemeliharaan berkala, "
+      + "riwayat perbaikan, dan biaya pemeliharaan per aset — menyuplai balik RKBMN "
+      + "pemeliharaan pada tahap perencanaan.",
+    dasarHukum: [DASAR_HUKUM_UMUM[1]],
+    fitur: [
+      "Jadwal pemeliharaan berkala per aset/kelompok",
+      "Riwayat & biaya pemeliharaan (per kejadian, per tahun)",
+      "Kondisi aset ter-update dari hasil pemeliharaan",
+    ],
+    integrasi: ["Riwayat biaya menjadi dasar usulan RKBMN pemeliharaan (Perencanaan)"],
+  },
+  {
+    id: "pemindahtanganan",
+    nama: "Pemindahtanganan",
+    urutan: 9,
+    status: "segera",
+    fase: 6,
+    ringkas: "Penjualan, Hibah, Tukar Menukar, Penyertaan Modal.",
+    deskripsi:
+      "Pemindahtanganan BMN sesuai diagram resmi: Penjualan (lelang), Hibah, Tukar Menukar, "
+      + "dan Penyertaan Modal — dari usulan, persetujuan, risalah, hingga BAST keluar.",
+    dasarHukum: [
+      "PMK 111/PMK.06/2016 jo. PMK 165/PMK.06/2021 — Pemindahtanganan BMN",
+    ],
+    fitur: [
+      "Alur usulan → persetujuan → pelaksanaan per jenis: Penjualan / Hibah / Tukar Menukar / Penyertaan Modal",
       "Arsip risalah lelang / naskah hibah / BAST keluar",
       "Aset otomatis keluar dari daftar aktif setelah selesai",
     ],
@@ -241,7 +328,7 @@ export const SIKLUS_MODULES = [
   {
     id: "pemusnahan",
     nama: "Pemusnahan",
-    urutan: 8,
+    urutan: 10,
     status: "segera",
     fase: 6,
     ringkas: "Usulan & berita acara pemusnahan aset rusak berat.",
@@ -249,6 +336,7 @@ export const SIKLUS_MODULES = [
       "Pemusnahan BMN yang tidak dapat digunakan/dimanfaatkan/dipindahtangankan: usulan "
       + "(kandidat otomatis dari aset rusak berat hasil inventarisasi), persetujuan, dan "
       + "berita acara pemusnahan.",
+    dasarHukum: ["PMK 83/PMK.06/2016 — Pemusnahan & Penghapusan BMN"],
     fitur: [
       "Kandidat pemusnahan otomatis dari kondisi Rusak Berat + tindak lanjut inventarisasi",
       "Alur usulan → persetujuan → BA pemusnahan (dengan foto bukti)",
@@ -258,7 +346,7 @@ export const SIKLUS_MODULES = [
   {
     id: "penghapusan",
     nama: "Penghapusan",
-    urutan: 9,
+    urutan: 11,
     status: "segera",
     fase: 6,
     ringkas: "SK penghapusan & arsip aset terhapus dari daftar barang.",
@@ -266,6 +354,7 @@ export const SIKLUS_MODULES = [
       "Penghapusan BMN dari daftar barang berdasarkan SK penghapusan — menindaklanjuti "
       + "pemindahtanganan, pemusnahan, atau sebab lain (hilang, force majeure). Aset "
       + "berklasifikasi 'Tidak Ditemukan' hasil inventarisasi menjadi kandidat usulan.",
+    dasarHukum: ["PMK 83/PMK.06/2016 — Pemusnahan & Penghapusan BMN"],
     fitur: [
       "Kandidat penghapusan dari klasifikasi Tidak Ditemukan (sudah tercatat rapi per sub-klasifikasi)",
       "Registrasi SK penghapusan + lampiran",
@@ -275,17 +364,21 @@ export const SIKLUS_MODULES = [
   },
   {
     id: "wasdal",
-    nama: "Pengawasan & Pengendalian",
-    urutan: 10,
+    nama: "Pembinaan, Pengawasan & Pengendalian",
+    urutan: 12,
     status: "segera",
     fase: 6,
-    ringkas: "Pemantauan ketertiban pengelolaan & tindak lanjut audit.",
+    ringkas: "Pemantauan, investigasi, portofolio aset, analisis SBSK, penertiban.",
     deskripsi:
-      "Pembinaan, pengawasan, dan pengendalian (wasdal): pemantauan ketertiban penatausahaan "
-      + "seluruh modul, penelusuran audit trail, dan pengelolaan tindak lanjut temuan audit.",
+      "Wasdal melingkupi seluruh siklus (PMK 207/PMK.06/2021) dengan lima kegiatan sesuai "
+      + "diagram resmi: Pemantauan, Investigasi, Portofolio Aset, Analisis SBSK, dan "
+      + "Penertiban — ditopang audit trail lintas modul yang sudah berjalan.",
+    dasarHukum: ["PMK 207/PMK.06/2021 — Wasdal BMN"],
     fitur: [
-      "Dasbor ketertiban per satker/kegiatan (kelengkapan data, foto, dokumen)",
-      "Register temuan audit + status tindak lanjut",
+      "Pemantauan ketertiban per satker/kegiatan (kelengkapan data, foto, dokumen)",
+      "Register investigasi & temuan audit + status tindak lanjut (penertiban)",
+      "Portofolio aset: komposisi, nilai, dan pemanfaatan lintas satker",
+      "Analisis SBSK: sanding kepemilikan vs standar kebutuhan",
       "Penelusuran audit trail lintas modul (fondasinya sudah berjalan)",
     ],
     integrasi: ["Audit trail per field yang sudah ada menjadi sumber penelusuran"],
@@ -296,8 +389,8 @@ export const SIKLUS_MODULES = [
 export const FASE_ROADMAP = {
   1: "Fase 1 — sekarang: pematangan Penatausahaan › Inventarisasi Aset",
   2: "Fase 2: Penatausahaan penuh — Pembukuan, Pelaporan, Inventarisasi Persediaan",
-  3: "Fase 3: Penggunaan (aset pegawai/BAST) + Pengamanan & Pemeliharaan",
-  4: "Fase 4: Perencanaan (RKBMN) + Pengadaan (pintu masuk data)",
+  3: "Fase 3: Penggunaan (PSP/aset pegawai/BMN idle) + Pengamanan + Pemeliharaan",
+  4: "Fase 4: Perencanaan Kebutuhan (RKBMN/SBSK) + Penganggaran + Pengadaan",
   5: "Fase 5: Pemanfaatan + Penilaian",
   6: "Fase 6: Pemindahtanganan, Pemusnahan, Penghapusan + Wasdal penuh",
 };

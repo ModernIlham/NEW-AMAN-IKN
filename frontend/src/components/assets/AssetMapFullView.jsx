@@ -2,10 +2,11 @@ import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import axios from "axios";
-import { MapPinned, RefreshCw, Loader2, Move, X, Filter, Download, Camera, Layers } from "lucide-react";
+import { MapPinned, RefreshCw, Loader2, Move, X, Filter, Download, Camera, Layers, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuRadioGroup, DropdownMenuRadioItem,
 } from "../ui/dropdown-menu";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -449,9 +450,9 @@ const AssetMapFullView = memo(function AssetMapFullView({
   return (
     <div className="space-y-2" data-testid="asset-map-fullview">
       {/* ── Bar peta: info + filter kelompok + unduh + tutup ──
-          HP: DUA baris — [ikon · judul · tutup] lalu [filter kelompok · unduh
-          · muat ulang] supaya teks jumlah titik tidak terpotong dan kontrol
-          tidak berdesakan; sm+ kembali satu baris seperti semula. */}
+          HP: SATU baris — [ikon · judul · menu gabungan · tutup]; filter
+          Barang Serupa + Unduh + Muat Ulang dilebur ke SATU tombol ber-menu
+          (ikonnya menandai filter aktif). sm+ tetap kontrol terpisah. */}
       <div className="bg-card rounded-xl border border-border shadow-sm p-1.5 sm:p-2 flex items-center gap-1.5 sm:gap-2 flex-wrap">
         <span className="w-8 h-8 rounded-lg bg-teal-600 flex items-center justify-center flex-shrink-0">
           <MapPinned className="w-4 h-4 text-white" />
@@ -473,6 +474,55 @@ const AssetMapFullView = memo(function AssetMapFullView({
               : (activityName || "Memuat…")}
           </p>
         </div>
+        {/* ── Menu gabungan (hanya HP): Barang Serupa + Unduh + Muat Ulang
+            dalam satu tombol — ikon Layers menyala violet + titik penanda
+            saat filter kelompok aktif ── */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              aria-label="Menu peta: filter barang serupa, unduh, muat ulang"
+              className="relative h-9 px-2 rounded-lg border border-border flex sm:hidden items-center gap-0.5 hover:bg-accent flex-shrink-0"
+              data-testid="asset-map-mobile-menu"
+            >
+              {loading
+                ? <Loader2 className="w-4 h-4 animate-spin text-teal-600" />
+                : <Layers className={`w-4 h-4 ${groupKey !== "__semua__" ? "text-violet-500" : "text-muted-foreground"}`} />}
+              {groupKey !== "__semua__" && (
+                <span className="absolute top-1.5 right-5 w-1.5 h-1.5 rounded-full bg-violet-500" aria-hidden="true" />
+              )}
+              <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-64">
+            {groups.length > 0 && (
+              <>
+                <DropdownMenuLabel className="text-[11px] flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-violet-500" />Barang Serupa
+                </DropdownMenuLabel>
+                <div className="max-h-52 overflow-y-auto">
+                  <DropdownMenuRadioGroup value={groupKey} onValueChange={changeGroup}>
+                    <DropdownMenuRadioItem className="min-h-[42px]" value="__semua__" data-testid="map-menu-group-all">Semua barang</DropdownMenuRadioItem>
+                    {groups.map((g) => (
+                      <DropdownMenuRadioItem className="min-h-[42px]" key={g.key} value={g.key}>{g.name} · {g.count} unit</DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </div>
+                <DropdownMenuSeparator />
+              </>
+            )}
+            <DropdownMenuLabel className="text-[11px] flex items-center gap-1.5">
+              <Download className="w-3.5 h-3.5 text-muted-foreground" />Unduh Titik Peta
+            </DropdownMenuLabel>
+            <DropdownMenuItem className="min-h-[42px]" onClick={() => downloadGeo("kml")} data-testid="map-menu-kml">KML (Google Earth)</DropdownMenuItem>
+            <DropdownMenuItem className="min-h-[42px]" onClick={() => downloadGeo("kmz")} data-testid="map-menu-kmz">KMZ (terkompresi)</DropdownMenuItem>
+            <DropdownMenuItem className="min-h-[42px]" onClick={() => downloadGeo("shp")} data-testid="map-menu-shp">SHP (Shapefile ZIP)</DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="min-h-[42px]" onClick={() => { didFitRef.current = false; load(); }} disabled={loading} data-testid="map-menu-refresh">
+              <RefreshCw className="w-4 h-4 mr-2" />Muat Ulang Peta
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <button
           type="button"
           onClick={onClose}
@@ -482,17 +532,15 @@ const AssetMapFullView = memo(function AssetMapFullView({
         >
           <X className="w-4 h-4" />
         </button>
-        {/* Pemutus baris — hanya HP: kontrol di bawah pindah ke baris kedua */}
-        <span className="basis-full h-0 sm:hidden" aria-hidden="true" />
         {activeFilterCount > 0 && (
           <span className="hidden md:flex items-center gap-1 px-2 h-7 rounded-full bg-blue-600/10 text-blue-600 dark:text-blue-400 text-[11px] font-semibold flex-shrink-0" data-testid="asset-map-filter-badge">
             <Filter className="w-3 h-3" />{activeFilterCount} filter
           </span>
         )}
-        {/* Filter Barang Serupa — kelompok kode+nama dari data peta */}
+        {/* Filter Barang Serupa (≥sm) — di HP menyatu ke menu gabungan */}
         {groups.length > 0 && (
           <Select value={groupKey} onValueChange={changeGroup}>
-            <SelectTrigger className="h-9 flex-1 min-w-0 sm:flex-none sm:w-auto sm:max-w-[240px] px-2 text-[11px] gap-1" aria-label="Filter barang serupa" data-testid="asset-map-group-filter">
+            <SelectTrigger className="hidden sm:flex h-9 w-auto max-w-[240px] px-2 text-[11px] gap-1 flex-shrink-0" aria-label="Filter barang serupa" data-testid="asset-map-group-filter">
               <Layers className="w-3.5 h-3.5 text-violet-500 flex-shrink-0" />
               <SelectValue />
             </SelectTrigger>
@@ -508,11 +556,11 @@ const AssetMapFullView = memo(function AssetMapFullView({
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="h-9 px-2.5 rounded-lg border border-border text-xs font-medium text-foreground/80 flex items-center gap-1 hover:bg-accent flex-shrink-0"
+              className="h-9 px-2.5 rounded-lg border border-border text-xs font-medium text-foreground/80 hidden sm:flex items-center gap-1 hover:bg-accent flex-shrink-0"
               data-testid="asset-map-download"
             >
               <Download className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Unduh</span>
+              <span>Unduh</span>
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-44">
@@ -531,12 +579,12 @@ const AssetMapFullView = memo(function AssetMapFullView({
           type="button"
           onClick={() => { didFitRef.current = false; load(); }}
           disabled={loading}
-          className="h-9 w-9 sm:w-auto sm:px-2.5 rounded-lg border border-border text-xs font-medium text-foreground/80 flex items-center justify-center gap-1 hover:bg-accent disabled:opacity-50 flex-shrink-0"
+          className="h-9 px-2.5 rounded-lg border border-border text-xs font-medium text-foreground/80 hidden sm:flex items-center justify-center gap-1 hover:bg-accent disabled:opacity-50 flex-shrink-0"
           aria-label="Muat ulang peta"
           data-testid="asset-map-refresh"
         >
           {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-          <span className="hidden sm:inline">Muat Ulang</span>
+          <span>Muat Ulang</span>
         </button>
       </div>
 

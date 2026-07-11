@@ -4,10 +4,15 @@
 > (Aplikasi Manajemen Aset Negara) dari aplikasi inventarisasi menjadi
 > platform siklus penuh pengelolaan Barang Milik Negara.
 >
-> Disusun: Juli 2026 · Referensi utama: PP 27/2014 jo. PP 28/2020,
+> Disusun: Juli 2026 · Referensi utama: **diagram resmi Kemenkeu "Siklus
+> Pengelolaan Barang Milik Negara/Daerah"** (UU 1/2004, PP 27/2014 jo.
+> PP 28/2020 — diberikan pemilik proyek sebagai acuan gambaran besar),
 > SE-17/MK.1/2024, dan sistem **KERJA-BARENG (SIMAN-G)** —
 > https://github.com/ModernIlham/KERJA-BARENG (proyek terdahulu pemilik,
 > modul lengkap & berfungsi — dipelajari menyeluruh sebagai referensi desain).
+>
+> **Asas pengelolaan BMN** (legenda diagram): Fungsional · Kepastian Hukum ·
+> Transparansi & Keterbukaan · Efisiensi · Akuntabilitas · Kepastian Nilai.
 
 ---
 
@@ -38,17 +43,23 @@ Masterplan ini mengarahkan pengembangan selanjutnya:
 ## 2. Posisi Saat Ini
 
 ```
-SIKLUS PENGELOLAAN BMN (PP 27/2014)
+SIKLUS PENGELOLAAN BMN/D — diagram resmi Kemenkeu (12 tahap, searah jarum jam)
 
- Perencanaan → Pengadaan → Penggunaan → Pemanfaatan → Pengamanan &
- Pemeliharaan → Penilaian → Pemindahtanganan → Pemusnahan → Penghapusan
-                              │
-              ┌───────────────┴────────────────┐
-              │  PENATAUSAHAAN (poros semua)   │
+ 1 Perencanaan Kebutuhan (RKBMN·SBSK) → 2 Penganggaran → 3 Pengadaan →
+ 4 Penggunaan (PSP·alih status·sementara·pihak lain·bersama·BMN idle) →
+ 5 Pemanfaatan (Sewa·Pinjam Pakai·KSP·BGS·BSG·KSPI·KETUPI·PDF) →
+ 6 Penilaian (Revaluasi BMN) → 7 Pengamanan (fisik·administrasi·hukum·
+ asuransi) → 8 Pemeliharaan → 9 PENATAUSAHAAN ✅ → 10 Pemindahtanganan
+ (penjualan·hibah·tukar menukar·penyertaan modal) → 11 Pemusnahan →
+ 12 Penghapusan → (kembali ke 1)
+
+              ┌────────────────────────────────┐
+              │  PENATAUSAHAAN (poros — kita)  │
               │  Pembukuan · INVENTARISASI ✅  │
-              │  · Pelaporan                   │
+              │  · Pelaporan  (PMK 181/2016)   │
               └────────────────────────────────┘
-              Pembinaan · Pengawasan · Pengendalian (melingkupi)
+   Pembinaan · Pengawasan · Pengendalian melingkupi seluruh siklus
+   (pemantauan · investigasi · portofolio aset · analisis SBSK · penertiban)
 ```
 
 **Yang sudah berjalan (modul Inventarisasi Aset):** kegiatan + tim + satker,
@@ -73,22 +84,24 @@ resmi, pengesahan + kunci kegiatan, audit trail per field, CI/CD otomatis.
 
 ## 3. Peta Siklus → Modul Aplikasi
 
-| # | Tahap siklus | Modul AMAN | Status | Fase |
-|---|---|---|---|---|
-| — | Penatausahaan › Inventarisasi Aset | (aplikasi berjalan) | ✅ Aktif | 1 |
-| — | Penatausahaan › Pembukuan | DBKP + KIB | Segera | 2 |
-| — | Penatausahaan › Inventarisasi Persediaan | Persediaan + gudang + opname | Segera | 2 |
-| — | Penatausahaan › Pelaporan | LBKP + arsip lintas kegiatan | Sebagian | 2 |
-| 1 | Perencanaan & Penganggaran | RKBMN | Segera | 4 |
-| 2 | Pengadaan | Perolehan + dokumen sumber | Segera | 4 |
-| 3 | Penggunaan | PSP + aset pegawai/BAST | Segera | 3 |
-| 4 | Pemanfaatan | Sewa/pinjam pakai/KSP + PNBP | Segera | 5 |
-| 5 | Pengamanan & Pemeliharaan | Dokumen kepemilikan + jadwal | Segera | 3 |
-| 6 | Penilaian | Revaluasi + penyusutan | Segera | 5 |
-| 7 | Pemindahtanganan | Jual/tukar/hibah/PMPP | Segera | 6 |
-| 8 | Pemusnahan | Usulan + BA pemusnahan | Segera | 6 |
-| 9 | Penghapusan | SK + arsip aset terhapus | Segera | 6 |
-| ∞ | Pengawasan & Pengendalian | Dasbor wasdal + temuan audit | Segera | 6 |
+| # | Tahap siklus (diagram resmi) | Modul AMAN | Dasar hukum tahap | Status | Fase |
+|---|---|---|---|---|---|
+| 9 | Penatausahaan › Inventarisasi Aset | (aplikasi berjalan) | PMK 181/PMK.06/2016 + SE-17/MK.1/2024 | ✅ Aktif | 1 |
+| 9 | Penatausahaan › Pembukuan | DBKP + KIB | PMK 181/PMK.06/2016 | Segera | 2 |
+| 9 | Penatausahaan › Inventarisasi Persediaan | Persediaan + gudang + opname | PMK 181/PMK.06/2016 | Segera | 2 |
+| 9 | Penatausahaan › Pelaporan | LBKP + arsip lintas kegiatan | PMK 181/PMK.06/2016 | Sebagian | 2 |
+| 1 | Perencanaan Kebutuhan | RKBMN + analisis SBSK | PMK 153/PMK.06/2021 (RKBMN); PMK 138/2024 (SBSK) | Segera | 4 |
+| 2 | Penganggaran | Pagu & status usulan RKBMN → realisasi | PMK 153/PMK.06/2021 (titik "Integrasi") | Segera | 4 |
+| 3 | Pengadaan | Perolehan + dokumen sumber | Perpres 16/2018 jo. 46/2025 | Segera | 4 |
+| 4 | Penggunaan | PSP · alih status · sementara · pihak lain · bersama · BMN idle · aset pegawai/BAST | PMK 40/2024; PMK 120/2024 (idle) | Segera | 3 |
+| 5 | Pemanfaatan | Sewa · Pinjam Pakai · KSP · BGS · BSG · KSPI · KETUPI · PDF + PNBP | PMK 115/PMK.06/2020; PMK 18/2024 (PDF) | Segera | 5 |
+| 6 | Penilaian | Revaluasi BMN + penyusutan | PMK 97/PMK.06/2019 | Segera | 5 |
+| 7 | Pengamanan | Fisik · administrasi · hukum · Asuransi BMN | PP 27/2014; PMK 97/PMK.06/2019 (asuransi) | Segera | 3 |
+| 8 | Pemeliharaan | Jadwal + riwayat + biaya per aset | PP 27/2014 | Segera | 3 |
+| 10 | Pemindahtanganan | Penjualan · Hibah · Tukar Menukar · Penyertaan Modal | PMK 111/PMK.06/2016 jo. 165/PMK.06/2021 | Segera | 6 |
+| 11 | Pemusnahan | Usulan + BA pemusnahan | PMK 83/PMK.06/2016 | Segera | 6 |
+| 12 | Penghapusan | SK + arsip aset terhapus | PMK 83/PMK.06/2016 | Segera | 6 |
+| ∞ | Pembinaan, Pengawasan & Pengendalian | Pemantauan · investigasi · portofolio aset · analisis SBSK · penertiban | PMK 207/PMK.06/2021 | Segera | 6 |
 
 Konsep ringkas per modul (deskripsi, fitur rencana, integrasi) hidup di
 `frontend/src/lib/bmnModules.js` dan tampil di aplikasi (Beranda Modul →
@@ -258,10 +271,10 @@ Referensi langsung: `routes/persediaan.py`, `persediaan_transaksi.py`,
 |---|---|---|---|
 | **1 — sekarang** | Pematangan Inventarisasi Aset | Perbaikan lapangan berkelanjutan; **rumah modul** ✅; masterplan ✅ | — |
 | **2** | Penatausahaan penuh | Kodefikasi referensi; Pembukuan (DBKP + KIB A–F); **Persediaan** (Bab 7); Pelaporan (LBKP + arsip lintas kegiatan) | Kodefikasi dibangun paling awal (dipakai semua) |
-| **3** | Penggunaan + Pengamanan | PSP; aset per pegawai/jabatan + BAST digital + alert pegawai keluar; arsip dokumen kepemilikan; jadwal & riwayat pemeliharaan | Data pengguna+BAST fase 1 |
-| **4** | Perencanaan + Pengadaan | Dokumen sumber (simpul); registrasi perolehan → auto-daftar master; RKBMN + sanding data eksisting | Kodefikasi (fase 2) |
-| **5** | Pemanfaatan + Penilaian | Perjanjian sewa/pinjam/KSP + kalender + PNBP; revaluasi + penyusutan per golongan | Pembukuan (fase 2) |
-| **6** | Hilir + Wasdal | Pemindahtanganan; Pemusnahan (kandidat dari rusak berat); Penghapusan (kandidat dari tidak ditemukan); dasbor wasdal + temuan audit | Approval gerbang (dibangun di fase 2–3) |
+| **3** | Penggunaan + Pengamanan + Pemeliharaan | PSP + alih status/sementara/pihak lain/bersama (PMK 40/2024); BMN idle (PMK 120/2024); aset per pegawai/jabatan + BAST digital + alert pegawai keluar; pengamanan fisik/administrasi/hukum + asuransi; jadwal & riwayat & biaya pemeliharaan | Data pengguna+BAST fase 1 |
+| **4** | Perencanaan Kebutuhan + Penganggaran + Pengadaan | RKBMN (PMK 153/2021) + analisis SBSK (PMK 138/2024) + sanding data eksisting; jembatan usulan→anggaran→realisasi; dokumen sumber (simpul); registrasi perolehan → auto-daftar master | Kodefikasi (fase 2) |
+| **5** | Pemanfaatan + Penilaian | Perjanjian per bentuk (Sewa/Pinjam Pakai/KSP/BGS/BSG/KSPI/KETUPI/PDF — PMK 115/2020 & 18/2024) + kalender jatuh tempo + PNBP; revaluasi BMN (PMK 97/2019) + penyusutan per golongan | Pembukuan (fase 2) |
+| **6** | Hilir + Wasdal | Pemindahtanganan (Penjualan/Hibah/Tukar Menukar/Penyertaan Modal — PMK 111/2016 jo. 165/2021); Pemusnahan (kandidat dari rusak berat); Penghapusan (kandidat dari tidak ditemukan) — PMK 83/2016; wasdal PMK 207/2021: pemantauan · investigasi · portofolio aset · analisis SBSK · penertiban | Approval gerbang (dibangun di fase 2–3) |
 
 **Aturan emas antar fase:** modul baru TIDAK menyalin data modul lama — ia
 merujuk. Sebelum membangun modul, tulis dulu kontrak integrasinya (field apa
