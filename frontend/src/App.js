@@ -12,6 +12,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { useDarkMode } from "@/hooks/useDarkMode";
 import { useBackGuard } from "@/hooks/useBackGuard";
+import { startUpdateCheck } from "@/lib/updateCheck";
 import BackgroundTaskBar from "@/components/BackgroundTaskBar";
 import { clearAllSnapshots, ensureSnapshotOwner } from "@/lib/offlineSnapshot";
 import axios from "axios";
@@ -48,6 +49,10 @@ function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const { dark, toggle: toggleDark } = useDarkMode();
+
+  // Deteksi versi baru pasca-deploy: pengguna diberi tombol "Muat Ulang"
+  // alih-alih harus menghapus cache manual (lihat lib/updateCheck.js).
+  useEffect(() => startUpdateCheck(), []);
 
   // Penjaga Back/Forward TINGKAT APLIKASI (lantai dasar tumpukan guard).
   // Sebelumnya guard hanya terpasang saat halaman dashboard ter-mount, sehingga
