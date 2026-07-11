@@ -20,18 +20,64 @@
  * @param {number} opts.maxBytes - Target max output size in bytes (default 900KB). If exceeded, quality is progressively lowered.
  * @returns {Promise<string>} base64 data URL (image/jpeg).
  */
-export function compressImageFile(file, opts = {}) {
-  return new Promise((resolve, reject) => {
-    if (!file || !file.type || !file.type.startsWith("image/")) {
-      reject(new Error("Not an image file"));
-      return;
-    }
+// createImageBitmap dengan { imageOrientation: 'from-image' } menghasilkan
+// bitmap yang SUDAH tegak sesuai EXIF (mengatasi foto miring dari galeri /
+// kamera-OS di banyak Android WebView). Kita gambar bitmap itu apa adanya —
+// tanpa transform manual — sehingga TIDAK ada risiko putar-ganda di browser
+// modern yang sudah menegakkan sendiri. Fallback ke jalur <img> lama bila
+// createImageBitmap tak ada.
+const supportsImageBitmap = typeof createImageBitmap === "function";
 
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error("Gagal membaca file"));
-    reader.onload = () => compressDataUrl(reader.result, opts).then(resolve, reject);
+    reader.onload = () => resolve(reader.result);
     reader.readAsDataURL(file);
   });
+}
+
+// Skala + encode JPEG progresif dari sebuah sumber gambar (ImageBitmap / <img>).
+function encodeScaled(source, srcW, srcH, { maxDim, quality, maxBytes }) {
+  try {
+    let width = srcW, height = srcH;
+    if (width > maxDim || height > maxDim) {
+      if (width >= height) { height = Math.round(height * (maxDim / width)); width = maxDim; }
+      else { width = Math.round(width * (maxDim / height)); height = maxDim; }
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(source, 0, 0, width, height);
+    let q = quality;
+    let dataUrl = canvas.toDataURL("image/jpeg", q);
+    const approxBytes = (s) => (s.length - (s.indexOf(",") + 1)) * 0.75;
+    while (approxBytes(dataUrl) > maxBytes && q > 0.4) {
+      q = Math.max(0.4, q - 0.1);
+      dataUrl = canvas.toDataURL("image/jpeg", q);
+    }
+    return dataUrl;
+  } finally {
+    // Bebaskan ImageBitmap walau drawImage/toDataURL sempat melempar (OOM di HP
+    // low-end) — mencegah kebocoran memori.
+    if (source && typeof source.close === "function") { try { source.close(); } catch { /* ignore */ } }
+  }
+}
+
+export async function compressImageFile(file, opts = {}) {
+  if (!file || !file.type || !file.type.startsWith("image/")) throw new Error("Not an image file");
+  const o = { maxDim: 1920, quality: 0.85, maxBytes: 900 * 1024, ...opts };
+  if (supportsImageBitmap) {
+    try {
+      const bmp = await createImageBitmap(file, { imageOrientation: "from-image" });
+      return encodeScaled(bmp, bmp.width, bmp.height, o);
+    } catch { /* fallback ke jalur <img> */ }
+  }
+  const dataUrl = await readFileAsDataUrl(file);
+  return compressDataUrl(dataUrl, opts);
 }
 
 /**
@@ -42,15 +88,23 @@ export function compressImageFile(file, opts = {}) {
  * @param {Object} opts - Same options as compressImageFile (maxDim, quality, maxBytes).
  * @returns {Promise<string>} base64 data URL (image/jpeg).
  */
-export function compressDataUrl(srcDataUrl, opts = {}) {
-  const { maxDim = 1920, quality = 0.85, maxBytes = 900 * 1024 } = opts;
+export async function compressDataUrl(srcDataUrl, opts = {}) {
+  const o = { maxDim: 1920, quality: 0.85, maxBytes: 900 * 1024, ...opts };
+  const { maxDim, quality, maxBytes } = o;
+  if (!srcDataUrl || typeof srcDataUrl !== "string" || !srcDataUrl.startsWith("data:image/")) {
+    throw new Error("Bukan data URL gambar");
+  }
+
+  // Jalur utama: bitmap ber-orientasi EXIF (menegakkan foto miring).
+  if (supportsImageBitmap) {
+    try {
+      const blob = await (await fetch(srcDataUrl)).blob();
+      const bmp = await createImageBitmap(blob, { imageOrientation: "from-image" });
+      return encodeScaled(bmp, bmp.width, bmp.height, o);
+    } catch { /* fallback ke <img> di bawah */ }
+  }
 
   return new Promise((resolve, reject) => {
-    if (!srcDataUrl || typeof srcDataUrl !== "string" || !srcDataUrl.startsWith("data:image/")) {
-      reject(new Error("Bukan data URL gambar"));
-      return;
-    }
-
     const img = new Image();
     img.onerror = () => reject(new Error("Gagal memuat gambar"));
     img.onload = () => {

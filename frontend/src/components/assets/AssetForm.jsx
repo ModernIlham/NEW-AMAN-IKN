@@ -846,8 +846,13 @@ const AssetForm = memo(({
   const addCameraPhoto = useCallback(async (dataUrl) => {
     photosModifiedRef.current = true;
     if (isEditing) {
+      // Saat edit OFFLINE, foto server yang sudah ada belum dimuat ke photoItems
+      // (mediaLoadedRef false) — hitung dari _photoCount agar batas 6 tetap benar.
+      const existingUnloaded = mediaLoadedRef.current ? 0 : (originalDataRef.current?._photoCount || 0);
+      if (photoItems.length + existingUnloaded >= 6) { toast.error("Maks 6 foto"); return; }
       const thumb = await generateThumbnailFromDataUrl(dataUrl, 100, 0.7).catch(() => dataUrl);
-      setPhotoItems(prev => (prev.length >= 6 ? prev : [...prev, { type: "new", thumbnail: thumb, newData: dataUrl }]));
+      setPhotoItems(prev => (prev.length + existingUnloaded >= 6 ? prev : [...prev, { type: "new", thumbnail: thumb, newData: dataUrl }]));
+      return;
     }
     setFormData(p => {
       if (p.photos.length >= 6) { toast.error("Maks 6 foto"); return p; }
@@ -857,7 +862,7 @@ const AssetForm = memo(({
         ...(p.inventory_status === "Belum Diinventarisasi" && p.photos.length === 0 ? { inventory_status: "Ditemukan" } : {}),
       };
     });
-  }, [isEditing]);
+  }, [isEditing, photoItems.length]);
 
   // GPS live dari kamera: simpan fix terbaru ke koordinat form + cache. Guard
   // kesetaraan agar TIDAK me-render ulang form saat koordinat tak berubah.
@@ -1111,7 +1116,9 @@ const AssetForm = memo(({
     });
 
     if (isEditing) {
-      const cur = photoItems.length;
+      // Edit offline: tambahkan _photoCount server yang belum dimuat ke hitungan.
+      const existingUnloaded = mediaLoadedRef.current ? 0 : (originalDataRef.current?._photoCount || 0);
+      const cur = photoItems.length + existingUnloaded;
       const allowed = validFiles.slice(0, max - cur);
       if (validFiles.length > allowed.length) toast.error(`Maks ${max} foto`);
       if (!allowed.length) return;

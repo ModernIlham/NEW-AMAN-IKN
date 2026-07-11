@@ -281,6 +281,43 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
         return;
       }
 
+      // --- Auto-renumber NUP untuk aset "dummy" yang bentrok (mis. dibuat
+      // offline oleh perangkat lain) --- ambil NUP berikutnya dari server lalu
+      // coba ulang otomatis (maks 3x). Hanya untuk CREATE kategori dummy yang
+      // NUP-nya memang dinomori otomatis — tidak mengubah NUP yang diketik user.
+      const detail = err?.response?.data?.detail;
+      const isNupCollision = err?.response?.status === 400 && typeof detail === "string"
+        && /NUP/.test(detail) && /sudah digunakan/i.test(detail);
+      if (!item.isEdit && isNupCollision && /dummy/i.test(item.payload?.category || "") && (item.nupRetries || 0) < 3) {
+        try {
+          const params = new URLSearchParams({ activity_id: item.payload.activity_id || "" });
+          if (item.payload.asset_code) params.set("asset_code", item.payload.asset_code);
+          const r = await axiosLargeUpload.get(`${API}/assets/next-nup?${params}`, { headers: getAuditHeaders() });
+          const nextNup = r?.data?.next_nup;
+          if (nextNup && String(nextNup) !== String(item.payload.NUP)) {
+            const newItem = {
+              ...item,
+              payload: { ...item.payload, NUP: String(nextNup) },
+              idempotencyKey: genIdempotencyKey(),
+              nupRetries: (item.nupRetries || 0) + 1,
+            };
+            // WRITE-THROUGH: samakan salinan persist + failedItemsRef dengan retry
+            // yang benar-benar berjalan. Tanpa ini, IndexedDB tetap menyimpan
+            // {key lama, NUP lama}; bila crash setelah retry sukses, rehydrate
+            // me-replay NUP lama → aset KEMBAR. Sekarang yang di-replay adalah
+            // item ber-NUP baru + key barunya (server bisa dedup lewat idempotensi).
+            failedItemsRef.current[statusKey] = toPlainItem(newItem, statusKey);
+            persistQueueItem(newItem, statusKey);
+            updateStatus(statusKey, "queued");
+            queueRef.current.push(newItem);
+            setQueueLength(queueRef.current.length);
+            toast.info(`NUP ${item.payload.NUP} sudah dipakai — dinomori ulang otomatis ke ${nextNup}`, { duration: 3500 });
+            item.reject?.(err); // promise asli sudah tak ditunggu; item baru yang diproses
+            return; // finally akan memicu processNext untuk item ber-NUP baru
+          }
+        } catch { /* gagal ambil NUP baru → jatuh ke penanganan gagal biasa */ }
+      }
+
       const errorMsg = getApiError(err, err.code === "ECONNABORTED" ? "Koneksi timeout" : "Gagal menyimpan");
       // 423 Locked: kegiatan sudah disahkan — retry tidak akan pernah berhasil,
       // jadi tampilkan toast yang jelas (save berjalan di background sehingga
