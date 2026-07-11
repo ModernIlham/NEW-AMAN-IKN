@@ -7,6 +7,7 @@ from typing import List
 from fastapi import APIRouter, HTTPException, UploadFile, File, Request, Header, Depends
 import csv as csv_module
 
+from asset_fields import ASSET_SCALAR_FIELDS, import_row_value
 from db import db
 from models import AssetCreate
 from auth_utils import require_user
@@ -328,51 +329,11 @@ async def import_assets(request: Request, file: UploadFile = File(...), force_up
             nup = str(row.get('NUP', '')).strip()
             existing = await db.assets.find_one({"asset_code": asset_code, "NUP": nup, "activity_id": activity_id})
             
-            asset_data = {
-                "asset_code": asset_code,
-                "NUP": str(row.get('NUP', '')).strip(),
-                "asset_name": str(row.get('asset_name', '')).strip(),
-                "category": str(row.get('category', 'Lainnya')).strip(),
-                "brand": str(row.get('brand', '')).strip(),
-                "model": str(row.get('model', '')).strip(),
-                "kode_register": str(row.get('kode_register', '')).strip(),
-                "serial_number": str(row.get('serial_number', '')).strip(),
-                "purchase_date": str(row.get('purchase_date', '')).strip(),
-                "purchase_price": str(row.get('purchase_price', '')).strip(),
-                "location": str(row.get('location', '')).strip(),
-                "eselon1": str(row.get('eselon1', '')).strip(),
-                "eselon2": str(row.get('eselon2', '')).strip(),
-                "user": str(row.get('user', '')).strip(),
-                "pengguna_melekat_ke": str(row.get('pengguna_melekat_ke', '')).strip(),
-                "pengguna_jabatan": str(row.get('pengguna_jabatan', '')).strip(),
-                "pengguna_nip": str(row.get('pengguna_nip', '')).strip(),
-                "operasional_jenis": str(row.get('operasional_jenis', '')).strip(),
-                "nomor_bast": str(row.get('nomor_bast', '')).strip(),
-                "condition": str(row.get('condition', 'Baik')).strip() or "Baik",
-                "status": str(row.get('status', 'Aktif')).strip() or "Aktif",
-                "nomor_spm": str(row.get('nomor_spm', '')).strip(),
-                "perolehan_dari_nama": str(row.get('perolehan_dari_nama', '')).strip(),
-                "nomor_kontrak": str(row.get('nomor_kontrak', '')).strip(),
-                "nomor_bukti_perolehan": str(row.get('nomor_bukti_perolehan', '')).strip(),
-                "supplier": str(row.get('supplier', '')).strip(),
-                "notes": str(row.get('notes', '')).strip(),
-                "stiker_status": str(row.get('stiker_status', 'Belum Terpasang')).strip() or "Belum Terpasang",
-                "stiker_ukuran": str(row.get('stiker_ukuran', '')).strip(),
-                "inventory_status": str(row.get('inventory_status', 'Belum Diinventarisasi')).strip() or "Belum Diinventarisasi",
-                "klasifikasi_tidak_ditemukan": str(row.get('klasifikasi_tidak_ditemukan', '')).strip(),
-                "sub_klasifikasi": str(row.get('sub_klasifikasi', '')).strip(),
-                "uraian_tidak_ditemukan": str(row.get('uraian_tidak_ditemukan', '')).strip(),
-                "tindak_lanjut": str(row.get('tindak_lanjut', '')).strip(),
-                "koordinat_latitude": str(row.get('koordinat_latitude', '')).strip(),
-                "koordinat_longitude": str(row.get('koordinat_longitude', '')).strip(),
-                "kronologis": str(row.get('kronologis', '')).strip(),
-                "keterangan_berlebih": str(row.get('keterangan_berlebih', '')).strip(),
-                "asal_usul_berlebih": str(row.get('asal_usul_berlebih', '')).strip(),
-                "nomor_perkara": str(row.get('nomor_perkara', '')).strip(),
-                "pihak_bersengketa": str(row.get('pihak_bersengketa', '')).strip(),
-                "keterangan_sengketa": str(row.get('keterangan_sengketa', '')).strip(),
-                "activity_id": activity_id,
-            }
+            # Semua field skalar dipetakan dari registry (asset_fields.py) —
+            # field baru otomatis ikut ter-impor tanpa mengedit mapping ini.
+            asset_data = {f.name: import_row_value(row, f) for f in ASSET_SCALAR_FIELDS}
+            asset_data["asset_code"] = asset_code
+            asset_data["activity_id"] = activity_id
             
             if existing and force_update:
                 # Update existing within the same activity

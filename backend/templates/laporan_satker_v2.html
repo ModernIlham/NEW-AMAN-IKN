@@ -152,6 +152,7 @@ td.r { text-align: right; font-variant-numeric: tabular-nums; }
 </style>
 </head>
 <body>
+{% set sec = namespace(n=0) %}
 
 {% if preview %}
 <div class="toolbar no-print">
@@ -198,7 +199,7 @@ td.r { text-align: right; font-variant-numeric: tabular-nums; }
 <!-- ===== 1. DAFTAR KEGIATAN ===== -->
 <div class="section page-break">
   <div class="section-header">
-    <div class="section-num">1</div>
+    {% set sec.n = sec.n + 1 %}<div class="section-num">{{ sec.n }}</div>
     <div><div class="section-title">Daftar Kegiatan Inventarisasi</div>
     <div class="section-desc">Seluruh kegiatan inventarisasi yang terdaftar pada satker {{ kode_satker }}</div></div>
   </div>
@@ -241,7 +242,7 @@ td.r { text-align: right; font-variant-numeric: tabular-nums; }
 <!-- ===== 2. RINGKASAN ===== -->
 <div class="section page-break">
   <div class="section-header">
-    <div class="section-num">2</div>
+    {% set sec.n = sec.n + 1 %}<div class="section-num">{{ sec.n }}</div>
     <div><div class="section-title">Ringkasan Inventarisasi</div>
     <div class="section-desc">Rangkuman hasil inventarisasi gabungan seluruh kegiatan</div></div>
   </div>
@@ -268,7 +269,7 @@ td.r { text-align: right; font-variant-numeric: tabular-nums; }
 <!-- ===== 3. ANALISIS ===== -->
 <div class="section page-break">
   <div class="section-header">
-    <div class="section-num">3</div>
+    {% set sec.n = sec.n + 1 %}<div class="section-num">{{ sec.n }}</div>
     <div><div class="section-title">Analisis Data</div>
     <div class="section-desc">Distribusi dan komposisi data inventarisasi BMN</div></div>
   </div>
@@ -329,7 +330,7 @@ td.r { text-align: right; font-variant-numeric: tabular-nums; }
 <!-- ===== 4. DAFTAR ASET ===== -->
 <div class="section page-break">
   <div class="section-header">
-    <div class="section-num">4</div>
+    {% set sec.n = sec.n + 1 %}<div class="section-num">{{ sec.n }}</div>
     <div><div class="section-title">Daftar Aset ({{ total_count }} NUP)</div>
     <div class="section-desc">Rincian seluruh barang milik negara pada satker {{ kode_satker }}</div></div>
   </div>
@@ -370,9 +371,9 @@ td.r { text-align: right; font-variant-numeric: tabular-nums; }
 {% if dok_rows %}
 <div class="section page-break">
   <div class="section-header">
-    <div class="section-num">5</div>
+    {% set sec.n = sec.n + 1 %}<div class="section-num">{{ sec.n }}</div>
     <div><div class="section-title">Kelengkapan Dokumen & Peralatan</div>
-    <div class="section-desc">Status kelengkapan dokumen per aset</div></div>
+    <div class="section-desc">Status kelengkapan dokumen per aset{% if dok_note %} ({{ dok_note }}){% endif %}</div></div>
   </div>
   <table class="dok-tbl">
     <thead>
@@ -397,7 +398,7 @@ td.r { text-align: right; font-variant-numeric: tabular-nums; }
 <!-- ===== 6. PERSONIL ===== -->
 <div class="section page-break">
   <div class="section-header">
-    <div class="section-num">6</div>
+    {% set sec.n = sec.n + 1 %}<div class="section-num">{{ sec.n }}</div>
     <div><div class="section-title">Personil Terlibat</div>
     <div class="section-desc">Daftar seluruh personil yang terlibat dalam kegiatan inventarisasi</div></div>
   </div>
@@ -421,7 +422,7 @@ td.r { text-align: right; font-variant-numeric: tabular-nums; }
 <!-- ===== 7. SIMPULAN ===== -->
 <div class="section">
   <div class="section-header">
-    <div class="section-num">7</div>
+    {% set sec.n = sec.n + 1 %}<div class="section-num">{{ sec.n }}</div>
     <div><div class="section-title">Simpulan</div>
     <div class="section-desc">Ringkasan hasil inventarisasi BMN</div></div>
   </div>

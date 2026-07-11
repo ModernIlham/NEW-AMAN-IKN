@@ -281,6 +281,105 @@ def _fit_col_widths(widths, avail):
     return [w * avail / total for w in widths]
 
 
+def _activity_identity(activity, settings=None):
+    """Identitas satker/kasatker sebuah kegiatan untuk laporan resmi.
+
+    Kegiatan dari UI menyimpan field FLAT (nama_satker, kasatker_nama/nip/
+    jabatan, alamat_satker); dict `kasatker` hanya ada pada data era lama.
+    Nama kegiatan BUKAN fallback untuk unit organisasi — fallback itu yang
+    dulu membuat "Unit Organisasi: <nama kegiatan>" muncul di laporan.
+    """
+    legacy = activity.get("kasatker")
+    if not isinstance(legacy, dict):  # data era lama bisa berupa string nama
+        legacy = {"nama_pejabat": legacy} if legacy else {}
+    settings = settings or {}
+
+    def pick(*vals, default):
+        for v in vals:
+            v = str(v).strip() if v is not None else ""
+            if v:
+                return v
+        return default
+
+    return {
+        "satker_name": pick(activity.get("nama_satker"), legacy.get("nama"),
+                            settings.get("nama_unit_organisasi"),
+                            default="................................"),
+        "kasatker_nama": pick(activity.get("kasatker_nama"), legacy.get("nama_pejabat"),
+                              default="........................"),
+        "kasatker_nip": pick(activity.get("kasatker_nip"), legacy.get("nip"),
+                             default="........................"),
+        "kasatker_jabatan": pick(activity.get("kasatker_jabatan"), legacy.get("jabatan"),
+                                 default="Kepala Satuan Kerja"),
+        "alamat": pick(activity.get("alamat_satker"), settings.get("alamat_instansi"),
+                       default="................................"),
+    }
+
+
+def _member_dict(member):
+    """Anggota tim sebagai dict — pada data era lama anggota bisa berupa
+    string nama saja; loop tabel memakai .get() dan akan crash tanpa ini."""
+    if isinstance(member, dict):
+        return member
+    return {"nama": str(member).strip() or "-"}
+
+
+def _member_nama(member, default="-"):
+    """Nama anggota tim — anggota bisa dict {nama, ...} atau string legacy."""
+    if isinstance(member, dict):
+        return str(member.get("nama") or default)
+    return str(member).strip() or default
+
+
+_BULAN_ID = ("Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli",
+             "Agustus", "September", "Oktober", "November", "Desember")
+
+
+def _fmt_tanggal_id(val):
+    """Tanggal gaya Indonesia ('11 Juli 2026') dari datetime / 'YYYY-MM-DD' /
+    'DD/MM/YYYY'. None/kosong -> "", format tak dikenal -> apa adanya."""
+    if val is None:
+        return ""
+    if isinstance(val, datetime):
+        return f"{val.day} {_BULAN_ID[val.month - 1]} {val.year}"
+    sv = str(val).strip()
+    if not sv:
+        return sv
+    for f in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+        try:
+            d = datetime.strptime(sv[:10], f)
+            return f"{d.day} {_BULAN_ID[d.month - 1]} {d.year}"
+        except ValueError:
+            continue
+    return sv
+
+
+def _identity_table(rows):
+    """Blok identitas 'Label : Nilai' dengan kolom titik dua yang sejajar.
+
+    rows: list of (label, value). Menggantikan pola lama deretan &nbsp; yang
+    membuat titik dua tidak pernah lurus antar-baris.
+    """
+    from xml.sax.saxutils import escape
+    from reportlab.platypus import Table, TableStyle, Paragraph
+    from reportlab.lib.units import mm as rl_mm
+    st = _get_report_styles()
+    body = st['Body']
+    data = [[Paragraph(f"<b>{escape(str(label))}</b>", body),
+             Paragraph(":", body),
+             Paragraph(escape(str(value)), body)] for label, value in rows]
+    t = Table(data, colWidths=[40 * rl_mm, 4 * rl_mm, None], hAlign='LEFT')
+    t.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (0, -1), 20),  # sejajar dgn BodyIndent
+        ('LEFTPADDING', (1, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 2),
+        ('TOPPADDING', (0, 0), (-1, -1), 1),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
+    ]))
+    return t
+
+
 def _signature_block(signers, doc_width):
     """Tidy, uniform signature layout as an invisible-borders table.
 
@@ -380,7 +479,7 @@ async def get_rekapitulasi(activity_id: str, _user: dict = Depends(require_user_
     total = len(assets)
     ditemukan = [a for a in assets if a.get("inventory_status") == "Ditemukan"]
     tidak_ditemukan = [a for a in assets if a.get("inventory_status") == "Tidak Ditemukan"]
-    belum = [a for a in assets if a.get("inventory_status", "Belum Diinventarisasi") == "Belum Diinventarisasi"]
+    belum = [a for a in assets if (a.get("inventory_status") or "Belum Diinventarisasi") == "Belum Diinventarisasi"]
     berlebih = [a for a in assets if a.get("inventory_status") == "Berlebih"]
     sengketa = [a for a in assets if a.get("inventory_status") == "Sengketa"]
 
@@ -500,27 +599,31 @@ async def generate_berita_acara_pdf(activity_id: str, _user: dict = Depends(requ
     elements.extend(_title_block("BERITA ACARA\nTIM INTERNAL PENELITIAN BMN TIDAK DITEMUKAN", nomor=nomor_ba))
 
     # Intro paragraph
-    tgl_ba = activity.get("tanggal_berita_acara", "-")
-    kasatker = activity.get("kasatker_nama", "-")
-    alamat = activity.get("alamat_satker", "-")
-    intro = f"""Pada hari ini, berdasarkan Surat Tugas Nomor {activity.get('nomor_surat', '-')}, 
-    kami Tim Internal yang ditunjuk untuk melakukan penelitian terhadap BMN yang tidak ditemukan 
-    pada kegiatan inventarisasi "{activity.get('nama_kegiatan', '-')}", 
+    ident = _activity_identity(activity, settings)
+    intro = f"""Pada hari ini, berdasarkan Surat Tugas Nomor {activity.get('nomor_surat', '-')},
+    kami Tim Internal yang ditunjuk untuk melakukan penelitian terhadap BMN yang tidak ditemukan
+    pada kegiatan inventarisasi "{activity.get('nama_kegiatan', '-')}",
     menyampaikan hasil penelitian sebagai berikut:"""
     elements.append(Paragraph(intro, normal_style))
     elements.append(Spacer(1, 4*rl_mm))
+
+    # Penomoran bagian dinamis — beberapa bagian bersyarat, jadi angka romawi
+    # dihitung berurutan (dulu "III." muncul dua kali).
+    _romawi = iter(["I", "II", "III", "IV", "V", "VI", "VII"])
+    def _sec(judul):
+        return Paragraph(f"<b>{next(_romawi)}. {judul}</b>", bold_style)
 
     # Tim Inventarisasi (Internal)
     tim_inti = activity.get("tim_inti", [])
     tim_pembantu_list_rhi = activity.get("tim_pembantu", [])
     if tim_inti or tim_pembantu_list_rhi:
-        elements.append(Paragraph("<b>I. TIM INVENTARISASI (INTERNAL)</b>", bold_style))
+        elements.append(_sec("TIM INVENTARISASI (INTERNAL)"))
         inv_style = _std_table_style(extra=[('ALIGN', (0, 0), (0, -1), 'CENTER')])
         tim_col_widths = _fit_col_widths([25, 55, 110, 95, 95, 80], doc.width)
         if tim_inti:
             elements.append(Paragraph("<b>Tim Inti (Pelaksana)</b>", small_style))
             ti_data = [['No', 'Peran', 'Nama', 'Jabatan', 'NIP/NIK', 'Unit']]
-            for i, m in enumerate(tim_inti):
+            for i, m in enumerate(map(_member_dict, tim_inti)):
                 ti_data.append([str(i+1), 'Ketua Tim' if m.get('is_ketua') else 'Anggota', Paragraph(m.get('nama', '-'), cell_style), Paragraph(m.get('jabatan', '-'), cell_style), Paragraph(str(m.get('nip', '-')), cell_style), Paragraph(m.get('unit', '-'), cell_style)])
             ti_table = Table(ti_data, colWidths=tim_col_widths, repeatRows=1)
             ti_table.setStyle(inv_style)
@@ -529,7 +632,7 @@ async def generate_berita_acara_pdf(activity_id: str, _user: dict = Depends(requ
         if tim_pembantu_list_rhi:
             elements.append(Paragraph("<b>Tim Pembantu</b>", small_style))
             tp2_data = [['No', 'Peran', 'Nama', 'Jabatan', 'NIP/NIK', 'Unit']]
-            for i, m in enumerate(tim_pembantu_list_rhi):
+            for i, m in enumerate(map(_member_dict, tim_pembantu_list_rhi)):
                 tp2_data.append([str(i+1), 'Ketua Tim' if m.get('is_ketua') else 'Anggota', Paragraph(m.get('nama', '-'), cell_style), Paragraph(m.get('jabatan', '-'), cell_style), Paragraph(str(m.get('nip', '-')), cell_style), Paragraph(m.get('unit', '-'), cell_style)])
             tp2_table = Table(tp2_data, colWidths=tim_col_widths, repeatRows=1)
             tp2_table.setStyle(inv_style)
@@ -537,11 +640,11 @@ async def generate_berita_acara_pdf(activity_id: str, _user: dict = Depends(requ
         elements.append(Spacer(1, 4*rl_mm))
 
     # Tim Peneliti (Eksternal)
-    elements.append(Paragraph("<b>II. TIM PENELITI (EKSTERNAL)</b>", bold_style))
+    elements.append(_sec("TIM PENELITI (EKSTERNAL)"))
     tim = activity.get("tim_peneliti", [])
     if tim:
         tim_data = [['No', 'Nama', 'Jabatan', 'NIP/NIK', 'Dari Satker']]
-        for i, m in enumerate(tim):
+        for i, m in enumerate(map(_member_dict, tim)):
             tim_data.append([str(i+1), Paragraph(m.get('nama', '-'), cell_style), Paragraph(m.get('jabatan', '-'), cell_style), Paragraph(str(m.get('nip', '-') or '-'), cell_style), Paragraph(m.get('dari_satker', '-') or '-', cell_style)])
         tim_table = Table(tim_data, colWidths=_fit_col_widths([25, 125, 110, 95, 100], doc.width), repeatRows=1)
         tim_table.setStyle(_std_table_style(extra=[('ALIGN', (0, 0), (0, -1), 'CENTER')]))
@@ -553,9 +656,9 @@ async def generate_berita_acara_pdf(activity_id: str, _user: dict = Depends(requ
     # Tim Pendukung (Eksternal)
     tim_pendukung = activity.get("tim_pendukung", [])
     if tim_pendukung:
-        elements.append(Paragraph("<b>II.b. TIM PENDUKUNG (EKSTERNAL)</b>", bold_style))
+        elements.append(_sec("TIM PENDUKUNG (EKSTERNAL)"))
         tp_data = [['No', 'Nama', 'Jabatan', 'NIP', 'Dari Pihak']]
-        for i, m in enumerate(tim_pendukung):
+        for i, m in enumerate(map(_member_dict, tim_pendukung)):
             tp_data.append([str(i+1), Paragraph(m.get('nama', '-'), cell_style), Paragraph(m.get('jabatan', '-'), cell_style), Paragraph(str(m.get('nip', '-')), cell_style), Paragraph(m.get('dari_pihak', '-'), cell_style)])
         tp_table = Table(tp_data, colWidths=_fit_col_widths([25, 125, 110, 95, 100], doc.width), repeatRows=1)
         tp_table.setStyle(_std_table_style(extra=[('ALIGN', (0, 0), (0, -1), 'CENTER')]))
@@ -563,7 +666,7 @@ async def generate_berita_acara_pdf(activity_id: str, _user: dict = Depends(requ
         elements.append(Spacer(1, 4*rl_mm))
 
     # Rekapitulasi
-    elements.append(Paragraph("<b>III. REKAPITULASI HASIL PENELITIAN</b>", bold_style))
+    elements.append(_sec("REKAPITULASI HASIL PENELITIAN"))
     total = len(assets)
     total_val = sum(safe_price(a) for a in assets)
     found_val = sum(safe_price(a) for a in ditemukan)
@@ -591,7 +694,7 @@ async def generate_berita_acara_pdf(activity_id: str, _user: dict = Depends(requ
 
     # Rincian BMN Tidak Ditemukan
     if tidak_ditemukan:
-        elements.append(Paragraph("<b>III. RINCIAN BMN TIDAK DITEMUKAN</b>", bold_style))
+        elements.append(_sec("RINCIAN BMN TIDAK DITEMUKAN"))
         detail_data = [['No', 'Kode Barang', 'NUP', 'Nama BMN', 'Klasifikasi', 'Sub Klasifikasi', 'Nilai (Rp)']]
         for i, a in enumerate(tidak_ditemukan):
             detail_data.append([
@@ -613,7 +716,7 @@ async def generate_berita_acara_pdf(activity_id: str, _user: dict = Depends(requ
         elements.append(Spacer(1, 4*rl_mm))
 
     # Kesimpulan
-    elements.append(Paragraph("<b>IV. KESIMPULAN</b>", bold_style))
+    elements.append(_sec("KESIMPULAN"))
     kesimpulan_text = activity.get("kesimpulan", "Belum ada kesimpulan.")
     elements.append(Paragraph(kesimpulan_text or "Belum ada kesimpulan.", normal_style))
     elements.append(Spacer(1, 8*rl_mm))
@@ -623,10 +726,10 @@ async def generate_berita_acara_pdf(activity_id: str, _user: dict = Depends(requ
     elements.append(Spacer(1, 6*rl_mm))
 
     elements.extend(_signature_block([
-        {'header': 'Mengetahui,', 'role': 'Kasatker', 'nama': kasatker,
-         'after': [f'NIP. {activity.get("kasatker_nip", "-")}']},
+        {'header': 'Mengetahui,', 'role': 'Kasatker', 'nama': ident["kasatker_nama"],
+         'after': [f'NIP. {ident["kasatker_nip"]}']},
         {'header': 'Tim Peneliti,', 'role': 'Ketua Tim',
-         'nama': tim[0].get('nama', '_______________') if tim else '_______________'},
+         'nama': _member_nama(tim[0], '_______________') if tim else '_______________'},
     ], doc.width))
 
     footer = _page_footer_factory("Berita Acara Tim Internal Penelitian BMN Tidak Ditemukan")
@@ -679,10 +782,11 @@ async def generate_sptjm_pdf(activity_id: str, _user: dict = Depends(require_use
     elements = []
     elements.extend(_kop_surat_flowables(settings, doc.width))
 
-    kasatker = activity.get("kasatker_nama", "_______________")
-    nip = activity.get("kasatker_nip", "_______________")
-    jabatan = activity.get("kasatker_jabatan", "Kepala Satuan Kerja")
-    alamat = activity.get("alamat_satker", "_______________")
+    ident = _activity_identity(activity, settings)
+    kasatker = ident["kasatker_nama"]
+    nip = ident["kasatker_nip"]
+    jabatan = ident["kasatker_jabatan"]
+    alamat = ident["alamat"]
     total_notfound = len(tidak_ditemukan)
     total_val_notfound = sum(safe_price(a) for a in tidak_ditemukan)
 
@@ -690,18 +794,22 @@ async def generate_sptjm_pdf(activity_id: str, _user: dict = Depends(require_use
     elements.extend(_title_block("SURAT PERNYATAAN TANGGUNG JAWAB MUTLAK"))
 
     # Body
-    body = f"""Yang bertanda tangan di bawah ini:<br/><br/>
-    Nama &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: <b>{kasatker}</b><br/>
-    NIP &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: {nip}<br/>
-    Jabatan &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: {jabatan}<br/>
-    Alamat &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: {alamat}<br/><br/>
-    Menyatakan dengan sesungguhnya bahwa:<br/><br/>
-    1. Saya bertanggung jawab penuh atas pengelolaan Barang Milik Negara (BMN) yang berada 
+    elements.append(Paragraph("Yang bertanda tangan di bawah ini:", normal_style))
+    elements.append(Spacer(1, 2*rl_mm))
+    elements.append(_identity_table([
+        ("Nama", kasatker),
+        ("NIP", nip),
+        ("Jabatan", jabatan),
+        ("Alamat", alamat),
+    ]))
+    elements.append(Spacer(1, 3*rl_mm))
+    body = f"""Menyatakan dengan sesungguhnya bahwa:<br/><br/>
+    1. Saya bertanggung jawab penuh atas pengelolaan Barang Milik Negara (BMN) yang berada
     dalam penguasaan Satuan Kerja yang saya pimpin.<br/><br/>
-    2. Berdasarkan hasil inventarisasi pada kegiatan "<b>{activity.get('nama_kegiatan', '-')}</b>" 
-    (Nomor Surat: {activity.get('nomor_surat', '-')}), terdapat <b>{total_notfound}</b> NUP BMN 
+    2. Berdasarkan hasil inventarisasi pada kegiatan "<b>{activity.get('nama_kegiatan', '-')}</b>"
+    (Nomor Surat: {activity.get('nomor_surat', '-')}), terdapat <b>{total_notfound}</b> NUP BMN
     dengan total nilai <b>{fmt_rp(total_val_notfound)}</b> yang tidak ditemukan.<br/><br/>
-    3. Saya bersedia menerima sanksi sesuai ketentuan peraturan perundang-undangan yang berlaku 
+    3. Saya bersedia menerima sanksi sesuai ketentuan peraturan perundang-undangan yang berlaku
     apabila di kemudian hari pernyataan ini tidak benar.<br/><br/>
     Demikian Surat Pernyataan ini dibuat dengan sebenar-benarnya untuk dipergunakan sebagaimana mestinya."""
     elements.append(Paragraph(body, normal_style))
@@ -728,7 +836,7 @@ async def generate_sptjm_pdf(activity_id: str, _user: dict = Depends(require_use
     elements.append(Spacer(1, 10*rl_mm))
 
     # Signature
-    tgl = activity.get("tanggal_berita_acara", "_______________")
+    tgl = str(activity.get("tanggal_berita_acara") or "").strip() or "......................."
     elements.extend(_signature_block([
         {'pre': [f'Dibuat di: {alamat}', f'Pada tanggal: {tgl}'],
          'header': 'Yang membuat pernyataan,',
@@ -786,10 +894,11 @@ async def generate_surat_koreksi_pdf(activity_id: str, _user: dict = Depends(req
     elements = []
     elements.extend(_kop_surat_flowables(settings, doc.width))
 
-    kasatker = activity.get("kasatker_nama", "_______________")
-    nip = activity.get("kasatker_nip", "_______________")
-    jabatan = activity.get("kasatker_jabatan", "Kepala Satuan Kerja")
-    alamat = activity.get("alamat_satker", "_______________")
+    ident = _activity_identity(activity, settings)
+    kasatker = ident["kasatker_nama"]
+    nip = ident["kasatker_nip"]
+    jabatan = ident["kasatker_jabatan"]
+    alamat = ident["alamat"]
     total_koreksi = len(koreksi_assets)
     total_val = sum(safe_price(a) for a in koreksi_assets)
 
@@ -797,16 +906,20 @@ async def generate_surat_koreksi_pdf(activity_id: str, _user: dict = Depends(req
     elements.extend(_title_block("SURAT PERNYATAAN\nKOREKSI PENCATATAN BARANG MILIK NEGARA"))
 
     # Body
-    body = f"""Yang bertanda tangan di bawah ini:<br/><br/>
-    Nama &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: <b>{kasatker}</b><br/>
-    NIP &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: {nip}<br/>
-    Jabatan &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: {jabatan}<br/>
-    Alamat &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: {alamat}<br/><br/>
-    Dengan ini menyatakan bahwa berdasarkan hasil inventarisasi pada kegiatan 
-    "<b>{activity.get('nama_kegiatan', '-')}</b>" (Nomor Surat: {activity.get('nomor_surat', '-')}), 
-    terdapat <b>{total_koreksi}</b> NUP BMN dengan total nilai <b>{fmt_rp(total_val)}</b> 
+    elements.append(Paragraph("Yang bertanda tangan di bawah ini:", normal_style))
+    elements.append(Spacer(1, 2*rl_mm))
+    elements.append(_identity_table([
+        ("Nama", kasatker),
+        ("NIP", nip),
+        ("Jabatan", jabatan),
+        ("Alamat", alamat),
+    ]))
+    elements.append(Spacer(1, 3*rl_mm))
+    body = f"""Dengan ini menyatakan bahwa berdasarkan hasil inventarisasi pada kegiatan
+    "<b>{activity.get('nama_kegiatan', '-')}</b>" (Nomor Surat: {activity.get('nomor_surat', '-')}),
+    terdapat <b>{total_koreksi}</b> NUP BMN dengan total nilai <b>{fmt_rp(total_val)}</b>
     yang teridentifikasi sebagai kesalahan pencatatan dan memerlukan koreksi.<br/><br/>
-    Koreksi pencatatan tersebut meliputi perubahan data BMN pada aplikasi SIMAK-BMN 
+    Koreksi pencatatan tersebut meliputi perubahan data BMN pada aplikasi SIMAK-BMN
     sesuai dengan hasil penelitian Tim Internal."""
     elements.append(Paragraph(body, normal_style))
     elements.append(Spacer(1, 4*rl_mm))
@@ -839,7 +952,7 @@ async def generate_surat_koreksi_pdf(activity_id: str, _user: dict = Depends(req
     elements.append(Spacer(1, 10*rl_mm))
 
     # Signature
-    tgl = activity.get("tanggal_berita_acara", "_______________")
+    tgl = str(activity.get("tanggal_berita_acara") or "").strip() or "......................."
     elements.extend(_signature_block([
         {'pre': [f'Dibuat di: {alamat}', f'Pada tanggal: {tgl}'],
          'header': 'Yang membuat pernyataan,',
@@ -947,10 +1060,10 @@ async def generate_dbhi_pdf(activity_id: str, dbhi_type: str, _user: dict = Depe
     elements.extend(_title_block(dbhi_config["title"]))
 
     # Activity info
-    satker = activity.get("kasatker", {})
-    satker_name = satker.get("nama", activity.get("nama_kegiatan", "-"))
+    ident = _activity_identity(activity, settings)
+    satker_name = ident["satker_name"]
     nomor_sk = activity.get("nomor_surat", "-")
-    tgl = activity.get("tanggal_mulai", "-")
+    tgl = _fmt_tanggal_id(activity.get("tanggal_mulai")) or "-"
     elements.append(Paragraph(f"Satuan Kerja: {satker_name}", info_style))
     elements.append(Paragraph(f"Nomor SK: {nomor_sk} &nbsp;&nbsp;|&nbsp;&nbsp; Tanggal: {tgl}", info_style))
     elements.append(Spacer(1, 4*rl_mm))
@@ -1058,8 +1171,8 @@ async def generate_dbhi_pdf(activity_id: str, dbhi_type: str, _user: dict = Depe
 
     # Signature section
     elements.append(Spacer(1, 12*rl_mm))
-    kasatker_nama = satker.get("nama_pejabat", "________________________")
-    kasatker_nip = satker.get("nip", "________________________")
+    kasatker_nama = ident["kasatker_nama"]
+    kasatker_nip = ident["kasatker_nip"]
 
     elements.extend(_signature_block([
         {'pre': ['.................., .......................'],
@@ -1111,7 +1224,7 @@ async def generate_rhi_pdf(activity_id: str, _user: dict = Depends(require_user_
     tidak_ditemukan = [a for a in assets if a.get("inventory_status") == "Tidak Ditemukan"]
     berlebih = [a for a in assets if a.get("inventory_status") == "Berlebih"]
     sengketa = [a for a in assets if a.get("inventory_status") == "Sengketa"]
-    belum = [a for a in assets if a.get("inventory_status", "Belum Diinventarisasi") == "Belum Diinventarisasi"]
+    belum = [a for a in assets if (a.get("inventory_status") or "Belum Diinventarisasi") == "Belum Diinventarisasi"]
 
     baik = [a for a in ditemukan if a.get("condition") == "Baik"]
     rusak_ringan = [a for a in ditemukan if a.get("condition") == "Rusak Ringan"]
@@ -1130,10 +1243,10 @@ async def generate_rhi_pdf(activity_id: str, _user: dict = Depends(require_user_
     elements.extend(_kop_surat_flowables(settings, doc.width))
     elements.extend(_title_block("REKAPITULASI HASIL INVENTARISASI\nBARANG MILIK NEGARA (RHI)"))
 
-    satker = activity.get("kasatker", {})
-    satker_name = satker.get("nama", activity.get("nama_kegiatan", "-"))
+    ident = _activity_identity(activity, settings)
+    satker_name = ident["satker_name"]
     elements.append(Paragraph(f"Satuan Kerja: {satker_name}", info_style))
-    elements.append(Paragraph(f"Nomor SK: {activity.get('nomor_surat', '-')} | Periode: {activity.get('tanggal_mulai', '-')} s.d. {activity.get('tanggal_selesai', '-')}", info_style))
+    elements.append(Paragraph(f"Nomor SK: {activity.get('nomor_surat') or '-'} | Periode: {_fmt_tanggal_id(activity.get('tanggal_mulai')) or '-'} s.d. {_fmt_tanggal_id(activity.get('tanggal_selesai')) or '-'}", info_style))
     elements.append(Spacer(1, 4*rl_mm))
 
     headers = ["No", "Kategori Hasil Inventarisasi", "Jumlah\n(NUP)", "Nilai (Rp)", "Persentase"]
@@ -1185,8 +1298,8 @@ async def generate_rhi_pdf(activity_id: str, _user: dict = Depends(require_user_
 
     # Signature
     elements.append(Spacer(1, 12*rl_mm))
-    kasatker_nama = satker.get("nama_pejabat", "________________________")
-    kasatker_nip = satker.get("nip", "________________________")
+    kasatker_nama = ident["kasatker_nama"]
+    kasatker_nip = ident["kasatker_nip"]
     elements.extend(_signature_block([
         {'pre': ['.................., .......................'],
          'header': 'Kepala Satuan Kerja,',
@@ -1239,16 +1352,16 @@ async def generate_bahi_pdf(activity_id: str, _user: dict = Depends(require_user
     rusak_ringan = [a for a in ditemukan if a.get("condition") == "Rusak Ringan"]
     rusak_berat = [a for a in ditemukan if a.get("condition") == "Rusak Berat"]
 
-    satker = activity.get("kasatker", {})
-    satker_name = satker.get("nama", activity.get("nama_kegiatan", "-"))
-    kasatker_nama = satker.get("nama_pejabat", "________________________")
-    kasatker_nip = satker.get("nip", "________________________")
-    kasatker_jabatan = satker.get("jabatan", "Kepala Satuan Kerja")
+    ident = _activity_identity(activity, settings)
+    satker_name = ident["satker_name"]
+    kasatker_nama = ident["kasatker_nama"]
+    kasatker_nip = ident["kasatker_nip"]
+    kasatker_jabatan = ident["kasatker_jabatan"]
     tim = activity.get("tim_peneliti", [])
     tim_pendukung_list = activity.get("tim_pendukung", [])
     nomor_sk = activity.get("nomor_surat", "-")
-    tgl_mulai = activity.get("tanggal_mulai", "-")
-    tgl_selesai = activity.get("tanggal_selesai", "-")
+    tgl_mulai = _fmt_tanggal_id(activity.get("tanggal_mulai")) or "-"
+    tgl_selesai = _fmt_tanggal_id(activity.get("tanggal_selesai")) or "-"
 
     buffer = io.BytesIO()
     doc = _std_doc(buffer)
@@ -1271,13 +1384,12 @@ async def generate_bahi_pdf(activity_id: str, _user: dict = Depends(require_user
         normal_style))
     elements.append(Spacer(1, 3*rl_mm))
 
-    id_data = [
-        ["Nama", f": {kasatker_nama}"],
-        ["Jabatan", f": {kasatker_jabatan}"],
-        ["Unit Organisasi", f": {satker_name}"],
-    ]
-    for label, value in id_data:
-        elements.append(Paragraph(f"<b>{label}</b> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{value}", indent_style))
+    elements.append(_identity_table([
+        ("Nama", kasatker_nama),
+        ("NIP", kasatker_nip),
+        ("Jabatan", kasatker_jabatan),
+        ("Unit Organisasi", satker_name),
+    ]))
 
     elements.append(Spacer(1, 3*rl_mm))
     elements.append(Paragraph(
@@ -1299,9 +1411,14 @@ async def generate_bahi_pdf(activity_id: str, _user: dict = Depends(require_user
         f"BMN Berlebih: <b>{len(berlebih)} NUP</b> ({fmt_rp(sum(safe_price(a) for a in berlebih))})",
         f"BMN Dalam Sengketa: <b>{len(sengketa)} NUP</b> ({fmt_rp(sum(safe_price(a) for a in sengketa))})",
     ]
-    for idx, item in enumerate(summary_items, 1):
-        prefix = f"{idx}. " if not item.startswith("&nbsp;") else ""
-        elements.append(Paragraph(f"{prefix}{item}", indent_style))
+    # Sub-butir a/b/c tidak memakai nomor — nomor urut hanya utk butir utama
+    no_butir = 0
+    for item in summary_items:
+        if item.startswith("&nbsp;"):
+            elements.append(Paragraph(item, indent_style))
+        else:
+            no_butir += 1
+            elements.append(Paragraph(f"{no_butir}. {item}", indent_style))
 
     elements.append(Spacer(1, 4*rl_mm))
 
@@ -1352,7 +1469,7 @@ async def generate_bahi_pdf(activity_id: str, _user: dict = Depends(require_user
          'after': [f'NIP. {kasatker_nip}']},
         {'pre': ['.................., .......................'],
          'header': 'Yang membuat Berita Acara,',
-         'nama': tim[0] if tim else '________________________',
+         'nama': _member_nama(tim[0], '________________________') if tim else '________________________',
          'after': ['NIP. ........................']},
     ], doc.width))
 
@@ -1378,11 +1495,11 @@ async def generate_sp_hasil_pdf(activity_id: str, _user: dict = Depends(require_
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
 
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
-    satker = activity.get("kasatker", {})
-    satker_name = satker.get("nama", activity.get("nama_kegiatan", "-"))
-    kasatker_nama = satker.get("nama_pejabat", "________________________")
-    kasatker_nip = satker.get("nip", "________________________")
-    kasatker_jabatan = satker.get("jabatan", "Kepala Satuan Kerja")
+    ident = _activity_identity(activity, settings)
+    satker_name = ident["satker_name"]
+    kasatker_nama = ident["kasatker_nama"]
+    kasatker_nip = ident["kasatker_nip"]
+    kasatker_jabatan = ident["kasatker_jabatan"]
     nomor_sk = activity.get("nomor_surat", "-")
 
     buffer = io.BytesIO()
@@ -1399,13 +1516,12 @@ async def generate_sp_hasil_pdf(activity_id: str, _user: dict = Depends(require_
     elements.append(Paragraph("Yang bertanda tangan di bawah ini:", normal_style))
     elements.append(Spacer(1, 2*rl_mm))
 
-    id_items = [
+    elements.append(_identity_table([
         ("Nama", kasatker_nama),
+        ("NIP", kasatker_nip),
         ("Jabatan", kasatker_jabatan),
         ("Unit Organisasi", satker_name),
-    ]
-    for label, value in id_items:
-        elements.append(Paragraph(f"<b>{label}</b> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: {value}", indent_style))
+    ]))
 
     elements.append(Spacer(1, 4*rl_mm))
     elements.append(Paragraph("<b>Menyatakan dengan sesungguhnya bahwa:</b>", normal_style))
@@ -1462,14 +1578,14 @@ async def generate_sp_pelaksanaan_pdf(activity_id: str, _user: dict = Depends(re
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
 
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
-    satker = activity.get("kasatker", {})
-    satker_name = satker.get("nama", activity.get("nama_kegiatan", "-"))
-    kasatker_nama = satker.get("nama_pejabat", "________________________")
-    kasatker_nip = satker.get("nip", "________________________")
-    kasatker_jabatan = satker.get("jabatan", "Kepala Satuan Kerja")
+    ident = _activity_identity(activity, settings)
+    satker_name = ident["satker_name"]
+    kasatker_nama = ident["kasatker_nama"]
+    kasatker_nip = ident["kasatker_nip"]
+    kasatker_jabatan = ident["kasatker_jabatan"]
     nomor_sk = activity.get("nomor_surat", "-")
-    tgl_mulai = activity.get("tanggal_mulai", "-")
-    tgl_selesai = activity.get("tanggal_selesai", "-")
+    tgl_mulai = _fmt_tanggal_id(activity.get("tanggal_mulai")) or "-"
+    tgl_selesai = _fmt_tanggal_id(activity.get("tanggal_selesai")) or "-"
 
     buffer = io.BytesIO()
     doc = _std_doc(buffer)
@@ -1485,13 +1601,12 @@ async def generate_sp_pelaksanaan_pdf(activity_id: str, _user: dict = Depends(re
     elements.append(Paragraph("Yang bertanda tangan di bawah ini:", normal_style))
     elements.append(Spacer(1, 2*rl_mm))
 
-    id_items = [
+    elements.append(_identity_table([
         ("Nama", kasatker_nama),
+        ("NIP", kasatker_nip),
         ("Jabatan", kasatker_jabatan),
         ("Unit Organisasi", satker_name),
-    ]
-    for label, value in id_items:
-        elements.append(Paragraph(f"<b>{label}</b> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: {value}", indent_style))
+    ]))
 
     elements.append(Spacer(1, 4*rl_mm))
     elements.append(Paragraph("<b>Menyatakan dengan sesungguhnya bahwa:</b>", normal_style))
@@ -1648,8 +1763,11 @@ async def _generate_cover_page(activity, settings):
         try:
             header, b64data = logo_url.split(",", 1)
             logo_bytes = base64.b64decode(b64data)
+            from reportlab.lib.utils import ImageReader
+            iw, ih = ImageReader(io.BytesIO(logo_bytes)).getSize()
+            scale = 80.0 / max(iw, ih)
             logo_buffer = io.BytesIO(logo_bytes)
-            logo_img = RLImage(logo_buffer, width=80, height=80)
+            logo_img = RLImage(logo_buffer, width=iw * scale, height=ih * scale)
             logo_img.hAlign = 'CENTER'
             elements.append(logo_img)
             elements.append(Spacer(1, 6*rl_mm))
@@ -1689,11 +1807,11 @@ async def _generate_cover_page(activity, settings):
 
     elements.append(Spacer(1, 15*rl_mm))
 
-    satker = activity.get("kasatker", {})
-    satker_name = satker.get("nama", activity.get("nama_kegiatan", "-"))
-    nomor_sk = activity.get("nomor_surat", "-")
-    tgl_mulai = activity.get("tanggal_mulai", "-")
-    tgl_selesai = activity.get("tanggal_selesai", "-")
+    ident = _activity_identity(activity, settings)
+    satker_name = ident["satker_name"]
+    nomor_sk = activity.get("nomor_surat") or "-"
+    tgl_mulai = _fmt_tanggal_id(activity.get("tanggal_mulai")) or "-"
+    tgl_selesai = _fmt_tanggal_id(activity.get("tanggal_selesai")) or "-"
 
     details = [
         f"Satuan Kerja: {satker_name}",
@@ -1784,7 +1902,8 @@ def _parse_detail_fields(detail_fields: str):
     return {f.strip() for f in (detail_fields or "").split(",") if f.strip()} & valid
 
 
-async def _build_executive_summary_data(activity_id: str, detail_fields=None):
+async def _build_executive_summary_data(activity_id: str, detail_fields=None,
+                                        with_asset_rows: bool = True):
     """Build all data needed for the executive summary template.
 
     detail_fields: optional set of EXEC_DETAIL_FIELDS keys — extra per-asset
@@ -1820,7 +1939,7 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None):
     tidak = [a for a in all_assets if a.get("inventory_status") == "Tidak Ditemukan"]
     berlebih = [a for a in all_assets if a.get("inventory_status") == "Berlebih"]
     sengketa = [a for a in all_assets if a.get("inventory_status") == "Sengketa"]
-    belum = [a for a in all_assets if a.get("inventory_status", "Belum Diinventarisasi") == "Belum Diinventarisasi"]
+    belum = [a for a in all_assets if (a.get("inventory_status") or "Belum Diinventarisasi") == "Belum Diinventarisasi"]
     baik = [a for a in ditemukan if a.get("condition") == "Baik"]
     rr = [a for a in ditemukan if a.get("condition") == "Rusak Ringan"]
     rb = [a for a in ditemukan if a.get("condition") == "Rusak Berat"]
@@ -1836,12 +1955,12 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None):
     st_dash = circumference
     st_offset = circumference * (1 - st_pct / 100)
 
-    satker = activity.get("kasatker", {})
-    satker_name = satker.get("nama", activity.get("nama_kegiatan", "-"))
-    tim = activity.get("tim_peneliti", []) or []
-    tim_pendukung = activity.get("tim_pendukung", []) or []
-    tim_inti = activity.get("tim_inti", []) or []
-    tim_pembantu = activity.get("tim_pembantu", []) or []
+    satker_name = _activity_identity(activity, settings)["satker_name"]
+    # _member_dict: anggota string era lama tetap tampil bernama, bukan "-"
+    tim = [_member_dict(t) for t in (activity.get("tim_peneliti", []) or [])]
+    tim_pendukung = [_member_dict(t) for t in (activity.get("tim_pendukung", []) or [])]
+    tim_inti = [_member_dict(t) for t in (activity.get("tim_inti", []) or [])]
+    tim_pembantu = [_member_dict(t) for t in (activity.get("tim_pembantu", []) or [])]
     pj_nama = activity.get("penanggung_jawab", "") or ""
     pj_jabatan = activity.get("penanggung_jawab_jabatan", "") or ""
     pj_nip = activity.get("penanggung_jawab_nip", "") or ""
@@ -2023,7 +2142,9 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None):
         simpulan.append({"color": "#0f172a", "text": "Seluruh hasil inventarisasi didokumentasikan dalam <strong>LHI</strong> (BAHI, RHI, 6 DBHI, Surat Pernyataan)."})
 
     asset_rows = []
-    for a in all_assets:
+    # Loop mahal (fallback GridFS per aset) — dilewati bila pemanggil hanya
+    # butuh halaman ringkasan (executive-summary-html/pdf, data-info).
+    for a in (all_assets if with_asset_rows else []):
         photos = a.get("photos", []) or []
         cover_idx = a.get("thumbnail_index", 0) or 0
         photo_url = photos[cover_idx] if photos and cover_idx < len(photos) else (photos[0] if photos else None)
@@ -2045,7 +2166,7 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None):
                 logger.debug(f"[reports] fallback GridFS aset {a.get('id')} gagal: {e}")
                 photo_url = photo_url or ""
 
-        inv_status = a.get("inventory_status", "Belum Diinventarisasi")
+        inv_status = a.get("inventory_status") or "Belum Diinventarisasi"
         condition = a.get("condition", "") or ""
         cond_badge, cond_class = "", ""
         if inv_status == "Ditemukan" and condition:
@@ -2111,7 +2232,7 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None):
             "photo_url": photo_url, "stiker_url": stiker_url,
         })
 
-    items_per_page = 150  # 75 per column * 2 columns
+    items_per_page = 140  # 70 per kolom * 2 kolom — selaras template (>=148 meluber)
     cat_pages = max(0, -(-len(cat_chart) // items_per_page)) if cat_chart else 0
     loc_pages = max(0, -(-len(loc_chart) // items_per_page)) if loc_chart else 0
 
@@ -2121,7 +2242,11 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None):
     for i in range(0, len(asset_rows), assets_per_page):
         asset_pages.append(asset_rows[i:i + assets_per_page])
 
-    total_pages = 2 + cat_pages + loc_pages + 1 + max(1, len(asset_pages))
+    # Halaman template ringkasan: 1 sampul + 1 ringkasan + halaman kategori +
+    # halaman lokasi + 1 analisis lanjutan/tim. Data per aset TIDAK ada di
+    # template ini (diunduh terpisah via executive-data-pdf) — dulu ikut
+    # dihitung sehingga "Halaman 2 dari N" selalu terlalu besar.
+    total_pages = 3 + cat_pages + loc_pages
 
     return {
         "logo_url": settings.get("logo_url", ""),
@@ -2130,10 +2255,10 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None):
         "alamat_instansi": settings.get("alamat_instansi", ""),
         "tahun_anggaran": settings.get("tahun_anggaran", ""),
         "satker_name": satker_name,
-        "nomor_sk": activity.get("nomor_surat", "-"),
-        "tgl_mulai": activity.get("tanggal_mulai", "-"),
-        "tgl_selesai": activity.get("tanggal_selesai", "-"),
-        "tanggal_cetak": datetime.now().strftime("%d %B %Y"),
+        "nomor_sk": activity.get("nomor_surat") or "-",
+        "tgl_mulai": _fmt_tanggal_id(activity.get("tanggal_mulai")) or "-",
+        "tgl_selesai": _fmt_tanggal_id(activity.get("tanggal_selesai")) or "-",
+        "tanggal_cetak": _fmt_tanggal_id(datetime.now()),
         "total_count": tc, "total_value_fmt": fmt(tv),
         "cnt_ditemukan": len(ditemukan), "val_ditemukan_fmt": fmt(sum(sp(a) for a in ditemukan)), "pct_ditemukan": pct(len(ditemukan), tc),
         "cnt_tidak": len(tidak), "val_tidak_fmt": fmt(sum(sp(a) for a in tidak)), "pct_tidak": pct(len(tidak), tc),
@@ -2153,10 +2278,11 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None):
         # simpulan[].text is trusted server-built HTML (only counts/percentages
         # interpolated) → Markup so autoescape keeps the <strong> tags.
         "simpulan": [{**s, "text": Markup(s["text"])} for s in simpulan],
-        "tim": tim[:5], "tim_pendukung": tim_pendukung[:5],
+        "tim": tim, "tim_pendukung": tim_pendukung,
         "tim_inti": tim_inti, "tim_pembantu": tim_pembantu,
         "pj_nama": pj_nama, "pj_jabatan": pj_jabatan, "pj_nip": pj_nip,
         "assets": asset_rows, "asset_pages": asset_pages, "total_pages": total_pages,
+        "asset_count": len(all_assets),
         "is_in_progress": is_in_progress,
         "cat_breakdown": cat_breakdown_sorted,
         "loc_breakdown": loc_breakdown_sorted,
@@ -2182,7 +2308,8 @@ async def executive_summary_html(activity_id: str, detail_fields: str = "",
                                  _user: dict = Depends(require_user_or_query_token)):
     """Serve Executive Summary as interactive HTML preview with real data"""
     from jinja2 import Environment, FileSystemLoader
-    data = await _build_executive_summary_data(activity_id, _parse_detail_fields(detail_fields))
+    data = await _build_executive_summary_data(activity_id, _parse_detail_fields(detail_fields),
+                                               with_asset_rows=False)
     if not data:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
     data["preview"] = True
@@ -2199,7 +2326,8 @@ async def generate_executive_summary_pdf(activity_id: str, detail_fields: str = 
     from jinja2 import Environment, FileSystemLoader
     import weasyprint
 
-    data = await _build_executive_summary_data(activity_id, _parse_detail_fields(detail_fields))
+    data = await _build_executive_summary_data(activity_id, _parse_detail_fields(detail_fields),
+                                               with_asset_rows=False)
     if not data:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
     data["preview"] = False
@@ -2266,11 +2394,12 @@ async def generate_executive_data_pdf(activity_id: str, page: int = 1, detail_fi
 async def executive_data_info(activity_id: str, detail_fields: str = "",
                               _user: dict = Depends(require_user_or_query_token)):
     """Return info about how many data download pages are available."""
-    data = await _build_executive_summary_data(activity_id, _parse_detail_fields(detail_fields))
+    data = await _build_executive_summary_data(activity_id, _parse_detail_fields(detail_fields),
+                                               with_asset_rows=False)
     if not data:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
-    
-    total_assets = len(data.get("assets", []))
+
+    total_assets = data.get("asset_count", 0)
     items_per_download = 499
     total_pages = max(0, -(-total_assets // items_per_download)) if total_assets > 0 else 0
     
@@ -2493,8 +2622,7 @@ async def _build_executive_grouped_data(activity_id: str, detail_fields=None):
             "detail_lines": detail_lines,
         })
 
-    satker = activity.get("kasatker", {})
-    satker_name = satker.get("nama", activity.get("nama_kegiatan", "-"))
+    satker_name = _activity_identity(activity, settings)["satker_name"]
 
     return {
         "logo_url": settings.get("logo_url", ""),
@@ -2502,7 +2630,7 @@ async def _build_executive_grouped_data(activity_id: str, detail_fields=None):
         "nama_instansi": settings.get("nama_instansi", ""),
         "satker_name": satker_name,
         "nomor_sk": activity.get("nomor_surat", "-"),
-        "tanggal_cetak": datetime.now().strftime("%d %B %Y"),
+        "tanggal_cetak": _fmt_tanggal_id(datetime.now()),
         "rows": rows,
         "total_groups": len(rows),
         "total_units": total_units,
@@ -2569,7 +2697,7 @@ async def _build_satker_report_v2(activity_id: str):
     ).to_list(100000)
     categories = await db.categories.find({}, {"_id": 0}).to_list(10000)
     cat_map = {c.get("kode_aset", ""): c.get("label", "") for c in categories}
-    act_name_map = {a.get("id", ""): a.get("nama_kegiatan", "") for a in satker_acts}
+    act_name_map = {a.get("id", ""): (a.get("nama_kegiatan") or "") for a in satker_acts}
 
     def sp(a):
         try: return float(a.get("purchase_price", 0) or 0)
@@ -2586,7 +2714,7 @@ async def _build_satker_report_v2(activity_id: str):
     tidak = [a for a in all_assets if a.get("inventory_status") == "Tidak Ditemukan"]
     berlebih = [a for a in all_assets if a.get("inventory_status") == "Berlebih"]
     sengketa = [a for a in all_assets if a.get("inventory_status") == "Sengketa"]
-    belum = [a for a in all_assets if a.get("inventory_status", "Belum Diinventarisasi") == "Belum Diinventarisasi"]
+    belum = [a for a in all_assets if (a.get("inventory_status") or "Belum Diinventarisasi") == "Belum Diinventarisasi"]
     baik = [a for a in ditemukan if a.get("condition") == "Baik"]
     rr = [a for a in ditemukan if a.get("condition") == "Rusak Ringan"]
     rb = [a for a in ditemukan if a.get("condition") == "Rusak Berat"]
@@ -2607,10 +2735,10 @@ async def _build_satker_report_v2(activity_id: str):
     chart_status = [{"name": n, "count": len(i), "pct": pct(len(i), tc), "color": stat_colors.get(n, "#64748b")} for n, i in [("Ditemukan", ditemukan), ("Tidak Ditemukan", tidak), ("Berlebih", berlebih), ("Sengketa", sengketa), ("Belum", belum)] if i]
 
     from collections import Counter
-    cat_counter = Counter(a.get("category", "Lainnya") for a in all_assets)
+    cat_counter = Counter((a.get("category") or "Lainnya") for a in all_assets)
     cat_vals = {}
     for a in all_assets:
-        c = a.get("category", "Lainnya")
+        c = a.get("category") or "Lainnya"
         cat_vals[c] = cat_vals.get(c, 0) + sp(a)
     chart_kategori = [{"name": (cat_map.get(c, c) or c)[:20], "count": cnt, "pct": pct(cnt, tc), "val_fmt": fmt(cat_vals.get(c, 0))} for c, cnt in cat_counter.most_common(10)]
 
@@ -2630,29 +2758,31 @@ async def _build_satker_report_v2(activity_id: str):
     for a in all_assets:
         aid = a.get("activity_id", "")
         act_vals[aid] = act_vals.get(aid, 0) + sp(a)
-    chart_per_kegiatan = [{"name": act_name_map.get(aid, aid)[:25], "count": cnt, "pct": pct(cnt, tc), "val_fmt": fmt(act_vals.get(aid, 0))} for aid, cnt in act_counter.most_common(10)]
+    chart_per_kegiatan = [{"name": (act_name_map.get(aid) or aid or "-")[:25], "count": cnt, "pct": pct(cnt, tc), "val_fmt": fmt(act_vals.get(aid, 0))} for aid, cnt in act_counter.most_common(10)]
 
     # Asset rows
     cond_map = {"Baik": ("Baik", "b-ok"), "Rusak Ringan": ("R.Ringan", "b-rr"), "Rusak Berat": ("R.Berat", "b-rb")}
     stat_map = {"Ditemukan": ("Ditemukan", "b-found"), "Tidak Ditemukan": ("Tdk Ditemukan", "b-miss"), "Berlebih": ("Berlebih", "b-extra"), "Sengketa": ("Sengketa", "b-dispute"), "Belum Diinventarisasi": ("Belum", "b-pending")}
     asset_rows = []
     for a in all_assets:
-        inv = a.get("inventory_status", "Belum Diinventarisasi")
+        inv = a.get("inventory_status") or "Belum Diinventarisasi"
         cond = a.get("condition", "") or ""
         cb, cc = cond_map.get(cond, ("", "")) if inv == "Ditemukan" and cond else ("", "")
         sb, sc = stat_map.get(inv, (inv, ""))
         year = str(a.get("purchase_date", "") or "")[:4]
         brand = a.get("brand", "") or ""
         model = a.get("model", "") or ""
+        cat_raw = a.get("category") or ""
         asset_rows.append({
-            "asset_code": a.get("asset_code", "-"), "nup": a.get("NUP", "-"),
-            "asset_name": a.get("asset_name", "-"), "category": (cat_map.get(a.get("category", ""), a.get("category", "-")) or a.get("category", "-")),
+            "asset_code": a.get("asset_code") or "-", "nup": a.get("NUP") or "-",
+            "asset_name": a.get("asset_name") or "-",
+            "category": cat_map.get(cat_raw, cat_raw) or "-",
             "brand_model": f"{brand} {model}".strip() or "-",
-            "eselon1": a.get("eselon1", ""), "eselon2": a.get("eselon2", ""),
-            "location": a.get("location", "-"), "year": year or "-", "value_fmt": fmt(sp(a)),
+            "eselon1": a.get("eselon1") or "", "eselon2": a.get("eselon2") or "",
+            "location": a.get("location") or "-", "year": year or "-", "value_fmt": fmt(sp(a)),
             "cond_badge": cb, "cond_cls": cc, "stat_badge": sb, "stat_cls": sc,
-            "stiker": a.get("stiker_status", "Belum Terpasang"),
-            "kegiatan_nama": act_name_map.get(a.get("activity_id", ""), "-")[:20],
+            "stiker": a.get("stiker_status") or "Belum Terpasang",
+            "kegiatan_nama": (act_name_map.get(a.get("activity_id", "")) or "-")[:20],
         })
 
     # Dok rows
@@ -2662,11 +2792,20 @@ async def _build_satker_report_v2(activity_id: str):
             dok_headers_set.add(d.get("name", ""))
     dok_headers = sorted(dok_headers_set)
     dok_rows = []
-    for a in all_assets[:100]:
+    # Hanya aset yang PUNYA data checklist — baris semua-x untuk aset tanpa
+    # checklist menyesatkan (tak terbedakan dari "tidak ada yang dicentang").
+    dok_eligible = [a for a in all_assets if (a.get("document_checklist") or [])]
+    for a in dok_eligible[:100]:
         ck = {d.get("name", ""): d.get("checked", False) for d in (a.get("document_checklist", []) or [])}
         checks = [ck.get(h, False) for h in dok_headers]
         score = sum(1 for c in checks if c)
-        dok_rows.append({"code": a.get("asset_code", "-"), "name": a.get("asset_name", "-")[:30], "checks": checks, "score": score, "total": len(dok_headers)})
+        dok_rows.append({"code": a.get("asset_code") or "-", "name": (a.get("asset_name") or "-")[:30], "checks": checks, "score": score, "total": len(dok_headers)})
+    dok_note_parts = []
+    if len(dok_eligible) > 100:
+        dok_note_parts.append(f"menampilkan 100 pertama dari {len(dok_eligible)} aset")
+    if len(dok_eligible) < tc:
+        dok_note_parts.append(f"{tc - len(dok_eligible)} aset tanpa data kelengkapan tidak ditampilkan")
+    dok_note = "; ".join(dok_note_parts)
 
     # Eselon list (from first activity that has data, or merge)
     eselon_list = []
@@ -2687,8 +2826,8 @@ async def _build_satker_report_v2(activity_id: str):
         kegiatan_list.append({
             "nomor_surat": act.get("nomor_surat", "-"),
             "nama_kegiatan": act.get("nama_kegiatan", "-"),
-            "periode": f"{act.get('tanggal_mulai', '-')} s/d {act.get('tanggal_selesai', '-')}",
-            "pj": act.get("penanggung_jawab", "-"),
+            "periode": f"{_fmt_tanggal_id(act.get('tanggal_mulai')) or '-'} s/d {_fmt_tanggal_id(act.get('tanggal_selesai')) or '-'}",
+            "pj": act.get("penanggung_jawab") or "-",
             "count": len(act_assets),
             "value_fmt": fmt(sum(sp(a) for a in act_assets)),
         })
@@ -2702,7 +2841,7 @@ async def _build_satker_report_v2(activity_id: str):
             if not kasatker_added:
                 personil.append({"is_header": True, "section": "Pimpinan Satuan Kerja"})
                 kasatker_added = True
-            personil.append({"is_header": False, "primary": True, "role": act.get("kasatker_jabatan", "Kepala Satuan Kerja"), "name": act["kasatker_nama"], "nip": act.get("kasatker_nip", ""), "jabatan": ""})
+            personil.append({"is_header": False, "primary": True, "role": act.get("kasatker_jabatan") or "Kepala Satuan Kerja", "name": act["kasatker_nama"], "nip": act.get("kasatker_nip") or "", "jabatan": ""})
             seen_names.add(act["kasatker_nama"])
 
     pj_added = False
@@ -2711,28 +2850,30 @@ async def _build_satker_report_v2(activity_id: str):
             if not pj_added:
                 personil.append({"is_header": True, "section": "Penanggung Jawab Inventarisasi"})
                 pj_added = True
-            personil.append({"is_header": False, "primary": False, "role": f"PJ — {act.get('nama_kegiatan', '')[:40]}", "name": act["penanggung_jawab"], "nip": "", "jabatan": ""})
+            personil.append({"is_header": False, "primary": False, "role": f"PJ — {(act.get('nama_kegiatan') or '')[:40]}", "name": act["penanggung_jawab"], "nip": "", "jabatan": ""})
             seen_names.add(act["penanggung_jawab"])
 
-    tim_added = False
-    for act in satker_acts:
-        for t in (act.get("tim_peneliti", []) or []):
-            if isinstance(t, dict) and t.get("nama") and t["nama"] not in seen_names:
-                if not tim_added:
-                    personil.append({"is_header": True, "section": "Tim Peneliti"})
-                    tim_added = True
-                personil.append({"is_header": False, "primary": False, "role": "Anggota Tim", "name": t["nama"], "nip": t.get("nip", ""), "jabatan": t.get("jabatan", "")})
-                seen_names.add(t["nama"])
+    def _tambah_tim(field, section_label, role_label):
+        """Semua tim masuk daftar personil; anggota string era lama dinormalkan
+        via _member_dict (dulu dibuang diam-diam oleh filter isinstance)."""
+        added = False
+        for act in satker_acts:
+            for t in map(_member_dict, act.get(field, []) or []):
+                nama = t.get("nama")
+                if nama and nama not in seen_names:
+                    if not added:
+                        personil.append({"is_header": True, "section": section_label})
+                        added = True
+                    personil.append({"is_header": False, "primary": False, "role": role_label,
+                                     "name": nama, "nip": t.get("nip") or "", "jabatan": t.get("jabatan") or ""})
+                    seen_names.add(nama)
 
-    tp_added = False
-    for act in satker_acts:
-        for t in (act.get("tim_pendukung", []) or []):
-            if isinstance(t, dict) and t.get("nama") and t["nama"] not in seen_names:
-                if not tp_added:
-                    personil.append({"is_header": True, "section": "Tim Pendukung"})
-                    tp_added = True
-                personil.append({"is_header": False, "primary": False, "role": "Pendukung", "name": t["nama"], "nip": t.get("nip", ""), "jabatan": t.get("jabatan", "")})
-                seen_names.add(t["nama"])
+    # Dulu bagian ini hanya memuat tim eksternal — Tim Inti & Tim Pembantu
+    # (pelaksana internal) tidak pernah muncul di "Personil Terlibat".
+    _tambah_tim("tim_inti", "Tim Inti (Pelaksana)", "Anggota Tim Inti")
+    _tambah_tim("tim_pembantu", "Tim Pembantu", "Tim Pembantu")
+    _tambah_tim("tim_peneliti", "Tim Peneliti", "Anggota Tim")
+    _tambah_tim("tim_pendukung", "Tim Pendukung", "Pendukung")
 
     # Simpulan
     simpulan = []
@@ -2745,9 +2886,10 @@ async def _build_satker_report_v2(activity_id: str):
         simpulan.append({"color": "#0ea5e9", "text": f"Rata-rata kelengkapan dokumen: <strong>{dok_pct}%</strong>."})
 
     return {
-        "kode_satker": source_act.get("kode_satker", "-"), "nama_satker": source_act.get("nama_satker", "-"),
-        "alamat_satker": source_act.get("alamat_satker", "-"),
-        "tanggal_cetak": datetime.now().strftime("%d %B %Y"),
+        "kode_satker": source_act.get("kode_satker") or "-",
+        "nama_satker": source_act.get("nama_satker") or "-",
+        "alamat_satker": source_act.get("alamat_satker") or "-",
+        "tanggal_cetak": _fmt_tanggal_id(datetime.now()),
         "total_kegiatan": len(satker_acts), "total_count": tc, "total_value_fmt": fmt(tv),
         "cnt_ditemukan": len(ditemukan), "pct_ditemukan": pct(len(ditemukan), tc),
         "cnt_tidak": len(tidak), "pct_tidak": pct(len(tidak), tc),
@@ -2760,13 +2902,14 @@ async def _build_satker_report_v2(activity_id: str):
         "chart_kategori": chart_kategori, "chart_lokasi": chart_lokasi,
         "chart_eselon1": chart_eselon1, "chart_per_kegiatan": chart_per_kegiatan,
         "assets": asset_rows, "dok_headers": dok_headers, "dok_rows": dok_rows,
+        "dok_note": dok_note,
         "personil": personil,
         # Trusted server-built HTML → Markup so autoescape keeps the <strong> tags.
         "simpulan": [{**s, "text": Markup(s["text"])} for s in simpulan],
-        "tim": [t for act in satker_acts for t in (act.get("tim_peneliti", []) or []) if isinstance(t, dict)],
-        "tim_pendukung": [t for act in satker_acts for t in (act.get("tim_pendukung", []) or []) if isinstance(t, dict)],
-        "tim_inti": [t for act in satker_acts for t in (act.get("tim_inti", []) or []) if isinstance(t, dict)],
-        "tim_pembantu": [t for act in satker_acts for t in (act.get("tim_pembantu", []) or []) if isinstance(t, dict)],
+        "tim": [_member_dict(t) for act in satker_acts for t in (act.get("tim_peneliti", []) or [])],
+        "tim_pendukung": [_member_dict(t) for act in satker_acts for t in (act.get("tim_pendukung", []) or [])],
+        "tim_inti": [_member_dict(t) for act in satker_acts for t in (act.get("tim_inti", []) or [])],
+        "tim_pembantu": [_member_dict(t) for act in satker_acts for t in (act.get("tim_pembantu", []) or [])],
         "kesimpulan": source_act.get("kesimpulan", ""),
     }
 
@@ -2835,10 +2978,12 @@ async def generate_lhi_pdf(activity_id: str, _user: dict = Depends(require_user_
     merger = PdfMerger()
 
     # 1. Cover page
+    sections_added = 0
     try:
         cover_buffer = await _generate_cover_page(activity, settings)
         if cover_buffer.getbuffer().nbytes > 0:
             merger.append(cover_buffer)
+            sections_added += 1
     except Exception as e:
         logger.warning(f"LHI: Failed to generate cover page: {e}")
 
@@ -2862,6 +3007,7 @@ async def generate_lhi_pdf(activity_id: str, _user: dict = Depends(require_user_
             pdf_buffer = await _get_pdf_buffer_from_response(response)
             if pdf_buffer.getbuffer().nbytes > 0:
                 merger.append(pdf_buffer)
+                sections_added += 1
         except Exception as e:
             logger.warning(f"LHI: Failed to generate {section_name}: {e}")
             continue
@@ -2871,8 +3017,8 @@ async def generate_lhi_pdf(activity_id: str, _user: dict = Depends(require_user_
     merger.close()
     output.seek(0)
 
-    if output.getbuffer().nbytes == 0:
-        raise HTTPException(status_code=500, detail="Gagal generate LHI - tidak ada data")
+    if sections_added == 0:
+        raise HTTPException(status_code=500, detail="Gagal generate LHI - tidak ada bagian yang berhasil dibuat")
 
     filename = f"LHI_Lengkap_{activity_id[:8]}.pdf"
     return StreamingResponse(output, media_type="application/pdf",
