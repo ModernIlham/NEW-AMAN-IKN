@@ -50,6 +50,7 @@ import { useRowLocking } from "@/hooks/useRowLocking";
 import { useAssetFilters } from "@/hooks/useAssetFilters";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useDragDropImport } from "@/hooks/useDragDropImport";
+import { useBackGuard } from "@/hooks/useBackGuard";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -980,6 +981,26 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     if (!editAssetForForm?.id) return -1;
     return assets.findIndex(a => a.id === editAssetForForm.id);
   }, [editAssetForForm?.id, assets]);
+
+  // Tombol Back/Undo browser: jangan keluar aplikasi — tutup overlay teratas
+  // dulu, dan bila tak ada, kembali ke daftar kegiatan (tetap di aplikasi).
+  const handleAppBack = useCallback(() => {
+    if (kartuIdentity) { setKartuIdentity(null); return; }
+    if (dialogs.import) { closeDialog('import'); return; }
+    if (dialogs.userManagement) { closeDialog('userManagement'); return; }
+    if (dialogs.categoryManager) { closeDialog('categoryManager'); return; }
+    if (dialogs.bulkDelete) { setDialog('bulkDelete', false); return; }
+    if (auditOpen) { setAuditOpen(false); return; }
+    if (selectedAssets.size > 0) { clearSelection(); return; }
+    // Form edit versi mobile adalah overlay (di desktop selalu tampil) — tutup
+    // hanya di layar kecil agar tidak mengganggu panel desktop.
+    if (isSidebarOpen && typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches) {
+      handleFormClose(); return;
+    }
+    if (showAdvancedFilter) { setShowAdvancedFilter(false); return; }
+    onBack();
+  }, [kartuIdentity, dialogs, auditOpen, selectedAssets, isSidebarOpen, showAdvancedFilter, closeDialog, setDialog, clearSelection, handleFormClose, setShowAdvancedFilter, onBack]);
+  useBackGuard(handleAppBack);
 
   // === RENDER ===
   return (

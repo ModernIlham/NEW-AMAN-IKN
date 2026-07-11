@@ -5,6 +5,7 @@ import { Loader2, X, ChevronLeft, ChevronRight, MapPin, Tag, User, Building2, Qr
 import AssetGalleryCard from "./AssetGalleryCard";
 import { TooltipProvider } from "../ui/tooltip";
 import { authMediaUrl } from "../../lib/mediaUrl";
+import { useBackGuard } from "../../hooks/useBackGuard";
 import axios from "axios";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -64,6 +65,10 @@ const Lightbox = memo(({ asset, onClose, onEdit }) => {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [photos.length, onClose]);
+
+  // Back/Undo browser saat lightbox terbuka → tutup lightbox, bukan pindah
+  // halaman. Komponen ini hanya ter-mount saat terbuka, jadi guard aktif penuh.
+  useBackGuard(onClose);
 
   // Lock background scroll while the lightbox is open (stops the page
   // behind from scrolling / "bocor" under the popup on mobile).
