@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from "react";
-import { ArrowLeft, Download, FileText, Presentation, ChevronDown, ChevronRight, Package, Shield, Users, Camera, Upload, BarChart3, FileSpreadsheet, Printer, RefreshCw, Globe, CheckCircle2, XCircle, Clock, Layers, Database, Server, Monitor, Wifi, Lock, Zap, BookOpen, DollarSign, Calendar, Target, AlertTriangle, MapPinned, GitBranch } from "lucide-react";
+import { ArrowLeft, Download, FileText, Presentation, ChevronDown, ChevronRight, Package, Shield, Users, Camera, Upload, BarChart3, FileSpreadsheet, Printer, RefreshCw, Globe, CheckCircle2, XCircle, Clock, Layers, Database, Server, Monitor, Wifi, Lock, Zap, BookOpen, DollarSign, Calendar, Target, AlertTriangle, MapPinned, GitBranch, Sparkles } from "lucide-react";
 import { downloadFileWithProgress } from "../lib/downloadFile";
 
 const API = process.env.REACT_APP_BACKEND_URL;
@@ -116,6 +116,35 @@ function ArchBlock({ icon: Icon, title, items, color }) {
       <ul className="space-y-1.5">
         {items.map((item, i) => (
           <li key={i} className="text-xs text-slate-400">{item}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// Kartu catatan rilis — dipakai bagian "Apa yang Baru".
+function ReleaseCard({ tag, date, title, points, color = "blue" }) {
+  const chipColors = {
+    blue: "bg-blue-500/15 text-blue-300 border-blue-500/30",
+    teal: "bg-teal-500/15 text-teal-300 border-teal-500/30",
+    orange: "bg-orange-500/15 text-orange-300 border-orange-500/30",
+    green: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
+    purple: "bg-purple-500/15 text-purple-300 border-purple-500/30",
+    cyan: "bg-cyan-500/15 text-cyan-300 border-cyan-500/30",
+  };
+  return (
+    <div className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-5 hover:border-slate-600/70 transition-colors">
+      <div className="flex items-center gap-2 mb-2">
+        <span className={`px-2 py-0.5 rounded-full border text-[10px] font-bold tracking-wide ${chipColors[color]}`}>{tag}</span>
+        <span className="text-[11px] text-slate-500">{date}</span>
+      </div>
+      <h4 className="font-semibold text-white text-sm mb-2">{title}</h4>
+      <ul className="space-y-1.5">
+        {points.map((p, i) => (
+          <li key={i} className="text-xs text-slate-400 flex items-start gap-1.5 leading-relaxed">
+            <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0 mt-0.5" />
+            <span>{p}</span>
+          </li>
         ))}
       </ul>
     </div>
@@ -278,24 +307,34 @@ export default function InfoPage({ onBack }) {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 py-10">
+      <div className="relative max-w-7xl mx-auto px-6 py-10 overflow-x-clip">
+        {/* Cahaya latar hero — dekoratif saja */}
+        <div className="pointer-events-none absolute -top-28 left-1/2 -translate-x-1/2 w-[720px] h-[420px] bg-blue-600/15 blur-[120px] rounded-full" aria-hidden="true" />
+        <div className="pointer-events-none absolute top-24 right-[-120px] w-[380px] h-[280px] bg-cyan-500/10 blur-[100px] rounded-full" aria-hidden="true" />
+
         {/* ── HERO ── */}
-        <div className="text-center mb-16">
+        <div className="relative text-center mb-16">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-blue-500/10 border border-blue-500/20 rounded-full text-blue-400 text-xs mb-6">
             <Zap className="w-3.5 h-3.5" />
-            Product Requirements Document — v2.2 (Juli 2026)
+            Product Requirements Document — v2.3 · Juli 2026
           </div>
           <h1 className="text-4xl md:text-5xl font-bold text-white mb-4 leading-tight">
             AMAN<br />
             <span className="bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">Aplikasi Manajemen Aset Negara</span>
           </h1>
-          <p className="text-lg text-slate-400 max-w-2xl mx-auto mb-8">
-            Solusi digital komprehensif untuk inventarisasi Barang Milik Negara (BMN) sesuai SE-17/MK.1/2024 Kementerian Keuangan RI —
-            offline-first, kolaborasi real-time multi-user, pengesahan berkekuatan dokumen, dan 13+ laporan resmi siap tanda tangan
+          <p className="text-lg text-slate-400 max-w-2xl mx-auto mb-5">
+            Satu aplikasi untuk seluruh siklus inventarisasi Barang Milik Negara: dari impor data SIMAN,
+            pendataan lapangan dengan kamera dan scan QR, sampai laporan resmi siap tanda tangan dan
+            pengesahan berkekuatan dokumen — tetap bekerja penuh saat sinyal hilang.
           </p>
+          <div className="flex items-center justify-center gap-2 flex-wrap mb-8">
+            {["Offline-first", "Real-time multi-user", "SE-17/MK.1/2024", "Peta GIS + KML/KMZ/SHP", "CI/CD otomatis"].map((chip) => (
+              <span key={chip} className="px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700 text-slate-300 text-[11px]">{chip}</span>
+            ))}
+          </div>
 
           {/* Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-3xl mx-auto">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 max-w-4xl mx-auto">
             <StatCard icon={Layers} value="20+" label="Modul Fitur" color="blue" />
             <StatCard icon={FileText} value="13+" label="Laporan Resmi PDF" color="green" />
             <StatCard icon={MapPinned} value="GIS" label="Peta + KML/KMZ/SHP" color="cyan" />
@@ -337,6 +376,71 @@ export default function InfoPage({ onBack }) {
         </div>
 
         {/* ── SECTIONS ── */}
+        <CollapsibleSection title="Apa yang Baru — Rilis v2.3" icon={Sparkles} defaultOpen={true}>
+          <p className="text-sm text-slate-400 mb-5">
+            Rangkaian pembaruan Juli 2026 berfokus pada pekerjaan lapangan: peta aset interaktif,
+            alur kamera + scan QR beruntun, dan laporan dengan kop surat resmi. Detail lengkap per
+            perubahan tercatat di CHANGELOG repositori.
+          </p>
+          <div className="grid md:grid-cols-2 gap-4">
+            <ReleaseCard
+              tag="PETA ASET" date="Juli 2026" color="teal"
+              title="Peta interaktif menyatu di halaman utama"
+              points={[
+                "Lembar peta menggantikan baris data tanpa meninggalkan halaman — header, mode, dan filter tetap aktif",
+                "Pencarian, filter lanjutan, dan Barang Serupa langsung menyaring pin di peta",
+                "Geser pin untuk membetulkan koordinat — tersimpan otomatis dan aman dari konflik antar-pengguna",
+                "Pin berlapis info: warna status, badge foto, border hijau saat pengguna + NIP + BAST lengkap",
+              ]}
+            />
+            <ReleaseCard
+              tag="EKSPOR GIS" date="Juli 2026" color="cyan"
+              title="Unduh titik peta ke KML, KMZ, dan Shapefile"
+              points={[
+                "27 atribut per titik — identitas, kondisi, pengguna, sampai jumlah foto",
+                "Mengikuti filter yang sedang aktif, jadi hasil unduhan = apa yang tampil",
+                "Shapefile ZIP lengkap dengan proyeksi WGS84 (.prj) — siap dibuka di ArcGIS/QGIS",
+              ]}
+            />
+            <ReleaseCard
+              tag="KAMERA LAPANGAN" date="Juli 2026" color="orange"
+              title="Alur pendataan beruntun tanpa keluar kamera"
+              points={[
+                "Flash, gestur kecerahan (tahan + geser), dan watermark jam/GPS otomatis",
+                "Simpan & Baru instan — antrean simpan bekerja di belakang, petugas lanjut ke aset berikutnya",
+                "Simpan & Scan: scan QR stiker → panel edit selengkap lembar edit cepat → scan berikutnya",
+              ]}
+            />
+            <ReleaseCard
+              tag="LAPORAN" date="Juli 2026" color="green"
+              title="Kop surat resmi & penanda tangan yang benar"
+              points={[
+                "Kop 3 baris (instansi, unit, sub-unit) + alamat multi-baris yang dapat diatur sendiri",
+                "Seluruh tanda tangan memakai jabatan \"Kuasa Pengguna Barang\"",
+                "Blok identitas rata titik dua, tanggal gaya Indonesia di semua laporan",
+              ]}
+            />
+            <ReleaseCard
+              tag="FONDASI" date="Juli 2026" color="purple"
+              title="Gerbang kualitas otomatis di setiap perubahan"
+              points={[
+                "GitHub Actions: test backend + lint & build frontend wajib hijau sebelum merge",
+                "Auto-deploy ke server produksi begitu perubahan masuk ke main",
+                "Registry field aset — satu sumber kebenaran, drift antar-modul tertangkap test",
+              ]}
+            />
+            <ReleaseCard
+              tag="MOBILE" date="Juli 2026" color="blue"
+              title="Tata letak HP yang lebih lega"
+              points={[
+                "Padding & jarak antar blok dirapatkan khusus layar kecil — baris data dapat ruang lebih",
+                "Bar peta dua baris di HP, popup pin dengan bingkai foto dan info padat",
+                "Target sentuh tombol tetap ≥44px sesuai pedoman aksesibilitas",
+              ]}
+            />
+          </div>
+        </CollapsibleSection>
+
         <CollapsibleSection title="Latar Belakang & Dasar Hukum" icon={BookOpen} defaultOpen={true}>
           <div className="grid md:grid-cols-2 gap-8">
             <div>
@@ -558,7 +662,7 @@ export default function InfoPage({ onBack }) {
         </CollapsibleSection>
 
         <CollapsibleSection title="Timeline Implementasi" icon={Calendar}>
-          <div className="grid grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
             {[
               { period: "Bulan 1-2", title: "Analisis & Desain", items: ["Requirement gathering", "UI/UX prototyping", "Desain database"], color: "blue" },
               { period: "Bulan 3-5", title: "Pengembangan Core", items: ["Backend API", "Frontend UI", "Database setup"], color: "green" },
@@ -635,7 +739,7 @@ export default function InfoPage({ onBack }) {
             Sistem Inventarisasi Barang Milik Negara (BMN) — sebelumnya InventoryMaster Pro
           </p>
           <p className="text-xs text-slate-600 mt-2">
-            &copy; {new Date().getFullYear()} AMAN v2.2 | Product Requirements Document
+            &copy; {new Date().getFullYear()} AMAN v2.3 | Product Requirements Document
           </p>
         </div>
       </div>

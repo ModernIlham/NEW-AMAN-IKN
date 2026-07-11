@@ -12,6 +12,7 @@ import {
 } from "../ui/select";
 import { getSnapshotAssets } from "../../lib/offlineSnapshot";
 import { downloadFileWithProgress } from "../../lib/downloadFile";
+import { authMediaUrl } from "../../lib/mediaUrl";
 import { useBackGuard } from "../../hooks/useBackGuard";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -29,6 +30,12 @@ const STATUS_COLORS = {
   "Berlebih": "#d97706",
   "Sengketa": "#7c3aed",
   "Belum Diinventarisasi": "#64748b",
+};
+
+const CONDITION_COLORS = {
+  "Baik": "#059669",
+  "Rusak Ringan": "#d97706",
+  "Rusak Berat": "#dc2626",
 };
 
 // Data pengguna barang LENGKAP = nama pengguna + NIP/NIK terisi + BAST
@@ -255,22 +262,100 @@ const AssetMapFullView = memo(function AssetMapFullView({
   }, []);
 
   // Konten popup dibangun ulang tiap dibuka (data baris terbaru dari entry).
+  // Tata letak padat: bingkai foto (bila ada) + identitas, pill status/kondisi
+  // berwarna, baris info berlabel, koordinat, tombol Edit selebar popup.
   const buildPopupEl = useCallback((entry) => {
     const row = entry.row;
     const lat = parseCoord(row.koordinat_latitude);
     const lng = parseCoord(row.koordinat_longitude);
+    const photoCount = Number(row.photo_count) || 0;
+    const status = row.inventory_status || "Belum Diinventarisasi";
+    const statusColor = STATUS_COLORS[status] || STATUS_COLORS["Belum Diinventarisasi"];
+    const condColor = CONDITION_COLORS[row.condition] || "#64748b";
+
     const el = document.createElement("div");
-    el.style.minWidth = "180px";
-    el.innerHTML = `
-      <div style="font-weight:700;font-size:12px;margin-bottom:2px">${esc(row.asset_name || "-")}</div>
-      <div style="font-size:11px;color:#475569">${esc(row.asset_code || "-")}${row.NUP ? ` &bull; NUP ${esc(row.NUP)}` : ""}</div>
-      ${row.location ? `<div style="font-size:11px;color:#475569">${esc(row.location)}</div>` : ""}
-      <div style="font-size:11px;color:#475569">${esc(row.inventory_status || "Belum Diinventarisasi")}</div>
-      <div style="font-family:monospace;font-size:10px;color:#64748b;margin-top:2px">${lat?.toFixed(6)}, ${lng?.toFixed(6)}</div>`;
+    el.style.cssText = "width:232px;line-height:1.35";
+
+    // ── Kepala: bingkai foto (hanya bila aset punya foto) + nama/kode ──
+    const head = document.createElement("div");
+    head.style.cssText = "display:flex;gap:8px;align-items:flex-start";
+    // Sumber gambar: online = streaming 256px (ter-cache browser); offline =
+    // thumbnail sampul yang ikut snapshot. Tanpa keduanya → tanpa bingkai,
+    // blok judul otomatis melebar (flex).
+    const coverSrc = navigator.onLine
+      ? authMediaUrl(`${API}/assets/${row.id}/photos/${row.thumbnail_index || 0}?v=${row.version || 1}&w=256`)
+      : (row.thumbnail || "");
+    if (photoCount > 0 && coverSrc) {
+      const frame = document.createElement("div");
+      frame.style.cssText = "position:relative;width:62px;height:62px;flex:0 0 62px;border-radius:10px;overflow:hidden;border:2px solid #e2e8f0;box-shadow:0 1px 3px rgba(15,23,42,.18);background:#f1f5f9";
+      const img = document.createElement("img");
+      img.alt = "";
+      img.loading = "lazy";
+      img.style.cssText = "width:100%;height:100%;object-fit:cover;display:block";
+      const fallback = row.thumbnail || "";
+      img.onerror = () => {
+        // Streaming gagal (token/jaringan) → pakai thumbnail snapshot;
+        // tanpa cadangan → lepas bingkai supaya tak ada kotak kosong.
+        if (fallback && img.src !== fallback) img.src = fallback;
+        else frame.remove();
+      };
+      img.src = coverSrc;
+      frame.appendChild(img);
+      if (photoCount > 1) {
+        const badge = document.createElement("span");
+        badge.textContent = `${photoCount} foto`;
+        badge.style.cssText = "position:absolute;bottom:3px;right:3px;background:rgba(15,23,42,.78);color:#fff;font-size:8.5px;font-weight:700;padding:1px 5px;border-radius:6px";
+        frame.appendChild(badge);
+      }
+      head.appendChild(frame);
+    }
+    const title = document.createElement("div");
+    title.style.cssText = "min-width:0;flex:1";
+    title.innerHTML = `
+      <div style="font-weight:700;font-size:12.5px;color:#0f172a;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${esc(row.asset_name || "-")}</div>
+      <div style="font-size:10.5px;color:#64748b;margin-top:2px">${esc(row.asset_code || "-")}${row.NUP ? ` &bull; NUP ${esc(row.NUP)}` : ""}</div>`;
+    head.appendChild(title);
+    el.appendChild(head);
+
+    // ── Pill status inventarisasi + kondisi + kelengkapan pengguna ──
+    const pill = (text, color) =>
+      `<span style="display:inline-flex;align-items:center;padding:2px 7px;border-radius:999px;font-size:9.5px;font-weight:700;background:${color}1a;color:${color};border:1px solid ${color}40">${esc(text)}</span>`;
+    const badges = document.createElement("div");
+    badges.style.cssText = "display:flex;flex-wrap:wrap;gap:4px;margin-top:7px";
+    badges.innerHTML = pill(status, statusColor)
+      + (row.condition ? pill(row.condition, condColor) : "")
+      + (isPenggunaComplete(row) ? pill("Pengguna lengkap ✓", "#16a34a") : "");
+    el.appendChild(badges);
+
+    // ── Baris info berlabel — hanya yang terisi, supaya tetap padat ──
+    const infoRows = [
+      ["Merk/Tipe", [row.brand, row.model].filter((v) => String(v || "").trim()).join(" — ")],
+      ["Kategori", row.category],
+      ["Lokasi", row.location],
+      ["Pengguna", String(row.user || "").trim()
+        ? `${row.user}${String(row.pengguna_nip || "").trim() ? ` · ${row.pengguna_nip}` : ""}`
+        : ""],
+    ].filter(([, v]) => String(v || "").trim());
+    if (infoRows.length > 0) {
+      const info = document.createElement("div");
+      info.style.cssText = "margin-top:7px;padding-top:6px;border-top:1px solid #f1f5f9";
+      info.innerHTML = infoRows.map(([label, value]) => `
+        <div style="display:flex;gap:6px;font-size:10.5px;margin-top:2px">
+          <span style="flex:0 0 56px;color:#94a3b8">${esc(label)}</span>
+          <span style="min-width:0;color:#334155;font-weight:500;word-break:break-word">${esc(value)}</span>
+        </div>`).join("");
+      el.appendChild(info);
+    }
+
+    // ── Koordinat + tombol Edit ──
+    const coords = document.createElement("div");
+    coords.style.cssText = "font-family:ui-monospace,SFMono-Regular,monospace;font-size:9.5px;color:#94a3b8;margin-top:6px";
+    coords.textContent = `${lat?.toFixed(6)}, ${lng?.toFixed(6)}`;
+    el.appendChild(coords);
     if (onEditRef.current) {
       const btn = document.createElement("button");
       btn.textContent = "Edit Aset";
-      btn.style.cssText = "margin-top:6px;padding:4px 10px;background:#2563eb;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer";
+      btn.style.cssText = "display:block;width:100%;margin-top:7px;padding:7px 0;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:11.5px;font-weight:700;cursor:pointer";
       btn.addEventListener("click", () => {
         entry.marker.closePopup();
         onEditRef.current?.(entry.row); // peta tetap terbuka — form edit muncul di atas/sampingnya
@@ -363,8 +448,11 @@ const AssetMapFullView = memo(function AssetMapFullView({
 
   return (
     <div className="space-y-2" data-testid="asset-map-fullview">
-      {/* ── Bar peta: info + filter kelompok + unduh + tutup ── */}
-      <div className="bg-card rounded-xl border border-border shadow-sm p-2 flex items-center gap-2 flex-wrap">
+      {/* ── Bar peta: info + filter kelompok + unduh + tutup ──
+          HP: DUA baris — [ikon · judul · tutup] lalu [filter kelompok · unduh
+          · muat ulang] supaya teks jumlah titik tidak terpotong dan kontrol
+          tidak berdesakan; sm+ kembali satu baris seperti semula. */}
+      <div className="bg-card rounded-xl border border-border shadow-sm p-1.5 sm:p-2 flex items-center gap-1.5 sm:gap-2 flex-wrap">
         <span className="w-8 h-8 rounded-lg bg-teal-600 flex items-center justify-center flex-shrink-0">
           <MapPinned className="w-4 h-4 text-white" />
         </span>
@@ -372,10 +460,30 @@ const AssetMapFullView = memo(function AssetMapFullView({
           <p className="text-xs font-bold text-foreground leading-tight">Peta Aset</p>
           <p className="text-[11px] text-muted-foreground truncate">
             {loadedOnce
-              ? <><span className="font-semibold text-foreground/80">{displayRows.length}</span> titik dari {total} aset{activeFilterCount > 0 ? " (terfilter)" : ""}{truncated ? " — sebagian belum dimuat" : ""}</>
+              ? (
+                <>
+                  <span className="sm:hidden">
+                    <span className="font-semibold text-foreground/80">{displayRows.length}</span>/{total} titik{activeFilterCount > 0 ? " · terfilter" : ""}{truncated ? " · belum semua termuat" : ""}
+                  </span>
+                  <span className="hidden sm:inline">
+                    <span className="font-semibold text-foreground/80">{displayRows.length}</span> titik dari {total} aset{activeFilterCount > 0 ? " (terfilter)" : ""}{truncated ? " — sebagian belum dimuat" : ""}
+                  </span>
+                </>
+              )
               : (activityName || "Memuat…")}
           </p>
         </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Tutup peta"
+          className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-accent flex-shrink-0 sm:order-last"
+          data-testid="asset-map-close"
+        >
+          <X className="w-4 h-4" />
+        </button>
+        {/* Pemutus baris — hanya HP: kontrol di bawah pindah ke baris kedua */}
+        <span className="basis-full h-0 sm:hidden" aria-hidden="true" />
         {activeFilterCount > 0 && (
           <span className="hidden md:flex items-center gap-1 px-2 h-7 rounded-full bg-blue-600/10 text-blue-600 dark:text-blue-400 text-[11px] font-semibold flex-shrink-0" data-testid="asset-map-filter-badge">
             <Filter className="w-3 h-3" />{activeFilterCount} filter
@@ -384,7 +492,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
         {/* Filter Barang Serupa — kelompok kode+nama dari data peta */}
         {groups.length > 0 && (
           <Select value={groupKey} onValueChange={changeGroup}>
-            <SelectTrigger className="h-9 w-auto max-w-[190px] sm:max-w-[240px] px-2 text-[11px] gap-1 flex-shrink-0" aria-label="Filter barang serupa" data-testid="asset-map-group-filter">
+            <SelectTrigger className="h-9 flex-1 min-w-0 sm:flex-none sm:w-auto sm:max-w-[240px] px-2 text-[11px] gap-1" aria-label="Filter barang serupa" data-testid="asset-map-group-filter">
               <Layers className="w-3.5 h-3.5 text-violet-500 flex-shrink-0" />
               <SelectValue />
             </SelectTrigger>
@@ -429,15 +537,6 @@ const AssetMapFullView = memo(function AssetMapFullView({
         >
           {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
           <span className="hidden sm:inline">Muat Ulang</span>
-        </button>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Tutup peta"
-          className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-accent flex-shrink-0"
-          data-testid="asset-map-close"
-        >
-          <X className="w-4 h-4" />
         </button>
       </div>
 

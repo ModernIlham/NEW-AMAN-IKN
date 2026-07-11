@@ -48,6 +48,35 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#67] Popup pin berbingkai foto + bar peta ringkas di HP + halaman PRD v2.3 — 2026-07-11
+
+- **Popup marker peta dirombak** — padat & informatif: bingkai foto sampul
+  62×62 (streaming 256px saat online, thumbnail snapshot saat offline; tanpa
+  foto → blok judul melebar penuh), badge "N foto", pill status/kondisi
+  berwarna + pill hijau "Pengguna lengkap ✓", baris info berlabel (Merk/Tipe,
+  Kategori, Lokasi, Pengguna+NIP) yang hanya tampil bila terisi, tombol
+  **Edit Aset** selebar popup.
+- **Bar peta dua baris di HP**: [ikon · judul · tutup] lalu [filter kelompok
+  (melebar) · unduh · muat ulang] — teks jumlah titik tidak lagi terpotong
+  (versi ringkas "616/616 titik"); ≥sm tetap satu baris.
+- **Halaman PRD tersembunyi → v2.3**: bagian baru "Apa yang Baru — Rilis
+  v2.3" (6 kartu catatan rilis), hero dipoles (copy, chip kapabilitas, cahaya
+  latar), grid statistik 5 kartu dibetulkan, timeline implementasi responsif.
+
+## [#66] Hover ikon peta, tata letak mode pindai, & panel Edit Info kamera — 2026-07-11
+
+- Tombol peta di toolbar: warna teks saat **hover di light mode** dibetulkan
+  (dulu putih di atas latar terang → tidak terlihat).
+- **Mode pindai kamera**: saat scanner aktif, tombol shutter/zoom/aksi
+  disembunyikan dan diganti bilah pindai dengan tombol "Batal Scan" lebar
+  penuh — tidak ada lagi kontrol bertumpuk.
+- **Panel Edit Info kamera selengkap lembar edit cepat inventarisasi**:
+  chip Status & Kondisi, blok detail kondisional (klasifikasi/sub, asal-usul,
+  sengketa, tindak lanjut), stiker + ukuran, Pengguna Barang (melekat ke,
+  jenis operasional, jabatan, nama, NIP/NIK) — konstanta diimpor dari
+  `InventoryFieldSheet` (satu sumber). Tombol **"Simpan & Scan"** di dalam
+  panel: simpan → kamera kembali memindai aset berikutnya.
+
 ## [#65] Peta jadi lembar di halaman utama + alur Simpan & Scan + pembaruan dokumen — 2026-07-11
 
 - **Peta Aset kini lembar di halaman utama** (bukan overlay lepas): header,
