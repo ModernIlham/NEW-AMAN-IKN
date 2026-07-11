@@ -1,13 +1,15 @@
-import React, { memo, useCallback, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import axios from "axios";
-import { MapPinned, RefreshCw, Loader2, Move, X, Filter, Download, Camera } from "lucide-react";
+import { MapPinned, RefreshCw, Loader2, Move, X, Filter, Download, Camera, Layers } from "lucide-react";
 import { toast } from "sonner";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "../ui/select";
 import { getSnapshotAssets } from "../../lib/offlineSnapshot";
 import { downloadFileWithProgress } from "../../lib/downloadFile";
 import { useBackGuard } from "../../hooks/useBackGuard";
@@ -69,22 +71,24 @@ function esc(str) {
 }
 
 /**
- * Peta Aset HALAMAN PENUH per kegiatan.
+ * Peta Aset — LEMBAR di halaman utama (menggantikan area baris data saat
+ * terbuka). Header, mode Dashboard/Inventarisasi, dan toolbar filter tetap
+ * tampil di atasnya; form tambah/edit aset tetap bisa terbuka di sampingnya
+ * (desktop) atau di atasnya (HP) — selesai edit kembali ke peta.
  *
- * - Mengikuti filter aktif dashboard: online memakai GET /assets dengan
- *   parameter yang SAMA dengan daftar (search + kategori + filter lanjutan,
- *   via buildParams), offline memakai snapshot + clientFilter yang sama
- *   dengan daftar offline.
- * - Pin berwarna status; bisa digeser (bila boleh edit) → koordinat aset
- *   otomatis tersimpan lewat antrean simpan yang sama dengan form.
- * - Tombol Back HP menutup peta (bukan keluar aplikasi).
+ * - Mengikuti filter aktif (search + kategori + filter lanjutan) — online via
+ *   GET /assets, offline via snapshot + clientFilter yang sama dengan daftar.
+ * - Filter "Barang Serupa" bawaan: kelompok (kode+nama, ≥2 unit) diturunkan
+ *   dari data peta sendiri sehingga jalan juga saat offline.
+ * - Pin digeser (bila boleh edit) → koordinat tersimpan otomatis.
+ * - Satu popup per pin (tanpa tooltip ganda). Back HP menutup peta.
  */
 const AssetMapFullView = memo(function AssetMapFullView({
   activityId,
   activityName = "",
   onClose,
   canEdit = false,
-  onEditAsset,        // (row) => void — tutup peta lalu buka form edit
+  onEditAsset,        // (row) => void — buka form edit (peta TETAP terbuka)
   onSaveCoords,       // (row, lat, lng) => void — simpan koordinat (throw = tolak)
   buildParams,        // () => URLSearchParams — filter aktif dashboard (tanpa page)
   clientFilter,       // (rows) => rows — filter yang sama utk data snapshot offline
@@ -93,13 +97,14 @@ const AssetMapFullView = memo(function AssetMapFullView({
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const layerRef = useRef(null);         // L.LayerGroup pin
-  const markersRef = useRef(new Map());  // id -> { marker, row, lat, lng, color, draggable }
-  const didFitRef = useRef(false);       // fitBounds hanya saat muat pertama
+  const markersRef = useRef(new Map());  // id -> { marker, row, lat, lng, iconKey, draggable }
+  const didFitRef = useRef(false);       // fitBounds hanya saat muat pertama / ganti kelompok
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
   const [truncated, setTruncated] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadedOnce, setLoadedOnce] = useState(false);
+  const [groupKey, setGroupKey] = useState("__semua__"); // filter Barang Serupa
   // Guard staleness: hanya hasil load TERBARU yang boleh menulis state —
   // load lama (loop multi-halaman) bisa selesai SETELAH load baru.
   const loadSeqRef = useRef(0);
@@ -111,15 +116,8 @@ const AssetMapFullView = memo(function AssetMapFullView({
   const onCloseRef = useRef(onClose);
   useEffect(() => { onEditRef.current = onEditAsset; onSaveRef.current = onSaveCoords; onCloseRef.current = onClose; });
 
-  // Back HP menutup peta, bukan keluar aplikasi.
+  // Back HP menutup lembar peta (kembali ke baris data), bukan keluar app.
   useBackGuard(useCallback(() => onCloseRef.current?.(), []));
-
-  // Kunci scroll latar selama peta terbuka.
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = prev; };
-  }, []);
 
   const load = useCallback(async () => {
     if (!activityId) return;
@@ -177,7 +175,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
     }
   }, [activityId, buildParams, clientFilter]);
 
-  // Muat data saat halaman peta dibuka.
+  // Muat data saat lembar peta dibuka.
   useEffect(() => { didFitRef.current = false; load(); }, [load]);
 
   // Unduh titik peta (KML/KMZ/SHP) lengkap dengan atribut — memakai filter
@@ -192,6 +190,32 @@ const AssetMapFullView = memo(function AssetMapFullView({
       timeoutMessage: "Ekspor peta terlalu lama — coba persempit filter",
     }).catch(() => {});
   }, [buildParams]);
+
+  // Kelompok Barang Serupa diturunkan dari data peta (kode+nama, ≥2 unit) —
+  // ikut filter aktif dan tetap tersedia saat offline.
+  const groups = useMemo(() => {
+    const byKey = new Map();
+    for (const r of rows) {
+      const key = `${r.asset_code || ""}||${r.asset_name || ""}`;
+      const g = byKey.get(key) || { key, code: r.asset_code || "-", name: r.asset_name || "-", count: 0 };
+      g.count += 1;
+      byKey.set(key, g);
+    }
+    return Array.from(byKey.values()).filter((g) => g.count >= 2)
+      .sort((a, b) => b.count - a.count).slice(0, 100);
+  }, [rows]);
+
+  // Baris yang tampil = baris peta ± filter kelompok Barang Serupa.
+  const displayRows = useMemo(() => {
+    if (groupKey === "__semua__") return rows;
+    return rows.filter((r) => `${r.asset_code || ""}||${r.asset_name || ""}` === groupKey);
+  }, [rows, groupKey]);
+
+  // Ganti kelompok → pusatkan ulang peta ke pin kelompok tsb.
+  const changeGroup = useCallback((v) => {
+    setGroupKey(v);
+    didFitRef.current = false;
+  }, []);
 
   // Init peta pada mount; rusak saat unmount.
   useEffect(() => {
@@ -247,7 +271,10 @@ const AssetMapFullView = memo(function AssetMapFullView({
       const btn = document.createElement("button");
       btn.textContent = "Edit Aset";
       btn.style.cssText = "margin-top:6px;padding:4px 10px;background:#2563eb;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer";
-      btn.addEventListener("click", () => onEditRef.current?.(entry.row));
+      btn.addEventListener("click", () => {
+        entry.marker.closePopup();
+        onEditRef.current?.(entry.row); // peta tetap terbuka — form edit muncul di atas/sampingnya
+      });
       el.appendChild(btn);
     }
     return el;
@@ -262,7 +289,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
     const seen = new Set();
     const bounds = [];
 
-    for (const row of rows) {
+    for (const row of displayRows) {
       const lat = parseCoord(row.koordinat_latitude);
       const lng = parseCoord(row.koordinat_longitude);
       if (lat === null || lng === null) continue;
@@ -291,10 +318,9 @@ const AssetMapFullView = memo(function AssetMapFullView({
 
       const marker = L.marker([lat, lng], { icon: markerIcon(color, hasPhoto, complete), draggable: !!canEdit });
       const entry = { marker, row, lat, lng, iconKey, draggable: !!canEdit };
-      // Konten popup/tooltip sebagai fungsi → dievaluasi saat dibuka dengan
-      // data terbaru; tooltip memakai TEKS ter-escape (leaflet merender HTML).
+      // SATU popup per pin (tanpa tooltip hover — dulu tooltip + popup tampil
+      // bertumpuk saat pin diketuk di layar sentuh).
       marker.bindPopup(() => buildPopupEl(entry));
-      marker.bindTooltip(() => esc(entry.row.asset_name || entry.row.asset_code || "Aset"), { direction: "top", offset: [0, -20] });
 
       marker.on("dragend", () => {
         const ll = marker.getLatLng();
@@ -321,7 +347,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
       markersRef.current.set(row.id, entry);
     }
 
-    // Buang pin milik baris yang sudah tidak ada (mis. filter berubah)
+    // Buang pin milik baris yang tak tampil (filter kelompok/filter berubah)
     for (const [id, entry] of Array.from(markersRef.current.entries())) {
       if (!seen.has(id)) {
         entry.marker.remove();
@@ -333,26 +359,42 @@ const AssetMapFullView = memo(function AssetMapFullView({
       didFitRef.current = true;
       map.fitBounds(bounds, { padding: [30, 30], maxZoom: 18 });
     }
-  }, [rows, canEdit, buildPopupEl, refreshRowVersion]);
+  }, [displayRows, canEdit, buildPopupEl, refreshRowVersion]);
 
-  return createPortal(
-    <div className="fixed inset-0 z-[70] bg-background flex flex-col" role="dialog" aria-modal="true" aria-label="Peta Aset" data-testid="asset-map-fullview">
-      {/* ── Header ── */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-card flex-shrink-0">
-        <span className="w-9 h-9 rounded-lg bg-teal-600 flex items-center justify-center flex-shrink-0">
-          <MapPinned className="w-5 h-5 text-white" />
+  return (
+    <div className="space-y-2" data-testid="asset-map-fullview">
+      {/* ── Bar peta: info + filter kelompok + unduh + tutup ── */}
+      <div className="bg-card rounded-xl border border-border shadow-sm p-2 flex items-center gap-2 flex-wrap">
+        <span className="w-8 h-8 rounded-lg bg-teal-600 flex items-center justify-center flex-shrink-0">
+          <MapPinned className="w-4 h-4 text-white" />
         </span>
         <div className="min-w-0 flex-1">
-          <h2 className="text-sm font-bold text-foreground leading-tight">Peta Aset</h2>
+          <p className="text-xs font-bold text-foreground leading-tight">Peta Aset</p>
           <p className="text-[11px] text-muted-foreground truncate">
-            {activityName || "Kegiatan aktif"}
-            {loadedOnce && <> — <span className="font-semibold text-foreground/80">{rows.length}</span> titik dari {total} aset{activeFilterCount > 0 ? " (terfilter)" : ""}{truncated ? " — sebagian belum dimuat, persempit filter" : ""}</>}
+            {loadedOnce
+              ? <><span className="font-semibold text-foreground/80">{displayRows.length}</span> titik dari {total} aset{activeFilterCount > 0 ? " (terfilter)" : ""}{truncated ? " — sebagian belum dimuat" : ""}</>
+              : (activityName || "Memuat…")}
           </p>
         </div>
         {activeFilterCount > 0 && (
-          <span className="hidden sm:flex items-center gap-1 px-2 h-7 rounded-full bg-blue-600/10 text-blue-600 dark:text-blue-400 text-[11px] font-semibold flex-shrink-0" data-testid="asset-map-filter-badge">
-            <Filter className="w-3 h-3" />{activeFilterCount} filter aktif
+          <span className="hidden md:flex items-center gap-1 px-2 h-7 rounded-full bg-blue-600/10 text-blue-600 dark:text-blue-400 text-[11px] font-semibold flex-shrink-0" data-testid="asset-map-filter-badge">
+            <Filter className="w-3 h-3" />{activeFilterCount} filter
           </span>
+        )}
+        {/* Filter Barang Serupa — kelompok kode+nama dari data peta */}
+        {groups.length > 0 && (
+          <Select value={groupKey} onValueChange={changeGroup}>
+            <SelectTrigger className="h-9 w-auto max-w-[190px] sm:max-w-[240px] px-2 text-[11px] gap-1 flex-shrink-0" aria-label="Filter barang serupa" data-testid="asset-map-group-filter">
+              <Layers className="w-3.5 h-3.5 text-violet-500 flex-shrink-0" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="max-h-72">
+              <SelectItem value="__semua__">Semua barang</SelectItem>
+              {groups.map((g) => (
+                <SelectItem key={g.key} value={g.key}>{g.name} · {g.count} unit</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         )}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -365,8 +407,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
               <span className="hidden sm:inline">Unduh</span>
             </button>
           </DropdownMenuTrigger>
-          {/* z di atas overlay peta (z-[70]) — default konten radix z-50 */}
-          <DropdownMenuContent align="end" className="w-44 z-[80]">
+          <DropdownMenuContent align="end" className="w-44">
             <DropdownMenuItem onClick={() => downloadGeo("kml")} data-testid="map-download-kml">
               <MapPinned className="w-4 h-4 mr-2" />KML (Google Earth)
             </DropdownMenuItem>
@@ -382,7 +423,8 @@ const AssetMapFullView = memo(function AssetMapFullView({
           type="button"
           onClick={() => { didFitRef.current = false; load(); }}
           disabled={loading}
-          className="h-9 px-2.5 rounded-lg border border-border text-xs font-medium text-foreground/80 flex items-center gap-1 hover:bg-accent disabled:opacity-50 flex-shrink-0"
+          className="h-9 w-9 sm:w-auto sm:px-2.5 rounded-lg border border-border text-xs font-medium text-foreground/80 flex items-center justify-center gap-1 hover:bg-accent disabled:opacity-50 flex-shrink-0"
+          aria-label="Muat ulang peta"
           data-testid="asset-map-refresh"
         >
           {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
@@ -392,25 +434,25 @@ const AssetMapFullView = memo(function AssetMapFullView({
           type="button"
           onClick={onClose}
           aria-label="Tutup peta"
-          className="w-9 h-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-accent flex-shrink-0"
+          className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-accent flex-shrink-0"
           data-testid="asset-map-close"
         >
-          <X className="w-5 h-5" />
+          <X className="w-4 h-4" />
         </button>
       </div>
 
-      {/* ── Peta (isi seluruh sisa layar) ── */}
-      <div className="relative flex-1 min-h-0">
-        <div ref={containerRef} className="absolute inset-0 z-0" data-testid="asset-map-canvas" />
+      {/* ── Peta ── */}
+      <div className="relative bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+        <div ref={containerRef} className="h-[58vh] sm:h-[62vh] lg:h-[calc(100vh-330px)] min-h-[360px] w-full z-0" data-testid="asset-map-canvas" />
         {loading && (
           <div className="absolute inset-0 z-[500] bg-background/50 flex items-center justify-center pointer-events-none">
             <Loader2 className="w-7 h-7 animate-spin text-teal-600" />
           </div>
         )}
-        {loadedOnce && !loading && rows.length === 0 && (
+        {loadedOnce && !loading && displayRows.length === 0 && (
           <div className="absolute inset-x-0 top-3 z-[500] flex justify-center pointer-events-none px-4">
             <span className="px-3 py-1.5 rounded-full bg-background/90 border border-border text-xs text-muted-foreground shadow text-center">
-              {activeFilterCount > 0
+              {activeFilterCount > 0 || groupKey !== "__semua__"
                 ? "Tidak ada aset berkoordinat yang cocok dengan filter aktif"
                 : "Belum ada aset dengan titik koordinat di kegiatan ini"}
             </span>
@@ -419,7 +461,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
       </div>
 
       {/* ── Legenda + petunjuk ── */}
-      <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-t border-border bg-card flex-shrink-0 flex-wrap">
+      <div className="bg-card rounded-xl border border-border shadow-sm px-3 py-1.5 flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-3 flex-wrap">
           {Object.entries(STATUS_COLORS).map(([label, color]) => (
             <span key={label} className="flex items-center gap-1 text-[10px] text-muted-foreground">
@@ -427,23 +469,22 @@ const AssetMapFullView = memo(function AssetMapFullView({
               {label}
             </span>
           ))}
+          <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+            <span className="w-3.5 h-3.5 rounded-full bg-slate-900 border border-white shadow flex items-center justify-center"><Camera className="w-2 h-2 text-white" /></span>
+            punya foto
+          </span>
+          <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+            <span className="w-2.5 h-2.5 rounded-full bg-card border-2 shadow" style={{ borderColor: "#16a34a" }} />
+            pengguna + NIP + BAST lengkap
+          </span>
         </div>
-        <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-          <span className="w-3.5 h-3.5 rounded-full bg-slate-900 border border-white shadow flex items-center justify-center"><Camera className="w-2 h-2 text-white" /></span>
-          punya foto
-        </span>
-        <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-          <span className="w-2.5 h-2.5 rounded-full bg-card border-2 shadow" style={{ borderColor: "#16a34a" }} />
-          pengguna + NIP + BAST lengkap
-        </span>
         {canEdit && (
           <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
             <Move className="w-3 h-3" />Geser pin untuk membetulkan koordinat — tersimpan otomatis
           </span>
         )}
       </div>
-    </div>,
-    document.body
+    </div>
   );
 });
 

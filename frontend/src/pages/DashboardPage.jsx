@@ -952,6 +952,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
          ?? null)
       : null;
     const isScan = typeof direction === "string" && direction.startsWith("camera:scan:");
+    const isStay = direction === "camera:stay"; // simpan tanpa pindah aset (alur Simpan & Scan)
     // PATCH kosong (tidak ada perubahan) → tak perlu simpan, langsung navigasi.
     const hasChanges = !isEdit || !usePatch || (payload && Object.keys(payload).length > 0);
     // 1) Optimistic local update (row stays locked until save completes via onItemSaved)
@@ -977,12 +978,16 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
         // removed only via dismissSync → onItemDismissed.
       });
       toast.info("Menyimpan di background...", { duration: 1200 });
-    } else if (isEdit && editId && !isScan) {
+    } else if (isEdit && editId && !isScan && !isStay) {
       // Tanpa perubahan tidak ada antrean yang akan melepas kunci baris
       // (biasanya onItemSaved) — lepaskan sekarang sebelum pindah aset.
       // (Alur scan melepasnya nanti HANYA bila benar-benar pindah aset.)
       unlockAsset(editId);
     }
+
+    // 3a-awal) Simpan tanpa pindah: form/kamera tetap pada aset yang sama —
+    //     scanner dibuka lagi oleh FullCameraSheet setelah tombol ditekan.
+    if (isStay) return;
 
     // 3a) Alur scan QR dari Mode Kamera (edit inventarisasi): cari aset hasil
     //     scan di kegiatan ini, kunci, lalu buka untuk diedit — kamera tetap
@@ -1339,7 +1344,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
             </div>
           </div>
 
-          <div className="p-3 sm:p-4 space-y-2 sm:space-y-3">
+          <div className="p-1.5 sm:p-4 space-y-1.5 sm:space-y-3">
             {/* Banner kegiatan disahkan — seluruh data terkunci */}
             {sealed && (
               <div className="flex items-start gap-2.5 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-300 dark:border-emerald-700 rounded-xl px-3 py-2" data-testid="sealed-banner">
@@ -1368,7 +1373,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
               />
             )}
             <DashboardToolbar
-              searchInput={searchInput} setSearchInput={setSearchInput} onScanCode={handleScannedCode} onOpenMap={() => setMapOpen(true)} categories={categories} filterCategory={filterCategory} setFilterCategory={setFilterCategory}
+              searchInput={searchInput} setSearchInput={setSearchInput} onScanCode={handleScannedCode} onOpenMap={() => setMapOpen(p => !p)} mapOpen={mapOpen} categories={categories} filterCategory={filterCategory} setFilterCategory={setFilterCategory}
               activeFilterCount={activeFilterCount} showAdvancedFilter={showAdvancedFilter} setShowAdvancedFilter={setShowAdvancedFilter}
               sortBy={sortBy} setSortBy={setSortBy} exporting={exporting} handleExport={handleExport} handleExportExecutivePDF={handleExportExecutivePDF}
               handlePreviewExecutive={handlePreviewExecutive} perms={perms} openDialog={openDialog} handlePrintBulkCards={handlePrintBulkCards}
@@ -1380,6 +1385,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
             {/* HP: tiga header panel bertumpuk memakan ~150px sebelum baris data.
                 Diringkas jadi SATU baris chip; panel dirender hanya saat dibuka.
                 Desktop (lg) tetap seperti semula (header panel selalu tampil). */}
+            {!mapOpen && (
             <div className="lg:hidden flex items-center gap-1.5 overflow-x-auto" data-testid="mobile-panel-chips">
               {!inventoryMode && (
                 <button type="button" onClick={handleAnalyticsToggle} data-testid="chip-analytics"
@@ -1398,11 +1404,26 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
                 <Layers className="w-3.5 h-3.5" />Barang Serupa
               </button>
             </div>
-            {!inventoryMode && <div className={analyticsOpen ? "" : "hidden lg:block"}><Suspense fallback={null}><AnalyticsPanel activityId={activity?.id} isOpen={analyticsOpen} onToggle={handleAnalyticsToggle} panelHeight={analyticsPanelHeight} onDragStart={handleAnalyticsDragStart} /></Suspense></div>}
-            {!inventoryMode && <div className={rekapOpen ? "" : "hidden lg:block"}><Suspense fallback={null}><RekapitulasiPanel activityId={activity?.id} isOpen={rekapOpen} onToggle={() => setRekapOpen(p => !p)} /></Suspense></div>}
-            <div className={groupsOpen ? "" : "hidden lg:block"}><Suspense fallback={null}><AssetGroupsPanel activityId={activity?.id} isOpen={groupsOpen} onToggle={() => setGroupsOpen(p => !p)} onBatchEdit={perms.canEdit ? handleGroupBatchEdit : undefined} /></Suspense></div>
+            )}
+            {!inventoryMode && !mapOpen && <div className={analyticsOpen ? "" : "hidden lg:block"}><Suspense fallback={null}><AnalyticsPanel activityId={activity?.id} isOpen={analyticsOpen} onToggle={handleAnalyticsToggle} panelHeight={analyticsPanelHeight} onDragStart={handleAnalyticsDragStart} /></Suspense></div>}
+            {!inventoryMode && !mapOpen && <div className={rekapOpen ? "" : "hidden lg:block"}><Suspense fallback={null}><RekapitulasiPanel activityId={activity?.id} isOpen={rekapOpen} onToggle={() => setRekapOpen(p => !p)} /></Suspense></div>}
+            {!mapOpen && <div className={groupsOpen ? "" : "hidden lg:block"}><Suspense fallback={null}><AssetGroupsPanel activityId={activity?.id} isOpen={groupsOpen} onToggle={() => setGroupsOpen(p => !p)} onBatchEdit={perms.canEdit ? handleGroupBatchEdit : undefined} /></Suspense></div>}
 
-            {loading ? (
+            {mapOpen ? (
+              <Suspense fallback={<div className="py-16 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto text-teal-600" /></div>}>
+                <AssetMapFullView
+                  activityId={activity?.id}
+                  activityName={activity?.nama_kegiatan}
+                  onClose={() => setMapOpen(false)}
+                  canEdit={perms.canEdit}
+                  onEditAsset={perms.canEdit ? handleEdit : undefined}
+                  onSaveCoords={handleMapCoordsSave}
+                  buildParams={buildMapParams}
+                  clientFilter={mapClientFilter}
+                  activeFilterCount={activeFilterCount + (debouncedSearch ? 1 : 0)}
+                />
+              </Suspense>
+            ) : loading ? (
               <LoadingIndicator message={loadingMessage} totalItems={totalItems} pageSize={pageSize} currentPage={currentPage} />
             ) : assets.length === 0 ? (
               (activeFilterCount > 0 || searchInput.trim()) ? (
@@ -1475,27 +1496,6 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
 
         <Suspense fallback={null}><AuditLogPanel activityId={activity?.id} isOpen={auditOpen} onToggle={handleAuditToggle} selectedAssetId={auditAssetId} selectedAssetCode={auditAssetCode} onClearAssetFilter={handleClearAuditFilter} /></Suspense>
 
-        {/* Peta Aset halaman penuh — mengikuti filter aktif daftar */}
-        {mapOpen && (
-          <Suspense fallback={null}>
-            <AssetMapFullView
-              activityId={activity?.id}
-              activityName={activity?.nama_kegiatan}
-              onClose={() => setMapOpen(false)}
-              canEdit={perms.canEdit}
-              onEditAsset={perms.canEdit ? async (row) => {
-                // Tutup peta hanya bila edit benar-benar terbuka — bila baris
-                // dikunci sesi lain/lock gagal, pengguna tetap di peta.
-                const ok = await handleEdit(row);
-                if (ok !== false) setMapOpen(false);
-              } : undefined}
-              onSaveCoords={handleMapCoordsSave}
-              buildParams={buildMapParams}
-              clientFilter={mapClientFilter}
-              activeFilterCount={activeFilterCount + (debouncedSearch ? 1 : 0)}
-            />
-          </Suspense>
-        )}
 
         {/* Scroll to Top Button */}
         <ScrollToTop scrollRef={mainContentRef} />

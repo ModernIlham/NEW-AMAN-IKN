@@ -1550,6 +1550,9 @@ const AssetForm = memo(({
   // Scan QR dari Mode Kamera: simpan perubahan aset saat ini dulu (jalur sama
   // dengan navigasi), lalu induk mencari & membuka aset hasil scan.
   const cameraScanAsset = useCallback((code) => submitWithIntent(`camera:scan:${code}`), [submitWithIntent]);
+  // Simpan aset saat ini TANPA berpindah (form & kamera tetap di aset ini) —
+  // dipakai tombol "Simpan & Scan" sebelum scanner dibuka lagi.
+  const cameraSaveStay = useCallback(() => submitWithIntent("camera:stay"), [submitWithIntent]);
 
   // Tampilan eksklusif inventarisasi lapangan menggantikan seluruh body form.
   const sheetMode = inventoryMode && isEditing && !showFullForm;
@@ -1630,6 +1633,7 @@ const AssetForm = memo(({
           onReviewSaved={onCameraReviewSaved ? cameraReviewSaved : undefined}
           onNavigate={cameraNavigate}
           onScanAsset={isEditing && inventoryMode && onSaveAndNavigate ? cameraScanAsset : undefined}
+          onSaveAndScanNext={isEditing && inventoryMode && onSaveAndNavigate ? cameraSaveStay : undefined}
           autoScan={cameraAutoScan}
         />
       )}

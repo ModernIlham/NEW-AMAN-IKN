@@ -48,6 +48,103 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#65] Peta jadi lembar di halaman utama + alur Simpan & Scan + pembaruan dokumen — 2026-07-11
+
+- **Peta Aset kini lembar di halaman utama** (bukan overlay lepas): header,
+  saklar Dashboard/Inventarisasi, dan toolbar filter tetap tampil; area baris
+  data digantikan peta saat terbuka. Form tambah/edit aset tetap bisa muncul di
+  samping (desktop) / di atasnya (HP) — selesai edit **kembali ke peta**.
+- **Barang Serupa jadi filter peta**: dropdown kelompok (kode+nama, ≥2 unit)
+  diturunkan dari data peta sendiri — ikut filter aktif dan jalan saat offline.
+- Pin kini **satu popup** saja (tooltip hover dihapus — dulu tampil dobel di
+  layar sentuh); tombol Edit menutup popup, peta tetap terbuka.
+- **Alur scan-edit lapangan dirapikan**: tombol utama **"Simpan & Scan"**
+  (simpan aset ini → scanner langsung terbuka lagi untuk stiker berikutnya),
+  "Simpan & Aset Baru" jadi baris sekunder, tombol Batal Scan diperbesar.
+  Intent `camera:stay` menyimpan tanpa berpindah aset.
+- HP: padding & jarak antar blok diperkecil khusus layar kecil — baris data
+  dapat ruang lebih (tinggi tombol tetap ≥44px sesuai aturan tap-target).
+- Dokumentasi menyeluruh: CHANGELOG terisi ulang (#38–#65), README v2.3,
+  halaman PRD tersembunyi diperbarui (peta, kamera, CI/CD, ekspor GIS).
+
+## [#64] Ekspor peta KML/KMZ/SHP + marker berlapis info + filter tanggal + kop KPB — 2026-07-11
+
+- **Unduh KML/KMZ/SHP** dari peta — 27 atribut per titik, mengikuti filter
+  aktif (endpoint `/api/export/geo`, shapefile WGS84 via pyshp).
+- Pin peta: **badge kamera** bila ada foto; **border hijau** bila pengguna +
+  NIP/NIK + BAST lengkap.
+- Filter Lanjutan: **rentang Tanggal Input** (server + offline + badge).
+- **Kop surat 3 baris** sesuai format resmi (instansi besar; unit + sub-unit
+  tebal) + **alamat multi-baris** (textarea; tiap Enter = baris kop).
+- Seluruh tanda tangan laporan: "Kepala Satuan Kerja" → **"Kuasa Pengguna
+  Barang"**.
+- `build_asset_search_query` diekstrak dari GET /assets — daftar, peta, dan
+  ekspor geo memakai SATU builder filter (tidak bisa drift).
+
+## [#63] Peta Aset halaman penuh + filter aktif + tombol ikon toolbar — 2026-07-11
+
+- Peta pindah dari panel bertumpuk ke tampilan penuh; tombol ikon pin teal di
+  samping Cari & Scan (ikon saja di HP/tablet).
+- Data peta mengikuti pencarian + kategori + filter lanjutan; offline memakai
+  snapshot dengan filter yang sama.
+- Backend: semua opsi sort GET /assets diberi tiebreaker `id` — paging
+  skip/limit deterministik.
+
+## [#59–#62] Auto-deploy ke VPS Hostinger — 2026-07-11
+
+- Workflow **Deploy ke Hostinger VPS**: setiap merge ke `main` menjalankan
+  `scripts/deploy_vps.sh` di VPS lewat SSH (fetch+reset, pip install, restart
+  backend, yarn build). Manual dispatch juga tersedia.
+- Secret `VPS_SSH_KEY` menerima format **base64 satu-baris** (anti salah
+  tempel); validasi kunci & uji jangkauan host dengan pesan error berbahasa
+  jelas. README deploy dibetulkan ke `origin/main`.
+
+## [#58] Kamera lapangan: flash, gestur kecerahan, simpan instan; edit cepat scan QR; Peta Aset — 2026-07-11
+
+- **Flash/senter** (menyala ulang setelah flip kamera) + **gestur kecerahan**
+  (tahan & geser atas/bawah; dibakar ke hasil foto, termasuk fallback iOS ≤17).
+- **Simpan & Baru instan**: alur kamera melewati validasi server & kompresi
+  Tinify per foto (lokal saja) — antrean latar tetap memvalidasi & auto-renumber
+  NUP saat sinkron.
+- **Kamera + Scan QR** untuk edit cepat antar-aset di mode inventarisasi
+  (cocok EKSAK pada register/kode/serial; ambigu → isi kotak pencarian).
+- **Peta Aset** perdana (leaflet + OSM): pin status berwarna, geser pin =
+  koordinat tersimpan otomatis lewat antrean (If-Match + Idempotency-Key).
+- 19 temuan verifikasi adversarial (43 agen) diperbaiki pra-merge, termasuk
+  XSS tooltip peta dan bypass OCC/row-lock.
+
+## [#57] Gerbang CI + registry field aset + perbaikan menyeluruh laporan — 2026-07-11
+
+- **CI GitHub Actions**: backend compileall + 26 test unit bebas-infra;
+  frontend eslint (react-hooks) + build — jalan di setiap PR. Run pertamanya
+  langsung menangkap `yarn.lock` yang drift (entri idb hilang).
+- **Registry field aset** (`backend/asset_fields.py`): PATCH, ubah massal,
+  audit, proyeksi list, CSV, impor diturunkan dari satu daftar + test
+  anti-drift. Bonus: eselon1/2 kini terlacak audit.
+- **Perbaikan laporan besar**: binding "Unit Organisasi" (dulu terisi nama
+  kegiatan), blok identitas rata (tabel titik dua sejajar + baris NIP),
+  penomoran BAHI/BA, "Halaman 2 dari N" eksekutif, Tim Inti/Pembantu muncul
+  di Personil laporan satker, footer ekspor dobel, jam WIB, kartu KONDISI/
+  STATUS tertukar, footer barang-serupa di tiap halaman, tanggal gaya
+  Indonesia di semua laporan.
+- pytest hygiene: 15 skrip test era scaffold dihapus, `pytest` default hanya
+  test unit; test live-server ber-marker `integration`.
+
+## [#38–#56] Ringkasan gelombang sebelumnya — 2026-07-08 s.d. 2026-07-10
+
+Progres unduhan kartu; posisi tombol X pop-up; perbaikan header otorisasi
+"pengguna melekat"; paritas ubah-massal dengan form edit; halaman riwayat
+sebagai panel; verifikasi hasil scan terhadap kegiatan aktif; back/undo
+browser tetap di aplikasi; GPS selalu realtime; baris terakhir laporan tak
+tertimpa footer (running element); **Mode Kamera Penuh ala Timemark** dengan
+alur beruntun + NUP dummy otomatis per perangkat; hapus baris optimistik
+langsung hilang; **performa menyeluruh** (index Mongo, proyeksi list ramping,
+virtualisasi kartu HP, streaming foto ber-ETag); **foto GridFS-only** dengan
+migrasi terverifikasi; token media 30 hari; **deteksi versi baru otomatis**
+("Muat Ulang" tanpa hapus cache); logo 3-klik ke halaman PRD; kartu tim
+2 baris; **field NIP/NIK pegawai** end-to-end; label NIP/NIK + kolom Dari
+Satker pada tim; gating auth batch endpoints; dokumen review refactoring.
+
 ## [#37] Kartu Inventarisasi cetak: presisi ke mockup + riwayat 8 baris — 2026-07-05
 
 - **Riwayat** menyimpan: **petugas** (akun pelaku dari audit-log, fallback pelaku

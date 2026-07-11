@@ -52,7 +52,7 @@ const SearchInput = memo(function SearchInput({ value, onCommit }) {
 });
 
 const DashboardToolbar = memo(function DashboardToolbar({
-  searchInput, setSearchInput, onScanCode, onOpenMap,
+  searchInput, setSearchInput, onScanCode, onOpenMap, mapOpen = false,
   categories, filterCategory, setFilterCategory,
   activeFilterCount, showAdvancedFilter, setShowAdvancedFilter,
   sortBy, setSortBy,
@@ -65,8 +65,8 @@ const DashboardToolbar = memo(function DashboardToolbar({
   viewMode, setViewMode,
 }) {
   return (
-    <div className="bg-card rounded-xl border border-border shadow-sm p-2 sm:p-2.5 print:hidden" data-testid="dashboard-toolbar">
-      <div className="flex flex-col gap-1.5 sm:gap-2">
+    <div className="bg-card rounded-xl border border-border shadow-sm p-1.5 sm:p-2.5 print:hidden" data-testid="dashboard-toolbar">
+      <div className="flex flex-col gap-1 sm:gap-2">
         {/* Baris 1: Cari + Scan QR stiker (+ Filter Lanjutan di mobile/tablet) */}
         <div className="flex items-center gap-1.5">
           <div className="relative flex-1 min-w-0">
@@ -74,14 +74,17 @@ const DashboardToolbar = memo(function DashboardToolbar({
             <SearchInput value={searchInput} onCommit={setSearchInput} />
           </div>
           <QrScanButton onDetected={onScanCode || setSearchInput} />
-          {/* Peta Aset halaman penuh — di HP/tablet cukup ikon khasnya */}
+          {/* Lembar Peta Aset — di HP/tablet cukup ikon khasnya; toggle */}
           {onOpenMap && (
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={onOpenMap}
-              className="h-9 w-9 p-0 lg:w-auto lg:px-2.5 lg:h-8 min-h-0 min-w-0 text-xs flex-shrink-0 text-teal-600 dark:text-teal-400 border-teal-300 dark:border-teal-800 hover:bg-teal-50 dark:hover:bg-teal-950"
+              aria-pressed={mapOpen}
+              className={`h-9 w-9 p-0 lg:w-auto lg:px-2.5 lg:h-8 min-h-0 min-w-0 text-xs flex-shrink-0 ${mapOpen
+                ? "bg-teal-600 border-teal-600 text-white hover:bg-teal-700 hover:text-white"
+                : "text-teal-600 dark:text-teal-400 border-teal-300 dark:border-teal-800 hover:bg-teal-50 dark:hover:bg-teal-950"}`}
               title="Peta aset (mengikuti filter aktif)"
               aria-label="Peta aset"
               data-testid="map-open-btn"
