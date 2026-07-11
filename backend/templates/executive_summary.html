@@ -470,7 +470,7 @@
 {% if preview %}<div class="separator">Halaman 3+: Analisis Distribusi Aset</div>{% endif %}
 
 <!-- =================== PAGE 3+: DYNAMIC DISTRIBUTION CHARTS =================== -->
-{% set items_per_col = 75 %}
+{% set items_per_col = 70 %}{# 75 meluber ke halaman ekstra saat >=74/kolom #}
 {% set items_per_page = items_per_col * 2 %}
 
 {% if cat_chart|length > 0 %}

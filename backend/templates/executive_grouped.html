@@ -68,6 +68,14 @@
 </head>
 <body>
 
+<!-- Running element footer: HARUS berada di awal body — WeasyPrint hanya
+     mengisi kotak margin mulai dari halaman tempat elemen muncul, jadi bila
+     di akhir body footer hanya tampil di halaman terakhir. -->
+<div class="data-footer">
+    <div><strong>{{ total_groups }}</strong> kelompok &nbsp;|&nbsp; <strong>{{ total_units }}</strong> unit BMN &nbsp;|&nbsp; Total Nilai: <strong>Rp {{ total_value_fmt }}</strong></div>
+    <div>Laporan Eksekutif per Barang Serupa &mdash; {{ satker_name }}</div>
+</div>
+
 <div class="data-header">
     <div class="data-header-logo">{% if logo_url %}<img src="{{ logo_url }}" alt="Logo" />{% endif %}</div>
     <div class="data-header-text">
@@ -134,11 +142,6 @@
             </tr>
         </tbody>
     </table>
-</div>
-
-<div class="data-footer">
-    <div><strong>{{ total_groups }}</strong> kelompok &nbsp;|&nbsp; <strong>{{ total_units }}</strong> unit BMN &nbsp;|&nbsp; Total Nilai: <strong>Rp {{ total_value_fmt }}</strong></div>
-    <div>Laporan Eksekutif per Barang Serupa &mdash; {{ satker_name }}</div>
 </div>
 
 </body>

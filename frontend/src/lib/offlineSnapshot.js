@@ -21,7 +21,10 @@ import axios from "axios";
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const DB_NAME = "aman_offline_snapshot";
-const DB_VERSION = 1;
+// v2: proyeksi list menambah field berlebih/sengketa — snapshot lama tidak
+// memilikinya dan sync delta tak akan mengisi ulang baris yang tak berubah,
+// jadi upgrade mengosongkan cache agar sync berikutnya full resync.
+const DB_VERSION = 2;
 const ASSET_STORE = "assets"; // keyed by asset id, indexed by activity_id
 const META_STORE = "meta";    // keyed by activityId → {activityId, userId, lastSync, count}
 
@@ -53,13 +56,17 @@ const SNAPSHOT_FIELDS = [
 
 function getDB() {
   return openDB(DB_NAME, DB_VERSION, {
-    upgrade(db) {
+    upgrade(db, oldVersion, _newVersion, tx) {
       if (!db.objectStoreNames.contains(ASSET_STORE)) {
         const store = db.createObjectStore(ASSET_STORE, { keyPath: "id" });
         store.createIndex("by-activity", "activity_id", { unique: false });
       }
       if (!db.objectStoreNames.contains(META_STORE)) {
         db.createObjectStore(META_STORE, { keyPath: "activityId" });
+      }
+      if (oldVersion > 0 && oldVersion < 2) {
+        tx.objectStore(ASSET_STORE).clear();
+        tx.objectStore(META_STORE).clear();
       }
     },
   });

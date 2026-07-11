@@ -289,7 +289,9 @@ def _activity_identity(activity, settings=None):
     Nama kegiatan BUKAN fallback untuk unit organisasi — fallback itu yang
     dulu membuat "Unit Organisasi: <nama kegiatan>" muncul di laporan.
     """
-    legacy = activity.get("kasatker") or {}
+    legacy = activity.get("kasatker")
+    if not isinstance(legacy, dict):  # data era lama bisa berupa string nama
+        legacy = {"nama_pejabat": legacy} if legacy else {}
     settings = settings or {}
 
     def pick(*vals, default):
@@ -2230,7 +2232,7 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
             "photo_url": photo_url, "stiker_url": stiker_url,
         })
 
-    items_per_page = 150  # 75 per column * 2 columns
+    items_per_page = 140  # 70 per kolom * 2 kolom — selaras template (>=148 meluber)
     cat_pages = max(0, -(-len(cat_chart) // items_per_page)) if cat_chart else 0
     loc_pages = max(0, -(-len(loc_chart) // items_per_page)) if loc_chart else 0
 
