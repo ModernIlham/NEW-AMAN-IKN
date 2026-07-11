@@ -27,6 +27,9 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserResponse
+    # Token khusus media (scope="media", 30 hari) — untuk URL <img>/window.open
+    # agar cache foto browser tidak ter-bust saat token sesi dirotasi.
+    media_token: Optional[str] = None
 
 class OTPRequest(BaseModel):
     email: str

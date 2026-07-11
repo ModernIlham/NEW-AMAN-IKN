@@ -76,23 +76,24 @@ def decode_data_url(data_url: Optional[str]) -> bytes:
 
 # --- GridFS Photo Helpers ---
 async def store_photo_to_gridfs(photo_base64: str) -> str:
-    """Store a base64 photo in GridFS and return the GridFS ID as string."""
+    """Store a base64 photo in GridFS and return the GridFS ID as string.
+
+    RAISES bila gagal (decode/tulis). Dulu fungsi ini mengembalikan "" secara
+    diam-diam — pasca migrasi GridFS-only itu berarti byte foto HILANG PERMANEN
+    sementara API melapor sukses (dan blob lama ikut terhapus). Semua pemanggil
+    punya jalur rollback/penanganan error; kegagalan harus terdengar."""
     photo_bytes = decode_data_url(photo_base64)
     if not photo_bytes:
-        return ""
-    try:
-        from bson import ObjectId
-        file_id = ObjectId()
-        grid_in = fs_bucket.open_upload_stream_with_id(
-            file_id, filename=f"photo_{uuid.uuid4()}.jpg",
-            metadata={"content_type": "image/jpeg", "size": len(photo_bytes)}
-        )
-        await grid_in.write(photo_bytes)
-        await grid_in.close()
-        return str(file_id)
-    except Exception as e:
-        logger.error(f"GridFS store error: {e}")
-        return ""
+        raise ValueError("Foto tidak valid (bukan base64 gambar)")
+    from bson import ObjectId
+    file_id = ObjectId()
+    grid_in = fs_bucket.open_upload_stream_with_id(
+        file_id, filename=f"photo_{uuid.uuid4()}.jpg",
+        metadata={"content_type": "image/jpeg", "size": len(photo_bytes)}
+    )
+    await grid_in.write(photo_bytes)
+    await grid_in.close()
+    return str(file_id)
 
 
 async def get_photo_from_gridfs(gridfs_id: str) -> Optional[bytes]:
@@ -365,6 +366,12 @@ def compute_changes(old_doc: dict, new_data: dict) -> list:
         old_count = len(old_list) if isinstance(old_list, list) else 0
         new_count = len(new_list) if isinstance(new_list, list) else 0
         if field == "photos":
+            # GridFS-first: dokumen bersih menyimpan photos=[] — jumlah nyata
+            # ada di photo_gridfs_ids (payload klien tetap kirim array foto).
+            old_g = old_doc.get("photo_gridfs_ids") or []
+            new_g = new_data.get("photo_gridfs_ids") or []
+            old_count = len([x for x in old_g if x]) or old_count
+            new_count = len([x for x in new_g if x]) or new_count
             if old_count != new_count:
                 changes.append({"field": "photos", "from": f"{old_count} foto", "to": f"{new_count} foto"})
         elif field == "document_checklist":

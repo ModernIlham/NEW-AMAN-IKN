@@ -19,6 +19,7 @@ from db import db
 from shared_utils import (
     invalidate_asset_cache, log_audit,
     create_thumbnail, create_gallery_thumbnail,
+    store_photo_to_gridfs, delete_photo_from_gridfs, generate_photo_thumbnail,
     SEALED_DETAIL,
 )
 from routes.websocket import notify_asset_change
@@ -236,22 +237,48 @@ async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user
         gallery_thumbnail = create_gallery_thumbnail(compressed_photo)
         CHUNK = 50
 
+        # Thumbnail 100px foto batch dibuat SEKALI, dipakai semua aset.
+        batch_photo_thumb = generate_photo_thumbnail(compressed_photo) or ""
+
         async def update_photo_chunk(chunk_ids):
             # SATU query $in per chunk (bukan find_one serial per aset — N+1).
             by_id = {}
-            async for doc in db.assets.find({"id": {"$in": chunk_ids}}, {"_id": 0, "id": 1, "photos": 1}):
+            async for doc in db.assets.find(
+                {"id": {"$in": chunk_ids}},
+                {"_id": 0, "id": 1, "photos": 1, "photo_gridfs_ids": 1, "photo_thumbnails": 1},
+            ):
                 by_id[doc["id"]] = doc
             ops = []
             for aid in chunk_ids:
-                asset = by_id.get(aid)
-                current_photos = asset.get("photos", []) if asset else []
-                new_photos = current_photos + [compressed_photo]
+                asset = by_id.get(aid) or {}
+                # PARITAS INDEKS: array gridfs TIDAK difilter — padding "" milik
+                # dokumen legacy harus dipertahankan (meng-collapse-nya menggeser
+                # indeks → streaming/keep[] menunjuk foto yang salah → kehilangan).
+                gridfs_ids = list(asset.get("photo_gridfs_ids") or [])
+                current_photos = asset.get("photos", []) or []
+                thumbs = list(asset.get("photo_thumbnails") or [])
+                current_count = len([g for g in gridfs_ids if g]) or len(current_photos)
+                n_slots = max(len(gridfs_ids), len(current_photos))
+                # Samakan panjang semua array ke n_slots sebelum append
+                gridfs_ids += [""] * (n_slots - len(gridfs_ids))
+                thumbs += [""] * (n_slots - len(thumbs))
+                # Foto masuk GridFS (satu blob PER ASET — blob dimiliki eksklusif
+                # oleh asetnya karena delete-asset menghapus blobnya).
+                try:
+                    gid = await store_photo_to_gridfs(compressed_photo)
+                except Exception as e:
+                    logger.warning(f"Batch photo: GridFS store failed for {aid}: {e}")
+                    continue
                 update_fields = {
-                    "photos": new_photos,
-                    "photo": new_photos[0] if new_photos else None,
+                    "photo_gridfs_ids": gridfs_ids + [gid],
+                    "photo_thumbnails": thumbs + [batch_photo_thumb],
                     "updated_at": now_str,
                 }
-                if len(current_photos) == 0:
+                # Dokumen legacy yang MASIH menyimpan inline: jaga photos paralel
+                # (padding "" bila lebih pendek). Dokumen bersih: photos tetap [].
+                if current_photos:
+                    update_fields["photos"] = current_photos + [""] * (n_slots - len(current_photos)) + [compressed_photo]
+                if current_count == 0:
                     update_fields["thumbnail"] = thumbnail
                     update_fields["gallery_thumbnail"] = gallery_thumbnail
                 ops.append(UpdateOne({"id": aid}, {"$set": update_fields}))
@@ -306,12 +333,29 @@ async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user
         for chunk in chunks:
             await update_doc_chunk(chunk)
 
-    # 4. Clear all photos from selected assets
+    # 4. Clear all photos from selected assets — termasuk blob GridFS (dulu
+    # hanya inline yang dikosongkan sehingga blob & photo_count menggantung).
+    # URUTAN PENTING: kumpulkan id blob → perbarui dokumen DULU → baru hapus
+    # blob. Bila crash setelah update, sisa blob hanya jadi orphan (bocor,
+    # aman); urutan sebaliknya bisa meninggalkan dokumen yang merujuk blob
+    # mati = kehilangan foto.
     if should_clear_photos:
+        gids_to_delete = []
+        async for doc in db.assets.find(
+            {"id": {"$in": data.asset_ids}, "photo_gridfs_ids": {"$exists": True, "$ne": []}},
+            {"_id": 0, "photo_gridfs_ids": 1},
+        ):
+            gids_to_delete.extend(g for g in (doc.get("photo_gridfs_ids") or []) if g)
         await db.assets.update_many(
             {"id": {"$in": data.asset_ids}},
-            {"$set": {"photos": [], "photo": None, "thumbnail": None, "gallery_thumbnail": None, "updated_at": now_str}}
+            {"$set": {"photos": [], "photo": None, "photo_gridfs_ids": [], "photo_thumbnails": [],
+                      "thumbnail": None, "gallery_thumbnail": None, "updated_at": now_str}}
         )
+        for gid in gids_to_delete:
+            try:
+                await delete_photo_from_gridfs(gid)
+            except Exception:
+                pass  # best-effort; orphan dibersihkan rutin GridFS
 
     # 5. Clear all document checklist from selected assets
     if should_clear_doc_checklist:

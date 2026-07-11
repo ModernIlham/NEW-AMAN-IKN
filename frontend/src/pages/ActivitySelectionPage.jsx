@@ -25,6 +25,7 @@ import { compressImageFile } from "@/lib/imageCompression";
 import { compressPdfFile } from "@/lib/pdfCompression";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
+import { useTripleClick } from "@/hooks/useTripleClick";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -904,6 +905,9 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
   }, [photoLightbox, pengesahanActivity, completionDialog, showCreate, editingActivity, showRestore, showResetAll]); // eslint-disable-line react-hooks/exhaustive-deps
   useBackGuard(handleAppBack);
 
+  // Halaman Info tersembunyi: butuh 3 klik beruntun pada logo
+  const activateInfo = useTripleClick(onShowInfo);
+
   // Compute date-based status phase for a kegiatan card.
   // 'belum_dimulai' (gray) → 'berlangsung' (blue) → 'selesai_tanggal' (amber, needs validation)
   const computeDatePhase = (act) => {
@@ -940,8 +944,8 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
             <div
               className={`w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-blue-500 flex items-center justify-center shadow-elev-1 ${onShowInfo ? "cursor-pointer" : ""}`}
               {...(onShowInfo ? {
-                role: "button", tabIndex: 0, onClick: onShowInfo,
-                onKeyDown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onShowInfo(); } },
+                role: "button", tabIndex: 0, onClick: activateInfo,
+                onKeyDown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activateInfo(); } },
                 "aria-label": "Info aplikasi", title: "Info aplikasi",
               } : {})}
               data-testid="activity-page-logo"

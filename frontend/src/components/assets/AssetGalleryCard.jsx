@@ -3,6 +3,7 @@ import { Camera, MapPin, Tag, Images, User, QrCode, CreditCard, Trash2, FileChec
 import {
   Tooltip, TooltipContent, TooltipTrigger,
 } from "../ui/tooltip";
+import { authMediaUrl } from "../../lib/mediaUrl";
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const COND = { "Baik": "bg-emerald-500", "Rusak Ringan": "bg-amber-500", "Rusak Berat": "bg-red-500" };
@@ -29,14 +30,23 @@ const extractYear = (dateStr) => {
 };
 
 const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard, onOpenLightbox, isSelected, onToggleSelect, isLockedByOther, lockedByName }) => {
-  const galleryThumb = asset.gallery_thumbnail || asset.thumbnail;
-  const hasPhoto = galleryThumb && galleryThumb.length > 10;
   const invInfo = INV_STATUS[asset.inventory_status] || INV_STATUS["Belum Diinventarisasi"];
   const stikerOk = asset.stiker_status === "Sudah Terpasang";
   const price = formatPrice(asset.purchase_price);
   const photoCount = asset.photo_count || asset.photos?.length || 0;
   const year = extractYear(asset.purchase_date);
   const [hovered, setHovered] = useState(false);
+  // Foto sampul galeri via STREAMING ?w=256 (ter-cache browser + server) —
+  // base64 gallery_thumbnail tak lagi dikirim di payload list. Fallback ke
+  // data-URI lama (baris legacy/snapshot offline) lalu thumbnail 100px bila
+  // streaming gagal (mis. offline tanpa cache).
+  const [streamErr, setStreamErr] = useState(false);
+  const legacyThumb = asset.gallery_thumbnail || asset.thumbnail;
+  const streamThumb = photoCount > 0 && !String(asset.id).startsWith("temp_")
+    ? authMediaUrl(`${API}/assets/${asset.id}/photos/${asset.thumbnail_index || 0}?v=${asset.version || 1}&w=256`)
+    : null;
+  const galleryThumb = (!streamErr && streamThumb) || legacyThumb;
+  const hasPhoto = !!galleryThumb && (streamThumb ? true : galleryThumb.length > 10);
 
   // Open photo/document from document checklist in new tab via backend streaming endpoint
   const openDocFile = useCallback((assetId, itemIndex, type) => {
@@ -77,6 +87,7 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
           <img
             src={galleryThumb}
             alt={asset.asset_name}
+            onError={() => { if (!streamErr && streamThumb && galleryThumb === streamThumb) setStreamErr(true); }}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             loading="lazy"
           />

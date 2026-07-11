@@ -26,7 +26,7 @@ import xlsxwriter
 from PIL import Image as PILImage
 
 from db import db
-from shared_utils import limiter, invalidate_asset_cache, log_audit
+from shared_utils import limiter, invalidate_asset_cache, log_audit, get_photo_from_gridfs
 
 logger = logging.getLogger(__name__)
 exports_router = APIRouter()
@@ -658,12 +658,28 @@ async def export_xlsx(request: Request, activity_id: Optional[str] = None, base_
         asset_name = asset.get('asset_name', '')
         asset_id = asset.get('id', '')
         
-        # HD Photo - use selected cover photo at higher resolution
+        # HD Photo - use selected cover photo at higher resolution.
+        # URUTAN: inline full-res → GridFS full-res → cover 'photo' →
+        # thumbnail 100px paling akhir. Dokumen ter-migrasi selalu punya
+        # thumbnail, jadi bila thumbnail dicoba lebih dulu, fallback GridFS
+        # tak pernah jalan dan kolom "HD Photo" berisi gambar 100px buram.
         photos_list = asset.get('photos', [])
         tidx = asset.get('thumbnail_index', 0) or 0
-        if photos_list and tidx < len(photos_list):
+        img_data = None
+        if photos_list and tidx < len(photos_list) and photos_list[tidx]:
             img_data = photos_list[tidx]
-        else:
+        gids = [g for g in (asset.get('photo_gridfs_ids') or []) if g]
+        if not img_data and gids:
+            # Blob sampul GridFS (indeks di-clamp) → data-URI agar jalur embed
+            # inline di bawah tetap bekerja tanpa perubahan.
+            try:
+                gidx = max(0, min(int(tidx), len(gids) - 1))
+                raw = await get_photo_from_gridfs(gids[gidx])
+                if raw:
+                    img_data = 'data:image/jpeg;base64,' + base64.b64encode(raw).decode('ascii')
+            except Exception as e:
+                logger.error(f"GridFS cover fetch failed for {asset_id}: {e}")
+        if not img_data:
             img_data = asset.get('photo') or asset.get('thumbnail')
         if img_data:
             try:
@@ -680,9 +696,21 @@ async def export_xlsx(request: Request, activity_id: Optional[str] = None, base_
 
         # Stiker Photo - use selected stiker photo at best quality
         stiker_idx = asset.get('stiker_photo_index')
+        stiker_data = None
         if stiker_idx is not None and photos_list and stiker_idx < len(photos_list):
+            stiker_data = photos_list[stiker_idx]
+        elif stiker_idx is not None and not photos_list and gids:
+            # Fallback GridFS: foto stiker pada indeks yang sama (di-clamp);
+            # dilewati bila stiker_photo_index tidak diset (None).
             try:
-                stiker_data = photos_list[stiker_idx]
+                sidx = max(0, min(int(stiker_idx), len(gids) - 1))
+                raw = await get_photo_from_gridfs(gids[sidx])
+                if raw:
+                    stiker_data = 'data:image/jpeg;base64,' + base64.b64encode(raw).decode('ascii')
+            except Exception as e:
+                logger.error(f"GridFS stiker fetch failed for {asset_id}: {e}")
+        if stiker_data:
+            try:
                 stiker_buffer = _xlsx_image_buffer(stiker_data, 900, quality=75)
                 worksheet.insert_image(row, 1, 'stiker.jpg', {
                     'image_data': stiker_buffer, 'x_scale': 0.24, 'y_scale': 0.24,

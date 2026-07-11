@@ -4,13 +4,17 @@ import {
   Wifi, WifiOff, Users2, RefreshCw, Moon, Sun
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useTripleClick } from "@/hooks/useTripleClick";
 
 const DashboardHeader = memo(({
   activity, user, perms, onBack, onLogout,
   auditOpen, onAuditToggle, onOpenUserManagement,
   isOnline, wsConnected, onlineUsers, pendingCount, syncing, onSync,
   dark, toggleDark, onShowInfo,
-}) => (
+}) => {
+  // Halaman Info tersembunyi: butuh 3 klik beruntun pada logo
+  const activateInfo = useTripleClick(onShowInfo);
+  return (
   <header className="bg-card/95 backdrop-blur-sm border-b border-border px-3 sm:px-4 py-2.5 sticky top-0 z-40 print:hidden" data-testid="dashboard-header">
     <div className="flex items-center justify-between gap-2 min-w-0">
       <div className="flex items-center gap-2 min-w-0 overflow-hidden flex-shrink">
@@ -18,13 +22,13 @@ const DashboardHeader = memo(({
           <ArrowLeft className="w-4 h-4 text-blue-600 dark:text-blue-400" />
         </Button>
         <div className="flex items-center gap-2 min-w-0 overflow-hidden">
-          {/* Klik logo = buka halaman Info/PRD aplikasi */}
+          {/* Klik logo 3x beruntun = buka halaman Info/PRD tersembunyi */}
           <div
             className={`w-9 h-9 rounded-lg bg-gradient-to-br from-blue-600 to-blue-500 flex items-center justify-center flex-shrink-0 shadow-elev-1 ${onShowInfo ? "cursor-pointer" : ""}`}
             {...(onShowInfo ? {
-              role: "button", tabIndex: 0, onClick: onShowInfo,
-              onKeyDown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onShowInfo(); } },
-              "aria-label": "Info aplikasi", title: "Info aplikasi",
+              role: "button", tabIndex: 0, onClick: activateInfo,
+              onKeyDown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activateInfo(); } },
+              "aria-label": "Info aplikasi (klik 3 kali)",
             } : {})}
             data-testid="dashboard-logo"
           >
@@ -97,7 +101,8 @@ const DashboardHeader = memo(({
       </div>
     </div>
   </header>
-));
+  );
+});
 
 DashboardHeader.displayName = "DashboardHeader";
 export default DashboardHeader;
