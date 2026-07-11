@@ -35,8 +35,9 @@ const BRIGHT_MIN = 0.4, BRIGHT_MAX = 2.0;
 const CANVAS_FILTER_OK = (() => {
   try {
     const c = document.createElement("canvas").getContext("2d");
-    c.filter = "brightness(1.2)";
-    return c.filter !== "none";
+    // Cek SEBELUM assignment: pada WebKit lama (iOS <= 17) `filter` bukan IDL
+    // attribute — assignment hanya membuat expando yang readback-nya lolos.
+    return typeof c.filter === "string";
   } catch { return false; }
 })();
 
@@ -141,9 +142,9 @@ const FullCameraSheet = memo(function FullCameraSheet({
 
   // Back HP: tutup scanner/panel edit dulu, lalu konfirmasi hapus, lalu kamera.
   useBackGuard(useCallback(() => {
-    if (scanActive) { setScanActive(false); return; }
     if (editOpen) { setEditOpen(false); return; }
     if (confirmIdx !== null) { setConfirmIdx(null); return; }
+    if (scanActive) { setScanActive(false); return; }
     onCloseRef.current?.();
   }, [editOpen, confirmIdx, scanActive]));
 
@@ -221,10 +222,14 @@ const FullCameraSheet = memo(function FullCameraSheet({
             const hasTorch = !!caps.torch;
             setTorchSupported(hasTorch);
             if (hasTorch && torchOnRef.current) {
-              track.applyConstraints({ advanced: [{ torch: true }] }).catch(() => {
-                torchOnRef.current = false; setTorchOn(false);
-              });
-            } else if (!hasTorch) { torchOnRef.current = false; setTorchOn(false); }
+              track.applyConstraints({ advanced: [{ torch: true }] })
+                .then(() => setTorchOn(true))
+                .catch(() => setTorchOn(false)); // keinginan (ref) dipertahankan
+            } else if (!hasTorch) {
+              // Kamera ini tak punya torch (mis. kamera depan) — matikan UI saja,
+              // keinginan tetap tersimpan agar flip balik menyalakannya lagi.
+              setTorchOn(false);
+            }
           } catch { setTorchSupported(false); }
         }
         const video = videoRef.current;
@@ -297,13 +302,25 @@ const FullCameraSheet = memo(function FullCameraSheet({
     }
   }, [setBright, bumpBrightUI]);
 
-  const onBrightPointerUp = useCallback(() => { brightDragRef.current = null; }, []);
-  const resetBright = useCallback(() => { setBright(1); bumpBrightUI(); }, [setBright, bumpBrightUI]);
+  const lastDragMovedRef = useRef(false);
+  const onBrightPointerUp = useCallback(() => {
+    lastDragMovedRef.current = !!brightDragRef.current?.moved;
+    brightDragRef.current = null;
+  }, []);
+  const resetBright = useCallback(() => {
+    // Dua drag cepat memicu dblclick sintetis — jangan hapus hasil atur barusan.
+    if (lastDragMovedRef.current) { lastDragMovedRef.current = false; return; }
+    setBright(1); bumpBrightUI();
+  }, [setBright, bumpBrightUI]);
 
   // Deteksi QR pada stream kamera aktif selama mode pemindaian menyala.
+  // Dijeda saat panel Edit Info / konfirmasi hapus terbuka — QR liar di rak
+  // tidak boleh menyimpan form setengah-terketik & berpindah aset diam-diam.
   useEffect(() => {
     if (!scanActive || !scanSupported || !onScanAsset) return undefined;
+    if (editOpen || confirmIdx !== null) return undefined;
     let stopped = false;
+    let detecting = false;
     (async () => {
       try {
         let formats = ["qr_code", "code_128", "code_39"];
@@ -316,9 +333,12 @@ const FullCameraSheet = memo(function FullCameraSheet({
     })();
     const timer = setInterval(async () => {
       const video = videoRef.current;
-      if (stopped || !scanDetectorRef.current || !video || video.readyState < 2) return;
+      if (stopped || detecting || !scanDetectorRef.current || !video || video.readyState < 2) return;
+      detecting = true;
       try {
         const codes = await scanDetectorRef.current.detect(video);
+        // Batal Scan / unmount saat detect() masih terbang → jangan tembak.
+        if (stopped) return;
         if (codes && codes.length > 0) {
           const code = extractScannedCode(codes[0].rawValue || "");
           stopped = true;
@@ -327,9 +347,10 @@ const FullCameraSheet = memo(function FullCameraSheet({
           else toast.error("QR tidak berisi kode yang dikenali");
         }
       } catch { /* frame belum siap — coba lagi di tick berikutnya */ }
+      finally { detecting = false; }
     }, 300);
     return () => { stopped = true; clearInterval(timer); };
-  }, [scanActive, scanSupported, onScanAsset]);
+  }, [scanActive, scanSupported, onScanAsset, editOpen, confirmIdx]);
 
   const startScan = useCallback(() => {
     if (!scanSupported) { toast.error("Scanner QR tidak didukung browser ini"); return; }

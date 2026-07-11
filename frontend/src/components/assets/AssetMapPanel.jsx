@@ -25,10 +25,10 @@ const STATUS_COLORS = {
 
 // Pin berwarna via divIcon — menghindari masalah path ikon default leaflet
 // di bundler CRA, sekaligus memberi warna per status inventarisasi.
-function markerIcon(color, dragging = false) {
+function markerIcon(color) {
   return L.divIcon({
     className: "",
-    html: `<div style="width:22px;height:22px;border-radius:50% 50% 50% 0;background:${color};transform:rotate(-45deg);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.45);${dragging ? "opacity:.75;" : ""}"></div>`,
+    html: `<div style="width:22px;height:22px;border-radius:50% 50% 50% 0;background:${color};transform:rotate(-45deg);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.45)"></div>`,
     iconSize: [22, 22],
     iconAnchor: [11, 22],
     popupAnchor: [0, -20],
@@ -51,19 +51,20 @@ const AssetMapPanel = memo(function AssetMapPanel({
   onToggle,
   canEdit = false,
   onEditAsset,        // (row) => void — buka form edit aset
-  onSaveCoords,       // (row, lat, lng) => Promise — simpan koordinat baru
+  onSaveCoords,       // (row, lat, lng) => void — simpan koordinat (throw = tolak)
 }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
-  const layerRef = useRef(null);       // L.LayerGroup pin
-  const didFitRef = useRef(false);     // fitBounds hanya saat muat pertama
+  const layerRef = useRef(null);         // L.LayerGroup pin
+  const markersRef = useRef(new Map());  // id -> { marker, row, lat, lng, color, draggable }
+  const didFitRef = useRef(false);       // fitBounds hanya saat muat pertama
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [loadedOnce, setLoadedOnce] = useState(false);
 
-  // Callback disimpan di ref agar pembuatan ulang marker tidak bergantung
-  // pada identitas arrow function dari induk (re-render tiap perubahan list).
+  // Callback disimpan di ref agar marker tidak dibangun ulang hanya karena
+  // identitas arrow function induk berubah tiap render.
   const onEditRef = useRef(onEditAsset);
   const onSaveRef = useRef(onSaveCoords);
   useEffect(() => { onEditRef.current = onEditAsset; onSaveRef.current = onSaveCoords; });
@@ -74,7 +75,7 @@ const AssetMapPanel = memo(function AssetMapPanel({
     try {
       let all = [];
       if (navigator.onLine) {
-        // Sumber massal bebas-media (proyeksi list, maks 1000/baris per halaman)
+        // Sumber massal bebas-media (proyeksi list, maks 1000 baris/halaman)
         let skip = 0;
         for (let page = 0; page < 50; page++) {
           const r = await axios.get(`${API}/assets/offline-snapshot`, {
@@ -107,12 +108,12 @@ const AssetMapPanel = memo(function AssetMapPanel({
     }
   }, [activityId]);
 
-  // Muat data saat panel dibuka pertama kali (dan saat ganti kegiatan).
+  // Muat data saat panel dibuka (dan saat ganti kegiatan).
   useEffect(() => {
     if (isOpen && activityId) { didFitRef.current = false; load(); }
   }, [isOpen, activityId, load]);
 
-  // Init peta saat panel terbuka; rusak saat unmount.
+  // Init peta saat panel terbuka; rusak saat panel ditutup/unmount.
   useEffect(() => {
     if (!isOpen || !containerRef.current || mapRef.current) return undefined;
     const map = L.map(containerRef.current, { zoomControl: true, attributionControl: true });
@@ -132,71 +133,125 @@ const AssetMapPanel = memo(function AssetMapPanel({
       map.remove();
       mapRef.current = null;
       layerRef.current = null;
+      markersRef.current = new Map();
     };
   }, [isOpen]);
 
-  // Bangun/perbarui pin setiap data berubah.
+  // Versi terbaru pasca-simpan (best-effort): antrean menyimpan async, jadi
+  // versi server diambil sesaat kemudian agar drag berikutnya memakai
+  // If-Match yang benar (baris peta bisa di luar halaman list).
+  const refreshRowVersion = useCallback((id) => {
+    if (!navigator.onLine) return;
+    setTimeout(async () => {
+      try {
+        const r = await axios.get(`${API}/assets/${id}`, { params: { exclude_media: true } });
+        const v = r.data?.version;
+        if (v != null) setRows((prev) => prev.map((x) => (x.id === id ? { ...x, version: v } : x)));
+      } catch { /* best-effort */ }
+    }, 2500);
+  }, []);
+
+  // Konten popup dibangun ulang tiap dibuka (data baris terbaru dari entry).
+  const buildPopupEl = useCallback((entry) => {
+    const row = entry.row;
+    const lat = parseCoord(row.koordinat_latitude);
+    const lng = parseCoord(row.koordinat_longitude);
+    const el = document.createElement("div");
+    el.style.minWidth = "180px";
+    el.innerHTML = `
+      <div style="font-weight:700;font-size:12px;margin-bottom:2px">${esc(row.asset_name || "-")}</div>
+      <div style="font-size:11px;color:#475569">${esc(row.asset_code || "-")}${row.NUP ? ` &bull; NUP ${esc(row.NUP)}` : ""}</div>
+      ${row.location ? `<div style="font-size:11px;color:#475569">${esc(row.location)}</div>` : ""}
+      <div style="font-size:11px;color:#475569">${esc(row.inventory_status || "Belum Diinventarisasi")}</div>
+      <div style="font-family:monospace;font-size:10px;color:#64748b;margin-top:2px">${lat?.toFixed(6)}, ${lng?.toFixed(6)}</div>`;
+    if (onEditRef.current) {
+      const btn = document.createElement("button");
+      btn.textContent = "Edit Aset";
+      btn.style.cssText = "margin-top:6px;padding:4px 10px;background:#2563eb;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer";
+      btn.addEventListener("click", () => onEditRef.current?.(entry.row));
+      el.appendChild(btn);
+    }
+    return el;
+  }, []);
+
+  // Sinkronkan pin secara INKREMENTAL — tidak clearLayers() setiap perubahan,
+  // supaya drag pin lain yang sedang berlangsung & popup terbuka tidak mati.
   useEffect(() => {
     const map = mapRef.current;
     const layer = layerRef.current;
     if (!map || !layer) return;
-    layer.clearLayers();
+    const seen = new Set();
     const bounds = [];
+
     for (const row of rows) {
       const lat = parseCoord(row.koordinat_latitude);
       const lng = parseCoord(row.koordinat_longitude);
       if (lat === null || lng === null) continue;
+      seen.add(row.id);
       bounds.push([lat, lng]);
       const color = STATUS_COLORS[row.inventory_status] || STATUS_COLORS["Belum Diinventarisasi"];
-      const marker = L.marker([lat, lng], {
-        icon: markerIcon(color),
-        draggable: !!canEdit,
-        title: `${row.asset_name || row.asset_code || "Aset"}`,
+      const existing = markersRef.current.get(row.id);
+
+      if (existing) {
+        existing.row = row; // handler membaca entry.row → selalu data terbaru
+        const dragging = existing.marker.dragging && existing.marker.dragging.moving && existing.marker.dragging.moving();
+        if (!dragging && (existing.lat !== lat || existing.lng !== lng)) {
+          existing.marker.setLatLng([lat, lng]);
+        }
+        existing.lat = lat; existing.lng = lng;
+        if (existing.color !== color) { existing.marker.setIcon(markerIcon(color)); existing.color = color; }
+        if (existing.draggable !== canEdit && existing.marker.dragging) {
+          if (canEdit) existing.marker.dragging.enable(); else existing.marker.dragging.disable();
+          existing.draggable = canEdit;
+        }
+        continue;
+      }
+
+      const marker = L.marker([lat, lng], { icon: markerIcon(color), draggable: !!canEdit });
+      const entry = { marker, row, lat, lng, color, draggable: !!canEdit };
+      // Konten popup/tooltip sebagai fungsi → dievaluasi saat dibuka dengan
+      // data terbaru; tooltip memakai TEKS ter-escape (leaflet merender HTML).
+      marker.bindPopup(() => buildPopupEl(entry));
+      marker.bindTooltip(() => esc(entry.row.asset_name || entry.row.asset_code || "Aset"), { direction: "top", offset: [0, -20] });
+
+      marker.on("dragend", () => {
+        const ll = marker.getLatLng();
+        const newLat = ll.lat.toFixed(6);
+        const newLng = ll.lng.toFixed(6);
+        try {
+          onSaveRef.current?.(entry.row, newLat, newLng);
+        } catch {
+          // Ditolak (baris terkunci / sedang dibuka di form) → kembalikan pin
+          marker.setLatLng([entry.lat, entry.lng]);
+          return;
+        }
+        entry.lat = parseFloat(newLat); entry.lng = parseFloat(newLng);
+        setRows((prev) => prev.map((r) => (r.id === entry.row.id
+          ? { ...r, koordinat_latitude: newLat, koordinat_longitude: newLng }
+          : r)));
+        toast.success(navigator.onLine
+          ? `Koordinat "${entry.row.asset_name || entry.row.asset_code}" tersimpan`
+          : `Koordinat "${entry.row.asset_name || entry.row.asset_code}" masuk antrean — tersinkron saat online`);
+        refreshRowVersion(entry.row.id);
       });
 
-      const el = document.createElement("div");
-      el.style.minWidth = "180px";
-      el.innerHTML = `
-        <div style="font-weight:700;font-size:12px;margin-bottom:2px">${esc(row.asset_name || "-")}</div>
-        <div style="font-size:11px;color:#475569">${esc(row.asset_code || "-")}${row.NUP ? ` &bull; NUP ${esc(row.NUP)}` : ""}</div>
-        ${row.location ? `<div style="font-size:11px;color:#475569">${esc(row.location)}</div>` : ""}
-        <div style="font-size:11px;color:#475569">${esc(row.inventory_status || "Belum Diinventarisasi")}</div>
-        <div style="font-family:monospace;font-size:10px;color:#64748b;margin-top:2px">${lat.toFixed(6)}, ${lng.toFixed(6)}</div>`;
-      if (onEditRef.current) {
-        const btn = document.createElement("button");
-        btn.textContent = "Edit Aset";
-        btn.style.cssText = "margin-top:6px;padding:4px 10px;background:#2563eb;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer";
-        btn.addEventListener("click", () => onEditRef.current?.(row));
-        el.appendChild(btn);
-      }
-      marker.bindPopup(el);
-      marker.bindTooltip(`${row.asset_name || row.asset_code || "Aset"}`, { direction: "top", offset: [0, -20] });
-
-      if (canEdit) {
-        marker.on("dragend", async () => {
-          const ll = marker.getLatLng();
-          const newLat = ll.lat.toFixed(6);
-          const newLng = ll.lng.toFixed(6);
-          try {
-            await onSaveRef.current?.(row, newLat, newLng);
-            // Perbarui state lokal agar popup & drag berikutnya berbasis nilai baru
-            setRows((prev) => prev.map((r) => (r.id === row.id
-              ? { ...r, koordinat_latitude: newLat, koordinat_longitude: newLng, version: (r.version || 1) + 1 }
-              : r)));
-            toast.success(`Koordinat "${row.asset_name || row.asset_code}" diperbarui`);
-          } catch {
-            marker.setLatLng([lat, lng]); // gagal → kembalikan pin
-            toast.error("Gagal menyimpan koordinat");
-          }
-        });
-      }
       marker.addTo(layer);
+      markersRef.current.set(row.id, entry);
     }
+
+    // Buang pin milik baris yang sudah tidak ada
+    for (const [id, entry] of Array.from(markersRef.current.entries())) {
+      if (!seen.has(id)) {
+        entry.marker.remove();
+        markersRef.current.delete(id);
+      }
+    }
+
     if (bounds.length > 0 && !didFitRef.current) {
       didFitRef.current = true;
       map.fitBounds(bounds, { padding: [30, 30], maxZoom: 18 });
     }
-  }, [rows, canEdit]);
+  }, [rows, canEdit, buildPopupEl, refreshRowVersion]);
 
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden" data-testid="asset-map-panel">
@@ -241,12 +296,12 @@ const AssetMapPanel = memo(function AssetMapPanel({
           <div className="relative">
             <div ref={containerRef} className="h-[420px] w-full z-0" data-testid="asset-map-canvas" />
             {loading && (
-              <div className="absolute inset-0 z-[400] bg-background/50 flex items-center justify-center pointer-events-none">
+              <div className="absolute inset-0 z-[500] bg-background/50 flex items-center justify-center pointer-events-none">
                 <Loader2 className="w-6 h-6 animate-spin text-teal-600" />
               </div>
             )}
             {loadedOnce && !loading && rows.length === 0 && (
-              <div className="absolute inset-x-0 top-3 z-[400] flex justify-center pointer-events-none">
+              <div className="absolute inset-x-0 top-3 z-[500] flex justify-center pointer-events-none">
                 <span className="px-3 py-1.5 rounded-full bg-background/90 border border-border text-xs text-muted-foreground shadow">
                   Belum ada aset dengan titik koordinat di kegiatan ini
                 </span>

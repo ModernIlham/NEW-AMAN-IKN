@@ -860,8 +860,14 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
 
   const handleOptimisticSubmit = useCallback((payload, isEdit, editId, usePatch = false) => {
     const assetId = isEdit ? editId : `temp_${Date.now()}`;
-    // Capture the version the user started editing from (for OCC / If-Match)
-    const baseVersion = isEdit ? (assets.find(a => a.id === editId)?.version ?? null) : null;
+    // Capture the version the user started editing from (for OCC / If-Match).
+    // Aset hasil scan QR bisa TIDAK ada di halaman list saat ini — pakai versi
+    // dari baris edit yang terbuka sebagai fallback agar If-Match tetap terkirim.
+    const baseVersion = isEdit
+      ? (assets.find(a => a.id === editId)?.version
+         ?? (editAssetRef.current?.id === editId ? editAssetRef.current?.version : null)
+         ?? null)
+      : null;
     if (isEdit && editId) {
       setAssets(prev => prev.map(a => a.id === editId ? { ...a, ...payload, thumbnail: payload.photo || a.thumbnail } : a));
       setMobileAssets(prev => prev.map(a => a.id === editId ? { ...a, ...payload, thumbnail: payload.photo || a.thumbnail } : a));
@@ -892,20 +898,39 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   // Geser pin di Peta Aset → simpan koordinat baru otomatis lewat antrean
   // simpan yang sama dengan form (If-Match + Idempotency-Key + retry offline).
   const handleMapCoordsSave = useCallback((row, lat, lng) => {
+    // Simpanan antrean melepas kunci baris saat selesai (onItemSaved) — jangan
+    // izinkan geser pin aset yang sedang dibuka di form edit sesi ini, dan
+    // hormati kunci sesi lain (error sinkron → pin di-revert oleh panel).
+    if (editAssetRef.current?.id === row.id) {
+      toast.error("Aset ini sedang dibuka di form edit — simpan/tutup form dulu");
+      throw new Error("row-open-in-form");
+    }
+    const lock = rowLocks[row.id];
+    if (lock && lock.session_id !== sessionId) {
+      toast.error(`Aset sedang diedit oleh ${lock.user_name}`);
+      throw new Error("row-locked");
+    }
     const payload = { koordinat_latitude: lat, koordinat_longitude: lng };
     setAssets(prev => prev.map(a => (a.id === row.id ? { ...a, ...payload } : a)));
     setMobileAssets(prev => prev.map(a => (a.id === row.id ? { ...a, ...payload } : a)));
     if (activity?.id) upsertSnapshotAsset(activity.id, { ...row, ...payload, id: row.id });
     const baseVersion = assetsStateRef.current.find(a => a.id === row.id)?.version ?? row.version ?? null;
-    return enqueueOptimistic({
+    // Fire-and-forget: antrean menjamin simpan (retry saat online kembali) —
+    // kegagalan sesaat TIDAK me-revert pin; konflik ditangani UI antrean.
+    enqueueOptimistic({
       tempId: row.id, payload, isEdit: true, editId: row.id, usePatch: true, baseVersion,
-    });
-  }, [enqueueOptimistic, activity?.id]);
+    }).catch(() => {});
+  }, [enqueueOptimistic, activity?.id, rowLocks, sessionId]);
 
   // Save current asset in background + navigate to next/prev row
   const handleSaveAndNavigate = useCallback(async (payload, isEdit, editId, direction, usePatch = false) => {
     const assetId = isEdit ? editId : `temp_${Date.now()}`;
-    const baseVersion = isEdit ? (assets.find(a => a.id === editId)?.version ?? null) : null;
+    const baseVersion = isEdit
+      ? (assets.find(a => a.id === editId)?.version
+         ?? (editAssetRef.current?.id === editId ? editAssetRef.current?.version : null)
+         ?? null)
+      : null;
+    const isScan = typeof direction === "string" && direction.startsWith("camera:scan:");
     // PATCH kosong (tidak ada perubahan) → tak perlu simpan, langsung navigasi.
     const hasChanges = !isEdit || !usePatch || (payload && Object.keys(payload).length > 0);
     // 1) Optimistic local update (row stays locked until save completes via onItemSaved)
@@ -931,30 +956,51 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
         // removed only via dismissSync → onItemDismissed.
       });
       toast.info("Menyimpan di background...", { duration: 1200 });
-    } else if (isEdit && editId) {
+    } else if (isEdit && editId && !isScan) {
       // Tanpa perubahan tidak ada antrean yang akan melepas kunci baris
       // (biasanya onItemSaved) — lepaskan sekarang sebelum pindah aset.
+      // (Alur scan melepasnya nanti HANYA bila benar-benar pindah aset.)
       unlockAsset(editId);
     }
 
     // 3a) Alur scan QR dari Mode Kamera (edit inventarisasi): cari aset hasil
     //     scan di kegiatan ini, kunci, lalu buka untuk diedit — kamera tetap
     //     terbuka karena editAsset hanya berganti (sama seperti prev/next).
-    if (typeof direction === "string" && direction.startsWith("camera:scan:")) {
+    //     Pencarian substring bisa mengenai banyak baris (satu kode aset utk
+    //     banyak NUP) — hanya buka otomatis bila cocok EKSAK dan tunggal.
+    if (isScan) {
       const code = direction.slice("camera:scan:".length).trim();
       if (!code || !activity?.id) return;
       const tId = toast.loading(`Mencari "${code}"…`);
       try {
         const r = await axios.get(`${API}/assets`, {
-          params: { activity_id: activity.id, search: code, page: 1, page_size: 10 },
+          params: { activity_id: activity.id, search: code, page: 1, page_size: 50 },
         });
-        const found = (r.data?.items || [])[0];
-        if (!found) { toast.error(`Barang "${code}" tidak ada di kegiatan ini`, { id: tId }); return; }
+        const items = r.data?.items || [];
+        const codeLc = code.toLowerCase();
+        const exact = items.filter(a =>
+          [a.kode_register, a.asset_code, a.serial_number]
+            .some(v => String(v || "").toLowerCase() === codeLc));
+        let found = null;
+        if (exact.length === 1) found = exact[0];
+        else if (exact.length === 0 && (r.data?.total || 0) === 1) found = items[0];
+        if (!found) {
+          if ((r.data?.total || 0) === 0) {
+            toast.error(`Barang "${code}" tidak ada di kegiatan ini`, { id: tId });
+          } else {
+            setSearchInput(code);
+            toast.info(`${exact.length > 1 ? exact.length : r.data.total} aset cocok dengan "${code}" — pilih dari daftar`, { id: tId, duration: 5000 });
+          }
+          return; // kunci aset yang sedang dibuka tetap dipegang
+        }
         if (found.id === editId) { toast.info("QR menunjuk aset yang sedang dibuka", { id: tId }); return; }
         const lock = rowLocks[found.id];
         if (lock && lock.session_id !== sessionId) { toast.error(`Aset sedang diedit oleh ${lock.user_name}`, { id: tId }); return; }
         const locked = await lockAsset(found.id);
         if (!locked) { toast.dismiss(tId); return; }
+        // Benar-benar pindah: bila tak ada perubahan tersimpan (tidak ada
+        // antrean yang akan melepasnya), lepaskan kunci aset lama sekarang.
+        if (!hasChanges && editId) unlockAsset(editId);
         setEditAssetForForm(found);
         toast.success(`${found.asset_name || found.asset_code}: siap diedit`, { id: tId });
       } catch {
@@ -988,7 +1034,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       setEditAssetForForm(null);
       setIsSidebarOpen(false);
     }
-  }, [assets, lockAsset, unlockAsset, enqueueOptimistic, rowLocks, sessionId, activity?.id]);
+  }, [assets, lockAsset, unlockAsset, enqueueOptimistic, rowLocks, sessionId, activity?.id, setSearchInput]);
 
   // Mode Kamera Penuh — "tinjau aset tersimpan": simpan aset saat ini lalu muat
   // aset yang tersimpan sebelumnya (paling atas daftar) ke form untuk ditinjau/

@@ -1249,11 +1249,19 @@ const AssetForm = memo(({
       errs.pengguna_jabatan = "Nama jabatan wajib diisi bila pengguna melekat ke Jabatan";
     }
 
+    // Kode register (opsional) harus 32 karakter hex — sama dengan aturan
+    // server (/assets/validate). Dicek di klien juga karena alur kamera
+    // beruntun melewati round-trip validasi server.
+    const kodeReg = String(formData.kode_register || "").trim();
+    if (kodeReg && !/^[A-Fa-f0-9]{32}$/.test(kodeReg)) {
+      errs.kode_register = `Kode Register harus tepat 32 karakter hex (saat ini ${kodeReg.length} karakter)`;
+    }
+
     if (Object.keys(errs).length > 0) {
       setFieldErrors(errs);
       setFormErrors([]);
       // Prioritas gulir ke error pertama (urutan wajar dari atas form).
-      const order = ["asset_code", "asset_name", "koordinat_latitude", "koordinat_longitude", "pengguna_jabatan"];
+      const order = ["asset_code", "asset_name", "kode_register", "koordinat_latitude", "koordinat_longitude", "pengguna_jabatan"];
       focusFieldError(order.find(f => errs[f]) || Object.keys(errs)[0]);
       toast.error(`Periksa ${Object.keys(errs).length} field yang belum benar`);
       return;
@@ -1302,6 +1310,9 @@ const AssetForm = memo(({
       let payload;
       let usePatch = false;
 
+      // Alur kamera beruntun: kompresi lokal saja (tanpa round-trip Tinify per
+      // foto) supaya scan/navigasi aset berikutnya tidak menunggu jaringan.
+      const cameraFlow = (navIntent || "").startsWith("camera:");
       if (isEditing && editId && originalDataRef.current) {
         // === EDIT MODE: Build diff payload — only send changed fields ===
         const orig = originalDataRef.current;
@@ -1350,8 +1361,9 @@ const AssetForm = memo(({
               keepIndices.push(item.originalIndex);
             } else if (item.type === 'new' && item.newData) {
               // Compress new photos before sending (server-side Tinify, dengan
-              // fallback kompresi lokal via canvas saat offline/gagal)
-              newPhotosToAdd.push(await compressOnePhoto(item.newData));
+              // fallback kompresi lokal via canvas saat offline/gagal; alur
+              // kamera memakai kompresi lokal saja agar tidak menunggu)
+              newPhotosToAdd.push(await compressOnePhoto(item.newData, { localOnly: cameraFlow }));
             }
           }
           if (newPhotosToAdd.length > 0) toast.info("Mengompres foto baru...", { duration: 2000 });
@@ -1373,7 +1385,7 @@ const AssetForm = memo(({
               if (typeof photo === "string" && photo.startsWith("__existing__:")) {
                 compressedItemPhotos.push(photo);
               } else {
-                compressedItemPhotos.push(await compressOnePhoto(photo));
+                compressedItemPhotos.push(await compressOnePhoto(photo, { localOnly: cameraFlow }));
               }
             }
             // Documents: pass through sentinels untouched. New uploads ship
@@ -1405,9 +1417,6 @@ const AssetForm = memo(({
 
       } else {
         // === CREATE MODE: Full payload as before ===
-        // Alur kamera beruntun: kompresi lokal saja (tanpa round-trip Tinify
-        // per foto) supaya surveyor langsung bisa memotret aset berikutnya.
-        const cameraFlow = (navIntent || "").startsWith("camera:");
         if (!cameraFlow) toast.info("Mengompres foto...", { duration: 2000 });
         const compressedPhotos = await compressPhotos(formData.photos, { localOnly: cameraFlow });
         const coverIdx = formData.thumbnail_index || 0;
