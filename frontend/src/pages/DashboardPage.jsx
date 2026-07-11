@@ -574,6 +574,12 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       buildFilterParams(params);
       const r = await axios.get(`${API}/assets?${params.toString()}`);
       const newItems = r.data.items || [];
+      // Halaman di luar rentang (mis. baris terakhir baru dihapus) → mundur ke
+      // halaman terakhir yang berisi data alih-alih menampilkan layar kosong.
+      const totalPagesResp = r.data.total_pages || 1;
+      if ((r.data.total || 0) > 0 && newItems.length === 0 && page > totalPagesResp) {
+        return doFetch(totalPagesResp, size, search, category, sort, appendMobile);
+      }
       // Keep unsynced CREATE rows visible: a refetch replaces the list, but
       // rows still waiting in the save queue don't exist on the server yet.
       const pendingRows = getPendingItems()
@@ -923,6 +929,20 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   }, [assets, lockAsset, enqueueOptimistic, rowLocks, sessionId, activity?.id]);
 
   const handleDelete = useCallback(async id => {
+    // Aset yang BELUM tersinkron (id "temp_") → batalkan dari antrean simpan.
+    // JANGAN kirim DELETE (id itu tak ada di server) — itu gagal lalu CREATE-nya
+    // tetap lolos belakangan → "aset hantu". dismissSync membuang baris temp +
+    // item antrean + salinan persist sekaligus.
+    if (String(id).startsWith("temp_")) {
+      const ok = await confirm({
+        title: "Batalkan Aset", description: "Aset ini belum tersimpan ke server. Batalkan penambahannya?",
+        confirmLabel: "Batalkan", variant: "danger",
+      });
+      if (!ok) return;
+      dismissSync(id);
+      toast.success("Dibatalkan");
+      return;
+    }
     const ok = await confirm({
       title: "Hapus Aset",
       description: "Aset ini akan dihapus permanen. Lanjutkan?",
@@ -930,6 +950,13 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       variant: "danger",
     });
     if (!ok) return;
+    // Hapus butuh koneksi (belum ada antrean hapus offline). Tanpa guard ini,
+    // saat offline axios.delete gagal → refetch menyajikan snapshot yang masih
+    // berisi baris tadi → baris "muncul lagi" & hapus hilang diam-diam.
+    if (!isOnlineRef.current) {
+      toast.error("Hapus aset memerlukan koneksi internet. Coba lagi saat online.");
+      return;
+    }
     setIsDeleting(id);
     // Optimistis: baris langsung HILANG dari layar (tak perlu tunggu server /
     // refresh manual). refreshData() di bawah hanya rekonsiliasi hitungan.
@@ -941,12 +968,12 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       await axios.delete(`${API}/assets/${id}`);
       if (activity?.id) removeSnapshotAsset(activity.id, id);
       toast.success("Dihapus");
-      refreshDataRef.current();
+      refreshDataRef.current(); // rekonsiliasi (doFetch meng-clamp halaman kosong)
     } catch (err) {
       toast.error(getApiError(err, "Gagal hapus"));
       refreshDataRef.current(); // rollback: muat ulang agar baris kembali bila hapus gagal
     } finally { setIsDeleting(null); }
-  }, [confirm, activity?.id]);
+  }, [confirm, activity?.id, dismissSync]);
 
   // Kartu Inventarisasi — riwayat pengesahan lintas kegiatan per identitas aset.
   // kode_satker kegiatan aktif ikut dikirim agar riwayat dibatasi pada satuan

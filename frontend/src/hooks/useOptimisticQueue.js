@@ -295,15 +295,23 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
           const r = await axiosLargeUpload.get(`${API}/assets/next-nup?${params}`, { headers: getAuditHeaders() });
           const nextNup = r?.data?.next_nup;
           if (nextNup && String(nextNup) !== String(item.payload.NUP)) {
-            updateStatus(statusKey, "queued");
-            // Re-enqueue create dengan NUP baru + idempotency key baru (payload berubah).
-            queueRef.current.push({
+            const newItem = {
               ...item,
               payload: { ...item.payload, NUP: String(nextNup) },
               idempotencyKey: genIdempotencyKey(),
               nupRetries: (item.nupRetries || 0) + 1,
-            });
+            };
+            // WRITE-THROUGH: samakan salinan persist + failedItemsRef dengan retry
+            // yang benar-benar berjalan. Tanpa ini, IndexedDB tetap menyimpan
+            // {key lama, NUP lama}; bila crash setelah retry sukses, rehydrate
+            // me-replay NUP lama → aset KEMBAR. Sekarang yang di-replay adalah
+            // item ber-NUP baru + key barunya (server bisa dedup lewat idempotensi).
+            failedItemsRef.current[statusKey] = toPlainItem(newItem, statusKey);
+            persistQueueItem(newItem, statusKey);
+            updateStatus(statusKey, "queued");
+            queueRef.current.push(newItem);
             setQueueLength(queueRef.current.length);
+            toast.info(`NUP ${item.payload.NUP} sudah dipakai — dinomori ulang otomatis ke ${nextNup}`, { duration: 3500 });
             item.reject?.(err); // promise asli sudah tak ditunggu; item baru yang diproses
             return; // finally akan memicu processNext untuk item ber-NUP baru
           }

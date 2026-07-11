@@ -39,27 +39,32 @@ function readFileAsDataUrl(file) {
 
 // Skala + encode JPEG progresif dari sebuah sumber gambar (ImageBitmap / <img>).
 function encodeScaled(source, srcW, srcH, { maxDim, quality, maxBytes }) {
-  let width = srcW, height = srcH;
-  if (width > maxDim || height > maxDim) {
-    if (width >= height) { height = Math.round(height * (maxDim / width)); width = maxDim; }
-    else { width = Math.round(width * (maxDim / height)); height = maxDim; }
+  try {
+    let width = srcW, height = srcH;
+    if (width > maxDim || height > maxDim) {
+      if (width >= height) { height = Math.round(height * (maxDim / width)); width = maxDim; }
+      else { width = Math.round(width * (maxDim / height)); height = maxDim; }
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(source, 0, 0, width, height);
+    let q = quality;
+    let dataUrl = canvas.toDataURL("image/jpeg", q);
+    const approxBytes = (s) => (s.length - (s.indexOf(",") + 1)) * 0.75;
+    while (approxBytes(dataUrl) > maxBytes && q > 0.4) {
+      q = Math.max(0.4, q - 0.1);
+      dataUrl = canvas.toDataURL("image/jpeg", q);
+    }
+    return dataUrl;
+  } finally {
+    // Bebaskan ImageBitmap walau drawImage/toDataURL sempat melempar (OOM di HP
+    // low-end) — mencegah kebocoran memori.
+    if (source && typeof source.close === "function") { try { source.close(); } catch { /* ignore */ } }
   }
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(source, 0, 0, width, height);
-  let q = quality;
-  let dataUrl = canvas.toDataURL("image/jpeg", q);
-  const approxBytes = (s) => (s.length - (s.indexOf(",") + 1)) * 0.75;
-  while (approxBytes(dataUrl) > maxBytes && q > 0.4) {
-    q = Math.max(0.4, q - 0.1);
-    dataUrl = canvas.toDataURL("image/jpeg", q);
-  }
-  if (typeof source.close === "function") { try { source.close(); } catch { /* ignore */ } }
-  return dataUrl;
 }
 
 export async function compressImageFile(file, opts = {}) {
