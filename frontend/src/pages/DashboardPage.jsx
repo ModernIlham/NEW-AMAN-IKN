@@ -7,6 +7,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback, memo, useRedu
 import {
   Package, Plus, X, ChevronDown, Loader2, Star,
   Users, PanelLeftClose, PanelLeftOpen, Lock,
+  BarChart3, ClipboardList, Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -1260,9 +1261,30 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
               refreshData={refreshData} viewMode={viewMode} setViewMode={setViewMode}
             />
 
-            {!inventoryMode && <Suspense fallback={null}><AnalyticsPanel activityId={activity?.id} isOpen={analyticsOpen} onToggle={handleAnalyticsToggle} panelHeight={analyticsPanelHeight} onDragStart={handleAnalyticsDragStart} /></Suspense>}
-            {!inventoryMode && <Suspense fallback={null}><RekapitulasiPanel activityId={activity?.id} isOpen={rekapOpen} onToggle={() => setRekapOpen(p => !p)} /></Suspense>}
-            <Suspense fallback={null}><AssetGroupsPanel activityId={activity?.id} isOpen={groupsOpen} onToggle={() => setGroupsOpen(p => !p)} onBatchEdit={perms.canEdit ? handleGroupBatchEdit : undefined} /></Suspense>
+            {/* HP: tiga header panel bertumpuk memakan ~150px sebelum baris data.
+                Diringkas jadi SATU baris chip; panel dirender hanya saat dibuka.
+                Desktop (lg) tetap seperti semula (header panel selalu tampil). */}
+            <div className="lg:hidden flex items-center gap-1.5 overflow-x-auto" data-testid="mobile-panel-chips">
+              {!inventoryMode && (
+                <button type="button" onClick={handleAnalyticsToggle} data-testid="chip-analytics"
+                  className={`h-8 px-2.5 rounded-full text-[11px] font-semibold flex items-center gap-1 flex-shrink-0 border transition-colors ${analyticsOpen ? "bg-blue-600 border-blue-600 text-white" : "bg-card border-border text-muted-foreground"}`}>
+                  <BarChart3 className="w-3.5 h-3.5" />Analytics
+                </button>
+              )}
+              {!inventoryMode && (
+                <button type="button" onClick={() => setRekapOpen(p => !p)} data-testid="chip-rekap"
+                  className={`h-8 px-2.5 rounded-full text-[11px] font-semibold flex items-center gap-1 flex-shrink-0 border transition-colors ${rekapOpen ? "bg-blue-600 border-blue-600 text-white" : "bg-card border-border text-muted-foreground"}`}>
+                  <ClipboardList className="w-3.5 h-3.5" />Rekapitulasi
+                </button>
+              )}
+              <button type="button" onClick={() => setGroupsOpen(p => !p)} data-testid="chip-groups"
+                className={`h-8 px-2.5 rounded-full text-[11px] font-semibold flex items-center gap-1 flex-shrink-0 border transition-colors ${groupsOpen ? "bg-violet-600 border-violet-600 text-white" : "bg-card border-border text-muted-foreground"}`}>
+                <Layers className="w-3.5 h-3.5" />Barang Serupa
+              </button>
+            </div>
+            {!inventoryMode && <div className={analyticsOpen ? "" : "hidden lg:block"}><Suspense fallback={null}><AnalyticsPanel activityId={activity?.id} isOpen={analyticsOpen} onToggle={handleAnalyticsToggle} panelHeight={analyticsPanelHeight} onDragStart={handleAnalyticsDragStart} /></Suspense></div>}
+            {!inventoryMode && <div className={rekapOpen ? "" : "hidden lg:block"}><Suspense fallback={null}><RekapitulasiPanel activityId={activity?.id} isOpen={rekapOpen} onToggle={() => setRekapOpen(p => !p)} /></Suspense></div>}
+            <div className={groupsOpen ? "" : "hidden lg:block"}><Suspense fallback={null}><AssetGroupsPanel activityId={activity?.id} isOpen={groupsOpen} onToggle={() => setGroupsOpen(p => !p)} onBatchEdit={perms.canEdit ? handleGroupBatchEdit : undefined} /></Suspense></div>
 
             {loading ? (
               <LoadingIndicator message={loadingMessage} totalItems={totalItems} pageSize={pageSize} currentPage={currentPage} />
