@@ -50,5 +50,9 @@ jobs:
             echo "::error::Isi secret VPS_SSH_KEY bukan private key OpenSSH yang valid. Cara paling mudah: di VPS jalankan  base64 -w0 ~/deploy_key; echo  lalu salin SATU baris hasilnya ke secret VPS_SSH_KEY. (Atau salin utuh semua baris file kunci dari -----BEGIN sampai -----END.)"
             exit 1
           fi
-          ssh-keyscan -p "${VPS_PORT:-22}" -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          # Uji jangkauan host lebih dulu — pesan jelas bila VPS_HOST salah
+          if ! ssh-keyscan -T 10 -p "${VPS_PORT:-22}" -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null; then
+            echo "::error::Tidak bisa terhubung ke VPS di port ${VPS_PORT:-22}. Pastikan secret VPS_HOST HANYA berisi IP/hostname (contoh: 123.45.67.89 — tanpa http://, tanpa port, tanpa spasi) dan port SSH terbuka."
+            exit 1
+          fi
           ssh -i ~/.ssh/deploy_key -p "${VPS_PORT:-22}" "$VPS_USER@$VPS_HOST" 'bash -s' < scripts/deploy_vps.sh
