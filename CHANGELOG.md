@@ -48,6 +48,13 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#70] Deploy: retry jangkauan VPS 5x + ulangi SSH sekali — 2026-07-11
+
+- `deploy.yml` kini tahan gangguan sesaat: `ssh-keyscan` dicoba **5 kali**
+  berjarak 20 detik (timeout 15 dtk/percobaan) dan eksekusi skrip deploy
+  **diulang sekali** bila koneksi putus (skrip idempoten). Latar: run
+  deploy pasca-merge #69 gagal keyscan padahal konfigurasi benar.
+
 ## [#69] Bar peta HP satu baris (menu gabungan) + siklus selaras diagram resmi Kemenkeu — 2026-07-11
 
 - **Bar peta di HP jadi SATU baris**: filter Barang Serupa + Unduh
