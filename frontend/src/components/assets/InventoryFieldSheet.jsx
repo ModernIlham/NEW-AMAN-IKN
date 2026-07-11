@@ -437,6 +437,10 @@ const InventoryFieldSheet = ({
                 <Label className="text-xs">{PENGGUNA_NAME_LABELS[formData.pengguna_melekat_ke] || "Pengguna"}</Label>
                 <Input name="user" value={formData.user || ""} onChange={onInputChange} className="h-9 text-xs" data-testid="sheet-pengguna-input" />
               </div>
+              <div className="space-y-1">
+                <Label className="text-xs">NIP/NIK Pegawai</Label>
+                <Input name="pengguna_nip" value={formData.pengguna_nip || ""} onChange={onInputChange} placeholder="NIP/NIK pegawai pengguna" className="h-9 text-xs" data-testid="sheet-pengguna-nip" />
+              </div>
               {hasGps ? (
                 <div className="flex items-center gap-1.5 min-w-0">
                   <MapPin className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />

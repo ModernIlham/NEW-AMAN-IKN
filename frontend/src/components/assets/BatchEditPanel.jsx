@@ -541,6 +541,11 @@ const BatchEditPanel = memo(function BatchEditPanel({
                   <label className="text-[10px] text-muted-foreground">{PENGGUNA_NAME_LABELS[updates.pengguna_melekat_ke] || "Nama Pengguna"}</label>
                   <ClearableInput placeholder="—" value={updates.user === "__clear__" ? "" : updates.user} isClear={updates.user === "__clear__"} onChange={e => setField("user", e.target.value)} onClear={() => toggleClearField("user")} />
                 </div>
+                {/* NIP/NIK pegawai pengguna */}
+                <div className="space-y-0.5 order-2 sm:order-none">
+                  <label className="text-[10px] text-muted-foreground">NIP/NIK Pegawai</label>
+                  <ClearableInput placeholder="—" value={updates.pengguna_nip === "__clear__" ? "" : updates.pengguna_nip} isClear={updates.pengguna_nip === "__clear__"} onChange={e => setField("pengguna_nip", e.target.value)} onClear={() => toggleClearField("pengguna_nip")} />
+                </div>
                 {/* Nama Jabatan (bila melekat ke Jabatan) — di HP di atas Nama */}
                 {updates.pengguna_melekat_ke === "Jabatan" && (
                   <div className="space-y-0.5 order-1 sm:order-none">
