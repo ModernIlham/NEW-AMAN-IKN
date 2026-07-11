@@ -24,6 +24,7 @@ const Lightbox = memo(({ asset, onClose, onEdit }) => {
   const [photos, setPhotos] = useState([]);
   const [idx, setIdx] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [imgLoading, setImgLoading] = useState(false); // foto berikutnya sedang dimuat
   const startX = useRef(0);
 
   useEffect(() => {
@@ -65,6 +66,25 @@ const Lightbox = memo(({ asset, onClose, onEdit }) => {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [photos.length, onClose]);
+
+  // Foto berpindah → tandai "sedang memuat" agar tampil spinner (bukan foto lama
+  // yang terlihat "freeze"). Dibersihkan oleh onLoad/onError <img>. Bila foto
+  // sudah di-cache (mis. hasil preload), onLoad langsung memicu clear.
+  useEffect(() => { if (photos.length > 0) setImgLoading(true); }, [idx, photos]);
+
+  // Preload foto tetangga (berikutnya & sebelumnya) agar navigasi mulus — saat
+  // ditampilkan sudah dari cache sehingga tak terkesan freeze.
+  useEffect(() => {
+    if (photos.length <= 1) return undefined;
+    const imgs = [];
+    [(idx + 1) % photos.length, (idx - 1 + photos.length) % photos.length].forEach((i) => {
+      if (i === idx) return;
+      const im = new Image();
+      im.src = photos[i];
+      imgs.push(im);
+    });
+    return () => { imgs.forEach((im) => { im.src = ""; }); };
+  }, [idx, photos]);
 
   // Back/Undo browser saat lightbox terbuka → tutup lightbox, bukan pindah
   // halaman. Komponen ini hanya ter-mount saat terbuka, jadi guard aktif penuh.
@@ -118,11 +138,19 @@ const Lightbox = memo(({ asset, onClose, onEdit }) => {
         ) : photos.length > 0 ? (
           <>
             <img
+              key={photos[idx]}
               src={photos[idx]}
               alt={a.name || "Asset"}
-              className="max-h-[60vh] max-w-full object-contain rounded-lg shadow-2xl"
+              onLoad={() => setImgLoading(false)}
+              onError={() => setImgLoading(false)}
+              className={`max-h-[60vh] max-w-full object-contain rounded-lg shadow-2xl transition-opacity duration-200 ${imgLoading ? "opacity-0" : "opacity-100"}`}
               draggable={false}
             />
+            {imgLoading && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none" data-testid="lightbox-img-loading">
+                <Loader2 className="w-10 h-10 text-slate-700 dark:text-white animate-spin" />
+              </div>
+            )}
             {photos.length > 1 && (
               <>
                 <button className="absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/50 hover:bg-black/70 text-white ring-1 ring-white/40 shadow-lg flex items-center justify-center backdrop-blur-sm transition-colors" onClick={(e) => { e.stopPropagation(); setIdx(i => (i - 1 + photos.length) % photos.length); }}>
