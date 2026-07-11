@@ -1998,6 +1998,7 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None):
             "asset_code": a.get("asset_code", "-"), "nup": a.get("NUP", "-"),
             "category_label": cat_map.get(a.get("category", ""), a.get("category", "-")) or "-",
             "asset_name": a.get("asset_name", "-") or "-", "brand_model": f"{brand} {model}".strip() or "-",
+            "eselon1": a.get("eselon1", "") or "", "eselon2": a.get("eselon2", "") or "",
 
             "year": year or "-", "value_fmt": fmt(sp(a)),
             "condition_badge": cond_badge, "condition_badge_class": cond_class,

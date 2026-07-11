@@ -194,7 +194,7 @@ const AssetGroupsPanel = memo(({ activityId, isOpen, onToggle, onBatchEdit }) =>
                           <Button
                             size="sm"
                             variant="outline"
-                            className="w-full h-7 text-xs border-violet-300 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/30"
+                            className="w-full h-7 text-xs border-violet-300 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/30 hover:text-violet-800 dark:hover:text-violet-200"
                             onClick={() => handleBatchEditGroup(group)}
                             data-testid={`group-batch-edit-${idx}`}
                           >

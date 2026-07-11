@@ -22,8 +22,6 @@
 
         .data-table tbody tr {
             border-bottom: 1px solid #f1f5f9;
-            height: 68px;
-            max-height: 68px;
             break-inside: avoid;
             page-break-inside: avoid;
         }
@@ -34,9 +32,6 @@
             border: 1px solid #f1f5f9;
             font-size: 8px;
             color: #334155;
-            overflow: hidden;
-            height: 68px;
-            max-height: 68px;
         }
         .data-table td.center { text-align: center; }
         .data-table td.right { text-align: right; }
@@ -49,23 +44,14 @@
         .stiker-badge-mini { font-size: 5.5px; background: #16a34a; color: #fff; padding: 1px 3px; border-radius: 2px; display: inline-block; margin-top: 2px; font-weight: 700; }
         .stiker-empty { width: 40px; height: 40px; border-radius: 3px; background: #f1f5f9; display: flex; align-items: center; justify-content: center; margin: 0 auto; color: #cbd5e1; font-size: 7px; }
 
-        /* Text cells: allow wrap, clip at fixed row height, fade to ellipsis at bottom */
+        /* Sel teks: bungkus penuh, tinggi baris mengikuti isi. Kata yang
+           mendekati tepi kolom turun ke baris berikutnya (memakai ruang
+           vertikal) alih-alih dipudarkan "...". WeasyPrint memaginasi otomatis
+           lewat thead berulang + break-inside:avoid, jadi baris boleh tinggi
+           tanpa memotong informasi. */
         .cell-clip {
-            max-height: 60px;
-            overflow: hidden;
-            position: relative;
-        }
-        /* Fade-out overlay when content overflows */
-        .cell-clip::after {
-            content: '...';
-            position: absolute;
-            bottom: 0; right: 0;
-            background: linear-gradient(90deg, transparent, #fff 40%);
-            padding: 0 4px 0 12px;
-            font-size: 7px; color: #94a3b8;
-        }
-        .data-table tbody tr:nth-child(even) .cell-clip::after {
-            background: linear-gradient(90deg, transparent, #fafbfd 40%);
+            word-wrap: break-word;
+            overflow-wrap: break-word;
         }
 
         .cell-main { font-size: 8px; font-weight: 600; color: #0f172a; margin-bottom: 2px; word-wrap: break-word; overflow-wrap: break-word; }
@@ -132,6 +118,8 @@
                 <td><div class="cell-clip">
                     <div class="cell-main">{{ a.asset_name }}</div>
                     <div class="cell-sub"><span class="label">Merk:</span> {{ a.brand_model }}</div>
+                    {% if a.eselon1 %}<div class="cell-sub"><span class="label">Es. I:</span> {{ a.eselon1 }}</div>{% endif %}
+                    {% if a.eselon2 %}<div class="cell-sub"><span class="label">Es. II:</span> {{ a.eselon2 }}</div>{% endif %}
                 </div></td>
                 <td class="center">{{ a.year or '-' }}</td>
                 <td class="right" style="font-weight:600;">{{ a.value_fmt }}</td>
