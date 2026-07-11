@@ -8,7 +8,7 @@ import {
   AlertTriangle, ShieldAlert, RotateCcw, Building2, Eye, Download,
   HardDrive, Upload, Shield, CheckCircle2, Database,
   Clock, PlayCircle, XCircle, Image as ImageIcon,
-  ShieldCheck, Lock,
+  ShieldCheck, Lock, LayoutGrid,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -473,7 +473,7 @@ function ActivityPhotoLightbox({ activityId, initialIndex = 0, onClose }) {
   );
 }
 
-export default function ActivitySelectionPage({ user, onLogout, onSelectActivity, onShowInfo }) {
+export default function ActivitySelectionPage({ user, onLogout, onSelectActivity, onShowInfo, onShowModules }) {
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -959,6 +959,18 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
           </div>
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground hidden sm:block">{user?.name || user?.username}</span>
+            {onShowModules && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onShowModules}
+                className="gap-1"
+                title="Kembali ke Beranda Modul Siklus BMN"
+                data-testid="activity-page-modules"
+              >
+                <LayoutGrid className="w-4 h-4" /><span className="hidden sm:inline">Modul</span>
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={onLogout} className="gap-1">
               <LogOut className="w-4 h-4" /><span className="hidden sm:inline">Keluar</span>
             </Button>
