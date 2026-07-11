@@ -894,6 +894,34 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     }
   }, [assets, lockAsset, enqueueOptimistic, rowLocks, sessionId, activity?.id]);
 
+  // Mode Kamera Penuh — "tinjau aset tersimpan": simpan aset saat ini lalu muat
+  // aset yang tersimpan sebelumnya (paling atas daftar) ke form untuk ditinjau/
+  // diperbaiki, tanpa keluar dari kamera. Setelah itu tombol ◀/▶ memakai
+  // navigasi standar (onSaveAndNavigate) antar aset yang sudah ada.
+  const handleCameraReviewSaved = useCallback(async (payload, isEdit, editId, usePatch = false) => {
+    const assetId = isEdit ? editId : `temp_${Date.now()}`;
+    const baseVersion = isEdit ? (assets.find(a => a.id === editId)?.version ?? null) : null;
+    if (isEdit && editId) {
+      setAssets(prev => prev.map(a => a.id === editId ? { ...a, ...payload, thumbnail: payload.photo || a.thumbnail } : a));
+      setMobileAssets(prev => prev.map(a => a.id === editId ? { ...a, ...payload, thumbnail: payload.photo || a.thumbnail } : a));
+    } else {
+      const tempAsset = { ...payload, id: assetId, thumbnail: payload.photo || null, created_at: new Date().toISOString() };
+      setAssets(prev => [tempAsset, ...prev]);
+      setMobileAssets(prev => [tempAsset, ...prev]);
+      setTotalItems(prev => prev + 1);
+    }
+    enqueueOptimistic({ tempId: assetId, payload, isEdit, editId: isEdit ? editId : undefined, usePatch, baseVersion }).catch(() => {});
+    // Aset yang ditinjau = aset terbaru SEBELUM simpan ini (kalau tadi kita
+    // meng-edit aset itu sendiri, ambil tetangga di atasnya).
+    const target = assets.find(a => a.id !== editId) || null;
+    if (!target) { toast.info("Belum ada aset lain untuk ditinjau"); return; }
+    const lock = rowLocks[target.id];
+    if (lock && lock.session_id !== sessionId) { toast.error(`Aset sedang diedit oleh ${lock.user_name}`); return; }
+    const locked = await lockAsset(target.id);
+    if (locked) setEditAssetForForm(target);
+    else toast.error("Aset sedang dikunci pengguna lain");
+  }, [assets, lockAsset, enqueueOptimistic, rowLocks, sessionId, activity?.id]);
+
   const handleDelete = useCallback(async id => {
     const ok = await confirm({
       title: "Hapus Aset",
@@ -1083,12 +1111,12 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
         {/* ASSET FORM SIDEBAR - only for admin/operator */}
         {perms.canEdit && (
           <div className={`hidden lg:block ${formPanelVisible ? 'w-[320px] min-w-[320px]' : 'w-0 min-w-0 overflow-hidden'}`} style={{ transition: 'width 0.3s ease, min-width 0.3s ease', willChange: 'width', contain: 'layout style' }}>
-            <AssetForm isOpen={isSidebarOpen || formPanelVisible} onClose={handleFormClose} activity={activity} categories={categories} editAsset={editAssetForForm} onSubmitSuccess={handleFormSubmitSuccess} onOptimisticSubmit={handleOptimisticSubmit} onSaveAndNavigate={handleSaveAndNavigate} assetIndex={editAssetIndex} totalAssetsInView={assets.length} saveQueueLength={queueLength} inventoryMode={inventoryMode} onShowCategoryManager={perms.canManageCategories ? () => openDialog('categoryManager') : undefined} onOpenKartu={handleOpenKartu} alwaysExpanded={formPanelVisible} />
+            <AssetForm isOpen={isSidebarOpen || formPanelVisible} onClose={handleFormClose} activity={activity} categories={categories} editAsset={editAssetForForm} onSubmitSuccess={handleFormSubmitSuccess} onOptimisticSubmit={handleOptimisticSubmit} onSaveAndNavigate={handleSaveAndNavigate} onCameraReviewSaved={handleCameraReviewSaved} onExitToNewAsset={() => setEditAssetForForm(null)} assetIndex={editAssetIndex} totalAssetsInView={assets.length} saveQueueLength={queueLength} inventoryMode={inventoryMode} onShowCategoryManager={perms.canManageCategories ? () => openDialog('categoryManager') : undefined} onOpenKartu={handleOpenKartu} alwaysExpanded={formPanelVisible} />
           </div>
         )}
         {perms.canEdit && (
           <div className="lg:hidden">
-            <AssetForm isOpen={isSidebarOpen} onClose={handleFormClose} activity={activity} categories={categories} editAsset={editAssetForForm} onSubmitSuccess={handleFormSubmitSuccess} onOptimisticSubmit={handleOptimisticSubmit} onSaveAndNavigate={handleSaveAndNavigate} assetIndex={editAssetIndex} totalAssetsInView={assets.length} saveQueueLength={queueLength} inventoryMode={inventoryMode} onShowCategoryManager={perms.canManageCategories ? () => openDialog('categoryManager') : undefined} onOpenKartu={handleOpenKartu} />
+            <AssetForm isOpen={isSidebarOpen} onClose={handleFormClose} activity={activity} categories={categories} editAsset={editAssetForForm} onSubmitSuccess={handleFormSubmitSuccess} onOptimisticSubmit={handleOptimisticSubmit} onSaveAndNavigate={handleSaveAndNavigate} onCameraReviewSaved={handleCameraReviewSaved} onExitToNewAsset={() => setEditAssetForForm(null)} assetIndex={editAssetIndex} totalAssetsInView={assets.length} saveQueueLength={queueLength} inventoryMode={inventoryMode} onShowCategoryManager={perms.canManageCategories ? () => openDialog('categoryManager') : undefined} onOpenKartu={handleOpenKartu} />
           </div>
         )}
 

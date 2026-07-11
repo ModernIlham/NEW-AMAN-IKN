@@ -443,6 +443,8 @@ const AssetForm = memo(({
   onSubmitSuccess,
   onOptimisticSubmit,
   onSaveAndNavigate,
+  onCameraReviewSaved,
+  onExitToNewAsset,
   assetIndex = -1,
   totalAssetsInView = 0,
   saveQueueLength = 0,
@@ -824,15 +826,17 @@ const AssetForm = memo(({
   const [cameraPromptOpen, setCameraPromptOpen] = useState(false);
   const [fullCameraOpen, setFullCameraOpen] = useState(false);
   useEffect(() => {
-    if (isOpen && !isEditing && inventoryMode) {
+    // Tawarkan dialog pilihan SEKALI saat membuka form aset baru — tapi tidak
+    // saat kita sudah berada di dalam Mode Kamera Penuh (mis. transisi tinjau→baru).
+    if (isOpen && !isEditing && inventoryMode && !fullCameraOpen) {
       if (autoCameraFiredRef.current) return;
       autoCameraFiredRef.current = true;
       setCameraPromptOpen(true);
       return;
     }
-    autoCameraFiredRef.current = false; // reset agar aset baru berikutnya ditawari lagi
-    if (!isOpen) { setCameraPromptOpen(false); setFullCameraOpen(false); }
-  }, [isOpen, isEditing, inventoryMode]);
+    // Reset one-shot HANYA saat form benar-benar tertutup, bukan tiap pindah aset.
+    if (!isOpen) { autoCameraFiredRef.current = false; setCameraPromptOpen(false); setFullCameraOpen(false); }
+  }, [isOpen, isEditing, inventoryMode, fullCameraOpen]);
 
   // Back HP saat dialog pilihan kamera terbuka → tutup dialognya saja
   useBackGuard(useCallback(() => setCameraPromptOpen(false), []), cameraPromptOpen);
@@ -855,10 +859,11 @@ const AssetForm = memo(({
     });
   }, [isEditing]);
 
-  // GPS live dari kamera: selalu simpan fix terbaru ke koordinat form + cache
+  // GPS live dari kamera: simpan fix terbaru ke koordinat form + cache. Guard
+  // kesetaraan agar TIDAK me-render ulang form saat koordinat tak berubah.
   const handleCameraGpsFix = useCallback(({ lat, lng }) => {
     try { localStorage.setItem("aman_last_gps", JSON.stringify({ lat, lng, ts: Date.now() })); } catch {}
-    setFormData(p => ({ ...p, koordinat_latitude: lat, koordinat_longitude: lng }));
+    setFormData(p => (p.koordinat_latitude === lat && p.koordinat_longitude === lng ? p : { ...p, koordinat_latitude: lat, koordinat_longitude: lng }));
   }, []);
 
   // Clear a single field's inline error (used on change so the red state
@@ -877,6 +882,53 @@ const AssetForm = memo(({
     setFormData(p => ({ ...p, [name]: value }));
     clearFieldError(name);
   }, [clearFieldError]);
+
+  // Urutan NUP LOKAL per (kegiatan|kode aset). Backend next-nup hanya menghitung
+  // dari aset yang SUDAH tersimpan di DB, sedangkan aset yang ditangkap beruntun
+  // masih di antrean (belum persist) — sehingga next-nup akan mengembalikan NUP
+  // yang SAMA berulang → kembar. Kita seed dari server (online) / localStorage
+  // (offline) lalu naikkan sendiri untuk tiap aset dummy berikutnya.
+  const nupSeqRef = useRef({});
+  const reserveDummyNup = useCallback(async (assetCode, categoryLabel) => {
+    const key = `${activity?.id || ""}|${assetCode || categoryLabel || ""}`;
+    const lsKey = `aman_nupseq_${key}`;
+    if (nupSeqRef.current[key] == null) {
+      let seed = 0;
+      try { const c = parseInt(localStorage.getItem(lsKey) || "", 10); if (Number.isFinite(c)) seed = c; } catch {}
+      try {
+        const params = new URLSearchParams({ activity_id: activity?.id || "" });
+        if (assetCode) params.set("asset_code", assetCode); else params.set("category", categoryLabel || "");
+        const res = await axios.get(`${API}/assets/next-nup?${params}`);
+        const serverNext = parseInt(res?.data?.next_nup, 10);
+        if (Number.isFinite(serverNext)) seed = Math.max(seed, serverNext - 1);
+      } catch { /* offline: pakai seed lokal */ }
+      nupSeqRef.current[key] = seed;
+    }
+    const issued = (nupSeqRef.current[key] || 0) + 1;
+    nupSeqRef.current[key] = issued;
+    try { localStorage.setItem(lsKey, String(issued)); } catch {}
+    return String(issued);
+  }, [activity?.id]);
+
+  // Kategori "dummy" + NUP otomatis untuk Mode Kamera Penuh: surveyor tidak
+  // perlu memilih kategori — Kode Aset di-set ke kategori dummy dan NUP dinomori
+  // otomatis, unik & berurutan per perangkat (lihat reserveDummyNup).
+  const applyDummyCategory = useCallback(async () => {
+    const dummy = (categories || []).find(c => /dummy/i.test(c.label || ""));
+    if (!dummy) return;
+    setFormData(p => ({ ...p, category: dummy.label, ...(dummy.kode_aset ? { asset_code: dummy.kode_aset } : {}) }));
+    clearFieldError("asset_code");
+    const nup = await reserveDummyNup(dummy.kode_aset, dummy.label);
+    setFormData(p => ({ ...p, NUP: nup }));
+  }, [categories, reserveDummyNup, clearFieldError]);
+
+  // Jumlah aset tersimpan selama sesi Kamera Penuh (indikator alur beruntun).
+  const [cameraSavedCount, setCameraSavedCount] = useState(0);
+
+  // Mode Kamera Penuh untuk aset BARU: standby-kan kategori dummy + NUP otomatis.
+  useEffect(() => {
+    if (fullCameraOpen && !isEditing && !formData.category) applyDummyCategory();
+  }, [fullCameraOpen, isEditing, formData.category, applyDummyCategory]);
 
   const handleSelectChange = useCallback((f, v) => {
     setFormData(p => ({ ...p, [f]: v }));
@@ -1004,6 +1056,18 @@ const AssetForm = memo(({
 
   const openCamera = useCallback(() => cameraInputRef.current?.click(), []);
   const openGallery = useCallback(() => fileInputRef.current?.click(), []);
+
+  // Mode Kamera Penuh butuh getUserMedia (konteks aman/HTTPS). Bila tak
+  // didukung (WebView pemerintah tanpa izin kamera / non-HTTPS), fallback ke
+  // kamera OS via input file — jangan buntu.
+  const cameraSupported = typeof navigator !== "undefined" && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  const openFullCamera = useCallback(() => {
+    if (cameraSupported) setFullCameraOpen(true);
+    else { toast.info("Mode kamera langsung tidak didukung — memakai kamera biasa."); cameraInputRef.current?.click(); }
+  }, [cameraSupported]);
+  // Callback stabil untuk FullCameraSheet (jaga memo + hindari render berlebih).
+  const closeFullCamera = useCallback(() => setFullCameraOpen(false), []);
+  const cameraSetField = useCallback((name, value) => { setFormData(p => ({ ...p, [name]: value })); clearFieldError(name); }, [clearFieldError]);
 
   // "Samakan dengan sebelumnya": konteks lokasi/pengguna dari aset terakhir
   // yang disimpan (localStorage 'aman_last_asset_ctx', ditulis saat submit).
@@ -1139,6 +1203,15 @@ const AssetForm = memo(({
 
   const handleSubmit = useCallback(async e => {
     e.preventDefault();
+    // Tangkap & bersihkan intent navigasi di awal agar tidak tersisa "basi"
+    // saat submit gagal validasi (mis. tombol Kamera Penuh ditekan tanpa nama).
+    const navIntent = navigationIntentRef.current;
+    navigationIntentRef.current = null;
+
+    // Jangan submit saat aset yang sedang ditinjau BELUM selesai dimuat — kalau
+    // dipaksa, jalur EDIT (butuh originalDataRef) belum siap dan bisa jatuh ke
+    // CREATE lalu MENIMPA aset lama dengan data aset baru sebelumnya.
+    if (isFormLoading) { toast.info("Menunggu data aset dimuat…"); return; }
 
     // === Inline client-side validation ===
     const errs = {};
@@ -1296,7 +1369,10 @@ const AssetForm = memo(({
           patch.document_checklist = cleanedChecklist;
         }
 
-        if (Object.keys(patch).length === 0) {
+        // Tanpa perubahan: berhenti — KECUALI ini aksi navigasi Kamera Penuh,
+        // supaya surveyor tetap bisa berpindah antar aset tersimpan meski tak
+        // ada yang diedit (PATCH kosong = no-op di backend).
+        if (Object.keys(patch).length === 0 && !navIntent) {
           toast.info("Tidak ada perubahan");
           setIsSubmitting(false);
           return;
@@ -1342,8 +1418,32 @@ const AssetForm = memo(({
 
       // Optimistic mode: pass payload to parent, close immediately
       if (onOptimisticSubmit || onSaveAndNavigate) {
-        const navDirection = navigationIntentRef.current;
-        navigationIntentRef.current = null;
+        const navDirection = navIntent;
+
+        // Kamera Penuh — simpan lalu SIAPKAN ASET BARU (tetap di kamera):
+        // form direset ke aset baru (kategori dummy + NUP baru via effect).
+        if (navDirection === "camera:new") {
+          if (onOptimisticSubmit) onOptimisticSubmit(payload, isEditing, editId, usePatch);
+          setCameraSavedCount(c => c + 1);
+          if (isEditing) {
+            // Sedang meninjau aset lama: minta induk melepas editAsset agar form
+            // benar-benar kembali ke mode "aset baru" (hindari editId/isEditing
+            // desync). Effect dummy akan mengisi kategori & NUP.
+            onExitToNewAsset?.();
+          } else {
+            resetForm(); // effect dummy mengisi kategori & NUP untuk aset berikutnya
+          }
+          toast.success("Aset tersimpan — siap foto aset baru");
+          setIsSubmitting(false);
+          return;
+        }
+        // Kamera Penuh — simpan lalu TINJAU aset tersimpan sebelumnya (edit).
+        if (navDirection === "camera:review") {
+          if (onCameraReviewSaved) { onCameraReviewSaved(payload, isEditing, editId, usePatch); setCameraSavedCount(c => c + 1); }
+          else if (onOptimisticSubmit) { onOptimisticSubmit(payload, isEditing, editId, usePatch); resetForm(); onClose?.(); }
+          setIsSubmitting(false);
+          return;
+        }
 
         if (navDirection && onSaveAndNavigate) {
           onSaveAndNavigate(payload, isEditing, editId, navDirection, usePatch);
@@ -1386,7 +1486,23 @@ const AssetForm = memo(({
       else if (err.code === 'ECONNABORTED') errorMsg = "Koneksi timeout. Coba kurangi ukuran file.";
       toast.error(errorMsg);
     } finally { setIsSubmitting(false); }
-  }, [formData, isEditing, editId, resetForm, onSubmitSuccess, onOptimisticSubmit, onSaveAndNavigate, onClose, focusFieldError]);
+  }, [formData, isEditing, editId, isFormLoading, resetForm, onSubmitSuccess, onOptimisticSubmit, onSaveAndNavigate, onCameraReviewSaved, onExitToNewAsset, onClose, focusFieldError]);
+
+  // — Aksi alur beruntun Mode Kamera Penuh (semua lewat handleSubmit agar
+  //   validasi + kompresi + payload tetap konsisten) —
+  // Guard sinkron: cegah ketuk ganda cepat yang bisa meng-enqueue 2 aset kembar
+  // (isSubmitting berbasis state tidak cukup cepat untuk balapan tap).
+  const cameraSubmitBusyRef = useRef(false);
+  const submitWithIntent = useCallback((intent) => {
+    if (cameraSubmitBusyRef.current) return;
+    cameraSubmitBusyRef.current = true;
+    navigationIntentRef.current = intent;
+    Promise.resolve(handleSubmit({ preventDefault: () => {} }))
+      .finally(() => { cameraSubmitBusyRef.current = false; });
+  }, [handleSubmit]);
+  const cameraSaveAndNew = useCallback(() => submitWithIntent("camera:new"), [submitWithIntent]);
+  const cameraReviewSaved = useCallback(() => submitWithIntent("camera:review"), [submitWithIntent]);
+  const cameraNavigate = useCallback((dir) => submitWithIntent(dir), [submitWithIntent]); // 'prev' | 'next'
 
   // Tampilan eksklusif inventarisasi lapangan menggantikan seluruh body form.
   const sheetMode = inventoryMode && isEditing && !showFullForm;
@@ -1432,7 +1548,7 @@ const AssetForm = memo(({
             </div>
             <div className="grid grid-cols-1 gap-2">
               <button type="button" data-testid="camera-choice-full"
-                onClick={() => { setCameraPromptOpen(false); setFullCameraOpen(true); }}
+                onClick={() => { setCameraPromptOpen(false); openFullCamera(); }}
                 className="h-11 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors">
                 <Camera className="w-4 h-4" />Mode Kamera Penuh
               </button>
@@ -1452,11 +1568,19 @@ const AssetForm = memo(({
         <FullCameraSheet
           formData={formData}
           photos={isEditing ? photoItems.map(it => it.thumbnail) : formData.photos}
-          onClose={() => setFullCameraOpen(false)}
+          isEditing={isEditing}
+          assetIndex={assetIndex}
+          totalAssetsInView={totalAssetsInView}
+          savedCount={cameraSavedCount}
+          busy={isSubmitting || isFormLoading}
+          onClose={closeFullCamera}
           onCapture={addCameraPhoto}
           onRemovePhoto={removePhoto}
-          onSetField={(name, value) => { setFormData(p => ({ ...p, [name]: value })); clearFieldError(name); }}
+          onSetField={cameraSetField}
           onGpsFix={handleCameraGpsFix}
+          onSaveAndNew={cameraSaveAndNew}
+          onReviewSaved={onCameraReviewSaved ? cameraReviewSaved : undefined}
+          onNavigate={cameraNavigate}
         />
       )}
       <aside
@@ -1588,7 +1712,7 @@ const AssetForm = memo(({
               onPenggunaMelekatChange={handlePenggunaMelekatChange}
               onOperasionalJenisChange={handleOperasionalJenisChange}
               onOpenCamera={openCamera}
-              onOpenFullCamera={() => setFullCameraOpen(true)}
+              onOpenFullCamera={openFullCamera}
               onOpenGallery={openGallery}
               onFetchGPS={fetchGPS}
               onApplyLastCtx={applyLastCtx}
