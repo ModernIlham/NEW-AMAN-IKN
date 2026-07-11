@@ -1508,7 +1508,17 @@ const AssetForm = memo(({
       .finally(() => { cameraSubmitBusyRef.current = false; });
   }, [handleSubmit]);
   const cameraSaveAndNew = useCallback(() => submitWithIntent("camera:new"), [submitWithIntent]);
-  const cameraReviewSaved = useCallback(() => submitWithIntent("camera:review"), [submitWithIntent]);
+  // ◀ Sebelumnya di Mode Kamera Penuh (aset baru): kalau SUDAH ada foto, nama
+  // pasti terisi (rana terkunci sampai nama diisi) → simpan lalu tinjau. Kalau
+  // BELUM ada foto, langsung tinjau aset sebelumnya TANPA validasi/simpan
+  // (mencegah error "wajib isi" yang membuat tombol tak bisa berpindah).
+  const cameraReviewSaved = useCallback(() => {
+    if (!isEditing && (formData.photos?.length || 0) === 0) {
+      onCameraReviewSaved?.(null, isEditing, editId, false, true); // navigateOnly
+    } else {
+      submitWithIntent("camera:review");
+    }
+  }, [submitWithIntent, onCameraReviewSaved, isEditing, editId, formData.photos]);
   const cameraNavigate = useCallback((dir) => submitWithIntent(dir), [submitWithIntent]); // 'prev' | 'next'
 
   // Tampilan eksklusif inventarisasi lapangan menggantikan seluruh body form.
