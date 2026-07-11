@@ -81,6 +81,7 @@ class AssetCreate(BaseModel):
     # terisi bila melekat ke Operasional.
     pengguna_melekat_ke: Optional[str] = ""
     pengguna_jabatan: Optional[str] = ""
+    pengguna_nip: Optional[str] = ""  # NIP/NIK pegawai pengguna aset
     operasional_jenis: Optional[str] = ""
     nomor_bast: Optional[str] = ""
     condition: Optional[str] = "Baik"
@@ -143,6 +144,7 @@ class AssetResponse(BaseModel):
     # Pengguna terstruktur (lihat AssetCreate)
     pengguna_melekat_ke: Optional[str] = ""
     pengguna_jabatan: Optional[str] = ""
+    pengguna_nip: Optional[str] = ""  # NIP/NIK pegawai pengguna aset
     operasional_jenis: Optional[str] = ""
     nomor_bast: Optional[str] = ""
     # Dokumen BAST (GridFS) — diisi server oleh POST /assets/{id}/bast

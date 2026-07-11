@@ -944,22 +944,27 @@ async def export_xlsx(request: Request, activity_id: Optional[str] = None, base_
             
             tr = 0
             
-            def write_tim_section(sheet, start_row, title, members, fields, has_ketua=False, has_dari_pihak=False):
+            def write_tim_section(sheet, start_row, title, members, fields, has_ketua=False, has_dari_pihak=False, has_dari_satker=False):
                 """Write a team section with header + members"""
                 r = start_row
                 sheet.merge_range(r, 0, r, 5, title, tim_section_fmt)
                 r += 1
-                
-                # Column headers
-                headers_tim = ['No', 'Nama', 'Jabatan', 'NIP', 'Unit' if not has_dari_pihak else 'Dari Pihak', 'Peran']
+
+                # Column headers — kolom ke-5 menyesuaikan jenis tim
+                col5 = 'Unit'
+                if has_dari_pihak:
+                    col5 = 'Dari Pihak'
+                elif has_dari_satker:
+                    col5 = 'Dari Satker'
+                headers_tim = ['No', 'Nama', 'Jabatan', 'NIP/NIK', col5, 'Peran']
                 for c, h in enumerate(headers_tim):
                     sheet.write(r, c, h, tim_header_fmt)
                 r += 1
-                
+
                 if not members:
                     sheet.merge_range(r, 0, r, 5, '(tidak ada data)', tim_cell_fmt)
                     return r + 1
-                
+
                 for idx, m in enumerate(members):
                     if not isinstance(m, dict):
                         continue
@@ -971,6 +976,8 @@ async def export_xlsx(request: Request, activity_id: Optional[str] = None, base_
                     sheet.write(r, 3, m.get('nip', ''), fmt)
                     if has_dari_pihak:
                         sheet.write(r, 4, m.get('dari_pihak', ''), fmt)
+                    elif has_dari_satker:
+                        sheet.write(r, 4, m.get('dari_satker', ''), fmt)
                     else:
                         sheet.write(r, 4, m.get('unit', ''), fmt)
                     peran = 'Ketua' if is_ketua else 'Anggota'
@@ -986,7 +993,7 @@ async def export_xlsx(request: Request, activity_id: Optional[str] = None, base_
                                    ['nama', 'jabatan', 'nip', 'unit'], has_ketua=True)
             # Tim Peneliti (External)
             tr = write_tim_section(tim_sheet, tr, 'TIM PENELITI (EKSTERNAL)', act_data.get('tim_peneliti', []),
-                                   ['nama', 'jabatan', 'nip'])
+                                   ['nama', 'jabatan', 'nip', 'dari_satker'], has_dari_satker=True)
             # Tim Pendukung (External)
             tr = write_tim_section(tim_sheet, tr, 'TIM PENDUKUNG (EKSTERNAL)', act_data.get('tim_pendukung', []),
                                    ['nama', 'jabatan', 'nip', 'dari_pihak'], has_dari_pihak=True)

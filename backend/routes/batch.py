@@ -152,7 +152,7 @@ BATCH_ALLOWED_FIELDS = {
     "nomor_bukti_perolehan", "supplier", "purchase_date", "purchase_price",
     "koordinat_latitude", "koordinat_longitude", "brand", "model",
     # Selaras dengan field yang bisa diedit di form aset (AssetForm):
-    "status", "user", "pengguna_melekat_ke", "pengguna_jabatan",
+    "status", "user", "pengguna_melekat_ke", "pengguna_jabatan", "pengguna_nip",
     "operasional_jenis", "nomor_bast", "notes",
 }
 

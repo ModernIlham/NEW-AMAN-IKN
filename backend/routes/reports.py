@@ -540,10 +540,10 @@ async def generate_berita_acara_pdf(activity_id: str, _user: dict = Depends(requ
     elements.append(Paragraph("<b>II. TIM PENELITI (EKSTERNAL)</b>", bold_style))
     tim = activity.get("tim_peneliti", [])
     if tim:
-        tim_data = [['No', 'Nama', 'Jabatan']]
+        tim_data = [['No', 'Nama', 'Jabatan', 'NIP/NIK', 'Dari Satker']]
         for i, m in enumerate(tim):
-            tim_data.append([str(i+1), Paragraph(m.get('nama', '-'), cell_style), Paragraph(m.get('jabatan', '-'), cell_style)])
-        tim_table = Table(tim_data, colWidths=_fit_col_widths([30, 200, 200], doc.width), repeatRows=1)
+            tim_data.append([str(i+1), Paragraph(m.get('nama', '-'), cell_style), Paragraph(m.get('jabatan', '-'), cell_style), Paragraph(str(m.get('nip', '-') or '-'), cell_style), Paragraph(m.get('dari_satker', '-') or '-', cell_style)])
+        tim_table = Table(tim_data, colWidths=_fit_col_widths([25, 125, 110, 95, 100], doc.width), repeatRows=1)
         tim_table.setStyle(_std_table_style(extra=[('ALIGN', (0, 0), (0, -1), 'CENTER')]))
         elements.append(tim_table)
     else:
@@ -1331,7 +1331,9 @@ async def generate_bahi_pdf(activity_id: str, _user: dict = Depends(require_user
     if tim:
         elements.append(Paragraph("<b>Tim Pelaksana Inventarisasi:</b>", bold_style))
         for i, member in enumerate(tim, 1):
-            elements.append(Paragraph(f"{i}. {member} &nbsp;&nbsp;&nbsp;(.......................)", small_style))
+            # Anggota bisa dict {nama, jabatan, nip, dari_satker} atau string legacy
+            name = member.get('nama', '-') if isinstance(member, dict) else str(member)
+            elements.append(Paragraph(f"{i}. {name} &nbsp;&nbsp;&nbsp;(.......................)", small_style))
         elements.append(Spacer(1, 4*rl_mm))
 
     if tim_pendukung_list:

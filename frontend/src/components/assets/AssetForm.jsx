@@ -366,6 +366,7 @@ function buildEditFormData(a, activityId) {
     serial_number: a.serial_number || "", purchase_date: a.purchase_date || "", purchase_price: a.purchase_price || "",
     location: a.location || "", eselon1: a.eselon1 || "", eselon2: a.eselon2 || "", user: a.user || "",
     pengguna_melekat_ke: a.pengguna_melekat_ke || "", pengguna_jabatan: a.pengguna_jabatan || "",
+    pengguna_nip: a.pengguna_nip || "",
     operasional_jenis: a.operasional_jenis || "",
     nomor_bast: a.nomor_bast || "",
     condition: a.condition || "Baik", status: a.status || "Aktif",
@@ -488,7 +489,7 @@ const AssetForm = memo(({
     asset_code: "", NUP: "", asset_name: "", category: "", brand: "", model: "",
     kode_register: "", serial_number: "", purchase_date: "", purchase_price: "",
     location: "", eselon1: "", eselon2: "", user: "",
-    pengguna_melekat_ke: "", pengguna_jabatan: "", operasional_jenis: "", nomor_bast: "",
+    pengguna_melekat_ke: "", pengguna_jabatan: "", pengguna_nip: "", operasional_jenis: "", nomor_bast: "",
     condition: "Baik", status: "Aktif",
     nomor_spm: "", perolehan_dari_nama: "", nomor_kontrak: "",
     nomor_bukti_perolehan: "", supplier: "", notes: "", photos: [],
@@ -1303,7 +1304,7 @@ const AssetForm = memo(({
           "asset_code", "NUP", "asset_name", "category", "brand", "model",
           "kode_register", "serial_number", "purchase_date", "purchase_price",
           "location", "eselon1", "eselon2", "user", "condition", "status",
-          "pengguna_melekat_ke", "pengguna_jabatan", "operasional_jenis", "nomor_bast",
+          "pengguna_melekat_ke", "pengguna_jabatan", "pengguna_nip", "operasional_jenis", "nomor_bast",
           "nomor_spm", "perolehan_dari_nama", "nomor_kontrak",
           "nomor_bukti_perolehan", "supplier", "notes",
           "stiker_status", "stiker_ukuran",
@@ -1910,6 +1911,10 @@ const AssetForm = memo(({
                 <div className="space-y-1">
                   <Label className="text-xs">{PENGGUNA_NAME_LABELS[formData.pengguna_melekat_ke] || "Pengguna"}</Label>
                   <Input name="user" value={formData.user} onChange={handleInputChange} className="h-8" data-testid="input-pengguna-nama" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">NIP/NIK Pegawai</Label>
+                  <Input name="pengguna_nip" value={formData.pengguna_nip} onChange={handleInputChange} placeholder="NIP/NIK pegawai pengguna" className="h-8" data-testid="input-pengguna-nip" />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Nomor BAST</Label>
