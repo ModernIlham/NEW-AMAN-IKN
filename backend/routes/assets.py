@@ -262,19 +262,23 @@ async def get_assets(
             }
     
     # Extended sort options
+    # Tiebreaker `id` di setiap opsi: sort Mongo tidak stabil antar-query
+    # skip/limit, tanpa kunci unik halaman bisa tumpang-tindih/terlewat
+    # (nilai created_at/nama yang sama) — penting utk klien yang menjahit
+    # beberapa halaman (mis. Peta Aset).
     sort_options = {
-        "newest": [("created_at", -1)],
-        "oldest": [("created_at", 1)],
-        "name_asc": [("asset_name", 1)],
-        "name_desc": [("asset_name", -1)],
-        "price_asc": [("purchase_price", 1)],
-        "price_desc": [("purchase_price", -1)],
-        "category_asc": [("category", 1)],
-        "category_desc": [("category", -1)],
-        "location_asc": [("location", 1)],
-        "eselon1_asc": [("eselon1", 1)],
-        "condition_asc": [("condition", 1)],
-        "status_asc": [("status", 1)]
+        "newest": [("created_at", -1), ("id", 1)],
+        "oldest": [("created_at", 1), ("id", 1)],
+        "name_asc": [("asset_name", 1), ("id", 1)],
+        "name_desc": [("asset_name", -1), ("id", 1)],
+        "price_asc": [("purchase_price", 1), ("id", 1)],
+        "price_desc": [("purchase_price", -1), ("id", 1)],
+        "category_asc": [("category", 1), ("id", 1)],
+        "category_desc": [("category", -1), ("id", 1)],
+        "location_asc": [("location", 1), ("id", 1)],
+        "eselon1_asc": [("eselon1", 1), ("id", 1)],
+        "condition_asc": [("condition", 1), ("id", 1)],
+        "status_asc": [("status", 1), ("id", 1)]
     }
     sort = sort_options.get(sort_by, [("created_at", -1)])
     

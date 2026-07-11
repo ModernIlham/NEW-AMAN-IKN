@@ -2,7 +2,7 @@ import React, { memo, useState, useEffect, useRef } from "react";
 import {
   Search, Filter, Download, Upload, Settings,
   Loader2, Trash2, Eye, FileText, FileSpreadsheet, CreditCard,
-  List, LayoutGrid,
+  List, LayoutGrid, MapPinned,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,7 +52,7 @@ const SearchInput = memo(function SearchInput({ value, onCommit }) {
 });
 
 const DashboardToolbar = memo(function DashboardToolbar({
-  searchInput, setSearchInput, onScanCode,
+  searchInput, setSearchInput, onScanCode, onOpenMap,
   categories, filterCategory, setFilterCategory,
   activeFilterCount, showAdvancedFilter, setShowAdvancedFilter,
   sortBy, setSortBy,
@@ -74,6 +74,22 @@ const DashboardToolbar = memo(function DashboardToolbar({
             <SearchInput value={searchInput} onCommit={setSearchInput} />
           </div>
           <QrScanButton onDetected={onScanCode || setSearchInput} />
+          {/* Peta Aset halaman penuh — di HP/tablet cukup ikon khasnya */}
+          {onOpenMap && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onOpenMap}
+              className="h-9 w-9 p-0 lg:w-auto lg:px-2.5 lg:h-8 min-h-0 min-w-0 text-xs flex-shrink-0 text-teal-600 dark:text-teal-400 border-teal-300 dark:border-teal-800 hover:bg-teal-50 dark:hover:bg-teal-950"
+              title="Peta aset (mengikuti filter aktif)"
+              aria-label="Peta aset"
+              data-testid="map-open-btn"
+            >
+              <MapPinned className="w-4 h-4" />
+              <span className="hidden lg:inline lg:ml-1">Peta</span>
+            </Button>
+          )}
           <Button
             variant={activeFilterCount > 0 ? "default" : "outline"}
             size="sm"
