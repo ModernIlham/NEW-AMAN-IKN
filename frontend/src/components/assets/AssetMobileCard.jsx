@@ -2,7 +2,7 @@ import React, { memo, useState, useRef } from "react";
 import { Camera, MapPin, Briefcase, Tag, Trash2, Lock, Cloud, Check, RotateCcw, MoreVertical, BookOpen, History, CreditCard } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuTrigger, DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
 // ============================================================================
@@ -215,10 +215,11 @@ const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, onOpenKartu, on
                   asset.status === "Maintenance" ? "badge-warning" :
                   "badge-error"
                 }`}>{asset.status}</span>
-                {/* Aksi per-aset (paritas dengan tabel desktop): Kartu Inventarisasi,
-                    Riwayat, Cetak Kartu, Hapus. stopPropagation agar tak memicu
-                    edit-on-tap / swipe. */}
-                {(onOpenKartu || onViewAudit || onPrintCard || onDelete) && (
+                {/* Aksi per-aset: Kartu Inventarisasi, Riwayat, Cetak Kartu.
+                    Hapus TIDAK ada di menu ini di HP/tablet — hapus dilakukan
+                    dengan menggeser baris (swipe). stopPropagation agar tak
+                    memicu edit-on-tap / swipe. */}
+                {(onOpenKartu || onViewAudit || onPrintCard) && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <button
@@ -248,12 +249,6 @@ const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, onOpenKartu, on
                           <CreditCard className="w-4 h-4 mr-2 text-blue-500" />Cetak Kartu
                         </DropdownMenuItem>
                       )}
-                      {onDelete && (<>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => onDelete(asset.id)} className="text-red-600 focus:text-red-600" data-testid={`mobile-delete-btn-${asset.id}`}>
-                          <Trash2 className="w-4 h-4 mr-2" />Hapus
-                        </DropdownMenuItem>
-                      </>)}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}

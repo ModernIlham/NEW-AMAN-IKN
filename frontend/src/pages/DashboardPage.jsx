@@ -14,7 +14,7 @@ import axios from "axios";
 import { getApiError } from "@/lib/utils";
 import { downloadFileWithProgress, makeDownloadProgress } from "@/lib/downloadFile";
 import { authMediaUrl } from "@/lib/mediaUrl";
-import { syncSnapshot, getSnapshotAssets, snapshotMeta, isSnapshotExpired, upsertSnapshotAsset } from "@/lib/offlineSnapshot";
+import { syncSnapshot, getSnapshotAssets, snapshotMeta, isSnapshotExpired, upsertSnapshotAsset, removeSnapshotAsset } from "@/lib/offlineSnapshot";
 
 // Import refactored components
 import {
@@ -931,10 +931,22 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     });
     if (!ok) return;
     setIsDeleting(id);
-    try { await axios.delete(`${API}/assets/${id}`); toast.success("Dihapus"); refreshData(); }
-    catch (err) { toast.error(getApiError(err, "Gagal hapus")); }
-    finally { setIsDeleting(null); }
-  }, [confirm]);
+    // Optimistis: baris langsung HILANG dari layar (tak perlu tunggu server /
+    // refresh manual). refreshData() di bawah hanya rekonsiliasi hitungan.
+    setAssets(prev => prev.filter(a => a.id !== id));
+    setMobileAssets(prev => prev.filter(a => a.id !== id));
+    setTotalItems(prev => Math.max(0, prev - 1));
+    setSelectedAssets(prev => { if (!prev.has(id)) return prev; const n = new Set(prev); n.delete(id); return n; });
+    try {
+      await axios.delete(`${API}/assets/${id}`);
+      if (activity?.id) removeSnapshotAsset(activity.id, id);
+      toast.success("Dihapus");
+      refreshDataRef.current();
+    } catch (err) {
+      toast.error(getApiError(err, "Gagal hapus"));
+      refreshDataRef.current(); // rollback: muat ulang agar baris kembali bila hapus gagal
+    } finally { setIsDeleting(null); }
+  }, [confirm, activity?.id]);
 
   // Kartu Inventarisasi — riwayat pengesahan lintas kegiatan per identitas aset.
   // kode_satker kegiatan aktif ikut dikirim agar riwayat dibatasi pada satuan

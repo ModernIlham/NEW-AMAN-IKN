@@ -226,6 +226,20 @@ export async function upsertSnapshotAsset(activityId, row) {
   }
 }
 
+/** Hapus SATU baris dari snapshot (setelah aset dihapus) agar reload offline
+ *  tidak menampilkan aset yang sudah tidak ada. */
+export async function removeSnapshotAsset(activityId, id) {
+  if (!activityId || !id) return;
+  try {
+    const db = await getDB();
+    const meta = await db.get(META_STORE, activityId);
+    if (!meta) return;
+    await db.delete(ASSET_STORE, id);
+  } catch {
+    // best-effort — TTL akan membereskan bila gagal
+  }
+}
+
 /** Remove one activity's snapshot (rows + meta). */
 export async function clearSnapshot(activityId) {
   if (!activityId) return;
