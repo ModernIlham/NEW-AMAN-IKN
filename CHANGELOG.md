@@ -48,6 +48,29 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#68] Rumah modul Siklus BMN + masterplan pengembangan + skill proses baku — 2026-07-11
+
+- **Beranda Modul** — halaman pertama setelah login: peta Siklus Pengelolaan
+  BMN (PP 27/2014) dengan Penatausahaan sebagai poros. **Inventarisasi Aset
+  AKTIF** (pintu ke aplikasi berjalan); Pembukuan, Inventarisasi Persediaan,
+  Pelaporan + 10 tahap siklus lain berstatus **Segera Hadir** — klik kartu
+  menampilkan konsep, rencana fitur, integrasi, dan fase roadmap.
+- Registry modul `frontend/src/lib/bmnModules.js` (satu sumber kebenaran
+  status & konsep modul); pilihan modul per-tab — reload di tengah kerja
+  lapangan tidak terlempar; tombol **Modul** di halaman Pilih Kegiatan.
+- **`docs/MASTERPLAN-SIKLUS-BMN.md`** — rencana induk hasil pendalaman repo
+  referensi KERJA-BARENG (SIMAN-G): pola yang diadopsi (kodefikasi prefix
+  5 level, transaksi stok vs atribut, approval `pending_changes`,
+  reklasifikasi 2 langkah, dokumen sumber sebagai simpul, FIFO batch,
+  interop SIMAN) & anti-pola yang dihindari; 7 prinsip integrasi antar
+  modul; **konsep rinci Inventarisasi Persediaan** (master ber-batch FIFO,
+  transaksi masuk/keluar per dokumen sumber, gudang, stock opname +
+  penyesuaian otomatis, nota dinas kritis/kedaluwarsa); roadmap fase 1–6.
+- **`.claude/skills/aman-dev/SKILL.md`** — proses baku pengembangan bertahap
+  per fitur: peta repo, konvensi wajib, pipeline verifikasi→PR→CI→merge→
+  auto-deploy, jebakan umum, checklist pemilik proyek.
+- README: bagian "Arah Pengembangan — Siklus Penuh Pengelolaan BMN".
+
 ## [#67] Popup pin berbingkai foto + bar peta ringkas di HP + halaman PRD v2.3 — 2026-07-11
 
 - **Popup marker peta dirombak** — padat & informatif: bingkai foto sampul
