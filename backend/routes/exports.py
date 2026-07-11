@@ -7,7 +7,7 @@ import asyncio
 import os
 import base64
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request, Depends
@@ -31,6 +31,15 @@ from shared_utils import limiter, invalidate_asset_cache, log_audit, get_photo_f
 
 logger = logging.getLogger(__name__)
 exports_router = APIRouter()
+
+def _safe_price_float(val) -> float:
+    """purchase_price berupa string bebas — nilai tak numerik dihitung 0
+    (selaras $convert onError:0 pada agregasi ringkasan), bukan error 500."""
+    try:
+        return float(val or 0)
+    except (ValueError, TypeError):
+        return 0.0
+
 
 # Default nilai kolom CSV saat field tidak ada di dokumen (dokumen lama).
 _CSV_ROW_DEFAULTS = {
@@ -335,6 +344,7 @@ async def export_pdf(request: Request, activity_id: Optional[str] = None,
         "total_value": {"$sum": {"$convert": {"input": "$purchase_price", "to": "double", "onError": 0, "onNull": 0}}},
         "active": {"$sum": {"$cond": [{"$eq": ["$status", "Aktif"]}, 1, 0]}},
         "maintenance": {"$sum": {"$cond": [{"$eq": ["$status", "Maintenance"]}, 1, 0]}},
+        "idle": {"$sum": {"$cond": [{"$eq": ["$status", "Idle"]}, 1, 0]}},
         "nonaktif": {"$sum": {"$cond": [{"$eq": ["$status", "Nonaktif"]}, 1, 0]}}
     }}]
     stats_result = await db.assets.aggregate(stats_pipeline).to_list(1)
@@ -380,7 +390,7 @@ async def export_pdf(request: Request, activity_id: Optional[str] = None,
     
     # === HEADER ===
     elements.append(Paragraph("LAPORAN INVENTARIS ASET", title_style))
-    now_str = datetime.now(timezone.utc).strftime("%d %B %Y, %H:%M WIB")
+    now_str = datetime.now(timezone(timedelta(hours=7))).strftime("%d %B %Y, %H:%M WIB")
     elements.append(Paragraph(f"Dicetak pada: {now_str}", subtitle_style))
     
     # === SUMMARY BOX ===
@@ -389,9 +399,10 @@ async def export_pdf(request: Request, activity_id: Optional[str] = None,
         Paragraph(f"<b>Total Nilai</b><br/>Rp {total_value:,.0f}", stat_style),
         Paragraph(f"<b>Aktif</b><br/>{sr.get('active', 0):,}", stat_style),
         Paragraph(f"<b>Maintenance</b><br/>{sr.get('maintenance', 0):,}", stat_style),
+        Paragraph(f"<b>Idle</b><br/>{sr.get('idle', 0):,}", stat_style),
         Paragraph(f"<b>Nonaktif</b><br/>{sr.get('nonaktif', 0):,}", stat_style),
     ]]
-    summary_table = Table(summary_data, colWidths=[50*mm]*5)
+    summary_table = Table(summary_data, colWidths=[44*mm]*6)
     summary_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f1f5f9')),
         ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#e2e8f0')),
@@ -458,7 +469,7 @@ async def export_pdf(request: Request, activity_id: Optional[str] = None,
         
         brand_model = asset.get('brand', '')
         if asset.get('model'):
-            brand_model += f"\n{asset.get('model', '')}" if brand_model else asset.get('model', '')
+            brand_model += f"<br/>{asset.get('model', '')}" if brand_model else asset.get('model', '')
         
         # Color-coded condition
         cond = asset.get('condition', '')
@@ -487,8 +498,8 @@ async def export_pdf(request: Request, activity_id: Optional[str] = None,
             Paragraph(asset.get('location', ''), cell_small),
             Paragraph(f"<b>{cond}</b>", cond_style),
             Paragraph(f"<b>{stat}</b>", stat_style_row),
-            Paragraph(f"{asset.get('stiker_status', 'Belum Terpasang')}" + (f"\n({asset.get('stiker_ukuran', '')})" if asset.get('stiker_ukuran') else ""), cell_small),
-            Paragraph(f"Rp {float(asset.get('purchase_price', 0) or 0):,.0f}", cell_style),
+            Paragraph(f"{asset.get('stiker_status', 'Belum Terpasang')}" + (f"<br/>({asset.get('stiker_ukuran', '')})" if asset.get('stiker_ukuran') else ""), cell_small),
+            Paragraph(f"Rp {_safe_price_float(asset.get('purchase_price')):,.0f}", cell_style),
         ])
     
     col_widths = [22*mm, 26*mm, 42*mm, 25*mm, 30*mm, 30*mm, 18*mm, 16*mm, 22*mm, 28*mm]
@@ -524,8 +535,13 @@ async def export_pdf(request: Request, activity_id: Optional[str] = None,
         fontSize=7, textColor=colors.HexColor('#94a3b8'), alignment=1)
     elements.append(Paragraph(f"Dokumen ini digenerate otomatis oleh Sistem Inventaris Aset | Total {total} aset", footer_style))
     
-    doc.build(elements, onFirstPage=add_page_number, onLaterPages=add_page_number)
-    
+    # Dokumen kecil mendapat footer "Halaman N dari M" via overlay di bawah;
+    # menulis nomor halaman ganda di titik yang sama membuat teks bertumpuk.
+    if total <= 500:
+        doc.build(elements)
+    else:
+        doc.build(elements, onFirstPage=add_page_number, onLaterPages=add_page_number)
+
     # Add total pages to each page (skip for large docs to save memory/time)
     buffer.seek(0)
     

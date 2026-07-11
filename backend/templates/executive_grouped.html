@@ -8,7 +8,14 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Inter', -apple-system, sans-serif; color: #1e293b; padding: 0; background: #fff; }
 
-        @page { size: A4 landscape; margin: 8mm 8mm 2mm 8mm; }
+        /* Footer sebagai running element di kotak margin bawah halaman —
+           WeasyPrint menyisakan ruang footer sehingga baris terakhir tabel
+           tidak lagi tertimpa (pola sama dengan executive_summary_data.html). */
+        @page {
+            size: A4 landscape;
+            margin: 8mm 8mm 11mm 8mm;
+            @bottom-center { content: element(footer); vertical-align: bottom; width: 100%; }
+        }
 
         .data-header { background: linear-gradient(135deg, #0c1f3f, #1a3461); padding: 12px 24px; display: flex; align-items: center; gap: 14px; }
         .data-header-logo { width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.1); border: 2px solid rgba(201,168,76,0.5); display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden; }
@@ -55,7 +62,7 @@
 
         .total-row td { background: #e8f0fe !important; border-top: 2px solid #1e3a5f; font-weight: 700; color: #0f172a; }
 
-        .data-footer { position: fixed; bottom: 0; left: 0; width: 100%; padding: 6px 24px; display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border-top: 1px solid #e2e8f0; font-size: 9px; color: #64748b; }
+        .data-footer { position: running(footer); width: 100%; padding: 5px 12px; display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border-top: 1px solid #e2e8f0; font-size: 9px; color: #64748b; }
         .data-footer strong { color: #0f172a; }
     </style>
 </head>

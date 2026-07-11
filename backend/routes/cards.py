@@ -359,7 +359,13 @@ def _decode_photo_flowable(asset, width, height):
         buf = io.BytesIO()
         im.save(buf, format="JPEG", quality=85)
         buf.seek(0)
-        return RLImage(buf, width=width, height=height)
+        # Pas-kan dalam kotak width x height dengan rasio aspek dipertahankan —
+        # foto landscape tidak lagi penyok dipaksa ke kotak potret.
+        iw, ih = im.size
+        scale = min(width / iw, height / ih)
+        img = RLImage(buf, width=iw * scale, height=ih * scale)
+        img.hAlign = 'CENTER'
+        return img
     except Exception as e:
         logger.debug(f"[cards] Photo processing skipped for asset: {e}")
         return placeholder
@@ -593,7 +599,7 @@ def create_ktp_card_elements(asset, history=None):
     cond_baik = cond.lower().startswith('baik')
     stat_aktif = stat.lower().startswith('aktif')
 
-    # Tiga kolom berlabel: STATUS | AKTIVITAS | NILAI PEROLEHAN
+    # Tiga kolom berlabel: KONDISI | STATUS | NILAI PEROLEHAN
     def labeled_col(label, value_flowable, width):
         value_flowable.hAlign = 'LEFT'
         t = Table([
@@ -608,15 +614,15 @@ def create_ktp_card_elements(asset, history=None):
         ]))
         return t
 
-    status_pill = pill(cond, GREEN if cond_baik else ORANGE, GREENBG if cond_baik else ORANGEBG, 22 * mm)
-    aktivitas_pill = pill(stat, BLUE if stat_aktif else GRAY, BLUEBG if stat_aktif else STRIPEBG, 22 * mm)
+    kondisi_pill = pill(cond, GREEN if cond_baik else ORANGE, GREENBG if cond_baik else ORANGEBG, 22 * mm)
+    status_pill = pill(stat, BLUE if stat_aktif else GRAY, BLUEBG if stat_aktif else STRIPEBG, 22 * mm)
     # Tanpa ikon — beri lebar penuh agar angka rupiah berdigit banyak tetap muat
     # pada satu baris. Ukuran diperkecil ke 9pt untuk headroom nominal besar.
     nilai_val = Paragraph(price_str, ls('_np', fontSize=9, textColor=GREEN, fontName='Helvetica-Bold', leading=10.5))
 
     badges = Table([[
+        labeled_col("KONDISI", kondisi_pill, 24 * mm),
         labeled_col("STATUS", status_pill, 24 * mm),
-        labeled_col("AKTIVITAS", aktivitas_pill, 24 * mm),
         labeled_col("NILAI PEROLEHAN", nilai_val, info_w - 48 * mm),
     ]], colWidths=[24 * mm, 24 * mm, info_w - 48 * mm], rowHeights=[11 * mm])
     badges.setStyle(TableStyle([
