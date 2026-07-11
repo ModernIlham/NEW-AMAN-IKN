@@ -572,7 +572,7 @@ const FullCameraSheet = memo(function FullCameraSheet({
 
       {/* ── Overlay bawah: thumbnail + kontrol ── */}
       <div className="relative z-10 bg-gradient-to-t from-black/80 to-transparent pt-6 pb-4 px-3 space-y-3">
-        {photos.length > 0 && (
+        {photos.length > 0 && !scanActive && (
           <div className="flex gap-2 overflow-x-auto pb-1">
             {photos.map((p, i) => (
               <div key={i} className="relative flex-shrink-0">
@@ -600,12 +600,25 @@ const FullCameraSheet = memo(function FullCameraSheet({
           </div>
         )}
         {/* Wajib isi Nama Aset dulu sebelum memotret — rana dikunci selama kosong. */}
-        {!nameFilled && (
+        {!nameFilled && !scanActive && (
           <button type="button" onClick={() => setEditOpen(true)} data-testid="full-camera-need-name"
             className="mx-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-400/90 text-black text-[11px] font-semibold">
             <AlertTriangle className="w-3.5 h-3.5" />Isi Nama Aset (<span className="text-red-700">*</span>) dulu untuk memotret
           </button>
         )}
+        {scanActive ? (
+          /* Mode pindai: kontrol rana disembunyikan agar tidak tumpang tindih */
+          <div className="space-y-2" data-testid="full-camera-scan-controls">
+            <div className="text-center space-y-0.5">
+              <p className="text-white text-sm font-semibold drop-shadow">Arahkan ke QR/barcode stiker aset</p>
+              <p className="text-white/70 text-[11px] drop-shadow">Aset yang cocok langsung terbuka untuk diedit</p>
+            </div>
+            <button type="button" onClick={() => setScanActive(false)} data-testid="full-camera-scan-cancel"
+              className="w-full h-12 rounded-xl bg-white/20 backdrop-blur text-white text-sm font-bold">
+              Batal Scan
+            </button>
+          </div>
+        ) : (
         <div className="flex items-center justify-between">
           <button type="button" onClick={() => setEditOpen(true)}
             data-testid="full-camera-edit-btn"
@@ -627,9 +640,11 @@ const FullCameraSheet = memo(function FullCameraSheet({
             Balik
           </button>
         </div>
+        )}
 
         {/* Alur beruntun: simpan & aset baru + maju/mundur antar aset tersimpan.
             Ditonjolkan saat foto sudah penuh (maks). */}
+        {!scanActive && (
         <div className={`grid grid-cols-3 gap-2 ${maxReached ? "ring-1 ring-white/40 rounded-xl p-1" : ""}`}>
           <button type="button" onClick={backAction} disabled={!canBack || busy} data-testid="full-camera-prev"
             className="h-11 rounded-lg bg-white/15 text-white text-xs font-semibold flex items-center justify-center gap-1 disabled:opacity-30 disabled:pointer-events-none">
@@ -653,7 +668,8 @@ const FullCameraSheet = memo(function FullCameraSheet({
             Berikutnya<ChevronRight className="w-4 h-4" />
           </button>
         </div>
-        {isEditing && onScanAsset && onSaveAndScanNext && (
+        )}
+        {isEditing && onScanAsset && onSaveAndScanNext && !scanActive && (
           <button type="button" onClick={onSaveAndNew} disabled={busy} data-testid="full-camera-savenew"
             className="w-full h-9 rounded-lg bg-white/10 text-white/85 text-[11px] font-semibold flex items-center justify-center gap-1 disabled:opacity-40 disabled:pointer-events-none">
             <Check className="w-3.5 h-3.5" />Simpan & Aset Baru
@@ -675,14 +691,6 @@ const FullCameraSheet = memo(function FullCameraSheet({
         <div className="absolute inset-0 z-[9] pointer-events-none" data-testid="full-camera-scan-overlay">
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="w-52 h-52 border-2 border-emerald-400/90 rounded-xl shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
-          </div>
-          <div className="absolute inset-x-0 top-1/2 mt-32 text-center px-6 space-y-2.5">
-            <p className="text-white text-sm font-semibold drop-shadow">Arahkan ke QR/barcode stiker aset</p>
-            <p className="text-white/75 text-[11px] drop-shadow">Aset yang cocok langsung terbuka untuk diedit</p>
-            <button type="button" onClick={() => setScanActive(false)} data-testid="full-camera-scan-cancel"
-              className="pointer-events-auto px-6 h-11 rounded-full bg-white/25 backdrop-blur text-white text-sm font-semibold">
-              Batal Scan
-            </button>
           </div>
         </div>
       )}

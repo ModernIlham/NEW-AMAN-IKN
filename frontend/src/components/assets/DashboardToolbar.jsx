@@ -84,7 +84,7 @@ const DashboardToolbar = memo(function DashboardToolbar({
               aria-pressed={mapOpen}
               className={`h-9 w-9 p-0 lg:w-auto lg:px-2.5 lg:h-8 min-h-0 min-w-0 text-xs flex-shrink-0 ${mapOpen
                 ? "bg-teal-600 border-teal-600 text-white hover:bg-teal-700 hover:text-white"
-                : "text-teal-600 dark:text-teal-400 border-teal-300 dark:border-teal-800 hover:bg-teal-50 dark:hover:bg-teal-950"}`}
+                : "text-teal-600 dark:text-teal-400 border-teal-300 dark:border-teal-800 hover:bg-teal-50 hover:text-teal-700 dark:hover:bg-teal-950 dark:hover:text-teal-300"}`}
               title="Peta aset (mengikuti filter aktif)"
               aria-label="Peta aset"
               data-testid="map-open-btn"
