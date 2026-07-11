@@ -1,4 +1,5 @@
 import React, { memo, useState, useCallback, useRef, useEffect, useMemo, startTransition } from "react";
+import { createPortal } from "react-dom";
 import {
   Plus, Edit3, X, Camera, Trash2, Check, ChevronDown,
   Package, Briefcase, ShieldCheck, Settings, Tag, Save, Loader2, ClipboardList,
@@ -17,6 +18,8 @@ import {
 } from "../ui/dropdown-menu";
 import { DocumentChecklist, DEFAULT_DOC_ITEMS } from "./DocumentChecklist";
 import InventoryFieldSheet, { PENGGUNA_MELEKAT_OPTIONS, PENGGUNA_NAME_LABELS, OPERASIONAL_JENIS_OPTIONS } from "./InventoryFieldSheet";
+import FullCameraSheet from "./FullCameraSheet";
+import { useBackGuard } from "../../hooks/useBackGuard";
 import { toast } from "sonner";
 import axios from "axios";
 import { getApiError } from "../../lib/utils";
@@ -470,7 +473,8 @@ const AssetForm = memo(({
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
   const bastInputRef = useRef(null);
-  // One-shot penanda agar kamera hanya auto-buka SEKALI per sesi form aset baru.
+  // One-shot penanda agar dialog pilihan Mode Kamera Penuh hanya ditawarkan
+  // SEKALI per sesi form aset baru (tidak muncul lagi setiap render).
   const autoCameraFiredRef = useRef(false);
 
   // Dokumen BAST tersimpan di server (GridFS): {file_id, filename} — hanya
@@ -813,22 +817,49 @@ const AssetForm = memo(({
     }
   }, [isOpen, isEditing, inventoryMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Aset BARU di mode inventarisasi: surveyor lebih fokus ke kamera. Buka kamera
-  // (fullscreen kamera OS via input capture="environment") secara OTOMATIS sekali
-  // saat form aset baru terbuka, sehingga bisa langsung memotret. One-shot ref
-  // mencegah kamera terbuka lagi setiap render / setelah user membatalkan.
-  // Tombol "Kamera" manual tetap tersedia sebagai fallback (mis. iOS yang
-  // memblokir pemicu di luar gesture).
+  // Aset BARU di mode inventarisasi: tawarkan PILIHAN (sekali per sesi form
+  // aset baru) untuk masuk Mode Kamera Penuh ala Timemark — halaman kamera
+  // fullscreen dengan jam berjalan, GPS live, info aset, edit info, dan hapus
+  // foto — atau tetap mengisi form biasa. Tidak lagi membuka kamera otomatis.
+  const [cameraPromptOpen, setCameraPromptOpen] = useState(false);
+  const [fullCameraOpen, setFullCameraOpen] = useState(false);
   useEffect(() => {
     if (isOpen && !isEditing && inventoryMode) {
-      if (autoCameraFiredRef.current) return undefined;
+      if (autoCameraFiredRef.current) return;
       autoCameraFiredRef.current = true;
-      const t = setTimeout(() => cameraInputRef.current?.click(), 350);
-      return () => clearTimeout(t);
+      setCameraPromptOpen(true);
+      return;
     }
-    autoCameraFiredRef.current = false; // reset agar aset baru berikutnya memicu lagi
-    return undefined;
+    autoCameraFiredRef.current = false; // reset agar aset baru berikutnya ditawari lagi
+    if (!isOpen) { setCameraPromptOpen(false); setFullCameraOpen(false); }
   }, [isOpen, isEditing, inventoryMode]);
+
+  // Back HP saat dialog pilihan kamera terbuka → tutup dialognya saja
+  useBackGuard(useCallback(() => setCameraPromptOpen(false), []), cameraPromptOpen);
+
+  // Foto dari Mode Kamera Penuh: dataURL sudah ≤1920px q0.85 (setara pipeline
+  // kompresi form) + sudah distempel waktu/GPS — langsung masuk daftar foto.
+  const addCameraPhoto = useCallback(async (dataUrl) => {
+    photosModifiedRef.current = true;
+    if (isEditing) {
+      const thumb = await generateThumbnailFromDataUrl(dataUrl, 100, 0.7).catch(() => dataUrl);
+      setPhotoItems(prev => (prev.length >= 6 ? prev : [...prev, { type: "new", thumbnail: thumb, newData: dataUrl }]));
+    }
+    setFormData(p => {
+      if (p.photos.length >= 6) { toast.error("Maks 6 foto"); return p; }
+      return {
+        ...p,
+        photos: [...p.photos, dataUrl],
+        ...(p.inventory_status === "Belum Diinventarisasi" && p.photos.length === 0 ? { inventory_status: "Ditemukan" } : {}),
+      };
+    });
+  }, [isEditing]);
+
+  // GPS live dari kamera: selalu simpan fix terbaru ke koordinat form + cache
+  const handleCameraGpsFix = useCallback(({ lat, lng }) => {
+    try { localStorage.setItem("aman_last_gps", JSON.stringify({ lat, lng, ts: Date.now() })); } catch {}
+    setFormData(p => ({ ...p, koordinat_latitude: lat, koordinat_longitude: lng }));
+  }, []);
 
   // Clear a single field's inline error (used on change so the red state
   // disappears as soon as the user starts correcting the field).
@@ -1385,7 +1416,50 @@ const AssetForm = memo(({
   return (
     <>
       {isOpen && !alwaysExpanded && <div className="fixed inset-0 bg-black/40 z-30 lg:hidden" onClick={onClose} />}
-      <aside 
+
+      {/* Dialog pilihan saat Tambah Aset Baru di mode inventarisasi */}
+      {cameraPromptOpen && createPortal(
+        <div className="fixed inset-0 z-[115] bg-black/60 flex items-center justify-center p-6" data-testid="camera-choice-dialog">
+          <div className="bg-card rounded-2xl p-5 w-full max-w-sm space-y-3 shadow-2xl">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center flex-shrink-0">
+                <Camera className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-foreground">Masuk Mode Kamera Penuh?</h3>
+                <p className="text-[11px] text-muted-foreground">Kamera fullscreen dengan jam & GPS live, info aset, edit info, dan hapus foto — tanpa keluar dari kamera.</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-2">
+              <button type="button" data-testid="camera-choice-full"
+                onClick={() => { setCameraPromptOpen(false); setFullCameraOpen(true); }}
+                className="h-11 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors">
+                <Camera className="w-4 h-4" />Mode Kamera Penuh
+              </button>
+              <button type="button" data-testid="camera-choice-form"
+                onClick={() => setCameraPromptOpen(false)}
+                className="h-11 rounded-lg border border-border bg-background text-foreground/80 hover:bg-accent text-sm font-medium transition-colors">
+                Isi Form Biasa
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Mode Kamera Penuh ala Timemark */}
+      {fullCameraOpen && (
+        <FullCameraSheet
+          formData={formData}
+          photos={isEditing ? photoItems.map(it => it.thumbnail) : formData.photos}
+          onClose={() => setFullCameraOpen(false)}
+          onCapture={addCameraPhoto}
+          onRemovePhoto={removePhoto}
+          onSetField={(name, value) => { setFormData(p => ({ ...p, [name]: value })); clearFieldError(name); }}
+          onGpsFix={handleCameraGpsFix}
+        />
+      )}
+      <aside
         className={`${alwaysExpanded ? 'translate-x-0' : (isOpen ? "translate-x-0" : "-translate-x-full")} ${alwaysExpanded ? 'relative w-full' : 'fixed lg:relative inset-y-0 left-0 z-40 lg:z-auto w-[85vw] sm:w-80 xl:w-96'} bg-card border-r border-border transition-transform duration-300 print:hidden shadow-2xl lg:shadow-none flex flex-col overflow-hidden h-full`}
       >
         {/* Header */}
@@ -1514,6 +1588,7 @@ const AssetForm = memo(({
               onPenggunaMelekatChange={handlePenggunaMelekatChange}
               onOperasionalJenisChange={handleOperasionalJenisChange}
               onOpenCamera={openCamera}
+              onOpenFullCamera={() => setFullCameraOpen(true)}
               onOpenGallery={openGallery}
               onFetchGPS={fetchGPS}
               onApplyLastCtx={applyLastCtx}
