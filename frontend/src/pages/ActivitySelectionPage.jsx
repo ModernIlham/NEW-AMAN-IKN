@@ -1288,18 +1288,21 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                   <button type="button" onClick={() => setForm(p => ({...p, tim_inti: [...(p.tim_inti || []), {nama: '', jabatan: '', nip: '', unit: '', is_ketua: false}]}))} className="text-[10px] text-amber-600 dark:text-amber-400 hover:text-amber-800 flex items-center gap-0.5"><Plus className="w-3 h-3" /> Tambah</button>
                 </div>
                 {(form.tim_inti || []).length === 0 && <p className="text-[10px] text-amber-500 italic">Belum ada anggota tim inti.</p>}
+                {/* Kartu ringkas 2 baris per anggota: Nama diberi ruang lega
+                    (dulu 5 kolom sebaris → tiap input sempit & tak terbaca). */}
                 {(form.tim_inti || []).map((m, idx) => (
-                  <div key={idx} className="space-y-1">
-                    {idx === 0 && <div className="grid grid-cols-[60px_1fr_1fr_1fr_1fr_28px] gap-1"><span className="text-[9px] text-amber-600 dark:text-amber-400">Peran</span><span className="text-[9px] text-amber-600 dark:text-amber-400">Nama</span><span className="text-[9px] text-amber-600 dark:text-amber-400">Jabatan</span><span className="text-[9px] text-amber-600 dark:text-amber-400">NIP/NIK</span><span className="text-[9px] text-amber-600 dark:text-amber-400">Unit</span><span></span></div>}
-                    <div className="grid grid-cols-[60px_1fr_1fr_1fr_1fr_28px] gap-1 items-center">
-                      <select value={m.is_ketua ? 'ketua' : 'anggota'} onChange={e => { const arr = [...form.tim_inti]; arr[idx] = {...arr[idx], is_ketua: e.target.value === 'ketua'}; setForm(p => ({...p, tim_inti: arr})); }} className="h-7 text-[10px] rounded border border-border bg-card text-foreground px-1">
+                  <div key={idx} className="rounded-md border border-amber-200/80 dark:border-amber-700/40 p-1.5 space-y-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <select value={m.is_ketua ? 'ketua' : 'anggota'} aria-label="Peran" onChange={e => { const arr = [...form.tim_inti]; arr[idx] = {...arr[idx], is_ketua: e.target.value === 'ketua'}; setForm(p => ({...p, tim_inti: arr})); }} className="h-8 w-[92px] flex-shrink-0 text-[11px] rounded border border-border bg-card text-foreground px-1">
                         <option value="anggota">Anggota</option><option value="ketua">Ketua</option>
                       </select>
-                      <Input value={m.nama} onChange={e => { const arr = [...form.tim_inti]; arr[idx] = {...arr[idx], nama: e.target.value}; setForm(p => ({...p, tim_inti: arr})); }} placeholder="Nama" className="h-7 text-xs" />
-                      <Input value={m.jabatan} onChange={e => { const arr = [...form.tim_inti]; arr[idx] = {...arr[idx], jabatan: e.target.value}; setForm(p => ({...p, tim_inti: arr})); }} placeholder="Jabatan" className="h-7 text-xs" />
-                      <Input value={m.nip} onChange={e => { const arr = [...form.tim_inti]; arr[idx] = {...arr[idx], nip: e.target.value}; setForm(p => ({...p, tim_inti: arr})); }} placeholder="NIP/NIK" className="h-7 text-xs" />
-                      <Input value={m.unit} onChange={e => { const arr = [...form.tim_inti]; arr[idx] = {...arr[idx], unit: e.target.value}; setForm(p => ({...p, tim_inti: arr})); }} placeholder="Unit" className="h-7 text-xs" />
-                      <button type="button" onClick={() => setForm(p => ({...p, tim_inti: p.tim_inti.filter((_, i) => i !== idx)}))} className="h-7 w-7 flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"><X className="w-3.5 h-3.5" /></button>
+                      <Input value={m.nama} onChange={e => { const arr = [...form.tim_inti]; arr[idx] = {...arr[idx], nama: e.target.value}; setForm(p => ({...p, tim_inti: arr})); }} placeholder="Nama lengkap" className="h-8 text-xs flex-1 min-w-0" />
+                      <button type="button" aria-label="Hapus anggota" onClick={() => setForm(p => ({...p, tim_inti: p.tim_inti.filter((_, i) => i !== idx)}))} className="h-8 w-8 flex-shrink-0 flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"><X className="w-3.5 h-3.5" /></button>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+                      <Input value={m.jabatan} onChange={e => { const arr = [...form.tim_inti]; arr[idx] = {...arr[idx], jabatan: e.target.value}; setForm(p => ({...p, tim_inti: arr})); }} placeholder="Jabatan" className="h-8 text-xs" />
+                      <Input value={m.nip} onChange={e => { const arr = [...form.tim_inti]; arr[idx] = {...arr[idx], nip: e.target.value}; setForm(p => ({...p, tim_inti: arr})); }} placeholder="NIP/NIK" className="h-8 text-xs" />
+                      <Input value={m.unit} onChange={e => { const arr = [...form.tim_inti]; arr[idx] = {...arr[idx], unit: e.target.value}; setForm(p => ({...p, tim_inti: arr})); }} placeholder="Unit" className="h-8 text-xs" />
                     </div>
                   </div>
                 ))}
@@ -1313,17 +1316,18 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                 </div>
                 {(form.tim_pembantu || []).length === 0 && <p className="text-[10px] text-amber-500 italic">Belum ada anggota tim pembantu.</p>}
                 {(form.tim_pembantu || []).map((m, idx) => (
-                  <div key={idx} className="space-y-1">
-                    {idx === 0 && <div className="grid grid-cols-[60px_1fr_1fr_1fr_1fr_28px] gap-1"><span className="text-[9px] text-amber-600 dark:text-amber-400">Peran</span><span className="text-[9px] text-amber-600 dark:text-amber-400">Nama</span><span className="text-[9px] text-amber-600 dark:text-amber-400">Jabatan</span><span className="text-[9px] text-amber-600 dark:text-amber-400">NIP/NIK</span><span className="text-[9px] text-amber-600 dark:text-amber-400">Unit</span><span></span></div>}
-                    <div className="grid grid-cols-[60px_1fr_1fr_1fr_1fr_28px] gap-1 items-center">
-                      <select value={m.is_ketua ? 'ketua' : 'anggota'} onChange={e => { const arr = [...form.tim_pembantu]; arr[idx] = {...arr[idx], is_ketua: e.target.value === 'ketua'}; setForm(p => ({...p, tim_pembantu: arr})); }} className="h-7 text-[10px] rounded border border-border bg-card text-foreground px-1">
+                  <div key={idx} className="rounded-md border border-amber-200/80 dark:border-amber-700/40 p-1.5 space-y-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <select value={m.is_ketua ? 'ketua' : 'anggota'} aria-label="Peran" onChange={e => { const arr = [...form.tim_pembantu]; arr[idx] = {...arr[idx], is_ketua: e.target.value === 'ketua'}; setForm(p => ({...p, tim_pembantu: arr})); }} className="h-8 w-[92px] flex-shrink-0 text-[11px] rounded border border-border bg-card text-foreground px-1">
                         <option value="anggota">Anggota</option><option value="ketua">Ketua</option>
                       </select>
-                      <Input value={m.nama} onChange={e => { const arr = [...form.tim_pembantu]; arr[idx] = {...arr[idx], nama: e.target.value}; setForm(p => ({...p, tim_pembantu: arr})); }} placeholder="Nama" className="h-7 text-xs" />
-                      <Input value={m.jabatan} onChange={e => { const arr = [...form.tim_pembantu]; arr[idx] = {...arr[idx], jabatan: e.target.value}; setForm(p => ({...p, tim_pembantu: arr})); }} placeholder="Jabatan" className="h-7 text-xs" />
-                      <Input value={m.nip} onChange={e => { const arr = [...form.tim_pembantu]; arr[idx] = {...arr[idx], nip: e.target.value}; setForm(p => ({...p, tim_pembantu: arr})); }} placeholder="NIP/NIK" className="h-7 text-xs" />
-                      <Input value={m.unit} onChange={e => { const arr = [...form.tim_pembantu]; arr[idx] = {...arr[idx], unit: e.target.value}; setForm(p => ({...p, tim_pembantu: arr})); }} placeholder="Unit" className="h-7 text-xs" />
-                      <button type="button" onClick={() => setForm(p => ({...p, tim_pembantu: p.tim_pembantu.filter((_, i) => i !== idx)}))} className="h-7 w-7 flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"><X className="w-3.5 h-3.5" /></button>
+                      <Input value={m.nama} onChange={e => { const arr = [...form.tim_pembantu]; arr[idx] = {...arr[idx], nama: e.target.value}; setForm(p => ({...p, tim_pembantu: arr})); }} placeholder="Nama lengkap" className="h-8 text-xs flex-1 min-w-0" />
+                      <button type="button" aria-label="Hapus anggota" onClick={() => setForm(p => ({...p, tim_pembantu: p.tim_pembantu.filter((_, i) => i !== idx)}))} className="h-8 w-8 flex-shrink-0 flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"><X className="w-3.5 h-3.5" /></button>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+                      <Input value={m.jabatan} onChange={e => { const arr = [...form.tim_pembantu]; arr[idx] = {...arr[idx], jabatan: e.target.value}; setForm(p => ({...p, tim_pembantu: arr})); }} placeholder="Jabatan" className="h-8 text-xs" />
+                      <Input value={m.nip} onChange={e => { const arr = [...form.tim_pembantu]; arr[idx] = {...arr[idx], nip: e.target.value}; setForm(p => ({...p, tim_pembantu: arr})); }} placeholder="NIP/NIK" className="h-8 text-xs" />
+                      <Input value={m.unit} onChange={e => { const arr = [...form.tim_pembantu]; arr[idx] = {...arr[idx], unit: e.target.value}; setForm(p => ({...p, tim_pembantu: arr})); }} placeholder="Unit" className="h-8 text-xs" />
                     </div>
                   </div>
                 ))}
@@ -1339,13 +1343,14 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
               </div>
               {(form.tim_peneliti || []).length === 0 && <p className="text-xs text-blue-500 dark:text-blue-400 italic">Belum ada anggota tim peneliti.</p>}
               {(form.tim_peneliti || []).map((member, idx) => (
-                <div key={idx} className="space-y-1">
-                  {idx === 0 && <div className="grid grid-cols-[1fr_1fr_1fr_28px] gap-2"><span className="text-[10px] text-blue-600 dark:text-blue-400">Nama</span><span className="text-[10px] text-blue-600 dark:text-blue-400">Jabatan</span><span className="text-[10px] text-blue-600 dark:text-blue-400">NIP</span><span></span></div>}
-                  <div className="grid grid-cols-[1fr_1fr_1fr_28px] gap-2 items-center">
-                    <Input value={member.nama} onChange={e => { const arr = [...form.tim_peneliti]; arr[idx] = {...arr[idx], nama: e.target.value}; setForm(p => ({...p, tim_peneliti: arr})); }} placeholder="Nama lengkap" className="h-7 text-xs" />
-                    <Input value={member.jabatan} onChange={e => { const arr = [...form.tim_peneliti]; arr[idx] = {...arr[idx], jabatan: e.target.value}; setForm(p => ({...p, tim_peneliti: arr})); }} placeholder="Jabatan" className="h-7 text-xs" />
-                    <Input value={member.nip} onChange={e => { const arr = [...form.tim_peneliti]; arr[idx] = {...arr[idx], nip: e.target.value}; setForm(p => ({...p, tim_peneliti: arr})); }} placeholder="NIP" className="h-7 text-xs" />
-                    <button type="button" onClick={() => setForm(p => ({...p, tim_peneliti: p.tim_peneliti.filter((_, i) => i !== idx)}))} className="h-7 w-7 flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"><X className="w-3.5 h-3.5" /></button>
+                <div key={idx} className="rounded-md border border-blue-200/80 dark:border-blue-700/40 p-1.5 space-y-1.5 bg-white/60 dark:bg-slate-800/40">
+                  <div className="flex items-center gap-1.5">
+                    <Input value={member.nama} onChange={e => { const arr = [...form.tim_peneliti]; arr[idx] = {...arr[idx], nama: e.target.value}; setForm(p => ({...p, tim_peneliti: arr})); }} placeholder="Nama lengkap" className="h-8 text-xs flex-1 min-w-0" />
+                    <button type="button" aria-label="Hapus anggota" onClick={() => setForm(p => ({...p, tim_peneliti: p.tim_peneliti.filter((_, i) => i !== idx)}))} className="h-8 w-8 flex-shrink-0 flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"><X className="w-3.5 h-3.5" /></button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                    <Input value={member.jabatan} onChange={e => { const arr = [...form.tim_peneliti]; arr[idx] = {...arr[idx], jabatan: e.target.value}; setForm(p => ({...p, tim_peneliti: arr})); }} placeholder="Jabatan" className="h-8 text-xs" />
+                    <Input value={member.nip} onChange={e => { const arr = [...form.tim_peneliti]; arr[idx] = {...arr[idx], nip: e.target.value}; setForm(p => ({...p, tim_peneliti: arr})); }} placeholder="NIP" className="h-8 text-xs" />
                   </div>
                 </div>
               ))}
@@ -1359,14 +1364,15 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
               </div>
               {(form.tim_pendukung || []).length === 0 && <p className="text-xs text-violet-500 dark:text-violet-400 italic">Belum ada anggota tim pendukung.</p>}
               {(form.tim_pendukung || []).map((member, idx) => (
-                <div key={idx} className="space-y-1">
-                  {idx === 0 && <div className="grid grid-cols-[1fr_1fr_1fr_1fr_28px] gap-2"><span className="text-[10px] text-violet-600 dark:text-violet-400">Nama</span><span className="text-[10px] text-violet-600 dark:text-violet-400">Jabatan</span><span className="text-[10px] text-violet-600 dark:text-violet-400">NIP</span><span className="text-[10px] text-violet-600 dark:text-violet-400">Dari Pihak</span><span></span></div>}
-                  <div className="grid grid-cols-[1fr_1fr_1fr_1fr_28px] gap-2 items-center">
-                    <Input value={member.nama} onChange={e => { const arr = [...form.tim_pendukung]; arr[idx] = {...arr[idx], nama: e.target.value}; setForm(p => ({...p, tim_pendukung: arr})); }} placeholder="Nama lengkap" className="h-7 text-xs" />
-                    <Input value={member.jabatan} onChange={e => { const arr = [...form.tim_pendukung]; arr[idx] = {...arr[idx], jabatan: e.target.value}; setForm(p => ({...p, tim_pendukung: arr})); }} placeholder="Jabatan" className="h-7 text-xs" />
-                    <Input value={member.nip} onChange={e => { const arr = [...form.tim_pendukung]; arr[idx] = {...arr[idx], nip: e.target.value}; setForm(p => ({...p, tim_pendukung: arr})); }} placeholder="NIP" className="h-7 text-xs" />
-                    <Input value={member.dari_pihak || ''} onChange={e => { const arr = [...form.tim_pendukung]; arr[idx] = {...arr[idx], dari_pihak: e.target.value}; setForm(p => ({...p, tim_pendukung: arr})); }} placeholder="Dari pihak mana" className="h-7 text-xs" />
-                    <button type="button" onClick={() => setForm(p => ({...p, tim_pendukung: p.tim_pendukung.filter((_, i) => i !== idx)}))} className="h-7 w-7 flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"><X className="w-3.5 h-3.5" /></button>
+                <div key={idx} className="rounded-md border border-violet-200/80 dark:border-violet-700/40 p-1.5 space-y-1.5 bg-white/60 dark:bg-slate-800/40">
+                  <div className="flex items-center gap-1.5">
+                    <Input value={member.nama} onChange={e => { const arr = [...form.tim_pendukung]; arr[idx] = {...arr[idx], nama: e.target.value}; setForm(p => ({...p, tim_pendukung: arr})); }} placeholder="Nama lengkap" className="h-8 text-xs flex-1 min-w-0" />
+                    <button type="button" aria-label="Hapus anggota" onClick={() => setForm(p => ({...p, tim_pendukung: p.tim_pendukung.filter((_, i) => i !== idx)}))} className="h-8 w-8 flex-shrink-0 flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"><X className="w-3.5 h-3.5" /></button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+                    <Input value={member.jabatan} onChange={e => { const arr = [...form.tim_pendukung]; arr[idx] = {...arr[idx], jabatan: e.target.value}; setForm(p => ({...p, tim_pendukung: arr})); }} placeholder="Jabatan" className="h-8 text-xs" />
+                    <Input value={member.nip} onChange={e => { const arr = [...form.tim_pendukung]; arr[idx] = {...arr[idx], nip: e.target.value}; setForm(p => ({...p, tim_pendukung: arr})); }} placeholder="NIP" className="h-8 text-xs" />
+                    <Input value={member.dari_pihak || ''} onChange={e => { const arr = [...form.tim_pendukung]; arr[idx] = {...arr[idx], dari_pihak: e.target.value}; setForm(p => ({...p, tim_pendukung: arr})); }} placeholder="Dari pihak mana" className="h-8 text-xs" />
                   </div>
                 </div>
               ))}
