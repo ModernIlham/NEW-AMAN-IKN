@@ -22,6 +22,7 @@ const formatPrice = (p) => {
 const Lightbox = memo(({ asset, onClose, onEdit }) => {
   const [fullAsset, setFullAsset] = useState(null);
   const [photos, setPhotos] = useState([]);
+  const [thumbs, setThumbs] = useState([]); // placeholder kecil per-foto (instan)
   const [idx, setIdx] = useState(0);
   const [loading, setLoading] = useState(true);
   const [imgLoading, setImgLoading] = useState(false); // foto berikutnya sedang dimuat
@@ -43,15 +44,23 @@ const Lightbox = memo(({ asset, onClose, onEdit }) => {
         setFullAsset(data);
         const count = Number(data.photo_count) || 0;
         const version = Number(data.version) || 1;
+        // w=1280: varian preview (~100-250KB) — jauh lebih cepat dari full-res
+        // (~900KB) dan tetap tajam untuk layar; server me-resize sekali lalu
+        // meng-cache (ETag/Cache-Control tetap berlaku).
         const p = count > 0
-          ? Array.from({ length: count }, (_, i) => authMediaUrl(`${API}/assets/${asset.id}/photos/${i}?v=${version}`))
+          ? Array.from({ length: count }, (_, i) => authMediaUrl(`${API}/assets/${asset.id}/photos/${i}?v=${version}&w=1280`))
           : (asset.thumbnail ? [asset.thumbnail] : []); // data-URI fallback (legacy inline cover)
+        // Thumbnail kecil per-foto sebagai placeholder instan saat berpindah.
+        setThumbs(count > 0
+          ? Array.from({ length: count }, (_, i) => authMediaUrl(`${API}/assets/${asset.id}/photos/${i}?v=${version}&thumb=1`))
+          : (asset.thumbnail ? [asset.thumbnail] : []));
         setPhotos(p);
         setIdx(0);
       })
       .catch(() => {
         setFullAsset(asset);
         setPhotos(asset.thumbnail ? [asset.thumbnail] : []); // data-URI support kept
+        setThumbs(asset.thumbnail ? [asset.thumbnail] : []);
         setIdx(0);
       })
       .finally(() => setLoading(false));
@@ -148,7 +157,14 @@ const Lightbox = memo(({ asset, onClose, onEdit }) => {
             />
             {imgLoading && (
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none" data-testid="lightbox-img-loading">
-                <Loader2 className="w-10 h-10 text-slate-700 dark:text-white animate-spin" />
+                {/* Placeholder instan: thumbnail kecil diperbesar + blur, supaya
+                    pengguna langsung melihat foto yang DITUJU (bukan foto lama)
+                    selagi versi tajamnya diunduh. */}
+                {thumbs[idx] && (
+                  <img src={thumbs[idx]} alt="" aria-hidden="true" draggable={false}
+                    className="max-h-[60vh] max-w-full object-contain rounded-lg blur-md scale-[1.02] opacity-80" />
+                )}
+                <Loader2 className="absolute w-10 h-10 text-white drop-shadow animate-spin" />
               </div>
             )}
             {photos.length > 1 && (

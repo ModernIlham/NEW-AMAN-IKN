@@ -839,6 +839,43 @@ async def get_asset_checklist_full(asset_id: str, _user: dict = Depends(require_
 MEDIA_CACHE_CONTROL = "private, max-age=86400"
 
 
+# --- Varian PREVIEW foto (lebar dibatasi) untuk lightbox/galeri -------------
+# Full-res (≤1920px, ~900KB) terlalu berat untuk dilihat cepat di jaringan
+# lapangan. ?w=<lebar> menghasilkan JPEG yang diperkecil (~100-250KB) —
+# di-resize SEKALI lalu di-cache di koleksi media_previews (ber-TTL), sehingga
+# permintaan berikutnya (siapa pun penggunanya) langsung dari cache.
+_PREVIEW_WIDTHS = {640, 1280}
+_PREVIEW_TTL_DAYS = 30
+_preview_index_ready = False
+
+
+async def _ensure_preview_index():
+    global _preview_index_ready
+    if _preview_index_ready:
+        return
+    _preview_index_ready = True
+    try:
+        await db.media_previews.create_index("created_at", expireAfterSeconds=_PREVIEW_TTL_DAYS * 86400)
+    except Exception:  # index sudah ada / tak bisa dibuat — cache tetap berfungsi
+        pass
+
+
+def _resize_jpeg(photo_bytes: bytes, max_w: int, quality: int = 80) -> bytes:
+    """Perkecil JPEG ke lebar maks `max_w` (rasio dipertahankan). Sinkron &
+    cepat (puluhan ms untuk sumber ≤1920px); hasil di-cache oleh pemanggil."""
+    import io
+    from PIL import Image as PILImage
+    img = PILImage.open(io.BytesIO(photo_bytes))
+    if img.mode not in ("RGB", "L"):
+        img = img.convert("RGB")
+    w, h = img.size
+    if w > max_w:
+        img = img.resize((max_w, max(1, round(h * max_w / w))), PILImage.LANCZOS)
+    out = io.BytesIO()
+    img.save(out, format="JPEG", quality=quality, optimize=True, progressive=True)
+    return out.getvalue()
+
+
 def _media_headers(etag: str, extra: dict = None) -> dict:
     headers = {"Cache-Control": MEDIA_CACHE_CONTROL, "ETag": etag,
                "X-Content-Type-Options": "nosniff"}
@@ -930,6 +967,7 @@ async def get_asset_checklist_document(asset_id: str, item_idx: int, doc_idx: in
 
 @assets_router.get("/assets/{asset_id}/photos/{photo_index}")
 async def get_asset_photo_full(asset_id: str, photo_index: int, request: Request, thumb: int = 0,
+                               w: int = 0,
                                _user: dict = Depends(require_user_or_query_token)):
     """Stream a full-resolution photo from GridFS or fallback to inline base64.
 
@@ -938,6 +976,10 @@ async def get_asset_photo_full(asset_id: str, photo_index: int, request: Request
     thumbnails) one generated on the fly — same fallback /media uses, cheap
     enough per request. The form's photo strip uses this so each thumbnail
     loads progressively via <img src> and gets cached by the browser.
+
+    ?w=640|1280 returns a width-capped PREVIEW JPEG (progressive, q80) —
+    resized once then cached in media_previews, so the lightbox loads a
+    ~100-250KB image instead of the full ~900KB original.
     """
     asset = await db.assets.find_one({"id": asset_id}, {
         "_id": 0, "photo_gridfs_ids": 1, "photos": 1, "photo_thumbnails": 1, "version": 1
@@ -945,10 +987,21 @@ async def get_asset_photo_full(asset_id: str, photo_index: int, request: Request
     if not asset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
 
-    etag = f'"{asset_id}-p{photo_index}{"-t" if thumb else ""}-v{int(asset.get("version", 1) or 1)}"'
+    preview_w = w if (w in _PREVIEW_WIDTHS and not thumb) else 0
+    etag = (f'"{asset_id}-p{photo_index}{"-t" if thumb else ""}'
+            f'{f"-w{preview_w}" if preview_w else ""}-v{int(asset.get("version", 1) or 1)}"')
     not_modified = _not_modified(request, etag)
     if not_modified:
         return not_modified
+
+    # Preview: sajikan dari cache bila sudah pernah di-resize (kunci = etag,
+    # otomatis basi saat versi aset berubah; koleksi ber-TTL).
+    if preview_w:
+        await _ensure_preview_index()
+        cached = await db.media_previews.find_one({"_id": etag})
+        if cached and cached.get("data"):
+            return Response(content=bytes(cached["data"]), media_type="image/jpeg",
+                            headers=_media_headers(etag))
 
     gridfs_ids = asset.get("photo_gridfs_ids", []) or []
     photos = asset.get("photos", []) or []
@@ -972,24 +1025,43 @@ async def get_asset_photo_full(asset_id: str, photo_index: int, request: Request
             except Exception:
                 pass  # corrupt stored thumbnail — fall through to the full photo
 
-    # Try GridFS first
+    # Ambil byte foto penuh: GridFS dulu, lalu fallback inline base64
+    photo_bytes = None
     if photo_index < len(gridfs_ids) and gridfs_ids[photo_index]:
         photo_bytes = await get_photo_from_gridfs(gridfs_ids[photo_index])
-        if photo_bytes:
-            return Response(content=photo_bytes, media_type="image/jpeg",
-                            headers=_media_headers(etag))
-
-    # Fallback to inline base64
-    if photo_index < len(photos):
+    if photo_bytes is None and photo_index < len(photos):
         photo_b64 = photos[photo_index]
         if photo_b64.startswith('data:'):
             _, data = photo_b64.split(',', 1)
         else:
             data = photo_b64
-        return Response(content=base64.b64decode(data), media_type="image/jpeg",
-                        headers=_media_headers(etag))
+        try:
+            photo_bytes = base64.b64decode(data)
+        except Exception:
+            photo_bytes = None
+    if photo_bytes is None:
+        raise HTTPException(status_code=404, detail="Foto tidak ditemukan")
 
-    raise HTTPException(status_code=404, detail="Foto tidak ditemukan")
+    # Preview: resize sekali → cache → sajikan. Gagal resize → foto asli.
+    if preview_w:
+        try:
+            preview = _resize_jpeg(photo_bytes, preview_w)
+            if len(preview) < len(photo_bytes):
+                try:
+                    await db.media_previews.update_one(
+                        {"_id": etag},
+                        {"$set": {"data": preview, "created_at": datetime.now(timezone.utc)}},
+                        upsert=True,
+                    )
+                except Exception:
+                    pass  # cache best-effort — respons tetap dilayani
+                return Response(content=preview, media_type="image/jpeg",
+                                headers=_media_headers(etag))
+        except Exception:
+            pass  # bukan JPEG valid / Pillow gagal — sajikan asli
+
+    return Response(content=photo_bytes, media_type="image/jpeg",
+                    headers=_media_headers(etag))
 
 
 # ============================================================================

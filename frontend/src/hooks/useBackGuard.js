@@ -40,6 +40,12 @@ function handlePopState() {
 function ensureInstalled() {
   if (installed || typeof window === "undefined") return;
   installed = true;
+  // DUA sentinel sebagai penyangga: lompatan riwayat multi-langkah (mis.
+  // long-press tombol Back lalu memilih entri 2 langkah ke belakang) tetap
+  // mendarat di entri milik aplikasi (popstate terpicu → tanam ulang), bukan
+  // langsung ke dokumen/situs lain. pushState juga MEMANGKAS riwayat maju,
+  // sehingga tombol Forward tak lagi bisa membawa keluar aplikasi.
+  seedSentinel();
   seedSentinel();
   window.addEventListener("popstate", handlePopState);
 }
