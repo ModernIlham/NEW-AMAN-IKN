@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import axios from "axios";
 import { getApiError } from "@/lib/utils";
+import { useTripleClick } from "@/hooks/useTripleClick";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -227,9 +228,11 @@ export default function LoginPage({ onLogin, onShowInfo }) {
   };
 
   // Halaman Info/PRD dibuka lewat klik LOGO aplikasi (tanpa tombol Info terpisah)
+  // Halaman Info tersembunyi: butuh 3 klik beruntun pada logo
+  const activateInfo = useTripleClick(onShowInfo);
   const logoProps = onShowInfo ? {
-    role: "button", tabIndex: 0, onClick: onShowInfo,
-    onKeyDown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onShowInfo(); } },
+    role: "button", tabIndex: 0, onClick: activateInfo,
+    onKeyDown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activateInfo(); } },
     "aria-label": "Info aplikasi", title: "Info aplikasi",
   } : {};
 
