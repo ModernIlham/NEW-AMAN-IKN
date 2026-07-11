@@ -1,0 +1,42 @@
+# Auto-deploy ke VPS Hostinger setiap kali main berubah (merge PR), atau
+# manual lewat tab Actions → "Deploy ke Hostinger VPS" → Run workflow.
+#
+# Butuh 3 secret repo (Settings → Secrets and variables → Actions):
+#   VPS_HOST     — IP/hostname VPS
+#   VPS_USER     — user SSH (mis. root)
+#   VPS_SSH_KEY  — private key OpenSSH yang public key-nya ada di
+#                  ~/.ssh/authorized_keys milik user tsb di VPS
+# Opsional: VPS_PORT (default 22).
+# Selama secret belum diset, job selesai dengan catatan (tidak gagal).
+name: Deploy ke Hostinger VPS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-vps
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy via SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          if [ -z "$VPS_HOST" ] || [ -z "$VPS_USER" ] || [ -z "$VPS_SSH_KEY" ]; then
+            echo "::notice::Deploy dilewati — set secret VPS_HOST, VPS_USER, dan VPS_SSH_KEY di Settings → Secrets and variables → Actions untuk mengaktifkan auto-deploy."
+            exit 0
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "${VPS_PORT:-22}" -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh -i ~/.ssh/deploy_key -p "${VPS_PORT:-22}" "$VPS_USER@$VPS_HOST" 'bash -s' < scripts/deploy_vps.sh
