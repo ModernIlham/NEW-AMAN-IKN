@@ -811,12 +811,13 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       // If 'queued' or 'saving', the lock will be released by onItemSaved after save completes
     }
     const lock = rowLocks[asset.id];
-    if (lock && lock.session_id !== sessionId) { toast.error(`Aset sedang diedit oleh ${lock.user_name}`); return; }
+    if (lock && lock.session_id !== sessionId) { toast.error(`Aset sedang diedit oleh ${lock.user_name}`); return false; }
     const locked = await lockAsset(asset.id);
-    if (!locked) return;
+    if (!locked) return false;
     setEditAssetForForm(asset);
     setIsSidebarOpen(true);
     if (!formPanelVisible) setFormPanelVisible(true);
+    return true;
   }, [rowLocks, sessionId, lockAsset, formPanelVisible, editAssetForForm, unlockAsset, syncStatuses]);
 
   const handleFormClose = useCallback(() => {
@@ -1479,7 +1480,12 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
               activityName={activity?.nama_kegiatan}
               onClose={() => setMapOpen(false)}
               canEdit={perms.canEdit}
-              onEditAsset={perms.canEdit ? (row) => { setMapOpen(false); handleEdit(row); } : undefined}
+              onEditAsset={perms.canEdit ? async (row) => {
+                // Tutup peta hanya bila edit benar-benar terbuka — bila baris
+                // dikunci sesi lain/lock gagal, pengguna tetap di peta.
+                const ok = await handleEdit(row);
+                if (ok !== false) setMapOpen(false);
+              } : undefined}
               onSaveCoords={handleMapCoordsSave}
               buildParams={buildMapParams}
               clientFilter={mapClientFilter}

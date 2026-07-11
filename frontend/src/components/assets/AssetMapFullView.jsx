@@ -70,8 +70,12 @@ const AssetMapFullView = memo(function AssetMapFullView({
   const didFitRef = useRef(false);       // fitBounds hanya saat muat pertama
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
+  const [truncated, setTruncated] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadedOnce, setLoadedOnce] = useState(false);
+  // Guard staleness: hanya hasil load TERBARU yang boleh menulis state —
+  // load lama (loop multi-halaman) bisa selesai SETELAH load baru.
+  const loadSeqRef = useRef(0);
 
   // Callback disimpan di ref agar marker tidak dibangun ulang hanya karena
   // identitas arrow function induk berubah tiap render.
@@ -92,43 +96,57 @@ const AssetMapFullView = memo(function AssetMapFullView({
 
   const load = useCallback(async () => {
     if (!activityId) return;
+    const seq = ++loadSeqRef.current;
+    const fresh = () => seq === loadSeqRef.current;
     setLoading(true);
     try {
-      let all = [];
+      const byId = new Map(); // dedupe id — halaman bisa tumpang-tindih saat data berubah di tengah paging
+      let serverTotal = 0;
+      let hitCap = false;
       if (navigator.onLine) {
         // Data MENGIKUTI FILTER AKTIF: query yang sama dengan daftar aset,
-        // dipaging sampai habis (page_size maks server = 500).
-        for (let page = 1; page <= 40; page++) {
+        // dipaging sampai habis (page_size maks server = 500, plafon 50k).
+        for (let page = 1; page <= 100; page++) {
           const params = buildParams ? buildParams() : new URLSearchParams();
           params.set("page", String(page));
           params.set("page_size", "500");
           params.set("sort_by", "newest");
           const r = await axios.get(`${API}/assets?${params.toString()}`);
+          if (!fresh()) return; // hasil basi — load baru sudah berjalan
           const items = r.data?.items || [];
-          all = all.concat(items);
-          if (all.length >= (r.data?.total || 0) || items.length === 0) break;
+          for (const it of items) { if (it && it.id) byId.set(it.id, it); }
+          serverTotal = r.data?.total || 0;
+          if (page >= (r.data?.total_pages || 1) || items.length === 0) break;
+          if (page === 100) hitCap = true;
         }
       } else {
         const cached = await getSnapshotAssets(activityId);
-        all = clientFilter ? clientFilter(cached) : cached;
+        if (!fresh()) return;
+        const filtered = clientFilter ? clientFilter(cached) : cached;
+        for (const it of filtered) { if (it && it.id) byId.set(it.id, it); }
+        serverTotal = filtered.length;
       }
-      setTotal(all.length);
+      const all = Array.from(byId.values());
+      setTotal(Math.max(serverTotal, all.length));
+      setTruncated(hitCap || all.length < serverTotal); // paging terpotong → beri tahu
       setRows(all.filter((a) => parseCoord(a.koordinat_latitude) !== null && parseCoord(a.koordinat_longitude) !== null));
       setLoadedOnce(true);
     } catch {
       // Jaringan gagal di tengah — snapshot lokal (dengan filter yang sama)
       try {
         const cached = await getSnapshotAssets(activityId);
+        if (!fresh()) return;
         const filtered = clientFilter ? clientFilter(cached) : cached;
         setTotal(filtered.length);
+        setTruncated(false);
         setRows(filtered.filter((a) => parseCoord(a.koordinat_latitude) !== null && parseCoord(a.koordinat_longitude) !== null));
         setLoadedOnce(true);
         toast.info("Peta memakai data snapshot offline");
       } catch {
-        toast.error("Gagal memuat data peta");
+        if (fresh()) toast.error("Gagal memuat data peta");
       }
     } finally {
-      setLoading(false);
+      if (fresh()) setLoading(false);
     }
   }, [activityId, buildParams, clientFilter]);
 
@@ -285,7 +303,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
           <h2 className="text-sm font-bold text-foreground leading-tight">Peta Aset</h2>
           <p className="text-[11px] text-muted-foreground truncate">
             {activityName || "Kegiatan aktif"}
-            {loadedOnce && <> — <span className="font-semibold text-foreground/80">{rows.length}</span> titik dari {total} aset{activeFilterCount > 0 ? " (terfilter)" : ""}</>}
+            {loadedOnce && <> — <span className="font-semibold text-foreground/80">{rows.length}</span> titik dari {total} aset{activeFilterCount > 0 ? " (terfilter)" : ""}{truncated ? " — sebagian belum dimuat, persempit filter" : ""}</>}
           </p>
         </div>
         {activeFilterCount > 0 && (
