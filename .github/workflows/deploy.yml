@@ -39,9 +39,15 @@ jobs:
           # Buang CR (tempel dari Windows) + pastikan newline penutup
           printf '%s\n' "$VPS_SSH_KEY" | tr -d '\r' > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
+          # Alternatif anti-salah-tempel: secret berisi SATU baris base64
+          # (hasil `base64 -w0 ~/deploy_key`) — didekode di sini.
+          if ! ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null 2>&1; then
+            printf '%s' "$VPS_SSH_KEY" | tr -d ' \t\r\n' | base64 -d > ~/.ssh/deploy_key 2>/dev/null || true
+            chmod 600 ~/.ssh/deploy_key
+          fi
           # Validasi kunci SEBELUM konek — pesan jelas bila isi secret rusak
           if ! ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null 2>&1; then
-            echo "::error::Isi secret VPS_SSH_KEY bukan private key OpenSSH yang valid. Salin ULANG seluruh isi file kunci (termasuk baris -----BEGIN ... KEY----- dan -----END ... KEY-----, dengan semua baris di antaranya utuh) lalu perbarui secret."
+            echo "::error::Isi secret VPS_SSH_KEY bukan private key OpenSSH yang valid. Cara paling mudah: di VPS jalankan  base64 -w0 ~/deploy_key; echo  lalu salin SATU baris hasilnya ke secret VPS_SSH_KEY. (Atau salin utuh semua baris file kunci dari -----BEGIN sampai -----END.)"
             exit 1
           fi
           ssh-keyscan -p "${VPS_PORT:-22}" -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
