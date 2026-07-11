@@ -15,6 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { compressImageFile } from "../../lib/imageCompression";
 import { compressPdfFile } from "../../lib/pdfCompression";
+import { acquireAccuratePosition } from "../../lib/geolocation";
 import { toast } from "sonner";
 import { DEFAULT_DOC_ITEMS } from "./DocumentChecklist";
 import {
@@ -227,27 +228,21 @@ const BatchEditPanel = memo(function BatchEditPanel({
     });
   }, []);
 
-  // GPS fetch
+  // GPS fetch — realtime & akurat (watchPosition + maximumAge:0, ambil akurasi terbaik)
   const fetchGPS = useCallback(() => {
     if (!navigator.geolocation) { toast.error("GPS tidak didukung di browser ini"); return; }
     setGpsLoading(true);
-    navigator.geolocation.getCurrentPosition(
-      pos => {
-        setUpdates(prev => ({
-          ...prev,
-          koordinat_latitude: pos.coords.latitude.toFixed(6),
-          koordinat_longitude: pos.coords.longitude.toFixed(6),
-        }));
-        setGpsLoading(false);
-        toast.success("Koordinat GPS berhasil diambil");
-      },
-      err => {
-        setGpsLoading(false);
-        if (err.code === 1) toast.error("Akses lokasi ditolak. Izinkan di pengaturan browser.");
-        else toast.error("Gagal mendapatkan lokasi GPS");
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
+    acquireAccuratePosition({
+      onUpdate: ({ lat, lng }) => setUpdates(prev => ({ ...prev, koordinat_latitude: lat, koordinat_longitude: lng })),
+    }).then(({ lat, lng, accuracy }) => {
+      setUpdates(prev => ({ ...prev, koordinat_latitude: lat, koordinat_longitude: lng }));
+      setGpsLoading(false);
+      toast.success(`Koordinat GPS diperbarui${Number.isFinite(accuracy) ? ` (±${Math.round(accuracy)} m)` : ""}`);
+    }).catch(err => {
+      setGpsLoading(false);
+      if (err?.code === 1) toast.error("Akses lokasi ditolak. Izinkan di pengaturan browser.");
+      else toast.error("Gagal mendapatkan lokasi GPS");
+    });
   }, []);
 
   // Photo upload (with client-side compression for fast upload)

@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import axios from "axios";
 import { getApiError } from "../../lib/utils";
 import { authMediaUrl } from "../../lib/mediaUrl";
+import { acquireAccuratePosition } from "../../lib/geolocation";
 import { compressImageFile, compressDataUrl, generateThumbnailFromDataUrl, dataUrlBytes } from "../../lib/imageCompression";
 
 // ============================================================================
@@ -687,22 +688,20 @@ const AssetForm = memo(({
   const fetchGPS = useCallback(() => {
     if (!navigator.geolocation) { toast.error("GPS tidak didukung di browser ini"); return; }
     setGpsLoading(true);
-    navigator.geolocation.getCurrentPosition(
-      pos => {
-        const lat = pos.coords.latitude.toFixed(6);
-        const lng = pos.coords.longitude.toFixed(6);
-        try { localStorage.setItem("aman_last_gps", JSON.stringify({ lat, lng, ts: Date.now() })); } catch {}
-        setFormData(p => ({ ...p, koordinat_latitude: lat, koordinat_longitude: lng }));
-        setGpsLoading(false);
-        toast.success("Koordinat GPS berhasil diambil");
-      },
-      err => {
-        setGpsLoading(false);
-        if (err.code === 1) toast.error("Akses lokasi ditolak. Izinkan di pengaturan browser.");
-        else toast.error("Gagal mendapatkan lokasi GPS");
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
+    // Realtime: koordinat diperbarui tiap fix yang lebih akurat, lalu diambil
+    // yang paling tepat. maximumAge:0 memastikan bukan koordinat lama (ter-cache).
+    acquireAccuratePosition({
+      onUpdate: ({ lat, lng }) => setFormData(p => ({ ...p, koordinat_latitude: lat, koordinat_longitude: lng })),
+    }).then(({ lat, lng, accuracy }) => {
+      try { localStorage.setItem("aman_last_gps", JSON.stringify({ lat, lng, ts: Date.now() })); } catch {}
+      setFormData(p => ({ ...p, koordinat_latitude: lat, koordinat_longitude: lng }));
+      setGpsLoading(false);
+      toast.success(`Koordinat GPS diperbarui${Number.isFinite(accuracy) ? ` (±${Math.round(accuracy)} m)` : ""}`);
+    }).catch(err => {
+      setGpsLoading(false);
+      if (err?.code === 1) toast.error("Akses lokasi ditolak. Izinkan di pengaturan browser.");
+      else toast.error("Gagal mendapatkan lokasi GPS");
+    });
   }, []);
 
   // Lazy-load full checklist (with photo data URLs and PDF data URLs) when the
@@ -803,7 +802,7 @@ const AssetForm = memo(({
               setFormData(p => (p.koordinat_latitude === lat && p.koordinat_longitude === lng) ? { ...p, koordinat_latitude: freshLat, koordinat_longitude: freshLng } : p);
             },
             () => {}, // fix baru gagal — nilai cache tetap dipakai
-            { enableHighAccuracy: true, timeout: 10000 }
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
           );
         }
       } else {
