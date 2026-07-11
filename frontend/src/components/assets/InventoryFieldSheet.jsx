@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import {
   Check, Camera, Images, MapPin, LocateFixed, RefreshCw, Loader2, Copy,
-  ChevronDown, ArrowRight,
+  ChevronDown, ArrowRight, ScanLine,
 } from "lucide-react";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
@@ -119,6 +119,7 @@ const InventoryFieldSheet = ({
   onOperasionalJenisChange,
   onOpenCamera,
   onOpenFullCamera,
+  onOpenFullCameraScan,
   onOpenGallery,
   onFetchGPS,
   onApplyLastCtx,
@@ -366,6 +367,16 @@ const InventoryFieldSheet = ({
                 className="w-full h-11 mb-2 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 disabled:pointer-events-none"
               >
                 <Camera className="w-4 h-4" />Mode Kamera Penuh (Jam + GPS Live)
+              </button>
+            )}
+            {onOpenFullCameraScan && typeof window !== "undefined" && "BarcodeDetector" in window && (
+              <button
+                type="button"
+                onClick={onOpenFullCameraScan}
+                data-testid="sheet-full-camera-scan-btn"
+                className="w-full h-11 mb-2 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+              >
+                <ScanLine className="w-4 h-4" />Kamera + Scan QR (edit cepat antar-aset)
               </button>
             )}
             <div className="grid grid-cols-2 gap-2">
