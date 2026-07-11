@@ -3,7 +3,7 @@ import {
   Package, Moon, Sun, LogOut, ChevronRight, Lock, Sparkles,
   ClipboardList, ShoppingCart, UserCheck, Handshake, ShieldCheck, Scale,
   ArrowLeftRight, Flame, FileX, Eye, BookOpen, Boxes, FileText, ClipboardCheck,
-  CheckCircle2, Link2, CalendarClock,
+  CheckCircle2, Link2, CalendarClock, Banknote, Wrench, Landmark,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -11,16 +11,19 @@ import {
 import { useTripleClick } from "@/hooks/useTripleClick";
 import {
   SIKLUS_MODULES, PENATAUSAHAAN_SUBMODULES, FASE_ROADMAP, STATUS_LABELS,
+  ASAS_PENGELOLAAN, DASAR_HUKUM_UMUM, PENATAUSAHAAN_DASAR_HUKUM,
 } from "@/lib/bmnModules";
 
 // Ikon per modul — dipetakan di sini supaya registry (lib) bebas dependensi UI.
 const MODULE_ICONS = {
   "perencanaan": ClipboardList,
+  "penganggaran": Banknote,
   "pengadaan": ShoppingCart,
   "penggunaan": UserCheck,
   "pemanfaatan": Handshake,
-  "pengamanan": ShieldCheck,
   "penilaian": Scale,
+  "pengamanan": ShieldCheck,
+  "pemeliharaan": Wrench,
   "pemindahtanganan": ArrowLeftRight,
   "pemusnahan": Flame,
   "penghapusan": FileX,
@@ -111,12 +114,21 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
         <div className="text-center space-y-2">
           <h2 className="text-xl sm:text-2xl font-bold text-foreground">Siklus Pengelolaan BMN</h2>
           <p className="text-xs sm:text-sm text-muted-foreground max-w-2xl mx-auto">
-            Satu rumah untuk seluruh tahap pengelolaan Barang Milik Negara (PP 27/2014).
-            Modul dibangun bertahap — mulai dari poros penatausahaan.
+            Satu rumah untuk 12 tahap pengelolaan Barang Milik Negara sesuai siklus resmi
+            Kemenkeu ({DASAR_HUKUM_UMUM.join(" · ")}). Modul dibangun bertahap — mulai dari
+            poros penatausahaan.
           </p>
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-600/10 border border-blue-500/30 text-blue-600 dark:text-blue-400 text-[11px] font-semibold">
             Posisi Anda: Penatausahaan › Inventarisasi Aset
           </span>
+          {/* Asas pengelolaan — legenda diagram resmi */}
+          <div className="flex items-center justify-center gap-1.5 flex-wrap pt-1">
+            {ASAS_PENGELOLAAN.map((asas) => (
+              <span key={asas} className="px-2 py-0.5 rounded-full bg-muted/70 border border-border text-[10px] text-muted-foreground">
+                {asas}
+              </span>
+            ))}
+          </div>
         </div>
 
         {/* ── Penatausahaan — poros (posisi kita) ── */}
@@ -127,7 +139,10 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
             </span>
             <div>
               <h3 className="font-bold text-foreground text-sm sm:text-base leading-tight">Penatausahaan</h3>
-              <p className="text-[11px] sm:text-xs text-muted-foreground">Pembukuan · Inventarisasi · Pelaporan — poros pencatatan seluruh siklus</p>
+              <p className="text-[11px] sm:text-xs text-muted-foreground">
+                Pembukuan · Inventarisasi · Pelaporan — poros pencatatan seluruh siklus
+                <span className="hidden sm:inline"> · {PENATAUSAHAAN_DASAR_HUKUM.split(" — ")[0]}</span>
+              </p>
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 mt-3">
@@ -251,6 +266,21 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
                       {detail.integrasi.map((f, i) => (
                         <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
                           <span className="text-violet-500 mt-0.5">•</span>
+                          <span>{f}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {detail.dasarHukum?.length > 0 && (
+                  <div>
+                    <p className="text-xs font-bold text-foreground mb-1.5 flex items-center gap-1.5">
+                      <Landmark className="w-3.5 h-3.5 text-amber-500" />Dasar hukum
+                    </p>
+                    <ul className="space-y-1">
+                      {detail.dasarHukum.map((f, i) => (
+                        <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
+                          <span className="text-amber-500 mt-0.5">•</span>
                           <span>{f}</span>
                         </li>
                       ))}
