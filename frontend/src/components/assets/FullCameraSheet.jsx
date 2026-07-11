@@ -2,6 +2,7 @@ import React, { memo, useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import {
   X, Camera, MapPin, Clock, Pencil, SwitchCamera, Loader2, Check, Trash2,
+  ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useBackGuard } from "../../hooks/useBackGuard";
@@ -28,11 +29,18 @@ const FullCameraSheet = memo(function FullCameraSheet({
   formData,
   photos = [],
   maxPhotos = 6,
+  isEditing = false,
+  assetIndex = -1,
+  totalAssetsInView = 0,
+  savedCount = 0,
   onClose,
-  onCapture,      // (dataUrl) => void — foto baru (sudah distempel + terkompresi)
-  onRemovePhoto,  // (index) => void
-  onSetField,     // (name, value) => void — edit info aset dari panel
-  onGpsFix,       // ({lat, lng}) => void — tiap fix GPS baru (update form + cache)
+  onCapture,       // (dataUrl) => void — foto baru (sudah distempel + terkompresi)
+  onRemovePhoto,   // (index) => void
+  onSetField,      // (name, value) => void — edit info aset dari panel
+  onGpsFix,        // ({lat, lng}) => void — tiap fix GPS baru (update form + cache)
+  onSaveAndNew,    // () => void — simpan aset ini lalu siapkan aset baru
+  onReviewSaved,   // () => void — simpan lalu tinjau aset tersimpan sebelumnya
+  onNavigate,      // (dir) => void — 'prev' | 'next' (mode edit aset yang sudah ada)
 }) {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
@@ -123,6 +131,12 @@ const FullCameraSheet = memo(function FullCameraSheet({
   const fmtTanggal = now.toLocaleDateString("id-ID", { weekday: "short", day: "2-digit", month: "short", year: "numeric" });
   const fmtJam = now.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
+  // Kontrol alur beruntun
+  const maxReached = photos.length >= maxPhotos;
+  const backAction = isEditing ? () => onNavigate?.("prev") : onReviewSaved;
+  const canBack = isEditing ? assetIndex > 0 : (!!onReviewSaved && totalAssetsInView > 0);
+  const canNext = isEditing && assetIndex >= 0 && assetIndex < totalAssetsInView - 1;
+
   // Ambil foto: gambar frame video ke canvas, stempel watermark ala Timemark,
   // hasilkan JPEG (sisi terpanjang ≤1920, q0.85 — setara pipeline kompresi form).
   const capture = useCallback(() => {
@@ -164,13 +178,15 @@ const FullCameraSheet = memo(function FullCameraSheet({
     onCapture(dataUrl);
   }, [photos.length, maxPhotos, formData, onCapture]);
 
+  // Form ringkas & padat: field penting saja, 2 kolom. Kode Aset & NUP
+  // read-only (sudah distandby-kan ke kategori dummy + NUP otomatis).
   const EDIT_FIELDS = [
-    { name: "asset_name", label: "Nama Aset" },
-    { name: "asset_code", label: "Kode Aset" },
-    { name: "NUP", label: "NUP" },
+    { name: "asset_name", label: "Nama Aset", full: true },
+    { name: "asset_code", label: "Kode Aset", readOnly: true },
+    { name: "NUP", label: "NUP", readOnly: true },
     { name: "location", label: "Lokasi" },
     { name: "user", label: "Pengguna" },
-    { name: "notes", label: "Catatan" },
+    { name: "notes", label: "Catatan", full: true },
   ];
 
   return createPortal(
@@ -245,8 +261,26 @@ const FullCameraSheet = memo(function FullCameraSheet({
             Balik
           </button>
         </div>
+
+        {/* Alur beruntun: simpan & aset baru + maju/mundur antar aset tersimpan.
+            Ditonjolkan saat foto sudah penuh (maks). */}
+        <div className={`grid grid-cols-3 gap-2 ${maxReached ? "ring-1 ring-white/40 rounded-xl p-1" : ""}`}>
+          <button type="button" onClick={backAction} disabled={!canBack} data-testid="full-camera-prev"
+            className="h-11 rounded-lg bg-white/15 text-white text-xs font-semibold flex items-center justify-center gap-1 disabled:opacity-30 disabled:pointer-events-none">
+            <ChevronLeft className="w-4 h-4" />Sebelumnya
+          </button>
+          <button type="button" onClick={onSaveAndNew} data-testid="full-camera-savenew"
+            className="h-11 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center justify-center gap-1 transition-colors">
+            <Check className="w-4 h-4" />Simpan & Baru
+          </button>
+          <button type="button" onClick={() => onNavigate?.("next")} disabled={!canNext} data-testid="full-camera-next"
+            className="h-11 rounded-lg bg-white/15 text-white text-xs font-semibold flex items-center justify-center gap-1 disabled:opacity-30 disabled:pointer-events-none">
+            Berikutnya<ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
         <div className="text-center text-[11px] text-white/70">
-          {photos.length}/{maxPhotos} foto • foto distempel waktu & GPS otomatis
+          {photos.length}/{maxPhotos} foto{maxReached ? " (penuh)" : ""} • {savedCount} tersimpan sesi ini
+          {isEditing && totalAssetsInView > 0 ? ` • aset ${assetIndex + 1}/${totalAssetsInView}` : ""}
         </div>
       </div>
 
@@ -280,17 +314,20 @@ const FullCameraSheet = memo(function FullCameraSheet({
                 <X className="w-4 h-4" />
               </button>
             </div>
-            {EDIT_FIELDS.map(f => (
-              <div key={f.name} className="space-y-1">
-                <label className="text-xs text-muted-foreground">{f.label}</label>
-                <input
-                  value={formData?.[f.name] || ""}
-                  onChange={e => onSetField(f.name, e.target.value)}
-                  data-testid={`full-camera-edit-${f.name}`}
-                  className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm text-foreground"
-                />
-              </div>
-            ))}
+            <div className="grid grid-cols-2 gap-2">
+              {EDIT_FIELDS.map(f => (
+                <div key={f.name} className={`space-y-0.5 ${f.full ? "col-span-2" : ""}`}>
+                  <label className="text-[11px] text-muted-foreground">{f.label}{f.readOnly ? " (otomatis)" : ""}</label>
+                  <input
+                    value={formData?.[f.name] || ""}
+                    onChange={e => onSetField(f.name, e.target.value)}
+                    readOnly={f.readOnly}
+                    data-testid={`full-camera-edit-${f.name}`}
+                    className={`w-full h-9 px-2.5 rounded-lg border border-border text-sm text-foreground ${f.readOnly ? "bg-muted text-muted-foreground" : "bg-background"}`}
+                  />
+                </div>
+              ))}
+            </div>
             <button type="button" onClick={() => setEditOpen(false)} data-testid="full-camera-edit-done"
               className="w-full h-11 rounded-lg bg-blue-600 text-white text-sm font-semibold flex items-center justify-center gap-1.5">
               <Check className="w-4 h-4" />Selesai
