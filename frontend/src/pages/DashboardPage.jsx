@@ -91,6 +91,9 @@ function filterSnapshotRows(rows, { search, category, filters }) {
     const pMax = parseFloat(filters.priceMax);
     if (!Number.isNaN(pMin)) out = out.filter(r => (Number(r.purchase_price) || 0) >= pMin);
     if (!Number.isNaN(pMax)) out = out.filter(r => (Number(r.purchase_price) || 0) <= pMax);
+    // Rentang tanggal input — created_at ISO, cukup bandingkan prefiks tanggal
+    if (filters.dateFrom) out = out.filter(r => String(r.created_at ?? "").slice(0, 10) >= filters.dateFrom);
+    if (filters.dateTo) out = out.filter(r => String(r.created_at ?? "").slice(0, 10) <= filters.dateTo);
   }
   return out;
 }
@@ -770,7 +773,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   useEffect(() => {
     if (isInitialMount.current) { isInitialMount.current = false; return; }
     refreshData(1, { showLoading: true });
-  }, [debouncedSearch, filterCategory, sortBy, pageSize, filters.condition, filters.status, filters.location, filters.eselon1, filters.eselon2, filters.stiker, filters.inventoryStatus, filters.priceMin, filters.priceMax]);
+  }, [debouncedSearch, filterCategory, sortBy, pageSize, filters.condition, filters.status, filters.location, filters.eselon1, filters.eselon2, filters.stiker, filters.inventoryStatus, filters.priceMin, filters.priceMax, filters.nomorSpm, filters.perolehanDari, filters.dateFrom, filters.dateTo]);
 
   const goToPage = async (p) => {
     const np = Math.max(1, Math.min(p, totalPages));

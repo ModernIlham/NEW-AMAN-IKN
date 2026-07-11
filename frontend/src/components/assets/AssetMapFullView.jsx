@@ -3,9 +3,13 @@ import { createPortal } from "react-dom";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import axios from "axios";
-import { MapPinned, RefreshCw, Loader2, Move, X, Filter } from "lucide-react";
+import { MapPinned, RefreshCw, Loader2, Move, X, Filter, Download, Camera } from "lucide-react";
 import { toast } from "sonner";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
 import { getSnapshotAssets } from "../../lib/offlineSnapshot";
+import { downloadFileWithProgress } from "../../lib/downloadFile";
 import { useBackGuard } from "../../hooks/useBackGuard";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -25,12 +29,35 @@ const STATUS_COLORS = {
   "Belum Diinventarisasi": "#64748b",
 };
 
+// Data pengguna barang LENGKAP = nama pengguna + NIP/NIK terisi + BAST
+// sudah terunggah → pin diberi border hijau.
+function isPenggunaComplete(row) {
+  return !!(String(row.user || "").trim()
+    && String(row.pengguna_nip || "").trim()
+    && String(row.bast_file_id || "").trim());
+}
+
+function rowHasPhoto(row) {
+  return (Number(row.photo_count) || 0) > 0;
+}
+
 // Pin berwarna via divIcon — menghindari masalah path ikon default leaflet
 // di bundler CRA, sekaligus memberi warna per status inventarisasi.
-function markerIcon(color) {
+// Border hijau = data pengguna lengkap; badge kamera = aset punya foto.
+function markerIcon(color, hasPhoto = false, complete = false) {
+  const border = complete ? "2.5px solid #16a34a" : "2px solid #fff";
+  const ring = complete ? "box-shadow:0 0 0 1.5px #16a34a, 0 1px 4px rgba(0,0,0,.45)" : "box-shadow:0 1px 4px rgba(0,0,0,.45)";
+  const badge = hasPhoto
+    ? `<div style="position:absolute;top:-7px;right:-7px;width:14px;height:14px;border-radius:50%;background:#0f172a;border:1.5px solid #fff;display:flex;align-items:center;justify-content:center;">
+         <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+       </div>`
+    : "";
   return L.divIcon({
     className: "",
-    html: `<div style="width:22px;height:22px;border-radius:50% 50% 50% 0;background:${color};transform:rotate(-45deg);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.45)"></div>`,
+    html: `<div style="position:relative;width:22px;height:22px">
+      <div style="width:22px;height:22px;border-radius:50% 50% 50% 0;background:${color};transform:rotate(-45deg);border:${border};${ring}"></div>
+      ${badge}
+    </div>`,
     iconSize: [22, 22],
     iconAnchor: [11, 22],
     popupAnchor: [0, -20],
@@ -153,6 +180,19 @@ const AssetMapFullView = memo(function AssetMapFullView({
   // Muat data saat halaman peta dibuka.
   useEffect(() => { didFitRef.current = false; load(); }, [load]);
 
+  // Unduh titik peta (KML/KMZ/SHP) lengkap dengan atribut — memakai filter
+  // aktif yang SAMA dengan peta/daftar (endpoint /export/geo).
+  const downloadGeo = useCallback((fmt) => {
+    const params = buildParams ? buildParams() : new URLSearchParams();
+    params.set("format", fmt);
+    const ext = fmt === "shp" ? "zip" : fmt;
+    const fname = `peta_aset.${ext}`;
+    downloadFileWithProgress(`${API}/export/geo?${params.toString()}`, fname, {
+      label: `Peta Aset (${fmt.toUpperCase()})`,
+      timeoutMessage: "Ekspor peta terlalu lama — coba persempit filter",
+    }).catch(() => {});
+  }, [buildParams]);
+
   // Init peta pada mount; rusak saat unmount.
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return undefined;
@@ -229,6 +269,9 @@ const AssetMapFullView = memo(function AssetMapFullView({
       seen.add(row.id);
       bounds.push([lat, lng]);
       const color = STATUS_COLORS[row.inventory_status] || STATUS_COLORS["Belum Diinventarisasi"];
+      const hasPhoto = rowHasPhoto(row);
+      const complete = isPenggunaComplete(row);
+      const iconKey = `${color}|${hasPhoto}|${complete}`;
       const existing = markersRef.current.get(row.id);
 
       if (existing) {
@@ -238,7 +281,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
           existing.marker.setLatLng([lat, lng]);
         }
         existing.lat = lat; existing.lng = lng;
-        if (existing.color !== color) { existing.marker.setIcon(markerIcon(color)); existing.color = color; }
+        if (existing.iconKey !== iconKey) { existing.marker.setIcon(markerIcon(color, hasPhoto, complete)); existing.iconKey = iconKey; }
         if (existing.draggable !== canEdit && existing.marker.dragging) {
           if (canEdit) existing.marker.dragging.enable(); else existing.marker.dragging.disable();
           existing.draggable = canEdit;
@@ -246,8 +289,8 @@ const AssetMapFullView = memo(function AssetMapFullView({
         continue;
       }
 
-      const marker = L.marker([lat, lng], { icon: markerIcon(color), draggable: !!canEdit });
-      const entry = { marker, row, lat, lng, color, draggable: !!canEdit };
+      const marker = L.marker([lat, lng], { icon: markerIcon(color, hasPhoto, complete), draggable: !!canEdit });
+      const entry = { marker, row, lat, lng, iconKey, draggable: !!canEdit };
       // Konten popup/tooltip sebagai fungsi → dievaluasi saat dibuka dengan
       // data terbaru; tooltip memakai TEKS ter-escape (leaflet merender HTML).
       marker.bindPopup(() => buildPopupEl(entry));
@@ -311,6 +354,30 @@ const AssetMapFullView = memo(function AssetMapFullView({
             <Filter className="w-3 h-3" />{activeFilterCount} filter aktif
           </span>
         )}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className="h-9 px-2.5 rounded-lg border border-border text-xs font-medium text-foreground/80 flex items-center gap-1 hover:bg-accent flex-shrink-0"
+              data-testid="asset-map-download"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Unduh</span>
+            </button>
+          </DropdownMenuTrigger>
+          {/* z di atas overlay peta (z-[70]) — default konten radix z-50 */}
+          <DropdownMenuContent align="end" className="w-44 z-[80]">
+            <DropdownMenuItem onClick={() => downloadGeo("kml")} data-testid="map-download-kml">
+              <MapPinned className="w-4 h-4 mr-2" />KML (Google Earth)
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => downloadGeo("kmz")} data-testid="map-download-kmz">
+              <MapPinned className="w-4 h-4 mr-2" />KMZ (terkompresi)
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => downloadGeo("shp")} data-testid="map-download-shp">
+              <MapPinned className="w-4 h-4 mr-2" />SHP (Shapefile ZIP)
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <button
           type="button"
           onClick={() => { didFitRef.current = false; load(); }}
@@ -361,6 +428,14 @@ const AssetMapFullView = memo(function AssetMapFullView({
             </span>
           ))}
         </div>
+        <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+          <span className="w-3.5 h-3.5 rounded-full bg-slate-900 border border-white shadow flex items-center justify-center"><Camera className="w-2 h-2 text-white" /></span>
+          punya foto
+        </span>
+        <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+          <span className="w-2.5 h-2.5 rounded-full bg-card border-2 shadow" style={{ borderColor: "#16a34a" }} />
+          pengguna + NIP + BAST lengkap
+        </span>
         {canEdit && (
           <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
             <Move className="w-3 h-3" />Geser pin untuk membetulkan koordinat — tersimpan otomatis

@@ -26,6 +26,7 @@ import xlsxwriter
 from PIL import Image as PILImage
 
 from asset_fields import SCALAR_FIELD_NAMES
+from routes.assets import build_asset_search_query
 from db import db
 from shared_utils import limiter, invalidate_asset_cache, log_audit, get_photo_from_gridfs
 
@@ -259,6 +260,239 @@ async def bulk_delete_assets(request: Request, activity_id: str, _user: dict = D
         "message": f"Berhasil menghapus {result.deleted_count} aset dari kegiatan ini",
         "deleted": result.deleted_count
     }
+
+# ============================================================================
+# EKSPOR GEO (KML / KMZ / SHP) — titik koordinat aset + atribut lengkap.
+# Mengikuti filter yang SAMA dengan daftar & Peta Aset (build_asset_search_query).
+# ============================================================================
+
+_GEO_MEDIA_EXCLUDE = {"_id": 0, "photos": 0, "photo": 0, "photo_thumbnails": 0,
+                      "thumbnail": 0, "gallery_thumbnail": 0, "document_checklist": 0}
+
+# Warna KML per status inventarisasi (format KML: aabbggrr)
+_KML_STATUS_COLORS = {
+    "Ditemukan": "ffeb6325",             # #2563eb
+    "Tidak Ditemukan": "ff2626dc",       # #dc2626
+    "Berlebih": "ff0677d9",              # #d97706
+    "Sengketa": "ffed3a7c",              # #7c3aed
+    "Belum Diinventarisasi": "ff8b7464", # #64748b
+}
+
+
+def _geo_coord(v, limit=180.0):
+    try:
+        n = float(str(v).strip().replace(",", "."))
+        return n if abs(n) <= limit else None
+    except (ValueError, TypeError):
+        return None
+
+
+def _geo_attrs(a: dict) -> list:
+    """Pasangan (label, nilai) atribut informasi untuk KML/SHP."""
+    # photo_count dihitung pipeline (GridFS-first, fallback foto inline legacy)
+    photo_count = a.get("photo_count")
+    if photo_count is None:
+        photo_count = len([g for g in (a.get("photo_gridfs_ids") or []) if g])
+    return [
+        ("Kode Aset", a.get("asset_code") or ""),
+        ("NUP", a.get("NUP") or ""),
+        ("Nama Aset", a.get("asset_name") or ""),
+        ("Kategori", a.get("category") or ""),
+        ("Merk", a.get("brand") or ""),
+        ("Model", a.get("model") or ""),
+        ("Serial Number", a.get("serial_number") or ""),
+        ("Kode Register", a.get("kode_register") or ""),
+        ("Lokasi", a.get("location") or ""),
+        ("Kondisi", a.get("condition") or ""),
+        ("Status", a.get("status") or ""),
+        ("Status Inventarisasi", a.get("inventory_status") or "Belum Diinventarisasi"),
+        ("Pengguna", a.get("user") or ""),
+        ("Jabatan Pengguna", a.get("pengguna_jabatan") or ""),
+        ("NIP/NIK Pegawai", a.get("pengguna_nip") or ""),
+        ("Nomor BAST", a.get("nomor_bast") or ""),
+        ("BAST Terunggah", "Ya" if (a.get("bast_file_id") or "") else "Tidak"),
+        ("Tgl Perolehan", a.get("purchase_date") or ""),
+        ("Harga", str(a.get("purchase_price") or "")),
+        ("Eselon I", a.get("eselon1") or ""),
+        ("Eselon II", a.get("eselon2") or ""),
+        ("Stiker", a.get("stiker_status") or ""),
+        ("Jumlah Foto", str(photo_count)),
+        ("Tanggal Input", str(a.get("created_at") or "")[:19]),
+        ("Latitude", str(a.get("koordinat_latitude") or "")),
+        ("Longitude", str(a.get("koordinat_longitude") or "")),
+        ("Catatan", a.get("notes") or ""),
+    ]
+
+
+def _build_kml(doc_name: str, features: list) -> str:
+    from xml.sax.saxutils import escape
+    styles = []
+    style_ids = {}
+    for i, (status, color) in enumerate(_KML_STATUS_COLORS.items()):
+        sid = f"st{i}"
+        style_ids[status] = sid
+        styles.append(
+            f'<Style id="{sid}"><IconStyle><color>{color}</color><scale>1.1</scale>'
+            f'<Icon><href>http://maps.google.com/mapfiles/kml/paddle/wht-blank.png</href></Icon>'
+            f'</IconStyle></Style>'
+        )
+    pms = []
+    for f in features:
+        data = "".join(
+            f'<Data name="{escape(k)}"><value>{escape(str(v))}</value></Data>'
+            for k, v in f["attrs"]
+        )
+        sid = style_ids.get(f["status"], style_ids["Belum Diinventarisasi"])
+        pms.append(
+            f'<Placemark><name>{escape(f["name"])}</name><styleUrl>#{sid}</styleUrl>'
+            f'<ExtendedData>{data}</ExtendedData>'
+            f'<Point><coordinates>{f["lng"]},{f["lat"]},0</coordinates></Point></Placemark>'
+        )
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<kml xmlns="http://www.opengis.net/kml/2.2"><Document>'
+        f'<name>{escape(doc_name)}</name>{"".join(styles)}{"".join(pms)}'
+        '</Document></kml>'
+    )
+
+
+# Nama field DBF maks 10 karakter — mapping label atribut → nama kolom SHP.
+_SHP_FIELDS = [
+    ("KODE_ASET", "Kode Aset"), ("NUP", "NUP"), ("NAMA", "Nama Aset"),
+    ("KATEGORI", "Kategori"), ("MERK", "Merk"), ("MODEL", "Model"),
+    ("SERIAL", "Serial Number"), ("REGISTER", "Kode Register"),
+    ("LOKASI", "Lokasi"), ("KONDISI", "Kondisi"), ("STATUS", "Status"),
+    ("STAT_INV", "Status Inventarisasi"), ("PENGGUNA", "Pengguna"),
+    ("JABATAN", "Jabatan Pengguna"), ("NIP_NIK", "NIP/NIK Pegawai"),
+    ("NO_BAST", "Nomor BAST"), ("BAST", "BAST Terunggah"),
+    ("TGL_BELI", "Tgl Perolehan"), ("HARGA", "Harga"),
+    ("ESELON1", "Eselon I"), ("ESELON2", "Eselon II"),
+    ("STIKER", "Stiker"), ("JML_FOTO", "Jumlah Foto"),
+    ("TGL_INPUT", "Tanggal Input"), ("CATATAN", "Catatan"),
+]
+
+_WGS84_PRJ = ('GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",'
+              'SPHEROID["WGS_1984",6378137.0,298.257223563]],'
+              'PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]]')
+
+
+def _build_shp_zip(features: list) -> bytes:
+    """Shapefile titik (POINT, WGS84) + atribut DBF, dizip beserta prj/cpg."""
+    import tempfile
+    import zipfile
+    import shapefile  # pyshp
+
+    with tempfile.TemporaryDirectory() as tmp:
+        base = os.path.join(tmp, "peta_aset")
+        w = shapefile.Writer(base, shapeType=shapefile.POINT, encoding="utf-8")
+        for name, _label in _SHP_FIELDS:
+            w.field(name, "C", size=254)
+        for f in features:
+            attrs = dict(f["attrs"])
+            w.point(f["lng"], f["lat"])
+            w.record(*[str(attrs.get(label, ""))[:254] for _name, label in _SHP_FIELDS])
+        w.close()
+
+        zbuf = io.BytesIO()
+        with zipfile.ZipFile(zbuf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for ext in ("shp", "shx", "dbf"):
+                zf.write(f"{base}.{ext}", f"peta_aset.{ext}")
+            zf.writestr("peta_aset.prj", _WGS84_PRJ)
+            zf.writestr("peta_aset.cpg", "UTF-8")
+        zbuf.seek(0)
+        return zbuf.getvalue()
+
+
+@exports_router.get("/export/geo")
+@limiter.limit("10/minute")
+async def export_geo(
+    request: Request,
+    format: str = "kml",
+    search: str = "",
+    category: str = "",
+    activity_id: str = "",
+    condition: str = "",
+    status: str = "",
+    location: str = "",
+    eselon1_filter: str = "",
+    eselon2_filter: str = "",
+    stiker_status: str = "",
+    inventory_status: str = "",
+    price_min: float = None,
+    price_max: float = None,
+    nomor_spm: str = "",
+    perolehan_dari: str = "",
+    created_from: str = "",
+    created_to: str = "",
+    _user: dict = Depends(require_user),
+):
+    """Ekspor titik koordinat aset (mengikuti filter aktif) sebagai KML/KMZ/SHP."""
+    fmt = (format or "kml").lower()
+    if fmt not in ("kml", "kmz", "shp"):
+        raise HTTPException(status_code=400, detail="Format harus kml, kmz, atau shp")
+
+    query = build_asset_search_query(
+        search=search, category=category, activity_id=activity_id,
+        condition=condition, status=status, location=location,
+        eselon1_filter=eselon1_filter, eselon2_filter=eselon2_filter,
+        stiker_status=stiker_status, inventory_status=inventory_status,
+        price_min=price_min, price_max=price_max, nomor_spm=nomor_spm,
+        perolehan_dari=perolehan_dari, created_from=created_from, created_to=created_to,
+    )
+    # Streaming cursor (bukan to_list) + photo_count GridFS-first dengan
+    # fallback foto inline legacy — konsisten dengan badge kamera di peta.
+    pipeline = [
+        {"$match": query},
+        {"$addFields": {"photo_count": {"$cond": [
+            {"$gt": [{"$size": {"$ifNull": ["$photo_gridfs_ids", []]}}, 0]},
+            {"$size": {"$ifNull": ["$photo_gridfs_ids", []]}},
+            {"$size": {"$ifNull": ["$photos", []]}},
+        ]}}},
+        {"$project": _GEO_MEDIA_EXCLUDE},
+        {"$sort": {"created_at": -1, "id": 1}},
+    ]
+    features = []
+    async for a in db.assets.aggregate(pipeline):
+        lat = _geo_coord(a.get("koordinat_latitude"), limit=90.0)   # lintang maks +-90
+        lng = _geo_coord(a.get("koordinat_longitude"), limit=180.0)
+        if lat is None or lng is None:
+            continue
+        features.append({
+            "name": a.get("asset_name") or a.get("asset_code") or "Aset",
+            "lat": lat, "lng": lng,
+            "status": a.get("inventory_status") or "Belum Diinventarisasi",
+            "attrs": _geo_attrs(a),
+        })
+        if len(features) >= 100000:
+            break
+    if not features:
+        raise HTTPException(status_code=404, detail="Tidak ada aset dengan titik koordinat sesuai filter")
+
+    doc_name = "Peta Aset"
+    if activity_id:
+        act = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0, "nama_kegiatan": 1})
+        if act and act.get("nama_kegiatan"):
+            doc_name = f"Peta Aset — {act['nama_kegiatan']}"
+
+    suffix = activity_id[:8] if activity_id else "semua"
+    if fmt == "kml":
+        data = _build_kml(doc_name, features).encode("utf-8")
+        media, fname = "application/vnd.google-earth.kml+xml", f"peta_aset_{suffix}.kml"
+    elif fmt == "kmz":
+        import zipfile
+        zbuf = io.BytesIO()
+        with zipfile.ZipFile(zbuf, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("doc.kml", _build_kml(doc_name, features))
+        data = zbuf.getvalue()
+        media, fname = "application/vnd.google-earth.kmz", f"peta_aset_{suffix}.kmz"
+    else:
+        data = _build_shp_zip(features)
+        media, fname = "application/zip", f"peta_aset_{suffix}_shp.zip"
+
+    logger.info(f"Geo export {fmt}: {len(features)} titik (activity={activity_id or '-'})")
+    return StreamingResponse(io.BytesIO(data), media_type=media,
+                             headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
 
 @exports_router.get("/export/csv")
 @limiter.limit("5/minute")
