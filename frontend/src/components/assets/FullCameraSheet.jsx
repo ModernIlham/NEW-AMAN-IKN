@@ -7,6 +7,21 @@ import {
 import { toast } from "sonner";
 import { useBackGuard } from "../../hooks/useBackGuard";
 import { extractScannedCode } from "./QrScanButton";
+import {
+  STATUS_OPTIONS, CONDITION_OPTIONS, SUB_KLASIFIKASI_OPTIONS,
+  PENGGUNA_MELEKAT_OPTIONS, PENGGUNA_NAME_LABELS, OPERASIONAL_JENIS_OPTIONS,
+} from "./InventoryFieldSheet";
+
+// Chip pilihan sekali-ketuk (versi ringkas SegButton lembar inventarisasi)
+const CamChip = ({ selected, cls, onClick, children, testId }) => (
+  <button type="button" onClick={onClick} aria-pressed={selected} data-testid={testId}
+    className={`h-10 rounded-lg border text-[11px] font-semibold px-1 text-center leading-tight transition-colors ${selected ? cls : "bg-background border-border text-foreground/80"}`}>
+    {children}
+  </button>
+);
+
+const camSelectCls = "w-full h-9 px-2 rounded-lg border border-border bg-background text-sm text-foreground";
+const camInputCls = "w-full h-9 px-2.5 rounded-lg border border-border bg-background text-sm text-foreground";
 
 // Pesan error kamera per jenis (fungsi murni di luar komponen agar tidak
 // menjadi dependency effect).
@@ -452,6 +467,11 @@ const FullCameraSheet = memo(function FullCameraSheet({
     { name: "user", label: "Pengguna" },
     { name: "notes", label: "Catatan", full: true },
   ];
+  // Mode scan-edit inventarisasi: "Pengguna" pindah ke seksi Pengguna Barang
+  // (dengan melekat-ke + NIP/NIK) — jangan tampil dobel di grid identitas.
+  const visibleEditFields = (isEditing && onScanAsset)
+    ? EDIT_FIELDS.filter(f => f.name !== "user")
+    : EDIT_FIELDS;
 
   return createPortal(
     <div className="fixed inset-0 z-[120] bg-black flex flex-col" role="dialog" aria-modal="true" aria-label="Mode Kamera Penuh" data-testid="full-camera-sheet">
@@ -572,7 +592,7 @@ const FullCameraSheet = memo(function FullCameraSheet({
 
       {/* ── Overlay bawah: thumbnail + kontrol ── */}
       <div className="relative z-10 bg-gradient-to-t from-black/80 to-transparent pt-6 pb-4 px-3 space-y-3">
-        {photos.length > 0 && (
+        {photos.length > 0 && !scanActive && (
           <div className="flex gap-2 overflow-x-auto pb-1">
             {photos.map((p, i) => (
               <div key={i} className="relative flex-shrink-0">
@@ -600,12 +620,25 @@ const FullCameraSheet = memo(function FullCameraSheet({
           </div>
         )}
         {/* Wajib isi Nama Aset dulu sebelum memotret — rana dikunci selama kosong. */}
-        {!nameFilled && (
+        {!nameFilled && !scanActive && (
           <button type="button" onClick={() => setEditOpen(true)} data-testid="full-camera-need-name"
             className="mx-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-400/90 text-black text-[11px] font-semibold">
             <AlertTriangle className="w-3.5 h-3.5" />Isi Nama Aset (<span className="text-red-700">*</span>) dulu untuk memotret
           </button>
         )}
+        {scanActive ? (
+          /* Mode pindai: kontrol rana disembunyikan agar tidak tumpang tindih */
+          <div className="space-y-2" data-testid="full-camera-scan-controls">
+            <div className="text-center space-y-0.5">
+              <p className="text-white text-sm font-semibold drop-shadow">Arahkan ke QR/barcode stiker aset</p>
+              <p className="text-white/70 text-[11px] drop-shadow">Aset yang cocok langsung terbuka untuk diedit</p>
+            </div>
+            <button type="button" onClick={() => setScanActive(false)} data-testid="full-camera-scan-cancel"
+              className="w-full h-12 rounded-xl bg-white/20 backdrop-blur text-white text-sm font-bold">
+              Batal Scan
+            </button>
+          </div>
+        ) : (
         <div className="flex items-center justify-between">
           <button type="button" onClick={() => setEditOpen(true)}
             data-testid="full-camera-edit-btn"
@@ -627,9 +660,11 @@ const FullCameraSheet = memo(function FullCameraSheet({
             Balik
           </button>
         </div>
+        )}
 
         {/* Alur beruntun: simpan & aset baru + maju/mundur antar aset tersimpan.
             Ditonjolkan saat foto sudah penuh (maks). */}
+        {!scanActive && (
         <div className={`grid grid-cols-3 gap-2 ${maxReached ? "ring-1 ring-white/40 rounded-xl p-1" : ""}`}>
           <button type="button" onClick={backAction} disabled={!canBack || busy} data-testid="full-camera-prev"
             className="h-11 rounded-lg bg-white/15 text-white text-xs font-semibold flex items-center justify-center gap-1 disabled:opacity-30 disabled:pointer-events-none">
@@ -653,7 +688,8 @@ const FullCameraSheet = memo(function FullCameraSheet({
             Berikutnya<ChevronRight className="w-4 h-4" />
           </button>
         </div>
-        {isEditing && onScanAsset && onSaveAndScanNext && (
+        )}
+        {isEditing && onScanAsset && onSaveAndScanNext && !scanActive && (
           <button type="button" onClick={onSaveAndNew} disabled={busy} data-testid="full-camera-savenew"
             className="w-full h-9 rounded-lg bg-white/10 text-white/85 text-[11px] font-semibold flex items-center justify-center gap-1 disabled:opacity-40 disabled:pointer-events-none">
             <Check className="w-3.5 h-3.5" />Simpan & Aset Baru
@@ -675,14 +711,6 @@ const FullCameraSheet = memo(function FullCameraSheet({
         <div className="absolute inset-0 z-[9] pointer-events-none" data-testid="full-camera-scan-overlay">
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="w-52 h-52 border-2 border-emerald-400/90 rounded-xl shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
-          </div>
-          <div className="absolute inset-x-0 top-1/2 mt-32 text-center px-6 space-y-2.5">
-            <p className="text-white text-sm font-semibold drop-shadow">Arahkan ke QR/barcode stiker aset</p>
-            <p className="text-white/75 text-[11px] drop-shadow">Aset yang cocok langsung terbuka untuk diedit</p>
-            <button type="button" onClick={() => setScanActive(false)} data-testid="full-camera-scan-cancel"
-              className="pointer-events-auto px-6 h-11 rounded-full bg-white/25 backdrop-blur text-white text-sm font-semibold">
-              Batal Scan
-            </button>
           </div>
         </div>
       )}
@@ -719,7 +747,7 @@ const FullCameraSheet = memo(function FullCameraSheet({
       {/* ── Panel Edit Info (bottom sheet di dalam kamera) ── */}
       {editOpen && (
         <div className="absolute inset-0 z-20 bg-black/60 flex flex-col justify-end" onClick={() => setEditOpen(false)}>
-          <div className="bg-card rounded-t-2xl p-4 max-h-[70vh] overflow-y-auto space-y-3" onClick={e => e.stopPropagation()} data-testid="full-camera-edit-panel">
+          <div className="bg-card rounded-t-2xl p-4 max-h-[82vh] overflow-y-auto space-y-3" onClick={e => e.stopPropagation()} data-testid="full-camera-edit-panel">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-foreground">Edit Info Aset</h3>
               <button type="button" onClick={() => setEditOpen(false)} aria-label="Tutup panel edit"
@@ -728,7 +756,7 @@ const FullCameraSheet = memo(function FullCameraSheet({
               </button>
             </div>
             <div className="grid grid-cols-2 gap-2">
-              {EDIT_FIELDS.map(f => (
+              {visibleEditFields.map(f => (
                 <div key={f.name} className={`space-y-0.5 ${f.full ? "col-span-2" : ""}`}>
                   <label className="text-[11px] text-muted-foreground">
                     {f.label}{f.required && <span className="text-red-500"> *</span>}{f.readOnly ? " (otomatis)" : ""}
@@ -744,10 +772,151 @@ const FullCameraSheet = memo(function FullCameraSheet({
                 </div>
               ))}
             </div>
-            <button type="button" onClick={() => setEditOpen(false)} data-testid="full-camera-edit-done"
-              className="w-full h-11 rounded-lg bg-blue-600 text-white text-sm font-semibold flex items-center justify-center gap-1.5">
-              <Check className="w-4 h-4" />Selesai
-            </button>
+
+            {/* Mode scan-edit inventarisasi: field SAMA dengan lembar edit
+                cepat — status, kondisi, detail kondisional, stiker, pengguna —
+                agar scan → lengkapi → Simpan & Scan berjalan tanpa keluar. */}
+            {isEditing && onScanAsset && (
+              <div className="space-y-3" data-testid="full-camera-edit-inventaris">
+                <div className="space-y-1">
+                  <p className="text-[11px] font-bold text-foreground">Status Inventarisasi</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {STATUS_OPTIONS.map(o => (
+                      <CamChip key={o.value} selected={formData?.inventory_status === o.value} cls={o.selected}
+                        onClick={() => onSetField("inventory_status", o.value)} testId={`cam-status-${o.value}`}>
+                        {o.value}
+                      </CamChip>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <p className="text-[11px] font-bold text-foreground">Kondisi Fisik</p>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {CONDITION_OPTIONS.map(o => (
+                      <CamChip key={o.value} selected={formData?.condition === o.value} cls={o.selected}
+                        onClick={() => onSetField("condition", o.value)} testId={`cam-condition-${o.value}`}>
+                        {o.value}
+                      </CamChip>
+                    ))}
+                  </div>
+                </div>
+
+                {formData?.inventory_status === "Tidak Ditemukan" && (
+                  <div className="space-y-1.5 rounded-lg border border-red-300/60 p-2">
+                    <p className="text-[11px] font-bold text-foreground">Detail Tidak Ditemukan</p>
+                    <select value={formData?.klasifikasi_tidak_ditemukan || ""} className={camSelectCls}
+                      onChange={e => onSetField("klasifikasi_tidak_ditemukan", e.target.value)} data-testid="cam-klasifikasi">
+                      <option value="">Pilih klasifikasi…</option>
+                      <option value="Kesalahan Pencatatan">Kesalahan Pencatatan</option>
+                      <option value="Tidak Ditemukan Lainnya">Tidak Ditemukan Lainnya</option>
+                    </select>
+                    {!!formData?.klasifikasi_tidak_ditemukan && (
+                      <select value={formData?.sub_klasifikasi || ""} className={camSelectCls}
+                        onChange={e => onSetField("sub_klasifikasi", e.target.value)} data-testid="cam-sub-klasifikasi">
+                        <option value="">Pilih sub klasifikasi…</option>
+                        {(SUB_KLASIFIKASI_OPTIONS[formData.klasifikasi_tidak_ditemukan] || []).map(o => (
+                          <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
+                      </select>
+                    )}
+                    <input value={formData?.uraian_tidak_ditemukan || ""} placeholder="Uraian tidak ditemukan"
+                      onChange={e => onSetField("uraian_tidak_ditemukan", e.target.value)} className={camInputCls} />
+                  </div>
+                )}
+
+                {formData?.inventory_status === "Berlebih" && (
+                  <div className="space-y-1.5 rounded-lg border border-purple-300/60 p-2">
+                    <p className="text-[11px] font-bold text-foreground">Detail Berlebih</p>
+                    <input value={formData?.asal_usul_berlebih || ""} placeholder="Asal usul BMN berlebih"
+                      onChange={e => onSetField("asal_usul_berlebih", e.target.value)} className={camInputCls} />
+                    <input value={formData?.keterangan_berlebih || ""} placeholder="Keterangan berlebih"
+                      onChange={e => onSetField("keterangan_berlebih", e.target.value)} className={camInputCls} />
+                  </div>
+                )}
+
+                {formData?.inventory_status === "Sengketa" && (
+                  <div className="space-y-1.5 rounded-lg border border-rose-300/60 p-2">
+                    <p className="text-[11px] font-bold text-foreground">Detail Sengketa</p>
+                    <input value={formData?.nomor_perkara || ""} placeholder="Nomor perkara"
+                      onChange={e => onSetField("nomor_perkara", e.target.value)} className={camInputCls} />
+                    <input value={formData?.pihak_bersengketa || ""} placeholder="Pihak bersengketa"
+                      onChange={e => onSetField("pihak_bersengketa", e.target.value)} className={camInputCls} />
+                    <input value={formData?.keterangan_sengketa || ""} placeholder="Keterangan sengketa"
+                      onChange={e => onSetField("keterangan_sengketa", e.target.value)} className={camInputCls} />
+                  </div>
+                )}
+
+                {formData?.condition === "Rusak Berat" && (
+                  <div className="space-y-1.5 rounded-lg border border-amber-300/60 p-2">
+                    <p className="text-[11px] font-bold text-foreground">Tindak Lanjut Rusak Berat</p>
+                    <input value={formData?.tindak_lanjut || ""} placeholder="Tindak lanjut"
+                      onChange={e => onSetField("tindak_lanjut", e.target.value)} className={camInputCls} />
+                  </div>
+                )}
+
+                <div className="space-y-1">
+                  <p className="text-[11px] font-bold text-foreground">Stiker</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <CamChip selected={formData?.stiker_status === "Sudah Terpasang"} cls="bg-blue-600 border-blue-600 text-white"
+                      onClick={() => onSetField("stiker_status", "Sudah Terpasang")} testId="cam-stiker-sudah">Sudah Terpasang</CamChip>
+                    <CamChip selected={formData?.stiker_status === "Belum Terpasang"} cls="bg-blue-600 border-blue-600 text-white"
+                      onClick={() => onSetField("stiker_status", "Belum Terpasang")} testId="cam-stiker-belum">Belum</CamChip>
+                  </div>
+                  {formData?.stiker_status === "Sudah Terpasang" && (
+                    <select value={formData?.stiker_ukuran || ""} className={camSelectCls}
+                      onChange={e => onSetField("stiker_ukuran", e.target.value)} data-testid="cam-stiker-ukuran">
+                      <option value="">Pilih ukuran stiker…</option>
+                      <option value="Kecil">Kecil (3x1.5cm)</option>
+                      <option value="Sedang">Sedang (5x3cm)</option>
+                      <option value="Besar">Besar (8x5cm)</option>
+                    </select>
+                  )}
+                </div>
+
+                <div className="space-y-1">
+                  <p className="text-[11px] font-bold text-foreground">Pengguna Barang</p>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {PENGGUNA_MELEKAT_OPTIONS.map(o => (
+                      <CamChip key={o} selected={formData?.pengguna_melekat_ke === o} cls="bg-indigo-600 border-indigo-600 text-white"
+                        onClick={() => onSetField("pengguna_melekat_ke", o)} testId={`cam-melekat-${o}`}>{o}</CamChip>
+                    ))}
+                  </div>
+                  {formData?.pengguna_melekat_ke === "Operasional" && (
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {OPERASIONAL_JENIS_OPTIONS.map(o => (
+                        <CamChip key={o} selected={formData?.operasional_jenis === o} cls="bg-indigo-600 border-indigo-600 text-white"
+                          onClick={() => onSetField("operasional_jenis", o)} testId={`cam-opjenis-${o}`}>{o}</CamChip>
+                      ))}
+                    </div>
+                  )}
+                  {formData?.pengguna_melekat_ke === "Jabatan" && (
+                    <input value={formData?.pengguna_jabatan || ""} placeholder="Nama jabatan"
+                      onChange={e => onSetField("pengguna_jabatan", e.target.value)} className={camInputCls} data-testid="cam-pengguna-jabatan" />
+                  )}
+                  <input value={formData?.user || ""}
+                    placeholder={PENGGUNA_NAME_LABELS[formData?.pengguna_melekat_ke] || "Nama Pengguna"}
+                    onChange={e => onSetField("user", e.target.value)} className={camInputCls} data-testid="cam-pengguna-nama" />
+                  <input value={formData?.pengguna_nip || ""} placeholder="NIP/NIK pegawai pengguna"
+                    onChange={e => onSetField("pengguna_nip", e.target.value)} className={camInputCls} data-testid="cam-pengguna-nip" />
+                </div>
+              </div>
+            )}
+
+            <div className={`grid gap-2 ${isEditing && onScanAsset && onSaveAndScanNext ? "grid-cols-2" : "grid-cols-1"}`}>
+              <button type="button" onClick={() => setEditOpen(false)} data-testid="full-camera-edit-done"
+                className="h-11 rounded-lg bg-blue-600 text-white text-sm font-semibold flex items-center justify-center gap-1.5">
+                <Check className="w-4 h-4" />Selesai
+              </button>
+              {isEditing && onScanAsset && onSaveAndScanNext && (
+                <button type="button" data-testid="full-camera-edit-save-scan"
+                  onClick={() => { setEditOpen(false); onSaveAndScanNext(); setScanActive(true); }}
+                  disabled={busy}
+                  className="h-11 rounded-lg bg-emerald-600 text-white text-sm font-bold flex items-center justify-center gap-1.5 disabled:opacity-60">
+                  <ScanLine className="w-4 h-4" />Simpan & Scan
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
