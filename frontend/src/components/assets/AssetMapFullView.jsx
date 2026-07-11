@@ -1,10 +1,12 @@
 import React, { memo, useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import axios from "axios";
-import { MapPinned, ChevronDown, RefreshCw, Loader2, Move } from "lucide-react";
+import { MapPinned, RefreshCw, Loader2, Move, X, Filter } from "lucide-react";
 import { toast } from "sonner";
 import { getSnapshotAssets } from "../../lib/offlineSnapshot";
+import { useBackGuard } from "../../hooks/useBackGuard";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -40,18 +42,26 @@ function esc(str) {
 }
 
 /**
- * Panel "Peta Aset" per kegiatan: semua aset yang punya titik koordinat
- * ditampilkan sebagai pin berwarna status. Pin bisa DIGESER (bila boleh edit)
- * — begitu dilepas, koordinat aset otomatis tersimpan lewat antrean simpan
- * yang sama dengan form (If-Match + Idempotency-Key + retry offline).
+ * Peta Aset HALAMAN PENUH per kegiatan.
+ *
+ * - Mengikuti filter aktif dashboard: online memakai GET /assets dengan
+ *   parameter yang SAMA dengan daftar (search + kategori + filter lanjutan,
+ *   via buildParams), offline memakai snapshot + clientFilter yang sama
+ *   dengan daftar offline.
+ * - Pin berwarna status; bisa digeser (bila boleh edit) → koordinat aset
+ *   otomatis tersimpan lewat antrean simpan yang sama dengan form.
+ * - Tombol Back HP menutup peta (bukan keluar aplikasi).
  */
-const AssetMapPanel = memo(function AssetMapPanel({
+const AssetMapFullView = memo(function AssetMapFullView({
   activityId,
-  isOpen,
-  onToggle,
+  activityName = "",
+  onClose,
   canEdit = false,
-  onEditAsset,        // (row) => void — buka form edit aset
+  onEditAsset,        // (row) => void — tutup peta lalu buka form edit
   onSaveCoords,       // (row, lat, lng) => void — simpan koordinat (throw = tolak)
+  buildParams,        // () => URLSearchParams — filter aktif dashboard (tanpa page)
+  clientFilter,       // (rows) => rows — filter yang sama utk data snapshot offline
+  activeFilterCount = 0,
 }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
@@ -67,7 +77,18 @@ const AssetMapPanel = memo(function AssetMapPanel({
   // identitas arrow function induk berubah tiap render.
   const onEditRef = useRef(onEditAsset);
   const onSaveRef = useRef(onSaveCoords);
-  useEffect(() => { onEditRef.current = onEditAsset; onSaveRef.current = onSaveCoords; });
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onEditRef.current = onEditAsset; onSaveRef.current = onSaveCoords; onCloseRef.current = onClose; });
+
+  // Back HP menutup peta, bukan keluar aplikasi.
+  useBackGuard(useCallback(() => onCloseRef.current?.(), []));
+
+  // Kunci scroll latar selama peta terbuka.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, []);
 
   const load = useCallback(async () => {
     if (!activityId) return;
@@ -75,29 +96,32 @@ const AssetMapPanel = memo(function AssetMapPanel({
     try {
       let all = [];
       if (navigator.onLine) {
-        // Sumber massal bebas-media (proyeksi list, maks 1000 baris/halaman)
-        let skip = 0;
-        for (let page = 0; page < 50; page++) {
-          const r = await axios.get(`${API}/assets/offline-snapshot`, {
-            params: { activity_id: activityId, skip, limit: 1000 },
-          });
+        // Data MENGIKUTI FILTER AKTIF: query yang sama dengan daftar aset,
+        // dipaging sampai habis (page_size maks server = 500).
+        for (let page = 1; page <= 40; page++) {
+          const params = buildParams ? buildParams() : new URLSearchParams();
+          params.set("page", String(page));
+          params.set("page_size", "500");
+          params.set("sort_by", "newest");
+          const r = await axios.get(`${API}/assets?${params.toString()}`);
           const items = r.data?.items || [];
           all = all.concat(items);
-          skip += items.length;
-          if (skip >= (r.data?.total || 0) || items.length === 0) break;
+          if (all.length >= (r.data?.total || 0) || items.length === 0) break;
         }
       } else {
-        all = await getSnapshotAssets(activityId);
+        const cached = await getSnapshotAssets(activityId);
+        all = clientFilter ? clientFilter(cached) : cached;
       }
       setTotal(all.length);
       setRows(all.filter((a) => parseCoord(a.koordinat_latitude) !== null && parseCoord(a.koordinat_longitude) !== null));
       setLoadedOnce(true);
     } catch {
-      // Jaringan gagal di tengah — coba snapshot lokal sebagai cadangan
+      // Jaringan gagal di tengah — snapshot lokal (dengan filter yang sama)
       try {
         const cached = await getSnapshotAssets(activityId);
-        setTotal(cached.length);
-        setRows(cached.filter((a) => parseCoord(a.koordinat_latitude) !== null && parseCoord(a.koordinat_longitude) !== null));
+        const filtered = clientFilter ? clientFilter(cached) : cached;
+        setTotal(filtered.length);
+        setRows(filtered.filter((a) => parseCoord(a.koordinat_latitude) !== null && parseCoord(a.koordinat_longitude) !== null));
         setLoadedOnce(true);
         toast.info("Peta memakai data snapshot offline");
       } catch {
@@ -106,16 +130,14 @@ const AssetMapPanel = memo(function AssetMapPanel({
     } finally {
       setLoading(false);
     }
-  }, [activityId]);
+  }, [activityId, buildParams, clientFilter]);
 
-  // Muat data saat panel dibuka (dan saat ganti kegiatan).
-  useEffect(() => {
-    if (isOpen && activityId) { didFitRef.current = false; load(); }
-  }, [isOpen, activityId, load]);
+  // Muat data saat halaman peta dibuka.
+  useEffect(() => { didFitRef.current = false; load(); }, [load]);
 
-  // Init peta saat panel terbuka; rusak saat panel ditutup/unmount.
+  // Init peta pada mount; rusak saat unmount.
   useEffect(() => {
-    if (!isOpen || !containerRef.current || mapRef.current) return undefined;
+    if (!containerRef.current || mapRef.current) return undefined;
     const map = L.map(containerRef.current, { zoomControl: true, attributionControl: true });
     map.setView([-1.4, 116.7], 5); // fallback: kawasan IKN
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -124,7 +146,6 @@ const AssetMapPanel = memo(function AssetMapPanel({
     }).addTo(map);
     layerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
-    // Ukuran container baru benar setelah layout — hitung ulang.
     setTimeout(() => map.invalidateSize(), 60);
     const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => map.invalidateSize()) : null;
     if (ro) ro.observe(containerRef.current);
@@ -135,7 +156,7 @@ const AssetMapPanel = memo(function AssetMapPanel({
       layerRef.current = null;
       markersRef.current = new Map();
     };
-  }, [isOpen]);
+  }, []);
 
   // Versi terbaru pasca-simpan (best-effort): antrean menyimpan async, jadi
   // versi server diambil sesaat kemudian agar drag berikutnya memakai
@@ -239,7 +260,7 @@ const AssetMapPanel = memo(function AssetMapPanel({
       markersRef.current.set(row.id, entry);
     }
 
-    // Buang pin milik baris yang sudah tidak ada
+    // Buang pin milik baris yang sudah tidak ada (mis. filter berubah)
     for (const [id, entry] of Array.from(markersRef.current.entries())) {
       if (!seen.has(id)) {
         entry.marker.remove();
@@ -253,75 +274,85 @@ const AssetMapPanel = memo(function AssetMapPanel({
     }
   }, [rows, canEdit, buildPopupEl, refreshRowVersion]);
 
-  return (
-    <div className="bg-card border border-border rounded-xl overflow-hidden" data-testid="asset-map-panel">
-      {/* Header — selalu tampil (pola panel dashboard) */}
-      <button
-        type="button"
-        onClick={onToggle}
-        className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-accent/40 transition-colors"
-        data-testid="asset-map-toggle"
-      >
-        <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
-          <MapPinned className="w-4 h-4 text-teal-600" />
-          Peta Aset
-          {loadedOnce && (
-            <span className="text-[11px] font-medium text-muted-foreground">
-              {rows.length} titik dari {total} aset
-            </span>
-          )}
+  return createPortal(
+    <div className="fixed inset-0 z-[70] bg-background flex flex-col" role="dialog" aria-modal="true" aria-label="Peta Aset" data-testid="asset-map-fullview">
+      {/* ── Header ── */}
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-card flex-shrink-0">
+        <span className="w-9 h-9 rounded-lg bg-teal-600 flex items-center justify-center flex-shrink-0">
+          <MapPinned className="w-5 h-5 text-white" />
         </span>
-        <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`} />
-      </button>
-
-      {isOpen && (
-        <div className="border-t border-border">
-          <div className="flex items-center justify-between px-3 py-1.5 gap-2 flex-wrap">
-            <div className="flex items-center gap-2 text-[11px] text-muted-foreground min-w-0">
-              {canEdit && (
-                <span className="flex items-center gap-1"><Move className="w-3 h-3" />Geser pin untuk membetulkan koordinat — tersimpan otomatis</span>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={() => { didFitRef.current = false; load(); }}
-              disabled={loading}
-              className="h-7 px-2 rounded-md border border-border text-[11px] font-medium text-foreground/80 flex items-center gap-1 hover:bg-accent disabled:opacity-50"
-              data-testid="asset-map-refresh"
-            >
-              {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-              Muat Ulang
-            </button>
-          </div>
-          <div className="relative">
-            <div ref={containerRef} className="h-[420px] w-full z-0" data-testid="asset-map-canvas" />
-            {loading && (
-              <div className="absolute inset-0 z-[500] bg-background/50 flex items-center justify-center pointer-events-none">
-                <Loader2 className="w-6 h-6 animate-spin text-teal-600" />
-              </div>
-            )}
-            {loadedOnce && !loading && rows.length === 0 && (
-              <div className="absolute inset-x-0 top-3 z-[500] flex justify-center pointer-events-none">
-                <span className="px-3 py-1.5 rounded-full bg-background/90 border border-border text-xs text-muted-foreground shadow">
-                  Belum ada aset dengan titik koordinat di kegiatan ini
-                </span>
-              </div>
-            )}
-          </div>
-          {/* Legenda status */}
-          <div className="flex items-center gap-3 px-3 py-1.5 flex-wrap border-t border-border">
-            {Object.entries(STATUS_COLORS).map(([label, color]) => (
-              <span key={label} className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                <span className="w-2.5 h-2.5 rounded-full border border-white shadow" style={{ background: color }} />
-                {label}
-              </span>
-            ))}
-          </div>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-sm font-bold text-foreground leading-tight">Peta Aset</h2>
+          <p className="text-[11px] text-muted-foreground truncate">
+            {activityName || "Kegiatan aktif"}
+            {loadedOnce && <> — <span className="font-semibold text-foreground/80">{rows.length}</span> titik dari {total} aset{activeFilterCount > 0 ? " (terfilter)" : ""}</>}
+          </p>
         </div>
-      )}
-    </div>
+        {activeFilterCount > 0 && (
+          <span className="hidden sm:flex items-center gap-1 px-2 h-7 rounded-full bg-blue-600/10 text-blue-600 dark:text-blue-400 text-[11px] font-semibold flex-shrink-0" data-testid="asset-map-filter-badge">
+            <Filter className="w-3 h-3" />{activeFilterCount} filter aktif
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={() => { didFitRef.current = false; load(); }}
+          disabled={loading}
+          className="h-9 px-2.5 rounded-lg border border-border text-xs font-medium text-foreground/80 flex items-center gap-1 hover:bg-accent disabled:opacity-50 flex-shrink-0"
+          data-testid="asset-map-refresh"
+        >
+          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+          <span className="hidden sm:inline">Muat Ulang</span>
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Tutup peta"
+          className="w-9 h-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-accent flex-shrink-0"
+          data-testid="asset-map-close"
+        >
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+
+      {/* ── Peta (isi seluruh sisa layar) ── */}
+      <div className="relative flex-1 min-h-0">
+        <div ref={containerRef} className="absolute inset-0 z-0" data-testid="asset-map-canvas" />
+        {loading && (
+          <div className="absolute inset-0 z-[500] bg-background/50 flex items-center justify-center pointer-events-none">
+            <Loader2 className="w-7 h-7 animate-spin text-teal-600" />
+          </div>
+        )}
+        {loadedOnce && !loading && rows.length === 0 && (
+          <div className="absolute inset-x-0 top-3 z-[500] flex justify-center pointer-events-none px-4">
+            <span className="px-3 py-1.5 rounded-full bg-background/90 border border-border text-xs text-muted-foreground shadow text-center">
+              {activeFilterCount > 0
+                ? "Tidak ada aset berkoordinat yang cocok dengan filter aktif"
+                : "Belum ada aset dengan titik koordinat di kegiatan ini"}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* ── Legenda + petunjuk ── */}
+      <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-t border-border bg-card flex-shrink-0 flex-wrap">
+        <div className="flex items-center gap-3 flex-wrap">
+          {Object.entries(STATUS_COLORS).map(([label, color]) => (
+            <span key={label} className="flex items-center gap-1 text-[10px] text-muted-foreground">
+              <span className="w-2.5 h-2.5 rounded-full border border-white shadow" style={{ background: color }} />
+              {label}
+            </span>
+          ))}
+        </div>
+        {canEdit && (
+          <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+            <Move className="w-3 h-3" />Geser pin untuk membetulkan koordinat — tersimpan otomatis
+          </span>
+        )}
+      </div>
+    </div>,
+    document.body
   );
 });
 
-AssetMapPanel.displayName = "AssetMapPanel";
-export default AssetMapPanel;
+AssetMapFullView.displayName = "AssetMapFullView";
+export default AssetMapFullView;

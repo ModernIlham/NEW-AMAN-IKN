@@ -7,7 +7,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback, memo, useRedu
 import {
   Package, Plus, X, ChevronDown, Loader2, Star,
   Users, PanelLeftClose, PanelLeftOpen, Lock,
-  BarChart3, ClipboardList, Layers, MapPinned,
+  BarChart3, ClipboardList, Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -33,7 +33,7 @@ const AnalyticsPanel = lazy(() => import("@/components/assets/AnalyticsPanel"));
 const RekapitulasiPanel = lazy(() => import("@/components/assets/RekapitulasiPanel"));
 const AuditLogPanel = lazy(() => import("@/components/assets/AuditLogPanel"));
 const AssetGroupsPanel = lazy(() => import("@/components/assets/AssetGroupsPanel"));
-const AssetMapPanel = lazy(() => import("@/components/assets/AssetMapPanel"));
+const AssetMapFullView = lazy(() => import("@/components/assets/AssetMapFullView"));
 import DashboardHeader from "@/components/assets/DashboardHeader";
 import StatsBar from "@/components/assets/StatsBar";
 import InventoryProgressBar from "@/components/assets/InventoryProgressBar";
@@ -895,6 +895,23 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     toast.info(isEdit ? "Menyimpan perubahan..." : "Menambahkan aset...", { duration: 1500 });
   }, [enqueueOptimistic, assets, activity?.id]);
 
+  // Peta mengikuti filter aktif: builder query yang SAMA dengan daftar aset
+  // (search + kategori + filter lanjutan), tanpa paging — peta yang paging.
+  const buildMapParams = useCallback(() => {
+    const params = new URLSearchParams();
+    if (debouncedSearch) params.append("search", debouncedSearch);
+    if (filterCategory && filterCategory !== "Semua") params.append("category", filterCategory);
+    if (activity?.id) params.append("activity_id", activity.id);
+    buildFilterParams(params);
+    return params;
+  }, [debouncedSearch, filterCategory, activity?.id, buildFilterParams]);
+
+  // Filter yang sama untuk data snapshot saat offline.
+  const mapClientFilter = useCallback(
+    (rows) => filterSnapshotRows(rows, { search: debouncedSearch, category: filterCategory, filters }),
+    [debouncedSearch, filterCategory, filters]
+  );
+
   // Geser pin di Peta Aset → simpan koordinat baru otomatis lewat antrean
   // simpan yang sama dengan form (If-Match + Idempotency-Key + retry offline).
   const handleMapCoordsSave = useCallback((row, lat, lng) => {
@@ -1347,7 +1364,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
               />
             )}
             <DashboardToolbar
-              searchInput={searchInput} setSearchInput={setSearchInput} onScanCode={handleScannedCode} categories={categories} filterCategory={filterCategory} setFilterCategory={setFilterCategory}
+              searchInput={searchInput} setSearchInput={setSearchInput} onScanCode={handleScannedCode} onOpenMap={() => setMapOpen(true)} categories={categories} filterCategory={filterCategory} setFilterCategory={setFilterCategory}
               activeFilterCount={activeFilterCount} showAdvancedFilter={showAdvancedFilter} setShowAdvancedFilter={setShowAdvancedFilter}
               sortBy={sortBy} setSortBy={setSortBy} exporting={exporting} handleExport={handleExport} handleExportExecutivePDF={handleExportExecutivePDF}
               handlePreviewExecutive={handlePreviewExecutive} perms={perms} openDialog={openDialog} handlePrintBulkCards={handlePrintBulkCards}
@@ -1376,15 +1393,10 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
                 className={`h-8 px-2.5 rounded-full text-[11px] font-semibold flex items-center gap-1 flex-shrink-0 border transition-colors ${groupsOpen ? "bg-violet-600 border-violet-600 text-white" : "bg-card border-border text-muted-foreground"}`}>
                 <Layers className="w-3.5 h-3.5" />Barang Serupa
               </button>
-              <button type="button" onClick={() => setMapOpen(p => !p)} data-testid="chip-map"
-                className={`h-8 px-2.5 rounded-full text-[11px] font-semibold flex items-center gap-1 flex-shrink-0 border transition-colors ${mapOpen ? "bg-teal-600 border-teal-600 text-white" : "bg-card border-border text-muted-foreground"}`}>
-                <MapPinned className="w-3.5 h-3.5" />Peta
-              </button>
             </div>
             {!inventoryMode && <div className={analyticsOpen ? "" : "hidden lg:block"}><Suspense fallback={null}><AnalyticsPanel activityId={activity?.id} isOpen={analyticsOpen} onToggle={handleAnalyticsToggle} panelHeight={analyticsPanelHeight} onDragStart={handleAnalyticsDragStart} /></Suspense></div>}
             {!inventoryMode && <div className={rekapOpen ? "" : "hidden lg:block"}><Suspense fallback={null}><RekapitulasiPanel activityId={activity?.id} isOpen={rekapOpen} onToggle={() => setRekapOpen(p => !p)} /></Suspense></div>}
             <div className={groupsOpen ? "" : "hidden lg:block"}><Suspense fallback={null}><AssetGroupsPanel activityId={activity?.id} isOpen={groupsOpen} onToggle={() => setGroupsOpen(p => !p)} onBatchEdit={perms.canEdit ? handleGroupBatchEdit : undefined} /></Suspense></div>
-            <div className={mapOpen ? "" : "hidden lg:block"}><Suspense fallback={null}><AssetMapPanel activityId={activity?.id} isOpen={mapOpen} onToggle={() => setMapOpen(p => !p)} canEdit={perms.canEdit} onEditAsset={perms.canEdit ? handleEdit : undefined} onSaveCoords={handleMapCoordsSave} /></Suspense></div>
 
             {loading ? (
               <LoadingIndicator message={loadingMessage} totalItems={totalItems} pageSize={pageSize} currentPage={currentPage} />
@@ -1458,6 +1470,23 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
         </main>
 
         <Suspense fallback={null}><AuditLogPanel activityId={activity?.id} isOpen={auditOpen} onToggle={handleAuditToggle} selectedAssetId={auditAssetId} selectedAssetCode={auditAssetCode} onClearAssetFilter={handleClearAuditFilter} /></Suspense>
+
+        {/* Peta Aset halaman penuh — mengikuti filter aktif daftar */}
+        {mapOpen && (
+          <Suspense fallback={null}>
+            <AssetMapFullView
+              activityId={activity?.id}
+              activityName={activity?.nama_kegiatan}
+              onClose={() => setMapOpen(false)}
+              canEdit={perms.canEdit}
+              onEditAsset={perms.canEdit ? (row) => { setMapOpen(false); handleEdit(row); } : undefined}
+              onSaveCoords={handleMapCoordsSave}
+              buildParams={buildMapParams}
+              clientFilter={mapClientFilter}
+              activeFilterCount={activeFilterCount + (debouncedSearch ? 1 : 0)}
+            />
+          </Suspense>
+        )}
 
         {/* Scroll to Top Button */}
         <ScrollToTop scrollRef={mainContentRef} />
