@@ -48,9 +48,40 @@ from reportlab.graphics.barcode import qr
 from PIL import Image as PILImage
 
 from db import db
+from shared_utils import get_photo_from_gridfs
 
 logger = logging.getLogger(__name__)
 cards_router = APIRouter()
+
+
+async def _hydrate_cover_from_gridfs(asset):
+    """Isi asset['photo'] dari GridFS bila foto inline kosong (migrasi GridFS-only).
+
+    Aset hasil migrasi punya photos=[] dan photo=None; blob asli tersimpan di
+    photo_gridfs_ids. Ambil foto sampul (thumbnail_index, di-clamp) lalu suntik
+    sebagai data-URI agar jalur decode sinkron (_decode_photo_flowable) tetap
+    bekerja tanpa perubahan. Bila gagal, aset dibiarkan apa adanya sehingga
+    kartu menampilkan placeholder "FOTO ASET".
+    """
+    try:
+        # Sudah ada foto inline yang bisa dipakai — tidak perlu GridFS.
+        if any(asset.get("photos") or []) or asset.get("photo"):
+            return
+        gids = [g for g in (asset.get("photo_gridfs_ids") or []) if g]
+        if not gids:
+            return
+        # Indeks sampul di-clamp ke rentang valid.
+        idx = asset.get("thumbnail_index") or 0
+        idx = max(0, min(int(idx), len(gids) - 1))
+        raw = await get_photo_from_gridfs(gids[idx])
+        if raw is None and idx != 0:
+            # Fallback ke blob pertama bila blob sampul tidak terbaca.
+            raw = await get_photo_from_gridfs(gids[0])
+        if raw:
+            asset["photo"] = "data:image/jpeg;base64," + base64.b64encode(raw).decode("ascii")
+    except Exception as e:
+        # Gagal apa pun → biarkan aset tanpa foto (placeholder tampil).
+        logger.debug(f"[cards] GridFS cover hydrate dilewati: {e}")
 
 # ============================================================================
 # ASSET CARD ENDPOINT (Kartu Inventarisasi — 4 panel fold layout, A4 landscape)
@@ -1060,6 +1091,8 @@ async def get_asset_card_pdf(asset_id: str, _user: dict = Depends(require_user))
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
 
     history = await _fetch_asset_history(asset)
+    # Aset GridFS-only: suntik foto sampul dari GridFS sebelum kartu dibangun.
+    await _hydrate_cover_from_gridfs(asset)
 
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=landscape(A4))
@@ -1093,6 +1126,8 @@ async def get_bulk_asset_cards(asset_ids: List[str], _user: dict = Depends(requi
             c.showPage()
         # Riwayat per aset (find per aset dapat diterima untuk jumlah wajar).
         history = await _fetch_asset_history(asset)
+        # Aset GridFS-only: suntik foto sampul dari GridFS sebelum kartu dibangun.
+        await _hydrate_cover_from_gridfs(asset)
         elements = create_ktp_card_elements(asset, history)
         _draw_card_page(c, elements)
 

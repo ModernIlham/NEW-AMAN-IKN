@@ -21,6 +21,7 @@ from pydantic import BaseModel
 
 from db import db
 from auth_utils import require_user, require_admin, require_user_or_query_token
+from shared_utils import get_photo_from_gridfs
 from markupsafe import Markup
 
 logger = logging.getLogger(__name__)
@@ -1722,6 +1723,48 @@ async def _generate_cover_page(activity, settings):
 # EXECUTIVE SUMMARY (HTML preview + PDF via weasyprint)
 # ============================================================================
 
+def _downscale_to_data_uri(raw: bytes, max_w: int = 640, quality: int = 80) -> str:
+    """Perkecil bytes foto (maks lebar 640px, JPEG q80) → data-URI base64.
+
+    Meniru _resize_jpeg di routes/assets.py. Dipakai untuk fallback GridFS
+    agar embed foto ke HTML WeasyPrint tetap hemat memori/waktu (template
+    menampilkan foto hanya ~58-78px, jadi 640px sudah lebih dari cukup).
+    Mengembalikan '' bila gagal (template punya fallback "No Foto").
+    """
+    # PIL tidak di-import global di modul ini — import lokal di helper.
+    import io as _io
+    from PIL import Image as PILImage
+    try:
+        img = PILImage.open(_io.BytesIO(raw))
+        if img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+        w, h = img.size
+        if w > max_w:
+            img = img.resize((max_w, max(1, round(h * max_w / w))), PILImage.LANCZOS)
+        out = _io.BytesIO()
+        img.save(out, format="JPEG", quality=quality, optimize=True)
+        return "data:image/jpeg;base64," + base64.b64encode(out.getvalue()).decode("ascii")
+    except Exception as e:
+        logger.debug(f"[reports] downscale foto gagal: {e}")
+        return ""
+
+
+async def _gridfs_photo_data_uri(gid: str, max_w: int = 640) -> str:
+    """Ambil foto dari GridFS lalu downscale ke data-URI; '' bila gagal.
+
+    Fallback untuk aset hasil migrasi GridFS-only (photos=[] tapi
+    photo_gridfs_ids terisi) pada laporan eksekutif & laporan berkelompok.
+    """
+    try:
+        raw = await get_photo_from_gridfs(gid)
+        if not raw:
+            return ""
+        return _downscale_to_data_uri(raw, max_w)
+    except Exception as e:
+        logger.debug(f"[reports] GridFS foto {gid} gagal diambil: {e}")
+        return ""
+
+
 # Kolom tambahan opsional untuk kolom "Kondisi & Status" (key, label, field aset)
 EXEC_DETAIL_FIELDS = [
     ("spm", "SPM", "nomor_spm"),
@@ -1752,7 +1795,9 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None):
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
     # proyeksi: buang media base64 yang tidak dipakai (hemat memori/IO);
     # 'photos' TETAP diambil (foto sampul & stiker di-embed pada laporan data)
-    # dan 'document_checklist' TETAP diambil (statistik & kolom kelengkapan dokumen)
+    # dan 'document_checklist' TETAP diambil (statistik & kolom kelengkapan dokumen).
+    # Proyeksi bergaya eksklusi, jadi 'photo_gridfs_ids' & 'thumbnail_index' &
+    # 'stiker_photo_index' ikut terambil — dipakai fallback GridFS di bawah.
     all_assets = await db.assets.find(
         {"activity_id": activity_id},
         {"_id": 0, "photo": 0, "photo_thumbnails": 0, "thumbnail": 0, "gallery_thumbnail": 0},
@@ -1880,8 +1925,13 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None):
         total_doc_checked += sum(1 for d in doc_ck if d.get("checked"))
     doc_completeness_pct = round(total_doc_checked / total_doc_items * 100, 1) if total_doc_items > 0 else 0
 
-    # Photo coverage stats
-    assets_with_photos = sum(1 for a in all_assets if len(a.get("photos", []) or []) > 0)
+    # Photo coverage stats — aset GridFS-only (photos kosong, blob di
+    # photo_gridfs_ids) juga dihitung sebagai "punya foto"
+    assets_with_photos = sum(
+        1 for a in all_assets
+        if (len(a.get("photos") or []) > 0)
+        or (len([g for g in (a.get("photo_gridfs_ids") or []) if g]) > 0)
+    )
     photo_coverage_pct = round(assets_with_photos / tc * 100, 1) if tc > 0 else 0
 
     # GPS coverage stats
@@ -1977,6 +2027,21 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None):
         photo_url = photos[cover_idx] if photos and cover_idx < len(photos) else (photos[0] if photos else None)
         stiker_idx = a.get("stiker_photo_index")
         stiker_url = photos[stiker_idx] if stiker_idx is not None and photos and stiker_idx < len(photos) else None
+        # Fallback GridFS: aset hasil migrasi (photos kosong) — ambil blob pada
+        # indeks yang sama (di-clamp), downscale 640px agar WeasyPrint hemat
+        # memori. Gagal → photo_url "" (template menampilkan "No Foto").
+        if not photos:
+            try:
+                gids = [g for g in (a.get("photo_gridfs_ids") or []) if g]
+                if gids and not photo_url:
+                    gidx = max(0, min(int(cover_idx), len(gids) - 1))
+                    photo_url = await _gridfs_photo_data_uri(gids[gidx]) or ""
+                if gids and not stiker_url and stiker_idx is not None:
+                    sidx = max(0, min(int(stiker_idx), len(gids) - 1))
+                    stiker_url = await _gridfs_photo_data_uri(gids[sidx]) or None
+            except Exception as e:
+                logger.debug(f"[reports] fallback GridFS aset {a.get('id')} gagal: {e}")
+                photo_url = photo_url or ""
 
         inv_status = a.get("inventory_status", "Belum Diinventarisasi")
         condition = a.get("condition", "") or ""
@@ -2327,6 +2392,7 @@ async def _build_executive_grouped_data(activity_id: str, detail_fields=None):
 
     # Batch-fetch foto sampul representative (satu query, hanya 1 foto per aset)
     photo_map = {}
+    gid_map = {}  # Fallback GridFS: id blob sampul per aset (aset hasil migrasi)
     if rep_ids:
         photo_pipeline = [
             {"$match": {"id": {"$in": rep_ids}}},
@@ -2337,10 +2403,21 @@ async def _build_executive_grouped_data(activity_id: str, detail_fields=None):
                     {"$arrayElemAt": ["$$ph", "$$ti"]},
                     {"$arrayElemAt": ["$$ph", 0]},
                 ]},
+            }},
+            # GridFS-aware: proyeksikan juga id blob sampul dari photo_gridfs_ids
+            # dengan pemilihan indeks yang sama seperti cover_photo di atas.
+            "cover_gid": {"$let": {
+                "vars": {"gd": {"$ifNull": ["$photo_gridfs_ids", []]}, "ti": {"$ifNull": ["$thumbnail_index", 0]}},
+                "in": {"$cond": [
+                    {"$and": [{"$gte": ["$$ti", 0]}, {"$lt": ["$$ti", {"$size": "$$gd"}]}]},
+                    {"$arrayElemAt": ["$$gd", "$$ti"]},
+                    {"$arrayElemAt": ["$$gd", 0]},
+                ]},
             }}}},
         ]
         async for d in db.assets.aggregate(photo_pipeline):
             photo_map[d["id"]] = d.get("cover_photo")
+            gid_map[d["id"]] = d.get("cover_gid")
 
     cond_abbr = [("Baik", "Baik"), ("Rusak Ringan", "RR"), ("Rusak Berat", "RB")]
     stat_abbr = [("Ditemukan", "Ditemukan"), ("Tidak Ditemukan", "Tdk Ditemukan"),
@@ -2390,6 +2467,14 @@ async def _build_executive_grouped_data(activity_id: str, detail_fields=None):
                 value += f" +{len(distinct) - 3} lainnya"
             detail_lines.append({"label": dlabel, "value": value})
 
+        # Foto sampul kelompok: foto inline (cover_photo) lebih murah, jadi
+        # dipakai lebih dulu; bila kosong tapi ada cover_gid (aset migrasi
+        # GridFS-only) → ambil blob dari GridFS + downscale 640px ke data-URI.
+        rep_id = g.get("rep_id")
+        cover_url = photo_map.get(rep_id)
+        if not cover_url and gid_map.get(rep_id):
+            cover_url = await _gridfs_photo_data_uri(gid_map[rep_id]) or None
+
         rows.append({
             "asset_code": key.get("asset_code") or "-",
             "category_label": cat_map.get(category, category) or "-",
@@ -2402,7 +2487,7 @@ async def _build_executive_grouped_data(activity_id: str, detail_fields=None):
             "group_value_fmt": fmt(group_value),
             "kondisi_summary": kondisi or "-",
             "status_summary": status or "-",
-            "photo_url": photo_map.get(g.get("rep_id")),
+            "photo_url": cover_url,
             "detail_lines": detail_lines,
         })
 
