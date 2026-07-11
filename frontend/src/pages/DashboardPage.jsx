@@ -657,7 +657,23 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     } catch {}
   };
 
-  const doFetchCategories = async () => { try { const r = await axios.get(`${API}/categories/all`); setCategories(Array.isArray(r.data) ? r.data : []); } catch { setCategories([]); } };
+  // Kategori di-cache ke localStorage agar "pilih kategori" (wajib isi) TETAP
+  // bisa dipakai saat OFFLINE — sehingga input aset baru bisa masuk antrean
+  // walau sinyal hilang. Cache diperbarui tiap berhasil ambil dari server.
+  const doFetchCategories = async () => {
+    try {
+      const r = await axios.get(`${API}/categories/all`);
+      const list = Array.isArray(r.data) ? r.data : [];
+      setCategories(list);
+      try { localStorage.setItem("aman_categories_cache", JSON.stringify(list)); } catch { /* penuh/diblokir — abaikan */ }
+    } catch {
+      // Offline / gagal → pakai cache terakhir supaya kategori tetap tampil.
+      try {
+        const cached = JSON.parse(localStorage.getItem("aman_categories_cache") || "null");
+        setCategories(Array.isArray(cached) ? cached : []);
+      } catch { setCategories([]); }
+    }
+  };
 
   const fetchParamsRef = useRef({ debouncedSearch, filterCategory, sortBy, pageSize, currentPage });
   fetchParamsRef.current = { debouncedSearch, filterCategory, sortBy, pageSize, currentPage };

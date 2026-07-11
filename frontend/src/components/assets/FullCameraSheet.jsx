@@ -18,6 +18,26 @@ function cameraErrMsg(err) {
   }
 }
 
+// Preset perbesaran (zoom) dari kemampuan track kamera — mis. 1×, 2×, 5×.
+function makeZoomPresets(caps) {
+  if (!caps || !(Number(caps.max) > Number(caps.min))) return [];
+  const min = Number(caps.min), max = Number(caps.max);
+  const cand = [0.5, 1, 2, 3, 5, 10].filter((z) => z >= min - 1e-6 && z <= max + 1e-6);
+  const out = Array.from(new Set([Number(min.toFixed(2)), ...cand])).sort((a, b) => a - b);
+  return out.slice(0, 6);
+}
+const fmtZoom = (z) => (Number.isInteger(z) ? String(z) : z.toFixed(1).replace(/\.0$/, ""));
+
+// Label singkat lensa fisik dari label perangkat (heuristik — nama lensa tak
+// standar antar perangkat, jadi jatuh ke "Lensa N" bila tak dikenali).
+function shortLensLabel(label, i) {
+  const l = (label || "").toLowerCase();
+  if (/ultra|wide|0\.5/.test(l)) return "0.5×";
+  if (/tele|telephoto/.test(l)) return "2×";
+  if (/back|rear|main|belakang/.test(l)) return "1×";
+  return `Lensa ${i + 1}`;
+}
+
 /**
  * Mode Kamera Penuh (ala aplikasi Timemark) untuk surveyor inventarisasi.
  *
@@ -75,6 +95,12 @@ const FullCameraSheet = memo(function FullCameraSheet({
   const [suspended, setSuspended] = useState(false); // track berhenti (background/lock/direbut app lain)
   const [camNonce, setCamNonce] = useState(0); // bump utk coba-sambung-ulang kamera
   const [gpsNonce, setGpsNonce] = useState(0); // bump utk coba-lagi GPS
+  // Pemilihan lensa & zoom sesuai spek kamera perangkat
+  const [deviceId, setDeviceId] = useState(null); // lensa fisik terpilih (null = default facingMode)
+  const [lenses, setLenses] = useState([]); // [{ deviceId, label }] kamera belakang (bila >1)
+  const [zoomCaps, setZoomCaps] = useState(null); // { min, max, step } bila track mendukung zoom
+  const [zoom, setZoom] = useState(1);
+  const lensesReadRef = useRef(false);
 
   const supported = typeof navigator !== "undefined" && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
 
@@ -132,10 +158,11 @@ const FullCameraSheet = memo(function FullCameraSheet({
     setReady(false); setStarting(true); setCamError(null); setSuspended(false);
     (async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: facing, width: { ideal: 1920 }, height: { ideal: 1080 } },
-          audio: false,
-        });
+        // Lensa terpilih → pakai deviceId; selain itu pakai facingMode.
+        const videoConstraint = deviceId
+          ? { deviceId: { exact: deviceId }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+          : { facingMode: facing, width: { ideal: 1920 }, height: { ideal: 1080 } };
+        const stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraint, audio: false });
         if (cancelled) { stream.getTracks().forEach(t => t.stop()); return; }
         streamRef.current = stream;
         track = stream.getVideoTracks()[0];
@@ -144,6 +171,14 @@ const FullCameraSheet = memo(function FullCameraSheet({
           // tandai suspended supaya rana dinonaktifkan & tak memotret frame beku.
           onEnded = () => { if (!cancelled) { setReady(false); setSuspended(true); } };
           track.addEventListener("ended", onEnded);
+          // Baca kemampuan zoom kamera aktif.
+          try {
+            const caps = track.getCapabilities?.() || {};
+            if (caps.zoom && Number(caps.zoom.max) > Number(caps.zoom.min)) {
+              setZoomCaps({ min: Number(caps.zoom.min), max: Number(caps.zoom.max), step: Number(caps.zoom.step) || 0.1 });
+              setZoom(Number(track.getSettings?.().zoom) || Number(caps.zoom.min));
+            } else setZoomCaps(null);
+          } catch { setZoomCaps(null); }
         }
         const video = videoRef.current;
         if (video) { video.srcObject = stream; await video.play().catch(() => {}); }
@@ -159,7 +194,29 @@ const FullCameraSheet = memo(function FullCameraSheet({
       if (track && onEnded) track.removeEventListener("ended", onEnded);
       if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
     };
-  }, [facing, camNonce, supported]);
+  }, [facing, deviceId, camNonce, supported]);
+
+  // Enumerasi lensa fisik (kamera belakang) SEKALI setelah izin diberi — agar
+  // surveyor bisa pilih 0.5×/1×/2× dsb. yang berupa sensor terpisah.
+  useEffect(() => {
+    if (!ready || lensesReadRef.current || !navigator.mediaDevices?.enumerateDevices) return;
+    lensesReadRef.current = true;
+    navigator.mediaDevices.enumerateDevices().then((list) => {
+      const cams = (list || []).filter((d) => d.kind === "videoinput" && d.deviceId);
+      const back = cams.filter((d) => !/front|user|face|depan/i.test(d.label || ""));
+      const use = back.length >= 2 ? back : cams;
+      if (use.length >= 2) setLenses(use.map((d, i) => ({ deviceId: d.deviceId, label: shortLensLabel(d.label, i) })));
+    }).catch(() => {});
+  }, [ready]);
+
+  // Terapkan zoom ke track aktif (perbesaran optik/digital sesuai kemampuan).
+  const applyZoom = useCallback(async (z) => {
+    const track = streamRef.current?.getVideoTracks?.()[0];
+    if (!track || !track.applyConstraints) return;
+    try { await track.applyConstraints({ advanced: [{ zoom: z }] }); setZoom(z); } catch { /* tak didukung */ }
+  }, []);
+
+  const zoomPresets = makeZoomPresets(zoomCaps);
 
   // Kembali ke depan (unlock/foreground): kalau track sudah mati, sambung ulang;
   // kalau masih hidup, cukup play() lagi.
@@ -333,6 +390,26 @@ const FullCameraSheet = memo(function FullCameraSheet({
             ))}
           </div>
         )}
+        {/* Pemilih lensa & zoom sesuai spek kamera (0.5× / 1× / 2× dst.).
+            Tampil hanya bila perangkat menyediakan lensa ganda atau zoom. */}
+        {(lenses.length >= 2 || zoomPresets.length >= 2) && (
+          <div className="flex items-center justify-center gap-1.5 flex-wrap" data-testid="full-camera-lensbar">
+            {lenses.map((l) => (
+              <button key={l.deviceId} type="button" onClick={() => { setDeviceId(l.deviceId); setZoom(1); }}
+                data-testid={`full-camera-lens-${l.deviceId}`}
+                className={`h-8 min-w-[42px] px-2 rounded-full text-[11px] font-bold transition-colors ${deviceId === l.deviceId ? "bg-white text-black" : "bg-white/20 text-white hover:bg-white/30"}`}>
+                {l.label}
+              </button>
+            ))}
+            {zoomPresets.length >= 2 && zoomPresets.map((z) => (
+              <button key={z} type="button" onClick={() => applyZoom(z)}
+                data-testid={`full-camera-zoom-${z}`}
+                className={`h-8 min-w-[38px] px-2 rounded-full text-[11px] font-bold transition-colors ${Math.abs((zoom || 1) - z) < 0.05 ? "bg-amber-400 text-black" : "bg-white/20 text-white hover:bg-white/30"}`}>
+                {fmtZoom(z)}×
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex items-center justify-between">
           <button type="button" onClick={() => setEditOpen(true)} data-testid="full-camera-edit-btn"
             className="flex flex-col items-center gap-1 text-white/90 text-[10px] font-medium w-16">
@@ -346,7 +423,7 @@ const FullCameraSheet = memo(function FullCameraSheet({
               <Camera className="w-6 h-6 text-black/70" />
             </span>
           </button>
-          <button type="button" onClick={() => setFacing(f => (f === "environment" ? "user" : "environment"))}
+          <button type="button" onClick={() => { setDeviceId(null); setFacing(f => (f === "environment" ? "user" : "environment")); }}
             data-testid="full-camera-flip"
             className="flex flex-col items-center gap-1 text-white/90 text-[10px] font-medium w-16">
             <span className="w-11 h-11 rounded-full bg-white/15 flex items-center justify-center"><SwitchCamera className="w-5 h-5" /></span>
