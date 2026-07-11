@@ -5,7 +5,7 @@ import base64
 import logging
 import asyncio
 from collections import deque
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, HTTPException, Request, Depends, UploadFile, File
 from fastapi.responses import Response
 
@@ -133,15 +133,10 @@ LIST_PROJECTION = {
 }
 
 
-@assets_router.get("/assets")
-async def get_assets(
+def build_asset_search_query(
     search: str = "",
     category: str = "",
-    sort_by: str = "newest",
-    page: int = 1,
-    page_size: int = 50,
     activity_id: str = "",
-    # Advanced filters
     condition: str = "",
     status: str = "",
     location: str = "",
@@ -153,11 +148,13 @@ async def get_assets(
     price_max: float = None,
     nomor_spm: str = "",
     perolehan_dari: str = "",
-    _user: dict = Depends(require_user),
-):
-    """Get paginated assets with advanced filters - optimized for millions of records"""
+    created_from: str = "",
+    created_to: str = "",
+) -> dict:
+    """Query pencarian + filter aset — SATU builder untuk GET /assets dan
+    ekspor geo (KML/KMZ/SHP) supaya filter tidak pernah drift antar-endpoint."""
     query = {}
-    
+
     # Filter by activity_id if provided
     if activity_id:
         query["activity_id"] = activity_id
@@ -260,7 +257,61 @@ async def get_assets(
                     {"$lte": [price_convert, price_max or 999999999999]}
                 ]
             }
-    
+
+    # Rentang tanggal input (created_at tersimpan sebagai string ISO —
+    # perbandingan leksikal aman untuk prefiks tanggal YYYY-MM-DD).
+    if created_from or created_to:
+        rng = {}
+        cf = str(created_from or "").strip()[:10]
+        ct = str(created_to or "").strip()[:10]
+        if cf:
+            rng["$gte"] = cf
+        if ct:
+            try:
+                # inklusif s.d. akhir hari: batas atas = hari berikutnya (eksklusif)
+                rng["$lt"] = (datetime.strptime(ct, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+            except ValueError:
+                pass
+        if rng:
+            query["created_at"] = rng
+
+    return query
+
+
+@assets_router.get("/assets")
+async def get_assets(
+    search: str = "",
+    category: str = "",
+    sort_by: str = "newest",
+    page: int = 1,
+    page_size: int = 50,
+    activity_id: str = "",
+    # Advanced filters
+    condition: str = "",
+    status: str = "",
+    location: str = "",
+    eselon1_filter: str = "",
+    eselon2_filter: str = "",
+    stiker_status: str = "",
+    inventory_status: str = "",
+    price_min: float = None,
+    price_max: float = None,
+    nomor_spm: str = "",
+    perolehan_dari: str = "",
+    created_from: str = "",
+    created_to: str = "",
+    _user: dict = Depends(require_user),
+):
+    """Get paginated assets with advanced filters - optimized for millions of records"""
+    query = build_asset_search_query(
+        search=search, category=category, activity_id=activity_id,
+        condition=condition, status=status, location=location,
+        eselon1_filter=eselon1_filter, eselon2_filter=eselon2_filter,
+        stiker_status=stiker_status, inventory_status=inventory_status,
+        price_min=price_min, price_max=price_max, nomor_spm=nomor_spm,
+        perolehan_dari=perolehan_dari, created_from=created_from, created_to=created_to,
+    )
+
     # Extended sort options
     # Tiebreaker `id` di setiap opsi: sort Mongo tidak stabil antar-query
     # skip/limit, tanpa kunci unik halaman bisa tumpang-tindih/terlewat

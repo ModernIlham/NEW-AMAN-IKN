@@ -64,24 +64,32 @@ def _kop_surat_flowables(settings, doc_width):
     settings = settings or {}
     nama_instansi = (settings.get("nama_instansi") or "").strip()
     nama_unit = (settings.get("nama_unit_organisasi") or "").strip()
+    nama_sub_unit = (settings.get("nama_sub_unit") or "").strip()
     alamat = (settings.get("alamat_instansi") or "").strip()
     logo_url = settings.get("logo_url", "") or ""
 
-    if not (nama_instansi or nama_unit or alamat or logo_url.startswith("data:")):
+    if not (nama_instansi or nama_unit or nama_sub_unit or alamat or logo_url.startswith("data:")):
         return []
 
     styles = getSampleStyleSheet()
-    instansi_style = ParagraphStyle('KopInstansi', parent=styles['Normal'], fontSize=13, alignment=TA_CENTER, fontName='Helvetica-Bold', leading=16)
-    unit_style = ParagraphStyle('KopUnit', parent=styles['Normal'], fontSize=11, alignment=TA_CENTER, leading=14)
-    alamat_style = ParagraphStyle('KopAlamat', parent=styles['Normal'], fontSize=8, alignment=TA_CENTER, leading=10, textColor=rl_colors.HexColor("#444444"))
+    # Gaya sesuai contoh kop resmi: baris 1 besar (nama instansi), baris 2-3
+    # TEBAL (unit organisasi + sub-unit/satker), alamat kecil bisa multi-baris.
+    instansi_style = ParagraphStyle('KopInstansi', parent=styles['Normal'], fontSize=13, alignment=TA_CENTER, fontName='Helvetica', leading=16)
+    unit_style = ParagraphStyle('KopUnit', parent=styles['Normal'], fontSize=12, alignment=TA_CENTER, fontName='Helvetica-Bold', leading=15)
+    alamat_style = ParagraphStyle('KopAlamat', parent=styles['Normal'], fontSize=8.5, alignment=TA_CENTER, leading=11, textColor=rl_colors.HexColor("#333333"))
 
     text_flow = []
     if nama_instansi:
         text_flow.append(Paragraph(nama_instansi.upper(), instansi_style))
     if nama_unit:
-        text_flow.append(Paragraph(nama_unit, unit_style))
-    if alamat:
-        text_flow.append(Paragraph(alamat, alamat_style))
+        text_flow.append(Paragraph(nama_unit.upper(), unit_style))
+    if nama_sub_unit:
+        text_flow.append(Paragraph(nama_sub_unit.upper(), unit_style))
+    # Alamat multi-baris: tiap baris (Enter di pengaturan) jadi baris sendiri
+    for line in alamat.splitlines():
+        line = line.strip()
+        if line:
+            text_flow.append(Paragraph(line, alamat_style))
 
     # Logo: decode data-URI base64 -> BytesIO -> Image (same approach as _generate_cover_page)
     logo_img = None
@@ -310,7 +318,7 @@ def _activity_identity(activity, settings=None):
         "kasatker_nip": pick(activity.get("kasatker_nip"), legacy.get("nip"),
                              default="........................"),
         "kasatker_jabatan": pick(activity.get("kasatker_jabatan"), legacy.get("jabatan"),
-                                 default="Kepala Satuan Kerja"),
+                                 default="Kuasa Pengguna Barang"),
         "alamat": pick(activity.get("alamat_satker"), settings.get("alamat_instansi"),
                        default="................................"),
     }
@@ -367,7 +375,7 @@ def _identity_table(rows):
     body = st['Body']
     data = [[Paragraph(f"<b>{escape(str(label))}</b>", body),
              Paragraph(":", body),
-             Paragraph(escape(str(value)), body)] for label, value in rows]
+             Paragraph(escape(str(value)).replace("\n", "<br/>"), body)] for label, value in rows]
     t = Table(data, colWidths=[40 * rl_mm, 4 * rl_mm, None], hAlign='LEFT')
     t.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
@@ -787,6 +795,7 @@ async def generate_sptjm_pdf(activity_id: str, _user: dict = Depends(require_use
     nip = ident["kasatker_nip"]
     jabatan = ident["kasatker_jabatan"]
     alamat = ident["alamat"]
+    alamat_singkat = alamat.splitlines()[0] if alamat.splitlines() else alamat
     total_notfound = len(tidak_ditemukan)
     total_val_notfound = sum(safe_price(a) for a in tidak_ditemukan)
 
@@ -838,7 +847,7 @@ async def generate_sptjm_pdf(activity_id: str, _user: dict = Depends(require_use
     # Signature
     tgl = str(activity.get("tanggal_berita_acara") or "").strip() or "......................."
     elements.extend(_signature_block([
-        {'pre': [f'Dibuat di: {alamat}', f'Pada tanggal: {tgl}'],
+        {'pre': [f'Dibuat di: {alamat_singkat}', f'Pada tanggal: {tgl}'],
          'header': 'Yang membuat pernyataan,',
          'nama': kasatker,
          'after': [f'NIP. {nip}']},
@@ -899,6 +908,7 @@ async def generate_surat_koreksi_pdf(activity_id: str, _user: dict = Depends(req
     nip = ident["kasatker_nip"]
     jabatan = ident["kasatker_jabatan"]
     alamat = ident["alamat"]
+    alamat_singkat = alamat.splitlines()[0] if alamat.splitlines() else alamat
     total_koreksi = len(koreksi_assets)
     total_val = sum(safe_price(a) for a in koreksi_assets)
 
@@ -954,7 +964,7 @@ async def generate_surat_koreksi_pdf(activity_id: str, _user: dict = Depends(req
     # Signature
     tgl = str(activity.get("tanggal_berita_acara") or "").strip() or "......................."
     elements.extend(_signature_block([
-        {'pre': [f'Dibuat di: {alamat}', f'Pada tanggal: {tgl}'],
+        {'pre': [f'Dibuat di: {alamat_singkat}', f'Pada tanggal: {tgl}'],
          'header': 'Yang membuat pernyataan,',
          'nama': kasatker,
          'after': [f'NIP. {nip}']},
@@ -1176,7 +1186,7 @@ async def generate_dbhi_pdf(activity_id: str, dbhi_type: str, _user: dict = Depe
 
     elements.extend(_signature_block([
         {'pre': ['.................., .......................'],
-         'header': 'Kepala Satuan Kerja,',
+         'header': 'Kuasa Pengguna Barang,',
          'nama': kasatker_nama,
          'after': [f'NIP. {kasatker_nip}']},
     ], doc.width))
@@ -1302,7 +1312,7 @@ async def generate_rhi_pdf(activity_id: str, _user: dict = Depends(require_user_
     kasatker_nip = ident["kasatker_nip"]
     elements.extend(_signature_block([
         {'pre': ['.................., .......................'],
-         'header': 'Kepala Satuan Kerja,',
+         'header': 'Kuasa Pengguna Barang,',
          'nama': kasatker_nama,
          'after': [f'NIP. {kasatker_nip}']},
     ], doc.width))
@@ -1657,6 +1667,7 @@ async def generate_sp_pelaksanaan_pdf(activity_id: str, _user: dict = Depends(re
 class ReportSettingsUpdate(BaseModel):
     nama_instansi: Optional[str] = ""
     nama_unit_organisasi: Optional[str] = ""
+    nama_sub_unit: Optional[str] = ""
     alamat_instansi: Optional[str] = ""
     judul_laporan: Optional[str] = "LAPORAN HASIL INVENTARISASI"
     subjudul_laporan: Optional[str] = "BARANG MILIK NEGARA (BMN)"
@@ -1674,6 +1685,7 @@ async def get_report_settings(_user: dict = Depends(require_user)):
             "logo_url": "",
             "nama_instansi": "",
             "nama_unit_organisasi": "",
+            "nama_sub_unit": "",
             "alamat_instansi": "",
             "judul_laporan": "LAPORAN HASIL INVENTARISASI",
             "subjudul_laporan": "BARANG MILIK NEGARA (BMN)",
@@ -1783,9 +1795,14 @@ async def _generate_cover_page(activity, settings):
     if nama_unit:
         elements.append(Paragraph(nama_unit, unit_style))
 
+    nama_sub_unit = settings.get("nama_sub_unit", "")
+    if nama_sub_unit:
+        elements.append(Paragraph(nama_sub_unit, unit_style))
+
     alamat = settings.get("alamat_instansi", "")
-    if alamat:
-        elements.append(Paragraph(alamat, alamat_style))
+    for _line in str(alamat).splitlines():
+        if _line.strip():
+            elements.append(Paragraph(_line.strip(), alamat_style))
 
     if nama_instansi or nama_unit or alamat:
         elements.append(Spacer(1, 2*rl_mm))
@@ -2252,7 +2269,7 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
         "logo_url": settings.get("logo_url", ""),
         "nama_instansi": settings.get("nama_instansi", ""),
         "nama_unit": settings.get("nama_unit_organisasi", ""),
-        "alamat_instansi": settings.get("alamat_instansi", ""),
+        "alamat_instansi": str(settings.get("alamat_instansi", "") or "").replace("\n", " • "),
         "tahun_anggaran": settings.get("tahun_anggaran", ""),
         "satker_name": satker_name,
         "nomor_sk": activity.get("nomor_surat") or "-",
@@ -2841,7 +2858,7 @@ async def _build_satker_report_v2(activity_id: str):
             if not kasatker_added:
                 personil.append({"is_header": True, "section": "Pimpinan Satuan Kerja"})
                 kasatker_added = True
-            personil.append({"is_header": False, "primary": True, "role": act.get("kasatker_jabatan") or "Kepala Satuan Kerja", "name": act["kasatker_nama"], "nip": act.get("kasatker_nip") or "", "jabatan": ""})
+            personil.append({"is_header": False, "primary": True, "role": act.get("kasatker_jabatan") or "Kuasa Pengguna Barang", "name": act["kasatker_nama"], "nip": act.get("kasatker_nip") or "", "jabatan": ""})
             seen_names.add(act["kasatker_nama"])
 
     pj_added = False

@@ -65,9 +65,10 @@ export default function ReportSettingsEditor({ onClose }) {
   if (loading) return <div className="p-4 text-center text-xs text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin mx-auto" /></div>;
 
   const fields = [
-    { key: "nama_instansi", label: "Nama Instansi", placeholder: "Contoh: IBU KOTA NUSANTARA" },
-    { key: "nama_unit_organisasi", label: "Unit Organisasi", placeholder: "Contoh: Otorita Ibu Kota Nusantara" },
-    { key: "alamat_instansi", label: "Alamat Instansi", placeholder: "Contoh: Penajam Paser Utara, Kalimantan Timur" },
+    { key: "nama_instansi", label: "Nama Instansi (baris 1 kop)", placeholder: "Contoh: OTORITA IBU KOTA NUSANTARA REPUBLIK INDONESIA" },
+    { key: "nama_unit_organisasi", label: "Unit Organisasi (baris 2, tebal)", placeholder: "Contoh: KUASA PENGGUNA BARANG" },
+    { key: "nama_sub_unit", label: "Sub Unit/Satker (baris 3, tebal)", placeholder: "Contoh: SATUAN KERJA D (PP-THD)" },
+    { key: "alamat_instansi", label: "Alamat Instansi (boleh beberapa baris — tekan Enter)", placeholder: "Gedung Kantor Otorita IKN, Nusantara, Kalimantan\nPerwakilan I: Menara Mandiri II Lantai 5, Jakarta", multiline: true },
     { key: "judul_laporan", label: "Judul Laporan", placeholder: "LAPORAN HASIL INVENTARISASI" },
     { key: "subjudul_laporan", label: "Sub Judul", placeholder: "BARANG MILIK NEGARA (BMN)" },
     { key: "tahun_anggaran", label: "Tahun Anggaran", placeholder: "2025" },
@@ -117,9 +118,19 @@ export default function ReportSettingsEditor({ onClose }) {
 
       {/* Text Fields */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        {fields.map(({ key, label, placeholder }) => (
-          <div key={key} className="space-y-0.5">
+        {fields.map(({ key, label, placeholder, multiline }) => (
+          <div key={key} className={`space-y-0.5 ${multiline ? "sm:col-span-2" : ""}`}>
             <label className="text-[10px] font-medium text-muted-foreground">{label}</label>
+            {multiline ? (
+              <textarea
+                data-testid={`settings-${key}`}
+                rows={3}
+                value={settings?.[key] || ""}
+                onChange={e => handleChange(key, e.target.value)}
+                placeholder={placeholder}
+                className="w-full px-2 py-1.5 text-xs border border-border rounded-md focus:ring-1 focus:ring-blue-300 focus:border-blue-400 bg-card resize-y"
+              />
+            ) : (
             <input
               data-testid={`settings-${key}`}
               type="text"
@@ -128,6 +139,7 @@ export default function ReportSettingsEditor({ onClose }) {
               placeholder={placeholder}
               className="w-full px-2 py-1.5 text-xs border border-border rounded-md focus:ring-1 focus:ring-blue-300 focus:border-blue-400 bg-card"
             />
+            )}
           </div>
         ))}
       </div>

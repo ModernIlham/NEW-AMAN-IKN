@@ -24,7 +24,7 @@ export function useAssetFilters({ activityId }) {
   const initialFilterState = useMemo(() => ({
     condition: "", status: "", location: "", eselon1: "", eselon2: "",
     stiker: "", inventoryStatus: "", priceMin: "", priceMax: "",
-    nomorSpm: "", perolehanDari: ""
+    nomorSpm: "", perolehanDari: "", dateFrom: "", dateTo: ""
   }), []);
 
   const [filters, dispatchFilter] = useReducer((state, action) => {
@@ -66,6 +66,8 @@ export function useAssetFilters({ activityId }) {
     if (filters.priceMax) params.append("price_max", filters.priceMax);
     if (filters.nomorSpm) params.append("nomor_spm", filters.nomorSpm);
     if (filters.perolehanDari) params.append("perolehan_dari", filters.perolehanDari);
+    if (filters.dateFrom) params.append("created_from", filters.dateFrom);
+    if (filters.dateTo) params.append("created_to", filters.dateTo);
     return params;
   }, [filters]);
 
@@ -75,7 +77,7 @@ export function useAssetFilters({ activityId }) {
     filters.condition, filters.status, filters.location,
     filters.eselon1, filters.eselon2, filters.stiker,
     filters.inventoryStatus, filters.priceMin, filters.priceMax,
-    filters.nomorSpm, filters.perolehanDari
+    filters.nomorSpm, filters.perolehanDari, filters.dateFrom, filters.dateTo
   ].filter(Boolean).length, [filterCategory, filters]);
 
   const handleAdvancedFilterChange = useCallback((field, value) => {

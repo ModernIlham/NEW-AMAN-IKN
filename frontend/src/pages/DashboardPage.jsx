@@ -91,6 +91,9 @@ function filterSnapshotRows(rows, { search, category, filters }) {
     const pMax = parseFloat(filters.priceMax);
     if (!Number.isNaN(pMin)) out = out.filter(r => (Number(r.purchase_price) || 0) >= pMin);
     if (!Number.isNaN(pMax)) out = out.filter(r => (Number(r.purchase_price) || 0) <= pMax);
+    // Rentang tanggal input — created_at ISO, cukup bandingkan prefiks tanggal
+    if (filters.dateFrom) out = out.filter(r => String(r.created_at ?? "").slice(0, 10) >= filters.dateFrom);
+    if (filters.dateTo) out = out.filter(r => String(r.created_at ?? "").slice(0, 10) <= filters.dateTo);
   }
   return out;
 }

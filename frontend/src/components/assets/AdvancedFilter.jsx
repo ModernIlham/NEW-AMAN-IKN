@@ -201,6 +201,27 @@ const AdvancedFilter = memo(({
                 data-testid="filter-perolehan-dari"
               />
             </div>
+
+            {/* Rentang tanggal input aset */}
+            <div className="col-span-2">
+              <Label className="text-[10px] text-muted-foreground mb-1 block">Tanggal Input (Dari — Sampai)</Label>
+              <div className="flex gap-1">
+                <input
+                  type="date"
+                  value={filters.dateFrom || ""}
+                  onChange={e => onFilterChange("dateFrom", e.target.value)}
+                  className="h-7 text-xs w-1/2 px-1.5 rounded-md border border-border bg-background text-foreground"
+                  data-testid="filter-date-from"
+                />
+                <input
+                  type="date"
+                  value={filters.dateTo || ""}
+                  onChange={e => onFilterChange("dateTo", e.target.value)}
+                  className="h-7 text-xs w-1/2 px-1.5 rounded-md border border-border bg-background text-foreground"
+                  data-testid="filter-date-to"
+                />
+              </div>
+            </div>
           </div>
           
           {/* Filter Actions */}
@@ -254,6 +275,9 @@ const AdvancedFilter = memo(({
           )}
           {filters.perolehanDari && (
             <FilterBadge onRemove={() => onFilterChange("perolehanDari", "")} testid="badge-remove-perolehan">Perolehan: {filters.perolehanDari}</FilterBadge>
+          )}
+          {(filters.dateFrom || filters.dateTo) && (
+            <FilterBadge onRemove={() => { onFilterChange("dateFrom", ""); onFilterChange("dateTo", ""); }} testid="badge-remove-date">Tanggal: {filters.dateFrom || '…'} – {filters.dateTo || '…'}</FilterBadge>
           )}
           <button
             type="button"
