@@ -11,6 +11,7 @@ import "@/App.css";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { useDarkMode } from "@/hooks/useDarkMode";
+import { useBackGuard } from "@/hooks/useBackGuard";
 import BackgroundTaskBar from "@/components/BackgroundTaskBar";
 import { clearAllSnapshots, ensureSnapshotOwner } from "@/lib/offlineSnapshot";
 import axios from "axios";
@@ -47,6 +48,14 @@ function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const { dark, toggle: toggleDark } = useDarkMode();
+
+  // Penjaga Back/Forward TINGKAT APLIKASI (lantai dasar tumpukan guard).
+  // Sebelumnya guard hanya terpasang saat halaman dashboard ter-mount, sehingga
+  // di halaman login (atau sebelum halaman siap) Back/Forward bisa keluar dari
+  // aplikasi. Dipasang di root: sentinel ditanam sejak aplikasi dibuka —
+  // pushState sekaligus MEMANGKAS riwayat maju, jadi Forward tidak lagi bisa
+  // membawa keluar; Back tanpa handler halaman = tetap diam di aplikasi.
+  useBackGuard(useCallback(() => { /* tetap di aplikasi */ }, []));
 
   // Session teardown shared by manual logout, 401 auto-logout, and idle
   // timeout. Stable identity (useCallback []) so interceptors/timers can

@@ -370,7 +370,11 @@ async def get_rekapitulasi(activity_id: str, _user: dict = Depends(require_user_
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
 
-    assets = await db.assets.find({"activity_id": activity_id}, {"_id": 0}).to_list(100000)
+    # proyeksi: buang media base64 yang tidak dipakai laporan ini (hemat memori/IO)
+    assets = await db.assets.find(
+        {"activity_id": activity_id},
+        {"_id": 0, "photos": 0, "photo": 0, "photo_thumbnails": 0, "thumbnail": 0, "gallery_thumbnail": 0, "document_checklist": 0},
+    ).to_list(100000)
 
     total = len(assets)
     ditemukan = [a for a in assets if a.get("inventory_status") == "Ditemukan"]
@@ -463,7 +467,11 @@ async def generate_berita_acara_pdf(activity_id: str, _user: dict = Depends(requ
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
 
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
-    assets = await db.assets.find({"activity_id": activity_id}, {"_id": 0}).to_list(100000)
+    # proyeksi: buang media base64 yang tidak dipakai laporan ini (hemat memori/IO)
+    assets = await db.assets.find(
+        {"activity_id": activity_id},
+        {"_id": 0, "photos": 0, "photo": 0, "photo_thumbnails": 0, "thumbnail": 0, "gallery_thumbnail": 0, "document_checklist": 0},
+    ).to_list(100000)
     tidak_ditemukan = [a for a in assets if a.get("inventory_status") == "Tidak Ditemukan"]
     ditemukan = [a for a in assets if a.get("inventory_status") == "Ditemukan"]
 
@@ -646,7 +654,11 @@ async def generate_sptjm_pdf(activity_id: str, _user: dict = Depends(require_use
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
 
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
-    assets = await db.assets.find({"activity_id": activity_id}, {"_id": 0}).to_list(100000)
+    # proyeksi: buang media base64 yang tidak dipakai laporan ini (hemat memori/IO)
+    assets = await db.assets.find(
+        {"activity_id": activity_id},
+        {"_id": 0, "photos": 0, "photo": 0, "photo_thumbnails": 0, "thumbnail": 0, "gallery_thumbnail": 0, "document_checklist": 0},
+    ).to_list(100000)
     tidak_ditemukan = [a for a in assets if a.get("inventory_status") == "Tidak Ditemukan"]
 
     def safe_price(a):
@@ -749,7 +761,11 @@ async def generate_surat_koreksi_pdf(activity_id: str, _user: dict = Depends(req
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
 
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
-    assets = await db.assets.find({"activity_id": activity_id}, {"_id": 0}).to_list(100000)
+    # proyeksi: buang media base64 yang tidak dipakai laporan ini (hemat memori/IO)
+    assets = await db.assets.find(
+        {"activity_id": activity_id},
+        {"_id": 0, "photos": 0, "photo": 0, "photo_thumbnails": 0, "thumbnail": 0, "gallery_thumbnail": 0, "document_checklist": 0},
+    ).to_list(100000)
     koreksi_assets = [a for a in assets if a.get("inventory_status") == "Tidak Ditemukan" and a.get("klasifikasi_tidak_ditemukan") == "Kesalahan Pencatatan"]
 
     def safe_price(a):
@@ -895,7 +911,11 @@ async def generate_dbhi_pdf(activity_id: str, dbhi_type: str, _user: dict = Depe
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
 
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
-    all_assets = await db.assets.find({"activity_id": activity_id}, {"_id": 0}).to_list(100000)
+    # proyeksi: buang media base64 yang tidak dipakai laporan ini (hemat memori/IO)
+    all_assets = await db.assets.find(
+        {"activity_id": activity_id},
+        {"_id": 0, "photos": 0, "photo": 0, "photo_thumbnails": 0, "thumbnail": 0, "gallery_thumbnail": 0, "document_checklist": 0},
+    ).to_list(100000)
     filtered = [a for a in all_assets if dbhi_config["filter"](a)]
 
     def safe_price(a):
@@ -1071,7 +1091,11 @@ async def generate_rhi_pdf(activity_id: str, _user: dict = Depends(require_user_
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
 
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
-    assets = await db.assets.find({"activity_id": activity_id}, {"_id": 0}).to_list(100000)
+    # proyeksi: buang media base64 yang tidak dipakai laporan ini (hemat memori/IO)
+    assets = await db.assets.find(
+        {"activity_id": activity_id},
+        {"_id": 0, "photos": 0, "photo": 0, "photo_thumbnails": 0, "thumbnail": 0, "gallery_thumbnail": 0, "document_checklist": 0},
+    ).to_list(100000)
 
     def safe_price(a):
         try: return float(a.get("purchase_price", 0) or 0)
@@ -1191,7 +1215,11 @@ async def generate_bahi_pdf(activity_id: str, _user: dict = Depends(require_user
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
 
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
-    assets = await db.assets.find({"activity_id": activity_id}, {"_id": 0}).to_list(100000)
+    # proyeksi: buang media base64 yang tidak dipakai laporan ini (hemat memori/IO)
+    assets = await db.assets.find(
+        {"activity_id": activity_id},
+        {"_id": 0, "photos": 0, "photo": 0, "photo_thumbnails": 0, "thumbnail": 0, "gallery_thumbnail": 0, "document_checklist": 0},
+    ).to_list(100000)
 
     def safe_price(a):
         try: return float(a.get("purchase_price", 0) or 0)
@@ -1722,7 +1750,13 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None):
     if not activity:
         return None
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
-    all_assets = await db.assets.find({"activity_id": activity_id}, {"_id": 0}).to_list(100000)
+    # proyeksi: buang media base64 yang tidak dipakai (hemat memori/IO);
+    # 'photos' TETAP diambil (foto sampul & stiker di-embed pada laporan data)
+    # dan 'document_checklist' TETAP diambil (statistik & kolom kelengkapan dokumen)
+    all_assets = await db.assets.find(
+        {"activity_id": activity_id},
+        {"_id": 0, "photo": 0, "photo_thumbnails": 0, "thumbnail": 0, "gallery_thumbnail": 0},
+    ).to_list(100000)
     categories = await db.categories.find({}, {"_id": 0}).to_list(10000)
     cat_map = {c.get("kode_aset", ""): c.get("label", "") for c in categories}
 
@@ -2440,7 +2474,12 @@ async def _build_satker_report_v2(activity_id: str):
         satker_acts = await db.inventory_activities.find({"kode_satker": kode_satker}, {"_id": 0}).sort("created_at", -1).to_list(100)
 
     act_ids = [a.get("id") for a in satker_acts if a.get("id")]
-    all_assets = await db.assets.find({"activity_id": {"$in": act_ids}}, {"_id": 0}).to_list(100000)
+    # proyeksi: buang media base64 yang tidak dipakai laporan ini (hemat memori/IO);
+    # 'document_checklist' TETAP diambil (statistik & tabel kelengkapan dokumen)
+    all_assets = await db.assets.find(
+        {"activity_id": {"$in": act_ids}},
+        {"_id": 0, "photos": 0, "photo": 0, "photo_thumbnails": 0, "thumbnail": 0, "gallery_thumbnail": 0},
+    ).to_list(100000)
     categories = await db.categories.find({}, {"_id": 0}).to_list(10000)
     cat_map = {c.get("kode_aset", ""): c.get("label", "") for c in categories}
     act_name_map = {a.get("id", ""): a.get("nama_kegiatan", "") for a in satker_acts}

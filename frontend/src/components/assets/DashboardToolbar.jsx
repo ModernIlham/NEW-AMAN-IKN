@@ -1,4 +1,4 @@
-import React, { memo } from "react";
+import React, { memo, useState, useEffect, useRef } from "react";
 import {
   Search, Filter, Download, Upload, Settings,
   Loader2, Trash2, Eye, FileText, FileSpreadsheet, CreditCard,
@@ -15,6 +15,41 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { CategorySelect, TinifyQuotaIndicator, TinifyQuotaMobile, AdvancedFilter } from "@/components/assets";
 import QrScanButton from "@/components/assets/QrScanButton";
+
+// Kotak cari dengan state LOKAL: tiap ketukan hanya me-render komponen kecil
+// ini, lalu nilainya didorong ke halaman (setSearchInput) setelah jeda 250 ms.
+// Sebelumnya setiap huruf me-render ulang seluruh dashboard (~1.400 baris +
+// form aset) — terasa berat mengetik di HP low-end.
+const SearchInput = memo(function SearchInput({ value, onCommit }) {
+  const [local, setLocal] = useState(value || "");
+  const lastCommitRef = useRef(value || "");
+
+  // Sinkron turun bila halaman mengubah nilai secara programatik
+  // (hasil scan QR mengisi kotak cari / tombol reset mengosongkannya).
+  useEffect(() => {
+    if (value !== lastCommitRef.current) {
+      lastCommitRef.current = value || "";
+      setLocal(value || "");
+    }
+  }, [value]);
+
+  // Dorong ke halaman ber-debounce
+  useEffect(() => {
+    if (local === lastCommitRef.current) return undefined;
+    const t = setTimeout(() => { lastCommitRef.current = local; onCommit(local); }, 250);
+    return () => clearTimeout(t);
+  }, [local, onCommit]);
+
+  return (
+    <Input
+      placeholder="Cari kode, nama, lokasi..."
+      value={local}
+      onChange={e => setLocal(e.target.value)}
+      className="pl-8 h-9 lg:h-8 text-sm"
+      data-testid="search-input"
+    />
+  );
+});
 
 const DashboardToolbar = memo(function DashboardToolbar({
   searchInput, setSearchInput, onScanCode,
@@ -36,13 +71,7 @@ const DashboardToolbar = memo(function DashboardToolbar({
         <div className="flex items-center gap-1.5">
           <div className="relative flex-1 min-w-0">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-            <Input
-              placeholder="Cari kode, nama, lokasi..."
-              value={searchInput}
-              onChange={e => setSearchInput(e.target.value)}
-              className="pl-8 h-9 lg:h-8 text-sm"
-              data-testid="search-input"
-            />
+            <SearchInput value={searchInput} onCommit={setSearchInput} />
           </div>
           <QrScanButton onDetected={onScanCode || setSearchInput} />
           <Button

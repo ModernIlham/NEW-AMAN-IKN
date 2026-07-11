@@ -708,28 +708,67 @@ async def create_asset(asset: AssetCreate, request: Request, _user: dict = Depen
     await log_audit("create", asset.activity_id, asset_id, asset.asset_code, asset.asset_name, audit_user, detail="Aset baru ditambahkan", nup=asset.NUP or "")
     await notify_asset_change(asset.activity_id, "asset_created", {"id": asset_id, "asset_code": asset.asset_code, "asset_name": asset.asset_name}, audit_user, user_id=audit_user_id)
 
-    response = AssetResponse(**asset_doc)
+    # Respons TANPA media (lihat _strip_media): klien sudah punya fotonya —
+    # jangan kirim balik base64 besar. Salinan dangkal agar asset_doc asli utuh.
+    response = AssetResponse(**_strip_media({**asset_doc}))
     # Cache the response for idempotent retries
     if idem_key:
         await store_idempotent_response(idem_key, response.model_dump(mode="json"), 200)
     return response
 
+def _strip_media(asset: dict) -> dict:
+    """Ganti media base64 (foto + berkas checklist) dengan array kosong sambil
+    menyisipkan photo_count/document_count. Dipakai GET ?exclude_media=true dan
+    respons tulis (POST/PUT/PATCH) — klien sudah memegang medianya sendiri,
+    mengirim balik ratusan KB base64 hanya membuang kuota & waktu."""
+    real_photos = asset.get("photos", []) or []
+    asset["photo_count"] = len(asset.get("photo_gridfs_ids") or []) or len(real_photos)
+    asset["photos"] = []
+    asset.pop("photo", None)
+    if asset.get("document_checklist"):
+        asset["document_checklist"] = [
+            {**item, "photos": [], "documents": [], "photo_count": len(item.get("photos", []) or []), "document_count": len(item.get("documents", []) or [])}
+            for item in asset["document_checklist"]
+        ]
+    return asset
+
+
 @assets_router.get("/assets/{asset_id}", response_model=AssetResponse)
 async def get_asset(asset_id: str, exclude_media: bool = False, _user: dict = Depends(require_user)):
     """Get a single asset by ID. Use ?exclude_media=true for a lightweight response without base64 photos/documents."""
+    if exclude_media:
+        # Buang media DI SISI MONGO (bukan di Python setelah dokumen multi-MB
+        # ditarik dari DB) — endpoint ini dipanggil pada SETIAP buka lightbox &
+        # form edit. Bentuk hasil identik dengan _strip_media:
+        # photos=[], photo dihapus, checklist: media dikosongkan + counts,
+        # field lain (termasuk thumbnail/photo_thumbnails) tetap utuh.
+        docs = await db.assets.aggregate([
+            {"$match": {"id": asset_id}},
+            {"$set": {
+                "photo_count": {"$cond": [
+                    {"$gt": [{"$size": {"$ifNull": ["$photo_gridfs_ids", []]}}, 0]},
+                    {"$size": {"$ifNull": ["$photo_gridfs_ids", []]}},
+                    {"$size": {"$ifNull": ["$photos", []]}},
+                ]},
+                "document_checklist": {"$map": {
+                    "input": {"$ifNull": ["$document_checklist", []]},
+                    "as": "item",
+                    "in": {"$mergeObjects": ["$$item", {
+                        "photos": [], "documents": [],
+                        "photo_count": {"$size": {"$ifNull": ["$$item.photos", []]}},
+                        "document_count": {"$size": {"$ifNull": ["$$item.documents", []]}},
+                    }]},
+                }},
+            }},
+            {"$set": {"photos": []}},
+            {"$unset": ["_id", "photo"]},
+        ]).to_list(1)
+        if not docs:
+            raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+        return AssetResponse(**docs[0])
     asset = await db.assets.find_one({"id": asset_id}, {"_id": 0})
     if not asset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
-    if exclude_media:
-        # Count before stripping, then replace with empty arrays
-        real_photos = asset.get("photos", []) or []
-        asset["photo_count"] = len(real_photos)
-        asset["photos"] = []
-        if "document_checklist" in asset and asset["document_checklist"]:
-            asset["document_checklist"] = [
-                {**item, "photos": [], "documents": [], "photo_count": len(item.get("photos", []) or []), "document_count": len(item.get("documents", []) or [])}
-                for item in asset["document_checklist"]
-            ]
     return AssetResponse(**asset)
 
 
@@ -839,6 +878,43 @@ async def get_asset_checklist_full(asset_id: str, _user: dict = Depends(require_
 MEDIA_CACHE_CONTROL = "private, max-age=86400"
 
 
+# --- Varian PREVIEW foto (lebar dibatasi) untuk lightbox/galeri -------------
+# Full-res (≤1920px, ~900KB) terlalu berat untuk dilihat cepat di jaringan
+# lapangan. ?w=<lebar> menghasilkan JPEG yang diperkecil (~100-250KB) —
+# di-resize SEKALI lalu di-cache di koleksi media_previews (ber-TTL), sehingga
+# permintaan berikutnya (siapa pun penggunanya) langsung dari cache.
+_PREVIEW_WIDTHS = {640, 1280}
+_PREVIEW_TTL_DAYS = 30
+_preview_index_ready = False
+
+
+async def _ensure_preview_index():
+    global _preview_index_ready
+    if _preview_index_ready:
+        return
+    _preview_index_ready = True
+    try:
+        await db.media_previews.create_index("created_at", expireAfterSeconds=_PREVIEW_TTL_DAYS * 86400)
+    except Exception:  # index sudah ada / tak bisa dibuat — cache tetap berfungsi
+        pass
+
+
+def _resize_jpeg(photo_bytes: bytes, max_w: int, quality: int = 80) -> bytes:
+    """Perkecil JPEG ke lebar maks `max_w` (rasio dipertahankan). Sinkron &
+    cepat (puluhan ms untuk sumber ≤1920px); hasil di-cache oleh pemanggil."""
+    import io
+    from PIL import Image as PILImage
+    img = PILImage.open(io.BytesIO(photo_bytes))
+    if img.mode not in ("RGB", "L"):
+        img = img.convert("RGB")
+    w, h = img.size
+    if w > max_w:
+        img = img.resize((max_w, max(1, round(h * max_w / w))), PILImage.LANCZOS)
+    out = io.BytesIO()
+    img.save(out, format="JPEG", quality=quality, optimize=True, progressive=True)
+    return out.getvalue()
+
+
 def _media_headers(etag: str, extra: dict = None) -> dict:
     headers = {"Cache-Control": MEDIA_CACHE_CONTROL, "ETag": etag,
                "X-Content-Type-Options": "nosniff"}
@@ -930,6 +1006,7 @@ async def get_asset_checklist_document(asset_id: str, item_idx: int, doc_idx: in
 
 @assets_router.get("/assets/{asset_id}/photos/{photo_index}")
 async def get_asset_photo_full(asset_id: str, photo_index: int, request: Request, thumb: int = 0,
+                               w: int = 0,
                                _user: dict = Depends(require_user_or_query_token)):
     """Stream a full-resolution photo from GridFS or fallback to inline base64.
 
@@ -938,6 +1015,10 @@ async def get_asset_photo_full(asset_id: str, photo_index: int, request: Request
     thumbnails) one generated on the fly — same fallback /media uses, cheap
     enough per request. The form's photo strip uses this so each thumbnail
     loads progressively via <img src> and gets cached by the browser.
+
+    ?w=640|1280 returns a width-capped PREVIEW JPEG (progressive, q80) —
+    resized once then cached in media_previews, so the lightbox loads a
+    ~100-250KB image instead of the full ~900KB original.
     """
     asset = await db.assets.find_one({"id": asset_id}, {
         "_id": 0, "photo_gridfs_ids": 1, "photos": 1, "photo_thumbnails": 1, "version": 1
@@ -945,10 +1026,21 @@ async def get_asset_photo_full(asset_id: str, photo_index: int, request: Request
     if not asset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
 
-    etag = f'"{asset_id}-p{photo_index}{"-t" if thumb else ""}-v{int(asset.get("version", 1) or 1)}"'
+    preview_w = w if (w in _PREVIEW_WIDTHS and not thumb) else 0
+    etag = (f'"{asset_id}-p{photo_index}{"-t" if thumb else ""}'
+            f'{f"-w{preview_w}" if preview_w else ""}-v{int(asset.get("version", 1) or 1)}"')
     not_modified = _not_modified(request, etag)
     if not_modified:
         return not_modified
+
+    # Preview: sajikan dari cache bila sudah pernah di-resize (kunci = etag,
+    # otomatis basi saat versi aset berubah; koleksi ber-TTL).
+    if preview_w:
+        await _ensure_preview_index()
+        cached = await db.media_previews.find_one({"_id": etag})
+        if cached and cached.get("data"):
+            return Response(content=bytes(cached["data"]), media_type="image/jpeg",
+                            headers=_media_headers(etag))
 
     gridfs_ids = asset.get("photo_gridfs_ids", []) or []
     photos = asset.get("photos", []) or []
@@ -972,24 +1064,43 @@ async def get_asset_photo_full(asset_id: str, photo_index: int, request: Request
             except Exception:
                 pass  # corrupt stored thumbnail — fall through to the full photo
 
-    # Try GridFS first
+    # Ambil byte foto penuh: GridFS dulu, lalu fallback inline base64
+    photo_bytes = None
     if photo_index < len(gridfs_ids) and gridfs_ids[photo_index]:
         photo_bytes = await get_photo_from_gridfs(gridfs_ids[photo_index])
-        if photo_bytes:
-            return Response(content=photo_bytes, media_type="image/jpeg",
-                            headers=_media_headers(etag))
-
-    # Fallback to inline base64
-    if photo_index < len(photos):
+    if photo_bytes is None and photo_index < len(photos):
         photo_b64 = photos[photo_index]
         if photo_b64.startswith('data:'):
             _, data = photo_b64.split(',', 1)
         else:
             data = photo_b64
-        return Response(content=base64.b64decode(data), media_type="image/jpeg",
-                        headers=_media_headers(etag))
+        try:
+            photo_bytes = base64.b64decode(data)
+        except Exception:
+            photo_bytes = None
+    if photo_bytes is None:
+        raise HTTPException(status_code=404, detail="Foto tidak ditemukan")
 
-    raise HTTPException(status_code=404, detail="Foto tidak ditemukan")
+    # Preview: resize sekali → cache → sajikan. Gagal resize → foto asli.
+    if preview_w:
+        try:
+            preview = _resize_jpeg(photo_bytes, preview_w)
+            if len(preview) < len(photo_bytes):
+                try:
+                    await db.media_previews.update_one(
+                        {"_id": etag},
+                        {"$set": {"data": preview, "created_at": datetime.now(timezone.utc)}},
+                        upsert=True,
+                    )
+                except Exception:
+                    pass  # cache best-effort — respons tetap dilayani
+                return Response(content=preview, media_type="image/jpeg",
+                                headers=_media_headers(etag))
+        except Exception:
+            pass  # bukan JPEG valid / Pillow gagal — sajikan asli
+
+    return Response(content=photo_bytes, media_type="image/jpeg",
+                    headers=_media_headers(etag))
 
 
 # ============================================================================
@@ -1301,7 +1412,9 @@ async def update_asset(asset_id: str, asset: AssetCreate, request: Request,
     changes = compute_changes(existing, asset.model_dump())
     if changes:
         await log_audit("update", asset.activity_id, asset_id, asset.asset_code, asset.asset_name, audit_user, changes=changes, nup=asset.NUP or "")
-    updated_asset = await db.assets.find_one({"id": asset_id}, {"_id": 0})
+    # Respons TANPA media: klien sudah memegang foto/dokumennya sendiri —
+    # mengirim balik base64 (bisa >1MB) di tiap simpan memboroskan kuota HP.
+    updated_asset = _strip_media(await db.assets.find_one({"id": asset_id}, {"_id": 0}))
     # Real-time notification
     await notify_asset_change(asset.activity_id, "asset_updated", {"id": asset_id, "asset_code": asset.asset_code, "asset_name": asset.asset_name}, audit_user, user_id=audit_user_id)
     return AssetResponse(**updated_asset)
@@ -1671,7 +1784,9 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
             merged.get("asset_code", ""), merged.get("asset_name", ""),
             audit_user, changes=changes, nup=merged.get("NUP", "")
         )
-    updated_asset = await db.assets.find_one({"id": asset_id}, {"_id": 0})
+    # Respons TANPA media (lihat _strip_media) — juga memperkecil dokumen
+    # idempotency yang disimpan di bawah.
+    updated_asset = _strip_media(await db.assets.find_one({"id": asset_id}, {"_id": 0}))
     await notify_asset_change(
         merged.get("activity_id", ""), "asset_updated",
         {"id": asset_id, "asset_code": merged.get("asset_code", ""), "asset_name": merged.get("asset_name", "")},

@@ -23,6 +23,14 @@ async def create_indexes() -> None:
         except Exception:
             pass
 
+        # KRITIS: semua jalur panas (GET/PUT/PATCH/DELETE /assets/{id}, stream
+        # foto, lock, batch) mencari lewat field "id" (uuid aplikasi) — tanpa
+        # indeks ini SETIAP lookup adalah full collection scan.
+        try:
+            await db.assets.create_index("id", unique=True, name="unique_asset_id")
+        except Exception:
+            # Data lama dengan id ganda: tetap buat indeks non-unik agar lookup cepat
+            await db.assets.create_index("id", name="asset_id_lookup")
         await db.assets.create_index(
             [("asset_code", 1), ("NUP", 1), ("activity_id", 1)],
             unique=True, name="unique_asset_code_nup_activity"
@@ -43,6 +51,9 @@ async def create_indexes() -> None:
         # Offline snapshot delta sync: /assets/offline-snapshot filters by
         # activity_id + updated_at > since
         await db.assets.create_index([("activity_id", 1), ("updated_at", -1)])
+        # Snapshot feed sort {created_at:-1, id:1} — tanpa tiebreak id di indeks,
+        # Mongo melakukan in-memory sort seluruh aset kegiatan di tiap halaman.
+        await db.assets.create_index([("activity_id", 1), ("created_at", -1), ("id", 1)])
         try:
             await db.assets.create_index([
                 ("asset_name", "text"), ("asset_code", "text"),
@@ -61,6 +72,8 @@ async def create_indexes() -> None:
         # Row locks TTL index - auto-expires after expires_at
         await db.row_locks.create_index("asset_id", unique=True)
         await db.row_locks.create_index("expires_at", expireAfterSeconds=0)
+        # Polling lock per kegiatan membaca row_locks langsung via activity_id
+        await db.row_locks.create_index("activity_id")
         # OTP store TTL index - auto-cleanup after 10min
         await db.otp_store.create_index("email", unique=True)
         await db.otp_store.create_index("created_at", expireAfterSeconds=660)
