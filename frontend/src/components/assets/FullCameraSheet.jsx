@@ -33,6 +33,7 @@ const FullCameraSheet = memo(function FullCameraSheet({
   assetIndex = -1,
   totalAssetsInView = 0,
   savedCount = 0,
+  busy = false,
   onClose,
   onCapture,       // (dataUrl) => void — foto baru (sudah distempel + terkompresi)
   onRemovePhoto,   // (index) => void
@@ -265,15 +266,15 @@ const FullCameraSheet = memo(function FullCameraSheet({
         {/* Alur beruntun: simpan & aset baru + maju/mundur antar aset tersimpan.
             Ditonjolkan saat foto sudah penuh (maks). */}
         <div className={`grid grid-cols-3 gap-2 ${maxReached ? "ring-1 ring-white/40 rounded-xl p-1" : ""}`}>
-          <button type="button" onClick={backAction} disabled={!canBack} data-testid="full-camera-prev"
+          <button type="button" onClick={backAction} disabled={!canBack || busy} data-testid="full-camera-prev"
             className="h-11 rounded-lg bg-white/15 text-white text-xs font-semibold flex items-center justify-center gap-1 disabled:opacity-30 disabled:pointer-events-none">
             <ChevronLeft className="w-4 h-4" />Sebelumnya
           </button>
-          <button type="button" onClick={onSaveAndNew} data-testid="full-camera-savenew"
-            className="h-11 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center justify-center gap-1 transition-colors">
-            <Check className="w-4 h-4" />Simpan & Baru
+          <button type="button" onClick={onSaveAndNew} disabled={busy} data-testid="full-camera-savenew"
+            className="h-11 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center justify-center gap-1 transition-colors disabled:opacity-60 disabled:pointer-events-none">
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}Simpan & Baru
           </button>
-          <button type="button" onClick={() => onNavigate?.("next")} disabled={!canNext} data-testid="full-camera-next"
+          <button type="button" onClick={() => onNavigate?.("next")} disabled={!canNext || busy} data-testid="full-camera-next"
             className="h-11 rounded-lg bg-white/15 text-white text-xs font-semibold flex items-center justify-center gap-1 disabled:opacity-30 disabled:pointer-events-none">
             Berikutnya<ChevronRight className="w-4 h-4" />
           </button>
@@ -282,6 +283,11 @@ const FullCameraSheet = memo(function FullCameraSheet({
           {photos.length}/{maxPhotos} foto{maxReached ? " (penuh)" : ""} • {savedCount} tersimpan sesi ini
           {isEditing && totalAssetsInView > 0 ? ` • aset ${assetIndex + 1}/${totalAssetsInView}` : ""}
         </div>
+        {photos.length > 0 && !gps && (
+          <div className="text-center text-[11px] text-amber-300 font-medium">
+            Menunggu sinyal GPS — koordinat wajib untuk menyimpan aset yang sudah difoto.
+          </div>
+        )}
       </div>
 
       {/* ── Konfirmasi hapus foto ── */}

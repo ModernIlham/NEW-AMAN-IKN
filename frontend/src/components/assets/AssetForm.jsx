@@ -882,20 +882,44 @@ const AssetForm = memo(({
     clearFieldError(name);
   }, [clearFieldError]);
 
+  // Urutan NUP LOKAL per (kegiatan|kode aset). Backend next-nup hanya menghitung
+  // dari aset yang SUDAH tersimpan di DB, sedangkan aset yang ditangkap beruntun
+  // masih di antrean (belum persist) — sehingga next-nup akan mengembalikan NUP
+  // yang SAMA berulang → kembar. Kita seed dari server (online) / localStorage
+  // (offline) lalu naikkan sendiri untuk tiap aset dummy berikutnya.
+  const nupSeqRef = useRef({});
+  const reserveDummyNup = useCallback(async (assetCode, categoryLabel) => {
+    const key = `${activity?.id || ""}|${assetCode || categoryLabel || ""}`;
+    const lsKey = `aman_nupseq_${key}`;
+    if (nupSeqRef.current[key] == null) {
+      let seed = 0;
+      try { const c = parseInt(localStorage.getItem(lsKey) || "", 10); if (Number.isFinite(c)) seed = c; } catch {}
+      try {
+        const params = new URLSearchParams({ activity_id: activity?.id || "" });
+        if (assetCode) params.set("asset_code", assetCode); else params.set("category", categoryLabel || "");
+        const res = await axios.get(`${API}/assets/next-nup?${params}`);
+        const serverNext = parseInt(res?.data?.next_nup, 10);
+        if (Number.isFinite(serverNext)) seed = Math.max(seed, serverNext - 1);
+      } catch { /* offline: pakai seed lokal */ }
+      nupSeqRef.current[key] = seed;
+    }
+    const issued = (nupSeqRef.current[key] || 0) + 1;
+    nupSeqRef.current[key] = issued;
+    try { localStorage.setItem(lsKey, String(issued)); } catch {}
+    return String(issued);
+  }, [activity?.id]);
+
   // Kategori "dummy" + NUP otomatis untuk Mode Kamera Penuh: surveyor tidak
   // perlu memilih kategori — Kode Aset di-set ke kategori dummy dan NUP dinomori
-  // otomatis (max+1 dalam lingkup kode aset + kegiatan).
-  const applyDummyCategory = useCallback(() => {
+  // otomatis, unik & berurutan per perangkat (lihat reserveDummyNup).
+  const applyDummyCategory = useCallback(async () => {
     const dummy = (categories || []).find(c => /dummy/i.test(c.label || ""));
     if (!dummy) return;
     setFormData(p => ({ ...p, category: dummy.label, ...(dummy.kode_aset ? { asset_code: dummy.kode_aset } : {}) }));
     clearFieldError("asset_code");
-    const params = new URLSearchParams({ activity_id: activity?.id || "" });
-    if (dummy.kode_aset) params.set("asset_code", dummy.kode_aset); else params.set("category", dummy.label);
-    axios.get(`${API}/assets/next-nup?${params}`)
-      .then(res => { const next = res?.data?.next_nup; if (next) setFormData(p => ({ ...p, NUP: next })); })
-      .catch(() => {});
-  }, [categories, activity?.id, clearFieldError]);
+    const nup = await reserveDummyNup(dummy.kode_aset, dummy.label);
+    setFormData(p => ({ ...p, NUP: nup }));
+  }, [categories, reserveDummyNup, clearFieldError]);
 
   // Jumlah aset tersimpan selama sesi Kamera Penuh (indikator alur beruntun).
   const [cameraSavedCount, setCameraSavedCount] = useState(0);
@@ -1171,6 +1195,11 @@ const AssetForm = memo(({
     const navIntent = navigationIntentRef.current;
     navigationIntentRef.current = null;
 
+    // Jangan submit saat aset yang sedang ditinjau BELUM selesai dimuat — kalau
+    // dipaksa, jalur EDIT (butuh originalDataRef) belum siap dan bisa jatuh ke
+    // CREATE lalu MENIMPA aset lama dengan data aset baru sebelumnya.
+    if (isFormLoading) { toast.info("Menunggu data aset dimuat…"); return; }
+
     // === Inline client-side validation ===
     const errs = {};
     if (!formData.asset_code) errs.asset_code = "Kode Aset wajib diisi";
@@ -1441,13 +1470,19 @@ const AssetForm = memo(({
       else if (err.code === 'ECONNABORTED') errorMsg = "Koneksi timeout. Coba kurangi ukuran file.";
       toast.error(errorMsg);
     } finally { setIsSubmitting(false); }
-  }, [formData, isEditing, editId, resetForm, onSubmitSuccess, onOptimisticSubmit, onSaveAndNavigate, onCameraReviewSaved, onExitToNewAsset, onClose, focusFieldError]);
+  }, [formData, isEditing, editId, isFormLoading, resetForm, onSubmitSuccess, onOptimisticSubmit, onSaveAndNavigate, onCameraReviewSaved, onExitToNewAsset, onClose, focusFieldError]);
 
   // — Aksi alur beruntun Mode Kamera Penuh (semua lewat handleSubmit agar
   //   validasi + kompresi + payload tetap konsisten) —
+  // Guard sinkron: cegah ketuk ganda cepat yang bisa meng-enqueue 2 aset kembar
+  // (isSubmitting berbasis state tidak cukup cepat untuk balapan tap).
+  const cameraSubmitBusyRef = useRef(false);
   const submitWithIntent = useCallback((intent) => {
+    if (cameraSubmitBusyRef.current) return;
+    cameraSubmitBusyRef.current = true;
     navigationIntentRef.current = intent;
-    handleSubmit({ preventDefault: () => {} });
+    Promise.resolve(handleSubmit({ preventDefault: () => {} }))
+      .finally(() => { cameraSubmitBusyRef.current = false; });
   }, [handleSubmit]);
   const cameraSaveAndNew = useCallback(() => submitWithIntent("camera:new"), [submitWithIntent]);
   const cameraReviewSaved = useCallback(() => submitWithIntent("camera:review"), [submitWithIntent]);
@@ -1521,6 +1556,7 @@ const AssetForm = memo(({
           assetIndex={assetIndex}
           totalAssetsInView={totalAssetsInView}
           savedCount={cameraSavedCount}
+          busy={isSubmitting || isFormLoading}
           onClose={() => setFullCameraOpen(false)}
           onCapture={addCameraPhoto}
           onRemovePhoto={removePhoto}
