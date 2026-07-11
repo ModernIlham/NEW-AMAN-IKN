@@ -1371,13 +1371,20 @@ async def update_asset(asset_id: str, asset: AssetCreate, request: Request,
     # PERTAHANKAN foto GridFS yang ada. Penghapusan foto dilakukan lewat
     # PATCH photo_ops (keep[]), bukan PUT kosong.
 
+    # Dokumen LEGACY MURNI (inline ada, blob GridFS belum ada) yang di-PUT
+    # tanpa foto: photos=[] akan memusnahkan satu-satunya salinan byte —
+    # pertahankan inline lama (dan cover-nya) sampai dokumen termigrasi.
+    has_real_gids = any(g for g in photo_gridfs_ids)
+    preserve_legacy_inline = (not photos) and (not has_real_gids) and len(old_photos) > 0
+
     update_data = {
         **asset.model_dump(),
-        # Inline base64 tidak dipersist lagi — GridFS adalah sumber tunggal.
-        "photos": [],
+        # Inline base64 tidak dipersist lagi — GridFS adalah sumber tunggal
+        # (kecuali preservasi dokumen legacy murni di atas).
+        "photos": old_photos if preserve_legacy_inline else [],
         "photo_gridfs_ids": photo_gridfs_ids,
         "photo_thumbnails": photo_thumbnails,
-        "photo": None,
+        "photo": existing.get("photo") if preserve_legacy_inline else None,
         "thumbnail": thumbnail,
         "gallery_thumbnail": gallery_thumbnail,
         "thumbnail_index": cover_idx,
@@ -1568,9 +1575,11 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
     # Handle photo_ops: server-side photo manipulation without frontend needing full photos
     if has_photo_ops:
         ops = body["photo_ops"]
-        keep_indices = ops.get("keep", [])
-        new_photos_b64 = ops.get("add", [])
-        new_thumb_idx = ops.get("thumbnail_index", 0)
+        # Dedup indeks keep (duplikat = satu blob dirujuk dua entri → penghapusan
+        # salah satu ikut membunuh rujukan lainnya); None-guard thumbnail_index.
+        keep_indices = list(dict.fromkeys(ops.get("keep", []) or []))
+        new_photos_b64 = ops.get("add", []) or []
+        new_thumb_idx = int(ops.get("thumbnail_index") or 0)
 
         old_photos = existing.get("photos", []) or []
         old_gridfs_ids = existing.get("photo_gridfs_ids", []) or []
@@ -1598,6 +1607,15 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
 
         # Process new photos: store in GridFS + generate thumbnails (atomic rollback if one fails)
         try:
+            # KRITIS (anti-kehilangan): foto KEPT dari dokumen legacy yang belum
+            # punya blob (gid "") harus DIUNGGAH sekarang — karena photos inline
+            # tidak dipersist lagi, tanpa unggahan ini byte foto lama lenyap
+            # begitu pengguna mengedit aset legacy.
+            for i, gid in enumerate(final_gridfs_ids):
+                if not gid and final_srcs[i]:
+                    new_gid = await store_photo_to_gridfs(final_srcs[i])
+                    newly_uploaded_gridfs.append(new_gid)
+                    final_gridfs_ids[i] = new_gid
             for photo_b64 in new_photos_b64:
                 final_srcs.append(photo_b64)
                 gid = await store_photo_to_gridfs(photo_b64)

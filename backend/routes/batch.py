@@ -251,9 +251,17 @@ async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user
             ops = []
             for aid in chunk_ids:
                 asset = by_id.get(aid) or {}
-                gridfs_ids = [g for g in (asset.get("photo_gridfs_ids") or []) if g]
+                # PARITAS INDEKS: array gridfs TIDAK difilter — padding "" milik
+                # dokumen legacy harus dipertahankan (meng-collapse-nya menggeser
+                # indeks → streaming/keep[] menunjuk foto yang salah → kehilangan).
+                gridfs_ids = list(asset.get("photo_gridfs_ids") or [])
                 current_photos = asset.get("photos", []) or []
-                current_count = len(gridfs_ids) or len(current_photos)
+                thumbs = list(asset.get("photo_thumbnails") or [])
+                current_count = len([g for g in gridfs_ids if g]) or len(current_photos)
+                n_slots = max(len(gridfs_ids), len(current_photos))
+                # Samakan panjang semua array ke n_slots sebelum append
+                gridfs_ids += [""] * (n_slots - len(gridfs_ids))
+                thumbs += [""] * (n_slots - len(thumbs))
                 # Foto masuk GridFS (satu blob PER ASET — blob dimiliki eksklusif
                 # oleh asetnya karena delete-asset menghapus blobnya).
                 try:
@@ -263,17 +271,13 @@ async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user
                     continue
                 update_fields = {
                     "photo_gridfs_ids": gridfs_ids + [gid],
-                    "photo_thumbnails": (asset.get("photo_thumbnails") or []) + [batch_photo_thumb],
+                    "photo_thumbnails": thumbs + [batch_photo_thumb],
                     "updated_at": now_str,
                 }
-                # Dokumen legacy yang MASIH menyimpan inline: selaraskan panjang
-                # array agar indeks tetap paralel (dokumen bersih: photos tetap []).
-                if current_photos and len(gridfs_ids) == 0:
-                    # legacy tanpa gridfs sama sekali → gridfs baru harus paralel
-                    update_fields["photo_gridfs_ids"] = [""] * len(current_photos) + [gid]
-                    update_fields["photos"] = current_photos + [compressed_photo]
-                elif current_photos:
-                    update_fields["photos"] = current_photos + [compressed_photo]
+                # Dokumen legacy yang MASIH menyimpan inline: jaga photos paralel
+                # (padding "" bila lebih pendek). Dokumen bersih: photos tetap [].
+                if current_photos:
+                    update_fields["photos"] = current_photos + [""] * (n_slots - len(current_photos)) + [compressed_photo]
                 if current_count == 0:
                     update_fields["thumbnail"] = thumbnail
                     update_fields["gallery_thumbnail"] = gallery_thumbnail
@@ -331,22 +335,27 @@ async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user
 
     # 4. Clear all photos from selected assets — termasuk blob GridFS (dulu
     # hanya inline yang dikosongkan sehingga blob & photo_count menggantung).
+    # URUTAN PENTING: kumpulkan id blob → perbarui dokumen DULU → baru hapus
+    # blob. Bila crash setelah update, sisa blob hanya jadi orphan (bocor,
+    # aman); urutan sebaliknya bisa meninggalkan dokumen yang merujuk blob
+    # mati = kehilangan foto.
     if should_clear_photos:
+        gids_to_delete = []
         async for doc in db.assets.find(
             {"id": {"$in": data.asset_ids}, "photo_gridfs_ids": {"$exists": True, "$ne": []}},
             {"_id": 0, "photo_gridfs_ids": 1},
         ):
-            for gid in (doc.get("photo_gridfs_ids") or []):
-                if gid:
-                    try:
-                        await delete_photo_from_gridfs(gid)
-                    except Exception:
-                        pass  # best-effort; orphan dibersihkan rutin GridFS
+            gids_to_delete.extend(g for g in (doc.get("photo_gridfs_ids") or []) if g)
         await db.assets.update_many(
             {"id": {"$in": data.asset_ids}},
             {"$set": {"photos": [], "photo": None, "photo_gridfs_ids": [], "photo_thumbnails": [],
                       "thumbnail": None, "gallery_thumbnail": None, "updated_at": now_str}}
         )
+        for gid in gids_to_delete:
+            try:
+                await delete_photo_from_gridfs(gid)
+            except Exception:
+                pass  # best-effort; orphan dibersihkan rutin GridFS
 
     # 5. Clear all document checklist from selected assets
     if should_clear_doc_checklist:

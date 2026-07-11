@@ -658,18 +658,20 @@ async def export_xlsx(request: Request, activity_id: Optional[str] = None, base_
         asset_name = asset.get('asset_name', '')
         asset_id = asset.get('id', '')
         
-        # HD Photo - use selected cover photo at higher resolution
+        # HD Photo - use selected cover photo at higher resolution.
+        # URUTAN: inline full-res → GridFS full-res → cover 'photo' →
+        # thumbnail 100px paling akhir. Dokumen ter-migrasi selalu punya
+        # thumbnail, jadi bila thumbnail dicoba lebih dulu, fallback GridFS
+        # tak pernah jalan dan kolom "HD Photo" berisi gambar 100px buram.
         photos_list = asset.get('photos', [])
         tidx = asset.get('thumbnail_index', 0) or 0
-        if photos_list and tidx < len(photos_list):
+        img_data = None
+        if photos_list and tidx < len(photos_list) and photos_list[tidx]:
             img_data = photos_list[tidx]
-        else:
-            img_data = asset.get('photo') or asset.get('thumbnail')
-        # Fallback GridFS: aset hasil migrasi (photos kosong) — ambil blob sampul
-        # dari GridFS pada indeks yang sama (di-clamp) lalu jadikan data-URI
-        # sehingga jalur embed inline di bawah tetap bekerja tanpa perubahan.
         gids = [g for g in (asset.get('photo_gridfs_ids') or []) if g]
         if not img_data and gids:
+            # Blob sampul GridFS (indeks di-clamp) → data-URI agar jalur embed
+            # inline di bawah tetap bekerja tanpa perubahan.
             try:
                 gidx = max(0, min(int(tidx), len(gids) - 1))
                 raw = await get_photo_from_gridfs(gids[gidx])
@@ -677,6 +679,8 @@ async def export_xlsx(request: Request, activity_id: Optional[str] = None, base_
                     img_data = 'data:image/jpeg;base64,' + base64.b64encode(raw).decode('ascii')
             except Exception as e:
                 logger.error(f"GridFS cover fetch failed for {asset_id}: {e}")
+        if not img_data:
+            img_data = asset.get('photo') or asset.get('thumbnail')
         if img_data:
             try:
                 thumb_buffer = _xlsx_image_buffer(img_data, 640, quality=70)
