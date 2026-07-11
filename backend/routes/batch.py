@@ -4,6 +4,7 @@ Extracted from assets.py for clean separation of concerns.
 Provides: lock/unlock/heartbeat, batch-update, groups, all-ids
 """
 import io
+import re
 import uuid
 import base64
 import logging
@@ -37,7 +38,7 @@ class LockRequest(BaseModel):
     asset_id: str
 
 @batch_router.post("/assets/lock")
-async def lock_asset(data: LockRequest, request: Request, x_user_id: str = Header(None), x_user_name: str = Header(None), x_session_id: str = Header(None)):
+async def lock_asset(data: LockRequest, request: Request, x_user_id: str = Header(None), x_user_name: str = Header(None), x_session_id: str = Header(None), _user: dict = Depends(require_user)):
     """Lock an asset row for editing. Atomic lock acquisition via find_one_and_update + insert fallback.
     Race-free: guaranteed only one user can hold the lock at any time."""
     asset_id = data.asset_id
@@ -97,7 +98,7 @@ async def lock_asset(data: LockRequest, request: Request, x_user_id: str = Heade
         }
 
 @batch_router.post("/assets/heartbeat")
-async def heartbeat_lock(data: LockRequest, request: Request, x_user_id: str = Header(None), x_user_name: str = Header(None), x_session_id: str = Header(None)):
+async def heartbeat_lock(data: LockRequest, request: Request, x_user_id: str = Header(None), x_user_name: str = Header(None), x_session_id: str = Header(None), _user: dict = Depends(require_user)):
     """Renew lock TTL (heartbeat). Call every ~15s while editing."""
     asset_id = data.asset_id
     now = datetime.now(timezone.utc)
@@ -111,7 +112,7 @@ async def heartbeat_lock(data: LockRequest, request: Request, x_user_id: str = H
     return {"renewed": result.modified_count > 0}
 
 @batch_router.post("/assets/unlock")
-async def unlock_asset(data: LockRequest, request: Request, x_user_id: str = Header(None), x_session_id: str = Header(None)):
+async def unlock_asset(data: LockRequest, request: Request, x_user_id: str = Header(None), x_session_id: str = Header(None), _user: dict = Depends(require_user)):
     """Release the lock on an asset row."""
     asset_id = data.asset_id
     session_id = x_session_id or "unknown-session"
@@ -119,7 +120,7 @@ async def unlock_asset(data: LockRequest, request: Request, x_user_id: str = Hea
     return {"unlocked": True}
 
 @batch_router.get("/assets/locks")
-async def get_all_locks(request: Request, activity_id: str = ""):
+async def get_all_locks(request: Request, activity_id: str = "", _user: dict = Depends(require_user)):
     """Get currently active (non-expired) locks. Optional activity_id filter for efficient per-activity polling.
     Also filters out expired locks defensively even if TTL index hasn't purged yet."""
     now = datetime.now(timezone.utc)
@@ -430,7 +431,7 @@ async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user
 
 
 @batch_router.get("/assets/groups")
-async def get_asset_groups(activity_id: str = "", request: Request = None):
+async def get_asset_groups(activity_id: str = "", request: Request = None, _user: dict = Depends(require_user)):
     """Group assets by same asset_code, asset_name, purchase_date, brand/model, price.
     Returns groups with count >= 2, including detailed member info."""
     match = {}
@@ -508,16 +509,20 @@ async def get_all_asset_ids(
     eselon2_filter: str = "",
     stiker_status: str = "",
     inventory_status: str = "",
+    _user: dict = Depends(require_user),
 ):
     """Get all asset IDs matching current filters (for select-all-pages)."""
     query = {}
     if activity_id:
         query["activity_id"] = activity_id
     if search:
+        # re.escape: samakan dengan GET /assets — regex mentah dari input user
+        # rawan ReDoS/injeksi pola.
+        rx = {"$regex": re.escape(search), "$options": "i"}
         query["$or"] = [
-            {"asset_code": {"$regex": search, "$options": "i"}},
-            {"asset_name": {"$regex": search, "$options": "i"}},
-            {"serial_number": {"$regex": search, "$options": "i"}},
+            {"asset_code": rx},
+            {"asset_name": rx},
+            {"serial_number": rx},
         ]
     if category:
         query["category"] = category
@@ -526,7 +531,7 @@ async def get_all_asset_ids(
     if status:
         query["status"] = status
     if location:
-        query["location"] = {"$regex": location, "$options": "i"}
+        query["location"] = {"$regex": re.escape(location), "$options": "i"}
     if eselon1_filter:
         query["eselon1"] = eselon1_filter
     if eselon2_filter:
