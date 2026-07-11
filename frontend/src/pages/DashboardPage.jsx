@@ -920,29 +920,40 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   // aset yang tersimpan sebelumnya (paling atas daftar) ke form untuk ditinjau/
   // diperbaiki, tanpa keluar dari kamera. Setelah itu tombol ◀/▶ memakai
   // navigasi standar (onSaveAndNavigate) antar aset yang sudah ada.
-  const handleCameraReviewSaved = useCallback(async (payload, isEdit, editId, usePatch = false) => {
-    const assetId = isEdit ? editId : `temp_${Date.now()}`;
-    const baseVersion = isEdit ? (assets.find(a => a.id === editId)?.version ?? null) : null;
-    if (isEdit && editId) {
-      setAssets(prev => prev.map(a => a.id === editId ? { ...a, ...payload, thumbnail: payload.photo || a.thumbnail } : a));
-      setMobileAssets(prev => prev.map(a => a.id === editId ? { ...a, ...payload, thumbnail: payload.photo || a.thumbnail } : a));
-    } else {
-      const tempAsset = { ...payload, id: assetId, thumbnail: payload.photo || null, created_at: new Date().toISOString() };
-      setAssets(prev => [tempAsset, ...prev]);
-      setMobileAssets(prev => [tempAsset, ...prev]);
-      setTotalItems(prev => prev + 1);
+  const handleCameraReviewSaved = useCallback(async (payload, isEdit, editId, usePatch = false, navigateOnly = false) => {
+    // navigateOnly = pindah ke aset sebelumnya TANPA menyimpan aset saat ini
+    // (dipakai saat aset baru masih kosong — hindari validasi/simpan).
+    if (!navigateOnly) {
+      const assetId = isEdit ? editId : `temp_${Date.now()}`;
+      const baseVersion = isEdit ? (assets.find(a => a.id === editId)?.version ?? null) : null;
+      if (isEdit && editId) {
+        setAssets(prev => prev.map(a => a.id === editId ? { ...a, ...payload, thumbnail: payload.photo || a.thumbnail } : a));
+        setMobileAssets(prev => prev.map(a => a.id === editId ? { ...a, ...payload, thumbnail: payload.photo || a.thumbnail } : a));
+      } else {
+        const tempAsset = { ...payload, id: assetId, thumbnail: payload.photo || null, created_at: new Date().toISOString() };
+        setAssets(prev => [tempAsset, ...prev]);
+        setMobileAssets(prev => [tempAsset, ...prev]);
+        setTotalItems(prev => prev + 1);
+      }
+      enqueueOptimistic({ tempId: assetId, payload, isEdit, editId: isEdit ? editId : undefined, usePatch, baseVersion }).catch(() => {});
     }
-    enqueueOptimistic({ tempId: assetId, payload, isEdit, editId: isEdit ? editId : undefined, usePatch, baseVersion }).catch(() => {});
     // Aset yang ditinjau = aset terbaru SEBELUM simpan ini (kalau tadi kita
     // meng-edit aset itu sendiri, ambil tetangga di atasnya).
     const target = assets.find(a => a.id !== editId) || null;
     if (!target) { toast.info("Belum ada aset lain untuk ditinjau"); return; }
+    // Aset sebelumnya masih PROSES PENYIMPANAN (antrean/temp) → belum bisa
+    // dibuka untuk diedit; beri notifikasi yang sesuai.
+    const st = syncStatuses[target.id]?.status;
+    if (String(target.id).startsWith("temp_") || st === "queued" || st === "saving" || st === "failed") {
+      toast.info("Aset sebelumnya masih dalam proses penyimpanan — tunggu sebentar lalu coba lagi.");
+      return;
+    }
     const lock = rowLocks[target.id];
     if (lock && lock.session_id !== sessionId) { toast.error(`Aset sedang diedit oleh ${lock.user_name}`); return; }
     const locked = await lockAsset(target.id);
     if (locked) setEditAssetForForm(target);
     else toast.error("Aset sedang dikunci pengguna lain");
-  }, [assets, lockAsset, enqueueOptimistic, rowLocks, sessionId, activity?.id]);
+  }, [assets, lockAsset, enqueueOptimistic, rowLocks, sessionId, activity?.id, syncStatuses]);
 
   const handleDelete = useCallback(async id => {
     // Aset yang BELUM tersinkron (id "temp_") → batalkan dari antrean simpan.

@@ -28,16 +28,6 @@ function makeZoomPresets(caps) {
 }
 const fmtZoom = (z) => (Number.isInteger(z) ? String(z) : z.toFixed(1).replace(/\.0$/, ""));
 
-// Label singkat lensa fisik dari label perangkat (heuristik — nama lensa tak
-// standar antar perangkat, jadi jatuh ke "Lensa N" bila tak dikenali).
-function shortLensLabel(label, i) {
-  const l = (label || "").toLowerCase();
-  if (/ultra|wide|0\.5/.test(l)) return "0.5×";
-  if (/tele|telephoto/.test(l)) return "2×";
-  if (/back|rear|main|belakang/.test(l)) return "1×";
-  return `Lensa ${i + 1}`;
-}
-
 /**
  * Mode Kamera Penuh (ala aplikasi Timemark) untuk surveyor inventarisasi.
  *
@@ -95,12 +85,10 @@ const FullCameraSheet = memo(function FullCameraSheet({
   const [suspended, setSuspended] = useState(false); // track berhenti (background/lock/direbut app lain)
   const [camNonce, setCamNonce] = useState(0); // bump utk coba-sambung-ulang kamera
   const [gpsNonce, setGpsNonce] = useState(0); // bump utk coba-lagi GPS
-  // Pemilihan lensa & zoom sesuai spek kamera perangkat
-  const [deviceId, setDeviceId] = useState(null); // lensa fisik terpilih (null = default facingMode)
-  const [lenses, setLenses] = useState([]); // [{ deviceId, label }] kamera belakang (bila >1)
+  // Zoom sesuai spek kamera perangkat (mis. 0.5× / 1× / 2× / 5× — tergantung
+  // rentang zoom yang diekspos browser; di banyak Android nilai <1 = ultrawide).
   const [zoomCaps, setZoomCaps] = useState(null); // { min, max, step } bila track mendukung zoom
   const [zoom, setZoom] = useState(1);
-  const lensesReadRef = useRef(false);
 
   const supported = typeof navigator !== "undefined" && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
 
@@ -158,11 +146,10 @@ const FullCameraSheet = memo(function FullCameraSheet({
     setReady(false); setStarting(true); setCamError(null); setSuspended(false);
     (async () => {
       try {
-        // Lensa terpilih → pakai deviceId; selain itu pakai facingMode.
-        const videoConstraint = deviceId
-          ? { deviceId: { exact: deviceId }, width: { ideal: 1920 }, height: { ideal: 1080 } }
-          : { facingMode: facing, width: { ideal: 1920 }, height: { ideal: 1080 } };
-        const stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraint, audio: false });
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: facing, width: { ideal: 1920 }, height: { ideal: 1080 } },
+          audio: false,
+        });
         if (cancelled) { stream.getTracks().forEach(t => t.stop()); return; }
         streamRef.current = stream;
         track = stream.getVideoTracks()[0];
@@ -194,20 +181,7 @@ const FullCameraSheet = memo(function FullCameraSheet({
       if (track && onEnded) track.removeEventListener("ended", onEnded);
       if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
     };
-  }, [facing, deviceId, camNonce, supported]);
-
-  // Enumerasi lensa fisik (kamera belakang) SEKALI setelah izin diberi — agar
-  // surveyor bisa pilih 0.5×/1×/2× dsb. yang berupa sensor terpisah.
-  useEffect(() => {
-    if (!ready || lensesReadRef.current || !navigator.mediaDevices?.enumerateDevices) return;
-    lensesReadRef.current = true;
-    navigator.mediaDevices.enumerateDevices().then((list) => {
-      const cams = (list || []).filter((d) => d.kind === "videoinput" && d.deviceId);
-      const back = cams.filter((d) => !/front|user|face|depan/i.test(d.label || ""));
-      const use = back.length >= 2 ? back : cams;
-      if (use.length >= 2) setLenses(use.map((d, i) => ({ deviceId: d.deviceId, label: shortLensLabel(d.label, i) })));
-    }).catch(() => {});
-  }, [ready]);
+  }, [facing, camNonce, supported]);
 
   // Terapkan zoom ke track aktif (perbesaran optik/digital sesuai kemampuan).
   const applyZoom = useCallback(async (z) => {
@@ -239,6 +213,8 @@ const FullCameraSheet = memo(function FullCameraSheet({
   const backAction = isEditing ? () => onNavigate?.("prev") : onReviewSaved;
   const canBack = isEditing ? assetIndex > 0 : (!!onReviewSaved && totalAssetsInView > 0);
   const canNext = isEditing && assetIndex >= 0 && assetIndex < totalAssetsInView - 1;
+  // Nama Aset WAJIB diisi sebelum memotret (rana dikunci selama kosong).
+  const nameFilled = !!(formData?.asset_name || "").trim();
 
   // Ambil foto: gambar frame video ke canvas, stempel watermark ala Timemark,
   // hasilkan JPEG (sisi terpanjang ≤1920, q0.85 — setara pipeline kompresi form).
@@ -292,7 +268,7 @@ const FullCameraSheet = memo(function FullCameraSheet({
   // Form ringkas & padat: field penting saja, 2 kolom. Kode Aset & NUP
   // read-only (sudah distandby-kan ke kategori dummy + NUP otomatis).
   const EDIT_FIELDS = [
-    { name: "asset_name", label: "Nama Aset", full: true },
+    { name: "asset_name", label: "Nama Aset", full: true, required: true },
     { name: "asset_code", label: "Kode Aset", readOnly: true },
     { name: "NUP", label: "NUP", readOnly: true },
     { name: "location", label: "Lokasi" },
@@ -390,40 +366,41 @@ const FullCameraSheet = memo(function FullCameraSheet({
             ))}
           </div>
         )}
-        {/* Pemilih lensa & zoom sesuai spek kamera (0.5× / 1× / 2× dst.).
-            Tampil hanya bila perangkat menyediakan lensa ganda atau zoom. */}
-        {(lenses.length >= 2 || zoomPresets.length >= 2) && (
+        {/* Zoom sesuai spek kamera (0.5× / 1× / 2× dst.). Tampil hanya bila
+            perangkat mengekspos rentang zoom. */}
+        {zoomPresets.length >= 2 && (
           <div className="flex items-center justify-center gap-1.5 flex-wrap" data-testid="full-camera-lensbar">
-            {lenses.map((l) => (
-              <button key={l.deviceId} type="button" onClick={() => { setDeviceId(l.deviceId); setZoom(1); }}
-                data-testid={`full-camera-lens-${l.deviceId}`}
-                className={`h-8 min-w-[42px] px-2 rounded-full text-[11px] font-bold transition-colors ${deviceId === l.deviceId ? "bg-white text-black" : "bg-white/20 text-white hover:bg-white/30"}`}>
-                {l.label}
-              </button>
-            ))}
-            {zoomPresets.length >= 2 && zoomPresets.map((z) => (
+            {zoomPresets.map((z) => (
               <button key={z} type="button" onClick={() => applyZoom(z)}
                 data-testid={`full-camera-zoom-${z}`}
-                className={`h-8 min-w-[38px] px-2 rounded-full text-[11px] font-bold transition-colors ${Math.abs((zoom || 1) - z) < 0.05 ? "bg-amber-400 text-black" : "bg-white/20 text-white hover:bg-white/30"}`}>
+                className={`h-8 min-w-[42px] px-2 rounded-full text-[11px] font-bold transition-colors ${Math.abs((zoom || 1) - z) < 0.05 ? "bg-amber-400 text-black" : "bg-white/20 text-white hover:bg-white/30"}`}>
                 {fmtZoom(z)}×
               </button>
             ))}
           </div>
         )}
-        <div className="flex items-center justify-between">
-          <button type="button" onClick={() => setEditOpen(true)} data-testid="full-camera-edit-btn"
-            className="flex flex-col items-center gap-1 text-white/90 text-[10px] font-medium w-16">
-            <span className="w-11 h-11 rounded-full bg-white/15 flex items-center justify-center"><Pencil className="w-5 h-5" /></span>
-            Edit Info
+        {/* Wajib isi Nama Aset dulu sebelum memotret — rana dikunci selama kosong. */}
+        {!nameFilled && (
+          <button type="button" onClick={() => setEditOpen(true)} data-testid="full-camera-need-name"
+            className="mx-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-400/90 text-black text-[11px] font-semibold">
+            <AlertTriangle className="w-3.5 h-3.5" />Isi Nama Aset (<span className="text-red-700">*</span>) dulu untuk memotret
           </button>
-          <button type="button" onClick={capture} disabled={!ready || photos.length >= maxPhotos}
+        )}
+        <div className="flex items-center justify-between">
+          <button type="button" onClick={() => setEditOpen(true)}
+            data-testid="full-camera-edit-btn"
+            className={`flex flex-col items-center gap-1 text-[10px] font-medium w-16 ${!nameFilled ? "text-amber-300" : "text-white/90"}`}>
+            <span className={`w-11 h-11 rounded-full flex items-center justify-center ${!nameFilled ? "bg-amber-400/30 ring-2 ring-amber-300 animate-pulse" : "bg-white/15"}`}><Pencil className="w-5 h-5" /></span>
+            Edit Info{!nameFilled ? " *" : ""}
+          </button>
+          <button type="button" onClick={capture} disabled={!ready || photos.length >= maxPhotos || !nameFilled}
             aria-label="Ambil foto" data-testid="full-camera-shutter"
             className="w-[72px] h-[72px] rounded-full border-4 border-white flex items-center justify-center disabled:opacity-40">
             <span className="w-14 h-14 rounded-full bg-white flex items-center justify-center">
               <Camera className="w-6 h-6 text-black/70" />
             </span>
           </button>
-          <button type="button" onClick={() => { setDeviceId(null); setFacing(f => (f === "environment" ? "user" : "environment")); }}
+          <button type="button" onClick={() => setFacing(f => (f === "environment" ? "user" : "environment"))}
             data-testid="full-camera-flip"
             className="flex flex-col items-center gap-1 text-white/90 text-[10px] font-medium w-16">
             <span className="w-11 h-11 rounded-full bg-white/15 flex items-center justify-center"><SwitchCamera className="w-5 h-5" /></span>
@@ -491,13 +468,16 @@ const FullCameraSheet = memo(function FullCameraSheet({
             <div className="grid grid-cols-2 gap-2">
               {EDIT_FIELDS.map(f => (
                 <div key={f.name} className={`space-y-0.5 ${f.full ? "col-span-2" : ""}`}>
-                  <label className="text-[11px] text-muted-foreground">{f.label}{f.readOnly ? " (otomatis)" : ""}</label>
+                  <label className="text-[11px] text-muted-foreground">
+                    {f.label}{f.required && <span className="text-red-500"> *</span>}{f.readOnly ? " (otomatis)" : ""}
+                  </label>
                   <input
                     value={formData?.[f.name] || ""}
                     onChange={e => onSetField(f.name, e.target.value)}
                     readOnly={f.readOnly}
+                    autoFocus={f.name === "asset_name" && !(formData?.asset_name || "").trim()}
                     data-testid={`full-camera-edit-${f.name}`}
-                    className={`w-full h-9 px-2.5 rounded-lg border border-border text-sm text-foreground ${f.readOnly ? "bg-muted text-muted-foreground" : "bg-background"}`}
+                    className={`w-full h-9 px-2.5 rounded-lg border text-sm text-foreground ${f.readOnly ? "bg-muted text-muted-foreground border-border" : (f.required && !(formData?.[f.name] || "").trim() ? "bg-background border-red-400" : "bg-background border-border")}`}
                   />
                 </div>
               ))}
