@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Request, Header
 
 from db import db
 from models import UserCreate, UserLogin, UserResponse, TokenResponse, OTPRequest, OTPVerify
-from auth_utils import hash_password, verify_password, create_token, get_current_user
+from auth_utils import hash_password, verify_password, create_token, create_media_token, get_current_user
 from shared_utils import limiter, generate_otp, send_otp_email, store_otp, get_otp, delete_otp, RESEND_API_KEY
 
 logger = logging.getLogger(__name__)
@@ -290,6 +290,7 @@ async def login(request: Request, credentials: UserLogin):
     
     return TokenResponse(
         access_token=token,
+        media_token=create_media_token(user["id"], user["username"]),
         user=UserResponse(
             id=user["id"],
             username=user["username"],

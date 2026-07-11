@@ -36,7 +36,26 @@ def create_token(user_id: str, username: str) -> str:
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 
-async def _decode_bearer(authorization: str) -> dict:
+# Token KHUSUS MEDIA (scope="media", umur 30 hari): dipakai hanya untuk URL
+# streaming foto/dokumen (?token=...) supaya URL media STABIL antar login —
+# tanpa ini, rotasi token sesi (24 jam) mengganti semua URL <img> dan mem-bust
+# seluruh cache foto browser setiap hari. Token ini DITOLAK oleh require_user
+# (tak bisa dipakai memanggil API tulis/baca biasa); validitasnya tetap dicek
+# ke db.users (akun nonaktif = ditolak) di _decode_bearer.
+MEDIA_TOKEN_EXPIRATION_DAYS = 30
+
+
+def create_media_token(user_id: str, username: str) -> str:
+    payload = {
+        "user_id": user_id,
+        "username": username,
+        "scope": "media",
+        "exp": datetime.now(timezone.utc).timestamp() + (MEDIA_TOKEN_EXPIRATION_DAYS * 86400),
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+async def _decode_bearer(authorization: str, allow_media_scope: bool = False) -> dict:
     """Decode an Authorization header value and return the user document.
 
     Raises HTTPException(401) on any failure. Shared by the legacy positional
@@ -51,6 +70,10 @@ async def _decode_bearer(authorization: str) -> dict:
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
     except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    # Token ber-scope "media" hanya sah untuk endpoint media/laporan
+    # (require_user_or_query_token) — tolak untuk API biasa.
+    if payload.get("scope") == "media" and not allow_media_scope:
         raise HTTPException(status_code=401, detail="Invalid token")
     user = await db.users.find_one({"id": payload.get("user_id")}, {"_id": 0, "password_hash": 0})
     if not user:
@@ -102,8 +125,8 @@ async def require_user_or_query_token(
     24h TTL. A short-lived, media-scoped token is a future improvement.
     """
     if authorization and authorization.startswith("Bearer "):
-        return await _decode_bearer(authorization)
+        return await _decode_bearer(authorization, allow_media_scope=True)
     if token:
-        return await _decode_bearer(f"Bearer {token}")
+        return await _decode_bearer(f"Bearer {token}", allow_media_scope=True)
     raise HTTPException(status_code=401, detail="Autentikasi diperlukan")
 

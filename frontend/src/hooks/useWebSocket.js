@@ -110,12 +110,14 @@ export function useWebSocket({ activityId, userId, userName, onAssetChange, onLo
               case "asset_updated":
                 if (msg.user_id && String(msg.user_id) === String(uid)) break;
                 toast.info(`${msg.user_name} memperbarui aset: ${msg.asset?.asset_code}`, { duration: 3000 });
-                oac?.();
+                // Teruskan tipe + info aset agar pemanggil bisa mem-patch SATU
+                // baris (bukan refetch seluruh daftar + statistik per event).
+                oac?.("asset_updated", msg.asset);
                 break;
               case "asset_deleted":
                 if (msg.user_id && String(msg.user_id) === String(uid)) break;
                 toast.info(`${msg.user_name} menghapus aset: ${msg.asset?.asset_code}`, { duration: 3000 });
-                oac?.();
+                oac?.("asset_deleted", msg.asset);
                 break;
               case "asset_locked":
                 olu?.(prev => ({ ...prev, [msg.asset_id]: { user_name: msg.user_name, user_id: msg.user_id } }));

@@ -250,7 +250,31 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   const wsNeedsRefreshRef = useRef(false);
   const wsRefreshTimerRef = useRef(null);
 
-  const onWsAssetChange = useCallback(() => {
+  const onWsAssetChange = useCallback((eventType, assetInfo) => {
+    // PATCH TERTARGET: update oleh rekan cukup mengganti SATU baris (fetch
+    // ringan tanpa media) — bukan refetch 50 baris + statistik per event.
+    // Aset yang tak ada di halaman/filter saat ini cukup diabaikan (posisinya
+    // di halaman lain); snapshot offline tetap disegarkan.
+    if (eventType === "asset_updated" && assetInfo?.id) {
+      // Baris yang sedang DIEDIT pengguna ini jangan ditimpa — tunda ke refresh.
+      if (editAssetRef.current?.id === assetInfo.id) { wsNeedsRefreshRef.current = true; return; }
+      axios.get(`${API}/assets/${assetInfo.id}?exclude_media=true`).then(res => {
+        const fresh = res?.data;
+        if (!fresh) return;
+        if (fresh.activity_id) upsertSnapshotAsset(fresh.activity_id, fresh);
+        setAssets(prev => prev.some(a => a.id === fresh.id) ? prev.map(a => a.id === fresh.id ? { ...a, ...fresh } : a) : prev);
+        setMobileAssets(prev => prev.some(a => a.id === fresh.id) ? prev.map(a => a.id === fresh.id ? { ...a, ...fresh } : a) : prev);
+      }).catch(() => { /* aset mungkin baru dihapus — refresh berikutnya merapikan */ });
+      return;
+    }
+    if (eventType === "asset_deleted" && assetInfo?.id) {
+      setAssets(prev => prev.filter(a => a.id !== assetInfo.id));
+      setMobileAssets(prev => prev.filter(a => a.id !== assetInfo.id));
+      setTotalItems(prev => Math.max(0, prev - 1));
+      if (activity?.id) removeSnapshotAsset(activity.id, assetInfo.id);
+      return;
+    }
+    // Create rekan / reconnect / sync selesai → refetch penuh (ber-debounce).
     // Deferred refresh: if user is editing, defer the refresh until form closes
     if (editAssetRef.current) {
       wsNeedsRefreshRef.current = true;
@@ -266,7 +290,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
         refreshData();
       }
     }, 2000);
-  }, []);
+  }, [activity?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => { if (wsRefreshTimerRef.current) clearTimeout(wsRefreshTimerRef.current); }, []);
   const { onlineUsers, connected: wsConnected, sendMessage: wsSend } = useWebSocket({
     activityId: activity?.id, userId: user?.id,

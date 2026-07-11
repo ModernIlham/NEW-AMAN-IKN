@@ -101,7 +101,9 @@ LIST_PROJECTION = {
     "status": 1, "nomor_spm": 1, "perolehan_dari_nama": 1,
     "nomor_kontrak": 1, "nomor_bukti_perolehan": 1, "supplier": 1,
     "notes": 1, "thumbnail": 1, "thumbnail_index": 1,
-    "gallery_thumbnail": 1,
+    # gallery_thumbnail (256px, ~11-20KB base64/baris) TIDAK ikut lagi: kartu
+    # galeri memakai streaming ?w=256 yang ter-cache browser; payload list 50
+    # baris hemat ~0,5-1MB dan sync snapshot 1000 baris hemat belasan MB.
     "created_at": 1, "updated_at": 1, "activity_id": 1,
     "version": 1,  # OCC: client needs this to send If-Match on subsequent writes
     "stiker_status": 1, "stiker_ukuran": 1, "stiker_photo_index": 1,
@@ -883,7 +885,7 @@ MEDIA_CACHE_CONTROL = "private, max-age=86400"
 # lapangan. ?w=<lebar> menghasilkan JPEG yang diperkecil (~100-250KB) —
 # di-resize SEKALI lalu di-cache di koleksi media_previews (ber-TTL), sehingga
 # permintaan berikutnya (siapa pun penggunanya) langsung dari cache.
-_PREVIEW_WIDTHS = {640, 1280}
+_PREVIEW_WIDTHS = {256, 640, 1280}  # 256 = kartu galeri, 1280 = lightbox
 _PREVIEW_TTL_DAYS = 30
 _preview_index_ready = False
 

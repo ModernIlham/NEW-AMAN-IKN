@@ -203,7 +203,7 @@ export default function LoginPage({ onLogin, onShowInfo }) {
           password: formData.password
         });
         toast.success("Login berhasil!");
-        onLogin(res.data.user, res.data.access_token);
+        onLogin(res.data.user, res.data.access_token, res.data.media_token);
       } else {
         // Registration: request OTP first
         const email = formData.username.trim().toLowerCase();

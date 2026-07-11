@@ -166,7 +166,7 @@ function App() {
     setLoading(false);
   }, []);
 
-  const handleLogin = (userData, token) => {
+  const handleLogin = (userData, token, mediaToken) => {
     // A DIFFERENT account logging in on this device must never see the
     // previous user's cached offline snapshot — wipe it before the new
     // session starts. Same-user re-login keeps the cache (best-effort async;
@@ -174,6 +174,21 @@ function App() {
     ensureSnapshotOwner(userData?.id);
     localStorage.setItem('token', token);
     localStorage.setItem('user', JSON.stringify(userData));
+    // Token media (30 hari) menstabilkan URL <img> antar login sehingga cache
+    // foto browser tetap hidup. PERTAHANKAN yang lama bila masih milik user
+    // yang sama & masih segar (>7 hari) — mengganti token = URL berubah =
+    // seluruh cache foto ter-bust; itu justru yang mau kita hindari.
+    if (mediaToken) {
+      try {
+        const old = localStorage.getItem('media_token');
+        let keepOld = false;
+        if (old) {
+          const p = JSON.parse(atob(old.split('.')[1] || '') || '{}');
+          keepOld = p.user_id === userData?.id && (p.exp || 0) * 1000 - Date.now() > 7 * 86400e3;
+        }
+        if (!keepOld) localStorage.setItem('media_token', mediaToken);
+      } catch { localStorage.setItem('media_token', mediaToken); }
+    }
     setUser(userData);
   };
 
@@ -188,6 +203,10 @@ function App() {
   // via the 7-day TTL anyway.
   const handleLogout = () => {
     clearAllSnapshots();
+    // Logout EKSPLISIT (perangkat berbagi): cabut juga token media agar tidak
+    // ada akses baca foto tersisa. Auto-logout (401/idle) sengaja MEMBIARKAN
+    // token media hidup supaya cache foto surveyor tak ter-bust tiap hari.
+    localStorage.removeItem('media_token');
     forceLogout();
   };
 

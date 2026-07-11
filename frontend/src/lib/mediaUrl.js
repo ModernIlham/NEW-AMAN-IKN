@@ -14,7 +14,10 @@
 // short-lived, media-scoped token is a future improvement.
 export function authMediaUrl(url) {
   if (!url) return url;
-  const token = localStorage.getItem("token");
+  // Utamakan token MEDIA (scope="media", 30 hari): stabil antar login sehingga
+  // URL <img> tidak berubah dan cache foto browser tetap berlaku. Fallback ke
+  // token sesi untuk masa transisi (login lama belum punya media_token).
+  const token = localStorage.getItem("media_token") || localStorage.getItem("token");
   if (!token) return url;
   const sep = url.includes("?") ? "&" : "?";
   return `${url}${sep}token=${encodeURIComponent(token)}`;
