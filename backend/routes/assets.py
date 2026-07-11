@@ -708,11 +708,30 @@ async def create_asset(asset: AssetCreate, request: Request, _user: dict = Depen
     await log_audit("create", asset.activity_id, asset_id, asset.asset_code, asset.asset_name, audit_user, detail="Aset baru ditambahkan", nup=asset.NUP or "")
     await notify_asset_change(asset.activity_id, "asset_created", {"id": asset_id, "asset_code": asset.asset_code, "asset_name": asset.asset_name}, audit_user, user_id=audit_user_id)
 
-    response = AssetResponse(**asset_doc)
+    # Respons TANPA media (lihat _strip_media): klien sudah punya fotonya —
+    # jangan kirim balik base64 besar. Salinan dangkal agar asset_doc asli utuh.
+    response = AssetResponse(**_strip_media({**asset_doc}))
     # Cache the response for idempotent retries
     if idem_key:
         await store_idempotent_response(idem_key, response.model_dump(mode="json"), 200)
     return response
+
+def _strip_media(asset: dict) -> dict:
+    """Ganti media base64 (foto + berkas checklist) dengan array kosong sambil
+    menyisipkan photo_count/document_count. Dipakai GET ?exclude_media=true dan
+    respons tulis (POST/PUT/PATCH) — klien sudah memegang medianya sendiri,
+    mengirim balik ratusan KB base64 hanya membuang kuota & waktu."""
+    real_photos = asset.get("photos", []) or []
+    asset["photo_count"] = len(asset.get("photo_gridfs_ids") or []) or len(real_photos)
+    asset["photos"] = []
+    asset.pop("photo", None)
+    if asset.get("document_checklist"):
+        asset["document_checklist"] = [
+            {**item, "photos": [], "documents": [], "photo_count": len(item.get("photos", []) or []), "document_count": len(item.get("documents", []) or [])}
+            for item in asset["document_checklist"]
+        ]
+    return asset
+
 
 @assets_router.get("/assets/{asset_id}", response_model=AssetResponse)
 async def get_asset(asset_id: str, exclude_media: bool = False, _user: dict = Depends(require_user)):
@@ -721,15 +740,7 @@ async def get_asset(asset_id: str, exclude_media: bool = False, _user: dict = De
     if not asset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
     if exclude_media:
-        # Count before stripping, then replace with empty arrays
-        real_photos = asset.get("photos", []) or []
-        asset["photo_count"] = len(real_photos)
-        asset["photos"] = []
-        if "document_checklist" in asset and asset["document_checklist"]:
-            asset["document_checklist"] = [
-                {**item, "photos": [], "documents": [], "photo_count": len(item.get("photos", []) or []), "document_count": len(item.get("documents", []) or [])}
-                for item in asset["document_checklist"]
-            ]
+        asset = _strip_media(asset)
     return AssetResponse(**asset)
 
 
@@ -1373,7 +1384,9 @@ async def update_asset(asset_id: str, asset: AssetCreate, request: Request,
     changes = compute_changes(existing, asset.model_dump())
     if changes:
         await log_audit("update", asset.activity_id, asset_id, asset.asset_code, asset.asset_name, audit_user, changes=changes, nup=asset.NUP or "")
-    updated_asset = await db.assets.find_one({"id": asset_id}, {"_id": 0})
+    # Respons TANPA media: klien sudah memegang foto/dokumennya sendiri —
+    # mengirim balik base64 (bisa >1MB) di tiap simpan memboroskan kuota HP.
+    updated_asset = _strip_media(await db.assets.find_one({"id": asset_id}, {"_id": 0}))
     # Real-time notification
     await notify_asset_change(asset.activity_id, "asset_updated", {"id": asset_id, "asset_code": asset.asset_code, "asset_name": asset.asset_name}, audit_user, user_id=audit_user_id)
     return AssetResponse(**updated_asset)
@@ -1743,7 +1756,9 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
             merged.get("asset_code", ""), merged.get("asset_name", ""),
             audit_user, changes=changes, nup=merged.get("NUP", "")
         )
-    updated_asset = await db.assets.find_one({"id": asset_id}, {"_id": 0})
+    # Respons TANPA media (lihat _strip_media) — juga memperkecil dokumen
+    # idempotency yang disimpan di bawah.
+    updated_asset = _strip_media(await db.assets.find_one({"id": asset_id}, {"_id": 0}))
     await notify_asset_change(
         merged.get("activity_id", ""), "asset_updated",
         {"id": asset_id, "asset_code": merged.get("asset_code", ""), "asset_name": merged.get("asset_name", "")},

@@ -44,8 +44,13 @@ async def lock_asset(data: LockRequest, request: Request, x_user_id: str = Heade
     expires_at = now + timedelta(seconds=LOCK_TTL_SECONDS)
     session_id = x_session_id or "unknown-session"
 
+    # activity_id disalin ke dokumen lock supaya polling GET /assets/locks bisa
+    # membaca row_locks langsung per kegiatan — tidak lagi mengambil puluhan
+    # ribu id aset dari db.assets pada SETIAP poll.
+    asset_doc = await db.assets.find_one({"id": asset_id}, {"_id": 0, "activity_id": 1})
     lock_doc = {
         "asset_id": asset_id,
+        "activity_id": (asset_doc or {}).get("activity_id", "") or "",
         "user_id": x_user_id or "unknown",
         "user_name": x_user_name or "Unknown",
         "session_id": session_id,
@@ -120,14 +125,11 @@ async def get_all_locks(request: Request, activity_id: str = ""):
     locks = {}
     query = {"expires_at": {"$gt": now}}
     if activity_id:
-        # Join with assets to filter by activity. For perf, get asset IDs for this activity first
-        # (limit scan size). Fall back to returning all locks if activity scope is too large.
-        asset_ids_cursor = db.assets.find({"activity_id": activity_id}, {"_id": 0, "id": 1}).limit(50000)
-        asset_ids = [d["id"] async for d in asset_ids_cursor]
-        if asset_ids:
-            query["asset_id"] = {"$in": asset_ids}
-        else:
-            return {"locks": {}}
+        # activity_id tersimpan di dokumen lock (didenormalisasi saat akuisisi)
+        # → cukup baca row_locks langsung, tanpa mengambil id aset dari db.assets
+        # di tiap poll. $exists:false = kompatibilitas lock lama sesaat setelah
+        # deploy (lock kedaluwarsa sendiri dalam hitungan menit).
+        query["$or"] = [{"activity_id": activity_id}, {"activity_id": {"$exists": False}}]
     cursor = db.row_locks.find(query, {"_id": 0, "asset_id": 1, "user_name": 1, "user_id": 1, "session_id": 1})
     async for doc in cursor:
         locks[doc["asset_id"]] = {
@@ -235,9 +237,13 @@ async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user
         CHUNK = 50
 
         async def update_photo_chunk(chunk_ids):
+            # SATU query $in per chunk (bukan find_one serial per aset — N+1).
+            by_id = {}
+            async for doc in db.assets.find({"id": {"$in": chunk_ids}}, {"_id": 0, "id": 1, "photos": 1}):
+                by_id[doc["id"]] = doc
             ops = []
             for aid in chunk_ids:
-                asset = await db.assets.find_one({"id": aid}, {"_id": 0, "photos": 1})
+                asset = by_id.get(aid)
                 current_photos = asset.get("photos", []) if asset else []
                 new_photos = current_photos + [compressed_photo]
                 update_fields = {
@@ -261,9 +267,13 @@ async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user
         CHUNK = 50
 
         async def update_doc_chunk(chunk_ids):
+            # SATU query $in per chunk (bukan find_one serial per aset — N+1).
+            by_id = {}
+            async for doc in db.assets.find({"id": {"$in": chunk_ids}}, {"_id": 0, "id": 1, "document_checklist": 1}):
+                by_id[doc["id"]] = doc
             ops = []
             for aid in chunk_ids:
-                asset = await db.assets.find_one({"id": aid}, {"_id": 0, "document_checklist": 1})
+                asset = by_id.get(aid)
                 existing = asset.get("document_checklist", []) if asset else []
                 existing_names = {item.get("name", ""): idx for idx, item in enumerate(existing)}
 

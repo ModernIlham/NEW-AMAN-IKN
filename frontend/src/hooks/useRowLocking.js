@@ -30,7 +30,10 @@ export function useRowLocking({ activityId, user, wsSend }) {
     const fetchLocks = async () => {
       try {
         const res = await axios.get(`${API}/assets/locks`, { params: { activity_id: activityId } });
-        setRowLocks(res.data.locks || {});
+        const next = res.data.locks || {};
+        // Identitas stabil: umumnya hasil poll = {} yang sama — objek baru tiap
+        // 30 detik memicu render ulang seluruh halaman + semua baris tanpa perlu.
+        setRowLocks(prev => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
       } catch (e) {
         // Non-fatal: lock state polling — WS will catch up on next real-time event.
         if (process.env.NODE_ENV !== "production") {

@@ -400,7 +400,9 @@ def create_thumbnail(image_data: Optional[str], size: int = 100, quality: int = 
             return None
         img.thumbnail((size, size))
         buffer = io.BytesIO()
-        img.save(buffer, format="JPEG", quality=quality)
+        # optimize: tabel Huffman optimal (hemat 2-10% byte tanpa penurunan
+        # kualitas); progressive: tampil bertahap di koneksi lambat.
+        img.save(buffer, format="JPEG", quality=quality, optimize=True, progressive=True)
         buffer.seek(0)
         thumb_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
         return f"data:image/jpeg;base64,{thumb_base64}"

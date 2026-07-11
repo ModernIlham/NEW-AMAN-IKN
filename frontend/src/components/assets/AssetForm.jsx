@@ -864,10 +864,16 @@ const AssetForm = memo(({
     });
   }, [isEditing, photoItems.length]);
 
-  // GPS live dari kamera: simpan fix terbaru ke koordinat form + cache. Guard
-  // kesetaraan agar TIDAK me-render ulang form saat koordinat tak berubah.
+  // GPS live dari kamera: watchPosition menembak ~1x/detik dan tiap commit
+  // me-render ulang seluruh form (~2.300 baris) — berat di HP low-end. Maka
+  // koordinat hanya di-commit bila BERGESER BERARTI (>±1e-5 derajat ≈ 1 m);
+  // jitter kecil cukup disimpan di cache & overlay kamera (state lokal sheet).
+  const lastGpsCommitRef = useRef(null);
   const handleCameraGpsFix = useCallback(({ lat, lng }) => {
     try { localStorage.setItem("aman_last_gps", JSON.stringify({ lat, lng, ts: Date.now() })); } catch {}
+    const prev = lastGpsCommitRef.current;
+    if (prev && Math.abs(parseFloat(lat) - parseFloat(prev.lat)) < 1e-5 && Math.abs(parseFloat(lng) - parseFloat(prev.lng)) < 1e-5) return;
+    lastGpsCommitRef.current = { lat, lng };
     setFormData(p => (p.koordinat_latitude === lat && p.koordinat_longitude === lng ? p : { ...p, koordinat_latitude: lat, koordinat_longitude: lng }));
   }, []);
 
