@@ -365,6 +365,12 @@ def compute_changes(old_doc: dict, new_data: dict) -> list:
         old_count = len(old_list) if isinstance(old_list, list) else 0
         new_count = len(new_list) if isinstance(new_list, list) else 0
         if field == "photos":
+            # GridFS-first: dokumen bersih menyimpan photos=[] — jumlah nyata
+            # ada di photo_gridfs_ids (payload klien tetap kirim array foto).
+            old_g = old_doc.get("photo_gridfs_ids") or []
+            new_g = new_data.get("photo_gridfs_ids") or []
+            old_count = len([x for x in old_g if x]) or old_count
+            new_count = len([x for x in new_g if x]) or new_count
             if old_count != new_count:
                 changes.append({"field": "photos", "from": f"{old_count} foto", "to": f"{new_count} foto"})
         elif field == "document_checklist":

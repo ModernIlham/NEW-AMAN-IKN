@@ -110,7 +110,13 @@ LIST_PROJECTION = {
     "inventory_status": 1, "klasifikasi_tidak_ditemukan": 1, "sub_klasifikasi": 1,
     "uraian_tidak_ditemukan": 1, "tindak_lanjut": 1,
     "koordinat_latitude": 1, "koordinat_longitude": 1, "kronologis": 1,
-    "photo_count": {"$size": {"$ifNull": ["$photos", []]}},
+    # GridFS-first (dokumen ter-migrasi punya photos=[] tapi gridfs terisi);
+    # fallback ke inline untuk dokumen legacy.
+    "photo_count": {"$cond": [
+        {"$gt": [{"$size": {"$ifNull": ["$photo_gridfs_ids", []]}}, 0]},
+        {"$size": {"$ifNull": ["$photo_gridfs_ids", []]}},
+        {"$size": {"$ifNull": ["$photos", []]}},
+    ]},
     # Computed doc checklist summary (avoids sending full checklist data)
     "doc_total": {"$size": {"$ifNull": ["$document_checklist", []]}},
     "doc_checked": {"$size": {"$filter": {
@@ -671,10 +677,15 @@ async def create_asset(asset: AssetCreate, request: Request, _user: dict = Depen
     asset_doc = {
         "id": asset_id,
         **asset.model_dump(),
-        "photos": photos,
+        # SUMBER TUNGGAL foto = GridFS. Base64 inline TIDAK lagi dipersist
+        # (dulu foto tersimpan 3×: photos[] + photo + GridFS → dokumen Mongo
+        # membengkak mendekati batas 16MB dan tiap baca full-doc menarik
+        # multi-MB). Semua jalur baca sudah GridFS-first dengan fallback inline
+        # untuk dokumen legacy.
+        "photos": [],
         "photo_gridfs_ids": photo_gridfs_ids,
         "photo_thumbnails": photo_thumbnails,
-        "photo": photos[cover_idx] if photos else None,
+        "photo": None,
         "thumbnail": thumbnail,
         "gallery_thumbnail": gallery_thumbnail,
         "thumbnail_index": asset.thumbnail_index or 0,
@@ -771,6 +782,24 @@ async def get_asset(asset_id: str, exclude_media: bool = False, _user: dict = De
     asset = await db.assets.find_one({"id": asset_id}, {"_id": 0})
     if not asset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    # Kontrak GET penuh = "beserta media". Dokumen bersih (GridFS-only,
+    # photos=[]) dihidrasikan dari blob agar konsumen lama tetap bekerja.
+    if not (asset.get("photos") or []) and (asset.get("photo_gridfs_ids") or []):
+        hydrated = []
+        for gid in asset["photo_gridfs_ids"]:
+            b64 = None
+            if gid:
+                try:
+                    raw = await get_photo_from_gridfs(gid)
+                    if raw:
+                        b64 = "data:image/jpeg;base64," + base64.b64encode(raw).decode("ascii")
+                except Exception:
+                    pass
+            hydrated.append(b64 or "")
+        asset["photos"] = hydrated
+        cover = asset.get("thumbnail_index") or 0
+        if 0 <= cover < len(hydrated) and hydrated[cover]:
+            asset["photo"] = hydrated[cover]
     return AssetResponse(**asset)
 
 
@@ -1309,36 +1338,46 @@ async def update_asset(asset_id: str, asset: AssetCreate, request: Request,
     photos = asset.photos or []
     if asset.photo and not photos:
         photos = [asset.photo]
-    
+
     # Generate thumbnail from selected cover photo + GridFS storage
     thumbnail = existing.get("thumbnail")
     gallery_thumbnail = existing.get("gallery_thumbnail")
     old_photos = existing.get("photos", [])
-    cover_idx = min(asset.thumbnail_index or 0, len(photos) - 1) if photos else 0
-    
+
     photo_gridfs_ids = existing.get("photo_gridfs_ids", [])
     photo_thumbnails = existing.get("photo_thumbnails", [])
     old_gridfs_for_rollback = list(photo_gridfs_ids)  # pre-existing IDs (keep if new upload fails)
 
-    if photos and (photos != old_photos or cover_idx != existing.get("thumbnail_index", 0)):
+    # Jumlah foto lama yang SEBENARNYA (GridFS-first; dokumen ter-migrasi punya
+    # photos=[] tapi gridfs_ids terisi).
+    old_count = len([g for g in photo_gridfs_ids if g]) or len(old_photos)
+    cover_idx = min(asset.thumbnail_index or 0, len(photos) - 1) if photos \
+        else min(asset.thumbnail_index or 0, max(0, old_count - 1))
+
+    if photos and (photos != old_photos or len(photos) != old_count or cover_idx != existing.get("thumbnail_index", 0)):
         thumbnail = create_thumbnail(photos[cover_idx])
         gallery_thumbnail = create_gallery_thumbnail(photos[cover_idx])
         # Store new photos in GridFS + generate per-photo thumbnails (atomic rollback on error)
         result = await process_photos_for_storage(photos)
         photo_gridfs_ids = result["gridfs_ids"]
         photo_thumbnails = result["thumbnails"]
-    elif not photos:
+    elif not photos and old_count == 0:
         thumbnail = None
         gallery_thumbnail = None
         photo_gridfs_ids = []
         photo_thumbnails = []
+    # PENJAGA KEHILANGAN SENYAP: payload PUT tanpa foto sementara GridFS masih
+    # berisi (klien yang memuat via exclude_media mengirim photos=[]) →
+    # PERTAHANKAN foto GridFS yang ada. Penghapusan foto dilakukan lewat
+    # PATCH photo_ops (keep[]), bukan PUT kosong.
 
     update_data = {
         **asset.model_dump(),
-        "photos": photos,
+        # Inline base64 tidak dipersist lagi — GridFS adalah sumber tunggal.
+        "photos": [],
         "photo_gridfs_ids": photo_gridfs_ids,
         "photo_thumbnails": photo_thumbnails,
-        "photo": photos[cover_idx] if photos else None,
+        "photo": None,
         "thumbnail": thumbnail,
         "gallery_thumbnail": gallery_thumbnail,
         "thumbnail_index": cover_idx,
@@ -1536,28 +1575,31 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
         old_photos = existing.get("photos", []) or []
         old_gridfs_ids = existing.get("photo_gridfs_ids", []) or []
         old_thumbnails = existing.get("photo_thumbnails", []) or []
+        old_n = max(len(old_photos), len(old_gridfs_ids))
 
-        # Build new arrays from kept photos + new photos
-        final_photos = []
+        # Susun array baru dari foto yang DIPERTAHANKAN + foto BARU.
+        # Kanonis = GridFS: final_srcs hanya menyimpan b64 bila tersedia murah
+        # (foto baru / inline legacy) untuk regenerasi cover tanpa fetch.
+        final_srcs = []
         final_gridfs_ids = []
         final_thumbnails = []
 
         for idx in keep_indices:
-            if 0 <= idx < len(old_photos):
-                final_photos.append(old_photos[idx])
-            if 0 <= idx < len(old_gridfs_ids):
-                final_gridfs_ids.append(old_gridfs_ids[idx])
-            elif 0 <= idx < len(old_photos):
-                final_gridfs_ids.append("")
-            if 0 <= idx < len(old_thumbnails):
+            if not (0 <= idx < old_n):
+                continue
+            final_srcs.append(old_photos[idx] if idx < len(old_photos) else None)
+            final_gridfs_ids.append(old_gridfs_ids[idx] if idx < len(old_gridfs_ids) else "")
+            if idx < len(old_thumbnails) and old_thumbnails[idx]:
                 final_thumbnails.append(old_thumbnails[idx])
-            elif 0 <= idx < len(old_photos):
+            elif idx < len(old_photos) and old_photos[idx]:
                 final_thumbnails.append(generate_photo_thumbnail(old_photos[idx]) or "")
+            else:
+                final_thumbnails.append("")
 
         # Process new photos: store in GridFS + generate thumbnails (atomic rollback if one fails)
         try:
             for photo_b64 in new_photos_b64:
-                final_photos.append(photo_b64)
+                final_srcs.append(photo_b64)
                 gid = await store_photo_to_gridfs(photo_b64)
                 newly_uploaded_gridfs.append(gid)
                 final_gridfs_ids.append(gid)
@@ -1575,15 +1617,29 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
         # Delete removed photos from GridFS (only AFTER successful uploads, to allow rollback)
         removed_indices = set(range(len(old_gridfs_ids))) - set(keep_indices)
 
-        cover_idx = min(new_thumb_idx, len(final_photos) - 1) if final_photos else 0
-        update_data["photos"] = final_photos
+        n_final = len(final_gridfs_ids)
+        cover_idx = min(new_thumb_idx, n_final - 1) if n_final else 0
+        # Inline base64 tidak dipersist lagi — GridFS sumber tunggal.
+        update_data["photos"] = []
         update_data["photo_gridfs_ids"] = final_gridfs_ids
         update_data["photo_thumbnails"] = final_thumbnails
-        update_data["photo"] = final_photos[cover_idx] if final_photos else None
+        update_data["photo"] = None
         update_data["thumbnail_index"] = cover_idx
-        if final_photos:
-            update_data["thumbnail"] = create_thumbnail(final_photos[cover_idx])
-            update_data["gallery_thumbnail"] = create_gallery_thumbnail(final_photos[cover_idx])
+        if n_final:
+            # Sumber bytes cover: b64 yang sudah di tangan (foto baru / inline
+            # legacy); bila kept dari dokumen ter-migrasi, ambil dari GridFS.
+            cover_b64 = final_srcs[cover_idx] if cover_idx < len(final_srcs) else None
+            if not cover_b64 and cover_idx < len(final_gridfs_ids) and final_gridfs_ids[cover_idx]:
+                try:
+                    raw = await get_photo_from_gridfs(final_gridfs_ids[cover_idx])
+                    if raw:
+                        cover_b64 = "data:image/jpeg;base64," + base64.b64encode(raw).decode("ascii")
+                except Exception as e:
+                    logger.warning(f"photo_ops cover regen: GridFS read failed for asset {asset_id}: {e}")
+            if cover_b64:
+                update_data["thumbnail"] = create_thumbnail(cover_b64)
+                update_data["gallery_thumbnail"] = create_gallery_thumbnail(cover_b64)
+            # cover_b64 kosong (blob korup): biarkan thumbnail lama apa adanya
         else:
             update_data["thumbnail"] = None
             update_data["gallery_thumbnail"] = None
@@ -1597,7 +1653,9 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
         photos = update_data["photos"] or []
         cover_idx = min(update_data.get("thumbnail_index", existing.get("thumbnail_index", 0)), len(photos) - 1) if photos else 0
         old_photos = existing.get("photos", [])
-        if photos and (photos != old_photos or cover_idx != existing.get("thumbnail_index", 0)):
+        old_gridfs = [g for g in (existing.get("photo_gridfs_ids", []) or []) if g]
+        old_count = len(old_gridfs) or len(old_photos)
+        if photos and (photos != old_photos or len(photos) != old_count or cover_idx != existing.get("thumbnail_index", 0)):
             update_data["thumbnail"] = create_thumbnail(photos[cover_idx])
             update_data["gallery_thumbnail"] = create_gallery_thumbnail(photos[cover_idx])
             # Atomic rollback inside process_photos_for_storage
@@ -1605,12 +1663,21 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
             newly_uploaded_gridfs.extend(result["gridfs_ids"])
             update_data["photo_gridfs_ids"] = result["gridfs_ids"]
             update_data["photo_thumbnails"] = result["thumbnails"]
-        elif not photos:
+            # Blob lama yang tergantikan dihapus SETELAH CAS sukses (dulu bocor
+            # sebagai orphan di cabang ini).
+            update_data["__rollback_old_removed_gids__"] = old_gridfs
+        elif not photos and old_count == 0:
             update_data["thumbnail"] = None
             update_data["gallery_thumbnail"] = None
             update_data["photo_gridfs_ids"] = []
             update_data["photo_thumbnails"] = []
-        update_data["photo"] = photos[cover_idx] if photos else None
+        elif not photos:
+            # PENJAGA: PATCH photos=[] sementara GridFS masih berisi → JANGAN
+            # hapus foto diam-diam; pertahankan (hapus foto = photo_ops keep[]).
+            update_data.pop("photos", None)
+        if "photos" in update_data:
+            update_data["photos"] = []  # inline tidak dipersist lagi
+        update_data["photo"] = None
         update_data["thumbnail_index"] = cover_idx
 
     # Handle cover-only change: user just picked a different thumbnail without
@@ -1648,7 +1715,8 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
             if cover_b64:
                 update_data["thumbnail"] = create_thumbnail(cover_b64)
                 update_data["gallery_thumbnail"] = create_gallery_thumbnail(cover_b64)
-                update_data["photo"] = cover_b64
+                # JANGAN tulis update_data["photo"]: itu menyuntikkan kembali
+                # base64 full-res ke dokumen yang sudah bersih (GridFS-only).
 
     # Handle document_checklist → normalize dicts. Frontend uses sentinels to
     # signal "preserve existing item at this index" without re-shipping the
@@ -1874,5 +1942,48 @@ async def migrate_photos_to_gridfs(_admin: dict = Depends(require_admin)):
             migrated += 1
         except Exception as e:
             logger.error(f"Migration error for asset {asset.get('id')}: {e}")
-    return {"migrated": migrated, "message": f"Berhasil migrasi {migrated} aset ke GridFS"}
+
+    # FASE 2 — pembersihan duplikasi: dokumen yang SUDAH punya blob GridFS
+    # lengkap tak perlu lagi menyimpan base64 inline (photos/photo). Sebelum
+    # $unset, setiap blob diverifikasi ADA & tidak kosong lewat metadata
+    # fs.files (tanpa membaca seluruh byte) — jangan pernah membuang salinan
+    # terakhir foto aset negara.
+    cleaned = 0
+    cursor2 = db.assets.find(
+        {"photos": {"$exists": True, "$ne": []}, "photo_gridfs_ids": {"$exists": True, "$ne": []}},
+        {"_id": 0, "id": 1, "photos": 1, "photo_gridfs_ids": 1, "photo_thumbnails": 1},
+    )
+    async for asset in cursor2:
+        try:
+            gids = [g for g in (asset.get("photo_gridfs_ids") or []) if g]
+            photos = asset.get("photos") or []
+            thumbs = asset.get("photo_thumbnails") or []
+            # Jumlah blob & thumbnail harus selaras dengan foto inline
+            if len(gids) != len(photos) or len(thumbs) < len(gids):
+                continue
+            ok = True
+            for gid in gids:
+                try:
+                    from bson import ObjectId
+                    fdoc = await db.fs.files.find_one(
+                        {"_id": ObjectId(gid) if ObjectId.is_valid(str(gid)) else gid},
+                        {"length": 1},
+                    )
+                    if not fdoc or not fdoc.get("length"):
+                        ok = False
+                        break
+                except Exception:
+                    ok = False
+                    break
+            if not ok:
+                continue
+            await db.assets.update_one({"id": asset["id"]}, {"$set": {"photos": []}, "$unset": {"photo": ""}})
+            cleaned += 1
+        except Exception as e:
+            logger.error(f"Cleanup error for asset {asset.get('id')}: {e}")
+
+    return {
+        "migrated": migrated, "cleaned": cleaned,
+        "message": f"Berhasil migrasi {migrated} aset ke GridFS; {cleaned} aset dibersihkan dari duplikasi inline",
+    }
 
