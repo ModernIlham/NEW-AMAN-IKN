@@ -736,11 +736,39 @@ def _strip_media(asset: dict) -> dict:
 @assets_router.get("/assets/{asset_id}", response_model=AssetResponse)
 async def get_asset(asset_id: str, exclude_media: bool = False, _user: dict = Depends(require_user)):
     """Get a single asset by ID. Use ?exclude_media=true for a lightweight response without base64 photos/documents."""
+    if exclude_media:
+        # Buang media DI SISI MONGO (bukan di Python setelah dokumen multi-MB
+        # ditarik dari DB) — endpoint ini dipanggil pada SETIAP buka lightbox &
+        # form edit. Bentuk hasil identik dengan _strip_media:
+        # photos=[], photo dihapus, checklist: media dikosongkan + counts,
+        # field lain (termasuk thumbnail/photo_thumbnails) tetap utuh.
+        docs = await db.assets.aggregate([
+            {"$match": {"id": asset_id}},
+            {"$set": {
+                "photo_count": {"$cond": [
+                    {"$gt": [{"$size": {"$ifNull": ["$photo_gridfs_ids", []]}}, 0]},
+                    {"$size": {"$ifNull": ["$photo_gridfs_ids", []]}},
+                    {"$size": {"$ifNull": ["$photos", []]}},
+                ]},
+                "document_checklist": {"$map": {
+                    "input": {"$ifNull": ["$document_checklist", []]},
+                    "as": "item",
+                    "in": {"$mergeObjects": ["$$item", {
+                        "photos": [], "documents": [],
+                        "photo_count": {"$size": {"$ifNull": ["$$item.photos", []]}},
+                        "document_count": {"$size": {"$ifNull": ["$$item.documents", []]}},
+                    }]},
+                }},
+            }},
+            {"$set": {"photos": []}},
+            {"$unset": ["_id", "photo"]},
+        ]).to_list(1)
+        if not docs:
+            raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+        return AssetResponse(**docs[0])
     asset = await db.assets.find_one({"id": asset_id}, {"_id": 0})
     if not asset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
-    if exclude_media:
-        asset = _strip_media(asset)
     return AssetResponse(**asset)
 
 
