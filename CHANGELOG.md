@@ -48,6 +48,23 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#69] Bar peta HP satu baris (menu gabungan) + siklus selaras diagram resmi Kemenkeu — 2026-07-11
+
+- **Bar peta di HP jadi SATU baris**: filter Barang Serupa + Unduh
+  (KML/KMZ/SHP) + Muat Ulang dilebur ke **satu tombol ber-menu** — ikon
+  Layers menyala violet + titik penanda saat filter kelompok aktif,
+  berganti spinner saat memuat; item menu ≥42px. ≥sm tetap kontrol
+  terpisah.
+- **Siklus selaras diagram resmi Kemenkeu** (12 tahap): Perencanaan
+  Kebutuhan ≠ Penganggaran, Pengamanan ≠ Pemeliharaan; **dasar hukum
+  (PMK) per tahap** tampil di dialog konsep; sub-kegiatan dirinci
+  (Penggunaan: PSP/alih status/sementara/pihak lain/bersama + BMN idle;
+  Pemanfaatan: Sewa/Pinjam Pakai/KSP/BGS/BSG/KSPI/KETUPI/PDF;
+  Pemindahtanganan: Penjualan/Hibah/Tukar Menukar/Penyertaan Modal;
+  Wasdal: pemantauan/investigasi/portofolio aset/analisis SBSK/
+  penertiban); strip **6 asas pengelolaan** di Beranda Modul; masterplan
+  diperbarui mengikuti diagram.
+
 ## [#68] Rumah modul Siklus BMN + masterplan pengembangan + skill proses baku — 2026-07-11
 
 - **Beranda Modul** — halaman pertama setelah login: peta Siklus Pengelolaan
