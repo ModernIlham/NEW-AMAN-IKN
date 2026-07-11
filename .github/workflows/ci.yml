@@ -1,0 +1,57 @@
+# Gerbang otomatis minimal (docs/REFACTORING_REVIEW.md #6):
+# - backend : compileall (sintaks/import) + pytest unit bebas-infra
+# - frontend: eslint (react-hooks, error menggagalkan) + build produksi
+# Test integrasi (butuh server + MongoDB) TIDAK jalan di sini — jalankan
+# manual dengan `pytest -m integration` di lingkungan yang punya backend hidup.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (compileall + pytest unit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Dependensi sistem WeasyPrint (pango)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpango-1.0-0 libpangoft2-1.0-0
+      - name: Install dependensi Python
+        run: pip install -r backend/requirements.txt
+      - name: Cek sintaks + bytecode seluruh backend
+        run: python -m compileall -q backend -x 'venv|__pycache__'
+      - name: Test unit bebas-infra
+        run: pytest -q
+
+  frontend:
+    name: Frontend (eslint + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+      - name: Install dependensi
+        run: yarn install --frozen-lockfile
+      - name: eslint (react-hooks)
+        run: yarn lint
+      - name: Build produksi
+        # CI=false: warning CRA lama tidak menggagalkan build; gerbang error
+        # sudah dipegang langkah eslint di atas.
+        run: CI=false yarn build

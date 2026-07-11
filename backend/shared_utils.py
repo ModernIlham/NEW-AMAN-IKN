@@ -23,6 +23,7 @@ from slowapi.util import get_remote_address
 import tinify
 import resend
 
+from asset_fields import SCALAR_FIELD_NAMES
 from db import db, fs_bucket
 
 logger = logging.getLogger(__name__)
@@ -328,16 +329,9 @@ async def send_otp_email(email: str, otp: str, name: str = ""):
         return False
 
 # --- Audit Logging ---
-TRACKED_FIELDS = [
-    "asset_name", "category", "brand", "model", "kode_register", "serial_number",
-    "purchase_date", "purchase_price", "location", "user",
-    "pengguna_melekat_ke", "pengguna_jabatan", "pengguna_nip", "operasional_jenis", "nomor_bast",
-    "condition", "status", "NUP", "notes", "stiker_status", "stiker_ukuran", "stiker_photo_index",
-    "nomor_spm", "perolehan_dari_nama", "nomor_kontrak", "nomor_bukti_perolehan", "supplier",
-    "inventory_status", "klasifikasi_tidak_ditemukan", "sub_klasifikasi", "uraian_tidak_ditemukan", "tindak_lanjut",
-    "koordinat_latitude", "koordinat_longitude", "kronologis",
-    "keterangan_berlebih", "asal_usul_berlebih", "nomor_perkara", "pihak_bersengketa", "keterangan_sengketa"
-]
+# Semua field skalar registry (kini termasuk asset_code & eselon1/eselon2 yang
+# dulu terlewat dari audit) + stiker_photo_index yang dilacak sebagai nilai.
+TRACKED_FIELDS = [*SCALAR_FIELD_NAMES, "stiker_photo_index"]
 TRACKED_COUNT_FIELDS = ["photos", "document_checklist"]
 
 async def log_audit(action: str, activity_id: str, asset_id: str = "", asset_code: str = "", asset_name: str = "", username: str = "system", changes: list = None, detail: str = "", nup: str = ""):

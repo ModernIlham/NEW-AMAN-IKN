@@ -25,11 +25,32 @@ from reportlab.pdfgen import canvas
 import xlsxwriter
 from PIL import Image as PILImage
 
+from asset_fields import SCALAR_FIELD_NAMES
 from db import db
 from shared_utils import limiter, invalidate_asset_cache, log_audit, get_photo_from_gridfs
 
 logger = logging.getLogger(__name__)
 exports_router = APIRouter()
+
+# Default nilai kolom CSV saat field tidak ada di dokumen (dokumen lama).
+_CSV_ROW_DEFAULTS = {
+    "stiker_status": "Belum Terpasang",
+    "inventory_status": "Belum Diinventarisasi",
+}
+
+# Header sheet "Data Aset" pada ekspor XLSX. Kolom skalar memakai label dari
+# registry (asset_fields.py); test registry menagih bila ada field baru yang
+# belum punya kolom di sini.
+ASSET_SHEET_HEADERS = ['Foto', 'Foto Stiker', 'Kode Aset', 'NUP', 'Nama Aset', 'Kategori', 'Brand', 'Model',
+                       'Kode Register', 'Serial Number', 'Tgl Beli', 'Harga', 'Lokasi', 'Eselon I', 'Eselon II',
+                       'Pengguna', 'Melekat Ke', 'Jabatan Pengguna', 'NIP/NIK Pegawai', 'Jenis Operasional', 'Nomor BAST',
+                       'Kondisi', 'Status', 'Stiker Status', 'Ukuran Stiker',
+                       'Nomor SPM', 'Perolehan Dari',
+                       'Nomor Kontrak', 'Bukti Perolehan', 'Supplier', 'Catatan',
+                       'Status Inventarisasi', 'Klasifikasi', 'Sub Klasifikasi', 'Uraian Tidak Ditemukan', 'Tindak Lanjut',
+                       'Latitude', 'Longitude', 'Kronologis',
+                       'Keterangan Berlebih', 'Asal Usul Berlebih', 'Nomor Perkara', 'Pihak Bersengketa', 'Keterangan Sengketa',
+                       'Jumlah Foto', 'Tanggal Input']
 
 
 def _xlsx_image_buffer(img_data: str, max_px: int, quality: int = 70) -> io.BytesIO:
@@ -260,7 +281,10 @@ async def export_csv(request: Request, activity_id: Optional[str] = None, base_u
                 yield f"# Eselon I: {nama_es1} | Eselon II: {', '.join(eselon2_list)}\n"
             yield "#\n"
         
-        yield "asset_code,NUP,asset_name,category,brand,model,kode_register,serial_number,purchase_date,purchase_price,location,eselon1,eselon2,user,pengguna_melekat_ke,pengguna_jabatan,pengguna_nip,operasional_jenis,nomor_bast,condition,status,nomor_spm,perolehan_dari_nama,nomor_kontrak,nomor_bukti_perolehan,supplier,notes,stiker_status,stiker_ukuran,inventory_status,klasifikasi_tidak_ditemukan,sub_klasifikasi,uraian_tidak_ditemukan,tindak_lanjut,koordinat_latitude,koordinat_longitude,kronologis,keterangan_berlebih,asal_usul_berlebih,nomor_perkara,pihak_bersengketa,keterangan_sengketa,jumlah_foto,tanggal_input,kelengkapan_items,link_foto_kelengkapan,link_pdf_kelengkapan\n"
+        # Kolom skalar diambil dari registry (asset_fields.py) supaya field
+        # baru otomatis ikut ter-ekspor; sisanya kolom turunan/kelengkapan.
+        yield ",".join([*SCALAR_FIELD_NAMES, "jumlah_foto", "tanggal_input",
+                        "kelengkapan_items", "link_foto_kelengkapan", "link_pdf_kelengkapan"]) + "\n"
         
         projection = {"_id": 0, "photo": 0, "photos": 0, "thumbnail": 0, "photo_thumbnails": 0}
         cursor = db.assets.find(query, projection).batch_size(500)
@@ -277,38 +301,7 @@ async def export_csv(request: Request, activity_id: Optional[str] = None, base_u
             photo_count = len(asset.get('photo_gridfs_ids', []))
             
             row = [
-                asset.get('asset_code', ''), asset.get('NUP', ''),
-                asset.get('asset_name', ''), asset.get('category', ''),
-                asset.get('brand', ''), asset.get('model', ''),
-                asset.get('kode_register', ''), asset.get('serial_number', ''),
-                asset.get('purchase_date', ''), str(asset.get('purchase_price', '')),
-                asset.get('location', ''),
-                asset.get('eselon1', ''), asset.get('eselon2', ''),
-                asset.get('user', ''),
-                asset.get('pengguna_melekat_ke', ''), asset.get('pengguna_jabatan', ''),
-                asset.get('pengguna_nip', ''),
-                asset.get('operasional_jenis', ''),
-                asset.get('nomor_bast', ''),
-                asset.get('condition', ''),
-                asset.get('status', ''), asset.get('nomor_spm', ''),
-                asset.get('perolehan_dari_nama', ''), asset.get('nomor_kontrak', ''),
-                asset.get('nomor_bukti_perolehan', ''), asset.get('supplier', ''),
-                asset.get('notes', ''),
-                asset.get('stiker_status', 'Belum Terpasang'),
-                asset.get('stiker_ukuran', ''),
-                asset.get('inventory_status', 'Belum Diinventarisasi'),
-                asset.get('klasifikasi_tidak_ditemukan', ''),
-                asset.get('sub_klasifikasi', ''),
-                asset.get('uraian_tidak_ditemukan', ''),
-                asset.get('tindak_lanjut', ''),
-                asset.get('koordinat_latitude', ''),
-                asset.get('koordinat_longitude', ''),
-                asset.get('kronologis', ''),
-                asset.get('keterangan_berlebih', ''),
-                asset.get('asal_usul_berlebih', ''),
-                asset.get('nomor_perkara', ''),
-                asset.get('pihak_bersengketa', ''),
-                asset.get('keterangan_sengketa', ''),
+                *[asset.get(n, _CSV_ROW_DEFAULTS.get(n, '')) for n in SCALAR_FIELD_NAMES],
                 str(photo_count),
                 asset.get('created_at', ''),
                 doc_data.get('kelengkapan_items', ''),
@@ -602,16 +595,7 @@ async def export_xlsx(request: Request, activity_id: Optional[str] = None, base_
         'align': 'left', 'valign': 'vcenter', 'border': 1, 'font_color': 'blue', 'underline': 1
     })
     
-    headers = ['Foto', 'Foto Stiker', 'Kode Aset', 'NUP', 'Nama Aset', 'Kategori', 'Brand', 'Model',
-               'Kode Register', 'Serial Number', 'Tgl Beli', 'Harga', 'Lokasi', 'Eselon I', 'Eselon II',
-               'Pengguna', 'Melekat Ke', 'Jabatan Pengguna', 'NIP/NIK Pegawai', 'Jenis Operasional', 'Nomor BAST',
-               'Kondisi', 'Status', 'Stiker Status', 'Ukuran Stiker',
-               'Nomor SPM', 'Perolehan Dari',
-               'Nomor Kontrak', 'Bukti Perolehan', 'Supplier', 'Catatan',
-               'Status Inventarisasi', 'Klasifikasi', 'Sub Klasifikasi', 'Uraian Tidak Ditemukan', 'Tindak Lanjut',
-               'Latitude', 'Longitude', 'Kronologis',
-               'Keterangan Berlebih', 'Asal Usul Berlebih', 'Nomor Perkara', 'Pihak Bersengketa', 'Keterangan Sengketa',
-               'Jumlah Foto', 'Tanggal Input']
+    headers = ASSET_SHEET_HEADERS
 
     for col, header in enumerate(headers):
         worksheet.write(0, col, header, header_format)

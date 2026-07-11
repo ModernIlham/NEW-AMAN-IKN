@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from pymongo import UpdateOne, ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
+from asset_fields import BATCHABLE_FIELD_NAMES
 from auth_utils import require_user
 from db import db
 from shared_utils import (
@@ -146,16 +147,9 @@ class BatchUpdateRequest(BaseModel):
     asset_ids: List[str]
     updates: dict  # Fields to update: category, location, condition, inventory_status, stiker_status, stiker_ukuran, eselon1, eselon2
 
-BATCH_ALLOWED_FIELDS = {
-    "category", "location", "condition", "inventory_status",
-    "stiker_status", "stiker_ukuran", "eselon1", "eselon2",
-    "nomor_spm", "perolehan_dari_nama", "nomor_kontrak",
-    "nomor_bukti_perolehan", "supplier", "purchase_date", "purchase_price",
-    "koordinat_latitude", "koordinat_longitude", "brand", "model",
-    # Selaras dengan field yang bisa diedit di form aset (AssetForm):
-    "status", "user", "pengguna_melekat_ke", "pengguna_jabatan", "pengguna_nip",
-    "operasional_jenis", "nomor_bast", "notes",
-}
+# Diturunkan dari registry (asset_fields.py, flag `batchable`) supaya selalu
+# selaras dengan field yang bisa diedit di form aset dan tidak drift lagi.
+BATCH_ALLOWED_FIELDS = set(BATCHABLE_FIELD_NAMES)
 
 # Fields that need special handling (not simple $set)
 BATCH_SPECIAL_FIELDS = {"batch_photo", "document_checklist_items"}

@@ -258,6 +258,22 @@ WHIPDOC_API_KEY=xxx
 REACT_APP_BACKEND_URL=https://your-domain.com
 ```
 
+### Menjalankan Test
+
+```bash
+# Test unit bebas-infra (tanpa MongoDB/server) — juga jalan otomatis di CI:
+pytest
+
+# Test integrasi (butuh backend hidup di :8001 + MongoDB):
+TEST_BASE_URL=http://localhost:8001 pytest -m integration
+
+# Lint frontend (aturan react-hooks; error menggagalkan CI):
+cd frontend && yarn lint
+```
+
+Gerbang CI (`.github/workflows/ci.yml`) menjalankan `compileall` + test unit
+backend serta `eslint` + `yarn build` frontend pada setiap PR.
+
 ---
 
 ## Deployment

@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Request, Depends, UploadFile, File
 from fastapi.responses import Response
 
 from db import db, fs_bucket
+from asset_fields import SCALAR_FIELD_NAMES
 from models import AssetCreate, AssetResponse
 from auth_utils import require_user, require_admin, require_user_or_query_token
 from shared_utils import (
@@ -91,25 +92,18 @@ def _build_cas_filter(asset_id: str, current_version: int) -> dict:
 # GET /assets and GET /assets/offline-snapshot so the offline cache stores
 # EXACTLY the same (media-free) shape as the live list.
 LIST_PROJECTION = {
-    "_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
-    "category": 1, "brand": 1, "model": 1, "kode_register": 1,
-    "serial_number": 1, "purchase_date": 1, "purchase_price": 1,
-    "location": 1, "eselon1": 1, "eselon2": 1, "user": 1, "condition": 1,
-    "pengguna_melekat_ke": 1, "pengguna_jabatan": 1, "pengguna_nip": 1, "operasional_jenis": 1,
-    "nomor_bast": 1,
+    "_id": 0, "id": 1,
+    # Semua field skalar aset dari registry (asset_fields.py) — termasuk
+    # field berlebih/sengketa agar form edit offline melihat nilai aslinya.
+    **{name: 1 for name in SCALAR_FIELD_NAMES},
     "bast_file_id": 1, "bast_filename": 1,
-    "status": 1, "nomor_spm": 1, "perolehan_dari_nama": 1,
-    "nomor_kontrak": 1, "nomor_bukti_perolehan": 1, "supplier": 1,
-    "notes": 1, "thumbnail": 1, "thumbnail_index": 1,
+    "thumbnail": 1, "thumbnail_index": 1,
     # gallery_thumbnail (256px, ~11-20KB base64/baris) TIDAK ikut lagi: kartu
     # galeri memakai streaming ?w=256 yang ter-cache browser; payload list 50
     # baris hemat ~0,5-1MB dan sync snapshot 1000 baris hemat belasan MB.
     "created_at": 1, "updated_at": 1, "activity_id": 1,
     "version": 1,  # OCC: client needs this to send If-Match on subsequent writes
-    "stiker_status": 1, "stiker_ukuran": 1, "stiker_photo_index": 1,
-    "inventory_status": 1, "klasifikasi_tidak_ditemukan": 1, "sub_klasifikasi": 1,
-    "uraian_tidak_ditemukan": 1, "tindak_lanjut": 1,
-    "koordinat_latitude": 1, "koordinat_longitude": 1, "kronologis": 1,
+    "stiker_photo_index": 1,
     # GridFS-first (dokumen ter-migrasi punya photos=[] tapi gridfs terisi);
     # fallback ke inline untuk dokumen legacy.
     "photo_count": {"$cond": [
@@ -1469,21 +1463,10 @@ async def update_asset(asset_id: str, asset: AssetCreate, request: Request,
 
 
 # Fields that can be patched individually
-PATCHABLE_FIELDS = {
-    "asset_code", "NUP", "asset_name", "category", "brand", "model",
-    "kode_register", "serial_number", "purchase_date", "purchase_price",
-    "location", "eselon1", "eselon2", "user", "condition", "status",
-    "pengguna_melekat_ke", "pengguna_jabatan", "pengguna_nip", "operasional_jenis", "nomor_bast",
-    "nomor_spm", "perolehan_dari_nama", "nomor_kontrak",
-    "nomor_bukti_perolehan", "supplier", "notes",
+# Semua field skalar registry + field media/posisi yang penanganannya khusus.
+PATCHABLE_FIELDS = frozenset(SCALAR_FIELD_NAMES) | {
     "photos", "photo", "thumbnail_index", "document_checklist",
-    "stiker_status", "stiker_ukuran", "stiker_photo_index",
-    "inventory_status", "klasifikasi_tidak_ditemukan", "sub_klasifikasi",
-    "uraian_tidak_ditemukan", "tindak_lanjut",
-    "koordinat_latitude", "koordinat_longitude", "kronologis",
-    "keterangan_berlebih", "asal_usul_berlebih",
-    "nomor_perkara", "pihak_bersengketa", "keterangan_sengketa",
-    "activity_id",
+    "stiker_photo_index", "activity_id",
 }
 
 @assets_router.patch("/assets/{asset_id}")

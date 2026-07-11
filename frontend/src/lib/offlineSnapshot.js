@@ -46,6 +46,8 @@ const SNAPSHOT_FIELDS = [
   "inventory_status", "klasifikasi_tidak_ditemukan", "sub_klasifikasi",
   "uraian_tidak_ditemukan", "tindak_lanjut",
   "koordinat_latitude", "koordinat_longitude", "kronologis",
+  "keterangan_berlebih", "asal_usul_berlebih",
+  "nomor_perkara", "pihak_bersengketa", "keterangan_sengketa",
   "photo_count", "doc_total", "doc_checked", "doc_summary",
 ];
 
