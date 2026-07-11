@@ -2,10 +2,11 @@ import React, { memo, useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import {
   X, Camera, MapPin, Clock, Pencil, SwitchCamera, Loader2, Check, Trash2,
-  ChevronLeft, ChevronRight, RotateCcw, AlertTriangle,
+  ChevronLeft, ChevronRight, RotateCcw, AlertTriangle, Zap, ZapOff, Sun, ScanLine,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useBackGuard } from "../../hooks/useBackGuard";
+import { extractScannedCode } from "./QrScanButton";
 
 // Pesan error kamera per jenis (fungsi murni di luar komponen agar tidak
 // menjadi dependency effect).
@@ -27,6 +28,34 @@ function makeZoomPresets(caps) {
   return out.slice(0, 6);
 }
 const fmtZoom = (z) => (Number.isInteger(z) ? String(z) : z.toFixed(1).replace(/\.0$/, ""));
+
+// Batas gestur kecerahan (filter CSS di pratinjau + dibakar saat memotret).
+const BRIGHT_MIN = 0.4, BRIGHT_MAX = 2.0;
+// canvas 2d `filter` tidak didukung Safari lama — deteksi sekali di module.
+const CANVAS_FILTER_OK = (() => {
+  try {
+    const c = document.createElement("canvas").getContext("2d");
+    // Cek SEBELUM assignment: pada WebKit lama (iOS <= 17) `filter` bukan IDL
+    // attribute — assignment hanya membuat expando yang readback-nya lolos.
+    return typeof c.filter === "string";
+  } catch { return false; }
+})();
+
+// Bakar kecerahan ke frame canvas TANPA ctx.filter (fallback Safari):
+// terang → overlay putih mode 'screen'; gelap → overlay abu mode 'multiply'.
+function bakeBrightnessFallback(ctx, w, h, b) {
+  ctx.save();
+  if (b > 1) {
+    ctx.globalCompositeOperation = "screen";
+    ctx.fillStyle = `rgba(255,255,255,${Math.min(0.85, (b - 1) * 0.55)})`;
+  } else {
+    ctx.globalCompositeOperation = "multiply";
+    const v = Math.round(255 * Math.max(0, b));
+    ctx.fillStyle = `rgb(${v},${v},${v})`;
+  }
+  ctx.fillRect(0, 0, w, h);
+  ctx.restore();
+}
 
 /**
  * Mode Kamera Penuh (ala aplikasi Timemark) untuk surveyor inventarisasi.
@@ -63,6 +92,9 @@ const FullCameraSheet = memo(function FullCameraSheet({
   onSaveAndNew,    // () => void — simpan aset ini lalu siapkan aset baru
   onReviewSaved,   // () => void — simpan lalu tinjau aset tersimpan sebelumnya
   onNavigate,      // (dir) => void — 'prev' | 'next' (mode edit aset yang sudah ada)
+  preparing = false, // aset baru sedang disiapkan → overlay loading ringan
+  onScanAsset,     // (code) => void — QR aset terdeteksi (mode edit inventarisasi)
+  autoScan = false, // buka kamera langsung dalam keadaan memindai QR
 }) {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
@@ -89,15 +121,32 @@ const FullCameraSheet = memo(function FullCameraSheet({
   // rentang zoom yang diekspos browser; di banyak Android nilai <1 = ultrawide).
   const [zoomCaps, setZoomCaps] = useState(null); // { min, max, step } bila track mendukung zoom
   const [zoom, setZoom] = useState(1);
+  // Senter/flash (torch) — hanya bila kamera aktif mengeksposnya.
+  const [torchSupported, setTorchSupported] = useState(false);
+  const [torchOn, setTorchOn] = useState(false);
+  const torchOnRef = useRef(false); // nilai terakhir utk re-apply saat kamera restart
+  // Kecerahan via gestur: sentuh area foto → indikator muncul; tahan & geser
+  // atas/bawah → atur. Diterapkan sebagai filter CSS di pratinjau dan dibakar
+  // ke hasil foto saat memotret.
+  const [brightness, setBrightness] = useState(1);
+  const brightnessRef = useRef(1);
+  const [brightUI, setBrightUI] = useState(false);
+  const brightTimerRef = useRef(null);
+  const brightDragRef = useRef(null); // { startY, startB, moved }
+  // Scan QR aset (mode edit inventarisasi): pakai stream kamera yang SAMA.
+  const scanSupported = typeof window !== "undefined" && "BarcodeDetector" in window;
+  const [scanActive, setScanActive] = useState(() => !!(autoScan && scanSupported && onScanAsset));
+  const scanDetectorRef = useRef(null);
 
   const supported = typeof navigator !== "undefined" && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
 
-  // Back HP: tutup panel edit dulu, lalu konfirmasi hapus, lalu kamera.
+  // Back HP: tutup scanner/panel edit dulu, lalu konfirmasi hapus, lalu kamera.
   useBackGuard(useCallback(() => {
     if (editOpen) { setEditOpen(false); return; }
     if (confirmIdx !== null) { setConfirmIdx(null); return; }
+    if (scanActive) { setScanActive(false); return; }
     onCloseRef.current?.();
-  }, [editOpen, confirmIdx]));
+  }, [editOpen, confirmIdx, scanActive]));
 
   // Kunci scroll latar selama kamera terbuka
   useEffect(() => {
@@ -166,6 +215,22 @@ const FullCameraSheet = memo(function FullCameraSheet({
               setZoom(Number(track.getSettings?.().zoom) || Number(caps.zoom.min));
             } else setZoomCaps(null);
           } catch { setZoomCaps(null); }
+          // Senter/flash: tampilkan tombol hanya bila track mendukung torch,
+          // dan pulihkan keadaan senter setelah kamera restart (flip/reconnect).
+          try {
+            const caps = track.getCapabilities?.() || {};
+            const hasTorch = !!caps.torch;
+            setTorchSupported(hasTorch);
+            if (hasTorch && torchOnRef.current) {
+              track.applyConstraints({ advanced: [{ torch: true }] })
+                .then(() => setTorchOn(true))
+                .catch(() => setTorchOn(false)); // keinginan (ref) dipertahankan
+            } else if (!hasTorch) {
+              // Kamera ini tak punya torch (mis. kamera depan) — matikan UI saja,
+              // keinginan tetap tersimpan agar flip balik menyalakannya lagi.
+              setTorchOn(false);
+            }
+          } catch { setTorchSupported(false); }
         }
         const video = videoRef.current;
         if (video) { video.srcObject = stream; await video.play().catch(() => {}); }
@@ -191,6 +256,106 @@ const FullCameraSheet = memo(function FullCameraSheet({
   }, []);
 
   const zoomPresets = makeZoomPresets(zoomCaps);
+
+  // Nyalakan/matikan senter (torch) pada track aktif.
+  const toggleTorch = useCallback(async () => {
+    const track = streamRef.current?.getVideoTracks?.()[0];
+    if (!track || !track.applyConstraints) return;
+    const next = !torchOnRef.current;
+    try {
+      await track.applyConstraints({ advanced: [{ torch: next }] });
+      torchOnRef.current = next;
+      setTorchOn(next);
+    } catch { toast.error("Senter tidak didukung kamera ini"); }
+  }, []);
+
+  // — Gestur kecerahan: sentuh area foto → indikator; tahan & geser vertikal —
+  const bumpBrightUI = useCallback(() => {
+    setBrightUI(true);
+    if (brightTimerRef.current) clearTimeout(brightTimerRef.current);
+    brightTimerRef.current = setTimeout(() => setBrightUI(false), 1600);
+  }, []);
+  useEffect(() => () => { if (brightTimerRef.current) clearTimeout(brightTimerRef.current); }, []);
+
+  const setBright = useCallback((b) => {
+    const v = Math.min(BRIGHT_MAX, Math.max(BRIGHT_MIN, b));
+    brightnessRef.current = v;
+    setBrightness(v);
+  }, []);
+
+  const onBrightPointerDown = useCallback((e) => {
+    // Hanya jari/kursor utama; jangan ganggu pinch dua jari.
+    if (!e.isPrimary) { brightDragRef.current = null; return; }
+    brightDragRef.current = { startY: e.clientY, startB: brightnessRef.current, moved: false };
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* opsional */ }
+    bumpBrightUI();
+  }, [bumpBrightUI]);
+
+  const onBrightPointerMove = useCallback((e) => {
+    const drag = brightDragRef.current;
+    if (!drag) return;
+    const dy = drag.startY - e.clientY; // geser ke atas = lebih terang
+    if (Math.abs(dy) > 6) drag.moved = true;
+    if (drag.moved) {
+      setBright(drag.startB + dy / 220);
+      bumpBrightUI();
+    }
+  }, [setBright, bumpBrightUI]);
+
+  const lastDragMovedRef = useRef(false);
+  const onBrightPointerUp = useCallback(() => {
+    lastDragMovedRef.current = !!brightDragRef.current?.moved;
+    brightDragRef.current = null;
+  }, []);
+  const resetBright = useCallback(() => {
+    // Dua drag cepat memicu dblclick sintetis — jangan hapus hasil atur barusan.
+    if (lastDragMovedRef.current) { lastDragMovedRef.current = false; return; }
+    setBright(1); bumpBrightUI();
+  }, [setBright, bumpBrightUI]);
+
+  // Deteksi QR pada stream kamera aktif selama mode pemindaian menyala.
+  // Dijeda saat panel Edit Info / konfirmasi hapus terbuka — QR liar di rak
+  // tidak boleh menyimpan form setengah-terketik & berpindah aset diam-diam.
+  useEffect(() => {
+    if (!scanActive || !scanSupported || !onScanAsset) return undefined;
+    if (editOpen || confirmIdx !== null) return undefined;
+    let stopped = false;
+    let detecting = false;
+    (async () => {
+      try {
+        let formats = ["qr_code", "code_128", "code_39"];
+        try {
+          const avail = await window.BarcodeDetector.getSupportedFormats();
+          formats = formats.filter((f) => avail.includes(f));
+        } catch { /* pakai daftar default */ }
+        scanDetectorRef.current = new window.BarcodeDetector(formats.length ? { formats } : undefined);
+      } catch { if (!stopped) setScanActive(false); }
+    })();
+    const timer = setInterval(async () => {
+      const video = videoRef.current;
+      if (stopped || detecting || !scanDetectorRef.current || !video || video.readyState < 2) return;
+      detecting = true;
+      try {
+        const codes = await scanDetectorRef.current.detect(video);
+        // Batal Scan / unmount saat detect() masih terbang → jangan tembak.
+        if (stopped) return;
+        if (codes && codes.length > 0) {
+          const code = extractScannedCode(codes[0].rawValue || "");
+          stopped = true;
+          setScanActive(false);
+          if (code) onScanAsset(code);
+          else toast.error("QR tidak berisi kode yang dikenali");
+        }
+      } catch { /* frame belum siap — coba lagi di tick berikutnya */ }
+      finally { detecting = false; }
+    }, 300);
+    return () => { stopped = true; clearInterval(timer); };
+  }, [scanActive, scanSupported, onScanAsset, editOpen, confirmIdx]);
+
+  const startScan = useCallback(() => {
+    if (!scanSupported) { toast.error("Scanner QR tidak didukung browser ini"); return; }
+    setScanActive(true);
+  }, [scanSupported]);
 
   // Kembali ke depan (unlock/foreground): kalau track sudah mati, sambung ulang;
   // kalau masih hidup, cukup play() lagi.
@@ -237,7 +402,12 @@ const FullCameraSheet = memo(function FullCameraSheet({
     canvas.width = Math.round(vw * scale);
     canvas.height = Math.round(vh * scale);
     const ctx = canvas.getContext("2d");
+    // Bakar kecerahan gestur ke hasil foto agar sama dengan pratinjau.
+    const bright = brightnessRef.current;
+    if (bright !== 1 && CANVAS_FILTER_OK) ctx.filter = `brightness(${bright})`;
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    ctx.filter = "none";
+    if (bright !== 1 && !CANVAS_FILTER_OK) bakeBrightnessFallback(ctx, canvas.width, canvas.height, bright);
 
     // — Watermark Timemark: blok semi-transparan kiri-bawah —
     const fix = gpsRef.current;
@@ -267,10 +437,16 @@ const FullCameraSheet = memo(function FullCameraSheet({
 
   // Form ringkas & padat: field penting saja, 2 kolom. Kode Aset & NUP
   // read-only (sudah distandby-kan ke kategori dummy + NUP otomatis).
+  // Mode edit menambah field identifikasi (kode register & serial number)
+  // untuk alur koreksi cepat via scan QR.
   const EDIT_FIELDS = [
     { name: "asset_name", label: "Nama Aset", full: true, required: true },
     { name: "asset_code", label: "Kode Aset", readOnly: true },
     { name: "NUP", label: "NUP", readOnly: true },
+    ...(isEditing ? [
+      { name: "kode_register", label: "Kode Register" },
+      { name: "serial_number", label: "Serial Number" },
+    ] : []),
     { name: "location", label: "Lokasi" },
     { name: "user", label: "Pengguna" },
     { name: "notes", label: "Catatan", full: true },
@@ -278,8 +454,36 @@ const FullCameraSheet = memo(function FullCameraSheet({
 
   return createPortal(
     <div className="fixed inset-0 z-[120] bg-black flex flex-col" role="dialog" aria-modal="true" aria-label="Mode Kamera Penuh" data-testid="full-camera-sheet">
-      {/* Pratinjau kamera */}
-      <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" playsInline muted />
+      {/* Pratinjau kamera (filter kecerahan mengikuti gestur) */}
+      <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" playsInline muted
+        style={brightness !== 1 ? { filter: `brightness(${brightness})` } : undefined} />
+
+      {/* Lapisan gestur kecerahan: sentuh → indikator; tahan & geser atas/bawah
+          → atur; ketuk dua kali → kembali normal. Di bawah overlay kontrol. */}
+      {ready && !camError && !suspended && (
+        <div
+          className="absolute inset-0 z-[5]"
+          style={{ touchAction: "none" }}
+          data-testid="full-camera-bright-layer"
+          onPointerDown={onBrightPointerDown}
+          onPointerMove={onBrightPointerMove}
+          onPointerUp={onBrightPointerUp}
+          onPointerCancel={onBrightPointerUp}
+          onDoubleClick={resetBright}
+        />
+      )}
+
+      {/* Indikator kecerahan (muncul saat gestur aktif) */}
+      {brightUI && (
+        <div className="absolute right-3 top-1/2 -translate-y-1/2 z-[8] flex flex-col items-center gap-1.5 pointer-events-none" data-testid="full-camera-bright-ui">
+          <Sun className="w-4 h-4 text-amber-300 drop-shadow" />
+          <div className="w-1.5 h-40 rounded-full bg-white/25 overflow-hidden flex flex-col justify-end">
+            <div className="w-full bg-amber-300 rounded-full"
+              style={{ height: `${((brightness - BRIGHT_MIN) / (BRIGHT_MAX - BRIGHT_MIN)) * 100}%` }} />
+          </div>
+          <span className="text-[10px] font-bold text-white drop-shadow tabular-nums">{Math.round(brightness * 100)}%</span>
+        </div>
+      )}
       {(starting || (!ready && !camError)) && (
         <div className="absolute inset-0 flex flex-col items-center justify-center text-white/80 gap-2" role="status" aria-live="polite">
           <Loader2 className="w-8 h-8 animate-spin" />
@@ -341,10 +545,25 @@ const FullCameraSheet = memo(function FullCameraSheet({
               {formData?.location ? ` • ${formData.location}` : ""}
             </div>
           </div>
-          <button type="button" onClick={onClose} aria-label="Tutup kamera" data-testid="full-camera-close"
-            className="w-10 h-10 rounded-full bg-black/50 text-white flex items-center justify-center flex-shrink-0">
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {!!onScanAsset && scanSupported && (
+              <button type="button" onClick={startScan} aria-label="Scan QR aset" data-testid="full-camera-scan"
+                className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${scanActive ? "bg-emerald-500 text-white" : "bg-black/50 text-white"}`}>
+                <ScanLine className="w-5 h-5" />
+              </button>
+            )}
+            {torchSupported && (
+              <button type="button" onClick={toggleTorch} aria-label={torchOn ? "Matikan flash" : "Nyalakan flash"}
+                aria-pressed={torchOn} data-testid="full-camera-torch"
+                className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${torchOn ? "bg-amber-400 text-black" : "bg-black/50 text-white"}`}>
+                {torchOn ? <Zap className="w-5 h-5" /> : <ZapOff className="w-5 h-5" />}
+              </button>
+            )}
+            <button type="button" onClick={onClose} aria-label="Tutup kamera" data-testid="full-camera-close"
+              className="w-10 h-10 rounded-full bg-black/50 text-white flex items-center justify-center">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -434,6 +653,32 @@ const FullCameraSheet = memo(function FullCameraSheet({
           </div>
         )}
       </div>
+
+      {/* ── Mode pemindaian QR aset (edit inventarisasi) ── */}
+      {scanActive && (
+        <div className="absolute inset-0 z-[9] pointer-events-none" data-testid="full-camera-scan-overlay">
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-52 h-52 border-2 border-emerald-400/90 rounded-xl shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
+          </div>
+          <div className="absolute inset-x-0 top-1/2 mt-32 text-center px-6 space-y-2">
+            <p className="text-white text-xs font-semibold drop-shadow">Arahkan ke QR/barcode stiker aset — aset akan dibuka untuk diedit</p>
+            <button type="button" onClick={() => setScanActive(false)} data-testid="full-camera-scan-cancel"
+              className="pointer-events-auto px-4 h-9 rounded-full bg-white/20 text-white text-xs font-semibold">
+              Batal Scan
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Aset baru sedang disiapkan (setelah Simpan & Baru) ── */}
+      {preparing && (
+        <div className="absolute inset-x-0 top-24 z-[15] flex justify-center pointer-events-none" role="status" aria-live="polite" data-testid="full-camera-preparing">
+          <div className="flex items-center gap-2 px-3.5 py-2 rounded-full bg-black/70 text-white text-xs font-medium shadow-lg">
+            <Loader2 className="w-4 h-4 animate-spin text-amber-300" />
+            {isEditing ? "Memuat data aset…" : "Menyiapkan aset baru…"}
+          </div>
+        </div>
+      )}
 
       {/* ── Konfirmasi hapus foto ── */}
       {confirmIdx !== null && (

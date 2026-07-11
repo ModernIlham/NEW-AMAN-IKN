@@ -315,12 +315,14 @@ function getAuditHeaders() {
 // saves bandwidth + Tinify quota for the common case.
 const SKIP_THRESHOLD = 500 * 1024; // bytes
 
-const compressOnePhoto = async (photo) => {
+const compressOnePhoto = async (photo, { localOnly = false } = {}) => {
   const bytes = dataUrlBytes(photo);
   if (bytes > 0 && bytes <= SKIP_THRESHOLD) return photo;
 
-  // 1) Server-side Tinify — best ratio, but needs connectivity
-  if (navigator.onLine) {
+  // 1) Server-side Tinify — best ratio, but needs connectivity.
+  //    Dilewati pada alur kamera beruntun (localOnly): surveyor tidak boleh
+  //    menunggu round-trip per foto hanya untuk lanjut ke aset berikutnya.
+  if (navigator.onLine && !localOnly) {
     try {
       const r = await axios.post(`${API}/compress-image`, { image_data: photo });
       if (r.data.success && r.data.compressed_data) return r.data.compressed_data;
@@ -340,10 +342,10 @@ const compressOnePhoto = async (photo) => {
   }
 };
 
-const compressPhotos = async (photos) => {
+const compressPhotos = async (photos, opts) => {
   const compressed = [];
   for (const photo of photos) {
-    compressed.push(await compressOnePhoto(photo));
+    compressed.push(await compressOnePhoto(photo, opts));
   }
   return compressed;
 };
@@ -826,6 +828,7 @@ const AssetForm = memo(({
   // foto — atau tetap mengisi form biasa. Tidak lagi membuka kamera otomatis.
   const [cameraPromptOpen, setCameraPromptOpen] = useState(false);
   const [fullCameraOpen, setFullCameraOpen] = useState(false);
+  const [cameraAutoScan, setCameraAutoScan] = useState(false);
   useEffect(() => {
     // Tawarkan dialog pilihan SEKALI saat membuka form aset baru — tapi tidak
     // saat kita sudah berada di dalam Mode Kamera Penuh (mis. transisi tinjau→baru).
@@ -1078,7 +1081,9 @@ const AssetForm = memo(({
     else { toast.info("Mode kamera langsung tidak didukung — memakai kamera biasa."); cameraInputRef.current?.click(); }
   }, [cameraSupported]);
   // Callback stabil untuk FullCameraSheet (jaga memo + hindari render berlebih).
-  const closeFullCamera = useCallback(() => setFullCameraOpen(false), []);
+  const closeFullCamera = useCallback(() => { setFullCameraOpen(false); setCameraAutoScan(false); }, []);
+  // Buka Mode Kamera langsung dalam keadaan memindai QR (edit inventarisasi).
+  const openFullCameraScan = useCallback(() => { setCameraAutoScan(true); openFullCamera(); }, [openFullCamera]);
   const cameraSetField = useCallback((name, value) => { setFormData(p => ({ ...p, [name]: value })); clearFieldError(name); }, [clearFieldError]);
 
   // "Samakan dengan sebelumnya": konteks lokasi/pengguna dari aset terakhir
@@ -1244,19 +1249,30 @@ const AssetForm = memo(({
       errs.pengguna_jabatan = "Nama jabatan wajib diisi bila pengguna melekat ke Jabatan";
     }
 
+    // Kode register (opsional) harus 32 karakter hex — sama dengan aturan
+    // server (/assets/validate). Dicek di klien juga karena alur kamera
+    // beruntun melewati round-trip validasi server.
+    const kodeReg = String(formData.kode_register || "").trim();
+    if (kodeReg && !/^[A-Fa-f0-9]{32}$/.test(kodeReg)) {
+      errs.kode_register = `Kode Register harus tepat 32 karakter hex (saat ini ${kodeReg.length} karakter)`;
+    }
+
     if (Object.keys(errs).length > 0) {
       setFieldErrors(errs);
       setFormErrors([]);
       // Prioritas gulir ke error pertama (urutan wajar dari atas form).
-      const order = ["asset_code", "asset_name", "koordinat_latitude", "koordinat_longitude", "pengguna_jabatan"];
+      const order = ["asset_code", "asset_name", "kode_register", "koordinat_latitude", "koordinat_longitude", "pengguna_jabatan"];
       focusFieldError(order.find(f => errs[f]) || Object.keys(errs)[0]);
       toast.error(`Periksa ${Object.keys(errs).length} field yang belum benar`);
       return;
     }
 
     // Validate (server round-trip) — skip saat offline: simpan langsung masuk
-    // antrean dan backend tetap memvalidasi ulang saat tersinkron.
-    if (navigator.onLine) {
+    // antrean dan backend tetap memvalidasi ulang saat tersinkron. Alur kamera
+    // beruntun (camera:*) juga melewatinya supaya "Simpan & Baru" instan —
+    // create tetap divalidasi server saat antrean tersinkron, dan bentrok NUP
+    // dummy sudah ditangani auto-renumber.
+    if (navigator.onLine && !(navIntent || "").startsWith("camera:")) {
       try {
         const url = isEditing && editId ? `${API}/assets/validate?exclude_id=${editId}` : `${API}/assets/validate`;
         const r = await axios.post(url, formData);
@@ -1294,6 +1310,9 @@ const AssetForm = memo(({
       let payload;
       let usePatch = false;
 
+      // Alur kamera beruntun: kompresi lokal saja (tanpa round-trip Tinify per
+      // foto) supaya scan/navigasi aset berikutnya tidak menunggu jaringan.
+      const cameraFlow = (navIntent || "").startsWith("camera:");
       if (isEditing && editId && originalDataRef.current) {
         // === EDIT MODE: Build diff payload — only send changed fields ===
         const orig = originalDataRef.current;
@@ -1342,8 +1361,9 @@ const AssetForm = memo(({
               keepIndices.push(item.originalIndex);
             } else if (item.type === 'new' && item.newData) {
               // Compress new photos before sending (server-side Tinify, dengan
-              // fallback kompresi lokal via canvas saat offline/gagal)
-              newPhotosToAdd.push(await compressOnePhoto(item.newData));
+              // fallback kompresi lokal via canvas saat offline/gagal; alur
+              // kamera memakai kompresi lokal saja agar tidak menunggu)
+              newPhotosToAdd.push(await compressOnePhoto(item.newData, { localOnly: cameraFlow }));
             }
           }
           if (newPhotosToAdd.length > 0) toast.info("Mengompres foto baru...", { duration: 2000 });
@@ -1365,7 +1385,7 @@ const AssetForm = memo(({
               if (typeof photo === "string" && photo.startsWith("__existing__:")) {
                 compressedItemPhotos.push(photo);
               } else {
-                compressedItemPhotos.push(await compressOnePhoto(photo));
+                compressedItemPhotos.push(await compressOnePhoto(photo, { localOnly: cameraFlow }));
               }
             }
             // Documents: pass through sentinels untouched. New uploads ship
@@ -1397,8 +1417,8 @@ const AssetForm = memo(({
 
       } else {
         // === CREATE MODE: Full payload as before ===
-        toast.info("Mengompres foto...", { duration: 2000 });
-        const compressedPhotos = await compressPhotos(formData.photos);
+        if (!cameraFlow) toast.info("Mengompres foto...", { duration: 2000 });
+        const compressedPhotos = await compressPhotos(formData.photos, { localOnly: cameraFlow });
         const coverIdx = formData.thumbnail_index || 0;
         const coverPhoto = compressedPhotos[coverIdx] || compressedPhotos[0] || null;
 
@@ -1527,6 +1547,9 @@ const AssetForm = memo(({
     }
   }, [submitWithIntent, onCameraReviewSaved, isEditing, editId, formData.photos]);
   const cameraNavigate = useCallback((dir) => submitWithIntent(dir), [submitWithIntent]); // 'prev' | 'next'
+  // Scan QR dari Mode Kamera: simpan perubahan aset saat ini dulu (jalur sama
+  // dengan navigasi), lalu induk mencari & membuka aset hasil scan.
+  const cameraScanAsset = useCallback((code) => submitWithIntent(`camera:scan:${code}`), [submitWithIntent]);
 
   // Tampilan eksklusif inventarisasi lapangan menggantikan seluruh body form.
   const sheetMode = inventoryMode && isEditing && !showFullForm;
@@ -1597,6 +1620,7 @@ const AssetForm = memo(({
           totalAssetsInView={totalAssetsInView}
           savedCount={cameraSavedCount}
           busy={isSubmitting || isFormLoading}
+          preparing={isFormLoading || isSubmitting || (!isEditing && !!formData.category && !formData.NUP)}
           onClose={closeFullCamera}
           onCapture={addCameraPhoto}
           onRemovePhoto={removePhoto}
@@ -1605,6 +1629,8 @@ const AssetForm = memo(({
           onSaveAndNew={cameraSaveAndNew}
           onReviewSaved={onCameraReviewSaved ? cameraReviewSaved : undefined}
           onNavigate={cameraNavigate}
+          onScanAsset={isEditing && inventoryMode && onSaveAndNavigate ? cameraScanAsset : undefined}
+          autoScan={cameraAutoScan}
         />
       )}
       <aside
@@ -1737,6 +1763,7 @@ const AssetForm = memo(({
               onOperasionalJenisChange={handleOperasionalJenisChange}
               onOpenCamera={openCamera}
               onOpenFullCamera={openFullCamera}
+              onOpenFullCameraScan={openFullCameraScan}
               onOpenGallery={openGallery}
               onFetchGPS={fetchGPS}
               onApplyLastCtx={applyLastCtx}

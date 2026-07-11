@@ -7,7 +7,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback, memo, useRedu
 import {
   Package, Plus, X, ChevronDown, Loader2, Star,
   Users, PanelLeftClose, PanelLeftOpen, Lock,
-  BarChart3, ClipboardList, Layers,
+  BarChart3, ClipboardList, Layers, MapPinned,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -33,6 +33,7 @@ const AnalyticsPanel = lazy(() => import("@/components/assets/AnalyticsPanel"));
 const RekapitulasiPanel = lazy(() => import("@/components/assets/RekapitulasiPanel"));
 const AuditLogPanel = lazy(() => import("@/components/assets/AuditLogPanel"));
 const AssetGroupsPanel = lazy(() => import("@/components/assets/AssetGroupsPanel"));
+const AssetMapPanel = lazy(() => import("@/components/assets/AssetMapPanel"));
 import DashboardHeader from "@/components/assets/DashboardHeader";
 import StatsBar from "@/components/assets/StatsBar";
 import InventoryProgressBar from "@/components/assets/InventoryProgressBar";
@@ -227,6 +228,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   const dragStartHeight = useRef(0);
   const [inventoryMode, setInventoryMode] = useState(false);
   const [groupsOpen, setGroupsOpen] = useState(false);
+  const [mapOpen, setMapOpen] = useState(false);
   const [viewMode, setViewMode] = useState('list');
   const [auditOpen, setAuditOpen] = useState(false);
   const [auditAssetId, setAuditAssetId] = useState("");
@@ -858,8 +860,14 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
 
   const handleOptimisticSubmit = useCallback((payload, isEdit, editId, usePatch = false) => {
     const assetId = isEdit ? editId : `temp_${Date.now()}`;
-    // Capture the version the user started editing from (for OCC / If-Match)
-    const baseVersion = isEdit ? (assets.find(a => a.id === editId)?.version ?? null) : null;
+    // Capture the version the user started editing from (for OCC / If-Match).
+    // Aset hasil scan QR bisa TIDAK ada di halaman list saat ini — pakai versi
+    // dari baris edit yang terbuka sebagai fallback agar If-Match tetap terkirim.
+    const baseVersion = isEdit
+      ? (assets.find(a => a.id === editId)?.version
+         ?? (editAssetRef.current?.id === editId ? editAssetRef.current?.version : null)
+         ?? null)
+      : null;
     if (isEdit && editId) {
       setAssets(prev => prev.map(a => a.id === editId ? { ...a, ...payload, thumbnail: payload.photo || a.thumbnail } : a));
       setMobileAssets(prev => prev.map(a => a.id === editId ? { ...a, ...payload, thumbnail: payload.photo || a.thumbnail } : a));
@@ -887,12 +895,46 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     toast.info(isEdit ? "Menyimpan perubahan..." : "Menambahkan aset...", { duration: 1500 });
   }, [enqueueOptimistic, assets, activity?.id]);
 
+  // Geser pin di Peta Aset → simpan koordinat baru otomatis lewat antrean
+  // simpan yang sama dengan form (If-Match + Idempotency-Key + retry offline).
+  const handleMapCoordsSave = useCallback((row, lat, lng) => {
+    // Simpanan antrean melepas kunci baris saat selesai (onItemSaved) — jangan
+    // izinkan geser pin aset yang sedang dibuka di form edit sesi ini, dan
+    // hormati kunci sesi lain (error sinkron → pin di-revert oleh panel).
+    if (editAssetRef.current?.id === row.id) {
+      toast.error("Aset ini sedang dibuka di form edit — simpan/tutup form dulu");
+      throw new Error("row-open-in-form");
+    }
+    const lock = rowLocks[row.id];
+    if (lock && lock.session_id !== sessionId) {
+      toast.error(`Aset sedang diedit oleh ${lock.user_name}`);
+      throw new Error("row-locked");
+    }
+    const payload = { koordinat_latitude: lat, koordinat_longitude: lng };
+    setAssets(prev => prev.map(a => (a.id === row.id ? { ...a, ...payload } : a)));
+    setMobileAssets(prev => prev.map(a => (a.id === row.id ? { ...a, ...payload } : a)));
+    if (activity?.id) upsertSnapshotAsset(activity.id, { ...row, ...payload, id: row.id });
+    const baseVersion = assetsStateRef.current.find(a => a.id === row.id)?.version ?? row.version ?? null;
+    // Fire-and-forget: antrean menjamin simpan (retry saat online kembali) —
+    // kegagalan sesaat TIDAK me-revert pin; konflik ditangani UI antrean.
+    enqueueOptimistic({
+      tempId: row.id, payload, isEdit: true, editId: row.id, usePatch: true, baseVersion,
+    }).catch(() => {});
+  }, [enqueueOptimistic, activity?.id, rowLocks, sessionId]);
+
   // Save current asset in background + navigate to next/prev row
   const handleSaveAndNavigate = useCallback(async (payload, isEdit, editId, direction, usePatch = false) => {
     const assetId = isEdit ? editId : `temp_${Date.now()}`;
-    const baseVersion = isEdit ? (assets.find(a => a.id === editId)?.version ?? null) : null;
+    const baseVersion = isEdit
+      ? (assets.find(a => a.id === editId)?.version
+         ?? (editAssetRef.current?.id === editId ? editAssetRef.current?.version : null)
+         ?? null)
+      : null;
+    const isScan = typeof direction === "string" && direction.startsWith("camera:scan:");
+    // PATCH kosong (tidak ada perubahan) → tak perlu simpan, langsung navigasi.
+    const hasChanges = !isEdit || !usePatch || (payload && Object.keys(payload).length > 0);
     // 1) Optimistic local update (row stays locked until save completes via onItemSaved)
-    if (isEdit && editId) {
+    if (!hasChanges) { /* lewati update optimistik & antrean */ } else if (isEdit && editId) {
       setAssets(prev => prev.map(a => a.id === editId ? { ...a, ...payload, thumbnail: payload.photo || a.thumbnail } : a));
       setMobileAssets(prev => prev.map(a => a.id === editId ? { ...a, ...payload, thumbnail: payload.photo || a.thumbnail } : a));
       // Offline: mirror the optimistic edit into the read snapshot (see
@@ -908,11 +950,64 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       setTotalItems(prev => prev + 1);
     }
     // 2) Enqueue background save
-    enqueueOptimistic({ tempId: assetId, payload, isEdit, editId: isEdit ? editId : undefined, usePatch, baseVersion }).catch(() => {
-      // Save failed — KEEP the optimistic row (retry/dismiss UI needs it);
-      // removed only via dismissSync → onItemDismissed.
-    });
-    toast.info("Menyimpan di background...", { duration: 1200 });
+    if (hasChanges) {
+      enqueueOptimistic({ tempId: assetId, payload, isEdit, editId: isEdit ? editId : undefined, usePatch, baseVersion }).catch(() => {
+        // Save failed — KEEP the optimistic row (retry/dismiss UI needs it);
+        // removed only via dismissSync → onItemDismissed.
+      });
+      toast.info("Menyimpan di background...", { duration: 1200 });
+    } else if (isEdit && editId && !isScan) {
+      // Tanpa perubahan tidak ada antrean yang akan melepas kunci baris
+      // (biasanya onItemSaved) — lepaskan sekarang sebelum pindah aset.
+      // (Alur scan melepasnya nanti HANYA bila benar-benar pindah aset.)
+      unlockAsset(editId);
+    }
+
+    // 3a) Alur scan QR dari Mode Kamera (edit inventarisasi): cari aset hasil
+    //     scan di kegiatan ini, kunci, lalu buka untuk diedit — kamera tetap
+    //     terbuka karena editAsset hanya berganti (sama seperti prev/next).
+    //     Pencarian substring bisa mengenai banyak baris (satu kode aset utk
+    //     banyak NUP) — hanya buka otomatis bila cocok EKSAK dan tunggal.
+    if (isScan) {
+      const code = direction.slice("camera:scan:".length).trim();
+      if (!code || !activity?.id) return;
+      const tId = toast.loading(`Mencari "${code}"…`);
+      try {
+        const r = await axios.get(`${API}/assets`, {
+          params: { activity_id: activity.id, search: code, page: 1, page_size: 50 },
+        });
+        const items = r.data?.items || [];
+        const codeLc = code.toLowerCase();
+        const exact = items.filter(a =>
+          [a.kode_register, a.asset_code, a.serial_number]
+            .some(v => String(v || "").toLowerCase() === codeLc));
+        let found = null;
+        if (exact.length === 1) found = exact[0];
+        else if (exact.length === 0 && (r.data?.total || 0) === 1) found = items[0];
+        if (!found) {
+          if ((r.data?.total || 0) === 0) {
+            toast.error(`Barang "${code}" tidak ada di kegiatan ini`, { id: tId });
+          } else {
+            setSearchInput(code);
+            toast.info(`${exact.length > 1 ? exact.length : r.data.total} aset cocok dengan "${code}" — pilih dari daftar`, { id: tId, duration: 5000 });
+          }
+          return; // kunci aset yang sedang dibuka tetap dipegang
+        }
+        if (found.id === editId) { toast.info("QR menunjuk aset yang sedang dibuka", { id: tId }); return; }
+        const lock = rowLocks[found.id];
+        if (lock && lock.session_id !== sessionId) { toast.error(`Aset sedang diedit oleh ${lock.user_name}`, { id: tId }); return; }
+        const locked = await lockAsset(found.id);
+        if (!locked) { toast.dismiss(tId); return; }
+        // Benar-benar pindah: bila tak ada perubahan tersimpan (tidak ada
+        // antrean yang akan melepasnya), lepaskan kunci aset lama sekarang.
+        if (!hasChanges && editId) unlockAsset(editId);
+        setEditAssetForForm(found);
+        toast.success(`${found.asset_name || found.asset_code}: siap diedit`, { id: tId });
+      } catch {
+        toast.error("Gagal mencari aset hasil scan — periksa koneksi", { id: tId });
+      }
+      return;
+    }
 
     // 3) Navigate to next/prev asset
     const currentIndex = assets.findIndex(a => a.id === editId);
@@ -939,7 +1034,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       setEditAssetForForm(null);
       setIsSidebarOpen(false);
     }
-  }, [assets, lockAsset, enqueueOptimistic, rowLocks, sessionId, activity?.id]);
+  }, [assets, lockAsset, unlockAsset, enqueueOptimistic, rowLocks, sessionId, activity?.id, setSearchInput]);
 
   // Mode Kamera Penuh — "tinjau aset tersimpan": simpan aset saat ini lalu muat
   // aset yang tersimpan sebelumnya (paling atas daftar) ke form untuk ditinjau/
@@ -1281,10 +1376,15 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
                 className={`h-8 px-2.5 rounded-full text-[11px] font-semibold flex items-center gap-1 flex-shrink-0 border transition-colors ${groupsOpen ? "bg-violet-600 border-violet-600 text-white" : "bg-card border-border text-muted-foreground"}`}>
                 <Layers className="w-3.5 h-3.5" />Barang Serupa
               </button>
+              <button type="button" onClick={() => setMapOpen(p => !p)} data-testid="chip-map"
+                className={`h-8 px-2.5 rounded-full text-[11px] font-semibold flex items-center gap-1 flex-shrink-0 border transition-colors ${mapOpen ? "bg-teal-600 border-teal-600 text-white" : "bg-card border-border text-muted-foreground"}`}>
+                <MapPinned className="w-3.5 h-3.5" />Peta
+              </button>
             </div>
             {!inventoryMode && <div className={analyticsOpen ? "" : "hidden lg:block"}><Suspense fallback={null}><AnalyticsPanel activityId={activity?.id} isOpen={analyticsOpen} onToggle={handleAnalyticsToggle} panelHeight={analyticsPanelHeight} onDragStart={handleAnalyticsDragStart} /></Suspense></div>}
             {!inventoryMode && <div className={rekapOpen ? "" : "hidden lg:block"}><Suspense fallback={null}><RekapitulasiPanel activityId={activity?.id} isOpen={rekapOpen} onToggle={() => setRekapOpen(p => !p)} /></Suspense></div>}
             <div className={groupsOpen ? "" : "hidden lg:block"}><Suspense fallback={null}><AssetGroupsPanel activityId={activity?.id} isOpen={groupsOpen} onToggle={() => setGroupsOpen(p => !p)} onBatchEdit={perms.canEdit ? handleGroupBatchEdit : undefined} /></Suspense></div>
+            <div className={mapOpen ? "" : "hidden lg:block"}><Suspense fallback={null}><AssetMapPanel activityId={activity?.id} isOpen={mapOpen} onToggle={() => setMapOpen(p => !p)} canEdit={perms.canEdit} onEditAsset={perms.canEdit ? handleEdit : undefined} onSaveCoords={handleMapCoordsSave} /></Suspense></div>
 
             {loading ? (
               <LoadingIndicator message={loadingMessage} totalItems={totalItems} pageSize={pageSize} currentPage={currentPage} />
