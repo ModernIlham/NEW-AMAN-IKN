@@ -18,14 +18,14 @@ import {
 // tombol type="submit" memakai jalur simpan yang sama persis dengan form penuh.
 // ============================================================================
 
-const STATUS_OPTIONS = [
+export const STATUS_OPTIONS = [
   { value: "Ditemukan", selected: "bg-emerald-600 border-emerald-600 text-white" },
   { value: "Tidak Ditemukan", selected: "bg-red-600 border-red-600 text-white" },
   { value: "Berlebih", selected: "bg-purple-600 border-purple-600 text-white" },
   { value: "Sengketa", selected: "bg-rose-600 border-rose-600 text-white" },
 ];
 
-const CONDITION_OPTIONS = [
+export const CONDITION_OPTIONS = [
   { value: "Baik", selected: "bg-emerald-600 border-emerald-600 text-white" },
   { value: "Rusak Ringan", selected: "bg-amber-500 border-amber-500 text-white" },
   { value: "Rusak Berat", selected: "bg-red-600 border-red-600 text-white" },
@@ -44,7 +44,7 @@ export const PENGGUNA_NAME_LABELS = {
 export const OPERASIONAL_JENIS_OPTIONS = ["Kegiatan/Acara/Kebutuhan", "Ruangan"];
 
 // Nilai HARUS sama persis dengan opsi Select pada form penuh (AssetForm).
-const SUB_KLASIFIKASI_OPTIONS = {
+export const SUB_KLASIFIKASI_OPTIONS = {
   "Kesalahan Pencatatan": [
     { value: "Kesalahan Kodefikasi", label: "Kesalahan Kodefikasi" },
     { value: "Pencatatan Ganda", label: "Pencatatan Ganda" },
