@@ -280,13 +280,21 @@ backend serta `eslint` + `yarn build` frontend pada setiap PR.
 
 Lihat [DEPLOYMENT_GUIDE_HOSTINGER.md](./DEPLOYMENT_GUIDE_HOSTINGER.md) untuk panduan deployment lengkap ke Hostinger VPS.
 
-**Update kode di VPS:**
+**Update kode di VPS (otomatis):** setiap merge ke `main` memicu workflow
+[Deploy ke Hostinger VPS](.github/workflows/deploy.yml) yang menjalankan
+`scripts/deploy_vps.sh` lewat SSH. Sekali saja, isi secret repo
+(Settings → Secrets and variables → Actions): `VPS_HOST`, `VPS_USER`,
+`VPS_SSH_KEY` (opsional `VPS_PORT`). Bisa juga dipicu manual dari tab
+Actions → Run workflow.
+
+**Update kode di VPS (manual):**
 ```bash
-# JANGAN gunakan git pull - selalu fetch + reset
+cd /var/www/inventarisasi && bash scripts/deploy_vps.sh
+# — atau langkah demi langkah (JANGAN git pull, selalu fetch + reset) —
 cp /var/www/inventarisasi/backend/.env /tmp/backend_env_backup
 cp /var/www/inventarisasi/frontend/.env /tmp/frontend_env_backup
 cd /var/www/inventarisasi
-git fetch origin && git reset --hard origin/Deploy_Hostinger_VPS
+git fetch origin && git reset --hard origin/main
 cp /tmp/backend_env_backup /var/www/inventarisasi/backend/.env
 cp /tmp/frontend_env_backup /var/www/inventarisasi/frontend/.env
 sudo supervisorctl restart inventarisasi-backend
