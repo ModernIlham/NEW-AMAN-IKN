@@ -90,12 +90,12 @@
                 <th style="width:8%;">Foto</th>
                 <th style="width:6%;">Stiker</th>
                 <th style="width:12%;">Identitas Barang</th>
-                <th style="width:14%;">Nama Barang</th>
+                <th style="width:12%;">Nama Barang</th>
                 <th style="width:4%;">Tahun</th>
                 <th style="width:8%;">Nilai (Rp)</th>
                 <th style="width:15%;">Kondisi & Status</th>
                 <th style="width:12%;">Lokasi & Pengguna</th>
-                <th style="width:10%;">Kelengkapan Dok.</th>
+                <th style="width:12%;">Kelengkapan Dok.</th>
                 <th style="width:8%;">Keterangan</th>
             </tr>
         </thead>
@@ -118,8 +118,6 @@
                 <td><div class="cell-clip">
                     <div class="cell-main">{{ a.asset_name }}</div>
                     <div class="cell-sub"><span class="label">Merk:</span> {{ a.brand_model }}</div>
-                    {% if a.eselon1 %}<div class="cell-sub"><span class="label">Es. I:</span> {{ a.eselon1 }}</div>{% endif %}
-                    {% if a.eselon2 %}<div class="cell-sub"><span class="label">Es. II:</span> {{ a.eselon2 }}</div>{% endif %}
                 </div></td>
                 <td class="center">{{ a.year or '-' }}</td>
                 <td class="right" style="font-weight:600;">{{ a.value_fmt }}</td>
@@ -135,7 +133,11 @@
                     <div class="cell-sub"><span class="label">Pengguna:</span> {{ a.user or '-' }}</div>
                     {% if a.coords %}<div class="cell-coords">{{ a.coords }}</div>{% endif %}
                 </div></td>
-                <td><div class="cell-clip"><div class="cell-sub" style="line-height:1.5;">{{ a.kelengkapan or '-' }}</div></div></td>
+                <td><div class="cell-clip">
+                    <div class="cell-sub" style="line-height:1.5;">{{ a.kelengkapan or '-' }}</div>
+                    {% if a.eselon1 %}<div class="cell-sub"><span class="label">Es. I:</span> {{ a.eselon1 }}</div>{% endif %}
+                    {% if a.eselon2 %}<div class="cell-sub"><span class="label">Es. II:</span> {{ a.eselon2 }}</div>{% endif %}
+                </div></td>
                 <td><div class="cell-clip" style="font-size:7px;">{{ a.notes or '-' }}</div></td>
             </tr>
             {% endfor %}
