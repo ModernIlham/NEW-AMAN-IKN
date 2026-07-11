@@ -2,10 +2,21 @@ import React, { memo, useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import {
   X, Camera, MapPin, Clock, Pencil, SwitchCamera, Loader2, Check, Trash2,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, RotateCcw, AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useBackGuard } from "../../hooks/useBackGuard";
+
+// Pesan error kamera per jenis (fungsi murni di luar komponen agar tidak
+// menjadi dependency effect).
+function cameraErrMsg(err) {
+  switch (err?.name) {
+    case "NotAllowedError": case "SecurityError": return "Akses kamera ditolak. Izinkan kamera di pengaturan situs, lalu Coba Lagi.";
+    case "NotFoundError": case "OverconstrainedError": return "Kamera tidak ditemukan di perangkat ini.";
+    case "NotReadableError": case "AbortError": return "Kamera sedang dipakai aplikasi lain. Tutup aplikasi itu lalu Coba Lagi.";
+    default: return "Gagal membuka kamera. Coba Lagi atau gunakan tombol Galeri/Kamera biasa.";
+  }
+}
 
 /**
  * Mode Kamera Penuh (ala aplikasi Timemark) untuk surveyor inventarisasi.
@@ -46,20 +57,33 @@ const FullCameraSheet = memo(function FullCameraSheet({
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const gpsRef = useRef(null); // fix terakhir utk stempel foto (hindari re-render race)
+  // onClose disimpan di ref agar effect kamera TIDAK bergantung padanya (induk
+  // mengirim arrow baru tiap render, dan GPS live memicu render ~1x/detik →
+  // dulu ini me-restart getUserMedia terus-menerus / preview berkedip).
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; });
+
   const [ready, setReady] = useState(false);
   const [starting, setStarting] = useState(true);
   const [facing, setFacing] = useState("environment");
   const [now, setNow] = useState(() => new Date());
   const [gps, setGps] = useState(null); // {lat, lng, accuracy}
+  const [gpsDenied, setGpsDenied] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [confirmIdx, setConfirmIdx] = useState(null); // index foto yang mau dihapus
+  const [camError, setCamError] = useState(null); // { name, msg } bila gagal buka kamera
+  const [suspended, setSuspended] = useState(false); // track berhenti (background/lock/direbut app lain)
+  const [camNonce, setCamNonce] = useState(0); // bump utk coba-sambung-ulang kamera
+  const [gpsNonce, setGpsNonce] = useState(0); // bump utk coba-lagi GPS
+
+  const supported = typeof navigator !== "undefined" && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
 
   // Back HP: tutup panel edit dulu, lalu konfirmasi hapus, lalu kamera.
   useBackGuard(useCallback(() => {
     if (editOpen) { setEditOpen(false); return; }
     if (confirmIdx !== null) { setConfirmIdx(null); return; }
-    onClose();
-  }, [editOpen, confirmIdx, onClose]));
+    onCloseRef.current?.();
+  }, [editOpen, confirmIdx]));
 
   // Kunci scroll latar selama kamera terbuka
   useEffect(() => {
@@ -74,9 +98,10 @@ const FullCameraSheet = memo(function FullCameraSheet({
     return () => clearInterval(t);
   }, []);
 
-  // GPS live: watchPosition dengan maximumAge:0 — terus ter-update tanpa refresh
+  // GPS live: watchPosition dengan maximumAge:0 — terus ter-update tanpa refresh.
+  // Error izin (code 1) ditandai agar surveyor diberi tahu + tombol Coba Lagi.
   useEffect(() => {
-    if (!navigator.geolocation) return undefined;
+    if (!navigator.geolocation) { setGpsDenied(true); return undefined; }
     const id = navigator.geolocation.watchPosition(
       (pos) => {
         const fix = {
@@ -86,19 +111,25 @@ const FullCameraSheet = memo(function FullCameraSheet({
         };
         gpsRef.current = fix;
         setGps(fix);
+        setGpsDenied(false);
         try { onGpsFix?.(fix); } catch { /* update form tidak boleh mematikan kamera */ }
       },
-      () => { /* sementara tidak dapat fix — biarkan watch berjalan */ },
+      (err) => { if (err && err.code === 1) setGpsDenied(true); },
       { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
     );
     return () => navigator.geolocation.clearWatch(id);
-  }, [onGpsFix]);
+  }, [onGpsFix, gpsNonce]);
 
-  // Nyalakan kamera (dan restart saat flip depan/belakang)
+  // Nyalakan kamera (restart hanya saat flip kamera / coba-sambung-ulang — TIDAK
+  // pada tiap render). Menangani: fitur tak didukung, izin ditolak, kamera
+  // direbut app lain, dan track yang berhenti (background/lock) tanpa menutup
+  // sheet secara diam-diam.
   useEffect(() => {
+    if (!supported) { setCamError({ name: "unsupported", msg: "Kamera langsung tidak didukung di browser/perangkat ini. Gunakan tombol Galeri/Kamera biasa." }); setStarting(false); return undefined; }
     let cancelled = false;
-    setReady(false);
-    setStarting(true);
+    let track = null;
+    let onEnded = null;
+    setReady(false); setStarting(true); setCamError(null); setSuspended(false);
     (async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -107,27 +138,41 @@ const FullCameraSheet = memo(function FullCameraSheet({
         });
         if (cancelled) { stream.getTracks().forEach(t => t.stop()); return; }
         streamRef.current = stream;
-        const video = videoRef.current;
-        if (video) {
-          video.srcObject = stream;
-          await video.play().catch(() => {});
+        track = stream.getVideoTracks()[0];
+        if (track) {
+          // Track berhenti (screen lock / app background / direbut app lain):
+          // tandai suspended supaya rana dinonaktifkan & tak memotret frame beku.
+          onEnded = () => { if (!cancelled) { setReady(false); setSuspended(true); } };
+          track.addEventListener("ended", onEnded);
         }
+        const video = videoRef.current;
+        if (video) { video.srcObject = stream; await video.play().catch(() => {}); }
         setReady(true);
       } catch (err) {
-        if (!cancelled) {
-          if (err?.name === "NotAllowedError") toast.error("Akses kamera ditolak. Izinkan di pengaturan browser.");
-          else toast.error("Gagal membuka kamera");
-          onClose();
-        }
+        if (!cancelled) setCamError({ name: err?.name || "error", msg: cameraErrMsg(err) }); // JANGAN auto-close
       } finally {
         if (!cancelled) setStarting(false);
       }
     })();
     return () => {
       cancelled = true;
+      if (track && onEnded) track.removeEventListener("ended", onEnded);
       if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
     };
-  }, [facing, onClose]);
+  }, [facing, camNonce, supported]);
+
+  // Kembali ke depan (unlock/foreground): kalau track sudah mati, sambung ulang;
+  // kalau masih hidup, cukup play() lagi.
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState !== "visible") return;
+      const tr = streamRef.current?.getVideoTracks?.()[0];
+      if (!tr || tr.readyState !== "live") setCamNonce((n) => n + 1);
+      else { setSuspended(false); videoRef.current?.play?.().catch(() => {}); }
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
 
   const fmtTanggal = now.toLocaleDateString("id-ID", { weekday: "short", day: "2-digit", month: "short", year: "numeric" });
   const fmtJam = now.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
@@ -142,6 +187,14 @@ const FullCameraSheet = memo(function FullCameraSheet({
   // hasilkan JPEG (sisi terpanjang ≤1920, q0.85 — setara pipeline kompresi form).
   const capture = useCallback(() => {
     const video = videoRef.current;
+    // Track harus 'live' — cegah memotret frame BEKU saat kamera terputus
+    // (background/lock) padahal watermark akan mencap waktu & GPS terbaru.
+    const track = streamRef.current?.getVideoTracks?.()[0];
+    if (suspended || !track || track.readyState !== "live") {
+      toast.error("Kamera terputus — menyambungkan ulang…");
+      setCamNonce((n) => n + 1);
+      return;
+    }
     if (!video || video.readyState < 2) { toast.error("Kamera belum siap"); return; }
     if (photos.length >= maxPhotos) { toast.error(`Maks ${maxPhotos} foto`); return; }
     const vw = video.videoWidth, vh = video.videoHeight;
@@ -177,7 +230,7 @@ const FullCameraSheet = memo(function FullCameraSheet({
 
     const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
     onCapture(dataUrl);
-  }, [photos.length, maxPhotos, formData, onCapture]);
+  }, [photos.length, maxPhotos, formData, onCapture, suspended]);
 
   // Form ringkas & padat: field penting saja, 2 kolom. Kode Aset & NUP
   // read-only (sudah distandby-kan ke kategori dummy + NUP otomatis).
@@ -191,12 +244,44 @@ const FullCameraSheet = memo(function FullCameraSheet({
   ];
 
   return createPortal(
-    <div className="fixed inset-0 z-[120] bg-black flex flex-col" data-testid="full-camera-sheet">
+    <div className="fixed inset-0 z-[120] bg-black flex flex-col" role="dialog" aria-modal="true" aria-label="Mode Kamera Penuh" data-testid="full-camera-sheet">
       {/* Pratinjau kamera */}
       <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" playsInline muted />
-      {(starting || !ready) && (
-        <div className="absolute inset-0 flex items-center justify-center text-white/80">
+      {(starting || (!ready && !camError)) && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-white/80 gap-2" role="status" aria-live="polite">
           <Loader2 className="w-8 h-8 animate-spin" />
+          <span className="text-xs">Menyalakan kamera…</span>
+        </div>
+      )}
+
+      {/* Gagal buka kamera: pesan jelas + Coba Lagi + Tutup (jangan auto-close) */}
+      {camError && (
+        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-4 px-8 text-center bg-black/85" data-testid="full-camera-error">
+          <AlertTriangle className="w-10 h-10 text-amber-400" />
+          <p className="text-sm text-white/90 max-w-xs">{camError.msg}</p>
+          <div className="flex items-center gap-2">
+            {supported && (
+              <button type="button" onClick={() => { setCamError(null); setCamNonce((n) => n + 1); }}
+                data-testid="full-camera-retry"
+                className="h-11 px-4 rounded-lg bg-blue-600 text-white text-sm font-semibold flex items-center gap-1.5">
+                <RotateCcw className="w-4 h-4" />Coba Lagi
+              </button>
+            )}
+            <button type="button" onClick={() => onCloseRef.current?.()}
+              className="h-11 px-4 rounded-lg bg-white/15 text-white text-sm font-medium">Tutup</button>
+          </div>
+        </div>
+      )}
+
+      {/* Kamera terputus (background/lock/direbut app lain): jangan memotret frame beku */}
+      {suspended && !camError && (
+        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 px-8 text-center bg-black/80" data-testid="full-camera-suspended">
+          <Camera className="w-9 h-9 text-white/70" />
+          <p className="text-sm text-white/90">Kamera terputus. Sambungkan kembali untuk melanjutkan.</p>
+          <button type="button" onClick={() => { setSuspended(false); setCamNonce((n) => n + 1); }}
+            className="h-11 px-4 rounded-lg bg-blue-600 text-white text-sm font-semibold flex items-center gap-1.5">
+            <RotateCcw className="w-4 h-4" />Sambungkan
+          </button>
         </div>
       )}
 
@@ -208,8 +293,14 @@ const FullCameraSheet = memo(function FullCameraSheet({
               <Clock className="w-3.5 h-3.5 flex-shrink-0" />{fmtTanggal} • {fmtJam}
             </div>
             <div className="flex items-center gap-1.5 text-[11px] font-mono">
-              <MapPin className={`w-3.5 h-3.5 flex-shrink-0 ${gps ? "text-emerald-400" : "text-white/50"}`} />
-              {gps ? `${gps.lat}, ${gps.lng}${gps.accuracy != null ? ` (±${gps.accuracy} m)` : ""}` : "Mencari sinyal GPS…"}
+              <MapPin className={`w-3.5 h-3.5 flex-shrink-0 ${gps ? "text-emerald-400" : gpsDenied ? "text-amber-400" : "text-white/50"}`} />
+              {gps ? `${gps.lat}, ${gps.lng}${gps.accuracy != null ? ` (±${gps.accuracy} m)` : ""}`
+                : gpsDenied ? <span className="text-amber-300">GPS mati/ditolak</span> : "Mencari sinyal GPS…"}
+              {!gps && gpsDenied && (
+                <button type="button" onClick={() => { setGpsDenied(false); setGpsNonce((n) => n + 1); }}
+                  data-testid="full-camera-gps-retry"
+                  className="ml-1 px-1.5 py-0.5 rounded bg-white/15 text-[10px] font-sans font-medium">Coba lagi</button>
+              )}
             </div>
             <div className="text-[11px] text-white/90 truncate">
               <span className="font-semibold">{formData?.asset_name || "Aset Baru"}</span>

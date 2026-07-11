@@ -859,10 +859,11 @@ const AssetForm = memo(({
     });
   }, [isEditing]);
 
-  // GPS live dari kamera: selalu simpan fix terbaru ke koordinat form + cache
+  // GPS live dari kamera: simpan fix terbaru ke koordinat form + cache. Guard
+  // kesetaraan agar TIDAK me-render ulang form saat koordinat tak berubah.
   const handleCameraGpsFix = useCallback(({ lat, lng }) => {
     try { localStorage.setItem("aman_last_gps", JSON.stringify({ lat, lng, ts: Date.now() })); } catch {}
-    setFormData(p => ({ ...p, koordinat_latitude: lat, koordinat_longitude: lng }));
+    setFormData(p => (p.koordinat_latitude === lat && p.koordinat_longitude === lng ? p : { ...p, koordinat_latitude: lat, koordinat_longitude: lng }));
   }, []);
 
   // Clear a single field's inline error (used on change so the red state
@@ -1055,6 +1056,18 @@ const AssetForm = memo(({
 
   const openCamera = useCallback(() => cameraInputRef.current?.click(), []);
   const openGallery = useCallback(() => fileInputRef.current?.click(), []);
+
+  // Mode Kamera Penuh butuh getUserMedia (konteks aman/HTTPS). Bila tak
+  // didukung (WebView pemerintah tanpa izin kamera / non-HTTPS), fallback ke
+  // kamera OS via input file — jangan buntu.
+  const cameraSupported = typeof navigator !== "undefined" && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  const openFullCamera = useCallback(() => {
+    if (cameraSupported) setFullCameraOpen(true);
+    else { toast.info("Mode kamera langsung tidak didukung — memakai kamera biasa."); cameraInputRef.current?.click(); }
+  }, [cameraSupported]);
+  // Callback stabil untuk FullCameraSheet (jaga memo + hindari render berlebih).
+  const closeFullCamera = useCallback(() => setFullCameraOpen(false), []);
+  const cameraSetField = useCallback((name, value) => { setFormData(p => ({ ...p, [name]: value })); clearFieldError(name); }, [clearFieldError]);
 
   // "Samakan dengan sebelumnya": konteks lokasi/pengguna dari aset terakhir
   // yang disimpan (localStorage 'aman_last_asset_ctx', ditulis saat submit).
@@ -1356,7 +1369,10 @@ const AssetForm = memo(({
           patch.document_checklist = cleanedChecklist;
         }
 
-        if (Object.keys(patch).length === 0) {
+        // Tanpa perubahan: berhenti — KECUALI ini aksi navigasi Kamera Penuh,
+        // supaya surveyor tetap bisa berpindah antar aset tersimpan meski tak
+        // ada yang diedit (PATCH kosong = no-op di backend).
+        if (Object.keys(patch).length === 0 && !navIntent) {
           toast.info("Tidak ada perubahan");
           setIsSubmitting(false);
           return;
@@ -1532,7 +1548,7 @@ const AssetForm = memo(({
             </div>
             <div className="grid grid-cols-1 gap-2">
               <button type="button" data-testid="camera-choice-full"
-                onClick={() => { setCameraPromptOpen(false); setFullCameraOpen(true); }}
+                onClick={() => { setCameraPromptOpen(false); openFullCamera(); }}
                 className="h-11 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors">
                 <Camera className="w-4 h-4" />Mode Kamera Penuh
               </button>
@@ -1557,10 +1573,10 @@ const AssetForm = memo(({
           totalAssetsInView={totalAssetsInView}
           savedCount={cameraSavedCount}
           busy={isSubmitting || isFormLoading}
-          onClose={() => setFullCameraOpen(false)}
+          onClose={closeFullCamera}
           onCapture={addCameraPhoto}
           onRemovePhoto={removePhoto}
-          onSetField={(name, value) => { setFormData(p => ({ ...p, [name]: value })); clearFieldError(name); }}
+          onSetField={cameraSetField}
           onGpsFix={handleCameraGpsFix}
           onSaveAndNew={cameraSaveAndNew}
           onReviewSaved={onCameraReviewSaved ? cameraReviewSaved : undefined}
@@ -1696,7 +1712,7 @@ const AssetForm = memo(({
               onPenggunaMelekatChange={handlePenggunaMelekatChange}
               onOperasionalJenisChange={handleOperasionalJenisChange}
               onOpenCamera={openCamera}
-              onOpenFullCamera={() => setFullCameraOpen(true)}
+              onOpenFullCamera={openFullCamera}
               onOpenGallery={openGallery}
               onFetchGPS={fetchGPS}
               onApplyLastCtx={applyLastCtx}
