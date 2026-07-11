@@ -121,6 +121,24 @@ const LazyKartuInventarisasiDialog = lazy(() => import("@/components/assets/Kart
 // Pengesahan (finalisasi kegiatan) hanya di halaman Kegiatan
 // (ActivitySelectionPage), tidak di halaman data.
 
+// Baris CREATE optimistik (id = tempId) dianggap SUDAH terwakili oleh baris
+// server bila id-nya sama ATAU kode aset + NUP-nya cocok. Ini mencegah baris
+// KEMBAR (temp + baris server) muncul saat sebuah refetch (mis. dipicu event
+// WebSocket) berlomba dengan konfirmasi simpan: server sudah mengembalikan
+// baris asli (id nyata), tetapi baris pending masih ber-id tempId sehingga
+// dedup lama yang hanya membandingkan id gagal mengenalinya sebagai aset sama.
+function serverHasPendingRow(serverRow, pendingRow) {
+  if (!serverRow || !pendingRow) return false;
+  if (serverRow.id === pendingRow.id) return true;
+  const code = (pendingRow.asset_code || "").trim();
+  if (
+    code &&
+    serverRow.asset_code === pendingRow.asset_code &&
+    String(serverRow.NUP ?? "") === String(pendingRow.NUP ?? "")
+  ) return true;
+  return false;
+}
+
 // ============================================================================
 // ASSET MANAGEMENT DASHBOARD (within Activity context)
 // ============================================================================
@@ -280,11 +298,21 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       setAssets(prev => prev.map(a => a.id === assetKey ? { ...a, ...serverData } : a));
       setMobileAssets(prev => prev.map(a => a.id === assetKey ? { ...a, ...serverData } : a));
     } else {
-      // For new items, replace the temp item with the server-generated item
+      // For new items, replace the temp item with the server row — dan pastikan
+      // HANYA ADA SATU baris ber-id server. Sebuah refetch yang berlomba (mis.
+      // dipicu WebSocket) bisa sudah menyisipkan baris server (id nyata) di
+      // samping baris temp; tanpa dedup ini hasilnya 2 baris kembar untuk aset
+      // yang sama sampai refresh manual. NUP untuk kategori auto-nomor diberi
+      // server, jadi dedup kode+NUP saja tak cukup — di sinilah kepastiannya.
       const serverId = serverData.id;
-      if (serverId && serverId !== assetKey) {
-        setAssets(prev => prev.map(a => a.id === assetKey ? { ...a, ...serverData, id: serverId } : a));
-        setMobileAssets(prev => prev.map(a => a.id === assetKey ? { ...a, ...serverData, id: serverId } : a));
+      if (serverId) {
+        const dedupeReplace = (prev) => {
+          const withoutDupServer = prev.filter(a => a.id !== serverId || a.id === assetKey);
+          const mapped = withoutDupServer.map(a => a.id === assetKey ? { ...a, ...serverData, id: serverId } : a);
+          return mapped.some(a => a.id === serverId) ? mapped : [{ ...serverData }, ...mapped];
+        };
+        setAssets(dedupeReplace);
+        setMobileAssets(dedupeReplace);
       }
     }
   }, []);
@@ -301,8 +329,8 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       .filter(it => !it.isEdit && it.payload && it.payload.activity_id === activity?.id)
       .map(it => ({ ...it.payload, id: it.tempId, thumbnail: it.payload.photo || null, created_at: it.queuedAt || new Date().toISOString() }));
     if (rows.length === 0) return;
-    setAssets(prev => [...rows.filter(r => !prev.some(a => a.id === r.id)), ...prev]);
-    setMobileAssets(prev => [...rows.filter(r => !prev.some(a => a.id === r.id)), ...prev]);
+    setAssets(prev => [...rows.filter(r => !prev.some(a => serverHasPendingRow(a, r))), ...prev]);
+    setMobileAssets(prev => [...rows.filter(r => !prev.some(a => serverHasPendingRow(a, r))), ...prev]);
     setTotalItems(prev => prev + rows.length);
   }, [activity?.id]);
 
@@ -505,7 +533,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       const pendingRows = pg === 1 ? getPendingItems()
         .filter(it => !it.isEdit && it.payload && it.payload.activity_id === activity?.id)
         .map(it => ({ ...it.payload, id: it.tempId, thumbnail: it.payload.photo || null, created_at: it.queuedAt || new Date().toISOString() }))
-        .filter(row => !pageItems.some(a => a.id === row.id)) : [];
+        .filter(row => !pageItems.some(a => serverHasPendingRow(a, row))) : [];
       const merged = pendingRows.length ? [...pendingRows, ...pageItems] : pageItems;
       setAssets(merged);
       setTotalItems(totalFiltered);
@@ -551,7 +579,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       const pendingRows = getPendingItems()
         .filter(it => !it.isEdit && it.payload && it.payload.activity_id === activity?.id)
         .map(it => ({ ...it.payload, id: it.tempId, thumbnail: it.payload.photo || null, created_at: it.queuedAt || new Date().toISOString() }))
-        .filter(row => !newItems.some(a => a.id === row.id));
+        .filter(row => !newItems.some(a => serverHasPendingRow(a, row)));
       const merged = pendingRows.length ? [...pendingRows, ...newItems] : newItems;
       setAssets(merged);
       setTotalItems(r.data.total || 0);

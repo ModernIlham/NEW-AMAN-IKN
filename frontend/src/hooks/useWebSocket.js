@@ -100,17 +100,20 @@ export function useWebSocket({ activityId, userId, userName, onAssetChange, onLo
                 setOnlineUsers(msg.users || []);
                 break;
               case "asset_created":
-                if (msg.user_id && msg.user_id === uid) break;
+                // Bandingkan sebagai String: id bisa berbeda tipe (mis. number
+                // vs string) sehingga === gagal menyaring event buatan sendiri,
+                // memicu refetch yang berlomba → baris kembar saat simpan aset baru.
+                if (msg.user_id && String(msg.user_id) === String(uid)) break;
                 toast.info(`${msg.user_name} menambahkan aset: ${msg.asset?.asset_code}`, { duration: 3000 });
                 oac?.();
                 break;
               case "asset_updated":
-                if (msg.user_id && msg.user_id === uid) break;
+                if (msg.user_id && String(msg.user_id) === String(uid)) break;
                 toast.info(`${msg.user_name} memperbarui aset: ${msg.asset?.asset_code}`, { duration: 3000 });
                 oac?.();
                 break;
               case "asset_deleted":
-                if (msg.user_id && msg.user_id === uid) break;
+                if (msg.user_id && String(msg.user_id) === String(uid)) break;
                 toast.info(`${msg.user_name} menghapus aset: ${msg.asset?.asset_code}`, { duration: 3000 });
                 oac?.();
                 break;

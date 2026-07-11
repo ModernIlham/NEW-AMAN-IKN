@@ -535,21 +535,22 @@ const BatchEditPanel = memo(function BatchEditPanel({
                     ))}
                   </div>
                 </div>
-                {/* Nama pengguna */}
-                <div className="space-y-0.5">
+                {/* Nama pengguna — di HP tampil SETELAH Jenis Operasional/Jabatan
+                    (order-2); di desktop kembali ke urutan sumber (grid 2 kolom). */}
+                <div className="space-y-0.5 order-2 sm:order-none">
                   <label className="text-[10px] text-muted-foreground">{PENGGUNA_NAME_LABELS[updates.pengguna_melekat_ke] || "Nama Pengguna"}</label>
                   <ClearableInput placeholder="—" value={updates.user === "__clear__" ? "" : updates.user} isClear={updates.user === "__clear__"} onChange={e => setField("user", e.target.value)} onClear={() => toggleClearField("user")} />
                 </div>
-                {/* Nama Jabatan (bila melekat ke Jabatan) */}
+                {/* Nama Jabatan (bila melekat ke Jabatan) — di HP di atas Nama */}
                 {updates.pengguna_melekat_ke === "Jabatan" && (
-                  <div className="space-y-0.5">
+                  <div className="space-y-0.5 order-1 sm:order-none">
                     <label className="text-[10px] text-muted-foreground">Nama Jabatan</label>
                     <ClearableInput placeholder="Contoh: Kepala Subbagian Umum" value={updates.pengguna_jabatan === "__clear__" ? "" : updates.pengguna_jabatan} isClear={updates.pengguna_jabatan === "__clear__"} onChange={e => setField("pengguna_jabatan", e.target.value)} onClear={() => toggleClearField("pengguna_jabatan")} />
                   </div>
                 )}
-                {/* Jenis Operasional (bila melekat ke Operasional) */}
+                {/* Jenis Operasional (bila melekat ke Operasional) — di HP di atas Nama */}
                 {updates.pengguna_melekat_ke === "Operasional" && (
-                  <div className="space-y-0.5">
+                  <div className="space-y-0.5 order-1 sm:order-none">
                     <label className="text-[10px] text-muted-foreground">Jenis Operasional</label>
                     <div className="grid grid-cols-2 gap-1">
                       {OPERASIONAL_JENIS_OPTIONS.map(o => (
@@ -561,8 +562,8 @@ const BatchEditPanel = memo(function BatchEditPanel({
                     </div>
                   </div>
                 )}
-                {/* Nomor BAST */}
-                <div className="space-y-0.5">
+                {/* Nomor BAST — selalu paling bawah di blok pengguna */}
+                <div className="space-y-0.5 order-3 sm:order-none">
                   <label className="text-[10px] text-muted-foreground flex items-center gap-1"><FileCheck className="w-2.5 h-2.5" />Nomor BAST</label>
                   <ClearableInput placeholder="—" value={updates.nomor_bast === "__clear__" ? "" : updates.nomor_bast} isClear={updates.nomor_bast === "__clear__"} onChange={e => setField("nomor_bast", e.target.value)} onClear={() => toggleClearField("nomor_bast")} />
                 </div>

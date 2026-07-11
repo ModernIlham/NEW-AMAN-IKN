@@ -470,6 +470,8 @@ const AssetForm = memo(({
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
   const bastInputRef = useRef(null);
+  // One-shot penanda agar kamera hanya auto-buka SEKALI per sesi form aset baru.
+  const autoCameraFiredRef = useRef(false);
 
   // Dokumen BAST tersimpan di server (GridFS): {file_id, filename} — hanya
   // bermakna pada mode edit (unggah butuh asset id).
@@ -810,6 +812,23 @@ const AssetForm = memo(({
       }
     }
   }, [isOpen, isEditing, inventoryMode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Aset BARU di mode inventarisasi: surveyor lebih fokus ke kamera. Buka kamera
+  // (fullscreen kamera OS via input capture="environment") secara OTOMATIS sekali
+  // saat form aset baru terbuka, sehingga bisa langsung memotret. One-shot ref
+  // mencegah kamera terbuka lagi setiap render / setelah user membatalkan.
+  // Tombol "Kamera" manual tetap tersedia sebagai fallback (mis. iOS yang
+  // memblokir pemicu di luar gesture).
+  useEffect(() => {
+    if (isOpen && !isEditing && inventoryMode) {
+      if (autoCameraFiredRef.current) return undefined;
+      autoCameraFiredRef.current = true;
+      const t = setTimeout(() => cameraInputRef.current?.click(), 350);
+      return () => clearTimeout(t);
+    }
+    autoCameraFiredRef.current = false; // reset agar aset baru berikutnya memicu lagi
+    return undefined;
+  }, [isOpen, isEditing, inventoryMode]);
 
   // Clear a single field's inline error (used on change so the red state
   // disappears as soon as the user starts correcting the field).
