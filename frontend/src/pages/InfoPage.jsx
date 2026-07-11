@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from "react";
-import { ArrowLeft, Download, FileText, Presentation, ChevronDown, ChevronRight, Package, Shield, Users, Camera, Upload, BarChart3, FileSpreadsheet, Printer, RefreshCw, Globe, CheckCircle2, XCircle, Clock, Layers, Database, Server, Monitor, Wifi, Lock, Zap, BookOpen, DollarSign, Calendar, Target, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Download, FileText, Presentation, ChevronDown, ChevronRight, Package, Shield, Users, Camera, Upload, BarChart3, FileSpreadsheet, Printer, RefreshCw, Globe, CheckCircle2, XCircle, Clock, Layers, Database, Server, Monitor, Wifi, Lock, Zap, BookOpen, DollarSign, Calendar, Target, AlertTriangle, MapPinned, GitBranch } from "lucide-react";
 import { downloadFileWithProgress } from "../lib/downloadFile";
 
 const API = process.env.REACT_APP_BACKEND_URL;
@@ -298,6 +298,7 @@ export default function InfoPage({ onBack }) {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-3xl mx-auto">
             <StatCard icon={Layers} value="20+" label="Modul Fitur" color="blue" />
             <StatCard icon={FileText} value="13+" label="Laporan Resmi PDF" color="green" />
+            <StatCard icon={MapPinned} value="GIS" label="Peta + KML/KMZ/SHP" color="cyan" />
             <StatCard icon={FileSpreadsheet} value="46" label="Kolom Import/Export" color="orange" />
             <StatCard icon={Users} value="Multi" label="User Real-time + Offline" color="purple" />
           </div>
@@ -379,10 +380,10 @@ export default function InfoPage({ onBack }) {
 
         <CollapsibleSection title="Arsitektur & Teknologi" icon={Server} defaultOpen={true}>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <ArchBlock icon={Monitor} title="Frontend" items={["React 19 + Tailwind CSS", "Shadcn/UI Components", "Offline-first: IndexedDB + Service Worker", "Responsive & Dark Mode"]} color="blue" />
+            <ArchBlock icon={Monitor} title="Frontend" items={["React 19 + Tailwind CSS", "Shadcn/UI + Leaflet (Peta Aset)", "Offline-first: IndexedDB + Service Worker", "Responsive & Dark Mode"]} color="blue" />
             <ArchBlock icon={Server} title="Backend" items={["Python FastAPI (Async), 19 modul route", "WebSocket + Event Bus lintas worker", "OCC (version/If-Match) + Idempotency-Key", "JWT + OTP Email Authentication"]} color="green" />
             <ArchBlock icon={Database} title="Database" items={["MongoDB 7.0 + Motor (async)", "GridFS: foto, dokumen, BAST", "Capped collection ws_events", "UUID-based Records"]} color="orange" />
-            <ArchBlock icon={Globe} title="Infrastructure" items={["VPS: Nginx + Supervisor", "Multi-worker uvicorn", "SSL/TLS (Let's Encrypt)", "WeasyPrint + ReportLab (PDF)"]} color="purple" />
+            <ArchBlock icon={Globe} title="Infrastructure" items={["VPS: Nginx + Supervisor", "CI/CD GitHub Actions — test tiap PR, auto-deploy saat merge", "Multi-worker uvicorn + SSL (Let's Encrypt)", "WeasyPrint + ReportLab (PDF)"]} color="purple" />
           </div>
           <div className="flex items-center justify-center gap-2 flex-wrap py-4">
             {["User Browser", "React SPA (offline-ready)", "Nginx", "FastAPI (multi-worker)", "MongoDB + GridFS"].map((item, i, arr) => (
@@ -403,7 +404,10 @@ export default function InfoPage({ onBack }) {
             <FeatureCard icon={Lock} title="Pengesahan & Kunci Kegiatan" description="Nomor tiket INV-{tahun}-{seq} + alur pengesahan berkekuatan dokumen" color="red" items={["Validasi kelayakan (foto, register, lokasi, pengguna)", "Unggah PDF bertanda tangan (GridFS)", "Kegiatan terkunci permanen (mutasi ditolak 423)"]} />
             <FeatureCard icon={BookOpen} title="Kartu Inventarisasi & QR" description="Riwayat pengesahan aset lintas kegiatan, terlingkup satker" color="cyan" items={["Per kode register / kode aset + NUP", "QR #kode_register di kartu cetak", "Scanner QR kamera di dashboard"]} />
             <FeatureCard icon={Camera} title="Foto & Media" description="Multi-foto per aset di GridFS dengan pemuatan progresif" color="pink" items={["Kompresi berlapis (client + server)", "Streaming URL cacheable (ETag/304)", "Checklist dokumen: foto bukti + PDF"]} />
-            <FeatureCard icon={FileText} title="13+ Laporan Resmi" description="DBHI (6 tipe), RHI, BAHI, SP, BA, SPTJM, Surat Koreksi, Eksekutif, Satker, LHI" color="teal" items={["Satu sistem desain seragam + kop surat editable", "Eksekutif per Barang Serupa + kolom detail toggle", "Kartu BMN format KTP (satuan & massal)"]} />
+            <FeatureCard icon={MapPinned} title="Peta Aset & Ekspor GIS" description="Lembar peta interaktif di halaman utama — mengikuti pencarian & filter aktif, jalan penuh saat offline" color="teal" items={["Pin status berwarna + badge foto + border hijau kelengkapan pengguna/BAST", "Geser pin = koordinat tersimpan otomatis (aman konflik)", "Filter Barang Serupa + unduh KML/KMZ/SHP (27 atribut, WGS84)"]} />
+            <FeatureCard icon={Zap} title="Kamera Lapangan Penuh" description="Layar kamera ala Timemark: jam & GPS live, watermark otomatis, alur beruntun tanpa keluar kamera" color="orange" items={["Flash + gestur kecerahan (dibakar ke hasil foto)", "Simpan & Baru instan — tanpa menunggu jaringan", "Simpan & Scan: scan QR → edit → scan berikutnya"]} />
+            <FeatureCard icon={GitBranch} title="CI/CD & Kualitas Kode" description="Setiap perubahan melewati gerbang otomatis sebelum sampai ke pengguna" color="cyan" items={["Test + lint + build di tiap PR (GitHub Actions)", "Auto-deploy ke VPS saat merge ke main", "Registry field aset + test anti-drift"]} />
+            <FeatureCard icon={FileText} title="13+ Laporan Resmi" description="DBHI (6 tipe), RHI, BAHI, SP, BA, SPTJM, Surat Koreksi, Eksekutif, Satker, LHI" color="teal" items={["Kop surat resmi 3 baris + alamat multi-baris, tanda tangan Kuasa Pengguna Barang", "Eksekutif per Barang Serupa + kolom detail toggle", "Kartu BMN format KTP (satuan & massal) + tanggal gaya Indonesia"]} />
             <FeatureCard icon={Users} title="Pengguna Melekat-ke + BAST" description="Pengguna aset terstruktur: Individual / Jabatan / Operasional" color="blue" items={["Nama jabatan kondisional (Jabatan)", "Jenis operasional: Kegiatan/Acara/Kebutuhan atau Ruangan", "Nomor BAST + unggah & preview dokumen BAST"]} />
             <FeatureCard icon={Upload} title="Import & Export 46 Kolom" description="CSV/XLSX dua arah dengan template dropdown dan validasi per baris" color="green" items={["Deteksi duplikat + pilihan update", "XLSX 4 sheet dengan foto HD embedded", "Export PDF landscape + progres unduhan"]} />
             <FeatureCard icon={Shield} title="Keamanan & Audit" description="JWT + OTP email, role-based access, jejak audit menyeluruh" color="orange" items={["Audit trail semua perubahan per field", "Auto-logout: sesi 401 & idle 30 menit", "Rate limiting + heartbeat sesi"]} />

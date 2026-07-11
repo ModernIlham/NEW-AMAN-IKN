@@ -2,7 +2,7 @@
 
 > Sistem Inventarisasi Barang Milik Negara (BMN) berbasis web, standar pemerintah Indonesia (SE 17/SE/M/2024 & LKPP 85/2025)
 
-**Versi:** 2.2 (Juli 2026) — Pengesahan & kunci kegiatan, kartu inventarisasi, QR, mode offline penuh
+**Versi:** 2.3 (Juli 2026) — Peta aset interaktif + ekspor GIS, kamera lapangan penuh, CI/CD auto-deploy
 
 ---
 
@@ -17,7 +17,20 @@ tiap rilis/PR (termasuk catatan teknis penting soal aturan tap-target 44px di �
 
 ---
 
-## 🆕 Highlight Rilis v2.2 (Juli 2026)
+## 🆕 Highlight Rilis v2.3 (Juli 2026)
+
+- 🗺️ **Peta Aset interaktif** — lembar peta di halaman utama (leaflet + OpenStreetMap): pin berwarna status, badge foto, border hijau kelengkapan pengguna+BAST; **geser pin = koordinat tersimpan otomatis**; mengikuti pencarian/filter aktif + filter Barang Serupa; jalan penuh saat offline (snapshot).
+- 🌐 **Ekspor GIS** — unduh titik peta sebagai **KML / KMZ / SHP** (shapefile WGS84) lengkap 27 atribut, mengikuti filter aktif.
+- 📷 **Kamera lapangan penuh** — flash, gestur kecerahan (dibakar ke foto), watermark jam+GPS, **Simpan & Baru instan** (tanpa menunggu jaringan), dan **Simpan & Scan** untuk alur scan-QR → edit → scan berikutnya.
+- 📄 **Kop surat resmi 3 baris** (instansi / unit / sub-unit) + alamat multi-baris; seluruh tanda tangan memakai **Kuasa Pengguna Barang**; belasan perbaikan isi laporan (binding data, penomoran, tanggal Indonesia).
+- 🚀 **CI/CD** — test + build otomatis di tiap PR (GitHub Actions), **auto-deploy ke VPS Hostinger** pada setiap merge ke `main`.
+- 🧱 **Registry field aset** — menambah field baru kini ±3 titik sentuh (dulu 13+), dijaga test anti-drift; filter rentang tanggal input.
+
+Detail lengkap per PR di [`CHANGELOG.md`](./CHANGELOG.md) (#38–#65).
+
+---
+
+## Highlight Rilis v2.2 (Juli 2026)
 
 - 🎫 **Nomor tiket kegiatan** `INV-{tahun}-{seq}` otomatis + **alur pengesahan**: unggah PDF bertanda tangan → sahkan → kegiatan **terkunci permanen** (semua mutasi ditolak 423). Lihat [`docs/PENGESAHAN.md`](./docs/PENGESAHAN.md).
 - 🗂️ **Kartu Inventarisasi** — riwayat pengesahan aset lintas kegiatan (per kode register / kode aset+NUP, terlingkup satker).
@@ -63,13 +76,13 @@ Perbaikan menyeluruh untuk kolaborasi multi-user & performa penyimpanan:
 
 | Layer | Teknologi |
 |-------|----------|
-| **Frontend** | React 19 + TailwindCSS + Shadcn/UI + Recharts + Lucide Icons |
+| **Frontend** | React 19 + TailwindCSS + Shadcn/UI + Recharts + Leaflet (peta) + Lucide Icons |
 | **Backend** | FastAPI (Python 3.11) — 19 route modules + event_bus, ~10.500 baris |
 | **Database** | MongoDB 7.0 (standalone) + Motor (async) + GridFS (foto) + Capped Collection (WS events) |
 | **PDF Engine** | WeasyPrint + Jinja2 (template) + ReportLab (tabel) |
 | **Real-time** | WebSocket + Cross-Worker Event Bus (tailable cursor) + Server Heartbeat |
 | **Consistency** | Optimistic Concurrency Control + Idempotency-Key + Atomic Lock |
-| **Deployment** | Hostinger VPS (Nginx + Supervisor + Let's Encrypt SSL) + Multi-worker uvicorn |
+| **Deployment** | Hostinger VPS (Nginx + Supervisor + Let's Encrypt SSL) + Multi-worker uvicorn + CI/CD GitHub Actions (auto-deploy saat merge) |
 
 ---
 
@@ -134,6 +147,7 @@ Perbaikan menyeluruh untuk kolaborasi multi-user & performa penyimpanan:
 | Laporan Satker | Laporan per satuan kerja |
 | LHI Package | Gabungan semua laporan (merged PDF) |
 | Batch ZIP | Download beberapa laporan sekaligus |
+| Ekspor GIS | Titik peta aset: KML / KMZ / SHP (WGS84) + 27 atribut |
 
 ### Fitur Tambahan
 - **Barang Serupa**: Pengelompokan aset per kode, NUP ranges, batch edit
