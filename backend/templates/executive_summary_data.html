@@ -8,7 +8,15 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Inter', -apple-system, sans-serif; color: #1e293b; padding: 0; background: #fff; }
 
-        @page { size: A4 landscape; margin: 8mm 8mm 2mm 8mm; }
+        /* Footer dipasang sebagai running element di kotak margin bawah halaman.
+           Dengan begitu WeasyPrint MENYISAKAN ruang footer (margin bawah 11mm)
+           di setiap halaman, sehingga baris data yang tak muat otomatis geser ke
+           halaman berikutnya — tidak lagi tertimpa/terpotong footer. */
+        @page {
+            size: A4 landscape;
+            margin: 8mm 8mm 11mm 8mm;
+            @bottom-center { content: element(footer); vertical-align: bottom; width: 100%; }
+        }
 
         .data-header { background: linear-gradient(135deg, #0c1f3f, #1a3461); padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; }
         .data-header h2 { font-size: 14px; font-weight: 700; color: #fff; letter-spacing: 1.5px; text-transform: uppercase; }
@@ -71,11 +79,21 @@
         .badge-berlebih { background: #faf5ff; color: #7c3aed; }
         .badge-sengketa { background: #fce7f3; color: #be185d; }
 
-        .data-footer { position: fixed; bottom: 0; left: 0; width: 100%; padding: 6px 24px; display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border-top: 1px solid #e2e8f0; font-size: 9px; color: #64748b; }
+        /* Lebar penuh mengikuti kotak margin @bottom-center (yang di-set width:100%)
+           agar justify-content:space-between bekerja: rentang di kiri, "Bagian" di kanan. */
+        .data-footer { position: running(footer); width: 100%; padding: 5px 12px; display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border-top: 1px solid #e2e8f0; font-size: 9px; color: #64748b; }
         .data-footer strong { color: #0f172a; }
     </style>
 </head>
 <body>
+
+<!-- Footer sebagai running element: HARUS berada di awal body agar "ditemukan"
+     sejak halaman pertama sehingga tampil di SETIAP halaman (bukan hanya
+     halaman terakhir). position:running mengeluarkannya dari alur normal. -->
+<div class="data-footer">
+    <div>Menampilkan <strong>{{ global_offset + 1 }}-{{ global_offset + total_chunk }}</strong> dari <strong>{{ total_all }}</strong> BMN &nbsp;|&nbsp; Total Nilai: <strong>Rp {{ total_value_fmt }}</strong></div>
+    <div>Bagian {{ data_page_num }}/{{ total_data_pages }}</div>
+</div>
 
 <div class="data-header">
     <h2>Data Inventarisasi BMN &mdash; Detail Per Aset{% if data_page_num %} (Bagian {{ data_page_num }}{% if total_data_pages %}/{{ total_data_pages }}{% endif %}){% endif %}</h2>
@@ -143,11 +161,6 @@
             {% endfor %}
         </tbody>
     </table>
-</div>
-
-<div class="data-footer">
-    <div>Menampilkan <strong>{{ global_offset + 1 }}-{{ global_offset + total_chunk }}</strong> dari <strong>{{ total_all }}</strong> BMN &nbsp;|&nbsp; Total Nilai: <strong>Rp {{ total_value_fmt }}</strong></div>
-    <div>Bagian {{ data_page_num }}/{{ total_data_pages }}</div>
 </div>
 
 </body>
