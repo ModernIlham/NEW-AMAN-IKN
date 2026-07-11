@@ -17,6 +17,23 @@ tiap rilis/PR (termasuk catatan teknis penting soal aturan tap-target 44px di �
 
 ---
 
+## 🧭 Arah Pengembangan — Siklus Penuh Pengelolaan BMN
+
+AMAN berkembang bertahap dari aplikasi inventarisasi menjadi platform siklus
+penuh pengelolaan BMN (PP 27/2014). **Beranda Modul** — halaman pertama
+setelah login — memetakan seluruh tahap siklus: *Penatausahaan ›
+Inventarisasi Aset* aktif hari ini; modul lain (Pembukuan, Inventarisasi
+Persediaan, Pelaporan, Perencanaan, Pengadaan, Penggunaan, Pemanfaatan,
+Pengamanan & Pemeliharaan, Penilaian, Pemindahtanganan, Pemusnahan,
+Penghapusan, Wasdal) berstatus **Segera Hadir** lengkap dengan konsep &
+rencana fiturnya.
+
+- Rencana induk & prinsip integrasi antar modul: [`docs/MASTERPLAN-SIKLUS-BMN.md`](./docs/MASTERPLAN-SIKLUS-BMN.md)
+- Registry modul (konsep yang tampil di aplikasi): `frontend/src/lib/bmnModules.js`
+- Proses baku pengembangan per fitur: `.claude/skills/aman-dev/SKILL.md`
+
+---
+
 ## 🆕 Highlight Rilis v2.3 (Juli 2026)
 
 - 🗺️ **Peta Aset interaktif** — lembar peta di halaman utama (leaflet + OpenStreetMap): pin berwarna status, badge foto, border hijau kelengkapan pengguna+BAST; **geser pin = koordinat tersimpan otomatis**; mengikuti pencarian/filter aktif + filter Barang Serupa; jalan penuh saat offline (snapshot).

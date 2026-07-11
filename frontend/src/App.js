@@ -24,6 +24,7 @@ import axios from "axios";
 const LoginPage = lazy(() => import("./pages/LoginPage"));
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 const InfoPage = lazy(() => import("./pages/InfoPage"));
+const ModuleHomePage = lazy(() => import("./pages/ModuleHomePage"));
 
 // ============================================================================
 // LOADING FALLBACK - Shown while lazy components load
@@ -194,6 +195,11 @@ function App() {
         if (!keepOld) localStorage.setItem('media_token', mediaToken);
       } catch { localStorage.setItem('media_token', mediaToken); }
     }
+    // Login baru selalu mendarat di Beranda Modul (rumah Siklus BMN) —
+    // pilihan modul bersifat per-sesi tab (sessionStorage), jadi reload di
+    // tengah pekerjaan lapangan TIDAK melempar user keluar dari modulnya.
+    sessionStorage.removeItem('aman_module');
+    setModuleChosen(false);
     setUser(userData);
   };
 
@@ -212,10 +218,24 @@ function App() {
     // ada akses baca foto tersisa. Auto-logout (401/idle) sengaja MEMBIARKAN
     // token media hidup supaya cache foto surveyor tak ter-bust tiap hari.
     localStorage.removeItem('media_token');
+    sessionStorage.removeItem('aman_module');
+    setModuleChosen(false);
     forceLogout();
   };
 
   const [showInfo, setShowInfo] = useState(false);
+  // "Rumah modul" Siklus BMN: login mendarat di Beranda Modul; masuk ke
+  // Inventarisasi menandai pilihan per-tab (sessionStorage) sehingga reload
+  // kembali ke modul yang sama, tab/login baru kembali ke beranda.
+  const [moduleChosen, setModuleChosen] = useState(() => sessionStorage.getItem('aman_module') === 'inventarisasi');
+  const enterInventarisasi = useCallback(() => {
+    sessionStorage.setItem('aman_module', 'inventarisasi');
+    setModuleChosen(true);
+  }, []);
+  const showModuleHome = useCallback(() => {
+    sessionStorage.removeItem('aman_module');
+    setModuleChosen(false);
+  }, []);
 
   if (loading) {
     return <PageLoader />;
@@ -226,6 +246,27 @@ function App() {
       <div className="App">
         <Suspense fallback={<PageLoader />}>
           <InfoPage onBack={() => setShowInfo(false)} />
+        </Suspense>
+        <Toaster position="top-right" richColors />
+      </div>
+    );
+  }
+
+  // Beranda Modul — rumah Siklus Pengelolaan BMN. Tampil setelah login
+  // sampai user memilih modul; modul selain Inventarisasi menampilkan
+  // konsep "Segera Hadir" di dalam halaman ini.
+  if (user && !moduleChosen) {
+    return (
+      <div className="App">
+        <Suspense fallback={<PageLoader />}>
+          <ModuleHomePage
+            user={user}
+            onLogout={handleLogout}
+            dark={dark}
+            toggleDark={toggleDark}
+            onShowInfo={() => setShowInfo(true)}
+            onEnterInventarisasi={enterInventarisasi}
+          />
         </Suspense>
         <Toaster position="top-right" richColors />
       </div>
@@ -252,7 +293,7 @@ function App() {
                 path="/"
                 element={
                   user ? (
-                    <DashboardPage user={user} onLogout={handleLogout} dark={dark} toggleDark={toggleDark} onShowInfo={() => setShowInfo(true)} />
+                    <DashboardPage user={user} onLogout={handleLogout} dark={dark} toggleDark={toggleDark} onShowInfo={() => setShowInfo(true)} onShowModules={showModuleHome} />
                   ) : (
                     <Navigate to="/login" replace />
                   )

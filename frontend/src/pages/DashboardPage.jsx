@@ -1534,7 +1534,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
 // ============================================================================
 // MAIN EXPORT - Wrapper Component with Activity Flow
 // ============================================================================
-export default function DashboardPage({ user, onLogout, dark, toggleDark, onShowInfo }) {
+export default function DashboardPage({ user, onLogout, dark, toggleDark, onShowInfo, onShowModules }) {
   const [selectedActivity, setSelectedActivity] = useState(null);
 
   useEffect(() => {
@@ -1588,6 +1588,6 @@ export default function DashboardPage({ user, onLogout, dark, toggleDark, onShow
     }
   }, [selectedActivity?.id]);
 
-  if (!selectedActivity) return <ActivitySelectionPage user={user} onLogout={handleLogout} onSelectActivity={handleSelectActivity} onShowInfo={onShowInfo} />;
+  if (!selectedActivity) return <ActivitySelectionPage user={user} onLogout={handleLogout} onSelectActivity={handleSelectActivity} onShowInfo={onShowInfo} onShowModules={onShowModules} />;
   return <AssetManagementPage user={user} onLogout={handleLogout} activity={selectedActivity} onBack={handleBack} onActivityRefresh={handleActivityRefresh} dark={dark} toggleDark={toggleDark} onShowInfo={onShowInfo} />;
 }
