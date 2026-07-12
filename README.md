@@ -49,7 +49,8 @@ kelengkapan BAST (#87) + **Daftar Barang yang Digunakan per pemegang**
 (PDF lampiran BAST, PMK 40/2024) (#125) + **daftar pantau BMN idle**
 dengan tiket klarifikasi → usul serah → diserahkan (PMK 120/2024)
 (#126) + **register SK penetapan penggunaan** 5 jenis dengan cakupan
-aset ter-PSP (#129) · Pengamanan — dasbor tertib administrasi + daftar
+aset ter-PSP (#129) + **arsip scan SK penetapan per register** (#137)
+· Pengamanan — dasbor tertib administrasi + daftar
 pantau sengketa (#88) · Pemeliharaan — riwayat & biaya per aset dengan
 telaah kapitalisasi PMK 181 (#89) + **DHPB PDF** semesteran/tahunan
 (Ps. 47 PP 27/2014) (#90) + jadwal berkala dengan status jatuh tempo (#92).
@@ -82,7 +83,7 @@ PMK 83/2016 (#104) + **tiket usulan berstatus** usul → proses → SK (#106)
 siap tanda tangan** (#119) + **usulan penghapusan otomatis per aset BA**
 (#120) + **lampiran bukti pelaksanaan** (#132) · Pemindahtanganan — **register usulan 4 bentuk** dengan dokumen
 wajib per tahap + tenggat lelang 6 bulan (PMK 111/2016 jo. 165/2021)
-(#111) · Wasdal — **dasbor pemantauan 5 objek** PMK 207/2021, temuan
+(#111) + **arsip scan dokumen per usulan** (#138) · Wasdal — **dasbor pemantauan 5 objek** PMK 207/2021, temuan
 otomatis dari register yang ada (#113) + **Laporan Hasil Pemantauan PDF
 pra-isi** untuk SIMAN v2 (#122).
 **Seluruh kartu modul siklus kini bisa dimasuki dari Beranda Modul.**
