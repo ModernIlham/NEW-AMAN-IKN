@@ -3,7 +3,8 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, ShieldCheck, Scale, BadgeCheck, Camera,
-  Gavel, Plus, QrCode, MapPin, Search, Trash2, UserCheck, FileText,
+  Gavel, Paperclip, Plus, QrCode, MapPin, Search, Trash2, Upload,
+  UserCheck, FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
+import { authMediaUrl } from "@/lib/mediaUrl";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -46,6 +48,11 @@ export default function PengamananPage({ user, onBack }) {
   // Register kasus: data GET + dialog kasus baru {data, aset, saving}
   const [kasus, setKasus] = useState(null);
   const [formKasus, setFormKasus] = useState(null);
+  // Arsip dokumen: data GET + dialog dokumen baru + dialog lampiran
+  const [dokumen, setDokumen] = useState(null);
+  const [formDok, setFormDok] = useState(null);
+  const [lampiranDok, setLampiranDok] = useState(null);
+  const fileDokRef = useRef(null);
   const [cari, setCari] = useState("");
   const [hasilCari, setHasilCari] = useState([]);
   const [mencari, setMencari] = useState(false);
@@ -60,16 +67,23 @@ export default function PengamananPage({ user, onBack }) {
       .catch(() => {});
   }, []);
 
+  const muatDokumen = useCallback(() => {
+    axios.get(`${API}/pengamanan/dokumen`)
+      .then((r) => setDokumen(r.data))
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     axios.get(`${API}/pengamanan/ringkasan`)
       .then((r) => setData(r.data))
       .catch(() => toast.error("Gagal memuat ringkasan pengamanan"))
       .finally(() => setLoading(false));
     muatKasus();
-  }, [muatKasus]);
+    muatDokumen();
+  }, [muatKasus, muatDokumen]);
 
   useEffect(() => {
-    if (!formKasus || cari.trim().length < 2) { setHasilCari([]); return undefined; }
+    if ((!formKasus && !formDok) || cari.trim().length < 2) { setHasilCari([]); return undefined; }
     clearTimeout(cariTimer.current);
     cariTimer.current = setTimeout(async () => {
       setMencari(true);
@@ -79,7 +93,7 @@ export default function PengamananPage({ user, onBack }) {
       } catch { setHasilCari([]); } finally { setMencari(false); }
     }, 300);
     return () => clearTimeout(cariTimer.current);
-  }, [cari, formKasus]);
+  }, [cari, formKasus, formDok]);
 
   const simpanKasus = async () => {
     if (!formKasus?.aset) return;
@@ -136,6 +150,68 @@ export default function PengamananPage({ user, onBack }) {
     } catch {
       toast.error("Gagal memuat daftar aset");
       setDetail(null);
+    }
+  };
+
+  const simpanDokumen = async () => {
+    if (!formDok?.aset) return;
+    setFormDok((f) => ({ ...f, saving: true }));
+    try {
+      await axios.post(`${API}/pengamanan/dokumen`, {
+        ...formDok.data, asset_id: formDok.aset.id,
+      });
+      toast.success("Dokumen dicatat");
+      setFormDok(null);
+      muatDokumen();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal mencatat dokumen");
+      setFormDok((f) => (f ? { ...f, saving: false } : f));
+    }
+  };
+
+  const hapusDokumen = async (d) => {
+    const ok = await confirm({
+      title: "Hapus dokumen dari arsip?",
+      description: `${dokumen?.label_jenis?.[d.jenis] || d.jenis} ${d.nomor} — ${d.asset_name || d.asset_id}. Lampirannya ikut terhapus.`,
+      confirmLabel: "Hapus", variant: "danger",
+    });
+    if (!ok) return;
+    try {
+      await axios.delete(`${API}/pengamanan/dokumen/${d.id}`);
+      toast.success("Dokumen dihapus");
+      muatDokumen();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal menghapus dokumen");
+    }
+  };
+
+  const unggahLampiranDok = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !lampiranDok) return;
+    setLampiranDok((l) => ({ ...l, uploading: true }));
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const r = await axios.post(`${API}/pengamanan/dokumen/${lampiranDok.dok.id}/lampiran`, fd);
+      toast.success("Lampiran terunggah");
+      setLampiranDok((l) => (l ? { ...l, dok: { ...l.dok, lampiran: r.data?.lampiran || [] }, uploading: false } : l));
+      muatDokumen();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Gagal mengunggah lampiran");
+      setLampiranDok((l) => (l ? { ...l, uploading: false } : l));
+    }
+  };
+
+  const hapusLampiranDok = async (fileId) => {
+    if (!lampiranDok) return;
+    try {
+      await axios.delete(`${API}/pengamanan/dokumen/${lampiranDok.dok.id}/lampiran/${fileId}`);
+      toast.success("Lampiran dihapus");
+      setLampiranDok((l) => (l ? { ...l, dok: { ...l.dok, lampiran: (l.dok.lampiran || []).filter((x) => x.file_id !== fileId) } } : l));
+      muatDokumen();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal menghapus lampiran");
     }
   };
 
@@ -301,8 +377,78 @@ export default function PengamananPage({ user, onBack }) {
               )}
             </div>
 
+            {/* ── Arsip dokumen kepemilikan (pustaka §11.3, PP 27/2014 Ps. 43) ── */}
+            <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="pengamanan-dokumen">
+              <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
+                <FileText className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold text-foreground">Arsip Dokumen Kepemilikan</p>
+                  <p className="text-[10px] text-muted-foreground truncate">
+                    Sertipikat / BPKB / STNK / IMB-PBG per aset + lokasi penyimpanan
+                  </p>
+                </div>
+                {(dokumen?.ringkasan?.kedaluwarsa || 0) > 0 && (
+                  <span className="px-1.5 py-0.5 rounded bg-red-500/15 text-red-600 dark:text-red-400 text-[10px] font-semibold flex-shrink-0">
+                    {dokumen.ringkasan.kedaluwarsa} kedaluwarsa
+                  </span>
+                )}
+                <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
+                  onClick={() => { setCari(""); setHasilCari([]); setFormDok({ data: { jenis: "sertipikat", nomor: "", atas_nama: "", lokasi_simpan: "pengelola_barang", berlaku_sampai: "", keterangan: "" }, aset: null, saving: false }); }}
+                  data-testid="pengamanan-dokumen-tambah">
+                  <Plus className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">Catat Dokumen</span>
+                </Button>
+              </div>
+              {(dokumen?.items || []).length === 0 ? (
+                <p className="text-[11px] text-muted-foreground text-center py-4 px-3">
+                  Belum ada dokumen — catat sertipikat/BPKB/IMB per aset beserta lokasi penyimpanannya.
+                </p>
+              ) : (
+                <ul className="divide-y divide-border/60">
+                  {dokumen.items.map((d) => {
+                    const kedaluwarsa = d.berlaku_sampai && d.berlaku_sampai < new Date().toISOString().slice(0, 10);
+                    return (
+                      <li key={d.id} className="p-3" data-testid={`pengamanan-dokumen-${d.id}`}>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px] font-semibold">
+                            {dokumen.label_jenis?.[d.jenis] || d.jenis}
+                          </span>
+                          {kedaluwarsa && (
+                            <span className="px-1.5 py-0.5 rounded bg-red-500/15 text-red-600 dark:text-red-400 text-[10px] font-semibold">
+                              Kedaluwarsa
+                            </span>
+                          )}
+                          <p className="text-sm font-semibold text-foreground flex-1 min-w-[140px] truncate">{d.asset_name || "-"}</p>
+                          <span className="font-mono text-[10px] text-muted-foreground flex-shrink-0">{d.asset_code} · {d.NUP}</span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          {[`No. ${d.nomor}`,
+                            d.atas_nama && `a.n. ${d.atas_nama}`,
+                            dokumen.label_lokasi?.[d.lokasi_simpan] || d.lokasi_simpan,
+                            d.berlaku_sampai && `berlaku s.d. ${d.berlaku_sampai}`,
+                            d.keterangan].filter(Boolean).join(" · ")}
+                        </p>
+                        <div className="flex gap-1.5 mt-1.5 items-center">
+                          <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                            onClick={() => setLampiranDok({ dok: d, uploading: false })}
+                            data-testid={`pengamanan-dokumen-${d.id}-lampiran`}>
+                            <Paperclip className="w-3.5 h-3.5 mr-1" />{(d.lampiran || []).length} lampiran
+                          </Button>
+                          {isAdmin && (
+                            <button type="button" onClick={() => hapusDokumen(d)} aria-label="Hapus dokumen"
+                              className="h-7 w-7 min-h-0 min-w-0 rounded flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-red-500/10">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+
             <p className="text-center text-[11px] text-muted-foreground pb-4">
-              {kasus?.catatan || "Arsip dokumen kepemilikan (sertifikat/BPKB) menyusul — masterplan Fase 3."}
+              {dokumen?.catatan || kasus?.catatan || ""}
             </p>
           </>
         )}
@@ -398,6 +544,153 @@ export default function PengamananPage({ user, onBack }) {
                   {formKasus.saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Buka Kasus"}
                 </Button>
               </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog catat dokumen kepemilikan ── */}
+      <Dialog open={!!formDok} onOpenChange={(o) => { if (!o) setFormDok(null); }}>
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Catat Dokumen Kepemilikan</DialogTitle>
+            <DialogDescription className="text-xs">
+              Arsip salinan (pustaka §11.3) — penyimpanan sah tetap per PP 27/2014 Ps. 43 + PMK 218/2015.
+            </DialogDescription>
+          </DialogHeader>
+          {formDok && (
+            <div className="space-y-3">
+              {!formDok.aset ? (
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="dok-cari">Cari aset</label>
+                  <div className="relative">
+                    <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-muted-foreground" />
+                    <Input id="dok-cari" className="pl-8" placeholder="nama / kode / NUP…"
+                      value={cari} onChange={(e) => setCari(e.target.value)} data-testid="dokumen-cari" />
+                  </div>
+                  {mencari && <p className="text-[11px] text-muted-foreground mt-1">Mencari…</p>}
+                  <ul className="mt-2 space-y-1.5 max-h-48 overflow-y-auto">
+                    {hasilCari.map((a) => (
+                      <li key={a.id}>
+                        <button type="button"
+                          onClick={() => setFormDok((f) => ({ ...f, aset: a }))}
+                          className="w-full text-left rounded-lg border border-border p-2 text-xs hover:bg-muted min-h-0"
+                          data-testid={`dokumen-pilih-${a.id}`}>
+                          <span className="text-foreground/90">{a.asset_name || "-"}</span>{" "}
+                          <span className="font-mono text-[10px] text-muted-foreground">({a.asset_code} · {a.NUP})</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-border p-2 text-xs flex items-center justify-between gap-2">
+                  <span className="text-foreground/90 min-w-0 truncate">
+                    {formDok.aset.asset_name || "-"}{" "}
+                    <span className="font-mono text-[10px] text-muted-foreground">({formDok.aset.asset_code} · {formDok.aset.NUP})</span>
+                  </span>
+                  <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
+                    onClick={() => setFormDok((f) => ({ ...f, aset: null }))}>
+                    Ganti
+                  </Button>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="dok-jenis">Jenis dokumen</label>
+                  <select id="dok-jenis" value={formDok.data.jenis}
+                    onChange={(e) => setFormDok((f) => ({ ...f, data: { ...f.data, jenis: e.target.value, lokasi_simpan: ["sertipikat", "imb_pbg"].includes(e.target.value) ? "pengelola_barang" : "pengguna_barang" } }))}
+                    className="w-full h-9 px-2 rounded-lg border border-border bg-background text-sm text-foreground"
+                    data-testid="dokumen-jenis">
+                    {Object.entries(dokumen?.label_jenis || {}).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="dok-nomor">Nomor dokumen</label>
+                  <Input id="dok-nomor" value={formDok.data.nomor}
+                    onChange={(e) => setFormDok((f) => ({ ...f, data: { ...f.data, nomor: e.target.value } }))}
+                    data-testid="dokumen-nomor" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="dok-an">Atas nama (ops.)</label>
+                  <Input id="dok-an" placeholder="Pemerintah RI c.q. …" value={formDok.data.atas_nama}
+                    onChange={(e) => setFormDok((f) => ({ ...f, data: { ...f.data, atas_nama: e.target.value } }))}
+                    data-testid="dokumen-an" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="dok-lokasi">Lokasi penyimpanan</label>
+                  <select id="dok-lokasi" value={formDok.data.lokasi_simpan}
+                    onChange={(e) => setFormDok((f) => ({ ...f, data: { ...f.data, lokasi_simpan: e.target.value } }))}
+                    className="w-full h-9 px-2 rounded-lg border border-border bg-background text-sm text-foreground"
+                    data-testid="dokumen-lokasi">
+                    {Object.entries(dokumen?.label_lokasi || {}).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="dok-berlaku">Berlaku s.d. (ops.)</label>
+                  <Input id="dok-berlaku" type="date" value={formDok.data.berlaku_sampai}
+                    onChange={(e) => setFormDok((f) => ({ ...f, data: { ...f.data, berlaku_sampai: e.target.value } }))}
+                    data-testid="dokumen-berlaku" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="dok-ket">Keterangan (ops.)</label>
+                  <Input id="dok-ket" value={formDok.data.keterangan}
+                    onChange={(e) => setFormDok((f) => ({ ...f, data: { ...f.data, keterangan: e.target.value } }))}
+                    data-testid="dokumen-ket" />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" size="sm" onClick={() => setFormDok(null)}>Batal</Button>
+                <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white"
+                  disabled={formDok.saving || !formDok.aset || !formDok.data.nomor.trim()}
+                  onClick={simpanDokumen} data-testid="dokumen-simpan">
+                  {formDok.saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Simpan"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog lampiran dokumen ── */}
+      <Dialog open={!!lampiranDok} onOpenChange={(o) => { if (!o) setLampiranDok(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Lampiran Scan Dokumen</DialogTitle>
+            <DialogDescription className="text-xs">
+              {lampiranDok && `${dokumen?.label_jenis?.[lampiranDok.dok.jenis] || lampiranDok.dok.jenis} No. ${lampiranDok.dok.nomor} — PDF/gambar, maks 10MB, 10 berkas.`}
+            </DialogDescription>
+          </DialogHeader>
+          {lampiranDok && (
+            <div className="space-y-2">
+              <input ref={fileDokRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" className="hidden" onChange={unggahLampiranDok} />
+              <Button size="sm" variant="outline" className="w-full"
+                disabled={lampiranDok.uploading || (lampiranDok.dok.lampiran || []).length >= 10}
+                onClick={() => fileDokRef.current?.click()} data-testid="dokumen-lampiran-unggah">
+                {lampiranDok.uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : (<><Upload className="w-4 h-4 mr-1.5" />Unggah scan</>)}
+              </Button>
+              {(lampiranDok.dok.lampiran || []).length === 0 ? (
+                <p className="text-[11px] text-muted-foreground text-center py-3">Belum ada lampiran.</p>
+              ) : (
+                <ul className="space-y-1.5 max-h-64 overflow-y-auto">
+                  {(lampiranDok.dok.lampiran || []).map((l) => (
+                    <li key={l.file_id} className="rounded-lg border border-border p-2 text-xs flex items-center gap-2">
+                      <button type="button"
+                        onClick={() => window.open(authMediaUrl(`${API}/pengamanan/dokumen/${lampiranDok.dok.id}/lampiran/${l.file_id}`), "_blank", "noopener")}
+                        className="min-w-0 flex-1 text-left text-foreground/90 truncate hover:underline min-h-0">
+                        {l.filename}
+                      </button>
+                      <span className="text-[10px] text-muted-foreground flex-shrink-0">{(l.tanggal || "").slice(0, 10)}</span>
+                      {isAdmin && (
+                        <button type="button" onClick={() => hapusLampiranDok(l.file_id)} aria-label={`Hapus ${l.filename}`}
+                          className="h-6 w-6 min-h-0 min-w-0 rounded flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-red-500/10 flex-shrink-0">
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
         </DialogContent>

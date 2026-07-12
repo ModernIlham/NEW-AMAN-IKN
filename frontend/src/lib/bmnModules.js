@@ -298,7 +298,7 @@ export const SIKLUS_MODULES = [
     urutan: 7,
     status: "sebagian",
     fase: 3,
-    ringkas: "Dasbor tertib administrasi + pantau sengketa + register BMN bermasalah berstatus sudah bisa dibuka.",
+    ringkas: "Dasbor tertib administrasi + register BMN bermasalah + arsip dokumen kepemilikan sudah bisa dibuka.",
     deskripsi:
       "Pengamanan BMN pada tiga lapis (PP 27/2014 Ps. 42): Fisik (penjagaan, patok, "
       + "pagar), Administrasi (kelengkapan dokumen & pencatatan), dan Hukum (sertifikat, "
@@ -310,7 +310,7 @@ export const SIKLUS_MODULES = [
     fitur: [
       "✅ Dasbor kelengkapan data aset (foto/register/lokasi/pengguna/BAST) + daftar pantau sengketa",
       "✅ Register BMN bermasalah berstatus: identifikasi → mediasi → blokir → litigasi → selesai (bahan laporan wasdal)",
-      "Arsip dokumen kepemilikan per aset (sertifikat, BPKB, IMB/PBG) + lokasi penyimpanan (menyusul)",
+      "✅ Arsip dokumen kepemilikan per aset: sertipikat/BPKB/STNK/IMB-PBG + lokasi penyimpanan (Ps. 43) + scan + pengingat kedaluwarsa",
       "Checklist pengamanan per jenis BMN + status sertipikasi K1-K4 (menyusul)",
       "Registrasi polis Asuransi BMN + masa berlaku (menyusul)",
     ],

@@ -95,3 +95,29 @@ class TestRegisterKasus:
         assert r["per_status"]["selesai"] == 1
         assert r["per_kategori"]["berperkara"] == 2
         assert rekap_kasus([])["aktif"] == 0
+
+
+class TestArsipDokumen:
+    def test_validasi_dokumen(self):
+        from pengamanan_utils import validate_dokumen
+        ok = {"jenis": "sertipikat", "nomor": "SHP 12/2020",
+              "lokasi_simpan": "pengelola_barang", "berlaku_sampai": ""}
+        assert validate_dokumen(ok) == []
+        errors = validate_dokumen({"jenis": "akta", "nomor": " ",
+                                   "lokasi_simpan": "brankas",
+                                   "berlaku_sampai": "12-07-2026"})
+        assert len(errors) == 4
+
+    def test_rekap_dokumen(self):
+        from pengamanan_utils import rekap_dokumen
+        items = [
+            {"jenis": "sertipikat", "lampiran": [{"file_id": "x"}],
+             "berlaku_sampai": ""},
+            {"jenis": "stnk", "lampiran": [], "berlaku_sampai": "2026-01-01"},
+            {"jenis": "stnk", "lampiran": [], "berlaku_sampai": "2027-01-01"},
+        ]
+        r = rekap_dokumen(items, "2026-07-12")
+        assert r["jumlah"] == 3 and r["ber_lampiran"] == 1
+        assert r["per_jenis"]["stnk"] == 2
+        assert r["kedaluwarsa"] == 1
+        assert rekap_dokumen([], "2026-07-12")["jumlah"] == 0

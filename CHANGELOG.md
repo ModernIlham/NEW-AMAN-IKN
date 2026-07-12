@@ -48,6 +48,17 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#171] Arsip dokumen kepemilikan per aset — 2026-07-12
+
+- **Arsip dokumen kepemilikan** di modul Pengamanan (pustaka §11.3,
+  PP 27/2014 Ps. 43 + PMK 218/2015): sertipikat/BPKB/STNK/IMB-PBG per
+  aset, atas nama, lokasi penyimpanan (Pengelola vs Pengguna Barang),
+  tanggal berlaku opsional dengan penanda kedaluwarsa, lampiran scan
+  GridFS pola baku (unggah/unduh/hapus admin).
+- UI: seksi arsip + dialog catat dokumen ber-pencarian aset + dialog
+  lampiran di `PengamananPage`; lokasi simpan otomatis mengikuti jenis.
+- Unit test +2 → 228 passed; indeks `pengamanan_dokumen`.
+
 ## [#170] Konsolidasi dokumentasi #169 — 2026-07-12
 
 - **Dokumentasi saja**: README Progres Fase 3 + roadmap masterplan
