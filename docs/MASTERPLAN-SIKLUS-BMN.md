@@ -87,17 +87,17 @@ resmi, pengesahan + kunci kegiatan, audit trail per field, CI/CD otomatis.
 | # | Tahap siklus (diagram resmi) | Modul AMAN | Dasar hukum tahap | Status | Fase |
 |---|---|---|---|---|---|
 | 9 | Penatausahaan › Inventarisasi Aset | (aplikasi berjalan) | PMK 181/PMK.06/2016 + SE-17/MK.1/2024 | ✅ Aktif | 1 |
-| 9 | Penatausahaan › Pembukuan | DBKP + KIB | PMK 181/PMK.06/2016 | Segera | 2 |
-| 9 | Penatausahaan › Inventarisasi Persediaan | Persediaan + gudang + opname | PMK 181/PMK.06/2016 | Segera | 2 |
+| 9 | Penatausahaan › Pembukuan | DBKP + KIB | PMK 181/PMK.06/2016 | Sebagian (DBKP #76; KIB tunggu verifikasi lampiran) | 2 |
+| 9 | Penatausahaan › Inventarisasi Persediaan | Persediaan + gudang + opname | PMK 181/PMK.06/2016 | Sebagian (inti lengkap #77–85) | 2 |
 | 9 | Penatausahaan › Pelaporan | LBKP + arsip lintas kegiatan | PMK 181/PMK.06/2016 | Sebagian | 2 |
 | 1 | Perencanaan Kebutuhan | RKBMN + analisis SBSK | PMK 153/PMK.06/2021 (RKBMN); PMK 138/2024 (SBSK) | Segera | 4 |
 | 2 | Penganggaran | Pagu & status usulan RKBMN → realisasi | PMK 153/PMK.06/2021 (titik "Integrasi") | Segera | 4 |
 | 3 | Pengadaan | Perolehan + dokumen sumber | Perpres 16/2018 jo. 46/2025 | Segera | 4 |
-| 4 | Penggunaan | PSP · alih status · sementara · pihak lain · bersama · BMN idle · aset pegawai/BAST | PMK 40/2024; PMK 120/2024 (idle) | Segera | 3 |
+| 4 | Penggunaan | PSP · alih status · sementara · pihak lain · bersama · BMN idle · aset pegawai/BAST | PMK 40/2024; PMK 120/2024 (idle) | Sebagian (rekap pemegang #87) | 3 |
 | 5 | Pemanfaatan | Sewa · Pinjam Pakai · KSP · BGS · BSG · KSPI · KETUPI · PDF + PNBP | PMK 115/PMK.06/2020; PMK 18/2024 (PDF) | Segera | 5 |
 | 6 | Penilaian | Revaluasi BMN + penyusutan | PMK 97/PMK.06/2019 | Segera | 5 |
-| 7 | Pengamanan | Fisik · administrasi · hukum · Asuransi BMN | PP 27/2014; PMK 97/PMK.06/2019 (asuransi) | Segera | 3 |
-| 8 | Pemeliharaan | Jadwal + riwayat + biaya per aset | PP 27/2014 | Segera | 3 |
+| 7 | Pengamanan | Fisik · administrasi · hukum · Asuransi BMN | PP 27/2014; PMK 97/PMK.06/2019 (asuransi) | Sebagian (dasbor tertib adm. #88) | 3 |
+| 8 | Pemeliharaan | Jadwal + riwayat + biaya per aset | PP 27/2014 | Sebagian (riwayat+biaya #89, DHPB #90) | 3 |
 | 10 | Pemindahtanganan | Penjualan · Hibah · Tukar Menukar · Penyertaan Modal | PMK 111/PMK.06/2016 jo. 165/PMK.06/2021 | Segera | 6 |
 | 11 | Pemusnahan | Usulan + BA pemusnahan | PMK 83/PMK.06/2016 | Segera | 6 |
 | 12 | Penghapusan | SK + arsip aset terhapus | PMK 83/PMK.06/2016 | Segera | 6 |

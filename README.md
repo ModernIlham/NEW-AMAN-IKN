@@ -22,9 +22,10 @@ tiap rilis/PR (termasuk catatan teknis penting soal aturan tap-target 44px di �
 AMAN berkembang bertahap dari aplikasi inventarisasi menjadi platform siklus
 penuh pengelolaan BMN (PP 27/2014). **Beranda Modul** — halaman pertama
 setelah login — memetakan seluruh tahap siklus: *Penatausahaan ›
-Inventarisasi Aset* aktif hari ini; modul lain (Pembukuan, Inventarisasi
-Persediaan, Pelaporan, Perencanaan, Pengadaan, Penggunaan, Pemanfaatan,
-Pengamanan & Pemeliharaan, Penilaian, Pemindahtanganan, Pemusnahan,
+Inventarisasi Aset* aktif penuh; **Inventarisasi Persediaan, Pelaporan,
+Penggunaan, Pengamanan, dan Pemeliharaan sudah Sebagian Aktif** (bisa
+dimasuki dari Beranda Modul); modul lain (Pembukuan/KIB, Perencanaan,
+Pengadaan, Pemanfaatan, Penilaian, Pemindahtanganan, Pemusnahan,
 Penghapusan, Wasdal) berstatus **Segera Hadir** lengkap dengan konsep &
 rencana fiturnya.
 
@@ -35,9 +36,16 @@ rencana fiturnya.
 
 **Progres Fase 2 (Juli 2026):** Referensi Kodefikasi 5 level (#73–74) ·
 DBKP per golongan (#76) · **modul Inventarisasi Persediaan inti lengkap**
-(#77–83): master ber-layer **FIFO** selaras SAKTI, transaksi masuk/keluar
+(#77–85): master ber-layer **FIFO** selaras SAKTI, transaksi masuk/keluar
 berjurnal, peringatan + nota dinas, laporan posisi/mutasi, stock opname +
-BAOF — semua dapat diakses dari Beranda Modul.
+BAOF, impor/ekspor + template · **hub Pelaporan** lintas kegiatan (#86) —
+semua dapat diakses dari Beranda Modul.
+
+**Progres Fase 3 (Juli 2026):** Penggunaan — rekap aset per pemegang +
+kelengkapan BAST (#87) · Pengamanan — dasbor tertib administrasi + daftar
+pantau sengketa (#88) · Pemeliharaan — riwayat & biaya per aset dengan
+telaah kapitalisasi PMK 181 (#89) + **DHPB PDF** semesteran/tahunan
+(Ps. 47 PP 27/2014) (#90).
 
 ---
 
