@@ -79,6 +79,31 @@ async def list_pengadaan(_user: dict = Depends(require_user)):
                 "ambang PMK 181/2016 (peralatan-mesin Rp1 jt, gedung Rp25 jt).")}
 
 
+@pengadaan_router.get("/pengadaan/export")
+async def export_pengadaan(_user: dict = Depends(require_user)):
+    """Ekspor CSV register perolehan (pola #158)."""
+    import csv as csv_module
+    import io
+
+    buf = io.StringIO()
+    w = csv_module.writer(buf)
+    w.writerow(["jenis", "pihak", "nomor_kontrak", "nomor_bast", "tanggal_bast",
+                "jumlah_barang", "nilai", "dokumen_kurang", "keterangan",
+                "jumlah_lampiran", "dibuat_oleh"])
+    async for p in db.pengadaan.find({}, {"_id": 0}).sort("tanggal_bast", -1):
+        w.writerow([
+            JENIS_PEROLEHAN.get(p.get("jenis"), (p.get("jenis"),))[0],
+            p.get("pihak"), p.get("nomor_kontrak"), p.get("nomor_bast"),
+            p.get("tanggal_bast"), len(p.get("barang") or []),
+            int(nilai_perolehan(p)),
+            "; ".join(dokumen_kurang_perolehan(p)),
+            p.get("keterangan"), len(p.get("lampiran_berkas") or []),
+            p.get("created_by"),
+        ])
+    return Response(content=buf.getvalue().encode("utf-8-sig"), media_type="text/csv",
+                    headers={"Content-Disposition": 'attachment; filename="register_pengadaan.csv"'})
+
+
 @pengadaan_router.post("/pengadaan")
 async def buat_perolehan(payload: PerolehanIn, user: dict = Depends(require_user)):
     """Catat perolehan baru (barang boleh ditautkan ke aset master)."""
