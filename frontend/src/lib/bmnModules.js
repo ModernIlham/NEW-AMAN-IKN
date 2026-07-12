@@ -271,6 +271,7 @@ export const SIKLUS_MODULES = [
       "✅ Kontribusi tahunan ber-NTPN per tahun + pengingat tunggakan otomatis",
       "✅ Ekspor CSV register perjanjian (status + rekap kontribusi + jumlah lampiran)",
       "✅ Arsip scan dokumen per perjanjian (persetujuan/perjanjian/bukti setor — PDF/gambar)",
+      "✅ Lampiran wasdal per perjanjian (laporan monitoring/BA peninjauan lapangan — arsip terpisah)",
       "Pemanfaatan dengan Fasilitas (PDF, PMK 18/2024) — menyusul",
     ],
     integrasi: ["Status pemanfaatan tampil di detail aset & laporan"],

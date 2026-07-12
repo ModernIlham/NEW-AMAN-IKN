@@ -77,7 +77,7 @@ async def export_pemanfaatan(_user: dict = Depends(require_user)):
                 "kontribusi_tahunan", "kontribusi_tercatat_jumlah",
                 "kontribusi_tercatat_total", "nomor_persetujuan",
                 "nomor_perjanjian", "ntpn", "jumlah_lampiran",
-                "keterangan", "dibuat_oleh"])
+                "jumlah_lampiran_wasdal", "keterangan", "dibuat_oleh"])
     async for p in db.pemanfaatan.find({}, {"_id": 0}).sort("berakhir", 1):
         kontribusi = p.get("kontribusi") or []
         status = status_perjanjian(p, today_iso)
@@ -92,6 +92,7 @@ async def export_pemanfaatan(_user: dict = Depends(require_user)):
             sum(float(k.get("jumlah") or 0) for k in kontribusi),
             p.get("nomor_persetujuan"), p.get("nomor_perjanjian"),
             p.get("ntpn"), len(p.get("lampiran") or []),
+            len(p.get("lampiran_wasdal") or []),
             p.get("keterangan"), p.get("created_by"),
         ])
     return Response(content=buf.getvalue().encode("utf-8-sig"), media_type="text/csv",
@@ -152,6 +153,7 @@ async def buat_pemanfaatan(payload: PemanfaatanIn, user: dict = Depends(require_
         "kontribusi_tahunan": float(data.get("kontribusi_tahunan") or 0),
         "kontribusi": [],
         "lampiran": [],
+        "lampiran_wasdal": [],
         "keterangan": str(data.get("keterangan") or "").strip(),
         "created_by": user.get("username"),
         "created_at": now,
@@ -233,15 +235,14 @@ def _lampiran_ext(filename: str) -> str:
     return ""
 
 
-@pemanfaatan_router.post("/pemanfaatan/{register_id}/lampiran")
-async def unggah_lampiran(register_id: str, file: UploadFile = File(...),
-                          user: dict = Depends(require_user)):
-    """Unggah scan dokumen perjanjian (PDF/gambar, maks 10MB, 10 berkas)."""
+async def _terima_lampiran(register_id: str, file: UploadFile, user: dict,
+                           field: str, kind: str) -> dict:
+    """Validasi + simpan satu lampiran GridFS lalu $push ke array `field`."""
     p = await db.pemanfaatan.find_one(
-        {"id": register_id}, {"_id": 0, "id": 1, "lampiran": 1})
+        {"id": register_id}, {"_id": 0, "id": 1, field: 1})
     if not p:
         raise HTTPException(status_code=404, detail="Register tidak ditemukan")
-    if len(p.get("lampiran") or []) >= _MAX_LAMPIRAN:
+    if len(p.get(field) or []) >= _MAX_LAMPIRAN:
         raise HTTPException(status_code=400,
                             detail=f"Maksimal {_MAX_LAMPIRAN} lampiran per perjanjian")
     filename = (file.filename or "dokumen.pdf").strip() or "dokumen.pdf"
@@ -262,7 +263,7 @@ async def unggah_lampiran(register_id: str, file: UploadFile = File(...),
     grid_in = fs_bucket.open_upload_stream_with_id(
         file_id, filename=filename,
         metadata={"content_type": _LAMPIRAN_MEDIA[ext], "size": len(file_bytes),
-                  "kind": "pemanfaatan", "register_id": register_id})
+                  "kind": kind, "register_id": register_id})
     await grid_in.write(file_bytes)
     await grid_in.close()
 
@@ -272,25 +273,24 @@ async def unggah_lampiran(register_id: str, file: UploadFile = File(...),
              "tanggal": datetime.now(timezone.utc).isoformat()}
     res = await db.pemanfaatan.find_one_and_update(
         {"id": register_id},
-        {"$push": {"lampiran": entri},
+        {"$push": {field: entri},
          "$set": {"updated_at": entri["tanggal"]}},
-        projection={"_id": 0, "lampiran": 1}, return_document=True)
+        projection={"_id": 0, field: 1}, return_document=True)
     if not res:
         await delete_document_from_gridfs(str(file_id))
         raise HTTPException(status_code=404, detail="Register tidak ditemukan")
-    return {"message": "Lampiran terunggah", "lampiran": res.get("lampiran") or []}
+    return {"message": "Lampiran terunggah", field: res.get(field) or []}
 
 
-@pemanfaatan_router.get("/pemanfaatan/{register_id}/lampiran/{file_id}")
-async def unduh_lampiran(register_id: str, file_id: str, request: Request,
-                         _user: dict = Depends(require_user_or_query_token)):
-    """Stream lampiran (dipakai window.open → menerima header ATAU ?token)."""
+async def _stream_lampiran(register_id: str, file_id: str, request: Request,
+                           field: str) -> Response:
+    """Stream satu lampiran dari array `field` (ETag + 304)."""
     p = await db.pemanfaatan.find_one(
-        {"id": register_id, "lampiran.file_id": file_id},
-        {"_id": 0, "lampiran.$": 1})
-    if not p or not p.get("lampiran"):
+        {"id": register_id, f"{field}.file_id": file_id},
+        {"_id": 0, f"{field}.$": 1})
+    if not p or not p.get(field):
         raise HTTPException(status_code=404, detail="Lampiran tidak ditemukan")
-    meta = p["lampiran"][0]
+    meta = p[field][0]
     etag = f'"lampiran-{file_id}"'
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers={"ETag": etag})
@@ -303,13 +303,11 @@ async def unduh_lampiran(register_id: str, file_id: str, request: Request,
                              "Content-Disposition": f'inline; filename="{meta.get("filename") or "dokumen"}"'})
 
 
-@pemanfaatan_router.delete("/pemanfaatan/{register_id}/lampiran/{file_id}")
-async def hapus_lampiran(register_id: str, file_id: str,
-                         _admin: dict = Depends(require_admin)):
-    """Hapus lampiran salah unggah (khusus admin)."""
+async def _buang_lampiran(register_id: str, file_id: str, field: str) -> dict:
+    """$pull satu entri dari array `field` + hapus berkas GridFS-nya."""
     res = await db.pemanfaatan.update_one(
         {"id": register_id},
-        {"$pull": {"lampiran": {"file_id": file_id}},
+        {"$pull": {field: {"file_id": file_id}},
          "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}})
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Register tidak ditemukan")
@@ -318,15 +316,65 @@ async def hapus_lampiran(register_id: str, file_id: str,
     return {"ok": True, "file_id": file_id}
 
 
+@pemanfaatan_router.post("/pemanfaatan/{register_id}/lampiran")
+async def unggah_lampiran(register_id: str, file: UploadFile = File(...),
+                          user: dict = Depends(require_user)):
+    """Unggah scan dokumen perjanjian (PDF/gambar, maks 10MB, 10 berkas)."""
+    return await _terima_lampiran(register_id, file, user,
+                                  "lampiran", "pemanfaatan")
+
+
+@pemanfaatan_router.get("/pemanfaatan/{register_id}/lampiran/{file_id}")
+async def unduh_lampiran(register_id: str, file_id: str, request: Request,
+                         _user: dict = Depends(require_user_or_query_token)):
+    """Stream lampiran (dipakai window.open → menerima header ATAU ?token)."""
+    return await _stream_lampiran(register_id, file_id, request, "lampiran")
+
+
+@pemanfaatan_router.delete("/pemanfaatan/{register_id}/lampiran/{file_id}")
+async def hapus_lampiran(register_id: str, file_id: str,
+                         _admin: dict = Depends(require_admin)):
+    """Hapus lampiran salah unggah (khusus admin)."""
+    return await _buang_lampiran(register_id, file_id, "lampiran")
+
+
+# Lampiran wasdal per perjanjian (pustaka §8: pemanfaatan adalah salah satu
+# dari 5 objek pemantauan KPB — laporan monitoring/BA peninjauan lapangan
+# diarsipkan TERPISAH dari dokumen perjanjian agar jejak wasdal jelas).
+
+@pemanfaatan_router.post("/pemanfaatan/{register_id}/wasdal")
+async def unggah_lampiran_wasdal(register_id: str, file: UploadFile = File(...),
+                                 user: dict = Depends(require_user)):
+    """Unggah laporan wasdal/BA peninjauan per perjanjian (PDF/gambar)."""
+    return await _terima_lampiran(register_id, file, user,
+                                  "lampiran_wasdal", "pemanfaatan_wasdal")
+
+
+@pemanfaatan_router.get("/pemanfaatan/{register_id}/wasdal/{file_id}")
+async def unduh_lampiran_wasdal(register_id: str, file_id: str, request: Request,
+                                _user: dict = Depends(require_user_or_query_token)):
+    """Stream lampiran wasdal (window.open → header ATAU ?token)."""
+    return await _stream_lampiran(register_id, file_id, request,
+                                  "lampiran_wasdal")
+
+
+@pemanfaatan_router.delete("/pemanfaatan/{register_id}/wasdal/{file_id}")
+async def hapus_lampiran_wasdal(register_id: str, file_id: str,
+                                _admin: dict = Depends(require_admin)):
+    """Hapus lampiran wasdal salah unggah (khusus admin)."""
+    return await _buang_lampiran(register_id, file_id, "lampiran_wasdal")
+
+
 @pemanfaatan_router.delete("/pemanfaatan/{register_id}")
 async def hapus_pemanfaatan(register_id: str, _admin: dict = Depends(require_admin)):
     """Hapus register salah input (khusus admin) + berkas lampirannya."""
-    p = await db.pemanfaatan.find_one({"id": register_id},
-                                      {"_id": 0, "lampiran": 1})
+    p = await db.pemanfaatan.find_one(
+        {"id": register_id}, {"_id": 0, "lampiran": 1, "lampiran_wasdal": 1})
     res = await db.pemanfaatan.delete_one({"id": register_id})
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Register tidak ditemukan")
-    for lamp in (p or {}).get("lampiran") or []:
+    semua = ((p or {}).get("lampiran") or []) + ((p or {}).get("lampiran_wasdal") or [])
+    for lamp in semua:
         if lamp.get("file_id"):
             await delete_document_from_gridfs(lamp["file_id"])
     return {"ok": True, "id": register_id}

@@ -48,6 +48,16 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#188] Lampiran wasdal per perjanjian pemanfaatan — 2026-07-12
+
+- **Arsip lampiran wasdal terpisah** per perjanjian pemanfaatan: laporan
+  monitoring/BA peninjauan lapangan (5 objek pemantauan KPB, pustaka §8)
+  di array `lampiran_wasdal` + trio endpoint GridFS `/wasdal` — terpisah
+  dari dokumen perjanjian (#131). Logika lampiran direfaktor jadi helper
+  bersama; kolom `jumlah_lampiran_wasdal` di CSV; tombol "Wasdal" +
+  dialog dua jenis di halaman Pemanfaatan. Butir "menyusul" Pemanfaatan
+  tinggal PDF PMK 18/2024.
+
 ## [#187] Konsolidasi dokumentasi #186 + perapian status modul — 2026-07-12
 
 - **Dokumentasi + data statis modul**: README Progres Fase 4 & masterplan
