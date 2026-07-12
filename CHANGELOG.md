@@ -48,6 +48,16 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#187] Konsolidasi dokumentasi #186 + perapian status modul — 2026-07-12
+
+- **Dokumentasi + data statis modul**: README Progres Fase 4 & masterplan
+  (Penganggaran "Lengkap tahap awal", daftar "menyusul" tuntas #186);
+  perapian baris pustaka §13 yang basi (Pemeliharaan #90/#91/#167,
+  Pemanfaatan #121/#131/#158, Pemusnahan #119/#120/#132, Penghapusan
+  #106/#134/#159); bmnModules: butir tiket proses 4 rezim (#181/#183)
+  masuk checklist Penggunaan, blok Penilaian dimutakhirkan (dasar hukum
+  PMK 99/2024 + Perpres 75/2017 + PMK 118/2017 jo. perubahannya).
+
 ## [#186] Sanding realisasi per triwulan (Penganggaran) — 2026-07-12
 
 - **Sanding realisasi per triwulan per tahun anggaran**: realisasi
