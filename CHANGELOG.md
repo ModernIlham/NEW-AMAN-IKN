@@ -48,6 +48,13 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#119] PDF Berita Acara Pemusnahan — 2026-07-12
+
+- **PDF BA Pemusnahan siap tanda tangan** (PMK 83/2016) dari register
+  #110: kop surat, nomor BA + persetujuan, cara pemusnahan, tabel aset
+  ber-total, blok tanda tangan pelaksana/saksi/KPB; tombol unduh per BA.
+  Smoke FakeDB + PNG lulus. Foto bukti pelaksanaan menyusul.
+
 ## [#118] Konsolidasi dokumentasi Pengadaan — 2026-07-12
 
 - **Dokumentasi saja**: masterplan (baris Peta Siklus Pengadaan →
