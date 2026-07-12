@@ -48,6 +48,12 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#200] Konsolidasi dokumentasi #199 — 2026-07-12
+
+- **Dokumentasi saja**: README Progres Fase 4 + masterplan + pustaka §13
+  baris Pengadaan (✅ tautan paket → Penganggaran #199; butir "menyusul"
+  tautan paket ke register penganggaran tuntas).
+
 ## [#199] Tautan Pengadaan → usulan Penganggaran — 2026-07-12
 
 - **Jembatan #117 ↔ #115**: register perolehan Pengadaan dapat ditautkan
