@@ -3,7 +3,7 @@
 > Rangkuman riset regulasi dan praktik resmi sebagai **bahan rujukan wajib**
 > sebelum membangun modul apa pun di AMAN — dipakai bersama
 > `docs/MASTERPLAN-SIKLUS-BMN.md`. Disusun dari riset internet Juli 2026
-> (sumber di §12). Butir bertanda **[perlu verifikasi]** belum terbaca dari
+> (sumber di §13). Butir bertanda **[perlu verifikasi]** belum terbaca dari
 > teks asli peraturan (PDF JDIH tidak terjangkau dari lingkungan riset) —
 > pastikan ke dokumen aslinya saat menulis spesifikasi teknis modulnya.
 >
@@ -408,7 +408,62 @@ bentuk + NTPN utk penjualan → SK penghapusan), peringatan tenggat lelang
 
 ---
 
-## 9. Kendala Umum Satker → Fitur Penangkal AMAN
+## 9. Penganggaran — Integrasi RKBMN ↔ RKA-K/L (PMK 62/2023 + PMK 153/PMK.06/2021)
+
+### 9.1 Dasar & status
+- **PMK 62 Tahun 2023** (Perencanaan Anggaran, Pelaksanaan Anggaran, serta
+  Akuntansi dan Pelaporan Keuangan) — regulasi induk penganggaran; mencabut
+  PMK 208/2019 (juknis RKA-K/L/DIPA) & PMK 199/2021 (revisi anggaran).
+  Diubah **PMK 107/2024** dan **PMK 41/2026** (berlaku 22 Juni 2026;
+  perubahan terpublikasi menyentuh sisi pelaksanaan — **[perlu verifikasi
+  apakah bab perencanaan anggaran ikut berubah]**).
+- **PMK 153/PMK.06/2021** (Perencanaan Kebutuhan BMN) masih berlaku;
+  praktik: RKBMN disusun via **SIMAN V2 modul Perencanaan** (siklus t-2 —
+  contoh: usulan RKBMN TA 2027 diinput Juli 2025). Kualitas RKBMN kini
+  dinilai dalam Indeks Pengelolaan Aset (KMK 39/KM.6/2025).
+
+### 9.2 Titik integrasi RKBMN → RKA-K/L
+- Alur: usulan **KPB** → konsolidasi Pengguna Barang + **reviu APIP**
+  (modul KMK 332/KM.6/2016) → penelaahan **Pengelola Barang (DJKN)** →
+  **RKBMN Hasil Penelaahan** (ditandatangani kedua pihak, tembusan Dirjen
+  Anggaran) → menjadi **dasar angka dasar & inisiatif baru** RKA-K/L dan
+  dokumen pendukung penelaahan/reviu RKA; SBSK = batas tertinggi.
+- Pemetaan belanja: usulan **pengadaan** → belanja modal **53x** (531
+  tanah; 532 peralatan-mesin; 533 gedung-bangunan; 534 jalan-irigasi-
+  jaringan; 536 modal lainnya); usulan **pemeliharaan** → **523**.
+- Perubahan kebutuhan tahun berjalan hanya lewat **usulan perubahan
+  RKBMN** — paling lambat 1 bulan sebelum batas revisi anggaran; revisi
+  anggaran berjenjang KPA/Kanwil DJPb/Dit. PA/DJA (jo. PER-9/PB/2023).
+
+### 9.3 Kalender & pelaksana tingkat satker
+| Waktu (pola) | Tahap |
+|---|---|
+| Juli–Des (t-2) | Input usulan RKBMN satker (tenggat surat internal K/L) → reviu APIP → penelaahan DJKN |
+| ± Maret–April | Pagu indikatif (Kemenkeu–Bappenas) |
+| ± Juni–Juli | Pagu anggaran → penyusunan RKA-K/L satker di **SAKTI Web** (operator–validator–approver, tanggung jawab KPA; referensi program/KRO/RO dari **KRISNA**; KAK/RAB) |
+| Agu–Okt | RUU APBN, pembahasan DPR, penelaahan RKA |
+| ± Nov–Des | Alokasi anggaran (pagu definitif) → **DIPA petikan** + POK + Halaman III DIPA |
+- Pemantauan realisasi: **IKPA** di OM-SPAN (a.l. penyerapan 20%, deviasi
+  Halaman III DIPA 15%, capaian output 25%) + MonSAKTI.
+
+### 9.4 Implikasi desain AMAN (modul Penganggaran tahap awal)
+- **Register usulan penganggaran** per usulan (lahir dari kertas kerja
+  RKBMN): pipeline **diusulkan → disetujui telaah (nilai disetujui) →
+  masuk DIPA (nomor + nilai) → terealisasi (nilai realisasi)**; ditolak =
+  terminal. Status diisi operator berdasar dokumen resmi — AMAN mencatat
+  jejak per aset/NUP (granularitas yang tidak dimiliki SAKTI), bukan
+  memutus.
+- Sanding **rencana vs realisasi** per jenis (pengadaan 53x vs
+  pemeliharaan 523) + serapan per usulan; pengingat kalender (tanggal
+  konfigurabel — tenggat internal per K/L berbeda).
+- **Yang TIDAK boleh diklaim**: bukan kanal resmi (RKBMN via SIMAN V2;
+  RKA/DIPA/revisi via SAKTI; Renja via KRISNA — posisi AMAN seperti
+  e-SADEWA di MA); tidak menghitung SBSK resmi; tidak menerbitkan dokumen
+  menyerupai dokumen resmi; status register tak berkekuatan hukum.
+
+---
+
+## 10. Kendala Umum Satker → Fitur Penangkal AMAN
 
 | Kendala nyata (temuan artikel DJKN/DJPb/BPK/jurnal) | Penangkal di AMAN |
 |---|---|
@@ -424,7 +479,7 @@ bentuk + NTPN utk penjualan → SK penghapusan), peringatan tenggat lelang
 
 ---
 
-## 10. Implikasi Desain per Modul (ringkas)
+## 11. Implikasi Desain per Modul (ringkas)
 
 | Modul (fase) | Keputusan desain dari pustaka ini |
 |---|---|
@@ -444,7 +499,7 @@ bentuk + NTPN utk penjualan → SK penghapusan), peringatan tenggat lelang
 
 ---
 
-## 11. Daftar Konsolidasi "Perlu Verifikasi"
+## 12. Daftar Konsolidasi "Perlu Verifikasi"
 
 1. Field lengkap KIB per 6 jenis → Lampiran PMK 181/2016.
 2. Batas waktu statutori penyampaian laporan per jenjang → Lampiran PMK 181.
@@ -468,10 +523,15 @@ bentuk + NTPN utk penjualan → SK penghapusan), peringatan tenggat lelang
     2 penertiban + 14 monev" hanya dari satu ringkasan pencarian) serta
     tenggat statutori pelaporan wasdal antar jenjang; nomor pasti KMK
     juknis SIMAN v2 (248/KM.6/2024).
+14. Tenggat statutori PMK 153/2021 (penyampaian RKBMN & Hasil Penelaahan —
+    sumber sekunder terbelah "minggu keempat Januari" vs "minggu ketiga
+    Februari"); apakah PMK 41/2026 mengubah bab perencanaan anggaran
+    PMK 62/2023; rincian akun BAS 6 digit terkini (pemutakhiran
+    KEP-211/PB/2018).
 
 ---
 
-## 12. Sumber Utama
+## 13. Sumber Utama
 
 Regulasi: PSAP 05 (ksap.org/standar/PSAP05.pdf) · PMK 181/PMK.06/2016
 (jdih.kemenkeu.go.id/dok/181-pmk-06-2016; peraturan.bpk.go.id/Details/121291)
@@ -494,7 +554,11 @@ FAQ opname fisik SAKTI (KLC); batas waktu LBMN Unaudited 2025 (KPPN
 Sampit); artikel wasdal DJKN (KPKNL Mamuju "Merindu BMN Seri 6",
 Kanwil Suluttenggomalut "Pantau, Tertib, Lapor", Kanwil Jatim,
 KPKNL Cirebon BMN idle); surat & pengumuman pelaporan wasdal
-MA/BPS/PA 2024–2026 (Modul Wasdal SIMAN v2).
+MA/BPS/PA 2024–2026 (Modul Wasdal SIMAN v2). Penganggaran: PMK 62/2023
+jo. 107/2024 & 41/2026 · PMK 153/2021 (jdih.kemenkeu.go.id) ·
+KMK 332/KM.6/2016 (reviu APIP) · KMK 39/KM.6/2025 (IPA) ·
+PER-9/PB/2023 (revisi) · juknis RKA satker SAKTI (HAI DJPb) ·
+artikel DJKN/DJPb/DJA (RKBMN, pagu indikatif, IKPA, e-SADEWA MA).
 
 Kendala lapangan: artikel KPKNL Tangerang I/Metro/Singkawang; DJKN
 "Pentingnya Penatausahaan Persediaan"; knowledge sharing Ittama DPR;
