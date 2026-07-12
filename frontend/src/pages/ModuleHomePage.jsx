@@ -56,7 +56,7 @@ function StatusBadge({ status }) {
  * tahap siklus lain sudah punya kamarnya masing-masing dengan status Segera
  * Hadir — klik kartunya menampilkan konsep, rencana fitur, dan fase roadmap.
  */
-export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onShowInfo, onEnterInventarisasi, onOpenKodefikasi, onOpenPersediaan, onOpenPelaporan, onOpenPenggunaan, onOpenPengamanan, onOpenPemeliharaan, onOpenPerencanaan, onOpenPenilaian, onOpenPenghapusan }) {
+export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onShowInfo, onEnterInventarisasi, onOpenKodefikasi, onOpenPersediaan, onOpenPelaporan, onOpenPenggunaan, onOpenPengamanan, onOpenPemeliharaan, onOpenPerencanaan, onOpenPenilaian, onOpenPenghapusan, onOpenPemanfaatan }) {
   const [detail, setDetail] = useState(null); // modul yang dibuka konsepnya
   const activateInfo = useTripleClick(onShowInfo);
   const DetailIcon = detail ? (MODULE_ICONS[detail.id] || Package) : null;
@@ -76,6 +76,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
     else if (mod.id === "perencanaan" && onOpenPerencanaan) onOpenPerencanaan();
     else if (mod.id === "penilaian" && onOpenPenilaian) onOpenPenilaian();
     else if (mod.id === "penghapusan" && onOpenPenghapusan) onOpenPenghapusan();
+    else if (mod.id === "pemanfaatan" && onOpenPemanfaatan) onOpenPemanfaatan();
     else setDetail(mod);
   };
 
@@ -219,7 +220,8 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
                 || (mod.id === "pemeliharaan" && !!onOpenPemeliharaan)
                 || (mod.id === "perencanaan" && !!onOpenPerencanaan)
                 || (mod.id === "penilaian" && !!onOpenPenilaian)
-                || (mod.id === "penghapusan" && !!onOpenPenghapusan);
+                || (mod.id === "penghapusan" && !!onOpenPenghapusan)
+                || (mod.id === "pemanfaatan" && !!onOpenPemanfaatan);
               return (
                 <button
                   key={mod.id}

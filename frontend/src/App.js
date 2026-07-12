@@ -34,6 +34,7 @@ const PemeliharaanPage = lazy(() => import("./pages/PemeliharaanPage"));
 const PerencanaanPage = lazy(() => import("./pages/PerencanaanPage"));
 const PenilaianPage = lazy(() => import("./pages/PenilaianPage"));
 const PenghapusanPage = lazy(() => import("./pages/PenghapusanPage"));
+const PemanfaatanPage = lazy(() => import("./pages/PemanfaatanPage"));
 
 // ============================================================================
 // LOADING FALLBACK - Shown while lazy components load
@@ -263,6 +264,8 @@ function App() {
   const [showPenilaian, setShowPenilaian] = useState(false);
   // Halaman Penghapusan (kandidat usul hapus)
   const [showPenghapusan, setShowPenghapusan] = useState(false);
+  // Halaman Pemanfaatan (register perjanjian)
+  const [showPemanfaatan, setShowPemanfaatan] = useState(false);
 
   if (loading) {
     return <PageLoader />;
@@ -387,6 +390,18 @@ function App() {
     );
   }
 
+  // Pemanfaatan — register perjanjian (Fase 5 tahap awal).
+  if (user && showPemanfaatan) {
+    return (
+      <div className="App">
+        <Suspense fallback={<PageLoader />}>
+          <PemanfaatanPage user={user} onBack={() => setShowPemanfaatan(false)} />
+        </Suspense>
+        <Toaster position="top-right" richColors />
+      </div>
+    );
+  }
+
   // Beranda Modul — rumah Siklus Pengelolaan BMN. Tampil setelah login
   // sampai user memilih modul; modul selain Inventarisasi menampilkan
   // konsep "Segera Hadir" di dalam halaman ini.
@@ -410,6 +425,7 @@ function App() {
             onOpenPerencanaan={() => setShowPerencanaan(true)}
             onOpenPenilaian={() => setShowPenilaian(true)}
             onOpenPenghapusan={() => setShowPenghapusan(true)}
+            onOpenPemanfaatan={() => setShowPemanfaatan(true)}
           />
         </Suspense>
         <Toaster position="top-right" richColors />

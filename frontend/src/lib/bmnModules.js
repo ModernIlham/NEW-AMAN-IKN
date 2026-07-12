@@ -231,9 +231,9 @@ export const SIKLUS_MODULES = [
     id: "pemanfaatan",
     nama: "Pemanfaatan",
     urutan: 5,
-    status: "segera",
+    status: "sebagian",
     fase: 5,
-    ringkas: "Sewa, Pinjam Pakai, KSP, BGS/BSG, KSPI, KETUPI — jadwal & PNBP.",
+    ringkas: "Register perjanjian 6 bentuk (jaga dokumen persetujuan/NTPN + jatuh tempo ≤60 hari) sudah bisa dibuka.",
     deskripsi:
       "Pemanfaatan BMN oleh pihak lain sesuai PMK No. 115/PMK.06/2020: Sewa, Pinjam Pakai, "
       + "Kerjasama Pemanfaatan (KSP), Bangun Guna Serah (BGS), Bangun Serah Guna (BSG), "
