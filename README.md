@@ -58,7 +58,9 @@ dengan tiket klarifikasi → usul serah → diserahkan (PMK 120/2024)
 (#126) + **register SK penetapan penggunaan** 5 jenis dengan cakupan
 aset ter-PSP (#129) + **arsip scan SK penetapan per register** (#137)
 · Pengamanan — dasbor tertib administrasi + daftar
-pantau sengketa (#88) · Pemeliharaan — riwayat & biaya per aset dengan
+pantau sengketa (#88) + **register BMN bermasalah berstatus**
+identifikasi → mediasi → blokir → litigasi → selesai (PP 27/2014
+Ps. 42, pustaka §11) (#169) · Pemeliharaan — riwayat & biaya per aset dengan
 telaah kapitalisasi PMK 181 (#89) + **DHPB PDF** semesteran/tahunan
 (Ps. 47 PP 27/2014) (#90) + jadwal berkala dengan status jatuh tempo (#92)
 + **ekspor CSV riwayat** (#167).
