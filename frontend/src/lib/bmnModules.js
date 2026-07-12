@@ -193,20 +193,25 @@ export const SIKLUS_MODULES = [
     id: "pengadaan",
     nama: "Pengadaan",
     urutan: 3,
-    status: "segera",
+    status: "sebagian",
     fase: 4,
-    ringkas: "Perolehan baru: kontrak, BAST, penerimaan → otomatis masuk daftar aset.",
+    ringkas: "Register perolehan per BAST/kontrak + checklist dokumen + tautan aset.",
     deskripsi:
-      "Pencatatan perolehan BMN baru (pembelian, hibah masuk, transfer masuk): dokumen "
-      + "sumber (kontrak, SPM/SP2D, BAST), penerimaan barang, dan pendaftaran otomatis "
-      + "ke master aset/persediaan — pola dokumen sumber mengadopsi KERJA-BARENG.",
+      "Pencatatan perolehan BMN baru (pembelian, hibah masuk, transfer masuk, "
+      + "pembangunan — Perpres 16/2018 jo. 46/2025, pustaka §10). Tahap awal: register "
+      + "perolehan per dokumen BAST/kontrak dengan checklist kelengkapan dokumen sumber "
+      + "(penangkal temuan BPK \"BAST tercecer\"), tautan barang ke aset master, dan "
+      + "penanda ekstrakomptabel di bawah ambang PMK 181/2016; pencatatan resmi tetap "
+      + "di SAKTI.",
     dasarHukum: ["Perpres 16/2018 jo. Perpres 46/2025 — Pengadaan Barang/Jasa Pemerintah"],
     fitur: [
-      "Registrasi perolehan per dokumen sumber (kontrak, PPK, penyedia, nilai)",
-      "Penerimaan barang → auto-daftar ke master aset (kode + NUP) / stok persediaan",
-      "Lampiran dokumen & foto serah terima",
+      "✅ Register perolehan per dokumen (jenis 101/102/103/105, penyedia, kontrak, BAST, daftar barang)",
+      "✅ Checklist dokumen sumber per jenis (kontrak/BAPHP/BAST/kuitansi/SP2D; hibah: naskah + MPHL-BJS)",
+      "✅ Tautan barang → aset master + penanda ekstrakomptabel PMK 181",
+      "Auto-daftar draft aset baru dari perolehan (menyusul)",
+      "Lampiran dokumen & foto serah terima (menyusul)",
     ],
-    integrasi: ["Menjadi pintu masuk data master aset & batch persediaan baru"],
+    integrasi: ["Menjadi pintu masuk data master aset & batch persediaan baru; tersambung register penganggaran (#115)"],
   },
   {
     id: "penggunaan",

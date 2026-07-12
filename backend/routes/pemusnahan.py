@@ -1,6 +1,6 @@
 """PEMUSNAHAN — Fase 6 tahap awal: register Berita Acara Pemusnahan.
 
-PMK 83/PMK.06/2016 (pustaka §1 & §11): BA dicatat setelah persetujuan +
+PMK 83/PMK.06/2016 (pustaka §1 & §12): BA dicatat setelah persetujuan +
 pelaksanaan; objek dibatasi aset rusak berat (kelayakan divalidasi per
 aset). Tindak lanjut penghapusan lewat modul Penghapusan.
 """

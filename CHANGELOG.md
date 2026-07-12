@@ -48,6 +48,14 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#117] Pengadaan tahap awal: register perolehan per dokumen — 2026-07-12
+
+- **Register perolehan** (bab pustaka §10, Perpres 16/2018 jo. 46/2025):
+  satu entri per BAST/kontrak (jenis 101/102/103/105), checklist dokumen
+  sumber per jenis (penangkal "BAST tercecer"), tautan barang → aset
+  master + penanda ekstrakomptabel ambang PMK 181. Kartu naik Sebagian —
+  Segera Hadir tersisa Pembukuan/KIB. 4 unit test (suite 187).
+
 ## [#116] Konsolidasi dokumentasi Penganggaran — 2026-07-12
 
 - **Dokumentasi saja**: masterplan (baris Peta Siklus Penganggaran →

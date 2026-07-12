@@ -3,7 +3,7 @@
 > Rangkuman riset regulasi dan praktik resmi sebagai **bahan rujukan wajib**
 > sebelum membangun modul apa pun di AMAN — dipakai bersama
 > `docs/MASTERPLAN-SIKLUS-BMN.md`. Disusun dari riset internet Juli 2026
-> (sumber di §13). Butir bertanda **[perlu verifikasi]** belum terbaca dari
+> (sumber di §14). Butir bertanda **[perlu verifikasi]** belum terbaca dari
 > teks asli peraturan (PDF JDIH tidak terjangkau dari lingkungan riset) —
 > pastikan ke dokumen aslinya saat menulis spesifikasi teknis modulnya.
 >
@@ -463,7 +463,72 @@ bentuk + NTPN utk penjualan → SK penghapusan), peringatan tenggat lelang
 
 ---
 
-## 10. Kendala Umum Satker → Fitur Penangkal AMAN
+## 10. Pengadaan — Perolehan & Dokumen Sumber (Perpres 16/2018 jo. 46/2025)
+
+### 10.1 Dasar & status
+- **Perpres 16/2018** jo. Perpres 12/2021 (perubahan pertama) jo.
+  **Perpres 46/2025** (perubahan KEDUA — bukan ketiga; ditetapkan
+  ±30 April 2025). Poin penting satker: **e-purchasing wajib** untuk
+  produk yang sudah tayang di Katalog Elektronik (INAPROC/Katalog V6,
+  tender = pilihan terakhir, berlaku juga jasa konsultansi); pengadaan
+  langsung konstruksi naik **≤ Rp400 jt** (barang/jasa lain ≤ Rp200 jt,
+  konsultansi ≤ Rp100 jt); PPK wajib sertifikat kompetensi PBJ.
+- Turunan LKPP masih transisi (SE Kepala LKPP 1/2025): PerLKPP 11/2021
+  (perencanaan) & 12/2021 jo. 4/2024 (pemilihan) tetap berlaku sepanjang
+  tidak bertentangan; Katalog V6 (Kep. 177/2024), mini-kompetisi
+  (Kep. 93/2025). **[PerLKPP payung baru belum ditemukan — pantau]**
+- Pembayaran kini rezim **PMK 62/2023 jo. 107/2024** (SPP→SPM→SPD2D;
+  mencabut PMK 190/2012).
+
+### 10.2 Alur satker & titik sambung ke BMN
+- Alur: RUP di **SiRUP** (setelah DIPA) → pemilihan via INAPROC/SPSE
+  (e-purchasing / pengadaan langsung / tender) → kontrak (bukti
+  pembelian/kuitansi/SPK/surat perjanjian) → **BAPHP → BAST** →
+  SPP → SPM → SP2D.
+- **BAST = pemicu pencatatan BMN** — di SAKTI pembelian aset dicatat
+  berdasar BAST tanpa menunggu SP2D: rekam kontrak+BAST (rincian kode
+  barang) di Modul Komitmen → pendetailan NUP di Modul Aset
+  Tetap/Persediaan → jurnal otomatis. Hibah barang: BAST hibah →
+  pendetailan → **MPHL-BJS** → pengesahan KPPN.
+- Kode transaksi perolehan (referensi): **101** Pembelian · **102**
+  Transfer Masuk · **103** Hibah Masuk · **105** Penyelesaian
+  Pembangunan dengan KDP · **112** Perolehan Lainnya · **113**
+  Penyelesaian Pembangunan Langsung.
+
+### 10.3 Nilai perolehan & ambang kapitalisasi
+- **PSAP 07 + Bultek 15**: nilai perolehan = harga beli/konstruksi +
+  biaya atribusi langsung sampai siap pakai (persiapan tempat,
+  pengiriman awal & bongkar-muat, instalasi, jasa profesional); biaya
+  administrasi umum TIDAK dikapitalisasi.
+- Ambang kapitalisasi **masih PMK 181/2016**: peralatan-mesin ≥ Rp1 jt,
+  gedung-bangunan ≥ Rp25 jt; tanah/JIJ/KDP tanpa ambang; di bawah ambang
+  → **ekstrakomptabel** (akun belanja tersendiri, S-454). Tidak ditemukan
+  PMK pengubah per Juli 2026 **[cek ulang JDIH saat implementasi]**.
+
+### 10.4 Temuan lapangan (BPK/DJPb)
+Aset tidak/terlambat tercatat ("BMN belum diregister" saat rekonsiliasi);
+**BAST tercecer/terlambat**; **salah pilih kode barang saat rekam BAST**
+(persediaan vs aset — sampai terbit surat DJPb S-429); selisih kontrak vs
+fisik; barang untuk pemda/masyarakat tidak segera di-BAST-kan.
+
+### 10.5 Implikasi desain AMAN (modul Pengadaan tahap awal)
+- **Register perolehan per dokumen** (satu entri per BAST/kontrak): jenis
+  perolehan (pembelian/transfer/hibah/pembangunan — selaras kode
+  101/102/103/105 sebagai referensi), penyedia/pemberi, nomor kontrak &
+  BAST, tanggal, daftar barang (uraian, kode, jumlah, harga satuan).
+- **Checklist kelengkapan dokumen sumber** per jenis (kontrak, BAPHP,
+  BAST, kuitansi, SP2D; hibah: naskah hibah + MPHL-BJS) — penangkal
+  temuan "BAST tercecer".
+- **Tautan barang → aset master** (cegah entri ganda; daftar tunggu
+  "belum dicatat") + penanda **ekstrakomptabel** bila harga satuan di
+  bawah ambang PMK 181 (parameter, bukan konstanta terkubur).
+- **Yang TIDAK boleh diklaim**: bukan pencatatan resmi (SAKTI) dan bukan
+  kanal pengadaan (SiRUP/SPSE/e-Katalog); tidak menerbitkan dokumen
+  berkekuatan hukum; NUP internal ≠ NUP resmi SAKTI.
+
+---
+
+## 11. Kendala Umum Satker → Fitur Penangkal AMAN
 
 | Kendala nyata (temuan artikel DJKN/DJPb/BPK/jurnal) | Penangkal di AMAN |
 |---|---|
@@ -479,7 +544,7 @@ bentuk + NTPN utk penjualan → SK penghapusan), peringatan tenggat lelang
 
 ---
 
-## 11. Implikasi Desain per Modul (ringkas)
+## 12. Implikasi Desain per Modul (ringkas)
 
 | Modul (fase) | Keputusan desain dari pustaka ini |
 |---|---|
@@ -500,7 +565,7 @@ bentuk + NTPN utk penjualan → SK penghapusan), peringatan tenggat lelang
 
 ---
 
-## 12. Daftar Konsolidasi "Perlu Verifikasi"
+## 13. Daftar Konsolidasi "Perlu Verifikasi"
 
 1. Field lengkap KIB per 6 jenis → Lampiran PMK 181/2016.
 2. Batas waktu statutori penyampaian laporan per jenjang → Lampiran PMK 181.
@@ -529,10 +594,14 @@ bentuk + NTPN utk penjualan → SK penghapusan), peringatan tenggat lelang
     Februari"); apakah PMK 41/2026 mengubah bab perencanaan anggaran
     PMK 62/2023; rincian akun BAS 6 digit terkini (pemutakhiran
     KEP-211/PB/2018).
+15. Jenjang rupiah bentuk kontrak (bukti pembelian/kuitansi/SPK/surat
+    perjanjian) pasca-Perpres 46/2025; ada-tidaknya PerLKPP payung baru
+    pengganti PerLKPP 11/2021 & 12/2021; kepastian tidak adanya PMK
+    pengubah ambang kapitalisasi PMK 181/2016 (cek daftar status JDIH).
 
 ---
 
-## 13. Sumber Utama
+## 14. Sumber Utama
 
 Regulasi: PSAP 05 (ksap.org/standar/PSAP05.pdf) · PMK 181/PMK.06/2016
 (jdih.kemenkeu.go.id/dok/181-pmk-06-2016; peraturan.bpk.go.id/Details/121291)
@@ -559,7 +628,11 @@ MA/BPS/PA 2024–2026 (Modul Wasdal SIMAN v2). Penganggaran: PMK 62/2023
 jo. 107/2024 & 41/2026 · PMK 153/2021 (jdih.kemenkeu.go.id) ·
 KMK 332/KM.6/2016 (reviu APIP) · KMK 39/KM.6/2025 (IPA) ·
 PER-9/PB/2023 (revisi) · juknis RKA satker SAKTI (HAI DJPb) ·
-artikel DJKN/DJPb/DJA (RKBMN, pagu indikatif, IKPA, e-SADEWA MA).
+artikel DJKN/DJPb/DJA (RKBMN, pagu indikatif, IKPA, e-SADEWA MA). Pengadaan: Perpres 16/2018 jo. 12/2021 jo. 46/2025
+(jdih.lkpp.go.id) · SE Kepala LKPP 1/2025 · PerLKPP 11/2021 &
+12/2021 jo. 4/2024 · Kep. 177/2024 (Katalog V6) & 93/2025 ·
+PSAP 07 + Bultek 15 (KSAP) · surat DJPb S-429 & S-454 · LHP BPK
+atas LKPP + Warta Pemeriksa · juknis SIMAK-BMN (kode transaksi).
 
 Kendala lapangan: artikel KPKNL Tangerang I/Metro/Singkawang; DJKN
 "Pentingnya Penatausahaan Persediaan"; knowledge sharing Ittama DPR;
