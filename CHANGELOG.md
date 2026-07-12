@@ -48,6 +48,14 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#111] Pemindahtanganan tahap awal: register usulan 4 bentuk — 2026-07-12
+
+- **Register pemindahtanganan** (bab pustaka §7, PMK 111/2016 jo.
+  165/2021): usulan multi-aset berstatus diusulkan → disetujui →
+  dilaksanakan → selesai; dokumen wajib per tahap (persetujuan, risalah/
+  BAST/naskah/PP, NTPN utk penjualan, SK Penghapusan) + peringatan
+  tenggat lelang 6 bulan. Kartu naik Sebagian; 4 unit test (suite 171).
+
 ## [#110] Pemusnahan tahap awal: register BA multi-aset — 2026-07-12
 
 - **Register BA Pemusnahan** (PMK 83/2016): nomor persetujuan wajib,

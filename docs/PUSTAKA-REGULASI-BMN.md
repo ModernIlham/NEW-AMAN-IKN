@@ -299,7 +299,49 @@ menyusul.
 
 ---
 
-## 7. Kendala Umum Satker → Fitur Penangkal AMAN
+## 7. Pemindahtanganan (PMK 111/PMK.06/2016 jo. 165/PMK.06/2021)
+
+**Status.** PMK 111/2016 jo. 165/2021 MASIH BERLAKU (melaksanakan Ps. 74A
+PP 28/2020). Pelengkap baru: PMK 77/2024 (penjualan kendaraan perorangan
+dinas tanpa lelang), PMK 122/2023 (juklak lelang), KMK 375/2024 (nilai
+taksiran kendaraan: harga pasar lelang × faktor kondisi 0,7/0,6/0,5),
+KMK 235/2023 (mandat DJKN). Empat bentuk: **Penjualan, Tukar Menukar,
+Hibah, PMPP** (UU 1/2004 Ps. 45; PP 27/2014 Ps. 54).
+
+**Jalur persetujuan bertingkat nilai** (UU 1/2004 Ps. 45-46; PP 27/2014
+Ps. 55-58): tanah/bangunan → DPR (kecuali 5 pengecualian; yang
+dikecualikan: >Rp10 M Presiden, ≤Rp10 M Pengelola); selain tanah/bangunan
+→ >Rp100 M DPR, >Rp10-100 M Presiden, ≤Rp10 M Pengelola (KPKNL/Kanwil/
+DJKN berjenjang). **Delegasi PMK 4/2015**: Pengguna Barang sendiri boleh
+menyetujui penjualan/hibah BMN selain tanah/bangunan TANPA bukti
+kepemilikan bernilai perolehan ≤Rp100 juta/unit — jalur tersering satker.
+
+**Penjualan**: prinsip LELANG via KPKNL (permohonan ≤6 BULAN sejak
+persetujuan; lewat = wajib penilaian ulang); tanpa lelang hanya kasus
+khusus (rumah negara gol. III ke penghuni sah; kendaraan perorangan dinas
+ke pejabat/ASN/TNI/Polri per PMK 77/2024; tanah kavling perumahan
+pegawai; bangunan di atas tanah pihak lain; penetapan Pengelola). Nilai
+limit dari penilaian/nilai taksiran; hasil disetor SELURUHNYA ke Kas
+Negara (PNBP). **Hibah**: penerima sah = Pemda/Pemdes, lembaga sosial-
+budaya-keagamaan-kemanusiaan-pendidikan non-komersial (wajib pernyataan
+instansi teknis), masyarakat program pembangunan, pemerintah negara lain;
+dokumen = Naskah Hibah + BAST. **Tukar Menukar**: penggantian barang
+minimal seimbang; Perjanjian TM + BAST + setor selisih. **PMPP**:
+ditetapkan PERATURAN PEMERINTAH; BAST ke BUMN/badan hukum penerima.
+
+**Tindak lanjut wajib**: Risalah Lelang/BAST → SK Penghapusan → keluar
+dari daftar barang → **lapor ke Pengelola ≤1 bulan** sejak SK.
+
+**Terapan AMAN (iterasi 38):** register per USULAN multi-aset berstatus
+(diusulkan → disetujui → dilaksanakan → selesai; tolak/batal), dokumen
+wajib per tahap mengunci transisi (persetujuan → dokumen pelaksanaan per
+bentuk + NTPN utk penjualan → SK penghapusan), peringatan tenggat lelang
+6 bulan; jalur persetujuan & ambang nilai dicatat sebagai informasi
+(tabel konfigurasi menyusul — sub-aturan bergerak).
+
+---
+
+## 8. Kendala Umum Satker → Fitur Penangkal AMAN
 
 | Kendala nyata (temuan artikel DJKN/DJPb/BPK/jurnal) | Penangkal di AMAN |
 |---|---|
@@ -315,7 +357,7 @@ menyusul.
 
 ---
 
-## 8. Implikasi Desain per Modul (ringkas)
+## 9. Implikasi Desain per Modul (ringkas)
 
 | Modul (fase) | Keputusan desain dari pustaka ini |
 |---|---|
@@ -332,7 +374,7 @@ menyusul.
 
 ---
 
-## 9. Daftar Konsolidasi "Perlu Verifikasi"
+## 10. Daftar Konsolidasi "Perlu Verifikasi"
 
 1. Field lengkap KIB per 6 jenis → Lampiran PMK 181/2016.
 2. Batas waktu statutori penyampaian laporan per jenjang → Lampiran PMK 181.
@@ -352,7 +394,7 @@ menyusul.
 
 ---
 
-## 10. Sumber Utama
+## 11. Sumber Utama
 
 Regulasi: PSAP 05 (ksap.org/standar/PSAP05.pdf) · PMK 181/PMK.06/2016
 (jdih.kemenkeu.go.id/dok/181-pmk-06-2016; peraturan.bpk.go.id/Details/121291)
