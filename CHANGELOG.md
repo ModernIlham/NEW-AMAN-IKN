@@ -48,6 +48,13 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#122] Laporan Hasil Pemantauan Wasdal PDF — 2026-07-12
+
+- **Laporan pra-isi wasdal semesteran** (PMK 207/2021): rekap 5 objek
+  pemantauan ber-total + rincian temuan per objek (maks 30/objek) + blok
+  tanda tangan; unduh dari header dasbor Wasdal. Kanal resmi tetap Modul
+  Wasdal SIMAN v2. Smoke FakeDB + PNG lulus.
+
 ## [#121] Kontribusi tahunan pemanfaatan + pengingat tunggakan — 2026-07-12
 
 - **Kewajiban PNBP tahunan** (KSP/BGS/KSPI, pustaka §6): field kontribusi
