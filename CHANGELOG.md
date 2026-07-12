@@ -48,6 +48,17 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#175] Checklist pengamanan per aset per jenis — 2026-07-12
+
+- **Checklist pengamanan** per aset (pustaka §11.2): butir fisik/
+  administrasi/hukum per jenis objek (tanah/gedung/kendaraan/lainnya),
+  skor terpenuhi + tanggal cek + petugas, upsert satu checklist per
+  aset (`GET/POST /pengamanan/checklist`, DELETE admin).
+- UI: seksi checklist dengan badge skor berwarna + tombol Perbarui
+  pra-isi + dialog isi ber-pencarian aset (tebakan jenis dari golongan
+  kode aset). Alat bantu internal — bukan bukti hukum.
+- Unit test +2 → 232 passed; indeks `pengamanan_checklist`.
+
 ## [#174] Konsolidasi dokumentasi #173 — 2026-07-12
 
 - **Dokumentasi saja**: README Progres Fase 3 + roadmap masterplan +
