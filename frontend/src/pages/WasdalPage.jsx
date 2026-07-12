@@ -1,10 +1,10 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, Eye, RefreshCw, ChevronDown, BadgeCheck,
   UserCheck, Handshake, ArrowLeftRight, BookOpen, ShieldCheck, FileText,
-  Gavel, Plus, Trash2, AlertTriangle, Siren, FileDown,
+  Gavel, Plus, Trash2, AlertTriangle, Siren, FileDown, Paperclip, Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
+import { authMediaUrl } from "@/lib/mediaUrl";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -50,6 +51,9 @@ export default function WasdalPage({ user, onBack }) {
   const [baInsi, setBaInsi] = useState(null);
   // Dialog lapor insidentil: {tiket, tanggal_lapor, keterangan, saving}
   const [laporInsi, setLaporInsi] = useState(null);
+  // Dialog lampiran insidentil: {tiket, uploading}
+  const [lampInsi, setLampInsi] = useState(null);
+  const lampInsiInputRef = useRef(null);
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
 
@@ -128,6 +132,37 @@ export default function WasdalPage({ user, onBack }) {
       muatInsi();
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Gagal menghapus tiket");
+    }
+  };
+
+  const unggahLampiranInsi = async (fileObj) => {
+    if (!lampInsi || !fileObj) return;
+    setLampInsi((l) => ({ ...l, uploading: true }));
+    try {
+      const fd = new FormData();
+      fd.append("file", fileObj);
+      const r = await axios.post(`${API}/wasdal/insidentil/${lampInsi.tiket.id}/lampiran`, fd);
+      toast.success("Lampiran terunggah");
+      setLampInsi((l) => (l ? { ...l, uploading: false,
+        tiket: { ...l.tiket, lampiran: r.data?.lampiran || [] } } : l));
+      muatInsi();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal mengunggah lampiran");
+      setLampInsi((l) => (l ? { ...l, uploading: false } : l));
+    }
+  };
+
+  const hapusLampiranInsi = async (fileId) => {
+    if (!lampInsi) return;
+    try {
+      await axios.delete(`${API}/wasdal/insidentil/${lampInsi.tiket.id}/lampiran/${fileId}`);
+      toast.success("Lampiran dihapus");
+      setLampInsi((l) => (l ? { ...l,
+        tiket: { ...l.tiket,
+          lampiran: (l.tiket.lampiran || []).filter((x) => x.file_id !== fileId) } } : l));
+      muatInsi();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal menghapus lampiran");
     }
   };
 
@@ -450,6 +485,12 @@ export default function WasdalPage({ user, onBack }) {
                               {t.info_tenggat.tahap}: sisa {t.info_tenggat.sisa_hari_kerja ?? "-"} hari kerja
                             </span>
                           )}
+                          <button type="button" aria-label="Lampiran tiket"
+                            onClick={() => setLampInsi({ tiket: t, uploading: false })}
+                            className="h-7 w-7 rounded-lg border border-border text-foreground/70 flex items-center justify-center hover:bg-muted min-h-0 min-w-0"
+                            data-testid={`wasdal-insidentil-lampiran-${t.id}`}>
+                            <Paperclip className="w-3 h-3" />
+                          </button>
                           <button type="button" aria-label="Unduh BA (PDF)"
                             onClick={() => downloadFileWithProgress(
                               `${API}/wasdal/insidentil/${t.id}/ba-pdf`,
@@ -598,6 +639,50 @@ export default function WasdalPage({ user, onBack }) {
               Simpan
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog lampiran tiket insidentil (scan BA + foto temuan) ── */}
+      <Dialog open={!!lampInsi} onOpenChange={(o) => { if (!o) setLampInsi(null); }}>
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Lampiran Pemantauan Insidentil</DialogTitle>
+            <DialogDescription className="text-xs">
+              {lampInsi && `${lampInsi.tiket.uraian}. Scan BA bertanda tangan / foto temuan (PDF/JPG/PNG, maks 10MB, 10 berkas).`}
+            </DialogDescription>
+          </DialogHeader>
+          <input ref={lampInsiInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) unggahLampiranInsi(f); }} />
+          <Button size="sm" variant="outline" className="h-8 text-xs min-h-0 self-start"
+            disabled={lampInsi?.uploading || (lampInsi?.tiket?.lampiran || []).length >= 10}
+            onClick={() => lampInsiInputRef.current?.click()} data-testid="wasdal-insidentil-lampiran-unggah">
+            {lampInsi?.uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <Upload className="w-3.5 h-3.5 mr-1.5" />}
+            Unggah Berkas
+          </Button>
+          {(lampInsi?.tiket?.lampiran || []).length === 0 ? (
+            <p className="text-xs text-muted-foreground text-center py-4">Belum ada lampiran.</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {(lampInsi?.tiket?.lampiran || []).map((f) => (
+                <li key={f.file_id} className="rounded-lg border border-border p-2 flex items-center gap-2">
+                  <button type="button"
+                    onClick={() => window.open(authMediaUrl(`${API}/wasdal/insidentil/${lampInsi.tiket.id}/lampiran/${f.file_id}`), "_blank", "noopener")}
+                    className="min-w-0 flex-1 text-left hover:underline">
+                    <span className="block text-xs font-semibold text-foreground truncate">{f.filename}</span>
+                    <span className="block text-[10px] text-muted-foreground">
+                      {String(f.tanggal || "").slice(0, 10)} · oleh {f.oleh}
+                    </span>
+                  </button>
+                  {isAdmin && (
+                    <button type="button" aria-label="Hapus lampiran" onClick={() => hapusLampiranInsi(f.file_id)}
+                      className="h-7 w-7 rounded-lg border border-border text-red-500 flex items-center justify-center hover:bg-red-500/10 flex-shrink-0 min-h-0 min-w-0">
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
         </DialogContent>
       </Dialog>
 

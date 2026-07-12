@@ -9,11 +9,15 @@ Wasdal SIMAN v2. BA pemantauan insidentil menyusul sesuai masterplan.
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import (
+    APIRouter, Depends, File, HTTPException, Query, Request, UploadFile,
+)
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from auth_utils import require_admin, require_user
-from db import db
+from auth_utils import require_admin, require_user, require_user_or_query_token
+from db import db, fs_bucket
+from shared_utils import delete_document_from_gridfs, get_document_from_gridfs
 from wasdal_utils import (
     AMBANG_BERLARUT_HARI, JENIS_TEMUAN, OBJEK_WASDAL, PEMICU_INSIDENTIL,
     STATUS_INSIDENTIL, SUMBER_PENERTIBAN, STATUS_PENERTIBAN,
@@ -258,6 +262,7 @@ async def catat_insidentil(payload: InsidentilIn,
         "hasil": "",
         "tanggal_lapor": "",
         "keterangan_lapor": "",
+        "lampiran": [],
         "created_by": user.get("username"),
         "created_at": now,
         "updated_at": now,
@@ -324,11 +329,119 @@ async def laporkan_insidentil(tiket_id: str, payload: LaporInsidentilIn,
 
 @wasdal_router.delete("/wasdal/insidentil/{tiket_id}")
 async def hapus_insidentil(tiket_id: str, _admin: dict = Depends(require_admin)):
-    """Hapus tiket salah input (khusus admin)."""
+    """Hapus tiket salah input (khusus admin) + berkas lampirannya."""
+    t = await db.pemantauan_insidentil.find_one(
+        {"id": tiket_id}, {"_id": 0, "lampiran": 1})
     res = await db.pemantauan_insidentil.delete_one({"id": tiket_id})
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Tiket tidak ditemukan")
+    for lamp in (t or {}).get("lampiran") or []:
+        if lamp.get("file_id"):
+            await delete_document_from_gridfs(lamp["file_id"])
     return {"ok": True, "id": tiket_id}
+
+
+# Arsip lampiran per tiket insidentil (scan BA bertanda tangan + foto
+# temuan). Pola sama dengan lampiran pemanfaatan/pemusnahan/penghapusan/
+# pengadaan/PSP/pemindahtanganan (#131–#138).
+_LAMPIRAN_MEDIA = {
+    ".pdf": "application/pdf",
+    ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+    ".png": "image/png", ".webp": "image/webp",
+}
+_MAX_LAMPIRAN_BYTES = 10 * 1024 * 1024
+_MAX_LAMPIRAN = 10
+
+
+def _lampiran_ext(filename: str) -> str:
+    name = (filename or "").lower()
+    for ext in _LAMPIRAN_MEDIA:
+        if name.endswith(ext):
+            return ext
+    return ""
+
+
+@wasdal_router.post("/wasdal/insidentil/{tiket_id}/lampiran")
+async def unggah_lampiran_insidentil(tiket_id: str, file: UploadFile = File(...),
+                                     user: dict = Depends(require_user)):
+    """Unggah scan BA/foto temuan (PDF/gambar, maks 10MB, 10 berkas)."""
+    t = await db.pemantauan_insidentil.find_one(
+        {"id": tiket_id}, {"_id": 0, "id": 1, "lampiran": 1})
+    if not t:
+        raise HTTPException(status_code=404, detail="Tiket tidak ditemukan")
+    if len(t.get("lampiran") or []) >= _MAX_LAMPIRAN:
+        raise HTTPException(status_code=400,
+                            detail=f"Maksimal {_MAX_LAMPIRAN} lampiran per tiket")
+    filename = (file.filename or "dokumen.pdf").strip() or "dokumen.pdf"
+    ext = _lampiran_ext(filename)
+    if not ext:
+        raise HTTPException(status_code=400,
+                            detail="Lampiran harus PDF atau gambar (JPG/PNG/WEBP)")
+    file_bytes = await file.read()
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="File kosong")
+    if len(file_bytes) > _MAX_LAMPIRAN_BYTES:
+        raise HTTPException(status_code=400, detail="Ukuran lampiran maksimal 10MB")
+    if ext == ".pdf" and not file_bytes[:5].startswith(b"%PDF"):
+        raise HTTPException(status_code=400, detail="File bukan PDF yang valid")
+
+    from bson import ObjectId
+    file_id = ObjectId()
+    grid_in = fs_bucket.open_upload_stream_with_id(
+        file_id, filename=filename,
+        metadata={"content_type": _LAMPIRAN_MEDIA[ext], "size": len(file_bytes),
+                  "kind": "insidentil", "tiket_id": tiket_id})
+    await grid_in.write(file_bytes)
+    await grid_in.close()
+
+    entri = {"file_id": str(file_id), "filename": filename,
+             "content_type": _LAMPIRAN_MEDIA[ext],
+             "oleh": user.get("username"),
+             "tanggal": datetime.now(timezone.utc).isoformat()}
+    res = await db.pemantauan_insidentil.find_one_and_update(
+        {"id": tiket_id},
+        {"$push": {"lampiran": entri}, "$set": {"updated_at": entri["tanggal"]}},
+        projection={"_id": 0, "lampiran": 1}, return_document=True)
+    if not res:
+        await delete_document_from_gridfs(str(file_id))
+        raise HTTPException(status_code=404, detail="Tiket tidak ditemukan")
+    return {"message": "Lampiran terunggah", "lampiran": res.get("lampiran") or []}
+
+
+@wasdal_router.get("/wasdal/insidentil/{tiket_id}/lampiran/{file_id}")
+async def unduh_lampiran_insidentil(tiket_id: str, file_id: str, request: Request,
+                                    _user: dict = Depends(require_user_or_query_token)):
+    """Stream lampiran tiket insidentil (menerima header ATAU ?token)."""
+    t = await db.pemantauan_insidentil.find_one(
+        {"id": tiket_id, "lampiran.file_id": file_id}, {"_id": 0, "lampiran.$": 1})
+    if not t or not t.get("lampiran"):
+        raise HTTPException(status_code=404, detail="Lampiran tidak ditemukan")
+    meta = t["lampiran"][0]
+    etag = f'"lampiran-{file_id}"'
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={"ETag": etag})
+    data = await get_document_from_gridfs(file_id)
+    if data is None:
+        raise HTTPException(status_code=404, detail="Berkas tidak ditemukan")
+    return Response(content=data,
+                    media_type=meta.get("content_type") or "application/octet-stream",
+                    headers={"ETag": etag, "Cache-Control": "private, max-age=86400",
+                             "Content-Disposition": f'inline; filename="{meta.get("filename") or "dokumen"}"'})
+
+
+@wasdal_router.delete("/wasdal/insidentil/{tiket_id}/lampiran/{file_id}")
+async def hapus_lampiran_insidentil(tiket_id: str, file_id: str,
+                                    _admin: dict = Depends(require_admin)):
+    """Hapus lampiran salah unggah (khusus admin)."""
+    res = await db.pemantauan_insidentil.update_one(
+        {"id": tiket_id},
+        {"$pull": {"lampiran": {"file_id": file_id}},
+         "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Tiket tidak ditemukan")
+    if res.modified_count:
+        await delete_document_from_gridfs(file_id)
+    return {"ok": True, "file_id": file_id}
 
 
 @wasdal_router.get("/wasdal/insidentil/{tiket_id}/ba-pdf")
