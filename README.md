@@ -108,7 +108,10 @@ bentuk** dengan penjaga dokumen persetujuan/NTPN + jatuh tempo ≤60 hari
 (PMK 115/2020) (#108) + **kontribusi tahunan ber-NTPN dengan pengingat
 tunggakan** (#121) + **arsip scan dokumen per perjanjian** (#131) +
 **ekspor CSV register** (#158) + **lampiran wasdal terpisah per
-perjanjian** (laporan monitoring/BA peninjauan lapangan) (#188)
+perjanjian** (laporan monitoring/BA peninjauan lapangan) (#188) +
+**atribut fasilitas transaksi** pada perjanjian KSP/BGS-BSG (PMK 18/2024;
+khusus IKN PMK 139/PMK.08/2022 — pendampingan, bukan bentuk pemanfaatan)
+(#190 — daftar "menyusul" Pemanfaatan tuntas)
 · Penghapusan — **kandidat usul hapus** per jalur
 PMK 83/2016 (#104) + **tiket usulan berstatus** usul → proses → SK (#106)
 + **arsip scan SK/berkas per usulan** (#134) + **ekspor CSV** (#159)
