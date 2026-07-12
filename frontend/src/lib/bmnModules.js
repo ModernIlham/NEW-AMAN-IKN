@@ -332,6 +332,7 @@ export const SIKLUS_MODULES = [
       "✅ Penanda telaah kapitalisasi (ambang PMK 181/2016)",
       "✅ DHPB semesteran/tahunan PDF (laporan KPB → Pengguna Barang)",
       "✅ Jadwal berkala per aset (jatuh tempo + status terlambat/segera)",
+      "✅ Ekspor CSV riwayat (biaya, kondisi, telaah kapitalisasi, bukti)",
     ],
     integrasi: ["Riwayat biaya menjadi dasar usulan RKBMN pemeliharaan (Perencanaan)"],
   },

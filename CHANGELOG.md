@@ -48,6 +48,15 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#167] Ekspor CSV riwayat pemeliharaan — 2026-07-12
+
+- **Ekspor CSV** riwayat pemeliharaan (`GET /pemeliharaan/export`) —
+  aset, tanggal, jenis DJKN, biaya, kondisi sebelum/sesudah, penanda
+  telaah kapitalisasi PMK 181, pelaksana/bukti — melanjutkan pola
+  #158–#163.
+- Tombol **CSV** di header `PemeliharaanPage`; checklist bmnModules
+  diperbarui.
+
 ## [#166] Konsolidasi dokumentasi #165 — 2026-07-12
 
 - **Dokumentasi saja**: README Progres Fase 4 + roadmap masterplan +
