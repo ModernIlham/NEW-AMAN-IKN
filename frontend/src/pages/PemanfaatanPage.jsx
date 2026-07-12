@@ -27,8 +27,12 @@ const WARNA_STATUS = {
 const FORM_KOSONG = {
   bentuk: "sewa", mitra: "", jenis_mitra: "", mulai: "", berakhir: "",
   nilai: "", nomor_persetujuan: "", nomor_perjanjian: "", ntpn: "",
-  kontribusi_tahunan: "", keterangan: "",
+  kontribusi_tahunan: "", dasar_fasilitas: "tanpa_fasilitas",
+  nomor_penetapan_fasilitas: "", pelaksana_fasilitas: "", keterangan: "",
 };
+
+// Fasilitas transaksi (PMK 18/2024 / PMK 139/2022) hanya untuk KSP/BGS-BSG
+const BENTUK_DAPAT_FASILITAS = ["ksp", "bgs_bsg"];
 
 /**
  * Pemanfaatan — Fase 5 tahap awal: register perjanjian pemanfaatan BMN
@@ -98,6 +102,9 @@ export default function PemanfaatanPage({ user, onBack }) {
         mulai: p.mulai, berakhir: p.berakhir, nilai: String(p.nilai ?? ""),
         nomor_persetujuan: p.nomor_persetujuan || "", nomor_perjanjian: p.nomor_perjanjian || "",
         ntpn: p.ntpn || "", kontribusi_tahunan: String(p.kontribusi_tahunan ?? ""),
+        dasar_fasilitas: p.dasar_fasilitas || "tanpa_fasilitas",
+        nomor_penetapan_fasilitas: p.nomor_penetapan_fasilitas || "",
+        pelaksana_fasilitas: p.pelaksana_fasilitas || "",
         keterangan: p.keterangan || "",
       },
     } : { id: null, aset: null, saving: false, data: { ...FORM_KOSONG } });
@@ -297,6 +304,12 @@ export default function PemanfaatanPage({ user, onBack }) {
                           Kontribusi tercatat: {(p.kontribusi || []).map((k) => k.tahun).join(", ")}
                         </p>
                       )}
+                      {p.dasar_fasilitas && p.dasar_fasilitas !== "tanpa_fasilitas" && (
+                        <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
+                          {(data?.label_dasar_fasilitas || {})[p.dasar_fasilitas] || p.dasar_fasilitas}
+                          {p.nomor_penetapan_fasilitas ? ` — ${p.nomor_penetapan_fasilitas}` : ""}
+                        </p>
+                      )}
                       <div className="flex gap-1.5 mt-1.5">
                         <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
                           onClick={() => setLamp({ perjanjian: p, jenis: "lampiran", uploading: false })}
@@ -446,6 +459,38 @@ export default function PemanfaatanPage({ user, onBack }) {
                   onChange={(e) => setField("kontribusi_tahunan", e.target.value)}
                   data-testid="pemanfaatan-kontribusi-tahunan" />
               </div>
+              {BENTUK_DAPAT_FASILITAS.includes(form.data.bentuk) && (
+                <>
+                  <div className="col-span-2">
+                    <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmf-fasilitas">
+                      Fasilitas transaksi (pendampingan — bukan bentuk pemanfaatan)
+                    </label>
+                    <select id="pmf-fasilitas" value={form.data.dasar_fasilitas}
+                      onChange={(e) => setField("dasar_fasilitas", e.target.value)}
+                      className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground"
+                      data-testid="pemanfaatan-dasar-fasilitas">
+                      {Object.entries(data?.label_dasar_fasilitas || { tanpa_fasilitas: "Tanpa fasilitas" }).map(([k, v]) => (
+                        <option key={k} value={k}>{v}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {form.data.dasar_fasilitas !== "tanpa_fasilitas" && (
+                    <>
+                      <div>
+                        <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmf-fas-no">No. penetapan fasilitas</label>
+                        <Input id="pmf-fas-no" value={form.data.nomor_penetapan_fasilitas}
+                          onChange={(e) => setField("nomor_penetapan_fasilitas", e.target.value)}
+                          data-testid="pemanfaatan-nomor-fasilitas" />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmf-fas-pelaksana">Pelaksana fasilitas (BUMN)</label>
+                        <Input id="pmf-fas-pelaksana" placeholder="mis. PT PII" value={form.data.pelaksana_fasilitas}
+                          onChange={(e) => setField("pelaksana_fasilitas", e.target.value)} />
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
               <div className="col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmf-ket">Keterangan</label>
                 <Input id="pmf-ket" value={form.data.keterangan}

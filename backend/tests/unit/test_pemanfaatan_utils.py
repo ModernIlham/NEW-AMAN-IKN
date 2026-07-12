@@ -33,6 +33,27 @@ def test_validasi_lolos_dan_bentuk_jangka():
                                    berakhir="2070-01-01")) == []
 
 
+def test_validasi_fasilitas_transaksi():
+    from pemanfaatan_utils import BENTUK_DAPAT_FASILITAS, validate_fasilitas
+
+    # Default tanpa fasilitas: selalu lolos, apa pun bentuknya
+    assert validate_fasilitas(_p()) == []
+    assert validate_fasilitas(_p(dasar_fasilitas="tanpa_fasilitas")) == []
+    # Dasar asing ditolak
+    assert any("tidak dikenal" in e
+               for e in validate_fasilitas(_p(dasar_fasilitas="pmk_lain")))
+    # Fasilitas hanya untuk KSP / BGS-BSG (sewa ditolak)
+    errs = validate_fasilitas(_p(dasar_fasilitas="pmk_18_2024",
+                                 nomor_penetapan_fasilitas="KEP-1/PPI/2026"))
+    assert any("KSP" in e for e in errs)
+    # KSP ber-fasilitas wajib nomor penetapan
+    errs = validate_fasilitas(_p(bentuk="ksp", dasar_fasilitas="pmk_139_2022"))
+    assert any("penetapan" in e for e in errs)
+    assert validate_fasilitas(_p(bentuk="ksp", dasar_fasilitas="pmk_18_2024",
+                                 nomor_penetapan_fasilitas="KEP-1/PPI/2026")) == []
+    assert BENTUK_DAPAT_FASILITAS <= set(BENTUK_PEMANFAATAN)
+
+
 def test_dokumen_kurang_menahan_status_aktif():
     assert dokumen_kurang(_p()) == []
     kurang = dokumen_kurang(_p(nomor_persetujuan="", ntpn=""))
