@@ -53,6 +53,9 @@ export default function PengamananPage({ user, onBack }) {
   const [formDok, setFormDok] = useState(null);
   const [lampiranDok, setLampiranDok] = useState(null);
   const fileDokRef = useRef(null);
+  // Checklist pengamanan: data GET + dialog isi checklist
+  const [cek, setCek] = useState(null);
+  const [formCek, setFormCek] = useState(null);
   const [cari, setCari] = useState("");
   const [hasilCari, setHasilCari] = useState([]);
   const [mencari, setMencari] = useState(false);
@@ -73,6 +76,12 @@ export default function PengamananPage({ user, onBack }) {
       .catch(() => {});
   }, []);
 
+  const muatCek = useCallback(() => {
+    axios.get(`${API}/pengamanan/checklist`)
+      .then((r) => setCek(r.data))
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     axios.get(`${API}/pengamanan/ringkasan`)
       .then((r) => setData(r.data))
@@ -80,10 +89,11 @@ export default function PengamananPage({ user, onBack }) {
       .finally(() => setLoading(false));
     muatKasus();
     muatDokumen();
-  }, [muatKasus, muatDokumen]);
+    muatCek();
+  }, [muatKasus, muatDokumen, muatCek]);
 
   useEffect(() => {
-    if ((!formKasus && !formDok) || cari.trim().length < 2) { setHasilCari([]); return undefined; }
+    if ((!formKasus && !formDok && !formCek) || cari.trim().length < 2) { setHasilCari([]); return undefined; }
     clearTimeout(cariTimer.current);
     cariTimer.current = setTimeout(async () => {
       setMencari(true);
@@ -93,7 +103,7 @@ export default function PengamananPage({ user, onBack }) {
       } catch { setHasilCari([]); } finally { setMencari(false); }
     }, 300);
     return () => clearTimeout(cariTimer.current);
-  }, [cari, formKasus, formDok]);
+  }, [cari, formKasus, formDok, formCek]);
 
   const simpanKasus = async () => {
     if (!formKasus?.aset) return;
@@ -212,6 +222,55 @@ export default function PengamananPage({ user, onBack }) {
       muatDokumen();
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Gagal menghapus lampiran");
+    }
+  };
+
+  // Tebakan jenis objek dari golongan kode aset (2=tanah, 4=gedung); bisa diganti
+  const tebakJenisObjek = (a) => {
+    const g = String(a?.asset_code || "").trim()[0];
+    if (g === "2") return "tanah";
+    if (g === "4") return "gedung_bangunan";
+    return "lainnya";
+  };
+
+  const bukaFormCek = (aset, existing) => {
+    setCari(""); setHasilCari([]);
+    const jenis = existing?.jenis_objek || tebakJenisObjek(aset);
+    setFormCek({
+      data: { jenis_objek: jenis, butir: { ...(existing?.butir || {}) }, keterangan: existing?.keterangan || "" },
+      aset, saving: false,
+    });
+  };
+
+  const simpanCek = async () => {
+    if (!formCek?.aset) return;
+    setFormCek((f) => ({ ...f, saving: true }));
+    try {
+      await axios.post(`${API}/pengamanan/checklist`, {
+        ...formCek.data, asset_id: formCek.aset.id,
+      });
+      toast.success("Checklist tersimpan");
+      setFormCek(null);
+      muatCek();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal menyimpan checklist");
+      setFormCek((f) => (f ? { ...f, saving: false } : f));
+    }
+  };
+
+  const hapusCek = async (c) => {
+    const ok = await confirm({
+      title: "Hapus checklist?",
+      description: `${c.asset_name || c.asset_id} — ${cek?.label_jenis?.[c.jenis_objek] || c.jenis_objek}.`,
+      confirmLabel: "Hapus", variant: "danger",
+    });
+    if (!ok) return;
+    try {
+      await axios.delete(`${API}/pengamanan/checklist/${c.id}`);
+      toast.success("Checklist dihapus");
+      muatCek();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal menghapus checklist");
     }
   };
 
@@ -452,8 +511,77 @@ export default function PengamananPage({ user, onBack }) {
               )}
             </div>
 
+            {/* ── Checklist pengamanan per aset (pustaka §11.2) ── */}
+            <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="pengamanan-checklist">
+              <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
+                <BadgeCheck className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold text-foreground">Checklist Pengamanan per Aset</p>
+                  <p className="text-[10px] text-muted-foreground truncate">
+                    Butir fisik/administrasi/hukum per jenis objek — alat bantu internal
+                  </p>
+                </div>
+                {(cek?.ringkasan?.jumlah || 0) > 0 && (
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-[10px] font-semibold flex-shrink-0">
+                    {cek.ringkasan.penuh}/{cek.ringkasan.jumlah} penuh
+                  </span>
+                )}
+                <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
+                  onClick={() => bukaFormCek(null, null)}
+                  data-testid="pengamanan-checklist-tambah">
+                  <Plus className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">Isi Checklist</span>
+                </Button>
+              </div>
+              {(cek?.items || []).length === 0 ? (
+                <p className="text-[11px] text-muted-foreground text-center py-4 px-3">
+                  Belum ada checklist — isi per aset (patok/plang, APAR, BPKB, dsb. sesuai jenisnya).
+                </p>
+              ) : (
+                <ul className="divide-y divide-border/60">
+                  {cek.items.map((c) => {
+                    const s = c.skor || {};
+                    const warna = s.persen === 100
+                      ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                      : (s.persen || 0) >= 50
+                        ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                        : "bg-red-500/15 text-red-600 dark:text-red-400";
+                    return (
+                      <li key={c.id} className="p-3" data-testid={`pengamanan-checklist-${c.id}`}>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${warna}`}>
+                            {s.terpenuhi}/{s.total} butir
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-semibold text-foreground/70">
+                            {cek.label_jenis?.[c.jenis_objek] || c.jenis_objek}
+                          </span>
+                          <p className="text-sm font-semibold text-foreground flex-1 min-w-[140px] truncate">{c.asset_name || "-"}</p>
+                          <span className="font-mono text-[10px] text-muted-foreground flex-shrink-0">{c.asset_code} · {c.NUP}</span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          {[`Dicek ${c.tanggal_cek} oleh ${c.petugas}`, c.keterangan].filter(Boolean).join(" · ")}
+                        </p>
+                        <div className="flex gap-1.5 mt-1.5 items-center">
+                          <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                            onClick={() => bukaFormCek({ id: c.asset_id, asset_code: c.asset_code, NUP: c.NUP, asset_name: c.asset_name }, c)}
+                            data-testid={`pengamanan-checklist-${c.id}-edit`}>
+                            Perbarui
+                          </Button>
+                          {isAdmin && (
+                            <button type="button" onClick={() => hapusCek(c)} aria-label="Hapus checklist"
+                              className="h-7 w-7 min-h-0 min-w-0 rounded flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-red-500/10">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+
             <p className="text-center text-[11px] text-muted-foreground pb-4">
-              {dokumen?.catatan || kasus?.catatan || ""}
+              {cek?.catatan || dokumen?.catatan || kasus?.catatan || ""}
             </p>
           </>
         )}
@@ -664,6 +792,94 @@ export default function PengamananPage({ user, onBack }) {
                   {formDok.saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Simpan"}
                 </Button>
               </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog isi checklist pengamanan ── */}
+      <Dialog open={!!formCek} onOpenChange={(o) => { if (!o) setFormCek(null); }}>
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Checklist Pengamanan Aset</DialogTitle>
+            <DialogDescription className="text-xs">
+              Butir per jenis objek (pustaka §11.2) — alat bantu internal, bukan bukti hukum.
+            </DialogDescription>
+          </DialogHeader>
+          {formCek && (
+            <div className="space-y-3">
+              {!formCek.aset ? (
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="cek-cari">Cari aset</label>
+                  <div className="relative">
+                    <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-muted-foreground" />
+                    <Input id="cek-cari" className="pl-8" placeholder="nama / kode / NUP…"
+                      value={cari} onChange={(e) => setCari(e.target.value)} data-testid="checklist-cari" />
+                  </div>
+                  {mencari && <p className="text-[11px] text-muted-foreground mt-1">Mencari…</p>}
+                  <ul className="mt-2 space-y-1.5 max-h-48 overflow-y-auto">
+                    {hasilCari.map((a) => (
+                      <li key={a.id}>
+                        <button type="button"
+                          onClick={() => setFormCek((f) => ({ ...f, aset: a, data: { ...f.data, jenis_objek: tebakJenisObjek(a), butir: {} } }))}
+                          className="w-full text-left rounded-lg border border-border p-2 text-xs hover:bg-muted min-h-0"
+                          data-testid={`checklist-pilih-${a.id}`}>
+                          <span className="text-foreground/90">{a.asset_name || "-"}</span>{" "}
+                          <span className="font-mono text-[10px] text-muted-foreground">({a.asset_code} · {a.NUP})</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <>
+                  <div className="rounded-lg border border-border p-2 text-xs flex items-center justify-between gap-2">
+                    <span className="text-foreground/90 min-w-0 truncate">
+                      {formCek.aset.asset_name || "-"}{" "}
+                      <span className="font-mono text-[10px] text-muted-foreground">({formCek.aset.asset_code} · {formCek.aset.NUP})</span>
+                    </span>
+                    <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
+                      onClick={() => setFormCek((f) => ({ ...f, aset: null }))}>
+                      Ganti
+                    </Button>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-foreground block mb-1" htmlFor="cek-jenis">Jenis objek</label>
+                    <select id="cek-jenis" value={formCek.data.jenis_objek}
+                      onChange={(e) => setFormCek((f) => ({ ...f, data: { ...f.data, jenis_objek: e.target.value, butir: {} } }))}
+                      className="w-full h-9 px-2 rounded-lg border border-border bg-background text-sm text-foreground"
+                      data-testid="checklist-jenis">
+                      {Object.entries(cek?.label_jenis || {}).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    {(cek?.butir_ref?.[formCek.data.jenis_objek] || []).map((b) => (
+                      <label key={b.kunci} className="flex items-center gap-2 rounded-lg border border-border p-2 text-xs cursor-pointer hover:bg-muted">
+                        <input type="checkbox" className="accent-emerald-600"
+                          checked={!!formCek.data.butir[b.kunci]}
+                          onChange={(e) => setFormCek((f) => ({ ...f, data: { ...f.data, butir: { ...f.data.butir, [b.kunci]: e.target.checked } } }))}
+                          data-testid={`checklist-butir-${b.kunci}`} />
+                        <span className="min-w-0 flex-1 text-foreground/90">{b.label}</span>
+                        <span className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-semibold text-foreground/60 flex-shrink-0">{b.aspek}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-foreground block mb-1" htmlFor="cek-ket">Keterangan (ops.)</label>
+                    <Input id="cek-ket" value={formCek.data.keterangan}
+                      onChange={(e) => setFormCek((f) => ({ ...f, data: { ...f.data, keterangan: e.target.value } }))}
+                      data-testid="checklist-keterangan" />
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setFormCek(null)}>Batal</Button>
+                    <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                      disabled={formCek.saving}
+                      onClick={simpanCek} data-testid="checklist-simpan">
+                      {formCek.saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Simpan"}
+                    </Button>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </DialogContent>
