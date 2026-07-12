@@ -48,6 +48,13 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#134] Arsip SK penghapusan (lampiran tiket usulan) — 2026-07-12
+
+- **Lampiran per tiket usulan** (PMK 83/2016): scan SK penghapusan +
+  dokumen pendukung (pola #131/#132 — GridFS, tautan ber-token, hapus
+  admin, bersih saat tiket dihapus); tombol klip + dialog di halaman
+  Penghapusan.
+
 ## [#133] Konsolidasi dokumentasi #131–#132 — 2026-07-12
 
 - **Dokumentasi saja**: README blok Progres Fase 5–6 + penanda roadmap

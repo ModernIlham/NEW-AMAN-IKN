@@ -381,9 +381,10 @@ export const SIKLUS_MODULES = [
       + "berklasifikasi 'Tidak Ditemukan' hasil inventarisasi menjadi kandidat usulan.",
     dasarHukum: ["PMK 83/PMK.06/2016 — Pemusnahan & Penghapusan BMN"],
     fitur: [
-      "Kandidat penghapusan dari klasifikasi Tidak Ditemukan (sudah tercatat rapi per sub-klasifikasi)",
-      "Registrasi SK penghapusan + lampiran",
-      "Arsip aset terhapus (tetap bisa ditelusuri, keluar dari daftar aktif)",
+      "✅ Kandidat per jalur: Tidak Ditemukan → penelusuran+TGR; Rusak Berat → pemusnahan/pemindahtanganan",
+      "✅ Tiket usulan berstatus: diusulkan → diproses → SK terbit/ditolak (nomor & tanggal SK terarsip)",
+      "✅ Lampiran per usulan: scan SK penghapusan + dokumen pendukung (PDF/gambar)",
+      "Arsip aset terhapus (tetap bisa ditelusuri, keluar dari daftar aktif) — menyusul",
     ],
     integrasi: ["Klasifikasi tidak ditemukan + uraian + kronologis dari inventarisasi = berkas usulan siap pakai"],
   },
