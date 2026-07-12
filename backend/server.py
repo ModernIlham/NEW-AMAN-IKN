@@ -188,6 +188,7 @@ from routes.persediaan import persediaan_router
 from routes.penggunaan import penggunaan_router
 from routes.pengamanan import pengamanan_router
 from routes.pemeliharaan import pemeliharaan_router
+from routes.perencanaan import perencanaan_router
 
 api_router.include_router(auth_router)
 api_router.include_router(categories_router)
@@ -213,6 +214,7 @@ api_router.include_router(persediaan_router)
 api_router.include_router(penggunaan_router)
 api_router.include_router(pengamanan_router)
 api_router.include_router(pemeliharaan_router)
+api_router.include_router(perencanaan_router)
 
 
 # ============================================================================

@@ -146,9 +146,9 @@ export const SIKLUS_MODULES = [
     id: "perencanaan",
     nama: "Perencanaan Kebutuhan",
     urutan: 1,
-    status: "segera",
+    status: "sebagian",
     fase: 4,
-    ringkas: "RKBMN & SBSK: kebutuhan pengadaan/pemeliharaan berbasis data aset.",
+    ringkas: "Kandidat RKBMN pemeliharaan (saringan kelayakan PMK 153/2021 + riwayat biaya) sudah bisa dibuka.",
     deskripsi:
       "Perencanaan Kebutuhan BMN (RKBMN): usulan kebutuhan pengadaan dan pemeliharaan dari "
       + "unit, ditimbang terhadap Standar Barang & Standar Kebutuhan (SBSK) serta data "
@@ -158,6 +158,7 @@ export const SIKLUS_MODULES = [
       "PMK 138 Tahun 2024 — SBSK",
     ],
     fitur: [
+      "✅ Kandidat RKBMN pemeliharaan: saringan kelayakan (Baik/RR vs rusak berat/idle) + riwayat biaya per aset",
       "Penyusunan RKBMN pengadaan & pemeliharaan per unit + persetujuan berjenjang",
       "Analisis SBSK: sanding usulan vs standar barang & kebutuhan",
       "Sanding usulan vs data aset eksisting (jumlah, kondisi, umur)",
