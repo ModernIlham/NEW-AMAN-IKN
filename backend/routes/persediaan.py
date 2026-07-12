@@ -20,9 +20,9 @@ from auth_utils import require_admin, require_user
 from db import db
 from persediaan_fields import EDITABLE_FIELD_NAMES
 from persediaan_utils import (
-    JENIS_MASUK, KODE_PENUH_LEN, KODE_PREFIX_LEN, SATUAN_BAKU, buat_layer,
-    next_kode_penuh, next_nup, status_stok, validate_kode_persediaan,
-    validate_transaksi_masuk,
+    JENIS_KELUAR, JENIS_MASUK, KODE_PENUH_LEN, KODE_PREFIX_LEN, SATUAN_BAKU,
+    buat_layer, konsumsi_fifo, next_kode_penuh, next_nup, status_stok,
+    validate_kode_persediaan, validate_transaksi_keluar, validate_transaksi_masuk,
 )
 
 persediaan_router = APIRouter()
@@ -75,9 +75,10 @@ async def list_satuan(_user: dict = Depends(require_user)):
 # di bawah — kalau tidak, "jenis-transaksi" tertelan sebagai item_id.
 @persediaan_router.get("/persediaan/jenis-transaksi")
 async def list_jenis_transaksi(_user: dict = Depends(require_user)):
-    """Jenis transaksi masuk (peta 1:1 ke SAKTI) untuk dropdown."""
+    """Jenis transaksi masuk & keluar (peta 1:1 ke SAKTI) untuk dropdown."""
     return {
         "masuk": [{"key": k, "label": v[0], "kode": v[1]} for k, v in JENIS_MASUK.items()],
+        "keluar": [{"key": k, "label": v[0], "kode": v[1]} for k, v in JENIS_KELUAR.items()],
     }
 
 
@@ -317,6 +318,92 @@ async def transaksi_masuk(item_id: str, data: TransaksiMasukIn, user: dict = Dep
 
     return {"message": f"{JENIS_MASUK[data.jenis][0]} tercatat", "stok": stok_sesudah,
             "transaksi": jurnal, "version": updated.get("version")}
+
+
+class TransaksiKeluarIn(BaseModel):
+    jenis: str = "habis_pakai"
+    jumlah: int = Field(gt=0)
+    unit_penerima: str = ""
+    no_bukti: str = ""
+    keterangan: str = ""
+
+
+@persediaan_router.post("/persediaan/{item_id}/keluar")
+async def transaksi_keluar(item_id: str, data: TransaksiKeluarIn, user: dict = Depends(require_user)):
+    """Transaksi KELUAR: konsumsi layer FIFO tertua + jurnal (pustaka §3).
+
+    Nilai keluar = Σ (qty terpakai × harga layer) — bukan rata-rata.
+    Update master BERSYARAT VERSI (retry 3x saat balapan dengan transaksi
+    lain); jurnal menyertakan rincian layer terpakai. Bila tulis jurnal
+    gagal → batches & stok dikembalikan ke snapshot sebelumnya.
+    """
+    now = datetime.now(timezone.utc)
+    for _attempt in range(3):
+        item = await db.persediaan.find_one({"id": item_id}, {"_id": 0})
+        if not item:
+            raise HTTPException(status_code=404, detail="Barang persediaan tidak ditemukan")
+        stok_sebelum = int(item.get("stok", 0) or 0)
+        ok, err = validate_transaksi_keluar(data.jenis, data.jumlah, stok_sebelum)
+        if not ok:
+            raise HTTPException(status_code=400, detail=err)
+        batches_lama = item.get("batches") or []
+        try:
+            batches_sisa, total_nilai, rincian = konsumsi_fifo(batches_lama, data.jumlah)
+        except ValueError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+
+        stok_sesudah = stok_sebelum - int(data.jumlah)
+        updated = await db.persediaan.find_one_and_update(
+            {"id": item_id, "version": item.get("version")},
+            {"$set": {"batches": batches_sisa, "stok": stok_sesudah,
+                      "updated_at": now.isoformat()},
+             "$inc": {"version": 1}},
+            projection={"_id": 0},
+            return_document=True,
+        )
+        if updated is None:
+            continue  # balapan — muat ulang lalu coba lagi
+
+        harga_rata = (total_nilai / int(data.jumlah)) if data.jumlah else 0.0
+        jurnal = {
+            "id": str(uuid.uuid4()),
+            "arah": "keluar",
+            "jenis": data.jenis,
+            "jenis_label": JENIS_KELUAR[data.jenis][0],
+            "kode_sakti": JENIS_KELUAR[data.jenis][1],
+            "persediaan_id": item_id,
+            "kode_barang": updated.get("kode_barang"),
+            "nup": updated.get("nup"),
+            "nama_barang": updated.get("nama_barang"),
+            "jumlah": int(data.jumlah),
+            "harga_satuan": harga_rata,   # rata-rata TERTIMBANG dari layer terpakai (informasi)
+            "total": total_nilai,          # nilai FIFO sesungguhnya
+            "rincian_layer": rincian,
+            "stok_sebelum": stok_sebelum,
+            "stok_sesudah": stok_sesudah,
+            "unit_penerima": data.unit_penerima.strip(),
+            "no_bukti": data.no_bukti.strip(),
+            "keterangan": data.keterangan.strip(),
+            "petugas": user.get("username") or user.get("user_id") or "-",
+            "timestamp": now.isoformat(),
+        }
+        try:
+            await db.transaksi_persediaan.insert_one({**jurnal})
+        except Exception:
+            # Kompensasi: kembalikan snapshot batches & stok sebelum keluar
+            await db.persediaan.update_one(
+                {"id": item_id},
+                {"$set": {"batches": batches_lama, "stok": stok_sebelum},
+                 "$inc": {"version": 1}},
+            )
+            raise HTTPException(status_code=500, detail="Gagal mencatat jurnal — transaksi dibatalkan")
+
+        return {"message": f"{JENIS_KELUAR[data.jenis][0]} tercatat", "stok": stok_sesudah,
+                "nilai_keluar": total_nilai, "transaksi": jurnal,
+                "version": updated.get("version")}
+
+    raise HTTPException(status_code=409,
+                        detail="Barang sedang diubah pengguna lain — coba lagi")
 
 
 @persediaan_router.get("/persediaan/{item_id}/riwayat")

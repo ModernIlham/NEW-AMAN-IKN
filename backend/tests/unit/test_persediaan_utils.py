@@ -5,9 +5,10 @@ from persediaan_fields import (
     EDITABLE_FIELD_NAMES, FIELD_NAMES, MANAGED_FIELD_NAMES, PERSEDIAAN_SCALAR_FIELDS,
 )
 from persediaan_utils import (
-    JENIS_MASUK, KODE_PENUH_LEN, KODE_PREFIX_LEN, SATUAN_BAKU, buat_layer,
-    next_kode_penuh, next_nup, nilai_persediaan_dari_batches, status_stok,
-    stok_dari_batches, validate_kode_persediaan, validate_transaksi_masuk,
+    JENIS_KELUAR, JENIS_MASUK, KODE_PENUH_LEN, KODE_PREFIX_LEN, SATUAN_BAKU,
+    buat_layer, konsumsi_fifo, next_kode_penuh, next_nup,
+    nilai_persediaan_dari_batches, status_stok, stok_dari_batches,
+    validate_kode_persediaan, validate_transaksi_keluar, validate_transaksi_masuk,
 )
 
 
@@ -127,6 +128,74 @@ class TestTransaksiMasuk:
         # Bentuk layer harus dibaca benar oleh penghitung stok/nilai
         assert stok_dari_batches([layer]) == 5
         assert nilai_persediaan_dari_batches([layer]) == 60000.0
+
+
+class TestTransaksiKeluar:
+    def test_jenis_keluar_lengkap_dengan_kode_sakti(self):
+        assert set(JENIS_KELUAR) == {
+            "habis_pakai", "transfer_keluar", "hibah_keluar", "usang", "rusak",
+        }
+        for label, kode in JENIS_KELUAR.values():
+            assert label and kode.startswith("K")
+
+    def test_validasi_keluar(self):
+        assert validate_transaksi_keluar("habis_pakai", 3, 10) == (True, "")
+        assert not validate_transaksi_keluar("pembelian", 3, 10)[0]   # jenis masuk ≠ keluar
+        assert not validate_transaksi_keluar("habis_pakai", 0, 10)[0]
+        assert not validate_transaksi_keluar("habis_pakai", 11, 10)[0]  # stok kurang
+        ok, err = validate_transaksi_keluar("habis_pakai", 11, 10)
+        assert "tersedia 10" in err
+
+
+class TestKonsumsiFifo:
+    def _layers(self):
+        return [
+            {"batch_id": "b2", "tanggal": "2026-02-01T00:00:00", "qty": 4, "harga": 6000.0},
+            {"batch_id": "b1", "tanggal": "2026-01-01T00:00:00", "qty": 10, "harga": 5000.0},
+            {"batch_id": "b3", "tanggal": "2026-03-01T00:00:00", "qty": 2, "harga": 7000.0},
+        ]
+
+    def test_layer_tertua_terkonsumsi_dulu(self):
+        sisa, nilai, rincian = konsumsi_fifo(self._layers(), 3)
+        assert rincian == [{"batch_id": "b1", "qty": 3, "harga": 5000.0}]
+        assert nilai == 15000.0
+        by = {b["batch_id"]: b for b in sisa}
+        assert by["b1"]["qty"] == 7 and by["b2"]["qty"] == 4 and by["b3"]["qty"] == 2
+
+    def test_lintas_layer_dan_layer_habis_hilang(self):
+        sisa, nilai, rincian = konsumsi_fifo(self._layers(), 12)
+        # 10 @5000 (b1 habis) + 2 @6000 (b2 tersisa 2)
+        assert nilai == 10 * 5000 + 2 * 6000
+        assert [r["batch_id"] for r in rincian] == ["b1", "b2"]
+        ids = [b["batch_id"] for b in sisa]
+        assert "b1" not in ids
+        assert {b["batch_id"]: b["qty"] for b in sisa} == {"b2": 2, "b3": 2}
+
+    def test_konsumsi_semua(self):
+        sisa, nilai, _ = konsumsi_fifo(self._layers(), 16)
+        assert sisa == []
+        assert nilai == 10 * 5000 + 4 * 6000 + 2 * 7000
+        assert stok_dari_batches(sisa) == 0
+
+    def test_stok_kurang_valueerror(self):
+        with pytest.raises(ValueError):
+            konsumsi_fifo(self._layers(), 17)
+        with pytest.raises(ValueError):
+            konsumsi_fifo([], 1)
+        with pytest.raises(ValueError):
+            konsumsi_fifo(self._layers(), 0)
+
+    def test_layer_qty_nol_diabaikan_dan_input_tak_termutasi(self):
+        layers = self._layers() + [{"batch_id": "b0", "tanggal": "2025-01-01", "qty": 0, "harga": 1.0}]
+        salinan = [dict(b) for b in layers]
+        sisa, _, rincian = konsumsi_fifo(layers, 1)
+        assert all(r["batch_id"] != "b0" for r in rincian)
+        assert layers == salinan  # fungsi murni — argumen tidak berubah
+
+    def test_konsistensi_dengan_penghitung_stok(self):
+        layers = self._layers()
+        sisa, _, _ = konsumsi_fifo(layers, 5)
+        assert stok_dari_batches(sisa) == stok_dari_batches(layers) - 5
 
 
 class TestRegistry:
