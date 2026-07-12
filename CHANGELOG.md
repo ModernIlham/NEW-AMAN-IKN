@@ -48,6 +48,16 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#80] Transaksi keluar FIFO persediaan — konsumsi layer tertua — 2026-07-12
+
+- **Transaksi KELUAR persediaan**: konsumsi layer FIFO tertua dulu; nilai
+  keluar = Σ qty terpakai × harga layer (FIFO murni); jenis peta SAKTI
+  (Habis Pakai K01, Transfer K02, Hibah K03, Usang K04, Rusak K05);
+  update master bersyarat versi + retry 3× (aman balapan); jurnal berisi
+  rincian layer + unit penerima; jurnal gagal → snapshot dikembalikan.
+- Tombol **Keluar** di halaman persediaan (nonaktif saat stok 0) + toast
+  nilai keluar FIFO. 8 unit test konsumsi FIFO baru (33 total lulus).
+
 ## [#79] Transaksi masuk FIFO persediaan — layer + jurnal + UI — 2026-07-12
 
 - **Transaksi MASUK persediaan**: jenis memetakan 1:1 ke SAKTI (Saldo Awal
