@@ -107,6 +107,10 @@ async def create_indexes() -> None:
         await db.kodefikasi.create_index("kode", unique=True)
         await db.kodefikasi.create_index([("level", 1), ("kode", 1)])
         await db.kodefikasi.create_index("parent_kode")
+        # Persediaan: identitas (kode+NUP) unik; jalur akses id; sort daftar
+        await db.persediaan.create_index([("kode_barang", 1), ("nup", 1)], unique=True)
+        await db.persediaan.create_index("id", unique=True)
+        await db.persediaan.create_index([("nama_barang", 1), ("kode_barang", 1)])
         logger.info("Database indexes created successfully")
     except Exception as e:
         logger.error(f"Error creating indexes: {e}")

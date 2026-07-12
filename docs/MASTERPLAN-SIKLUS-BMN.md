@@ -259,7 +259,12 @@ Referensi langsung: `routes/persediaan.py`, `persediaan_transaksi.py`,
 
 ### 7.4 Urutan pembangunan modul Persediaan (fitur = PR kecil)
 
-1. Registry field + model + koleksi + CRUD master (kodefikasi '1', NUP auto).
+> Catatan urutan Fase 2 (2026-07-12): **KIB ditunda** sampai field per
+> jenis terverifikasi dari Lampiran PMK 181 (aturan "regulasi dulu, kode
+> kemudian" — pustaka §6 butir 1); DBKP sudah jalan (#76), pembangunan
+> berlanjut ke Persediaan.
+
+1. ✅ (#77) Registry field + model + koleksi + CRUD master (kodefikasi '1', NUP auto).
 2. Import/export Excel master persediaan + template.
 3. Transaksi masuk (satuan → massal per dokumen) + batch FIFO + riwayat grup.
 4. Transaksi keluar FIFO + unit penerima + bukti foto.

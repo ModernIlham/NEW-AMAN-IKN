@@ -48,6 +48,17 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#77] Master Persediaan — langkah 1 modul Inventarisasi Persediaan — 2026-07-12
+
+- **Master barang persediaan** (`/api/persediaan`): kode wajib berawalan '1'
+  (10 digit → nomor urut otomatis; 16 digit penuh), NUP otomatis, identitas
+  unik; stok lahir 0 dan **stok/nilai bersumber dari layer FIFO** (perpetual
+  + FIFO per layer, selaras SAKTI — pustaka §3); status stok
+  habis/kritis/aman terfilter di query; update ber-OCC (If-Match); hapus
+  hanya saat stok 0. Registry field anti-drift + 20 unit test.
+- KIB **ditunda** menunggu verifikasi Lampiran PMK 181 (aturan "regulasi
+  dulu, kode kemudian") — tercatat di masterplan.
+
 ## [#76] DBKP per golongan — langkah pertama modul Pembukuan — 2026-07-12
 
 - **Laporan DBKP (Daftar Barang Kuasa Pengguna) per golongan** sesuai PMK
