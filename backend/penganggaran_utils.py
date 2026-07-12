@@ -92,6 +92,34 @@ def validate_transisi_anggaran(u: dict, ke: str, data: dict) -> list:
     return errors
 
 
+def sanding_per_akun(items) -> list:
+    """Sanding rencana vs realisasi per akun BAS (pustaka §9).
+
+    Baris per akun (usulan tanpa akun digabung ke "lainnya"), terurut
+    kode akun; serapan = realisasi / DIPA per akun. Meniru pola sanding
+    pagu-realisasi satker, pada granularitas usulan yang tidak dimiliki
+    SAKTI.
+    """
+    grup = {}
+    for u in items or []:
+        akun = str(u.get("akun") or "").strip() or "lainnya"
+        g = grup.setdefault(akun, {"akun": akun,
+                                   "label": AKUN_BAS.get(akun, "Tanpa akun"),
+                                   "jumlah": 0, "usulan": 0.0,
+                                   "disetujui": 0.0, "dipa": 0.0,
+                                   "realisasi": 0.0})
+        g["jumlah"] += 1
+        g["usulan"] += parse_harga(u.get("nilai_usulan"))
+        g["disetujui"] += parse_harga(u.get("nilai_disetujui"))
+        g["dipa"] += parse_harga(u.get("nilai_dipa"))
+        g["realisasi"] += parse_harga(u.get("nilai_realisasi"))
+    rows = sorted(grup.values(), key=lambda g: g["akun"])
+    for g in rows:
+        g["serapan_persen"] = round(
+            g["realisasi"] / g["dipa"] * 100, 1) if g["dipa"] else 0.0
+    return rows
+
+
 def rekap_anggaran(items) -> dict:
     """Ringkasan register: per status/jenis + total nilai tiap tahap.
 

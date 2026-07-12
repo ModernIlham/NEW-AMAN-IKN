@@ -186,6 +186,48 @@ export default function PenganggaranPage({ user, onBack }) {
               </div>
             </div>
 
+            {/* ── Sanding per akun BAS ── */}
+            {(data.per_akun || []).length > 0 && (
+              <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+                <div className="px-3 py-2.5 border-b border-border">
+                  <p className="text-xs font-bold text-foreground">Sanding Rencana vs Realisasi per Akun BAS</p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs" data-testid="penganggaran-sanding">
+                    <thead>
+                      <tr className="text-muted-foreground border-b border-border/60">
+                        <th className="text-left px-3 py-1.5 font-semibold">Akun</th>
+                        <th className="text-right px-2 py-1.5 font-semibold">Usulan</th>
+                        <th className="text-right px-2 py-1.5 font-semibold">Disetujui</th>
+                        <th className="text-right px-2 py-1.5 font-semibold">DIPA</th>
+                        <th className="text-right px-2 py-1.5 font-semibold">Realisasi</th>
+                        <th className="text-right px-3 py-1.5 font-semibold">Serapan</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/60">
+                      {data.per_akun.map((a) => (
+                        <tr key={a.akun}>
+                          <td className="px-3 py-1.5 text-foreground whitespace-nowrap">
+                            <span className="font-mono font-semibold">{a.akun !== "lainnya" ? a.akun : "—"}</span>
+                            <span className="text-muted-foreground"> {a.label} · {a.jumlah} usulan</span>
+                          </td>
+                          <td className="px-2 py-1.5 text-right text-foreground/90 whitespace-nowrap">{fmtRp(a.usulan)}</td>
+                          <td className="px-2 py-1.5 text-right text-foreground/90 whitespace-nowrap">{fmtRp(a.disetujui)}</td>
+                          <td className="px-2 py-1.5 text-right text-foreground/90 whitespace-nowrap">{fmtRp(a.dipa)}</td>
+                          <td className="px-2 py-1.5 text-right text-foreground/90 whitespace-nowrap">{fmtRp(a.realisasi)}</td>
+                          <td className="px-3 py-1.5 text-right font-semibold whitespace-nowrap">
+                            <span className={a.serapan_persen >= 90 ? "text-emerald-600 dark:text-emerald-400" : a.dipa > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}>
+                              {a.serapan_persen}%
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
             {/* ── Daftar usulan ── */}
             <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
               {data.items.length === 0 ? (
