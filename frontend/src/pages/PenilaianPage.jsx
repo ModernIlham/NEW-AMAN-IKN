@@ -1,9 +1,9 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, Scale, Coins, TrendingDown, Wallet, AlertTriangle,
-  BookOpen, Plus, Pencil, Trash2,
+  BookOpen, FileSignature, Plus, Pencil, Search, Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,9 +29,85 @@ export default function PenilaianPage({ user, onBack }) {
   // Referensi masa manfaat: {items} | null; dialog: {kode, uraian, tahun, saving, edit}
   const [ref, setRef] = useState(null);
   const [formRef, setFormRef] = useState(null);
+  // Register koreksi nilai: data GET + dialog catat {data, aset, saving}
+  const [koreksi, setKoreksi] = useState(null);
+  const [formKoreksi, setFormKoreksi] = useState(null);
+  const [cari, setCari] = useState("");
+  const [hasilCari, setHasilCari] = useState([]);
+  const cariTimer = useRef(null);
   const { confirm, confirmDialog } = useConfirm();
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
+
+  const muatKoreksi = useCallback(() => {
+    axios.get(`${API}/penilaian/koreksi`)
+      .then((r) => setKoreksi(r.data))
+      .catch(() => {});
+  }, []);
+  useEffect(() => { muatKoreksi(); }, [muatKoreksi]);
+
+  useEffect(() => {
+    if (!formKoreksi || cari.trim().length < 2) { setHasilCari([]); return undefined; }
+    clearTimeout(cariTimer.current);
+    cariTimer.current = setTimeout(async () => {
+      try {
+        const r = await axios.get(`${API}/assets`, { params: { search: cari.trim(), page_size: 8 } });
+        setHasilCari(r.data?.items || []);
+      } catch { setHasilCari([]); }
+    }, 300);
+    return () => clearTimeout(cariTimer.current);
+  }, [cari, formKoreksi]);
+
+  const simpanKoreksi = async () => {
+    if (!formKoreksi?.aset) return;
+    setFormKoreksi((f) => ({ ...f, saving: true }));
+    try {
+      await axios.post(`${API}/penilaian/koreksi`, {
+        ...formKoreksi.data, asset_id: formKoreksi.aset.id,
+        nilai_lama: Number(formKoreksi.data.nilai_lama || 0),
+        nilai_baru: Number(formKoreksi.data.nilai_baru || 0),
+        masa_manfaat_semester: parseInt(formKoreksi.data.masa_manfaat_semester, 10) || 0,
+      });
+      toast.success("Koreksi nilai dicatat");
+      setFormKoreksi(null);
+      muatKoreksi();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal mencatat koreksi");
+      setFormKoreksi((f) => (f ? { ...f, saving: false } : f));
+    }
+  };
+
+  const tandaiSakti = async (k) => {
+    const ok = await confirm({
+      title: "Tandai tercatat di SAKTI?",
+      description: `${k.nomor_dokumen} — ${k.asset_name || k.asset_id}. Pastikan sudah divalidasi & di-approve di SAKTI.`,
+      confirmLabel: "Tandai",
+    });
+    if (!ok) return;
+    try {
+      await axios.post(`${API}/penilaian/koreksi/${k.id}/sakti`);
+      toast.success("Ditandai tercatat di SAKTI");
+      muatKoreksi();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal menandai");
+    }
+  };
+
+  const hapusKoreksi = async (k) => {
+    const ok = await confirm({
+      title: "Hapus catatan koreksi?",
+      description: `${koreksi?.label_jenis?.[k.jenis] || k.jenis} ${k.nomor_dokumen} — ${k.asset_name || k.asset_id}.`,
+      confirmLabel: "Hapus", variant: "danger",
+    });
+    if (!ok) return;
+    try {
+      await axios.delete(`${API}/penilaian/koreksi/${k.id}`);
+      toast.success("Catatan dihapus");
+      muatKoreksi();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal menghapus");
+    }
+  };
 
   const muatPosisi = useCallback(() => {
     setLoading(true);
@@ -222,6 +298,72 @@ export default function PenilaianPage({ user, onBack }) {
               </div>
             )}
 
+            {/* ── Register koreksi nilai & hasil penilaian (PMK 99/2024 + 118/2017) ── */}
+            <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="penilaian-koreksi">
+              <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
+                <FileSignature className="w-4 h-4 text-teal-600 flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold text-foreground">Koreksi Nilai & Hasil Penilaian</p>
+                  <p className="text-[10px] text-muted-foreground truncate">
+                    Revaluasi/koreksi per aset (LHIP/Laporan Penilaian/BA) — resmi di SAKTI
+                  </p>
+                </div>
+                {(koreksi?.ringkasan?.belum_tercatat_sakti || 0) > 0 && (
+                  <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px] font-semibold flex-shrink-0">
+                    {koreksi.ringkasan.belum_tercatat_sakti} belum di SAKTI
+                  </span>
+                )}
+                <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
+                  onClick={() => { setCari(""); setHasilCari([]); setFormKoreksi({ data: { jenis: "revaluasi", jenis_dokumen: "lhip", nomor_dokumen: "", tanggal_dokumen: "", nilai_lama: "", nilai_baru: "", penilai_pelaksana: "", dampak_masa_manfaat: "tetap", masa_manfaat_semester: "", catatan: "" }, aset: null, saving: false }); }}
+                  data-testid="penilaian-koreksi-tambah">
+                  <Plus className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">Catat</span>
+                </Button>
+              </div>
+              {(koreksi?.items || []).length === 0 ? (
+                <p className="text-[11px] text-muted-foreground text-center py-4 px-3">
+                  Belum ada catatan — rekam hasil revaluasi/koreksi nilai saat LHIP/BA diterima dari KPKNL.
+                </p>
+              ) : (
+                <ul className="divide-y divide-border/60">
+                  {koreksi.items.map((k) => (
+                    <li key={k.id} className="p-3" data-testid={`penilaian-koreksi-${k.id}`}>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="px-1.5 py-0.5 rounded bg-teal-500/15 text-teal-600 dark:text-teal-400 text-[10px] font-semibold">
+                          {koreksi.label_jenis?.[k.jenis] || k.jenis}
+                        </span>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${k.status_sakti === "tercatat_sakti" ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" : "bg-amber-500/15 text-amber-600 dark:text-amber-400"}`}>
+                          {koreksi.label_sakti?.[k.status_sakti] || k.status_sakti}
+                        </span>
+                        <p className="text-sm font-semibold text-foreground flex-1 min-w-[140px] truncate">{k.asset_name || "-"}</p>
+                        <span className="font-mono text-[10px] text-muted-foreground flex-shrink-0">{k.asset_code} · {k.NUP}</span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        {[`${koreksi.label_dokumen?.[k.jenis_dokumen] || k.jenis_dokumen} ${k.nomor_dokumen} (${k.tanggal_dokumen})`,
+                          `Rp${Math.round(Number(k.nilai_lama || 0)).toLocaleString("id-ID")} → Rp${Math.round(Number(k.nilai_baru || 0)).toLocaleString("id-ID")}`,
+                          k.dampak_masa_manfaat === "masa_manfaat_baru" && `masa manfaat baru ${k.masa_manfaat_semester} smt (akumulasi reset)`,
+                          k.penilai_pelaksana, k.catatan, `oleh ${k.created_by}`].filter(Boolean).join(" · ")}
+                      </p>
+                      <div className="flex gap-1.5 mt-1.5 items-center">
+                        {k.status_sakti === "belum_dicatat" && (
+                          <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                            onClick={() => tandaiSakti(k)}
+                            data-testid={`penilaian-koreksi-${k.id}-sakti`}>
+                            Tandai tercatat di SAKTI
+                          </Button>
+                        )}
+                        {isAdmin && (
+                          <button type="button" onClick={() => hapusKoreksi(k)} aria-label="Hapus koreksi"
+                            className="h-7 w-7 min-h-0 min-w-0 rounded flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-red-500/10">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
             {/* ── Referensi masa manfaat ── */}
             <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
               <div className="px-3 py-2 border-b border-border flex items-center gap-2">
@@ -314,6 +456,137 @@ export default function PenilaianPage({ user, onBack }) {
               {formRef?.saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <BookOpen className="w-4 h-4 mr-1.5" />}Simpan
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog catat koreksi nilai ── */}
+      <Dialog open={!!formKoreksi} onOpenChange={(o) => { if (!o) setFormKoreksi(null); }}>
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Catat Koreksi Nilai / Hasil Penilaian</DialogTitle>
+            <DialogDescription className="text-xs">
+              AMAN bukan penilai — nilai wajar sah dari Laporan Penilaian DJKN; pencatatan resmi di SAKTI.
+            </DialogDescription>
+          </DialogHeader>
+          {formKoreksi && (
+            <div className="space-y-3">
+              {!formKoreksi.aset ? (
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="kor-cari">Cari aset</label>
+                  <div className="relative">
+                    <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-muted-foreground" />
+                    <Input id="kor-cari" className="pl-8" placeholder="nama / kode / NUP…"
+                      value={cari} onChange={(e) => setCari(e.target.value)} data-testid="koreksi-cari" />
+                  </div>
+                  <ul className="mt-2 space-y-1.5 max-h-40 overflow-y-auto">
+                    {hasilCari.map((a) => (
+                      <li key={a.id}>
+                        <button type="button"
+                          onClick={() => setFormKoreksi((f) => ({ ...f, aset: a, data: { ...f.data, nilai_lama: a.purchase_price ?? f.data.nilai_lama } }))}
+                          className="w-full text-left rounded-lg border border-border p-2 text-xs hover:bg-muted min-h-0"
+                          data-testid={`koreksi-pilih-${a.id}`}>
+                          <span className="text-foreground/90">{a.asset_name || "-"}</span>{" "}
+                          <span className="font-mono text-[10px] text-muted-foreground">({a.asset_code} · {a.NUP})</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-border p-2 text-xs flex items-center justify-between gap-2">
+                  <span className="text-foreground/90 min-w-0 truncate">
+                    {formKoreksi.aset.asset_name || "-"}{" "}
+                    <span className="font-mono text-[10px] text-muted-foreground">({formKoreksi.aset.asset_code} · {formKoreksi.aset.NUP})</span>
+                  </span>
+                  <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
+                    onClick={() => setFormKoreksi((f) => ({ ...f, aset: null }))}>
+                    Ganti
+                  </Button>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="kor-jenis">Jenis</label>
+                  <select id="kor-jenis" value={formKoreksi.data.jenis}
+                    onChange={(e) => setFormKoreksi((f) => ({ ...f, data: { ...f.data, jenis: e.target.value } }))}
+                    className="w-full h-9 px-2 rounded-lg border border-border bg-background text-sm text-foreground"
+                    data-testid="koreksi-jenis">
+                    {Object.entries(koreksi?.label_jenis || {}).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="kor-dok">Jenis dokumen</label>
+                  <select id="kor-dok" value={formKoreksi.data.jenis_dokumen}
+                    onChange={(e) => setFormKoreksi((f) => ({ ...f, data: { ...f.data, jenis_dokumen: e.target.value } }))}
+                    className="w-full h-9 px-2 rounded-lg border border-border bg-background text-sm text-foreground"
+                    data-testid="koreksi-dok">
+                    {Object.entries(koreksi?.label_dokumen || {}).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="kor-nomor">Nomor dokumen</label>
+                  <Input id="kor-nomor" value={formKoreksi.data.nomor_dokumen}
+                    onChange={(e) => setFormKoreksi((f) => ({ ...f, data: { ...f.data, nomor_dokumen: e.target.value } }))}
+                    data-testid="koreksi-nomor" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="kor-tanggal">Tanggal dokumen</label>
+                  <Input id="kor-tanggal" type="date" value={formKoreksi.data.tanggal_dokumen}
+                    onChange={(e) => setFormKoreksi((f) => ({ ...f, data: { ...f.data, tanggal_dokumen: e.target.value } }))}
+                    data-testid="koreksi-tanggal" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="kor-lama">Nilai lama (Rp)</label>
+                  <Input id="kor-lama" type="number" min="0" value={formKoreksi.data.nilai_lama}
+                    onChange={(e) => setFormKoreksi((f) => ({ ...f, data: { ...f.data, nilai_lama: e.target.value } }))}
+                    data-testid="koreksi-lama" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="kor-baru">Nilai baru (Rp)</label>
+                  <Input id="kor-baru" type="number" min="0" value={formKoreksi.data.nilai_baru}
+                    onChange={(e) => setFormKoreksi((f) => ({ ...f, data: { ...f.data, nilai_baru: e.target.value } }))}
+                    data-testid="koreksi-baru" />
+                </div>
+                <div className="col-span-2">
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="kor-dampak">Dampak masa manfaat</label>
+                  <select id="kor-dampak" value={formKoreksi.data.dampak_masa_manfaat}
+                    onChange={(e) => setFormKoreksi((f) => ({ ...f, data: { ...f.data, dampak_masa_manfaat: e.target.value } }))}
+                    className="w-full h-9 px-2 rounded-lg border border-border bg-background text-sm text-foreground"
+                    data-testid="koreksi-dampak">
+                    {Object.entries(koreksi?.label_dampak || {}).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                  </select>
+                </div>
+                {formKoreksi.data.dampak_masa_manfaat === "masa_manfaat_baru" && (
+                  <div>
+                    <label className="text-xs font-medium text-foreground block mb-1" htmlFor="kor-smt">Masa manfaat baru (semester)</label>
+                    <Input id="kor-smt" type="number" min="1" value={formKoreksi.data.masa_manfaat_semester}
+                      onChange={(e) => setFormKoreksi((f) => ({ ...f, data: { ...f.data, masa_manfaat_semester: e.target.value } }))}
+                      data-testid="koreksi-smt" />
+                  </div>
+                )}
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="kor-penilai">Penilai/pelaksana (ops.)</label>
+                  <Input id="kor-penilai" placeholder="Tim Penilai KPKNL …" value={formKoreksi.data.penilai_pelaksana}
+                    onChange={(e) => setFormKoreksi((f) => ({ ...f, data: { ...f.data, penilai_pelaksana: e.target.value } }))}
+                    data-testid="koreksi-penilai" />
+                </div>
+                <div className="col-span-2">
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="kor-catatan">Catatan (ops.)</label>
+                  <Input id="kor-catatan" value={formKoreksi.data.catatan}
+                    onChange={(e) => setFormKoreksi((f) => ({ ...f, data: { ...f.data, catatan: e.target.value } }))}
+                    data-testid="koreksi-catatan" />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" size="sm" onClick={() => setFormKoreksi(null)}>Batal</Button>
+                <Button size="sm" className="bg-teal-600 hover:bg-teal-700 text-white"
+                  disabled={formKoreksi.saving || !formKoreksi.aset || !formKoreksi.data.nomor_dokumen.trim() || !formKoreksi.data.tanggal_dokumen}
+                  onClick={simpanKoreksi} data-testid="koreksi-simpan">
+                  {formKoreksi.saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Simpan"}
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

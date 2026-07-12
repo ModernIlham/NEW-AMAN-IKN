@@ -48,6 +48,20 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#184] Register koreksi nilai & hasil penilaian — 2026-07-12
+
+- **Register koreksi nilai per aset** di modul Penilaian: catat hasil
+  revaluasi (LHIP), koreksi inventarisasi, koreksi temuan/putusan,
+  koreksi pencatatan, dan penilaian tujuan tertentu (informasional,
+  tidak mengubah nilai buku) — nilai lama → baru, selisih otomatis,
+  dampak masa manfaat (tetap / masa manfaat baru), dan status
+  pencatatan SAKTI (tandai "tercatat di SAKTI", anti-race).
+- Dasar riset: Perpres 75/2017 + PMK 118/2017 jo. 57/2018 jo. 107/2019
+  (revaluasi), PMK 99 Tahun 2024 (penilaian) — pustaka §13 baris
+  Penilaian dimutakhirkan + butir verifikasi 23 di §14.
+- Unit test +2 → 244 passed; UI seksi baru + dialog pencarian aset di
+  halaman Penilaian; indeks `penilaian_koreksi`.
+
 ## [#183] Tiket proses: dioperasikan pihak lain & penggunaan bersama — 2026-07-12
 
 - **Dua rezim PMK 40/2024 tersisa** pada register tiket proses:

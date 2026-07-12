@@ -285,6 +285,7 @@ export const SIKLUS_MODULES = [
       + "nilai wajar, Revaluasi BMN, dan perhitungan penyusutan per golongan.",
     dasarHukum: ["PMK 97/PMK.06/2019 — Revaluasi BMN"],
     fitur: [
+      "✅ Register koreksi nilai & hasil penilaian per aset (revaluasi/LHIP/BA, checklist tercatat di SAKTI)",
       "✅ Penyusutan garis lurus semesteran per golongan (PMK 65/2017; masa manfaat KMK 295/2019 jo. 266/2023) + daftar telaah",
       "Referensi masa manfaat dapat dikelola (seed lengkap lampiran KMK)",
       "Pencatatan hasil penilaian/revaluasi per aset",
