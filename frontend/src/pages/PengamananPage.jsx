@@ -3,8 +3,8 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, ShieldCheck, Scale, BadgeCheck, Camera,
-  Gavel, Paperclip, Plus, QrCode, MapPin, Search, Trash2, Upload,
-  UserCheck, FileText,
+  Gavel, Paperclip, Plus, QrCode, MapPin, Search, Trash2, Umbrella,
+  Upload, UserCheck, FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,6 +39,13 @@ const WARNA_STATUS_KASUS = {
   selesai: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
 };
 
+const WARNA_STATUS_POLIS = {
+  akan_datang: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
+  aktif: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+  segera_berakhir: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+  berakhir: "bg-red-500/15 text-red-600 dark:text-red-400",
+};
+
 export default function PengamananPage({ user, onBack }) {
   const isAdmin = user?.role === "admin";
   const [data, setData] = useState(null);
@@ -56,6 +63,9 @@ export default function PengamananPage({ user, onBack }) {
   // Checklist pengamanan: data GET + dialog isi checklist
   const [cek, setCek] = useState(null);
   const [formCek, setFormCek] = useState(null);
+  // Register polis asuransi: data GET + dialog polis baru
+  const [polis, setPolis] = useState(null);
+  const [formPolis, setFormPolis] = useState(null);
   const [cari, setCari] = useState("");
   const [hasilCari, setHasilCari] = useState([]);
   const [mencari, setMencari] = useState(false);
@@ -82,6 +92,12 @@ export default function PengamananPage({ user, onBack }) {
       .catch(() => {});
   }, []);
 
+  const muatPolis = useCallback(() => {
+    axios.get(`${API}/pengamanan/polis`)
+      .then((r) => setPolis(r.data))
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     axios.get(`${API}/pengamanan/ringkasan`)
       .then((r) => setData(r.data))
@@ -90,10 +106,11 @@ export default function PengamananPage({ user, onBack }) {
     muatKasus();
     muatDokumen();
     muatCek();
-  }, [muatKasus, muatDokumen, muatCek]);
+    muatPolis();
+  }, [muatKasus, muatDokumen, muatCek, muatPolis]);
 
   useEffect(() => {
-    if ((!formKasus && !formDok && !formCek) || cari.trim().length < 2) { setHasilCari([]); return undefined; }
+    if ((!formKasus && !formDok && !formCek && !formPolis) || cari.trim().length < 2) { setHasilCari([]); return undefined; }
     clearTimeout(cariTimer.current);
     cariTimer.current = setTimeout(async () => {
       setMencari(true);
@@ -103,7 +120,7 @@ export default function PengamananPage({ user, onBack }) {
       } catch { setHasilCari([]); } finally { setMencari(false); }
     }, 300);
     return () => clearTimeout(cariTimer.current);
-  }, [cari, formKasus, formDok, formCek]);
+  }, [cari, formKasus, formDok, formCek, formPolis]);
 
   const simpanKasus = async () => {
     if (!formKasus?.aset) return;
@@ -222,6 +239,40 @@ export default function PengamananPage({ user, onBack }) {
       muatDokumen();
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Gagal menghapus lampiran");
+    }
+  };
+
+  const simpanPolis = async () => {
+    if (!formPolis?.aset) return;
+    setFormPolis((f) => ({ ...f, saving: true }));
+    try {
+      await axios.post(`${API}/pengamanan/polis`, {
+        ...formPolis.data, asset_id: formPolis.aset.id,
+        nilai_pertanggungan: Number(formPolis.data.nilai_pertanggungan || 0),
+        premi: Number(formPolis.data.premi || 0),
+      });
+      toast.success("Polis dicatat");
+      setFormPolis(null);
+      muatPolis();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal mencatat polis");
+      setFormPolis((f) => (f ? { ...f, saving: false } : f));
+    }
+  };
+
+  const hapusPolis = async (p) => {
+    const ok = await confirm({
+      title: "Hapus polis dari register?",
+      description: `Polis ${p.nomor_polis} — ${p.asset_name || p.asset_id}.`,
+      confirmLabel: "Hapus", variant: "danger",
+    });
+    if (!ok) return;
+    try {
+      await axios.delete(`${API}/pengamanan/polis/${p.id}`);
+      toast.success("Polis dihapus");
+      muatPolis();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal menghapus polis");
     }
   };
 
@@ -580,8 +631,69 @@ export default function PengamananPage({ user, onBack }) {
               )}
             </div>
 
+            {/* ── Register polis Asuransi BMN (pustaka §11.5, PMK 43/2025) ── */}
+            <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="pengamanan-polis">
+              <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
+                <Umbrella className="w-4 h-4 text-sky-600 flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold text-foreground">Polis Asuransi BMN</p>
+                  <p className="text-[10px] text-muted-foreground truncate">
+                    PMK 43/2025 (mencabut PMK 97/2019) — pengingat masa berlaku
+                  </p>
+                </div>
+                {(polis?.ringkasan?.per_status?.segera_berakhir || 0) > 0 && (
+                  <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px] font-semibold flex-shrink-0">
+                    {polis.ringkasan.per_status.segera_berakhir} segera berakhir
+                  </span>
+                )}
+                <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
+                  onClick={() => { setCari(""); setHasilCari([]); setFormPolis({ data: { nomor_polis: "", penanggung: "Konsorsium Asuransi BMN", kategori_objek: "program_preferen", nilai_pertanggungan: "", premi: "", sumber_dana: "dipa", mulai: "", berakhir: "", keterangan: "" }, aset: null, saving: false }); }}
+                  data-testid="pengamanan-polis-tambah">
+                  <Plus className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">Catat Polis</span>
+                </Button>
+              </div>
+              {(polis?.items || []).length === 0 ? (
+                <p className="text-[11px] text-muted-foreground text-center py-4 px-3">
+                  Belum ada polis — catat polis gedung/bangunan yang diasuransikan beserta masa berlakunya.
+                </p>
+              ) : (
+                <ul className="divide-y divide-border/60">
+                  {polis.items.map((p) => (
+                    <li key={p.id} className="p-3" data-testid={`pengamanan-polis-${p.id}`}>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${WARNA_STATUS_POLIS[p.info?.status] || "bg-muted"}`}>
+                          {polis.label_status?.[p.info?.status] || p.info?.status}
+                          {p.info?.status === "segera_berakhir" && ` · ${p.info.sisa_hari} hari`}
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-semibold text-foreground/70">
+                          {polis.label_kategori?.[p.kategori_objek] || p.kategori_objek}
+                        </span>
+                        <p className="text-sm font-semibold text-foreground flex-1 min-w-[140px] truncate">{p.asset_name || "-"}</p>
+                        <span className="font-mono text-[10px] text-muted-foreground flex-shrink-0">{p.asset_code} · {p.NUP}</span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        {[`Polis ${p.nomor_polis}`, p.penanggung,
+                          `Pertanggungan Rp${Math.round(Number(p.nilai_pertanggungan || 0)).toLocaleString("id-ID")}`,
+                          `Premi Rp${Math.round(Number(p.premi || 0)).toLocaleString("id-ID")} (${polis.label_sumber_dana?.[p.sumber_dana] || p.sumber_dana})`,
+                          `${p.mulai} s.d. ${p.berakhir}`,
+                          p.keterangan].filter(Boolean).join(" · ")}
+                      </p>
+                      {isAdmin && (
+                        <div className="flex gap-1.5 mt-1.5">
+                          <button type="button" onClick={() => hapusPolis(p)} aria-label="Hapus polis"
+                            className="h-7 w-7 min-h-0 min-w-0 rounded flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-red-500/10">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
             <p className="text-center text-[11px] text-muted-foreground pb-4">
-              {cek?.catatan || dokumen?.catatan || kasus?.catatan || ""}
+              {polis?.catatan || cek?.catatan || dokumen?.catatan || kasus?.catatan || ""}
             </p>
           </>
         )}
@@ -790,6 +902,127 @@ export default function PengamananPage({ user, onBack }) {
                   disabled={formDok.saving || !formDok.aset || !formDok.data.nomor.trim()}
                   onClick={simpanDokumen} data-testid="dokumen-simpan">
                   {formDok.saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Simpan"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog catat polis asuransi ── */}
+      <Dialog open={!!formPolis} onOpenChange={(o) => { if (!o) setFormPolis(null); }}>
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Catat Polis Asuransi BMN</DialogTitle>
+            <DialogDescription className="text-xs">
+              Register pendamping (PMK 43/2025) — perencanaan resmi tetap via SIMAN.
+            </DialogDescription>
+          </DialogHeader>
+          {formPolis && (
+            <div className="space-y-3">
+              {!formPolis.aset ? (
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pol-cari">Cari aset (gedung/bangunan)</label>
+                  <div className="relative">
+                    <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-muted-foreground" />
+                    <Input id="pol-cari" className="pl-8" placeholder="nama / kode / NUP…"
+                      value={cari} onChange={(e) => setCari(e.target.value)} data-testid="polis-cari" />
+                  </div>
+                  {mencari && <p className="text-[11px] text-muted-foreground mt-1">Mencari…</p>}
+                  <ul className="mt-2 space-y-1.5 max-h-48 overflow-y-auto">
+                    {hasilCari.map((a) => (
+                      <li key={a.id}>
+                        <button type="button"
+                          onClick={() => setFormPolis((f) => ({ ...f, aset: a }))}
+                          className="w-full text-left rounded-lg border border-border p-2 text-xs hover:bg-muted min-h-0"
+                          data-testid={`polis-pilih-${a.id}`}>
+                          <span className="text-foreground/90">{a.asset_name || "-"}</span>{" "}
+                          <span className="font-mono text-[10px] text-muted-foreground">({a.asset_code} · {a.NUP})</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-border p-2 text-xs flex items-center justify-between gap-2">
+                  <span className="text-foreground/90 min-w-0 truncate">
+                    {formPolis.aset.asset_name || "-"}{" "}
+                    <span className="font-mono text-[10px] text-muted-foreground">({formPolis.aset.asset_code} · {formPolis.aset.NUP})</span>
+                  </span>
+                  <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
+                    onClick={() => setFormPolis((f) => ({ ...f, aset: null }))}>
+                    Ganti
+                  </Button>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pol-nomor">Nomor polis</label>
+                  <Input id="pol-nomor" value={formPolis.data.nomor_polis}
+                    onChange={(e) => setFormPolis((f) => ({ ...f, data: { ...f.data, nomor_polis: e.target.value } }))}
+                    data-testid="polis-nomor" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pol-penanggung">Penanggung</label>
+                  <Input id="pol-penanggung" value={formPolis.data.penanggung}
+                    onChange={(e) => setFormPolis((f) => ({ ...f, data: { ...f.data, penanggung: e.target.value } }))}
+                    data-testid="polis-penanggung" />
+                </div>
+                <div className="col-span-2">
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pol-kategori">Kategori objek (PMK 43/2025)</label>
+                  <select id="pol-kategori" value={formPolis.data.kategori_objek}
+                    onChange={(e) => setFormPolis((f) => ({ ...f, data: { ...f.data, kategori_objek: e.target.value } }))}
+                    className="w-full h-9 px-2 rounded-lg border border-border bg-background text-sm text-foreground"
+                    data-testid="polis-kategori">
+                    {Object.entries(polis?.label_kategori || {}).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pol-nilai">Nilai pertanggungan (Rp)</label>
+                  <Input id="pol-nilai" type="number" min="0" value={formPolis.data.nilai_pertanggungan}
+                    onChange={(e) => setFormPolis((f) => ({ ...f, data: { ...f.data, nilai_pertanggungan: e.target.value } }))}
+                    data-testid="polis-nilai" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pol-premi">Premi (Rp)</label>
+                  <Input id="pol-premi" type="number" min="0" value={formPolis.data.premi}
+                    onChange={(e) => setFormPolis((f) => ({ ...f, data: { ...f.data, premi: e.target.value } }))}
+                    data-testid="polis-premi" />
+                </div>
+                <div className="col-span-2">
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pol-sumber">Sumber dana premi</label>
+                  <select id="pol-sumber" value={formPolis.data.sumber_dana}
+                    onChange={(e) => setFormPolis((f) => ({ ...f, data: { ...f.data, sumber_dana: e.target.value } }))}
+                    className="w-full h-9 px-2 rounded-lg border border-border bg-background text-sm text-foreground"
+                    data-testid="polis-sumber">
+                    {Object.entries(polis?.label_sumber_dana || {}).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pol-mulai">Mulai</label>
+                  <Input id="pol-mulai" type="date" value={formPolis.data.mulai}
+                    onChange={(e) => setFormPolis((f) => ({ ...f, data: { ...f.data, mulai: e.target.value } }))}
+                    data-testid="polis-mulai" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pol-berakhir">Berakhir</label>
+                  <Input id="pol-berakhir" type="date" value={formPolis.data.berakhir}
+                    onChange={(e) => setFormPolis((f) => ({ ...f, data: { ...f.data, berakhir: e.target.value } }))}
+                    data-testid="polis-berakhir" />
+                </div>
+                <div className="col-span-2">
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pol-ket">Keterangan (ops.)</label>
+                  <Input id="pol-ket" value={formPolis.data.keterangan}
+                    onChange={(e) => setFormPolis((f) => ({ ...f, data: { ...f.data, keterangan: e.target.value } }))}
+                    data-testid="polis-ket" />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" size="sm" onClick={() => setFormPolis(null)}>Batal</Button>
+                <Button size="sm" className="bg-sky-600 hover:bg-sky-700 text-white"
+                  disabled={formPolis.saving || !formPolis.aset || !formPolis.data.nomor_polis.trim() || !formPolis.data.mulai || !formPolis.data.berakhir}
+                  onClick={simpanPolis} data-testid="polis-simpan">
+                  {formPolis.saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Simpan"}
                 </Button>
               </div>
             </div>

@@ -16,11 +16,12 @@ from db import db, fs_bucket
 from shared_utils import delete_document_from_gridfs, get_document_from_gridfs
 from pengamanan_utils import (
     BUTIR_CHECKLIST, JENIS_DOKUMEN, JENIS_KEKURANGAN, JENIS_OBJEK_CHECKLIST,
-    KATEGORI_KASUS, KATEGORI_SERTIPIKASI, LOKASI_SIMPAN, STATUS_KASUS,
-    TRANSISI_KASUS, kekurangan_aset, rekap_checklist, rekap_dokumen,
-    rekap_kasus, rekap_kesehatan, rekap_sertipikasi, skor_checklist,
-    validate_checklist, validate_dokumen, validate_kasus,
-    validate_kategori_sertipikasi, validate_transisi_kasus,
+    KATEGORI_KASUS, KATEGORI_OBJEK_ASURANSI, KATEGORI_SERTIPIKASI,
+    LOKASI_SIMPAN, STATUS_KASUS, SUMBER_DANA_PREMI, TRANSISI_KASUS,
+    info_polis, kekurangan_aset, rekap_checklist, rekap_dokumen,
+    rekap_kasus, rekap_kesehatan, rekap_polis, rekap_sertipikasi,
+    skor_checklist, validate_checklist, validate_dokumen, validate_kasus,
+    validate_kategori_sertipikasi, validate_polis, validate_transisi_kasus,
 )
 
 pengamanan_router = APIRouter()
@@ -434,4 +435,86 @@ async def hapus_checklist(cek_id: str, _admin: dict = Depends(require_admin)):
     res = await db.pengamanan_checklist.delete_one({"id": cek_id})
     if not res.deleted_count:
         raise HTTPException(status_code=404, detail="Checklist tidak ditemukan")
+    return {"ok": True}
+
+
+class PolisIn(BaseModel):
+    asset_id: str = Field(min_length=1)
+    nomor_polis: str = Field(min_length=1)
+    penanggung: str = "Konsorsium Asuransi BMN"
+    kategori_objek: str
+    nilai_pertanggungan: float = Field(ge=0)
+    premi: float = Field(ge=0)
+    sumber_dana: str
+    mulai: str = Field(min_length=10, max_length=10)
+    berakhir: str = Field(min_length=10, max_length=10)
+    keterangan: str = ""
+
+
+@pengamanan_router.get("/pengamanan/polis")
+async def list_polis(_user: dict = Depends(require_user)):
+    """Register polis asuransi BMN (terbaru dulu) + status masa berlaku."""
+    items = [p async for p in db.pengamanan_polis.find({}, {"_id": 0})
+             .sort("berakhir", -1).limit(500)]
+    today_iso = datetime.now(timezone.utc).date().isoformat()
+    for p in items:
+        p["info"] = info_polis(p, today_iso)
+    return {"items": items, "ringkasan": rekap_polis(items, today_iso),
+            "label_kategori": KATEGORI_OBJEK_ASURANSI,
+            "label_sumber_dana": SUMBER_DANA_PREMI,
+            "label_status": {"akan_datang": "Akan datang", "aktif": "Aktif",
+                             "segera_berakhir": "Segera berakhir",
+                             "berakhir": "Berakhir"},
+            "catatan": (
+                "Register pendamping (pustaka §11.5, PMK 43/2025) — "
+                "perencanaan resmi via SIMAN; AMAN tidak menerbitkan polis, "
+                "tidak menghitung tarif resmi, dan bukan laporan resmi "
+                "pengasuransian.")}
+
+
+@pengamanan_router.post("/pengamanan/polis")
+async def catat_polis(payload: PolisIn, user: dict = Depends(require_user)):
+    """Catat satu polis untuk satu aset (satu aset boleh berpolis ganda)."""
+    data = payload.model_dump()
+    errors = validate_polis(data)
+    if errors:
+        raise HTTPException(status_code=400, detail="; ".join(errors))
+    asset = await db.assets.find_one(
+        {"id": data["asset_id"]},
+        {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1})
+    if not asset:
+        raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    now = datetime.now(timezone.utc).isoformat()
+    record = {
+        "id": str(uuid.uuid4()),
+        "asset_id": asset["id"],
+        "asset_code": asset.get("asset_code"),
+        "NUP": asset.get("NUP"),
+        "asset_name": asset.get("asset_name"),
+        "nomor_polis": data["nomor_polis"].strip(),
+        "penanggung": str(data.get("penanggung") or "").strip()
+        or "Konsorsium Asuransi BMN",
+        "kategori_objek": data["kategori_objek"],
+        "nilai_pertanggungan": float(data["nilai_pertanggungan"]),
+        "premi": float(data["premi"]),
+        "sumber_dana": data["sumber_dana"],
+        "mulai": data["mulai"].strip()[:10],
+        "berakhir": data["berakhir"].strip()[:10],
+        "keterangan": str(data.get("keterangan") or "").strip(),
+        "created_by": user.get("username"),
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.pengamanan_polis.insert_one({**record})
+    record["info"] = info_polis(
+        record, datetime.now(timezone.utc).date().isoformat())
+    return record
+
+
+@pengamanan_router.delete("/pengamanan/polis/{polis_id}")
+async def hapus_polis(polis_id: str, _admin: dict = Depends(require_admin)):
+    """Hapus satu polis dari register (admin)."""
+    res = await db.pengamanan_polis.delete_one({"id": polis_id})
+    if not res.deleted_count:
+        raise HTTPException(status_code=404, detail="Polis tidak ditemukan")
     return {"ok": True}

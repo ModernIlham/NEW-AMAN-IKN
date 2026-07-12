@@ -168,6 +168,9 @@ async def create_indexes() -> None:
         # Checklist pengamanan: satu per aset + jalur id
         await db.pengamanan_checklist.create_index("asset_id", unique=True)
         await db.pengamanan_checklist.create_index("id", unique=True)
+        # Register polis asuransi BMN: daftar per aset/berakhir + jalur id
+        await db.pengamanan_polis.create_index([("asset_id", 1), ("berakhir", 1)])
+        await db.pengamanan_polis.create_index("id", unique=True)
         logger.info("Database indexes created successfully")
     except Exception as e:
         logger.error(f"Error creating indexes: {e}")
