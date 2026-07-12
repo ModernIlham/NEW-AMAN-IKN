@@ -117,7 +117,9 @@ khusus IKN PMK 139/PMK.08/2022 — pendampingan, bukan bentuk pemanfaatan)
 (#190 — daftar "menyusul" Pemanfaatan tuntas)
 · Penghapusan — **kandidat usul hapus** per jalur
 PMK 83/2016 (#104) + **tiket usulan berstatus** usul → proses → SK (#106)
-+ **arsip scan SK/berkas per usulan** (#134) + **ekspor CSV** (#159)
++ **arsip scan SK/berkas per usulan** (#134) + **ekspor CSV** (#159) +
+**Jejak Aset Terhapus** (arsip read-only dari log audit — aset yang
+dihapus permanen tetap tertelusur) (#197)
 · Pemusnahan — **register BA multi-aset** (#110) + **PDF Berita Acara
 siap tanda tangan** (#119) + **usulan penghapusan otomatis per aset BA**
 (#120) + **lampiran bukti pelaksanaan** (#132) + **ekspor CSV** (#161)
