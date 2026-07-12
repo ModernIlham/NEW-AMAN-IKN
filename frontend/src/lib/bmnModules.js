@@ -256,16 +256,17 @@ export const SIKLUS_MODULES = [
     id: "penilaian",
     nama: "Penilaian",
     urutan: 6,
-    status: "segera",
+    status: "sebagian",
     fase: 5,
-    ringkas: "Nilai wajar, revaluasi BMN, dan penyusutan.",
+    ringkas: "Posisi penyusutan garis lurus semesteran (PMK 65/2017) sudah bisa dibuka — revaluasi menyusul.",
     deskripsi:
       "Penilaian BMN untuk penyusunan neraca dan rencana pemindahtanganan/pemanfaatan: "
       + "nilai wajar, Revaluasi BMN, dan perhitungan penyusutan per golongan.",
     dasarHukum: ["PMK 97/PMK.06/2019 — Revaluasi BMN"],
     fitur: [
+      "✅ Penyusutan garis lurus semesteran per golongan (PMK 65/2017; masa manfaat KMK 295/2019 jo. 266/2023) + daftar telaah",
+      "Referensi masa manfaat dapat dikelola (seed lengkap lampiran KMK)",
       "Pencatatan hasil penilaian/revaluasi per aset",
-      "Penyusutan otomatis per golongan (masa manfaat standar)",
       "Riwayat nilai: perolehan → revaluasi → buku",
     ],
     integrasi: ["Nilai perolehan dari master aset; hasil menyuplai pembukuan & pelaporan"],
