@@ -65,6 +65,37 @@ async def list_penganggaran(_user: dict = Depends(require_user)):
                 "hukum.")}
 
 
+@penganggaran_router.get("/penganggaran/export")
+async def export_penganggaran(_user: dict = Depends(require_user)):
+    """Ekspor CSV register usulan penganggaran (pola #158)."""
+    import csv as csv_module
+    import io
+
+    from fastapi.responses import Response as HttpResponse
+
+    buf = io.StringIO()
+    w = csv_module.writer(buf)
+    w.writerow(["tahun_anggaran", "jenis", "akun", "uraian", "status",
+                "nilai_usulan", "nilai_disetujui", "nilai_dipa",
+                "nilai_realisasi", "nomor_dipa", "jumlah_aset", "sumber",
+                "keterangan", "dibuat_oleh"])
+    async for u in db.penganggaran.find({}, {"_id": 0}).sort("created_at", -1):
+        akun = u.get("akun") or ""
+        w.writerow([
+            u.get("tahun_anggaran"),
+            JENIS_ANGGARAN.get(u.get("jenis"), (u.get("jenis"),))[0],
+            f"{akun} — {AKUN_BAS[akun]}" if akun in AKUN_BAS else akun,
+            u.get("uraian"),
+            STATUS_ANGGARAN.get(u.get("status"), u.get("status")),
+            u.get("nilai_usulan"), u.get("nilai_disetujui"),
+            u.get("nilai_dipa"), u.get("nilai_realisasi"),
+            u.get("nomor_dipa"), len(u.get("aset") or []),
+            u.get("sumber"), u.get("keterangan"), u.get("created_by"),
+        ])
+    return HttpResponse(content=buf.getvalue().encode("utf-8-sig"), media_type="text/csv",
+                        headers={"Content-Disposition": 'attachment; filename="register_penganggaran.csv"'})
+
+
 @penganggaran_router.post("/penganggaran")
 async def buat_usulan_anggaran(payload: UsulanAnggaranIn,
                                user: dict = Depends(require_user)):

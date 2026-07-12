@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Loader2, Wallet, Plus, Search, X, Coins, TicketCheck,
+  ArrowLeft, Loader2, Wallet, Plus, Search, X, Coins, Download, TicketCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
+import { downloadFileWithProgress } from "@/lib/downloadFile";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -146,6 +147,11 @@ export default function PenganggaranPage({ user, onBack }) {
               RKBMN → RKA-K/L → DIPA → realisasi (PMK 62/2023 + 153/2021)
             </p>
           </div>
+          <Button size="sm" variant="outline" className="flex-shrink-0"
+            onClick={() => downloadFileWithProgress(`${API}/penganggaran/export`, "register_penganggaran.csv", { label: "Ekspor Register Penganggaran (CSV)" }).catch(() => {})}
+            data-testid="penganggaran-export">
+            <Download className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">CSV</span>
+          </Button>
           <Button size="sm"
             onClick={() => { setCari(""); setHasilCari([]); setForm({ data: { jenis: "pemeliharaan", uraian: "", tahun_anggaran: String(new Date().getFullYear() + 2), nilai_usulan: "", akun: "523", sumber: "", keterangan: "" }, aset: [], saving: false }); }}
             className="bg-teal-600 hover:bg-teal-700 text-white flex-shrink-0" data-testid="penganggaran-tambah">

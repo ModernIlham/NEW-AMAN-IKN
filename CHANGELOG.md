@@ -48,6 +48,16 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#163] Ekspor CSV register penganggaran — 2026-07-12
+
+- **Ekspor CSV** register usulan penganggaran (`GET /penganggaran/export`)
+  — tahun, jenis, akun BAS berlabel, uraian, status, nilai per tahap
+  (usulan/disetujui/DIPA/realisasi), nomor DIPA, jumlah aset tertaut,
+  sumber, pembuat — menutup gelombang ekspor CSV register pendamping
+  (#158–#161).
+- Tombol **CSV** di header `PenganggaranPage` (`downloadFileWithProgress`,
+  `utf-8-sig`); checklist `bmnModules.js` penganggaran diperbarui.
+
 ## [#162] Konsolidasi dokumentasi #161 — 2026-07-12
 
 - **Dokumentasi saja**: README blok Progres (pemusnahan + pengadaan:
