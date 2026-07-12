@@ -19,8 +19,11 @@ from auth_utils import require_admin, require_user, require_user_or_query_token
 from db import db, fs_bucket
 from shared_utils import delete_document_from_gridfs, get_document_from_gridfs
 from penggunaan_utils import (
-    JENIS_PSP, STATUS_IDLE, indikasi_idle, kunci_pemegang, rekap_idle,
-    rekap_pemegang, rekap_psp, validate_psp, validate_transisi_idle,
+    ARAH_PROSES, JENIS_PROSES_PENGGUNAAN, JENIS_PSP, STATUS_IDLE,
+    STATUS_PROSES, TRANSISI_PROSES, indikasi_idle, info_proses_sementara,
+    kunci_pemegang, rekap_idle, rekap_pemegang, rekap_proses_penggunaan,
+    rekap_psp, validate_proses_penggunaan, validate_psp,
+    validate_transisi_idle, validate_transisi_proses,
 )
 
 penggunaan_router = APIRouter()
@@ -492,3 +495,139 @@ async def daftar_pemegang_pdf(
     nama_file = nama_tampil.replace(" ", "_").replace("/", "-")
     return StreamingResponse(buffer, media_type="application/pdf",
                              headers={"Content-Disposition": f'attachment; filename="Daftar_Barang_{nama_file}.pdf"'})
+
+
+class ProsesIn(BaseModel):
+    jenis_proses: str
+    arah: str
+    pihak_asal: str = Field(min_length=1)
+    pihak_tujuan: str = Field(min_length=1)
+    asset_ids: list[str] = Field(min_length=1, max_length=100)
+    nomor_permohonan: str = ""
+    tanggal_permohonan: str = ""
+    tanggal_mulai: str = ""            # wajib utk penggunaan sementara
+    tanggal_berakhir: str = ""
+    keterangan: str = ""
+
+
+class TransisiProsesIn(BaseModel):
+    status: str
+    catatan: str = ""
+    nomor_dokumen: str = ""            # dokumen tahap ini (persetujuan/BAST/SK)
+    tanggal_dokumen: str = ""
+
+
+# Peta status tujuan → field dokumen yang diisi saat transisi.
+_DOK_PROSES = {
+    "disetujui": ("nomor_persetujuan", "tanggal_persetujuan"),
+    "ditolak": ("nomor_penolakan", "tanggal_penolakan"),
+    "bast_selesai": ("nomor_bast", "tanggal_bast"),
+    "dihapus_dibukukan": ("nomor_sk_penghapusan", "tanggal_sk_penghapusan"),
+    "berjalan": ("nomor_perjanjian", "tanggal_perjanjian"),
+}
+
+
+@penggunaan_router.get("/penggunaan/proses")
+async def list_proses(_user: dict = Depends(require_user)):
+    """Tiket proses alih status & penggunaan sementara + ringkasan."""
+    items = [t async for t in db.penggunaan_proses.find({}, {"_id": 0})
+             .sort("updated_at", -1).limit(500)]
+    today_iso = datetime.now(timezone.utc).date().isoformat()
+    for t in items:
+        t["info"] = info_proses_sementara(t, today_iso)
+    return {"items": items,
+            "ringkasan": rekap_proses_penggunaan(items, today_iso),
+            "label_jenis": JENIS_PROSES_PENGGUNAAN,
+            "label_arah": ARAH_PROSES,
+            "label_status": STATUS_PROSES,
+            "transisi": {j: {k: sorted(v) for k, v in peta.items()}
+                         for j, peta in TRANSISI_PROSES.items()},
+            "catatan": (
+                "Register proses pendamping (PMK 40/2024, pustaka §14 butir "
+                "22) — pengajuan resmi via SIMAN/DJKN; tenggat BAST/"
+                "penghapusan hanya pengingat internal; SK final dicatat di "
+                "register SK PSP.")}
+
+
+@penggunaan_router.post("/penggunaan/proses")
+async def buat_proses(payload: ProsesIn, user: dict = Depends(require_user)):
+    """Buka tiket proses baru (status awal draf; aset multi ber-snapshot)."""
+    data = payload.model_dump()
+    errors = validate_proses_penggunaan(data)
+    if errors:
+        raise HTTPException(status_code=400, detail="; ".join(errors))
+    aset_rows = []
+    for aid in dict.fromkeys(data["asset_ids"]):
+        a = await db.assets.find_one(
+            {"id": aid},
+            {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1})
+        if not a:
+            raise HTTPException(status_code=404,
+                                detail=f"Aset {aid} tidak ditemukan")
+        aset_rows.append({"asset_id": a["id"], "asset_code": a.get("asset_code"),
+                          "NUP": a.get("NUP"), "asset_name": a.get("asset_name")})
+    now = datetime.now(timezone.utc).isoformat()
+    record = {
+        "id": str(uuid.uuid4()),
+        "jenis_proses": data["jenis_proses"],
+        "arah": data["arah"],
+        "pihak_asal": data["pihak_asal"].strip(),
+        "pihak_tujuan": data["pihak_tujuan"].strip(),
+        "aset": aset_rows,
+        "status": "draf",
+        "nomor_permohonan": str(data.get("nomor_permohonan") or "").strip(),
+        "tanggal_permohonan": str(data.get("tanggal_permohonan") or "").strip()[:10],
+        "tanggal_mulai": str(data.get("tanggal_mulai") or "").strip()[:10],
+        "tanggal_berakhir": str(data.get("tanggal_berakhir") or "").strip()[:10],
+        "keterangan": str(data.get("keterangan") or "").strip(),
+        "riwayat": [{"status": "draf", "tanggal": now,
+                     "oleh": user.get("username"), "catatan": ""}],
+        "created_by": user.get("username"),
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.penggunaan_proses.insert_one({**record})
+    return record
+
+
+@penggunaan_router.post("/penggunaan/proses/{tiket_id}/status")
+async def transisi_proses(tiket_id: str, payload: TransisiProsesIn,
+                          user: dict = Depends(require_user)):
+    """Pindahkan status tiket (anti-race; dokumen tahap ikut tercatat)."""
+    t = await db.penggunaan_proses.find_one({"id": tiket_id}, {"_id": 0})
+    if not t:
+        raise HTTPException(status_code=404, detail="Tiket tidak ditemukan")
+    ke = payload.status
+    errors = validate_transisi_proses(t, ke)
+    if errors:
+        raise HTTPException(status_code=400, detail="; ".join(errors))
+    now = datetime.now(timezone.utc).isoformat()
+    set_fields = {"status": ke, "updated_at": now}
+    if ke in _DOK_PROSES:
+        f_nomor, f_tanggal = _DOK_PROSES[ke]
+        if str(payload.nomor_dokumen or "").strip():
+            set_fields[f_nomor] = payload.nomor_dokumen.strip()
+        if str(payload.tanggal_dokumen or "").strip():
+            set_fields[f_tanggal] = payload.tanggal_dokumen.strip()[:10]
+    entri = {"status": ke, "tanggal": now, "oleh": user.get("username"),
+             "catatan": str(payload.catatan or "").strip()}
+    res = await db.penggunaan_proses.find_one_and_update(
+        {"id": tiket_id, "status": t["status"]},
+        {"$set": set_fields, "$push": {"riwayat": entri}},
+        projection={"_id": 0},
+    )
+    if not res:
+        raise HTTPException(
+            status_code=409,
+            detail="Status tiket berubah di perangkat lain — muat ulang")
+    res.update(set_fields)
+    return res
+
+
+@penggunaan_router.delete("/penggunaan/proses/{tiket_id}")
+async def hapus_proses(tiket_id: str, _admin: dict = Depends(require_admin)):
+    """Hapus satu tiket proses (admin)."""
+    res = await db.penggunaan_proses.delete_one({"id": tiket_id})
+    if not res.deleted_count:
+        raise HTTPException(status_code=404, detail="Tiket tidak ditemukan")
+    return {"ok": True}

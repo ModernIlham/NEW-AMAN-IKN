@@ -48,6 +48,17 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#181] Tiket proses alih status & penggunaan sementara — 2026-07-12
+
+- **Tiket proses PMK 40/2024** di modul Penggunaan: alih status
+  (draf → diajukan → disetujui → BAST → dihapus & dibukukan; tenggat
+  1/2/1 bulan sebagai pengingat, [perlu verifikasi]) dan penggunaan
+  sementara (5/2 tahun; ≤6 bulan boleh langsung berjalan tanpa
+  persetujuan Pengelola; pengingat perpanjangan ≤90 hari).
+- Endpoint GET/POST/status (dokumen tahap otomatis terpetakan)/DELETE +
+  indeks; seksi UI + dialog buka tiket multi-aset di `PenggunaanPage`.
+- Unit test +3 → 240 passed; checklist bmnModules.
+
 ## [#180] Konsolidasi dokumentasi #179 — 2026-07-12
 
 - **Dokumentasi saja**: README Progres Fase 4 + roadmap masterplan +

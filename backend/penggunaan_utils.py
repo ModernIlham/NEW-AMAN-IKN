@@ -182,3 +182,139 @@ def rekap_pemegang(assets):
         })
     hasil.sort(key=lambda x: (-x["jumlah_aset"], x["nama"].lower()))
     return hasil
+
+
+# ---------------------------------------------------------------------------
+# Tiket proses Alih Status & Penggunaan Sementara (PMK 40/2024, riset
+# #181) — register PROSES antar Pengguna Barang; SK final tetap dicatat
+# di register SK PSP. Tenggat BAST ≤1 bulan / SK penghapusan ≤2 bulan /
+# lapor ≤1 bulan HANYA pengingat internal (angka [perlu verifikasi]
+# §14) — tidak memblokir input tanggal riil.
+# ---------------------------------------------------------------------------
+
+JENIS_PROSES_PENGGUNAAN = {
+    "alih_status": "Alih Status Penggunaan",
+    "penggunaan_sementara": "Penggunaan Sementara",
+}
+
+ARAH_PROSES = {"keluar": "Keluar (satker sebagai asal)",
+               "masuk": "Masuk (satker sebagai penerima)"}
+
+STATUS_PROSES = {
+    "draf": "Draf",
+    "diajukan": "Diajukan ke Pengelola",
+    "disetujui": "Disetujui Pengelola",
+    "ditolak": "Ditolak",
+    "bast_selesai": "BAST selesai",
+    "dihapus_dibukukan": "Dihapus & dibukukan pengguna baru",
+    "berjalan": "Berjalan",
+    "berakhir": "Berakhir",
+}
+
+# Penggunaan sementara ≤6 bulan boleh langsung berjalan (perjanjian antar
+# Pengguna Barang tanpa persetujuan Pengelola — [perlu verifikasi]).
+TRANSISI_PROSES = {
+    "alih_status": {
+        "draf": {"diajukan"},
+        "diajukan": {"disetujui", "ditolak"},
+        "disetujui": {"bast_selesai"},
+        "bast_selesai": {"dihapus_dibukukan"},
+        "dihapus_dibukukan": set(),
+        "ditolak": set(),
+    },
+    "penggunaan_sementara": {
+        "draf": {"diajukan"},
+        "diajukan": {"disetujui", "berjalan", "ditolak"},
+        "disetujui": {"berjalan"},
+        "berjalan": {"berakhir"},
+        "berakhir": set(),
+        "ditolak": set(),
+    },
+}
+
+
+def validate_proses_penggunaan(data: dict) -> list:
+    """Validasi tiket proses baru → daftar pesan kesalahan."""
+    from datetime import date
+
+    errors = []
+    if data.get("jenis_proses") not in JENIS_PROSES_PENGGUNAAN:
+        valid = ", ".join(JENIS_PROSES_PENGGUNAAN)
+        errors.append(f"Jenis proses tidak dikenal (pilihan: {valid})")
+    if data.get("arah") not in ARAH_PROSES:
+        valid = ", ".join(ARAH_PROSES)
+        errors.append(f"Arah tidak dikenal (pilihan: {valid})")
+    if not str(data.get("pihak_asal") or "").strip():
+        errors.append("Pihak asal wajib diisi")
+    if not str(data.get("pihak_tujuan") or "").strip():
+        errors.append("Pihak tujuan wajib diisi")
+    if not data.get("asset_ids"):
+        errors.append("Minimal satu aset dipilih")
+    mulai = str(data.get("tanggal_mulai") or "").strip()[:10]
+    akhir = str(data.get("tanggal_berakhir") or "").strip()[:10]
+    if data.get("jenis_proses") == "penggunaan_sementara":
+        try:
+            d_mulai = date.fromisoformat(mulai)
+            d_akhir = date.fromisoformat(akhir)
+            if d_akhir <= d_mulai:
+                errors.append("Tanggal berakhir harus setelah tanggal mulai")
+        except ValueError:
+            errors.append("Penggunaan sementara wajib tanggal mulai/berakhir "
+                          "berformat YYYY-MM-DD")
+    return errors
+
+
+def validate_transisi_proses(tiket: dict, ke: str) -> list:
+    """Validasi perpindahan status tiket proses (per jenisnya)."""
+    jenis = tiket.get("jenis_proses")
+    peta = TRANSISI_PROSES.get(jenis, {})
+    if ke not in STATUS_PROSES:
+        valid = ", ".join(STATUS_PROSES)
+        return [f"Status tujuan tidak dikenal (pilihan: {valid})"]
+    if ke not in peta.get(tiket.get("status"), set()):
+        return [f"Transisi {tiket.get('status')} → {ke} tidak diizinkan "
+                f"untuk {jenis}"]
+    return []
+
+
+def info_proses_sementara(tiket: dict, today_iso: str) -> dict:
+    """Pengingat penggunaan sementara BERJALAN → {berakhir, lewat,
+    sisa_hari, saatnya_perpanjangan (≤90 hari)}."""
+    from datetime import date
+
+    kosong = {"berakhir": None, "lewat": False, "sisa_hari": None,
+              "saatnya_perpanjangan": False}
+    if (tiket.get("jenis_proses") != "penggunaan_sementara"
+            or tiket.get("status") != "berjalan"):
+        return kosong
+    berakhir = str(tiket.get("tanggal_berakhir") or "").strip()[:10]
+    try:
+        batas = date.fromisoformat(berakhir)
+        hari_ini = date.fromisoformat(str(today_iso)[:10])
+    except ValueError:
+        return kosong
+    sisa = (batas - hari_ini).days
+    return {"berakhir": berakhir, "lewat": sisa < 0,
+            "sisa_hari": max(0, sisa),
+            "saatnya_perpanjangan": 0 <= sisa <= 90}
+
+
+def rekap_proses_penggunaan(items, today_iso: str) -> dict:
+    """Ringkasan tiket: per jenis, per status, berjalan & segera berakhir."""
+    per_jenis = {k: 0 for k in JENIS_PROSES_PENGGUNAAN}
+    per_status = {k: 0 for k in STATUS_PROSES}
+    segera_berakhir = 0
+    for t in items or []:
+        j = t.get("jenis_proses")
+        if j in per_jenis:
+            per_jenis[j] += 1
+        s = t.get("status")
+        if s in per_status:
+            per_status[s] += 1
+        if info_proses_sementara(t, today_iso)["saatnya_perpanjangan"]:
+            segera_berakhir += 1
+    aktif = sum(v for s, v in per_status.items()
+                if s not in ("dihapus_dibukukan", "berakhir", "ditolak"))
+    return {"jumlah": len(items or []), "aktif": aktif,
+            "segera_berakhir": segera_berakhir,
+            "per_jenis": per_jenis, "per_status": per_status}
