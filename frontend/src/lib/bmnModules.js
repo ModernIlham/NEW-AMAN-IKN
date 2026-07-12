@@ -403,8 +403,9 @@ export const SIKLUS_MODULES = [
     fitur: [
       "✅ Dasbor pemantauan per 5 objek wasdal (temuan otomatis dari register)",
       "✅ Aturan: BAST kosong, perjanjian berakhir/dokumen kurang, usulan berlarut, kandidat belum diusulkan, data belum lengkap, sengketa, rusak tanpa pemeliharaan",
+      "✅ Laporan Hasil Pemantauan PDF pra-isi (rekap 5 objek + rincian temuan + tanda tangan) — kanal resmi tetap SIMAN v2",
       "Register penertiban ber-timer 15 hari kerja (menyusul)",
-      "BA pemantauan insidentil + generator laporan formulir PMK 207 (menyusul)",
+      "BA pemantauan insidentil + formulir resmi Lampiran PMK 207 (menyusul)",
       "Portofolio aset & analisis SBSK (menyusul)",
     ],
     integrasi: ["Membaca register pemanfaatan, penghapusan, pemindahtanganan, pemeliharaan, dan data aset tanpa input ganda"],
