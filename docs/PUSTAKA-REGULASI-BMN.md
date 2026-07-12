@@ -3,7 +3,7 @@
 > Rangkuman riset regulasi dan praktik resmi sebagai **bahan rujukan wajib**
 > sebelum membangun modul apa pun di AMAN — dipakai bersama
 > `docs/MASTERPLAN-SIKLUS-BMN.md`. Disusun dari riset internet Juli 2026
-> (sumber di §14). Butir bertanda **[perlu verifikasi]** belum terbaca dari
+> (sumber di §15). Butir bertanda **[perlu verifikasi]** belum terbaca dari
 > teks asli peraturan (PDF JDIH tidak terjangkau dari lingkungan riset) —
 > pastikan ke dokumen aslinya saat menulis spesifikasi teknis modulnya.
 >
@@ -104,7 +104,7 @@ rekonsiliasi berformat selaras SAKTI/MonSAKTI.
 
 Pola konsisten lintas CaLBMN satker (pengadilan, KKP, Kemenag, KPU,
 Komdigi; format dari Lampiran PMK 181/2016 — nomor lampiran perlu
-verifikasi, §13 butir 16):
+verifikasi, §14 butir 16):
 
 - **I. Pendahuluan** — dasar hukum (UU 17/2003; UU 1/2004 Ps. 49(6) &
   55(2); PP 27/2014 jo. PP 28/2020; PMK 181/2016) + entitas & periode
@@ -601,7 +601,75 @@ fisik; barang untuk pemda/masyarakat tidak segera di-BAST-kan.
 
 ---
 
-## 11. Kendala Umum Satker → Fitur Penangkal AMAN
+## 11. Pengamanan BMN (PP 27/2014 Ps. 42-43 jo. PP 28/2020 + PMK 218/2015)
+
+> Riset Juli 2026; seluruh fetch teks asli regulasi terblokir proxy (403)
+> sehingga rincian bersumber cuplikan pencarian + artikel DJKN — butir
+> [perlu verifikasi] dirangkum di §14 butir 18-19.
+
+### 11.1 Dasar & status regulasi
+
+- **Koreksi premis**: PMK 244/PMK.06/2012 BUKAN aturan pengamanan —
+  itu PMK **Wasdal** (jo. PMK 52/2016), dan keduanya sudah DICABUT oleh
+  **PMK 207/PMK.06/2021** (sudah dipakai modul Wasdal, §8). Tidak ada
+  PMK nasional tunggal "tata cara pengamanan BMN"; norma pengamanan
+  tersebar:
+- **UU 1/2004 Ps. 49(1)**: tanah BMN wajib disertipikatkan atas nama
+  **Pemerintah Republik Indonesia** (c.q. K/L pengguna).
+- **PP 27/2014 jo. PP 28/2020 Ps. 42**: Pengelola/Pengguna/Kuasa
+  Pengguna Barang **wajib** mengamankan BMN dalam penguasaannya,
+  meliputi pengamanan **administrasi, fisik, dan hukum**. **Ps. 43**:
+  bukti kepemilikan disimpan tertib — tanah/bangunan oleh **Pengelola
+  Barang**, selain tanah/bangunan oleh **Pengguna Barang**.
+- **PMK 218/PMK.06/2015**: tata cara penyimpanan dokumen kepemilikan
+  (pejabat penyimpan, konversi media, permintaan dokumen pendukung).
+- **Peraturan Bersama Menkeu-BPN 186/PMK.06/2009 & 24/2009**:
+  pensertipikatan tanah BMN a.n. Pemerintah RI c.q. K/L.
+- Pedoman teknis per K/L (contoh KMK 21/KMK.01/2012 di Kemenkeu) —
+  wujud konkret pengamanan per jenis BMN diatur di level ini.
+
+### 11.2 Bentuk pengamanan per jenis BMN (ringkas, [perlu verifikasi])
+
+| Jenis | Fisik | Administrasi | Hukum |
+|---|---|---|---|
+| Tanah | patok/pagar/plang nama | catat + arsip dokumen perolehan | sertipikat Hak Pakai a.n. Pemerintah RI c.q. K/L; blokir bila sengketa |
+| Gedung/bangunan | pagar, satpam, CCTV, APAR | arsip IMB/PBG, BAST, KIB | bukti kepemilikan a.n. Pemerintah RI |
+| Kendaraan | kunci/alarm, simpan di pool kantor | arsip BPKB + salinan STNK | BPKB/STNK a.n. pemerintah; pajak tepat waktu |
+| Selain tanah/bangunan | gudang terkunci, APAR | registrasi, DBR/DBL, opname | dokumen perolehan; TGR bila dikuasai pihak lain |
+
+### 11.3 BMN bermasalah/sengketa
+
+- Kategori kasus umum (artikel DJKN): (1) **dikuasai pihak lain** tanpa
+  alas hak; (2) **disertipikatkan pihak lain / tumpang tindih**;
+  (3) **sengketa/berperkara** di pengadilan.
+- Alur penanganan praktik: preventif (dokumen + sertipikasi + kuasai
+  fisik) → **mediasi/non-litigasi** (pokja satker + KPKNL, fasilitasi
+  BPN) → **pemblokiran sertipikat** di Kantor Pertanahan (jaga status
+  quo) → **litigasi** dengan pendampingan Jaksa Pengacara Negara →
+  selesai (inkracht/pulih).
+- BMN bermasalah masuk lingkup **laporan wasdal semesteran/tahunan**
+  (PMK 207/2021) dan CaLBMN — tidak ada laporan khusus terpisah.
+- Sertipikasi tanah BMN: kategori target **K1** (lengkap, siap SHP),
+  **K2** (data kurang), **K3** (sengketa), **K4** (sudah sertipikat,
+  perlu pemutakhiran SIMAN) [perlu verifikasi].
+
+### 11.4 Implikasi desain AMAN
+
+- ✅ **Register BMN bermasalah berstatus** (#169): kategori kasus (3 di
+  atas), pipeline identifikasi → mediasi → blokir → litigasi → selesai,
+  pihak lawan + nomor perkara + pendamping, riwayat per transisi —
+  bahan mentah laporan wasdal & CaLBMN.
+- Menyusul: checklist pengamanan per aset per jenis (turunan tabel
+  11.2), arsip dokumen kepemilikan per aset dengan lokasi penyimpanan
+  (Pengelola vs Pengguna, Ps. 43), field status sertipikasi K1-K4.
+- **Yang TIDAK boleh diklaim**: bukan kanal laporan wasdal resmi; bukan
+  penyimpanan dokumen kepemilikan yang sah (PMK 218/2015); tidak
+  melakukan pemblokiran sertipikat / nasihat hukum; register tak
+  berkekuatan hukum. Jangan merujuk PMK 244/2012 (dicabut).
+
+---
+
+## 12. Kendala Umum Satker → Fitur Penangkal AMAN
 
 | Kendala nyata (temuan artikel DJKN/DJPb/BPK/jurnal) | Penangkal di AMAN |
 |---|---|
@@ -617,7 +685,7 @@ fisik; barang untuk pemda/masyarakat tidak segera di-BAST-kan.
 
 ---
 
-## 12. Implikasi Desain per Modul (ringkas)
+## 13. Implikasi Desain per Modul (ringkas)
 
 | Modul (fase) | Keputusan desain dari pustaka ini |
 |---|---|
@@ -626,6 +694,7 @@ fisik; barang untuk pemda/masyarakat tidak segera di-BAST-kan.
 | Persediaan (F2) | Perpetual + FIFO per layer; enum transaksi peta SAKTI; dua tahap usang/rusak; operator–approver; opname semesteran + BAOF + kunci back-date; mapping akun 1171xx |
 | Pelaporan (F2, ✅ inti) | ✅ Hub arsip (#86) + Posisi BMN di Neraca (#93) + rekonsiliasi XLSX (#94) + LBKP mutasi per golongan (#95) + CaLBMN pra-isi bab I–V (§2.3a) + LKB per NUP + ringkasan B/RR/RB (§2.3b) + periode ber-kunci dengan penanda FINAL + tenggat penyampaian konfigurabel per periode — daftar "Implikasi AMAN" §2.3 tuntas |
 | Penggunaan (F3) | PSP/alih/sementara/pihak lain/bersama + BMN idle (PMK 40 & 120/2024) |
+| Pengamanan (F3, ✅ tahap awal) | ✅ Dasbor tertib administrasi + pantau sengketa dari data inventarisasi (#88); ✅ register BMN bermasalah berstatus identifikasi→mediasi→blokir→litigasi→selesai (#169, §11); menyusul: checklist pengamanan per jenis, arsip dokumen kepemilikan (Ps. 43), status sertipikasi K1-K4 |
 | Pemeliharaan (F3, ✅ tahap awal) | Riwayat per kejadian per aset (jenis ringan/sedang/berat DJKN); rekap per TA (bahan DHPB Ps. 47); kondisi sebelum/sesudah; penanda telaah kapitalisasi ≥ ambang PMK 181; jadwal berkala & DHPB PDF menyusul |
 | Perencanaan (F4, ✅ tahap awal) | ✅ Saringan kelayakan RKBMN pemeliharaan (#99: Baik/RR layak; RB → jalur hapus; idle → PMK 120/2024) + kertas kerja XLSX (#100); menyusul: usulan per unit + persetujuan, sanding SBSK PMK 138/2024 |
 | Penganggaran (F4, ✅ tahap awal) | ✅ Register usulan berstatus diusulkan→telaah→DIPA→realisasi, nilai per tahap + akun BAS 53x/523 + serapan (#115, §9); AMAN pendamping — kanal resmi SIMAN V2/SAKTI/KRISNA; ✅ sanding per akun BAS (#123) + ekspor CSV (#163) + kalender tenggat konfigurabel (#165); menyusul: sanding per triwulan |
@@ -639,7 +708,7 @@ fisik; barang untuk pemda/masyarakat tidak segera di-BAST-kan.
 
 ---
 
-## 13. Daftar Konsolidasi "Perlu Verifikasi"
+## 14. Daftar Konsolidasi "Perlu Verifikasi"
 
 1. Field lengkap KIB per 6 jenis → Lampiran PMK 181/2016.
 2. Batas waktu statutori penyampaian laporan per jenjang → Lampiran PMK 181.
@@ -681,10 +750,17 @@ fisik; barang untuk pemda/masyarakat tidak segera di-BAST-kan.
     kolom Keterangan, dan tenggat "≤15 hari setelah TA berakhir" (dari
     modul pelatihan, bukan pasal PMK 181 langsung) — perlu satu PDF
     AstLaporanKondisiBarangUAKPB asli untuk verifikasi.
+18. Pengamanan (§11): rincian bentuk per jenis BMN dari artikel DJKN &
+    cuplikan KMK 21/KMK.01/2012 (bukan teks regulasi); ayat persis UU
+    1/2004 Ps. 49 selain ayat (1); perubahan penjelasan Ps. 42 oleh
+    PP 28/2020; taksonomi kasus & alur mediasi-blokir-litigasi.
+19. PMK 218/PMK.06/2015: rincian pasal penyimpanan dokumen & status
+    terkini; kategori sertipikasi K1-K4 + status Peraturan Bersama
+    186/PMK.06/2009 & 24/2009 (belum dicek ke teks asli).
 
 ---
 
-## 14. Sumber Utama
+## 15. Sumber Utama
 
 Regulasi: PSAP 05 (ksap.org/standar/PSAP05.pdf) · PMK 181/PMK.06/2016
 (jdih.kemenkeu.go.id/dok/181-pmk-06-2016; peraturan.bpk.go.id/Details/121291)

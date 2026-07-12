@@ -62,3 +62,36 @@ class TestRekap:
         per, lengkap, sengketa = rekap_kesehatan([])
         assert lengkap == 0 and sengketa == []
         assert all(v == 0 for v in per.values())
+
+
+class TestRegisterKasus:
+    def test_validasi_kasus(self):
+        from pengamanan_utils import validate_kasus
+        ok = {"kategori": "dikuasai_pihak_lain", "uraian": "Tanah diokupasi",
+              "pihak_lawan": "Warga sekitar"}
+        assert validate_kasus(ok) == []
+        errors = validate_kasus({"kategori": "aneh", "uraian": " ",
+                                 "pihak_lawan": ""})
+        assert len(errors) == 3
+
+    def test_transisi_kasus(self):
+        from pengamanan_utils import validate_transisi_kasus
+        assert validate_transisi_kasus({"status": "identifikasi"}, "litigasi") == []
+        assert validate_transisi_kasus({"status": "mediasi"}, "selesai") == []
+        # Mundur / dari terminal / status asing → ditolak
+        assert validate_transisi_kasus({"status": "litigasi"}, "mediasi")
+        assert validate_transisi_kasus({"status": "selesai"}, "litigasi")
+        assert validate_transisi_kasus({"status": "identifikasi"}, "banding")
+
+    def test_rekap_kasus(self):
+        from pengamanan_utils import rekap_kasus
+        items = [
+            {"status": "identifikasi", "kategori": "dikuasai_pihak_lain"},
+            {"status": "litigasi", "kategori": "berperkara"},
+            {"status": "selesai", "kategori": "berperkara"},
+        ]
+        r = rekap_kasus(items)
+        assert r["jumlah"] == 3 and r["aktif"] == 2
+        assert r["per_status"]["selesai"] == 1
+        assert r["per_kategori"]["berperkara"] == 2
+        assert rekap_kasus([])["aktif"] == 0

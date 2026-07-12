@@ -48,6 +48,21 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#169] Register BMN bermasalah + bab pustaka Pengamanan — 2026-07-12
+
+- **Bab pustaka baru §11 "Pengamanan BMN"** (riset dulu): induk regulasi
+  PP 27/2014 Ps. 42–43 jo. PP 28/2020 + UU 1/2004 Ps. 49 + PMK 218/2015
+  (koreksi: PMK 244/2012 = Wasdal, sudah dicabut PMK 207/2021); bentuk
+  pengamanan per jenis BMN; alur kasus; sertipikasi K1–K4; bab lama
+  §11–§14 bergeser jadi §12–§15.
+- **Register BMN bermasalah/sengketa** di modul Pengamanan: kategori
+  (dikuasai pihak lain / sertipikat pihak lain / berperkara), pipeline
+  identifikasi → mediasi → blokir → litigasi → selesai dengan riwayat +
+  anti-race, satu kasus aktif per aset, hapus admin — bahan laporan
+  wasdal/CaLBMN.
+- UI: seksi register + dialog buka kasus ber-pencarian aset di
+  `PengamananPage` (prop `user` dari App). Unit test +3 → 226 passed.
+
 ## [#168] Konsolidasi dokumentasi #167 — 2026-07-12
 
 - **Dokumentasi saja**: README Progres Fase 3 + roadmap masterplan
