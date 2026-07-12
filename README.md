@@ -44,9 +44,10 @@ lintas kegiatan (#86), **Posisi BMN di Neraca** (#93), ekspor
 tahunan per golongan dengan saldo awal–mutasi–akhir (#95), dan
 **CaLBMN pra-isi bab I–V** per periode (struktur lampiran PMK 181,
 bahan penyusunan — final via SAKTI) (#144), **LKB — Laporan Kondisi
-Barang** per NUP + ringkasan B/RR/RB per golongan (#146), dan **periode
-pelaporan ber-kunci** dengan penanda FINAL di LBKP/CaLBMN (#148) —
-semua dapat diakses dari Beranda Modul.
+Barang** per NUP + ringkasan B/RR/RB per golongan (#146), **periode
+pelaporan ber-kunci** dengan penanda FINAL di LBKP/CaLBMN (#148), dan
+**tenggat penyampaian konfigurabel per periode** dengan pengingat
+lewat tenggat (#150) — semua dapat diakses dari Beranda Modul.
 
 **Progres Fase 3 (Juli 2026):** Penggunaan — rekap aset per pemegang +
 kelengkapan BAST (#87) + **Daftar Barang yang Digunakan per pemegang**
