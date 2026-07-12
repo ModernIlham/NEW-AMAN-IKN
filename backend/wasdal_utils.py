@@ -9,7 +9,7 @@ laporan wasdal semesteran; kanal resmi pelaporan tetap SIMAN v2.
 
 Fungsi murni tanpa Mongo/IO agar teruji unit.
 """
-from datetime import date
+from datetime import date, timedelta
 
 from pemanfaatan_utils import (
     LABEL_STATUS_PERJANJIAN, dokumen_kurang, status_perjanjian,
@@ -226,6 +226,96 @@ def rekap_wasdal(per_objek: dict) -> dict:
             per_jenis[t["jenis"]] = per_jenis.get(t["jenis"], 0) + 1
     return {"per_objek": per_o, "per_jenis": per_jenis,
             "total": sum(per_o.values())}
+
+
+# ── Penertiban KPB (PMK 207: selesai ≤15 hari kerja — pustaka §8.3) ──
+SUMBER_PENERTIBAN = {
+    "pemantauan": "Hasil pemantauan KPB",
+    "permintaan_pengelola": "Surat permintaan Pengelola",
+    "apip_bpk": "Temuan APIP/BPK",
+}
+
+STATUS_PENERTIBAN = {"berjalan": "Berjalan", "selesai": "Selesai"}
+
+TENGGAT_HARI_KERJA = 15
+
+
+def tambah_hari_kerja(mulai_iso: str, hari_kerja: int = TENGGAT_HARI_KERJA):
+    """Tanggal setelah N hari kerja (Senin–Jumat; libur nasional tidak
+    dihitung — tenggat regulasi tetap acuan, ini pendekatan konservatif)."""
+    mulai = _tgl(mulai_iso)
+    if not mulai or hari_kerja < 0:
+        return None
+    d, sisa = mulai, hari_kerja
+    while sisa > 0:
+        d += timedelta(days=1)
+        if d.weekday() < 5:
+            sisa -= 1
+    return d.isoformat()
+
+
+def sisa_hari_kerja(dari_iso: str, sampai_iso: str):
+    """Jumlah hari kerja dari `dari` (eksklusif) sampai `sampai` (inklusif);
+    None bila tanggal tidak valid, 0 bila sudah lewat/sama."""
+    dari, sampai = _tgl(dari_iso), _tgl(sampai_iso)
+    if not dari or not sampai:
+        return None
+    if sampai <= dari:
+        return 0
+    d, n = dari, 0
+    while d < sampai:
+        d += timedelta(days=1)
+        if d.weekday() < 5:
+            n += 1
+    return n
+
+
+def status_tenggat_penertiban(tiket: dict, today_iso: str) -> dict:
+    """Info tenggat tiket → {lewat, sisa_hari_kerja} (hanya tiket berjalan)."""
+    if tiket.get("status") != "berjalan":
+        return {"lewat": False, "sisa_hari_kerja": None}
+    tenggat, hari_ini = _tgl(tiket.get("tenggat")), _tgl(today_iso)
+    if not tenggat or not hari_ini:
+        return {"lewat": False, "sisa_hari_kerja": None}
+    if hari_ini > tenggat:
+        return {"lewat": True, "sisa_hari_kerja": 0}
+    return {"lewat": False,
+            "sisa_hari_kerja": sisa_hari_kerja(today_iso, tiket.get("tenggat"))}
+
+
+def validate_penertiban(data: dict) -> list:
+    """Validasi input tiket penertiban baru → daftar pesan kesalahan."""
+    errors = []
+    if data.get("sumber") not in SUMBER_PENERTIBAN:
+        errors.append("Sumber penertiban tidak dikenal")
+    if data.get("objek") and data["objek"] not in OBJEK_WASDAL:
+        errors.append("Objek pemantauan tidak dikenal")
+    if not _terisi(data.get("uraian")):
+        errors.append("Uraian penertiban wajib diisi")
+    if not _tgl(data.get("tanggal_dasar")):
+        errors.append("Tanggal dasar tidak valid (YYYY-MM-DD)")
+    return errors
+
+
+def validate_selesai_penertiban(tiket: dict, data: dict) -> list:
+    """Validasi penyelesaian tiket: harus berjalan + tindak lanjut terisi."""
+    errors = []
+    if tiket.get("status") != "berjalan":
+        errors.append("Tiket sudah selesai")
+    if not _terisi(data.get("tindak_lanjut")):
+        errors.append("Uraian tindak lanjut wajib diisi")
+    return errors
+
+
+def rekap_penertiban(items, today_iso: str) -> dict:
+    """Ringkasan register penertiban: total, berjalan, selesai, lewat tenggat."""
+    items = items or []
+    berjalan = [t for t in items if t.get("status") == "berjalan"]
+    lewat = sum(1 for t in berjalan
+                if status_tenggat_penertiban(t, today_iso)["lewat"])
+    return {"total": len(items), "berjalan": len(berjalan),
+            "selesai": sum(1 for t in items if t.get("status") == "selesai"),
+            "lewat_tenggat": lewat}
 
 
 # Ekspor label status perjanjian agar UI wasdal tak impor ganda

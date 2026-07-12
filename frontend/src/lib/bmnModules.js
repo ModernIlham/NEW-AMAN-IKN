@@ -395,7 +395,7 @@ export const SIKLUS_MODULES = [
     urutan: 12,
     status: "sebagian",
     fase: 6,
-    ringkas: "Dasbor pemantauan 5 objek wasdal KPB; penertiban & laporan menyusul.",
+    ringkas: "Dasbor pemantauan 5 objek wasdal KPB + register penertiban 15 hari kerja.",
     deskripsi:
       "Wasdal melingkupi seluruh siklus (PMK 207/PMK.06/2021). Tahap awal: dasbor "
       + "pemantauan tingkat KPB — mesin aturan membaca register yang sudah ada dan "
@@ -407,7 +407,7 @@ export const SIKLUS_MODULES = [
       "✅ Dasbor pemantauan per 5 objek wasdal (temuan otomatis dari register)",
       "✅ Aturan: BAST kosong, perjanjian berakhir/dokumen kurang, usulan berlarut, kandidat belum diusulkan, data belum lengkap, sengketa, rusak tanpa pemeliharaan",
       "✅ Laporan Hasil Pemantauan PDF pra-isi (rekap 5 objek + rincian temuan + tanda tangan) — kanal resmi tetap SIMAN v2",
-      "Register penertiban ber-timer 15 hari kerja (menyusul)",
+      "✅ Register penertiban ber-tenggat 15 hari kerja (sumber pemantauan/permintaan Pengelola/APIP-BPK, peringatan lewat tenggat, tindak lanjut tercatat)",
       "BA pemantauan insidentil + formulir resmi Lampiran PMK 207 (menyusul)",
       "Portofolio aset & analisis SBSK (menyusul)",
     ],

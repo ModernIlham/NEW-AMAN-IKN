@@ -2,19 +2,24 @@
 
 Mesin aturan ringan atas register yang sudah ada (aset, pemanfaatan,
 usulan penghapusan, pemindahtanganan, pemeliharaan) → temuan per lima
-objek pemantauan. Bahan pra-isi laporan wasdal semesteran; kanal resmi
-pelaporan tetap Modul Wasdal SIMAN v2. Register penertiban (timer 15 hari
-kerja) & BA pemantauan insidentil menyusul sesuai masterplan.
+objek pemantauan + register penertiban ber-tenggat 15 hari kerja. Bahan
+pra-isi laporan wasdal semesteran; kanal resmi pelaporan tetap Modul
+Wasdal SIMAN v2. BA pemantauan insidentil menyusul sesuai masterplan.
 """
+import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 
-from auth_utils import require_user
+from auth_utils import require_admin, require_user
 from db import db
 from wasdal_utils import (
     AMBANG_BERLARUT_HARI, JENIS_TEMUAN, OBJEK_WASDAL,
-    periode_wasdal, rekap_wasdal, susun_temuan,
+    SUMBER_PENERTIBAN, STATUS_PENERTIBAN, TENGGAT_HARI_KERJA,
+    periode_wasdal, rekap_penertiban, rekap_wasdal,
+    status_tenggat_penertiban, susun_temuan, tambah_hari_kerja,
+    validate_penertiban, validate_selesai_penertiban,
 )
 
 wasdal_router = APIRouter()
@@ -76,6 +81,116 @@ async def pemantauan_wasdal(
         "ambang_hari": ambang_hari,
         "total_aset": total_aset,
     }
+
+
+class PenertibanIn(BaseModel):
+    sumber: str
+    tanggal_dasar: str = Field(min_length=10, max_length=10)
+    objek: str = ""                 # salah satu 5 objek pemantauan (opsional)
+    uraian: str = Field(min_length=1)
+    asset_id: str = ""              # tautan opsional ke aset
+
+
+class SelesaiPenertibanIn(BaseModel):
+    tindak_lanjut: str = Field(min_length=1)
+    tanggal_selesai: str = ""
+
+
+@wasdal_router.get("/wasdal/penertiban")
+async def daftar_penertiban(_user: dict = Depends(require_user)):
+    """Register penertiban + sisa/lewat tenggat + rekap."""
+    today_iso = datetime.now(timezone.utc).date().isoformat()
+    items = [t async for t in db.penertiban.find({}, {"_id": 0})
+             .sort("created_at", -1).limit(500)]
+    for t in items:
+        t["info_tenggat"] = status_tenggat_penertiban(t, today_iso)
+    return {"items": items, "ringkasan": rekap_penertiban(items, today_iso),
+            "label_sumber": SUMBER_PENERTIBAN,
+            "label_status": STATUS_PENERTIBAN,
+            "label_objek": OBJEK_WASDAL,
+            "tenggat_hari_kerja": TENGGAT_HARI_KERJA,
+            "catatan": (
+                "PMK 207/2021: penertiban oleh KPB selesai paling lama "
+                f"{TENGGAT_HARI_KERJA} hari kerja sejak pemantauan selesai / "
+                "surat permintaan Pengelola diterima (juga dipicu temuan "
+                "APIP/BPK). Tenggat dihitung hari kerja Senin–Jumat.")}
+
+
+@wasdal_router.post("/wasdal/penertiban")
+async def catat_penertiban(payload: PenertibanIn,
+                           user: dict = Depends(require_user)):
+    """Buka tiket penertiban — tenggat otomatis 15 hari kerja."""
+    data = payload.model_dump()
+    errors = validate_penertiban(data)
+    if errors:
+        raise HTTPException(status_code=400, detail="; ".join(errors))
+    aset = None
+    if str(data.get("asset_id") or "").strip():
+        aset = await db.assets.find_one(
+            {"id": data["asset_id"].strip()},
+            {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1})
+        if not aset:
+            raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    now = datetime.now(timezone.utc).isoformat()
+    record = {
+        "id": str(uuid.uuid4()),
+        "sumber": data["sumber"],
+        "tanggal_dasar": data["tanggal_dasar"].strip()[:10],
+        "tenggat": tambah_hari_kerja(data["tanggal_dasar"]),
+        "objek": str(data.get("objek") or "").strip(),
+        "uraian": data["uraian"].strip(),
+        "status": "berjalan",
+        "tindak_lanjut": "",
+        "tanggal_selesai": "",
+        "asset_id": (aset or {}).get("id") or "",
+        "asset_code": (aset or {}).get("asset_code"),
+        "NUP": (aset or {}).get("NUP"),
+        "asset_name": (aset or {}).get("asset_name"),
+        "created_by": user.get("username"),
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.penertiban.insert_one({**record})
+    record["info_tenggat"] = status_tenggat_penertiban(
+        record, datetime.now(timezone.utc).date().isoformat())
+    return record
+
+
+@wasdal_router.post("/wasdal/penertiban/{tiket_id}/selesai")
+async def selesaikan_penertiban(tiket_id: str, payload: SelesaiPenertibanIn,
+                                admin: dict = Depends(require_admin)):
+    """Tutup tiket penertiban dengan uraian tindak lanjut (admin)."""
+    t = await db.penertiban.find_one({"id": tiket_id}, {"_id": 0})
+    if not t:
+        raise HTTPException(status_code=404, detail="Tiket tidak ditemukan")
+    data = payload.model_dump()
+    errors = validate_selesai_penertiban(t, data)
+    if errors:
+        raise HTTPException(status_code=400, detail="; ".join(errors))
+    now = datetime.now(timezone.utc).isoformat()
+    res = await db.penertiban.find_one_and_update(
+        # Anti-balapan: hanya tiket yang masih berjalan
+        {"id": tiket_id, "status": "berjalan"},
+        {"$set": {"status": "selesai",
+                  "tindak_lanjut": data["tindak_lanjut"].strip(),
+                  "tanggal_selesai": (str(data.get("tanggal_selesai") or "").strip()[:10]
+                                      or now[:10]),
+                  "diselesaikan_oleh": admin.get("username"),
+                  "updated_at": now}},
+        projection={"_id": 0}, return_document=True)
+    if not res:
+        raise HTTPException(status_code=409,
+                            detail="Tiket berubah oleh proses lain — muat ulang")
+    return res
+
+
+@wasdal_router.delete("/wasdal/penertiban/{tiket_id}")
+async def hapus_penertiban(tiket_id: str, _admin: dict = Depends(require_admin)):
+    """Hapus tiket salah input (khusus admin)."""
+    res = await db.penertiban.delete_one({"id": tiket_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Tiket tidak ditemukan")
+    return {"ok": True, "id": tiket_id}
 
 
 @wasdal_router.get("/wasdal/laporan-pdf")

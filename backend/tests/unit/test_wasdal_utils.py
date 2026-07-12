@@ -1,9 +1,11 @@
 """Uji logika murni dasbor pemantauan Wasdal (PMK 207/2021)."""
 from wasdal_utils import (
-    JENIS_TEMUAN, OBJEK_PER_JENIS, OBJEK_WASDAL,
-    periode_wasdal, rekap_wasdal, susun_temuan,
+    JENIS_TEMUAN, OBJEK_PER_JENIS, OBJEK_WASDAL, SUMBER_PENERTIBAN,
+    periode_wasdal, rekap_penertiban, rekap_wasdal, sisa_hari_kerja,
+    status_tenggat_penertiban, susun_temuan, tambah_hari_kerja,
     temuan_pemanfaatan, temuan_pemindahtanganan, temuan_penatausahaan,
     temuan_pengamanan_pemeliharaan, temuan_penggunaan,
+    validate_penertiban, validate_selesai_penertiban,
 )
 
 HARI_INI = "2026-07-12"
@@ -103,3 +105,52 @@ def test_susun_dan_rekap():
     r = rekap_wasdal(per_objek)
     assert r["total"] == 1 and r["per_objek"]["penggunaan"] == 1
     assert r["per_jenis"] == {"pemegang_tanpa_bast": 1}
+
+
+# ── Penertiban (tenggat 15 hari kerja) ──
+
+def test_tambah_hari_kerja():
+    # Jumat 2026-07-10 + 1 hari kerja = Senin 2026-07-13 (lompat akhir pekan)
+    assert tambah_hari_kerja("2026-07-10", 1) == "2026-07-13"
+    # Senin 2026-07-13 + 5 hari kerja = Senin pekan berikutnya
+    assert tambah_hari_kerja("2026-07-13", 5) == "2026-07-20"
+    # Default 15 hari kerja = 3 pekan kalender
+    assert tambah_hari_kerja("2026-07-13") == "2026-08-03"
+    assert tambah_hari_kerja("bukan-tanggal") is None
+
+
+def test_sisa_hari_kerja():
+    assert sisa_hari_kerja("2026-07-10", "2026-07-13") == 1  # Jum → Sen
+    assert sisa_hari_kerja("2026-07-13", "2026-07-13") == 0
+    assert sisa_hari_kerja("2026-07-14", "2026-07-13") == 0  # sudah lewat
+    assert sisa_hari_kerja("x", "2026-07-13") is None
+
+
+def test_status_tenggat_penertiban():
+    tiket = {"status": "berjalan", "tenggat": "2026-07-20"}
+    info = status_tenggat_penertiban(tiket, "2026-07-13")
+    assert info == {"lewat": False, "sisa_hari_kerja": 5}
+    assert status_tenggat_penertiban(tiket, "2026-07-21")["lewat"] is True
+    selesai = {"status": "selesai", "tenggat": "2026-07-01"}
+    assert status_tenggat_penertiban(selesai, "2026-07-13") == {
+        "lewat": False, "sisa_hari_kerja": None}
+
+
+def test_validate_penertiban():
+    ok = {"sumber": "pemantauan", "tanggal_dasar": "2026-07-10",
+          "objek": "penggunaan", "uraian": "Aset dikuasai pihak ketiga"}
+    assert validate_penertiban(ok) == []
+    assert set(SUMBER_PENERTIBAN) == {"pemantauan", "permintaan_pengelola",
+                                      "apip_bpk"}
+    buruk = validate_penertiban({"sumber": "x", "objek": "y",
+                                 "uraian": " ", "tanggal_dasar": "z"})
+    assert len(buruk) == 4
+
+
+def test_validate_selesai_dan_rekap():
+    berjalan = {"status": "berjalan", "tenggat": "2026-07-01"}
+    assert validate_selesai_penertiban(berjalan, {"tindak_lanjut": "Ditertibkan"}) == []
+    assert validate_selesai_penertiban({"status": "selesai"},
+                                       {"tindak_lanjut": ""}) != []
+    r = rekap_penertiban([berjalan, {"status": "selesai"}], "2026-07-13")
+    assert r == {"total": 2, "berjalan": 1, "selesai": 1, "lewat_tenggat": 1}
