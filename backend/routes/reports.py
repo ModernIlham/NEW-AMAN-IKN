@@ -1578,6 +1578,134 @@ async def generate_posisi_bmn_pdf(_user: dict = Depends(require_user_or_query_to
                              headers={"Content-Disposition": 'attachment; filename="Posisi_BMN_Neraca.pdf"'})
 
 
+@reports_router.get("/pembukuan/rekonsiliasi-xlsx")
+async def generate_rekonsiliasi_xlsx(_user: dict = Depends(require_user_or_query_token)):
+    """Ekspor rekonsiliasi Posisi BMN (XLSX) — sandingan SAKTI/MonSAKTI.
+
+    Pustaka §2.3: ekspor pembanding rekonsiliasi. Tiga sheet dari data
+    nyata: Posisi per Golongan (intra/ekstra + persediaan + total),
+    Rincian Aset (klasifikasi per NUP), Rincian Persediaan (stok + nilai
+    FIFO per layer).
+    """
+    import xlsxwriter
+    from kodefikasi_utils import GOLONGAN_DEFAULTS
+    from pembukuan_utils import (
+        build_dbkp_rows, golongan_of, klasifikasi_komptabel, parse_harga,
+        posisi_neraca,
+    )
+    from persediaan_utils import nilai_persediaan_dari_batches
+
+    assets = await db.assets.find(
+        {}, {"_id": 0, "asset_code": 1, "NUP": 1, "asset_name": 1,
+             "purchase_price": 1, "location": 1, "condition": 1},
+    ).to_list(500000)
+    uraian_map = {k: u for k, u in GOLONGAN_DEFAULTS}
+    async for k in db.kodefikasi.find({"level": 1}, {"_id": 0, "kode": 1, "uraian": 1}):
+        if k.get("uraian"):
+            uraian_map[k["kode"]] = k["uraian"]
+    rows, total_aset = build_dbkp_rows(assets, uraian_map)
+    persediaan = await db.persediaan.find(
+        {}, {"_id": 0, "kode_barang": 1, "nup": 1, "nama_barang": 1,
+             "satuan": 1, "stok": 1, "batches": 1},
+    ).to_list(100000)
+    p_nilai = sum(nilai_persediaan_dari_batches(it.get("batches")) for it in persediaan)
+    posisi = posisi_neraca(rows, total_aset, len(persediaan), p_nilai)
+
+    buffer = io.BytesIO()
+    wb = xlsxwriter.Workbook(buffer, {"in_memory": True})
+    f_judul = wb.add_format({"bold": True})
+    f_kepala = wb.add_format({"bold": True, "bg_color": "#DDE6F2", "border": 1})
+    f_sel = wb.add_format({"border": 1})
+    f_angka = wb.add_format({"border": 1, "num_format": "#,##0"})
+    f_tebal = wb.add_format({"bold": True, "border": 1})
+    f_tebal_angka = wb.add_format({"bold": True, "border": 1, "num_format": "#,##0"})
+
+    today_iso = datetime.now(timezone.utc).date().isoformat()
+
+    # ── Sheet 1: posisi per golongan ─────────────────────────────────
+    s1 = wb.add_worksheet("Posisi Golongan")
+    s1.write(0, 0, f"Posisi BMN per {today_iso} — sandingan rekonsiliasi SAKTI/MonSAKTI "
+                   "(intra/ekstra per ambang PMK 181; persediaan FIFO per layer)", f_judul)
+    kolom1 = ["Gol", "Uraian", "Jml Intra", "Nilai Intra", "Jml Ekstra",
+              "Nilai Ekstra", "Jml Total", "Nilai Total"]
+    for c, h in enumerate(kolom1):
+        s1.write(2, c, h, f_kepala)
+    r = 3
+    for row in posisi["aset"]:
+        s1.write(r, 0, row["golongan"], f_sel)
+        s1.write(r, 1, row["uraian"], f_sel)
+        for c, key in enumerate(["jumlah_intra", "nilai_intra", "jumlah_ekstra",
+                                 "nilai_ekstra", "jumlah_total", "nilai_total"], start=2):
+            s1.write_number(r, c, row[key], f_angka)
+        r += 1
+    p = posisi["persediaan"]
+    s1.write(r, 0, "1", f_sel)
+    s1.write(r, 1, "Persediaan (aset lancar — nilai FIFO per layer)", f_sel)
+    for c, v in enumerate([p["jumlah"], p["nilai"], 0, 0, p["jumlah"], p["nilai"]], start=2):
+        s1.write_number(r, c, v, f_angka)
+    r += 1
+    g = posisi["total"]
+    s1.write(r, 0, "", f_tebal)
+    s1.write(r, 1, "TOTAL POSISI BMN", f_tebal)
+    for c, key in enumerate(["jumlah_intra", "nilai_intra", "jumlah_ekstra",
+                             "nilai_ekstra", "jumlah_total", "nilai_total"], start=2):
+        s1.write_number(r, c, g[key], f_tebal_angka)
+    s1.set_column(0, 0, 6)
+    s1.set_column(1, 1, 44)
+    s1.set_column(2, 7, 15)
+
+    # ── Sheet 2: rincian aset (dasar sanding per NUP) ────────────────
+    s2 = wb.add_worksheet("Rincian Aset")
+    kolom2 = ["Kode Barang", "NUP", "Nama Barang", "Gol", "Nilai Perolehan",
+              "Komptabel", "Kondisi", "Lokasi"]
+    for c, h in enumerate(kolom2):
+        s2.write(0, c, h, f_kepala)
+    for i, a in enumerate(sorted(
+            assets, key=lambda x: (str(x.get("asset_code") or ""), str(x.get("NUP") or ""))),
+            start=1):
+        harga = parse_harga(a.get("purchase_price"))
+        s2.write(i, 0, str(a.get("asset_code") or ""), f_sel)
+        s2.write(i, 1, str(a.get("NUP") or ""), f_sel)
+        s2.write(i, 2, str(a.get("asset_name") or ""), f_sel)
+        s2.write(i, 3, golongan_of(a.get("asset_code")) or "?", f_sel)
+        s2.write_number(i, 4, harga, f_angka)
+        s2.write(i, 5, klasifikasi_komptabel(a.get("asset_code"), harga), f_sel)
+        s2.write(i, 6, str(a.get("condition") or ""), f_sel)
+        s2.write(i, 7, str(a.get("location") or ""), f_sel)
+    s2.set_column(0, 0, 14)
+    s2.set_column(1, 1, 7)
+    s2.set_column(2, 2, 38)
+    s2.set_column(3, 3, 5)
+    s2.set_column(4, 4, 16)
+    s2.set_column(5, 7, 14)
+
+    # ── Sheet 3: rincian persediaan ──────────────────────────────────
+    s3 = wb.add_worksheet("Rincian Persediaan")
+    kolom3 = ["Kode Barang", "NUP", "Nama Barang", "Satuan", "Stok", "Nilai (FIFO)"]
+    for c, h in enumerate(kolom3):
+        s3.write(0, c, h, f_kepala)
+    for i, it in enumerate(sorted(
+            persediaan, key=lambda x: (str(x.get("nama_barang") or ""), str(x.get("kode_barang") or ""))),
+            start=1):
+        s3.write(i, 0, str(it.get("kode_barang") or ""), f_sel)
+        s3.write(i, 1, str(it.get("nup") or ""), f_sel)
+        s3.write(i, 2, str(it.get("nama_barang") or ""), f_sel)
+        s3.write(i, 3, str(it.get("satuan") or ""), f_sel)
+        s3.write_number(i, 4, int(it.get("stok", 0) or 0), f_angka)
+        s3.write_number(i, 5, nilai_persediaan_dari_batches(it.get("batches")), f_angka)
+    s3.set_column(0, 0, 18)
+    s3.set_column(1, 1, 7)
+    s3.set_column(2, 2, 38)
+    s3.set_column(3, 5, 12)
+
+    wb.close()
+    buffer.seek(0)
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="Rekonsiliasi_Posisi_BMN.xlsx"'})
+
+
 # ============================================================================
 # BAHI PDF
 # ============================================================================

@@ -113,6 +113,11 @@ export default function PelaporanPage({ onBack }) {
             data-testid="pelaporan-posisi-bmn">
             <FileDown className="w-3.5 h-3.5" />Unduh PDF
           </Button>
+          <Button variant="outline" size="sm" className="gap-1.5"
+            onClick={() => downloadFileWithProgress(`${API}/pembukuan/rekonsiliasi-xlsx`, "Rekonsiliasi_Posisi_BMN.xlsx", { label: "Ekspor Rekonsiliasi (XLSX)" }).catch(() => {})}
+            data-testid="pelaporan-rekonsiliasi">
+            <FileDown className="w-3.5 h-3.5" />Rekonsiliasi XLSX
+          </Button>
         </div>
 
         {/* ── Laporan persediaan (satker-wide) ── */}

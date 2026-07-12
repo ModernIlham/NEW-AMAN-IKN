@@ -1963,7 +1963,16 @@ async def delete_asset(asset_id: str, request: Request, _admin: dict = Depends(r
     invalidate_asset_cache()
     audit_user = _admin.get("name") or _admin.get("username") or request.headers.get("X-Audit-User", "unknown")
     audit_user_id = _admin.get("id") or request.headers.get("X-Audit-User-Id", "")
-    await log_audit("delete", asset_doc.get("activity_id", ""), asset_id, asset_doc.get("asset_code", ""), asset_doc.get("asset_name", ""), audit_user, detail="Aset dihapus", nup=asset_doc.get("NUP", ""))
+    # Nilai perolehan direkam di changes agar LBKP mutasi-kurang mendatang
+    # bisa menghitung NILAI barang yang dihapus, bukan hanya jumlahnya.
+    await log_audit(
+        "delete", asset_doc.get("activity_id", ""), asset_id,
+        asset_doc.get("asset_code", ""), asset_doc.get("asset_name", ""),
+        audit_user, detail="Aset dihapus", nup=asset_doc.get("NUP", ""),
+        changes=[{"field": "purchase_price",
+                  "from": str(asset_doc.get("purchase_price", "") or ""),
+                  "to": ""}],
+    )
     # Real-time notification
     await notify_asset_change(asset_doc.get("activity_id", ""), "asset_deleted", {"id": asset_id, "asset_code": asset_doc.get("asset_code", "")}, audit_user, user_id=audit_user_id)
     
