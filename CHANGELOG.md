@@ -48,6 +48,16 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#85] Impor/ekspor master persediaan + template + toolbar menu — 2026-07-12
+
+- **Impor CSV/XLSX master persediaan**: identitas (kode 16 + NUP) sudah ada
+  → perbarui field non-identitas; baru → jalur create (kode 10 digit
+  auto-suffix, NUP otomatis); stok/layer tak tersentuh; laporan per baris.
+- **Template CSV** + **Ekspor CSV** (master + stok & nilai FIFO terkini).
+- Toolbar persediaan dirapikan: menu **Dokumen** (Posisi/Mutasi/Kertas
+  Kerja/BAOF) + menu **Data** (Impor/Template/Ekspor) — ramah HP.
+  5 unit test parser impor (48 total lulus).
+
 ## [#84] Konsolidasi status modul Persediaan (dokumentasi) — 2026-07-12
 
 - Kartu modul Persediaan di Beranda Modul menampilkan fitur berjalan

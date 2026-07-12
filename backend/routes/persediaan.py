@@ -13,7 +13,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 
 from auth_utils import require_admin, require_user
@@ -23,8 +23,8 @@ from persediaan_utils import (
     JENIS_KELUAR, JENIS_MASUK, KODE_PENUH_LEN, KODE_PREFIX_LEN, SATUAN_BAKU,
     buat_layer, klasifikasi_kedaluwarsa, konsumsi_fifo, mutasi_periode,
     next_kode_penuh, next_nup, nilai_persediaan_dari_batches,
-    penyesuaian_opname, status_stok, validate_kode_persediaan,
-    validate_transaksi_keluar, validate_transaksi_masuk,
+    parse_import_persediaan_rows, penyesuaian_opname, status_stok,
+    validate_kode_persediaan, validate_transaksi_keluar, validate_transaksi_masuk,
 )
 
 persediaan_router = APIRouter()
@@ -198,6 +198,93 @@ def _fmt_rp(val):
         return f"{int(val):,}".replace(",", ".")
     except (ValueError, TypeError, OverflowError):
         return "0"
+
+
+_TEMPLATE_HEADERS = ["kode_barang", "nup", "nama_barang", "merk", "tipe", "satuan",
+                     "lokasi", "batas_kritis", "expired_default", "tahun_anggaran", "keterangan"]
+
+
+@persediaan_router.get("/persediaan/template")
+async def template_persediaan(_user: dict = Depends(require_user)):
+    """Template CSV impor master persediaan (kode 10 digit → nomor urut otomatis)."""
+    import csv as csv_module
+    import io
+
+    from fastapi.responses import Response
+
+    buf = io.StringIO()
+    w = csv_module.writer(buf)
+    w.writerow(_TEMPLATE_HEADERS)
+    w.writerow(["1010101001", "", "Kertas HVS A4 80gr", "SiDU", "", "Rim", "Gudang ATK", "5", "", "2026", ""])
+    w.writerow(["1010101001000002", "1", "Tinta Printer Hitam", "Epson", "003", "Botol", "Gudang ATK", "2", "", "2026", "contoh kode 16 digit"])
+    return Response(content=buf.getvalue().encode("utf-8-sig"), media_type="text/csv",
+                    headers={"Content-Disposition": 'attachment; filename="template_persediaan.csv"'})
+
+
+@persediaan_router.get("/persediaan/export")
+async def export_persediaan(_user: dict = Depends(require_user)):
+    """Ekspor CSV master persediaan + stok & nilai FIFO terkini."""
+    import csv as csv_module
+    import io
+
+    from fastapi.responses import Response
+
+    buf = io.StringIO()
+    w = csv_module.writer(buf)
+    w.writerow(_TEMPLATE_HEADERS + ["stok", "nilai"])
+    async for it in db.persediaan.find({}, {"_id": 0}).sort([("nama_barang", 1), ("kode_barang", 1)]):
+        w.writerow([
+            it.get("kode_barang"), it.get("nup"), it.get("nama_barang"),
+            it.get("merk"), it.get("tipe"), it.get("satuan"), it.get("lokasi"),
+            it.get("batas_kritis", 0), it.get("expired_default"),
+            it.get("tahun_anggaran"), it.get("keterangan"),
+            int(it.get("stok", 0) or 0),
+            int(nilai_persediaan_dari_batches(it.get("batches"))),
+        ])
+    return Response(content=buf.getvalue().encode("utf-8-sig"), media_type="text/csv",
+                    headers={"Content-Disposition": 'attachment; filename="master_persediaan.csv"'})
+
+
+@persediaan_router.post("/persediaan/import")
+async def import_persediaan(file: UploadFile = File(...), _user: dict = Depends(require_user)):
+    """Impor massal master (CSV/XLSX): kode 16+NUP sudah ada → perbarui field
+    non-identitas; selain itu buat baru (kode 10 digit → nomor urut otomatis,
+    NUP kosong → otomatis). Stok/layer TIDAK tersentuh impor."""
+    from routes.kodefikasi import _rows_from_upload
+
+    content = await file.read()
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File maksimal 10MB")
+    rows = _rows_from_upload(file.filename, content)
+    entries, errors, dupes = parse_import_persediaan_rows(rows)
+
+    inserted = updated = 0
+    now = datetime.now(timezone.utc).isoformat()
+    for e in entries:
+        kode, nup = e["kode_barang"], e["nup"]
+        scalar = {k: v for k, v in e.items() if k not in ("kode_barang", "nup")}
+        if len(kode) == KODE_PENUH_LEN and nup:
+            res = await db.persediaan.update_one(
+                {"kode_barang": kode, "nup": nup},
+                {"$set": {**scalar, "updated_at": now}, "$inc": {"version": 1}},
+            )
+            if res.matched_count:
+                updated += 1
+                continue
+        # buat baru — pakai jalur create agar aturan kode/NUP otomatis sama
+        try:
+            payload = PersediaanCreate(kode_barang=kode, nup=nup, **scalar)
+            await create_persediaan(payload, _user=_user)
+            inserted += 1
+        except HTTPException as exc:
+            errors.append(f"{kode}/{nup or 'auto'}: {exc.detail}")
+
+    return {
+        "message": f"Impor selesai: {inserted} baru, {updated} diperbarui",
+        "inserted": inserted, "updated": updated,
+        "duplikat_dalam_file": dupes,
+        "errors": errors[:50], "error_count": len(errors),
+    }
 
 
 @persediaan_router.get("/persediaan/opname/kertas-kerja-pdf")
