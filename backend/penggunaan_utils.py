@@ -195,6 +195,8 @@ def rekap_pemegang(assets):
 JENIS_PROSES_PENGGUNAAN = {
     "alih_status": "Alih Status Penggunaan",
     "penggunaan_sementara": "Penggunaan Sementara",
+    "dioperasikan_pihak_lain": "Dioperasikan Pihak Lain",
+    "penggunaan_bersama": "Penggunaan Bersama",
 }
 
 ARAH_PROSES = {"keluar": "Keluar (satker sebagai asal)",
@@ -230,6 +232,25 @@ TRANSISI_PROSES = {
         "berakhir": set(),
         "ditolak": set(),
     },
+    # Dioperasikan pihak lain (PENETAPAN Pengelola; pihak non-K/L) dan
+    # penggunaan bersama (Eminen + Kolaborator; persetujuan Pengelola) —
+    # keduanya berjangka, tanpa jalur pintas ≤6 bulan.
+    "dioperasikan_pihak_lain": {
+        "draf": {"diajukan"},
+        "diajukan": {"disetujui", "ditolak"},
+        "disetujui": {"berjalan"},
+        "berjalan": {"berakhir"},
+        "berakhir": set(),
+        "ditolak": set(),
+    },
+    "penggunaan_bersama": {
+        "draf": {"diajukan"},
+        "diajukan": {"disetujui", "ditolak"},
+        "disetujui": {"berjalan"},
+        "berjalan": {"berakhir"},
+        "berakhir": set(),
+        "ditolak": set(),
+    },
 }
 
 
@@ -252,14 +273,17 @@ def validate_proses_penggunaan(data: dict) -> list:
         errors.append("Minimal satu aset dipilih")
     mulai = str(data.get("tanggal_mulai") or "").strip()[:10]
     akhir = str(data.get("tanggal_berakhir") or "").strip()[:10]
-    if data.get("jenis_proses") == "penggunaan_sementara":
+    berjangka = data.get("jenis_proses") in (
+        "penggunaan_sementara", "dioperasikan_pihak_lain",
+        "penggunaan_bersama")
+    if berjangka:
         try:
             d_mulai = date.fromisoformat(mulai)
             d_akhir = date.fromisoformat(akhir)
             if d_akhir <= d_mulai:
                 errors.append("Tanggal berakhir harus setelah tanggal mulai")
         except ValueError:
-            errors.append("Penggunaan sementara wajib tanggal mulai/berakhir "
+            errors.append("Proses berjangka wajib tanggal mulai/berakhir "
                           "berformat YYYY-MM-DD")
     return errors
 
@@ -284,8 +308,10 @@ def info_proses_sementara(tiket: dict, today_iso: str) -> dict:
 
     kosong = {"berakhir": None, "lewat": False, "sisa_hari": None,
               "saatnya_perpanjangan": False}
-    if (tiket.get("jenis_proses") != "penggunaan_sementara"
-            or tiket.get("status") != "berjalan"):
+    berjangka = tiket.get("jenis_proses") in (
+        "penggunaan_sementara", "dioperasikan_pihak_lain",
+        "penggunaan_bersama")
+    if not berjangka or tiket.get("status") != "berjalan":
         return kosong
     berakhir = str(tiket.get("tanggal_berakhir") or "").strip()[:10]
     try:

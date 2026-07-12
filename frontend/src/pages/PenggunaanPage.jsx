@@ -468,7 +468,7 @@ export default function PenggunaanPage({ user, onBack }) {
             <div className="min-w-0 flex-1">
               <p className="text-xs font-bold text-foreground">Proses Alih Status & Penggunaan Sementara</p>
               <p className="text-[10px] text-muted-foreground truncate">
-                Antar Pengguna Barang (PMK 40/2024) — pengajuan resmi via SIMAN/DJKN
+                Alih status · sementara · dioperasikan pihak lain · bersama (PMK 40/2024) — resmi via SIMAN/DJKN
               </p>
             </div>
             {(proses?.ringkasan?.segera_berakhir || 0) > 0 && (
@@ -516,7 +516,7 @@ export default function PenggunaanPage({ user, onBack }) {
                       t.nomor_bast && `BAST ${t.nomor_bast}`,
                       t.nomor_sk_penghapusan && `SK Hapus ${t.nomor_sk_penghapusan}`,
                       t.nomor_perjanjian && `Perjanjian ${t.nomor_perjanjian}`,
-                      t.jenis_proses === "penggunaan_sementara" && t.tanggal_mulai && `${t.tanggal_mulai} s.d. ${t.tanggal_berakhir}`,
+                      t.tanggal_mulai && t.tanggal_berakhir && `${t.tanggal_mulai} s.d. ${t.tanggal_berakhir}`,
                       t.keterangan, `oleh ${t.created_by}`].filter(Boolean).join(" · ")}
                   </p>
                   <div className="flex gap-1.5 mt-1.5 flex-wrap items-center">
@@ -662,7 +662,7 @@ export default function PenggunaanPage({ user, onBack }) {
                     onChange={(e) => setFormProses((f) => ({ ...f, data: { ...f.data, tanggal_permohonan: e.target.value } }))}
                     data-testid="proses-tgl" />
                 </div>
-                {formProses.data.jenis_proses === "penggunaan_sementara" && (
+                {["penggunaan_sementara", "dioperasikan_pihak_lain", "penggunaan_bersama"].includes(formProses.data.jenis_proses) && (
                   <>
                     <div>
                       <label className="text-xs font-medium text-foreground block mb-1" htmlFor="prs-mulai">Mulai</label>
