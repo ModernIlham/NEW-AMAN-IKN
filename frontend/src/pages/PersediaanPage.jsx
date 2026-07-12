@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Search, Plus, Pencil, Trash2, Loader2, Boxes,
-  ChevronLeft, ChevronRight, PackagePlus, History,
+  ChevronLeft, ChevronRight, PackagePlus, PackageMinus, History,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,10 +57,12 @@ export default function PersediaanPage({ user, onBack }) {
   // Dialog: {mode:"tambah", data} | {mode:"edit", id, version, data}
   const [form, setForm] = useState(null);
   const [saving, setSaving] = useState(false);
-  // Transaksi masuk: {item, data:{jenis,jumlah,...}}; riwayat: {item, rows, loading}
+  // Transaksi masuk/keluar: {item, data:{jenis,jumlah,...}}; riwayat: {item, rows, loading}
   const [masuk, setMasuk] = useState(null);
+  const [keluar, setKeluar] = useState(null);
   const [riwayat, setRiwayat] = useState(null);
   const [jenisMasuk, setJenisMasuk] = useState([]);
+  const [jenisKeluar, setJenisKeluar] = useState([]);
   const { confirm, confirmDialog } = useConfirm();
   const searchTimer = useRef(null);
 
@@ -89,8 +91,8 @@ export default function PersediaanPage({ user, onBack }) {
       .then((r) => setSatuanList(Array.isArray(r.data) ? r.data : []))
       .catch(() => setSatuanList([]));
     axios.get(`${API}/persediaan/jenis-transaksi`)
-      .then((r) => setJenisMasuk(r.data?.masuk || []))
-      .catch(() => setJenisMasuk([]));
+      .then((r) => { setJenisMasuk(r.data?.masuk || []); setJenisKeluar(r.data?.keluar || []); })
+      .catch(() => { setJenisMasuk([]); setJenisKeluar([]); });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onSearchChange = (v) => {
@@ -150,6 +152,24 @@ export default function PersediaanPage({ user, onBack }) {
       load(page, search, status);
     } catch (err) {
       toast.error(getApiError(err, "Gagal mencatat transaksi masuk"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const submitKeluar = async () => {
+    if (!keluar) return;
+    const d = keluar.data;
+    const jumlah = parseInt(d.jumlah, 10);
+    if (!jumlah || jumlah <= 0) { toast.error("Jumlah harus lebih dari 0"); return; }
+    setSaving(true);
+    try {
+      const r = await axios.post(`${API}/persediaan/${keluar.item.id}/keluar`, { ...d, jumlah });
+      toast.success(`${r.data?.message} — nilai keluar ${fmtRp(r.data?.nilai_keluar)}, stok kini ${r.data?.stok}`);
+      setKeluar(null);
+      load(page, search, status);
+    } catch (err) {
+      toast.error(getApiError(err, "Gagal mencatat transaksi keluar"));
     } finally {
       setSaving(false);
     }
@@ -316,6 +336,20 @@ export default function PersediaanPage({ user, onBack }) {
                           data-testid={`persediaan-masuk-${it.kode_barang}-${it.nup}`}
                         >
                           <PackagePlus className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setKeluar({
+                            item: it,
+                            data: { jenis: "habis_pakai", jumlah: "", unit_penerima: "", no_bukti: "", keterangan: "" },
+                          })}
+                          disabled={!it.stok}
+                          aria-label={`Transaksi keluar ${it.nama_barang}`}
+                          title={it.stok ? "Transaksi keluar (FIFO)" : "Stok kosong"}
+                          className="p-1.5 rounded-md text-red-600 dark:text-red-400 hover:bg-red-500/10 disabled:opacity-30 min-w-0 min-h-0"
+                          data-testid={`persediaan-keluar-${it.kode_barang}-${it.nup}`}
+                        >
+                          <PackageMinus className="w-3.5 h-3.5" />
                         </button>
                         <button
                           type="button"
@@ -554,6 +588,68 @@ export default function PersediaanPage({ user, onBack }) {
             <Button variant="outline" onClick={() => setMasuk(null)}>Batal</Button>
             <Button onClick={submitMasuk} disabled={saving} className="bg-emerald-600 hover:bg-emerald-700" data-testid="persediaan-masuk-simpan">
               {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <PackagePlus className="w-4 h-4 mr-1.5" />}Catat Masuk
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog transaksi keluar ── */}
+      <Dialog open={!!keluar} onOpenChange={(o) => { if (!o) setKeluar(null); }}>
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Transaksi Keluar — {keluar?.item?.nama_barang}</DialogTitle>
+            <DialogDescription className="text-xs">
+              Mengonsumsi layer FIFO tertua dulu; nilai keluar dihitung dari harga
+              layer terpakai. Stok tersedia: {keluar?.item?.stok}.
+            </DialogDescription>
+          </DialogHeader>
+          {keluar && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-out-jenis">Jenis</label>
+                <select
+                  id="psd-out-jenis"
+                  value={keluar.data.jenis}
+                  onChange={(e) => setKeluar((m) => ({ ...m, data: { ...m.data, jenis: e.target.value } }))}
+                  className="w-full h-9 px-2 rounded-lg border border-border bg-background text-sm text-foreground"
+                  data-testid="persediaan-keluar-jenis"
+                >
+                  {(jenisKeluar.length ? jenisKeluar : [{ key: "habis_pakai", label: "Habis Pakai/Pemakaian", kode: "K01" }]).map((j) => (
+                    <option key={j.key} value={j.key}>{j.label} ({j.kode})</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-out-jumlah">Jumlah (maks {keluar.item.stok})</label>
+                <Input id="psd-out-jumlah" type="number" min="1" max={keluar.item.stok} placeholder="0"
+                  value={keluar.data.jumlah}
+                  onChange={(e) => setKeluar((m) => ({ ...m, data: { ...m.data, jumlah: e.target.value } }))}
+                  data-testid="persediaan-keluar-jumlah" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-out-unit">Unit Penerima</label>
+                <Input id="psd-out-unit" placeholder="cth. Bagian Umum"
+                  value={keluar.data.unit_penerima}
+                  onChange={(e) => setKeluar((m) => ({ ...m, data: { ...m.data, unit_penerima: e.target.value } }))} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-out-bukti">No. Bukti</label>
+                <Input id="psd-out-bukti"
+                  value={keluar.data.no_bukti}
+                  onChange={(e) => setKeluar((m) => ({ ...m, data: { ...m.data, no_bukti: e.target.value } }))} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-out-ket">Keterangan</label>
+                <Input id="psd-out-ket"
+                  value={keluar.data.keterangan}
+                  onChange={(e) => setKeluar((m) => ({ ...m, data: { ...m.data, keterangan: e.target.value } }))} />
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setKeluar(null)}>Batal</Button>
+            <Button onClick={submitKeluar} disabled={saving} className="bg-red-600 hover:bg-red-700" data-testid="persediaan-keluar-simpan">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <PackageMinus className="w-4 h-4 mr-1.5" />}Catat Keluar
             </Button>
           </DialogFooter>
         </DialogContent>

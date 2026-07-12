@@ -105,6 +105,68 @@ JENIS_MASUK = {
 }
 
 
+JENIS_KELUAR = {
+    "habis_pakai": ("Habis Pakai/Pemakaian", "K01"),
+    "transfer_keluar": ("Transfer Keluar", "K02"),
+    "hibah_keluar": ("Hibah Keluar", "K03"),
+    "usang": ("Usang", "K04"),
+    "rusak": ("Rusak", "K05"),
+}
+
+
+def validate_transaksi_keluar(jenis: str, jumlah, stok_tersedia: int):
+    """(ok, err) — jenis dikenal, jumlah bulat > 0 dan <= stok tersedia."""
+    if jenis not in JENIS_KELUAR:
+        valid = ", ".join(JENIS_KELUAR)
+        return False, f"Jenis transaksi keluar tidak dikenal (pilihan: {valid})"
+    try:
+        j = int(jumlah)
+    except (ValueError, TypeError):
+        return False, "Jumlah harus bilangan bulat"
+    if j <= 0:
+        return False, "Jumlah harus lebih dari 0"
+    if j > int(stok_tersedia or 0):
+        return False, f"Stok tidak cukup — tersedia {int(stok_tersedia or 0)}"
+    return True, ""
+
+
+def konsumsi_fifo(batches, jumlah: int):
+    """Konsumsi layer FIFO tertua dulu → (batches_sisa, total_nilai, rincian).
+
+    - Layer diurutkan menaik berdasarkan `tanggal` (string ISO — urutan
+      leksikografis = kronologis); layer qty<=0 dibuang.
+    - Nilai keluar = Σ (qty terpakai × harga layer) — penilaian FIFO murni,
+      BUKAN rata-rata (pustaka §3.1).
+    - rincian: [{batch_id, qty, harga}] layer yang terpakai (jejak jurnal).
+    - Stok kurang → ValueError (pemanggil sudah memvalidasi; ini pagar akhir).
+    """
+    sisa_butuh = int(jumlah)
+    if sisa_butuh <= 0:
+        raise ValueError("Jumlah keluar harus lebih dari 0")
+    urut = sorted((dict(b) for b in (batches or []) if int(b.get("qty", 0) or 0) > 0),
+                  key=lambda b: str(b.get("tanggal", "")))
+    total_nilai = 0.0
+    rincian = []
+    batches_sisa = []
+    for b in urut:
+        qty = int(b.get("qty", 0) or 0)
+        harga = float(b.get("harga", 0) or 0)
+        if sisa_butuh <= 0:
+            batches_sisa.append(b)
+            continue
+        ambil = min(qty, sisa_butuh)
+        total_nilai += ambil * harga
+        rincian.append({"batch_id": b.get("batch_id"), "qty": ambil, "harga": harga})
+        sisa_butuh -= ambil
+        if qty > ambil:
+            b["qty"] = qty - ambil
+            batches_sisa.append(b)
+        # layer habis → tidak ikut sisa
+    if sisa_butuh > 0:
+        raise ValueError("Stok layer tidak mencukupi jumlah keluar")
+    return batches_sisa, total_nilai, rincian
+
+
 def validate_transaksi_masuk(jenis: str, jumlah, harga_satuan):
     """(ok, err) — jenis dikenal, jumlah bulat > 0, harga >= 0."""
     if jenis not in JENIS_MASUK:
