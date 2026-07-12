@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Search, Plus, Pencil, Trash2, Loader2, Boxes,
   ChevronLeft, ChevronRight, PackagePlus, PackageMinus, History,
+  AlertTriangle, FileDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
+import { downloadFileWithProgress } from "@/lib/downloadFile";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -63,6 +65,7 @@ export default function PersediaanPage({ user, onBack }) {
   const [riwayat, setRiwayat] = useState(null);
   const [jenisMasuk, setJenisMasuk] = useState([]);
   const [jenisKeluar, setJenisKeluar] = useState([]);
+  const [peringatan, setPeringatan] = useState(null);
   const { confirm, confirmDialog } = useConfirm();
   const searchTimer = useRef(null);
 
@@ -93,6 +96,9 @@ export default function PersediaanPage({ user, onBack }) {
     axios.get(`${API}/persediaan/jenis-transaksi`)
       .then((r) => { setJenisMasuk(r.data?.masuk || []); setJenisKeluar(r.data?.keluar || []); })
       .catch(() => { setJenisMasuk([]); setJenisKeluar([]); });
+    axios.get(`${API}/persediaan/peringatan`)
+      .then((r) => setPeringatan(r.data))
+      .catch(() => setPeringatan(null));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onSearchChange = (v) => {
@@ -232,6 +238,41 @@ export default function PersediaanPage({ user, onBack }) {
       </header>
 
       <main className="max-w-5xl mx-auto px-3 sm:px-6 py-4 space-y-3">
+        {/* ── Banner peringatan (kritis/habis/kedaluwarsa) + nota dinas ── */}
+        {peringatan && peringatan.total_masalah > 0 && (
+          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-xl p-2.5 sm:p-3 flex items-center gap-2 flex-wrap" data-testid="persediaan-peringatan">
+            <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+            <p className="text-xs text-amber-800 dark:text-amber-300 flex-1 min-w-[180px]">
+              {[
+                peringatan.habis.length > 0 && `${peringatan.habis.length} habis`,
+                peringatan.kritis.length > 0 && `${peringatan.kritis.length} kritis`,
+                peringatan.kedaluwarsa.length > 0 && `${peringatan.kedaluwarsa.length} kedaluwarsa`,
+                peringatan.segera_kedaluwarsa.length > 0 && `${peringatan.segera_kedaluwarsa.length} segera kedaluwarsa (≤${peringatan.horizon_hari} hari)`,
+              ].filter(Boolean).join(" · ")}
+            </p>
+            {(peringatan.habis.length > 0 || peringatan.kritis.length > 0) && (
+              <button
+                type="button"
+                onClick={() => downloadFileWithProgress(`${API}/persediaan/nota-dinas?jenis=kritis`, "Nota_Dinas_Stok_Kritis.pdf", { label: "Nota Dinas Stok Kritis" }).catch(() => {})}
+                className="h-8 px-2.5 rounded-lg border border-amber-400 dark:border-amber-600 text-[11px] font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-1 hover:bg-amber-100 dark:hover:bg-amber-900/40 min-w-0 min-h-0"
+                data-testid="persediaan-nota-kritis"
+              >
+                <FileDown className="w-3.5 h-3.5" />Nota Dinas Kritis
+              </button>
+            )}
+            {(peringatan.kedaluwarsa.length > 0 || peringatan.segera_kedaluwarsa.length > 0) && (
+              <button
+                type="button"
+                onClick={() => downloadFileWithProgress(`${API}/persediaan/nota-dinas?jenis=kedaluwarsa`, "Nota_Dinas_Kedaluwarsa.pdf", { label: "Nota Dinas Kedaluwarsa" }).catch(() => {})}
+                className="h-8 px-2.5 rounded-lg border border-amber-400 dark:border-amber-600 text-[11px] font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-1 hover:bg-amber-100 dark:hover:bg-amber-900/40 min-w-0 min-h-0"
+                data-testid="persediaan-nota-kedaluwarsa"
+              >
+                <FileDown className="w-3.5 h-3.5" />Nota Dinas Kedaluwarsa
+              </button>
+            )}
+          </div>
+        )}
+
         {/* ── Toolbar ── */}
         <div className="bg-card rounded-xl border border-border shadow-sm p-2 sm:p-3 space-y-2">
           <div className="flex items-center gap-2 flex-wrap">

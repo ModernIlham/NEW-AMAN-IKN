@@ -200,6 +200,41 @@ def buat_layer(batch_id: str, tanggal_iso: str, jumlah: int, harga_satuan: float
     }
 
 
+def klasifikasi_kedaluwarsa(batches, today_iso: str, horizon_hari: int = 30):
+    """Pilah layer ber-kedaluwarsa → (lewat, segera) relatif `today_iso`.
+
+    today_iso 'YYYY-MM-DD' dipasok pemanggil — fungsi tetap deterministik/
+    murni. `lewat` = expired <= hari ini; `segera` = expired dalam
+    `horizon_hari` ke depan. Layer tanpa expired / qty 0 / tanggal rusak
+    diabaikan.
+    """
+    from datetime import date
+
+    try:
+        today = date.fromisoformat((today_iso or "")[:10])
+    except ValueError:
+        return [], []
+    lewat, segera = [], []
+    for b in batches or []:
+        exp_raw = str(b.get("expired") or "").strip()[:10]
+        if not exp_raw:
+            continue
+        try:
+            exp = date.fromisoformat(exp_raw)
+        except ValueError:
+            continue
+        qty = int(b.get("qty", 0) or 0)
+        if qty <= 0:
+            continue
+        info = {"batch_id": b.get("batch_id"), "qty": qty,
+                "harga": float(b.get("harga", 0) or 0), "expired": exp_raw}
+        if exp <= today:
+            lewat.append(info)
+        elif (exp - today).days <= int(horizon_hari):
+            segera.append(info)
+    return lewat, segera
+
+
 def status_stok(stok: int, batas_kritis) -> str:
     """'habis' | 'kritis' | 'aman' — untuk peringatan & nota dinas kelak."""
     try:

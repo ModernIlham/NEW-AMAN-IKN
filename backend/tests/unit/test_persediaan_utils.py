@@ -6,8 +6,8 @@ from persediaan_fields import (
 )
 from persediaan_utils import (
     JENIS_KELUAR, JENIS_MASUK, KODE_PENUH_LEN, KODE_PREFIX_LEN, SATUAN_BAKU,
-    buat_layer, konsumsi_fifo, next_kode_penuh, next_nup,
-    nilai_persediaan_dari_batches, status_stok, stok_dari_batches,
+    buat_layer, klasifikasi_kedaluwarsa, konsumsi_fifo, next_kode_penuh,
+    next_nup, nilai_persediaan_dari_batches, status_stok, stok_dari_batches,
     validate_kode_persediaan, validate_transaksi_keluar, validate_transaksi_masuk,
 )
 
@@ -196,6 +196,36 @@ class TestKonsumsiFifo:
         layers = self._layers()
         sisa, _, _ = konsumsi_fifo(layers, 5)
         assert stok_dari_batches(sisa) == stok_dari_batches(layers) - 5
+
+
+class TestKlasifikasiKedaluwarsa:
+    def _batches(self):
+        return [
+            {"batch_id": "a", "qty": 5, "harga": 100, "expired": "2026-07-01"},   # lewat
+            {"batch_id": "b", "qty": 3, "harga": 200, "expired": "2026-07-12"},   # tepat hari ini = lewat
+            {"batch_id": "c", "qty": 2, "harga": 300, "expired": "2026-08-01"},   # segera (<=30 hari)
+            {"batch_id": "d", "qty": 1, "harga": 400, "expired": "2026-12-31"},   # aman
+            {"batch_id": "e", "qty": 4, "harga": 500, "expired": ""},             # tanpa expired
+            {"batch_id": "f", "qty": 0, "harga": 600, "expired": "2026-07-01"},   # qty 0 diabaikan
+            {"batch_id": "g", "qty": 2, "harga": 700, "expired": "31-12-2026"},   # tanggal rusak
+        ]
+
+    def test_pilah_lewat_dan_segera(self):
+        lewat, segera = klasifikasi_kedaluwarsa(self._batches(), "2026-07-12", 30)
+        assert [b["batch_id"] for b in lewat] == ["a", "b"]
+        assert [b["batch_id"] for b in segera] == ["c"]
+        assert lewat[0] == {"batch_id": "a", "qty": 5, "harga": 100.0, "expired": "2026-07-01"}
+
+    def test_horizon_mempengaruhi_segera(self):
+        _, segera_pendek = klasifikasi_kedaluwarsa(self._batches(), "2026-07-12", 7)
+        assert segera_pendek == []
+        _, segera_panjang = klasifikasi_kedaluwarsa(self._batches(), "2026-07-12", 365)
+        assert [b["batch_id"] for b in segera_panjang] == ["c", "d"]
+
+    def test_input_kosong_atau_tanggal_rusak(self):
+        assert klasifikasi_kedaluwarsa(None, "2026-07-12") == ([], [])
+        assert klasifikasi_kedaluwarsa([], "2026-07-12") == ([], [])
+        assert klasifikasi_kedaluwarsa(self._batches(), "bukan-tanggal") == ([], [])
 
 
 class TestRegistry:
