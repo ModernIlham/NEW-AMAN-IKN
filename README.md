@@ -22,12 +22,12 @@ tiap rilis/PR (termasuk catatan teknis penting soal aturan tap-target 44px di �
 AMAN berkembang bertahap dari aplikasi inventarisasi menjadi platform siklus
 penuh pengelolaan BMN (PP 27/2014). **Beranda Modul** — halaman pertama
 setelah login — memetakan seluruh tahap siklus: *Penatausahaan ›
-Inventarisasi Aset* aktif penuh; **13 modul siklus sudah Sebagian
-Aktif** (Persediaan, Pelaporan, Perencanaan, Penganggaran, Penggunaan,
-Pemanfaatan, Penilaian, Pengamanan, Pemeliharaan, Pemindahtanganan,
-Pemusnahan, Penghapusan, Wasdal) — semua kartu siklus bisa dimasuki;
-sisanya (Pengadaan, Pembukuan/KIB) berstatus **Segera Hadir** lengkap
-dengan konsep & rencana fiturnya.
+Inventarisasi Aset* aktif penuh; **SEMUA 14 modul siklus lainnya sudah
+Sebagian Aktif** (Persediaan, Pelaporan, Perencanaan, Penganggaran,
+Pengadaan, Penggunaan, Pemanfaatan, Penilaian, Pengamanan, Pemeliharaan,
+Pemindahtanganan, Pemusnahan, Penghapusan, Wasdal) — seluruh kartu siklus
+bisa dimasuki; hanya sub-modul Pembukuan/KIB yang masih **Segera Hadir**
+(menunggu verifikasi lampiran PMK 181).
 
 - Rencana induk & prinsip integrasi antar modul: [`docs/MASTERPLAN-SIKLUS-BMN.md`](./docs/MASTERPLAN-SIKLUS-BMN.md)
 - Rujukan regulasi & alur bisnis: [`docs/PUSTAKA-REGULASI-BMN.md`](./docs/PUSTAKA-REGULASI-BMN.md)
@@ -56,7 +56,10 @@ riwayat biaya Pemeliharaan) (#99) + **kertas kerja XLSX** siap diisi
 satker untuk dibawa ke SIMAN (#100) · Penganggaran — **register
 usulan berstatus** diusulkan → disetujui telaah → masuk DIPA →
 terealisasi, nilai per tahap + serapan (PMK 62/2023 + 153/2021)
-(#115). Pelaporan Fase 2 juga tuntas inti:
+(#115) · Pengadaan — **register perolehan per BAST/kontrak** dengan
+checklist dokumen sumber, tautan barang ke aset master, dan penanda
+ekstrakomptabel PMK 181 (Perpres 16/2018 jo. 46/2025) (#117).
+Pelaporan Fase 2 juga tuntas inti:
 Posisi BMN di Neraca (#93), rekonsiliasi XLSX (#94), LBKP mutasi (#95),
 Kartu Barang (#97), transaksi massal persediaan (#98).
 
