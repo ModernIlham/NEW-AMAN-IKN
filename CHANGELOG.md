@@ -48,6 +48,14 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#142] Pemantauan insidentil wasdal (10+5 hari kerja) + PDF BA — 2026-07-12
+
+- **Pemantauan insidentil** (PMK 207/2021): pemicu masyarakat/media/
+  audit, alur berjalan → BA terbit → dilaporkan dengan tenggat
+  pelaksanaan 10 hari kerja + lapor 5 hari kerja sejak BA, peringatan
+  lewat tenggat; **PDF Berita Acara siap tanda tangan** (placeholder
+  bila BA belum terbit, smoke pypdfium2). Suite 208.
+
 ## [#141] Konsolidasi dokumentasi #140 — 2026-07-12
 
 - **Dokumentasi saja**: README blok Progres Fase 5–6 + penanda roadmap
