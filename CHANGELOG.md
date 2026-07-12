@@ -48,6 +48,11 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#155] Konsolidasi dokumentasi #154 — 2026-07-12
+
+- **Dokumentasi saja**: README blok Progres Fase 2 + roadmap masterplan
+  (pindah gudang ✅; fase 2 tersisa hanya KIB).
+
 ## [#154] Pindah gudang persediaan ber-jurnal — 2026-07-12
 
 - **Pindah gudang per barang**: lokasi berpindah anti-balapan, stok &
