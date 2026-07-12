@@ -2,9 +2,10 @@ import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Loader2, ClipboardList, CheckCircle2, XCircle, Coins,
+  ArrowLeft, Loader2, ClipboardList, CheckCircle2, XCircle, Coins, FileDown,
 } from "lucide-react";
 import { useBackGuard } from "@/hooks/useBackGuard";
+import { downloadFileWithProgress } from "@/lib/downloadFile";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -70,6 +71,18 @@ export default function PerencanaanPage({ onBack }) {
           >
             {[th, th - 1, th - 2].map((t) => <option key={t} value={t}>TA {t}</option>)}
           </select>
+          <button
+            type="button"
+            onClick={() => downloadFileWithProgress(
+              `${API}/perencanaan/rkbmn-pemeliharaan-xlsx?tahun=${tahun}`,
+              `Usulan_RKBMN_Pemeliharaan_TA${tahun + 1}.xlsx`,
+              { label: "Kertas kerja usulan RKBMN" },
+            ).catch(() => {})}
+            className="h-8 px-2.5 rounded-lg border border-border text-xs font-semibold text-foreground/80 flex items-center gap-1.5 hover:bg-muted flex-shrink-0 min-h-0"
+            data-testid="perencanaan-xlsx"
+          >
+            <FileDown className="w-3.5 h-3.5" /><span className="hidden sm:inline">Kertas Kerja</span>
+          </button>
         </div>
       </header>
 
