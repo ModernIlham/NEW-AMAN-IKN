@@ -109,6 +109,20 @@ export default function PelaporanPage({ user, onBack }) {
     }
   };
 
+  const aturTenggat = async (p) => {
+    const tenggat = window.prompt(
+      `Tenggat penyampaian ${p.label} (YYYY-MM-DD; kosongkan untuk menghapus):`,
+      p.tenggat || "");
+    if (tenggat === null) return;
+    try {
+      await axios.post(`${API}/pelaporan/periode/${p.id}/tenggat`, { tenggat: tenggat.trim() });
+      toast.success(tenggat.trim() ? "Tenggat tersimpan" : "Tenggat dihapus");
+      muatPeriode();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal mengatur tenggat");
+    }
+  };
+
   const filtered = useMemo(() => {
     const s = search.trim().toLowerCase();
     const rows = !s ? activities : activities.filter((a) =>
@@ -281,6 +295,22 @@ export default function PelaporanPage({ user, onBack }) {
                       <span className="text-[10px] text-muted-foreground">
                         terkunci {String(p.tanggal_kunci || "").slice(0, 10)} oleh {p.dikunci_oleh}
                       </span>
+                    )}
+                    {p.info_tenggat?.tenggat && p.info_tenggat.lewat && (
+                      <span className="px-1.5 py-0.5 rounded bg-red-500/15 text-red-600 dark:text-red-400 text-[10px] font-semibold">
+                        Lewat tenggat {p.info_tenggat.tenggat}
+                      </span>
+                    )}
+                    {p.info_tenggat?.tenggat && !p.info_tenggat.lewat && (
+                      <span className="text-[10px] text-muted-foreground">
+                        tenggat {p.info_tenggat.tenggat} (sisa {p.info_tenggat.sisa_hari} hari)
+                      </span>
+                    )}
+                    {isAdmin && p.status === "terbuka" && (
+                      <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                        onClick={() => aturTenggat(p)} data-testid={`pelaporan-periode-tenggat-${p.id}`}>
+                        <CalendarCheck className="w-3 h-3 mr-1" />Tenggat
+                      </Button>
                     )}
                     {isAdmin && p.status === "terbuka" && (
                       <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"

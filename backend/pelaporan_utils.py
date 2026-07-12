@@ -77,6 +77,43 @@ def cari_periode(items, tahun, semester=None):
     return None
 
 
+def validate_tenggat(data: dict) -> list:
+    """Validasi pengaturan tenggat periode (YYYY-MM-DD; kosong = hapus)."""
+    from datetime import date
+
+    tenggat = str(data.get("tenggat") or "").strip()
+    if not tenggat:
+        return []
+    try:
+        date.fromisoformat(tenggat[:10])
+    except ValueError:
+        return ["Tenggat tidak valid (YYYY-MM-DD)"]
+    return []
+
+
+def info_tenggat_periode(periode: dict, today_iso: str) -> dict:
+    """Pengingat tenggat penyampaian periode TERBUKA → {tenggat, lewat,
+    sisa_hari}. Periode terkunci/tanpa tenggat tidak diingatkan.
+
+    Sisa dihitung hari kalender — tenggat penyampaian laporan ditetapkan
+    sebagai tanggal (surat DJKN/K/L per periode), bukan hari kerja.
+    """
+    from datetime import date
+
+    kosong = {"tenggat": None, "lewat": False, "sisa_hari": None}
+    tenggat = str(periode.get("tenggat") or "").strip()[:10]
+    if periode.get("status") != "terbuka" or not tenggat:
+        return kosong
+    try:
+        batas = date.fromisoformat(tenggat)
+        hari_ini = date.fromisoformat(str(today_iso)[:10])
+    except ValueError:
+        return kosong
+    selisih = (batas - hari_ini).days
+    return {"tenggat": tenggat, "lewat": selisih < 0,
+            "sisa_hari": max(0, selisih)}
+
+
 def penanda_final(periode) -> str:
     """Sufiks subjudul laporan bila periodenya terkunci; '' bila tidak."""
     if not periode or periode.get("status") != "terkunci":
