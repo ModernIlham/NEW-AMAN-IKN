@@ -78,3 +78,34 @@ def test_rekap():
     assert r["per_bentuk"]["hibah"] == 1
     assert r["nilai"] == pytest.approx(1_750_000)
     assert set(BENTUK_PEMINDAHTANGANAN) == set(r["per_bentuk"])
+
+
+def test_sarankan_jenjang():
+    from pemindahtanganan_utils import (
+        AMBANG_PERSETUJUAN_PT, JENJANG_PERSETUJUAN, sarankan_jenjang,
+    )
+    M = 1_000_000_000
+    # Selain tanah/bangunan: tiga tingkat 10 M / 100 M
+    assert sarankan_jenjang("penjualan_lelang", "selain_tanah_bangunan", 5 * M)["jenjang"] == "pengelola"
+    assert sarankan_jenjang("penjualan_lelang", "selain_tanah_bangunan", 50 * M)["jenjang"] == "presiden"
+    assert sarankan_jenjang("penjualan_lelang", "selain_tanah_bangunan", 150 * M)["jenjang"] == "dpr"
+    # Batas persis: 10 M → pengelola (bukan presiden); 100 M → presiden (bukan dpr)
+    assert sarankan_jenjang("hibah", "selain_tanah_bangunan", 10 * M)["jenjang"] == "pengelola"
+    assert sarankan_jenjang("hibah", "selain_tanah_bangunan", 100 * M)["jenjang"] == "presiden"
+    # Tanah/bangunan umum → DPR tanpa batas
+    assert sarankan_jenjang("tukar_menukar", "tanah_bangunan", 1 * M)["jenjang"] == "dpr"
+    # Tanah/bangunan terkecuali → ikut nilai (Presiden bila > 10 M)
+    assert sarankan_jenjang("tukar_menukar", "tanah_bangunan", 5 * M, tb_terkecuali=True)["jenjang"] == "pengelola"
+    assert sarankan_jenjang("tukar_menukar", "tanah_bangunan", 20 * M, tb_terkecuali=True)["jenjang"] == "presiden"
+    # PMPP: naikkan floor ke Presiden bila hasil pengelola
+    pmpp = sarankan_jenjang("pmpp", "selain_tanah_bangunan", 5 * M)
+    assert pmpp["jenjang"] == "presiden" and any("PMPP" in c for c in pmpp["catatan"])
+    # Hibah low-value: catatan Pengguna Barang, tetap jenjang pengelola
+    hibah = sarankan_jenjang("hibah", "selain_tanah_bangunan", 50_000_000)
+    assert hibah["jenjang"] == "pengelola" and any("Pengguna Barang" in c for c in hibah["catatan"])
+    # Keluaran punya label + disclaimer
+    s = sarankan_jenjang("penjualan_lelang", "selain_tanah_bangunan", 5 * M)
+    assert s["jenjang_label"] == JENJANG_PERSETUJUAN["pengelola"]
+    assert "Indikatif" in s["disclaimer"]
+    # Referensi konsisten
+    assert all(r["jenjang"] in JENJANG_PERSETUJUAN for r in AMBANG_PERSETUJUAN_PT)

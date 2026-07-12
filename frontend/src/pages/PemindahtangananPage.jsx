@@ -183,7 +183,7 @@ export default function PemindahtangananPage({ user, onBack }) {
             data-testid="pemindahtanganan-export">
             <Download className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">CSV</span>
           </Button>
-          <Button size="sm" onClick={() => { setCari(""); setHasilCari([]); setForm({ data: { bentuk: "hibah", pihak: "", keterangan: "" }, aset: [], saving: false }); }}
+          <Button size="sm" onClick={() => { setCari(""); setHasilCari([]); setForm({ data: { bentuk: "hibah", pihak: "", keterangan: "", jenis_bmn: "selain_tanah_bangunan", nilai_wajar: "", tb_terkecuali: false }, aset: [], saving: false }); }}
             className="bg-indigo-600 hover:bg-indigo-700 text-white flex-shrink-0" data-testid="pemindahtanganan-tambah">
             <Plus className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">Usulkan</span>
           </Button>
@@ -258,6 +258,18 @@ export default function PemindahtangananPage({ user, onBack }) {
                           <AlertTriangle className="w-3 h-3 flex-shrink-0" />{w}
                         </p>
                       ))}
+                      {u.saran_jenjang && (
+                        <div className="mt-1 rounded-md bg-violet-500/10 border border-violet-500/30 px-2 py-1" data-testid={`pemindahtanganan-saran-${u.id}`}>
+                          <p className="text-[11px] text-violet-700 dark:text-violet-300">
+                            Saran jenjang persetujuan: <b>{u.saran_jenjang.jenjang_label}</b>
+                            <span className="text-muted-foreground"> · {u.saran_jenjang.dasar}</span>
+                          </p>
+                          {(u.saran_jenjang.catatan || []).map((c) => (
+                            <p key={c} className="text-[10px] text-muted-foreground mt-0.5">• {c}</p>
+                          ))}
+                          <p className="text-[9px] text-muted-foreground/80 mt-0.5 italic">{u.saran_jenjang.disclaimer}</p>
+                        </div>
+                      )}
                       <ul className="mt-1 space-y-0.5">
                         {(u.aset || []).slice(0, 5).map((a) => (
                           <li key={a.asset_id} className="text-[11px] text-foreground/80 truncate">
@@ -388,6 +400,32 @@ export default function PemindahtangananPage({ user, onBack }) {
                 <Input id="ptg-ket" value={form.data.keterangan}
                   onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, keterangan: e.target.value } }))} />
               </div>
+              {/* Input untuk saran jenjang persetujuan (indikatif) */}
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="ptg-jenis">Jenis BMN</label>
+                <select id="ptg-jenis" value={form.data.jenis_bmn}
+                  onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, jenis_bmn: e.target.value } }))}
+                  className="w-full h-9 px-2 rounded-lg border border-border bg-background text-sm text-foreground"
+                  data-testid="pemindahtanganan-jenis-bmn">
+                  {Object.entries(data?.label_jenis_bmn || { selain_tanah_bangunan: "Selain tanah/bangunan", tanah_bangunan: "Tanah dan/atau bangunan" }).map(([k, v]) => (
+                    <option key={k} value={k}>{v}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="ptg-nw">Nilai wajar (Rp, 0 = pakai nilai perolehan)</label>
+                <Input id="ptg-nw" type="number" min="0" placeholder="0" value={form.data.nilai_wajar}
+                  onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, nilai_wajar: e.target.value } }))}
+                  data-testid="pemindahtanganan-nilai-wajar" />
+              </div>
+              {form.data.jenis_bmn === "tanah_bangunan" && (
+                <label className="col-span-2 flex items-center gap-2 text-xs text-foreground cursor-pointer">
+                  <input type="checkbox" checked={!!form.data.tb_terkecuali}
+                    onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, tb_terkecuali: e.target.checked } }))}
+                    data-testid="pemindahtanganan-terkecuali" />
+                  Termasuk pengecualian Ps. 55(2) PP 27/2014 (tak sesuai tata ruang / untuk pegawai / kepentingan umum, dsb.)
+                </label>
+              )}
               <div className="col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="ptg-cari">Tambah aset</label>
                 <div className="relative">

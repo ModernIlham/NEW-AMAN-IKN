@@ -135,3 +135,94 @@ def rekap_pt(items):
             nilai += parse_harga(a.get("harga"))
     return {"jumlah": len(items or []), "jumlah_aset": jumlah_aset,
             "per_status": per_status, "per_bentuk": per_bentuk, "nilai": nilai}
+
+
+# ---------------------------------------------------------------------------
+# Referensi jenjang persetujuan pemindahtanganan (riset #201). Ambang
+# STATUTORI dari UU 1/2004 Ps. 45-46 + PP 27/2014 jo. 28/2020 Ps. 55-58
+# (di atas level PMK — PMK 111/2016 jo. 165/2021 tak mengubah ambang).
+# Ambang dihitung atas NILAI WAJAR hasil penilaian, bukan nilai buku.
+# AMAN hanya MENYARANKAN (indikatif); keputusan resmi tetap pejabat
+# berwenang. Pendelegasian internal DJKN (KPKNL/Kanwil/Dirjen) & delegasi
+# ke Pengguna Barang belum diverifikasi dari teks resmi (pustaka §14).
+# ---------------------------------------------------------------------------
+JENIS_BMN_PT = {
+    "selain_tanah_bangunan": "Selain tanah dan/atau bangunan",
+    "tanah_bangunan": "Tanah dan/atau bangunan",
+}
+
+JENJANG_PERSETUJUAN = {
+    "pengguna": "Pengguna Barang (K/L)",
+    "pengelola": "Pengelola Barang (Menkeu c.q. DJKN)",
+    "presiden": "Presiden",
+    "dpr": "DPR RI",
+}
+
+_MILIAR = 1_000_000_000
+_AMBANG_PRESIDEN = 10 * _MILIAR      # > Rp10 M
+_AMBANG_DPR = 100 * _MILIAR          # > Rp100 M (selain tanah/bangunan)
+
+# Tabel referensi untuk ditampilkan (nilai None = tak berhingga).
+AMBANG_PERSETUJUAN_PT = [
+    {"jenis_bmn": "selain_tanah_bangunan", "batas_bawah": 0,
+     "batas_atas": _AMBANG_PRESIDEN, "jenjang": "pengelola",
+     "dasar": "UU 1/2004 Ps. 46; PP 27/2014"},
+    {"jenis_bmn": "selain_tanah_bangunan", "batas_bawah": _AMBANG_PRESIDEN,
+     "batas_atas": _AMBANG_DPR, "jenjang": "presiden",
+     "dasar": "UU 1/2004 Ps. 46"},
+    {"jenis_bmn": "selain_tanah_bangunan", "batas_bawah": _AMBANG_DPR,
+     "batas_atas": None, "jenjang": "dpr", "dasar": "UU 1/2004 Ps. 46"},
+    {"jenis_bmn": "tanah_bangunan", "batas_bawah": 0, "batas_atas": None,
+     "jenjang": "dpr", "dasar": "PP 27/2014 Ps. 55(1) — umum, tanpa batas nilai"},
+    {"jenis_bmn": "tanah_bangunan_terkecuali", "batas_bawah": 0,
+     "batas_atas": _AMBANG_PRESIDEN, "jenjang": "pengelola",
+     "dasar": "PP 27/2014 Ps. 56 (pengecualian Ps. 55(2))"},
+    {"jenis_bmn": "tanah_bangunan_terkecuali", "batas_bawah": _AMBANG_PRESIDEN,
+     "batas_atas": None, "jenjang": "presiden",
+     "dasar": "PP 27/2014 Ps. 56 (pengecualian Ps. 55(2))"},
+]
+
+
+def sarankan_jenjang(bentuk, jenis_bmn, nilai, tb_terkecuali=False) -> dict:
+    """Sarankan jenjang persetujuan (indikatif) dari jenis BMN + nilai wajar.
+
+    Mengembalikan {jenjang, jenjang_label, dasar, catatan(list), disclaimer}.
+    Tidak memblok apa pun — hanya panduan. Nilai idealnya nilai wajar.
+    """
+    n = parse_harga(nilai)
+    catatan = []
+    if jenis_bmn == "tanah_bangunan":
+        if tb_terkecuali:
+            jenjang = "presiden" if n > _AMBANG_PRESIDEN else "pengelola"
+            dasar = "PP 27/2014 Ps. 56 (pengecualian Ps. 55(2))"
+        else:
+            jenjang = "dpr"
+            dasar = "PP 27/2014 Ps. 55(1) — tanah/bangunan wajib persetujuan DPR"
+            catatan.append("Bila termasuk pengecualian Ps. 55(2) (tak sesuai "
+                           "tata ruang, untuk pegawai/kepentingan umum, dsb.), "
+                           "jenjang mengikuti nilai (Pengelola/Presiden).")
+    else:  # selain tanah/bangunan
+        if n > _AMBANG_DPR:
+            jenjang, dasar = "dpr", "UU 1/2004 Ps. 46"
+        elif n > _AMBANG_PRESIDEN:
+            jenjang, dasar = "presiden", "UU 1/2004 Ps. 46"
+        else:
+            jenjang, dasar = "pengelola", "UU 1/2004 Ps. 46; PP 27/2014"
+        if bentuk == "hibah" and n <= 100_000_000:
+            catatan.append("Hibah selain tanah/bangunan tanpa bukti "
+                           "kepemilikan & nilai perolehan ≤ Rp100 jt dapat "
+                           "cukup Pengguna Barang (KMK 334/2021).")
+    # PMPP ditetapkan dengan Peraturan Pemerintah → minimal melibatkan Presiden
+    if bentuk == "pmpp" and jenjang == "pengelola":
+        jenjang = "presiden"
+        catatan.append("PMPP ditetapkan dengan Peraturan Pemerintah — "
+                       "minimal melibatkan Presiden.")
+    return {
+        "jenjang": jenjang,
+        "jenjang_label": JENJANG_PERSETUJUAN.get(jenjang, jenjang),
+        "dasar": dasar,
+        "catatan": catatan,
+        "disclaimer": ("Indikatif berbasis nilai wajar — bukan penetapan; "
+                       "keputusan resmi di pejabat berwenang. Ambang statutori "
+                       "[perlu verifikasi vs teks resmi, pustaka §14]."),
+    }

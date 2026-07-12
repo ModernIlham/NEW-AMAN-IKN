@@ -17,9 +17,11 @@ from auth_utils import require_admin, require_user, require_user_or_query_token
 from db import db, fs_bucket
 from shared_utils import delete_document_from_gridfs, get_document_from_gridfs
 from pemindahtanganan_utils import (
-    BENTUK_PEMINDAHTANGANAN, DOKUMEN_PELAKSANAAN, STATUS_USULAN_PT,
-    peringatan_pt, rekap_pt, validate_transisi_pt, validate_usulan_pt,
+    AMBANG_PERSETUJUAN_PT, BENTUK_PEMINDAHTANGANAN, DOKUMEN_PELAKSANAAN,
+    JENIS_BMN_PT, JENJANG_PERSETUJUAN, STATUS_USULAN_PT, peringatan_pt,
+    rekap_pt, sarankan_jenjang, validate_transisi_pt, validate_usulan_pt,
 )
+from pembukuan_utils import parse_harga
 
 pemindahtanganan_router = APIRouter()
 
@@ -31,7 +33,32 @@ class UsulanPtIn(BaseModel):
     bentuk: str
     pihak: str = Field(min_length=1)   # penerima hibah / pembeli / mitra / BUMN
     keterangan: str = ""
+    # Input untuk saran jenjang persetujuan (indikatif, tak memblok)
+    jenis_bmn: str = "selain_tanah_bangunan"
+    nilai_wajar: float = 0             # 0 = pakai jumlah nilai perolehan aset
+    tb_terkecuali: bool = False        # tanah/bangunan termasuk pengecualian Ps.55(2)
     asset_ids: list[str] = Field(min_length=1, max_length=100)
+
+
+def _nilai_dasar_saran(u: dict) -> float:
+    """Nilai untuk saran jenjang: nilai wajar bila diisi, jika tidak jumlah
+    nilai perolehan aset (dengan disclaimer di keluaran saran)."""
+    nw = parse_harga(u.get("nilai_wajar"))
+    if nw > 0:
+        return nw
+    return sum(parse_harga(a.get("harga")) for a in u.get("aset") or [])
+
+
+def _saran_untuk(u: dict) -> dict:
+    """Bungkus sarankan_jenjang + tandai basis nilai yang dipakai."""
+    nilai = _nilai_dasar_saran(u)
+    saran = sarankan_jenjang(
+        u.get("bentuk"), u.get("jenis_bmn") or "selain_tanah_bangunan",
+        nilai, bool(u.get("tb_terkecuali")))
+    saran["nilai_dipakai"] = nilai
+    saran["basis_nilai"] = ("nilai_wajar" if parse_harga(u.get("nilai_wajar")) > 0
+                            else "nilai_perolehan")
+    return saran
 
 
 class TransisiPtIn(BaseModel):
@@ -90,10 +117,14 @@ async def list_pemindahtanganan(_user: dict = Depends(require_user)):
              .sort("created_at", -1).limit(500)]
     for u in items:
         u["peringatan"] = peringatan_pt(u, today_iso)
+        u["saran_jenjang"] = _saran_untuk(u)
     return {"items": items, "ringkasan": rekap_pt(items),
             "label_status": STATUS_USULAN_PT,
             "label_bentuk": BENTUK_PEMINDAHTANGANAN,
             "label_dokumen": DOKUMEN_PELAKSANAAN,
+            "label_jenis_bmn": JENIS_BMN_PT,
+            "label_jenjang": JENJANG_PERSETUJUAN,
+            "ambang_referensi": AMBANG_PERSETUJUAN_PT,
             "catatan": (
                 "Register penatausahaan: persetujuan bertingkat nilai (Pengguna "
                 "delegasi PMK 4/2015 / KPKNL / Kanwil / DJKN / Presiden / DPR); "
@@ -123,6 +154,10 @@ async def buat_usulan_pt(payload: UsulanPtIn, user: dict = Depends(require_user)
         "bentuk": data["bentuk"],
         "pihak": data["pihak"].strip(),
         "keterangan": str(data.get("keterangan") or "").strip(),
+        "jenis_bmn": (data.get("jenis_bmn") if data.get("jenis_bmn") in JENIS_BMN_PT
+                      else "selain_tanah_bangunan"),
+        "nilai_wajar": float(parse_harga(data.get("nilai_wajar"))),
+        "tb_terkecuali": bool(data.get("tb_terkecuali")),
         "status": "diusulkan",
         "nomor_persetujuan": "",
         "tanggal_persetujuan": "",
@@ -138,6 +173,7 @@ async def buat_usulan_pt(payload: UsulanPtIn, user: dict = Depends(require_user)
         "updated_at": now,
     }
     await db.pemindahtanganan.insert_one({**record})
+    record["saran_jenjang"] = _saran_untuk(record)
     return record
 
 
