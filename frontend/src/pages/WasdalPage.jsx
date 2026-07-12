@@ -3,9 +3,10 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, Eye, RefreshCw, ChevronDown, BadgeCheck,
-  UserCheck, Handshake, ArrowLeftRight, BookOpen, ShieldCheck,
+  UserCheck, Handshake, ArrowLeftRight, BookOpen, ShieldCheck, FileText,
 } from "lucide-react";
 import { useBackGuard } from "@/hooks/useBackGuard";
+import { downloadFileWithProgress } from "@/lib/downloadFile";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -74,6 +75,19 @@ export default function WasdalPage({ onBack }) {
               {data ? `${data.periode?.label} · ${data.total_aset} aset dipantau` : "PMK 207/PMK.06/2021"}
             </p>
           </div>
+          <button
+            type="button"
+            aria-label="Unduh laporan pemantauan (PDF)"
+            onClick={() => downloadFileWithProgress(
+              `${API}/wasdal/laporan-pdf`,
+              `Laporan_Wasdal_${(data?.periode?.label || "periode").replace(/\s/g, "_")}.pdf`,
+              { label: "Laporan Hasil Pemantauan Wasdal" },
+            ).catch(() => {})}
+            className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0"
+            data-testid="wasdal-laporan"
+          >
+            <FileText className="w-4 h-4" />
+          </button>
           <button
             type="button"
             onClick={muat}
