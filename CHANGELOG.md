@@ -48,6 +48,14 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#199] Tautan Pengadaan → usulan Penganggaran — 2026-07-12
+
+- **Jembatan #117 ↔ #115**: register perolehan Pengadaan dapat ditautkan
+  ke usulan Penganggaran (field `penganggaran_id` + snapshot uraian/nomor
+  DIPA/tahun). Endpoint `POST /pengadaan/{id}/penganggaran` (tautkan/lepas);
+  dropdown di form + baris info di register; kolom penganggaran + DIPA di
+  CSV. Referensi lunak (tak memvalidasi nilai). Unit test +1 → 250 passed.
+
 ## [#198] Konsolidasi dokumentasi #197 — 2026-07-12
 
 - **Dokumentasi saja**: README Progres Fase 5–6 + masterplan + pustaka
