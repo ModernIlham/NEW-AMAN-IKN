@@ -2,9 +2,9 @@
 import pytest
 
 from pemeliharaan_utils import (
-    JENIS_PEMELIHARAAN, KONDISI_SETELAH_VALID, indikasi_kapitalisasi, parse_biaya,
-    rekap_pemeliharaan, tahun_dari_tanggal, urut_riwayat,
-    validate_pemeliharaan,
+    JENIS_PEMELIHARAAN, KONDISI_SETELAH_VALID, indikasi_kapitalisasi,
+    kelompok_dhpb, parse_biaya, rekap_pemeliharaan, rentang_periode,
+    tahun_dari_tanggal, urut_riwayat, validate_pemeliharaan,
 )
 
 HARI_INI = "2026-07-12"
@@ -174,3 +174,39 @@ def test_rekap_kosong_aman():
     r = rekap_pemeliharaan([])
     assert r["jumlah"] == 0 and r["total_biaya"] == 0.0
     assert r["per_aset"] == [] and r["per_tahun"] == {}
+
+
+# ── DHPB: periode & pengelompokan ────────────────────────────────────────
+
+def test_rentang_periode_tahun_penuh_dan_semester():
+    assert rentang_periode(2026) == ("2026-01-01", "2026-12-31", "Tahun Anggaran 2026")
+    assert rentang_periode(2026, 1) == ("2026-01-01", "2026-06-30", "Semester I Tahun Anggaran 2026")
+    assert rentang_periode(2026, 2) == ("2026-07-01", "2026-12-31", "Semester II Tahun Anggaran 2026")
+
+
+def test_kelompok_dhpb_urut_aset_dan_kronologis():
+    records = [
+        _rec(asset_id="a2", asset_name="Genset", tanggal="2026-02-01", biaya=900000),
+        _rec(asset_id="a1", asset_name="AC Split", tanggal="2026-06-01", biaya=50000,
+             created_at="2026-06-01T01:00:00"),
+        _rec(asset_id="a1", asset_name="AC Split", tanggal="2026-01-01", biaya=100000,
+             created_at="2026-01-01T01:00:00"),
+    ]
+    grup, total = kelompok_dhpb(records)
+    # Grup terurut nama aset (AC Split dulu), catatan kronologis naik
+    assert [g["asset_id"] for g in grup] == ["a1", "a2"]
+    assert [r["tanggal"] for r in grup[0]["items"]] == ["2026-01-01", "2026-06-01"]
+    assert grup[0]["subtotal"] == pytest.approx(150000)
+    assert grup[1]["subtotal"] == pytest.approx(900000)
+    assert total == pytest.approx(1050000)
+
+
+def test_kelompok_dhpb_kosong_dan_tanpa_asset_id():
+    grup, total = kelompok_dhpb([])
+    assert grup == [] and total == 0.0
+    # Catatan legacy tanpa asset_id tetap terkelompok via kode+NUP
+    r1 = _rec(asset_id=None, asset_code="X", NUP="1", biaya=10)
+    r2 = _rec(asset_id=None, asset_code="X", NUP="1", biaya=15)
+    grup, total = kelompok_dhpb([r1, r2])
+    assert len(grup) == 1 and len(grup[0]["items"]) == 2
+    assert total == pytest.approx(25)

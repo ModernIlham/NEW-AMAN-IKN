@@ -13,8 +13,9 @@ from pydantic import BaseModel, Field
 from auth_utils import require_admin, require_user
 from db import db
 from pemeliharaan_utils import (
-    JENIS_PEMELIHARAAN, indikasi_kapitalisasi, rekap_pemeliharaan,
-    urut_riwayat, parse_biaya, validate_pemeliharaan,
+    JENIS_PEMELIHARAAN, indikasi_kapitalisasi, kelompok_dhpb,
+    rekap_pemeliharaan, rentang_periode, urut_riwayat, parse_biaya,
+    validate_pemeliharaan,
 )
 
 pemeliharaan_router = APIRouter()
@@ -59,6 +60,133 @@ async def rekap(
     hasil["label_jenis"] = JENIS_PEMELIHARAAN
     hasil["tahun"] = tahun
     return hasil
+
+
+def _fmt_rp(val):
+    try:
+        return f"{int(val):,}".replace(",", ".")
+    except (ValueError, TypeError, OverflowError):
+        return "0"
+
+
+@pemeliharaan_router.get("/pemeliharaan/dhpb-pdf")
+async def dhpb_pdf(
+    tahun: int = Query(..., ge=2000, le=2100),
+    semester: int = Query(None, ge=1, le=2),
+    _user: dict = Depends(require_user),
+):
+    """DHPB — Daftar Hasil Pemeliharaan Barang per periode (Ps. 47 PP 27/2014).
+
+    Laporan berkala KPB → Pengguna Barang: catatan pemeliharaan periode
+    terpilih (tahun penuh / semester) dikelompokkan per aset + subtotal
+    dan total biaya. Hanya data nyata — periode kosong = 404.
+    """
+    from io import BytesIO
+
+    from reportlab.lib.units import mm as rl_mm
+    from reportlab.platypus import Paragraph, Spacer, Table
+
+    from routes.reports import (
+        _fit_col_widths, _fmt_tanggal_id, _get_report_styles,
+        _kop_surat_flowables, _page_footer_factory, _signature_block,
+        _std_doc, _std_table_style, _title_block,
+    )
+
+    dari, sampai, label_periode = rentang_periode(tahun, semester)
+    records = [r async for r in db.pemeliharaan.find(
+        {"tanggal": {"$gte": dari, "$lte": sampai}}, _PROJ)]
+    if not records:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Tidak ada catatan pemeliharaan pada {label_periode}")
+    grup, total_biaya = kelompok_dhpb(records)
+    ada_kapitalisasi = any(r.get("indikasi_kapitalisasi") for r in records)
+
+    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    buffer = BytesIO()
+    doc = _std_doc(buffer, landscape_mode=True)
+    st = _get_report_styles()
+    elements = []
+    elements.extend(_kop_surat_flowables(settings, doc.width))
+    elements.extend(_title_block("DAFTAR HASIL PEMELIHARAAN BARANG (DHPB)",
+                                 subjudul=label_periode))
+    elements.append(Paragraph(
+        f"Periode {_fmt_tanggal_id(dari)} s.d. {_fmt_tanggal_id(sampai)} · "
+        f"{len(records)} catatan pada {len(grup)} aset · laporan berkala "
+        "Kuasa Pengguna Barang (Pasal 47 PP 27/2014)", st['Meta']))
+    elements.append(Spacer(1, 4 * rl_mm))
+
+    headers = ["No", "Tanggal", "Jenis", "Uraian Pekerjaan", "Pelaksana",
+               "No. Bukti", "Kondisi Akhir", "Biaya (Rp)"]
+    table_data = [[Paragraph(h, st['TableHeader']) for h in headers]]
+    baris_aset = []  # indeks baris judul aset → SPAN selebar tabel
+    no = 0
+    for g in grup:
+        label_aset = (f"{g['asset_name'] or '-'} "
+                      f"({g['asset_code'] or '-'} · NUP {g['NUP'] or '-'})")
+        baris_aset.append(len(table_data))
+        table_data.append([Paragraph(f"<b>{label_aset}</b>", st['Cell']),
+                           "", "", "", "", "", "", ""])
+        for r in g["items"]:
+            no += 1
+            tanda = " *" if r.get("indikasi_kapitalisasi") else ""
+            table_data.append([
+                Paragraph(str(no), st['CellCenter']),
+                Paragraph(_fmt_tanggal_id(r.get("tanggal")), st['CellCenter']),
+                Paragraph((r.get("jenis") or "-").capitalize(), st['CellCenter']),
+                Paragraph((r.get("uraian") or "-"), st['Cell']),
+                Paragraph(r.get("pelaksana") or "-", st['Cell']),
+                Paragraph(r.get("no_bukti") or "-", st['Cell']),
+                Paragraph(r.get("kondisi_setelah") or "-", st['CellCenter']),
+                Paragraph(f"{_fmt_rp(r.get('biaya'))}{tanda}", st['CellRight']),
+            ])
+        table_data.append([
+            Paragraph("", st['Cell']), Paragraph("", st['Cell']),
+            Paragraph("", st['Cell']),
+            Paragraph(f"<b>Subtotal — {len(g['items'])} catatan</b>", st['Cell']),
+            Paragraph("", st['Cell']), Paragraph("", st['Cell']),
+            Paragraph("", st['Cell']),
+            Paragraph(f"<b>{_fmt_rp(g['subtotal'])}</b>", st['CellRight']),
+        ])
+    table_data.append([
+        Paragraph("", st['Cell']), Paragraph("", st['Cell']),
+        Paragraph("", st['Cell']),
+        Paragraph("<b>TOTAL BIAYA PEMELIHARAAN</b>", st['Cell']),
+        Paragraph("", st['Cell']), Paragraph("", st['Cell']),
+        Paragraph("", st['Cell']),
+        Paragraph(f"<b>{_fmt_rp(total_biaya)}</b>", st['CellRight']),
+    ])
+    table = Table(table_data,
+                  colWidths=_fit_col_widths([25, 62, 52, 200, 90, 80, 62, 80], doc.width),
+                  repeatRows=1)
+    table.setStyle(_std_table_style(
+        zebra=True, total_row=True,
+        extra=[("SPAN", (0, i), (-1, i)) for i in baris_aset]))
+    elements.append(table)
+    if ada_kapitalisasi:
+        elements.append(Spacer(1, 2 * rl_mm))
+        elements.append(Paragraph(
+            "*) Biaya mencapai nilai satuan minimum kapitalisasi "
+            "PMK 181/PMK.06/2016 — telaah apakah menambah masa "
+            "manfaat/kapasitas (belanja modal / pengembangan nilai aset).",
+            st['Meta']))
+
+    elements.append(Spacer(1, 12 * rl_mm))
+    elements.extend(_signature_block([
+        {'pre': ['.................., .......................'],
+         'header': 'Kuasa Pengguna Barang,',
+         'nama': settings.get("kasatker_nama") or "-",
+         'after': [f"NIP. {settings.get('kasatker_nip') or '-'}"]},
+    ], doc.width))
+    footer = _page_footer_factory("DHPB")
+    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    buffer.seek(0)
+    from fastapi.responses import StreamingResponse
+    suffix = f"_S{semester}" if semester else ""
+    return StreamingResponse(
+        buffer, media_type="application/pdf",
+        headers={"Content-Disposition":
+                 f'attachment; filename="DHPB_{tahun}{suffix}.pdf"'})
 
 
 @pemeliharaan_router.get("/pemeliharaan/aset/{asset_id}")

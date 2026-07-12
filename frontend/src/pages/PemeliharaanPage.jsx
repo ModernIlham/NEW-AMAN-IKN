@@ -3,13 +3,17 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, Wrench, Plus, Search, Trash2, X,
-  CalendarDays, Coins, Boxes, ClipboardList,
+  CalendarDays, Coins, Boxes, ClipboardList, FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { downloadFileWithProgress } from "@/lib/downloadFile";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
 
@@ -166,6 +170,8 @@ export default function PemeliharaanPage({ user, onBack }) {
 
   const labelJenis = daftar?.label_jenis || rekap?.label_jenis || {};
   const tahunTersedia = Object.keys(rekap?.per_tahun || {}).filter((t) => t !== "0").sort().reverse();
+  // DHPB mengikuti filter tahun; tanpa filter = tahun berjalan
+  const tahunDhpb = tahun || new Date().getFullYear();
 
   return (
     <div className="min-h-screen bg-background" data-testid="pemeliharaan-page">
@@ -263,6 +269,33 @@ export default function PemeliharaanPage({ user, onBack }) {
             <option value="">Semua jenis</option>
             {Object.entries(labelJenis).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 text-xs" data-testid="pemeliharaan-dhpb">
+                <FileText className="w-3.5 h-3.5 mr-1.5" />DHPB (PDF)
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-64">
+              {[
+                { label: `Tahun penuh ${tahunDhpb}`, q: "" },
+                { label: `Semester I ${tahunDhpb} (Jan–Jun)`, q: "&semester=1" },
+                { label: `Semester II ${tahunDhpb} (Jul–Des)`, q: "&semester=2" },
+              ].map((o) => (
+                <DropdownMenuItem
+                  key={o.label}
+                  className="min-h-[42px]"
+                  onClick={() =>
+                    downloadFileWithProgress(
+                      `${API}/pemeliharaan/dhpb-pdf?tahun=${tahunDhpb}${o.q}`,
+                      `DHPB_${tahunDhpb}${o.q ? `_S${o.q.slice(-1)}` : ""}.pdf`,
+                      { label: `DHPB ${o.label}` },
+                    ).catch(() => {})}
+                >
+                  {o.label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
           {asetFilter && (
             <button
               type="button"

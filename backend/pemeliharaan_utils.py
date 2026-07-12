@@ -112,6 +112,48 @@ def urut_riwayat(records):
     )
 
 
+def rentang_periode(tahun: int, semester=None):
+    """Rentang tanggal ISO satu periode DHPB → (dari, sampai, label).
+
+    Ps. 47 PP 27/2014: laporan berkala (praktik baku semesteran) + rekap
+    per Tahun Anggaran. semester None = tahun penuh.
+    """
+    t = int(tahun)
+    if semester == 1:
+        return f"{t}-01-01", f"{t}-06-30", f"Semester I Tahun Anggaran {t}"
+    if semester == 2:
+        return f"{t}-07-01", f"{t}-12-31", f"Semester II Tahun Anggaran {t}"
+    return f"{t}-01-01", f"{t}-12-31", f"Tahun Anggaran {t}"
+
+
+def kelompok_dhpb(records):
+    """Kelompokkan catatan per aset untuk DHPB → (grup, total_biaya).
+
+    Grup terurut nama aset; catatan di dalam grup kronologis (tanggal,
+    created_at) mengikuti format kartu pemeliharaan bahan ajar DJKN.
+    """
+    per = {}
+    total = 0.0
+    for r in records or []:
+        kunci = r.get("asset_id") or f"{r.get('asset_code')}-{r.get('NUP')}"
+        g = per.setdefault(kunci, {
+            "asset_id": r.get("asset_id"),
+            "asset_code": r.get("asset_code"),
+            "NUP": r.get("NUP"),
+            "asset_name": r.get("asset_name"),
+            "items": [], "subtotal": 0.0,
+        })
+        g["items"].append(r)
+        g["subtotal"] += parse_biaya(r.get("biaya")) or 0.0
+        total += parse_biaya(r.get("biaya")) or 0.0
+    grup = sorted(per.values(), key=lambda g: (
+        g["asset_name"] or "", g["asset_code"] or "", str(g["NUP"] or "")))
+    for g in grup:
+        g["items"].sort(key=lambda r: (
+            str(r.get("tanggal") or ""), str(r.get("created_at") or "")))
+    return grup, total
+
+
 def rekap_pemeliharaan(records, tahun: int = None):
     """Rekap catatan → jumlah, total biaya, per jenis, per tahun, per aset.
 
