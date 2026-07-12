@@ -48,6 +48,19 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#190] Koreksi PMK 18/2024 + atribut fasilitas transaksi — 2026-07-12
+
+- **Koreksi regulasi (riset)**: PMK 18/2024 = "Tata Cara Pemberian
+  Fasilitas Penyiapan & Pelaksanaan Transaksi Pemanfaatan BMN"
+  (pendampingan DJPPR, analog PDF KPBU) — BUKAN bentuk pemanfaatan ke-7;
+  khusus IKN berlaku PMK 139/PMK.08/2022 (PT PII). Salah kaprah "bentuk
+  PDF" dikoreksi di pustaka (sub-bab §6.a baru + butir verifikasi 24),
+  masterplan, dan bmnModules.
+- **Fitur**: atribut fasilitas transaksi opsional pada register
+  perjanjian (dasar/nomor penetapan/pelaksana) — hanya KSP/BGS-BSG,
+  nomor penetapan wajib bila ber-fasilitas; kolom CSV + blok form baru.
+  Daftar "menyusul" Pemanfaatan tuntas. Unit test +1 → 246 passed.
+
 ## [#189] Konsolidasi dokumentasi #188 — 2026-07-12
 
 - **Dokumentasi saja**: README Progres Fase 5 + tabel modul & roadmap
