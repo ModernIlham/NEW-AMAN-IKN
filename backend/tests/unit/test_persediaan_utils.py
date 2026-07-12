@@ -8,8 +8,9 @@ from persediaan_utils import (
     JENIS_KELUAR, JENIS_MASUK, KODE_PENUH_LEN, KODE_PREFIX_LEN, SATUAN_BAKU,
     buat_layer, klasifikasi_kedaluwarsa, konsumsi_fifo, mutasi_periode,
     next_kode_penuh, next_nup, nilai_persediaan_dari_batches,
-    penyesuaian_opname, status_stok, stok_dari_batches,
-    validate_kode_persediaan, validate_transaksi_keluar, validate_transaksi_masuk,
+    parse_import_persediaan_rows, penyesuaian_opname, status_stok,
+    stok_dari_batches, validate_kode_persediaan, validate_transaksi_keluar,
+    validate_transaksi_masuk,
 )
 
 
@@ -197,6 +198,55 @@ class TestKonsumsiFifo:
         layers = self._layers()
         sisa, _, _ = konsumsi_fifo(layers, 5)
         assert stok_dari_batches(sisa) == stok_dari_batches(layers) - 5
+
+
+class TestParseImportPersediaan:
+    def test_baris_valid_10_dan_16_digit(self):
+        entries, errors, dupes = parse_import_persediaan_rows([
+            {"kode_barang": "1010101001", "nama_barang": "Kertas", "satuan": "Rim",
+             "batas_kritis": "5"},
+            {"kode": "1010101001000002", "nup": "1", "nama": "Tinta", "merk": "Epson"},
+        ])
+        assert errors == [] and dupes == 0
+        assert entries[0]["kode_barang"] == "1010101001"
+        assert entries[0]["batas_kritis"] == 5
+        assert entries[1]["kode_barang"] == "1010101001000002"
+        assert entries[1]["nup"] == "1" and entries[1]["satuan"] == "Buah"  # default
+
+    def test_error_kode_dan_nama(self):
+        entries, errors, _ = parse_import_persediaan_rows([
+            {"kode_barang": "3010101001", "nama_barang": "Salah golongan"},
+            {"kode_barang": "1010101001", "nama_barang": ""},
+        ])
+        assert entries == []
+        assert len(errors) == 2
+        assert "Baris 2" in errors[0] and "Baris 3" in errors[1]
+
+    def test_duplikat_identitas_baris_terakhir_menang(self):
+        entries, errors, dupes = parse_import_persediaan_rows([
+            {"kode_barang": "1010101001000002", "nup": "1", "nama_barang": "Lama"},
+            {"kode_barang": "1010101001000002", "nup": "1", "nama_barang": "Baru"},
+            {"kode_barang": "1010101001", "nama_barang": "A"},
+            {"kode_barang": "1010101001", "nama_barang": "B"},  # 10 digit ≠ duplikat
+        ])
+        assert errors == [] and dupes == 1
+        assert len(entries) == 3
+        assert entries[0]["nama_barang"] == "Baru"
+
+    def test_artefak_excel_dan_batas_kotor(self):
+        entries, errors, _ = parse_import_persediaan_rows([
+            {"kode_barang": "1010101001.0", "nup": "2.0", "nama_barang": "X",
+             "batas_kritis": "abc", "expired_default": "2027-01-01T00:00:00"},
+        ])
+        assert errors == []
+        assert entries[0]["kode_barang"] == "1010101001"
+        assert entries[0]["nup"] == "2"
+        assert entries[0]["batas_kritis"] == 0
+        assert entries[0]["expired_default"] == "2027-01-01"
+
+    def test_baris_kosong_dilewati(self):
+        assert parse_import_persediaan_rows([{"kode_barang": "", "nama_barang": ""}]) == ([], [], 0)
+        assert parse_import_persediaan_rows(None) == ([], [], 0)
 
 
 class TestPenyesuaianOpname:

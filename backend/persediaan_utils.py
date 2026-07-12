@@ -200,6 +200,72 @@ def buat_layer(batch_id: str, tanggal_iso: str, jumlah: int, harga_satuan: float
     }
 
 
+def parse_import_persediaan_rows(rows):
+    """Normalisasi baris impor master persediaan → (entries, errors, dupes).
+
+    Kolom dikenali (fleksibel): kode_barang/kode, nup, nama_barang/nama,
+    merk, tipe, satuan, lokasi, batas_kritis, expired_default/kedaluwarsa,
+    tahun_anggaran, keterangan. Kode wajib valid persediaan (10/16 digit
+    berawalan '1'); nama wajib. batas_kritis non-angka → 0. Duplikat
+    (kode 16 digit + nup) dalam file: baris terakhir menang; kode 10
+    digit tidak dianggap duplikat (nomor urut dibuat saat insert).
+    """
+    def _s(row, *keys):
+        for k in keys:
+            v = row.get(k)
+            if v is not None and str(v).strip():
+                return str(v).strip()
+        return ""
+
+    entries = []
+    by_identity = {}
+    errors = []
+    dupes = 0
+    for i, row in enumerate(rows or [], start=2):  # baris 1 = header
+        kode = _s(row, "kode_barang", "kode")
+        if kode.endswith(".0"):
+            kode = kode[:-2]
+        nama = _s(row, "nama_barang", "nama")
+        if not kode and not nama:
+            continue  # baris kosong
+        ok, err = validate_kode_persediaan(kode)
+        if not ok:
+            errors.append(f"Baris {i}: {err}")
+            continue
+        if not nama:
+            errors.append(f"Baris {i}: nama barang kosong untuk kode {kode}")
+            continue
+        nup = _s(row, "nup")
+        if nup.endswith(".0"):
+            nup = nup[:-2]
+        try:
+            batas = max(0, int(float(_s(row, "batas_kritis") or 0)))
+        except (ValueError, TypeError):
+            batas = 0
+        entry = {
+            "kode_barang": kode,
+            "nup": nup,
+            "nama_barang": nama,
+            "merk": _s(row, "merk"),
+            "tipe": _s(row, "tipe"),
+            "satuan": _s(row, "satuan") or "Buah",
+            "lokasi": _s(row, "lokasi"),
+            "batas_kritis": batas,
+            "expired_default": _s(row, "expired_default", "kedaluwarsa")[:10],
+            "tahun_anggaran": _s(row, "tahun_anggaran")[:4],
+            "keterangan": _s(row, "keterangan"),
+        }
+        if len(kode) == KODE_PENUH_LEN and nup:
+            key = (kode, nup)
+            if key in by_identity:
+                dupes += 1
+                entries[by_identity[key]] = entry  # baris terakhir menang
+                continue
+            by_identity[key] = len(entries)
+        entries.append(entry)
+    return entries, errors, dupes
+
+
 def penyesuaian_opname(batches, stok_fisik: int, batch_id_baru: str, tanggal_iso: str):
     """Setel layer agar total qty = stok_fisik → (batches_baru, detail).
 

@@ -4,8 +4,11 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Search, Plus, Pencil, Trash2, Loader2, Boxes,
   ChevronLeft, ChevronRight, PackagePlus, PackageMinus, History,
-  AlertTriangle, FileDown, ClipboardCheck,
+  AlertTriangle, FileDown, ClipboardCheck, ChevronDown, Upload, Download,
 } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -71,6 +74,9 @@ export default function PersediaanPage({ user, onBack }) {
   // Dialog opname: {item, stok_fisik, alasan}; BAOF: {tanggal}
   const [opname, setOpname] = useState(null);
   const [baof, setBaof] = useState(null);
+  // Impor master
+  const [importing, setImporting] = useState(false);
+  const fileImporRef = useRef(null);
   const { confirm, confirmDialog } = useConfirm();
   const searchTimer = useRef(null);
 
@@ -183,6 +189,28 @@ export default function PersediaanPage({ user, onBack }) {
       toast.error(getApiError(err, "Gagal mencatat transaksi keluar"));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const onImportFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setImporting(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const r = await axios.post(`${API}/persediaan/import`, fd);
+      const d = r.data || {};
+      toast.success(d.message || "Impor selesai");
+      if (d.error_count > 0) {
+        toast.warning(`${d.error_count} baris bermasalah — contoh: ${(d.errors || [])[0] || ""}`);
+      }
+      load(1, search, status);
+    } catch (err) {
+      toast.error(getApiError(err, "Gagal mengimpor file"));
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -314,38 +342,61 @@ export default function PersediaanPage({ user, onBack }) {
             <Button className="h-10 gap-1.5" onClick={() => setForm({ mode: "tambah", data: { ...emptyForm } })} data-testid="persediaan-add">
               <Plus className="w-4 h-4" /><span className="hidden sm:inline">Tambah Barang</span>
             </Button>
-            <Button
-              variant="outline" className="h-10 gap-1.5"
-              onClick={() => downloadFileWithProgress(`${API}/persediaan/laporan/posisi-pdf`, "Laporan_Posisi_Persediaan.pdf", { label: "Laporan Posisi Persediaan" }).catch(() => {})}
-              data-testid="persediaan-laporan-posisi"
-            >
-              <FileDown className="w-4 h-4" /><span className="hidden sm:inline">Posisi</span>
-            </Button>
-            <Button
-              variant="outline" className="h-10 gap-1.5"
-              onClick={() => {
-                const now = new Date();
-                const awal = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-                setMutasi({ dari: awal, sampai: now.toISOString().slice(0, 10) });
-              }}
-              data-testid="persediaan-laporan-mutasi"
-            >
-              <FileDown className="w-4 h-4" /><span className="hidden sm:inline">Mutasi</span>
-            </Button>
-            <Button
-              variant="outline" className="h-10 gap-1.5"
-              onClick={() => downloadFileWithProgress(`${API}/persediaan/opname/kertas-kerja-pdf`, "Kertas_Kerja_Opname.pdf", { label: "Kertas Kerja Opname" }).catch(() => {})}
-              data-testid="persediaan-kertas-kerja"
-            >
-              <ClipboardCheck className="w-4 h-4" /><span className="hidden sm:inline">Kertas Kerja</span>
-            </Button>
-            <Button
-              variant="outline" className="h-10 gap-1.5"
-              onClick={() => setBaof({ tanggal: new Date().toISOString().slice(0, 10) })}
-              data-testid="persediaan-baof"
-            >
-              <ClipboardCheck className="w-4 h-4" /><span className="hidden sm:inline">BAOF</span>
-            </Button>
+            {/* Menu Dokumen: laporan & berita acara dalam satu tombol */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="h-10 gap-1.5" data-testid="persediaan-menu-dokumen">
+                  <FileDown className="w-4 h-4" /><span className="hidden sm:inline">Dokumen</span>
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuItem className="min-h-[42px]" data-testid="persediaan-laporan-posisi"
+                  onClick={() => downloadFileWithProgress(`${API}/persediaan/laporan/posisi-pdf`, "Laporan_Posisi_Persediaan.pdf", { label: "Laporan Posisi Persediaan" }).catch(() => {})}>
+                  <FileDown className="w-4 h-4 mr-2" />Laporan Posisi (PDF)
+                </DropdownMenuItem>
+                <DropdownMenuItem className="min-h-[42px]" data-testid="persediaan-laporan-mutasi"
+                  onClick={() => {
+                    const now = new Date();
+                    const awal = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+                    setMutasi({ dari: awal, sampai: now.toISOString().slice(0, 10) });
+                  }}>
+                  <FileDown className="w-4 h-4 mr-2" />Laporan Mutasi (pilih periode)
+                </DropdownMenuItem>
+                <DropdownMenuItem className="min-h-[42px]" data-testid="persediaan-kertas-kerja"
+                  onClick={() => downloadFileWithProgress(`${API}/persediaan/opname/kertas-kerja-pdf`, "Kertas_Kerja_Opname.pdf", { label: "Kertas Kerja Opname" }).catch(() => {})}>
+                  <ClipboardCheck className="w-4 h-4 mr-2" />Kertas Kerja Opname
+                </DropdownMenuItem>
+                <DropdownMenuItem className="min-h-[42px]" data-testid="persediaan-baof"
+                  onClick={() => setBaof({ tanggal: new Date().toISOString().slice(0, 10) })}>
+                  <ClipboardCheck className="w-4 h-4 mr-2" />BAOF (pilih tanggal)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {/* Menu Data: impor / template / ekspor master */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="h-10 gap-1.5" data-testid="persediaan-menu-data">
+                  <Upload className="w-4 h-4" /><span className="hidden sm:inline">Data</span>
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-60">
+                <DropdownMenuItem className="min-h-[42px]" disabled={importing} data-testid="persediaan-import"
+                  onClick={() => fileImporRef.current?.click()}>
+                  {importing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}Impor CSV/XLSX
+                </DropdownMenuItem>
+                <DropdownMenuItem className="min-h-[42px]" data-testid="persediaan-template"
+                  onClick={() => downloadFileWithProgress(`${API}/persediaan/template`, "template_persediaan.csv", { label: "Template Persediaan" }).catch(() => {})}>
+                  <Download className="w-4 h-4 mr-2" />Unduh Template
+                </DropdownMenuItem>
+                <DropdownMenuItem className="min-h-[42px]" data-testid="persediaan-export"
+                  onClick={() => downloadFileWithProgress(`${API}/persediaan/export`, "master_persediaan.csv", { label: "Ekspor Master Persediaan" }).catch(() => {})}>
+                  <Download className="w-4 h-4 mr-2" />Ekspor CSV (+stok & nilai)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <input ref={fileImporRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={onImportFile} />
           </div>
           <div className="flex items-center gap-1.5 flex-wrap">
             {STATUS_FILTERS.map((f) => (
