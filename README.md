@@ -57,6 +57,13 @@ satker untuk dibawa ke SIMAN (#100). Pelaporan Fase 2 juga tuntas inti:
 Posisi BMN di Neraca (#93), rekonsiliasi XLSX (#94), LBKP mutasi (#95),
 Kartu Barang (#97), transaksi massal persediaan (#98).
 
+**Progres Fase 5–6 (Juli 2026):** Penilaian — **penyusutan garis lurus
+semesteran** (PMK 65/2017; masa manfaat KMK 295/2019 jo. 266/2023) dengan
+halaman posisi per golongan + daftar telaah (#102–#103) · Penghapusan —
+**kandidat usul hapus** per jalur PMK 83/2016 (Tidak Ditemukan →
+penelusuran+TGR; Rusak Berat → pemusnahan/pemindahtanganan) (#104).
+**10 modul siklus kini bisa dimasuki dari Beranda Modul.**
+
 ---
 
 ## 🆕 Highlight Rilis v2.3 (Juli 2026)

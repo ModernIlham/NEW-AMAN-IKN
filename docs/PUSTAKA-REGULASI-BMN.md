@@ -286,7 +286,8 @@ seed lengkap dari lampiran KMK menyusul.
 | Penggunaan (F3) | PSP/alih/sementara/pihak lain/bersama + BMN idle (PMK 40 & 120/2024) |
 | Pemeliharaan (F3, ✅ tahap awal) | Riwayat per kejadian per aset (jenis ringan/sedang/berat DJKN); rekap per TA (bahan DHPB Ps. 47); kondisi sebelum/sesudah; penanda telaah kapitalisasi ≥ ambang PMK 181; jadwal berkala & DHPB PDF menyusul |
 | Perencanaan (F4, ✅ tahap awal) | ✅ Saringan kelayakan RKBMN pemeliharaan (#99: Baik/RR layak; RB → jalur hapus; idle → PMK 120/2024) + kertas kerja XLSX (#100); menyusul: usulan per unit + persetujuan, sanding SBSK PMK 138/2024 |
-| Penghapusan (F6) | Kandidat dari "Tidak Ditemukan" + tiket TGR/penelusuran dari tindak lanjut inventarisasi |
+| Penilaian (F5, ✅ tahap awal) | ✅ Penyusutan garis lurus semesteran + daftar telaah (#102-#103, §5); menyusul: referensi masa manfaat dapat dikelola (seed lampiran KMK), revaluasi |
+| Penghapusan (F6, ✅ tahap awal) | ✅ Kandidat per jalur (#104): "Tidak Ditemukan" → penelusuran+TGR; RB → pemusnahan/pemindahtanganan; menyusul: tiket usulan berstatus + arsip SK |
 
 ---
 

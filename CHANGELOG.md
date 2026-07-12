@@ -48,6 +48,11 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#105] Konsolidasi dokumentasi Fase 5–6 tahap awal — 2026-07-12
+
+- Masterplan/README/pustaka diselaraskan dengan #102–#104 (Penilaian &
+  Penghapusan → Sebagian); README dapat blok Progres Fase 5–6.
+
 ## [#104] Penghapusan tahap awal: kandidat usul hapus — 2026-07-12
 
 - **Fase 6 dimulai** — halaman Penghapusan: kandidat dijaring dari
