@@ -22,12 +22,12 @@ tiap rilis/PR (termasuk catatan teknis penting soal aturan tap-target 44px di �
 AMAN berkembang bertahap dari aplikasi inventarisasi menjadi platform siklus
 penuh pengelolaan BMN (PP 27/2014). **Beranda Modul** — halaman pertama
 setelah login — memetakan seluruh tahap siklus: *Penatausahaan ›
-Inventarisasi Aset* aktif penuh; **Persediaan, Pelaporan, Perencanaan,
-Penggunaan, Pemanfaatan, Penilaian, Pengamanan, Pemeliharaan, dan
-Penghapusan sudah Sebagian Aktif** — seluruh 13 kartu siklus bisa
-dimasuki; sisanya (Penganggaran, Pengadaan, Pemindahtanganan, Pemusnahan,
-Wasdal) berstatus **Segera Hadir** lengkap dengan konsep & rencana
-fiturnya.
+Inventarisasi Aset* aktif penuh; **11 modul siklus sudah Sebagian
+Aktif** (Persediaan, Pelaporan, Perencanaan, Penggunaan, Pemanfaatan,
+Penilaian, Pengamanan, Pemeliharaan, Pemindahtanganan, Pemusnahan,
+Penghapusan) — seluruh 13 kartu siklus bisa dimasuki; sisanya
+(Penganggaran, Pengadaan, Wasdal, Pembukuan/KIB) berstatus **Segera
+Hadir** lengkap dengan konsep & rencana fiturnya.
 
 - Rencana induk & prinsip integrasi antar modul: [`docs/MASTERPLAN-SIKLUS-BMN.md`](./docs/MASTERPLAN-SIKLUS-BMN.md)
 - Rujukan regulasi & alur bisnis: [`docs/PUSTAKA-REGULASI-BMN.md`](./docs/PUSTAKA-REGULASI-BMN.md)
@@ -63,7 +63,10 @@ halaman posisi per golongan + daftar telaah (#102–#103) + referensi masa
 manfaat dapat dikelola (#107) · Pemanfaatan — **register perjanjian 6
 bentuk** dengan penjaga dokumen persetujuan/NTPN + jatuh tempo ≤60 hari
 (PMK 115/2020) (#108) · Penghapusan — **kandidat usul hapus** per jalur
-PMK 83/2016 (#104) + **tiket usulan berstatus** usul → proses → SK (#106).
+PMK 83/2016 (#104) + **tiket usulan berstatus** usul → proses → SK (#106)
+· Pemusnahan — **register BA multi-aset** (#110) · Pemindahtanganan —
+**register usulan 4 bentuk** dengan dokumen wajib per tahap + tenggat
+lelang 6 bulan (PMK 111/2016 jo. 165/2021) (#111).
 **Seluruh 13 kartu modul siklus kini bisa dimasuki dari Beranda Modul.**
 
 ---
