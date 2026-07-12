@@ -48,6 +48,14 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#95] LBKP per golongan: saldo awal + mutasi + saldo akhir — 2026-07-12
+
+- **LBKP semesteran/tahunan** (PMK 181): tiga seksi Intra/Ekstra/Gabungan
+  per golongan — saldo awal, mutasi tambah (pencatatan), mutasi kurang
+  (tombstone audit; nilai terekam sejak #94, kasus lama diungkap jujur),
+  saldo akhir = identitas mutasi; dropdown periode di hub Pelaporan.
+- 3 unit test (suite 141); smoke render tervalidasi angka-per-angka.
+
 ## [#94] Ekspor rekonsiliasi XLSX — sandingan SAKTI — 2026-07-12
 
 - **Rekonsiliasi XLSX** (3 sheet): Posisi per Golongan, Rincian Aset
