@@ -147,6 +147,9 @@ async def create_indexes() -> None:
         # Register SK penetapan penggunaan: urut tanggal + jalur id
         await db.psp.create_index("tanggal_sk")
         await db.psp.create_index("id", unique=True)
+        # Tiket penertiban wasdal: daftar per status/tenggat + jalur id
+        await db.penertiban.create_index([("status", 1), ("tenggat", 1)])
+        await db.penertiban.create_index("id", unique=True)
         logger.info("Database indexes created successfully")
     except Exception as e:
         logger.error(f"Error creating indexes: {e}")
