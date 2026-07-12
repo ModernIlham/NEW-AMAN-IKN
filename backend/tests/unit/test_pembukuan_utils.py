@@ -5,7 +5,7 @@ rekap DBKP per golongan tidak bergeser diam-diam.
 """
 from pembukuan_utils import (
     AMBANG_KAPITALISASI_DEFAULT, build_dbkp_rows, golongan_of,
-    klasifikasi_komptabel, parse_harga, posisi_neraca,
+    build_lbkp_rows, klasifikasi_komptabel, parse_harga, posisi_neraca,
 )
 
 
@@ -123,3 +123,51 @@ class TestPosisiNeraca:
         hasil = posisi_neraca(rows, total)
         assert hasil["total"] == {**total}
         assert hasil["persediaan"] == {"jumlah": 0, "nilai": 0.0}
+
+
+class TestBuildLbkpRows:
+    DARI, SAMPAI = "2026-01-01", "2026-06-30"
+
+    def _aset(self, kode, harga, created):
+        return {"asset_code": kode, "purchase_price": harga, "created_at": created}
+
+    def test_awal_tambah_kurang_akhir_per_kelas(self):
+        assets = [
+            self._aset("3060102135", 5_000_000, "2025-03-01T08:00:00"),   # intra, awal
+            self._aset("3060102135", 2_000_000, "2026-02-10T08:00:00"),   # intra, tambah
+            self._aset("3060102135", 400_000, "2026-03-05T08:00:00"),     # ekstra, tambah
+            self._aset("3060102135", 900_000, "2026-08-01T08:00:00"),     # setelah periode → abaikan
+        ]
+        tombstones = [
+            {"asset_code": "3060102135", "timestamp": "2026-04-01T08:00:00", "nilai": 1_500_000},
+            {"asset_code": "3060102135", "timestamp": "2025-12-01T08:00:00", "nilai": 999},  # di luar periode
+        ]
+        per_kelas, tanpa_nilai = build_lbkp_rows(assets, tombstones, self.DARI, self.SAMPAI,
+                                                 {"3": "Peralatan dan Mesin"})
+        assert tanpa_nilai == 0
+        rows_i, tot_i = per_kelas["intra"]
+        assert len(rows_i) == 1 and rows_i[0]["uraian"] == "Peralatan dan Mesin"
+        assert (tot_i["jumlah_awal"], tot_i["jumlah_tambah"], tot_i["jumlah_kurang"]) == (1, 1, 1)
+        assert tot_i["nilai_akhir"] == 5_000_000 + 2_000_000 - 1_500_000
+        assert tot_i["jumlah_akhir"] == 1
+        rows_e, tot_e = per_kelas["ekstra"]
+        assert (tot_e["jumlah_tambah"], tot_e["nilai_tambah"]) == (1, 400_000)
+        _, tot_g = per_kelas["gabungan"]
+        assert tot_g["jumlah_akhir"] == tot_i["jumlah_akhir"] + tot_e["jumlah_akhir"]
+        assert tot_g["nilai_akhir"] == tot_i["nilai_akhir"] + tot_e["nilai_akhir"]
+
+    def test_tombstone_tanpa_nilai_terhitung_jumlahnya(self):
+        per_kelas, tanpa_nilai = build_lbkp_rows(
+            [], [{"asset_code": "3060102135", "timestamp": "2026-02-01T00:00:00", "nilai": 0}],
+            self.DARI, self.SAMPAI)
+        assert tanpa_nilai == 1
+        _, tot_g = per_kelas["gabungan"]
+        assert tot_g["jumlah_kurang"] == 1 and tot_g["nilai_kurang"] == 0.0
+        assert tot_g["jumlah_akhir"] == -1  # jujur: saldo negatif menandakan data historis kurang
+
+    def test_kosong(self):
+        per_kelas, tanpa_nilai = build_lbkp_rows([], [], self.DARI, self.SAMPAI)
+        assert tanpa_nilai == 0
+        for kelas in ("intra", "ekstra", "gabungan"):
+            rows, total = per_kelas[kelas]
+            assert rows == [] and total["jumlah_akhir"] == 0
