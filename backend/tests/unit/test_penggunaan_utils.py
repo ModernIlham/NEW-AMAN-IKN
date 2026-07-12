@@ -129,3 +129,52 @@ class TestPsp:
         assert rekap_psp([]) == {"jumlah_sk": 0,
                                  "per_jenis": {k: 0 for k in JENIS_PSP},
                                  "aset_tercakup": 0}
+
+
+class TestProsesPenggunaan:
+    def test_validasi_proses(self):
+        from penggunaan_utils import validate_proses_penggunaan
+        ok = {"jenis_proses": "alih_status", "arah": "keluar",
+              "pihak_asal": "Satker A", "pihak_tujuan": "K/L B",
+              "asset_ids": ["x"]}
+        assert validate_proses_penggunaan(ok) == []
+        sementara_ok = {**ok, "jenis_proses": "penggunaan_sementara",
+                        "tanggal_mulai": "2026-08-01",
+                        "tanggal_berakhir": "2028-08-01"}
+        assert validate_proses_penggunaan(sementara_ok) == []
+        errors = validate_proses_penggunaan(
+            {"jenis_proses": "pinjam", "arah": "atas", "pihak_asal": " ",
+             "pihak_tujuan": "", "asset_ids": []})
+        assert len(errors) == 5
+        # Penggunaan sementara tanpa tanggal → error
+        assert validate_proses_penggunaan(
+            {**ok, "jenis_proses": "penggunaan_sementara"})
+
+    def test_transisi_proses(self):
+        from penggunaan_utils import validate_transisi_proses
+        assert validate_transisi_proses(
+            {"jenis_proses": "alih_status", "status": "disetujui"},
+            "bast_selesai") == []
+        # Lompatan ≤6 bulan khusus penggunaan sementara
+        assert validate_transisi_proses(
+            {"jenis_proses": "penggunaan_sementara", "status": "diajukan"},
+            "berjalan") == []
+        assert validate_transisi_proses(
+            {"jenis_proses": "alih_status", "status": "diajukan"}, "berjalan")
+        assert validate_transisi_proses(
+            {"jenis_proses": "alih_status", "status": "dihapus_dibukukan"},
+            "diajukan")
+
+    def test_info_dan_rekap_proses(self):
+        from penggunaan_utils import (info_proses_sementara,
+                                      rekap_proses_penggunaan)
+        berjalan = {"jenis_proses": "penggunaan_sementara",
+                    "status": "berjalan", "tanggal_berakhir": "2026-08-01"}
+        info = info_proses_sementara(berjalan, "2026-07-12")
+        assert info["sisa_hari"] == 20 and info["saatnya_perpanjangan"]
+        alih = {"jenis_proses": "alih_status", "status": "diajukan"}
+        assert info_proses_sementara(alih, "2026-07-12")["berakhir"] is None
+        r = rekap_proses_penggunaan([berjalan, alih], "2026-07-12")
+        assert r["jumlah"] == 2 and r["aktif"] == 2
+        assert r["segera_berakhir"] == 1
+        assert r["per_jenis"]["alih_status"] == 1

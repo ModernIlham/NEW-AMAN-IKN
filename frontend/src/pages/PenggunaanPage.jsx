@@ -25,6 +25,17 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
  * digunakan kembali / usul serah → diserahkan ke Pengelola.
  * PSP/alih status menyusul (PMK 40/2024).
  */
+const WARNA_STATUS_PROSES = {
+  draf: "bg-muted text-foreground/70",
+  diajukan: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
+  disetujui: "bg-violet-500/15 text-violet-600 dark:text-violet-400",
+  ditolak: "bg-red-500/15 text-red-600 dark:text-red-400",
+  bast_selesai: "bg-blue-500/15 text-blue-600 dark:text-blue-400",
+  dihapus_dibukukan: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+  berjalan: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+  berakhir: "bg-muted text-foreground/70",
+};
+
 export default function PenggunaanPage({ user, onBack }) {
   const isAdmin = user?.role === "admin";
   const [items, setItems] = useState([]);
@@ -49,6 +60,9 @@ export default function PenggunaanPage({ user, onBack }) {
   const cariPspTimer = useRef(null);
   // Dialog lampiran SK PSP: {sk, uploading}
   const [lampPsp, setLampPsp] = useState(null);
+  // Tiket proses alih status/penggunaan sementara: data GET + dialog baru
+  const [proses, setProses] = useState(null);
+  const [formProses, setFormProses] = useState(null);
   const lampPspInputRef = useRef(null);
   const searchTimer = useRef(null);
 
@@ -84,11 +98,11 @@ export default function PenggunaanPage({ user, onBack }) {
       .catch(() => toast.error("Gagal memuat register PSP"));
   }, []);
 
-  useEffect(() => { load(1, ""); loadIdle(); loadPsp(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(1, ""); loadIdle(); loadPsp(); loadProses(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Pencarian aset (debounce) untuk dialog catat SK PSP
   useEffect(() => {
-    if (!formPsp || cariPsp.trim().length < 2) { setHasilCariPsp([]); return undefined; }
+    if ((!formPsp && !formProses) || cariPsp.trim().length < 2) { setHasilCariPsp([]); return undefined; }
     clearTimeout(cariPspTimer.current);
     cariPspTimer.current = setTimeout(async () => {
       try {
@@ -97,7 +111,7 @@ export default function PenggunaanPage({ user, onBack }) {
       } catch { setHasilCariPsp([]); }
     }, 300);
     return () => clearTimeout(cariPspTimer.current);
-  }, [cariPsp, formPsp]);
+  }, [cariPsp, formPsp, formProses]);
 
   const onSearchChange = (v) => {
     setSearch(v);
@@ -116,6 +130,63 @@ export default function PenggunaanPage({ user, onBack }) {
     } catch {
       toast.error("Gagal memuat aset pemegang");
       setDetail(null);
+    }
+  };
+
+  const loadProses = useCallback(() => {
+    axios.get(`${API}/penggunaan/proses`)
+      .then((r) => setProses(r.data))
+      .catch(() => {});
+  }, []);
+
+  const simpanProses = async () => {
+    if (!formProses) return;
+    if (formProses.aset.length === 0) { toast.error("Tambahkan minimal satu aset"); return; }
+    setFormProses((f) => ({ ...f, saving: true }));
+    try {
+      await axios.post(`${API}/penggunaan/proses`, {
+        ...formProses.data, asset_ids: formProses.aset.map((a) => a.id),
+      });
+      toast.success("Tiket proses dibuka (draf)");
+      setFormProses(null);
+      loadProses();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal membuka tiket proses");
+      setFormProses((f) => (f ? { ...f, saving: false } : f));
+    }
+  };
+
+  const pindahStatusProses = async (t, ke) => {
+    const label = proses?.label_status?.[ke] || ke;
+    const perluDok = ["disetujui", "ditolak", "bast_selesai", "dihapus_dibukukan", "berjalan"].includes(ke);
+    let nomor = ""; let tanggal = "";
+    if (perluDok) {
+      nomor = window.prompt(`Nomor dokumen untuk "${label}" (persetujuan/BAST/SK/perjanjian, ops.):`, "");
+      if (nomor === null) return;
+      tanggal = window.prompt("Tanggal dokumen (YYYY-MM-DD, ops.):", "");
+      if (tanggal === null) return;
+    }
+    const catatan = window.prompt(`Catatan untuk "${label}" (ops.):`, "");
+    if (catatan === null) return;
+    try {
+      await axios.post(`${API}/penggunaan/proses/${t.id}/status`, {
+        status: ke, catatan, nomor_dokumen: nomor || "", tanggal_dokumen: tanggal || "",
+      });
+      toast.success(`Status tiket: ${label}`);
+      loadProses();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal mengubah status tiket");
+    }
+  };
+
+  const hapusProses = async (t) => {
+    if (!window.confirm(`Hapus tiket ${proses?.label_jenis?.[t.jenis_proses] || t.jenis_proses} (${t.pihak_asal} → ${t.pihak_tujuan})?`)) return;
+    try {
+      await axios.delete(`${API}/penggunaan/proses/${t.id}`);
+      toast.success("Tiket dihapus");
+      loadProses();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal menghapus tiket");
     }
   };
 
@@ -391,6 +462,84 @@ export default function PenggunaanPage({ user, onBack }) {
           </div>
         )}
 
+        {/* ── Tiket proses alih status & penggunaan sementara (PMK 40/2024) ── */}
+        <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="penggunaan-proses">
+          <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold text-foreground">Proses Alih Status & Penggunaan Sementara</p>
+              <p className="text-[10px] text-muted-foreground truncate">
+                Antar Pengguna Barang (PMK 40/2024) — pengajuan resmi via SIMAN/DJKN
+              </p>
+            </div>
+            {(proses?.ringkasan?.segera_berakhir || 0) > 0 && (
+              <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px] font-semibold flex-shrink-0">
+                {proses.ringkasan.segera_berakhir} segera berakhir
+              </span>
+            )}
+            <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
+              onClick={() => { setCariPsp(""); setHasilCariPsp([]); setFormProses({ data: { jenis_proses: "alih_status", arah: "keluar", pihak_asal: "", pihak_tujuan: "", nomor_permohonan: "", tanggal_permohonan: "", tanggal_mulai: "", tanggal_berakhir: "", keterangan: "" }, aset: [], saving: false }); }}
+              data-testid="penggunaan-proses-tambah">
+              <Plus className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">Buka Tiket</span>
+            </Button>
+          </div>
+          {(proses?.items || []).length === 0 ? (
+            <p className="text-[11px] text-muted-foreground text-center py-4 px-3">
+              Belum ada tiket — catat proses alih status (permanen) atau penggunaan sementara (berjangka 5/2 tahun).
+            </p>
+          ) : (
+            <ul className="divide-y divide-border/60">
+              {proses.items.map((t) => (
+                <li key={t.id} className="p-3" data-testid={`penggunaan-proses-${t.id}`}>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${WARNA_STATUS_PROSES[t.status] || "bg-muted"}`}>
+                      {proses.label_status?.[t.status] || t.status}
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 text-[10px] font-semibold">
+                      {proses.label_jenis?.[t.jenis_proses] || t.jenis_proses}
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-semibold text-foreground/70">
+                      {proses.label_arah?.[t.arah] || t.arah}
+                    </span>
+                    {t.info?.saatnya_perpanjangan && (
+                      <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px] font-semibold">
+                        {t.info.sisa_hari} hari — ajukan perpanjangan
+                      </span>
+                    )}
+                    <p className="text-sm font-semibold text-foreground flex-1 min-w-[140px] truncate">
+                      {t.pihak_asal} → {t.pihak_tujuan}
+                    </p>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    {[`${(t.aset || []).length} aset`,
+                      t.nomor_permohonan && `Permohonan ${t.nomor_permohonan}`,
+                      t.nomor_persetujuan && `Persetujuan ${t.nomor_persetujuan}`,
+                      t.nomor_bast && `BAST ${t.nomor_bast}`,
+                      t.nomor_sk_penghapusan && `SK Hapus ${t.nomor_sk_penghapusan}`,
+                      t.nomor_perjanjian && `Perjanjian ${t.nomor_perjanjian}`,
+                      t.jenis_proses === "penggunaan_sementara" && t.tanggal_mulai && `${t.tanggal_mulai} s.d. ${t.tanggal_berakhir}`,
+                      t.keterangan, `oleh ${t.created_by}`].filter(Boolean).join(" · ")}
+                  </p>
+                  <div className="flex gap-1.5 mt-1.5 flex-wrap items-center">
+                    {((proses.transisi?.[t.jenis_proses] || {})[t.status] || []).map((ke) => (
+                      <Button key={ke} size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                        onClick={() => pindahStatusProses(t, ke)}
+                        data-testid={`penggunaan-proses-${t.id}-ke-${ke}`}>
+                        {proses.label_status?.[ke] || ke}
+                      </Button>
+                    ))}
+                    {isAdmin && (
+                      <button type="button" onClick={() => hapusProses(t)} aria-label="Hapus tiket"
+                        className="h-7 w-7 min-h-0 min-w-0 rounded flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-red-500/10">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
         {/* ── Register SK Penetapan Penggunaan (PSP) ── */}
         {psp && (
           <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="penggunaan-psp">
@@ -458,6 +607,130 @@ export default function PenggunaanPage({ user, onBack }) {
           Alih status antar Pengguna & BAST digital penetapan (PMK 40/2024) menyusul — masterplan Fase 3.
         </p>
       </main>
+
+      {/* ── Dialog buka tiket proses ── */}
+      <Dialog open={!!formProses} onOpenChange={(o) => { if (!o) setFormProses(null); }}>
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Buka Tiket Proses</DialogTitle>
+            <DialogDescription className="text-xs">
+              Alih status (permanen) / penggunaan sementara (berjangka) — pengajuan resmi via SIMAN/DJKN.
+            </DialogDescription>
+          </DialogHeader>
+          {formProses && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="prs-jenis">Jenis proses</label>
+                  <select id="prs-jenis" value={formProses.data.jenis_proses}
+                    onChange={(e) => setFormProses((f) => ({ ...f, data: { ...f.data, jenis_proses: e.target.value } }))}
+                    className="w-full h-9 px-2 rounded-lg border border-border bg-background text-sm text-foreground"
+                    data-testid="proses-jenis">
+                    {Object.entries(proses?.label_jenis || {}).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="prs-arah">Arah</label>
+                  <select id="prs-arah" value={formProses.data.arah}
+                    onChange={(e) => setFormProses((f) => ({ ...f, data: { ...f.data, arah: e.target.value } }))}
+                    className="w-full h-9 px-2 rounded-lg border border-border bg-background text-sm text-foreground"
+                    data-testid="proses-arah">
+                    {Object.entries(proses?.label_arah || {}).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="prs-asal">Pihak asal</label>
+                  <Input id="prs-asal" value={formProses.data.pihak_asal}
+                    onChange={(e) => setFormProses((f) => ({ ...f, data: { ...f.data, pihak_asal: e.target.value } }))}
+                    data-testid="proses-asal" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="prs-tujuan">Pihak tujuan</label>
+                  <Input id="prs-tujuan" value={formProses.data.pihak_tujuan}
+                    onChange={(e) => setFormProses((f) => ({ ...f, data: { ...f.data, pihak_tujuan: e.target.value } }))}
+                    data-testid="proses-tujuan" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="prs-nomor">No. permohonan (ops.)</label>
+                  <Input id="prs-nomor" value={formProses.data.nomor_permohonan}
+                    onChange={(e) => setFormProses((f) => ({ ...f, data: { ...f.data, nomor_permohonan: e.target.value } }))}
+                    data-testid="proses-nomor" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="prs-tgl">Tgl. permohonan (ops.)</label>
+                  <Input id="prs-tgl" type="date" value={formProses.data.tanggal_permohonan}
+                    onChange={(e) => setFormProses((f) => ({ ...f, data: { ...f.data, tanggal_permohonan: e.target.value } }))}
+                    data-testid="proses-tgl" />
+                </div>
+                {formProses.data.jenis_proses === "penggunaan_sementara" && (
+                  <>
+                    <div>
+                      <label className="text-xs font-medium text-foreground block mb-1" htmlFor="prs-mulai">Mulai</label>
+                      <Input id="prs-mulai" type="date" value={formProses.data.tanggal_mulai}
+                        onChange={(e) => setFormProses((f) => ({ ...f, data: { ...f.data, tanggal_mulai: e.target.value } }))}
+                        data-testid="proses-mulai" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-foreground block mb-1" htmlFor="prs-berakhir">Berakhir (maks 5 th tanah/bangunan, 2 th lainnya)</label>
+                      <Input id="prs-berakhir" type="date" value={formProses.data.tanggal_berakhir}
+                        onChange={(e) => setFormProses((f) => ({ ...f, data: { ...f.data, tanggal_berakhir: e.target.value } }))}
+                        data-testid="proses-berakhir" />
+                    </div>
+                  </>
+                )}
+                <div className="col-span-2">
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="prs-ket">Keterangan (ops.)</label>
+                  <Input id="prs-ket" value={formProses.data.keterangan}
+                    onChange={(e) => setFormProses((f) => ({ ...f, data: { ...f.data, keterangan: e.target.value } }))}
+                    data-testid="proses-ket" />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="prs-cari">Tambah aset</label>
+                <div className="relative">
+                  <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-muted-foreground" />
+                  <Input id="prs-cari" className="pl-8" placeholder="nama / kode / NUP…"
+                    value={cariPsp} onChange={(e) => setCariPsp(e.target.value)} data-testid="proses-cari" />
+                </div>
+                <ul className="mt-2 space-y-1.5 max-h-32 overflow-y-auto">
+                  {hasilCariPsp.map((a) => (
+                    <li key={a.id}>
+                      <button type="button"
+                        onClick={() => setFormProses((f) => (f.aset.some((x) => x.id === a.id) ? f : { ...f, aset: [...f.aset, a] }))}
+                        className="w-full text-left rounded-lg border border-border p-2 text-xs hover:bg-muted min-h-0"
+                        data-testid={`proses-pilih-${a.id}`}>
+                        <span className="text-foreground/90">{a.asset_name || "-"}</span>{" "}
+                        <span className="font-mono text-[10px] text-muted-foreground">({a.asset_code} · {a.NUP})</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                {formProses.aset.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {formProses.aset.map((a) => (
+                      <li key={a.id} className="rounded-lg border border-border p-1.5 text-xs flex items-center justify-between gap-2">
+                        <span className="min-w-0 truncate text-foreground/90">{a.asset_name || "-"} <span className="font-mono text-[10px] text-muted-foreground">({a.asset_code})</span></span>
+                        <button type="button" onClick={() => setFormProses((f) => ({ ...f, aset: f.aset.filter((x) => x.id !== a.id) }))}
+                          className="h-6 w-6 min-h-0 min-w-0 rounded flex items-center justify-center text-muted-foreground hover:text-red-500 flex-shrink-0" aria-label="Lepas aset">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" size="sm" onClick={() => setFormProses(null)}>Batal</Button>
+                <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                  disabled={formProses.saving || !formProses.data.pihak_asal.trim() || !formProses.data.pihak_tujuan.trim() || formProses.aset.length === 0}
+                  onClick={simpanProses} data-testid="proses-simpan">
+                  {formProses.saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Buka Tiket (Draf)"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* ── Dialog catat SK PSP ── */}
       <Dialog open={!!formPsp} onOpenChange={(o) => { if (!o) setFormPsp(null); }}>
