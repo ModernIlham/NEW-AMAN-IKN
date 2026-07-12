@@ -725,7 +725,7 @@ fisik; barang untuk pemda/masyarakat tidak segera di-BAST-kan.
 | Pembukuan (F2) | DBKP per golongan; flag intra/ekstra dari ambang kapitalisasi ber-parameter; Ruangan+DBR/DBL; KIB 6 jenis; barang bersejarah qty-saja |
 | Persediaan (F2) | Perpetual + FIFO per layer; enum transaksi peta SAKTI; dua tahap usang/rusak; operator–approver; opname semesteran + BAOF + kunci back-date; mapping akun 1171xx |
 | Pelaporan (F2, ✅ inti) | ✅ Hub arsip (#86) + Posisi BMN di Neraca (#93) + rekonsiliasi XLSX (#94) + LBKP mutasi per golongan (#95) + CaLBMN pra-isi bab I–V (§2.3a) + LKB per NUP + ringkasan B/RR/RB (§2.3b) + periode ber-kunci dengan penanda FINAL + tenggat penyampaian konfigurabel per periode — daftar "Implikasi AMAN" §2.3 tuntas |
-| Penggunaan (F3) | PSP/alih/sementara/pihak lain/bersama + BMN idle (PMK 40 & 120/2024) |
+| Penggunaan (F3, ✅ tahap awal) | ✅ Rekap pemegang + BAST (#87), daftar per pemegang PDF (#125), BMN idle berjenjang (#126), register SK PSP 5 jenis + arsip (#129/#137); ✅ tiket proses alih status & penggunaan sementara ber-pipeline + pengingat (#181, PMK 40/2024); menyusul: penggunaan bersama & dioperasikan pihak lain sebagai tiket proses |
 | Pengamanan (F3, ✅ tahap awal) | ✅ Dasbor tertib administrasi + pantau sengketa dari data inventarisasi (#88); ✅ register BMN bermasalah berstatus identifikasi→mediasi→blokir→litigasi→selesai (#169, §11); ✅ arsip dokumen kepemilikan per aset + lokasi penyimpanan Ps. 43 + scan (#171); ✅ status sertipikasi K1-K4 per dokumen sertipikat (#173); ✅ checklist pengamanan per aset per jenis dengan skor (#175, §11.2); ✅ register polis Asuransi BMN + pengingat masa berlaku (#177, §11.5, PMK 43/2025) — daftar "menyusul" Pengamanan tuntas |
 | Pemeliharaan (F3, ✅ tahap awal) | Riwayat per kejadian per aset (jenis ringan/sedang/berat DJKN); rekap per TA (bahan DHPB Ps. 47); kondisi sebelum/sesudah; penanda telaah kapitalisasi ≥ ambang PMK 181; jadwal berkala & DHPB PDF menyusul |
 | Perencanaan (F4, ✅ tahap awal) | ✅ Saringan kelayakan RKBMN pemeliharaan (#99) + kertas kerja XLSX (#100); ✅ usulan RKBMN per unit berstatus draft→diajukan→PB→Pengelola→telaah + SPTJM/reviu APIP (#179, PMK 153/2021 + KMK 128/KM.6/2022); menyusul: sanding SBSK (kalkulator menunggu lampiran PMK 138/2024, §14 butir 21) |
@@ -801,6 +801,12 @@ fisik; barang untuk pemda/masyarakat tidak segera di-BAST-kan.
     — kalkulator SBSK DITUNDA sampai lampiran asli terbaca); alur
     berjenjang KPB→korwil→eselon I→PB + reviu APIP + SPTJM (PMK
     153/2021 + KMK 128/KM.6/2022) dari artikel DJKN/juknis MA.
+22. Alih status & penggunaan sementara (riset Juli 2026, #181, PMK
+    40/2024): tenggat BAST ≤1 bulan / SK penghapusan ≤2 bulan / lapor
+    ≤1 bulan; jangka penggunaan sementara 5 th (tanah/bangunan) vs 2 th
+    (lainnya); ≤6 bulan tanpa persetujuan Pengelola; apakah persetujuan
+    alih status merangkap PSP baru — semua dari cuplikan, nomor pasal
+    belum terkonfirmasi dari teks asli PMK 40/2024.
 
 ---
 
