@@ -120,7 +120,7 @@ export const PENATAUSAHAAN_SUBMODULES = [
     nama: "Pelaporan",
     status: "sebagian",
     fase: 2,
-    ringkas: "Hub arsip, LBKP, Posisi BMN di Neraca, dan rekonsiliasi XLSX sudah bisa dibuka — CaLBMN & LKB menyusul.",
+    ringkas: "Hub arsip, LBKP, Posisi BMN di Neraca, rekonsiliasi XLSX, dan CaLBMN pra-isi sudah bisa dibuka — LKB menyusul.",
     deskripsi:
       "Pelaporan BMN berkala: Laporan Barang Kuasa Pengguna (LBKP) semesteran & tahunan, "
       + "laporan kondisi barang, serta dukungan rekonsiliasi dengan SIMAK/SAKTI. Saat ini "
@@ -130,6 +130,7 @@ export const PENATAUSAHAAN_SUBMODULES = [
     fitur: [
       "✅ Posisi BMN di Neraca (per golongan, intra/ekstra + persediaan FIFO)",
       "✅ LBKP semesteran/tahunan per golongan (saldo awal–mutasi–akhir) + rekonsiliasi XLSX",
+      "✅ CaLBMN pra-isi bab I–V per periode (struktur PMK 181; bahan penyusunan — final via SAKTI)",
       "Arsip laporan lintas kegiatan dengan penomoran & riwayat",
       "Ekspor rekonsiliasi (format yang bisa disandingkan dengan SIMAK/SAKTI)",
     ],

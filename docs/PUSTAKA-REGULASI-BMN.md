@@ -100,6 +100,50 @@ Unaudited / Audited) + kunci periode; generator LBKP per komponen +
 CaLBMN + LKB; checklist penyampaian per tujuan; ekspor pembanding
 rekonsiliasi berformat selaras SAKTI/MonSAKTI.
 
+#### 2.3a Struktur baku CaLBMN tingkat UAKPB (riset Jul 2026)
+
+Pola konsisten lintas CaLBMN satker (pengadilan, KKP, Kemenag, KPU,
+Komdigi; format dari Lampiran PMK 181/2016 — nomor lampiran perlu
+verifikasi, §13 butir 16):
+
+- **I. Pendahuluan** — dasar hukum (UU 17/2003; UU 1/2004 Ps. 49(6) &
+  55(2); PP 27/2014 jo. PP 28/2020; PMK 181/2016) + entitas & periode
+  pelaporan (identitas UAKPB, Semester I/II/Tahunan).
+- **II. Kebijakan Penatausahaan BMN** — penggolongan & kodefikasi;
+  kapitalisasi intra/ekstrakomptabel (PM ≥ Rp1 jt; GB ≥ Rp25 jt; tanah/
+  JIJ/koleksi perpustakaan ≥ Rp1); penyusutan (PMK 1/2013 jo. 65/2017);
+  amortisasi ATB (PMK 251/2015); rekonsiliasi internal UAKPA + eksternal
+  KPKNL.
+- **III. Pendekatan Penyusunan Laporan** — sumber data (SIMAK-BMN/SAKTI
+  modul Aset Tetap & Persediaan, basis akrual), cakupan, daftar lampiran
+  (Neraca, LBKP Intra/Ekstra/Gabungan, Persediaan, KDP, ATB, Register
+  Transaksi Harian, Laporan Penyusutan, LKB untuk tahunan).
+- **IV. Ringkasan BMN** — saldo awal; ringkasan mutasi per akun neraca
+  (Persediaan, Tanah, Peralatan & Mesin, Gedung & Bangunan, JIJ, Aset
+  Tetap Lainnya, KDP, Aset Lainnya) dengan pola saldo awal → mutasi
+  tambah/kurang per jenis transaksi → saldo akhir untuk intra/ekstra/
+  gabungan; posisi BMN di neraca.
+- **V. Informasi BMN Lainnya** — perkembangan nilai antarperiode; PSP,
+  pemanfaatan, pemindahtanganan, penghapusan; BMN idle; sengketa; PNBP
+  dari pengelolaan BMN; langkah strategis.
+
+Istilah mutasi lazim (kode SIMAK/SAKTI): tambah — Saldo Awal (100),
+Pembelian (101), Transfer Masuk (102), Hibah Masuk (103), Rampasan (104),
+Penyelesaian Pembangunan Dengan KDP (105), Pembatalan Penghapusan (106),
+Reklasifikasi Masuk (107), Perolehan Lainnya (112), Penyelesaian
+Pembangunan Langsung (113), Pengembangan Nilai (202), Koreksi Bertambah
+(204/205), Penerimaan ATR (206), Pengembangan via KDP (208); kurang —
+Penghapusan (301), Transfer Keluar (302), Hibah Keluar (303),
+Reklasifikasi Keluar (304), Koreksi Pencatatan (305), Penghentian dari
+Penggunaan (401). Tahunan dilampiri LKB dan lazim terbit dua versi
+(unaudited → audited).
+
+**Implikasi AMAN (CaLBMN):** generator CaLBMN pra-isi per periode dengan
+bab I–V terisi dari data yang ada (LBKP #95, posisi neraca #93, register
+PSP/pemanfaatan/pemindahtanganan/penghapusan/idle/sengketa, kontribusi
+PNBP #121) — AMAN penyiap bahan; dokumen resmi tetap dari SAKTI dan
+finalisasi narasi oleh operator.
+
 ### 2.4 Organisasi penatausahaan
 
 UAPB (K/L) ⟶ UAPPB-E1 (eselon I) ⟶ UAPPB-W (wilayah) ⟶ **UAKPB (satker —
@@ -558,7 +602,7 @@ fisik; barang untuk pemda/masyarakat tidak segera di-BAST-kan.
 | Kodefikasi (✅) | 5 level dari panjang prefix; golongan 1 vs 2–8; referensi dapat diimpor/diperbarui — jangan hard-code |
 | Pembukuan (F2) | DBKP per golongan; flag intra/ekstra dari ambang kapitalisasi ber-parameter; Ruangan+DBR/DBL; KIB 6 jenis; barang bersejarah qty-saja |
 | Persediaan (F2) | Perpetual + FIFO per layer; enum transaksi peta SAKTI; dua tahap usang/rusak; operator–approver; opname semesteran + BAOF + kunci back-date; mapping akun 1171xx |
-| Pelaporan (F2, ✅ inti) | ✅ Hub arsip (#86) + Posisi BMN di Neraca (#93) + rekonsiliasi XLSX (#94) + LBKP mutasi per golongan (#95); menyusul: periode ber-kunci, CaLBMN + LKB, tenggat konfigurabel |
+| Pelaporan (F2, ✅ inti) | ✅ Hub arsip (#86) + Posisi BMN di Neraca (#93) + rekonsiliasi XLSX (#94) + LBKP mutasi per golongan (#95) + CaLBMN pra-isi bab I–V (§2.3a); menyusul: periode ber-kunci, LKB, tenggat konfigurabel |
 | Penggunaan (F3) | PSP/alih/sementara/pihak lain/bersama + BMN idle (PMK 40 & 120/2024) |
 | Pemeliharaan (F3, ✅ tahap awal) | Riwayat per kejadian per aset (jenis ringan/sedang/berat DJKN); rekap per TA (bahan DHPB Ps. 47); kondisi sebelum/sesudah; penanda telaah kapitalisasi ≥ ambang PMK 181; jadwal berkala & DHPB PDF menyusul |
 | Perencanaan (F4, ✅ tahap awal) | ✅ Saringan kelayakan RKBMN pemeliharaan (#99: Baik/RR layak; RB → jalur hapus; idle → PMK 120/2024) + kertas kerja XLSX (#100); menyusul: usulan per unit + persetujuan, sanding SBSK PMK 138/2024 |
@@ -606,6 +650,11 @@ fisik; barang untuk pemda/masyarakat tidak segera di-BAST-kan.
     perjanjian) pasca-Perpres 46/2025; ada-tidaknya PerLKPP payung baru
     pengganti PerLKPP 11/2021 & 12/2021; kepastian tidak adanya PMK
     pengubah ambang kapitalisasi PMK 181/2016 (cek daftar status JDIH).
+16. Nomor lampiran PMK 181/2016 yang memuat format CaLBMN tingkat UAKPB
+    (cuplikan terbelah "Lampiran IV" vs "Lampiran VI"); tenggat
+    penyampaian LBKP semesteran "≤20 hari setelah semester berakhir"
+    (aturan era SABMN lama — cek rezim PMK 181); kode transaksi
+    pertukaran & reklasifikasi BPYBDS.
 
 ---
 

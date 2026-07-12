@@ -1714,6 +1714,241 @@ async def generate_lbkp_pdf(
         headers={"Content-Disposition": f'attachment; filename="LBKP_{tahun}{suffix}.pdf"'})
 
 
+@reports_router.get("/pembukuan/calbmn-pdf")
+async def generate_calbmn_pdf(
+    tahun: int = Query(..., ge=2000, le=2100),
+    semester: int = Query(None, ge=1, le=2),
+    _user: dict = Depends(require_user_or_query_token),
+):
+    """CaLBMN pra-isi tingkat UAKPB (pustaka §2.3a — struktur I–V).
+
+    Bab I–V terisi dari data register yang ada (LBKP #95, persediaan,
+    PSP/pemanfaatan/pemindahtanganan/penghapusan/idle/sengketa, PNBP
+    kontribusi #121). AMAN penyiap bahan — dokumen resmi tetap dari
+    SAKTI; narasi difinalkan operator. Tanpa data dummy: keterbatasan
+    data historis diungkap eksplisit.
+    """
+    from reportlab.platypus import Table, Paragraph, Spacer
+    from reportlab.lib.units import mm as rl_mm
+    from kodefikasi_utils import GOLONGAN_DEFAULTS
+    from pembukuan_utils import (
+        AMBANG_KAPITALISASI_DEFAULT, build_lbkp_rows, parse_harga,
+    )
+    from pemeliharaan_utils import rentang_periode
+    from pengamanan_utils import is_sengketa
+    from persediaan_utils import nilai_persediaan_dari_batches
+
+    dari, sampai, label_periode = rentang_periode(tahun, semester)
+    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    assets = await db.assets.find(
+        {}, {"_id": 0, "id": 1, "asset_code": 1, "purchase_price": 1,
+             "created_at": 1, "inventory_status": 1, "nomor_perkara": 1,
+             "pihak_bersengketa": 1},
+    ).to_list(500000)
+    tombstones = []
+    async for t in db.audit_logs.find(
+            {"action": "delete"},
+            {"_id": 0, "asset_code": 1, "timestamp": 1, "changes": 1}):
+        nilai = 0.0
+        for c in t.get("changes") or []:
+            if c.get("field") == "purchase_price":
+                nilai = parse_harga(c.get("from"))
+                break
+        tombstones.append({"asset_code": t.get("asset_code"),
+                           "timestamp": t.get("timestamp"), "nilai": nilai})
+
+    uraian_map = {k: u for k, u in GOLONGAN_DEFAULTS}
+    async for k in db.kodefikasi.find({"level": 1}, {"_id": 0, "kode": 1, "uraian": 1}):
+        if k.get("uraian"):
+            uraian_map[k["kode"]] = k["uraian"]
+
+    per_kelas, n_tanpa_nilai = build_lbkp_rows(assets, tombstones, dari, sampai, uraian_map)
+    if not per_kelas["gabungan"][0]:
+        raise HTTPException(status_code=404,
+                            detail=f"Belum ada data aset untuk {label_periode}")
+
+    # Persediaan (posisi kini — keterbatasan diungkap di teks)
+    p_jumlah, p_nilai = 0, 0.0
+    async for it in db.persediaan.find({}, {"_id": 0, "batches": 1}):
+        p_jumlah += 1
+        p_nilai += nilai_persediaan_dari_batches(it.get("batches"))
+
+    # Informasi BMN lainnya — hitungan register (kueri ringan)
+    psp_aset = set()
+    async for s in db.psp.find({}, {"_id": 0, "aset.asset_id": 1}):
+        for a in s.get("aset") or []:
+            if a.get("asset_id"):
+                psp_aset.add(a["asset_id"])
+    n_pemanfaatan = await db.pemanfaatan.count_documents({})
+    pnbp_jumlah, pnbp_nilai = 0, 0.0
+    async for p in db.pemanfaatan.find({}, {"_id": 0, "kontribusi": 1}):
+        for k in p.get("kontribusi") or []:
+            tgl = str(k.get("tanggal") or "")[:10]
+            if dari <= tgl <= sampai:
+                pnbp_jumlah += 1
+                pnbp_nilai += float(k.get("jumlah") or 0)
+    n_pt_proses = await db.pemindahtanganan.count_documents(
+        {"status": {"$in": ["diusulkan", "disetujui", "dilaksanakan"]}})
+    n_pt_selesai = await db.pemindahtanganan.count_documents({"status": "selesai"})
+    n_hapus_proses = await db.usulan_penghapusan.count_documents(
+        {"status": {"$in": ["diusulkan", "diproses"]}})
+    n_hapus_sk = await db.usulan_penghapusan.count_documents({"status": "sk_terbit"})
+    n_pemusnahan = await db.pemusnahan.count_documents({})
+    n_idle_aktif = await db.bmn_idle.count_documents(
+        {"status": {"$in": ["klarifikasi", "usul_serah"]}})
+    n_idle_serah = await db.bmn_idle.count_documents({"status": "diserahkan"})
+    n_sengketa = sum(1 for a in assets if is_sengketa(a))
+
+    def fmt_rp(val):
+        try: return f"{int(val):,}".replace(",", ".")
+        except (ValueError, TypeError, OverflowError): return "0"
+
+    ambang_pm = fmt_rp(AMBANG_KAPITALISASI_DEFAULT.get("3", 0))
+    ambang_gb = fmt_rp(AMBANG_KAPITALISASI_DEFAULT.get("4", 0))
+    satker = settings.get("kop_line2") or settings.get("kop_line1") or "Satuan Kerja"
+
+    buffer = io.BytesIO()
+    doc = _std_doc(buffer)
+    st = _get_report_styles()
+    elements = []
+    elements.extend(_kop_surat_flowables(settings, doc.width))
+    elements.extend(_title_block(
+        "CATATAN ATAS LAPORAN\nBARANG MILIK NEGARA",
+        subjudul=f"Tingkat Kuasa Pengguna Barang — {label_periode} · Bahan Penyusunan (Pra-isi)"))
+
+    def bab(judul):
+        elements.append(Spacer(1, 3 * rl_mm))
+        elements.append(Paragraph(f"<b>{judul}</b>", st['Meta']))
+        elements.append(Spacer(1, 1 * rl_mm))
+
+    bab("I. PENDAHULUAN")
+    elements.append(Paragraph(
+        f"Catatan atas Laporan Barang Milik Negara (CaLBMN) ini disusun oleh "
+        f"{satker} selaku Unit Akuntansi Kuasa Pengguna Barang (UAKPB) untuk "
+        f"periode {label_periode} ({_fmt_tanggal_id(dari)} s.d. "
+        f"{_fmt_tanggal_id(sampai)}). Dasar hukum: UU 17/2003 tentang Keuangan "
+        f"Negara; UU 1/2004 tentang Perbendaharaan Negara (Ps. 49 ayat (6) dan "
+        f"Ps. 55 ayat (2)); PP 27/2014 jo. PP 28/2020 tentang Pengelolaan "
+        f"BMN/D; dan PMK 181/PMK.06/2016 tentang Penatausahaan BMN.", st['Meta']))
+
+    bab("II. KEBIJAKAN PENATAUSAHAAN BMN")
+    elements.append(Paragraph(
+        f"BMN dibukukan per golongan mengikuti kodefikasi barang. Pemilahan "
+        f"intrakomptabel/ekstrakomptabel mengikuti nilai satuan minimum "
+        f"kapitalisasi PMK 181/PMK.06/2016: Peralatan dan Mesin ≥ Rp{ambang_pm}; "
+        f"Gedung dan Bangunan ≥ Rp{ambang_gb}; golongan lain dibukukan "
+        f"intrakomptabel tanpa ambang. Penyusutan aset tetap mengikuti "
+        f"PMK 1/PMK.06/2013 jo. PMK 65/PMK.06/2017 (garis lurus semesteran — "
+        f"rekap tersedia pada halaman Penilaian); rekonsiliasi internal dengan "
+        f"UAKPA dan eksternal dengan KPKNL dilakukan per semester.", st['Meta']))
+
+    bab("III. PENDEKATAN PENYUSUNAN LAPORAN")
+    elements.append(Paragraph(
+        f"Angka pada dokumen ini dihasilkan aplikasi AMAN dari register "
+        f"inventarisasi, persediaan, dan register siklus BMN satker sebagai "
+        f"BAHAN penyusunan CaLBMN. Dokumen resmi tetap disusun melalui "
+        f"SIMAK-BMN/SAKTI; narasi akhir difinalkan operator BMN. Mutasi tambah "
+        f"dihitung dari tanggal pencatatan aset dan mutasi kurang dari jejak "
+        f"audit penghapusan pada AMAN.", st['Meta']))
+
+    bab("IV. RINGKASAN BMN (GABUNGAN INTRA + EKSTRAKOMPTABEL)")
+    rows_gab, total_gab = per_kelas["gabungan"]
+    headers = ["Gol", "Uraian Golongan", "Saldo Awal (Rp)",
+               "Mutasi Tambah (Rp)", "Mutasi Kurang (Rp)", "Saldo Akhir (Rp)"]
+    table_data = [[Paragraph(h, st['TableHeader']) for h in headers]]
+    for r in rows_gab:
+        table_data.append([
+            Paragraph(r["golongan"], st['CellCenter']),
+            Paragraph(r["uraian"], st['Cell']),
+            Paragraph(fmt_rp(r["nilai_awal"]), st['CellRight']),
+            Paragraph(fmt_rp(r["nilai_tambah"]), st['CellRight']),
+            Paragraph(fmt_rp(r["nilai_kurang"]), st['CellRight']),
+            Paragraph(fmt_rp(r["nilai_akhir"]), st['CellRight']),
+        ])
+    table_data.append([
+        Paragraph("", st['CellCenter']),
+        Paragraph("<b>JUMLAH ASET TETAP</b>", st['Cell']),
+        Paragraph(f"<b>{fmt_rp(total_gab['nilai_awal'])}</b>", st['CellRight']),
+        Paragraph(f"<b>{fmt_rp(total_gab['nilai_tambah'])}</b>", st['CellRight']),
+        Paragraph(f"<b>{fmt_rp(total_gab['nilai_kurang'])}</b>", st['CellRight']),
+        Paragraph(f"<b>{fmt_rp(total_gab['nilai_akhir'])}</b>", st['CellRight']),
+    ])
+    table = Table(table_data,
+                  colWidths=_fit_col_widths([26, 140, 74, 74, 74, 74], doc.width),
+                  repeatRows=1)
+    table.setStyle(_std_table_style(zebra=True, total_row=True))
+    elements.append(table)
+    elements.append(Spacer(1, 2 * rl_mm))
+
+    t_intra, t_ekstra = per_kelas["intra"][1], per_kelas["ekstra"][1]
+    ringkas = [["Kelas", "Saldo Awal (Rp)", "Saldo Akhir (Rp)", "Jumlah NUP Akhir"]]
+    ringkas_rows = [
+        ("Intrakomptabel (tersaji di neraca)", t_intra),
+        ("Ekstrakomptabel (di bawah ambang)", t_ekstra),
+        ("Gabungan", total_gab),
+    ]
+    table_data = [[Paragraph(h, st['TableHeader']) for h in ringkas[0]]]
+    for label, tot in ringkas_rows:
+        table_data.append([
+            Paragraph(label, st['Cell']),
+            Paragraph(fmt_rp(tot['nilai_awal']), st['CellRight']),
+            Paragraph(fmt_rp(tot['nilai_akhir']), st['CellRight']),
+            Paragraph(str(tot['jumlah_akhir']), st['CellCenter']),
+        ])
+    table = Table(table_data,
+                  colWidths=_fit_col_widths([180, 90, 90, 80], doc.width))
+    table.setStyle(_std_table_style(zebra=True))
+    elements.append(table)
+    elements.append(Spacer(1, 2 * rl_mm))
+    catatan_iv = (
+        f"Persediaan (aset lancar): {p_jumlah} jenis barang dengan nilai "
+        f"posisi kini Rp{fmt_rp(p_nilai)} (FIFO per layer — nilai historis "
+        f"per akhir periode menyusul dengan kunci periode). Mutasi kurang "
+        f"aset yang jejak nilainya belum terekam dihitung jumlahnya dengan "
+        f"nilai 0. Komponen KDP dan ATB belum dicatat pada AMAN.")
+    if n_tanpa_nilai:
+        catatan_iv += (f" Terdapat {n_tanpa_nilai} penghapusan periode ini "
+                       f"tanpa nilai perolehan terekam.")
+    elements.append(Paragraph(catatan_iv, st['Meta']))
+
+    bab("V. INFORMASI BMN LAINNYA")
+    butir = [
+        f"Penetapan Status Penggunaan: {len(psp_aset)} aset tercakup SK "
+        f"penetapan dari {len(assets)} aset terdaftar.",
+        f"Pemanfaatan: {n_pemanfaatan} perjanjian tercatat; PNBP dari "
+        f"kontribusi/setoran ber-NTPN periode ini: {pnbp_jumlah} setoran "
+        f"senilai Rp{fmt_rp(pnbp_nilai)}.",
+        f"Pemindahtanganan: {n_pt_proses} usulan dalam proses; "
+        f"{n_pt_selesai} selesai (SK Penghapusan terbit).",
+        f"Penghapusan: {n_hapus_proses} usulan aktif; {n_hapus_sk} SK "
+        f"terbit; {n_pemusnahan} Berita Acara Pemusnahan tercatat.",
+        f"BMN idle: {n_idle_aktif} tiket aktif (klarifikasi/usul serah); "
+        f"{n_idle_serah} telah diserahkan ke Pengelola Barang.",
+        f"Sengketa: {n_sengketa} aset berstatus/berindikasi sengketa.",
+    ]
+    for b in butir:
+        elements.append(Paragraph(f"• {b}", st['Meta']))
+    elements.append(Spacer(1, 1 * rl_mm))
+    elements.append(Paragraph(
+        "Langkah strategis dan penjelasan kualitatif lainnya diisi operator "
+        "sesuai kondisi satker sebelum dokumen difinalkan.", st['Meta']))
+
+    elements.append(Spacer(1, 10 * rl_mm))
+    elements.extend(_signature_block([
+        {'pre': ['.................., .......................'],
+         'header': 'Kuasa Pengguna Barang,',
+         'nama': settings.get("kasatker_nama") or "-",
+         'after': [f"NIP. {settings.get('kasatker_nip') or '-'}"]},
+    ], doc.width))
+    footer = _page_footer_factory("CaLBMN — Bahan Penyusunan (Pra-isi)")
+    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    buffer.seek(0)
+    suffix = f"_S{semester}" if semester else ""
+    return StreamingResponse(
+        buffer, media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="CaLBMN_{tahun}{suffix}.pdf"'})
+
+
 @reports_router.get("/pembukuan/rekonsiliasi-xlsx")
 async def generate_rekonsiliasi_xlsx(_user: dict = Depends(require_user_or_query_token)):
     """Ekspor rekonsiliasi Posisi BMN (XLSX) — sandingan SAKTI/MonSAKTI.
