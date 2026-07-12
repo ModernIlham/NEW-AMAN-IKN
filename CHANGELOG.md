@@ -48,6 +48,12 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#84] Konsolidasi status modul Persediaan (dokumentasi) — 2026-07-12
+
+- Kartu modul Persediaan di Beranda Modul menampilkan fitur berjalan
+  (✅ #77–#83) vs menyusul (gudang, impor massal, massal per dokumen);
+  masterplan §7.4 ditandai per PR; README blok "Progres Fase 2".
+
 ## [#83] Stock opname persediaan + BAOF 3 penandatangan — 2026-07-12
 
 - **Opname per barang**: stok fisik + alasan wajib → selisih dibukukan
