@@ -148,6 +148,100 @@ async def catat_psp(payload: PspIn, user: dict = Depends(require_user)):
     return record
 
 
+@penggunaan_router.get("/penggunaan/psp/{sk_id}/bast-pdf")
+async def bast_psp_pdf(sk_id: str, _user: dict = Depends(require_user)):
+    """BAST penetapan status penggunaan siap tanda tangan (PMK 40/2024).
+
+    Kop surat satker, narasi dasar SK penetapan, tabel aset multi-baris,
+    blok tanda tangan pihak yang menyerahkan/menerima + KPB. Data murni
+    dari register SK — tanpa isian dummy.
+    """
+    from io import BytesIO
+
+    from fastapi.responses import StreamingResponse
+    from reportlab.lib.units import mm as rl_mm
+    from reportlab.platypus import Paragraph, Spacer, Table
+
+    from routes.reports import (
+        _fit_col_widths, _fmt_tanggal_id, _get_report_styles, _kop_surat_flowables,
+        _page_footer_factory, _signature_block, _std_doc, _std_table_style,
+        _title_block,
+    )
+
+    sk = await db.psp.find_one({"id": sk_id}, {"_id": 0})
+    if not sk:
+        raise HTTPException(status_code=404, detail="SK tidak ditemukan")
+    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    aset = sk.get("aset") or []
+    jenis = JENIS_PSP.get(sk.get("jenis"), sk.get("jenis") or "-")
+
+    buffer = BytesIO()
+    doc = _std_doc(buffer)
+    st = _get_report_styles()
+    elements = []
+    elements.extend(_kop_surat_flowables(settings, doc.width))
+    elements.extend(_title_block(
+        "BERITA ACARA SERAH TERIMA\nPENETAPAN STATUS PENGGUNAAN "
+        "BARANG MILIK NEGARA"))
+    penetap = str(sk.get("penetap") or "").strip()
+    elements.append(Paragraph(
+        f"Berdasarkan Surat Keputusan {jenis} Nomor "
+        f"<b>{sk.get('nomor_sk') or '-'}</b> tanggal "
+        f"{_fmt_tanggal_id(sk.get('tanggal_sk'))}"
+        + (f" yang ditetapkan oleh {penetap}" if penetap else "")
+        + f", pada hari ini telah dilakukan serah terima {len(aset)} unit "
+        f"Barang Milik Negara untuk penyelenggaraan tugas dan fungsi "
+        f"(PMK 40 Tahun 2024), dengan rincian sebagai berikut:",
+        st['Meta']))
+    elements.append(Spacer(1, 4 * rl_mm))
+
+    headers = ["No", "Kode Barang", "NUP", "Nama Barang"]
+    table_data = [[Paragraph(h, st['TableHeader']) for h in headers]]
+    for i, a in enumerate(aset, start=1):
+        table_data.append([
+            Paragraph(str(i), st['CellCenter']),
+            Paragraph(a.get("asset_code") or "-", st['Cell']),
+            Paragraph(str(a.get("NUP") or "-"), st['CellCenter']),
+            Paragraph(a.get("asset_name") or "-", st['Cell']),
+        ])
+    table = Table(table_data,
+                  colWidths=_fit_col_widths([28, 140, 55, 250], doc.width),
+                  repeatRows=1)
+    table.setStyle(_std_table_style(zebra=True))
+    elements.append(table)
+
+    if str(sk.get("keterangan") or "").strip():
+        elements.append(Spacer(1, 3 * rl_mm))
+        elements.append(Paragraph(f"Keterangan: {sk['keterangan']}", st['Meta']))
+    elements.append(Spacer(1, 4 * rl_mm))
+    elements.append(Paragraph(
+        "Pihak yang menerima bertanggung jawab atas penggunaan, pengamanan, "
+        "dan pemeliharaan barang tersebut sesuai ketentuan pengelolaan BMN. "
+        "Demikian Berita Acara Serah Terima ini dibuat dengan sebenarnya "
+        "untuk dipergunakan sebagaimana mestinya.", st['Meta']))
+    elements.append(Spacer(1, 12 * rl_mm))
+    elements.extend(_signature_block([
+        {'pre': [''], 'header': 'Pihak yang Menyerahkan,',
+         'nama': '...........................',
+         'after': ['NIP. ....................']},
+        {'pre': [''], 'header': 'Pihak yang Menerima,',
+         'nama': '...........................',
+         'after': ['NIP. ....................']},
+    ], doc.width))
+    elements.append(Spacer(1, 10 * rl_mm))
+    elements.extend(_signature_block([
+        {'pre': [''], 'header': 'Mengetahui,', 'role': 'Kuasa Pengguna Barang,',
+         'nama': settings.get("kasatker_nama") or '...........................',
+         'after': [f"NIP. {settings.get('kasatker_nip') or '....................'}"]},
+    ], doc.width))
+    footer = _page_footer_factory("BAST Penetapan Status Penggunaan BMN")
+    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    buffer.seek(0)
+    nama_file = (sk.get("nomor_sk") or "SK").replace("/", "-").replace(" ", "-")
+    return StreamingResponse(buffer, media_type="application/pdf",
+                             headers={"Content-Disposition": f'attachment; filename="BAST_PSP_{nama_file}.pdf"'})
+
+
 @penggunaan_router.delete("/penggunaan/psp/{sk_id}")
 async def hapus_psp(sk_id: str, _admin: dict = Depends(require_admin)):
     """Hapus catatan SK salah input (khusus admin) + berkas lampirannya."""
