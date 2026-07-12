@@ -48,6 +48,12 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#132] Lampiran bukti pelaksanaan pemusnahan — 2026-07-12
+
+- **Lampiran per BA** (PMK 83/2016): foto pelaksanaan + scan BA
+  bertanda tangan (pola #131 — GridFS, tautan ber-token, hapus admin,
+  bersih saat BA dihapus); dialog Lampiran di halaman Pemusnahan.
+
 ## [#131] Arsip scan dokumen pemanfaatan — 2026-07-12
 
 - **Lampiran per perjanjian** (pustaka §6): unggah scan persetujuan/
