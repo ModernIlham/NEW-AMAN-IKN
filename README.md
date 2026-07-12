@@ -22,12 +22,12 @@ tiap rilis/PR (termasuk catatan teknis penting soal aturan tap-target 44px di �
 AMAN berkembang bertahap dari aplikasi inventarisasi menjadi platform siklus
 penuh pengelolaan BMN (PP 27/2014). **Beranda Modul** — halaman pertama
 setelah login — memetakan seluruh tahap siklus: *Penatausahaan ›
-Inventarisasi Aset* aktif penuh; **Inventarisasi Persediaan, Pelaporan,
-Penggunaan, Pengamanan, dan Pemeliharaan sudah Sebagian Aktif** (bisa
-dimasuki dari Beranda Modul); modul lain (Pembukuan/KIB, Perencanaan,
-Pengadaan, Pemanfaatan, Penilaian, Pemindahtanganan, Pemusnahan,
-Penghapusan, Wasdal) berstatus **Segera Hadir** lengkap dengan konsep &
-rencana fiturnya.
+Inventarisasi Aset* aktif penuh; **Persediaan, Pelaporan, Perencanaan,
+Penggunaan, Pemanfaatan, Penilaian, Pengamanan, Pemeliharaan, dan
+Penghapusan sudah Sebagian Aktif** — seluruh 13 kartu siklus bisa
+dimasuki; sisanya (Penganggaran, Pengadaan, Pemindahtanganan, Pemusnahan,
+Wasdal) berstatus **Segera Hadir** lengkap dengan konsep & rencana
+fiturnya.
 
 - Rencana induk & prinsip integrasi antar modul: [`docs/MASTERPLAN-SIKLUS-BMN.md`](./docs/MASTERPLAN-SIKLUS-BMN.md)
 - Rujukan regulasi & alur bisnis: [`docs/PUSTAKA-REGULASI-BMN.md`](./docs/PUSTAKA-REGULASI-BMN.md)
@@ -59,10 +59,12 @@ Kartu Barang (#97), transaksi massal persediaan (#98).
 
 **Progres Fase 5–6 (Juli 2026):** Penilaian — **penyusutan garis lurus
 semesteran** (PMK 65/2017; masa manfaat KMK 295/2019 jo. 266/2023) dengan
-halaman posisi per golongan + daftar telaah (#102–#103) · Penghapusan —
-**kandidat usul hapus** per jalur PMK 83/2016 (Tidak Ditemukan →
-penelusuran+TGR; Rusak Berat → pemusnahan/pemindahtanganan) (#104).
-**10 modul siklus kini bisa dimasuki dari Beranda Modul.**
+halaman posisi per golongan + daftar telaah (#102–#103) + referensi masa
+manfaat dapat dikelola (#107) · Pemanfaatan — **register perjanjian 6
+bentuk** dengan penjaga dokumen persetujuan/NTPN + jatuh tempo ≤60 hari
+(PMK 115/2020) (#108) · Penghapusan — **kandidat usul hapus** per jalur
+PMK 83/2016 (#104) + **tiket usulan berstatus** usul → proses → SK (#106).
+**Seluruh 13 kartu modul siklus kini bisa dimasuki dari Beranda Modul.**
 
 ---
 
