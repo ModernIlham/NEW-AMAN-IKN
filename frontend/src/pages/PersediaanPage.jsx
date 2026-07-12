@@ -58,6 +58,8 @@ export default function PersediaanPage({ user, onBack }) {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
+  const [gudang, setGudang] = useState("");
+  const [daftarGudang, setDaftarGudang] = useState([]);
   const [loading, setLoading] = useState(false);
   const [satuanList, setSatuanList] = useState([]);
   // Dialog: {mode:"tambah", data} | {mode:"edit", id, version, data}
@@ -88,11 +90,12 @@ export default function PersediaanPage({ user, onBack }) {
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
 
-  const load = useCallback(async (p = 1, s = search, st = status) => {
+  const load = useCallback(async (p = 1, s = search, st = status, g = gudang) => {
     setLoading(true);
     try {
       const r = await axios.get(`${API}/persediaan`, {
-        params: { search: s, status: st || undefined, page: p, page_size: 50 },
+        params: { search: s, status: st || undefined,
+                  gudang: g || undefined, page: p, page_size: 50 },
       });
       setItems(r.data?.items || []);
       setTotal(r.data?.total || 0);
@@ -103,7 +106,7 @@ export default function PersediaanPage({ user, onBack }) {
     } finally {
       setLoading(false);
     }
-  }, [search, status]);
+  }, [search, status, gudang]);
 
   useEffect(() => {
     load(1, "", "");
@@ -119,6 +122,9 @@ export default function PersediaanPage({ user, onBack }) {
     axios.get(`${API}/persediaan/opname/status`)
       .then((r) => setOpnameStatus(r.data))
       .catch(() => setOpnameStatus(null));
+    axios.get(`${API}/persediaan/gudang/daftar`)
+      .then((r) => setDaftarGudang(r.data?.items || []))
+      .catch(() => setDaftarGudang([]));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onSearchChange = (v) => {
@@ -151,6 +157,11 @@ export default function PersediaanPage({ user, onBack }) {
   const changeStatus = (st) => {
     setStatus(st);
     load(1, search, st);
+  };
+
+  const changeGudang = (g) => {
+    setGudang(g);
+    load(1, search, status, g);
   };
 
   const setField = (k, v) => setForm((f) => ({ ...f, data: { ...f.data, [k]: v } }));
@@ -455,7 +466,10 @@ export default function PersediaanPage({ user, onBack }) {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-64">
                 <DropdownMenuItem className="min-h-[42px]" data-testid="persediaan-laporan-posisi"
-                  onClick={() => downloadFileWithProgress(`${API}/persediaan/laporan/posisi-pdf`, "Laporan_Posisi_Persediaan.pdf", { label: "Laporan Posisi Persediaan" }).catch(() => {})}>
+                  onClick={() => downloadFileWithProgress(
+                    `${API}/persediaan/laporan/posisi-pdf${gudang ? `?gudang=${encodeURIComponent(gudang)}` : ""}`,
+                    gudang ? `Laporan_Posisi_Persediaan_${gudang.replace(/[^\w-]/g, "_")}.pdf` : "Laporan_Posisi_Persediaan.pdf",
+                    { label: gudang ? `Laporan Posisi Persediaan — ${gudang}` : "Laporan Posisi Persediaan" }).catch(() => {})}>
                   <FileDown className="w-4 h-4 mr-2" />Laporan Posisi (PDF)
                 </DropdownMenuItem>
                 <DropdownMenuItem className="min-h-[42px]" data-testid="persediaan-laporan-mutasi"
@@ -517,6 +531,20 @@ export default function PersediaanPage({ user, onBack }) {
                 {f.label}
               </button>
             ))}
+            {daftarGudang.length > 0 && (
+              <select
+                value={gudang}
+                onChange={(e) => changeGudang(e.target.value)}
+                className="h-8 px-2 rounded-full border border-border bg-background text-xs text-foreground min-w-0 min-h-0"
+                aria-label="Filter Lokasi/Gudang"
+                data-testid="persediaan-filter-gudang"
+              >
+                <option value="">Semua gudang</option>
+                {daftarGudang.map((g) => (
+                  <option key={g} value={g}>{g}</option>
+                ))}
+              </select>
+            )}
           </div>
         </div>
 

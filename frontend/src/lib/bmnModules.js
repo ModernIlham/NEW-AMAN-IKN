@@ -108,7 +108,8 @@ export const PENATAUSAHAAN_SUBMODULES = [
       "✅ Stock opname: selisih → penyesuaian otomatis + kertas kerja & BAOF PDF + pengingat semesteran",
       "✅ Impor/ekspor master + Kartu Barang PDF (riwayat + saldo berjalan)",
       "✅ Transaksi massal per dokumen (satu bukti, banyak barang)",
-      "Menyusul: gudang (distribusi/transfer antar lokasi)",
+      "✅ Filter Lokasi/Gudang di daftar master + laporan posisi per gudang",
+      "Menyusul: transfer/distribusi stok antar gudang",
     ],
     integrasi: [
       "Berbagi kodefikasi barang, satker, dan kop surat dengan modul aset",

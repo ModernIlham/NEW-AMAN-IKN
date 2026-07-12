@@ -9,6 +9,7 @@ Regulasi: docs/PUSTAKA-REGULASI-BMN.md §3 (perpetual + FIFO per layer,
 kode golongan '1', batas kritis & kedaluwarsa untuk peringatan/nota dinas).
 Referensi teknis: modul persediaan KERJA-BARENG (dipelajari menyeluruh).
 """
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -440,11 +441,13 @@ async def opname_status(_user: dict = Depends(require_user)):
 
 
 @persediaan_router.get("/persediaan/laporan/posisi-pdf")
-async def laporan_posisi_pdf(_user: dict = Depends(require_user)):
+async def laporan_posisi_pdf(gudang: str = "",
+                             _user: dict = Depends(require_user)):
     """Laporan Posisi Persediaan (hari ini) — per KELOMPOK kodefikasi.
 
     Grup per prefix 5 digit (uraian dari referensi kodefikasi); nilai per
-    barang dihitung dari layer FIFO (pustaka §3.4). Semua data nyata.
+    barang dihitung dari layer FIFO (pustaka §3.4). Dapat difilter satu
+    Lokasi/Gudang. Semua data nyata.
     """
     from io import BytesIO
 
@@ -462,8 +465,11 @@ async def laporan_posisi_pdf(_user: dict = Depends(require_user)):
     async for k in db.kodefikasi.find({"level": 3}, {"_id": 0, "kode": 1, "uraian": 1}):
         uraian_kelompok[k["kode"]] = k.get("uraian") or ""
 
+    filter_gudang = str(gudang or "").strip()
+    query = ({"lokasi": {"$regex": f"^{re.escape(filter_gudang)}$", "$options": "i"}}
+             if filter_gudang else {})
     grup = {}
-    async for it in db.persediaan.find({}, {"_id": 0}):
+    async for it in db.persediaan.find(query, {"_id": 0}):
         stok = int(it.get("stok", 0) or 0)
         nilai = nilai_persediaan_dari_batches(it.get("batches"))
         kel = str(it.get("kode_barang") or "")[:5]
@@ -482,7 +488,9 @@ async def laporan_posisi_pdf(_user: dict = Depends(require_user)):
     st = _get_report_styles()
     elements = []
     elements.extend(_kop_surat_flowables(settings, doc.width))
-    elements.extend(_title_block("LAPORAN POSISI PERSEDIAAN"))
+    elements.extend(_title_block(
+        "LAPORAN POSISI PERSEDIAAN",
+        subjudul=f"Lokasi/Gudang: {filter_gudang}" if filter_gudang else None))
     elements.append(Paragraph(f"Per tanggal: {_fmt_tanggal_id(today_iso)} · nilai dihitung FIFO per layer", st['Meta']))
     elements.append(Spacer(1, 4 * rl_mm))
 
@@ -696,16 +704,30 @@ async def transaksi_massal(payload: TransaksiMassalIn, user: dict = Depends(requ
             "hasil": hasil}
 
 
+@persediaan_router.get("/persediaan/gudang/daftar")
+async def daftar_gudang(_user: dict = Depends(require_user)):
+    """Daftar nilai Lokasi/Gudang unik yang terpakai di master (untuk filter)."""
+    nilai = await db.persediaan.distinct("lokasi")
+    gudang = sorted({str(v).strip() for v in nilai if str(v or "").strip()},
+                    key=str.casefold)
+    return {"items": gudang, "total": len(gudang)}
+
+
 @persediaan_router.get("/persediaan")
 async def list_persediaan(
     search: str = "",
     status: str = Query("", pattern="^(|aman|kritis|habis)$"),
+    gudang: str = "",
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=500),
     _user: dict = Depends(require_user),
 ):
-    """Daftar master persediaan: cari kode/nama/merk, filter status stok."""
+    """Daftar master persediaan: cari kode/nama/merk, filter status stok
+    dan Lokasi/Gudang (padanan persis, abaikan kapital)."""
     query = {}
+    if gudang.strip():
+        query["lokasi"] = {"$regex": f"^{re.escape(gudang.strip())}$",
+                           "$options": "i"}
     if search:
         s = search.strip()
         query["$or"] = [
