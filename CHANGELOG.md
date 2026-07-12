@@ -48,6 +48,18 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#179] Usulan RKBMN per unit berstatus — 2026-07-12
+
+- **Register usulan RKBMN per unit** (PMK 153/2021 + KMK 128/KM.6/2022):
+  pipeline draft → diajukan → disetujui PB → dikirim Pengelola (SIMAN)
+  → disetujui/ditolak penelaahan, jalur dikembalikan wajib catatan;
+  penanda SPTJM + reviu APIP; aset opsional ber-snapshot; anti-race.
+- Temuan riset: PMK 138/2024 (SBSK) mencabut PMK 172/2020 — angka
+  lampiran belum terverifikasi, kalkulator SBSK ditunda (pustaka §14
+  butir 21).
+- UI: seksi usulan + dialog buat usulan di `PerencanaanPage` (prop
+  `user`); checklist bmnModules. Unit test +3 → 237 passed.
+
 ## [#178] Konsolidasi dokumentasi #177 — 2026-07-12
 
 - **Dokumentasi saja**: README Progres Fase 3 + roadmap masterplan +

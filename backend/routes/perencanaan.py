@@ -6,14 +6,20 @@ diusulkan (Baik/Rusak Ringan, dioperasikan) vs yang tidak (rusak berat,
 idle, nonaktif) + riwayat biaya pemeliharaan sebagai bahan pertimbangan.
 RKBMN pengadaan + sanding SBSK menyusul sesuai masterplan.
 """
+import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 
-from auth_utils import require_user
+from auth_utils import require_admin, require_user
 from db import db
 from pemeliharaan_utils import rekap_pemeliharaan
-from perencanaan_utils import rekap_rkbmn
+from perencanaan_utils import (
+    JENIS_USULAN_RKBMN, STATUS_USULAN_RKBMN, TRANSISI_USULAN_RKBMN,
+    rekap_rkbmn, rekap_usulan_rkbmn, validate_transisi_rkbmn,
+    validate_usulan_rkbmn,
+)
 
 perencanaan_router = APIRouter()
 
@@ -137,3 +143,119 @@ async def rkbmn_pemeliharaan(
         f"{tahun}."
     )
     return hasil
+
+
+class UsulanRkbmnIn(BaseModel):
+    tahun_rkbmn: str = Field(min_length=4, max_length=4)
+    jenis: str
+    unit_pengusul: str = Field(min_length=1)
+    uraian: str = Field(min_length=1)
+    volume: float = Field(gt=0)
+    satuan: str = Field(min_length=1)
+    asset_id: str = ""                 # opsional (pemeliharaan/eksisting)
+    keterangan: str = ""
+
+
+class TransisiRkbmnIn(BaseModel):
+    status: str
+    catatan: str = ""
+    sptjm: bool | None = None          # penanda SPTJM ditandatangani
+    reviu_apip: bool | None = None     # penanda sudah direviu APIP
+
+
+@perencanaan_router.get("/perencanaan/usulan")
+async def list_usulan_rkbmn(_user: dict = Depends(require_user)):
+    """Register usulan RKBMN per unit (terbaru dulu) + ringkasan."""
+    items = [u async for u in db.perencanaan_usulan.find({}, {"_id": 0})
+             .sort("updated_at", -1).limit(500)]
+    return {"items": items, "ringkasan": rekap_usulan_rkbmn(items),
+            "label_jenis": JENIS_USULAN_RKBMN,
+            "label_status": STATUS_USULAN_RKBMN,
+            "transisi": {k: sorted(v) for k, v in TRANSISI_USULAN_RKBMN.items()},
+            "catatan": (
+                "Register pendamping rantai usulan RKBMN internal (PMK "
+                "153/2021 + KMK 128/KM.6/2022) — usulan resmi tetap via "
+                "SIMAN V2; status di sini tak berkekuatan hukum dan bukan "
+                "cetakan RKBMN/SPTJM/Hasil Penelaahan.")}
+
+
+@perencanaan_router.post("/perencanaan/usulan")
+async def buat_usulan_rkbmn(payload: UsulanRkbmnIn,
+                            user: dict = Depends(require_user)):
+    """Buat usulan RKBMN baru (status awal draft; aset opsional)."""
+    data = payload.model_dump()
+    errors = validate_usulan_rkbmn(data)
+    if errors:
+        raise HTTPException(status_code=400, detail="; ".join(errors))
+    aset_snapshot = {}
+    aid = str(data.get("asset_id") or "").strip()
+    if aid:
+        a = await db.assets.find_one({"id": aid}, _PROJ_ASET)
+        if not a:
+            raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+        aset_snapshot = {"asset_id": a["id"], "asset_code": a.get("asset_code"),
+                         "NUP": a.get("NUP"), "asset_name": a.get("asset_name")}
+    now = datetime.now(timezone.utc).isoformat()
+    record = {
+        "id": str(uuid.uuid4()),
+        "tahun_rkbmn": data["tahun_rkbmn"].strip(),
+        "jenis": data["jenis"],
+        "unit_pengusul": data["unit_pengusul"].strip(),
+        "uraian": data["uraian"].strip(),
+        "volume": float(data["volume"]),
+        "satuan": data["satuan"].strip(),
+        **aset_snapshot,
+        "status": "draft",
+        "sptjm": False,
+        "reviu_apip": False,
+        "keterangan": str(data.get("keterangan") or "").strip(),
+        "riwayat": [{"status": "draft", "tanggal": now,
+                     "oleh": user.get("username"), "catatan": ""}],
+        "created_by": user.get("username"),
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.perencanaan_usulan.insert_one({**record})
+    return record
+
+
+@perencanaan_router.post("/perencanaan/usulan/{usulan_id}/status")
+async def transisi_usulan_rkbmn(usulan_id: str, payload: TransisiRkbmnIn,
+                                user: dict = Depends(require_user)):
+    """Pindahkan status usulan (anti-race; dikembalikan wajib catatan)."""
+    u = await db.perencanaan_usulan.find_one({"id": usulan_id}, {"_id": 0})
+    if not u:
+        raise HTTPException(status_code=404, detail="Usulan tidak ditemukan")
+    ke = payload.status
+    errors = validate_transisi_rkbmn(u, ke, payload.catatan)
+    if errors:
+        raise HTTPException(status_code=400, detail="; ".join(errors))
+    now = datetime.now(timezone.utc).isoformat()
+    set_fields = {"status": ke, "updated_at": now}
+    if payload.sptjm is not None:
+        set_fields["sptjm"] = bool(payload.sptjm)
+    if payload.reviu_apip is not None:
+        set_fields["reviu_apip"] = bool(payload.reviu_apip)
+    entri = {"status": ke, "tanggal": now, "oleh": user.get("username"),
+             "catatan": str(payload.catatan or "").strip()}
+    res = await db.perencanaan_usulan.find_one_and_update(
+        {"id": usulan_id, "status": u["status"]},
+        {"$set": set_fields, "$push": {"riwayat": entri}},
+        projection={"_id": 0},
+    )
+    if not res:
+        raise HTTPException(
+            status_code=409,
+            detail="Status usulan berubah di perangkat lain — muat ulang")
+    res.update(set_fields)
+    return res
+
+
+@perencanaan_router.delete("/perencanaan/usulan/{usulan_id}")
+async def hapus_usulan_rkbmn(usulan_id: str,
+                             _admin: dict = Depends(require_admin)):
+    """Hapus satu usulan dari register (admin)."""
+    res = await db.perencanaan_usulan.delete_one({"id": usulan_id})
+    if not res.deleted_count:
+        raise HTTPException(status_code=404, detail="Usulan tidak ditemukan")
+    return {"ok": True}

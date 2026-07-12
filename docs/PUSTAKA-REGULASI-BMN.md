@@ -794,6 +794,13 @@ fisik; barang untuk pemda/masyarakat tidak segera di-BAST-kan.
     BMN Program/Nonprogram; alur & tenggat perencanaan via SIMAN pasca
     PMK 43/2025; komposisi/syarat konsorsium; pengelola PFB (BPDLH) dan
     seluruh angka statistik cakupan/klaim.
+21. SBSK & RKBMN per unit (riset Juli 2026, #179): PMK 138 Tahun 2024
+    (SBSK) mencabut PMK 172/2020 dan berlaku untuk RKBMN mulai TA 2027
+    [perlu verifikasi]; SEMUA angka m² per jenjang jabatan/ruang
+    penunjang dari paparan PMK 172/2020 (saling konflik antar cuplikan
+    — kalkulator SBSK DITUNDA sampai lampiran asli terbaca); alur
+    berjenjang KPB→korwil→eselon I→PB + reviu APIP + SPTJM (PMK
+    153/2021 + KMK 128/KM.6/2022) dari artikel DJKN/juknis MA.
 
 ---
 
