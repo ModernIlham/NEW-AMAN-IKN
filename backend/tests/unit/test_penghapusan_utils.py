@@ -1,7 +1,10 @@
 """Uji logika murni kandidat penghapusan (PMK 83/2016)."""
 import pytest
 
-from penghapusan_utils import JALUR_KANDIDAT, jalur_kandidat, rekap_kandidat
+from penghapusan_utils import (
+    JALUR_KANDIDAT, STATUS_USULAN, TRANSISI_USULAN, boleh_transisi,
+    jalur_kandidat, rekap_kandidat, validate_transisi,
+)
 
 
 def _aset(**over):
@@ -44,3 +47,26 @@ def test_rekap_per_jalur_nilai_dan_urutan():
 def test_rekap_kosong_aman():
     r = rekap_kandidat([])
     assert r["ringkasan"] == {"jumlah": 0, "nilai": 0.0}
+
+
+def test_transisi_usulan_sah_dan_tidak():
+    assert boleh_transisi("diusulkan", "diproses") is True
+    assert boleh_transisi("diusulkan", "ditolak") is True
+    assert boleh_transisi("diproses", "sk_terbit") is True
+    assert boleh_transisi("diusulkan", "sk_terbit") is False  # tidak boleh lompat
+    assert boleh_transisi("sk_terbit", "diusulkan") is False  # final
+    assert boleh_transisi("ditolak", "diproses") is False     # final
+    # Semua status transisi terdaftar di label
+    for dari, tujuan in TRANSISI_USULAN.items():
+        assert dari in STATUS_USULAN
+        assert tujuan <= set(STATUS_USULAN)
+
+
+def test_validate_transisi_sk_wajib_nomor():
+    assert validate_transisi("diproses", "sk_terbit", "SK-1/2026") == []
+    errs = validate_transisi("diproses", "sk_terbit", "")
+    assert any("Nomor SK" in e for e in errs)
+    errs = validate_transisi("diusulkan", "sk_terbit", "SK-1/2026")
+    assert any("tidak sah" in e for e in errs)
+    errs = validate_transisi("diusulkan", "status_aneh")
+    assert any("tidak dikenal" in e for e in errs)
