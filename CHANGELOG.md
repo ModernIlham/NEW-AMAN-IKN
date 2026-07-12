@@ -48,6 +48,15 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#197] Jejak Aset Terhapus (arsip read-only) — 2026-07-12
+
+- **Aset yang dihapus permanen kini tetap tertelusur**: endpoint
+  read-only `GET /audit-logs/aset-terhapus` (dari log audit; kode/NUP/
+  nama/nilai perolehan/oleh/waktu, rekap jumlah + total nilai) + seksi
+  "Jejak Aset Terhapus" di halaman Penghapusan. Tidak mengubah mekanisme
+  hapus/offline-sync. Unit test +1 → 249 passed. Butir "menyusul"
+  Penghapusan (arsip aset terhapus) tuntas.
+
 ## [#196] Peta: zoom maksimal dinaikkan ke 22 — 2026-07-12
 
 - **Peta full-view** kini bisa diperbesar hingga zoom 22 (dari 19):

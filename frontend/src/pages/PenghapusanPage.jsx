@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, FileX, SearchX, Flame, Coins, TicketCheck,
-  Paperclip, Upload, Trash2, Download,
+  Paperclip, Upload, Trash2, Download, Archive,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,6 +46,8 @@ export default function PenghapusanPage({ user, onBack }) {
   // Dialog lampiran: {usulan, uploading}
   const [lamp, setLamp] = useState(null);
   const lampInputRef = useRef(null);
+  // Jejak aset terhapus (arsip read-only dari audit log): {items, ringkasan}
+  const [jejak, setJejak] = useState(null);
   const { confirm, confirmDialog } = useConfirm();
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
@@ -58,6 +60,10 @@ export default function PenghapusanPage({ user, onBack }) {
       .then(([k, u]) => { setData(k.data); setUsulan(u.data); })
       .catch(() => toast.error("Gagal memuat data penghapusan"))
       .finally(() => setLoading(false));
+    // Jejak terhapus dimuat terpisah — kegagalannya tak boleh menahan data utama
+    axios.get(`${API}/audit-logs/aset-terhapus`, { params: { page_size: 50 } })
+      .then((r) => setJejak(r.data))
+      .catch(() => setJejak(null));
   }, []);
   useEffect(() => { muat(); }, [muat]);
 
@@ -311,6 +317,54 @@ export default function PenghapusanPage({ user, onBack }) {
                 </div>
               );
             })}
+
+            {/* ── Jejak Aset Terhapus (arsip read-only dari log audit) ── */}
+            {jejak && (jejak.items || []).length > 0 && (
+              <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="penghapusan-jejak-terhapus">
+                <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
+                  <Archive className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold text-foreground">Jejak Aset Terhapus</p>
+                    <p className="text-[10px] text-muted-foreground truncate">
+                      Aset yang dihapus permanen tetap tertelusur di sini (arsip log audit)
+                    </p>
+                  </div>
+                  <span className="px-1.5 py-0.5 rounded bg-muted text-foreground/70 text-[10px] font-semibold flex-shrink-0">
+                    {jejak.ringkasan?.jumlah || 0} aset · {fmtRp(jejak.ringkasan?.total_nilai)}
+                  </span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs" data-testid="penghapusan-jejak-tabel">
+                    <thead>
+                      <tr className="text-muted-foreground border-b border-border/60">
+                        <th className="text-left px-3 py-1.5 font-semibold">Aset</th>
+                        <th className="text-right px-2 py-1.5 font-semibold">Nilai</th>
+                        <th className="text-left px-2 py-1.5 font-semibold">Oleh</th>
+                        <th className="text-left px-3 py-1.5 font-semibold">Waktu</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/60">
+                      {jejak.items.map((r) => (
+                        <tr key={r.id}>
+                          <td className="px-3 py-1.5 text-foreground">
+                            <span className="font-mono">{r.asset_code || "-"}</span>
+                            {r.NUP && <span className="text-blue-600 font-semibold"> / {r.NUP}</span>}
+                            {r.asset_name && <span className="text-muted-foreground"> — {r.asset_name}</span>}
+                            {r.massal && <span className="ml-1 text-[10px] text-red-500">(massal)</span>}
+                          </td>
+                          <td className="px-2 py-1.5 text-right text-foreground/90 whitespace-nowrap">{fmtRp(r.nilai)}</td>
+                          <td className="px-2 py-1.5 text-muted-foreground whitespace-nowrap">{r.oleh || "-"}</td>
+                          <td className="px-3 py-1.5 text-muted-foreground whitespace-nowrap">
+                            {r.waktu ? new Date(r.waktu).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" }) : "-"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="px-3 py-2 text-[10px] text-muted-foreground border-t border-border">{jejak.catatan}</p>
+              </div>
+            )}
 
             <p className="text-center text-[11px] text-muted-foreground pb-4">{data.catatan}</p>
           </>
