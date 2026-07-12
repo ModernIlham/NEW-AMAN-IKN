@@ -48,6 +48,12 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#166] Konsolidasi dokumentasi #165 — 2026-07-12
+
+- **Dokumentasi saja**: README Progres Fase 4 + roadmap masterplan +
+  pustaka §12 baris Penganggaran (kalender tenggat #165; "menyusul"
+  tinggal sanding per triwulan).
+
 ## [#165] Kalender penganggaran konfigurabel — 2026-07-12
 
 - **Kalender penganggaran** (pustaka §9.4): register tahapan ber-tenggat
