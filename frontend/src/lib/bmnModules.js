@@ -190,6 +190,7 @@ export const SIKLUS_MODULES = [
       "✅ Register usulan berstatus: diusulkan → disetujui telaah → masuk DIPA → terealisasi",
       "✅ Nilai per tahap + serapan (realisasi/DIPA) + akun BAS 53x/523 + tautan aset",
       "✅ Sanding rencana vs realisasi per akun BAS (usulan/disetujui/DIPA/realisasi + serapan)",
+      "✅ Ekspor CSV register usulan (nilai per tahap, akun BAS, status)",
       "Pengingat kalender penganggaran konfigurabel (menyusul)",
     ],
     integrasi: ["Menjembatani RKBMN (Perencanaan) dengan realisasi (Pengadaan); usulan dapat ditautkan ke aset"],
