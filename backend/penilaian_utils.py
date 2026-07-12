@@ -171,7 +171,7 @@ def rekap_penyusutan(assets, per_iso, peta=None, uraian_golongan=None):
 
 
 # ---------------------------------------------------------------------------
-# Register koreksi nilai & hasil penilaian per aset (riset #185; PMK 99
+# Register koreksi nilai & hasil penilaian per aset (riset #184; PMK 99
 # Tahun 2024 mencabut PMK 173/2020 yang mencabut PMK 111/2017; revaluasi
 # nasional: Perpres 75/2017 + PMK 118/2017 jo. 57/2018 jo. 107/2019).
 # AMAN bukan penilai: nilai wajar sah hanya dari Laporan Penilaian

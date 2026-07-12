@@ -732,7 +732,7 @@ fisik; barang untuk pemda/masyarakat tidak segera di-BAST-kan.
 | Penganggaran (F4, ✅ tahap awal) | ✅ Register usulan berstatus diusulkan→telaah→DIPA→realisasi, nilai per tahap + akun BAS 53x/523 + serapan (#115, §9); AMAN pendamping — kanal resmi SIMAN V2/SAKTI/KRISNA; ✅ sanding per akun BAS (#123) + ekspor CSV (#163) + kalender tenggat konfigurabel (#165); menyusul: sanding per triwulan |
 | Pengadaan (F4, ✅ tahap awal) | ✅ Register perolehan per BAST/kontrak (jenis 101/102/103/105) + checklist dokumen sumber + tautan aset + penanda ekstrakomptabel PMK 181 (#117, §10); pencatatan resmi di SAKTI; menyusul: auto-daftar draft aset, lampiran scan, tautan paket ke register penganggaran |
 | Pemanfaatan (F5, ✅ tahap awal) | ✅ Register perjanjian 6 bentuk + penjaga dokumen & jatuh tempo (#108, §6); menyusul: pengingat kontribusi tahunan, lampiran wasdal, arsip scan |
-| Penilaian (F5, ✅ tahap awal) | ✅ Penyusutan garis lurus semesteran + daftar telaah (#102-#103, §5) + referensi masa manfaat dikelola (#107); ✅ register koreksi nilai & hasil penilaian per aset (revaluasi/LHIP/BA + checklist tercatat SAKTI) (#185, PMK 99/2024 + Perpres 75/2017 + PMK 118/2017 jo. 57/2018 jo. 107/2019); AMAN bukan penilai — nilai wajar sah dari Laporan Penilaian DJKN |
+| Penilaian (F5, ✅ tahap awal) | ✅ Penyusutan garis lurus semesteran + daftar telaah (#102-#103, §5) + referensi masa manfaat dikelola (#107); ✅ register koreksi nilai & hasil penilaian per aset (revaluasi/LHIP/BA + checklist tercatat SAKTI) (#184, PMK 99/2024 + Perpres 75/2017 + PMK 118/2017 jo. 57/2018 jo. 107/2019); AMAN bukan penilai — nilai wajar sah dari Laporan Penilaian DJKN |
 | Pemindahtanganan (F6, ✅ tahap awal) | ✅ Register usulan 4 bentuk + dokumen wajib per tahap + tenggat lelang (#111, §7); menyusul: tabel konfigurasi jalur persetujuan/ambang nilai, arsip scan |
 | Pemusnahan (F6, ✅ tahap awal) | ✅ Register BA multi-aset, persetujuan wajib, objek RB (#110); menyusul: foto bukti + PDF BA + tautan usulan penghapusan |
 | Penghapusan (F6, ✅ tahap awal) | ✅ Kandidat per jalur (#104): "Tidak Ditemukan" → penelusuran+TGR; RB → pemusnahan/pemindahtanganan; menyusul: tiket usulan berstatus + arsip SK |
@@ -807,7 +807,7 @@ fisik; barang untuk pemda/masyarakat tidak segera di-BAST-kan.
     (lainnya); ≤6 bulan tanpa persetujuan Pengelola; apakah persetujuan
     alih status merangkap PSP baru — semua dari cuplikan, nomor pasal
     belum terkonfirmasi dari teks asli PMK 40/2024.
-23. Penilaian/revaluasi (riset Juli 2026, #185): rantai PMK 111/2017 →
+23. Penilaian/revaluasi (riset Juli 2026, #184): rantai PMK 111/2017 →
     173/2020 → PMK 99 Tahun 2024 (tanggal berlaku dua versi); status
     PMK 118/2017 jo. 57/2018 jo. 107/2019 "masih berlaku"; perlakuan
     akuntansi reval (nilai perolehan baru, akumulasi reset nol, masa
