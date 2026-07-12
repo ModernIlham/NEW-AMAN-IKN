@@ -7,11 +7,13 @@ aset). Tindak lanjut penghapusan lewat modul Penghapusan.
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from auth_utils import require_admin, require_user
-from db import db
+from auth_utils import require_admin, require_user, require_user_or_query_token
+from db import db, fs_bucket
+from shared_utils import delete_document_from_gridfs, get_document_from_gridfs
 from pemusnahan_utils import (
     CARA_PEMUSNAHAN, alasan_usulan_dari_ba, kelayakan_musnah,
     rekap_pemusnahan, validate_pemusnahan,
@@ -85,6 +87,7 @@ async def buat_pemusnahan(payload: PemusnahanIn, user: dict = Depends(require_us
         "nomor_persetujuan": data["nomor_persetujuan"].strip(),
         "keterangan": str(data.get("keterangan") or "").strip(),
         "aset": aset_rows,
+        "lampiran": [],
         "created_by": user.get("username"),
         "created_at": now,
         "updated_at": now,
@@ -246,10 +249,115 @@ async def ba_pemusnahan_pdf(ba_id: str, _user: dict = Depends(require_user)):
                              headers={"Content-Disposition": f'attachment; filename="BA_Pemusnahan_{nama_file}.pdf"'})
 
 
+# Lampiran bukti per BA (PMK 83/2016: foto pelaksanaan + scan BA
+# bertanda tangan). Pola sama dengan lampiran pemanfaatan (#131).
+_LAMPIRAN_MEDIA = {
+    ".pdf": "application/pdf",
+    ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+    ".png": "image/png", ".webp": "image/webp",
+}
+_MAX_LAMPIRAN_BYTES = 10 * 1024 * 1024
+_MAX_LAMPIRAN = 10
+
+
+def _lampiran_ext(filename: str) -> str:
+    name = (filename or "").lower()
+    for ext in _LAMPIRAN_MEDIA:
+        if name.endswith(ext):
+            return ext
+    return ""
+
+
+@pemusnahan_router.post("/pemusnahan/{ba_id}/lampiran")
+async def unggah_lampiran_ba(ba_id: str, file: UploadFile = File(...),
+                             user: dict = Depends(require_user)):
+    """Unggah foto bukti/scan BA (PDF/gambar, maks 10MB, 10 berkas)."""
+    ba = await db.pemusnahan.find_one({"id": ba_id}, {"_id": 0, "id": 1, "lampiran": 1})
+    if not ba:
+        raise HTTPException(status_code=404, detail="BA tidak ditemukan")
+    if len(ba.get("lampiran") or []) >= _MAX_LAMPIRAN:
+        raise HTTPException(status_code=400,
+                            detail=f"Maksimal {_MAX_LAMPIRAN} lampiran per BA")
+    filename = (file.filename or "bukti.jpg").strip() or "bukti.jpg"
+    ext = _lampiran_ext(filename)
+    if not ext:
+        raise HTTPException(status_code=400,
+                            detail="Lampiran harus PDF atau gambar (JPG/PNG/WEBP)")
+    file_bytes = await file.read()
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="File kosong")
+    if len(file_bytes) > _MAX_LAMPIRAN_BYTES:
+        raise HTTPException(status_code=400, detail="Ukuran lampiran maksimal 10MB")
+    if ext == ".pdf" and not file_bytes[:5].startswith(b"%PDF"):
+        raise HTTPException(status_code=400, detail="File bukan PDF yang valid")
+
+    from bson import ObjectId
+    file_id = ObjectId()
+    grid_in = fs_bucket.open_upload_stream_with_id(
+        file_id, filename=filename,
+        metadata={"content_type": _LAMPIRAN_MEDIA[ext], "size": len(file_bytes),
+                  "kind": "pemusnahan", "ba_id": ba_id})
+    await grid_in.write(file_bytes)
+    await grid_in.close()
+
+    entri = {"file_id": str(file_id), "filename": filename,
+             "content_type": _LAMPIRAN_MEDIA[ext],
+             "oleh": user.get("username"),
+             "tanggal": datetime.now(timezone.utc).isoformat()}
+    res = await db.pemusnahan.find_one_and_update(
+        {"id": ba_id},
+        {"$push": {"lampiran": entri}, "$set": {"updated_at": entri["tanggal"]}},
+        projection={"_id": 0, "lampiran": 1}, return_document=True)
+    if not res:
+        await delete_document_from_gridfs(str(file_id))
+        raise HTTPException(status_code=404, detail="BA tidak ditemukan")
+    return {"message": "Lampiran terunggah", "lampiran": res.get("lampiran") or []}
+
+
+@pemusnahan_router.get("/pemusnahan/{ba_id}/lampiran/{file_id}")
+async def unduh_lampiran_ba(ba_id: str, file_id: str, request: Request,
+                            _user: dict = Depends(require_user_or_query_token)):
+    """Stream lampiran BA (menerima header ATAU ?token untuk window.open)."""
+    ba = await db.pemusnahan.find_one(
+        {"id": ba_id, "lampiran.file_id": file_id}, {"_id": 0, "lampiran.$": 1})
+    if not ba or not ba.get("lampiran"):
+        raise HTTPException(status_code=404, detail="Lampiran tidak ditemukan")
+    meta = ba["lampiran"][0]
+    etag = f'"lampiran-{file_id}"'
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={"ETag": etag})
+    data = await get_document_from_gridfs(file_id)
+    if data is None:
+        raise HTTPException(status_code=404, detail="Berkas tidak ditemukan")
+    return Response(content=data,
+                    media_type=meta.get("content_type") or "application/octet-stream",
+                    headers={"ETag": etag, "Cache-Control": "private, max-age=86400",
+                             "Content-Disposition": f'inline; filename="{meta.get("filename") or "bukti"}"'})
+
+
+@pemusnahan_router.delete("/pemusnahan/{ba_id}/lampiran/{file_id}")
+async def hapus_lampiran_ba(ba_id: str, file_id: str,
+                            _admin: dict = Depends(require_admin)):
+    """Hapus lampiran salah unggah (khusus admin)."""
+    res = await db.pemusnahan.update_one(
+        {"id": ba_id},
+        {"$pull": {"lampiran": {"file_id": file_id}},
+         "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="BA tidak ditemukan")
+    if res.modified_count:
+        await delete_document_from_gridfs(file_id)
+    return {"ok": True, "file_id": file_id}
+
+
 @pemusnahan_router.delete("/pemusnahan/{ba_id}")
 async def hapus_pemusnahan(ba_id: str, _admin: dict = Depends(require_admin)):
-    """Hapus BA salah input (khusus admin)."""
+    """Hapus BA salah input (khusus admin) + berkas lampirannya."""
+    ba = await db.pemusnahan.find_one({"id": ba_id}, {"_id": 0, "lampiran": 1})
     res = await db.pemusnahan.delete_one({"id": ba_id})
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="BA tidak ditemukan")
+    for lamp in (ba or {}).get("lampiran") or []:
+        if lamp.get("file_id"):
+            await delete_document_from_gridfs(lamp["file_id"])
     return {"ok": True, "id": ba_id}
