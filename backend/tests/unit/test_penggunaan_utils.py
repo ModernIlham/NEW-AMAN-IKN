@@ -119,16 +119,65 @@ class TestPsp:
     def test_rekap_psp_aset_unik(self):
         from penggunaan_utils import JENIS_PSP, rekap_psp
         sk = [
+            # Tanpa field status (record lama) = dianggap ditetapkan
             {"jenis": "psp", "aset": [{"asset_id": "a1"}, {"asset_id": "a2"}]},
             {"jenis": "alih_status", "aset": [{"asset_id": "a2"}]},
+            # Draf belum menetapkan apa pun — tak masuk cakupan aset
+            {"jenis": "psp", "status_pengajuan": "draf",
+             "aset": [{"asset_id": "a9"}]},
         ]
         r = rekap_psp(sk)
-        assert r["jumlah_sk"] == 2 and r["aset_tercakup"] == 2
-        assert r["per_jenis"]["psp"] == 1 and r["per_jenis"]["alih_status"] == 1
+        assert r["jumlah_sk"] == 3 and r["aset_tercakup"] == 2
+        assert r["per_jenis"]["psp"] == 2 and r["per_jenis"]["alih_status"] == 1
+        assert r["per_status"]["ditetapkan"] == 2 and r["per_status"]["draf"] == 1
         assert set(JENIS_PSP) == set(r["per_jenis"])
-        assert rekap_psp([]) == {"jumlah_sk": 0,
-                                 "per_jenis": {k: 0 for k in JENIS_PSP},
-                                 "aset_tercakup": 0}
+        assert rekap_psp([])["jumlah_sk"] == 0
+
+    def test_validasi_psp_draf(self):
+        from penggunaan_utils import validate_psp
+        draf = {"nomor_sk": "", "tanggal_sk": "", "jenis": "psp",
+                "asset_ids": ["a1"]}
+        assert validate_psp(draf, "2026-07-12", draf=True) == []
+        # Tanggal (bila diisi) tetap divalidasi format + masa depan
+        assert any("YYYY-MM-DD" in e for e in validate_psp(
+            {**draf, "tanggal_sk": "12-07-2026"}, "2026-07-12", draf=True))
+        assert any("masa depan" in e for e in validate_psp(
+            {**draf, "tanggal_sk": "2026-07-13"}, "2026-07-12", draf=True))
+
+    def test_transisi_pengajuan_psp(self):
+        from penggunaan_utils import (
+            STATUS_PENGAJUAN_PSP, TRANSISI_PENGAJUAN_PSP,
+            status_pengajuan_psp, validate_transisi_pengajuan_psp,
+        )
+        hari = "2026-07-12"
+        draf = {"status_pengajuan": "draf"}
+        diajukan = {"status_pengajuan": "diajukan"}
+        # Record lama tanpa field = ditetapkan (terminal)
+        assert status_pengajuan_psp({}) == "ditetapkan"
+        assert any("tidak sah" in e for e in
+                   validate_transisi_pengajuan_psp({}, "diajukan", {}, hari))
+        # draf → diajukan sah; draf → ditetapkan tidak (harus lewat diajukan)
+        assert validate_transisi_pengajuan_psp(draf, "diajukan", {}, hari) == []
+        assert any("tidak sah" in e for e in
+                   validate_transisi_pengajuan_psp(draf, "ditetapkan", {}, hari))
+        # Penetapan wajib nomor + tanggal SK sah
+        errs = validate_transisi_pengajuan_psp(diajukan, "ditetapkan", {}, hari)
+        assert any("Nomor SK" in e for e in errs)
+        assert validate_transisi_pengajuan_psp(
+            diajukan, "ditetapkan",
+            {"nomor_sk": "KEP-2/MK.6/2026", "tanggal_sk": "2026-07-10"},
+            hari) == []
+        # Tolak/kembalikan wajib catatan
+        assert any("Catatan" in e for e in
+                   validate_transisi_pengajuan_psp(diajukan, "ditolak", {}, hari))
+        assert validate_transisi_pengajuan_psp(
+            diajukan, "draf", {"catatan": "lengkapi data aset"}, hari) == []
+        # Registry konsisten
+        for dari, tujuan in TRANSISI_PENGAJUAN_PSP.items():
+            assert dari in STATUS_PENGAJUAN_PSP
+            assert tujuan <= set(STATUS_PENGAJUAN_PSP)
+        assert TRANSISI_PENGAJUAN_PSP["ditetapkan"] == set()
+        assert TRANSISI_PENGAJUAN_PSP["ditolak"] == set()
 
 
 class TestProsesPenggunaan:

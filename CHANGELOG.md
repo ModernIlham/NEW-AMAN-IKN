@@ -48,6 +48,16 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#194] Alur pengajuan PSP berstatus — 2026-07-12
+
+- **Alur pengajuan PSP** (butir "menyusul" terakhir Penggunaan): usulan
+  dapat dibuat sebagai draf tanpa SK → diajukan → ditetapkan (nomor/
+  tanggal SK wajib saat itu) / ditolak / dikembalikan (catatan wajib).
+  Kompatibel mundur (SK lama tanpa status = ditetapkan); cakupan aset
+  ter-PSP & BAST PDF hanya untuk yang ditetapkan; anti-balapan +
+  riwayat. UI: checkbox draf + badge status + tombol transisi. Unit
+  test +2 → 248 passed. **Daftar "menyusul" Penggunaan tuntas.**
+
 ## [#193] Konsolidasi dokumentasi #192 — 2026-07-12
 
 - **Dokumentasi saja**: README Progres Fase 3 + masterplan + pustaka §13

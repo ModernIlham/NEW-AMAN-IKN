@@ -245,7 +245,7 @@ export const SIKLUS_MODULES = [
       "✅ Arsip scan SK penetapan + dokumen pendukung per register (PDF/gambar)",
       "✅ Tiket proses 4 rezim PMK 40/2024 (alih status/sementara/pihak lain/bersama) ber-pipeline + pengingat perpanjangan ≤90 hari",
       "✅ BAST penetapan status penggunaan PDF siap tanda tangan per SK (kop surat + tabel aset)",
-      "Alur pengajuan PSP berstatus (draf → diajukan → ditetapkan) — menyusul",
+      "✅ Alur pengajuan PSP berstatus: draf usulan → diajukan → ditetapkan (SK wajib) / ditolak / dikembalikan",
     ],
     integrasi: ["Field pengguna, NIP, jabatan, dan BAST dari modul inventarisasi menjadi data awal"],
   },
