@@ -60,7 +60,8 @@ aset ter-PSP (#129) + **arsip scan SK penetapan per register** (#137)
 · Pengamanan — dasbor tertib administrasi + daftar
 pantau sengketa (#88) · Pemeliharaan — riwayat & biaya per aset dengan
 telaah kapitalisasi PMK 181 (#89) + **DHPB PDF** semesteran/tahunan
-(Ps. 47 PP 27/2014) (#90) + jadwal berkala dengan status jatuh tempo (#92).
+(Ps. 47 PP 27/2014) (#90) + jadwal berkala dengan status jatuh tempo (#92)
++ **ekspor CSV riwayat** (#167).
 
 **Progres Fase 4 (Juli 2026):** Perencanaan — **kandidat RKBMN
 pemeliharaan** (saringan kelayakan PMK 153/2021 dari kondisi aset +
