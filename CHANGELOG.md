@@ -48,6 +48,14 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#185] Konsolidasi dokumentasi #184 — 2026-07-12
+
+- **Dokumentasi saja**: README Progres Fase 5 (Penilaian + koreksi nilai
+  #184) + tabel modul & roadmap masterplan — dasar hukum dimutakhirkan:
+  revaluasi Perpres 75/2017 + PMK 118/2017 jo. perubahannya, penilaian
+  PMK 99/2024, asuransi PMK 43/2025; baris Pengamanan & Penggunaan
+  menjadi "Lengkap tahap awal".
+
 ## [#184] Register koreksi nilai & hasil penilaian — 2026-07-12
 
 - **Register koreksi nilai per aset** di modul Penilaian: catat hasil
