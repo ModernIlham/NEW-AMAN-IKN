@@ -48,6 +48,11 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#101] Konsolidasi dokumentasi Fase 4 tahap awal — 2026-07-12
+
+- Masterplan/README/pustaka diselaraskan dengan #99–#100 (Perencanaan
+  → Sebagian); README dapat blok Progres Fase 4.
+
 ## [#100] Kertas kerja usulan RKBMN pemeliharaan (XLSX) — 2026-07-12
 
 - **Kertas kerja RKBMN** siap diisi satker: sheet Layak (identitas +
