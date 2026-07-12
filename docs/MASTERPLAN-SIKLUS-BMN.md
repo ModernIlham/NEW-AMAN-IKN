@@ -101,7 +101,7 @@ resmi, pengesahan + kunci kegiatan, audit trail per field, CI/CD otomatis.
 | 10 | Pemindahtanganan | Penjualan · Hibah · Tukar Menukar · Penyertaan Modal | PMK 111/PMK.06/2016 jo. 165/PMK.06/2021 | Sebagian (register usulan berstatus #111) | 6 |
 | 11 | Pemusnahan | Usulan + BA pemusnahan | PMK 83/PMK.06/2016 | Sebagian (register BA #110) | 6 |
 | 12 | Penghapusan | SK + arsip aset terhapus | PMK 83/PMK.06/2016 | Sebagian (kandidat usul hapus #104) | 6 |
-| ∞ | Pembinaan, Pengawasan & Pengendalian | Pemantauan · investigasi · portofolio aset · analisis SBSK · penertiban | PMK 207/PMK.06/2021 | Segera | 6 |
+| ∞ | Pembinaan, Pengawasan & Pengendalian | Pemantauan · investigasi · portofolio aset · analisis SBSK · penertiban | PMK 207/PMK.06/2021 | Sebagian (dasbor pemantauan #113) | 6 |
 
 Konsep ringkas per modul (deskripsi, fitur rencana, integrasi) hidup di
 `frontend/src/lib/bmnModules.js` dan tampil di aplikasi (Beranda Modul →
@@ -292,7 +292,7 @@ Referensi langsung: `routes/persediaan.py`, `persediaan_transaksi.py`,
 | **3** | Penggunaan + Pengamanan + Pemeliharaan | PSP + alih status/sementara/pihak lain/bersama (PMK 40/2024); BMN idle (PMK 120/2024); aset per pegawai/jabatan + BAST digital + alert pegawai keluar; pengamanan fisik/administrasi/hukum + asuransi; jadwal & riwayat & biaya pemeliharaan — *tahap awal ✅: rekap pemegang (#87), dasbor pengamanan (#88), riwayat & biaya pemeliharaan + telaah kapitalisasi (pustaka §4)* | Data pengguna+BAST fase 1 |
 | **4** | Perencanaan Kebutuhan + Penganggaran + Pengadaan | RKBMN (PMK 153/2021) + analisis SBSK (PMK 138/2024) + sanding data eksisting; jembatan usulan→anggaran→realisasi; dokumen sumber (simpul); registrasi perolehan → auto-daftar master — *tahap awal ✅: saringan kelayakan RKBMN pemeliharaan (#99) + kertas kerja XLSX siap isi (#100), memakai balik kondisi aset + riwayat biaya Pemeliharaan* | Kodefikasi (fase 2) |
 | **5** | Pemanfaatan + Penilaian | Perjanjian per bentuk (Sewa/Pinjam Pakai/KSP/BGS/BSG/KSPI/KETUPI/PDF — PMK 115/2020 & 18/2024) + kalender jatuh tempo + PNBP; revaluasi BMN (PMK 97/2019) + penyusutan per golongan — *tahap awal ✅: penyusutan garis lurus semesteran + halaman Penilaian (#102-#103, §5) + referensi masa manfaat dikelola (#107) + register pemanfaatan 6 bentuk (#108, §6)* | Pembukuan (fase 2) |
-| **6** | Hilir + Wasdal | Pemindahtanganan (Penjualan/Hibah/Tukar Menukar/Penyertaan Modal — PMK 111/2016 jo. 165/2021); Pemusnahan (kandidat dari rusak berat); Penghapusan (kandidat dari tidak ditemukan) — PMK 83/2016; wasdal PMK 207/2021: pemantauan · investigasi · portofolio aset · analisis SBSK · penertiban — *tahap awal ✅: kandidat usul hapus (#104), tiket usulan berstatus (#106), register BA pemusnahan (#110), register pemindahtanganan 4 bentuk (#111, pustaka §7)* | Approval gerbang (dibangun di fase 2–3) |
+| **6** | Hilir + Wasdal | Pemindahtanganan (Penjualan/Hibah/Tukar Menukar/Penyertaan Modal — PMK 111/2016 jo. 165/2021); Pemusnahan (kandidat dari rusak berat); Penghapusan (kandidat dari tidak ditemukan) — PMK 83/2016; wasdal PMK 207/2021: pemantauan · investigasi · portofolio aset · analisis SBSK · penertiban — *tahap awal ✅: kandidat usul hapus (#104), tiket usulan berstatus (#106), register BA pemusnahan (#110), register pemindahtanganan 4 bentuk (#111, pustaka §7), dasbor pemantauan wasdal 5 objek (#113, pustaka §8)* | Approval gerbang (dibangun di fase 2–3) |
 
 **Aturan emas antar fase:** modul baru TIDAK menyalin data modul lama — ia
 merujuk. Sebelum membangun modul, tulis dulu kontrak integrasinya (field apa

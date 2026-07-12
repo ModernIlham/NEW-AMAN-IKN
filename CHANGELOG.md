@@ -48,6 +48,12 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#114] Konsolidasi dokumentasi Wasdal — 2026-07-12
+
+- **Dokumentasi saja**: masterplan (baris Peta Siklus Wasdal → Sebagian,
+  penanda roadmap Fase 6 + #113), README (intro 12 modul Sebagian Aktif +
+  blok Progres Fase 5–6), dan pustaka §10 (baris implikasi Wasdal).
+
 ## [#113] Wasdal tahap awal: dasbor pemantauan 5 objek — 2026-07-12
 
 - **Dasbor pemantauan Wasdal KPB** (bab pustaka §8, PMK 207/2021): mesin
