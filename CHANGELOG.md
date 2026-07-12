@@ -48,6 +48,12 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#156] Arsip lampiran tiket insidentil wasdal — 2026-07-12
+
+- **Lampiran per tiket insidentil** (scan BA bertanda tangan + foto
+  temuan, pola lampiran baku): tombol klip + dialog di seksi Pemantauan
+  Insidentil halaman Wasdal; hapus tiket membersihkan berkasnya.
+
 ## [#155] Konsolidasi dokumentasi #154 — 2026-07-12
 
 - **Dokumentasi saja**: README blok Progres Fase 2 + roadmap masterplan
