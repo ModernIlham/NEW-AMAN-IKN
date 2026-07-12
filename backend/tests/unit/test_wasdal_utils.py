@@ -1,10 +1,12 @@
 """Uji logika murni dasbor pemantauan Wasdal (PMK 207/2021)."""
 from wasdal_utils import (
-    JENIS_TEMUAN, OBJEK_PER_JENIS, OBJEK_WASDAL, SUMBER_PENERTIBAN,
-    periode_wasdal, rekap_penertiban, rekap_wasdal, sisa_hari_kerja,
+    JENIS_TEMUAN, OBJEK_PER_JENIS, OBJEK_WASDAL, PEMICU_INSIDENTIL,
+    SUMBER_PENERTIBAN, info_tenggat_insidentil, periode_wasdal,
+    rekap_insidentil, rekap_penertiban, rekap_wasdal, sisa_hari_kerja,
     status_tenggat_penertiban, susun_temuan, tambah_hari_kerja,
     temuan_pemanfaatan, temuan_pemindahtanganan, temuan_penatausahaan,
     temuan_pengamanan_pemeliharaan, temuan_penggunaan,
+    validate_ba_insidentil, validate_insidentil, validate_lapor_insidentil,
     validate_penertiban, validate_selesai_penertiban,
 )
 
@@ -154,3 +156,56 @@ def test_validate_selesai_dan_rekap():
                                        {"tindak_lanjut": ""}) != []
     r = rekap_penertiban([berjalan, {"status": "selesai"}], "2026-07-13")
     assert r == {"total": 2, "berjalan": 1, "selesai": 1, "lewat_tenggat": 1}
+
+
+# ── Pemantauan insidentil (10 + 5 hari kerja) ──
+
+def test_validate_insidentil():
+    ok = {"pemicu": "informasi_masyarakat", "tanggal_mulai": "2026-07-10",
+          "objek": "pengamanan_pemeliharaan", "uraian": "Laporan warga"}
+    assert validate_insidentil(ok) == []
+    assert set(PEMICU_INSIDENTIL) == {"informasi_masyarakat",
+                                      "pemberitaan_media", "hasil_audit"}
+    buruk = validate_insidentil({"pemicu": "x", "objek": "y",
+                                 "uraian": "", "tanggal_mulai": "z"})
+    assert len(buruk) == 4
+
+
+def test_transisi_insidentil():
+    berjalan = {"status": "berjalan"}
+    assert validate_ba_insidentil(berjalan, {
+        "nomor_ba": "BA-1", "tanggal_ba": "2026-07-15", "hasil": "Sesuai"}) == []
+    assert validate_ba_insidentil({"status": "dilaporkan"},
+                                  {"nomor_ba": "", "tanggal_ba": "x",
+                                   "hasil": ""}) != []
+    ba = {"status": "ba_terbit"}
+    assert validate_lapor_insidentil(ba, {"tanggal_lapor": "2026-07-16"}) == []
+    assert validate_lapor_insidentil(berjalan, {"tanggal_lapor": "x"}) != []
+
+
+def test_info_tenggat_insidentil():
+    # Berjalan: mulai Senin 2026-07-13 → tenggat pelaksanaan Senin 2026-07-27
+    t = {"status": "berjalan", "tanggal_mulai": "2026-07-13"}
+    info = info_tenggat_insidentil(t, "2026-07-20")
+    assert info["tahap"] == "pelaksanaan" and info["tenggat"] == "2026-07-27"
+    assert info == {"tahap": "pelaksanaan", "tenggat": "2026-07-27",
+                    "lewat": False, "sisa_hari_kerja": 5}
+    assert info_tenggat_insidentil(t, "2026-07-28")["lewat"] is True
+    # BA terbit: tanggal BA Rabu 2026-07-15 → tenggat lapor Rabu 2026-07-22
+    b = {"status": "ba_terbit", "tanggal_ba": "2026-07-15"}
+    info = info_tenggat_insidentil(b, "2026-07-16")
+    assert info["tahap"] == "lapor" and info["tenggat"] == "2026-07-22"
+    # Dilaporkan: tanpa tenggat aktif
+    assert info_tenggat_insidentil({"status": "dilaporkan"}, "2026-07-16") == {
+        "tahap": None, "tenggat": None, "lewat": False, "sisa_hari_kerja": None}
+
+
+def test_rekap_insidentil():
+    items = [
+        {"status": "berjalan", "tanggal_mulai": "2026-06-01"},   # lewat
+        {"status": "ba_terbit", "tanggal_ba": "2026-07-10"},
+        {"status": "dilaporkan"},
+    ]
+    r = rekap_insidentil(items, "2026-07-13")
+    assert r == {"total": 3, "berjalan": 1, "ba_terbit": 1, "dilaporkan": 1,
+                 "lewat_tenggat": 1}

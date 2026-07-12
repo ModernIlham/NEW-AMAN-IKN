@@ -318,5 +318,105 @@ def rekap_penertiban(items, today_iso: str) -> dict:
             "lewat_tenggat": lewat}
 
 
+# ── Pemantauan insidentil (PMK 207 §8.3: pelaksanaan ≤10 hari kerja,
+#    hasil dilaporkan ≤5 hari kerja sejak tanggal BA) ──
+PEMICU_INSIDENTIL = {
+    "informasi_masyarakat": "Informasi masyarakat",
+    "pemberitaan_media": "Pemberitaan media",
+    "hasil_audit": "Hasil audit APIP/BPK",
+}
+
+STATUS_INSIDENTIL = {
+    "berjalan": "Berjalan",
+    "ba_terbit": "BA terbit",
+    "dilaporkan": "Dilaporkan",
+}
+
+TENGGAT_PELAKSANAAN_HK = 10
+TENGGAT_LAPOR_HK = 5
+
+
+def validate_insidentil(data: dict) -> list:
+    """Validasi pembukaan pemantauan insidentil baru."""
+    errors = []
+    if data.get("pemicu") not in PEMICU_INSIDENTIL:
+        errors.append("Pemicu pemantauan tidak dikenal")
+    if data.get("objek") and data["objek"] not in OBJEK_WASDAL:
+        errors.append("Objek pemantauan tidak dikenal")
+    if not _terisi(data.get("uraian")):
+        errors.append("Uraian pemantauan wajib diisi")
+    if not _tgl(data.get("tanggal_mulai")):
+        errors.append("Tanggal mulai tidak valid (YYYY-MM-DD)")
+    return errors
+
+
+def validate_ba_insidentil(tiket: dict, data: dict) -> list:
+    """Validasi penerbitan BA: tiket berjalan + nomor & tanggal BA."""
+    errors = []
+    if tiket.get("status") != "berjalan":
+        errors.append("BA hanya dapat diterbitkan pada tiket berjalan")
+    if not _terisi(data.get("nomor_ba")):
+        errors.append("Nomor BA wajib diisi")
+    if not _tgl(data.get("tanggal_ba")):
+        errors.append("Tanggal BA tidak valid (YYYY-MM-DD)")
+    if not _terisi(data.get("hasil")):
+        errors.append("Ringkasan hasil pemantauan wajib diisi")
+    return errors
+
+
+def validate_lapor_insidentil(tiket: dict, data: dict) -> list:
+    """Validasi pelaporan hasil: tiket ber-BA + tanggal lapor."""
+    errors = []
+    if tiket.get("status") != "ba_terbit":
+        errors.append("Pelaporan hanya untuk tiket dengan BA terbit")
+    if not _tgl(data.get("tanggal_lapor")):
+        errors.append("Tanggal lapor tidak valid (YYYY-MM-DD)")
+    return errors
+
+
+def info_tenggat_insidentil(tiket: dict, today_iso: str) -> dict:
+    """Tenggat aktif tiket insidentil per statusnya.
+
+    berjalan  → tenggat pelaksanaan (mulai + 10 hari kerja)
+    ba_terbit → tenggat lapor (tanggal BA + 5 hari kerja)
+    dilaporkan → tidak ada tenggat aktif.
+    """
+    status = tiket.get("status")
+    if status == "berjalan":
+        tenggat = tambah_hari_kerja(tiket.get("tanggal_mulai"),
+                                    TENGGAT_PELAKSANAAN_HK)
+        tahap = "pelaksanaan"
+    elif status == "ba_terbit":
+        tenggat = tambah_hari_kerja(tiket.get("tanggal_ba"), TENGGAT_LAPOR_HK)
+        tahap = "lapor"
+    else:
+        return {"tahap": None, "tenggat": None, "lewat": False,
+                "sisa_hari_kerja": None}
+    hari_ini = _tgl(today_iso)
+    batas = _tgl(tenggat)
+    if not batas or not hari_ini:
+        return {"tahap": tahap, "tenggat": tenggat, "lewat": False,
+                "sisa_hari_kerja": None}
+    if hari_ini > batas:
+        return {"tahap": tahap, "tenggat": tenggat, "lewat": True,
+                "sisa_hari_kerja": 0}
+    return {"tahap": tahap, "tenggat": tenggat, "lewat": False,
+            "sisa_hari_kerja": sisa_hari_kerja(today_iso, tenggat)}
+
+
+def rekap_insidentil(items, today_iso: str) -> dict:
+    """Ringkasan register insidentil: jumlah per status + lewat tenggat."""
+    items = items or []
+    per_status = {k: 0 for k in STATUS_INSIDENTIL}
+    lewat = 0
+    for t in items:
+        st = t.get("status")
+        if st in per_status:
+            per_status[st] += 1
+        if info_tenggat_insidentil(t, today_iso)["lewat"]:
+            lewat += 1
+    return {"total": len(items), **per_status, "lewat_tenggat": lewat}
+
+
 # Ekspor label status perjanjian agar UI wasdal tak impor ganda
 LABEL_STATUS_PEMANFAATAN = LABEL_STATUS_PERJANJIAN
