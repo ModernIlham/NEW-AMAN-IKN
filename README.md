@@ -68,7 +68,8 @@ riwayat biaya Pemeliharaan) (#99) + **kertas kerja XLSX** siap diisi
 satker untuk dibawa ke SIMAN (#100) · Penganggaran — **register
 usulan berstatus** diusulkan → disetujui telaah → masuk DIPA →
 terealisasi, nilai per tahap + serapan (PMK 62/2023 + 153/2021)
-(#115) + **sanding rencana vs realisasi per akun BAS** (#123) ·
+(#115) + **sanding rencana vs realisasi per akun BAS** (#123) +
+**ekspor CSV register** (#163) ·
 Pengadaan — **register perolehan per BAST/kontrak** dengan
 checklist dokumen sumber, tautan barang ke aset master, dan penanda
 ekstrakomptabel PMK 181 (Perpres 16/2018 jo. 46/2025) (#117) +
