@@ -393,7 +393,7 @@ export default function PengamananPage({ user, onBack }) {
                   </span>
                 )}
                 <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
-                  onClick={() => { setCari(""); setHasilCari([]); setFormDok({ data: { jenis: "sertipikat", nomor: "", atas_nama: "", lokasi_simpan: "pengelola_barang", berlaku_sampai: "", keterangan: "" }, aset: null, saving: false }); }}
+                  onClick={() => { setCari(""); setHasilCari([]); setFormDok({ data: { jenis: "sertipikat", nomor: "", atas_nama: "", lokasi_simpan: "pengelola_barang", berlaku_sampai: "", kategori_sertipikasi: "", keterangan: "" }, aset: null, saving: false }); }}
                   data-testid="pengamanan-dokumen-tambah">
                   <Plus className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">Catat Dokumen</span>
                 </Button>
@@ -415,6 +415,11 @@ export default function PengamananPage({ user, onBack }) {
                           {kedaluwarsa && (
                             <span className="px-1.5 py-0.5 rounded bg-red-500/15 text-red-600 dark:text-red-400 text-[10px] font-semibold">
                               Kedaluwarsa
+                            </span>
+                          )}
+                          {d.kategori_sertipikasi && (
+                            <span className="px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-600 dark:text-violet-400 text-[10px] font-semibold">
+                              {dokumen.label_sertipikasi?.[d.kategori_sertipikasi] || d.kategori_sertipikasi}
                             </span>
                           )}
                           <p className="text-sm font-semibold text-foreground flex-1 min-w-[140px] truncate">{d.asset_name || "-"}</p>
@@ -599,7 +604,7 @@ export default function PengamananPage({ user, onBack }) {
                 <div>
                   <label className="text-xs font-medium text-foreground block mb-1" htmlFor="dok-jenis">Jenis dokumen</label>
                   <select id="dok-jenis" value={formDok.data.jenis}
-                    onChange={(e) => setFormDok((f) => ({ ...f, data: { ...f.data, jenis: e.target.value, lokasi_simpan: ["sertipikat", "imb_pbg"].includes(e.target.value) ? "pengelola_barang" : "pengguna_barang" } }))}
+                    onChange={(e) => setFormDok((f) => ({ ...f, data: { ...f.data, jenis: e.target.value, lokasi_simpan: ["sertipikat", "imb_pbg"].includes(e.target.value) ? "pengelola_barang" : "pengguna_barang", kategori_sertipikasi: e.target.value === "sertipikat" ? f.data.kategori_sertipikasi : "" } }))}
                     className="w-full h-9 px-2 rounded-lg border border-border bg-background text-sm text-foreground"
                     data-testid="dokumen-jenis">
                     {Object.entries(dokumen?.label_jenis || {}).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -632,6 +637,18 @@ export default function PengamananPage({ user, onBack }) {
                     onChange={(e) => setFormDok((f) => ({ ...f, data: { ...f.data, berlaku_sampai: e.target.value } }))}
                     data-testid="dokumen-berlaku" />
                 </div>
+                {formDok.data.jenis === "sertipikat" && (
+                  <div className="col-span-2">
+                    <label className="text-xs font-medium text-foreground block mb-1" htmlFor="dok-sertipikasi">Status sertipikasi (ops., kategori DJKN-BPN)</label>
+                    <select id="dok-sertipikasi" value={formDok.data.kategori_sertipikasi}
+                      onChange={(e) => setFormDok((f) => ({ ...f, data: { ...f.data, kategori_sertipikasi: e.target.value } }))}
+                      className="w-full h-9 px-2 rounded-lg border border-border bg-background text-sm text-foreground"
+                      data-testid="dokumen-sertipikasi">
+                      <option value="">— tidak diisi —</option>
+                      {Object.entries(dokumen?.label_sertipikasi || {}).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                    </select>
+                  </div>
+                )}
                 <div>
                   <label className="text-xs font-medium text-foreground block mb-1" htmlFor="dok-ket">Keterangan (ops.)</label>
                   <Input id="dok-ket" value={formDok.data.keterangan}
