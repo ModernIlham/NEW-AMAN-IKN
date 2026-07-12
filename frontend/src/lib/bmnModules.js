@@ -234,6 +234,7 @@ export const SIKLUS_MODULES = [
       "✅ Daftar Barang yang Digunakan per pemegang (PDF lampiran BAST, tanda tangan pemegang + KPB)",
       "✅ Daftar pantau BMN idle (PMK 120/2024): kandidat otomatis + tiket klarifikasi → usul serah → diserahkan",
       "✅ Register SK penetapan penggunaan multi-aset (PSP/alih status/sementara/pihak lain/bersama) + cakupan aset ter-PSP",
+      "✅ Arsip scan SK penetapan + dokumen pendukung per register (PDF/gambar)",
       "BAST digital penetapan & alur pengajuan PSP (menyusul)",
     ],
     integrasi: ["Field pengguna, NIP, jabatan, dan BAST dari modul inventarisasi menjadi data awal"],
