@@ -200,6 +200,53 @@ def buat_layer(batch_id: str, tanggal_iso: str, jumlah: int, harga_satuan: float
     }
 
 
+def mutasi_periode(jurnal_rows, dari_iso: str, sampai_iso: str):
+    """Rekap mutasi per barang dari JURNAL → {persediaan_id: rekap}.
+
+    Rekap: saldo_awal (Σ masuk−keluar sebelum `dari`), masuk_qty/nilai &
+    keluar_qty/nilai dalam periode [dari..sampai] inklusif, saldo_akhir =
+    awal + masuk − keluar. Semua dari jurnal nyata — tidak menyentuh master.
+    Batas tanggal 'YYYY-MM-DD'; timestamp jurnal ISO (perbandingan prefix
+    10 karakter = kronologis). Baris tanpa persediaan_id diabaikan.
+    """
+    dari = (dari_iso or "")[:10]
+    sampai = (sampai_iso or "")[:10]
+    rekap = {}
+    for r in jurnal_rows or []:
+        pid = r.get("persediaan_id")
+        if not pid:
+            continue
+        tgl = str(r.get("timestamp") or "")[:10]
+        arah = r.get("arah")
+        try:
+            qty = int(r.get("jumlah", 0) or 0)
+            nilai = float(r.get("total", 0) or 0)
+        except (ValueError, TypeError):
+            continue
+        e = rekap.setdefault(pid, {
+            "persediaan_id": pid,
+            "kode_barang": r.get("kode_barang"),
+            "nup": r.get("nup"),
+            "nama_barang": r.get("nama_barang"),
+            "saldo_awal": 0,
+            "masuk_qty": 0, "masuk_nilai": 0.0,
+            "keluar_qty": 0, "keluar_nilai": 0.0,
+        })
+        if tgl < dari:
+            e["saldo_awal"] += qty if arah == "masuk" else -qty
+        elif tgl <= sampai:
+            if arah == "masuk":
+                e["masuk_qty"] += qty
+                e["masuk_nilai"] += nilai
+            else:
+                e["keluar_qty"] += qty
+                e["keluar_nilai"] += nilai
+        # transaksi setelah `sampai` diabaikan (laporan periode)
+    for e in rekap.values():
+        e["saldo_akhir"] = e["saldo_awal"] + e["masuk_qty"] - e["keluar_qty"]
+    return rekap
+
+
 def klasifikasi_kedaluwarsa(batches, today_iso: str, horizon_hari: int = 30):
     """Pilah layer ber-kedaluwarsa → (lewat, segera) relatif `today_iso`.
 

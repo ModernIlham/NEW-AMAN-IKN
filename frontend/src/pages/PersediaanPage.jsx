@@ -66,6 +66,8 @@ export default function PersediaanPage({ user, onBack }) {
   const [jenisMasuk, setJenisMasuk] = useState([]);
   const [jenisKeluar, setJenisKeluar] = useState([]);
   const [peringatan, setPeringatan] = useState(null);
+  // Dialog laporan mutasi: {dari, sampai} default bulan berjalan
+  const [mutasi, setMutasi] = useState(null);
   const { confirm, confirmDialog } = useConfirm();
   const searchTimer = useRef(null);
 
@@ -288,6 +290,24 @@ export default function PersediaanPage({ user, onBack }) {
             </div>
             <Button className="h-10 gap-1.5" onClick={() => setForm({ mode: "tambah", data: { ...emptyForm } })} data-testid="persediaan-add">
               <Plus className="w-4 h-4" /><span className="hidden sm:inline">Tambah Barang</span>
+            </Button>
+            <Button
+              variant="outline" className="h-10 gap-1.5"
+              onClick={() => downloadFileWithProgress(`${API}/persediaan/laporan/posisi-pdf`, "Laporan_Posisi_Persediaan.pdf", { label: "Laporan Posisi Persediaan" }).catch(() => {})}
+              data-testid="persediaan-laporan-posisi"
+            >
+              <FileDown className="w-4 h-4" /><span className="hidden sm:inline">Posisi</span>
+            </Button>
+            <Button
+              variant="outline" className="h-10 gap-1.5"
+              onClick={() => {
+                const now = new Date();
+                const awal = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+                setMutasi({ dari: awal, sampai: now.toISOString().slice(0, 10) });
+              }}
+              data-testid="persediaan-laporan-mutasi"
+            >
+              <FileDown className="w-4 h-4" /><span className="hidden sm:inline">Mutasi</span>
             </Button>
           </div>
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -691,6 +711,49 @@ export default function PersediaanPage({ user, onBack }) {
             <Button variant="outline" onClick={() => setKeluar(null)}>Batal</Button>
             <Button onClick={submitKeluar} disabled={saving} className="bg-red-600 hover:bg-red-700" data-testid="persediaan-keluar-simpan">
               {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <PackageMinus className="w-4 h-4 mr-1.5" />}Catat Keluar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog rentang laporan mutasi ── */}
+      <Dialog open={!!mutasi} onOpenChange={(o) => { if (!o) setMutasi(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Laporan Mutasi Persediaan</DialogTitle>
+            <DialogDescription className="text-xs">
+              Saldo awal → masuk → keluar → saldo akhir per barang, dihitung dari jurnal transaksi.
+            </DialogDescription>
+          </DialogHeader>
+          {mutasi && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-mut-dari">Dari</label>
+                <Input id="psd-mut-dari" type="date" value={mutasi.dari}
+                  onChange={(e) => setMutasi((m) => ({ ...m, dari: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-mut-sampai">Sampai</label>
+                <Input id="psd-mut-sampai" type="date" value={mutasi.sampai}
+                  onChange={(e) => setMutasi((m) => ({ ...m, sampai: e.target.value }))} />
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setMutasi(null)}>Batal</Button>
+            <Button
+              onClick={() => {
+                if (!mutasi?.dari || !mutasi?.sampai) { toast.error("Isi rentang tanggal"); return; }
+                downloadFileWithProgress(
+                  `${API}/persediaan/laporan/mutasi-pdf?dari=${mutasi.dari}&sampai=${mutasi.sampai}`,
+                  `Laporan_Mutasi_Persediaan_${mutasi.dari}_${mutasi.sampai}.pdf`,
+                  { label: "Laporan Mutasi Persediaan" },
+                ).catch(() => {});
+                setMutasi(null);
+              }}
+              data-testid="persediaan-mutasi-unduh"
+            >
+              <FileDown className="w-4 h-4 mr-1.5" />Unduh PDF
             </Button>
           </DialogFooter>
         </DialogContent>

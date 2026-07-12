@@ -21,9 +21,9 @@ from db import db
 from persediaan_fields import EDITABLE_FIELD_NAMES
 from persediaan_utils import (
     JENIS_KELUAR, JENIS_MASUK, KODE_PENUH_LEN, KODE_PREFIX_LEN, SATUAN_BAKU,
-    buat_layer, klasifikasi_kedaluwarsa, konsumsi_fifo, next_kode_penuh,
-    next_nup, status_stok, validate_kode_persediaan, validate_transaksi_keluar,
-    validate_transaksi_masuk,
+    buat_layer, klasifikasi_kedaluwarsa, konsumsi_fifo, mutasi_periode,
+    next_kode_penuh, next_nup, nilai_persediaan_dari_batches, status_stok,
+    validate_kode_persediaan, validate_transaksi_keluar, validate_transaksi_masuk,
 )
 
 persediaan_router = APIRouter()
@@ -190,6 +190,198 @@ async def nota_dinas_persediaan(
     from fastapi.responses import StreamingResponse
     return StreamingResponse(buffer, media_type="application/pdf",
                              headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
+
+def _fmt_rp(val):
+    try:
+        return f"{int(val):,}".replace(",", ".")
+    except (ValueError, TypeError, OverflowError):
+        return "0"
+
+
+@persediaan_router.get("/persediaan/laporan/posisi-pdf")
+async def laporan_posisi_pdf(_user: dict = Depends(require_user)):
+    """Laporan Posisi Persediaan (hari ini) — per KELOMPOK kodefikasi.
+
+    Grup per prefix 5 digit (uraian dari referensi kodefikasi); nilai per
+    barang dihitung dari layer FIFO (pustaka §3.4). Semua data nyata.
+    """
+    from io import BytesIO
+
+    from reportlab.lib.units import mm as rl_mm
+    from reportlab.platypus import Paragraph, Spacer, Table
+
+    from routes.reports import (
+        _fit_col_widths, _fmt_tanggal_id, _get_report_styles, _kop_surat_flowables,
+        _page_footer_factory, _signature_block, _std_doc, _std_table_style,
+        _title_block,
+    )
+
+    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    uraian_kelompok = {}
+    async for k in db.kodefikasi.find({"level": 3}, {"_id": 0, "kode": 1, "uraian": 1}):
+        uraian_kelompok[k["kode"]] = k.get("uraian") or ""
+
+    grup = {}
+    async for it in db.persediaan.find({}, {"_id": 0}):
+        stok = int(it.get("stok", 0) or 0)
+        nilai = nilai_persediaan_dari_batches(it.get("batches"))
+        kel = str(it.get("kode_barang") or "")[:5]
+        g = grup.setdefault(kel, {"kelompok": kel,
+                                  "uraian": uraian_kelompok.get(kel, ""),
+                                  "items": [], "stok": 0, "nilai": 0.0})
+        g["items"].append({"kode": it.get("kode_barang"), "nup": it.get("nup"),
+                           "nama": it.get("nama_barang"), "satuan": it.get("satuan") or "-",
+                           "stok": stok, "nilai": nilai})
+        g["stok"] += stok
+        g["nilai"] += nilai
+
+    today_iso = datetime.now(timezone.utc).date().isoformat()
+    buffer = BytesIO()
+    doc = _std_doc(buffer)
+    st = _get_report_styles()
+    elements = []
+    elements.extend(_kop_surat_flowables(settings, doc.width))
+    elements.extend(_title_block("LAPORAN POSISI PERSEDIAAN"))
+    elements.append(Paragraph(f"Per tanggal: {_fmt_tanggal_id(today_iso)} · nilai dihitung FIFO per layer", st['Meta']))
+    elements.append(Spacer(1, 4 * rl_mm))
+
+    headers = ["Kode Barang", "NUP", "Nama Barang", "Satuan", "Stok", "Nilai (Rp)"]
+    table_data = [[Paragraph(h, st['TableHeader']) for h in headers]]
+    grand_stok, grand_nilai = 0, 0.0
+    for kel in sorted(grup):
+        g = grup[kel]
+        label = f"Kelompok {kel}" + (f" — {g['uraian']}" if g["uraian"] else "")
+        table_data.append([Paragraph(f"<b>{label}</b>", st['Cell']), "", "", "", "", ""])
+        for it in sorted(g["items"], key=lambda x: (x["nama"] or "", x["kode"] or "")):
+            table_data.append([
+                Paragraph(it["kode"] or "-", st['Cell']),
+                Paragraph(it["nup"] or "-", st['CellCenter']),
+                Paragraph(it["nama"] or "-", st['Cell']),
+                Paragraph(it["satuan"], st['CellCenter']),
+                Paragraph(str(it["stok"]), st['CellCenter']),
+                Paragraph(_fmt_rp(it["nilai"]), st['CellRight']),
+            ])
+        table_data.append([
+            Paragraph("", st['Cell']), Paragraph("", st['Cell']),
+            Paragraph(f"<b>Subtotal {kel}</b>", st['Cell']), Paragraph("", st['Cell']),
+            Paragraph(f"<b>{g['stok']}</b>", st['CellCenter']),
+            Paragraph(f"<b>{_fmt_rp(g['nilai'])}</b>", st['CellRight']),
+        ])
+        grand_stok += g["stok"]
+        grand_nilai += g["nilai"]
+    table_data.append([
+        Paragraph("", st['Cell']), Paragraph("", st['Cell']),
+        Paragraph("<b>TOTAL</b>", st['Cell']), Paragraph("", st['Cell']),
+        Paragraph(f"<b>{grand_stok}</b>", st['CellCenter']),
+        Paragraph(f"<b>{_fmt_rp(grand_nilai)}</b>", st['CellRight']),
+    ])
+    table = Table(table_data, colWidths=_fit_col_widths([120, 40, 180, 55, 45, 90], doc.width), repeatRows=1)
+    table.setStyle(_std_table_style(zebra=True, total_row=True))
+    elements.append(table)
+
+    elements.append(Spacer(1, 12 * rl_mm))
+    elements.extend(_signature_block([
+        {'pre': ['.................., .......................'],
+         'header': 'Kuasa Pengguna Barang,',
+         'nama': settings.get("kasatker_nama") or "-",
+         'after': [f"NIP. {settings.get('kasatker_nip') or '-'}"]},
+    ], doc.width))
+    footer = _page_footer_factory("Laporan Posisi Persediaan")
+    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    buffer.seek(0)
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(buffer, media_type="application/pdf",
+                             headers={"Content-Disposition": 'attachment; filename="Laporan_Posisi_Persediaan.pdf"'})
+
+
+@persediaan_router.get("/persediaan/laporan/mutasi-pdf")
+async def laporan_mutasi_pdf(
+    dari: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    sampai: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    _user: dict = Depends(require_user),
+):
+    """Laporan Mutasi Persediaan per periode — dari JURNAL (pustaka §3.4).
+
+    Kolom: saldo awal → masuk (qty & nilai) → keluar (qty & nilai) →
+    saldo akhir per barang. Saldo dihitung murni dari jurnal transaksi.
+    """
+    from io import BytesIO
+
+    from reportlab.lib.units import mm as rl_mm
+    from reportlab.platypus import Paragraph, Spacer, Table
+
+    from routes.reports import (
+        _fit_col_widths, _fmt_tanggal_id, _get_report_styles, _kop_surat_flowables,
+        _page_footer_factory, _signature_block, _std_doc, _std_table_style,
+        _title_block,
+    )
+
+    if sampai < dari:
+        raise HTTPException(status_code=400, detail="Tanggal akhir sebelum tanggal awal")
+
+    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    rows = [r async for r in db.transaksi_persediaan.find({}, {"_id": 0})]
+    rekap = mutasi_periode(rows, dari, sampai)
+
+    buffer = BytesIO()
+    doc = _std_doc(buffer, landscape_mode=True)
+    st = _get_report_styles()
+    elements = []
+    elements.extend(_kop_surat_flowables(settings, doc.width))
+    elements.extend(_title_block("LAPORAN MUTASI PERSEDIAAN"))
+    elements.append(Paragraph(
+        f"Periode: {_fmt_tanggal_id(dari)} s.d. {_fmt_tanggal_id(sampai)} · dihitung dari jurnal transaksi",
+        st['Meta']))
+    elements.append(Spacer(1, 4 * rl_mm))
+
+    headers = ["Kode Barang", "Nama Barang", "Saldo\nAwal", "Masuk\nQty", "Masuk\nNilai (Rp)",
+               "Keluar\nQty", "Keluar\nNilai (Rp)", "Saldo\nAkhir"]
+    table_data = [[Paragraph(h.replace("\n", "<br/>"), st['TableHeader']) for h in headers]]
+    urut = sorted(rekap.values(), key=lambda e: (e["nama_barang"] or "", e["kode_barang"] or ""))
+    tot = {"masuk_qty": 0, "masuk_nilai": 0.0, "keluar_qty": 0, "keluar_nilai": 0.0}
+    for e in urut:
+        table_data.append([
+            Paragraph(e["kode_barang"] or "-", st['Cell']),
+            Paragraph(e["nama_barang"] or "-", st['Cell']),
+            Paragraph(str(e["saldo_awal"]), st['CellCenter']),
+            Paragraph(str(e["masuk_qty"]), st['CellCenter']),
+            Paragraph(_fmt_rp(e["masuk_nilai"]), st['CellRight']),
+            Paragraph(str(e["keluar_qty"]), st['CellCenter']),
+            Paragraph(_fmt_rp(e["keluar_nilai"]), st['CellRight']),
+            Paragraph(str(e["saldo_akhir"]), st['CellCenter']),
+        ])
+        for k in tot:
+            tot[k] += e[k]
+    if not urut:
+        elements.append(Paragraph("Tidak ada transaksi pada periode ini.", st['Cell']))
+    else:
+        table_data.append([
+            Paragraph("", st['Cell']), Paragraph("<b>TOTAL</b>", st['Cell']),
+            Paragraph("", st['CellCenter']),
+            Paragraph(f"<b>{tot['masuk_qty']}</b>", st['CellCenter']),
+            Paragraph(f"<b>{_fmt_rp(tot['masuk_nilai'])}</b>", st['CellRight']),
+            Paragraph(f"<b>{tot['keluar_qty']}</b>", st['CellCenter']),
+            Paragraph(f"<b>{_fmt_rp(tot['keluar_nilai'])}</b>", st['CellRight']),
+            Paragraph("", st['CellCenter']),
+        ])
+        table = Table(table_data, colWidths=_fit_col_widths([115, 190, 50, 50, 90, 50, 90, 50], doc.width), repeatRows=1)
+        table.setStyle(_std_table_style(zebra=True, total_row=True))
+        elements.append(table)
+
+    elements.append(Spacer(1, 12 * rl_mm))
+    elements.extend(_signature_block([
+        {'pre': ['.................., .......................'],
+         'header': 'Kuasa Pengguna Barang,',
+         'nama': settings.get("kasatker_nama") or "-",
+         'after': [f"NIP. {settings.get('kasatker_nip') or '-'}"]},
+    ], doc.width))
+    footer = _page_footer_factory("Laporan Mutasi Persediaan")
+    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    buffer.seek(0)
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(buffer, media_type="application/pdf",
+                             headers={"Content-Disposition": f'attachment; filename="Laporan_Mutasi_Persediaan_{dari}_{sampai}.pdf"'})
 
 
 @persediaan_router.get("/persediaan/jenis-transaksi")

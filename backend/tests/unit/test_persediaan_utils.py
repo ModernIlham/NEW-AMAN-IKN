@@ -6,9 +6,10 @@ from persediaan_fields import (
 )
 from persediaan_utils import (
     JENIS_KELUAR, JENIS_MASUK, KODE_PENUH_LEN, KODE_PREFIX_LEN, SATUAN_BAKU,
-    buat_layer, klasifikasi_kedaluwarsa, konsumsi_fifo, next_kode_penuh,
-    next_nup, nilai_persediaan_dari_batches, status_stok, stok_dari_batches,
-    validate_kode_persediaan, validate_transaksi_keluar, validate_transaksi_masuk,
+    buat_layer, klasifikasi_kedaluwarsa, konsumsi_fifo, mutasi_periode,
+    next_kode_penuh, next_nup, nilai_persediaan_dari_batches, status_stok,
+    stok_dari_batches, validate_kode_persediaan, validate_transaksi_keluar,
+    validate_transaksi_masuk,
 )
 
 
@@ -196,6 +197,43 @@ class TestKonsumsiFifo:
         layers = self._layers()
         sisa, _, _ = konsumsi_fifo(layers, 5)
         assert stok_dari_batches(sisa) == stok_dari_batches(layers) - 5
+
+
+class TestMutasiPeriode:
+    def _jurnal(self):
+        def j(pid, arah, tgl, qty, nilai):
+            return {"persediaan_id": pid, "arah": arah, "timestamp": f"{tgl}T10:00:00+00:00",
+                    "jumlah": qty, "total": nilai, "kode_barang": f"K-{pid}",
+                    "nup": "1", "nama_barang": f"Barang {pid}"}
+        return [
+            j("p1", "masuk", "2026-06-01", 10, 100000),   # sebelum periode → saldo awal +10
+            j("p1", "keluar", "2026-06-15", 3, 30000),    # sebelum periode → saldo awal -3
+            j("p1", "masuk", "2026-07-05", 5, 60000),     # dalam periode
+            j("p1", "keluar", "2026-07-10", 2, 22000),    # dalam periode
+            j("p1", "masuk", "2026-08-01", 99, 999999),   # setelah periode → diabaikan
+            j("p2", "masuk", "2026-07-01", 4, 40000),     # barang lain, dalam periode
+            {"arah": "masuk", "timestamp": "2026-07-02", "jumlah": 1, "total": 1},  # tanpa pid → abaikan
+        ]
+
+    def test_rekap_per_barang(self):
+        rekap = mutasi_periode(self._jurnal(), "2026-07-01", "2026-07-31")
+        p1 = rekap["p1"]
+        assert p1["saldo_awal"] == 7            # 10 - 3
+        assert p1["masuk_qty"] == 5 and p1["masuk_nilai"] == 60000
+        assert p1["keluar_qty"] == 2 and p1["keluar_nilai"] == 22000
+        assert p1["saldo_akhir"] == 10          # 7 + 5 - 2
+        p2 = rekap["p2"]
+        assert p2["saldo_awal"] == 0 and p2["saldo_akhir"] == 4
+        assert set(rekap) == {"p1", "p2"}
+
+    def test_batas_periode_inklusif(self):
+        rekap = mutasi_periode(self._jurnal(), "2026-07-05", "2026-07-10")
+        p1 = rekap["p1"]
+        assert p1["masuk_qty"] == 5 and p1["keluar_qty"] == 2  # kedua batas ikut
+
+    def test_kosong(self):
+        assert mutasi_periode([], "2026-07-01", "2026-07-31") == {}
+        assert mutasi_periode(None, "2026-07-01", "2026-07-31") == {}
 
 
 class TestKlasifikasiKedaluwarsa:
