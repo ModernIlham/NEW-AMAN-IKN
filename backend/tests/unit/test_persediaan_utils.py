@@ -7,9 +7,9 @@ from persediaan_fields import (
 from persediaan_utils import (
     JENIS_KELUAR, JENIS_MASUK, KODE_PENUH_LEN, KODE_PREFIX_LEN, SATUAN_BAKU,
     buat_layer, klasifikasi_kedaluwarsa, konsumsi_fifo, mutasi_periode,
-    next_kode_penuh, next_nup, nilai_persediaan_dari_batches, status_stok,
-    stok_dari_batches, validate_kode_persediaan, validate_transaksi_keluar,
-    validate_transaksi_masuk,
+    next_kode_penuh, next_nup, nilai_persediaan_dari_batches,
+    penyesuaian_opname, status_stok, stok_dari_batches,
+    validate_kode_persediaan, validate_transaksi_keluar, validate_transaksi_masuk,
 )
 
 
@@ -197,6 +197,41 @@ class TestKonsumsiFifo:
         layers = self._layers()
         sisa, _, _ = konsumsi_fifo(layers, 5)
         assert stok_dari_batches(sisa) == stok_dari_batches(layers) - 5
+
+
+class TestPenyesuaianOpname:
+    def _layers(self):
+        return [
+            {"batch_id": "b1", "tanggal": "2026-01-01", "qty": 10, "harga": 5000.0},
+            {"batch_id": "b2", "tanggal": "2026-02-01", "qty": 4, "harga": 6000.0},
+        ]
+
+    def test_fisik_kurang_konsumsi_fifo(self):
+        baru, d = penyesuaian_opname(self._layers(), 9, "bx", "2026-07-12T00:00:00")
+        assert stok_dari_batches(baru) == 9
+        assert d["arah"] == "keluar" and d["jumlah"] == 5
+        assert d["nilai"] == 5 * 5000  # layer tertua (b1) terkonsumsi dulu
+        assert d["rincian"][0]["batch_id"] == "b1"
+
+    def test_fisik_lebih_layer_penyesuaian_harga_termuda(self):
+        baru, d = penyesuaian_opname(self._layers(), 20, "bx", "2026-07-12T00:00:00")
+        assert stok_dari_batches(baru) == 20
+        assert d["arah"] == "masuk" and d["jumlah"] == 6
+        assert d["harga"] == 6000.0  # harga layer termuda (b2)
+        assert d["nilai"] == 6 * 6000
+        tambahan = [b for b in baru if b["batch_id"] == "bx"][0]
+        assert tambahan["ref"] == "OPNAME" and tambahan["qty"] == 6
+
+    def test_fisik_lebih_tanpa_layer_harga_nol(self):
+        baru, d = penyesuaian_opname([], 3, "bx", "2026-07-12T00:00:00")
+        assert stok_dari_batches(baru) == 3
+        assert d["harga"] == 0.0 and d["nilai"] == 0.0
+
+    def test_tanpa_selisih_atau_negatif_valueerror(self):
+        with pytest.raises(ValueError):
+            penyesuaian_opname(self._layers(), 14, "bx", "2026-07-12")  # sama dengan buku
+        with pytest.raises(ValueError):
+            penyesuaian_opname(self._layers(), -1, "bx", "2026-07-12")
 
 
 class TestMutasiPeriode:

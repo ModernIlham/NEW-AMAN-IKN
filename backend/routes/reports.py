@@ -399,7 +399,9 @@ def _signature_block(signers, doc_width):
       role   -- str below header (e.g. 'Kepala Satuan Kerja')
       nama   -- str signatory name (rendered bold + underlined)
       after  -- list[str] lines below the name (e.g. jabatan, 'NIP. ...')
-    One signer renders right-aligned; two render left/right.
+    One signer renders right-aligned; two render left/right; THREE render
+    two on top (left/right) + the third centered below (pola BA opname:
+    penghitung & saksi di atas, mengetahui di bawah).
     """
     from reportlab.platypus import Table, TableStyle, Paragraph, Spacer, KeepTogether
     from reportlab.lib.units import mm as rl_mm
@@ -430,6 +432,20 @@ def _signature_block(signers, doc_width):
         for _ in range(max_after - len(after)):
             flow.append(Paragraph('&nbsp;', sig))
         return flow
+
+    if len(signers) >= 3:
+        atas = _signature_block(signers[:2], doc_width)
+        bawah_tbl = Table(
+            [["", _col(signers[2]), ""]],
+            colWidths=[doc_width * 0.30, doc_width * 0.40, doc_width * 0.30])
+        bawah_tbl.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+            ('TOPPADDING', (0, 0), (-1, -1), 0),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+        ]))
+        return atas + [Spacer(1, 8 * rl_mm), KeepTogether(bawah_tbl)]
 
     if len(signers) == 1:
         cells = [["", _col(signers[0])]]

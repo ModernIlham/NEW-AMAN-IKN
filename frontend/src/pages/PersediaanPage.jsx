@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Search, Plus, Pencil, Trash2, Loader2, Boxes,
   ChevronLeft, ChevronRight, PackagePlus, PackageMinus, History,
-  AlertTriangle, FileDown,
+  AlertTriangle, FileDown, ClipboardCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -68,6 +68,9 @@ export default function PersediaanPage({ user, onBack }) {
   const [peringatan, setPeringatan] = useState(null);
   // Dialog laporan mutasi: {dari, sampai} default bulan berjalan
   const [mutasi, setMutasi] = useState(null);
+  // Dialog opname: {item, stok_fisik, alasan}; BAOF: {tanggal}
+  const [opname, setOpname] = useState(null);
+  const [baof, setBaof] = useState(null);
   const { confirm, confirmDialog } = useConfirm();
   const searchTimer = useRef(null);
 
@@ -178,6 +181,26 @@ export default function PersediaanPage({ user, onBack }) {
       load(page, search, status);
     } catch (err) {
       toast.error(getApiError(err, "Gagal mencatat transaksi keluar"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const submitOpname = async () => {
+    if (!opname) return;
+    const fisik = parseInt(opname.stok_fisik, 10);
+    if (Number.isNaN(fisik) || fisik < 0) { toast.error("Stok fisik tidak valid"); return; }
+    if ((opname.alasan || "").trim().length < 3) { toast.error("Alasan selisih wajib diisi (bahan CaLK)"); return; }
+    setSaving(true);
+    try {
+      const r = await axios.post(`${API}/persediaan/${opname.item.id}/opname`, {
+        stok_fisik: fisik, alasan: opname.alasan.trim(),
+      });
+      toast.success(r.data?.message || "Opname tercatat");
+      setOpname(null);
+      load(page, search, status);
+    } catch (err) {
+      toast.error(getApiError(err, "Gagal merekam opname"));
     } finally {
       setSaving(false);
     }
@@ -309,6 +332,20 @@ export default function PersediaanPage({ user, onBack }) {
             >
               <FileDown className="w-4 h-4" /><span className="hidden sm:inline">Mutasi</span>
             </Button>
+            <Button
+              variant="outline" className="h-10 gap-1.5"
+              onClick={() => downloadFileWithProgress(`${API}/persediaan/opname/kertas-kerja-pdf`, "Kertas_Kerja_Opname.pdf", { label: "Kertas Kerja Opname" }).catch(() => {})}
+              data-testid="persediaan-kertas-kerja"
+            >
+              <ClipboardCheck className="w-4 h-4" /><span className="hidden sm:inline">Kertas Kerja</span>
+            </Button>
+            <Button
+              variant="outline" className="h-10 gap-1.5"
+              onClick={() => setBaof({ tanggal: new Date().toISOString().slice(0, 10) })}
+              data-testid="persediaan-baof"
+            >
+              <ClipboardCheck className="w-4 h-4" /><span className="hidden sm:inline">BAOF</span>
+            </Button>
           </div>
           <div className="flex items-center gap-1.5 flex-wrap">
             {STATUS_FILTERS.map((f) => (
@@ -411,6 +448,16 @@ export default function PersediaanPage({ user, onBack }) {
                           data-testid={`persediaan-keluar-${it.kode_barang}-${it.nup}`}
                         >
                           <PackageMinus className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setOpname({ item: it, stok_fisik: String(it.stok), alasan: "" })}
+                          aria-label={`Opname ${it.nama_barang}`}
+                          title="Rekam hasil opname fisik"
+                          className="p-1.5 rounded-md text-violet-600 dark:text-violet-400 hover:bg-violet-500/10 min-w-0 min-h-0"
+                          data-testid={`persediaan-opname-${it.kode_barang}-${it.nup}`}
+                        >
+                          <ClipboardCheck className="w-3.5 h-3.5" />
                         </button>
                         <button
                           type="button"
@@ -711,6 +758,79 @@ export default function PersediaanPage({ user, onBack }) {
             <Button variant="outline" onClick={() => setKeluar(null)}>Batal</Button>
             <Button onClick={submitKeluar} disabled={saving} className="bg-red-600 hover:bg-red-700" data-testid="persediaan-keluar-simpan">
               {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <PackageMinus className="w-4 h-4 mr-1.5" />}Catat Keluar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog opname per barang ── */}
+      <Dialog open={!!opname} onOpenChange={(o) => { if (!o) setOpname(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Opname Fisik — {opname?.item?.nama_barang}</DialogTitle>
+            <DialogDescription className="text-xs">
+              Stok buku saat ini: <b>{opname?.item?.stok}</b>. Selisih akan dibukukan
+              otomatis (kurang = konsumsi FIFO; lebih = layer penyesuaian) + jurnal opname.
+            </DialogDescription>
+          </DialogHeader>
+          {opname && (
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-op-fisik">Stok Fisik Hasil Hitung</label>
+                <Input id="psd-op-fisik" type="number" min="0"
+                  value={opname.stok_fisik}
+                  onChange={(e) => setOpname((m) => ({ ...m, stok_fisik: e.target.value }))}
+                  data-testid="persediaan-opname-fisik" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-op-alasan">Alasan Selisih (wajib — bahan CaLK)</label>
+                <Input id="psd-op-alasan" placeholder="cth. susut pemakaian tidak tercatat"
+                  value={opname.alasan}
+                  onChange={(e) => setOpname((m) => ({ ...m, alasan: e.target.value }))}
+                  data-testid="persediaan-opname-alasan" />
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setOpname(null)}>Batal</Button>
+            <Button onClick={submitOpname} disabled={saving} className="bg-violet-600 hover:bg-violet-700" data-testid="persediaan-opname-simpan">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <ClipboardCheck className="w-4 h-4 mr-1.5" />}Rekam Opname
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog BAOF ── */}
+      <Dialog open={!!baof} onOpenChange={(o) => { if (!o) setBaof(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Berita Acara Opname Fisik (BAOF)</DialogTitle>
+            <DialogDescription className="text-xs">
+              Berisi seluruh penyesuaian opname pada tanggal terpilih + 3 penandatangan.
+            </DialogDescription>
+          </DialogHeader>
+          {baof && (
+            <div>
+              <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-baof-tgl">Tanggal Opname</label>
+              <Input id="psd-baof-tgl" type="date" value={baof.tanggal}
+                onChange={(e) => setBaof((m) => ({ ...m, tanggal: e.target.value }))} />
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setBaof(null)}>Batal</Button>
+            <Button
+              onClick={() => {
+                if (!baof?.tanggal) { toast.error("Pilih tanggal"); return; }
+                downloadFileWithProgress(
+                  `${API}/persediaan/opname/baof-pdf?tanggal=${baof.tanggal}`,
+                  `BAOF_${baof.tanggal}.pdf`,
+                  { label: "Berita Acara Opname Fisik" },
+                ).catch(() => {});
+                setBaof(null);
+              }}
+              data-testid="persediaan-baof-unduh"
+            >
+              <FileDown className="w-4 h-4 mr-1.5" />Unduh PDF
             </Button>
           </DialogFooter>
         </DialogContent>

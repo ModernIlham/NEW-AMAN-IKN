@@ -200,6 +200,38 @@ def buat_layer(batch_id: str, tanggal_iso: str, jumlah: int, harga_satuan: float
     }
 
 
+def penyesuaian_opname(batches, stok_fisik: int, batch_id_baru: str, tanggal_iso: str):
+    """Setel layer agar total qty = stok_fisik → (batches_baru, detail).
+
+    - fisik < buku  → kekurangan dikonsumsi FIFO (layer tertua dulu);
+      detail {"arah": "keluar", "jumlah", "nilai", "rincian"}.
+    - fisik > buku  → kelebihan jadi LAYER PENYESUAIAN baru dengan harga
+      layer TERMUDA yang ada (pendekatan konservatif; 0 bila tanpa layer);
+      detail {"arah": "masuk", "jumlah", "nilai", "harga"}.
+    - fisik == buku → ValueError (tidak ada selisih untuk disesuaikan).
+    stok_fisik < 0 → ValueError. Fungsi murni — batch_id & tanggal dipasok.
+    """
+    fisik = int(stok_fisik)
+    if fisik < 0:
+        raise ValueError("Stok fisik tidak boleh negatif")
+    buku = stok_dari_batches(batches)
+    if fisik == buku:
+        raise ValueError("Tidak ada selisih — stok fisik sama dengan buku")
+    if fisik < buku:
+        sisa, nilai, rincian = konsumsi_fifo(batches, buku - fisik)
+        return sisa, {"arah": "keluar", "jumlah": buku - fisik,
+                      "nilai": nilai, "rincian": rincian}
+    # fisik > buku — harga layer termuda (tanggal terbesar) sebagai acuan
+    urut = sorted((b for b in (batches or []) if int(b.get("qty", 0) or 0) > 0),
+                  key=lambda b: str(b.get("tanggal", "")))
+    harga = float(urut[-1].get("harga", 0) or 0) if urut else 0.0
+    tambah = fisik - buku
+    layer = buat_layer(batch_id_baru, tanggal_iso, tambah, harga, "", "OPNAME")
+    return list(batches or []) + [layer], {
+        "arah": "masuk", "jumlah": tambah, "nilai": tambah * harga, "harga": harga,
+    }
+
+
 def mutasi_periode(jurnal_rows, dari_iso: str, sampai_iso: str):
     """Rekap mutasi per barang dari JURNAL → {persediaan_id: rekap}.
 

@@ -22,8 +22,9 @@ from persediaan_fields import EDITABLE_FIELD_NAMES
 from persediaan_utils import (
     JENIS_KELUAR, JENIS_MASUK, KODE_PENUH_LEN, KODE_PREFIX_LEN, SATUAN_BAKU,
     buat_layer, klasifikasi_kedaluwarsa, konsumsi_fifo, mutasi_periode,
-    next_kode_penuh, next_nup, nilai_persediaan_dari_batches, status_stok,
-    validate_kode_persediaan, validate_transaksi_keluar, validate_transaksi_masuk,
+    next_kode_penuh, next_nup, nilai_persediaan_dari_batches,
+    penyesuaian_opname, status_stok, validate_kode_persediaan,
+    validate_transaksi_keluar, validate_transaksi_masuk,
 )
 
 persediaan_router = APIRouter()
@@ -197,6 +198,143 @@ def _fmt_rp(val):
         return f"{int(val):,}".replace(",", ".")
     except (ValueError, TypeError, OverflowError):
         return "0"
+
+
+@persediaan_router.get("/persediaan/opname/kertas-kerja-pdf")
+async def opname_kertas_kerja_pdf(_user: dict = Depends(require_user)):
+    """Kertas kerja opname (pustaka §3.3): saldo buku + kolom fisik KOSONG
+    untuk diisi saat penghitungan — pola "Cetak Bahan Opname Fisik" SAKTI."""
+    from io import BytesIO
+
+    from reportlab.lib.units import mm as rl_mm
+    from reportlab.platypus import Paragraph, Spacer, Table
+
+    from routes.reports import (
+        _fit_col_widths, _fmt_tanggal_id, _get_report_styles, _kop_surat_flowables,
+        _page_footer_factory, _signature_block, _std_doc, _std_table_style,
+        _title_block,
+    )
+
+    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    items = [x async for x in db.persediaan.find({}, {"_id": 0, "batches": 0})]
+    items.sort(key=lambda x: (x.get("nama_barang") or "", x.get("kode_barang") or ""))
+
+    today_iso = datetime.now(timezone.utc).date().isoformat()
+    buffer = BytesIO()
+    doc = _std_doc(buffer)
+    st = _get_report_styles()
+    elements = []
+    elements.extend(_kop_surat_flowables(settings, doc.width))
+    elements.extend(_title_block("KERTAS KERJA OPNAME FISIK PERSEDIAAN"))
+    elements.append(Paragraph(
+        f"Saldo buku per {_fmt_tanggal_id(today_iso)} — kolom Stok Fisik & Keterangan diisi saat penghitungan.",
+        st['Meta']))
+    elements.append(Spacer(1, 4 * rl_mm))
+
+    headers = ["No", "Kode Barang", "Nama Barang", "Satuan", "Stok Buku", "Stok Fisik", "Keterangan"]
+    table_data = [[Paragraph(h, st['TableHeader']) for h in headers]]
+    for i, it in enumerate(items, start=1):
+        table_data.append([
+            Paragraph(str(i), st['CellCenter']),
+            Paragraph(it.get("kode_barang") or "-", st['Cell']),
+            Paragraph(it.get("nama_barang") or "-", st['Cell']),
+            Paragraph(it.get("satuan") or "-", st['CellCenter']),
+            Paragraph(str(int(it.get("stok", 0) or 0)), st['CellCenter']),
+            Paragraph("", st['Cell']),
+            Paragraph("", st['Cell']),
+        ])
+    if not items:
+        elements.append(Paragraph("Belum ada barang persediaan terdaftar.", st['Cell']))
+    else:
+        table = Table(table_data, colWidths=_fit_col_widths([28, 110, 150, 50, 55, 60, 80], doc.width), repeatRows=1)
+        table.setStyle(_std_table_style(zebra=True))
+        elements.append(table)
+
+    elements.append(Spacer(1, 12 * rl_mm))
+    elements.extend(_signature_block([
+        {'pre': [''], 'header': 'Petugas Penghitung,', 'nama': '...........................', 'after': ['NIP. ....................']},
+        {'pre': [''], 'header': 'Saksi,', 'nama': '...........................', 'after': ['NIP. ....................']},
+        {'pre': [''], 'header': 'Mengetahui,', 'nama': '...........................', 'after': ['NIP. ....................']},
+    ], doc.width))
+    footer = _page_footer_factory("Kertas Kerja Opname Fisik Persediaan")
+    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    buffer.seek(0)
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(buffer, media_type="application/pdf",
+                             headers={"Content-Disposition": 'attachment; filename="Kertas_Kerja_Opname.pdf"'})
+
+
+@persediaan_router.get("/persediaan/opname/baof-pdf")
+async def opname_baof_pdf(
+    tanggal: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    _user: dict = Depends(require_user),
+):
+    """BAOF — Berita Acara Opname Fisik (pustaka §3.3): penyesuaian opname
+    pada tanggal tsb + 3 penandatangan (penghitung, saksi, mengetahui)."""
+    from io import BytesIO
+
+    from reportlab.lib.units import mm as rl_mm
+    from reportlab.platypus import Paragraph, Spacer, Table
+
+    from routes.reports import (
+        _fit_col_widths, _fmt_tanggal_id, _get_report_styles, _kop_surat_flowables,
+        _page_footer_factory, _signature_block, _std_doc, _std_table_style,
+        _title_block,
+    )
+
+    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    rows = [r async for r in db.transaksi_persediaan.find(
+        {"jenis": "opname"}, {"_id": 0})]
+    rows = [r for r in rows if str(r.get("timestamp") or "")[:10] == tanggal]
+    rows.sort(key=lambda r: (r.get("nama_barang") or "", r.get("timestamp") or ""))
+
+    buffer = BytesIO()
+    doc = _std_doc(buffer)
+    st = _get_report_styles()
+    elements = []
+    elements.extend(_kop_surat_flowables(settings, doc.width))
+    elements.extend(_title_block("BERITA ACARA OPNAME FISIK PERSEDIAAN (BAOF)"))
+    elements.append(Paragraph(
+        f"Pada tanggal {_fmt_tanggal_id(tanggal)} telah dilakukan opname fisik persediaan "
+        f"dengan hasil penyesuaian sebagai berikut. Selisih telah dibukukan pada jurnal "
+        f"transaksi; penjelasan selisih diungkapkan pada kolom alasan (bahan CaLK).",
+        st['Meta']))
+    elements.append(Spacer(1, 4 * rl_mm))
+
+    if not rows:
+        elements.append(Paragraph(
+            "Tidak ada penyesuaian opname pada tanggal tersebut (fisik = buku untuk seluruh barang yang diopname).",
+            st['Cell']))
+    else:
+        headers = ["No", "Kode Barang", "Nama Barang", "Buku", "Fisik", "Selisih", "Alasan"]
+        table_data = [[Paragraph(h, st['TableHeader']) for h in headers]]
+        for i, r in enumerate(rows, start=1):
+            selisih = int(r.get("stok_sesudah", 0)) - int(r.get("stok_sebelum", 0))
+            table_data.append([
+                Paragraph(str(i), st['CellCenter']),
+                Paragraph(r.get("kode_barang") or "-", st['Cell']),
+                Paragraph(r.get("nama_barang") or "-", st['Cell']),
+                Paragraph(str(r.get("stok_sebelum", 0)), st['CellCenter']),
+                Paragraph(str(r.get("stok_sesudah", 0)), st['CellCenter']),
+                Paragraph(f"{'+' if selisih > 0 else ''}{selisih}", st['CellCenter']),
+                Paragraph(r.get("keterangan") or "-", st['Cell']),
+            ])
+        table = Table(table_data, colWidths=_fit_col_widths([28, 105, 140, 42, 42, 48, 110], doc.width), repeatRows=1)
+        table.setStyle(_std_table_style(zebra=True))
+        elements.append(table)
+
+    elements.append(Spacer(1, 12 * rl_mm))
+    elements.extend(_signature_block([
+        {'pre': [''], 'header': 'Petugas Penghitung,', 'nama': '...........................', 'after': ['NIP. ....................']},
+        {'pre': [''], 'header': 'Saksi,', 'nama': '...........................', 'after': ['NIP. ....................']},
+        {'pre': [''], 'header': 'Mengetahui,', 'role': 'Kuasa Pengguna Barang,', 'nama': settings.get("kasatker_nama") or '...........................', 'after': [f"NIP. {settings.get('kasatker_nip') or '....................'}"]},
+    ], doc.width))
+    footer = _page_footer_factory("Berita Acara Opname Fisik Persediaan")
+    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    buffer.seek(0)
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(buffer, media_type="application/pdf",
+                             headers={"Content-Disposition": f'attachment; filename="BAOF_{tanggal}.pdf"'})
 
 
 @persediaan_router.get("/persediaan/laporan/posisi-pdf")
@@ -711,6 +849,84 @@ async def transaksi_keluar(item_id: str, data: TransaksiKeluarIn, user: dict = D
 
         return {"message": f"{JENIS_KELUAR[data.jenis][0]} tercatat", "stok": stok_sesudah,
                 "nilai_keluar": total_nilai, "transaksi": jurnal,
+                "version": updated.get("version")}
+
+    raise HTTPException(status_code=409,
+                        detail="Barang sedang diubah pengguna lain — coba lagi")
+
+
+class OpnameIn(BaseModel):
+    stok_fisik: int = Field(ge=0)
+    alasan: str = Field(min_length=3, max_length=500)
+
+
+@persediaan_router.post("/persediaan/{item_id}/opname")
+async def opname_persediaan(item_id: str, data: OpnameIn, user: dict = Depends(require_user)):
+    """Rekam hasil opname SATU barang (pustaka §3.3 — hanya yang selisih).
+
+    fisik < buku → kekurangan dikonsumsi FIFO; fisik > buku → layer
+    penyesuaian berharga layer termuda. Saldo buku disetel = fisik +
+    jurnal jenis "opname" dengan ALASAN WAJIB (bahan pengungkapan CaLK).
+    Update bersyarat versi + retry 3× seperti transaksi keluar.
+    """
+    now = datetime.now(timezone.utc)
+    for _attempt in range(3):
+        item = await db.persediaan.find_one({"id": item_id}, {"_id": 0})
+        if not item:
+            raise HTTPException(status_code=404, detail="Barang persediaan tidak ditemukan")
+        stok_sebelum = int(item.get("stok", 0) or 0)
+        batches_lama = item.get("batches") or []
+        batch_id = str(uuid.uuid4())
+        try:
+            batches_baru, detail = penyesuaian_opname(
+                batches_lama, data.stok_fisik, batch_id, now.isoformat())
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+        updated = await db.persediaan.find_one_and_update(
+            {"id": item_id, "version": item.get("version")},
+            {"$set": {"batches": batches_baru, "stok": int(data.stok_fisik),
+                      "updated_at": now.isoformat()},
+             "$inc": {"version": 1}},
+            projection={"_id": 0},
+            return_document=True,
+        )
+        if updated is None:
+            continue  # balapan — muat ulang lalu coba lagi
+
+        jurnal = {
+            "id": str(uuid.uuid4()),
+            "arah": detail["arah"],
+            "jenis": "opname",
+            "jenis_label": "Penyesuaian Opname Fisik",
+            "kode_sakti": "OPN",
+            "persediaan_id": item_id,
+            "kode_barang": updated.get("kode_barang"),
+            "nup": updated.get("nup"),
+            "nama_barang": updated.get("nama_barang"),
+            "jumlah": int(detail["jumlah"]),
+            "harga_satuan": (detail["nilai"] / detail["jumlah"]) if detail["jumlah"] else 0.0,
+            "total": float(detail["nilai"]),
+            "rincian_layer": detail.get("rincian", []),
+            "stok_sebelum": stok_sebelum,
+            "stok_sesudah": int(data.stok_fisik),
+            "keterangan": data.alasan.strip(),
+            "petugas": user.get("username") or user.get("user_id") or "-",
+            "timestamp": now.isoformat(),
+        }
+        try:
+            await db.transaksi_persediaan.insert_one({**jurnal})
+        except Exception:
+            await db.persediaan.update_one(
+                {"id": item_id},
+                {"$set": {"batches": batches_lama, "stok": stok_sebelum},
+                 "$inc": {"version": 1}},
+            )
+            raise HTTPException(status_code=500, detail="Gagal mencatat jurnal — opname dibatalkan")
+
+        selisih = int(data.stok_fisik) - stok_sebelum
+        return {"message": f"Opname tercatat (selisih {'+' if selisih > 0 else ''}{selisih})",
+                "stok": int(data.stok_fisik), "transaksi": jurnal,
                 "version": updated.get("version")}
 
     raise HTTPException(status_code=409,

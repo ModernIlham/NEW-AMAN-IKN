@@ -48,6 +48,16 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#83] Stock opname persediaan + BAOF 3 penandatangan — 2026-07-12
+
+- **Opname per barang**: stok fisik + alasan wajib → selisih dibukukan
+  otomatis (kurang = konsumsi FIFO; lebih = layer penyesuaian harga layer
+  termuda) + jurnal jenis opname (OPN); bersyarat versi + retry.
+- **Kertas Kerja Opname** (kolom fisik kosong, pola SAKTI) & **BAOF** per
+  tanggal (buku → fisik → selisih ± + alasan) — keduanya PDF berkop.
+- `_signature_block` kini mendukung **3 penandatangan** (penghitung, saksi,
+  mengetahui) — dulu ttd ke-3 terbuang diam-diam. 90 unit test lulus.
+
 ## [#82] Laporan persediaan: Posisi Stok + Mutasi Periode (PDF) — 2026-07-12
 
 - **Laporan Posisi Persediaan**: per kelompok kodefikasi (uraian dari
