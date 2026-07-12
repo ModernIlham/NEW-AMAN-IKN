@@ -48,7 +48,14 @@ diakses dari Beranda Modul.
 kelengkapan BAST (#87) · Pengamanan — dasbor tertib administrasi + daftar
 pantau sengketa (#88) · Pemeliharaan — riwayat & biaya per aset dengan
 telaah kapitalisasi PMK 181 (#89) + **DHPB PDF** semesteran/tahunan
-(Ps. 47 PP 27/2014) (#90).
+(Ps. 47 PP 27/2014) (#90) + jadwal berkala dengan status jatuh tempo (#92).
+
+**Progres Fase 4 (Juli 2026):** Perencanaan — **kandidat RKBMN
+pemeliharaan** (saringan kelayakan PMK 153/2021 dari kondisi aset +
+riwayat biaya Pemeliharaan) (#99) + **kertas kerja XLSX** siap diisi
+satker untuk dibawa ke SIMAN (#100). Pelaporan Fase 2 juga tuntas inti:
+Posisi BMN di Neraca (#93), rekonsiliasi XLSX (#94), LBKP mutasi (#95),
+Kartu Barang (#97), transaksi massal persediaan (#98).
 
 ---
 
