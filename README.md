@@ -29,8 +29,15 @@ Penghapusan, Wasdal) berstatus **Segera Hadir** lengkap dengan konsep &
 rencana fiturnya.
 
 - Rencana induk & prinsip integrasi antar modul: [`docs/MASTERPLAN-SIKLUS-BMN.md`](./docs/MASTERPLAN-SIKLUS-BMN.md)
+- Rujukan regulasi & alur bisnis: [`docs/PUSTAKA-REGULASI-BMN.md`](./docs/PUSTAKA-REGULASI-BMN.md)
 - Registry modul (konsep yang tampil di aplikasi): `frontend/src/lib/bmnModules.js`
 - Proses baku pengembangan per fitur: `.claude/skills/aman-dev/SKILL.md`
+
+**Progres Fase 2 (Juli 2026):** Referensi Kodefikasi 5 level (#73–74) ·
+DBKP per golongan (#76) · **modul Inventarisasi Persediaan inti lengkap**
+(#77–83): master ber-layer **FIFO** selaras SAKTI, transaksi masuk/keluar
+berjurnal, peringatan + nota dinas, laporan posisi/mutasi, stock opname +
+BAOF — semua dapat diakses dari Beranda Modul.
 
 ---
 

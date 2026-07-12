@@ -92,25 +92,25 @@ export const PENATAUSAHAAN_SUBMODULES = [
     nama: "Inventarisasi Persediaan",
     status: "sebagian",
     fase: 2,
-    ringkas: "Master barang persediaan sudah bisa dikelola — transaksi FIFO, gudang, & opname menyusul.",
+    ringkas: "Berjalan: master, transaksi masuk/keluar FIFO, peringatan + nota dinas, laporan, opname + BAOF. Menyusul: gudang & impor massal.",
     deskripsi:
-      "Manajemen barang persediaan (aset lancar, kodefikasi berawalan '1'): master persediaan "
-      + "dengan stok ber-batch FIFO (harga & kedaluwarsa per batch), transaksi masuk/keluar "
-      + "terkelompok per dokumen sumber, gudang, dan stock opname berkala dengan penyesuaian "
-      + "otomatis. Alur mengadopsi modul persediaan KERJA-BARENG yang sudah terbukti.",
-    dasarHukum: [PENATAUSAHAAN_DASAR_HUKUM],
+      "Manajemen barang persediaan (aset lancar, kodefikasi berawalan '1') — pencatatan "
+      + "perpetual + penilaian FIFO per layer selaras SAKTI (PMK 234/2020). Inti modul "
+      + "sudah berjalan (#77–#83): master ber-layer FIFO, transaksi masuk/keluar dengan "
+      + "jurnal berjejak, peringatan kritis/kedaluwarsa + nota dinas, laporan posisi/"
+      + "mutasi, dan stock opname dengan BAOF 3 penandatangan.",
+    dasarHukum: [PENATAUSAHAAN_DASAR_HUKUM, "PMK 234/PMK.05/2020 — FIFO (kebijakan akuntansi)"],
     fitur: [
-      "Master persediaan: kodefikasi 16 digit berawalan '1', NUP otomatis, satuan, foto",
-      "Stok FIFO per batch — harga perolehan & tanggal kedaluwarsa melekat di batch",
-      "Transaksi masuk/keluar (satuan & massal per dokumen: no. bukti, kontrak, PPK, penyedia) + bukti foto",
-      "Gudang: distribusi, pengembalian, transfer antar gudang, ringkasan per gudang",
-      "Stock opname: fisik vs sistem → selisih → penyesuaian otomatis + jurnal transaksi",
-      "Peringatan batas kritis & kedaluwarsa + nota dinas otomatis (PDF)",
-      "Laporan persediaan: posisi stok, mutasi per periode, rincian per barang",
+      "✅ Master persediaan: kode '1' 16 digit (nomor urut otomatis), NUP otomatis, batas kritis, kedaluwarsa",
+      "✅ Transaksi masuk/keluar FIFO per layer + jurnal (jenis memetakan kode SAKTI M0x/K0x)",
+      "✅ Peringatan habis/kritis/kedaluwarsa + Nota Dinas PDF otomatis",
+      "✅ Laporan Posisi (per kelompok kodefikasi) & Mutasi periode (dari jurnal)",
+      "✅ Stock opname: selisih → penyesuaian otomatis + kertas kerja & BAOF PDF",
+      "Menyusul: gudang (distribusi/transfer), impor massal master, transaksi massal per dokumen",
     ],
     integrasi: [
       "Berbagi kodefikasi barang, satker, dan kop surat dengan modul aset",
-      "Opname persediaan memakai pola kegiatan + mode lapangan yang sudah ada",
+      "Jurnal persediaan menjadi sumber laporan & rekonsiliasi (selaras SAKTI)",
     ],
   },
   {
