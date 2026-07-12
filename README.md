@@ -39,7 +39,8 @@ DBKP per golongan (#76) · **modul Inventarisasi Persediaan inti lengkap**
 (#77–85): master ber-layer **FIFO** selaras SAKTI, transaksi masuk/keluar
 berjurnal, peringatan + nota dinas, laporan posisi/mutasi, stock opname +
 BAOF + pengingat semesteran (#128), impor/ekspor + template, **filter
-Lokasi/Gudang + laporan posisi per gudang** (#152) · **Pelaporan inti lengkap**: hub arsip
+Lokasi/Gudang + laporan posisi per gudang** (#152), **pindah gudang
+ber-jurnal** (#154) · **Pelaporan inti lengkap**: hub arsip
 lintas kegiatan (#86), **Posisi BMN di Neraca** (#93), ekspor
 **rekonsiliasi XLSX** sandingan SAKTI (#94), **LBKP** semesteran/
 tahunan per golongan dengan saldo awal–mutasi–akhir (#95), dan
