@@ -63,7 +63,9 @@ identifikasi → mediasi → blokir → litigasi → selesai (PP 27/2014
 Ps. 42, pustaka §11) (#169) + **arsip dokumen kepemilikan per aset**
 (sertipikat/BPKB/STNK/IMB-PBG + lokasi penyimpanan Ps. 43 + scan +
 penanda kedaluwarsa) (#171) + **status sertipikasi tanah** belum/
-proses/K1–K4/SHP terbit per dokumen sertipikat (#173) · Pemeliharaan — riwayat & biaya per aset dengan
+proses/K1–K4/SHP terbit per dokumen sertipikat (#173) + **checklist
+pengamanan per aset** butir fisik/administrasi/hukum per jenis objek
+dengan skor (#175) · Pemeliharaan — riwayat & biaya per aset dengan
 telaah kapitalisasi PMK 181 (#89) + **DHPB PDF** semesteran/tahunan
 (Ps. 47 PP 27/2014) (#90) + jadwal berkala dengan status jatuh tempo (#92)
 + **ekspor CSV riwayat** (#167).
