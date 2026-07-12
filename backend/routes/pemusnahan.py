@@ -81,6 +81,108 @@ async def buat_pemusnahan(payload: PemusnahanIn, user: dict = Depends(require_us
     return record
 
 
+@pemusnahan_router.get("/pemusnahan/{ba_id}/ba-pdf")
+async def ba_pemusnahan_pdf(ba_id: str, _user: dict = Depends(require_user)):
+    """Berita Acara Pemusnahan siap tanda tangan (PMK 83/2016).
+
+    Kop surat satker, narasi dasar persetujuan + cara pemusnahan, tabel
+    aset multi-baris dengan nilai perolehan, blok tanda tangan pelaksana/
+    saksi/KPB. Data murni dari register — tanpa isian dummy.
+    """
+    from io import BytesIO
+
+    from fastapi.responses import StreamingResponse
+    from reportlab.lib.units import mm as rl_mm
+    from reportlab.platypus import Paragraph, Spacer, Table
+
+    from pembukuan_utils import parse_harga
+    from routes.reports import (
+        _fit_col_widths, _fmt_tanggal_id, _get_report_styles, _kop_surat_flowables,
+        _page_footer_factory, _signature_block, _std_doc, _std_table_style,
+        _title_block,
+    )
+
+    ba = await db.pemusnahan.find_one({"id": ba_id}, {"_id": 0})
+    if not ba:
+        raise HTTPException(status_code=404, detail="BA tidak ditemukan")
+    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    aset = ba.get("aset") or []
+    cara = CARA_PEMUSNAHAN.get(ba.get("cara"), ba.get("cara") or "-")
+
+    def _rp(v):
+        n = parse_harga(v)
+        return f"Rp{n:,.0f}".replace(",", ".") if n else "-"
+
+    buffer = BytesIO()
+    doc = _std_doc(buffer)
+    st = _get_report_styles()
+    elements = []
+    elements.extend(_kop_surat_flowables(settings, doc.width))
+    elements.extend(_title_block("BERITA ACARA PEMUSNAHAN BARANG MILIK NEGARA",
+                                 nomor=ba.get("nomor_ba") or "-"))
+    elements.append(Paragraph(
+        f"Pada tanggal {_fmt_tanggal_id(ba.get('tanggal_ba'))}, berdasarkan "
+        f"persetujuan pemusnahan Nomor {ba.get('nomor_persetujuan') or '-'}, "
+        f"telah dilaksanakan pemusnahan Barang Milik Negara dengan cara "
+        f"<b>{cara.lower()}</b> terhadap {len(aset)} unit barang dalam kondisi "
+        f"rusak berat yang tidak dapat digunakan, dimanfaatkan, maupun "
+        f"dipindahtangankan (PMK 83/PMK.06/2016), dengan rincian sebagai berikut:",
+        st['Meta']))
+    elements.append(Spacer(1, 4 * rl_mm))
+
+    headers = ["No", "Kode Barang", "NUP", "Nama Barang", "Nilai Perolehan"]
+    table_data = [[Paragraph(h, st['TableHeader']) for h in headers]]
+    total = 0.0
+    for i, a in enumerate(aset, start=1):
+        total += parse_harga(a.get("harga"))
+        table_data.append([
+            Paragraph(str(i), st['CellCenter']),
+            Paragraph(a.get("asset_code") or "-", st['Cell']),
+            Paragraph(str(a.get("NUP") or "-"), st['CellCenter']),
+            Paragraph(a.get("asset_name") or "-", st['Cell']),
+            Paragraph(_rp(a.get("harga")), st['CellRight']),
+        ])
+    table_data.append([
+        Paragraph("", st['Cell']),
+        Paragraph("", st['Cell']),
+        Paragraph("", st['Cell']),
+        Paragraph("<b>Jumlah</b>", st['Cell']),
+        Paragraph(f"<b>{_rp(total)}</b>", st['CellRight']),
+    ])
+    table = Table(table_data,
+                  colWidths=_fit_col_widths([28, 120, 45, 190, 90], doc.width),
+                  repeatRows=1)
+    table.setStyle(_std_table_style(zebra=True, total_row=True))
+    elements.append(table)
+
+    if str(ba.get("keterangan") or "").strip():
+        elements.append(Spacer(1, 3 * rl_mm))
+        elements.append(Paragraph(f"Keterangan: {ba['keterangan']}", st['Meta']))
+    elements.append(Spacer(1, 4 * rl_mm))
+    elements.append(Paragraph(
+        "Demikian Berita Acara Pemusnahan ini dibuat dengan sebenarnya untuk "
+        "dipergunakan sebagaimana mestinya, sebagai dasar usulan penghapusan "
+        "dari Daftar Barang Kuasa Pengguna.", st['Meta']))
+    elements.append(Spacer(1, 12 * rl_mm))
+    elements.extend(_signature_block([
+        {'pre': [''], 'header': 'Petugas Pelaksana,',
+         'nama': '...........................',
+         'after': ['NIP. ....................']},
+        {'pre': [''], 'header': 'Saksi,',
+         'nama': '...........................',
+         'after': ['NIP. ....................']},
+        {'pre': [''], 'header': 'Mengetahui,', 'role': 'Kuasa Pengguna Barang,',
+         'nama': settings.get("kasatker_nama") or '...........................',
+         'after': [f"NIP. {settings.get('kasatker_nip') or '....................'}"]},
+    ], doc.width))
+    footer = _page_footer_factory("Berita Acara Pemusnahan BMN")
+    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    buffer.seek(0)
+    nama_file = (ba.get("nomor_ba") or "BA").replace("/", "-").replace(" ", "_")
+    return StreamingResponse(buffer, media_type="application/pdf",
+                             headers={"Content-Disposition": f'attachment; filename="BA_Pemusnahan_{nama_file}.pdf"'})
+
+
 @pemusnahan_router.delete("/pemusnahan/{ba_id}")
 async def hapus_pemusnahan(ba_id: str, _admin: dict = Depends(require_admin)):
     """Hapus BA salah input (khusus admin)."""

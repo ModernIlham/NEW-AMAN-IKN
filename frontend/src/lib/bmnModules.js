@@ -359,8 +359,9 @@ export const SIKLUS_MODULES = [
     dasarHukum: ["PMK 83/PMK.06/2016 — Pemusnahan & Penghapusan BMN"],
     fitur: [
       "✅ Register BA Pemusnahan multi-aset (nomor persetujuan wajib; cara dibakar/dihancurkan/dll; objek dibatasi Rusak Berat)",
+      "✅ PDF Berita Acara siap tanda tangan (kop surat, tabel aset + nilai, blok pelaksana/saksi/KPB)",
       "Kandidat pemusnahan otomatis dari kondisi Rusak Berat + tindak lanjut inventarisasi",
-      "Foto bukti pelaksanaan + PDF BA",
+      "Foto bukti pelaksanaan (menyusul)",
     ],
     integrasi: ["Kondisi & tindak lanjut dari modul inventarisasi menjadi pintu masuk"],
   },

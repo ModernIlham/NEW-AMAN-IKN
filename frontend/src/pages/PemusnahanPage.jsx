@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
+import { downloadFileWithProgress } from "@/lib/downloadFile";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -174,6 +175,16 @@ export default function PemusnahanPage({ user, onBack }) {
                         </span>
                         <span className="text-[11px] text-muted-foreground">{r.tanggal_ba}</span>
                         <span className="text-[11px] text-muted-foreground ml-auto">{(r.aset || []).length} aset</span>
+                        <button type="button" aria-label="Unduh BA (PDF)"
+                          onClick={() => downloadFileWithProgress(
+                            `${API}/pemusnahan/${r.id}/ba-pdf`,
+                            `BA_Pemusnahan_${(r.nomor_ba || "BA").replace(/[/\s]/g, "-")}.pdf`,
+                            { label: `BA Pemusnahan ${r.nomor_ba}` },
+                          ).catch(() => {})}
+                          className="h-7 w-7 rounded-lg border border-border text-foreground/70 flex items-center justify-center hover:bg-muted min-h-0 min-w-0"
+                          data-testid={`pemusnahan-unduh-${r.id}`}>
+                          <FileText className="w-3 h-3" />
+                        </button>
                         {isAdmin && (
                           <button type="button" onClick={() => hapus(r)} aria-label="Hapus BA"
                             className="h-7 w-7 rounded-lg border border-border text-red-500 flex items-center justify-center hover:bg-red-500/10 min-h-0 min-w-0">
