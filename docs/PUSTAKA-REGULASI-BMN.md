@@ -175,7 +175,52 @@ peran pengguna: operator BMN vs pejabat penanggung jawab/penandatangan.
 
 ---
 
-## 4. Kendala Umum Satker → Fitur Penangkal AMAN
+## 4. Pemeliharaan (PP 27/2014 Ps. 46-47)
+
+**Tanggung jawab & dokumen.** Pengelola/Pengguna/Kuasa Pengguna Barang
+bertanggung jawab atas pemeliharaan BMN di bawah penguasaannya; pedomannya
+Daftar Kebutuhan Pemeliharaan Barang (DKPB); biaya dibebankan APBN — kecuali
+BMN sedang dimanfaatkan pihak lain (sewa/pinjam pakai/KSP/BGS-BSG/KSPI):
+biaya menjadi tanggungan mitra (Ps. 46). KPB **wajib membuat Daftar Hasil
+Pemeliharaan Barang (DHPB)** dan melaporkannya tertulis ke Pengguna Barang
+secara berkala (praktik baku: semesteran); Pengguna Barang merekap DHPB
+per Tahun Anggaran sebagai bahan evaluasi efisiensi (Ps. 47). DHPB tahunan
+juga input wajib RKBMN pemeliharaan (PMK 153/2021). PP 28/2020 tidak
+mengubah Ps. 46-47.
+
+**Klasifikasi jenis (bahan ajar DJKN/KLC):** *ringan* — harian oleh unit
+pemakai tanpa membebani anggaran; *sedang* — berkala oleh tenaga
+terdidik/terlatih; *berat* — sewaktu-waktu oleh tenaga ahli. (Gedung:
+Permen PU 24/2008 & PUPR 22/2018 membedakan pemeliharaan-preventif vs
+perawatan-kuratif dengan tingkat kerusakan ringan/sedang/berat.)
+
+**Kapitalisasi vs beban.** Pengeluaran setelah perolehan dikapitalisasi bila
+menambah masa manfaat ATAU kapasitas/mutu/standar kinerja (PSAP 07 par.
+50-51) DAN ≥ nilai satuan minimum kapitalisasi PMK 181/2016 (peralatan-mesin
+≥ Rp1 jt; gedung-bangunan ≥ Rp25 jt; tanah & JIJ tanpa batas minimum).
+Yang hanya mempertahankan fungsi normal = beban akun 523xxx (523111 gedung,
+523121 peralatan-mesin, 5231xx JIJ, 523191 lainnya). Renovasi terkapitalisasi
+dapat menambah masa manfaat per tabel KMK 59/KM.6/2013; SIMAK-BMN/SAKTI
+merekamnya sebagai "Pengembangan Nilai Aset" — pemeliharaan non-kapital
+TIDAK punya riwayat per-NUP di aplikasi resmi (gap yang ditutup kartu
+pemeliharaan manual → peluang AMAN).
+
+**Harapan auditor (Itjen/BPK):** riwayat per aset (kode+NUP) terisi
+berkelanjutan; kondisi B/RR/RB mutakhir & konsisten LKB; bukti per transaksi
+(SPK/kuitansi, BA pemeriksaan pekerjaan, SPM/SP2D, foto); ketepatan akun
+523 vs 53 (temuan berulang: layak kapital tapi tidak dikapitalisasi); DHPB
+tersusun; RKBMN pemeliharaan hanya untuk BMN kondisi Baik/Rusak Ringan
+(rusak berat / diusul hapus / dimanfaatkan pihak lain tidak boleh).
+
+**Terapan AMAN (iterasi 16):** catatan per kejadian (tanggal, jenis
+ringan/sedang/berat, uraian, biaya, pelaksana, no. bukti, kondisi
+sebelum/sesudah otomatis) + rekap per tahun/jenis/aset + pembaruan kondisi
+aset + penanda "telaah kapitalisasi" bila biaya ≥ ambang golongan.
+Menyusul: jadwal berkala, DHPB PDF, akun 523/53 per catatan, foto bukti.
+
+---
+
+## 5. Kendala Umum Satker → Fitur Penangkal AMAN
 
 | Kendala nyata (temuan artikel DJKN/DJPb/BPK/jurnal) | Penangkal di AMAN |
 |---|---|
@@ -191,7 +236,7 @@ peran pengguna: operator BMN vs pejabat penanggung jawab/penandatangan.
 
 ---
 
-## 5. Implikasi Desain per Modul (ringkas)
+## 6. Implikasi Desain per Modul (ringkas)
 
 | Modul (fase) | Keputusan desain dari pustaka ini |
 |---|---|
@@ -200,11 +245,12 @@ peran pengguna: operator BMN vs pejabat penanggung jawab/penandatangan.
 | Persediaan (F2) | Perpetual + FIFO per layer; enum transaksi peta SAKTI; dua tahap usang/rusak; operator–approver; opname semesteran + BAOF + kunci back-date; mapping akun 1171xx |
 | Pelaporan (F2) | Periode ber-kunci; LBKP per komponen + CaLBMN + LKB; tenggat konfigurabel; ekspor rekonsiliasi selaras SAKTI |
 | Penggunaan (F3) | PSP/alih/sementara/pihak lain/bersama + BMN idle (PMK 40 & 120/2024) |
+| Pemeliharaan (F3, ✅ tahap awal) | Riwayat per kejadian per aset (jenis ringan/sedang/berat DJKN); rekap per TA (bahan DHPB Ps. 47); kondisi sebelum/sesudah; penanda telaah kapitalisasi ≥ ambang PMK 181; jadwal berkala & DHPB PDF menyusul |
 | Penghapusan (F6) | Kandidat dari "Tidak Ditemukan" + tiket TGR/penelusuran dari tindak lanjut inventarisasi |
 
 ---
 
-## 6. Daftar Konsolidasi "Perlu Verifikasi"
+## 7. Daftar Konsolidasi "Perlu Verifikasi"
 
 1. Field lengkap KIB per 6 jenis → Lampiran PMK 181/2016.
 2. Batas waktu statutori penyampaian laporan per jenjang → Lampiran PMK 181.
@@ -214,17 +260,26 @@ peran pengguna: operator BMN vs pejabat penanggung jawab/penandatangan.
 6. Nomor PMK revaluasi BMN pada diagram (tertulis 97/PMK.06/2019).
 7. Kode transaksi internal SAKTI (vs M0x/K0x aplikasi lama).
 8. Dasar formal TGR atas selisih kurang persediaan.
+9. Format baku DHPB (kolom minimal) — belum ada lampiran nasional seragam;
+   sementara pakai kolom kartu pemeliharaan bahan ajar DJKN.
+10. Periodisitas laporan DHPB KPB→PB: PP hanya menyebut "berkala";
+    semesteran adalah praktik baku, konfirmasi kebijakan K/L masing-masing.
 
 ---
 
-## 7. Sumber Utama
+## 8. Sumber Utama
 
 Regulasi: PSAP 05 (ksap.org/standar/PSAP05.pdf) · PMK 181/PMK.06/2016
 (jdih.kemenkeu.go.id/dok/181-pmk-06-2016; peraturan.bpk.go.id/Details/121291)
 · PMK 29/PMK.06/2010 kodefikasi · PMK 225/2019 → 234/2020 → 231/2022 jo.
 57/2023 → PMK 100/2025 (kebijakan akuntansi; lampiran Bab VI persediaan di
 peraturan.bpk.go.id/Download/96077) · PMK 207/2021 wasdal · PMK 118/2023
-SIMAN.
+SIMAN · PP 27/2014 Ps. 46-47 jo. PP 28/2020 (pemeliharaan;
+peraturan.bpk.go.id/Details/5464) · PSAP 07 par. 50-51 (kapitalisasi;
+ksap.org/standar/PSAP07.pdf) · KMK 59/KM.6/2013 (masa manfaat + tabel
+renovasi/overhaul) · PMK 153/PMK.06/2021 (RKBMN) · KEP-211/PB/2018 jo.
+KEP-205/PB/2021 (akun 523xxx BAS) · Permen PU 24/PRT/M/2008 & PUPR
+22/PRT/M/2018 (pemeliharaan vs perawatan gedung).
 
 Materi resmi/teknis: materi DJKN "Penatausahaan BMN" 2017; Modul 5
 Penatausahaan BMN (PUPR); modul e-learning KLC Kemenkeu; buku saku

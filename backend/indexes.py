@@ -114,6 +114,10 @@ async def create_indexes() -> None:
         # Jurnal transaksi persediaan: riwayat per barang, terbaru dulu
         await db.transaksi_persediaan.create_index([("persediaan_id", 1), ("timestamp", -1)])
         await db.transaksi_persediaan.create_index("timestamp")
+        # Pemeliharaan: riwayat per aset terbaru dulu; daftar global per tanggal
+        await db.pemeliharaan.create_index([("asset_id", 1), ("tanggal", -1)])
+        await db.pemeliharaan.create_index([("tanggal", -1), ("created_at", -1)])
+        await db.pemeliharaan.create_index("id", unique=True)
         logger.info("Database indexes created successfully")
     except Exception as e:
         logger.error(f"Error creating indexes: {e}")
