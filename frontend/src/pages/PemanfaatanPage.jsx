@@ -157,16 +157,20 @@ export default function PemanfaatanPage({ user, onBack }) {
     }
   };
 
+  // jenis lampiran aktif di dialog: "lampiran" (dokumen) | "wasdal"
+  const lampPath = lamp?.jenis === "wasdal" ? "wasdal" : "lampiran";
+  const lampField = lamp?.jenis === "wasdal" ? "lampiran_wasdal" : "lampiran";
+
   const unggahLampiran = async (fileObj) => {
     if (!lamp || !fileObj) return;
     setLamp((l) => ({ ...l, uploading: true }));
     try {
       const fd = new FormData();
       fd.append("file", fileObj);
-      const res = await axios.post(`${API}/pemanfaatan/${lamp.perjanjian.id}/lampiran`, fd);
+      const res = await axios.post(`${API}/pemanfaatan/${lamp.perjanjian.id}/${lampPath}`, fd);
       toast.success("Lampiran terunggah");
       setLamp((l) => (l ? { ...l, uploading: false,
-        perjanjian: { ...l.perjanjian, lampiran: res.data?.lampiran || [] } } : l));
+        perjanjian: { ...l.perjanjian, [lampField]: res.data?.[lampField] || [] } } : l));
       muat();
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Gagal mengunggah lampiran");
@@ -177,11 +181,11 @@ export default function PemanfaatanPage({ user, onBack }) {
   const hapusLampiran = async (fileId) => {
     if (!lamp) return;
     try {
-      await axios.delete(`${API}/pemanfaatan/${lamp.perjanjian.id}/lampiran/${fileId}`);
+      await axios.delete(`${API}/pemanfaatan/${lamp.perjanjian.id}/${lampPath}/${fileId}`);
       toast.success("Lampiran dihapus");
       setLamp((l) => (l ? { ...l,
         perjanjian: { ...l.perjanjian,
-          lampiran: (l.perjanjian.lampiran || []).filter((x) => x.file_id !== fileId) } } : l));
+          [lampField]: (l.perjanjian[lampField] || []).filter((x) => x.file_id !== fileId) } } : l));
       muat();
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Gagal menghapus lampiran");
@@ -295,9 +299,14 @@ export default function PemanfaatanPage({ user, onBack }) {
                       )}
                       <div className="flex gap-1.5 mt-1.5">
                         <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
-                          onClick={() => setLamp({ perjanjian: p, uploading: false })}
+                          onClick={() => setLamp({ perjanjian: p, jenis: "lampiran", uploading: false })}
                           data-testid={`pemanfaatan-lampiran-${p.id}`}>
                           <Paperclip className="w-3 h-3 mr-1" />Lampiran{(p.lampiran || []).length > 0 && ` (${p.lampiran.length})`}
+                        </Button>
+                        <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                          onClick={() => setLamp({ perjanjian: p, jenis: "wasdal", uploading: false })}
+                          data-testid={`pemanfaatan-wasdal-${p.id}`}>
+                          <Paperclip className="w-3 h-3 mr-1" />Wasdal{(p.lampiran_wasdal || []).length > 0 && ` (${p.lampiran_wasdal.length})`}
                         </Button>
                         {Number(p.kontribusi_tahunan) > 0 && p.status !== "berakhir" && (
                           <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
@@ -454,31 +463,33 @@ export default function PemanfaatanPage({ user, onBack }) {
         </DialogContent>
       </Dialog>
 
-      {/* ── Dialog lampiran dokumen ── */}
+      {/* ── Dialog lampiran (dokumen perjanjian ATAU laporan wasdal) ── */}
       <Dialog open={!!lamp} onOpenChange={(o) => { if (!o) setLamp(null); }}>
         <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Lampiran Dokumen</DialogTitle>
+            <DialogTitle>{lamp?.jenis === "wasdal" ? "Lampiran Wasdal" : "Lampiran Dokumen"}</DialogTitle>
             <DialogDescription className="text-xs">
-              {lamp && `${labelBentuk[lamp.perjanjian.bentuk] || lamp.perjanjian.bentuk} — ${lamp.perjanjian.mitra}. Scan persetujuan/perjanjian/bukti setor (PDF/JPG/PNG, maks 10MB, 10 berkas).`}
+              {lamp && `${labelBentuk[lamp.perjanjian.bentuk] || lamp.perjanjian.bentuk} — ${lamp.perjanjian.mitra}. ${lamp.jenis === "wasdal"
+                ? "Laporan monitoring/BA peninjauan lapangan atas pelaksanaan pemanfaatan (PDF/JPG/PNG, maks 10MB, 10 berkas)."
+                : "Scan persetujuan/perjanjian/bukti setor (PDF/JPG/PNG, maks 10MB, 10 berkas)."}`}
             </DialogDescription>
           </DialogHeader>
           <input ref={lampInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" className="hidden"
             onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) unggahLampiran(f); }} />
           <Button size="sm" variant="outline" className="h-8 text-xs min-h-0 self-start"
-            disabled={lamp?.uploading || (lamp?.perjanjian?.lampiran || []).length >= 10}
+            disabled={lamp?.uploading || (lamp?.perjanjian?.[lampField] || []).length >= 10}
             onClick={() => lampInputRef.current?.click()} data-testid="pemanfaatan-lampiran-unggah">
             {lamp?.uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <Upload className="w-3.5 h-3.5 mr-1.5" />}
             Unggah Berkas
           </Button>
-          {(lamp?.perjanjian?.lampiran || []).length === 0 ? (
+          {(lamp?.perjanjian?.[lampField] || []).length === 0 ? (
             <p className="text-xs text-muted-foreground text-center py-4">Belum ada lampiran.</p>
           ) : (
             <ul className="space-y-1.5">
-              {(lamp?.perjanjian?.lampiran || []).map((f) => (
+              {(lamp?.perjanjian?.[lampField] || []).map((f) => (
                 <li key={f.file_id} className="rounded-lg border border-border p-2 flex items-center gap-2">
                   <button type="button"
-                    onClick={() => window.open(authMediaUrl(`${API}/pemanfaatan/${lamp.perjanjian.id}/lampiran/${f.file_id}`), "_blank", "noopener")}
+                    onClick={() => window.open(authMediaUrl(`${API}/pemanfaatan/${lamp.perjanjian.id}/${lampPath}/${f.file_id}`), "_blank", "noopener")}
                     className="min-w-0 flex-1 text-left hover:underline">
                     <span className="block text-xs font-semibold text-foreground truncate">{f.filename}</span>
                     <span className="block text-[10px] text-muted-foreground">
