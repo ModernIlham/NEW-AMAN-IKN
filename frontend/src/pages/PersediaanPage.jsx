@@ -5,6 +5,7 @@ import {
   ArrowLeft, Search, Plus, Pencil, Trash2, Loader2, Boxes,
   ChevronLeft, ChevronRight, PackagePlus, PackageMinus, History,
   AlertTriangle, FileDown, ClipboardCheck, ChevronDown, Upload, Download,
+  Layers, X,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -77,6 +78,9 @@ export default function PersediaanPage({ user, onBack }) {
   // Impor master
   const [importing, setImporting] = useState(false);
   const fileImporRef = useRef(null);
+  // Transaksi massal per dokumen: {arah, jenis, ..., items[], cari, hasil, laporan}
+  const [massal, setMassal] = useState(null);
+  const massalTimer = useRef(null);
   const { confirm, confirmDialog } = useConfirm();
   const searchTimer = useRef(null);
 
@@ -118,6 +122,26 @@ export default function PersediaanPage({ user, onBack }) {
     searchTimer.current = setTimeout(() => load(1, v, status), 350);
   };
   useEffect(() => () => { if (searchTimer.current) clearTimeout(searchTimer.current); }, []);
+
+  // Pencarian barang untuk dialog transaksi massal (debounce)
+  const massalCari = massal?.cari || "";
+  useEffect(() => {
+    if (!massal || massalCari.trim().length < 2) return undefined;
+    clearTimeout(massalTimer.current);
+    massalTimer.current = setTimeout(async () => {
+      setMassal((m) => (m ? { ...m, mencari: true } : m));
+      try {
+        const r = await axios.get(`${API}/persediaan`, {
+          params: { search: massalCari.trim(), page_size: 8 },
+        });
+        setMassal((m) => (m ? { ...m, hasil: r.data?.items || [], mencari: false } : m));
+      } catch {
+        setMassal((m) => (m ? { ...m, hasil: [], mencari: false } : m));
+      }
+    }, 300);
+    return () => clearTimeout(massalTimer.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [massalCari]);
 
   const changeStatus = (st) => {
     setStatus(st);
@@ -234,6 +258,69 @@ export default function PersediaanPage({ user, onBack }) {
     }
   };
 
+  const bukaMassal = () => setMassal({
+    arah: "masuk", jenis: "pembelian", no_bukti: "", jenis_dokumen: "",
+    penyedia: "", unit_penerima: "", keterangan: "",
+    items: [], cari: "", hasil: [], mencari: false, saving: false, laporan: null,
+  });
+  const setMField = (k, v) => setMassal((m) => ({ ...m, [k]: v }));
+
+  const tambahItemMassal = (it) => setMassal((m) => {
+    if (m.items.some((x) => x.id === it.id)) return { ...m, cari: "", hasil: [] };
+    return {
+      ...m, cari: "", hasil: [],
+      items: [...m.items, {
+        id: it.id, kode_barang: it.kode_barang, nup: it.nup,
+        nama_barang: it.nama_barang, stok: it.stok, satuan: it.satuan,
+        jumlah: "", harga_satuan: "", expired: "",
+      }],
+    };
+  });
+  const setItemMassal = (id, k, v) => setMassal((m) => ({
+    ...m, items: m.items.map((x) => (x.id === id ? { ...x, [k]: v } : x)),
+  }));
+  const hapusItemMassal = (id) => setMassal((m) => ({
+    ...m, items: m.items.filter((x) => x.id !== id),
+  }));
+
+  const submitMassal = async () => {
+    if (!massal || massal.items.length === 0) { toast.error("Tambahkan minimal satu barang"); return; }
+    for (const it of massal.items) {
+      const n = parseInt(it.jumlah, 10);
+      if (Number.isNaN(n) || n <= 0) { toast.error(`Jumlah tidak valid: ${it.nama_barang}`); return; }
+      if (massal.arah === "masuk") {
+        const h = parseFloat(it.harga_satuan);
+        if (Number.isNaN(h) || h < 0) { toast.error(`Harga tidak valid: ${it.nama_barang}`); return; }
+      }
+    }
+    setMassal((m) => ({ ...m, saving: true }));
+    try {
+      const r = await axios.post(`${API}/persediaan/transaksi-massal`, {
+        arah: massal.arah, jenis: massal.jenis, no_bukti: massal.no_bukti,
+        jenis_dokumen: massal.jenis_dokumen, penyedia: massal.penyedia,
+        unit_penerima: massal.unit_penerima, keterangan: massal.keterangan,
+        items: massal.items.map((it) => ({
+          persediaan_id: it.id, jumlah: parseInt(it.jumlah, 10),
+          harga_satuan: massal.arah === "masuk" ? parseFloat(it.harga_satuan) : 0,
+          expired: it.expired || "",
+        })),
+      });
+      const d = r.data || {};
+      if ((d.gagal || 0) > 0) {
+        // Jangan tutup dialog: operator harus tahu persis barang mana yang gagal
+        toast.warning(`${d.sukses}/${d.total} barang tercatat — ${d.gagal} gagal (lihat rincian)`);
+        setMassal((m) => ({ ...m, saving: false, laporan: d }));
+      } else {
+        toast.success(`Transaksi massal tercatat: ${d.sukses} barang, satu dokumen`);
+        setMassal(null);
+      }
+      load(1, search, status);
+    } catch (err) {
+      toast.error(getApiError(err, "Gagal memproses transaksi massal"));
+      setMassal((m) => (m ? { ...m, saving: false } : m));
+    }
+  };
+
   const openRiwayat = async (item) => {
     setRiwayat({ item, rows: [], loading: true });
     try {
@@ -341,6 +428,9 @@ export default function PersediaanPage({ user, onBack }) {
             </div>
             <Button className="h-10 gap-1.5" onClick={() => setForm({ mode: "tambah", data: { ...emptyForm } })} data-testid="persediaan-add">
               <Plus className="w-4 h-4" /><span className="hidden sm:inline">Tambah Barang</span>
+            </Button>
+            <Button variant="outline" className="h-10 gap-1.5" onClick={bukaMassal} data-testid="persediaan-massal">
+              <Layers className="w-4 h-4" /><span className="hidden sm:inline">Massal</span>
             </Button>
             {/* Menu Dokumen: laporan & berita acara dalam satu tombol */}
             <DropdownMenu>
@@ -979,6 +1069,143 @@ export default function PersediaanPage({ user, onBack }) {
               ))}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog transaksi massal per dokumen ── */}
+      <Dialog open={!!massal} onOpenChange={(o) => { if (!o) setMassal(null); }}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Transaksi Massal — Satu Dokumen</DialogTitle>
+            <DialogDescription className="text-xs">
+              Satu bukti (BAST/kuitansi/nota dinas) untuk banyak barang sekaligus.
+              Tiap barang tetap tercatat sebagai transaksi berjurnal FIFO tersendiri.
+            </DialogDescription>
+          </DialogHeader>
+          {massal && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-m-arah">Arah</label>
+                  <select id="psd-m-arah" value={massal.arah}
+                    onChange={(e) => setMassal((m) => ({
+                      ...m, arah: e.target.value,
+                      jenis: e.target.value === "masuk" ? "pembelian" : "habis_pakai",
+                    }))}
+                    className="w-full h-9 px-2 rounded-lg border border-border bg-background text-sm text-foreground"
+                    data-testid="persediaan-massal-arah">
+                    <option value="masuk">Masuk</option>
+                    <option value="keluar">Keluar</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-m-jenis">Jenis</label>
+                  <select id="psd-m-jenis" value={massal.jenis}
+                    onChange={(e) => setMField("jenis", e.target.value)}
+                    className="w-full h-9 px-2 rounded-lg border border-border bg-background text-sm text-foreground"
+                    data-testid="persediaan-massal-jenis">
+                    {(massal.arah === "masuk" ? jenisMasuk : jenisKeluar).map((j) => (
+                      <option key={j.key} value={j.key}>{j.label} ({j.kode})</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-m-bukti">No. Bukti</label>
+                  <Input id="psd-m-bukti" placeholder="cth. BAST-15/VII/2026"
+                    value={massal.no_bukti} onChange={(e) => setMField("no_bukti", e.target.value)}
+                    data-testid="persediaan-massal-bukti" />
+                </div>
+                {massal.arah === "masuk" ? (
+                  <>
+                    <div>
+                      <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-m-jdok">Jenis Dokumen</label>
+                      <Input id="psd-m-jdok" placeholder="BAST / Kuitansi / Kontrak"
+                        value={massal.jenis_dokumen} onChange={(e) => setMField("jenis_dokumen", e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-m-penyedia">Penyedia</label>
+                      <Input id="psd-m-penyedia" value={massal.penyedia}
+                        onChange={(e) => setMField("penyedia", e.target.value)} />
+                    </div>
+                  </>
+                ) : (
+                  <div>
+                    <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-m-unit">Unit Penerima</label>
+                    <Input id="psd-m-unit" placeholder="cth. Bagian Umum"
+                      value={massal.unit_penerima} onChange={(e) => setMField("unit_penerima", e.target.value)} />
+                  </div>
+                )}
+                <div className={massal.arah === "masuk" ? "" : "col-span-1"}>
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-m-ket">Keterangan</label>
+                  <Input id="psd-m-ket" value={massal.keterangan}
+                    onChange={(e) => setMField("keterangan", e.target.value)} />
+                </div>
+              </div>
+
+              {/* Pencarian & daftar barang dokumen */}
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-m-cari">Tambah barang</label>
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
+                  <Input id="psd-m-cari" className="pl-8" placeholder="Cari kode/nama barang (min. 2 huruf)"
+                    value={massal.cari} onChange={(e) => setMField("cari", e.target.value)}
+                    data-testid="persediaan-massal-cari" />
+                  {(massal.mencari || massal.hasil.length > 0) && massal.cari.trim().length >= 2 && (
+                    <div className="absolute z-50 mt-1 w-full max-h-44 overflow-y-auto rounded-lg border border-border bg-card shadow-lg">
+                      {massal.mencari ? (
+                        <div className="flex justify-center py-3"><Loader2 className="w-4 h-4 animate-spin text-emerald-600" /></div>
+                      ) : massal.hasil.map((it) => (
+                        <button key={it.id} type="button" onClick={() => tambahItemMassal(it)}
+                          className="w-full px-2.5 py-1.5 text-left hover:bg-muted"
+                          data-testid={`persediaan-massal-pilih-${it.kode_barang}-${it.nup}`}>
+                          <span className="block text-xs font-semibold text-foreground truncate">{it.nama_barang}</span>
+                          <span className="block text-[10px] text-muted-foreground font-mono">{it.kode_barang} · NUP {it.nup} · stok {it.stok}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {massal.items.length > 0 && (
+                <ul className="space-y-1.5">
+                  {massal.items.map((it) => {
+                    const gagal = massal.laporan?.hasil?.find((h) => h.persediaan_id === it.id && !h.ok);
+                    return (
+                      <li key={it.id} className={`rounded-lg border p-2 ${gagal ? "border-red-500/60 bg-red-500/5" : "border-border"}`}>
+                        <div className="flex items-center gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-semibold text-foreground truncate">{it.nama_barang}</p>
+                            <p className="text-[10px] text-muted-foreground font-mono">{it.kode_barang} · NUP {it.nup} · stok {it.stok} {it.satuan || ""}</p>
+                          </div>
+                          <Input type="number" min="1" placeholder="Jml" className="w-20 h-8 text-xs"
+                            value={it.jumlah} onChange={(e) => setItemMassal(it.id, "jumlah", e.target.value)}
+                            data-testid={`persediaan-massal-jumlah-${it.kode_barang}-${it.nup}`} />
+                          {massal.arah === "masuk" && (
+                            <Input type="number" min="0" placeholder="Harga" className="w-28 h-8 text-xs"
+                              value={it.harga_satuan} onChange={(e) => setItemMassal(it.id, "harga_satuan", e.target.value)} />
+                          )}
+                          <button type="button" onClick={() => hapusItemMassal(it.id)} aria-label="Hapus barang"
+                            className="h-8 w-8 rounded-lg border border-border text-red-500 flex items-center justify-center hover:bg-red-500/10 flex-shrink-0 min-h-0 min-w-0">
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        {gagal && <p className="mt-1 text-[11px] text-red-500">Gagal: {gagal.error}</p>}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setMassal(null)}>Batal</Button>
+            <Button onClick={submitMassal} disabled={massal?.saving || (massal?.items?.length || 0) === 0}
+              className="bg-emerald-600 hover:bg-emerald-700" data-testid="persediaan-massal-simpan">
+              {massal?.saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Layers className="w-4 h-4 mr-1.5" />}
+              Catat {massal?.items?.length || 0} Barang
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

@@ -48,6 +48,13 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#98] Transaksi massal persediaan: satu dokumen banyak barang — 2026-07-12
+
+- **Transaksi Massal** (tombol baru di toolbar): satu bukti untuk ≤100
+  barang; tiap barang tetap lewat jalur transaksi FIFO tunggal yang sudah
+  teruji; kegagalan per barang dilaporkan per item (baris disorot merah,
+  dialog tetap terbuka) tanpa membatalkan barang lain.
+
 ## [#97] Kartu Barang Persediaan PDF: riwayat + saldo berjalan — 2026-07-12
 
 - **Kartu Barang** per barang persediaan (form kendali standar): identitas

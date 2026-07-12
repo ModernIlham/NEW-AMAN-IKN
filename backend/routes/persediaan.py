@@ -618,6 +618,69 @@ async def list_jenis_transaksi(_user: dict = Depends(require_user)):
     }
 
 
+class ItemMassalIn(BaseModel):
+    persediaan_id: str = Field(min_length=1)
+    jumlah: int = Field(gt=0)
+    harga_satuan: float = Field(0, ge=0)   # dipakai arah masuk
+    expired: str = ""                       # dipakai arah masuk (opsional)
+
+
+class TransaksiMassalIn(BaseModel):
+    arah: str                               # "masuk" | "keluar"
+    jenis: str
+    no_bukti: str = ""
+    jenis_dokumen: str = ""                 # masuk
+    tgl_dokumen: str = ""                   # masuk
+    penyedia: str = ""                      # masuk
+    unit_penerima: str = ""                 # keluar
+    keterangan: str = ""
+    items: list[ItemMassalIn] = Field(min_length=1, max_length=100)
+
+
+@persediaan_router.post("/persediaan/transaksi-massal")
+async def transaksi_massal(payload: TransaksiMassalIn, user: dict = Depends(require_user)):
+    """Satu dokumen (BAST/kuitansi/nota) untuk BANYAK barang sekaligus.
+
+    Tiap barang diproses lewat jalur transaksi tunggal yang sudah atomik +
+    berjurnal + berkompensasi — massal hanyalah pengulang dengan field
+    dokumen yang sama. Kegagalan per barang TIDAK membatalkan barang lain
+    (Mongo standalone tanpa transaksi multi-dokumen); hasil per barang
+    dilaporkan apa adanya agar operator tahu persis mana yang gagal.
+    """
+    if payload.arah not in ("masuk", "keluar"):
+        raise HTTPException(status_code=400, detail="Arah harus 'masuk' atau 'keluar'")
+    peta_jenis = JENIS_MASUK if payload.arah == "masuk" else JENIS_KELUAR
+    if payload.jenis not in peta_jenis:
+        valid = ", ".join(peta_jenis)
+        raise HTTPException(status_code=400, detail=f"Jenis tidak dikenal (pilihan: {valid})")
+
+    hasil = []
+    for it in payload.items:
+        try:
+            if payload.arah == "masuk":
+                r = await transaksi_masuk(it.persediaan_id, TransaksiMasukIn(
+                    jenis=payload.jenis, jumlah=it.jumlah,
+                    harga_satuan=it.harga_satuan, expired=it.expired,
+                    no_bukti=payload.no_bukti, jenis_dokumen=payload.jenis_dokumen,
+                    tgl_dokumen=payload.tgl_dokumen, penyedia=payload.penyedia,
+                    keterangan=payload.keterangan,
+                ), user=user)
+            else:
+                r = await transaksi_keluar(it.persediaan_id, TransaksiKeluarIn(
+                    jenis=payload.jenis, jumlah=it.jumlah,
+                    unit_penerima=payload.unit_penerima,
+                    no_bukti=payload.no_bukti, keterangan=payload.keterangan,
+                ), user=user)
+            hasil.append({"persediaan_id": it.persediaan_id, "ok": True,
+                          "stok": r.get("stok"), "message": r.get("message")})
+        except HTTPException as e:
+            hasil.append({"persediaan_id": it.persediaan_id, "ok": False,
+                          "error": str(e.detail)})
+    sukses = sum(1 for h in hasil if h["ok"])
+    return {"total": len(hasil), "sukses": sukses, "gagal": len(hasil) - sukses,
+            "hasil": hasil}
+
+
 @persediaan_router.get("/persediaan")
 async def list_persediaan(
     search: str = "",
