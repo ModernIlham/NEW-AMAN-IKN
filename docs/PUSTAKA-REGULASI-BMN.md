@@ -3,7 +3,7 @@
 > Rangkuman riset regulasi dan praktik resmi sebagai **bahan rujukan wajib**
 > sebelum membangun modul apa pun di AMAN — dipakai bersama
 > `docs/MASTERPLAN-SIKLUS-BMN.md`. Disusun dari riset internet Juli 2026
-> (sumber di §7). Butir bertanda **[perlu verifikasi]** belum terbaca dari
+> (sumber di §12). Butir bertanda **[perlu verifikasi]** belum terbaca dari
 > teks asli peraturan (PDF JDIH tidak terjangkau dari lingkungan riset) —
 > pastikan ke dokumen aslinya saat menulis spesifikasi teknis modulnya.
 >
@@ -341,7 +341,74 @@ bentuk + NTPN utk penjualan → SK penghapusan), peringatan tenggat lelang
 
 ---
 
-## 8. Kendala Umum Satker → Fitur Penangkal AMAN
+## 8. Wasdal — Pengawasan & Pengendalian (PMK 207/PMK.06/2021)
+
+### 8.1 Dasar & status
+- **PMK 207/PMK.06/2021** tentang Pengawasan dan Pengendalian BMN — berlaku
+  **1 Januari 2022**, mencabut PMK 244/PMK.06/2012 jo. PMK 52/PMK.06/2016.
+  Masih berlaku per Juli 2026 (pelaporan Sem II/Tahunan 2025 dan Sem I 2026
+  di K/L masih merujuk PMK ini); tidak ditemukan aturan pengubah.
+- Ekosistem: **PMK 118/2023** (pengelolaan BMN via SIMAN), KMK 125/KM.6/2024
+  (rollout SIMAN v2 penuh Jul–Des 2024), KMK 248/KM.6/2024 (juknis SIMAN v2,
+  memuat Modul Wasdal) **[nomor perlu verifikasi]**; regulasi objek terkait:
+  PMK 40/2024 (penggunaan), **PMK 120 Tahun 2024** (BMN idle — mencabut
+  PMK 71/2016).
+
+### 8.2 Bentuk wasdal Pengguna Barang/KPB
+- **Pemantauan** (periodik & insidentil) + **penertiban** + tindak lanjut
+  hasil audit APIP/BPKP/pemeriksaan BPK + **pelaporan berjenjang**.
+  Investigasi, monev, penetapan indikator kinerja, dan evaluasi kinerja
+  portofolio aset adalah domain **Pengelola Barang** (KPKNL–Kanwil–Kantor
+  Pusat DJKN), bukan KPB.
+- **Lima objek pemantauan KPB**: (1) Penggunaan, (2) Pemanfaatan,
+  (3) Pemindahtanganan, (4) Penatausahaan, (5) Pengamanan & pemeliharaan —
+  dicek kesesuaian pelaksanaannya dengan ketentuan, via penelitian
+  administrasi dan/atau lapangan (boleh berbantuan teknologi). Pemantauan
+  insidentil dapat dipicu informasi masyarakat/media/hasil audit.
+
+### 8.3 Frekuensi & tenggat
+| Hal | Ketentuan | Catatan |
+|---|---|---|
+| Pemantauan periodik | 1x/semester ATAU 1x/tahun (selesai akhir Februari) | **[KONFLIK SUMBER — verifikasi ke pasal PMK 207]**; siklus semesteran otomatis memenuhi kedua tafsir |
+| Pemantauan insidentil | pelaksanaan ≤10 hari kerja; hasil dilaporkan ≤5 hari kerja sejak BA | — |
+| Penertiban oleh KPB | selesai ≤**15 hari kerja** sejak pemantauan selesai / surat permintaan Pengelola diterima | juga dipicu temuan APIP/BPK |
+| Laporan wasdal | **semesteran + tahunan**, berjenjang KPB → PPB-W → PPB-E1 → PB → Pengelola | tenggat statutori antar jenjang [perlu verifikasi]; praktik K/L: Sem I ± awal Juli, Sem II+Tahunan ± Januari |
+
+- Kanal resmi pelaporan sejak Sem II/Tahunan 2024: **Modul Wasdal SIMAN v2**
+  (sebelumnya Excel). Sanksi tidak melaksanakan wasdal: penundaan
+  penyelesaian/pelaksanaan RKBMN + pengurangan indikator kinerja pengelolaan.
+
+### 8.4 Keterkaitan dengan domain lain
+- **Sertifikasi tanah** (objek pengamanan): tanah wajib bersertipikat a.n.
+  Pemerintah RI c.q. K/L; temuan lazim: belum bersertipikat, dokumen
+  kepemilikan tidak dikuasai satker.
+- **BMN idle** (temuan pemantauan penggunaan): wajib diserahkan ke Pengelola
+  — rezim teknis kini PMK 120/2024; SIMAN v2 punya Modul BMN Idle terpisah.
+- **Investigasi Pengelola**: hasil 3 kategori (tanpa penyimpangan /
+  penyimpangan tanpa indikasi kerugian negara / dengan indikasi) → kembali
+  ke Pengguna sebagai permintaan penertiban; audit APIP atas permintaan
+  PB/KPB bila ada indikasi penyimpangan.
+- Temuan wasdal tersering (artikel Kanwil DJKN Jatim): RB belum dihapus,
+  pemindahtanganan di luar ketentuan, BMN idle, dikuasai pihak ketiga,
+  digunakan tanpa hak, tanah belum bersertipikat, aset belum tercatat.
+
+### 8.5 Implikasi desain AMAN (dasbor pemantauan tingkat KPB)
+- **Mesin aturan ringan membaca register yang SUDAH ada** (tanpa input
+  ganda): aset (BAST/kondisi/foto/koordinat/nilai/sengketa), pemanfaatan
+  (berakhir/dokumen kurang), penghapusan & pemindahtanganan (usulan
+  berlarut, RB belum diusulkan, tenggat lelang), pemeliharaan (aset rusak
+  tanpa penanganan tahun berjalan).
+- Temuan dikelompokkan per **5 objek pemantauan PMK 207** + label periode
+  (Semester I/II) sebagai bahan pra-isi laporan wasdal — **kanal resmi
+  tetap SIMAN v2; AMAN memposisikan diri sebagai penyiap data**.
+- Menyusul: register penertiban ber-timer 15 hari kerja, BA pemantauan
+  insidentil (tenggat 10+5 hari kerja), generator laporan mengikuti
+  formulir Lampiran PMK 207 (baca lampiran asli dulu), kalender tenggat
+  konfigurabel (tenggat internal ditetapkan surat DJKN/K/L per tahun).
+
+---
+
+## 9. Kendala Umum Satker → Fitur Penangkal AMAN
 
 | Kendala nyata (temuan artikel DJKN/DJPb/BPK/jurnal) | Penangkal di AMAN |
 |---|---|
@@ -357,7 +424,7 @@ bentuk + NTPN utk penjualan → SK penghapusan), peringatan tenggat lelang
 
 ---
 
-## 9. Implikasi Desain per Modul (ringkas)
+## 10. Implikasi Desain per Modul (ringkas)
 
 | Modul (fase) | Keputusan desain dari pustaka ini |
 |---|---|
@@ -376,7 +443,7 @@ bentuk + NTPN utk penjualan → SK penghapusan), peringatan tenggat lelang
 
 ---
 
-## 10. Daftar Konsolidasi "Perlu Verifikasi"
+## 11. Daftar Konsolidasi "Perlu Verifikasi"
 
 1. Field lengkap KIB per 6 jenis → Lampiran PMK 181/2016.
 2. Batas waktu statutori penyampaian laporan per jenjang → Lampiran PMK 181.
@@ -393,10 +460,17 @@ bentuk + NTPN utk penjualan → SK penghapusan), peringatan tenggat lelang
 11. Angka lengkap Tabel I & II KMK 295/KM.6/2019 jo. 266/KM.6/2023 —
     lampiran belum dapat diunduh dari jaringan sesi riset; validasi via
     JDIH sebelum seed penuh referensi masa manfaat.
+12. Frekuensi pemantauan periodik KPB dalam PMK 207/2021 — sumber DJKN
+    terbelah (1x/semester vs 1x/tahun selesai akhir Februari); teks asli
+    tidak terbaca dari lingkungan riset.
+13. Struktur & jumlah formulir Lampiran PMK 207 (klaim "65 pemantauan +
+    2 penertiban + 14 monev" hanya dari satu ringkasan pencarian) serta
+    tenggat statutori pelaporan wasdal antar jenjang; nomor pasti KMK
+    juknis SIMAN v2 (248/KM.6/2024).
 
 ---
 
-## 11. Sumber Utama
+## 12. Sumber Utama
 
 Regulasi: PSAP 05 (ksap.org/standar/PSAP05.pdf) · PMK 181/PMK.06/2016
 (jdih.kemenkeu.go.id/dok/181-pmk-06-2016; peraturan.bpk.go.id/Details/121291)
@@ -416,7 +490,10 @@ inventarisasi Bawaslu; HAI DJPb "Penerapan FIFO Modul Persediaan SAKTI
 TA 2021"; juknis perekaman transaksi & migrasi persediaan SAKTI (DJPb);
 kamus SAKTI modul persediaan & rekam hasil opname (klinikakuntansi.net);
 FAQ opname fisik SAKTI (KLC); batas waktu LBMN Unaudited 2025 (KPPN
-Sampit).
+Sampit); artikel wasdal DJKN (KPKNL Mamuju "Merindu BMN Seri 6",
+Kanwil Suluttenggomalut "Pantau, Tertib, Lapor", Kanwil Jatim,
+KPKNL Cirebon BMN idle); surat & pengumuman pelaporan wasdal
+MA/BPS/PA 2024–2026 (Modul Wasdal SIMAN v2).
 
 Kendala lapangan: artikel KPKNL Tangerang I/Metro/Singkawang; DJKN
 "Pentingnya Penatausahaan Persediaan"; knowledge sharing Ittama DPR;

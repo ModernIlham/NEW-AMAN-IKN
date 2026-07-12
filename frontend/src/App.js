@@ -37,6 +37,7 @@ const PenghapusanPage = lazy(() => import("./pages/PenghapusanPage"));
 const PemanfaatanPage = lazy(() => import("./pages/PemanfaatanPage"));
 const PemusnahanPage = lazy(() => import("./pages/PemusnahanPage"));
 const PemindahtangananPage = lazy(() => import("./pages/PemindahtangananPage"));
+const WasdalPage = lazy(() => import("./pages/WasdalPage"));
 
 // ============================================================================
 // LOADING FALLBACK - Shown while lazy components load
@@ -272,6 +273,8 @@ function App() {
   const [showPemusnahan, setShowPemusnahan] = useState(false);
   // Halaman Pemindahtanganan (register usulan)
   const [showPemindahtanganan, setShowPemindahtanganan] = useState(false);
+  // Halaman Wasdal (dasbor pemantauan)
+  const [showWasdal, setShowWasdal] = useState(false);
 
   if (loading) {
     return <PageLoader />;
@@ -432,6 +435,18 @@ function App() {
     );
   }
 
+  // Wasdal — dasbor pemantauan (PMK 207/2021, tahap awal).
+  if (user && showWasdal) {
+    return (
+      <div className="App">
+        <Suspense fallback={<PageLoader />}>
+          <WasdalPage user={user} onBack={() => setShowWasdal(false)} />
+        </Suspense>
+        <Toaster position="top-right" richColors />
+      </div>
+    );
+  }
+
   // Beranda Modul — rumah Siklus Pengelolaan BMN. Tampil setelah login
   // sampai user memilih modul; modul selain Inventarisasi menampilkan
   // konsep "Segera Hadir" di dalam halaman ini.
@@ -458,6 +473,7 @@ function App() {
             onOpenPemanfaatan={() => setShowPemanfaatan(true)}
             onOpenPemusnahan={() => setShowPemusnahan(true)}
             onOpenPemindahtanganan={() => setShowPemindahtanganan(true)}
+            onOpenWasdal={() => setShowWasdal(true)}
           />
         </Suspense>
         <Toaster position="top-right" richColors />
