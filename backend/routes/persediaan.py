@@ -25,7 +25,8 @@ from persediaan_utils import (
     buat_layer, klasifikasi_kedaluwarsa, konsumsi_fifo, mutasi_periode,
     next_kode_penuh, next_nup, nilai_persediaan_dari_batches,
     parse_import_persediaan_rows, penyesuaian_opname, status_stok,
-    validate_kode_persediaan, validate_transaksi_keluar, validate_transaksi_masuk,
+    validate_kode_persediaan, validate_pindah_gudang,
+    validate_transaksi_keluar, validate_transaksi_masuk,
 )
 
 persediaan_router = APIRouter()
@@ -1042,6 +1043,79 @@ async def transaksi_keluar(item_id: str, data: TransaksiKeluarIn, user: dict = D
                         detail="Barang sedang diubah pengguna lain — coba lagi")
 
 
+class PindahGudangIn(BaseModel):
+    lokasi_baru: str = Field(min_length=1, max_length=200)
+    no_bukti: str = ""
+    keterangan: str = ""
+
+
+@persediaan_router.post("/persediaan/{item_id}/pindah-gudang")
+async def pindah_gudang_persediaan(item_id: str, data: PindahGudangIn,
+                                   user: dict = Depends(require_user)):
+    """Pindahkan barang ke Lokasi/Gudang lain — ber-jurnal.
+
+    Mutasi lokasi seluruh record: stok & layer FIFO TIDAK berubah; jurnal
+    arah "mutasi" jenis "pindah_gudang" mencatat lokasi_dari/lokasi_ke
+    (kode SAKTI kosong — mutasi internal satker). Bila penulisan jurnal
+    gagal, lokasi dikembalikan (pola kompensasi transaksi masuk).
+    """
+    item = await db.persediaan.find_one({"id": item_id}, {"_id": 0})
+    if not item:
+        raise HTTPException(status_code=404, detail="Barang persediaan tidak ditemukan")
+    lokasi_lama = str(item.get("lokasi") or "").strip()
+    ok, err = validate_pindah_gudang(lokasi_lama, data.lokasi_baru)
+    if not ok:
+        raise HTTPException(status_code=400, detail=err)
+
+    now = datetime.now(timezone.utc)
+    lokasi_baru = data.lokasi_baru.strip()
+    updated = await db.persediaan.find_one_and_update(
+        # Anti-balapan: lokasi lama diikutkan di filter
+        {"id": item_id, "lokasi": item.get("lokasi")},
+        {"$set": {"lokasi": lokasi_baru, "updated_at": now.isoformat()},
+         "$inc": {"version": 1}},
+        projection={"_id": 0}, return_document=True)
+    if updated is None:
+        raise HTTPException(status_code=409,
+                            detail="Lokasi barang berubah oleh pengguna lain — muat ulang")
+
+    stok = int(updated.get("stok", 0) or 0)
+    jurnal = {
+        "id": str(uuid.uuid4()),
+        "arah": "mutasi",
+        "jenis": "pindah_gudang",
+        "jenis_label": "Pindah Gudang",
+        "kode_sakti": "",
+        "persediaan_id": item_id,
+        "kode_barang": updated.get("kode_barang"),
+        "nup": updated.get("nup"),
+        "nama_barang": updated.get("nama_barang"),
+        "jumlah": stok,
+        "harga_satuan": 0.0,
+        "total": 0.0,
+        "stok_sebelum": stok,
+        "stok_sesudah": stok,
+        "lokasi_dari": lokasi_lama,
+        "lokasi_ke": lokasi_baru,
+        "no_bukti": data.no_bukti.strip(),
+        "keterangan": data.keterangan.strip(),
+        "petugas": user.get("username") or user.get("user_id") or "-",
+        "timestamp": now.isoformat(),
+    }
+    try:
+        await db.transaksi_persediaan.insert_one({**jurnal})
+    except Exception:
+        # Kompensasi: kembalikan lokasi — mutasi tanpa jejak jurnal dilarang.
+        await db.persediaan.update_one(
+            {"id": item_id, "lokasi": lokasi_baru},
+            {"$set": {"lokasi": item.get("lokasi")}, "$inc": {"version": 1}})
+        raise HTTPException(status_code=500, detail="Gagal mencatat jurnal — pindah gudang dibatalkan")
+
+    return {"message": f"Barang dipindahkan ke {lokasi_baru}",
+            "lokasi": lokasi_baru, "transaksi": jurnal,
+            "version": updated.get("version")}
+
+
 class OpnameIn(BaseModel):
     stok_fisik: int = Field(ge=0)
     alasan: str = Field(min_length=3, max_length=500)
@@ -1169,6 +1243,7 @@ async def kartu_barang_pdf(item_id: str, _user: dict = Depends(require_user)):
     label_jenis = {k: v[0] for k, v in JENIS_MASUK.items()}
     label_jenis.update({k: v[0] for k, v in JENIS_KELUAR.items()})
     label_jenis["opname"] = "Penyesuaian Opname"
+    label_jenis["pindah_gudang"] = "Pindah Gudang"
 
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
     buffer = BytesIO()

@@ -109,7 +109,7 @@ export const PENATAUSAHAAN_SUBMODULES = [
       "✅ Impor/ekspor master + Kartu Barang PDF (riwayat + saldo berjalan)",
       "✅ Transaksi massal per dokumen (satu bukti, banyak barang)",
       "✅ Filter Lokasi/Gudang di daftar master + laporan posisi per gudang",
-      "Menyusul: transfer/distribusi stok antar gudang",
+      "✅ Pindah gudang per barang ber-jurnal (lokasi asal → tujuan tercatat, stok & FIFO tak berubah)",
     ],
     integrasi: [
       "Berbagi kodefikasi barang, satker, dan kop surat dengan modul aset",
