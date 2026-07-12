@@ -48,6 +48,13 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#87] Penggunaan tahap awal: rekap aset per pemegang + BAST — 2026-07-12
+
+- **Fase 3 dimulai** — halaman "Aset per Pemegang" (lintas kegiatan) dari
+  data pengguna+NIP+BAST inventarisasi: badge Lengkap / BAST x/y, dialog
+  daftar aset per pemegang; kunci nama ternormalisasi + NIP. Kartu
+  Penggunaan naik Sebagian Aktif. 7 unit test; tanpa koleksi baru.
+
 ## [#86] Hub Pelaporan — arsip laporan lintas kegiatan satu pintu — 2026-07-12
 
 - **Halaman Arsip Pelaporan** (dari Beranda Modul): daftar semua kegiatan
