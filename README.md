@@ -107,7 +107,9 @@ pencatatan SAKTI; Perpres 75/2017, PMK 118/2017 jo. perubahannya, PMK 99/2024)
 bentuk** dengan penjaga dokumen persetujuan/NTPN + jatuh tempo ≤60 hari
 (PMK 115/2020) (#108) + **kontribusi tahunan ber-NTPN dengan pengingat
 tunggakan** (#121) + **arsip scan dokumen per perjanjian** (#131) +
-**ekspor CSV register** (#158) · Penghapusan — **kandidat usul hapus** per jalur
+**ekspor CSV register** (#158) + **lampiran wasdal terpisah per
+perjanjian** (laporan monitoring/BA peninjauan lapangan) (#188)
+· Penghapusan — **kandidat usul hapus** per jalur
 PMK 83/2016 (#104) + **tiket usulan berstatus** usul → proses → SK (#106)
 + **arsip scan SK/berkas per usulan** (#134) + **ekspor CSV** (#159)
 · Pemusnahan — **register BA multi-aset** (#110) + **PDF Berita Acara
