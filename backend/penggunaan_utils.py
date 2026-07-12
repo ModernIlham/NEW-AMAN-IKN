@@ -21,20 +21,28 @@ JENIS_PSP = {
 }
 
 
-def validate_psp(data: dict, today_iso: str) -> list:
-    """Validasi pencatatan SK penetapan penggunaan → daftar kesalahan."""
+def validate_psp(data: dict, today_iso: str, draf: bool = False) -> list:
+    """Validasi pencatatan SK penetapan penggunaan → daftar kesalahan.
+
+    draf=True (usulan sebelum SK terbit): nomor/tanggal SK opsional —
+    keduanya baru wajib saat transisi ke "ditetapkan".
+    """
     from datetime import date
 
     errors = []
-    if not str(data.get("nomor_sk") or "").strip():
+    tanggal = str(data.get("tanggal_sk") or "").strip()[:10]
+    if not draf and not str(data.get("nomor_sk") or "").strip():
         errors.append("Nomor SK wajib diisi")
-    try:
-        t = date.fromisoformat(str(data.get("tanggal_sk") or "").strip()[:10])
-        hari_ini = date.fromisoformat((today_iso or "")[:10])
-        if t > hari_ini:
-            errors.append("Tanggal SK tidak boleh di masa depan")
-    except ValueError:
-        errors.append("Tanggal SK wajib (format YYYY-MM-DD)")
+    if not draf or tanggal:
+        try:
+            t = date.fromisoformat(tanggal)
+            hari_ini = date.fromisoformat((today_iso or "")[:10])
+            if t > hari_ini:
+                errors.append("Tanggal SK tidak boleh di masa depan")
+        except ValueError:
+            errors.append("Tanggal SK wajib (format YYYY-MM-DD)"
+                          if not draf else
+                          "Tanggal SK (bila diisi) harus berformat YYYY-MM-DD")
     if data.get("jenis") not in JENIS_PSP:
         pilihan = ", ".join(JENIS_PSP)
         errors.append(f"Jenis penetapan tidak dikenal (pilihan: {pilihan})")
@@ -43,19 +51,79 @@ def validate_psp(data: dict, today_iso: str) -> list:
     return errors
 
 
+# Alur pengajuan PSP (pustaka §13 — usulan sebelum SK terbit). SK lama
+# tanpa field status dianggap sudah DITETAPKAN (SK terbit) agar data
+# eksisting tetap sah tanpa migrasi.
+STATUS_PENGAJUAN_PSP = {
+    "draf": "Draf Usulan",
+    "diajukan": "Diajukan ke Pejabat Penetap",
+    "ditetapkan": "Ditetapkan (SK terbit)",
+    "ditolak": "Ditolak",
+}
+
+TRANSISI_PENGAJUAN_PSP = {
+    "draf": {"diajukan"},
+    # "draf" dari diajukan = dikembalikan untuk perbaikan (catatan wajib)
+    "diajukan": {"ditetapkan", "ditolak", "draf"},
+    "ditetapkan": set(),
+    "ditolak": set(),
+}
+
+
+def status_pengajuan_psp(sk: dict) -> str:
+    """Status pengajuan; record lama tanpa field = ditetapkan."""
+    s = str(sk.get("status_pengajuan") or "").strip()
+    return s if s in STATUS_PENGAJUAN_PSP else "ditetapkan"
+
+
+def validate_transisi_pengajuan_psp(sk: dict, ke: str, data: dict,
+                                    today_iso: str) -> list:
+    """Validasi pindah status pengajuan + syarat dokumen per tahap."""
+    from datetime import date
+
+    errors = []
+    dari = status_pengajuan_psp(sk)
+    if ke not in STATUS_PENGAJUAN_PSP:
+        errors.append("Status tujuan tidak dikenal")
+        return errors
+    if ke not in TRANSISI_PENGAJUAN_PSP.get(dari, set()):
+        errors.append(f"Transisi {dari} → {ke} tidak sah")
+        return errors
+    if ke == "ditetapkan":
+        if not str(data.get("nomor_sk") or "").strip():
+            errors.append("Nomor SK wajib diisi saat penetapan")
+        try:
+            t = date.fromisoformat(str(data.get("tanggal_sk") or "").strip()[:10])
+            if t > date.fromisoformat((today_iso or "")[:10]):
+                errors.append("Tanggal SK tidak boleh di masa depan")
+        except ValueError:
+            errors.append("Tanggal SK wajib (format YYYY-MM-DD) saat penetapan")
+    if ke in {"ditolak", "draf"} and not str(data.get("catatan") or "").strip():
+        errors.append("Catatan wajib diisi saat menolak/mengembalikan usulan")
+    return errors
+
+
 def rekap_psp(daftar_sk) -> dict:
-    """Ringkasan register PSP: jumlah SK, per jenis, aset unik tercakup."""
+    """Ringkasan register PSP: jumlah SK, per jenis/status, aset tercakup.
+
+    Cakupan aset ter-PSP hanya menghitung SK yang sudah DITETAPKAN —
+    draf/diajukan/ditolak belum menetapkan status penggunaan apa pun.
+    """
     per_jenis = {k: 0 for k in JENIS_PSP}
+    per_status = {k: 0 for k in STATUS_PENGAJUAN_PSP}
     aset_unik = set()
     for sk in daftar_sk or []:
         j = sk.get("jenis")
         if j in per_jenis:
             per_jenis[j] += 1
-        for a in sk.get("aset") or []:
-            if a.get("asset_id"):
-                aset_unik.add(a["asset_id"])
+        s = status_pengajuan_psp(sk)
+        per_status[s] += 1
+        if s == "ditetapkan":
+            for a in sk.get("aset") or []:
+                if a.get("asset_id"):
+                    aset_unik.add(a["asset_id"])
     return {"jumlah_sk": len(daftar_sk or []), "per_jenis": per_jenis,
-            "aset_tercakup": len(aset_unik)}
+            "per_status": per_status, "aset_tercakup": len(aset_unik)}
 
 
 # Status tiket penanganan BMN idle → label Indonesia

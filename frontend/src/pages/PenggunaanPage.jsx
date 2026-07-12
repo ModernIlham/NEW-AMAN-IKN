@@ -36,6 +36,13 @@ const WARNA_STATUS_PROSES = {
   berakhir: "bg-muted text-foreground/70",
 };
 
+const WARNA_PENGAJUAN_PSP = {
+  draf: "bg-muted text-foreground/70",
+  diajukan: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
+  ditetapkan: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+  ditolak: "bg-red-500/15 text-red-600 dark:text-red-400",
+};
+
 export default function PenggunaanPage({ user, onBack }) {
   const isAdmin = user?.role === "admin";
   const [items, setItems] = useState([]);
@@ -214,6 +221,31 @@ export default function PenggunaanPage({ user, onBack }) {
       loadPsp();
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Gagal menghapus SK");
+    }
+  };
+
+  const pindahStatusPsp = async (sk, ke) => {
+    const payload = { status: ke, nomor_sk: "", tanggal_sk: "", catatan: "" };
+    if (ke === "ditetapkan") {
+      const nomor = window.prompt("Nomor SK penetapan:", sk.nomor_sk || "");
+      if (nomor === null) return;
+      const tanggal = window.prompt("Tanggal SK (YYYY-MM-DD):",
+        sk.tanggal_sk || new Date().toISOString().slice(0, 10));
+      if (tanggal === null) return;
+      payload.nomor_sk = nomor; payload.tanggal_sk = tanggal;
+    }
+    if (ke === "ditolak" || ke === "draf") {
+      const catatan = window.prompt(ke === "ditolak"
+        ? "Catatan penolakan (wajib):" : "Catatan pengembalian (wajib):", "");
+      if (catatan === null) return;
+      payload.catatan = catatan;
+    }
+    try {
+      await axios.post(`${API}/penggunaan/psp/${sk.id}/status`, payload);
+      toast.success("Status usulan diperbarui");
+      loadPsp();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal memindah status");
     }
   };
 
@@ -549,7 +581,7 @@ export default function PenggunaanPage({ user, onBack }) {
               <span className="px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-600 dark:text-sky-400 text-[10px] font-semibold">
                 {psp.ringkasan?.aset_tercakup || 0}/{psp.ringkasan?.total_aset || 0} aset tercakup
               </span>
-              <Button size="sm" onClick={() => { setCariPsp(""); setHasilCariPsp([]); setFormPsp({ data: { nomor_sk: "", tanggal_sk: new Date().toISOString().slice(0, 10), jenis: "psp", penetap: "", keterangan: "" }, aset: [], saving: false }); }}
+              <Button size="sm" onClick={() => { setCariPsp(""); setHasilCariPsp([]); setFormPsp({ data: { nomor_sk: "", tanggal_sk: new Date().toISOString().slice(0, 10), jenis: "psp", penetap: "", keterangan: "", sebagai_draf: false }, aset: [], saving: false }); }}
                 className="h-7 text-[11px] min-h-0 bg-sky-600 hover:bg-sky-700 text-white" data-testid="penggunaan-psp-tambah">
                 <Plus className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">Catat SK</span>
               </Button>
@@ -566,24 +598,45 @@ export default function PenggunaanPage({ user, onBack }) {
                       <span className="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-600 dark:text-sky-400 text-[10px] font-semibold">
                         {psp.label_jenis?.[sk.jenis] || sk.jenis}
                       </span>
-                      <p className="text-xs font-semibold text-foreground flex-1 min-w-[120px] truncate">{sk.nomor_sk}</p>
-                      <span className="text-[11px] text-muted-foreground">{sk.tanggal_sk} · {(sk.aset || []).length} aset</span>
+                      <p className="text-xs font-semibold text-foreground flex-1 min-w-[120px] truncate">{sk.nomor_sk || "(SK belum terbit)"}</p>
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${WARNA_PENGAJUAN_PSP[sk.status_pengajuan] || "bg-muted text-muted-foreground"}`}>
+                        {psp.label_status_pengajuan?.[sk.status_pengajuan] || sk.status_pengajuan}
+                      </span>
+                      <span className="text-[11px] text-muted-foreground">{sk.tanggal_sk || "—"} · {(sk.aset || []).length} aset</span>
+                      {sk.status_pengajuan === "draf" && (
+                        <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                          onClick={() => pindahStatusPsp(sk, "diajukan")}
+                          data-testid={`penggunaan-psp-ajukan-${sk.id}`}>Ajukan</Button>
+                      )}
+                      {sk.status_pengajuan === "diajukan" && isAdmin && (
+                        <>
+                          <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                            onClick={() => pindahStatusPsp(sk, "ditetapkan")}
+                            data-testid={`penggunaan-psp-tetapkan-${sk.id}`}>Tetapkan</Button>
+                          <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 text-amber-600"
+                            onClick={() => pindahStatusPsp(sk, "draf")}>Kembalikan</Button>
+                          <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 text-red-500"
+                            onClick={() => pindahStatusPsp(sk, "ditolak")}>Tolak</Button>
+                        </>
+                      )}
                       <button type="button" aria-label="Lampiran SK"
                         onClick={() => setLampPsp({ sk, uploading: false })}
                         className="h-7 w-7 rounded-lg border border-border text-foreground/70 flex items-center justify-center hover:bg-muted min-h-0 min-w-0"
                         data-testid={`penggunaan-psp-lampiran-${sk.id}`}>
                         <Paperclip className="w-3 h-3" />
                       </button>
-                      <button type="button" aria-label="Unduh BAST (PDF)"
-                        onClick={() => downloadFileWithProgress(
-                          `${API}/penggunaan/psp/${sk.id}/bast-pdf`,
-                          `BAST_PSP_${(sk.nomor_sk || "SK").replace(/[/\s]/g, "-")}.pdf`,
-                          { label: `BAST PSP ${sk.nomor_sk}` },
-                        ).catch(() => {})}
-                        className="h-7 w-7 rounded-lg border border-border text-foreground/70 flex items-center justify-center hover:bg-muted min-h-0 min-w-0"
-                        data-testid={`penggunaan-psp-bast-${sk.id}`}>
-                        <FileText className="w-3 h-3" />
-                      </button>
+                      {sk.status_pengajuan === "ditetapkan" && (
+                        <button type="button" aria-label="Unduh BAST (PDF)"
+                          onClick={() => downloadFileWithProgress(
+                            `${API}/penggunaan/psp/${sk.id}/bast-pdf`,
+                            `BAST_PSP_${(sk.nomor_sk || "SK").replace(/[/\s]/g, "-")}.pdf`,
+                            { label: `BAST PSP ${sk.nomor_sk}` },
+                          ).catch(() => {})}
+                          className="h-7 w-7 rounded-lg border border-border text-foreground/70 flex items-center justify-center hover:bg-muted min-h-0 min-w-0"
+                          data-testid={`penggunaan-psp-bast-${sk.id}`}>
+                          <FileText className="w-3 h-3" />
+                        </button>
+                      )}
                       {isAdmin && (
                         <button type="button" aria-label="Hapus SK" onClick={() => hapusPsp(sk)}
                           className="h-7 w-7 rounded-lg border border-border text-red-500 flex items-center justify-center hover:bg-red-500/10 min-h-0 min-w-0">
@@ -614,7 +667,7 @@ export default function PenggunaanPage({ user, onBack }) {
         )}
 
         <p className="text-center text-[11px] text-muted-foreground pb-4">
-          Alih status antar Pengguna & BAST digital penetapan (PMK 40/2024) menyusul — masterplan Fase 3.
+          Daftar "menyusul" Penggunaan tuntas — tiket proses 4 rezim, BAST PSP PDF, dan alur pengajuan PSP sudah tersedia (PMK 40/2024).
         </p>
       </main>
 
@@ -785,6 +838,12 @@ export default function PenggunaanPage({ user, onBack }) {
                 <Input id="psp-ket" value={formPsp.data.keterangan}
                   onChange={(e) => setFormPsp((f) => ({ ...f, data: { ...f.data, keterangan: e.target.value } }))} />
               </div>
+              <label className="col-span-2 flex items-center gap-2 text-xs text-foreground cursor-pointer">
+                <input type="checkbox" checked={!!formPsp.data.sebagai_draf}
+                  onChange={(e) => setFormPsp((f) => ({ ...f, data: { ...f.data, sebagai_draf: e.target.checked } }))}
+                  data-testid="penggunaan-psp-draf" />
+                Simpan sebagai <b>draf usulan</b> — SK belum terbit (nomor/tanggal SK diisi saat penetapan)
+              </label>
               <div className="col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psp-cari">Tambah aset</label>
                 <div className="relative">

@@ -20,10 +20,11 @@ from db import db, fs_bucket
 from shared_utils import delete_document_from_gridfs, get_document_from_gridfs
 from penggunaan_utils import (
     ARAH_PROSES, JENIS_PROSES_PENGGUNAAN, JENIS_PSP, STATUS_IDLE,
-    STATUS_PROSES, TRANSISI_PROSES, indikasi_idle, info_proses_sementara,
-    kunci_pemegang, rekap_idle, rekap_pemegang, rekap_proses_penggunaan,
-    rekap_psp, validate_proses_penggunaan, validate_psp,
-    validate_transisi_idle, validate_transisi_proses,
+    STATUS_PENGAJUAN_PSP, STATUS_PROSES, TRANSISI_PROSES, indikasi_idle,
+    info_proses_sementara, kunci_pemegang, rekap_idle, rekap_pemegang,
+    rekap_proses_penggunaan, rekap_psp, status_pengajuan_psp,
+    validate_proses_penggunaan, validate_psp, validate_transisi_idle,
+    validate_transisi_pengajuan_psp, validate_transisi_proses,
 )
 
 penggunaan_router = APIRouter()
@@ -88,12 +89,20 @@ async def aset_pemegang(
 
 
 class PspIn(BaseModel):
-    nomor_sk: str = Field(min_length=1)
-    tanggal_sk: str = Field(min_length=10, max_length=10)
+    nomor_sk: str = ""             # wajib kecuali draf usulan
+    tanggal_sk: str = ""           # wajib kecuali draf usulan
     jenis: str
     penetap: str = ""              # Pengelola Barang / Pengguna Barang (delegasi)
     keterangan: str = ""
+    sebagai_draf: bool = False     # True = usulan PSP sebelum SK terbit
     asset_ids: list[str] = Field(min_length=1, max_length=200)
+
+
+class TransisiPengajuanIn(BaseModel):
+    status: str
+    nomor_sk: str = ""             # wajib saat "ditetapkan"
+    tanggal_sk: str = ""
+    catatan: str = ""              # wajib saat ditolak/dikembalikan
 
 
 @penggunaan_router.get("/penggunaan/psp")
@@ -101,11 +110,15 @@ async def daftar_psp(_user: dict = Depends(require_user)):
     """Register SK penetapan penggunaan + rekap + cakupan aset."""
     items = [s async for s in db.psp.find({}, {"_id": 0})
              .sort("tanggal_sk", -1).limit(500)]
+    for s in items:
+        # Normalisasi record lama tanpa field status (= SK sudah terbit)
+        s["status_pengajuan"] = status_pengajuan_psp(s)
     total_aset = await db.assets.count_documents({})
     ringkasan = rekap_psp(items)
     ringkasan["total_aset"] = total_aset
     return {"items": items, "ringkasan": ringkasan,
             "label_jenis": JENIS_PSP,
+            "label_status_pengajuan": STATUS_PENGAJUAN_PSP,
             "catatan": (
                 "Register penatausahaan SK penggunaan (PMK 40/2024): PSP "
                 "ditetapkan Pengelola Barang atau Pengguna Barang untuk BMN "
@@ -120,7 +133,7 @@ async def catat_psp(payload: PspIn, user: dict = Depends(require_user)):
 
     data = payload.model_dump()
     today_iso = dt.now(timezone.utc).date().isoformat()
-    errors = validate_psp(data, today_iso)
+    errors = validate_psp(data, today_iso, draf=bool(data.get("sebagai_draf")))
     if errors:
         raise HTTPException(status_code=400, detail="; ".join(errors))
     aset_rows = []
@@ -131,13 +144,17 @@ async def catat_psp(payload: PspIn, user: dict = Depends(require_user)):
         aset_rows.append({"asset_id": a["id"], "asset_code": a.get("asset_code"),
                           "NUP": a.get("NUP"), "asset_name": a.get("asset_name")})
     now = dt.now(timezone.utc).isoformat()
+    status_awal = "draf" if data.get("sebagai_draf") else "ditetapkan"
     record = {
         "id": str(uuid.uuid4()),
-        "nomor_sk": data["nomor_sk"].strip(),
-        "tanggal_sk": data["tanggal_sk"].strip()[:10],
+        "nomor_sk": str(data.get("nomor_sk") or "").strip(),
+        "tanggal_sk": str(data.get("tanggal_sk") or "").strip()[:10],
         "jenis": data["jenis"],
         "penetap": str(data.get("penetap") or "").strip(),
         "keterangan": str(data.get("keterangan") or "").strip(),
+        "status_pengajuan": status_awal,
+        "riwayat_pengajuan": [{"status": status_awal, "tanggal": now,
+                               "oleh": user.get("username"), "catatan": ""}],
         "aset": aset_rows,
         "lampiran": [],
         "created_by": user.get("username"),
@@ -146,6 +163,42 @@ async def catat_psp(payload: PspIn, user: dict = Depends(require_user)):
     }
     await db.psp.insert_one({**record})
     return record
+
+
+@penggunaan_router.post("/penggunaan/psp/{sk_id}/status")
+async def transisi_pengajuan_psp(sk_id: str, payload: TransisiPengajuanIn,
+                                 admin: dict = Depends(require_admin)):
+    """Pindahkan status pengajuan PSP (admin — SK wajib saat penetapan)."""
+    from datetime import datetime as dt
+
+    sk = await db.psp.find_one({"id": sk_id}, {"_id": 0})
+    if not sk:
+        raise HTTPException(status_code=404, detail="Usulan tidak ditemukan")
+    today_iso = dt.now(timezone.utc).date().isoformat()
+    data = payload.model_dump()
+    errors = validate_transisi_pengajuan_psp(sk, payload.status, data, today_iso)
+    if errors:
+        raise HTTPException(status_code=400, detail="; ".join(errors))
+    now = dt.now(timezone.utc).isoformat()
+    update = {"status_pengajuan": payload.status, "updated_at": now}
+    if payload.status == "ditetapkan":
+        update["nomor_sk"] = payload.nomor_sk.strip()
+        update["tanggal_sk"] = payload.tanggal_sk.strip()[:10]
+    res = await db.psp.find_one_and_update(
+        # Anti-balapan: status lama diikutkan di filter (record lama tanpa
+        # field status terminal "ditetapkan" — tak pernah sampai sini)
+        {"id": sk_id, "status_pengajuan": sk.get("status_pengajuan")},
+        {"$set": update,
+         "$push": {"riwayat_pengajuan": {
+             "status": payload.status, "tanggal": now,
+             "oleh": admin.get("username"),
+             "catatan": str(payload.catatan or "").strip()}}},
+        projection={"_id": 0}, return_document=True,
+    )
+    if not res:
+        raise HTTPException(status_code=409,
+                            detail="Status usulan berubah oleh proses lain — muat ulang")
+    return res
 
 
 @penggunaan_router.get("/penggunaan/psp/{sk_id}/bast-pdf")
@@ -171,6 +224,9 @@ async def bast_psp_pdf(sk_id: str, _user: dict = Depends(require_user)):
     sk = await db.psp.find_one({"id": sk_id}, {"_id": 0})
     if not sk:
         raise HTTPException(status_code=404, detail="SK tidak ditemukan")
+    if status_pengajuan_psp(sk) != "ditetapkan":
+        raise HTTPException(status_code=400,
+                            detail="BAST hanya untuk usulan yang sudah ditetapkan (SK terbit)")
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
     aset = sk.get("aset") or []
     jenis = JENIS_PSP.get(sk.get("jenis"), sk.get("jenis") or "-")
