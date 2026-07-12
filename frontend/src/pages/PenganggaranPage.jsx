@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Loader2, Wallet, Plus, Search, X, Coins, Download, TicketCheck,
+  ArrowLeft, CalendarClock, Loader2, Wallet, Plus, Search, X, Coins,
+  Download, TicketCheck, Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,6 +38,9 @@ export default function PenganggaranPage({ user, onBack }) {
   const [form, setForm] = useState(null);
   // Dialog transisi: {usulan, ke, fields{}, saving}
   const [trx, setTrx] = useState(null);
+  // Kalender penganggaran: data GET + dialog tahapan baru {data, saving}
+  const [kalender, setKalender] = useState(null);
+  const [formTahapan, setFormTahapan] = useState(null);
   const [cari, setCari] = useState("");
   const [hasilCari, setHasilCari] = useState([]);
   const [mencari, setMencari] = useState(false);
@@ -50,6 +54,9 @@ export default function PenganggaranPage({ user, onBack }) {
       .then((r) => setData(r.data))
       .catch(() => toast.error("Gagal memuat register penganggaran"))
       .finally(() => setLoading(false));
+    axios.get(`${API}/penganggaran/kalender`)
+      .then((r) => setKalender(r.data))
+      .catch(() => {});
   }, []);
   useEffect(() => { muat(); }, [muat]);
 
@@ -122,6 +129,36 @@ export default function PenganggaranPage({ user, onBack }) {
       muat();
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Gagal mengubah status");
+    }
+  };
+
+  const simpanTahapan = async () => {
+    if (!formTahapan) return;
+    setFormTahapan((f) => ({ ...f, saving: true }));
+    try {
+      await axios.post(`${API}/penganggaran/kalender`, formTahapan.data);
+      toast.success("Tahapan kalender dicatat");
+      setFormTahapan(null);
+      muat();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal mencatat tahapan");
+      setFormTahapan((f) => (f ? { ...f, saving: false } : f));
+    }
+  };
+
+  const hapusTahapan = async (t) => {
+    const ok = await confirm({
+      title: "Hapus tahapan kalender?",
+      description: `${t.nama} — tenggat ${t.tanggal} (TA ${t.tahun_anggaran}).`,
+      confirmLabel: "Hapus", variant: "danger",
+    });
+    if (!ok) return;
+    try {
+      await axios.delete(`${API}/penganggaran/kalender/${t.id}`);
+      toast.success("Tahapan dihapus");
+      muat();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal menghapus tahapan");
     }
   };
 
@@ -234,6 +271,66 @@ export default function PenganggaranPage({ user, onBack }) {
               </div>
             )}
 
+            {/* ── Kalender penganggaran (tenggat konfigurabel, pustaka §9.4) ── */}
+            <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="penganggaran-kalender">
+              <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
+                <CalendarClock className="w-4 h-4 text-teal-600 flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold text-foreground">Kalender Penganggaran</p>
+                  <p className="text-[10px] text-muted-foreground truncate">
+                    Tenggat internal K/L — tanggal diisi sendiri sesuai surat edaran unit
+                  </p>
+                </div>
+                {kalender?.ringkasan?.lewat > 0 && (
+                  <span className="px-1.5 py-0.5 rounded bg-red-500/15 text-red-600 dark:text-red-400 text-[10px] font-semibold flex-shrink-0">
+                    {kalender.ringkasan.lewat} lewat tenggat
+                  </span>
+                )}
+                {isAdmin && (
+                  <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
+                    onClick={() => setFormTahapan({ data: { nama: "", tanggal: "", tahun_anggaran: String(new Date().getFullYear() + 2), keterangan: "" }, saving: false })}
+                    data-testid="penganggaran-kalender-tambah">
+                    <Plus className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">Tahapan</span>
+                  </Button>
+                )}
+              </div>
+              {(kalender?.items || []).length === 0 ? (
+                <p className="text-[11px] text-muted-foreground text-center py-4 px-3">
+                  Belum ada tahapan — contoh: penyampaian RKBMN ke Biro/Sekretariat, batas revisi DIPA.
+                </p>
+              ) : (
+                <ul className="divide-y divide-border/60">
+                  {kalender.items.map((t) => {
+                    const info = t.info_tenggat || {};
+                    const warna = info.lewat
+                      ? "bg-red-500/15 text-red-600 dark:text-red-400"
+                      : (info.sisa_hari ?? 999) <= 30
+                        ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                        : "bg-muted text-foreground/70";
+                    const label = info.lewat ? "Lewat tenggat"
+                      : (info.sisa_hari ?? 999) <= 30 ? `${info.sisa_hari} hari lagi` : t.tanggal;
+                    return (
+                      <li key={t.id} className="px-3 py-2 flex items-center gap-2" data-testid={`penganggaran-tahapan-${t.id}`}>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold flex-shrink-0 ${warna}`}>{label}</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-semibold text-foreground truncate">{t.nama}</p>
+                          <p className="text-[10px] text-muted-foreground truncate">
+                            {t.tanggal} · TA {t.tahun_anggaran}{t.keterangan && ` · ${t.keterangan}`}
+                          </p>
+                        </div>
+                        {isAdmin && (
+                          <button type="button" onClick={() => hapusTahapan(t)} aria-label={`Hapus ${t.nama}`}
+                            className="h-7 w-7 min-h-0 min-w-0 rounded flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-red-500/10 flex-shrink-0">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+
             {/* ── Daftar usulan ── */}
             <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
               {data.items.length === 0 ? (
@@ -320,6 +417,56 @@ export default function PenganggaranPage({ user, onBack }) {
           </>
         )}
       </main>
+
+      {/* ── Dialog tahapan kalender baru ── */}
+      <Dialog open={!!formTahapan} onOpenChange={(o) => { if (!o) setFormTahapan(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Catat Tahapan Kalender</DialogTitle>
+            <DialogDescription className="text-xs">
+              Tanggal tenggat internal unit Anda (surat edaran K/L) — bukan dari regulasi pusat.
+            </DialogDescription>
+          </DialogHeader>
+          {formTahapan && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="kal-nama">Nama tahapan</label>
+                <Input id="kal-nama" placeholder="cth. Penyampaian RKBMN ke Biro"
+                  value={formTahapan.data.nama}
+                  onChange={(e) => setFormTahapan((f) => ({ ...f, data: { ...f.data, nama: e.target.value } }))}
+                  data-testid="kalender-nama" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="kal-tanggal">Tanggal tenggat</label>
+                <Input id="kal-tanggal" type="date" value={formTahapan.data.tanggal}
+                  onChange={(e) => setFormTahapan((f) => ({ ...f, data: { ...f.data, tanggal: e.target.value } }))}
+                  data-testid="kalender-tanggal" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="kal-ta">TA sasaran</label>
+                <Input id="kal-ta" inputMode="numeric" maxLength={4} value={formTahapan.data.tahun_anggaran}
+                  onChange={(e) => setFormTahapan((f) => ({ ...f, data: { ...f.data, tahun_anggaran: e.target.value.replace(/\D/g, "") } }))}
+                  data-testid="kalender-ta" />
+              </div>
+              <div className="col-span-2">
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="kal-ket">Keterangan (opsional)</label>
+                <Input id="kal-ket" placeholder="cth. lampirkan kertas kerja SBSK"
+                  value={formTahapan.data.keterangan}
+                  onChange={(e) => setFormTahapan((f) => ({ ...f, data: { ...f.data, keterangan: e.target.value } }))}
+                  data-testid="kalender-keterangan" />
+              </div>
+              <div className="col-span-2 flex justify-end gap-2">
+                <Button variant="outline" size="sm" onClick={() => setFormTahapan(null)}>Batal</Button>
+                <Button size="sm" className="bg-teal-600 hover:bg-teal-700 text-white"
+                  disabled={formTahapan.saving || !formTahapan.data.nama.trim() || !formTahapan.data.tanggal}
+                  onClick={simpanTahapan} data-testid="kalender-simpan">
+                  {formTahapan.saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Simpan"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* ── Dialog usulan baru ── */}
       <Dialog open={!!form} onOpenChange={(o) => { if (!o) setForm(null); }}>

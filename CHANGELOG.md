@@ -48,6 +48,17 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#165] Kalender penganggaran konfigurabel — 2026-07-12
+
+- **Kalender penganggaran** (pustaka §9.4): register tahapan ber-tenggat
+  yang dikelola admin (`GET/POST /penganggaran/kalender`, DELETE per
+  tahapan) — tanggal konfigurabel karena tenggat internal tiap K/L
+  berbeda; pengingat lewat tenggat (merah) dan ≤30 hari (kuning) di
+  `PenganggaranPage` memakai pola tenggat pelaporan #150.
+- Utils + 3 unit test baru (validasi tahapan, info tenggat, rekap);
+  indeks `penganggaran_kalender`; checklist bmnModules — item "menyusul"
+  terakhir modul Penganggaran tuntas.
+
 ## [#164] Konsolidasi dokumentasi #163 — 2026-07-12
 
 - **Dokumentasi saja**: README blok Progres Fase 4 (penganggaran:

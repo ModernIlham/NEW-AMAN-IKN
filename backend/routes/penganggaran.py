@@ -17,7 +17,8 @@ from auth_utils import require_admin, require_user
 from db import db
 from penganggaran_utils import (
     AKUN_BAS, JENIS_ANGGARAN, STATUS_ANGGARAN,
-    rekap_anggaran, sanding_per_akun, validate_transisi_anggaran,
+    info_tenggat_tahapan, rekap_anggaran, rekap_kalender, sanding_per_akun,
+    validate_tahapan_kalender, validate_transisi_anggaran,
     validate_usulan_anggaran,
 )
 
@@ -94,6 +95,63 @@ async def export_penganggaran(_user: dict = Depends(require_user)):
         ])
     return HttpResponse(content=buf.getvalue().encode("utf-8-sig"), media_type="text/csv",
                         headers={"Content-Disposition": 'attachment; filename="register_penganggaran.csv"'})
+
+
+class TahapanKalenderIn(BaseModel):
+    nama: str = Field(min_length=1)
+    tanggal: str = Field(min_length=10, max_length=10)
+    tahun_anggaran: str = Field(min_length=4, max_length=4)
+    keterangan: str = ""
+
+
+@penganggaran_router.get("/penganggaran/kalender")
+async def list_kalender_penganggaran(_user: dict = Depends(require_user)):
+    """Kalender tahapan (tenggat terdekat dulu) + pengingat sisa hari."""
+    items = [t async for t in db.penganggaran_kalender.find({}, {"_id": 0})
+             .sort("tanggal", 1).limit(200)]
+    today_iso = datetime.now(timezone.utc).date().isoformat()
+    for t in items:
+        t["info_tenggat"] = info_tenggat_tahapan(t, today_iso)
+    return {"items": items, "ringkasan": rekap_kalender(items, today_iso),
+            "catatan": (
+                "Tanggal tenggat konfigurabel — tenggat internal tiap K/L "
+                "berbeda (surat edaran masing-masing); isi berdasar kalender "
+                "penganggaran resmi unit Anda (pustaka §9.4).")}
+
+
+@penganggaran_router.post("/penganggaran/kalender")
+async def buat_tahapan_kalender(payload: TahapanKalenderIn,
+                                admin: dict = Depends(require_admin)):
+    """Daftarkan satu tahapan kalender penganggaran (admin)."""
+    data = payload.model_dump()
+    errors = validate_tahapan_kalender(data)
+    if errors:
+        raise HTTPException(status_code=400, detail="; ".join(errors))
+    now = datetime.now(timezone.utc).isoformat()
+    record = {
+        "id": str(uuid.uuid4()),
+        "nama": data["nama"].strip(),
+        "tanggal": data["tanggal"].strip()[:10],
+        "tahun_anggaran": data["tahun_anggaran"].strip(),
+        "keterangan": str(data.get("keterangan") or "").strip(),
+        "created_by": admin.get("username"),
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.penganggaran_kalender.insert_one({**record})
+    record["info_tenggat"] = info_tenggat_tahapan(
+        record, datetime.now(timezone.utc).date().isoformat())
+    return record
+
+
+@penganggaran_router.delete("/penganggaran/kalender/{tahapan_id}")
+async def hapus_tahapan_kalender(tahapan_id: str,
+                                 _admin: dict = Depends(require_admin)):
+    """Hapus satu tahapan kalender (admin)."""
+    res = await db.penganggaran_kalender.delete_one({"id": tahapan_id})
+    if not res.deleted_count:
+        raise HTTPException(status_code=404, detail="Tahapan tidak ditemukan")
+    return {"ok": True}
 
 
 @penganggaran_router.post("/penganggaran")

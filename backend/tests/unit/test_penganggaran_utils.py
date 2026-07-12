@@ -106,3 +106,34 @@ def test_sanding_per_akun():
 def test_registry_akun():
     assert set(JENIS_ANGGARAN) == {"pengadaan", "pemeliharaan"}
     assert all(k.startswith("53") or k == "523" for k in AKUN_BAS)
+
+
+class TestKalenderPenganggaran:
+    def test_validasi_tahapan(self):
+        from penganggaran_utils import validate_tahapan_kalender
+        ok = {"nama": "Penyampaian RKBMN ke Biro", "tanggal": "2026-08-15",
+              "tahun_anggaran": "2028"}
+        assert validate_tahapan_kalender(ok) == []
+        errors = validate_tahapan_kalender(
+            {"nama": " ", "tanggal": "15-08-2026", "tahun_anggaran": "28"})
+        assert len(errors) == 3
+
+    def test_info_tenggat_tahapan(self):
+        from penganggaran_utils import info_tenggat_tahapan
+        t = {"tanggal": "2026-08-15"}
+        info = info_tenggat_tahapan(t, "2026-08-05")
+        assert info == {"tanggal": "2026-08-15", "lewat": False,
+                        "sisa_hari": 10}
+        lewat = info_tenggat_tahapan(t, "2026-08-20")
+        assert lewat["lewat"] is True and lewat["sisa_hari"] == 0
+        assert info_tenggat_tahapan({"tanggal": "x"}, "2026-08-05")["tanggal"] is None
+
+    def test_rekap_kalender(self):
+        from penganggaran_utils import rekap_kalender
+        items = [{"tanggal": "2026-08-15"},   # 10 hari lagi → mendatang
+                 {"tanggal": "2026-12-01"},   # >30 hari → tidak dihitung
+                 {"tanggal": "2026-08-01"},   # lewat
+                 {"tanggal": "rusak"}]        # tanggal invalid → diabaikan
+        r = rekap_kalender(items, "2026-08-05")
+        assert r == {"jumlah": 4, "lewat": 1, "mendatang_30_hari": 1}
+        assert rekap_kalender([], "2026-08-05")["jumlah"] == 0
