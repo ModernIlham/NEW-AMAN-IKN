@@ -364,12 +364,14 @@ export const SIKLUS_MODULES = [
       + "dan Penyertaan Modal — dari usulan, persetujuan, risalah, hingga BAST keluar.",
     dasarHukum: [
       "PMK 111/PMK.06/2016 jo. PMK 165/PMK.06/2021 — Pemindahtanganan BMN",
+      "UU 1/2004 Ps. 45–46 + PP 27/2014 jo. PP 28/2020 Ps. 55–58 — ambang persetujuan",
     ],
     fitur: [
       "✅ Register usulan multi-aset berstatus: diusulkan → disetujui → dilaksanakan → selesai (SK Penghapusan)",
       "✅ Dokumen wajib per tahap (persetujuan; risalah/BAST/naskah/PP + NTPN utk penjualan; SK) + peringatan tenggat lelang 6 bulan",
       "✅ Arsip scan risalah lelang / naskah hibah / BAST / bukti setor per usulan (PDF/gambar)",
       "✅ Ekspor CSV register usulan (bentuk + status + dokumen per tahap + ringkas aset)",
+      "✅ Saran jenjang persetujuan (indikatif) dari jenis BMN + nilai wajar: Pengelola/Presiden/DPR (UU 1/2004 & PP 27/2014)",
       "Aset otomatis keluar dari daftar aktif setelah selesai",
     ],
     integrasi: ["Berbagi alur persetujuan & dokumen dengan pemusnahan/penghapusan"],

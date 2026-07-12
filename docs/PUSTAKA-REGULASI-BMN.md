@@ -422,8 +422,14 @@ dari daftar barang → **lapor ke Pengelola ≤1 bulan** sejak SK.
 (diusulkan → disetujui → dilaksanakan → selesai; tolak/batal), dokumen
 wajib per tahap mengunci transisi (persetujuan → dokumen pelaksanaan per
 bentuk + NTPN utk penjualan → SK penghapusan), peringatan tenggat lelang
-6 bulan; jalur persetujuan & ambang nilai dicatat sebagai informasi
-(tabel konfigurasi menyusul — sub-aturan bergerak).
+6 bulan. **Saran jenjang persetujuan (#201, indikatif):** dari jenis BMN
+(tanah/bangunan vs selain) + nilai wajar, AMAN menyarankan jenjang
+Pengelola/Presiden/DPR sesuai ambang UU 1/2004 Ps. 46 & PP 27/2014
+Ps. 55-56 (selain t/b: ≤Rp10 M Pengelola, >Rp10-100 M Presiden, >Rp100 M
+DPR; t/b umum → DPR; t/b terkecuali Ps. 55(2) ikut nilai; PMPP lantai
+Presiden; hibah ≤Rp100 jt catatan Pengguna Barang). **Hanya panduan —
+tidak memblok**; keputusan resmi tetap pejabat berwenang. Ambang statutori
+& delegasi internal DJKN masih perlu verifikasi teks resmi (§14 butir 25).
 
 ---
 
@@ -844,6 +850,16 @@ fisik; barang untuk pemda/masyarakat tidak segera di-BAST-kan.
     ada/tidaknya penggantian biaya fasilitas oleh mitra terpilih; isi
     Ketentuan Penutup (relasi ke PMK 139/PMK.08/2022); kepastian PMK
     115/2020 masih berlaku per Juli 2026 — semua dari cuplikan (403).
+25. Ambang persetujuan pemindahtanganan (riset Juli 2026, #201): angka
+    statutori (Rp10 M / Rp100 M; DPR/Presiden/Pengelola) konsisten lintas
+    sumber sekunder & selaras UU 1/2004 Ps. 45-46 + PP 27/2014 Ps. 55-58,
+    tetapi belum terbaca dari teks resmi (403 total). BELUM terverifikasi:
+    angka pendelegasian internal DJKN untuk pemindahtanganan (KPKNL/Kanwil/
+    Dirjen — angka yang beredar berasal dari konteks PSP); ambang delegasi
+    Pengguna Barang (PMK 4/2015); rincian pasal yang diubah PMK 165/2021;
+    mekanisme ambang pada PMPP; kutipan verbatim UU 1/2004 Ps. 45-46 &
+    PP 27/2014 Ps. 55-58. Saran jenjang AMAN (#201) bersifat indikatif —
+    JANGAN dijadikan validasi keras sampai terverifikasi.
 
 ---
 
