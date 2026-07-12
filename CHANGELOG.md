@@ -48,6 +48,20 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#73] Kodefikasi referensi barang 5 level — fondasi Fase 2 — 2026-07-12
+
+- **Referensi kodefikasi BMN** (`/api/kodefikasi`): struktur 5 level dari
+  panjang prefix kode (1/3/5/7/10 digit — Golongan/Bidang/Kelompok/Sub/
+  Sub-sub); digit pertama memisahkan domain ('1' persediaan, '2'-'8' aset).
+- Endpoint: list (cari/filter/paging), `/golongan` (seed 8 golongan standar
+  idempoten), `/lookup/{kode}` uraian berjenjang, `/template` CSV, CRUD
+  admin (hapus ditolak bila punya turunan), `/import` CSV/XLSX upsert
+  dengan laporan per baris. Index kode unik.
+- 24 unit test logika murni (anti-drift) — level SELALU diturunkan dari
+  panjang kode, tak bisa bertentangan dengan file impor.
+- Fondasi untuk Pembukuan (DBKP/KIB), Inventarisasi Persediaan, dan
+  Pengadaan pada iterasi loop fase berikutnya.
+
 ## [#70] Deploy: retry jangkauan VPS 5x + ulangi SSH sekali — 2026-07-11
 
 - `deploy.yml` kini tahan gangguan sesaat: `ssh-keyscan` dicoba **5 kali**
