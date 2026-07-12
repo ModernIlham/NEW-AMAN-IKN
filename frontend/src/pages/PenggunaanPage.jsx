@@ -574,6 +574,16 @@ export default function PenggunaanPage({ user, onBack }) {
                         data-testid={`penggunaan-psp-lampiran-${sk.id}`}>
                         <Paperclip className="w-3 h-3" />
                       </button>
+                      <button type="button" aria-label="Unduh BAST (PDF)"
+                        onClick={() => downloadFileWithProgress(
+                          `${API}/penggunaan/psp/${sk.id}/bast-pdf`,
+                          `BAST_PSP_${(sk.nomor_sk || "SK").replace(/[/\s]/g, "-")}.pdf`,
+                          { label: `BAST PSP ${sk.nomor_sk}` },
+                        ).catch(() => {})}
+                        className="h-7 w-7 rounded-lg border border-border text-foreground/70 flex items-center justify-center hover:bg-muted min-h-0 min-w-0"
+                        data-testid={`penggunaan-psp-bast-${sk.id}`}>
+                        <FileText className="w-3 h-3" />
+                      </button>
                       {isAdmin && (
                         <button type="button" aria-label="Hapus SK" onClick={() => hapusPsp(sk)}
                           className="h-7 w-7 rounded-lg border border-border text-red-500 flex items-center justify-center hover:bg-red-500/10 min-h-0 min-w-0">
