@@ -228,10 +228,17 @@ const AssetMapFullView = memo(function AssetMapFullView({
   // Init peta pada mount; rusak saat unmount.
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return undefined;
-    const map = L.map(containerRef.current, { zoomControl: true, attributionControl: true });
+    // maxZoom 22 (di atas native OSM z19) agar pin yang berdekatan bisa
+    // dipisahkan saat diperbesar; ubin OSM native mentok z19 → maxNativeZoom
+    // memberi tahu Leaflet untuk MEMPERBESAR ubin z19 pada z20–22 (agak
+    // buram tapi posisi pin makin presisi).
+    const map = L.map(containerRef.current, {
+      zoomControl: true, attributionControl: true, maxZoom: 22,
+    });
     map.setView([-1.4, 116.7], 5); // fallback: kawasan IKN
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
+      maxZoom: 22,
+      maxNativeZoom: 19,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(map);
     layerRef.current = L.layerGroup().addTo(map);
@@ -443,7 +450,9 @@ const AssetMapFullView = memo(function AssetMapFullView({
 
     if (bounds.length > 0 && !didFitRef.current) {
       didFitRef.current = true;
-      map.fitBounds(bounds, { padding: [30, 30], maxZoom: 18 });
+      // Batasi auto-fit di z19 (native OSM) agar tidak langsung buram;
+      // pengguna dapat memperbesar manual hingga z22 untuk memisahkan pin.
+      map.fitBounds(bounds, { padding: [30, 30], maxZoom: 19 });
     }
   }, [displayRows, canEdit, buildPopupEl, refreshRowVersion]);
 
