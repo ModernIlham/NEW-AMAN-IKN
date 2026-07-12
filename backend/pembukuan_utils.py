@@ -116,3 +116,29 @@ def build_dbkp_rows(assets, uraian_map=None, ambang=None):
         "nilai_total": sum(r["nilai_total"] for r in rows),
     }
     return rows, total
+
+
+def posisi_neraca(rows, total, persediaan_jumlah=0, persediaan_nilai=0.0):
+    """Gabungkan rekap aset tetap + persediaan → Posisi BMN di Neraca.
+
+    Komponen LBKP (pustaka §2.3). Persediaan adalah aset lancar (akun
+    1171xx) — selalu intrakomptabel tanpa ambang; jumlahnya dihitung per
+    JENIS barang (bukan per unit stok) agar sebanding dengan kolom NUP.
+    Posisi lengkap (KDP, ATB, penyusutan) menyusul bertahap.
+    """
+    p_jumlah = int(persediaan_jumlah or 0)
+    p_nilai = float(persediaan_nilai or 0.0)
+    grand = {
+        "jumlah_intra": total["jumlah_intra"] + p_jumlah,
+        "nilai_intra": total["nilai_intra"] + p_nilai,
+        "jumlah_ekstra": total["jumlah_ekstra"],
+        "nilai_ekstra": total["nilai_ekstra"],
+        "jumlah_total": total["jumlah_total"] + p_jumlah,
+        "nilai_total": total["nilai_total"] + p_nilai,
+    }
+    return {
+        "aset": rows,
+        "total_aset": total,
+        "persediaan": {"jumlah": p_jumlah, "nilai": p_nilai},
+        "total": grand,
+    }

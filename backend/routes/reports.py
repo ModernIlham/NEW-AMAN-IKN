@@ -9,7 +9,7 @@ import os
 import logging
 import base64
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Template directory - relative to this file's location (works on any server)
@@ -1456,6 +1456,126 @@ async def generate_dbkp_pdf(activity_id: str, _user: dict = Depends(require_user
     buffer.seek(0)
     return StreamingResponse(buffer, media_type="application/pdf",
                              headers={"Content-Disposition": f'attachment; filename="DBKP_{activity_id[:8]}.pdf"'})
+
+
+@reports_router.get("/pembukuan/posisi-bmn-pdf")
+async def generate_posisi_bmn_pdf(_user: dict = Depends(require_user_or_query_token)):
+    """Laporan Posisi BMN di Neraca — komponen LBKP (pustaka §2.3).
+
+    Rekap SELURUH aset satker (lintas kegiatan) per golongan dengan
+    pemilahan intra/ekstrakomptabel (ambang PMK 181) + baris Persediaan
+    (aset lancar, nilai FIFO per layer). Posisi lengkap (KDP, ATB,
+    penyusutan) menyusul sesuai masterplan.
+    """
+    from reportlab.platypus import Table, Paragraph, Spacer
+    from reportlab.lib.units import mm as rl_mm
+    from kodefikasi_utils import GOLONGAN_DEFAULTS
+    from pembukuan_utils import (
+        AMBANG_KAPITALISASI_DEFAULT, build_dbkp_rows, posisi_neraca,
+    )
+    from persediaan_utils import nilai_persediaan_dari_batches
+
+    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    assets = await db.assets.find(
+        {}, {"_id": 0, "asset_code": 1, "purchase_price": 1},
+    ).to_list(500000)
+
+    uraian_map = {k: u for k, u in GOLONGAN_DEFAULTS}
+    async for k in db.kodefikasi.find({"level": 1}, {"_id": 0, "kode": 1, "uraian": 1}):
+        if k.get("uraian"):
+            uraian_map[k["kode"]] = k["uraian"]
+
+    rows, total_aset = build_dbkp_rows(assets, uraian_map)
+    p_jumlah, p_nilai = 0, 0.0
+    async for it in db.persediaan.find({}, {"_id": 0, "batches": 1}):
+        p_jumlah += 1
+        p_nilai += nilai_persediaan_dari_batches(it.get("batches"))
+    posisi = posisi_neraca(rows, total_aset, p_jumlah, p_nilai)
+
+    def fmt_rp(val):
+        try: return f"{int(val):,}".replace(",", ".")
+        except (ValueError, TypeError, OverflowError): return "0"
+
+    today_iso = datetime.now(timezone.utc).date().isoformat()
+    buffer = io.BytesIO()
+    doc = _std_doc(buffer, landscape_mode=True)
+    st = _get_report_styles()
+    elements = []
+    elements.extend(_kop_surat_flowables(settings, doc.width))
+    elements.extend(_title_block("LAPORAN POSISI BARANG MILIK NEGARA DI NERACA",
+                                 subjudul=f"Posisi per {_fmt_tanggal_id(today_iso)}"))
+    elements.append(Paragraph(
+        f"Seluruh aset satker lintas kegiatan ({posisi['total_aset']['jumlah_total']} NUP aset tetap"
+        f" + {posisi['persediaan']['jumlah']} jenis persediaan) · nilai perolehan; penyusutan menyusul",
+        st['Meta']))
+    elements.append(Spacer(1, 4*rl_mm))
+
+    headers = ["Gol.", "Uraian",
+               "Jml\nIntra", "Nilai Intra\n(Rp)",
+               "Jml\nEkstra", "Nilai Ekstra\n(Rp)",
+               "Jml\nTotal", "Nilai Total\n(Rp)"]
+    table_data = [[Paragraph(h.replace("\n", "<br/>"), st['TableHeader']) for h in headers]]
+    for r in posisi["aset"]:
+        table_data.append([
+            Paragraph(r["golongan"], st['CellCenter']),
+            Paragraph(r["uraian"], st['Cell']),
+            Paragraph(str(r["jumlah_intra"]), st['CellCenter']),
+            Paragraph(fmt_rp(r["nilai_intra"]), st['CellRight']),
+            Paragraph(str(r["jumlah_ekstra"]), st['CellCenter']),
+            Paragraph(fmt_rp(r["nilai_ekstra"]), st['CellRight']),
+            Paragraph(str(r["jumlah_total"]), st['CellCenter']),
+            Paragraph(fmt_rp(r["nilai_total"]), st['CellRight']),
+        ])
+    p = posisi["persediaan"]
+    table_data.append([
+        Paragraph("1", st['CellCenter']),
+        Paragraph("Persediaan (aset lancar — nilai FIFO per layer)", st['Cell']),
+        Paragraph(str(p["jumlah"]), st['CellCenter']),
+        Paragraph(fmt_rp(p["nilai"]), st['CellRight']),
+        Paragraph("0", st['CellCenter']),
+        Paragraph("0", st['CellRight']),
+        Paragraph(str(p["jumlah"]), st['CellCenter']),
+        Paragraph(fmt_rp(p["nilai"]), st['CellRight']),
+    ])
+    g = posisi["total"]
+    table_data.append([
+        Paragraph("", st['CellCenter']),
+        Paragraph("<b>TOTAL POSISI BMN</b>", st['Cell']),
+        Paragraph(f"<b>{g['jumlah_intra']}</b>", st['CellCenter']),
+        Paragraph(f"<b>{fmt_rp(g['nilai_intra'])}</b>", st['CellRight']),
+        Paragraph(f"<b>{g['jumlah_ekstra']}</b>", st['CellCenter']),
+        Paragraph(f"<b>{fmt_rp(g['nilai_ekstra'])}</b>", st['CellRight']),
+        Paragraph(f"<b>{g['jumlah_total']}</b>", st['CellCenter']),
+        Paragraph(f"<b>{fmt_rp(g['nilai_total'])}</b>", st['CellRight']),
+    ])
+    table = Table(table_data,
+                  colWidths=_fit_col_widths([32, 180, 62, 100, 62, 100, 62, 100], doc.width),
+                  repeatRows=1)
+    table.setStyle(_std_table_style(zebra=True, total_row=True))
+    elements.append(table)
+
+    ambang_pm = fmt_rp(AMBANG_KAPITALISASI_DEFAULT.get("3", 0))
+    ambang_gb = fmt_rp(AMBANG_KAPITALISASI_DEFAULT.get("4", 0))
+    elements.append(Spacer(1, 3*rl_mm))
+    elements.append(Paragraph(
+        "Catatan: hanya barang intrakomptabel yang tersaji di neraca; pemilahan mengikuti nilai satuan "
+        f"minimum kapitalisasi PMK 181/PMK.06/2016 (Peralatan dan Mesin ≥ Rp{ambang_pm}; Gedung dan "
+        f"Bangunan ≥ Rp{ambang_gb}; golongan lain tanpa ambang). Jumlah persediaan dihitung per jenis "
+        "barang; komponen KDP, ATB, dan penyusutan menyusul bertahap.", st['Meta']))
+
+    elements.append(Spacer(1, 12*rl_mm))
+    elements.extend(_signature_block([
+        {'pre': ['.................., .......................'],
+         'header': 'Kuasa Pengguna Barang,',
+         'nama': settings.get("kasatker_nama") or "-",
+         'after': [f"NIP. {settings.get('kasatker_nip') or '-'}"]},
+    ], doc.width))
+
+    footer = _page_footer_factory("Laporan Posisi BMN di Neraca")
+    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    buffer.seek(0)
+    return StreamingResponse(buffer, media_type="application/pdf",
+                             headers={"Content-Disposition": 'attachment; filename="Posisi_BMN_Neraca.pdf"'})
 
 
 # ============================================================================
