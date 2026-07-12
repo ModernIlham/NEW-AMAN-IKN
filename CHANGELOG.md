@@ -48,6 +48,13 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#150] Tenggat pelaporan konfigurabel per periode — 2026-07-12
+
+- **Tenggat penyampaian per periode** (surat DJKN/K/L): atur/ubah/hapus
+  oleh admin saat periode terbuka (tercatat riwayat); pengingat sisa
+  hari + badge lewat tenggat di kartu Periode Pelaporan. Daftar
+  "Implikasi AMAN" Pelaporan §2.3 tuntas. Suite 218.
+
 ## [#149] Konsolidasi dokumentasi #148 — 2026-07-12
 
 - **Dokumentasi saja**: README blok Progres Fase 2 + roadmap masterplan
