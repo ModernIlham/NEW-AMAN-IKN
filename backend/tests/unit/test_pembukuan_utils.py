@@ -5,7 +5,7 @@ rekap DBKP per golongan tidak bergeser diam-diam.
 """
 from pembukuan_utils import (
     AMBANG_KAPITALISASI_DEFAULT, build_dbkp_rows, golongan_of,
-    klasifikasi_komptabel, parse_harga,
+    klasifikasi_komptabel, parse_harga, posisi_neraca,
 )
 
 
@@ -100,3 +100,26 @@ class TestBuildDbkpRows:
         rows, _ = build_dbkp_rows([{"asset_code": "3010101001", "purchase_price": "Rp1.500.000"}])
         assert rows[0]["jumlah_intra"] == 1
         assert rows[0]["nilai_intra"] == 1_500_000.0
+
+
+class TestPosisiNeraca:
+    def test_persediaan_masuk_intra_dan_grand_total(self):
+        rows, total = build_dbkp_rows([
+            {"asset_code": "3060102135", "purchase_price": 5_000_000},   # intra
+            {"asset_code": "3060102135", "purchase_price": 500_000},     # ekstra
+        ])
+        hasil = posisi_neraca(rows, total, persediaan_jumlah=3, persediaan_nilai=750_000)
+        assert hasil["persediaan"] == {"jumlah": 3, "nilai": 750_000.0}
+        assert hasil["total"]["jumlah_intra"] == 1 + 3
+        assert hasil["total"]["nilai_intra"] == 5_000_000 + 750_000
+        # Ekstra tidak terpengaruh persediaan
+        assert hasil["total"]["jumlah_ekstra"] == total["jumlah_ekstra"] == 1
+        assert hasil["total"]["nilai_total"] == 5_500_000 + 750_000
+
+    def test_tanpa_persediaan_sama_dengan_total_aset(self):
+        rows, total = build_dbkp_rows([
+            {"asset_code": "2010104001", "purchase_price": 100_000_000},
+        ])
+        hasil = posisi_neraca(rows, total)
+        assert hasil["total"] == {**total}
+        assert hasil["persediaan"] == {"jumlah": 0, "nilai": 0.0}

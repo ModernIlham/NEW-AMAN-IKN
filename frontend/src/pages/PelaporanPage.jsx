@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Search, Loader2, FileText, FileDown, ChevronDown,
-  ShieldCheck, Boxes,
+  ShieldCheck, Boxes, Scale,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -99,6 +99,22 @@ export default function PelaporanPage({ onBack }) {
       </header>
 
       <main className="max-w-5xl mx-auto px-3 sm:px-6 py-4 space-y-3">
+        {/* ── Pembukuan satker-wide: Posisi BMN di Neraca (komponen LBKP) ── */}
+        <div className="bg-card rounded-xl border border-border shadow-sm p-2.5 sm:p-3 flex items-center gap-2 flex-wrap">
+          <span className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
+            <Scale className="w-4 h-4 text-white" />
+          </span>
+          <div className="flex-1 min-w-[140px]">
+            <p className="text-xs font-semibold text-foreground">Posisi BMN di Neraca</p>
+            <p className="text-[10px] text-muted-foreground">Seluruh aset per golongan (intra/ekstra, PMK 181) + persediaan FIFO</p>
+          </div>
+          <Button variant="outline" size="sm" className="gap-1.5"
+            onClick={() => downloadFileWithProgress(`${API}/pembukuan/posisi-bmn-pdf`, "Posisi_BMN_Neraca.pdf", { label: "Laporan Posisi BMN di Neraca" }).catch(() => {})}
+            data-testid="pelaporan-posisi-bmn">
+            <FileDown className="w-3.5 h-3.5" />Unduh PDF
+          </Button>
+        </div>
+
         {/* ── Laporan persediaan (satker-wide) ── */}
         <div className="bg-card rounded-xl border border-border shadow-sm p-2.5 sm:p-3 flex items-center gap-2 flex-wrap">
           <span className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center flex-shrink-0">

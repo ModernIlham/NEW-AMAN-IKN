@@ -126,7 +126,8 @@ export const PENATAUSAHAAN_SUBMODULES = [
       + "akan menyatukannya menjadi arsip laporan lintas kegiatan & lintas periode.",
     dasarHukum: [PENATAUSAHAAN_DASAR_HUKUM],
     fitur: [
-      "LBKP semesteran/tahunan per golongan",
+      "✅ Posisi BMN di Neraca (per golongan, intra/ekstra + persediaan FIFO)",
+      "LBKP semesteran/tahunan per golongan (komponen lain menyusul)",
       "Arsip laporan lintas kegiatan dengan penomoran & riwayat",
       "Ekspor rekonsiliasi (format yang bisa disandingkan dengan SIMAK/SAKTI)",
     ],
