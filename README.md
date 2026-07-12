@@ -85,7 +85,9 @@ usulan berstatus** diusulkan → disetujui telaah → masuk DIPA →
 terealisasi, nilai per tahap + serapan (PMK 62/2023 + 153/2021)
 (#115) + **sanding rencana vs realisasi per akun BAS** (#123) +
 **ekspor CSV register** (#163) + **kalender tenggat konfigurabel dengan
-pengingat** (#165) ·
+pengingat** (#165) + **sanding realisasi per triwulan per tahun
+anggaran** (kumulatif + serapan kumulatif vs DIPA) (#186 — daftar
+"menyusul" Penganggaran tuntas) ·
 Pengadaan — **register perolehan per BAST/kontrak** dengan
 checklist dokumen sumber, tautan barang ke aset master, dan penanda
 ekstrakomptabel PMK 181 (Perpres 16/2018 jo. 46/2025) (#117) +
