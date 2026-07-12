@@ -5,9 +5,9 @@ from persediaan_fields import (
     EDITABLE_FIELD_NAMES, FIELD_NAMES, MANAGED_FIELD_NAMES, PERSEDIAAN_SCALAR_FIELDS,
 )
 from persediaan_utils import (
-    KODE_PENUH_LEN, KODE_PREFIX_LEN, SATUAN_BAKU, next_kode_penuh, next_nup,
-    nilai_persediaan_dari_batches, status_stok, stok_dari_batches,
-    validate_kode_persediaan,
+    JENIS_MASUK, KODE_PENUH_LEN, KODE_PREFIX_LEN, SATUAN_BAKU, buat_layer,
+    next_kode_penuh, next_nup, nilai_persediaan_dari_batches, status_stok,
+    stok_dari_batches, validate_kode_persediaan, validate_transaksi_masuk,
 )
 
 
@@ -93,6 +93,40 @@ class TestStatusStok:
         assert status_stok(6, 0) == "aman"     # tanpa batas kritis
         assert status_stok(6, None) == "aman"
         assert status_stok(6, "x") == "aman"   # batas kotor dianggap 0
+
+
+class TestTransaksiMasuk:
+    def test_jenis_masuk_lengkap_dengan_kode_sakti(self):
+        assert set(JENIS_MASUK) == {
+            "saldo_awal", "pembelian", "transfer_masuk", "hibah_masuk", "perolehan_lainnya",
+        }
+        for label, kode in JENIS_MASUK.values():
+            assert label and kode.startswith("M")
+
+    def test_validasi_masuk_valid(self):
+        assert validate_transaksi_masuk("pembelian", 5, 12000) == (True, "")
+        assert validate_transaksi_masuk("saldo_awal", 1, 0) == (True, "")
+
+    def test_validasi_masuk_jenis_tak_dikenal(self):
+        ok, err = validate_transaksi_masuk("penjualan", 5, 100)
+        assert not ok and "tidak dikenal" in err
+
+    def test_validasi_masuk_jumlah_dan_harga(self):
+        assert not validate_transaksi_masuk("pembelian", 0, 100)[0]
+        assert not validate_transaksi_masuk("pembelian", -3, 100)[0]
+        assert not validate_transaksi_masuk("pembelian", "x", 100)[0]
+        assert not validate_transaksi_masuk("pembelian", 1, -5)[0]
+        assert not validate_transaksi_masuk("pembelian", 1, float("nan"))[0]
+
+    def test_buat_layer_bentuk_baku(self):
+        layer = buat_layer("b1", "2026-07-12T00:00:00", 5, 12000.0, " 2027-01-01 ", " BAST-9 ")
+        assert layer == {
+            "batch_id": "b1", "tanggal": "2026-07-12T00:00:00",
+            "qty": 5, "harga": 12000.0, "expired": "2027-01-01", "ref": "BAST-9",
+        }
+        # Bentuk layer harus dibaca benar oleh penghitung stok/nilai
+        assert stok_dari_batches([layer]) == 5
+        assert nilai_persediaan_dari_batches([layer]) == 60000.0
 
 
 class TestRegistry:

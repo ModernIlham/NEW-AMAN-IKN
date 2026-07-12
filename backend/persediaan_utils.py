@@ -94,6 +94,50 @@ def nilai_persediaan_dari_batches(batches) -> float:
     return total
 
 
+# ── Transaksi persediaan (pustaka §3.2 — peta 1:1 ke jenis SAKTI) ──────
+# Kunci enum internal → (label Indonesia, kode warisan aplikasi Persediaan)
+JENIS_MASUK = {
+    "saldo_awal": ("Saldo Awal", "M01"),
+    "pembelian": ("Pembelian", "M02"),
+    "transfer_masuk": ("Transfer Masuk", "M03"),
+    "hibah_masuk": ("Hibah Masuk", "M04"),
+    "perolehan_lainnya": ("Perolehan Lainnya", "M99"),
+}
+
+
+def validate_transaksi_masuk(jenis: str, jumlah, harga_satuan):
+    """(ok, err) — jenis dikenal, jumlah bulat > 0, harga >= 0."""
+    if jenis not in JENIS_MASUK:
+        valid = ", ".join(JENIS_MASUK)
+        return False, f"Jenis transaksi masuk tidak dikenal (pilihan: {valid})"
+    try:
+        j = int(jumlah)
+    except (ValueError, TypeError):
+        return False, "Jumlah harus bilangan bulat"
+    if j <= 0:
+        return False, "Jumlah harus lebih dari 0"
+    try:
+        h = float(harga_satuan)
+    except (ValueError, TypeError):
+        return False, "Harga satuan harus angka"
+    if h != h or h in (float("inf"), float("-inf")) or h < 0:
+        return False, "Harga satuan tidak boleh negatif"
+    return True, ""
+
+
+def buat_layer(batch_id: str, tanggal_iso: str, jumlah: int, harga_satuan: float,
+               expired: str = "", ref: str = "") -> dict:
+    """Layer FIFO baru — bentuk baku yang dibaca stok/nilai_dari_batches."""
+    return {
+        "batch_id": batch_id,
+        "tanggal": tanggal_iso,
+        "qty": int(jumlah),
+        "harga": float(harga_satuan),
+        "expired": (expired or "").strip(),
+        "ref": (ref or "").strip(),
+    }
+
+
 def status_stok(stok: int, batas_kritis) -> str:
     """'habis' | 'kritis' | 'aman' — untuk peringatan & nota dinas kelak."""
     try:

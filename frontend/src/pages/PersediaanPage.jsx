@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Search, Plus, Pencil, Trash2, Loader2, Boxes,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, PackagePlus, History,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,6 +57,10 @@ export default function PersediaanPage({ user, onBack }) {
   // Dialog: {mode:"tambah", data} | {mode:"edit", id, version, data}
   const [form, setForm] = useState(null);
   const [saving, setSaving] = useState(false);
+  // Transaksi masuk: {item, data:{jenis,jumlah,...}}; riwayat: {item, rows, loading}
+  const [masuk, setMasuk] = useState(null);
+  const [riwayat, setRiwayat] = useState(null);
+  const [jenisMasuk, setJenisMasuk] = useState([]);
   const { confirm, confirmDialog } = useConfirm();
   const searchTimer = useRef(null);
 
@@ -84,6 +88,9 @@ export default function PersediaanPage({ user, onBack }) {
     axios.get(`${API}/persediaan/satuan-baku`)
       .then((r) => setSatuanList(Array.isArray(r.data) ? r.data : []))
       .catch(() => setSatuanList([]));
+    axios.get(`${API}/persediaan/jenis-transaksi`)
+      .then((r) => setJenisMasuk(r.data?.masuk || []))
+      .catch(() => setJenisMasuk([]));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onSearchChange = (v) => {
@@ -127,6 +134,39 @@ export default function PersediaanPage({ user, onBack }) {
       setSaving(false);
     }
   };
+
+  const submitMasuk = async () => {
+    if (!masuk) return;
+    const d = masuk.data;
+    const jumlah = parseInt(d.jumlah, 10);
+    if (!jumlah || jumlah <= 0) { toast.error("Jumlah harus lebih dari 0"); return; }
+    setSaving(true);
+    try {
+      const r = await axios.post(`${API}/persediaan/${masuk.item.id}/masuk`, {
+        ...d, jumlah, harga_satuan: Number(d.harga_satuan) || 0,
+      });
+      toast.success(`${r.data?.message} — stok kini ${r.data?.stok}`);
+      setMasuk(null);
+      load(page, search, status);
+    } catch (err) {
+      toast.error(getApiError(err, "Gagal mencatat transaksi masuk"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openRiwayat = async (item) => {
+    setRiwayat({ item, rows: [], loading: true });
+    try {
+      const r = await axios.get(`${API}/persediaan/${item.id}/riwayat`, { params: { page_size: 50 } });
+      setRiwayat({ item, rows: r.data?.items || [], loading: false });
+    } catch (err) {
+      toast.error(getApiError(err, "Gagal memuat riwayat"));
+      setRiwayat(null);
+    }
+  };
+
+  const fmtRp = (n) => `Rp${Number(n || 0).toLocaleString("id-ID")}`;
 
   const remove = async (item) => {
     const ok = await confirm({
@@ -260,6 +300,33 @@ export default function PersediaanPage({ user, onBack }) {
                       </td>
                       <td className="px-3 py-2 text-muted-foreground hidden sm:table-cell">{it.lokasi || "—"}</td>
                       <td className="px-3 py-2 text-right whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => setMasuk({
+                            item: it,
+                            data: {
+                              jenis: "pembelian", jumlah: "", harga_satuan: "",
+                              expired: "", no_bukti: "", jenis_dokumen: "",
+                              tgl_dokumen: "", no_kontrak: "", penyedia: "", keterangan: "",
+                            },
+                          })}
+                          aria-label={`Transaksi masuk ${it.nama_barang}`}
+                          title="Transaksi masuk (stok bertambah)"
+                          className="p-1.5 rounded-md text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 min-w-0 min-h-0"
+                          data-testid={`persediaan-masuk-${it.kode_barang}-${it.nup}`}
+                        >
+                          <PackagePlus className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openRiwayat(it)}
+                          aria-label={`Riwayat ${it.nama_barang}`}
+                          title="Riwayat transaksi"
+                          className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted min-w-0 min-h-0"
+                          data-testid={`persediaan-riwayat-${it.kode_barang}-${it.nup}`}
+                        >
+                          <History className="w-3.5 h-3.5" />
+                        </button>
                         <button
                           type="button"
                           onClick={() => setForm({
@@ -408,6 +475,128 @@ export default function PersediaanPage({ user, onBack }) {
               {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : null}Simpan
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog transaksi masuk ── */}
+      <Dialog open={!!masuk} onOpenChange={(o) => { if (!o) setMasuk(null); }}>
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Transaksi Masuk — {masuk?.item?.nama_barang}</DialogTitle>
+            <DialogDescription className="text-xs">
+              Membuat layer FIFO baru (harga melekat di layer) dan menambah stok.
+              Kode {masuk?.item?.kode_barang} · NUP {masuk?.item?.nup} · stok saat ini {masuk?.item?.stok}.
+            </DialogDescription>
+          </DialogHeader>
+          {masuk && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-in-jenis">Jenis</label>
+                <select
+                  id="psd-in-jenis"
+                  value={masuk.data.jenis}
+                  onChange={(e) => setMasuk((m) => ({ ...m, data: { ...m.data, jenis: e.target.value } }))}
+                  className="w-full h-9 px-2 rounded-lg border border-border bg-background text-sm text-foreground"
+                  data-testid="persediaan-masuk-jenis"
+                >
+                  {(jenisMasuk.length ? jenisMasuk : [{ key: "pembelian", label: "Pembelian", kode: "M02" }]).map((j) => (
+                    <option key={j.key} value={j.key}>{j.label} ({j.kode})</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-in-jumlah">Jumlah</label>
+                <Input id="psd-in-jumlah" type="number" min="1" placeholder="0"
+                  value={masuk.data.jumlah}
+                  onChange={(e) => setMasuk((m) => ({ ...m, data: { ...m.data, jumlah: e.target.value } }))}
+                  data-testid="persediaan-masuk-jumlah" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-in-harga">Harga Satuan (Rp)</label>
+                <Input id="psd-in-harga" type="number" min="0" placeholder="0"
+                  value={masuk.data.harga_satuan}
+                  onChange={(e) => setMasuk((m) => ({ ...m, data: { ...m.data, harga_satuan: e.target.value } }))}
+                  data-testid="persediaan-masuk-harga" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-in-expired">Kedaluwarsa Batch</label>
+                <Input id="psd-in-expired" type="date"
+                  value={masuk.data.expired}
+                  onChange={(e) => setMasuk((m) => ({ ...m, data: { ...m.data, expired: e.target.value } }))} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-in-bukti">No. Bukti/BAST</label>
+                <Input id="psd-in-bukti" placeholder="cth. BAST-12/2026"
+                  value={masuk.data.no_bukti}
+                  onChange={(e) => setMasuk((m) => ({ ...m, data: { ...m.data, no_bukti: e.target.value } }))} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-in-jdok">Jenis Dokumen</label>
+                <Input id="psd-in-jdok" placeholder="BAST / Kuitansi / Kontrak"
+                  value={masuk.data.jenis_dokumen}
+                  onChange={(e) => setMasuk((m) => ({ ...m, data: { ...m.data, jenis_dokumen: e.target.value } }))} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-in-penyedia">Penyedia</label>
+                <Input id="psd-in-penyedia"
+                  value={masuk.data.penyedia}
+                  onChange={(e) => setMasuk((m) => ({ ...m, data: { ...m.data, penyedia: e.target.value } }))} />
+              </div>
+              <div className="col-span-2">
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-in-ket">Keterangan</label>
+                <Input id="psd-in-ket"
+                  value={masuk.data.keterangan}
+                  onChange={(e) => setMasuk((m) => ({ ...m, data: { ...m.data, keterangan: e.target.value } }))} />
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setMasuk(null)}>Batal</Button>
+            <Button onClick={submitMasuk} disabled={saving} className="bg-emerald-600 hover:bg-emerald-700" data-testid="persediaan-masuk-simpan">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <PackagePlus className="w-4 h-4 mr-1.5" />}Catat Masuk
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog riwayat transaksi ── */}
+      <Dialog open={!!riwayat} onOpenChange={(o) => { if (!o) setRiwayat(null); }}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Riwayat — {riwayat?.item?.nama_barang}</DialogTitle>
+            <DialogDescription className="text-xs">
+              Jurnal transaksi (terbaru dulu) · kode {riwayat?.item?.kode_barang} · NUP {riwayat?.item?.nup}
+            </DialogDescription>
+          </DialogHeader>
+          {riwayat?.loading ? (
+            <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-emerald-600" /></div>
+          ) : (riwayat?.rows?.length || 0) === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">Belum ada transaksi — catat transaksi masuk untuk mengisi stok.</p>
+          ) : (
+            <div className="space-y-2">
+              {riwayat.rows.map((t) => (
+                <div key={t.id} className="rounded-lg border border-border p-2.5 text-xs" data-testid={`riwayat-item-${t.id}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={`px-2 py-0.5 rounded-full font-semibold ${t.arah === "masuk" ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" : "bg-red-500/15 text-red-600 dark:text-red-400"}`}>
+                      {t.jenis_label} ({t.kode_sakti})
+                    </span>
+                    <span className="text-muted-foreground">{(t.timestamp || "").slice(0, 16).replace("T", " ")}</span>
+                  </div>
+                  <p className="mt-1.5 text-foreground">
+                    {t.arah === "masuk" ? "+" : "−"}{t.jumlah} × {fmtRp(t.harga_satuan)} = <b>{fmtRp(t.total)}</b>
+                    <span className="text-muted-foreground"> · stok {t.stok_sebelum} → {t.stok_sesudah}</span>
+                  </p>
+                  {(t.no_bukti || t.penyedia || t.keterangan) && (
+                    <p className="mt-1 text-muted-foreground">
+                      {[t.no_bukti && `Bukti: ${t.no_bukti}`, t.penyedia && `Penyedia: ${t.penyedia}`, t.keterangan]
+                        .filter(Boolean).join(" · ")}
+                    </p>
+                  )}
+                  <p className="mt-0.5 text-muted-foreground">Petugas: {t.petugas}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
