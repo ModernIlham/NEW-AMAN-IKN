@@ -98,7 +98,10 @@ Kartu Barang (#97), transaksi massal persediaan (#98).
 **Progres Fase 5–6 (Juli 2026):** Penilaian — **penyusutan garis lurus
 semesteran** (PMK 65/2017; masa manfaat KMK 295/2019 jo. 266/2023) dengan
 halaman posisi per golongan + daftar telaah (#102–#103) + referensi masa
-manfaat dapat dikelola (#107) · Pemanfaatan — **register perjanjian 6
+manfaat dapat dikelola (#107) + **register koreksi nilai** (revaluasi
+LHIP/koreksi inventarisasi/temuan/pencatatan, dampak masa manfaat, status
+pencatatan SAKTI; Perpres 75/2017, PMK 118/2017 jo. perubahannya, PMK 99/2024)
+(#184) · Pemanfaatan — **register perjanjian 6
 bentuk** dengan penjaga dokumen persetujuan/NTPN + jatuh tempo ≤60 hari
 (PMK 115/2020) (#108) + **kontribusi tahunan ber-NTPN dengan pengingat
 tunggakan** (#121) + **arsip scan dokumen per perjanjian** (#131) +
