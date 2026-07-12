@@ -48,6 +48,16 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#89] Pemeliharaan tahap awal: riwayat + biaya per aset (bahan DHPB) — 2026-07-12
+
+- **Modul Pemeliharaan** (PP 27/2014 Ps. 46-47, riset regulasi → pustaka
+  §4): catat kejadian per aset (jenis ringan/sedang/berat DJKN, biaya,
+  pelaksana, bukti), kondisi sebelum/sesudah (opsional memperbarui kondisi
+  aset), rekap per tahun anggaran/jenis + aset terboros, filter, dan
+  **penanda telaah kapitalisasi** bila biaya ≥ ambang PMK 181/2016.
+- Kartu Pemeliharaan naik Sebagian Aktif. 18 unit test (suite 128 lulus);
+  koleksi baru `pemeliharaan` + indeks.
+
 ## [#88] Pengamanan tahap awal: dasbor tertib administrasi + sengketa — 2026-07-12
 
 - **Dasbor kesehatan data aset**: 6 kartu (Data Lengkap + tanpa foto/
