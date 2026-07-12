@@ -105,7 +105,7 @@ export const PENATAUSAHAAN_SUBMODULES = [
       "✅ Transaksi masuk/keluar FIFO per layer + jurnal (jenis memetakan kode SAKTI M0x/K0x)",
       "✅ Peringatan habis/kritis/kedaluwarsa + Nota Dinas PDF otomatis",
       "✅ Laporan Posisi (per kelompok kodefikasi) & Mutasi periode (dari jurnal)",
-      "✅ Stock opname: selisih → penyesuaian otomatis + kertas kerja & BAOF PDF",
+      "✅ Stock opname: selisih → penyesuaian otomatis + kertas kerja & BAOF PDF + pengingat semesteran",
       "✅ Impor/ekspor master + Kartu Barang PDF (riwayat + saldo berjalan)",
       "✅ Transaksi massal per dokumen (satu bukti, banyak barang)",
       "Menyusul: gudang (distribusi/transfer antar lokasi)",

@@ -380,6 +380,36 @@ def klasifikasi_kedaluwarsa(batches, today_iso: str, horizon_hari: int = 30):
     return lewat, segera
 
 
+def status_opname_semester(tanggal_opname_terakhir, today_iso: str) -> dict:
+    """Status opname fisik pada semester berjalan (pustaka §3.3).
+
+    Opname wajib tiap semester; `tanggal_opname_terakhir` = tanggal
+    transaksi opname terbaru (ISO, boleh None). Hasil: {sudah, label,
+    terakhir, pesan} — pesan kosong bila semester ini sudah diopname.
+    """
+    from datetime import date
+
+    try:
+        today = date.fromisoformat((today_iso or "")[:10])
+    except ValueError:
+        return {"sudah": False, "label": "", "terakhir": "", "pesan": ""}
+    sem = 1 if today.month <= 6 else 2
+    label = f"Semester {'I' if sem == 1 else 'II'} {today.year}"
+    awal = date(today.year, 1 if sem == 1 else 7, 1)
+    terakhir = str(tanggal_opname_terakhir or "").strip()[:10]
+    try:
+        sudah = bool(terakhir) and date.fromisoformat(terakhir) >= awal
+    except ValueError:
+        sudah = False
+    pesan = "" if sudah else (
+        f"Belum ada opname fisik pada {label}"
+        + (f" — opname terakhir {terakhir}" if terakhir else
+           " — belum pernah ada opname tercatat")
+        + ". Jadwalkan opname semesteran (PSAP 05 / praktik SAKTI).")
+    return {"sudah": sudah, "label": label, "terakhir": terakhir,
+            "pesan": pesan}
+
+
 def status_stok(stok: int, batas_kritis) -> str:
     """'habis' | 'kritis' | 'aman' — untuk peringatan & nota dinas kelak."""
     try:

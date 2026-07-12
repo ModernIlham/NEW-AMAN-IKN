@@ -424,6 +424,21 @@ async def opname_baof_pdf(
                              headers={"Content-Disposition": f'attachment; filename="BAOF_{tanggal}.pdf"'})
 
 
+@persediaan_router.get("/persediaan/opname/status")
+async def opname_status(_user: dict = Depends(require_user)):
+    """Status opname semester berjalan — pengingat opname semesteran."""
+    from datetime import datetime, timezone
+
+    from persediaan_utils import status_opname_semester
+
+    today_iso = datetime.now(timezone.utc).date().isoformat()
+    terakhir = await db.transaksi_persediaan.find_one(
+        {"jenis": "opname"}, {"_id": 0, "timestamp": 1},
+        sort=[("timestamp", -1)])
+    tanggal = str((terakhir or {}).get("timestamp") or "")[:10]
+    return status_opname_semester(tanggal, today_iso)
+
+
 @persediaan_router.get("/persediaan/laporan/posisi-pdf")
 async def laporan_posisi_pdf(_user: dict = Depends(require_user)):
     """Laporan Posisi Persediaan (hari ini) — per KELOMPOK kodefikasi.

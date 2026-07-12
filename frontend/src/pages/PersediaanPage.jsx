@@ -70,6 +70,8 @@ export default function PersediaanPage({ user, onBack }) {
   const [jenisMasuk, setJenisMasuk] = useState([]);
   const [jenisKeluar, setJenisKeluar] = useState([]);
   const [peringatan, setPeringatan] = useState(null);
+  // Status opname semester berjalan: {sudah, label, terakhir, pesan}
+  const [opnameStatus, setOpnameStatus] = useState(null);
   // Dialog laporan mutasi: {dari, sampai} default bulan berjalan
   const [mutasi, setMutasi] = useState(null);
   // Dialog opname: {item, stok_fisik, alasan}; BAOF: {tanggal}
@@ -114,6 +116,9 @@ export default function PersediaanPage({ user, onBack }) {
     axios.get(`${API}/persediaan/peringatan`)
       .then((r) => setPeringatan(r.data))
       .catch(() => setPeringatan(null));
+    axios.get(`${API}/persediaan/opname/status`)
+      .then((r) => setOpnameStatus(r.data))
+      .catch(() => setOpnameStatus(null));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onSearchChange = (v) => {
@@ -378,6 +383,14 @@ export default function PersediaanPage({ user, onBack }) {
       </header>
 
       <main className="max-w-5xl mx-auto px-3 sm:px-6 py-4 space-y-3">
+        {/* ── Banner pengingat opname semesteran ── */}
+        {opnameStatus && !opnameStatus.sudah && opnameStatus.pesan && (
+          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-xl p-2.5 sm:p-3 flex items-center gap-2" data-testid="persediaan-opname-banner">
+            <ClipboardCheck className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+            <p className="text-xs text-amber-800 dark:text-amber-200 flex-1 min-w-0">{opnameStatus.pesan}</p>
+          </div>
+        )}
+
         {/* ── Banner peringatan (kritis/habis/kedaluwarsa) + nota dinas ── */}
         {peringatan && peringatan.total_masalah > 0 && (
           <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-xl p-2.5 sm:p-3 flex items-center gap-2 flex-wrap" data-testid="persediaan-peringatan">

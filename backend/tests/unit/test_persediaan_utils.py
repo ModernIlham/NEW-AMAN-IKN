@@ -369,3 +369,24 @@ class TestRegistry:
     def test_satuan_baku_terisi_unik(self):
         assert len(SATUAN_BAKU) >= 10
         assert len(SATUAN_BAKU) == len(set(SATUAN_BAKU))
+
+
+class TestStatusOpnameSemester:
+    def test_belum_pernah_opname(self):
+        from persediaan_utils import status_opname_semester
+        s = status_opname_semester(None, "2026-07-12")
+        assert not s["sudah"] and s["label"] == "Semester II 2026"
+        assert "belum pernah" in s["pesan"]
+
+    def test_opname_semester_lalu_tetap_diingatkan(self):
+        from persediaan_utils import status_opname_semester
+        s = status_opname_semester("2026-06-30", "2026-07-12")
+        assert not s["sudah"] and "2026-06-30" in s["pesan"]
+
+    def test_opname_semester_ini_tertib(self):
+        from persediaan_utils import status_opname_semester
+        s = status_opname_semester("2026-07-01", "2026-07-12")
+        assert s["sudah"] and s["pesan"] == ""
+        # Semester I: batas awal 1 Januari
+        s = status_opname_semester("2026-01-01", "2026-03-15")
+        assert s["sudah"] and s["label"] == "Semester I 2026"
