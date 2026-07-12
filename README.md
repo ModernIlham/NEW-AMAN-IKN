@@ -56,7 +56,8 @@ riwayat biaya Pemeliharaan) (#99) + **kertas kerja XLSX** siap diisi
 satker untuk dibawa ke SIMAN (#100) · Penganggaran — **register
 usulan berstatus** diusulkan → disetujui telaah → masuk DIPA →
 terealisasi, nilai per tahap + serapan (PMK 62/2023 + 153/2021)
-(#115) · Pengadaan — **register perolehan per BAST/kontrak** dengan
+(#115) + **sanding rencana vs realisasi per akun BAS** (#123) ·
+Pengadaan — **register perolehan per BAST/kontrak** dengan
 checklist dokumen sumber, tautan barang ke aset master, dan penanda
 ekstrakomptabel PMK 181 (Perpres 16/2018 jo. 46/2025) (#117).
 Pelaporan Fase 2 juga tuntas inti:
@@ -68,14 +69,17 @@ semesteran** (PMK 65/2017; masa manfaat KMK 295/2019 jo. 266/2023) dengan
 halaman posisi per golongan + daftar telaah (#102–#103) + referensi masa
 manfaat dapat dikelola (#107) · Pemanfaatan — **register perjanjian 6
 bentuk** dengan penjaga dokumen persetujuan/NTPN + jatuh tempo ≤60 hari
-(PMK 115/2020) (#108) · Penghapusan — **kandidat usul hapus** per jalur
+(PMK 115/2020) (#108) + **kontribusi tahunan ber-NTPN dengan pengingat
+tunggakan** (#121) · Penghapusan — **kandidat usul hapus** per jalur
 PMK 83/2016 (#104) + **tiket usulan berstatus** usul → proses → SK (#106)
-· Pemusnahan — **register BA multi-aset** (#110) · Pemindahtanganan —
-**register usulan 4 bentuk** dengan dokumen wajib per tahap + tenggat
-lelang 6 bulan (PMK 111/2016 jo. 165/2021) (#111) · Wasdal — **dasbor
-pemantauan 5 objek** PMK 207/2021, temuan otomatis dari register yang
-ada (#113).
-**Seluruh 13 kartu modul siklus kini bisa dimasuki dari Beranda Modul.**
+· Pemusnahan — **register BA multi-aset** (#110) + **PDF Berita Acara
+siap tanda tangan** (#119) + **usulan penghapusan otomatis per aset BA**
+(#120) · Pemindahtanganan — **register usulan 4 bentuk** dengan dokumen
+wajib per tahap + tenggat lelang 6 bulan (PMK 111/2016 jo. 165/2021)
+(#111) · Wasdal — **dasbor pemantauan 5 objek** PMK 207/2021, temuan
+otomatis dari register yang ada (#113) + **Laporan Hasil Pemantauan PDF
+pra-isi** untuk SIMAN v2 (#122).
+**Seluruh kartu modul siklus kini bisa dimasuki dari Beranda Modul.**
 
 ---
 
