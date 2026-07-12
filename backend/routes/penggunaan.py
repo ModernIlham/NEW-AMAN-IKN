@@ -15,8 +15,8 @@ from pydantic import BaseModel, Field
 from auth_utils import require_admin, require_user
 from db import db
 from penggunaan_utils import (
-    STATUS_IDLE, indikasi_idle, kunci_pemegang, rekap_idle, rekap_pemegang,
-    validate_transisi_idle,
+    JENIS_PSP, STATUS_IDLE, indikasi_idle, kunci_pemegang, rekap_idle,
+    rekap_pemegang, rekap_psp, validate_psp, validate_transisi_idle,
 )
 
 penggunaan_router = APIRouter()
@@ -78,6 +78,75 @@ async def aset_pemegang(
             })
     out.sort(key=lambda x: (x["asset_name"] or "", x["asset_code"] or ""))
     return {"items": out, "total": len(out)}
+
+
+class PspIn(BaseModel):
+    nomor_sk: str = Field(min_length=1)
+    tanggal_sk: str = Field(min_length=10, max_length=10)
+    jenis: str
+    penetap: str = ""              # Pengelola Barang / Pengguna Barang (delegasi)
+    keterangan: str = ""
+    asset_ids: list[str] = Field(min_length=1, max_length=200)
+
+
+@penggunaan_router.get("/penggunaan/psp")
+async def daftar_psp(_user: dict = Depends(require_user)):
+    """Register SK penetapan penggunaan + rekap + cakupan aset."""
+    items = [s async for s in db.psp.find({}, {"_id": 0})
+             .sort("tanggal_sk", -1).limit(500)]
+    total_aset = await db.assets.count_documents({})
+    ringkasan = rekap_psp(items)
+    ringkasan["total_aset"] = total_aset
+    return {"items": items, "ringkasan": ringkasan,
+            "label_jenis": JENIS_PSP,
+            "catatan": (
+                "Register penatausahaan SK penggunaan (PMK 40/2024): PSP "
+                "ditetapkan Pengelola Barang atau Pengguna Barang untuk BMN "
+                "tertentu (delegasi). AMAN mencatat cakupan SK per aset — "
+                "dokumen resmi tetap SK yang diterbitkan pejabat berwenang.")}
+
+
+@penggunaan_router.post("/penggunaan/psp")
+async def catat_psp(payload: PspIn, user: dict = Depends(require_user)):
+    """Catat satu SK penetapan penggunaan multi-aset (snapshot identitas)."""
+    from datetime import datetime as dt
+
+    data = payload.model_dump()
+    today_iso = dt.now(timezone.utc).date().isoformat()
+    errors = validate_psp(data, today_iso)
+    if errors:
+        raise HTTPException(status_code=400, detail="; ".join(errors))
+    aset_rows = []
+    for aid in dict.fromkeys(data["asset_ids"]):
+        a = await db.assets.find_one({"id": aid}, _PROJ_IDLE)
+        if not a:
+            raise HTTPException(status_code=404, detail=f"Aset {aid} tidak ditemukan")
+        aset_rows.append({"asset_id": a["id"], "asset_code": a.get("asset_code"),
+                          "NUP": a.get("NUP"), "asset_name": a.get("asset_name")})
+    now = dt.now(timezone.utc).isoformat()
+    record = {
+        "id": str(uuid.uuid4()),
+        "nomor_sk": data["nomor_sk"].strip(),
+        "tanggal_sk": data["tanggal_sk"].strip()[:10],
+        "jenis": data["jenis"],
+        "penetap": str(data.get("penetap") or "").strip(),
+        "keterangan": str(data.get("keterangan") or "").strip(),
+        "aset": aset_rows,
+        "created_by": user.get("username"),
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.psp.insert_one({**record})
+    return record
+
+
+@penggunaan_router.delete("/penggunaan/psp/{sk_id}")
+async def hapus_psp(sk_id: str, _admin: dict = Depends(require_admin)):
+    """Hapus catatan SK salah input (khusus admin)."""
+    res = await db.psp.delete_one({"id": sk_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="SK tidak ditemukan")
+    return {"ok": True, "id": sk_id}
 
 
 class TiketIdleIn(BaseModel):

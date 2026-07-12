@@ -144,6 +144,9 @@ async def create_indexes() -> None:
         # Tiket BMN idle: cek duplikat aktif per aset + jalur id
         await db.bmn_idle.create_index([("asset_id", 1), ("status", 1)])
         await db.bmn_idle.create_index("id", unique=True)
+        # Register SK penetapan penggunaan: urut tanggal + jalur id
+        await db.psp.create_index("tanggal_sk")
+        await db.psp.create_index("id", unique=True)
         logger.info("Database indexes created successfully")
     except Exception as e:
         logger.error(f"Error creating indexes: {e}")
