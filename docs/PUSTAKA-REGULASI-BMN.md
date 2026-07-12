@@ -370,6 +370,8 @@ bentuk + NTPN utk penjualan → SK penghapusan), peringatan tenggat lelang
 | Perencanaan (F4, ✅ tahap awal) | ✅ Saringan kelayakan RKBMN pemeliharaan (#99: Baik/RR layak; RB → jalur hapus; idle → PMK 120/2024) + kertas kerja XLSX (#100); menyusul: usulan per unit + persetujuan, sanding SBSK PMK 138/2024 |
 | Pemanfaatan (F5, ✅ tahap awal) | ✅ Register perjanjian 6 bentuk + penjaga dokumen & jatuh tempo (#108, §6); menyusul: pengingat kontribusi tahunan, lampiran wasdal, arsip scan |
 | Penilaian (F5, ✅ tahap awal) | ✅ Penyusutan garis lurus semesteran + daftar telaah (#102-#103, §5); menyusul: referensi masa manfaat dapat dikelola (seed lampiran KMK), revaluasi |
+| Pemindahtanganan (F6, ✅ tahap awal) | ✅ Register usulan 4 bentuk + dokumen wajib per tahap + tenggat lelang (#111, §7); menyusul: tabel konfigurasi jalur persetujuan/ambang nilai, arsip scan |
+| Pemusnahan (F6, ✅ tahap awal) | ✅ Register BA multi-aset, persetujuan wajib, objek RB (#110); menyusul: foto bukti + PDF BA + tautan usulan penghapusan |
 | Penghapusan (F6, ✅ tahap awal) | ✅ Kandidat per jalur (#104): "Tidak Ditemukan" → penelusuran+TGR; RB → pemusnahan/pemindahtanganan; menyusul: tiket usulan berstatus + arsip SK |
 
 ---
