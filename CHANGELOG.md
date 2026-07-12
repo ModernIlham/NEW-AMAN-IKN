@@ -48,6 +48,15 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#113] Wasdal tahap awal: dasbor pemantauan 5 objek — 2026-07-12
+
+- **Dasbor pemantauan Wasdal KPB** (bab pustaka §8, PMK 207/2021): mesin
+  aturan membaca register yang ada → 12 jenis temuan per 5 objek
+  pemantauan (BAST kosong, perjanjian berakhir/dokumen kurang, usulan
+  hapus berlarut, kandidat belum diusulkan, tenggat lelang, data belum
+  lengkap, sengketa, rusak tanpa pemeliharaan). Kartu naik Sebagian;
+  8 unit test (suite 179). Penertiban & laporan formulir PMK menyusul.
+
 ## [#112] Konsolidasi dokumentasi Fase 6 — 2026-07-12
 
 - **Dokumentasi saja**: masterplan (baris Peta Siklus Pemindahtanganan &

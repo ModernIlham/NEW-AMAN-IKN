@@ -56,7 +56,7 @@ function StatusBadge({ status }) {
  * tahap siklus lain sudah punya kamarnya masing-masing dengan status Segera
  * Hadir — klik kartunya menampilkan konsep, rencana fitur, dan fase roadmap.
  */
-export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onShowInfo, onEnterInventarisasi, onOpenKodefikasi, onOpenPersediaan, onOpenPelaporan, onOpenPenggunaan, onOpenPengamanan, onOpenPemeliharaan, onOpenPerencanaan, onOpenPenilaian, onOpenPenghapusan, onOpenPemanfaatan, onOpenPemusnahan, onOpenPemindahtanganan }) {
+export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onShowInfo, onEnterInventarisasi, onOpenKodefikasi, onOpenPersediaan, onOpenPelaporan, onOpenPenggunaan, onOpenPengamanan, onOpenPemeliharaan, onOpenPerencanaan, onOpenPenilaian, onOpenPenghapusan, onOpenPemanfaatan, onOpenPemusnahan, onOpenPemindahtanganan, onOpenWasdal }) {
   const [detail, setDetail] = useState(null); // modul yang dibuka konsepnya
   const activateInfo = useTripleClick(onShowInfo);
   const DetailIcon = detail ? (MODULE_ICONS[detail.id] || Package) : null;
@@ -79,6 +79,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
     else if (mod.id === "pemanfaatan" && onOpenPemanfaatan) onOpenPemanfaatan();
     else if (mod.id === "pemusnahan" && onOpenPemusnahan) onOpenPemusnahan();
     else if (mod.id === "pemindahtanganan" && onOpenPemindahtanganan) onOpenPemindahtanganan();
+    else if (mod.id === "wasdal" && onOpenWasdal) onOpenWasdal();
     else setDetail(mod);
   };
 
@@ -225,7 +226,8 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
                 || (mod.id === "penghapusan" && !!onOpenPenghapusan)
                 || (mod.id === "pemanfaatan" && !!onOpenPemanfaatan)
                 || (mod.id === "pemusnahan" && !!onOpenPemusnahan)
-                || (mod.id === "pemindahtanganan" && !!onOpenPemindahtanganan);
+                || (mod.id === "pemindahtanganan" && !!onOpenPemindahtanganan)
+                || (mod.id === "wasdal" && !!onOpenWasdal);
               return (
                 <button
                   key={mod.id}

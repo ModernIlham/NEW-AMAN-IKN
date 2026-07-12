@@ -377,22 +377,24 @@ export const SIKLUS_MODULES = [
     id: "wasdal",
     nama: "Pembinaan, Pengawasan & Pengendalian",
     urutan: 12,
-    status: "segera",
+    status: "sebagian",
     fase: 6,
-    ringkas: "Pemantauan, investigasi, portofolio aset, analisis SBSK, penertiban.",
+    ringkas: "Dasbor pemantauan 5 objek wasdal KPB; penertiban & laporan menyusul.",
     deskripsi:
-      "Wasdal melingkupi seluruh siklus (PMK 207/PMK.06/2021) dengan lima kegiatan sesuai "
-      + "diagram resmi: Pemantauan, Investigasi, Portofolio Aset, Analisis SBSK, dan "
-      + "Penertiban — ditopang audit trail lintas modul yang sudah berjalan.",
+      "Wasdal melingkupi seluruh siklus (PMK 207/PMK.06/2021). Tahap awal: dasbor "
+      + "pemantauan tingkat KPB — mesin aturan membaca register yang sudah ada dan "
+      + "mengelompokkan temuan per lima objek pemantauan (penggunaan, pemanfaatan, "
+      + "pemindahtanganan & penghapusan, penatausahaan, pengamanan & pemeliharaan) "
+      + "sebagai bahan pra-isi laporan wasdal; kanal resmi tetap Modul Wasdal SIMAN v2.",
     dasarHukum: ["PMK 207/PMK.06/2021 — Wasdal BMN"],
     fitur: [
-      "Pemantauan ketertiban per satker/kegiatan (kelengkapan data, foto, dokumen)",
-      "Register investigasi & temuan audit + status tindak lanjut (penertiban)",
-      "Portofolio aset: komposisi, nilai, dan pemanfaatan lintas satker",
-      "Analisis SBSK: sanding kepemilikan vs standar kebutuhan",
-      "Penelusuran audit trail lintas modul (fondasinya sudah berjalan)",
+      "✅ Dasbor pemantauan per 5 objek wasdal (temuan otomatis dari register)",
+      "✅ Aturan: BAST kosong, perjanjian berakhir/dokumen kurang, usulan berlarut, kandidat belum diusulkan, data belum lengkap, sengketa, rusak tanpa pemeliharaan",
+      "Register penertiban ber-timer 15 hari kerja (menyusul)",
+      "BA pemantauan insidentil + generator laporan formulir PMK 207 (menyusul)",
+      "Portofolio aset & analisis SBSK (menyusul)",
     ],
-    integrasi: ["Audit trail per field yang sudah ada menjadi sumber penelusuran"],
+    integrasi: ["Membaca register pemanfaatan, penghapusan, pemindahtanganan, pemeliharaan, dan data aset tanpa input ganda"],
   },
 ];
 

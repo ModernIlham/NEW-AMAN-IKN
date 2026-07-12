@@ -1,6 +1,6 @@
 """Logika murni PEMUSNAHAN (Fase 6 tahap awal: register BA Pemusnahan).
 
-PMK 83/PMK.06/2016 (pustaka §1 & §8): pemusnahan dilakukan setelah
+PMK 83/PMK.06/2016 (pustaka §1 & §10): pemusnahan dilakukan setelah
 persetujuan Pengelola/Pengguna Barang atas BMN yang tidak dapat
 digunakan/dimanfaatkan/dipindahtangankan (lazimnya rusak berat), dengan
 cara dibakar/dihancurkan/ditimbun/ditenggelamkan/cara lain, dituangkan
