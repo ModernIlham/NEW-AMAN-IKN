@@ -48,6 +48,12 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#198] Konsolidasi dokumentasi #197 — 2026-07-12
+
+- **Dokumentasi saja**: README Progres Fase 5–6 + masterplan + pustaka
+  §13 baris Penghapusan (✅ Jejak Aset Terhapus #197 — butir "menyusul"
+  arsip aset terhapus tuntas).
+
 ## [#197] Jejak Aset Terhapus (arsip read-only) — 2026-07-12
 
 - **Aset yang dihapus permanen kini tetap tertelusur**: endpoint
