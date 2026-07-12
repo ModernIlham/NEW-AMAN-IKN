@@ -48,6 +48,13 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#118] Konsolidasi dokumentasi Pengadaan — 2026-07-12
+
+- **Dokumentasi saja**: masterplan (baris Peta Siklus Pengadaan →
+  Sebagian, roadmap Fase 4 + #117), README (intro **SEMUA 14 modul
+  siklus Sebagian Aktif** — tersisa sub-modul Pembukuan/KIB — + blok
+  Progres Fase 4), dan pustaka §12 (baris implikasi Pengadaan).
+
 ## [#117] Pengadaan tahap awal: register perolehan per dokumen — 2026-07-12
 
 - **Register perolehan** (bab pustaka §10, Perpres 16/2018 jo. 46/2025):
