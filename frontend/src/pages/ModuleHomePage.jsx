@@ -56,7 +56,7 @@ function StatusBadge({ status }) {
  * tahap siklus lain sudah punya kamarnya masing-masing dengan status Segera
  * Hadir — klik kartunya menampilkan konsep, rencana fitur, dan fase roadmap.
  */
-export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onShowInfo, onEnterInventarisasi, onOpenKodefikasi, onOpenPersediaan, onOpenPelaporan, onOpenPenggunaan, onOpenPengamanan, onOpenPemeliharaan, onOpenPerencanaan }) {
+export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onShowInfo, onEnterInventarisasi, onOpenKodefikasi, onOpenPersediaan, onOpenPelaporan, onOpenPenggunaan, onOpenPengamanan, onOpenPemeliharaan, onOpenPerencanaan, onOpenPenilaian }) {
   const [detail, setDetail] = useState(null); // modul yang dibuka konsepnya
   const activateInfo = useTripleClick(onShowInfo);
   const DetailIcon = detail ? (MODULE_ICONS[detail.id] || Package) : null;
@@ -74,6 +74,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
     else if (mod.id === "pengamanan" && onOpenPengamanan) onOpenPengamanan();
     else if (mod.id === "pemeliharaan" && onOpenPemeliharaan) onOpenPemeliharaan();
     else if (mod.id === "perencanaan" && onOpenPerencanaan) onOpenPerencanaan();
+    else if (mod.id === "penilaian" && onOpenPenilaian) onOpenPenilaian();
     else setDetail(mod);
   };
 
@@ -215,7 +216,8 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
               const enterable = (mod.id === "penggunaan" && !!onOpenPenggunaan)
                 || (mod.id === "pengamanan" && !!onOpenPengamanan)
                 || (mod.id === "pemeliharaan" && !!onOpenPemeliharaan)
-                || (mod.id === "perencanaan" && !!onOpenPerencanaan);
+                || (mod.id === "perencanaan" && !!onOpenPerencanaan)
+                || (mod.id === "penilaian" && !!onOpenPenilaian);
               return (
                 <button
                   key={mod.id}
