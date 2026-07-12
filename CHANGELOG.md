@@ -48,6 +48,11 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#109] Konsolidasi dokumentasi Pemanfaatan & status modul — 2026-07-12
+
+- Masterplan/README/pustaka diselaraskan dengan #106–#108; README kini
+  menyebut 9 modul Sebagian Aktif (13 kartu siklus bisa dimasuki).
+
 ## [#108] Pemanfaatan tahap awal: register perjanjian 6 bentuk — 2026-07-12
 
 - **Fase 5 Pemanfaatan dimulai** (bab pustaka §6, PMK 115/2020): register
