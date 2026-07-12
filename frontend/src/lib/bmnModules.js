@@ -290,18 +290,22 @@ export const SIKLUS_MODULES = [
     id: "pemeliharaan",
     nama: "Pemeliharaan",
     urutan: 8,
-    status: "segera",
+    status: "sebagian",
     fase: 3,
-    ringkas: "Jadwal, riwayat, dan biaya pemeliharaan per aset.",
+    ringkas: "Catatan riwayat & biaya pemeliharaan per aset (bahan DHPB) sudah bisa dibuka.",
     deskripsi:
-      "Pemeliharaan BMN agar selalu dalam kondisi siap pakai: jadwal pemeliharaan berkala, "
-      + "riwayat perbaikan, dan biaya pemeliharaan per aset — menyuplai balik RKBMN "
-      + "pemeliharaan pada tahap perencanaan.",
+      "Pemeliharaan BMN agar selalu dalam kondisi siap pakai (PP 27/2014 Ps. 46-47): "
+      + "riwayat per kejadian (ringan/sedang/berat), rekap biaya per tahun anggaran "
+      + "sebagai bahan Daftar Hasil Pemeliharaan Barang (DHPB), dan jadwal berkala — "
+      + "menyuplai balik RKBMN pemeliharaan pada tahap perencanaan.",
     dasarHukum: [DASAR_HUKUM_UMUM[1]],
     fitur: [
+      "✅ Riwayat & biaya pemeliharaan per kejadian per aset (kondisi sebelum/sesudah)",
+      "✅ Rekap biaya per tahun anggaran + per jenis + aset terboros",
+      "✅ Kondisi aset ter-update dari hasil pemeliharaan",
+      "✅ Penanda telaah kapitalisasi (ambang PMK 181/2016)",
       "Jadwal pemeliharaan berkala per aset/kelompok",
-      "Riwayat & biaya pemeliharaan (per kejadian, per tahun)",
-      "Kondisi aset ter-update dari hasil pemeliharaan",
+      "DHPB semesteran/tahunan PDF (laporan KPB → Pengguna Barang)",
     ],
     integrasi: ["Riwayat biaya menjadi dasar usulan RKBMN pemeliharaan (Perencanaan)"],
   },
