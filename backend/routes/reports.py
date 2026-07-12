@@ -1595,10 +1595,14 @@ async def generate_lbkp_pdf(
     from reportlab.platypus import Table, Paragraph, Spacer
     from reportlab.lib.units import mm as rl_mm
     from kodefikasi_utils import GOLONGAN_DEFAULTS
+    from pelaporan_utils import kunci_unik_periode, penanda_final
     from pembukuan_utils import build_lbkp_rows, parse_harga
     from pemeliharaan_utils import rentang_periode
 
     dari, sampai, label_periode = rentang_periode(tahun, semester)
+    periode_rec = await db.periode_pelaporan.find_one(
+        {"kunci_unik": kunci_unik_periode(tahun, semester)}, {"_id": 0})
+    sufiks_final = penanda_final(periode_rec)
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
     assets = await db.assets.find(
         {}, {"_id": 0, "asset_code": 1, "purchase_price": 1, "created_at": 1},
@@ -1635,7 +1639,7 @@ async def generate_lbkp_pdf(
     elements = []
     elements.extend(_kop_surat_flowables(settings, doc.width))
     elements.extend(_title_block("LAPORAN BARANG KUASA PENGGUNA (LBKP)\nPER GOLONGAN BARANG",
-                                 subjudul=label_periode))
+                                 subjudul=label_periode + sufiks_final))
     elements.append(Paragraph(
         f"Periode {_fmt_tanggal_id(dari)} s.d. {_fmt_tanggal_id(sampai)} · saldo akhir = "
         "saldo awal + mutasi tambah − mutasi kurang", st['Meta']))
@@ -1872,6 +1876,7 @@ async def generate_calbmn_pdf(
     from reportlab.platypus import Table, Paragraph, Spacer
     from reportlab.lib.units import mm as rl_mm
     from kodefikasi_utils import GOLONGAN_DEFAULTS
+    from pelaporan_utils import kunci_unik_periode, penanda_final
     from pembukuan_utils import (
         AMBANG_KAPITALISASI_DEFAULT, build_lbkp_rows, parse_harga,
     )
@@ -1880,6 +1885,9 @@ async def generate_calbmn_pdf(
     from persediaan_utils import nilai_persediaan_dari_batches
 
     dari, sampai, label_periode = rentang_periode(tahun, semester)
+    periode_rec = await db.periode_pelaporan.find_one(
+        {"kunci_unik": kunci_unik_periode(tahun, semester)}, {"_id": 0})
+    sufiks_final = penanda_final(periode_rec)
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
     assets = await db.assets.find(
         {}, {"_id": 0, "id": 1, "asset_code": 1, "purchase_price": 1,
@@ -1955,7 +1963,8 @@ async def generate_calbmn_pdf(
     elements.extend(_kop_surat_flowables(settings, doc.width))
     elements.extend(_title_block(
         "CATATAN ATAS LAPORAN\nBARANG MILIK NEGARA",
-        subjudul=f"Tingkat Kuasa Pengguna Barang — {label_periode} · Bahan Penyusunan (Pra-isi)"))
+        subjudul=(f"Tingkat Kuasa Pengguna Barang — {label_periode}"
+                  f"{sufiks_final} · Bahan Penyusunan (Pra-isi)")))
 
     def bab(judul):
         elements.append(Spacer(1, 3 * rl_mm))
