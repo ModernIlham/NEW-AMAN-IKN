@@ -35,6 +35,27 @@ GOLONGAN_TANPA_SUSUT = {
 }
 
 
+def validate_masa_manfaat(kode, tahun) -> list:
+    """Validasi entri referensi masa manfaat → daftar pesan kesalahan.
+
+    Kunci = KELOMPOK kodefikasi (5 digit, golongan 3-5 yang disusutkan);
+    tahun 1-60 (rentang wajar tabel KMK: 2-50).
+    """
+    errors = []
+    k = str(kode or "").strip()
+    if len(k) != 5 or not k.isdigit():
+        errors.append("Kode kelompok harus 5 digit angka (mis. 30201)")
+    elif k[0] not in ("3", "4", "5"):
+        errors.append("Golongan di luar objek penyusutan (hanya 3/4/5)")
+    try:
+        t = int(tahun)
+    except (TypeError, ValueError):
+        t = 0
+    if not 1 <= t <= 60:
+        errors.append("Masa manfaat harus 1-60 tahun")
+    return errors
+
+
 def semester_index(tanggal_iso):
     """Indeks semester absolut (tahun×2 + 0/1); None bila tanggal tak valid."""
     try:
