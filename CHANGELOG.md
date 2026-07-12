@@ -48,6 +48,13 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#138] Arsip lampiran register pemindahtanganan — 2026-07-12
+
+- **Lampiran per usulan** (PMK 111/2016 jo. 165/2021): scan persetujuan/
+  risalah lelang/BAST/naskah hibah/bukti setor PNBP (pola lampiran baku);
+  tombol klip + dialog di halaman Pemindahtanganan. Seluruh register
+  hilir siklus BMN kini punya arsip berkas konsisten.
+
 ## [#137] Arsip scan SK PSP (lampiran register penetapan) — 2026-07-12
 
 - **Lampiran per SK PSP** (PMK 40/2024): scan SK penetapan + dokumen
