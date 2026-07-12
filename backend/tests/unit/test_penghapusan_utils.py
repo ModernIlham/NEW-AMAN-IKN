@@ -70,3 +70,28 @@ def test_validate_transisi_sk_wajib_nomor():
     assert any("tidak sah" in e for e in errs)
     errs = validate_transisi("diusulkan", "status_aneh")
     assert any("tidak dikenal" in e for e in errs)
+
+
+def test_jejak_aset_terhapus():
+    from penghapusan_utils import (
+        normalisasi_jejak_terhapus, rekap_jejak_terhapus,
+    )
+    logs = [
+        {"id": "l1", "action": "delete", "asset_code": "3.10.01.02.001",
+         "nup": "1", "asset_name": "Laptop", "username": "budi",
+         "timestamp": "2026-07-10T02:00:00+00:00", "activity_id": "keg1",
+         "changes": [{"field": "purchase_price", "from": "15000000", "to": ""}]},
+        {"id": "l2", "action": "bulk_delete", "asset_code": "3.05.02.01.002",
+         "nup": "7", "asset_name": "Meja", "username": "ani",
+         "timestamp": "2026-07-11T03:00:00+00:00", "activity_id": "keg1",
+         "changes": []},
+    ]
+    rows = normalisasi_jejak_terhapus(logs)
+    assert [r["asset_code"] for r in rows] == ["3.10.01.02.001", "3.05.02.01.002"]
+    assert rows[0]["nilai"] == 15_000_000 and rows[0]["massal"] is False
+    assert rows[1]["nilai"] == 0 and rows[1]["massal"] is True
+    assert rows[0]["NUP"] == "1" and rows[0]["oleh"] == "budi"
+    rek = rekap_jejak_terhapus(rows)
+    assert rek["jumlah"] == 2 and rek["total_nilai"] == 15_000_000
+    assert normalisasi_jejak_terhapus([]) == []
+    assert rekap_jejak_terhapus([]) == {"jumlah": 0, "total_nilai": 0}

@@ -105,3 +105,44 @@ def rekap_kandidat(assets):
             "nilai": sum(b["nilai"] for b in jalur.values()),
         },
     }
+
+
+# ---------------------------------------------------------------------------
+# Jejak Aset Terhapus (arsip read-only). Aset yang dihapus permanen tetap
+# tertelusur lewat audit_logs — endpoint hanya MEMBACA jejak itu, tidak
+# mengubah mekanisme hapus. Nilai perolehan direkam di changes saat hapus
+# (field purchase_price, sisi "from").
+# ---------------------------------------------------------------------------
+
+def _nilai_dari_changes(changes) -> float:
+    """Ambil nilai perolehan aset dari entri audit penghapusan."""
+    for c in changes or []:
+        if c.get("field") == "purchase_price":
+            return parse_harga(c.get("from"))
+    return 0.0
+
+
+def normalisasi_jejak_terhapus(logs):
+    """Ubah entri audit_logs penghapusan → baris jejak siap tampil."""
+    rows = []
+    for lg in logs or []:
+        rows.append({
+            "id": lg.get("id"),
+            "asset_code": lg.get("asset_code") or "",
+            "NUP": lg.get("nup") or "",
+            "asset_name": lg.get("asset_name") or "",
+            "nilai": _nilai_dari_changes(lg.get("changes")),
+            "oleh": lg.get("username") or "",
+            "waktu": lg.get("timestamp") or "",
+            "activity_id": lg.get("activity_id") or "",
+            "massal": lg.get("action") == "bulk_delete",
+        })
+    return rows
+
+
+def rekap_jejak_terhapus(rows):
+    """Ringkasan jejak terhapus: jumlah baris + total nilai perolehan."""
+    return {
+        "jumlah": len(rows or []),
+        "total_nilai": sum(float(r.get("nilai") or 0) for r in (rows or [])),
+    }

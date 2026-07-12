@@ -412,7 +412,7 @@ export const SIKLUS_MODULES = [
       "✅ Tiket usulan berstatus: diusulkan → diproses → SK terbit/ditolak (nomor & tanggal SK terarsip)",
       "✅ Lampiran per usulan: scan SK penghapusan + dokumen pendukung (PDF/gambar)",
       "✅ Ekspor CSV register usulan (jalur + status + SK + jumlah lampiran)",
-      "Arsip aset terhapus (tetap bisa ditelusuri, keluar dari daftar aktif) — menyusul",
+      "✅ Jejak Aset Terhapus: arsip read-only dari log audit (kode/NUP/nama/nilai/oleh/waktu) — aset yang dihapus permanen tetap tertelusur",
     ],
     integrasi: ["Klasifikasi tidak ditemukan + uraian + kronologis dari inventarisasi = berkas usulan siap pakai"],
   },
