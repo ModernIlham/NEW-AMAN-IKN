@@ -84,6 +84,13 @@ status modul berubah.
   `--frozen-lockfile`).
 - Deploy gagal `Permission denied` padahal kunci benar → cek
   `authorized_keys` baris menempel (butuh newline sebelum append).
+- Deploy gagal "Tidak bisa terhubung ke VPS" berulang (keyscan 5x pun
+  gagal, lintas run/IP runner) = VPS-nya yang tumbang/SSH mati — BUKAN
+  salah workflow/secrets. Pemulihan: cek hPanel Hostinger (status VPS,
+  restart, sshd, firewall, RAM penuh). Kode di `main` aman; setelah VPS
+  hidup, picu deploy via tab Actions → "Deploy ke Hostinger VPS" → Run
+  workflow (atau merge PR berikutnya). Insiden: 2026-07-11 ±23:14 UTC,
+  3 run gagal beruntun.
 - Re-run workflow lama ≠ menjalankan workflow baru — pakai "Run workflow".
 - Test laporan: `scripts` smoke FakeDB di scratchpad sesi lama — pola:
   render semua laporan ke PDF via pypdfium2 tanpa Mongo.
