@@ -141,6 +141,29 @@ export default function PelaporanPage({ onBack }) {
               })()}
             </DropdownMenuContent>
           </DropdownMenu>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-1.5" data-testid="pelaporan-calbmn">
+                <FileDown className="w-3.5 h-3.5" />CaLBMN<ChevronDown className="w-3 h-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              {(() => {
+                const th = new Date().getFullYear();
+                return [
+                  { label: `Semester I ${th} (Jan–Jun)`, q: `tahun=${th}&semester=1`, f: `CaLBMN_${th}_S1.pdf` },
+                  { label: `Semester II ${th} (Jul–Des)`, q: `tahun=${th}&semester=2`, f: `CaLBMN_${th}_S2.pdf` },
+                  { label: `Tahunan ${th}`, q: `tahun=${th}`, f: `CaLBMN_${th}.pdf` },
+                  { label: `Tahunan ${th - 1}`, q: `tahun=${th - 1}`, f: `CaLBMN_${th - 1}.pdf` },
+                ].map((o) => (
+                  <DropdownMenuItem key={o.label} className="min-h-[42px]"
+                    onClick={() => downloadFileWithProgress(`${API}/pembukuan/calbmn-pdf?${o.q}`, o.f, { label: `CaLBMN ${o.label}` }).catch(() => {})}>
+                    {o.label}
+                  </DropdownMenuItem>
+                ));
+              })()}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         {/* ── Laporan persediaan (satker-wide) ── */}
