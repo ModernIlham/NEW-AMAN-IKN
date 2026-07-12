@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, FileX, SearchX, Flame, Coins, TicketCheck,
+  Paperclip, Upload, Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
+import { authMediaUrl } from "@/lib/mediaUrl";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -40,6 +42,9 @@ export default function PenghapusanPage({ user, onBack }) {
   const [formUsul, setFormUsul] = useState(null);
   // Dialog SK terbit: {usulan, nomor_sk, tanggal_sk, catatan, saving}
   const [formSk, setFormSk] = useState(null);
+  // Dialog lampiran: {usulan, uploading}
+  const [lamp, setLamp] = useState(null);
+  const lampInputRef = useRef(null);
   const { confirm, confirmDialog } = useConfirm();
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
@@ -104,6 +109,37 @@ export default function PenghapusanPage({ user, onBack }) {
     });
     if (ok) setFormSk(null);
     else setFormSk((f) => (f ? { ...f, saving: false } : f));
+  };
+
+  const unggahLampiran = async (fileObj) => {
+    if (!lamp || !fileObj) return;
+    setLamp((l) => ({ ...l, uploading: true }));
+    try {
+      const fd = new FormData();
+      fd.append("file", fileObj);
+      const res = await axios.post(`${API}/penghapusan/usulan/${lamp.usulan.id}/lampiran`, fd);
+      toast.success("Lampiran terunggah");
+      setLamp((l) => (l ? { ...l, uploading: false,
+        usulan: { ...l.usulan, lampiran: res.data?.lampiran || [] } } : l));
+      muat();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal mengunggah lampiran");
+      setLamp((l) => (l ? { ...l, uploading: false } : l));
+    }
+  };
+
+  const hapusLampiran = async (fileId) => {
+    if (!lamp) return;
+    try {
+      await axios.delete(`${API}/penghapusan/usulan/${lamp.usulan.id}/lampiran/${fileId}`);
+      toast.success("Lampiran dihapus");
+      setLamp((l) => (l ? { ...l,
+        usulan: { ...l.usulan,
+          lampiran: (l.usulan.lampiran || []).filter((x) => x.file_id !== fileId) } } : l));
+      muat();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal menghapus lampiran");
+    }
   };
 
   const labelStatus = usulan?.label_status || {};
@@ -181,6 +217,12 @@ export default function PenghapusanPage({ user, onBack }) {
                         </span>
                         <p className="text-xs font-semibold text-foreground truncate flex-1 min-w-[120px]">{u.asset_name || "-"}</p>
                         <span className="font-mono text-[10px] text-muted-foreground">{u.asset_code} · {u.NUP}</span>
+                        <button type="button" aria-label="Lampiran usulan"
+                          onClick={() => setLamp({ usulan: u, uploading: false })}
+                          className="h-6 w-6 rounded-lg border border-border text-foreground/70 flex items-center justify-center hover:bg-muted min-h-0 min-w-0"
+                          data-testid={`penghapusan-lampiran-${u.id}`}>
+                          <Paperclip className="w-3 h-3" />
+                        </button>
                       </div>
                       <p className="text-[10px] text-muted-foreground mt-0.5">
                         {labelJalur[u.jalur] || u.jalur}
@@ -331,6 +373,50 @@ export default function PenghapusanPage({ user, onBack }) {
               {formSk?.saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <TicketCheck className="w-4 h-4 mr-1.5" />}Terbitkan
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog lampiran usulan (arsip SK + dokumen pendukung) ── */}
+      <Dialog open={!!lamp} onOpenChange={(o) => { if (!o) setLamp(null); }}>
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Lampiran Usulan Penghapusan</DialogTitle>
+            <DialogDescription className="text-xs">
+              {lamp && `${lamp.usulan.asset_name || "-"} (${lamp.usulan.asset_code} · ${lamp.usulan.NUP}). Scan SK penghapusan / dokumen pendukung (PDF/JPG/PNG, maks 10MB, 10 berkas).`}
+            </DialogDescription>
+          </DialogHeader>
+          <input ref={lampInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) unggahLampiran(f); }} />
+          <Button size="sm" variant="outline" className="h-8 text-xs min-h-0 self-start"
+            disabled={lamp?.uploading || (lamp?.usulan?.lampiran || []).length >= 10}
+            onClick={() => lampInputRef.current?.click()} data-testid="penghapusan-lampiran-unggah">
+            {lamp?.uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <Upload className="w-3.5 h-3.5 mr-1.5" />}
+            Unggah Berkas
+          </Button>
+          {(lamp?.usulan?.lampiran || []).length === 0 ? (
+            <p className="text-xs text-muted-foreground text-center py-4">Belum ada lampiran.</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {(lamp?.usulan?.lampiran || []).map((f) => (
+                <li key={f.file_id} className="rounded-lg border border-border p-2 flex items-center gap-2">
+                  <button type="button"
+                    onClick={() => window.open(authMediaUrl(`${API}/penghapusan/usulan/${lamp.usulan.id}/lampiran/${f.file_id}`), "_blank", "noopener")}
+                    className="min-w-0 flex-1 text-left hover:underline">
+                    <span className="block text-xs font-semibold text-foreground truncate">{f.filename}</span>
+                    <span className="block text-[10px] text-muted-foreground">
+                      {String(f.tanggal || "").slice(0, 10)} · oleh {f.oleh}
+                    </span>
+                  </button>
+                  {isAdmin && (
+                    <button type="button" aria-label="Hapus lampiran" onClick={() => hapusLampiran(f.file_id)}
+                      className="h-7 w-7 rounded-lg border border-border text-red-500 flex items-center justify-center hover:bg-red-500/10 flex-shrink-0 min-h-0 min-w-0">
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
         </DialogContent>
       </Dialog>
 
