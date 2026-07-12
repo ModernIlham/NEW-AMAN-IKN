@@ -120,6 +120,70 @@ def sanding_per_akun(items) -> list:
     return rows
 
 
+NAMA_TRIWULAN = {1: "TW I", 2: "TW II", 3: "TW III", 4: "TW IV"}
+
+
+def _tanggal_status(u: dict, status: str):
+    """Tanggal ISO (YYYY-MM-DD) entri riwayat TERAKHIR berstatus tsb."""
+    tanggal = None
+    for r in u.get("riwayat") or []:
+        if r.get("status") == status and r.get("tanggal"):
+            tanggal = str(r["tanggal"])[:10]
+    return tanggal
+
+
+def sanding_per_triwulan(items) -> list:
+    """Sanding realisasi per triwulan per tahun anggaran (pustaka §9).
+
+    Triwulan realisasi diambil dari tanggal entri riwayat "terealisasi";
+    serapan kumulatif dibanding total nilai DIPA tahun anggaran tsb.
+    Usulan terealisasi tanpa tanggal riwayat dihitung di `tanpa_triwulan`
+    (tetap masuk total, tidak hilang). Tahun tanpa DIPA maupun realisasi
+    tidak ditampilkan (belum ada yang disanding).
+    """
+    grup = {}
+    for u in items or []:
+        tahun = str(u.get("tahun_anggaran") or "").strip() or "?"
+        g = grup.setdefault(tahun, {
+            "tahun_anggaran": tahun, "dipa": 0.0, "realisasi": 0.0,
+            "per_triwulan": {q: {"triwulan": q, "nama": NAMA_TRIWULAN[q],
+                                 "jumlah": 0, "realisasi": 0.0}
+                             for q in (1, 2, 3, 4)},
+            "tanpa_triwulan": 0,
+        })
+        g["dipa"] += parse_harga(u.get("nilai_dipa"))
+        if u.get("status") != "terealisasi":
+            continue
+        nilai = parse_harga(u.get("nilai_realisasi"))
+        g["realisasi"] += nilai
+        tanggal = _tanggal_status(u, "terealisasi")
+        bulan = 0
+        if tanggal and len(tanggal) >= 7 and tanggal[5:7].isdigit():
+            bulan = int(tanggal[5:7])
+        if 1 <= bulan <= 12:
+            tw = g["per_triwulan"][(bulan - 1) // 3 + 1]
+            tw["jumlah"] += 1
+            tw["realisasi"] += nilai
+        else:
+            g["tanpa_triwulan"] += 1
+    rows = [g for g in grup.values() if g["dipa"] or g["realisasi"]]
+    rows.sort(key=lambda g: g["tahun_anggaran"])
+    for g in rows:
+        kumulatif = 0.0
+        daftar = []
+        for q in (1, 2, 3, 4):
+            tw = g["per_triwulan"][q]
+            kumulatif += tw["realisasi"]
+            tw["kumulatif"] = kumulatif
+            tw["serapan_kumulatif_persen"] = round(
+                kumulatif / g["dipa"] * 100, 1) if g["dipa"] else 0.0
+            daftar.append(tw)
+        g["per_triwulan"] = daftar
+        g["serapan_persen"] = round(
+            g["realisasi"] / g["dipa"] * 100, 1) if g["dipa"] else 0.0
+    return rows
+
+
 def rekap_anggaran(items) -> dict:
     """Ringkasan register: per status/jenis + total nilai tiap tahap.
 

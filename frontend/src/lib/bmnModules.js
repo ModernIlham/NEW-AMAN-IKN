@@ -176,7 +176,7 @@ export const SIKLUS_MODULES = [
     urutan: 2,
     status: "sebagian",
     fase: 4,
-    ringkas: "Register usulan RKBMN → telaah → DIPA → realisasi + sanding per akun + kalender tenggat.",
+    ringkas: "Register usulan RKBMN → telaah → DIPA → realisasi + sanding per akun & triwulan + kalender tenggat.",
     deskripsi:
       "Tindak lanjut RKBMN ke dalam penganggaran (titik 'Integrasi' siklus resmi, "
       + "PMK 62/2023 + PMK 153/2021). Tahap awal: register usulan berstatus — nilai "
@@ -190,6 +190,7 @@ export const SIKLUS_MODULES = [
       "✅ Register usulan berstatus: diusulkan → disetujui telaah → masuk DIPA → terealisasi",
       "✅ Nilai per tahap + serapan (realisasi/DIPA) + akun BAS 53x/523 + tautan aset",
       "✅ Sanding rencana vs realisasi per akun BAS (usulan/disetujui/DIPA/realisasi + serapan)",
+      "✅ Sanding realisasi per triwulan per tahun anggaran (kumulatif + serapan kumulatif)",
       "✅ Ekspor CSV register usulan (nilai per tahap, akun BAS, status)",
       "✅ Kalender penganggaran konfigurabel: tahapan ber-tenggat + pengingat lewat/≤30 hari",
     ],

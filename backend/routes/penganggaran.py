@@ -18,8 +18,8 @@ from db import db
 from penganggaran_utils import (
     AKUN_BAS, JENIS_ANGGARAN, STATUS_ANGGARAN,
     info_tenggat_tahapan, rekap_anggaran, rekap_kalender, sanding_per_akun,
-    validate_tahapan_kalender, validate_transisi_anggaran,
-    validate_usulan_anggaran,
+    sanding_per_triwulan, validate_tahapan_kalender,
+    validate_transisi_anggaran, validate_usulan_anggaran,
 )
 
 penganggaran_router = APIRouter()
@@ -56,6 +56,7 @@ async def list_penganggaran(_user: dict = Depends(require_user)):
              .sort("created_at", -1).limit(500)]
     return {"items": items, "ringkasan": rekap_anggaran(items),
             "per_akun": sanding_per_akun(items),
+            "per_triwulan": sanding_per_triwulan(items),
             "label_status": STATUS_ANGGARAN,
             "label_jenis": {k: v[0] for k, v in JENIS_ANGGARAN.items()},
             "label_akun": AKUN_BAS,

@@ -271,6 +271,64 @@ export default function PenganggaranPage({ user, onBack }) {
               </div>
             )}
 
+            {/* ── Sanding realisasi per triwulan (pustaka §9) ── */}
+            {(data.per_triwulan || []).length > 0 && (
+              <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="penganggaran-triwulan">
+                <div className="px-3 py-2.5 border-b border-border">
+                  <p className="text-xs font-bold text-foreground">Sanding Realisasi per Triwulan</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    Triwulan mengikuti tanggal usulan ditandai terealisasi; serapan kumulatif dibanding total DIPA tahun tsb.
+                  </p>
+                </div>
+                <div className="divide-y divide-border/60">
+                  {data.per_triwulan.map((g) => (
+                    <div key={g.tahun_anggaran}>
+                      <div className="px-3 pt-2 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
+                        <span className="font-bold text-foreground">TA {g.tahun_anggaran}</span>
+                        <span className="text-muted-foreground">DIPA {fmtRp(g.dipa)} · Realisasi {fmtRp(g.realisasi)}</span>
+                        <span className={`font-semibold ${g.serapan_persen >= 90 ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}>
+                          {g.serapan_persen}%
+                        </span>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="text-muted-foreground border-b border-border/60">
+                              <th className="text-left px-3 py-1.5 font-semibold">Triwulan</th>
+                              <th className="text-right px-2 py-1.5 font-semibold">Usulan cair</th>
+                              <th className="text-right px-2 py-1.5 font-semibold">Realisasi</th>
+                              <th className="text-right px-2 py-1.5 font-semibold">Kumulatif</th>
+                              <th className="text-right px-3 py-1.5 font-semibold">Serapan kum.</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border/60">
+                            {g.per_triwulan.map((tw) => (
+                              <tr key={tw.triwulan}>
+                                <td className="px-3 py-1.5 text-foreground whitespace-nowrap font-semibold">{tw.nama}</td>
+                                <td className="px-2 py-1.5 text-right text-foreground/90">{tw.jumlah}</td>
+                                <td className="px-2 py-1.5 text-right text-foreground/90 whitespace-nowrap">{fmtRp(tw.realisasi)}</td>
+                                <td className="px-2 py-1.5 text-right text-foreground/90 whitespace-nowrap">{fmtRp(tw.kumulatif)}</td>
+                                <td className="px-3 py-1.5 text-right font-semibold whitespace-nowrap">
+                                  <span className={tw.serapan_kumulatif_persen >= 90 ? "text-emerald-600 dark:text-emerald-400" : tw.serapan_kumulatif_persen > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}>
+                                    {tw.serapan_kumulatif_persen}%
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      {g.tanpa_triwulan > 0 && (
+                        <p className="px-3 pb-2 text-[10px] text-muted-foreground">
+                          {g.tanpa_triwulan} usulan terealisasi tanpa tanggal riwayat — masuk total, tidak terpetakan ke triwulan.
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* ── Kalender penganggaran (tenggat konfigurabel, pustaka §9.4) ── */}
             <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="penganggaran-kalender">
               <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">

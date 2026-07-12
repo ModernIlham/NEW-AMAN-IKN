@@ -103,6 +103,47 @@ def test_sanding_per_akun():
     assert sanding_per_akun([]) == []
 
 
+def test_sanding_per_triwulan():
+    from penganggaran_utils import sanding_per_triwulan
+
+    def _real(tanggal, **over):
+        return _u(status="terealisasi",
+                  riwayat=[{"status": "diusulkan", "tanggal": "2026-01-05"},
+                           {"status": "terealisasi", "tanggal": tanggal}],
+                  **over)
+
+    items = [
+        # TW I 2026: realisasi 40 dari DIPA 100
+        _real("2026-02-15T10:00:00+00:00", tahun_anggaran="2026",
+              nilai_dipa=100, nilai_realisasi=40),
+        # TW III 2026: realisasi 60 dari DIPA 100
+        _real("2026-08-01", tahun_anggaran="2026",
+              nilai_dipa=100, nilai_realisasi=60),
+        # Masih masuk_dipa (belum realisasi) → hanya menambah DIPA
+        _u(status="masuk_dipa", tahun_anggaran="2026", nilai_dipa=50),
+        # Terealisasi tanpa riwayat tanggal → masuk tanpa_triwulan
+        _u(status="terealisasi", tahun_anggaran="2026",
+           nilai_dipa=0, nilai_realisasi=10),
+        # Tahun lain tanpa DIPA/realisasi → tidak ditampilkan
+        _u(tahun_anggaran="2025"),
+    ]
+    rows = sanding_per_triwulan(items)
+    assert [g["tahun_anggaran"] for g in rows] == ["2026"]
+    g = rows[0]
+    assert g["dipa"] == pytest.approx(250)
+    assert g["realisasi"] == pytest.approx(110)
+    assert g["tanpa_triwulan"] == 1
+    assert g["serapan_persen"] == pytest.approx(44.0)
+    tw1, tw2, tw3, tw4 = g["per_triwulan"]
+    assert (tw1["nama"], tw1["jumlah"], tw1["realisasi"]) == ("TW I", 1, 40)
+    assert tw1["serapan_kumulatif_persen"] == pytest.approx(16.0)
+    assert tw2["realisasi"] == 0 and tw2["kumulatif"] == pytest.approx(40)
+    assert tw3["kumulatif"] == pytest.approx(100)
+    assert tw3["serapan_kumulatif_persen"] == pytest.approx(40.0)
+    assert tw4["kumulatif"] == pytest.approx(100)  # tanpa_triwulan tak masuk TW
+    assert sanding_per_triwulan([]) == []
+
+
 def test_registry_akun():
     assert set(JENIS_ANGGARAN) == {"pengadaan", "pemeliharaan"}
     assert all(k.startswith("53") or k == "523" for k in AKUN_BAS)
