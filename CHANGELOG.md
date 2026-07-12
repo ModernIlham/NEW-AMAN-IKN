@@ -48,6 +48,13 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#152] Filter Lokasi/Gudang persediaan — 2026-07-12
+
+- **Dimensi gudang aktif**: daftar gudang unik + filter gudang di daftar
+  master (paging benar di query) + **laporan posisi per gudang** dengan
+  subjudul; dropdown filter + unduhan ikut filter aktif. Smoke pypdfium2
+  dua skenario lulus.
+
 ## [#151] Konsolidasi dokumentasi #150 — 2026-07-12
 
 - **Dokumentasi saja**: README blok Progres Fase 2 + roadmap masterplan
