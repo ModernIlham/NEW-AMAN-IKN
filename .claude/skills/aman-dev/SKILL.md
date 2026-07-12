@@ -59,6 +59,11 @@ pengelolaan BMN — baca `docs/MASTERPLAN-SIKLUS-BMN.md` sebelum menambah modul.
 9. **Modul baru** ikut prinsip integrasi Bab 5 masterplan: satu identitas
    aset, satu kodefikasi, transaksi = jurnal, dokumen sumber = simpul,
    approval = gerbang, offline-first, registry anti-drift.
+10. **Regulasi dulu, kode kemudian**: sebelum membangun fitur ber-alur
+   bisnis pemerintahan, baca `docs/PUSTAKA-REGULASI-BMN.md`. Bila alurnya
+   belum tercakup di sana → riset internet (peraturan + praktik SAKTI),
+   TAMBAHKAN ke pustaka (beserta sumber & tanda "perlu verifikasi"), baru
+   implementasi. Jangan menebak aturan; jangan data dummy di laporan.
 
 ## Pipeline ship per fitur (urutan eksak)
 

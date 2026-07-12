@@ -203,6 +203,15 @@ Referensi langsung: `routes/persediaan.py`, `persediaan_transaksi.py`,
 `persediaan_transaksi_grouped.py`, `gudang.py`, `opname.py` di KERJA-BARENG
 (dipelajari baris per baris) — disesuaikan ke fondasi AMAN.
 
+> ✅ **Tervalidasi regulasi** (riset 2026-07-12, rincian di
+> `docs/PUSTAKA-REGULASI-BMN.md` §3): kebijakan akuntansi pemerintah pusat
+> memakai **pencatatan perpetual + penilaian FIFO per layer** sejak TA 2021
+> (PMK 234/2020; SAKTI Modul Persediaan) — desain FIFO per batch di bawah
+> ini selaras. Enum jenis transaksi wajib memetakan 1:1 ke daftar transaksi
+> SAKTI (saldo awal, pembelian, transfer/hibah masuk-keluar, pemakaian,
+> usang/rusak dua-tahap, koreksi, opname) dan tiap kode barang termapping
+> ke akun neraca 1171xx — lihat pustaka §3.2–3.4.
+
 ### 7.1 Entitas
 
 | Entitas | Field kunci (dari referensi, disesuaikan) |
