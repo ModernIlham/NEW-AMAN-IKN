@@ -48,6 +48,15 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#201] Saran jenjang persetujuan Pemindahtanganan — 2026-07-12
+
+- **Saran jenjang persetujuan (indikatif)** dari jenis BMN + nilai wajar:
+  Pengelola Barang (≤Rp10 M) / Presiden (>10–100 M) / DPR (>100 M) untuk
+  selain tanah/bangunan; tanah/bangunan umum → DPR, terkecuali Ps. 55(2)
+  ikut nilai; PMPP lantai Presiden; hibah ≤Rp100 jt catatan Pengguna
+  Barang (UU 1/2004 Ps. 45–46 + PP 27/2014). **Tidak memblok** — panduan
+  saja. Pustaka §7 + verifikasi §14 no. 25. Unit test +1 → 251 passed.
+
 ## [#200] Konsolidasi dokumentasi #199 — 2026-07-12
 
 - **Dokumentasi saja**: README Progres Fase 4 + masterplan + pustaka §13
