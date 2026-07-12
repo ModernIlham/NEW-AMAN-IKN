@@ -667,6 +667,38 @@ fisik; barang untuk pemda/masyarakat tidak segera di-BAST-kan.
   melakukan pemblokiran sertipikat / nasihat hukum; register tak
   berkekuatan hukum. Jangan merujuk PMK 244/2012 (dicabut).
 
+### 11.5 Asuransi BMN (PMK 97/2019 → PMK 43 Tahun 2025)
+
+> Riset Juli 2026; teks asli PMK tak terbaca (proxy 403) — seluruh butir
+> dari cuplikan pencarian/artikel DJKN, dirangkum di §14 butir 20.
+
+- **Status regulasi**: PMK 247/PMK.06/2016 → dicabut PMK 97/PMK.06/2019
+  → **dicabut PMK 43 Tahun 2025** (berlaku 14 Juli 2025; polis lama
+  tetap berlaku sampai habis masa). Induk: PP 27/2014 jo. PP 28/2020 —
+  pengasuransian bagian pengamanan; sifat **"dapat"** (selektif,
+  efisiensi, prioritas), bukan wajib mutlak.
+- **Objek** (PMK 97/2019): **gedung dan bangunan** berdampak pelayanan
+  umum / menunjang tusi (kantor, pendidikan, kesehatan) + opsional
+  sarana-prasarana (struktural/mekanikal/elektrikal/tata ruang luar).
+  PMK 43/2025 mengelompokkan: **BMN Program (Preferen/Nonpreferen)** dan
+  **Nonprogram (Mandatory/Luar Negeri/Opsional)** [perlu verifikasi].
+- **Mekanisme**: penanggung = **Konsorsium Asuransi BMN** (ketua
+  Jasindo, administrator MAIPARK) via **Kontrak Payung** yang diteken
+  Pengelola Barang; pemegang polis = Pengguna Barang; perencanaan via
+  **SIMAN**, premi dianggarkan di DIPA — PMK 43/2025 menambah skema
+  pendanaan **Pooling Fund Bencana** (Perpres 75/2021 + PMK 28/2025);
+  laporan pelaksanaan menjadi bagian LBKP.
+- **Data minimum polis**: nomor polis, penanggung, objek per NUP,
+  nilai pertanggungan, premi (+sumber dana), jangka waktu (umumnya
+  1 tahun), risiko yang dijamin, klaim.
+- **Implikasi AMAN**: ✅ register polis per aset (#177) — nomor polis,
+  penanggung, kategori objek (enum PMK 43/2025 sementara), nilai
+  pertanggungan, premi + sumber dana DIPA/PFB, masa berlaku dengan
+  pengingat segera-berakhir (≤90 hari); menyusul: sub-register klaim,
+  lampiran scan polis. **Yang TIDAK boleh diklaim**: bukan kanal resmi
+  perencanaan (SIMAN), tidak menerbitkan polis / menghitung tarif
+  resmi / memproses klaim; register bukan laporan resmi pengasuransian.
+
 ---
 
 ## 12. Kendala Umum Satker → Fitur Penangkal AMAN
@@ -694,7 +726,7 @@ fisik; barang untuk pemda/masyarakat tidak segera di-BAST-kan.
 | Persediaan (F2) | Perpetual + FIFO per layer; enum transaksi peta SAKTI; dua tahap usang/rusak; operator–approver; opname semesteran + BAOF + kunci back-date; mapping akun 1171xx |
 | Pelaporan (F2, ✅ inti) | ✅ Hub arsip (#86) + Posisi BMN di Neraca (#93) + rekonsiliasi XLSX (#94) + LBKP mutasi per golongan (#95) + CaLBMN pra-isi bab I–V (§2.3a) + LKB per NUP + ringkasan B/RR/RB (§2.3b) + periode ber-kunci dengan penanda FINAL + tenggat penyampaian konfigurabel per periode — daftar "Implikasi AMAN" §2.3 tuntas |
 | Penggunaan (F3) | PSP/alih/sementara/pihak lain/bersama + BMN idle (PMK 40 & 120/2024) |
-| Pengamanan (F3, ✅ tahap awal) | ✅ Dasbor tertib administrasi + pantau sengketa dari data inventarisasi (#88); ✅ register BMN bermasalah berstatus identifikasi→mediasi→blokir→litigasi→selesai (#169, §11); ✅ arsip dokumen kepemilikan per aset + lokasi penyimpanan Ps. 43 + scan (#171); ✅ status sertipikasi K1-K4 per dokumen sertipikat (#173); ✅ checklist pengamanan per aset per jenis dengan skor (#175, §11.2); menyusul: registrasi polis Asuransi BMN (PMK 97/2019) |
+| Pengamanan (F3, ✅ tahap awal) | ✅ Dasbor tertib administrasi + pantau sengketa dari data inventarisasi (#88); ✅ register BMN bermasalah berstatus identifikasi→mediasi→blokir→litigasi→selesai (#169, §11); ✅ arsip dokumen kepemilikan per aset + lokasi penyimpanan Ps. 43 + scan (#171); ✅ status sertipikasi K1-K4 per dokumen sertipikat (#173); ✅ checklist pengamanan per aset per jenis dengan skor (#175, §11.2); menyusul: registrasi polis Asuransi BMN (PMK 43/2025) |
 | Pemeliharaan (F3, ✅ tahap awal) | Riwayat per kejadian per aset (jenis ringan/sedang/berat DJKN); rekap per TA (bahan DHPB Ps. 47); kondisi sebelum/sesudah; penanda telaah kapitalisasi ≥ ambang PMK 181; jadwal berkala & DHPB PDF menyusul |
 | Perencanaan (F4, ✅ tahap awal) | ✅ Saringan kelayakan RKBMN pemeliharaan (#99: Baik/RR layak; RB → jalur hapus; idle → PMK 120/2024) + kertas kerja XLSX (#100); menyusul: usulan per unit + persetujuan, sanding SBSK PMK 138/2024 |
 | Penganggaran (F4, ✅ tahap awal) | ✅ Register usulan berstatus diusulkan→telaah→DIPA→realisasi, nilai per tahap + akun BAS 53x/523 + serapan (#115, §9); AMAN pendamping — kanal resmi SIMAN V2/SAKTI/KRISNA; ✅ sanding per akun BAS (#123) + ekspor CSV (#163) + kalender tenggat konfigurabel (#165); menyusul: sanding per triwulan |
@@ -757,6 +789,11 @@ fisik; barang untuk pemda/masyarakat tidak segera di-BAST-kan.
 19. PMK 218/PMK.06/2015: rincian pasal penyimpanan dokumen & status
     terkini; kategori sertipikasi K1-K4 + status Peraturan Bersama
     186/PMK.06/2009 & 24/2009 (belum dicek ke teks asli).
+20. Asuransi BMN (§11.5): seluruh kutipan pasal PMK 97/2019 & PMK 43
+    Tahun 2025 dari cuplikan (teks asli tak terbaca); definisi kategori
+    BMN Program/Nonprogram; alur & tenggat perencanaan via SIMAN pasca
+    PMK 43/2025; komposisi/syarat konsorsium; pengelola PFB (BPDLH) dan
+    seluruh angka statistik cakupan/klaim.
 
 ---
 

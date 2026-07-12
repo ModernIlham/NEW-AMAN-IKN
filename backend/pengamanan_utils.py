@@ -355,3 +355,102 @@ def rekap_checklist(items) -> dict:
             penuh += 1
     return {"jumlah": len(items or []), "penuh": penuh,
             "per_jenis": per_jenis}
+
+
+# ---------------------------------------------------------------------------
+# Register polis Asuransi BMN (pustaka §11.5) — dasar PMK 43 Tahun 2025
+# (mencabut PMK 97/2019). Kategori objek dari siaran pers DJKN, [perlu
+# verifikasi] §14 butir 20. Register pendamping: bukan kanal resmi SIMAN,
+# bukan penerbitan polis, bukan laporan resmi pengasuransian.
+# ---------------------------------------------------------------------------
+
+KATEGORI_OBJEK_ASURANSI = {
+    "program_preferen": "BMN Program — Preferen",
+    "program_nonpreferen": "BMN Program — Nonpreferen",
+    "nonprogram_mandatory": "BMN Nonprogram — Mandatory",
+    "nonprogram_luar_negeri": "BMN Nonprogram — Luar Negeri",
+    "nonprogram_opsional": "BMN Nonprogram — Opsional",
+}
+
+SUMBER_DANA_PREMI = {
+    "dipa": "DIPA K/L",
+    "pfb": "Pooling Fund Bencana (PFB)",
+}
+
+# Ambang pengingat perpanjangan polis (hari kalender sebelum berakhir).
+AMBANG_SEGERA_BERAKHIR = 90
+
+
+def validate_polis(data: dict) -> list:
+    """Validasi pencatatan polis asuransi → daftar pesan kesalahan."""
+    from datetime import date
+
+    errors = []
+    if not str(data.get("nomor_polis") or "").strip():
+        errors.append("Nomor polis wajib diisi")
+    if data.get("kategori_objek") not in KATEGORI_OBJEK_ASURANSI:
+        valid = ", ".join(KATEGORI_OBJEK_ASURANSI)
+        errors.append(f"Kategori objek tidak dikenal (pilihan: {valid})")
+    if data.get("sumber_dana") not in SUMBER_DANA_PREMI:
+        valid = ", ".join(SUMBER_DANA_PREMI)
+        errors.append(f"Sumber dana premi tidak dikenal (pilihan: {valid})")
+    mulai = str(data.get("mulai") or "").strip()[:10]
+    berakhir = str(data.get("berakhir") or "").strip()[:10]
+    try:
+        d_mulai = date.fromisoformat(mulai)
+        d_akhir = date.fromisoformat(berakhir)
+        if d_akhir <= d_mulai:
+            errors.append("Tanggal berakhir harus setelah tanggal mulai")
+    except ValueError:
+        errors.append("Tanggal mulai/berakhir harus berformat YYYY-MM-DD")
+    for k, label in (("nilai_pertanggungan", "Nilai pertanggungan"),
+                     ("premi", "Premi")):
+        try:
+            if float(data.get(k) or 0) < 0:
+                errors.append(f"{label} tidak boleh negatif")
+        except (TypeError, ValueError):
+            errors.append(f"{label} harus angka")
+    return errors
+
+
+def info_polis(polis: dict, today_iso: str) -> dict:
+    """Status masa berlaku polis → {status, sisa_hari}.
+
+    Status: akan_datang / aktif / segera_berakhir (≤90 hari) / berakhir.
+    """
+    from datetime import date
+
+    kosong = {"status": None, "sisa_hari": None}
+    try:
+        mulai = date.fromisoformat(str(polis.get("mulai") or "")[:10])
+        akhir = date.fromisoformat(str(polis.get("berakhir") or "")[:10])
+        hari_ini = date.fromisoformat(str(today_iso)[:10])
+    except ValueError:
+        return kosong
+    if hari_ini < mulai:
+        return {"status": "akan_datang", "sisa_hari": (akhir - hari_ini).days}
+    sisa = (akhir - hari_ini).days
+    if sisa < 0:
+        return {"status": "berakhir", "sisa_hari": 0}
+    if sisa <= AMBANG_SEGERA_BERAKHIR:
+        return {"status": "segera_berakhir", "sisa_hari": sisa}
+    return {"status": "aktif", "sisa_hari": sisa}
+
+
+def rekap_polis(items, today_iso: str) -> dict:
+    """Ringkasan polis per status masa berlaku + total nilai aktif."""
+    per_status = {"akan_datang": 0, "aktif": 0, "segera_berakhir": 0,
+                  "berakhir": 0}
+    nilai_aktif = 0.0
+    for p in items or []:
+        info = info_polis(p, today_iso)
+        st = info["status"]
+        if st in per_status:
+            per_status[st] += 1
+        if st in ("aktif", "segera_berakhir"):
+            try:
+                nilai_aktif += float(p.get("nilai_pertanggungan") or 0)
+            except (TypeError, ValueError):
+                pass
+    return {"jumlah": len(items or []), "per_status": per_status,
+            "nilai_pertanggungan_aktif": nilai_aktif}

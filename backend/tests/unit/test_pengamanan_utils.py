@@ -175,3 +175,39 @@ class TestChecklistPengamanan:
         r = rekap_checklist([penuh, sebagian])
         assert r["jumlah"] == 2 and r["penuh"] == 1
         assert r["per_jenis"]["tanah"] == 1
+
+
+class TestPolisAsuransi:
+    def test_validasi_polis(self):
+        from pengamanan_utils import validate_polis
+        ok = {"nomor_polis": "ABMN-001/2026", "kategori_objek": "program_preferen",
+              "sumber_dana": "dipa", "mulai": "2026-01-01",
+              "berakhir": "2027-01-01", "nilai_pertanggungan": 5_000_000_000,
+              "premi": 12_000_000}
+        assert validate_polis(ok) == []
+        errors = validate_polis({"nomor_polis": " ", "kategori_objek": "vip",
+                                 "sumber_dana": "kas", "mulai": "2026-01-01",
+                                 "berakhir": "2025-01-01",
+                                 "nilai_pertanggungan": -1, "premi": "x"})
+        assert len(errors) == 6
+
+    def test_info_dan_rekap_polis(self):
+        from pengamanan_utils import info_polis, rekap_polis
+        p_aktif = {"mulai": "2026-01-01", "berakhir": "2027-01-01",
+                   "nilai_pertanggungan": 100}
+        p_segera = {"mulai": "2025-09-01", "berakhir": "2026-08-01",
+                    "nilai_pertanggungan": 50}
+        p_habis = {"mulai": "2025-01-01", "berakhir": "2026-01-01",
+                   "nilai_pertanggungan": 25}
+        today = "2026-07-12"
+        assert info_polis(p_aktif, today)["status"] == "aktif"
+        segera = info_polis(p_segera, today)
+        assert segera["status"] == "segera_berakhir" and segera["sisa_hari"] == 20
+        assert info_polis(p_habis, today)["status"] == "berakhir"
+        assert info_polis({"mulai": "2026-08-01", "berakhir": "2027-08-01"},
+                          today)["status"] == "akan_datang"
+        r = rekap_polis([p_aktif, p_segera, p_habis], today)
+        assert r["jumlah"] == 3
+        assert r["per_status"]["aktif"] == 1
+        assert r["per_status"]["segera_berakhir"] == 1
+        assert r["nilai_pertanggungan_aktif"] == 150

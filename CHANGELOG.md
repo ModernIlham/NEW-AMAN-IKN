@@ -48,6 +48,20 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#177] Register polis Asuransi BMN (PMK 43/2025) — 2026-07-12
+
+- **Subbab pustaka §11.5 Asuransi BMN** (riset dulu): PMK 97/2019
+  ternyata sudah dicabut **PMK 43 Tahun 2025** (skema premi baru via
+  Pooling Fund Bencana) — modul merujuk PMK 43/2025; butir verifikasi
+  20 di §14.
+- **Register polis** per aset di modul Pengamanan: nomor polis,
+  penanggung (default Konsorsium Asuransi BMN), kategori objek
+  Program/Nonprogram, nilai pertanggungan, premi + sumber dana
+  (DIPA/PFB), masa berlaku dengan status akan datang/aktif/
+  **segera berakhir ≤90 hari**/berakhir + ringkasan.
+- UI seksi polis + dialog ber-pencarian aset; item "menyusul"
+  Pengamanan kini TUNTAS semua. Unit test +2 → 234 passed.
+
 ## [#176] Konsolidasi dokumentasi #175 — 2026-07-12
 
 - **Dokumentasi saja**: README Progres Fase 3 + roadmap masterplan +

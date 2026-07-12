@@ -298,14 +298,14 @@ export const SIKLUS_MODULES = [
     urutan: 7,
     status: "sebagian",
     fase: 3,
-    ringkas: "Dasbor tertib administrasi + register BMN bermasalah + arsip dokumen kepemilikan sudah bisa dibuka.",
+    ringkas: "Dasbor, register BMN bermasalah, arsip dokumen, checklist, dan polis asuransi sudah bisa dibuka.",
     deskripsi:
       "Pengamanan BMN pada tiga lapis (PP 27/2014 Ps. 42): Fisik (penjagaan, patok, "
       + "pagar), Administrasi (kelengkapan dokumen & pencatatan), dan Hukum (sertifikat, "
       + "BPKB, dokumen kepemilikan) — ditambah Asuransi BMN untuk aset strategis.",
     dasarHukum: [
       "PP 27/2014 jo. PP 28/2020 Ps. 42-43 — kewajiban pengamanan & penyimpanan bukti kepemilikan",
-      "PMK 97/PMK.06/2019 — Asuransi BMN (pengamanan aset tertentu)",
+      "PMK 43 Tahun 2025 — Pengasuransian BMN (mencabut PMK 97/2019)",
     ],
     fitur: [
       "✅ Dasbor kelengkapan data aset (foto/register/lokasi/pengguna/BAST) + daftar pantau sengketa",
@@ -313,7 +313,7 @@ export const SIKLUS_MODULES = [
       "✅ Arsip dokumen kepemilikan per aset: sertipikat/BPKB/STNK/IMB-PBG + lokasi penyimpanan (Ps. 43) + scan + pengingat kedaluwarsa",
       "✅ Status sertipikasi tanah per dokumen sertipikat (belum/proses/K1-K4/SHP terbit)",
       "✅ Checklist pengamanan per aset per jenis (butir fisik/administrasi/hukum + skor + tanggal cek)",
-      "Registrasi polis Asuransi BMN + masa berlaku (menyusul)",
+      "✅ Register polis Asuransi BMN: nomor/penanggung/kategori objek/nilai/premi + pengingat masa berlaku (PMK 43/2025)",
     ],
     integrasi: ["Data sengketa & kelengkapan dokumen dari inventarisasi menjadi daftar pantau"],
   },
