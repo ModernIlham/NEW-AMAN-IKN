@@ -343,7 +343,7 @@ export const SIKLUS_MODULES = [
     fitur: [
       "✅ Register usulan multi-aset berstatus: diusulkan → disetujui → dilaksanakan → selesai (SK Penghapusan)",
       "✅ Dokumen wajib per tahap (persetujuan; risalah/BAST/naskah/PP + NTPN utk penjualan; SK) + peringatan tenggat lelang 6 bulan",
-      "Arsip scan risalah lelang / naskah hibah / BAST keluar",
+      "✅ Arsip scan risalah lelang / naskah hibah / BAST / bukti setor per usulan (PDF/gambar)",
       "Aset otomatis keluar dari daftar aktif setelah selesai",
     ],
     integrasi: ["Berbagi alur persetujuan & dokumen dengan pemusnahan/penghapusan"],
