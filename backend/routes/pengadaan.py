@@ -19,7 +19,7 @@ from shared_utils import delete_document_from_gridfs, get_document_from_gridfs
 from pengadaan_utils import (
     DOKUMEN_PEROLEHAN, JENIS_PEROLEHAN, LABEL_DOKUMEN_SUMBER,
     dokumen_kurang_perolehan, is_ekstrakomptabel, nilai_perolehan,
-    rekap_perolehan, validate_perolehan,
+    rekap_perolehan, snapshot_penganggaran, validate_perolehan,
 )
 
 pengadaan_router = APIRouter()
@@ -42,7 +42,26 @@ class PerolehanIn(BaseModel):
     nomor_bast: str = Field(min_length=1)
     tanggal_bast: str = Field(min_length=10, max_length=10)
     keterangan: str = ""
+    penganggaran_id: str = ""          # tautan usulan Penganggaran (opsional)
     barang: list[BarangIn] = Field(min_length=1, max_length=100)
+
+
+class TautkanPenganggaranIn(BaseModel):
+    penganggaran_id: str = ""          # kosong = lepaskan tautan
+
+
+async def _ambil_snapshot_penganggaran(penganggaran_id: str) -> dict:
+    """Cari usulan penganggaran (bila id diisi) → snapshot; 404 bila hilang."""
+    pid = str(penganggaran_id or "").strip()
+    if not pid:
+        return snapshot_penganggaran(None)
+    u = await db.penganggaran.find_one(
+        {"id": pid},
+        {"_id": 0, "id": 1, "uraian": 1, "nomor_dipa": 1, "tahun_anggaran": 1})
+    if not u:
+        raise HTTPException(status_code=404,
+                            detail="Usulan penganggaran tidak ditemukan")
+    return snapshot_penganggaran(u)
 
 
 class DokumenIn(BaseModel):
@@ -88,8 +107,8 @@ async def export_pengadaan(_user: dict = Depends(require_user)):
     buf = io.StringIO()
     w = csv_module.writer(buf)
     w.writerow(["jenis", "pihak", "nomor_kontrak", "nomor_bast", "tanggal_bast",
-                "jumlah_barang", "nilai", "dokumen_kurang", "keterangan",
-                "jumlah_lampiran", "dibuat_oleh"])
+                "jumlah_barang", "nilai", "dokumen_kurang", "penganggaran",
+                "nomor_dipa", "keterangan", "jumlah_lampiran", "dibuat_oleh"])
     async for p in db.pengadaan.find({}, {"_id": 0}).sort("tanggal_bast", -1):
         w.writerow([
             JENIS_PEROLEHAN.get(p.get("jenis"), (p.get("jenis"),))[0],
@@ -97,6 +116,7 @@ async def export_pengadaan(_user: dict = Depends(require_user)):
             p.get("tanggal_bast"), len(p.get("barang") or []),
             int(nilai_perolehan(p)),
             "; ".join(dokumen_kurang_perolehan(p)),
+            p.get("penganggaran_uraian"), p.get("penganggaran_nomor_dipa"),
             p.get("keterangan"), len(p.get("lampiran_berkas") or []),
             p.get("created_by"),
         ])
@@ -128,6 +148,7 @@ async def buat_perolehan(payload: PerolehanIn, user: dict = Depends(require_user
             row.update({"asset_id": a["id"], "asset_code": a.get("asset_code"),
                         "NUP": a.get("NUP"), "asset_name": a.get("asset_name")})
         barang_rows.append(row)
+    snap = await _ambil_snapshot_penganggaran(data.get("penganggaran_id"))
     now = datetime.now(timezone.utc).isoformat()
     record = {
         "id": str(uuid.uuid4()),
@@ -137,6 +158,7 @@ async def buat_perolehan(payload: PerolehanIn, user: dict = Depends(require_user
         "nomor_bast": data["nomor_bast"].strip(),
         "tanggal_bast": data["tanggal_bast"].strip()[:10],
         "keterangan": str(data.get("keterangan") or "").strip(),
+        **snap,
         # Checklist mulai kosong; BAST & kontrak otomatis tercentang bila
         # nomornya sudah diisi saat pencatatan.
         "dokumen": {"bast": True,
@@ -195,6 +217,22 @@ async def tautkan_barang(perolehan_id: str, payload: TautkanIn,
         {"id": perolehan_id},
         {"$set": {"barang": barang, "updated_at": now}})
     p["barang"] = barang
+    return _enrich(p)
+
+
+@pengadaan_router.post("/pengadaan/{perolehan_id}/penganggaran")
+async def tautkan_penganggaran(perolehan_id: str,
+                               payload: TautkanPenganggaranIn,
+                               _user: dict = Depends(require_user)):
+    """Tautkan/lepaskan perolehan ke usulan Penganggaran (#117 ↔ #115)."""
+    p = await db.pengadaan.find_one({"id": perolehan_id}, {"_id": 0})
+    if not p:
+        raise HTTPException(status_code=404, detail="Perolehan tidak ditemukan")
+    snap = await _ambil_snapshot_penganggaran(payload.penganggaran_id)
+    now = datetime.now(timezone.utc).isoformat()
+    await db.pengadaan.update_one(
+        {"id": perolehan_id}, {"$set": {**snap, "updated_at": now}})
+    p.update(snap)
     return _enrich(p)
 
 

@@ -138,3 +138,26 @@ def rekap_perolehan(items) -> dict:
             "nilai": nilai, "dokumen_lengkap": lengkap,
             "barang_total": barang_total, "belum_tertaut": belum_tertaut,
             "ekstrakomptabel": ekstra}
+
+
+# ---------------------------------------------------------------------------
+# Tautan paket perolehan → usulan Penganggaran (#117 ↔ #115). Snapshot
+# identitas usulan agar register perolehan menjejak sumber anggarannya
+# (uraian, nomor DIPA, tahun) tanpa join saat baca. Referensi lunak —
+# menautkan tidak memvalidasi nilai; kanal resmi tetap SAKTI.
+# ---------------------------------------------------------------------------
+
+def snapshot_penganggaran(usulan) -> dict:
+    """Ringkas identitas usulan penganggaran untuk disimpan di perolehan.
+
+    usulan None / kosong → snapshot kosong (tautan dilepas).
+    """
+    if not usulan:
+        return {"penganggaran_id": "", "penganggaran_uraian": "",
+                "penganggaran_nomor_dipa": "", "penganggaran_tahun": ""}
+    return {
+        "penganggaran_id": str(usulan.get("id") or "").strip(),
+        "penganggaran_uraian": str(usulan.get("uraian") or "").strip(),
+        "penganggaran_nomor_dipa": str(usulan.get("nomor_dipa") or "").strip(),
+        "penganggaran_tahun": str(usulan.get("tahun_anggaran") or "").strip(),
+    }

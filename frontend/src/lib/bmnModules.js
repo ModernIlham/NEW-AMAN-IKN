@@ -217,6 +217,7 @@ export const SIKLUS_MODULES = [
       "✅ Tautan barang → aset master + penanda ekstrakomptabel PMK 181",
       "✅ Lampiran berkas per perolehan: scan kontrak/BAPHP/BAST/kuitansi/SP2D (PDF/gambar)",
       "✅ Ekspor CSV register perolehan (nilai, dokumen kurang, lampiran)",
+      "✅ Tautan paket perolehan → usulan Penganggaran (snapshot uraian/DIPA/tahun; jembatan #117 ↔ #115)",
       "Auto-daftar draft aset baru dari perolehan (menyusul)",
     ],
     integrasi: ["Menjadi pintu masuk data master aset & batch persediaan baru; tersambung register penganggaran (#115)"],
