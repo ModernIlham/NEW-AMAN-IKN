@@ -48,6 +48,15 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#81] Peringatan kritis/kedaluwarsa + nota dinas PDF persediaan — 2026-07-12
+
+- **Daftar pantau persediaan** (`/persediaan/peringatan`): habis, kritis
+  (stok ≤ batas), layer kedaluwarsa & segera kedaluwarsa (horizon 30 hari).
+- **Nota dinas PDF otomatis** (kritis/kedaluwarsa): kop surat + tabel +
+  tanda tangan KPB — usulan pengadaan atau tindak lanjut kedaluwarsa.
+- **Banner peringatan** kuning + tombol unduh nota dinas di halaman
+  Master Persediaan. 3 unit test klasifikasi kedaluwarsa (36 total).
+
 ## [#80] Transaksi keluar FIFO persediaan — konsumsi layer tertua — 2026-07-12
 
 - **Transaksi KELUAR persediaan**: konsumsi layer FIFO tertua dulu; nilai

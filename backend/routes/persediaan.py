@@ -21,8 +21,9 @@ from db import db
 from persediaan_fields import EDITABLE_FIELD_NAMES
 from persediaan_utils import (
     JENIS_KELUAR, JENIS_MASUK, KODE_PENUH_LEN, KODE_PREFIX_LEN, SATUAN_BAKU,
-    buat_layer, konsumsi_fifo, next_kode_penuh, next_nup, status_stok,
-    validate_kode_persediaan, validate_transaksi_keluar, validate_transaksi_masuk,
+    buat_layer, klasifikasi_kedaluwarsa, konsumsi_fifo, next_kode_penuh,
+    next_nup, status_stok, validate_kode_persediaan, validate_transaksi_keluar,
+    validate_transaksi_masuk,
 )
 
 persediaan_router = APIRouter()
@@ -72,7 +73,125 @@ async def list_satuan(_user: dict = Depends(require_user)):
 
 
 # CATATAN URUTAN: route literal HARUS terdaftar sebelum GET /persediaan/{item_id}
-# di bawah — kalau tidak, "jenis-transaksi" tertelan sebagai item_id.
+# di bawah — kalau tidak, path literal tertelan sebagai item_id.
+@persediaan_router.get("/persediaan/peringatan")
+async def peringatan_persediaan(
+    horizon_hari: int = Query(30, ge=1, le=365),
+    _user: dict = Depends(require_user),
+):
+    """Daftar pantau (pustaka §3): stok habis/kritis + layer kedaluwarsa.
+
+    Bahan banner peringatan & nota dinas — dihitung dari data nyata
+    (stok vs batas kritis; expired layer vs hari ini + horizon).
+    """
+    today_iso = datetime.now(timezone.utc).date().isoformat()
+    habis, kritis, lewat, segera = [], [], [], []
+    cursor = db.persediaan.find({}, {"_id": 0})
+    async for item in cursor:
+        stok = int(item.get("stok", 0) or 0)
+        st = status_stok(stok, item.get("batas_kritis"))
+        ringkas = {"id": item.get("id"), "kode_barang": item.get("kode_barang"),
+                   "nup": item.get("nup"), "nama_barang": item.get("nama_barang"),
+                   "satuan": item.get("satuan"), "stok": stok,
+                   "batas_kritis": item.get("batas_kritis", 0)}
+        if st == "habis":
+            habis.append(ringkas)
+        elif st == "kritis":
+            kritis.append(ringkas)
+        exp_lewat, exp_segera = klasifikasi_kedaluwarsa(
+            item.get("batches"), today_iso, horizon_hari)
+        for e in exp_lewat:
+            lewat.append({**ringkas, **e})
+        for e in exp_segera:
+            segera.append({**ringkas, **e})
+    return {"tanggal": today_iso, "horizon_hari": horizon_hari,
+            "habis": habis, "kritis": kritis,
+            "kedaluwarsa": lewat, "segera_kedaluwarsa": segera,
+            "total_masalah": len(habis) + len(kritis) + len(lewat) + len(segera)}
+
+
+@persediaan_router.get("/persediaan/nota-dinas")
+async def nota_dinas_persediaan(
+    jenis: str = Query(..., pattern="^(kritis|kedaluwarsa)$"),
+    horizon_hari: int = Query(30, ge=1, le=365),
+    _user: dict = Depends(require_user),
+):
+    """Nota dinas PDF otomatis (pustaka §3): stok kritis/habis ATAU layer
+    kedaluwarsa — kop surat + tabel + tanda tangan Kuasa Pengguna Barang."""
+    from io import BytesIO
+
+    from reportlab.lib.units import mm as rl_mm
+    from reportlab.platypus import Paragraph, Spacer, Table
+
+    from routes.reports import (
+        _fit_col_widths, _fmt_tanggal_id, _get_report_styles, _kop_surat_flowables,
+        _page_footer_factory, _signature_block, _std_doc, _std_table_style,
+        _title_block,
+    )
+
+    data = await peringatan_persediaan(horizon_hari=horizon_hari, _user=_user)
+    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+
+    buffer = BytesIO()
+    doc = _std_doc(buffer)
+    st = _get_report_styles()
+    elements = []
+    elements.extend(_kop_surat_flowables(settings, doc.width))
+
+    if jenis == "kritis":
+        judul = "NOTA DINAS\nUSULAN PENGADAAN PERSEDIAAN (STOK KRITIS/HABIS)"
+        rows = data["habis"] + data["kritis"]
+        headers = ["No", "Kode Barang", "Nama Barang", "Satuan", "Stok", "Batas Kritis"]
+        widths = [28, 120, 190, 60, 45, 65]
+        body = [[str(i + 1), r["kode_barang"], r["nama_barang"], r.get("satuan") or "-",
+                 str(r["stok"]), str(r.get("batas_kritis") or 0)] for i, r in enumerate(rows)]
+        pengantar = ("Bersama ini disampaikan daftar barang persediaan yang stoknya telah "
+                     "HABIS atau mencapai batas kritis, untuk menjadi pertimbangan dalam "
+                     "pengadaan berikutnya.")
+    else:
+        judul = "NOTA DINAS\nPERSEDIAAN KEDALUWARSA / SEGERA KEDALUWARSA"
+        rows = data["kedaluwarsa"] + data["segera_kedaluwarsa"]
+        headers = ["No", "Kode Barang", "Nama Barang", "Jumlah", "Kedaluwarsa"]
+        widths = [28, 130, 200, 55, 85]
+        body = [[str(i + 1), r["kode_barang"], r["nama_barang"], str(r["qty"]),
+                 _fmt_tanggal_id(r["expired"]) or r["expired"]] for i, r in enumerate(rows)]
+        pengantar = (f"Bersama ini disampaikan daftar persediaan yang telah/akan kedaluwarsa "
+                     f"dalam {data['horizon_hari']} hari ke depan, untuk ditindaklanjuti "
+                     f"(pemakaian prioritas, pemindahan, atau usulan penghapusan).")
+
+    elements.extend(_title_block(judul))
+    elements.append(Paragraph(f"Tanggal data: {_fmt_tanggal_id(data['tanggal'])}", st['Meta']))
+    elements.append(Paragraph(pengantar, st['Meta']))
+    elements.append(Spacer(1, 4 * rl_mm))
+
+    if not body:
+        elements.append(Paragraph("Tidak ada barang yang memenuhi kriteria saat ini.", st['Cell']))
+    else:
+        table_data = [[Paragraph(h, st['TableHeader']) for h in headers]]
+        for r in body:
+            table_data.append([Paragraph(str(c), st['Cell']) for c in r])
+        table = Table(table_data, colWidths=_fit_col_widths(widths, doc.width), repeatRows=1)
+        table.setStyle(_std_table_style(zebra=True))
+        elements.append(table)
+
+    elements.append(Spacer(1, 12 * rl_mm))
+    kasatker = settings.get("kasatker_nama") or "-"
+    elements.extend(_signature_block([
+        {'pre': ['.................., .......................'],
+         'header': 'Kuasa Pengguna Barang,',
+         'nama': kasatker,
+         'after': [f"NIP. {settings.get('kasatker_nip') or '-'}"]},
+    ], doc.width))
+
+    footer = _page_footer_factory("Nota Dinas Persediaan")
+    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    buffer.seek(0)
+    fname = f"Nota_Dinas_{'Stok_Kritis' if jenis == 'kritis' else 'Kedaluwarsa'}.pdf"
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(buffer, media_type="application/pdf",
+                             headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
+
 @persediaan_router.get("/persediaan/jenis-transaksi")
 async def list_jenis_transaksi(_user: dict = Depends(require_user)):
     """Jenis transaksi masuk & keluar (peta 1:1 ke SAKTI) untuk dropdown."""
