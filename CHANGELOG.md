@@ -48,6 +48,17 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#74] UI Referensi Kodefikasi — kelola & impor dari Beranda Modul — 2026-07-12
+
+- **Halaman Referensi Kodefikasi**: cari kode/uraian (debounce), chip filter
+  per level, tabel berpaging + badge level berwarna + penanda PERSEDIAAN
+  (kode berawalan '1'); back-guard HP.
+- **Admin**: tambah (level otomatis dari panjang kode), ubah uraian, hapus
+  berkonfirmasi (turunan ditolak server), impor CSV/XLSX + ringkasan hasil,
+  unduh template. Non-admin baca saja.
+- Tombol perkakas "Referensi Kodefikasi Barang" di kartu Penatausahaan
+  Beranda Modul.
+
 ## [#73] Kodefikasi referensi barang 5 level — fondasi Fase 2 — 2026-07-12
 
 - **Referensi kodefikasi BMN** (`/api/kodefikasi`): struktur 5 level dari
