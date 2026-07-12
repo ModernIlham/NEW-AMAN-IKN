@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Search, Loader2, UserCheck, ChevronLeft, ChevronRight,
-  BadgeCheck, FileWarning,
+  BadgeCheck, FileWarning, FileText,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
+import { downloadFileWithProgress } from "@/lib/downloadFile";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -188,6 +189,16 @@ export default function PenggunaanPage({ onBack }) {
           {detail?.loading ? (
             <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-sky-600" /></div>
           ) : (
+            <>
+            <Button size="sm" variant="outline" className="h-8 text-xs min-h-0 self-start"
+              onClick={() => downloadFileWithProgress(
+                `${API}/penggunaan/pemegang/daftar-pdf?nama=${encodeURIComponent(detail?.pemegang?.nama || "")}&nip=${encodeURIComponent(detail?.pemegang?.nip || "")}`,
+                `Daftar_Barang_${(detail?.pemegang?.nama || "pemegang").replace(/\s/g, "_")}.pdf`,
+                { label: `Daftar Barang ${detail?.pemegang?.nama}` },
+              ).catch(() => {})}
+              data-testid="penggunaan-unduh-daftar">
+              <FileText className="w-3.5 h-3.5 mr-1.5" />Unduh Daftar (PDF Lampiran BAST)
+            </Button>
             <ul className="space-y-2">
               {(detail?.rows || []).map((a) => (
                 <li key={a.id} className="rounded-lg border border-border p-2.5 text-xs" data-testid={`penggunaan-aset-${a.id}`}>
@@ -206,6 +217,7 @@ export default function PenggunaanPage({ onBack }) {
                 </li>
               ))}
             </ul>
+            </>
           )}
         </DialogContent>
       </Dialog>

@@ -48,6 +48,13 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#125] Daftar Barang yang Digunakan per pemegang (PDF) — 2026-07-12
+
+- **Lampiran BAST penggunaan** (PMK 40/2024): PDF per pemegang berisi
+  identitas + tabel aset yang dipegang + penanda BAST + tanda tangan
+  pemegang/KPB; unduh dari dialog aset pemegang. Smoke FakeDB + PNG
+  lulus. PSP/alih status/BMN idle menyusul.
+
 ## [#124] Konsolidasi dokumentasi fitur #119–#123 — 2026-07-12
 
 - **Dokumentasi saja**: README blok Progres Fase 4 & 5–6 + penanda
