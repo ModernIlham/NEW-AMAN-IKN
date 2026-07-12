@@ -48,6 +48,12 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#107] Referensi masa manfaat dapat dikelola — 2026-07-12
+
+- **Referensi masa manfaat** per kelompok (KMK 295/2019 jo. 266/2023):
+  daftar gabungan berlabel sumber; admin tambah/ubah/hapus entri satker
+  (menimpa bawaan riset); posisi penyusutan langsung memakai peta terbaru.
+
 ## [#106] Tiket usulan penghapusan berstatus (usul → proses → SK) — 2026-07-12
 
 - **Tiket usulan** per aset kandidat (jalur otomatis, duplikat aktif

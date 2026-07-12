@@ -3,7 +3,7 @@ import pytest
 
 from penilaian_utils import (
     GOLONGAN_TANPA_SUSUT, MASA_MANFAAT_DEFAULT, hitung_penyusutan,
-    rekap_penyusutan, semester_index, status_susut,
+    rekap_penyusutan, semester_index, status_susut, validate_masa_manfaat,
 )
 
 
@@ -87,3 +87,13 @@ def test_rekap_pisah_bucket_dan_total():
 def test_rekap_kosong_aman():
     r = rekap_penyusutan([], "2026-07-12")
     assert r["per_golongan"] == [] and r["total"]["jumlah"] == 0
+
+
+def test_validate_masa_manfaat():
+    assert validate_masa_manfaat("30201", 7) == []
+    assert validate_masa_manfaat("40101", 50) == []
+    assert any("5 digit" in e for e in validate_masa_manfaat("302", 7))
+    assert any("5 digit" in e for e in validate_masa_manfaat("3020a", 7))
+    assert any("Golongan" in e for e in validate_masa_manfaat("20101", 7))  # tanah
+    assert any("1-60" in e for e in validate_masa_manfaat("30201", 0))
+    assert any("1-60" in e for e in validate_masa_manfaat("30201", "x"))
