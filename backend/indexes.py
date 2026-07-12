@@ -177,6 +177,9 @@ async def create_indexes() -> None:
         # Tiket proses alih status/penggunaan sementara: per status + jalur id
         await db.penggunaan_proses.create_index([("jenis_proses", 1), ("status", 1)])
         await db.penggunaan_proses.create_index("id", unique=True)
+        # Register koreksi nilai penilaian: per aset/tanggal + jalur id
+        await db.penilaian_koreksi.create_index([("asset_id", 1), ("tanggal_dokumen", -1)])
+        await db.penilaian_koreksi.create_index("id", unique=True)
         logger.info("Database indexes created successfully")
     except Exception as e:
         logger.error(f"Error creating indexes: {e}")

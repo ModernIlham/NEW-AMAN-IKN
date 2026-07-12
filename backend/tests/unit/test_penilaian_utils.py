@@ -97,3 +97,39 @@ def test_validate_masa_manfaat():
     assert any("Golongan" in e for e in validate_masa_manfaat("20101", 7))  # tanah
     assert any("1-60" in e for e in validate_masa_manfaat("30201", 0))
     assert any("1-60" in e for e in validate_masa_manfaat("30201", "x"))
+
+
+class TestKoreksiNilai:
+    def test_validasi_koreksi(self):
+        from penilaian_utils import validate_koreksi_nilai
+        ok = {"jenis": "revaluasi", "jenis_dokumen": "lhip",
+              "nomor_dokumen": "LHIP-12/2026", "tanggal_dokumen": "2026-06-30",
+              "nilai_lama": 100_000_000, "nilai_baru": 250_000_000,
+              "dampak_masa_manfaat": "masa_manfaat_baru",
+              "masa_manfaat_semester": 40}
+        assert validate_koreksi_nilai(ok) == []
+        errors = validate_koreksi_nilai(
+            {"jenis": "markup", "jenis_dokumen": "memo", "nomor_dokumen": " ",
+             "tanggal_dokumen": "30-06-2026", "nilai_lama": -1,
+             "nilai_baru": "x", "dampak_masa_manfaat": "reset"})
+        assert len(errors) == 7
+        # Masa manfaat baru wajib angka semester > 0
+        assert validate_koreksi_nilai(
+            {**ok, "masa_manfaat_semester": 0})
+
+    def test_rekap_koreksi(self):
+        from penilaian_utils import rekap_koreksi_nilai
+        items = [
+            {"jenis": "revaluasi", "status_sakti": "belum_dicatat",
+             "nilai_lama": 100, "nilai_baru": 250},
+            {"jenis": "koreksi_pencatatan", "status_sakti": "tercatat_sakti",
+             "nilai_lama": 50, "nilai_baru": 40},
+            {"jenis": "penilaian_tujuan_tertentu",
+             "status_sakti": "belum_dicatat",
+             "nilai_lama": 0, "nilai_baru": 999},
+        ]
+        r = rekap_koreksi_nilai(items)
+        assert r["jumlah"] == 3
+        assert r["belum_tercatat_sakti"] == 1  # tujuan tertentu tak dihitung
+        assert r["selisih_total"] == 140       # (250-100) + (40-50)
+        assert r["per_jenis"]["penilaian_tujuan_tertentu"] == 1

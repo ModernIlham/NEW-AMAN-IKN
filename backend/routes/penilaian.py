@@ -5,6 +5,7 @@ Rekap per golongan + daftar telaah (henti susut, tanpa referensi masa
 manfaat) dari data aset nyata. Revaluasi & referensi masa manfaat yang
 dapat dikelola menyusul sesuai masterplan.
 """
+import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -15,6 +16,8 @@ from db import db
 from kodefikasi_utils import GOLONGAN_DEFAULTS
 from penilaian_utils import (
     MASA_MANFAAT_DEFAULT, rekap_penyusutan, validate_masa_manfaat,
+    DAMPAK_MASA_MANFAAT, DOKUMEN_KOREKSI, JENIS_KOREKSI_NILAI,
+    STATUS_SAKTI_KOREKSI, rekap_koreksi_nilai, validate_koreksi_nilai,
 )
 
 penilaian_router = APIRouter()
@@ -121,3 +124,104 @@ async def posisi_penyusutan(
         "referensi tidak ditebak dan tampil di daftar telaah."
     )
     return hasil
+
+
+class KoreksiNilaiIn(BaseModel):
+    asset_id: str = Field(min_length=1)
+    jenis: str
+    jenis_dokumen: str
+    nomor_dokumen: str = Field(min_length=1)
+    tanggal_dokumen: str = Field(min_length=10, max_length=10)
+    nilai_lama: float = Field(ge=0)
+    nilai_baru: float = Field(ge=0)
+    penilai_pelaksana: str = ""
+    dampak_masa_manfaat: str = "tetap"
+    masa_manfaat_semester: int = 0
+    catatan: str = ""
+
+
+@penilaian_router.get("/penilaian/koreksi")
+async def list_koreksi_nilai(_user: dict = Depends(require_user)):
+    """Register koreksi nilai & hasil penilaian (terbaru dulu)."""
+    items = [k async for k in db.penilaian_koreksi.find({}, {"_id": 0})
+             .sort("tanggal_dokumen", -1).limit(500)]
+    return {"items": items, "ringkasan": rekap_koreksi_nilai(items),
+            "label_jenis": JENIS_KOREKSI_NILAI,
+            "label_dokumen": DOKUMEN_KOREKSI,
+            "label_dampak": DAMPAK_MASA_MANFAAT,
+            "label_sakti": STATUS_SAKTI_KOREKSI,
+            "catatan": (
+                "Register pendamping (PMK 99/2024 + PMK 118/2017) — AMAN "
+                "bukan penilai dan tidak menghitung nilai wajar; pencatatan "
+                "resmi di SAKTI (koreksi revaluasi di-push pusat, satker "
+                "memverifikasi vs LHIP); penilaian tujuan tertentu tidak "
+                "mengubah nilai buku.")}
+
+
+@penilaian_router.post("/penilaian/koreksi")
+async def catat_koreksi_nilai(payload: KoreksiNilaiIn,
+                              user: dict = Depends(require_user)):
+    """Catat satu peristiwa nilai untuk satu aset (status SAKTI: belum)."""
+    data = payload.model_dump()
+    errors = validate_koreksi_nilai(data)
+    if errors:
+        raise HTTPException(status_code=400, detail="; ".join(errors))
+    asset = await db.assets.find_one(
+        {"id": data["asset_id"]},
+        {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1})
+    if not asset:
+        raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    now = datetime.now(timezone.utc).isoformat()
+    record = {
+        "id": str(uuid.uuid4()),
+        "asset_id": asset["id"],
+        "asset_code": asset.get("asset_code"),
+        "NUP": asset.get("NUP"),
+        "asset_name": asset.get("asset_name"),
+        "jenis": data["jenis"],
+        "jenis_dokumen": data["jenis_dokumen"],
+        "nomor_dokumen": data["nomor_dokumen"].strip(),
+        "tanggal_dokumen": data["tanggal_dokumen"].strip()[:10],
+        "nilai_lama": float(data["nilai_lama"]),
+        "nilai_baru": float(data["nilai_baru"]),
+        "selisih": float(data["nilai_baru"]) - float(data["nilai_lama"]),
+        "penilai_pelaksana": str(data.get("penilai_pelaksana") or "").strip(),
+        "dampak_masa_manfaat": data["dampak_masa_manfaat"],
+        "masa_manfaat_semester": int(data.get("masa_manfaat_semester") or 0),
+        "status_sakti": "belum_dicatat",
+        "catatan": str(data.get("catatan") or "").strip(),
+        "created_by": user.get("username"),
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.penilaian_koreksi.insert_one({**record})
+    return record
+
+
+@penilaian_router.post("/penilaian/koreksi/{koreksi_id}/sakti")
+async def tandai_tercatat_sakti(koreksi_id: str,
+                                user: dict = Depends(require_user)):
+    """Tandai koreksi sudah divalidasi & di-approve di SAKTI (anti-race)."""
+    now = datetime.now(timezone.utc).isoformat()
+    res = await db.penilaian_koreksi.find_one_and_update(
+        {"id": koreksi_id, "status_sakti": "belum_dicatat"},
+        {"$set": {"status_sakti": "tercatat_sakti", "updated_at": now,
+                  "sakti_oleh": user.get("username"), "sakti_tanggal": now[:10]}},
+        projection={"_id": 0},
+    )
+    if not res:
+        raise HTTPException(
+            status_code=409,
+            detail="Koreksi tidak ditemukan atau sudah ditandai tercatat")
+    res["status_sakti"] = "tercatat_sakti"
+    return res
+
+
+@penilaian_router.delete("/penilaian/koreksi/{koreksi_id}")
+async def hapus_koreksi_nilai(koreksi_id: str,
+                              _admin: dict = Depends(require_admin)):
+    """Hapus satu catatan koreksi (admin)."""
+    res = await db.penilaian_koreksi.delete_one({"id": koreksi_id})
+    if not res.deleted_count:
+        raise HTTPException(status_code=404, detail="Koreksi tidak ditemukan")
+    return {"ok": True}

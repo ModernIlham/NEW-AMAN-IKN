@@ -168,3 +168,100 @@ def rekap_penyusutan(assets, per_iso, peta=None, uraian_golongan=None):
     return {"per_golongan": rows, "total": total, "henti": henti,
             "tanpa_referensi": tanpa_ref, "tidak": tidak,
             "jumlah_habis": jumlah_habis}
+
+
+# ---------------------------------------------------------------------------
+# Register koreksi nilai & hasil penilaian per aset (riset #185; PMK 99
+# Tahun 2024 mencabut PMK 173/2020 yang mencabut PMK 111/2017; revaluasi
+# nasional: Perpres 75/2017 + PMK 118/2017 jo. 57/2018 jo. 107/2019).
+# AMAN bukan penilai: nilai wajar sah hanya dari Laporan Penilaian
+# Penilai Pemerintah DJKN/Penilai Publik; pencatatan resmi di SAKTI.
+# ---------------------------------------------------------------------------
+
+JENIS_KOREKSI_NILAI = {
+    "revaluasi": "Revaluasi / penilaian kembali",
+    "koreksi_inventarisasi": "Koreksi hasil inventarisasi",
+    "koreksi_temuan_putusan": "Koreksi temuan BPK/APIP/putusan",
+    "koreksi_pencatatan": "Koreksi kesalahan pencatatan",
+    "penilaian_tujuan_tertentu": "Penilaian tujuan tertentu (informasional)",
+}
+
+DOKUMEN_KOREKSI = {
+    "lhip": "LHIP (Laporan Hasil Inventarisasi & Penilaian)",
+    "laporan_penilaian": "Laporan Penilaian",
+    "ba": "Berita Acara",
+    "sk_koreksi": "SK Koreksi",
+}
+
+DAMPAK_MASA_MANFAAT = {
+    "tetap": "Masa manfaat tetap",
+    "masa_manfaat_baru": "Masa manfaat baru (akumulasi reset)",
+}
+
+STATUS_SAKTI_KOREKSI = {
+    "belum_dicatat": "Belum tercatat di SAKTI",
+    "tercatat_sakti": "Sudah divalidasi & di-approve di SAKTI",
+}
+
+
+def validate_koreksi_nilai(data: dict) -> list:
+    """Validasi pencatatan koreksi nilai → daftar pesan kesalahan."""
+    from datetime import date
+
+    errors = []
+    if data.get("jenis") not in JENIS_KOREKSI_NILAI:
+        valid = ", ".join(JENIS_KOREKSI_NILAI)
+        errors.append(f"Jenis koreksi tidak dikenal (pilihan: {valid})")
+    if data.get("jenis_dokumen") not in DOKUMEN_KOREKSI:
+        valid = ", ".join(DOKUMEN_KOREKSI)
+        errors.append(f"Jenis dokumen tidak dikenal (pilihan: {valid})")
+    if not str(data.get("nomor_dokumen") or "").strip():
+        errors.append("Nomor dokumen wajib diisi")
+    tanggal = str(data.get("tanggal_dokumen") or "").strip()[:10]
+    try:
+        date.fromisoformat(tanggal)
+    except ValueError:
+        errors.append("Tanggal dokumen harus berformat YYYY-MM-DD")
+    for k, label in (("nilai_lama", "Nilai lama"), ("nilai_baru", "Nilai baru")):
+        try:
+            if float(data.get(k) or 0) < 0:
+                errors.append(f"{label} tidak boleh negatif")
+        except (TypeError, ValueError):
+            errors.append(f"{label} harus angka")
+    if data.get("dampak_masa_manfaat") not in DAMPAK_MASA_MANFAAT:
+        valid = ", ".join(DAMPAK_MASA_MANFAAT)
+        errors.append(f"Dampak masa manfaat tidak dikenal (pilihan: {valid})")
+    if data.get("dampak_masa_manfaat") == "masa_manfaat_baru":
+        try:
+            if int(data.get("masa_manfaat_semester") or 0) <= 0:
+                errors.append("Masa manfaat baru (semester) harus lebih dari 0")
+        except (TypeError, ValueError):
+            errors.append("Masa manfaat baru harus angka semester")
+    return errors
+
+
+def rekap_koreksi_nilai(items) -> dict:
+    """Ringkasan register: per jenis, belum tercatat SAKTI, total selisih.
+
+    Selisih hanya dihitung untuk jenis yang mengubah nilai buku —
+    penilaian tujuan tertentu bersifat informasional.
+    """
+    per_jenis = {k: 0 for k in JENIS_KOREKSI_NILAI}
+    belum_sakti = 0
+    selisih_total = 0.0
+    for k in items or []:
+        j = k.get("jenis")
+        if j in per_jenis:
+            per_jenis[j] += 1
+        if (k.get("status_sakti") == "belum_dicatat"
+                and j != "penilaian_tujuan_tertentu"):
+            belum_sakti += 1
+        if j != "penilaian_tujuan_tertentu":
+            try:
+                selisih_total += (float(k.get("nilai_baru") or 0)
+                                  - float(k.get("nilai_lama") or 0))
+            except (TypeError, ValueError):
+                pass
+    return {"jumlah": len(items or []), "per_jenis": per_jenis,
+            "belum_tercatat_sakti": belum_sakti,
+            "selisih_total": selisih_total}
