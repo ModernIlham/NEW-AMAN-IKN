@@ -44,6 +44,44 @@ class TransisiPtIn(BaseModel):
     catatan: str = ""
 
 
+@pemindahtanganan_router.get("/pemindahtanganan/export")
+async def export_pemindahtanganan(_user: dict = Depends(require_user)):
+    """Ekspor CSV seluruh usulan pemindahtanganan (pola #158).
+
+    Rincian aset diringkas jumlah + nilai perolehan total per usulan.
+    """
+    import csv as csv_module
+    import io
+
+    from fastapi.responses import Response as HttpResponse
+
+    from pembukuan_utils import parse_harga
+
+    buf = io.StringIO()
+    w = csv_module.writer(buf)
+    w.writerow(["bentuk", "pihak", "status", "jumlah_aset",
+                "nilai_perolehan_total", "nomor_persetujuan",
+                "tanggal_persetujuan", "nomor_dokumen", "ntpn",
+                "nomor_sk_penghapusan", "tanggal_usulan", "keterangan",
+                "jumlah_lampiran", "dibuat_oleh"])
+    async for u in db.pemindahtanganan.find({}, {"_id": 0}).sort("created_at", -1):
+        aset = u.get("aset") or []
+        w.writerow([
+            BENTUK_PEMINDAHTANGANAN.get(u.get("bentuk"), u.get("bentuk")),
+            u.get("pihak"),
+            STATUS_USULAN_PT.get(u.get("status"), u.get("status")),
+            len(aset),
+            int(sum(parse_harga(a.get("harga")) for a in aset)),
+            u.get("nomor_persetujuan"), u.get("tanggal_persetujuan"),
+            u.get("nomor_dokumen"), u.get("ntpn"),
+            u.get("nomor_sk_penghapusan"),
+            str(u.get("created_at") or "")[:10], u.get("keterangan"),
+            len(u.get("lampiran") or []), u.get("created_by"),
+        ])
+    return HttpResponse(content=buf.getvalue().encode("utf-8-sig"), media_type="text/csv",
+                        headers={"Content-Disposition": 'attachment; filename="register_pemindahtanganan.csv"'})
+
+
 @pemindahtanganan_router.get("/pemindahtanganan")
 async def list_pemindahtanganan(_user: dict = Depends(require_user)):
     """Register usulan (terbaru dulu) + ringkasan + peringatan tenggat."""

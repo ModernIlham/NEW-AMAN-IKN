@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, FileX, SearchX, Flame, Coins, TicketCheck,
-  Paperclip, Upload, Trash2,
+  Paperclip, Upload, Trash2, Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,7 @@ import {
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { authMediaUrl } from "@/lib/mediaUrl";
+import { downloadFileWithProgress } from "@/lib/downloadFile";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -168,6 +169,11 @@ export default function PenghapusanPage({ user, onBack }) {
               Usul → proses → SK terbit · PMK 83/PMK.06/2016
             </p>
           </div>
+          <Button size="sm" variant="outline" className="flex-shrink-0"
+            onClick={() => downloadFileWithProgress(`${API}/penghapusan/usulan/export`, "register_usulan_penghapusan.csv", { label: "Ekspor Usulan Penghapusan (CSV)" }).catch(() => {})}
+            data-testid="penghapusan-export">
+            <Download className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">CSV</span>
+          </Button>
         </div>
       </header>
 

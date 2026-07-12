@@ -48,6 +48,13 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#159] Ekspor CSV register penghapusan & pemindahtanganan — 2026-07-12
+
+- **Ekspor CSV** dua register hilir lagi (pola #158): usulan penghapusan
+  (jalur + status + SK + jumlah lampiran) dan pemindahtanganan (bentuk +
+  status + dokumen per tahap + ringkas aset); tombol CSV di kedua
+  halaman.
+
 ## [#158] Ekspor CSV register pemanfaatan — 2026-07-12
 
 - **Ekspor CSV** register perjanjian (kolom lengkap + status turunan +
