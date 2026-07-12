@@ -48,6 +48,13 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#100] Kertas kerja usulan RKBMN pemeliharaan (XLSX) — 2026-07-12
+
+- **Kertas kerja RKBMN** siap diisi satker: sheet Layak (identitas +
+  riwayat biaya + kolom kuning Usulan Pekerjaan & Perkiraan Biaya) +
+  sheet Tidak Layak (alasan/jalur benar); tombol di halaman Perencanaan;
+  nama file mengikuti TA usulan (+1). Smoke roundtrip openpyxl.
+
 ## [#99] Perencanaan tahap awal: kandidat RKBMN pemeliharaan — 2026-07-12
 
 - **Fase 4 dimulai** — halaman Perencanaan: saringan kelayakan usulan
