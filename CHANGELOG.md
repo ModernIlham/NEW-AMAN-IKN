@@ -48,6 +48,14 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#94] Ekspor rekonsiliasi XLSX — sandingan SAKTI — 2026-07-12
+
+- **Rekonsiliasi XLSX** (3 sheet): Posisi per Golongan, Rincian Aset
+  (klasifikasi per NUP), Rincian Persediaan (nilai FIFO) — tombol di hub
+  Pelaporan; angka numerik agar bisa dihitung ulang di Excel.
+- Fondasi LBKP: audit hapus aset kini merekam nilai perolehan (tombstone
+  bernilai untuk mutasi kurang mendatang). Smoke roundtrip openpyxl.
+
 ## [#93] Laporan Posisi BMN di Neraca — komponen LBKP — 2026-07-12
 
 - **Posisi BMN di Neraca** (PMK 181, pustaka §2.3): seluruh aset satker
