@@ -48,6 +48,18 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#76] DBKP per golongan — langkah pertama modul Pembukuan — 2026-07-12
+
+- **Laporan DBKP (Daftar Barang Kuasa Pengguna) per golongan** sesuai PMK
+  181/2016: pemilahan **intra/ekstrakomptabel** dari ambang kapitalisasi
+  ber-parameter (Peralatan & Mesin ≥ Rp1 jt; Gedung & Bangunan ≥ Rp25 jt;
+  lainnya selalu intra); uraian golongan dari referensi kodefikasi; barang
+  tanpa golongan tampil sebagai baris "?" (tidak disembunyikan); catatan
+  ambang + tanda tangan Kuasa Pengguna Barang.
+- Tombol "DBKP per Golongan" di panel Laporan Resmi + masuk batch ZIP.
+- `pembukuan_utils.py` + 14 unit test; smoke render FakeDB tervalidasi
+  visual (menemukan & memperbaiki header patah + field nama kegiatan).
+
 ## [#75] Perbaikan hover light/dark + aturan anti-terulang + pustaka regulasi — 2026-07-12
 
 - **Hover dibetulkan di kedua tema**: akar masalah = token `--accent`
