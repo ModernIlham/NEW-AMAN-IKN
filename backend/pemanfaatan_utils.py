@@ -94,6 +94,58 @@ LABEL_STATUS_PERJANJIAN = {
 }
 
 
+def tahun_tertunggak(p: dict, today_iso: str) -> list:
+    """Tahun kontribusi tahunan yang belum tercatat pembayarannya.
+
+    Berlaku hanya bila kontribusi_tahunan > 0 (KSP/BGS-BSG/KSPI/KETUPI —
+    pustaka §6: kewajiban PNBP tahunan mitra). Kewajiban timbul tiap
+    tahun kalender sejak tahun mulai s.d. min(tahun berjalan, tahun
+    berakhir); tahun yang sudah tercatat pada daftar `kontribusi`
+    dikecualikan.
+    """
+    try:
+        if float(p.get("kontribusi_tahunan") or 0) <= 0:
+            return []
+    except (TypeError, ValueError):
+        return []
+    mulai = _tgl(p.get("mulai"))
+    berakhir = _tgl(p.get("berakhir"))
+    hari_ini = _tgl(today_iso)
+    if not (mulai and hari_ini):
+        return []
+    akhir = min(hari_ini.year, berakhir.year if berakhir else hari_ini.year)
+    terbayar = {str(k.get("tahun") or "").strip()
+                for k in (p.get("kontribusi") or [])}
+    return [t for t in range(mulai.year, akhir + 1) if str(t) not in terbayar]
+
+
+def peringatan_kontribusi(p: dict, today_iso: str) -> list:
+    """Peringatan tunggakan kontribusi tahunan (kosong bila tertib)."""
+    tunggak = tahun_tertunggak(p, today_iso)
+    if not tunggak:
+        return []
+    daftar = ", ".join(str(t) for t in tunggak)
+    return [f"Kontribusi tahunan belum tercatat untuk tahun: {daftar}"]
+
+
+def validate_kontribusi(data: dict, p: dict, today_iso: str) -> list:
+    """Validasi pencatatan pembayaran kontribusi satu tahun."""
+    errors = []
+    tahun = str(data.get("tahun") or "").strip()
+    if not (tahun.isdigit() and 2000 <= int(tahun) <= 2100):
+        errors.append("Tahun kontribusi wajib 4 digit yang wajar")
+    if not str(data.get("ntpn") or "").strip():
+        errors.append("NTPN bukti setor PNBP wajib diisi")
+    t = _tgl(data.get("tanggal"))
+    hari_ini = _tgl(today_iso)
+    if t and hari_ini and t > hari_ini:
+        errors.append("Tanggal setor tidak boleh di masa depan")
+    if tahun and any(str(k.get("tahun") or "").strip() == tahun
+                     for k in (p.get("kontribusi") or [])):
+        errors.append(f"Kontribusi tahun {tahun} sudah tercatat")
+    return errors
+
+
 def rekap_pemanfaatan(items, today_iso: str):
     """Ringkasan register: hitung per status & bentuk + total nilai."""
     per_status = {k: 0 for k in LABEL_STATUS_PERJANJIAN}

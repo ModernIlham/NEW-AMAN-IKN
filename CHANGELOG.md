@@ -48,6 +48,13 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#121] Kontribusi tahunan pemanfaatan + pengingat tunggakan — 2026-07-12
+
+- **Kewajiban PNBP tahunan** (KSP/BGS/KSPI, pustaka §6): field kontribusi
+  tahunan pada perjanjian, pencatatan pembayaran per tahun ber-NTPN
+  (duplikat tahun ditolak), pengingat tunggakan otomatis dari tahun
+  mulai s.d. tahun berjalan/berakhir. 2 unit test (suite 190).
+
 ## [#120] Usulan penghapusan otomatis dari BA Pemusnahan — 2026-07-12
 
 - **Tindak lanjut PMK 83/2016 satu klik**: tombol Usulkan Hapus per BA

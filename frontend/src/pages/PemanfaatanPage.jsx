@@ -24,15 +24,17 @@ const WARNA_STATUS = {
 
 const FORM_KOSONG = {
   bentuk: "sewa", mitra: "", jenis_mitra: "", mulai: "", berakhir: "",
-  nilai: "", nomor_persetujuan: "", nomor_perjanjian: "", ntpn: "", keterangan: "",
+  nilai: "", nomor_persetujuan: "", nomor_perjanjian: "", ntpn: "",
+  kontribusi_tahunan: "", keterangan: "",
 };
 
 /**
  * Pemanfaatan — Fase 5 tahap awal: register perjanjian pemanfaatan BMN
  * (PMK 115/2020). Satker = pengusul & penatausaha; status Aktif menuntut
  * nomor persetujuan Pengelola + perjanjian (sewa: + NTPN) — mencegah
- * temuan auditor tersering secara struktural. Pengingat kontribusi
- * tahunan & lampiran wasdal menyusul.
+ * temuan auditor tersering secara struktural. Kontribusi tahunan (KSP/
+ * BGS/KSPI) tercatat per tahun ber-NTPN dengan pengingat tunggakan;
+ * lampiran scan dokumen menyusul.
  */
 export default function PemanfaatanPage({ user, onBack }) {
   const isAdmin = user?.role === "admin";
@@ -41,6 +43,8 @@ export default function PemanfaatanPage({ user, onBack }) {
   const [bentukList, setBentukList] = useState([]);
   // Dialog: {id?, data, aset, saving}
   const [form, setForm] = useState(null);
+  // Dialog catat kontribusi: {perjanjian, fields{tahun,ntpn,tanggal,jumlah}, saving}
+  const [kontrib, setKontrib] = useState(null);
   const [cari, setCari] = useState("");
   const [hasilCari, setHasilCari] = useState([]);
   const [mencari, setMencari] = useState(false);
@@ -88,7 +92,8 @@ export default function PemanfaatanPage({ user, onBack }) {
         bentuk: p.bentuk, mitra: p.mitra, jenis_mitra: p.jenis_mitra || "",
         mulai: p.mulai, berakhir: p.berakhir, nilai: String(p.nilai ?? ""),
         nomor_persetujuan: p.nomor_persetujuan || "", nomor_perjanjian: p.nomor_perjanjian || "",
-        ntpn: p.ntpn || "", keterangan: p.keterangan || "",
+        ntpn: p.ntpn || "", kontribusi_tahunan: String(p.kontribusi_tahunan ?? ""),
+        keterangan: p.keterangan || "",
       },
     } : { id: null, aset: null, saving: false, data: { ...FORM_KOSONG } });
   };
@@ -100,6 +105,7 @@ export default function PemanfaatanPage({ user, onBack }) {
       const payload = {
         ...form.data,
         nilai: parseFloat(form.data.nilai) || 0,
+        kontribusi_tahunan: parseFloat(form.data.kontribusi_tahunan) || 0,
         asset_id: form.aset?.id || "",
       };
       if (form.id) await axios.put(`${API}/pemanfaatan/${form.id}`, payload);
@@ -126,6 +132,23 @@ export default function PemanfaatanPage({ user, onBack }) {
       muat();
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Gagal menghapus");
+    }
+  };
+
+  const simpanKontribusi = async () => {
+    if (!kontrib) return;
+    setKontrib((k) => ({ ...k, saving: true }));
+    try {
+      await axios.post(`${API}/pemanfaatan/${kontrib.perjanjian.id}/kontribusi`, {
+        ...kontrib.fields,
+        jumlah: parseFloat(kontrib.fields.jumlah) || 0,
+      });
+      toast.success(`Kontribusi tahun ${kontrib.fields.tahun} tercatat`);
+      setKontrib(null);
+      muat();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal mencatat kontribusi");
+      setKontrib((k) => (k ? { ...k, saving: false } : k));
     }
   };
 
@@ -219,7 +242,24 @@ export default function PemanfaatanPage({ user, onBack }) {
                       {p.kekurangan?.length > 0 && (
                         <p className="text-[11px] text-red-500/90 mt-0.5">{p.kekurangan.join("; ")}</p>
                       )}
+                      {(p.peringatan_kontribusi || []).map((w) => (
+                        <p key={w} className="text-[11px] text-amber-600 dark:text-amber-400 mt-0.5 flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3 flex-shrink-0" />{w}
+                        </p>
+                      ))}
+                      {(p.kontribusi || []).length > 0 && (
+                        <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
+                          Kontribusi tercatat: {(p.kontribusi || []).map((k) => k.tahun).join(", ")}
+                        </p>
+                      )}
                       <div className="flex gap-1.5 mt-1.5">
+                        {Number(p.kontribusi_tahunan) > 0 && p.status !== "berakhir" && (
+                          <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                            onClick={() => setKontrib({ perjanjian: p, saving: false, fields: { tahun: String(new Date().getFullYear()), ntpn: "", tanggal: new Date().toISOString().slice(0, 10), jumlah: String(p.kontribusi_tahunan) } })}
+                            data-testid={`pemanfaatan-kontribusi-${p.id}`}>
+                            Catat Kontribusi
+                          </Button>
+                        )}
                         <button type="button" onClick={() => buka(p)} aria-label="Ubah register"
                           className="h-7 w-7 rounded-lg border border-border text-foreground/70 flex items-center justify-center hover:bg-muted min-h-0 min-w-0">
                           <Pencil className="w-3 h-3" />
@@ -344,6 +384,13 @@ export default function PemanfaatanPage({ user, onBack }) {
                     onChange={(e) => setField("ntpn", e.target.value)} data-testid="pemanfaatan-ntpn" />
                 </div>
               )}
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmf-kontrib">Kontribusi tahunan (Rp, 0 = tidak ada)</label>
+                <Input id="pmf-kontrib" type="number" min="0" placeholder="0"
+                  value={form.data.kontribusi_tahunan}
+                  onChange={(e) => setField("kontribusi_tahunan", e.target.value)}
+                  data-testid="pemanfaatan-kontribusi-tahunan" />
+              </div>
               <div className="col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmf-ket">Keterangan</label>
                 <Input id="pmf-ket" value={form.data.keterangan}
@@ -356,6 +403,51 @@ export default function PemanfaatanPage({ user, onBack }) {
             <Button onClick={simpan} disabled={form?.saving}
               className="bg-teal-600 hover:bg-teal-700 text-white" data-testid="pemanfaatan-simpan">
               {form?.saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Handshake className="w-4 h-4 mr-1.5" />}Simpan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog catat kontribusi tahunan ── */}
+      <Dialog open={!!kontrib} onOpenChange={(o) => { if (!o) setKontrib(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Catat Kontribusi Tahunan</DialogTitle>
+            <DialogDescription className="text-xs">
+              {kontrib && `${labelBentuk[kontrib.perjanjian.bentuk] || kontrib.perjanjian.bentuk} — ${kontrib.perjanjian.mitra}. PNBP disetor mitra ke Kas Negara; NTPN sebagai bukti.`}
+            </DialogDescription>
+          </DialogHeader>
+          {kontrib && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmf-k-tahun">Tahun</label>
+                <Input id="pmf-k-tahun" inputMode="numeric" maxLength={4} value={kontrib.fields.tahun}
+                  onChange={(e) => setKontrib((k) => ({ ...k, fields: { ...k.fields, tahun: e.target.value.replace(/\D/g, "") } }))}
+                  data-testid="pemanfaatan-k-tahun" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmf-k-tgl">Tanggal setor</label>
+                <Input id="pmf-k-tgl" type="date" value={kontrib.fields.tanggal}
+                  onChange={(e) => setKontrib((k) => ({ ...k, fields: { ...k.fields, tanggal: e.target.value } }))} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmf-k-ntpn">NTPN</label>
+                <Input id="pmf-k-ntpn" className="font-mono" value={kontrib.fields.ntpn}
+                  onChange={(e) => setKontrib((k) => ({ ...k, fields: { ...k.fields, ntpn: e.target.value } }))}
+                  data-testid="pemanfaatan-k-ntpn" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmf-k-jumlah">Jumlah (Rp)</label>
+                <Input id="pmf-k-jumlah" type="number" min="0" value={kontrib.fields.jumlah}
+                  onChange={(e) => setKontrib((k) => ({ ...k, fields: { ...k.fields, jumlah: e.target.value } }))} />
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setKontrib(null)}>Batal</Button>
+            <Button onClick={simpanKontribusi} disabled={kontrib?.saving}
+              className="bg-teal-600 hover:bg-teal-700 text-white" data-testid="pemanfaatan-k-simpan">
+              {kontrib?.saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Coins className="w-4 h-4 mr-1.5" />}Catat
             </Button>
           </DialogFooter>
         </DialogContent>
