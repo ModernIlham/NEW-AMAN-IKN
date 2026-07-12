@@ -143,3 +143,58 @@ def rekap_anggaran(items) -> dict:
     return {"jumlah": len(items or []), "per_status": per_status,
             "per_jenis": per_jenis, "nilai": nilai,
             "serapan_persen": round(serapan, 1)}
+
+
+# ---------------------------------------------------------------------------
+# Kalender penganggaran (pustaka §9.4) — tahapan ber-tenggat KONFIGURABEL.
+# Tenggat internal tiap K/L berbeda (surat edaran masing-masing), sehingga
+# tanggal TIDAK di-hardcode dari regulasi; admin mengisinya sendiri.
+# ---------------------------------------------------------------------------
+
+def validate_tahapan_kalender(data: dict) -> list:
+    """Validasi tahapan kalender penganggaran → daftar pesan kesalahan."""
+    from datetime import date
+
+    errors = []
+    if not str(data.get("nama") or "").strip():
+        errors.append("Nama tahapan wajib diisi")
+    tahun = str(data.get("tahun_anggaran") or "").strip()
+    if not (len(tahun) == 4 and tahun.isdigit()):
+        errors.append("Tahun anggaran harus 4 digit angka")
+    tanggal = str(data.get("tanggal") or "").strip()[:10]
+    try:
+        date.fromisoformat(tanggal)
+    except ValueError:
+        errors.append("Tanggal tenggat harus berformat YYYY-MM-DD")
+    return errors
+
+
+def info_tenggat_tahapan(tahapan: dict, today_iso: str) -> dict:
+    """Pengingat satu tahapan → {tanggal, lewat, sisa_hari} (hari kalender)."""
+    from datetime import date
+
+    kosong = {"tanggal": None, "lewat": False, "sisa_hari": None}
+    tanggal = str(tahapan.get("tanggal") or "").strip()[:10]
+    try:
+        batas = date.fromisoformat(tanggal)
+        hari_ini = date.fromisoformat(str(today_iso)[:10])
+    except ValueError:
+        return kosong
+    selisih = (batas - hari_ini).days
+    return {"tanggal": tanggal, "lewat": selisih < 0,
+            "sisa_hari": max(0, selisih)}
+
+
+def rekap_kalender(items, today_iso: str) -> dict:
+    """Ringkasan tahapan: total, lewat tenggat, dan mendatang ≤30 hari."""
+    lewat = mendatang = 0
+    for t in items or []:
+        info = info_tenggat_tahapan(t, today_iso)
+        if info["tanggal"] is None:
+            continue
+        if info["lewat"]:
+            lewat += 1
+        elif info["sisa_hari"] is not None and info["sisa_hari"] <= 30:
+            mendatang += 1
+    return {"jumlah": len(items or []), "lewat": lewat,
+            "mendatang_30_hari": mendatang}
