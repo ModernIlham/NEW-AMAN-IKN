@@ -318,9 +318,9 @@ export const SIKLUS_MODULES = [
     id: "pemindahtanganan",
     nama: "Pemindahtanganan",
     urutan: 9,
-    status: "segera",
+    status: "sebagian",
     fase: 6,
-    ringkas: "Penjualan, Hibah, Tukar Menukar, Penyertaan Modal.",
+    ringkas: "Register usulan 4 bentuk berstatus (dokumen wajib per tahap, tenggat lelang 6 bulan) sudah bisa dibuka.",
     deskripsi:
       "Pemindahtanganan BMN sesuai diagram resmi: Penjualan (lelang), Hibah, Tukar Menukar, "
       + "dan Penyertaan Modal — dari usulan, persetujuan, risalah, hingga BAST keluar.",
@@ -328,8 +328,9 @@ export const SIKLUS_MODULES = [
       "PMK 111/PMK.06/2016 jo. PMK 165/PMK.06/2021 — Pemindahtanganan BMN",
     ],
     fitur: [
-      "Alur usulan → persetujuan → pelaksanaan per jenis: Penjualan / Hibah / Tukar Menukar / Penyertaan Modal",
-      "Arsip risalah lelang / naskah hibah / BAST keluar",
+      "✅ Register usulan multi-aset berstatus: diusulkan → disetujui → dilaksanakan → selesai (SK Penghapusan)",
+      "✅ Dokumen wajib per tahap (persetujuan; risalah/BAST/naskah/PP + NTPN utk penjualan; SK) + peringatan tenggat lelang 6 bulan",
+      "Arsip scan risalah lelang / naskah hibah / BAST keluar",
       "Aset otomatis keluar dari daftar aktif setelah selesai",
     ],
     integrasi: ["Berbagi alur persetujuan & dokumen dengan pemusnahan/penghapusan"],
