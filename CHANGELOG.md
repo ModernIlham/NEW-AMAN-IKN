@@ -48,6 +48,14 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#93] Laporan Posisi BMN di Neraca — komponen LBKP — 2026-07-12
+
+- **Posisi BMN di Neraca** (PMK 181, pustaka §2.3): seluruh aset satker
+  lintas kegiatan per golongan (intra/ekstra) + baris Persediaan (nilai
+  FIFO per layer) + total posisi; unduh dari hub Pelaporan.
+- Helper murni `posisi_neraca` + 2 test (suite 138); fix impor `timezone`
+  reports.py (tertangkap smoke).
+
 ## [#92] Jadwal pemeliharaan berkala: jatuh tempo + status + auto-geser — 2026-07-12
 
 - **Jadwal Berkala** per aset (pedoman DKPB Ps. 46(2) PP 27/2014): interval
