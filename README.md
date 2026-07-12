@@ -45,7 +45,10 @@ tahunan per golongan dengan saldo awal–mutasi–akhir (#95) — semua dapat
 diakses dari Beranda Modul.
 
 **Progres Fase 3 (Juli 2026):** Penggunaan — rekap aset per pemegang +
-kelengkapan BAST (#87) · Pengamanan — dasbor tertib administrasi + daftar
+kelengkapan BAST (#87) + **Daftar Barang yang Digunakan per pemegang**
+(PDF lampiran BAST, PMK 40/2024) (#125) + **daftar pantau BMN idle**
+dengan tiket klarifikasi → usul serah → diserahkan (PMK 120/2024)
+(#126) · Pengamanan — dasbor tertib administrasi + daftar
 pantau sengketa (#88) · Pemeliharaan — riwayat & biaya per aset dengan
 telaah kapitalisasi PMK 181 (#89) + **DHPB PDF** semesteran/tahunan
 (Ps. 47 PP 27/2014) (#90) + jadwal berkala dengan status jatuh tempo (#92).
