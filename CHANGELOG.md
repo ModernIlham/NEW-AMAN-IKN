@@ -48,6 +48,11 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#127] Konsolidasi dokumentasi Penggunaan #125–#126 — 2026-07-12
+
+- **Dokumentasi saja**: README blok Progres Fase 3 + masterplan (baris
+  Peta Siklus Penggunaan & roadmap Fase 3) diperluas dengan #125–#126.
+
 ## [#126] Daftar pantau BMN idle + tiket klarifikasi — 2026-07-12
 
 - **BMN idle (PMK 120/2024)**: kandidat otomatis (Nonaktif / tanpa
