@@ -48,6 +48,13 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#140] Register penertiban wasdal (tenggat 15 hari kerja) — 2026-07-12
+
+- **Tiket penertiban KPB** (PMK 207/2021): sumber pemantauan/permintaan
+  Pengelola/temuan APIP-BPK, tenggat otomatis 15 hari kerja
+  (Senin–Jumat), peringatan lewat tenggat, selesai ber-tindak-lanjut
+  (anti-balapan); seksi baru + 2 dialog di halaman Wasdal. Suite 204.
+
 ## [#139] Konsolidasi dokumentasi #137–#138 — 2026-07-12
 
 - **Dokumentasi saja**: README blok Progres Fase 3 (arsip SK PSP #137) &
