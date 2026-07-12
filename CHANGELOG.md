@@ -48,6 +48,13 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#88] Pengamanan tahap awal: dasbor tertib administrasi + sengketa — 2026-07-12
+
+- **Dasbor kesehatan data aset**: 6 kartu (Data Lengkap + tanpa foto/
+  register/lokasi/pengguna/BAST — klik → daftar aset bermasalah) +
+  **Daftar Pantau Sengketa** (perkara, pihak) dari data inventarisasi.
+- Kartu Pengamanan naik Sebagian Aktif. 8 unit test; tanpa koleksi baru.
+
 ## [#87] Penggunaan tahap awal: rekap aset per pemegang + BAST — 2026-07-12
 
 - **Fase 3 dimulai** — halaman "Aset per Pemegang" (lintas kegiatan) dari
