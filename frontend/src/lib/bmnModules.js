@@ -227,7 +227,7 @@ export const SIKLUS_MODULES = [
     urutan: 4,
     status: "sebagian",
     fase: 3,
-    ringkas: "Rekap aset per pemegang (+kelengkapan BAST) sudah bisa dibuka — PSP/alih status/BMN idle menyusul.",
+    ringkas: "Rekap pemegang, BMN idle, register SK PSP, dan tiket proses 4 rezim PMK 40/2024 sudah bisa dibuka.",
     deskripsi:
       "Penggunaan BMN sesuai PMK 40 Tahun 2024: Penetapan Status Penggunaan (PSP), Alih "
       + "Status Penggunaan, Penggunaan Sementara, Penggunaan BMN untuk dioperasikan Pihak "
@@ -243,6 +243,7 @@ export const SIKLUS_MODULES = [
       "✅ Daftar pantau BMN idle (PMK 120/2024): kandidat otomatis + tiket klarifikasi → usul serah → diserahkan",
       "✅ Register SK penetapan penggunaan multi-aset (PSP/alih status/sementara/pihak lain/bersama) + cakupan aset ter-PSP",
       "✅ Arsip scan SK penetapan + dokumen pendukung per register (PDF/gambar)",
+      "✅ Tiket proses 4 rezim PMK 40/2024 (alih status/sementara/pihak lain/bersama) ber-pipeline + pengingat perpanjangan ≤90 hari",
       "BAST digital penetapan & alur pengajuan PSP (menyusul)",
     ],
     integrasi: ["Field pengguna, NIP, jabatan, dan BAST dari modul inventarisasi menjadi data awal"],
@@ -280,17 +281,20 @@ export const SIKLUS_MODULES = [
     urutan: 6,
     status: "sebagian",
     fase: 5,
-    ringkas: "Posisi penyusutan garis lurus semesteran (PMK 65/2017) sudah bisa dibuka — revaluasi menyusul.",
+    ringkas: "Posisi penyusutan semesteran (PMK 65/2017) + register koreksi nilai/revaluasi per aset sudah bisa dibuka.",
     deskripsi:
       "Penilaian BMN untuk penyusunan neraca dan rencana pemindahtanganan/pemanfaatan: "
       + "nilai wajar, Revaluasi BMN, dan perhitungan penyusutan per golongan.",
-    dasarHukum: ["PMK 97/PMK.06/2019 — Revaluasi BMN"],
+    dasarHukum: [
+      "PMK 99 Tahun 2024 — Penilaian oleh Penilai Pemerintah di Kemenkeu",
+      "Perpres 75/2017 + PMK 118/PMK.06/2017 jo. 57/2018 jo. 107/2019 — Revaluasi BMN",
+      "PMK 65/PMK.06/2017 — Penyusutan BMN",
+    ],
     fitur: [
       "✅ Register koreksi nilai & hasil penilaian per aset (revaluasi/LHIP/BA, checklist tercatat di SAKTI)",
       "✅ Penyusutan garis lurus semesteran per golongan (PMK 65/2017; masa manfaat KMK 295/2019 jo. 266/2023) + daftar telaah",
-      "Referensi masa manfaat dapat dikelola (seed lengkap lampiran KMK)",
-      "Pencatatan hasil penilaian/revaluasi per aset",
-      "Riwayat nilai: perolehan → revaluasi → buku",
+      "✅ Referensi masa manfaat dapat dikelola (seed lengkap lampiran KMK)",
+      "Riwayat nilai per aset: perolehan → revaluasi → buku (menyusul)",
     ],
     integrasi: ["Nilai perolehan dari master aset; hasil menyuplai pembukuan & pelaporan"],
   },
