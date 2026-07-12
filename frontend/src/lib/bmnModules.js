@@ -106,7 +106,8 @@ export const PENATAUSAHAAN_SUBMODULES = [
       "✅ Peringatan habis/kritis/kedaluwarsa + Nota Dinas PDF otomatis",
       "✅ Laporan Posisi (per kelompok kodefikasi) & Mutasi periode (dari jurnal)",
       "✅ Stock opname: selisih → penyesuaian otomatis + kertas kerja & BAOF PDF",
-      "Menyusul: gudang (distribusi/transfer), impor massal master, transaksi massal per dokumen",
+      "✅ Impor/ekspor master + Kartu Barang PDF (riwayat + saldo berjalan)",
+      "Menyusul: gudang (distribusi/transfer), transaksi massal per dokumen",
     ],
     integrasi: [
       "Berbagi kodefikasi barang, satker, dan kop surat dengan modul aset",

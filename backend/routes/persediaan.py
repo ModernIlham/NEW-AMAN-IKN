@@ -1037,6 +1037,97 @@ async def riwayat_persediaan(
             "total_pages": max(1, -(-total // page_size))}
 
 
+@persediaan_router.get("/persediaan/{item_id}/kartu-barang-pdf")
+async def kartu_barang_pdf(item_id: str, _user: dict = Depends(require_user)):
+    """Kartu Barang Persediaan — riwayat kronologis + saldo berjalan.
+
+    Form kendali standar penatausahaan persediaan (analog kartu barang
+    manual bahan ajar DJKN): identitas barang + seluruh jurnal transaksi
+    terurut waktu dengan kolom masuk/keluar/sisa dan nilai. Barang tanpa
+    transaksi = 404 (tanpa data dummy).
+    """
+    from io import BytesIO
+
+    from reportlab.lib.units import mm as rl_mm
+    from reportlab.platypus import Paragraph, Spacer, Table
+
+    from routes.reports import (
+        _fit_col_widths, _fmt_tanggal_id, _get_report_styles,
+        _kop_surat_flowables, _page_footer_factory, _signature_block,
+        _std_doc, _std_table_style, _title_block,
+    )
+
+    item = await db.persediaan.find_one({"id": item_id}, {"_id": 0})
+    if not item:
+        raise HTTPException(status_code=404, detail="Barang persediaan tidak ditemukan")
+    rows = [r async for r in db.transaksi_persediaan
+            .find({"persediaan_id": item_id}, {"_id": 0}).sort("timestamp", 1)]
+    if not rows:
+        raise HTTPException(status_code=404,
+                            detail="Belum ada transaksi untuk barang ini")
+
+    label_jenis = {k: v[0] for k, v in JENIS_MASUK.items()}
+    label_jenis.update({k: v[0] for k, v in JENIS_KELUAR.items()})
+    label_jenis["opname"] = "Penyesuaian Opname"
+
+    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    buffer = BytesIO()
+    doc = _std_doc(buffer)
+    st = _get_report_styles()
+    elements = []
+    elements.extend(_kop_surat_flowables(settings, doc.width))
+    elements.extend(_title_block("KARTU BARANG PERSEDIAAN"))
+    elements.append(Paragraph(
+        f"{item.get('nama_barang') or '-'} · Kode {item.get('kode_barang') or '-'} · "
+        f"NUP {item.get('nup') or '-'} · Satuan {item.get('satuan') or '-'}"
+        + (f" · Lokasi {item.get('lokasi')}" if item.get("lokasi") else "")
+        + f" · Stok kini {int(item.get('stok', 0) or 0)}", st['Meta']))
+    elements.append(Spacer(1, 4 * rl_mm))
+
+    headers = ["Tanggal", "Uraian", "No. Bukti", "Masuk", "Keluar", "Sisa", "Nilai (Rp)"]
+    table_data = [[Paragraph(h, st['TableHeader']) for h in headers]]
+    for r in rows:
+        arah = r.get("arah")
+        jumlah = int(r.get("jumlah", 0) or 0)
+        uraian = label_jenis.get(r.get("jenis"), r.get("jenis") or "-")
+        if r.get("keterangan"):
+            uraian += f" — {r['keterangan']}"
+        table_data.append([
+            Paragraph(_fmt_tanggal_id(str(r.get("timestamp") or "")[:10]), st['CellCenter']),
+            Paragraph(uraian, st['Cell']),
+            Paragraph(r.get("no_bukti") or "-", st['Cell']),
+            Paragraph(str(jumlah) if arah == "masuk" else "", st['CellCenter']),
+            Paragraph(str(jumlah) if arah == "keluar" else "", st['CellCenter']),
+            Paragraph(str(int(r.get("stok_sesudah", 0) or 0)), st['CellCenter']),
+            Paragraph(_fmt_rp(r.get("total")), st['CellRight']),
+        ])
+    table = Table(table_data,
+                  colWidths=_fit_col_widths([62, 160, 80, 40, 40, 40, 80], doc.width),
+                  repeatRows=1)
+    table.setStyle(_std_table_style(zebra=True))
+    elements.append(table)
+    elements.append(Spacer(1, 3 * rl_mm))
+    elements.append(Paragraph(
+        "Catatan: kolom Sisa = stok setelah transaksi (saldo berjalan dari jurnal); "
+        "nilai keluar dihitung FIFO per layer.", st['Meta']))
+
+    elements.append(Spacer(1, 12 * rl_mm))
+    elements.extend(_signature_block([
+        {'pre': ['.................., .......................'],
+         'header': 'Pengurus Barang Persediaan,',
+         'nama': settings.get("kasatker_nama") or "-",
+         'after': [f"NIP. {settings.get('kasatker_nip') or '-'}"]},
+    ], doc.width))
+    footer = _page_footer_factory("Kartu Barang Persediaan")
+    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    buffer.seek(0)
+    from fastapi.responses import StreamingResponse
+    nama_file = (item.get("kode_barang") or item_id)[:20]
+    return StreamingResponse(buffer, media_type="application/pdf",
+                             headers={"Content-Disposition":
+                                      f'attachment; filename="Kartu_Barang_{nama_file}.pdf"'})
+
+
 @persediaan_router.delete("/persediaan/{item_id}")
 async def delete_persediaan(item_id: str, _admin: dict = Depends(require_admin)):
     """Hapus master — hanya bila stok 0 & tanpa layer (jejak transaksi aman)."""

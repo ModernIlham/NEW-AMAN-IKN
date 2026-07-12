@@ -48,6 +48,12 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#97] Kartu Barang Persediaan PDF: riwayat + saldo berjalan — 2026-07-12
+
+- **Kartu Barang** per barang persediaan (form kendali standar): identitas
+  + jurnal kronologis dengan kolom masuk/keluar/sisa (saldo berjalan) dan
+  nilai FIFO; tombol di dialog Riwayat. Barang tanpa transaksi = 404.
+
 ## [#96] Konsolidasi status Pelaporan Fase 2 (dokumentasi) — 2026-07-12
 
 - Masterplan/README/pustaka/kartu modul diselaraskan: inti Pelaporan
