@@ -3,7 +3,8 @@ import pytest
 
 from penganggaran_utils import (
     AKUN_BAS, JENIS_ANGGARAN, STATUS_ANGGARAN, TRANSISI_ANGGARAN,
-    rekap_anggaran, validate_transisi_anggaran, validate_usulan_anggaran,
+    rekap_anggaran, sanding_per_akun, validate_transisi_anggaran,
+    validate_usulan_anggaran,
 )
 
 
@@ -76,6 +77,30 @@ def test_rekap_dan_serapan():
     assert r["nilai"]["dipa"] == pytest.approx(60_000_000)
     assert r["serapan_persen"] == pytest.approx(25.0)
     assert rekap_anggaran([])["serapan_persen"] == 0.0
+
+
+def test_sanding_per_akun():
+    items = [
+        _u(nilai_usulan=10_000_000),                       # 523
+        _u(nilai_usulan=5_000_000, nilai_dipa=4_000_000,
+           nilai_realisasi=1_000_000),                     # 523
+        _u(jenis="pengadaan", akun="532", nilai_usulan=50_000_000,
+           nilai_dipa=40_000_000, nilai_realisasi=40_000_000),
+        _u(akun="", nilai_usulan=2_000_000),               # tanpa akun
+    ]
+    rows = sanding_per_akun(items)
+    assert [r["akun"] for r in rows] == ["523", "532", "lainnya"]
+    r523 = rows[0]
+    assert r523["jumlah"] == 2
+    assert r523["usulan"] == pytest.approx(15_000_000)
+    assert r523["dipa"] == pytest.approx(4_000_000)
+    assert r523["serapan_persen"] == pytest.approx(25.0)
+    r532 = rows[1]
+    assert r532["label"] == AKUN_BAS["532"]
+    assert r532["serapan_persen"] == pytest.approx(100.0)
+    assert rows[2]["label"] == "Tanpa akun"
+    assert rows[2]["serapan_persen"] == 0.0
+    assert sanding_per_akun([]) == []
 
 
 def test_registry_akun():

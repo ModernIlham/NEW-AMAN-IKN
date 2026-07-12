@@ -48,6 +48,12 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#123] Sanding per akun BAS di register penganggaran — 2026-07-12
+
+- **Sanding rencana vs realisasi per akun** (pustaka §9): tabel per akun
+  53x/523 dengan nilai usulan/disetujui/DIPA/realisasi + serapan persen;
+  usulan tanpa akun digabung baris "lainnya". 1 unit test (suite 191).
+
 ## [#122] Laporan Hasil Pemantauan Wasdal PDF — 2026-07-12
 
 - **Laporan pra-isi wasdal semesteran** (PMK 207/2021): rekap 5 objek

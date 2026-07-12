@@ -17,7 +17,8 @@ from auth_utils import require_admin, require_user
 from db import db
 from penganggaran_utils import (
     AKUN_BAS, JENIS_ANGGARAN, STATUS_ANGGARAN,
-    rekap_anggaran, validate_transisi_anggaran, validate_usulan_anggaran,
+    rekap_anggaran, sanding_per_akun, validate_transisi_anggaran,
+    validate_usulan_anggaran,
 )
 
 penganggaran_router = APIRouter()
@@ -53,6 +54,7 @@ async def list_penganggaran(_user: dict = Depends(require_user)):
     items = [u async for u in db.penganggaran.find({}, {"_id": 0})
              .sort("created_at", -1).limit(500)]
     return {"items": items, "ringkasan": rekap_anggaran(items),
+            "per_akun": sanding_per_akun(items),
             "label_status": STATUS_ANGGARAN,
             "label_jenis": {k: v[0] for k, v in JENIS_ANGGARAN.items()},
             "label_akun": AKUN_BAS,
