@@ -58,3 +58,36 @@ def test_rekap_kosong_aman():
     r = rekap_rkbmn([], {})
     assert r["layak"] == [] and r["tidak"] == []
     assert r["ringkasan"]["total"] == 0
+
+
+class TestUsulanRkbmn:
+    def test_validasi_usulan(self):
+        from perencanaan_utils import validate_usulan_rkbmn
+        ok = {"tahun_rkbmn": "2028", "jenis": "pemeliharaan",
+              "unit_pengusul": "Satker A", "uraian": "Servis genset",
+              "volume": 1, "satuan": "unit"}
+        assert validate_usulan_rkbmn(ok) == []
+        errors = validate_usulan_rkbmn(
+            {"tahun_rkbmn": "28", "jenis": "sewa", "unit_pengusul": " ",
+             "uraian": "", "volume": 0, "satuan": ""})
+        assert len(errors) == 6
+
+    def test_transisi_usulan(self):
+        from perencanaan_utils import validate_transisi_rkbmn
+        assert validate_transisi_rkbmn({"status": "draft"}, "diajukan") == []
+        assert validate_transisi_rkbmn(
+            {"status": "diajukan"}, "dikembalikan", "lengkapi dokumen") == []
+        # Dikembalikan tanpa catatan / transisi mundur / dari terminal
+        assert validate_transisi_rkbmn({"status": "diajukan"}, "dikembalikan")
+        assert validate_transisi_rkbmn({"status": "dikirim_pengelola"}, "draft")
+        assert validate_transisi_rkbmn({"status": "disetujui_telaah"}, "diajukan")
+
+    def test_rekap_usulan(self):
+        from perencanaan_utils import rekap_usulan_rkbmn
+        items = [{"status": "draft", "jenis": "pengadaan"},
+                 {"status": "dikirim_pengelola", "jenis": "pemeliharaan"},
+                 {"status": "disetujui_telaah", "jenis": "pemeliharaan"}]
+        r = rekap_usulan_rkbmn(items)
+        assert r["jumlah"] == 3 and r["berjalan"] == 2
+        assert r["per_jenis"]["pemeliharaan"] == 2
+        assert rekap_usulan_rkbmn([])["berjalan"] == 0

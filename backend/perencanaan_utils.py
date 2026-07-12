@@ -69,3 +69,89 @@ def rekap_rkbmn(assets, biaya_per_aset=None):
             "total_biaya_riwayat": sum(r["riwayat_biaya"] for r in layak),
         },
     }
+
+
+# ---------------------------------------------------------------------------
+# Register usulan RKBMN per unit (PMK 153/2021 + KMK 128/KM.6/2022) —
+# rantai persetujuan berjenjang internal K/L sebelum masuk SIMAN V2.
+# Register pendamping (pola e-SADEWA MA): status tak berkekuatan hukum,
+# bukan cetakan RKBMN/SPTJM/Hasil Penelaahan resmi.
+# ---------------------------------------------------------------------------
+
+JENIS_USULAN_RKBMN = {
+    "pengadaan": "Pengadaan",
+    "pemeliharaan": "Pemeliharaan",
+}
+
+STATUS_USULAN_RKBMN = {
+    "draft": "Draft",
+    "diajukan": "Diajukan unit",
+    "dikembalikan": "Dikembalikan (perbaikan)",
+    "disetujui_pb": "Disetujui Pengguna Barang",
+    "dikirim_pengelola": "Dikirim ke Pengelola (SIMAN)",
+    "disetujui_telaah": "Disetujui Hasil Penelaahan",
+    "ditolak_telaah": "Ditolak Hasil Penelaahan",
+}
+
+TRANSISI_USULAN_RKBMN = {
+    "draft": {"diajukan"},
+    "diajukan": {"disetujui_pb", "dikembalikan"},
+    "dikembalikan": {"diajukan"},
+    "disetujui_pb": {"dikirim_pengelola", "dikembalikan"},
+    "dikirim_pengelola": {"disetujui_telaah", "ditolak_telaah"},
+    "disetujui_telaah": set(),
+    "ditolak_telaah": set(),
+}
+
+
+def validate_usulan_rkbmn(data: dict) -> list:
+    """Validasi usulan RKBMN baru → daftar pesan kesalahan."""
+    errors = []
+    tahun = str(data.get("tahun_rkbmn") or "").strip()
+    if not (len(tahun) == 4 and tahun.isdigit()):
+        errors.append("Tahun RKBMN harus 4 digit angka")
+    if data.get("jenis") not in JENIS_USULAN_RKBMN:
+        valid = ", ".join(JENIS_USULAN_RKBMN)
+        errors.append(f"Jenis usulan tidak dikenal (pilihan: {valid})")
+    if not str(data.get("unit_pengusul") or "").strip():
+        errors.append("Unit/KPB pengusul wajib diisi")
+    if not str(data.get("uraian") or "").strip():
+        errors.append("Uraian usulan wajib diisi")
+    try:
+        if float(data.get("volume") or 0) <= 0:
+            errors.append("Volume harus lebih dari 0")
+    except (TypeError, ValueError):
+        errors.append("Volume harus angka")
+    if not str(data.get("satuan") or "").strip():
+        errors.append("Satuan wajib diisi")
+    return errors
+
+
+def validate_transisi_rkbmn(usulan: dict, ke: str, catatan: str = "") -> list:
+    """Validasi transisi status usulan; dikembalikan wajib beralasan."""
+    dari = usulan.get("status")
+    if ke not in STATUS_USULAN_RKBMN:
+        valid = ", ".join(STATUS_USULAN_RKBMN)
+        return [f"Status tujuan tidak dikenal (pilihan: {valid})"]
+    if ke not in TRANSISI_USULAN_RKBMN.get(dari, set()):
+        return [f"Transisi {dari} → {ke} tidak diizinkan"]
+    if ke == "dikembalikan" and not str(catatan or "").strip():
+        return ["Pengembalian usulan wajib disertai catatan perbaikan"]
+    return []
+
+
+def rekap_usulan_rkbmn(items) -> dict:
+    """Ringkasan usulan per status + per jenis + berjalan (non-terminal)."""
+    per_status = {k: 0 for k in STATUS_USULAN_RKBMN}
+    per_jenis = {k: 0 for k in JENIS_USULAN_RKBMN}
+    for u in items or []:
+        s = u.get("status")
+        if s in per_status:
+            per_status[s] += 1
+        j = u.get("jenis")
+        if j in per_jenis:
+            per_jenis[j] += 1
+    berjalan = sum(v for s, v in per_status.items()
+                   if s not in ("disetujui_telaah", "ditolak_telaah"))
+    return {"jumlah": len(items or []), "berjalan": berjalan,
+            "per_status": per_status, "per_jenis": per_jenis}

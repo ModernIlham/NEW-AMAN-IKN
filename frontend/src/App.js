@@ -374,7 +374,7 @@ function App() {
     return (
       <div className="App">
         <Suspense fallback={<PageLoader />}>
-          <PerencanaanPage onBack={() => setShowPerencanaan(false)} />
+          <PerencanaanPage user={user} onBack={() => setShowPerencanaan(false)} />
         </Suspense>
         <Toaster position="top-right" richColors />
       </div>
