@@ -220,7 +220,46 @@ Menyusul: jadwal berkala, DHPB PDF, akun 523/53 per catatan, foto bukti.
 
 ---
 
-## 5. Kendala Umum Satker → Fitur Penangkal AMAN
+## 5. Penyusutan (PMK 65/PMK.06/2017 + KMK 295/KM.6/2019 jo. 266/KM.6/2023)
+
+**Dasar & metode.** PMK 65/PMK.06/2017 (masih berlaku, dirujuk LBMN audited
+2024/2025): metode tunggal **garis lurus tanpa nilai residu**, dihitung
+**per unit aset**, dibukukan **tiap akhir semester** (30 Jun & 31 Des).
+Basis = nilai perolehan setelah kapitalisasi. **Konvensi semester penuh**:
+aset yang diperoleh kapan pun dalam semester dibebani satu semester penuh
+(tanpa prorata harian).
+
+**Tabel masa manfaat.** KMK 59/KM.6/2013 **DICABUT** — kini
+**KMK 295/KM.6/2019** jo. **KMK 266/KM.6/2023**; kunci tabel = KELOMPOK
+kodefikasi (level 3, prefix 5 digit). Contoh terverifikasi: alat angkutan
+darat bermotor 7 th; alat kantor & alat rumah tangga 5 th; rentang
+peralatan-mesin 2-20 th, gedung-bangunan 10-50 th, JIJ 5-40 th. Nilai lazim
+lain (komputer unit & peralatan komputer 4 th; alat studio/komunikasi 5 th;
+gedung permanen 50 th) *perlu validasi lampiran KMK*. Tabel II mengatur
+penambahan masa manfaat akibat renovasi/overhaul (per rentang % biaya
+terhadap nilai aset).
+
+**Tidak disusutkan:** tanah (gol. 2), KDP (gol. 7), aset bersejarah
+(kuantitas saja), ATL hewan/tanaman/bahan pustaka (ATL yang disusutkan
+hanya alat musik modern 4 th); **henti susut**: aset hilang / rusak berat
+yang TELAH diusulkan pemindahtanganan/pemusnahan/penghapusan →
+direklasifikasi keluar aset tetap + diungkap CaLK. Aset habis masa manfaat:
+nilai buku **0** (bukan Rp1), tetap tersaji bruto sampai SK penghapusan.
+
+**Harapan auditor:** LBKP memuat Laporan Penyusutan per golongan; CaLK
+mengungkap kebijakan (dasar hukum, metode, periodisitas, tabel); saldo
+akumulasi penyusutan laporan barang = neraca keuangan (rekonsiliasi);
+aset henti-susut/nilai-buku-nol diungkap jumlahnya.
+
+**Terapan AMAN (iterasi 29):** logika murni penyusutan garis lurus
+semesteran + rekap per golongan dari tanggal perolehan & harga aset;
+kelompok tanpa masa manfaat terdaftar TIDAK ditebak — masuk daftar
+"perlu referensi" (tanpa data dummy). Referensi masa manfaat editable &
+seed lengkap dari lampiran KMK menyusul.
+
+---
+
+## 6. Kendala Umum Satker → Fitur Penangkal AMAN
 
 | Kendala nyata (temuan artikel DJKN/DJPb/BPK/jurnal) | Penangkal di AMAN |
 |---|---|
@@ -236,7 +275,7 @@ Menyusul: jadwal berkala, DHPB PDF, akun 523/53 per catatan, foto bukti.
 
 ---
 
-## 6. Implikasi Desain per Modul (ringkas)
+## 7. Implikasi Desain per Modul (ringkas)
 
 | Modul (fase) | Keputusan desain dari pustaka ini |
 |---|---|
@@ -251,7 +290,7 @@ Menyusul: jadwal berkala, DHPB PDF, akun 523/53 per catatan, foto bukti.
 
 ---
 
-## 7. Daftar Konsolidasi "Perlu Verifikasi"
+## 8. Daftar Konsolidasi "Perlu Verifikasi"
 
 1. Field lengkap KIB per 6 jenis → Lampiran PMK 181/2016.
 2. Batas waktu statutori penyampaian laporan per jenjang → Lampiran PMK 181.
@@ -265,10 +304,13 @@ Menyusul: jadwal berkala, DHPB PDF, akun 523/53 per catatan, foto bukti.
    sementara pakai kolom kartu pemeliharaan bahan ajar DJKN.
 10. Periodisitas laporan DHPB KPB→PB: PP hanya menyebut "berkala";
     semesteran adalah praktik baku, konfirmasi kebijakan K/L masing-masing.
+11. Angka lengkap Tabel I & II KMK 295/KM.6/2019 jo. 266/KM.6/2023 —
+    lampiran belum dapat diunduh dari jaringan sesi riset; validasi via
+    JDIH sebelum seed penuh referensi masa manfaat.
 
 ---
 
-## 8. Sumber Utama
+## 9. Sumber Utama
 
 Regulasi: PSAP 05 (ksap.org/standar/PSAP05.pdf) · PMK 181/PMK.06/2016
 (jdih.kemenkeu.go.id/dok/181-pmk-06-2016; peraturan.bpk.go.id/Details/121291)
