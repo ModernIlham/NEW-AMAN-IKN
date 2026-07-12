@@ -36,6 +36,42 @@ def jalur_kandidat(asset):
     return None
 
 
+STATUS_USULAN = {
+    "diusulkan": "Diusulkan",
+    "diproses": "Diproses (Pengguna/Pengelola Barang)",
+    "sk_terbit": "SK Penghapusan Terbit",
+    "ditolak": "Ditolak/Dibatalkan",
+}
+
+# Alur PMK 83/2016: usulan → persetujuan → SK; tolak bisa di dua tahap.
+TRANSISI_USULAN = {
+    "diusulkan": {"diproses", "ditolak"},
+    "diproses": {"sk_terbit", "ditolak"},
+    "sk_terbit": set(),
+    "ditolak": set(),
+}
+
+
+def boleh_transisi(dari: str, ke: str) -> bool:
+    """Apakah perpindahan status usulan sah menurut alur PMK 83/2016."""
+    return ke in TRANSISI_USULAN.get(dari, set())
+
+
+def validate_transisi(dari: str, ke: str, nomor_sk: str = "") -> list:
+    """Daftar pesan kesalahan transisi status usulan."""
+    errors = []
+    if ke not in STATUS_USULAN:
+        valid = ", ".join(STATUS_USULAN)
+        errors.append(f"Status tidak dikenal (pilihan: {valid})")
+        return errors
+    if not boleh_transisi(dari, ke):
+        errors.append(
+            f"Transisi {STATUS_USULAN.get(dari, dari)} → {STATUS_USULAN[ke]} tidak sah")
+    if ke == "sk_terbit" and not str(nomor_sk or "").strip():
+        errors.append("Nomor SK penghapusan wajib diisi saat SK terbit")
+    return errors
+
+
 def rekap_kandidat(assets):
     """Jaring kandidat per jalur → {"jalur": {key: {label, alasan, rows,
     jumlah, nilai}}, "ringkasan": {...}} — semua dari data nyata."""

@@ -358,7 +358,7 @@ export const SIKLUS_MODULES = [
     urutan: 11,
     status: "sebagian",
     fase: 6,
-    ringkas: "Kandidat usul hapus (Rusak Berat + Tidak Ditemukan, PMK 83/2016) sudah bisa dibuka — tiket usulan & SK menyusul.",
+    ringkas: "Kandidat usul hapus + tiket usulan berstatus (usul → proses → SK, PMK 83/2016) sudah bisa dibuka.",
     deskripsi:
       "Penghapusan BMN dari daftar barang berdasarkan SK penghapusan — menindaklanjuti "
       + "pemindahtanganan, pemusnahan, atau sebab lain (hilang, force majeure). Aset "

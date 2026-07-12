@@ -48,6 +48,13 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#106] Tiket usulan penghapusan berstatus (usul → proses → SK) — 2026-07-12
+
+- **Tiket usulan** per aset kandidat (jalur otomatis, duplikat aktif
+  ditolak): transisi tervalidasi diusulkan → diproses → SK terbit /
+  ditolak (admin; SK wajib bernomor; anti-balapan; riwayat tercatat);
+  kandidat menampilkan status usulannya. 2 unit test (suite 159).
+
 ## [#105] Konsolidasi dokumentasi Fase 5–6 tahap awal — 2026-07-12
 
 - Masterplan/README/pustaka diselaraskan dengan #102–#104 (Penilaian &
