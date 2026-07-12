@@ -48,6 +48,12 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#96] Konsolidasi status Pelaporan Fase 2 (dokumentasi) — 2026-07-12
+
+- Masterplan/README/pustaka/kartu modul diselaraskan: inti Pelaporan
+  Fase 2 lengkap (#86, #93–#95); sisa pekerjaan Fase 2 didaftar eksplisit
+  (KIB menunggu verifikasi lampiran, gudang/massal persediaan, CaLBMN/LKB).
+
 ## [#95] LBKP per golongan: saldo awal + mutasi + saldo akhir — 2026-07-12
 
 - **LBKP semesteran/tahunan** (PMK 181): tiga seksi Intra/Ekstra/Gabungan
