@@ -2,7 +2,8 @@
 import pytest
 
 from pemusnahan_utils import (
-    CARA_PEMUSNAHAN, kelayakan_musnah, rekap_pemusnahan, validate_pemusnahan,
+    CARA_PEMUSNAHAN, alasan_usulan_dari_ba, kelayakan_musnah,
+    rekap_pemusnahan, validate_pemusnahan,
 )
 
 HARI_INI = "2026-07-12"
@@ -34,6 +35,14 @@ def test_kelayakan_hanya_rusak_berat():
     assert ok is False and "rusak berat" in alasan
     ok, alasan = kelayakan_musnah({"condition": ""})
     assert ok is False and "kosong" in alasan
+
+
+def test_alasan_usulan_merujuk_ba():
+    alasan = alasan_usulan_dari_ba(_ba())
+    assert "BA-01/VII/2026" in alasan
+    assert "2026-07-10" in alasan and "S-9/KNL.05/2026" in alasan
+    # Field kosong tidak membuat crash — tanda strip sebagai penampung
+    assert "-" in alasan_usulan_dari_ba({})
 
 
 def test_rekap():

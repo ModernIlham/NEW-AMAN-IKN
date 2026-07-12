@@ -64,6 +64,17 @@ def kelayakan_musnah(asset: dict):
     return True, ""
 
 
+def alasan_usulan_dari_ba(ba: dict) -> str:
+    """Keterangan usulan penghapusan yang merujuk BA pemusnahan.
+
+    Tindak lanjut PMK 83/2016: barang yang telah dimusnahkan diusulkan
+    hapus dari DBKP dengan BA sebagai dokumen sumber.
+    """
+    return (f"Telah dimusnahkan — BA {ba.get('nomor_ba') or '-'} tanggal "
+            f"{str(ba.get('tanggal_ba') or '-')[:10]} (persetujuan "
+            f"{ba.get('nomor_persetujuan') or '-'})")
+
+
 def rekap_pemusnahan(records):
     """Ringkasan register BA: jumlah BA, aset, nilai perolehan musnah."""
     jumlah_aset = 0
