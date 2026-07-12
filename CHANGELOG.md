@@ -48,6 +48,12 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#103] Halaman Penilaian: posisi penyusutan + daftar telaah — 2026-07-12
+
+- **Halaman Penilaian** (dari Beranda Modul): kartu perolehan/akumulasi/
+  nilai buku/habis masa manfaat, tabel per golongan, telaah henti-susut &
+  perlu-referensi, pemilih tanggal posisi. Kartu naik Sebagian Aktif.
+
 ## [#102] Penyusutan BMN: garis lurus semesteran per golongan (API) — 2026-07-12
 
 - **Fase 5 dimulai** — bab pustaka §5 Penyusutan (koreksi: KMK 59/2013
