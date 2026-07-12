@@ -56,7 +56,7 @@ function StatusBadge({ status }) {
  * tahap siklus lain sudah punya kamarnya masing-masing dengan status Segera
  * Hadir — klik kartunya menampilkan konsep, rencana fitur, dan fase roadmap.
  */
-export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onShowInfo, onEnterInventarisasi, onOpenKodefikasi, onOpenPersediaan, onOpenPelaporan }) {
+export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onShowInfo, onEnterInventarisasi, onOpenKodefikasi, onOpenPersediaan, onOpenPelaporan, onOpenPenggunaan }) {
   const [detail, setDetail] = useState(null); // modul yang dibuka konsepnya
   const activateInfo = useTripleClick(onShowInfo);
   const DetailIcon = detail ? (MODULE_ICONS[detail.id] || Package) : null;
@@ -70,6 +70,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
     if (mod.id === "inventarisasi-aset") onEnterInventarisasi();
     else if (mod.id === "inventarisasi-persediaan" && onOpenPersediaan) onOpenPersediaan();
     else if (mod.id === "pelaporan" && onOpenPelaporan) onOpenPelaporan();
+    else if (mod.id === "penggunaan" && onOpenPenggunaan) onOpenPenggunaan();
     else setDetail(mod);
   };
 
@@ -208,13 +209,18 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
             {siklusSorted.map((mod) => {
               const Icon = MODULE_ICONS[mod.id] || Package;
+              const enterable = mod.id === "penggunaan" && !!onOpenPenggunaan;
               return (
                 <button
                   key={mod.id}
                   type="button"
                   onClick={() => openModule(mod)}
                   data-testid={`module-card-${mod.id}`}
-                  className="text-left rounded-xl border border-border bg-card p-3 hover:bg-muted hover:shadow-sm transition-all"
+                  className={`text-left rounded-xl border p-3 hover:shadow-sm transition-all ${
+                    enterable
+                      ? "border-emerald-500/40 bg-emerald-500/5 hover:bg-emerald-500/10"
+                      : "border-border bg-card hover:bg-muted"
+                  }`}
                 >
                   <div className="flex items-center gap-2.5">
                     <span className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center flex-shrink-0 relative">

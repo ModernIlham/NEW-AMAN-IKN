@@ -203,9 +203,9 @@ export const SIKLUS_MODULES = [
     id: "penggunaan",
     nama: "Penggunaan",
     urutan: 4,
-    status: "segera",
+    status: "sebagian",
     fase: 3,
-    ringkas: "PSP, alih status, penggunaan sementara/pihak lain/bersama, BMN idle.",
+    ringkas: "Rekap aset per pemegang (+kelengkapan BAST) sudah bisa dibuka — PSP/alih status/BMN idle menyusul.",
     deskripsi:
       "Penggunaan BMN sesuai PMK 40 Tahun 2024: Penetapan Status Penggunaan (PSP), Alih "
       + "Status Penggunaan, Penggunaan Sementara, Penggunaan BMN untuk dioperasikan Pihak "
