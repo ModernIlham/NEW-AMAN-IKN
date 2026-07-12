@@ -15,7 +15,7 @@ from pathlib import Path
 # Template directory - relative to this file's location (works on any server)
 TEMPLATES_DIR = str(Path(__file__).resolve().parent.parent / "templates")
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Depends
+from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Depends
 from fastapi.responses import StreamingResponse, HTMLResponse
 from pydantic import BaseModel
 
@@ -1576,6 +1576,142 @@ async def generate_posisi_bmn_pdf(_user: dict = Depends(require_user_or_query_to
     buffer.seek(0)
     return StreamingResponse(buffer, media_type="application/pdf",
                              headers={"Content-Disposition": 'attachment; filename="Posisi_BMN_Neraca.pdf"'})
+
+
+@reports_router.get("/pembukuan/lbkp-pdf")
+async def generate_lbkp_pdf(
+    tahun: int = Query(..., ge=2000, le=2100),
+    semester: int = Query(None, ge=1, le=2),
+    _user: dict = Depends(require_user_or_query_token),
+):
+    """LBKP per golongan — saldo awal + mutasi + saldo akhir (pustaka §2.3).
+
+    Tiga seksi: Intrakomptabel, Ekstrakomptabel, Gabungan. Mutasi tambah
+    dari tanggal pencatatan aset; mutasi kurang dari jejak audit
+    penghapusan (nilai terekam sejak #94 — penghapusan lama dihitung
+    jumlahnya, nilai 0, dan diungkap di catatan). Tidak pernah memuat
+    data dummy: keterbatasan data historis dicantumkan eksplisit.
+    """
+    from reportlab.platypus import Table, Paragraph, Spacer
+    from reportlab.lib.units import mm as rl_mm
+    from kodefikasi_utils import GOLONGAN_DEFAULTS
+    from pembukuan_utils import build_lbkp_rows, parse_harga
+    from pemeliharaan_utils import rentang_periode
+
+    dari, sampai, label_periode = rentang_periode(tahun, semester)
+    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    assets = await db.assets.find(
+        {}, {"_id": 0, "asset_code": 1, "purchase_price": 1, "created_at": 1},
+    ).to_list(500000)
+    tombstones = []
+    async for t in db.audit_logs.find(
+            {"action": "delete"},
+            {"_id": 0, "asset_code": 1, "timestamp": 1, "changes": 1}):
+        nilai = 0.0
+        for c in t.get("changes") or []:
+            if c.get("field") == "purchase_price":
+                nilai = parse_harga(c.get("from"))
+                break
+        tombstones.append({"asset_code": t.get("asset_code"),
+                           "timestamp": t.get("timestamp"), "nilai": nilai})
+
+    uraian_map = {k: u for k, u in GOLONGAN_DEFAULTS}
+    async for k in db.kodefikasi.find({"level": 1}, {"_id": 0, "kode": 1, "uraian": 1}):
+        if k.get("uraian"):
+            uraian_map[k["kode"]] = k["uraian"]
+
+    per_kelas, n_tanpa_nilai = build_lbkp_rows(assets, tombstones, dari, sampai, uraian_map)
+    if not per_kelas["gabungan"][0]:
+        raise HTTPException(status_code=404,
+                            detail=f"Belum ada data aset untuk {label_periode}")
+
+    def fmt_rp(val):
+        try: return f"{int(val):,}".replace(",", ".")
+        except (ValueError, TypeError, OverflowError): return "0"
+
+    buffer = io.BytesIO()
+    doc = _std_doc(buffer, landscape_mode=True)
+    st = _get_report_styles()
+    elements = []
+    elements.extend(_kop_surat_flowables(settings, doc.width))
+    elements.extend(_title_block("LAPORAN BARANG KUASA PENGGUNA (LBKP)\nPER GOLONGAN BARANG",
+                                 subjudul=label_periode))
+    elements.append(Paragraph(
+        f"Periode {_fmt_tanggal_id(dari)} s.d. {_fmt_tanggal_id(sampai)} · saldo akhir = "
+        "saldo awal + mutasi tambah − mutasi kurang", st['Meta']))
+    elements.append(Spacer(1, 3 * rl_mm))
+
+    headers = ["Gol", "Uraian Golongan",
+               "Awal\nJml", "Saldo Awal\n(Rp)",
+               "Tambah\nJml", "Mutasi Tambah\n(Rp)",
+               "Kurang\nJml", "Mutasi Kurang\n(Rp)",
+               "Akhir\nJml", "Saldo Akhir\n(Rp)"]
+    col_widths = _fit_col_widths([24, 128, 36, 86, 36, 86, 36, 86, 36, 86], doc.width)
+    LABEL_KELAS = [("intra", "I. INTRAKOMPTABEL (tersaji di neraca)"),
+                   ("ekstra", "II. EKSTRAKOMPTABEL (di bawah ambang kapitalisasi)"),
+                   ("gabungan", "III. GABUNGAN")]
+    for kunci, label in LABEL_KELAS:
+        rows, total = per_kelas[kunci]
+        elements.append(Paragraph(f"<b>{label}</b>", st['Meta']))
+        elements.append(Spacer(1, 1.5 * rl_mm))
+        table_data = [[Paragraph(h.replace("\n", "<br/>"), st['TableHeader']) for h in headers]]
+        for r in rows:
+            table_data.append([
+                Paragraph(r["golongan"], st['CellCenter']),
+                Paragraph(r["uraian"], st['Cell']),
+                Paragraph(str(r["jumlah_awal"]), st['CellCenter']),
+                Paragraph(fmt_rp(r["nilai_awal"]), st['CellRight']),
+                Paragraph(str(r["jumlah_tambah"]), st['CellCenter']),
+                Paragraph(fmt_rp(r["nilai_tambah"]), st['CellRight']),
+                Paragraph(str(r["jumlah_kurang"]), st['CellCenter']),
+                Paragraph(fmt_rp(r["nilai_kurang"]), st['CellRight']),
+                Paragraph(str(r["jumlah_akhir"]), st['CellCenter']),
+                Paragraph(fmt_rp(r["nilai_akhir"]), st['CellRight']),
+            ])
+        if not rows:
+            table_data.append([Paragraph("—", st['CellCenter'])] +
+                              [Paragraph("nihil", st['Cell'])] +
+                              [Paragraph("0", st['CellCenter']) for _ in range(8)])
+        table_data.append([
+            Paragraph("", st['CellCenter']),
+            Paragraph("<b>JUMLAH</b>", st['Cell']),
+            Paragraph(f"<b>{total['jumlah_awal']}</b>", st['CellCenter']),
+            Paragraph(f"<b>{fmt_rp(total['nilai_awal'])}</b>", st['CellRight']),
+            Paragraph(f"<b>{total['jumlah_tambah']}</b>", st['CellCenter']),
+            Paragraph(f"<b>{fmt_rp(total['nilai_tambah'])}</b>", st['CellRight']),
+            Paragraph(f"<b>{total['jumlah_kurang']}</b>", st['CellCenter']),
+            Paragraph(f"<b>{fmt_rp(total['nilai_kurang'])}</b>", st['CellRight']),
+            Paragraph(f"<b>{total['jumlah_akhir']}</b>", st['CellCenter']),
+            Paragraph(f"<b>{fmt_rp(total['nilai_akhir'])}</b>", st['CellRight']),
+        ])
+        table = Table(table_data, colWidths=col_widths, repeatRows=1)
+        table.setStyle(_std_table_style(zebra=True, total_row=True))
+        elements.append(table)
+        elements.append(Spacer(1, 4 * rl_mm))
+
+    catatan = ("Catatan: mutasi tambah dihitung dari tanggal pencatatan aset; mutasi kurang dari "
+               "jejak audit penghapusan. Aset yang dibuat dan dihapus sebelum awal periode tidak "
+               "dapat direkonstruksi dari jejak yang ada. Komponen persediaan/KDP/ATB/penyusutan "
+               "LBKP menyusul bertahap.")
+    if n_tanpa_nilai:
+        catatan += (f" Terdapat {n_tanpa_nilai} penghapusan pada periode ini yang nilai "
+                    "perolehannya belum terekam (audit lama) — dihitung jumlahnya dengan nilai 0.")
+    elements.append(Paragraph(catatan, st['Meta']))
+
+    elements.append(Spacer(1, 12 * rl_mm))
+    elements.extend(_signature_block([
+        {'pre': ['.................., .......................'],
+         'header': 'Kuasa Pengguna Barang,',
+         'nama': settings.get("kasatker_nama") or "-",
+         'after': [f"NIP. {settings.get('kasatker_nip') or '-'}"]},
+    ], doc.width))
+    footer = _page_footer_factory("LBKP per Golongan")
+    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    buffer.seek(0)
+    suffix = f"_S{semester}" if semester else ""
+    return StreamingResponse(
+        buffer, media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="LBKP_{tahun}{suffix}.pdf"'})
 
 
 @reports_router.get("/pembukuan/rekonsiliasi-xlsx")

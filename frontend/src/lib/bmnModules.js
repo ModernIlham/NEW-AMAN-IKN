@@ -127,7 +127,7 @@ export const PENATAUSAHAAN_SUBMODULES = [
     dasarHukum: [PENATAUSAHAAN_DASAR_HUKUM],
     fitur: [
       "✅ Posisi BMN di Neraca (per golongan, intra/ekstra + persediaan FIFO)",
-      "LBKP semesteran/tahunan per golongan (komponen lain menyusul)",
+      "✅ LBKP semesteran/tahunan per golongan (saldo awal–mutasi–akhir) + rekonsiliasi XLSX",
       "Arsip laporan lintas kegiatan dengan penomoran & riwayat",
       "Ekspor rekonsiliasi (format yang bisa disandingkan dengan SIMAK/SAKTI)",
     ],

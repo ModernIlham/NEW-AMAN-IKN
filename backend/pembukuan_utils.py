@@ -118,6 +118,94 @@ def build_dbkp_rows(assets, uraian_map=None, ambang=None):
     return rows, total
 
 
+_KOLOM_LBKP = ("jumlah_awal", "nilai_awal", "jumlah_tambah", "nilai_tambah",
+               "jumlah_kurang", "nilai_kurang", "jumlah_akhir", "nilai_akhir")
+
+
+def _baris_lbkp_kosong(gol, uraian_map):
+    uraian_map = uraian_map or {}
+    return {
+        "golongan": gol,
+        "uraian": uraian_map.get(gol) or (
+            "Tanpa Golongan (kode belum rapi)" if gol == "?" else f"Golongan {gol}"),
+        **{k: (0.0 if k.startswith("nilai") else 0) for k in _KOLOM_LBKP},
+    }
+
+
+def build_lbkp_rows(assets, tombstones, dari, sampai, uraian_map=None, ambang=None):
+    """LBKP per golongan: saldo awal + mutasi tambah/kurang + saldo akhir.
+
+    assets: aset HIDUP {asset_code, purchase_price, created_at}.
+    tombstones: jejak penghapusan {asset_code, timestamp, nilai} — nilai
+    0.0 bila audit lama belum merekam harga.
+    dari/sampai: ISO YYYY-MM-DD inklusif.
+
+    Kembalikan (per_kelas, n_kurang_tanpa_nilai) dengan per_kelas =
+    {"intra"|"ekstra"|"gabungan": (rows, total)}; tiap baris memuat kolom
+    awal/tambah/kurang/akhir (jumlah & nilai). Saldo akhir = awal + tambah
+    − kurang (identitas mutasi). Keterbatasan yang HARUS dicatat pemanggil:
+    aset yang dibuat lalu dihapus sebelum `dari` tak dapat direkonstruksi
+    (tombstone tanpa tanggal perolehan), dan penghapusan lama tanpa nilai
+    terekam dihitung jumlahnya dengan nilai 0.
+    """
+    agg = {"intra": {}, "ekstra": {}}
+
+    def _baris(kelas, gol):
+        return agg[kelas].setdefault(gol, _baris_lbkp_kosong(gol, uraian_map))
+
+    for a in assets or []:
+        tanggal = str(a.get("created_at") or "")[:10]
+        if not tanggal or tanggal > sampai:
+            continue
+        gol = golongan_of(a.get("asset_code")) or "?"
+        harga = parse_harga(a.get("purchase_price"))
+        kelas = klasifikasi_komptabel(a.get("asset_code"), harga, ambang)
+        row = _baris(kelas, gol)
+        if tanggal < dari:
+            row["jumlah_awal"] += 1
+            row["nilai_awal"] += harga
+        else:
+            row["jumlah_tambah"] += 1
+            row["nilai_tambah"] += harga
+
+    n_tanpa_nilai = 0
+    for t in tombstones or []:
+        tanggal = str(t.get("timestamp") or "")[:10]
+        if not (dari <= tanggal <= sampai):
+            continue
+        gol = golongan_of(t.get("asset_code")) or "?"
+        nilai = parse_harga(t.get("nilai"))
+        if nilai <= 0:
+            n_tanpa_nilai += 1
+        kelas = klasifikasi_komptabel(t.get("asset_code"), nilai, ambang)
+        row = _baris(kelas, gol)
+        row["jumlah_kurang"] += 1
+        row["nilai_kurang"] += nilai
+
+    def _tutup(peta):
+        rows = []
+        for gol in sorted(peta, key=lambda g: (g == "?", g)):
+            r = peta[gol]
+            r["jumlah_akhir"] = r["jumlah_awal"] + r["jumlah_tambah"] - r["jumlah_kurang"]
+            r["nilai_akhir"] = r["nilai_awal"] + r["nilai_tambah"] - r["nilai_kurang"]
+            rows.append(r)
+        total = {k: sum(r[k] for r in rows) for k in _KOLOM_LBKP}
+        return rows, total
+
+    gabungan = {}
+    for peta in agg.values():
+        for gol, r in peta.items():
+            g = gabungan.setdefault(gol, _baris_lbkp_kosong(gol, uraian_map))
+            for k in _KOLOM_LBKP[:6]:  # akhir dihitung ulang di _tutup
+                g[k] += r[k]
+    per_kelas = {
+        "intra": _tutup(agg["intra"]),
+        "ekstra": _tutup(agg["ekstra"]),
+        "gabungan": _tutup(gabungan),
+    }
+    return per_kelas, n_tanpa_nilai
+
+
 def posisi_neraca(rows, total, persediaan_jumlah=0, persediaan_nilai=0.0):
     """Gabungkan rekap aset tetap + persediaan → Posisi BMN di Neraca.
 
