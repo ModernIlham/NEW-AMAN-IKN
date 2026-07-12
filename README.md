@@ -38,7 +38,7 @@ bisa dimasuki; hanya sub-modul Pembukuan/KIB yang masih **Segera Hadir**
 DBKP per golongan (#76) · **modul Inventarisasi Persediaan inti lengkap**
 (#77–85): master ber-layer **FIFO** selaras SAKTI, transaksi masuk/keluar
 berjurnal, peringatan + nota dinas, laporan posisi/mutasi, stock opname +
-BAOF, impor/ekspor + template · **Pelaporan inti lengkap**: hub arsip
+BAOF + pengingat semesteran (#128), impor/ekspor + template · **Pelaporan inti lengkap**: hub arsip
 lintas kegiatan (#86), **Posisi BMN di Neraca** (#93), ekspor
 **rekonsiliasi XLSX** sandingan SAKTI (#94), dan **LBKP** semesteran/
 tahunan per golongan dengan saldo awal–mutasi–akhir (#95) — semua dapat
@@ -48,7 +48,8 @@ diakses dari Beranda Modul.
 kelengkapan BAST (#87) + **Daftar Barang yang Digunakan per pemegang**
 (PDF lampiran BAST, PMK 40/2024) (#125) + **daftar pantau BMN idle**
 dengan tiket klarifikasi → usul serah → diserahkan (PMK 120/2024)
-(#126) · Pengamanan — dasbor tertib administrasi + daftar
+(#126) + **register SK penetapan penggunaan** 5 jenis dengan cakupan
+aset ter-PSP (#129) · Pengamanan — dasbor tertib administrasi + daftar
 pantau sengketa (#88) · Pemeliharaan — riwayat & biaya per aset dengan
 telaah kapitalisasi PMK 181 (#89) + **DHPB PDF** semesteran/tahunan
 (Ps. 47 PP 27/2014) (#90) + jadwal berkala dengan status jatuh tempo (#92).
