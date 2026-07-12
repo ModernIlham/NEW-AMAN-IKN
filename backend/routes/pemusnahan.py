@@ -58,6 +58,33 @@ async def list_pemusnahan(_user: dict = Depends(require_user)):
                 "penghapusan lewat modul Penghapusan.")}
 
 
+@pemusnahan_router.get("/pemusnahan/export")
+async def export_pemusnahan(_user: dict = Depends(require_user)):
+    """Ekspor CSV register BA pemusnahan (pola #158)."""
+    import csv as csv_module
+    import io
+
+    from pembukuan_utils import parse_harga
+
+    buf = io.StringIO()
+    w = csv_module.writer(buf)
+    w.writerow(["nomor_ba", "tanggal_ba", "cara", "nomor_persetujuan",
+                "jumlah_aset", "nilai_perolehan", "keterangan",
+                "jumlah_lampiran", "dibuat_oleh"])
+    async for r in db.pemusnahan.find({}, {"_id": 0}).sort("tanggal_ba", -1):
+        aset = r.get("aset") or []
+        w.writerow([
+            r.get("nomor_ba"), r.get("tanggal_ba"),
+            CARA_PEMUSNAHAN.get(r.get("cara"), r.get("cara")),
+            r.get("nomor_persetujuan"), len(aset),
+            int(sum(parse_harga(a.get("harga")) for a in aset)),
+            r.get("keterangan"), len(r.get("lampiran") or []),
+            r.get("created_by"),
+        ])
+    return Response(content=buf.getvalue().encode("utf-8-sig"), media_type="text/csv",
+                    headers={"Content-Disposition": 'attachment; filename="register_pemusnahan.csv"'})
+
+
 @pemusnahan_router.post("/pemusnahan")
 async def buat_pemusnahan(payload: PemusnahanIn, user: dict = Depends(require_user)):
     """Catat satu BA pemusnahan multi-aset (aset harus rusak berat)."""

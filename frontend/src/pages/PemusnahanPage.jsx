@@ -2,8 +2,8 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Loader2, Flame, Plus, Search, Trash2, X, Coins, FileText,
-  Paperclip, Upload,
+  ArrowLeft, Loader2, Flame, Plus, Search, Trash2, X, Coins, Download,
+  FileText, Paperclip, Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -176,6 +176,11 @@ export default function PemusnahanPage({ user, onBack }) {
               Setelah persetujuan + pelaksanaan · PMK 83/PMK.06/2016
             </p>
           </div>
+          <Button size="sm" variant="outline" className="flex-shrink-0"
+            onClick={() => downloadFileWithProgress(`${API}/pemusnahan/export`, "register_pemusnahan.csv", { label: "Ekspor Register Pemusnahan (CSV)" }).catch(() => {})}
+            data-testid="pemusnahan-export">
+            <Download className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">CSV</span>
+          </Button>
           <Button size="sm" onClick={() => { setCari(""); setHasilCari([]); setForm({ data: { ...FORM_KOSONG }, aset: [], saving: false }); }}
             className="bg-orange-700 hover:bg-orange-800 text-white flex-shrink-0" data-testid="pemusnahan-tambah">
             <Plus className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">Catat BA</span>
