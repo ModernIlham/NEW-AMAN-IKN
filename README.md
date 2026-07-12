@@ -38,8 +38,11 @@ rencana fiturnya.
 DBKP per golongan (#76) · **modul Inventarisasi Persediaan inti lengkap**
 (#77–85): master ber-layer **FIFO** selaras SAKTI, transaksi masuk/keluar
 berjurnal, peringatan + nota dinas, laporan posisi/mutasi, stock opname +
-BAOF, impor/ekspor + template · **hub Pelaporan** lintas kegiatan (#86) —
-semua dapat diakses dari Beranda Modul.
+BAOF, impor/ekspor + template · **Pelaporan inti lengkap**: hub arsip
+lintas kegiatan (#86), **Posisi BMN di Neraca** (#93), ekspor
+**rekonsiliasi XLSX** sandingan SAKTI (#94), dan **LBKP** semesteran/
+tahunan per golongan dengan saldo awal–mutasi–akhir (#95) — semua dapat
+diakses dari Beranda Modul.
 
 **Progres Fase 3 (Juli 2026):** Penggunaan — rekap aset per pemegang +
 kelengkapan BAST (#87) · Pengamanan — dasbor tertib administrasi + daftar
