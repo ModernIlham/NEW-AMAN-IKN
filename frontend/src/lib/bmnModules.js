@@ -169,20 +169,25 @@ export const SIKLUS_MODULES = [
     id: "penganggaran",
     nama: "Penganggaran",
     urutan: 2,
-    status: "segera",
+    status: "sebagian",
     fase: 4,
-    ringkas: "Menjembatani RKBMN ke anggaran (RKA) — integrasi perencanaan-penganggaran.",
+    ringkas: "Register usulan RKBMN → telaah → DIPA → realisasi; sanding & kalender menyusul.",
     deskripsi:
-      "Tindak lanjut RKBMN ke dalam penganggaran: pagu kebutuhan BMN per unit/tahun, "
-      + "penandaan usulan yang lolos anggaran, dan pemantauan realisasi terhadap rencana — "
-      + "titik 'Integrasi' pada siklus resmi Kemenkeu.",
-    dasarHukum: ["PMK No. 153/PMK.06/2021 — RKBMN (keterkaitan penganggaran)"],
-    fitur: [
-      "Pagu kebutuhan BMN per unit & tahun anggaran",
-      "Status usulan RKBMN: diusulkan → disetujui → dianggarkan → direalisasikan",
-      "Sanding realisasi pengadaan vs rencana & anggaran",
+      "Tindak lanjut RKBMN ke dalam penganggaran (titik 'Integrasi' siklus resmi, "
+      + "PMK 62/2023 + PMK 153/2021). Tahap awal: register usulan berstatus — nilai "
+      + "tercatat per tahap (usulan → disetujui telaah → DIPA → realisasi) dengan "
+      + "tautan aset/NUP; kanal resmi tetap SIMAN V2 (RKBMN) dan SAKTI (RKA/DIPA).",
+    dasarHukum: [
+      "PMK No. 153/PMK.06/2021 — RKBMN (keterkaitan penganggaran)",
+      "PMK 62 Tahun 2023 jo. 107/2024 & 41/2026 — perencanaan & pelaksanaan anggaran",
     ],
-    integrasi: ["Menjembatani RKBMN (Perencanaan) dengan realisasi (Pengadaan)"],
+    fitur: [
+      "✅ Register usulan berstatus: diusulkan → disetujui telaah → masuk DIPA → terealisasi",
+      "✅ Nilai per tahap + serapan (realisasi/DIPA) + akun BAS 53x/523 + tautan aset",
+      "Sanding rencana vs realisasi per akun/triwulan (menyusul)",
+      "Pengingat kalender penganggaran konfigurabel (menyusul)",
+    ],
+    integrasi: ["Menjembatani RKBMN (Perencanaan) dengan realisasi (Pengadaan); usulan dapat ditautkan ke aset"],
   },
   {
     id: "pengadaan",
