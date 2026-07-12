@@ -48,6 +48,14 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#148] Periode pelaporan ber-kunci + penanda FINAL — 2026-07-12
+
+- **Periode pelaporan** (Semester I/II/Tahunan) berstatus terbuka →
+  terkunci (admin, anti-balapan; buka kembali wajib beralasan &
+  tercatat); saat terkunci, **LBKP & CaLBMN berpenanda FINAL** di
+  subjudul. Kartu kelola periode di hub Pelaporan. Suite 216; smoke
+  pypdfium2 tiga skenario lulus.
+
 ## [#147] Konsolidasi dokumentasi #146 — 2026-07-12
 
 - **Dokumentasi saja**: README blok Progres Fase 2 + roadmap masterplan
