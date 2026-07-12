@@ -48,6 +48,12 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#91] Konsolidasi dokumentasi Fase 3 (masterplan + README) — 2026-07-12
+
+- Tabel peta siklus masterplan: 5 modul kini berstatus **Sebagian** dengan
+  rujukan PR (#76–#90); README dapat blok **Progres Fase 3** (#87–#90) dan
+  paragraf Beranda Modul yang menyebut modul-modul Sebagian Aktif.
+
 ## [#90] DHPB PDF semesteran/tahunan — laporan berkala pemeliharaan — 2026-07-12
 
 - **DHPB (Daftar Hasil Pemeliharaan Barang)** per periode (tahun penuh /
