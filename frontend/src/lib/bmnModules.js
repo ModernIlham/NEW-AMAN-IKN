@@ -90,9 +90,9 @@ export const PENATAUSAHAAN_SUBMODULES = [
   {
     id: "inventarisasi-persediaan",
     nama: "Inventarisasi Persediaan",
-    status: "segera",
+    status: "sebagian",
     fase: 2,
-    ringkas: "Stok barang habis pakai: FIFO, gudang, opname — konsep dari sistem KERJA-BARENG.",
+    ringkas: "Master barang persediaan sudah bisa dikelola — transaksi FIFO, gudang, & opname menyusul.",
     deskripsi:
       "Manajemen barang persediaan (aset lancar, kodefikasi berawalan '1'): master persediaan "
       + "dengan stok ber-batch FIFO (harga & kedaluwarsa per batch), transaksi masuk/keluar "

@@ -56,7 +56,7 @@ function StatusBadge({ status }) {
  * tahap siklus lain sudah punya kamarnya masing-masing dengan status Segera
  * Hadir — klik kartunya menampilkan konsep, rencana fitur, dan fase roadmap.
  */
-export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onShowInfo, onEnterInventarisasi, onOpenKodefikasi }) {
+export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onShowInfo, onEnterInventarisasi, onOpenKodefikasi, onOpenPersediaan }) {
   const [detail, setDetail] = useState(null); // modul yang dibuka konsepnya
   const activateInfo = useTripleClick(onShowInfo);
   const DetailIcon = detail ? (MODULE_ICONS[detail.id] || Package) : null;
@@ -68,6 +68,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
 
   const openModule = (mod) => {
     if (mod.id === "inventarisasi-aset") onEnterInventarisasi();
+    else if (mod.id === "inventarisasi-persediaan" && onOpenPersediaan) onOpenPersediaan();
     else setDetail(mod);
   };
 
@@ -161,6 +162,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
             {PENATAUSAHAAN_SUBMODULES.map((mod) => {
               const Icon = MODULE_ICONS[mod.id] || Package;
               const aktif = mod.id === "inventarisasi-aset";
+              const enterable = aktif || (mod.id === "inventarisasi-persediaan" && !!onOpenPersediaan);
               return (
                 <button
                   key={mod.id}
@@ -181,9 +183,9 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
                   </div>
                   <p className="font-semibold text-foreground text-xs sm:text-sm leading-tight">{mod.nama}</p>
                   <p className="text-[11px] text-muted-foreground mt-1 leading-snug">{mod.ringkas}</p>
-                  {aktif && (
+                  {enterable && (
                     <span className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 group-hover:gap-1.5 transition-all">
-                      Masuk Modul <ChevronRight className="w-3.5 h-3.5" />
+                      {aktif ? "Masuk Modul" : "Buka Master Persediaan"} <ChevronRight className="w-3.5 h-3.5" />
                     </span>
                   )}
                 </button>
