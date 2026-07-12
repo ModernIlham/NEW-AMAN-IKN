@@ -48,6 +48,17 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#82] Laporan persediaan: Posisi Stok + Mutasi Periode (PDF) — 2026-07-12
+
+- **Laporan Posisi Persediaan**: per kelompok kodefikasi (uraian dari
+  referensi), nilai per barang dihitung FIFO per layer, subtotal +
+  grand total.
+- **Laporan Mutasi Persediaan** per periode dari JURNAL: saldo awal →
+  masuk (qty/nilai) → keluar (qty/nilai) → saldo akhir + TOTAL.
+- Tombol Posisi & Mutasi (dialog rentang, default bulan berjalan) di
+  toolbar Master Persediaan. 3 unit test mutasi_periode (39 total);
+  smoke render tervalidasi visual.
+
 ## [#81] Peringatan kritis/kedaluwarsa + nota dinas PDF persediaan — 2026-07-12
 
 - **Daftar pantau persediaan** (`/persediaan/peringatan`): habis, kritis
