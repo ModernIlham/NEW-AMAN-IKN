@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, Wrench, Plus, Search, Trash2, X,
-  CalendarDays, Coins, Boxes, ClipboardList, FileText,
+  CalendarDays, Coins, Boxes, ClipboardList, Download, FileText,
   CalendarClock, Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -272,6 +272,11 @@ export default function PemeliharaanPage({ user, onBack }) {
               Riwayat & biaya per aset — bahan Daftar Hasil Pemeliharaan (PP 27/2014)
             </p>
           </div>
+          <Button size="sm" variant="outline" className="flex-shrink-0"
+            onClick={() => downloadFileWithProgress(`${API}/pemeliharaan/export`, "riwayat_pemeliharaan.csv", { label: "Ekspor Riwayat Pemeliharaan (CSV)" }).catch(() => {})}
+            data-testid="pemeliharaan-export">
+            <Download className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">CSV</span>
+          </Button>
           <Button size="sm" onClick={bukaForm} className="bg-orange-600 hover:bg-orange-700 text-white flex-shrink-0" data-testid="pemeliharaan-tambah">
             <Plus className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">Catat</span>
           </Button>

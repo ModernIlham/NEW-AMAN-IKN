@@ -296,6 +296,36 @@ async def riwayat_aset(asset_id: str, _user: dict = Depends(require_user)):
     return {"items": records, "jumlah": len(records), "total_biaya": total}
 
 
+@pemeliharaan_router.get("/pemeliharaan/export")
+async def export_pemeliharaan(_user: dict = Depends(require_user)):
+    """Ekspor CSV seluruh riwayat pemeliharaan (pola #158)."""
+    import csv as csv_module
+    import io
+
+    from fastapi.responses import Response as HttpResponse
+
+    buf = io.StringIO()
+    w = csv_module.writer(buf)
+    w.writerow(["kode_aset", "nup", "nama_aset", "tanggal", "jenis",
+                "uraian", "biaya", "kondisi_sebelum", "kondisi_setelah",
+                "telaah_kapitalisasi", "pelaksana", "no_bukti",
+                "keterangan", "dibuat_oleh"])
+    async for c in db.pemeliharaan.find({}, {"_id": 0}) \
+            .sort([("tanggal", -1), ("created_at", -1)]):
+        w.writerow([
+            c.get("asset_code"), c.get("NUP"), c.get("asset_name"),
+            c.get("tanggal"),
+            JENIS_PEMELIHARAAN.get(c.get("jenis"), c.get("jenis")),
+            c.get("uraian"), int(parse_biaya(c.get("biaya")) or 0),
+            c.get("kondisi_sebelum"), c.get("kondisi_setelah"),
+            "Ya" if c.get("indikasi_kapitalisasi") else "",
+            c.get("pelaksana"), c.get("no_bukti"), c.get("keterangan"),
+            c.get("created_by"),
+        ])
+    return HttpResponse(content=buf.getvalue().encode("utf-8-sig"), media_type="text/csv",
+                        headers={"Content-Disposition": 'attachment; filename="riwayat_pemeliharaan.csv"'})
+
+
 @pemeliharaan_router.get("/pemeliharaan")
 async def list_pemeliharaan(
     asset_id: str = "",
