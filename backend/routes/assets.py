@@ -148,8 +148,8 @@ def build_asset_search_query(
     price_max: float = None,
     nomor_spm: str = "",
     perolehan_dari: str = "",
-    created_from: str = "",
-    created_to: str = "",
+    beli_dari: str = "",
+    beli_sampai: str = "",
 ) -> dict:
     """Query pencarian + filter aset — SATU builder untuk GET /assets dan
     ekspor geo (KML/KMZ/SHP) supaya filter tidak pernah drift antar-endpoint."""
@@ -258,14 +258,16 @@ def build_asset_search_query(
                 ]
             }
 
-    # Rentang tanggal input (created_at tersimpan sebagai string ISO —
-    # perbandingan leksikal aman untuk prefiks tanggal YYYY-MM-DD).
-    # Kedua batas divalidasi simetris; nilai tak valid diabaikan diam-diam
-    # (frontend selalu mengirim YYYY-MM-DD dari <input type=date>).
-    if created_from or created_to:
+    # Rentang TANGGAL BELI (purchase_date, string YYYY-MM-DD — perbandingan
+    # leksikal aman untuk prefiks tanggal). Aset tanpa tanggal beli otomatis
+    # keluar dari hasil saat rentang diisi (tak punya tanggal beli untuk
+    # dibandingkan). Kedua batas divalidasi simetris; nilai tak valid
+    # diabaikan diam-diam (frontend selalu mengirim YYYY-MM-DD dari
+    # <input type=date>).
+    if beli_dari or beli_sampai:
         rng = {}
-        cf = str(created_from or "").strip()[:10]
-        ct = str(created_to or "").strip()[:10]
+        cf = str(beli_dari or "").strip()[:10]
+        ct = str(beli_sampai or "").strip()[:10]
         if cf:
             try:
                 datetime.strptime(cf, "%Y-%m-%d")
@@ -274,13 +276,12 @@ def build_asset_search_query(
                 pass
         if ct:
             try:
-                # inklusif s.d. akhir hari: batas atas = hari berikutnya (eksklusif).
-                # OverflowError: 9999-12-31 + 1 hari melewati datetime.MAXYEAR.
-                rng["$lt"] = (datetime.strptime(ct, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+                datetime.strptime(ct, "%Y-%m-%d")
+                rng["$lte"] = ct  # tanggal beli tanpa jam → batas atas inklusif
             except (ValueError, OverflowError):
                 pass
         if rng:
-            query["created_at"] = rng
+            query["purchase_date"] = rng
 
     return query
 
@@ -305,8 +306,8 @@ async def get_assets(
     price_max: float = None,
     nomor_spm: str = "",
     perolehan_dari: str = "",
-    created_from: str = "",
-    created_to: str = "",
+    beli_dari: str = "",
+    beli_sampai: str = "",
     _user: dict = Depends(require_user),
 ):
     """Get paginated assets with advanced filters - optimized for millions of records"""
@@ -316,7 +317,7 @@ async def get_assets(
         eselon1_filter=eselon1_filter, eselon2_filter=eselon2_filter,
         stiker_status=stiker_status, inventory_status=inventory_status,
         price_min=price_min, price_max=price_max, nomor_spm=nomor_spm,
-        perolehan_dari=perolehan_dari, created_from=created_from, created_to=created_to,
+        perolehan_dari=perolehan_dari, beli_dari=beli_dari, beli_sampai=beli_sampai,
     )
 
     # Extended sort options

@@ -422,8 +422,8 @@ async def export_geo(
     price_max: float = None,
     nomor_spm: str = "",
     perolehan_dari: str = "",
-    created_from: str = "",
-    created_to: str = "",
+    beli_dari: str = "",
+    beli_sampai: str = "",
     _user: dict = Depends(require_user),
 ):
     """Ekspor titik koordinat aset (mengikuti filter aktif) sebagai KML/KMZ/SHP."""
@@ -437,7 +437,7 @@ async def export_geo(
         eselon1_filter=eselon1_filter, eselon2_filter=eselon2_filter,
         stiker_status=stiker_status, inventory_status=inventory_status,
         price_min=price_min, price_max=price_max, nomor_spm=nomor_spm,
-        perolehan_dari=perolehan_dari, created_from=created_from, created_to=created_to,
+        perolehan_dari=perolehan_dari, beli_dari=beli_dari, beli_sampai=beli_sampai,
     )
     # Streaming cursor (bukan to_list) + photo_count GridFS-first dengan
     # fallback foto inline legacy — konsisten dengan badge kamera di peta.

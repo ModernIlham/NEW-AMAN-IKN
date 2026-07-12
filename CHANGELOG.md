@@ -48,6 +48,16 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#202] Filter rentang waktu pakai tanggal beli (+ peta) — 2026-07-12
+
+- **Filter rentang tanggal** di daftar inventarisasi aset kini menyaring
+  berdasarkan **tanggal beli** (`purchase_date`), bukan tanggal input
+  (`created_at`). Karena builder query dipakai bersama `/assets` + ekspor
+  geo, dan peta memakai `buildParams` + `clientFilter` yang sama,
+  **peta ikut tersaring**. Param → `beli_dari/beli_sampai` (batas atas
+  inklusif); label UI "Tanggal Input" → "Tanggal Beli"; aset tanpa
+  tanggal beli keluar saat rentang diisi; indeks `purchase_date` ditambah.
+
 ## [#201] Saran jenjang persetujuan Pemindahtanganan — 2026-07-12
 
 - **Saran jenjang persetujuan (indikatif)** dari jenis BMN + nilai wajar:

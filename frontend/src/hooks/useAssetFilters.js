@@ -66,8 +66,8 @@ export function useAssetFilters({ activityId }) {
     if (filters.priceMax) params.append("price_max", filters.priceMax);
     if (filters.nomorSpm) params.append("nomor_spm", filters.nomorSpm);
     if (filters.perolehanDari) params.append("perolehan_dari", filters.perolehanDari);
-    if (filters.dateFrom) params.append("created_from", filters.dateFrom);
-    if (filters.dateTo) params.append("created_to", filters.dateTo);
+    if (filters.dateFrom) params.append("beli_dari", filters.dateFrom);
+    if (filters.dateTo) params.append("beli_sampai", filters.dateTo);
     return params;
   }, [filters]);
 
