@@ -48,6 +48,15 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#144] CaLBMN pra-isi bab I–V per periode — 2026-07-12
+
+- **CaLBMN pra-isi** (struktur lampiran PMK 181/2016, riset → pustaka
+  §2.3a): bab I–V terisi dari data nyata — ringkasan mutasi LBKP per
+  golongan, intra/ekstra, persediaan FIFO, cakupan PSP, PNBP kontribusi
+  ber-NTPN periode berjalan, pemindahtanganan/penghapusan/idle/sengketa;
+  dropdown periode di hub Pelaporan. Posisi: bahan penyusunan — dokumen
+  resmi via SAKTI; smoke pypdfium2 lulus.
+
 ## [#143] Konsolidasi dokumentasi #142 — 2026-07-12
 
 - **Dokumentasi saja**: README blok Progres Fase 5–6 + penanda roadmap
