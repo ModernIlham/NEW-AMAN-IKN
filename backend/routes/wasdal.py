@@ -15,11 +15,14 @@ from pydantic import BaseModel, Field
 from auth_utils import require_admin, require_user
 from db import db
 from wasdal_utils import (
-    AMBANG_BERLARUT_HARI, JENIS_TEMUAN, OBJEK_WASDAL,
-    SUMBER_PENERTIBAN, STATUS_PENERTIBAN, TENGGAT_HARI_KERJA,
-    periode_wasdal, rekap_penertiban, rekap_wasdal,
-    status_tenggat_penertiban, susun_temuan, tambah_hari_kerja,
-    validate_penertiban, validate_selesai_penertiban,
+    AMBANG_BERLARUT_HARI, JENIS_TEMUAN, OBJEK_WASDAL, PEMICU_INSIDENTIL,
+    STATUS_INSIDENTIL, SUMBER_PENERTIBAN, STATUS_PENERTIBAN,
+    TENGGAT_HARI_KERJA, TENGGAT_LAPOR_HK, TENGGAT_PELAKSANAAN_HK,
+    info_tenggat_insidentil, periode_wasdal, rekap_insidentil,
+    rekap_penertiban, rekap_wasdal, status_tenggat_penertiban,
+    susun_temuan, tambah_hari_kerja, validate_ba_insidentil,
+    validate_insidentil, validate_lapor_insidentil, validate_penertiban,
+    validate_selesai_penertiban,
 )
 
 wasdal_router = APIRouter()
@@ -191,6 +194,217 @@ async def hapus_penertiban(tiket_id: str, _admin: dict = Depends(require_admin))
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Tiket tidak ditemukan")
     return {"ok": True, "id": tiket_id}
+
+
+class InsidentilIn(BaseModel):
+    pemicu: str
+    tanggal_mulai: str = Field(min_length=10, max_length=10)
+    objek: str = ""                 # salah satu 5 objek pemantauan (opsional)
+    uraian: str = Field(min_length=1)
+    lokasi: str = ""
+
+
+class BaInsidentilIn(BaseModel):
+    nomor_ba: str = Field(min_length=1)
+    tanggal_ba: str = Field(min_length=10, max_length=10)
+    hasil: str = Field(min_length=1)
+
+
+class LaporInsidentilIn(BaseModel):
+    tanggal_lapor: str = Field(min_length=10, max_length=10)
+    keterangan: str = ""
+
+
+@wasdal_router.get("/wasdal/insidentil")
+async def daftar_insidentil(_user: dict = Depends(require_user)):
+    """Register pemantauan insidentil + tenggat aktif per tiket + rekap."""
+    today_iso = datetime.now(timezone.utc).date().isoformat()
+    items = [t async for t in db.pemantauan_insidentil.find({}, {"_id": 0})
+             .sort("created_at", -1).limit(500)]
+    for t in items:
+        t["info_tenggat"] = info_tenggat_insidentil(t, today_iso)
+    return {"items": items, "ringkasan": rekap_insidentil(items, today_iso),
+            "label_pemicu": PEMICU_INSIDENTIL,
+            "label_status": STATUS_INSIDENTIL,
+            "label_objek": OBJEK_WASDAL,
+            "tenggat_pelaksanaan_hk": TENGGAT_PELAKSANAAN_HK,
+            "tenggat_lapor_hk": TENGGAT_LAPOR_HK,
+            "catatan": (
+                "PMK 207/2021: pemantauan insidentil dilaksanakan paling lama "
+                f"{TENGGAT_PELAKSANAAN_HK} hari kerja sejak mulai; hasilnya "
+                f"dilaporkan paling lama {TENGGAT_LAPOR_HK} hari kerja sejak "
+                "tanggal BA. Tenggat dihitung hari kerja Senin–Jumat.")}
+
+
+@wasdal_router.post("/wasdal/insidentil")
+async def catat_insidentil(payload: InsidentilIn,
+                           user: dict = Depends(require_user)):
+    """Buka pemantauan insidentil (pemicu masyarakat/media/audit)."""
+    data = payload.model_dump()
+    errors = validate_insidentil(data)
+    if errors:
+        raise HTTPException(status_code=400, detail="; ".join(errors))
+    now = datetime.now(timezone.utc).isoformat()
+    record = {
+        "id": str(uuid.uuid4()),
+        "pemicu": data["pemicu"],
+        "tanggal_mulai": data["tanggal_mulai"].strip()[:10],
+        "objek": str(data.get("objek") or "").strip(),
+        "uraian": data["uraian"].strip(),
+        "lokasi": str(data.get("lokasi") or "").strip(),
+        "status": "berjalan",
+        "nomor_ba": "",
+        "tanggal_ba": "",
+        "hasil": "",
+        "tanggal_lapor": "",
+        "keterangan_lapor": "",
+        "created_by": user.get("username"),
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.pemantauan_insidentil.insert_one({**record})
+    record["info_tenggat"] = info_tenggat_insidentil(
+        record, datetime.now(timezone.utc).date().isoformat())
+    return record
+
+
+@wasdal_router.post("/wasdal/insidentil/{tiket_id}/ba")
+async def terbitkan_ba_insidentil(tiket_id: str, payload: BaInsidentilIn,
+                                  admin: dict = Depends(require_admin)):
+    """Catat BA pemantauan insidentil (admin) → status ba_terbit."""
+    t = await db.pemantauan_insidentil.find_one({"id": tiket_id}, {"_id": 0})
+    if not t:
+        raise HTTPException(status_code=404, detail="Tiket tidak ditemukan")
+    data = payload.model_dump()
+    errors = validate_ba_insidentil(t, data)
+    if errors:
+        raise HTTPException(status_code=400, detail="; ".join(errors))
+    now = datetime.now(timezone.utc).isoformat()
+    res = await db.pemantauan_insidentil.find_one_and_update(
+        # Anti-balapan: hanya tiket yang masih berjalan
+        {"id": tiket_id, "status": "berjalan"},
+        {"$set": {"status": "ba_terbit",
+                  "nomor_ba": data["nomor_ba"].strip(),
+                  "tanggal_ba": data["tanggal_ba"].strip()[:10],
+                  "hasil": data["hasil"].strip(),
+                  "ba_oleh": admin.get("username"),
+                  "updated_at": now}},
+        projection={"_id": 0}, return_document=True)
+    if not res:
+        raise HTTPException(status_code=409,
+                            detail="Tiket berubah oleh proses lain — muat ulang")
+    return res
+
+
+@wasdal_router.post("/wasdal/insidentil/{tiket_id}/lapor")
+async def laporkan_insidentil(tiket_id: str, payload: LaporInsidentilIn,
+                              admin: dict = Depends(require_admin)):
+    """Catat pelaporan hasil (admin) → status dilaporkan."""
+    t = await db.pemantauan_insidentil.find_one({"id": tiket_id}, {"_id": 0})
+    if not t:
+        raise HTTPException(status_code=404, detail="Tiket tidak ditemukan")
+    data = payload.model_dump()
+    errors = validate_lapor_insidentil(t, data)
+    if errors:
+        raise HTTPException(status_code=400, detail="; ".join(errors))
+    now = datetime.now(timezone.utc).isoformat()
+    res = await db.pemantauan_insidentil.find_one_and_update(
+        {"id": tiket_id, "status": "ba_terbit"},
+        {"$set": {"status": "dilaporkan",
+                  "tanggal_lapor": data["tanggal_lapor"].strip()[:10],
+                  "keterangan_lapor": str(data.get("keterangan") or "").strip(),
+                  "lapor_oleh": admin.get("username"),
+                  "updated_at": now}},
+        projection={"_id": 0}, return_document=True)
+    if not res:
+        raise HTTPException(status_code=409,
+                            detail="Tiket berubah oleh proses lain — muat ulang")
+    return res
+
+
+@wasdal_router.delete("/wasdal/insidentil/{tiket_id}")
+async def hapus_insidentil(tiket_id: str, _admin: dict = Depends(require_admin)):
+    """Hapus tiket salah input (khusus admin)."""
+    res = await db.pemantauan_insidentil.delete_one({"id": tiket_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Tiket tidak ditemukan")
+    return {"ok": True, "id": tiket_id}
+
+
+@wasdal_router.get("/wasdal/insidentil/{tiket_id}/ba-pdf")
+async def ba_insidentil_pdf(tiket_id: str, _user: dict = Depends(require_user)):
+    """Berita Acara Pemantauan Insidentil (PDF siap tanda tangan).
+
+    Bila BA belum diterbitkan, nomor/tanggal tampil sebagai isian kosong —
+    dokumen tetap bisa disiapkan lebih dulu.
+    """
+    from io import BytesIO
+
+    from fastapi.responses import StreamingResponse
+    from reportlab.lib.units import mm as rl_mm
+    from reportlab.platypus import Paragraph, Spacer, Table
+
+    from routes.reports import (
+        _fit_col_widths, _get_report_styles, _kop_surat_flowables,
+        _page_footer_factory, _signature_block, _std_doc, _std_table_style,
+        _title_block,
+    )
+
+    t = await db.pemantauan_insidentil.find_one({"id": tiket_id}, {"_id": 0})
+    if not t:
+        raise HTTPException(status_code=404, detail="Tiket tidak ditemukan")
+    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+
+    buffer = BytesIO()
+    doc = _std_doc(buffer)
+    st = _get_report_styles()
+    elements = []
+    elements.extend(_kop_surat_flowables(settings, doc.width))
+    elements.extend(_title_block(
+        "BERITA ACARA\nPEMANTAUAN INSIDENTIL BMN",
+        nomor=t.get("nomor_ba") or "....................",
+        subjudul="Pengawasan dan Pengendalian BMN — PMK 207/PMK.06/2021"))
+    elements.append(Paragraph(
+        f"Pada tanggal {t.get('tanggal_ba') or '....................'} telah "
+        f"dilaksanakan pemantauan insidentil atas Barang Milik Negara "
+        f"berdasarkan pemicu berikut, dimulai tanggal "
+        f"{t.get('tanggal_mulai') or '-'} dengan batas pelaksanaan "
+        f"{TENGGAT_PELAKSANAAN_HK} hari kerja.", st['Meta']))
+    elements.append(Spacer(1, 3 * rl_mm))
+
+    baris = [
+        ("Pemicu", PEMICU_INSIDENTIL.get(t.get("pemicu"), t.get("pemicu") or "-")),
+        ("Objek pemantauan", OBJEK_WASDAL.get(t.get("objek"), "") or "Tidak spesifik"),
+        ("Uraian", t.get("uraian") or "-"),
+        ("Lokasi", t.get("lokasi") or "-"),
+        ("Hasil pemantauan", t.get("hasil") or "(diisi setelah pemantauan selesai)"),
+    ]
+    table_data = [[Paragraph(f"<b>{k}</b>", st['Cell']), Paragraph(str(v), st['Cell'])]
+                  for k, v in baris]
+    table = Table(table_data, colWidths=_fit_col_widths([130, 328], doc.width))
+    table.setStyle(_std_table_style(zebra=False))
+    elements.append(table)
+    elements.append(Spacer(1, 4 * rl_mm))
+    elements.append(Paragraph(
+        f"Hasil pemantauan dilaporkan secara berjenjang paling lama "
+        f"{TENGGAT_LAPOR_HK} hari kerja sejak tanggal Berita Acara ini. "
+        f"Berita Acara dibuat dengan sebenarnya untuk dipergunakan "
+        f"sebagaimana mestinya.", st['Meta']))
+    elements.append(Spacer(1, 8 * rl_mm))
+    elements.extend(_signature_block([
+        {'pre': [''], 'header': 'Petugas Pemantauan,',
+         'nama': '...........................',
+         'after': ['NIP. ....................']},
+        {'pre': [''], 'header': 'Mengetahui,', 'role': 'Kuasa Pengguna Barang,',
+         'nama': settings.get("kasatker_nama") or '...........................',
+         'after': [f"NIP. {settings.get('kasatker_nip') or '....................'}"]},
+    ], doc.width))
+    footer = _page_footer_factory("Berita Acara Pemantauan Insidentil BMN")
+    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    buffer.seek(0)
+    nama = f"BA_Pemantauan_Insidentil_{(t.get('nomor_ba') or tiket_id[:8]).replace('/', '-')}.pdf"
+    return StreamingResponse(buffer, media_type="application/pdf",
+                             headers={"Content-Disposition": f'attachment; filename="{nama}"'})
 
 
 @wasdal_router.get("/wasdal/laporan-pdf")

@@ -405,10 +405,13 @@ bentuk + NTPN utk penjualan → SK penghapusan), peringatan tenggat lelang
   surat permintaan Pengelola / temuan APIP-BPK; hitung hari kerja
   Senin–Jumat, libur nasional belum diperhitungkan; tindak lanjut
   tercatat saat selesai).
-- Menyusul: BA pemantauan insidentil (tenggat 10+5 hari kerja), generator
-  laporan mengikuti formulir Lampiran PMK 207 (baca lampiran asli dulu),
-  kalender tenggat konfigurabel (tenggat internal ditetapkan surat
-  DJKN/K/L per tahun).
+- ✅ Pemantauan insidentil ber-tenggat 10+5 hari kerja (pemicu: informasi
+  masyarakat / pemberitaan media / hasil audit; alur berjalan → BA terbit
+  → dilaporkan; PDF Berita Acara siap tanda tangan dengan placeholder
+  bila BA belum terbit).
+- Menyusul: generator laporan mengikuti formulir Lampiran PMK 207 (baca
+  lampiran asli dulu), kalender tenggat konfigurabel (tenggat internal
+  ditetapkan surat DJKN/K/L per tahun).
 
 ---
 
@@ -566,7 +569,7 @@ fisik; barang untuk pemda/masyarakat tidak segera di-BAST-kan.
 | Pemindahtanganan (F6, ✅ tahap awal) | ✅ Register usulan 4 bentuk + dokumen wajib per tahap + tenggat lelang (#111, §7); menyusul: tabel konfigurasi jalur persetujuan/ambang nilai, arsip scan |
 | Pemusnahan (F6, ✅ tahap awal) | ✅ Register BA multi-aset, persetujuan wajib, objek RB (#110); menyusul: foto bukti + PDF BA + tautan usulan penghapusan |
 | Penghapusan (F6, ✅ tahap awal) | ✅ Kandidat per jalur (#104): "Tidak Ditemukan" → penelusuran+TGR; RB → pemusnahan/pemindahtanganan; menyusul: tiket usulan berstatus + arsip SK |
-| Wasdal (F6, ✅ tahap awal) | ✅ Dasbor pemantauan 5 objek PMK 207 — mesin aturan atas register yang ada, tanpa input ganda (#113, §8); ✅ register penertiban ber-tenggat 15 hari kerja; AMAN penyiap data, kanal resmi SIMAN v2; menyusul: BA insidentil + formulir lampiran |
+| Wasdal (F6, ✅ tahap awal) | ✅ Dasbor pemantauan 5 objek PMK 207 — mesin aturan atas register yang ada, tanpa input ganda (#113, §8); ✅ register penertiban ber-tenggat 15 hari kerja; ✅ pemantauan insidentil 10+5 hari kerja + PDF BA; AMAN penyiap data, kanal resmi SIMAN v2; menyusul: formulir lampiran PMK 207 |
 
 ---
 

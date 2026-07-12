@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, Eye, RefreshCw, ChevronDown, BadgeCheck,
   UserCheck, Handshake, ArrowLeftRight, BookOpen, ShieldCheck, FileText,
-  Gavel, Plus, Trash2, AlertTriangle,
+  Gavel, Plus, Trash2, AlertTriangle, Siren, FileDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,6 +42,14 @@ export default function WasdalPage({ user, onBack }) {
   const [formPen, setFormPen] = useState(null);
   // Dialog selesai penertiban: {tiket, tindak_lanjut, tanggal_selesai, saving}
   const [selesaiPen, setSelesaiPen] = useState(null);
+  // Register pemantauan insidentil: {items, ringkasan, label_pemicu, ...}
+  const [insi, setInsi] = useState(null);
+  // Dialog catat insidentil: {data, saving}
+  const [formInsi, setFormInsi] = useState(null);
+  // Dialog BA insidentil: {tiket, nomor_ba, tanggal_ba, hasil, saving}
+  const [baInsi, setBaInsi] = useState(null);
+  // Dialog lapor insidentil: {tiket, tanggal_lapor, keterangan, saving}
+  const [laporInsi, setLaporInsi] = useState(null);
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
 
@@ -59,7 +67,69 @@ export default function WasdalPage({ user, onBack }) {
       .catch(() => toast.error("Gagal memuat register penertiban"));
   }, []);
 
-  useEffect(() => { muat(); muatPen(); }, [muat, muatPen]);
+  const muatInsi = useCallback(() => {
+    axios.get(`${API}/wasdal/insidentil`)
+      .then((r) => setInsi(r.data))
+      .catch(() => toast.error("Gagal memuat pemantauan insidentil"));
+  }, []);
+
+  useEffect(() => { muat(); muatPen(); muatInsi(); }, [muat, muatPen, muatInsi]);
+
+  const simpanInsi = async () => {
+    if (!formInsi) return;
+    setFormInsi((f) => ({ ...f, saving: true }));
+    try {
+      await axios.post(`${API}/wasdal/insidentil`, formInsi.data);
+      toast.success("Pemantauan insidentil dibuka");
+      setFormInsi(null);
+      muatInsi();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal mencatat pemantauan");
+      setFormInsi((f) => (f ? { ...f, saving: false } : f));
+    }
+  };
+
+  const kirimBaInsi = async () => {
+    if (!baInsi) return;
+    setBaInsi((s) => ({ ...s, saving: true }));
+    try {
+      await axios.post(`${API}/wasdal/insidentil/${baInsi.tiket.id}/ba`, {
+        nomor_ba: baInsi.nomor_ba, tanggal_ba: baInsi.tanggal_ba, hasil: baInsi.hasil,
+      });
+      toast.success("BA pemantauan tercatat");
+      setBaInsi(null);
+      muatInsi();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal mencatat BA");
+      setBaInsi((s) => (s ? { ...s, saving: false } : s));
+    }
+  };
+
+  const kirimLaporInsi = async () => {
+    if (!laporInsi) return;
+    setLaporInsi((s) => ({ ...s, saving: true }));
+    try {
+      await axios.post(`${API}/wasdal/insidentil/${laporInsi.tiket.id}/lapor`, {
+        tanggal_lapor: laporInsi.tanggal_lapor, keterangan: laporInsi.keterangan,
+      });
+      toast.success("Pelaporan tercatat");
+      setLaporInsi(null);
+      muatInsi();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal mencatat pelaporan");
+      setLaporInsi((s) => (s ? { ...s, saving: false } : s));
+    }
+  };
+
+  const hapusInsi = async (tiket) => {
+    try {
+      await axios.delete(`${API}/wasdal/insidentil/${tiket.id}`);
+      toast.success("Tiket dihapus");
+      muatInsi();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal menghapus tiket");
+    }
+  };
 
   const simpanPen = async () => {
     if (!formPen) return;
@@ -333,13 +403,232 @@ export default function WasdalPage({ user, onBack }) {
               </div>
             )}
 
+            {/* ── Pemantauan insidentil (10 + 5 hari kerja) ── */}
+            {insi && (
+              <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="wasdal-insidentil">
+                <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
+                  <Siren className="w-4 h-4 text-violet-500" />
+                  <p className="text-xs font-bold text-foreground flex-1">Pemantauan Insidentil ({insi.tenggat_pelaksanaan_hk}+{insi.tenggat_lapor_hk} hari kerja)</p>
+                  {(insi.ringkasan?.lewat_tenggat || 0) > 0 && (
+                    <span className="px-2 py-0.5 rounded-full bg-red-500/15 text-red-600 dark:text-red-400 text-[10px] font-semibold">
+                      {insi.ringkasan.lewat_tenggat} lewat tenggat
+                    </span>
+                  )}
+                  <span className="px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-600 dark:text-violet-400 text-[10px] font-semibold">
+                    {(insi.ringkasan?.berjalan || 0) + (insi.ringkasan?.ba_terbit || 0)} aktif
+                  </span>
+                  <Button size="sm" onClick={() => setFormInsi({ data: { pemicu: "informasi_masyarakat", tanggal_mulai: new Date().toISOString().slice(0, 10), objek: "", uraian: "", lokasi: "" }, saving: false })}
+                    className="h-7 text-[11px] min-h-0 bg-violet-600 hover:bg-violet-700 text-white" data-testid="wasdal-insidentil-tambah">
+                    <Plus className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">Catat</span>
+                  </Button>
+                </div>
+                {(insi.items || []).length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-5 px-4">
+                    Belum ada pemantauan insidentil — dibuka bila ada informasi masyarakat, pemberitaan media, atau hasil audit.
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-border/60">
+                    {insi.items.map((t) => (
+                      <li key={t.id} className="p-3" data-testid={`wasdal-insidentil-${t.id}`}>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                            t.status === "dilaporkan"
+                              ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                              : t.status === "ba_terbit"
+                                ? "bg-sky-500/15 text-sky-600 dark:text-sky-400"
+                                : "bg-violet-500/15 text-violet-600 dark:text-violet-400"}`}>
+                            {insi.label_status?.[t.status] || t.status}
+                          </span>
+                          <p className="text-xs font-semibold text-foreground flex-1 min-w-[140px] truncate">{t.uraian}</p>
+                          {t.info_tenggat?.lewat && (
+                            <span className="px-1.5 py-0.5 rounded bg-red-500/15 text-red-600 dark:text-red-400 text-[10px] font-semibold flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3" />Lewat tenggat {t.info_tenggat.tahap} ({t.info_tenggat.tenggat})
+                            </span>
+                          )}
+                          {t.info_tenggat?.tahap && !t.info_tenggat?.lewat && (
+                            <span className="text-[10px] text-muted-foreground">
+                              {t.info_tenggat.tahap}: sisa {t.info_tenggat.sisa_hari_kerja ?? "-"} hari kerja
+                            </span>
+                          )}
+                          <button type="button" aria-label="Unduh BA (PDF)"
+                            onClick={() => downloadFileWithProgress(
+                              `${API}/wasdal/insidentil/${t.id}/ba-pdf`,
+                              `BA_Pemantauan_Insidentil_${(t.nomor_ba || t.id.slice(0, 8)).replace(/\//g, "-")}.pdf`,
+                              { label: "BA Pemantauan Insidentil" },
+                            ).catch(() => {})}
+                            className="h-7 w-7 rounded-lg border border-border text-foreground/70 flex items-center justify-center hover:bg-muted min-h-0 min-w-0"
+                            data-testid={`wasdal-insidentil-pdf-${t.id}`}>
+                            <FileDown className="w-3 h-3" />
+                          </button>
+                          {isAdmin && t.status === "berjalan" && (
+                            <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                              onClick={() => setBaInsi({ tiket: t, nomor_ba: "", tanggal_ba: new Date().toISOString().slice(0, 10), hasil: "", saving: false })}
+                              data-testid={`wasdal-insidentil-ba-${t.id}`}>
+                              BA Terbit
+                            </Button>
+                          )}
+                          {isAdmin && t.status === "ba_terbit" && (
+                            <Button size="sm" className="h-7 text-[11px] min-h-0 bg-emerald-600 hover:bg-emerald-700 text-white"
+                              onClick={() => setLaporInsi({ tiket: t, tanggal_lapor: new Date().toISOString().slice(0, 10), keterangan: "", saving: false })}
+                              data-testid={`wasdal-insidentil-lapor-${t.id}`}>
+                              Dilaporkan
+                            </Button>
+                          )}
+                          {isAdmin && (
+                            <button type="button" aria-label="Hapus tiket" onClick={() => hapusInsi(t)}
+                              className="h-7 w-7 rounded-lg border border-border text-red-500 flex items-center justify-center hover:bg-red-500/10 min-h-0 min-w-0">
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          {[insi.label_pemicu?.[t.pemicu] || t.pemicu,
+                            t.objek && (insi.label_objek?.[t.objek] || t.objek),
+                            t.lokasi,
+                            `mulai ${t.tanggal_mulai}`,
+                            t.nomor_ba && `BA ${t.nomor_ba} (${t.tanggal_ba})`,
+                            t.tanggal_lapor && `dilaporkan ${t.tanggal_lapor}`,
+                            `oleh ${t.created_by}`].filter(Boolean).join(" · ")}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <p className="px-3 py-2 text-[11px] text-muted-foreground border-t border-border">{insi.catatan}</p>
+              </div>
+            )}
+
             <p className="text-center text-[11px] text-muted-foreground pb-4">
-              Menyusul: BA pemantauan insidentil (10+5 hari kerja) dan generator
-              laporan formulir PMK 207 — masterplan Fase 6.
+              Menyusul: generator laporan formulir Lampiran PMK 207 — masterplan Fase 6.
             </p>
           </>
         )}
       </main>
+
+      {/* ── Dialog catat pemantauan insidentil ── */}
+      <Dialog open={!!formInsi} onOpenChange={(o) => { if (!o) setFormInsi(null); }}>
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Catat Pemantauan Insidentil</DialogTitle>
+            <DialogDescription className="text-xs">
+              Pelaksanaan ≤{insi?.tenggat_pelaksanaan_hk || 10} hari kerja sejak mulai;
+              hasil dilaporkan ≤{insi?.tenggat_lapor_hk || 5} hari kerja sejak tanggal BA.
+            </DialogDescription>
+          </DialogHeader>
+          {formInsi && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="insi-pemicu">Pemicu</label>
+                <select id="insi-pemicu" value={formInsi.data.pemicu}
+                  onChange={(e) => setFormInsi((f) => ({ ...f, data: { ...f.data, pemicu: e.target.value } }))}
+                  className="w-full h-9 px-2 rounded-lg border border-border bg-background text-sm text-foreground"
+                  data-testid="wasdal-insidentil-pemicu">
+                  {Object.entries(insi?.label_pemicu || {}).map(([k, v]) => (
+                    <option key={k} value={k}>{v}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="insi-tgl">Tanggal mulai</label>
+                <Input id="insi-tgl" type="date" value={formInsi.data.tanggal_mulai}
+                  onChange={(e) => setFormInsi((f) => ({ ...f, data: { ...f.data, tanggal_mulai: e.target.value } }))} />
+              </div>
+              <div className="col-span-2">
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="insi-objek">Objek pemantauan (opsional)</label>
+                <select id="insi-objek" value={formInsi.data.objek}
+                  onChange={(e) => setFormInsi((f) => ({ ...f, data: { ...f.data, objek: e.target.value } }))}
+                  className="w-full h-9 px-2 rounded-lg border border-border bg-background text-sm text-foreground">
+                  <option value="">— tidak spesifik —</option>
+                  {Object.entries(insi?.label_objek || {}).map(([k, v]) => (
+                    <option key={k} value={k}>{v}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="col-span-2">
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="insi-uraian">Uraian</label>
+                <Input id="insi-uraian" placeholder="mis. Laporan warga: aset ditempati pihak ketiga" value={formInsi.data.uraian}
+                  onChange={(e) => setFormInsi((f) => ({ ...f, data: { ...f.data, uraian: e.target.value } }))}
+                  data-testid="wasdal-insidentil-uraian" />
+              </div>
+              <div className="col-span-2">
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="insi-lokasi">Lokasi (opsional)</label>
+                <Input id="insi-lokasi" value={formInsi.data.lokasi}
+                  onChange={(e) => setFormInsi((f) => ({ ...f, data: { ...f.data, lokasi: e.target.value } }))} />
+              </div>
+            </div>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setFormInsi(null)}>Batal</Button>
+            <Button onClick={simpanInsi} disabled={formInsi?.saving || !formInsi?.data?.uraian?.trim()}
+              className="bg-violet-600 hover:bg-violet-700 text-white" data-testid="wasdal-insidentil-simpan">
+              {formInsi?.saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Siren className="w-4 h-4 mr-1.5" />}Buka Pemantauan
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog BA insidentil ── */}
+      <Dialog open={!!baInsi} onOpenChange={(o) => { if (!o) setBaInsi(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Catat BA Pemantauan</DialogTitle>
+            <DialogDescription className="text-xs">{baInsi?.tiket?.uraian}</DialogDescription>
+          </DialogHeader>
+          <div>
+            <label className="text-xs font-medium text-foreground block mb-1" htmlFor="insi-ba-nomor">Nomor BA</label>
+            <Input id="insi-ba-nomor" placeholder="BA-01/WASDAL/2026" value={baInsi?.nomor_ba || ""}
+              onChange={(e) => setBaInsi((s) => ({ ...s, nomor_ba: e.target.value }))}
+              data-testid="wasdal-insidentil-ba-nomor" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-foreground block mb-1" htmlFor="insi-ba-tgl">Tanggal BA</label>
+            <Input id="insi-ba-tgl" type="date" value={baInsi?.tanggal_ba || ""}
+              onChange={(e) => setBaInsi((s) => ({ ...s, tanggal_ba: e.target.value }))} />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-foreground block mb-1" htmlFor="insi-ba-hasil">Ringkasan hasil</label>
+            <Input id="insi-ba-hasil" placeholder="mis. Ditemukan penggunaan tanpa hak" value={baInsi?.hasil || ""}
+              onChange={(e) => setBaInsi((s) => ({ ...s, hasil: e.target.value }))}
+              data-testid="wasdal-insidentil-ba-hasil" />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setBaInsi(null)}>Batal</Button>
+            <Button onClick={kirimBaInsi} disabled={baInsi?.saving || !baInsi?.nomor_ba?.trim() || !baInsi?.hasil?.trim()}
+              className="bg-sky-600 hover:bg-sky-700 text-white" data-testid="wasdal-insidentil-ba-simpan">
+              Simpan
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog lapor insidentil ── */}
+      <Dialog open={!!laporInsi} onOpenChange={(o) => { if (!o) setLaporInsi(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Catat Pelaporan Hasil</DialogTitle>
+            <DialogDescription className="text-xs">
+              {laporInsi?.tiket && `BA ${laporInsi.tiket.nomor_ba} (${laporInsi.tiket.tanggal_ba}) — lapor ≤${insi?.tenggat_lapor_hk || 5} hari kerja sejak BA.`}
+            </DialogDescription>
+          </DialogHeader>
+          <div>
+            <label className="text-xs font-medium text-foreground block mb-1" htmlFor="insi-lapor-tgl">Tanggal lapor</label>
+            <Input id="insi-lapor-tgl" type="date" value={laporInsi?.tanggal_lapor || ""}
+              onChange={(e) => setLaporInsi((s) => ({ ...s, tanggal_lapor: e.target.value }))} />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-foreground block mb-1" htmlFor="insi-lapor-ket">Keterangan (opsional)</label>
+            <Input id="insi-lapor-ket" placeholder="mis. via Modul Wasdal SIMAN v2" value={laporInsi?.keterangan || ""}
+              onChange={(e) => setLaporInsi((s) => ({ ...s, keterangan: e.target.value }))} />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setLaporInsi(null)}>Batal</Button>
+            <Button onClick={kirimLaporInsi} disabled={laporInsi?.saving}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white" data-testid="wasdal-insidentil-lapor-simpan">
+              Simpan
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Dialog catat penertiban ── */}
       <Dialog open={!!formPen} onOpenChange={(o) => { if (!o) setFormPen(null); }}>
