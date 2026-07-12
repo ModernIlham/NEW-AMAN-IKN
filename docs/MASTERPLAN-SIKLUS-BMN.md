@@ -264,14 +264,18 @@ Referensi langsung: `routes/persediaan.py`, `persediaan_transaksi.py`,
 > kemudian" — pustaka §6 butir 1); DBKP sudah jalan (#76), pembangunan
 > berlanjut ke Persediaan.
 
-1. ✅ (#77) Registry field + model + koleksi + CRUD master (kodefikasi '1', NUP auto).
-2. Import/export Excel master persediaan + template.
-3. Transaksi masuk (satuan → massal per dokumen) + batch FIFO + riwayat grup.
-4. Transaksi keluar FIFO + unit penerima + bukti foto.
-5. Peringatan kritis/kedaluwarsa + nota dinas PDF.
-6. Gudang + movement (distribusi/pengembalian/transfer).
-7. Opname lapangan (offline) + BA opname + penyesuaian otomatis.
-8. Laporan (posisi, mutasi, kartu barang) + integrasi arsip laporan.
+1. ✅ (#77) Registry field + model + koleksi + CRUD master (kodefikasi '1', NUP auto)
+   — UI master ✅ (#78).
+2. Import/export Excel master persediaan + template. *(tersisa)*
+3. ✅ (#79) Transaksi masuk + batch FIFO + jurnal (massal per dokumen: *tersisa*).
+4. ✅ (#80) Transaksi keluar FIFO (konsumsi layer tertua) + unit penerima
+   (bukti foto: *tersisa*).
+5. ✅ (#81) Peringatan kritis/kedaluwarsa + nota dinas PDF.
+6. Gudang + movement (distribusi/pengembalian/transfer). *(tersisa)*
+7. ✅ (#83) Opname + penyesuaian otomatis + kertas kerja & BAOF PDF
+   (mode lapangan offline: *tersisa*).
+8. ✅ (#82) Laporan posisi & mutasi periode dari jurnal (kartu barang &
+   arsip lintas kegiatan: *tersisa*).
 
 ---
 
