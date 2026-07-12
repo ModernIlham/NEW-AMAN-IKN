@@ -15,9 +15,10 @@ from auth_utils import require_admin, require_user, require_user_or_query_token
 from db import db, fs_bucket
 from shared_utils import delete_document_from_gridfs, get_document_from_gridfs
 from pengamanan_utils import (
-    JENIS_DOKUMEN, JENIS_KEKURANGAN, KATEGORI_KASUS, LOKASI_SIMPAN,
-    STATUS_KASUS, TRANSISI_KASUS, kekurangan_aset, rekap_dokumen,
-    rekap_kasus, rekap_kesehatan, validate_dokumen, validate_kasus,
+    JENIS_DOKUMEN, JENIS_KEKURANGAN, KATEGORI_KASUS, KATEGORI_SERTIPIKASI,
+    LOKASI_SIMPAN, STATUS_KASUS, TRANSISI_KASUS, kekurangan_aset,
+    rekap_dokumen, rekap_kasus, rekap_kesehatan, rekap_sertipikasi,
+    validate_dokumen, validate_kasus, validate_kategori_sertipikasi,
     validate_transisi_kasus,
 )
 
@@ -193,6 +194,7 @@ class DokumenIn(BaseModel):
     atas_nama: str = ""            # mis. Pemerintah RI c.q. K/L
     lokasi_simpan: str
     berlaku_sampai: str = ""       # opsional (STNK/pajak) YYYY-MM-DD
+    kategori_sertipikasi: str = ""  # opsional, hanya jenis sertipikat
     keterangan: str = ""
 
 
@@ -204,7 +206,9 @@ async def list_dokumen(asset_id: str = "", _user: dict = Depends(require_user)):
              .sort("updated_at", -1).limit(500)]
     today_iso = datetime.now(timezone.utc).date().isoformat()
     return {"items": items, "ringkasan": rekap_dokumen(items, today_iso),
+            "sertipikasi": rekap_sertipikasi(items),
             "label_jenis": JENIS_DOKUMEN, "label_lokasi": LOKASI_SIMPAN,
+            "label_sertipikasi": KATEGORI_SERTIPIKASI,
             "catatan": (
                 "Arsip pendamping (pustaka §11.3) — penyimpanan dokumen yang "
                 "sah tetap mengikuti PP 27/2014 Ps. 43 + PMK 218/2015 "
@@ -216,7 +220,7 @@ async def list_dokumen(asset_id: str = "", _user: dict = Depends(require_user)):
 async def catat_dokumen(payload: DokumenIn, user: dict = Depends(require_user)):
     """Catat satu dokumen kepemilikan untuk satu aset."""
     data = payload.model_dump()
-    errors = validate_dokumen(data)
+    errors = validate_dokumen(data) + validate_kategori_sertipikasi(data)
     if errors:
         raise HTTPException(status_code=400, detail="; ".join(errors))
     asset = await db.assets.find_one(
@@ -236,6 +240,7 @@ async def catat_dokumen(payload: DokumenIn, user: dict = Depends(require_user)):
         "atas_nama": str(data.get("atas_nama") or "").strip(),
         "lokasi_simpan": data["lokasi_simpan"],
         "berlaku_sampai": str(data.get("berlaku_sampai") or "").strip()[:10],
+        "kategori_sertipikasi": str(data.get("kategori_sertipikasi") or "").strip(),
         "keterangan": str(data.get("keterangan") or "").strip(),
         "lampiran": [],
         "created_by": user.get("username"),

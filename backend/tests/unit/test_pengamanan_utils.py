@@ -121,3 +121,31 @@ class TestArsipDokumen:
         assert r["per_jenis"]["stnk"] == 2
         assert r["kedaluwarsa"] == 1
         assert rekap_dokumen([], "2026-07-12")["jumlah"] == 0
+
+
+class TestSertipikasi:
+    def test_validasi_kategori(self):
+        from pengamanan_utils import validate_kategori_sertipikasi
+        assert validate_kategori_sertipikasi(
+            {"jenis": "sertipikat", "kategori_sertipikasi": "k1"}) == []
+        assert validate_kategori_sertipikasi(
+            {"jenis": "sertipikat", "kategori_sertipikasi": ""}) == []
+        # Bukan sertipikat / kategori asing → ditolak
+        assert validate_kategori_sertipikasi(
+            {"jenis": "bpkb", "kategori_sertipikasi": "k1"})
+        assert validate_kategori_sertipikasi(
+            {"jenis": "sertipikat", "kategori_sertipikasi": "k9"})
+
+    def test_rekap_sertipikasi(self):
+        from pengamanan_utils import rekap_sertipikasi
+        items = [
+            {"jenis": "sertipikat", "kategori_sertipikasi": "k1"},
+            {"jenis": "sertipikat", "kategori_sertipikasi": "shp_terbit"},
+            {"jenis": "sertipikat", "kategori_sertipikasi": ""},
+            {"jenis": "bpkb", "kategori_sertipikasi": ""},
+        ]
+        r = rekap_sertipikasi(items)
+        assert r["jumlah_sertipikat"] == 3
+        assert r["per_kategori"]["k1"] == 1
+        assert r["per_kategori"]["shp_terbit"] == 1
+        assert r["tanpa_kategori"] == 1

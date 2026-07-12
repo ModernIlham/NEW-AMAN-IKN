@@ -48,6 +48,13 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#173] Status sertipikasi tanah K1–K4 — 2026-07-12
+
+- **Status sertipikasi** pada arsip dokumen jenis sertipikat (pustaka
+  §11.4): belum/proses/K1–K4/SHP terbit + rekap per kategori di
+  `GET /pengamanan/dokumen`; select hanya muncul untuk jenis sertipikat
+  + badge ungu kategori di daftar. Unit test +2 → 230 passed.
+
 ## [#172] Konsolidasi dokumentasi #171 — 2026-07-12
 
 - **Dokumentasi saja**: README Progres Fase 3 + roadmap masterplan +

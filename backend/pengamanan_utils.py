@@ -220,3 +220,47 @@ def rekap_dokumen(items, today_iso: str) -> dict:
                 pass
     return {"jumlah": len(items or []), "per_jenis": per_jenis,
             "ber_lampiran": ber_lampiran, "kedaluwarsa": kedaluwarsa}
+
+
+# Kategori target sertipikasi tanah BMN (pustaka §11.3, [perlu verifikasi]
+# §14 butir 19 — definisi dari artikel DJKN, bukan teks regulasi):
+# K1 lengkap siap SHP · K2 data kurang · K3 sengketa · K4 sudah sertipikat
+# perlu pemutakhiran SIMAN. Berlaku untuk dokumen jenis "sertipikat" saja.
+KATEGORI_SERTIPIKASI = {
+    "belum": "Belum diproses",
+    "proses": "Dalam proses BPN",
+    "k1": "K1 — lengkap, siap SHP",
+    "k2": "K2 — data belum lengkap",
+    "k3": "K3 — sengketa/berperkara",
+    "k4": "K4 — sudah sertipikat, perlu pemutakhiran SIMAN",
+    "shp_terbit": "SHP terbit a.n. Pemerintah RI",
+}
+
+
+def validate_kategori_sertipikasi(data: dict) -> list:
+    """Kategori sertipikasi hanya sah untuk dokumen jenis sertipikat."""
+    kategori = str(data.get("kategori_sertipikasi") or "").strip()
+    if not kategori:
+        return []
+    if data.get("jenis") != "sertipikat":
+        return ["Kategori sertipikasi hanya untuk dokumen jenis sertipikat"]
+    if kategori not in KATEGORI_SERTIPIKASI:
+        valid = ", ".join(KATEGORI_SERTIPIKASI)
+        return [f"Kategori sertipikasi tidak dikenal (pilihan: {valid})"]
+    return []
+
+
+def rekap_sertipikasi(items) -> dict:
+    """Hitung dokumen sertipikat per kategori sertipikasi (+tanpa kategori)."""
+    per = {k: 0 for k in KATEGORI_SERTIPIKASI}
+    tanpa = 0
+    for d in items or []:
+        if d.get("jenis") != "sertipikat":
+            continue
+        kategori = str(d.get("kategori_sertipikasi") or "").strip()
+        if kategori in per:
+            per[kategori] += 1
+        else:
+            tanpa += 1
+    return {"per_kategori": per, "tanpa_kategori": tanpa,
+            "jumlah_sertipikat": tanpa + sum(per.values())}
