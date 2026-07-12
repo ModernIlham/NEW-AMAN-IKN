@@ -6,11 +6,18 @@ baru; ini proyeksi baca. Daftar aset per pemegang dapat diunduh sebagai
 PDF lampiran BAST. PSP/alih status/BMN idle menyusul sesuai masterplan
 Fase 3 (PMK 40/2024 & 120/2024 — pustaka §1).
 """
-from fastapi import APIRouter, Depends, HTTPException, Query
+import uuid
+from datetime import datetime, timezone
 
-from auth_utils import require_user
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
+
+from auth_utils import require_admin, require_user
 from db import db
-from penggunaan_utils import kunci_pemegang, rekap_pemegang
+from penggunaan_utils import (
+    STATUS_IDLE, indikasi_idle, kunci_pemegang, rekap_idle, rekap_pemegang,
+    validate_transisi_idle,
+)
 
 penggunaan_router = APIRouter()
 
@@ -71,6 +78,134 @@ async def aset_pemegang(
             })
     out.sort(key=lambda x: (x["asset_name"] or "", x["asset_code"] or ""))
     return {"items": out, "total": len(out)}
+
+
+class TiketIdleIn(BaseModel):
+    asset_id: str = Field(min_length=1)
+    keterangan: str = ""
+
+
+class TransisiIdleIn(BaseModel):
+    status: str
+    nomor_usulan: str = ""       # surat usulan penyerahan ke Pengelola
+    nomor_bast_serah: str = ""   # BAST penyerahan
+    catatan: str = ""
+
+
+_PROJ_IDLE = {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
+              "status": 1, "user": 1, "inventory_status": 1, "location": 1}
+
+
+@penggunaan_router.get("/penggunaan/idle")
+async def daftar_idle(_user: dict = Depends(require_user)):
+    """Kandidat BMN idle (PMK 120/2024) + tiket penanganan + ringkasan."""
+    tiket = [t async for t in db.bmn_idle.find({}, {"_id": 0})
+             .sort("created_at", -1).limit(500)]
+    tiket_aktif = {t["asset_id"]: t for t in tiket
+                   if t.get("status") in ("klarifikasi", "usul_serah")}
+    kandidat = []
+    async for a in db.assets.find({}, _PROJ_IDLE):
+        ya, alasan = indikasi_idle(a)
+        if not ya:
+            continue
+        t = tiket_aktif.get(a["id"])
+        kandidat.append({
+            "asset_id": a["id"], "asset_code": a.get("asset_code"),
+            "NUP": a.get("NUP"), "asset_name": a.get("asset_name"),
+            "location": a.get("location"), "alasan": alasan,
+            "tiket": ({"id": t["id"], "status": t["status"]} if t else None),
+        })
+    kandidat.sort(key=lambda x: (x["asset_name"] or "", x["asset_code"] or ""))
+    return {"kandidat": kandidat, "tiket": tiket,
+            "ringkasan": rekap_idle(kandidat, tiket),
+            "label_status": STATUS_IDLE,
+            "catatan": (
+                "PMK 120/2024: BMN yang tidak digunakan untuk tugas dan fungsi "
+                "wajib diteliti (klarifikasi); bila benar idle, diserahkan "
+                "kepada Pengelola Barang. Kandidat dihitung otomatis dari "
+                "status Nonaktif / tanpa pengguna.")}
+
+
+@penggunaan_router.post("/penggunaan/idle")
+async def buat_tiket_idle(payload: TiketIdleIn, user: dict = Depends(require_user)):
+    """Buka tiket klarifikasi idle untuk satu aset kandidat."""
+    a = await db.assets.find_one({"id": payload.asset_id}, _PROJ_IDLE)
+    if not a:
+        raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    ya, alasan = indikasi_idle(a)
+    if not ya:
+        raise HTTPException(status_code=400,
+                            detail="Aset bukan kandidat idle (berstatus aktif dan berpengguna)")
+    aktif = await db.bmn_idle.find_one(
+        {"asset_id": payload.asset_id,
+         "status": {"$in": ["klarifikasi", "usul_serah"]}}, {"_id": 0, "id": 1})
+    if aktif:
+        raise HTTPException(status_code=409,
+                            detail="Aset ini sudah punya tiket idle aktif")
+    now = datetime.now(timezone.utc).isoformat()
+    record = {
+        "id": str(uuid.uuid4()),
+        "asset_id": a["id"],
+        "asset_code": a.get("asset_code"),
+        "NUP": a.get("NUP"),
+        "asset_name": a.get("asset_name"),
+        "alasan": alasan,
+        "status": "klarifikasi",
+        "nomor_usulan": "",
+        "nomor_bast_serah": "",
+        "keterangan": str(payload.keterangan or "").strip(),
+        "riwayat": [{"status": "klarifikasi", "tanggal": now,
+                     "oleh": user.get("username"), "catatan": ""}],
+        "created_by": user.get("username"),
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.bmn_idle.insert_one({**record})
+    return record
+
+
+@penggunaan_router.post("/penggunaan/idle/{tiket_id}/status")
+async def transisi_idle(tiket_id: str, payload: TransisiIdleIn,
+                        admin: dict = Depends(require_admin)):
+    """Pindahkan status tiket idle (admin — dokumen wajib per tahap)."""
+    t = await db.bmn_idle.find_one({"id": tiket_id}, {"_id": 0})
+    if not t:
+        raise HTTPException(status_code=404, detail="Tiket tidak ditemukan")
+    errors = validate_transisi_idle(t.get("status"), payload.status,
+                                    payload.model_dump())
+    if errors:
+        raise HTTPException(status_code=400, detail="; ".join(errors))
+    now = datetime.now(timezone.utc).isoformat()
+    update = {"status": payload.status, "updated_at": now}
+    if payload.status == "usul_serah":
+        update["nomor_usulan"] = payload.nomor_usulan.strip()
+    if payload.status == "diserahkan":
+        update["nomor_bast_serah"] = payload.nomor_bast_serah.strip()
+    res = await db.bmn_idle.find_one_and_update(
+        # Anti-balapan: status lama diikutkan di filter
+        {"id": tiket_id, "status": t["status"]},
+        {"$set": update,
+         "$push": {"riwayat": {"status": payload.status, "tanggal": now,
+                               "oleh": admin.get("username"),
+                               "catatan": str(payload.catatan or "").strip()}}},
+        projection={"_id": 0}, return_document=True,
+    )
+    if not res:
+        raise HTTPException(status_code=409,
+                            detail="Status tiket berubah oleh proses lain — muat ulang")
+    return res
+
+
+@penggunaan_router.delete("/penggunaan/idle/{tiket_id}")
+async def hapus_tiket_idle(tiket_id: str, _admin: dict = Depends(require_admin)):
+    """Hapus tiket salah input (hanya status klarifikasi)."""
+    res = await db.bmn_idle.delete_one(
+        {"id": tiket_id, "status": "klarifikasi"})
+    if res.deleted_count == 0:
+        raise HTTPException(
+            status_code=409,
+            detail="Tiket tidak ditemukan atau sudah diproses (tidak boleh dihapus)")
+    return {"ok": True, "id": tiket_id}
 
 
 @penggunaan_router.get("/penggunaan/pemegang/daftar-pdf")

@@ -3,12 +3,72 @@
 Rekap aset per PEMEGANG (pengguna barang) lintas kegiatan, dibangun dari
 field yang sudah dicatat modul inventarisasi: `user` (nama pemegang/
 jabatan/operasional), `pengguna_nip`, `pengguna_melekat_ke`,
-`pengguna_jabatan`, dan `bast_file_id` (BAST terunggah).
+`pengguna_jabatan`, dan `bast_file_id` (BAST terunggah) — plus daftar
+pantau BMN IDLE (PMK 120/2024: BMN yang tidak digunakan untuk tusi wajib
+diklarifikasi lalu diserahkan ke Pengelola Barang bila benar idle).
 
-Dasar: PMK 40/2024 (Penggunaan BMN) — pustaka §1; masterplan Fase 3:
-"data pengguna+BAST dari modul inventarisasi menjadi data awal".
-Fungsi murni tanpa Mongo/IO agar teruji unit.
+Dasar: PMK 40/2024 (Penggunaan BMN) + PMK 120/2024 (BMN idle) — pustaka
+§1 & §8. Fungsi murni tanpa Mongo/IO agar teruji unit.
 """
+
+# Status tiket penanganan BMN idle → label Indonesia
+STATUS_IDLE = {
+    "klarifikasi": "Klarifikasi (diteliti penggunaannya)",
+    "digunakan_kembali": "Digunakan Kembali (bukan idle)",
+    "usul_serah": "Diusulkan Serah ke Pengelola",
+    "diserahkan": "Diserahkan ke Pengelola Barang",
+}
+
+TRANSISI_IDLE = {
+    "klarifikasi": {"digunakan_kembali", "usul_serah"},
+    "usul_serah": {"diserahkan"},
+    "digunakan_kembali": set(),
+    "diserahkan": set(),
+}
+
+
+def indikasi_idle(asset: dict):
+    """(kandidat, alasan) — indikasi BMN idle dari data inventarisasi.
+
+    Kandidat: aset berstatus Nonaktif ATAU tanpa pengguna tercatat.
+    Aset Tidak Ditemukan bukan kandidat idle (jalurnya penelusuran/TGR
+    di modul Penghapusan). Hanya penanda klarifikasi — keputusan idle
+    final lewat penelitian (PMK 120/2024).
+    """
+    if str(asset.get("inventory_status") or "").strip() == "Tidak Ditemukan":
+        return False, ""
+    if str(asset.get("status") or "").strip() == "Nonaktif":
+        return True, "Status aset Nonaktif"
+    if not str(asset.get("user") or "").strip():
+        return True, "Tanpa pengguna tercatat (indikasi tidak digunakan untuk tusi)"
+    return False, ""
+
+
+def validate_transisi_idle(dari: str, ke: str, data: dict) -> list:
+    """Validasi pindah status tiket idle + dokumen wajib per tahap."""
+    errors = []
+    if ke not in STATUS_IDLE:
+        errors.append("Status tujuan tidak dikenal")
+        return errors
+    if ke not in TRANSISI_IDLE.get(dari, set()):
+        errors.append(f"Transisi {dari} → {ke} tidak sah")
+        return errors
+    if ke == "usul_serah" and not str(data.get("nomor_usulan") or "").strip():
+        errors.append("Nomor surat usulan penyerahan wajib diisi")
+    if ke == "diserahkan" and not str(data.get("nomor_bast_serah") or "").strip():
+        errors.append("Nomor BAST penyerahan ke Pengelola wajib diisi")
+    return errors
+
+
+def rekap_idle(kandidat, tiket) -> dict:
+    """Ringkasan dasbor idle: jumlah kandidat + tiket per status."""
+    per_status = {k: 0 for k in STATUS_IDLE}
+    for t in tiket or []:
+        s = t.get("status")
+        if s in per_status:
+            per_status[s] += 1
+    return {"kandidat": len(kandidat or []), "per_status": per_status,
+            "tiket": len(tiket or [])}
 
 
 def kunci_pemegang(asset: dict):
