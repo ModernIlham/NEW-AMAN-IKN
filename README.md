@@ -86,7 +86,8 @@ wajib per tahap + tenggat lelang 6 bulan (PMK 111/2016 jo. 165/2021)
 (#111) + **arsip scan dokumen per usulan** (#138) · Wasdal — **dasbor pemantauan 5 objek** PMK 207/2021, temuan
 otomatis dari register yang ada (#113) + **Laporan Hasil Pemantauan PDF
 pra-isi** untuk SIMAN v2 (#122) + **register penertiban ber-tenggat
-15 hari kerja** dengan peringatan lewat tenggat (#140).
+15 hari kerja** dengan peringatan lewat tenggat (#140) + **pemantauan
+insidentil 10+5 hari kerja dengan PDF Berita Acara** (#142).
 **Seluruh kartu modul siklus kini bisa dimasuki dari Beranda Modul.**
 
 ---
