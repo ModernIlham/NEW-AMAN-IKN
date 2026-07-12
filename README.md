@@ -22,11 +22,11 @@ tiap rilis/PR (termasuk catatan teknis penting soal aturan tap-target 44px di �
 AMAN berkembang bertahap dari aplikasi inventarisasi menjadi platform siklus
 penuh pengelolaan BMN (PP 27/2014). **Beranda Modul** — halaman pertama
 setelah login — memetakan seluruh tahap siklus: *Penatausahaan ›
-Inventarisasi Aset* aktif penuh; **11 modul siklus sudah Sebagian
+Inventarisasi Aset* aktif penuh; **12 modul siklus sudah Sebagian
 Aktif** (Persediaan, Pelaporan, Perencanaan, Penggunaan, Pemanfaatan,
 Penilaian, Pengamanan, Pemeliharaan, Pemindahtanganan, Pemusnahan,
-Penghapusan) — seluruh 13 kartu siklus bisa dimasuki; sisanya
-(Penganggaran, Pengadaan, Wasdal, Pembukuan/KIB) berstatus **Segera
+Penghapusan, Wasdal) — seluruh 13 kartu siklus bisa dimasuki; sisanya
+(Penganggaran, Pengadaan, Pembukuan/KIB) berstatus **Segera
 Hadir** lengkap dengan konsep & rencana fiturnya.
 
 - Rencana induk & prinsip integrasi antar modul: [`docs/MASTERPLAN-SIKLUS-BMN.md`](./docs/MASTERPLAN-SIKLUS-BMN.md)
@@ -66,7 +66,9 @@ bentuk** dengan penjaga dokumen persetujuan/NTPN + jatuh tempo ≤60 hari
 PMK 83/2016 (#104) + **tiket usulan berstatus** usul → proses → SK (#106)
 · Pemusnahan — **register BA multi-aset** (#110) · Pemindahtanganan —
 **register usulan 4 bentuk** dengan dokumen wajib per tahap + tenggat
-lelang 6 bulan (PMK 111/2016 jo. 165/2021) (#111).
+lelang 6 bulan (PMK 111/2016 jo. 165/2021) (#111) · Wasdal — **dasbor
+pemantauan 5 objek** PMK 207/2021, temuan otomatis dari register yang
+ada (#113).
 **Seluruh 13 kartu modul siklus kini bisa dimasuki dari Beranda Modul.**
 
 ---
