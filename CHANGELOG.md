@@ -48,6 +48,11 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#191] Konsolidasi dokumentasi #190 — 2026-07-12
+
+- **Dokumentasi saja**: README Progres Fase 5 butir Pemanfaatan
+  (+ atribut fasilitas transaksi #190; daftar "menyusul" tuntas).
+
 ## [#190] Koreksi PMK 18/2024 + atribut fasilitas transaksi — 2026-07-12
 
 - **Koreksi regulasi (riset)**: PMK 18/2024 = "Tata Cara Pemberian
