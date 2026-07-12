@@ -939,6 +939,17 @@ export default function PersediaanPage({ user, onBack }) {
               Jurnal transaksi (terbaru dulu) · kode {riwayat?.item?.kode_barang} · NUP {riwayat?.item?.nup}
             </DialogDescription>
           </DialogHeader>
+          {(riwayat?.rows?.length || 0) > 0 && (
+            <Button variant="outline" size="sm" className="gap-1.5 self-start"
+              onClick={() => downloadFileWithProgress(
+                `${API}/persediaan/${riwayat.item.id}/kartu-barang-pdf`,
+                `Kartu_Barang_${riwayat.item.kode_barang || riwayat.item.id}.pdf`,
+                { label: `Kartu Barang ${riwayat.item.nama_barang}` },
+              ).catch(() => {})}
+              data-testid="persediaan-kartu-barang">
+              <FileDown className="w-3.5 h-3.5" />Kartu Barang (PDF)
+            </Button>
+          )}
           {riwayat?.loading ? (
             <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-emerald-600" /></div>
           ) : (riwayat?.rows?.length || 0) === 0 ? (
