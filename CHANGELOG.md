@@ -48,6 +48,15 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#192] BAST penetapan status penggunaan PDF — 2026-07-12
+
+- **BAST digital penetapan PSP**: PDF siap tanda tangan per SK dari
+  register SK PSP (#129) — kop surat, narasi dasar SK (PMK 40/2024),
+  tabel aset, tanda tangan pihak menyerahkan/menerima + KPB (pola BA
+  pemusnahan #119; data murni register). Tombol unduh per SK di halaman
+  Penggunaan; smoke test PDF lolos. Sisa "menyusul" Penggunaan: alur
+  pengajuan PSP berstatus.
+
 ## [#191] Konsolidasi dokumentasi #190 — 2026-07-12
 
 - **Dokumentasi saja**: README Progres Fase 5 butir Pemanfaatan
