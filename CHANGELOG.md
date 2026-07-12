@@ -48,6 +48,14 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#126] Daftar pantau BMN idle + tiket klarifikasi — 2026-07-12
+
+- **BMN idle (PMK 120/2024)**: kandidat otomatis (Nonaktif / tanpa
+  pengguna; Tidak Ditemukan dikecualikan), tiket klarifikasi →
+  digunakan kembali / usul serah → diserahkan (dokumen wajib per tahap,
+  anti-balapan, riwayat); seksi baru di halaman Penggunaan. 3 unit test
+  (suite 194).
+
 ## [#125] Daftar Barang yang Digunakan per pemegang (PDF) — 2026-07-12
 
 - **Lampiran BAST penggunaan** (PMK 40/2024): PDF per pemegang berisi
