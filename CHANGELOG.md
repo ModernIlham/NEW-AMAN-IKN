@@ -48,6 +48,13 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#120] Usulan penghapusan otomatis dari BA Pemusnahan — 2026-07-12
+
+- **Tindak lanjut PMK 83/2016 satu klik**: tombol Usulkan Hapus per BA
+  membuat tiket usulan penghapusan tiap aset (keterangan merujuk nomor
+  BA + persetujuan); aset ber-usulan aktif dilewati; lencana ✓ saat
+  semua tercakup. 1 unit test baru (suite 188).
+
 ## [#119] PDF Berita Acara Pemusnahan — 2026-07-12
 
 - **PDF BA Pemusnahan siap tanda tangan** (PMK 83/2016) dari register
