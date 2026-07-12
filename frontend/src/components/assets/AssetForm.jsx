@@ -1657,7 +1657,7 @@ const AssetForm = memo(({
             {isEditing && onOpenKartu && (
               <Button
                 type="button" variant="ghost" size="sm"
-                className="h-7 gap-1 px-2 text-[10px] text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30"
+                className="h-7 gap-1 px-2 text-[10px] text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 hover:text-emerald-800 dark:hover:bg-emerald-900/40 dark:hover:text-emerald-300"
                 onClick={() => onOpenKartu({
                   kode_register: formData.kode_register,
                   asset_code: formData.asset_code,

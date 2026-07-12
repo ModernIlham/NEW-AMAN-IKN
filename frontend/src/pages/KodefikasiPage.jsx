@@ -172,7 +172,7 @@ export default function KodefikasiPage({ user, onBack }) {
             type="button"
             onClick={onBack}
             aria-label="Kembali ke Beranda Modul"
-            className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-accent flex-shrink-0"
+            className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0"
             data-testid="kodefikasi-back"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -228,7 +228,7 @@ export default function KodefikasiPage({ user, onBack }) {
                 className={`h-8 px-3 rounded-full border text-xs font-medium min-w-0 min-h-0 transition-colors ${
                   level === f.value
                     ? "bg-blue-600 border-blue-600 text-white"
-                    : "border-border text-muted-foreground hover:bg-accent"
+                    : "border-border text-muted-foreground hover:bg-muted"
                 }`}
                 data-testid={`kodefikasi-level-${f.value}`}
               >
@@ -268,7 +268,7 @@ export default function KodefikasiPage({ user, onBack }) {
                 </thead>
                 <tbody>
                   {items.map((it) => (
-                    <tr key={it.kode} className="border-b border-border/60 last:border-0 hover:bg-accent/40" data-testid={`kodefikasi-row-${it.kode}`}>
+                    <tr key={it.kode} className="border-b border-border/60 last:border-0 hover:bg-muted/50" data-testid={`kodefikasi-row-${it.kode}`}>
                       <td className="px-3 py-2 font-mono text-xs font-semibold text-foreground whitespace-nowrap">
                         {it.kode}
                         {it.is_persediaan && (
@@ -288,7 +288,7 @@ export default function KodefikasiPage({ user, onBack }) {
                             type="button"
                             onClick={() => setForm({ mode: "edit", kode: it.kode, uraian: it.uraian })}
                             aria-label={`Ubah uraian ${it.kode}`}
-                            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent min-w-0 min-h-0"
+                            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted min-w-0 min-h-0"
                             data-testid={`kodefikasi-edit-${it.kode}`}
                           >
                             <Pencil className="w-3.5 h-3.5" />

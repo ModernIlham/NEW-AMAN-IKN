@@ -482,7 +482,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
             <button
               type="button"
               aria-label="Menu peta: filter barang serupa, unduh, muat ulang"
-              className="relative h-9 px-2 rounded-lg border border-border flex sm:hidden items-center gap-0.5 hover:bg-accent flex-shrink-0"
+              className="relative h-9 px-2 rounded-lg border border-border flex sm:hidden items-center gap-0.5 hover:bg-muted flex-shrink-0"
               data-testid="asset-map-mobile-menu"
             >
               {loading
@@ -527,7 +527,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
           type="button"
           onClick={onClose}
           aria-label="Tutup peta"
-          className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-accent flex-shrink-0 sm:order-last"
+          className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0 sm:order-last"
           data-testid="asset-map-close"
         >
           <X className="w-4 h-4" />
@@ -556,7 +556,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="h-9 px-2.5 rounded-lg border border-border text-xs font-medium text-foreground/80 hidden sm:flex items-center gap-1 hover:bg-accent flex-shrink-0"
+              className="h-9 px-2.5 rounded-lg border border-border text-xs font-medium text-foreground/80 hidden sm:flex items-center gap-1 hover:bg-muted flex-shrink-0"
               data-testid="asset-map-download"
             >
               <Download className="w-3.5 h-3.5" />
@@ -579,7 +579,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
           type="button"
           onClick={() => { didFitRef.current = false; load(); }}
           disabled={loading}
-          className="h-9 px-2.5 rounded-lg border border-border text-xs font-medium text-foreground/80 hidden sm:flex items-center justify-center gap-1 hover:bg-accent disabled:opacity-50 flex-shrink-0"
+          className="h-9 px-2.5 rounded-lg border border-border text-xs font-medium text-foreground/80 hidden sm:flex items-center justify-center gap-1 hover:bg-muted disabled:opacity-50 flex-shrink-0"
           aria-label="Muat ulang peta"
           data-testid="asset-map-refresh"
         >

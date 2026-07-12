@@ -48,6 +48,21 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#75] Perbaikan hover light/dark + aturan anti-terulang + pustaka regulasi — 2026-07-12
+
+- **Hover dibetulkan di kedua tema**: akar masalah = token `--accent`
+  proyek adalah biru pekat + teks putih. `hover:bg-accent` → `hover:bg-muted`
+  (Beranda Modul, Kodefikasi, bar peta); tombol **Kartu** di header edit
+  aset diberi pasangan `hover:text-*` kedua tema (dulu teks putih di atas
+  emerald terang → tak terbaca di light mode). Aturan anti-terulang 6b
+  tertulis di SKILL.md.
+- **`docs/PUSTAKA-REGULASI-BMN.md`** — rujukan wajib sebelum membangun
+  modul: penatausahaan PMK 181/2016 (DBKP/DBR/KIB 6 jenis/LBKP/jenjang),
+  persediaan (desain **FIFO per batch tervalidasi** — perpetual + FIFO per
+  layer ala SAKTI sejak TA 2021; enum transaksi resmi; opname + BAOF;
+  akun 1171xx), kendala satker → fitur penangkal, butir perlu-verifikasi,
+  sumber. SKILL.md aturan 10: "regulasi dulu, kode kemudian".
+
 ## [#74] UI Referensi Kodefikasi — kelola & impor dari Beranda Modul — 2026-07-12
 
 - **Halaman Referensi Kodefikasi**: cari kode/uraian (debounce), chip filter
