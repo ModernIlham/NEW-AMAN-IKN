@@ -360,6 +360,7 @@ export const SIKLUS_MODULES = [
     fitur: [
       "✅ Register BA Pemusnahan multi-aset (nomor persetujuan wajib; cara dibakar/dihancurkan/dll; objek dibatasi Rusak Berat)",
       "✅ PDF Berita Acara siap tanda tangan (kop surat, tabel aset + nilai, blok pelaksana/saksi/KPB)",
+      "✅ Tindak lanjut otomatis: usulan penghapusan per aset BA (satu klik, aset ber-usulan aktif dilewati)",
       "Kandidat pemusnahan otomatis dari kondisi Rusak Berat + tindak lanjut inventarisasi",
       "Foto bukti pelaksanaan (menyusul)",
     ],

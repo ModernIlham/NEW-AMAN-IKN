@@ -13,7 +13,8 @@ from pydantic import BaseModel, Field
 from auth_utils import require_admin, require_user
 from db import db
 from pemusnahan_utils import (
-    CARA_PEMUSNAHAN, kelayakan_musnah, rekap_pemusnahan, validate_pemusnahan,
+    CARA_PEMUSNAHAN, alasan_usulan_dari_ba, kelayakan_musnah,
+    rekap_pemusnahan, validate_pemusnahan,
 )
 
 pemusnahan_router = APIRouter()
@@ -33,9 +34,20 @@ class PemusnahanIn(BaseModel):
 
 @pemusnahan_router.get("/pemusnahan")
 async def list_pemusnahan(_user: dict = Depends(require_user)):
-    """Register BA pemusnahan (terbaru dulu) + ringkasan."""
+    """Register BA pemusnahan (terbaru dulu) + ringkasan + status usulan."""
     items = [r async for r in db.pemusnahan.find({}, {"_id": 0})
              .sort("tanggal_ba", -1).limit(500)]
+    # Satu kueri: aset BA mana yang sudah punya usulan penghapusan aktif
+    semua_id = [a.get("asset_id") for r in items for a in (r.get("aset") or [])]
+    diusulkan = set()
+    if semua_id:
+        async for u in db.usulan_penghapusan.find(
+                {"asset_id": {"$in": semua_id}, "status": {"$ne": "ditolak"}},
+                {"_id": 0, "asset_id": 1}):
+            diusulkan.add(u["asset_id"])
+    for r in items:
+        r["aset_diusulkan"] = sum(
+            1 for a in (r.get("aset") or []) if a.get("asset_id") in diusulkan)
     return {"items": items, "ringkasan": rekap_pemusnahan(items),
             "label_cara": CARA_PEMUSNAHAN,
             "catatan": (
@@ -79,6 +91,57 @@ async def buat_pemusnahan(payload: PemusnahanIn, user: dict = Depends(require_us
     }
     await db.pemusnahan.insert_one({**record})
     return record
+
+
+@pemusnahan_router.post("/pemusnahan/{ba_id}/usulkan-penghapusan")
+async def usulkan_penghapusan_dari_ba(ba_id: str,
+                                      user: dict = Depends(require_user)):
+    """Buat usulan penghapusan (register Penghapusan) untuk aset BA ini.
+
+    Tindak lanjut PMK 83/2016: barang yang telah dimusnahkan diusulkan
+    hapus dari DBKP. Aset yang sudah punya usulan aktif dilewati (bukan
+    galat) supaya tombol aman diklik ulang.
+    """
+    ba = await db.pemusnahan.find_one({"id": ba_id}, {"_id": 0})
+    if not ba:
+        raise HTTPException(status_code=404, detail="BA tidak ditemukan")
+    hasil = []
+    dibuat = 0
+    for a in ba.get("aset") or []:
+        aid = a.get("asset_id")
+        aktif = await db.usulan_penghapusan.find_one(
+            {"asset_id": aid, "status": {"$ne": "ditolak"}},
+            {"_id": 0, "id": 1, "status": 1})
+        if aktif:
+            hasil.append({"asset_id": aid, "asset_name": a.get("asset_name"),
+                          "dibuat": False,
+                          "alasan": f"Sudah ada usulan aktif ({aktif.get('status')})"})
+            continue
+        now = datetime.now(timezone.utc).isoformat()
+        record = {
+            "id": str(uuid.uuid4()),
+            "asset_id": aid,
+            "asset_code": a.get("asset_code"),
+            "NUP": a.get("NUP"),
+            "asset_name": a.get("asset_name"),
+            "jalur": "rusak_berat",
+            "status": "diusulkan",
+            "nomor_sk": "",
+            "tanggal_sk": "",
+            "keterangan": alasan_usulan_dari_ba(ba),
+            "riwayat": [{"status": "diusulkan", "tanggal": now,
+                         "oleh": user.get("username"),
+                         "catatan": f"Otomatis dari BA {ba.get('nomor_ba')}"}],
+            "created_by": user.get("username"),
+            "created_at": now,
+            "updated_at": now,
+        }
+        await db.usulan_penghapusan.insert_one({**record})
+        dibuat += 1
+        hasil.append({"asset_id": aid, "asset_name": a.get("asset_name"),
+                      "dibuat": True, "alasan": ""})
+    return {"total": len(hasil), "dibuat": dibuat,
+            "terlewati": len(hasil) - dibuat, "hasil": hasil}
 
 
 @pemusnahan_router.get("/pemusnahan/{ba_id}/ba-pdf")

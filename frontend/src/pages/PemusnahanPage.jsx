@@ -103,6 +103,23 @@ export default function PemusnahanPage({ user, onBack }) {
     }
   };
 
+  const usulkanHapus = async (r) => {
+    const ok = await confirm({
+      title: `Usulkan penghapusan aset BA ${r.nomor_ba}?`,
+      description: "Tindak lanjut PMK 83/2016 — usulan dibuat di register Penghapusan untuk tiap aset yang belum diusulkan.",
+      confirmLabel: "Usulkan",
+    });
+    if (!ok) return;
+    try {
+      const res = await axios.post(`${API}/pemusnahan/${r.id}/usulkan-penghapusan`);
+      const { dibuat, terlewati } = res.data || {};
+      toast.success(`${dibuat} usulan dibuat${terlewati ? `, ${terlewati} dilewati (sudah ada usulan aktif)` : ""}`);
+      muat();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal membuat usulan penghapusan");
+    }
+  };
+
   const labelCara = data?.label_cara || {};
 
   return (
@@ -175,6 +192,17 @@ export default function PemusnahanPage({ user, onBack }) {
                         </span>
                         <span className="text-[11px] text-muted-foreground">{r.tanggal_ba}</span>
                         <span className="text-[11px] text-muted-foreground ml-auto">{(r.aset || []).length} aset</span>
+                        {(r.aset_diusulkan || 0) >= (r.aset || []).length ? (
+                          <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-[10px] font-semibold">
+                            ✓ Diusulkan hapus
+                          </span>
+                        ) : (
+                          <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                            onClick={() => usulkanHapus(r)}
+                            data-testid={`pemusnahan-usulkan-${r.id}`}>
+                            Usulkan Hapus{(r.aset_diusulkan || 0) > 0 && ` (${r.aset_diusulkan}/${(r.aset || []).length})`}
+                          </Button>
+                        )}
                         <button type="button" aria-label="Unduh BA (PDF)"
                           onClick={() => downloadFileWithProgress(
                             `${API}/pemusnahan/${r.id}/ba-pdf`,
