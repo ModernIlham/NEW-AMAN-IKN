@@ -48,6 +48,13 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#110] Pemusnahan tahap awal: register BA multi-aset — 2026-07-12
+
+- **Register BA Pemusnahan** (PMK 83/2016): nomor persetujuan wajib,
+  objek dibatasi Rusak Berat (divalidasi per aset), cara pemusnahan
+  baku, snapshot identitas + nilai; halaman baru dengan ringkasan +
+  form multi-aset. Kartu naik Sebagian Aktif; 3 unit test (suite 167).
+
 ## [#109] Konsolidasi dokumentasi Pemanfaatan & status modul — 2026-07-12
 
 - Masterplan/README/pustaka diselaraskan dengan #106–#108; README kini
