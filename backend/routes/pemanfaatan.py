@@ -58,6 +58,46 @@ async def daftar_bentuk(_user: dict = Depends(require_user)):
     ]}
 
 
+@pemanfaatan_router.get("/pemanfaatan/export")
+async def export_pemanfaatan(_user: dict = Depends(require_user)):
+    """Ekspor CSV seluruh register perjanjian pemanfaatan.
+
+    Kolom register + status turunan + rekap kontribusi tercatat +
+    jumlah lampiran — bahan olah lanjut/lampiran laporan (pola export
+    persediaan; semua data nyata dari register).
+    """
+    import csv as csv_module
+    import io
+
+    today_iso = datetime.now(timezone.utc).date().isoformat()
+    buf = io.StringIO()
+    w = csv_module.writer(buf)
+    w.writerow(["bentuk", "mitra", "jenis_mitra", "kode_aset", "nup",
+                "nama_aset", "mulai", "berakhir", "status", "nilai",
+                "kontribusi_tahunan", "kontribusi_tercatat_jumlah",
+                "kontribusi_tercatat_total", "nomor_persetujuan",
+                "nomor_perjanjian", "ntpn", "jumlah_lampiran",
+                "keterangan", "dibuat_oleh"])
+    async for p in db.pemanfaatan.find({}, {"_id": 0}).sort("berakhir", 1):
+        kontribusi = p.get("kontribusi") or []
+        status = status_perjanjian(p, today_iso)
+        w.writerow([
+            BENTUK_PEMANFAATAN.get(p.get("bentuk"), (p.get("bentuk"),))[0],
+            p.get("mitra"), p.get("jenis_mitra"),
+            p.get("asset_code"), p.get("NUP"), p.get("asset_name"),
+            p.get("mulai"), p.get("berakhir"),
+            LABEL_STATUS_PERJANJIAN.get(status, status),
+            p.get("nilai", 0), p.get("kontribusi_tahunan", 0),
+            len(kontribusi),
+            sum(float(k.get("jumlah") or 0) for k in kontribusi),
+            p.get("nomor_persetujuan"), p.get("nomor_perjanjian"),
+            p.get("ntpn"), len(p.get("lampiran") or []),
+            p.get("keterangan"), p.get("created_by"),
+        ])
+    return Response(content=buf.getvalue().encode("utf-8-sig"), media_type="text/csv",
+                    headers={"Content-Disposition": 'attachment; filename="register_pemanfaatan.csv"'})
+
+
 @pemanfaatan_router.get("/pemanfaatan")
 async def list_pemanfaatan(_user: dict = Depends(require_user)):
     """Register perjanjian + status turunan + ringkasan."""

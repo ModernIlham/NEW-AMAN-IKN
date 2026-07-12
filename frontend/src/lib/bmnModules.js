@@ -265,6 +265,7 @@ export const SIKLUS_MODULES = [
       "✅ Registrasi perjanjian per bentuk: Sewa / Pinjam Pakai / KSP / BGS / BSG / KSPI / KETUPI",
       "✅ Penjaga dokumen (persetujuan Pengelola + perjanjian; sewa: NTPN) & status jatuh tempo ≤60 hari",
       "✅ Kontribusi tahunan ber-NTPN per tahun + pengingat tunggakan otomatis",
+      "✅ Ekspor CSV register perjanjian (status + rekap kontribusi + jumlah lampiran)",
       "✅ Arsip scan dokumen per perjanjian (persetujuan/perjanjian/bukti setor — PDF/gambar)",
       "Pemanfaatan dengan Fasilitas (PDF, PMK 18/2024) — menyusul",
     ],
