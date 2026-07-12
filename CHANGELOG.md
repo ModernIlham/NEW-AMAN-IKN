@@ -48,6 +48,15 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#186] Sanding realisasi per triwulan (Penganggaran) — 2026-07-12
+
+- **Sanding realisasi per triwulan per tahun anggaran**: realisasi
+  dipetakan ke TW I–IV dari tanggal riwayat "terealisasi"; kumulatif +
+  serapan kumulatif dibanding total DIPA. Usulan tanpa tanggal riwayat
+  tetap masuk total (tidak hilang). Butir "menyusul" terakhir modul
+  Penganggaran tuntas.
+- Unit test +1 → 245 passed; seksi tabel baru di halaman Penganggaran.
+
 ## [#185] Konsolidasi dokumentasi #184 — 2026-07-12
 
 - **Dokumentasi saja**: README Progres Fase 5 (Penilaian + koreksi nilai
