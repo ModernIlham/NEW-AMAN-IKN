@@ -83,14 +83,16 @@ halaman posisi per golongan + daftar telaah (#102–#103) + referensi masa
 manfaat dapat dikelola (#107) · Pemanfaatan — **register perjanjian 6
 bentuk** dengan penjaga dokumen persetujuan/NTPN + jatuh tempo ≤60 hari
 (PMK 115/2020) (#108) + **kontribusi tahunan ber-NTPN dengan pengingat
-tunggakan** (#121) + **arsip scan dokumen per perjanjian** (#131) · Penghapusan — **kandidat usul hapus** per jalur
+tunggakan** (#121) + **arsip scan dokumen per perjanjian** (#131) +
+**ekspor CSV register** (#158) · Penghapusan — **kandidat usul hapus** per jalur
 PMK 83/2016 (#104) + **tiket usulan berstatus** usul → proses → SK (#106)
-+ **arsip scan SK/berkas per usulan** (#134)
++ **arsip scan SK/berkas per usulan** (#134) + **ekspor CSV** (#159)
 · Pemusnahan — **register BA multi-aset** (#110) + **PDF Berita Acara
 siap tanda tangan** (#119) + **usulan penghapusan otomatis per aset BA**
 (#120) + **lampiran bukti pelaksanaan** (#132) · Pemindahtanganan — **register usulan 4 bentuk** dengan dokumen
 wajib per tahap + tenggat lelang 6 bulan (PMK 111/2016 jo. 165/2021)
-(#111) + **arsip scan dokumen per usulan** (#138) · Wasdal — **dasbor pemantauan 5 objek** PMK 207/2021, temuan
+(#111) + **arsip scan dokumen per usulan** (#138) + **ekspor CSV**
+(#159) · Wasdal — **dasbor pemantauan 5 objek** PMK 207/2021, temuan
 otomatis dari register yang ada (#113) + **Laporan Hasil Pemantauan PDF
 pra-isi** untuk SIMAN v2 (#122) + **register penertiban ber-tenggat
 15 hari kerja** dengan peringatan lewat tenggat (#140) + **pemantauan
