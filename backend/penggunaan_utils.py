@@ -11,6 +11,53 @@ Dasar: PMK 40/2024 (Penggunaan BMN) + PMK 120/2024 (BMN idle) — pustaka
 §1 & §8. Fungsi murni tanpa Mongo/IO agar teruji unit.
 """
 
+# Jenis penetapan penggunaan (PMK 40/2024) → label Indonesia
+JENIS_PSP = {
+    "psp": "Penetapan Status Penggunaan (PSP)",
+    "alih_status": "Alih Status Penggunaan",
+    "penggunaan_sementara": "Penggunaan Sementara",
+    "dioperasikan_pihak_lain": "Dioperasikan Pihak Lain",
+    "penggunaan_bersama": "Penggunaan Bersama",
+}
+
+
+def validate_psp(data: dict, today_iso: str) -> list:
+    """Validasi pencatatan SK penetapan penggunaan → daftar kesalahan."""
+    from datetime import date
+
+    errors = []
+    if not str(data.get("nomor_sk") or "").strip():
+        errors.append("Nomor SK wajib diisi")
+    try:
+        t = date.fromisoformat(str(data.get("tanggal_sk") or "").strip()[:10])
+        hari_ini = date.fromisoformat((today_iso or "")[:10])
+        if t > hari_ini:
+            errors.append("Tanggal SK tidak boleh di masa depan")
+    except ValueError:
+        errors.append("Tanggal SK wajib (format YYYY-MM-DD)")
+    if data.get("jenis") not in JENIS_PSP:
+        pilihan = ", ".join(JENIS_PSP)
+        errors.append(f"Jenis penetapan tidak dikenal (pilihan: {pilihan})")
+    if not data.get("asset_ids"):
+        errors.append("Minimal satu aset yang ditetapkan")
+    return errors
+
+
+def rekap_psp(daftar_sk) -> dict:
+    """Ringkasan register PSP: jumlah SK, per jenis, aset unik tercakup."""
+    per_jenis = {k: 0 for k in JENIS_PSP}
+    aset_unik = set()
+    for sk in daftar_sk or []:
+        j = sk.get("jenis")
+        if j in per_jenis:
+            per_jenis[j] += 1
+        for a in sk.get("aset") or []:
+            if a.get("asset_id"):
+                aset_unik.add(a["asset_id"])
+    return {"jumlah_sk": len(daftar_sk or []), "per_jenis": per_jenis,
+            "aset_tercakup": len(aset_unik)}
+
+
 # Status tiket penanganan BMN idle → label Indonesia
 STATUS_IDLE = {
     "klarifikasi": "Klarifikasi (diteliti penggunaannya)",

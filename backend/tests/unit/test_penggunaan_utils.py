@@ -99,3 +99,33 @@ class TestBmnIdle:
         assert r["kandidat"] == 2 and r["tiket"] == 2
         assert r["per_status"]["klarifikasi"] == 1
         assert r["per_status"]["diserahkan"] == 1
+
+
+class TestPsp:
+    def test_validasi_psp(self):
+        from penggunaan_utils import validate_psp
+        ok = {"nomor_sk": "KEP-1/MK.6/2026", "tanggal_sk": "2026-07-01",
+              "jenis": "psp", "asset_ids": ["a1"]}
+        assert validate_psp(ok, "2026-07-12") == []
+        assert any("Nomor SK" in e for e in validate_psp(
+            {**ok, "nomor_sk": " "}, "2026-07-12"))
+        assert any("masa depan" in e for e in validate_psp(
+            {**ok, "tanggal_sk": "2026-07-13"}, "2026-07-12"))
+        assert any("Jenis" in e for e in validate_psp(
+            {**ok, "jenis": "pinjam"}, "2026-07-12"))
+        assert any("satu aset" in e for e in validate_psp(
+            {**ok, "asset_ids": []}, "2026-07-12"))
+
+    def test_rekap_psp_aset_unik(self):
+        from penggunaan_utils import JENIS_PSP, rekap_psp
+        sk = [
+            {"jenis": "psp", "aset": [{"asset_id": "a1"}, {"asset_id": "a2"}]},
+            {"jenis": "alih_status", "aset": [{"asset_id": "a2"}]},
+        ]
+        r = rekap_psp(sk)
+        assert r["jumlah_sk"] == 2 and r["aset_tercakup"] == 2
+        assert r["per_jenis"]["psp"] == 1 and r["per_jenis"]["alih_status"] == 1
+        assert set(JENIS_PSP) == set(r["per_jenis"])
+        assert rekap_psp([]) == {"jumlah_sk": 0,
+                                 "per_jenis": {k: 0 for k in JENIS_PSP},
+                                 "aset_tercakup": 0}
