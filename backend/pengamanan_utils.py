@@ -149,3 +149,74 @@ def rekap_kasus(items) -> dict:
     aktif = sum(v for s, v in per_status.items() if s != "selesai")
     return {"jumlah": len(items or []), "aktif": aktif,
             "per_status": per_status, "per_kategori": per_kategori}
+
+
+# ---------------------------------------------------------------------------
+# Arsip dokumen kepemilikan per aset (pustaka §11.3) — PP 27/2014 Ps. 43:
+# dokumen tanah/bangunan disimpan Pengelola Barang (KPKNL), selain itu oleh
+# Pengguna Barang. Lokasi penyimpanan = pilihan informatif, bukan validasi
+# keras (praktik penyimpanan tiap satker berbeda).
+# ---------------------------------------------------------------------------
+
+JENIS_DOKUMEN = {
+    "sertipikat": "Sertipikat tanah (SHP a.n. Pemerintah RI c.q. K/L)",
+    "bpkb": "BPKB kendaraan",
+    "stnk": "STNK kendaraan",
+    "imb_pbg": "IMB / PBG bangunan",
+    "perolehan": "Dokumen perolehan (BAST/AJB/hibah)",
+    "lainnya": "Dokumen lainnya",
+}
+
+LOKASI_SIMPAN = {
+    "pengelola_barang": "Pengelola Barang (KPKNL/Kanwil DJKN)",
+    "pengguna_barang": "Pengguna Barang (satker)",
+}
+
+
+def validate_dokumen(data: dict) -> list:
+    """Validasi pencatatan dokumen kepemilikan → daftar pesan kesalahan."""
+    from datetime import date
+
+    errors = []
+    if data.get("jenis") not in JENIS_DOKUMEN:
+        valid = ", ".join(JENIS_DOKUMEN)
+        errors.append(f"Jenis dokumen tidak dikenal (pilihan: {valid})")
+    if not str(data.get("nomor") or "").strip():
+        errors.append("Nomor dokumen wajib diisi")
+    if data.get("lokasi_simpan") not in LOKASI_SIMPAN:
+        valid = ", ".join(LOKASI_SIMPAN)
+        errors.append(f"Lokasi penyimpanan tidak dikenal (pilihan: {valid})")
+    berlaku = str(data.get("berlaku_sampai") or "").strip()
+    if berlaku:
+        try:
+            date.fromisoformat(berlaku[:10])
+        except ValueError:
+            errors.append("Tanggal berlaku harus berformat YYYY-MM-DD")
+    return errors
+
+
+def rekap_dokumen(items, today_iso: str) -> dict:
+    """Ringkasan arsip: total, per jenis, ber-lampiran, kedaluwarsa."""
+    from datetime import date
+
+    per_jenis = {k: 0 for k in JENIS_DOKUMEN}
+    ber_lampiran = kedaluwarsa = 0
+    try:
+        hari_ini = date.fromisoformat(str(today_iso)[:10])
+    except ValueError:
+        hari_ini = None
+    for d in items or []:
+        j = d.get("jenis")
+        if j in per_jenis:
+            per_jenis[j] += 1
+        if d.get("lampiran"):
+            ber_lampiran += 1
+        berlaku = str(d.get("berlaku_sampai") or "").strip()[:10]
+        if berlaku and hari_ini is not None:
+            try:
+                if date.fromisoformat(berlaku) < hari_ini:
+                    kedaluwarsa += 1
+            except ValueError:
+                pass
+    return {"jumlah": len(items or []), "per_jenis": per_jenis,
+            "ber_lampiran": ber_lampiran, "kedaluwarsa": kedaluwarsa}
