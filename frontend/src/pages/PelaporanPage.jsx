@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Search, Loader2, FileText, FileDown, ChevronDown,
-  ShieldCheck, Boxes, Scale,
+  ShieldCheck, Boxes, Scale, Lock, LockOpen, Plus, Trash2, CalendarCheck,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -42,19 +42,72 @@ function fmtPeriode(a) {
  * per kegiatan + laporan persediaan pada satu pintu — bekal LBKP/rekonsiliasi
  * pada tahap berikutnya.
  */
-export default function PelaporanPage({ onBack }) {
+export default function PelaporanPage({ user, onBack }) {
+  const isAdmin = user?.role === "admin";
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  // Register periode pelaporan: {items, ringkasan, label_status, catatan}
+  const [periode, setPeriode] = useState(null);
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
+
+  const muatPeriode = useCallback(() => {
+    axios.get(`${API}/pelaporan/periode`)
+      .then((r) => setPeriode(r.data))
+      .catch(() => toast.error("Gagal memuat periode pelaporan"));
+  }, []);
 
   useEffect(() => {
     axios.get(`${API}/inventory-activities`)
       .then((r) => setActivities(Array.isArray(r.data) ? r.data : (r.data?.items || [])))
       .catch(() => toast.error("Gagal memuat daftar kegiatan"))
       .finally(() => setLoading(false));
-  }, []);
+    muatPeriode();
+  }, [muatPeriode]);
+
+  const buatPeriode = async (semester) => {
+    const th = new Date().getFullYear();
+    try {
+      await axios.post(`${API}/pelaporan/periode`, { tahun: th, semester });
+      toast.success("Periode terdaftar");
+      muatPeriode();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal mendaftarkan periode");
+    }
+  };
+
+  const kunciPeriode = async (p) => {
+    try {
+      await axios.post(`${API}/pelaporan/periode/${p.id}/kunci`);
+      toast.success(`${p.label} terkunci — laporan periode ini FINAL`);
+      muatPeriode();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal mengunci periode");
+    }
+  };
+
+  const bukaPeriode = async (p) => {
+    const alasan = window.prompt(`Alasan membuka kunci ${p.label} (wajib, tercatat pada riwayat):`);
+    if (!alasan || !alasan.trim()) return;
+    try {
+      await axios.post(`${API}/pelaporan/periode/${p.id}/buka`, { alasan });
+      toast.success("Kunci periode dibuka");
+      muatPeriode();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal membuka kunci");
+    }
+  };
+
+  const hapusPeriode = async (p) => {
+    try {
+      await axios.delete(`${API}/pelaporan/periode/${p.id}`);
+      toast.success("Periode dihapus");
+      muatPeriode();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal menghapus periode");
+    }
+  };
 
   const filtered = useMemo(() => {
     const s = search.trim().toLowerCase();
@@ -170,6 +223,90 @@ export default function PelaporanPage({ onBack }) {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+
+        {/* ── Periode pelaporan ber-kunci ── */}
+        {periode && (
+          <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="pelaporan-periode">
+            <div className="px-3 py-2.5 border-b border-border flex items-center gap-2 flex-wrap">
+              <span className="w-8 h-8 rounded-lg bg-slate-600 flex items-center justify-center flex-shrink-0">
+                <CalendarCheck className="w-4 h-4 text-white" />
+              </span>
+              <div className="flex-1 min-w-[140px]">
+                <p className="text-xs font-semibold text-foreground">Periode Pelaporan</p>
+                <p className="text-[10px] text-muted-foreground">Periode terkunci = LBKP & CaLBMN periode itu berpenanda FINAL</p>
+              </div>
+              <span className="px-2 py-0.5 rounded-full bg-slate-500/15 text-slate-600 dark:text-slate-400 text-[10px] font-semibold">
+                {periode.ringkasan?.terkunci || 0} terkunci
+              </span>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-1.5" data-testid="pelaporan-periode-tambah">
+                    <Plus className="w-3.5 h-3.5" />Daftarkan<ChevronDown className="w-3 h-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-60">
+                  {(() => {
+                    const th = new Date().getFullYear();
+                    return [
+                      { label: `Semester I ${th}`, semester: 1 },
+                      { label: `Semester II ${th}`, semester: 2 },
+                      { label: `Tahunan ${th}`, semester: null },
+                    ].map((o) => (
+                      <DropdownMenuItem key={o.label} className="min-h-[42px]"
+                        onClick={() => buatPeriode(o.semester)}>
+                        {o.label}
+                      </DropdownMenuItem>
+                    ));
+                  })()}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+            {(periode.items || []).length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-4 px-3">
+                Belum ada periode terdaftar — daftarkan periode berjalan lalu kunci saat laporan final.
+              </p>
+            ) : (
+              <ul className="divide-y divide-border/60">
+                {periode.items.map((p) => (
+                  <li key={p.id} className="px-3 py-2 flex items-center gap-2 flex-wrap" data-testid={`pelaporan-periode-${p.id}`}>
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold flex items-center gap-1 ${
+                      p.status === "terkunci"
+                        ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                        : "bg-amber-500/15 text-amber-600 dark:text-amber-400"}`}>
+                      {p.status === "terkunci" ? <Lock className="w-3 h-3" /> : <LockOpen className="w-3 h-3" />}
+                      {periode.label_status?.[p.status] || p.status}
+                    </span>
+                    <p className="text-xs font-semibold text-foreground flex-1 min-w-[120px]">{p.label}</p>
+                    {p.status === "terkunci" && (
+                      <span className="text-[10px] text-muted-foreground">
+                        terkunci {String(p.tanggal_kunci || "").slice(0, 10)} oleh {p.dikunci_oleh}
+                      </span>
+                    )}
+                    {isAdmin && p.status === "terbuka" && (
+                      <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                        onClick={() => kunciPeriode(p)} data-testid={`pelaporan-periode-kunci-${p.id}`}>
+                        <Lock className="w-3 h-3 mr-1" />Kunci
+                      </Button>
+                    )}
+                    {isAdmin && p.status === "terkunci" && (
+                      <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                        onClick={() => bukaPeriode(p)} data-testid={`pelaporan-periode-buka-${p.id}`}>
+                        <LockOpen className="w-3 h-3 mr-1" />Buka
+                      </Button>
+                    )}
+                    {isAdmin && p.status === "terbuka" && (
+                      <button type="button" aria-label="Hapus periode" onClick={() => hapusPeriode(p)}
+                        className="h-7 w-7 rounded-lg border border-border text-red-500 flex items-center justify-center hover:bg-red-500/10 min-h-0 min-w-0">
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="px-3 py-2 text-[11px] text-muted-foreground border-t border-border">{periode.catatan}</p>
+          </div>
+        )}
 
         {/* ── Laporan persediaan (satker-wide) ── */}
         <div className="bg-card rounded-xl border border-border shadow-sm p-2.5 sm:p-3 flex items-center gap-2 flex-wrap">
