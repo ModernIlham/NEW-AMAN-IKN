@@ -338,17 +338,18 @@ export const SIKLUS_MODULES = [
     id: "pemusnahan",
     nama: "Pemusnahan",
     urutan: 10,
-    status: "segera",
+    status: "sebagian",
     fase: 6,
-    ringkas: "Usulan & berita acara pemusnahan aset rusak berat.",
+    ringkas: "Register BA Pemusnahan (persetujuan wajib, aset rusak berat) sudah bisa dibuka.",
     deskripsi:
       "Pemusnahan BMN yang tidak dapat digunakan/dimanfaatkan/dipindahtangankan: usulan "
       + "(kandidat otomatis dari aset rusak berat hasil inventarisasi), persetujuan, dan "
       + "berita acara pemusnahan.",
     dasarHukum: ["PMK 83/PMK.06/2016 — Pemusnahan & Penghapusan BMN"],
     fitur: [
+      "✅ Register BA Pemusnahan multi-aset (nomor persetujuan wajib; cara dibakar/dihancurkan/dll; objek dibatasi Rusak Berat)",
       "Kandidat pemusnahan otomatis dari kondisi Rusak Berat + tindak lanjut inventarisasi",
-      "Alur usulan → persetujuan → BA pemusnahan (dengan foto bukti)",
+      "Foto bukti pelaksanaan + PDF BA",
     ],
     integrasi: ["Kondisi & tindak lanjut dari modul inventarisasi menjadi pintu masuk"],
   },

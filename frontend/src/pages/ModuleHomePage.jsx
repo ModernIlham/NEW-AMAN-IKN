@@ -56,7 +56,7 @@ function StatusBadge({ status }) {
  * tahap siklus lain sudah punya kamarnya masing-masing dengan status Segera
  * Hadir — klik kartunya menampilkan konsep, rencana fitur, dan fase roadmap.
  */
-export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onShowInfo, onEnterInventarisasi, onOpenKodefikasi, onOpenPersediaan, onOpenPelaporan, onOpenPenggunaan, onOpenPengamanan, onOpenPemeliharaan, onOpenPerencanaan, onOpenPenilaian, onOpenPenghapusan, onOpenPemanfaatan }) {
+export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onShowInfo, onEnterInventarisasi, onOpenKodefikasi, onOpenPersediaan, onOpenPelaporan, onOpenPenggunaan, onOpenPengamanan, onOpenPemeliharaan, onOpenPerencanaan, onOpenPenilaian, onOpenPenghapusan, onOpenPemanfaatan, onOpenPemusnahan }) {
   const [detail, setDetail] = useState(null); // modul yang dibuka konsepnya
   const activateInfo = useTripleClick(onShowInfo);
   const DetailIcon = detail ? (MODULE_ICONS[detail.id] || Package) : null;
@@ -77,6 +77,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
     else if (mod.id === "penilaian" && onOpenPenilaian) onOpenPenilaian();
     else if (mod.id === "penghapusan" && onOpenPenghapusan) onOpenPenghapusan();
     else if (mod.id === "pemanfaatan" && onOpenPemanfaatan) onOpenPemanfaatan();
+    else if (mod.id === "pemusnahan" && onOpenPemusnahan) onOpenPemusnahan();
     else setDetail(mod);
   };
 
@@ -221,7 +222,8 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
                 || (mod.id === "perencanaan" && !!onOpenPerencanaan)
                 || (mod.id === "penilaian" && !!onOpenPenilaian)
                 || (mod.id === "penghapusan" && !!onOpenPenghapusan)
-                || (mod.id === "pemanfaatan" && !!onOpenPemanfaatan);
+                || (mod.id === "pemanfaatan" && !!onOpenPemanfaatan)
+                || (mod.id === "pemusnahan" && !!onOpenPemusnahan);
               return (
                 <button
                   key={mod.id}
