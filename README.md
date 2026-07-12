@@ -94,7 +94,8 @@ wajib per tahap + tenggat lelang 6 bulan (PMK 111/2016 jo. 165/2021)
 otomatis dari register yang ada (#113) + **Laporan Hasil Pemantauan PDF
 pra-isi** untuk SIMAN v2 (#122) + **register penertiban ber-tenggat
 15 hari kerja** dengan peringatan lewat tenggat (#140) + **pemantauan
-insidentil 10+5 hari kerja dengan PDF Berita Acara** (#142).
+insidentil 10+5 hari kerja dengan PDF Berita Acara** (#142) + **arsip
+lampiran per tiket insidentil** (#156).
 **Seluruh kartu modul siklus kini bisa dimasuki dari Beranda Modul.**
 
 ---
