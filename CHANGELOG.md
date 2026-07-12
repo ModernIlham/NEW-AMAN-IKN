@@ -48,6 +48,17 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#79] Transaksi masuk FIFO persediaan — layer + jurnal + UI — 2026-07-12
+
+- **Transaksi MASUK persediaan**: jenis memetakan 1:1 ke SAKTI (Saldo Awal
+  M01, Pembelian M02, Transfer M03, Hibah M04, Perolehan Lainnya M99);
+  layer FIFO baru (harga & kedaluwarsa melekat di layer) + stok naik
+  atomik + **jurnal** ber-stok sebelum/sesudah + dokumen sumber; bila
+  jurnal gagal → layer & stok dikompensasi.
+- Tombol **Masuk** & **Riwayat** per baris di halaman Master Persediaan
+  (kartu jurnal: jenis + kode SAKTI, jumlah × harga, stok →, bukti,
+  petugas). 5 unit test baru.
+
 ## [#78] UI Master Persediaan — modul naik Sebagian Aktif — 2026-07-12
 
 - **Halaman Master Persediaan** dari Beranda Modul: cari + chip filter
