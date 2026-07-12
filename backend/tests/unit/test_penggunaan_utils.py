@@ -178,3 +178,37 @@ class TestProsesPenggunaan:
         assert r["jumlah"] == 2 and r["aktif"] == 2
         assert r["segera_berakhir"] == 1
         assert r["per_jenis"]["alih_status"] == 1
+
+
+class TestProsesJenisBaru:
+    def test_jenis_baru(self):
+        from penggunaan_utils import (JENIS_PROSES_PENGGUNAAN,
+                                      validate_proses_penggunaan,
+                                      validate_transisi_proses)
+        assert set(JENIS_PROSES_PENGGUNAAN) == {
+            "alih_status", "penggunaan_sementara",
+            "dioperasikan_pihak_lain", "penggunaan_bersama"}
+        base = {"arah": "keluar", "pihak_asal": "Satker A",
+                "pihak_tujuan": "BUMN X", "asset_ids": ["x"],
+                "tanggal_mulai": "2026-08-01",
+                "tanggal_berakhir": "2031-08-01"}
+        assert validate_proses_penggunaan(
+            {**base, "jenis_proses": "dioperasikan_pihak_lain"}) == []
+        # Berjangka baru wajib tanggal
+        assert validate_proses_penggunaan(
+            {"jenis_proses": "penggunaan_bersama", "arah": "masuk",
+             "pihak_asal": "A", "pihak_tujuan": "B", "asset_ids": ["x"]})
+        # Tanpa jalur pintas ≤6 bulan (beda dgn penggunaan sementara)
+        assert validate_transisi_proses(
+            {"jenis_proses": "dioperasikan_pihak_lain",
+             "status": "diajukan"}, "berjalan")
+        assert validate_transisi_proses(
+            {"jenis_proses": "penggunaan_bersama", "status": "disetujui"},
+            "berjalan") == []
+
+    def test_pengingat_jenis_baru(self):
+        from penggunaan_utils import info_proses_sementara
+        t = {"jenis_proses": "dioperasikan_pihak_lain", "status": "berjalan",
+             "tanggal_berakhir": "2026-08-01"}
+        info = info_proses_sementara(t, "2026-07-12")
+        assert info["sisa_hari"] == 20 and info["saatnya_perpanjangan"]

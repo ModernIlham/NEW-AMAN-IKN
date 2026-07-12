@@ -57,8 +57,9 @@ kelengkapan BAST (#87) + **Daftar Barang yang Digunakan per pemegang**
 dengan tiket klarifikasi → usul serah → diserahkan (PMK 120/2024)
 (#126) + **register SK penetapan penggunaan** 5 jenis dengan cakupan
 aset ter-PSP (#129) + **arsip scan SK penetapan per register** (#137)
-+ **tiket proses alih status & penggunaan sementara** antar Pengguna
-Barang dengan pengingat tenggat/perpanjangan (PMK 40/2024) (#181)
++ **tiket proses 4 rezim PMK 40/2024** (alih status, penggunaan
+sementara, dioperasikan pihak lain, penggunaan bersama) dengan
+pengingat tenggat/perpanjangan (#181, #183)
 · Pengamanan — dasbor tertib administrasi + daftar
 pantau sengketa (#88) + **register BMN bermasalah berstatus**
 identifikasi → mediasi → blokir → litigasi → selesai (PP 27/2014

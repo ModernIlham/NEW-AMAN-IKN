@@ -48,6 +48,16 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#183] Tiket proses: dioperasikan pihak lain & penggunaan bersama — 2026-07-12
+
+- **Dua rezim PMK 40/2024 tersisa** pada register tiket proses:
+  dioperasikan pihak lain (penetapan Pengelola, pihak non-K/L) dan
+  penggunaan bersama (Eminen + Kolaborator) — pipeline berjangka tanpa
+  jalur pintas ≤6 bulan; pengingat perpanjangan ≤90 hari untuk semua
+  jenis berjangka. Daftar "menyusul" Penggunaan tuntas (4 rezim).
+- Unit test +2 → 242 passed; UI opsi jenis baru + dokumentasi
+  (README/masterplan/pustaka/bmnModules) dalam PR yang sama.
+
 ## [#182] Konsolidasi dokumentasi #181 — 2026-07-12
 
 - **Dokumentasi saja**: README Progres Fase 3 + roadmap masterplan +
