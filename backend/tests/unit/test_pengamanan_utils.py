@@ -149,3 +149,29 @@ class TestSertipikasi:
         assert r["per_kategori"]["k1"] == 1
         assert r["per_kategori"]["shp_terbit"] == 1
         assert r["tanpa_kategori"] == 1
+
+
+class TestChecklistPengamanan:
+    def test_validasi_checklist(self):
+        from pengamanan_utils import validate_checklist
+        ok = {"jenis_objek": "tanah",
+              "butir": {"patok_batas": True, "sertipikat": False}}
+        assert validate_checklist(ok) == []
+        assert validate_checklist({"jenis_objek": "kapal", "butir": {}})
+        assert validate_checklist({"jenis_objek": "tanah", "butir": {}})
+        errors = validate_checklist(
+            {"jenis_objek": "kendaraan", "butir": {"patok_batas": True}})
+        assert errors and "patok_batas" in errors[0]
+
+    def test_skor_dan_rekap(self):
+        from pengamanan_utils import rekap_checklist, skor_checklist
+        penuh = {"jenis_objek": "lainnya",
+                 "butir": {"simpan_terkunci": True, "apar_gudang": True,
+                           "tercatat_dbr": True, "dokumen_perolehan": True}}
+        sebagian = {"jenis_objek": "tanah", "butir": {"patok_batas": True}}
+        assert skor_checklist(penuh)["persen"] == 100
+        s = skor_checklist(sebagian)
+        assert s["terpenuhi"] == 1 and s["total"] == 5
+        r = rekap_checklist([penuh, sebagian])
+        assert r["jumlah"] == 2 and r["penuh"] == 1
+        assert r["per_jenis"]["tanah"] == 1

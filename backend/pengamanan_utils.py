@@ -264,3 +264,94 @@ def rekap_sertipikasi(items) -> dict:
             tanpa += 1
     return {"per_kategori": per, "tanpa_kategori": tanpa,
             "jumlah_sertipikat": tanpa + sum(per.values())}
+
+
+# ---------------------------------------------------------------------------
+# Checklist pengamanan per aset per jenis objek (pustaka §11.2 —
+# [perlu verifikasi] §14 butir 18: butir dari artikel DJKN & KMK 21/2012,
+# bukan teks regulasi; checklist AMAN alat bantu internal, bukan bukti
+# hukum pelaksanaan pengamanan).
+# ---------------------------------------------------------------------------
+
+JENIS_OBJEK_CHECKLIST = {
+    "tanah": "Tanah",
+    "gedung_bangunan": "Gedung / Bangunan",
+    "kendaraan": "Kendaraan bermotor",
+    "lainnya": "BMN selain tanah/bangunan",
+}
+
+# (kunci, label, aspek fisik/administrasi/hukum)
+BUTIR_CHECKLIST = {
+    "tanah": [
+        ("patok_batas", "Patok/tanda batas terpasang", "fisik"),
+        ("pagar", "Pagar pengaman", "fisik"),
+        ("plang_nama", "Plang/papan nama kepemilikan", "fisik"),
+        ("arsip_perolehan", "Arsip dokumen perolehan lengkap", "administrasi"),
+        ("sertipikat", "Sertipikat a.n. Pemerintah RI c.q. K/L", "hukum"),
+    ],
+    "gedung_bangunan": [
+        ("pagar_papan", "Pagar & papan nama", "fisik"),
+        ("penjagaan", "Penjagaan/satpam atau CCTV", "fisik"),
+        ("apar", "APAR tersedia dan berfungsi", "fisik"),
+        ("arsip_bangunan", "Arsip IMB/PBG + BAST/dokumen pembangunan", "administrasi"),
+        ("bukti_kepemilikan", "Bukti kepemilikan a.n. Pemerintah RI", "hukum"),
+    ],
+    "kendaraan": [
+        ("kunci_alarm", "Kunci pengaman/alarm berfungsi", "fisik"),
+        ("simpan_kantor", "Disimpan di lingkungan kantor (pool)", "fisik"),
+        ("arsip_bpkb_stnk", "Arsip BPKB + salinan STNK", "administrasi"),
+        ("atas_nama_pemerintah", "BPKB/STNK atas nama pemerintah", "hukum"),
+        ("pajak_hidup", "Pajak kendaraan dibayar tepat waktu", "hukum"),
+    ],
+    "lainnya": [
+        ("simpan_terkunci", "Disimpan di ruangan/gudang terkunci", "fisik"),
+        ("apar_gudang", "APAR tersedia di area penyimpanan", "fisik"),
+        ("tercatat_dbr", "Tercatat di DBR/DBL ruangan", "administrasi"),
+        ("dokumen_perolehan", "Dokumen perolehan (BAST) tersimpan", "administrasi"),
+    ],
+}
+
+
+def validate_checklist(data: dict) -> list:
+    """Validasi isian checklist pengamanan → daftar pesan kesalahan."""
+    errors = []
+    jenis = data.get("jenis_objek")
+    if jenis not in JENIS_OBJEK_CHECKLIST:
+        valid = ", ".join(JENIS_OBJEK_CHECKLIST)
+        errors.append(f"Jenis objek tidak dikenal (pilihan: {valid})")
+        return errors
+    butir = data.get("butir")
+    if not isinstance(butir, dict) or not butir:
+        errors.append("Isian butir checklist wajib diisi")
+        return errors
+    sah = {k for k, _, _ in BUTIR_CHECKLIST[jenis]}
+    asing = set(butir) - sah
+    if asing:
+        errors.append(f"Butir tidak dikenal untuk jenis {jenis}: "
+                      + ", ".join(sorted(asing)))
+    return errors
+
+
+def skor_checklist(item: dict) -> dict:
+    """Skor satu checklist → {terpenuhi, total, persen}."""
+    jenis = item.get("jenis_objek")
+    daftar = BUTIR_CHECKLIST.get(jenis, [])
+    butir = item.get("butir") or {}
+    terpenuhi = sum(1 for k, _, _ in daftar if butir.get(k))
+    total = len(daftar)
+    persen = round(terpenuhi / total * 100) if total else 0
+    return {"terpenuhi": terpenuhi, "total": total, "persen": persen}
+
+
+def rekap_checklist(items) -> dict:
+    """Ringkasan checklist: jumlah, penuh (100%), per jenis."""
+    per_jenis = {k: 0 for k in JENIS_OBJEK_CHECKLIST}
+    penuh = 0
+    for c in items or []:
+        j = c.get("jenis_objek")
+        if j in per_jenis:
+            per_jenis[j] += 1
+        if skor_checklist(c)["persen"] == 100:
+            penuh += 1
+    return {"jumlah": len(items or []), "penuh": penuh,
+            "per_jenis": per_jenis}

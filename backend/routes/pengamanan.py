@@ -15,11 +15,12 @@ from auth_utils import require_admin, require_user, require_user_or_query_token
 from db import db, fs_bucket
 from shared_utils import delete_document_from_gridfs, get_document_from_gridfs
 from pengamanan_utils import (
-    JENIS_DOKUMEN, JENIS_KEKURANGAN, KATEGORI_KASUS, KATEGORI_SERTIPIKASI,
-    LOKASI_SIMPAN, STATUS_KASUS, TRANSISI_KASUS, kekurangan_aset,
-    rekap_dokumen, rekap_kasus, rekap_kesehatan, rekap_sertipikasi,
-    validate_dokumen, validate_kasus, validate_kategori_sertipikasi,
-    validate_transisi_kasus,
+    BUTIR_CHECKLIST, JENIS_DOKUMEN, JENIS_KEKURANGAN, JENIS_OBJEK_CHECKLIST,
+    KATEGORI_KASUS, KATEGORI_SERTIPIKASI, LOKASI_SIMPAN, STATUS_KASUS,
+    TRANSISI_KASUS, kekurangan_aset, rekap_checklist, rekap_dokumen,
+    rekap_kasus, rekap_kesehatan, rekap_sertipikasi, skor_checklist,
+    validate_checklist, validate_dokumen, validate_kasus,
+    validate_kategori_sertipikasi, validate_transisi_kasus,
 )
 
 pengamanan_router = APIRouter()
@@ -363,3 +364,74 @@ async def hapus_lampiran_dokumen(dok_id: str, file_id: str,
     if res.modified_count:
         await delete_document_from_gridfs(file_id)
     return {"ok": True, "file_id": file_id}
+
+
+class ChecklistIn(BaseModel):
+    asset_id: str = Field(min_length=1)
+    jenis_objek: str
+    butir: dict[str, bool]
+    keterangan: str = ""
+
+
+@pengamanan_router.get("/pengamanan/checklist")
+async def list_checklist(_user: dict = Depends(require_user)):
+    """Checklist pengamanan per aset (terbaru dulu) + skor + ringkasan."""
+    items = [c async for c in db.pengamanan_checklist.find({}, {"_id": 0})
+             .sort("updated_at", -1).limit(500)]
+    for c in items:
+        c["skor"] = skor_checklist(c)
+    return {"items": items, "ringkasan": rekap_checklist(items),
+            "label_jenis": JENIS_OBJEK_CHECKLIST,
+            "butir_ref": {j: [{"kunci": k, "label": lbl, "aspek": asp}
+                              for k, lbl, asp in daftar]
+                          for j, daftar in BUTIR_CHECKLIST.items()},
+            "catatan": (
+                "Alat bantu internal turunan pustaka §11.2 (butir dari "
+                "artikel DJKN/KMK 21/2012 — perlu verifikasi ke pedoman "
+                "K/L masing-masing); bukan bukti hukum pelaksanaan "
+                "pengamanan.")}
+
+
+@pengamanan_router.post("/pengamanan/checklist")
+async def simpan_checklist(payload: ChecklistIn,
+                           user: dict = Depends(require_user)):
+    """Simpan/perbarui checklist satu aset (satu checklist per aset)."""
+    data = payload.model_dump()
+    errors = validate_checklist(data)
+    if errors:
+        raise HTTPException(status_code=400, detail="; ".join(errors))
+    asset = await db.assets.find_one(
+        {"id": data["asset_id"]},
+        {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1})
+    if not asset:
+        raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    now = datetime.now(timezone.utc).isoformat()
+    isi = {
+        "asset_id": asset["id"],
+        "asset_code": asset.get("asset_code"),
+        "NUP": asset.get("NUP"),
+        "asset_name": asset.get("asset_name"),
+        "jenis_objek": data["jenis_objek"],
+        "butir": {k: bool(v) for k, v in data["butir"].items()},
+        "keterangan": str(data.get("keterangan") or "").strip(),
+        "tanggal_cek": now[:10],
+        "petugas": user.get("username"),
+        "updated_at": now,
+    }
+    res = await db.pengamanan_checklist.find_one_and_update(
+        {"asset_id": asset["id"]},
+        {"$set": isi,
+         "$setOnInsert": {"id": str(uuid.uuid4()), "created_at": now,
+                          "created_by": user.get("username")}},
+        upsert=True, return_document=True, projection={"_id": 0})
+    res["skor"] = skor_checklist(res)
+    return res
+
+
+@pengamanan_router.delete("/pengamanan/checklist/{cek_id}")
+async def hapus_checklist(cek_id: str, _admin: dict = Depends(require_admin)):
+    """Hapus satu checklist (admin)."""
+    res = await db.pengamanan_checklist.delete_one({"id": cek_id})
+    if not res.deleted_count:
+        raise HTTPException(status_code=404, detail="Checklist tidak ditemukan")
+    return {"ok": True}

@@ -165,6 +165,9 @@ async def create_indexes() -> None:
         # Arsip dokumen kepemilikan: daftar per aset + jalur id
         await db.pengamanan_dokumen.create_index("asset_id")
         await db.pengamanan_dokumen.create_index("id", unique=True)
+        # Checklist pengamanan: satu per aset + jalur id
+        await db.pengamanan_checklist.create_index("asset_id", unique=True)
+        await db.pengamanan_checklist.create_index("id", unique=True)
         logger.info("Database indexes created successfully")
     except Exception as e:
         logger.error(f"Error creating indexes: {e}")
