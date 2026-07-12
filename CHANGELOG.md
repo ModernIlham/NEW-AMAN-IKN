@@ -48,6 +48,14 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#196] Peta: zoom maksimal dinaikkan ke 22 — 2026-07-12
+
+- **Peta full-view** kini bisa diperbesar hingga zoom 22 (dari 19):
+  `maxNativeZoom: 19` + `maxZoom: 22` pada TileLayer & objek peta →
+  Leaflet memperbesar ubin OSM z19 pada z20–22, sehingga pin aset yang
+  berdekatan dapat dipisahkan lebih presisi saat diperbesar. Auto-fit
+  dibatasi z19 agar tampilan awal tetap tajam.
+
 ## [#195] Konsolidasi dokumentasi #194 — 2026-07-12
 
 - **Dokumentasi saja**: README Progres Fase 3 + masterplan + pustaka §13
