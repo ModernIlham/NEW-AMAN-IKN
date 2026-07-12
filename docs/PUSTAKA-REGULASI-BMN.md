@@ -259,7 +259,47 @@ seed lengkap dari lampiran KMK menyusul.
 
 ---
 
-## 6. Kendala Umum Satker → Fitur Penangkal AMAN
+## 6. Pemanfaatan (PMK 115/PMK.06/2020 + PMK 18/2024)
+
+**Status regulasi.** PMK 115/PMK.06/2020 MASIH BERLAKU (pokok pemanfaatan;
+mencabut PMK 78/2014, 164/2014, 57/2016). **PMK 18/2024 BUKAN pengganti**
+— isinya fasilitas penyiapan & pelaksanaan transaksi (ala PDF: kajian,
+market sounding, pendampingan tender) bagi PJPB. KETUPI = bentuk ke-6
+sejak PP 28/2020 (operasional a.l. KMK 361/KMK.6/2024).
+
+**Enam bentuk + jangka maksimal:** Sewa 5 th dapat diperpanjang (mitra:
+badan usaha/perorangan; periodesitas jam-hari-bulan-tahun) · Pinjam Pakai
+5 th (mitra HANYA Pemda/Pemdes; tanpa imbalan; perpanjangan diajukan ≥2
+bulan sebelum berakhir) · KSP 30 th (infrastruktur 50 th; mitra badan
+usaha non-perorangan via tender) · BGS/BSG 30 th **tidak dapat
+diperpanjang** (dilaksanakan Pengelola Barang) · KSPI 50 th · KETUPI 50 th
+(PJPB + BLU; objek ditetapkan Menkeu). Persetujuan SELALU di Pengelola
+Barang (KPKNL/Kanwil/DJKN berjenjang nilai).
+
+**Keuangan.** Sewa = tarif pokok (nilai wajar penilaian) × faktor
+penyesuai (jenis kegiatan + periodesitas; per jam s.d. 190%), dibayar
+sekaligus di muka oleh penyewa LANGSUNG ke Kas Negara (PNBP, kode billing
+SIMPONI); KSP = kontribusi tetap tahunan (% × nilai wajar) + pembagian
+keuntungan; BGS/BSG = kontribusi tahunan tiap ulang tahun perjanjian +
+≥10% hasil untuk tusi; KSPI = clawback kelebihan keuntungan; KETUPI =
+dana di muka. **Satker (KPB) = pengusul & penatausaha — DILARANG menerima/
+memakai uang langsung (UU 1/2004).**
+
+**Temuan auditor tersering:** pemanfaatan tanpa persetujuan Pengelola;
+hasil sewa tidak disetor/dipakai langsung; perjanjian berakhir tapi objek
+masih dipakai; tarif tanpa penilaian; tidak diungkap di LBKP/wasdal.
+
+**Terapan AMAN (iterasi 35):** register + arsip, bukan sistem uang —
+entitas per perjanjian (bentuk, objek BMN, mitra, persetujuan Pengelola,
+perjanjian, nilai, NTPN, periode); status "aktif" HANYA bila nomor
+persetujuan + perjanjian terisi (sewa: + NTPN) — mencegah dua temuan
+tersering secara struktural; peringatan jatuh tempo H-60 (syarat
+perpanjangan ≥2 bulan); pengingat kontribusi tahunan & laporan wasdal
+menyusul.
+
+---
+
+## 7. Kendala Umum Satker → Fitur Penangkal AMAN
 
 | Kendala nyata (temuan artikel DJKN/DJPb/BPK/jurnal) | Penangkal di AMAN |
 |---|---|
@@ -275,7 +315,7 @@ seed lengkap dari lampiran KMK menyusul.
 
 ---
 
-## 7. Implikasi Desain per Modul (ringkas)
+## 8. Implikasi Desain per Modul (ringkas)
 
 | Modul (fase) | Keputusan desain dari pustaka ini |
 |---|---|
@@ -291,7 +331,7 @@ seed lengkap dari lampiran KMK menyusul.
 
 ---
 
-## 8. Daftar Konsolidasi "Perlu Verifikasi"
+## 9. Daftar Konsolidasi "Perlu Verifikasi"
 
 1. Field lengkap KIB per 6 jenis → Lampiran PMK 181/2016.
 2. Batas waktu statutori penyampaian laporan per jenjang → Lampiran PMK 181.
@@ -311,7 +351,7 @@ seed lengkap dari lampiran KMK menyusul.
 
 ---
 
-## 9. Sumber Utama
+## 10. Sumber Utama
 
 Regulasi: PSAP 05 (ksap.org/standar/PSAP05.pdf) · PMK 181/PMK.06/2016
 (jdih.kemenkeu.go.id/dok/181-pmk-06-2016; peraturan.bpk.go.id/Details/121291)

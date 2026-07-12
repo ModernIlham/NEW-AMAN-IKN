@@ -126,6 +126,9 @@ async def create_indexes() -> None:
         await db.usulan_penghapusan.create_index("id", unique=True)
         # Referensi masa manfaat penyusutan: satu entri per kelompok
         await db.masa_manfaat.create_index("kode", unique=True)
+        # Register pemanfaatan: urut jatuh tempo + jalur id
+        await db.pemanfaatan.create_index("berakhir")
+        await db.pemanfaatan.create_index("id", unique=True)
         logger.info("Database indexes created successfully")
     except Exception as e:
         logger.error(f"Error creating indexes: {e}")
