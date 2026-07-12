@@ -48,6 +48,14 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#154] Pindah gudang persediaan ber-jurnal — 2026-07-12
+
+- **Pindah gudang per barang**: lokasi berpindah anti-balapan, stok &
+  layer FIFO tak tersentuh, jurnal arah "mutasi" mencatat asal → tujuan
+  (+kompensasi bila jurnal gagal); `mutasi_periode` kini mengabaikan
+  arah mutasi agar saldo laporan tak terganggu. Dialog + render riwayat
+  khusus. Suite 220.
+
 ## [#153] Konsolidasi dokumentasi #152 — 2026-07-12
 
 - **Dokumentasi saja**: README blok Progres Fase 2 + roadmap masterplan
