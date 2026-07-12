@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Search, Loader2, UserCheck, ChevronLeft, ChevronRight,
   BadgeCheck, FileWarning, FileText, Plus, X, Trash2, ScrollText,
+  Paperclip, Upload,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
+import { authMediaUrl } from "@/lib/mediaUrl";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -45,6 +47,9 @@ export default function PenggunaanPage({ user, onBack }) {
   const [cariPsp, setCariPsp] = useState("");
   const [hasilCariPsp, setHasilCariPsp] = useState([]);
   const cariPspTimer = useRef(null);
+  // Dialog lampiran SK PSP: {sk, uploading}
+  const [lampPsp, setLampPsp] = useState(null);
+  const lampPspInputRef = useRef(null);
   const searchTimer = useRef(null);
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
@@ -138,6 +143,37 @@ export default function PenggunaanPage({ user, onBack }) {
       loadPsp();
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Gagal menghapus SK");
+    }
+  };
+
+  const unggahLampiranPsp = async (fileObj) => {
+    if (!lampPsp || !fileObj) return;
+    setLampPsp((l) => ({ ...l, uploading: true }));
+    try {
+      const fd = new FormData();
+      fd.append("file", fileObj);
+      const res = await axios.post(`${API}/penggunaan/psp/${lampPsp.sk.id}/lampiran`, fd);
+      toast.success("Lampiran terunggah");
+      setLampPsp((l) => (l ? { ...l, uploading: false,
+        sk: { ...l.sk, lampiran: res.data?.lampiran || [] } } : l));
+      loadPsp();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal mengunggah lampiran");
+      setLampPsp((l) => (l ? { ...l, uploading: false } : l));
+    }
+  };
+
+  const hapusLampiranPsp = async (fileId) => {
+    if (!lampPsp) return;
+    try {
+      await axios.delete(`${API}/penggunaan/psp/${lampPsp.sk.id}/lampiran/${fileId}`);
+      toast.success("Lampiran dihapus");
+      setLampPsp((l) => (l ? { ...l,
+        sk: { ...l.sk,
+          lampiran: (l.sk.lampiran || []).filter((x) => x.file_id !== fileId) } } : l));
+      loadPsp();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal menghapus lampiran");
     }
   };
 
@@ -383,6 +419,12 @@ export default function PenggunaanPage({ user, onBack }) {
                       </span>
                       <p className="text-xs font-semibold text-foreground flex-1 min-w-[120px] truncate">{sk.nomor_sk}</p>
                       <span className="text-[11px] text-muted-foreground">{sk.tanggal_sk} · {(sk.aset || []).length} aset</span>
+                      <button type="button" aria-label="Lampiran SK"
+                        onClick={() => setLampPsp({ sk, uploading: false })}
+                        className="h-7 w-7 rounded-lg border border-border text-foreground/70 flex items-center justify-center hover:bg-muted min-h-0 min-w-0"
+                        data-testid={`penggunaan-psp-lampiran-${sk.id}`}>
+                        <Paperclip className="w-3 h-3" />
+                      </button>
                       {isAdmin && (
                         <button type="button" aria-label="Hapus SK" onClick={() => hapusPsp(sk)}
                           className="h-7 w-7 rounded-lg border border-border text-red-500 flex items-center justify-center hover:bg-red-500/10 min-h-0 min-w-0">
@@ -506,6 +548,50 @@ export default function PenggunaanPage({ user, onBack }) {
               {formPsp?.saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <ScrollText className="w-4 h-4 mr-1.5" />}Catat SK
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog lampiran SK PSP (arsip scan SK + dokumen pendukung) ── */}
+      <Dialog open={!!lampPsp} onOpenChange={(o) => { if (!o) setLampPsp(null); }}>
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Lampiran SK Penetapan Penggunaan</DialogTitle>
+            <DialogDescription className="text-xs">
+              {lampPsp && `${lampPsp.sk.nomor_sk} (${lampPsp.sk.tanggal_sk}). Scan SK PSP / dokumen pendukung (PDF/JPG/PNG, maks 10MB, 10 berkas).`}
+            </DialogDescription>
+          </DialogHeader>
+          <input ref={lampPspInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) unggahLampiranPsp(f); }} />
+          <Button size="sm" variant="outline" className="h-8 text-xs min-h-0 self-start"
+            disabled={lampPsp?.uploading || (lampPsp?.sk?.lampiran || []).length >= 10}
+            onClick={() => lampPspInputRef.current?.click()} data-testid="penggunaan-psp-lampiran-unggah">
+            {lampPsp?.uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <Upload className="w-3.5 h-3.5 mr-1.5" />}
+            Unggah Berkas
+          </Button>
+          {(lampPsp?.sk?.lampiran || []).length === 0 ? (
+            <p className="text-xs text-muted-foreground text-center py-4">Belum ada lampiran.</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {(lampPsp?.sk?.lampiran || []).map((f) => (
+                <li key={f.file_id} className="rounded-lg border border-border p-2 flex items-center gap-2">
+                  <button type="button"
+                    onClick={() => window.open(authMediaUrl(`${API}/penggunaan/psp/${lampPsp.sk.id}/lampiran/${f.file_id}`), "_blank", "noopener")}
+                    className="min-w-0 flex-1 text-left hover:underline">
+                    <span className="block text-xs font-semibold text-foreground truncate">{f.filename}</span>
+                    <span className="block text-[10px] text-muted-foreground">
+                      {String(f.tanggal || "").slice(0, 10)} · oleh {f.oleh}
+                    </span>
+                  </button>
+                  {isAdmin && (
+                    <button type="button" aria-label="Hapus lampiran" onClick={() => hapusLampiranPsp(f.file_id)}
+                      className="h-7 w-7 rounded-lg border border-border text-red-500 flex items-center justify-center hover:bg-red-500/10 flex-shrink-0 min-h-0 min-w-0">
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
         </DialogContent>
       </Dialog>
 

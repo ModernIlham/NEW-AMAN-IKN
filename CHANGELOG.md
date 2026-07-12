@@ -48,6 +48,13 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#137] Arsip scan SK PSP (lampiran register penetapan) — 2026-07-12
+
+- **Lampiran per SK PSP** (PMK 40/2024): scan SK penetapan + dokumen
+  pendukung (pola #131/#132/#134/#135 — GridFS, tautan ber-token,
+  hapus admin, bersih saat SK dihapus); tombol klip + dialog di bagian
+  PSP halaman Penggunaan.
+
 ## [#136] Konsolidasi dokumentasi #134–#135 — 2026-07-12
 
 - **Dokumentasi saja**: README blok Progres Fase 4 (arsip berkas
