@@ -270,9 +270,9 @@ export const SIKLUS_MODULES = [
     id: "pengamanan",
     nama: "Pengamanan",
     urutan: 7,
-    status: "segera",
+    status: "sebagian",
     fase: 3,
-    ringkas: "Pengamanan fisik, administrasi, hukum + asuransi BMN.",
+    ringkas: "Dasbor tertib administrasi (kelengkapan foto/register/lokasi/pengguna/BAST) + pantau sengketa sudah bisa dibuka.",
     deskripsi:
       "Pengamanan BMN pada tiga lapis sesuai diagram resmi: Fisik (penjagaan, stiker, "
       + "pagar), Administrasi (kelengkapan dokumen & pencatatan), dan Hukum (sertifikat, "
