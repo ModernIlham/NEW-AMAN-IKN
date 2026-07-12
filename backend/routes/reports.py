@@ -1327,6 +1327,122 @@ async def generate_rhi_pdf(activity_id: str, _user: dict = Depends(require_user_
 
 
 # ============================================================================
+# DBKP PDF — Daftar Barang Kuasa Pengguna (modul Pembukuan, PMK 181/2016)
+# ============================================================================
+
+@reports_router.get("/inventory-activities/{activity_id}/dbkp-pdf")
+async def generate_dbkp_pdf(activity_id: str, _user: dict = Depends(require_user_or_query_token)):
+    """DBKP per golongan barang — pisah intra/ekstrakomptabel.
+
+    Langkah pertama modul Pembukuan (pustaka §2.1): rekap barang per
+    GOLONGAN (digit pertama kode) dengan pemilahan INTRAKOMPTABEL vs
+    EKSTRAKOMPTABEL menurut ambang kapitalisasi PMK 181 (peralatan &
+    mesin ≥ Rp1 jt; gedung & bangunan ≥ Rp25 jt; golongan lain selalu
+    intra). Uraian golongan diambil dari referensi kodefikasi (fallback
+    daftar golongan standar).
+    """
+    from reportlab.platypus import Table, Paragraph, Spacer
+    from reportlab.lib.units import mm as rl_mm
+    from kodefikasi_utils import GOLONGAN_DEFAULTS
+    from pembukuan_utils import AMBANG_KAPITALISASI_DEFAULT, build_dbkp_rows
+
+    activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
+    if not activity:
+        raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+
+    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    assets = await db.assets.find(
+        {"activity_id": activity_id},
+        {"_id": 0, "asset_code": 1, "purchase_price": 1},
+    ).to_list(100000)
+
+    # Uraian golongan: referensi kodefikasi (level 1) menimpa default standar
+    uraian_map = {k: u for k, u in GOLONGAN_DEFAULTS}
+    async for k in db.kodefikasi.find({"level": 1}, {"_id": 0, "kode": 1, "uraian": 1}):
+        if k.get("uraian"):
+            uraian_map[k["kode"]] = k["uraian"]
+
+    rows, total = build_dbkp_rows(assets, uraian_map)
+
+    def fmt_rp(val):
+        try: return f"{int(val):,}".replace(",", ".")
+        except (ValueError, TypeError, OverflowError): return "0"
+
+    buffer = io.BytesIO()
+    doc = _std_doc(buffer, landscape_mode=True)
+    st = _get_report_styles()
+    cell_style = st['Cell']
+    cell_center = st['CellCenter']
+    cell_right = st['CellRight']
+    header_style = st['TableHeader']
+
+    elements = []
+    elements.extend(_kop_surat_flowables(settings, doc.width))
+    elements.extend(_title_block("DAFTAR BARANG KUASA PENGGUNA (DBKP)\nPER GOLONGAN BARANG"))
+
+    ident = _activity_identity(activity, settings)
+    elements.append(Paragraph(f"Satuan Kerja: {ident['satker_name']}", st['Meta']))
+    elements.append(Paragraph(
+        f"Kegiatan: {activity.get('nama_kegiatan') or '-'} | Periode: {_fmt_tanggal_id(activity.get('tanggal_mulai')) or '-'} s.d. {_fmt_tanggal_id(activity.get('tanggal_selesai')) or '-'}",
+        st['Meta']))
+    elements.append(Spacer(1, 4*rl_mm))
+
+    headers = ["Gol.", "Uraian Golongan",
+               "Jml\nIntra", "Nilai Intra\n(Rp)",
+               "Jml\nEkstra", "Nilai Ekstra\n(Rp)",
+               "Jml\nTotal", "Nilai Total\n(Rp)"]
+    table_data = [[Paragraph(h.replace("\n", "<br/>"), header_style) for h in headers]]
+    for r in rows:
+        table_data.append([
+            Paragraph(r["golongan"], cell_center),
+            Paragraph(r["uraian"], cell_style),
+            Paragraph(str(r["jumlah_intra"]), cell_center),
+            Paragraph(fmt_rp(r["nilai_intra"]), cell_right),
+            Paragraph(str(r["jumlah_ekstra"]), cell_center),
+            Paragraph(fmt_rp(r["nilai_ekstra"]), cell_right),
+            Paragraph(str(r["jumlah_total"]), cell_center),
+            Paragraph(fmt_rp(r["nilai_total"]), cell_right),
+        ])
+    table_data.append([
+        Paragraph("", cell_center),
+        Paragraph("<b>JUMLAH</b>", cell_style),
+        Paragraph(f"<b>{total['jumlah_intra']}</b>", cell_center),
+        Paragraph(f"<b>{fmt_rp(total['nilai_intra'])}</b>", cell_right),
+        Paragraph(f"<b>{total['jumlah_ekstra']}</b>", cell_center),
+        Paragraph(f"<b>{fmt_rp(total['nilai_ekstra'])}</b>", cell_right),
+        Paragraph(f"<b>{total['jumlah_total']}</b>", cell_center),
+        Paragraph(f"<b>{fmt_rp(total['nilai_total'])}</b>", cell_right),
+    ])
+
+    col_widths = _fit_col_widths([32, 180, 62, 100, 62, 100, 62, 100], doc.width)
+    table = Table(table_data, colWidths=col_widths, repeatRows=1)
+    table.setStyle(_std_table_style(zebra=True, total_row=True))
+    elements.append(table)
+
+    ambang_pm = fmt_rp(AMBANG_KAPITALISASI_DEFAULT.get("3", 0))
+    ambang_gb = fmt_rp(AMBANG_KAPITALISASI_DEFAULT.get("4", 0))
+    elements.append(Spacer(1, 3*rl_mm))
+    elements.append(Paragraph(
+        f"Catatan: pemilahan intrakomptabel/ekstrakomptabel mengikuti nilai satuan minimum kapitalisasi "
+        f"(PMK 181/PMK.06/2016): Peralatan dan Mesin ≥ Rp{ambang_pm}; Gedung dan Bangunan ≥ Rp{ambang_gb}; "
+        f"golongan lainnya dibukukan intrakomptabel tanpa ambang.", st['Meta']))
+
+    elements.append(Spacer(1, 12*rl_mm))
+    elements.extend(_signature_block([
+        {'pre': ['.................., .......................'],
+         'header': 'Kuasa Pengguna Barang,',
+         'nama': ident["kasatker_nama"],
+         'after': [f'NIP. {ident["kasatker_nip"]}']},
+    ], doc.width))
+
+    footer = _page_footer_factory("Daftar Barang Kuasa Pengguna (DBKP) per Golongan")
+    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    buffer.seek(0)
+    return StreamingResponse(buffer, media_type="application/pdf",
+                             headers={"Content-Disposition": f'attachment; filename="DBKP_{activity_id[:8]}.pdf"'})
+
+
+# ============================================================================
 # BAHI PDF
 # ============================================================================
 
@@ -3060,6 +3176,7 @@ BATCH_PDF_MAP = {
     "sptjm": ("SPTJM", generate_sptjm_pdf),
     "surat-koreksi": ("Surat_Koreksi", generate_surat_koreksi_pdf),
     "executive-summary": ("Laporan_Eksekutif", generate_executive_summary_pdf),
+    "dbkp": ("DBKP", generate_dbkp_pdf),
 }
 
 BATCH_DBHI_TYPES = [
