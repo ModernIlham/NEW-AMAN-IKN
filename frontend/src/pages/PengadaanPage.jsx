@@ -45,11 +45,18 @@ export default function PengadaanPage({ user, onBack }) {
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
 
+  // Opsi usulan penganggaran untuk dropdown tautan (#117 ↔ #115)
+  const [opsiAnggaran, setOpsiAnggaran] = useState([]);
+
   const muat = useCallback(() => {
     axios.get(`${API}/pengadaan`)
       .then((r) => setData(r.data))
       .catch(() => toast.error("Gagal memuat register perolehan"))
       .finally(() => setLoading(false));
+    // Daftar usulan penganggaran (opsional — kegagalan tak menahan register)
+    axios.get(`${API}/penganggaran`)
+      .then((r) => setOpsiAnggaran(r.data?.items || []))
+      .catch(() => setOpsiAnggaran([]));
   }, []);
   useEffect(() => { muat(); }, [muat]);
 
@@ -195,7 +202,7 @@ export default function PengadaanPage({ user, onBack }) {
             <Download className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">CSV</span>
           </Button>
           <Button size="sm"
-            onClick={() => setForm({ data: { jenis: "pembelian", pihak: "", nomor_kontrak: "", nomor_bast: "", tanggal_bast: new Date().toISOString().slice(0, 10), keterangan: "" }, barang: [{ ...BARANG_KOSONG }], saving: false })}
+            onClick={() => setForm({ data: { jenis: "pembelian", pihak: "", nomor_kontrak: "", nomor_bast: "", tanggal_bast: new Date().toISOString().slice(0, 10), keterangan: "", penganggaran_id: "" }, barang: [{ ...BARANG_KOSONG }], saving: false })}
             className="bg-orange-600 hover:bg-orange-700 text-white flex-shrink-0" data-testid="pengadaan-tambah">
             <Plus className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">Catat Perolehan</span>
           </Button>
@@ -269,6 +276,13 @@ export default function PengadaanPage({ user, onBack }) {
                         {p.keterangan && ` · ${p.keterangan}`}
                         {` · oleh ${p.created_by}`}
                       </p>
+                      {p.penganggaran_id && (
+                        <p className="text-[11px] text-violet-600 dark:text-violet-400 mt-0.5 truncate" data-testid={`pengadaan-anggaran-${p.id}`}>
+                          Anggaran: {p.penganggaran_uraian || "(usulan)"}
+                          {p.penganggaran_tahun && ` · TA ${p.penganggaran_tahun}`}
+                          {p.penganggaran_nomor_dipa && ` · ${p.penganggaran_nomor_dipa}`}
+                        </p>
+                      )}
                       {/* Checklist dokumen sumber */}
                       <div className="flex flex-wrap gap-1 mt-1.5">
                         {(dokumenWajib[p.jenis] || []).map((k) => {
@@ -374,6 +388,20 @@ export default function PengadaanPage({ user, onBack }) {
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-ket">Keterangan</label>
                 <Input id="pgd-ket" value={form.data.keterangan}
                   onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, keterangan: e.target.value } }))} />
+              </div>
+              <div className="col-span-2">
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-anggaran">Usulan Penganggaran terkait (opsional)</label>
+                <select id="pgd-anggaran" value={form.data.penganggaran_id}
+                  onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, penganggaran_id: e.target.value } }))}
+                  className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground"
+                  data-testid="pengadaan-penganggaran">
+                  <option value="">— Tidak ditautkan —</option>
+                  {opsiAnggaran.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {`${u.tahun_anggaran || "?"} · ${u.uraian || "(tanpa uraian)"}${u.nomor_dipa ? ` · ${u.nomor_dipa}` : ""}`}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="col-span-2 space-y-2">
                 <p className="text-xs font-medium text-foreground">Daftar barang</p>

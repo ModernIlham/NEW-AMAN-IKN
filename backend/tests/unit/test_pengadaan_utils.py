@@ -81,3 +81,20 @@ def test_nilai_dan_rekap():
     assert r["dokumen_lengkap"] == 1          # hanya hibah yang lengkap
     assert r["barang_total"] == 2 and r["belum_tertaut"] == 1
     assert r["ekstrakomptabel"] == 1          # printer 750rb < 1jt
+
+
+def test_snapshot_penganggaran():
+    from pengadaan_utils import snapshot_penganggaran
+    kosong = snapshot_penganggaran(None)
+    assert kosong == {"penganggaran_id": "", "penganggaran_uraian": "",
+                      "penganggaran_nomor_dipa": "", "penganggaran_tahun": ""}
+    assert snapshot_penganggaran({}) == kosong
+    u = {"id": "u1", "uraian": " Genset 100kVA ", "nomor_dipa": "DIPA-1/2027",
+         "tahun_anggaran": "2027", "status": "masuk_dipa"}
+    snap = snapshot_penganggaran(u)
+    assert snap["penganggaran_id"] == "u1"
+    assert snap["penganggaran_uraian"] == "Genset 100kVA"
+    assert snap["penganggaran_nomor_dipa"] == "DIPA-1/2027"
+    assert snap["penganggaran_tahun"] == "2027"
+    # Field asing (status) tidak ikut ke snapshot
+    assert "status" not in snap
