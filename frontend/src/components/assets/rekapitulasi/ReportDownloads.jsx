@@ -47,6 +47,8 @@ const officialReports = [
     btn: "bg-teal-600 hover:bg-teal-700 disabled:bg-teal-300 dark:bg-teal-700 dark:hover:bg-teal-600 dark:disabled:bg-teal-900/50 dark:disabled:text-teal-400" },
   { key: "sp-pelaksanaan", label: "SP Pelaksanaan", icon: FileText,
     btn: "bg-cyan-600 hover:bg-cyan-700 disabled:bg-cyan-300 dark:bg-cyan-700 dark:hover:bg-cyan-600 dark:disabled:bg-cyan-900/50 dark:disabled:text-cyan-400" },
+  { key: "dbkp", label: "DBKP per Golongan", icon: BookOpen,
+    btn: "bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300 dark:bg-violet-700 dark:hover:bg-violet-600 dark:disabled:bg-violet-900/50 dark:disabled:text-violet-400" },
 ];
 
 const supportingDocs = [
@@ -78,6 +80,7 @@ const allBatchItems = [
   { key: "dbhi-berlebih", label: "DBHI Berlebih", group: "dbhi" },
   { key: "dbhi-tidak-ditemukan", label: "DBHI Tidak Ditemukan", group: "dbhi" },
   { key: "dbhi-sengketa", label: "DBHI Sengketa", group: "dbhi" },
+  { key: "dbkp", label: "DBKP per Golongan", group: "resmi" },
   { key: "berita-acara", label: "BA Tidak Ditemukan", group: "pendukung" },
   { key: "sptjm", label: "SPTJM", group: "pendukung" },
   { key: "surat-koreksi", label: "Surat Koreksi", group: "pendukung" },

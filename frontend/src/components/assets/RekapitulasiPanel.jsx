@@ -40,14 +40,14 @@ function RekapitulasiPanel({ activityId, isOpen, onToggle }) {
         "surat-koreksi": "surat-koreksi-pdf", "rhi": "rhi-pdf",
         "bahi": "bahi-pdf", "sp-hasil": "sp-hasil-pdf",
         "sp-pelaksanaan": "sp-pelaksanaan-pdf", "lhi": "lhi-pdf",
-        "executive-summary": "executive-summary-pdf"
+        "executive-summary": "executive-summary-pdf", "dbkp": "dbkp-pdf"
       };
       const filenames = {
         "berita-acara": "Berita_Acara", "sptjm": "SPTJM",
         "surat-koreksi": "Surat_Koreksi", "rhi": "RHI",
         "bahi": "BAHI", "sp-hasil": "SP_Hasil",
         "sp-pelaksanaan": "SP_Pelaksanaan", "lhi": "LHI_Lengkap",
-        "executive-summary": "Laporan_Eksekutif"
+        "executive-summary": "Laporan_Eksekutif", "dbkp": "DBKP"
       };
       const endpoint = endpoints[type];
       if (!endpoint) return;
