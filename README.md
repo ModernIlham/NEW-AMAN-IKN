@@ -72,7 +72,8 @@ terealisasi, nilai per tahap + serapan (PMK 62/2023 + 153/2021)
 Pengadaan — **register perolehan per BAST/kontrak** dengan
 checklist dokumen sumber, tautan barang ke aset master, dan penanda
 ekstrakomptabel PMK 181 (Perpres 16/2018 jo. 46/2025) (#117) +
-**arsip scan berkas per perolehan** (BAST/kontrak/faktur) (#135).
+**arsip scan berkas per perolehan** (BAST/kontrak/faktur) (#135) +
+**ekspor CSV register** (#161).
 Pelaporan Fase 2 juga tuntas inti:
 Posisi BMN di Neraca (#93), rekonsiliasi XLSX (#94), LBKP mutasi (#95),
 Kartu Barang (#97), transaksi massal persediaan (#98).
@@ -89,7 +90,8 @@ PMK 83/2016 (#104) + **tiket usulan berstatus** usul → proses → SK (#106)
 + **arsip scan SK/berkas per usulan** (#134) + **ekspor CSV** (#159)
 · Pemusnahan — **register BA multi-aset** (#110) + **PDF Berita Acara
 siap tanda tangan** (#119) + **usulan penghapusan otomatis per aset BA**
-(#120) + **lampiran bukti pelaksanaan** (#132) · Pemindahtanganan — **register usulan 4 bentuk** dengan dokumen
+(#120) + **lampiran bukti pelaksanaan** (#132) + **ekspor CSV** (#161)
+· Pemindahtanganan — **register usulan 4 bentuk** dengan dokumen
 wajib per tahap + tenggat lelang 6 bulan (PMK 111/2016 jo. 165/2021)
 (#111) + **arsip scan dokumen per usulan** (#138) + **ekspor CSV**
 (#159) · Wasdal — **dasbor pemantauan 5 objek** PMK 207/2021, temuan
