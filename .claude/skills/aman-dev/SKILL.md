@@ -42,6 +42,17 @@ pengelolaan BMN — baca `docs/MASTERPLAN-SIKLUS-BMN.md` sebelum menambah modul.
 6. **Jangan perkecil tombol** di ≤1023px — aturan tap-target 44px global di
    `index.css`. Elemen kecil yang membengkak → beri `min-w-0 min-h-0`.
    (Riwayat lengkap: header CHANGELOG.md.)
+6b. **ATURAN HOVER (sering menggigit — ikon peta #66, tombol Kartu #75):**
+   token `--accent` proyek ini = **BIRU pekat** + `--accent-foreground` =
+   **PUTIH** (bukan abu lembut ala shadcn standar). Konsekuensi:
+   - Hover halus pada tombol/kartu/baris buatan sendiri: pakai
+     `hover:bg-muted` (atau `hover:bg-accent/10`) — JANGAN `hover:bg-accent`
+     polos kecuali sengaja mau biru solid (maka teks harus putih).
+   - `Button variant="ghost"/"outline"` base-nya menyetel
+     `hover:text-accent-foreground` (putih). Bila memberi warna teks kustom
+     (mis. `text-emerald-700`) WAJIB sertakan pasangan `hover:text-*` untuk
+     kedua tema — kalau tidak, teks jadi putih di atas latar terang.
+   - Uji SETIAP elemen interaktif baru di light DAN dark mode sebelum ship.
 7. **Overlay di atas kamera** (z-[120]): pakai elemen native (select, bukan
    Radix portal) di dalam FullCameraSheet.
 8. **Data uji**: `data-testid` untuk elemen interaktif baru.

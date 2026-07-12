@@ -92,7 +92,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
             type="button"
             onClick={toggleDark}
             aria-label={dark ? "Mode terang" : "Mode gelap"}
-            className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-accent flex-shrink-0"
+            className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0"
             data-testid="module-home-theme"
           >
             {dark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
@@ -100,7 +100,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
           <button
             type="button"
             onClick={onLogout}
-            className="h-9 px-3 rounded-lg border border-border text-foreground/80 text-xs font-medium flex items-center gap-1.5 hover:bg-accent flex-shrink-0"
+            className="h-9 px-3 rounded-lg border border-border text-foreground/80 text-xs font-medium flex items-center gap-1.5 hover:bg-muted flex-shrink-0"
             data-testid="module-home-logout"
           >
             <LogOut className="w-4 h-4" />
@@ -170,7 +170,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
                   className={`text-left rounded-xl border p-3 transition-all group ${
                     aktif
                       ? "border-emerald-500/50 bg-emerald-500/5 hover:bg-emerald-500/10 hover:shadow-md"
-                      : "border-border bg-background hover:bg-accent hover:shadow-sm"
+                      : "border-border bg-background hover:bg-muted hover:shadow-sm"
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2 mb-2">
@@ -207,7 +207,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
                   type="button"
                   onClick={() => openModule(mod)}
                   data-testid={`module-card-${mod.id}`}
-                  className="text-left rounded-xl border border-border bg-card p-3 hover:bg-accent hover:shadow-sm transition-all"
+                  className="text-left rounded-xl border border-border bg-card p-3 hover:bg-muted hover:shadow-sm transition-all"
                 >
                   <div className="flex items-center gap-2.5">
                     <span className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center flex-shrink-0 relative">
