@@ -196,6 +196,7 @@ from routes.pemusnahan import pemusnahan_router
 from routes.pemindahtanganan import pemindahtanganan_router
 from routes.wasdal import wasdal_router
 from routes.penganggaran import penganggaran_router
+from routes.pengadaan import pengadaan_router
 
 api_router.include_router(auth_router)
 api_router.include_router(categories_router)
@@ -229,6 +230,7 @@ api_router.include_router(pemusnahan_router)
 api_router.include_router(pemindahtanganan_router)
 api_router.include_router(wasdal_router)
 api_router.include_router(penganggaran_router)
+api_router.include_router(pengadaan_router)
 
 
 # ============================================================================

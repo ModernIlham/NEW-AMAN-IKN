@@ -138,6 +138,9 @@ async def create_indexes() -> None:
         # Register penganggaran: daftar per status/tahun + jalur id
         await db.penganggaran.create_index([("status", 1), ("tahun_anggaran", 1)])
         await db.penganggaran.create_index("id", unique=True)
+        # Register perolehan pengadaan: urut tanggal BAST + jalur id
+        await db.pengadaan.create_index("tanggal_bast")
+        await db.pengadaan.create_index("id", unique=True)
         logger.info("Database indexes created successfully")
     except Exception as e:
         logger.error(f"Error creating indexes: {e}")
