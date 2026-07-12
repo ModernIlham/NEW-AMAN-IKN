@@ -118,7 +118,7 @@ export const PENATAUSAHAAN_SUBMODULES = [
     nama: "Pelaporan",
     status: "sebagian",
     fase: 2,
-    ringkas: "Laporan barang semesteran/tahunan & rekonsiliasi — laporan inventarisasi sudah tersedia.",
+    ringkas: "Hub arsip laporan lintas kegiatan + laporan persediaan sudah bisa dibuka — LBKP & rekonsiliasi menyusul.",
     deskripsi:
       "Pelaporan BMN berkala: Laporan Barang Kuasa Pengguna (LBKP) semesteran & tahunan, "
       + "laporan kondisi barang, serta dukungan rekonsiliasi dengan SIMAK/SAKTI. Saat ini "
