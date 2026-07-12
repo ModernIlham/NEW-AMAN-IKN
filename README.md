@@ -74,7 +74,10 @@ telaah kapitalisasi PMK 181 (#89) + **DHPB PDF** semesteran/tahunan
 **Progres Fase 4 (Juli 2026):** Perencanaan — **kandidat RKBMN
 pemeliharaan** (saringan kelayakan PMK 153/2021 dari kondisi aset +
 riwayat biaya Pemeliharaan) (#99) + **kertas kerja XLSX** siap diisi
-satker untuk dibawa ke SIMAN (#100) · Penganggaran — **register
+satker untuk dibawa ke SIMAN (#100) + **usulan RKBMN per unit
+berstatus** draft → diajukan → disetujui PB → dikirim Pengelola →
+hasil penelaahan, dengan penanda SPTJM/reviu APIP (PMK 153/2021 +
+KMK 128/KM.6/2022) (#179) · Penganggaran — **register
 usulan berstatus** diusulkan → disetujui telaah → masuk DIPA →
 terealisasi, nilai per tahap + serapan (PMK 62/2023 + 153/2021)
 (#115) + **sanding rencana vs realisasi per akun BAS** (#123) +

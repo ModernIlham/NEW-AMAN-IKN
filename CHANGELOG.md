@@ -48,6 +48,12 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#180] Konsolidasi dokumentasi #179 — 2026-07-12
+
+- **Dokumentasi saja**: README Progres Fase 4 + roadmap masterplan +
+  pustaka §13 baris Perencanaan (usulan RKBMN per unit #179; menyusul
+  tinggal sanding SBSK menunggu lampiran PMK 138/2024).
+
 ## [#179] Usulan RKBMN per unit berstatus — 2026-07-12
 
 - **Register usulan RKBMN per unit** (PMK 153/2021 + KMK 128/KM.6/2022):
