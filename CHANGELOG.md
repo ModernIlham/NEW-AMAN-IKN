@@ -48,6 +48,14 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#99] Perencanaan tahap awal: kandidat RKBMN pemeliharaan — 2026-07-12
+
+- **Fase 4 dimulai** — halaman Perencanaan: saringan kelayakan usulan
+  pemeliharaan (PMK 153/2021: Baik/RR layak; rusak berat → jalur hapus;
+  idle → penetapan status) + riwayat biaya per aset dari modul
+  Pemeliharaan (terbesar dulu). Kartu naik Sebagian Aktif; 6 unit test
+  (suite 147 lulus).
+
 ## [#98] Transaksi massal persediaan: satu dokumen banyak barang — 2026-07-12
 
 - **Transaksi Massal** (tombol baru di toolbar): satu bukti untuk ≤100
