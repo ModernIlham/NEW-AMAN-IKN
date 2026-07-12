@@ -48,6 +48,16 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#78] UI Master Persediaan — modul naik Sebagian Aktif — 2026-07-12
+
+- **Halaman Master Persediaan** dari Beranda Modul: cari + chip filter
+  status stok (aman/kritis/habis, dihitung di server), tambah barang
+  (kode '1' 10 digit → nomor urut otomatis; NUP otomatis; satuan baku),
+  edit ber-OCC (If-Match; 409 memuat ulang), hapus admin berkonfirmasi.
+- Kartu "Inventarisasi Persediaan" di Beranda Modul naik status
+  **Sebagian Aktif** dan bisa dimasuki. Transaksi FIFO/gudang/opname
+  menyusul (§7.4).
+
 ## [#77] Master Persediaan — langkah 1 modul Inventarisasi Persediaan — 2026-07-12
 
 - **Master barang persediaan** (`/api/persediaan`): kode wajib berawalan '1'
