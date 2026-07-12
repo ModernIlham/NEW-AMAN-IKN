@@ -20,8 +20,9 @@ from auth_utils import require_admin, require_user
 from db import db
 from persediaan_fields import EDITABLE_FIELD_NAMES
 from persediaan_utils import (
-    KODE_PENUH_LEN, KODE_PREFIX_LEN, SATUAN_BAKU, next_kode_penuh, next_nup,
-    status_stok, validate_kode_persediaan,
+    JENIS_MASUK, KODE_PENUH_LEN, KODE_PREFIX_LEN, SATUAN_BAKU, buat_layer,
+    next_kode_penuh, next_nup, status_stok, validate_kode_persediaan,
+    validate_transaksi_masuk,
 )
 
 persediaan_router = APIRouter()
@@ -68,6 +69,16 @@ def _doc(item: dict) -> dict:
 async def list_satuan(_user: dict = Depends(require_user)):
     """Daftar satuan baku untuk dropdown (referensi, bukan pembatasan keras)."""
     return list(SATUAN_BAKU)
+
+
+# CATATAN URUTAN: route literal HARUS terdaftar sebelum GET /persediaan/{item_id}
+# di bawah — kalau tidak, "jenis-transaksi" tertelan sebagai item_id.
+@persediaan_router.get("/persediaan/jenis-transaksi")
+async def list_jenis_transaksi(_user: dict = Depends(require_user)):
+    """Jenis transaksi masuk (peta 1:1 ke SAKTI) untuk dropdown."""
+    return {
+        "masuk": [{"key": k, "label": v[0], "kode": v[1]} for k, v in JENIS_MASUK.items()],
+    }
 
 
 @persediaan_router.get("/persediaan")
@@ -213,6 +224,116 @@ async def update_persediaan(
             raise HTTPException(status_code=404, detail="Barang persediaan tidak ditemukan")
         raise HTTPException(status_code=409, detail="Versi berubah — muat ulang data lalu simpan lagi")
     return _doc(res)
+
+
+class TransaksiMasukIn(BaseModel):
+    jenis: str = "pembelian"
+    jumlah: int = Field(gt=0)
+    harga_satuan: float = Field(0, ge=0)
+    expired: str = ""            # YYYY-MM-DD; kosong = pakai expired_default
+    no_bukti: str = ""
+    jenis_dokumen: str = ""      # BAST / Kuitansi / Kontrak / SPBy / dll.
+    tgl_dokumen: str = ""
+    no_kontrak: str = ""
+    penyedia: str = ""
+    keterangan: str = ""
+
+
+@persediaan_router.post("/persediaan/{item_id}/masuk")
+async def transaksi_masuk(item_id: str, data: TransaksiMasukIn, user: dict = Depends(require_user)):
+    """Transaksi MASUK: layer FIFO baru + stok naik + jurnal (pustaka §3).
+
+    Pencatatan perpetual: master diperbarui ATOMIK ($push layer + $inc stok
+    + $inc version); jurnal `transaksi_persediaan` menyusul dengan
+    stok_sebelum/sesudah — bila penulisan jurnal gagal, layer dikompensasi
+    (dicabut lagi) supaya master tidak pernah menyimpan stok tanpa jejak.
+    """
+    ok, err = validate_transaksi_masuk(data.jenis, data.jumlah, data.harga_satuan)
+    if not ok:
+        raise HTTPException(status_code=400, detail=err)
+
+    now = datetime.now(timezone.utc)
+    batch_id = str(uuid.uuid4())
+    ref = (data.no_bukti or data.no_kontrak or "").strip()
+
+    # Ambil dulu untuk stok_sebelum + expired_default (best-effort snapshot;
+    # angka resmi stok sebelum/sesudah diambil dari hasil update atomik).
+    item = await db.persediaan.find_one({"id": item_id}, {"_id": 0})
+    if not item:
+        raise HTTPException(status_code=404, detail="Barang persediaan tidak ditemukan")
+
+    expired = (data.expired or item.get("expired_default") or "").strip()
+    layer = buat_layer(batch_id, now.isoformat(), data.jumlah, data.harga_satuan, expired, ref)
+
+    updated = await db.persediaan.find_one_and_update(
+        {"id": item_id},
+        {"$push": {"batches": layer},
+         "$inc": {"stok": int(data.jumlah), "version": 1},
+         "$set": {"updated_at": now.isoformat()}},
+        projection={"_id": 0},
+        return_document=True,
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Barang persediaan tidak ditemukan")
+
+    stok_sesudah = int(updated.get("stok", 0) or 0)
+    jurnal = {
+        "id": str(uuid.uuid4()),
+        "arah": "masuk",
+        "jenis": data.jenis,
+        "jenis_label": JENIS_MASUK[data.jenis][0],
+        "kode_sakti": JENIS_MASUK[data.jenis][1],
+        "persediaan_id": item_id,
+        "kode_barang": updated.get("kode_barang"),
+        "nup": updated.get("nup"),
+        "nama_barang": updated.get("nama_barang"),
+        "batch_id": batch_id,
+        "jumlah": int(data.jumlah),
+        "harga_satuan": float(data.harga_satuan),
+        "total": int(data.jumlah) * float(data.harga_satuan),
+        "stok_sebelum": stok_sesudah - int(data.jumlah),
+        "stok_sesudah": stok_sesudah,
+        "expired": expired,
+        "no_bukti": data.no_bukti.strip(),
+        "jenis_dokumen": data.jenis_dokumen.strip(),
+        "tgl_dokumen": data.tgl_dokumen.strip(),
+        "no_kontrak": data.no_kontrak.strip(),
+        "penyedia": data.penyedia.strip(),
+        "keterangan": data.keterangan.strip(),
+        "petugas": user.get("username") or user.get("user_id") or "-",
+        "timestamp": now.isoformat(),
+    }
+    try:
+        await db.transaksi_persediaan.insert_one({**jurnal})
+    except Exception:
+        # Kompensasi: cabut layer & stok yang barusan masuk — master tidak
+        # boleh menyimpan stok tanpa jejak jurnal.
+        await db.persediaan.update_one(
+            {"id": item_id},
+            {"$pull": {"batches": {"batch_id": batch_id}},
+             "$inc": {"stok": -int(data.jumlah), "version": 1}},
+        )
+        raise HTTPException(status_code=500, detail="Gagal mencatat jurnal — transaksi dibatalkan")
+
+    return {"message": f"{JENIS_MASUK[data.jenis][0]} tercatat", "stok": stok_sesudah,
+            "transaksi": jurnal, "version": updated.get("version")}
+
+
+@persediaan_router.get("/persediaan/{item_id}/riwayat")
+async def riwayat_persediaan(
+    item_id: str,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    _user: dict = Depends(require_user),
+):
+    """Jurnal transaksi sebuah barang, terbaru dulu."""
+    query = {"persediaan_id": item_id}
+    total = await db.transaksi_persediaan.count_documents(query)
+    cursor = (db.transaksi_persediaan.find(query, {"_id": 0})
+              .sort("timestamp", -1).skip((page - 1) * page_size).limit(page_size))
+    items = [x async for x in cursor]
+    return {"items": items, "total": total, "page": page, "page_size": page_size,
+            "total_pages": max(1, -(-total // page_size))}
 
 
 @persediaan_router.delete("/persediaan/{item_id}")
