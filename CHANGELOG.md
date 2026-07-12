@@ -48,6 +48,13 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#104] Penghapusan tahap awal: kandidat usul hapus — 2026-07-12
+
+- **Fase 6 dimulai** — halaman Penghapusan: kandidat dijaring dari
+  inventarisasi per jalur PMK 83/2016 (Tidak Ditemukan → penelusuran +
+  telaah TGR; Rusak Berat → pemusnahan/pemindahtanganan) + nilai
+  perolehan. Kartu naik Sebagian Aktif; 3 unit test (suite 157).
+
 ## [#103] Halaman Penilaian: posisi penyusutan + daftar telaah — 2026-07-12
 
 - **Halaman Penilaian** (dari Beranda Modul): kartu perolehan/akumulasi/
