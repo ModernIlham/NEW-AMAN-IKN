@@ -59,3 +59,43 @@ class TestRekapPemegang:
     def test_kosong(self):
         assert rekap_pemegang([]) == []
         assert rekap_pemegang(None) == []
+
+
+class TestBmnIdle:
+    def test_indikasi_idle(self):
+        from penggunaan_utils import indikasi_idle
+        ya, alasan = indikasi_idle({"status": "Nonaktif", "user": "Budi"})
+        assert ya and "Nonaktif" in alasan
+        ya, alasan = indikasi_idle({"status": "Aktif", "user": " "})
+        assert ya and "pengguna" in alasan
+        # Tidak Ditemukan bukan jalur idle (jalurnya penelusuran/TGR)
+        ya, _ = indikasi_idle({"status": "Nonaktif", "user": "",
+                               "inventory_status": "Tidak Ditemukan"})
+        assert not ya
+        ya, _ = indikasi_idle({"status": "Aktif", "user": "Budi"})
+        assert not ya
+
+    def test_transisi_dokumen_wajib(self):
+        from penggunaan_utils import (
+            STATUS_IDLE, TRANSISI_IDLE, validate_transisi_idle,
+        )
+        assert validate_transisi_idle("klarifikasi", "digunakan_kembali", {}) == []
+        assert any("usulan" in e for e in
+                   validate_transisi_idle("klarifikasi", "usul_serah", {}))
+        assert validate_transisi_idle(
+            "klarifikasi", "usul_serah", {"nomor_usulan": "S-1/2026"}) == []
+        assert any("BAST" in e for e in
+                   validate_transisi_idle("usul_serah", "diserahkan", {}))
+        assert any("tidak sah" in e for e in
+                   validate_transisi_idle("klarifikasi", "diserahkan", {}))
+        assert TRANSISI_IDLE["diserahkan"] == set()
+        for dari, tujuan in TRANSISI_IDLE.items():
+            assert dari in STATUS_IDLE and tujuan <= set(STATUS_IDLE)
+
+    def test_rekap_idle(self):
+        from penggunaan_utils import rekap_idle
+        r = rekap_idle([{"asset_id": "a1"}, {"asset_id": "a2"}],
+                       [{"status": "klarifikasi"}, {"status": "diserahkan"}])
+        assert r["kandidat"] == 2 and r["tiket"] == 2
+        assert r["per_status"]["klarifikasi"] == 1
+        assert r["per_status"]["diserahkan"] == 1

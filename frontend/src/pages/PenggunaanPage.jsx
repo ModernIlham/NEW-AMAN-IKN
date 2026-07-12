@@ -18,9 +18,13 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 /**
  * Penggunaan — Fase 3 tahap awal: rekap aset per PEMEGANG lintas kegiatan,
  * dibangun dari data pengguna + NIP + BAST yang sudah dicatat modul
- * inventarisasi. PSP/alih status/BMN idle menyusul (PMK 40 & 120/2024).
+ * inventarisasi — plus daftar pantau BMN IDLE (PMK 120/2024): kandidat
+ * otomatis dari status Nonaktif / tanpa pengguna, tiket klarifikasi →
+ * digunakan kembali / usul serah → diserahkan ke Pengelola.
+ * PSP/alih status menyusul (PMK 40/2024).
  */
-export default function PenggunaanPage({ onBack }) {
+export default function PenggunaanPage({ user, onBack }) {
+  const isAdmin = user?.role === "admin";
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [totalLengkap, setTotalLengkap] = useState(0);
@@ -30,6 +34,10 @@ export default function PenggunaanPage({ onBack }) {
   const [loading, setLoading] = useState(true);
   // Dialog daftar aset: {pemegang, rows, loading}
   const [detail, setDetail] = useState(null);
+  // Data BMN idle: {kandidat, tiket, ringkasan, label_status, catatan}
+  const [idle, setIdle] = useState(null);
+  // Dialog transisi idle: {tiket, ke, fields{}, saving}
+  const [trxIdle, setTrxIdle] = useState(null);
   const searchTimer = useRef(null);
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
@@ -52,7 +60,13 @@ export default function PenggunaanPage({ onBack }) {
     }
   }, [search]);
 
-  useEffect(() => { load(1, ""); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const loadIdle = useCallback(() => {
+    axios.get(`${API}/penggunaan/idle`)
+      .then((r) => setIdle(r.data))
+      .catch(() => toast.error("Gagal memuat daftar BMN idle"));
+  }, []);
+
+  useEffect(() => { load(1, ""); loadIdle(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onSearchChange = (v) => {
     setSearch(v);
@@ -71,6 +85,28 @@ export default function PenggunaanPage({ onBack }) {
     } catch {
       toast.error("Gagal memuat aset pemegang");
       setDetail(null);
+    }
+  };
+
+  const bukaKlarifikasi = async (k) => {
+    try {
+      await axios.post(`${API}/penggunaan/idle`, { asset_id: k.asset_id });
+      toast.success("Tiket klarifikasi dibuka");
+      loadIdle();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal membuka tiket");
+    }
+  };
+
+  const kirimTransisiIdle = async (tiket, ke, fields = {}) => {
+    try {
+      await axios.post(`${API}/penggunaan/idle/${tiket.id}/status`, { status: ke, ...fields });
+      toast.success(`Status: ${idle?.label_status?.[ke] || ke}`);
+      setTrxIdle(null);
+      loadIdle();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal mengubah status");
+      setTrxIdle((t) => (t ? { ...t, saving: false } : t));
     }
   };
 
@@ -171,10 +207,141 @@ export default function PenggunaanPage({ onBack }) {
           </div>
         )}
 
+        {/* ── BMN Idle (PMK 120/2024) ── */}
+        {idle && (
+          <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="penggunaan-idle">
+            <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
+              <FileWarning className="w-4 h-4 text-amber-500" />
+              <p className="text-xs font-bold text-foreground flex-1">BMN Idle — Daftar Pantau (PMK 120/2024)</p>
+              <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px] font-semibold">
+                {idle.ringkasan?.kandidat || 0} kandidat
+              </span>
+            </div>
+            {(idle.kandidat || []).length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-5 px-4">
+                Tidak ada indikasi idle — seluruh aset berstatus aktif dan berpengguna.
+              </p>
+            ) : (
+              <ul className="divide-y divide-border/60">
+                {idle.kandidat.slice(0, 50).map((k) => (
+                  <li key={k.asset_id} className="p-3 flex flex-wrap items-center gap-2" data-testid={`penggunaan-idle-${k.asset_id}`}>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-xs font-semibold text-foreground truncate">
+                        {k.asset_name || "-"} <span className="font-mono font-normal text-muted-foreground">({k.asset_code} · {k.NUP})</span>
+                      </span>
+                      <span className="block text-[11px] text-muted-foreground truncate">{k.alasan}{k.location && ` · ${k.location}`}</span>
+                    </span>
+                    {k.tiket ? (
+                      <span className="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-600 dark:text-sky-400 text-[10px] font-semibold">
+                        {idle.label_status?.[k.tiket.status] || k.tiket.status}
+                      </span>
+                    ) : (
+                      <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                        onClick={() => bukaKlarifikasi(k)} data-testid={`penggunaan-idle-klarifikasi-${k.asset_id}`}>
+                        Klarifikasi
+                      </Button>
+                    )}
+                  </li>
+                ))}
+                {(idle.kandidat || []).length > 50 && (
+                  <li className="text-[11px] text-muted-foreground text-center py-2">Menampilkan 50 kandidat pertama.</li>
+                )}
+              </ul>
+            )}
+            {(idle.tiket || []).length > 0 && (
+              <div className="border-t border-border">
+                <p className="px-3 pt-2.5 pb-1 text-[11px] font-semibold text-foreground/80">Tiket penanganan</p>
+                <ul className="divide-y divide-border/60">
+                  {idle.tiket.map((t) => (
+                    <li key={t.id} className="p-3" data-testid={`penggunaan-tiket-${t.id}`}>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-600 dark:text-sky-400 text-[10px] font-semibold">
+                          {idle.label_status?.[t.status] || t.status}
+                        </span>
+                        <p className="text-xs font-semibold text-foreground flex-1 min-w-[120px] truncate">
+                          {t.asset_name} <span className="font-mono font-normal text-muted-foreground">({t.asset_code} · {t.NUP})</span>
+                        </p>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
+                        {t.alasan}
+                        {t.nomor_usulan && ` · Usulan ${t.nomor_usulan}`}
+                        {t.nomor_bast_serah && ` · BAST ${t.nomor_bast_serah}`}
+                        {t.keterangan && ` · ${t.keterangan}`}
+                        {` · oleh ${t.created_by}`}
+                      </p>
+                      {isAdmin && ["klarifikasi", "usul_serah"].includes(t.status) && (
+                        <div className="flex gap-1.5 mt-1.5 flex-wrap">
+                          {t.status === "klarifikasi" && (
+                            <>
+                              <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                                onClick={() => kirimTransisiIdle(t, "digunakan_kembali")}>
+                                Digunakan Kembali
+                              </Button>
+                              <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                                onClick={() => setTrxIdle({ tiket: t, ke: "usul_serah", saving: false, fields: { nomor_usulan: "" } })}
+                                data-testid={`penggunaan-idle-usul-${t.id}`}>
+                                Usul Serah
+                              </Button>
+                            </>
+                          )}
+                          {t.status === "usul_serah" && (
+                            <Button size="sm" className="h-7 text-[11px] min-h-0 bg-emerald-600 hover:bg-emerald-700 text-white"
+                              onClick={() => setTrxIdle({ tiket: t, ke: "diserahkan", saving: false, fields: { nomor_bast_serah: "" } })}
+                              data-testid={`penggunaan-idle-serah-${t.id}`}>
+                              Diserahkan (BAST)
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <p className="px-3 py-2 text-[11px] text-muted-foreground border-t border-border">{idle.catatan}</p>
+          </div>
+        )}
+
         <p className="text-center text-[11px] text-muted-foreground pb-4">
-          PSP, alih status, dan pemantauan BMN idle (PMK 40 & 120/2024) menyusul — masterplan Fase 3.
+          PSP dan alih status penggunaan (PMK 40/2024) menyusul — masterplan Fase 3.
         </p>
       </main>
+
+      {/* ── Dialog transisi tiket idle ── */}
+      <Dialog open={!!trxIdle} onOpenChange={(o) => { if (!o) setTrxIdle(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{idle?.label_status?.[trxIdle?.ke] || trxIdle?.ke}</DialogTitle>
+            <DialogDescription className="text-xs">
+              {trxIdle?.tiket && `${trxIdle.tiket.asset_name} (${trxIdle.tiket.asset_code} · ${trxIdle.tiket.NUP})`}
+            </DialogDescription>
+          </DialogHeader>
+          {trxIdle?.ke === "usul_serah" && (
+            <div>
+              <label className="text-xs font-medium text-foreground block mb-1" htmlFor="idle-usulan">No. Surat Usulan Penyerahan</label>
+              <Input id="idle-usulan" placeholder="S-12/SATKER/2026" value={trxIdle.fields.nomor_usulan}
+                onChange={(e) => setTrxIdle((t) => ({ ...t, fields: { ...t.fields, nomor_usulan: e.target.value } }))}
+                data-testid="penggunaan-idle-nomor-usulan" />
+            </div>
+          )}
+          {trxIdle?.ke === "diserahkan" && (
+            <div>
+              <label className="text-xs font-medium text-foreground block mb-1" htmlFor="idle-bast">No. BAST Penyerahan ke Pengelola</label>
+              <Input id="idle-bast" placeholder="BAST-01/KNL.05/2026" value={trxIdle.fields.nomor_bast_serah}
+                onChange={(e) => setTrxIdle((t) => ({ ...t, fields: { ...t.fields, nomor_bast_serah: e.target.value } }))}
+                data-testid="penggunaan-idle-nomor-bast" />
+            </div>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setTrxIdle(null)}>Batal</Button>
+            <Button disabled={trxIdle?.saving}
+              onClick={() => { setTrxIdle((t) => ({ ...t, saving: true })); kirimTransisiIdle(trxIdle.tiket, trxIdle.ke, trxIdle.fields); }}
+              className="bg-sky-600 hover:bg-sky-700 text-white" data-testid="penggunaan-idle-simpan">
+              Simpan
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Dialog daftar aset pemegang ── */}
       <Dialog open={!!detail} onOpenChange={(o) => { if (!o) setDetail(null); }}>
