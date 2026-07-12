@@ -10,7 +10,7 @@ from persediaan_utils import (
     next_kode_penuh, next_nup, nilai_persediaan_dari_batches,
     parse_import_persediaan_rows, penyesuaian_opname, status_stok,
     stok_dari_batches, validate_kode_persediaan, validate_transaksi_keluar,
-    validate_transaksi_masuk,
+    validate_pindah_gudang, validate_transaksi_masuk,
 )
 
 
@@ -390,3 +390,25 @@ class TestStatusOpnameSemester:
         # Semester I: batas awal 1 Januari
         s = status_opname_semester("2026-01-01", "2026-03-15")
         assert s["sudah"] and s["label"] == "Semester I 2026"
+
+
+class TestPindahGudang:
+    def test_validate(self):
+        assert validate_pindah_gudang("Gudang A", "Gudang B") == (True, "")
+        ok, err = validate_pindah_gudang("Gudang A", "  gudang a ")
+        assert not ok and "sama" in err
+        ok, err = validate_pindah_gudang("Gudang A", "   ")
+        assert not ok and "wajib" in err
+
+    def test_mutasi_periode_abaikan_arah_mutasi(self):
+        rows = [
+            {"persediaan_id": "p1", "arah": "masuk", "jumlah": 10,
+             "total": 100_000, "timestamp": "2026-07-01T00:00:00"},
+            {"persediaan_id": "p1", "arah": "mutasi", "jumlah": 10,
+             "total": 0, "timestamp": "2026-07-05T00:00:00"},
+            {"persediaan_id": "p1", "arah": "keluar", "jumlah": 3,
+             "total": 30_000, "timestamp": "2026-07-10T00:00:00"},
+        ]
+        r = mutasi_periode(rows, "2026-07-01", "2026-07-31")["p1"]
+        assert r["masuk_qty"] == 10 and r["keluar_qty"] == 3
+        assert r["saldo_akhir"] == 7  # pindah gudang tidak mengubah saldo

@@ -5,7 +5,7 @@ import {
   ArrowLeft, Search, Plus, Pencil, Trash2, Loader2, Boxes,
   ChevronLeft, ChevronRight, PackagePlus, PackageMinus, History,
   AlertTriangle, FileDown, ClipboardCheck, ChevronDown, Upload, Download,
-  Layers, X,
+  Layers, X, Warehouse,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -78,6 +78,8 @@ export default function PersediaanPage({ user, onBack }) {
   const [mutasi, setMutasi] = useState(null);
   // Dialog opname: {item, stok_fisik, alasan}; BAOF: {tanggal}
   const [opname, setOpname] = useState(null);
+  // Dialog pindah gudang: {item, lokasi_baru, no_bukti, keterangan, saving}
+  const [pindah, setPindah] = useState(null);
   const [baof, setBaof] = useState(null);
   // Impor master
   const [importing, setImporting] = useState(false);
@@ -162,6 +164,27 @@ export default function PersediaanPage({ user, onBack }) {
   const changeGudang = (g) => {
     setGudang(g);
     load(1, search, status, g);
+  };
+
+  const kirimPindahGudang = async () => {
+    if (!pindah) return;
+    setPindah((p) => ({ ...p, saving: true }));
+    try {
+      const r = await axios.post(`${API}/persediaan/${pindah.item.id}/pindah-gudang`, {
+        lokasi_baru: pindah.lokasi_baru,
+        no_bukti: pindah.no_bukti,
+        keterangan: pindah.keterangan,
+      });
+      toast.success(r.data?.message || "Barang dipindahkan");
+      setPindah(null);
+      load(page, search, status, gudang);
+      axios.get(`${API}/persediaan/gudang/daftar`)
+        .then((res) => setDaftarGudang(res.data?.items || []))
+        .catch(() => {});
+    } catch (err) {
+      toast.error(getApiError(err, "Gagal memindahkan barang"));
+      setPindah((p) => (p ? { ...p, saving: false } : p));
+    }
   };
 
   const setField = (k, v) => setForm((f) => ({ ...f, data: { ...f.data, [k]: v } }));
@@ -643,6 +666,16 @@ export default function PersediaanPage({ user, onBack }) {
                         </button>
                         <button
                           type="button"
+                          onClick={() => setPindah({ item: it, lokasi_baru: "", no_bukti: "", keterangan: "", saving: false })}
+                          aria-label={`Pindah gudang ${it.nama_barang}`}
+                          title="Pindah Lokasi/Gudang (ber-jurnal)"
+                          className="p-1.5 rounded-md text-sky-600 dark:text-sky-400 hover:bg-sky-500/10 min-w-0 min-h-0"
+                          data-testid={`persediaan-pindah-${it.kode_barang}-${it.nup}`}
+                        >
+                          <Warehouse className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => openRiwayat(it)}
                           aria-label={`Riwayat ${it.nama_barang}`}
                           title="Riwayat transaksi"
@@ -1062,6 +1095,46 @@ export default function PersediaanPage({ user, onBack }) {
       </Dialog>
 
       {/* ── Dialog riwayat transaksi ── */}
+      {/* ── Dialog pindah gudang (ber-jurnal) ── */}
+      <Dialog open={!!pindah} onOpenChange={(o) => { if (!o) setPindah(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Pindah Lokasi/Gudang</DialogTitle>
+            <DialogDescription className="text-xs">
+              {pindah && `${pindah.item.nama_barang} (${pindah.item.kode_barang} · NUP ${pindah.item.nup}) — lokasi saat ini: ${pindah.item.lokasi || "—"}. Stok & layer FIFO tidak berubah; perpindahan tercatat di jurnal.`}
+            </DialogDescription>
+          </DialogHeader>
+          <div>
+            <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pindah-lokasi">Lokasi/Gudang tujuan</label>
+            <Input id="pindah-lokasi" list="pindah-daftar-gudang" placeholder="mis. Gudang Cabang"
+              value={pindah?.lokasi_baru || ""}
+              onChange={(e) => setPindah((p) => ({ ...p, lokasi_baru: e.target.value }))}
+              data-testid="persediaan-pindah-lokasi" />
+            <datalist id="pindah-daftar-gudang">
+              {daftarGudang.map((g) => <option key={g} value={g} />)}
+            </datalist>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pindah-bukti">No. Bukti (opsional)</label>
+            <Input id="pindah-bukti" value={pindah?.no_bukti || ""}
+              onChange={(e) => setPindah((p) => ({ ...p, no_bukti: e.target.value }))} />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pindah-ket">Keterangan (opsional)</label>
+            <Input id="pindah-ket" value={pindah?.keterangan || ""}
+              onChange={(e) => setPindah((p) => ({ ...p, keterangan: e.target.value }))} />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setPindah(null)}>Batal</Button>
+            <Button onClick={kirimPindahGudang}
+              disabled={pindah?.saving || !pindah?.lokasi_baru?.trim()}
+              className="bg-sky-600 hover:bg-sky-700 text-white" data-testid="persediaan-pindah-simpan">
+              {pindah?.saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Warehouse className="w-4 h-4 mr-1.5" />}Pindahkan
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={!!riwayat} onOpenChange={(o) => { if (!o) setRiwayat(null); }}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
@@ -1090,15 +1163,25 @@ export default function PersediaanPage({ user, onBack }) {
               {riwayat.rows.map((t) => (
                 <div key={t.id} className="rounded-lg border border-border p-2.5 text-xs" data-testid={`riwayat-item-${t.id}`}>
                   <div className="flex items-center justify-between gap-2">
-                    <span className={`px-2 py-0.5 rounded-full font-semibold ${t.arah === "masuk" ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" : "bg-red-500/15 text-red-600 dark:text-red-400"}`}>
-                      {t.jenis_label} ({t.kode_sakti})
+                    <span className={`px-2 py-0.5 rounded-full font-semibold ${
+                      t.arah === "masuk" ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                        : t.arah === "mutasi" ? "bg-sky-500/15 text-sky-600 dark:text-sky-400"
+                          : "bg-red-500/15 text-red-600 dark:text-red-400"}`}>
+                      {t.jenis_label}{t.kode_sakti ? ` (${t.kode_sakti})` : ""}
                     </span>
                     <span className="text-muted-foreground">{(t.timestamp || "").slice(0, 16).replace("T", " ")}</span>
                   </div>
-                  <p className="mt-1.5 text-foreground">
-                    {t.arah === "masuk" ? "+" : "−"}{t.jumlah} × {fmtRp(t.harga_satuan)} = <b>{fmtRp(t.total)}</b>
-                    <span className="text-muted-foreground"> · stok {t.stok_sebelum} → {t.stok_sesudah}</span>
-                  </p>
+                  {t.arah === "mutasi" ? (
+                    <p className="mt-1.5 text-foreground">
+                      {t.lokasi_dari || "—"} → <b>{t.lokasi_ke || "—"}</b>
+                      <span className="text-muted-foreground"> · stok tetap {t.stok_sesudah}</span>
+                    </p>
+                  ) : (
+                    <p className="mt-1.5 text-foreground">
+                      {t.arah === "masuk" ? "+" : "−"}{t.jumlah} × {fmtRp(t.harga_satuan)} = <b>{fmtRp(t.total)}</b>
+                      <span className="text-muted-foreground"> · stok {t.stok_sebelum} → {t.stok_sesudah}</span>
+                    </p>
+                  )}
                   {(t.no_bukti || t.penyedia || t.keterangan) && (
                     <p className="mt-1 text-muted-foreground">
                       {[t.no_bukti && `Bukti: ${t.no_bukti}`, t.penyedia && `Penyedia: ${t.penyedia}`, t.keterangan]

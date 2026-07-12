@@ -187,6 +187,17 @@ def validate_transaksi_masuk(jenis: str, jumlah, harga_satuan):
     return True, ""
 
 
+def validate_pindah_gudang(lokasi_lama, lokasi_baru):
+    """(ok, err) — lokasi baru wajib terisi dan berbeda dari lokasi lama
+    (perbandingan abaikan kapital & spasi tepi)."""
+    baru = str(lokasi_baru or "").strip()
+    if not baru:
+        return False, "Lokasi/Gudang tujuan wajib diisi"
+    if baru.casefold() == str(lokasi_lama or "").strip().casefold():
+        return False, "Lokasi/Gudang tujuan sama dengan lokasi saat ini"
+    return True, ""
+
+
 def buat_layer(batch_id: str, tanggal_iso: str, jumlah: int, harga_satuan: float,
                expired: str = "", ref: str = "") -> dict:
     """Layer FIFO baru — bentuk baku yang dibaca stok/nilai_dari_batches."""
@@ -330,6 +341,8 @@ def mutasi_periode(jurnal_rows, dari_iso: str, sampai_iso: str):
             "masuk_qty": 0, "masuk_nilai": 0.0,
             "keluar_qty": 0, "keluar_nilai": 0.0,
         })
+        if arah not in ("masuk", "keluar"):
+            continue  # mutasi lokasi (pindah gudang) tidak mengubah saldo
         if tgl < dari:
             e["saldo_awal"] += qty if arah == "masuk" else -qty
         elif tgl <= sampai:
