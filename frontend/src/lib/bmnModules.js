@@ -259,11 +259,13 @@ export const SIKLUS_MODULES = [
       "Pemanfaatan BMN oleh pihak lain sesuai PMK No. 115/PMK.06/2020: Sewa, Pinjam Pakai, "
       + "Kerjasama Pemanfaatan (KSP), Bangun Guna Serah (BGS), Bangun Serah Guna (BSG), "
       + "Kerjasama Penyediaan Infrastruktur (KSPI), dan Kerjasama Terbatas Untuk Pembiayaan "
-      + "Infrastruktur (KETUPI) — termasuk Pemanfaatan dengan Fasilitas (PDF, PMK 18 Tahun "
-      + "2024), dengan jadwal jatuh tempo dan pemantauan PNBP.",
+      + "Infrastruktur (KETUPI) — dengan jadwal jatuh tempo dan pemantauan PNBP. Perjanjian "
+      + "KSP/BGS/BSG dapat lahir dari fasilitas penyiapan & pelaksanaan transaksi "
+      + "(PMK 18 Tahun 2024; khusus IKN: PMK 139/PMK.08/2022) — pendampingan, bukan bentuk baru.",
     dasarHukum: [
       "PMK No. 115/PMK.06/2020 — Pemanfaatan BMN",
-      "PMK 18 Tahun 2024 — Pemanfaatan dengan Fasilitas (PDF)",
+      "PMK 18 Tahun 2024 — Fasilitas Penyiapan & Pelaksanaan Transaksi Pemanfaatan BMN",
+      "PMK 139/PMK.08/2022 — Fasilitas transaksi pemanfaatan/pemindahtanganan BMN dalam rangka IKN",
     ],
     fitur: [
       "✅ Registrasi perjanjian per bentuk: Sewa / Pinjam Pakai / KSP / BGS / BSG / KSPI / KETUPI",
@@ -272,7 +274,7 @@ export const SIKLUS_MODULES = [
       "✅ Ekspor CSV register perjanjian (status + rekap kontribusi + jumlah lampiran)",
       "✅ Arsip scan dokumen per perjanjian (persetujuan/perjanjian/bukti setor — PDF/gambar)",
       "✅ Lampiran wasdal per perjanjian (laporan monitoring/BA peninjauan lapangan — arsip terpisah)",
-      "Pemanfaatan dengan Fasilitas (PDF, PMK 18/2024) — menyusul",
+      "✅ Atribut fasilitas transaksi (PMK 18/2024 / PMK 139/2022 IKN) pada perjanjian KSP/BGS-BSG",
     ],
     integrasi: ["Status pemanfaatan tampil di detail aset & laporan"],
   },

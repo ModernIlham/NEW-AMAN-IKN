@@ -22,7 +22,7 @@
 | Kebijakan akuntansi pemerintah pusat | PMK 225/2019 → **PMK 234/2020 (FIFO mulai TA 2021)** → 231/2022 jo. 57/2023 → **PMK 100/2025** (LK TA 2025) | Bab VI = Kebijakan Akuntansi Persediaan [redaksi FIFO di PMK 100/2025 perlu verifikasi] |
 | Standar akuntansi persediaan | **PSAP 05** (PP 71/2010) | Perpetual/periodik; FIFO/rata-rata; harga terakhir hanya bila tidak material |
 | Penggunaan | PMK 40/2024; BMN idle PMK 120/2024 | Lihat diagram siklus resmi |
-| Pemanfaatan | PMK 115/PMK.06/2020; PDF PMK 18/2024 | — |
+| Pemanfaatan | PMK 115/PMK.06/2020; fasilitas transaksi PMK 18/2024 (+ PMK 139/PMK.08/2022 khusus IKN) | — |
 | Pemindahtanganan | PMK 111/PMK.06/2016 jo. 165/PMK.06/2021 | — |
 | Pemusnahan & Penghapusan | PMK 83/PMK.06/2016 | — |
 | Wasdal | PMK 207/PMK.06/2021 | Laporan wasdal via SIMAN — domain terpisah dari LBKP |
@@ -333,6 +333,25 @@ mencabut PMK 78/2014, 164/2014, 57/2016). **PMK 18/2024 BUKAN pengganti**
 market sounding, pendampingan tender) bagi PJPB. KETUPI = bentuk ke-6
 sejak PP 28/2020 (operasional a.l. KMK 361/KMK.6/2024).
 
+**6.a Fasilitas transaksi pemanfaatan (riset #190).** Judul resmi PMK 18
+Tahun 2024: "Tata Cara Pemberian **Fasilitas** Penyiapan dan Pelaksanaan
+Transaksi Pemanfaatan BMN" (BN 2024/201) — "Fasilitas" = bantuan/dukungan
+Menteri Keuangan (domain **DJPPR/PDPPI**, bukan DJKN) kepada
+**Penanggung Jawab Pemanfaatan BMN (PJPB)**, analog Project Development
+Facility (PDF) pada rezim KPBU (PMK 180/PMK.08/2020). **BUKAN bentuk
+pemanfaatan ke-7** — bentuk tetap 6 sesuai PP 27/2014 jo. 28/2020 +
+PMK 115/2020, dan fasilitas tidak menimbulkan PNBP baru (pendanaan APBN).
+Alur: permohonan PJPB → penetapan Menteri (pelaksana dapat BUMN
+penugasan) → tahap penyiapan (Kajian Peningkatan Nilai BMN, Kajian
+Rekomendasi Transaksi, market sounding) → tahap pelaksanaan transaksi
+bila rekomendasi **KSP/BGS/BSG** (pendampingan tender s.d. tanda tangan
+perjanjian + pemantauan kewajiban awal mitra) → berakhir (tujuan
+tercapai/jangka habis/diakhiri Menteri). Khusus aset lingkup **IKN**
+berlaku fasilitas serupa **PMK 139/PMK.08/2022** (pelaksana PT PII,
+berjangka s.d. 2032). Transaksi hasil fasilitas tetap tunduk penuh pada
+PMK 115/2020. Rincian pasal belum terverifikasi dari teks resmi (§14
+butir 24).
+
 **Enam bentuk + jangka maksimal:** Sewa 5 th dapat diperpanjang (mitra:
 badan usaha/perorangan; periodesitas jam-hari-bulan-tahun) · Pinjam Pakai
 5 th (mitra HANYA Pemda/Pemdes; tanpa imbalan; perpanjangan diajukan ≥2
@@ -360,8 +379,9 @@ entitas per perjanjian (bentuk, objek BMN, mitra, persetujuan Pengelola,
 perjanjian, nilai, NTPN, periode); status "aktif" HANYA bila nomor
 persetujuan + perjanjian terisi (sewa: + NTPN) — mencegah dua temuan
 tersering secara struktural; peringatan jatuh tempo H-60 (syarat
-perpanjangan ≥2 bulan); pengingat kontribusi tahunan & laporan wasdal
-menyusul.
+perpanjangan ≥2 bulan); pengingat kontribusi tahunan (#121); lampiran
+wasdal per perjanjian (#188); atribut fasilitas transaksi PMK 18/2024 /
+PMK 139/2022 pada perjanjian KSP/BGS-BSG (#190).
 
 ---
 
@@ -731,7 +751,7 @@ fisik; barang untuk pemda/masyarakat tidak segera di-BAST-kan.
 | Perencanaan (F4, ✅ tahap awal) | ✅ Saringan kelayakan RKBMN pemeliharaan (#99) + kertas kerja XLSX (#100); ✅ usulan RKBMN per unit berstatus draft→diajukan→PB→Pengelola→telaah + SPTJM/reviu APIP (#179, PMK 153/2021 + KMK 128/KM.6/2022); menyusul: sanding SBSK (kalkulator menunggu lampiran PMK 138/2024, §14 butir 21) |
 | Penganggaran (F4, ✅ tahap awal) | ✅ Register usulan berstatus diusulkan→telaah→DIPA→realisasi, nilai per tahap + akun BAS 53x/523 + serapan (#115, §9); AMAN pendamping — kanal resmi SIMAN V2/SAKTI/KRISNA; ✅ sanding per akun BAS (#123) + ekspor CSV (#163) + kalender tenggat konfigurabel (#165) + sanding realisasi per triwulan (#186) — daftar "menyusul" Penganggaran tuntas |
 | Pengadaan (F4, ✅ tahap awal) | ✅ Register perolehan per BAST/kontrak (jenis 101/102/103/105) + checklist dokumen sumber + tautan aset + penanda ekstrakomptabel PMK 181 (#117, §10); pencatatan resmi di SAKTI; menyusul: auto-daftar draft aset, lampiran scan, tautan paket ke register penganggaran |
-| Pemanfaatan (F5, ✅ tahap awal) | ✅ Register perjanjian 6 bentuk + penjaga dokumen & jatuh tempo (#108, §6); ✅ pengingat kontribusi tahunan ber-NTPN (#121) + arsip scan per perjanjian (#131) + ekspor CSV (#158) + lampiran wasdal terpisah per perjanjian (laporan monitoring/BA peninjauan, #188); menyusul: Pemanfaatan dengan Fasilitas (PDF, PMK 18/2024) |
+| Pemanfaatan (F5, ✅ tahap awal) | ✅ Register perjanjian 6 bentuk + penjaga dokumen & jatuh tempo (#108, §6); ✅ pengingat kontribusi tahunan ber-NTPN (#121) + arsip scan per perjanjian (#131) + ekspor CSV (#158) + lampiran wasdal terpisah per perjanjian (#188) + atribut fasilitas transaksi PMK 18/2024 / PMK 139/2022 pada KSP/BGS-BSG (#190, §6.a) — daftar "menyusul" Pemanfaatan tuntas (catatan: "PDF" PMK 18/2024 BUKAN bentuk pemanfaatan) |
 | Penilaian (F5, ✅ tahap awal) | ✅ Penyusutan garis lurus semesteran + daftar telaah (#102-#103, §5) + referensi masa manfaat dikelola (#107); ✅ register koreksi nilai & hasil penilaian per aset (revaluasi/LHIP/BA + checklist tercatat SAKTI) (#184, PMK 99/2024 + Perpres 75/2017 + PMK 118/2017 jo. 57/2018 jo. 107/2019); AMAN bukan penilai — nilai wajar sah dari Laporan Penilaian DJKN |
 | Pemindahtanganan (F6, ✅ tahap awal) | ✅ Register usulan 4 bentuk + dokumen wajib per tahap + tenggat lelang (#111, §7); menyusul: tabel konfigurasi jalur persetujuan/ambang nilai, arsip scan |
 | Pemusnahan (F6, ✅ tahap awal) | ✅ Register BA multi-aset, persetujuan wajib, objek RB (#110); ✅ PDF BA siap tanda tangan (#119) + usulan penghapusan otomatis per aset BA (#120) + foto bukti pelaksanaan (#132) + ekspor CSV (#161) — daftar "menyusul" Pemusnahan tuntas |
@@ -814,6 +834,16 @@ fisik; barang untuk pemda/masyarakat tidak segera di-BAST-kan.
     manfaat baru = faktor kondisi × masa manfaat); alur koreksi
     revaluasi SAKTI (push pusat, verifikasi vs LHIP, validasi-approve);
     masa berlaku Laporan Penilaian — semua dari cuplikan (403).
+24. Fasilitas transaksi pemanfaatan (riset Juli 2026, #190): PMK 18
+    Tahun 2024 — tanggal penetapan (24 vs 25 Mar) & berlaku (15 vs 16
+    Apr 2024); rumusan pasal definisi PJPB (Pengguna saja atau juga
+    Pengelola); daftar persyaratan administratif & substantif
+    permohonan; rincian objek yang dapat difasilitasi; jangka waktu
+    maksimal fasilitas + perpanjangan; BUMN Pelaksana yang ditunjuk
+    (PT SMI/PT PII baru terkonfirmasi untuk KPBU & PMK 139/2022-IKN);
+    ada/tidaknya penggantian biaya fasilitas oleh mitra terpilih; isi
+    Ketentuan Penutup (relasi ke PMK 139/PMK.08/2022); kepastian PMK
+    115/2020 masih berlaku per Juli 2026 — semua dari cuplikan (403).
 
 ---
 

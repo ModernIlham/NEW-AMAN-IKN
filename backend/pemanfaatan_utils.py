@@ -146,6 +146,43 @@ def validate_kontribusi(data: dict, p: dict, today_iso: str) -> list:
     return errors
 
 
+# ---------------------------------------------------------------------------
+# Fasilitas penyiapan & pelaksanaan transaksi pemanfaatan (riset #190).
+# PMK 18 Tahun 2024 (umum, domain DJPPR) / PMK 139/PMK.08/2022 (khusus IKN):
+# BUKAN bentuk pemanfaatan ke-7 — hanya pendampingan Menteri Keuangan untuk
+# menyiapkan & mengeksekusi transaksi; skema yang didampingi sampai
+# transaksi hanyalah KSP dan BGS/BSG. Register merekamnya sebagai atribut
+# pendamping opsional pada perjanjian, bukan bentuk tersendiri.
+# ---------------------------------------------------------------------------
+DASAR_FASILITAS = {
+    "tanpa_fasilitas": "Tanpa fasilitas",
+    "pmk_18_2024": "Fasilitas transaksi PMK 18/2024",
+    "pmk_139_2022": "Fasilitas transaksi PMK 139/PMK.08/2022 (IKN)",
+}
+
+# Skema yang dapat lahir dari fasilitas (Kajian Rekomendasi Transaksi)
+BENTUK_DAPAT_FASILITAS = {"ksp", "bgs_bsg"}
+
+
+def validate_fasilitas(data: dict) -> list:
+    """Validasi atribut fasilitas transaksi pada payload perjanjian."""
+    errors = []
+    dasar = str(data.get("dasar_fasilitas") or "tanpa_fasilitas").strip()
+    if dasar not in DASAR_FASILITAS:
+        pilihan = ", ".join(DASAR_FASILITAS)
+        errors.append(f"Dasar fasilitas tidak dikenal (pilihan: {pilihan})")
+        return errors
+    if dasar == "tanpa_fasilitas":
+        return errors
+    if data.get("bentuk") not in BENTUK_DAPAT_FASILITAS:
+        errors.append("Fasilitas transaksi hanya untuk bentuk KSP atau "
+                      "BGS/BSG (PMK 18/2024)")
+    if not str(data.get("nomor_penetapan_fasilitas") or "").strip():
+        errors.append("Nomor penetapan fasilitas wajib diisi bila perjanjian "
+                      "lahir dari fasilitas transaksi")
+    return errors
+
+
 def rekap_pemanfaatan(items, today_iso: str):
     """Ringkasan register: hitung per status & bentuk + total nilai."""
     per_status = {k: 0 for k in LABEL_STATUS_PERJANJIAN}

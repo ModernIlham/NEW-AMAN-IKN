@@ -17,9 +17,10 @@ from auth_utils import require_admin, require_user, require_user_or_query_token
 from db import db, fs_bucket
 from shared_utils import delete_document_from_gridfs, get_document_from_gridfs
 from pemanfaatan_utils import (
-    BENTUK_PEMANFAATAN, LABEL_STATUS_PERJANJIAN, dokumen_kurang,
-    peringatan_kontribusi, rekap_pemanfaatan, status_perjanjian,
-    validate_kontribusi, validate_pemanfaatan,
+    BENTUK_PEMANFAATAN, DASAR_FASILITAS, LABEL_STATUS_PERJANJIAN,
+    dokumen_kurang, peringatan_kontribusi, rekap_pemanfaatan,
+    status_perjanjian, validate_fasilitas, validate_kontribusi,
+    validate_pemanfaatan,
 )
 
 pemanfaatan_router = APIRouter()
@@ -39,6 +40,10 @@ class PemanfaatanIn(BaseModel):
     nomor_perjanjian: str = ""
     ntpn: str = ""                # bukti setor PNBP (wajib utk sewa aktif)
     kontribusi_tahunan: float = 0  # kewajiban PNBP per tahun (0 = tidak ada)
+    # Fasilitas transaksi PMK 18/2024 / PMK 139/2022 (pendamping, opsional)
+    dasar_fasilitas: str = "tanpa_fasilitas"
+    nomor_penetapan_fasilitas: str = ""
+    pelaksana_fasilitas: str = ""  # BUMN penugasan (mis. PT PII utk IKN)
     keterangan: str = ""
 
 
@@ -76,7 +81,8 @@ async def export_pemanfaatan(_user: dict = Depends(require_user)):
                 "nama_aset", "mulai", "berakhir", "status", "nilai",
                 "kontribusi_tahunan", "kontribusi_tercatat_jumlah",
                 "kontribusi_tercatat_total", "nomor_persetujuan",
-                "nomor_perjanjian", "ntpn", "jumlah_lampiran",
+                "nomor_perjanjian", "ntpn", "dasar_fasilitas",
+                "nomor_penetapan_fasilitas", "jumlah_lampiran",
                 "jumlah_lampiran_wasdal", "keterangan", "dibuat_oleh"])
     async for p in db.pemanfaatan.find({}, {"_id": 0}).sort("berakhir", 1):
         kontribusi = p.get("kontribusi") or []
@@ -91,7 +97,11 @@ async def export_pemanfaatan(_user: dict = Depends(require_user)):
             len(kontribusi),
             sum(float(k.get("jumlah") or 0) for k in kontribusi),
             p.get("nomor_persetujuan"), p.get("nomor_perjanjian"),
-            p.get("ntpn"), len(p.get("lampiran") or []),
+            p.get("ntpn"),
+            DASAR_FASILITAS.get(p.get("dasar_fasilitas") or "tanpa_fasilitas",
+                                p.get("dasar_fasilitas")),
+            p.get("nomor_penetapan_fasilitas"),
+            len(p.get("lampiran") or []),
             len(p.get("lampiran_wasdal") or []),
             p.get("keterangan"), p.get("created_by"),
         ])
@@ -113,6 +123,7 @@ async def list_pemanfaatan(_user: dict = Depends(require_user)):
     return {"items": items, "ringkasan": ringkasan,
             "label_status": LABEL_STATUS_PERJANJIAN,
             "label_bentuk": {k: v[0] for k, v in BENTUK_PEMANFAATAN.items()},
+            "label_dasar_fasilitas": DASAR_FASILITAS,
             "catatan": (
                 "Register penatausahaan — persetujuan di Pengelola Barang; "
                 "PNBP disetor mitra langsung ke Kas Negara (PMK 115/2020). "
@@ -124,7 +135,7 @@ async def list_pemanfaatan(_user: dict = Depends(require_user)):
 async def buat_pemanfaatan(payload: PemanfaatanIn, user: dict = Depends(require_user)):
     """Catat satu perjanjian pemanfaatan."""
     data = payload.model_dump()
-    errors = validate_pemanfaatan(data)
+    errors = validate_pemanfaatan(data) + validate_fasilitas(data)
     if errors:
         raise HTTPException(status_code=400, detail="; ".join(errors))
     objek = None
@@ -151,6 +162,9 @@ async def buat_pemanfaatan(payload: PemanfaatanIn, user: dict = Depends(require_
         "nomor_perjanjian": str(data.get("nomor_perjanjian") or "").strip(),
         "ntpn": str(data.get("ntpn") or "").strip(),
         "kontribusi_tahunan": float(data.get("kontribusi_tahunan") or 0),
+        "dasar_fasilitas": str(data.get("dasar_fasilitas") or "tanpa_fasilitas").strip(),
+        "nomor_penetapan_fasilitas": str(data.get("nomor_penetapan_fasilitas") or "").strip(),
+        "pelaksana_fasilitas": str(data.get("pelaksana_fasilitas") or "").strip(),
         "kontribusi": [],
         "lampiran": [],
         "lampiran_wasdal": [],
@@ -168,7 +182,7 @@ async def ubah_pemanfaatan(register_id: str, payload: PemanfaatanIn,
                            user: dict = Depends(require_user)):
     """Perbarui perjanjian (melengkapi dokumen/nilai)."""
     data = payload.model_dump()
-    errors = validate_pemanfaatan(data)
+    errors = validate_pemanfaatan(data) + validate_fasilitas(data)
     if errors:
         raise HTTPException(status_code=400, detail="; ".join(errors))
     update = {k: (str(v).strip() if isinstance(v, str) else v)
