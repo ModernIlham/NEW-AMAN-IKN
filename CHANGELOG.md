@@ -48,6 +48,15 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#108] Pemanfaatan tahap awal: register perjanjian 6 bentuk — 2026-07-12
+
+- **Fase 5 Pemanfaatan dimulai** (bab pustaka §6, PMK 115/2020): register
+  perjanjian Sewa/Pinjam Pakai/KSP/BGS-BSG/KSPI/KETUPI dengan validasi
+  jangka maksimal per bentuk; status Aktif menuntut nomor persetujuan
+  Pengelola + perjanjian (sewa: + NTPN) — pencegah temuan auditor;
+  peringatan jatuh tempo ≤60 hari. Seluruh 13 kartu siklus kini bisa
+  dimasuki. 4 unit test (suite 164).
+
 ## [#107] Referensi masa manfaat dapat dikelola — 2026-07-12
 
 - **Referensi masa manfaat** per kelompok (KMK 295/2019 jo. 266/2023):
