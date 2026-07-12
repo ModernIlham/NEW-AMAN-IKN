@@ -39,6 +39,10 @@ async def create_indexes() -> None:
         await db.assets.create_index("asset_name")
         await db.assets.create_index("category")
         await db.assets.create_index("created_at")
+        # Filter rentang TANGGAL BELI (purchase_date) di daftar aset & ekspor
+        # geo — tanpa indeks, range filter = full collection scan.
+        await db.assets.create_index("purchase_date")
+        await db.assets.create_index([("activity_id", 1), ("purchase_date", 1)])
         await db.assets.create_index("location")
         await db.assets.create_index("serial_number")
         await db.assets.create_index("status")

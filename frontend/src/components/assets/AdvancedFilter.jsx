@@ -202,9 +202,9 @@ const AdvancedFilter = memo(({
               />
             </div>
 
-            {/* Rentang tanggal input aset */}
+            {/* Rentang tanggal beli aset (bukan tanggal input) */}
             <div className="col-span-2">
-              <Label className="text-[10px] text-muted-foreground mb-1 block">Tanggal Input (Dari — Sampai)</Label>
+              <Label className="text-[10px] text-muted-foreground mb-1 block">Tanggal Beli (Dari — Sampai)</Label>
               <div className="flex gap-1">
                 <input
                   type="date"
