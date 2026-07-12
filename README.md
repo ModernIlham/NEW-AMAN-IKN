@@ -95,7 +95,8 @@ Pengadaan — **register perolehan per BAST/kontrak** dengan
 checklist dokumen sumber, tautan barang ke aset master, dan penanda
 ekstrakomptabel PMK 181 (Perpres 16/2018 jo. 46/2025) (#117) +
 **arsip scan berkas per perolehan** (BAST/kontrak/faktur) (#135) +
-**ekspor CSV register** (#161).
+**ekspor CSV register** (#161) + **tautan paket perolehan → usulan
+Penganggaran** (jembatan #117↔#115) (#199).
 Pelaporan Fase 2 juga tuntas inti:
 Posisi BMN di Neraca (#93), rekonsiliasi XLSX (#94), LBKP mutasi (#95),
 Kartu Barang (#97), transaksi massal persediaan (#98).
