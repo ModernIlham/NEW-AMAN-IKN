@@ -48,6 +48,13 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#112] Konsolidasi dokumentasi Fase 6 — 2026-07-12
+
+- **Dokumentasi saja**: masterplan (baris Peta Siklus Pemindahtanganan &
+  Pemusnahan → Sebagian, penanda roadmap Fase 6 diperluas #106/#110/#111),
+  README (intro 11 modul Sebagian Aktif + blok Progres Fase 5–6), dan
+  pustaka §9 (baris implikasi Pemindahtanganan & Pemusnahan).
+
 ## [#111] Pemindahtanganan tahap awal: register usulan 4 bentuk — 2026-07-12
 
 - **Register pemindahtanganan** (bab pustaka §7, PMK 111/2016 jo.
