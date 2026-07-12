@@ -48,6 +48,12 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#158] Ekspor CSV register pemanfaatan — 2026-07-12
+
+- **Ekspor CSV** register perjanjian (kolom lengkap + status turunan +
+  rekap kontribusi tercatat + jumlah lampiran, UTF-8 BOM); tombol CSV
+  di header halaman Pemanfaatan.
+
 ## [#157] Konsolidasi dokumentasi #156 — 2026-07-12
 
 - **Dokumentasi saja**: README blok Progres Fase 5–6 + roadmap
