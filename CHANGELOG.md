@@ -48,6 +48,13 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#129] Register SK penetapan penggunaan (PSP) — 2026-07-12
+
+- **Register SK PSP multi-aset** (PMK 40/2024): 5 jenis penetapan,
+  snapshot aset per SK, rekap per jenis + cakupan aset unik ter-PSP vs
+  total; seksi baru + dialog catat di halaman Penggunaan. 2 unit test
+  (suite 199).
+
 ## [#128] Pengingat opname semesteran persediaan — 2026-07-12
 
 - **Banner pengingat opname fisik** (pustaka §3.3): status per semester
