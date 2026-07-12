@@ -48,6 +48,13 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#135] Lampiran berkas register perolehan — 2026-07-12
+
+- **Arsip berkas per perolehan** (melengkapi checklist #117): scan
+  kontrak/BAPHP/BAST/kuitansi/SP2D (pola lampiran baku); tombol klip +
+  dialog di halaman Pengadaan. Semua register hilir kini punya arsip
+  lampiran konsisten.
+
 ## [#134] Arsip SK penghapusan (lampiran tiket usulan) — 2026-07-12
 
 - **Lampiran per tiket usulan** (PMK 83/2016): scan SK penghapusan +

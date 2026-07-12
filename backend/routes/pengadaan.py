@@ -9,11 +9,13 @@ alat bantu tertib dokumen satker. Pra-isi draft aset baru menyusul.
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from auth_utils import require_admin, require_user
-from db import db
+from auth_utils import require_admin, require_user, require_user_or_query_token
+from db import db, fs_bucket
+from shared_utils import delete_document_from_gridfs, get_document_from_gridfs
 from pengadaan_utils import (
     DOKUMEN_PEROLEHAN, JENIS_PEROLEHAN, LABEL_DOKUMEN_SUMBER,
     dokumen_kurang_perolehan, is_ekstrakomptabel, nilai_perolehan,
@@ -115,6 +117,7 @@ async def buat_perolehan(payload: PerolehanIn, user: dict = Depends(require_user
         "dokumen": {"bast": True,
                     **({"kontrak": True} if str(data.get("nomor_kontrak") or "").strip() else {})},
         "barang": barang_rows,
+        "lampiran_berkas": [],
         "created_by": user.get("username"),
         "created_at": now,
         "updated_at": now,
@@ -170,11 +173,123 @@ async def tautkan_barang(perolehan_id: str, payload: TautkanIn,
     return _enrich(p)
 
 
+# Lampiran berkas per perolehan (scan kontrak/BAPHP/BAST/kuitansi/SP2D
+# — melengkapi checklist dokumen sumber). Pola sama dengan #131/#132/#134.
+_LAMPIRAN_MEDIA = {
+    ".pdf": "application/pdf",
+    ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+    ".png": "image/png", ".webp": "image/webp",
+}
+_MAX_LAMPIRAN_BYTES = 10 * 1024 * 1024
+_MAX_LAMPIRAN = 10
+
+
+def _lampiran_ext(filename: str) -> str:
+    name = (filename or "").lower()
+    for ext in _LAMPIRAN_MEDIA:
+        if name.endswith(ext):
+            return ext
+    return ""
+
+
+@pengadaan_router.post("/pengadaan/{perolehan_id}/lampiran")
+async def unggah_lampiran_perolehan(perolehan_id: str,
+                                    file: UploadFile = File(...),
+                                    user: dict = Depends(require_user)):
+    """Unggah scan dokumen sumber (PDF/gambar, maks 10MB, 10 berkas)."""
+    p = await db.pengadaan.find_one(
+        {"id": perolehan_id}, {"_id": 0, "id": 1, "lampiran_berkas": 1})
+    if not p:
+        raise HTTPException(status_code=404, detail="Perolehan tidak ditemukan")
+    if len(p.get("lampiran_berkas") or []) >= _MAX_LAMPIRAN:
+        raise HTTPException(status_code=400,
+                            detail=f"Maksimal {_MAX_LAMPIRAN} lampiran per perolehan")
+    filename = (file.filename or "dokumen.pdf").strip() or "dokumen.pdf"
+    ext = _lampiran_ext(filename)
+    if not ext:
+        raise HTTPException(status_code=400,
+                            detail="Lampiran harus PDF atau gambar (JPG/PNG/WEBP)")
+    file_bytes = await file.read()
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="File kosong")
+    if len(file_bytes) > _MAX_LAMPIRAN_BYTES:
+        raise HTTPException(status_code=400, detail="Ukuran lampiran maksimal 10MB")
+    if ext == ".pdf" and not file_bytes[:5].startswith(b"%PDF"):
+        raise HTTPException(status_code=400, detail="File bukan PDF yang valid")
+
+    from bson import ObjectId
+    file_id = ObjectId()
+    grid_in = fs_bucket.open_upload_stream_with_id(
+        file_id, filename=filename,
+        metadata={"content_type": _LAMPIRAN_MEDIA[ext], "size": len(file_bytes),
+                  "kind": "pengadaan", "perolehan_id": perolehan_id})
+    await grid_in.write(file_bytes)
+    await grid_in.close()
+
+    entri = {"file_id": str(file_id), "filename": filename,
+             "content_type": _LAMPIRAN_MEDIA[ext],
+             "oleh": user.get("username"),
+             "tanggal": datetime.now(timezone.utc).isoformat()}
+    res = await db.pengadaan.find_one_and_update(
+        {"id": perolehan_id},
+        {"$push": {"lampiran_berkas": entri},
+         "$set": {"updated_at": entri["tanggal"]}},
+        projection={"_id": 0, "lampiran_berkas": 1}, return_document=True)
+    if not res:
+        await delete_document_from_gridfs(str(file_id))
+        raise HTTPException(status_code=404, detail="Perolehan tidak ditemukan")
+    return {"message": "Lampiran terunggah",
+            "lampiran_berkas": res.get("lampiran_berkas") or []}
+
+
+@pengadaan_router.get("/pengadaan/{perolehan_id}/lampiran/{file_id}")
+async def unduh_lampiran_perolehan(perolehan_id: str, file_id: str,
+                                   request: Request,
+                                   _user: dict = Depends(require_user_or_query_token)):
+    """Stream lampiran perolehan (menerima header ATAU ?token)."""
+    p = await db.pengadaan.find_one(
+        {"id": perolehan_id, "lampiran_berkas.file_id": file_id},
+        {"_id": 0, "lampiran_berkas.$": 1})
+    if not p or not p.get("lampiran_berkas"):
+        raise HTTPException(status_code=404, detail="Lampiran tidak ditemukan")
+    meta = p["lampiran_berkas"][0]
+    etag = f'"lampiran-{file_id}"'
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={"ETag": etag})
+    data = await get_document_from_gridfs(file_id)
+    if data is None:
+        raise HTTPException(status_code=404, detail="Berkas tidak ditemukan")
+    return Response(content=data,
+                    media_type=meta.get("content_type") or "application/octet-stream",
+                    headers={"ETag": etag, "Cache-Control": "private, max-age=86400",
+                             "Content-Disposition": f'inline; filename="{meta.get("filename") or "dokumen"}"'})
+
+
+@pengadaan_router.delete("/pengadaan/{perolehan_id}/lampiran/{file_id}")
+async def hapus_lampiran_perolehan(perolehan_id: str, file_id: str,
+                                   _admin: dict = Depends(require_admin)):
+    """Hapus lampiran salah unggah (khusus admin)."""
+    res = await db.pengadaan.update_one(
+        {"id": perolehan_id},
+        {"$pull": {"lampiran_berkas": {"file_id": file_id}},
+         "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Perolehan tidak ditemukan")
+    if res.modified_count:
+        await delete_document_from_gridfs(file_id)
+    return {"ok": True, "file_id": file_id}
+
+
 @pengadaan_router.delete("/pengadaan/{perolehan_id}")
 async def hapus_perolehan(perolehan_id: str,
                           _admin: dict = Depends(require_admin)):
-    """Hapus register perolehan salah input (admin)."""
+    """Hapus register perolehan salah input (admin) + berkas lampirannya."""
+    p = await db.pengadaan.find_one({"id": perolehan_id},
+                                    {"_id": 0, "lampiran_berkas": 1})
     res = await db.pengadaan.delete_one({"id": perolehan_id})
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Perolehan tidak ditemukan")
+    for lamp in (p or {}).get("lampiran_berkas") or []:
+        if lamp.get("file_id"):
+            await delete_document_from_gridfs(lamp["file_id"])
     return {"ok": True, "id": perolehan_id}
