@@ -4,8 +4,9 @@ Menjaga aturan intra/ekstrakomptabel (ambang kapitalisasi PMK 181) dan
 rekap DBKP per golongan tidak bergeser diam-diam.
 """
 from pembukuan_utils import (
-    AMBANG_KAPITALISASI_DEFAULT, build_dbkp_rows, golongan_of,
-    build_lbkp_rows, klasifikasi_komptabel, parse_harga, posisi_neraca,
+    AMBANG_KAPITALISASI_DEFAULT, KONDISI_LKB, build_dbkp_rows,
+    build_lbkp_rows, build_lkb_rows, golongan_of, klasifikasi_komptabel,
+    parse_harga, posisi_neraca,
 )
 
 
@@ -171,3 +172,40 @@ class TestBuildLbkpRows:
         for kelas in ("intra", "ekstra", "gabungan"):
             rows, total = per_kelas[kelas]
             assert rows == [] and total["jumlah_akhir"] == 0
+
+
+class TestBuildLkbRows:
+    def test_rekap_per_kondisi(self):
+        assets = [
+            {"asset_code": "3100102001", "condition": "Baik",
+             "purchase_price": 5_000_000},
+            {"asset_code": "3100102002", "condition": "Rusak Ringan",
+             "purchase_price": 2_000_000},
+            {"asset_code": "3100102003", "condition": "Rusak Berat",
+             "purchase_price": 1_000_000},
+            {"asset_code": "3100102004", "condition": "",
+             "purchase_price": 500_000},
+            {"asset_code": "4010101001", "condition": "Baik",
+             "purchase_price": 300_000_000},
+        ]
+        rows, total = build_lkb_rows(assets, {"3": "Peralatan dan Mesin"})
+        assert KONDISI_LKB == ("Baik", "Rusak Ringan", "Rusak Berat")
+        assert [r["golongan"] for r in rows] == ["3", "4"]
+        pm = rows[0]
+        assert pm["uraian"] == "Peralatan dan Mesin"
+        assert (pm["baik"], pm["rusak_ringan"], pm["rusak_berat"],
+                pm["belum"]) == (1, 1, 1, 1)
+        assert pm["jumlah"] == 4 and pm["nilai"] == 8_500_000
+        assert total["jumlah"] == 5 and total["baik"] == 2
+        assert total["nilai"] == 308_500_000
+
+    def test_kondisi_tak_dikenal_dan_kode_kosong(self):
+        rows, total = build_lkb_rows([
+            {"asset_code": "", "condition": "Hancur", "purchase_price": 10},
+        ])
+        assert rows[0]["golongan"] == "?" and rows[0]["belum"] == 1
+        assert total["jumlah"] == 1
+
+    def test_kosong(self):
+        rows, total = build_lkb_rows([])
+        assert rows == [] and total["jumlah"] == 0 and total["nilai"] == 0

@@ -118,6 +118,11 @@ export default function PelaporanPage({ onBack }) {
             data-testid="pelaporan-rekonsiliasi">
             <FileDown className="w-3.5 h-3.5" />Rekonsiliasi XLSX
           </Button>
+          <Button variant="outline" size="sm" className="gap-1.5"
+            onClick={() => downloadFileWithProgress(`${API}/pembukuan/lkb-pdf`, "Laporan_Kondisi_Barang.pdf", { label: "Laporan Kondisi Barang (LKB)" }).catch(() => {})}
+            data-testid="pelaporan-lkb-kondisi">
+            <FileDown className="w-3.5 h-3.5" />LKB
+          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm" className="gap-1.5" data-testid="pelaporan-lbkp">

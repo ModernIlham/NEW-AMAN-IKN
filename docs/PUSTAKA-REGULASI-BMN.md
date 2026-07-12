@@ -144,6 +144,28 @@ PSP/pemanfaatan/pemindahtanganan/penghapusan/idle/sengketa, kontribusi
 PNBP #121) — AMAN penyiap bahan; dokumen resmi tetap dari SAKTI dan
 finalisasi narasi oleh operator.
 
+#### 2.3b Laporan Kondisi Barang (LKB) — format baku (riset Jul 2026)
+
+- Cetakan resmi SIMAK-BMN/SAKTI kode laporan **LKBT-PKPB1** (SAKTI:
+  modul Aset Tetap, "AstLaporanKondisiBarangUAKPB"); judul "LAPORAN
+  KONDISI BARANG PER {BULAN TAHUN} UNTUK SEMUA KONDISI" (dapat difilter
+  per kondisi) + identitas UAKPB.
+- **Rincian per item/NUP** dikelompokkan di bawah kode-nama sub-sub
+  kelompok barang; kolom terkonfirmasi: Kode Barang, Nama Barang, NUP,
+  Kuantitas, Satuan, Kondisi, Harga Perolehan. Varian agregat B/RR/RB
+  per golongan lazim sebagai tabel ringkasan di CaLBMN, bukan formulir
+  LKB itu sendiri.
+- Kondisi baku hanya 3: **Baik** (utuh & berfungsi), **Rusak Ringan**
+  (utuh, kurang berfungsi; perbaikan ringan tanpa ganti komponen pokok),
+  **Rusak Berat** (tidak utuh/tidak berfungsi; perbaikan besar tidak
+  ekonomis). Perubahan kondisi direkam via transaksi 203 setelah cek
+  fisik per ruangan (basis DBR).
+- Waktu: lampiran wajib LBKP **tahunan** (ke KPKNL ≤15 hari setelah TA
+  berakhir per modul pelatihan — [perlu verifikasi rezim PMK 181]);
+  aplikasi bebas mencetak per bulan berjalan.
+- Tanda tangan: **Penanggung Jawab UAKPB / Kuasa Pengguna Barang**
+  (nama + NIP).
+
 ### 2.4 Organisasi penatausahaan
 
 UAPB (K/L) ⟶ UAPPB-E1 (eselon I) ⟶ UAPPB-W (wilayah) ⟶ **UAKPB (satker —
@@ -602,7 +624,7 @@ fisik; barang untuk pemda/masyarakat tidak segera di-BAST-kan.
 | Kodefikasi (✅) | 5 level dari panjang prefix; golongan 1 vs 2–8; referensi dapat diimpor/diperbarui — jangan hard-code |
 | Pembukuan (F2) | DBKP per golongan; flag intra/ekstra dari ambang kapitalisasi ber-parameter; Ruangan+DBR/DBL; KIB 6 jenis; barang bersejarah qty-saja |
 | Persediaan (F2) | Perpetual + FIFO per layer; enum transaksi peta SAKTI; dua tahap usang/rusak; operator–approver; opname semesteran + BAOF + kunci back-date; mapping akun 1171xx |
-| Pelaporan (F2, ✅ inti) | ✅ Hub arsip (#86) + Posisi BMN di Neraca (#93) + rekonsiliasi XLSX (#94) + LBKP mutasi per golongan (#95) + CaLBMN pra-isi bab I–V (§2.3a); menyusul: periode ber-kunci, LKB, tenggat konfigurabel |
+| Pelaporan (F2, ✅ inti) | ✅ Hub arsip (#86) + Posisi BMN di Neraca (#93) + rekonsiliasi XLSX (#94) + LBKP mutasi per golongan (#95) + CaLBMN pra-isi bab I–V (§2.3a) + LKB per NUP + ringkasan B/RR/RB (§2.3b); menyusul: periode ber-kunci, tenggat konfigurabel |
 | Penggunaan (F3) | PSP/alih/sementara/pihak lain/bersama + BMN idle (PMK 40 & 120/2024) |
 | Pemeliharaan (F3, ✅ tahap awal) | Riwayat per kejadian per aset (jenis ringan/sedang/berat DJKN); rekap per TA (bahan DHPB Ps. 47); kondisi sebelum/sesudah; penanda telaah kapitalisasi ≥ ambang PMK 181; jadwal berkala & DHPB PDF menyusul |
 | Perencanaan (F4, ✅ tahap awal) | ✅ Saringan kelayakan RKBMN pemeliharaan (#99: Baik/RR layak; RB → jalur hapus; idle → PMK 120/2024) + kertas kerja XLSX (#100); menyusul: usulan per unit + persetujuan, sanding SBSK PMK 138/2024 |
@@ -655,6 +677,10 @@ fisik; barang untuk pemda/masyarakat tidak segera di-BAST-kan.
     penyampaian LBKP semesteran "≤20 hari setelah semester berakhir"
     (aturan era SABMN lama — cek rezim PMK 181); kode transaksi
     pertukaran & reklasifikasi BPYBDS.
+17. LKB (LKBT-PKPB1): urutan persis kolom kiri-ke-kanan, ada-tidaknya
+    kolom Keterangan, dan tenggat "≤15 hari setelah TA berakhir" (dari
+    modul pelatihan, bukan pasal PMK 181 langsung) — perlu satu PDF
+    AstLaporanKondisiBarangUAKPB asli untuk verifikasi.
 
 ---
 

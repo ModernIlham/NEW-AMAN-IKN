@@ -48,6 +48,13 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#146] LKB — Laporan Kondisi Barang — 2026-07-12
+
+- **LKB per NUP + ringkasan B/RR/RB per golongan** (format LKBT-PKPB1,
+  riset → pustaka §2.3b): kondisi kosong tampil "(belum dicatat)",
+  kolom satuan tidak difabrikasi; tombol di hub Pelaporan. Suite 211;
+  smoke pypdfium2 lulus.
+
 ## [#145] Konsolidasi dokumentasi #144 — 2026-07-12
 
 - **Dokumentasi saja**: README blok Progres Fase 2 + roadmap masterplan

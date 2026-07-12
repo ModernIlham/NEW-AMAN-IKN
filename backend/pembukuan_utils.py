@@ -230,3 +230,46 @@ def posisi_neraca(rows, total, persediaan_jumlah=0, persediaan_nilai=0.0):
         "persediaan": {"jumlah": p_jumlah, "nilai": p_nilai},
         "total": grand,
     }
+
+
+# Kondisi resmi barang (SIMAK-BMN): Baik / Rusak Ringan / Rusak Berat.
+KONDISI_LKB = ("Baik", "Rusak Ringan", "Rusak Berat")
+
+
+def build_lkb_rows(assets, uraian_map=None):
+    """Rekap Laporan Kondisi Barang per golongan → (rows, total).
+
+    assets: iterable dict minimal {asset_code, condition, purchase_price}.
+    Kolom per baris: kuantitas Baik / Rusak Ringan / Rusak Berat /
+    belum dicatat + total + nilai perolehan. Kondisi di luar tiga
+    kategori resmi dihitung 'belum' agar ditagih dibereskan — tidak
+    pernah ditebak.
+    """
+    uraian_map = uraian_map or {}
+    agg = {}
+    for a in assets or []:
+        gol = golongan_of(a.get("asset_code")) or "?"
+        row = agg.setdefault(gol, {
+            "golongan": gol,
+            "uraian": uraian_map.get(gol) or (
+                "Tanpa Golongan (kode belum rapi)" if gol == "?" else f"Golongan {gol}"),
+            "baik": 0, "rusak_ringan": 0, "rusak_berat": 0, "belum": 0,
+            "jumlah": 0, "nilai": 0.0,
+        })
+        kondisi = str(a.get("condition") or "").strip()
+        if kondisi == "Baik":
+            row["baik"] += 1
+        elif kondisi == "Rusak Ringan":
+            row["rusak_ringan"] += 1
+        elif kondisi == "Rusak Berat":
+            row["rusak_berat"] += 1
+        else:
+            row["belum"] += 1
+        row["jumlah"] += 1
+        row["nilai"] += parse_harga(a.get("purchase_price"))
+
+    rows = [agg[g] for g in sorted(agg, key=lambda g: (g == "?", g))]
+    total = {k: sum(r[k] for r in rows)
+             for k in ("baik", "rusak_ringan", "rusak_berat", "belum", "jumlah")}
+    total["nilai"] = sum(r["nilai"] for r in rows)
+    return rows, total

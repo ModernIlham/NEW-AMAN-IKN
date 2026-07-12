@@ -1714,6 +1714,147 @@ async def generate_lbkp_pdf(
         headers={"Content-Disposition": f'attachment; filename="LBKP_{tahun}{suffix}.pdf"'})
 
 
+@reports_router.get("/pembukuan/lkb-pdf")
+async def generate_lkb_pdf(_user: dict = Depends(require_user_or_query_token)):
+    """Laporan Kondisi Barang — lampiran LBKP tahunan (pustaka §2.3b).
+
+    Mengikuti format LKBT-PKPB1: rincian per NUP (kode, nama, NUP,
+    kuantitas, kondisi, harga perolehan) dikelompokkan per golongan +
+    ringkasan B/RR/RB per golongan. Kolom Satuan belum dicatat AMAN dan
+    tidak difabrikasi; kondisi kosong tampil "(belum dicatat)".
+    """
+    from reportlab.platypus import Table, Paragraph, Spacer
+    from reportlab.lib.units import mm as rl_mm
+    from kodefikasi_utils import GOLONGAN_DEFAULTS
+    from pembukuan_utils import KONDISI_LKB, build_lkb_rows, parse_harga
+
+    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    assets = await db.assets.find(
+        {}, {"_id": 0, "asset_code": 1, "NUP": 1, "asset_name": 1,
+             "condition": 1, "purchase_price": 1},
+    ).to_list(500000)
+    if not assets:
+        raise HTTPException(status_code=404, detail="Belum ada data aset")
+
+    uraian_map = {k: u for k, u in GOLONGAN_DEFAULTS}
+    async for k in db.kodefikasi.find({"level": 1}, {"_id": 0, "kode": 1, "uraian": 1}):
+        if k.get("uraian"):
+            uraian_map[k["kode"]] = k["uraian"]
+    rekap_rows, rekap_total = build_lkb_rows(assets, uraian_map)
+
+    def fmt_rp(val):
+        try: return f"{int(val):,}".replace(",", ".")
+        except (ValueError, TypeError, OverflowError): return "0"
+
+    today_iso = datetime.now(timezone.utc).date().isoformat()
+    _BULAN_ID = ["", "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+                 "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
+    per_label = f"{_BULAN_ID[int(today_iso[5:7])]} {today_iso[:4]}".upper()
+
+    buffer = io.BytesIO()
+    doc = _std_doc(buffer, landscape_mode=True)
+    st = _get_report_styles()
+    elements = []
+    elements.extend(_kop_surat_flowables(settings, doc.width))
+    elements.extend(_title_block(
+        f"LAPORAN KONDISI BARANG\nPER {per_label} — SEMUA KONDISI",
+        subjudul="Lampiran LBKP Tahunan (PMK 181/PMK.06/2016)"))
+    elements.append(Paragraph(
+        "Ringkasan kondisi per golongan (kuantitas per kategori resmi "
+        "Baik / Rusak Ringan / Rusak Berat):", st['Meta']))
+    elements.append(Spacer(1, 1.5 * rl_mm))
+
+    headers = ["Gol", "Uraian Golongan", "Baik", "Rusak\nRingan",
+               "Rusak\nBerat", "Belum\nDicatat", "Jumlah", "Nilai Perolehan (Rp)"]
+    table_data = [[Paragraph(h.replace("\n", "<br/>"), st['TableHeader']) for h in headers]]
+    for r in rekap_rows:
+        table_data.append([
+            Paragraph(r["golongan"], st['CellCenter']),
+            Paragraph(r["uraian"], st['Cell']),
+            Paragraph(str(r["baik"]), st['CellCenter']),
+            Paragraph(str(r["rusak_ringan"]), st['CellCenter']),
+            Paragraph(str(r["rusak_berat"]), st['CellCenter']),
+            Paragraph(str(r["belum"]), st['CellCenter']),
+            Paragraph(str(r["jumlah"]), st['CellCenter']),
+            Paragraph(fmt_rp(r["nilai"]), st['CellRight']),
+        ])
+    table_data.append([
+        Paragraph("", st['CellCenter']),
+        Paragraph("<b>JUMLAH</b>", st['Cell']),
+        Paragraph(f"<b>{rekap_total['baik']}</b>", st['CellCenter']),
+        Paragraph(f"<b>{rekap_total['rusak_ringan']}</b>", st['CellCenter']),
+        Paragraph(f"<b>{rekap_total['rusak_berat']}</b>", st['CellCenter']),
+        Paragraph(f"<b>{rekap_total['belum']}</b>", st['CellCenter']),
+        Paragraph(f"<b>{rekap_total['jumlah']}</b>", st['CellCenter']),
+        Paragraph(f"<b>{fmt_rp(rekap_total['nilai'])}</b>", st['CellRight']),
+    ])
+    table = Table(table_data,
+                  colWidths=_fit_col_widths([28, 210, 54, 54, 54, 54, 54, 120], doc.width),
+                  repeatRows=1)
+    table.setStyle(_std_table_style(zebra=True, total_row=True))
+    elements.append(table)
+    elements.append(Spacer(1, 5 * rl_mm))
+
+    # Rincian per NUP, dikelompokkan per golongan (format LKBT-PKPB1)
+    per_gol = {}
+    for a in assets:
+        gol = str(a.get("asset_code") or "").strip()[:1]
+        per_gol.setdefault(gol if gol.isdigit() else "?", []).append(a)
+    headers = ["Kode Barang", "Nama Barang", "NUP", "Kuantitas",
+               "Kondisi", "Harga Perolehan (Rp)"]
+    for gol in sorted(per_gol, key=lambda g: (g == "?", g)):
+        uraian = uraian_map.get(gol) or (
+            "Tanpa Golongan (kode belum rapi)" if gol == "?" else f"Golongan {gol}")
+        rincian = sorted(per_gol[gol],
+                         key=lambda a: (str(a.get("asset_code") or ""),
+                                        str(a.get("NUP") or "")))
+        elements.append(Paragraph(f"<b>Golongan {gol} — {uraian}</b> · {len(rincian)} NUP",
+                                  st['Meta']))
+        elements.append(Spacer(1, 1.5 * rl_mm))
+        table_data = [[Paragraph(h, st['TableHeader']) for h in headers]]
+        for a in rincian:
+            kondisi = str(a.get("condition") or "").strip()
+            if kondisi not in KONDISI_LKB:
+                kondisi = "(belum dicatat)"
+            table_data.append([
+                Paragraph(str(a.get("asset_code") or "-"), st['CellCenter']),
+                Paragraph(str(a.get("asset_name") or "-"), st['Cell']),
+                Paragraph(str(a.get("NUP") or "-"), st['CellCenter']),
+                Paragraph("1", st['CellCenter']),
+                Paragraph(kondisi, st['CellCenter']),
+                Paragraph(fmt_rp(parse_harga(a.get("purchase_price"))),
+                          st['CellRight']),
+            ])
+        table = Table(table_data,
+                      colWidths=_fit_col_widths([96, 250, 44, 56, 90, 110], doc.width),
+                      repeatRows=1)
+        table.setStyle(_std_table_style(zebra=True))
+        elements.append(table)
+        elements.append(Spacer(1, 4 * rl_mm))
+
+    elements.append(Paragraph(
+        "Catatan: kategori kondisi resmi hanya Baik / Rusak Ringan / Rusak "
+        "Berat (perubahan kondisi dicatat setelah pengecekan fisik); baris "
+        "berkondisi \"(belum dicatat)\" perlu dimutakhirkan pada modul "
+        "inventarisasi. Kuantitas per baris = 1 NUP; kolom satuan belum "
+        "dicatat pada AMAN. Dokumen resmi LKB (LKBT-PKPB1) tetap dicetak "
+        "dari SIMAK-BMN/SAKTI — laporan ini bahan sandingan/kerja.", st['Meta']))
+    elements.append(Spacer(1, 10 * rl_mm))
+    elements.extend(_signature_block([
+        {'pre': ['.................., .......................'],
+         'header': 'Penanggung Jawab UAKPB',
+         'role': 'Kuasa Pengguna Barang,',
+         'nama': settings.get("kasatker_nama") or "-",
+         'after': [f"NIP. {settings.get('kasatker_nip') or '-'}"]},
+    ], doc.width))
+    footer = _page_footer_factory("Laporan Kondisi Barang (LKB)")
+    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    buffer.seek(0)
+    return StreamingResponse(
+        buffer, media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="LKB_{today_iso[:7]}.pdf"'})
+
+
 @reports_router.get("/pembukuan/calbmn-pdf")
 async def generate_calbmn_pdf(
     tahun: int = Query(..., ge=2000, le=2100),
