@@ -133,6 +133,7 @@ export const PENATAUSAHAAN_SUBMODULES = [
       "✅ CaLBMN pra-isi bab I–V per periode (struktur PMK 181; bahan penyusunan — final via SAKTI)",
       "✅ LKB — Laporan Kondisi Barang (rincian per NUP + ringkasan B/RR/RB per golongan, format LKBT-PKPB1)",
       "✅ Periode pelaporan ber-kunci (Semester I/II/Tahunan; terkunci = LBKP & CaLBMN berpenanda FINAL; buka kembali wajib beralasan)",
+      "✅ Tenggat penyampaian konfigurabel per periode (surat DJKN/K/L) dengan pengingat sisa hari / lewat tenggat",
       "Arsip laporan lintas kegiatan dengan penomoran & riwayat",
       "Ekspor rekonsiliasi (format yang bisa disandingkan dengan SIMAK/SAKTI)",
     ],
