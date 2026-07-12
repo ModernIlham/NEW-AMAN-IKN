@@ -48,6 +48,13 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#86] Hub Pelaporan — arsip laporan lintas kegiatan satu pintu — 2026-07-12
+
+- **Halaman Arsip Pelaporan** (dari Beranda Modul): daftar semua kegiatan
+  (cari, badge Disahkan) + dropdown unduh 7 laporan resmi per kegiatan
+  (LHI/RHI/BAHI/DBKP/SP/Eksekutif) + seksi laporan persediaan.
+- Kartu Pelaporan kini bisa dimasuki; LBKP & rekonsiliasi menyusul.
+
 ## [#85] Impor/ekspor master persediaan + template + toolbar menu — 2026-07-12
 
 - **Impor CSV/XLSX master persediaan**: identitas (kode 16 + NUP) sudah ada
