@@ -48,6 +48,14 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#102] Penyusutan BMN: garis lurus semesteran per golongan (API) — 2026-07-12
+
+- **Fase 5 dimulai** — bab pustaka §5 Penyusutan (koreksi: KMK 59/2013
+  dicabut → KMK 295/2019 jo. 266/2023) + logika murni PMK 65/2017 (tanpa
+  residu, konvensi semester penuh, nilai buku habis = 0, bucket telaah
+  henti-susut/perlu-referensi tanpa menebak angka) + endpoint
+  `/penilaian/penyusutan`. 7 unit test (suite 154); UI menyusul.
+
 ## [#101] Konsolidasi dokumentasi Fase 4 tahap awal — 2026-07-12
 
 - Masterplan/README/pustaka diselaraskan dengan #99–#100 (Perencanaan
