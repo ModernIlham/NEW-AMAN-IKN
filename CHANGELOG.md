@@ -48,6 +48,14 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#115] Penganggaran tahap awal: register usulan berstatus — 2026-07-12
+
+- **Register usulan penganggaran** (bab pustaka §9, PMK 62/2023 +
+  PMK 153/2021): pipeline diusulkan → disetujui telaah → masuk DIPA →
+  terealisasi dengan nilai wajib per tahap, akun BAS 53x/523 sesuai
+  jenis, tautan aset opsional, rekap serapan. Kartu naik Sebagian —
+  tinggal Pengadaan yang Segera Hadir. 4 unit test (suite 183).
+
 ## [#114] Konsolidasi dokumentasi Wasdal — 2026-07-12
 
 - **Dokumentasi saja**: masterplan (baris Peta Siklus Wasdal → Sebagian,
