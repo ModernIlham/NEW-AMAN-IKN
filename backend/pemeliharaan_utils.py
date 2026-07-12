@@ -112,6 +112,64 @@ def urut_riwayat(records):
     )
 
 
+def tambah_bulan(tanggal_iso: str, n: int) -> str:
+    """Tanggal ISO + n bulan; hari dijepit ke akhir bulan tujuan.
+
+    Contoh: 2026-01-31 + 1 bulan → 2026-02-28 (bukan meloncat ke Maret).
+    """
+    t = _parse_tanggal(tanggal_iso)
+    if not t:
+        return ""
+    total = (t.year * 12) + (t.month - 1) + int(n)
+    tahun, bulan = divmod(total, 12)
+    bulan += 1
+    # Hari terakhir bulan tujuan (tanpa modul calendar agar tetap ringan)
+    if bulan == 12:
+        akhir = 31
+    else:
+        akhir = (date(tahun, bulan + 1, 1) - date(tahun, bulan, 1)).days
+    return date(tahun, bulan, min(t.day, akhir)).isoformat()
+
+
+def validate_jadwal(data: dict) -> list:
+    """Validasi payload jadwal berkala → daftar pesan kesalahan."""
+    errors = []
+    try:
+        interval = int(data.get("interval_bulan"))
+    except (TypeError, ValueError):
+        interval = 0
+    if not 1 <= interval <= 60:
+        errors.append("Interval harus 1-60 bulan")
+    if not _parse_tanggal(data.get("mulai")):
+        errors.append("Tanggal mulai wajib diisi (format YYYY-MM-DD)")
+    return errors
+
+
+def jatuh_tempo(jadwal: dict) -> str:
+    """Tanggal jatuh tempo berikutnya sebuah jadwal berkala.
+
+    Belum pernah dilaksanakan → jatuh tempo = tanggal mulai; sesudahnya =
+    pelaksanaan terakhir + interval bulan.
+    """
+    terakhir = str(jadwal.get("terakhir") or "").strip()
+    if not terakhir:
+        return str(jadwal.get("mulai") or "").strip()[:10]
+    return tambah_bulan(terakhir, int(jadwal.get("interval_bulan") or 1))
+
+
+def status_jadwal(due_iso: str, today_iso: str, ambang_hari: int = 14) -> str:
+    """Status jadwal: terlambat / segera (≤ ambang_hari) / terjadwal."""
+    due = _parse_tanggal(due_iso)
+    hari_ini = _parse_tanggal(today_iso)
+    if not due or not hari_ini:
+        return "terjadwal"
+    if due < hari_ini:
+        return "terlambat"
+    if (due - hari_ini).days <= ambang_hari:
+        return "segera"
+    return "terjadwal"
+
+
 def rentang_periode(tahun: int, semester=None):
     """Rentang tanggal ISO satu periode DHPB → (dari, sampai, label).
 

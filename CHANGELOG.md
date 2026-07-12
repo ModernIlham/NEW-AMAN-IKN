@@ -48,6 +48,15 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#92] Jadwal pemeliharaan berkala: jatuh tempo + status + auto-geser — 2026-07-12
+
+- **Jadwal Berkala** per aset (pedoman DKPB Ps. 46(2) PP 27/2014): interval
+  1–60 bulan, jatuh tempo dihitung dari pelaksanaan terakhir + interval,
+  status **Terlambat / Segera (≤14 hari) / Terjadwal**; mencatat
+  pemeliharaan otomatis menggeser jadwal aset tsb.
+- Seksi baru di halaman Pemeliharaan: badge peringatan, aksi Catat
+  (prefill aset), ubah, hapus admin. 5 unit test (suite 136 lulus).
+
 ## [#91] Konsolidasi dokumentasi Fase 3 (masterplan + README) — 2026-07-12
 
 - Tabel peta siklus masterplan: 5 modul kini berstatus **Sebagian** dengan
