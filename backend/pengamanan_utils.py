@@ -78,3 +78,74 @@ def rekap_kesehatan(assets):
             })
     sengketa.sort(key=lambda x: (x["asset_name"] or "", x["asset_code"] or ""))
     return per, lengkap, sengketa
+
+
+# ---------------------------------------------------------------------------
+# Register BMN bermasalah/sengketa (pustaka §11.3-11.4) — kategori kasus dan
+# pipeline penanganan dari praktik DJKN; register ini bahan mentah laporan
+# wasdal/CaLBMN, bukan kanal resmi dan tak berkekuatan hukum.
+# ---------------------------------------------------------------------------
+
+KATEGORI_KASUS = {
+    "dikuasai_pihak_lain": "Dikuasai pihak lain",
+    "sertipikat_pihak_lain": "Disertipikatkan/tumpang tindih pihak lain",
+    "berperkara": "Sengketa/berperkara di pengadilan",
+}
+
+STATUS_KASUS = {
+    "identifikasi": "Identifikasi",
+    "mediasi": "Mediasi / non-litigasi",
+    "blokir": "Pemblokiran sertipikat",
+    "litigasi": "Litigasi",
+    "selesai": "Selesai",
+}
+
+# Transisi maju boleh melompati tahap (mis. langsung litigasi); selesai
+# terminal — kasus baru dibuka sebagai register baru bila muncul lagi.
+TRANSISI_KASUS = {
+    "identifikasi": {"mediasi", "blokir", "litigasi", "selesai"},
+    "mediasi": {"blokir", "litigasi", "selesai"},
+    "blokir": {"litigasi", "selesai"},
+    "litigasi": {"selesai"},
+    "selesai": set(),
+}
+
+
+def validate_kasus(data: dict) -> list:
+    """Validasi pembukaan kasus baru → daftar pesan kesalahan."""
+    errors = []
+    if data.get("kategori") not in KATEGORI_KASUS:
+        valid = ", ".join(KATEGORI_KASUS)
+        errors.append(f"Kategori kasus tidak dikenal (pilihan: {valid})")
+    if not str(data.get("uraian") or "").strip():
+        errors.append("Uraian kasus wajib diisi")
+    if not str(data.get("pihak_lawan") or "").strip():
+        errors.append("Pihak lawan/penguasa wajib diisi")
+    return errors
+
+
+def validate_transisi_kasus(kasus: dict, ke: str) -> list:
+    """Validasi perpindahan status kasus."""
+    dari = kasus.get("status")
+    if ke not in STATUS_KASUS:
+        valid = ", ".join(STATUS_KASUS)
+        return [f"Status tujuan tidak dikenal (pilihan: {valid})"]
+    if ke not in TRANSISI_KASUS.get(dari, set()):
+        return [f"Transisi {dari} → {ke} tidak diizinkan"]
+    return []
+
+
+def rekap_kasus(items) -> dict:
+    """Ringkasan register kasus per status + per kategori + aktif."""
+    per_status = {k: 0 for k in STATUS_KASUS}
+    per_kategori = {k: 0 for k in KATEGORI_KASUS}
+    for k in items or []:
+        s = k.get("status")
+        if s in per_status:
+            per_status[s] += 1
+        kat = k.get("kategori")
+        if kat in per_kategori:
+            per_kategori[kat] += 1
+    aktif = sum(v for s, v in per_status.items() if s != "selesai")
+    return {"jumlah": len(items or []), "aktif": aktif,
+            "per_status": per_status, "per_kategori": per_kategori}

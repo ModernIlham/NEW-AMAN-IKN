@@ -298,17 +298,21 @@ export const SIKLUS_MODULES = [
     urutan: 7,
     status: "sebagian",
     fase: 3,
-    ringkas: "Dasbor tertib administrasi (kelengkapan foto/register/lokasi/pengguna/BAST) + pantau sengketa sudah bisa dibuka.",
+    ringkas: "Dasbor tertib administrasi + pantau sengketa + register BMN bermasalah berstatus sudah bisa dibuka.",
     deskripsi:
-      "Pengamanan BMN pada tiga lapis sesuai diagram resmi: Fisik (penjagaan, stiker, "
+      "Pengamanan BMN pada tiga lapis (PP 27/2014 Ps. 42): Fisik (penjagaan, patok, "
       + "pagar), Administrasi (kelengkapan dokumen & pencatatan), dan Hukum (sertifikat, "
       + "BPKB, dokumen kepemilikan) — ditambah Asuransi BMN untuk aset strategis.",
-    dasarHukum: ["PMK 97/PMK.06/2019 — Asuransi BMN (pengamanan aset tertentu)"],
+    dasarHukum: [
+      "PP 27/2014 jo. PP 28/2020 Ps. 42-43 — kewajiban pengamanan & penyimpanan bukti kepemilikan",
+      "PMK 97/PMK.06/2019 — Asuransi BMN (pengamanan aset tertentu)",
+    ],
     fitur: [
-      "Arsip dokumen kepemilikan per aset (sertifikat, BPKB, IMB)",
-      "Dasbor kelengkapan pengamanan fisik / administrasi / hukum",
-      "Registrasi polis Asuransi BMN + masa berlaku",
-      "Pemantauan aset bermasalah (sengketa — datanya sudah dicatat inventarisasi)",
+      "✅ Dasbor kelengkapan data aset (foto/register/lokasi/pengguna/BAST) + daftar pantau sengketa",
+      "✅ Register BMN bermasalah berstatus: identifikasi → mediasi → blokir → litigasi → selesai (bahan laporan wasdal)",
+      "Arsip dokumen kepemilikan per aset (sertifikat, BPKB, IMB/PBG) + lokasi penyimpanan (menyusul)",
+      "Checklist pengamanan per jenis BMN + status sertipikasi K1-K4 (menyusul)",
+      "Registrasi polis Asuransi BMN + masa berlaku (menyusul)",
     ],
     integrasi: ["Data sengketa & kelengkapan dokumen dari inventarisasi menjadi daftar pantau"],
   },
