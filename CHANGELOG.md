@@ -48,6 +48,12 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#128] Pengingat opname semesteran persediaan — 2026-07-12
+
+- **Banner pengingat opname fisik** (pustaka §3.3): status per semester
+  berjalan dari transaksi opname terakhir; tampil di halaman Persediaan
+  bila semester ini belum diopname. 3 unit test (suite 197).
+
 ## [#127] Konsolidasi dokumentasi Penggunaan #125–#126 — 2026-07-12
 
 - **Dokumentasi saja**: README blok Progres Fase 3 + masterplan (baris
