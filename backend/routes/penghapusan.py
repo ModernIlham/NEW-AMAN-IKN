@@ -86,6 +86,32 @@ async def list_usulan(
             "label_jalur": {k: v[0] for k, v in JALUR_KANDIDAT.items()}}
 
 
+@penghapusan_router.get("/penghapusan/usulan/export")
+async def export_usulan_penghapusan(_user: dict = Depends(require_user)):
+    """Ekspor CSV seluruh tiket usulan penghapusan (pola #158)."""
+    import csv as csv_module
+    import io
+
+    from fastapi.responses import Response as HttpResponse
+
+    buf = io.StringIO()
+    w = csv_module.writer(buf)
+    w.writerow(["jalur", "kode_aset", "nup", "nama_aset", "status",
+                "nomor_sk", "tanggal_sk", "tanggal_usulan", "keterangan",
+                "jumlah_lampiran", "dibuat_oleh"])
+    async for u in db.usulan_penghapusan.find({}, {"_id": 0}).sort("created_at", -1):
+        w.writerow([
+            JALUR_KANDIDAT.get(u.get("jalur"), (u.get("jalur"),))[0],
+            u.get("asset_code"), u.get("NUP"), u.get("asset_name"),
+            STATUS_USULAN.get(u.get("status"), u.get("status")),
+            u.get("nomor_sk"), u.get("tanggal_sk"),
+            str(u.get("created_at") or "")[:10], u.get("keterangan"),
+            len(u.get("lampiran") or []), u.get("created_by"),
+        ])
+    return HttpResponse(content=buf.getvalue().encode("utf-8-sig"), media_type="text/csv",
+                        headers={"Content-Disposition": 'attachment; filename="register_usulan_penghapusan.csv"'})
+
+
 @penghapusan_router.post("/penghapusan/usulan")
 async def buat_usulan(payload: UsulanIn, user: dict = Depends(require_user)):
     """Buat tiket usulan penghapusan untuk satu aset kandidat."""

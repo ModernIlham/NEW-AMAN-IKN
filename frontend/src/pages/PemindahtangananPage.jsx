@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, ArrowLeftRight, Plus, Search, Trash2, X, Coins,
-  TicketCheck, AlertTriangle, Paperclip, Upload,
+  TicketCheck, AlertTriangle, Paperclip, Upload, Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,7 @@ import {
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { authMediaUrl } from "@/lib/mediaUrl";
+import { downloadFileWithProgress } from "@/lib/downloadFile";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -177,6 +178,11 @@ export default function PemindahtangananPage({ user, onBack }) {
               Penjualan · Tukar Menukar · Hibah · PMPP (PMK 111/2016 jo. 165/2021)
             </p>
           </div>
+          <Button size="sm" variant="outline" className="flex-shrink-0"
+            onClick={() => downloadFileWithProgress(`${API}/pemindahtanganan/export`, "register_pemindahtanganan.csv", { label: "Ekspor Register Pemindahtanganan (CSV)" }).catch(() => {})}
+            data-testid="pemindahtanganan-export">
+            <Download className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">CSV</span>
+          </Button>
           <Button size="sm" onClick={() => { setCari(""); setHasilCari([]); setForm({ data: { bentuk: "hibah", pihak: "", keterangan: "" }, aset: [], saving: false }); }}
             className="bg-indigo-600 hover:bg-indigo-700 text-white flex-shrink-0" data-testid="pemindahtanganan-tambah">
             <Plus className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">Usulkan</span>
