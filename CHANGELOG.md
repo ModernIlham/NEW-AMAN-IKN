@@ -48,6 +48,13 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#131] Arsip scan dokumen pemanfaatan — 2026-07-12
+
+- **Lampiran per perjanjian** (pustaka §6): unggah scan persetujuan/
+  perjanjian/bukti setor (PDF/gambar, GridFS, maks 10×10MB), buka via
+  tautan ber-token, hapus admin; hapus register ikut membersihkan
+  berkasnya. Dialog Lampiran di halaman Pemanfaatan.
+
 ## [#130] Konsolidasi dokumentasi #128–#129 — 2026-07-12
 
 - **Dokumentasi saja**: README blok Progres Fase 2 & 3 + masterplan
