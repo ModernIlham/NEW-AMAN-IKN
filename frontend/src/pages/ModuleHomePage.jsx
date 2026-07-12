@@ -3,7 +3,7 @@ import {
   Package, Moon, Sun, LogOut, ChevronRight, Lock, Sparkles,
   ClipboardList, ShoppingCart, UserCheck, Handshake, ShieldCheck, Scale,
   ArrowLeftRight, Flame, FileX, Eye, BookOpen, Boxes, FileText, ClipboardCheck,
-  CheckCircle2, Link2, CalendarClock, Banknote, Wrench, Landmark,
+  CheckCircle2, Link2, CalendarClock, Banknote, Wrench, Landmark, ListTree,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -56,7 +56,7 @@ function StatusBadge({ status }) {
  * tahap siklus lain sudah punya kamarnya masing-masing dengan status Segera
  * Hadir — klik kartunya menampilkan konsep, rencana fitur, dan fase roadmap.
  */
-export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onShowInfo, onEnterInventarisasi }) {
+export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onShowInfo, onEnterInventarisasi, onOpenKodefikasi }) {
   const [detail, setDetail] = useState(null); // modul yang dibuka konsepnya
   const activateInfo = useTripleClick(onShowInfo);
   const DetailIcon = detail ? (MODULE_ICONS[detail.id] || Package) : null;
@@ -145,6 +145,18 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
               </p>
             </div>
           </div>
+          {onOpenKodefikasi && (
+            <button
+              type="button"
+              onClick={onOpenKodefikasi}
+              className="mt-2 inline-flex items-center gap-1.5 px-3 h-8 rounded-full border border-blue-500/40 bg-blue-600/10 text-blue-600 dark:text-blue-400 text-[11px] font-semibold hover:bg-blue-600/20 transition-colors min-w-0 min-h-0"
+              data-testid="module-open-kodefikasi"
+            >
+              <ListTree className="w-3.5 h-3.5" />
+              Referensi Kodefikasi Barang
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 mt-3">
             {PENATAUSAHAAN_SUBMODULES.map((mod) => {
               const Icon = MODULE_ICONS[mod.id] || Package;

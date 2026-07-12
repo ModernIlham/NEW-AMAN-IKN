@@ -25,6 +25,7 @@ const LoginPage = lazy(() => import("./pages/LoginPage"));
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 const InfoPage = lazy(() => import("./pages/InfoPage"));
 const ModuleHomePage = lazy(() => import("./pages/ModuleHomePage"));
+const KodefikasiPage = lazy(() => import("./pages/KodefikasiPage"));
 
 // ============================================================================
 // LOADING FALLBACK - Shown while lazy components load
@@ -236,6 +237,8 @@ function App() {
     sessionStorage.removeItem('aman_module');
     setModuleChosen(false);
   }, []);
+  // Halaman Referensi Kodefikasi (perkakas Penatausahaan dari Beranda Modul)
+  const [showKodefikasi, setShowKodefikasi] = useState(false);
 
   if (loading) {
     return <PageLoader />;
@@ -246,6 +249,18 @@ function App() {
       <div className="App">
         <Suspense fallback={<PageLoader />}>
           <InfoPage onBack={() => setShowInfo(false)} />
+        </Suspense>
+        <Toaster position="top-right" richColors />
+      </div>
+    );
+  }
+
+  // Referensi Kodefikasi — perkakas Penatausahaan, dibuka dari Beranda Modul.
+  if (user && showKodefikasi) {
+    return (
+      <div className="App">
+        <Suspense fallback={<PageLoader />}>
+          <KodefikasiPage user={user} onBack={() => setShowKodefikasi(false)} />
         </Suspense>
         <Toaster position="top-right" richColors />
       </div>
@@ -266,6 +281,7 @@ function App() {
             toggleDark={toggleDark}
             onShowInfo={() => setShowInfo(true)}
             onEnterInventarisasi={enterInventarisasi}
+            onOpenKodefikasi={() => setShowKodefikasi(true)}
           />
         </Suspense>
         <Toaster position="top-right" richColors />
