@@ -48,6 +48,11 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#162] Konsolidasi dokumentasi #161 — 2026-07-12
+
+- **Dokumentasi saja**: README blok Progres (pemusnahan + pengadaan:
+  penanda ekspor CSV #161) + roadmap masterplan fase 4 & 6.
+
 ## [#161] Ekspor CSV register pemusnahan & pengadaan — 2026-07-12
 
 - **Ekspor CSV** dua register terakhir gelombang #158–#159: pemusnahan
