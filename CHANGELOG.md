@@ -48,6 +48,11 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#124] Konsolidasi dokumentasi fitur #119–#123 — 2026-07-12
+
+- **Dokumentasi saja**: README blok Progres Fase 4 & 5–6 + penanda
+  roadmap masterplan diperluas dengan lima fitur pendalaman (#119–#123).
+
 ## [#123] Sanding per akun BAS di register penganggaran — 2026-07-12
 
 - **Sanding rencana vs realisasi per akun** (pustaka §9): tabel per akun
