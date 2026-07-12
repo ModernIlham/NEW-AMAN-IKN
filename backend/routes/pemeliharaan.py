@@ -13,9 +13,9 @@ from pydantic import BaseModel, Field
 from auth_utils import require_admin, require_user
 from db import db
 from pemeliharaan_utils import (
-    JENIS_PEMELIHARAAN, indikasi_kapitalisasi, kelompok_dhpb,
-    rekap_pemeliharaan, rentang_periode, urut_riwayat, parse_biaya,
-    validate_pemeliharaan,
+    JENIS_PEMELIHARAAN, indikasi_kapitalisasi, jatuh_tempo, kelompok_dhpb,
+    rekap_pemeliharaan, rentang_periode, status_jadwal, urut_riwayat,
+    parse_biaya, validate_jadwal, validate_pemeliharaan,
 )
 
 pemeliharaan_router = APIRouter()
@@ -24,6 +24,19 @@ _PROJ = {"_id": 0}
 # Field ringkas untuk rekap (hemat: tanpa uraian/keterangan panjang).
 _PROJ_REKAP = {"_id": 0, "asset_id": 1, "asset_code": 1, "NUP": 1,
                "asset_name": 1, "tanggal": 1, "jenis": 1, "biaya": 1}
+
+
+class JadwalIn(BaseModel):
+    asset_id: str = Field(min_length=1)
+    interval_bulan: int
+    mulai: str
+    keterangan: str = ""     # uraian pekerjaan berkala (mis. "servis AC")
+
+
+class JadwalUpdate(BaseModel):
+    interval_bulan: int
+    mulai: str
+    keterangan: str = ""
 
 
 class PemeliharaanIn(BaseModel):
@@ -189,6 +202,91 @@ async def dhpb_pdf(
                  f'attachment; filename="DHPB_{tahun}{suffix}.pdf"'})
 
 
+@pemeliharaan_router.get("/pemeliharaan/jadwal")
+async def list_jadwal(_user: dict = Depends(require_user)):
+    """Jadwal berkala semua aset + jatuh tempo & status, terlambat dulu.
+
+    Pedoman DKPB Ps. 46(2) PP 27/2014: pemeliharaan berpedoman pada daftar
+    kebutuhan pemeliharaan — jadwal ini bentuk operasionalnya di satker.
+    """
+    today_iso = datetime.now(timezone.utc).date().isoformat()
+    items = []
+    async for j in db.jadwal_pemeliharaan.find({}, _PROJ):
+        due = jatuh_tempo(j)
+        j["jatuh_tempo"] = due
+        j["status"] = status_jadwal(due, today_iso)
+        items.append(j)
+    items.sort(key=lambda x: (x["jatuh_tempo"] or "9999", x.get("asset_name") or ""))
+    return {
+        "items": items,
+        "jumlah": len(items),
+        "terlambat": sum(1 for i in items if i["status"] == "terlambat"),
+        "segera": sum(1 for i in items if i["status"] == "segera"),
+    }
+
+
+@pemeliharaan_router.post("/pemeliharaan/jadwal")
+async def create_jadwal(payload: JadwalIn, user: dict = Depends(require_user)):
+    """Buat jadwal pemeliharaan berkala untuk satu aset."""
+    data = payload.model_dump()
+    errors = validate_jadwal(data)
+    if errors:
+        raise HTTPException(status_code=400, detail="; ".join(errors))
+    asset = await db.assets.find_one(
+        {"id": data["asset_id"]},
+        {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1},
+    )
+    if not asset:
+        raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    now = datetime.now(timezone.utc).isoformat()
+    record = {
+        "id": str(uuid.uuid4()),
+        "asset_id": asset["id"],
+        "asset_code": asset.get("asset_code"),
+        "NUP": asset.get("NUP"),
+        "asset_name": asset.get("asset_name"),
+        "interval_bulan": int(data["interval_bulan"]),
+        "mulai": str(data["mulai"]).strip()[:10],
+        "terakhir": "",   # terisi otomatis saat pemeliharaan dicatat
+        "keterangan": str(data.get("keterangan") or "").strip(),
+        "created_by": user.get("username"),
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.jadwal_pemeliharaan.insert_one({**record})
+    return record
+
+
+@pemeliharaan_router.put("/pemeliharaan/jadwal/{jadwal_id}")
+async def update_jadwal(jadwal_id: str, payload: JadwalUpdate,
+                        _user: dict = Depends(require_user)):
+    """Ubah interval/mulai/keterangan sebuah jadwal berkala."""
+    data = payload.model_dump()
+    errors = validate_jadwal(data)
+    if errors:
+        raise HTTPException(status_code=400, detail="; ".join(errors))
+    res = await db.jadwal_pemeliharaan.find_one_and_update(
+        {"id": jadwal_id},
+        {"$set": {"interval_bulan": int(data["interval_bulan"]),
+                  "mulai": str(data["mulai"]).strip()[:10],
+                  "keterangan": str(data.get("keterangan") or "").strip(),
+                  "updated_at": datetime.now(timezone.utc).isoformat()}},
+        projection=_PROJ, return_document=True,
+    )
+    if not res:
+        raise HTTPException(status_code=404, detail="Jadwal tidak ditemukan")
+    return res
+
+
+@pemeliharaan_router.delete("/pemeliharaan/jadwal/{jadwal_id}")
+async def delete_jadwal(jadwal_id: str, _admin: dict = Depends(require_admin)):
+    """Hapus jadwal berkala (khusus admin)."""
+    res = await db.jadwal_pemeliharaan.delete_one({"id": jadwal_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Jadwal tidak ditemukan")
+    return {"ok": True, "id": jadwal_id}
+
+
 @pemeliharaan_router.get("/pemeliharaan/aset/{asset_id}")
 async def riwayat_aset(asset_id: str, _user: dict = Depends(require_user)):
     """Riwayat pemeliharaan satu aset (terbaru dulu) + subtotal biaya."""
@@ -279,6 +377,12 @@ async def create_pemeliharaan(payload: PemeliharaanIn, user: dict = Depends(requ
             {"$set": {"condition": record["kondisi_setelah"], "updated_at": now},
              "$inc": {"version": 1}},
         )
+    # Jadwal berkala aset ini bergeser otomatis: pelaksanaan terbaru menjadi
+    # dasar jatuh tempo berikutnya ($max aman utk ISO string; "" selalu kalah).
+    await db.jadwal_pemeliharaan.update_many(
+        {"asset_id": asset["id"]},
+        {"$max": {"terakhir": record["tanggal"]}, "$set": {"updated_at": now}},
+    )
     return record
 
 

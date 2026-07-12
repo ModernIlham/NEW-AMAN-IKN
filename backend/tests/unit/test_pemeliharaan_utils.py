@@ -3,8 +3,9 @@ import pytest
 
 from pemeliharaan_utils import (
     JENIS_PEMELIHARAAN, KONDISI_SETELAH_VALID, indikasi_kapitalisasi,
-    kelompok_dhpb, parse_biaya, rekap_pemeliharaan, rentang_periode,
-    tahun_dari_tanggal, urut_riwayat, validate_pemeliharaan,
+    jatuh_tempo, kelompok_dhpb, parse_biaya, rekap_pemeliharaan,
+    rentang_periode, status_jadwal, tahun_dari_tanggal, tambah_bulan,
+    urut_riwayat, validate_jadwal, validate_pemeliharaan,
 )
 
 HARI_INI = "2026-07-12"
@@ -174,6 +175,43 @@ def test_rekap_kosong_aman():
     r = rekap_pemeliharaan([])
     assert r["jumlah"] == 0 and r["total_biaya"] == 0.0
     assert r["per_aset"] == [] and r["per_tahun"] == {}
+
+
+# ── Jadwal berkala ───────────────────────────────────────────────────────
+
+def test_tambah_bulan_normal_dan_lintas_tahun():
+    assert tambah_bulan("2026-03-15", 3) == "2026-06-15"
+    assert tambah_bulan("2026-11-10", 3) == "2027-02-10"
+    assert tambah_bulan("2026-12-01", 1) == "2027-01-01"
+
+
+def test_tambah_bulan_jepit_akhir_bulan():
+    assert tambah_bulan("2026-01-31", 1) == "2026-02-28"
+    assert tambah_bulan("2024-01-31", 1) == "2024-02-29"  # kabisat
+    assert tambah_bulan("2026-08-31", 1) == "2026-09-30"
+    assert tambah_bulan("tidak-valid", 1) == ""
+
+
+def test_validate_jadwal():
+    assert validate_jadwal({"interval_bulan": 6, "mulai": "2026-07-01"}) == []
+    assert any("Interval" in e for e in validate_jadwal({"interval_bulan": 0, "mulai": "2026-07-01"}))
+    assert any("Interval" in e for e in validate_jadwal({"interval_bulan": "x", "mulai": "2026-07-01"}))
+    assert any("mulai" in e for e in validate_jadwal({"interval_bulan": 6, "mulai": ""}))
+
+
+def test_jatuh_tempo_dari_mulai_lalu_dari_terakhir():
+    j = {"interval_bulan": 6, "mulai": "2026-07-01", "terakhir": ""}
+    assert jatuh_tempo(j) == "2026-07-01"
+    j["terakhir"] = "2026-07-05"
+    assert jatuh_tempo(j) == "2027-01-05"
+
+
+def test_status_jadwal_terlambat_segera_terjadwal():
+    assert status_jadwal("2026-07-11", HARI_INI) == "terlambat"
+    assert status_jadwal(HARI_INI, HARI_INI) == "segera"          # hari ini = due
+    assert status_jadwal("2026-07-26", HARI_INI) == "segera"      # tepat ambang 14 hari
+    assert status_jadwal("2026-07-27", HARI_INI) == "terjadwal"
+    assert status_jadwal("", HARI_INI) == "terjadwal"             # tanpa due → netral
 
 
 # ── DHPB: periode & pengelompokan ────────────────────────────────────────

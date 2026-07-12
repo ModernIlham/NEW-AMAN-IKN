@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, Wrench, Plus, Search, Trash2, X,
   CalendarDays, Coins, Boxes, ClipboardList, FileText,
+  CalendarClock, Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +28,13 @@ const WARNA_JENIS = {
   berat: "bg-red-500/15 text-red-600 dark:text-red-400",
 };
 const WARNA_JENIS_DEFAULT = "bg-muted text-muted-foreground";
+
+const BADGE_JADWAL = {
+  terlambat: "bg-red-500/15 text-red-600 dark:text-red-400",
+  segera: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+  terjadwal: "bg-muted text-muted-foreground",
+};
+const LABEL_JADWAL = { terlambat: "Terlambat", segera: "Segera", terjadwal: "Terjadwal" };
 
 const FORM_KOSONG = {
   tanggal: new Date().toISOString().slice(0, 10),
@@ -54,8 +62,12 @@ export default function PemeliharaanPage({ user, onBack }) {
   const [jenisFilter, setJenisFilter] = useState("");
   const [asetFilter, setAsetFilter] = useState(null); // {id, nama}
   const [jenisList, setJenisList] = useState([]);
-  // Dialog catat: {data, saving} | null
+  // Jadwal berkala: {items, jumlah, terlambat, segera} | null
+  const [jadwal, setJadwal] = useState(null);
+  // Dialog catat: {data, aset, saving} | null
   const [form, setForm] = useState(null);
+  // Dialog jadwal: {id?, data, aset, saving} | null — id terisi saat edit
+  const [formJadwal, setFormJadwal] = useState(null);
   // Pemilih aset di dialog
   const [cari, setCari] = useState("");
   const [hasilCari, setHasilCari] = useState([]);
@@ -99,17 +111,29 @@ export default function PemeliharaanPage({ user, onBack }) {
     }
   }, [page, tahun, jenisFilter, asetFilter]);
 
+  const muatJadwal = useCallback(async () => {
+    try {
+      const r = await axios.get(`${API}/pemeliharaan/jadwal`);
+      setJadwal(r.data);
+    } catch {
+      toast.error("Gagal memuat jadwal berkala");
+    }
+  }, []);
+
   useEffect(() => { muatRekap(); }, [muatRekap]);
   useEffect(() => { muatDaftar(); }, [muatDaftar]);
+  useEffect(() => { muatJadwal(); }, [muatJadwal]);
   useEffect(() => {
     axios.get(`${API}/pemeliharaan/jenis`)
       .then((r) => setJenisList(r.data?.items || []))
       .catch(() => {});
   }, []);
 
-  // Pencarian aset (debounce) untuk form catat
+  // Pencarian aset (debounce) — dipakai form catat & form jadwal baru
   useEffect(() => {
-    if (!form) return undefined;
+    const butuhAset = (form && !form.aset)
+      || (formJadwal && !formJadwal.id && !formJadwal.aset);
+    if (!butuhAset) return undefined;
     if (cari.trim().length < 2) { setHasilCari([]); return undefined; }
     clearTimeout(cariTimer.current);
     cariTimer.current = setTimeout(async () => {
@@ -124,14 +148,65 @@ export default function PemeliharaanPage({ user, onBack }) {
       }
     }, 300);
     return () => clearTimeout(cariTimer.current);
-  }, [cari, form]);
+  }, [cari, form, formJadwal]);
 
-  const bukaForm = () => {
+  const bukaForm = (aset = null) => {
     setCari("");
     setHasilCari([]);
-    setForm({ data: { ...FORM_KOSONG, tanggal: new Date().toISOString().slice(0, 10) }, aset: null, saving: false });
+    setForm({ data: { ...FORM_KOSONG, tanggal: new Date().toISOString().slice(0, 10) }, aset, saving: false });
   };
   const setField = (k, v) => setForm((f) => ({ ...f, data: { ...f.data, [k]: v } }));
+
+  const bukaFormJadwal = (j = null) => {
+    setCari("");
+    setHasilCari([]);
+    setFormJadwal(j ? {
+      id: j.id,
+      aset: { id: j.asset_id, asset_name: j.asset_name, asset_code: j.asset_code, NUP: j.NUP },
+      data: { interval_bulan: j.interval_bulan, mulai: j.mulai, keterangan: j.keterangan || "" },
+      saving: false,
+    } : {
+      id: null, aset: null, saving: false,
+      data: { interval_bulan: 6, mulai: new Date().toISOString().slice(0, 10), keterangan: "" },
+    });
+  };
+  const setFieldJadwal = (k, v) => setFormJadwal((f) => ({ ...f, data: { ...f.data, [k]: v } }));
+
+  const simpanJadwal = async () => {
+    if (!formJadwal) return;
+    if (!formJadwal.id && !formJadwal.aset) { toast.error("Pilih aset terlebih dahulu"); return; }
+    setFormJadwal((f) => ({ ...f, saving: true }));
+    try {
+      if (formJadwal.id) {
+        await axios.put(`${API}/pemeliharaan/jadwal/${formJadwal.id}`, formJadwal.data);
+      } else {
+        await axios.post(`${API}/pemeliharaan/jadwal`, { ...formJadwal.data, asset_id: formJadwal.aset.id });
+      }
+      toast.success("Jadwal berkala tersimpan");
+      setFormJadwal(null);
+      muatJadwal();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal menyimpan jadwal");
+      setFormJadwal((f) => (f ? { ...f, saving: false } : f));
+    }
+  };
+
+  const hapusJadwal = async (j) => {
+    const ok = await confirm({
+      title: "Hapus jadwal berkala?",
+      description: `${j.asset_name || "-"} — tiap ${j.interval_bulan} bulan${j.keterangan ? ` (${j.keterangan})` : ""}.`,
+      confirmLabel: "Hapus",
+      variant: "danger",
+    });
+    if (!ok) return;
+    try {
+      await axios.delete(`${API}/pemeliharaan/jadwal/${j.id}`);
+      toast.success("Jadwal dihapus");
+      muatJadwal();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal menghapus jadwal");
+    }
+  };
 
   const simpan = async () => {
     if (!form?.aset) { toast.error("Pilih aset terlebih dahulu"); return; }
@@ -144,6 +219,7 @@ export default function PemeliharaanPage({ user, onBack }) {
       setPage(1);
       muatRekap();
       muatDaftar();
+      muatJadwal(); // pelaksanaan terbaru menggeser jatuh tempo jadwal
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Gagal menyimpan catatan");
       setForm((f) => (f ? { ...f, saving: false } : f));
@@ -220,6 +296,83 @@ export default function PemeliharaanPage({ user, onBack }) {
             <p className="text-lg font-bold text-foreground leading-none">{rekap?.jumlah_aset ?? "…"}</p>
             <p className="text-[10px] text-muted-foreground mt-1">Aset terpelihara</p>
           </div>
+        </div>
+
+        {/* ── Jadwal berkala (pedoman DKPB Ps. 46(2) PP 27/2014) ── */}
+        <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+          <div className="px-3 py-2 border-b border-border flex items-center gap-2">
+            <CalendarClock className="w-4 h-4 text-orange-500" />
+            <p className="text-xs font-bold text-foreground">Jadwal Berkala</p>
+            {(jadwal?.terlambat || 0) > 0 && (
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${BADGE_JADWAL.terlambat}`}>
+                {jadwal.terlambat} terlambat
+              </span>
+            )}
+            {(jadwal?.segera || 0) > 0 && (
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${BADGE_JADWAL.segera}`}>
+                {jadwal.segera} segera
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => bukaFormJadwal()}
+              className="ml-auto h-7 px-2.5 rounded-lg border border-border text-xs font-semibold text-foreground/80 flex items-center gap-1 hover:bg-muted min-h-0"
+              data-testid="pemeliharaan-jadwal-tambah"
+            >
+              <Plus className="w-3.5 h-3.5" />Tambah
+            </button>
+          </div>
+          {(jadwal?.items || []).length === 0 ? (
+            <p className="text-xs text-muted-foreground text-center py-4 px-3">
+              Belum ada jadwal — tambahkan pemeliharaan berkala (mis. servis AC tiap 6 bulan) agar jatuh tempo terpantau.
+            </p>
+          ) : (
+            <ul className="divide-y divide-border/60">
+              {jadwal.items.map((j) => (
+                <li key={j.id} className="px-3 py-2 flex items-center gap-2" data-testid={`pemeliharaan-jadwal-${j.id}`}>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                      <p className="text-xs font-semibold text-foreground truncate">{j.asset_name || "-"}</p>
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${BADGE_JADWAL[j.status] || BADGE_JADWAL.terjadwal}`}>
+                        {LABEL_JADWAL[j.status] || j.status} · {fmtTgl(j.jatuh_tempo)}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground truncate">
+                      <span className="font-mono">{j.asset_code} · {j.NUP}</span> · tiap {j.interval_bulan} bln
+                      {j.keterangan && ` · ${j.keterangan}`}
+                      {j.terakhir && ` · terakhir ${fmtTgl(j.terakhir)}`}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => bukaForm({ id: j.asset_id, asset_name: j.asset_name, asset_code: j.asset_code, NUP: j.NUP })}
+                    className="h-7 px-2 rounded-lg bg-orange-600 hover:bg-orange-700 text-white text-[11px] font-semibold flex-shrink-0 min-h-0 min-w-0"
+                    data-testid={`pemeliharaan-jadwal-catat-${j.id}`}
+                  >
+                    Catat
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => bukaFormJadwal(j)}
+                    aria-label="Ubah jadwal"
+                    className="h-7 w-7 rounded-lg border border-border text-foreground/70 flex items-center justify-center hover:bg-muted flex-shrink-0 min-h-0 min-w-0"
+                  >
+                    <Pencil className="w-3 h-3" />
+                  </button>
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => hapusJadwal(j)}
+                      aria-label="Hapus jadwal"
+                      className="h-7 w-7 rounded-lg border border-border text-red-500 flex items-center justify-center hover:bg-red-500/10 flex-shrink-0 min-h-0 min-w-0"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         {/* ── Aset dengan biaya terbesar ── */}
@@ -500,6 +653,85 @@ export default function PemeliharaanPage({ user, onBack }) {
             <Button variant="outline" onClick={() => setForm(null)}>Batal</Button>
             <Button onClick={simpan} disabled={form?.saving} className="bg-orange-600 hover:bg-orange-700 text-white" data-testid="pemeliharaan-simpan">
               {form?.saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Wrench className="w-4 h-4 mr-1.5" />}Simpan Catatan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog jadwal berkala ── */}
+      <Dialog open={!!formJadwal} onOpenChange={(o) => { if (!o) setFormJadwal(null); }}>
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{formJadwal?.id ? "Ubah Jadwal Berkala" : "Tambah Jadwal Berkala"}</DialogTitle>
+            <DialogDescription className="text-xs">
+              Jatuh tempo berikutnya dihitung dari pelaksanaan terakhir + interval;
+              mencatat pemeliharaan aset ini otomatis menggeser jadwalnya.
+            </DialogDescription>
+          </DialogHeader>
+          {formJadwal && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmlj-aset">Aset</label>
+                {formJadwal.aset ? (
+                  <div className="flex items-center justify-between gap-2 rounded-lg border border-border p-2">
+                    <span className="min-w-0">
+                      <span className="block text-xs font-semibold text-foreground truncate">{formJadwal.aset.asset_name}</span>
+                      <span className="block text-[10px] text-muted-foreground font-mono">{formJadwal.aset.asset_code} · {formJadwal.aset.NUP}</span>
+                    </span>
+                    {!formJadwal.id && (
+                      <button type="button" onClick={() => setFormJadwal((f) => ({ ...f, aset: null }))} aria-label="Ganti aset"
+                        className="h-7 w-7 rounded-lg border border-border text-foreground/70 flex items-center justify-center hover:bg-muted flex-shrink-0 min-h-0 min-w-0">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
+                    <Input id="pmlj-aset" className="pl-8" placeholder="Cari nama/kode aset (min. 2 huruf)"
+                      value={cari} onChange={(e) => setCari(e.target.value)} data-testid="pemeliharaan-jadwal-cari" />
+                    {(mencari || hasilCari.length > 0) && cari.trim().length >= 2 && (
+                      <div className="absolute z-50 mt-1 w-full max-h-48 overflow-y-auto rounded-lg border border-border bg-card shadow-lg">
+                        {mencari ? (
+                          <div className="flex justify-center py-3"><Loader2 className="w-4 h-4 animate-spin text-orange-600" /></div>
+                        ) : hasilCari.map((a) => (
+                          <button key={a.id} type="button"
+                            onClick={() => { setFormJadwal((f) => ({ ...f, aset: a })); setCari(""); setHasilCari([]); }}
+                            className="w-full px-2.5 py-1.5 text-left hover:bg-muted">
+                            <span className="block text-xs font-semibold text-foreground truncate">{a.asset_name}</span>
+                            <span className="block text-[10px] text-muted-foreground font-mono">{a.asset_code} · {a.NUP}{a.location ? ` · ${a.location}` : ""}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmlj-interval">Interval (bulan)</label>
+                <Input id="pmlj-interval" type="number" min="1" max="60"
+                  value={formJadwal.data.interval_bulan}
+                  onChange={(e) => setFieldJadwal("interval_bulan", e.target.value)}
+                  data-testid="pemeliharaan-jadwal-interval" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmlj-mulai">Jatuh tempo pertama</label>
+                <Input id="pmlj-mulai" type="date"
+                  value={formJadwal.data.mulai}
+                  onChange={(e) => setFieldJadwal("mulai", e.target.value)} />
+              </div>
+              <div className="col-span-2">
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmlj-ket">Keterangan</label>
+                <Input id="pmlj-ket" placeholder="cth. servis rutin AC / ganti oli genset"
+                  value={formJadwal.data.keterangan}
+                  onChange={(e) => setFieldJadwal("keterangan", e.target.value)} />
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setFormJadwal(null)}>Batal</Button>
+            <Button onClick={simpanJadwal} disabled={formJadwal?.saving} className="bg-orange-600 hover:bg-orange-700 text-white" data-testid="pemeliharaan-jadwal-simpan">
+              {formJadwal?.saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <CalendarClock className="w-4 h-4 mr-1.5" />}Simpan Jadwal
             </Button>
           </DialogFooter>
         </DialogContent>
