@@ -14,6 +14,7 @@ pengelolaan BMN — baca `docs/MASTERPLAN-SIKLUS-BMN.md` sebelum menambah modul.
 | Area | Lokasi | Catatan |
 |---|---|---|
 | Registry field aset | `backend/asset_fields.py` | SATU sumber kebenaran 42 field skalar → proyeksi list, PATCH, batch, CSV, impor, audit. Tambah field = ikuti panduan di header file; test anti-drift menagih semua turunan |
+| Kodefikasi barang | `backend/kodefikasi_utils.py` + `routes/kodefikasi.py` | Struktur 5 level dari panjang prefix (1/3/5/7/10 digit); digit 1 = domain ('1' persediaan, '2'-'8' aset); seed 8 golongan idempoten; lookup hierarki `/api/kodefikasi/lookup/{kode}` |
 | Route API | `backend/routes/*.py` | assets, exports (geo/xlsx/pdf), reports (ReportLab), activities, auth, backup |
 | Laporan PDF | `backend/routes/reports.py` | Helper wajib dipakai: `_kop_surat_flowables`, `_activity_identity`, `_identity_table`, `_fmt_tanggal_id`, `_signature_block` ("Kuasa Pengguna Barang") |
 | Test unit | `backend/tests/unit/` | Jalan tanpa Mongo; registry test menjaga drift |
@@ -99,6 +100,10 @@ status modul berubah.
   `(ValueError, OverflowError)`.
 - Efek refetch harus menyertakan SEMUA filter di deps — filter baru yang
   lupa didaftarkan tidak memicu muat ulang.
+- Sesi Claude Code yang sangat panjang: token konektor GitHub bisa
+  kedaluwarsa sesaat ("requires re-authorization") — coba ulang dulu
+  (token biasanya diperbarui otomatis); bila tetap gagal, PR yang CI-nya
+  hijau bisa di-merge manual lewat tombol GitHub, pekerjaan tidak hilang.
 
 ## Checklist pemilik proyek (setingan untuk kesuksesan bertahap)
 

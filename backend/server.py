@@ -183,6 +183,7 @@ from routes.pdf_compress import pdf_compress_router
 from routes.batch import batch_router
 from routes.documents import documents_router
 from routes.pengesahan import pengesahan_router
+from routes.kodefikasi import kodefikasi_router
 
 api_router.include_router(auth_router)
 api_router.include_router(categories_router)
@@ -203,6 +204,7 @@ api_router.include_router(audit_router)
 api_router.include_router(media_router)
 api_router.include_router(pdf_compress_router)
 api_router.include_router(documents_router)
+api_router.include_router(kodefikasi_router)
 
 
 # ============================================================================
