@@ -48,6 +48,14 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#90] DHPB PDF semesteran/tahunan — laporan berkala pemeliharaan — 2026-07-12
+
+- **DHPB (Daftar Hasil Pemeliharaan Barang)** per periode (tahun penuh /
+  Semester I / II — Ps. 47 PP 27/2014): PDF landscape berkop surat, grup
+  per aset + subtotal & total, tanda telaah kapitalisasi, ttd KPB; tombol
+  dropdown di halaman Pemeliharaan. Periode kosong = 404 (tanpa dummy).
+- Smoke render FakeDB menangkap bug label aset terjepit → SPAN baris grup.
+
 ## [#89] Pemeliharaan tahap awal: riwayat + biaya per aset (bahan DHPB) — 2026-07-12
 
 - **Modul Pemeliharaan** (PP 27/2014 Ps. 46-47, riset regulasi → pustaka
