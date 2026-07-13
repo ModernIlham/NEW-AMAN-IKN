@@ -202,6 +202,36 @@ const AdvancedFilter = memo(({
               />
             </div>
 
+            {/* Nama Pengguna aset (field registry: user) */}
+            <div>
+              <Label className="text-[10px] text-muted-foreground mb-1 block">Nama Pengguna</Label>
+              <OptimizedInput
+                type="text"
+                placeholder="Nama pemegang..."
+                name="filterUser"
+                value={filters.user || ""}
+                onChange={e => onFilterChange("user", e.target.value)}
+                className="h-7 text-xs"
+                debounceMs={400}
+                data-testid="filter-user"
+              />
+            </div>
+
+            {/* NIK/NIP pengguna aset (field registry: pengguna_nip) */}
+            <div>
+              <Label className="text-[10px] text-muted-foreground mb-1 block">NIK/NIP Pengguna</Label>
+              <OptimizedInput
+                type="text"
+                placeholder="NIK/NIP..."
+                name="filterPenggunaNip"
+                value={filters.penggunaNip || ""}
+                onChange={e => onFilterChange("penggunaNip", e.target.value)}
+                className="h-7 text-xs"
+                debounceMs={400}
+                data-testid="filter-pengguna-nip"
+              />
+            </div>
+
             {/* Rentang tanggal beli aset (bukan tanggal input) */}
             <div className="col-span-2">
               <Label className="text-[10px] text-muted-foreground mb-1 block">Tanggal Beli (Dari — Sampai)</Label>
@@ -275,6 +305,12 @@ const AdvancedFilter = memo(({
           )}
           {filters.perolehanDari && (
             <FilterBadge onRemove={() => onFilterChange("perolehanDari", "")} testid="badge-remove-perolehan">Perolehan: {filters.perolehanDari}</FilterBadge>
+          )}
+          {filters.user && (
+            <FilterBadge tone="violet" onRemove={() => onFilterChange("user", "")} testid="badge-remove-user">Pengguna: {filters.user}</FilterBadge>
+          )}
+          {filters.penggunaNip && (
+            <FilterBadge tone="violet" onRemove={() => onFilterChange("penggunaNip", "")} testid="badge-remove-pengguna-nip">NIK/NIP: {filters.penggunaNip}</FilterBadge>
           )}
           {(filters.dateFrom || filters.dateTo) && (
             <FilterBadge onRemove={() => { onFilterChange("dateFrom", ""); onFilterChange("dateTo", ""); }} testid="badge-remove-date">Tanggal: {filters.dateFrom || '…'} – {filters.dateTo || '…'}</FilterBadge>

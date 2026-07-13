@@ -422,6 +422,8 @@ async def export_geo(
     price_max: float = None,
     nomor_spm: str = "",
     perolehan_dari: str = "",
+    user_filter: str = "",
+    pengguna_nip: str = "",
     beli_dari: str = "",
     beli_sampai: str = "",
     ids: str = "",
@@ -444,7 +446,8 @@ async def export_geo(
         eselon1_filter=eselon1_filter, eselon2_filter=eselon2_filter,
         stiker_status=stiker_status, inventory_status=inventory_status,
         price_min=price_min, price_max=price_max, nomor_spm=nomor_spm,
-        perolehan_dari=perolehan_dari, beli_dari=beli_dari, beli_sampai=beli_sampai,
+        perolehan_dari=perolehan_dari, user_filter=user_filter, pengguna_nip=pengguna_nip,
+        beli_dari=beli_dari, beli_sampai=beli_sampai,
         ids=id_list,
     )
     # Streaming cursor (bukan to_list) + photo_count GridFS-first dengan

@@ -48,6 +48,27 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#244] Search data: filter Nama Pengguna + NIK/NIP pengguna aset — 2026-07-13
+
+- **Filter Data** (panel filter lanjutan) kini punya dua kolom baru: **Nama
+  Pengguna** (field `user`) dan **NIK/NIP Pengguna** (field `pengguna_nip`) —
+  keduanya pencarian *contains* (mengandung), literal-safe (`re.escape`, anti-ReDoS),
+  dan bisa dikombinasikan dengan filter lain maupun kotak pencarian bebas.
+  Alasan dedikasi kolom: NIK/NIP **tidak** termasuk daftar `$or` pencarian bebas,
+  jadi sebelumnya tak bisa dicari; nama pengguna kini bisa dipersempit presisi
+  tanpa mencampur hasil dari field lain.
+- Backend: parameter `user_filter` + `pengguna_nip` ditambahkan ke
+  `build_asset_search_query()` (satu builder dipakai `GET /assets` **dan** ekspor
+  geo KML/KMZ/SHP), plus diteruskan di endpoint `GET /assets` & ekspor geo — jadi
+  filter ini juga mempengaruhi titik & unduhan peta, konsisten dengan filter lain.
+- Offline: jalur `filterSnapshotRows` (snapshot lokal) ikut menyaring `user` &
+  `pengguna_nip` (keduanya ada di `LIST_PROJECTION`), sehingga hasil offline
+  identik dengan online.
+- Badge filter aktif "Pengguna: …" & "NIK/NIP: …" (nada violet) muncul saat terisi,
+  dengan tombol hapus per-filter. Ditambah 5 unit test murni untuk builder query.
+
+---
+
 ## [#243] Lightbox: navigasi antar-aset cukup SWIPE (tombol panah dihapus) — 2026-07-13
 
 - Menindaklanjuti #240: **tombol panah ‹ ›** untuk pindah antar-aset di kartu
