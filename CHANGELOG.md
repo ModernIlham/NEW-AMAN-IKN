@@ -48,6 +48,21 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#249] Rekonsiliasi XLSX SAKTI: ikut kecualikan aset dihapus (selaras Neraca) — 2026-07-13
+
+- Lanjutan #248: ekspor **Rekonsiliasi Posisi BMN (XLSX)** — sandingan
+  SAKTI/MonSAKTI — kini memakai `active_asset_filter` yang sama, sehingga posisi
+  per golongannya **konsisten dengan Laporan Posisi BMN di Neraca**. Tanpa ini,
+  rekonsiliasi bisa menunjukkan *selisih semu* hanya karena aset ber-SK
+  penghapusan (`dihapus=True`) masih ikut terhitung di ekspor tetapi tidak lagi
+  di Neraca.
+- Dengan ini keluarga laporan **POSISI/NILAI** (DBKP, Posisi BMN/Neraca, rekap
+  penyusutan, rekonsiliasi XLSX) seluruhnya konsisten mengecualikan aset
+  dihapus. Laporan **MUTASI** (LBKP/CaLBMN) tetap ditunda (butuh baris
+  pengurangan agar saldo seimbang). Verifikasi: pytest unit lulus.
+
+---
+
 ## [#248] Laporan posisi/nilai: kecualikan aset yang sudah DIHAPUS (stop double-count) — 2026-07-13
 
 - **Integrasi §5A Prinsip 3 (lanjutan #234/#200).** Saat SK penghapusan terbit,

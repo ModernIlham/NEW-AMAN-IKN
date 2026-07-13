@@ -2121,9 +2121,13 @@ async def generate_rekonsiliasi_xlsx(_user: dict = Depends(require_user_or_query
     )
     from persediaan_utils import nilai_persediaan_dari_batches
 
+    # Rekonsiliasi Posisi BMN harus SELARAS dengan Neraca (#248): kecualikan aset
+    # ber-SK penghapusan agar sandingan SAKTI/MonSAKTI tidak selisih hanya karena
+    # aset yang sudah dihapus masih ikut terhitung (§5A Prinsip 3).
     assets = await db.assets.find(
-        {}, {"_id": 0, "asset_code": 1, "NUP": 1, "asset_name": 1,
-             "purchase_price": 1, "location": 1, "condition": 1},
+        active_asset_filter(),
+        {"_id": 0, "asset_code": 1, "NUP": 1, "asset_name": 1,
+         "purchase_price": 1, "location": 1, "condition": 1},
     ).to_list(500000)
     uraian_map = {k: u for k, u in GOLONGAN_DEFAULTS}
     async for k in db.kodefikasi.find({"level": 1}, {"_id": 0, "kode": 1, "uraian": 1}):
