@@ -596,6 +596,13 @@ export default function PenggunaanPage({ user, onBack }) {
               <span className="px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-600 dark:text-sky-400 text-[10px] font-semibold">
                 {psp.ringkasan?.aset_tercakup || 0}/{psp.ringkasan?.total_aset || 0} aset tercakup
               </span>
+              {(psp.items || []).length > 0 && (
+                <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
+                  onClick={() => downloadFileWithProgress(`${API}/penggunaan/psp/export`, "register_sk_psp.csv", { label: "Ekspor Register SK PSP (CSV)" }).catch(() => {})}
+                  data-testid="penggunaan-psp-export">
+                  <FileDown className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">CSV</span>
+                </Button>
+              )}
               <Button size="sm" onClick={() => { setCariPsp(""); setHasilCariPsp([]); setFormPsp({ data: { nomor_sk: "", tanggal_sk: new Date().toISOString().slice(0, 10), jenis: "psp", penetap: "", keterangan: "", sebagai_draf: false }, aset: [], saving: false }); }}
                 className="h-7 text-[11px] min-h-0 bg-sky-600 hover:bg-sky-700 text-white" data-testid="penggunaan-psp-tambah">
                 <Plus className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">Catat SK</span>

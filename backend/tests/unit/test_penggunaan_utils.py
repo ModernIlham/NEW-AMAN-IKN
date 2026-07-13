@@ -153,6 +153,34 @@ class TestPsp:
         assert set(JENIS_PSP) == set(r["per_jenis"])
         assert rekap_psp([])["jumlah_sk"] == 0
 
+    def test_baris_csv_psp(self):
+        from penggunaan_utils import HEADER_CSV_PSP, baris_csv_psp
+        assert baris_csv_psp([]) == [HEADER_CSV_PSP]
+        assert baris_csv_psp(None) == [HEADER_CSV_PSP]
+        # SK multi-aset (2 aset) → 2 baris; record lama tanpa status = ditetapkan
+        rows = baris_csv_psp([{
+            "nomor_sk": "KEP-1", "tanggal_sk": "2026-07-01T00:00", "jenis": "psp",
+            "penetap": "KPKNL", "keterangan": "-", "created_by": "budi",
+            "lampiran": [{"file_id": "x"}],
+            "aset": [
+                {"asset_code": "3.01", "NUP": "1", "asset_name": "Mobil"},
+                {"asset_code": "3.01", "NUP": "2", "asset_name": "Motor"},
+            ],
+        }])
+        assert rows[0] == HEADER_CSV_PSP
+        assert len(rows) == 3
+        r1 = rows[1]
+        assert r1[0] == "3.01" and r1[2] == "Mobil"
+        assert r1[3] == "KEP-1" and r1[4] == "2026-07-01"   # tanggal dipangkas
+        assert r1[5] == "Penetapan Status Penggunaan (PSP)"  # label jenis
+        assert r1[7] == "Ditetapkan (SK terbit)"             # status default
+        assert r1[8] == 1                                     # jumlah lampiran
+        assert rows[2][1] == "2"
+        # Draf + jenis tak dikenal + tanpa aset → 1 baris, status "Draf Usulan"
+        kosong = baris_csv_psp([{"jenis": "zz", "status_pengajuan": "draf"}])[1]
+        assert kosong[0] == "" and kosong[5] == "zz"
+        assert kosong[7] == "Draf Usulan" and kosong[8] == 0
+
     def test_validasi_psp_draf(self):
         from penggunaan_utils import validate_psp
         draf = {"nomor_sk": "", "tanggal_sk": "", "jenis": "psp",

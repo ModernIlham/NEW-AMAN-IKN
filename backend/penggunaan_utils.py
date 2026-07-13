@@ -126,6 +126,43 @@ def rekap_psp(daftar_sk) -> dict:
             "per_status": per_status, "aset_tercakup": len(aset_unik)}
 
 
+HEADER_CSV_PSP = [
+    "kode_aset", "nup", "nama_aset", "nomor_sk", "tanggal_sk", "jenis",
+    "penetap", "status", "jumlah_lampiran", "keterangan", "dibuat_oleh",
+]
+
+
+def baris_csv_psp(sk_list) -> list:
+    """Susun baris CSV register SK PSP: [header, *data] — fungsi murni.
+
+    SK multi-aset di-flatten: SATU baris per aset (field SK diulang). Jenis
+    & status pengajuan diterjemahkan ke label (record lama tanpa status =
+    ditetapkan); tanggal SK dipangkas 10 char; jumlah lampiran dihitung;
+    field hilang → string kosong. Tanpa Mongo/IO agar teruji unit (pola
+    ekspor #158).
+    """
+    baris = [list(HEADER_CSV_PSP)]
+    for sk in sk_list or []:
+        jenis = JENIS_PSP.get(sk.get("jenis"), sk.get("jenis") or "")
+        status = STATUS_PENGAJUAN_PSP.get(status_pengajuan_psp(sk), "")
+        n_lampiran = len(sk.get("lampiran") or [])
+        for a in sk.get("aset") or [{}]:
+            baris.append([
+                a.get("asset_code") or "",
+                a.get("NUP") or "",
+                a.get("asset_name") or "",
+                sk.get("nomor_sk") or "",
+                str(sk.get("tanggal_sk") or "")[:10],
+                jenis,
+                sk.get("penetap") or "",
+                status,
+                n_lampiran,
+                sk.get("keterangan") or "",
+                sk.get("created_by") or "",
+            ])
+    return baris
+
+
 # Status tiket penanganan BMN idle → label Indonesia
 STATUS_IDLE = {
     "klarifikasi": "Klarifikasi (diteliti penggunaannya)",

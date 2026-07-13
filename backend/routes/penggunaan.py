@@ -21,7 +21,7 @@ from shared_utils import delete_document_from_gridfs, get_document_from_gridfs
 from penggunaan_utils import (
     ARAH_PROSES, JENIS_PROSES_PENGGUNAAN, JENIS_PSP, STATUS_IDLE,
     STATUS_PENGAJUAN_PSP, STATUS_PROSES, TRANSISI_PROSES, baris_csv_idle,
-    baris_csv_proses, indikasi_idle,
+    baris_csv_proses, baris_csv_psp, indikasi_idle,
     info_proses_sementara, kunci_pemegang, rekap_idle, rekap_pemegang,
     rekap_proses_penggunaan, rekap_psp, status_pengajuan_psp,
     validate_proses_penggunaan, validate_psp, validate_transisi_idle,
@@ -125,6 +125,25 @@ async def daftar_psp(_user: dict = Depends(require_user)):
                 "ditetapkan Pengelola Barang atau Pengguna Barang untuk BMN "
                 "tertentu (delegasi). AMAN mencatat cakupan SK per aset — "
                 "dokumen resmi tetap SK yang diterbitkan pejabat berwenang.")}
+
+
+@penggunaan_router.get("/penggunaan/psp/export")
+async def export_psp(_user: dict = Depends(require_user)):
+    """Ekspor CSV register SK PSP — flatten per aset (pola #158)."""
+    import csv as csv_module
+    import io
+
+    from fastapi.responses import Response as HttpResponse
+
+    items = [s async for s in db.psp.find({}, {"_id": 0}).sort("tanggal_sk", -1)]
+    buf = io.StringIO()
+    w = csv_module.writer(buf)
+    for row in baris_csv_psp(items):
+        w.writerow(row)
+    return HttpResponse(
+        content=buf.getvalue().encode("utf-8-sig"), media_type="text/csv",
+        headers={"Content-Disposition":
+                 'attachment; filename="register_sk_psp.csv"'})
 
 
 @penggunaan_router.post("/penggunaan/psp")
