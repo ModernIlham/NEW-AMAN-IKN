@@ -48,6 +48,25 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#261] Deteksi snapshot identitas aset basi (read-only) — §5A Prinsip 1 — 2026-07-13
+
+- **Integrasi §5A gap #8 / Prinsip 1 (langkah read-only pertama).** Register
+  hilir membekukan `asset_code`/`NUP`/`asset_name` saat record dibuat; bila
+  master aset kelak diedit, snapshot itu jadi **basi**. Endpoint **read-only**
+  `GET /integritas/identitas-penghapusan` membandingkan tiap usulan penghapusan
+  dengan master aset TERKINI (via `asset_id`) dan melaporkan yang **`snapshot_basi`**
+  (field yang berbeda) atau yang **`aset_master_hilang`** (master tak ada lagi),
+  lengkap dengan hitungan.
+- **Helper murni `identitas_drift(snapshot, master)`** (`integritas_utils.py`) →
+  dict `{field: {snapshot, master}}` hanya untuk field yang beda; perbandingan
+  ter-strip (None/""/spasi tepi setara → tak ada drift palsu). **6 unit test**.
+- **Tidak mengubah data apa pun** — hanya deteksi/laporan; penyegaran otomatis
+  saat master diedit & perluasan ke register hilir lain (pemeliharaan/
+  pemindahtanganan/…) adalah langkah terpisah. pytest **332 lulus**. Masterplan
+  §5A gap #8 diperbarui.
+
+---
+
 ## [#260] Konsolidasi §5A: ringkasan status integrasi siklus BMN — 2026-07-13
 
 - **Dokumentasi (masterplan §5A).** Menambah ringkasan status integrasi yang
