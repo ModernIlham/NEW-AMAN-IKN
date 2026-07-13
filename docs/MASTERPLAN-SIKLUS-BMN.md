@@ -179,6 +179,44 @@ Semua modul baru wajib tunduk pada tujuh prinsip berikut:
 
 ---
 
+## 5A. Status Integrasi Antar-Modul & Daftar Gap (audit 2026-07-13)
+
+Audit lintas-modul terhadap 5 prinsip Bab 5. Kepatuhan saat ini:
+
+| Prinsip | Status | Ringkas bukti |
+|---|---|---|
+| 1. Satu identitas aset | ✅ Patuh (risiko drift) | Semua modul merujuk `asset_id` + snapshot `asset_code/NUP`; snapshot **tak disegarkan** bila master berubah |
+| 2. Satu kodefikasi | ⚠️ Sebagian | Golongan **diturunkan** dari prefix di mana-mana; tapi kodefikasi **bukan FK tervalidasi** saat create aset/persediaan |
+| 3. Transaksi = jurnal, master = proyeksi | ❌ Melanggar (kecuali **Persediaan**) | Register hilir punya `riwayat[]` tapi **master tak diproyeksikan** (SK hapus/BA musnah/PSP/revaluasi tak meng-`update` `db.assets`); hanya Pemeliharaan yang memproyeksi kondisi |
+| 4. Dokumen sumber = simpul | ❌ Belum ada | `dokumen_sumber_id` 0 kecocokan; dokumen diketik ulang per modul |
+| 5. Approval = gerbang, OCC fondasi | ❌ Melanggar | `pending_changes` 0; OCC penuh hanya di `assets.py`; modul lain cek peran saja |
+
+**Daftar gap (dampak tertinggi → rendah), untuk ditutup bertahap per PR kecil:**
+
+1. **Master tak diproyeksikan dari transaksi hilir** (Prinsip 3) — aset SK-hapus/
+   dimusnahkan/dipindahtangankan/direvaluasi tetap "hidup & bernilai penuh" di
+   master → laporan resmi (DBKP/neraca/penyusutan) bisa *double-count*. Cicil per
+   modul, mulai proyeksi status saat **SK Penghapusan terbit** (pola CAS `version`
+   + audit seperti `assets.py`).
+2. **Belum ada simpul Dokumen Sumber** (Prinsip 4) — jadikan record perolehan
+   Pengadaan sebagai node; aset/persediaan simpan `perolehan_id`.
+3. **Approval `pending_changes` + OCC belum seragam** (Prinsip 5).
+4. **Perencanaan (RKBMN) → Penganggaran putus** — dua register paralel tanpa
+   `rkbmn_id`; tiru pola `snapshot_penganggaran` (Pengadaan→Penganggaran #199).
+5. ✅ **Pemusnahan → Penghapusan kini ber-FK** (`sumber_ba_id` + `sumber_ba_nomor`
+   pada `usulan_penghapusan`, #228) — sebelumnya hanya teks bebas. *Tersisa:*
+   Pemindahtanganan → Penghapusan (masih via string `nomor_sk_penghapusan`).
+6. **Pengadaan → Aset satu arah & manual** — perolehan tak auto-daftar master;
+   aset tak simpan `perolehan_id` balik.
+7. **Kodefikasi bukan FK tervalidasi** (Prinsip 2).
+8. **Snapshot identitas aset basi** (Prinsip 1) — disalin, tak disegarkan.
+
+> Aturan: tiap gap ditutup sebagai fitur kecil ber-PR (verifikasi → CI → deploy),
+> dengan proyeksi master memakai pola OCC `find_one_and_update` bersyarat +
+> audit log yang sudah terbukti di `assets.py`.
+
+---
+
 ## 6. Rumah Modul (sudah dibangun)
 
 - **Beranda Modul** (`frontend/src/pages/ModuleHomePage.jsx`) — halaman
