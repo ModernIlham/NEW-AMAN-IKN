@@ -208,8 +208,14 @@ Audit lintas-modul terhadap 5 prinsip Bab 5. Kepatuhan saat ini:
    via SK (`dihapus=True`) kini tampil sebagai **mutasi kurang** di periode SK
    terbit lewat helper murni `tombstones_penghapusan` + `build_lbkp_rows` yang
    sadar-tanggal-SK (#253), sehingga identitas *saldo akhir = awal + tambah −
-   kurang* tetap seimbang (diuji unit). *Tersisa:* proyeksi master dari BA
-   Pemusnahan, PSP/pemindahtanganan, dan revaluasi Penilaian.
+   kurang* tetap seimbang (diuji unit). ✅ **Revaluasi Penilaian kini
+   memproyeksi master** — saat koreksi nilai *tercatat SAKTI*, aset ditandai
+   `nilai_wajar_terakhir` + jejak `revaluasi.{...}` + `$inc version` + audit
+   `action="revaluasi"` (#254, helper murni `build_asset_revaluasi_projection`,
+   best-effort/idempoten spt #234); `purchase_price` historis TAK ditimpa.
+   *Tersisa:* laporan posisi/nilai MEMAKAI `nilai_wajar_terakhir` bila ada
+   (langkah lanjut), serta proyeksi master dari BA Pemusnahan dan
+   PSP/pemindahtanganan.
 2. **Belum ada simpul Dokumen Sumber** (Prinsip 4) — jadikan record perolehan
    Pengadaan sebagai node; aset/persediaan simpan `perolehan_id`.
 3. **Approval `pending_changes` + OCC belum seragam** (Prinsip 5).
