@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Search, Loader2, UserCheck, ChevronLeft, ChevronRight,
   BadgeCheck, FileWarning, FileText, Plus, X, Trash2, ScrollText,
-  Paperclip, Upload,
+  Paperclip, Upload, FileDown,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -408,6 +408,14 @@ export default function PenggunaanPage({ user, onBack }) {
               <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px] font-semibold">
                 {idle.ringkasan?.kandidat || 0} kandidat
               </span>
+              {(idle.tiket || []).length > 0 && (
+                <button type="button"
+                  onClick={() => downloadFileWithProgress(`${API}/penggunaan/idle/export`, "register_tiket_bmn_idle.csv", { label: "Ekspor Register Tiket BMN Idle (CSV)" }).catch(() => {})}
+                  className="h-7 px-2 rounded-lg border border-border text-[11px] font-semibold text-foreground/80 flex items-center gap-1 hover:bg-muted min-h-0 flex-shrink-0"
+                  data-testid="penggunaan-idle-export">
+                  <FileDown className="w-3.5 h-3.5" /><span className="hidden sm:inline">CSV</span>
+                </button>
+              )}
             </div>
             {(idle.kandidat || []).length === 0 ? (
               <p className="text-xs text-muted-foreground text-center py-5 px-4">

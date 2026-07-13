@@ -241,7 +241,7 @@ export const SIKLUS_MODULES = [
     fitur: [
       "✅ Rekap aset per pemegang lintas kegiatan + kelengkapan BAST/NIP",
       "✅ Daftar Barang yang Digunakan per pemegang (PDF lampiran BAST, tanda tangan pemegang + KPB)",
-      "✅ Daftar pantau BMN idle (PMK 120/2024): kandidat otomatis + tiket klarifikasi → usul serah → diserahkan",
+      "✅ Daftar pantau BMN idle (PMK 120/2024): kandidat otomatis + tiket klarifikasi → usul serah → diserahkan + ekspor CSV register tiket",
       "✅ Register SK penetapan penggunaan multi-aset (PSP/alih status/sementara/pihak lain/bersama) + cakupan aset ter-PSP",
       "✅ Arsip scan SK penetapan + dokumen pendukung per register (PDF/gambar)",
       "✅ Tiket proses 4 rezim PMK 40/2024 (alih status/sementara/pihak lain/bersama) ber-pipeline + pengingat perpanjangan ≤90 hari",

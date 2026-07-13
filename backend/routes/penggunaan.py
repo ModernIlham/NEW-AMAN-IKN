@@ -20,7 +20,8 @@ from db import db, fs_bucket
 from shared_utils import delete_document_from_gridfs, get_document_from_gridfs
 from penggunaan_utils import (
     ARAH_PROSES, JENIS_PROSES_PENGGUNAAN, JENIS_PSP, STATUS_IDLE,
-    STATUS_PENGAJUAN_PSP, STATUS_PROSES, TRANSISI_PROSES, indikasi_idle,
+    STATUS_PENGAJUAN_PSP, STATUS_PROSES, TRANSISI_PROSES, baris_csv_idle,
+    indikasi_idle,
     info_proses_sementara, kunci_pemegang, rekap_idle, rekap_pemegang,
     rekap_proses_penggunaan, rekap_psp, status_pengajuan_psp,
     validate_proses_penggunaan, validate_psp, validate_transisi_idle,
@@ -457,6 +458,26 @@ async def daftar_idle(_user: dict = Depends(require_user)):
                 "wajib diteliti (klarifikasi); bila benar idle, diserahkan "
                 "kepada Pengelola Barang. Kandidat dihitung otomatis dari "
                 "status Nonaktif / tanpa pengguna.")}
+
+
+@penggunaan_router.get("/penggunaan/idle/export")
+async def export_idle(_user: dict = Depends(require_user)):
+    """Ekspor CSV register tiket penanganan BMN idle (pola #158)."""
+    import csv as csv_module
+    import io
+
+    from fastapi.responses import Response as HttpResponse
+
+    tiket = [t async for t in db.bmn_idle.find({}, {"_id": 0})
+             .sort("created_at", -1)]
+    buf = io.StringIO()
+    w = csv_module.writer(buf)
+    for row in baris_csv_idle(tiket):
+        w.writerow(row)
+    return HttpResponse(
+        content=buf.getvalue().encode("utf-8-sig"), media_type="text/csv",
+        headers={"Content-Disposition":
+                 'attachment; filename="register_tiket_bmn_idle.csv"'})
 
 
 @penggunaan_router.post("/penggunaan/idle")
