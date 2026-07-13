@@ -48,7 +48,24 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
-## [#207] Ekspor CSV register penertiban Wasdal — 2026-07-13
+## [#208] Simpan-lanjut lintas halaman + galeri auto-scroll prefetch — 2026-07-13
+
+- **Ritme input tak putus lintas halaman:** saat menekan Simpan/Update pada
+  aset **terakhir yang dimuat** sementara masih ada halaman berikutnya,
+  aplikasi kini otomatis memuat halaman berikutnya lalu membuka aset
+  **pertama**-nya untuk diedit — tak lagi berhenti/menutup form di baris
+  terakhir. Berlaku di form penuh, sheet inventarisasi cepat, dan Mode
+  Kamera (tombol ▶). `loadMoreMobile` mengembalikan baris baru (menghindari
+  masalah closure basi); gerbang tombol memakai `hasMoreToLoad`
+  (`mobileCurrentPage < totalPages`); aset baru dikunci seperti navigasi
+  biasa. Di tabel (≥lg) tak mengubah paginasi; di galeri/kartu memakai
+  infinite scroll yang sama.
+- **Galeri auto-muat lebih sigap:** pemicu "muat lebih banyak" diganti dari
+  pengecekan indeks baris virtual (baru ter-mount saat mepet bawah) menjadi
+  **IntersectionObserver** pada sentinel nyata dengan **prefetch 600px** —
+  daftar termuat otomatis SAAT gulir *hampir* sampai bawah, terasa lebih
+  cepat. Ditambah `overscroll-behavior: contain` agar momentum gulir tak
+  bocor ke halaman (mengunci kepemilikan scroll di kontainer galeri).
 
 - **Ekspor CSV** register penertiban wasdal (`GET
   /wasdal/penertiban/export`), melengkapi pola ekspor register. Kolom:

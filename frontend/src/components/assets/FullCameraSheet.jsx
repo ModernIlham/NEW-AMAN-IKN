@@ -97,6 +97,7 @@ const FullCameraSheet = memo(function FullCameraSheet({
   isEditing = false,
   assetIndex = -1,
   totalAssetsInView = 0,
+  hasMoreToLoad = false,
   savedCount = 0,
   busy = false,
   onClose,
@@ -393,7 +394,10 @@ const FullCameraSheet = memo(function FullCameraSheet({
   const maxReached = photos.length >= maxPhotos;
   const backAction = isEditing ? () => onNavigate?.("prev") : onReviewSaved;
   const canBack = isEditing ? assetIndex > 0 : (!!onReviewSaved && totalAssetsInView > 0);
-  const canNext = isEditing && assetIndex >= 0 && assetIndex < totalAssetsInView - 1;
+  // Lanjut bila masih ada aset di daftar, ATAU masih ada halaman berikutnya
+  // yang bisa dimuat (ritme input kamera lintas halaman tak terputus).
+  const canNext = isEditing && assetIndex >= 0
+    && (assetIndex < totalAssetsInView - 1 || hasMoreToLoad);
   // Nama Aset WAJIB diisi sebelum memotret (rana dikunci selama kosong).
   const nameFilled = !!(formData?.asset_name || "").trim();
 

@@ -265,6 +265,7 @@ const AssetGalleryView = memo(({
 }) => {
   const [lightboxAsset, setLightboxAsset] = useState(null);
   const containerRef = useRef(null);
+  const sentinelRef = useRef(null);
   // Mobile-first initial guess (based on viewport) so phones never flash a
   // 4-column grid before the ResizeObserver measures the real container width.
   // A 4-col first paint squeezes each card to ~65px and clips the footer's
@@ -321,14 +322,12 @@ const AssetGalleryView = memo(({
     return result;
   }, [assets, columns]);
 
-  // Virtualizer for rows
+  // Virtualizer for rows (tanpa baris sentinel virtual — pemicu load-more kini
+  // via IntersectionObserver pada elemen sentinel NYATA di bawah daftar).
   const virtualizer = useVirtualizer({
-    count: rows.length + (hasMore ? 1 : 0), // +1 for load more sentinel
+    count: rows.length,
     getScrollElement: () => containerRef.current,
-    estimateSize: (index) => {
-      if (index === rows.length) return 60; // Load more row
-      return ROW_HEIGHT;
-    },
+    estimateSize: () => ROW_HEIGHT,
     overscan: 3,
   });
 
@@ -339,16 +338,21 @@ const AssetGalleryView = memo(({
     virtualizer.measure();
   }, [ROW_HEIGHT]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Trigger load more when sentinel row is visible
+  // Auto-muat halaman berikutnya saat sentinel MENDEKATI bawah (prefetch 600px)
+  // — IntersectionObserver pada elemen nyata dengan root = kontainer galeri.
+  // Jauh lebih andal & terasa lebih sigap daripada memeriksa indeks baris
+  // virtual (yang hanya ter-mount saat sudah mepet ke bawah). rootMargin
+  // membuatnya memuat sebelum benar-benar sampai ke ujung.
   useEffect(() => {
-    if (!onLoadMore || !hasMore || isLoadingMore) return;
-
-    const items = virtualizer.getVirtualItems();
-    const lastItem = items[items.length - 1];
-    if (lastItem && lastItem.index >= rows.length) {
-      onLoadMore();
-    }
-  }, [virtualizer.getVirtualItems(), onLoadMore, hasMore, isLoadingMore, rows.length]);
+    const el = sentinelRef.current;
+    const root = containerRef.current;
+    if (!el || !root || !onLoadMore) return undefined;
+    const io = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting && hasMore && !isLoadingMore) onLoadMore();
+    }, { root, rootMargin: "600px 0px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [onLoadMore, hasMore, isLoadingMore]);
 
   const openLightbox = useCallback((asset) => {
     setLightboxAsset(asset);
@@ -366,6 +370,9 @@ const AssetGalleryView = memo(({
         className="overflow-y-auto overflow-x-hidden h-[calc(100dvh-140px)] sm:h-[calc(100dvh-280px)]"
         style={{
           contain: 'layout style',
+          // Cegah momentum scroll "bocor" ke <main> (double-scroll) sehingga
+          // gulir tetap dimiliki kontainer galeri & sentinel andal terpicu.
+          overscrollBehavior: 'contain',
         }}
         data-testid="gallery-grid"
       >
@@ -377,35 +384,6 @@ const AssetGalleryView = memo(({
           }}
         >
           {virtualizer.getVirtualItems().map((virtualRow) => {
-            // Load more sentinel row
-            if (virtualRow.index === rows.length) {
-              return (
-                <div
-                  key="load-more"
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    height: `${virtualRow.size}px`,
-                    transform: `translateY(${virtualRow.start}px)`,
-                  }}
-                  className="flex items-center justify-center py-4"
-                >
-                  {isLoadingMore ? (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Memuat data lanjutan...</span>
-                    </div>
-                  ) : (
-                    <div className="text-center text-xs text-muted-foreground">
-                      Scroll ke bawah untuk memuat lebih banyak
-                    </div>
-                  )}
-                </div>
-              );
-            }
-
             const row = rows[virtualRow.index];
             return (
               <div
@@ -450,6 +428,24 @@ const AssetGalleryView = memo(({
             );
           })}
         </div>
+
+        {/* Sentinel prefetch nyata: IntersectionObserver memicu load-more saat
+            elemen ini mendekati bawah (rootMargin 600px) — memuat otomatis
+            SEBELUM benar-benar sampai ke ujung. */}
+        {hasMore && (
+          <div ref={sentinelRef} className="flex items-center justify-center py-4" data-testid="gallery-loadmore-sentinel">
+            {isLoadingMore ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Memuat data lanjutan...</span>
+              </div>
+            ) : (
+              <div className="text-center text-xs text-muted-foreground">
+                Memuat otomatis saat digulir…
+              </div>
+            )}
+          </div>
+        )}
 
         {/* End of list indicator */}
         {!hasMore && assets.length > 0 && (
