@@ -464,7 +464,7 @@ const InventoryFieldSheet = ({
                     disabled={gpsLoading}
                     aria-label="Perbarui koordinat GPS"
                     data-testid="sheet-gps-refresh-btn"
-                    className="h-7 w-7 rounded-md flex items-center justify-center flex-shrink-0 text-muted-foreground hover:text-blue-600 hover:bg-accent transition-colors"
+                    className={`h-7 w-7 rounded-md flex items-center justify-center flex-shrink-0 hover:bg-accent transition-colors ${gpsLoading ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground hover:text-blue-600 dark:hover:text-blue-400"}`}
                   >
                     {gpsLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
                   </button>
@@ -475,7 +475,9 @@ const InventoryFieldSheet = ({
                   onClick={onFetchGPS}
                   disabled={gpsLoading}
                   data-testid="sheet-gps-btn"
-                  className="flex items-center gap-1.5 text-[11px] font-medium text-blue-600 hover:text-blue-700 transition-colors"
+                  className={`flex items-center gap-1.5 text-[11px] font-medium transition-colors ${gpsLoading
+                    ? "text-amber-600 dark:text-amber-400"
+                    : "text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"}`}
                 >
                   {gpsLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <LocateFixed className="w-3.5 h-3.5" />}
                   {gpsLoading ? "Mencari lokasi..." : "Ambil GPS"}

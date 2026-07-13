@@ -15,9 +15,10 @@
  * @param {Object} [opts]
  * @param {(fix:{lat:string,lng:string,accuracy:number}) => void} [opts.onUpdate]
  *        Dipanggil tiap kali ada fix baru yang lebih akurat (untuk tampilan realtime).
- * @param {number} [opts.desiredAccuracy=8] meter — selesai lebih awal bila tercapai.
- *        Diperketat dari 15→8 m agar koordinat lebih akurat (radius lebih sempit);
- *        bila sinyal tak sampai 8 m, fix TERBAIK dalam `maxWait` tetap dipakai.
+ * @param {number} [opts.desiredAccuracy=6] meter — selesai lebih awal bila tercapai.
+ *        Diperketat 15→8→6 m agar koordinat hanya direkam pada radius ≤6 m
+ *        (sejalan dengan gating kamera); bila sinyal tak sampai 6 m, fix TERBAIK
+ *        dalam `maxWait` tetap dipakai (dan rana kamera tetap terkunci >6 m).
  * @param {number} [opts.maxWait=12000] ms — durasi maksimum mengumpulkan fix.
  *        Diperpanjang 8→12 dtk supaya GPS punya waktu mengerucut ke fix ketat;
  *        `onUpdate` memperbarui koordinat realtime selama proses berlangsung.
@@ -26,7 +27,7 @@
  */
 export function acquireAccuratePosition({
   onUpdate,
-  desiredAccuracy = 8,
+  desiredAccuracy = 6,
   maxWait = 12000,
   timeout = 15000,
 } = {}) {

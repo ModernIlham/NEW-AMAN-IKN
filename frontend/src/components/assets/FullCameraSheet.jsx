@@ -507,16 +507,17 @@ const FullCameraSheet = memo(function FullCameraSheet({
     : EDIT_FIELDS;
 
   // ── Gating akurasi GPS: jaga agar koordinat range lebar tak terekam ──
-  // Hijau ≤6 m (berkedip), kuning ≤8 m, di atas 8 m rana DIKUNCI + diredupkan.
-  // GPS mati/ditolak → tak menggate (tak ada koordinat = tak ada risiko).
-  // Masih mencari fix (belum ada akurasi) → tahan rana dulu sampai fix akurat.
+  // Cutoff diperketat: koordinat HANYA boleh direkam bila akurasi ≤6 m; di atas
+  // 6 m rana DIKUNCI + diredupkan (dulu 8 m). ≤4 m = SANGAT AKURAT (jarang) →
+  // effect lebih heboh agar pengguna segera memotret. GPS mati/ditolak → tak
+  // menggate. Masih mencari fix (belum ada akurasi) → tahan rana sampai akurat.
   const gpsAcc = gps?.accuracy;
-  const accGood = typeof gpsAcc === "number" && gpsAcc <= 6;
-  const accFair = typeof gpsAcc === "number" && gpsAcc > 6 && gpsAcc <= 8;
-  const accPoor = typeof gpsAcc === "number" && gpsAcc > 8;
-  const gpsBlocked = !gpsDenied && (gpsAcc == null || gpsAcc > 8);
+  const accExcellent = typeof gpsAcc === "number" && gpsAcc <= 4;          // sangat akurat (jarang)
+  const accOk = typeof gpsAcc === "number" && gpsAcc <= 6;                 // ≤6 m → boleh potret
+  const accPoor = typeof gpsAcc === "number" && gpsAcc > 6;               // >6 m → rana dikunci
+  const gpsBlocked = !gpsDenied && (gpsAcc == null || gpsAcc > 6);
   const ringColor = gpsDenied ? null
-    : accGood ? "#22c55e" : accFair ? "#eab308" : accPoor ? "#ef4444" : "#64748b";
+    : accOk ? "#22c55e" : accPoor ? "#ef4444" : "#64748b";
 
   return createPortal(
     <div className="fixed inset-0 z-[120] bg-black flex flex-col" role="dialog" aria-modal="true" aria-label="Mode Kamera Penuh" data-testid="full-camera-sheet">
@@ -524,12 +525,28 @@ const FullCameraSheet = memo(function FullCameraSheet({
       <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" playsInline muted
         style={brightness !== 1 ? { filter: `brightness(${brightness})` } : undefined} />
 
-      {/* Cincin akurasi GPS di tepi area kamera — hijau ≤6 m (berkedip), kuning
-          ≤8 m, merah >8 m (rana dikunci). Tak tampil bila GPS mati/ditolak. */}
+      {/* Cincin akurasi GPS di tepi area kamera — hijau ≤6 m (berkedip), merah
+          >6 m (rana dikunci). ≤4 m: cincin lebih tebal + cahaya dalam (heboh).
+          Tak tampil bila GPS mati/ditolak. */}
       {ringColor && (
         <div aria-hidden="true" data-testid="full-camera-gps-ring"
-          className={`absolute inset-0 z-[6] pointer-events-none ${accGood ? "animate-pulse" : ""}`}
-          style={{ boxShadow: `inset 0 0 0 4px ${ringColor}` }} />
+          className={`absolute inset-0 z-[6] pointer-events-none ${accOk ? "animate-pulse" : ""}`}
+          style={{ boxShadow: accExcellent
+            ? "inset 0 0 0 6px #22c55e, inset 0 0 48px rgba(34,197,94,0.55)"
+            : `inset 0 0 0 4px ${ringColor}` }} />
+      )}
+      {/* ≤4 m SANGAT AKURAT (jarang): cincin ping kedua + badge ajakan segera
+          memotret — dorong pengguna menangkap titik paling presisi. */}
+      {accExcellent && (
+        <>
+          <div aria-hidden="true" data-testid="full-camera-gps-excellent-ping"
+            className="absolute inset-3 z-[6] pointer-events-none rounded-3xl border-4 border-emerald-400/80 animate-ping" />
+          <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[8] pointer-events-none px-1">
+            <span className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-emerald-500 text-white text-xs font-extrabold shadow-lg animate-bounce whitespace-nowrap">
+              🎯 Akurasi ±{gpsAcc} m — segera potret!
+            </span>
+          </div>
+        </>
       )}
       {/* Reticle tap-to-focus (muncul di titik ketukan, memudar sendiri). */}
       {focusRipple && (
@@ -723,7 +740,7 @@ const FullCameraSheet = memo(function FullCameraSheet({
           </button>
           <button type="button" onClick={capture} disabled={!ready || photos.length >= maxPhotos || !nameFilled || gpsBlocked}
             aria-label="Ambil foto" data-testid="full-camera-shutter"
-            title={gpsBlocked ? (gpsAcc == null ? "Menunggu sinyal GPS akurat…" : `Akurasi GPS ±${gpsAcc} m terlalu lebar (maks ±8 m)`) : undefined}
+            title={gpsBlocked ? (gpsAcc == null ? "Menunggu sinyal GPS akurat…" : `Akurasi GPS ±${gpsAcc} m terlalu lebar (maks ±6 m)`) : undefined}
             className="w-[72px] h-[72px] rounded-full border-4 border-white flex items-center justify-center disabled:opacity-40">
             <span className="w-14 h-14 rounded-full bg-white flex items-center justify-center">
               <Camera className="w-6 h-6 text-black/70" />

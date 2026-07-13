@@ -48,6 +48,24 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#235] Kamera/GPS: cutoff ≤6 m + effect "heboh" ≤4 m + tombol Ambil GPS theme-aware — 2026-07-13
+
+- **Cutoff koordinat diperketat 8→6 m.** Rana kamera kini terkunci bila akurasi
+  GPS **>6 m** (dulu >8 m), sehingga koordinat berrange lebar tak terekam. Cincin
+  tepi kamera: **hijau ≤6 m** (boleh potret), **merah >6 m** (rana dikunci).
+  `acquireAccuratePosition` `desiredAccuracy` juga 8→6 m.
+- **≤4 m = "sangat akurat" (jarang) → effect lebih heboh.** Saat akurasi
+  menyentuh **±≤4 m**, cincin hijau menebal + bercahaya ke dalam, muncul cincin
+  ping kedua, dan badge memantul **"🎯 Akurasi ±N m — segera potret!"** untuk
+  mendorong surveyor langsung menangkap titik paling presisi.
+- **Tombol "Ambil GPS" saat mencari kini theme-aware.** Sebelumnya warnanya tak
+  ikut light/dark (dan meredup karena `disabled:opacity-50`) → terlihat kusam.
+  Kini state "Mencari…" memakai amber yang jelas di kedua tema; state normal
+  biru dengan varian `dark:`. Diperbaiki di form edit, InventoryFieldSheet
+  (2 tombol), dan konsisten dengan gating kamera.
+
+---
+
 ## [#234] Integrasi: proyeksi Penghapusan → master aset saat SK terbit (Prinsip 3) — 2026-07-13
 
 Gap integrasi teratas §5A masterplan (Prinsip 3 Bab 5: *transaksi = jurnal,
