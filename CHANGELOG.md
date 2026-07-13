@@ -48,6 +48,19 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#231] Mode list: klik foto baris aset → lightbox seperti galeri — 2026-07-13
+
+- **Foto di baris daftar aset kini bisa diklik → membuka lightbox foto** yang
+  sama seperti mode galeri & popup peta (`PhotoLightbox`). Berlaku di **tabel
+  desktop** (thumbnail baris) maupun **kartu HP** (mode list) — hanya bila
+  aset punya foto (kursor `zoom-in` + cincin biru saat hover/tekan). Lightbox
+  memuat foto beresolusi penuh + navigasi antar-foto + info aset. Prop
+  `onOpenPhoto` diteruskan ke `VirtualizedAssetTable`, `VirtualizedMobileCards`
+  → `AssetMobileCard`; state `photoLightboxAsset` di DashboardPage merender
+  `PhotoLightbox` (lazy).
+
+---
+
 ## [#230] Header HP: gabungkan Pengguna + Riwayat + Keluar ke satu menu — 2026-07-13
 
 - **Header lebih ringkas di HP.** Di layar kecil, tombol **Pengguna**,

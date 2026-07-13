@@ -34,6 +34,7 @@ const RekapitulasiPanel = lazy(() => import("@/components/assets/RekapitulasiPan
 const AuditLogPanel = lazy(() => import("@/components/assets/AuditLogPanel"));
 const AssetGroupsPanel = lazy(() => import("@/components/assets/AssetGroupsPanel"));
 const AssetMapFullView = lazy(() => import("@/components/assets/AssetMapFullView"));
+const PhotoLightbox = lazy(() => import("@/components/assets/PhotoLightbox"));
 import DashboardHeader from "@/components/assets/DashboardHeader";
 import StatsBar from "@/components/assets/StatsBar";
 import InventoryProgressBar from "@/components/assets/InventoryProgressBar";
@@ -276,6 +277,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   const [auditAssetCode, setAuditAssetCode] = useState("");
   // Kartu Inventarisasi: identitas aset yang riwayatnya sedang dibuka
   const [kartuIdentity, setKartuIdentity] = useState(null);
+  const [photoLightboxAsset, setPhotoLightboxAsset] = useState(null); // foto baris list → lightbox
 
   // Dialog visibility - consolidated into single reducer
   const [dialogs, dispatchDialog] = useReducer((state, action) => {
@@ -1693,11 +1695,11 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
               ) : (<>
                 <div className="relative hidden lg:block">
                   <TooltipProvider>
-                    <VirtualizedAssetTable assets={assets} editId={editAssetForForm?.id} onEdit={perms.canEdit ? handleEdit : undefined} onDelete={perms.canDelete ? handleDelete : undefined} onPrintCard={handlePrintCard} onOpenKartu={handleOpenKartu} onViewAudit={handleViewAssetAudit} pageSize={pageSize} rowLocks={rowLocks} currentSessionId={sessionId} syncStatuses={syncStatuses} onRetrySync={retrySync} onDismissSync={dismissSync} selectedAssets={selectedAssets} onToggleSelect={perms.canEdit ? toggleSelectAsset : undefined} onToggleSelectAll={perms.canEdit ? toggleSelectAll : undefined} />
+                    <VirtualizedAssetTable assets={assets} editId={editAssetForForm?.id} onEdit={perms.canEdit ? handleEdit : undefined} onDelete={perms.canDelete ? handleDelete : undefined} onPrintCard={handlePrintCard} onOpenKartu={handleOpenKartu} onViewAudit={handleViewAssetAudit} onOpenPhoto={setPhotoLightboxAsset} pageSize={pageSize} rowLocks={rowLocks} currentSessionId={sessionId} syncStatuses={syncStatuses} onRetrySync={retrySync} onDismissSync={dismissSync} selectedAssets={selectedAssets} onToggleSelect={perms.canEdit ? toggleSelectAsset : undefined} onToggleSelectAll={perms.canEdit ? toggleSelectAll : undefined} />
                   </TooltipProvider>
                 </div>
                 <div className="lg:hidden">
-                  <VirtualizedMobileCards assets={mobileAssets} editId={editAssetForForm?.id} onEdit={perms.canEdit ? handleEdit : undefined} onDelete={perms.canDelete ? handleDelete : undefined} onOpenKartu={handleOpenKartu} onViewAudit={handleViewAssetAudit} onPrintCard={handlePrintCard} onLoadMore={loadMoreMobile} isLoadingMore={mobileLoading} hasMore={mobileCurrentPage < totalPages} totalItems={totalItems} rowLocks={rowLocks} currentSessionId={sessionId} syncStatuses={syncStatuses} onRetrySync={retrySync} onDismissSync={dismissSync} selectedAssets={selectedAssets} onToggleSelect={perms.canEdit ? toggleSelectAsset : undefined} />
+                  <VirtualizedMobileCards assets={mobileAssets} editId={editAssetForForm?.id} onEdit={perms.canEdit ? handleEdit : undefined} onDelete={perms.canDelete ? handleDelete : undefined} onOpenKartu={handleOpenKartu} onViewAudit={handleViewAssetAudit} onPrintCard={handlePrintCard} onOpenPhoto={setPhotoLightboxAsset} onLoadMore={loadMoreMobile} isLoadingMore={mobileLoading} hasMore={mobileCurrentPage < totalPages} totalItems={totalItems} rowLocks={rowLocks} currentSessionId={sessionId} syncStatuses={syncStatuses} onRetrySync={retrySync} onDismissSync={dismissSync} selectedAssets={selectedAssets} onToggleSelect={perms.canEdit ? toggleSelectAsset : undefined} />
                 </div>
                 <div className="hidden lg:block">
                   <AssetPagination currentPage={currentPage} totalPages={totalPages} totalItems={totalItems} pageSize={pageSize} setPageSize={setPageSize} goToPage={goToPage} />
@@ -1720,6 +1722,8 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
         {dialogs.import && <LazyImportDialog open={dialogs.import} onClose={handleImportClose} onSuccess={() => { clearDropFile(); refreshData(1); doFetchCategories(); }} activityId={activity?.id} preloadFile={dropFile} />}
         {dialogs.userManagement && <LazyUserManagementDialog open={dialogs.userManagement} onClose={() => closeDialog('userManagement')} currentUser={user} />}
         {kartuIdentity && <LazyKartuInventarisasiDialog open={!!kartuIdentity} identity={kartuIdentity} onClose={() => setKartuIdentity(null)} />}
+        {/* Lightbox foto dari baris mode list (tabel/kartu HP) — sama seperti galeri & popup peta. */}
+        {photoLightboxAsset && <PhotoLightbox asset={photoLightboxAsset} onClose={() => setPhotoLightboxAsset(null)} onEdit={perms.canEdit ? handleEdit : undefined} />}
       </Suspense>
       {confirmDialog}
 
