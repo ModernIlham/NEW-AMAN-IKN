@@ -48,6 +48,21 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#250] Lightbox: animasi kartu tetangga menyala saat digeser + preload aset tetangga (seamless) — 2026-07-13
+
+- **Pop-up foto lebih hidup saat pindah antar-aset.** Kartu tetangga (peek)
+  kini mulai **samar** sebagai petunjuk, lalu **opacity-nya bertambah mengikuti
+  jauhnya geseran** ke sisi itu — kartu berikutnya/sebelumnya seolah "muncul"
+  makin jelas seiring jempol menggeser. Kartu depan menyusut halus (efek
+  kedalaman/berlapis). Dihitung dari helper murni `peekAnim` (`lib/lightboxAnim.js`,
+  +6 unit test) → mudah diuji & konsisten di **ukuran layar mana pun**.
+- **Perpindahan antar-aset terasa instan & seamless.** Foto pertama + thumbnail
+  aset **tetangga** (sebelum & sesudah, sesuai urutan/filter aktif) kini
+  **di-preload dini** — saat kartu berganti, gambar tujuan sudah di cache
+  sehingga tak ada jeda/kedip. Melengkapi preload antar-FOTO yang sudah ada.
+
+---
+
 ## [#249] Rekonsiliasi XLSX SAKTI: ikut kecualikan aset dihapus (selaras Neraca) — 2026-07-13
 
 - Lanjutan #248: ekspor **Rekonsiliasi Posisi BMN (XLSX)** — sandingan

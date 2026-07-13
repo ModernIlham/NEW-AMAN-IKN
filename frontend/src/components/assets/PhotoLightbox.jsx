@@ -2,6 +2,7 @@ import React, { memo, useState, useCallback, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Loader2, X, ChevronLeft, ChevronRight, MapPin, Tag, User, QrCode, FileCheck, FileX, StickyNote, Download } from "lucide-react";
 import { authMediaUrl } from "../../lib/mediaUrl";
+import { peekAnim } from "../../lib/lightboxAnim";
 import { useBackGuard } from "../../hooks/useBackGuard";
 import { toast } from "sonner";
 import axios from "axios";
@@ -189,6 +190,23 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
     return () => { imgs.forEach((im) => { im.src = ""; }); };
   }, [idx, photos]);
 
+  // Preload DINI foto pertama + thumbnail aset TETANGGA (sebelum & sesudah)
+  // sesuai urutan/filter aktif — sehingga pindah antar-aset terasa instan &
+  // seamless (gambar tujuan sudah di cache saat kartu berganti). Baris
+  // peta/galeri sudah membawa photo_count+version, jadi URL bisa dibangun
+  // tanpa round-trip.
+  useEffect(() => {
+    if (!siblings || sibIndex < 0) return undefined;
+    const imgs = [];
+    [sibIndex - 1, sibIndex + 1].forEach((i) => {
+      if (i < 0 || i >= siblings.length) return;
+      const built = buildPhotoUrls(siblings[i]);
+      if (built.thumbs[0]) { const t = new Image(); t.src = built.thumbs[0]; imgs.push(t); }
+      if (built.photos[0]) { const im = new Image(); im.src = built.photos[0]; imgs.push(im); }
+    });
+    return () => { imgs.forEach((im) => { im.src = ""; }); };
+  }, [siblings, sibIndex]);
+
   // Back/Undo browser saat lightbox terbuka → tutup lightbox, bukan pindah
   // halaman. Komponen ini hanya ter-mount saat terbuka, jadi guard aktif penuh.
   useBackGuard(onClose);
@@ -216,6 +234,8 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
   const invStatus = a.inventory_status || "Belum Diinventarisasi";
   const docChecked = a.doc_checked || 0;
   const docTotal = a.doc_total || 0;
+  // Parameter animasi geser kartu info (opacity peek + skala kartu depan).
+  const anim = peekAnim(infoDragX);
 
   return createPortal(
     <div
@@ -299,12 +319,14 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
           filter aktif (tanpa tombol panah — cukup swipe); FOTO tak ikut tergeser. */}
       <div className="w-full max-w-4xl px-4 pb-4 pt-2" onClick={(e) => e.stopPropagation()}>
         <div className="relative" onTouchStart={onInfoTouchStart} onTouchMove={onInfoTouchMove} onTouchEnd={onInfoTouchEnd}>
-          {/* Peek kartu tetangga = petunjuk bisa digeser antar-aset */}
-          {hasNextAsset && <div aria-hidden="true" className="absolute inset-y-2 left-10 -right-2 rounded-xl bg-white/35 dark:bg-slate-800/50 border border-white/25 dark:border-white/10" />}
-          {hasPrevAsset && <div aria-hidden="true" className="absolute inset-y-2 right-10 -left-2 rounded-xl bg-white/35 dark:bg-slate-800/50 border border-white/25 dark:border-white/10" />}
+          {/* Peek kartu tetangga: mulai SAMAR (petunjuk bisa digeser antar-aset),
+              opacity BERTAMBAH mengikuti geseran ke sisi itu (peekAnim) → kartu
+              berikut/sebelumnya "muncul" makin jelas seiring jempol menggeser. */}
+          {hasNextAsset && <div aria-hidden="true" style={{ opacity: anim.nextOpacity, transition: infoDragX ? "none" : "opacity 0.2s" }} className="absolute inset-y-2 left-10 -right-2 rounded-xl bg-white/70 dark:bg-slate-700/70 border border-white/40 dark:border-white/10 shadow-lg" />}
+          {hasPrevAsset && <div aria-hidden="true" style={{ opacity: anim.prevOpacity, transition: infoDragX ? "none" : "opacity 0.2s" }} className="absolute inset-y-2 right-10 -left-2 rounded-xl bg-white/70 dark:bg-slate-700/70 border border-white/40 dark:border-white/10 shadow-lg" />}
           <div
             className="relative bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl rounded-xl p-3 border border-white/50 dark:border-white/15 shadow-xl"
-            style={{ transform: infoDragX ? `translateX(${infoDragX}px)` : undefined, transition: infoDragX ? "none" : "transform 0.2s" }}
+            style={{ transform: infoDragX ? `translateX(${infoDragX}px) scale(${anim.frontScale})` : undefined, transition: infoDragX ? "none" : "transform 0.2s" }}
           >
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0 space-y-1.5">
