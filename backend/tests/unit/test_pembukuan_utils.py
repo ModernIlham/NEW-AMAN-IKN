@@ -6,8 +6,34 @@ rekap DBKP per golongan tidak bergeser diam-diam.
 from pembukuan_utils import (
     AMBANG_KAPITALISASI_DEFAULT, KONDISI_LKB, build_dbkp_rows,
     build_lbkp_rows, build_lkb_rows, golongan_of, klasifikasi_komptabel,
-    parse_harga, posisi_neraca, tombstones_penghapusan,
+    nilai_buku_aset, parse_harga, posisi_neraca, tombstones_penghapusan,
 )
+
+
+class TestNilaiBukuAset:
+    """Nilai buku terkini laporan posisi: nilai wajar revaluasi (#254) bila ada,
+    jika tidak nilai perolehan. Nilai wajar 0 (direvaluasi ke nol) ≠ 'tak ada'."""
+    def test_pakai_nilai_wajar_bila_ada(self):
+        assert nilai_buku_aset({"purchase_price": 100, "nilai_wajar_terakhir": 250}) == 250.0
+
+    def test_nilai_wajar_nol_tetap_dipakai(self):
+        # aset direvaluasi ke 0 → 0, BUKAN jatuh ke purchase_price
+        assert nilai_buku_aset({"purchase_price": 100, "nilai_wajar_terakhir": 0}) == 0.0
+
+    def test_tanpa_revaluasi_pakai_perolehan(self):
+        assert nilai_buku_aset({"purchase_price": 100}) == 100.0
+        assert nilai_buku_aset({"purchase_price": 100, "nilai_wajar_terakhir": None}) == 100.0
+
+    def test_keduanya_kosong_nol(self):
+        assert nilai_buku_aset({}) == 0.0
+
+    def test_dbkp_pakai_nilai_wajar(self):
+        # aset ekstra by cost (400rb) direvaluasi ke 5jt → jadi INTRA + nilai wajar
+        assets = [{"asset_code": "3060102135", "purchase_price": 400_000,
+                   "nilai_wajar_terakhir": 5_000_000}]
+        rows, total = build_dbkp_rows(assets, {"3": "Peralatan dan Mesin"})
+        assert total["nilai_intra"] == 5_000_000 and total["jumlah_intra"] == 1
+        assert total["nilai_ekstra"] == 0
 
 
 class TestParseHarga:
