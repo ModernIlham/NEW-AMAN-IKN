@@ -829,6 +829,8 @@ const AssetMapFullView = memo(function AssetMapFullView({
           asset={lightboxRow}
           onClose={() => setLightboxRow(null)}
           onEdit={onEditAsset}
+          siblings={displayRows}
+          onSelectAsset={setLightboxRow}
         />
       )}
     </div>

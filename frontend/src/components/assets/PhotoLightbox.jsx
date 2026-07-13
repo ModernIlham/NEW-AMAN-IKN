@@ -1,8 +1,9 @@
 import React, { memo, useState, useCallback, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Loader2, X, ChevronLeft, ChevronRight, MapPin, Tag, User, QrCode, FileCheck, FileX, StickyNote } from "lucide-react";
+import { Loader2, X, ChevronLeft, ChevronRight, MapPin, Tag, User, QrCode, FileCheck, FileX, StickyNote, Download } from "lucide-react";
 import { authMediaUrl } from "../../lib/mediaUrl";
 import { useBackGuard } from "../../hooks/useBackGuard";
+import { toast } from "sonner";
 import axios from "axios";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -37,7 +38,7 @@ function buildPhotoUrls(src) {
 // Dipakai bersama oleh galeri (AssetGalleryView) dan popup marker peta
 // (AssetMapFullView) — supaya pengalaman "buka foto" identik di kedua tempat.
 // ============================================================================
-const Lightbox = memo(({ asset, onClose, onEdit }) => {
+const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset = null }) => {
   // Foto diseed SEKETIKA dari data aset yang diklik (peta/galeri sudah bawa
   // photo_count + version) supaya <img> mulai memuat langsung — bukan setelah
   // round-trip metadata. `builtRef` mengingat jumlah/versi terakhir yang
@@ -56,6 +57,66 @@ const Lightbox = memo(({ asset, onClose, onEdit }) => {
   const [imgLoading, setImgLoading] = useState(seed.current.photos.length > 0);
   const startX = useRef(0);
   const builtRef = useRef({ count: seed.current.count, version: seed.current.version });
+  const [downloading, setDownloading] = useState(false);
+
+  // Navigasi antar-ASET (bukan antar-foto): geser/klik pada kartu info → aset
+  // sebelum/sesudah sesuai urutan & filter aktif (daftar `siblings` dari
+  // pemanggil). Optional — bila tak diberi siblings, fitur ini nonaktif mulus.
+  const sibIndex = (siblings && asset) ? siblings.findIndex((s) => s?.id === asset.id) : -1;
+  const hasPrevAsset = sibIndex > 0;
+  const hasNextAsset = sibIndex >= 0 && sibIndex < siblings.length - 1;
+  const goAsset = useCallback((dir) => {
+    if (!siblings || !onSelectAsset || sibIndex < 0) return;
+    const ni = sibIndex + dir;
+    if (ni < 0 || ni >= siblings.length) return;
+    onSelectAsset(siblings[ni]);
+  }, [siblings, onSelectAsset, sibIndex]);
+
+  // Geser kartu info: umpan balik drag + snap; lepas melewati ambang → pindah
+  // aset. stopPropagation agar TIDAK ikut memicu geser-foto pada overlay.
+  const infoStartX = useRef(null);
+  const [infoDragX, setInfoDragX] = useState(0);
+  const onInfoTouchStart = useCallback((e) => { e.stopPropagation(); infoStartX.current = e.touches[0].clientX; }, []);
+  const onInfoTouchMove = useCallback((e) => {
+    e.stopPropagation();
+    if (infoStartX.current == null) return;
+    let dx = e.touches[0].clientX - infoStartX.current;
+    if ((dx > 0 && !hasPrevAsset) || (dx < 0 && !hasNextAsset)) dx *= 0.25; // redam bila mentok
+    setInfoDragX(Math.max(-120, Math.min(120, dx)));
+  }, [hasPrevAsset, hasNextAsset]);
+  const onInfoTouchEnd = useCallback((e) => {
+    e.stopPropagation();
+    const dx = infoStartX.current == null ? 0 : e.changedTouches[0].clientX - infoStartX.current;
+    infoStartX.current = null;
+    setInfoDragX(0);
+    if (Math.abs(dx) > 60) { if (dx > 0) goAsset(-1); else goAsset(1); }
+  }, [goAsset]);
+
+  // Unduh foto ASLI (resolusi penuh) — yang tampil hanya varian preview w=1280.
+  const downloadOriginal = useCallback(async () => {
+    const cur = fullAsset || asset;
+    const id = cur?.id;
+    if (!id) return;
+    setDownloading(true);
+    try {
+      const url = authMediaUrl(`${API}/assets/${id}/photos/${idx}?v=${builtRef.current.version}`); // tanpa w → asli
+      const res = await axios.get(url, { responseType: "blob" });
+      const type = res.data?.type || "";
+      const ext = type.includes("png") ? "png" : type.includes("webp") ? "webp" : "jpg";
+      const blobUrl = URL.createObjectURL(res.data);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = `${(cur.asset_code || cur.NUP || id)}_foto-${idx + 1}.${ext}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1500);
+    } catch {
+      toast.error("Gagal mengunduh foto asli");
+    } finally {
+      setDownloading(false);
+    }
+  }, [fullAsset, asset, idx]);
 
   useEffect(() => {
     if (!asset?.id) return undefined;
@@ -101,10 +162,13 @@ const Lightbox = memo(({ asset, onClose, onEdit }) => {
       if (e.key === "Escape") onClose();
       if (e.key === "ArrowLeft") setIdx(i => (i - 1 + photos.length) % photos.length);
       if (e.key === "ArrowRight") setIdx(i => (i + 1) % photos.length);
+      // ↑/↓ = pindah antar-ASET (bila daftar siblings tersedia)
+      if (e.key === "ArrowUp") goAsset(-1);
+      if (e.key === "ArrowDown") goAsset(1);
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [photos.length, onClose]);
+  }, [photos.length, onClose, goAsset]);
 
   // Foto berpindah → tandai "sedang memuat" agar tampil spinner (bukan foto lama
   // yang terlihat "freeze"). Dibersihkan oleh onLoad/onError <img>. Bila foto
@@ -172,6 +236,21 @@ const Lightbox = memo(({ asset, onClose, onEdit }) => {
 
       {/* Photo area */}
       <div className="relative flex-1 flex items-center justify-center w-full max-w-4xl px-4" onClick={(e) => e.stopPropagation()}>
+        {/* Unduh foto ASLI (resolusi penuh) — ikon di lingkaran gelap semi-
+            transparan + cincin putih agar kontras di light/dark & di atas warna
+            foto apa pun. Yang tampil hanya varian preview (w=1280). */}
+        {!loading && photos.length > 0 && (
+          <button
+            onClick={(e) => { e.stopPropagation(); downloadOriginal(); }}
+            disabled={downloading}
+            title="Unduh foto asli (resolusi penuh)"
+            aria-label="Unduh foto asli"
+            className="absolute left-2 top-2 z-10 w-10 h-10 rounded-full bg-black/50 hover:bg-black/70 text-white ring-1 ring-white/40 shadow-lg flex items-center justify-center backdrop-blur-sm transition-colors disabled:opacity-70"
+            data-testid="lightbox-download"
+          >
+            {downloading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
+          </button>
+        )}
         {loading ? (
           <Loader2 className="w-10 h-10 text-slate-700 dark:text-white animate-spin" />
         ) : photos.length > 0 ? (
@@ -216,9 +295,29 @@ const Lightbox = memo(({ asset, onClose, onEdit }) => {
         )}
       </div>
 
-      {/* Info panel */}
+      {/* Info panel — geser kiri/kanan (atau klik ‹ ›) untuk PINDAH ANTAR-ASET
+          sesuai urutan/filter aktif; FOTO tidak ikut tergeser. */}
       <div className="w-full max-w-4xl px-4 pb-4 pt-2" onClick={(e) => e.stopPropagation()}>
-        <div className="bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl rounded-xl p-3 border border-white/50 dark:border-white/15 shadow-xl">
+        <div className="relative" onTouchStart={onInfoTouchStart} onTouchMove={onInfoTouchMove} onTouchEnd={onInfoTouchEnd}>
+          {/* Peek kartu tetangga = petunjuk bisa digeser antar-aset */}
+          {hasNextAsset && <div aria-hidden="true" className="absolute inset-y-2 left-10 -right-2 rounded-xl bg-white/35 dark:bg-slate-800/50 border border-white/25 dark:border-white/10" />}
+          {hasPrevAsset && <div aria-hidden="true" className="absolute inset-y-2 right-10 -left-2 rounded-xl bg-white/35 dark:bg-slate-800/50 border border-white/25 dark:border-white/10" />}
+          <div
+            className="relative bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl rounded-xl p-3 border border-white/50 dark:border-white/15 shadow-xl"
+            style={{ transform: infoDragX ? `translateX(${infoDragX}px)` : undefined, transition: infoDragX ? "none" : "transform 0.2s" }}
+          >
+            {hasPrevAsset && (
+              <button onClick={() => goAsset(-1)} title="Aset sebelumnya" aria-label="Aset sebelumnya" data-testid="lightbox-prev-asset"
+                className="absolute -left-1 top-1/2 -translate-y-1/2 z-10 w-7 h-7 rounded-full bg-black/50 hover:bg-black/70 text-white ring-1 ring-white/40 shadow flex items-center justify-center backdrop-blur-sm">
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+            )}
+            {hasNextAsset && (
+              <button onClick={() => goAsset(1)} title="Aset berikutnya" aria-label="Aset berikutnya" data-testid="lightbox-next-asset"
+                className="absolute -right-1 top-1/2 -translate-y-1/2 z-10 w-7 h-7 rounded-full bg-black/50 hover:bg-black/70 text-white ring-1 ring-white/40 shadow flex items-center justify-center backdrop-blur-sm">
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            )}
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0 space-y-1.5">
               <h3 className="text-slate-900 dark:text-white font-semibold text-sm truncate">{a.name || a.asset_name || "Tanpa Nama"}</h3>
@@ -254,6 +353,12 @@ const Lightbox = memo(({ asset, onClose, onEdit }) => {
               >
                 Edit
               </button>
+            )}
+          </div>
+            {sibIndex >= 0 && siblings.length > 1 && (
+              <div className="mt-2 text-center text-[10px] text-slate-500 dark:text-white/50">
+                Aset {sibIndex + 1} / {siblings.length} · geser untuk pindah aset
+              </div>
             )}
           </div>
         </div>
