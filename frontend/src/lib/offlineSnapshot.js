@@ -17,6 +17,7 @@
  */
 import { openDB } from "idb";
 import axios from "axios";
+import { isQuotaExceeded } from "./idbErrors";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -139,6 +140,9 @@ export async function syncSnapshot(activityId, userId, onProgress, { forceFull =
   let skip = 0;
   let total = 0;
   let loaded = 0;
+  // Kuota IndexedDB terlampaui di tengah sync (perangkat nyaris penuh): berhenti
+  // menulis dengan anggun, layani cache sebagian yang sudah ada — jangan crash.
+  let quotaHit = false;
 
   for (;;) {
     const params = new URLSearchParams({ activity_id: activityId, skip: String(skip), limit: String(PAGE_LIMIT) });
@@ -162,16 +166,24 @@ export async function syncSnapshot(activityId, userId, onProgress, { forceFull =
     }
 
     if (items.length) {
-      const tx = db.transaction(ASSET_STORE, "readwrite");
+      const staged = [];
       for (const item of items) {
         const row = toSnapshotRow(item);
-        if (row.id && row.activity_id === activityId) {
-          tx.store.put(row);
-          fetchedIds?.add(row.id);
-        }
+        if (row.id && row.activity_id === activityId) staged.push(row);
       }
-      await tx.done;
-      loaded += items.length;
+      try {
+        const tx = db.transaction(ASSET_STORE, "readwrite");
+        for (const row of staged) tx.store.put(row);
+        await tx.done;
+        for (const row of staged) fetchedIds?.add(row.id);
+        loaded += items.length;
+      } catch (e) {
+        // Kuota penuh → hentikan sync dengan anggun (cache sebalumnya tetap
+        // dilayani). Error lain (mis. store hilang) dilempar ke pemanggil.
+        if (!isQuotaExceeded(e)) throw e;
+        quotaHit = true;
+        break;
+      }
     }
 
     onProgress?.({ loaded, total, pct: total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : 100 });
@@ -181,8 +193,10 @@ export async function syncSnapshot(activityId, userId, onProgress, { forceFull =
   }
 
   // Full sync: reconcile deletes — drop rows of this activity the server no
-  // longer returned (no tombstone log needed for this path).
-  if (fullSync && fetchedIds) {
+  // longer returned (no tombstone log needed for this path). DILEWATI saat
+  // quotaHit: kita berhenti lebih awal, jadi banyak id sah belum masuk
+  // fetchedIds — mereka bukan "stale", menghapusnya justru mengecilkan cache.
+  if (fullSync && fetchedIds && !quotaHit) {
     const existing = await db.getAllKeysFromIndex(ASSET_STORE, "by-activity", activityId);
     const stale = existing.filter((id) => !fetchedIds.has(id));
     if (stale.length) {
@@ -194,8 +208,16 @@ export async function syncSnapshot(activityId, userId, onProgress, { forceFull =
 
   const count = (await db.getAllKeysFromIndex(ASSET_STORE, "by-activity", activityId)).length;
   const newMeta = { activityId, userId, lastSync: lastSyncCursor, count };
-  await db.put(META_STORE, newMeta);
-  return { count, lastSync: lastSyncCursor };
+  try {
+    await db.put(META_STORE, newMeta);
+  } catch (e) {
+    // Meta ~beberapa byte; bila ini pun kena kuota, catat tanpa crash. Snapshot
+    // parsial tanpa meta baru akan dilayani berdasarkan meta lama (delta) atau
+    // dianggap absen (full) — tetap konsisten, tak rusak.
+    if (!isQuotaExceeded(e)) throw e;
+    quotaHit = true;
+  }
+  return { count, lastSync: lastSyncCursor, partial: quotaHit };
 }
 
 /**

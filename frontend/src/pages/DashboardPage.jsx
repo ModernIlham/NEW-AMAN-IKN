@@ -884,10 +884,18 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     syncSnapshot(activity.id, user.id, (p) => {
       if (!cancelled) setSnapshotState({ phase: "syncing", pct: p.pct });
     })
-      .then(({ count, lastSync }) => {
+      .then(({ count, lastSync, partial }) => {
         if (cancelled) return;
-        setSnapshotState({ phase: "ready", count, lastSync });
+        setSnapshotState({ phase: "ready", count, lastSync, partial: !!partial });
         setOfflineLastSync(lastSync);
+        // Penyimpanan perangkat penuh: cache offline hanya sebagian tersimpan,
+        // tapi aplikasi tidak crash & antrian simpan tetap utuh. Beri tahu sekali.
+        if (partial) {
+          toast.warning(
+            `Penyimpanan perangkat hampir penuh — hanya ${count} aset tersimpan untuk mode offline. Kosongkan ruang lalu sinkron ulang.`,
+            { duration: 7000 }
+          );
+        }
       })
       .catch((e) => {
         if (cancelled) return;

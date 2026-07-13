@@ -48,6 +48,27 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#246] Offline lebih tahan banting: sync snapshot tak crash saat penyimpanan penuh — 2026-07-13
+
+- **Cache offline pada perangkat nyaris penuh tidak lagi crash / rusak.**
+  `syncSnapshot` (unduh snapshot aset untuk mode inventarisasi offline) kini
+  **toleran kuota IndexedDB**: bila penyimpanan penuh di tengah proses, sync
+  berhenti dengan anggun dan **melayani cache sebagian** yang sudah tersimpan
+  alih-alih gagal total.
+- **Cegah cache menyusut keliru**: pada *full sync* yang kena kuota, langkah
+  rekonsiliasi hapus-baris-usang **dilewati** — karena sync berhenti lebih awal,
+  banyak id sah belum sempat tercatat; menghapusnya justru akan mengecilkan
+  cache. Penulisan meta juga dibungkus toleransi kuota (snapshot parsial tetap
+  konsisten, tak korup).
+- **Umpan balik jelas**: saat parsial, muncul notifikasi sekali —
+  "Penyimpanan perangkat hampir penuh — hanya N aset tersimpan untuk mode
+  offline" — dan antrian **simpan** tetap utuh (jalur tulis independen).
+- Helper murni `isQuotaExceeded(err)` (`lib/idbErrors.js`, lintas-peramban:
+  `QuotaExceededError`/`NS_ERROR_DOM_QUOTA_REACHED`/kode 22/1014) + 6 unit test.
+  Kolaborasi multi-pengguna tetap dijaga OCC (versi/If-Match) yang sudah ada.
+
+---
+
 ## [#245] Muat ulang aman: tahan reload/pindah versi selagi data offline belum tersinkron — 2026-07-13
 
 - **Cegah kehilangan/kerusakan data offline saat muat ulang atau berpindah ke
