@@ -201,9 +201,10 @@ Audit lintas-modul terhadap 5 prinsip Bab 5. Kepatuhan saat ini:
    `version` di-`$inc` (bust cache/OCC) + audit `action="penghapusan"` (#234).
    *Sengaja scoped:* field laporan (`inventory_status/condition/purchase_price`)
    TAK diubah → tanpa regresi. ✅ **Penyaringan aset `dihapus` dari laporan
-   POSISI/NILAI sudah** — DBKP, Posisi BMN di Neraca, dan rekap penyusutan kini
-   mengecualikan `dihapus=True` lewat helper bersama `active_asset_filter`
-   (#248) → berhenti *double-count*. *Tersisa:* laporan MUTASI (LBKP/CaLBMN)
+   POSISI/NILAI sudah** — DBKP, Posisi BMN di Neraca, rekap penyusutan (#248),
+   dan rekonsiliasi XLSX SAKTI (#249) kini mengecualikan `dihapus=True` lewat
+   helper bersama `active_asset_filter` → berhenti *double-count* & sandingan
+   SAKTI selaras. *Tersisa:* laporan MUTASI (LBKP/CaLBMN)
    perlu menampilkan penghapusan sebagai baris **pengurangan** (bukan sekadar
    hilang, agar saldo tetap seimbang); serta proyeksi master dari BA Pemusnahan,
    PSP/pemindahtanganan, dan revaluasi Penilaian.
