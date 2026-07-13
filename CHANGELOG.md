@@ -48,6 +48,24 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#223] Ekspor CSV jurnal transaksi persediaan (Persediaan) — 2026-07-13
+
+- **Ekspor CSV seluruh jurnal transaksi persediaan** (`GET
+  /persediaan/transaksi/export`) — melengkapi ekspor Persediaan (master
+  sudah ber-CSV; kini **jurnal transaksi** juga). Satu baris per gerakan
+  stok (masuk / keluar / mutasi pindah-gudang / opname), terurut waktu,
+  memuat **kode transaksi SAKTI**, identitas barang (kode/NUP/nama),
+  jumlah, harga satuan & total (nilai FIFO, dibulatkan), **stok
+  sebelum/sesudah** (saldo berjalan), data dokumen (no. bukti, jenis
+  dokumen, tanggal, no. kontrak, penyedia), unit penerima, lokasi asal→
+  tujuan (mutasi), petugas, dan keterangan. Bahan **rekonsiliasi SAKTI**
+  (pustaka §3 — pencatatan perpetual + FIFO). Helper murni
+  `baris_csv_transaksi` (tanpa Mongo, teruji unit — field khas tiap jenis
+  transaksi dibiarkan kosong bila absen, bukan error) + tombol "Ekspor
+  Jurnal Transaksi" di menu Data. Baca-saja. Unit test +4 → 287 passed.
+
+---
+
 ## [#222] UX seleksi aset: tutup Ubah Massal tak menghapus seleksi + select-all semua tampilan + tombol Pengguna tampil di HP — 2026-07-13
 
 - **Menutup panel "Ubah Massal" tidak lagi mengosongkan seleksi.** Dulu

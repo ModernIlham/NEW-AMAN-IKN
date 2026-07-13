@@ -5,8 +5,9 @@ from persediaan_fields import (
     EDITABLE_FIELD_NAMES, FIELD_NAMES, MANAGED_FIELD_NAMES, PERSEDIAAN_SCALAR_FIELDS,
 )
 from persediaan_utils import (
-    JENIS_KELUAR, JENIS_MASUK, KODE_PENUH_LEN, KODE_PREFIX_LEN, SATUAN_BAKU,
-    buat_layer, klasifikasi_kedaluwarsa, konsumsi_fifo, mutasi_periode,
+    HEADER_CSV_TRANSAKSI, JENIS_KELUAR, JENIS_MASUK, KODE_PENUH_LEN,
+    KODE_PREFIX_LEN, SATUAN_BAKU, baris_csv_transaksi, buat_layer,
+    klasifikasi_kedaluwarsa, konsumsi_fifo, mutasi_periode,
     next_kode_penuh, next_nup, nilai_persediaan_dari_batches,
     parse_import_persediaan_rows, penyesuaian_opname, status_stok,
     stok_dari_batches, validate_kode_persediaan, validate_transaksi_keluar,
@@ -412,3 +413,54 @@ class TestPindahGudang:
         r = mutasi_periode(rows, "2026-07-01", "2026-07-31")["p1"]
         assert r["masuk_qty"] == 10 and r["keluar_qty"] == 3
         assert r["saldo_akhir"] == 7  # pindah gudang tidak mengubah saldo
+
+
+class TestBarisCsvTransaksi:
+    def test_kosong_hanya_header(self):
+        rows = baris_csv_transaksi([])
+        assert rows == [HEADER_CSV_TRANSAKSI]
+        assert baris_csv_transaksi(None) == [HEADER_CSV_TRANSAKSI]
+
+    def test_masuk_lengkap_dengan_dokumen(self):
+        trx = {
+            "timestamp": "2026-07-13T04:05:06+00:00", "arah": "masuk",
+            "jenis": "pembelian", "jenis_label": "Pembelian",
+            "kode_sakti": "M01", "kode_barang": "1010101001000001",
+            "nup": "1", "nama_barang": "Kertas HVS A4", "jumlah": 10,
+            "harga_satuan": 45000.0, "total": 450000.0,
+            "stok_sebelum": 5, "stok_sesudah": 15, "no_bukti": "BAST-1",
+            "jenis_dokumen": "BAST", "tgl_dokumen": "2026-07-10",
+            "no_kontrak": "K-9", "penyedia": "CV Maju", "petugas": "budi",
+            "keterangan": "stok awal",
+        }
+        header, baris = baris_csv_transaksi([trx])
+        assert header == HEADER_CSV_TRANSAKSI
+        d = dict(zip(HEADER_CSV_TRANSAKSI, baris))
+        assert d["tanggal"] == "2026-07-13"           # dipangkas ke tanggal
+        assert d["uraian"] == "Pembelian"             # jenis_label → uraian
+        assert d["kode_sakti"] == "M01" and d["jumlah"] == 10
+        assert d["total"] == 450000 and d["harga_satuan"] == 45000
+        assert d["penyedia"] == "CV Maju" and d["no_kontrak"] == "K-9"
+        # field khas transaksi lain kosong pada 'masuk'
+        assert d["unit_penerima"] == "" and d["lokasi_dari"] == ""
+
+    def test_keluar_dan_mutasi_isi_field_masing_masing(self):
+        keluar = {"timestamp": "2026-07-13", "arah": "keluar",
+                  "jenis_label": "Habis Pakai", "jumlah": 3,
+                  "harga_satuan": 45000.4, "total": 135001.6,
+                  "unit_penerima": "Subbag Umum"}
+        mutasi = {"timestamp": "2026-07-14", "arah": "mutasi",
+                  "jenis_label": "Pindah Gudang",
+                  "lokasi_dari": "Gudang A", "lokasi_ke": "Gudang B"}
+        _, br_keluar, br_mutasi = baris_csv_transaksi([keluar, mutasi])
+        dk = dict(zip(HEADER_CSV_TRANSAKSI, br_keluar))
+        dm = dict(zip(HEADER_CSV_TRANSAKSI, br_mutasi))
+        assert dk["unit_penerima"] == "Subbag Umum"
+        assert dk["harga_satuan"] == 45000 and dk["total"] == 135002  # bulat
+        assert dm["lokasi_dari"] == "Gudang A" and dm["lokasi_ke"] == "Gudang B"
+        assert dm["jumlah"] == 0  # field jumlah absen → 0, bukan error
+
+    def test_jumlah_kolom_konsisten(self):
+        trx = {"arah": "opname", "nama_barang": "X"}
+        rows = baris_csv_transaksi([trx])
+        assert all(len(r) == len(HEADER_CSV_TRANSAKSI) for r in rows)

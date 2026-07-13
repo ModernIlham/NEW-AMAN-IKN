@@ -534,6 +534,10 @@ export default function PersediaanPage({ user, onBack }) {
                   onClick={() => downloadFileWithProgress(`${API}/persediaan/export`, "master_persediaan.csv", { label: "Ekspor Master Persediaan" }).catch(() => {})}>
                   <Download className="w-4 h-4 mr-2" />Ekspor CSV (+stok & nilai)
                 </DropdownMenuItem>
+                <DropdownMenuItem className="min-h-[42px]" data-testid="persediaan-export-jurnal"
+                  onClick={() => downloadFileWithProgress(`${API}/persediaan/transaksi/export`, "jurnal_transaksi_persediaan.csv", { label: "Ekspor Jurnal Transaksi" }).catch(() => {})}>
+                  <Download className="w-4 h-4 mr-2" />Ekspor Jurnal Transaksi
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
             <input ref={fileImporRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={onImportFile} />
