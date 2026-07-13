@@ -62,7 +62,8 @@ sementara, dioperasikan pihak lain, penggunaan bersama) dengan
 pengingat tenggat/perpanjangan (#181, #183) + **BAST penetapan status
 penggunaan PDF siap tanda tangan per SK** (#192) + **alur pengajuan PSP
 berstatus** draf usulan → diajukan → ditetapkan/ditolak (#194 — daftar
-"menyusul" Penggunaan tuntas)
+"menyusul" Penggunaan tuntas) + **ekspor CSV seluruh register
+Penggunaan** (BMN idle #212, proses penggunaan #218, SK PSP #219)
 · Pengamanan — dasbor tertib administrasi + daftar
 pantau sengketa (#88) + **register BMN bermasalah berstatus**
 identifikasi → mediasi → blokir → litigasi → selesai (PP 27/2014
@@ -72,7 +73,9 @@ penanda kedaluwarsa) (#171) + **status sertipikasi tanah** belum/
 proses/K1–K4/SHP terbit per dokumen sertipikat (#173) + **checklist
 pengamanan per aset** butir fisik/administrasi/hukum per jenis objek
 dengan skor (#175) + **register polis Asuransi BMN** dengan pengingat
-masa berlaku (PMK 43/2025, mencabut PMK 97/2019) (#177) · Pemeliharaan — riwayat & biaya per aset dengan
+masa berlaku (PMK 43/2025, mencabut PMK 97/2019) (#177) + **ekspor CSV
+seluruh register Pengamanan** (polis #205, kasus bermasalah #213,
+dokumen kepemilikan #214, checklist #216) · Pemeliharaan — riwayat & biaya per aset dengan
 telaah kapitalisasi PMK 181 (#89) + **DHPB PDF** semesteran/tahunan
 (Ps. 47 PP 27/2014) (#90) + jadwal berkala dengan status jatuh tempo (#92)
 + **ekspor CSV riwayat** (#167).
@@ -139,8 +142,8 @@ lampiran per tiket insidentil** (#156).
 
 ## 🆕 Highlight Rilis v2.3 (Juli 2026)
 
-- 🗺️ **Peta Aset interaktif** — lembar peta di halaman utama (leaflet + OpenStreetMap): pin berwarna status, badge foto, border hijau kelengkapan pengguna+BAST; **geser pin = koordinat tersimpan otomatis**; mengikuti pencarian/filter aktif + filter Barang Serupa; jalan penuh saat offline (snapshot).
-- 🌐 **Ekspor GIS** — unduh titik peta sebagai **KML / KMZ / SHP** (shapefile WGS84) lengkap 27 atribut, mengikuti filter aktif.
+- 🗺️ **Peta Aset interaktif** — lembar peta di halaman utama (leaflet + OpenStreetMap): pin berwarna status, badge foto, border hijau kelengkapan pengguna+BAST; **geser pin = koordinat tersimpan otomatis**; mengikuti pencarian/filter aktif + filter Barang Serupa; **aset terpilih di daftar menyaring pin peta** (dan unduh GIS); **foto di popup marker dapat diklik → lightbox** seperti mode galeri; **bar skala metrik + kompas arah utara + info skala 1:N & zoom**; jalan penuh saat offline (snapshot) (#217).
+- 🌐 **Ekspor GIS** — unduh titik peta sebagai **KML / KMZ / SHP** (shapefile WGS84) lengkap 27 atribut, mengikuti filter aktif; **dibatasi ke aset terpilih** bila ada seleksi (#217).
 - 📷 **Kamera lapangan penuh** — flash, gestur kecerahan (dibakar ke foto), watermark jam+GPS, **Simpan & Baru instan** (tanpa menunggu jaringan), dan **Simpan & Scan** untuk alur scan-QR → edit → scan berikutnya.
 - 📄 **Kop surat resmi 3 baris** (instansi / unit / sub-unit) + alamat multi-baris; seluruh tanda tangan memakai **Kuasa Pengguna Barang**; belasan perbaikan isi laporan (binding data, penomoran, tanggal Indonesia).
 - 🚀 **CI/CD** — test + build otomatis di tiap PR (GitHub Actions), **auto-deploy ke VPS Hostinger** pada setiap merge ke `main`.

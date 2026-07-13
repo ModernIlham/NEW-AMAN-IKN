@@ -48,6 +48,18 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#220] Konsolidasi dokumentasi #205–#219 (masterplan + README) — 2026-07-13
+
+- **Dokumentasi saja** (tanpa perubahan aplikasi). Menyelaraskan
+  `docs/MASTERPLAN-SIKLUS-BMN.md` & `README.md` dengan batch fitur
+  #205–#219: (1) **ekspor CSV seluruh register** modul **Penggunaan**
+  (idle #212, proses #218, SK PSP #219) & **Pengamanan** (polis #205,
+  kasus #213, dokumen #214, checklist #216) ditandai di tabel status modul
+  + baris Fase 3; (2) peningkatan **Peta Aset** (#217): seleksi memfilter
+  titik & unduh GIS, foto popup → lightbox, bar skala metrik + kompas +
+  info skala/zoom; (3) kontrol **segmented** Analytics/Rekapitulasi/Barang
+  Serupa di dasbor (#215). Tanpa data dummy.
+
 ## [#219] Ekspor CSV register SK PSP (Penggunaan) — 2026-07-13
 
 - **Ekspor CSV** register SK penetapan status penggunaan (`GET
