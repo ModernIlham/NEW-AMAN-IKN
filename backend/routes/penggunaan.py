@@ -21,7 +21,7 @@ from shared_utils import delete_document_from_gridfs, get_document_from_gridfs
 from penggunaan_utils import (
     ARAH_PROSES, JENIS_PROSES_PENGGUNAAN, JENIS_PSP, STATUS_IDLE,
     STATUS_PENGAJUAN_PSP, STATUS_PROSES, TRANSISI_PROSES, baris_csv_idle,
-    indikasi_idle,
+    baris_csv_proses, indikasi_idle,
     info_proses_sementara, kunci_pemegang, rekap_idle, rekap_pemegang,
     rekap_proses_penggunaan, rekap_psp, status_pengajuan_psp,
     validate_proses_penggunaan, validate_psp, validate_transisi_idle,
@@ -718,6 +718,27 @@ async def list_proses(_user: dict = Depends(require_user)):
                 "22) — pengajuan resmi via SIMAN/DJKN; tenggat BAST/"
                 "penghapusan hanya pengingat internal; SK final dicatat di "
                 "register SK PSP.")}
+
+
+@penggunaan_router.get("/penggunaan/proses/export")
+async def export_proses(_user: dict = Depends(require_user)):
+    """Ekspor CSV register proses penggunaan — flatten per aset (pola #158)."""
+    import csv as csv_module
+    import io
+
+    from fastapi.responses import Response as HttpResponse
+
+    today_iso = datetime.now(timezone.utc).date().isoformat()
+    items = [t async for t in db.penggunaan_proses.find({}, {"_id": 0})
+             .sort("updated_at", -1)]
+    buf = io.StringIO()
+    w = csv_module.writer(buf)
+    for row in baris_csv_proses(items, today_iso):
+        w.writerow(row)
+    return HttpResponse(
+        content=buf.getvalue().encode("utf-8-sig"), media_type="text/csv",
+        headers={"Content-Disposition":
+                 'attachment; filename="register_proses_penggunaan.csv"'})
 
 
 @penggunaan_router.post("/penggunaan/proses")

@@ -244,7 +244,7 @@ export const SIKLUS_MODULES = [
       "✅ Daftar pantau BMN idle (PMK 120/2024): kandidat otomatis + tiket klarifikasi → usul serah → diserahkan + ekspor CSV register tiket",
       "✅ Register SK penetapan penggunaan multi-aset (PSP/alih status/sementara/pihak lain/bersama) + cakupan aset ter-PSP",
       "✅ Arsip scan SK penetapan + dokumen pendukung per register (PDF/gambar)",
-      "✅ Tiket proses 4 rezim PMK 40/2024 (alih status/sementara/pihak lain/bersama) ber-pipeline + pengingat perpanjangan ≤90 hari",
+      "✅ Tiket proses 4 rezim PMK 40/2024 (alih status/sementara/pihak lain/bersama) ber-pipeline + pengingat perpanjangan ≤90 hari + ekspor CSV",
       "✅ BAST penetapan status penggunaan PDF siap tanda tangan per SK (kop surat + tabel aset)",
       "✅ Alur pengajuan PSP berstatus: draf usulan → diajukan → ditetapkan (SK wajib) / ditolak / dikembalikan",
     ],

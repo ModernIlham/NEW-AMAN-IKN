@@ -48,6 +48,22 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#218] Ekspor CSV register proses penggunaan (Penggunaan) — 2026-07-13
+
+- **Ekspor CSV** register proses penggunaan (`GET
+  /penggunaan/proses/export`) — melengkapi ekspor Penggunaan (setelah idle
+  #212). Tiket **multi-aset di-flatten**: satu baris per aset (field tiket
+  diulang). Kolom: identitas aset, jenis proses (label: alih status /
+  penggunaan sementara / dioperasikan pihak lain / penggunaan bersama),
+  arah (keluar/masuk), pihak asal & tujuan, status (label pipeline),
+  **status_tenggat** (dihitung dari `info_proses_sementara` untuk tiket
+  berjangka yang berjalan: "Lewat tenggat" / "N hari lagi" [+ "(perpanjang)"
+  bila ≤90 hari]; kosong bila tak berlaku), nomor & tanggal permohonan,
+  tanggal mulai & berakhir, keterangan, pembuat. Helper murni
+  `baris_csv_proses` (tanpa Mongo, teruji unit) + tombol unduh CSV di panel
+  "Proses Alih Status & Penggunaan Sementara" (muncul saat ada tiket).
+  Baca-saja. Unit test +1 → 281 passed. Dasar PMK 40/2024.
+
 ## [#217] Peta: seleksi memfilter titik & unduh GIS, foto popup dapat diperbesar, skala + kompas + bar metrik + rapikan dasbor — 2026-07-13
 
 **Penyempurnaan tampilan dasbor (menyertai peta di atas):**

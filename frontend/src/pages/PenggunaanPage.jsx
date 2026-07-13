@@ -516,6 +516,13 @@ export default function PenggunaanPage({ user, onBack }) {
                 {proses.ringkasan.segera_berakhir} segera berakhir
               </span>
             )}
+            {(proses?.items || []).length > 0 && (
+              <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
+                onClick={() => downloadFileWithProgress(`${API}/penggunaan/proses/export`, "register_proses_penggunaan.csv", { label: "Ekspor Register Proses Penggunaan (CSV)" }).catch(() => {})}
+                data-testid="penggunaan-proses-export">
+                <FileDown className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">CSV</span>
+              </Button>
+            )}
             <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
               onClick={() => { setCariPsp(""); setHasilCariPsp([]); setFormProses({ data: { jenis_proses: "alih_status", arah: "keluar", pihak_asal: "", pihak_tujuan: "", nomor_permohonan: "", tanggal_permohonan: "", tanggal_mulai: "", tanggal_berakhir: "", keterangan: "" }, aset: [], saving: false }); }}
               data-testid="penggunaan-proses-tambah">
