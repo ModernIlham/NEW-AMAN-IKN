@@ -2,9 +2,40 @@
 import pytest
 
 from penilaian_utils import (
-    GOLONGAN_TANPA_SUSUT, MASA_MANFAAT_DEFAULT, hitung_penyusutan,
-    rekap_penyusutan, semester_index, status_susut, validate_masa_manfaat,
+    GOLONGAN_TANPA_SUSUT, MASA_MANFAAT_DEFAULT, build_asset_revaluasi_projection,
+    hitung_penyusutan, rekap_penyusutan, semester_index, status_susut,
+    validate_masa_manfaat,
 )
+
+
+class TestRevaluasiProjection:
+    """Proyeksi master saat revaluasi final (#254): nilai_wajar_terakhir + jejak."""
+    KOREKSI = {
+        "id": "k-1", "asset_id": "a-9", "nilai_lama": 100_000_000.0,
+        "nilai_baru": 150_000_000.0, "jenis": "revaluasi",
+        "nomor_dokumen": "LAP-DJKN-2026-01", "tanggal_dokumen": "2026-03-15T00:00:00",
+    }
+
+    def test_set_nilai_wajar_terakhir_dan_jejak(self):
+        proj = build_asset_revaluasi_projection(self.KOREKSI, "2026-03-20T08:00:00")
+        assert proj["nilai_wajar_terakhir"] == 150_000_000.0
+        rev = proj["revaluasi"]
+        assert rev["nilai_wajar"] == 150_000_000.0
+        assert rev["nilai_lama"] == 100_000_000.0
+        assert rev["nomor_dokumen"] == "LAP-DJKN-2026-01"
+        assert rev["tanggal_dokumen"] == "2026-03-15"   # dipotong 10 char
+        assert rev["koreksi_id"] == "k-1"
+        assert rev["diproyeksikan_pada"] == "2026-03-20T08:00:00"
+
+    def test_tidak_menimpa_purchase_price(self):
+        # proyeksi HANYA field revaluasi — nilai perolehan historis tetap utuh
+        proj = build_asset_revaluasi_projection(self.KOREKSI, "2026-03-20")
+        assert "purchase_price" not in proj
+
+    def test_nilai_kosong_aman_jadi_nol(self):
+        proj = build_asset_revaluasi_projection({"id": "k", "asset_id": "a"}, "2026-01-01")
+        assert proj["nilai_wajar_terakhir"] == 0.0
+        assert proj["revaluasi"]["nilai_lama"] == 0.0
 
 
 def _aset(**over):

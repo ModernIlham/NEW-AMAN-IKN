@@ -15,11 +15,13 @@ from auth_utils import require_admin, require_user
 from db import db
 from kodefikasi_utils import GOLONGAN_DEFAULTS
 from report_filters import active_asset_filter
+from shared_utils import log_audit
 from penilaian_utils import (
     MASA_MANFAAT_DEFAULT, rekap_penyusutan, validate_masa_manfaat,
     DAMPAK_MASA_MANFAAT, DOKUMEN_KOREKSI, JENIS_KOREKSI_NILAI,
     STATUS_SAKTI_KOREKSI, baris_csv_koreksi, rekap_koreksi_nilai,
     susun_riwayat_nilai, validate_koreksi_nilai,
+    build_asset_revaluasi_projection,
 )
 
 penilaian_router = APIRouter()
@@ -247,10 +249,50 @@ async def catat_koreksi_nilai(payload: KoreksiNilaiIn,
     return record
 
 
+async def _proyeksi_master_revaluasi(koreksi: dict, oleh: str) -> bool:
+    """Proyeksikan master aset saat koreksi/revaluasi nilai FINAL (tercatat SAKTI)
+    — Prinsip 3 Bab 5. Best-effort & idempoten: nilai sudah tercatat di register
+    `penilaian_koreksi` (jurnal), jadi kegagalan/no-op proyeksi TIDAK menggagalkan
+    transisi SAKTI. `$inc version` mem-bust cache/ETag + memicu OCC 409 pada form
+    edit usang. `tandai_tercatat_sakti` hanya bertransisi sekali (guard
+    status_sakti) → proyeksi berjalan maksimal sekali per koreksi; koreksi
+    berikutnya menimpa `nilai_wajar_terakhir` (revaluasi terbaru menang).
+    """
+    asset_id = koreksi.get("asset_id")
+    if not asset_id:
+        return False
+    now = datetime.now(timezone.utc).isoformat()
+    proj = build_asset_revaluasi_projection(koreksi, now)
+    updated = await db.assets.find_one_and_update(
+        {"id": asset_id},
+        {"$set": proj, "$inc": {"version": 1}},
+        projection={"_id": 0, "id": 1, "activity_id": 1, "asset_code": 1,
+                    "asset_name": 1, "NUP": 1},
+        return_document=True,
+    )
+    if not updated:
+        return False
+    await log_audit(
+        "revaluasi", updated.get("activity_id", ""), updated.get("id", ""),
+        updated.get("asset_code", ""), updated.get("asset_name", ""),
+        username=oleh,
+        detail=(f"Nilai wajar diproyeksikan ke master: "
+                f"Rp{int(proj['nilai_wajar_terakhir'])}"
+                f" (dok {proj['revaluasi']['nomor_dokumen']})").strip(),
+        nup=updated.get("NUP", ""),
+    )
+    return True
+
+
 @penilaian_router.post("/penilaian/koreksi/{koreksi_id}/sakti")
 async def tandai_tercatat_sakti(koreksi_id: str,
                                 user: dict = Depends(require_user)):
-    """Tandai koreksi sudah divalidasi & di-approve di SAKTI (anti-race)."""
+    """Tandai koreksi sudah divalidasi & di-approve di SAKTI (anti-race).
+
+    Saat transisi BERHASIL, PROYEKSIKAN nilai wajar ke master aset
+    (`nilai_wajar_terakhir` + jejak revaluasi, #254) — best-effort, tak
+    menggagalkan transisi bila aset sudah tak ada.
+    """
     now = datetime.now(timezone.utc).isoformat()
     res = await db.penilaian_koreksi.find_one_and_update(
         {"id": koreksi_id, "status_sakti": "belum_dicatat"},
@@ -263,6 +305,7 @@ async def tandai_tercatat_sakti(koreksi_id: str,
             status_code=409,
             detail="Koreksi tidak ditemukan atau sudah ditandai tercatat")
     res["status_sakti"] = "tercatat_sakti"
+    await _proyeksi_master_revaluasi(res, user.get("username"))
     return res
 
 

@@ -361,3 +361,29 @@ def baris_csv_koreksi(koreksi_list) -> list:
             k.get("created_by") or "",
         ])
     return baris
+
+
+def build_asset_revaluasi_projection(koreksi: dict, now_iso: str) -> dict:
+    """Proyeksi master aset saat koreksi/REVALUASI nilai FINAL (tercatat SAKTI) —
+    Prinsip 3 Bab 5 (transaksi = jurnal register `penilaian_koreksi`, master =
+    proyeksi). Mengembalikan dict `$set` untuk `db.assets`: `nilai_wajar_terakhir`
+    (nilai wajar terkini) + jejak `revaluasi.{...}`.
+
+    SENGAJA TIDAK menimpa `purchase_price` (nilai perolehan historis tetap utuh
+    untuk audit); laporan posisi/nilai yang ingin memakai nilai wajar cukup
+    membaca `nilai_wajar_terakhir` bila ada (langkah lanjutan terpisah). Pemanggil
+    menambah `$inc: {version: 1}` (bust cache/ETag + picu OCC 409 form usang).
+    """
+    nilai = float(koreksi.get("nilai_baru") or 0)
+    return {
+        "nilai_wajar_terakhir": nilai,
+        "revaluasi": {
+            "nilai_wajar": nilai,
+            "nilai_lama": float(koreksi.get("nilai_lama") or 0),
+            "jenis": str(koreksi.get("jenis") or ""),
+            "nomor_dokumen": str(koreksi.get("nomor_dokumen") or "").strip(),
+            "tanggal_dokumen": str(koreksi.get("tanggal_dokumen") or "").strip()[:10],
+            "koreksi_id": str(koreksi.get("id") or ""),
+            "diproyeksikan_pada": now_iso,
+        },
+    }

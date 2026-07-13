@@ -48,6 +48,24 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#254] Revaluasi Penilaian memproyeksi nilai wajar ke master aset — 2026-07-13
+
+- **Integrasi §5A Prinsip 3 (Penilaian → master).** Saat koreksi/revaluasi nilai
+  ditandai **tercatat SAKTI** (final), master aset kini diproyeksi: field
+  **`nilai_wajar_terakhir`** (nilai wajar terkini) + jejak `revaluasi.{nilai,
+  nilai_lama, jenis, nomor/tanggal dokumen, koreksi_id}` + `$inc version`
+  (bust cache/OCC) + audit `action="revaluasi"`.
+- **`purchase_price` historis TAK ditimpa** — nilai perolehan tetap utuh untuk
+  audit; laporan yang ingin memakai nilai wajar cukup membaca
+  `nilai_wajar_terakhir` (langkah lanjut).
+- **Best-effort & idempoten** (pola sama #234): register `penilaian_koreksi`
+  tetap jurnal sumber; kegagalan/no-op proyeksi tak menggagalkan transisi SAKTI;
+  transisi hanya sekali (guard status), revaluasi terbaru menimpa yang lama.
+  Helper murni `build_asset_revaluasi_projection` + **3 unit test**. Masterplan
+  §5A diperbarui. pytest 308 lulus.
+
+---
+
 ## [#253] LBKP/CaLBMN: penghapusan via SK tampil sebagai mutasi kurang (saldo seimbang) — 2026-07-13
 
 - **Melengkapi §5A untuk laporan MUTASI.** Setelah laporan POSISI/NILAI
