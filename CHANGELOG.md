@@ -48,6 +48,35 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#233] Sinkron: bedakan "perlu tindakan" vs "sedang sinkron" (tanda tak lagi menyala palsu) — 2026-07-13
+
+- **Bug:** tombol/tanda sinkron di header tetap menyala walau sudah online &
+  sudah ditekan **Sinkronkan** hingga tanda hilang; lalu **muncul lagi** tiap
+  kembali ke halaman. Penyebab: penghitung `pendingCount` ikut menghitung item
+  **konflik versi (409)** dan **kegiatan terkunci (423)** sebagai "pending
+  sinkron", padahal `flushPending` memang **melewati** keduanya (retry otomatis
+  pasti gagal lagi). Item ini tersimpan di IndexedDB dan **direhidrasi sebagai
+  "failed" generik** tiap buka halaman → tanda menyala terus.
+- **Perbaikan — hitung yang jujur:** helper murni baru
+  `summarizeSyncStatuses` (di `frontend/src/lib/syncStatus.js`, lepas dari
+  axios/idb agar bisa diuji unit) memisahkan:
+  - **`pendingCount`** → hanya item yang **benar-benar bisa** diselesaikan tombol
+    Sinkronkan (queued/saving/**gagal jaringan**). Setelah tersinkron, tanda
+    hilang **permanen** (salinan persist sudah dihapus saat server konfirmasi).
+  - **`actionCount`** → item **macet** yang perlu **tindakan manual per-baris**
+    (konflik 409 / terkunci 423). Ditandai badge oranye **"perlu tindakan"**
+    terpisah (ikon segitiga) — **bukan** tombol sinkron biru/kuning yang
+    menyesatkan.
+- **Rehidrasi diperbaiki:** item konflik dikembalikan sebagai status `conflict`
+  (bukan `failed`), item terkunci ditandai `{locked}` — jadi tak lagi salah
+  dihitung sebagai antrian sinkron saat halaman dibuka ulang.
+- **Tampilan HP:** kartu aset kini punya banner **konflik** (oranye, "Tinjau" +
+  abaikan) seperti mode list desktop, sehingga item macet bisa ditindak dari HP.
+- Uji: unit test `summarizeSyncStatuses` (8 kasus) hijau; `eslint` bersih;
+  `CI=false yarn build` sukses.
+
+---
+
 ## [#232] Kamera: tap-to-focus + gating akurasi GPS (ring hijau/kuning + kunci rana) — 2026-07-13
 
 - **Ketuk area kamera → fokus di titik itu (tap-to-focus).** Ketukan cepat

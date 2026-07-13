@@ -1,5 +1,5 @@
 import React, { memo, useState, useRef } from "react";
-import { Camera, MapPin, Briefcase, Tag, Trash2, Lock, Cloud, Check, RotateCcw, MoreVertical, BookOpen, History, CreditCard } from "lucide-react";
+import { Camera, MapPin, Briefcase, Tag, Trash2, Lock, Cloud, Check, RotateCcw, MoreVertical, BookOpen, History, CreditCard, AlertTriangle } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuTrigger,
@@ -171,6 +171,17 @@ const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, onOpenKartu, on
               <RotateCcw className="w-2.5 h-2.5" />
               <span className="flex-1">{syncStatus.error || 'Gagal menyimpan'}</span>
               <button onClick={e => { e.stopPropagation(); onRetrySync?.(asset.id); }} className="underline text-[10px] ml-1">Coba lagi</button>
+              <button onClick={e => { e.stopPropagation(); onDismissSync?.(asset.id); }} className="ml-1 opacity-70">&times;</button>
+            </div>
+          )}
+          {/* Konflik versi (409): perlu tindakan manual — data server terbaru
+              sudah dimuat, tinjau lalu simpan ulang atau abaikan. Tanpa banner
+              ini item bentrok tak bisa ditindak dari tampilan HP. */}
+          {syncStatus?.status === 'conflict' && (
+            <div className="absolute top-0 left-0 right-0 bg-orange-500 text-white text-[10px] px-2 py-0.5 flex items-center gap-1 z-10">
+              <AlertTriangle className="w-2.5 h-2.5" />
+              <span className="flex-1">{syncStatus.error || 'Versi berbeda dari server'}</span>
+              <button onClick={e => { e.stopPropagation(); onRetrySync?.(asset.id); }} className="underline text-[10px] ml-1">Tinjau</button>
               <button onClick={e => { e.stopPropagation(); onDismissSync?.(asset.id); }} className="ml-1 opacity-70">&times;</button>
             </div>
           )}

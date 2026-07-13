@@ -1,7 +1,7 @@
 import React, { memo } from "react";
 import {
   Package, ArrowLeft, Users, History, LogOut,
-  Wifi, WifiOff, Users2, RefreshCw, Moon, Sun, MoreVertical
+  Wifi, WifiOff, Users2, RefreshCw, Moon, Sun, MoreVertical, AlertTriangle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,7 +13,7 @@ import { useTripleClick } from "@/hooks/useTripleClick";
 const DashboardHeader = memo(({
   activity, user, perms, onBack, onLogout,
   auditOpen, onAuditToggle, onOpenUserManagement,
-  isOnline, wsConnected, onlineUsers, pendingCount, syncing, onSync,
+  isOnline, wsConnected, onlineUsers, pendingCount, syncing, actionCount = 0, onSync,
   dark, toggleDark, onShowInfo,
 }) => {
   // Halaman Info tersembunyi: butuh 3 klik beruntun pada logo
@@ -67,6 +67,20 @@ const DashboardHeader = memo(({
           ) : (
             <span className="flex items-center gap-1 text-[10px] bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded-full font-medium" data-testid="ws-disconnected-indicator" title="Koneksi real-time terputus — perubahan tetap tersimpan, namun notifikasi dari user lain tertunda">
               <WifiOff className="w-3 h-3" /> WS
+            </span>
+          )}
+          {/* "Perlu tindakan" — item MACET (konflik versi / kegiatan terkunci)
+              yang TIDAK bisa diselesaikan tombol Sinkronkan. Dibedakan dari
+              tanda sinkron biru/kuning agar tidak menyesatkan: ini menandai
+              baris yang harus ditinjau manual (simpan ulang / abaikan), bukan
+              antrian yang sedang/akan disinkronkan. */}
+          {actionCount > 0 && (
+            <span
+              className="flex items-center gap-1 text-[10px] bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400 px-1.5 py-0.5 rounded-full font-medium"
+              data-testid="sync-action-badge"
+              title="Perlu tindakan manual: ada perubahan yang bentrok versi atau kegiatannya terkunci. Tinjau baris bertanda oranye/merah lalu simpan ulang atau abaikan — tombol Sinkronkan tidak dapat menyelesaikannya."
+            >
+              <AlertTriangle className="w-3 h-3" /> {actionCount}
             </span>
           )}
           {onlineUsers.length > 1 && (

@@ -4,6 +4,7 @@ import { openDB } from "idb";
 import { toast } from "sonner";
 import { getApiError } from "../lib/utils";
 import { checkReachable, REACHABILITY_RETRY_MS } from "../lib/connectivity";
+import { summarizeSyncStatuses } from "../lib/syncStatus";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -148,8 +149,12 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
     onRehydrateRef.current = onRehydrate;
   });
 
-  const updateStatus = useCallback((id, status, error) => {
-    statusesRef.current = { ...statusesRef.current, [id]: { status, error: error || null, ts: Date.now() } };
+  const updateStatus = useCallback((id, status, error, extra) => {
+    // `extra` menempelkan penanda tambahan (mis. { locked: true } untuk 423)
+    // agar summarizeSyncStatuses bisa membedakan gagal-jaringan (bisa di-flush)
+    // dari gagal-terkunci (perlu tindakan manual). Selalu ditulis ulang penuh,
+    // jadi penanda hanya ada saat status ini memang membawanya.
+    statusesRef.current = { ...statusesRef.current, [id]: { status, error: error || null, ts: Date.now(), ...(extra || {}) } };
     setSyncStatuses(statusesRef.current);
   }, []);
 
@@ -326,7 +331,10 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
       if (isLocked) {
         toast.error(errorMsg || "Kegiatan sudah disahkan dan terkunci", { duration: 6000 });
       }
-      updateStatus(statusKey, "failed", errorMsg);
+      // 423 ditandai {locked} → dihitung sebagai "perlu tindakan" (bukan pending
+      // sinkron) sehingga tombol Sinkronkan tidak menyala selamanya untuk
+      // kegiatan terkunci yang flush-nya memang selalu dilewati (flushPending).
+      updateStatus(statusKey, "failed", errorMsg, isLocked ? { locked: true } : undefined);
 
       // Re-register + persist so retry/rehydrate always have the payload (a
       // prior success of the same statusKey may have removed the entry).
@@ -488,12 +496,29 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
       if (toRegister.length === 0) return;
       toRegister.forEach((rec) => {
         failedItemsRef.current[rec.statusKey] = rec;
-        updateStatus(
-          rec.statusKey, "failed",
-          rec.locked
-            ? "Kegiatan sudah disahkan dan terkunci — perubahan tidak dapat disimpan"
-            : "Belum tersinkron — perubahan tersimpan di perangkat ini"
-        );
+        if (rec.locked) {
+          // 423 terkunci: perlu tindakan manual (retry/dismiss). {locked} agar
+          // tidak dihitung sebagai pending sinkron.
+          updateStatus(
+            rec.statusKey, "failed",
+            "Kegiatan sudah disahkan dan terkunci — perubahan tidak dapat disimpan",
+            { locked: true }
+          );
+        } else if (rec.hadConflict) {
+          // 409 konflik: kembalikan sebagai status "conflict" (perlu tindakan),
+          // BUKAN "failed" generik. Dulu direhidrasi sebagai "failed" → keliru
+          // dihitung pending → tanda sinkron MUNCUL LAGI tiap buka halaman
+          // padahal flush auto memang melewati item bentrok.
+          updateStatus(
+            rec.statusKey, "conflict",
+            "Versi berbeda dari server — tinjau lalu simpan ulang"
+          );
+        } else {
+          updateStatus(
+            rec.statusKey, "failed",
+            "Belum tersinkron — perubahan tersimpan di perangkat ini"
+          );
+        }
       });
       onRehydrateRef.current?.(toRegister);
       if (navigator.onLine) flushRef.current?.(true); // auto (rehidrasi) — lewati item bentrok
@@ -513,17 +538,13 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
   // parent re-inject pending CREATE rows after a server refetch replaces the list.
   const getPendingItems = useCallback(() => Object.values(failedItemsRef.current), []);
 
-  // Honest sync counters derived from real queue state
-  const { pendingCount, isSyncing } = useMemo(() => {
-    let pending = 0;
-    let saving = false;
-    Object.values(syncStatuses).forEach((s) => {
-      if (!s) return;
-      if (s.status === "queued" || s.status === "saving" || s.status === "failed" || s.status === "conflict") pending++;
-      if (s.status === "queued" || s.status === "saving") saving = true;
-    });
-    return { pendingCount: pending, isSyncing: saving };
-  }, [syncStatuses]);
+  // Honest sync counters derived from real queue state (lihat
+  // summarizeSyncStatuses): pendingCount = bisa di-flush; actionCount = macet
+  // (konflik/terkunci) yang perlu tindakan manual per-baris.
+  const { pendingCount, isSyncing, actionCount } = useMemo(
+    () => summarizeSyncStatuses(syncStatuses),
+    [syncStatuses]
+  );
 
   // Check if queue is completely idle (nothing queued or active)
   const isIdle = activeCountRef.current === 0 && queueRef.current.length === 0;
@@ -538,6 +559,7 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
     isIdle,
     pendingCount,
     isSyncing,
+    actionCount,
     flushPending,
     getPendingItems,
   };
