@@ -237,3 +237,29 @@ class TestPolisAsuransi:
         # Field hilang → string kosong; status tak terhitung → ""
         kosong = baris_csv_polis([{"nomor_polis": "P2"}], "2026-07-12")[1]
         assert kosong[0] == "" and kosong[6] == 0 and kosong[11] == ""
+
+    def test_baris_csv_kasus(self):
+        from pengamanan_utils import HEADER_CSV_KASUS, baris_csv_kasus
+        # Kosong / None → hanya header
+        assert baris_csv_kasus([]) == [HEADER_CSV_KASUS]
+        assert baris_csv_kasus(None) == [HEADER_CSV_KASUS]
+        rows = baris_csv_kasus([{
+            "asset_code": "40101", "NUP": "7", "asset_name": "Tanah Kantor",
+            "lokasi": "Jl. Merdeka", "kategori": "berperkara",
+            "status": "litigasi", "uraian": "Gugatan perdata",
+            "pihak_lawan": "PT X", "nomor_perkara": "12/PDT/2026",
+            "pendamping": "Kejaksaan", "created_at": "2026-01-05T08:00:00+00:00",
+            "updated_at": "2026-06-10T09:30:00+00:00", "created_by": "admin",
+        }])
+        assert rows[0] == HEADER_CSV_KASUS
+        r = rows[1]
+        # Label kategori/status terbaca; tanggal dipangkas 10 char
+        assert r[4] == "Sengketa/berperkara di pengadilan"
+        assert r[5] == "Litigasi"
+        assert r[8] == "12/PDT/2026"
+        assert r[10] == "2026-01-05" and r[11] == "2026-06-10"
+        assert r[12] == "admin"
+        # Field hilang → string kosong; kategori tak dikenal → apa adanya
+        kosong = baris_csv_kasus([{"kategori": "xx", "status": "yy"}])[1]
+        assert kosong[0] == "" and kosong[4] == "xx" and kosong[5] == "yy"
+        assert kosong[10] == "" and kosong[11] == ""
