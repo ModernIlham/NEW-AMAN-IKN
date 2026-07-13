@@ -564,10 +564,26 @@ const FullCameraSheet = memo(function FullCameraSheet({
                   className="ml-1 px-1.5 py-0.5 rounded bg-white/15 text-[10px] font-sans font-medium">Coba lagi</button>
               )}
             </div>
-            <div className="text-[11px] text-white/90 truncate">
-              <span className="font-semibold">{formData?.asset_name || "Aset Baru"}</span>
-              {formData?.asset_code ? ` — ${formData.asset_code}` : ""}{formData?.NUP ? ` NUP ${formData.NUP}` : ""}
-              {formData?.location ? ` • ${formData.location}` : ""}
+            {/* Info aset — TIAP field satu baris (nama, kategori, kode+NUP,
+                lokasi). Teks yang tak muat boleh turun ke baris ke-2, lalu
+                baru dipotong "…" (line-clamp-2). */}
+            <div className="text-[11px] text-white/90 leading-tight space-y-0.5">
+              <div className="font-semibold line-clamp-2">{formData?.asset_name || "Aset Baru"}</div>
+              {formData?.category && (
+                <div className="text-white/80 line-clamp-2">
+                  <span className="text-white/50">Kategori:</span> {formData.category}
+                </div>
+              )}
+              {(formData?.asset_code || formData?.NUP) && (
+                <div className="font-mono text-white/80 line-clamp-2">
+                  {formData?.asset_code || "—"}{formData?.NUP ? ` · NUP ${formData.NUP}` : ""}
+                </div>
+              )}
+              {formData?.location && (
+                <div className="text-white/80 line-clamp-2">
+                  <span className="text-white/50">Lokasi:</span> {formData.location}
+                </div>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
