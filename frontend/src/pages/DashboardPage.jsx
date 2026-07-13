@@ -406,7 +406,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
 
   const {
     syncStatuses, enqueue: enqueueOptimistic, retry: retrySync, dismiss: dismissSync,
-    queueLength, consumeRefreshFlag, pendingCount, isSyncing, flushPending, getPendingItems,
+    queueLength, consumeRefreshFlag, pendingCount, isSyncing, actionCount, flushPending, getPendingItems,
   } = useOptimisticQueue({
     onItemSaved: (assetId) => unlockAsset(assetId),
     onItemFailed: (assetId) => unlockAsset(assetId),
@@ -1485,7 +1485,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
         auditOpen={auditOpen} onAuditToggle={handleAuditToggle}
         onOpenUserManagement={() => openDialog('userManagement')}
         isOnline={isOnline} wsConnected={wsConnected} onlineUsers={onlineUsers}
-        pendingCount={pendingCount} syncing={isSyncing} onSync={() => flushPending(false)}
+        pendingCount={pendingCount} syncing={isSyncing} actionCount={actionCount} onSync={() => flushPending(false)}
         dark={dark} toggleDark={toggleDark}
         onShowInfo={onShowInfo}
       />
