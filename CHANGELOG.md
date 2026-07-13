@@ -48,6 +48,19 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#221] Ekspor CSV jadwal pemeliharaan berkala (Pemeliharaan) — 2026-07-13
+
+- **Ekspor CSV** jadwal pemeliharaan berkala (`GET
+  /pemeliharaan/jadwal/export`) — melengkapi ekspor Pemeliharaan (riwayat
+  sudah #167; kini **jadwal** juga ber-CSV). Kolom: identitas aset,
+  interval (bulan), tanggal mulai, terakhir dilaksanakan, **jatuh tempo**
+  (dihitung: belum dilaksanakan → = mulai; sesudahnya → terakhir + interval),
+  **status** (label: Terlambat / Segera jatuh tempo / Terjadwal, ambang 14
+  hari), keterangan, pembuat. Helper murni `baris_csv_jadwal`
+  (jatuh_tempo/status_jadwal, tanpa Mongo, teruji unit) + tombol unduh CSV
+  di panel "Jadwal Berkala" (muncul saat ada jadwal). Baca-saja. Unit test
+  +1 → 283 passed. Pedoman DKPB Ps. 46(2) PP 27/2014.
+
 ## [#220] Konsolidasi dokumentasi #205–#219 (masterplan + README) — 2026-07-13
 
 - **Dokumentasi saja** (tanpa perubahan aplikasi). Menyelaraskan

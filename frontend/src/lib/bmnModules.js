@@ -347,7 +347,7 @@ export const SIKLUS_MODULES = [
       "✅ Kondisi aset ter-update dari hasil pemeliharaan",
       "✅ Penanda telaah kapitalisasi (ambang PMK 181/2016)",
       "✅ DHPB semesteran/tahunan PDF (laporan KPB → Pengguna Barang)",
-      "✅ Jadwal berkala per aset (jatuh tempo + status terlambat/segera)",
+      "✅ Jadwal berkala per aset (jatuh tempo + status terlambat/segera) + ekspor CSV",
       "✅ Ekspor CSV riwayat (biaya, kondisi, telaah kapitalisasi, bukti)",
     ],
     integrasi: ["Riwayat biaya menjadi dasar usulan RKBMN pemeliharaan (Perencanaan)"],

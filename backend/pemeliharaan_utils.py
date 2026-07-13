@@ -170,6 +170,44 @@ def status_jadwal(due_iso: str, today_iso: str, ambang_hari: int = 14) -> str:
     return "terjadwal"
 
 
+STATUS_JADWAL_LABEL = {
+    "terlambat": "Terlambat",
+    "segera": "Segera jatuh tempo",
+    "terjadwal": "Terjadwal",
+}
+
+HEADER_CSV_JADWAL = [
+    "kode_aset", "nup", "nama_aset", "interval_bulan", "mulai",
+    "terakhir_dilaksanakan", "jatuh_tempo", "status", "keterangan",
+    "dibuat_oleh",
+]
+
+
+def baris_csv_jadwal(jadwal_list, today_iso) -> list:
+    """Susun baris CSV jadwal pemeliharaan berkala: [header, *data] — murni.
+
+    Jatuh tempo & status dihitung via jatuh_tempo/status_jadwal (terlambat/
+    segera/terjadwal → label); tanggal dipangkas 10 char; field hilang →
+    string kosong. Tanpa Mongo/IO agar teruji unit (pola ekspor #158).
+    """
+    baris = [list(HEADER_CSV_JADWAL)]
+    for j in jadwal_list or []:
+        due = jatuh_tempo(j)
+        baris.append([
+            j.get("asset_code") or "",
+            j.get("NUP") or "",
+            j.get("asset_name") or "",
+            int(j.get("interval_bulan") or 0),
+            str(j.get("mulai") or "")[:10],
+            str(j.get("terakhir") or "")[:10],
+            due or "",
+            STATUS_JADWAL_LABEL.get(status_jadwal(due, today_iso), ""),
+            j.get("keterangan") or "",
+            j.get("created_by") or "",
+        ])
+    return baris
+
+
 def rentang_periode(tahun: int, semester=None):
     """Rentang tanggal ISO satu periode DHPB → (dari, sampai, label).
 
