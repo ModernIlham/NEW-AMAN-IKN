@@ -91,3 +91,33 @@ class TestUsulanRkbmn:
         assert r["jumlah"] == 3 and r["berjalan"] == 2
         assert r["per_jenis"]["pemeliharaan"] == 2
         assert rekap_usulan_rkbmn([])["berjalan"] == 0
+
+
+# ── FK Perencanaan → Penganggaran: snapshot_rkbmn (§5A gap #4, #257) ──
+from perencanaan_utils import snapshot_rkbmn
+
+
+def test_snapshot_rkbmn_lengkap():
+    u = {"id": "rk-1", "uraian": "Pemeliharaan gedung A", "tahun_rkbmn": "2027",
+         "jenis": "pemeliharaan", "unit_pengusul": "Setditjen", "status": "draft"}
+    snap = snapshot_rkbmn(u)
+    assert snap == {
+        "rkbmn_id": "rk-1", "rkbmn_uraian": "Pemeliharaan gedung A",
+        "rkbmn_tahun": "2027", "rkbmn_jenis": "pemeliharaan",
+        "rkbmn_unit": "Setditjen",
+    }
+
+
+def test_snapshot_rkbmn_kosong_melepas_tautan():
+    # None / dict kosong → semua field kosong (tautan dilepas), kunci tetap ada
+    for u in (None, {}):
+        snap = snapshot_rkbmn(u)
+        assert set(snap) == {"rkbmn_id", "rkbmn_uraian", "rkbmn_tahun",
+                             "rkbmn_jenis", "rkbmn_unit"}
+        assert all(v == "" for v in snap.values())
+
+
+def test_snapshot_rkbmn_field_hilang_aman():
+    snap = snapshot_rkbmn({"id": " rk-9 "})
+    assert snap["rkbmn_id"] == "rk-9"          # di-strip
+    assert snap["rkbmn_uraian"] == "" and snap["rkbmn_tahun"] == ""

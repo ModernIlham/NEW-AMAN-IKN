@@ -48,6 +48,25 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#257] Perencanaan → Penganggaran ber-FK: usulan anggaran simpan `rkbmn_id` — 2026-07-13
+
+- **Integrasi §5A gap #4 (Prinsip 4 — dokumen/usulan sumber jadi simpul).** Usulan
+  Penganggaran kini menyimpan **`rkbmn_id`** (FK ke usulan RKBMN Perencanaan) +
+  **snapshot beku** identitasnya (`rkbmn_uraian`, `rkbmn_tahun`, `rkbmn_jenis`,
+  `rkbmn_unit`) saat dibuat. Sebelumnya dua register paralel hanya tertaut lewat
+  teks bebas `sumber` → tak bisa telusur balik ke usulan RKBMN asal.
+- **Tiru pola `snapshot_penganggaran` (#199, Pengadaan→Penganggaran).** Helper
+  murni `snapshot_rkbmn(usulan)` + `_ambil_snapshot_rkbmn(rkbmn_id)` (404 bila id
+  tak ditemukan; kosong = lepas tautan). Snapshot **dibekukan** agar jejak asal
+  RKBMN tetap utuh walau usulan sumber kelak berubah/terhapus.
+- Dengan ini rantai **Perencanaan → Penganggaran → Pengadaan** tertaut penuh
+  (Pengadaan→Penganggaran sudah ber-FK sejak #199).
+- Field opsional `rkbmn_id` di `UsulanAnggaranIn`; `purchase_price`/register lain
+  tak tersentuh. Helper murni + **3 unit test**. Masterplan §5A gap #4 ditandai
+  tuntas. pytest **320 lulus**.
+
+---
+
 ## [#256] Pemindahtanganan selesai memproyeksi master aset (`dihapus`) — 2026-07-13
 
 - **Integrasi §5A Prinsip 3 (Pemindahtanganan → master).** Saat usulan
