@@ -59,18 +59,25 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 // Satu segmen dari kontrol gabungan (Analytics/Rekapitulasi/Barang Serupa).
 // Tiga segmen berbagi satu kartu ber-divider → tampil sebagai satu kesatuan
 // desain menyamping (bukan tiga tombol/kartu terpisah), hemat ruang di semua
-// viewport dan memperlebar area data.
-function PanelSegment({ active, onClick, testid, icon: Icon, label, badge, activeCls, iconCls }) {
+// viewport dan memperlebar area data. Badge jumlah dibuat seperti NOTIFIKASI:
+// mengambang di atas-tengah, sedikit menjorok keluar kotak, agar tidak
+// menutupi teks label (label kini punya ruang penuh).
+function PanelSegment({ active, onClick, testid, icon: Icon, label, badge, activeCls, iconCls, badgeCls, roundedL, roundedR }) {
   return (
     <button
       type="button" onClick={onClick} data-testid={testid} aria-pressed={active}
-      className={`flex-1 min-w-0 flex items-center justify-center gap-1.5 px-2 py-2 text-[11px] sm:text-xs font-semibold transition-colors ${active ? activeCls : "text-foreground hover:bg-muted"}`}
+      className={`relative flex-1 min-w-0 flex items-center justify-center gap-1.5 px-2 py-2 text-[11px] sm:text-xs font-semibold transition-colors ${roundedL ? "rounded-l-xl" : ""} ${roundedR ? "rounded-r-xl" : ""} ${active ? activeCls : "text-foreground hover:bg-muted"}`}
     >
+      {badge != null && (
+        <span
+          className={`absolute -top-2 left-1/2 -translate-x-1/2 z-10 text-[9px] leading-none px-1.5 py-0.5 rounded-full font-bold shadow-sm ring-2 ring-card whitespace-nowrap pointer-events-none ${badgeCls || "bg-blue-600 text-white"}`}
+          data-testid={`${testid}-badge`}
+        >
+          {badge}
+        </span>
+      )}
       <Icon className={`w-3.5 h-3.5 flex-shrink-0 ${active ? "" : iconCls}`} />
       <span className="truncate">{label}</span>
-      {badge != null && (
-        <span className={`text-[9px] leading-none px-1.5 py-0.5 rounded-full font-medium flex-shrink-0 ${active ? "bg-white/25 text-white" : "bg-muted text-muted-foreground"}`}>{badge}</span>
-      )}
       {active
         ? <ChevronUp className="w-3.5 h-3.5 flex-shrink-0" />
         : <ChevronDown className="w-3.5 h-3.5 flex-shrink-0 opacity-60" />}
@@ -1413,9 +1420,13 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   useBackGuard(handleAppBack);
 
   // === RENDER ===
+  // h-screen + overflow-hidden mengunci app-shell tepat setinggi viewport
+  // (header + baris h-[calc(100vh-53px)] = 100vh). Tanpa ini, sisa sub-piksel
+  // membuat DOKUMEN bisa ter-scroll saat roda mouse di atas header (yang bukan
+  // area scroll) → muncul "efek turun sedikit" yang mengganggu.
   return (
     <div
-      className="min-h-screen bg-background text-foreground overflow-x-hidden"
+      className="h-screen bg-background text-foreground overflow-hidden"
       onDragEnter={perms.canImport && !dialogs.categoryManager ? handleDragEnter : undefined}
       onDragLeave={perms.canImport && !dialogs.categoryManager ? handleDragLeave : undefined}
       onDragOver={perms.canImport && !dialogs.categoryManager ? handleDragOver : undefined}
@@ -1486,7 +1497,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
             </div>
           </div>
 
-          <div className="p-1.5 sm:p-4 lg:p-3 space-y-1.5 sm:space-y-3 lg:space-y-2">
+          <div className="p-1.5 sm:p-3 space-y-1.5 sm:space-y-2">
             {/* Banner kegiatan disahkan — seluruh data terkunci */}
             {sealed && (
               <div className="flex items-start gap-2.5 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-300 dark:border-emerald-700 rounded-xl px-3 py-2" data-testid="sealed-banner">
@@ -1528,12 +1539,14 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
                 SATU kontrol segmented menyamping di semua viewport — hemat ruang
                 (dulu tiga bar bertumpuk ~120px) & memperlebar area data. Isi
                 panel dirender di bawah baris ini saat segmennya aktif. */}
+            {/* Tanpa overflow-hidden + margin atas → badge notifikasi bisa
+                menjorok keluar tepi atas kotak tanpa terpotong. */}
             {!mapOpen && (
-            <div className="flex items-stretch rounded-xl border border-border bg-card shadow-sm overflow-hidden divide-x divide-border" data-testid="panel-segmented">
+            <div className="flex items-stretch rounded-xl border border-border bg-card shadow-sm divide-x divide-border mt-2" data-testid="panel-segmented">
               {!inventoryMode && (
                 <PanelSegment
                   active={analyticsOpen} onClick={handleAnalyticsToggle} testid="chip-analytics"
-                  icon={BarChart3} label="Analytics"
+                  icon={BarChart3} label="Analytics" roundedL
                   activeCls="bg-blue-600 text-white" iconCls="text-blue-600" />
               )}
               {!inventoryMode && (
@@ -1541,12 +1554,14 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
                   active={rekapOpen} onClick={() => setRekapOpen(p => !p)} testid="chip-rekap"
                   icon={ClipboardList} label="Rekapitulasi"
                   badge={rekapTotal != null ? `${rekapTotal} BMN` : null}
+                  badgeCls="bg-blue-600 text-white"
                   activeCls="bg-blue-600 text-white" iconCls="text-blue-600" />
               )}
               <PanelSegment
                 active={groupsOpen} onClick={() => setGroupsOpen(p => !p)} testid="chip-groups"
-                icon={Layers} label="Barang Serupa"
+                icon={Layers} label="Barang Serupa" roundedR roundedL={inventoryMode}
                 badge={groupsCount ? `${groupsCount} grup` : null}
+                badgeCls="bg-violet-600 text-white"
                 activeCls="bg-violet-600 text-white" iconCls="text-violet-600" />
             </div>
             )}

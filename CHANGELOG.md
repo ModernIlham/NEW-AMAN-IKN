@@ -48,7 +48,27 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
-## [#217] Peta: seleksi memfilter titik & unduh GIS, foto popup dapat diperbesar, skala + kompas + bar metrik — 2026-07-13
+## [#217] Peta: seleksi memfilter titik & unduh GIS, foto popup dapat diperbesar, skala + kompas + bar metrik + rapikan dasbor — 2026-07-13
+
+**Penyempurnaan tampilan dasbor (menyertai peta di atas):**
+
+4. **Jarak mode tablet dirapatkan.** Wadah utama dasbor pada rentang tablet
+   (`sm`) sebelumnya lebih renggang (`p-4`, `space-y-3`) dibanding HP &
+   desktop; kini disetarakan dengan desktop (`sm:p-3`, `sm:space-y-2`)
+   sehingga rapi di semua ukuran.
+5. **Badge jumlah pada kontrol Analytics/Rekapitulasi/Barang Serupa dibuat
+   seperti notifikasi.** Sebelumnya badge menyatu di dalam segmen &
+   menutupi teks label (mis. "R… 163 BMN"); kini badge **mengambang di
+   atas-tengah** segmen, sedikit menjorok keluar tepi kotak (gaya
+   notifikasi, ber-`ring`), sehingga label tampil penuh dan tak tertutup.
+6. **Perbaikan "efek turun sedikit" saat scroll di atas header.** App-shell
+   dasbor kini dikunci setinggi viewport (`h-screen` + `overflow-hidden`)
+   sehingga dokumen tidak lagi ikut ter-scroll/rubber-band saat roda mouse
+   berada di atas header (area non-scroll) — hanya `<main>` yang menggulir.
+
+---
+
+
 
 Tiga penyempurnaan **Peta Aset** (inventarisasi):
 
