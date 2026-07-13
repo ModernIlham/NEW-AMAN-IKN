@@ -48,6 +48,32 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#236] Sinkron offline handal: cegah self-409 + toast konflik tak berulang + Sinkronkan menuntaskan bentrok — 2026-07-13
+
+Lanjutan #233. Keluhan: toast "Aset telah diubah oleh pengguna lain" muncul
+terus & tanda sinkron tetap minta disinkron walau sudah online dan sudah diklik.
+
+- **Akar masalah utama: self-409 pada edit berantai.** Edit kedua atas aset yang
+  sama mengirim `If-Match` versi lama (versi saat form dimuat), padahal simpanan
+  pertama sudah menaikkan versi server → server menolak 409 walau **hanya satu
+  pengguna**. Kini `If-Match` memakai **versi tertinggi yang diketahui**
+  (`resolveBaseVersion` = `max(baseVersion, lastSavedVersion)`, helper murni
+  teruji unit) — tak pernah menurunkan versi, jadi bentrok orang lain yang benar-
+  benar baru tetap terdeteksi.
+- **Tombol Sinkronkan kini menuntaskan item bentrok.** Dulu klik Sinkronkan tak
+  menyentuh item konflik (macet selamanya). Kini sinkron **manual** meng-retry
+  item bentrok: `onConflict` sudah memuat versi server terbaru ke daftar,
+  sehingga retry membangun ulang di versi itu (*last-write-wins* dengan data
+  pengguna) dan **berhasil** — tanda hilang permanen. Auto-flush saat reconnect
+  tetap melewati item bentrok (hindari menimpa perubahan orang lain secara pasif).
+- **Toast konflik di-throttle per-aset (≥8 dtk)** → tak lagi bertubi-tubi saat
+  beberapa percobaan sinkron atas aset yang sama.
+- Offline tetap tersimpan di perangkat (IndexedDB) & auto-sinkron saat online
+  kembali seperti sebelumnya — kini benar-benar tuntas karena self-409 hilang.
+- Uji: `resolveBaseVersion` (7 kasus) hijau; eslint bersih; `CI=false yarn build` sukses.
+
+---
+
 ## [#235] Kamera/GPS: cutoff ≤6 m + effect "heboh" ≤4 m + tombol Ambil GPS theme-aware — 2026-07-13
 
 - **Cutoff koordinat diperketat 8→6 m.** Rana kamera kini terkunci bila akurasi

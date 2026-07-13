@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { getApiError } from "../lib/utils";
 import { checkReachable, REACHABILITY_RETRY_MS } from "../lib/connectivity";
 import { summarizeSyncStatuses } from "../lib/syncStatus";
+import { resolveBaseVersion } from "../lib/occ";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -197,11 +198,14 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
     if (item.isEdit && item.editId) inFlightEditsRef.current.add(item.editId);
     updateStatus(statusKey, "saving");
 
-    // A save that waited behind another save of the same asset must build on
-    // the version that save returned, otherwise it would self-409.
-    if (item.isEdit && item.awaitingPrior) {
-      const v = lastSavedVersionsRef.current[item.editId];
-      if (v != null) item.baseVersion = v;
+    // Kirim If-Match dengan versi TERTINGGI yang kita ketahui agar tak self-409:
+    // edit berantai atas aset yang sama (atau yang menunggu di belakang simpanan
+    // lain) sudah menaikkan versi server; `baseVersion` item bisa jadi versi saat
+    // form dimuat. resolveBaseVersion mengambil max(base, lastSaved) — tak pernah
+    // menurunkan versi, jadi bentrok orang lain yang benar-benar baru tetap 409.
+    if (item.isEdit && item.editId) {
+      const resolved = resolveBaseVersion(item.baseVersion, lastSavedVersionsRef.current[item.editId]);
+      if (resolved != null) item.baseVersion = resolved;
     }
 
     // Build per-request headers for OCC + idempotency + audit stamping
@@ -431,17 +435,19 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
     flushGuardRef.current = true;
     setTimeout(() => { flushGuardRef.current = false; }, 3000);
     Object.keys(failedItemsRef.current).forEach((key) => {
-      // 423 Locked (kegiatan disahkan): jangan auto-retry — hasilnya pasti
-      // 423 lagi. Item tetap tersimpan; user memutuskan retry/dismiss manual.
-      if (failedItemsRef.current[key]?.locked) return;
-      // OCC 409 (bentrok): JANGAN auto-retry. Saat buka kegiatan, daftar aset
-      // belum termuat → getLatestVersion null → versi basi dikirim ulang →
-      // server 409 lagi → toast "diubah pengguna lain" MUNCUL TERUS tiap buka
-      // kegiatan (dan menimpa perubahan orang lain itu keliru). Biarkan user
-      // meninjau lalu retry manual per-baris (yang menyegarkan versi dulu),
-      // atau tekan Sinkronkan (auto=false) untuk memaksa.
-      if (auto && failedItemsRef.current[key]?.hadConflict) return;
-      if (statusesRef.current[key]?.status === "failed") retry(key);
+      const rec = failedItemsRef.current[key];
+      // 423 Locked (kegiatan disahkan): jangan retry — hasilnya pasti 423 lagi.
+      // Item tetap tersimpan; user memutuskan retry/dismiss manual per-baris.
+      if (rec?.locked) return;
+      // OCC 409 (bentrok) saat AUTO (reconnect/rehidrasi): lewati — menimpa
+      // perubahan orang lain secara pasif itu keliru. Tapi saat MANUAL (tombol
+      // Sinkronkan, auto=false): retry — onConflict sudah memuat versi server
+      // terbaru ke daftar, jadi retry membangun ulang di versi itu (last-write-
+      // wins dengan data user) dan BERHASIL, bukan 409 lagi. Ini yang membuat
+      // "sudah diklik sinkron tapi terus minta sinkron" akhirnya tuntas.
+      if (auto && rec?.hadConflict) return;
+      const st = statusesRef.current[key]?.status;
+      if (st === "failed" || (!auto && rec?.hadConflict)) retry(key);
     });
     processNext(); // anything still queued in memory (in-flight guard: activeCountRef)
   }, [retry, processNext]);
