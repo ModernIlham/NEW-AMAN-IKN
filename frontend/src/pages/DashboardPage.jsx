@@ -582,7 +582,11 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       setOfflineLastSync(meta?.lastSync || null);
       setOfflineServed(true);
       setLoadingMessage(`Mode offline — menampilkan ${merged.length} dari ${totalFiltered} aset tersimpan`);
-      return true;
+      // Kembalikan baris halaman ini (append: hanya slice baru) agar pemanggil
+      // seperti loadMoreMobile bisa membuka aset pertama halaman berikutnya
+      // (alur simpan-lanjut lintas halaman). Array truthy → pemeriksaan
+      // `if (served)` di pemanggil lama tetap benar.
+      return (appendMobile && pg > 1) ? pageItems : merged;
     } catch {
       return false;
     }
@@ -650,14 +654,17 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     }
   };
 
+  // Mengembalikan array baris yang baru dimuat (halaman berikutnya) atau null
+  // bila tak ada lagi/ gagal — dipakai alur simpan-lanjut lintas halaman untuk
+  // membuka aset pertama halaman baru.
   const loadMoreMobile = async () => {
-    if (mobileLoading || mobileCurrentPage >= totalPages) return;
+    if (mobileLoading || mobileCurrentPage >= totalPages) return null;
     setMobileLoading(true);
     const nextPage = mobileCurrentPage + 1;
     // Offline: append the next page straight from the snapshot
     if (!isOnlineRef.current) {
       const served = await serveFromSnapshot(nextPage, pageSize, debouncedSearch, filterCategory, sortBy, true);
-      if (served) { setMobileLoading(false); return; }
+      if (served) { setMobileLoading(false); return Array.isArray(served) ? served : []; }
     }
     try {
       const params = new URLSearchParams();
@@ -669,14 +676,19 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       if (activity?.id) params.append("activity_id", activity.id);
       buildFilterParams(params);
       const r = await axios.get(`${API}/assets?${params.toString()}`);
-      setMobileAssets(prev => [...prev, ...(r.data.items || [])]);
+      const items = r.data.items || [];
+      setMobileAssets(prev => [...prev, ...items]);
       setMobileCurrentPage(nextPage);
+      return items;
     } catch {
       const served = await serveFromSnapshot(nextPage, pageSize, debouncedSearch, filterCategory, sortBy, true);
       if (!served) toast.error("Gagal memuat data lanjutan");
+      return Array.isArray(served) ? served : null;
     }
     finally { setMobileLoading(false); }
   };
+  const loadMoreMobileRef = useRef(loadMoreMobile);
+  loadMoreMobileRef.current = loadMoreMobile;
 
   const doFetchStats = async (search, category) => {
     try {
@@ -1064,12 +1076,36 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
         setEditAssetForForm(null);
         setIsSidebarOpen(false);
       }
+    } else if (direction === 'next' && currentIndex !== -1 && mobileCurrentPage < totalPages) {
+      // Di ujung daftar yang sudah dimuat tapi masih ada halaman berikutnya:
+      // muat halaman berikutnya lalu buka aset PERTAMA-nya — ritme input
+      // lintas halaman tak terputus (galeri/kartu = infinite scroll; tabel
+      // = paginasi, mobileAssets di sana = halaman aktif). loadMoreMobile
+      // mengembalikan baris baru sehingga tak bergantung state async.
+      const fresh = await loadMoreMobileRef.current();
+      const nextAsset = (fresh && fresh.length) ? fresh[0] : null;
+      if (!nextAsset) {
+        // Gagal memuat / halaman kosong (loadMoreMobile sudah beri tahu bila gagal)
+        setEditAssetForForm(null);
+        setIsSidebarOpen(false);
+        return;
+      }
+      const lock = rowLocks[nextAsset.id];
+      if (lock && lock.session_id !== sessionId) {
+        toast.error(`Aset berikutnya sedang diedit oleh ${lock.user_name}`);
+        setEditAssetForForm(null);
+        setIsSidebarOpen(false);
+        return;
+      }
+      const locked = await lockAsset(nextAsset.id);
+      if (locked) setEditAssetForForm(nextAsset);
+      else { setEditAssetForForm(null); setIsSidebarOpen(false); }
     } else {
-      toast.info(direction === 'next' ? "Sudah di aset terakhir halaman ini" : "Sudah di aset pertama halaman ini");
+      toast.info(direction === 'next' ? "Sudah di aset terakhir" : "Sudah di aset pertama halaman ini");
       setEditAssetForForm(null);
       setIsSidebarOpen(false);
     }
-  }, [assets, mobileAssets, lockAsset, unlockAsset, enqueueOptimistic, rowLocks, sessionId, activity?.id, setSearchInput]);
+  }, [assets, mobileAssets, mobileCurrentPage, totalPages, lockAsset, unlockAsset, enqueueOptimistic, rowLocks, sessionId, activity?.id, setSearchInput]);
 
   // Mode Kamera Penuh — "tinjau aset tersimpan": simpan aset saat ini lalu muat
   // aset yang tersimpan sebelumnya (paling atas daftar) ke form untuk ditinjau/
@@ -1339,12 +1375,12 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
         {/* ASSET FORM SIDEBAR - only for admin/operator */}
         {perms.canEdit && (
           <div className={`hidden lg:block ${formPanelVisible ? 'w-[320px] min-w-[320px]' : 'w-0 min-w-0 overflow-hidden'}`} style={{ transition: 'width 0.3s ease, min-width 0.3s ease', willChange: 'width', contain: 'layout style' }}>
-            <AssetForm isOpen={isSidebarOpen || formPanelVisible} onClose={handleFormClose} activity={activity} categories={categories} editAsset={editAssetForForm} onSubmitSuccess={handleFormSubmitSuccess} onOptimisticSubmit={handleOptimisticSubmit} onSaveAndNavigate={handleSaveAndNavigate} onCameraReviewSaved={handleCameraReviewSaved} onExitToNewAsset={() => setEditAssetForForm(null)} assetIndex={editAssetIndex} totalAssetsInView={mobileAssets.length} saveQueueLength={queueLength} inventoryMode={inventoryMode} onShowCategoryManager={perms.canManageCategories ? () => openDialog('categoryManager') : undefined} onOpenKartu={handleOpenKartu} alwaysExpanded={formPanelVisible} />
+            <AssetForm isOpen={isSidebarOpen || formPanelVisible} onClose={handleFormClose} activity={activity} categories={categories} editAsset={editAssetForForm} onSubmitSuccess={handleFormSubmitSuccess} onOptimisticSubmit={handleOptimisticSubmit} onSaveAndNavigate={handleSaveAndNavigate} onCameraReviewSaved={handleCameraReviewSaved} onExitToNewAsset={() => setEditAssetForForm(null)} assetIndex={editAssetIndex} totalAssetsInView={mobileAssets.length} hasMoreToLoad={mobileCurrentPage < totalPages} saveQueueLength={queueLength} inventoryMode={inventoryMode} onShowCategoryManager={perms.canManageCategories ? () => openDialog('categoryManager') : undefined} onOpenKartu={handleOpenKartu} alwaysExpanded={formPanelVisible} />
           </div>
         )}
         {perms.canEdit && (
           <div className="lg:hidden">
-            <AssetForm isOpen={isSidebarOpen} onClose={handleFormClose} activity={activity} categories={categories} editAsset={editAssetForForm} onSubmitSuccess={handleFormSubmitSuccess} onOptimisticSubmit={handleOptimisticSubmit} onSaveAndNavigate={handleSaveAndNavigate} onCameraReviewSaved={handleCameraReviewSaved} onExitToNewAsset={() => setEditAssetForForm(null)} assetIndex={editAssetIndex} totalAssetsInView={mobileAssets.length} saveQueueLength={queueLength} inventoryMode={inventoryMode} onShowCategoryManager={perms.canManageCategories ? () => openDialog('categoryManager') : undefined} onOpenKartu={handleOpenKartu} />
+            <AssetForm isOpen={isSidebarOpen} onClose={handleFormClose} activity={activity} categories={categories} editAsset={editAssetForForm} onSubmitSuccess={handleFormSubmitSuccess} onOptimisticSubmit={handleOptimisticSubmit} onSaveAndNavigate={handleSaveAndNavigate} onCameraReviewSaved={handleCameraReviewSaved} onExitToNewAsset={() => setEditAssetForForm(null)} assetIndex={editAssetIndex} totalAssetsInView={mobileAssets.length} hasMoreToLoad={mobileCurrentPage < totalPages} saveQueueLength={queueLength} inventoryMode={inventoryMode} onShowCategoryManager={perms.canManageCategories ? () => openDialog('categoryManager') : undefined} onOpenKartu={handleOpenKartu} />
           </div>
         )}
 

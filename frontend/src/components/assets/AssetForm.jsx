@@ -450,6 +450,7 @@ const AssetForm = memo(({
   onExitToNewAsset,
   assetIndex = -1,
   totalAssetsInView = 0,
+  hasMoreToLoad = false,
   saveQueueLength = 0,
   inventoryMode = false,
   onShowCategoryManager,
@@ -1557,14 +1558,19 @@ const AssetForm = memo(({
   // Tampilan eksklusif inventarisasi lapangan menggantikan seluruh body form.
   const sheetMode = inventoryMode && isEditing && !showFullForm;
 
-  // "Simpan & Lanjut" hanya bermakna bila masih ada aset berikutnya.
+  // "Simpan & Lanjut" bermakna bila masih ada aset berikutnya DI daftar, ATAU
+  // masih ada halaman berikutnya yang bisa dimuat (hasMoreToLoad) — sehingga
+  // menyimpan baris terakhir yang dimuat tetap melanjutkan ritme ke halaman
+  // berikutnya (pemanggil memuatnya lalu membuka aset pertamanya).
   // Guard ini identik dengan onClick tombol submit form penuh di bawah.
-  const canSaveNext = isEditing && !!onSaveAndNavigate && assetIndex >= 0 && assetIndex < totalAssetsInView - 1;
+  const canSaveNext = isEditing && !!onSaveAndNavigate && assetIndex >= 0
+    && (assetIndex < totalAssetsInView - 1 || hasMoreToLoad);
   const queueNextIntent = useCallback(() => {
-    if (isEditing && onSaveAndNavigate && assetIndex >= 0 && assetIndex < totalAssetsInView - 1) {
+    if (isEditing && onSaveAndNavigate && assetIndex >= 0
+        && (assetIndex < totalAssetsInView - 1 || hasMoreToLoad)) {
       navigationIntentRef.current = 'next';
     }
-  }, [isEditing, onSaveAndNavigate, assetIndex, totalAssetsInView]);
+  }, [isEditing, onSaveAndNavigate, assetIndex, totalAssetsInView, hasMoreToLoad]);
 
   const filteredCategories = useMemo(() => {
     const cats = Array.isArray(categories) ? categories : [];
@@ -1621,6 +1627,7 @@ const AssetForm = memo(({
           isEditing={isEditing}
           assetIndex={assetIndex}
           totalAssetsInView={totalAssetsInView}
+          hasMoreToLoad={hasMoreToLoad}
           savedCount={cameraSavedCount}
           busy={isSubmitting || isFormLoading}
           preparing={isFormLoading || isSubmitting || (!isEditing && !!formData.category && !formData.NUP)}
@@ -2295,7 +2302,8 @@ const AssetForm = memo(({
                   className={`flex-1 h-9 relative ${isEditing ? "bg-amber-600 hover:bg-amber-700" : ""}`}
                   disabled={isSubmitting}
                   onClick={() => {
-                    if (isEditing && onSaveAndNavigate && assetIndex >= 0 && assetIndex < totalAssetsInView - 1) {
+                    if (isEditing && onSaveAndNavigate && assetIndex >= 0
+                        && (assetIndex < totalAssetsInView - 1 || hasMoreToLoad)) {
                       navigationIntentRef.current = 'next';
                     }
                   }}
