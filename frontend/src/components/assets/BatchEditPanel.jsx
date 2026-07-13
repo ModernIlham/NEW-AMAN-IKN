@@ -1,7 +1,7 @@
 import React, { memo, useState, useCallback, useRef, useMemo, useEffect } from "react";
 import {
   X, Loader2, CheckSquare, Tag, MapPin, Wrench, ClipboardList,
-  Sticker, Building2, Camera, FileCheck, Receipt,
+  Sticker, Building2, Camera, Images, FileCheck, Receipt,
   Calendar, DollarSign, Navigation, Package, Truck,
   LocateFixed, Search, FileUp, FileText, Check, ChevronDown,
   Eraser, Trash2, Power, UserRound, StickyNote,
@@ -236,9 +236,18 @@ const BatchEditPanel = memo(function BatchEditPanel({
     acquireAccuratePosition({
       onUpdate: ({ lat, lng }) => setUpdates(prev => ({ ...prev, koordinat_latitude: lat, koordinat_longitude: lng })),
     }).then(({ lat, lng, accuracy }) => {
-      setUpdates(prev => ({ ...prev, koordinat_latitude: lat, koordinat_longitude: lng }));
       setGpsLoading(false);
-      toast.success(`Koordinat GPS diperbarui${Number.isFinite(accuracy) ? ` (±${Math.round(accuracy)} m)` : ""}`);
+      const acc = Number.isFinite(accuracy) ? Math.round(accuracy) : null;
+      // Ikut aturan kamera: koordinat hanya disimpan bila akurasi ≤8 m. Di atas
+      // itu, buang koordinat sementara (dari onUpdate) agar tak terekam ke banyak
+      // aset dengan radius terlalu lebar.
+      if (acc != null && acc > 8) {
+        setUpdates(prev => { const n = { ...prev }; delete n.koordinat_latitude; delete n.koordinat_longitude; return n; });
+        toast.error(`Akurasi GPS ±${acc} m terlalu lebar (maks ±8 m) — koordinat tidak disimpan. Coba lagi di tempat lebih terbuka.`);
+        return;
+      }
+      setUpdates(prev => ({ ...prev, koordinat_latitude: lat, koordinat_longitude: lng }));
+      toast.success(`Koordinat GPS diperbarui${acc != null ? ` (±${acc} m)` : ""}`);
     }).catch(err => {
       setGpsLoading(false);
       if (err?.code === 1) toast.error("Akses lokasi ditolak. Izinkan di pengaturan browser.");
@@ -625,16 +634,23 @@ const BatchEditPanel = memo(function BatchEditPanel({
               </div>
             ) : (
               <div className="flex gap-2">
-                <label className="flex-1 flex items-center justify-center gap-2 text-xs text-blue-600 dark:text-blue-400 bg-blue-100/50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-md p-2 cursor-pointer border border-dashed border-blue-300 dark:border-blue-700" data-testid="batch-photo-upload">
-                  <Camera className="w-4 h-4" />Tambah Foto
+                {/* Dua opsi sumber foto: KAMERA (capture langsung di HP) & GALERI. */}
+                <label className="flex-1 flex items-center justify-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 bg-blue-100/50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-md p-2 cursor-pointer border border-dashed border-blue-300 dark:border-blue-700" data-testid="batch-photo-camera">
+                  <Camera className="w-4 h-4" />Kamera
+                  <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhotoUpload} />
+                </label>
+                <label className="flex-1 flex items-center justify-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 bg-blue-100/50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-md p-2 cursor-pointer border border-dashed border-blue-300 dark:border-blue-700" data-testid="batch-photo-upload">
+                  <Images className="w-4 h-4" />Galeri
                   <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
                 </label>
                 <button
                   onClick={() => setClearPhotos(true)}
-                  className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-md px-3 py-2 border border-dashed border-red-300 dark:border-red-700 transition-colors"
+                  className="flex items-center justify-center text-red-500 hover:text-red-700 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-md px-2.5 py-2 border border-dashed border-red-300 dark:border-red-700 transition-colors flex-shrink-0"
                   data-testid="batch-clear-photos-btn"
+                  title="Hapus semua foto dari aset terpilih"
+                  aria-label="Hapus semua foto"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />Hapus Foto
+                  <Trash2 className="w-3.5 h-3.5" />
                 </button>
               </div>
             )}

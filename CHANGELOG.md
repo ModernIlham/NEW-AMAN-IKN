@@ -48,6 +48,21 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#241] Ubah Massal: opsi foto KAMERA (bukan hanya galeri) + Ambil GPS ikut aturan ≤8 m — 2026-07-13
+
+- **Tambah foto massal kini punya opsi KAMERA.** Dulu hanya "Tambah Foto"
+  (pemilih berkas/galeri). Kini dua tombol: **Kamera** (`capture` — langsung
+  jepret di HP) & **Galeri** (pilih berkas). Keduanya tetap melewati kompresi
+  klien (`compressImageFile`) seperti input foto lain.
+- **Ambil GPS massal ikut aturan ≤8 m.** Koordinat hanya disimpan bila akurasi
+  **≤8 m** (sejalan gating kamera); di atas itu koordinat sementara dibuang &
+  muncul peringatan — mencegah satu koordinat berrange lebar terekam ke banyak
+  aset sekaligus.
+- Catatan: bagian **Kelengkapan Dokumen & Peralatan** memang sudah tersedia di
+  Ubah Massal. Multi-foto massal + redesign tata letak ringkas menyusul.
+
+---
+
 ## [#240] Lightbox foto: unduh foto ASLI (ikon kontras) + navigasi antar-ASET via geser kartu info — 2026-07-13
 
 - **Tombol unduh foto asli (resolusi penuh).** Yang tampil di popup hanya varian
