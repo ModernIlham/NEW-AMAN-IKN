@@ -298,6 +298,27 @@ const AssetMapFullView = memo(function AssetMapFullView({
       },
     }).addTo(map);
 
+    // SPIDERFY SAAT HOVER — pin yang benar-benar bertindih (koordinat sama /
+    // nyaris sama) tak bisa dipisah dengan memperbesar; begitu kursor menyentuh
+    // cluster-nya, langsung dikipas agar tiap pin bisa diklik. Hanya untuk
+    // cluster RAPAT (rentang < ~60 px di layar) atau saat sudah zoom maksimum,
+    // dan jumlah anggota wajar — supaya cluster besar yang menyebar tetap
+    // "klik→perbesar", bukan meledak jadi puluhan kaki di hover. Tak
+    // di-unspiderfy saat mouseout agar kursor bisa berpindah ke pin kipasnya.
+    layerRef.current.on("clustermouseover", (e) => {
+      const cl = e.layer;
+      if (!cl || cl._spiderfied) return;
+      const n = cl.getChildCount();
+      if (n < 2 || n > 15) return;
+      try {
+        const b = cl.getBounds();
+        const nw = map.latLngToLayerPoint(b.getNorthWest());
+        const se = map.latLngToLayerPoint(b.getSouthEast());
+        const spanPx = Math.max(Math.abs(se.x - nw.x), Math.abs(se.y - nw.y));
+        if (spanPx < 60 || map.getZoom() >= map.getMaxZoom()) cl.spiderfy();
+      } catch { /* bounds belum siap — abaikan */ }
+    });
+
     // ── Kontrol orientasi & skala (info saat zoom) ──
     // Bar skala metrik (meter/km) — tanpa imperial.
     L.control.scale({ metric: true, imperial: false, maxWidth: 140, position: "bottomleft" }).addTo(map);

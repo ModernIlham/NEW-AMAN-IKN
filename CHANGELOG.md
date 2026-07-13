@@ -66,6 +66,13 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
   berdekatan yang dikelompokkan; pin yang renggang tetap tampil sendiri.
   Marker tetap **draggable** (setelah dipisah) dan popup + autosave koordinat
   tetap berfungsi. Dependency baru: `leaflet.markercluster`.
+- **Spiderfy saat hover** untuk pin yang bertindih. Pin berkoordinat sama /
+  nyaris sama tak bisa dipisah dengan memperbesar; kini begitu kursor
+  menyentuh cluster rapatnya (rentang < ~60 px, atau saat sudah zoom
+  maksimum), cluster langsung **dikipas** tanpa harus diklik — sehingga pin
+  yang benar-benar bertumpuk pun bisa diklik satu per satu. Hanya untuk
+  cluster kecil (≤15 pin) agar cluster besar yang menyebar tetap
+  "klik → perbesar", bukan meledak jadi puluhan kaki di hover.
 
 ---
 
