@@ -48,6 +48,52 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#217] Peta: seleksi memfilter titik & unduh GIS, foto popup dapat diperbesar, skala + kompas + bar metrik + rapikan dasbor — 2026-07-13
+
+**Penyempurnaan tampilan dasbor (menyertai peta di atas):**
+
+4. **Jarak mode tablet dirapatkan.** Wadah utama dasbor pada rentang tablet
+   (`sm`) sebelumnya lebih renggang (`p-4`, `space-y-3`) dibanding HP &
+   desktop; kini disetarakan dengan desktop (`sm:p-3`, `sm:space-y-2`)
+   sehingga rapi di semua ukuran.
+5. **Badge jumlah pada kontrol Analytics/Rekapitulasi/Barang Serupa dibuat
+   seperti notifikasi.** Sebelumnya badge menyatu di dalam segmen &
+   menutupi teks label (mis. "R… 163 BMN"); kini badge **mengambang di
+   atas-tengah** segmen, sedikit menjorok keluar tepi kotak (gaya
+   notifikasi, ber-`ring`), sehingga label tampil penuh dan tak tertutup.
+6. **Perbaikan "efek turun sedikit" saat scroll di atas header.** App-shell
+   dasbor kini dikunci setinggi viewport (`h-screen` + `overflow-hidden`)
+   sehingga dokumen tidak lagi ikut ter-scroll/rubber-band saat roda mouse
+   berada di atas header (area non-scroll) — hanya `<main>` yang menggulir.
+
+---
+
+
+
+Tiga penyempurnaan **Peta Aset** (inventarisasi):
+
+1. **Seleksi aset memengaruhi titik peta + unduh GIS.** Bila ada aset yang
+   **dipilih** di daftar, peta kini **hanya menampilkan pin aset terpilih**
+   (irisan dengan filter aktif), dan **unduh KML/KMZ/SHP** ikut dibatasi ke
+   pilihan tersebut. Backend: parameter `ids` baru di `GET /export/geo`
+   (irisan filter ∩ pilihan via `build_asset_search_query(ids=...)`).
+   Frontend mengirim id terpilih (batas aman 200 id/URL; lebih dari itu
+   diberi tahu untuk mempersempit pilihan — tanpa memotong data diam-diam).
+   Bar info peta menandai "titik aset terpilih".
+2. **Foto pada popup marker dapat diklik → lightbox.** Bingkai foto di popup
+   pin kini ber-kursor *zoom-in*; diklik membuka **lightbox foto yang SAMA**
+   seperti saat foto dibuka di mode galeri (navigasi antar-foto, info aset).
+   Komponen `Lightbox` diekstrak ke `PhotoLightbox.jsx` dan dipakai bersama
+   galeri + peta (tanpa mengubah perilaku galeri).
+3. **Info skala + kompas + bar skala metrik.** Peta kini menampilkan **bar
+   skala metrik** (m/km), **kompas arah utara** (peta selalu north-up), dan
+   **info skala nominal 1:N + level zoom** yang diperbarui otomatis saat
+   diperbesar/digeser (piksel OGC 0,28 mm).
+
+Verifikasi: `pytest` → **280 passed** (unit `test_export_geo_ids` baru:
+`ids` → `{"id": {"$in": [...]}}`, kosong/None tanpa filter, irisan dengan
+filter lain); `eslint` bersih; `CI=false yarn build` sukses.
+
 ## [#216] Ekspor CSV checklist pengamanan (Pengamanan) — 2026-07-13
 
 - **Ekspor CSV** checklist pengamanan per aset (`GET

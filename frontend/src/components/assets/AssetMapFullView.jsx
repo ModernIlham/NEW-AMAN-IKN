@@ -15,8 +15,13 @@ import { getSnapshotAssets } from "../../lib/offlineSnapshot";
 import { downloadFileWithProgress } from "../../lib/downloadFile";
 import { authMediaUrl } from "../../lib/mediaUrl";
 import { useBackGuard } from "../../hooks/useBackGuard";
+import Lightbox from "./PhotoLightbox";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+
+// Batas aman jumlah id terpilih yang boleh dikirim di URL ekspor terseleksi
+// (UUID ~37 char/id → di bawah 8KB request-line agar tak kena 414 di proxy).
+const MAX_SELECTED_EXPORT = 200;
 
 // Koordinat aset tersimpan sebagai string — parse toleran (koma desimal).
 function parseCoord(v) {
@@ -101,12 +106,16 @@ const AssetMapFullView = memo(function AssetMapFullView({
   buildParams,        // () => URLSearchParams — filter aktif dashboard (tanpa page)
   clientFilter,       // (rows) => rows — filter yang sama utk data snapshot offline
   activeFilterCount = 0,
+  selectedIds = null, // Set<id> aset terpilih di daftar → peta & ekspor hanya ini
 }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const layerRef = useRef(null);         // L.LayerGroup pin
   const markersRef = useRef(new Map());  // id -> { marker, row, lat, lng, iconKey, draggable }
   const didFitRef = useRef(false);       // fitBounds hanya saat muat pertama / ganti kelompok
+  const scaleInfoElRef = useRef(null);   // elemen info skala/zoom (diperbarui saat zoom)
+  const onPhotoClickRef = useRef(null);  // dipanggil DOM popup → buka lightbox foto
+  const [lightboxRow, setLightboxRow] = useState(null); // aset yang fotonya dibuka
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
   const [truncated, setTruncated] = useState(false);
@@ -123,6 +132,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
   const onSaveRef = useRef(onSaveCoords);
   const onCloseRef = useRef(onClose);
   useEffect(() => { onEditRef.current = onEditAsset; onSaveRef.current = onSaveCoords; onCloseRef.current = onClose; });
+  onPhotoClickRef.current = (row) => setLightboxRow(row);
 
   // Back HP menutup lembar peta (kembali ke baris data), bukan keluar app.
   useBackGuard(useCallback(() => onCloseRef.current?.(), []));
@@ -191,13 +201,21 @@ const AssetMapFullView = memo(function AssetMapFullView({
   const downloadGeo = useCallback((fmt) => {
     const params = buildParams ? buildParams() : new URLSearchParams();
     params.set("format", fmt);
+    // Ada aset terpilih → ekspor HANYA yang terpilih (irisan filter ∩ pilihan).
+    if (selectedIds && selectedIds.size > 0) {
+      if (selectedIds.size > MAX_SELECTED_EXPORT) {
+        toast.error(`Terlalu banyak aset terpilih untuk ekspor terseleksi (maks ${MAX_SELECTED_EXPORT}). Persempit pilihan, atau kosongkan seleksi untuk ekspor sesuai filter.`);
+        return;
+      }
+      params.set("ids", Array.from(selectedIds).join(","));
+    }
     const ext = fmt === "shp" ? "zip" : fmt;
     const fname = `peta_aset.${ext}`;
     downloadFileWithProgress(`${API}/export/geo?${params.toString()}`, fname, {
       label: `Peta Aset (${fmt.toUpperCase()})`,
       timeoutMessage: "Ekspor peta terlalu lama — coba persempit filter",
     }).catch(() => {});
-  }, [buildParams]);
+  }, [buildParams, selectedIds]);
 
   // Kelompok Barang Serupa diturunkan dari data peta (kode+nama, ≥2 unit) —
   // ikut filter aktif dan tetap tersedia saat offline.
@@ -213,11 +231,19 @@ const AssetMapFullView = memo(function AssetMapFullView({
       .sort((a, b) => b.count - a.count).slice(0, 100);
   }, [rows]);
 
-  // Baris yang tampil = baris peta ± filter kelompok Barang Serupa.
+  // Baris yang tampil = baris peta, disaring: seleksi (bila ada) lalu kelompok
+  // Barang Serupa. Ada aset terpilih di daftar → peta HANYA menampilkan pin
+  // aset terpilih tersebut (juga berpengaruh ke unduh GIS terseleksi).
+  const hasSelection = !!(selectedIds && selectedIds.size > 0);
   const displayRows = useMemo(() => {
-    if (groupKey === "__semua__") return rows;
-    return rows.filter((r) => `${r.asset_code || ""}||${r.asset_name || ""}` === groupKey);
-  }, [rows, groupKey]);
+    let base = rows;
+    if (selectedIds && selectedIds.size > 0) base = rows.filter((r) => selectedIds.has(r.id));
+    if (groupKey === "__semua__") return base;
+    return base.filter((r) => `${r.asset_code || ""}||${r.asset_name || ""}` === groupKey);
+  }, [rows, groupKey, selectedIds]);
+
+  // Pusatkan ulang peta saat seleksi dinyalakan/dimatikan (bukan tiap toggle).
+  useEffect(() => { didFitRef.current = false; }, [hasSelection]);
 
   // Ganti kelompok → pusatkan ulang peta ke pin kelompok tsb.
   const changeGroup = useCallback((v) => {
@@ -242,6 +268,44 @@ const AssetMapFullView = memo(function AssetMapFullView({
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(map);
     layerRef.current = L.layerGroup().addTo(map);
+
+    // ── Kontrol orientasi & skala (info saat zoom) ──
+    // Bar skala metrik (meter/km) — tanpa imperial.
+    L.control.scale({ metric: true, imperial: false, maxWidth: 140, position: "bottomleft" }).addTo(map);
+    // Kompas arah utara (peta selalu menghadap utara / north-up).
+    const NorthControl = L.Control.extend({
+      onAdd() {
+        const d = L.DomUtil.create("div", "leaflet-bar");
+        d.style.cssText = "background:#fff;width:32px;height:38px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:default";
+        d.title = "Arah utara — peta selalu menghadap utara";
+        d.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 L6 20 L12 16 L18 20 Z" fill="#dc2626"/><path d="M12 16 L12 3" stroke="#0f172a" stroke-width="1.5"/></svg><span style="font-size:9px;font-weight:800;color:#0f172a;line-height:1;margin-top:1px">U</span>';
+        L.DomEvent.disableClickPropagation(d);
+        return d;
+      },
+    });
+    new NorthControl({ position: "topright" }).addTo(map);
+    // Info skala nominal (1:N) + level zoom — diperbarui tiap zoom/geser.
+    const scaleInfo = L.control({ position: "bottomleft" });
+    scaleInfo.onAdd = () => {
+      const d = L.DomUtil.create("div", "");
+      d.style.cssText = "background:rgba(255,255,255,.9);padding:2px 7px;border-radius:6px;font:600 11px system-ui,sans-serif;color:#0f172a;box-shadow:0 1px 3px rgba(0,0,0,.25);margin-bottom:4px;white-space:nowrap";
+      scaleInfoElRef.current = d;
+      return d;
+    };
+    scaleInfo.addTo(map);
+    const updateScaleInfo = () => {
+      const el = scaleInfoElRef.current;
+      if (!el) return;
+      const z = map.getZoom();
+      const lat = map.getCenter().lat;
+      // meter per piksel pada lintang ini → skala nominal (piksel OGC 0,28mm).
+      const mpp = 40075016.686 * Math.abs(Math.cos(lat * Math.PI / 180)) / Math.pow(2, z + 8);
+      const ratio = Math.round(mpp / 0.00028);
+      el.textContent = `Skala 1:${ratio.toLocaleString("id-ID")} · zoom ${z}`;
+    };
+    map.on("zoomend moveend", updateScaleInfo);
+    updateScaleInfo();
+
     mapRef.current = map;
     setTimeout(() => map.invalidateSize(), 60);
     const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => map.invalidateSize()) : null;
@@ -315,6 +379,13 @@ const AssetMapFullView = memo(function AssetMapFullView({
         badge.style.cssText = "position:absolute;bottom:3px;right:3px;background:rgba(15,23,42,.78);color:#fff;font-size:8.5px;font-weight:700;padding:1px 5px;border-radius:6px";
         frame.appendChild(badge);
       }
+      // Klik bingkai foto → buka lightbox yang SAMA seperti mode galeri.
+      frame.style.cursor = "zoom-in";
+      frame.title = "Klik untuk memperbesar foto";
+      frame.addEventListener("click", (e) => {
+        e.stopPropagation();
+        onPhotoClickRef.current?.(entry.row);
+      });
       head.appendChild(frame);
     }
     const title = document.createElement("div");
@@ -473,10 +544,10 @@ const AssetMapFullView = memo(function AssetMapFullView({
               ? (
                 <>
                   <span className="sm:hidden">
-                    <span className="font-semibold text-foreground/80">{displayRows.length}</span>/{total} titik{activeFilterCount > 0 ? " · terfilter" : ""}{truncated ? " · belum semua termuat" : ""}
+                    <span className="font-semibold text-foreground/80">{displayRows.length}</span>/{total} titik{hasSelection ? " · terpilih" : activeFilterCount > 0 ? " · terfilter" : ""}{truncated ? " · belum semua termuat" : ""}
                   </span>
                   <span className="hidden sm:inline">
-                    <span className="font-semibold text-foreground/80">{displayRows.length}</span> titik dari {total} aset{activeFilterCount > 0 ? " (terfilter)" : ""}{truncated ? " — sebagian belum dimuat" : ""}
+                    <span className="font-semibold text-foreground/80">{displayRows.length}</span> titik {hasSelection ? "aset terpilih" : `dari ${total} aset${activeFilterCount > 0 ? " (terfilter)" : ""}`}{truncated ? " — sebagian belum dimuat" : ""}
                   </span>
                 </>
               )
@@ -640,6 +711,15 @@ const AssetMapFullView = memo(function AssetMapFullView({
           </span>
         )}
       </div>
+
+      {/* Lightbox foto — sama seperti mode galeri; dibuka dari popup marker */}
+      {lightboxRow && (
+        <Lightbox
+          asset={lightboxRow}
+          onClose={() => setLightboxRow(null)}
+          onEdit={onEditAsset}
+        />
+      )}
     </div>
   );
 });
