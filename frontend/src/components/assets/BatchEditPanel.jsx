@@ -25,6 +25,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 
 const STIKER_STATUSES = ["Belum Terpasang", "Sudah Terpasang"];
 const STIKER_SIZES = ["Kecil", "Sedang", "Besar"];
+const MAX_BATCH_PHOTOS = 6;
 const CONDITIONS = ["Baik", "Rusak Ringan", "Rusak Berat"];
 const INVENTORY_STATUSES = ["Belum Diinventarisasi", "Ditemukan", "Tidak Ditemukan", "Berlebih", "Sengketa"];
 // Selaras dengan opsi Status pada form aset (AssetForm).
@@ -135,7 +136,6 @@ const BatchEditPanel = memo(function BatchEditPanel({
   attached = false,
 }) {
   const [updates, setUpdates] = useState({});
-  const [photoPreview, setPhotoPreview] = useState(null);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [showMore, setShowMore] = useState(false);
   const [clearPhotos, setClearPhotos] = useState(false);
@@ -255,18 +255,29 @@ const BatchEditPanel = memo(function BatchEditPanel({
     });
   }, []);
 
-  // Photo upload (with client-side compression for fast upload)
+  // Upload foto MASSAL — banyak foto, tiap foto lewat kompresi klien. Disimpan
+  // di updates.batch_photos (array data-URL); backend distribusi ke tiap aset
+  // menghormati batas 6 foto/aset.
   const handlePhotoUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 15 * 1024 * 1024) { toast.error("Foto terlalu besar (maks 15MB)"); return; }
-    if (!file.type.startsWith('image/')) { toast.error("File harus berupa gambar"); return; }
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const existing = (updates.batch_photos || []).length;
+    const room = MAX_BATCH_PHOTOS - existing;
+    if (room <= 0) { toast.error(`Maksimal ${MAX_BATCH_PHOTOS} foto`); e.target.value = ""; return; }
+    const picked = files.slice(0, room);
+    if (files.length > room) toast.warning(`Hanya ${room} foto ditambahkan (maks ${MAX_BATCH_PHOTOS}).`);
     const toastId = toast.loading("Mengompresi foto...");
     try {
-      const compressed = await compressImageFile(file);
-      setPhotoPreview(compressed);
-      setUpdates(prev => ({ ...prev, batch_photo: compressed }));
-      setClearPhotos(false);
+      const compressedList = [];
+      for (const file of picked) {
+        if (file.size > 15 * 1024 * 1024) { toast.error(`${file.name || "Foto"} terlalu besar (maks 15MB)`); continue; }
+        if (!file.type.startsWith('image/')) { toast.error("File harus berupa gambar"); continue; }
+        compressedList.push(await compressImageFile(file));
+      }
+      if (compressedList.length) {
+        setUpdates(prev => ({ ...prev, batch_photos: [...(prev.batch_photos || []), ...compressedList].slice(0, MAX_BATCH_PHOTOS) }));
+        setClearPhotos(false);
+      }
       toast.dismiss(toastId);
     } catch (err) {
       toast.dismiss(toastId);
@@ -275,9 +286,13 @@ const BatchEditPanel = memo(function BatchEditPanel({
     e.target.value = "";
   };
 
-  const removePhoto = () => {
-    setPhotoPreview(null);
-    setUpdates(prev => { const next = { ...prev }; delete next.batch_photo; return next; });
+  const removePhoto = (idx) => {
+    setUpdates(prev => {
+      const arr = (prev.batch_photos || []).filter((_, i) => i !== idx);
+      const next = { ...prev };
+      if (arr.length) next.batch_photos = arr; else delete next.batch_photos;
+      return next;
+    });
   };
 
   // Doc checklist toggle + file upload
@@ -626,32 +641,46 @@ const BatchEditPanel = memo(function BatchEditPanel({
                 <span className="text-xs text-red-600 dark:text-red-400 flex-1">Semua foto akan dihapus dari {selectedCount} aset</span>
                 <button onClick={() => setClearPhotos(false)} className="text-red-400 hover:text-red-600"><X className="w-4 h-4" /></button>
               </div>
-            ) : photoPreview ? (
-              <div className="flex items-center gap-2">
-                <img src={photoPreview} alt="preview" className="w-12 h-12 object-cover rounded border" />
-                <span className="text-xs text-muted-foreground">Foto akan ditambahkan ke {selectedCount} aset</span>
-                <button onClick={removePhoto} className="text-red-500 hover:text-red-700 ml-auto"><X className="w-4 h-4" /></button>
-              </div>
             ) : (
-              <div className="flex gap-2">
-                {/* Dua opsi sumber foto: KAMERA (capture langsung di HP) & GALERI. */}
-                <label className="flex-1 flex items-center justify-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 bg-blue-100/50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-md p-2 cursor-pointer border border-dashed border-blue-300 dark:border-blue-700" data-testid="batch-photo-camera">
-                  <Camera className="w-4 h-4" />Kamera
-                  <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhotoUpload} />
-                </label>
-                <label className="flex-1 flex items-center justify-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 bg-blue-100/50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-md p-2 cursor-pointer border border-dashed border-blue-300 dark:border-blue-700" data-testid="batch-photo-upload">
-                  <Images className="w-4 h-4" />Galeri
-                  <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
-                </label>
-                <button
-                  onClick={() => setClearPhotos(true)}
-                  className="flex items-center justify-center text-red-500 hover:text-red-700 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-md px-2.5 py-2 border border-dashed border-red-300 dark:border-red-700 transition-colors flex-shrink-0"
-                  data-testid="batch-clear-photos-btn"
-                  title="Hapus semua foto dari aset terpilih"
-                  aria-label="Hapus semua foto"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+              <div className="space-y-1.5">
+                {(updates.batch_photos || []).length > 0 && (
+                  <>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(updates.batch_photos || []).map((p, i) => (
+                        <div key={i} className="relative w-12 h-12 flex-shrink-0">
+                          <img src={p} alt={`Foto ${i + 1}`} className="w-12 h-12 object-cover rounded border" />
+                          <button onClick={() => removePhoto(i)} title="Hapus foto ini" aria-label={`Hapus foto ${i + 1}`}
+                            className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center shadow ring-1 ring-white dark:ring-slate-900">
+                            <X className="w-2.5 h-2.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <span className="text-[10px] text-muted-foreground">{(updates.batch_photos || []).length} foto akan ditambahkan ke {selectedCount} aset (maks {MAX_BATCH_PHOTOS}/aset)</span>
+                  </>
+                )}
+                {(updates.batch_photos || []).length < MAX_BATCH_PHOTOS && (
+                  <div className="flex gap-2">
+                    {/* Dua opsi sumber: KAMERA (jepret langsung) & GALERI (multi-pilih). */}
+                    <label className="flex-1 flex items-center justify-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 bg-blue-100/50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-md p-2 cursor-pointer border border-dashed border-blue-300 dark:border-blue-700" data-testid="batch-photo-camera">
+                      <Camera className="w-4 h-4" />Kamera
+                      <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhotoUpload} />
+                    </label>
+                    <label className="flex-1 flex items-center justify-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 bg-blue-100/50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-md p-2 cursor-pointer border border-dashed border-blue-300 dark:border-blue-700" data-testid="batch-photo-upload">
+                      <Images className="w-4 h-4" />Galeri
+                      <input ref={photoInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handlePhotoUpload} />
+                    </label>
+                    <button
+                      onClick={() => setClearPhotos(true)}
+                      className="flex items-center justify-center text-red-500 hover:text-red-700 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-md px-2.5 py-2 border border-dashed border-red-300 dark:border-red-700 transition-colors flex-shrink-0"
+                      data-testid="batch-clear-photos-btn"
+                      title="Hapus semua foto dari aset terpilih"
+                      aria-label="Hapus semua foto"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>

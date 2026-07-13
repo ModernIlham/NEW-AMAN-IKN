@@ -48,6 +48,24 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#242] Ubah Massal: MULTI-foto massal (banyak foto sekaligus, tetap terkompres, hormati batas 6/aset) — 2026-07-13
+
+Lanjutan #241.
+
+- **Tambah BANYAK foto massal sekaligus.** Dulu hanya 1 foto per Ubah Massal.
+  Kini bisa pilih **beberapa foto** (Galeri `multiple`) atau jepret berulang via
+  Kamera; muncul **grid pratinjau** dengan tombol hapus per foto. Tiap foto tetap
+  melewati kompresi klien (`compressImageFile`).
+- **Backend `batch_photos` (list).** `routes/batch.py` kini menerima
+  `batch_photos` (daftar) selain `batch_photo` (tunggal, kompat lama) — dikompres
+  sekali per foto lalu didistribusikan ke tiap aset **menghormati batas 6
+  foto/aset** (hanya mengisi sisa slot; parity indeks GridFS/thumbnail
+  dipertahankan seperti sebelumnya). Cover thumbnail dari foto pertama untuk aset
+  yang semula tanpa foto.
+- Catatan: redesign tata letak Ubah Massal ringkas/terkategori menyusul.
+
+---
+
 ## [#241] Ubah Massal: opsi foto KAMERA (bukan hanya galeri) + Ambil GPS ikut aturan ≤8 m — 2026-07-13
 
 - **Tambah foto massal kini punya opsi KAMERA.** Dulu hanya "Tambah Foto"
