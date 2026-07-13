@@ -155,3 +155,24 @@ def rekap_usulan_rkbmn(items) -> dict:
                    if s not in ("disetujui_telaah", "ditolak_telaah"))
     return {"jumlah": len(items or []), "berjalan": berjalan,
             "per_status": per_status, "per_jenis": per_jenis}
+
+
+def snapshot_rkbmn(usulan) -> dict:
+    """Ringkas identitas usulan RKBMN (Perencanaan) untuk disimpan sebagai FK
+    pada usulan Penganggaran (§5A gap #4: hubungkan simpul Perencanaan →
+    Penganggaran, tiru pola `snapshot_penganggaran` Pengadaan→Penganggaran #199).
+
+    Snapshot dibekukan saat usulan anggaran dibuat — jejak asal RKBMN tetap utuh
+    walau usulan RKBMN sumber kelak berubah/terhapus. usulan None / kosong →
+    snapshot kosong (tautan dilepas).
+    """
+    if not usulan:
+        return {"rkbmn_id": "", "rkbmn_uraian": "", "rkbmn_tahun": "",
+                "rkbmn_jenis": "", "rkbmn_unit": ""}
+    return {
+        "rkbmn_id": str(usulan.get("id") or "").strip(),
+        "rkbmn_uraian": str(usulan.get("uraian") or "").strip(),
+        "rkbmn_tahun": str(usulan.get("tahun_rkbmn") or "").strip(),
+        "rkbmn_jenis": str(usulan.get("jenis") or "").strip(),
+        "rkbmn_unit": str(usulan.get("unit_pengusul") or "").strip(),
+    }

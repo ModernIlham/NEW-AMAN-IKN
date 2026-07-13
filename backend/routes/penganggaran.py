@@ -21,6 +21,7 @@ from penganggaran_utils import (
     sanding_per_triwulan, validate_tahapan_kalender,
     validate_transisi_anggaran, validate_usulan_anggaran,
 )
+from perencanaan_utils import snapshot_rkbmn
 
 penganggaran_router = APIRouter()
 
@@ -35,6 +36,7 @@ class UsulanAnggaranIn(BaseModel):
     nilai_usulan: float = Field(gt=0)
     akun: str = ""                     # pilihan BAS ringkas (53x/523)
     sumber: str = ""                   # mis. "Kertas kerja RKBMN 2027"
+    rkbmn_id: str = ""                 # FK usulan RKBMN Perencanaan (#257)
     keterangan: str = ""
     asset_ids: list[str] = Field(default_factory=list, max_length=100)
 
@@ -155,14 +157,32 @@ async def hapus_tahapan_kalender(tahapan_id: str,
     return {"ok": True}
 
 
+async def _ambil_snapshot_rkbmn(rkbmn_id: str) -> dict:
+    """Cari usulan RKBMN Perencanaan (bila id diisi) → snapshot FK; 404 bila
+    hilang (tiru `_ambil_snapshot_penganggaran` #199)."""
+    rid = str(rkbmn_id or "").strip()
+    if not rid:
+        return snapshot_rkbmn(None)
+    u = await db.perencanaan_usulan.find_one(
+        {"id": rid},
+        {"_id": 0, "id": 1, "uraian": 1, "tahun_rkbmn": 1, "jenis": 1,
+         "unit_pengusul": 1})
+    if not u:
+        raise HTTPException(status_code=404,
+                            detail="Usulan RKBMN Perencanaan tidak ditemukan")
+    return snapshot_rkbmn(u)
+
+
 @penganggaran_router.post("/penganggaran")
 async def buat_usulan_anggaran(payload: UsulanAnggaranIn,
                                user: dict = Depends(require_user)):
-    """Buat usulan penganggaran (opsional tertaut aset — snapshot identitas)."""
+    """Buat usulan penganggaran (opsional tertaut aset + FK usulan RKBMN)."""
     data = payload.model_dump()
     errors = validate_usulan_anggaran(data)
     if errors:
         raise HTTPException(status_code=400, detail="; ".join(errors))
+    # FK ke simpul Perencanaan (§5A gap #4): bekukan snapshot RKBMN sumber.
+    snap_rkbmn = await _ambil_snapshot_rkbmn(data.get("rkbmn_id"))
     aset_rows = []
     for aid in dict.fromkeys(data.get("asset_ids") or []):
         a = await db.assets.find_one({"id": aid}, _PROJ_ASET)
@@ -180,6 +200,7 @@ async def buat_usulan_anggaran(payload: UsulanAnggaranIn,
         "nilai_usulan": float(data["nilai_usulan"]),
         "akun": str(data.get("akun") or "").strip(),
         "sumber": str(data.get("sumber") or "").strip(),
+        **snap_rkbmn,
         "keterangan": str(data.get("keterangan") or "").strip(),
         "status": "diusulkan",
         "nomor_hasil_penelaahan": "",

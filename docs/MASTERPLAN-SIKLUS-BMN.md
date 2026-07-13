@@ -232,8 +232,12 @@ Audit lintas-modul terhadap 5 prinsip Bab 5. Kepatuhan saat ini:
 2. **Belum ada simpul Dokumen Sumber** (Prinsip 4) — jadikan record perolehan
    Pengadaan sebagai node; aset/persediaan simpan `perolehan_id`.
 3. **Approval `pending_changes` + OCC belum seragam** (Prinsip 5).
-4. **Perencanaan (RKBMN) → Penganggaran putus** — dua register paralel tanpa
-   `rkbmn_id`; tiru pola `snapshot_penganggaran` (Pengadaan→Penganggaran #199).
+4. ✅ **Perencanaan (RKBMN) → Penganggaran kini ber-FK** — usulan penganggaran
+   menyimpan `rkbmn_id` + snapshot beku (`rkbmn_uraian/tahun/jenis/unit`) dari
+   usulan RKBMN sumber saat dibuat (#257, helper murni `snapshot_rkbmn`, tiru
+   pola `snapshot_penganggaran` Pengadaan→Penganggaran #199). Sebelumnya dua
+   register paralel tanpa taut — kini rantai Perencanaan→Penganggaran→Pengadaan
+   tertaut penuh.
 5. ✅ **Pemusnahan → Penghapusan kini ber-FK** (`sumber_ba_id` + `sumber_ba_nomor`
    pada `usulan_penghapusan`, #228) — sebelumnya hanya teks bebas. ✅ **Pemindahtanganan
    *selesai* kini memproyeksi master** (`dihapus` + jejak SK, #256) sehingga aset
