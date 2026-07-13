@@ -17,7 +17,8 @@ from kodefikasi_utils import GOLONGAN_DEFAULTS
 from penilaian_utils import (
     MASA_MANFAAT_DEFAULT, rekap_penyusutan, validate_masa_manfaat,
     DAMPAK_MASA_MANFAAT, DOKUMEN_KOREKSI, JENIS_KOREKSI_NILAI,
-    STATUS_SAKTI_KOREKSI, rekap_koreksi_nilai, validate_koreksi_nilai,
+    STATUS_SAKTI_KOREKSI, rekap_koreksi_nilai, susun_riwayat_nilai,
+    validate_koreksi_nilai,
 )
 
 penilaian_router = APIRouter()
@@ -156,6 +157,31 @@ async def list_koreksi_nilai(_user: dict = Depends(require_user)):
                 "resmi di SAKTI (koreksi revaluasi di-push pusat, satker "
                 "memverifikasi vs LHIP); penilaian tujuan tertentu tidak "
                 "mengubah nilai buku.")}
+
+
+@penilaian_router.get("/penilaian/riwayat-nilai/{asset_id}")
+async def riwayat_nilai_aset(asset_id: str, _user: dict = Depends(require_user)):
+    """Jejak kronologis nilai satu aset (perolehan → koreksi/revaluasi).
+
+    Read-only: menggabungkan nilai perolehan master aset dengan peristiwa
+    di register koreksi nilai (#184). Nilai buku terkini mengikuti koreksi
+    non-informasional terakhir.
+    """
+    asset = await db.assets.find_one(
+        {"id": asset_id},
+        {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
+         "purchase_date": 1, "purchase_price": 1})
+    if not asset:
+        raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    koreksi = [k async for k in db.penilaian_koreksi.find(
+        {"asset_id": asset_id}, {"_id": 0})]
+    riwayat = susun_riwayat_nilai(asset, koreksi)
+    return {"aset": asset, **riwayat,
+            "label_jenis": JENIS_KOREKSI_NILAI,
+            "label_dokumen": DOKUMEN_KOREKSI,
+            "label_sakti": STATUS_SAKTI_KOREKSI,
+            "catatan": ("Read-only — nilai buku terkini indikatif dari koreksi "
+                        "non-informasional terakhir; angka resmi tetap di SAKTI.")}
 
 
 @penilaian_router.post("/penilaian/koreksi")

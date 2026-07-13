@@ -299,7 +299,7 @@ export const SIKLUS_MODULES = [
       "✅ Register koreksi nilai & hasil penilaian per aset (revaluasi/LHIP/BA, checklist tercatat di SAKTI)",
       "✅ Penyusutan garis lurus semesteran per golongan (PMK 65/2017; masa manfaat KMK 295/2019 jo. 266/2023) + daftar telaah",
       "✅ Referensi masa manfaat dapat dikelola (seed lengkap lampiran KMK)",
-      "Riwayat nilai per aset: perolehan → revaluasi → buku (menyusul)",
+      "✅ Riwayat nilai per aset (read-only): perolehan → koreksi/revaluasi → nilai terkini",
     ],
     integrasi: ["Nilai perolehan dari master aset; hasil menyuplai pembukuan & pelaporan"],
   },
