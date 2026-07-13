@@ -15,15 +15,19 @@
  * @param {Object} [opts]
  * @param {(fix:{lat:string,lng:string,accuracy:number}) => void} [opts.onUpdate]
  *        Dipanggil tiap kali ada fix baru yang lebih akurat (untuk tampilan realtime).
- * @param {number} [opts.desiredAccuracy=15] meter — selesai lebih awal bila tercapai.
- * @param {number} [opts.maxWait=8000] ms — durasi maksimum mengumpulkan fix.
+ * @param {number} [opts.desiredAccuracy=8] meter — selesai lebih awal bila tercapai.
+ *        Diperketat dari 15→8 m agar koordinat lebih akurat (radius lebih sempit);
+ *        bila sinyal tak sampai 8 m, fix TERBAIK dalam `maxWait` tetap dipakai.
+ * @param {number} [opts.maxWait=12000] ms — durasi maksimum mengumpulkan fix.
+ *        Diperpanjang 8→12 dtk supaya GPS punya waktu mengerucut ke fix ketat;
+ *        `onUpdate` memperbarui koordinat realtime selama proses berlangsung.
  * @param {number} [opts.timeout=15000] ms — timeout per pembacaan geolokasi.
  * @returns {Promise<{lat:string,lng:string,accuracy:number}>}
  */
 export function acquireAccuratePosition({
   onUpdate,
-  desiredAccuracy = 15,
-  maxWait = 8000,
+  desiredAccuracy = 8,
+  maxWait = 12000,
   timeout = 15000,
 } = {}) {
   return new Promise((resolve, reject) => {

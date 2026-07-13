@@ -1,6 +1,12 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+// Clustering marker berdekatan (mudah diklik saat pin bertumpuk). CSS dasar
+// wajib untuk animasi + kaki spiderfy; ikon cluster kita gaya sendiri
+// (iconCreateFunction) sehingga Default.css sekadar cadangan aman.
+import "leaflet.markercluster";
+import "leaflet.markercluster/dist/MarkerCluster.css";
+import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import axios from "axios";
 import { MapPinned, RefreshCw, Loader2, Move, X, Filter, Download, Camera, Layers, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
@@ -267,7 +273,30 @@ const AssetMapFullView = memo(function AssetMapFullView({
       maxNativeZoom: 19,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(map);
-    layerRef.current = L.layerGroup().addTo(map);
+    // Grup marker ber-CLUSTER: pin yang saling MEPET (dalam ~44 px) dikumpulkan
+    // jadi satu gelembung ber-angka; klik → perbesar ke area anggotanya, dan
+    // di zoom maksimum pin yang bertindih di-SPIDERFY (dikipas) agar bisa
+    // diklik satu per satu. Radius kecil (44 px ≈ ukuran pin) supaya HANYA yang
+    // benar-benar berdekatan yang dikelompokkan.
+    layerRef.current = L.markerClusterGroup({
+      maxClusterRadius: 44,
+      spiderfyOnMaxZoom: true,
+      showCoverageOnHover: false,
+      zoomToBoundsOnClick: true,
+      removeOutsideVisibleBounds: true,
+      chunkedLoading: true,
+      iconCreateFunction: (cluster) => {
+        const n = cluster.getChildCount();
+        const size = n < 10 ? 34 : n < 100 ? 40 : 46;
+        return L.divIcon({
+          html: `<div style="width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center;`
+            + `border-radius:9999px;background:rgba(37,99,235,.92);color:#fff;font:700 12px system-ui,sans-serif;`
+            + `border:2px solid #fff;box-shadow:0 1px 4px rgba(15,23,42,.4)">${n}</div>`,
+          className: "aman-cluster",
+          iconSize: [size, size],
+        });
+      },
+    }).addTo(map);
 
     // ── Kontrol orientasi & skala (info saat zoom) ──
     // Bar skala metrik (meter/km) — tanpa imperial.
@@ -470,6 +499,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
         const dragging = existing.marker.dragging && existing.marker.dragging.moving && existing.marker.dragging.moving();
         if (!dragging && (existing.lat !== lat || existing.lng !== lng)) {
           existing.marker.setLatLng([lat, lng]);
+          layer.refreshClusters?.(existing.marker); // beri tahu cluster posisi berubah
         }
         existing.lat = lat; existing.lng = lng;
         if (existing.iconKey !== iconKey) { existing.marker.setIcon(markerIcon(color, hasPhoto, complete)); existing.iconKey = iconKey; }
@@ -498,6 +528,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
           return;
         }
         entry.lat = parseFloat(newLat); entry.lng = parseFloat(newLng);
+        layerRef.current?.refreshClusters?.(marker); // posisi baru → cluster diperbarui
         setRows((prev) => prev.map((r) => (r.id === entry.row.id
           ? { ...r, koordinat_latitude: newLat, koordinat_longitude: newLng }
           : r)));
@@ -514,7 +545,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
     // Buang pin milik baris yang tak tampil (filter kelompok/filter berubah)
     for (const [id, entry] of Array.from(markersRef.current.entries())) {
       if (!seen.has(id)) {
-        entry.marker.remove();
+        layer.removeLayer(entry.marker); // dari cluster group (bukan .remove())
         markersRef.current.delete(id);
       }
     }
