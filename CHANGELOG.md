@@ -48,6 +48,17 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#230] Header HP: gabungkan Pengguna + Riwayat + Keluar ke satu menu — 2026-07-13
+
+- **Header lebih ringkas di HP.** Di layar kecil, tombol **Pengguna**,
+  **Riwayat**, dan **Keluar** yang sebelumnya berjajar (membuat header penuh)
+  kini disatukan ke **satu menu ringkas** (tombol titik-tiga di pojok kanan) —
+  indikator online/offline + tombol mode gelap tetap tampil. Di layar ≥`sm`
+  ketiga tombol tetap tampil terpisah seperti semula. Aksi Keluar diberi warna
+  merah di menu agar jelas.
+
+---
+
 ## [#229] Peta: tombol aktif/nonaktif pengelompokan (cluster) marker — 2026-07-13
 
 - **Tombol "Cluster: Aktif/Mati"** di toolbar peta (desktop) + item di menu
