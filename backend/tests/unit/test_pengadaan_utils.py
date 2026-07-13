@@ -138,3 +138,34 @@ def test_perolehan_projection_tanggal_dipangkas_dan_strip():
         _perolehan(id=" prl-9 ", tanggal_bast="2026-03-15T00:00:00"), NOW6)
     assert proj["perolehan_id"] == "prl-9"                 # di-strip
     assert proj["perolehan"]["tanggal_bast"] == "2026-03-15"   # 10 char
+
+
+# ── FK dokumen sumber untuk persediaan: snapshot_perolehan (§5A gap #2, #259) ──
+from pengadaan_utils import snapshot_perolehan
+
+
+def test_snapshot_perolehan_lengkap():
+    p = {"id": "prl-2", "nomor_bast": "BAST-5/2026", "tanggal_bast": "2026-02-10",
+         "jenis": "pembelian", "pihak": "CV Mitra", "keterangan": "abaikan"}
+    snap = snapshot_perolehan(p)
+    assert snap == {
+        "perolehan_id": "prl-2", "perolehan_nomor_bast": "BAST-5/2026",
+        "perolehan_tanggal_bast": "2026-02-10", "perolehan_jenis": "pembelian",
+        "perolehan_pihak": "CV Mitra",
+    }
+    assert "keterangan" not in snap                     # field asing tak ikut
+
+
+def test_snapshot_perolehan_kosong_melepas_tautan():
+    for x in (None, {}):
+        snap = snapshot_perolehan(x)
+        assert set(snap) == {"perolehan_id", "perolehan_nomor_bast",
+                             "perolehan_tanggal_bast", "perolehan_jenis",
+                             "perolehan_pihak"}
+        assert all(v == "" for v in snap.values())
+
+
+def test_snapshot_perolehan_tanggal_dipangkas():
+    snap = snapshot_perolehan({"id": " prl-3 ", "tanggal_bast": "2026-02-10T09:00:00"})
+    assert snap["perolehan_id"] == "prl-3"              # di-strip
+    assert snap["perolehan_tanggal_bast"] == "2026-02-10"   # 10 char

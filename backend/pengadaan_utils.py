@@ -189,3 +189,23 @@ def build_asset_perolehan_projection(perolehan, now_iso) -> dict:
             "diproyeksikan_pada": now_iso,
         },
     }
+
+
+def snapshot_perolehan(perolehan) -> dict:
+    """Ringkas identitas perolehan Pengadaan untuk disimpan sebagai FK pada
+    jurnal transaksi MASUK persediaan (§5A gap #2 — simpul Dokumen Sumber juga
+    untuk persediaan, tiru pola `snapshot_penganggaran`). Bentuk RATA agar cocok
+    di jurnal `transaksi_persediaan`. perolehan None/kosong → snapshot kosong
+    (tautan dilepas).
+    """
+    if not perolehan:
+        return {"perolehan_id": "", "perolehan_nomor_bast": "",
+                "perolehan_tanggal_bast": "", "perolehan_jenis": "",
+                "perolehan_pihak": ""}
+    return {
+        "perolehan_id": str(perolehan.get("id") or "").strip(),
+        "perolehan_nomor_bast": str(perolehan.get("nomor_bast") or "").strip(),
+        "perolehan_tanggal_bast": str(perolehan.get("tanggal_bast") or "").strip()[:10],
+        "perolehan_jenis": str(perolehan.get("jenis") or "").strip(),
+        "perolehan_pihak": str(perolehan.get("pihak") or "").strip(),
+    }

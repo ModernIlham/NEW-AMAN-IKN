@@ -229,10 +229,11 @@ Audit lintas-modul terhadap 5 prinsip Bab 5. Kepatuhan saat ini:
    penyusutan memakai nilai wajar, serta proyeksi master dari **BA Pemusnahan**
    final (Pemusnahan sudah ber-FK ke usulan Penghapusan #228 → proyeksi ikut saat
    SK penghapusan itu terbit; proyeksi langsung dari BA belum).
-2. ⚠️ **Simpul Dokumen Sumber sebagian** (Prinsip 4) — record perolehan Pengadaan
-   kini menjadi node yang aset rujuk balik via `perolehan_id` + snapshot (#258,
-   lihat gap #6). *Tersisa:* persediaan simpan `perolehan_id`; auto-daftar aset
-   dari perolehan.
+2. ⚠️ **Simpul Dokumen Sumber makin lengkap** (Prinsip 4) — record perolehan
+   Pengadaan kini menjadi node yang **aset** rujuk balik via `perolehan_id` +
+   snapshot (#258, gap #6) **dan** yang **transaksi masuk persediaan** rujuk via
+   `perolehan_id` + snapshot di jurnal (#259, helper murni `snapshot_perolehan`).
+   *Tersisa:* auto-daftar draft aset baru dari perolehan (pra-isi).
 3. **Approval `pending_changes` + OCC belum seragam** (Prinsip 5).
 4. ✅ **Perencanaan (RKBMN) → Penganggaran kini ber-FK** — usulan penganggaran
    menyimpan `rkbmn_id` + snapshot beku (`rkbmn_uraian/tahun/jenis/unit`) dari

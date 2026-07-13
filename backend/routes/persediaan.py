@@ -28,6 +28,7 @@ from persediaan_utils import (
     validate_kode_persediaan, validate_pindah_gudang,
     validate_transaksi_keluar, validate_transaksi_masuk,
 )
+from pengadaan_utils import snapshot_perolehan
 
 persediaan_router = APIRouter()
 
@@ -898,7 +899,24 @@ class TransaksiMasukIn(BaseModel):
     tgl_dokumen: str = ""
     no_kontrak: str = ""
     penyedia: str = ""
+    perolehan_id: str = ""       # FK perolehan Pengadaan (dokumen sumber, #259)
     keterangan: str = ""
+
+
+async def _ambil_snapshot_perolehan(perolehan_id: str) -> dict:
+    """Cari perolehan Pengadaan (bila id diisi) → snapshot FK dokumen sumber;
+    404 bila hilang (tiru `_ambil_snapshot_penganggaran` #199/#258)."""
+    pid = str(perolehan_id or "").strip()
+    if not pid:
+        return snapshot_perolehan(None)
+    p = await db.pengadaan.find_one(
+        {"id": pid},
+        {"_id": 0, "id": 1, "nomor_bast": 1, "tanggal_bast": 1, "jenis": 1,
+         "pihak": 1})
+    if not p:
+        raise HTTPException(status_code=404,
+                            detail="Perolehan Pengadaan tidak ditemukan")
+    return snapshot_perolehan(p)
 
 
 @persediaan_router.post("/persediaan/{item_id}/masuk")
@@ -913,6 +931,10 @@ async def transaksi_masuk(item_id: str, data: TransaksiMasukIn, user: dict = Dep
     ok, err = validate_transaksi_masuk(data.jenis, data.jumlah, data.harga_satuan)
     if not ok:
         raise HTTPException(status_code=400, detail=err)
+
+    # FK dokumen sumber (§5A gap #2): 404 dulu SEBELUM mutasi stok agar tak ada
+    # layer masuk tanpa perolehan valid.
+    snap_perolehan = await _ambil_snapshot_perolehan(data.perolehan_id)
 
     now = datetime.now(timezone.utc)
     batch_id = str(uuid.uuid4())
@@ -961,6 +983,7 @@ async def transaksi_masuk(item_id: str, data: TransaksiMasukIn, user: dict = Dep
         "tgl_dokumen": data.tgl_dokumen.strip(),
         "no_kontrak": data.no_kontrak.strip(),
         "penyedia": data.penyedia.strip(),
+        **snap_perolehan,
         "keterangan": data.keterangan.strip(),
         "petugas": user.get("username") or user.get("user_id") or "-",
         "timestamp": now.isoformat(),
