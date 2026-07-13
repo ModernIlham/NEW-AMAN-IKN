@@ -276,7 +276,13 @@ berdampak-tertinggi lebih dulu.
    tak memicu OCC 409 palsu). *Tersisa:* auto-daftar draft aset baru dari
    perolehan (pra-isi) belum.
 7. **Kodefikasi bukan FK tervalidasi** (Prinsip 2).
-8. **Snapshot identitas aset basi** (Prinsip 1) — disalin, tak disegarkan.
+8. ⚠️ **Snapshot identitas aset basi** (Prinsip 1) — disalin, tak disegarkan.
+   ✅ **Deteksi READ-ONLY sudah** — helper murni `identitas_drift(snapshot,
+   master)` + endpoint `GET /integritas/identitas-penghapusan` melaporkan
+   snapshot `asset_code/NUP/asset_name` yang basi (atau master hilang) di
+   register `usulan_penghapusan` vs master terkini (#261). *Tersisa:* perluas
+   deteksi ke register hilir lain (pemeliharaan/pemindahtanganan/…) & penyegaran
+   otomatis saat master aset diedit.
 
 > Aturan: tiap gap ditutup sebagai fitur kecil ber-PR (verifikasi → CI → deploy),
 > dengan proyeksi master memakai pola OCC `find_one_and_update` bersyarat +
