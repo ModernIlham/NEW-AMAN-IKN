@@ -1669,7 +1669,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
                 {/* Toolbar seleksi — tampil di SEMUA viewport (HP/tablet/desktop):
                     hitungan + pilih-semua/kosongkan + buka-tutup Ubah Massal. */}
                 {perms.canEdit && (
-                  <div className="flex items-center gap-1.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg px-2.5 py-1" data-testid="selection-toolbar">
+                  <div className={`flex items-center gap-1.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 px-2.5 py-1 ${showBatchPanel ? "rounded-t-lg border-b-0" : "rounded-lg"}`} data-testid="selection-toolbar">
                     {/* Hitungan = TEKS (tanpa bingkai). Aksi = TOMBOL (berbingkai/
                         solid) supaya jelas mana teks, mana tombol. Satu baris,
                         padat; label aksi menciut jadi ikon di layar sempit. */}
@@ -1695,7 +1695,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
                 )}
                 {/* Menutup panel (X/Batal) MENCIUTKAN saja — seleksi dipertahankan. */}
                 {perms.canEdit && showBatchPanel && (
-                  <Suspense fallback={null}><BatchEditPanel selectedCount={selectedAssets.size} categories={categories} onApply={handleBatchUpdate} onClose={() => setShowBatchPanel(false)} updating={batchUpdating} activity={activity} assets={assets} selectedAssets={selectedAssets} /></Suspense>
+                  <Suspense fallback={null}><BatchEditPanel attached selectedCount={selectedAssets.size} categories={categories} onApply={handleBatchUpdate} onClose={() => setShowBatchPanel(false)} updating={batchUpdating} activity={activity} assets={assets} selectedAssets={selectedAssets} /></Suspense>
                 )}
               </>)}
 

@@ -132,6 +132,7 @@ function ClearableSelect({ value, onValueChange, children, placeholder, ...props
 
 const BatchEditPanel = memo(function BatchEditPanel({
   selectedCount, categories, onApply, onClose, updating, activity, assets, selectedAssets,
+  attached = false,
 }) {
   const [updates, setUpdates] = useState({});
   const [photoPreview, setPhotoPreview] = useState(null);
@@ -384,20 +385,25 @@ const BatchEditPanel = memo(function BatchEditPanel({
   const hasUpdates = setCount > 0 || clearCount > 0;
 
   return (
-    <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 print:hidden" data-testid="batch-edit-panel">
+    // `attached`: panel menyambung mulus di bawah toolbar seleksi (satu kartu) —
+    // atas rata + tanpa garis atas ganda. Header ringkas (judul & tombol tutup
+    // sudah ada di toolbar), sisakan hanya pengalih "Tampilkan Semua Field".
+    <div className={`bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-3 print:hidden ${attached ? "rounded-b-lg border-t-0 pt-2" : "rounded-lg"}`} data-testid="batch-edit-panel">
       {confirmDialog}
       <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <CheckSquare className="w-4 h-4 text-blue-600" />
-          <span className="text-sm font-medium text-blue-800 dark:text-blue-300">
-            {selectedCount} aset dipilih — Ubah Massal
-          </span>
-        </div>
-        <div className="flex items-center gap-1">
+        {!attached && (
+          <div className="flex items-center gap-2">
+            <CheckSquare className="w-4 h-4 text-blue-600" />
+            <span className="text-sm font-medium text-blue-800 dark:text-blue-300">
+              {selectedCount} aset dipilih — Ubah Massal
+            </span>
+          </div>
+        )}
+        <div className="flex items-center gap-1 ml-auto">
           <button onClick={() => setShowMore(!showMore)} className="text-[10px] text-blue-600 dark:text-blue-400 hover:underline px-2 py-0.5" data-testid="batch-toggle-more">
             {showMore ? "Tampilkan Sedikit" : "Tampilkan Semua Field"}
           </button>
-          <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={onClose}><X className="w-3.5 h-3.5" /></Button>
+          {!attached && <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={onClose}><X className="w-3.5 h-3.5" /></Button>}
         </div>
       </div>
 
