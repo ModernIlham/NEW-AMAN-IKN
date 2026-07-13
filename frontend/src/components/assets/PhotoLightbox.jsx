@@ -13,56 +13,87 @@ const formatPrice = (p) => {
   return isNaN(num) ? null : `Rp ${num.toLocaleString("id-ID")}`;
 };
 
+// Bangun URL foto (varian tajam w=1280) + thumbnail kecil dari data aset yang
+// SUDAH di tangan — baris peta / kartu galeri sudah membawa photo_count +
+// version. Dipakai agar foto MULAI dimuat SEKETIKA tanpa menunggu round-trip
+// /assets/{id} (penyebab "loading lama walau fotonya sudah ada").
+function buildPhotoUrls(src) {
+  const id = src?.id;
+  const count = Number(src?.photo_count) || 0;
+  const version = Number(src?.version) || 1;
+  if (id && count > 0) {
+    return {
+      count, version,
+      photos: Array.from({ length: count }, (_, i) => authMediaUrl(`${API}/assets/${id}/photos/${i}?v=${version}&w=1280`)),
+      thumbs: Array.from({ length: count }, (_, i) => authMediaUrl(`${API}/assets/${id}/photos/${i}?v=${version}&thumb=1`)),
+    };
+  }
+  const uri = src?.thumbnail ? [src.thumbnail] : []; // fallback data-URI (cover legacy)
+  return { count: uri.length, version, photos: uri, thumbs: uri };
+}
+
 // ============================================================================
 // LIGHTBOX - Photo gallery with full asset info
 // Dipakai bersama oleh galeri (AssetGalleryView) dan popup marker peta
 // (AssetMapFullView) — supaya pengalaman "buka foto" identik di kedua tempat.
 // ============================================================================
 const Lightbox = memo(({ asset, onClose, onEdit }) => {
+  // Foto diseed SEKETIKA dari data aset yang diklik (peta/galeri sudah bawa
+  // photo_count + version) supaya <img> mulai memuat langsung — bukan setelah
+  // round-trip metadata. `builtRef` mengingat jumlah/versi terakhir yang
+  // dipakai membangun URL agar hasil fetch tak mengganti array foto bila tak
+  // berubah (array baru → efek imgLoading menyala → kedip cepat).
+  const seed = useRef(null);
+  if (seed.current === null) seed.current = buildPhotoUrls(asset);
   const [fullAsset, setFullAsset] = useState(null);
-  const [photos, setPhotos] = useState([]);
-  const [thumbs, setThumbs] = useState([]); // placeholder kecil per-foto (instan)
+  const [photos, setPhotos] = useState(seed.current.photos);
+  const [thumbs, setThumbs] = useState(seed.current.thumbs); // placeholder kecil per-foto (instan)
   const [idx, setIdx] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [imgLoading, setImgLoading] = useState(false); // foto berikutnya sedang dimuat
+  const [loading, setLoading] = useState(seed.current.photos.length === 0);
+  // Mulai dalam keadaan "memuat" bila ada foto (varian tajam w=1280 belum
+  // ter-cache) → langsung tampil placeholder blur + spinner, bukan berkedip
+  // dari foto tajam-lalu-hilang saat efek menyalakan loading.
+  const [imgLoading, setImgLoading] = useState(seed.current.photos.length > 0);
   const startX = useRef(0);
+  const builtRef = useRef({ count: seed.current.count, version: seed.current.version });
 
   useEffect(() => {
-    if (!asset?.id) return;
-    setLoading(true);
-    // Light fetch only (no base64 media): text fields + photo_count + version.
-    // Each photo then streams directly into <img src=".../photos/{i}?v=...">,
-    // so the first photo renders as soon as ITS bytes arrive (progressive) and
-    // the browser caches every photo — no more waiting for one huge JSON blob.
-    // ?v={version} busts the cache when the asset is edited; the endpoint is a
-    // public GET (like the other media streams) since <img> can't send auth
-    // headers. Legacy inline photos are handled server-side by the same URL.
+    if (!asset?.id) return undefined;
+    // Aset berganti (mis. dari galeri) → seed ulang foto. Pada MOUNT pertama
+    // state sudah diseed via useState di atas, jadi lewati agar tak set ulang
+    // (yang memicu kedip). w=1280: varian preview tajam (~100-250KB), di-resize
+    // & di-cache server sekali (ETag/Cache-Control tetap berlaku).
+    const init = buildPhotoUrls(asset);
+    if (init.count !== builtRef.current.count || init.version !== builtRef.current.version) {
+      builtRef.current = { count: init.count, version: init.version };
+      setPhotos(init.photos);
+      setThumbs(init.thumbs);
+      setIdx(0);
+      setLoading(init.photos.length === 0);
+    }
+    setFullAsset(asset);
+    // Fetch ringan (tanpa base64) HANYA untuk memperkaya panel info +
+    // rekonsiliasi jumlah/versi. Foto sudah tampil; array hanya dibangun ulang
+    // bila jumlah/versi BERBEDA — sehingga tak me-reset foto yang sedang dimuat.
+    let alive = true;
     axios.get(`${API}/assets/${asset.id}?exclude_media=true`)
       .then(r => {
+        if (!alive) return;
         const data = r.data;
         setFullAsset(data);
-        const count = Number(data.photo_count) || 0;
-        const version = Number(data.version) || 1;
-        // w=1280: varian preview (~100-250KB) — jauh lebih cepat dari full-res
-        // (~900KB) dan tetap tajam untuk layar; server me-resize sekali lalu
-        // meng-cache (ETag/Cache-Control tetap berlaku).
-        const p = count > 0
-          ? Array.from({ length: count }, (_, i) => authMediaUrl(`${API}/assets/${asset.id}/photos/${i}?v=${version}&w=1280`))
-          : (asset.thumbnail ? [asset.thumbnail] : []); // data-URI fallback (legacy inline cover)
-        // Thumbnail kecil per-foto sebagai placeholder instan saat berpindah.
-        setThumbs(count > 0
-          ? Array.from({ length: count }, (_, i) => authMediaUrl(`${API}/assets/${asset.id}/photos/${i}?v=${version}&thumb=1`))
-          : (asset.thumbnail ? [asset.thumbnail] : []));
-        setPhotos(p);
-        setIdx(0);
+        const c = Number(data.photo_count) || 0;
+        const v = Number(data.version) || 1;
+        if (c !== builtRef.current.count || v !== builtRef.current.version) {
+          const next = buildPhotoUrls({ ...asset, photo_count: c, version: v });
+          builtRef.current = { count: next.count, version: next.version };
+          setPhotos(next.photos);
+          setThumbs(next.thumbs);
+          setIdx(i => Math.min(i, Math.max(0, next.photos.length - 1)));
+        }
       })
-      .catch(() => {
-        setFullAsset(asset);
-        setPhotos(asset.thumbnail ? [asset.thumbnail] : []); // data-URI support kept
-        setThumbs(asset.thumbnail ? [asset.thumbnail] : []);
-        setIdx(0);
-      })
-      .finally(() => setLoading(false));
+      .catch(() => { /* tampilan awal dari data asset tetap dipakai */ })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
   }, [asset?.id, asset?.thumbnail]);
 
   useEffect(() => {
