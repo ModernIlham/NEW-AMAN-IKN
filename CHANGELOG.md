@@ -48,6 +48,24 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#247] Ubah Massal: tata letak ringkas & terkategori (per seksi) — 2026-07-13
+
+- **Panel Ubah Massal ditata ulang jadi berkategori & padat** (permintaan
+  "perbaiki design tampilan ubah massal agar ringkas padat dan terkategori").
+  Field yang sebelumnya berjejal dalam dua grid datar besar kini dikelompokkan
+  ke **seksi berjudul**: **Klasifikasi & Lokasi**, **Kondisi & Status** (selalu
+  tampil), lalu — saat "Tampilkan Semua Field" — **Administrasi Perolehan**,
+  **Identitas & Catatan**, **Pengguna / Penanggung Jawab**, **Koordinat GPS**,
+  **Foto**, dan **Kelengkapan Dokumen & Peralatan**.
+- Tiap seksi punya header ringkas (ikon + judul kecil, huruf kapital tipis) +
+  garis pemisah tipis — lebih mudah dipindai, tidak memakan banyak ruang.
+- **Murni tata letak/pengelompokan** — komponen helper `Section` baru;
+  TIDAK ada perubahan logika simpan, unggah foto (kamera+galeri+multi+kompresi),
+  GPS ≤8 m, maupun kelengkapan dokumen. Semua field, penanda "Kosongkan", dan
+  aksi tetap sama persis.
+
+---
+
 ## [#246] Offline lebih tahan banting: sync snapshot tak crash saat penyimpanan penuh — 2026-07-13
 
 - **Cache offline pada perangkat nyaris penuh tidak lagi crash / rusak.**
