@@ -42,6 +42,19 @@ const VirtualizedMobileCards = memo(({
     overscan: 6,
   });
 
+  // Jaga aset terseleksi (yang sedang diedit) selalu terlihat: saat editId
+  // berubah (mis. auto-lanjut setelah simpan), gulir kartunya ke tengah layar.
+  // Hanya saat editId benar-benar berubah agar tak melawan gulir manual /
+  // load-more. scrollToIndex self-correct untuk tinggi terukur (measureElement).
+  const lastScrolledEditId = useRef(null);
+  useEffect(() => {
+    if (!editId || editId === lastScrolledEditId.current) return;
+    const index = assets.findIndex((a) => a.id === editId);
+    if (index < 0) return;
+    lastScrolledEditId.current = editId;
+    virtualizer.scrollToIndex(index, { align: "center" });
+  }, [editId, assets, virtualizer]);
+
   // Muat halaman berikutnya saat baris sentinel masuk viewport virtual —
   // menggantikan IntersectionObserver (elemen sentinel kini absolut/virtual).
   const virtualItems = virtualizer.getVirtualItems();
@@ -49,7 +62,6 @@ const VirtualizedMobileCards = memo(({
     if (!onLoadMore || !hasMore || isLoadingMore) return;
     const last = virtualItems[virtualItems.length - 1];
     if (last && last.index >= assets.length) onLoadMore();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [virtualItems, onLoadMore, hasMore, isLoadingMore, assets.length]);
 
   return (

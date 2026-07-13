@@ -1,4 +1,4 @@
-import React, { memo, useState, useCallback, useRef, useEffect, useMemo } from "react";
+import React, { memo, useState, useCallback, useRef, useEffect, useLayoutEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Loader2, X, ChevronLeft, ChevronRight, MapPin, Tag, User, Building2, QrCode, ClipboardCheck, Calendar, FileCheck, FileX, StickyNote } from "lucide-react";
@@ -255,6 +255,8 @@ const AssetGalleryView = memo(({
   onDelete,
   onPrintCard,
   onLoadMore,
+  onLoadPrev,
+  hasPrev = false,
   isLoadingMore = false,
   hasMore = true,
   totalItems = 0,
@@ -266,6 +268,11 @@ const AssetGalleryView = memo(({
   const [lightboxAsset, setLightboxAsset] = useState(null);
   const containerRef = useRef(null);
   const sentinelRef = useRef(null);
+  const topSentinelRef = useRef(null);
+  // Geometri scroll ({scrollHeight, scrollTop}) direkam SEBELUM prepend agar
+  // posisi tampilan bisa dijangkar setelah baris disisipkan di atas.
+  const prependAnchor = useRef(null);
+  const lastScrolledEditId = useRef(null);
   // Mobile-first initial guess (based on viewport) so phones never flash a
   // 4-column grid before the ResizeObserver measures the real container width.
   // A 4-col first paint squeezes each card to ~65px and clips the footer's
@@ -354,6 +361,54 @@ const AssetGalleryView = memo(({
     return () => io.disconnect();
   }, [onLoadMore, hasMore, isLoadingMore]);
 
+  // Scroll ke ATAS mendekati puncak → muat halaman SEBELUMNYA (dua arah).
+  // Rekam geometri scroll dulu agar bisa dijangkar setelah prepend (A4).
+  const handleLoadPrev = useCallback(() => {
+    const el = containerRef.current;
+    if (!el || !onLoadPrev) return;
+    prependAnchor.current = { scrollHeight: el.scrollHeight, scrollTop: el.scrollTop };
+    onLoadPrev();
+  }, [onLoadPrev]);
+
+  // Sentinel ATAS: rootMargin kecil (bukan 600px) agar tak memicu kaskade
+  // memuat semua halaman sekaligus saat masuk dari halaman jauh.
+  useEffect(() => {
+    const el = topSentinelRef.current;
+    const root = containerRef.current;
+    if (!el || !root || !onLoadPrev) return undefined;
+    const io = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting && hasPrev && !isLoadingMore) handleLoadPrev();
+    }, { root, rootMargin: "100px 0px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [onLoadPrev, hasPrev, isLoadingMore, handleLoadPrev]);
+
+  // Jangkar scroll setelah baris di-PREPEND: pertahankan konten yang sama tetap
+  // di tampilan (tanpa "lompat"). Jalan sinkron pra-paint (useLayoutEffect).
+  useLayoutEffect(() => {
+    const anchor = prependAnchor.current;
+    if (!anchor) return;
+    const el = containerRef.current;
+    if (el) {
+      const delta = el.scrollHeight - anchor.scrollHeight;
+      if (delta > 0) el.scrollTop = anchor.scrollTop + delta;
+    }
+    prependAnchor.current = null;
+  }, [assets]);
+
+  // Jaga aset terseleksi (yang sedang diedit) SELALU terlihat: saat editId
+  // berubah (mis. auto-lanjut setelah simpan), gulir kartunya ke tengah layar.
+  // Hanya saat editId benar-benar berubah — tak melawan gulir manual pengguna,
+  // dan tak terpicu saat load-more/prev. Bila baris belum termuat (index -1),
+  // efek jalan lagi ketika `assets` berubah.
+  useEffect(() => {
+    if (!editId || editId === lastScrolledEditId.current) return;
+    const index = assets.findIndex((a) => a.id === editId);
+    if (index < 0) return;
+    lastScrolledEditId.current = editId;
+    virtualizer.scrollToIndex(Math.floor(index / columns), { align: "center" });
+  }, [editId, columns, assets, virtualizer]);
+
   const openLightbox = useCallback((asset) => {
     setLightboxAsset(asset);
   }, []);
@@ -383,6 +438,15 @@ const AssetGalleryView = memo(({
             position: 'relative',
           }}
         >
+          {/* Sentinel ATAS (absolut di offset 0 → tak menggeser origin virtualizer):
+              IntersectionObserver memuat halaman SEBELUMNYA saat mendekati puncak. */}
+          {hasPrev && (
+            <div
+              ref={topSentinelRef}
+              data-testid="gallery-loadprev-sentinel"
+              style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: 1 }}
+            />
+          )}
           {virtualizer.getVirtualItems().map((virtualRow) => {
             const row = rows[virtualRow.index];
             return (

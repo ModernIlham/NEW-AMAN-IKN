@@ -201,7 +201,8 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   const [mobileLoading, setMobileLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("Memuat data...");
   const [currentPage, setCurrentPage] = useState(1);
-  const [mobileCurrentPage, setMobileCurrentPage] = useState(1);
+  const [mobileCurrentPage, setMobileCurrentPage] = useState(1); // halaman TERAKHIR yang dimuat di galeri/kartu
+  const [mobileFirstPage, setMobileFirstPage] = useState(1);     // halaman PERTAMA yang dimuat (untuk scroll-atas dua arah)
   const [pageSize, setPageSize] = useState(50);
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -544,7 +545,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   // OFFLINE READ PATH: serve the list from the local snapshot (filter/sort/
   // paginate client-side). Returns true when data was served. TTL >7 hari
   // diperlakukan seperti tidak ada snapshot (pesan kedaluwarsa).
-  const serveFromSnapshot = async (page, size, search, category, sort, appendMobile = false) => {
+  const serveFromSnapshot = async (page, size, search, category, sort, appendMobile = false, prependMobile = false) => {
     if (!activity?.id) return false;
     try {
       const rows = await getSnapshotAssets(activity.id);
@@ -571,12 +572,16 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       setTotalItems(totalFiltered);
       setTotalPages(totalPg);
       setCurrentPage(pg);
-      if (appendMobile && pg > 1) {
+      if (prependMobile) {
+        setMobileAssets(prev => [...pageItems, ...prev]);   // PREPEND (scroll-atas dua arah)
+        setMobileFirstPage(pg);
+      } else if (appendMobile && pg > 1) {
         setMobileAssets(prev => [...prev, ...pageItems]);
         setMobileCurrentPage(pg);
       } else {
         setMobileAssets(merged);
         setMobileCurrentPage(pg);
+        setMobileFirstPage(pg);
       }
       const meta = await snapshotMeta(activity.id);
       setOfflineLastSync(meta?.lastSync || null);
@@ -586,7 +591,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       // seperti loadMoreMobile bisa membuka aset pertama halaman berikutnya
       // (alur simpan-lanjut lintas halaman). Array truthy → pemeriksaan
       // `if (served)` di pemanggil lama tetap benar.
-      return (appendMobile && pg > 1) ? pageItems : merged;
+      return prependMobile ? pageItems : (appendMobile && pg > 1) ? pageItems : merged;
     } catch {
       return false;
     }
@@ -630,8 +635,12 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       if (appendMobile && page > 1) {
         setMobileAssets(prev => [...prev, ...newItems]);
       } else {
+        // Jendela galeri = [P, P]: JANGAN reset ke 1. Bila pindah dari halaman
+        // tabel (mis. hal. 5) lalu ke galeri, jendela mulai di 5 sehingga
+        // scroll-atas dapat memuat 4,3,2,1 (dua arah) dan scroll-bawah 6,7…
         setMobileAssets(merged);
-        setMobileCurrentPage(1);
+        setMobileCurrentPage(r.data.page || 1);
+        setMobileFirstPage(r.data.page || 1);
       }
       setOfflineServed(false); // live data on screen again
       setLoadingMessage(`Berhasil memuat ${newItems.length} dari ${r.data.total || 0} aset`);
@@ -689,6 +698,42 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   };
   const loadMoreMobileRef = useRef(loadMoreMobile);
   loadMoreMobileRef.current = loadMoreMobile;
+
+  // Muat halaman SEBELUMNYA (scroll ke atas di galeri) — cermin loadMoreMobile,
+  // tetapi PREPEND agar urutan global & filter tetap terjaga. Flag mobileLoading
+  // yang sama menyerialkan terhadap loadMore sehingga sentinel atas & bawah tak
+  // saling memicu bersamaan. Mengembalikan baris baru (untuk anchor scroll).
+  const loadPrevMobile = async () => {
+    if (mobileLoading || mobileFirstPage <= 1) return null;
+    setMobileLoading(true);
+    const prevPage = mobileFirstPage - 1;
+    if (!isOnlineRef.current) {
+      const served = await serveFromSnapshot(prevPage, pageSize, debouncedSearch, filterCategory, sortBy, false, true);
+      if (served) { setMobileLoading(false); return Array.isArray(served) ? served : []; }
+    }
+    try {
+      const params = new URLSearchParams();
+      if (debouncedSearch) params.append("search", debouncedSearch);
+      if (filterCategory && filterCategory !== "Semua") params.append("category", filterCategory);
+      params.append("sort_by", sortBy || "newest");
+      params.append("page", String(prevPage));
+      params.append("page_size", String(pageSize));
+      if (activity?.id) params.append("activity_id", activity.id);
+      buildFilterParams(params);
+      const r = await axios.get(`${API}/assets?${params.toString()}`);
+      const items = r.data.items || [];
+      setMobileAssets(prev => [...items, ...prev]);   // PREPEND
+      setMobileFirstPage(prevPage);
+      return items;
+    } catch {
+      const served = await serveFromSnapshot(prevPage, pageSize, debouncedSearch, filterCategory, sortBy, false, true);
+      if (!served) toast.error("Gagal memuat data sebelumnya");
+      return Array.isArray(served) ? served : null;
+    }
+    finally { setMobileLoading(false); }
+  };
+  const loadPrevMobileRef = useRef(loadPrevMobile);
+  loadPrevMobileRef.current = loadPrevMobile;
 
   const doFetchStats = async (search, category) => {
     try {
@@ -1528,7 +1573,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
               </>)}
 
               {viewMode === 'gallery' ? (
-                <AssetGalleryView assets={mobileAssets} editId={editAssetForForm?.id} onEdit={perms.canEdit ? handleEdit : undefined} onDelete={perms.canDelete ? handleDelete : undefined} onPrintCard={handlePrintCard} onLoadMore={loadMoreMobile} isLoadingMore={mobileLoading} hasMore={mobileCurrentPage < totalPages} totalItems={totalItems} rowLocks={rowLocks} currentSessionId={sessionId} selectedAssets={selectedAssets} onToggleSelect={perms.canEdit ? toggleSelectAsset : undefined} />
+                <AssetGalleryView assets={mobileAssets} editId={editAssetForForm?.id} onEdit={perms.canEdit ? handleEdit : undefined} onDelete={perms.canDelete ? handleDelete : undefined} onPrintCard={handlePrintCard} onLoadMore={loadMoreMobile} onLoadPrev={loadPrevMobile} hasPrev={mobileFirstPage > 1} isLoadingMore={mobileLoading} hasMore={mobileCurrentPage < totalPages} totalItems={totalItems} rowLocks={rowLocks} currentSessionId={sessionId} selectedAssets={selectedAssets} onToggleSelect={perms.canEdit ? toggleSelectAsset : undefined} />
               ) : (<>
                 <div className="relative hidden lg:block">
                   <TooltipProvider>
