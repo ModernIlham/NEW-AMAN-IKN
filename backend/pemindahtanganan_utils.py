@@ -99,6 +99,40 @@ def validate_transisi_pt(u: dict, ke: str, data: dict) -> list:
     return errors
 
 
+def build_asset_pemindahtanganan_projection(usulan: dict, now_iso: str) -> dict:
+    """Proyeksi master aset saat pemindahtanganan SELESAI — SK Penghapusan terbit
+    (Prinsip 3 Bab 5: transaksi = jurnal, master = proyeksi).
+
+    Pemindahtanganan yang tuntas (jual/tukar/hibah/PMPP) menghapus aset dari
+    pembukuan lewat SK Penghapusan (tindak lanjut PMK 83/2016). Master diproyeksi
+    memakai BENTUK MARKER YANG SAMA dengan penghapusan langsung (#234):
+    `dihapus=True` + jejak `penghapusan.{...}` — sehingga SELURUH mesin laporan
+    hilir ikut OTOMATIS: penyaringan posisi/nilai (DBKP/Neraca/rekonsiliasi,
+    #248/#249) dan tombstone mutasi KURANG di LBKP/CaLBMN (#253, lewat
+    `penghapusan.tanggal_sk`). Pembeda dari penghapusan biasa: `jalur=
+    "pemindahtanganan"` + `pemindahtanganan_id`/`bentuk` untuk telusur.
+
+    `tanggal_sk`: SK ditetapkan saat transisi 'selesai'; pakai
+    `tanggal_sk_penghapusan` bila ada, jika tidak tanggal transisi (`now_iso`).
+    Pemanggil menambah `$inc: {version: 1}` (bust cache/ETag + picu OCC 409 pada
+    form usang). SENGAJA tak menyentuh `purchase_price`/`condition` (dibaca
+    laporan; nilai perolehan historis tetap utuh untuk tombstone & audit).
+    """
+    return {
+        "dihapus": True,
+        "penghapusan": {
+            "status": "sk_terbit",
+            "jalur": "pemindahtanganan",
+            "pemindahtanganan_id": str(usulan.get("id") or ""),
+            "bentuk": str(usulan.get("bentuk") or ""),
+            "nomor_sk": str(usulan.get("nomor_sk_penghapusan") or "").strip(),
+            "tanggal_sk": (str(usulan.get("tanggal_sk_penghapusan") or "").strip()[:10]
+                           or now_iso[:10]),
+            "diproyeksikan_pada": now_iso,
+        },
+    }
+
+
 def peringatan_pt(u: dict, today_iso: str) -> list:
     """Peringatan kepatuhan per usulan (tenggat lelang 6 bulan)."""
     warn = []

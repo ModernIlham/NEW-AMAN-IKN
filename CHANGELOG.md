@@ -48,6 +48,29 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#256] Pemindahtanganan selesai memproyeksi master aset (`dihapus`) — 2026-07-13
+
+- **Integrasi §5A Prinsip 3 (Pemindahtanganan → master).** Saat usulan
+  pemindahtanganan (jual/tukar/hibah/PMPP) berstatus **`selesai`** (SK Penghapusan
+  terbit), setiap aset di usulan kini diproyeksi ke master: **`dihapus=True`** +
+  jejak `penghapusan.{jalur:"pemindahtanganan", bentuk, nomor_sk, tanggal_sk}` +
+  `$inc version` (bust cache/OCC) + audit. Sebelumnya aset yang dipindahtangankan
+  tetap "hidup & bernilai penuh" di master → **double-count** di laporan resmi.
+- **Pakai ulang mesin penghapusan (#234/#248/#253).** Marker memakai bentuk yang
+  SAMA dengan penghapusan langsung, jadi SELURUH laporan hilir ikut **otomatis**:
+  penyaringan posisi/nilai (DBKP/Neraca/rekonsiliasi) dan **tombstone mutasi
+  KURANG** LBKP/CaLBMN di periode SK — tanpa kode laporan tambahan.
+- **Best-effort & idempoten** (pola #234/#254): register `pemindahtanganan` tetap
+  jurnal sumber; filter `dihapus != true` membuat aman dipanggil ulang & tak
+  menimpa jejak penghapusan jalur lain; kegagalan proyeksi tak menggagalkan
+  transisi. `purchase_price`/`condition` tak disentuh (nilai perolehan historis
+  utuh untuk tombstone & audit).
+- Helper murni `build_asset_pemindahtanganan_projection` + **4 unit test**
+  (termasuk cross-check aset ter-proyeksi menghasilkan mutasi kurang di
+  `build_lbkp_rows`). Masterplan §5A diperbarui. pytest **317 lulus**.
+
+---
+
 ## [#255] Laporan posisi/nilai memakai nilai wajar revaluasi (`nilai_wajar_terakhir`) — 2026-07-13
 
 - **Integrasi §5A Prinsip 3 (lanjutan #254).** Laporan **POSISI/NILAI** kini
