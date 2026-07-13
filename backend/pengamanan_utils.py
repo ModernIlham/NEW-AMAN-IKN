@@ -454,3 +454,58 @@ def rekap_polis(items, today_iso: str) -> dict:
                 pass
     return {"jumlah": len(items or []), "per_status": per_status,
             "nilai_pertanggungan_aktif": nilai_aktif}
+
+
+# Label status masa berlaku polis (dipakai endpoint list, ekspor, & test).
+STATUS_POLIS = {
+    "akan_datang": "Akan datang",
+    "aktif": "Aktif",
+    "segera_berakhir": "Segera berakhir",
+    "berakhir": "Berakhir",
+}
+
+HEADER_CSV_POLIS = [
+    "kode_aset", "nup", "nama_aset", "nomor_polis", "penanggung",
+    "kategori_objek", "nilai_pertanggungan", "premi", "sumber_dana",
+    "mulai", "berakhir", "status", "sisa_hari", "keterangan", "dibuat_oleh",
+]
+
+
+def baris_csv_polis(polis_list, today_iso) -> list:
+    """Susun baris CSV register polis asuransi BMN: [header, *data] — murni.
+
+    Kategori objek/sumber dana/status diterjemahkan ke label; nilai
+    pertanggungan & premi dibulatkan rupiah; status masa berlaku + sisa
+    hari dihitung via info_polis. Tanpa Mongo/IO agar teruji unit (pola
+    ekspor #158).
+    """
+    def _rp(x):
+        try:
+            return int(round(float(x or 0)))
+        except (TypeError, ValueError):
+            return 0
+
+    baris = [list(HEADER_CSV_POLIS)]
+    for p in polis_list or []:
+        info = info_polis(p, today_iso)
+        sisa = info.get("sisa_hari")
+        baris.append([
+            p.get("asset_code") or "",
+            p.get("NUP") or "",
+            p.get("asset_name") or "",
+            p.get("nomor_polis") or "",
+            p.get("penanggung") or "",
+            KATEGORI_OBJEK_ASURANSI.get(p.get("kategori_objek"),
+                                        p.get("kategori_objek") or ""),
+            _rp(p.get("nilai_pertanggungan")),
+            _rp(p.get("premi")),
+            SUMBER_DANA_PREMI.get(p.get("sumber_dana"),
+                                  p.get("sumber_dana") or ""),
+            str(p.get("mulai") or "")[:10],
+            str(p.get("berakhir") or "")[:10],
+            STATUS_POLIS.get(info.get("status"), info.get("status") or ""),
+            sisa if sisa is not None else "",
+            p.get("keterangan") or "",
+            p.get("created_by") or "",
+        ])
+    return baris

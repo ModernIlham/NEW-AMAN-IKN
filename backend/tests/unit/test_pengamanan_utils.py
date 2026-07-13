@@ -211,3 +211,29 @@ class TestPolisAsuransi:
         assert r["per_status"]["aktif"] == 1
         assert r["per_status"]["segera_berakhir"] == 1
         assert r["nilai_pertanggungan_aktif"] == 150
+
+    def test_baris_csv_polis(self):
+        from pengamanan_utils import HEADER_CSV_POLIS, baris_csv_polis
+        # Kosong / None → hanya header
+        assert baris_csv_polis([], "2026-07-12") == [HEADER_CSV_POLIS]
+        assert baris_csv_polis(None, "2026-07-12") == [HEADER_CSV_POLIS]
+        rows = baris_csv_polis([{
+            "asset_code": "40101", "NUP": "3", "asset_name": "Gedung Kantor",
+            "nomor_polis": "POL-1", "penanggung": "Konsorsium Asuransi BMN",
+            "kategori_objek": "nonprogram_mandatory",
+            "nilai_pertanggungan": 1_000_000.6, "premi": 5_000.4,
+            "sumber_dana": "dipa", "mulai": "2026-01-01T00:00",
+            "berakhir": "2027-01-01", "keterangan": "-", "created_by": "admin",
+        }], "2026-07-12")
+        assert rows[0] == HEADER_CSV_POLIS
+        r = rows[1]
+        # Label kategori/sumber dana/status terbaca; nilai dibulatkan
+        assert r[5] == "BMN Nonprogram — Mandatory"
+        assert r[6] == 1_000_001 and r[7] == 5_000
+        assert r[8] == "DIPA K/L"
+        assert r[9] == "2026-01-01"       # tanggal dipangkas 10 char
+        assert r[11] == "Aktif"           # status masa berlaku
+        assert isinstance(r[12], int)     # sisa_hari terisi
+        # Field hilang → string kosong; status tak terhitung → ""
+        kosong = baris_csv_polis([{"nomor_polis": "P2"}], "2026-07-12")[1]
+        assert kosong[0] == "" and kosong[6] == 0 and kosong[11] == ""

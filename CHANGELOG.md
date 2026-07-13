@@ -48,6 +48,18 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#205] Ekspor CSV register polis asuransi BMN (Pengamanan) — 2026-07-13
+
+- **Ekspor CSV** register polis asuransi BMN (`GET
+  /pengamanan/polis/export`), melengkapi pola ekspor register. Kolom:
+  identitas aset, nomor polis, penanggung, kategori objek & sumber dana
+  premi (label terbaca), nilai pertanggungan & premi (rupiah bulat),
+  masa berlaku (mulai–berakhir), status masa berlaku + sisa hari
+  (dihitung via `info_polis`), keterangan, pembuat. Helper murni
+  `baris_csv_polis` (tanpa Mongo, teruji unit) + tombol unduh CSV di
+  panel polis (muncul saat ada data). Bersifat baca-saja. Unit test +1
+  → 271 passed.
+
 ## [#204] Ekspor CSV register koreksi nilai (Penilaian) — 2026-07-13
 
 - **Ekspor CSV** register koreksi nilai/hasil penilaian (`GET

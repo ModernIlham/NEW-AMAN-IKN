@@ -18,8 +18,8 @@ from pengamanan_utils import (
     BUTIR_CHECKLIST, JENIS_DOKUMEN, JENIS_KEKURANGAN, JENIS_OBJEK_CHECKLIST,
     KATEGORI_KASUS, KATEGORI_OBJEK_ASURANSI, KATEGORI_SERTIPIKASI,
     LOKASI_SIMPAN, STATUS_KASUS, SUMBER_DANA_PREMI, TRANSISI_KASUS,
-    info_polis, kekurangan_aset, rekap_checklist, rekap_dokumen,
-    rekap_kasus, rekap_kesehatan, rekap_polis, rekap_sertipikasi,
+    baris_csv_polis, info_polis, kekurangan_aset, rekap_checklist,
+    rekap_dokumen, rekap_kasus, rekap_kesehatan, rekap_polis, rekap_sertipikasi,
     skor_checklist, validate_checklist, validate_dokumen, validate_kasus,
     validate_kategori_sertipikasi, validate_polis, validate_transisi_kasus,
 )
@@ -470,6 +470,27 @@ async def list_polis(_user: dict = Depends(require_user)):
                 "perencanaan resmi via SIMAN; AMAN tidak menerbitkan polis, "
                 "tidak menghitung tarif resmi, dan bukan laporan resmi "
                 "pengasuransian.")}
+
+
+@pengamanan_router.get("/pengamanan/polis/export")
+async def export_polis(_user: dict = Depends(require_user)):
+    """Ekspor CSV seluruh register polis asuransi BMN (pola #158)."""
+    import csv as csv_module
+    import io
+
+    from fastapi.responses import Response as HttpResponse
+
+    today_iso = datetime.now(timezone.utc).date().isoformat()
+    polis = [p async for p in db.pengamanan_polis.find({}, {"_id": 0})
+             .sort("berakhir", -1)]
+    buf = io.StringIO()
+    w = csv_module.writer(buf)
+    for row in baris_csv_polis(polis, today_iso):
+        w.writerow(row)
+    return HttpResponse(
+        content=buf.getvalue().encode("utf-8-sig"), media_type="text/csv",
+        headers={"Content-Disposition":
+                 'attachment; filename="register_polis_asuransi.csv"'})
 
 
 @pengamanan_router.post("/pengamanan/polis")
