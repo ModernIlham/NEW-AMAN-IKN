@@ -48,6 +48,25 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#215] Satukan toggle Analytics/Rekapitulasi/Barang Serupa jadi satu baris — 2026-07-13
+
+- **Inventarisasi Aset** — tiga panel di atas baris data (**Dashboard
+  Analytics**, **Rekapitulasi Inventarisasi**, **Barang Serupa**) yang
+  sebelumnya bertumpuk vertikal (tiga bar ~120px) kini disatukan menjadi
+  **satu kontrol segmented menyamping** — satu kartu utuh ber-divider,
+  bukan tiga tombol/kartu terpisah. Segmen aktif diberi warna (biru untuk
+  Analytics/Rekapitulasi, ungu untuk Barang Serupa) + chevron; badge
+  jumlah (mis. "163 BMN", "N grup") tetap tampil di segmennya.
+- Berlaku **seragam di semua viewport** (desktop, tablet, HP) — menghemat
+  ruang vertikal dan **memperlebar area data**. Isi panel dirender di
+  bawah baris kontrol saat segmennya dibuka (mode *embedded*: panel hanya
+  merender konten, header jadi segmen). Pegangan geser-tinggi grafik
+  Analytics dipindah ke tepi bawah kartunya.
+- Teknis: komponen `PanelSegment` baru di `DashboardPage`; `AnalyticsPanel`
+  / `RekapitulasiPanel` / `AssetGroupsPanel` menerima prop `embedded`
+  (+ callback `onTotal`/`onCount` untuk badge). Menggantikan baris chip
+  mobile lama. `eslint` bersih; `CI=false yarn build` sukses.
+
 ## [#214] Ekspor CSV arsip dokumen kepemilikan (Pengamanan) — 2026-07-13
 
 - **Ekspor CSV** arsip dokumen kepemilikan (`GET

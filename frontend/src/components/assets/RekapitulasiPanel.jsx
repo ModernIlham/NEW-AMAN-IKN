@@ -11,7 +11,7 @@ import ReportDownloads from "./rekapitulasi/ReportDownloads";
 
 const API = (process.env.REACT_APP_BACKEND_URL || "http://localhost:8001") + "/api";
 
-function RekapitulasiPanel({ activityId, isOpen, onToggle }) {
+function RekapitulasiPanel({ activityId, isOpen, onToggle, embedded = false, onTotal }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState("");
@@ -23,12 +23,13 @@ function RekapitulasiPanel({ activityId, isOpen, onToggle }) {
     try {
       const r = await axios.get(`${API}/inventory-activities/${activityId}/rekapitulasi`);
       setData(r.data);
+      onTotal?.(r.data?.total_bmn_diteliti || 0);
     } catch (err) {
       console.error("Failed to fetch rekapitulasi:", err);
     } finally {
       setLoading(false);
     }
-  }, [activityId, isOpen]);
+  }, [activityId, isOpen, onTotal]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -77,6 +78,45 @@ function RekapitulasiPanel({ activityId, isOpen, onToggle }) {
 
   const total = data?.total_bmn_diteliti || 0;
 
+  const body = (
+    <div className={embedded ? "px-4 py-3 space-y-3" : "border-t border-border px-4 py-3 space-y-3"}>
+      {loading ? (
+        <div className="flex items-center justify-center py-4 gap-2">
+          <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+          <span className="text-sm text-muted-foreground">Memuat rekapitulasi...</span>
+        </div>
+      ) : !data || total === 0 ? (
+        <p className="text-sm text-muted-foreground text-center py-4">Belum ada data aset untuk direkapitulasi.</p>
+      ) : (
+        <>
+          <SummaryCards data={data} total={total} />
+          <ConditionBreakdown ditemukan={data.ditemukan} />
+          <InventoryProgress data={data} total={total} />
+          <TidakDitemukanBreakdown tidakDitemukan={data.tidak_ditemukan} subBreakdown={data.sub_breakdown} />
+          <ReportDownloads
+            data={data}
+            activityId={activityId}
+            downloading={downloading}
+            showSettings={showSettings}
+            setShowSettings={setShowSettings}
+            onDownloadPDF={handleDownloadPDF}
+            onDownloadDBHI={handleDownloadDBHI}
+          />
+        </>
+      )}
+    </div>
+  );
+
+  // Mode embedded: hanya render isi (header sudah jadi segmen di kontrol gabungan).
+  if (embedded) {
+    if (!isOpen) return null;
+    return (
+      <div className="mt-1.5 bg-card border border-border rounded-xl shadow-sm overflow-hidden print:hidden" data-testid="rekapitulasi-panel">
+        {body}
+      </div>
+    );
+  }
+
   return (
     <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden print:hidden" data-testid="rekapitulasi-panel">
       {/* Toggle Header */}
@@ -92,34 +132,7 @@ function RekapitulasiPanel({ activityId, isOpen, onToggle }) {
       </button>
 
       {/* Content */}
-      {isOpen && (
-        <div className="border-t border-border px-4 py-3 space-y-3">
-          {loading ? (
-            <div className="flex items-center justify-center py-4 gap-2">
-              <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
-              <span className="text-sm text-muted-foreground">Memuat rekapitulasi...</span>
-            </div>
-          ) : !data || total === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-4">Belum ada data aset untuk direkapitulasi.</p>
-          ) : (
-            <>
-              <SummaryCards data={data} total={total} />
-              <ConditionBreakdown ditemukan={data.ditemukan} />
-              <InventoryProgress data={data} total={total} />
-              <TidakDitemukanBreakdown tidakDitemukan={data.tidak_ditemukan} subBreakdown={data.sub_breakdown} />
-              <ReportDownloads
-                data={data}
-                activityId={activityId}
-                downloading={downloading}
-                showSettings={showSettings}
-                setShowSettings={setShowSettings}
-                onDownloadPDF={handleDownloadPDF}
-                onDownloadDBHI={handleDownloadDBHI}
-              />
-            </>
-          )}
-        </div>
-      )}
+      {isOpen && body}
     </div>
   );
 }
