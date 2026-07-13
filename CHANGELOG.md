@@ -48,6 +48,24 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#206] Perbaiki: Simpan di mode galeri halaman 2+ menutup form & reload — 2026-07-13
+
+- **Bug:** di tampilan **mode galeri** inventarisasi aset, menekan
+  "Simpan" pada baris di **halaman kedua dan seterusnya** (hasil infinite
+  scroll) membuat panel edit menutup sendiri dan daftar seolah dimuat
+  ulang — padahal di halaman pertama Simpan lancar melanjutkan ke aset
+  berikutnya. Terjadi di tablet/HP dan layout kartu.
+- **Sebab:** galeri/kartu merender `mobileAssets` (superset infinite
+  scroll), tetapi gerbang tombol Simpan + navigasi (`editAssetIndex`,
+  `totalAssetsInView`, `handleSaveAndNavigate`) membaca `assets` yang
+  **beku di halaman 1**. Baris halaman 2+ tak ditemukan di `assets`
+  (indeks −1) → gerbang gagal → Simpan jatuh ke jalur tutup-form yang
+  memicu `refreshData()` sehingga daftar kolaps ke halaman 1.
+- **Perbaikan:** samakan indeks, jumlah, dan navigasi form agar semua
+  membaca `mobileAssets` (di tabel ≥lg isinya sama dengan halaman aktif,
+  jadi perilaku desktop tak berubah). Kini Simpan di galeri halaman 2+
+  lanjut ke aset berikutnya tanpa menutup form / reload daftar.
+
 ## [#205] Ekspor CSV register polis asuransi BMN (Pengamanan) — 2026-07-13
 
 - **Ekspor CSV** register polis asuransi BMN (`GET
