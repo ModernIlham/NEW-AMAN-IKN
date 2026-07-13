@@ -48,6 +48,23 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#251] Efek getar (haptics): GPS ≤4 m akurat, simpan, & pindah aset di kamera — 2026-07-13
+
+- **Umpan balik taktil di lapangan** — terasa tanpa harus melihat layar:
+  - **Getar "kunci akurat"** saat akurasi GPS menembus **≤4 m** (sekali, saat
+    transisi — bukan bergetar terus).
+  - **Getar berbeda saat SIMPAN** (Simpan & Baru / Simpan & Scan) — satu getar mantap.
+  - **Getar berbeda saat PINDAH ASET** di halaman kamera — tik pendek untuk
+    *Berikutnya*, tik ganda untuk *Sebelumnya* (arah terasa beda).
+  - Tik sangat ringan saat **menjepret foto**; dan getar "perhatian" saat
+    **konflik sinkron** (data diubah pengguna lain) di dasbor.
+- Helper `lib/haptics.js` (Web Vibration API, **best-effort**: desktop & iOS
+  Safari mengabaikan tanpa error). Pola tiap kejadian sengaja BEDA + helper
+  murni `resolveHapticPattern` (+4 unit test). Bisa dimatikan via localStorage
+  `aman_haptics` = `off`.
+
+---
+
 ## [#250] Lightbox: animasi kartu tetangga menyala saat digeser + preload aset tetangga (seamless) — 2026-07-13
 
 - **Pop-up foto lebih hidup saat pindah antar-aset.** Kartu tetangga (peek)

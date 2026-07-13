@@ -7,6 +7,7 @@ import {
 import { toast } from "sonner";
 import { useBackGuard } from "../../hooks/useBackGuard";
 import { extractScannedCode } from "./QrScanButton";
+import { haptic } from "../../lib/haptics";
 import {
   STATUS_OPTIONS, CONDITION_OPTIONS, SUB_KLASIFIKASI_OPTIONS,
   PENGGUNA_MELEKAT_OPTIONS, PENGGUNA_NAME_LABELS, OPERASIONAL_JENIS_OPTIONS,
@@ -421,7 +422,13 @@ const FullCameraSheet = memo(function FullCameraSheet({
 
   // Kontrol alur beruntun
   const maxReached = photos.length >= maxPhotos;
-  const backAction = isEditing ? () => onNavigate?.("prev") : onReviewSaved;
+  // Getar berbeda per aksi (umpan balik taktil tanpa melihat layar): simpan =
+  // getar mantap; pindah aset = tik (maju tunggal, mundur ganda → arah terasa
+  // beda). haptic() best-effort (diabaikan bila perangkat/preferensi tak dukung).
+  const saveAndNew = useCallback(() => { haptic("save"); onSaveAndNew?.(); }, [onSaveAndNew]);
+  const saveAndScanNext = useCallback(() => { haptic("save"); onSaveAndScanNext?.(); }, [onSaveAndScanNext]);
+  const navHaptic = useCallback((dir) => { haptic(dir === "next" ? "navNext" : "navPrev"); onNavigate?.(dir); }, [onNavigate]);
+  const backAction = isEditing ? () => navHaptic("prev") : onReviewSaved;
   const canBack = isEditing ? assetIndex > 0 : (!!onReviewSaved && totalAssetsInView > 0);
   // Lanjut bila masih ada aset di daftar, ATAU masih ada halaman berikutnya
   // yang bisa dimuat (ritme input kamera lintas halaman tak terputus).
@@ -481,8 +488,20 @@ const FullCameraSheet = memo(function FullCameraSheet({
     });
 
     const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+    haptic("shutter"); // tik ringan saat foto benar-benar terambil
     onCapture(dataUrl);
   }, [photos.length, maxPhotos, formData, onCapture, suspended]);
+
+  // Getar SEKALI saat akurasi GPS mencapai SANGAT presisi (≤4 m) — "kunci
+  // akurat" terasa tanpa harus melihat cincin. Rising-edge via ref agar tidak
+  // bergetar terus-menerus selama tetap ≤4 m.
+  const gpsExcellentRef = useRef(false);
+  useEffect(() => {
+    const acc = gps?.accuracy;
+    const excellent = typeof acc === "number" && acc <= 4;
+    if (excellent && !gpsExcellentRef.current) haptic("gpsLock");
+    gpsExcellentRef.current = excellent;
+  }, [gps?.accuracy]);
 
   // Form ringkas & padat: field penting saja, 2 kolom. Kode Aset & NUP
   // read-only (sudah distandby-kan ke kategori dummy + NUP otomatis).
@@ -773,25 +792,25 @@ const FullCameraSheet = memo(function FullCameraSheet({
           </button>
           {isEditing && onScanAsset && onSaveAndScanNext ? (
             /* Alur lapangan scan-edit: simpan lalu LANGSUNG buka scanner lagi */
-            <button type="button" onClick={() => { onSaveAndScanNext(); setScanActive(true); }} disabled={busy}
+            <button type="button" onClick={() => { saveAndScanNext(); setScanActive(true); }} disabled={busy}
               data-testid="full-camera-save-scan"
               className="h-11 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-1 transition-colors disabled:opacity-60 disabled:pointer-events-none">
               {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <ScanLine className="w-4 h-4" />}Simpan & Scan
             </button>
           ) : (
-            <button type="button" onClick={onSaveAndNew} disabled={busy} data-testid="full-camera-savenew"
+            <button type="button" onClick={saveAndNew} disabled={busy} data-testid="full-camera-savenew"
               className="h-11 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center justify-center gap-1 transition-colors disabled:opacity-60 disabled:pointer-events-none">
               {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}Simpan & Baru
             </button>
           )}
-          <button type="button" onClick={() => onNavigate?.("next")} disabled={!canNext || busy} data-testid="full-camera-next"
+          <button type="button" onClick={() => navHaptic("next")} disabled={!canNext || busy} data-testid="full-camera-next"
             className="h-11 rounded-lg bg-white/15 text-white text-xs font-semibold flex items-center justify-center gap-1 disabled:opacity-30 disabled:pointer-events-none">
             Berikutnya<ChevronRight className="w-4 h-4" />
           </button>
         </div>
         )}
         {isEditing && onScanAsset && onSaveAndScanNext && !scanActive && (
-          <button type="button" onClick={onSaveAndNew} disabled={busy} data-testid="full-camera-savenew"
+          <button type="button" onClick={saveAndNew} disabled={busy} data-testid="full-camera-savenew"
             className="w-full h-9 rounded-lg bg-white/10 text-white/85 text-[11px] font-semibold flex items-center justify-center gap-1 disabled:opacity-40 disabled:pointer-events-none">
             <Check className="w-3.5 h-3.5" />Simpan & Aset Baru
           </button>
@@ -1011,7 +1030,7 @@ const FullCameraSheet = memo(function FullCameraSheet({
               </button>
               {isEditing && onScanAsset && onSaveAndScanNext && (
                 <button type="button" data-testid="full-camera-edit-save-scan"
-                  onClick={() => { setEditOpen(false); onSaveAndScanNext(); setScanActive(true); }}
+                  onClick={() => { setEditOpen(false); saveAndScanNext(); setScanActive(true); }}
                   disabled={busy}
                   className="h-11 rounded-lg bg-emerald-600 text-white text-sm font-bold flex items-center justify-center gap-1.5 disabled:opacity-60">
                   <ScanLine className="w-4 h-4" />Simpan & Scan
