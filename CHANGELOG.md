@@ -48,6 +48,28 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#222] UX seleksi aset: tutup Ubah Massal tak menghapus seleksi + select-all semua tampilan + tombol Pengguna tampil di HP — 2026-07-13
+
+- **Menutup panel "Ubah Massal" tidak lagi mengosongkan seleksi.** Dulu
+  menutup panel (X/Batal) ikut menghapus seluruh centang per-baris. Kini
+  tombol tutup hanya **menciutkan** panel; seleksi tetap dipertahankan
+  sehingga bisa dibuka-tutup tanpa kehilangan aset terpilih. Panel muncul
+  otomatis saat seleksi pertama (0 → >0) dan hilang saat seleksi benar-benar
+  dikosongkan.
+- **Toolbar seleksi di SEMUA tampilan (HP/tablet/desktop).** Menampilkan
+  jumlah aset terpilih, tombol **"Pilih/batal semua tampilan ini"**
+  (select-all/deselect untuk daftar viewport aktif — tabel desktop atau
+  galeri/kartu HP/tablet), **"Kosongkan seleksi"**, dan toggle
+  **Ubah Massal/Tutup**. Sebelumnya select-all hanya ada di header tabel
+  desktop; kini tersedia di HP/tablet untuk menghapus (mengosongkan) seleksi
+  massal.
+- **Tombol "Pengguna" (kelola user) kini tampak di HP mode admin.** Dulu
+  disembunyikan (`hidden sm:flex`) di layar kecil sehingga admin tak bisa
+  membuka manajemen pengguna dari HP. Kini tampil sebagai tombol ikon ringkas
+  (ikon `Users`, label muncul ≥`md`) dengan `aria-label`/`title`.
+
+---
+
 ## [#221] Ekspor CSV jadwal pemeliharaan berkala (Pemeliharaan) — 2026-07-13
 
 - **Ekspor CSV** jadwal pemeliharaan berkala (`GET
