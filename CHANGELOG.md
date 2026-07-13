@@ -48,6 +48,21 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#211] List mode: auto-pindah halaman saat lewati baris terakhir + area data lebih luas (desktop) — 2026-07-13
+
+- **List (tabel) mode — auto-pindah halaman:** saat menekan Simpan/Update
+  pada **baris terakhir** halaman tabel desktop sementara masih ada
+  halaman berikutnya, aplikasi kini **otomatis berpindah ke halaman
+  berikutnya** (kontrol paginasi + tabel ikut geser) lalu membuka baris
+  **pertama**-nya untuk diedit — ritme input tak lagi mentok di halaman
+  lama. `doFetch`/`goToPage` mengembalikan baris halaman baru; navigasi
+  memilih `goToPage` (mode list ≥lg) vs infinite scroll (galeri/kartu HP).
+- **Area data lebih luas (desktop):** kartu statistik atas (Total Aset /
+  Nilai / Aktif / Maintenance) dibuat **ringkas satu baris** (label–nilai
+  sejajar, padding & ukuran font lebih kecil) dan jarak antar-seksi header
+  dipadatkan khusus `lg` — memberi porsi layar lebih besar untuk baris
+  data. Tampilan tablet/HP tak berubah.
+
 ## [#210] Ekspor CSV register pemantauan insidentil Wasdal — 2026-07-13
 
 - **Ekspor CSV** register pemantauan insidentil wasdal (`GET

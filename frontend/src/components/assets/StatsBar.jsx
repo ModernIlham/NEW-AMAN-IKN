@@ -66,9 +66,9 @@ const StatsBar = memo(({ stats, inventoryMode, setInventoryMode, isOnline, pendi
         { label: "Aktif", value: stats.activeCount.toLocaleString('id-ID'), color: "text-emerald-600 dark:text-emerald-400" },
         { label: "Maintenance", value: stats.maintenanceCount.toLocaleString('id-ID'), color: "text-amber-600 dark:text-amber-400" },
       ].map((s, i) => (
-        <div key={i} className="min-w-0 bg-card rounded-xl border border-border p-3.5 shadow-elev-1 hover:shadow-elev-2 transition-shadow duration-180" data-testid={`stat-card-${i}`}>
-          <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">{s.label}</div>
-          <div className={`text-2xl font-bold ${s.color} mt-1`}>{s.value}</div>
+        <div key={i} className="min-w-0 bg-card rounded-xl border border-border px-3.5 py-2 shadow-elev-1 hover:shadow-elev-2 transition-shadow duration-180 flex items-center justify-between gap-2" data-testid={`stat-card-${i}`}>
+          <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider flex-shrink-0">{s.label}</div>
+          <div className={`text-xl font-bold ${s.color} truncate text-right`}>{s.value}</div>
         </div>
       ))}
     </div>
