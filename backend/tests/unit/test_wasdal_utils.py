@@ -158,6 +158,37 @@ def test_validate_selesai_dan_rekap():
     assert r == {"total": 2, "berjalan": 1, "selesai": 1, "lewat_tenggat": 1}
 
 
+def test_baris_csv_penertiban():
+    from wasdal_utils import HEADER_CSV_PENERTIBAN, baris_csv_penertiban
+    assert baris_csv_penertiban([], "2026-07-13") == [HEADER_CSV_PENERTIBAN]
+    assert baris_csv_penertiban(None, "2026-07-13") == [HEADER_CSV_PENERTIBAN]
+    rows = baris_csv_penertiban([
+        {"sumber": "pemantauan", "tanggal_dasar": "2026-07-10",
+         "tenggat": "2026-07-20", "objek": "penggunaan",
+         "uraian": "Dikuasai pihak ketiga", "status": "berjalan",
+         "tindak_lanjut": "", "tanggal_selesai": "",
+         "asset_code": "40101", "NUP": "2", "asset_name": "Gedung",
+         "created_by": "admin"},
+        # Lewat tenggat (berjalan, hari ini > tenggat)
+        {"sumber": "apip_bpk", "tanggal_dasar": "2026-06-01",
+         "tenggat": "2026-06-20", "status": "berjalan", "uraian": "x"},
+        # Selesai → status_tenggat "Selesai"
+        {"sumber": "permintaan_pengelola", "status": "selesai",
+         "tenggat": "2026-07-01", "tanggal_selesai": "2026-07-05", "uraian": "y"},
+    ], "2026-07-13")
+    assert rows[0] == HEADER_CSV_PENERTIBAN
+    # Baris 1: label sumber/status/objek + "N hk lagi"
+    assert rows[1][0] == "Hasil pemantauan KPB"
+    assert rows[1][3] == "5 hk lagi" and rows[1][4] == "Berjalan"
+    assert rows[1][5] == "Penggunaan"  # objek diterjemahkan ke label
+    # Baris 2: lewat tenggat
+    assert rows[2][3] == "Lewat tenggat"
+    # Baris 3: selesai
+    assert rows[3][3] == "Selesai" and rows[3][4] == "Selesai"
+    # Field aset hilang → string kosong
+    assert rows[2][9] == "" and rows[2][11] == ""
+
+
 # ── Pemantauan insidentil (10 + 5 hari kerja) ──
 
 def test_validate_insidentil():

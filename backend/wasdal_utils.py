@@ -318,6 +318,50 @@ def rekap_penertiban(items, today_iso: str) -> dict:
             "lewat_tenggat": lewat}
 
 
+HEADER_CSV_PENERTIBAN = [
+    "sumber", "tanggal_dasar", "tenggat", "status_tenggat", "status",
+    "objek_pemantauan", "uraian", "tindak_lanjut", "tanggal_selesai",
+    "kode_aset", "nup", "nama_aset", "dibuat_oleh",
+]
+
+
+def baris_csv_penertiban(items, today_iso) -> list:
+    """Susun baris CSV register penertiban wasdal: [header, *data] — murni.
+
+    Sumber/status/objek diterjemahkan ke label; kolom status_tenggat
+    memakai status_tenggat_penertiban (Selesai / Lewat tenggat / "N hk
+    lagi"). Tanpa Mongo/IO agar teruji unit (pola ekspor #158).
+    """
+    baris = [list(HEADER_CSV_PENERTIBAN)]
+    for t in items or []:
+        if t.get("status") == "selesai":
+            st_tenggat = "Selesai"
+        else:
+            info = status_tenggat_penertiban(t, today_iso)
+            if info["lewat"]:
+                st_tenggat = "Lewat tenggat"
+            elif info["sisa_hari_kerja"] is not None:
+                st_tenggat = f"{info['sisa_hari_kerja']} hk lagi"
+            else:
+                st_tenggat = ""
+        baris.append([
+            SUMBER_PENERTIBAN.get(t.get("sumber"), t.get("sumber") or ""),
+            str(t.get("tanggal_dasar") or "")[:10],
+            str(t.get("tenggat") or "")[:10],
+            st_tenggat,
+            STATUS_PENERTIBAN.get(t.get("status"), t.get("status") or ""),
+            OBJEK_WASDAL.get(t.get("objek"), t.get("objek") or ""),
+            t.get("uraian") or "",
+            t.get("tindak_lanjut") or "",
+            str(t.get("tanggal_selesai") or "")[:10],
+            t.get("asset_code") or "",
+            t.get("NUP") or "",
+            t.get("asset_name") or "",
+            t.get("created_by") or "",
+        ])
+    return baris
+
+
 # ── Pemantauan insidentil (PMK 207 §8.3: pelaksanaan ≤10 hari kerja,
 #    hasil dilaporkan ≤5 hari kerja sejak tanggal BA) ──
 PEMICU_INSIDENTIL = {
