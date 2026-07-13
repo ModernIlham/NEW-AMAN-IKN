@@ -445,6 +445,44 @@ def rekap_checklist(items) -> dict:
             "per_jenis": per_jenis}
 
 
+HEADER_CSV_CHECKLIST = [
+    "kode_aset", "nup", "nama_aset", "jenis_objek", "terpenuhi",
+    "total_butir", "persen", "butir_belum", "keterangan", "tanggal_cek",
+    "petugas",
+]
+
+
+def baris_csv_checklist(checklist_list) -> list:
+    """Susun baris CSV checklist pengamanan: [header, *data] — murni.
+
+    Jenis objek diterjemahkan ke label; skor (terpenuhi/total/persen)
+    dihitung via skor_checklist; kolom butir_belum berisi label butir yang
+    belum terpenuhi (dipisah "; ") untuk bahan tindak lanjut. Tanpa
+    Mongo/IO agar teruji unit (pola ekspor #158).
+    """
+    baris = [list(HEADER_CSV_CHECKLIST)]
+    for c in checklist_list or []:
+        jenis = c.get("jenis_objek")
+        daftar = BUTIR_CHECKLIST.get(jenis, [])
+        butir = c.get("butir") or {}
+        belum = [lbl for k, lbl, _ in daftar if not butir.get(k)]
+        skor = skor_checklist(c)
+        baris.append([
+            c.get("asset_code") or "",
+            c.get("NUP") or "",
+            c.get("asset_name") or "",
+            JENIS_OBJEK_CHECKLIST.get(jenis, jenis or ""),
+            skor["terpenuhi"],
+            skor["total"],
+            skor["persen"],
+            "; ".join(belum),
+            c.get("keterangan") or "",
+            str(c.get("tanggal_cek") or "")[:10],
+            c.get("petugas") or "",
+        ])
+    return baris
+
+
 # ---------------------------------------------------------------------------
 # Register polis Asuransi BMN (pustaka §11.5) — dasar PMK 43 Tahun 2025
 # (mencabut PMK 97/2019). Kategori objek dari siaran pers DJKN, [perlu

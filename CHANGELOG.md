@@ -48,6 +48,20 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#216] Ekspor CSV checklist pengamanan (Pengamanan) — 2026-07-13
+
+- **Ekspor CSV** checklist pengamanan per aset (`GET
+  /pengamanan/checklist/export`) — melengkapi ekspor register modul
+  Pengamanan (kini kasus #213, polis #205, dokumen #214, **checklist**
+  semua ber-CSV). Kolom: identitas aset, jenis objek (label:
+  Tanah/Gedung/Kendaraan/lainnya), terpenuhi, total butir, persen,
+  **butir_belum** (label butir yang belum terpenuhi, dipisah "; " sebagai
+  bahan tindak lanjut), keterangan, tanggal cek, petugas. Helper murni
+  `baris_csv_checklist` (skor via `skor_checklist`, tanpa Mongo, teruji
+  unit) + tombol unduh CSV di panel "Checklist Pengamanan per Aset"
+  (muncul saat ada data). Baca-saja, alat bantu internal (pustaka §11.2).
+  Unit test +1 → 277 passed.
+
 ## [#215] Satukan toggle Analytics/Rekapitulasi/Barang Serupa jadi satu baris — 2026-07-13
 
 - **Inventarisasi Aset** — tiga panel di atas baris data (**Dashboard
