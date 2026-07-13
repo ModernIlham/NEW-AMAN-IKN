@@ -48,6 +48,26 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#228] Integrasi: audit lintas-modul + taut sumber Pemusnahan → Penghapusan — 2026-07-13
+
+- **Audit integrasi antar-modul (siklus BMN).** Peninjauan kepatuhan 5 prinsip
+  arsitektur (masterplan Bab 5) dituangkan ke **§5A Status Integrasi &
+  Daftar Gap** di `docs/MASTERPLAN-SIKLUS-BMN.md`: identitas aset ✅ (risiko
+  snapshot basi); kodefikasi ⚠️ (diturunkan tapi belum FK tervalidasi);
+  transaksi=jurnal ❌ kecuali Persediaan (master hilir tak diproyeksikan);
+  dokumen-sumber ❌ (belum ada `dokumen_sumber_id`); approval-gate ❌
+  (`pending_changes` belum ada, OCC penuh hanya di `assets.py`). Delapan gap
+  diurutkan berdampak untuk ditutup bertahap per PR kecil.
+- **Taut struktural Pemusnahan → Penghapusan (gap #5).** Usulan penghapusan
+  yang dibuat otomatis dari BA Pemusnahan kini menyimpan **FK** `sumber_ba_id`
+  + `sumber_ba_nomor` + `sumber_modul="pemusnahan"` — sebelumnya rantai hanya
+  tertaut lewat teks bebas nomor BA, sulit ditelusuri balik. Helper murni
+  `usulan_penghapusan_dari_ba` (teruji unit, +2 → 289 passed) membangun
+  record; route memakainya. Baca-saja bagi pengguna; fondasi telusur-balik
+  rantai hilir siklus.
+
+---
+
 ## [#227] Peta: akurasi GPS diperketat + clustering marker berdekatan — 2026-07-13
 
 - **Koordinat GPS lebih akurat (radius lebih sempit).** Ambang "cukup akurat"

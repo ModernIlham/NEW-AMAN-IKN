@@ -75,6 +75,40 @@ def alasan_usulan_dari_ba(ba: dict) -> str:
             f"{ba.get('nomor_persetujuan') or '-'})")
 
 
+def usulan_penghapusan_dari_ba(ba: dict, aset: dict, now_iso: str, oleh, new_id: str) -> dict:
+    """Record `usulan_penghapusan` (register Penghapusan) untuk SATU aset dari
+    BA Pemusnahan — dengan TAUT STRUKTURAL ke BA sumbernya.
+
+    Integrasi (masterplan Bab 5, prinsip 3 & 4): selain keterangan teks, usulan
+    menyimpan FK `sumber_ba_id` (id BA pemusnahan) + `sumber_ba_nomor` dan
+    `sumber_modul="pemusnahan"`, sehingga rantai **Pemusnahan → Penghapusan**
+    bisa ditelusuri balik tanpa mencocokkan string nomor BA. Fungsi murni
+    (tanpa Mongo/uuid internal) supaya teruji unit; `new_id` diberikan pemanggil.
+    """
+    return {
+        "id": new_id,
+        "asset_id": aset.get("asset_id"),
+        "asset_code": aset.get("asset_code"),
+        "NUP": aset.get("NUP"),
+        "asset_name": aset.get("asset_name"),
+        "jalur": "rusak_berat",
+        "status": "diusulkan",
+        "nomor_sk": "",
+        "tanggal_sk": "",
+        "keterangan": alasan_usulan_dari_ba(ba),
+        # ── Taut sumber (Pemusnahan → Penghapusan) ──
+        "sumber_modul": "pemusnahan",
+        "sumber_ba_id": ba.get("id"),
+        "sumber_ba_nomor": ba.get("nomor_ba") or "",
+        "lampiran": [],
+        "riwayat": [{"status": "diusulkan", "tanggal": now_iso, "oleh": oleh,
+                     "catatan": f"Otomatis dari BA {ba.get('nomor_ba')}"}],
+        "created_by": oleh,
+        "created_at": now_iso,
+        "updated_at": now_iso,
+    }
+
+
 def rekap_pemusnahan(records):
     """Ringkasan register BA: jumlah BA, aset, nilai perolehan musnah."""
     jumlah_aset = 0

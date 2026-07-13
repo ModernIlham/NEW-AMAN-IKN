@@ -15,8 +15,8 @@ from auth_utils import require_admin, require_user, require_user_or_query_token
 from db import db, fs_bucket
 from shared_utils import delete_document_from_gridfs, get_document_from_gridfs
 from pemusnahan_utils import (
-    CARA_PEMUSNAHAN, alasan_usulan_dari_ba, kelayakan_musnah,
-    rekap_pemusnahan, validate_pemusnahan,
+    CARA_PEMUSNAHAN, kelayakan_musnah, rekap_pemusnahan,
+    usulan_penghapusan_dari_ba, validate_pemusnahan,
 )
 
 pemusnahan_router = APIRouter()
@@ -148,25 +148,8 @@ async def usulkan_penghapusan_dari_ba(ba_id: str,
                           "alasan": f"Sudah ada usulan aktif ({aktif.get('status')})"})
             continue
         now = datetime.now(timezone.utc).isoformat()
-        record = {
-            "id": str(uuid.uuid4()),
-            "asset_id": aid,
-            "asset_code": a.get("asset_code"),
-            "NUP": a.get("NUP"),
-            "asset_name": a.get("asset_name"),
-            "jalur": "rusak_berat",
-            "status": "diusulkan",
-            "nomor_sk": "",
-            "tanggal_sk": "",
-            "keterangan": alasan_usulan_dari_ba(ba),
-            "lampiran": [],
-            "riwayat": [{"status": "diusulkan", "tanggal": now,
-                         "oleh": user.get("username"),
-                         "catatan": f"Otomatis dari BA {ba.get('nomor_ba')}"}],
-            "created_by": user.get("username"),
-            "created_at": now,
-            "updated_at": now,
-        }
+        # Record ber-TAUT sumber (Pemusnahan → Penghapusan) — helper murni teruji.
+        record = usulan_penghapusan_dari_ba(ba, a, now, user.get("username"), str(uuid.uuid4()))
         await db.usulan_penghapusan.insert_one({**record})
         dibuat += 1
         hasil.append({"asset_id": aid, "asset_name": a.get("asset_name"),

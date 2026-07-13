@@ -3,7 +3,7 @@ import pytest
 
 from pemusnahan_utils import (
     CARA_PEMUSNAHAN, alasan_usulan_dari_ba, kelayakan_musnah,
-    rekap_pemusnahan, validate_pemusnahan,
+    rekap_pemusnahan, usulan_penghapusan_dari_ba, validate_pemusnahan,
 )
 
 HARI_INI = "2026-07-12"
@@ -43,6 +43,30 @@ def test_alasan_usulan_merujuk_ba():
     assert "2026-07-10" in alasan and "S-9/KNL.05/2026" in alasan
     # Field kosong tidak membuat crash — tanda strip sebagai penampung
     assert "-" in alasan_usulan_dari_ba({})
+
+
+def test_usulan_penghapusan_taut_sumber_ba():
+    ba = _ba(id="ba-123")
+    aset = {"asset_id": "a1", "asset_code": "3.05.01", "NUP": "7",
+            "asset_name": "Laptop"}
+    rec = usulan_penghapusan_dari_ba(ba, aset, "2026-07-13T00:00:00", "budi", "u-1")
+    # Identitas aset tersalin
+    assert rec["id"] == "u-1" and rec["asset_id"] == "a1"
+    assert rec["asset_code"] == "3.05.01" and rec["NUP"] == "7"
+    assert rec["jalur"] == "rusak_berat" and rec["status"] == "diusulkan"
+    # TAUT SUMBER struktural (Pemusnahan -> Penghapusan) — bukan sekadar teks
+    assert rec["sumber_modul"] == "pemusnahan"
+    assert rec["sumber_ba_id"] == "ba-123"
+    assert rec["sumber_ba_nomor"] == "BA-01/VII/2026"
+    # Keterangan tetap merujuk BA + riwayat awal terisi
+    assert "BA-01/VII/2026" in rec["keterangan"]
+    assert rec["riwayat"][0]["status"] == "diusulkan" and rec["riwayat"][0]["oleh"] == "budi"
+
+
+def test_usulan_penghapusan_ba_tanpa_nomor_tak_crash():
+    rec = usulan_penghapusan_dari_ba({"id": "ba-x"}, {"asset_id": "a2"},
+                                     "2026-07-13T00:00:00", "ani", "u-2")
+    assert rec["sumber_ba_id"] == "ba-x" and rec["sumber_ba_nomor"] == ""
 
 
 def test_rekap():
