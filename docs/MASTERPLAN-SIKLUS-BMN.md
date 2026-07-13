@@ -200,9 +200,13 @@ Audit lintas-modul terhadap 5 prinsip Bab 5. Kepatuhan saat ini:
    `dihapus=True` + jejak SK (`penghapusan.{nomor_sk,tanggal_sk,usulan_id}`) +
    `version` di-`$inc` (bust cache/OCC) + audit `action="penghapusan"` (#234).
    *Sengaja scoped:* field laporan (`inventory_status/condition/purchase_price`)
-   TAK diubah → tanpa regresi; penyaringan aset `dihapus` dari laporan (agar
-   berhenti *double-count*) = langkah lanjutan terpisah. *Tersisa:* proyeksi dari
-   BA Pemusnahan, PSP/pemindahtanganan, dan revaluasi Penilaian.
+   TAK diubah → tanpa regresi. ✅ **Penyaringan aset `dihapus` dari laporan
+   POSISI/NILAI sudah** — DBKP, Posisi BMN di Neraca, dan rekap penyusutan kini
+   mengecualikan `dihapus=True` lewat helper bersama `active_asset_filter`
+   (#248) → berhenti *double-count*. *Tersisa:* laporan MUTASI (LBKP/CaLBMN)
+   perlu menampilkan penghapusan sebagai baris **pengurangan** (bukan sekadar
+   hilang, agar saldo tetap seimbang); serta proyeksi master dari BA Pemusnahan,
+   PSP/pemindahtanganan, dan revaluasi Penilaian.
 2. **Belum ada simpul Dokumen Sumber** (Prinsip 4) — jadikan record perolehan
    Pengadaan sebagai node; aset/persediaan simpan `perolehan_id`.
 3. **Approval `pending_changes` + OCC belum seragam** (Prinsip 5).

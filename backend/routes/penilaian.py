@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from auth_utils import require_admin, require_user
 from db import db
 from kodefikasi_utils import GOLONGAN_DEFAULTS
+from report_filters import active_asset_filter
 from penilaian_utils import (
     MASA_MANFAAT_DEFAULT, rekap_penyusutan, validate_masa_manfaat,
     DAMPAK_MASA_MANFAAT, DOKUMEN_KOREKSI, JENIS_KOREKSI_NILAI,
@@ -106,7 +107,9 @@ async def posisi_penyusutan(
         if k.get("uraian"):
             uraian[k["kode"]] = k["uraian"]
     peta, _ = await _peta_masa_manfaat()
-    assets = [a async for a in db.assets.find({}, _PROJ)]
+    # Rekap penyusutan hanya atas aset yang MASIH dimiliki — aset ber-SK
+    # penghapusan (#234) dikecualikan agar nilai buku tidak lebih saji (§5A).
+    assets = [a async for a in db.assets.find(active_asset_filter(), _PROJ)]
     hasil = rekap_penyusutan(assets, per_tanggal, peta=peta,
                              uraian_golongan=uraian)
     dipangkas = {

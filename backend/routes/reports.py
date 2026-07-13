@@ -22,6 +22,7 @@ from pydantic import BaseModel
 from db import db
 from auth_utils import require_user, require_admin, require_user_or_query_token
 from shared_utils import get_photo_from_gridfs
+from report_filters import active_asset_filter
 from markupsafe import Markup
 
 logger = logging.getLogger(__name__)
@@ -1367,8 +1368,10 @@ async def generate_dbkp_pdf(activity_id: str, _user: dict = Depends(require_user
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
 
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    # Kecualikan aset yang sudah DIHAPUS (SK penghapusan, #234) agar DBKP tidak
+    # double-count nilai BMN yang tak lagi dimiliki (§5A Prinsip 3).
     assets = await db.assets.find(
-        {"activity_id": activity_id},
+        active_asset_filter({"activity_id": activity_id}),
         {"_id": 0, "asset_code": 1, "purchase_price": 1},
     ).to_list(100000)
 
@@ -1476,8 +1479,10 @@ async def generate_posisi_bmn_pdf(_user: dict = Depends(require_user_or_query_to
     from persediaan_utils import nilai_persediaan_dari_batches
 
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    # Posisi BMN di Neraca: hanya aset yang MASIH dimiliki — aset ber-SK
+    # penghapusan (#234) dikecualikan agar nilai neraca tidak lebih saji (§5A).
     assets = await db.assets.find(
-        {}, {"_id": 0, "asset_code": 1, "purchase_price": 1},
+        active_asset_filter(), {"_id": 0, "asset_code": 1, "purchase_price": 1},
     ).to_list(500000)
 
     uraian_map = {k: u for k, u in GOLONGAN_DEFAULTS}
