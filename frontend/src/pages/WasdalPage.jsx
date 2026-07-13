@@ -377,6 +377,13 @@ export default function WasdalPage({ user, onBack }) {
                   <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px] font-semibold">
                     {pen.ringkasan?.berjalan || 0} berjalan
                   </span>
+                  {(pen.items || []).length > 0 && (
+                    <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
+                      onClick={() => downloadFileWithProgress(`${API}/wasdal/penertiban/export`, "register_penertiban_wasdal.csv", { label: "Ekspor Register Penertiban Wasdal (CSV)" }).catch(() => {})}
+                      data-testid="wasdal-penertiban-export">
+                      <FileDown className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">CSV</span>
+                    </Button>
+                  )}
                   <Button size="sm" onClick={() => setFormPen({ data: { sumber: "pemantauan", tanggal_dasar: new Date().toISOString().slice(0, 10), objek: "", uraian: "" }, saving: false })}
                     className="h-7 text-[11px] min-h-0 bg-amber-600 hover:bg-amber-700 text-white" data-testid="wasdal-penertiban-tambah">
                     <Plus className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">Catat</span>

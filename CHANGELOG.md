@@ -48,6 +48,18 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#207] Ekspor CSV register penertiban Wasdal — 2026-07-13
+
+- **Ekspor CSV** register penertiban wasdal (`GET
+  /wasdal/penertiban/export`), melengkapi pola ekspor register. Kolom:
+  sumber (label), tanggal dasar, tenggat, **status tenggat** (Selesai /
+  Lewat tenggat / "N hk lagi" dihitung dari `status_tenggat_penertiban`),
+  status, objek pemantauan (label), uraian, tindak lanjut, tanggal
+  selesai, identitas aset tertaut (opsional), pembuat. Helper murni
+  `baris_csv_penertiban` (tanpa Mongo, teruji unit) + tombol unduh CSV di
+  panel penertiban (muncul saat ada data). Bersifat baca-saja. Unit test
+  +1 → 272 passed. Dasar PMK 207/2021 (tenggat 15 hari kerja).
+
 ## [#206] Perbaiki: Simpan di mode galeri halaman 2+ menutup form & reload — 2026-07-13
 
 - **Bug:** di tampilan **mode galeri** inventarisasi aset, menekan

@@ -22,7 +22,7 @@ from wasdal_utils import (
     AMBANG_BERLARUT_HARI, JENIS_TEMUAN, OBJEK_WASDAL, PEMICU_INSIDENTIL,
     STATUS_INSIDENTIL, SUMBER_PENERTIBAN, STATUS_PENERTIBAN,
     TENGGAT_HARI_KERJA, TENGGAT_LAPOR_HK, TENGGAT_PELAKSANAAN_HK,
-    info_tenggat_insidentil, periode_wasdal, rekap_insidentil,
+    baris_csv_penertiban, info_tenggat_insidentil, periode_wasdal, rekap_insidentil,
     rekap_penertiban, rekap_wasdal, status_tenggat_penertiban,
     susun_temuan, tambah_hari_kerja, validate_ba_insidentil,
     validate_insidentil, validate_lapor_insidentil, validate_penertiban,
@@ -121,6 +121,27 @@ async def daftar_penertiban(_user: dict = Depends(require_user)):
                 f"{TENGGAT_HARI_KERJA} hari kerja sejak pemantauan selesai / "
                 "surat permintaan Pengelola diterima (juga dipicu temuan "
                 "APIP/BPK). Tenggat dihitung hari kerja Senin–Jumat.")}
+
+
+@wasdal_router.get("/wasdal/penertiban/export")
+async def export_penertiban(_user: dict = Depends(require_user)):
+    """Ekspor CSV seluruh register penertiban wasdal (pola #158)."""
+    import csv as csv_module
+    import io
+
+    from fastapi.responses import Response as HttpResponse
+
+    today_iso = datetime.now(timezone.utc).date().isoformat()
+    items = [t async for t in db.penertiban.find({}, {"_id": 0})
+             .sort("created_at", -1)]
+    buf = io.StringIO()
+    w = csv_module.writer(buf)
+    for row in baris_csv_penertiban(items, today_iso):
+        w.writerow(row)
+    return HttpResponse(
+        content=buf.getvalue().encode("utf-8-sig"), media_type="text/csv",
+        headers={"Content-Disposition":
+                 'attachment; filename="register_penertiban_wasdal.csv"'})
 
 
 @wasdal_router.post("/wasdal/penertiban")
