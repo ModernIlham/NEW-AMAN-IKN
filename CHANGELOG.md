@@ -48,6 +48,21 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#238] Toolbar seleksi aset: satu-kesatuan (toolbar + Ubah Massal menyatu, tanpa header ganda) — 2026-07-13
+
+- **Toolbar seleksi & panel Ubah Massal kini satu kartu menyatu.** Dulu keduanya
+  dua kotak berbingkai terpisah dengan header **ganda** ("N terpilih" di toolbar
+  + "N aset dipilih — Ubah Massal" di panel) → terlihat berantakan & tak
+  estetik. Kini saat panel terbuka, toolbar kehilangan sudut & garis bawahnya
+  dan panel kehilangan sudut & garis atasnya sehingga **menyambung mulus**
+  menjadi satu bagian ringkas.
+- **Hilangkan header ganda:** saat menyatu (`attached`), panel tak lagi
+  menampilkan judul "N aset dipilih — Ubah Massal" maupun tombol tutup (X) —
+  keduanya sudah ada di toolbar (hitungan + tombol **Tutup**). Sisa kontrol di
+  panel hanya pengalih **"Tampilkan Semua Field"**.
+
+---
+
 ## [#237] Peta — filter "Barang Serupa": tampil SEMUA + garis pemisah tabel + kode·nama·unit — 2026-07-13
 
 - **Tampilkan semua kelompok terdeteksi.** Dulu daftar kelompok Barang Serupa
