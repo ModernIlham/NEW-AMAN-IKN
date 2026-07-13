@@ -949,7 +949,8 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   const handleSaveAndNavigate = useCallback(async (payload, isEdit, editId, direction, usePatch = false) => {
     const assetId = isEdit ? editId : `temp_${Date.now()}`;
     const baseVersion = isEdit
-      ? (assets.find(a => a.id === editId)?.version
+      ? (mobileAssets.find(a => a.id === editId)?.version
+         ?? assets.find(a => a.id === editId)?.version
          ?? (editAssetRef.current?.id === editId ? editAssetRef.current?.version : null)
          ?? null)
       : null;
@@ -1037,12 +1038,18 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       return;
     }
 
-    // 3) Navigate to next/prev asset
-    const currentIndex = assets.findIndex(a => a.id === editId);
+    // 3) Navigate to next/prev asset. Pakai `mobileAssets` (bukan `assets`):
+    //    di tabel (≥lg) isinya sama dgn halaman aktif, di galeri/kartu ia
+    //    superset yang memuat baris halaman 2+ — sehingga navigasi konsisten
+    //    dengan gerbang tombol Simpan (assetIndex/totalAssetsInView juga dari
+    //    mobileAssets). Tanpa ini, di galeri halaman 2+ baris tak ditemukan
+    //    (-1) dan form tutup alih-alih lanjut ke aset berikutnya.
+    const navList = mobileAssets;
+    const currentIndex = navList.findIndex(a => a.id === editId);
     const nextIndex = direction === 'next' ? currentIndex + 1 : currentIndex - 1;
 
-    if (nextIndex >= 0 && nextIndex < assets.length) {
-      const nextAsset = assets[nextIndex];
+    if (currentIndex !== -1 && nextIndex >= 0 && nextIndex < navList.length) {
+      const nextAsset = navList[nextIndex];
       const lock = rowLocks[nextAsset.id];
       if (lock && lock.session_id !== sessionId) {
         toast.error(`Aset berikutnya sedang diedit oleh ${lock.user_name}`);
@@ -1062,7 +1069,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       setEditAssetForForm(null);
       setIsSidebarOpen(false);
     }
-  }, [assets, lockAsset, unlockAsset, enqueueOptimistic, rowLocks, sessionId, activity?.id, setSearchInput]);
+  }, [assets, mobileAssets, lockAsset, unlockAsset, enqueueOptimistic, rowLocks, sessionId, activity?.id, setSearchInput]);
 
   // Mode Kamera Penuh — "tinjau aset tersimpan": simpan aset saat ini lalu muat
   // aset yang tersimpan sebelumnya (paling atas daftar) ke form untuk ditinjau/
@@ -1246,11 +1253,18 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     window.open(authMediaUrl(`${process.env.REACT_APP_BACKEND_URL}/api/inventory-activities/${activity.id}/executive-summary-html`), '_blank');
   }, [activity]);
 
-  // Compute current edit position for navigation
+  // Compute current edit position for navigation.
+  // Navigasi form ("Simpan → aset berikutnya") memakai `mobileAssets`, BUKAN
+  // `assets`: di layout tabel (≥lg) keduanya berisi halaman yang sama, tetapi
+  // di tampilan galeri/kartu (infinite scroll) `mobileAssets` adalah SUPERSET
+  // yang memuat baris halaman 2+ sedangkan `assets` beku di halaman 1. Bila
+  // indeks dihitung dari `assets`, baris galeri halaman 2+ tak ditemukan
+  // (indeks -1) → gerbang tombol Simpan gagal → form jatuh ke jalur tutup +
+  // refresh (kolaps ke halaman 1), bukan lanjut ke aset berikutnya.
   const editAssetIndex = useMemo(() => {
     if (!editAssetForForm?.id) return -1;
-    return assets.findIndex(a => a.id === editAssetForForm.id);
-  }, [editAssetForForm?.id, assets]);
+    return mobileAssets.findIndex(a => a.id === editAssetForForm.id);
+  }, [editAssetForForm?.id, mobileAssets]);
 
   // Tombol Back/Undo browser: jangan keluar aplikasi — tutup overlay teratas
   // dulu, dan bila tak ada, kembali ke daftar kegiatan (tetap di aplikasi).
@@ -1325,12 +1339,12 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
         {/* ASSET FORM SIDEBAR - only for admin/operator */}
         {perms.canEdit && (
           <div className={`hidden lg:block ${formPanelVisible ? 'w-[320px] min-w-[320px]' : 'w-0 min-w-0 overflow-hidden'}`} style={{ transition: 'width 0.3s ease, min-width 0.3s ease', willChange: 'width', contain: 'layout style' }}>
-            <AssetForm isOpen={isSidebarOpen || formPanelVisible} onClose={handleFormClose} activity={activity} categories={categories} editAsset={editAssetForForm} onSubmitSuccess={handleFormSubmitSuccess} onOptimisticSubmit={handleOptimisticSubmit} onSaveAndNavigate={handleSaveAndNavigate} onCameraReviewSaved={handleCameraReviewSaved} onExitToNewAsset={() => setEditAssetForForm(null)} assetIndex={editAssetIndex} totalAssetsInView={assets.length} saveQueueLength={queueLength} inventoryMode={inventoryMode} onShowCategoryManager={perms.canManageCategories ? () => openDialog('categoryManager') : undefined} onOpenKartu={handleOpenKartu} alwaysExpanded={formPanelVisible} />
+            <AssetForm isOpen={isSidebarOpen || formPanelVisible} onClose={handleFormClose} activity={activity} categories={categories} editAsset={editAssetForForm} onSubmitSuccess={handleFormSubmitSuccess} onOptimisticSubmit={handleOptimisticSubmit} onSaveAndNavigate={handleSaveAndNavigate} onCameraReviewSaved={handleCameraReviewSaved} onExitToNewAsset={() => setEditAssetForForm(null)} assetIndex={editAssetIndex} totalAssetsInView={mobileAssets.length} saveQueueLength={queueLength} inventoryMode={inventoryMode} onShowCategoryManager={perms.canManageCategories ? () => openDialog('categoryManager') : undefined} onOpenKartu={handleOpenKartu} alwaysExpanded={formPanelVisible} />
           </div>
         )}
         {perms.canEdit && (
           <div className="lg:hidden">
-            <AssetForm isOpen={isSidebarOpen} onClose={handleFormClose} activity={activity} categories={categories} editAsset={editAssetForForm} onSubmitSuccess={handleFormSubmitSuccess} onOptimisticSubmit={handleOptimisticSubmit} onSaveAndNavigate={handleSaveAndNavigate} onCameraReviewSaved={handleCameraReviewSaved} onExitToNewAsset={() => setEditAssetForForm(null)} assetIndex={editAssetIndex} totalAssetsInView={assets.length} saveQueueLength={queueLength} inventoryMode={inventoryMode} onShowCategoryManager={perms.canManageCategories ? () => openDialog('categoryManager') : undefined} onOpenKartu={handleOpenKartu} />
+            <AssetForm isOpen={isSidebarOpen} onClose={handleFormClose} activity={activity} categories={categories} editAsset={editAssetForForm} onSubmitSuccess={handleFormSubmitSuccess} onOptimisticSubmit={handleOptimisticSubmit} onSaveAndNavigate={handleSaveAndNavigate} onCameraReviewSaved={handleCameraReviewSaved} onExitToNewAsset={() => setEditAssetForForm(null)} assetIndex={editAssetIndex} totalAssetsInView={mobileAssets.length} saveQueueLength={queueLength} inventoryMode={inventoryMode} onShowCategoryManager={perms.canManageCategories ? () => openDialog('categoryManager') : undefined} onOpenKartu={handleOpenKartu} />
           </div>
         )}
 
