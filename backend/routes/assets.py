@@ -148,6 +148,8 @@ def build_asset_search_query(
     price_max: float = None,
     nomor_spm: str = "",
     perolehan_dari: str = "",
+    user_filter: str = "",
+    pengguna_nip: str = "",
     beli_dari: str = "",
     beli_sampai: str = "",
     ids: list = None,
@@ -238,7 +240,17 @@ def build_asset_search_query(
 
     if perolehan_dari:
         query["supplier"] = _rx(perolehan_dari)
-    
+
+    # Filter khusus pemegang aset (registry: `user` = nama pengguna,
+    # `pengguna_nip` = NIP/NIK). Terpisah dari kotak pencarian bebas agar bisa
+    # dikombinasikan dengan filter lain dan agar NIP (yang tidak masuk daftar
+    # $or pencarian) tetap bisa dicari presisi. Keduanya contains, literal-safe.
+    if user_filter:
+        query["user"] = _rx(user_filter)
+
+    if pengguna_nip:
+        query["pengguna_nip"] = _rx(pengguna_nip)
+
     # Price range filter
     if price_min is not None or price_max is not None:
         price_query = {}
@@ -312,6 +324,8 @@ async def get_assets(
     price_max: float = None,
     nomor_spm: str = "",
     perolehan_dari: str = "",
+    user_filter: str = "",
+    pengguna_nip: str = "",
     beli_dari: str = "",
     beli_sampai: str = "",
     _user: dict = Depends(require_user),
@@ -323,7 +337,8 @@ async def get_assets(
         eselon1_filter=eselon1_filter, eselon2_filter=eselon2_filter,
         stiker_status=stiker_status, inventory_status=inventory_status,
         price_min=price_min, price_max=price_max, nomor_spm=nomor_spm,
-        perolehan_dari=perolehan_dari, beli_dari=beli_dari, beli_sampai=beli_sampai,
+        perolehan_dari=perolehan_dari, user_filter=user_filter, pengguna_nip=pengguna_nip,
+        beli_dari=beli_dari, beli_sampai=beli_sampai,
     )
 
     # Extended sort options

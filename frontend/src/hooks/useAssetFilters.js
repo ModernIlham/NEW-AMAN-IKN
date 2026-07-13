@@ -24,7 +24,8 @@ export function useAssetFilters({ activityId }) {
   const initialFilterState = useMemo(() => ({
     condition: "", status: "", location: "", eselon1: "", eselon2: "",
     stiker: "", inventoryStatus: "", priceMin: "", priceMax: "",
-    nomorSpm: "", perolehanDari: "", dateFrom: "", dateTo: ""
+    nomorSpm: "", perolehanDari: "", user: "", penggunaNip: "",
+    dateFrom: "", dateTo: ""
   }), []);
 
   const [filters, dispatchFilter] = useReducer((state, action) => {
@@ -66,6 +67,8 @@ export function useAssetFilters({ activityId }) {
     if (filters.priceMax) params.append("price_max", filters.priceMax);
     if (filters.nomorSpm) params.append("nomor_spm", filters.nomorSpm);
     if (filters.perolehanDari) params.append("perolehan_dari", filters.perolehanDari);
+    if (filters.user) params.append("user_filter", filters.user);
+    if (filters.penggunaNip) params.append("pengguna_nip", filters.penggunaNip);
     if (filters.dateFrom) params.append("beli_dari", filters.dateFrom);
     if (filters.dateTo) params.append("beli_sampai", filters.dateTo);
     return params;
@@ -77,7 +80,8 @@ export function useAssetFilters({ activityId }) {
     filters.condition, filters.status, filters.location,
     filters.eselon1, filters.eselon2, filters.stiker,
     filters.inventoryStatus, filters.priceMin, filters.priceMax,
-    filters.nomorSpm, filters.perolehanDari, filters.dateFrom, filters.dateTo
+    filters.nomorSpm, filters.perolehanDari, filters.user, filters.penggunaNip,
+    filters.dateFrom, filters.dateTo
   ].filter(Boolean).length, [filterCategory, filters]);
 
   const handleAdvancedFilterChange = useCallback((field, value) => {

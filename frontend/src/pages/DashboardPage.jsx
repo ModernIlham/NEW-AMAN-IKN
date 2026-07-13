@@ -117,6 +117,8 @@ function filterSnapshotRows(rows, { search, category, filters }) {
     eq("inventory_status", filters.inventoryStatus);
     sub("nomor_spm", filters.nomorSpm);
     sub("supplier", filters.perolehanDari);
+    sub("user", filters.user);
+    sub("pengguna_nip", filters.penggunaNip);
     const pMin = parseFloat(filters.priceMin);
     const pMax = parseFloat(filters.priceMax);
     if (!Number.isNaN(pMin)) out = out.filter(r => (Number(r.purchase_price) || 0) >= pMin);
