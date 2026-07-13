@@ -48,7 +48,23 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
-## [#208] Simpan-lanjut lintas halaman + galeri auto-scroll prefetch — 2026-07-13
+## [#209] Galeri: infinite scroll dua arah + jaga aset terseleksi terlihat — 2026-07-13
+
+- **Scroll dua arah (muat halaman sebelumnya):** bila pengguna berada di
+  halaman tabel yang jauh (mis. halaman 5) lalu beralih ke mode galeri,
+  kini **scroll ke atas otomatis memuat halaman sebelumnya** (4, 3, 2, 1)
+  dan scroll ke bawah memuat berikutnya — data tetap **urut & sesuai
+  filter**. Sebelumnya galeri hanya menampilkan halaman masuk dan halaman
+  yang lebih kecil tak terjangkau. Diperbaiki bug `doFetch` yang mereset
+  jendela galeri ke halaman 1; ditambah state `mobileFirstPage`,
+  `loadPrevMobile` (prepend + paritas offline), sentinel atas
+  IntersectionObserver, dan **penjangkaran posisi scroll saat prepend**
+  (useLayoutEffect) agar tampilan tak "melompat".
+- **Aset terseleksi selalu terlihat:** saat aset yang diedit berganti
+  (mis. auto-lanjut setelah simpan), galeri/kartu kini **otomatis
+  menggulir kartu aset tersebut ke tengah layar** (`scrollToIndex`) —
+  tak perlu mencari lagi. Hanya saat aset aktif berubah, tidak melawan
+  gulir manual pengguna.
 
 - **Ritme input tak putus lintas halaman:** saat menekan Simpan/Update pada
   aset **terakhir yang dimuat** sementara masih ada halaman berikutnya,
