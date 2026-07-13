@@ -18,8 +18,9 @@ from db import db, fs_bucket
 from shared_utils import delete_document_from_gridfs, get_document_from_gridfs
 from pengadaan_utils import (
     DOKUMEN_PEROLEHAN, JENIS_PEROLEHAN, LABEL_DOKUMEN_SUMBER,
-    dokumen_kurang_perolehan, is_ekstrakomptabel, nilai_perolehan,
-    rekap_perolehan, snapshot_penganggaran, validate_perolehan,
+    build_asset_perolehan_projection, dokumen_kurang_perolehan,
+    is_ekstrakomptabel, nilai_perolehan, rekap_perolehan,
+    snapshot_penganggaran, validate_perolehan,
 )
 
 pengadaan_router = APIRouter()
@@ -62,6 +63,31 @@ async def _ambil_snapshot_penganggaran(penganggaran_id: str) -> dict:
         raise HTTPException(status_code=404,
                             detail="Usulan penganggaran tidak ditemukan")
     return snapshot_penganggaran(u)
+
+
+async def _proyeksi_perolehan_ke_aset(perolehan: dict) -> None:
+    """Proyeksi BALIK dokumen sumber (§5A gap #6): stamp `perolehan_id` +
+    snapshot ke tiap aset yang tertaut di baris barang. Best-effort — perolehan
+    (jurnal) sudah tersimpan; kegagalan tak menggagalkan pencatatan. Tanpa
+    `$inc version` (provenance) agar tak memicu OCC 409 palsu pada form aset.
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    proj = build_asset_perolehan_projection(perolehan, now)
+    for b in perolehan.get("barang") or []:
+        aid = str(b.get("asset_id") or "").strip()
+        if aid:
+            await db.assets.update_one({"id": aid}, {"$set": proj})
+
+
+async def _lepas_perolehan_dari_aset(asset_id: str, perolehan_id: str) -> None:
+    """Lepas back-link perolehan pada aset saat baris di-untautkan — HANYA bila
+    `perolehan_id` cocok (jangan hapus tautan milik perolehan lain)."""
+    aid = str(asset_id or "").strip()
+    if not aid:
+        return
+    await db.assets.update_one(
+        {"id": aid, "perolehan_id": perolehan_id},
+        {"$set": {"perolehan_id": "", "perolehan": {}}})
 
 
 class DokumenIn(BaseModel):
@@ -170,6 +196,8 @@ async def buat_perolehan(payload: PerolehanIn, user: dict = Depends(require_user
         "updated_at": now,
     }
     await db.pengadaan.insert_one({**record})
+    # Back-link dokumen sumber (§5A gap #6): stamp perolehan_id ke aset tertaut.
+    await _proyeksi_perolehan_ke_aset(record)
     return _enrich(record)
 
 
@@ -202,6 +230,7 @@ async def tautkan_barang(perolehan_id: str, payload: TautkanIn,
     if payload.index >= len(barang):
         raise HTTPException(status_code=400, detail="Baris barang tidak ada")
     row = barang[payload.index]
+    prev_aid = str(row.get("asset_id") or "").strip()   # aset lama (lepas back-link)
     aid = str(payload.asset_id or "").strip()
     if aid:
         a = await db.assets.find_one({"id": aid}, _PROJ_ASET)
@@ -216,6 +245,13 @@ async def tautkan_barang(perolehan_id: str, payload: TautkanIn,
     await db.pengadaan.update_one(
         {"id": perolehan_id},
         {"$set": {"barang": barang, "updated_at": now}})
+    # Back-link dokumen sumber (§5A gap #6): lepas dari aset lama bila berganti,
+    # lalu stamp perolehan_id + snapshot ke aset baru.
+    if prev_aid and prev_aid != aid:
+        await _lepas_perolehan_dari_aset(prev_aid, perolehan_id)
+    if aid:
+        await db.assets.update_one(
+            {"id": aid}, {"$set": build_asset_perolehan_projection(p, now)})
     p["barang"] = barang
     return _enrich(p)
 
