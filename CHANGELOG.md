@@ -48,6 +48,16 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#243] Lightbox: navigasi antar-aset cukup SWIPE (tombol panah dihapus) — 2026-07-13
+
+- Menindaklanjuti #240: **tombol panah ‹ ›** untuk pindah antar-aset di kartu
+  info **dihapus** — cukup **geser (swipe) kiri/kanan** pada kartu info untuk ke
+  aset sebelum/berikutnya (peek kartu tetangga + umpan-balik drag + pintasan
+  ↑/↓ tetap). Tampilan kartu info jadi lebih bersih. Navigasi antar-FOTO (dalam
+  satu aset) di area foto tak berubah.
+
+---
+
 ## [#242] Ubah Massal: MULTI-foto massal (banyak foto sekaligus, tetap terkompres, hormati batas 6/aset) — 2026-07-13
 
 Lanjutan #241.
