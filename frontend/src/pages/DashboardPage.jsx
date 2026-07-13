@@ -393,6 +393,10 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   assetsStateRef.current = assets;
   const getLatestVersion = useCallback((assetId) => assetsStateRef.current.find(a => a.id === assetId)?.version ?? null, []);
 
+  // Throttle toast konflik per-aset: tanpa ini, flush berulang / beberapa antrian
+  // atas aset yang sama memunculkan toast "diubah pengguna lain" bertubi-tubi.
+  const conflictToastAtRef = useRef({});
+
   // Rehydrated offline CREATEs need their temp rows back so the retry UI has a row
   const handleQueueRehydrate = useCallback((items) => {
     const rows = items
@@ -413,8 +417,13 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     onRowSynced: handleRowSynced,
     onConflict: (assetId, conflictDetail) => {
       // Another user modified this asset before our save landed.
-      // Show a toast and refresh the row so the user sees the latest server state.
-      toast.error(conflictDetail?.message || "Data telah diubah pengguna lain. Memuat versi terbaru...", { duration: 4500 });
+      // Toast di-throttle per-aset (≥8 dtk) agar tidak bertubi-tubi saat beberapa
+      // percobaan sinkron atas aset yang sama gagal berturut-turut.
+      const now = Date.now();
+      if (now - (conflictToastAtRef.current[assetId] || 0) > 8000) {
+        conflictToastAtRef.current[assetId] = now;
+        toast.error(conflictDetail?.message || "Data telah diubah pengguna lain. Memuat versi terbaru...", { duration: 4500 });
+      }
       // Fetch the fresh row to update the local state with the winning version
       axios.get(`${API}/assets/${assetId}?exclude_media=true`).then(res => {
         if (res?.data) {
