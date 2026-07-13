@@ -70,6 +70,22 @@ def klasifikasi_komptabel(kode_barang, harga_satuan, ambang=None) -> str:
     return "intra" if parse_harga(harga_satuan) >= batas else "ekstra"
 
 
+def nilai_buku_aset(a):
+    """Nilai buku TERKINI aset untuk laporan POSISI/NILAI (DBKP, Posisi BMN di
+    Neraca, rekonsiliasi): nilai wajar hasil revaluasi (`nilai_wajar_terakhir`,
+    proyeksi #254) BILA ADA, jika tidak nilai perolehan (`purchase_price`).
+
+    `nilai_wajar_terakhir` BOLEH bernilai 0 (aset direvaluasi ke nol) → dibedakan
+    dari 'tidak pernah direvaluasi' lewat `is not None`, bukan truthiness.
+    SENGAJA tidak dipakai di laporan MUTASI (LBKP/CaLBMN — di sana revaluasi
+    adalah jenis mutasi tersendiri) maupun dasar penyusutan (langkah terpisah).
+    """
+    nw = a.get("nilai_wajar_terakhir")
+    if nw is not None:
+        return parse_harga(nw)
+    return parse_harga(a.get("purchase_price"))
+
+
 def build_dbkp_rows(assets, uraian_map=None, ambang=None):
     """Rekap DBKP per golongan dari daftar aset → (rows, total).
 
@@ -84,7 +100,9 @@ def build_dbkp_rows(assets, uraian_map=None, ambang=None):
     agg = {}
     for a in assets or []:
         gol = golongan_of(a.get("asset_code")) or "?"
-        harga = parse_harga(a.get("purchase_price"))
+        # Nilai buku terkini: pakai nilai wajar revaluasi bila ada (#254),
+        # jika tidak nilai perolehan. Ini juga menentukan ambang intra/ekstra.
+        harga = nilai_buku_aset(a)
         kelas = klasifikasi_komptabel(a.get("asset_code"), harga, ambang)
         row = agg.setdefault(gol, {
             "golongan": gol,

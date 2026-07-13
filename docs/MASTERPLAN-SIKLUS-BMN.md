@@ -213,8 +213,14 @@ Audit lintas-modul terhadap 5 prinsip Bab 5. Kepatuhan saat ini:
    `nilai_wajar_terakhir` + jejak `revaluasi.{...}` + `$inc version` + audit
    `action="revaluasi"` (#254, helper murni `build_asset_revaluasi_projection`,
    best-effort/idempoten spt #234); `purchase_price` historis TAK ditimpa.
-   *Tersisa:* laporan posisi/nilai MEMAKAI `nilai_wajar_terakhir` bila ada
-   (langkah lanjut), serta proyeksi master dari BA Pemusnahan dan
+   ✅ **Laporan POSISI/NILAI kini MEMAKAI `nilai_wajar_terakhir`** — helper murni
+   `nilai_buku_aset(a)` (= nilai wajar revaluasi bila `is not None` — 0 pun
+   dihormati, jika tidak `purchase_price`) menggantikan `purchase_price` mentah di
+   `build_dbkp_rows` (DBKP + Posisi BMN di Neraca) dan rincian per-NUP rekonsiliasi
+   XLSX SAKTI (Sheet 2 kini *tie-out* dgn total Sheet 1), #255. *Sengaja scoped:*
+   dasar penyusutan (`rekap_penyusutan`) & laporan MUTASI (LBKP/CaLBMN — revaluasi
+   = jenis mutasi tersendiri) TAK diubah → langkah terpisah. *Tersisa:* dasar
+   penyusutan memakai nilai wajar, serta proyeksi master dari BA Pemusnahan dan
    PSP/pemindahtanganan.
 2. **Belum ada simpul Dokumen Sumber** (Prinsip 4) — jadikan record perolehan
    Pengadaan sebagai node; aset/persediaan simpan `perolehan_id`.

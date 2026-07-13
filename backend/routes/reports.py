@@ -1372,7 +1372,7 @@ async def generate_dbkp_pdf(activity_id: str, _user: dict = Depends(require_user
     # double-count nilai BMN yang tak lagi dimiliki (§5A Prinsip 3).
     assets = await db.assets.find(
         active_asset_filter({"activity_id": activity_id}),
-        {"_id": 0, "asset_code": 1, "purchase_price": 1},
+        {"_id": 0, "asset_code": 1, "purchase_price": 1, "nilai_wajar_terakhir": 1},
     ).to_list(100000)
 
     # Uraian golongan: referensi kodefikasi (level 1) menimpa default standar
@@ -1482,7 +1482,8 @@ async def generate_posisi_bmn_pdf(_user: dict = Depends(require_user_or_query_to
     # Posisi BMN di Neraca: hanya aset yang MASIH dimiliki — aset ber-SK
     # penghapusan (#234) dikecualikan agar nilai neraca tidak lebih saji (§5A).
     assets = await db.assets.find(
-        active_asset_filter(), {"_id": 0, "asset_code": 1, "purchase_price": 1},
+        active_asset_filter(),
+        {"_id": 0, "asset_code": 1, "purchase_price": 1, "nilai_wajar_terakhir": 1},
     ).to_list(500000)
 
     uraian_map = {k: u for k, u in GOLONGAN_DEFAULTS}
@@ -2124,7 +2125,7 @@ async def generate_rekonsiliasi_xlsx(_user: dict = Depends(require_user_or_query
     import xlsxwriter
     from kodefikasi_utils import GOLONGAN_DEFAULTS
     from pembukuan_utils import (
-        build_dbkp_rows, golongan_of, klasifikasi_komptabel, parse_harga,
+        build_dbkp_rows, golongan_of, klasifikasi_komptabel, nilai_buku_aset,
         posisi_neraca,
     )
     from persediaan_utils import nilai_persediaan_dari_batches
@@ -2135,7 +2136,8 @@ async def generate_rekonsiliasi_xlsx(_user: dict = Depends(require_user_or_query
     assets = await db.assets.find(
         active_asset_filter(),
         {"_id": 0, "asset_code": 1, "NUP": 1, "asset_name": 1,
-         "purchase_price": 1, "location": 1, "condition": 1},
+         "purchase_price": 1, "location": 1, "condition": 1,
+         "nilai_wajar_terakhir": 1},
     ).to_list(500000)
     uraian_map = {k: u for k, u in GOLONGAN_DEFAULTS}
     async for k in db.kodefikasi.find({"level": 1}, {"_id": 0, "kode": 1, "uraian": 1}):
@@ -2194,14 +2196,16 @@ async def generate_rekonsiliasi_xlsx(_user: dict = Depends(require_user_or_query
 
     # ── Sheet 2: rincian aset (dasar sanding per NUP) ────────────────
     s2 = wb.add_worksheet("Rincian Aset")
-    kolom2 = ["Kode Barang", "NUP", "Nama Barang", "Gol", "Nilai Perolehan",
+    kolom2 = ["Kode Barang", "NUP", "Nama Barang", "Gol", "Nilai Buku",
               "Komptabel", "Kondisi", "Lokasi"]
     for c, h in enumerate(kolom2):
         s2.write(0, c, h, f_kepala)
     for i, a in enumerate(sorted(
             assets, key=lambda x: (str(x.get("asset_code") or ""), str(x.get("NUP") or ""))),
             start=1):
-        harga = parse_harga(a.get("purchase_price"))
+        # Nilai buku terkini (nilai wajar revaluasi bila ada, #254) agar rincian
+        # per-NUP TIE-OUT dengan total golongan Sheet 1 (build_dbkp_rows).
+        harga = nilai_buku_aset(a)
         s2.write(i, 0, str(a.get("asset_code") or ""), f_sel)
         s2.write(i, 1, str(a.get("NUP") or ""), f_sel)
         s2.write(i, 2, str(a.get("asset_name") or ""), f_sel)

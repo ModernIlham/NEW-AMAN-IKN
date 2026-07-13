@@ -48,6 +48,28 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#255] Laporan posisi/nilai memakai nilai wajar revaluasi (`nilai_wajar_terakhir`) — 2026-07-13
+
+- **Integrasi §5A Prinsip 3 (lanjutan #254).** Laporan **POSISI/NILAI** kini
+  menghitung nilai buku terkini aset: **nilai wajar hasil revaluasi**
+  (`nilai_wajar_terakhir`, proyeksi #254) bila ada, jika tidak nilai perolehan
+  (`purchase_price`). Sebelumnya selalu memakai `purchase_price` mentah sehingga
+  aset yang sudah direvaluasi tampil dengan nilai lama di neraca.
+- **Helper murni `nilai_buku_aset(a)`** di `pembukuan_utils` — pakai
+  `nilai_wajar_terakhir` bila **`is not None`** (nilai wajar **0** pun dihormati,
+  dibedakan dari 'belum pernah direvaluasi'), selain itu `purchase_price`.
+  Dipakai di `build_dbkp_rows` (menggerakkan **DBKP**, **Posisi BMN di Neraca**,
+  klasifikasi intra/ekstra) dan rincian per-NUP **rekonsiliasi XLSX SAKTI**
+  (kolom kini "Nilai Buku") sehingga Sheet 2 **tie-out** dengan total Sheet 1.
+- **Sengaja scoped:** dasar **penyusutan** (`rekap_penyusutan`) dan laporan
+  **MUTASI** (LBKP/CaLBMN — revaluasi adalah jenis mutasi tersendiri) **TIDAK**
+  diubah → langkah terpisah agar PR kecil & aman. `purchase_price` tak disentuh.
+- Helper murni + **5 unit test** (nilai wajar dipakai, 0 dihormati, fallback
+  `purchase_price`, keduanya kosong→0, klasifikasi intra/ekstra ikut nilai
+  wajar). Masterplan §5A diperbarui. pytest **313 lulus**.
+
+---
+
 ## [#254] Revaluasi Penilaian memproyeksi nilai wajar ke master aset — 2026-07-13
 
 - **Integrasi §5A Prinsip 3 (Penilaian → master).** Saat koreksi/revaluasi nilai
