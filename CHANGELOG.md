@@ -48,6 +48,32 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#217] Peta: seleksi memfilter titik & unduh GIS, foto popup dapat diperbesar, skala + kompas + bar metrik — 2026-07-13
+
+Tiga penyempurnaan **Peta Aset** (inventarisasi):
+
+1. **Seleksi aset memengaruhi titik peta + unduh GIS.** Bila ada aset yang
+   **dipilih** di daftar, peta kini **hanya menampilkan pin aset terpilih**
+   (irisan dengan filter aktif), dan **unduh KML/KMZ/SHP** ikut dibatasi ke
+   pilihan tersebut. Backend: parameter `ids` baru di `GET /export/geo`
+   (irisan filter ∩ pilihan via `build_asset_search_query(ids=...)`).
+   Frontend mengirim id terpilih (batas aman 200 id/URL; lebih dari itu
+   diberi tahu untuk mempersempit pilihan — tanpa memotong data diam-diam).
+   Bar info peta menandai "titik aset terpilih".
+2. **Foto pada popup marker dapat diklik → lightbox.** Bingkai foto di popup
+   pin kini ber-kursor *zoom-in*; diklik membuka **lightbox foto yang SAMA**
+   seperti saat foto dibuka di mode galeri (navigasi antar-foto, info aset).
+   Komponen `Lightbox` diekstrak ke `PhotoLightbox.jsx` dan dipakai bersama
+   galeri + peta (tanpa mengubah perilaku galeri).
+3. **Info skala + kompas + bar skala metrik.** Peta kini menampilkan **bar
+   skala metrik** (m/km), **kompas arah utara** (peta selalu north-up), dan
+   **info skala nominal 1:N + level zoom** yang diperbarui otomatis saat
+   diperbesar/digeser (piksel OGC 0,28 mm).
+
+Verifikasi: `pytest` → **280 passed** (unit `test_export_geo_ids` baru:
+`ids` → `{"id": {"$in": [...]}}`, kosong/None tanpa filter, irisan dengan
+filter lain); `eslint` bersih; `CI=false yarn build` sukses.
+
 ## [#216] Ekspor CSV checklist pengamanan (Pengamanan) — 2026-07-13
 
 - **Ekspor CSV** checklist pengamanan per aset (`GET

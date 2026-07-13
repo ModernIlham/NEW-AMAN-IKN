@@ -1566,6 +1566,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
                   buildParams={buildMapParams}
                   clientFilter={mapClientFilter}
                   activeFilterCount={activeFilterCount + (debouncedSearch ? 1 : 0)}
+                  selectedIds={selectedAssets}
                 />
               </Suspense>
             ) : loading ? (

@@ -150,6 +150,7 @@ def build_asset_search_query(
     perolehan_dari: str = "",
     beli_dari: str = "",
     beli_sampai: str = "",
+    ids: list = None,
 ) -> dict:
     """Query pencarian + filter aset — SATU builder untuk GET /assets dan
     ekspor geo (KML/KMZ/SHP) supaya filter tidak pernah drift antar-endpoint."""
@@ -158,7 +159,12 @@ def build_asset_search_query(
     # Filter by activity_id if provided
     if activity_id:
         query["activity_id"] = activity_id
-    
+
+    # Batasi ke daftar id tertentu (mis. aset yang DIPILIH di peta) — irisan
+    # dengan filter lain, sehingga ekspor terseleksi = filter ∩ pilihan.
+    if ids:
+        query["id"] = {"$in": list(ids)}
+
     # Multi-field search with regex - EXTENDED to cover all important fields
     if search:
         # Try to detect if search is a number (for price search)
