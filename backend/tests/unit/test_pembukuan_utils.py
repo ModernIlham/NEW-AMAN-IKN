@@ -6,7 +6,7 @@ rekap DBKP per golongan tidak bergeser diam-diam.
 from pembukuan_utils import (
     AMBANG_KAPITALISASI_DEFAULT, KONDISI_LKB, build_dbkp_rows,
     build_lbkp_rows, build_lkb_rows, golongan_of, klasifikasi_komptabel,
-    parse_harga, posisi_neraca,
+    parse_harga, posisi_neraca, tombstones_penghapusan,
 )
 
 
@@ -172,6 +172,54 @@ class TestBuildLbkpRows:
         for kelas in ("intra", "ekstra", "gabungan"):
             rows, total = per_kelas[kelas]
             assert rows == [] and total["jumlah_akhir"] == 0
+
+
+class TestPenghapusanMutasi:
+    """Penghapusan via SK (dihapus=True, proyeksi #234) tampil sebagai mutasi
+    KURANG di periode SK terbit — melengkapi tombstone hard-delete audit — dan
+    identitas saldo (akhir = awal + tambah − kurang) tetap SEIMBANG."""
+    DARI, SAMPAI = "2026-01-01", "2026-06-30"
+    KODE = "3060102135"  # golongan 3, ≥ ambang → intrakomptabel
+
+    def _aset(self, harga, created, dihapus=False, sk=None):
+        a = {"asset_code": self.KODE, "purchase_price": harga, "created_at": created}
+        if dihapus:
+            a["dihapus"] = True
+            if sk:
+                a["penghapusan"] = {"tanggal_sk": sk}
+        return a
+
+    def test_tombstones_penghapusan_bentuk(self):
+        assets = [
+            self._aset(5_000_000, "2024-01-01", dihapus=True, sk="2026-03-01"),
+            self._aset(1_000_000, "2024-01-01"),                        # bukan dihapus → dilewati
+            self._aset(2_000_000, "2024-01-01", dihapus=True, sk=None),  # tanpa SK → dilewati
+        ]
+        ts = tombstones_penghapusan(assets)
+        assert ts == [{"asset_code": self.KODE, "timestamp": "2026-03-01", "nilai": 5_000_000}]
+
+    def test_sk_dalam_periode_awal_dikurangi_seimbang(self):
+        # dibuat sebelum periode, SK DALAM periode → awal +1, kurang +1, akhir 0
+        assets = [self._aset(5_000_000, "2024-01-01", dihapus=True, sk="2026-03-01")]
+        per_kelas, _ = build_lbkp_rows(assets, tombstones_penghapusan(assets), self.DARI, self.SAMPAI)
+        _, tot = per_kelas["gabungan"]
+        assert (tot["jumlah_awal"], tot["jumlah_kurang"], tot["jumlah_akhir"]) == (1, 1, 0)
+        assert tot["nilai_akhir"] == 0.0
+
+    def test_sk_sebelum_periode_tak_masuk_saldo(self):
+        # SK SEBELUM periode → sudah lenyap: tak di saldo awal, tak dikurangi lagi
+        assets = [self._aset(5_000_000, "2024-01-01", dihapus=True, sk="2025-06-01")]
+        per_kelas, _ = build_lbkp_rows(assets, tombstones_penghapusan(assets), self.DARI, self.SAMPAI)
+        _, tot = per_kelas["gabungan"]
+        assert (tot["jumlah_awal"], tot["jumlah_kurang"], tot["jumlah_akhir"]) == (0, 0, 0)
+
+    def test_sk_setelah_periode_tetap_di_saldo_akhir(self):
+        # SK SETELAH periode → masih BMN di akhir: awal +1, kurang 0, akhir +1
+        assets = [self._aset(5_000_000, "2024-01-01", dihapus=True, sk="2026-09-01")]
+        per_kelas, _ = build_lbkp_rows(assets, tombstones_penghapusan(assets), self.DARI, self.SAMPAI)
+        _, tot = per_kelas["gabungan"]
+        assert (tot["jumlah_awal"], tot["jumlah_kurang"], tot["jumlah_akhir"]) == (1, 0, 1)
+        assert tot["nilai_akhir"] == 5_000_000
 
 
 class TestBuildLkbRows:

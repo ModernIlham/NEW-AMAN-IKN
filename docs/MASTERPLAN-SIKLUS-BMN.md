@@ -204,10 +204,12 @@ Audit lintas-modul terhadap 5 prinsip Bab 5. Kepatuhan saat ini:
    POSISI/NILAI sudah** — DBKP, Posisi BMN di Neraca, rekap penyusutan (#248),
    dan rekonsiliasi XLSX SAKTI (#249) kini mengecualikan `dihapus=True` lewat
    helper bersama `active_asset_filter` → berhenti *double-count* & sandingan
-   SAKTI selaras. *Tersisa:* laporan MUTASI (LBKP/CaLBMN)
-   perlu menampilkan penghapusan sebagai baris **pengurangan** (bukan sekadar
-   hilang, agar saldo tetap seimbang); serta proyeksi master dari BA Pemusnahan,
-   PSP/pemindahtanganan, dan revaluasi Penilaian.
+   SAKTI selaras. ✅ **Laporan MUTASI (LBKP & CaLBMN) juga sudah** — penghapusan
+   via SK (`dihapus=True`) kini tampil sebagai **mutasi kurang** di periode SK
+   terbit lewat helper murni `tombstones_penghapusan` + `build_lbkp_rows` yang
+   sadar-tanggal-SK (#253), sehingga identitas *saldo akhir = awal + tambah −
+   kurang* tetap seimbang (diuji unit). *Tersisa:* proyeksi master dari BA
+   Pemusnahan, PSP/pemindahtanganan, dan revaluasi Penilaian.
 2. **Belum ada simpul Dokumen Sumber** (Prinsip 4) — jadikan record perolehan
    Pengadaan sebagai node; aset/persediaan simpan `perolehan_id`.
 3. **Approval `pending_changes` + OCC belum seragam** (Prinsip 5).

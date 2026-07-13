@@ -48,6 +48,24 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#253] LBKP/CaLBMN: penghapusan via SK tampil sebagai mutasi kurang (saldo seimbang) — 2026-07-13
+
+- **Melengkapi §5A untuk laporan MUTASI.** Setelah laporan POSISI/NILAI
+  mengecualikan aset dihapus (#248/#249), kini **LBKP** & **CaLBMN** menampilkan
+  penghapusan lewat **SK** (`dihapus=True`, proyeksi master #234) sebagai
+  **mutasi KURANG** pada periode SK terbit — melengkapi tombstone hard-delete
+  audit yang sudah ada.
+- **Identitas saldo tetap seimbang** (*saldo akhir = saldo awal + mutasi tambah
+  − mutasi kurang*): `build_lbkp_rows` kini sadar-tanggal-SK — aset yang SK-nya
+  terbit **sebelum** periode tak lagi ikut saldo awal (sudah lenyap), yang
+  **dalam** periode masuk saldo awal lalu dikurangi, yang **setelah** periode
+  tetap sebagai BMN di saldo akhir.
+- Helper murni `tombstones_penghapusan(assets)` (`pembukuan_utils.py`) +
+  **4 unit test** membuktikan keseimbangan untuk keempat kasus. Tanpa perubahan
+  data; hanya penyajian mutasi yang kini lengkap.
+
+---
+
 ## [#252] Ubah Massal: bisa TAMBAH kelengkapan dokumen baru (nama kustom) secara massal — 2026-07-13
 
 - **Kini bisa menambah dokumen kelengkapan BARU dari panel Ubah Massal.**
