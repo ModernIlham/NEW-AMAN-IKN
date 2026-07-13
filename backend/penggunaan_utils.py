@@ -441,3 +441,57 @@ def rekap_proses_penggunaan(items, today_iso: str) -> dict:
     return {"jumlah": len(items or []), "aktif": aktif,
             "segera_berakhir": segera_berakhir,
             "per_jenis": per_jenis, "per_status": per_status}
+
+
+HEADER_CSV_PROSES = [
+    "kode_aset", "nup", "nama_aset", "jenis_proses", "arah", "pihak_asal",
+    "pihak_tujuan", "status", "status_tenggat", "nomor_permohonan",
+    "tanggal_permohonan", "tanggal_mulai", "tanggal_berakhir", "keterangan",
+    "dibuat_oleh",
+]
+
+
+def baris_csv_proses(tiket_list, today_iso) -> list:
+    """Susun baris CSV register proses penggunaan: [header, *data] — murni.
+
+    Tiket multi-aset di-flatten: SATU baris per aset (field tiket diulang).
+    Jenis/arah/status diterjemahkan ke label; kolom status_tenggat dihitung
+    via info_proses_sementara untuk tiket berjangka yang BERJALAN (Lewat
+    tenggat / "N hari lagi" [+ "(perpanjang)" bila ≤90 hari]); tanpa itu
+    kosong. Tanpa Mongo/IO agar teruji unit (pola ekspor #158).
+    """
+    baris = [list(HEADER_CSV_PROSES)]
+    for t in tiket_list or []:
+        info = info_proses_sementara(t, today_iso)
+        if info.get("berakhir"):
+            if info.get("lewat"):
+                tenggat = "Lewat tenggat"
+            else:
+                sisa = info.get("sisa_hari")
+                tenggat = f"{sisa} hari lagi"
+                if info.get("saatnya_perpanjangan"):
+                    tenggat += " (perpanjang)"
+        else:
+            tenggat = ""
+        jenis = JENIS_PROSES_PENGGUNAAN.get(t.get("jenis_proses"),
+                                            t.get("jenis_proses") or "")
+        arah = ARAH_PROSES.get(t.get("arah"), t.get("arah") or "")
+        status = STATUS_PROSES.get(t.get("status"), t.get("status") or "")
+        aset_list = t.get("aset") or [{}]
+        for a in aset_list:
+            baris.append([
+                a.get("asset_code") or "",
+                a.get("NUP") or "",
+                a.get("asset_name") or "",
+                jenis, arah,
+                t.get("pihak_asal") or "",
+                t.get("pihak_tujuan") or "",
+                status, tenggat,
+                t.get("nomor_permohonan") or "",
+                str(t.get("tanggal_permohonan") or "")[:10],
+                str(t.get("tanggal_mulai") or "")[:10],
+                str(t.get("tanggal_berakhir") or "")[:10],
+                t.get("keterangan") or "",
+                t.get("created_by") or "",
+            ])
+    return baris

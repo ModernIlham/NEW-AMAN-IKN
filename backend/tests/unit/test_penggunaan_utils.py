@@ -248,6 +248,38 @@ class TestProsesPenggunaan:
         assert r["segera_berakhir"] == 1
         assert r["per_jenis"]["alih_status"] == 1
 
+    def test_baris_csv_proses(self):
+        from penggunaan_utils import HEADER_CSV_PROSES, baris_csv_proses
+        assert baris_csv_proses([], "2026-07-12") == [HEADER_CSV_PROSES]
+        assert baris_csv_proses(None, "2026-07-12") == [HEADER_CSV_PROSES]
+        # Tiket berjangka BERJALAN dengan 2 aset → 2 baris + status_tenggat
+        rows = baris_csv_proses([{
+            "jenis_proses": "penggunaan_sementara", "arah": "keluar",
+            "pihak_asal": "Satker A", "pihak_tujuan": "K/L B",
+            "status": "berjalan", "tanggal_berakhir": "2026-08-01",
+            "nomor_permohonan": "P-1", "tanggal_permohonan": "2026-06-01",
+            "tanggal_mulai": "2026-06-05", "keterangan": "-",
+            "created_by": "budi",
+            "aset": [
+                {"asset_code": "3.01", "NUP": "1", "asset_name": "Mobil"},
+                {"asset_code": "3.01", "NUP": "2", "asset_name": "Motor"},
+            ],
+        }], "2026-07-12")
+        assert rows[0] == HEADER_CSV_PROSES
+        assert len(rows) == 3   # header + 2 aset
+        r1 = rows[1]
+        assert r1[0] == "3.01" and r1[1] == "1" and r1[2] == "Mobil"
+        assert r1[3] == "Penggunaan Sementara"       # label jenis
+        assert r1[4] == "Keluar (satker sebagai asal)"  # label arah
+        assert r1[7] == "Berjalan"                    # label status
+        assert r1[8] == "20 hari lagi (perpanjang)"   # status_tenggat ≤90
+        assert rows[2][1] == "2"                       # aset kedua
+        # Tiket tanpa aset → tetap satu baris (kolom aset kosong); non-berjalan
+        # → status_tenggat kosong; jenis tak dikenal → apa adanya
+        kosong = baris_csv_proses([{"jenis_proses": "zz", "status": "draf"}],
+                                  "2026-07-12")[1]
+        assert kosong[0] == "" and kosong[3] == "zz" and kosong[8] == ""
+
 
 class TestProsesJenisBaru:
     def test_jenis_baru(self):
