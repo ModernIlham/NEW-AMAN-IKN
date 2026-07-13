@@ -278,8 +278,10 @@ const AssetMapFullView = memo(function AssetMapFullView({
       g.count += 1;
       byKey.set(key, g);
     }
+    // Tampilkan SEMUA kelompok terdeteksi (tak dibatasi) — daftar bisa digulir.
+    // Dulu di-`slice(0, 100)` sehingga kelompok terbanyak-ke-101 dst. tak muncul.
     return Array.from(byKey.values()).filter((g) => g.count >= 2)
-      .sort((a, b) => b.count - a.count).slice(0, 100);
+      .sort((a, b) => b.count - a.count);
   }, [rows]);
 
   // Baris yang tampil = baris peta, disaring: seleksi (bila ada) lalu kelompok
@@ -650,17 +652,23 @@ const AssetMapFullView = memo(function AssetMapFullView({
               <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-64">
+          <DropdownMenuContent align="end" className="w-72">
             {groups.length > 0 && (
               <>
                 <DropdownMenuLabel className="text-[11px] flex items-center gap-1.5">
-                  <Layers className="w-3.5 h-3.5 text-violet-500" />Barang Serupa
+                  <Layers className="w-3.5 h-3.5 text-violet-500" />Barang Serupa ({groups.length} jenis)
                 </DropdownMenuLabel>
-                <div className="max-h-52 overflow-y-auto">
+                <div className="max-h-60 overflow-y-auto">
                   <DropdownMenuRadioGroup value={groupKey} onValueChange={changeGroup}>
-                    <DropdownMenuRadioItem className="min-h-[42px]" value="__semua__" data-testid="map-menu-group-all">Semua barang</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem className="min-h-[42px] border-b border-border/60" value="__semua__" data-testid="map-menu-group-all">Semua barang</DropdownMenuRadioItem>
                     {groups.map((g) => (
-                      <DropdownMenuRadioItem className="min-h-[42px]" key={g.key} value={g.key}>{g.name} · {g.count} unit</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem className="min-h-[42px] border-b border-border/40 last:border-b-0" key={g.key} value={g.key}>
+                        <span className="flex items-center gap-2 w-full">
+                          <span className="font-mono text-[10px] text-muted-foreground shrink-0">{g.code}</span>
+                          <span className="flex-1 truncate">{g.name}</span>
+                          <span className="text-[10px] font-semibold text-violet-600 dark:text-violet-400 shrink-0">{g.count} unit</span>
+                        </span>
+                      </DropdownMenuRadioItem>
                     ))}
                   </DropdownMenuRadioGroup>
                 </div>
@@ -705,10 +713,16 @@ const AssetMapFullView = memo(function AssetMapFullView({
               <Layers className="w-3.5 h-3.5 text-violet-500 flex-shrink-0" />
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="max-h-72">
-              <SelectItem value="__semua__">Semua barang</SelectItem>
+            <SelectContent className="max-h-80 min-w-[280px]">
+              <SelectItem value="__semua__" className="border-b border-border/60">Semua barang ({groups.length} jenis)</SelectItem>
               {groups.map((g) => (
-                <SelectItem key={g.key} value={g.key}>{g.name} · {g.count} unit</SelectItem>
+                <SelectItem key={g.key} value={g.key} className="border-b border-border/40 last:border-b-0">
+                  <span className="flex items-center gap-2 w-full">
+                    <span className="font-mono text-[10px] text-muted-foreground shrink-0">{g.code}</span>
+                    <span className="flex-1 truncate">{g.name}</span>
+                    <span className="text-[10px] font-semibold text-violet-600 dark:text-violet-400 shrink-0">{g.count} unit</span>
+                  </span>
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
