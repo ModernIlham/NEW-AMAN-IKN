@@ -151,6 +151,40 @@ def rekap_kasus(items) -> dict:
             "per_status": per_status, "per_kategori": per_kategori}
 
 
+HEADER_CSV_KASUS = [
+    "kode_aset", "nup", "nama_aset", "lokasi", "kategori", "status",
+    "uraian", "pihak_lawan", "nomor_perkara", "pendamping",
+    "tanggal_dibuat", "tanggal_perbarui", "dibuat_oleh",
+]
+
+
+def baris_csv_kasus(kasus_list) -> list:
+    """Susun baris CSV register kasus BMN bermasalah: [header, *data] — murni.
+
+    Kategori & status diterjemahkan ke label; tanggal dipangkas ke bagian
+    tanggal (YYYY-MM-DD). Tanpa Mongo/IO agar teruji unit (pola ekspor
+    #158).
+    """
+    baris = [list(HEADER_CSV_KASUS)]
+    for k in kasus_list or []:
+        baris.append([
+            k.get("asset_code") or "",
+            k.get("NUP") or "",
+            k.get("asset_name") or "",
+            k.get("lokasi") or "",
+            KATEGORI_KASUS.get(k.get("kategori"), k.get("kategori") or ""),
+            STATUS_KASUS.get(k.get("status"), k.get("status") or ""),
+            k.get("uraian") or "",
+            k.get("pihak_lawan") or "",
+            k.get("nomor_perkara") or "",
+            k.get("pendamping") or "",
+            str(k.get("created_at") or "")[:10],
+            str(k.get("updated_at") or "")[:10],
+            k.get("created_by") or "",
+        ])
+    return baris
+
+
 # ---------------------------------------------------------------------------
 # Arsip dokumen kepemilikan per aset (pustaka §11.3) — PP 27/2014 Ps. 43:
 # dokumen tanah/bangunan disimpan Pengelola Barang (KPKNL), selain itu oleh

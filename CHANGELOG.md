@@ -48,6 +48,19 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#213] Ekspor CSV register kasus BMN bermasalah (Pengamanan) — 2026-07-13
+
+- **Ekspor CSV** register kasus/sengketa BMN bermasalah (`GET
+  /pengamanan/kasus/export`), melengkapi pola ekspor register di modul
+  Pengamanan (setelah polis #205). Kolom: identitas aset (kode/NUP/nama/
+  lokasi), kategori (label: dikuasai pihak lain / tumpang tindih
+  sertipikat / berperkara), status (label: identifikasi → mediasi →
+  blokir → litigasi → selesai), uraian, pihak lawan, nomor perkara,
+  pendamping, tanggal dibuat & diperbarui, pembuat. Helper murni
+  `baris_csv_kasus` (tanpa Mongo, teruji unit) + tombol unduh CSV di
+  panel "Register BMN Bermasalah" (muncul saat ada kasus). Baca-saja,
+  bahan laporan wasdal/CaLBMN. Unit test +1 → 275 passed.
+
 ## [#212] Ekspor CSV register tiket BMN idle (Penggunaan) — 2026-07-13
 
 - **Ekspor CSV** register tiket penanganan BMN idle (`GET

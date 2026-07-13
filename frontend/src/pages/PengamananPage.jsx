@@ -437,6 +437,13 @@ export default function PengamananPage({ user, onBack }) {
                     {kasus.ringkasan.aktif} aktif
                   </span>
                 )}
+                {(kasus?.items || []).length > 0 && (
+                  <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
+                    onClick={() => downloadFileWithProgress(`${API}/pengamanan/kasus/export`, "register_kasus_bmn.csv", { label: "Ekspor Register BMN Bermasalah (CSV)" }).catch(() => {})}
+                    data-testid="pengamanan-kasus-export">
+                    <Download className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">CSV</span>
+                  </Button>
+                )}
                 <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
                   onClick={() => { setCari(""); setHasilCari([]); setFormKasus({ data: { kategori: "dikuasai_pihak_lain", uraian: "", pihak_lawan: "", nomor_perkara: "", pendamping: "" }, aset: null, saving: false }); }}
                   data-testid="pengamanan-kasus-tambah">
