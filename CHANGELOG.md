@@ -48,6 +48,19 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#260] Konsolidasi §5A: ringkasan status integrasi siklus BMN — 2026-07-13
+
+- **Dokumentasi (masterplan §5A).** Menambah ringkasan status integrasi yang
+  ringkas di atas daftar gap: menandai yang **TUNTAS** (proyeksi hilir Prinsip 3
+  #234/#254/#255/#256; gap #1 double-count; rantai FK+snapshot Perencanaan →
+  Penganggaran → Pengadaan → Aset/Persediaan #199/#257/#258/#259 — simpul Dokumen
+  Sumber Prinsip 4) dan yang **TERSISA** sebagai fitur lebih besar (dasar
+  penyusutan nilai wajar; OCC/approval Prinsip 5; kodefikasi FK Prinsip 2;
+  segarkan snapshot identitas Prinsip 1; proyeksi BA Pemusnahan; auto-daftar
+  aset dari perolehan). Hanya dokumentasi — tanpa perubahan kode.
+
+---
+
 ## [#259] Persediaan masuk bisa tertaut perolehan Pengadaan (`perolehan_id`) — 2026-07-13
 
 - **Integrasi §5A gap #2 / Prinsip 4 (Dokumen Sumber untuk persediaan).**

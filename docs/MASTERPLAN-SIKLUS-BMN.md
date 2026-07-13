@@ -191,6 +191,28 @@ Audit lintas-modul terhadap 5 prinsip Bab 5. Kepatuhan saat ini:
 | 4. Dokumen sumber = simpul | ❌ Belum ada | `dokumen_sumber_id` 0 kecocokan; dokumen diketik ulang per modul |
 | 5. Approval = gerbang, OCC fondasi | ❌ Melanggar | `pending_changes` 0; OCC penuh hanya di `assets.py`; modul lain cek peran saja |
 
+**Ringkasan status integrasi (per 2026-07):** rangkaian PR kecil menutup gap
+berdampak-tertinggi lebih dulu.
+
+- ✅ **TUNTAS — Prinsip 3 (transaksi hilir → master):** Penghapusan proyeksi
+  `dihapus` saat SK terbit (#234); Revaluasi proyeksi `nilai_wajar_terakhir`
+  (#254) & laporan POSISI/NILAI memakainya lewat `nilai_buku_aset` (#255);
+  Pemindahtanganan *selesai* proyeksi `dihapus` (#256). Semua *reuse* mesin
+  laporan hilir (penyaringan posisi #248/#249 + tombstone mutasi LBKP #253).
+- ✅ **TUNTAS — gap #1 double-count** aset dihapus di seluruh laporan
+  posisi/nilai + mutasi (#248/#249/#253).
+- ✅ **TUNTAS — rantai perencanaan→pengadaan (FK + snapshot):** Perencanaan
+  (RKBMN) → Penganggaran `rkbmn_id` (#257); Pengadaan → Penganggaran `penganggaran_id`
+  (#199); Pengadaan → Aset dua arah `perolehan_id` (#258); Persediaan masuk →
+  Perolehan `perolehan_id` (#259) — **simpul Dokumen Sumber (Prinsip 4)** kini
+  dirujuk aset & persediaan.
+- ⏳ **TERSISA (fitur lebih besar, perlu desain khusus):** dasar **penyusutan**
+  memakai nilai wajar (revaluasi mengganti basis + sisa masa manfaat per PSAP);
+  **OCC/approval** seragam `pending_changes` (Prinsip 5); **kodefikasi** sebagai
+  FK tervalidasi (Prinsip 2); **segarkan snapshot identitas** aset basi (Prinsip
+  1); proyeksi master dari **BA Pemusnahan** final; auto-daftar draft aset dari
+  perolehan.
+
 **Daftar gap (dampak tertinggi → rendah), untuk ditutup bertahap per PR kecil:**
 
 1. **Master tak diproyeksikan dari transaksi hilir** (Prinsip 3) — aset yang
