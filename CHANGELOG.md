@@ -48,6 +48,20 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#226] Kamera lapangan: info aset per-baris (nama/kategori/kode+NUP/lokasi) — 2026-07-13
+
+- **Overlay info aset di kamera dipecah per-baris.** Sebelumnya nama, kode,
+  NUP, dan lokasi ditumpuk dalam **satu baris** yang langsung terpotong
+  (`truncate`) — kategori bahkan tak tampil. Kini tiap informasi punya
+  **barisnya sendiri**: **nama barang**, **kategori**, **kode barang · NUP**,
+  dan **lokasi**. Teks yang tak muat pada satu baris boleh **turun ke baris
+  ke-2**, dan baru dipotong "…" bila masih melebihi (dua baris per field,
+  `line-clamp-2`). Berlaku di kamera lapangan untuk **tambah aset baru**
+  maupun **koreksi cepat via scan QR** (komponen `FullCameraSheet` dipakai
+  bersama). Baris kosong disembunyikan agar tetap ringkas.
+
+---
+
 ## [#225] Perbaikan bug inventarisasi: notifikasi konflik berulang + kedip/loading foto popup peta — 2026-07-13
 
 - **Notifikasi "Aset telah diubah oleh pengguna lain" tak lagi muncul
