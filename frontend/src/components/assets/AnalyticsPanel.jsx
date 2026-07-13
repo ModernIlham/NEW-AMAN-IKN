@@ -90,7 +90,7 @@ const ChartCard = memo(({ title, children }) => (
 ));
 ChartCard.displayName = "ChartCard";
 
-const AnalyticsPanel = memo(({ activityId, isOpen, onToggle, panelHeight, onDragStart }) => {
+const AnalyticsPanel = memo(({ activityId, isOpen, onToggle, panelHeight, onDragStart, embedded = false }) => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -119,6 +119,119 @@ const AnalyticsPanel = memo(({ activityId, isOpen, onToggle, panelHeight, onDrag
     data.by_condition?.length > 0 ||
     data.by_status?.length > 0
   );
+
+  const chartsContent = (
+    loading && !data ? (
+      <div className="flex items-center justify-center py-8">
+        <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <span className="ml-2 text-xs text-muted-foreground">Memuat analytics...</span>
+      </div>
+    ) : !hasData ? (
+      <div className="text-center py-6 text-muted-foreground text-xs">Tidak ada data untuk ditampilkan</div>
+    ) : (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 p-1">
+        {/* 1. Distribusi per Kategori - Donut */}
+        {data.by_category?.length > 0 && (
+          <ChartCard title="Distribusi per Kategori">
+            <ResponsiveContainer width="100%" height={180}>
+              <PieChart>
+                <Pie
+                  data={data.by_category.slice(0, 8)}
+                  cx="50%" cy="50%"
+                  innerRadius={35} outerRadius={70}
+                  dataKey="count"
+                  nameKey="name"
+                  labelLine={false}
+                  label={PieLabel}
+                  stroke="none"
+                >
+                  {data.by_category.slice(0, 8).map((_, i) => (
+                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip content={<CustomTooltip />} />
+                <Legend
+                  layout="vertical" align="right" verticalAlign="middle"
+                  iconSize={8} iconType="circle"
+                  formatter={(v) => <span className="text-[10px] text-muted-foreground">{v.length > 12 ? v.slice(0, 12) + '...' : v}</span>}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </ChartCard>
+        )}
+
+        {/* 2. Distribusi per Kondisi - Bar */}
+        {data.by_condition?.length > 0 && (
+          <ChartCard title="Distribusi per Kondisi">
+            <DarkAwareBarChart data={data.by_condition} layout="vertical">
+              <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                {data.by_condition.map((_, i) => (
+                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                ))}
+              </Bar>
+            </DarkAwareBarChart>
+          </ChartCard>
+        )}
+
+        {/* 3. Distribusi per Status - Bar */}
+        {data.by_status?.length > 0 && (
+          <ChartCard title="Distribusi per Status">
+            <DarkAwareBarChart data={data.by_status} layout="vertical">
+              <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                {data.by_status.map((_, i) => (
+                  <Cell key={i} fill={COLORS[(i + 3) % COLORS.length]} />
+                ))}
+              </Bar>
+            </DarkAwareBarChart>
+          </ChartCard>
+        )}
+
+        {/* 4. Top 10 Lokasi - Horizontal Bar */}
+        {data.by_location?.length > 0 && (
+          <ChartCard title="Top 10 Lokasi">
+            <DarkAwareBarChart data={data.by_location} layout="vertical" yWidth={90}>
+              <Bar dataKey="count" fill="#3b82f6" radius={[0, 4, 4, 0]} />
+            </DarkAwareBarChart>
+          </ChartCard>
+        )}
+
+        {/* 5. Nilai Aset per Kategori - Bar */}
+        {data.by_category?.length > 0 && (
+          <ChartCard title="Nilai Aset per Kategori (Rp)">
+            <DarkAwareBarChart data={data.by_category.slice(0, 8)} layout="horizontal" isValue>
+              <Bar dataKey="value" fill="#10b981" radius={[4, 4, 0, 0]}>
+                {data.by_category.slice(0, 8).map((_, i) => (
+                  <Cell key={i} fill={COLORS[(i + 5) % COLORS.length]} />
+                ))}
+              </Bar>
+            </DarkAwareBarChart>
+          </ChartCard>
+        )}
+      </div>
+    )
+  );
+
+  // Mode embedded: header sudah jadi segmen di kontrol gabungan; render isi +
+  // pegangan geser tinggi di bagian bawah kartu.
+  if (embedded) {
+    if (!isOpen) return null;
+    return (
+      <div className="print:hidden select-none mt-1.5 bg-card border border-border rounded-xl shadow-sm overflow-hidden" data-testid="analytics-panel-wrapper">
+        <div className="overflow-y-auto overflow-x-hidden" style={{ height: panelHeight }} data-testid="analytics-content">
+          {chartsContent}
+        </div>
+        <div
+          className="flex items-center justify-center py-1 border-t border-border cursor-ns-resize hover:bg-muted touch-none"
+          onMouseDown={onDragStart}
+          onTouchStart={onDragStart}
+          data-testid="analytics-drag-handle"
+          title="Geser untuk mengubah tinggi"
+        >
+          <GripHorizontal className="w-4 h-4 text-muted-foreground" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="print:hidden select-none" data-testid="analytics-panel-wrapper">
@@ -159,94 +272,7 @@ const AnalyticsPanel = memo(({ activityId, isOpen, onToggle, panelHeight, onDrag
           style={{ height: panelHeight }}
           data-testid="analytics-content"
         >
-          {loading && !data ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-              <span className="ml-2 text-xs text-muted-foreground">Memuat analytics...</span>
-            </div>
-          ) : !hasData ? (
-            <div className="text-center py-6 text-muted-foreground text-xs">Tidak ada data untuk ditampilkan</div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 p-1">
-              {/* 1. Distribusi per Kategori - Donut */}
-              {data.by_category?.length > 0 && (
-                <ChartCard title="Distribusi per Kategori">
-                  <ResponsiveContainer width="100%" height={180}>
-                    <PieChart>
-                      <Pie
-                        data={data.by_category.slice(0, 8)}
-                        cx="50%" cy="50%"
-                        innerRadius={35} outerRadius={70}
-                        dataKey="count"
-                        nameKey="name"
-                        labelLine={false}
-                        label={PieLabel}
-                        stroke="none"
-                      >
-                        {data.by_category.slice(0, 8).map((_, i) => (
-                          <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip content={<CustomTooltip />} />
-                      <Legend
-                        layout="vertical" align="right" verticalAlign="middle"
-                        iconSize={8} iconType="circle"
-                        formatter={(v) => <span className="text-[10px] text-muted-foreground">{v.length > 12 ? v.slice(0, 12) + '...' : v}</span>}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </ChartCard>
-              )}
-
-              {/* 2. Distribusi per Kondisi - Bar */}
-              {data.by_condition?.length > 0 && (
-                <ChartCard title="Distribusi per Kondisi">
-                  <DarkAwareBarChart data={data.by_condition} layout="vertical">
-                    <Bar dataKey="count" radius={[0, 4, 4, 0]}>
-                      {data.by_condition.map((_, i) => (
-                        <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                      ))}
-                    </Bar>
-                  </DarkAwareBarChart>
-                </ChartCard>
-              )}
-
-              {/* 3. Distribusi per Status - Bar */}
-              {data.by_status?.length > 0 && (
-                <ChartCard title="Distribusi per Status">
-                  <DarkAwareBarChart data={data.by_status} layout="vertical">
-                    <Bar dataKey="count" radius={[0, 4, 4, 0]}>
-                      {data.by_status.map((_, i) => (
-                        <Cell key={i} fill={COLORS[(i + 3) % COLORS.length]} />
-                      ))}
-                    </Bar>
-                  </DarkAwareBarChart>
-                </ChartCard>
-              )}
-
-              {/* 4. Top 10 Lokasi - Horizontal Bar */}
-              {data.by_location?.length > 0 && (
-                <ChartCard title="Top 10 Lokasi">
-                  <DarkAwareBarChart data={data.by_location} layout="vertical" yWidth={90}>
-                    <Bar dataKey="count" fill="#3b82f6" radius={[0, 4, 4, 0]} />
-                  </DarkAwareBarChart>
-                </ChartCard>
-              )}
-
-              {/* 5. Nilai Aset per Kategori - Bar */}
-              {data.by_category?.length > 0 && (
-                <ChartCard title="Nilai Aset per Kategori (Rp)">
-                  <DarkAwareBarChart data={data.by_category.slice(0, 8)} layout="horizontal" isValue>
-                    <Bar dataKey="value" fill="#10b981" radius={[4, 4, 0, 0]}>
-                      {data.by_category.slice(0, 8).map((_, i) => (
-                        <Cell key={i} fill={COLORS[(i + 5) % COLORS.length]} />
-                      ))}
-                    </Bar>
-                  </DarkAwareBarChart>
-                </ChartCard>
-              )}
-            </div>
-          )}
+          {chartsContent}
         </div>
       )}
     </div>

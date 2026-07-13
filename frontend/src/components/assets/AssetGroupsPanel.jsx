@@ -39,7 +39,7 @@ const INV_COLORS = {
   "Sengketa": "text-rose-600 dark:text-rose-400",
 };
 
-const AssetGroupsPanel = memo(({ activityId, isOpen, onToggle, onBatchEdit }) => {
+const AssetGroupsPanel = memo(({ activityId, isOpen, onToggle, onBatchEdit, embedded = false, onCount }) => {
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(false);
   const [expandedGroup, setExpandedGroup] = useState(null);
@@ -48,10 +48,10 @@ const AssetGroupsPanel = memo(({ activityId, isOpen, onToggle, onBatchEdit }) =>
     if (!activityId || !isOpen) return;
     setLoading(true);
     axios.get(`${API}/assets/groups`, { params: { activity_id: activityId } })
-      .then(res => setGroups(res.data.groups || []))
+      .then(res => { const g = res.data.groups || []; setGroups(g); onCount?.(g.length); })
       .catch(() => setGroups([]))
       .finally(() => setLoading(false));
-  }, [activityId, isOpen]);
+  }, [activityId, isOpen, onCount]);
 
   const formatPrice = (price) => {
     if (!price) return '-';
@@ -65,24 +65,7 @@ const AssetGroupsPanel = memo(({ activityId, isOpen, onToggle, onBatchEdit }) =>
     }
   }, [onBatchEdit]);
 
-  return (
-    <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="asset-groups-panel">
-      <button
-        onClick={onToggle}
-        className="min-h-0 min-w-0 w-full flex items-center justify-between px-3 py-2 bg-gradient-to-r from-violet-50 to-purple-50 hover:from-violet-100 hover:to-purple-100 dark:from-violet-900/30 dark:to-purple-900/30 dark:hover:from-violet-900/50 dark:hover:to-purple-900/50 transition-colors"
-        data-testid="asset-groups-toggle"
-      >
-        <div className="flex items-center gap-2 min-w-0">
-          <Layers className="w-4 h-4 text-violet-600 flex-shrink-0" />
-          <span className="text-sm font-semibold text-violet-800 dark:text-violet-300">Barang Serupa</span>
-          {groups.length > 0 && (
-            <span className="text-[10px] bg-violet-200 dark:bg-violet-800/50 text-violet-700 dark:text-violet-300 px-1.5 py-0.5 rounded-full font-medium">{groups.length} grup</span>
-          )}
-        </div>
-        {isOpen ? <ChevronDown className="w-4 h-4 text-violet-500 dark:text-violet-400 flex-shrink-0" /> : <ChevronRight className="w-4 h-4 text-violet-500 dark:text-violet-400 flex-shrink-0" />}
-      </button>
-
-      {isOpen && (
+  const list = (
         <div className="max-h-[400px] overflow-y-auto">
           {loading ? (
             <div className="p-4 text-center text-sm text-muted-foreground">Memuat data grup...</div>
@@ -210,7 +193,35 @@ const AssetGroupsPanel = memo(({ activityId, isOpen, onToggle, onBatchEdit }) =>
             </div>
           )}
         </div>
-      )}
+  );
+
+  // Mode embedded: hanya render isi (header sudah jadi segmen di kontrol gabungan).
+  if (embedded) {
+    if (!isOpen) return null;
+    return (
+      <div className="mt-1.5 bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="asset-groups-panel">
+        {list}
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="asset-groups-panel">
+      <button
+        onClick={onToggle}
+        className="min-h-0 min-w-0 w-full flex items-center justify-between px-3 py-2 bg-gradient-to-r from-violet-50 to-purple-50 hover:from-violet-100 hover:to-purple-100 dark:from-violet-900/30 dark:to-purple-900/30 dark:hover:from-violet-900/50 dark:hover:to-purple-900/50 transition-colors"
+        data-testid="asset-groups-toggle"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <Layers className="w-4 h-4 text-violet-600 flex-shrink-0" />
+          <span className="text-sm font-semibold text-violet-800 dark:text-violet-300">Barang Serupa</span>
+          {groups.length > 0 && (
+            <span className="text-[10px] bg-violet-200 dark:bg-violet-800/50 text-violet-700 dark:text-violet-300 px-1.5 py-0.5 rounded-full font-medium">{groups.length} grup</span>
+          )}
+        </div>
+        {isOpen ? <ChevronDown className="w-4 h-4 text-violet-500 dark:text-violet-400 flex-shrink-0" /> : <ChevronRight className="w-4 h-4 text-violet-500 dark:text-violet-400 flex-shrink-0" />}
+      </button>
+      {isOpen && list}
     </div>
   );
 });

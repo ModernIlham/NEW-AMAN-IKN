@@ -5,7 +5,7 @@
 // ============================================================================
 import React, { useState, useEffect, useRef, useMemo, useCallback, memo, useReducer, lazy, Suspense } from "react";
 import {
-  Package, Plus, X, ChevronDown, Loader2, Star,
+  Package, Plus, X, ChevronDown, ChevronUp, Loader2, Star,
   Users, PanelLeftClose, PanelLeftOpen, Lock,
   BarChart3, ClipboardList, Layers,
 } from "lucide-react";
@@ -55,6 +55,28 @@ import { useDragDropImport } from "@/hooks/useDragDropImport";
 import { useBackGuard } from "@/hooks/useBackGuard";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+
+// Satu segmen dari kontrol gabungan (Analytics/Rekapitulasi/Barang Serupa).
+// Tiga segmen berbagi satu kartu ber-divider → tampil sebagai satu kesatuan
+// desain menyamping (bukan tiga tombol/kartu terpisah), hemat ruang di semua
+// viewport dan memperlebar area data.
+function PanelSegment({ active, onClick, testid, icon: Icon, label, badge, activeCls, iconCls }) {
+  return (
+    <button
+      type="button" onClick={onClick} data-testid={testid} aria-pressed={active}
+      className={`flex-1 min-w-0 flex items-center justify-center gap-1.5 px-2 py-2 text-[11px] sm:text-xs font-semibold transition-colors ${active ? activeCls : "text-foreground hover:bg-muted"}`}
+    >
+      <Icon className={`w-3.5 h-3.5 flex-shrink-0 ${active ? "" : iconCls}`} />
+      <span className="truncate">{label}</span>
+      {badge != null && (
+        <span className={`text-[9px] leading-none px-1.5 py-0.5 rounded-full font-medium flex-shrink-0 ${active ? "bg-white/25 text-white" : "bg-muted text-muted-foreground"}`}>{badge}</span>
+      )}
+      {active
+        ? <ChevronUp className="w-3.5 h-3.5 flex-shrink-0" />
+        : <ChevronDown className="w-3.5 h-3.5 flex-shrink-0 opacity-60" />}
+    </button>
+  );
+}
 
 // ============================================================================
 // OFFLINE READ PATH — client-side filter/sort over the local snapshot.
@@ -234,6 +256,10 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   const dragStartHeight = useRef(0);
   const [inventoryMode, setInventoryMode] = useState(false);
   const [groupsOpen, setGroupsOpen] = useState(false);
+  // Hitungan dilaporkan panel (saat pertama dibuka) → tampil sebagai badge di
+  // kontrol segmented gabungan meski panel tertutup.
+  const [rekapTotal, setRekapTotal] = useState(null);
+  const [groupsCount, setGroupsCount] = useState(null);
   const [mapOpen, setMapOpen] = useState(false);
   const [viewMode, setViewMode] = useState('list');
   const viewModeRef = useRef(viewMode);
@@ -1498,32 +1524,35 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
               refreshData={refreshData} viewMode={viewMode} setViewMode={setViewMode}
             />
 
-            {/* HP: tiga header panel bertumpuk memakan ~150px sebelum baris data.
-                Diringkas jadi SATU baris chip; panel dirender hanya saat dibuka.
-                Desktop (lg) tetap seperti semula (header panel selalu tampil). */}
+            {/* Tiga panel (Analytics/Rekapitulasi/Barang Serupa) disatukan jadi
+                SATU kontrol segmented menyamping di semua viewport — hemat ruang
+                (dulu tiga bar bertumpuk ~120px) & memperlebar area data. Isi
+                panel dirender di bawah baris ini saat segmennya aktif. */}
             {!mapOpen && (
-            <div className="lg:hidden flex items-center gap-1.5 overflow-x-auto" data-testid="mobile-panel-chips">
+            <div className="flex items-stretch rounded-xl border border-border bg-card shadow-sm overflow-hidden divide-x divide-border" data-testid="panel-segmented">
               {!inventoryMode && (
-                <button type="button" onClick={handleAnalyticsToggle} data-testid="chip-analytics"
-                  className={`h-8 px-2.5 rounded-full text-[11px] font-semibold flex items-center gap-1 flex-shrink-0 border transition-colors ${analyticsOpen ? "bg-blue-600 border-blue-600 text-white" : "bg-card border-border text-muted-foreground"}`}>
-                  <BarChart3 className="w-3.5 h-3.5" />Analytics
-                </button>
+                <PanelSegment
+                  active={analyticsOpen} onClick={handleAnalyticsToggle} testid="chip-analytics"
+                  icon={BarChart3} label="Analytics"
+                  activeCls="bg-blue-600 text-white" iconCls="text-blue-600" />
               )}
               {!inventoryMode && (
-                <button type="button" onClick={() => setRekapOpen(p => !p)} data-testid="chip-rekap"
-                  className={`h-8 px-2.5 rounded-full text-[11px] font-semibold flex items-center gap-1 flex-shrink-0 border transition-colors ${rekapOpen ? "bg-blue-600 border-blue-600 text-white" : "bg-card border-border text-muted-foreground"}`}>
-                  <ClipboardList className="w-3.5 h-3.5" />Rekapitulasi
-                </button>
+                <PanelSegment
+                  active={rekapOpen} onClick={() => setRekapOpen(p => !p)} testid="chip-rekap"
+                  icon={ClipboardList} label="Rekapitulasi"
+                  badge={rekapTotal != null ? `${rekapTotal} BMN` : null}
+                  activeCls="bg-blue-600 text-white" iconCls="text-blue-600" />
               )}
-              <button type="button" onClick={() => setGroupsOpen(p => !p)} data-testid="chip-groups"
-                className={`h-8 px-2.5 rounded-full text-[11px] font-semibold flex items-center gap-1 flex-shrink-0 border transition-colors ${groupsOpen ? "bg-violet-600 border-violet-600 text-white" : "bg-card border-border text-muted-foreground"}`}>
-                <Layers className="w-3.5 h-3.5" />Barang Serupa
-              </button>
+              <PanelSegment
+                active={groupsOpen} onClick={() => setGroupsOpen(p => !p)} testid="chip-groups"
+                icon={Layers} label="Barang Serupa"
+                badge={groupsCount ? `${groupsCount} grup` : null}
+                activeCls="bg-violet-600 text-white" iconCls="text-violet-600" />
             </div>
             )}
-            {!inventoryMode && !mapOpen && <div className={analyticsOpen ? "" : "hidden lg:block"}><Suspense fallback={null}><AnalyticsPanel activityId={activity?.id} isOpen={analyticsOpen} onToggle={handleAnalyticsToggle} panelHeight={analyticsPanelHeight} onDragStart={handleAnalyticsDragStart} /></Suspense></div>}
-            {!inventoryMode && !mapOpen && <div className={rekapOpen ? "" : "hidden lg:block"}><Suspense fallback={null}><RekapitulasiPanel activityId={activity?.id} isOpen={rekapOpen} onToggle={() => setRekapOpen(p => !p)} /></Suspense></div>}
-            {!mapOpen && <div className={groupsOpen ? "" : "hidden lg:block"}><Suspense fallback={null}><AssetGroupsPanel activityId={activity?.id} isOpen={groupsOpen} onToggle={() => setGroupsOpen(p => !p)} onBatchEdit={perms.canEdit ? handleGroupBatchEdit : undefined} /></Suspense></div>}
+            {!inventoryMode && !mapOpen && analyticsOpen && <Suspense fallback={null}><AnalyticsPanel embedded activityId={activity?.id} isOpen={analyticsOpen} onToggle={handleAnalyticsToggle} panelHeight={analyticsPanelHeight} onDragStart={handleAnalyticsDragStart} /></Suspense>}
+            {!inventoryMode && !mapOpen && rekapOpen && <Suspense fallback={null}><RekapitulasiPanel embedded activityId={activity?.id} isOpen={rekapOpen} onToggle={() => setRekapOpen(p => !p)} onTotal={setRekapTotal} /></Suspense>}
+            {!mapOpen && groupsOpen && <Suspense fallback={null}><AssetGroupsPanel embedded activityId={activity?.id} isOpen={groupsOpen} onToggle={() => setGroupsOpen(p => !p)} onCount={setGroupsCount} onBatchEdit={perms.canEdit ? handleGroupBatchEdit : undefined} /></Suspense>}
 
             {mapOpen ? (
               <Suspense fallback={<div className="py-16 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto text-teal-600" /></div>}>
