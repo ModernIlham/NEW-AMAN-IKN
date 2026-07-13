@@ -48,6 +48,24 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#248] Laporan posisi/nilai: kecualikan aset yang sudah DIHAPUS (stop double-count) — 2026-07-13
+
+- **Integrasi §5A Prinsip 3 (lanjutan #234/#200).** Saat SK penghapusan terbit,
+  master aset ditandai `dihapus=True`. Kini laporan **POSISI/NILAI** —
+  **DBKP**, **Posisi BMN di Neraca**, dan **rekap penyusutan** (Penilaian) —
+  **mengecualikan** aset `dihapus` sehingga nilai BMN tidak lagi *double-count*
+  (aset yang sudah dihapus tak lagi dihitung sebagai milik).
+- Helper bersama `active_asset_filter(base)` (`backend/report_filters.py`,
+  +5 unit test): menggabungkan `{"dihapus": {"$ne": True}}` ke query — cocok
+  untuk aset lama (tanpa field) & `dihapus=False`, hanya menyingkirkan
+  `dihapus=True`. SATU sumber agar tidak drift antar-laporan.
+- **Sengaja di-scope:** laporan **MUTASI** (LBKP/CaLBMN) BELUM diubah — di sana
+  penghapusan harus tampil sebagai **baris pengurangan** agar saldo
+  awal−mutasi=akhir tetap seimbang (langkah terpisah). Register & jejak audit
+  penghapusan tetap utuh. Masterplan §5A diperbarui.
+
+---
+
 ## [#247] Ubah Massal: tata letak ringkas & terkategori (per seksi) — 2026-07-13
 
 - **Panel Ubah Massal ditata ulang jadi berkategori & padat** (permintaan
