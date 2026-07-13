@@ -2207,7 +2207,11 @@ const AssetForm = memo(({
                         )}
                       </Label>
                     </div>
-                    <Button type="button" variant="ghost" size="sm" onClick={fetchGPS} disabled={gpsLoading} className="h-5 px-1.5 text-[10px] text-blue-600 hover:text-blue-700" data-testid="refresh-gps-btn">
+                    <Button type="button" variant="ghost" size="sm" onClick={fetchGPS} disabled={gpsLoading}
+                      className={`h-5 px-1.5 text-[10px] font-medium disabled:opacity-100 ${gpsLoading
+                        ? "text-amber-600 dark:text-amber-400"
+                        : "text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"}`}
+                      data-testid="refresh-gps-btn">
                       {gpsLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <LocateFixed className="w-3 h-3" />}
                       <span className="ml-0.5">{gpsLoading ? 'Mencari...' : 'Ambil GPS'}</span>
                     </Button>
