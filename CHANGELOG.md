@@ -48,6 +48,19 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#219] Ekspor CSV register SK PSP (Penggunaan) — 2026-07-13
+
+- **Ekspor CSV** register SK penetapan status penggunaan (`GET
+  /penggunaan/psp/export`) — melengkapi ekspor Penggunaan (kini idle #212,
+  proses #218, **SK PSP** semua ber-CSV). SK **multi-aset di-flatten**: satu
+  baris per aset (field SK diulang). Kolom: identitas aset, nomor & tanggal
+  SK, jenis (label: PSP / alih status / sementara / pihak lain / bersama),
+  penetap, status pengajuan (label: Draf Usulan / Diajukan / Ditetapkan /
+  Ditolak — record lama tanpa status = Ditetapkan), jumlah lampiran,
+  keterangan, pembuat. Helper murni `baris_csv_psp` (tanpa Mongo, teruji
+  unit) + tombol unduh CSV di panel "Penetapan Status Penggunaan" (muncul
+  saat ada SK). Baca-saja. Unit test +1 → 282 passed. Dasar PMK 40/2024.
+
 ## [#218] Ekspor CSV register proses penggunaan (Penggunaan) — 2026-07-13
 
 - **Ekspor CSV** register proses penggunaan (`GET
