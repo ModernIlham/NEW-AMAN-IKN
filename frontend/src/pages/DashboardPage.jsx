@@ -236,6 +236,8 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   const [groupsOpen, setGroupsOpen] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
   const [viewMode, setViewMode] = useState('list');
+  const viewModeRef = useRef(viewMode);
+  viewModeRef.current = viewMode;
   const [auditOpen, setAuditOpen] = useState(false);
   const [auditAssetId, setAuditAssetId] = useState("");
   const [auditAssetCode, setAuditAssetCode] = useState("");
@@ -644,9 +646,13 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       }
       setOfflineServed(false); // live data on screen again
       setLoadingMessage(`Berhasil memuat ${newItems.length} dari ${r.data.total || 0} aset`);
+      // Kembalikan baris halaman ini agar pemanggil (goToPage → alur simpan-
+      // lanjut lintas halaman mode list/tabel) bisa membuka aset pertamanya.
+      return merged;
     } catch {
       // Network failed (offline / server unreachable) → fall back to snapshot
       const served = await serveFromSnapshot(page, size, search, category, sort, appendMobile);
+      if (served) return Array.isArray(served) ? served : null;
       if (!served) {
         const meta = await snapshotMeta(activity?.id);
         if (isSnapshotExpired(meta)) {
@@ -838,9 +844,12 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     const np = Math.max(1, Math.min(p, totalPages));
     setPageLoading(true);
     setLoadingMessage(`Memuat halaman ${np} dari ${totalPages}...`);
-    await doFetch(np, pageSize, debouncedSearch, filterCategory, sortBy);
+    const items = await doFetch(np, pageSize, debouncedSearch, filterCategory, sortBy);
     setPageLoading(false);
+    return items;   // baris halaman baru (untuk alur simpan-lanjut mode list)
   };
+  const goToPageRef = useRef(goToPage);
+  goToPageRef.current = goToPage;
 
   const applyFilters = () => {
     setPageLoading(true);
@@ -1124,10 +1133,20 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     } else if (direction === 'next' && currentIndex !== -1 && mobileCurrentPage < totalPages) {
       // Di ujung daftar yang sudah dimuat tapi masih ada halaman berikutnya:
       // muat halaman berikutnya lalu buka aset PERTAMA-nya — ritme input
-      // lintas halaman tak terputus (galeri/kartu = infinite scroll; tabel
-      // = paginasi, mobileAssets di sana = halaman aktif). loadMoreMobile
-      // mengembalikan baris baru sehingga tak bergantung state async.
-      const fresh = await loadMoreMobileRef.current();
+      // lintas halaman tak terputus. Kedua loader mengembalikan baris baru
+      // (tak bergantung state async).
+      //  • Mode LIST + desktop (≥lg): tabel BERPAGINASI → geser HALAMAN tabel
+      //    via goToPage supaya tampilan tabel + kontrol paginasi ikut pindah
+      //    (bukan sekadar menambah baris tersembunyi yang bikin "page tak
+      //    berpindah").
+      //  • Galeri (semua) & kartu mobile (<lg): infinite scroll → loadMoreMobile
+      //    (append).
+      const isDesktopList = viewModeRef.current !== 'gallery'
+        && typeof window !== 'undefined'
+        && window.matchMedia('(min-width: 1024px)').matches;
+      const fresh = isDesktopList
+        ? await goToPageRef.current(currentPage + 1)
+        : await loadMoreMobileRef.current();
       const nextAsset = (fresh && fresh.length) ? fresh[0] : null;
       if (!nextAsset) {
         // Gagal memuat / halaman kosong (loadMoreMobile sudah beri tahu bila gagal)
@@ -1150,7 +1169,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       setEditAssetForForm(null);
       setIsSidebarOpen(false);
     }
-  }, [assets, mobileAssets, mobileCurrentPage, totalPages, lockAsset, unlockAsset, enqueueOptimistic, rowLocks, sessionId, activity?.id, setSearchInput]);
+  }, [assets, mobileAssets, mobileCurrentPage, currentPage, totalPages, lockAsset, unlockAsset, enqueueOptimistic, rowLocks, sessionId, activity?.id, setSearchInput]);
 
   // Mode Kamera Penuh — "tinjau aset tersimpan": simpan aset saat ini lalu muat
   // aset yang tersimpan sebelumnya (paling atas daftar) ke form untuk ditinjau/
@@ -1441,7 +1460,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
             </div>
           </div>
 
-          <div className="p-1.5 sm:p-4 space-y-1.5 sm:space-y-3">
+          <div className="p-1.5 sm:p-4 lg:p-3 space-y-1.5 sm:space-y-3 lg:space-y-2">
             {/* Banner kegiatan disahkan — seluruh data terkunci */}
             {sealed && (
               <div className="flex items-start gap-2.5 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-300 dark:border-emerald-700 rounded-xl px-3 py-2" data-testid="sealed-banner">
