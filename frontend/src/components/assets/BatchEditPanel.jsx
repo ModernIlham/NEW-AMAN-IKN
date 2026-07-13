@@ -131,6 +131,24 @@ function ClearableSelect({ value, onValueChange, children, placeholder, ...props
   );
 }
 
+// Seksi berkategori — header ringkas (ikon + judul kecil) + isi. Membuat panel
+// Ubah Massal terbaca BERKELOMPOK/terkategori & padat tanpa makan banyak ruang.
+// `right` = elemen aksi opsional (mis. tombol Hapus Semua) di kanan judul.
+function Section({ icon: Icon, title, right, children, first = false }) {
+  return (
+    <div className={first ? "" : "mt-2 pt-2 border-t border-blue-200 dark:border-blue-800"}>
+      <div className="flex items-center gap-1 mb-1">
+        <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-blue-700/80 dark:text-blue-300/80">
+          {Icon && <Icon className="w-3 h-3" />}
+          {title}
+        </div>
+        {right && <div className="ml-auto">{right}</div>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
 const BatchEditPanel = memo(function BatchEditPanel({
   selectedCount, categories, onApply, onClose, updating, activity, assets, selectedAssets,
   attached = false,
@@ -431,81 +449,90 @@ const BatchEditPanel = memo(function BatchEditPanel({
         </div>
       </div>
 
-      {/* Primary Fields */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-        {/* Kategori - with search */}
-        <div className="space-y-0.5">
-          <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Tag className="w-2.5 h-2.5" />Kategori</label>
-          <BatchCategorySelect categories={categories} value={updates.category} onChange={v => setField("category", v)} />
-        </div>
+      {/* ── Klasifikasi & Lokasi (selalu tampil) ── */}
+      <Section icon={Tag} title="Klasifikasi & Lokasi" first>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+          {/* Kategori - with search */}
+          <div className="space-y-0.5">
+            <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Tag className="w-2.5 h-2.5" />Kategori</label>
+            <BatchCategorySelect categories={categories} value={updates.category} onChange={v => setField("category", v)} />
+          </div>
 
-        {/* Lokasi */}
-        <div className="space-y-0.5">
-          <label className="text-[10px] text-muted-foreground flex items-center gap-1"><MapPin className="w-2.5 h-2.5" />Lokasi</label>
-          <ClearableInput placeholder="—" value={updates.location === "__clear__" ? "" : updates.location} isClear={updates.location === "__clear__"} onChange={e => setField("location", e.target.value)} onClear={() => toggleClearField("location")} />
-        </div>
+          {/* Lokasi */}
+          <div className="space-y-0.5">
+            <label className="text-[10px] text-muted-foreground flex items-center gap-1"><MapPin className="w-2.5 h-2.5" />Lokasi</label>
+            <ClearableInput placeholder="—" value={updates.location === "__clear__" ? "" : updates.location} isClear={updates.location === "__clear__"} onChange={e => setField("location", e.target.value)} onClear={() => toggleClearField("location")} />
+          </div>
 
-        {/* Eselon I */}
-        <div className="space-y-0.5">
-          <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Building2 className="w-2.5 h-2.5" />Eselon I</label>
-          <ClearableSelect value={updates.eselon1 || "__none__"} onValueChange={v => { setField("eselon1", v); if (v === "__clear__" || v === "__none__") setField("eselon2", undefined); }}>
-            {eselon1List.map(e => <SelectItem key={e.nama} value={e.nama}>{e.nama}</SelectItem>)}
-          </ClearableSelect>
-        </div>
+          {/* Eselon I */}
+          <div className="space-y-0.5">
+            <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Building2 className="w-2.5 h-2.5" />Eselon I</label>
+            <ClearableSelect value={updates.eselon1 || "__none__"} onValueChange={v => { setField("eselon1", v); if (v === "__clear__" || v === "__none__") setField("eselon2", undefined); }}>
+              {eselon1List.map(e => <SelectItem key={e.nama} value={e.nama}>{e.nama}</SelectItem>)}
+            </ClearableSelect>
+          </div>
 
-        {/* Eselon II */}
-        <div className="space-y-0.5">
-          <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Building2 className="w-2.5 h-2.5" />Eselon II</label>
-          <ClearableSelect value={updates.eselon2 || "__none__"} onValueChange={v => setField("eselon2", v)} disabled={!selectedEselon1 || selectedEselon1 === "__clear__" || eselon2List.length === 0} placeholder={selectedEselon1 && selectedEselon1 !== "__clear__" ? "—" : "Pilih Eselon I dulu"}>
-            {eselon2List.map(e2 => <SelectItem key={e2} value={e2}>{e2}</SelectItem>)}
-          </ClearableSelect>
+          {/* Eselon II */}
+          <div className="space-y-0.5">
+            <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Building2 className="w-2.5 h-2.5" />Eselon II</label>
+            <ClearableSelect value={updates.eselon2 || "__none__"} onValueChange={v => setField("eselon2", v)} disabled={!selectedEselon1 || selectedEselon1 === "__clear__" || eselon2List.length === 0} placeholder={selectedEselon1 && selectedEselon1 !== "__clear__" ? "—" : "Pilih Eselon I dulu"}>
+              {eselon2List.map(e2 => <SelectItem key={e2} value={e2}>{e2}</SelectItem>)}
+            </ClearableSelect>
+          </div>
         </div>
+      </Section>
 
-        {/* Kondisi */}
-        <div className="space-y-0.5">
-          <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Wrench className="w-2.5 h-2.5" />Kondisi</label>
-          <ClearableSelect value={updates.condition || "__none__"} onValueChange={v => setField("condition", v)}>
-            {CONDITIONS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-          </ClearableSelect>
-        </div>
+      {/* ── Kondisi & Status (selalu tampil) ── */}
+      <Section icon={ClipboardList} title="Kondisi & Status">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+          {/* Kondisi */}
+          <div className="space-y-0.5">
+            <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Wrench className="w-2.5 h-2.5" />Kondisi</label>
+            <ClearableSelect value={updates.condition || "__none__"} onValueChange={v => setField("condition", v)}>
+              {CONDITIONS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+            </ClearableSelect>
+          </div>
 
-        {/* Status Inventaris */}
-        <div className="space-y-0.5">
-          <label className="text-[10px] text-muted-foreground flex items-center gap-1"><ClipboardList className="w-2.5 h-2.5" />Status Inventaris</label>
-          <ClearableSelect value={updates.inventory_status || "__none__"} onValueChange={v => setField("inventory_status", v)}>
-            {INVENTORY_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-          </ClearableSelect>
-        </div>
+          {/* Status Inventaris */}
+          <div className="space-y-0.5">
+            <label className="text-[10px] text-muted-foreground flex items-center gap-1"><ClipboardList className="w-2.5 h-2.5" />Status Inventaris</label>
+            <ClearableSelect value={updates.inventory_status || "__none__"} onValueChange={v => setField("inventory_status", v)}>
+              {INVENTORY_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+            </ClearableSelect>
+          </div>
 
-        {/* Stiker Status */}
-        <div className="space-y-0.5">
-          <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Sticker className="w-2.5 h-2.5" />Status Stiker</label>
-          <ClearableSelect value={updates.stiker_status || "__none__"} onValueChange={v => setField("stiker_status", v)}>
-            {STIKER_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-          </ClearableSelect>
-        </div>
+          {/* Status Aset */}
+          <div className="space-y-0.5">
+            <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Power className="w-2.5 h-2.5" />Status Aset</label>
+            <ClearableSelect value={updates.status || "__none__"} onValueChange={v => setField("status", v)}>
+              {ASSET_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+            </ClearableSelect>
+          </div>
 
-        {/* Stiker Ukuran */}
-        <div className="space-y-0.5">
-          <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Sticker className="w-2.5 h-2.5" />Ukuran Stiker</label>
-          <ClearableSelect value={updates.stiker_ukuran || "__none__"} onValueChange={v => setField("stiker_ukuran", v)}>
-            {STIKER_SIZES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-          </ClearableSelect>
-        </div>
+          {/* Stiker Status */}
+          <div className="space-y-0.5">
+            <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Sticker className="w-2.5 h-2.5" />Status Stiker</label>
+            <ClearableSelect value={updates.stiker_status || "__none__"} onValueChange={v => setField("stiker_status", v)}>
+              {STIKER_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+            </ClearableSelect>
+          </div>
 
-        {/* Status Aset */}
-        <div className="space-y-0.5">
-          <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Power className="w-2.5 h-2.5" />Status Aset</label>
-          <ClearableSelect value={updates.status || "__none__"} onValueChange={v => setField("status", v)}>
-            {ASSET_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-          </ClearableSelect>
+          {/* Stiker Ukuran */}
+          <div className="space-y-0.5">
+            <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Sticker className="w-2.5 h-2.5" />Ukuran Stiker</label>
+            <ClearableSelect value={updates.stiker_ukuran || "__none__"} onValueChange={v => setField("stiker_ukuran", v)}>
+              {STIKER_SIZES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+            </ClearableSelect>
+          </div>
         </div>
-      </div>
+      </Section>
 
       {/* Extended Fields */}
       {showMore && (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 mt-2 pt-2 border-t border-blue-200 dark:border-blue-800">
+          {/* ── Administrasi Perolehan ── */}
+          <Section icon={Receipt} title="Administrasi Perolehan">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
             <div className="space-y-0.5">
               <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Receipt className="w-2.5 h-2.5" />Nomor SPM</label>
               <ClearableInput placeholder="—" value={updates.nomor_spm === "__clear__" ? "" : updates.nomor_spm} isClear={updates.nomor_spm === "__clear__"} onChange={e => setField("nomor_spm", e.target.value)} onClear={() => toggleClearField("nomor_spm")} />
@@ -534,6 +561,12 @@ const BatchEditPanel = memo(function BatchEditPanel({
               <label className="text-[10px] text-muted-foreground flex items-center gap-1"><DollarSign className="w-2.5 h-2.5" />Harga (Rp)</label>
               <ClearableInput type="number" placeholder="—" value={updates.purchase_price === "__clear__" ? "" : updates.purchase_price} isClear={updates.purchase_price === "__clear__"} onChange={e => setField("purchase_price", e.target.value)} onClear={() => toggleClearField("purchase_price")} />
             </div>
+          </div>
+          </Section>
+
+          {/* ── Identitas & Catatan ── */}
+          <Section icon={Package} title="Identitas & Catatan">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
             <div className="space-y-0.5">
               <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Tag className="w-2.5 h-2.5" />Brand</label>
               <ClearableInput placeholder="—" value={updates.brand === "__clear__" ? "" : updates.brand} isClear={updates.brand === "__clear__"} onChange={e => setField("brand", e.target.value)} onClear={() => toggleClearField("brand")} />
@@ -548,10 +581,12 @@ const BatchEditPanel = memo(function BatchEditPanel({
               <label className="text-[10px] text-muted-foreground flex items-center gap-1"><StickyNote className="w-2.5 h-2.5" />Catatan</label>
               <ClearableInput placeholder="—" value={updates.notes === "__clear__" ? "" : updates.notes} isClear={updates.notes === "__clear__"} onChange={e => setField("notes", e.target.value)} onClear={() => toggleClearField("notes")} />
             </div>
+          </div>
+          </Section>
 
-            {/* Pengguna / Penanggung Jawab — struktur sama seperti form edit */}
-            <div className="col-span-2 sm:col-span-3 lg:col-span-4 space-y-1.5 p-2 rounded-md border border-blue-200 dark:border-blue-800 bg-background/50">
-              <label className="text-[10px] font-medium text-muted-foreground flex items-center gap-1"><UserRound className="w-2.5 h-2.5" />Pengguna / Penanggung Jawab</label>
+          {/* ── Pengguna / Penanggung Jawab — struktur sama seperti form edit ── */}
+          <Section icon={UserRound} title="Pengguna / Penanggung Jawab">
+            <div className="p-2 rounded-md border border-blue-200 dark:border-blue-800 bg-background/50">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {/* Melekat ke */}
                 <div className="space-y-0.5">
@@ -604,9 +639,11 @@ const BatchEditPanel = memo(function BatchEditPanel({
                 </div>
               </div>
             </div>
+          </Section>
 
-            {/* Koordinat GPS */}
-            <div className="col-span-2 sm:col-span-3 lg:col-span-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {/* ── Koordinat GPS ── */}
+          <Section icon={Navigation} title="Koordinat GPS">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               <div className="space-y-0.5">
                 <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Navigation className="w-2.5 h-2.5" />Latitude</label>
                 <ClearableInput placeholder="—" value={updates.koordinat_latitude === "__clear__" ? "" : updates.koordinat_latitude} isClear={updates.koordinat_latitude === "__clear__"} onChange={e => setField("koordinat_latitude", e.target.value)} onClear={() => toggleClearField("koordinat_latitude")} />
@@ -630,11 +667,11 @@ const BatchEditPanel = memo(function BatchEditPanel({
                 </button>
               </div>
             </div>
-          </div>
+          </Section>
 
-          {/* Batch Photo Upload + Clear */}
+          {/* ── Foto ── */}
           <div className="mt-2 pt-2 border-t border-blue-200 dark:border-blue-800">
-            <label className="text-[10px] text-muted-foreground flex items-center gap-1 mb-1"><Camera className="w-2.5 h-2.5" />Foto</label>
+            <div className="flex items-center gap-1 mb-1 text-[10px] font-semibold uppercase tracking-wide text-blue-700/80 dark:text-blue-300/80"><Camera className="w-3 h-3" />Foto</div>
             {clearPhotos ? (
               <div className="flex items-center gap-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-md">
                 <Trash2 className="w-4 h-4 text-red-500 flex-shrink-0" />
@@ -685,13 +722,13 @@ const BatchEditPanel = memo(function BatchEditPanel({
             )}
           </div>
 
-          {/* Document Checklist with file upload + Clear */}
+          {/* ── Kelengkapan Dokumen & Peralatan ── */}
           <div className="mt-2 pt-2 border-t border-blue-200 dark:border-blue-800">
             <div className="flex items-center justify-between mb-1">
-              <label className="text-[10px] text-muted-foreground flex items-center gap-1">
-                <FileCheck className="w-2.5 h-2.5" />Kelengkapan Dokumen & Peralatan
-                {activeDocCount > 0 && <span className="text-[9px] bg-blue-200 dark:bg-blue-800/50 text-blue-700 dark:text-blue-300 px-1 rounded-full ml-1">{activeDocCount} aktif</span>}
-              </label>
+              <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-blue-700/80 dark:text-blue-300/80">
+                <FileCheck className="w-3 h-3" />Kelengkapan Dokumen & Peralatan
+                {activeDocCount > 0 && <span className="text-[9px] bg-blue-200 dark:bg-blue-800/50 text-blue-700 dark:text-blue-300 px-1 rounded-full ml-1 normal-case">{activeDocCount} aktif</span>}
+              </div>
               {!clearDocChecklist && (
                 <button
                   onClick={() => setClearDocChecklist(true)}
