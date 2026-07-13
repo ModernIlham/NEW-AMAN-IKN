@@ -295,8 +295,8 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
         )}
       </div>
 
-      {/* Info panel — geser kiri/kanan (atau klik ‹ ›) untuk PINDAH ANTAR-ASET
-          sesuai urutan/filter aktif; FOTO tidak ikut tergeser. */}
+      {/* Info panel — GESER kiri/kanan untuk PINDAH ANTAR-ASET sesuai urutan/
+          filter aktif (tanpa tombol panah — cukup swipe); FOTO tak ikut tergeser. */}
       <div className="w-full max-w-4xl px-4 pb-4 pt-2" onClick={(e) => e.stopPropagation()}>
         <div className="relative" onTouchStart={onInfoTouchStart} onTouchMove={onInfoTouchMove} onTouchEnd={onInfoTouchEnd}>
           {/* Peek kartu tetangga = petunjuk bisa digeser antar-aset */}
@@ -306,18 +306,6 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
             className="relative bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl rounded-xl p-3 border border-white/50 dark:border-white/15 shadow-xl"
             style={{ transform: infoDragX ? `translateX(${infoDragX}px)` : undefined, transition: infoDragX ? "none" : "transform 0.2s" }}
           >
-            {hasPrevAsset && (
-              <button onClick={() => goAsset(-1)} title="Aset sebelumnya" aria-label="Aset sebelumnya" data-testid="lightbox-prev-asset"
-                className="absolute -left-1 top-1/2 -translate-y-1/2 z-10 w-7 h-7 rounded-full bg-black/50 hover:bg-black/70 text-white ring-1 ring-white/40 shadow flex items-center justify-center backdrop-blur-sm">
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-            )}
-            {hasNextAsset && (
-              <button onClick={() => goAsset(1)} title="Aset berikutnya" aria-label="Aset berikutnya" data-testid="lightbox-next-asset"
-                className="absolute -right-1 top-1/2 -translate-y-1/2 z-10 w-7 h-7 rounded-full bg-black/50 hover:bg-black/70 text-white ring-1 ring-white/40 shadow flex items-center justify-center backdrop-blur-sm">
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            )}
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0 space-y-1.5">
               <h3 className="text-slate-900 dark:text-white font-semibold text-sm truncate">{a.name || a.asset_name || "Tanpa Nama"}</h3>
