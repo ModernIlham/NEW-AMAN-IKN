@@ -48,6 +48,26 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#245] Muat ulang aman: tahan reload/pindah versi selagi data offline belum tersinkron — 2026-07-13
+
+- **Cegah kehilangan/kerusakan data offline saat muat ulang atau berpindah ke
+  versi aplikasi yang lebih baru.** Selama masih ada antrian yang perlu
+  disinkronkan (pending atau macet), penutupan/​reload halaman kini ditahan
+  dengan dialog konfirmasi bawaan peramban (`beforeunload`) — pengguna tak lagi
+  bisa tanpa sadar menutup aplikasi di tengah proses sinkron.
+- Antrian tulis offline sendiri **sudah aman**: persist di IndexedDB +
+  rehydrate saat mount + auto-flush saat online (useOptimisticQueue, PR #233/#202).
+  Guard ini adalah **lapisan pengaman terakhir** agar tak ada data yang
+  ditinggalkan sebelum tersinkron ke server.
+- Implementasi: helper murni `hasUnsyncedWork({pendingCount, actionCount})`
+  (`lib/unloadGuard.js`, +5 unit test) + hook `useUnsyncedGuard`
+  (`hooks/useUnsyncedGuard.js`) yang memasang/melepas listener `beforeunload`
+  sesuai ada-tidaknya antrian. Dipasang di `DashboardPage`. Service worker tidak
+  memaksa reload otomatis saat versi baru (registrasi minimal di `index.html`),
+  jadi tak ada auto-reload yang bisa memutus sinkron.
+
+---
+
 ## [#244] Search data: filter Nama Pengguna + NIK/NIP pengguna aset — 2026-07-13
 
 - **Filter Data** (panel filter lanjutan) kini punya dua kolom baru: **Nama

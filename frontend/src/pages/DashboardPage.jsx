@@ -49,6 +49,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useOfflineSync } from "@/hooks/useOfflineSync";
 import { useOptimisticQueue } from "@/hooks/useOptimisticQueue";
+import { useUnsyncedGuard } from "@/hooks/useUnsyncedGuard";
 import { useRowLocking } from "@/hooks/useRowLocking";
 import { useAssetFilters } from "@/hooks/useAssetFilters";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
@@ -449,6 +450,12 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     onRehydrate: handleQueueRehydrate,
     getLatestVersion,
   });
+
+  // Tahan muat-ulang / pindah versi selama masih ada data offline yang belum
+  // tersinkron (pending atau macet) — cegah pengguna menutup aplikasi di tengah
+  // sinkron tanpa sadar. Antrian sendiri sudah aman di IndexedDB + auto-flush
+  // saat online; guard ini pengaman terakhir (lihat useUnsyncedGuard).
+  useUnsyncedGuard({ pendingCount, actionCount });
 
   // === ROW LOCKING ===
   const { rowLocks, setRowLocks, sessionId, lockAsset, unlockAsset } = useRowLocking({
