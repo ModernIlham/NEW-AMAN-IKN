@@ -48,6 +48,26 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#259] Persediaan masuk bisa tertaut perolehan Pengadaan (`perolehan_id`) — 2026-07-13
+
+- **Integrasi §5A gap #2 / Prinsip 4 (Dokumen Sumber untuk persediaan).**
+  Transaksi **MASUK** persediaan kini dapat menyimpan **`perolehan_id`** (FK ke
+  perolehan Pengadaan) + snapshot beku identitas dokumen sumber
+  (`perolehan_nomor_bast`, `perolehan_tanggal_bast`, `perolehan_jenis`,
+  `perolehan_pihak`) pada jurnal `transaksi_persediaan`. Melengkapi #258 (aset):
+  kini **aset maupun persediaan** dapat merujuk balik ke record perolehan sebagai
+  simpul dokumen sumber.
+- **Pola `snapshot_penganggaran` (#199/#257/#258).** Helper murni
+  `snapshot_perolehan(perolehan)` (bentuk rata untuk jurnal) +
+  `_ambil_snapshot_perolehan(perolehan_id)` — **404** bila id tak ditemukan,
+  divalidasi **sebelum** mutasi stok agar tak ada layer masuk tanpa perolehan
+  valid; kosong = lepas tautan.
+- Field **opsional** `perolehan_id` di `TransaksiMasukIn` — backward-compatible;
+  transaksi tanpa taut & transaksi massal tetap jalan seperti semula.
+- Helper murni + **3 unit test**. Masterplan §5A gap #2 diperbarui. pytest **326 lulus**.
+
+---
+
 ## [#258] Pengadaan → Aset dua arah: aset simpan `perolehan_id` (dokumen sumber) — 2026-07-13
 
 - **Integrasi §5A gap #6 / Prinsip 4 (simpul Dokumen Sumber).** Tautan
