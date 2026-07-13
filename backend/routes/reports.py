@@ -1601,7 +1601,7 @@ async def generate_lbkp_pdf(
     from reportlab.lib.units import mm as rl_mm
     from kodefikasi_utils import GOLONGAN_DEFAULTS
     from pelaporan_utils import kunci_unik_periode, penanda_final
-    from pembukuan_utils import build_lbkp_rows, parse_harga
+    from pembukuan_utils import build_lbkp_rows, parse_harga, tombstones_penghapusan
     from pemeliharaan_utils import rentang_periode
 
     dari, sampai, label_periode = rentang_periode(tahun, semester)
@@ -1610,7 +1610,8 @@ async def generate_lbkp_pdf(
     sufiks_final = penanda_final(periode_rec)
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
     assets = await db.assets.find(
-        {}, {"_id": 0, "asset_code": 1, "purchase_price": 1, "created_at": 1},
+        {}, {"_id": 0, "asset_code": 1, "purchase_price": 1, "created_at": 1,
+             "dihapus": 1, "penghapusan": 1},
     ).to_list(500000)
     tombstones = []
     async for t in db.audit_logs.find(
@@ -1623,6 +1624,9 @@ async def generate_lbkp_pdf(
                 break
         tombstones.append({"asset_code": t.get("asset_code"),
                            "timestamp": t.get("timestamp"), "nilai": nilai})
+    # Penghapusan via SK (proyeksi master #234, dihapus=True) → mutasi KURANG di
+    # periode SK terbit, melengkapi tombstone hard-delete audit di atas (§5A).
+    tombstones += tombstones_penghapusan(assets)
 
     uraian_map = {k: u for k, u in GOLONGAN_DEFAULTS}
     async for k in db.kodefikasi.find({"level": 1}, {"_id": 0, "kode": 1, "uraian": 1}):
@@ -1884,6 +1888,7 @@ async def generate_calbmn_pdf(
     from pelaporan_utils import kunci_unik_periode, penanda_final
     from pembukuan_utils import (
         AMBANG_KAPITALISASI_DEFAULT, build_lbkp_rows, parse_harga,
+        tombstones_penghapusan,
     )
     from pemeliharaan_utils import rentang_periode
     from pengamanan_utils import is_sengketa
@@ -1897,7 +1902,7 @@ async def generate_calbmn_pdf(
     assets = await db.assets.find(
         {}, {"_id": 0, "id": 1, "asset_code": 1, "purchase_price": 1,
              "created_at": 1, "inventory_status": 1, "nomor_perkara": 1,
-             "pihak_bersengketa": 1},
+             "pihak_bersengketa": 1, "dihapus": 1, "penghapusan": 1},
     ).to_list(500000)
     tombstones = []
     async for t in db.audit_logs.find(
@@ -1910,6 +1915,9 @@ async def generate_calbmn_pdf(
                 break
         tombstones.append({"asset_code": t.get("asset_code"),
                            "timestamp": t.get("timestamp"), "nilai": nilai})
+    # Penghapusan via SK (proyeksi master #234, dihapus=True) → mutasi KURANG di
+    # periode SK terbit, melengkapi tombstone hard-delete audit di atas (§5A).
+    tombstones += tombstones_penghapusan(assets)
 
     uraian_map = {k: u for k, u in GOLONGAN_DEFAULTS}
     async for k in db.kodefikasi.find({"level": 1}, {"_id": 0, "kode": 1, "uraian": 1}):

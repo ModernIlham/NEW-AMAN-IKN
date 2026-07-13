@@ -132,6 +132,32 @@ def _baris_lbkp_kosong(gol, uraian_map):
     }
 
 
+def tombstones_penghapusan(assets):
+    """Bangun 'tombstone' mutasi KURANG dari aset yang dihapus via SK penghapusan
+    (proyeksi master #234: `dihapus=True` + `penghapusan.tanggal_sk`). Bentuknya
+    sama dengan tombstone hard-delete audit — {asset_code, timestamp, nilai} —
+    agar build_lbkp_rows menghitungnya sebagai mutasi kurang di periode SK terbit.
+
+    `timestamp` = tanggal SK; `nilai` = harga perolehan. Aset tanpa tanggal SK
+    dilewati (tak bisa ditempatkan pada periode mana pun). Melengkapi audit
+    hard-delete sehingga laporan MUTASI (LBKP/CaLBMN) juga mencerminkan
+    penghapusan lewat SK — bukan hanya penghapusan permanen.
+    """
+    out = []
+    for a in assets or []:
+        if not a.get("dihapus"):
+            continue
+        sk = str((a.get("penghapusan") or {}).get("tanggal_sk") or "")[:10]
+        if not sk:
+            continue
+        out.append({
+            "asset_code": a.get("asset_code"),
+            "timestamp": sk,
+            "nilai": a.get("purchase_price"),
+        })
+    return out
+
+
 def build_lbkp_rows(assets, tombstones, dari, sampai, uraian_map=None, ambang=None):
     """LBKP per golongan: saldo awal + mutasi tambah/kurang + saldo akhir.
 
@@ -157,6 +183,16 @@ def build_lbkp_rows(assets, tombstones, dari, sampai, uraian_map=None, ambang=No
         tanggal = str(a.get("created_at") or "")[:10]
         if not tanggal or tanggal > sampai:
             continue
+        # Aset DIHAPUS via SK penghapusan (proyeksi #234) yang SK-nya terbit
+        # SEBELUM `dari` sudah tak ada di saldo awal periode ini — lewati
+        # (setara aset yang lenyap sebelum periode). Bila SK >= dari, aset MASIH
+        # hidup di awal periode → tetap dihitung saldo awal/tambah, lalu dikurangi
+        # oleh tombstone penghapusan (tombstones_penghapusan) di periode SK-nya
+        # sehingga identitas mutasi (akhir = awal + tambah − kurang) tetap seimbang.
+        if a.get("dihapus"):
+            sk_hapus = str((a.get("penghapusan") or {}).get("tanggal_sk") or "")[:10]
+            if sk_hapus and sk_hapus < dari:
+                continue
         gol = golongan_of(a.get("asset_code")) or "?"
         harga = parse_harga(a.get("purchase_price"))
         kelas = klasifikasi_komptabel(a.get("asset_code"), harga, ambang)
