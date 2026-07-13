@@ -48,6 +48,18 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#229] Peta: tombol aktif/nonaktif pengelompokan (cluster) marker — 2026-07-13
+
+- **Tombol "Cluster: Aktif/Mati"** di toolbar peta (desktop) + item di menu
+  gabungan (HP) untuk **menghidupkan/mematikan pengelompokan marker**. Saat
+  aktif, pin berdekatan dikumpulkan jadi gelembung ber-angka (#227); saat
+  dimatikan, semua pin tampil satu per satu. Peralihan **memindahkan** marker
+  yang sudah ada antar-layer (cluster ↔ layer biasa) tanpa memuat ulang —
+  popup, drag, dan autosave koordinat tetap berfungsi. Factory
+  `buildClusterLayer` dipakai bersama oleh init peta & toggle.
+
+---
+
 ## [#228] Integrasi: audit lintas-modul + taut sumber Pemusnahan → Penghapusan — 2026-07-13
 
 - **Audit integrasi antar-modul (siklus BMN).** Peninjauan kepatuhan 5 prinsip
