@@ -8,7 +8,7 @@ import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import axios from "axios";
-import { MapPinned, RefreshCw, Loader2, Move, X, Filter, Download, Camera, Layers, ChevronDown } from "lucide-react";
+import { MapPinned, RefreshCw, Loader2, Move, X, Filter, Download, Camera, Layers, ChevronDown, Boxes } from "lucide-react";
 import { toast } from "sonner";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -89,6 +89,49 @@ function esc(str) {
   return String(str ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+// Grup marker ber-CLUSTER (pin mepet → gelembung ber-angka). Dibungkus factory
+// supaya bisa dibangun ULANG saat pengguna men-toggle cluster on/off. Radius
+// kecil (44 px ≈ ukuran pin) → hanya pin yang benar-benar berdekatan yang
+// dikelompokkan; klik cluster → perbesar ke anggota; zoom maks / hover cluster
+// rapat → spiderfy (dikipas) agar tiap pin bisa diklik.
+function buildClusterLayer(map) {
+  const layer = L.markerClusterGroup({
+    maxClusterRadius: 44,
+    spiderfyOnMaxZoom: true,
+    showCoverageOnHover: false,
+    zoomToBoundsOnClick: true,
+    removeOutsideVisibleBounds: true,
+    chunkedLoading: true,
+    iconCreateFunction: (cluster) => {
+      const n = cluster.getChildCount();
+      const size = n < 10 ? 34 : n < 100 ? 40 : 46;
+      return L.divIcon({
+        html: `<div style="width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center;`
+          + `border-radius:9999px;background:rgba(37,99,235,.92);color:#fff;font:700 12px system-ui,sans-serif;`
+          + `border:2px solid #fff;box-shadow:0 1px 4px rgba(15,23,42,.4)">${n}</div>`,
+        className: "aman-cluster",
+        iconSize: [size, size],
+      });
+    },
+  });
+  // Spiderfy saat hover — pin bertindih (koordinat sama/nyaris) tak bisa dipisah
+  // dengan memperbesar; hover cluster RAPAT (rentang <60 px) / zoom maks → kipas.
+  layer.on("clustermouseover", (e) => {
+    const cl = e.layer;
+    if (!cl || cl._spiderfied) return;
+    const n = cl.getChildCount();
+    if (n < 2 || n > 15) return;
+    try {
+      const b = cl.getBounds();
+      const nw = map.latLngToLayerPoint(b.getNorthWest());
+      const se = map.latLngToLayerPoint(b.getSouthEast());
+      const spanPx = Math.max(Math.abs(se.x - nw.x), Math.abs(se.y - nw.y));
+      if (spanPx < 60 || map.getZoom() >= map.getMaxZoom()) cl.spiderfy();
+    } catch { /* bounds belum siap — abaikan */ }
+  });
+  return layer;
+}
+
 /**
  * Peta Aset — LEMBAR di halaman utama (menggantikan area baris data saat
  * terbuka). Header, mode Dashboard/Inventarisasi, dan toolbar filter tetap
@@ -128,6 +171,8 @@ const AssetMapFullView = memo(function AssetMapFullView({
   const [loading, setLoading] = useState(false);
   const [loadedOnce, setLoadedOnce] = useState(false);
   const [groupKey, setGroupKey] = useState("__semua__"); // filter Barang Serupa
+  const [clusterOn, setClusterOn] = useState(true); // kelompokkan pin berdekatan
+  const clusterOnRef = useRef(true);
   // Guard staleness: hanya hasil load TERBARU yang boleh menulis state —
   // load lama (loop multi-halaman) bisa selesai SETELAH load baru.
   const loadSeqRef = useRef(0);
@@ -257,6 +302,25 @@ const AssetMapFullView = memo(function AssetMapFullView({
     didFitRef.current = false;
   }, []);
 
+  // Hidup/matikan clustering: bangun layer baru (cluster ↔ layer biasa) lalu
+  // PINDAHKAN semua marker yang sudah ada ke layer itu — pin & popup tetap.
+  const toggleCluster = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const on = !clusterOnRef.current;
+    clusterOnRef.current = on;
+    setClusterOn(on);
+    const old = layerRef.current;
+    const next = on ? buildClusterLayer(map) : L.layerGroup();
+    for (const entry of markersRef.current.values()) {
+      try { if (old) old.removeLayer(entry.marker); } catch { /* abaikan */ }
+      next.addLayer(entry.marker);
+    }
+    if (old) map.removeLayer(old);
+    next.addTo(map);
+    layerRef.current = next;
+  }, []);
+
   // Init peta pada mount; rusak saat unmount.
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return undefined;
@@ -276,48 +340,8 @@ const AssetMapFullView = memo(function AssetMapFullView({
     // Grup marker ber-CLUSTER: pin yang saling MEPET (dalam ~44 px) dikumpulkan
     // jadi satu gelembung ber-angka; klik → perbesar ke area anggotanya, dan
     // di zoom maksimum pin yang bertindih di-SPIDERFY (dikipas) agar bisa
-    // diklik satu per satu. Radius kecil (44 px ≈ ukuran pin) supaya HANYA yang
-    // benar-benar berdekatan yang dikelompokkan.
-    layerRef.current = L.markerClusterGroup({
-      maxClusterRadius: 44,
-      spiderfyOnMaxZoom: true,
-      showCoverageOnHover: false,
-      zoomToBoundsOnClick: true,
-      removeOutsideVisibleBounds: true,
-      chunkedLoading: true,
-      iconCreateFunction: (cluster) => {
-        const n = cluster.getChildCount();
-        const size = n < 10 ? 34 : n < 100 ? 40 : 46;
-        return L.divIcon({
-          html: `<div style="width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center;`
-            + `border-radius:9999px;background:rgba(37,99,235,.92);color:#fff;font:700 12px system-ui,sans-serif;`
-            + `border:2px solid #fff;box-shadow:0 1px 4px rgba(15,23,42,.4)">${n}</div>`,
-          className: "aman-cluster",
-          iconSize: [size, size],
-        });
-      },
-    }).addTo(map);
-
-    // SPIDERFY SAAT HOVER — pin yang benar-benar bertindih (koordinat sama /
-    // nyaris sama) tak bisa dipisah dengan memperbesar; begitu kursor menyentuh
-    // cluster-nya, langsung dikipas agar tiap pin bisa diklik. Hanya untuk
-    // cluster RAPAT (rentang < ~60 px di layar) atau saat sudah zoom maksimum,
-    // dan jumlah anggota wajar — supaya cluster besar yang menyebar tetap
-    // "klik→perbesar", bukan meledak jadi puluhan kaki di hover. Tak
-    // di-unspiderfy saat mouseout agar kursor bisa berpindah ke pin kipasnya.
-    layerRef.current.on("clustermouseover", (e) => {
-      const cl = e.layer;
-      if (!cl || cl._spiderfied) return;
-      const n = cl.getChildCount();
-      if (n < 2 || n > 15) return;
-      try {
-        const b = cl.getBounds();
-        const nw = map.latLngToLayerPoint(b.getNorthWest());
-        const se = map.latLngToLayerPoint(b.getSouthEast());
-        const spanPx = Math.max(Math.abs(se.x - nw.x), Math.abs(se.y - nw.y));
-        if (spanPx < 60 || map.getZoom() >= map.getMaxZoom()) cl.spiderfy();
-      } catch { /* bounds belum siap — abaikan */ }
-    });
+    // diklik satu per satu. Bisa dimatikan pengguna lewat tombol "Cluster".
+    layerRef.current = (clusterOnRef.current ? buildClusterLayer(map) : L.layerGroup()).addTo(map);
 
     // ── Kontrol orientasi & skala (info saat zoom) ──
     // Bar skala metrik (meter/km) — tanpa imperial.
@@ -653,6 +677,11 @@ const AssetMapFullView = memo(function AssetMapFullView({
             <DropdownMenuItem className="min-h-[42px]" onClick={() => { didFitRef.current = false; load(); }} disabled={loading} data-testid="map-menu-refresh">
               <RefreshCw className="w-4 h-4 mr-2" />Muat Ulang Peta
             </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="min-h-[42px]" onClick={toggleCluster} data-testid="map-menu-cluster-toggle">
+              <Boxes className={`w-4 h-4 mr-2 ${clusterOn ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground"}`} />
+              Pengelompokan Marker: {clusterOn ? "Aktif" : "Mati"}
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
         <button
@@ -707,6 +736,22 @@ const AssetMapFullView = memo(function AssetMapFullView({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        <button
+          type="button"
+          onClick={toggleCluster}
+          aria-pressed={clusterOn}
+          className={`h-9 px-2.5 rounded-lg border text-xs font-medium hidden sm:flex items-center justify-center gap-1 flex-shrink-0 transition-colors ${
+            clusterOn
+              ? "border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400"
+              : "border-border text-foreground/80 hover:bg-muted"
+          }`}
+          aria-label={clusterOn ? "Matikan pengelompokan marker" : "Hidupkan pengelompokan marker"}
+          title={clusterOn ? "Marker berdekatan dikelompokkan — klik untuk matikan" : "Marker tampil satu per satu — klik untuk kelompokkan"}
+          data-testid="asset-map-cluster-toggle"
+        >
+          <Boxes className="w-3.5 h-3.5" />
+          <span>Cluster: {clusterOn ? "Aktif" : "Mati"}</span>
+        </button>
         <button
           type="button"
           onClick={() => { didFitRef.current = false; load(); }}
