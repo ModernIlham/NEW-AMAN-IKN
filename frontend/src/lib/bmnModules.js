@@ -438,7 +438,7 @@ export const SIKLUS_MODULES = [
       "✅ Aturan: BAST kosong, perjanjian berakhir/dokumen kurang, usulan berlarut, kandidat belum diusulkan, data belum lengkap, sengketa, rusak tanpa pemeliharaan",
       "✅ Laporan Hasil Pemantauan PDF pra-isi (rekap 5 objek + rincian temuan + tanda tangan) — kanal resmi tetap SIMAN v2",
       "✅ Register penertiban ber-tenggat 15 hari kerja (sumber pemantauan/permintaan Pengelola/APIP-BPK, peringatan lewat tenggat, tindak lanjut tercatat) + ekspor CSV",
-      "✅ Pemantauan insidentil 10+5 hari kerja (pemicu masyarakat/media/audit, alur berjalan → BA terbit → dilaporkan) + PDF BA siap tanda tangan",
+      "✅ Pemantauan insidentil 10+5 hari kerja (pemicu masyarakat/media/audit, alur berjalan → BA terbit → dilaporkan) + PDF BA siap tanda tangan + ekspor CSV",
       "✅ Arsip lampiran per tiket insidentil (scan BA bertanda tangan + foto temuan)",
       "Generator laporan formulir resmi Lampiran PMK 207 (menyusul)",
       "Portofolio aset & analisis SBSK (menyusul)",
