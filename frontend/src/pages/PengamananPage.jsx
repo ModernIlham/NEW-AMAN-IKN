@@ -592,6 +592,13 @@ export default function PengamananPage({ user, onBack }) {
                     {cek.ringkasan.penuh}/{cek.ringkasan.jumlah} penuh
                   </span>
                 )}
+                {(cek?.items || []).length > 0 && (
+                  <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
+                    onClick={() => downloadFileWithProgress(`${API}/pengamanan/checklist/export`, "checklist_pengamanan.csv", { label: "Ekspor Checklist Pengamanan (CSV)" }).catch(() => {})}
+                    data-testid="pengamanan-checklist-export">
+                    <Download className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">CSV</span>
+                  </Button>
+                )}
                 <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
                   onClick={() => bukaFormCek(null, null)}
                   data-testid="pengamanan-checklist-tambah">

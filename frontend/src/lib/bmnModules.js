@@ -323,7 +323,7 @@ export const SIKLUS_MODULES = [
       "✅ Register BMN bermasalah berstatus: identifikasi → mediasi → blokir → litigasi → selesai (bahan laporan wasdal) + ekspor CSV",
       "✅ Arsip dokumen kepemilikan per aset: sertipikat/BPKB/STNK/IMB-PBG + lokasi penyimpanan (Ps. 43) + scan + pengingat kedaluwarsa + ekspor CSV",
       "✅ Status sertipikasi tanah per dokumen sertipikat (belum/proses/K1-K4/SHP terbit)",
-      "✅ Checklist pengamanan per aset per jenis (butir fisik/administrasi/hukum + skor + tanggal cek)",
+      "✅ Checklist pengamanan per aset per jenis (butir fisik/administrasi/hukum + skor + tanggal cek) + ekspor CSV",
       "✅ Register polis Asuransi BMN: nomor/penanggung/kategori objek/nilai/premi + pengingat masa berlaku (PMK 43/2025) + ekspor CSV",
     ],
     integrasi: ["Data sengketa & kelengkapan dokumen dari inventarisasi menjadi daftar pantau"],

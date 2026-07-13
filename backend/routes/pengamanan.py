@@ -18,8 +18,8 @@ from pengamanan_utils import (
     BUTIR_CHECKLIST, JENIS_DOKUMEN, JENIS_KEKURANGAN, JENIS_OBJEK_CHECKLIST,
     KATEGORI_KASUS, KATEGORI_OBJEK_ASURANSI, KATEGORI_SERTIPIKASI,
     LOKASI_SIMPAN, STATUS_KASUS, SUMBER_DANA_PREMI, TRANSISI_KASUS,
-    baris_csv_dokumen, baris_csv_kasus, baris_csv_polis, info_polis,
-    kekurangan_aset, rekap_checklist,
+    baris_csv_checklist, baris_csv_dokumen, baris_csv_kasus, baris_csv_polis,
+    info_polis, kekurangan_aset, rekap_checklist,
     rekap_dokumen, rekap_kasus, rekap_kesehatan, rekap_polis, rekap_sertipikasi,
     skor_checklist, validate_checklist, validate_dokumen, validate_kasus,
     validate_kategori_sertipikasi, validate_polis, validate_transisi_kasus,
@@ -433,6 +433,26 @@ async def list_checklist(_user: dict = Depends(require_user)):
                 "artikel DJKN/KMK 21/2012 — perlu verifikasi ke pedoman "
                 "K/L masing-masing); bukan bukti hukum pelaksanaan "
                 "pengamanan.")}
+
+
+@pengamanan_router.get("/pengamanan/checklist/export")
+async def export_checklist(_user: dict = Depends(require_user)):
+    """Ekspor CSV seluruh checklist pengamanan (pola #158)."""
+    import csv as csv_module
+    import io
+
+    from fastapi.responses import Response as HttpResponse
+
+    items = [c async for c in db.pengamanan_checklist.find({}, {"_id": 0})
+             .sort("updated_at", -1)]
+    buf = io.StringIO()
+    w = csv_module.writer(buf)
+    for row in baris_csv_checklist(items):
+        w.writerow(row)
+    return HttpResponse(
+        content=buf.getvalue().encode("utf-8-sig"), media_type="text/csv",
+        headers={"Content-Disposition":
+                 'attachment; filename="checklist_pengamanan.csv"'})
 
 
 @pengamanan_router.post("/pengamanan/checklist")

@@ -294,3 +294,31 @@ class TestPolisAsuransi:
         # Tanpa masa berlaku → status kosong; jenis tak dikenal → apa adanya
         tanpa = baris_csv_dokumen([{"jenis": "zz"}], "2026-07-13")[1]
         assert tanpa[3] == "zz" and tanpa[8] == "" and tanpa[9] == ""
+
+    def test_baris_csv_checklist(self):
+        from pengamanan_utils import HEADER_CSV_CHECKLIST, baris_csv_checklist
+        # Kosong / None → hanya header
+        assert baris_csv_checklist([]) == [HEADER_CSV_CHECKLIST]
+        assert baris_csv_checklist(None) == [HEADER_CSV_CHECKLIST]
+        rows = baris_csv_checklist([{
+            "asset_code": "40101", "NUP": "1", "asset_name": "Tanah Kantor",
+            "jenis_objek": "tanah",
+            "butir": {"patok_batas": True, "pagar": True, "plang_nama": False,
+                      "arsip_perolehan": True, "sertipikat": False},
+            "keterangan": "-", "tanggal_cek": "2026-07-01",
+            "petugas": "budi",
+        }])
+        assert rows[0] == HEADER_CSV_CHECKLIST
+        r = rows[1]
+        assert r[3] == "Tanah"           # label jenis objek
+        assert r[4] == 3 and r[5] == 5   # terpenuhi/total (5 butir tanah)
+        assert r[6] == 60                # persen = 3/5
+        # butir_belum berisi label butir yang belum terpenuhi
+        assert "Plang/papan nama kepemilikan" in r[7]
+        assert "Sertipikat a.n. Pemerintah RI c.q. K/L" in r[7]
+        assert "Patok" not in r[7]       # yang terpenuhi tak masuk
+        assert r[9] == "2026-07-01" and r[10] == "budi"
+        # Jenis tak dikenal → skor 0/0, tanpa butir
+        kosong = baris_csv_checklist([{"jenis_objek": "zz", "butir": {}}])[1]
+        assert kosong[3] == "zz" and kosong[4] == 0 and kosong[5] == 0
+        assert kosong[6] == 0 and kosong[7] == ""
