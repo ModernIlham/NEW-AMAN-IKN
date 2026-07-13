@@ -48,6 +48,21 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#252] Ubah Massal: bisa TAMBAH kelengkapan dokumen baru (nama kustom) secara massal — 2026-07-13
+
+- **Kini bisa menambah dokumen kelengkapan BARU dari panel Ubah Massal.**
+  Sebelumnya bagian "Kelengkapan Dokumen & Peralatan" hanya bisa meng-*aktifkan*
+  item dari daftar bawaan/ yang sudah ada — **tak ada cara menambah dokumen
+  bernama baru**. Ditambahkan input **"Tambah dokumen baru…"** + tombol: item
+  baru langsung **aktif** dan ikut diterapkan ke **semua aset terpilih**.
+- Dedupe nama (case-insensitive) agar tak menduplikasi item bawaan/existing;
+  bisa ditambah via tombol atau tekan **Enter**.
+- **Frontend-only**: backend (`routes/batch.py`) sudah meng-*append* item
+  ber-nama baru ke tiap aset saat `document_checklist_items` dikirim — jadi cukup
+  melengkapi UI-nya. Verifikasi: eslint 0 error, `CI=false yarn build` sukses.
+
+---
+
 ## [#251] Efek getar (haptics): GPS ≤4 m akurat, simpan, & pindah aset di kamera — 2026-07-13
 
 - **Umpan balik taktil di lapangan** — terasa tanpa harus melihat layar:

@@ -4,7 +4,7 @@ import {
   Sticker, Building2, Camera, Images, FileCheck, Receipt,
   Calendar, DollarSign, Navigation, Package, Truck,
   LocateFixed, Search, FileUp, FileText, Check, ChevronDown,
-  Eraser, Trash2, Power, UserRound, StickyNote,
+  Eraser, Trash2, Power, UserRound, StickyNote, Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -178,6 +178,9 @@ const BatchEditPanel = memo(function BatchEditPanel({
 
   // Doc checklist state: active items + their files
   const [docItems, setDocItems] = useState([]);
+  // Input "tambah dokumen baru" (nama kustom) — agar bisa menambah kelengkapan
+  // dokumen yang belum ada di daftar bawaan, secara MASSAL ke semua aset terpilih.
+  const [customDoc, setCustomDoc] = useState("");
 
   // Rebuild doc items when docItemNames changes
   useEffect(() => {
@@ -312,6 +315,20 @@ const BatchEditPanel = memo(function BatchEditPanel({
       return next;
     });
   };
+
+  // Tambah item kelengkapan dokumen BARU (nama kustom) — langsung AKTIF supaya
+  // ikut diterapkan ke semua aset terpilih. Dedupe nama (case-insensitive)
+  // terhadap item yang sudah ada (bawaan + existing + kustom sebelumnya).
+  const addCustomDoc = useCallback(() => {
+    const name = customDoc.trim();
+    if (!name) return;
+    if (docItems.some(d => (d.name || "").toLowerCase() === name.toLowerCase())) {
+      toast.error("Dokumen sudah ada di daftar");
+      return;
+    }
+    setDocItems(prev => [...prev, { name, _active: true, checked: true, photos: [], documents: [] }]);
+    setCustomDoc("");
+  }, [customDoc, docItems]);
 
   // Doc checklist toggle + file upload
   const toggleDocItem = (idx) => {
@@ -798,7 +815,28 @@ const BatchEditPanel = memo(function BatchEditPanel({
                     </div>
                   ))}
                 </div>
-                <p className="text-[9px] text-muted-foreground mt-1">Klik item untuk mengaktifkan, lalu upload foto/PDF yang akan diterapkan ke semua aset terpilih</p>
+                {/* Tambah dokumen kelengkapan BARU (nama kustom) → langsung
+                    aktif & diterapkan massal ke semua aset terpilih. */}
+                <div className="flex gap-1 mt-1.5">
+                  <Input
+                    placeholder="Tambah dokumen baru…"
+                    value={customDoc}
+                    onChange={e => setCustomDoc(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addCustomDoc(); } }}
+                    className="h-7 text-xs flex-1"
+                    data-testid="batch-doc-custom-input"
+                  />
+                  <button
+                    type="button"
+                    onClick={addCustomDoc}
+                    disabled={!customDoc.trim()}
+                    className="h-7 px-2 rounded-md border border-blue-300 dark:border-blue-700 bg-blue-100/50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-[11px] font-semibold flex items-center gap-1 flex-shrink-0 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+                    data-testid="batch-doc-custom-add"
+                  >
+                    <Plus className="w-3 h-3" />Tambah
+                  </button>
+                </div>
+                <p className="text-[9px] text-muted-foreground mt-1">Klik item untuk mengaktifkan (atau tambahkan dokumen baru), lalu upload foto/PDF yang akan diterapkan ke semua aset terpilih</p>
               </>
             )}
           </div>
