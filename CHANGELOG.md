@@ -48,6 +48,20 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#237] Peta — filter "Barang Serupa": tampil SEMUA + garis pemisah tabel + kode·nama·unit — 2026-07-13
+
+- **Tampilkan semua kelompok terdeteksi.** Dulu daftar kelompok Barang Serupa
+  di-`slice(0, 100)` → jenis ke-101 dst. tak muncul. Kini **tak dibatasi**
+  (daftar bisa digulir), sesuai jumlah barang serupa yang benar-benar terdeteksi.
+- **Garis pemisah seperti tabel.** Tiap baris kelompok kini punya **garis pemisah
+  bawah** sehingga mudah membedakan aset atas dengan bawahnya — di dropdown
+  desktop maupun menu HP.
+- **Tata letak per baris jadi kolom rapi:** `kode` (mono) · `nama` (truncate) ·
+  `N unit` (violet, kanan) — bukan lagi satu teks memanjang. Header "Semua
+  barang" kini menampilkan jumlah jenis terdeteksi.
+
+---
+
 ## [#236] Sinkron offline handal: cegah self-409 + toast konflik tak berulang + Sinkronkan menuntaskan bentrok — 2026-07-13
 
 Lanjutan #233. Keluhan: toast "Aset telah diubah oleh pengguna lain" muncul
