@@ -48,6 +48,34 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#227] Peta: akurasi GPS diperketat + clustering marker berdekatan — 2026-07-13
+
+- **Koordinat GPS lebih akurat (radius lebih sempit).** Ambang "cukup akurat"
+  (`desiredAccuracy`) diperketat **15 → 8 meter** dan durasi pengumpulan fix
+  (`maxWait`) diperpanjang **8 → 12 detik**, sehingga GPS punya waktu
+  mengerucut ke fix yang lebih ketat sebelum diterima; bila sinyal tak sampai
+  8 m, fix **terbaik** dalam 12 detik tetap dipakai dan koordinat tetap
+  diperbarui **realtime** selama proses (`acquireAccuratePosition`). Berlaku
+  di tombol Ambil GPS pada form aset & ubah massal.
+- **Marker berdekatan kini di-cluster (mudah diklik).** Peta memakai
+  `L.markerClusterGroup`: pin yang **saling mepet** (dalam ~44 px ≈ ukuran
+  pin) dikumpulkan jadi satu **gelembung ber-angka** biru; **klik cluster →
+  peta memperbesar** ke area anggotanya (memisahkan pin), dan di zoom maksimum
+  pin yang benar-benar bertindih di-**spiderfy** (dikipas) agar tiap pin bisa
+  diklik satu per satu. Radius kecil menjaga HANYA pin yang benar-benar
+  berdekatan yang dikelompokkan; pin yang renggang tetap tampil sendiri.
+  Marker tetap **draggable** (setelah dipisah) dan popup + autosave koordinat
+  tetap berfungsi. Dependency baru: `leaflet.markercluster`.
+- **Spiderfy saat hover** untuk pin yang bertindih. Pin berkoordinat sama /
+  nyaris sama tak bisa dipisah dengan memperbesar; kini begitu kursor
+  menyentuh cluster rapatnya (rentang < ~60 px, atau saat sudah zoom
+  maksimum), cluster langsung **dikipas** tanpa harus diklik — sehingga pin
+  yang benar-benar bertumpuk pun bisa diklik satu per satu. Hanya untuk
+  cluster kecil (≤15 pin) agar cluster besar yang menyebar tetap
+  "klik → perbesar", bukan meledak jadi puluhan kaki di hover.
+
+---
+
 ## [#226] Kamera lapangan: info aset per-baris (nama/kategori/kode+NUP/lokasi) — 2026-07-13
 
 - **Overlay info aset di kamera dipecah per-baris.** Sebelumnya nama, kode,
