@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, ShieldCheck, Scale, BadgeCheck, Camera,
   Gavel, Paperclip, Plus, QrCode, MapPin, Search, Trash2, Umbrella,
-  Upload, UserCheck, FileText,
+  Upload, UserCheck, FileText, Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
+import { downloadFileWithProgress } from "@/lib/downloadFile";
 import { authMediaUrl } from "@/lib/mediaUrl";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -645,6 +646,13 @@ export default function PengamananPage({ user, onBack }) {
                   <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px] font-semibold flex-shrink-0">
                     {polis.ringkasan.per_status.segera_berakhir} segera berakhir
                   </span>
+                )}
+                {(polis?.items || []).length > 0 && (
+                  <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
+                    onClick={() => downloadFileWithProgress(`${API}/pengamanan/polis/export`, "register_polis_asuransi.csv", { label: "Ekspor Register Polis Asuransi (CSV)" }).catch(() => {})}
+                    data-testid="pengamanan-polis-export">
+                    <Download className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">CSV</span>
+                  </Button>
                 )}
                 <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
                   onClick={() => { setCari(""); setHasilCari([]); setFormPolis({ data: { nomor_polis: "", penanggung: "Konsorsium Asuransi BMN", kategori_objek: "program_preferen", nilai_pertanggungan: "", premi: "", sumber_dana: "dipa", mulai: "", berakhir: "", keterangan: "" }, aset: null, saving: false }); }}
