@@ -3,7 +3,8 @@ import pytest
 
 from penghapusan_utils import (
     JALUR_KANDIDAT, STATUS_USULAN, TRANSISI_USULAN, boleh_transisi,
-    jalur_kandidat, rekap_kandidat, validate_transisi,
+    build_asset_penghapusan_projection, jalur_kandidat, rekap_kandidat,
+    validate_transisi,
 )
 
 
@@ -70,6 +71,36 @@ def test_validate_transisi_sk_wajib_nomor():
     assert any("tidak sah" in e for e in errs)
     errs = validate_transisi("diusulkan", "status_aneh")
     assert any("tidak dikenal" in e for e in errs)
+
+
+def test_proyeksi_master_penghapusan_hanya_marker():
+    """Proyeksi Prinsip 3: master ditandai `dihapus` + jejak SK, TANPA menyentuh
+    field yang dibaca laporan (inventory_status/condition/purchase_price)."""
+    usulan = {
+        "id": "u1", "asset_id": "a1", "jalur": "rusak_berat",
+        "nomor_sk": "  SK-9/2026 ", "tanggal_sk": "2026-07-13T00:00:00",
+        "status": "sk_terbit",
+    }
+    proj = build_asset_penghapusan_projection(usulan, "2026-07-13T04:05:06+00:00")
+    assert proj["dihapus"] is True
+    p = proj["penghapusan"]
+    assert p["status"] == "sk_terbit"
+    assert p["usulan_id"] == "u1" and p["jalur"] == "rusak_berat"
+    assert p["nomor_sk"] == "SK-9/2026"          # dirapikan (strip)
+    assert p["tanggal_sk"] == "2026-07-13"       # dipangkas 10 char
+    assert p["diproyeksikan_pada"] == "2026-07-13T04:05:06+00:00"
+    # Tidak boleh menyentuh field laporan → tak ada regresi laporan
+    for terlarang in ("inventory_status", "condition", "purchase_price",
+                      "asset_name", "version", "NUP"):
+        assert terlarang not in proj
+
+
+def test_proyeksi_master_penghapusan_field_kosong_aman():
+    proj = build_asset_penghapusan_projection({}, "2026-01-01T00:00:00+00:00")
+    p = proj["penghapusan"]
+    assert proj["dihapus"] is True
+    assert p["usulan_id"] == "" and p["nomor_sk"] == "" and p["tanggal_sk"] == ""
+    assert p["jalur"] == "" and p["diproyeksikan_pada"] == "2026-01-01T00:00:00+00:00"
 
 
 def test_jejak_aset_terhapus():
