@@ -22,8 +22,8 @@ from db import db
 from persediaan_fields import EDITABLE_FIELD_NAMES
 from persediaan_utils import (
     JENIS_KELUAR, JENIS_MASUK, KODE_PENUH_LEN, KODE_PREFIX_LEN, SATUAN_BAKU,
-    buat_layer, klasifikasi_kedaluwarsa, konsumsi_fifo, mutasi_periode,
-    next_kode_penuh, next_nup, nilai_persediaan_dari_batches,
+    baris_csv_transaksi, buat_layer, klasifikasi_kedaluwarsa, konsumsi_fifo,
+    mutasi_periode, next_kode_penuh, next_nup, nilai_persediaan_dari_batches,
     parse_import_persediaan_rows, penyesuaian_opname, status_stok,
     validate_kode_persediaan, validate_pindah_gudang,
     validate_transaksi_keluar, validate_transaksi_masuk,
@@ -245,6 +245,30 @@ async def export_persediaan(_user: dict = Depends(require_user)):
         ])
     return Response(content=buf.getvalue().encode("utf-8-sig"), media_type="text/csv",
                     headers={"Content-Disposition": 'attachment; filename="master_persediaan.csv"'})
+
+
+@persediaan_router.get("/persediaan/transaksi/export")
+async def export_transaksi_persediaan(_user: dict = Depends(require_user)):
+    """Ekspor CSV seluruh jurnal transaksi persediaan (pola #158).
+
+    Bahan rekonsiliasi SAKTI: tiap gerakan stok (masuk/keluar/mutasi/opname)
+    satu baris, terurut waktu, memuat kode transaksi SAKTI, nilai FIFO, dan
+    saldo berjalan. Baca-saja — helper murni `baris_csv_transaksi` yang
+    membentuk baris (teruji unit)."""
+    import csv as csv_module
+    import io
+
+    from fastapi.responses import Response
+
+    items = [t async for t in db.transaksi_persediaan.find({}, {"_id": 0})
+             .sort("timestamp", 1)]
+    buf = io.StringIO()
+    w = csv_module.writer(buf)
+    for row in baris_csv_transaksi(items):
+        w.writerow(row)
+    return Response(content=buf.getvalue().encode("utf-8-sig"), media_type="text/csv",
+                    headers={"Content-Disposition":
+                             'attachment; filename="jurnal_transaksi_persediaan.csv"'})
 
 
 @persediaan_router.post("/persediaan/import")

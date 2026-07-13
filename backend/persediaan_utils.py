@@ -434,3 +434,69 @@ def status_stok(stok: int, batas_kritis) -> str:
     if batas > 0 and stok <= batas:
         return "kritis"
     return "aman"
+
+
+# Ekspor CSV jurnal transaksi persediaan (pola #158) — bahan rekonsiliasi
+# SAKTI: setiap gerakan stok (masuk/keluar/mutasi/opname) satu baris, memuat
+# kode transaksi SAKTI + nilai FIFO + saldo berjalan. Fungsi murni (tanpa
+# Mongo) supaya teruji unit; route hanya menyalin daftar transaksi ke sini.
+HEADER_CSV_TRANSAKSI = [
+    "tanggal", "arah", "jenis", "uraian", "kode_sakti",
+    "kode_barang", "nup", "nama_barang", "jumlah",
+    "harga_satuan", "total", "stok_sebelum", "stok_sesudah",
+    "no_bukti", "jenis_dokumen", "tgl_dokumen", "no_kontrak", "penyedia",
+    "unit_penerima", "lokasi_dari", "lokasi_ke", "petugas", "keterangan",
+]
+
+
+def _num(v) -> int:
+    try:
+        return int(v or 0)
+    except (ValueError, TypeError):
+        return 0
+
+
+def _rp(v) -> int:
+    """Bulatkan nilai rupiah ke bilangan bulat (nilai FIFO bisa pecahan)."""
+    try:
+        return int(round(float(v or 0)))
+    except (ValueError, TypeError):
+        return 0
+
+
+def baris_csv_transaksi(transaksi_list) -> list:
+    """[header, *baris] jurnal transaksi persediaan untuk ekspor CSV.
+
+    Menerima daftar dokumen `transaksi_persediaan` (apa adanya dari DB) dan
+    mengembalikan baris siap-tulis. Field yang absen pada suatu jenis
+    transaksi (mis. unit_penerima hanya di 'keluar', lokasi_* hanya di
+    'mutasi') dibiarkan kosong — bukan error.
+    """
+    rows = [list(HEADER_CSV_TRANSAKSI)]
+    for t in transaksi_list or []:
+        rows.append([
+            str(t.get("timestamp") or "")[:10],
+            t.get("arah") or "",
+            t.get("jenis") or "",
+            t.get("jenis_label") or "",
+            t.get("kode_sakti") or "",
+            t.get("kode_barang") or "",
+            t.get("nup") or "",
+            t.get("nama_barang") or "",
+            _num(t.get("jumlah")),
+            _rp(t.get("harga_satuan")),
+            _rp(t.get("total")),
+            _num(t.get("stok_sebelum")),
+            _num(t.get("stok_sesudah")),
+            t.get("no_bukti") or "",
+            t.get("jenis_dokumen") or "",
+            t.get("tgl_dokumen") or "",
+            t.get("no_kontrak") or "",
+            t.get("penyedia") or "",
+            t.get("unit_penerima") or "",
+            t.get("lokasi_dari") or "",
+            t.get("lokasi_ke") or "",
+            t.get("petugas") or "",
+            t.get("keterangan") or "",
+        ])
+    return rows
