@@ -15,10 +15,13 @@ from pydantic import BaseModel, Field
 
 from auth_utils import require_admin, require_user, require_user_or_query_token
 from db import db, fs_bucket
-from shared_utils import delete_document_from_gridfs, get_document_from_gridfs
+from shared_utils import (
+    delete_document_from_gridfs, get_document_from_gridfs, log_audit,
+)
 from pemindahtanganan_utils import (
     AMBANG_PERSETUJUAN_PT, BENTUK_PEMINDAHTANGANAN, DOKUMEN_PELAKSANAAN,
-    JENIS_BMN_PT, JENJANG_PERSETUJUAN, STATUS_USULAN_PT, peringatan_pt,
+    JENIS_BMN_PT, JENJANG_PERSETUJUAN, STATUS_USULAN_PT,
+    build_asset_pemindahtanganan_projection, peringatan_pt,
     rekap_pt, sarankan_jenjang, validate_transisi_pt, validate_usulan_pt,
 )
 from pembukuan_utils import parse_harga
@@ -177,6 +180,47 @@ async def buat_usulan_pt(payload: UsulanPtIn, user: dict = Depends(require_user)
     return record
 
 
+async def _proyeksi_master_pemindahtanganan(usulan: dict, oleh: str) -> int:
+    """Proyeksikan master aset saat pemindahtanganan SELESAI — tandai `dihapus`
+    (SK Penghapusan terbit) untuk SETIAP aset dalam usulan (Prinsip 3 Bab 5).
+
+    Best-effort & idempoten (pola #234/#254): register `pemindahtanganan` tetap
+    jurnal sumber; kegagalan/no-op proyeksi TIDAK menggagalkan transisi. Filter
+    `dihapus != true` membuat aman dipanggil ulang & tak menimpa jejak
+    penghapusan lain (mis. aset sudah dihapus jalur langsung). `$inc version`
+    mem-bust cache/ETag + memicu OCC 409 pada form aset usang. Mengembalikan
+    jumlah aset yang benar-benar diproyeksikan.
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    proj = build_asset_pemindahtanganan_projection(usulan, now)
+    n = 0
+    for row in usulan.get("aset") or []:
+        aid = row.get("asset_id")
+        if not aid:
+            continue
+        updated = await db.assets.find_one_and_update(
+            {"id": aid, "dihapus": {"$ne": True}},
+            {"$set": proj, "$inc": {"version": 1}},
+            projection={"_id": 0, "id": 1, "activity_id": 1,
+                        "asset_code": 1, "asset_name": 1},
+            return_document=True,
+        )
+        if not updated:
+            # Aset sudah dihapus/diproyeksikan atau tak ada — SK tetap sah.
+            continue
+        n += 1
+        await log_audit(
+            "penghapusan", updated.get("activity_id", ""), updated.get("id", ""),
+            asset_code=updated.get("asset_code", ""),
+            asset_name=updated.get("asset_name", ""),
+            username=oleh or "system",
+            detail=(f"Aset dihapus dari master via pemindahtanganan "
+                    f"({proj['penghapusan']['bentuk']}) — SK "
+                    f"{proj['penghapusan']['nomor_sk']}").strip(),
+        )
+    return n
+
+
 @pemindahtanganan_router.post("/pemindahtanganan/{usulan_id}/status")
 async def transisi_pt(usulan_id: str, payload: TransisiPtIn,
                       admin: dict = Depends(require_admin)):
@@ -212,6 +256,11 @@ async def transisi_pt(usulan_id: str, payload: TransisiPtIn,
     if not res:
         raise HTTPException(status_code=409,
                             detail="Status usulan berubah oleh proses lain — muat ulang")
+    # Proyeksi master (Prinsip 3): saat SELESAI (SK Penghapusan terbit), tandai
+    # aset `dihapus` di db.assets agar berhenti double-count di laporan (#256).
+    # Setelah CAS sukses agar tak double-proyeksi.
+    if payload.status == "selesai":
+        await _proyeksi_master_pemindahtanganan(res, admin.get("username"))
     return res
 
 

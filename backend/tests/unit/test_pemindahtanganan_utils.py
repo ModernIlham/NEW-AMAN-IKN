@@ -109,3 +109,66 @@ def test_sarankan_jenjang():
     assert "Indikatif" in s["disclaimer"]
     # Referensi konsisten
     assert all(r["jenjang"] in JENJANG_PERSETUJUAN for r in AMBANG_PERSETUJUAN_PT)
+
+
+# ── Proyeksi master saat SELESAI (SK Penghapusan) — §5A Prinsip 3 (#256) ──
+from pemindahtanganan_utils import build_asset_pemindahtanganan_projection
+from pembukuan_utils import tombstones_penghapusan, build_lbkp_rows
+
+NOW = "2026-07-13T10:20:30+00:00"
+
+
+def _pt(**over):
+    base = {"id": "pt-1", "bentuk": "penjualan_lelang",
+            "nomor_sk_penghapusan": "SK-99/2026",
+            "aset": [{"asset_id": "a1", "asset_code": "3050104001",
+                      "harga": "10000000"}]}
+    base.update(over)
+    return base
+
+
+def test_proyeksi_pt_bentuk_dihapus():
+    proj = build_asset_pemindahtanganan_projection(_pt(), NOW)
+    assert proj["dihapus"] is True
+    p = proj["penghapusan"]
+    assert p["jalur"] == "pemindahtanganan"          # pembeda dari penghapusan langsung
+    assert p["status"] == "sk_terbit"
+    assert p["pemindahtanganan_id"] == "pt-1"
+    assert p["bentuk"] == "penjualan_lelang"
+    assert p["nomor_sk"] == "SK-99/2026"
+    assert p["diproyeksikan_pada"] == NOW
+    # SENGAJA tak menyentuh purchase_price/condition
+    assert "purchase_price" not in proj and "condition" not in proj
+
+
+def test_proyeksi_pt_tanggal_sk_default_dan_eksplisit():
+    # Tanpa tanggal SK eksplisit → pakai tanggal transisi (now)
+    assert build_asset_pemindahtanganan_projection(_pt(), NOW)["penghapusan"]["tanggal_sk"] == "2026-07-13"
+    # Bila record membawa tanggal SK → dipakai (dipangkas 10 char)
+    proj = build_asset_pemindahtanganan_projection(
+        _pt(tanggal_sk_penghapusan="2026-05-01T00:00:00"), NOW)
+    assert proj["penghapusan"]["tanggal_sk"] == "2026-05-01"
+
+
+def test_proyeksi_pt_field_kosong_aman():
+    proj = build_asset_pemindahtanganan_projection({}, NOW)
+    p = proj["penghapusan"]
+    assert proj["dihapus"] is True
+    assert p["pemindahtanganan_id"] == "" and p["nomor_sk"] == ""
+    assert p["tanggal_sk"] == "2026-07-13"           # fallback now tetap jalan
+
+
+def test_proyeksi_pt_kompatibel_tombstone_lbkp():
+    """Aset ter-proyeksi pemindahtanganan HARUS ikut terhitung sebagai mutasi
+    KURANG di LBKP lewat mesin tombstone #253 — tanpa kode laporan tambahan."""
+    proj = build_asset_pemindahtanganan_projection(
+        _pt(tanggal_sk_penghapusan="2026-04-10"), NOW)
+    aset = {"asset_code": "3050104001", "purchase_price": "10000000", **proj}
+    ts = tombstones_penghapusan([aset])
+    assert len(ts) == 1
+    assert ts[0]["timestamp"] == "2026-04-10"        # periode = tanggal SK
+    assert ts[0]["nilai"] == "10000000"              # nilai perolehan
+    # Dan build_lbkp_rows menempatkannya sebagai KURANG bila SK dalam periode
+    per_kelas, _ = build_lbkp_rows([], ts, "2026-01-01", "2026-06-30")
+    _rows, total = per_kelas["gabungan"]
+    assert total["nilai_kurang"] == 10000000.0 and total["nilai_tambah"] == 0.0

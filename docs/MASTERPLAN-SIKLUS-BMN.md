@@ -187,7 +187,7 @@ Audit lintas-modul terhadap 5 prinsip Bab 5. Kepatuhan saat ini:
 |---|---|---|
 | 1. Satu identitas aset | ✅ Patuh (risiko drift) | Semua modul merujuk `asset_id` + snapshot `asset_code/NUP`; snapshot **tak disegarkan** bila master berubah |
 | 2. Satu kodefikasi | ⚠️ Sebagian | Golongan **diturunkan** dari prefix di mana-mana; tapi kodefikasi **bukan FK tervalidasi** saat create aset/persediaan |
-| 3. Transaksi = jurnal, master = proyeksi | ⚠️ Sebagian (Persediaan + **Penghapusan** + Pemeliharaan) | **Penghapusan kini memproyeksi** master saat SK terbit (`dihapus=True` + jejak SK + `version` bump + audit, #234); Persediaan penuh; Pemeliharaan proyeksi kondisi. *Tersisa:* BA musnah/PSP/revaluasi belum meng-`update` `db.assets` |
+| 3. Transaksi = jurnal, master = proyeksi | ⚠️ Sebagian (Persediaan + **Penghapusan** + **Revaluasi** + **Pemindahtanganan** + Pemeliharaan) | **Penghapusan** proyeksi master saat SK terbit (#234); **Revaluasi** proyeksi `nilai_wajar_terakhir` (#254) & laporan posisi memakainya (#255); **Pemindahtanganan** *selesai* proyeksi `dihapus` (#256); Persediaan penuh; Pemeliharaan proyeksi kondisi. *Tersisa:* BA Pemusnahan final belum proyeksi langsung |
 | 4. Dokumen sumber = simpul | ❌ Belum ada | `dokumen_sumber_id` 0 kecocokan; dokumen diketik ulang per modul |
 | 5. Approval = gerbang, OCC fondasi | ❌ Melanggar | `pending_changes` 0; OCC penuh hanya di `assets.py`; modul lain cek peran saja |
 
@@ -219,17 +219,27 @@ Audit lintas-modul terhadap 5 prinsip Bab 5. Kepatuhan saat ini:
    `build_dbkp_rows` (DBKP + Posisi BMN di Neraca) dan rincian per-NUP rekonsiliasi
    XLSX SAKTI (Sheet 2 kini *tie-out* dgn total Sheet 1), #255. *Sengaja scoped:*
    dasar penyusutan (`rekap_penyusutan`) & laporan MUTASI (LBKP/CaLBMN — revaluasi
-   = jenis mutasi tersendiri) TAK diubah → langkah terpisah. *Tersisa:* dasar
-   penyusutan memakai nilai wajar, serta proyeksi master dari BA Pemusnahan dan
-   PSP/pemindahtanganan.
+   = jenis mutasi tersendiri) TAK diubah → langkah terpisah. ✅ **Pemindahtanganan
+   kini memproyeksi master** — saat usulan *selesai* (SK Penghapusan terbit), tiap
+   aset ditandai `dihapus=True` + jejak `penghapusan.{jalur:"pemindahtanganan",
+   bentuk, nomor_sk, tanggal_sk}` + `$inc version` + audit (#256, helper murni
+   `build_asset_pemindahtanganan_projection`, best-effort/idempoten spt #234).
+   MEMAKAI ULANG bentuk marker penghapusan sehingga penyaringan posisi
+   (#248/#249) & tombstone mutasi LBKP (#253) ikut otomatis. *Tersisa:* dasar
+   penyusutan memakai nilai wajar, serta proyeksi master dari **BA Pemusnahan**
+   final (Pemusnahan sudah ber-FK ke usulan Penghapusan #228 → proyeksi ikut saat
+   SK penghapusan itu terbit; proyeksi langsung dari BA belum).
 2. **Belum ada simpul Dokumen Sumber** (Prinsip 4) — jadikan record perolehan
    Pengadaan sebagai node; aset/persediaan simpan `perolehan_id`.
 3. **Approval `pending_changes` + OCC belum seragam** (Prinsip 5).
 4. **Perencanaan (RKBMN) → Penganggaran putus** — dua register paralel tanpa
    `rkbmn_id`; tiru pola `snapshot_penganggaran` (Pengadaan→Penganggaran #199).
 5. ✅ **Pemusnahan → Penghapusan kini ber-FK** (`sumber_ba_id` + `sumber_ba_nomor`
-   pada `usulan_penghapusan`, #228) — sebelumnya hanya teks bebas. *Tersisa:*
-   Pemindahtanganan → Penghapusan (masih via string `nomor_sk_penghapusan`).
+   pada `usulan_penghapusan`, #228) — sebelumnya hanya teks bebas. ✅ **Pemindahtanganan
+   *selesai* kini memproyeksi master** (`dihapus` + jejak SK, #256) sehingga aset
+   yang dipindahtangankan berhenti terhitung di laporan. *Tersisa:* tautan
+   Pemindahtanganan → tiket `usulan_penghapusan` masih via string `nomor_sk_penghapusan`
+   (belum FK id) — dampak laporan sudah tertangani lewat proyeksi master.
 6. **Pengadaan → Aset satu arah & manual** — perolehan tak auto-daftar master;
    aset tak simpan `perolehan_id` balik.
 7. **Kodefikasi bukan FK tervalidasi** (Prinsip 2).
