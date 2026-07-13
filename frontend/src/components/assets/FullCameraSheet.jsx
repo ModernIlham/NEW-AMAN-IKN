@@ -507,17 +507,20 @@ const FullCameraSheet = memo(function FullCameraSheet({
     : EDIT_FIELDS;
 
   // ── Gating akurasi GPS: jaga agar koordinat range lebar tak terekam ──
-  // Cutoff diperketat: koordinat HANYA boleh direkam bila akurasi ≤6 m; di atas
-  // 6 m rana DIKUNCI + diredupkan (dulu 8 m). ≤4 m = SANGAT AKURAT (jarang) →
-  // effect lebih heboh agar pengguna segera memotret. GPS mati/ditolak → tak
-  // menggate. Masih mencari fix (belum ada akurasi) → tahan rana sampai akurat.
+  // Toleransi dilonggarkan untuk mempercepat alur lapangan: koordinat boleh
+  // direkam hingga ≤8 m. Cincin: HIJAU ≤6 m (baik), KUNING 6–8 m (masih boleh —
+  // dipercepat), MERAH >8 m (rana DIKUNCI + diredupkan). ≤4 m = SANGAT AKURAT
+  // (jarang) → effect lebih heboh. GPS mati/ditolak → tak menggate. Masih
+  // mencari fix (belum ada akurasi) → tahan rana sampai fix akurat didapat.
   const gpsAcc = gps?.accuracy;
-  const accExcellent = typeof gpsAcc === "number" && gpsAcc <= 4;          // sangat akurat (jarang)
-  const accOk = typeof gpsAcc === "number" && gpsAcc <= 6;                 // ≤6 m → boleh potret
-  const accPoor = typeof gpsAcc === "number" && gpsAcc > 6;               // >6 m → rana dikunci
-  const gpsBlocked = !gpsDenied && (gpsAcc == null || gpsAcc > 6);
+  const accExcellent = typeof gpsAcc === "number" && gpsAcc <= 4;              // sangat akurat (jarang)
+  const accGood = typeof gpsAcc === "number" && gpsAcc <= 6;                   // hijau (baik)
+  const accFair = typeof gpsAcc === "number" && gpsAcc > 6 && gpsAcc <= 8;     // kuning (masih boleh)
+  const accOk = typeof gpsAcc === "number" && gpsAcc <= 8;                     // ≤8 m → boleh potret
+  const accPoor = typeof gpsAcc === "number" && gpsAcc > 8;                    // >8 m → rana dikunci
+  const gpsBlocked = !gpsDenied && (gpsAcc == null || gpsAcc > 8);
   const ringColor = gpsDenied ? null
-    : accOk ? "#22c55e" : accPoor ? "#ef4444" : "#64748b";
+    : accGood ? "#22c55e" : accFair ? "#eab308" : accPoor ? "#ef4444" : "#64748b";
 
   return createPortal(
     <div className="fixed inset-0 z-[120] bg-black flex flex-col" role="dialog" aria-modal="true" aria-label="Mode Kamera Penuh" data-testid="full-camera-sheet">
@@ -525,9 +528,9 @@ const FullCameraSheet = memo(function FullCameraSheet({
       <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" playsInline muted
         style={brightness !== 1 ? { filter: `brightness(${brightness})` } : undefined} />
 
-      {/* Cincin akurasi GPS di tepi area kamera — hijau ≤6 m (berkedip), merah
-          >6 m (rana dikunci). ≤4 m: cincin lebih tebal + cahaya dalam (heboh).
-          Tak tampil bila GPS mati/ditolak. */}
+      {/* Cincin akurasi GPS di tepi area kamera — hijau ≤6 m, kuning 6–8 m
+          (keduanya berkedip & boleh potret), merah >8 m (rana dikunci). ≤4 m:
+          cincin lebih tebal + cahaya dalam (heboh). Tak tampil bila GPS mati. */}
       {ringColor && (
         <div aria-hidden="true" data-testid="full-camera-gps-ring"
           className={`absolute inset-0 z-[6] pointer-events-none ${accOk ? "animate-pulse" : ""}`}
@@ -548,11 +551,16 @@ const FullCameraSheet = memo(function FullCameraSheet({
           </div>
         </>
       )}
-      {/* Reticle tap-to-focus (muncul di titik ketukan, memudar sendiri). */}
+      {/* Reticle tap-to-focus: menyebar TEPAT dari titik sentuh lalu memudar.
+          Anchor div tanpa transform di (x,y); cincin & titik dipusatkan via
+          margin negatif (bukan -translate) karena `animate-ping` menimpa
+          `transform` → dulu cincin lompat ke pojok kiri-atas & tak center. */}
       {focusRipple && (
         <div key={focusRipple.id} aria-hidden="true" data-testid="full-camera-focus-ring"
-          className="absolute z-[7] pointer-events-none w-16 h-16 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/95 animate-ping"
-          style={{ left: focusRipple.x, top: focusRipple.y }} />
+          className="absolute z-[7] pointer-events-none" style={{ left: focusRipple.x, top: focusRipple.y }}>
+          <span className="absolute -ml-8 -mt-8 w-16 h-16 rounded-full border-2 border-white/95 animate-ping" />
+          <span className="absolute -ml-1 -mt-1 w-2 h-2 rounded-full bg-white/95" />
+        </div>
       )}
 
       {/* Lapisan gestur kecerahan: sentuh → indikator; tahan & geser atas/bawah
@@ -740,7 +748,7 @@ const FullCameraSheet = memo(function FullCameraSheet({
           </button>
           <button type="button" onClick={capture} disabled={!ready || photos.length >= maxPhotos || !nameFilled || gpsBlocked}
             aria-label="Ambil foto" data-testid="full-camera-shutter"
-            title={gpsBlocked ? (gpsAcc == null ? "Menunggu sinyal GPS akurat…" : `Akurasi GPS ±${gpsAcc} m terlalu lebar (maks ±6 m)`) : undefined}
+            title={gpsBlocked ? (gpsAcc == null ? "Menunggu sinyal GPS akurat…" : `Akurasi GPS ±${gpsAcc} m terlalu lebar (maks ±8 m)`) : undefined}
             className="w-[72px] h-[72px] rounded-full border-4 border-white flex items-center justify-center disabled:opacity-40">
             <span className="w-14 h-14 rounded-full bg-white flex items-center justify-center">
               <Camera className="w-6 h-6 text-black/70" />
