@@ -319,11 +319,40 @@ const FullCameraSheet = memo(function FullCameraSheet({
     }
   }, [setBright, bumpBrightUI]);
 
-  const lastDragMovedRef = useRef(false);
-  const onBrightPointerUp = useCallback(() => {
-    lastDragMovedRef.current = !!brightDragRef.current?.moved;
-    brightDragRef.current = null;
+  // ── Tap-to-focus: ketuk (bukan geser) di area kamera → fokus di titik itu ──
+  const [focusRipple, setFocusRipple] = useState(null); // { x, y, id } koordinat DALAM video
+  const focusTimerRef = useRef(null);
+  const focusIdRef = useRef(0);
+  const tapFocus = useCallback((clientX, clientY) => {
+    const el = videoRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    focusIdRef.current += 1;
+    setFocusRipple({ x, y, id: focusIdRef.current });
+    if (focusTimerRef.current) clearTimeout(focusTimerRef.current);
+    focusTimerRef.current = setTimeout(() => setFocusRipple(null), 700);
+    // Best-effort: minta kamera fokus ke titik (0..1). Banyak browser mengabaikan
+    // pointsOfInterest — efek visual tetap memberi umpan balik ketukan.
+    const track = streamRef.current?.getVideoTracks?.()[0];
+    if (track?.applyConstraints) {
+      const nx = Math.min(1, Math.max(0, x / rect.width));
+      const ny = Math.min(1, Math.max(0, y / rect.height));
+      track.applyConstraints({ advanced: [{ focusMode: "single-shot", pointsOfInterest: [{ x: nx, y: ny }] }] })
+        .catch(() => {});
+    }
   }, []);
+
+  const lastDragMovedRef = useRef(false);
+  const onBrightPointerUp = useCallback((e) => {
+    const moved = !!brightDragRef.current?.moved;
+    lastDragMovedRef.current = moved;
+    brightDragRef.current = null;
+    // Ketukan cepat (tanpa geser) & benar-benar dilepas (bukan cancel) → fokus.
+    if (!moved && e && e.type === "pointerup" && e.isPrimary !== false) tapFocus(e.clientX, e.clientY);
+  }, [tapFocus]);
   const resetBright = useCallback(() => {
     // Dua drag cepat memicu dblclick sintetis — jangan hapus hasil atur barusan.
     if (lastDragMovedRef.current) { lastDragMovedRef.current = false; return; }
@@ -477,11 +506,37 @@ const FullCameraSheet = memo(function FullCameraSheet({
     ? EDIT_FIELDS.filter(f => f.name !== "user")
     : EDIT_FIELDS;
 
+  // ── Gating akurasi GPS: jaga agar koordinat range lebar tak terekam ──
+  // Hijau ≤6 m (berkedip), kuning ≤8 m, di atas 8 m rana DIKUNCI + diredupkan.
+  // GPS mati/ditolak → tak menggate (tak ada koordinat = tak ada risiko).
+  // Masih mencari fix (belum ada akurasi) → tahan rana dulu sampai fix akurat.
+  const gpsAcc = gps?.accuracy;
+  const accGood = typeof gpsAcc === "number" && gpsAcc <= 6;
+  const accFair = typeof gpsAcc === "number" && gpsAcc > 6 && gpsAcc <= 8;
+  const accPoor = typeof gpsAcc === "number" && gpsAcc > 8;
+  const gpsBlocked = !gpsDenied && (gpsAcc == null || gpsAcc > 8);
+  const ringColor = gpsDenied ? null
+    : accGood ? "#22c55e" : accFair ? "#eab308" : accPoor ? "#ef4444" : "#64748b";
+
   return createPortal(
     <div className="fixed inset-0 z-[120] bg-black flex flex-col" role="dialog" aria-modal="true" aria-label="Mode Kamera Penuh" data-testid="full-camera-sheet">
       {/* Pratinjau kamera (filter kecerahan mengikuti gestur) */}
       <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" playsInline muted
         style={brightness !== 1 ? { filter: `brightness(${brightness})` } : undefined} />
+
+      {/* Cincin akurasi GPS di tepi area kamera — hijau ≤6 m (berkedip), kuning
+          ≤8 m, merah >8 m (rana dikunci). Tak tampil bila GPS mati/ditolak. */}
+      {ringColor && (
+        <div aria-hidden="true" data-testid="full-camera-gps-ring"
+          className={`absolute inset-0 z-[6] pointer-events-none ${accGood ? "animate-pulse" : ""}`}
+          style={{ boxShadow: `inset 0 0 0 4px ${ringColor}` }} />
+      )}
+      {/* Reticle tap-to-focus (muncul di titik ketukan, memudar sendiri). */}
+      {focusRipple && (
+        <div key={focusRipple.id} aria-hidden="true" data-testid="full-camera-focus-ring"
+          className="absolute z-[7] pointer-events-none w-16 h-16 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/95 animate-ping"
+          style={{ left: focusRipple.x, top: focusRipple.y }} />
+      )}
 
       {/* Lapisan gestur kecerahan: sentuh → indikator; tahan & geser atas/bawah
           → atur; ketuk dua kali → kembali normal. Di bawah overlay kontrol. */}
@@ -666,8 +721,9 @@ const FullCameraSheet = memo(function FullCameraSheet({
             <span className={`w-11 h-11 rounded-full flex items-center justify-center ${!nameFilled ? "bg-amber-400/30 ring-2 ring-amber-300 animate-pulse" : "bg-white/15"}`}><Pencil className="w-5 h-5" /></span>
             Edit Info{!nameFilled ? " *" : ""}
           </button>
-          <button type="button" onClick={capture} disabled={!ready || photos.length >= maxPhotos || !nameFilled}
+          <button type="button" onClick={capture} disabled={!ready || photos.length >= maxPhotos || !nameFilled || gpsBlocked}
             aria-label="Ambil foto" data-testid="full-camera-shutter"
+            title={gpsBlocked ? (gpsAcc == null ? "Menunggu sinyal GPS akurat…" : `Akurasi GPS ±${gpsAcc} m terlalu lebar (maks ±8 m)`) : undefined}
             className="w-[72px] h-[72px] rounded-full border-4 border-white flex items-center justify-center disabled:opacity-40">
             <span className="w-14 h-14 rounded-full bg-white flex items-center justify-center">
               <Camera className="w-6 h-6 text-black/70" />

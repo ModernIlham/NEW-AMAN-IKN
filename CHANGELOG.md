@@ -48,6 +48,24 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#232] Kamera: tap-to-focus + gating akurasi GPS (ring hijau/kuning + kunci rana) — 2026-07-13
+
+- **Ketuk area kamera → fokus di titik itu (tap-to-focus).** Ketukan cepat
+  (bukan gestur geser kecerahan) di posisi mana pun pada pratinjau kamera kini
+  memunculkan **reticle** di titik ketukan + upaya menyetel fokus kamera ke
+  titik tersebut (`applyConstraints` `focusMode`/`pointsOfInterest` — best
+  effort; efek visual tetap ada bila perangkat mengabaikannya). Berlaku di
+  **scanner** maupun **tambah aset baru**.
+- **Gating akurasi GPS demi ketepatan titik lokasi.** Cincin di tepi area
+  kamera menandai akurasi fix: **hijau berkedip bila ±≤6 m**, **kuning bila
+  ±≤8 m**, **merah bila >8 m**. Bila akurasi **>8 m** (atau fix akurat belum
+  didapat), **tombol rana dikunci & diredupkan** sehingga foto berkoordinat
+  range terlalu lebar tak terekam — surveyor mendekat/menunggu sinyal
+  mengerucut dulu. GPS mati/ditolak tidak menggate (tak ada koordinat = tak
+  ada risiko). Melengkapi pengetatan `acquireAccuratePosition` (fix ≤8 m, #227).
+
+---
+
 ## [#231] Mode list: klik foto baris aset → lightbox seperti galeri — 2026-07-13
 
 - **Foto di baris daftar aset kini bisa diklik → membuka lightbox foto** yang
