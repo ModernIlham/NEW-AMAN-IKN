@@ -48,6 +48,23 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#239] Kamera/GPS: toleransi ≤8 m (kuning 6–8 m) + perbaikan animasi titik fokus — 2026-07-13
+
+Revisi #235 mengikuti alur lapangan agar lebih cepat.
+
+- **Toleransi koordinat dilonggarkan ≤6→≤8 m.** Rana kamera kini terkunci hanya
+  bila akurasi **>8 m** (dulu >6 m). Cincin: **hijau ≤6 m**, **kuning 6–8 m**
+  (masih boleh potret — mempercepat pengambilan), **merah >8 m** (rana dikunci).
+  **≤4 m** tetap "sangat akurat" (cincin heboh + badge). `acquireAccuratePosition`
+  `desiredAccuracy` 6→8 m (berhenti begitu ≤8 m).
+- **Perbaikan animasi titik fokus (tap-to-focus).** Dulu cincin fokus tak
+  bermula di titik sentuh & menyebar dari pojok — karena `animate-ping` menimpa
+  `transform: translate` yang dipakai untuk memusatkan. Kini reticle dipusatkan
+  via **margin negatif** (anchor tanpa transform di titik sentuh) + titik pusat
+  kecil, sehingga cincin **menyebar tepat dari titik ketukan**.
+
+---
+
 ## [#238] Toolbar seleksi aset: satu-kesatuan (toolbar + Ubah Massal menyatu, tanpa header ganda) — 2026-07-13
 
 - **Toolbar seleksi & panel Ubah Massal kini satu kartu menyatu.** Dulu keduanya
