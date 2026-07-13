@@ -416,7 +416,9 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
 
   // Retry everything failed + kick the queue — used on reconnect, after
   // rehydration, and by the header's manual sync button.
-  const flushPending = useCallback(() => {
+  // auto=true → dipanggil otomatis (reconnect / rehydrasi saat buka kegiatan);
+  // auto=false → aksi eksplisit user (tombol Sinkronkan di header).
+  const flushPending = useCallback((auto = false) => {
     if (flushGuardRef.current) return; // throttle rapid online/offline flaps
     flushGuardRef.current = true;
     setTimeout(() => { flushGuardRef.current = false; }, 3000);
@@ -424,6 +426,13 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
       // 423 Locked (kegiatan disahkan): jangan auto-retry — hasilnya pasti
       // 423 lagi. Item tetap tersimpan; user memutuskan retry/dismiss manual.
       if (failedItemsRef.current[key]?.locked) return;
+      // OCC 409 (bentrok): JANGAN auto-retry. Saat buka kegiatan, daftar aset
+      // belum termuat → getLatestVersion null → versi basi dikirim ulang →
+      // server 409 lagi → toast "diubah pengguna lain" MUNCUL TERUS tiap buka
+      // kegiatan (dan menimpa perubahan orang lain itu keliru). Biarkan user
+      // meninjau lalu retry manual per-baris (yang menyegarkan versi dulu),
+      // atau tekan Sinkronkan (auto=false) untuk memaksa.
+      if (auto && failedItemsRef.current[key]?.hadConflict) return;
       if (statusesRef.current[key]?.status === "failed") retry(key);
     });
     processNext(); // anything still queued in memory (in-flight guard: activeCountRef)
@@ -444,7 +453,7 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
       const reachable = await checkReachable();
       if (cancelled) return;
       if (reachable) {
-        flushRef.current?.();
+        flushRef.current?.(true); // auto (reconnect) — lewati item bentrok
       } else {
         retryTimer = setTimeout(verifyAndFlush, REACHABILITY_RETRY_MS);
       }
@@ -487,7 +496,7 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
         );
       });
       onRehydrateRef.current?.(toRegister);
-      if (navigator.onLine) flushRef.current?.();
+      if (navigator.onLine) flushRef.current?.(true); // auto (rehidrasi) — lewati item bentrok
     })();
     return () => { cancelled = true; };
   }, [updateStatus]);

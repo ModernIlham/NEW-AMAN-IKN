@@ -1483,7 +1483,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
         auditOpen={auditOpen} onAuditToggle={handleAuditToggle}
         onOpenUserManagement={() => openDialog('userManagement')}
         isOnline={isOnline} wsConnected={wsConnected} onlineUsers={onlineUsers}
-        pendingCount={pendingCount} syncing={isSyncing} onSync={flushPending}
+        pendingCount={pendingCount} syncing={isSyncing} onSync={() => flushPending(false)}
         dark={dark} toggleDark={toggleDark}
         onShowInfo={onShowInfo}
       />

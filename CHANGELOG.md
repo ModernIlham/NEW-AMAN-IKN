@@ -48,6 +48,33 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#225] Perbaikan bug inventarisasi: notifikasi konflik berulang + kedip/loading foto popup peta — 2026-07-13
+
+- **Notifikasi "Aset telah diubah oleh pengguna lain" tak lagi muncul
+  berulang saat membuka kegiatan.** Penyebab: antrean simpan optimistis
+  me-*rehydrate* item lama dari perangkat dan meng-*auto-retry* semuanya saat
+  masuk kegiatan — termasuk item yang **dulu bentrok (OCC 409)**. Saat itu
+  daftar aset belum termuat, jadi versi (If-Match) yang dikirim basi → server
+  menolak (409) lagi → toast muncul → item disimpan ulang → berulang **tiap
+  kali** buka kegiatan. Perbaikan: **auto-flush (rehidrasi/rekoneksi) kini
+  melewati item yang berakhir konflik** — dibiarkan untuk ditinjau &
+  di-*retry* manual per-baris (yang menyegarkan versi lebih dulu) atau lewat
+  tombol **Sinkronkan** (aksi eksplisit user). Mengirim ulang otomatis edit
+  basi di atas perubahan orang lain juga memang keliru secara OCC.
+- **Foto pada popup marker peta tak lagi loading lama & berkedip cepat saat
+  diklik.** Dulu lightbox menunggu round-trip `/assets/{id}` sebelum bisa
+  menampilkan foto (spinner pemblokir), lalu mengganti array foto setelah
+  fetch (memicu efek "memuat" menyala lagi → kedip). Kini foto **diseed
+  seketika** dari data aset yang sudah dibawa baris peta (`photo_count` +
+  `version`) sehingga `<img>` langsung dimuat; fetch metadata hanya memperkaya
+  panel info dan **hanya membangun ulang URL foto bila jumlah/versi berubah**
+  (tak me-reset foto yang sedang tampil). Keadaan "memuat" awal juga
+  diinisialisasi benar → placeholder blur langsung tampil, bukan foto
+  tajam-lalu-hilang. Berlaku sama di galeri maupun popup peta (komponen
+  `PhotoLightbox` dipakai bersama).
+
+---
+
 ## [#224] Ringkas toolbar seleksi inventarisasi — 1 baris + bedakan tombol/teks — 2026-07-13
 
 - **Toolbar seleksi aset dipadatkan.** Sebelumnya (#222) toolbar melebar dan
