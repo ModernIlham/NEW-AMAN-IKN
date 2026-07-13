@@ -48,6 +48,24 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#224] Ringkas toolbar seleksi inventarisasi — 1 baris + bedakan tombol/teks — 2026-07-13
+
+- **Toolbar seleksi aset dipadatkan.** Sebelumnya (#222) toolbar melebar dan
+  membungkus jadi dua baris di tablet/desktop, memakan banyak ruang; aksinya
+  (pilih semua, kosongkan) tampil seperti **teks** biasa sehingga tak jelas
+  mana yang bisa diklik. Kini:
+  - **Satu baris** yang padat (tinggi tombol 28px, jarak rapat) — tidak lagi
+    membungkus di lebar wajar.
+  - **Hitungan = teks** (`N terpilih`, tanpa bingkai); **aksi = tombol**
+    berbingkai/solid: "Pilih semua" (chip biru + ikon centang, tooltip
+    "Pilih/batal semua aset di tampilan ini"), "Kosongkan" (chip merah + X),
+    dan tombol utama "Ubah Massal/Tutup" (biru solid, kanan). Perbedaan
+    bentuk membuat mana tombol vs teks langsung terbaca.
+  - Di layar sempit label aksi menciut jadi ikon saja (tetap ber-`title`),
+    hemat ruang tanpa kehilangan makna.
+
+---
+
 ## [#223] Ekspor CSV jurnal transaksi persediaan (Persediaan) — 2026-07-13
 
 - **Ekspor CSV seluruh jurnal transaksi persediaan** (`GET

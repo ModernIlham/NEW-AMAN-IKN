@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, memo, useReducer, lazy, Suspense } from "react";
 import {
   Package, Plus, X, ChevronDown, ChevronUp, Loader2, Star,
-  Users, PanelLeftClose, PanelLeftOpen, Lock, Pen,
+  Users, PanelLeftClose, PanelLeftOpen, Lock, Pen, CheckSquare,
   BarChart3, ClipboardList, Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -1658,11 +1658,20 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
                 {/* Toolbar seleksi — tampil di SEMUA viewport (HP/tablet/desktop):
                     hitungan + pilih-semua/kosongkan + buka-tutup Ubah Massal. */}
                 {perms.canEdit && (
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg px-3 py-1.5" data-testid="selection-toolbar">
-                    <span className="text-xs font-semibold text-blue-800 dark:text-blue-300"><b>{selectedAssets.size}</b> aset terpilih</span>
-                    <button onClick={toggleSelectAllVisible} className="text-xs text-blue-700 dark:text-blue-300 hover:underline font-medium" data-testid="select-all-visible-btn">Pilih/batal semua tampilan ini</button>
-                    <button onClick={clearSelection} className="text-xs text-red-600 dark:text-red-400 hover:underline font-medium" data-testid="clear-selection-btn">Kosongkan seleksi</button>
-                    <button onClick={() => setShowBatchPanel(v => !v)} className="ml-auto h-7 px-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1 flex-shrink-0" data-testid="toggle-batch-panel-btn">
+                  <div className="flex items-center gap-1.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg px-2.5 py-1" data-testid="selection-toolbar">
+                    {/* Hitungan = TEKS (tanpa bingkai). Aksi = TOMBOL (berbingkai/
+                        solid) supaya jelas mana teks, mana tombol. Satu baris,
+                        padat; label aksi menciut jadi ikon di layar sempit. */}
+                    <span className="text-xs text-blue-800 dark:text-blue-300 flex-shrink-0 whitespace-nowrap">
+                      <b className="text-sm font-bold">{selectedAssets.size}</b> terpilih
+                    </span>
+                    <button onClick={toggleSelectAllVisible} title="Pilih/batal semua aset di tampilan ini" className="h-7 px-2 rounded-md border border-blue-300 dark:border-blue-700 bg-white/70 dark:bg-transparent text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-xs font-medium flex items-center gap-1 flex-shrink-0 transition-colors" data-testid="select-all-visible-btn">
+                      <CheckSquare className="w-3.5 h-3.5" /><span className="hidden sm:inline">Pilih semua</span>
+                    </button>
+                    <button onClick={clearSelection} title="Kosongkan seleksi" className="h-7 px-2 rounded-md border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 text-xs font-medium flex items-center gap-1 flex-shrink-0 transition-colors" data-testid="clear-selection-btn">
+                      <X className="w-3.5 h-3.5" /><span className="hidden sm:inline">Kosongkan</span>
+                    </button>
+                    <button onClick={() => setShowBatchPanel(v => !v)} className="ml-auto h-7 px-2.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1 flex-shrink-0 transition-colors" data-testid="toggle-batch-panel-btn">
                       <Pen className="w-3.5 h-3.5" />{showBatchPanel ? "Tutup" : "Ubah Massal"}
                     </button>
                   </div>
