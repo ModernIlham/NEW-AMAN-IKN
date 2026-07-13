@@ -133,3 +133,37 @@ class TestKoreksiNilai:
         assert r["belum_tercatat_sakti"] == 1  # tujuan tertentu tak dihitung
         assert r["selisih_total"] == 140       # (250-100) + (40-50)
         assert r["per_jenis"]["penilaian_tujuan_tertentu"] == 1
+
+
+def test_susun_riwayat_nilai():
+    from penilaian_utils import susun_riwayat_nilai
+    aset = {"purchase_date": "2020-03-15", "purchase_price": 10_000_000}
+    koreksi = [
+        {"tanggal_dokumen": "2023-12-01", "jenis": "revaluasi",
+         "nilai_lama": 10_000_000, "nilai_baru": 25_000_000,
+         "nomor_dokumen": "LHIP-1", "status_sakti": "tercatat_sakti"},
+        # Informasional: tidak mengubah nilai buku terkini
+        {"tanggal_dokumen": "2024-06-01", "jenis": "penilaian_tujuan_tertentu",
+         "nilai_lama": 25_000_000, "nilai_baru": 30_000_000,
+         "nomor_dokumen": "LP-9", "status_sakti": "belum_dicatat"},
+        # Lebih awal dari revaluasi → harus terurut di depan
+        {"tanggal_dokumen": "2022-01-10", "jenis": "koreksi_pencatatan",
+         "nilai_lama": 10_000_000, "nilai_baru": 12_000_000,
+         "nomor_dokumen": "BA-2", "status_sakti": "tercatat_sakti"},
+    ]
+    r = susun_riwayat_nilai(aset, koreksi)
+    # Peristiwa: perolehan + 3 koreksi, terurut menaik tanggal
+    assert [p["jenis"] for p in r["peristiwa"]] == [
+        "perolehan", "koreksi_pencatatan", "revaluasi", "penilaian_tujuan_tertentu"]
+    assert r["peristiwa"][0]["nilai_baru"] == 10_000_000
+    assert r["peristiwa"][0]["nilai_lama"] is None
+    assert r["peristiwa"][2]["selisih"] == 15_000_000
+    assert r["nilai_perolehan"] == 10_000_000
+    # Nilai terkini = revaluasi (25 jt); yang informasional (30 jt) diabaikan
+    assert r["nilai_terkini"] == 25_000_000
+    assert r["jumlah_koreksi"] == 3
+    assert r["peristiwa"][3]["informasional"] is True
+    # Tanpa koreksi → nilai terkini = perolehan
+    kosong = susun_riwayat_nilai(aset, [])
+    assert kosong["nilai_terkini"] == 10_000_000 and kosong["jumlah_koreksi"] == 0
+    assert susun_riwayat_nilai({}, [])["nilai_perolehan"] == 0

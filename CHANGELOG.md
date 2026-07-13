@@ -48,6 +48,19 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#203] Riwayat nilai per aset (Penilaian) — 2026-07-13
+
+- **Riwayat Nilai per Aset** (read-only) di halaman Penilaian: cari satu
+  aset lalu lihat jejak kronologis nilainya — **perolehan** (dari
+  `purchase_date` + `purchase_price`) → tiap **koreksi/revaluasi** (LHIP/
+  BA/Laporan Penilaian, urut tanggal dokumen) → **nilai terkini**. Nilai
+  terkini mengikuti koreksi non-informasional terakhir; koreksi
+  "penilaian tujuan tertentu" ditandai **informasional** dan tidak
+  mengubah nilai buku. Endpoint `GET /penilaian/riwayat-nilai/{asset_id}`
+  + helper murni `susun_riwayat_nilai` (tanpa Mongo, teruji unit). Tidak
+  ada mutasi data — hanya menyusun ulang catatan yang sudah ada. Unit
+  test +1 → 269 passed. Melengkapi butir "menyusul" pada modul Penilaian.
+
 ## [#202] Filter rentang waktu pakai tanggal beli (+ peta) — 2026-07-12
 
 - **Filter rentang tanggal** di daftar inventarisasi aset kini menyaring

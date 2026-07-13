@@ -265,3 +265,55 @@ def rekap_koreksi_nilai(items) -> dict:
     return {"jumlah": len(items or []), "per_jenis": per_jenis,
             "belum_tercatat_sakti": belum_sakti,
             "selisih_total": selisih_total}
+
+
+# ---------------------------------------------------------------------------
+# Riwayat nilai per aset (read-only, #203). Gabungkan nilai perolehan
+# (master aset) dengan peristiwa koreksi/revaluasi (penilaian_koreksi #184)
+# menjadi jejak kronologis. Nilai buku terkini = nilai_baru koreksi
+# non-informasional terakhir; penilaian tujuan tertentu tidak mengubah buku.
+# ---------------------------------------------------------------------------
+
+def susun_riwayat_nilai(asset, koreksi_list) -> dict:
+    """Jejak kronologis nilai satu aset → {peristiwa, nilai_terkini, ...}."""
+    asset = asset or {}
+    harga_awal = parse_harga(asset.get("purchase_price"))
+    peristiwa = [{
+        "tanggal": str(asset.get("purchase_date") or "").strip()[:10],
+        "jenis": "perolehan",
+        "label": "Perolehan",
+        "nilai_lama": None,
+        "nilai_baru": harga_awal,
+        "selisih": None,
+        "nomor_dokumen": "",
+        "status_sakti": "",
+        "informasional": False,
+    }]
+    # Urut koreksi menaik menurut tanggal dokumen (tak valid → di akhir "")
+    for k in sorted(koreksi_list or [],
+                    key=lambda x: str(x.get("tanggal_dokumen") or "")):
+        jenis = k.get("jenis")
+        informasional = (jenis == "penilaian_tujuan_tertentu")
+        peristiwa.append({
+            "tanggal": str(k.get("tanggal_dokumen") or "").strip()[:10],
+            "jenis": jenis,
+            "label": JENIS_KOREKSI_NILAI.get(jenis, jenis),
+            "nilai_lama": parse_harga(k.get("nilai_lama")),
+            "nilai_baru": parse_harga(k.get("nilai_baru")),
+            "selisih": parse_harga(k.get("nilai_baru")) - parse_harga(k.get("nilai_lama")),
+            "nomor_dokumen": str(k.get("nomor_dokumen") or "").strip(),
+            "jenis_dokumen": k.get("jenis_dokumen"),
+            "status_sakti": k.get("status_sakti") or "",
+            "informasional": informasional,
+        })
+    # Nilai buku terkini: ikuti koreksi non-informasional terakhir
+    nilai_terkini = harga_awal
+    for p in peristiwa[1:]:
+        if not p["informasional"]:
+            nilai_terkini = p["nilai_baru"]
+    return {
+        "peristiwa": peristiwa,
+        "nilai_perolehan": harga_awal,
+        "nilai_terkini": nilai_terkini,
+        "jumlah_koreksi": len(peristiwa) - 1,
+    }

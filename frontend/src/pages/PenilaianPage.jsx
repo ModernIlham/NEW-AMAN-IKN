@@ -35,6 +35,11 @@ export default function PenilaianPage({ user, onBack }) {
   const [cari, setCari] = useState("");
   const [hasilCari, setHasilCari] = useState([]);
   const cariTimer = useRef(null);
+  // Riwayat nilai per aset (read-only, #203): {aset, peristiwa, ...} | null
+  const [cariRiw, setCariRiw] = useState("");
+  const [hasilRiw, setHasilRiw] = useState([]);
+  const [riwayat, setRiwayat] = useState(null);
+  const cariRiwTimer = useRef(null);
   const { confirm, confirmDialog } = useConfirm();
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
@@ -57,6 +62,28 @@ export default function PenilaianPage({ user, onBack }) {
     }, 300);
     return () => clearTimeout(cariTimer.current);
   }, [cari, formKoreksi]);
+
+  useEffect(() => {
+    if (cariRiw.trim().length < 2) { setHasilRiw([]); return undefined; }
+    clearTimeout(cariRiwTimer.current);
+    cariRiwTimer.current = setTimeout(async () => {
+      try {
+        const r = await axios.get(`${API}/assets`, { params: { search: cariRiw.trim(), page_size: 8 } });
+        setHasilRiw(r.data?.items || []);
+      } catch { setHasilRiw([]); }
+    }, 300);
+    return () => clearTimeout(cariRiwTimer.current);
+  }, [cariRiw]);
+
+  const muatRiwayat = async (aset) => {
+    setCariRiw(""); setHasilRiw([]);
+    try {
+      const r = await axios.get(`${API}/penilaian/riwayat-nilai/${aset.id}`);
+      setRiwayat(r.data);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal memuat riwayat nilai");
+    }
+  };
 
   const simpanKoreksi = async () => {
     if (!formKoreksi?.aset) return;
@@ -362,6 +389,99 @@ export default function PenilaianPage({ user, onBack }) {
                   ))}
                 </ul>
               )}
+            </div>
+
+            {/* ── Riwayat nilai per aset (read-only, #203) ── */}
+            <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="penilaian-riwayat">
+              <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
+                <Coins className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold text-foreground">Riwayat Nilai per Aset</p>
+                  <p className="text-[10px] text-muted-foreground truncate">
+                    Jejak satu aset: perolehan → koreksi/revaluasi → nilai terkini (read-only)
+                  </p>
+                </div>
+                {riwayat && (
+                  <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
+                    onClick={() => { setRiwayat(null); setCariRiw(""); setHasilRiw([]); }}
+                    data-testid="penilaian-riwayat-tutup">
+                    Ganti aset
+                  </Button>
+                )}
+              </div>
+              <div className="p-3">
+                {!riwayat ? (
+                  <div>
+                    <div className="relative">
+                      <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-muted-foreground" />
+                      <Input className="pl-8" placeholder="Cari aset: nama / kode / NUP…"
+                        value={cariRiw} onChange={(e) => setCariRiw(e.target.value)} data-testid="riwayat-cari" />
+                    </div>
+                    {hasilRiw.length > 0 && (
+                      <ul className="mt-2 space-y-1.5 max-h-48 overflow-y-auto">
+                        {hasilRiw.map((a) => (
+                          <li key={a.id}>
+                            <button type="button" onClick={() => muatRiwayat(a)}
+                              className="w-full text-left rounded-lg border border-border p-2 text-xs hover:bg-muted min-h-0"
+                              data-testid={`riwayat-pilih-${a.id}`}>
+                              <span className="text-foreground/90">{a.asset_name || "-"}</span>{" "}
+                              <span className="font-mono text-[10px] text-muted-foreground">({a.asset_code} · {a.NUP})</span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <p className="text-[11px] text-muted-foreground text-center py-3">
+                      {cariRiw.trim().length < 2
+                        ? "Ketik minimal 2 huruf untuk mencari aset."
+                        : hasilRiw.length === 0 ? "Tidak ada aset yang cocok." : ""}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-semibold text-foreground flex-1 min-w-[140px] truncate">{riwayat.aset?.asset_name || "-"}</p>
+                      <span className="font-mono text-[10px] text-muted-foreground flex-shrink-0">{riwayat.aset?.asset_code} · {riwayat.aset?.NUP}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="rounded-lg border border-border p-2">
+                        <p className="text-[10px] text-muted-foreground">Nilai perolehan</p>
+                        <p className="text-sm font-bold text-foreground">Rp{Math.round(Number(riwayat.nilai_perolehan || 0)).toLocaleString("id-ID")}</p>
+                      </div>
+                      <div className="rounded-lg border border-border p-2">
+                        <p className="text-[10px] text-muted-foreground">Nilai terkini</p>
+                        <p className="text-sm font-bold text-foreground">Rp{Math.round(Number(riwayat.nilai_terkini || 0)).toLocaleString("id-ID")}</p>
+                      </div>
+                    </div>
+                    <ol className="relative border-l border-border/70 ml-1.5 space-y-3">
+                      {(riwayat.peristiwa || []).map((p, i) => (
+                        <li key={i} className="ml-3.5" data-testid={`riwayat-peristiwa-${i}`}>
+                          <span className={`absolute -left-1.5 w-3 h-3 rounded-full border-2 border-card ${p.jenis === "perolehan" ? "bg-sky-500" : p.informasional ? "bg-slate-400" : "bg-teal-500"}`} />
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-xs font-semibold text-foreground">{p.label}</span>
+                            {p.informasional && (
+                              <span className="px-1.5 py-0.5 rounded bg-slate-500/15 text-slate-600 dark:text-slate-300 text-[10px] font-semibold">informasional</span>
+                            )}
+                            {p.status_sakti && riwayat.label_sakti?.[p.status_sakti] && (
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${p.status_sakti === "tercatat_sakti" ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" : "bg-amber-500/15 text-amber-600 dark:text-amber-400"}`}>
+                                {riwayat.label_sakti[p.status_sakti]}
+                              </span>
+                            )}
+                            <span className="text-[10px] text-muted-foreground ml-auto">{p.tanggal || "—"}</span>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            {p.nilai_lama == null
+                              ? `Rp${Math.round(Number(p.nilai_baru || 0)).toLocaleString("id-ID")}`
+                              : `Rp${Math.round(Number(p.nilai_lama || 0)).toLocaleString("id-ID")} → Rp${Math.round(Number(p.nilai_baru || 0)).toLocaleString("id-ID")}`}
+                            {p.nomor_dokumen && ` · ${(riwayat.label_dokumen?.[p.jenis_dokumen] || p.jenis_dokumen || "").trim()} ${p.nomor_dokumen}`.replace(/\s+/g, " ")}
+                          </p>
+                        </li>
+                      ))}
+                    </ol>
+                    {riwayat.catatan && <p className="text-[10px] text-muted-foreground">{riwayat.catatan}</p>}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* ── Referensi masa manfaat ── */}
