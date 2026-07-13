@@ -48,6 +48,27 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#258] Pengadaan → Aset dua arah: aset simpan `perolehan_id` (dokumen sumber) — 2026-07-13
+
+- **Integrasi §5A gap #6 / Prinsip 4 (simpul Dokumen Sumber).** Tautan
+  perolehan→aset selama ini SATU arah (`perolehan.barang[].asset_id`). Kini saat
+  baris barang perolehan Pengadaan ditautkan ke aset master (baik saat
+  `buat_perolehan` maupun `tautkan_barang`), **aset menyimpan `perolehan_id`** +
+  snapshot beku identitas dokumen sumber (`jenis`, `pihak`, `nomor_bast`,
+  `tanggal_bast`, `nomor_kontrak`) → bisa ditelusuri **dua arah** (aset ⇄
+  perolehan).
+- **Lepas tautan aman.** Saat baris di-untautkan / dipindah ke aset lain,
+  back-link pada aset lama dilepas **hanya bila `perolehan_id`-nya cocok** (tak
+  mengganggu tautan milik perolehan lain).
+- **Provenance, bukan keadaan neraca.** Helper murni
+  `build_asset_perolehan_projection`; proyeksi **best-effort** (perolehan tetap
+  jurnal sumber) dan **TANPA** `$inc version` — menghindari OCC 409 palsu pada
+  form edit aset yang sedang terbuka. `purchase_price`/field laporan tak disentuh.
+- **3 unit test** (snapshot lengkap, `None`/`{}` → lepas tautan, tanggal dipangkas
+  10 char & id di-strip). Masterplan §5A gap #2 & #6 diperbarui. pytest **323 lulus**.
+
+---
+
 ## [#257] Perencanaan → Penganggaran ber-FK: usulan anggaran simpan `rkbmn_id` — 2026-07-13
 
 - **Integrasi §5A gap #4 (Prinsip 4 — dokumen/usulan sumber jadi simpul).** Usulan

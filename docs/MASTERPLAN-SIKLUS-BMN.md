@@ -229,8 +229,10 @@ Audit lintas-modul terhadap 5 prinsip Bab 5. Kepatuhan saat ini:
    penyusutan memakai nilai wajar, serta proyeksi master dari **BA Pemusnahan**
    final (Pemusnahan sudah ber-FK ke usulan Penghapusan #228 → proyeksi ikut saat
    SK penghapusan itu terbit; proyeksi langsung dari BA belum).
-2. **Belum ada simpul Dokumen Sumber** (Prinsip 4) — jadikan record perolehan
-   Pengadaan sebagai node; aset/persediaan simpan `perolehan_id`.
+2. ⚠️ **Simpul Dokumen Sumber sebagian** (Prinsip 4) — record perolehan Pengadaan
+   kini menjadi node yang aset rujuk balik via `perolehan_id` + snapshot (#258,
+   lihat gap #6). *Tersisa:* persediaan simpan `perolehan_id`; auto-daftar aset
+   dari perolehan.
 3. **Approval `pending_changes` + OCC belum seragam** (Prinsip 5).
 4. ✅ **Perencanaan (RKBMN) → Penganggaran kini ber-FK** — usulan penganggaran
    menyimpan `rkbmn_id` + snapshot beku (`rkbmn_uraian/tahun/jenis/unit`) dari
@@ -244,8 +246,12 @@ Audit lintas-modul terhadap 5 prinsip Bab 5. Kepatuhan saat ini:
    yang dipindahtangankan berhenti terhitung di laporan. *Tersisa:* tautan
    Pemindahtanganan → tiket `usulan_penghapusan` masih via string `nomor_sk_penghapusan`
    (belum FK id) — dampak laporan sudah tertangani lewat proyeksi master.
-6. **Pengadaan → Aset satu arah & manual** — perolehan tak auto-daftar master;
-   aset tak simpan `perolehan_id` balik.
+6. ✅ **Pengadaan → Aset kini DUA arah** — saat baris barang perolehan ditautkan
+   ke aset (`buat_perolehan`/`tautkan_barang`), aset menyimpan `perolehan_id` +
+   snapshot beku dokumen sumber (BAST/kontrak) balik (#258, helper murni
+   `build_asset_perolehan_projection`, best-effort, **tanpa** version bump agar
+   tak memicu OCC 409 palsu). *Tersisa:* auto-daftar draft aset baru dari
+   perolehan (pra-isi) belum.
 7. **Kodefikasi bukan FK tervalidasi** (Prinsip 2).
 8. **Snapshot identitas aset basi** (Prinsip 1) — disalin, tak disegarkan.
 

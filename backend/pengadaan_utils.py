@@ -161,3 +161,31 @@ def snapshot_penganggaran(usulan) -> dict:
         "penganggaran_nomor_dipa": str(usulan.get("nomor_dipa") or "").strip(),
         "penganggaran_tahun": str(usulan.get("tahun_anggaran") or "").strip(),
     }
+
+
+def build_asset_perolehan_projection(perolehan, now_iso) -> dict:
+    """Proyeksi BALIK 'dokumen sumber' pada aset (§5A gap #6 — Prinsip 4).
+
+    Tautan perolehan→aset selama ini SATU arah (`perolehan.barang[].asset_id`).
+    Saat baris barang ditautkan ke aset master, aset kini menyimpan
+    `perolehan_id` + snapshot beku identitas dokumen sumber (BAST/kontrak) →
+    bisa ditelusuri DUA arah (aset ⇄ perolehan). `perolehan` None/kosong →
+    proyeksi kosong (lepas tautan).
+
+    SENGAJA tak menyentuh field laporan (`purchase_price` dst) & pemanggil TAK
+    menaikkan `version` — ini provenance/metadata sumber, bukan keadaan neraca;
+    menaikkan version akan memicu OCC 409 palsu pada form edit aset yang terbuka.
+    """
+    if not perolehan:
+        return {"perolehan_id": "", "perolehan": {}}
+    return {
+        "perolehan_id": str(perolehan.get("id") or "").strip(),
+        "perolehan": {
+            "jenis": str(perolehan.get("jenis") or "").strip(),
+            "pihak": str(perolehan.get("pihak") or "").strip(),
+            "nomor_bast": str(perolehan.get("nomor_bast") or "").strip(),
+            "tanggal_bast": str(perolehan.get("tanggal_bast") or "").strip()[:10],
+            "nomor_kontrak": str(perolehan.get("nomor_kontrak") or "").strip(),
+            "diproyeksikan_pada": now_iso,
+        },
+    }

@@ -98,3 +98,43 @@ def test_snapshot_penganggaran():
     assert snap["penganggaran_tahun"] == "2027"
     # Field asing (status) tidak ikut ke snapshot
     assert "status" not in snap
+
+
+# ── Back-link dokumen sumber ke aset: build_asset_perolehan_projection (§5A gap #6, #258) ──
+from pengadaan_utils import build_asset_perolehan_projection
+
+NOW6 = "2026-07-13T18:30:00+00:00"
+
+
+def _perolehan(**over):
+    base = {"id": "prl-1", "jenis": "pembelian", "pihak": "PT Sumber Jaya",
+            "nomor_bast": "BAST-7/2026", "tanggal_bast": "2026-03-15",
+            "nomor_kontrak": "SPK-3/2026"}
+    base.update(over)
+    return base
+
+
+def test_perolehan_projection_lengkap():
+    proj = build_asset_perolehan_projection(_perolehan(), NOW6)
+    assert proj["perolehan_id"] == "prl-1"
+    p = proj["perolehan"]
+    assert p["jenis"] == "pembelian" and p["pihak"] == "PT Sumber Jaya"
+    assert p["nomor_bast"] == "BAST-7/2026" and p["tanggal_bast"] == "2026-03-15"
+    assert p["nomor_kontrak"] == "SPK-3/2026"
+    assert p["diproyeksikan_pada"] == NOW6
+    # SENGAJA tak menyentuh field laporan / version
+    assert "purchase_price" not in proj and "version" not in proj
+
+
+def test_perolehan_projection_kosong_melepas_tautan():
+    # None / dict kosong → back-link kosong (tautan dilepas)
+    for x in (None, {}):
+        proj = build_asset_perolehan_projection(x, NOW6)
+        assert proj == {"perolehan_id": "", "perolehan": {}}
+
+
+def test_perolehan_projection_tanggal_dipangkas_dan_strip():
+    proj = build_asset_perolehan_projection(
+        _perolehan(id=" prl-9 ", tanggal_bast="2026-03-15T00:00:00"), NOW6)
+    assert proj["perolehan_id"] == "prl-9"                 # di-strip
+    assert proj["perolehan"]["tanggal_bast"] == "2026-03-15"   # 10 char
