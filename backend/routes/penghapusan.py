@@ -14,10 +14,10 @@ from pydantic import BaseModel, Field
 
 from auth_utils import require_admin, require_user, require_user_or_query_token
 from db import db, fs_bucket
-from shared_utils import delete_document_from_gridfs, get_document_from_gridfs
+from shared_utils import delete_document_from_gridfs, get_document_from_gridfs, log_audit
 from penghapusan_utils import (
-    JALUR_KANDIDAT, STATUS_USULAN, jalur_kandidat, rekap_kandidat,
-    validate_transisi,
+    JALUR_KANDIDAT, STATUS_USULAN, build_asset_penghapusan_projection,
+    jalur_kandidat, rekap_kandidat, validate_transisi,
 )
 
 penghapusan_router = APIRouter()
@@ -151,6 +151,38 @@ async def buat_usulan(payload: UsulanIn, user: dict = Depends(require_user)):
     return record
 
 
+async def _proyeksi_master_penghapusan(usulan: dict, oleh: str) -> bool:
+    """Proyeksikan master aset saat SK penghapusan terbit (Prinsip 3 Bab 5).
+
+    Best-effort & idempoten: SK sudah tercatat di register `usulan_penghapusan`
+    (jurnal), jadi kegagalan/no-op proyeksi TIDAK menggagalkan transisi. Filter
+    `dihapus != true` membuat pemanggilan ulang aman; `$inc version` mem-bust
+    cache media/ETag dan memicu OCC 409 pada form edit yang masih terbuka atas
+    aset itu (memang seharusnya konflik — asetnya baru saja dihapus). Tidak
+    menyentuh field yang dibaca laporan → tanpa regresi laporan.
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    proj = build_asset_penghapusan_projection(usulan, now)
+    updated = await db.assets.find_one_and_update(
+        {"id": usulan.get("asset_id"), "dihapus": {"$ne": True}},
+        {"$set": proj, "$inc": {"version": 1}},
+        projection={"_id": 0, "id": 1, "activity_id": 1, "asset_code": 1,
+                    "asset_name": 1, "NUP": 1},
+        return_document=True,
+    )
+    if not updated:
+        # Aset sudah dihapus/diproyeksikan atau tak ada lagi — SK tetap sah.
+        return False
+    await log_audit(
+        "penghapusan", updated.get("activity_id", ""), updated.get("id", ""),
+        updated.get("asset_code", ""), updated.get("asset_name", ""),
+        username=oleh,
+        detail=f"Aset dihapus dari master via SK penghapusan {proj['penghapusan']['nomor_sk']}".strip(),
+        nup=updated.get("NUP", ""),
+    )
+    return True
+
+
 @penghapusan_router.post("/penghapusan/usulan/{usulan_id}/status")
 async def transisi_usulan(usulan_id: str, payload: TransisiIn,
                           admin: dict = Depends(require_admin)):
@@ -182,6 +214,11 @@ async def transisi_usulan(usulan_id: str, payload: TransisiIn,
     if not res:
         raise HTTPException(status_code=409,
                             detail="Status usulan berubah oleh proses lain — muat ulang")
+    # Proyeksi master (Prinsip 3): saat SK terbit, tandai aset `dihapus` di
+    # db.assets + audit. Setelah transisi CAS sukses agar tak double-proyeksi.
+    if payload.status == "sk_terbit":
+        res["proyeksi_master"] = await _proyeksi_master_penghapusan(
+            res, admin.get("username") or "system")
     return res
 
 

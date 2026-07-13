@@ -187,17 +187,22 @@ Audit lintas-modul terhadap 5 prinsip Bab 5. Kepatuhan saat ini:
 |---|---|---|
 | 1. Satu identitas aset | ✅ Patuh (risiko drift) | Semua modul merujuk `asset_id` + snapshot `asset_code/NUP`; snapshot **tak disegarkan** bila master berubah |
 | 2. Satu kodefikasi | ⚠️ Sebagian | Golongan **diturunkan** dari prefix di mana-mana; tapi kodefikasi **bukan FK tervalidasi** saat create aset/persediaan |
-| 3. Transaksi = jurnal, master = proyeksi | ❌ Melanggar (kecuali **Persediaan**) | Register hilir punya `riwayat[]` tapi **master tak diproyeksikan** (SK hapus/BA musnah/PSP/revaluasi tak meng-`update` `db.assets`); hanya Pemeliharaan yang memproyeksi kondisi |
+| 3. Transaksi = jurnal, master = proyeksi | ⚠️ Sebagian (Persediaan + **Penghapusan** + Pemeliharaan) | **Penghapusan kini memproyeksi** master saat SK terbit (`dihapus=True` + jejak SK + `version` bump + audit, #234); Persediaan penuh; Pemeliharaan proyeksi kondisi. *Tersisa:* BA musnah/PSP/revaluasi belum meng-`update` `db.assets` |
 | 4. Dokumen sumber = simpul | ❌ Belum ada | `dokumen_sumber_id` 0 kecocokan; dokumen diketik ulang per modul |
 | 5. Approval = gerbang, OCC fondasi | ❌ Melanggar | `pending_changes` 0; OCC penuh hanya di `assets.py`; modul lain cek peran saja |
 
 **Daftar gap (dampak tertinggi → rendah), untuk ditutup bertahap per PR kecil:**
 
-1. **Master tak diproyeksikan dari transaksi hilir** (Prinsip 3) — aset SK-hapus/
+1. **Master tak diproyeksikan dari transaksi hilir** (Prinsip 3) — aset yang
    dimusnahkan/dipindahtangankan/direvaluasi tetap "hidup & bernilai penuh" di
    master → laporan resmi (DBKP/neraca/penyusutan) bisa *double-count*. Cicil per
-   modul, mulai proyeksi status saat **SK Penghapusan terbit** (pola CAS `version`
-   + audit seperti `assets.py`).
+   modul. ✅ **Penghapusan sudah:** saat **SK terbit**, master ditandai
+   `dihapus=True` + jejak SK (`penghapusan.{nomor_sk,tanggal_sk,usulan_id}`) +
+   `version` di-`$inc` (bust cache/OCC) + audit `action="penghapusan"` (#234).
+   *Sengaja scoped:* field laporan (`inventory_status/condition/purchase_price`)
+   TAK diubah → tanpa regresi; penyaringan aset `dihapus` dari laporan (agar
+   berhenti *double-count*) = langkah lanjutan terpisah. *Tersisa:* proyeksi dari
+   BA Pemusnahan, PSP/pemindahtanganan, dan revaluasi Penilaian.
 2. **Belum ada simpul Dokumen Sumber** (Prinsip 4) — jadikan record perolehan
    Pengadaan sebagai node; aset/persediaan simpan `perolehan_id`.
 3. **Approval `pending_changes` + OCC belum seragam** (Prinsip 5).

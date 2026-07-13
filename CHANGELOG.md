@@ -48,6 +48,34 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#234] Integrasi: proyeksi Penghapusan → master aset saat SK terbit (Prinsip 3) — 2026-07-13
+
+Gap integrasi teratas §5A masterplan (Prinsip 3 Bab 5: *transaksi = jurnal,
+master = proyeksi*). Sebelumnya SK penghapusan hanya tercatat di register
+`usulan_penghapusan`; master `db.assets` tak pernah tahu asetnya sudah dihapus
+→ laporan resmi berisiko *double-count*.
+
+- **Proyeksi otomatis saat SK terbit.** Ketika tiket usulan transisi ke
+  `sk_terbit`, master aset ditandai: `dihapus=True` + sub-record
+  `penghapusan { status, usulan_id, jalur, nomor_sk, tanggal_sk,
+  diproyeksikan_pada }`, `version` di-`$inc` (bust cache media/ETag + picu OCC
+  409 pada form edit usang atas aset itu — memang seharusnya konflik), dan
+  entri **audit** `action="penghapusan"` (muncul di Riwayat, badge merah
+  "Penghapusan (SK)").
+- **Best-effort & idempoten.** Proyeksi berjalan **setelah** transisi CAS
+  sukses; filter `dihapus != true` membuat aman diulang; kegagalan/no-op
+  (aset sudah tak ada) **tidak** menggagalkan penerbitan SK.
+- **Scoped anti-regresi laporan.** SENGAJA tidak mengubah field yang dibaca
+  laporan (`inventory_status`/`condition`/`purchase_price`) — laporan
+  (DBKP/neraca/penyusutan) tetap identik. Penyaringan aset `dihapus` dari
+  laporan (agar *double-count* berhenti) adalah langkah lanjutan terpisah.
+- Helper murni `build_asset_penghapusan_projection` (teruji unit, 2 kasus baru;
+  total 291 unit backend hijau). `eslint` bersih; `CI=false yarn build` sukses.
+- Masterplan §5A diperbarui: Prinsip 3 kini ⚠️ Sebagian (Persediaan +
+  Penghapusan + Pemeliharaan); tersisa proyeksi dari BA Pemusnahan, PSP, revaluasi.
+
+---
+
 ## [#233] Sinkron: bedakan "perlu tindakan" vs "sedang sinkron" (tanda tak lagi menyala palsu) — 2026-07-13
 
 - **Bug:** tombol/tanda sinkron di header tetap menyala walau sudah online &

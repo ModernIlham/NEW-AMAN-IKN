@@ -13,6 +13,7 @@ const ACTION_MAP = {
   import: { label: "Import", color: "text-purple-600", bg: "bg-purple-500", dot: "bg-purple-500" },
   sahkan: { label: "Pengesahan", color: "text-amber-600", bg: "bg-amber-500", dot: "bg-amber-500" },
   pengesahan_dokumen: { label: "Dokumen Pengesahan", color: "text-amber-600", bg: "bg-amber-500", dot: "bg-amber-500" },
+  penghapusan: { label: "Penghapusan (SK)", color: "text-rose-600", bg: "bg-rose-500", dot: "bg-rose-500" },
 };
 
 const FIELD_LABELS = {

@@ -72,6 +72,31 @@ def validate_transisi(dari: str, ke: str, nomor_sk: str = "") -> list:
     return errors
 
 
+def build_asset_penghapusan_projection(usulan: dict, now_iso: str) -> dict:
+    """Proyeksi master aset saat SK penghapusan terbit (Prinsip 3 Bab 5:
+    transaksi = jurnal, master = proyeksi).
+
+    Mengembalikan dict `$set` untuk `db.assets` — HANYA field marker khusus
+    penghapusan. SENGAJA tidak menyentuh `inventory_status`/`condition`/
+    `purchase_price`: itu dibaca laporan resmi (DBKP/neraca/penyusutan), jadi
+    mengubahnya di sini berisiko regresi laporan. Penyaringan aset ber-SK dari
+    laporan adalah langkah lanjutan terpisah — di sini master cukup MEMBAWA
+    kebenaran transaksi hilir (jejak SK) + `dihapus=True`. Pemanggil menambah
+    `$inc: {version: 1}` (bust cache media/ETag + picu OCC 409 pada form usang).
+    """
+    return {
+        "dihapus": True,
+        "penghapusan": {
+            "status": "sk_terbit",
+            "usulan_id": str(usulan.get("id") or ""),
+            "jalur": str(usulan.get("jalur") or ""),
+            "nomor_sk": str(usulan.get("nomor_sk") or "").strip(),
+            "tanggal_sk": str(usulan.get("tanggal_sk") or "").strip()[:10],
+            "diproyeksikan_pada": now_iso,
+        },
+    }
+
+
 def rekap_kandidat(assets):
     """Jaring kandidat per jalur → {"jalur": {key: {label, alasan, rows,
     jumlah, nilai}}, "ringkasan": {...}} — semua dari data nyata."""
