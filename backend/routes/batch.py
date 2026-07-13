@@ -152,7 +152,7 @@ class BatchUpdateRequest(BaseModel):
 BATCH_ALLOWED_FIELDS = set(BATCHABLE_FIELD_NAMES)
 
 # Fields that need special handling (not simple $set)
-BATCH_SPECIAL_FIELDS = {"batch_photo", "document_checklist_items"}
+BATCH_SPECIAL_FIELDS = {"batch_photo", "batch_photos", "document_checklist_items"}
 
 @batch_router.put("/assets/batch-update")
 async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user_id: str = Header(None), x_user_name: str = Header(None), x_session_id: str = Header(None), _user: dict = Depends(require_user)):
@@ -170,9 +170,17 @@ async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user
         if v == "__clear__":
             clean_updates[k] = ""
 
-    # Handle batch photo (add 1 photo to all selected assets)
+    # Handle batch photo(s): terima `batch_photo` (tunggal, kompat lama) ATAU
+    # `batch_photos` (banyak) → gabung jadi satu daftar data-URL, batasi 6 foto.
     batch_photo = data.updates.get("batch_photo")
-    has_photo = batch_photo and isinstance(batch_photo, str) and batch_photo.startswith("data:")
+    batch_photos_in = data.updates.get("batch_photos")
+    photo_list = []
+    if isinstance(batch_photo, str) and batch_photo.startswith("data:"):
+        photo_list.append(batch_photo)
+    if isinstance(batch_photos_in, list):
+        photo_list += [p for p in batch_photos_in if isinstance(p, str) and p.startswith("data:")]
+    photo_list = photo_list[:6]  # tak mungkin > 6 foto per aset
+    has_photo = len(photo_list) > 0
 
     # Handle clear photos (remove all photos from selected assets)
     should_clear_photos = data.updates.get("clear_photos") is True
@@ -221,19 +229,21 @@ async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user
             {"$set": clean_updates}
         )
 
-    # 2. Batch photo — auto-compress ONCE, then distribute to all assets
+    # 2. Foto massal — kompres SEKALI per foto, lalu distribusikan ke semua aset
+    #    (hormati batas 6 foto/aset). `photo_list` gabungan batch_photo + batch_photos.
     if has_photo:
-        # Compress photo before distributing (Tinify first, Pillow fallback)
-        compressed_photo, compress_method, orig_size, comp_size = await auto_compress_image(batch_photo)
-        if compress_method != "none":
-            logger.info(f"Batch photo compressed via {compress_method}: {orig_size/1024:.0f}KB → {comp_size/1024:.0f}KB ({(1-comp_size/orig_size)*100:.0f}% reduction)")
+        prepared = []  # [{data, thumb}] per foto, sudah dikompres sekali
+        for p in photo_list:
+            compressed_photo, compress_method, orig_size, comp_size = await auto_compress_image(p)
+            if compress_method != "none":
+                logger.info(f"Batch photo compressed via {compress_method}: {orig_size/1024:.0f}KB → {comp_size/1024:.0f}KB ({(1-comp_size/orig_size)*100:.0f}% reduction)")
+            prepared.append({"data": compressed_photo, "thumb": generate_photo_thumbnail(compressed_photo) or ""})
 
-        thumbnail = create_thumbnail(compressed_photo)
-        gallery_thumbnail = create_gallery_thumbnail(compressed_photo)
+        # Cover (thumbnail/gallery) dari foto PERTAMA — dipakai bila aset semula 0 foto.
+        cover_thumbnail = create_thumbnail(prepared[0]["data"])
+        cover_gallery = create_gallery_thumbnail(prepared[0]["data"])
+        MAX_PHOTOS = 6
         CHUNK = 50
-
-        # Thumbnail 100px foto batch dibuat SEKALI, dipakai semua aset.
-        batch_photo_thumb = generate_photo_thumbnail(compressed_photo) or ""
 
         async def update_photo_chunk(chunk_ids):
             # SATU query $in per chunk (bukan find_one serial per aset — N+1).
@@ -253,29 +263,40 @@ async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user
                 current_photos = asset.get("photos", []) or []
                 thumbs = list(asset.get("photo_thumbnails") or [])
                 current_count = len([g for g in gridfs_ids if g]) or len(current_photos)
+                # Hormati batas 6 foto/aset: hanya tambah sisa slot yang tersedia.
+                to_add = prepared[: max(0, MAX_PHOTOS - current_count)]
+                if not to_add:
+                    continue  # aset sudah penuh
                 n_slots = max(len(gridfs_ids), len(current_photos))
                 # Samakan panjang semua array ke n_slots sebelum append
                 gridfs_ids += [""] * (n_slots - len(gridfs_ids))
                 thumbs += [""] * (n_slots - len(thumbs))
-                # Foto masuk GridFS (satu blob PER ASET — blob dimiliki eksklusif
+                # Setiap foto → satu blob GridFS PER ASET (blob dimiliki eksklusif
                 # oleh asetnya karena delete-asset menghapus blobnya).
-                try:
-                    gid = await store_photo_to_gridfs(compressed_photo)
-                except Exception as e:
-                    logger.warning(f"Batch photo: GridFS store failed for {aid}: {e}")
+                new_gids, new_thumbs, new_inline = [], [], []
+                for ph in to_add:
+                    try:
+                        gid = await store_photo_to_gridfs(ph["data"])
+                    except Exception as e:
+                        logger.warning(f"Batch photo: GridFS store failed for {aid}: {e}")
+                        continue
+                    new_gids.append(gid)
+                    new_thumbs.append(ph["thumb"])
+                    new_inline.append(ph["data"])
+                if not new_gids:
                     continue
                 update_fields = {
-                    "photo_gridfs_ids": gridfs_ids + [gid],
-                    "photo_thumbnails": thumbs + [batch_photo_thumb],
+                    "photo_gridfs_ids": gridfs_ids + new_gids,
+                    "photo_thumbnails": thumbs + new_thumbs,
                     "updated_at": now_str,
                 }
                 # Dokumen legacy yang MASIH menyimpan inline: jaga photos paralel
                 # (padding "" bila lebih pendek). Dokumen bersih: photos tetap [].
                 if current_photos:
-                    update_fields["photos"] = current_photos + [""] * (n_slots - len(current_photos)) + [compressed_photo]
+                    update_fields["photos"] = current_photos + [""] * (n_slots - len(current_photos)) + new_inline
                 if current_count == 0:
-                    update_fields["thumbnail"] = thumbnail
-                    update_fields["gallery_thumbnail"] = gallery_thumbnail
+                    update_fields["thumbnail"] = cover_thumbnail
+                    update_fields["gallery_thumbnail"] = cover_gallery
                 ops.append(UpdateOne({"id": aid}, {"$set": update_fields}))
             if ops:
                 await db.assets.bulk_write(ops, ordered=False)
