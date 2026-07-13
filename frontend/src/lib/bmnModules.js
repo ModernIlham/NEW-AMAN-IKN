@@ -296,7 +296,7 @@ export const SIKLUS_MODULES = [
       "PMK 65/PMK.06/2017 — Penyusutan BMN",
     ],
     fitur: [
-      "✅ Register koreksi nilai & hasil penilaian per aset (revaluasi/LHIP/BA, checklist tercatat di SAKTI)",
+      "✅ Register koreksi nilai & hasil penilaian per aset (revaluasi/LHIP/BA, checklist tercatat di SAKTI) + ekspor CSV",
       "✅ Penyusutan garis lurus semesteran per golongan (PMK 65/2017; masa manfaat KMK 295/2019 jo. 266/2023) + daftar telaah",
       "✅ Referensi masa manfaat dapat dikelola (seed lengkap lampiran KMK)",
       "✅ Riwayat nilai per aset (read-only): perolehan → koreksi/revaluasi → nilai terkini",

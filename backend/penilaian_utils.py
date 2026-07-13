@@ -317,3 +317,47 @@ def susun_riwayat_nilai(asset, koreksi_list) -> dict:
         "nilai_terkini": nilai_terkini,
         "jumlah_koreksi": len(peristiwa) - 1,
     }
+
+
+# Header CSV register koreksi nilai (dipakai endpoint ekspor & test).
+HEADER_CSV_KOREKSI = [
+    "kode_aset", "nup", "nama_aset", "jenis", "jenis_dokumen",
+    "nomor_dokumen", "tanggal_dokumen", "nilai_lama", "nilai_baru",
+    "selisih", "dampak_masa_manfaat", "masa_manfaat_semester",
+    "penilai_pelaksana", "status_sakti", "catatan", "dibuat_oleh",
+]
+
+
+def baris_csv_koreksi(koreksi_list) -> list:
+    """Susun baris CSV register koreksi nilai: [header, *data] — fungsi murni.
+
+    Nilai rupiah dibulatkan ke bilangan bulat; kode jenis/dokumen/SAKTI
+    diterjemahkan ke labelnya. Urutan mengikuti input (endpoint mengurut
+    via Mongo). Tanpa Mongo/IO agar teruji unit (pola ekspor #158).
+    """
+    baris = [list(HEADER_CSV_KOREKSI)]
+    for k in koreksi_list or []:
+        # Bulatkan dulu agar kolom selisih konsisten dengan lama/baru di CSV.
+        lama = int(round(parse_harga(k.get("nilai_lama"))))
+        baru = int(round(parse_harga(k.get("nilai_baru"))))
+        baris.append([
+            k.get("asset_code") or "",
+            k.get("NUP") or "",
+            k.get("asset_name") or "",
+            JENIS_KOREKSI_NILAI.get(k.get("jenis"), k.get("jenis") or ""),
+            DOKUMEN_KOREKSI.get(k.get("jenis_dokumen"), k.get("jenis_dokumen") or ""),
+            k.get("nomor_dokumen") or "",
+            str(k.get("tanggal_dokumen") or "")[:10],
+            lama,
+            baru,
+            baru - lama,
+            DAMPAK_MASA_MANFAAT.get(k.get("dampak_masa_manfaat"),
+                                    k.get("dampak_masa_manfaat") or ""),
+            int(k.get("masa_manfaat_semester") or 0),
+            k.get("penilai_pelaksana") or "",
+            STATUS_SAKTI_KOREKSI.get(k.get("status_sakti"),
+                                     k.get("status_sakti") or ""),
+            k.get("catatan") or "",
+            k.get("created_by") or "",
+        ])
+    return baris

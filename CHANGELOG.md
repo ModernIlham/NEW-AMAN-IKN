@@ -48,6 +48,18 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#204] Ekspor CSV register koreksi nilai (Penilaian) — 2026-07-13
+
+- **Ekspor CSV** register koreksi nilai/hasil penilaian (`GET
+  /penilaian/koreksi/export`), melengkapi pola ekspor register yang sudah
+  ada (pemanfaatan/pemeliharaan/pemindahtanganan/pemusnahan/pengadaan/
+  penganggaran/penghapusan). Kolom: identitas aset, jenis & dokumen
+  (label terbaca), nomor & tanggal dokumen, nilai lama→baru + selisih
+  (rupiah bulat, konsisten), dampak masa manfaat, penilai, status SAKTI,
+  catatan, pembuat. Helper murni `baris_csv_koreksi` (tanpa Mongo, teruji
+  unit) + tombol unduh CSV di panel koreksi (muncul saat ada data).
+  Unit test +1 → 270 passed.
+
 ## [#203] Riwayat nilai per aset (Penilaian) — 2026-07-13
 
 - **Riwayat Nilai per Aset** (read-only) di halaman Penilaian: cari satu

@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, Scale, Coins, TrendingDown, Wallet, AlertTriangle,
-  BookOpen, FileSignature, Plus, Pencil, Search, Trash2,
+  BookOpen, FileSignature, Plus, Pencil, Search, Trash2, Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
+import { downloadFileWithProgress } from "@/lib/downloadFile";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -339,6 +340,13 @@ export default function PenilaianPage({ user, onBack }) {
                   <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px] font-semibold flex-shrink-0">
                     {koreksi.ringkasan.belum_tercatat_sakti} belum di SAKTI
                   </span>
+                )}
+                {(koreksi?.items || []).length > 0 && (
+                  <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
+                    onClick={() => downloadFileWithProgress(`${API}/penilaian/koreksi/export`, "register_koreksi_nilai.csv", { label: "Ekspor Register Koreksi Nilai (CSV)" }).catch(() => {})}
+                    data-testid="penilaian-koreksi-export">
+                    <Download className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">CSV</span>
+                  </Button>
                 )}
                 <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
                   onClick={() => { setCari(""); setHasilCari([]); setFormKoreksi({ data: { jenis: "revaluasi", jenis_dokumen: "lhip", nomor_dokumen: "", tanggal_dokumen: "", nilai_lama: "", nilai_baru: "", penilai_pelaksana: "", dampak_masa_manfaat: "tetap", masa_manfaat_semester: "", catatan: "" }, aset: null, saving: false }); }}

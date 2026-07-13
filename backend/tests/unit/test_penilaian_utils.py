@@ -167,3 +167,32 @@ def test_susun_riwayat_nilai():
     kosong = susun_riwayat_nilai(aset, [])
     assert kosong["nilai_terkini"] == 10_000_000 and kosong["jumlah_koreksi"] == 0
     assert susun_riwayat_nilai({}, [])["nilai_perolehan"] == 0
+
+
+def test_baris_csv_koreksi():
+    from penilaian_utils import HEADER_CSV_KOREKSI, baris_csv_koreksi
+    # Daftar kosong → hanya header
+    assert baris_csv_koreksi([]) == [HEADER_CSV_KOREKSI]
+    assert baris_csv_koreksi(None) == [HEADER_CSV_KOREKSI]
+    rows = baris_csv_koreksi([{
+        "asset_code": "3020101001", "NUP": "1", "asset_name": "Mobil Dinas",
+        "jenis": "revaluasi", "jenis_dokumen": "lhip",
+        "nomor_dokumen": "LHIP-1", "tanggal_dokumen": "2023-12-01T00:00",
+        "nilai_lama": 10_000_000.4, "nilai_baru": 25_000_000.6,
+        "dampak_masa_manfaat": "tetap", "masa_manfaat_semester": 0,
+        "penilai_pelaksana": "KPKNL", "status_sakti": "tercatat_sakti",
+        "catatan": "sesuai LHIP", "created_by": "admin",
+    }])
+    assert rows[0] == HEADER_CSV_KOREKSI
+    r = rows[1]
+    # Kode jenis/dokumen/SAKTI diterjemahkan ke label
+    assert r[3] == "Revaluasi / penilaian kembali"
+    assert r[4].startswith("LHIP")
+    assert r[13] == "Sudah divalidasi & di-approve di SAKTI"
+    # Tanggal dipangkas 10 char; nilai dibulatkan; selisih = baru - lama
+    assert r[6] == "2023-12-01"
+    assert r[7] == 10_000_000 and r[8] == 25_000_001
+    assert r[9] == 15_000_001
+    # Field hilang → string kosong, bukan None
+    kosong = baris_csv_koreksi([{"jenis": "koreksi_pencatatan"}])[1]
+    assert kosong[0] == "" and kosong[7] == 0 and kosong[9] == 0
