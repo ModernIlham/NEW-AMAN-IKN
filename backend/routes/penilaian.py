@@ -17,8 +17,8 @@ from kodefikasi_utils import GOLONGAN_DEFAULTS
 from penilaian_utils import (
     MASA_MANFAAT_DEFAULT, rekap_penyusutan, validate_masa_manfaat,
     DAMPAK_MASA_MANFAAT, DOKUMEN_KOREKSI, JENIS_KOREKSI_NILAI,
-    STATUS_SAKTI_KOREKSI, rekap_koreksi_nilai, susun_riwayat_nilai,
-    validate_koreksi_nilai,
+    STATUS_SAKTI_KOREKSI, baris_csv_koreksi, rekap_koreksi_nilai,
+    susun_riwayat_nilai, validate_koreksi_nilai,
 )
 
 penilaian_router = APIRouter()
@@ -157,6 +157,26 @@ async def list_koreksi_nilai(_user: dict = Depends(require_user)):
                 "resmi di SAKTI (koreksi revaluasi di-push pusat, satker "
                 "memverifikasi vs LHIP); penilaian tujuan tertentu tidak "
                 "mengubah nilai buku.")}
+
+
+@penilaian_router.get("/penilaian/koreksi/export")
+async def export_koreksi_nilai(_user: dict = Depends(require_user)):
+    """Ekspor CSV seluruh register koreksi nilai/hasil penilaian (pola #158)."""
+    import csv as csv_module
+    import io
+
+    from fastapi.responses import Response as HttpResponse
+
+    koreksi = [k async for k in db.penilaian_koreksi.find({}, {"_id": 0})
+               .sort("tanggal_dokumen", -1)]
+    buf = io.StringIO()
+    w = csv_module.writer(buf)
+    for row in baris_csv_koreksi(koreksi):
+        w.writerow(row)
+    return HttpResponse(
+        content=buf.getvalue().encode("utf-8-sig"), media_type="text/csv",
+        headers={"Content-Disposition":
+                 'attachment; filename="register_koreksi_nilai.csv"'})
 
 
 @penilaian_router.get("/penilaian/riwayat-nilai/{asset_id}")
