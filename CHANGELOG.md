@@ -48,6 +48,17 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#212] Ekspor CSV register tiket BMN idle (Penggunaan) — 2026-07-13
+
+- **Ekspor CSV** register tiket penanganan BMN idle (`GET
+  /penggunaan/idle/export`), melengkapi pola ekspor register. Kolom:
+  identitas aset, alasan indikasi idle, status (label:
+  klarifikasi/digunakan kembali/usul serah/diserahkan), nomor usulan
+  penyerahan, nomor BAST serah, keterangan, pembuat, tanggal dibuat.
+  Helper murni `baris_csv_idle` (tanpa Mongo, teruji unit) + tombol unduh
+  CSV di panel "BMN Idle — Daftar Pantau" (muncul saat ada tiket).
+  Baca-saja. Unit test +1 → 274 passed. Dasar PMK 120/2024.
+
 ## [#211] List mode: auto-pindah halaman saat lewati baris terakhir + area data lebih luas (desktop) — 2026-07-13
 
 - **List (tabel) mode — auto-pindah halaman:** saat menekan Simpan/Update

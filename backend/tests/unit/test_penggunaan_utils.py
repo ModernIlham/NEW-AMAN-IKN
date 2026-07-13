@@ -100,6 +100,26 @@ class TestBmnIdle:
         assert r["per_status"]["klarifikasi"] == 1
         assert r["per_status"]["diserahkan"] == 1
 
+    def test_baris_csv_idle(self):
+        from penggunaan_utils import HEADER_CSV_IDLE, baris_csv_idle
+        assert baris_csv_idle([]) == [HEADER_CSV_IDLE]
+        assert baris_csv_idle(None) == [HEADER_CSV_IDLE]
+        rows = baris_csv_idle([{
+            "asset_code": "30501", "NUP": "7", "asset_name": "Kursi",
+            "alasan": "Tanpa pengguna", "status": "usul_serah",
+            "nomor_usulan": "US-1", "nomor_bast_serah": "",
+            "keterangan": "-", "created_by": "admin",
+            "created_at": "2026-07-01T09:00:00",
+        }])
+        assert rows[0] == HEADER_CSV_IDLE
+        r = rows[1]
+        assert r[0] == "30501" and r[2] == "Kursi"
+        assert r[4] == "Diusulkan Serah ke Pengelola"  # status → label
+        assert r[9] == "2026-07-01"                     # tanggal dipangkas 10
+        # Field hilang → string kosong
+        kosong = baris_csv_idle([{"status": "klarifikasi"}])[1]
+        assert kosong[0] == "" and kosong[4] == "Klarifikasi (diteliti penggunaannya)"
+
 
 class TestPsp:
     def test_validasi_psp(self):

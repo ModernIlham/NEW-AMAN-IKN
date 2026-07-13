@@ -186,6 +186,35 @@ def rekap_idle(kandidat, tiket) -> dict:
             "tiket": len(tiket or [])}
 
 
+HEADER_CSV_IDLE = [
+    "kode_aset", "nup", "nama_aset", "alasan", "status", "nomor_usulan",
+    "nomor_bast_serah", "keterangan", "dibuat_oleh", "tanggal_dibuat",
+]
+
+
+def baris_csv_idle(tiket_list) -> list:
+    """Susun baris CSV register tiket BMN idle: [header, *data] — fungsi murni.
+
+    Status diterjemahkan ke label; tanggal dipangkas 10 char; field hilang →
+    string kosong. Tanpa Mongo/IO agar teruji unit (pola ekspor #158).
+    """
+    baris = [list(HEADER_CSV_IDLE)]
+    for t in tiket_list or []:
+        baris.append([
+            t.get("asset_code") or "",
+            t.get("NUP") or "",
+            t.get("asset_name") or "",
+            t.get("alasan") or "",
+            STATUS_IDLE.get(t.get("status"), t.get("status") or ""),
+            t.get("nomor_usulan") or "",
+            t.get("nomor_bast_serah") or "",
+            t.get("keterangan") or "",
+            t.get("created_by") or "",
+            str(t.get("created_at") or "")[:10],
+        ])
+    return baris
+
+
 def kunci_pemegang(asset: dict):
     """Kunci identitas pemegang: (nama_norm, nip). None bila tanpa pengguna.
 
