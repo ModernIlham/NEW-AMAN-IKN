@@ -300,6 +300,60 @@ def rekap_sertipikasi(items) -> dict:
             "jumlah_sertipikat": tanpa + sum(per.values())}
 
 
+HEADER_CSV_DOKUMEN = [
+    "kode_aset", "nup", "nama_aset", "jenis", "nomor", "atas_nama",
+    "lokasi_simpan", "kategori_sertipikasi", "berlaku_sampai",
+    "status_berlaku", "jumlah_lampiran", "keterangan", "dibuat_oleh",
+]
+
+
+def baris_csv_dokumen(dokumen_list, today_iso) -> list:
+    """Susun baris CSV arsip dokumen kepemilikan: [header, *data] — murni.
+
+    Jenis/lokasi simpan/kategori sertipikasi diterjemahkan ke label;
+    status_berlaku dihitung dari berlaku_sampai vs today_iso (Kedaluwarsa /
+    Berlaku / "" bila tanpa masa berlaku); jumlah lampiran dihitung. Tanpa
+    Mongo/IO agar teruji unit (pola ekspor #158).
+    """
+    from datetime import date
+
+    try:
+        hari_ini = date.fromisoformat(str(today_iso)[:10])
+    except ValueError:
+        hari_ini = None
+
+    def _status(berlaku):
+        if not berlaku or hari_ini is None:
+            return ""
+        try:
+            return "Kedaluwarsa" if date.fromisoformat(berlaku) < hari_ini \
+                else "Berlaku"
+        except ValueError:
+            return ""
+
+    baris = [list(HEADER_CSV_DOKUMEN)]
+    for d in dokumen_list or []:
+        berlaku = str(d.get("berlaku_sampai") or "").strip()[:10]
+        kategori = str(d.get("kategori_sertipikasi") or "").strip()
+        baris.append([
+            d.get("asset_code") or "",
+            d.get("NUP") or "",
+            d.get("asset_name") or "",
+            JENIS_DOKUMEN.get(d.get("jenis"), d.get("jenis") or ""),
+            d.get("nomor") or "",
+            d.get("atas_nama") or "",
+            LOKASI_SIMPAN.get(d.get("lokasi_simpan"),
+                              d.get("lokasi_simpan") or ""),
+            KATEGORI_SERTIPIKASI.get(kategori, kategori),
+            berlaku,
+            _status(berlaku),
+            len(d.get("lampiran") or []),
+            d.get("keterangan") or "",
+            d.get("created_by") or "",
+        ])
+    return baris
+
+
 # ---------------------------------------------------------------------------
 # Checklist pengamanan per aset per jenis objek (pustaka §11.2 —
 # [perlu verifikasi] §14 butir 18: butir dari artikel DJKN & KMK 21/2012,

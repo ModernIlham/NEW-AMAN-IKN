@@ -48,6 +48,20 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#214] Ekspor CSV arsip dokumen kepemilikan (Pengamanan) — 2026-07-13
+
+- **Ekspor CSV** arsip dokumen kepemilikan (`GET
+  /pengamanan/dokumen/export`), melengkapi pola ekspor register di modul
+  Pengamanan (setelah polis #205 & kasus #213). Kolom: identitas aset,
+  jenis (label: sertipikat/BPKB/STNK/IMB-PBG/perolehan/lainnya), nomor,
+  atas nama, lokasi simpan (label Pengelola/Pengguna Barang), kategori
+  sertipikasi (label K1–K4/SHP, untuk jenis sertipikat), berlaku sampai,
+  **status berlaku** (Berlaku / Kedaluwarsa dihitung dari tanggal vs hari
+  ini; kosong bila tanpa masa berlaku), jumlah lampiran, keterangan,
+  pembuat. Helper murni `baris_csv_dokumen` (tanpa Mongo, teruji unit) +
+  tombol unduh CSV di panel "Arsip Dokumen Kepemilikan" (muncul saat ada
+  dokumen). Baca-saja. Unit test +1 → 276 passed. Dasar PP 27/2014 Ps. 43.
+
 ## [#213] Ekspor CSV register kasus BMN bermasalah (Pengamanan) — 2026-07-13
 
 - **Ekspor CSV** register kasus/sengketa BMN bermasalah (`GET

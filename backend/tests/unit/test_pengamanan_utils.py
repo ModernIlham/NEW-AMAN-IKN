@@ -263,3 +263,34 @@ class TestPolisAsuransi:
         kosong = baris_csv_kasus([{"kategori": "xx", "status": "yy"}])[1]
         assert kosong[0] == "" and kosong[4] == "xx" and kosong[5] == "yy"
         assert kosong[10] == "" and kosong[11] == ""
+
+    def test_baris_csv_dokumen(self):
+        from pengamanan_utils import HEADER_CSV_DOKUMEN, baris_csv_dokumen
+        # Kosong / None → hanya header
+        assert baris_csv_dokumen([], "2026-07-13") == [HEADER_CSV_DOKUMEN]
+        assert baris_csv_dokumen(None, "2026-07-13") == [HEADER_CSV_DOKUMEN]
+        rows = baris_csv_dokumen([{
+            "asset_code": "40101", "NUP": "3", "asset_name": "Tanah Kantor",
+            "jenis": "sertipikat", "nomor": "SHP-12", "atas_nama": "Pem. RI",
+            "lokasi_simpan": "pengelola_barang",
+            "kategori_sertipikasi": "k1", "berlaku_sampai": "2030-01-01",
+            "lampiran": [{"file_id": "a"}, {"file_id": "b"}],
+            "keterangan": "-", "created_by": "admin",
+        }], "2026-07-13")
+        assert rows[0] == HEADER_CSV_DOKUMEN
+        r = rows[1]
+        # Label jenis/lokasi/kategori terbaca
+        assert r[3].startswith("Sertipikat tanah")
+        assert r[6].startswith("Pengelola Barang")
+        assert r[7] == "K1 — lengkap, siap SHP"
+        assert r[8] == "2030-01-01" and r[9] == "Berlaku"   # belum lewat
+        assert r[10] == 2                                    # jumlah lampiran
+        # STNK kedaluwarsa (berlaku < hari ini) + tanpa lampiran
+        lewat = baris_csv_dokumen([{
+            "jenis": "stnk", "nomor": "X", "berlaku_sampai": "2020-05-01T00:00",
+        }], "2026-07-13")[1]
+        assert lewat[8] == "2020-05-01" and lewat[9] == "Kedaluwarsa"
+        assert lewat[10] == 0
+        # Tanpa masa berlaku → status kosong; jenis tak dikenal → apa adanya
+        tanpa = baris_csv_dokumen([{"jenis": "zz"}], "2026-07-13")[1]
+        assert tanpa[3] == "zz" and tanpa[8] == "" and tanpa[9] == ""
