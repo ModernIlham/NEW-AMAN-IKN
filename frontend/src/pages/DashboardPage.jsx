@@ -49,6 +49,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useOfflineSync } from "@/hooks/useOfflineSync";
 import { useOptimisticQueue } from "@/hooks/useOptimisticQueue";
+import { haptic } from "@/lib/haptics";
 import { useUnsyncedGuard } from "@/hooks/useUnsyncedGuard";
 import { useRowLocking } from "@/hooks/useRowLocking";
 import { useAssetFilters } from "@/hooks/useAssetFilters";
@@ -425,6 +426,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       const now = Date.now();
       if (now - (conflictToastAtRef.current[assetId] || 0) > 8000) {
         conflictToastAtRef.current[assetId] = now;
+        haptic("error"); // getar "perhatian": data diubah pengguna lain (throttle sama dgn toast)
         toast.error(conflictDetail?.message || "Data telah diubah pengguna lain. Memuat versi terbaru...", { duration: 4500 });
       }
       // Fetch the fresh row to update the local state with the winning version
