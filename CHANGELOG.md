@@ -48,6 +48,23 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#240] Lightbox foto: unduh foto ASLI (ikon kontras) + navigasi antar-ASET via geser kartu info — 2026-07-13
+
+- **Tombol unduh foto asli (resolusi penuh).** Yang tampil di popup hanya varian
+  preview (`w=1280`). Ditambah tombol ikon **Unduh** di pojok foto yang mengambil
+  **file ASLI** (endpoint tanpa `w` → byte penuh) via blob download. Ikon di
+  **lingkaran gelap semi-transparan + cincin putih + backdrop-blur** → kontras &
+  jelas di light/dark maupun di atas warna foto apa pun.
+- **Navigasi antar-ASET langsung dari popup.** Geser kiri/kanan pada **kartu
+  info** (bukan foto) → pindah ke aset **sebelum/sesudah** sesuai urutan & filter
+  aktif. Ada **peek/bayangan kartu tetangga** sebagai petunjuk, umpan-balik drag,
+  tombol **‹ ›** (untuk desktop), penunjuk "Aset i/N", dan pintasan **↑/↓**. Geser
+  foto (di area foto) tetap berpindah antar-FOTO seperti biasa.
+- Berlaku di ketiga tempat lightbox dipakai: mode list, galeri, dan popup peta
+  (masing-masing memakai daftar aset-nya sendiri sesuai filter aktif).
+
+---
+
 ## [#239] Kamera/GPS: toleransi ≤8 m (kuning 6–8 m) + perbaikan animasi titik fokus — 2026-07-13
 
 Revisi #235 mengikuti alur lapangan agar lebih cepat.

@@ -294,7 +294,7 @@ const AssetGalleryView = memo(({
 
       {/* Lightbox */}
       {lightboxAsset && (
-        <Lightbox asset={lightboxAsset} onClose={closeLightbox} onEdit={onEdit} />
+        <Lightbox asset={lightboxAsset} onClose={closeLightbox} onEdit={onEdit} siblings={assets} onSelectAsset={setLightboxAsset} />
       )}
     </TooltipProvider>
   );
