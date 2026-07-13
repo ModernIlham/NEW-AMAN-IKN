@@ -13,9 +13,9 @@ from pydantic import BaseModel, Field
 from auth_utils import require_admin, require_user
 from db import db
 from pemeliharaan_utils import (
-    JENIS_PEMELIHARAAN, indikasi_kapitalisasi, jatuh_tempo, kelompok_dhpb,
-    rekap_pemeliharaan, rentang_periode, status_jadwal, urut_riwayat,
-    parse_biaya, validate_jadwal, validate_pemeliharaan,
+    JENIS_PEMELIHARAAN, baris_csv_jadwal, indikasi_kapitalisasi, jatuh_tempo,
+    kelompok_dhpb, rekap_pemeliharaan, rentang_periode, status_jadwal,
+    urut_riwayat, parse_biaya, validate_jadwal, validate_pemeliharaan,
 )
 
 pemeliharaan_router = APIRouter()
@@ -223,6 +223,26 @@ async def list_jadwal(_user: dict = Depends(require_user)):
         "terlambat": sum(1 for i in items if i["status"] == "terlambat"),
         "segera": sum(1 for i in items if i["status"] == "segera"),
     }
+
+
+@pemeliharaan_router.get("/pemeliharaan/jadwal/export")
+async def export_jadwal(_user: dict = Depends(require_user)):
+    """Ekspor CSV jadwal pemeliharaan berkala (pola #158)."""
+    import csv as csv_module
+    import io
+
+    from fastapi.responses import Response as HttpResponse
+
+    today_iso = datetime.now(timezone.utc).date().isoformat()
+    items = [j async for j in db.jadwal_pemeliharaan.find({}, _PROJ)]
+    buf = io.StringIO()
+    w = csv_module.writer(buf)
+    for row in baris_csv_jadwal(items, today_iso):
+        w.writerow(row)
+    return HttpResponse(
+        content=buf.getvalue().encode("utf-8-sig"), media_type="text/csv",
+        headers={"Content-Disposition":
+                 'attachment; filename="jadwal_pemeliharaan.csv"'})
 
 
 @pemeliharaan_router.post("/pemeliharaan/jadwal")

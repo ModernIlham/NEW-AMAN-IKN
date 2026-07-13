@@ -318,10 +318,20 @@ export default function PemeliharaanPage({ user, onBack }) {
                 {jadwal.segera} segera
               </span>
             )}
+            {(jadwal?.items || []).length > 0 && (
+              <button
+                type="button"
+                onClick={() => downloadFileWithProgress(`${API}/pemeliharaan/jadwal/export`, "jadwal_pemeliharaan.csv", { label: "Ekspor Jadwal Pemeliharaan (CSV)" }).catch(() => {})}
+                className="ml-auto h-7 px-2.5 rounded-lg border border-border text-xs font-semibold text-foreground/80 flex items-center gap-1 hover:bg-muted min-h-0"
+                data-testid="pemeliharaan-jadwal-export"
+              >
+                <Download className="w-3.5 h-3.5" />CSV
+              </button>
+            )}
             <button
               type="button"
               onClick={() => bukaFormJadwal()}
-              className="ml-auto h-7 px-2.5 rounded-lg border border-border text-xs font-semibold text-foreground/80 flex items-center gap-1 hover:bg-muted min-h-0"
+              className={`${(jadwal?.items || []).length > 0 ? "" : "ml-auto "}h-7 px-2.5 rounded-lg border border-border text-xs font-semibold text-foreground/80 flex items-center gap-1 hover:bg-muted min-h-0`}
               data-testid="pemeliharaan-jadwal-tambah"
             >
               <Plus className="w-3.5 h-3.5" />Tambah

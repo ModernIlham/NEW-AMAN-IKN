@@ -2,7 +2,8 @@
 import pytest
 
 from pemeliharaan_utils import (
-    JENIS_PEMELIHARAAN, KONDISI_SETELAH_VALID, indikasi_kapitalisasi,
+    HEADER_CSV_JADWAL, JENIS_PEMELIHARAAN, KONDISI_SETELAH_VALID,
+    baris_csv_jadwal, indikasi_kapitalisasi,
     jatuh_tempo, kelompok_dhpb, parse_biaya, rekap_pemeliharaan,
     rentang_periode, status_jadwal, tahun_dari_tanggal, tambah_bulan,
     urut_riwayat, validate_jadwal, validate_pemeliharaan,
@@ -212,6 +213,30 @@ def test_status_jadwal_terlambat_segera_terjadwal():
     assert status_jadwal("2026-07-26", HARI_INI) == "segera"      # tepat ambang 14 hari
     assert status_jadwal("2026-07-27", HARI_INI) == "terjadwal"
     assert status_jadwal("", HARI_INI) == "terjadwal"             # tanpa due → netral
+
+
+def test_baris_csv_jadwal():
+    assert baris_csv_jadwal([], HARI_INI) == [HEADER_CSV_JADWAL]
+    assert baris_csv_jadwal(None, HARI_INI) == [HEADER_CSV_JADWAL]
+    # Belum pernah dilaksanakan → jatuh tempo = mulai; mulai < hari ini → terlambat
+    rows = baris_csv_jadwal([{
+        "asset_code": "3.05", "NUP": "2", "asset_name": "Genset",
+        "interval_bulan": 6, "mulai": "2026-06-01T00:00", "terakhir": "",
+        "keterangan": "servis rutin", "created_by": "budi",
+    }], HARI_INI)
+    assert rows[0] == HEADER_CSV_JADWAL
+    r = rows[1]
+    assert r[0] == "3.05" and r[2] == "Genset"
+    assert r[3] == 6 and r[4] == "2026-06-01"    # interval + tanggal dipangkas
+    assert r[5] == "" and r[6] == "2026-06-01"   # belum dilaksanakan → jatuh tempo = mulai
+    assert r[7] == "Terlambat"                    # 2026-06-01 < 2026-07-12
+    # Sudah dilaksanakan → jatuh tempo = terakhir + interval; masih jauh → terjadwal
+    lanjut = baris_csv_jadwal([{
+        "asset_code": "3.05", "NUP": "3", "interval_bulan": 12,
+        "mulai": "2025-01-01", "terakhir": "2026-01-05",
+    }], HARI_INI)[1]
+    assert lanjut[5] == "2026-01-05" and lanjut[6] == "2027-01-05"
+    assert lanjut[7] == "Terjadwal" and lanjut[8] == ""  # keterangan kosong
 
 
 # ── DHPB: periode & pengelompokan ────────────────────────────────────────
