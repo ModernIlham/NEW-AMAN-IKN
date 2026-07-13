@@ -9,7 +9,7 @@ import {
 // MOBILE CARD WITH SWIPE GESTURES
 // OPTIMIZED: Only uses thumbnail from API (photos are lazy-loaded when editing)
 // ============================================================================
-const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, onOpenKartu, onViewAudit, onPrintCard, lockedBy, syncStatus, onRetrySync, onDismissSync, selected, onToggleSelect }) => {
+const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, onOpenKartu, onViewAudit, onPrintCard, onOpenPhoto, lockedBy, syncStatus, onRetrySync, onDismissSync, selected, onToggleSelect }) => {
   const [swipeX, setSwipeX] = useState(0);
   const [startX, setStartX] = useState(0);
   const [isSwiping, setIsSwiping] = useState(false);
@@ -191,9 +191,21 @@ const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, onOpenKartu, on
               />
             </div>
           )}
-          <div className="w-14 h-14 rounded-lg border border-border overflow-hidden bg-muted flex items-center justify-center flex-shrink-0">
-            {hasPhoto ? <img src={coverPhoto} alt="" className="w-full h-full object-cover" loading="lazy" /> : <Camera className="w-5 h-5 text-muted-foreground" />}
-          </div>
+          {hasPhoto && onOpenPhoto ? (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onOpenPhoto(asset); }}
+              className="w-14 h-14 rounded-lg border border-border overflow-hidden bg-muted flex items-center justify-center flex-shrink-0 cursor-zoom-in active:ring-2 active:ring-blue-400"
+              aria-label={`Lihat foto ${asset.asset_code || asset.asset_name || ''}`.trim()}
+              data-testid={`card-photo-${asset.id}`}
+            >
+              <img src={coverPhoto} alt="" className="w-full h-full object-cover" loading="lazy" />
+            </button>
+          ) : (
+            <div className="w-14 h-14 rounded-lg border border-border overflow-hidden bg-muted flex items-center justify-center flex-shrink-0">
+              {hasPhoto ? <img src={coverPhoto} alt="" className="w-full h-full object-cover" loading="lazy" /> : <Camera className="w-5 h-5 text-muted-foreground" />}
+            </div>
+          )}
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-1">
               <div className="min-w-0">

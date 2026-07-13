@@ -41,7 +41,7 @@ const formatPrice = (price) => {
 // md-lg: Foto, Identitas, Nama, Kondisi, Status, INV, Actions
 // xl+: + Eselon, Lokasi, Harga, Dok, Stiker
 // ============================================================================
-const VirtualizedAssetTable = memo(({ assets, editId, onEdit, onDelete, onPrintCard, onOpenKartu, onViewAudit, pageSize, rowLocks = {}, currentSessionId, syncStatuses = {}, onRetrySync, onDismissSync, selectedAssets, onToggleSelect, onToggleSelectAll }) => {
+const VirtualizedAssetTable = memo(({ assets, editId, onEdit, onDelete, onPrintCard, onOpenKartu, onViewAudit, onOpenPhoto, pageSize, rowLocks = {}, currentSessionId, syncStatuses = {}, onRetrySync, onDismissSync, selectedAssets, onToggleSelect, onToggleSelectAll }) => {
   const parentRef = useRef(null);
   const ROW_HEIGHT = 52;
   const HEADER_HEIGHT = 32;
@@ -231,9 +231,22 @@ const VirtualizedAssetTable = memo(({ assets, editId, onEdit, onDelete, onPrintC
                       <Lock className="w-1.5 h-1.5" />
                     </div>
                   )}
-                  <div className="w-8 h-8 rounded overflow-hidden bg-muted flex items-center justify-center">
-                    {hasPhoto ? <img src={photo} alt="" className="w-full h-full object-cover" loading="lazy" /> : <Camera className="w-3 h-3 text-muted-foreground" />}
-                  </div>
+                  {hasPhoto && onOpenPhoto ? (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); onOpenPhoto(a); }}
+                      className="w-8 h-8 rounded overflow-hidden bg-muted flex items-center justify-center cursor-zoom-in hover:ring-2 hover:ring-blue-400 transition"
+                      title="Lihat foto aset"
+                      aria-label={`Lihat foto ${a.asset_code || a.asset_name || ''}`.trim()}
+                      data-testid={`row-photo-${a.id}`}
+                    >
+                      <img src={photo} alt="" className="w-full h-full object-cover" loading="lazy" />
+                    </button>
+                  ) : (
+                    <div className="w-8 h-8 rounded overflow-hidden bg-muted flex items-center justify-center">
+                      {hasPhoto ? <img src={photo} alt="" className="w-full h-full object-cover" loading="lazy" /> : <Camera className="w-3 h-3 text-muted-foreground" />}
+                    </div>
+                  )}
                 </div>
 
                 {/* Identitas: Code + NUP + Category */}

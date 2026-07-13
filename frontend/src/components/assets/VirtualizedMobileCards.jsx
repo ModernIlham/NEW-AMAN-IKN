@@ -18,6 +18,7 @@ const VirtualizedMobileCards = memo(({
   onOpenKartu,
   onViewAudit,
   onPrintCard,
+  onOpenPhoto,
   onLoadMore,
   isLoadingMore = false,
   hasMore = true,
@@ -123,6 +124,7 @@ const VirtualizedMobileCards = memo(({
                 onOpenKartu={onOpenKartu}
                 onViewAudit={onViewAudit}
                 onPrintCard={onPrintCard}
+                onOpenPhoto={onOpenPhoto}
                 lockedBy={isLockedByOther ? lock.user_name : null}
                 syncStatus={syncStatuses[asset.id]}
                 onRetrySync={onRetrySync}
