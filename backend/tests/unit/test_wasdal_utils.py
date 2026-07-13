@@ -240,3 +240,32 @@ def test_rekap_insidentil():
     r = rekap_insidentil(items, "2026-07-13")
     assert r == {"total": 3, "berjalan": 1, "ba_terbit": 1, "dilaporkan": 1,
                  "lewat_tenggat": 1}
+
+
+def test_baris_csv_insidentil():
+    from wasdal_utils import HEADER_CSV_INSIDENTIL, baris_csv_insidentil
+    assert baris_csv_insidentil([], "2026-07-13") == [HEADER_CSV_INSIDENTIL]
+    assert baris_csv_insidentil(None, "2026-07-13") == [HEADER_CSV_INSIDENTIL]
+    rows = baris_csv_insidentil([
+        # berjalan, belum lewat → "N hk lagi (pelaksanaan)"
+        {"pemicu": "informasi_masyarakat", "tanggal_mulai": "2026-07-10",
+         "lokasi": "Gudang A", "objek": "penggunaan", "uraian": "Laporan warga",
+         "status": "berjalan", "created_by": "admin"},
+        # berjalan lama → lewat tenggat pelaksanaan
+        {"pemicu": "hasil_audit", "tanggal_mulai": "2026-06-01",
+         "status": "berjalan", "uraian": "x"},
+        # dilaporkan → status_tenggat "Selesai", tak ada tenggat aktif
+        {"pemicu": "pemberitaan_media", "status": "dilaporkan",
+         "nomor_ba": "BA-9", "tanggal_ba": "2026-07-01",
+         "tanggal_lapor": "2026-07-05", "uraian": "y"},
+    ], "2026-07-13")
+    assert rows[0] == HEADER_CSV_INSIDENTIL
+    # Baris 1: label pemicu/objek/status + "N hk lagi (pelaksanaan)"
+    assert rows[1][0] == "Informasi masyarakat"
+    assert rows[1][3] == "Penggunaan" and rows[1][5] == "Berjalan"
+    assert rows[1][7].endswith("(pelaksanaan)")
+    # Baris 2: lewat tenggat pelaksanaan
+    assert rows[2][7] == "Lewat tenggat pelaksanaan"
+    # Baris 3: dilaporkan → Selesai; tenggat aktif kosong
+    assert rows[3][5] == "Dilaporkan" and rows[3][7] == "Selesai"
+    assert rows[3][6] == "" and rows[3][8] == "BA-9"

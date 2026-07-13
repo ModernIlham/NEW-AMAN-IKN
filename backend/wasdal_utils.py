@@ -462,5 +462,50 @@ def rekap_insidentil(items, today_iso: str) -> dict:
     return {"total": len(items), **per_status, "lewat_tenggat": lewat}
 
 
+HEADER_CSV_INSIDENTIL = [
+    "pemicu", "tanggal_mulai", "lokasi", "objek_pemantauan", "uraian",
+    "status", "tenggat_aktif", "status_tenggat", "nomor_ba", "tanggal_ba",
+    "hasil", "tanggal_lapor", "keterangan_lapor", "dibuat_oleh",
+]
+
+
+def baris_csv_insidentil(items, today_iso) -> list:
+    """Susun baris CSV register pemantauan insidentil: [header, *data] — murni.
+
+    Pemicu/status/objek diterjemahkan ke label; kolom status_tenggat memakai
+    info_tenggat_insidentil (Lewat tenggat / "N hk lagi" per tahap /
+    "Selesai"). Tanpa Mongo/IO agar teruji unit (pola ekspor #158).
+    """
+    baris = [list(HEADER_CSV_INSIDENTIL)]
+    for t in items or []:
+        info = info_tenggat_insidentil(t, today_iso)
+        tahap = info.get("tahap")
+        if tahap is None:
+            st_tenggat = "Selesai" if t.get("status") == "dilaporkan" else ""
+        elif info.get("lewat"):
+            st_tenggat = f"Lewat tenggat {tahap}"
+        elif info.get("sisa_hari_kerja") is not None:
+            st_tenggat = f"{info['sisa_hari_kerja']} hk lagi ({tahap})"
+        else:
+            st_tenggat = tahap
+        baris.append([
+            PEMICU_INSIDENTIL.get(t.get("pemicu"), t.get("pemicu") or ""),
+            str(t.get("tanggal_mulai") or "")[:10],
+            t.get("lokasi") or "",
+            OBJEK_WASDAL.get(t.get("objek"), t.get("objek") or ""),
+            t.get("uraian") or "",
+            STATUS_INSIDENTIL.get(t.get("status"), t.get("status") or ""),
+            str(info.get("tenggat") or "")[:10],
+            st_tenggat,
+            t.get("nomor_ba") or "",
+            str(t.get("tanggal_ba") or "")[:10],
+            t.get("hasil") or "",
+            str(t.get("tanggal_lapor") or "")[:10],
+            t.get("keterangan_lapor") or "",
+            t.get("created_by") or "",
+        ])
+    return baris
+
+
 # Ekspor label status perjanjian agar UI wasdal tak impor ganda
 LABEL_STATUS_PEMANFAATAN = LABEL_STATUS_PERJANJIAN

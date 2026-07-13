@@ -48,6 +48,19 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#210] Ekspor CSV register pemantauan insidentil Wasdal — 2026-07-13
+
+- **Ekspor CSV** register pemantauan insidentil wasdal (`GET
+  /wasdal/insidentil/export`), melengkapi ekspor register Wasdal
+  (penertiban #207). Kolom: pemicu (label), tanggal mulai, lokasi, objek
+  pemantauan (label), uraian, status, **tenggat aktif** + **status
+  tenggat** (Lewat tenggat / "N hk lagi" per tahap pelaksanaan/lapor /
+  Selesai, dihitung via `info_tenggat_insidentil`), nomor & tanggal BA,
+  hasil, tanggal lapor, keterangan lapor, pembuat. Helper murni
+  `baris_csv_insidentil` (tanpa Mongo, teruji unit) + tombol unduh CSV di
+  panel pemantauan insidentil. Baca-saja. Unit test +1 → 273 passed.
+  Dasar PMK 207/2021 (pelaksanaan ≤10 hk, lapor ≤5 hk sejak BA).
+
 ## [#209] Galeri: infinite scroll dua arah + jaga aset terseleksi terlihat — 2026-07-13
 
 - **Scroll dua arah (muat halaman sebelumnya):** bila pengguna berada di

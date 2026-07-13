@@ -459,6 +459,13 @@ export default function WasdalPage({ user, onBack }) {
                   <span className="px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-600 dark:text-violet-400 text-[10px] font-semibold">
                     {(insi.ringkasan?.berjalan || 0) + (insi.ringkasan?.ba_terbit || 0)} aktif
                   </span>
+                  {(insi.items || []).length > 0 && (
+                    <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
+                      onClick={() => downloadFileWithProgress(`${API}/wasdal/insidentil/export`, "register_pemantauan_insidentil.csv", { label: "Ekspor Register Pemantauan Insidentil (CSV)" }).catch(() => {})}
+                      data-testid="wasdal-insidentil-export">
+                      <FileDown className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">CSV</span>
+                    </Button>
+                  )}
                   <Button size="sm" onClick={() => setFormInsi({ data: { pemicu: "informasi_masyarakat", tanggal_mulai: new Date().toISOString().slice(0, 10), objek: "", uraian: "", lokasi: "" }, saving: false })}
                     className="h-7 text-[11px] min-h-0 bg-violet-600 hover:bg-violet-700 text-white" data-testid="wasdal-insidentil-tambah">
                     <Plus className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">Catat</span>
