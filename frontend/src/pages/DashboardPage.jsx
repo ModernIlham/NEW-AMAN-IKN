@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, memo, useReducer, lazy, Suspense } from "react";
 import {
   Package, Plus, X, ChevronDown, ChevronUp, Loader2, Star,
-  Users, PanelLeftClose, PanelLeftOpen, Lock,
+  Users, PanelLeftClose, PanelLeftOpen, Lock, Pen,
   BarChart3, ClipboardList, Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -495,6 +495,34 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   }, [activity?.id, debouncedSearch, filterCategory, buildFilterParams]);
 
   const clearSelection = useCallback(() => { setSelectedAssets(new Set()); setShowBatchPanel(false); }, []);
+
+  // Pilih/kosongkan SEMUA aset yang tampil di viewport aktif (desktop = tabel
+  // `assets`; galeri/HP/tablet = `mobileAssets`) — memberi select-all/deselect
+  // di semua tampilan, bukan hanya header tabel desktop.
+  const toggleSelectAllVisible = useCallback(() => {
+    const isDesktopList = viewModeRef.current !== 'gallery'
+      && typeof window !== 'undefined'
+      && window.matchMedia('(min-width: 1024px)').matches;
+    const list = isDesktopList ? assets : mobileAssets;
+    const ids = list.map(a => a.id);
+    setSelectedAssets(prev => {
+      const semua = ids.length > 0 && ids.every(id => prev.has(id));
+      const next = new Set(prev);
+      if (semua) ids.forEach(id => next.delete(id));
+      else ids.forEach(id => next.add(id));
+      return next;
+    });
+  }, [assets, mobileAssets]);
+
+  // Panel "Ubah Massal" muncul otomatis saat seleksi PERTAMA (0 → >0) dan
+  // hilang saat seleksi dikosongkan; tapi menutup panel (X/Batal) hanya
+  // menciutkannya — seleksi TETAP dipertahankan (bug: dulu ikut terhapus).
+  const prevSelSizeRef = useRef(0);
+  useEffect(() => {
+    if (prevSelSizeRef.current === 0 && selectedAssets.size > 0) setShowBatchPanel(true);
+    else if (selectedAssets.size === 0) setShowBatchPanel(false);
+    prevSelSizeRef.current = selectedAssets.size;
+  }, [selectedAssets]);
 
   // Verifikasi hasil scan barcode/QR terhadap kegiatan yang sedang dibuka.
   // Bug sebelumnya: scan SELALU memunculkan notifikasi "berhasil" walau barang
@@ -1627,13 +1655,28 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
               )}
 
               {selectedAssets.size > 0 && (<>
+                {/* Toolbar seleksi — tampil di SEMUA viewport (HP/tablet/desktop):
+                    hitungan + pilih-semua/kosongkan + buka-tutup Ubah Massal. */}
+                {perms.canEdit && (
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg px-3 py-1.5" data-testid="selection-toolbar">
+                    <span className="text-xs font-semibold text-blue-800 dark:text-blue-300"><b>{selectedAssets.size}</b> aset terpilih</span>
+                    <button onClick={toggleSelectAllVisible} className="text-xs text-blue-700 dark:text-blue-300 hover:underline font-medium" data-testid="select-all-visible-btn">Pilih/batal semua tampilan ini</button>
+                    <button onClick={clearSelection} className="text-xs text-red-600 dark:text-red-400 hover:underline font-medium" data-testid="clear-selection-btn">Kosongkan seleksi</button>
+                    <button onClick={() => setShowBatchPanel(v => !v)} className="ml-auto h-7 px-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1 flex-shrink-0" data-testid="toggle-batch-panel-btn">
+                      <Pen className="w-3.5 h-3.5" />{showBatchPanel ? "Tutup" : "Ubah Massal"}
+                    </button>
+                  </div>
+                )}
                 {selectedAssets.size === assets.length && totalItems > assets.length && (
                   <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-1.5 flex items-center justify-between text-xs">
                     <span className="text-amber-800 dark:text-amber-300">{selectedAssets.size} aset di halaman ini dipilih. Total ada <b>{totalItems}</b> aset.</span>
                     <button onClick={selectAllPages} className="text-blue-600 dark:text-blue-400 hover:underline font-semibold ml-2" data-testid="select-all-pages-btn">Pilih semua {totalItems} aset</button>
                   </div>
                 )}
-                <Suspense fallback={null}><BatchEditPanel selectedCount={selectedAssets.size} categories={categories} onApply={handleBatchUpdate} onClose={clearSelection} updating={batchUpdating} activity={activity} assets={assets} selectedAssets={selectedAssets} /></Suspense>
+                {/* Menutup panel (X/Batal) MENCIUTKAN saja — seleksi dipertahankan. */}
+                {perms.canEdit && showBatchPanel && (
+                  <Suspense fallback={null}><BatchEditPanel selectedCount={selectedAssets.size} categories={categories} onApply={handleBatchUpdate} onClose={() => setShowBatchPanel(false)} updating={batchUpdating} activity={activity} assets={assets} selectedAssets={selectedAssets} /></Suspense>
+                )}
               </>)}
 
               {viewMode === 'gallery' ? (
