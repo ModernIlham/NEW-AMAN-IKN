@@ -48,6 +48,25 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#279] GPS pintar kamera: kunci koordinat aset ke jepretan PALING AKURAT — 2026-07-14
+
+- **Koordinat aset kini memakai fix GPS terakurat selama sesi kamera**, bukan
+  fix terakhir yang mungkin ber-jitter/kurang presisi. Saat kamera terbuka,
+  `watchPosition` mengalirkan `{lat,lng,accuracy}` terus-menerus; koordinat aset
+  hanya di-commit bila fix baru **lebih akurat** (accuracy lebih kecil) daripada
+  yang terbaik sejauh ini (fix pertama selalu dipakai). Hasil akhir = koordinat
+  dengan GPS paling presisi di antara semua jepretan foto aset tersebut.
+- **Per-aset**: "fix terbaik" di-reset tiap ganti aset (edit) atau simpan-lalu-
+  baru (`cameraSavedCount`), sehingga tiap aset memilih koordinat terakuratnya
+  sendiri. Komit jadi jarang (akurasi membaik lalu berhenti) — juga ringan di HP
+  low-end. Sepenuhnya offline-safe (murni state lokal).
+- Helper murni `lib/gpsAkurasi.js` (`koordinatValid`, `akurasiValid`,
+  `lebihAkurat`, `pilihKoordinatTerbaik`) + **10 unit test**; validasi ketat
+  (tolak `""`/`null` yang `Number()` ubah jadi `0`). Integrasi di
+  `AssetForm.handleCameraGpsFix`. eslint bersih, `yarn build` sukses.
+
+---
+
 ## [#278] Kamera: info pengguna terstruktur (Melekat ke + Nama Pengguna) di overlay & watermark foto — 2026-07-14
 
 - **Info pengguna barang tampil terstruktur 2 baris** di halaman kamera (tambah
