@@ -88,6 +88,22 @@ def hierarchy_prefixes(kode: str):
     return out
 
 
+def level_terdaftar_terdalam(kode, terdaftar) -> int:
+    """Level TERDALAM (1-5) yang prefix kode-nya ada di referensi kodefikasi;
+    0 bila tak satu pun (bahkan golongan level 1) terdaftar (§5A gap #7 —
+    kodefikasi sebagai FK tervalidasi, Prinsip 2).
+
+    `terdaftar` = himpunan (`set`) kode kodefikasi yang terdaftar. Memakai
+    `hierarchy_prefixes` sehingga kode "3050104001" dicek berjenjang: "3" →
+    "301" → "30105"? … dst. Fungsi murni — pemanggil menyiapkan himpunan.
+    """
+    deepest = 0
+    for level, prefix in hierarchy_prefixes(normalize_kode(kode)):
+        if prefix in terdaftar:
+            deepest = level          # level menaik → yang terakhir cocok = terdalam
+    return deepest
+
+
 def is_persediaan_kode(kode: str) -> bool:
     """Domain persediaan = digit pertama '1' (aset lancar)."""
     return bool(kode) and kode[0] == "1"

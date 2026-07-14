@@ -275,7 +275,12 @@ berdampak-tertinggi lebih dulu.
    `build_asset_perolehan_projection`, best-effort, **tanpa** version bump agar
    tak memicu OCC 409 palsu). *Tersisa:* auto-daftar draft aset baru dari
    perolehan (pra-isi) belum.
-7. **Kodefikasi bukan FK tervalidasi** (Prinsip 2).
+7. ⚠️ **Kodefikasi bukan FK tervalidasi** (Prinsip 2). ✅ **Validasi READ-ONLY
+   sudah** — helper murni `level_terdaftar_terdalam(kode, terdaftar)` + endpoint
+   `GET /integritas/kodefikasi-aset` melaporkan kode aset yang golongan/level-nya
+   TAK terdaftar di `db.kodefikasi` (peringatan non-blocking, agregasi per kode
+   distinct; #262). *Tersisa:* validasi saat create/impor aset (soft-warning) &
+   lengkapi referensi.
 8. ⚠️ **Snapshot identitas aset basi** (Prinsip 1) — disalin, tak disegarkan.
    ✅ **Deteksi READ-ONLY sudah** — helper murni `identitas_drift(snapshot,
    master)` + endpoint `GET /integritas/identitas-penghapusan` melaporkan
