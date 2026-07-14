@@ -48,6 +48,21 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#263] Deteksi identitas aset basi di register pemindahtanganan (read-only) — §5A Prinsip 1 — 2026-07-14
+
+- **Perluasan §5A gap #8 / Prinsip 1 (lanjutan #261).** Endpoint **read-only**
+  `GET /integritas/identitas-pemindahtanganan` mendeteksi snapshot identitas aset
+  (`asset_code`/`NUP`/`asset_name`) yang **basi** pada register `pemindahtanganan`
+  — yang membekukan identitas per baris `aset[]`. Master di-lookup **batch** via
+  `$in` (hindari N+1); melaporkan `snapshot_basi` / `aset_master_hilang` + hitungan.
+- **Helper murni `drift_identitas_daftar(aset_list, master_by_id)`**
+  (`integritas_utils.py`) → daftar temuan per baris (pakai ulang `identitas_drift`).
+  **4 unit test**. Read-only — tak mengubah data. Deteksi kini mencakup **dua**
+  register hilir (penghapusan #261 + pemindahtanganan). pytest **340 lulus**.
+  Masterplan §5A gap #8 diperbarui.
+
+---
+
 ## [#262] Validasi FK kodefikasi aset (read-only, non-blocking) — §5A Prinsip 2 — 2026-07-14
 
 - **Integrasi §5A gap #7 / Prinsip 2 (kodefikasi sebagai FK).** Kode barang aset
