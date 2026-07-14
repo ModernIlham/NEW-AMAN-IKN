@@ -48,6 +48,31 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#267] Perbaikan bug: cover foto tak berubah di mode daftar setelah hapus + ganti cover — 2026-07-14
+
+- **Bug.** Saat mengedit foto aset: menghapus foto yang sedang jadi cover lalu
+  menetapkan foto lain sebagai cover, saat disimpan `thumbnail_index` tersimpan
+  benar (form menampilkan cover yang benar saat dibuka lagi) TAPI thumbnail cover
+  di **mode daftar** (`asset.thumbnail`) tetap menampilkan cover lama. Baru
+  berubah bila cover diganti sekali lagi (tanpa menghapus foto).
+- **Akar masalah.** Jalur `photo_ops` (hapus/tambah foto) me-regen thumbnail
+  daftar HANYA bila byte cover berhasil diambil, dan mengambilnya lewat
+  `get_photo_from_gridfs` yang memakai `ObjectId(id)` **tanpa penjaga** — id yang
+  bukan 24-hex membuatnya melempar → `None` diam-diam → thumbnail lama dibiarkan.
+  Jalur "ganti cover saja" memakai koersi **toleran** (`ObjectId.is_valid`
+  fallback), itulah mengapa mengganti cover lagi memperbaikinya.
+- **Perbaikan.**
+  1. Helper murni baru `coerce_gridfs_id` (`gridfs_id_utils.py`) — koersi ke
+     ObjectId hanya bila valid; dipakai `get_photo_from_gridfs` (`shared_utils.py`)
+     sehingga jalur unduh foto (cover `photo_ops`, stream galeri `w=256`,
+     lightbox) selaras & tak gagal senyap. **4 unit test**.
+  2. Penjaga di jalur `photo_ops` (`routes/assets.py`): bila byte full-res cover
+     gagal diambil tetapi thumbnail per-foto cover tersedia, regen composite
+     cover dari situ → cover daftar **tak pernah** basi saat cover berganti.
+- Backend saja (tanpa perubahan frontend). pytest **352 lulus**, compileall OK.
+
+---
+
 ## [#266] Kapstone dasbor gabungan integritas `/integritas/ringkasan` (read-only) — §5A gap #8 — 2026-07-14
 
 - **Endpoint kapstone read-only `GET /integritas/ringkasan`.** Menggabungkan
