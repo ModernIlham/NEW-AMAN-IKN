@@ -38,6 +38,20 @@ function cameraErrMsg(err) {
   }
 }
 
+// Rangkai deskripsi "Melekat ke" pengguna barang untuk ditampilkan di overlay
+// kamera DAN dicetak di watermark foto (fungsi murni, di luar komponen):
+//   Individual  → "Individual"
+//   Jabatan     → "Jabatan — <nama jabatan>"
+//   Operasional → "Operasional — <Kegiatan/Acara/Kebutuhan | Ruangan>"
+// Kosong ("") bila belum dipilih.
+function deskripsiMelekat(fd) {
+  const m = (fd?.pengguna_melekat_ke || "").trim();
+  if (!m) return "";
+  if (m === "Jabatan") return fd?.pengguna_jabatan ? `Jabatan — ${fd.pengguna_jabatan}` : "Jabatan";
+  if (m === "Operasional") return fd?.operasional_jenis ? `Operasional — ${fd.operasional_jenis}` : "Operasional";
+  return m; // Individual (atau nilai lain apa adanya)
+}
+
 // Preset perbesaran (zoom) dari kemampuan track kamera — mis. 1×, 2×, 5×.
 function makeZoomPresets(caps) {
   if (!caps || !(Number(caps.max) > Number(caps.min))) return [];
@@ -489,16 +503,18 @@ const FullCameraSheet = memo(function FullCameraSheet({
     // — Watermark Timemark: blok semi-transparan kiri-bawah —
     const fix = gpsRef.current;
     const t = new Date();
-    // Baris pengguna + jenis melekat — hanya ditambah bila ada datanya (jangan
-    // menaruh baris kosong). Nama pengguna jatuh ke nama jabatan bila diisi.
-    const pengguna = (formData?.user || formData?.pengguna_jabatan || "").trim();
-    const melekat = [formData?.pengguna_melekat_ke, formData?.operasional_jenis].filter(Boolean).join(" — ");
+    // Info pengguna DUA baris terstruktur (hanya ditambah bila ada datanya):
+    //   "Melekat ke: <Individual/Jabatan—.../Operasional—...>"
+    //   "Nama Pengguna: <nama>"
+    const melekatDesc = deskripsiMelekat(formData);
+    const namaPengguna = (formData?.user || "").trim();
     const lines = [
       `${t.toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })}  ${t.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`,
       fix ? `GPS ${fix.lat}, ${fix.lng}${fix.accuracy != null ? ` (±${fix.accuracy} m)` : ""}` : "GPS: —",
       `${formData?.asset_code || "—"}${formData?.NUP ? `  NUP ${formData.NUP}` : ""}`,
       (formData?.asset_name || "Aset Baru") + (formData?.location ? ` • ${formData.location}` : ""),
-      ...((pengguna || melekat) ? [`Pengguna: ${pengguna}${melekat ? `  [${melekat}]` : ""}`] : []),
+      ...(melekatDesc ? [`Melekat ke: ${melekatDesc}`] : []),
+      ...(namaPengguna ? [`Nama Pengguna: ${namaPengguna}`] : []),
     ];
     const fs = Math.max(13, Math.round(canvas.width * 0.018));
     const lh = Math.round(fs * 1.4);
@@ -708,6 +724,18 @@ const FullCameraSheet = memo(function FullCameraSheet({
               {formData?.location && (
                 <div className="text-white/80 line-clamp-2">
                   <span className="text-white/50">Lokasi:</span> {formData.location}
+                </div>
+              )}
+              {/* Info pengguna barang — "Melekat ke" lalu "Nama Pengguna" di
+                  bawahnya; ikut tercetak di watermark hasil jepretan. */}
+              {deskripsiMelekat(formData) && (
+                <div className="text-white/80 line-clamp-2">
+                  <span className="text-white/50">Melekat ke:</span> {deskripsiMelekat(formData)}
+                </div>
+              )}
+              {(formData?.user || "").trim() && (
+                <div className="text-white/80 line-clamp-2">
+                  <span className="text-white/50">Nama Pengguna:</span> {formData.user}
                 </div>
               )}
             </div>
