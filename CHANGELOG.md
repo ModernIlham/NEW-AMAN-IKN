@@ -48,6 +48,20 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#271] Peringatan kodefikasi live di form aset (non-blocking, §5A Prinsip 2) — 2026-07-14
+
+- **Umpan balik langsung saat mengisi Kode Aset.** `AssetForm` kini memanggil
+  `GET /integritas/cek-kode` (debounce 500ms) saat `asset_code` berubah dan
+  menampilkan **peringatan kuning non-blocking** di bawah field bila prefix kode
+  belum terdaftar di referensi kodefikasi (golongan/kode tak terdaftar / panjang
+  kode tak valid). **Tak pernah memblokir simpan** — data lama dengan kode tak
+  terdaftar tetap bisa disimpan.
+- Best-effort: gagal/offline diabaikan diam-diam (tak mengganggu input); sembunyi
+  bila sudah ada error field. Melengkapi endpoint `/integritas/cek-kode` (#269).
+- Frontend saja. `yarn build` sukses, eslint bersih (hanya warning lama).
+
+---
+
 ## [#270] Perbaikan UX HP: jaga posisi scroll setelah simpan + muat ulang cerdas (auto-sinkron) — 2026-07-14
 
 - **Posisi scroll HP tak melompat lagi setelah simpan.** Saat menutup form
