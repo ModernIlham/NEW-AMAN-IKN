@@ -246,7 +246,12 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
       .then(r => {
         if (!alive) return;
         const data = r.data;
-        setFullAsset(data);
+        // GABUNG, bukan ganti: respons exclude_media TIDAK menghitung
+        // doc_total/doc_checked/doc_summary (field itu hanya di proyeksi list).
+        // Mengganti fullAsset dengan data mentah membuat badge "Dok x/y" dari
+        // seed galeri MUNCUL lalu HILANG (kedip). Merge → field segar dari server
+        // menang, tapi hitungan dokumen dari seed dipertahankan.
+        setFullAsset({ ...asset, ...data });
         const c = Number(data.photo_count) || 0;
         const v = Number(data.version) || 1;
         if (c !== builtRef.current.count || v !== builtRef.current.version) {

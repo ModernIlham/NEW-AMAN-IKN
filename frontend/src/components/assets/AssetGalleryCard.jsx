@@ -98,17 +98,24 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
           </div>
         )}
 
-        {/* Batch select checkbox */}
+        {/* Batch select — area seleksi: <label> ber-padding lebar supaya ketuk
+            di sekitar kotak = MENYELEKSI, dan onClick stopPropagation menahan
+            klik agar TIDAK ikut membuka lightbox (fokus pengguna saat memilih
+            adalah seleksi, bukan buka foto). */}
         {onToggleSelect && (
-          <div className="absolute top-1.5 left-1.5 z-10">
+          <label
+            className="absolute top-0 left-0 z-10 p-2 cursor-pointer"
+            onClick={(e) => e.stopPropagation()}
+            data-testid={`gallery-select-wrap-${asset.id}`}
+          >
             <input
               type="checkbox"
               checked={!!isSelected}
-              onChange={(e) => { e.stopPropagation(); onToggleSelect(asset.id); }}
-              className="w-4 h-4 rounded border-2 border-white/80 bg-black/30 cursor-pointer accent-blue-600"
+              onChange={() => onToggleSelect(asset.id)}
+              className="block w-5 h-5 rounded border-2 border-white/80 bg-black/30 cursor-pointer accent-blue-600"
               data-testid={`gallery-select-${asset.id}`}
             />
-          </div>
+          </label>
         )}
 
         {/* Top-right badges */}
