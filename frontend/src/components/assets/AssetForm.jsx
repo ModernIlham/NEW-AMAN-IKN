@@ -4,7 +4,7 @@ import {
   Plus, Edit3, X, Camera, Trash2, Check, ChevronDown,
   Package, Briefcase, ShieldCheck, Settings, Tag, Save, Loader2, ClipboardList,
   Info, ChevronRight, BookOpen, Wrench, ArrowRight, HelpCircle, MapPin, LocateFixed,
-  ChevronLeft, CloudOff, Upload, Eye, UserRound,
+  ChevronLeft, CloudOff, Upload, Eye, UserRound, AlertTriangle,
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -507,6 +507,10 @@ const AssetForm = memo(({
 
   const [formData, setFormData] = useState(emptyForm);
   const [editId, setEditId] = useState(null);
+  // Peringatan kodefikasi LIVE (§5A Prinsip 2, non-blocking): hasil cek
+  // GET /integritas/cek-kode untuk asset_code saat ini — hanya info, tak
+  // pernah memblokir simpan (data lama boleh punya kode tak terdaftar).
+  const [kodefikasiWarn, setKodefikasiWarn] = useState(null);
   // Asset version (OCC): appended as ?v= cache-buster to all media streaming
   // URLs (photo strip, checklist photos/PDFs) so the browser cache is busted
   // whenever the asset changes.
@@ -515,6 +519,26 @@ const AssetForm = memo(({
   // Offline edit: form initialized from the cached list row (offline snapshot)
   // because GET /assets/{id} was unreachable — shows a notice, media unavailable.
   const [offlineNotice, setOfflineNotice] = useState(false);
+
+  // Cek kodefikasi LIVE (debounce) saat Kode Aset berubah: peringatan lunak bila
+  // prefix kode tak terdaftar di referensi. Non-blocking, best-effort — gagal /
+  // offline diabaikan diam-diam (tak mengganggu input). §5A Prinsip 2 (#271).
+  useEffect(() => {
+    const kode = (formData.asset_code || "").trim();
+    if (!isOpen || !kode) { setKodefikasiWarn(null); return undefined; }
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      try {
+        const r = await axios.get(
+          `${API}/integritas/cek-kode?asset_code=${encodeURIComponent(kode)}`);
+        if (cancelled) return;
+        setKodefikasiWarn(r.data && r.data.peringatan ? r.data : null);
+      } catch {
+        if (!cancelled) setKodefikasiWarn(null); // offline/gagal → jangan ganggu
+      }
+    }, 500);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [formData.asset_code, isOpen]);
 
   // Dirty tracking: store original data + modification flags
   const originalDataRef = useRef(null);
@@ -1805,6 +1829,15 @@ const AssetForm = memo(({
                 <Label className="text-xs">Kode Aset *</Label>
                 <Input name="asset_code" value={formData.asset_code} onChange={handleInputChange} placeholder="Pilih kategori untuk mengisi otomatis" required className={`h-8 bg-muted${fieldErrCls("asset_code")}`} readOnly={!!categories.find(c => c.kode_aset && c.label === formData.category)} aria-invalid={!!fieldErrors.asset_code} />
                 {renderFieldError("asset_code")}
+                {/* Peringatan kodefikasi LIVE (non-blocking, §5A Prinsip 2) —
+                    tak menghalangi simpan; hanya mengingatkan agar referensi
+                    kodefikasi dilengkapi. Sembunyi bila field error sudah ada. */}
+                {kodefikasiWarn && !fieldErrors.asset_code && (
+                  <p className="text-[10px] text-amber-600 dark:text-amber-400 flex items-start gap-1" data-testid="kodefikasi-warning">
+                    <AlertTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                    <span>{kodefikasiWarn.pesan}</span>
+                  </p>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1 min-w-0"><Label className="text-xs">NUP</Label><Input name="NUP" value={formData.NUP} onChange={handleInputChange} placeholder="1" className="h-8" /></div>
