@@ -48,6 +48,24 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#278] Kamera: info pengguna terstruktur (Melekat ke + Nama Pengguna) di overlay & watermark foto — 2026-07-14
+
+- **Info pengguna barang tampil terstruktur 2 baris** di halaman kamera (tambah
+  aset & edit) dan **ikut tercetak di watermark** hasil jepretan/unduh:
+  - `Melekat ke: <Individual | Jabatan — <nama jabatan> | Operasional — <Kegiatan/Acara/Kebutuhan | Ruangan>>`
+  - `Nama Pengguna: <nama>`
+  Sebelumnya (dari #274) hanya satu baris `Pengguna: <nama> [<melekat>]` yang
+  padat. Kini dirapikan: baris **Melekat ke** lalu baris **Nama Pengguna** di
+  bawahnya — konsisten di overlay layar kamera dan di stempel foto.
+- Helper murni `deskripsiMelekat(formData)` (di luar komponen) merangkai
+  deskripsi melekat dari `pengguna_melekat_ke` + `operasional_jenis` /
+  `pengguna_jabatan`; dipakai identik oleh overlay UI dan watermark canvas.
+  Baris hanya muncul bila ada datanya.
+- Frontend saja (`components/assets/FullCameraSheet.jsx`); eslint bersih,
+  `yarn build` sukses.
+
+---
+
 ## [#277] Putar foto PERMANEN: rotasi mengubah berkas asli di semua tampilan (thumbnail/galeri/unduh/layar penuh) — 2026-07-14
 
 - **Tombol Putar di lightbox kini menyimpan rotasi ke server (permanen).**
