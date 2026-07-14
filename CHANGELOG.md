@@ -48,6 +48,32 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#277] Putar foto PERMANEN: rotasi mengubah berkas asli di semua tampilan (thumbnail/galeri/unduh/layar penuh) — 2026-07-14
+
+- **Tombol Putar di lightbox kini menyimpan rotasi ke server (permanen).**
+  Sebelumnya putar hanya memutar tampilan sesaat. Sekarang menekan Putar
+  memanggil endpoint baru `POST /assets/{id}/photos/{idx}/rotate` yang:
+  memutar **byte foto ASLI** di GridFS 90° (Pillow, searah jarum jam,
+  `expand=True`), me-regen **thumbnail per-foto**, dan bila foto **cover**
+  ikut me-regen **thumbnail daftar + galeri**, lalu menaikkan `version`.
+  Akibatnya rotasi tampil **di semua tempat tanpa terkecuali** — thumbnail
+  list, kartu galeri, unduhan foto asli, dan penampil layar penuh — bukan
+  sekadar sesaat. Cache preview otomatis basi (etag memuat versi).
+- **OCC + Idempotency.** Endpoint memakai CAS pada `version` (`$inc`) — kalah
+  balapan versi → `409` + blob baru dibuang agar GridFS tak yatim; blob lama
+  (pra-rotasi) dihapus setelah tulis sukses. Header `Idempotency-Key`
+  didukung. Ber-audit (`Putar foto #n sebesar 90°`).
+- **UX lightbox.** Umpan balik instan (rotasi tampilan sementara) selagi server
+  memproses; setelah sukses foto dimuat ulang dengan versi baru (sudah menyatu)
+  dan tombol memperlihatkan spinner + nonaktif selama proses. Gagal/offline →
+  toast + tampilan dikembalikan. Operasi online (butuh server GridFS).
+- Helper murni `photo_rotate_utils.py` (`normalisasi_derajat`, `rotate_jpeg_bytes`)
+  + **7 unit test** (pytest 371 lulus). `backend/routes/assets.py`,
+  `frontend/src/components/assets/PhotoLightbox.jsx`. eslint bersih, `yarn build`
+  sukses.
+
+---
+
 ## [#276] Lightbox: layar penuh DALAM aplikasi (tombol Back kembali ke lightbox, bukan keluar app) — 2026-07-14
 
 - **Perbaikan bug: tombol Back saat layar penuh malah keluar aplikasi.**
