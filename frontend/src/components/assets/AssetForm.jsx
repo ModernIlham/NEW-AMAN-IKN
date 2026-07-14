@@ -26,6 +26,7 @@ import { getApiError } from "../../lib/utils";
 import { authMediaUrl } from "../../lib/mediaUrl";
 import { acquireAccuratePosition } from "../../lib/geolocation";
 import { lebihAkurat } from "../../lib/gpsAkurasi";
+import { bolehSalinKoordinat } from "../../lib/salinKonteks";
 import { compressImageFile, compressDataUrl, generateThumbnailFromDataUrl, dataUrlBytes } from "../../lib/imageCompression";
 import { statusInventarisasiOtomatis, autoInventarisasiEnabled } from "../../lib/inventoryStatus";
 
@@ -1134,6 +1135,11 @@ const AssetForm = memo(({
     let ctx = null;
     try { ctx = JSON.parse(localStorage.getItem("aman_last_asset_ctx") || "null"); } catch {}
     if (!ctx) return;
+    // Koordinat GPS ikut disalin SECARA CERDAS: hanya bila koordinat form masih
+    // kosong (jangan timpa GPS segar/manual) DAN konteks masih baru (aset lama
+    // kemungkinan pindah lokasi). Koordinat salinan bersifat sementara — GPS
+    // kamera yang akurat akan menggantikannya (bestGpsAccuracyRef=null per aset).
+    const salinKoord = bolehSalinKoordinat(ctx, formData.koordinat_latitude, formData.koordinat_longitude, Date.now());
     // Hanya isi field yang masih kosong — jangan pernah menimpa isian pengguna
     setFormData(p => ({
       ...p,
@@ -1141,9 +1147,10 @@ const AssetForm = memo(({
       ...(!p.eselon1 && ctx.eselon1 ? { eselon1: ctx.eselon1 } : {}),
       ...(!p.eselon2 && ctx.eselon2 ? { eselon2: ctx.eselon2 } : {}),
       ...(!p.user && ctx.user ? { user: ctx.user } : {}),
+      ...(salinKoord ? { koordinat_latitude: ctx.koordinat_latitude, koordinat_longitude: ctx.koordinat_longitude } : {}),
     }));
-    toast.success("Disalin dari aset sebelumnya");
-  }, []);
+    toast.success(salinKoord ? "Disalin dari aset sebelumnya (termasuk koordinat GPS)" : "Disalin dari aset sebelumnya");
+  }, [formData.koordinat_latitude, formData.koordinat_longitude]);
 
   const handleChecklistChange = useCallback(u => { checklistModifiedRef.current = true; setFormData(p => ({...p, document_checklist: u})); }, []);
 
@@ -1498,13 +1505,23 @@ const AssetForm = memo(({
         return;
       }
       
-      // Simpan konteks lokasi/pengguna untuk "Samakan dengan sebelumnya"
+      // Simpan konteks untuk "Salin dari aset sebelumnya": lokasi/pengguna +
+      // KOORDINAT GPS + timestamp (ts). Koordinat dipakai sebagai titik awal
+      // cerdas untuk aset berikutnya yang berdekatan; ts menjaga agar salinan
+      // koordinat hanya dipakai saat konteks masih baru (lihat salinKonteks).
       try {
         const ctx = {};
         for (const k of ["location", "eselon1", "eselon2", "user"]) {
           if (formData[k]) ctx[k] = formData[k];
         }
-        if (Object.keys(ctx).length > 0) localStorage.setItem("aman_last_asset_ctx", JSON.stringify(ctx));
+        if (formData.koordinat_latitude && formData.koordinat_longitude) {
+          ctx.koordinat_latitude = formData.koordinat_latitude;
+          ctx.koordinat_longitude = formData.koordinat_longitude;
+        }
+        if (Object.keys(ctx).length > 0) {
+          ctx.ts = Date.now();
+          localStorage.setItem("aman_last_asset_ctx", JSON.stringify(ctx));
+        }
       } catch {}
 
       // Optimistic mode: pass payload to parent, close immediately

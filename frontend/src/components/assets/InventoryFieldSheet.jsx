@@ -504,6 +504,7 @@ const InventoryFieldSheet = ({
                   type="button"
                   onClick={onApplyLastCtx}
                   data-testid="copy-last-ctx-btn"
+                  title={`Salin lokasi/pengguna${lastCtx?.koordinat_latitude ? " + koordinat GPS" : ""} dari aset terakhir (hanya mengisi yang kosong)`}
                   className="inline-flex items-center gap-1.5 rounded-full px-2.5 h-8 text-[11px] font-medium text-blue-600 hover:bg-blue-600/10 transition-colors"
                 >
                   <Copy className="w-3.5 h-3.5" />Salin dari aset sebelumnya
