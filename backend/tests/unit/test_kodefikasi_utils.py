@@ -187,3 +187,43 @@ def test_level_terdaftar_kosong():
 def test_level_terdaftar_none_aman():
     assert level_terdaftar_terdalam(None, {"3"}) == 0
     assert level_terdaftar_terdalam("", {"3"}) == 0
+
+
+# ── Validasi lunak kode aset: cek_kode_kodefikasi (§5A Prinsip 2, #269) ──
+from kodefikasi_utils import cek_kode_kodefikasi
+
+
+def test_cek_kode_kosong_tanpa_peringatan():
+    r = cek_kode_kodefikasi("", {"3"})
+    assert r["status"] == "kosong" and r["peringatan"] is False
+    assert cek_kode_kodefikasi(None, {"3"})["status"] == "kosong"
+
+
+def test_cek_kode_ok_terdaftar_penuh():
+    r = cek_kode_kodefikasi("3050104001", {"3050104001"})
+    assert r["status"] == "ok" and r["peringatan"] is False
+    assert r["level_kode"] == 5 and r["level_terdaftar"] == 5
+
+
+def test_cek_kode_panjang_tak_valid():
+    r = cek_kode_kodefikasi("3010", {"3"})
+    assert r["status"] == "panjang_kode_tak_valid" and r["peringatan"] is True
+    assert r["level_kode"] is None
+
+
+def test_cek_kode_golongan_tak_terdaftar():
+    r = cek_kode_kodefikasi("3050104001", set())
+    assert r["status"] == "golongan_tak_terdaftar" and r["peringatan"] is True
+    assert r["level_terdaftar"] == 0 and "Golongan '3'" in r["pesan"]
+
+
+def test_cek_kode_spesifik_tak_terdaftar():
+    # Terdaftar sampai level 3 (5 digit), kode level 5 → spesifik belum terdaftar
+    r = cek_kode_kodefikasi("3050104001", {"3", "305", "30501"})
+    assert r["status"] == "kode_spesifik_tak_terdaftar" and r["peringatan"] is True
+    assert r["level_kode"] == 5 and r["level_terdaftar"] == 3
+
+
+def test_cek_kode_normalisasi_float_excel():
+    r = cek_kode_kodefikasi("305.0", {"305"})
+    assert r["kode"] == "305" and r["status"] == "ok"
