@@ -289,8 +289,11 @@ berdampak-tertinggi lebih dulu.
    (#263), SK PSP Penggunaan `db.psp` (#264), **dan `jadwal_pemeliharaan`**
    (#265) vs master terkini — lookup master batch `$in`; helper murni
    `identitas_drift`/`drift_identitas_daftar`/`drift_identitas_tunggal` +
-   `hitung_masalah`. *Tersisa:* dasbor integritas gabungan (`/integritas/
-   ringkasan`) & penyegaran otomatis saat master aset diedit.
+   `hitung_masalah`. ✅ **Kapstone dasbor gabungan sudah** — endpoint read-only
+   `GET /integritas/ringkasan` menyatukan hitungan seluruh cek (4 register
+   identitas + kodefikasi FK) jadi total lintas-cek via helper murni
+   `gabung_temuan_integritas` (#266); tanpa me-refactor endpoint detail.
+   *Tersisa:* penyegaran otomatis snapshot saat master aset diedit.
 
 > Aturan: tiap gap ditutup sebagai fitur kecil ber-PR (verifikasi → CI → deploy),
 > dengan proyeksi master memakai pola OCC `find_one_and_update` bersyarat +
