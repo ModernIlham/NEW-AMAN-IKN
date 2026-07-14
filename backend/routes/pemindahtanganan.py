@@ -22,7 +22,8 @@ from pemindahtanganan_utils import (
     AMBANG_PERSETUJUAN_PT, BENTUK_PEMINDAHTANGANAN, DOKUMEN_PELAKSANAAN,
     JENIS_BMN_PT, JENJANG_PERSETUJUAN, STATUS_USULAN_PT,
     build_asset_pemindahtanganan_projection, peringatan_pt,
-    rekap_pt, sarankan_jenjang, validate_transisi_pt, validate_usulan_pt,
+    rekap_pt, sarankan_jenjang, taut_penghapusan, validate_transisi_pt,
+    validate_usulan_pt,
 )
 from pembukuan_utils import parse_harga
 
@@ -243,7 +244,15 @@ async def transisi_pt(usulan_id: str, payload: TransisiPtIn,
         if payload.ntpn:
             update["ntpn"] = payload.ntpn.strip()
     if payload.status == "selesai":
-        update["nomor_sk_penghapusan"] = payload.nomor_sk_penghapusan.strip()
+        sk = payload.nomor_sk_penghapusan.strip()
+        update["nomor_sk_penghapusan"] = sk
+        # §5A gap #5: taut FK ke tiket usulan_penghapusan bila nomor SK cocok
+        # (bukan sekadar string) → penelusuran dua arah. Best-effort: tak cocok
+        # → nomor teks tetap tersimpan tanpa FK (tak menggagalkan transisi).
+        if sk:
+            tiket = await db.usulan_penghapusan.find_one(
+                {"nomor_sk": sk}, {"_id": 0, "id": 1, "nomor_sk": 1})
+            update.update(taut_penghapusan(sk, tiket))
     res = await db.pemindahtanganan.find_one_and_update(
         # Anti-balapan: status lama diikutkan di filter
         {"id": usulan_id, "status": u["status"]},
@@ -261,6 +270,13 @@ async def transisi_pt(usulan_id: str, payload: TransisiPtIn,
     # Setelah CAS sukses agar tak double-proyeksi.
     if payload.status == "selesai":
         await _proyeksi_master_pemindahtanganan(res, admin.get("username"))
+        # Back-link §5A gap #5: tandai tiket penghapusan sumbernya (dua arah).
+        # Best-effort — tak menyentuh version tiket (hindari OCC 409 palsu).
+        if res.get("penghapusan_id"):
+            await db.usulan_penghapusan.update_one(
+                {"id": res["penghapusan_id"]},
+                {"$set": {"sumber_pemindahtanganan_id": res.get("id"),
+                          "sumber_pemindahtanganan_bentuk": res.get("bentuk", "")}})
     return res
 
 

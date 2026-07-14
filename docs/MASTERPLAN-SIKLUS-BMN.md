@@ -266,9 +266,12 @@ berdampak-tertinggi lebih dulu.
 5. ✅ **Pemusnahan → Penghapusan kini ber-FK** (`sumber_ba_id` + `sumber_ba_nomor`
    pada `usulan_penghapusan`, #228) — sebelumnya hanya teks bebas. ✅ **Pemindahtanganan
    *selesai* kini memproyeksi master** (`dihapus` + jejak SK, #256) sehingga aset
-   yang dipindahtangankan berhenti terhitung di laporan. *Tersisa:* tautan
-   Pemindahtanganan → tiket `usulan_penghapusan` masih via string `nomor_sk_penghapusan`
-   (belum FK id) — dampak laporan sudah tertangani lewat proyeksi master.
+   yang dipindahtangankan berhenti terhitung di laporan. ✅ **Pemindahtanganan →
+   tiket `usulan_penghapusan` kini ber-FK id** — saat SELESAI, `nomor_sk_penghapusan`
+   dicocokkan ke tiket; bila cocok disimpan `penghapusan_id` (+snapshot nomor) di
+   usulan pemindahtanganan **dan** back-link `sumber_pemindahtanganan_id` di tiket
+   penghapusan (dua arah; #272, helper murni `taut_penghapusan`, best-effort tanpa
+   version bump). Gap #5 tuntas.
 6. ✅ **Pengadaan → Aset kini DUA arah** — saat baris barang perolehan ditautkan
    ke aset (`buat_perolehan`/`tautkan_barang`), aset menyimpan `perolehan_id` +
    snapshot beku dokumen sumber (BAST/kontrak) balik (#258, helper murni
