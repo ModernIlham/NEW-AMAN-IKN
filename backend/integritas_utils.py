@@ -118,3 +118,26 @@ def gabung_temuan_integritas(bagian):
     return {"total_temuan": total, "per_masalah": per_masalah,
             "jumlah_cek": len(bagian), "jumlah_cek_bermasalah": n_bermasalah,
             "bagian": bagian}
+
+
+def ringkasan_csv_baris(hasil, label_masalah=None):
+    """Ubah hasil `gabung_temuan_integritas` → daftar baris CSV (list-of-list)
+    untuk ekspor dasbor integritas. Baris pertama = header; satu baris per
+    register + satu baris `TOTAL`. `rincian_masalah` = "label=jumlah; …".
+    `label_masalah`: dict opsional {kode_masalah: label manusiawi}. Fungsi murni
+    (tanpa IO) — endpoint yang menulis CSV & mengalirkan respons."""
+    label_masalah = label_masalah or {}
+
+    def _rincian(per):
+        return "; ".join(f"{label_masalah.get(m, m)}={c}"
+                         for m, c in (per or {}).items())
+
+    rows = [["register", "label", "jumlah_temuan", "rincian_masalah"]]
+    hasil = hasil or {}
+    for b in hasil.get("bagian", []) or []:
+        b = b or {}
+        rows.append([b.get("register", ""), b.get("label", ""),
+                     b.get("jumlah", 0), _rincian(b.get("per_masalah"))])
+    rows.append(["TOTAL", "Semua pemeriksaan", hasil.get("total_temuan", 0),
+                 _rincian(hasil.get("per_masalah"))])
+    return rows

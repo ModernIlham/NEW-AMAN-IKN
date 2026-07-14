@@ -48,6 +48,22 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#273] Ekspor CSV dasbor integritas `/integritas/ekspor-ringkasan` (read-only) — 2026-07-14
+
+- **Unduhan CSV kesehatan data (§5A).** Endpoint read-only baru
+  `GET /integritas/ekspor-ringkasan` menghasilkan CSV: satu baris per register
+  (Usulan Penghapusan, Pemindahtanganan, SK PSP, Jadwal Pemeliharaan, Kodefikasi
+  Aset) berisi jumlah temuan + rincian per jenis masalah, plus baris **TOTAL** —
+  untuk arsip/tindak lanjut. Sumber data sama dengan `/integritas/ringkasan`
+  (#266); tak mengubah data.
+- **Helper murni `ringkasan_csv_baris(hasil, label_masalah)`**
+  (`integritas_utils.py`) menyusun baris CSV dari `gabung_temuan_integritas`
+  (label masalah manusiawi). **4 unit test**. Endpoint memakai helper internal
+  `_kumpulkan_bagian_integritas` (di-refactor DRY dari ringkasan). pytest
+  **364 lulus**, compileall OK. Backend saja (pola #158, UTF-8 BOM utk Excel).
+
+---
+
 ## [#272] FK Pemindahtanganan→Penghapusan (`penghapusan_id`) — §5A gap #5 tuntas — 2026-07-14
 
 - **Tautan dua arah ber-FK id.** Saat usulan pemindahtanganan berstatus
