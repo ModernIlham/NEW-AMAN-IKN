@@ -48,6 +48,27 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#281] "Salin dari aset sebelumnya" kini ikut menyalin koordinat GPS (cerdas) — 2026-07-14
+
+- **Fitur "Salin dari aset sebelumnya" (edit cepat/inventarisasi) kini juga
+  menyalin koordinat GPS aset sebelumnya** — titik awal wajar karena aset yang
+  diinventarisasi beruntun biasanya berdekatan. Sebelumnya hanya lokasi/eselon/
+  pengguna yang tersalin; koordinat tidak.
+- **Cerdas, bukan asal salin:**
+  - **Fill-if-empty** — koordinat hanya diisi bila field koordinat form masih
+    **kosong**; tak pernah menimpa GPS segar/manual.
+  - **Guard kesegaran** — koordinat hanya disalin bila konteks aset sebelumnya
+    **masih baru (≤30 menit)**; aset yang disimpan lama kemungkinan berada di
+    lokasi jauh (timestamp `ts` disimpan bersama konteks).
+  - **Sementara** — koordinat salinan otomatis **digantikan** GPS kamera yang
+    akurat begitu dapat fix (selaras GPS-pintar #279 `bestGpsAccuracyRef`).
+  - Toast & tooltip tombol memberi tahu bila koordinat ikut tersalin.
+- Helper murni `lib/salinKonteks.js` (`bolehSalinKoordinat`) + **6 unit test**;
+  `AssetForm` (simpan `koordinat_*`+`ts` ke `aman_last_asset_ctx`, `applyLastCtx`
+  cerdas), `InventoryFieldSheet` (tooltip). eslint bersih, `yarn build` sukses.
+
+---
+
 ## [#280] Perbaikan: badge dokumen tak lagi berkedip di lightbox + kotak select galeri tak buka lightbox — 2026-07-14
 
 - **Bug: badge "Dok x/y" berkedip (muncul lalu langsung hilang) di popup foto.**
