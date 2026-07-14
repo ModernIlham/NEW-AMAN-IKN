@@ -37,3 +37,28 @@ def identitas_drift(snapshot, master, fields=FIELD_IDENTITAS) -> dict:
         if s != m:
             out[f] = {"snapshot": s, "master": m}
     return out
+
+
+def drift_identitas_daftar(aset_list, master_by_id):
+    """Deteksi identitas basi untuk DAFTAR snapshot aset (mis. `pemindahtanganan
+    .aset[]`). Bandingkan tiap baris dengan master via `master_by_id`
+    (dict `{asset_id: master}`) → daftar temuan:
+    `{asset_id, masalah: "aset_master_hilang"|"snapshot_basi", snapshot?/drift?}`.
+    Baris yang konsisten TIDAK dimasukkan. Fungsi murni — pemanggil menyiapkan
+    `master_by_id` (batch, hindari N+1).
+    """
+    out = []
+    for row in aset_list or []:
+        aid = str(row.get("asset_id") or "")
+        master = master_by_id.get(aid)
+        if not master:
+            out.append({
+                "asset_id": aid, "masalah": "aset_master_hilang",
+                "snapshot": {f: row.get(f) for f in FIELD_IDENTITAS},
+            })
+            continue
+        drift = identitas_drift(row, master)
+        if drift:
+            out.append({"asset_id": aid, "masalah": "snapshot_basi",
+                        "drift": drift})
+    return out

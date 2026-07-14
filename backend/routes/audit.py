@@ -8,7 +8,9 @@ from fastapi import APIRouter, Depends
 from db import db
 from auth_utils import require_user
 from penghapusan_utils import normalisasi_jejak_terhapus, rekap_jejak_terhapus
-from integritas_utils import FIELD_IDENTITAS, identitas_drift
+from integritas_utils import (
+    FIELD_IDENTITAS, drift_identitas_daftar, identitas_drift,
+)
 from kodefikasi_utils import (
     derive_level, level_terdaftar_terdalam, normalize_kode,
 )
@@ -178,4 +180,43 @@ async def integritas_kodefikasi_aset(_user: dict = Depends(require_user)):
             "Peringatan read-only (§5A Prinsip 2): kode aset yang prefix "
             "kodefikasi-nya belum terdaftar di referensi. Non-blocking — tak "
             "menolak data lama; lengkapi referensi kodefikasi untuk menutup."),
+    }
+
+
+@audit_router.get("/integritas/identitas-pemindahtanganan")
+async def integritas_identitas_pemindahtanganan(_user: dict = Depends(require_user)):
+    """§5A Prinsip 1 (READ-ONLY, lanjutan #261): deteksi snapshot identitas aset
+    basi pada register `pemindahtanganan` (yang membekukan identitas per baris
+    `aset[]`). Master di-lookup BATCH via `$in` (hindari N+1)."""
+    usulan_list = [u async for u in db.pemindahtanganan.find(
+        {}, {"_id": 0, "id": 1, "bentuk": 1, "status": 1, "aset": 1})]
+    ids = {str(r.get("asset_id") or "")
+           for u in usulan_list for r in (u.get("aset") or [])
+           if r.get("asset_id")}
+    master_by_id = {}
+    if ids:
+        async for a in db.assets.find(
+                {"id": {"$in": list(ids)}},
+                {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1}):
+            master_by_id[a["id"]] = a
+
+    items = []
+    n_basi = n_hilang = 0
+    for u in usulan_list:
+        for t in drift_identitas_daftar(u.get("aset"), master_by_id):
+            if t["masalah"] == "aset_master_hilang":
+                n_hilang += 1
+            else:
+                n_basi += 1
+            items.append({"pemindahtanganan_id": u.get("id"),
+                          "bentuk": u.get("bentuk"), "status": u.get("status"),
+                          **t})
+    return {
+        "jumlah": len(items),
+        "snapshot_basi": n_basi,
+        "aset_master_hilang": n_hilang,
+        "items": items,
+        "catatan": (
+            "Deteksi read-only snapshot identitas aset basi di register "
+            "pemindahtanganan (§5A Prinsip 1). Belum menyegarkan otomatis."),
     }

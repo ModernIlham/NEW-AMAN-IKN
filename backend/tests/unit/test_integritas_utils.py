@@ -41,3 +41,41 @@ def test_snapshot_atau_master_kosong_kembalikan_kosong():
 
 def test_field_identitas_tiga_kolom():
     assert FIELD_IDENTITAS == ("asset_code", "NUP", "asset_name")
+
+
+# ── Deteksi drift untuk daftar aset (pemindahtanganan) — §5A gap #8 slice 2 (#263) ──
+from integritas_utils import drift_identitas_daftar
+
+
+def test_daftar_semua_konsisten():
+    aset = [_snap(asset_id="a1"), _snap(asset_id="a2")]
+    master = {"a1": _snap(), "a2": _snap()}
+    assert drift_identitas_daftar(aset, master) == []
+
+
+def test_daftar_snapshot_basi():
+    aset = [_snap(asset_id="a1", NUP="12")]
+    master = {"a1": _snap(NUP="99")}
+    out = drift_identitas_daftar(aset, master)
+    assert len(out) == 1
+    assert out[0]["asset_id"] == "a1" and out[0]["masalah"] == "snapshot_basi"
+    assert out[0]["drift"]["NUP"] == {"snapshot": "12", "master": "99"}
+
+
+def test_daftar_master_hilang():
+    aset = [{"asset_id": "a9", "asset_code": "30", "NUP": "1", "asset_name": "X"}]
+    out = drift_identitas_daftar(aset, {})           # master_by_id kosong
+    assert len(out) == 1
+    assert out[0]["masalah"] == "aset_master_hilang"
+    assert out[0]["snapshot"] == {"asset_code": "30", "NUP": "1", "asset_name": "X"}
+
+
+def test_daftar_campuran_dan_kosong():
+    assert drift_identitas_daftar([], {"a1": _snap()}) == []
+    assert drift_identitas_daftar(None, {}) == []
+    aset = [_snap(asset_id="ok"), _snap(asset_id="basi", asset_name="Lama"),
+            {"asset_id": "hilang"}]
+    master = {"ok": _snap(), "basi": _snap(asset_name="Baru")}
+    out = drift_identitas_daftar(aset, master)
+    masalah = {t["asset_id"]: t["masalah"] for t in out}
+    assert masalah == {"basi": "snapshot_basi", "hilang": "aset_master_hilang"}
