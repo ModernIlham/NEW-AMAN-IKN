@@ -64,6 +64,22 @@ def drift_identitas_daftar(aset_list, master_by_id):
     return out
 
 
+def drift_identitas_tunggal(snapshot, master):
+    """Temuan identitas untuk SATU snapshot (register yang membekukan identitas
+    per record, mis. `jadwal_pemeliharaan`) vs master aset TERKINI:
+    `{"masalah": "aset_master_hilang", "snapshot": {...}}` bila master tak ada;
+    `{"masalah": "snapshot_basi", "drift": {...}}` bila ada field basi; `None`
+    bila konsisten. Fungsi murni — pemanggil menyiapkan master & menyertakan
+    konteks (asset_id dll)."""
+    if not master:
+        return {"masalah": "aset_master_hilang",
+                "snapshot": {f: (snapshot or {}).get(f) for f in FIELD_IDENTITAS}}
+    drift = identitas_drift(snapshot, master)
+    if drift:
+        return {"masalah": "snapshot_basi", "drift": drift}
+    return None
+
+
 def hitung_masalah(temuan):
     """Ringkas daftar temuan (mis. dari `drift_identitas_daftar`) → dict hitungan
     per nilai field `masalah`, mis. `{"snapshot_basi": 2, "aset_master_hilang":

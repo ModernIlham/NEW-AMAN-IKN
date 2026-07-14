@@ -9,7 +9,8 @@ from db import db
 from auth_utils import require_user
 from penghapusan_utils import normalisasi_jejak_terhapus, rekap_jejak_terhapus
 from integritas_utils import (
-    FIELD_IDENTITAS, drift_identitas_daftar, hitung_masalah, identitas_drift,
+    FIELD_IDENTITAS, drift_identitas_daftar, drift_identitas_tunggal,
+    hitung_masalah, identitas_drift,
 )
 from kodefikasi_utils import (
     derive_level, level_terdaftar_terdalam, normalize_kode,
@@ -253,4 +254,39 @@ async def integritas_identitas_psp(_user: dict = Depends(require_user)):
         "catatan": (
             "Deteksi read-only snapshot identitas aset basi di register SK PSP "
             "Penggunaan (§5A Prinsip 1). Belum menyegarkan otomatis."),
+    }
+
+
+@audit_router.get("/integritas/identitas-jadwal-pemeliharaan")
+async def integritas_identitas_jadwal_pemeliharaan(_user: dict = Depends(require_user)):
+    """§5A Prinsip 1 (READ-ONLY, lanjutan #261/#263/#264): deteksi snapshot
+    identitas aset basi pada register `jadwal_pemeliharaan` (membekukan identitas
+    per record). Master di-lookup BATCH via `$in` (hindari N+1)."""
+    jadwal = [j async for j in db.jadwal_pemeliharaan.find(
+        {}, {"_id": 0, "id": 1, "asset_id": 1, "asset_code": 1, "NUP": 1,
+             "asset_name": 1, "jatuh_tempo": 1})]
+    ids = {str(j.get("asset_id") or "") for j in jadwal if j.get("asset_id")}
+    master_by_id = {}
+    if ids:
+        async for a in db.assets.find(
+                {"id": {"$in": list(ids)}},
+                {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1}):
+            master_by_id[a["id"]] = a
+
+    items = []
+    for j in jadwal:
+        aid = str(j.get("asset_id") or "")
+        temuan = drift_identitas_tunggal(j, master_by_id.get(aid))
+        if temuan:
+            items.append({"jadwal_id": j.get("id"), "asset_id": aid,
+                          "jatuh_tempo": j.get("jatuh_tempo"), **temuan})
+    ringkas = hitung_masalah(items)
+    return {
+        "jumlah": len(items),
+        "snapshot_basi": ringkas.get("snapshot_basi", 0),
+        "aset_master_hilang": ringkas.get("aset_master_hilang", 0),
+        "items": items,
+        "catatan": (
+            "Deteksi read-only snapshot identitas aset basi di register jadwal "
+            "pemeliharaan (§5A Prinsip 1). Belum menyegarkan otomatis."),
     }

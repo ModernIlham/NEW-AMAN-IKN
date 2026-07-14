@@ -99,3 +99,26 @@ def test_hitung_masalah_kosong_dan_aman():
     assert hitung_masalah(None) == {}
     # entri tanpa 'masalah' diabaikan
     assert hitung_masalah([{"asset_id": "x"}, {}]) == {}
+
+
+# ── Temuan identitas satu record (jadwal_pemeliharaan) — §5A gap #8 slice 4 (#265) ──
+from integritas_utils import drift_identitas_tunggal
+
+
+def test_tunggal_konsisten_none():
+    assert drift_identitas_tunggal(_snap(), _snap()) is None
+
+
+def test_tunggal_snapshot_basi():
+    t = drift_identitas_tunggal(_snap(NUP="12"), _snap(NUP="99"))
+    assert t["masalah"] == "snapshot_basi"
+    assert t["drift"]["NUP"] == {"snapshot": "12", "master": "99"}
+
+
+def test_tunggal_master_hilang():
+    t = drift_identitas_tunggal(
+        {"asset_code": "30", "NUP": "1", "asset_name": "X"}, None)
+    assert t["masalah"] == "aset_master_hilang"
+    assert t["snapshot"] == {"asset_code": "30", "NUP": "1", "asset_name": "X"}
+    # master {} kosong → juga dianggap hilang
+    assert drift_identitas_tunggal(_snap(), {})["masalah"] == "aset_master_hilang"
