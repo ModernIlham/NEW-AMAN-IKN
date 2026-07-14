@@ -1,9 +1,19 @@
 import React, { useState, useEffect, useCallback, memo } from "react";
-import { History, X, ChevronLeft, ChevronRight, User, Clock, Plus, Edit3, Trash2, Layers, FileUp, Users, Package } from "lucide-react";
+import { History, X, ChevronLeft, ChevronRight, User, Clock, Plus, Edit3, Trash2, Layers, FileUp, Users, Package, ShieldCheck, ShieldAlert, RefreshCw } from "lucide-react";
 import { Button } from "../ui/button";
 import axios from "axios";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+
+// Label manusiawi untuk jenis temuan integritas (§5A) — sinkron dengan nilai
+// field `masalah` dari endpoint backend /integritas/*.
+const MASALAH_LABEL = {
+  snapshot_basi: "Identitas basi",
+  aset_master_hilang: "Aset induk hilang",
+  golongan_tak_terdaftar: "Golongan tak terdaftar",
+  kode_spesifik_tak_terdaftar: "Kode tak terdaftar",
+  panjang_kode_tak_valid: "Panjang kode tak valid",
+};
 
 const ACTION_MAP = {
   create: { label: "Tambah", color: "text-emerald-600", bg: "bg-emerald-500", dot: "bg-emerald-500" },
@@ -186,6 +196,85 @@ const UserSummary = memo(({ logs, onSelectUser, selectedUser }) => {
 UserSummary.displayName = "UserSummary";
 
 // ============================================================================
+// Integritas Data (§5A) — dasbor read-only gabungan dari /integritas/ringkasan
+// ============================================================================
+const IntegritasSummary = memo(({ data, loading, error, onRefresh }) => {
+  if (loading && !data) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="text-center py-12 text-muted-foreground px-4">
+        <ShieldAlert className="w-10 h-10 mx-auto mb-3 opacity-20" />
+        <p className="text-xs font-medium">Gagal memuat ringkasan integritas</p>
+        <button onClick={onRefresh} className="text-[10px] text-blue-500 hover:text-blue-700 font-medium mt-2 inline-flex items-center gap-1">
+          <RefreshCw className="w-3 h-3" />Coba lagi
+        </button>
+      </div>
+    );
+  }
+  if (!data) return null;
+  const total = data.total_temuan || 0;
+  const bagian = data.bagian || [];
+  const bersih = total === 0;
+  return (
+    <div className="p-3 space-y-2.5" data-testid="integritas-summary">
+      {/* Headline */}
+      <div className={`rounded-lg p-3 border flex items-center gap-3 ${bersih ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'}`}>
+        {bersih ? <ShieldCheck className="w-6 h-6 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                : <ShieldAlert className="w-6 h-6 text-amber-600 dark:text-amber-400 flex-shrink-0" />}
+        <div className="min-w-0">
+          <p className={`text-sm font-bold ${bersih ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}`}>
+            {bersih ? 'Data konsisten' : `${total} temuan`}
+          </p>
+          <p className="text-[10px] text-muted-foreground">
+            {bersih ? 'Tidak ada masalah integritas terdeteksi' : `${data.jumlah_cek_bermasalah || 0} dari ${data.jumlah_cek || bagian.length} pemeriksaan bermasalah`}
+          </p>
+        </div>
+        <button onClick={onRefresh} className="ml-auto text-muted-foreground hover:text-foreground flex-shrink-0" title="Muat ulang" data-testid="integritas-refresh">
+          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+        </button>
+      </div>
+
+      {/* Per register */}
+      {bagian.map((b) => {
+        const jml = b.jumlah || 0;
+        const perMasalah = b.per_masalah || {};
+        return (
+          <div key={b.register} className={`rounded-lg p-2 border ${jml > 0 ? 'bg-card border-amber-200 dark:border-amber-900/50' : 'bg-muted/40 border-border'}`} data-testid={`integritas-register-${b.register}`}>
+            <div className="flex items-center gap-1.5">
+              {jml > 0 ? <ShieldAlert className="w-3 h-3 text-amber-500 flex-shrink-0" />
+                       : <ShieldCheck className="w-3 h-3 text-emerald-500 flex-shrink-0" />}
+              <span className="text-[11px] font-semibold text-foreground truncate">{b.label || b.register}</span>
+              <span className={`text-[10px] ml-auto font-bold px-1.5 py-0.5 rounded ${jml > 0 ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400' : 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400'}`}>{jml}</span>
+            </div>
+            {jml > 0 && (
+              <div className="flex flex-wrap gap-1 mt-1.5">
+                {Object.entries(perMasalah).map(([m, c]) => (
+                  <span key={m} className="text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded">
+                    {(MASALAH_LABEL[m] || m)}: <span className="font-semibold text-foreground">{c}</span>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      <p className="text-[9px] text-muted-foreground px-1 pt-1 leading-relaxed">
+        Read-only (§5A): identitas snapshot basi di register hilir + kodefikasi FK aset.
+        Detail per temuan tersedia via endpoint <span className="font-mono">/integritas/*</span>. Tak mengubah data.
+      </p>
+    </div>
+  );
+});
+IntegritasSummary.displayName = "IntegritasSummary";
+
+// ============================================================================
 // MAIN AUDIT LOG PANEL
 // ============================================================================
 const AuditLogPanel = memo(({ activityId, isOpen, onToggle, selectedAssetId, selectedAssetCode, onClearAssetFilter }) => {
@@ -194,8 +283,25 @@ const AuditLogPanel = memo(({ activityId, isOpen, onToggle, selectedAssetId, sel
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
-  const [viewMode, setViewMode] = useState("timeline"); // "timeline" | "user"
+  const [viewMode, setViewMode] = useState("timeline"); // "timeline" | "user" | "integritas"
   const [filterUser, setFilterUser] = useState("");
+  const [integritas, setIntegritas] = useState(null);
+  const [integritasLoading, setIntegritasLoading] = useState(false);
+  const [integritasError, setIntegritasError] = useState(false);
+
+  const fetchIntegritas = useCallback(async () => {
+    setIntegritasLoading(true);
+    setIntegritasError(false);
+    try {
+      const r = await axios.get(`${API}/integritas/ringkasan`);
+      setIntegritas(r.data);
+    } catch (err) {
+      console.error("Integritas fetch error:", err);
+      setIntegritasError(true);
+    } finally {
+      setIntegritasLoading(false);
+    }
+  }, []);
 
   const fetchLogs = useCallback(async (p = 1) => {
     setLoading(true);
@@ -222,6 +328,14 @@ const AuditLogPanel = memo(({ activityId, isOpen, onToggle, selectedAssetId, sel
       if (selectedAssetId) setViewMode("timeline");
     }
   }, [isOpen, fetchLogs, selectedAssetId]);
+
+  // Muat ringkasan integritas saat tab-nya dibuka (sekali; tombol muat ulang
+  // untuk menyegarkan). Scan lintas-register — jangan panggil kecuali diminta.
+  useEffect(() => {
+    if (isOpen && viewMode === "integritas" && !integritas && !integritasLoading && !integritasError) {
+      fetchIntegritas();
+    }
+  }, [isOpen, viewMode, integritas, integritasLoading, integritasError, fetchIntegritas]);
 
   return (
     <>
@@ -265,6 +379,13 @@ const AuditLogPanel = memo(({ activityId, isOpen, onToggle, selectedAssetId, sel
                 >
                   <Users className="w-3 h-3" />Per User
                 </button>
+                <button
+                  onClick={() => setViewMode("integritas")}
+                  className={`flex-1 flex items-center justify-center gap-1 text-[10px] font-semibold py-1 rounded-md transition-colors ${viewMode === "integritas" ? 'bg-card text-blue-600 shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                  data-testid="audit-tab-integritas"
+                >
+                  <ShieldCheck className="w-3 h-3" />Integritas
+                </button>
               </div>
             )}
           </div>
@@ -284,7 +405,9 @@ const AuditLogPanel = memo(({ activityId, isOpen, onToggle, selectedAssetId, sel
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto" data-testid="audit-log-list">
-            {loading && logs.length === 0 ? (
+            {viewMode === "integritas" && !selectedAssetId ? (
+              <IntegritasSummary data={integritas} loading={integritasLoading} error={integritasError} onRefresh={fetchIntegritas} />
+            ) : loading && logs.length === 0 ? (
               <div className="flex items-center justify-center py-12">
                 <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
               </div>
@@ -319,7 +442,7 @@ const AuditLogPanel = memo(({ activityId, isOpen, onToggle, selectedAssetId, sel
           </div>
 
           {/* Pagination */}
-          {totalPages > 1 && (
+          {viewMode !== "integritas" && totalPages > 1 && (
             <div className="px-3 py-2 border-t border-border flex items-center justify-between flex-shrink-0 bg-muted">
               <Button
                 variant="outline" size="sm" className="h-6 text-[10px] px-2"

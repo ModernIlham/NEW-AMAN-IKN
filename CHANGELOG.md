@@ -48,6 +48,21 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#268] Tab "Integritas" di panel Riwayat — dasbor integritas data (§5A) di UI — 2026-07-14
+
+- **Surface kapstone #266 ke UI.** Panel **Riwayat** (`AuditLogPanel`) kini punya
+  tab ketiga **Integritas** yang memanggil `GET /integritas/ringkasan` dan
+  menampilkan **read-only**: status keseluruhan (konsisten / N temuan), jumlah
+  pemeriksaan bermasalah, lalu rincian per register (Usulan Penghapusan,
+  Pemindahtanganan, SK PSP, Jadwal Pemeliharaan, Kodefikasi Aset) beserta chip
+  per jenis masalah (identitas basi, aset induk hilang, golongan/kode tak
+  terdaftar, panjang kode tak valid).
+- Dimuat **sekali** saat tab dibuka (scan lintas-register) + tombol muat ulang;
+  tak mengubah data apa pun. Theme-aware (light/dark), responsif.
+- Frontend saja. `yarn build` (craco) sukses, eslint bersih.
+
+---
+
 ## [#267] Perbaikan bug: cover foto tak berubah di mode daftar setelah hapus + ganti cover — 2026-07-14
 
 - **Bug.** Saat mengedit foto aset: menghapus foto yang sedang jadi cover lalu
