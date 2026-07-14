@@ -23,6 +23,7 @@ from shared_utils import (
     get_document_from_gridfs, delete_document_from_gridfs,
 )
 from routes.websocket import notify_asset_change
+from photo_rotate_utils import normalisasi_derajat, rotate_jpeg_bytes
 
 logger = logging.getLogger(__name__)
 assets_router = APIRouter()
@@ -1210,6 +1211,158 @@ async def get_asset_photo_full(asset_id: str, photo_index: int, request: Request
 
     return Response(content=photo_bytes, media_type="image/jpeg",
                     headers=_media_headers(etag))
+
+
+@assets_router.post("/assets/{asset_id}/photos/{photo_index}/rotate")
+async def rotate_asset_photo(asset_id: str, photo_index: int, request: Request,
+                             _user: dict = Depends(require_user)):
+    """Putar foto ke-`photo_index` SECARA PERMANEN (default 90° searah jarum jam).
+
+    Rotasi mengganti byte foto ASLI di GridFS + regen thumbnail per-foto dan
+    (bila foto cover) thumbnail daftar/galeri, lalu menaikkan `version`. Akibatnya
+    thumbnail, galeri, unduh, dan layar penuh SEMUA ikut berputar (permintaan
+    "berubah total tanpa terkecuali") — bukan sekadar tampilan sesaat. Cache
+    preview otomatis basi karena etag memuat versi.
+
+    OCC via If-Match (opsional) + Idempotency-Key (opsional). Body opsional
+    `{"degrees": 90}` (kelipatan 90; default & minimum efektif 90).
+    """
+    # --- Idempotency: putar ulang dgn kunci sama tak menggandakan rotasi ---
+    idem_key = request.headers.get("Idempotency-Key", "")
+    if idem_key:
+        cached = await get_idempotent_response(idem_key)
+        if cached and cached.get("response"):
+            return cached["response"]
+        _idem = await reserve_idempotency_key(idem_key)
+        if _idem == "done":
+            cached = await get_idempotent_response(idem_key)
+            if cached and cached.get("response"):
+                return cached["response"]
+        elif _idem == "pending":
+            raise HTTPException(status_code=409, detail="Permintaan sedang diproses, coba lagi sebentar")
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    degrees = normalisasi_derajat(body.get("degrees", 90)) if isinstance(body, dict) else 90
+    if degrees == 0:
+        degrees = 90  # tombol putar selalu memutar; 0 tak berarti
+
+    existing = await db.assets.find_one({"id": asset_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    await ensure_activity_not_sealed(existing.get("activity_id"))
+
+    # --- OCC (If-Match) ---
+    if_match = request.headers.get("If-Match", "").strip().strip('"')
+    current_version = int(existing.get("version", 1) or 1)
+    if if_match:
+        try:
+            expected = int(if_match)
+        except ValueError:
+            expected = current_version
+        if expected != current_version:
+            raise HTTPException(status_code=409, detail={
+                "message": "Aset telah diubah oleh pengguna lain. Muat ulang dan coba lagi.",
+                "current_version": current_version, "your_version": expected,
+            })
+
+    gridfs_ids = list(existing.get("photo_gridfs_ids") or [])
+    photos = list(existing.get("photos") or [])
+    thumbnails = list(existing.get("photo_thumbnails") or [])
+    n = max(len(gridfs_ids), len(photos))
+    if photo_index < 0 or photo_index >= n:
+        raise HTTPException(status_code=404, detail="Foto tidak ditemukan")
+
+    # Ambil byte foto asli: GridFS dulu, lalu fallback inline base64 (legacy)
+    old_gid = gridfs_ids[photo_index] if photo_index < len(gridfs_ids) else None
+    src_bytes = await get_photo_from_gridfs(old_gid) if old_gid else None
+    if src_bytes is None and photo_index < len(photos) and photos[photo_index]:
+        pb = photos[photo_index]
+        try:
+            src_bytes = base64.b64decode(pb.split(",", 1)[1] if pb.startswith("data:") else pb)
+        except Exception:
+            src_bytes = None
+    if src_bytes is None:
+        raise HTTPException(status_code=404, detail="Byte foto tidak ditemukan")
+
+    # Putar (Pillow) → JPEG baru → data-URI untuk helper penyimpanan
+    try:
+        rotated = rotate_jpeg_bytes(src_bytes, degrees)
+    except Exception as e:
+        logger.error(f"Rotate gagal aset {asset_id} idx {photo_index}: {e}")
+        raise HTTPException(status_code=422, detail="Gagal memutar foto (berkas bukan gambar valid)")
+    rotated_uri = "data:image/jpeg;base64," + base64.b64encode(rotated).decode("utf-8")
+
+    set_fields = {}
+    new_gid = None
+    if old_gid or photo_index < len(gridfs_ids):
+        new_gid = await store_photo_to_gridfs(rotated_uri)
+        while len(gridfs_ids) <= photo_index:
+            gridfs_ids.append("")
+        gridfs_ids[photo_index] = new_gid
+        set_fields["photo_gridfs_ids"] = gridfs_ids
+    else:  # foto inline legacy — ganti di tempat
+        while len(photos) <= photo_index:
+            photos.append("")
+        photos[photo_index] = rotated_uri
+        set_fields["photos"] = photos
+
+    # Regen thumbnail per-foto (strip form + placeholder lightbox)
+    while len(thumbnails) <= photo_index:
+        thumbnails.append("")
+    thumbnails[photo_index] = generate_photo_thumbnail(rotated_uri) or ""
+    set_fields["photo_thumbnails"] = thumbnails
+
+    # Foto cover → regen thumbnail daftar (data-URI) + gallery_thumbnail
+    cover_idx = int(existing.get("thumbnail_index") or 0)
+    if photo_index == cover_idx:
+        set_fields["thumbnail"] = create_thumbnail(rotated_uri)
+        set_fields["gallery_thumbnail"] = create_gallery_thumbnail(rotated_uri)
+
+    # Tulis ber-OCC (CAS pada version) + $inc version → etag preview lama basi
+    cas_filter = _build_cas_filter(asset_id, current_version)
+    result = await db.assets.update_one(cas_filter, {"$set": set_fields, "$inc": {"version": 1}})
+    if result.matched_count == 0:
+        # Kalah balapan versi → buang blob baru agar tak jadi yatim
+        if new_gid:
+            try:
+                await delete_photo_from_gridfs(new_gid)
+            except Exception:
+                pass
+        latest = await db.assets.find_one({"id": asset_id}, {"_id": 0, "version": 1})
+        raise HTTPException(status_code=409, detail={
+            "message": "Aset telah diubah oleh pengguna lain. Muat ulang dan coba lagi.",
+            "current_version": int((latest or {}).get("version", current_version + 1) or current_version + 1),
+        })
+
+    # Sukses → hapus blob lama (byte pra-rotasi) agar GridFS tak menumpuk
+    if old_gid and new_gid and old_gid != new_gid:
+        try:
+            await delete_photo_from_gridfs(old_gid)
+        except Exception:
+            pass
+
+    invalidate_asset_cache()
+    new_version = current_version + 1
+    audit_user = _user.get("name") or _user.get("username") or request.headers.get("X-Audit-User", "unknown")
+    try:
+        await log_audit("update", existing.get("activity_id"), asset_id,
+                        existing.get("asset_code"), existing.get("asset_name"), audit_user,
+                        detail=f"Putar foto #{photo_index + 1} sebesar {degrees}°",
+                        nup=existing.get("NUP") or "")
+    except Exception:
+        pass
+
+    resp = {"id": asset_id, "version": new_version, "photo_index": photo_index,
+            "degrees": degrees, "photo_count": len(gridfs_ids) or len(photos)}
+    if idem_key:
+        try:
+            await store_idempotent_response(idem_key, resp, 200)
+        except Exception:
+            pass
+    return resp
 
 
 # ============================================================================

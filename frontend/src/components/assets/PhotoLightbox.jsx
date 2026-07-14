@@ -132,6 +132,7 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
   const [rot, setRot] = useState(0); // rotasi tampilan foto (0/90/180/270) — preview saja
   const [fullscreen, setFullscreen] = useState(false); // penampil foto layar penuh DALAM aplikasi
   const closeFullscreen = useCallback(() => setFullscreen(false), []);
+  const [rotating, setRotating] = useState(false); // putar PERMANEN sedang diproses server
 
   // Navigasi antar-ASET (bukan antar-foto): geser/klik pada kartu info → aset
   // sebelum/sesudah sesuai urutan & filter aktif (daftar `siblings` dari
@@ -191,6 +192,36 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
       setDownloading(false);
     }
   }, [fullAsset, asset, idx]);
+
+  // Putar foto PERMANEN di server (mengubah berkas asli) lalu muat ulang dengan
+  // versi baru → thumbnail, galeri, unduh, dan layar penuh SEMUA ikut berputar
+  // (permintaan "berubah total tanpa terkecuali"). Umpan balik instan lewat
+  // rotasi tampilan sementara selagi server memproses; dikembalikan bila gagal.
+  const rotatePhotoPersist = useCallback(async () => {
+    const cur = fullAsset || asset;
+    const id = cur?.id;
+    if (!id || rotating || photos.length === 0) return;
+    setRotating(true);
+    setRot((r) => (r + 90) % 360); // umpan balik instan (CSS) selama proses
+    try {
+      const res = await axios.post(`${API}/assets/${id}/photos/${idx}/rotate`, { degrees: 90 });
+      const newVersion = Number(res.data?.version) || (builtRef.current.version + 1);
+      builtRef.current = { ...builtRef.current, version: newVersion };
+      // Bangun ulang URL dgn versi baru → berkas yang kini sudah diputar di
+      // server dimuat ulang. Efek [idx, photos] otomatis reset rot=0.
+      const next = buildPhotoUrls({ ...cur, photo_count: builtRef.current.count, version: newVersion });
+      setPhotos(next.photos);
+      setThumbs(next.thumbs);
+      setFullAsset((fa) => (fa ? { ...fa, version: newVersion } : fa));
+    } catch {
+      setRot((r) => (r - 90 + 360) % 360); // gagal → kembalikan tampilan
+      toast.error(navigator.onLine === false
+        ? "Perlu koneksi internet untuk memutar foto permanen"
+        : "Gagal memutar foto di server");
+    } finally {
+      setRotating(false);
+    }
+  }, [fullAsset, asset, idx, rotating, photos.length]);
 
   useEffect(() => {
     if (!asset?.id) return undefined;
@@ -358,13 +389,14 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
               <Maximize2 className="w-5 h-5" />
             </button>
             <button
-              onClick={(e) => { e.stopPropagation(); setRot((r) => (r + 90) % 360); }}
-              title="Putar foto 90°"
-              aria-label="Putar foto 90 derajat"
-              className="w-10 h-10 rounded-full bg-black/50 hover:bg-black/70 text-white ring-1 ring-white/40 shadow-lg flex items-center justify-center backdrop-blur-sm transition-colors"
+              onClick={(e) => { e.stopPropagation(); rotatePhotoPersist(); }}
+              disabled={rotating}
+              title="Putar foto 90° (permanen — berlaku di semua tampilan & unduhan)"
+              aria-label="Putar foto 90 derajat secara permanen"
+              className="w-10 h-10 rounded-full bg-black/50 hover:bg-black/70 text-white ring-1 ring-white/40 shadow-lg flex items-center justify-center backdrop-blur-sm transition-colors disabled:opacity-70"
               data-testid="lightbox-rotate"
             >
-              <RotateCw className="w-5 h-5" />
+              {rotating ? <Loader2 className="w-5 h-5 animate-spin" /> : <RotateCw className="w-5 h-5" />}
             </button>
           </div>
         )}
