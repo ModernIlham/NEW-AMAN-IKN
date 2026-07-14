@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import {
   Check, Camera, Images, MapPin, LocateFixed, RefreshCw, Loader2, Copy,
-  ChevronDown, ArrowRight, ScanLine,
+  ChevronDown, ArrowRight, ScanLine, Sparkles,
 } from "lucide-react";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
@@ -9,6 +9,7 @@ import { Textarea } from "../ui/textarea";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "../ui/select";
+import { autoInventarisasiEnabled } from "../../lib/inventoryStatus";
 
 // ============================================================================
 // InventoryFieldSheet — tampilan EKSKLUSIF mode inventarisasi lapangan.
@@ -127,6 +128,16 @@ const InventoryFieldSheet = ({
   onShowFullForm,
 }) => {
   const [notesOpen, setNotesOpen] = useState(false);
+  // Auto-inventaris: bila ada foto + koordinat & status masih default, saat
+  // simpan status jadi "Sudah Diinventarisasi" (logika di AssetForm.handleSubmit).
+  const [autoInv, setAutoInv] = useState(() => autoInventarisasiEnabled());
+  const toggleAutoInv = () => {
+    setAutoInv((on) => {
+      const next = !on;
+      try { localStorage.setItem("aman_auto_inventarisasi", next ? "on" : "off"); } catch { /* diam */ }
+      return next;
+    });
+  };
 
   const hasGps = !!(formData.koordinat_latitude && formData.koordinat_longitude);
   const status = formData.inventory_status;
@@ -161,7 +172,12 @@ const InventoryFieldSheet = ({
         <div className="p-3 space-y-3">
           {/* Card 1 — Status Inventarisasi */}
           <Card testId="sheet-card-status">
-            <CardHeader badge="1" title="Status Inventarisasi" />
+            <CardHeader badge="1" title="Status Inventarisasi" hint={
+              <button type="button" onClick={toggleAutoInv} aria-pressed={autoInv} data-testid="sheet-autoinv"
+                className={`inline-flex items-center gap-1 h-6 px-2 rounded-full text-[10px] font-semibold transition-colors flex-shrink-0 ${autoInv ? "bg-emerald-600 text-white" : "bg-muted text-muted-foreground"}`}>
+                <Sparkles className="w-3 h-3" />Auto {autoInv ? "ON" : "OFF"}
+              </button>
+            } />
             <div className="grid grid-cols-2 gap-1.5">
               {STATUS_OPTIONS.map(o => (
                 <SegButton

@@ -26,6 +26,7 @@ import { getApiError } from "../../lib/utils";
 import { authMediaUrl } from "../../lib/mediaUrl";
 import { acquireAccuratePosition } from "../../lib/geolocation";
 import { compressImageFile, compressDataUrl, generateThumbnailFromDataUrl, dataUrlBytes } from "../../lib/imageCompression";
+import { statusInventarisasiOtomatis, autoInventarisasiEnabled } from "../../lib/inventoryStatus";
 
 // ============================================================================
 // INVENTORY CLASSIFICATION INFO DATA (SE 17/SE/M/2024)
@@ -1338,6 +1339,22 @@ const AssetForm = memo(({
       // Alur kamera beruntun: kompresi lokal saja (tanpa round-trip Tinify per
       // foto) supaya scan/navigasi aset berikutnya tidak menunggu jaringan.
       const cameraFlow = (navIntent || "").startsWith("camera:");
+
+      // Status inventarisasi OTOMATIS (default AKTIF): saat foto + koordinat sudah
+      // ada dan status masih default "Belum Diinventarisasi", simpan sebagai
+      // "Sudah Diinventarisasi". Dihitung SEKALI di sini lalu hanya diterapkan ke
+      // PAYLOAD (bukan ke formData) agar validasi di atas tak berubah timing-nya.
+      // Karena hanya naik saat koordinat ADA, aturan "inventarisasi wajib
+      // koordinat" tetap terpenuhi.
+      const hasPhoto = ((photoItems?.length || 0) > 0) || (formData.photos || []).some(Boolean);
+      const autoStatus = statusInventarisasiOtomatis({
+        inventory_status: formData.inventory_status,
+        hasPhoto,
+        lat: formData.koordinat_latitude,
+        lng: formData.koordinat_longitude,
+        enabled: autoInventarisasiEnabled(),
+      });
+
       if (isEditing && editId && originalDataRef.current) {
         // === EDIT MODE: Build diff payload — only send changed fields ===
         const orig = originalDataRef.current;
@@ -1364,6 +1381,11 @@ const AssetForm = memo(({
             patch[key] = formData[key];
           }
         }
+
+        // Terapkan status inventarisasi otomatis ke patch (override hasil loop
+        // bila perlu). Hanya dikirim bila berbeda dari nilai asli server.
+        if (autoStatus !== (orig.inventory_status ?? "")) patch.inventory_status = autoStatus;
+        else delete patch.inventory_status;
 
         // Compare simple numeric/nullable fields
         if (formData.thumbnail_index !== orig.thumbnail_index) patch.thumbnail_index = formData.thumbnail_index;
@@ -1453,8 +1475,8 @@ const AssetForm = memo(({
           documents: Array.isArray(item.documents) ? item.documents.map(doc => ({ name: doc.name || 'document.pdf', data: doc.data || '' })) : []
         })));
 
-        payload = { 
-          ...formData, photo: coverPhoto, photos: compressedPhotos, document_checklist: cleanedChecklist,
+        payload = {
+          ...formData, inventory_status: autoStatus, photo: coverPhoto, photos: compressedPhotos, document_checklist: cleanedChecklist,
         };
       }
       

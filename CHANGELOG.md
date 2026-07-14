@@ -48,6 +48,30 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#274] Kamera lapangan: auto-status inventaris + suara rana + info pengguna/melekat di foto — 2026-07-14
+
+- **Auto status inventarisasi (default ON, ada toggle).** Saat foto **dan**
+  koordinat sudah terekam dan status masih default *"Belum Diinventarisasi"*,
+  aset otomatis disimpan sebagai *"Sudah Diinventarisasi"* — surveyor cukup
+  memotret + kunci GPS tanpa mengetuk status (kerja lapangan cepat). Berlaku di
+  **halaman kamera penuh** dan **inventarisasi cepat** (keduanya menyimpan lewat
+  `AssetForm.handleSubmit`). Status yang **sudah diubah manual** (Tidak
+  Ditemukan/Berlebih/Sengketa/Sudah) TAK PERNAH diubah. Toggle **Auto-inventaris
+  ON/OFF** di kedua lembar; preferensi `localStorage aman_auto_inventarisasi`.
+  Helper murni `statusInventarisasiOtomatis` + `autoInventarisasiEnabled`
+  (`lib/inventoryStatus.js`); diterapkan ke **payload saja** (validasi &
+  logika cover foto tak tersentuh).
+- **Suara rana kamera.** Klik rana **disintesis** via Web Audio API (tanpa aset,
+  tetap bunyi offline; best-effort, tak pernah melempar) saat foto benar-benar
+  terambil — melengkapi getar. Toggle 🔊/🔇 di overlay kamera; preferensi
+  `localStorage aman_shutter_sound`. Helper `lib/shutterSound.js`.
+- **Info pengguna + jenis melekat di foto.** Watermark foto kini menambah baris
+  `Pengguna: <nama> [<melekat> — <jenis operasional>]` (hanya bila ada datanya).
+- Frontend saja. 2 lib murni + **13 unit test** baru; eslint bersih, `yarn build`
+  sukses.
+
+---
+
 ## [#273] Ekspor CSV dasbor integritas `/integritas/ekspor-ringkasan` (read-only) — 2026-07-14
 
 - **Unduhan CSV kesehatan data (§5A).** Endpoint read-only baru
