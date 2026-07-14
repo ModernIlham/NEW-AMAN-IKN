@@ -1,6 +1,6 @@
 import React, { memo, useState, useCallback, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Loader2, X, ChevronLeft, ChevronRight, MapPin, Tag, User, QrCode, FileCheck, FileX, StickyNote, Download } from "lucide-react";
+import { Loader2, X, ChevronLeft, ChevronRight, MapPin, Tag, User, QrCode, FileCheck, FileX, StickyNote, Download, Maximize2, RotateCw } from "lucide-react";
 import { authMediaUrl } from "../../lib/mediaUrl";
 import { peekAnim } from "../../lib/lightboxAnim";
 import { useBackGuard } from "../../hooks/useBackGuard";
@@ -59,6 +59,7 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
   const startX = useRef(0);
   const builtRef = useRef({ count: seed.current.count, version: seed.current.version });
   const [downloading, setDownloading] = useState(false);
+  const [rot, setRot] = useState(0); // rotasi tampilan foto (0/90/180/270) — preview saja
 
   // Navigasi antar-ASET (bukan antar-foto): geser/klik pada kartu info → aset
   // sebelum/sesudah sesuai urutan & filter aktif (daftar `siblings` dari
@@ -119,6 +120,18 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
     }
   }, [fullAsset, asset, idx]);
 
+  // Layar penuh: buka foto ASLI (resolusi penuh/HD) di TAB BARU — browser
+  // menampilkannya penuh dengan zoom native. Token disematkan via query
+  // (authMediaUrl memang dirancang untuk window.open). Dipanggil SINKRON pada
+  // klik → tak diblokir popup-blocker.
+  const openFullscreenOriginal = useCallback(() => {
+    const cur = fullAsset || asset;
+    const id = cur?.id;
+    if (!id) return;
+    const url = authMediaUrl(`${API}/assets/${id}/photos/${idx}?v=${builtRef.current.version}`); // tanpa w → asli
+    window.open(url, "_blank", "noopener,noreferrer");
+  }, [fullAsset, asset, idx]);
+
   useEffect(() => {
     if (!asset?.id) return undefined;
     // Aset berganti (mis. dari galeri) → seed ulang foto. Pada MOUNT pertama
@@ -174,7 +187,7 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
   // Foto berpindah → tandai "sedang memuat" agar tampil spinner (bukan foto lama
   // yang terlihat "freeze"). Dibersihkan oleh onLoad/onError <img>. Bila foto
   // sudah di-cache (mis. hasil preload), onLoad langsung memicu clear.
-  useEffect(() => { if (photos.length > 0) setImgLoading(true); }, [idx, photos]);
+  useEffect(() => { if (photos.length > 0) setImgLoading(true); setRot(0); }, [idx, photos]);
 
   // Preload foto tetangga (berikutnya & sebelumnya) agar navigasi mulus — saat
   // ditampilkan sudah dari cache sehingga tak terkesan freeze.
@@ -256,20 +269,41 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
 
       {/* Photo area */}
       <div className="relative flex-1 flex items-center justify-center w-full max-w-4xl px-4" onClick={(e) => e.stopPropagation()}>
-        {/* Unduh foto ASLI (resolusi penuh) — ikon di lingkaran gelap semi-
+        {/* Toolbar foto (kiri-atas, tumpuk vertikal): Unduh asli · Layar penuh
+            (buka HD asli di tab baru) · Putar 90°. Ikon di lingkaran gelap semi-
             transparan + cincin putih agar kontras di light/dark & di atas warna
-            foto apa pun. Yang tampil hanya varian preview (w=1280). */}
+            foto apa pun. Yang tampil di lightbox hanya varian preview (w=1280). */}
         {!loading && photos.length > 0 && (
-          <button
-            onClick={(e) => { e.stopPropagation(); downloadOriginal(); }}
-            disabled={downloading}
-            title="Unduh foto asli (resolusi penuh)"
-            aria-label="Unduh foto asli"
-            className="absolute left-2 top-2 z-10 w-10 h-10 rounded-full bg-black/50 hover:bg-black/70 text-white ring-1 ring-white/40 shadow-lg flex items-center justify-center backdrop-blur-sm transition-colors disabled:opacity-70"
-            data-testid="lightbox-download"
-          >
-            {downloading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
-          </button>
+          <div className="absolute left-2 top-2 z-10 flex flex-col gap-1.5" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={(e) => { e.stopPropagation(); downloadOriginal(); }}
+              disabled={downloading}
+              title="Unduh foto asli (resolusi penuh)"
+              aria-label="Unduh foto asli"
+              className="w-10 h-10 rounded-full bg-black/50 hover:bg-black/70 text-white ring-1 ring-white/40 shadow-lg flex items-center justify-center backdrop-blur-sm transition-colors disabled:opacity-70"
+              data-testid="lightbox-download"
+            >
+              {downloading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); openFullscreenOriginal(); }}
+              title="Layar penuh — buka foto HD asli di tab baru"
+              aria-label="Layar penuh (foto HD asli di tab baru)"
+              className="w-10 h-10 rounded-full bg-black/50 hover:bg-black/70 text-white ring-1 ring-white/40 shadow-lg flex items-center justify-center backdrop-blur-sm transition-colors"
+              data-testid="lightbox-fullscreen"
+            >
+              <Maximize2 className="w-5 h-5" />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); setRot((r) => (r + 90) % 360); }}
+              title="Putar foto 90°"
+              aria-label="Putar foto 90 derajat"
+              className="w-10 h-10 rounded-full bg-black/50 hover:bg-black/70 text-white ring-1 ring-white/40 shadow-lg flex items-center justify-center backdrop-blur-sm transition-colors"
+              data-testid="lightbox-rotate"
+            >
+              <RotateCw className="w-5 h-5" />
+            </button>
+          </div>
         )}
         {loading ? (
           <Loader2 className="w-10 h-10 text-slate-700 dark:text-white animate-spin" />
@@ -281,7 +315,14 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
               alt={a.name || "Asset"}
               onLoad={() => setImgLoading(false)}
               onError={() => setImgLoading(false)}
-              className={`max-h-[60vh] max-w-full object-contain rounded-lg shadow-2xl transition-opacity duration-200 ${imgLoading ? "opacity-0" : "opacity-100"}`}
+              className={`object-contain rounded-lg shadow-2xl transition-all duration-200 ${imgLoading ? "opacity-0" : "opacity-100"}`}
+              // Saat diputar 90°/270° tinggi↔lebar bertukar; batas dimensi ditukar
+              // agar foto tetap muat di layar (tak melimpah ke panel info).
+              style={{
+                transform: rot ? `rotate(${rot}deg)` : undefined,
+                maxHeight: rot % 180 === 90 ? "75vw" : "60vh",
+                maxWidth: rot % 180 === 90 ? "60vh" : "100%",
+              }}
               draggable={false}
             />
             {imgLoading && (

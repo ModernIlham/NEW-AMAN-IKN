@@ -48,6 +48,29 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#275] Lightbox foto: layar penuh (HD asli) + putar; perkecil "×" foto di HP/tablet; kolom Eselon II & Pengguna di list desktop — 2026-07-14
+
+- **Lightbox — tombol Layar Penuh + Putar, tata letak ditata ulang.** Popup foto
+  kini punya toolbar vertikal kiri-atas berisi **Unduh · Layar Penuh · Putar**
+  (sebelumnya hanya Unduh). *Layar Penuh* membuka **foto HD asli** (resolusi
+  penuh, tanpa `w=`) di **tab baru** — dibuka sinkron pada klik via
+  `window.open` (token disematkan `authMediaUrl`, tak diblokir popup-blocker).
+  *Putar* memutar tampilan 90°/180°/270° (preview; batas dimensi ditukar saat
+  90°/270° agar tetap muat, reset otomatis saat ganti foto).
+  (`components/assets/PhotoLightbox.jsx`)
+- **Tombol "×" hapus foto lebih kecil di HP/tablet.** Di halaman tambah/edit
+  aset, lingkaran ikon "×" per-foto tak lagi membengkak jadi 44px oleh aturan
+  tap-target global ≤1023px — ditambah `min-w-0 min-h-0` (lingkaran ~20px konsisten
+  di semua layar). (`components/assets/AssetForm.jsx`)
+- **List mode desktop (≥xl): Eselon II & nama Pengguna.** Kolom **Eselon** kini
+  menampilkan **Eselon II** dengan font lebih kecil tepat di bawah Eselon I;
+  kolom **Lokasi** menambah **nama pengguna** di baris kedua (font kecil, ikon
+  pengguna). Hanya tampilan desktop (`hidden xl:block`).
+  (`components/assets/VirtualizedAssetTable.jsx`)
+- Frontend saja; eslint bersih (0 error), `yarn build` sukses.
+
+---
+
 ## [#274] Kamera lapangan: auto-status inventaris + suara rana + info pengguna/melekat di foto — 2026-07-14
 
 - **Auto status inventarisasi (default ON, ada toggle).** Saat foto **dan**
