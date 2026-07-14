@@ -48,6 +48,27 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#266] Kapstone dasbor gabungan integritas `/integritas/ringkasan` (read-only) — §5A gap #8 — 2026-07-14
+
+- **Endpoint kapstone read-only `GET /integritas/ringkasan`.** Menggabungkan
+  SELURUH cek integritas §5A dalam satu panggilan: hitungan temuan per register
+  (identitas snapshot basi 4 register — penghapusan, pemindahtanganan, SK PSP,
+  jadwal pemeliharaan — + kodefikasi FK aset) plus **total lintas-cek** dan
+  `per_masalah` gabungan. Tak menyertakan daftar item detail (ambil dari
+  endpoint `/integritas/*` per register bila perlu). Tak mengubah data apa pun.
+- **Helper internal baru di `audit.py`** (`_ringkas_identitas_snapshot`,
+  `_ringkas_identitas_daftar`, `_ringkas_kodefikasi`, `_master_identitas_by_id`)
+  yang hanya MENGHITUNG temuan per register — master aset di-lookup **batch
+  `$in`** (hindari N+1). Sengaja **tidak me-refactor** 5 endpoint detail lama
+  (hindari regresi; tak ada uji endpoint).
+- **Helper murni `gabung_temuan_integritas(bagian)`** (`integritas_utils.py`) —
+  menyatukan ringkasan per-register jadi total dasbor (`total_temuan`,
+  `per_masalah` gabungan, `jumlah_cek`, `jumlah_cek_bermasalah`). **3 unit
+  test**. pytest **348 lulus**. Masterplan §5A gap #8 diperbarui (kapstone
+  ringkasan).
+
+---
+
 ## [#265] Deteksi identitas aset basi di register jadwal pemeliharaan (read-only) — §5A Prinsip 1 — 2026-07-14
 
 - **Perluasan §5A gap #8 / Prinsip 1 (lanjutan #261/#263/#264).** Endpoint

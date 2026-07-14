@@ -91,3 +91,30 @@ def hitung_masalah(temuan):
         if m:
             out[m] = out.get(m, 0) + 1
     return out
+
+
+def gabung_temuan_integritas(bagian):
+    """Gabungkan hasil beberapa cek integritas jadi SATU ringkasan dasbor
+    (kapstone §5A gap #8). `bagian`: daftar dict per-cek/register berbentuk
+    minimal ``{"register": str, "jumlah": int, "per_masalah": {masalah: n}}``.
+
+    Kembalikan ``{"total_temuan": int, "per_masalah": {...gabungan lintas-cek},
+    "jumlah_cek": int, "jumlah_cek_bermasalah": int, "bagian": [...apa adanya]}``.
+    Fungsi murni — pemanggil (endpoint) menjalankan scan Mongo tiap register lalu
+    menyusun `bagian`; ini menyatukan total agar dasbor konsisten tanpa menyentuh
+    endpoint detail per register.
+    """
+    total = 0
+    per_masalah = {}
+    n_bermasalah = 0
+    bagian = list(bagian or [])
+    for b in bagian:
+        jml = (b or {}).get("jumlah", 0) or 0
+        total += jml
+        if jml:
+            n_bermasalah += 1
+        for m, c in ((b or {}).get("per_masalah") or {}).items():
+            per_masalah[m] = per_masalah.get(m, 0) + (c or 0)
+    return {"total_temuan": total, "per_masalah": per_masalah,
+            "jumlah_cek": len(bagian), "jumlah_cek_bermasalah": n_bermasalah,
+            "bagian": bagian}

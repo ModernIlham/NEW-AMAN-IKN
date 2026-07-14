@@ -10,7 +10,7 @@ from auth_utils import require_user
 from penghapusan_utils import normalisasi_jejak_terhapus, rekap_jejak_terhapus
 from integritas_utils import (
     FIELD_IDENTITAS, drift_identitas_daftar, drift_identitas_tunggal,
-    hitung_masalah, identitas_drift,
+    gabung_temuan_integritas, hitung_masalah, identitas_drift,
 )
 from kodefikasi_utils import (
     derive_level, level_terdaftar_terdalam, normalize_kode,
@@ -289,4 +289,106 @@ async def integritas_identitas_jadwal_pemeliharaan(_user: dict = Depends(require
         "catatan": (
             "Deteksi read-only snapshot identitas aset basi di register jadwal "
             "pemeliharaan (§5A Prinsip 1). Belum menyegarkan otomatis."),
+    }
+
+
+# ── Kapstone: dasbor gabungan integritas (§5A gap #8, read-only) ──────────────
+# Helper internal BARU khusus ringkasan — hanya MENGHITUNG temuan per register
+# (bukan daftar item detail), agar dasbor menyajikan total lintas-cek. Sengaja
+# tidak me-refactor 5 endpoint detail di atas (hindari regresi; tak ada uji
+# endpoint). Master aset di-lookup BATCH via $in untuk hindari N+1.
+
+_PROJ_MASTER_ID = {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1}
+
+
+async def _master_identitas_by_id(ids):
+    """Ambil identitas master aset BATCH via `$in` → dict `{id: master}`."""
+    uniq = [i for i in {str(x or "") for x in ids} if i]
+    out = {}
+    if uniq:
+        async for a in db.assets.find({"id": {"$in": uniq}}, _PROJ_MASTER_ID):
+            out[a["id"]] = a
+    return out
+
+
+async def _ringkas_identitas_snapshot(coll, register, label):
+    """Ringkas cek identitas basi untuk register yang membekukan identitas PER
+    RECORD (usulan_penghapusan, jadwal_pemeliharaan)."""
+    rows = [r async for r in db[coll].find(
+        {}, {"_id": 0, "asset_id": 1, "asset_code": 1, "NUP": 1,
+             "asset_name": 1})]
+    master = await _master_identitas_by_id(r.get("asset_id") for r in rows)
+    temuan = []
+    for r in rows:
+        t = drift_identitas_tunggal(r, master.get(str(r.get("asset_id") or "")))
+        if t:
+            temuan.append(t)
+    return {"register": register, "label": label, "jumlah": len(temuan),
+            "per_masalah": hitung_masalah(temuan)}
+
+
+async def _ringkas_identitas_daftar(coll, register, label):
+    """Ringkas cek identitas basi untuk register ber-`aset[]`
+    (pemindahtanganan, psp)."""
+    docs = [d async for d in db[coll].find({}, {"_id": 0, "aset": 1})]
+    master = await _master_identitas_by_id(
+        r.get("asset_id") for d in docs for r in (d.get("aset") or []))
+    temuan = []
+    for d in docs:
+        temuan.extend(drift_identitas_daftar(d.get("aset"), master))
+    return {"register": register, "label": label, "jumlah": len(temuan),
+            "per_masalah": hitung_masalah(temuan)}
+
+
+async def _ringkas_kodefikasi():
+    """Ringkas cek kodefikasi FK (§5A Prinsip 2) — hitung asset_code DISTINCT
+    (aset aktif) yang prefix kodefikasinya tak terdaftar."""
+    terdaftar = set()
+    async for k in db.kodefikasi.find({}, {"_id": 0, "kode": 1}):
+        if k.get("kode"):
+            terdaftar.add(str(k["kode"]))
+    temuan = []
+    async for grp in db.assets.aggregate([
+        {"$match": active_asset_filter()},
+        {"$group": {"_id": "$asset_code"}},
+    ]):
+        kode = normalize_kode(grp.get("_id"))
+        level_kode = derive_level(kode)
+        if not level_kode:
+            temuan.append({"masalah": "panjang_kode_tak_valid"})
+            continue
+        dalam = level_terdaftar_terdalam(kode, terdaftar)
+        if dalam >= level_kode:
+            continue
+        temuan.append({"masalah": "golongan_tak_terdaftar" if dalam == 0
+                       else "kode_spesifik_tak_terdaftar"})
+    return {"register": "kodefikasi_aset", "label": "Kodefikasi Aset",
+            "jumlah": len(temuan), "per_masalah": hitung_masalah(temuan)}
+
+
+@audit_router.get("/integritas/ringkasan")
+async def integritas_ringkasan(_user: dict = Depends(require_user)):
+    """Kapstone §5A gap #8 (READ-ONLY): dasbor gabungan seluruh cek integritas
+    dalam satu panggilan — hitungan temuan per register (identitas basi 4
+    register + kodefikasi FK) beserta total lintas-cek. Tak menyertakan daftar
+    item detail (ambil dari endpoint per-register bila perlu). Tak mengubah data
+    apa pun."""
+    bagian = [
+        await _ringkas_identitas_snapshot(
+            "usulan_penghapusan", "usulan_penghapusan", "Usulan Penghapusan"),
+        await _ringkas_identitas_daftar(
+            "pemindahtanganan", "pemindahtanganan", "Pemindahtanganan"),
+        await _ringkas_identitas_daftar("psp", "psp", "SK PSP Penggunaan"),
+        await _ringkas_identitas_snapshot(
+            "jadwal_pemeliharaan", "jadwal_pemeliharaan", "Jadwal Pemeliharaan"),
+        await _ringkas_kodefikasi(),
+    ]
+    hasil = gabung_temuan_integritas(bagian)
+    return {
+        **hasil,
+        "catatan": (
+            "Dasbor gabungan integritas data siklus BMN (§5A, read-only): "
+            "identitas snapshot basi di register hilir + kodefikasi FK aset. "
+            "Total di sini menyatukan hitungan; detail per temuan tersedia di "
+            "endpoint /integritas/* masing-masing. Tak mengubah data."),
     }

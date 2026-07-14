@@ -122,3 +122,46 @@ def test_tunggal_master_hilang():
     assert t["snapshot"] == {"asset_code": "30", "NUP": "1", "asset_name": "X"}
     # master {} kosong → juga dianggap hilang
     assert drift_identitas_tunggal(_snap(), {})["masalah"] == "aset_master_hilang"
+
+
+# ── Ringkasan gabungan lintas-cek (kapstone /integritas/ringkasan) — §5A gap #8 (#266) ──
+from integritas_utils import gabung_temuan_integritas
+
+
+def test_gabung_total_dan_per_masalah():
+    bagian = [
+        {"register": "usulan_penghapusan", "jumlah": 3,
+         "per_masalah": {"snapshot_basi": 2, "aset_master_hilang": 1}},
+        {"register": "kodefikasi_aset", "jumlah": 2,
+         "per_masalah": {"golongan_tak_terdaftar": 2}},
+        {"register": "jadwal_pemeliharaan", "jumlah": 0, "per_masalah": {}},
+    ]
+    r = gabung_temuan_integritas(bagian)
+    assert r["total_temuan"] == 5
+    assert r["jumlah_cek"] == 3
+    assert r["jumlah_cek_bermasalah"] == 2      # jadwal (0) tak dihitung bermasalah
+    assert r["per_masalah"] == {"snapshot_basi": 2, "aset_master_hilang": 1,
+                                "golongan_tak_terdaftar": 2}
+    assert r["bagian"] == bagian                 # diteruskan apa adanya
+
+
+def test_gabung_masalah_sama_dijumlah_lintas_cek():
+    bagian = [
+        {"register": "pemindahtanganan", "jumlah": 1,
+         "per_masalah": {"snapshot_basi": 1}},
+        {"register": "psp", "jumlah": 2,
+         "per_masalah": {"snapshot_basi": 2}},
+    ]
+    r = gabung_temuan_integritas(bagian)
+    assert r["total_temuan"] == 3
+    assert r["per_masalah"] == {"snapshot_basi": 3}
+
+
+def test_gabung_kosong_dan_aman():
+    r = gabung_temuan_integritas([])
+    assert r == {"total_temuan": 0, "per_masalah": {}, "jumlah_cek": 0,
+                 "jumlah_cek_bermasalah": 0, "bagian": []}
+    assert gabung_temuan_integritas(None)["total_temuan"] == 0
+    # entri tanpa 'per_masalah'/'jumlah' tak bikin error
+    r2 = gabung_temuan_integritas([{"register": "x"}])
+    assert r2["total_temuan"] == 0 and r2["jumlah_cek"] == 1
