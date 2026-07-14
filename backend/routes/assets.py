@@ -1724,7 +1724,16 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
             if cover_b64:
                 update_data["thumbnail"] = create_thumbnail(cover_b64)
                 update_data["gallery_thumbnail"] = create_gallery_thumbnail(cover_b64)
-            # cover_b64 kosong (blob korup): biarkan thumbnail lama apa adanya
+            elif cover_idx < len(final_thumbnails) and final_thumbnails[cover_idx]:
+                # Fallback: full-res cover gagal diambil (mis. blob korup) tetapi
+                # thumbnail per-foto cover TERSEDIA → regen composite dari situ
+                # agar cover di mode DAFTAR (asset.thumbnail) tak pernah basi saat
+                # cover diganti sambil menghapus foto. thumbnail_index +
+                # photo_thumbnails sudah diperbarui; tanpa ini daftar tetap
+                # menampilkan cover lama sampai cover diubah lagi (bug dilaporkan).
+                update_data["thumbnail"] = create_thumbnail(final_thumbnails[cover_idx])
+                update_data["gallery_thumbnail"] = create_gallery_thumbnail(final_thumbnails[cover_idx])
+            # keduanya kosong (benar-benar tak ada byte): biarkan thumbnail lama
         else:
             update_data["thumbnail"] = None
             update_data["gallery_thumbnail"] = None

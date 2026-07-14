@@ -25,6 +25,7 @@ import resend
 
 from asset_fields import SCALAR_FIELD_NAMES
 from db import db, fs_bucket
+from gridfs_id_utils import coerce_gridfs_id
 
 logger = logging.getLogger(__name__)
 
@@ -98,10 +99,11 @@ async def store_photo_to_gridfs(photo_base64: str) -> str:
 
 
 async def get_photo_from_gridfs(gridfs_id: str) -> Optional[bytes]:
-    """Retrieve a photo from GridFS by its ID string."""
+    """Retrieve a photo from GridFS by its ID string. Memakai `coerce_gridfs_id`
+    (toleran) — selaras jalur unduh lain (regen cover thumbnail_index, migrasi,
+    impor backup)."""
     try:
-        from bson import ObjectId
-        grid_out = await fs_bucket.open_download_stream(ObjectId(gridfs_id))
+        grid_out = await fs_bucket.open_download_stream(coerce_gridfs_id(gridfs_id))
         return await grid_out.read()
     except Exception as e:
         logger.error(f"GridFS read error for {gridfs_id}: {e}")
