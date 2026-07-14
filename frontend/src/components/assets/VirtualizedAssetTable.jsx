@@ -1,6 +1,6 @@
 import React, { useRef, memo } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Camera, Briefcase, MapPin, Tag, CreditCard, Trash2, History, ClipboardCheck, Lock, Cloud, CloudOff, Check, RotateCcw, Clock, Loader2, AlertTriangle, BookOpen } from "lucide-react";
+import { Camera, Briefcase, MapPin, Tag, CreditCard, Trash2, History, ClipboardCheck, Lock, Cloud, CloudOff, Check, RotateCcw, Clock, Loader2, AlertTriangle, BookOpen, User } from "lucide-react";
 import { Button } from "../ui/button";
 import {
   Tooltip,
@@ -271,10 +271,23 @@ const VirtualizedAssetTable = memo(({ assets, editId, onEdit, onDelete, onPrintC
                   {(a.brand || a.model) && <div className="text-[9px] text-muted-foreground truncate leading-tight">{[a.brand, a.model].filter(Boolean).join(' / ')}</div>}
                 </div>
 
-                {/* Eselon I/II - xl (flex-1: matches header, truncates only when needed) */}
-                <div className="hidden xl:block flex-1 min-w-0 px-1"><TruncatedCell text={a.eselon1 ? `${a.eselon1}${a.eselon2 ? ' / '+a.eselon2 : ''}` : ''} /></div>
-                {/* Lokasi - xl */}
-                <div className="hidden xl:block flex-1 min-w-0 px-1"><TruncatedCell text={a.location} /></div>
+                {/* Eselon I/II - xl (flex-1: matches header, truncates only when
+                    needed). Eselon II tampil di baris kedua dengan font lebih
+                    kecil, tepat di bawah Eselon I. */}
+                <div className="hidden xl:block flex-1 min-w-0 px-1">
+                  <TruncatedCell text={a.eselon1} icon={Briefcase} />
+                  {a.eselon2 && <div className="text-[9px] text-muted-foreground/80 truncate leading-tight pl-3.5" title={a.eselon2}>{a.eselon2}</div>}
+                </div>
+                {/* Lokasi - xl. Nama pengguna ditambah di baris kedua (font kecil). */}
+                <div className="hidden xl:block flex-1 min-w-0 px-1">
+                  <TruncatedCell text={a.location} icon={MapPin} />
+                  {a.user && (
+                    <div className="flex items-center gap-0.5 min-w-0 leading-tight" title={`Pengguna: ${a.user}`}>
+                      <User className="w-2.5 h-2.5 text-muted-foreground/70 flex-shrink-0" />
+                      <span className="text-[9px] text-muted-foreground/80 truncate">{a.user}</span>
+                    </div>
+                  )}
+                </div>
                 {/* Harga - xl */}
                 <div className="hidden xl:block w-20 flex-shrink-0 px-1 text-right">
                   <span className="text-[10px] text-muted-foreground font-medium">{formatPrice(a.purchase_price)}</span>
