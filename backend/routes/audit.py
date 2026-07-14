@@ -11,7 +11,17 @@ from penghapusan_utils import normalisasi_jejak_terhapus, rekap_jejak_terhapus
 from integritas_utils import (
     FIELD_IDENTITAS, drift_identitas_daftar, drift_identitas_tunggal,
     gabung_temuan_integritas, hitung_masalah, identitas_drift,
+    ringkasan_csv_baris,
 )
+
+# Label manusiawi jenis temuan integritas (dipakai ekspor CSV dasbor).
+LABEL_MASALAH_INTEGRITAS = {
+    "snapshot_basi": "Identitas basi",
+    "aset_master_hilang": "Aset induk hilang",
+    "golongan_tak_terdaftar": "Golongan tak terdaftar",
+    "kode_spesifik_tak_terdaftar": "Kode tak terdaftar",
+    "panjang_kode_tak_valid": "Panjang kode tak valid",
+}
 from kodefikasi_utils import (
     cek_kode_kodefikasi, derive_level, level_terdaftar_terdalam, normalize_kode,
 )
@@ -379,14 +389,10 @@ async def _ringkas_kodefikasi():
             "jumlah": len(temuan), "per_masalah": hitung_masalah(temuan)}
 
 
-@audit_router.get("/integritas/ringkasan")
-async def integritas_ringkasan(_user: dict = Depends(require_user)):
-    """Kapstone §5A gap #8 (READ-ONLY): dasbor gabungan seluruh cek integritas
-    dalam satu panggilan — hitungan temuan per register (identitas basi 4
-    register + kodefikasi FK) beserta total lintas-cek. Tak menyertakan daftar
-    item detail (ambil dari endpoint per-register bila perlu). Tak mengubah data
-    apa pun."""
-    bagian = [
+async def _kumpulkan_bagian_integritas():
+    """Jalankan SEMUA cek integritas §5A → daftar ringkasan per register.
+    Satu sumber untuk endpoint ringkasan JSON & ekspor CSV (hindari duplikasi)."""
+    return [
         await _ringkas_identitas_snapshot(
             "usulan_penghapusan", "usulan_penghapusan", "Usulan Penghapusan"),
         await _ringkas_identitas_daftar(
@@ -396,7 +402,16 @@ async def integritas_ringkasan(_user: dict = Depends(require_user)):
             "jadwal_pemeliharaan", "jadwal_pemeliharaan", "Jadwal Pemeliharaan"),
         await _ringkas_kodefikasi(),
     ]
-    hasil = gabung_temuan_integritas(bagian)
+
+
+@audit_router.get("/integritas/ringkasan")
+async def integritas_ringkasan(_user: dict = Depends(require_user)):
+    """Kapstone §5A gap #8 (READ-ONLY): dasbor gabungan seluruh cek integritas
+    dalam satu panggilan — hitungan temuan per register (identitas basi 4
+    register + kodefikasi FK) beserta total lintas-cek. Tak menyertakan daftar
+    item detail (ambil dari endpoint per-register bila perlu). Tak mengubah data
+    apa pun."""
+    hasil = gabung_temuan_integritas(await _kumpulkan_bagian_integritas())
     return {
         **hasil,
         "catatan": (
@@ -405,3 +420,24 @@ async def integritas_ringkasan(_user: dict = Depends(require_user)):
             "Total di sini menyatukan hitungan; detail per temuan tersedia di "
             "endpoint /integritas/* masing-masing. Tak mengubah data."),
     }
+
+
+@audit_router.get("/integritas/ekspor-ringkasan")
+async def integritas_ekspor_ringkasan(_user: dict = Depends(require_user)):
+    """Ekspor CSV dasbor integritas §5A (READ-ONLY, pola #158): satu baris per
+    register (jumlah temuan + rincian per masalah) + baris TOTAL. Untuk arsip /
+    tindak lanjut kesehatan data. Sumber `bagian` sama dengan `/integritas/
+    ringkasan`. Tak mengubah data."""
+    import csv as csv_module
+    import io
+    from fastapi.responses import Response as HttpResponse
+
+    hasil = gabung_temuan_integritas(await _kumpulkan_bagian_integritas())
+    buf = io.StringIO()
+    w = csv_module.writer(buf)
+    for row in ringkasan_csv_baris(hasil, LABEL_MASALAH_INTEGRITAS):
+        w.writerow(row)
+    return HttpResponse(
+        content=buf.getvalue().encode("utf-8-sig"), media_type="text/csv",
+        headers={"Content-Disposition":
+                 'attachment; filename="ringkasan_integritas.csv"'})

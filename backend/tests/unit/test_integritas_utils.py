@@ -165,3 +165,38 @@ def test_gabung_kosong_dan_aman():
     # entri tanpa 'per_masalah'/'jumlah' tak bikin error
     r2 = gabung_temuan_integritas([{"register": "x"}])
     assert r2["total_temuan"] == 0 and r2["jumlah_cek"] == 1
+
+
+# ── Baris CSV ekspor dasbor integritas — §5A (#273) ──
+from integritas_utils import ringkasan_csv_baris
+
+
+def test_ringkasan_csv_header_dan_total():
+    hasil = gabung_temuan_integritas([
+        {"register": "usulan_penghapusan", "label": "Usulan Penghapusan",
+         "jumlah": 2, "per_masalah": {"snapshot_basi": 2}},
+        {"register": "kodefikasi_aset", "label": "Kodefikasi Aset",
+         "jumlah": 0, "per_masalah": {}},
+    ])
+    rows = ringkasan_csv_baris(hasil, {"snapshot_basi": "Identitas basi"})
+    assert rows[0] == ["register", "label", "jumlah_temuan", "rincian_masalah"]
+    # baris register pertama
+    assert rows[1][:3] == ["usulan_penghapusan", "Usulan Penghapusan", 2]
+    assert rows[1][3] == "Identitas basi=2"
+    # register bersih → rincian kosong
+    assert rows[2] == ["kodefikasi_aset", "Kodefikasi Aset", 0, ""]
+    # baris TOTAL di akhir
+    assert rows[-1][0] == "TOTAL" and rows[-1][2] == 2
+    assert rows[-1][3] == "Identitas basi=2"
+
+
+def test_ringkasan_csv_kosong_dan_tanpa_label():
+    rows = ringkasan_csv_baris(gabung_temuan_integritas([]))
+    assert rows[0][0] == "register"
+    assert rows[-1] == ["TOTAL", "Semua pemeriksaan", 0, ""]
+    assert ringkasan_csv_baris(None)[-1][0] == "TOTAL"       # None aman
+    # tanpa label_masalah → pakai kode masalah apa adanya
+    r = ringkasan_csv_baris(gabung_temuan_integritas(
+        [{"register": "x", "label": "X", "jumlah": 1,
+          "per_masalah": {"golongan_tak_terdaftar": 1}}]))
+    assert r[1][3] == "golongan_tak_terdaftar=1"
