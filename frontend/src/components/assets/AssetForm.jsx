@@ -25,6 +25,7 @@ import axios from "axios";
 import { getApiError } from "../../lib/utils";
 import { authMediaUrl } from "../../lib/mediaUrl";
 import { acquireAccuratePosition } from "../../lib/geolocation";
+import { lebihAkurat } from "../../lib/gpsAkurasi";
 import { compressImageFile, compressDataUrl, generateThumbnailFromDataUrl, dataUrlBytes } from "../../lib/imageCompression";
 import { statusInventarisasiOtomatis, autoInventarisasiEnabled } from "../../lib/inventoryStatus";
 
@@ -894,16 +895,21 @@ const AssetForm = memo(({
     });
   }, [isEditing, photoItems.length]);
 
-  // GPS live dari kamera: watchPosition menembak ~1x/detik dan tiap commit
-  // me-render ulang seluruh form (~2.300 baris) — berat di HP low-end. Maka
-  // koordinat hanya di-commit bila BERGESER BERARTI (>±1e-5 derajat ≈ 1 m);
-  // jitter kecil cukup disimpan di cache & overlay kamera (state lokal sheet).
-  const lastGpsCommitRef = useRef(null);
-  const handleCameraGpsFix = useCallback(({ lat, lng }) => {
+  // GPS PINTAR (#4): selama sesi kamera SATU aset, watchPosition mengalirkan fix
+  // {lat,lng,accuracy} terus-menerus. Alih-alih memakai fix TERAKHIR (yang bisa
+  // ber-jitter / kurang akurat), koordinat dikunci ke jepretan PALING AKURAT —
+  // hanya di-commit bila fix ini lebih akurat (accuracy lebih kecil) daripada
+  // yang terbaik sejauh ini; fix pertama selalu dipakai. Commit jadi jarang
+  // (akurasi membaik lalu berhenti), sekaligus ringan untuk HP low-end. Reset
+  // "fix terbaik" per aset via efek [editAsset?.id, cameraSavedCount] di bawah.
+  const bestGpsAccuracyRef = useRef(null);
+  const handleCameraGpsFix = useCallback((fix) => {
+    const lat = fix?.lat, lng = fix?.lng;
+    if (lat == null || lng == null) return;
     try { localStorage.setItem("aman_last_gps", JSON.stringify({ lat, lng, ts: Date.now() })); } catch {}
-    const prev = lastGpsCommitRef.current;
-    if (prev && Math.abs(parseFloat(lat) - parseFloat(prev.lat)) < 1e-5 && Math.abs(parseFloat(lng) - parseFloat(prev.lng)) < 1e-5) return;
-    lastGpsCommitRef.current = { lat, lng };
+    const best = bestGpsAccuracyRef.current;
+    if (best && !lebihAkurat(fix, best)) return; // sudah punya yang lebih akurat
+    bestGpsAccuracyRef.current = fix;
     setFormData(p => (p.koordinat_latitude === lat && p.koordinat_longitude === lng ? p : { ...p, koordinat_latitude: lat, koordinat_longitude: lng }));
   }, []);
 
@@ -965,6 +971,10 @@ const AssetForm = memo(({
 
   // Jumlah aset tersimpan selama sesi Kamera Penuh (indikator alur beruntun).
   const [cameraSavedCount, setCameraSavedCount] = useState(0);
+
+  // GPS PINTAR: reset "fix terbaik" tiap ganti aset (edit) atau simpan-lalu-baru
+  // (cameraSavedCount naik) → tiap aset memilih koordinat GPS terakuratnya sendiri.
+  useEffect(() => { bestGpsAccuracyRef.current = null; }, [editAsset?.id, cameraSavedCount]);
 
   // Mode Kamera Penuh untuk aset BARU: standby-kan kategori dummy + NUP otomatis.
   useEffect(() => {
