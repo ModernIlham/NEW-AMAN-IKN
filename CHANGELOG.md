@@ -48,6 +48,23 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#276] Lightbox: layar penuh DALAM aplikasi (tombol Back kembali ke lightbox, bukan keluar app) — 2026-07-14
+
+- **Perbaikan bug: tombol Back saat layar penuh malah keluar aplikasi.**
+  Sebelumnya tombol "Layar Penuh" membuka foto HD di **tab baru** (`window.open`);
+  di PWA/HP itu menavigasi keluar app sehingga Back **keluar aplikasi**, bukan
+  kembali. Sekarang layar penuh memakai **penampil DALAM aplikasi**
+  (komponen `FullscreenPhoto`): memakai **Fullscreen API** bila tersedia dan
+  jatuh ke overlay `fixed inset-0` bila ditolak (mis. iOS). `useBackGuard`
+  memastikan **Back / gesture geser menutup penampil** dan kembali ke lightbox —
+  tidak pernah keluar aplikasi. Escape / keluar-fullscreen sistem juga menutup
+  penampil. Rotasi tampilan lightbox ikut terbawa ke layar penuh.
+  (`components/assets/PhotoLightbox.jsx`; `data-testid` `lightbox-fullscreen-view`,
+  `lightbox-fullscreen-close`.)
+- Frontend saja; eslint bersih (0 error), `yarn build` sukses.
+
+---
+
 ## [#275] Lightbox foto: layar penuh (HD asli) + putar; perkecil "×" foto di HP/tablet; kolom Eselon II & Pengguna di list desktop — 2026-07-14
 
 - **Lightbox — tombol Layar Penuh + Putar, tata letak ditata ulang.** Popup foto
