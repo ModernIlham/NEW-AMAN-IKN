@@ -48,6 +48,24 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#262] Validasi FK kodefikasi aset (read-only, non-blocking) — §5A Prinsip 2 — 2026-07-14
+
+- **Integrasi §5A gap #7 / Prinsip 2 (kodefikasi sebagai FK).** Kode barang aset
+  diturunkan dari prefix tetapi tak pernah divalidasi sebagai FK ke referensi
+  `kodefikasi`. Endpoint **read-only** `GET /integritas/kodefikasi-aset`
+  mengagregasi `asset_code` DISTINCT (aset aktif) dan melaporkan kode yang
+  prefix golongan/level-nya **tak terdaftar** di `db.kodefikasi`, dengan ambang
+  `golongan_tak_terdaftar` / `kode_spesifik_tak_terdaftar` /
+  `panjang_kode_tak_valid` + jumlah aset per kode.
+- **Helper murni `level_terdaftar_terdalam(kode, terdaftar)`** (`kodefikasi_utils.py`)
+  → level terdalam (1–5) yang prefix-nya ada di himpunan kode terdaftar (0 bila
+  tak ada), memakai `hierarchy_prefixes`. **4 unit test**.
+- **Non-blocking & read-only** — hanya peringatan; **tidak** menolak/mengubah
+  data lama (create/impor tetap jalan). Validasi soft-warning saat create/impor
+  = langkah terpisah. pytest **336 lulus**. Masterplan §5A gap #7 diperbarui.
+
+---
+
 ## [#261] Deteksi snapshot identitas aset basi (read-only) — §5A Prinsip 1 — 2026-07-13
 
 - **Integrasi §5A gap #8 / Prinsip 1 (langkah read-only pertama).** Register

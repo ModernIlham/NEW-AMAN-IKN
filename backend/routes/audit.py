@@ -9,6 +9,10 @@ from db import db
 from auth_utils import require_user
 from penghapusan_utils import normalisasi_jejak_terhapus, rekap_jejak_terhapus
 from integritas_utils import FIELD_IDENTITAS, identitas_drift
+from kodefikasi_utils import (
+    derive_level, level_terdaftar_terdalam, normalize_kode,
+)
+from report_filters import active_asset_filter
 
 logger = logging.getLogger(__name__)
 audit_router = APIRouter()
@@ -118,4 +122,60 @@ async def integritas_identitas_penghapusan(_user: dict = Depends(require_user)):
             "Deteksi read-only snapshot identitas aset basi di register usulan "
             "penghapusan (§5A Prinsip 1). Belum menyegarkan otomatis — hanya "
             "melaporkan agar bisa ditindaklanjuti."),
+    }
+
+
+@audit_router.get("/integritas/kodefikasi-aset")
+async def integritas_kodefikasi_aset(_user: dict = Depends(require_user)):
+    """§5A Prinsip 2 (READ-ONLY): kodefikasi sebagai FK tervalidasi.
+
+    Kode barang aset diturunkan dari prefix, tetapi TAK divalidasi sebagai FK ke
+    referensi `kodefikasi`. Endpoint ini mengagregasi `asset_code` DISTINCT (aset
+    aktif) dan melaporkan yang prefix golongan/level-nya **tak terdaftar** di
+    `db.kodefikasi` — sebagai **peringatan** (non-blocking), tanpa menolak/ubah
+    data lama. Ambang: `kode_spesifik_tak_terdaftar` (hanya induk terdaftar),
+    `golongan_tak_terdaftar` (level 1 pun tak ada), `panjang_kode_tak_valid`.
+    """
+    terdaftar = set()
+    async for k in db.kodefikasi.find({}, {"_id": 0, "kode": 1}):
+        if k.get("kode"):
+            terdaftar.add(str(k["kode"]))
+
+    items = []
+    n_golongan = n_spesifik = n_invalid = 0
+    async for grp in db.assets.aggregate([
+        {"$match": active_asset_filter()},
+        {"$group": {"_id": "$asset_code", "jumlah_aset": {"$sum": 1}}},
+    ]):
+        kode = normalize_kode(grp.get("_id"))
+        jml = grp.get("jumlah_aset", 0)
+        level_kode = derive_level(kode)
+        if not level_kode:
+            n_invalid += 1
+            items.append({"asset_code": grp.get("_id"), "jumlah_aset": jml,
+                          "masalah": "panjang_kode_tak_valid"})
+            continue
+        dalam = level_terdaftar_terdalam(kode, terdaftar)
+        if dalam >= level_kode:
+            continue  # kode terdaftar sampai level-nya → konsisten
+        masalah = "golongan_tak_terdaftar" if dalam == 0 else "kode_spesifik_tak_terdaftar"
+        if dalam == 0:
+            n_golongan += 1
+        else:
+            n_spesifik += 1
+        items.append({"asset_code": grp.get("_id"), "jumlah_aset": jml,
+                      "level_kode": level_kode, "level_terdaftar": dalam,
+                      "masalah": masalah})
+
+    items.sort(key=lambda x: (-x.get("jumlah_aset", 0), str(x.get("asset_code") or "")))
+    return {
+        "jumlah_kode": len(items),
+        "golongan_tak_terdaftar": n_golongan,
+        "kode_spesifik_tak_terdaftar": n_spesifik,
+        "panjang_kode_tak_valid": n_invalid,
+        "items": items,
+        "catatan": (
+            "Peringatan read-only (§5A Prinsip 2): kode aset yang prefix "
+            "kodefikasi-nya belum terdaftar di referensi. Non-blocking — tak "
+            "menolak data lama; lengkapi referensi kodefikasi untuk menutup."),
     }

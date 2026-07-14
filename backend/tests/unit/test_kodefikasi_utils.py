@@ -159,3 +159,31 @@ class TestParseImportRows:
             {"kode": "301.0", "uraian": "Alat Besar"},
         ])
         assert errors == [] and entries[0]["kode"] == "301"
+
+
+# ── FK kodefikasi tervalidasi: level_terdaftar_terdalam (§5A gap #7, #262) ──
+from kodefikasi_utils import level_terdaftar_terdalam
+
+
+def test_level_terdaftar_penuh():
+    # Kode 10 digit (level 5) terdaftar utuh → level 5
+    assert level_terdaftar_terdalam("3050104001", {"3050104001"}) == 5
+
+
+def test_level_terdaftar_berjenjang():
+    # Terdaftar sampai level 3 (5 digit) → 3
+    kode = "3050104001"
+    assert level_terdaftar_terdalam(kode, {"3", "305", "30501"}) == 3
+    # Hanya golongan → 1
+    assert level_terdaftar_terdalam(kode, {"3"}) == 1
+
+
+def test_level_terdaftar_kosong():
+    # Tak ada satu pun prefix terdaftar → 0
+    assert level_terdaftar_terdalam("3050104001", set()) == 0
+    assert level_terdaftar_terdalam("3050104001", {"9", "801"}) == 0
+
+
+def test_level_terdaftar_none_aman():
+    assert level_terdaftar_terdalam(None, {"3"}) == 0
+    assert level_terdaftar_terdalam("", {"3"}) == 0
