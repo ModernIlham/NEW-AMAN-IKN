@@ -48,6 +48,24 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#272] FK Pemindahtanganan→Penghapusan (`penghapusan_id`) — §5A gap #5 tuntas — 2026-07-14
+
+- **Tautan dua arah ber-FK id.** Saat usulan pemindahtanganan berstatus
+  **selesai** (SK Penghapusan terbit), `nomor_sk_penghapusan` dicocokkan ke
+  tiket `usulan_penghapusan` (via `nomor_sk`). Bila cocok:
+  - usulan pemindahtanganan menyimpan `penghapusan_id` (+ snapshot
+    `penghapusan_nomor_sk`) — FK id, bukan sekadar teks;
+  - tiket penghapusan menyimpan back-link `sumber_pemindahtanganan_id` +
+    `sumber_pemindahtanganan_bentuk` (penelusuran dua arah, pola #228).
+- **Best-effort non-blocking**: tak cocok → nomor teks tetap tersimpan tanpa FK,
+  transisi tak digagalkan; back-link tak menyentuh `version` tiket (hindari OCC
+  409 palsu). Helper murni `taut_penghapusan(nomor_sk, usulan)`
+  (`pemindahtanganan_utils.py`) + **4 unit test**. pytest **362 lulus**.
+- Menutup sisa §5A gap #5 (Dokumen Sumber = simpul; rantai Pemindahtanganan →
+  Penghapusan kini tertaut FK). Backend saja.
+
+---
+
 ## [#271] Peringatan kodefikasi live di form aset (non-blocking, §5A Prinsip 2) — 2026-07-14
 
 - **Umpan balik langsung saat mengisi Kode Aset.** `AssetForm` kini memanggil

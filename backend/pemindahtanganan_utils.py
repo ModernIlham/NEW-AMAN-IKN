@@ -133,6 +133,22 @@ def build_asset_pemindahtanganan_projection(usulan: dict, now_iso: str) -> dict:
     }
 
 
+def taut_penghapusan(nomor_sk, usulan) -> dict:
+    """Bentuk taut FK Pemindahtanganan→Penghapusan (§5A gap #5). Saat usulan
+    pemindahtanganan SELESAI, `nomor_sk_penghapusan`-nya dicocokkan ke tiket
+    `usulan_penghapusan`. `usulan` = dokumen tiket yang cocok (atau None/{}).
+
+    Kembalikan `{"penghapusan_id", "penghapusan_nomor_sk"}` bila tiket ada &
+    ber-`id` (FK id, bukan sekadar string); else `{}` (nomor teks tetap
+    disimpan pemanggil — tanpa FK). Fungsi murni — pemanggil melakukan lookup
+    (mis. `db.usulan_penghapusan.find_one({"nomor_sk": ...})`)."""
+    nk = str(nomor_sk or "").strip()
+    if not nk or not usulan or not usulan.get("id"):
+        return {}
+    return {"penghapusan_id": usulan["id"],
+            "penghapusan_nomor_sk": str(usulan.get("nomor_sk") or nk).strip()}
+
+
 def peringatan_pt(u: dict, today_iso: str) -> list:
     """Peringatan kepatuhan per usulan (tenggat lelang 6 bulan)."""
     warn = []

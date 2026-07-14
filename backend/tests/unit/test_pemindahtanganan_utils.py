@@ -172,3 +172,31 @@ def test_proyeksi_pt_kompatibel_tombstone_lbkp():
     per_kelas, _ = build_lbkp_rows([], ts, "2026-01-01", "2026-06-30")
     _rows, total = per_kelas["gabungan"]
     assert total["nilai_kurang"] == 10000000.0 and total["nilai_tambah"] == 0.0
+
+
+# ── FK Pemindahtanganan→Penghapusan: taut_penghapusan (§5A gap #5, #272) ──
+from pemindahtanganan_utils import taut_penghapusan
+
+
+def test_taut_penghapusan_cocok():
+    tiket = {"id": "pgh-1", "nomor_sk": "SK-123/2026"}
+    out = taut_penghapusan("SK-123/2026", tiket)
+    assert out == {"penghapusan_id": "pgh-1", "penghapusan_nomor_sk": "SK-123/2026"}
+
+
+def test_taut_penghapusan_normalisasi_spasi():
+    tiket = {"id": "pgh-2", "nomor_sk": "SK-9"}
+    # nomor dari pemindahtanganan ber-spasi tepi tetap tertaut; nomor snapshot
+    # diambil dari tiket (sumber kebenaran).
+    assert taut_penghapusan("  SK-9  ", tiket)["penghapusan_id"] == "pgh-2"
+
+
+def test_taut_penghapusan_tanpa_tiket_atau_id():
+    assert taut_penghapusan("SK-1", None) == {}
+    assert taut_penghapusan("SK-1", {}) == {}
+    assert taut_penghapusan("SK-1", {"nomor_sk": "SK-1"}) == {}   # tanpa id → tak ada FK
+
+
+def test_taut_penghapusan_nomor_kosong():
+    assert taut_penghapusan("", {"id": "x", "nomor_sk": "y"}) == {}
+    assert taut_penghapusan(None, {"id": "x"}) == {}
