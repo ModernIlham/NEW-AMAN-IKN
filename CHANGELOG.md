@@ -48,6 +48,25 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#280] Perbaikan: badge dokumen tak lagi berkedip di lightbox + kotak select galeri tak buka lightbox — 2026-07-14
+
+- **Bug: badge "Dok x/y" berkedip (muncul lalu langsung hilang) di popup foto.**
+  Lightbox men-seed dari aset galeri (punya `doc_total`/`doc_checked`), lalu
+  fetch `GET /assets/{id}?exclude_media=true` **mengganti** `fullAsset` dengan
+  respons yang TIDAK menghitung field itu (hanya ada di proyeksi list) → badge
+  hilang. Kini fullAsset **digabung** (`{...seed, ...data}`): field segar dari
+  server menang, hitungan dokumen dari seed dipertahankan → badge stabil.
+  (`components/assets/PhotoLightbox.jsx`)
+- **Bug: klik kotak select di galeri malah membuka lightbox.** Checkbox berada di
+  dalam area foto yang `onClick`-nya membuka lightbox; `stopPropagation` di
+  `onChange` tak menahan event **klik** yang menggelembung. Kotak select kini
+  dibungkus `<label>` ber-padding lebar dengan `onClick` stopPropagation →
+  ketuk di area select **hanya menyeleksi**, tidak membuka foto (fokus pengguna
+  saat memilih = seleksi). (`components/assets/AssetGalleryCard.jsx`)
+- Frontend saja; eslint bersih (0 error), `yarn build` sukses.
+
+---
+
 ## [#279] GPS pintar kamera: kunci koordinat aset ke jepretan PALING AKURAT — 2026-07-14
 
 - **Koordinat aset kini memakai fix GPS terakurat selama sesi kamera**, bukan
