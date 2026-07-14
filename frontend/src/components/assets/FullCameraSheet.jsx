@@ -3,11 +3,14 @@ import { createPortal } from "react-dom";
 import {
   X, Camera, MapPin, Clock, Pencil, SwitchCamera, Loader2, Check, Trash2,
   ChevronLeft, ChevronRight, RotateCcw, AlertTriangle, Zap, ZapOff, Sun, ScanLine,
+  Volume2, VolumeX, Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useBackGuard } from "../../hooks/useBackGuard";
 import { extractScannedCode } from "./QrScanButton";
 import { haptic } from "../../lib/haptics";
+import { playShutterSound, shutterSoundEnabled } from "../../lib/shutterSound";
+import { autoInventarisasiEnabled } from "../../lib/inventoryStatus";
 import {
   STATUS_OPTIONS, CONDITION_OPTIONS, SUB_KLASIFIKASI_OPTIONS,
   PENGGUNA_MELEKAT_OPTIONS, PENGGUNA_NAME_LABELS, OPERASIONAL_JENIS_OPTIONS,
@@ -155,6 +158,24 @@ const FullCameraSheet = memo(function FullCameraSheet({
   const scanSupported = typeof window !== "undefined" && "BarcodeDetector" in window;
   const [scanActive, setScanActive] = useState(() => !!(autoScan && scanSupported && onScanAsset));
   const scanDetectorRef = useRef(null);
+  // Bunyi rana (klik tersintesis) & status inventarisasi otomatis — preferensi
+  // dari localStorage, bisa dimatikan lewat toggle di overlay kamera.
+  const [soundOn, setSoundOn] = useState(() => shutterSoundEnabled());
+  const [autoInv, setAutoInv] = useState(() => autoInventarisasiEnabled());
+  const toggleSound = useCallback(() => {
+    setSoundOn((on) => {
+      const next = !on;
+      try { localStorage.setItem("aman_shutter_sound", next ? "on" : "off"); } catch { /* diam */ }
+      return next;
+    });
+  }, []);
+  const toggleAutoInv = useCallback(() => {
+    setAutoInv((on) => {
+      const next = !on;
+      try { localStorage.setItem("aman_auto_inventarisasi", next ? "on" : "off"); } catch { /* diam */ }
+      return next;
+    });
+  }, []);
 
   const supported = typeof navigator !== "undefined" && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
 
@@ -468,11 +489,16 @@ const FullCameraSheet = memo(function FullCameraSheet({
     // — Watermark Timemark: blok semi-transparan kiri-bawah —
     const fix = gpsRef.current;
     const t = new Date();
+    // Baris pengguna + jenis melekat — hanya ditambah bila ada datanya (jangan
+    // menaruh baris kosong). Nama pengguna jatuh ke nama jabatan bila diisi.
+    const pengguna = (formData?.user || formData?.pengguna_jabatan || "").trim();
+    const melekat = [formData?.pengguna_melekat_ke, formData?.operasional_jenis].filter(Boolean).join(" — ");
     const lines = [
       `${t.toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })}  ${t.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`,
       fix ? `GPS ${fix.lat}, ${fix.lng}${fix.accuracy != null ? ` (±${fix.accuracy} m)` : ""}` : "GPS: —",
       `${formData?.asset_code || "—"}${formData?.NUP ? `  NUP ${formData.NUP}` : ""}`,
       (formData?.asset_name || "Aset Baru") + (formData?.location ? ` • ${formData.location}` : ""),
+      ...((pengguna || melekat) ? [`Pengguna: ${pengguna}${melekat ? `  [${melekat}]` : ""}`] : []),
     ];
     const fs = Math.max(13, Math.round(canvas.width * 0.018));
     const lh = Math.round(fs * 1.4);
@@ -489,6 +515,7 @@ const FullCameraSheet = memo(function FullCameraSheet({
 
     const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
     haptic("shutter"); // tik ringan saat foto benar-benar terambil
+    playShutterSound(); // klik rana (best-effort; hormati toggle bunyi)
     onCapture(dataUrl);
   }, [photos.length, maxPhotos, formData, onCapture, suspended]);
 
@@ -699,6 +726,12 @@ const FullCameraSheet = memo(function FullCameraSheet({
                 {torchOn ? <Zap className="w-5 h-5" /> : <ZapOff className="w-5 h-5" />}
               </button>
             )}
+            {/* Bunyi rana on/off — klik tersintesis saat memotret. */}
+            <button type="button" onClick={toggleSound} aria-label={soundOn ? "Matikan bunyi rana" : "Nyalakan bunyi rana"}
+              aria-pressed={soundOn} data-testid="full-camera-sound"
+              className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${soundOn ? "bg-black/50 text-white" : "bg-black/50 text-white/45"}`}>
+              {soundOn ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+            </button>
             <button type="button" onClick={onClose} aria-label="Tutup kamera" data-testid="full-camera-close"
               className="w-10 h-10 rounded-full bg-black/50 text-white flex items-center justify-center">
               <X className="w-5 h-5" />
@@ -899,7 +932,15 @@ const FullCameraSheet = memo(function FullCameraSheet({
             {isEditing && onScanAsset && (
               <div className="space-y-3" data-testid="full-camera-edit-inventaris">
                 <div className="space-y-1">
-                  <p className="text-[11px] font-bold text-foreground">Status Inventarisasi</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[11px] font-bold text-foreground">Status Inventarisasi</p>
+                    {/* Auto-inventaris: bila ada foto + koordinat & status masih
+                        default, saat simpan status jadi "Sudah Diinventarisasi". */}
+                    <button type="button" onClick={toggleAutoInv} aria-pressed={autoInv} data-testid="full-camera-autoinv"
+                      className={`inline-flex items-center gap-1 h-6 px-2 rounded-full text-[10px] font-semibold transition-colors ${autoInv ? "bg-emerald-600 text-white" : "bg-muted text-muted-foreground"}`}>
+                      <Sparkles className="w-3 h-3" />Auto-inventaris {autoInv ? "ON" : "OFF"}
+                    </button>
+                  </div>
                   <div className="grid grid-cols-2 gap-1.5">
                     {STATUS_OPTIONS.map(o => (
                       <CamChip key={o.value} selected={formData?.inventory_status === o.value} cls={o.selected}
