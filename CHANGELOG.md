@@ -48,6 +48,44 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#270] Perbaikan UX HP: jaga posisi scroll setelah simpan + muat ulang cerdas (auto-sinkron) — 2026-07-14
+
+- **Posisi scroll HP tak melompat lagi setelah simpan.** Saat menutup form
+  sesudah menyimpan, `refreshData` dulu memuat ulang & **menyusun ulang jendela
+  galeri HP** (mengganti `mobileAssets` dengan satu halaman) sehingga posisi
+  scroll/baris terselect melompat. Kini penutupan form memakai opsi
+  `preserveMobile`: rekonsiliasi hitungan/daftar desktop TANPA menyentuh jendela
+  infinite-scroll HP — posisi & fokus pengguna ke data terjaga (baris tersimpan
+  sudah diperbarui optimis + via `onRowSynced`).
+- **Muat ulang cerdas, tanpa dialog mengganggu.** `useUnsyncedGuard` tak lagi
+  selalu menampilkan dialog konfirmasi bawaan peramban. Perilaku baru:
+  - tak ada antrian → **muat ulang biasa** (pembaruan aplikasi lancar, tak perlu
+    hapus cache manual);
+  - ada antrian & **online** → **otomatis sinkron** (best-effort, dipancing saat
+    `pagehide`/`beforeunload`) lalu reload berjalan — antrian juga persist di
+    IndexedDB + auto-flush saat load, jadi tak ada data tertinggal;
+  - ada antrian & **offline** → tetap ditahan dengan konfirmasi (data belum bisa
+    dikirim ke server).
+- Frontend saja. `yarn build` sukses, eslint bersih, uji `unloadGuard` lulus.
+
+---
+
+## [#269] Validasi lunak kode aset `GET /integritas/cek-kode` (§5A Prinsip 2) — 2026-07-14
+
+- **Endpoint read-only non-blocking** `GET /integritas/cek-kode?asset_code=...`
+  yang memvalidasi SATU kode aset terhadap referensi `db.kodefikasi` dan
+  mengembalikan `status`/`pesan` peringatan (bukan penolakan) — untuk umpan
+  balik **langsung** saat mengisi/menyunting kode aset. Melengkapi
+  `/integritas/kodefikasi-aset` (#262) yang memindai seluruh aset.
+- **Helper murni `cek_kode_kodefikasi(kode, terdaftar)`** (`kodefikasi_utils.py`)
+  → `{kode, level_kode, level_terdaftar, status, peringatan, pesan}`; status:
+  `kosong` / `ok` / `panjang_kode_tak_valid` / `golongan_tak_terdaftar` /
+  `kode_spesifik_tak_terdaftar`. Memakai `level_terdaftar_terdalam` yang sudah
+  ada. **6 unit test**. pytest **358 lulus**. Masterplan §5A gap #7 diperbarui.
+- Backend saja (pemasangan di form aset menyusul sebagai iterasi frontend).
+
+---
+
 ## [#268] Tab "Integritas" di panel Riwayat — dasbor integritas data (§5A) di UI — 2026-07-14
 
 - **Surface kapstone #266 ke UI.** Panel **Riwayat** (`AuditLogPanel`) kini punya

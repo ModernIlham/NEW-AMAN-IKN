@@ -279,7 +279,10 @@ berdampak-tertinggi lebih dulu.
    sudah** — helper murni `level_terdaftar_terdalam(kode, terdaftar)` + endpoint
    `GET /integritas/kodefikasi-aset` melaporkan kode aset yang golongan/level-nya
    TAK terdaftar di `db.kodefikasi` (peringatan non-blocking, agregasi per kode
-   distinct; #262). *Tersisa:* validasi saat create/impor aset (soft-warning) &
+   distinct; #262). ✅ **Validasi lunak per-kode sudah** — helper murni
+   `cek_kode_kodefikasi(kode, terdaftar)` + endpoint `GET /integritas/cek-kode`
+   memberi status/pesan peringatan untuk SATU kode (umpan balik langsung saat
+   input aset, non-blocking; #269). *Tersisa:* pasang di form aset (frontend) &
    lengkapi referensi.
 8. ⚠️ **Snapshot identitas aset basi** (Prinsip 1) — disalin, tak disegarkan.
    ✅ **Deteksi READ-ONLY sudah** — helper murni `identitas_drift(snapshot,

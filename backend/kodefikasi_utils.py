@@ -109,6 +109,46 @@ def is_persediaan_kode(kode: str) -> bool:
     return bool(kode) and kode[0] == "1"
 
 
+def cek_kode_kodefikasi(kode, terdaftar) -> dict:
+    """Cek SATU kode aset terhadap referensi kodefikasi (FK, §5A Prinsip 2) —
+    NON-BLOCKING (peringatan, bukan penolakan; jangan tolak data lama).
+
+    Kembalikan dict `{kode, level_kode, level_terdaftar, status, peringatan,
+    pesan}` dengan `status`:
+      - "kosong"                     → tak ada kode diisi (tanpa peringatan)
+      - "ok"                         → valid & terdaftar sampai level-nya
+      - "panjang_kode_tak_valid"     → panjang bukan level 1-5 (1/3/5/7/10 digit)
+      - "golongan_tak_terdaftar"     → level 1 pun belum terdaftar
+      - "kode_spesifik_tak_terdaftar"→ induk terdaftar tetapi kode ini belum
+    `peringatan` = True bila status bukan "ok"/"kosong". Fungsi murni —
+    pemanggil menyiapkan himpunan `terdaftar` (set kode kodefikasi).
+    """
+    k = normalize_kode(kode)
+    if not k:
+        return {"kode": "", "level_kode": None, "level_terdaftar": 0,
+                "status": "kosong", "peringatan": False, "pesan": ""}
+    level_kode = derive_level(k)
+    if not level_kode:
+        valid = "/".join(str(n) for n in LEVEL_LENGTHS.values())
+        return {"kode": k, "level_kode": None, "level_terdaftar": 0,
+                "status": "panjang_kode_tak_valid", "peringatan": True,
+                "pesan": f"Panjang kode '{k}' tidak sesuai level 1-5 ({valid} digit)."}
+    dalam = level_terdaftar_terdalam(k, terdaftar)
+    if dalam >= level_kode:
+        return {"kode": k, "level_kode": level_kode, "level_terdaftar": dalam,
+                "status": "ok", "peringatan": False, "pesan": ""}
+    if dalam == 0:
+        return {"kode": k, "level_kode": level_kode, "level_terdaftar": 0,
+                "status": "golongan_tak_terdaftar", "peringatan": True,
+                "pesan": f"Golongan '{k[:1]}' belum terdaftar di referensi "
+                         f"kodefikasi."}
+    return {"kode": k, "level_kode": level_kode, "level_terdaftar": dalam,
+            "status": "kode_spesifik_tak_terdaftar", "peringatan": True,
+            "pesan": f"Kode baru terdaftar sampai level {dalam} "
+                     f"({LEVEL_LABELS.get(dalam, '-')}); kode lengkap belum "
+                     f"terdaftar. Lengkapi referensi untuk validasi penuh."}
+
+
 def parse_import_rows(rows):
     """Normalisasi baris impor kodefikasi → (entries, errors).
 

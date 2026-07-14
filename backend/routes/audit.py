@@ -13,7 +13,7 @@ from integritas_utils import (
     gabung_temuan_integritas, hitung_masalah, identitas_drift,
 )
 from kodefikasi_utils import (
-    derive_level, level_terdaftar_terdalam, normalize_kode,
+    cek_kode_kodefikasi, derive_level, level_terdaftar_terdalam, normalize_kode,
 )
 from report_filters import active_asset_filter
 
@@ -182,6 +182,19 @@ async def integritas_kodefikasi_aset(_user: dict = Depends(require_user)):
             "kodefikasi-nya belum terdaftar di referensi. Non-blocking — tak "
             "menolak data lama; lengkapi referensi kodefikasi untuk menutup."),
     }
+
+
+@audit_router.get("/integritas/cek-kode")
+async def integritas_cek_kode(asset_code: str = "", _user: dict = Depends(require_user)):
+    """§5A Prinsip 2 (READ-ONLY, NON-BLOCKING): validasi LUNAK satu `asset_code`
+    terhadap referensi `db.kodefikasi`. Kembalikan status + pesan peringatan
+    (tanpa menolak) — untuk umpan balik langsung saat mengisi/menyunting kode
+    aset. Melengkapi `/integritas/kodefikasi-aset` yang memindai seluruh aset."""
+    terdaftar = set()
+    async for kdf in db.kodefikasi.find({}, {"_id": 0, "kode": 1}):
+        if kdf.get("kode"):
+            terdaftar.add(str(kdf["kode"]))
+    return cek_kode_kodefikasi(asset_code, terdaftar)
 
 
 @audit_router.get("/integritas/identitas-pemindahtanganan")

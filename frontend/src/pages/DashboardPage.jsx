@@ -453,11 +453,11 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     getLatestVersion,
   });
 
-  // Tahan muat-ulang / pindah versi selama masih ada data offline yang belum
-  // tersinkron (pending atau macet) — cegah pengguna menutup aplikasi di tengah
-  // sinkron tanpa sadar. Antrian sendiri sudah aman di IndexedDB + auto-flush
-  // saat online; guard ini pengaman terakhir (lihat useUnsyncedGuard).
-  useUnsyncedGuard({ pendingCount, actionCount });
+  // Muat-ulang ramah tapi aman: bila masih ada antrian & ONLINE → otomatis
+  // sinkron (best-effort) lalu reload lancar tanpa dialog; bila OFFLINE → tahan
+  // dgn konfirmasi; bila tak ada antrian → reload biasa (lihat useUnsyncedGuard).
+  const flushForUnload = useCallback(() => flushPending(false), [flushPending]);
+  useUnsyncedGuard({ pendingCount, actionCount, isOnline, onFlush: flushForUnload });
 
   // === ROW LOCKING ===
   const { rowLocks, setRowLocks, sessionId, lockAsset, unlockAsset } = useRowLocking({
@@ -682,7 +682,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     }
   };
 
-  const doFetch = async (page, size, search, category, sort, appendMobile = false) => {
+  const doFetch = async (page, size, search, category, sort, appendMobile = false, preserveMobile = false) => {
     // Offline: don't wait for a network timeout — serve the snapshot directly.
     if (!isOnlineRef.current) {
       const served = await serveFromSnapshot(page, size, search, category, sort, appendMobile);
@@ -719,7 +719,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       setCurrentPage(r.data.page || 1);
       if (appendMobile && page > 1) {
         setMobileAssets(prev => [...prev, ...newItems]);
-      } else {
+      } else if (!preserveMobile) {
         // Jendela galeri = [P, P]: JANGAN reset ke 1. Bila pindah dari halaman
         // tabel (mis. hal. 5) lalu ke galeri, jendela mulai di 5 sehingga
         // scroll-atas dapat memuat 4,3,2,1 (dua arah) dan scroll-bawah 6,7…
@@ -727,6 +727,9 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
         setMobileCurrentPage(r.data.page || 1);
         setMobileFirstPage(r.data.page || 1);
       }
+      // preserveMobile: sengaja TIDAK menyentuh mobileAssets/halaman galeri —
+      // jendela infinite-scroll + posisi scroll HP tetap; baris yang baru
+      // disimpan sudah diperbarui optimis + via onRowSynced.
       setOfflineServed(false); // live data on screen again
       setLoadingMessage(`Berhasil memuat ${newItems.length} dari ${r.data.total || 0} aset`);
       // Kembalikan baris halaman ini agar pemanggil (goToPage → alur simpan-
@@ -859,11 +862,14 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   // showLoading: user-initiated refetches (filter/sort/page-size) show the
   // list skeleton; background refreshes (post-save sync, WS) stay silent so
   // they never flash an overlay while someone is working.
-  const refreshData = (page, { showLoading = false } = {}) => {
+  const refreshData = (page, { showLoading = false, preserveMobile = false } = {}) => {
     const p = fetchParamsRef.current;
     const pg = page !== undefined ? page : p.currentPage;
     const work = Promise.all([
-      doFetch(pg, p.pageSize, p.debouncedSearch, p.filterCategory, p.sortBy),
+      // preserveMobile: rekonsiliasi daftar desktop + hitungan TANPA menyusun
+      // ulang jendela infinite-scroll HP (mencegah lompatan posisi scroll saat
+      // menutup form setelah simpan; baris tersimpan sudah diperbarui optimis).
+      doFetch(pg, p.pageSize, p.debouncedSearch, p.filterCategory, p.sortBy, false, preserveMobile),
       doFetchStats(p.debouncedSearch, p.filterCategory),
     ]);
     if (showLoading) {
@@ -1006,11 +1012,15 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
         return;
       }
       setEditAssetForForm(null);
-      // Deferred refresh: sync with server now that editing is done
+      // Deferred refresh: sync with server now that editing is done.
+      // preserveMobile: rekonsiliasi hitungan/daftar desktop TANPA menyusun
+      // ulang jendela galeri HP → posisi scroll & baris terselect tetap di
+      // tempat (fokus pengguna ke data terjaga). Baris yang baru disimpan sudah
+      // diperbarui optimis + via onRowSynced, jadi tak perlu muat ulang HP.
       const queueNeedsRefresh = consumeRefreshFlag();
       const wsNeedsRefresh = wsNeedsRefreshRef.current;
       wsNeedsRefreshRef.current = false;
-      if (queueNeedsRefresh || wsNeedsRefresh) refreshData();
+      if (queueNeedsRefresh || wsNeedsRefresh) refreshData(undefined, { preserveMobile: true });
     }, 300);
   }, [editAssetForForm, unlockAsset, syncStatuses, consumeRefreshFlag]);
 
