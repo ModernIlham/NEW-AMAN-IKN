@@ -35,6 +35,76 @@ function buildPhotoUrls(src) {
 }
 
 // ============================================================================
+// FULLSCREEN PHOTO — penampil foto layar penuh DI DALAM aplikasi (bukan tab
+// baru). Menampilkan foto resolusi ASLI/HD. Memakai Fullscreen API bila
+// tersedia; kalau ditolak (mis. iOS Safari untuk elemen non-video), overlay
+// `fixed inset-0` tetap memenuhi layar. useBackGuard memastikan tombol Back /
+// gesture geser MENUTUP penampil ini (kembali ke lightbox), BUKAN keluar
+// aplikasi — memperbaiki bug "Back saat fullscreen malah keluar aplikasi".
+// ============================================================================
+const FullscreenPhoto = memo(({ src, alt, rot = 0, onClose }) => {
+  const containerRef = useRef(null);
+  const [imgLoading, setImgLoading] = useState(true);
+  useBackGuard(onClose);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    let requested = false;
+    if (el && el.requestFullscreen) {
+      requested = true;
+      el.requestFullscreen().catch(() => { /* ditolak (mis. iOS) → overlay fixed tetap penuh layar */ });
+    }
+    // Keluar fullscreen via Escape/tombol sistem → tutup penampil juga.
+    const onFsChange = () => { if (!document.fullscreenElement) onClose(); };
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("fullscreenchange", onFsChange);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("fullscreenchange", onFsChange);
+      window.removeEventListener("keydown", onKey);
+      try { if (requested && document.fullscreenElement) document.exitFullscreen?.(); } catch { /* abaikan */ }
+    };
+  }, [onClose]);
+
+  const swapped = rot % 180 === 90; // 90°/270° → tinggi↔lebar bertukar
+  return createPortal(
+    <div
+      ref={containerRef}
+      className="fixed inset-0 z-[120] bg-black flex items-center justify-center"
+      onClick={onClose}
+      data-testid="lightbox-fullscreen-view"
+    >
+      <button
+        onClick={(e) => { e.stopPropagation(); onClose(); }}
+        title="Tutup layar penuh"
+        aria-label="Tutup layar penuh"
+        className="absolute top-3 right-3 z-10 w-10 h-10 rounded-full bg-black/50 hover:bg-black/70 text-white ring-1 ring-white/40 shadow-lg flex items-center justify-center backdrop-blur-sm transition-colors"
+        data-testid="lightbox-fullscreen-close"
+      >
+        <X className="w-5 h-5" />
+      </button>
+      {imgLoading && <Loader2 className="absolute w-10 h-10 text-white animate-spin" />}
+      <img
+        src={src}
+        alt={alt || "Foto"}
+        onLoad={() => setImgLoading(false)}
+        onError={() => setImgLoading(false)}
+        onClick={(e) => e.stopPropagation()}
+        className={`object-contain transition-opacity duration-200 ${imgLoading ? "opacity-0" : "opacity-100"}`}
+        style={{
+          transform: rot ? `rotate(${rot}deg)` : undefined,
+          maxHeight: swapped ? "100vw" : "100vh",
+          maxWidth: swapped ? "100vh" : "100vw",
+        }}
+        draggable={false}
+      />
+    </div>,
+    document.body
+  );
+});
+FullscreenPhoto.displayName = "FullscreenPhoto";
+
+// ============================================================================
 // LIGHTBOX - Photo gallery with full asset info
 // Dipakai bersama oleh galeri (AssetGalleryView) dan popup marker peta
 // (AssetMapFullView) — supaya pengalaman "buka foto" identik di kedua tempat.
@@ -60,6 +130,8 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
   const builtRef = useRef({ count: seed.current.count, version: seed.current.version });
   const [downloading, setDownloading] = useState(false);
   const [rot, setRot] = useState(0); // rotasi tampilan foto (0/90/180/270) — preview saja
+  const [fullscreen, setFullscreen] = useState(false); // penampil foto layar penuh DALAM aplikasi
+  const closeFullscreen = useCallback(() => setFullscreen(false), []);
 
   // Navigasi antar-ASET (bukan antar-foto): geser/klik pada kartu info → aset
   // sebelum/sesudah sesuai urutan & filter aktif (daftar `siblings` dari
@@ -118,18 +190,6 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
     } finally {
       setDownloading(false);
     }
-  }, [fullAsset, asset, idx]);
-
-  // Layar penuh: buka foto ASLI (resolusi penuh/HD) di TAB BARU — browser
-  // menampilkannya penuh dengan zoom native. Token disematkan via query
-  // (authMediaUrl memang dirancang untuk window.open). Dipanggil SINKRON pada
-  // klik → tak diblokir popup-blocker.
-  const openFullscreenOriginal = useCallback(() => {
-    const cur = fullAsset || asset;
-    const id = cur?.id;
-    if (!id) return;
-    const url = authMediaUrl(`${API}/assets/${id}/photos/${idx}?v=${builtRef.current.version}`); // tanpa w → asli
-    window.open(url, "_blank", "noopener,noreferrer");
   }, [fullAsset, asset, idx]);
 
   useEffect(() => {
@@ -249,6 +309,8 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
   const docTotal = a.doc_total || 0;
   // Parameter animasi geser kartu info (opacity peek + skala kartu depan).
   const anim = peekAnim(infoDragX);
+  // URL foto ASLI (resolusi penuh) untuk penampil layar penuh.
+  const fullSrc = a?.id ? authMediaUrl(`${API}/assets/${a.id}/photos/${idx}?v=${builtRef.current.version}`) : (photos[idx] || null);
 
   return createPortal(
     <div
@@ -270,9 +332,10 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
       {/* Photo area */}
       <div className="relative flex-1 flex items-center justify-center w-full max-w-4xl px-4" onClick={(e) => e.stopPropagation()}>
         {/* Toolbar foto (kiri-atas, tumpuk vertikal): Unduh asli · Layar penuh
-            (buka HD asli di tab baru) · Putar 90°. Ikon di lingkaran gelap semi-
-            transparan + cincin putih agar kontras di light/dark & di atas warna
-            foto apa pun. Yang tampil di lightbox hanya varian preview (w=1280). */}
+            (HD asli, DALAM aplikasi — Back kembali ke lightbox, bukan keluar app) ·
+            Putar 90°. Ikon di lingkaran gelap semi-transparan + cincin putih agar
+            kontras di light/dark & di atas warna foto apa pun. Lightbox tampil
+            preview (w=1280). */}
         {!loading && photos.length > 0 && (
           <div className="absolute left-2 top-2 z-10 flex flex-col gap-1.5" onClick={(e) => e.stopPropagation()}>
             <button
@@ -286,9 +349,9 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
               {downloading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
             </button>
             <button
-              onClick={(e) => { e.stopPropagation(); openFullscreenOriginal(); }}
-              title="Layar penuh — buka foto HD asli di tab baru"
-              aria-label="Layar penuh (foto HD asli di tab baru)"
+              onClick={(e) => { e.stopPropagation(); setFullscreen(true); }}
+              title="Layar penuh (foto HD asli)"
+              aria-label="Layar penuh (foto HD asli)"
               className="w-10 h-10 rounded-full bg-black/50 hover:bg-black/70 text-white ring-1 ring-white/40 shadow-lg flex items-center justify-center backdrop-blur-sm transition-colors"
               data-testid="lightbox-fullscreen"
             >
@@ -414,6 +477,9 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
           </div>
         </div>
       </div>
+      {fullscreen && fullSrc && (
+        <FullscreenPhoto src={fullSrc} alt={a.name || a.asset_name} rot={rot} onClose={closeFullscreen} />
+      )}
     </div>,
     document.body
   );
