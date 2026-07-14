@@ -285,10 +285,11 @@ berdampak-tertinggi lebih dulu.
    ✅ **Deteksi READ-ONLY sudah** — helper murni `identitas_drift(snapshot,
    master)` + endpoint `GET /integritas/identitas-penghapusan` melaporkan
    snapshot `asset_code/NUP/asset_name` yang basi (atau master hilang) di
-   register `usulan_penghapusan` vs master terkini (#261) **dan register
-   `pemindahtanganan`** (per baris `aset[]`, lookup master batch `$in`, helper
-   murni `drift_identitas_daftar`, #263). *Tersisa:* perluas ke register hilir
-   lain (pemeliharaan/penggunaan/…) & penyegaran otomatis saat master aset diedit.
+   register `usulan_penghapusan` vs master terkini (#261), register
+   `pemindahtanganan` (#263), **dan SK PSP Penggunaan `db.psp`** (per baris
+   `aset[]`, lookup master batch `$in`, helper murni `drift_identitas_daftar` +
+   `hitung_masalah`, #264). *Tersisa:* register `jadwal_pemeliharaan` &
+   penyegaran otomatis saat master aset diedit.
 
 > Aturan: tiap gap ditutup sebagai fitur kecil ber-PR (verifikasi → CI → deploy),
 > dengan proyeksi master memakai pola OCC `find_one_and_update` bersyarat +

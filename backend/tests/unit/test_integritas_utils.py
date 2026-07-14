@@ -79,3 +79,23 @@ def test_daftar_campuran_dan_kosong():
     out = drift_identitas_daftar(aset, master)
     masalah = {t["asset_id"]: t["masalah"] for t in out}
     assert masalah == {"basi": "snapshot_basi", "hilang": "aset_master_hilang"}
+
+
+# ── Ringkasan hitungan masalah — §5A gap #8 slice 3 (#264) ──
+from integritas_utils import hitung_masalah
+
+
+def test_hitung_masalah():
+    temuan = [
+        {"asset_id": "a", "masalah": "snapshot_basi"},
+        {"asset_id": "b", "masalah": "aset_master_hilang"},
+        {"asset_id": "c", "masalah": "snapshot_basi"},
+    ]
+    assert hitung_masalah(temuan) == {"snapshot_basi": 2, "aset_master_hilang": 1}
+
+
+def test_hitung_masalah_kosong_dan_aman():
+    assert hitung_masalah([]) == {}
+    assert hitung_masalah(None) == {}
+    # entri tanpa 'masalah' diabaikan
+    assert hitung_masalah([{"asset_id": "x"}, {}]) == {}

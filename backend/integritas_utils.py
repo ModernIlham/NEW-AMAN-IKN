@@ -62,3 +62,16 @@ def drift_identitas_daftar(aset_list, master_by_id):
             out.append({"asset_id": aid, "masalah": "snapshot_basi",
                         "drift": drift})
     return out
+
+
+def hitung_masalah(temuan):
+    """Ringkas daftar temuan (mis. dari `drift_identitas_daftar`) → dict hitungan
+    per nilai field `masalah`, mis. `{"snapshot_basi": 2, "aset_master_hilang":
+    1}`. Fungsi murni — memudahkan endpoint integritas menyajikan ringkasan
+    konsisten."""
+    out = {}
+    for t in temuan or []:
+        m = (t or {}).get("masalah")
+        if m:
+            out[m] = out.get(m, 0) + 1
+    return out

@@ -9,7 +9,7 @@ from db import db
 from auth_utils import require_user
 from penghapusan_utils import normalisasi_jejak_terhapus, rekap_jejak_terhapus
 from integritas_utils import (
-    FIELD_IDENTITAS, drift_identitas_daftar, identitas_drift,
+    FIELD_IDENTITAS, drift_identitas_daftar, hitung_masalah, identitas_drift,
 )
 from kodefikasi_utils import (
     derive_level, level_terdaftar_terdalam, normalize_kode,
@@ -219,4 +219,38 @@ async def integritas_identitas_pemindahtanganan(_user: dict = Depends(require_us
         "catatan": (
             "Deteksi read-only snapshot identitas aset basi di register "
             "pemindahtanganan (§5A Prinsip 1). Belum menyegarkan otomatis."),
+    }
+
+
+@audit_router.get("/integritas/identitas-psp")
+async def integritas_identitas_psp(_user: dict = Depends(require_user)):
+    """§5A Prinsip 1 (READ-ONLY, lanjutan #261/#263): deteksi snapshot identitas
+    aset basi pada register SK PSP Penggunaan (`db.psp`, per baris `aset[]`).
+    Master di-lookup BATCH via `$in` (hindari N+1)."""
+    sk_list = [s async for s in db.psp.find(
+        {}, {"_id": 0, "id": 1, "nomor_sk": 1, "status_pengajuan": 1, "aset": 1})]
+    ids = {str(r.get("asset_id") or "")
+           for s in sk_list for r in (s.get("aset") or [])
+           if r.get("asset_id")}
+    master_by_id = {}
+    if ids:
+        async for a in db.assets.find(
+                {"id": {"$in": list(ids)}},
+                {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1}):
+            master_by_id[a["id"]] = a
+
+    items = []
+    for s in sk_list:
+        for t in drift_identitas_daftar(s.get("aset"), master_by_id):
+            items.append({"psp_id": s.get("id"), "nomor_sk": s.get("nomor_sk"),
+                          "status_pengajuan": s.get("status_pengajuan"), **t})
+    ringkas = hitung_masalah(items)
+    return {
+        "jumlah": len(items),
+        "snapshot_basi": ringkas.get("snapshot_basi", 0),
+        "aset_master_hilang": ringkas.get("aset_master_hilang", 0),
+        "items": items,
+        "catatan": (
+            "Deteksi read-only snapshot identitas aset basi di register SK PSP "
+            "Penggunaan (§5A Prinsip 1). Belum menyegarkan otomatis."),
     }
