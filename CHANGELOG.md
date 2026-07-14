@@ -48,6 +48,22 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#265] Deteksi identitas aset basi di register jadwal pemeliharaan (read-only) — §5A Prinsip 1 — 2026-07-14
+
+- **Perluasan §5A gap #8 / Prinsip 1 (lanjutan #261/#263/#264).** Endpoint
+  **read-only** `GET /integritas/identitas-jadwal-pemeliharaan` mendeteksi
+  snapshot identitas aset basi pada register `jadwal_pemeliharaan` (membekukan
+  identitas per record) — master di-lookup **batch `$in`** (hindari N+1);
+  laporkan `snapshot_basi` / `aset_master_hilang` + hitungan.
+- **Helper murni `drift_identitas_tunggal(snapshot, master)`**
+  (`integritas_utils.py`) — temuan untuk SATU record (blok bangun register
+  single-snapshot; melengkapi `drift_identitas_daftar` untuk list). **3 unit test**.
+- Deteksi identitas basi kini mencakup **empat** register hilir (penghapusan
+  #261, pemindahtanganan #263, SK PSP #264, jadwal pemeliharaan #265). Read-only.
+  pytest **345 lulus**. Masterplan §5A gap #8 diperbarui.
+
+---
+
 ## [#264] Deteksi identitas aset basi di register SK PSP Penggunaan (read-only) — §5A Prinsip 1 — 2026-07-14
 
 - **Perluasan §5A gap #8 / Prinsip 1 (lanjutan #261/#263).** Endpoint **read-only**
