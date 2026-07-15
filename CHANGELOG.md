@@ -48,6 +48,26 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#284] Penyusutan PSAP 07: henti-susut juga untuk aset HILANG (Tidak Ditemukan) yang telah diusulkan penghapusan — 2026-07-15
+
+- **Lanjutan koreksi #282 (PMK 65/2017 · PSAP 07 · pustaka §5).** Pustaka §5
+  menyebut *"aset **hilang** / rusak berat yang **telah diusulkan** →
+  direklasifikasi keluar aset tetap"*. #282 sudah menangani **rusak berat**;
+  PR ini melengkapi sisi **hilang**.
+- **Aset berstatus inventarisasi "Tidak Ditemukan"** kini diperlakukan setara
+  rusak berat untuk henti-susut: **tetap disusutkan** selama masih tercatat
+  sebagai aset tetap, dan baru **dihentikan** penyusutannya bila **telah
+  diusulkan** penghapusan (usulan aktif — belum ditolak).
+- **Dampak angka:** aset hilang yang **belum** diusulkan tetap masuk nilai buku
+  per golongan (tidak lebih/kurang saji); yang **sudah** diusulkan pindah ke
+  daftar telaah *henti-susut* dengan alasan "Hilang (Tidak Ditemukan)".
+- Perubahan **murni & teruji**: `status_susut` kini membaca `inventory_status`
+  di samping `condition`; endpoint `GET /penilaian/penyusutan` menyertakan
+  `inventory_status` pada proyeksi. **18 unit test** lulus (2 uji baru); tanpa
+  data ditebak.
+
+---
+
 ## [#283] Layar penuh foto: cubit & gulir untuk zoom in/out + seret untuk menggeser (tanpa tombol) — 2026-07-15
 
 - **Penampil foto layar penuh (dari pop-up foto) kini bisa di-zoom** — sebelumnya

@@ -43,7 +43,8 @@ async def _peta_masa_manfaat():
     return peta, entri
 
 _PROJ = {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
-         "purchase_price": 1, "purchase_date": 1, "condition": 1}
+         "purchase_price": 1, "purchase_date": 1, "condition": 1,
+         "inventory_status": 1}
 _MAKS_BARIS = 500
 
 

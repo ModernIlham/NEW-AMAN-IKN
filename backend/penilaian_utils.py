@@ -7,11 +7,11 @@ dengan konvensi semester penuh. Masa manfaat per KELOMPOK kodefikasi
 
 Prinsip kejujuran data: kelompok yang belum punya masa manfaat terdaftar
 TIDAK ditebak — asetnya masuk daftar "perlu referensi". Aset Rusak Berat
-TIDAK otomatis berhenti disusutkan: selama masih tercatat sebagai aset
-tetap ia tetap disusutkan; penyusutan baru DIHENTIKAN (henti-susut) saat
-aset rusak berat itu TELAH DIUSULKAN penghapusan/pemindahtanganan/
-pemusnahan — direklasifikasi keluar aset tetap (PMK 65/2017, pustaka §5).
-Fungsi murni tanpa Mongo/IO agar teruji unit.
+atau Hilang (Tidak Ditemukan) TIDAK otomatis berhenti disusutkan: selama
+masih tercatat sebagai aset tetap ia tetap disusutkan; penyusutan baru
+DIHENTIKAN (henti-susut) saat aset rusak berat/hilang itu TELAH DIUSULKAN
+penghapusan/pemindahtanganan/pemusnahan — direklasifikasi keluar aset
+tetap (PMK 65/2017, pustaka §5). Fungsi murni tanpa Mongo/IO agar teruji unit.
 """
 from datetime import date
 
@@ -72,19 +72,23 @@ def status_susut(asset, peta=None, diusulkan=False):
     """('susut'|'henti'|'tanpa_referensi'|'tidak', alasan, masa_tahun|None).
 
     `diusulkan` = aset SUDAH punya usulan penghapusan aktif (belum ditolak).
-    Rusak Berat SAJA tidak menghentikan penyusutan — aset tetap disusutkan
-    selama masih tercatat sebagai aset tetap. Henti-susut hanya berlaku saat
-    aset rusak berat itu TELAH DIUSULKAN penghapusan (reklas keluar aset
-    tetap, PMK 65/2017 — pustaka §5).
+    Kondisi Rusak Berat / status Hilang (Tidak Ditemukan) SAJA tidak
+    menghentikan penyusutan — aset tetap disusutkan selama masih tercatat
+    sebagai aset tetap. Henti-susut hanya berlaku saat aset rusak berat ATAU
+    hilang itu TELAH DIUSULKAN penghapusan (reklas keluar aset tetap, PMK
+    65/2017 — pustaka §5: "aset hilang / rusak berat yang telah diusulkan").
     """
     peta = MASA_MANFAAT_DEFAULT if peta is None else peta
     kode = str(asset.get("asset_code") or "").strip()
     gol = golongan_of(kode)
     if gol in GOLONGAN_TANPA_SUSUT:
         return "tidak", GOLONGAN_TANPA_SUSUT[gol], None
-    if diusulkan and str(asset.get("condition") or "").strip() == "Rusak Berat":
+    rusak_berat = str(asset.get("condition") or "").strip() == "Rusak Berat"
+    hilang = str(asset.get("inventory_status") or "").strip() == "Tidak Ditemukan"
+    if diusulkan and (rusak_berat or hilang):
+        dasar = "Rusak Berat" if rusak_berat else "Hilang (Tidak Ditemukan)"
         return ("henti",
-                "Rusak Berat & telah diusulkan penghapusan — penyusutan dihentikan (reklas keluar aset tetap, PMK 65/2017)",
+                f"{dasar} & telah diusulkan penghapusan — penyusutan dihentikan (reklas keluar aset tetap, PMK 65/2017)",
                 None)
     masa = peta.get(kode[:5])
     if not masa:
