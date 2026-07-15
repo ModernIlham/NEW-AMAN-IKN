@@ -3,8 +3,8 @@ import pytest
 
 from penilaian_utils import (
     GOLONGAN_TANPA_SUSUT, MASA_MANFAAT_DEFAULT, build_asset_revaluasi_projection,
-    hitung_penyusutan, rekap_penyusutan, semester_index, status_susut,
-    validate_masa_manfaat,
+    dasar_penyusutan, hitung_penyusutan, rekap_penyusutan, semester_index,
+    status_susut, validate_masa_manfaat,
 )
 
 
@@ -161,6 +161,44 @@ def test_rekap_hilang_henti_hanya_bila_diusulkan():
     r2 = rekap_penyusutan(assets, "2026-07-12", diusulkan_ids={"hl"})
     assert len(r2["henti"]) == 1 and r2["henti"][0]["id"] == "hl"
     assert r2["total"]["jumlah"] == 0
+
+
+def test_dasar_penyusutan_revaluasi_vs_perolehan():
+    # Tanpa revaluasi → basis & tanggal perolehan historis
+    harga, mulai, sumber = dasar_penyusutan(_aset())
+    assert harga == 280_000_000 and mulai == "2023-03-15" and sumber == "perolehan"
+    # Sudah direvaluasi final → basis nilai revaluasi, mulai tanggal revaluasi
+    harga, mulai, sumber = dasar_penyusutan(_aset(
+        nilai_wajar_terakhir=350_000_000,
+        revaluasi={"tanggal_dokumen": "2025-06-30"}))
+    assert harga == 350_000_000 and mulai == "2025-06-30" and sumber == "revaluasi"
+    # Nilai wajar 0 / tanpa tanggal revaluasi → fallback ke perolehan (defensif)
+    _, _, s1 = dasar_penyusutan(_aset(nilai_wajar_terakhir=0,
+                                      revaluasi={"tanggal_dokumen": "2025-06-30"}))
+    _, _, s2 = dasar_penyusutan(_aset(nilai_wajar_terakhir=350_000_000,
+                                      revaluasi={"tanggal_dokumen": ""}))
+    _, _, s3 = dasar_penyusutan(_aset(nilai_wajar_terakhir=350_000_000))  # tak ada subdoc
+    assert s1 == "perolehan" and s2 == "perolehan" and s3 == "perolehan"
+
+
+def test_rekap_pakai_basis_revaluasi():
+    # Aset direvaluasi 350jt per 30 Jun 2025 (Sem I 2025); masa 7 th = 14 sem.
+    # Posisi 2026-07-12 (Sem II 2026) → 3 semester berlalu sejak revaluasi.
+    a = _aset(id="rv", purchase_price=280_000_000, purchase_date="2023-03-15",
+              nilai_wajar_terakhir=350_000_000,
+              revaluasi={"tanggal_dokumen": "2025-06-30"})
+    r = rekap_penyusutan([a], "2026-07-12")
+    g3 = r["per_golongan"][0]
+    # Nilai perolehan = NILAI REVALUASI (350jt), bukan harga beli 280jt
+    assert g3["nilai_perolehan"] == pytest.approx(350_000_000)
+    assert g3["akumulasi"] == pytest.approx(75_000_000)   # 3 sem × 350jt/14
+    assert g3["nilai_buku"] == pytest.approx(275_000_000)
+    assert r["jumlah_revaluasi"] == 1
+    # Bandingkan: tanpa revaluasi (basis historis) nilai buku jauh lebih kecil
+    a2 = _aset(id="hist")  # 280jt, 2023-03-15
+    r2 = rekap_penyusutan([a2], "2026-07-12")
+    assert r2["jumlah_revaluasi"] == 0
+    assert r2["per_golongan"][0]["nilai_buku"] == pytest.approx(140_000_000)
 
 
 def test_rekap_kosong_aman():

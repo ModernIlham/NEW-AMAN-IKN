@@ -312,16 +312,33 @@ yang TELAH diusulkan pemindahtanganan/pemusnahan/penghapusan →
 direklasifikasi keluar aset tetap + diungkap CaLK. Aset habis masa manfaat:
 nilai buku **0** (bukan Rp1), tetap tersaji bruto sampai SK penghapusan.
 
+**Pasca-revaluasi (penilaian kembali) — TERVERIFIKASI.** Aset yang telah
+direvaluasi final "terlahir kembali": **nilai perolehan BARU = nilai
+revaluasi** (nilai wajar hasil penilaian DJKN); **akumulasi penyusutan pada
+tanggal revaluasi DIELIMINASI** (metode eliminasi → nilai buku baru = nilai
+revaluasi; selisih terhadap nilai buku lama diakui sebagai *Selisih
+Revaluasi Aset Tetap* di ekuitas); **masa manfaat DI-RESET PENUH** per
+kelompok, dihitung **ulang sejak tanggal revaluasi**. Metode/konvensi lain
+(garis lurus, tanpa residu, semesteran, konvensi semester penuh) **tidak
+berubah**. Dasar: **PMK 118/PMK.06/2017 jo. 57/2018 jo. 107/2019** +
+**Buletin Teknis SAP No. 18 (Penyusutan)** — dikonfirmasi dari sumber primer
+oleh pemilik proyek (Juli 2026; sebelumnya §14 butir 23 "perlu verifikasi");
+rujukan sekunder: DJKN, BPK, PKN STAN, KSAP. (Akses PDF primer terblokir dari
+lingkungan build — verifikasi teks primer dilakukan pemilik proyek.)
+
 **Harapan auditor:** LBKP memuat Laporan Penyusutan per golongan; CaLK
 mengungkap kebijakan (dasar hukum, metode, periodisitas, tabel); saldo
 akumulasi penyusutan laporan barang = neraca keuangan (rekonsiliasi);
 aset henti-susut/nilai-buku-nol diungkap jumlahnya.
 
-**Terapan AMAN (iterasi 29):** logika murni penyusutan garis lurus
-semesteran + rekap per golongan dari tanggal perolehan & harga aset;
-kelompok tanpa masa manfaat terdaftar TIDAK ditebak — masuk daftar
-"perlu referensi" (tanpa data dummy). Referensi masa manfaat editable &
-seed lengkap dari lampiran KMK menyusul.
+**Terapan AMAN (iterasi 29 + koreksi lanjutan):** logika murni penyusutan
+garis lurus semesteran + rekap per golongan; kelompok tanpa masa manfaat
+terdaftar TIDAK ditebak — masuk daftar "perlu referensi" (tanpa data dummy).
+**Henti-susut** hanya untuk aset rusak berat/hilang yang **telah diusulkan**
+penghapusan (#281/#283). **Penyusutan sadar-revaluasi**: aset ber-`nilai_
+wajar_terakhir` (status SAKTI tercatat) disusutkan atas nilai revaluasi
+dengan masa manfaat reset penuh sejak tanggal revaluasi (`dasar_penyusutan`).
+Referensi masa manfaat editable (#107).
 
 ---
 
@@ -833,13 +850,20 @@ fisik; barang untuk pemda/masyarakat tidak segera di-BAST-kan.
     (lainnya); ≤6 bulan tanpa persetujuan Pengelola; apakah persetujuan
     alih status merangkap PSP baru — semua dari cuplikan, nomor pasal
     belum terkonfirmasi dari teks asli PMK 40/2024.
-23. Penilaian/revaluasi (riset Juli 2026, #184): rantai PMK 111/2017 →
-    173/2020 → PMK 99 Tahun 2024 (tanggal berlaku dua versi); status
-    PMK 118/2017 jo. 57/2018 jo. 107/2019 "masih berlaku"; perlakuan
-    akuntansi reval (nilai perolehan baru, akumulasi reset nol, masa
-    manfaat baru = faktor kondisi × masa manfaat); alur koreksi
-    revaluasi SAKTI (push pusat, verifikasi vs LHIP, validasi-approve);
-    masa berlaku Laporan Penilaian — semua dari cuplikan (403).
+23. Penilaian/revaluasi (riset Juli 2026, #184; **PERLAKUAN AKUNTANSI
+    PASCA-REVALUASI DIVERIFIKASI Juli 2026 oleh pemilik proyek dari sumber
+    primer**): rantai PMK 111/2017 → 173/2020 → PMK 99 Tahun 2024; PMK
+    118/2017 jo. 57/2018 jo. 107/2019 masih berlaku. **KONFIRMASI perlakuan
+    akuntansi (PMK 118/2017 + Bultek SAP 18):** nilai perolehan baru = nilai
+    revaluasi; akumulasi penyusutan **dieliminasi (nol)**; masa manfaat
+    **DI-RESET PENUH per kelompok** (bukan sisa — faktor kondisi masuk ke
+    *nilai wajar* oleh DJKN, BUKAN ke jadwal susut, mengoreksi hipotesis
+    lama "faktor kondisi × masa manfaat"); garis lurus/tanpa residu/
+    semesteran/semester penuh tetap. Diterapkan di `dasar_penyusutan`
+    (#284, §5). PDF primer terblokir dari lingkungan build → teks primer
+    diverifikasi pemilik proyek. **Sisa belum terkonfirmasi teks primer:**
+    masa berlaku Laporan Penilaian & tanggal-berlaku dua-versi PMK 99/2024;
+    alur koreksi revaluasi SAKTI (push pusat, verifikasi vs LHIP).
 24. Fasilitas transaksi pemanfaatan (riset Juli 2026, #190): PMK 18
     Tahun 2024 — tanggal penetapan (24 vs 25 Mar) & berlaku (15 vs 16
     Apr 2024); rumusan pasal definisi PJPB (Pengguna saja atau juga
