@@ -102,9 +102,14 @@ def status_susut(asset, peta=None, diusulkan=False):
         return ("tanpa_referensi",
                 f"Kelompok {kode[:5] or '?'} belum punya masa manfaat terdaftar — lengkapi referensi KMK",
                 None)
-    if semester_index(asset.get("purchase_date")) is None:
+    # Gerbang pada TITIK-MULAI EFEKTIF penyusutan (aset revaluasi dimulai dari
+    # tanggal revaluasi; lihat dasar_penyusutan) — bukan hanya purchase_date —
+    # agar aset revaluasi yang tanggal perolehannya kosong tetap dapat
+    # disusutkan dari basis revaluasi (temuan review).
+    _harga, mulai, _sumber = dasar_penyusutan(asset)
+    if semester_index(mulai) is None:
         return ("tanpa_referensi",
-                "Tanggal perolehan tidak tercatat — lengkapi data aset",
+                "Tanggal perolehan/revaluasi tidak tercatat — lengkapi data aset",
                 None)
     return "susut", "", masa
 
@@ -190,8 +195,10 @@ def rekap_penyusutan(assets, per_iso, peta=None, uraian_golongan=None,
             tidak[alasan] = tidak.get(alasan, 0) + 1
             continue
         if status == "henti":
+            # Tampilkan basis tercatat efektif (nilai revaluasi bila ada),
+            # bukan selalu harga perolehan historis (temuan review, informasional).
             henti.append({**ident, "alasan": alasan,
-                          "harga": parse_harga(a.get("purchase_price"))})
+                          "harga": dasar_penyusutan(a)[0]})
             continue
         if status == "tanpa_referensi":
             tanpa_ref.append({**ident, "alasan": alasan})

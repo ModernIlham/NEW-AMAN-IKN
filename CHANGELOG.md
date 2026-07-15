@@ -48,6 +48,27 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#288] Koreksi hasil review: aset revaluasi tanpa tanggal perolehan tetap disusutkan — 2026-07-15
+
+- **Tindak lanjut review menyeluruh penyusutan.** Perbaikan **kebenaran** yang
+  ditemukan reviewer independen:
+  - **status_susut** kini menggerbang pada **titik-mulai efektif** penyusutan
+    (tanggal revaluasi untuk aset revaluasi; lihat `dasar_penyusutan`) — bukan
+    hanya `purchase_date`. Aset yang **sudah direvaluasi** tetapi tanggal
+    perolehannya kosong kini **tetap disusutkan** atas basis revaluasi (dulu
+    keliru masuk "tanpa referensi" & keluar dari hitungan).
+  - **Daftar telaah henti-susut** menampilkan **basis tercatat efektif** (nilai
+    revaluasi bila ada), bukan selalu harga perolehan historis (informasional).
+- **2 unit test baru** (total 22 lulus): revaluasi tanpa tanggal perolehan →
+  susut; revaluasi dengan tanggal invalid + perolehan kosong → tanpa_referensi
+  (fallback aman); henti-susut ber-revaluasi → harga = nilai revaluasi.
+- **Catatan:** satu temuan konvensi (posisi tepat pada tanggal tutup buku 30 Jun/
+  31 Des memasukkan semester yang ditutup) SENGAJA belum diubah — menunggu
+  keputusan pemilik proyek karena mengubah angka pelaporan. Nits kosmetik
+  (pembulatan tampilan ±Rp1) dibiarkan.
+
+---
+
 ## [#287] Laporan Penyusutan BMN per golongan (PDF siap tanda tangan) — 2026-07-15
 
 - **Memenuhi harapan auditor (pustaka §5).** Tombol **"PDF"** di halaman

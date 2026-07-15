@@ -181,6 +181,31 @@ def test_dasar_penyusutan_revaluasi_vs_perolehan():
     assert s1 == "perolehan" and s2 == "perolehan" and s3 == "perolehan"
 
 
+def test_status_susut_revaluasi_tanpa_tanggal_perolehan():
+    # Aset revaluasi valid tapi purchase_date KOSONG → tetap SUSUT (disusutkan
+    # dari tanggal revaluasi), bukan tanpa_referensi (temuan review #2).
+    a = _aset(purchase_date="", nilai_wajar_terakhir=500_000_000,
+              revaluasi={"tanggal_dokumen": "2025-06-30"})
+    status, _, masa = status_susut(a)
+    assert status == "susut" and masa == 7
+    # Revaluasi tanpa tanggal valid & perolehan kosong → tanpa_referensi (fallback)
+    b = _aset(purchase_date="", nilai_wajar_terakhir=500_000_000,
+              revaluasi={"tanggal_dokumen": ""})
+    status, alasan, _ = status_susut(b)
+    assert status == "tanpa_referensi"
+
+
+def test_rekap_henti_pakai_basis_revaluasi():
+    # Henti-susut yang sudah direvaluasi → "harga" tampil = nilai revaluasi
+    # (basis tercatat efektif), bukan harga perolehan historis (temuan review #4).
+    a = _aset(id="rb", condition="Rusak Berat",
+              nilai_wajar_terakhir=400_000_000,
+              revaluasi={"tanggal_dokumen": "2025-06-30"})
+    r = rekap_penyusutan([a], "2026-07-12", diusulkan_ids={"rb"})
+    assert len(r["henti"]) == 1
+    assert r["henti"][0]["harga"] == pytest.approx(400_000_000)
+
+
 def test_rekap_pakai_basis_revaluasi():
     # Aset direvaluasi 350jt per 30 Jun 2025 (Sem I 2025); masa 7 th = 14 sem.
     # Posisi 2026-07-12 (Sem II 2026) → 3 semester berlalu sejak revaluasi.
