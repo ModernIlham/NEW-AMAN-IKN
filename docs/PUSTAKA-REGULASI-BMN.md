@@ -338,7 +338,9 @@ terdaftar TIDAK ditebak — masuk daftar "perlu referensi" (tanpa data dummy).
 penghapusan (#281/#283). **Penyusutan sadar-revaluasi**: aset ber-`nilai_
 wajar_terakhir` (status SAKTI tercatat) disusutkan atas nilai revaluasi
 dengan masa manfaat reset penuh sejak tanggal revaluasi (`dasar_penyusutan`).
-Referensi masa manfaat editable (#107).
+Referensi masa manfaat editable (#107). **Laporan Penyusutan per golongan**
+kini tersedia sebagai **PDF siap tanda tangan** (nilai perolehan/akumulasi/
+nilai buku per golongan + ringkasan telaah) — memenuhi harapan auditor §5.
 
 ---
 
