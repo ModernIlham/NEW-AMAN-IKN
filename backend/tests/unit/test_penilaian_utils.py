@@ -58,12 +58,27 @@ def test_status_susut_normal_dan_pengecualian():
     assert status == "susut" and masa == 7  # alat angkutan darat bermotor
     status, alasan, _ = status_susut(_aset(asset_code="2010104001"))
     assert status == "tidak" and "Tanah" in alasan
-    status, alasan, _ = status_susut(_aset(condition="Rusak Berat"))
+    # Rusak Berat TANPA usulan penghapusan → tetap disusutkan (bukan henti)
+    status, _, masa = status_susut(_aset(condition="Rusak Berat"))
+    assert status == "susut" and masa == 7
+    # Rusak Berat DENGAN usulan penghapusan aktif → henti-susut (reklas keluar)
+    status, alasan, _ = status_susut(_aset(condition="Rusak Berat"), diusulkan=True)
     assert status == "henti" and "penghapusan" in alasan
+    # diusulkan tapi kondisi Baik → tetap susut (henti hanya untuk rusak berat)
+    status, _, masa = status_susut(_aset(), diusulkan=True)
+    assert status == "susut" and masa == 7
     status, alasan, _ = status_susut(_aset(asset_code="3999901001"))
     assert status == "tanpa_referensi" and "39999" in alasan
     status, alasan, _ = status_susut(_aset(purchase_date=""))
     assert status == "tanpa_referensi" and "perolehan" in alasan
+
+
+def test_status_susut_rusak_berat_tanpa_referensi_tetap_telaah():
+    # Rusak Berat belum diusulkan + kelompok tanpa masa manfaat → jatuh ke
+    # tanpa_referensi (bukan henti) — konsisten dengan aturan reklas.
+    status, alasan, _ = status_susut(
+        _aset(condition="Rusak Berat", asset_code="3999901001"))
+    assert status == "tanpa_referensi" and "39999" in alasan
 
 
 def test_hitung_garis_lurus_semesteran_konvensi_penuh():
@@ -104,7 +119,8 @@ def test_rekap_pisah_bucket_dan_total():
         _aset(id="a5", purchase_price=8_000_000, asset_code="3100101001",
               purchase_date="2018-01-01"),                         # komputer, habis
     ]
-    r = rekap_penyusutan(assets, "2026-07-12")
+    # a3 rusak berat DAN diusulkan penghapusan → masuk henti (reklas keluar)
+    r = rekap_penyusutan(assets, "2026-07-12", diusulkan_ids={"a3"})
     assert r["total"]["jumlah"] == 2
     assert len(r["henti"]) == 1 and r["henti"][0]["id"] == "a3"
     assert len(r["tanpa_referensi"]) == 1 and r["tanpa_referensi"][0]["id"] == "a4"
@@ -113,6 +129,20 @@ def test_rekap_pisah_bucket_dan_total():
     g3 = next(g for g in r["per_golongan"] if g["golongan"] == "3")
     assert g3["nilai_perolehan"] == pytest.approx(288_000_000)
     assert g3["nilai_buku"] == pytest.approx(140_000_000)  # a1 140jt + a5 0
+
+
+def test_rekap_rusak_berat_henti_hanya_bila_diusulkan():
+    # Aset rusak berat yang BELUM diusulkan tetap aset tetap → tetap
+    # disusutkan (masuk per_golongan), bukan henti-susut.
+    assets = [_aset(id="rb", condition="Rusak Berat")]
+    r = rekap_penyusutan(assets, "2026-07-12")            # diusulkan_ids kosong
+    assert r["henti"] == []
+    assert r["total"]["jumlah"] == 1
+    assert r["total"]["nilai_perolehan"] == pytest.approx(280_000_000)
+    # Setelah diusulkan penghapusan → baru berpindah ke henti (keluar hitungan)
+    r2 = rekap_penyusutan(assets, "2026-07-12", diusulkan_ids={"rb"})
+    assert len(r2["henti"]) == 1 and r2["henti"][0]["id"] == "rb"
+    assert r2["total"]["jumlah"] == 0
 
 
 def test_rekap_kosong_aman():

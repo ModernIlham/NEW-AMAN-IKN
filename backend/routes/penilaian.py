@@ -112,8 +112,15 @@ async def posisi_penyusutan(
     # Rekap penyusutan hanya atas aset yang MASIH dimiliki — aset ber-SK
     # penghapusan (#234) dikecualikan agar nilai buku tidak lebih saji (§5A).
     assets = [a async for a in db.assets.find(active_asset_filter(), _PROJ)]
+    # Aset rusak berat baru henti-susut bila TELAH diusulkan penghapusan
+    # (reklas keluar aset tetap, PMK 65/2017); usulan aktif = belum ditolak.
+    diusulkan_ids = set()
+    async for u in db.usulan_penghapusan.find(
+            {"status": {"$ne": "ditolak"}}, {"_id": 0, "asset_id": 1}):
+        if u.get("asset_id"):
+            diusulkan_ids.add(u["asset_id"])
     hasil = rekap_penyusutan(assets, per_tanggal, peta=peta,
-                             uraian_golongan=uraian)
+                             uraian_golongan=uraian, diusulkan_ids=diusulkan_ids)
     dipangkas = {
         "henti": len(hasil["henti"]) > _MAKS_BARIS,
         "tanpa_referensi": len(hasil["tanpa_referensi"]) > _MAKS_BARIS,
