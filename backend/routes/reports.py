@@ -1697,7 +1697,8 @@ async def generate_penyusutan_pdf(
     elements.append(Paragraph(
         "Masa manfaat per kelompok kodefikasi (KMK 295/KM.6/2019 jo. 266/KM.6/2023); "
         "konvensi semester penuh (aset diperoleh kapan pun dalam semester dibebani satu "
-        "semester penuh); posisi memuat semester yang sudah berakhir.", st['Meta']))
+        "semester penuh); posisi memuat semester yang sudah berakhir — posisi tepat pada "
+        "30 Jun/31 Des memuat semester yang ditutup hari itu.", st['Meta']))
 
     elements.append(Spacer(1, 12*rl_mm))
     elements.extend(_signature_block([

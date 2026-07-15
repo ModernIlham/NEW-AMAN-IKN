@@ -2,9 +2,9 @@
 import pytest
 
 from penilaian_utils import (
-    GOLONGAN_TANPA_SUSUT, MASA_MANFAAT_DEFAULT, build_asset_revaluasi_projection,
-    dasar_penyusutan, hitung_penyusutan, rekap_penyusutan, semester_index,
-    status_susut, validate_masa_manfaat,
+    GOLONGAN_TANPA_SUSUT, MASA_MANFAAT_DEFAULT, akhir_semester,
+    build_asset_revaluasi_projection, dasar_penyusutan, hitung_penyusutan,
+    rekap_penyusutan, semester_index, status_susut, validate_masa_manfaat,
 )
 
 
@@ -115,6 +115,27 @@ def test_hitung_habis_masa_manfaat_nilai_buku_nol():
     assert d["habis"] is True
     assert d["akumulasi"] == pytest.approx(8_000_000)
     assert d["nilai_buku"] == 0.0  # nol, bukan Rp1
+
+
+def test_konvensi_inklusif_tanggal_tutup_buku():
+    # Helper akhir_semester
+    assert akhir_semester("2026-06-30") and akhir_semester("2026-12-31")
+    assert not akhir_semester("2026-07-01") and not akhir_semester("2026-06-29")
+    assert not akhir_semester("") and not akhir_semester(None)
+    # Perolehan Mar 2023 (Sem I 2023); posisi per 30 Jun 2026 (TUTUP BUKU) →
+    # semester Sem I 2026 IKUT dihitung = 7 semester (bukan 6).
+    d = hitung_penyusutan(280_000_000, 7, "2023-03-15", "2026-06-30")
+    assert d["semester_terpakai"] == 7 and d["akumulasi"] == pytest.approx(140_000_000)
+    # Sehari sebelum tutup (29 Jun) → belum, 6 semester.
+    d = hitung_penyusutan(280_000_000, 7, "2023-03-15", "2026-06-29")
+    assert d["semester_terpakai"] == 6
+    # Per 31 Des memuat Sem II: aset 4 th (8 sem) perolehan Jan 2018, per
+    # 2021-12-31 → 8 semester → HABIS, nilai buku 0.
+    d = hitung_penyusutan(8_000_000, 4, "2018-01-01", "2021-12-31")
+    assert d["semester_terpakai"] == 8 and d["habis"] is True and d["nilai_buku"] == 0.0
+    # Sehari sebelum (30 Des) → 7 semester, belum habis.
+    d = hitung_penyusutan(8_000_000, 4, "2018-01-01", "2021-12-30")
+    assert d["semester_terpakai"] == 7 and d["habis"] is False
 
 
 def test_rekap_pisah_bucket_dan_total():

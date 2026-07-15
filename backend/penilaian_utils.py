@@ -75,6 +75,20 @@ def semester_index(tanggal_iso):
     return t.year * 2 + (0 if t.month <= 6 else 1)
 
 
+def akhir_semester(tanggal_iso):
+    """True bila tanggal TEPAT pada penutupan semester (30 Jun atau 31 Des).
+
+    Beban penyusutan semester dibukukan pada tanggal ini; maka posisi per
+    tanggal tutup buku MEMUAT semester yang baru ditutup (konvensi INKLUSIF,
+    dikonfirmasi pemilik proyek 2026-07 — selaras SAKTI). Lihat hitung_penyusutan.
+    """
+    try:
+        t = date.fromisoformat(str(tanggal_iso or "").strip()[:10])
+    except (ValueError, TypeError):
+        return False
+    return (t.month == 6 and t.day == 30) or (t.month == 12 and t.day == 31)
+
+
 def status_susut(asset, peta=None, diusulkan=False):
     """('susut'|'henti'|'tanpa_referensi'|'tidak', alasan, masa_tahun|None).
 
@@ -121,6 +135,11 @@ def hitung_penyusutan(harga, masa_tahun, perolehan_iso, per_iso):
     posisi per tanggal hanya memuat semester yang SUDAH BERAKHIR, sehingga
     terpakai = indeks_semester(per) − indeks_semester(perolehan), dipagari
     [0, masa manfaat dalam semester]. Nilai buku akhir = 0 (bukan Rp1).
+
+    Konvensi INKLUSIF: bila `per` jatuh TEPAT pada tanggal tutup buku (30 Jun/
+    31 Des), semester yang ditutup hari itu SUDAH berakhir (bebannya dibukukan
+    pada tanggal itu) → ikut dihitung (+1 semester). Di tanggal tengah-semester
+    tak berpengaruh.
     """
     h = parse_harga(harga)
     masa_sem = max(1, int(masa_tahun) * 2)
@@ -129,6 +148,8 @@ def hitung_penyusutan(harga, masa_tahun, perolehan_iso, per_iso):
     if i0 is None or i1 is None:
         terpakai = 0
     else:
+        if akhir_semester(per_iso):
+            i1 += 1
         terpakai = max(0, min(masa_sem, i1 - i0))
     beban = h / masa_sem
     akumulasi = min(h, beban * terpakai)

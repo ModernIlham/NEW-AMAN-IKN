@@ -48,6 +48,23 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#289] Penyusutan: konvensi INKLUSIF pada tanggal tutup buku (30 Jun/31 Des) — 2026-07-15
+
+- **Keputusan pemilik proyek** atas temuan review (finding #1). Laporan/posisi
+  penyusutan yang dijalankan **tepat pada tanggal tutup buku (30 Juni / 31
+  Desember)** kini **MEMUAT** semester yang ditutup hari itu — bebannya memang
+  dibukukan pada tanggal tersebut ("dibukukan tiap akhir semester", PMK 65/2017;
+  selaras praktik SAKTI).
+- **Dampak:** posisi per **30 Jun 2026** kini menghitung Sem I 2026 (mis. mobil
+  contoh 7 semester, bukan 6); aset yang genap habis masa manfaat pada 31 Des
+  kini bernilai buku **0** tepat di tanggal itu (sebelumnya baru 1 Jan). Tanggal
+  **tengah-semester tidak terpengaruh** (tetap seperti sebelumnya).
+- Helper murni baru `akhir_semester(iso)`; `hitung_penyusutan` menambah 1
+  semester bila `per` tepat 30 Jun/31 Des. **+1 uji** (total suite 379 lulus).
+  Endpoint & PDF penyusutan + pustaka §5 dicatat memakai konvensi inklusif.
+
+---
+
 ## [#288] Koreksi hasil review: aset revaluasi tanpa tanggal perolehan tetap disusutkan — 2026-07-15
 
 - **Tindak lanjut review menyeluruh penyusutan.** Perbaikan **kebenaran** yang
