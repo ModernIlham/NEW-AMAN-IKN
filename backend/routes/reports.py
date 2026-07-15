@@ -1584,6 +1584,136 @@ async def generate_posisi_bmn_pdf(_user: dict = Depends(require_user_or_query_to
                              headers={"Content-Disposition": 'attachment; filename="Posisi_BMN_Neraca.pdf"'})
 
 
+@reports_router.get("/penilaian/penyusutan-pdf")
+async def generate_penyusutan_pdf(
+    per_tanggal: str = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    _user: dict = Depends(require_user_or_query_token),
+):
+    """Laporan Penyusutan BMN per golongan (PMK 65/2017) — harapan auditor
+    (pustaka §5: "LBKP memuat Laporan Penyusutan per golongan").
+
+    Garis lurus semesteran tanpa residu; aset yang sudah direvaluasi final
+    disusutkan atas nilai revaluasi dengan masa manfaat reset penuh (#284).
+    Aset yang tak bisa dihitung (henti-susut / tanpa referensi masa manfaat)
+    TIDAK ikut angka melainkan diringkas jumlahnya (kejujuran data).
+    """
+    from reportlab.platypus import Table, Paragraph, Spacer
+    from reportlab.lib.units import mm as rl_mm
+    from kodefikasi_utils import GOLONGAN_DEFAULTS
+    from penilaian_utils import MASA_MANFAAT_DEFAULT, rekap_penyusutan
+
+    if not per_tanggal:
+        per_tanggal = datetime.now(timezone.utc).date().isoformat()
+    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+
+    peta = dict(MASA_MANFAAT_DEFAULT)
+    async for m in db.masa_manfaat.find({}, {"_id": 0, "kode": 1, "tahun": 1}):
+        peta[m["kode"]] = int(m["tahun"])
+    uraian = {k: u for k, u in GOLONGAN_DEFAULTS}
+    async for k in db.kodefikasi.find({"level": 1}, {"_id": 0, "kode": 1, "uraian": 1}):
+        if k.get("uraian"):
+            uraian[k["kode"]] = k["uraian"]
+
+    proj = {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
+            "purchase_price": 1, "purchase_date": 1, "condition": 1,
+            "inventory_status": 1, "nilai_wajar_terakhir": 1, "revaluasi": 1}
+    assets = await db.assets.find(active_asset_filter(), proj).to_list(500000)
+    diusulkan_ids = set()
+    async for u in db.usulan_penghapusan.find(
+            {"status": {"$ne": "ditolak"}}, {"_id": 0, "asset_id": 1}):
+        if u.get("asset_id"):
+            diusulkan_ids.add(u["asset_id"])
+    hasil = rekap_penyusutan(assets, per_tanggal, peta=peta,
+                             uraian_golongan=uraian, diusulkan_ids=diusulkan_ids)
+
+    def fmt_rp(val):
+        try: return f"{int(val):,}".replace(",", ".")
+        except (ValueError, TypeError, OverflowError): return "0"
+
+    buffer = io.BytesIO()
+    doc = _std_doc(buffer, landscape_mode=True)
+    st = _get_report_styles()
+    elements = []
+    elements.extend(_kop_surat_flowables(settings, doc.width))
+    elements.extend(_title_block("LAPORAN PENYUSUTAN BARANG MILIK NEGARA",
+                                 subjudul=f"Posisi per {_fmt_tanggal_id(per_tanggal)}"))
+    tot = hasil["total"]
+    elements.append(Paragraph(
+        f"Metode garis lurus tanpa residu, semesteran (PMK 65/PMK.06/2017) · "
+        f"{tot['jumlah']} aset disusutkan", st['Meta']))
+    elements.append(Spacer(1, 4*rl_mm))
+
+    headers = ["Gol.", "Uraian", "Jml\nAset", "Nilai Perolehan\n(Rp)",
+               "Akumulasi\nPenyusutan (Rp)", "Nilai Buku\n(Rp)"]
+    table_data = [[Paragraph(h.replace("\n", "<br/>"), st['TableHeader']) for h in headers]]
+    for r in hasil["per_golongan"]:
+        table_data.append([
+            Paragraph(r["golongan"], st['CellCenter']),
+            Paragraph(r["uraian"], st['Cell']),
+            Paragraph(str(r["jumlah"]), st['CellCenter']),
+            Paragraph(fmt_rp(r["nilai_perolehan"]), st['CellRight']),
+            Paragraph(fmt_rp(r["akumulasi"]), st['CellRight']),
+            Paragraph(fmt_rp(r["nilai_buku"]), st['CellRight']),
+        ])
+    table_data.append([
+        Paragraph("", st['CellCenter']),
+        Paragraph("<b>TOTAL</b>", st['Cell']),
+        Paragraph(f"<b>{tot['jumlah']}</b>", st['CellCenter']),
+        Paragraph(f"<b>{fmt_rp(tot['nilai_perolehan'])}</b>", st['CellRight']),
+        Paragraph(f"<b>{fmt_rp(tot['akumulasi'])}</b>", st['CellRight']),
+        Paragraph(f"<b>{fmt_rp(tot['nilai_buku'])}</b>", st['CellRight']),
+    ])
+    table = Table(table_data,
+                  colWidths=_fit_col_widths([34, 210, 55, 120, 120, 120], doc.width),
+                  repeatRows=1)
+    table.setStyle(_std_table_style(zebra=True, total_row=True))
+    if hasil["per_golongan"]:
+        elements.append(table)
+    else:
+        elements.append(Paragraph(
+            "Belum ada aset yang dapat dihitung — lengkapi tanggal perolehan & "
+            "referensi masa manfaat kelompok.", st['Meta']))
+
+    # Ringkasan telaah (kejujuran data): aset di luar hitungan penyusutan.
+    n_henti = len(hasil["henti"])
+    n_tanpa = len(hasil["tanpa_referensi"])
+    n_tidak = sum(hasil["tidak"].values())
+    elements.append(Spacer(1, 3*rl_mm))
+    elements.append(Paragraph(
+        f"Ringkasan telaah: {hasil['jumlah_habis']} aset habis masa manfaat "
+        f"(nilai buku 0, tetap tersaji) · {n_henti} aset henti-susut (rusak berat/"
+        f"hilang yang telah diusulkan penghapusan, direklasifikasi keluar aset "
+        f"tetap) · {n_tanpa} aset tanpa referensi masa manfaat (tidak ditebak) · "
+        f"{n_tidak} aset kelompok tidak disusutkan (tanah/KDP/aset bersejarah).",
+        st['Meta']))
+    if hasil.get("jumlah_revaluasi"):
+        elements.append(Spacer(1, 1.5*rl_mm))
+        elements.append(Paragraph(
+            f"Termasuk <b>{hasil['jumlah_revaluasi']}</b> aset yang disusutkan atas "
+            "NILAI REVALUASI — masa manfaat di-reset penuh sejak tanggal revaluasi, "
+            "akumulasi lama dieliminasi (PMK 118/PMK.06/2017 jo. 57/2018 jo. 107/2019 "
+            "+ Buletin Teknis SAP 18).", st['Meta']))
+    elements.append(Spacer(1, 1.5*rl_mm))
+    elements.append(Paragraph(
+        "Masa manfaat per kelompok kodefikasi (KMK 295/KM.6/2019 jo. 266/KM.6/2023); "
+        "konvensi semester penuh (aset diperoleh kapan pun dalam semester dibebani satu "
+        "semester penuh); posisi memuat semester yang sudah berakhir.", st['Meta']))
+
+    elements.append(Spacer(1, 12*rl_mm))
+    elements.extend(_signature_block([
+        {'pre': ['.................., .......................'],
+         'header': 'Kuasa Pengguna Barang,',
+         'nama': settings.get("kasatker_nama") or "-",
+         'after': [f"NIP. {settings.get('kasatker_nip') or '-'}"]},
+    ], doc.width))
+
+    footer = _page_footer_factory("Laporan Penyusutan BMN")
+    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    buffer.seek(0)
+    return StreamingResponse(buffer, media_type="application/pdf",
+                             headers={"Content-Disposition": 'attachment; filename="Laporan_Penyusutan_BMN.pdf"'})
+
+
 @reports_router.get("/pembukuan/lbkp-pdf")
 async def generate_lbkp_pdf(
     tahun: int = Query(..., ge=2000, le=2100),

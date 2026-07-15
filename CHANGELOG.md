@@ -48,6 +48,25 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#287] Laporan Penyusutan BMN per golongan (PDF siap tanda tangan) — 2026-07-15
+
+- **Memenuhi harapan auditor (pustaka §5).** Tombol **"PDF"** di halaman
+  *Penilaian — Posisi Penyusutan* mengunduh **Laporan Penyusutan BMN** resmi:
+  kop surat KPB + tabel **per golongan** (Nilai Perolehan · Akumulasi Penyusutan
+  · Nilai Buku) + baris TOTAL + blok tanda tangan Kuasa Pengguna Barang.
+- **Selaras kaidah penyusutan yang sudah rampung:** garis lurus semesteran tanpa
+  residu (PMK 65/2017); aset yang **sudah direvaluasi** disusutkan atas **nilai
+  revaluasi** dengan masa manfaat reset penuh (#285) dan dicatat jumlahnya.
+- **Kejujuran data:** ringkasan telaah di kaki laporan — jumlah aset *habis masa
+  manfaat*, *henti-susut* (rusak berat/hilang telah diusulkan penghapusan),
+  *tanpa referensi masa manfaat* (tidak ditebak), dan *tidak disusutkan*
+  (tanah/KDP/aset bersejarah).
+- Endpoint `GET /penilaian/penyusutan-pdf?per_tanggal=` (reportlab, memakai ulang
+  `rekap_penyusutan`); mengikuti pola generator PDF Neraca/LBKP yang ada. Data
+  ter-uji (376 unit test lulus), PDF ter-verifikasi lokal, eslint bersih, build sukses.
+
+---
+
 ## [#286] Penilaian: catatan basis revaluasi di halaman Posisi Penyusutan — 2026-07-15
 
 - **Melengkapi #285 di sisi UI.** Halaman **Penilaian — Posisi Penyusutan** kini

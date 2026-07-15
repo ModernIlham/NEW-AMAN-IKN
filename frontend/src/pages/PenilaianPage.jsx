@@ -272,8 +272,13 @@ export default function PenilaianPage({ user, onBack }) {
 
             {/* ── Per golongan ── */}
             <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-              <div className="px-3 py-2 border-b border-border">
-                <p className="text-xs font-bold text-foreground">Per Golongan — posisi per {data.per_tanggal}</p>
+              <div className="px-3 py-2 border-b border-border flex items-center justify-between gap-2">
+                <p className="text-xs font-bold text-foreground truncate">Per Golongan — posisi per {data.per_tanggal}</p>
+                <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
+                  onClick={() => downloadFileWithProgress(`${API}/penilaian/penyusutan-pdf?per_tanggal=${data.per_tanggal}`, "Laporan_Penyusutan_BMN.pdf", { label: "Laporan Penyusutan BMN (PDF)" }).catch(() => {})}
+                  data-testid="penilaian-pdf">
+                  <Download className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">PDF</span>
+                </Button>
               </div>
               {data.per_golongan.length === 0 ? (
                 <p className="text-xs text-muted-foreground text-center py-6">
