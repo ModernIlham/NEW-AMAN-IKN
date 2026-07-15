@@ -3,6 +3,9 @@ import { createPortal } from "react-dom";
 import { Loader2, X, ChevronLeft, ChevronRight, MapPin, Tag, User, QrCode, FileCheck, FileX, StickyNote, Download, Maximize2, RotateCw } from "lucide-react";
 import { authMediaUrl } from "../../lib/mediaUrl";
 import { peekAnim } from "../../lib/lightboxAnim";
+import {
+  SKALA_MIN, jepitGeser, jarak, skalaCubit, skalaGulir, titikTengah, zoomKeTitik,
+} from "../../lib/zoomPan";
 import { useBackGuard } from "../../hooks/useBackGuard";
 import { toast } from "sonner";
 import axios from "axios";
@@ -45,7 +48,27 @@ function buildPhotoUrls(src) {
 const FullscreenPhoto = memo(({ src, alt, rot = 0, onClose }) => {
   const containerRef = useRef(null);
   const [imgLoading, setImgLoading] = useState(true);
+  // Zoom & geser TANPA tombol: gulir roda tetikus / cubit dua jari untuk
+  // perbesar-perkecil, seret untuk menggeser saat sudah diperbesar. State
+  // dicermin ke ref agar terbaca di listener native (non-passive) tanpa
+  // memasang ulang listener tiap perubahan.
+  const [view, setViewState] = useState({ scale: SKALA_MIN, tx: 0, ty: 0 });
+  const viewRef = useRef(view);
+  const gestureRef = useRef({ mode: "none" });
+  const pannedRef = useRef(false); // menandai gestur menggeser → jangan tutup saat klik
   useBackGuard(onClose);
+
+  const setView = useCallback((next) => { viewRef.current = next; setViewState(next); }, []);
+  const resetView = useCallback(() => setView({ scale: SKALA_MIN, tx: 0, ty: 0 }), [setView]);
+  // Terapkan skala+geser dengan jepit batas; skala kembali ke pas layar → nol.
+  const terapkan = useCallback((scale, tx, ty) => {
+    if (scale <= SKALA_MIN) { setView({ scale: SKALA_MIN, tx: 0, ty: 0 }); return; }
+    const c = jepitGeser(tx, ty, scale, window.innerWidth, window.innerHeight);
+    setView({ scale, tx: c.tx, ty: c.ty });
+  }, [setView]);
+
+  // Ganti foto / rotasi → kembalikan ke pas layar.
+  useEffect(() => { resetView(); }, [src, rot, resetView]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -66,12 +89,133 @@ const FullscreenPhoto = memo(({ src, alt, rot = 0, onClose }) => {
     };
   }, [onClose]);
 
+  // Listener native non-passive (React memasang wheel/touchmove sebagai passive
+  // sehingga preventDefault tak berlaku) → pasang manual agar zoom lancar &
+  // tak menggulir/zoom halaman.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return undefined;
+    const dxPusat = () => window.innerWidth / 2;
+    const dyPusat = () => window.innerHeight / 2;
+
+    const onWheel = (e) => {
+      e.preventDefault();
+      const cur = viewRef.current;
+      const fx = e.clientX - dxPusat(), fy = e.clientY - dyPusat();
+      const s = skalaGulir(cur.scale, e.deltaY);
+      const t = zoomKeTitik(cur.scale, cur.tx, cur.ty, s, fx, fy);
+      terapkan(s, t.tx, t.ty);
+    };
+
+    const onTouchStart = (e) => {
+      pannedRef.current = false;
+      const cur = viewRef.current;
+      if (e.touches.length === 2) {
+        const [a, b] = e.touches;
+        const mid = titikTengah(a.clientX, a.clientY, b.clientX, b.clientY);
+        gestureRef.current = {
+          mode: "pinch",
+          startDist: jarak(a.clientX, a.clientY, b.clientX, b.clientY),
+          startScale: cur.scale, startTx: cur.tx, startTy: cur.ty,
+          startMidX: mid.x - dxPusat(), startMidY: mid.y - dyPusat(),
+        };
+        e.preventDefault();
+      } else if (e.touches.length === 1 && cur.scale > SKALA_MIN) {
+        const t = e.touches[0];
+        gestureRef.current = { mode: "pan", startX: t.clientX, startY: t.clientY, startTx: cur.tx, startTy: cur.ty };
+        e.preventDefault();
+      } else {
+        gestureRef.current = { mode: "none" };
+      }
+    };
+
+    const onTouchMove = (e) => {
+      const g = gestureRef.current;
+      if (g.mode === "pinch" && e.touches.length >= 2) {
+        const [a, b] = e.touches;
+        const d = jarak(a.clientX, a.clientY, b.clientX, b.clientY);
+        const mid = titikTengah(a.clientX, a.clientY, b.clientX, b.clientY);
+        const s = skalaCubit(g.startScale, g.startDist, d);
+        const t1 = zoomKeTitik(g.startScale, g.startTx, g.startTy, s, g.startMidX, g.startMidY);
+        const curMidX = mid.x - dxPusat(), curMidY = mid.y - dyPusat();
+        pannedRef.current = true;
+        terapkan(s, t1.tx + (curMidX - g.startMidX), t1.ty + (curMidY - g.startMidY));
+        e.preventDefault();
+      } else if (g.mode === "pan" && e.touches.length === 1) {
+        const t = e.touches[0];
+        pannedRef.current = true;
+        terapkan(viewRef.current.scale, g.startTx + (t.clientX - g.startX), g.startTy + (t.clientY - g.startY));
+        e.preventDefault();
+      }
+    };
+
+    const onTouchEnd = (e) => {
+      if (e.touches.length === 0) {
+        if (viewRef.current.scale <= SKALA_MIN) resetView();
+        gestureRef.current = { mode: "none" };
+      } else if (e.touches.length === 1) {
+        // Satu jari terlepas dari cubit → lanjutkan sebagai geser bila diperbesar.
+        const t = e.touches[0];
+        const cur = viewRef.current;
+        gestureRef.current = cur.scale > SKALA_MIN
+          ? { mode: "pan", startX: t.clientX, startY: t.clientY, startTx: cur.tx, startTy: cur.ty }
+          : { mode: "none" };
+      }
+    };
+
+    el.addEventListener("wheel", onWheel, { passive: false });
+    el.addEventListener("touchstart", onTouchStart, { passive: false });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.addEventListener("touchend", onTouchEnd);
+    el.addEventListener("touchcancel", onTouchEnd);
+    return () => {
+      el.removeEventListener("wheel", onWheel);
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", onTouchEnd);
+      el.removeEventListener("touchcancel", onTouchEnd);
+    };
+  }, [terapkan, resetView]);
+
+  // Seret tetikus (desktop) untuk menggeser saat sudah diperbesar.
+  const onMouseDown = useCallback((e) => {
+    const cur = viewRef.current;
+    if (cur.scale <= SKALA_MIN) return;
+    e.preventDefault();
+    pannedRef.current = false;
+    const startX = e.clientX, startY = e.clientY, startTx = cur.tx, startTy = cur.ty;
+    const move = (ev) => {
+      pannedRef.current = true;
+      terapkan(viewRef.current.scale, startTx + (ev.clientX - startX), startTy + (ev.clientY - startY));
+    };
+    const up = () => { window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", up); };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  }, [terapkan]);
+
+  // Klik-ganda: sudah diperbesar → kembali pas layar; pas layar → perbesar ke titik.
+  const onDoubleClick = useCallback((e) => {
+    e.stopPropagation();
+    const cur = viewRef.current;
+    if (cur.scale > SKALA_MIN) { resetView(); return; }
+    const fx = e.clientX - window.innerWidth / 2, fy = e.clientY - window.innerHeight / 2;
+    const t = zoomKeTitik(SKALA_MIN, 0, 0, 2.5, fx, fy);
+    terapkan(2.5, t.tx, t.ty);
+  }, [resetView, terapkan]);
+
+  const onContainerClick = useCallback(() => {
+    if (pannedRef.current) { pannedRef.current = false; return; } // habis menggeser → jangan tutup
+    onClose();
+  }, [onClose]);
+
   const swapped = rot % 180 === 90; // 90°/270° → tinggi↔lebar bertukar
+  const zoomed = view.scale > SKALA_MIN;
   return createPortal(
     <div
       ref={containerRef}
-      className="fixed inset-0 z-[120] bg-black flex items-center justify-center"
-      onClick={onClose}
+      className="fixed inset-0 z-[120] bg-black flex items-center justify-center overflow-hidden"
+      onClick={onContainerClick}
+      style={{ touchAction: "none" }}
       data-testid="lightbox-fullscreen-view"
     >
       <button
@@ -90,11 +234,17 @@ const FullscreenPhoto = memo(({ src, alt, rot = 0, onClose }) => {
         onLoad={() => setImgLoading(false)}
         onError={() => setImgLoading(false)}
         onClick={(e) => e.stopPropagation()}
-        className={`object-contain transition-opacity duration-200 ${imgLoading ? "opacity-0" : "opacity-100"}`}
+        onDoubleClick={onDoubleClick}
+        onMouseDown={onMouseDown}
+        className={`object-contain select-none transition-opacity duration-200 ${imgLoading ? "opacity-0" : "opacity-100"}`}
         style={{
-          transform: rot ? `rotate(${rot}deg)` : undefined,
+          transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.scale})${rot ? ` rotate(${rot}deg)` : ""}`,
+          transformOrigin: "center center",
           maxHeight: swapped ? "100vw" : "100vh",
           maxWidth: swapped ? "100vh" : "100vw",
+          cursor: zoomed ? "grab" : "auto",
+          willChange: "transform",
+          touchAction: "none",
         }}
         draggable={false}
       />
