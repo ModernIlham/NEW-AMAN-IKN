@@ -48,6 +48,28 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#282] Penyusutan PSAP 07: aset Rusak Berat berhenti disusutkan HANYA bila telah diusulkan penghapusan — 2026-07-15
+
+- **Koreksi kebenaran akuntansi (PMK 65/2017 · PSAP 07 · pustaka §5).** Sebelumnya
+  **setiap** aset berkondisi **Rusak Berat** langsung dianggap *henti-susut* dan
+  dikeluarkan dari perhitungan posisi penyusutan. Itu **terlalu dini**: aset rusak
+  berat tetap berstatus **aset tetap** dan **tetap disusutkan** selama masih
+  tercatat sebagai aset tetap.
+- **Aturan yang benar** — penyusutan baru **dihentikan** saat aset rusak berat itu
+  **TELAH DIUSULKAN** penghapusan/pemindahtanganan/pemusnahan (direklasifikasi
+  keluar aset tetap ke Aset Lain-lain). Sinyal "telah diusulkan" dibaca dari
+  `usulan_penghapusan` berstatus **aktif** (belum ditolak) — konsisten dengan
+  daftar kandidat Penghapusan.
+- **Dampak angka:** aset rusak berat yang **belum** diusulkan kini **ikut**
+  perhitungan nilai buku per golongan (tidak lagi hilang dari posisi); yang
+  **sudah** diusulkan tetap tampil di daftar telaah *henti-susut*.
+- Perubahan **murni & teruji**: `status_susut(asset, peta, diusulkan=False)` +
+  `rekap_penyusutan(..., diusulkan_ids=None)`; endpoint `GET /penilaian/penyusutan`
+  menghimpun id aset ber-usulan aktif. **17 unit test** lulus (termasuk 3 uji baru
+  untuk perilaku ini); tak ada data ditebak.
+
+---
+
 ## [#281] "Salin dari aset sebelumnya" kini ikut menyalin koordinat GPS (cerdas) — 2026-07-14
 
 - **Fitur "Salin dari aset sebelumnya" (edit cepat/inventarisasi) kini juga

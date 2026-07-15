@@ -6,9 +6,12 @@ dengan konvensi semester penuh. Masa manfaat per KELOMPOK kodefikasi
 (prefix 5 digit) mengikuti KMK 295/KM.6/2019 jo. KMK 266/KM.6/2023.
 
 Prinsip kejujuran data: kelompok yang belum punya masa manfaat terdaftar
-TIDAK ditebak — asetnya masuk daftar "perlu referensi"; aset Rusak Berat
-masuk daftar telaah henti-susut (PMK 65: henti susut saat telah diusulkan
-penghapusan). Fungsi murni tanpa Mongo/IO agar teruji unit.
+TIDAK ditebak — asetnya masuk daftar "perlu referensi". Aset Rusak Berat
+TIDAK otomatis berhenti disusutkan: selama masih tercatat sebagai aset
+tetap ia tetap disusutkan; penyusutan baru DIHENTIKAN (henti-susut) saat
+aset rusak berat itu TELAH DIUSULKAN penghapusan/pemindahtanganan/
+pemusnahan — direklasifikasi keluar aset tetap (PMK 65/2017, pustaka §5).
+Fungsi murni tanpa Mongo/IO agar teruji unit.
 """
 from datetime import date
 
@@ -65,16 +68,23 @@ def semester_index(tanggal_iso):
     return t.year * 2 + (0 if t.month <= 6 else 1)
 
 
-def status_susut(asset, peta=None):
-    """('susut'|'henti'|'tanpa_referensi'|'tidak', alasan, masa_tahun|None)."""
+def status_susut(asset, peta=None, diusulkan=False):
+    """('susut'|'henti'|'tanpa_referensi'|'tidak', alasan, masa_tahun|None).
+
+    `diusulkan` = aset SUDAH punya usulan penghapusan aktif (belum ditolak).
+    Rusak Berat SAJA tidak menghentikan penyusutan — aset tetap disusutkan
+    selama masih tercatat sebagai aset tetap. Henti-susut hanya berlaku saat
+    aset rusak berat itu TELAH DIUSULKAN penghapusan (reklas keluar aset
+    tetap, PMK 65/2017 — pustaka §5).
+    """
     peta = MASA_MANFAAT_DEFAULT if peta is None else peta
     kode = str(asset.get("asset_code") or "").strip()
     gol = golongan_of(kode)
     if gol in GOLONGAN_TANPA_SUSUT:
         return "tidak", GOLONGAN_TANPA_SUSUT[gol], None
-    if str(asset.get("condition") or "").strip() == "Rusak Berat":
+    if diusulkan and str(asset.get("condition") or "").strip() == "Rusak Berat":
         return ("henti",
-                "Rusak Berat — telaah usulan penghapusan (henti susut saat telah diusulkan, PMK 65/2017)",
+                "Rusak Berat & telah diusulkan penghapusan — penyusutan dihentikan (reklas keluar aset tetap, PMK 65/2017)",
                 None)
     masa = peta.get(kode[:5])
     if not masa:
@@ -116,8 +126,13 @@ def hitung_penyusutan(harga, masa_tahun, perolehan_iso, per_iso):
     }
 
 
-def rekap_penyusutan(assets, per_iso, peta=None, uraian_golongan=None):
+def rekap_penyusutan(assets, per_iso, peta=None, uraian_golongan=None,
+                     diusulkan_ids=None):
     """Rekap posisi penyusutan per golongan + daftar telaah.
+
+    `diusulkan_ids` = himpunan id aset yang punya usulan penghapusan aktif
+    (belum ditolak) — aset rusak berat di dalamnya masuk henti-susut; yang
+    di luar tetap disusutkan meski rusak berat (PMK 65/2017, pustaka §5).
 
     Kembalikan {"per_golongan": [...], "total": {...},
     "henti": [...], "tanpa_referensi": [...], "tidak": {alasan: jumlah},
@@ -125,12 +140,14 @@ def rekap_penyusutan(assets, per_iso, peta=None, uraian_golongan=None):
     dihitung TIDAK ikut angka penyusutan melainkan tampil di daftarnya.
     """
     uraian_golongan = uraian_golongan or {}
+    diusulkan_ids = diusulkan_ids or set()
     per_gol = {}
     henti, tanpa_ref = [], []
     tidak = {}
     jumlah_habis = 0
     for a in assets or []:
-        status, alasan, masa = status_susut(a, peta)
+        status, alasan, masa = status_susut(
+            a, peta, diusulkan=a.get("id") in diusulkan_ids)
         ident = {"id": a.get("id"), "asset_code": a.get("asset_code"),
                  "NUP": a.get("NUP"), "asset_name": a.get("asset_name")}
         if status == "tidak":
