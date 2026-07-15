@@ -48,6 +48,36 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#290] Backup / Pulihkan / Reset: cakup SEMUA koleksi secara dinamis (perbaikan data-safety) — 2026-07-15
+
+- **Perbaikan penting keamanan data.** Daftar koleksi untuk **backup, restore,
+  dan system-reset dulu di-HARDCODE** dan mentok di versi lama (v3.4.0) — hanya
+  10 koleksi. Seluruh modul yang ditambahkan sejak itu **tidak ikut**:
+  `kodefikasi`, `masa_manfaat`, `penilaian_koreksi`, `usulan_penghapusan`,
+  `persediaan`, `transaksi_persediaan`, `jadwal_pemeliharaan`, `pemeliharaan`,
+  `pemanfaatan`, `pemusnahan`, `pemindahtanganan`, `penertiban`,
+  `pemantauan_insidentil`, `pengadaan`, `pengamanan_*`, `penganggaran`(+kalender),
+  `penggunaan_proses`, `psp`, `perencanaan_usulan`, `periode_pelaporan`,
+  `bmn_idle`. Akibatnya: **backup tidak lengkap** (restore kehilangan data itu)
+  & **"reset semua" menyisakan data yatim + foto**.
+- **Kini DINAMIS:** koleksi di-enumerasi otomatis dari database, jadi **setiap
+  modul baru langsung ikut** ter-backup, ter-restore, & ter-reset tanpa update
+  manual. Kebijakan murni di `backup_utils.py` (teruji unit).
+  - **Backup**: seluruh koleksi aplikasi + GridFS + uploads (kecuali transient:
+    lock/OTP/job/idempotency/ws-events/cache-preview).
+  - **Restore**: memulihkan **semua** koleksi yang ada di file backup (bukan
+    daftar tetap) — koleksi baru ikut walau DB tujuan kosong; alias legacy
+    (`activities`→`inventory_activities`) tetap dikenali; safety-backup +
+    rollback kini mencakup semua koleksi.
+  - **System Reset** (`/system/reset-all`): menghapus **seluruh** data
+    operasional & referensi **+ membersihkan GridFS (foto/lampiran)**, tetap
+    mempertahankan akun (`users`) & konfigurasi (`report_settings`, kuota) agar
+    admin bisa login & kop surat tak hilang.
+- **4 unit test baru** (383 suite lulus) memverifikasi cakupan modul baru, aturan
+  keep-reset, & parsing isi backup. `py_compile` bersih.
+
+---
+
 ## [#289] Penyusutan: konvensi INKLUSIF pada tanggal tutup buku (30 Jun/31 Des) — 2026-07-15
 
 - **Keputusan pemilik proyek** atas temuan review (finding #1). Laporan/posisi
