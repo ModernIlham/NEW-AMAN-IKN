@@ -48,6 +48,20 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#286] Penilaian: catatan basis revaluasi di halaman Posisi Penyusutan — 2026-07-15
+
+- **Melengkapi #285 di sisi UI.** Halaman **Penilaian — Posisi Penyusutan** kini
+  menampilkan **catatan** saat ada aset yang disusutkan atas nilai revaluasi:
+  *"N aset disusutkan atas nilai revaluasi — masa manfaat di-reset penuh sejak
+  tanggal revaluasi, akumulasi lama dieliminasi (PMK 118/2017 + Buletin Teknis
+  SAP 18)"*.
+- Muncul **hanya bila** `jumlah_revaluasi > 0` (dari endpoint `GET
+  /penilaian/penyusutan`) — tak mengganggu tampilan bila belum ada aset
+  ber-revaluasi. Selaras tema terang/gelap (aksen sky), ikon `RefreshCw`.
+- Perubahan UI murni; eslint bersih (0 error), `yarn build` (craco) sukses.
+
+---
+
 ## [#285] Penyusutan PSAP 07 sadar-revaluasi: aset yang telah direvaluasi disusutkan atas nilai revaluasi (masa manfaat reset penuh) — 2026-07-15
 
 - **Fitur inti PSAP 07 — kaidah TERVERIFIKASI sumber primer.** Sebelumnya semua
