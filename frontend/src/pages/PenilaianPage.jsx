@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, Scale, Coins, TrendingDown, Wallet, AlertTriangle,
-  BookOpen, FileSignature, Plus, Pencil, Search, Trash2, Download,
+  BookOpen, FileSignature, Plus, Pencil, Search, Trash2, Download, RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -254,6 +254,21 @@ export default function PenilaianPage({ user, onBack }) {
                 <p className="text-[10px] text-muted-foreground mt-1">Habis masa manfaat (nilai buku 0, tetap tersaji)</p>
               </div>
             </div>
+
+            {/* ── Catatan basis revaluasi (PSAP 07: aset direvaluasi disusutkan atas nilai revaluasi) ── */}
+            {data.jumlah_revaluasi > 0 && (
+              <div
+                className="flex items-start gap-1.5 text-[11px] leading-snug text-sky-700 dark:text-sky-300 bg-sky-500/10 border border-sky-500/30 rounded-lg px-3 py-1.5"
+                data-testid="penilaian-revaluasi-note"
+              >
+                <RefreshCw className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                <span>
+                  <strong>{data.jumlah_revaluasi}</strong> aset disusutkan atas{" "}
+                  <strong>nilai revaluasi</strong> — masa manfaat di-reset penuh sejak tanggal
+                  revaluasi, akumulasi lama dieliminasi (PMK 118/2017 + Buletin Teknis SAP 18).
+                </span>
+              </div>
+            )}
 
             {/* ── Per golongan ── */}
             <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
