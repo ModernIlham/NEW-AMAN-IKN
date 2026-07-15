@@ -64,7 +64,14 @@ def test_status_susut_normal_dan_pengecualian():
     # Rusak Berat DENGAN usulan penghapusan aktif → henti-susut (reklas keluar)
     status, alasan, _ = status_susut(_aset(condition="Rusak Berat"), diusulkan=True)
     assert status == "henti" and "penghapusan" in alasan
-    # diusulkan tapi kondisi Baik → tetap susut (henti hanya untuk rusak berat)
+    # Hilang (Tidak Ditemukan) TANPA usulan → tetap disusutkan
+    status, _, masa = status_susut(_aset(inventory_status="Tidak Ditemukan"))
+    assert status == "susut" and masa == 7
+    # Hilang (Tidak Ditemukan) DENGAN usulan → henti-susut (aset hilang, pustaka §5)
+    status, alasan, _ = status_susut(
+        _aset(inventory_status="Tidak Ditemukan"), diusulkan=True)
+    assert status == "henti" and "Hilang" in alasan and "penghapusan" in alasan
+    # diusulkan tapi Baik & ditemukan → tetap susut (henti hanya RB/hilang)
     status, _, masa = status_susut(_aset(), diusulkan=True)
     assert status == "susut" and masa == 7
     status, alasan, _ = status_susut(_aset(asset_code="3999901001"))
@@ -142,6 +149,17 @@ def test_rekap_rusak_berat_henti_hanya_bila_diusulkan():
     # Setelah diusulkan penghapusan → baru berpindah ke henti (keluar hitungan)
     r2 = rekap_penyusutan(assets, "2026-07-12", diusulkan_ids={"rb"})
     assert len(r2["henti"]) == 1 and r2["henti"][0]["id"] == "rb"
+    assert r2["total"]["jumlah"] == 0
+
+
+def test_rekap_hilang_henti_hanya_bila_diusulkan():
+    # Aset HILANG (Tidak Ditemukan) yang belum diusulkan tetap disusutkan;
+    # setelah diusulkan penghapusan → henti-susut (pustaka §5).
+    assets = [_aset(id="hl", inventory_status="Tidak Ditemukan")]
+    r = rekap_penyusutan(assets, "2026-07-12")
+    assert r["henti"] == [] and r["total"]["jumlah"] == 1
+    r2 = rekap_penyusutan(assets, "2026-07-12", diusulkan_ids={"hl"})
+    assert len(r2["henti"]) == 1 and r2["henti"][0]["id"] == "hl"
     assert r2["total"]["jumlah"] == 0
 
 
