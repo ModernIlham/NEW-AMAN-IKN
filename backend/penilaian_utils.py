@@ -5,6 +5,13 @@ residu, dihitung per unit, dibukukan tiap AKHIR SEMESTER (30 Jun/31 Des)
 dengan konvensi semester penuh. Masa manfaat per KELOMPOK kodefikasi
 (prefix 5 digit) mengikuti KMK 295/KM.6/2019 jo. KMK 266/KM.6/2023.
 
+Aset yang SUDAH direvaluasi final "terlahir kembali" (PMK 118/PMK.06/2017
+jo. 57/2018 jo. 107/2019; Buletin Teknis SAP 18): nilai perolehan BARU =
+nilai revaluasi, akumulasi penyusutan di-NOL-kan (eliminasi), masa manfaat
+di-RESET PENUH dihitung ulang sejak tanggal revaluasi — metode/konvensi
+lainnya (garis lurus, tanpa residu, semesteran) tidak berubah. Lihat
+`dasar_penyusutan`.
+
 Prinsip kejujuran data: kelompok yang belum punya masa manfaat terdaftar
 TIDAK ditebak — asetnya masuk daftar "perlu referensi". Aset Rusak Berat
 atau Hilang (Tidak Ditemukan) TIDAK otomatis berhenti disusutkan: selama
@@ -130,6 +137,26 @@ def hitung_penyusutan(harga, masa_tahun, perolehan_iso, per_iso):
     }
 
 
+def dasar_penyusutan(asset):
+    """Basis & titik-mulai penyusutan satu aset → (harga, mulai_iso, sumber).
+
+    Aset yang SUDAH direvaluasi final "terlahir kembali" (PMK 118/PMK.06/2017
+    jo. 57/2018 jo. 107/2019; Buletin Teknis SAP 18): NILAI PEROLEHAN BARU =
+    nilai revaluasi, akumulasi penyusutan di-NOL-kan (metode eliminasi), dan
+    MASA MANFAAT di-RESET PENUH — penyusutan dihitung ULANG dari tanggal
+    revaluasi dengan masa manfaat penuh kelompok. Metode garis lurus, tanpa
+    residu, semesteran, konvensi semester penuh TIDAK berubah (pustaka §5).
+
+    Basis revaluasi dipakai HANYA bila nilai wajar > 0 DAN tanggal revaluasi
+    valid (kalau tidak → fallback ke nilai/tanggal perolehan historis).
+    """
+    nilai_rev = parse_harga(asset.get("nilai_wajar_terakhir"))
+    tgl_rev = (asset.get("revaluasi") or {}).get("tanggal_dokumen")
+    if nilai_rev > 0 and semester_index(tgl_rev) is not None:
+        return nilai_rev, tgl_rev, "revaluasi"
+    return parse_harga(asset.get("purchase_price")), asset.get("purchase_date"), "perolehan"
+
+
 def rekap_penyusutan(assets, per_iso, peta=None, uraian_golongan=None,
                      diusulkan_ids=None):
     """Rekap posisi penyusutan per golongan + daftar telaah.
@@ -138,10 +165,14 @@ def rekap_penyusutan(assets, per_iso, peta=None, uraian_golongan=None,
     (belum ditolak) — aset rusak berat di dalamnya masuk henti-susut; yang
     di luar tetap disusutkan meski rusak berat (PMK 65/2017, pustaka §5).
 
+    Aset yang sudah direvaluasi final disusutkan atas NILAI REVALUASI dengan
+    masa manfaat di-reset penuh sejak tanggal revaluasi (lihat
+    `dasar_penyusutan`); `jumlah_revaluasi` menghitung berapa yang demikian.
+
     Kembalikan {"per_golongan": [...], "total": {...},
     "henti": [...], "tanpa_referensi": [...], "tidak": {alasan: jumlah},
-    "jumlah_habis": n} — semua dari data nyata; aset yang tak bisa
-    dihitung TIDAK ikut angka penyusutan melainkan tampil di daftarnya.
+    "jumlah_habis": n, "jumlah_revaluasi": n} — semua dari data nyata; aset
+    yang tak bisa dihitung TIDAK ikut angka penyusutan melainkan tampil di daftarnya.
     """
     uraian_golongan = uraian_golongan or {}
     diusulkan_ids = diusulkan_ids or set()
@@ -149,6 +180,7 @@ def rekap_penyusutan(assets, per_iso, peta=None, uraian_golongan=None,
     henti, tanpa_ref = [], []
     tidak = {}
     jumlah_habis = 0
+    jumlah_revaluasi = 0
     for a in assets or []:
         status, alasan, masa = status_susut(
             a, peta, diusulkan=a.get("id") in diusulkan_ids)
@@ -164,8 +196,12 @@ def rekap_penyusutan(assets, per_iso, peta=None, uraian_golongan=None,
         if status == "tanpa_referensi":
             tanpa_ref.append({**ident, "alasan": alasan})
             continue
-        d = hitung_penyusutan(a.get("purchase_price"), masa,
-                              a.get("purchase_date"), per_iso)
+        # Aset revaluasi: basis = nilai revaluasi, mulai = tanggal revaluasi,
+        # masa manfaat penuh (reset) — mesin sama, cukup ganti basis & titik mulai.
+        harga, mulai, sumber = dasar_penyusutan(a)
+        if sumber == "revaluasi":
+            jumlah_revaluasi += 1
+        d = hitung_penyusutan(harga, masa, mulai, per_iso)
         gol = golongan_of(a.get("asset_code")) or "?"
         g = per_gol.setdefault(gol, {
             "golongan": gol,
@@ -174,7 +210,7 @@ def rekap_penyusutan(assets, per_iso, peta=None, uraian_golongan=None,
             "akumulasi": 0.0, "nilai_buku": 0.0,
         })
         g["jumlah"] += 1
-        g["nilai_perolehan"] += parse_harga(a.get("purchase_price"))
+        g["nilai_perolehan"] += harga  # nilai perolehan BARU bila sudah direvaluasi
         g["akumulasi"] += d["akumulasi"]
         g["nilai_buku"] += d["nilai_buku"]
         if d["habis"]:
@@ -188,7 +224,7 @@ def rekap_penyusutan(assets, per_iso, peta=None, uraian_golongan=None,
     }
     return {"per_golongan": rows, "total": total, "henti": henti,
             "tanpa_referensi": tanpa_ref, "tidak": tidak,
-            "jumlah_habis": jumlah_habis}
+            "jumlah_habis": jumlah_habis, "jumlah_revaluasi": jumlah_revaluasi}
 
 
 # ---------------------------------------------------------------------------

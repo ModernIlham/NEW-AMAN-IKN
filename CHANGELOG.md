@@ -48,6 +48,33 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#285] Penyusutan PSAP 07 sadar-revaluasi: aset yang telah direvaluasi disusutkan atas nilai revaluasi (masa manfaat reset penuh) — 2026-07-15
+
+- **Fitur inti PSAP 07 — kaidah TERVERIFIKASI sumber primer.** Sebelumnya semua
+  aset disusutkan atas **nilai perolehan historis** meski sudah direvaluasi.
+  Kini aset yang **sudah direvaluasi final** (punya `nilai_wajar_terakhir`
+  status SAKTI tercatat) "terlahir kembali" sesuai **PMK 118/PMK.06/2017 jo.
+  57/2018 jo. 107/2019 + Buletin Teknis SAP No. 18**:
+  - **Nilai perolehan baru = nilai revaluasi** (nilai wajar hasil penilaian DJKN).
+  - **Akumulasi penyusutan lama dieliminasi** (nol) pada tanggal revaluasi.
+  - **Masa manfaat di-reset PENUH** per kelompok, dihitung ulang **sejak tanggal
+    revaluasi** (bukan sisa masa manfaat).
+  - Metode garis lurus, tanpa residu, semesteran, konvensi semester penuh
+    **tidak berubah**.
+- **Dampak:** posisi penyusutan (`GET /penilaian/penyusutan`) memakai basis &
+  jadwal yang benar untuk aset pasca-revaluasi — nilai buku tidak lagi lebih/
+  kurang saji; `jumlah_revaluasi` melaporkan berapa aset yang demikian.
+- **Kejujuran data:** kaidah ini sempat ditandai "perlu verifikasi" (pustaka §14
+  butir 23) karena PDF regulasi primer **terblokir** dari lingkungan build.
+  Teks primer **dikonfirmasi pemilik proyek** sebelum kode ditulis — pustaka §5
+  & butir 23 diperbarui jadi *terverifikasi*.
+- Perubahan **murni & teruji**: helper `dasar_penyusutan(asset)` (basis + titik-
+  mulai) memakai ulang mesin `hitung_penyusutan`; `rekap_penyusutan` +
+  `GET /penilaian/penyusutan` menyertakan field revaluasi. **20 unit test** lulus
+  (2 uji baru). Tanpa data ditebak.
+
+---
+
 ## [#284] Penyusutan PSAP 07: henti-susut juga untuk aset HILANG (Tidak Ditemukan) yang telah diusulkan penghapusan — 2026-07-15
 
 - **Lanjutan koreksi #282 (PMK 65/2017 · PSAP 07 · pustaka §5).** Pustaka §5

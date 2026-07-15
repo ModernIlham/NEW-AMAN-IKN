@@ -44,7 +44,7 @@ async def _peta_masa_manfaat():
 
 _PROJ = {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
          "purchase_price": 1, "purchase_date": 1, "condition": 1,
-         "inventory_status": 1}
+         "inventory_status": 1, "nilai_wajar_terakhir": 1, "revaluasi": 1}
 _MAKS_BARIS = 500
 
 
@@ -135,7 +135,10 @@ async def posisi_penyusutan(
         "Garis lurus tanpa residu, semesteran, konvensi semester penuh "
         "(PMK 65/2017); posisi memuat semester yang sudah berakhir. Masa "
         "manfaat per kelompok (KMK 295/2019 jo. 266/2023) — kelompok tanpa "
-        "referensi tidak ditebak dan tampil di daftar telaah."
+        "referensi tidak ditebak dan tampil di daftar telaah. Aset yang sudah "
+        "direvaluasi final disusutkan atas NILAI REVALUASI dengan masa manfaat "
+        "di-reset penuh sejak tanggal revaluasi (PMK 118/2017 jo. 57/2018 jo. "
+        "107/2019; Bultek SAP 18) — akumulasi lama dieliminasi."
     )
     return hasil
 
