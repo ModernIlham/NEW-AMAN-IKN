@@ -293,7 +293,10 @@ Menyusul: jadwal berkala, DHPB PDF, akun 523/53 per catatan, foto bukti.
 **per unit aset**, dibukukan **tiap akhir semester** (30 Jun & 31 Des).
 Basis = nilai perolehan setelah kapitalisasi. **Konvensi semester penuh**:
 aset yang diperoleh kapan pun dalam semester dibebani satu semester penuh
-(tanpa prorata harian).
+(tanpa prorata harian). Posisi laporan yang **tepat pada tanggal tutup buku
+(30 Jun/31 Des) MEMUAT** semester yang ditutup hari itu (beban dibukukan pada
+tanggal tersebut — konvensi inklusif, dikonfirmasi pemilik proyek 2026-07,
+selaras SAKTI; `akhir_semester`/`hitung_penyusutan`).
 
 **Tabel masa manfaat.** KMK 59/KM.6/2013 **DICABUT** — kini
 **KMK 295/KM.6/2019** jo. **KMK 266/KM.6/2023**; kunci tabel = KELOMPOK

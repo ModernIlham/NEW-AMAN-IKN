@@ -133,7 +133,8 @@ async def posisi_penyusutan(
     hasil["referensi_masa_manfaat"] = peta
     hasil["catatan"] = (
         "Garis lurus tanpa residu, semesteran, konvensi semester penuh "
-        "(PMK 65/2017); posisi memuat semester yang sudah berakhir. Masa "
+        "(PMK 65/2017); posisi memuat semester yang sudah berakhir — posisi "
+        "tepat pada 30 Jun/31 Des memuat semester yang ditutup hari itu. Masa "
         "manfaat per kelompok (KMK 295/2019 jo. 266/2023) — kelompok tanpa "
         "referensi tidak ditebak dan tampil di daftar telaah. Aset yang sudah "
         "direvaluasi final disusutkan atas NILAI REVALUASI dengan masa manfaat "
