@@ -48,6 +48,28 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#283] Layar penuh foto: cubit & gulir untuk zoom in/out + seret untuk menggeser (tanpa tombol) — 2026-07-15
+
+- **Penampil foto layar penuh (dari pop-up foto) kini bisa di-zoom** — sebelumnya
+  foto tak bisa diperbesar/diperkecil sama sekali. Sesuai permintaan: **tanpa
+  tombol apa pun**, murni lewat gestur natural:
+  - **Gulir roda tetikus** (desktop) → perbesar/perkecil ke arah kursor.
+  - **Cubit dua jari** (HP/tablet) → perbesar/perkecil ke arah titik cubit.
+  - **Seret** (tetikus atau satu jari) saat sudah diperbesar → geser/menggeser foto.
+  - **Ketuk-ganda** → toggle: pas-layar ⇄ perbesar 2,5× ke titik yang diketuk.
+- **Cerdas & aman:** zoom di-*jepit* 1×–5×; geseran dibatasi agar foto tak hilang
+  dari layar; balik ke 1× otomatis mengembalikan foto ke posisi pas-layar; ketuk
+  latar hitam tetap menutup penampil (tak keliru saat habis menggeser). Rotasi &
+  ganti foto otomatis me-reset zoom.
+- **Interaksi tetap lancar** — listener native *non-passive* (`wheel`/`touch`)
+  agar `preventDefault` berlaku (halaman tak ikut menggulir/zoom); transform
+  `translate → scale → rotate` menyatu dengan fitur putar foto (#277/#279).
+- Logika murni `lib/zoomPan.js` (zoom-ke-titik, skala cubit/gulir, jepit geser)
+  + **6 unit test**; `PhotoLightbox.FullscreenPhoto` menyambungkan gestur. eslint
+  bersih (0 error), `yarn build` sukses.
+
+---
+
 ## [#282] Penyusutan PSAP 07: aset Rusak Berat berhenti disusutkan HANYA bila telah diusulkan penghapusan — 2026-07-15
 
 - **Koreksi kebenaran akuntansi (PMK 65/2017 · PSAP 07 · pustaka §5).** Sebelumnya
