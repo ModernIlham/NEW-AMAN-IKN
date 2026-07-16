@@ -48,6 +48,22 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#293] Laporan pakai penanda tangan KPB aktif dari registry pejabat — 2026-07-16
+
+- **Menghubungkan registry pejabat (#291/#292) ke dokumen resmi.** Blok tanda
+  tangan **Laporan Posisi BMN di Neraca** & **Laporan Penyusutan BMN** kini
+  memakai **Kuasa Pengguna Barang (KPB) aktif** dari registry `pejabat` pada
+  tanggal laporan — bukan lagi `kasatker` tunggal di setelan.
+- **`pejabat_utils.penandatangan_kpb(settings, pejabat_list, per_iso)`** (murni):
+  ambil KPB yang **masih berlaku dengan SK terbaru**; **fallback** ke setelan
+  laporan (`kasatker_nama/nip/jabatan`) bila registry belum diisi — jadi laporan
+  lama tetap jalan tanpa perubahan.
+- Helper async `_penandatangan_kpb` di `routes/reports.py` (muat registry +
+  resolusi). **4 unit test** (registry vs fallback vs kosong); `py_compile` bersih.
+- Laporan lain (LBKP, CaLBMN, DHPB, DBKP, LKB) menyusul memakai pola yang sama.
+
+---
+
 ## [#292] UI Kelola Referensi Pejabat Penatausahaan — 2026-07-16
 
 - **Melengkapi #291 di sisi UI.** Halaman **Referensi Pejabat** (`PejabatPage`)
