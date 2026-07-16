@@ -280,6 +280,7 @@ IntegritasSummary.displayName = "IntegritasSummary";
 const AuditLogPanel = memo(({ activityId, isOpen, onToggle, selectedAssetId, selectedAssetCode, onClearAssetFilter }) => {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
@@ -305,6 +306,7 @@ const AuditLogPanel = memo(({ activityId, isOpen, onToggle, selectedAssetId, sel
 
   const fetchLogs = useCallback(async (p = 1) => {
     setLoading(true);
+    setLoadError(false);
     try {
       const params = new URLSearchParams({ page: String(p), page_size: "30" });
       if (activityId) params.append("activity_id", activityId);
@@ -316,6 +318,7 @@ const AuditLogPanel = memo(({ activityId, isOpen, onToggle, selectedAssetId, sel
       setPage(p);
     } catch (err) {
       console.error("Audit log fetch error:", err);
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -410,6 +413,16 @@ const AuditLogPanel = memo(({ activityId, isOpen, onToggle, selectedAssetId, sel
             ) : loading && logs.length === 0 ? (
               <div className="flex items-center justify-center py-12">
                 <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : loadError && logs.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground px-4" data-testid="audit-load-error">
+                <History className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                <p className="text-xs font-medium">Gagal memuat riwayat</p>
+                <p className="text-[10px] mt-1">Periksa koneksi Anda, lalu coba lagi</p>
+                <Button variant="outline" size="sm" className="mt-3 h-7 text-xs"
+                  onClick={() => fetchLogs(page)} data-testid="audit-retry-btn">
+                  Coba lagi
+                </Button>
               </div>
             ) : logs.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground px-4">

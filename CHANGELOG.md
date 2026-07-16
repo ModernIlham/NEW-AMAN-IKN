@@ -48,6 +48,33 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#337] Review batch 9: guard hapus master, kop CaLBMN, tahun perolehan & polesan UI — 2026-07-16
+
+- **#34 — Master tidak bisa dihapus selagi masih dipakai aset**: hapus
+  **pegawai** (NIP tercatat sebagai pengguna), **kategori** (label dipakai
+  `category`), dan **ruangan** (label lokasi cocok) kini ditolak `409` dengan
+  jumlah aset terdampak + saran (pindahkan aset / nonaktifkan pegawai) — dulu
+  referensi bisa lenyap diam-diam meninggalkan aset yatim.
+- **#36 — Daftar pemegang (Penggunaan) diperkaya master pegawai**: tiap baris
+  membawa `pegawai_master_nama`, `pegawai_master_unit`, `pegawai_terdaftar`
+  (satu query ber-key NIP per halaman) — pemegang yang NIP-nya tak terdaftar
+  kini kelihatan.
+- **#40 — Kop CaLBMN memakai identitas satker nyata** dari pengaturan laporan
+  (`nama_sub_unit` → `nama_unit_organisasi` → `nama_instansi`), bukan teks baku.
+- **#43 — Tahun perolehan tahan berbagai format tanggal**: helper
+  `_tahun_perolehan()` (ISO, `DD-MM-YYYY`, `DD/MM/YYYY`, teks ber-tahun) dipakai
+  di 3 titik laporan — dulu `[:4]` mentah menghasilkan "31/1" sebagai "tahun".
+- **#57 — Panel Riwayat (audit log)**: gagal fetch kini menampilkan "Gagal
+  memuat riwayat" + tombol **Coba lagi** — dulu diam-diam tampil "Belum ada
+  riwayat" yang menyesatkan.
+- **#58 — Pilihan Penanggung Jawab Ruangan** disaring seperti backend
+  (`_berlaku_pada`): hanya pejabat aktif yang rentang berlakunya mencakup hari
+  ini; nilai lama yang sudah tidak berlaku ditandai "(kedaluwarsa)".
+- Verifikasi: suite **426 lulus**; smoke `_tahun_perolehan` 6 format; eslint
+  bersih; `yarn build` sukses.
+
+---
+
 ## [#336] Review batch 8: wasdal lintas modul & serapan anggaran dari Pengadaan — 2026-07-16
 
 - **#12 — Dasbor Wasdal kini membaca register Pengamanan & Penggunaan**:

@@ -77,7 +77,16 @@ async def create_category(category: CategoryCreate, _user: dict = Depends(requir
 
 @categories_router.delete("/categories/{category_id}")
 async def delete_category(category_id: str, _user: dict = Depends(require_user)):
-    """Delete a category (login wajib — temuan review keamanan)."""
+    """Delete a category (login wajib). Ditolak bila masih dipakai aset (temuan #34)."""
+    cat = await db.categories.find_one({"id": category_id}, {"_id": 0, "label": 1})
+    if cat and str(cat.get("label") or "").strip():
+        dipakai = await db.assets.count_documents(
+            {"category": cat["label"], "dihapus": {"$ne": True}})
+        if dipakai:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Kategori '{cat['label']}' masih dipakai {dipakai} aset — "
+                       f"pindahkan aset ke kategori lain dulu.")
     result = await db.categories.delete_one({"id": category_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Kategori tidak ditemukan")

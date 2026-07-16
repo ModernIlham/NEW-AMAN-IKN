@@ -96,6 +96,25 @@ async def ubah_ruangan(ruangan_id: str, payload: RuanganIn,
 @ruangan_router.delete("/ruangan/{ruangan_id}")
 async def hapus_ruangan(ruangan_id: str, user: dict = Depends(require_admin)):
     """Hapus ruangan (admin)."""
+    r = await db.ruangan.find_one(
+        {"id": ruangan_id}, {"_id": 0, "kode_ruangan": 1, "nama_ruangan": 1})
+    if r:
+        import re as _re
+        label = [x for x in (
+            f"{r.get('kode_ruangan','')} — {r.get('nama_ruangan','')}".strip(" —"),
+            str(r.get("kode_ruangan") or "").strip(),
+            str(r.get("nama_ruangan") or "").strip()) if x]
+        if label:
+            dipakai = await db.assets.count_documents({
+                "dihapus": {"$ne": True},
+                "$or": [{"location": {"$regex": f"^{_re.escape(v)}$", "$options": "i"}}
+                        for v in label]})
+            if dipakai:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Ruangan {r.get('kode_ruangan')} masih dipakai sebagai "
+                           f"lokasi {dipakai} aset — pindahkan aset atau nonaktifkan "
+                           f"ruangan, jangan dihapus (temuan #34).")
     res = await db.ruangan.delete_one({"id": ruangan_id})
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Ruangan tidak ditemukan")
