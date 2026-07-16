@@ -48,6 +48,18 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#323] UI Referensi Akun Persediaan (evaluasi #3b) — 2026-07-16
+
+- **Halaman "Referensi Akun Persediaan"** (`PersediaanAkunPage.jsx`) dari Beranda
+  Modul: katalog akun 1171xx (referensi), daftar **pemetaan sub-kelompok → akun**
+  (override satker), dengan admin **tambah/ubah/hapus** (POST/DELETE
+  `/persediaan-akun`). Sub-kelompok difilter 5-digit '1'; akun dipilih dari katalog.
+- Banner menegaskan default 117111 & sub-akun lain **perlu verifikasi Lampiran BAS**.
+  Wiring `App.js` + `ModuleHomePage.jsx` (tombol "Referensi Akun Persediaan").
+  `eslint` bersih, `yarn build` sukses. Melengkapi #3a (backend).
+
+---
+
 ## [#322] Kelola Referensi Akun Persediaan (sub-kelompok → 1171xx) — evaluasi #3a — 2026-07-16
 
 - **Endpoint kelola akun persediaan** (`routes/persediaan_akun.py`, terdaftar di

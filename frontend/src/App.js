@@ -29,6 +29,7 @@ const KodefikasiPage = lazy(() => import("./pages/KodefikasiPage"));
 const PejabatPage = lazy(() => import("./pages/PejabatPage"));
 const RuanganPage = lazy(() => import("./pages/RuanganPage"));
 const AkunBasPage = lazy(() => import("./pages/AkunBasPage"));
+const PersediaanAkunPage = lazy(() => import("./pages/PersediaanAkunPage"));
 const PegawaiPage = lazy(() => import("./pages/PegawaiPage"));
 const PersediaanPage = lazy(() => import("./pages/PersediaanPage"));
 const PelaporanPage = lazy(() => import("./pages/PelaporanPage"));
@@ -260,6 +261,7 @@ function App() {
   const [showPejabat, setShowPejabat] = useState(false);
   const [showRuangan, setShowRuangan] = useState(false);
   const [showAkunBas, setShowAkunBas] = useState(false);
+  const [showPersediaanAkun, setShowPersediaanAkun] = useState(false);
   const [showPegawai, setShowPegawai] = useState(false);
   // Halaman Master Persediaan (modul Inventarisasi Persediaan — sebagian aktif)
   const [showPersediaan, setShowPersediaan] = useState(false);
@@ -347,6 +349,18 @@ function App() {
       <div className="App">
         <Suspense fallback={<PageLoader />}>
           <AkunBasPage user={user} onBack={() => setShowAkunBas(false)} />
+        </Suspense>
+        <Toaster position="top-right" richColors />
+      </div>
+    );
+  }
+
+  // Referensi Akun Persediaan (sub-kelompok → 1171xx) — perkakas Penatausahaan.
+  if (user && showPersediaanAkun) {
+    return (
+      <div className="App">
+        <Suspense fallback={<PageLoader />}>
+          <PersediaanAkunPage user={user} onBack={() => setShowPersediaanAkun(false)} />
         </Suspense>
         <Toaster position="top-right" richColors />
       </div>
@@ -551,6 +565,7 @@ function App() {
             onOpenPejabat={() => setShowPejabat(true)}
             onOpenRuangan={() => setShowRuangan(true)}
             onOpenAkunBas={() => setShowAkunBas(true)}
+            onOpenPersediaanAkun={() => setShowPersediaanAkun(true)}
             onOpenPegawai={() => setShowPegawai(true)}
             onOpenPersediaan={() => setShowPersediaan(true)}
             onOpenPelaporan={() => setShowPelaporan(true)}
