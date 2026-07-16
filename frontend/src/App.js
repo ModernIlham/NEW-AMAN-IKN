@@ -28,6 +28,7 @@ const ModuleHomePage = lazy(() => import("./pages/ModuleHomePage"));
 const KodefikasiPage = lazy(() => import("./pages/KodefikasiPage"));
 const PejabatPage = lazy(() => import("./pages/PejabatPage"));
 const RuanganPage = lazy(() => import("./pages/RuanganPage"));
+const AkunBasPage = lazy(() => import("./pages/AkunBasPage"));
 const PersediaanPage = lazy(() => import("./pages/PersediaanPage"));
 const PelaporanPage = lazy(() => import("./pages/PelaporanPage"));
 const PenggunaanPage = lazy(() => import("./pages/PenggunaanPage"));
@@ -257,6 +258,7 @@ function App() {
   const [showKodefikasi, setShowKodefikasi] = useState(false);
   const [showPejabat, setShowPejabat] = useState(false);
   const [showRuangan, setShowRuangan] = useState(false);
+  const [showAkunBas, setShowAkunBas] = useState(false);
   // Halaman Master Persediaan (modul Inventarisasi Persediaan — sebagian aktif)
   const [showPersediaan, setShowPersediaan] = useState(false);
   // Halaman hub Pelaporan (arsip laporan lintas kegiatan)
@@ -331,6 +333,18 @@ function App() {
       <div className="App">
         <Suspense fallback={<PageLoader />}>
           <RuanganPage user={user} onBack={() => setShowRuangan(false)} />
+        </Suspense>
+        <Toaster position="top-right" richColors />
+      </div>
+    );
+  }
+
+  // Referensi Akun Neraca (BAS) — perkakas Penatausahaan, dibuka dari Beranda Modul.
+  if (user && showAkunBas) {
+    return (
+      <div className="App">
+        <Suspense fallback={<PageLoader />}>
+          <AkunBasPage user={user} onBack={() => setShowAkunBas(false)} />
         </Suspense>
         <Toaster position="top-right" richColors />
       </div>
@@ -522,6 +536,7 @@ function App() {
             onOpenKodefikasi={() => setShowKodefikasi(true)}
             onOpenPejabat={() => setShowPejabat(true)}
             onOpenRuangan={() => setShowRuangan(true)}
+            onOpenAkunBas={() => setShowAkunBas(true)}
             onOpenPersediaan={() => setShowPersediaan(true)}
             onOpenPelaporan={() => setShowPelaporan(true)}
             onOpenPenggunaan={() => setShowPenggunaan(true)}

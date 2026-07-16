@@ -220,7 +220,11 @@ Peralatan & Mesin = 132111**, **4 Gedung & Bangunan = 133111**, **5 JIJ =
 **[perlu verifikasi Lampiran BAS / KEP-211/PB/2018]** & dapat ditimpa admin
 (pola referensi masa manfaat). **Laporan Posisi BMN di Neraca (#302) & DBKP per
 Golongan (#303) kini menampilkan kolom Akun Neraca per golongan**
-(`akun_untuk_golongan`); UI kelola akun/BAS menyusul.
+(`akun_untuk_golongan`). **UI kelola tersedia (#304):** halaman *Referensi Akun
+Neraca* (`AkunBasPage.jsx`) dari Beranda Modul — semua user melihat pemetaan
+(sumber Default riset / Input satker), admin menyunting akun+uraian per golongan
+(`POST /akun-bas`) atau mengembalikan override ke default
+(`DELETE /akun-bas/{golongan}`).
 
 ---
 
