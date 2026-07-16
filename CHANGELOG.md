@@ -48,6 +48,23 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#333] Review batch 5: polesan UI Persediaan (banner, massal, riwayat, kertas kerja) — 2026-07-16
+
+- **#20 — Banner selalu segar**: setelah transaksi masuk/keluar/opname/massal
+  sukses, banner peringatan stok & status opname semesteran di-refresh otomatis
+  (`refreshRingkasan`).
+- **#23 + tindak lanjut #17 — dialog massal lengkap**: input **Tgl Dokumen**,
+  **kedaluwarsa per baris barang**, dan pemilih **Perolehan (Pengadaan)**
+  (mengirim `perolehan_id` → semua jurnal baris ber-snapshot BAST, pasangan #332).
+- **#24 — Riwayat "Muat lebih"**: dialog riwayat tak lagi terpotong 50 baris —
+  tombol memuat halaman berikutnya (paginasi backend yang sudah ada).
+- **Tindak lanjut #22**: unduh kertas kerja opname menyertakan **filter gudang
+  aktif** (`?gudang=`).
+- **#49 — teks basi diperbaiki**: header tak lagi bilang "transaksi masuk/keluar
+  menyusul". `eslint --max-warnings=0` bersih, `yarn build` sukses.
+
+---
+
 ## [#332] Review batch 4: integrasi Pengadaan–Persediaan & laporan persediaan — 2026-07-16
 
 - **#11 — Hapus perolehan tak lagi meninggalkan back-link menggantung**: sebelum

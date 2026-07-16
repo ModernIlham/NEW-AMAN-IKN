@@ -252,6 +252,7 @@ export default function PersediaanPage({ user, onBack }) {
       toast.success(`${r.data?.message} — stok kini ${r.data?.stok}`);
       setMasuk(null);
       load(page, search, status);
+      refreshRingkasan();
     } catch (err) {
       toast.error(getApiError(err, "Gagal mencatat transaksi masuk"));
     } finally {
@@ -270,6 +271,7 @@ export default function PersediaanPage({ user, onBack }) {
       toast.success(`${r.data?.message} — nilai keluar ${fmtRp(r.data?.nilai_keluar)}, stok kini ${r.data?.stok}`);
       setKeluar(null);
       load(page, search, status);
+      refreshRingkasan();
     } catch (err) {
       toast.error(getApiError(err, "Gagal mencatat transaksi keluar"));
     } finally {
@@ -312,6 +314,7 @@ export default function PersediaanPage({ user, onBack }) {
       toast.success(r.data?.message || "Opname tercatat");
       setOpname(null);
       load(page, search, status);
+      refreshRingkasan();
     } catch (err) {
       toast.error(getApiError(err, "Gagal merekam opname"));
     } finally {
@@ -321,6 +324,7 @@ export default function PersediaanPage({ user, onBack }) {
 
   const bukaMassal = () => setMassal({
     arah: "masuk", jenis: "pembelian", no_bukti: "", jenis_dokumen: "",
+    tgl_dokumen: "", perolehan_id: "",
     penyedia: "", unit_penerima: "", keterangan: "",
     items: [], cari: "", hasil: [], mencari: false, saving: false, laporan: null,
   });
@@ -359,6 +363,7 @@ export default function PersediaanPage({ user, onBack }) {
       const r = await axios.post(`${API}/persediaan/transaksi-massal`, {
         arah: massal.arah, jenis: massal.jenis, no_bukti: massal.no_bukti,
         jenis_dokumen: massal.jenis_dokumen, penyedia: massal.penyedia,
+        tgl_dokumen: massal.tgl_dokumen, perolehan_id: massal.perolehan_id,
         unit_penerima: massal.unit_penerima, keterangan: massal.keterangan,
         items: massal.items.map((it) => ({
           persediaan_id: it.id, jumlah: parseInt(it.jumlah, 10),
@@ -376,20 +381,45 @@ export default function PersediaanPage({ user, onBack }) {
         setMassal(null);
       }
       load(1, search, status);
+      refreshRingkasan();
     } catch (err) {
       toast.error(getApiError(err, "Gagal memproses transaksi massal"));
       setMassal((m) => (m ? { ...m, saving: false } : m));
     }
   };
 
+  // Segarkan banner peringatan stok & status opname setelah transaksi (temuan #20).
+  const refreshRingkasan = () => {
+    axios.get(`${API}/persediaan/peringatan`).then((r) => setPeringatan(r.data)).catch(() => {});
+    axios.get(`${API}/persediaan/opname/status`).then((r) => setOpnameStatus(r.data)).catch(() => {});
+  };
+
   const openRiwayat = async (item) => {
-    setRiwayat({ item, rows: [], loading: true });
+    setRiwayat({ item, rows: [], loading: true, page: 1, total: 0 });
     try {
-      const r = await axios.get(`${API}/persediaan/${item.id}/riwayat`, { params: { page_size: 50 } });
-      setRiwayat({ item, rows: r.data?.items || [], loading: false });
+      const r = await axios.get(`${API}/persediaan/${item.id}/riwayat`, { params: { page: 1, page_size: 50 } });
+      setRiwayat({ item, rows: r.data?.items || [], loading: false, page: 1, total: r.data?.total || 0 });
     } catch (err) {
       toast.error(getApiError(err, "Gagal memuat riwayat"));
       setRiwayat(null);
+    }
+  };
+
+  // Muat halaman riwayat berikutnya (temuan #24 — dulu terpotong 50 baris).
+  const muatRiwayatLagi = async () => {
+    if (!riwayat || riwayat.loading) return;
+    const next = (riwayat.page || 1) + 1;
+    setRiwayat((r) => ({ ...r, loading: true }));
+    try {
+      const r = await axios.get(`${API}/persediaan/${riwayat.item.id}/riwayat`, { params: { page: next, page_size: 50 } });
+      setRiwayat((prev) => ({
+        ...prev, loading: false, page: next,
+        rows: [...(prev?.rows || []), ...(r.data?.items || [])],
+        total: r.data?.total ?? prev?.total,
+      }));
+    } catch (err) {
+      toast.error(getApiError(err, "Gagal memuat riwayat"));
+      setRiwayat((r) => (r ? { ...r, loading: false } : r));
     }
   };
 
@@ -446,7 +476,7 @@ export default function PersediaanPage({ user, onBack }) {
           <div className="min-w-0 flex-1">
             <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight">Master Persediaan</h1>
             <p className="text-[11px] sm:text-xs text-muted-foreground truncate">
-              {total} barang · stok & nilai mengikuti layer FIFO · transaksi masuk/keluar menyusul
+              {total} barang · stok & nilai mengikuti layer FIFO · transaksi masuk/keluar ber-jurnal
             </p>
           </div>
         </div>
@@ -540,7 +570,7 @@ export default function PersediaanPage({ user, onBack }) {
                   <FileDown className="w-4 h-4 mr-2" />Laporan Mutasi (pilih periode)
                 </DropdownMenuItem>
                 <DropdownMenuItem className="min-h-[42px]" data-testid="persediaan-kertas-kerja"
-                  onClick={() => downloadFileWithProgress(`${API}/persediaan/opname/kertas-kerja-pdf`, "Kertas_Kerja_Opname.pdf", { label: "Kertas Kerja Opname" }).catch(() => {})}>
+                  onClick={() => downloadFileWithProgress(`${API}/persediaan/opname/kertas-kerja-pdf${gudang ? `?gudang=${encodeURIComponent(gudang)}` : ""}`, "Kertas_Kerja_Opname.pdf", { label: gudang ? `Kertas Kerja Opname (${gudang})` : "Kertas Kerja Opname" }).catch(() => {})}>
                   <ClipboardCheck className="w-4 h-4 mr-2" />Kertas Kerja Opname
                 </DropdownMenuItem>
                 <DropdownMenuItem className="min-h-[42px]" data-testid="persediaan-baof"
@@ -1272,6 +1302,14 @@ export default function PersediaanPage({ user, onBack }) {
                   <p className="mt-0.5 text-muted-foreground">Petugas: {t.petugas}</p>
                 </div>
               ))}
+              {(riwayat?.rows?.length || 0) < (riwayat?.total || 0) && (
+                <Button variant="outline" size="sm" className="w-full gap-1.5"
+                  disabled={riwayat?.loading} onClick={muatRiwayatLagi}
+                  data-testid="persediaan-riwayat-muat-lagi">
+                  {riwayat?.loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                  Muat lebih ({riwayat?.rows?.length}/{riwayat?.total})
+                </Button>
+              )}
             </div>
           )}
         </DialogContent>
@@ -1388,6 +1426,27 @@ export default function PersediaanPage({ user, onBack }) {
                       <Input id="psd-m-penyedia" value={massal.penyedia}
                         onChange={(e) => setMField("penyedia", e.target.value)} />
                     </div>
+                    <div>
+                      <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-m-tgldok">Tgl Dokumen</label>
+                      <Input id="psd-m-tgldok" type="date" value={massal.tgl_dokumen}
+                        onChange={(e) => setMField("tgl_dokumen", e.target.value)} />
+                    </div>
+                    {pengadaanList.length > 0 && (
+                      <div className="col-span-2">
+                        <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-m-perolehan">Perolehan (Pengadaan) — opsional</label>
+                        <select id="psd-m-perolehan" value={massal.perolehan_id}
+                          onChange={(e) => setMField("perolehan_id", e.target.value)}
+                          className="w-full h-9 px-2 rounded-lg border border-border bg-background text-sm text-foreground"
+                          data-testid="persediaan-massal-perolehan">
+                          <option value="">— tanpa tautan dokumen sumber —</option>
+                          {pengadaanList.map((pp) => (
+                            <option key={pp.id} value={pp.id}>
+                              {[pp.nomor_bast, pp.pihak, pp.tanggal_bast].filter(Boolean).join(" · ")}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </>
                 ) : (
                   <div>
@@ -1443,8 +1502,12 @@ export default function PersediaanPage({ user, onBack }) {
                             value={it.jumlah} onChange={(e) => setItemMassal(it.id, "jumlah", e.target.value)}
                             data-testid={`persediaan-massal-jumlah-${it.kode_barang}-${it.nup}`} />
                           {massal.arah === "masuk" && (
-                            <Input type="number" min="0" placeholder="Harga" className="w-28 h-8 text-xs"
-                              value={it.harga_satuan} onChange={(e) => setItemMassal(it.id, "harga_satuan", e.target.value)} />
+                            <>
+                              <Input type="number" min="0" placeholder="Harga" className="w-28 h-8 text-xs"
+                                value={it.harga_satuan} onChange={(e) => setItemMassal(it.id, "harga_satuan", e.target.value)} />
+                              <Input type="date" title="Kedaluwarsa batch (opsional)" className="w-32 h-8 text-xs"
+                                value={it.expired} onChange={(e) => setItemMassal(it.id, "expired", e.target.value)} />
+                            </>
                           )}
                           <button type="button" onClick={() => hapusItemMassal(it.id)} aria-label="Hapus barang"
                             className="h-8 w-8 rounded-lg border border-border text-red-500 flex items-center justify-center hover:bg-red-500/10 flex-shrink-0 min-h-0 min-w-0">
