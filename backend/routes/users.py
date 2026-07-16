@@ -15,8 +15,14 @@ users_router = APIRouter()
 # ============================================================================
 
 @users_router.get("/users")
-async def get_all_users(admin_id: str = ""):
-    """Get all users (admin only)"""
+async def get_all_users(admin_id: str = "", _admin: dict = Depends(require_admin)):
+    """Get all users (admin only — ditegakkan lewat JWT, bukan param).
+
+    Temuan review keamanan: dulu cek admin hanya berjalan bila param `admin_id`
+    dikirim, sehingga GET /users tanpa param bocor tanpa autentikasi. Param
+    `admin_id` dipertahankan demi kompatibilitas pemanggil lama, tetapi
+    otorisasi kini dari token (require_admin).
+    """
     if admin_id:
         admin_user = await db.users.find_one({"id": admin_id})
         if not admin_user or admin_user.get("role") != "admin":

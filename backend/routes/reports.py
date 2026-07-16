@@ -2082,9 +2082,13 @@ async def generate_lkb_pdf(_user: dict = Depends(require_user_or_query_token)):
     from pembukuan_utils import KONDISI_LKB, build_lkb_rows, parse_harga
 
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    # LKB = laporan posisi/snapshot kondisi — aset ber-SK penghapusan (soft-delete
+    # dihapus=True) TIDAK ikut, selaras DBKP/Posisi Neraca/penyusutan/rekonsiliasi
+    # (temuan review: tanpa filter ini LKB lebih saji & tak pernah rekon).
     assets = await db.assets.find(
-        {}, {"_id": 0, "asset_code": 1, "NUP": 1, "asset_name": 1,
-             "condition": 1, "purchase_price": 1},
+        active_asset_filter(),
+        {"_id": 0, "asset_code": 1, "NUP": 1, "asset_name": 1,
+         "condition": 1, "purchase_price": 1},
     ).to_list(500000)
     if not assets:
         raise HTTPException(status_code=404, detail="Belum ada data aset")

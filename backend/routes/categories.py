@@ -6,7 +6,7 @@ import asyncio
 import csv as csv_module
 from typing import List
 from fastapi import APIRouter, HTTPException, UploadFile, File, Request, Depends
-from auth_utils import require_user
+from auth_utils import require_admin, require_user
 
 from db import db
 from models import CategoryCreate
@@ -55,8 +55,8 @@ async def get_all_categories():
     return categories
 
 @categories_router.post("/categories")
-async def create_category(category: CategoryCreate):
-    """Create a new category"""
+async def create_category(category: CategoryCreate, _user: dict = Depends(require_user)):
+    """Create a new category (login wajib — temuan review keamanan)."""
     kode = category.kode_aset.strip() if category.kode_aset else ""
     label = category.label.strip()
     
@@ -76,8 +76,8 @@ async def create_category(category: CategoryCreate):
     return {"id": cat_id, "label": label, "kode_aset": kode}
 
 @categories_router.delete("/categories/{category_id}")
-async def delete_category(category_id: str):
-    """Delete a category"""
+async def delete_category(category_id: str, _user: dict = Depends(require_user)):
+    """Delete a category (login wajib — temuan review keamanan)."""
     result = await db.categories.delete_one({"id": category_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Kategori tidak ditemukan")
@@ -85,8 +85,8 @@ async def delete_category(category_id: str):
     return {"message": "Kategori berhasil dihapus"}
 
 @categories_router.delete("/categories-all")
-async def delete_all_categories():
-    """Delete ALL categories"""
+async def delete_all_categories(_admin: dict = Depends(require_admin)):
+    """Delete ALL categories (destruktif — khusus admin, temuan review keamanan)."""
     result = await db.categories.delete_many({})
     invalidate_category_cache()
     logger.info(f"Deleted all categories: {result.deleted_count}")
