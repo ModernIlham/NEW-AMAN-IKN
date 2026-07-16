@@ -1510,6 +1510,15 @@ async def generate_posisi_bmn_pdf(_user: dict = Depends(require_user_or_query_to
         p_nilai += nilai_persediaan_dari_batches(it.get("batches"))
     posisi = posisi_neraca(rows, total_aset, p_jumlah, p_nilai)
 
+    # Akun neraca per golongan (BAS #300): default riset ditimpa entri satker.
+    from akun_bas_utils import AKUN_NERACA_DEFAULT, akun_untuk_golongan
+    peta_akun = {g: dict(v) for g, v in AKUN_NERACA_DEFAULT.items()}
+    async for m in db.akun_bas.find({}, {"_id": 0}):
+        peta_akun[m["golongan"]] = {"akun": m.get("akun", ""), "uraian": m.get("uraian", "")}
+
+    def _akun(g):
+        return (akun_untuk_golongan(g, peta_akun) or {}).get("akun") or "-"
+
     def fmt_rp(val):
         try: return f"{int(val):,}".replace(",", ".")
         except (ValueError, TypeError, OverflowError): return "0"
@@ -1528,7 +1537,7 @@ async def generate_posisi_bmn_pdf(_user: dict = Depends(require_user_or_query_to
         st['Meta']))
     elements.append(Spacer(1, 4*rl_mm))
 
-    headers = ["Gol.", "Uraian",
+    headers = ["Gol.", "Akun\nNeraca", "Uraian",
                "Jml\nIntra", "Nilai Intra\n(Rp)",
                "Jml\nEkstra", "Nilai Ekstra\n(Rp)",
                "Jml\nTotal", "Nilai Total\n(Rp)"]
@@ -1536,6 +1545,7 @@ async def generate_posisi_bmn_pdf(_user: dict = Depends(require_user_or_query_to
     for r in posisi["aset"]:
         table_data.append([
             Paragraph(r["golongan"], st['CellCenter']),
+            Paragraph(_akun(r["golongan"]), st['CellCenter']),
             Paragraph(r["uraian"], st['Cell']),
             Paragraph(str(r["jumlah_intra"]), st['CellCenter']),
             Paragraph(fmt_rp(r["nilai_intra"]), st['CellRight']),
@@ -1547,6 +1557,7 @@ async def generate_posisi_bmn_pdf(_user: dict = Depends(require_user_or_query_to
     p = posisi["persediaan"]
     table_data.append([
         Paragraph("1", st['CellCenter']),
+        Paragraph(_akun("1"), st['CellCenter']),
         Paragraph("Persediaan (aset lancar — nilai FIFO per layer)", st['Cell']),
         Paragraph(str(p["jumlah"]), st['CellCenter']),
         Paragraph(fmt_rp(p["nilai"]), st['CellRight']),
@@ -1558,6 +1569,7 @@ async def generate_posisi_bmn_pdf(_user: dict = Depends(require_user_or_query_to
     g = posisi["total"]
     table_data.append([
         Paragraph("", st['CellCenter']),
+        Paragraph("", st['CellCenter']),
         Paragraph("<b>TOTAL POSISI BMN</b>", st['Cell']),
         Paragraph(f"<b>{g['jumlah_intra']}</b>", st['CellCenter']),
         Paragraph(f"<b>{fmt_rp(g['nilai_intra'])}</b>", st['CellRight']),
@@ -1567,7 +1579,7 @@ async def generate_posisi_bmn_pdf(_user: dict = Depends(require_user_or_query_to
         Paragraph(f"<b>{fmt_rp(g['nilai_total'])}</b>", st['CellRight']),
     ])
     table = Table(table_data,
-                  colWidths=_fit_col_widths([32, 180, 62, 100, 62, 100, 62, 100], doc.width),
+                  colWidths=_fit_col_widths([32, 54, 150, 58, 94, 58, 94, 58, 94], doc.width),
                   repeatRows=1)
     table.setStyle(_std_table_style(zebra=True, total_row=True))
     elements.append(table)
@@ -1579,7 +1591,9 @@ async def generate_posisi_bmn_pdf(_user: dict = Depends(require_user_or_query_to
         "Catatan: hanya barang intrakomptabel yang tersaji di neraca; pemilahan mengikuti nilai satuan "
         f"minimum kapitalisasi PMK 181/PMK.06/2016 (Peralatan dan Mesin ≥ Rp{ambang_pm}; Gedung dan "
         f"Bangunan ≥ Rp{ambang_gb}; golongan lain tanpa ambang). Jumlah persediaan dihitung per jenis "
-        "barang; komponen KDP, ATB, dan penyusutan menyusul bertahap.", st['Meta']))
+        "barang; komponen KDP, ATB, dan penyusutan menyusul bertahap. Kolom Akun Neraca = akun "
+        "representatif per golongan (referensi BAS); akun per sub-kelompok dapat berbeda — "
+        "verifikasi Lampiran BAS.", st['Meta']))
 
     elements.append(Spacer(1, 12*rl_mm))
     ttd = await _penandatangan_kpb(settings, today_iso)
