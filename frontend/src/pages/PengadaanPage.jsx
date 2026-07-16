@@ -24,7 +24,8 @@ const BARANG_KOSONG = { uraian: "", kode: "", jumlah: "1", harga_satuan: "" };
  * (Perpres 16/2018 jo. 46/2025, pustaka §10): satu entri per BAST/kontrak,
  * checklist dokumen sumber (penangkal "BAST tercecer"), tautan barang ke
  * aset master + penanda ekstrakomptabel PMK 181. Pencatatan resmi tetap
- * di SAKTI; pra-isi draft aset baru menyusul sesuai masterplan.
+ * di SAKTI; barang belum tertaut dapat dibuatkan draft aset otomatis
+ * (tombol "Buat Draft Aset", NUP berurut).
  */
 export default function PengadaanPage({ user, onBack }) {
   const isAdmin = user?.role === "admin";

@@ -30,7 +30,8 @@ const IKON_OBJEK = {
  * Temuan otomatis dari register yang sudah ada, dikelompokkan per lima
  * objek pemantauan + register penertiban ber-tenggat 15 hari kerja;
  * bahan pra-isi laporan wasdal semesteran (kanal resmi pelaporan tetap
- * Modul Wasdal SIMAN v2). BA pemantauan insidentil menyusul.
+ * Modul Wasdal SIMAN v2), plus register pemantauan insidentil ber-BA
+ * (isi BA + PDF + lampiran).
  */
 export default function WasdalPage({ user, onBack }) {
   const isAdmin = user?.role === "admin";

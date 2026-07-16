@@ -14,7 +14,6 @@ Tests new background job endpoints:
 - POST /api/backup/dismiss/{job_id} - Dismiss completed/failed job
 - GET /api/backup/stats - Get collection statistics
 - Concurrent job prevention (409 when job already running)
-- Legacy endpoints: GET /api/backup/create, POST /api/backup/restore
 """
 
 import pytest
@@ -29,6 +28,35 @@ BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 # Test credentials
 ADMIN_USERNAME = "admin"
 ADMIN_PASSWORD = TEST_ADMIN_PASSWORD
+
+
+def _create_backup_zip(auth_headers):
+    """Buat backup via alur background (start → progress → download); bytes ZIP.
+
+    Endpoint sinkron legacy GET /api/backup/create sudah dihapus (temuan #59) —
+    semua pembuatan backup kini lewat job background.
+    """
+    start = requests.post(f"{BASE_URL}/api/backup/start", headers=auth_headers, timeout=30)
+    if start.status_code != 200:
+        pytest.skip(f"Could not start backup job: {start.status_code}")
+    job_id = start.json().get("job_id")
+    deadline = time.time() + 120
+    while time.time() < deadline:
+        pr = requests.get(f"{BASE_URL}/api/backup/progress/{job_id}", headers=auth_headers)
+        if pr.status_code == 200:
+            status = pr.json().get("status")
+            if status == "completed":
+                break
+            if status == "failed":
+                pytest.skip(f"Backup job failed: {pr.json().get('error')}")
+        time.sleep(2)
+    else:
+        pytest.skip("Backup job did not complete in time")
+    dl = requests.get(f"{BASE_URL}/api/backup/download/{job_id}", headers=auth_headers, timeout=120)
+    requests.post(f"{BASE_URL}/api/backup/dismiss/{job_id}", headers=auth_headers)
+    if dl.status_code != 200:
+        pytest.skip(f"Could not download backup: {dl.status_code}")
+    return dl.content
 
 
 class TestBackgroundBackupAPIs:
@@ -366,12 +394,8 @@ class TestBackgroundBackupAPIs:
                 requests.post(f"{BASE_URL}/api/backup/dismiss/{data['job_id']}", headers=auth_headers)
                 time.sleep(1)
         
-        # Create a valid backup first using legacy endpoint (faster)
-        backup_resp = requests.get(f"{BASE_URL}/api/backup/create", headers=auth_headers, timeout=60)
-        if backup_resp.status_code != 200:
-            pytest.skip("Could not create backup for restore test")
-        
-        backup_content = backup_resp.content
+        # Create a valid backup first via the background flow
+        backup_content = _create_backup_zip(auth_headers)
         
         # Start restore
         restore_resp = requests.post(
@@ -456,48 +480,6 @@ class TestBackgroundBackupAPIs:
                 assert data.get("status") == "dismissed", "Dismissed job should not show as active"
 
     # =========================================================================
-    # TEST: Legacy endpoints still work
-    # =========================================================================
-    
-    def test_legacy_backup_create_works(self, auth_headers):
-        """GET /api/backup/create (legacy) should still work"""
-        response = requests.get(f"{BASE_URL}/api/backup/create", headers=auth_headers, timeout=60)
-        assert response.status_code == 200, f"Expected 200, got {response.status_code}"
-        
-        content_type = response.headers.get("Content-Type", "")
-        assert "zip" in content_type or "octet-stream" in content_type
-        print("PASS: Legacy backup create works")
-    
-    def test_legacy_restore_works(self, auth_headers):
-        """POST /api/backup/restore (legacy) should still work"""
-        # First dismiss any existing jobs
-        active_resp = requests.get(f"{BASE_URL}/api/backup/active", headers=auth_headers)
-        if active_resp.status_code == 200:
-            data = active_resp.json()
-            if data.get("status") != "idle" and data.get("job_id"):
-                requests.post(f"{BASE_URL}/api/backup/dismiss/{data['job_id']}", headers=auth_headers)
-                time.sleep(1)
-        
-        # Create backup
-        backup_resp = requests.get(f"{BASE_URL}/api/backup/create", headers=auth_headers, timeout=60)
-        if backup_resp.status_code != 200:
-            pytest.skip("Could not create backup")
-        
-        # Restore using legacy endpoint
-        restore_resp = requests.post(
-            f"{BASE_URL}/api/backup/restore",
-            headers=auth_headers,
-            files={"file": ("backup.zip", io.BytesIO(backup_resp.content), "application/zip")},
-            timeout=120
-        )
-        assert restore_resp.status_code == 200, f"Expected 200, got {restore_resp.status_code}: {restore_resp.text}"
-        
-        data = restore_resp.json()
-        assert "message" in data, "Response should have message"
-        assert "restored" in data or "total_restored" in data, "Response should have restore stats"
-        print("PASS: Legacy restore works")
-
-    # =========================================================================
     # TEST: Login works after background restore
     # =========================================================================
     
@@ -511,16 +493,14 @@ class TestBackgroundBackupAPIs:
                 requests.post(f"{BASE_URL}/api/backup/dismiss/{data['job_id']}", headers=auth_headers)
                 time.sleep(1)
         
-        # Create backup using legacy (faster)
-        backup_resp = requests.get(f"{BASE_URL}/api/backup/create", headers=auth_headers, timeout=60)
-        if backup_resp.status_code != 200:
-            pytest.skip("Could not create backup")
-        
+        # Create backup via the background flow
+        backup_content = _create_backup_zip(auth_headers)
+
         # Start background restore
         restore_resp = requests.post(
             f"{BASE_URL}/api/backup/restore/start",
             headers=auth_headers,
-            files={"file": ("backup.zip", io.BytesIO(backup_resp.content), "application/zip")},
+            files={"file": ("backup.zip", io.BytesIO(backup_content), "application/zip")},
             timeout=60
         )
         if restore_resp.status_code != 200:

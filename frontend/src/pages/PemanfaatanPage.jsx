@@ -40,7 +40,7 @@ const BENTUK_DAPAT_FASILITAS = ["ksp", "bgs_bsg"];
  * nomor persetujuan Pengelola + perjanjian (sewa: + NTPN) — mencegah
  * temuan auditor tersering secara struktural. Kontribusi tahunan (KSP/
  * BGS/KSPI) tercatat per tahun ber-NTPN dengan pengingat tunggakan;
- * lampiran scan dokumen menyusul.
+ * scan dokumen perjanjian terlampir per register.
  */
 export default function PemanfaatanPage({ user, onBack }) {
   const isAdmin = user?.role === "admin";

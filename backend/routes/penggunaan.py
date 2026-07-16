@@ -1,10 +1,11 @@
 """PENGGUNAAN — Fase 3 tahap awal: rekap aset per pemegang lintas kegiatan.
 
-Membaca data yang SUDAH dicatat modul inventarisasi (user, pengguna_nip,
-pengguna_melekat_ke, pengguna_jabatan, bast_file_id) — tidak ada koleksi
-baru; ini proyeksi baca. Daftar aset per pemegang dapat diunduh sebagai
-PDF lampiran BAST. PSP/alih status/BMN idle menyusul sesuai masterplan
-Fase 3 (PMK 40/2024 & 120/2024 — pustaka §1).
+Rekap per pemegang membaca data yang SUDAH dicatat modul inventarisasi
+(user, pengguna_nip, pengguna_melekat_ke, pengguna_jabatan, bast_file_id)
+— proyeksi baca, dapat diunduh sebagai PDF lampiran BAST. Register PSP
+(SK + BAST), proses alih status/alih fungsi, dan BMN idle (klarifikasi →
+usul serah) tersedia di modul ini (PMK 40/2024 & 120/2024 — pustaka §1);
+transisi terminalnya memproyeksikan status ke master aset.
 """
 import uuid
 from datetime import datetime, timezone

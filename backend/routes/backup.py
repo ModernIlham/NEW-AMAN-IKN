@@ -1,5 +1,4 @@
 """System Backup & Restore routes with background processing. Admin only."""
-import io
 import os
 import json
 import uuid
@@ -10,7 +9,7 @@ import shutil
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Header, UploadFile, File
-from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.responses import FileResponse
 from bson import ObjectId
 
 from db import db, fs_bucket
@@ -675,117 +674,3 @@ async def dismiss_job(job_id: str, authorization: str = Header(None)):
         if p.exists():
             p.unlink(missing_ok=True)
     return {"ok": True}
-
-
-# Legacy endpoints (kept for backward compatibility but redirect to new flow)
-@backup_router.get("/create")
-async def create_backup_legacy(authorization: str = Header(None)):
-    """Legacy: synchronous backup. Still works but prefer /start for background."""
-    user = await require_admin(authorization)
-    logger.info(f"Legacy backup by {user.get('username')}")
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
-        stats = {}
-        for col_name in await _app_collections():
-            docs = []
-            async for doc in db[col_name].find({}):
-                docs.append(serialize_doc(doc, keep_id=col_name in KEEP_ID_COLLECTIONS))
-            stats[col_name] = len(docs)
-            zf.writestr(f"{col_name}.json", json.dumps(docs, ensure_ascii=False, default=str))
-        if UPLOADS_DIR.exists():
-            for file_path in UPLOADS_DIR.rglob("*"):
-                if file_path.is_file():
-                    rel_path = file_path.relative_to(UPLOADS_DIR)
-                    zf.write(file_path, f"uploads/{rel_path}")
-        metadata = {
-            "version": APP_VERSION,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "created_by": user.get("username"),
-            "collections": stats,
-            "total_records": sum(stats.values()),
-        }
-        zf.writestr("metadata.json", json.dumps(metadata, ensure_ascii=False, indent=2))
-    zip_buffer.seek(0)
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    filename = f"backup_{timestamp}.zip"
-    return StreamingResponse(zip_buffer, media_type="application/zip", headers={"Content-Disposition": f"attachment; filename={filename}"})
-
-
-@backup_router.post("/restore")
-async def restore_backup_legacy(file: UploadFile = File(...), authorization: str = Header(None)):
-    """Legacy: synchronous restore. Still works but prefer /restore/start for background."""
-    await require_admin(authorization)  # auth side-effect only
-    if not file.filename.endswith(".zip"):
-        raise HTTPException(status_code=400, detail="File harus berformat ZIP")
-    try:
-        content = await file.read()
-        zip_buffer = io.BytesIO(content)
-    except Exception:
-        logger.exception("Restore: gagal membaca file upload")
-        raise HTTPException(status_code=400, detail="Gagal membaca file backup")
-    try:
-        with zipfile.ZipFile(zip_buffer, 'r') as zf:
-            names = zf.namelist()
-            if "metadata.json" not in names:
-                raise HTTPException(status_code=400, detail="File backup tidak valid")
-            metadata = json.loads(zf.read("metadata.json"))
-            missing = [c for c in ["users", "categories", "activities", "assets"] if f"{c}.json" not in names]
-            if missing:
-                raise HTTPException(status_code=400, detail=f"Data tidak lengkap: {', '.join(missing)}")
-    except zipfile.BadZipFile:
-        raise HTTPException(status_code=400, detail="File ZIP rusak")
-    except HTTPException:
-        raise
-    safety_data = {}
-    for col_name in await _app_collections():
-        docs = []
-        async for doc in db[col_name].find({}):
-            docs.append(serialize_doc(doc, keep_id=col_name in KEEP_ID_COLLECTIONS))
-        safety_data[col_name] = docs
-    restore_stats = {}
-    upload_files_restored = 0
-    try:
-        zip_buffer.seek(0)
-        with zipfile.ZipFile(zip_buffer, 'r') as zf:
-            for zip_col in collections_from_backup(zf.namelist()):
-                col_name = LEGACY_COLLECTION_ALIASES.get(zip_col, zip_col)
-                await db[col_name].delete_many({})
-                docs = json.loads(zf.read(f"{zip_col}.json"))
-                if col_name == "assets":
-                    for d in docs:
-                        if not d.get("version"):
-                            d["version"] = 1
-                if docs:
-                    await db[col_name].insert_many(docs)
-                restore_stats[col_name] = len(docs)
-            for name in zf.namelist():
-                if name.startswith("uploads/") and not name.endswith("/"):
-                    rel_path = name[len("uploads/"):]
-                    target = UPLOADS_DIR / rel_path
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    with open(target, 'wb') as f:
-                        f.write(zf.read(name))
-                    upload_files_restored += 1
-    except Exception:
-        logger.exception("Restore gagal — mengembalikan data ke kondisi semula")
-        for col_name, docs in safety_data.items():
-            await db[col_name].delete_many({})
-            if docs:
-                await db[col_name].insert_many(docs)
-        raise HTTPException(status_code=500, detail="Restore gagal, data telah dikembalikan ke kondisi semula.")
-    try:
-        await repair_ticket_counters()
-    except Exception:
-        pass
-    try:
-        from indexes import create_indexes
-        await create_indexes()
-    except Exception:
-        pass
-    return {
-        "message": "Data berhasil dipulihkan",
-        "backup_metadata": metadata,
-        "restored": restore_stats,
-        "total_restored": sum(restore_stats.values()),
-        "upload_files_restored": upload_files_restored,
-    }

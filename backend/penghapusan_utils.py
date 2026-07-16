@@ -4,7 +4,8 @@ PMK 83/PMK.06/2016 (pustaka §1 & §7): penghapusan didahului sebab yang
 sah — a.l. pemusnahan/pemindahtanganan untuk barang rusak berat, atau
 penelusuran + telaah TGR untuk barang yang tidak ditemukan saat
 inventarisasi. Modul ini MENJARING kandidat dari data inventarisasi
-(kondisi + status inventarisasi) — pengajuan formal & SK menyusul.
+(kondisi + status inventarisasi); register usulan formal + SK penghapusan
+dikelola di routes/penghapusan.py dan memproyeksikan status ke master aset.
 
 Fungsi murni tanpa Mongo/IO agar teruji unit.
 """

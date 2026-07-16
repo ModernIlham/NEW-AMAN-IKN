@@ -192,6 +192,36 @@ class TestBuildLbkpRows:
         assert tot_g["jumlah_kurang"] == 1 and tot_g["nilai_kurang"] == 0.0
         assert tot_g["jumlah_akhir"] == -1  # jujur: saldo negatif menandakan data historis kurang
 
+    def test_tombstone_tanpa_nilai_tak_ditebak_ekstra(self):
+        # #63: aset intra semasa hidup (Rp5 jt) dihapus permanen, audit lama
+        # tanpa nilai → kurangnya TIDAK boleh jatuh di seksi ekstra (nilai 0
+        # selalu terklasifikasi ekstra) — hanya Gabungan yang mencatatnya.
+        assets = [self._aset("3060102135", 400_000, "2025-01-01T00:00:00")]  # ekstra, awal
+        tombstones = [{"asset_code": "3060102135",
+                       "timestamp": "2026-02-01T00:00:00", "nilai": 0}]
+        per_kelas, tanpa_nilai = build_lbkp_rows(assets, tombstones, self.DARI, self.SAMPAI)
+        assert tanpa_nilai == 1
+        _, tot_e = per_kelas["ekstra"]
+        # Seksi ekstra tidak dikurangi dan tidak negatif
+        assert tot_e["jumlah_kurang"] == 0
+        assert (tot_e["jumlah_awal"], tot_e["jumlah_akhir"]) == (1, 1)
+        _, tot_i = per_kelas["intra"]
+        assert tot_i["jumlah_kurang"] == 0
+        _, tot_g = per_kelas["gabungan"]
+        assert tot_g["jumlah_kurang"] == 1  # hanya Gabungan yang mencatat
+
+    def test_tombstone_kelas_terekam_dipakai_walau_nilai_nol(self):
+        # #63: tombstone SK membawa kelas semasa hidup → kurang jatuh di seksi
+        # yang sama dengan saldo awalnya walau nilai perolehan 0.
+        tombstones = [{"asset_code": "3060102135", "timestamp": "2026-02-01",
+                       "nilai": 0, "kelas_komptabel": "ekstra"}]
+        per_kelas, tanpa_nilai = build_lbkp_rows([], tombstones, self.DARI, self.SAMPAI)
+        assert tanpa_nilai == 1
+        _, tot_e = per_kelas["ekstra"]
+        assert tot_e["jumlah_kurang"] == 1
+        _, tot_g = per_kelas["gabungan"]
+        assert tot_g["jumlah_kurang"] == 1
+
     def test_kosong(self):
         per_kelas, tanpa_nilai = build_lbkp_rows([], [], self.DARI, self.SAMPAI)
         assert tanpa_nilai == 0
@@ -222,7 +252,8 @@ class TestPenghapusanMutasi:
             self._aset(2_000_000, "2024-01-01", dihapus=True, sk=None),  # tanpa SK → dilewati
         ]
         ts = tombstones_penghapusan(assets)
-        assert ts == [{"asset_code": self.KODE, "timestamp": "2026-03-01", "nilai": 5_000_000}]
+        assert ts == [{"asset_code": self.KODE, "timestamp": "2026-03-01",
+                       "nilai": 5_000_000, "kelas_komptabel": "intra"}]
 
     def test_sk_dalam_periode_awal_dikurangi_seimbang(self):
         # dibuat sebelum periode, SK DALAM periode → awal +1, kurang +1, akhir 0

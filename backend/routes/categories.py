@@ -4,7 +4,6 @@ import uuid
 import logging
 import asyncio
 import csv as csv_module
-from typing import List
 from fastapi import APIRouter, HTTPException, UploadFile, File, Request, Depends
 from auth_utils import require_admin, require_user
 
@@ -259,18 +258,3 @@ async def get_import_progress(job_id: str):
         raise HTTPException(status_code=404, detail="Job not found")
     return import_progress[job_id]
 
-@categories_router.post("/categories/import")
-async def import_categories(categories: List[CategoryCreate], _user: dict = Depends(require_user)):
-    """Legacy bulk import categories from JSON"""
-    imported = 0
-    for cat in categories:
-        kode = cat.kode_aset.strip() if cat.kode_aset else ""
-        label = cat.label.strip()
-        cat_id = kode if kode else label.replace(" ", "")
-        existing = await db.categories.find_one({"id": cat_id})
-        if not existing:
-            await db.categories.insert_one({"id": cat_id, "label": label, "kode_aset": kode})
-            imported += 1
-    logger.info(f"Imported {imported} categories")
-    
-    return {"message": f"Berhasil import {imported} kategori"}

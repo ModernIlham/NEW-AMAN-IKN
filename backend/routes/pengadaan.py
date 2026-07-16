@@ -4,7 +4,8 @@ Perpres 16/2018 jo. 46/2025 (pustaka §10): satu entri per BAST/kontrak,
 checklist kelengkapan dokumen sumber, daftar barang dengan tautan ke aset
 master (cegah entri ganda) + penanda ekstrakomptabel PMK 181. Pencatatan
 resmi tetap di SAKTI; kanal pengadaan tetap SiRUP/SPSE/e-Katalog — AMAN
-alat bantu tertib dokumen satker. Pra-isi draft aset baru menyusul.
+alat bantu tertib dokumen satker. Barang perolehan yang belum tertaut
+dapat dibuatkan draft aset otomatis (buat-draft-aset, NUP berurut).
 """
 import uuid
 from datetime import datetime, timezone

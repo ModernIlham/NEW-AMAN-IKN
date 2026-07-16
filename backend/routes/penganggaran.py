@@ -4,8 +4,9 @@ PMK 62/2023 + PMK 153/2021 (pustaka §9): jejak usulan dari kertas kerja
 RKBMN menuju anggaran — diusulkan → disetujui telaah → masuk DIPA →
 terealisasi. Nilai per tahap tercatat (usulan/disetujui/DIPA/realisasi);
 kanal resmi tetap SIMAN V2 (RKBMN) & SAKTI (RKA/DIPA) — AMAN mencatat
-jejak per usulan/aset, bukan memutus. Sanding rencana vs realisasi +
-pengingat kalender menyusul sesuai masterplan.
+jejak per usulan/aset, bukan memutus. Kalender tahapan anggaran dikelola
+di sini; realisasi manual disandingkan dengan nilai perolehan Pengadaan
+yang bertaut (realisasi_pengadaan).
 """
 import uuid
 from datetime import datetime, timezone

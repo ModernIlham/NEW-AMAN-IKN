@@ -2,8 +2,9 @@
 
 PMK 65/PMK.06/2017 + KMK 295/KM.6/2019 jo. 266/KM.6/2023 (pustaka §5).
 Rekap per golongan + daftar telaah (henti susut, tanpa referensi masa
-manfaat) dari data aset nyata. Revaluasi & referensi masa manfaat yang
-dapat dikelola menyusul sesuai masterplan.
+manfaat) dari data aset nyata. Referensi masa manfaat dapat dikelola
+(GET/POST/DELETE masa-manfaat); koreksi/revaluasi nilai tercatat lewat
+register koreksi dan diproyeksikan ke `nilai_wajar_terakhir` aset.
 """
 import uuid
 from datetime import datetime, timezone

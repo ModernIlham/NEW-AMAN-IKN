@@ -150,16 +150,19 @@ def _baris_lbkp_kosong(gol, uraian_map):
     }
 
 
-def tombstones_penghapusan(assets):
+def tombstones_penghapusan(assets, ambang=None):
     """Bangun 'tombstone' mutasi KURANG dari aset yang dihapus via SK penghapusan
     (proyeksi master #234: `dihapus=True` + `penghapusan.tanggal_sk`). Bentuknya
     sama dengan tombstone hard-delete audit — {asset_code, timestamp, nilai} —
     agar build_lbkp_rows menghitungnya sebagai mutasi kurang di periode SK terbit.
 
-    `timestamp` = tanggal SK; `nilai` = harga perolehan. Aset tanpa tanggal SK
-    dilewati (tak bisa ditempatkan pada periode mana pun). Melengkapi audit
-    hard-delete sehingga laporan MUTASI (LBKP/CaLBMN) juga mencerminkan
-    penghapusan lewat SK — bukan hanya penghapusan permanen.
+    `timestamp` = tanggal SK; `nilai` = harga perolehan; `kelas_komptabel` =
+    kelas aset SEMASA HIDUP (dari harga perolehan yang sama dengan saat aset
+    dihitung di saldo awal/tambah) agar mutasi kurang jatuh di seksi yang sama
+    walau nilainya 0 (#63). Aset tanpa tanggal SK dilewati (tak bisa
+    ditempatkan pada periode mana pun). Melengkapi audit hard-delete sehingga
+    laporan MUTASI (LBKP/CaLBMN) juga mencerminkan penghapusan lewat SK —
+    bukan hanya penghapusan permanen.
     """
     out = []
     for a in assets or []:
@@ -172,6 +175,8 @@ def tombstones_penghapusan(assets):
             "asset_code": a.get("asset_code"),
             "timestamp": sk,
             "nilai": a.get("purchase_price"),
+            "kelas_komptabel": klasifikasi_komptabel(
+                a.get("asset_code"), a.get("purchase_price"), ambang),
         })
     return out
 
@@ -181,16 +186,21 @@ def build_lbkp_rows(assets, tombstones, dari, sampai, uraian_map=None, ambang=No
 
     assets: aset HIDUP {asset_code, purchase_price, created_at}.
     tombstones: jejak penghapusan {asset_code, timestamp, nilai} — nilai
-    0.0 bila audit lama belum merekam harga.
+    0.0 bila audit lama belum merekam harga; opsional `kelas_komptabel`
+    ("intra"/"ekstra") bila kelas semasa hidup diketahui.
     dari/sampai: ISO YYYY-MM-DD inklusif.
 
     Kembalikan (per_kelas, n_kurang_tanpa_nilai) dengan per_kelas =
     {"intra"|"ekstra"|"gabungan": (rows, total)}; tiap baris memuat kolom
     awal/tambah/kurang/akhir (jumlah & nilai). Saldo akhir = awal + tambah
-    − kurang (identitas mutasi). Keterbatasan yang HARUS dicatat pemanggil:
-    aset yang dibuat lalu dihapus sebelum `dari` tak dapat direkonstruksi
-    (tombstone tanpa tanggal perolehan), dan penghapusan lama tanpa nilai
-    terekam dihitung jumlahnya dengan nilai 0.
+    − kurang (identitas mutasi). Mutasi kurang TANPA nilai terekam DAN tanpa
+    kelas terekam tidak ditebak seksinya (nilai 0 akan selalu jatuh 'ekstra'
+    padahal semasa hidup bisa intra, #63) — dihitung pada seksi GABUNGAN
+    saja, sehingga Gabungan bisa berbeda dari I+II sebesar penghapusan itu.
+    Keterbatasan yang HARUS dicatat pemanggil: aset yang dibuat lalu dihapus
+    sebelum `dari` tak dapat direkonstruksi (tombstone tanpa tanggal
+    perolehan), dan penghapusan lama tanpa nilai terekam dihitung jumlahnya
+    dengan nilai 0.
     """
     agg = {"intra": {}, "ekstra": {}}
 
@@ -223,6 +233,7 @@ def build_lbkp_rows(assets, tombstones, dari, sampai, uraian_map=None, ambang=No
             row["nilai_tambah"] += harga
 
     n_tanpa_nilai = 0
+    tanpa_kelas = {}  # kurang yang seksinya tak diketahui → Gabungan saja (#63)
     for t in tombstones or []:
         tanggal = str(t.get("timestamp") or "")[:10]
         if not (dari <= tanggal <= sampai):
@@ -231,8 +242,12 @@ def build_lbkp_rows(assets, tombstones, dari, sampai, uraian_map=None, ambang=No
         nilai = parse_harga(t.get("nilai"))
         if nilai <= 0:
             n_tanpa_nilai += 1
-        kelas = klasifikasi_komptabel(t.get("asset_code"), nilai, ambang)
-        row = _baris(kelas, gol)
+        kelas = str(t.get("kelas_komptabel") or "").strip()
+        if kelas not in ("intra", "ekstra"):
+            kelas = (klasifikasi_komptabel(t.get("asset_code"), nilai, ambang)
+                     if nilai > 0 else "")
+        row = (_baris(kelas, gol) if kelas
+               else tanpa_kelas.setdefault(gol, _baris_lbkp_kosong(gol, uraian_map)))
         row["jumlah_kurang"] += 1
         row["nilai_kurang"] += nilai
 
@@ -247,7 +262,7 @@ def build_lbkp_rows(assets, tombstones, dari, sampai, uraian_map=None, ambang=No
         return rows, total
 
     gabungan = {}
-    for peta in agg.values():
+    for peta in (agg["intra"], agg["ekstra"], tanpa_kelas):
         for gol, r in peta.items():
             g = gabungan.setdefault(gol, _baris_lbkp_kosong(gol, uraian_map))
             for k in _KOLOM_LBKP[:6]:  # akhir dihitung ulang di _tutup

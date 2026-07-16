@@ -96,14 +96,6 @@ async def list_kodefikasi(
     }
 
 
-@kodefikasi_router.get("/kodefikasi/golongan")
-async def list_golongan(_user: dict = Depends(require_user)):
-    """Level 1 (8 golongan) — dipakai dropdown & pemisah domain aset/persediaan."""
-    await _ensure_golongan_seed()
-    cursor = db.kodefikasi.find({"level": 1}, {"_id": 0}).sort("kode", 1)
-    return [_doc(x) async for x in cursor]
-
-
 @kodefikasi_router.get("/kodefikasi/template")
 async def download_template(_user: dict = Depends(require_user)):
     """Template CSV impor: kolom kode,uraian — level diturunkan otomatis."""

@@ -46,6 +46,7 @@ function namaLengkap(p) {
 export default function PegawaiPage({ user, onBack }) {
   const isAdmin = user?.role === "admin";
   const [items, setItems] = useState([]);
+  const [rekap, setRekap] = useState(null);
   const [ref, setRef] = useState({ jenis_kelamin: [], status_kepegawaian: [], jenis_jabatan: [], status: [] });
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
@@ -67,6 +68,10 @@ export default function PegawaiPage({ user, onBack }) {
     } finally {
       setLoading(false);
     }
+    // Rekap per unit kerja (ringkasan adopsi SIMAN-G) — best-effort.
+    axios.get(`${API}/pegawai/rekap-unit`)
+      .then((r) => setRekap(r.data))
+      .catch(() => setRekap(null));
   }, []);
 
   useEffect(() => {
@@ -162,6 +167,33 @@ export default function PegawaiPage({ user, onBack }) {
             )}
           </div>
         </div>
+
+        {rekap && (rekap.unit || []).length > 0 && (
+          <div className="bg-card rounded-xl border border-border shadow-sm p-2.5 sm:p-3" data-testid="pegawai-rekap-unit">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground mb-2">
+              Rekap per Unit Kerja — {rekap.jumlah_unit} unit · {rekap.jumlah_pegawai} pegawai
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {rekap.unit.map((u) => {
+                const tanpaUnit = u.unit_kerja === "(unit kerja belum dicatat)";
+                return (
+                  <button key={u.unit_kerja} type="button"
+                    onClick={() => !tanpaUnit && setSearch(search === u.unit_kerja ? "" : u.unit_kerja)}
+                    disabled={tanpaUnit}
+                    className={`px-2 py-1 rounded-full border text-[11px] min-w-0 min-h-0 ${
+                      search === u.unit_kerja
+                        ? "border-sky-500 bg-sky-500/15 text-sky-600 dark:text-sky-400 font-semibold"
+                        : tanpaUnit
+                          ? "border-border/60 text-muted-foreground/70 cursor-default"
+                          : "border-border text-foreground/80 hover:bg-muted"}`}
+                    data-testid={`pegawai-rekap-chip-${u.unit_kerja}`}>
+                    {u.unit_kerja} <span className="font-bold">{u.jumlah}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
           {loading ? (

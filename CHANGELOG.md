@@ -48,6 +48,42 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#338] Review batch 10 (final): LBKP tanpa tebakan seksi, sapu bersih API legacy & penanda basi — 2026-07-16
+
+- **#63 — LBKP/CaLBMN: mutasi kurang tanpa nilai tak lagi ditebak Ekstra**:
+  nilai 0 selalu terklasifikasi "ekstra" padahal aset semasa hidup bisa intra
+  → kini kurang yang kelasnya tak dapat dipastikan dicatat di seksi **Gabungan
+  saja** (diungkap di catatan laporan; Gabungan bisa ≠ I+II). Tombstone
+  penghapusan via SK kini merekam `kelas_komptabel` semasa hidup sehingga
+  kurangnya selalu jatuh di seksi yang sama dengan saldo awalnya. +2 uji unit.
+- **#59/#69 — API legacy tanpa konsumen dihapus** (cegah drift permukaan
+  ganda): `GET /backup/create` (backup sinkron **blocking**), `POST
+  /backup/restore` (restore sinkron destruktif), `POST /categories/import`,
+  `GET /pemeliharaan/aset/{id}`, `GET /kodefikasi/golongan`. Dipertahankan
+  karena masih ada pemakainya: `GET /backup/stats`, `GET /backup/progress/
+  {job_id}`, `GET /categories` paginasi (uji integrasi). Suite integrasi
+  backup dimigrasikan ke alur background.
+- **#57 (lanjutan #66) — dicatat**: stream `doc-file` memang sengaja publik
+  (keputusan terdokumentasi di kode: tautan pada ekspor CSV/XLSX dibuka dari
+  spreadsheet tanpa token; dikeraskan Content-Type tetap + nosniff) — temuan
+  #66 kedaluwarsa, tidak diubah.
+- **#62/#64/#65 — penanda "menyusul" basi disapu** (semua klaim diverifikasi
+  ke kode dulu): registry `bmnModules` (draft aset dari perolehan ✅, aset
+  keluar daftar aktif setelah PT selesai ✅, register usulan RKBMN ✅), footer
+  PelaporanPage (LBKP & rekonsiliasi sudah di halaman itu), 8 docstring modul
+  backend + 9 header halaman frontend kini menyatakan fitur yang benar-benar
+  ada (SBSK & formulir PMK 207 tetap ditandai menyusul — memang belum ada).
+- **#67 — jalur sync offline mati dibuang**: `useOfflineSync` kini murni
+  deteksi online/offline; antrean IDB lama (kebijakan konflik berbeda dari
+  `useOptimisticQueue` yang asli) dihapus + database IDB usangnya dibersihkan
+  best-effort agar op basi tak pernah tereksekusi.
+- **#68 — rekap pegawai per unit kerja tampil**: kartu chip unit (jumlah
+  pegawai per unit, klik = filter) di Master Pegawai dari endpoint
+  `/pegawai/rekap-unit` yang selama ini tak terpakai.
+- Verifikasi: suite **428 lulus** (+2); eslint bersih; `yarn build` sukses.
+
+---
+
 ## [#337] Review batch 9: guard hapus master, kop CaLBMN, tahun perolehan & polesan UI — 2026-07-16
 
 - **#34 — Master tidak bisa dihapus selagi masih dipakai aset**: hapus

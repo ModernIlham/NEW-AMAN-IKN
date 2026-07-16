@@ -439,7 +439,7 @@ export default function PelaporanPage({ user, onBack }) {
         </div>
 
         <p className="text-center text-[11px] text-muted-foreground pb-4">
-          LBKP semesteran/tahunan & ekspor rekonsiliasi SIMAK/SAKTI menyusul pada tahap berikutnya (masterplan Fase 2 › Pelaporan).
+          Angka LBKP/rekonsiliasi bersumber dari data aset & persediaan AMAN — pencatatan resmi tetap di SAKTI/SIMAN.
         </p>
       </main>
     </div>

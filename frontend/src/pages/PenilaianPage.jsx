@@ -19,8 +19,8 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 /**
  * Penilaian — Fase 5 tahap awal: posisi penyusutan aset tetap
  * (PMK 65/2017: garis lurus tanpa residu, semesteran, konvensi semester
- * penuh; masa manfaat KMK 295/2019 jo. 266/2023 per kelompok). Revaluasi
- * dan referensi masa manfaat yang dapat dikelola menyusul.
+ * penuh; masa manfaat KMK 295/2019 jo. 266/2023 per kelompok), register
+ * koreksi/revaluasi nilai, dan referensi masa manfaat yang dapat dikelola.
  */
 export default function PenilaianPage({ user, onBack }) {
   const isAdmin = user?.role === "admin";

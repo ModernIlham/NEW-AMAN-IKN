@@ -49,8 +49,8 @@ const FORM_KOSONG = {
 
 /**
  * Pemeliharaan — Fase 3 tahap awal: catatan riwayat + biaya pemeliharaan
- * per aset (bahan Daftar Hasil Pemeliharaan Barang, PP 27/2014 Ps. 46-47).
- * Jadwal berkala + DHPB PDF menyusul sesuai masterplan.
+ * per aset (bahan Daftar Hasil Pemeliharaan Barang, PP 27/2014 Ps. 46-47),
+ * jadwal pemeliharaan berkala, dan unduhan DHPB PDF.
  */
 export default function PemeliharaanPage({ user, onBack }) {
   const isAdmin = user?.role === "admin";
