@@ -48,6 +48,29 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#291] Referensi Pejabat Penatausahaan BMN — fondasi back-end (riset PMK 181/2016) — 2026-07-15
+
+- **Fase baru: manajemen data pejabat/pegawai penatausahaan** — hasil riset
+  mendalam repo pendahulu (SIMAN-G/KERJA-BARENG) + situs SAKTI Pelaporan +
+  PMK 181/PMK.06/2016. Menutup celah "referensi penanda tangan" yang di SAKTI
+  wajib (KPA/PPK/PPSPM/Bendahara + penanda tangan aset) namun di AMAN dulu
+  hanya `kasatker_nama/nip` tunggal di setelan laporan.
+- **Registry `pejabat`** (`pejabat_utils.py` murni + `routes/pejabat.py`): daftar
+  pejabat dengan **peran** (Kuasa Pengguna Barang/KPB, Petugas Penatausahaan
+  BMN/Operator SIMAK-BMN, Pengurus Barang, Penanggung Jawab Ruangan, PPK,
+  Pengguna Barang), **unit akuntansi** (jenjang UAPB→UAPPB-E1→UAPPB-W→UAKPB→
+  UAPKPB + penanggung jawabnya), **SK penunjukan & masa berlaku**.
+- **Pejabat aktif per peran & tanggal**: `GET /pejabat/aktif?peran=&per_tanggal=`
+  memilih pejabat yang **masih berlaku** dengan **SK terbaru** — agar dokumen
+  resmi (KIB/BAST/LBKP/penghapusan) memakai penanda tangan yang benar untuk
+  tanggalnya. CRUD admin + `GET /pejabat/referensi` (dropdown UI).
+- Pustaka §2.4a diperbarui (struktur & pejabat penatausahaan). **3 unit test**
+  murni (referensi, validasi, pemilihan pejabat aktif per tanggal); `py_compile`
+  bersih (suite pure lokal 343 lulus). Slice
+  fondasi — pemanfaatan di blok tanda tangan laporan & UI kelola menyusul.
+
+---
+
 ## [#290] Backup / Pulihkan / Reset: cakup SEMUA koleksi secara dinamis (perbaikan data-safety) — 2026-07-15
 
 - **Perbaikan penting keamanan data.** Daftar koleksi untuk **backup, restore,
