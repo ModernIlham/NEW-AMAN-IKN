@@ -48,6 +48,22 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#316] Laporan Eksekutif: perbaiki hitungan "Stiker Belum Terpasang" — 2026-07-16
+
+- **Perbaikan bug**: pada Laporan Eksekutif bagian **Status Pemasangan Stiker**,
+  "Belum Terpasang" bisa menampilkan **0 padahal ada aset tanpa stiker**. Penyebab:
+  hitungan dibatasi hanya ke aset ber-`inventory_status = "Ditemukan"` dan `belum`
+  dihitung sebagai `(jumlah Ditemukan − terpasang)`; aset yang **belum
+  diinventarisasi** (justru yang belum berstiker) tak ikut terhitung → `belum` bisa 0.
+- **Perbaikan**: status stiker kini dihitung **atas SELURUH aset kegiatan** —
+  terpasang = `stiker_status == "Sudah Terpasang"`, belum = sisanya (termasuk kosong),
+  persen atas total aset. Diterapkan di ringkasan utama & laporan satker/grup;
+  teks simpulan menyesuaikan (X dari total).
+- Logika dipisah ke helper murni `report_utils.hitung_status_stiker` + uji unit
+  → `pytest tests/unit` **414 lulus**.
+
+---
+
 ## [#315] Inventarisasi aset: input Kode Aset terhubung ke referensi kodefikasi — 2026-07-16
 
 - **Pemilih kode barang dari referensi** di form aset (`AssetForm.jsx`). Di samping
