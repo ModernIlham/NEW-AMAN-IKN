@@ -48,6 +48,24 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#315] Inventarisasi aset: input Kode Aset terhubung ke referensi kodefikasi — 2026-07-16
+
+- **Pemilih kode barang dari referensi** di form aset (`AssetForm.jsx`). Di samping
+  input "Kode Aset" kini ada tombol **Referensi** → dropdown pencarian
+  (`GET /kodefikasi?search=`) menampilkan kode + uraian + level + satuan; memilih
+  satu **mengisi `asset_code`** dan **`asset_name`** (bila nama masih kosong).
+  Tersembunyi saat kode dikunci kategori.
+- **Konfirmasi keterhubungan**: saat kode terdaftar penuh, muncul baris hijau
+  **"Terhubung ke referensi: «nama resmi»"** (dari `/kodefikasi/lookup`), melengkapi
+  peringatan kuning yang sudah ada untuk kode tak terdaftar.
+- **Aman offline & tidak memblokir**: input bebas tetap bisa diketik; semua panggilan
+  referensi best-effort — gagal/offline diabaikan (pemilih menampilkan "referensi tak
+  tersedia"), seragam dengan pola cek-kode/ruangan yang ada. Tanpa perubahan backend/
+  registry (satuan tidak disimpan, hanya info) → tak menyentuh anti-drift.
+- Verifikasi: `yarn lint` (0 error) + `yarn build` sukses. Endpoint kodefikasi sudah teruji.
+
+---
+
 ## [#314] Kodefikasi: dua format ekspor (datar & hierarki + info SIMAN) — 2026-07-16
 
 - **Ekspor referensi kode barang dalam dua pendekatan** (`GET /kodefikasi/export?bentuk=`,

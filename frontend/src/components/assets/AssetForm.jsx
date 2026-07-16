@@ -1,7 +1,7 @@
 import React, { memo, useState, useCallback, useRef, useEffect, useMemo, startTransition } from "react";
 import { createPortal } from "react-dom";
 import {
-  Plus, Edit3, X, Camera, Trash2, Check, ChevronDown,
+  Plus, Edit3, X, Camera, Trash2, Check, ChevronDown, Search,
   Package, Briefcase, ShieldCheck, Settings, Tag, Save, Loader2, ClipboardList,
   Info, ChevronRight, BookOpen, Wrench, ArrowRight, HelpCircle, MapPin, LocateFixed,
   ChevronLeft, CloudOff, Upload, Eye, UserRound, AlertTriangle,
@@ -514,6 +514,14 @@ const AssetForm = memo(({
   // GET /integritas/cek-kode untuk asset_code saat ini — hanya info, tak
   // pernah memblokir simpan (data lama boleh punya kode tak terdaftar).
   const [kodefikasiWarn, setKodefikasiWarn] = useState(null);
+  // Nama resmi barang dari referensi (bila kode terdaftar penuh) → tanda "terhubung".
+  const [kodeRefNama, setKodeRefNama] = useState("");
+  // Pemilih kode barang dari referensi kodefikasi (#K, offline-tolerant).
+  // kodeResults: array = hasil, null = referensi tak tersedia (offline), [] = kosong.
+  const [kodePickerOpen, setKodePickerOpen] = useState(false);
+  const [kodeQuery, setKodeQuery] = useState("");
+  const [kodeResults, setKodeResults] = useState([]);
+  const [kodeLoading, setKodeLoading] = useState(false);
   // Asset version (OCC): appended as ?v= cache-buster to all media streaming
   // URLs (photo strip, checklist photos/PDFs) so the browser cache is busted
   // whenever the asset changes.
@@ -544,20 +552,42 @@ const AssetForm = memo(({
   // offline diabaikan diam-diam (tak mengganggu input). §5A Prinsip 2 (#271).
   useEffect(() => {
     const kode = (formData.asset_code || "").trim();
-    if (!isOpen || !kode) { setKodefikasiWarn(null); return undefined; }
+    if (!isOpen || !kode) { setKodefikasiWarn(null); setKodeRefNama(""); return undefined; }
     let cancelled = false;
     const t = setTimeout(async () => {
-      try {
-        const r = await axios.get(
-          `${API}/integritas/cek-kode?asset_code=${encodeURIComponent(kode)}`);
-        if (cancelled) return;
-        setKodefikasiWarn(r.data && r.data.peringatan ? r.data : null);
-      } catch {
-        if (!cancelled) setKodefikasiWarn(null); // offline/gagal → jangan ganggu
-      }
+      // Peringatan (cek-kode) + nama resmi (lookup) sekaligus; keduanya
+      // best-effort — offline/gagal diabaikan diam-diam (tak mengganggu input).
+      const [cek, lk] = await Promise.allSettled([
+        axios.get(`${API}/integritas/cek-kode?asset_code=${encodeURIComponent(kode)}`),
+        axios.get(`${API}/kodefikasi/lookup/${encodeURIComponent(kode)}`),
+      ]);
+      if (cancelled) return;
+      const cekData = cek.status === "fulfilled" ? cek.value.data : null;
+      setKodefikasiWarn(cekData && cekData.peringatan ? cekData : null);
+      const lkData = lk.status === "fulfilled" ? lk.value.data : null;
+      setKodeRefNama(lkData?.uraian_terdalam || "");
     }, 500);
     return () => { cancelled = true; clearTimeout(t); };
   }, [formData.asset_code, isOpen]);
+
+  // Cari kode barang di referensi saat pemilih terbuka (debounce, offline-tolerant).
+  useEffect(() => {
+    if (!kodePickerOpen) return undefined;
+    let cancelled = false;
+    setKodeLoading(true);
+    const t = setTimeout(async () => {
+      try {
+        const r = await axios.get(`${API}/kodefikasi`, {
+          params: { search: kodeQuery.trim(), page_size: 30 } });
+        if (!cancelled) setKodeResults(r.data?.items || []);
+      } catch {
+        if (!cancelled) setKodeResults(null); // referensi tak tersedia (offline)
+      } finally {
+        if (!cancelled) setKodeLoading(false);
+      }
+    }, 300);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [kodePickerOpen, kodeQuery]);
 
   // Dirty tracking: store original data + modification flags
   const originalDataRef = useRef(null);
@@ -945,6 +975,19 @@ const AssetForm = memo(({
     const { name, value } = e.target;
     setFormData(p => ({ ...p, [name]: value }));
     clearFieldError(name);
+  }, [clearFieldError]);
+
+  // Pilih kode dari referensi kodefikasi → isi asset_code + nama (bila kosong).
+  const onPickKode = useCallback((item) => {
+    setFormData(p => ({
+      ...p,
+      asset_code: item.kode,
+      asset_name: (p.asset_name || "").trim() ? p.asset_name : (item.uraian || ""),
+    }));
+    clearFieldError("asset_code");
+    clearFieldError("asset_name");
+    setKodePickerOpen(false);
+    setKodeQuery("");
   }, [clearFieldError]);
 
   // Urutan NUP LOKAL per (kegiatan|kode aset). Backend next-nup hanya menghitung
@@ -1892,7 +1935,46 @@ const AssetForm = memo(({
             {formSection === "basic" && (<>
               <div className="space-y-1">
                 <Label className="text-xs">Kode Aset *</Label>
-                <Input name="asset_code" value={formData.asset_code} onChange={handleInputChange} placeholder="Pilih kategori untuk mengisi otomatis" required className={`h-8 bg-muted${fieldErrCls("asset_code")}`} readOnly={!!categories.find(c => c.kode_aset && c.label === formData.category)} aria-invalid={!!fieldErrors.asset_code} />
+                {(() => {
+                  const kodeLocked = !!categories.find(c => c.kode_aset && c.label === formData.category);
+                  return (
+                    <div className="flex gap-1.5">
+                      <Input name="asset_code" value={formData.asset_code} onChange={handleInputChange} placeholder="Cari di referensi atau ketik kode" required className={`h-8 bg-muted flex-1 min-w-0${fieldErrCls("asset_code")}`} readOnly={kodeLocked} aria-invalid={!!fieldErrors.asset_code} />
+                      {!kodeLocked && (
+                        <DropdownMenu open={kodePickerOpen} onOpenChange={setKodePickerOpen}>
+                          <DropdownMenuTrigger asChild>
+                            <button type="button" title="Cari kode barang di referensi kodefikasi" className="h-8 px-2.5 rounded-md border border-input bg-card hover:bg-accent flex items-center gap-1 text-xs shrink-0" data-testid="asset-code-picker">
+                              <Search className="w-3.5 h-3.5" /><span className="hidden sm:inline">Referensi</span>
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent className="w-[calc(100vw-3rem)] max-w-sm">
+                            <div className="p-2">
+                              <Input placeholder="Cari kode / nama barang…" value={kodeQuery} onChange={e => setKodeQuery(e.target.value)} className="h-8 mb-2" data-testid="asset-code-picker-search" />
+                              <ScrollArea className="h-56">
+                                {kodeResults === null ? (
+                                  <div className="text-xs text-center text-muted-foreground py-3">Referensi tak tersedia (offline). Ketik kode manual.</div>
+                                ) : kodeLoading ? (
+                                  <div className="text-xs text-center text-muted-foreground py-3">Memuat…</div>
+                                ) : kodeResults.length === 0 ? (
+                                  <div className="text-xs text-center text-muted-foreground py-3">{kodeQuery.trim() ? "Tidak ditemukan" : "Ketik untuk mencari kode barang"}</div>
+                                ) : kodeResults.map(it => (
+                                  <button type="button" key={it.kode} onClick={() => onPickKode(it)} className="w-full text-left px-2 py-1.5 rounded hover:bg-accent flex items-start gap-2 min-w-0" data-testid={`asset-code-opt-${it.kode}`}>
+                                    <span className="font-mono text-xs text-foreground shrink-0">{it.kode}</span>
+                                    <span className="flex-1 min-w-0">
+                                      <span className="block text-xs text-foreground/90 break-words">{it.uraian}</span>
+                                      <span className="block text-[10px] text-muted-foreground">{it.level} {it.label_level}{it.meta?.satuan ? ` · ${it.meta.satuan}` : ""}{it.is_persediaan ? " · persediaan" : ""}</span>
+                                    </span>
+                                    {formData.asset_code === it.kode && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />}
+                                  </button>
+                                ))}
+                              </ScrollArea>
+                            </div>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                    </div>
+                  );
+                })()}
                 {renderFieldError("asset_code")}
                 {/* Peringatan kodefikasi LIVE (non-blocking, §5A Prinsip 2) —
                     tak menghalangi simpan; hanya mengingatkan agar referensi
@@ -1901,6 +1983,13 @@ const AssetForm = memo(({
                   <p className="text-[10px] text-amber-600 dark:text-amber-400 flex items-start gap-1" data-testid="kodefikasi-warning">
                     <AlertTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />
                     <span>{kodefikasiWarn.pesan}</span>
+                  </p>
+                )}
+                {/* Konfirmasi positif: kode terdaftar penuh → nama resmi referensi. */}
+                {!kodefikasiWarn && !fieldErrors.asset_code && kodeRefNama && (
+                  <p className="text-[10px] text-emerald-600 dark:text-emerald-400 flex items-start gap-1" data-testid="kodefikasi-ok">
+                    <Check className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                    <span>Terhubung ke referensi: {kodeRefNama}</span>
                   </p>
                 )}
               </div>
