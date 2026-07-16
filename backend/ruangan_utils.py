@@ -75,3 +75,23 @@ def kelompok_dbr(assets):
     if belum in per:
         rows.append(per[belum])
     return rows
+
+
+def cocok_ruangan_master(label, master_list):
+    """Cari ruangan master yang cocok dengan label ruangan (dari data aset).
+
+    Cocok bila label = "KODE — Nama", KODE saja, atau Nama saja (abai kapital
+    & spasi tepi). Dipakai KIR untuk menautkan Penanggung Jawab Ruangan dari
+    master. Kembalikan dict master atau None. MURNI (teruji unit).
+    """
+    t = str(label or "").strip().lower()
+    if not t:
+        return None
+    for m in master_list or []:
+        kode = str(m.get("kode_ruangan") or "").strip()
+        nama = str(m.get("nama_ruangan") or "").strip()
+        kandidat = {kode.lower(), nama.lower(), f"{kode} — {nama}".strip(" —").lower()}
+        kandidat.discard("")
+        if t in kandidat:
+            return m
+    return None

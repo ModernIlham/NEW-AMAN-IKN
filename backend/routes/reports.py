@@ -1676,6 +1676,94 @@ async def generate_dbr_pdf(_user: dict = Depends(require_user_or_query_token)):
                              headers={"Content-Disposition": 'attachment; filename="Daftar_Barang_Ruangan.pdf"'})
 
 
+@reports_router.get("/pembukuan/kir-pdf")
+async def generate_kir_pdf(_user: dict = Depends(require_user_or_query_token)):
+    """Kartu Inventaris Ruangan (KIR) — satu kartu per ruangan (PMK 181/2016).
+
+    Aset dikelompokkan per ruangan (dari data aset, seperti DBR); tiap kartu
+    menautkan **Penanggung Jawab Ruangan** dari master ruangan (#294) bila
+    namanya cocok, dan ditandatangani PJ Ruangan + KPB. Satu ruangan per halaman.
+    """
+    from reportlab.platypus import Table, Paragraph, Spacer, PageBreak
+    from reportlab.lib.units import mm as rl_mm
+    from ruangan_utils import kelompok_dbr, cocok_ruangan_master
+    from pembukuan_utils import parse_harga
+
+    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    assets = await db.assets.find(
+        active_asset_filter(),
+        {"_id": 0, "asset_code": 1, "NUP": 1, "asset_name": 1, "condition": 1,
+         "purchase_price": 1, "location": 1, "operasional_jenis": 1, "user": 1},
+    ).to_list(500000)
+    master = await db.ruangan.find({}, {"_id": 0}).to_list(5000)
+    rows = kelompok_dbr(assets)
+
+    def fmt_rp(val):
+        try: return f"{int(val):,}".replace(",", ".")
+        except (ValueError, TypeError, OverflowError): return "0"
+
+    today_iso = datetime.now(timezone.utc).date().isoformat()
+    ttd_kpb = await _penandatangan_kpb(settings, today_iso)
+    buffer = io.BytesIO()
+    doc = _std_doc(buffer)
+    st = _get_report_styles()
+    elements = []
+    if not rows:
+        elements.extend(_kop_surat_flowables(settings, doc.width))
+        elements.extend(_title_block("KARTU INVENTARIS RUANGAN (KIR)"))
+        elements.append(Paragraph("Belum ada aset untuk didaftar.", st['Meta']))
+    for idx, r in enumerate(rows):
+        m = cocok_ruangan_master(r["ruangan"], master)
+        elements.extend(_kop_surat_flowables(settings, doc.width))
+        elements.extend(_title_block("KARTU INVENTARIS RUANGAN (KIR)",
+                                     subjudul=f"Ruangan: {r['ruangan']}"))
+        meta_txt = f"{r['jumlah']} unit BMN · nilai perolehan Rp{fmt_rp(r['nilai'])}"
+        if m:
+            det = " · ".join(x for x in [m.get("gedung"),
+                                         f"Lt. {m.get('lantai')}" if m.get("lantai") else ""] if x)
+            meta_txt += f" · {det}" if det else ""
+            meta_txt += f" · Penanggung Jawab: {m.get('penanggung_jawab_nama') or '-'}"
+        else:
+            meta_txt += " · (ruangan belum tertaut master)"
+        elements.append(Paragraph(meta_txt, st['Meta']))
+        elements.append(Spacer(1, 3*rl_mm))
+
+        headers = ["No.", "Kode Barang", "NUP", "Nama Barang", "Kondisi", "Nilai (Rp)"]
+        td = [[Paragraph(h, st['TableHeader']) for h in headers]]
+        for i, a in enumerate(r["aset"], 1):
+            td.append([
+                Paragraph(str(i), st['CellCenter']),
+                Paragraph(str(a.get("asset_code") or "-"), st['CellCenter']),
+                Paragraph(str(a.get("NUP") or "-"), st['CellCenter']),
+                Paragraph(str(a.get("asset_name") or "-"), st['Cell']),
+                Paragraph(str(a.get("condition") or "-"), st['CellCenter']),
+                Paragraph(fmt_rp(parse_harga(a.get("purchase_price"))), st['CellRight']),
+            ])
+        table = Table(td, colWidths=_fit_col_widths([26, 92, 34, 190, 66, 92], doc.width),
+                      repeatRows=1)
+        table.setStyle(_std_table_style(zebra=True))
+        elements.append(table)
+
+        elements.append(Spacer(1, 10*rl_mm))
+        elements.extend(_signature_block([
+            {'header': 'Penanggung Jawab Ruangan,',
+             'nama': (m.get("penanggung_jawab_nama") if m else "") or "-",
+             'after': ['']},
+            {'pre': ['.................., .......................'],
+             'header': 'Kuasa Pengguna Barang,',
+             'nama': ttd_kpb["nama"],
+             'after': [f"NIP. {ttd_kpb['nip']}"]},
+        ], doc.width))
+        if idx < len(rows) - 1:
+            elements.append(PageBreak())
+
+    footer = _page_footer_factory("Kartu Inventaris Ruangan (KIR)")
+    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    buffer.seek(0)
+    return StreamingResponse(buffer, media_type="application/pdf",
+                             headers={"Content-Disposition": 'attachment; filename="Kartu_Inventaris_Ruangan.pdf"'})
+
+
 @reports_router.get("/penilaian/penyusutan-pdf")
 async def generate_penyusutan_pdf(
     per_tanggal: str = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),

@@ -1,6 +1,8 @@
 """Uji master referensi ruangan (fondasi KIR/DBR)."""
 import pytest
-from ruangan_utils import kelompok_dbr, ringkas_lokasi, ruangan_aset, validate_ruangan
+from ruangan_utils import (
+    cocok_ruangan_master, kelompok_dbr, ringkas_lokasi, ruangan_aset, validate_ruangan,
+)
 
 
 def test_validate_ruangan():
@@ -49,3 +51,17 @@ def test_kelompok_dbr():
     # "(lokasi belum dicatat)" selalu terakhir
     assert rows[-1]["ruangan"] == "(lokasi belum dicatat)" and rows[-1]["jumlah"] == 1
     assert kelompok_dbr([]) == []
+
+
+def test_cocok_ruangan_master():
+    master = [{"kode_ruangan": "R.101", "nama_ruangan": "Ruang Rapat",
+               "penanggung_jawab_nama": "Budi"}]
+    # cocok via "KODE — Nama" (format datalist #298)
+    assert cocok_ruangan_master("R.101 — Ruang Rapat", master)["penanggung_jawab_nama"] == "Budi"
+    # cocok via kode saja / nama saja (abai kapital & spasi)
+    assert cocok_ruangan_master(" r.101 ", master)["kode_ruangan"] == "R.101"
+    assert cocok_ruangan_master("RUANG RAPAT", master)["kode_ruangan"] == "R.101"
+    # tak cocok / kosong → None
+    assert cocok_ruangan_master("Gudang X", master) is None
+    assert cocok_ruangan_master("", master) is None
+    assert cocok_ruangan_master("R.101", []) is None
