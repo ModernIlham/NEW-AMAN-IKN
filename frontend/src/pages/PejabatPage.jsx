@@ -20,6 +20,7 @@ function getApiError(err, fallback) {
 
 const EMPTY = {
   mode: "tambah", nama: "", nip: "", jabatan: "", pangkat_golongan: "",
+  status_kepegawaian: "", unit_kerja: "", no_hp: "", email: "",
   peran: [], unit_akuntansi: "", sk_nomor: "", sk_tanggal: "",
   berlaku_mulai: "", berlaku_selesai: "", aktif: true, keterangan: "",
 };
@@ -35,6 +36,7 @@ export default function PejabatPage({ user, onBack }) {
   const isAdmin = user?.role === "admin";
   const [items, setItems] = useState([]);
   const [peranRef, setPeranRef] = useState([]);
+  const [statusRef, setStatusRef] = useState([]);
   const [unitRef, setUnitRef] = useState([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
@@ -46,6 +48,8 @@ export default function PejabatPage({ user, onBack }) {
 
   const peranUraian = useCallback(
     (kode) => peranRef.find((p) => p.kode === kode)?.uraian || kode, [peranRef]);
+  const statusUraian = useCallback(
+    (kode) => statusRef.find((s) => s.kode === kode)?.uraian || kode, [statusRef]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -63,6 +67,7 @@ export default function PejabatPage({ user, onBack }) {
     load();
     axios.get(`${API}/pejabat/referensi`).then((r) => {
       setPeranRef(r.data?.peran || []);
+      setStatusRef(r.data?.status_kepegawaian || []);
       setUnitRef(r.data?.unit_akuntansi || []);
     }).catch(() => {});
   }, [load]);
@@ -79,7 +84,9 @@ export default function PejabatPage({ user, onBack }) {
     setSaving(true);
     const body = {
       nama: form.nama, nip: form.nip, jabatan: form.jabatan,
-      pangkat_golongan: form.pangkat_golongan, peran: form.peran,
+      pangkat_golongan: form.pangkat_golongan,
+      status_kepegawaian: form.status_kepegawaian, unit_kerja: form.unit_kerja,
+      no_hp: form.no_hp, email: form.email, peran: form.peran,
       unit_akuntansi: form.unit_akuntansi, sk_nomor: form.sk_nomor,
       sk_tanggal: form.sk_tanggal, berlaku_mulai: form.berlaku_mulai,
       berlaku_selesai: form.berlaku_selesai, aktif: form.aktif,
@@ -120,7 +127,8 @@ export default function PejabatPage({ user, onBack }) {
 
   const q = search.trim().toLowerCase();
   const filtered = !q ? items : items.filter((it) =>
-    [it.nama, it.nip, it.jabatan].some((v) => String(v || "").toLowerCase().includes(q)));
+    [it.nama, it.nip, it.jabatan, it.unit_kerja, it.email]
+      .some((v) => String(v || "").toLowerCase().includes(q)));
 
   return (
     <div className="min-h-screen bg-background" data-testid="pejabat-page">
@@ -149,7 +157,7 @@ export default function PejabatPage({ user, onBack }) {
             <div className="relative flex-1 min-w-[180px]">
               <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
               <Input value={search} onChange={(e) => setSearch(e.target.value)}
-                placeholder="Cari nama / NIP / jabatan…" className="pl-9 h-10" data-testid="pejabat-search" />
+                placeholder="Cari nama / NIP / jabatan / unit kerja / email…" className="pl-9 h-10" data-testid="pejabat-search" />
             </div>
             {isAdmin && (
               <Button variant="outline" className="h-10 gap-1.5"
@@ -190,10 +198,20 @@ export default function PejabatPage({ user, onBack }) {
                   {filtered.map((it) => (
                     <tr key={it.id} className="border-b border-border/60 last:border-0 hover:bg-muted/50" data-testid={`pejabat-row-${it.id}`}>
                       <td className="px-3 py-2">
-                        <p className="font-semibold text-foreground">{it.nama}</p>
+                        <p className="font-semibold text-foreground flex items-center gap-1.5 flex-wrap">
+                          {it.nama}
+                          {it.status_kepegawaian && (
+                            <span className="px-1.5 py-0.5 rounded bg-slate-500/15 text-muted-foreground text-[9px] font-semibold uppercase">
+                              {statusUraian(it.status_kepegawaian).split(" (")[0]}
+                            </span>
+                          )}
+                        </p>
                         <p className="text-[11px] text-muted-foreground">
                           {it.jabatan || "—"}{it.nip ? ` · NIP ${it.nip}` : ""}
                         </p>
+                        {it.unit_kerja && (
+                          <p className="text-[10px] text-muted-foreground/80 truncate">{it.unit_kerja}</p>
+                        )}
                       </td>
                       <td className="px-3 py-2">
                         <div className="flex flex-wrap gap-1">
@@ -256,6 +274,18 @@ export default function PejabatPage({ user, onBack }) {
                 <Field label="NIP / NRP"><Input value={form.nip} onChange={(e) => setForm((f) => ({ ...f, nip: e.target.value }))} className="font-mono" /></Field>
                 <Field label="Jabatan"><Input value={form.jabatan} onChange={(e) => setForm((f) => ({ ...f, jabatan: e.target.value }))} /></Field>
                 <Field label="Pangkat / Golongan"><Input value={form.pangkat_golongan} onChange={(e) => setForm((f) => ({ ...f, pangkat_golongan: e.target.value }))} placeholder="cth. Penata (III/c)" /></Field>
+                <Field label="Status Kepegawaian">
+                  <select value={form.status_kepegawaian}
+                    onChange={(e) => setForm((f) => ({ ...f, status_kepegawaian: e.target.value }))}
+                    className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                    data-testid="pejabat-form-status">
+                    <option value="">— pilih —</option>
+                    {statusRef.map((s) => <option key={s.kode} value={s.kode}>{s.uraian}</option>)}
+                  </select>
+                </Field>
+                <Field label="Unit Kerja"><Input value={form.unit_kerja} onChange={(e) => setForm((f) => ({ ...f, unit_kerja: e.target.value }))} placeholder="cth. Bagian Umum" /></Field>
+                <Field label="No. HP"><Input value={form.no_hp} onChange={(e) => setForm((f) => ({ ...f, no_hp: e.target.value }))} inputMode="tel" placeholder="cth. 0812…" /></Field>
+                <Field label="Email"><Input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} placeholder="nama@instansi.go.id" data-testid="pejabat-form-email" /></Field>
               </div>
 
               <Field label="Peran *">

@@ -16,7 +16,8 @@ from auth_utils import require_admin, require_user
 from db import db
 from shared_utils import log_audit
 from pejabat_utils import (
-    PERAN_PEJABAT, UNIT_AKUNTANSI, pejabat_aktif_untuk_peran, validate_pejabat,
+    PERAN_PEJABAT, STATUS_KEPEGAWAIAN, UNIT_AKUNTANSI,
+    pejabat_aktif_untuk_peran, validate_pejabat,
 )
 
 pejabat_router = APIRouter()
@@ -29,6 +30,10 @@ class PejabatIn(BaseModel):
     nip: Optional[str] = ""
     jabatan: Optional[str] = ""
     pangkat_golongan: Optional[str] = ""
+    status_kepegawaian: Optional[str] = ""
+    unit_kerja: Optional[str] = ""
+    no_hp: Optional[str] = ""
+    email: Optional[str] = ""
     peran: List[str] = []
     unit_akuntansi: Optional[str] = ""
     sk_nomor: Optional[str] = ""
@@ -45,6 +50,10 @@ def _bersih(p: PejabatIn) -> dict:
         "nip": str(p.nip or "").strip(),
         "jabatan": str(p.jabatan or "").strip(),
         "pangkat_golongan": str(p.pangkat_golongan or "").strip(),
+        "status_kepegawaian": str(p.status_kepegawaian or "").strip(),
+        "unit_kerja": str(p.unit_kerja or "").strip(),
+        "no_hp": str(p.no_hp or "").strip(),
+        "email": str(p.email or "").strip(),
         "peran": [str(x).strip() for x in (p.peran or []) if str(x).strip()],
         "unit_akuntansi": str(p.unit_akuntansi or "").strip(),
         "sk_nomor": str(p.sk_nomor or "").strip(),
@@ -58,9 +67,10 @@ def _bersih(p: PejabatIn) -> dict:
 
 @pejabat_router.get("/pejabat/referensi")
 async def referensi_pejabat(_user: dict = Depends(require_user)):
-    """Referensi peran & unit akuntansi (untuk dropdown UI)."""
+    """Referensi peran, status kepegawaian & unit akuntansi (untuk dropdown UI)."""
     return {
         "peran": [{"kode": k, "uraian": v} for k, v in PERAN_PEJABAT.items()],
+        "status_kepegawaian": [{"kode": k, "uraian": v} for k, v in STATUS_KEPEGAWAIAN.items()],
         "unit_akuntansi": [{"kode": k, **v} for k, v in UNIT_AKUNTANSI.items()],
     }
 
