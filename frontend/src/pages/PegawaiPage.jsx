@@ -1,0 +1,350 @@
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import axios from "axios";
+import { toast } from "sonner";
+import {
+  ArrowLeft, Search, Plus, Pencil, Trash2, Loader2, IdCard,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from "@/components/ui/dialog";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { useBackGuard } from "@/hooks/useBackGuard";
+
+const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+
+function getApiError(err, fallback) {
+  return err?.response?.data?.detail || fallback;
+}
+
+const EMPTY = {
+  mode: "tambah", nama: "", nip: "", gelar_depan: "", gelar_belakang: "",
+  jenis_kelamin: "", tempat_lahir: "", tanggal_lahir: "", status_kepegawaian: "",
+  pangkat_golongan: "", jabatan: "", jenis_jabatan: "", eselon: "",
+  unit_kerja: "", unit_organisasi: "", npwp: "", pendidikan_terakhir: "",
+  no_hp: "", email: "", alamat: "", tmt_jabatan: "", status: "aktif",
+  keterangan: "",
+};
+
+// Nama + gelar untuk tampilan (samakan dengan nama_lengkap di backend).
+function namaLengkap(p) {
+  const depan = (p.gelar_depan || "").trim();
+  const belakang = (p.gelar_belakang || "").trim();
+  let out = `${depan} ${(p.nama || "").trim()}`.trim();
+  if (belakang) out = `${out}, ${belakang}`;
+  return out;
+}
+
+/**
+ * Master Pegawai (data kepegawaian menyeluruh satker, adopsi SIMAN-G).
+ *
+ * Berbeda dari Referensi Pejabat (khusus penanda tangan/penatausahaan):
+ * halaman ini menampung SELURUH pegawai + unit kerjanya sebagai rujukan
+ * lintas modul. Semua user login melihat; admin mengelola (CRUD).
+ */
+export default function PegawaiPage({ user, onBack }) {
+  const isAdmin = user?.role === "admin";
+  const [items, setItems] = useState([]);
+  const [ref, setRef] = useState({ jenis_kelamin: [], status_kepegawaian: [], jenis_jabatan: [], status: [] });
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const { confirm, confirmDialog } = useConfirm();
+
+  useBackGuard(useCallback(() => onBack?.(), [onBack]));
+
+  const uraian = useCallback((list, kode) => (ref[list] || []).find((o) => o.kode === kode)?.uraian || kode, [ref]);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await axios.get(`${API}/pegawai`);
+      setItems(r.data?.items || []);
+    } catch (err) {
+      toast.error(getApiError(err, "Gagal memuat daftar pegawai"));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+    axios.get(`${API}/pegawai/referensi`).then((r) => setRef({
+      jenis_kelamin: r.data?.jenis_kelamin || [],
+      status_kepegawaian: r.data?.status_kepegawaian || [],
+      jenis_jabatan: r.data?.jenis_jabatan || [],
+      status: r.data?.status || [],
+    })).catch(() => {});
+  }, [load]);
+
+  const submitForm = async () => {
+    if (!form) return;
+    if (!(form.nama || "").trim()) { toast.error("Nama pegawai wajib diisi"); return; }
+    setSaving(true);
+    const body = { ...form };
+    delete body.mode; delete body.id; delete body.created_at; delete body.updated_at;
+    try {
+      if (form.mode === "tambah") {
+        await axios.post(`${API}/pegawai`, body);
+        toast.success(`Pegawai ${form.nama} ditambahkan`);
+      } else {
+        await axios.put(`${API}/pegawai/${form.id}`, body);
+        toast.success(`Pegawai ${form.nama} diperbarui`);
+      }
+      setForm(null);
+      load();
+    } catch (err) {
+      toast.error(getApiError(err, "Gagal menyimpan pegawai"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const remove = async (it) => {
+    const ok = await confirm({
+      title: `Hapus pegawai ${it.nama}?`,
+      description: "Data pegawai ini akan dihapus dari master pegawai.",
+      confirmLabel: "Hapus", variant: "danger",
+    });
+    if (!ok) return;
+    try {
+      await axios.delete(`${API}/pegawai/${it.id}`);
+      toast.success(`Pegawai ${it.nama} dihapus`);
+      load();
+    } catch (err) {
+      toast.error(getApiError(err, "Gagal menghapus pegawai"));
+    }
+  };
+
+  const q = search.trim().toLowerCase();
+  const filtered = useMemo(() => (!q ? items : items.filter((it) =>
+    [it.nama, it.nip, it.jabatan, it.unit_kerja, it.email]
+      .some((v) => String(v || "").toLowerCase().includes(q)))), [items, q]);
+
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  return (
+    <div className="min-h-screen bg-background" data-testid="pegawai-page">
+      <header className="bg-card/95 backdrop-blur-sm border-b border-border px-3 sm:px-6 py-2.5 sticky top-0 z-40">
+        <div className="max-w-5xl mx-auto flex items-center gap-3">
+          <button type="button" onClick={onBack} aria-label="Kembali ke Beranda Modul"
+            className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0"
+            data-testid="pegawai-back">
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+          <span className="w-9 h-9 rounded-lg bg-sky-600 flex items-center justify-center flex-shrink-0">
+            <IdCard className="w-4 h-4 text-white" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight">Master Pegawai</h1>
+            <p className="text-[11px] sm:text-xs text-muted-foreground truncate">
+              {items.length} pegawai · data kepegawaian menyeluruh &amp; unit kerja (adopsi SIMAN-G)
+            </p>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-5xl mx-auto px-3 sm:px-6 py-4 space-y-3">
+        <div className="bg-card rounded-xl border border-border shadow-sm p-2 sm:p-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="relative flex-1 min-w-[180px]">
+              <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+              <Input value={search} onChange={(e) => setSearch(e.target.value)}
+                placeholder="Cari nama / NIP / jabatan / unit kerja / email…" className="pl-9 h-10" data-testid="pegawai-search" />
+            </div>
+            {isAdmin && (
+              <Button variant="outline" className="h-10 gap-1.5"
+                onClick={() => setForm({ ...EMPTY })} data-testid="pegawai-add">
+                <Plus className="w-4 h-4" /><span className="hidden sm:inline">Tambah</span>
+              </Button>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+          {loading ? (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="w-7 h-7 animate-spin text-sky-600" />
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="text-center py-16 px-4">
+              <IdCard className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
+              <p className="text-sm font-medium text-foreground">
+                {items.length === 0 ? "Belum ada pegawai" : "Tidak ada yang cocok"}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {isAdmin ? "Tambah data pegawai satker (seluruh pegawai & unit kerjanya)."
+                  : "Minta admin menambah data pegawai."}
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/40 text-left text-xs text-muted-foreground">
+                    <th className="px-3 py-2.5 font-semibold">Nama / NIP</th>
+                    <th className="px-3 py-2.5 font-semibold hidden sm:table-cell">Jabatan / Unit Kerja</th>
+                    <th className="px-3 py-2.5 font-semibold">Status</th>
+                    {isAdmin && <th className="px-3 py-2.5 font-semibold text-right">Aksi</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((it) => (
+                    <tr key={it.id} className="border-b border-border/60 last:border-0 hover:bg-muted/50" data-testid={`pegawai-row-${it.id}`}>
+                      <td className="px-3 py-2">
+                        <p className="font-semibold text-foreground flex items-center gap-1.5 flex-wrap">
+                          {namaLengkap(it)}
+                          {it.status_kepegawaian && (
+                            <span className="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-600 dark:text-sky-400 text-[9px] font-semibold uppercase">
+                              {uraian("status_kepegawaian", it.status_kepegawaian).split(" (")[0]}
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground font-mono">{it.nip || "—"}</p>
+                      </td>
+                      <td className="px-3 py-2 hidden sm:table-cell">
+                        <p className="text-[12px] text-foreground/90">{it.jabatan || "—"}</p>
+                        <p className="text-[10px] text-muted-foreground/80">{it.unit_kerja || ""}</p>
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                          (it.status || "aktif") === "aktif"
+                            ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                            : "bg-slate-500/15 text-muted-foreground"}`}>
+                          {uraian("status", it.status || "aktif")}
+                        </span>
+                      </td>
+                      {isAdmin && (
+                        <td className="px-3 py-2 text-right whitespace-nowrap">
+                          <button type="button" onClick={() => setForm({ ...EMPTY, ...it, mode: "edit" })}
+                            aria-label={`Ubah ${it.nama}`}
+                            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted min-w-0 min-h-0"
+                            data-testid={`pegawai-edit-${it.id}`}>
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button type="button" onClick={() => remove(it)}
+                            aria-label={`Hapus ${it.nama}`}
+                            className="p-1.5 rounded-md text-muted-foreground hover:text-red-600 hover:bg-red-500/10 min-w-0 min-h-0"
+                            data-testid={`pegawai-delete-${it.id}`}>
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </main>
+
+      {/* ── Dialog tambah / edit ── */}
+      <Dialog open={!!form} onOpenChange={(o) => { if (!o) setForm(null); }}>
+        <DialogContent className="max-w-2xl max-h-[88vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{form?.mode === "tambah" ? "Tambah Pegawai" : `Ubah Pegawai — ${form?.nama}`}</DialogTitle>
+            <DialogDescription className="text-xs">
+              Data kepegawaian menyeluruh — dipakai sebagai rujukan lintas modul (pemegang barang, penanggung jawab ruangan, dll.).
+            </DialogDescription>
+          </DialogHeader>
+          {form && (
+            <div className="space-y-4">
+              <Group title="Identitas">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <Field label="Gelar Depan"><Input value={form.gelar_depan} onChange={set("gelar_depan")} placeholder="cth. Dr." /></Field>
+                  <Field label="Nama *" span2><Input value={form.nama} onChange={set("nama")} data-testid="pegawai-form-nama" /></Field>
+                  <Field label="Gelar Belakang"><Input value={form.gelar_belakang} onChange={set("gelar_belakang")} placeholder="cth. S.E." /></Field>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Field label="NIP / NRP"><Input value={form.nip} onChange={set("nip")} className="font-mono" inputMode="numeric" placeholder="18 digit (opsional)" data-testid="pegawai-form-nip" /></Field>
+                  <Field label="NPWP"><Input value={form.npwp} onChange={set("npwp")} className="font-mono" /></Field>
+                  <Field label="Jenis Kelamin">
+                    <Select value={form.jenis_kelamin} onChange={set("jenis_kelamin")} data-testid="pegawai-form-jk" opts={ref.jenis_kelamin} />
+                  </Field>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Tempat Lahir"><Input value={form.tempat_lahir} onChange={set("tempat_lahir")} /></Field>
+                    <Field label="Tgl Lahir"><Input type="date" value={form.tanggal_lahir} onChange={set("tanggal_lahir")} /></Field>
+                  </div>
+                </div>
+              </Group>
+
+              <Group title="Kepegawaian">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Field label="Status Kepegawaian">
+                    <Select value={form.status_kepegawaian} onChange={set("status_kepegawaian")} data-testid="pegawai-form-status-peg" opts={ref.status_kepegawaian} />
+                  </Field>
+                  <Field label="Pangkat / Golongan"><Input value={form.pangkat_golongan} onChange={set("pangkat_golongan")} placeholder="cth. Penata (III/c)" /></Field>
+                  <Field label="Jenis Jabatan">
+                    <Select value={form.jenis_jabatan} onChange={set("jenis_jabatan")} opts={ref.jenis_jabatan} />
+                  </Field>
+                  <Field label="Eselon"><Input value={form.eselon} onChange={set("eselon")} placeholder="cth. IV.a" /></Field>
+                  <Field label="Status di Satker">
+                    <Select value={form.status} onChange={set("status")} data-testid="pegawai-form-status" opts={ref.status} allowEmpty={false} />
+                  </Field>
+                  <Field label="TMT Jabatan"><Input type="date" value={form.tmt_jabatan} onChange={set("tmt_jabatan")} /></Field>
+                </div>
+              </Group>
+
+              <Group title="Jabatan & Unit Kerja">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Field label="Jabatan" span2><Input value={form.jabatan} onChange={set("jabatan")} placeholder="cth. Analis Pengelolaan BMN" /></Field>
+                  <Field label="Unit Kerja"><Input value={form.unit_kerja} onChange={set("unit_kerja")} placeholder="cth. Bagian Umum" data-testid="pegawai-form-unit" /></Field>
+                  <Field label="Unit Organisasi / Satker"><Input value={form.unit_organisasi} onChange={set("unit_organisasi")} /></Field>
+                </div>
+              </Group>
+
+              <Group title="Kontak & Lainnya">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Field label="No. HP"><Input value={form.no_hp} onChange={set("no_hp")} inputMode="tel" placeholder="cth. 0812…" /></Field>
+                  <Field label="Email"><Input type="email" value={form.email} onChange={set("email")} placeholder="nama@instansi.go.id" data-testid="pegawai-form-email" /></Field>
+                  <Field label="Pendidikan Terakhir"><Input value={form.pendidikan_terakhir} onChange={set("pendidikan_terakhir")} placeholder="cth. S1 Akuntansi" /></Field>
+                  <Field label="Alamat"><Input value={form.alamat} onChange={set("alamat")} /></Field>
+                </div>
+                <Field label="Keterangan"><Input value={form.keterangan} onChange={set("keterangan")} /></Field>
+              </Group>
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setForm(null)}>Batal</Button>
+            <Button onClick={submitForm} disabled={saving} data-testid="pegawai-form-save">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : null}Simpan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {confirmDialog}
+    </div>
+  );
+}
+
+function Group({ title, children }) {
+  return (
+    <div className="space-y-3">
+      <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground border-b border-border/60 pb-1">{title}</p>
+      {children}
+    </div>
+  );
+}
+
+function Field({ label, children, span2 }) {
+  return (
+    <div className={span2 ? "col-span-2" : ""}>
+      <label className="text-xs font-medium text-foreground block mb-1">{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function Select({ value, onChange, opts, allowEmpty = true, ...rest }) {
+  return (
+    <select value={value} onChange={onChange}
+      className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm" {...rest}>
+      {allowEmpty && <option value="">— pilih —</option>}
+      {(opts || []).map((o) => <option key={o.kode} value={o.kode}>{o.uraian}</option>)}
+    </select>
+  );
+}
