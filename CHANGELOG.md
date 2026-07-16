@@ -48,6 +48,22 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#325] Opsi wajib pegawai terdaftar untuk pengguna aset (evaluasi #4) — 2026-07-16
+
+- **Memperkuat tautan pengguna↔Master Pegawai (OPT-IN).** Setelan laporan baru
+  `wajib_pegawai_terdaftar` (**default OFF**). Bila **ON**, menyimpan aset (create/
+  update PUT/patch) dengan `pengguna_nip` yang **belum terdaftar di Master Pegawai**
+  ditolak **400** dengan pesan jelas (menyebut NIP). Bila **OFF** atau `pengguna_nip`
+  kosong → perilaku sekarang (entri lapangan/offline & data lama tetap jalan).
+- Helper `_enforce_pegawai_terdaftar` dipanggil di **ketiga jalur tulis** aset
+  (POST/PUT/PATCH) — konsisten. Flag disimpan lewat `PUT /report-settings` yang ada.
+- `pytest tests/unit` **417 lulus**; smoke-test helper (OFF→lolos, ON+kosong→lolos,
+  ON+terdaftar→lolos, ON+tak terdaftar→400).
+- **Ditunda (dicatat):** `ruangan_id` FK penuh per aset (arsitektural — menyentuh
+  registry field aset & anti-drift); tetap tautan teks/datalist untuk saat ini.
+
+---
+
 ## [#324] Verifikasi akun neraca persediaan 1171xx + koreksi (evaluasi #3c) — 2026-07-16
 
 - **Riset verifikasi** akun 1171xx dari **laporan neraca/BMN audited berbagai K/L**

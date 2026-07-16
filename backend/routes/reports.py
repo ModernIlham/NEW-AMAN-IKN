@@ -2938,6 +2938,9 @@ class ReportSettingsUpdate(BaseModel):
     subjudul_laporan: Optional[str] = "BARANG MILIK NEGARA (BMN)"
     tahun_anggaran: Optional[str] = ""
     catatan_kaki: Optional[str] = ""
+    # Evaluasi #4 (OPT-IN, default OFF): bila True, simpan aset menolak pengguna_nip
+    # yang belum terdaftar di Master Pegawai. None = jangan ubah nilai tersimpan.
+    wajib_pegawai_terdaftar: Optional[bool] = None
 
 
 @reports_router.get("/report-settings")
@@ -2956,6 +2959,7 @@ async def get_report_settings(_user: dict = Depends(require_user)):
             "subjudul_laporan": "BARANG MILIK NEGARA (BMN)",
             "tahun_anggaran": "",
             "catatan_kaki": "",
+            "wajib_pegawai_terdaftar": False,
         }
     return settings
 

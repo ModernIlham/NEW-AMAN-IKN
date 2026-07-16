@@ -691,6 +691,25 @@ async def process_photos_for_storage(photos: list) -> dict:
     return {"gridfs_ids": gridfs_ids, "thumbnails": thumbnails}
 
 
+async def _enforce_pegawai_terdaftar(pengguna_nip):
+    """Evaluasi #4 (OPT-IN): bila setelan `wajib_pegawai_terdaftar` ON dan NIP
+    pengguna diisi tapi TIDAK terdaftar di Master Pegawai → tolak 400. Default
+    OFF (perilaku lama, entri lapangan/offline & data lama tetap jalan)."""
+    nip = str(pengguna_nip or "").strip()
+    if not nip:
+        return
+    settings = await db.report_settings.find_one(
+        {"type": "global"}, {"_id": 0, "wajib_pegawai_terdaftar": 1}) or {}
+    if not settings.get("wajib_pegawai_terdaftar"):
+        return
+    if not await db.pegawai.find_one({"nip": nip}, {"_id": 1}):
+        raise HTTPException(
+            status_code=400,
+            detail=f"NIP/NIK pengguna '{nip}' belum terdaftar di Master Pegawai. "
+                   f"Daftarkan pegawai tersebut, atau nonaktifkan setelan "
+                   f"'Wajib Pegawai Terdaftar'.")
+
+
 @assets_router.post("/assets", response_model=AssetResponse)
 async def create_asset(asset: AssetCreate, request: Request, _user: dict = Depends(require_user)):
     """Create a new asset. Supports Idempotency-Key header to safely retry on network errors."""
@@ -712,6 +731,7 @@ async def create_asset(asset: AssetCreate, request: Request, _user: dict = Depen
 
     # Kegiatan yang sudah disahkan terkunci — tolak penambahan aset (423)
     await ensure_activity_not_sealed(asset.activity_id)
+    await _enforce_pegawai_terdaftar(asset.pengguna_nip)
 
     # Check uniqueness: asset_code + NUP within same activity
     existing_query = {
@@ -1514,6 +1534,7 @@ async def update_asset(asset_id: str, asset: AssetCreate, request: Request,
     await ensure_activity_not_sealed(existing.get("activity_id"))
     if asset.activity_id and asset.activity_id != existing.get("activity_id"):
         await ensure_activity_not_sealed(asset.activity_id)
+    await _enforce_pegawai_terdaftar(asset.pengguna_nip)
 
     # --- Optimistic Concurrency Control (OCC) ---
     # Client sends If-Match header with the version they loaded. If server has a
@@ -1735,6 +1756,8 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
     body_activity_id = body.get("activity_id")
     if body_activity_id and body_activity_id != existing.get("activity_id"):
         await ensure_activity_not_sealed(body_activity_id)
+    if "pengguna_nip" in body:
+        await _enforce_pegawai_terdaftar(body.get("pengguna_nip"))
 
     # --- Optimistic Concurrency Control ---
     if_match = request.headers.get("If-Match", "").strip().strip('"')
