@@ -279,6 +279,15 @@ Neraca* (`AkunBasPage.jsx`) dari Beranda Modul — semua user melihat pemetaan
 - **Implikasi:** enum transaksi AMAN memetakan 1:1 ke daftar ini (demi
   rekonsiliasi); bedakan transfer antar satker vs pindah gudang internal;
   workflow operator–approver (pola approval staging masterplan §4).
+- **Status implementasi:** jenis **Masuk** (Saldo Awal, Pembelian, Transfer
+  Masuk, Hibah Masuk, **Rampasan**, **Reklasifikasi Masuk**, **Reklasifikasi
+  dari Aset**, Perolehan Lainnya) & **Keluar** (Habis Pakai, Transfer Keluar,
+  Hibah Keluar, Usang, Rusak, **Penghapusan Lainnya**, **Reklasifikasi Keluar**)
+  sudah terpasang penuh (`JENIS_MASUK`/`JENIS_KELUAR`, muncul otomatis di UI dari
+  `/persediaan/jenis-transaksi`). Kode M05–M07/K06–K07 = kode internal aplikasi
+  **[perlu verifikasi kode SAKTI resmi]**. **BELUM** (governance, ditunda menunggu
+  keputusan): Koreksi sebagai jenis tersendiri, penghapusan definitif 2-tahap
+  (H01/H02) berbasis SK, dan alur approval operator→approver.
 
 ### 3.3 Stock opname
 

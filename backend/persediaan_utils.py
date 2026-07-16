@@ -101,6 +101,9 @@ JENIS_MASUK = {
     "pembelian": ("Pembelian", "M02"),
     "transfer_masuk": ("Transfer Masuk", "M03"),
     "hibah_masuk": ("Hibah Masuk", "M04"),
+    "rampasan": ("Rampasan", "M05"),
+    "reklasifikasi_masuk": ("Reklasifikasi Masuk", "M06"),
+    "reklasifikasi_dari_aset": ("Reklasifikasi dari Aset", "M07"),
     "perolehan_lainnya": ("Perolehan Lainnya", "M99"),
 }
 
@@ -111,6 +114,8 @@ JENIS_KELUAR = {
     "hibah_keluar": ("Hibah Keluar", "K03"),
     "usang": ("Usang", "K04"),
     "rusak": ("Rusak", "K05"),
+    "penghapusan_lainnya": ("Penghapusan Lainnya", "K06"),
+    "reklasifikasi_keluar": ("Reklasifikasi Keluar", "K07"),
 }
 
 
