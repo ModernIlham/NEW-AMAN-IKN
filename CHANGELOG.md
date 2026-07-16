@@ -48,6 +48,16 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#298] Tombol unduh DBR di hub Pelaporan — 2026-07-16
+
+- **Menyurfacekan DBR (#297) di UI.** Tombol **"DBR"** ditambahkan di kartu
+  Pembukuan satker-wide halaman **Pelaporan** (di samping Posisi BMN / LKB /
+  LBKP) → mengunduh **Daftar Barang Ruangan** (`GET /pembukuan/dbr-pdf`).
+- Perubahan UI murni (satu tombol, pola `downloadFileWithProgress` yang ada);
+  eslint bersih, `yarn build` sukses.
+
+---
+
 ## [#297] DBR — Daftar Barang Ruangan (PDF per ruangan) — 2026-07-16
 
 - **Artikel penatausahaan baru** memanfaatkan Master Ruangan (#294/#296).
