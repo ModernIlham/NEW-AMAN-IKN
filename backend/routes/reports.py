@@ -2063,7 +2063,9 @@ async def generate_lbkp_pdf(
                "LBKP menyusul bertahap.")
     if n_tanpa_nilai:
         catatan += (f" Terdapat {n_tanpa_nilai} penghapusan pada periode ini yang nilai "
-                    "perolehannya belum terekam (audit lama) — dihitung jumlahnya dengan nilai 0.")
+                    "perolehannya belum terekam (audit lama) — dihitung jumlahnya dengan nilai 0; "
+                    "yang kelas intra/ekstra-nya tak dapat dipastikan dicatat pada seksi Gabungan "
+                    "saja, sehingga Gabungan dapat berbeda dari penjumlahan seksi I+II.")
     elements.append(Paragraph(catatan, st['Meta']))
 
     elements.append(Spacer(1, 12 * rl_mm))
@@ -2435,7 +2437,9 @@ async def generate_calbmn_pdf(
         f"nilai 0. Komponen KDP dan ATB belum dicatat pada AMAN.")
     if n_tanpa_nilai:
         catatan_iv += (f" Terdapat {n_tanpa_nilai} penghapusan periode ini "
-                       f"tanpa nilai perolehan terekam.")
+                       f"tanpa nilai perolehan terekam; yang kelasnya tak "
+                       f"dapat dipastikan dicatat pada rekap gabungan saja "
+                       f"(tidak ditebak intra/ekstra).")
     elements.append(Paragraph(catatan_iv, st['Meta']))
 
     bab("V. INFORMASI BMN LAINNYA")

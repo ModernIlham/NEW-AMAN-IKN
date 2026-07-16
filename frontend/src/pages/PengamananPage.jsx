@@ -29,8 +29,9 @@ const IKON_KEKURANGAN = {
 /**
  * Pengamanan — Fase 3 tahap awal: dasbor tertib administrasi data aset
  * (penangkal temuan "barang tanpa foto/label/dokumen") + daftar pantau
- * sengketa dari data inventarisasi. Arsip dokumen kepemilikan & jadwal
- * pemeliharaan menyusul sesuai masterplan.
+ * sengketa dari data inventarisasi, register dokumen kepemilikan
+ * ber-lampiran, checklist pengamanan fisik, dan polis asuransi; jadwal
+ * pemeliharaan dikelola di modul Pemeliharaan.
  */
 const WARNA_STATUS_KASUS = {
   identifikasi: "bg-amber-500/15 text-amber-600 dark:text-amber-400",

@@ -1,8 +1,8 @@
 """PEMELIHARAAN — Fase 3 tahap awal: catatan riwayat + biaya per aset.
 
 PP 27/2014 Ps. 46-47: catatan per kejadian pemeliharaan menjadi bahan
-Daftar Hasil Pemeliharaan Barang (DHPB) + rekap biaya per tahun anggaran.
-Jadwal pemeliharaan berkala & DHPB PDF menyusul sesuai masterplan Fase 3.
+Daftar Hasil Pemeliharaan Barang (DHPB, tersedia sebagai PDF) + rekap
+biaya per tahun anggaran; jadwal pemeliharaan berkala dikelola di sini.
 """
 import uuid
 from datetime import datetime, timezone
@@ -16,7 +16,7 @@ from shared_utils import blok_ttd_kpb
 from pemeliharaan_utils import (
     JENIS_PEMELIHARAAN, baris_csv_jadwal, indikasi_kapitalisasi, jatuh_tempo,
     kelompok_dhpb, rekap_pemeliharaan, rentang_periode, status_jadwal,
-    urut_riwayat, parse_biaya, validate_jadwal, validate_pemeliharaan,
+    parse_biaya, validate_jadwal, validate_pemeliharaan,
 )
 
 pemeliharaan_router = APIRouter()
@@ -303,15 +303,6 @@ async def delete_jadwal(jadwal_id: str, _admin: dict = Depends(require_admin)):
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Jadwal tidak ditemukan")
     return {"ok": True, "id": jadwal_id}
-
-
-@pemeliharaan_router.get("/pemeliharaan/aset/{asset_id}")
-async def riwayat_aset(asset_id: str, _user: dict = Depends(require_user)):
-    """Riwayat pemeliharaan satu aset (terbaru dulu) + subtotal biaya."""
-    records = [r async for r in db.pemeliharaan.find({"asset_id": asset_id}, _PROJ)]
-    records = urut_riwayat(records)
-    total = sum(parse_biaya(r.get("biaya")) or 0.0 for r in records)
-    return {"items": records, "jumlah": len(records), "total_biaya": total}
 
 
 @pemeliharaan_router.get("/pemeliharaan/export")

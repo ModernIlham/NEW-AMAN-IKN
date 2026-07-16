@@ -347,7 +347,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     userName: user?.name || user?.username,
     onAssetChange: onWsAssetChange, onLocksUpdate: (locks) => setRowLocks(locks),
   });
-  const { isOnline } = useOfflineSync({ onSyncComplete: onWsAssetChange });
+  const { isOnline } = useOfflineSync();
 
   // === OFFLINE READ CACHE (snapshot) ===
   // snapshotState → progres sinkron di InventoryProgressBar

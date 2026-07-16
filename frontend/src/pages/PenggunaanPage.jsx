@@ -22,8 +22,9 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
  * dibangun dari data pengguna + NIP + BAST yang sudah dicatat modul
  * inventarisasi — plus daftar pantau BMN IDLE (PMK 120/2024): kandidat
  * otomatis dari status Nonaktif / tanpa pengguna, tiket klarifikasi →
- * digunakan kembali / usul serah → diserahkan ke Pengelola.
- * PSP/alih status menyusul (PMK 40/2024).
+ * digunakan kembali / usul serah → diserahkan ke Pengelola — serta
+ * register PSP (SK + BAST PDF) dan tiket proses alih status/alih fungsi
+ * (PMK 40/2024).
  */
 const WARNA_STATUS_PROSES = {
   draf: "bg-muted text-foreground/70",

@@ -4,7 +4,8 @@ Mesin aturan ringan atas register yang sudah ada (aset, pemanfaatan,
 usulan penghapusan, pemindahtanganan, pemeliharaan) → temuan per lima
 objek pemantauan + register penertiban ber-tenggat 15 hari kerja. Bahan
 pra-isi laporan wasdal semesteran; kanal resmi pelaporan tetap Modul
-Wasdal SIMAN v2. BA pemantauan insidentil menyusul sesuai masterplan.
+Wasdal SIMAN v2. Pemantauan insidentil ber-BA (isi + PDF + lampiran)
+dikelola lewat register tersendiri di modul ini.
 """
 import uuid
 from datetime import datetime, timezone

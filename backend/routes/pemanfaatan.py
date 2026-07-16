@@ -4,7 +4,7 @@ PMK 115/PMK.06/2020 (pustaka §6): register + arsip, bukan sistem uang —
 persetujuan selalu di Pengelola Barang; PNBP disetor mitra langsung ke
 Kas Negara. Status turunan menandai dokumen kurang / jatuh tempo ≤60
 hari / berakhir. Kontribusi tahunan tercatat per tahun (NTPN) dengan
-pengingat tunggakan; lampiran scan dokumen menyusul.
+pengingat tunggakan; lampiran scan dokumen tersimpan di GridFS.
 """
 import uuid
 from datetime import datetime, timezone
