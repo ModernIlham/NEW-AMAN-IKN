@@ -48,6 +48,29 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#306] Master Pegawai — data kepegawaian menyeluruh satker (adopsi SIMAN-G) — 2026-07-16
+
+- **Modul referensi baru: Master Pegawai.** BERBEDA dari Referensi Pejabat
+  (khusus pejabat penatausahaan/penanda tangan), master `pegawai` menampung
+  **SELURUH pegawai** satker beserta **unit kerjanya masing-masing**, mengadopsi
+  kelengkapan data SIMAN Modul Pegawai (SIMAN-G)/SIMPEG.
+- Field: NIP (unik bila diisi), gelar depan/belakang, jenis kelamin, tempat/tgl
+  lahir, status kepegawaian (PNS/CPNS/PPPK/TNI/POLRI/Non-ASN), pangkat golongan,
+  jabatan, jenis jabatan (struktural/fungsional/pelaksana), eselon, unit kerja,
+  unit organisasi, NPWP, pendidikan, no. HP, email (divalidasi), alamat, TMT,
+  status di satker (aktif/cuti/tugas belajar/mutasi/pensiun/nonaktif). Hanya
+  `nama` wajib.
+- Backend: `pegawai_utils.py` (murni: `validate_pegawai`, `nama_lengkap`,
+  `is_aktif`, `kelompok_unit_kerja`) + `routes/pegawai.py` (CRUD admin, list,
+  `/pegawai/referensi`, `/pegawai/rekap-unit`; NIP unik) terdaftar di
+  `server.py`. Uji unit ditambah → **404 lulus**.
+- Frontend `PegawaiPage.jsx`: daftar + cari + form berkelompok (Identitas,
+  Kepegawaian, Jabatan & Unit, Kontak); badge status kepegawaian & status
+  satker; dibuka dari **Beranda Modul** (tombol "Master Pegawai"). `eslint`
+  bersih, `yarn build` sukses.
+
+---
+
 ## [#305] Master pegawai lebih kaya: status kepegawaian, kontak & unit kerja — 2026-07-16
 
 - **Melengkapi bagian (b): registry Pejabat diperkaya (adopsi SIMAN-G).** Tiap

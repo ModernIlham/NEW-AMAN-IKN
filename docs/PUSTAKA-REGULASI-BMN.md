@@ -211,6 +211,21 @@ master bila nama cocok (`cocok_ruangan_master`) — tanda tangan PJ Ruangan + KP
 Form aset menyarankan nama ruangan master (datalist, #299) agar penamaan
 konsisten. Tautan `ruangan_id` FK penuh per aset menyusul bila diperlukan.
 
+**2.4c Master Pegawai (terapan AMAN, adopsi SIMAN-G).** BERBEDA dari Referensi
+Pejabat (§2.4a, khusus pejabat penatausahaan/penanda tangan): master `pegawai`
+menampung **SELURUH pegawai** satker beserta **unit kerjanya masing-masing**,
+mengadopsi kelengkapan data **SIMAN Modul Pegawai (SIMAN-G) / SIMPEG** — NIP,
+gelar, jenis kelamin, tempat/tanggal lahir, `status_kepegawaian` (PNS/CPNS/PPPK/
+TNI/POLRI/Non-ASN), pangkat golongan, jabatan, `jenis_jabatan` (struktural/
+fungsional/pelaksana), eselon, unit kerja, unit organisasi, NPWP, pendidikan,
+kontak (HP/email divalidasi), alamat, TMT, & `status` di satker (aktif/cuti/
+tugas belajar/mutasi/pensiun/nonaktif). Hanya `nama` wajib; NIP unik bila diisi.
+Dipakai sebagai **rujukan lintas modul** (pemegang barang, penanggung jawab
+ruangan, distribusi DBR/KIR). Logika murni teruji unit (`pegawai_utils.py`:
+`validate_pegawai`, `nama_lengkap`, `kelompok_unit_kerja`) + CRUD
+(`routes/pegawai.py`, endpoint `/pegawai`, `/pegawai/referensi`,
+`/pegawai/rekap-unit`) + UI kelola (`PegawaiPage.jsx`, dibuka dari Beranda Modul).
+
 ### 2.5 Referensi Akun Neraca (BAS) per golongan (#301)
 
 Master `akun_bas` memetakan **golongan kodefikasi → akun neraca aset** (Bagan
