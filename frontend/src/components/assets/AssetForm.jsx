@@ -522,6 +522,22 @@ const AssetForm = memo(({
   // Offline edit: form initialized from the cached list row (offline snapshot)
   // because GET /assets/{id} was unreachable — shows a notice, media unavailable.
   const [offlineNotice, setOfflineNotice] = useState(false);
+  // Saran nama ruangan (master #294) untuk datalist field Lokasi — agar penamaan
+  // ruangan KONSISTEN (dasar DBR/KIR yang rapi). Best-effort, tetap boleh teks bebas.
+  const [ruanganNames, setRuanganNames] = useState([]);
+
+  // Muat saran ruangan sekali saat form dibuka (best-effort; offline diabaikan).
+  useEffect(() => {
+    if (!isOpen || ruanganNames.length) return undefined;
+    let cancelled = false;
+    axios.get(`${API}/ruangan`).then((r) => {
+      if (cancelled) return;
+      setRuanganNames((r.data?.items || [])
+        .map((x) => [x.kode_ruangan, x.nama_ruangan].filter(Boolean).join(" — "))
+        .filter(Boolean));
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [isOpen, ruanganNames.length]);
 
   // Cek kodefikasi LIVE (debounce) saat Kode Aset berubah: peringatan lunak bila
   // prefix kode tak terdaftar di referensi. Non-blocking, best-effort — gagal /
@@ -1954,7 +1970,7 @@ const AssetForm = memo(({
                 <div className="space-y-1"><Label className="text-xs">Tanggal Beli</Label><Input type="date" name="purchase_date" value={formData.purchase_date} onChange={handleInputChange} className="h-8" /></div>
                 <div className="space-y-1"><Label className="text-xs">Harga (Rp)</Label><Input type="number" name="purchase_price" value={formData.purchase_price} onChange={handleInputChange} className="h-8" /></div>
               </div>
-              <div className="space-y-1"><Label className="text-xs">Lokasi</Label><Input name="location" value={formData.location} onChange={handleInputChange} className="h-8" /></div>
+              <div className="space-y-1"><Label className="text-xs">Lokasi</Label><Input name="location" value={formData.location} onChange={handleInputChange} className="h-8" list="daftar-ruangan-master" placeholder="pilih ruangan / ketik bebas" /><datalist id="daftar-ruangan-master">{ruanganNames.map((n) => <option key={n} value={n} />)}</datalist></div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1"><Label className="text-xs">Eselon I</Label>
                   <select name="eselon1" value={formData.eselon1} onChange={e => { handleInputChange(e); setFormData(p => ({...p, eselon2: ''})); }} className="w-full h-8 px-2 rounded-md border border-input bg-background text-sm" data-testid="asset-eselon1-select">
