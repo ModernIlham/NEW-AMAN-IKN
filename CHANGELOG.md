@@ -48,6 +48,24 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#324] Verifikasi akun neraca persediaan 1171xx + koreksi (evaluasi #3c) — 2026-07-16
+
+- **Riset verifikasi** akun 1171xx dari **laporan neraca/BMN audited berbagai K/L**
+  (sumber sekunder resmi). **Terkonfirmasi konsisten:** 117111 Barang Konsumsi,
+  117113 Bahan untuk Pemeliharaan, 117114 Suku Cadang, **117131 Bahan Baku**,
+  117199 Persediaan Lainnya.
+- **KOREKSI akurasi:** `117131` sebelumnya keliru diberi label **"untuk Diserahkan
+  kpd Masyarakat"** — sebenarnya **Bahan Baku**; kode tebakan awal `117191`
+  (Bahan Baku) **dihapus**. Ditambah `117128` (untuk Diserahkan, seri 11712x)
+  bertanda [perlu verifikasi].
+- **Masih perlu verifikasi Lampiran BAS/KEP-211:** `117112` Amunisi & `117128`
+  (untuk Diserahkan) — sumber primer `.go.id` (KEP-211, neraca K/L) **terblokir
+  proxy**, jadi tidak ditebak. Katalog kini menandai yang belum terverifikasi.
+- Diperbarui `persediaan_akun_utils.py` (docstring + `AKUN_PERSEDIAAN_DEFAULT`) &
+  pustaka §3.4. `pytest tests/unit` **417 lulus**.
+
+---
+
 ## [#323] UI Referensi Akun Persediaan (evaluasi #3b) — 2026-07-16
 
 - **Halaman "Referensi Akun Persediaan"** (`PersediaanAkunPage.jsx`) dari Beranda

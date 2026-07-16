@@ -319,17 +319,20 @@ Neraca* (`AkunBasPage.jsx`) dari Beranda Modul — semua user melihat pemetaan
 - Laporan baku minimum: **Posisi Persediaan di Neraca** (per akun),
   **Rincian** (saldo awal-mutasi-akhir per barang), **Mutasi/Transaksi**
   (per jenis), **per Layer**. Satuan dari tabel referensi baku.
-- **Status implementasi (#310):** akun neraca persediaan dipetakan lewat
-  `persediaan_akun_utils.py` (`akun_persediaan`) — **default `117111`
-  (Barang Konsumsi, terkonfirmasi Neraca Percobaan satker)**; sub-akun 1171xx
-  lain (`AKUN_PERSEDIAAN_DEFAULT`: 117112 Amunisi, 117113 Bahan Pemeliharaan,
-  117114 Suku Cadang, 117131 utk Diserahkan ke Masyarakat, 117191 Bahan Baku,
-  117199 Lainnya) = **rujukan riset, [WAJIB VERIFIKASI Lampiran BAS]**, dapat
-  ditimpa satker **per sub-kelompok (5 digit)** via koleksi `persediaan_akun`.
-  **Laporan Posisi Persediaan** kini menampilkan kolom **Akun** per barang +
-  **rekap nilai per akun neraca** (dasar penyajian di Neraca). Riset kode 6-digit
-  sub-akun terhambat (sumber .go.id diblok proxy) — asumsi ditandai jelas,
-  tidak ditebak diam-diam; UI kelola pemetaan menyusul bila diperlukan.
+- **Status implementasi (#310) + verifikasi (evaluasi #3, Jul 2026):** akun
+  neraca persediaan dipetakan lewat `persediaan_akun_utils.py` (`akun_persediaan`),
+  dapat dikelola satker **per sub-kelompok (5 digit)** via koleksi `persediaan_akun`
+  (endpoint + UI *Referensi Akun Persediaan*). **Default aman `117111` (Barang
+  Konsumsi)**. **Kode TERKONFIRMASI** dari **laporan neraca/BMN audited berbagai
+  K/L** (sumber sekunder resmi): **117111 Barang Konsumsi, 117113 Bahan untuk
+  Pemeliharaan, 117114 Suku Cadang, 117131 Bahan Baku, 117199 Persediaan Lainnya**.
+  **KOREKSI:** `117131` = **Bahan Baku** (rujukan awal keliru "untuk Diserahkan");
+  kode `117191` (tebakan awal) dihapus. **Masih [PERLU VERIFIKASI Lampiran BAS /
+  KEP-211/PB/2018]:** `117112` Amunisi & `117128` (untuk Diserahkan kpd Masyarakat,
+  seri 11712x per jenis) — **sumber primer .go.id (KEP-211, neraca K/L) terblokir
+  proxy**, jadi tidak ditebak. **Laporan Posisi Persediaan** menampilkan kolom
+  **Akun** + rekap per akun neraca. Sumber sekunder verifikasi: laporan BMN/neraca
+  audited K/L (mis. KKP, KPU, Kemhan/Itjen KEP-211) — [KEP-211/PB/2018].
 
 ---
 
