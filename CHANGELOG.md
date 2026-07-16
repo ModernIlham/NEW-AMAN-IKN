@@ -48,6 +48,23 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#310] Persediaan: akun neraca 1171xx + Laporan Posisi per akun — 2026-07-16
+
+- **Memetakan persediaan ke akun neraca (sub-kelompok 1171xx).** Util murni baru
+  `persediaan_akun_utils.py` (`akun_persediaan`, `validate_akun_persediaan`,
+  `AKUN_PERSEDIAAN_DEFAULT`) — **default terkonfirmasi `117111` (Barang
+  Konsumsi)**; sub-akun lain (117112/117113/117114/117131/117191/117199) =
+  rujukan riset **[perlu verifikasi Lampiran BAS]**, dapat ditimpa satker per
+  sub-kelompok (5 digit) via koleksi `persediaan_akun`.
+- **Laporan Posisi Persediaan** kini menampilkan **kolom "Akun"** per barang +
+  **rekapitulasi nilai per akun neraca** (dasar penyajian di Neraca) — sebelumnya
+  hanya per kelompok kodefikasi tanpa akun.
+- Uji unit ditambah → **408 lulus**; PDF di-smoke-test (FakeDB, default + override).
+  Kode 6-digit sub-akun **perlu verifikasi** (sumber .go.id terhambat proxy) —
+  ditandai jelas, tidak ditebak. UI kelola pemetaan menyusul bila diperlukan.
+
+---
+
 ## [#309] Persediaan: panel rincian layer FIFO (read-only) — 2026-07-16
 
 - **Menampilkan saldo per layer FIFO** yang sebelumnya hanya ada di backend
