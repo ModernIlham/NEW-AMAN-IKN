@@ -48,6 +48,21 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#300] KIR — Kartu Inventaris Ruangan (kartu per ruangan) — 2026-07-16
+
+- **Dokumen penatausahaan baru** melengkapi seri ruangan. `GET /pembukuan/kir-pdf`
+  mencetak **kartu per ruangan** (satu ruangan per halaman): kop surat + judul
+  KIR + daftar BMN ruangan (No/Kode/NUP/Nama/Kondisi/Nilai) + subtotal.
+- **Integrasi master ruangan**: tiap kartu menautkan **Penanggung Jawab Ruangan**
+  dari master (#294) bila nama ruangan cocok (`cocok_ruangan_master` — cocok via
+  "KODE — Nama", kode, atau nama), lalu **ditandatangani PJ Ruangan + KPB aktif**
+  (`_penandatangan_kpb`, #293). Ruangan tak-tertaut ditandai jelas.
+- **`ruangan_utils.cocok_ruangan_master`** (murni). **5 unit test** ruangan
+  (1 baru); PDF diverifikasi lokal (`%PDF-`), `py_compile` bersih, suite 392
+  lulus. Tombol **KIR** ditambahkan di hub Pelaporan (di samping DBR).
+
+---
+
 ## [#299] Form aset: saran ruangan (master) di field Lokasi — 2026-07-16
 
 - **Menghubungkan aset ke Master Ruangan (#294) secara ringan** tanpa mengubah

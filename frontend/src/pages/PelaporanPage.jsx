@@ -195,6 +195,11 @@ export default function PelaporanPage({ user, onBack }) {
             data-testid="pelaporan-dbr">
             <FileDown className="w-3.5 h-3.5" />DBR
           </Button>
+          <Button variant="outline" size="sm" className="gap-1.5"
+            onClick={() => downloadFileWithProgress(`${API}/pembukuan/kir-pdf`, "Kartu_Inventaris_Ruangan.pdf", { label: "Kartu Inventaris Ruangan (KIR)" }).catch(() => {})}
+            data-testid="pelaporan-kir">
+            <FileDown className="w-3.5 h-3.5" />KIR
+          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm" className="gap-1.5" data-testid="pelaporan-lbkp">

@@ -201,7 +201,11 @@ kerja) menata lokasi BMN secara **terstruktur** (dulu teks bebas) — fondasi
 Fondasi back-end + UI kelola (#294/#296). **DBR PDF** (`GET /pembukuan/dbr-pdf`,
 #297) mengelompokkan BMN per ruangan dari data aset yang ada (pengguna melekat
 ke Ruangan / lokasi teks bebas; aset tanpa lokasi tetap tampil) + tanda tangan
-KPB aktif. Tautan `ruangan_id` per aset (ke master) & KIR menyusul.
+KPB aktif. **KIR PDF** (`GET /pembukuan/kir-pdf`, #300) mencetak **kartu per
+ruangan** (satu ruangan/halaman) + menautkan **Penanggung Jawab Ruangan** dari
+master bila nama cocok (`cocok_ruangan_master`) — tanda tangan PJ Ruangan + KPB.
+Form aset menyarankan nama ruangan master (datalist, #299) agar penamaan
+konsisten. Tautan `ruangan_id` FK penuh per aset menyusul bila diperlukan.
 
 ---
 
