@@ -481,12 +481,19 @@ async def hapus_lampiran_perolehan(perolehan_id: str, file_id: str,
 @pengadaan_router.delete("/pengadaan/{perolehan_id}")
 async def hapus_perolehan(perolehan_id: str,
                           _admin: dict = Depends(require_admin)):
-    """Hapus register perolehan salah input (admin) + berkas lampirannya."""
+    """Hapus register perolehan salah input (admin) + berkas lampirannya.
+
+    Back-link `perolehan_id`/snapshot di aset tertaut DILEPAS dulu (temuan
+    review #11 — dulu menggantung menunjuk perolehan yang sudah tidak ada).
+    """
     p = await db.pengadaan.find_one({"id": perolehan_id},
-                                    {"_id": 0, "lampiran_berkas": 1})
+                                    {"_id": 0, "lampiran_berkas": 1, "barang": 1})
     res = await db.pengadaan.delete_one({"id": perolehan_id})
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Perolehan tidak ditemukan")
+    for b in (p or {}).get("barang") or []:
+        if b.get("asset_id"):
+            await _lepas_perolehan_dari_aset(b["asset_id"], perolehan_id)
     for lamp in (p or {}).get("lampiran_berkas") or []:
         if lamp.get("file_id"):
             await delete_document_from_gridfs(lamp["file_id"])
