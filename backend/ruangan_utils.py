@@ -37,3 +37,41 @@ def ringkas_lokasi(ruangan):
     if inti:
         bagian.append(inti)
     return " · ".join(bagian)
+
+
+def ruangan_aset(asset):
+    """Nama ruangan tempat aset berada (dari data yang ADA, tanpa fabrikasi).
+
+    Prioritas: pengguna melekat ke Ruangan (`operasional_jenis == "Ruangan"` →
+    nama di `user`), lalu `location` (teks bebas). Bila kosong → penanda
+    "(lokasi belum dicatat)" agar aset tak hilang dari DBR. MURNI.
+    """
+    a = asset or {}
+    if str(a.get("operasional_jenis") or "").strip().lower() == "ruangan":
+        r = str(a.get("user") or "").strip()
+        if r:
+            return r
+    loc = str(a.get("location") or "").strip()
+    return loc or "(lokasi belum dicatat)"
+
+
+def kelompok_dbr(assets):
+    """Kelompokkan aset per ruangan untuk DBR (Daftar Barang Ruangan).
+
+    Kembalikan list terurut nama ruangan: [{"ruangan", "jumlah", "nilai",
+    "aset": [...]}]. Nilai = jumlah parse harga perolehan bila tersedia.
+    "(lokasi belum dicatat)" selalu ditaruh paling akhir. MURNI (teruji unit).
+    """
+    from pembukuan_utils import parse_harga
+    per = {}
+    for a in assets or []:
+        nama = ruangan_aset(a)
+        g = per.setdefault(nama, {"ruangan": nama, "jumlah": 0, "nilai": 0.0, "aset": []})
+        g["jumlah"] += 1
+        g["nilai"] += parse_harga(a.get("purchase_price"))
+        g["aset"].append(a)
+    belum = "(lokasi belum dicatat)"
+    rows = sorted((v for k, v in per.items() if k != belum), key=lambda x: x["ruangan"])
+    if belum in per:
+        rows.append(per[belum])
+    return rows
