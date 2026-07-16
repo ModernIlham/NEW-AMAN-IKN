@@ -170,6 +170,12 @@ async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user
         if v == "__clear__":
             clean_updates[k] = ""
 
+    # Setelan opt-in "wajib pegawai terdaftar" berlaku juga utk ubah massal
+    # (temuan #29 — dulu hanya create/PUT/PATCH tunggal yang menegakkan).
+    if clean_updates.get("pengguna_nip"):
+        from shared_utils import enforce_pegawai_terdaftar
+        await enforce_pegawai_terdaftar(clean_updates["pengguna_nip"])
+
     # Handle batch photo(s): terima `batch_photo` (tunggal, kompat lama) ATAU
     # `batch_photos` (banyak) → gabung jadi satu daftar data-URL, batasi 6 foto.
     batch_photo = data.updates.get("batch_photo")

@@ -487,3 +487,23 @@ async def blok_ttd_kpb_titik(settings, per_iso=None):
     return {'pre': [''], 'header': 'Mengetahui,', 'role': 'Kuasa Pengguna Barang,',
             'nama': kpb["nama"] if kpb["nama"] != "-" else '...........................',
             'after': [f"NIP. {kpb['nip'] if kpb['nip'] != '-' else '....................'}"]}
+
+
+async def enforce_pegawai_terdaftar(pengguna_nip):
+    """Evaluasi #4 / temuan #29 (OPT-IN, satu penegakan lintas jalur tulis):
+    bila setelan `wajib_pegawai_terdaftar` ON dan NIP pengguna diisi tapi
+    TIDAK terdaftar di Master Pegawai → HTTPException 400. Default OFF
+    (perilaku lama; entri lapangan/offline & data lama tetap jalan)."""
+    nip = str(pengguna_nip or "").strip()
+    if not nip:
+        return
+    settings = await db.report_settings.find_one(
+        {"type": "global"}, {"_id": 0, "wajib_pegawai_terdaftar": 1}) or {}
+    if not settings.get("wajib_pegawai_terdaftar"):
+        return
+    if not await db.pegawai.find_one({"nip": nip}, {"_id": 1}):
+        raise HTTPException(
+            status_code=400,
+            detail=f"NIP/NIK pengguna '{nip}' belum terdaftar di Master Pegawai. "
+                   f"Daftarkan pegawai tersebut, atau nonaktifkan setelan "
+                   f"'Wajib Pegawai Terdaftar'.")
