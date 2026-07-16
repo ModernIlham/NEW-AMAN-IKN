@@ -48,6 +48,22 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#296] UI Kelola Referensi Ruangan — 2026-07-16
+
+- **Melengkapi #295 di sisi UI.** Halaman **Referensi Ruangan** (`RuanganPage`)
+  dibuka dari **Beranda Modul** (tombol di samping "Referensi Pejabat") — master
+  ruangan #295 kini bisa dikelola pengguna.
+- **Semua user login** melihat daftar ruangan (kode/nama, gedung/lantai,
+  penanggung jawab, status); **admin** menambah/mengubah/menghapus lewat dialog:
+  kode ruangan, nama, gedung, lantai, **Penanggung Jawab Ruangan** (dropdown dari
+  pejabat berperan `penanggung_jawab_ruangan`, #290), unit kerja, status aktif.
+- Pencarian sisi-klien (kode/nama/gedung/penanggung jawab); selaras tema
+  terang/gelap; memakai `GET /ruangan` + `GET /pejabat` (#295/#290). Wiring
+  lazy-route di `App.js`.
+- Perubahan UI murni; **eslint bersih**, `yarn build` (craco) sukses.
+
+---
+
 ## [#295] Master Referensi Ruangan — fondasi KIR/DBR & lokasi terstruktur — 2026-07-16
 
 - **Referensi baru menutup celah lokasi teks-bebas** (temuan riset SIMAN-G:
