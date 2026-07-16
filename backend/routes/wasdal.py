@@ -78,9 +78,29 @@ async def pemantauan_wasdal(
 ):
     """Temuan pemantauan per objek wasdal + rekap + periode berjalan."""
     periode, per_objek, rekap, total_aset = await _data_pemantauan(ambang_hari)
+    # Ringkasan register Pengamanan & Penggunaan (temuan review #12 — dulu
+    # wasdal tak membaca kedua register itu). Additif: UI lama tetap jalan.
+    lintas_modul = {
+        "kasus_pengamanan_terbuka": await db.pengamanan_kasus.count_documents(
+            {"status": {"$ne": "selesai"}}),
+        "polis_asuransi": await db.pengamanan_polis.count_documents({}),
+        "sk_psp": await db.psp.count_documents({}),
+        "proses_penggunaan_aktif": await db.penggunaan_proses.count_documents(
+            {"status": {"$nin": ["dihapus_dibukukan", "berakhir", "ditolak"]}}),
+        "bmn_idle_aktif": await db.bmn_idle.count_documents(
+            {"status": {"$in": ["klarifikasi", "usul_serah"]}}),
+    }
     return {
         "periode": periode,
         "rekap": rekap,
+        "lintas_modul": lintas_modul,
+        "label_lintas_modul": {
+            "kasus_pengamanan_terbuka": "Kasus pengamanan belum selesai",
+            "polis_asuransi": "Polis asuransi BMN tercatat",
+            "sk_psp": "SK Penetapan Status Penggunaan",
+            "proses_penggunaan_aktif": "Tiket alih status/penggunaan aktif",
+            "bmn_idle_aktif": "Tiket BMN idle aktif",
+        },
         "temuan": {k: v[:_MAKS_TAMPIL] for k, v in per_objek.items()},
         "terpotong": {k: max(0, len(v) - _MAKS_TAMPIL)
                       for k, v in per_objek.items()},

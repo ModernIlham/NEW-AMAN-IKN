@@ -48,6 +48,21 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#336] Review batch 8: wasdal lintas modul & serapan anggaran dari Pengadaan — 2026-07-16
+
+- **#12 — Dasbor Wasdal kini membaca register Pengamanan & Penggunaan**:
+  respons `/wasdal/pemantauan` diperkaya blok `lintas_modul` (kasus pengamanan
+  belum selesai, polis asuransi tercatat, SK PSP, tiket alih status/penggunaan
+  aktif, tiket BMN idle aktif) + label — additif, UI lama tetap jalan.
+- **#13 — Serapan Penganggaran menarik data nyata dari Pengadaan**: tiap usulan
+  di `/penganggaran` kini membawa `realisasi_pengadaan` (total nilai perolehan
+  Pengadaan yang bertaut `penganggaran_id`) + `total_realisasi_pengadaan` —
+  pembanding objektif terhadap `nilai_realisasi` manual; field lama tidak diubah.
+- Verifikasi: suite **426 lulus**; smoke — serapan 2 perolehan tertaut = 250
+  (perolehan tanpa tautan diabaikan); lintas_modul menghitung 5 register benar.
+
+---
+
 ## [#335] Review batch 7: tanggal laporan persediaan memakai WIB (UTC+7) — 2026-07-16
 
 - **Temuan #25/#44**: seluruh derivasi TANGGAL di modul persediaan dulu memakai

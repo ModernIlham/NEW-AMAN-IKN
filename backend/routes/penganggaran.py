@@ -53,10 +53,27 @@ class TransisiAnggaranIn(BaseModel):
 
 @penganggaran_router.get("/penganggaran")
 async def list_penganggaran(_user: dict = Depends(require_user)):
-    """Register usulan (terbaru dulu) + ringkasan + label."""
+    """Register usulan (terbaru dulu) + ringkasan + label.
+
+    Tiap usulan diperkaya `realisasi_pengadaan` = total nilai perolehan
+    Pengadaan yang bertaut (`pengadaan.penganggaran_id`) — temuan review #13:
+    serapan kini menarik data nyata dari register Pengadaan, bukan hanya
+    `nilai_realisasi` yang diketik manual (field lama tidak diubah).
+    """
+    from pengadaan_utils import nilai_perolehan
+
     items = [u async for u in db.penganggaran.find({}, {"_id": 0})
              .sort("created_at", -1).limit(500)]
+    realisasi = {}
+    async for p in db.pengadaan.find(
+            {"penganggaran_id": {"$nin": ["", None]}},
+            {"_id": 0, "penganggaran_id": 1, "barang": 1}):
+        pid = p.get("penganggaran_id")
+        realisasi[pid] = realisasi.get(pid, 0.0) + float(nilai_perolehan(p))
+    for u in items:
+        u["realisasi_pengadaan"] = realisasi.get(u.get("id"), 0.0)
     return {"items": items, "ringkasan": rekap_anggaran(items),
+            "total_realisasi_pengadaan": round(sum(realisasi.values()), 2),
             "per_akun": sanding_per_akun(items),
             "per_triwulan": sanding_per_triwulan(items),
             "label_status": STATUS_ANGGARAN,
