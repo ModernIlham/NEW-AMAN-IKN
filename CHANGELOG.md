@@ -48,6 +48,21 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#308] Persediaan: tautan Pengadaan + tgl/no kontrak di dialog masuk — 2026-07-16
+
+- **Menyalakan integrasi dokumen sumber yang sudah siap di backend.** Dialog
+  **Transaksi Masuk** kini punya pemilih **Perolehan (Pengadaan)** (opsional) —
+  menautkan layer FIFO ke BAST di modul Pengadaan (`perolehan_id`,
+  `_ambil_snapshot_perolehan`); memilih perolehan **mengisi otomatis** penyedia,
+  no. kontrak, tanggal, no. bukti (BAST) & jenis dokumen yang masih kosong.
+- Menambah input **Tgl Dokumen** & **No. Kontrak** (sebelumnya di-seed tapi tanpa
+  field) — kini terkirim ke `TransaksiMasukIn`. Sebelumnya UI selalu mengirim
+  kosong meski backend menerimanya.
+- Daftar perolehan diambil dari `GET /pengadaan` saat halaman dimuat.
+  `eslint --max-warnings=0` bersih, `yarn build` sukses.
+
+---
+
 ## [#307] Persediaan: jenis transaksi SAKTI dilengkapi — 2026-07-16
 
 - **Melengkapi peta jenis transaksi persediaan → SAKTI (pustaka §3.2).** Menambah
