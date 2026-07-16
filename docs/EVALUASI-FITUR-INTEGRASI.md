@@ -131,3 +131,18 @@ akun, backup dinamis (semua koleksi otomatis tercakup), dan dua integrasi keras
 penanda tangan persediaan**, **penyatuan sumber akun**, **verifikasi akun BAS**, dan
 **penguatan tautan aset↔master** (opsional-keras) — semuanya bisa dikerjakan bertahap
 tanpa merusak alur offline-first yang sudah berjalan.
+
+---
+
+## 7. Status Perbaikan Rekomendasi #1–#5 (Jul 2026)
+
+| # | Rekomendasi | Status | PR / Catatan |
+|---|---|---|---|
+| 1 | Samakan penanda tangan PDF Persediaan dengan registry Pejabat | **Selesai** | #319 (`_kpb_signer`, fallback setelan) |
+| 2 | Satukan sumber akun golongan-1 (117111) | **Selesai** | #320 (`AKUN_PERSEDIAAN_UTAMA` dari `akun_bas`) |
+| 3 | Kelola & verifikasi akun neraca persediaan 1171xx | **Selesai** | #321 (endpoint), #322 (UI), #323 (riset). **KOREKSI: 117131 = Bahan Baku** (bukan "untuk Diserahkan"); 117191 dihapus. **117112 & 117128 masih perlu verifikasi Lampiran BAS** (sumber `.go.id` terblokir proxy). |
+| 4 | Perkuat tautan pengguna↔pegawai | **Selesai (opt-in)** | #324 (setelan `wajib_pegawai_terdaftar`, default OFF). **`ruangan_id` FK penuh: DITUNDA** (arsitektural — registry field aset + anti-drift). |
+| 5 | Auto-draft aset dari Pengadaan | **Menunggu keputusan lingkup** | Endpoint backend menyusul; butuh keputusan pemilik (lingkup UI & kegiatan tujuan). |
+
+**Bonus:** 3 bug UI daftar aset diperbaiki (#325) — filter Nama Pengguna memicu refresh+skeleton;
+gap tinggi baris pasca-filter (virtualized) hilang; pesan gagal menyertakan Kode Aset · NUP · Kegiatan.

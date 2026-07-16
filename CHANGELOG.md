@@ -48,6 +48,16 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#327] Evaluasi: status perbaikan rekomendasi #1–#5 — 2026-07-16
+
+- `docs/EVALUASI-FITUR-INTEGRASI.md` §7: tabel status perbaikan — **#1 Selesai**
+  (#319), **#2 Selesai** (#320), **#3 Selesai** (#321/#322/#323, koreksi 117131=
+  Bahan Baku; 117112/117128 masih perlu verifikasi), **#4 Selesai opt-in** (#324,
+  `ruangan_id` FK ditunda), **#5 Menunggu keputusan lingkup** (auto-draft aset dari
+  Pengadaan). Plus catatan 3 bug UI daftar aset (#325).
+
+---
+
 ## [#326] Perbaikan 3 bug UI daftar aset (filter skeleton, gap baris, identitas pesan gagal) — 2026-07-16
 
 - **(A) Filter Nama Pengguna kini merefresh + skeleton.** Effect refetch daftar aset
