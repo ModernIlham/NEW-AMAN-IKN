@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 
 from auth_utils import require_admin, require_user, require_user_or_query_token
 from db import db, fs_bucket
-from shared_utils import delete_document_from_gridfs, get_document_from_gridfs, log_audit
+from shared_utils import blok_ttd_kpb_titik, delete_document_from_gridfs, get_document_from_gridfs, log_audit
 from penggunaan_utils import (
     ARAH_PROSES, JENIS_PROSES_PENGGUNAAN, JENIS_PSP, STATUS_IDLE,
     STATUS_PENGAJUAN_PSP, STATUS_PROSES, TRANSISI_PROSES, baris_csv_idle,
@@ -308,9 +308,7 @@ async def bast_psp_pdf(sk_id: str, _user: dict = Depends(require_user)):
     ], doc.width))
     elements.append(Spacer(1, 10 * rl_mm))
     elements.extend(_signature_block([
-        {'pre': [''], 'header': 'Mengetahui,', 'role': 'Kuasa Pengguna Barang,',
-         'nama': settings.get("kasatker_nama") or '...........................',
-         'after': [f"NIP. {settings.get('kasatker_nip') or '....................'}"]},
+        await blok_ttd_kpb_titik(settings),   # KPB dari registry pejabat (temuan #26)
     ], doc.width))
     footer = _page_footer_factory("BAST Penetapan Status Penggunaan BMN")
     doc.build(elements, onFirstPage=footer, onLaterPages=footer)
@@ -715,9 +713,7 @@ async def daftar_pemegang_pdf(
         {'pre': [''], 'header': 'Pemegang Barang,',
          'nama': nama_tampil,
          'after': [f"NIP. {nip.strip() or '....................'}"]},
-        {'pre': [''], 'header': 'Mengetahui,', 'role': 'Kuasa Pengguna Barang,',
-         'nama': settings.get("kasatker_nama") or '...........................',
-         'after': [f"NIP. {settings.get('kasatker_nip') or '....................'}"]},
+        await blok_ttd_kpb_titik(settings),   # KPB dari registry pejabat (temuan #26)
     ], doc.width))
     footer = _page_footer_factory("Daftar Barang yang Digunakan")
     doc.build(elements, onFirstPage=footer, onLaterPages=footer)

@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from auth_utils import require_admin, require_user
 from db import db
+from shared_utils import blok_ttd_kpb
 from pemeliharaan_utils import (
     JENIS_PEMELIHARAAN, baris_csv_jadwal, indikasi_kapitalisasi, jatuh_tempo,
     kelompok_dhpb, rekap_pemeliharaan, rentang_periode, status_jadwal,
@@ -186,10 +187,7 @@ async def dhpb_pdf(
 
     elements.append(Spacer(1, 12 * rl_mm))
     elements.extend(_signature_block([
-        {'pre': ['.................., .......................'],
-         'header': 'Kuasa Pengguna Barang,',
-         'nama': settings.get("kasatker_nama") or "-",
-         'after': [f"NIP. {settings.get('kasatker_nip') or '-'}"]},
+        await blok_ttd_kpb(settings),   # KPB dari registry pejabat (temuan #26)
     ], doc.width))
     footer = _page_footer_factory("DHPB")
     doc.build(elements, onFirstPage=footer, onLaterPages=footer)

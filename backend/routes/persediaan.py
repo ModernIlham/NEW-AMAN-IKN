@@ -34,20 +34,17 @@ from persediaan_utils import (
     validate_transaksi_keluar, validate_transaksi_masuk,
 )
 from pengadaan_utils import snapshot_perolehan
-from pejabat_utils import penandatangan_kpb as _pure_penandatangan_kpb
 
 persediaan_router = APIRouter()
 
 
 async def _kpb_signer(settings, per_iso=None):
-    """Penanda tangan Kuasa Pengguna Barang untuk PDF persediaan — SATU sumber.
-
-    Ambil KPB aktif dari registry `pejabat` pada tanggal laporan; fallback ke
-    setelan (kasatker) bila registry kosong — konsisten dengan laporan satker
-    (`_penandatangan_kpb` di reports.py). Kembalikan {nama, nip, jabatan, sumber}.
-    """
-    pejabat_list = await db.pejabat.find({}, {"_id": 0}).to_list(2000)
-    return _pure_penandatangan_kpb(settings or {}, pejabat_list, per_iso)
+    """Penanda tangan Kuasa Pengguna Barang untuk PDF persediaan — delegasi ke
+    resolver bersama `shared_utils.resolve_penandatangan_kpb` (temuan #26/#41:
+    default tanggal = hari ini sehingga rentang berlaku SK pejabat DICEK;
+    fallback setelan kasatker). Kembalikan {nama, nip, jabatan, sumber}."""
+    from shared_utils import resolve_penandatangan_kpb
+    return await resolve_penandatangan_kpb(settings, per_iso)
 
 
 class PersediaanCreate(BaseModel):
@@ -1392,11 +1389,16 @@ async def kartu_barang_pdf(item_id: str, _user: dict = Depends(require_user)):
         "nilai keluar dihitung FIFO per layer.", st['Meta']))
 
     elements.append(Spacer(1, 12 * rl_mm))
+    # Kartu Barang ditandatangani PENGURUS BARANG (bukan Kepala Satker) —
+    # temuan #27: dulu keliru diisi nama kasatker. Ambil pejabat berperan
+    # pengurus_barang dari registry; belum ada → garis titik (jangan fabrikasi).
+    from shared_utils import resolve_pejabat_peran
+    _pengurus = await resolve_pejabat_peran("pengurus_barang") or {}
     elements.extend(_signature_block([
         {'pre': ['.................., .......................'],
          'header': 'Pengurus Barang Persediaan,',
-         'nama': settings.get("kasatker_nama") or "-",
-         'after': [f"NIP. {settings.get('kasatker_nip') or '-'}"]},
+         'nama': str(_pengurus.get("nama") or "").strip() or '...........................',
+         'after': [f"NIP. {str(_pengurus.get('nip') or '').strip() or '....................'}"]},
     ], doc.width))
     footer = _page_footer_factory("Kartu Barang Persediaan")
     doc.build(elements, onFirstPage=footer, onLaterPages=footer)
