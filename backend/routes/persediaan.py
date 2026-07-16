@@ -34,8 +34,20 @@ from persediaan_utils import (
     validate_transaksi_keluar, validate_transaksi_masuk,
 )
 from pengadaan_utils import snapshot_perolehan
+from pejabat_utils import penandatangan_kpb as _pure_penandatangan_kpb
 
 persediaan_router = APIRouter()
+
+
+async def _kpb_signer(settings, per_iso=None):
+    """Penanda tangan Kuasa Pengguna Barang untuk PDF persediaan — SATU sumber.
+
+    Ambil KPB aktif dari registry `pejabat` pada tanggal laporan; fallback ke
+    setelan (kasatker) bila registry kosong — konsisten dengan laporan satker
+    (`_penandatangan_kpb` di reports.py). Kembalikan {nama, nip, jabatan, sumber}.
+    """
+    pejabat_list = await db.pejabat.find({}, {"_id": 0}).to_list(2000)
+    return _pure_penandatangan_kpb(settings or {}, pejabat_list, per_iso)
 
 
 class PersediaanCreate(BaseModel):
@@ -184,12 +196,12 @@ async def nota_dinas_persediaan(
         elements.append(table)
 
     elements.append(Spacer(1, 12 * rl_mm))
-    kasatker = settings.get("kasatker_nama") or "-"
+    kpb = await _kpb_signer(settings)
     elements.extend(_signature_block([
         {'pre': ['.................., .......................'],
          'header': 'Kuasa Pengguna Barang,',
-         'nama': kasatker,
-         'after': [f"NIP. {settings.get('kasatker_nip') or '-'}"]},
+         'nama': kpb["nama"],
+         'after': [f"NIP. {kpb['nip']}"]},
     ], doc.width))
 
     footer = _page_footer_factory("Nota Dinas Persediaan")
@@ -443,10 +455,13 @@ async def opname_baof_pdf(
         elements.append(table)
 
     elements.append(Spacer(1, 12 * rl_mm))
+    _kpb = await _kpb_signer(settings)
+    _kpb_nama = _kpb["nama"] if _kpb["nama"] != "-" else '...........................'
+    _kpb_nip = _kpb["nip"] if _kpb["nip"] != "-" else '....................'
     elements.extend(_signature_block([
         {'pre': [''], 'header': 'Petugas Penghitung,', 'nama': '...........................', 'after': ['NIP. ....................']},
         {'pre': [''], 'header': 'Saksi,', 'nama': '...........................', 'after': ['NIP. ....................']},
-        {'pre': [''], 'header': 'Mengetahui,', 'role': 'Kuasa Pengguna Barang,', 'nama': settings.get("kasatker_nama") or '...........................', 'after': [f"NIP. {settings.get('kasatker_nip') or '....................'}"]},
+        {'pre': [''], 'header': 'Mengetahui,', 'role': 'Kuasa Pengguna Barang,', 'nama': _kpb_nama, 'after': [f"NIP. {_kpb_nip}"]},
     ], doc.width))
     footer = _page_footer_factory("Berita Acara Opname Fisik Persediaan")
     doc.build(elements, onFirstPage=footer, onLaterPages=footer)
@@ -596,11 +611,12 @@ async def laporan_posisi_pdf(gudang: str = "",
             "sub-akun per jenis perlu verifikasi Lampiran BAS.", st['Meta']))
 
     elements.append(Spacer(1, 12 * rl_mm))
+    kpb = await _kpb_signer(settings)
     elements.extend(_signature_block([
         {'pre': ['.................., .......................'],
          'header': 'Kuasa Pengguna Barang,',
-         'nama': settings.get("kasatker_nama") or "-",
-         'after': [f"NIP. {settings.get('kasatker_nip') or '-'}"]},
+         'nama': kpb["nama"],
+         'after': [f"NIP. {kpb['nip']}"]},
     ], doc.width))
     footer = _page_footer_factory("Laporan Posisi Persediaan")
     doc.build(elements, onFirstPage=footer, onLaterPages=footer)
@@ -685,11 +701,12 @@ async def laporan_mutasi_pdf(
         elements.append(table)
 
     elements.append(Spacer(1, 12 * rl_mm))
+    kpb = await _kpb_signer(settings)
     elements.extend(_signature_block([
         {'pre': ['.................., .......................'],
          'header': 'Kuasa Pengguna Barang,',
-         'nama': settings.get("kasatker_nama") or "-",
-         'after': [f"NIP. {settings.get('kasatker_nip') or '-'}"]},
+         'nama': kpb["nama"],
+         'after': [f"NIP. {kpb['nip']}"]},
     ], doc.width))
     footer = _page_footer_factory("Laporan Mutasi Persediaan")
     doc.build(elements, onFirstPage=footer, onLaterPages=footer)
