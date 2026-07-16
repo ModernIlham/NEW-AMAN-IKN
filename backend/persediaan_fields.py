@@ -5,8 +5,8 @@ lewat CRUD master; turunannya (whitelist update, kolom CSV/impor kelak)
 dijaga unit test. Field TERKELOLA SISTEM sengaja di luar registry:
 
     stok, batches (layer FIFO), version, created_at, updated_at, id
-    → hanya berubah lewat transaksi persediaan / opname (iterasi §7.4
-      berikutnya), bukan lewat edit master.
+    → hanya berubah lewat transaksi persediaan / opname (masuk/keluar
+      FIFO, pindah gudang, penyesuaian opname), bukan lewat edit master.
 
 Identitas (kode_barang + nup) ditetapkan saat create dan TIDAK bisa
 diubah lewat update — mengubah identitas merusak jejak layer/transaksi.

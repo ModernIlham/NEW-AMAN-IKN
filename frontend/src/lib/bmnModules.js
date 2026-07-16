@@ -90,9 +90,9 @@ export const PENATAUSAHAAN_SUBMODULES = [
   {
     id: "inventarisasi-persediaan",
     nama: "Inventarisasi Persediaan",
-    status: "sebagian",
+    status: "aktif",
     fase: 2,
-    ringkas: "Berjalan: master, transaksi masuk/keluar FIFO, peringatan + nota dinas, laporan, opname + BAOF. Menyusul: gudang & impor massal.",
+    ringkas: "Aktif: master ber-layer FIFO, transaksi masuk/keluar (jenis SAKTI lengkap) + tautan Pengadaan, gudang & impor massal, peringatan + nota dinas, opname + BAOF, rincian layer FIFO, Laporan Posisi per akun neraca (1171xx) & Mutasi.",
     deskripsi:
       "Manajemen barang persediaan (aset lancar, kodefikasi berawalan '1') — pencatatan "
       + "perpetual + penilaian FIFO per layer selaras SAKTI (PMK 234/2020). Inti modul "
@@ -102,9 +102,11 @@ export const PENATAUSAHAAN_SUBMODULES = [
     dasarHukum: [PENATAUSAHAAN_DASAR_HUKUM, "PMK 234/PMK.05/2020 — FIFO (kebijakan akuntansi)"],
     fitur: [
       "✅ Master persediaan: kode '1' 16 digit (nomor urut otomatis), NUP otomatis, batas kritis, kedaluwarsa",
-      "✅ Transaksi masuk/keluar FIFO per layer + jurnal (jenis memetakan kode SAKTI M0x/K0x)",
+      "✅ Transaksi masuk/keluar FIFO per layer + jurnal (jenis SAKTI lengkap: masuk M01–M07/M99, keluar K01–K07)",
+      "✅ Tautan dokumen sumber Pengadaan (BAST) di transaksi masuk + tgl/no kontrak (isi otomatis)",
+      "✅ Rincian layer FIFO per barang (saldo, harga melekat, nilai, kedaluwarsa) — telaah 'Persediaan per Layer'",
       "✅ Peringatan habis/kritis/kedaluwarsa + Nota Dinas PDF otomatis",
-      "✅ Laporan Posisi (per kelompok kodefikasi) & Mutasi periode (dari jurnal)",
+      "✅ Laporan Posisi per kelompok + kolom Akun & rekap per akun neraca (1171xx) & Mutasi periode (dari jurnal)",
       "✅ Stock opname: selisih → penyesuaian otomatis + kertas kerja & BAOF PDF + pengingat semesteran",
       "✅ Impor/ekspor master + Kartu Barang PDF (riwayat + saldo berjalan) + ekspor CSV jurnal transaksi (rekonsiliasi SAKTI)",
       "✅ Transaksi massal per dokumen (satu bukti, banyak barang)",
