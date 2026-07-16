@@ -57,7 +57,7 @@ function StatusBadge({ status }) {
  * tahap siklus lain sudah punya kamarnya masing-masing dengan status Segera
  * Hadir — klik kartunya menampilkan konsep, rencana fitur, dan fase roadmap.
  */
-export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onShowInfo, onEnterInventarisasi, onOpenKodefikasi, onOpenPejabat, onOpenRuangan, onOpenPersediaan, onOpenPelaporan, onOpenPenggunaan, onOpenPengamanan, onOpenPemeliharaan, onOpenPerencanaan, onOpenPenilaian, onOpenPenghapusan, onOpenPemanfaatan, onOpenPemusnahan, onOpenPemindahtanganan, onOpenWasdal, onOpenPenganggaran, onOpenPengadaan }) {
+export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onShowInfo, onEnterInventarisasi, onOpenKodefikasi, onOpenPejabat, onOpenRuangan, onOpenAkunBas, onOpenPersediaan, onOpenPelaporan, onOpenPenggunaan, onOpenPengamanan, onOpenPemeliharaan, onOpenPerencanaan, onOpenPenilaian, onOpenPenghapusan, onOpenPemanfaatan, onOpenPemusnahan, onOpenPemindahtanganan, onOpenWasdal, onOpenPenganggaran, onOpenPengadaan }) {
   const [detail, setDetail] = useState(null); // modul yang dibuka konsepnya
   const activateInfo = useTripleClick(onShowInfo);
   const DetailIcon = detail ? (MODULE_ICONS[detail.id] || Package) : null;
@@ -193,6 +193,18 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
             >
               <DoorOpen className="w-3.5 h-3.5" />
               Referensi Ruangan
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {onOpenAkunBas && (
+            <button
+              type="button"
+              onClick={onOpenAkunBas}
+              className="mt-2 ml-2 inline-flex items-center gap-1.5 px-3 h-8 rounded-full border border-amber-500/40 bg-amber-600/10 text-amber-600 dark:text-amber-400 text-[11px] font-semibold hover:bg-amber-600/20 transition-colors min-w-0 min-h-0"
+              data-testid="module-open-akun-bas"
+            >
+              <Landmark className="w-3.5 h-3.5" />
+              Referensi Akun Neraca
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
           )}

@@ -48,6 +48,24 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#304] UI kelola Referensi Akun Neraca (BAS) — 2026-07-16
+
+- **Melengkapi bagian (a): halaman React "Referensi Akun Neraca"**
+  (`AkunBasPage.jsx`) — antarmuka mengelola pemetaan **golongan BMN → akun
+  neraca (BAS)** yang mendasari kolom Akun di Neraca (#302) & DBKP (#303).
+  Sebelumnya pemetaan hanya bisa diubah lewat API (`/akun-bas`).
+- Semua user login melihat 8 golongan (akun, uraian, sumber **Default riset** /
+  **Input satker**); **admin** menyunting akun+uraian per golongan
+  (`POST /akun-bas`) atau mengembalikan override ke default
+  (`DELETE /akun-bas/{golongan}`). Input akun difilter 3–6 digit angka.
+- Banner peringatan menegaskan akun default adalah **akun representatif hasil
+  riset — wajib diverifikasi ke Lampiran BAS** (KEP-211/PB/2018). Dibuka dari
+  **Beranda Modul** (tombol "Referensi Akun Neraca", pola Pejabat/Ruangan).
+- Wiring `App.js` (lazy route + `showAkunBas`) & `ModuleHomePage.jsx` (prop
+  `onOpenAkunBas` + tombol). `eslint` bersih, `yarn build` sukses.
+
+---
+
 ## [#303] DBKP per Golongan: kolom Akun Neraca — 2026-07-16
 
 - **Melanjutkan #302 ke DBKP.** Laporan **Daftar Barang Kuasa Pengguna (DBKP)
