@@ -48,6 +48,17 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#321] Akun persediaan golongan-1 satu sumber dari akun_bas (evaluasi #2) — 2026-07-16
+
+- **Menutup temuan evaluasi #2** (dua sistem akun paralel): `AKUN_PERSEDIAAN_UTAMA`
+  (`persediaan_akun_utils.py`) tak lagi hardcode `"117111"` melainkan **diturunkan
+  dari `akun_bas_utils.AKUN_NERACA_DEFAULT["1"]`** — satu sumber kebenaran akun
+  golongan Persediaan, tak bisa drift bila akun_bas diubah.
+- Uji unit ditambah (`AKUN_PERSEDIAAN_UTAMA == AKUN_NERACA_DEFAULT["1"]["akun"]`)
+  → `pytest tests/unit` **417 lulus**. Tanpa perubahan perilaku (nilai tetap 117111).
+
+---
+
 ## [#320] Persediaan: PDF pakai penanda tangan KPB dari registry Pejabat (evaluasi #1) — 2026-07-16
 
 - **Menutup temuan evaluasi #1/#4** (inkonsistensi penanda tangan): seluruh PDF

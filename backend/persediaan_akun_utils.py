@@ -9,10 +9,15 @@ persediaan; **[WAJIB VERIFIKASI Lampiran BAS / KEP-211/PB/2018 dst.]** dan dapat
 ditimpa per sub-kelompok (5 digit) oleh satker (pola referensi masa manfaat /
 akun_bas). Default aman = **117111 (Barang Konsumsi)** — akun persediaan paling
 umum & sudah terkonfirmasi di Neraca Percobaan satker.
-"""
 
-# Akun utama persediaan (default terkonfirmasi).
-AKUN_PERSEDIAAN_UTAMA = "117111"
+Evaluasi #2 (satu sumber akun golongan-1): `AKUN_PERSEDIAAN_UTAMA` DITURUNKAN dari
+`akun_bas_utils.AKUN_NERACA_DEFAULT["1"]` agar tidak ada dua kebenaran akun
+golongan Persediaan yang bisa saling drift.
+"""
+from akun_bas_utils import AKUN_NERACA_DEFAULT
+
+# Akun utama persediaan — satu sumber dari akun_bas golongan "1" (terkonfirmasi).
+AKUN_PERSEDIAAN_UTAMA = AKUN_NERACA_DEFAULT["1"]["akun"]
 
 # Rujukan sub-akun neraca persediaan (kode 6-digit → uraian).
 # [PERLU VERIFIKASI Lampiran BAS] kecuali 117111 yang sudah terkonfirmasi.

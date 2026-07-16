@@ -1,8 +1,14 @@
 """Uji akun neraca Persediaan (sub-kelompok 1171xx)."""
+from akun_bas_utils import AKUN_NERACA_DEFAULT
 from persediaan_akun_utils import (
     AKUN_PERSEDIAAN_DEFAULT, AKUN_PERSEDIAAN_UTAMA,
     akun_persediaan, validate_akun_persediaan,
 )
+
+
+def test_akun_utama_satu_sumber_dari_akun_bas():
+    # Evaluasi #2: akun golongan-1 persediaan diturunkan dari akun_bas (satu sumber).
+    assert AKUN_PERSEDIAAN_UTAMA == AKUN_NERACA_DEFAULT["1"]["akun"]
 
 
 def test_default_memuat_akun_utama_dan_sub():
