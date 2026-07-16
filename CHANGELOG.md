@@ -48,6 +48,17 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#303] DBKP per Golongan: kolom Akun Neraca — 2026-07-16
+
+- **Melanjutkan #302 ke DBKP.** Laporan **Daftar Barang Kuasa Pengguna (DBKP)
+  per Golongan** (`GET /pembukuan/dbkp-pdf`) kini juga menampilkan **kolom "Akun
+  Neraca"** per golongan (dari referensi Akun/BAS #300, default riset ditimpa
+  entri satker) — seragam dengan Laporan Posisi BMN di Neraca (#302).
+- Perubahan wiring murni; `py_compile` bersih, suite 395 lulus (tabel 9-kolom
+  konsisten header/baris/colWidths). UI kelola akun/BAS menyusul.
+
+---
+
 ## [#302] Laporan Posisi BMN di Neraca: kolom Akun Neraca per golongan — 2026-07-16
 
 - **Memanfaatkan referensi Akun/BAS (#301).** Laporan **Posisi BMN di Neraca**
