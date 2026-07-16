@@ -935,7 +935,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   useEffect(() => {
     if (isInitialMount.current) { isInitialMount.current = false; return; }
     refreshData(1, { showLoading: true });
-  }, [debouncedSearch, filterCategory, sortBy, pageSize, filters.condition, filters.status, filters.location, filters.eselon1, filters.eselon2, filters.stiker, filters.inventoryStatus, filters.priceMin, filters.priceMax, filters.nomorSpm, filters.perolehanDari, filters.dateFrom, filters.dateTo]);
+  }, [debouncedSearch, filterCategory, sortBy, pageSize, filters.condition, filters.status, filters.location, filters.eselon1, filters.eselon2, filters.stiker, filters.inventoryStatus, filters.priceMin, filters.priceMax, filters.nomorSpm, filters.perolehanDari, filters.dateFrom, filters.dateTo, filters.user, filters.penggunaNip]);
 
   const goToPage = async (p) => {
     const np = Math.max(1, Math.min(p, totalPages));
@@ -1060,13 +1060,13 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     }
     setEditAssetForForm(null);
     setIsSidebarOpen(false);
-    enqueueOptimistic({ tempId: assetId, payload, isEdit, editId: isEdit ? editId : undefined, usePatch, baseVersion }).catch(() => {
+    enqueueOptimistic({ tempId: assetId, payload, isEdit, editId: isEdit ? editId : undefined, usePatch, baseVersion, nama_kegiatan: activity?.nama_kegiatan }).catch(() => {
       // Save failed — KEEP the optimistic row so the retry/dismiss UI stays
       // attached to it (syncStatuses[assetId] shows 'failed'). The temp row is
       // removed only via dismissSync → onItemDismissed.
     });
     toast.info(isEdit ? "Menyimpan perubahan..." : "Menambahkan aset...", { duration: 1500 });
-  }, [enqueueOptimistic, assets, activity?.id]);
+  }, [enqueueOptimistic, assets, activity?.id, activity?.nama_kegiatan]);
 
   // Peta mengikuti filter aktif: builder query yang SAMA dengan daftar aset
   // (search + kategori + filter lanjutan), tanpa paging — peta yang paging.
@@ -1143,7 +1143,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     }
     // 2) Enqueue background save
     if (hasChanges) {
-      enqueueOptimistic({ tempId: assetId, payload, isEdit, editId: isEdit ? editId : undefined, usePatch, baseVersion }).catch(() => {
+      enqueueOptimistic({ tempId: assetId, payload, isEdit, editId: isEdit ? editId : undefined, usePatch, baseVersion, nama_kegiatan: activity?.nama_kegiatan }).catch(() => {
         // Save failed — KEEP the optimistic row (retry/dismiss UI needs it);
         // removed only via dismissSync → onItemDismissed.
       });
@@ -1270,7 +1270,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       setEditAssetForForm(null);
       setIsSidebarOpen(false);
     }
-  }, [assets, mobileAssets, mobileCurrentPage, currentPage, totalPages, lockAsset, unlockAsset, enqueueOptimistic, rowLocks, sessionId, activity?.id, setSearchInput]);
+  }, [assets, mobileAssets, mobileCurrentPage, currentPage, totalPages, lockAsset, unlockAsset, enqueueOptimistic, rowLocks, sessionId, activity?.id, activity?.nama_kegiatan, setSearchInput]);
 
   // Mode Kamera Penuh — "tinjau aset tersimpan": simpan aset saat ini lalu muat
   // aset yang tersimpan sebelumnya (paling atas daftar) ke form untuk ditinjau/

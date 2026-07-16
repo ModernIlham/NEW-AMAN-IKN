@@ -41,7 +41,16 @@ const VirtualizedMobileCards = memo(({
     getScrollElement: () => scrollRef.current,
     estimateSize: (index) => (index === assets.length ? 64 : 112),
     overscan: 6,
+    // Kunci ukuran terukur ke IDENTITAS aset (bukan indeks slot) supaya tinggi
+    // baris tak "tertukar" antar-aset saat daftar berubah (mis. setelah filter).
+    getItemKey: (index) => assets[index]?.id ?? `row-${index}`,
   });
+
+  // Setel ulang cache tinggi baris saat daftar aset berubah (filter/urut/muat) —
+  // mencegah gap sisa dari tinggi baris lama (mis. gap row 1↔2 pasca-filter).
+  useEffect(() => {
+    virtualizer.measure();
+  }, [assets, virtualizer]);
 
   // Jaga aset terseleksi (yang sedang diedit) selalu terlihat: saat editId
   // berubah (mis. auto-lanjut setelah simpan), gulir kartunya ke tengah layar.

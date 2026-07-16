@@ -48,6 +48,26 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#326] Perbaikan 3 bug UI daftar aset (filter skeleton, gap baris, identitas pesan gagal) — 2026-07-16
+
+- **(A) Filter Nama Pengguna kini merefresh + skeleton.** Effect refetch daftar aset
+  tak menyertakan `filters.user`/`filters.penggunaNip` di dependency array →
+  filter pengguna tak memicu muat ulang server-side maupun skeleton. Ditambahkan
+  ke deps (`DashboardPage.jsx`).
+- **(B) Gap antar-baris pasca-filter hilang.** Daftar kartu mobile (virtualized,
+  `@tanstack/react-virtual`) menyimpan tinggi baris terukur per-indeks tanpa reset
+  saat data berubah → tinggi baris lama "tertukar" (gap row 1↔2). Ditambah
+  `getItemKey` (kunci ke `asset.id`) + `virtualizer.measure()` on `assets` change
+  (`VirtualizedMobileCards.jsx`).
+- **(C) Pesan gagal kini menyebut identitas aset.** Pesan "Gagal simpan / coba lagi"
+  kini berformat **`[Kode <asset_code> · NUP <nup> · Keg. <nama kegiatan>] <error>`**
+  — mudah dicari di antara puluhan ribu aset & banyak kegiatan. `nama_kegiatan`
+  di-stamp ke item antrean saat enqueue (bukan payload; tak dikirim ke server)
+  (`useOptimisticQueue.js` + `DashboardPage.jsx`).
+- `eslint` (0 error) & `yarn build` sukses.
+
+---
+
 ## [#325] Opsi wajib pegawai terdaftar untuk pengguna aset (evaluasi #4) — 2026-07-16
 
 - **Memperkuat tautan pengguna↔Master Pegawai (OPT-IN).** Setelan laporan baru
