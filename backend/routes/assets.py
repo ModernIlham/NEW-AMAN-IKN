@@ -692,22 +692,10 @@ async def process_photos_for_storage(photos: list) -> dict:
 
 
 async def _enforce_pegawai_terdaftar(pengguna_nip):
-    """Evaluasi #4 (OPT-IN): bila setelan `wajib_pegawai_terdaftar` ON dan NIP
-    pengguna diisi tapi TIDAK terdaftar di Master Pegawai → tolak 400. Default
-    OFF (perilaku lama, entri lapangan/offline & data lama tetap jalan)."""
-    nip = str(pengguna_nip or "").strip()
-    if not nip:
-        return
-    settings = await db.report_settings.find_one(
-        {"type": "global"}, {"_id": 0, "wajib_pegawai_terdaftar": 1}) or {}
-    if not settings.get("wajib_pegawai_terdaftar"):
-        return
-    if not await db.pegawai.find_one({"nip": nip}, {"_id": 1}):
-        raise HTTPException(
-            status_code=400,
-            detail=f"NIP/NIK pengguna '{nip}' belum terdaftar di Master Pegawai. "
-                   f"Daftarkan pegawai tersebut, atau nonaktifkan setelan "
-                   f"'Wajib Pegawai Terdaftar'.")
+    """Evaluasi #4 (OPT-IN) — delegasi ke penegakan bersama di shared_utils
+    (temuan #29: jalur batch & impor juga harus menegakkan aturan yang sama)."""
+    from shared_utils import enforce_pegawai_terdaftar
+    await enforce_pegawai_terdaftar(pengguna_nip)
 
 
 async def buat_aset_draft(data: AssetCreate, audit_user: str = "system") -> dict:

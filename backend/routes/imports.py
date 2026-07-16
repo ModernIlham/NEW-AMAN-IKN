@@ -320,20 +320,38 @@ async def import_assets(request: Request, file: UploadFile = File(...), force_up
                 "total_new": len(new_rows)
             }
         
+        # Setelan opt-in "wajib pegawai terdaftar" berlaku juga utk impor
+        # (temuan #29). Set NIP dimuat SEKALI (bukan query per baris); baris
+        # melanggar dilewati sebagai error baris — bukan menolak seluruh file.
+        _settings = await db.report_settings.find_one(
+            {"type": "global"}, {"_id": 0, "wajib_pegawai_terdaftar": 1}) or {}
+        wajib_pegawai = bool(_settings.get("wajib_pegawai_terdaftar"))
+        nip_terdaftar = set()
+        if wajib_pegawai:
+            nip_terdaftar = {str(n).strip() for n in await db.pegawai.distinct("nip")
+                             if str(n or "").strip()}
+        pegawai_errors = []
+
         # Process import
         imported = 0
         updated = 0
-        
+
         for row in rows:
             asset_code = str(row.get('asset_code', '')).strip()
             nup = str(row.get('NUP', '')).strip()
             existing = await db.assets.find_one({"asset_code": asset_code, "NUP": nup, "activity_id": activity_id})
-            
+
             # Semua field skalar dipetakan dari registry (asset_fields.py) —
             # field baru otomatis ikut ter-impor tanpa mengedit mapping ini.
             asset_data = {f.name: import_row_value(row, f) for f in ASSET_SCALAR_FIELDS}
             asset_data["asset_code"] = asset_code
             asset_data["activity_id"] = activity_id
+
+            _nip = str(asset_data.get("pengguna_nip") or "").strip()
+            if wajib_pegawai and _nip and _nip not in nip_terdaftar:
+                pegawai_errors.append(
+                    f"{asset_code} NUP {nup}: NIP '{_nip}' belum terdaftar di Master Pegawai")
+                continue
             
             if existing and force_update:
                 # Update existing within the same activity
@@ -361,8 +379,11 @@ async def import_assets(request: Request, file: UploadFile = File(...), force_up
         
         return {
             "success": True,
-            "message": f"Berhasil import {imported} aset baru" + (f", {updated} aset diupdate" if updated else ""),
-            "errors": [],
+            "message": f"Berhasil import {imported} aset baru"
+                       + (f", {updated} aset diupdate" if updated else "")
+                       + (f", {len(pegawai_errors)} baris dilewati (NIP tak terdaftar)"
+                          if pegawai_errors else ""),
+            "errors": pegawai_errors[:20],
             "imported": imported,
             "updated": updated,
             "duplicates": []

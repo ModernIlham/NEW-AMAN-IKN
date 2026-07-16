@@ -48,6 +48,24 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#334] Review batch 6: integritas data (wajib-pegawai menyeluruh & guard usulan PT) — 2026-07-16
+
+- **#29 — Setelan "wajib pegawai terdaftar" tak bisa ditembus lagi**: penegakan
+  dipindah ke `shared_utils.enforce_pegawai_terdaftar` dan kini berlaku di
+  SEMUA jalur tulis `pengguna_nip` — create/PUT/PATCH aset, **ubah massal**
+  (`batch-update`), dan **impor XLSX** (set NIP dimuat sekali; baris melanggar
+  dilewati sebagai error baris `"<kode> NUP <n>: NIP ... belum terdaftar"`,
+  bukan menolak seluruh file). Default tetap OFF.
+- **#9 — Guard usulan pemindahtanganan**: `buat_usulan_pt` kini menolak aset
+  yang **sudah dihapus dari pembukuan** (400) dan aset yang **masih punya
+  usulan PT aktif** (409, menyebut bentuk+status usulan) — mencegah usulan
+  ganda/atas aset yang sudah keluar. (Cek "sedang dimanfaatkan" ditunda —
+  perlu definisi lintas register pemanfaatan.)
+- Verifikasi: suite **423 lulus**; smoke — enforcement ON+NIP asing → 400;
+  PT aset dihapus → 400; usulan ganda → 409; aset bersih → usulan dibuat.
+
+---
+
 ## [#333] Review batch 5: polesan UI Persediaan (banner, massal, riwayat, kertas kerja) — 2026-07-16
 
 - **#20 — Banner selalu segar**: setelah transaksi masuk/keluar/opname/massal
