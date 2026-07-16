@@ -23,7 +23,7 @@ from db import db
 from auth_utils import require_user, require_admin, require_user_or_query_token
 from shared_utils import get_photo_from_gridfs
 from report_filters import active_asset_filter
-from report_utils import hitung_status_stiker
+from report_utils import hitung_status_stiker, distribusi_pengguna
 from markupsafe import Markup
 
 logger = logging.getLogger(__name__)
@@ -3358,6 +3358,23 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
     e1_max = max((e[1]["count"] for e in eselon1_breakdown_sorted), default=1)
     eselon_chart = [{"name": e[0][:25], "count": e[1]["count"], "value": e[1]["value"], "bar_pct": round(e[1]["count"] / e1_max * 100)} for e in eselon1_breakdown_sorted[:10]]
 
+    # Distribusi per PENGGUNA (key = NIP/NIK, tampil nama; terhubung master pegawai)
+    peg_master = {}
+    async for _p in db.pegawai.find({"nip": {"$nin": ["", None]}},
+                                    {"_id": 0, "nip": 1, "nama": 1, "unit_kerja": 1}):
+        nip_p = str(_p.get("nip") or "").strip()
+        if nip_p:
+            peg_master[nip_p] = _p
+    pengguna_rows, pengguna_ringkas = distribusi_pengguna(all_assets, peg_master)
+    peg_max = max((r["count"] for r in pengguna_rows), default=1)
+    pengguna_chart = [{
+        "nama": (r["nama"] or "")[:36], "nip": r["nip"],
+        "unit_kerja": (r["unit_kerja"] or "")[:28],
+        "terdaftar": r["terdaftar"], "tanpa_nip": r["tanpa_nip"],
+        "count": r["count"], "value": r["value"], "value_fmt": fmt(r["value"]),
+        "bar_pct": round(r["count"] / peg_max * 100),
+    } for r in pengguna_rows]
+
     # Status pie chart data (for SVG donut)
     status_pie = []
     status_items = [
@@ -3579,6 +3596,8 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
         "loc_chart": loc_chart,
         "year_chart": year_chart,
         "eselon_chart": eselon_chart,
+        "pengguna_chart": pengguna_chart,
+        "pengguna_ringkas": pengguna_ringkas,
         "status_pie": status_pie,
         "condition_pie": condition_pie,
         "cond_by_cat": cond_by_cat,

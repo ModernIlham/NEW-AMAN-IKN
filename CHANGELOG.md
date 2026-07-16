@@ -48,6 +48,22 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#317] Laporan Eksekutif: halaman Distribusi Per Pengguna (key NIP/NIK, terhubung Master Pegawai) — 2026-07-16
+
+- **Halaman baru "Distribusi Per Pengguna"** di Laporan Eksekutif. Aset
+  dikelompokkan per **KEY = NIP/NIK** (`pengguna_nip`), **ditampilkan dengan nama
+  pengguna** — nama & unit kerja diambil dari **Master Pegawai** bila NIP terdaftar
+  (join `db.pegawai` per `nip`), fallback ke nama pada aset.
+- Kolom: #, Nama Pengguna, NIP/NIK, Unit Kerja, bar, NUP, Nilai (Rp); terurut nilai
+  desc. Baris dengan **NIP belum terdaftar di master ditandai "(belum terdaftar)"**;
+  aset tanpa NIP dikelompokkan "Tanpa Pengguna / NIP". Header memuat ringkasan
+  jumlah pengguna & jumlah NIP belum terdaftar.
+- Logika murni `report_utils.distribusi_pengguna` (+ uji unit) → `pytest tests/unit`
+  **416 lulus**; **smoke-render WeasyPrint** OK (PDF valid, halaman baru + hitungan
+  stiker benar).
+
+---
+
 ## [#316] Laporan Eksekutif: perbaiki hitungan "Stiker Belum Terpasang" — 2026-07-16
 
 - **Perbaikan bug**: pada Laporan Eksekutif bagian **Status Pemasangan Stiker**,

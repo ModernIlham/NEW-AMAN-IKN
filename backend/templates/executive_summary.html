@@ -579,6 +579,45 @@
 {% endfor %}
 {% endif %}
 
+{% if pengguna_chart is defined and pengguna_chart|length > 0 %}
+{% if preview %}<div class="separator">Distribusi Per Pengguna</div>{% endif %}
+{% for page_start in range(0, pengguna_chart|length, items_per_page) %}
+{% set page_items = pengguna_chart[page_start:page_start + items_per_page] %}
+<div class="exec-page">
+    <div class="exec-header">
+        <div class="exec-header-logo">{% if logo_url %}<img src="{{ logo_url }}" alt="Logo" />{% endif %}</div>
+        <div class="exec-header-text">
+            <h1>Distribusi Per Pengguna{% if pengguna_chart|length > items_per_page %} ({{ page_start + 1 }}-{{ [page_start + items_per_page, pengguna_chart|length]|min }} dari {{ pengguna_chart|length }}){% endif %}</h1>
+            <p>{{ satker_name }} &mdash; {{ pengguna_ringkas.jumlah_pengguna }} pengguna (key NIP/NIK, terhubung Master Pegawai){% if pengguna_ringkas.jumlah_tak_terdaftar > 0 %} &mdash; {{ pengguna_ringkas.jumlah_tak_terdaftar }} NIP belum terdaftar{% endif %}</p>
+        </div>
+        <div class="exec-header-meta"><div><strong>SK: {{ nomor_sk }}</strong></div><div>{{ tanggal_cetak }}</div></div>
+    </div>
+    <div class="exec-body">
+        <div class="chart-title"><div class="cdot" style="background:#0ea5e9"></div>Distribusi Aset Per Pengguna ({{ pengguna_chart|length }} pengguna){% if pengguna_chart|length > items_per_page %} &mdash; Hal {{ loop.index }}{% endif %}</div>
+        <table class="dist-table-full">
+            <thead><tr><th class="num">#</th><th>Nama Pengguna</th><th>NIP/NIK</th><th>Unit Kerja</th><th class="bar-cell"></th><th class="r">NUP</th><th class="r">Nilai (Rp)</th></tr></thead>
+            <tbody>
+            {% for p in page_items %}
+            <tr>
+                <td class="num">{{ page_start + loop.index }}</td>
+                <td class="name-cell" title="{{ p.nama }}">{{ p.nama }}{% if p.nip and not p.terdaftar %} <span style="color:#d97706;font-size:6px;font-weight:700;">(belum terdaftar)</span>{% endif %}</td>
+                <td style="font-family:monospace;">{{ p.nip if p.nip else '—' }}</td>
+                <td class="name-cell" title="{{ p.unit_kerja }}">{{ p.unit_kerja if p.unit_kerja else '—' }}</td>
+                <td class="bar-cell"><div class="dist-mini-bar" style="width:{{ p.bar_pct }}%;background:{{ ['#0ea5e9','#0284c7','#0369a1','#38bdf8','#7dd3fc'][loop.index0 % 5] }};"></div></td>
+                <td class="val-cell">{{ p.count }}</td>
+                <td class="money-cell">{{ '{:,.0f}'.format(p.value).replace(',', '.') }}</td>
+            </tr>
+            {% endfor %}
+            <tr class="summary-row"><td colspan="5">Total Halaman Ini ({{ page_items|length }} pengguna)</td><td class="r">{{ page_items|sum(attribute='count') }}</td><td class="r">{{ '{:,.0f}'.format(page_items|sum(attribute='value')).replace(',', '.') }}</td></tr>
+            </tbody>
+        </table>
+        <div style="margin-top:6px;font-size:7px;color:#64748b;">Key pengelompokan = NIP/NIK; nama diambil dari Master Pegawai bila NIP terdaftar. Aset tanpa NIP dikelompokkan sebagai &ldquo;Tanpa Pengguna / NIP&rdquo;.</div>
+    </div>
+    <div class="exec-footer"><div>Laporan Eksekutif &mdash; {{ satker_name }}</div><div>Pengguna {{ page_start + 1 }}-{{ [page_start + items_per_page, pengguna_chart|length]|min }} dari {{ pengguna_chart|length }}</div></div>
+</div>
+{% endfor %}
+{% endif %}
+
 {% if preview %}<div class="separator">Analisis Lanjutan, Tim & Cakupan</div>{% endif %}
 
 <!-- =================== ANALYSIS, COVERAGE & TIM PAGE =================== -->
