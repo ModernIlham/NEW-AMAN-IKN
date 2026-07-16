@@ -173,6 +173,24 @@ fokus AMAN)** ⟶ opsional UAPKPB (pembantu). **Implikasi:** data satker
 menyimpan identitas UAKPB + tujuan penyampaian (UAPPB-W/E1, KPKNL mana);
 peran pengguna: operator BMN vs pejabat penanggung jawab/penandatangan.
 
+**Penanggung jawab per jenjang (PMK 181/2016, riset Jul 2026):** UAPB =
+Menteri/Pimpinan Lembaga; UAPPB-E1 = pejabat Eselon I; UAPPB-W = pejabat
+Eselon II; **UAKPB = Kepala Kantor/Satker = Kuasa Pengguna Barang (KPB)**;
+UAPKPB = pembantu KPB. Di tingkat satker perekaman data BMN dijalankan
+**Petugas Penatausahaan / Operator SIMAK-BMN** (kini SAKTI) yang ditunjuk
+dengan **SK**; **KPB** menandatangani LBKP/DBKP/CaLBMN & dokumen penghapusan/
+BAST (analog "referensi penanda tangan aset" di modul Administrasi SAKTI:
+KPA/PPK/PPSPM/Bendahara + penanda tangan aset/persediaan/GLP).
+
+**2.4a Referensi Pejabat (terapan AMAN, #290).** Registry `pejabat` menyimpan
+pejabat penatausahaan (peran: `kuasa_pengguna_barang`, `penatausahaan_bmn`,
+`pengurus_barang`, `penanggung_jawab_ruangan`, `ppk`, `pengguna_barang`) +
+unit akuntansi + **SK penunjukan & masa berlaku**, sehingga dokumen resmi
+memakai pejabat yang benar & **masih berlaku pada tanggalnya**
+(`pejabat_aktif_untuk_peran` memilih SK terbaru yang berlaku). Fondasi
+back-end (`pejabat_utils.py` + `routes/pejabat.py`); pemanfaatan di blok tanda
+tangan laporan menyusul bertahap.
+
 ---
 
 ## 3. Persediaan (PSAP 05 + praktik SAKTI)
