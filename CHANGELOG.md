@@ -48,6 +48,23 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#311] Persediaan → status Aktif + rapikan teks/docstring — 2026-07-16
+
+- **Modul Inventarisasi Persediaan kini berstatus "Aktif"** (dari "Sebagian
+  Aktif") di Beranda Modul (`bmnModules.js`) — setelah #306–#310 melengkapi jenis
+  transaksi SAKTI, tautan Pengadaan, panel layer FIFO, & akun neraca per akun.
+- Rapikan **teks 'ringkas' basi** (menghapus "Menyusul: gudang & impor massal"
+  yang sudah lama ada) + menambah fitur baru ke daftar (jenis SAKTI lengkap,
+  tautan Pengadaan, layer FIFO, akun neraca 1171xx).
+- Perbarui **docstring basi "iterasi berikutnya"** di `routes/persediaan.py` &
+  `persediaan_fields.py` (fitur transaksi/opname sudah ada). Non-fungsional;
+  `pytest tests/unit` **408 lulus**, `eslint`/`yarn build` bersih.
+- **Catatan:** sub-akun neraca 1171xx selain **117111** masih **perlu verifikasi
+  Lampiran BAS**; alur governance (approval operator→approver, kunci back-date,
+  penghapusan definitif 2-tahap) sengaja **ditunda** menunggu keputusan pemilik.
+
+---
+
 ## [#310] Persediaan: akun neraca 1171xx + Laporan Posisi per akun — 2026-07-16
 
 - **Memetakan persediaan ke akun neraca (sub-kelompok 1171xx).** Util murni baru

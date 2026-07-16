@@ -1,9 +1,13 @@
-"""Master PERSEDIAAN — langkah 1 modul Inventarisasi Persediaan (§7.4).
+"""Modul Inventarisasi Persediaan — AKTIF (§7.4).
 
-Master barang persediaan satker (aset lancar, kodefikasi berawalan '1'):
-CRUD + paging/pencarian. Stok & layer FIFO (`batches`) dikelola transaksi
-persediaan pada iterasi berikutnya — di sini barang lahir dengan stok 0
-dan daftar layer kosong; hapus hanya boleh saat stok masih 0.
+Master barang persediaan satker (aset lancar, kodefikasi berawalan '1')
+beserta seluruh siklusnya: CRUD master (paging/pencarian), transaksi
+masuk/keluar ber-layer FIFO + jurnal (jenis SAKTI lengkap), tautan dokumen
+sumber Pengadaan (BAST), pindah gudang & transaksi massal, peringatan +
+Nota Dinas, stock opname + BAOF, rincian layer FIFO, serta laporan Posisi
+(kolom akun neraca 1171xx + rekap per akun) & Mutasi. Master lahir dengan
+stok 0 & layer kosong; stok/`batches` hanya berubah lewat transaksi/opname;
+hapus master hanya boleh saat stok 0.
 
 Regulasi: docs/PUSTAKA-REGULASI-BMN.md §3 (perpetual + FIFO per layer,
 kode golongan '1', batas kritis & kedaluwarsa untuk peringatan/nota dinas).
