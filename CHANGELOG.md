@@ -48,6 +48,22 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#295] Master Referensi Ruangan — fondasi KIR/DBR & lokasi terstruktur — 2026-07-16
+
+- **Referensi baru menutup celah lokasi teks-bebas** (temuan riset SIMAN-G:
+  ruangan/lokasi tak terstruktur). Master `ruangan` menata lokasi BMN per
+  ruangan — fondasi **KIR (Kartu Inventaris Ruangan)** & **DBR (Daftar Barang
+  Ruangan)**, PMK 181/2016.
+- **`ruangan_utils.py`** (murni): `validate_ruangan` (kode & nama wajib),
+  `ringkas_lokasi` (string lokasi ringkas untuk label/laporan: *Gedung · Lt. N ·
+  KODE — Nama*). **`routes/ruangan.py`**: CRUD admin + `GET /ruangan`; **kode
+  ruangan unik** (ditolak bila bentrok). Tiap ruangan dapat menunjuk
+  **Penanggung Jawab Ruangan** (tautan ke registry pejabat #290).
+- Pustaka §2.4b; **2 unit test** murni; `py_compile` bersih. Slice fondasi —
+  UI kelola + tautan lokasi aset → ruangan menyusul.
+
+---
+
 ## [#294] KPB aktif menandatangani LBKP, CaLBMN & LKB juga — 2026-07-16
 
 - **Meluaskan #293** ke laporan satker-level lain. Blok tanda tangan **LBKP**,

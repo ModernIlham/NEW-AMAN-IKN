@@ -194,6 +194,13 @@ blok **tanda tangan** laporan satker-level **Posisi BMN Neraca & Penyusutan
 (`penandatangan_kpb`, fallback ke setelan kasatker) — laporan per-kegiatan
 (DBKP/DBHI/RHI) memakai identitas kegiatan, menyusul bila diperlukan.
 
+**2.4b Referensi Ruangan (terapan AMAN, #294).** Master `ruangan` (kode unik,
+nama, gedung, lantai, **Penanggung Jawab Ruangan** dari registry pejabat, unit
+kerja) menata lokasi BMN secara **terstruktur** (dulu teks bebas) — fondasi
+**KIR (Kartu Inventaris Ruangan)** & **DBR (Daftar Barang Ruangan)**.
+Fondasi back-end (`ruangan_utils.py` + `routes/ruangan.py`); UI kelola & tautan
+lokasi aset → ruangan menyusul bertahap.
+
 ---
 
 ## 3. Persediaan (PSAP 05 + praktik SAKTI)
