@@ -1858,11 +1858,12 @@ async def generate_lbkp_pdf(
     elements.append(Paragraph(catatan, st['Meta']))
 
     elements.append(Spacer(1, 12 * rl_mm))
+    ttd = await _penandatangan_kpb(settings, sampai)
     elements.extend(_signature_block([
         {'pre': ['.................., .......................'],
          'header': 'Kuasa Pengguna Barang,',
-         'nama': settings.get("kasatker_nama") or "-",
-         'after': [f"NIP. {settings.get('kasatker_nip') or '-'}"]},
+         'nama': ttd["nama"],
+         'after': [f"NIP. {ttd['nip']}"]},
     ], doc.width))
     footer = _page_footer_factory("LBKP per Golongan")
     doc.build(elements, onFirstPage=footer, onLaterPages=footer)
@@ -1999,12 +2000,13 @@ async def generate_lkb_pdf(_user: dict = Depends(require_user_or_query_token)):
         "dicatat pada AMAN. Dokumen resmi LKB (LKBT-PKPB1) tetap dicetak "
         "dari SIMAK-BMN/SAKTI — laporan ini bahan sandingan/kerja.", st['Meta']))
     elements.append(Spacer(1, 10 * rl_mm))
+    ttd = await _penandatangan_kpb(settings, datetime.now(timezone.utc).date().isoformat())
     elements.extend(_signature_block([
         {'pre': ['.................., .......................'],
          'header': 'Penanggung Jawab UAKPB',
          'role': 'Kuasa Pengguna Barang,',
-         'nama': settings.get("kasatker_nama") or "-",
-         'after': [f"NIP. {settings.get('kasatker_nip') or '-'}"]},
+         'nama': ttd["nama"],
+         'after': [f"NIP. {ttd['nip']}"]},
     ], doc.width))
     footer = _page_footer_factory("Laporan Kondisi Barang (LKB)")
     doc.build(elements, onFirstPage=footer, onLaterPages=footer)
@@ -2243,11 +2245,12 @@ async def generate_calbmn_pdf(
         "sesuai kondisi satker sebelum dokumen difinalkan.", st['Meta']))
 
     elements.append(Spacer(1, 10 * rl_mm))
+    ttd = await _penandatangan_kpb(settings, sampai)
     elements.extend(_signature_block([
         {'pre': ['.................., .......................'],
          'header': 'Kuasa Pengguna Barang,',
-         'nama': settings.get("kasatker_nama") or "-",
-         'after': [f"NIP. {settings.get('kasatker_nip') or '-'}"]},
+         'nama': ttd["nama"],
+         'after': [f"NIP. {ttd['nip']}"]},
     ], doc.width))
     footer = _page_footer_factory("CaLBMN — Bahan Penyusunan (Pra-isi)")
     doc.build(elements, onFirstPage=footer, onLaterPages=footer)

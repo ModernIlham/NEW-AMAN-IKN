@@ -48,6 +48,21 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#294] KPB aktif menandatangani LBKP, CaLBMN & LKB juga — 2026-07-16
+
+- **Meluaskan #293** ke laporan satker-level lain. Blok tanda tangan **LBKP**,
+  **CaLBMN**, & **Laporan Kondisi Barang (LKB)** kini memakai **Kuasa Pengguna
+  Barang aktif** dari registry `pejabat` (`_penandatangan_kpb`) — LBKP & CaLBMN
+  pada tanggal **akhir periode** laporan, LKB pada **tanggal cetak**.
+- **Fallback** ke setelan `kasatker` tetap berlaku bila registry belum diisi →
+  tanpa regresi. Kelima laporan satker-level (Neraca, Penyusutan, LBKP, CaLBMN,
+  LKB) kini seragam memakai satu sumber penanda tangan.
+- Perubahan wiring murni (memakai ulang helper #293); `py_compile` bersih, 4 unit
+  test pejabat tetap lulus. Laporan per-kegiatan (DBKP/DBHI/RHI) memakai
+  identitas kegiatan — di luar cakupan.
+
+---
+
 ## [#293] Laporan pakai penanda tangan KPB aktif dari registry pejabat — 2026-07-16
 
 - **Menghubungkan registry pejabat (#291/#292) ke dokumen resmi.** Blok tanda

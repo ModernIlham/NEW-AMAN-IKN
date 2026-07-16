@@ -189,9 +189,10 @@ unit akuntansi + **SK penunjukan & masa berlaku**, sehingga dokumen resmi
 memakai pejabat yang benar & **masih berlaku pada tanggalnya**
 (`pejabat_aktif_untuk_peran` memilih SK terbaru yang berlaku). Fondasi
 back-end (`pejabat_utils.py` + `routes/pejabat.py`, #290) + UI kelola (#291);
-blok **tanda tangan** laporan **Posisi BMN di Neraca & Penyusutan** kini memakai
-**KPB aktif per tanggal** (`penandatangan_kpb`, fallback ke setelan kasatker,
-#292) — laporan lain menyusul bertahap.
+blok **tanda tangan** laporan satker-level **Posisi BMN Neraca & Penyusutan
+(#292), LBKP, CaLBMN, & LKB (#293)** kini memakai **KPB aktif per tanggal**
+(`penandatangan_kpb`, fallback ke setelan kasatker) — laporan per-kegiatan
+(DBKP/DBHI/RHI) memakai identitas kegiatan, menyusul bila diperlukan.
 
 ---
 
