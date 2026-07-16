@@ -86,3 +86,27 @@ def pejabat_aktif_untuk_peran(pejabat_list, peran, per_iso=None):
         return None
     kandidat.sort(key=lambda pj: str(pj.get("berlaku_mulai") or ""), reverse=True)
     return kandidat[0]
+
+
+def penandatangan_kpb(settings, pejabat_list, per_iso=None):
+    """Data penanda tangan **Kuasa Pengguna Barang** untuk dokumen resmi.
+
+    Prioritas: KPB aktif dari registry `pejabat` pada tanggal `per_iso`; bila
+    tak ada, fallback ke setelan laporan (`kasatker_nama/nip/jabatan`) — jadi
+    laporan lama tetap jalan. Kembalikan {nama, nip, jabatan, sumber}. MURNI.
+    """
+    settings = settings or {}
+    pj = pejabat_aktif_untuk_peran(pejabat_list, "kuasa_pengguna_barang", per_iso)
+    if pj:
+        return {
+            "nama": str(pj.get("nama") or "").strip() or "-",
+            "nip": str(pj.get("nip") or "").strip() or "-",
+            "jabatan": str(pj.get("jabatan") or "").strip() or "Kuasa Pengguna Barang",
+            "sumber": "registry",
+        }
+    return {
+        "nama": str(settings.get("kasatker_nama") or "").strip() or "-",
+        "nip": str(settings.get("kasatker_nip") or "").strip() or "-",
+        "jabatan": str(settings.get("kasatker_jabatan") or "").strip() or "Kuasa Pengguna Barang",
+        "sumber": "setelan",
+    }

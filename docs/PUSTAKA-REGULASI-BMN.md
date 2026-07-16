@@ -188,8 +188,10 @@ pejabat penatausahaan (peran: `kuasa_pengguna_barang`, `penatausahaan_bmn`,
 unit akuntansi + **SK penunjukan & masa berlaku**, sehingga dokumen resmi
 memakai pejabat yang benar & **masih berlaku pada tanggalnya**
 (`pejabat_aktif_untuk_peran` memilih SK terbaru yang berlaku). Fondasi
-back-end (`pejabat_utils.py` + `routes/pejabat.py`); pemanfaatan di blok tanda
-tangan laporan menyusul bertahap.
+back-end (`pejabat_utils.py` + `routes/pejabat.py`, #290) + UI kelola (#291);
+blok **tanda tangan** laporan **Posisi BMN di Neraca & Penyusutan** kini memakai
+**KPB aktif per tanggal** (`penandatangan_kpb`, fallback ke setelan kasatker,
+#292) — laporan lain menyusul bertahap.
 
 ---
 

@@ -1,7 +1,7 @@
 """Uji referensi pejabat penatausahaan BMN (#290, PMK 181/2016)."""
 from pejabat_utils import (
     PERAN_PEJABAT, UNIT_AKUNTANSI,
-    pejabat_aktif_untuk_peran, validate_pejabat,
+    pejabat_aktif_untuk_peran, penandatangan_kpb, validate_pejabat,
 )
 
 
@@ -55,3 +55,18 @@ def test_pejabat_aktif_untuk_peran():
     assert pejabat_aktif_untuk_peran(daftar, "ppk", "2026-07-16") is None
     # Rentang kosong = terbuka; input kosong aman
     assert pejabat_aktif_untuk_peran([], "ppk", None) is None
+
+
+def test_penandatangan_kpb_registry_vs_fallback():
+    settings = {"kasatker_nama": "Kasatker Lama", "kasatker_nip": "111",
+                "kasatker_jabatan": "Kepala Kantor"}
+    daftar = [_pj("KPB Aktif", ["kuasa_pengguna_barang"], "2025-07-01", "")]
+    # Ada KPB aktif di registry → dipakai (bukan setelan)
+    ttd = penandatangan_kpb(settings, daftar, "2026-07-16")
+    assert ttd["nama"] == "KPB Aktif" and ttd["sumber"] == "registry"
+    # Tak ada KPB berlaku pada tanggal → fallback ke setelan kasatker
+    ttd = penandatangan_kpb(settings, daftar, "2024-01-01")
+    assert ttd["nama"] == "Kasatker Lama" and ttd["nip"] == "111" and ttd["sumber"] == "setelan"
+    # Registry kosong & setelan kosong → tetap aman ("-")
+    ttd = penandatangan_kpb({}, [], "2026-07-16")
+    assert ttd["nama"] == "-" and ttd["jabatan"] == "Kuasa Pengguna Barang"

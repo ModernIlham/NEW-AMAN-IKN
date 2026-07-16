@@ -1461,6 +1461,18 @@ async def generate_dbkp_pdf(activity_id: str, _user: dict = Depends(require_user
                              headers={"Content-Disposition": f'attachment; filename="DBKP_{activity_id[:8]}.pdf"'})
 
 
+async def _penandatangan_kpb(settings, per_iso=None):
+    """Penanda tangan Kuasa Pengguna Barang untuk laporan satker-level.
+
+    Ambil KPB aktif dari registry `pejabat` pada tanggal laporan; fallback ke
+    setelan laporan (kasatker) bila belum ada (#292). Kembalikan {nama, nip,
+    jabatan, sumber}.
+    """
+    from pejabat_utils import penandatangan_kpb
+    pejabat_list = await db.pejabat.find({}, {"_id": 0}).to_list(2000)
+    return penandatangan_kpb(settings, pejabat_list, per_iso)
+
+
 @reports_router.get("/pembukuan/posisi-bmn-pdf")
 async def generate_posisi_bmn_pdf(_user: dict = Depends(require_user_or_query_token)):
     """Laporan Posisi BMN di Neraca — komponen LBKP (pustaka §2.3).
@@ -1570,11 +1582,12 @@ async def generate_posisi_bmn_pdf(_user: dict = Depends(require_user_or_query_to
         "barang; komponen KDP, ATB, dan penyusutan menyusul bertahap.", st['Meta']))
 
     elements.append(Spacer(1, 12*rl_mm))
+    ttd = await _penandatangan_kpb(settings, today_iso)
     elements.extend(_signature_block([
         {'pre': ['.................., .......................'],
          'header': 'Kuasa Pengguna Barang,',
-         'nama': settings.get("kasatker_nama") or "-",
-         'after': [f"NIP. {settings.get('kasatker_nip') or '-'}"]},
+         'nama': ttd["nama"],
+         'after': [f"NIP. {ttd['nip']}"]},
     ], doc.width))
 
     footer = _page_footer_factory("Laporan Posisi BMN di Neraca")
@@ -1701,11 +1714,12 @@ async def generate_penyusutan_pdf(
         "30 Jun/31 Des memuat semester yang ditutup hari itu.", st['Meta']))
 
     elements.append(Spacer(1, 12*rl_mm))
+    ttd = await _penandatangan_kpb(settings, per_tanggal)
     elements.extend(_signature_block([
         {'pre': ['.................., .......................'],
          'header': 'Kuasa Pengguna Barang,',
-         'nama': settings.get("kasatker_nama") or "-",
-         'after': [f"NIP. {settings.get('kasatker_nip') or '-'}"]},
+         'nama': ttd["nama"],
+         'after': [f"NIP. {ttd['nip']}"]},
     ], doc.width))
 
     footer = _page_footer_factory("Laporan Penyusutan BMN")
