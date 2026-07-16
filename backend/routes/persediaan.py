@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 
 from auth_utils import require_admin, require_user
 from db import db
+from persediaan_akun_utils import akun_persediaan
 from persediaan_fields import EDITABLE_FIELD_NAMES
 from persediaan_utils import (
     JENIS_KELUAR, JENIS_MASUK, KODE_PENUH_LEN, KODE_PREFIX_LEN, SATUAN_BAKU,
@@ -491,22 +492,32 @@ async def laporan_posisi_pdf(gudang: str = "",
     async for k in db.kodefikasi.find({"level": 3}, {"_id": 0, "kode": 1, "uraian": 1}):
         uraian_kelompok[k["kode"]] = k.get("uraian") or ""
 
+    # Peta akun neraca persediaan (sub-kelompok → 1171xx): entri satker menimpa default.
+    peta_akun = {}
+    async for m in db.persediaan_akun.find({}, {"_id": 0}):
+        peta_akun[str(m.get("sub_kelompok") or "").strip()] = {
+            "akun": m.get("akun", ""), "uraian": m.get("uraian", "")}
+
     filter_gudang = str(gudang or "").strip()
     query = ({"lokasi": {"$regex": f"^{re.escape(filter_gudang)}$", "$options": "i"}}
              if filter_gudang else {})
     grup = {}
+    akun_total = {}
     async for it in db.persediaan.find(query, {"_id": 0}):
         stok = int(it.get("stok", 0) or 0)
         nilai = nilai_persediaan_dari_batches(it.get("batches"))
         kel = str(it.get("kode_barang") or "")[:5]
+        ak = akun_persediaan(it.get("kode_barang"), peta_akun)
         g = grup.setdefault(kel, {"kelompok": kel,
                                   "uraian": uraian_kelompok.get(kel, ""),
                                   "items": [], "stok": 0, "nilai": 0.0})
         g["items"].append({"kode": it.get("kode_barang"), "nup": it.get("nup"),
                            "nama": it.get("nama_barang"), "satuan": it.get("satuan") or "-",
-                           "stok": stok, "nilai": nilai})
+                           "stok": stok, "nilai": nilai, "akun": ak["akun"]})
         g["stok"] += stok
         g["nilai"] += nilai
+        at = akun_total.setdefault(ak["akun"], {"uraian": ak["uraian"], "nilai": 0.0})
+        at["nilai"] += nilai
 
     today_iso = datetime.now(timezone.utc).date().isoformat()
     buffer = BytesIO()
@@ -520,25 +531,27 @@ async def laporan_posisi_pdf(gudang: str = "",
     elements.append(Paragraph(f"Per tanggal: {_fmt_tanggal_id(today_iso)} · nilai dihitung FIFO per layer", st['Meta']))
     elements.append(Spacer(1, 4 * rl_mm))
 
-    headers = ["Kode Barang", "NUP", "Nama Barang", "Satuan", "Stok", "Nilai (Rp)"]
+    headers = ["Kode Barang", "NUP", "Nama Barang", "Satuan", "Akun", "Stok", "Nilai (Rp)"]
     table_data = [[Paragraph(h, st['TableHeader']) for h in headers]]
     grand_stok, grand_nilai = 0, 0.0
     for kel in sorted(grup):
         g = grup[kel]
         label = f"Kelompok {kel}" + (f" — {g['uraian']}" if g["uraian"] else "")
-        table_data.append([Paragraph(f"<b>{label}</b>", st['Cell']), "", "", "", "", ""])
+        table_data.append([Paragraph(f"<b>{label}</b>", st['Cell']), "", "", "", "", "", ""])
         for it in sorted(g["items"], key=lambda x: (x["nama"] or "", x["kode"] or "")):
             table_data.append([
                 Paragraph(it["kode"] or "-", st['Cell']),
                 Paragraph(it["nup"] or "-", st['CellCenter']),
                 Paragraph(it["nama"] or "-", st['Cell']),
                 Paragraph(it["satuan"], st['CellCenter']),
+                Paragraph(it["akun"], st['CellCenter']),
                 Paragraph(str(it["stok"]), st['CellCenter']),
                 Paragraph(_fmt_rp(it["nilai"]), st['CellRight']),
             ])
         table_data.append([
             Paragraph("", st['Cell']), Paragraph("", st['Cell']),
             Paragraph(f"<b>Subtotal {kel}</b>", st['Cell']), Paragraph("", st['Cell']),
+            Paragraph("", st['Cell']),
             Paragraph(f"<b>{g['stok']}</b>", st['CellCenter']),
             Paragraph(f"<b>{_fmt_rp(g['nilai'])}</b>", st['CellRight']),
         ])
@@ -547,12 +560,36 @@ async def laporan_posisi_pdf(gudang: str = "",
     table_data.append([
         Paragraph("", st['Cell']), Paragraph("", st['Cell']),
         Paragraph("<b>TOTAL</b>", st['Cell']), Paragraph("", st['Cell']),
+        Paragraph("", st['Cell']),
         Paragraph(f"<b>{grand_stok}</b>", st['CellCenter']),
         Paragraph(f"<b>{_fmt_rp(grand_nilai)}</b>", st['CellRight']),
     ])
-    table = Table(table_data, colWidths=_fit_col_widths([120, 40, 180, 55, 45, 90], doc.width), repeatRows=1)
+    table = Table(table_data, colWidths=_fit_col_widths([104, 34, 150, 48, 54, 40, 84], doc.width), repeatRows=1)
     table.setStyle(_std_table_style(zebra=True, total_row=True))
     elements.append(table)
+
+    # Rekap nilai persediaan per akun neraca (dasar penyajian di Neraca).
+    if akun_total:
+        elements.append(Spacer(1, 5 * rl_mm))
+        elements.append(Paragraph("<b>Rekapitulasi per Akun Neraca</b>", st['Cell']))
+        rekap_data = [[Paragraph(h, st['TableHeader']) for h in ["Akun", "Uraian", "Nilai (Rp)"]]]
+        for akun in sorted(akun_total):
+            a = akun_total[akun]
+            rekap_data.append([
+                Paragraph(akun, st['CellCenter']),
+                Paragraph(a["uraian"] or "-", st['Cell']),
+                Paragraph(_fmt_rp(a["nilai"]), st['CellRight']),
+            ])
+        rekap_data.append([
+            Paragraph("", st['Cell']), Paragraph("<b>TOTAL</b>", st['Cell']),
+            Paragraph(f"<b>{_fmt_rp(grand_nilai)}</b>", st['CellRight']),
+        ])
+        rekap = Table(rekap_data, colWidths=_fit_col_widths([60, 300, 100], doc.width), repeatRows=1)
+        rekap.setStyle(_std_table_style(zebra=True, total_row=True))
+        elements.append(rekap)
+        elements.append(Paragraph(
+            "Akun neraca 1171xx = rujukan (default 117111 Barang Konsumsi); "
+            "sub-akun per jenis perlu verifikasi Lampiran BAS.", st['Meta']))
 
     elements.append(Spacer(1, 12 * rl_mm))
     elements.extend(_signature_block([
