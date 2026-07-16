@@ -12,6 +12,33 @@ Ketentuan kode barang persediaan:
 
 Berisi fungsi murni saja (tanpa Mongo/IO) — route memakai fungsi ini.
 """
+from datetime import datetime, timedelta, timezone
+
+# Zona waktu operasional aplikasi (WIB, UTC+7) — timestamp DISIMPAN tetap UTC;
+# WIB hanya untuk derivasi TANGGAL (filter/label) agar transaksi pagi/dini hari
+# tidak tercatat pada tanggal sebelumnya (temuan review #25/#44).
+WIB = timezone(timedelta(hours=7))
+
+
+def tanggal_wib(ts_iso):
+    """Tanggal lokal WIB 'YYYY-MM-DD' dari timestamp ISO. Naive dianggap UTC;
+    string tak baku → fallback potong 10 karakter; kosong → ''. MURNI."""
+    s = str(ts_iso or "").strip()
+    if not s:
+        return ""
+    try:
+        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except ValueError:
+        return s[:10]
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(WIB).date().isoformat()
+
+
+def today_wib():
+    """Tanggal HARI INI menurut WIB (untuk label laporan & batas 'hari ini')."""
+    return datetime.now(timezone.utc).astimezone(WIB).date().isoformat()
+
 
 KODE_PENUH_LEN = 16
 KODE_PREFIX_LEN = 10
@@ -330,7 +357,7 @@ def mutasi_periode(jurnal_rows, dari_iso: str, sampai_iso: str):
         pid = r.get("persediaan_id")
         if not pid:
             continue
-        tgl = str(r.get("timestamp") or "")[:10]
+        tgl = tanggal_wib(r.get("timestamp"))   # tanggal lokal WIB (#25/#44)
         arah = r.get("arah")
         try:
             qty = int(r.get("jumlah", 0) or 0)

@@ -26,6 +26,7 @@ from db import db
 from persediaan_akun_utils import akun_persediaan
 from persediaan_fields import EDITABLE_FIELD_NAMES
 from persediaan_utils import (
+    tanggal_wib, today_wib,
     JENIS_KELUAR, JENIS_MASUK, KODE_PENUH_LEN, KODE_PREFIX_LEN, SATUAN_BAKU,
     baris_csv_transaksi, buat_layer, klasifikasi_kedaluwarsa, konsumsi_fifo,
     mutasi_periode, next_kode_penuh, next_nup, nilai_persediaan_dari_batches,
@@ -102,7 +103,7 @@ async def peringatan_persediaan(
     Bahan banner peringatan & nota dinas — dihitung dari data nyata
     (stok vs batas kritis; expired layer vs hari ini + horizon).
     """
-    today_iso = datetime.now(timezone.utc).date().isoformat()
+    today_iso = today_wib()   # tanggal lokal WIB (#25/#44)
     habis, kritis, lewat, segera = [], [], [], []
     cursor = db.persediaan.find({}, {"_id": 0})
     async for item in cursor:
@@ -352,7 +353,7 @@ async def opname_kertas_kerja_pdf(gudang: str = "",
     items = [x async for x in db.persediaan.find(query, {"_id": 0, "batches": 0})]
     items.sort(key=lambda x: (x.get("nama_barang") or "", x.get("kode_barang") or ""))
 
-    today_iso = datetime.now(timezone.utc).date().isoformat()
+    today_iso = today_wib()   # tanggal lokal WIB (#25/#44)
     buffer = BytesIO()
     doc = _std_doc(buffer)
     st = _get_report_styles()
@@ -420,7 +421,7 @@ async def opname_baof_pdf(
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
     rows = [r async for r in db.transaksi_persediaan.find(
         {"jenis": "opname"}, {"_id": 0})]
-    rows = [r for r in rows if str(r.get("timestamp") or "")[:10] == tanggal]
+    rows = [r for r in rows if tanggal_wib(r.get("timestamp")) == tanggal]
     rows.sort(key=lambda r: (r.get("nama_barang") or "", r.get("timestamp") or ""))
 
     buffer = BytesIO()
@@ -482,11 +483,11 @@ async def opname_status(_user: dict = Depends(require_user)):
 
     from persediaan_utils import status_opname_semester
 
-    today_iso = datetime.now(timezone.utc).date().isoformat()
+    today_iso = today_wib()   # tanggal lokal WIB (#25/#44)
     terakhir = await db.transaksi_persediaan.find_one(
         {"jenis": "opname"}, {"_id": 0, "timestamp": 1},
         sort=[("timestamp", -1)])
-    tanggal = str((terakhir or {}).get("timestamp") or "")[:10]
+    tanggal = tanggal_wib((terakhir or {}).get("timestamp"))
     return status_opname_semester(tanggal, today_iso)
 
 
@@ -542,7 +543,7 @@ async def laporan_posisi_pdf(gudang: str = "",
         at = akun_total.setdefault(ak["akun"], {"uraian": ak["uraian"], "nilai": 0.0})
         at["nilai"] += nilai
 
-    today_iso = datetime.now(timezone.utc).date().isoformat()
+    today_iso = today_wib()   # tanggal lokal WIB (#25/#44)
     buffer = BytesIO()
     doc = _std_doc(buffer)
     st = _get_report_styles()
@@ -1383,7 +1384,7 @@ async def kartu_barang_pdf(item_id: str, _user: dict = Depends(require_user)):
         if r.get("keterangan"):
             uraian += f" — {r['keterangan']}"
         table_data.append([
-            Paragraph(_fmt_tanggal_id(str(r.get("timestamp") or "")[:10]), st['CellCenter']),
+            Paragraph(_fmt_tanggal_id(tanggal_wib(r.get("timestamp"))), st['CellCenter']),
             Paragraph(uraian, st['Cell']),
             Paragraph(r.get("no_bukti") or "-", st['Cell']),
             Paragraph(str(jumlah) if arah == "masuk" else "", st['CellCenter']),
