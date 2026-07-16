@@ -23,6 +23,7 @@ from db import db
 from auth_utils import require_user, require_admin, require_user_or_query_token
 from shared_utils import get_photo_from_gridfs
 from report_filters import active_asset_filter
+from report_utils import hitung_status_stiker
 from markupsafe import Markup
 
 logger = logging.getLogger(__name__)
@@ -3229,9 +3230,9 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
 
     tc = len(all_assets)
     tv = sum(sp(a) for a in all_assets)
-    st_terpasang = len([a for a in ditemukan if a.get("stiker_status") == "Sudah Terpasang"])
-    st_belum = len(ditemukan) - st_terpasang
-    st_pct = int(st_terpasang / len(ditemukan) * 100) if len(ditemukan) > 0 else 0
+    # Status stiker dihitung atas SELURUH aset kegiatan (bukan hanya 'Ditemukan')
+    # agar 'belum terpasang' mencerminkan aset tak berstiker yang sesungguhnya.
+    st_terpasang, st_belum, st_pct = hitung_status_stiker(all_assets)
     circumference = 2 * 3.14159 * 32
     st_dash = circumference
     st_offset = circumference * (1 - st_pct / 100)
@@ -3415,8 +3416,8 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
             simpulan.append({"color": "#a855f7", "text": f"<strong>{len(sengketa)} NUP</strong> BMN dalam sengketa senilai <strong>Rp {fmt(sum(sp(a) for a in sengketa))}</strong>. Koordinasi bagian hukum diperlukan."})
         if len(belum) > 0:
             simpulan.append({"color": "#94a3b8", "text": f"<strong>{len(belum)} NUP</strong> ({pct(len(belum), tc)}%) belum diinventarisasi. Perlu tindak lanjut segera."})
-        if len(ditemukan) > 0:
-            simpulan.append({"color": "#22c55e", "text": f"Stiker terpasang pada <strong>{st_terpasang} dari {len(ditemukan)}</strong> NUP (<strong>{st_pct}%</strong>). {f'Masih ada <strong>{st_belum}</strong> NUP belum dipasang stiker.' if st_belum > 0 else 'Seluruh BMN sudah terpasang stiker.'}"})
+        if tc > 0:
+            simpulan.append({"color": "#22c55e", "text": f"Stiker terpasang pada <strong>{st_terpasang} dari {tc}</strong> NUP (<strong>{st_pct}%</strong>). {f'Masih ada <strong>{st_belum}</strong> NUP belum dipasang stiker.' if st_belum > 0 else 'Seluruh BMN sudah terpasang stiker.'}"})
         simpulan.append({"color": "#0ea5e9", "text": f"Kelengkapan dokumen: <strong>{doc_completeness_pct}%</strong> terisi. Dokumentasi foto: <strong>{photo_coverage_pct}%</strong> aset terfoto. GPS: <strong>{gps_coverage_pct}%</strong> terkoordinat."})
         if is_in_progress:
             simpulan.append({"color": "#f97316", "text": "<strong>CATATAN:</strong> Laporan ini dibuat saat periode inventarisasi <strong>masih berlangsung</strong>. Data dapat berubah hingga periode berakhir."})
@@ -3999,8 +4000,8 @@ async def _build_satker_report_v2(activity_id: str):
     baik = [a for a in ditemukan if a.get("condition") == "Baik"]
     rr = [a for a in ditemukan if a.get("condition") == "Rusak Ringan"]
     rb = [a for a in ditemukan if a.get("condition") == "Rusak Berat"]
-    st_terpasang = len([a for a in ditemukan if a.get("stiker_status") == "Sudah Terpasang"])
-    st_pct = int(st_terpasang / len(ditemukan) * 100) if ditemukan else 0
+    # Status stiker atas SELURUH aset kegiatan (lihat perbaikan di ringkasan utama).
+    st_terpasang, st_belum, st_pct = hitung_status_stiker(all_assets)
     dok_scores = []
     for a in all_assets:
         ck = a.get("document_checklist", []) or []
@@ -4163,7 +4164,7 @@ async def _build_satker_report_v2(activity_id: str):
         if tidak: simpulan.append({"color": "#dc2626", "text": f"<strong>{len(tidak)} NUP</strong> tidak ditemukan senilai <strong>Rp {fmt(sum(sp(a) for a in tidak))}</strong>."})
         if berlebih: simpulan.append({"color": "#d97706", "text": f"<strong>{len(berlebih)} NUP</strong> BMN berlebih senilai <strong>Rp {fmt(sum(sp(a) for a in berlebih))}</strong>."})
         if sengketa: simpulan.append({"color": "#7c3aed", "text": f"<strong>{len(sengketa)} NUP</strong> BMN dalam sengketa."})
-        simpulan.append({"color": "#059669", "text": f"Stiker terpasang pada <strong>{st_terpasang} dari {len(ditemukan)}</strong> NUP (<strong>{st_pct}%</strong>)."})
+        simpulan.append({"color": "#059669", "text": f"Stiker terpasang pada <strong>{st_terpasang} dari {tc}</strong> NUP (<strong>{st_pct}%</strong>)."})
         simpulan.append({"color": "#0ea5e9", "text": f"Rata-rata kelengkapan dokumen: <strong>{dok_pct}%</strong>."})
 
     return {
@@ -4177,7 +4178,7 @@ async def _build_satker_report_v2(activity_id: str):
         "cnt_berlebih": len(berlebih), "pct_berlebih": pct(len(berlebih), tc),
         "cnt_sengketa": len(sengketa), "pct_sengketa": pct(len(sengketa), tc),
         "cnt_belum": len(belum), "pct_belum": pct(len(belum), tc),
-        "stiker_terpasang": st_terpasang, "stiker_pct": st_pct, "dok_pct": dok_pct,
+        "stiker_terpasang": st_terpasang, "stiker_belum": st_belum, "stiker_pct": st_pct, "dok_pct": dok_pct,
         "eselon_list": eselon_list, "kegiatan_list": kegiatan_list,
         "chart_kondisi": chart_kondisi, "chart_status": chart_status,
         "chart_kategori": chart_kategori, "chart_lokasi": chart_lokasi,
