@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 
 from auth_utils import require_admin, require_user, require_user_or_query_token
 from db import db, fs_bucket
-from shared_utils import delete_document_from_gridfs, get_document_from_gridfs
+from shared_utils import blok_ttd_kpb_titik, delete_document_from_gridfs, get_document_from_gridfs
 from wasdal_utils import (
     AMBANG_BERLARUT_HARI, JENIS_TEMUAN, OBJEK_WASDAL, PEMICU_INSIDENTIL,
     STATUS_INSIDENTIL, SUMBER_PENERTIBAN, STATUS_PENERTIBAN,
@@ -551,9 +551,7 @@ async def ba_insidentil_pdf(tiket_id: str, _user: dict = Depends(require_user)):
         {'pre': [''], 'header': 'Petugas Pemantauan,',
          'nama': '...........................',
          'after': ['NIP. ....................']},
-        {'pre': [''], 'header': 'Mengetahui,', 'role': 'Kuasa Pengguna Barang,',
-         'nama': settings.get("kasatker_nama") or '...........................',
-         'after': [f"NIP. {settings.get('kasatker_nip') or '....................'}"]},
+        await blok_ttd_kpb_titik(settings),   # KPB dari registry pejabat (temuan #26)
     ], doc.width))
     footer = _page_footer_factory("Berita Acara Pemantauan Insidentil BMN")
     doc.build(elements, onFirstPage=footer, onLaterPages=footer)
@@ -664,9 +662,7 @@ async def laporan_wasdal_pdf(
         {'pre': [''], 'header': 'Petugas Pemantauan,',
          'nama': '...........................',
          'after': ['NIP. ....................']},
-        {'pre': [''], 'header': 'Mengetahui,', 'role': 'Kuasa Pengguna Barang,',
-         'nama': settings.get("kasatker_nama") or '...........................',
-         'after': [f"NIP. {settings.get('kasatker_nip') or '....................'}"]},
+        await blok_ttd_kpb_titik(settings),   # KPB dari registry pejabat (temuan #26)
     ], doc.width))
     footer = _page_footer_factory("Laporan Hasil Pemantauan Wasdal BMN")
     doc.build(elements, onFirstPage=footer, onLaterPages=footer)

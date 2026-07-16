@@ -441,3 +441,49 @@ VALID_SUB_KLASIFIKASI_LAINNYA = [
     "Lainnya"
 ]
 VALID_SUB_KLASIFIKASI_ALL = VALID_SUB_KLASIFIKASI_PENCATATAN + VALID_SUB_KLASIFIKASI_LAINNYA
+
+
+# ── Penanda tangan dokumen resmi (temuan review #26 — satu resolver lintas modul) ──
+
+async def resolve_penandatangan_kpb(settings, per_iso=None):
+    """Penanda tangan **Kuasa Pengguna Barang** untuk dokumen resmi.
+
+    SATU resolver untuk semua modul (dulu 5 modul membaca setelan kasatker
+    langsung sehingga KPB dari registry pejabat tidak muncul): KPB aktif dari
+    registry `pejabat` pada tanggal dokumen (`per_iso`), fallback setelan
+    laporan (kasatker). Kembalikan {nama, nip, jabatan, sumber}.
+    """
+    from pejabat_utils import penandatangan_kpb
+    # Default tanggal = hari ini (temuan #41: tanpa tanggal, rentang berlaku
+    # SK pejabat tidak dicek sehingga pejabat kedaluwarsa bisa terpilih).
+    per_iso = per_iso or datetime.now(timezone.utc).date().isoformat()
+    pejabat_list = await db.pejabat.find({}, {"_id": 0}).to_list(2000)
+    return penandatangan_kpb(settings or {}, pejabat_list, per_iso)
+
+
+async def resolve_pejabat_peran(peran, per_iso=None):
+    """Pejabat aktif pemegang `peran` (mis. 'pengurus_barang') pada tanggal
+    `per_iso` (default hari ini) dari registry pejabat — None bila belum ada."""
+    from pejabat_utils import pejabat_aktif_untuk_peran
+    per_iso = per_iso or datetime.now(timezone.utc).date().isoformat()
+    pejabat_list = await db.pejabat.find({}, {"_id": 0}).to_list(2000)
+    return pejabat_aktif_untuk_peran(pejabat_list, peran, per_iso)
+
+
+async def blok_ttd_kpb(settings, per_iso=None):
+    """Entri `_signature_block` "Kuasa Pengguna Barang" (dengan baris tempat/
+    tanggal titik-titik) — nama/NIP dari registry pejabat, fallback setelan."""
+    kpb = await resolve_penandatangan_kpb(settings, per_iso)
+    return {'pre': ['.................., .......................'],
+            'header': 'Kuasa Pengguna Barang,',
+            'nama': kpb["nama"],
+            'after': [f"NIP. {kpb['nip']}"]}
+
+
+async def blok_ttd_kpb_titik(settings, per_iso=None):
+    """Entri `_signature_block` "Mengetahui / Kuasa Pengguna Barang" dengan
+    fallback garis-titik (pola BA/daftar) — nama/NIP dari registry pejabat."""
+    kpb = await resolve_penandatangan_kpb(settings, per_iso)
+    return {'pre': [''], 'header': 'Mengetahui,', 'role': 'Kuasa Pengguna Barang,',
+            'nama': kpb["nama"] if kpb["nama"] != "-" else '...........................',
+            'after': [f"NIP. {kpb['nip'] if kpb['nip'] != '-' else '....................'}"]}

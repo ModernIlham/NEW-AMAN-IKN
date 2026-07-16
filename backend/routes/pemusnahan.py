@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 
 from auth_utils import require_admin, require_user, require_user_or_query_token
 from db import db, fs_bucket
-from shared_utils import delete_document_from_gridfs, get_document_from_gridfs
+from shared_utils import blok_ttd_kpb_titik, delete_document_from_gridfs, get_document_from_gridfs
 from pemusnahan_utils import (
     CARA_PEMUSNAHAN, kelayakan_musnah, rekap_pemusnahan,
     usulan_penghapusan_dari_ba, validate_pemusnahan,
@@ -248,9 +248,7 @@ async def ba_pemusnahan_pdf(ba_id: str, _user: dict = Depends(require_user)):
         {'pre': [''], 'header': 'Saksi,',
          'nama': '...........................',
          'after': ['NIP. ....................']},
-        {'pre': [''], 'header': 'Mengetahui,', 'role': 'Kuasa Pengguna Barang,',
-         'nama': settings.get("kasatker_nama") or '...........................',
-         'after': [f"NIP. {settings.get('kasatker_nip') or '....................'}"]},
+        await blok_ttd_kpb_titik(settings),   # KPB dari registry pejabat (temuan #26)
     ], doc.width))
     footer = _page_footer_factory("Berita Acara Pemusnahan BMN")
     doc.build(elements, onFirstPage=footer, onLaterPages=footer)

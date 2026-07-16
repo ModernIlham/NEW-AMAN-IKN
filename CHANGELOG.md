@@ -48,6 +48,28 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#331] Review batch 3: tanda tangan seluruh dokumen dari registry Pejabat — 2026-07-16
+
+- **Satu resolver tanda tangan lintas modul** (temuan #26): 6 blok "Kuasa
+  Pengguna Barang" yang masih membaca setelan kasatker langsung — DHPB
+  Pemeliharaan, BA Pemusnahan, BAST PSP & Daftar Barang Digunakan (Penggunaan),
+  BA Pemantauan & Laporan Wasdal — kini memakai **KPB aktif dari registry
+  pejabat** via `shared_utils.resolve_penandatangan_kpb` + helper blok siap-pakai
+  (`blok_ttd_kpb`, `blok_ttd_kpb_titik`), fallback setelan/garis-titik seperti
+  sebelumnya.
+- **Rentang berlaku SK pejabat kini dicek** (temuan #41): resolver ber-default
+  tanggal HARI INI — pejabat kedaluwarsa tak lagi bisa terpilih (dulu
+  `_kpb_signer` persediaan dipanggil tanpa tanggal). `_kpb_signer` kini delegasi
+  ke resolver bersama.
+- **Kartu Barang Persediaan** (temuan #27): blok "Pengurus Barang Persediaan"
+  tidak lagi diisi nama Kepala Satker — kini **pejabat berperan
+  `pengurus_barang`** dari registry, fallback garis-titik (tanpa fabrikasi).
+- Verifikasi: suite **422 lulus**; smoke — KPB kedaluwarsa tersaring, blok
+  helper benar, fallback setelan/titik benar, resolver pengurus_barang benar,
+  PDF Posisi Persediaan render via resolver bersama.
+
+---
+
 ## [#330] Review batch 2: alih status keluar & BMN idle diserahkan keluar dari pembukuan — 2026-07-16
 
 - **Menutup handoff Penggunaan → Pembukuan yang putus** (temuan review #1,
