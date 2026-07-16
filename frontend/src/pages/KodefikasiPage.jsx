@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Search, Plus, Upload, Download, Pencil, Trash2, Loader2,
-  ListTree, ChevronLeft, ChevronRight, Info,
+  ListTree, ChevronLeft, ChevronRight, Info, FileDown, Table2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -199,6 +199,14 @@ export default function KodefikasiPage({ user, onBack }) {
     }).catch(() => {});
   };
 
+  // Dua pendekatan ekspor: datar (seperti tabel) & hierarki berkolom + info SIMAN.
+  const exportKodefikasi = (bentuk) => {
+    const nama = bentuk === "hierarki" ? "kodefikasi_hierarki.xlsx" : "kodefikasi_datar.xlsx";
+    downloadFileWithProgress(`${API}/kodefikasi/export?bentuk=${bentuk}`, nama, {
+      label: bentuk === "hierarki" ? "Ekspor Kodefikasi (hierarki + info SIMAN)" : "Ekspor Kodefikasi (datar)",
+    }).catch(() => {});
+  };
+
   return (
     <div className="min-h-screen bg-background" data-testid="kodefikasi-page">
       {/* ── Header ── */}
@@ -254,6 +262,12 @@ export default function KodefikasiPage({ user, onBack }) {
                 </Button>
               </>
             )}
+            <Button variant="outline" className="h-10 gap-1.5" onClick={() => exportKodefikasi("datar")} data-testid="kodefikasi-export-datar" title="Ekspor datar (Kode, Uraian, Level, Induk)">
+              <FileDown className="w-4 h-4" /><span className="hidden sm:inline">Ekspor Datar</span>
+            </Button>
+            <Button variant="outline" className="h-10 gap-1.5" onClick={() => exportKodefikasi("hierarki")} data-testid="kodefikasi-export-hierarki" title="Ekspor hierarki berkolom (Golongan→Sub-Sub) + info SIMAN">
+              <Table2 className="w-4 h-4" /><span className="hidden sm:inline">Ekspor Hierarki</span>
+            </Button>
           </div>
           <div className="flex items-center gap-1.5 flex-wrap">
             {LEVEL_FILTERS.map((f) => (

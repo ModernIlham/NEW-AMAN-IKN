@@ -48,6 +48,25 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#314] Kodefikasi: dua format ekspor (datar & hierarki + info SIMAN) — 2026-07-16
+
+- **Ekspor referensi kode barang dalam dua pendekatan** (`GET /kodefikasi/export?bentuk=`,
+  XLSX, untuk semua user login):
+  - **datar**: satu baris per kode — Kode, Uraian, Level, Kode Induk (mengikuti
+    tampilan tabel sekarang).
+  - **hierarki**: satu baris per **kode barang level 5**, dengan kolom hierarki
+    tiap tingkat (Kode+Nama Golongan → Bidang → Kelompok → Sub Kelompok → Kode
+    Barang/Nama) **plus informasi tambahan SIMAN** (Satuan, Dasar, Jenis BMN,
+    TB/STB, Bukti Kepemilikan).
+- Dua tombol **Ekspor Datar** & **Ekspor Hierarki** di `KodefikasiPage.jsx`.
+  Ekspor hierarki memuat semua kode→uraian sekali (isi kolom leluhur via prefix),
+  `openpyxl write_only` untuk ~14 ribu baris.
+- Diuji: `pytest tests/unit` **411 lulus** + **smoke-test XLSX** (FakeDB) — kedua
+  bentuk valid, header/kolom/metadata benar. `eslint`/`yarn build` bersih.
+  Melengkapi fitur referensi kode barang SIMAN (impor #312, Detail #313, ekspor ini).
+
+---
+
 ## [#313] Kodefikasi: panel Detail (hierarki + info SIMAN) & impor banyak file — 2026-07-16
 
 - **Panel Detail per kode** (tombol info, untuk semua user) menampilkan

@@ -122,6 +122,66 @@ async def download_template(_user: dict = Depends(require_user)):
     )
 
 
+@kodefikasi_router.get("/kodefikasi/export")
+async def export_kodefikasi(bentuk: str = Query("datar", pattern="^(datar|hierarki)$"),
+                            _user: dict = Depends(require_user)):
+    """Ekspor referensi kodefikasi (XLSX) — dua pendekatan:
+
+    - **datar**: satu baris per kode (Kode, Uraian, Level, Kode Induk) — mengikuti
+      tampilan tabel sekarang.
+    - **hierarki**: satu baris per **kode barang level 5**, dengan kolom hierarki
+      tiap tingkat (Golongan → Sub-Sub Kelompok) + metadata SIMAN (Satuan, Dasar,
+      Jenis BMN, TB/STB, Bukti Kepemilikan).
+    """
+    from openpyxl import Workbook
+
+    await _ensure_golongan_seed()
+    wb = Workbook(write_only=True)
+    ws = wb.create_sheet("Kodefikasi")
+
+    if bentuk == "datar":
+        ws.append(["Kode", "Uraian", "Level", "Kode Induk"])
+        cursor = db.kodefikasi.find({}, {"_id": 0}).sort("kode", 1)
+        async for x in cursor:
+            lv = x.get("level")
+            ws.append([x.get("kode", ""), x.get("uraian", ""),
+                       f"{lv} {LEVEL_LABELS.get(lv, '')}".strip(),
+                       x.get("parent_kode") or ""])
+        nama_file = "kodefikasi_datar.xlsx"
+    else:  # hierarki
+        # Muat semua kode → uraian sekali untuk mengisi kolom leluhur.
+        uraian_map = {}
+        async for x in db.kodefikasi.find({}, {"_id": 0, "kode": 1, "uraian": 1}):
+            uraian_map[x["kode"]] = x.get("uraian", "")
+        ws.append([
+            "Kode Golongan", "Nama Golongan", "Kode Bidang", "Nama Bidang",
+            "Kode Kelompok", "Nama Kelompok", "Kode Sub Kelompok", "Nama Sub Kelompok",
+            "Kode Barang", "Nama Barang", "Satuan", "Dasar", "Jenis BMN",
+            "TB/STB", "Bukti Kepemilikan",
+        ])
+        cursor = db.kodefikasi.find({"level": 5}, {"_id": 0}).sort("kode", 1)
+        async for x in cursor:
+            k = x.get("kode", "")
+            g, b, kl, sk = k[:1], k[:3], k[:5], k[:7]
+            ws.append([
+                g, uraian_map.get(g, ""), b, uraian_map.get(b, ""),
+                kl, uraian_map.get(kl, ""), sk, uraian_map.get(sk, ""),
+                k, x.get("uraian", ""),
+                x.get("satuan", ""), x.get("dasar", ""), x.get("jenis_bmn", ""),
+                x.get("tb_stb", ""), x.get("bukti_kepemilikan", ""),
+            ])
+        nama_file = "kodefikasi_hierarki.xlsx"
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{nama_file}"'},
+    )
+
+
 @kodefikasi_router.get("/kodefikasi/lookup/{kode}")
 async def lookup_kode(kode: str, _user: dict = Depends(require_user)):
     """Uraian berjenjang untuk sebuah kode barang (golongan → … → level kode).
