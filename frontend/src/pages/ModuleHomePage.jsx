@@ -4,7 +4,7 @@ import {
   ClipboardList, ShoppingCart, UserCheck, Handshake, ShieldCheck, Scale,
   ArrowLeftRight, Flame, FileX, Eye, BookOpen, Boxes, FileText, ClipboardCheck,
   CheckCircle2, Link2, CalendarClock, Banknote, Wrench, Landmark, ListTree,
-  Users,
+  Users, DoorOpen,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -57,7 +57,7 @@ function StatusBadge({ status }) {
  * tahap siklus lain sudah punya kamarnya masing-masing dengan status Segera
  * Hadir — klik kartunya menampilkan konsep, rencana fitur, dan fase roadmap.
  */
-export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onShowInfo, onEnterInventarisasi, onOpenKodefikasi, onOpenPejabat, onOpenPersediaan, onOpenPelaporan, onOpenPenggunaan, onOpenPengamanan, onOpenPemeliharaan, onOpenPerencanaan, onOpenPenilaian, onOpenPenghapusan, onOpenPemanfaatan, onOpenPemusnahan, onOpenPemindahtanganan, onOpenWasdal, onOpenPenganggaran, onOpenPengadaan }) {
+export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onShowInfo, onEnterInventarisasi, onOpenKodefikasi, onOpenPejabat, onOpenRuangan, onOpenPersediaan, onOpenPelaporan, onOpenPenggunaan, onOpenPengamanan, onOpenPemeliharaan, onOpenPerencanaan, onOpenPenilaian, onOpenPenghapusan, onOpenPemanfaatan, onOpenPemusnahan, onOpenPemindahtanganan, onOpenWasdal, onOpenPenganggaran, onOpenPengadaan }) {
   const [detail, setDetail] = useState(null); // modul yang dibuka konsepnya
   const activateInfo = useTripleClick(onShowInfo);
   const DetailIcon = detail ? (MODULE_ICONS[detail.id] || Package) : null;
@@ -181,6 +181,18 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
             >
               <Users className="w-3.5 h-3.5" />
               Referensi Pejabat
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {onOpenRuangan && (
+            <button
+              type="button"
+              onClick={onOpenRuangan}
+              className="mt-2 ml-2 inline-flex items-center gap-1.5 px-3 h-8 rounded-full border border-teal-500/40 bg-teal-600/10 text-teal-600 dark:text-teal-400 text-[11px] font-semibold hover:bg-teal-600/20 transition-colors min-w-0 min-h-0"
+              data-testid="module-open-ruangan"
+            >
+              <DoorOpen className="w-3.5 h-3.5" />
+              Referensi Ruangan
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
           )}
