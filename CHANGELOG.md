@@ -48,6 +48,23 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#305] Master pegawai lebih kaya: status kepegawaian, kontak & unit kerja — 2026-07-16
+
+- **Melengkapi bagian (b): registry Pejabat diperkaya (adopsi SIMAN-G).** Tiap
+  pejabat kini dapat menyimpan **status kepegawaian** (PNS/CPNS/PPPK/TNI/POLRI/
+  Non-ASN), **unit kerja**, **no. HP**, & **email** — di samping NIP & pangkat
+  golongan yang sudah ada. Semua field baru **opsional** (tidak merusak API atau
+  blok tanda tangan laporan lama).
+- Backend: `pejabat_utils.py` konstanta `STATUS_KEPEGAWAIAN` + validasi
+  status_kepegawaian & format email (`validate_pejabat`); `routes/pejabat.py`
+  field baru di `PejabatIn`/`_bersih` + endpoint referensi mengekspos daftar
+  status untuk dropdown. Uji unit ditambah → **397 lulus**.
+- Frontend `PejabatPage.jsx`: field form Status Kepegawaian (dropdown), Unit
+  Kerja, No. HP, Email; badge status + unit kerja di tabel; pencarian mencakup
+  unit kerja & email. `eslint` bersih, `yarn build` sukses.
+
+---
+
 ## [#304] UI kelola Referensi Akun Neraca (BAS) — 2026-07-16
 
 - **Melengkapi bagian (a): halaman React "Referensi Akun Neraca"**

@@ -193,6 +193,10 @@ blok **tanda tangan** laporan satker-level **Posisi BMN Neraca & Penyusutan
 (#292), LBKP, CaLBMN, & LKB (#293)** kini memakai **KPB aktif per tanggal**
 (`penandatangan_kpb`, fallback ke setelan kasatker) — laporan per-kegiatan
 (DBKP/DBHI/RHI) memakai identitas kegiatan, menyusul bila diperlukan.
+**Master pegawai diperkaya (#305, adopsi SIMAN-G):** tiap pejabat kini bisa
+menyimpan **status kepegawaian** (`STATUS_KEPEGAWAIAN`: PNS/CPNS/PPPK/TNI/POLRI/
+Non-ASN), **unit kerja**, **no. HP**, & **email** (divalidasi format) di samping
+NIP/pangkat golongan — semua opsional (tidak merusak API/laporan lama).
 
 **2.4b Referensi Ruangan (terapan AMAN, #294).** Master `ruangan` (kode unik,
 nama, gedung, lantai, **Penanggung Jawab Ruangan** dari registry pejabat, unit

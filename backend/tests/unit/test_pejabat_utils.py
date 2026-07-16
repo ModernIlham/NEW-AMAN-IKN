@@ -1,6 +1,6 @@
 """Uji referensi pejabat penatausahaan BMN (#290, PMK 181/2016)."""
 from pejabat_utils import (
-    PERAN_PEJABAT, UNIT_AKUNTANSI,
+    PERAN_PEJABAT, STATUS_KEPEGAWAIAN, UNIT_AKUNTANSI,
     pejabat_aktif_untuk_peran, penandatangan_kpb, validate_pejabat,
 )
 
@@ -11,6 +11,12 @@ def test_referensi_memuat_peran_dan_unit_inti():
     # Jenjang unit akuntansi PMK 181/2016 lengkap
     for k in ("uapb", "uappb_e1", "uappb_w", "uakpb", "uapkpb"):
         assert k in UNIT_AKUNTANSI and UNIT_AKUNTANSI[k]["penanggung_jawab"]
+
+
+def test_status_kepegawaian_mencakup_klasifikasi_inti():
+    # Adopsi klasifikasi kepegawaian (SIMAN-G/BKN)
+    for k in ("pns", "cpns", "pppk", "tni", "polri", "non_asn"):
+        assert k in STATUS_KEPEGAWAIAN and STATUS_KEPEGAWAIAN[k]
 
 
 def test_validate_pejabat():
@@ -29,6 +35,21 @@ def test_validate_pejabat():
     assert any("berlaku" in e for e in validate_pejabat(
         {"nama": "A", "peran": ["ppk"],
          "berlaku_mulai": "2026-12-31", "berlaku_selesai": "2026-01-01"}))
+
+
+def test_validate_pejabat_field_baru():
+    # status kepegawaian valid & tak dikenal
+    assert validate_pejabat(
+        {"nama": "A", "peran": ["ppk"], "status_kepegawaian": "pppk"}) == []
+    assert any("Status kepegawaian" in e for e in validate_pejabat(
+        {"nama": "A", "peran": ["ppk"], "status_kepegawaian": "honorer"}))
+    # email valid & tidak valid; kosong tidak error
+    assert validate_pejabat(
+        {"nama": "A", "peran": ["ppk"], "email": "budi@kemenkeu.go.id"}) == []
+    assert validate_pejabat({"nama": "A", "peran": ["ppk"], "email": ""}) == []
+    for bad in ("budi", "budi@", "budi@x", "a b@c.id"):
+        assert any("email" in e.lower() for e in validate_pejabat(
+            {"nama": "A", "peran": ["ppk"], "email": bad}))
 
 
 def _pj(nama, peran, mulai="", selesai="", aktif=True):

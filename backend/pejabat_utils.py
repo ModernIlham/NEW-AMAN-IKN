@@ -20,6 +20,20 @@ PERAN_PEJABAT = {
     "pengguna_barang": "Pengguna Barang (Menteri/Pimpinan Lembaga)",
 }
 
+# Status kepegawaian pejabat/pegawai (adopsi klasifikasi SIMAN-G/BKN) — kode → uraian.
+STATUS_KEPEGAWAIAN = {
+    "pns": "PNS",
+    "cpns": "CPNS",
+    "pppk": "PPPK",
+    "tni": "TNI",
+    "polri": "POLRI",
+    "non_asn": "Non-ASN (PPNPN/Kontrak)",
+}
+
+# Format email sederhana (murni, tanpa dependensi): satu '@' & domain ber-titik.
+import re as _re
+_EMAIL_RE = _re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
 # Jenjang unit akuntansi Pengguna Barang (PMK 181/2016) — kode → detail.
 UNIT_AKUNTANSI = {
     "uapb": {"uraian": "Unit Akuntansi Pengguna Barang",
@@ -50,6 +64,12 @@ def validate_pejabat(doc):
     ua = (doc or {}).get("unit_akuntansi")
     if ua and ua not in UNIT_AKUNTANSI:
         errors.append(f"Unit akuntansi tidak dikenal: {ua}")
+    stat = str((doc or {}).get("status_kepegawaian") or "").strip()
+    if stat and stat not in STATUS_KEPEGAWAIAN:
+        errors.append(f"Status kepegawaian tidak dikenal: {stat}")
+    email = str((doc or {}).get("email") or "").strip()
+    if email and not _EMAIL_RE.match(email):
+        errors.append("Format email tidak valid")
     mulai = str((doc or {}).get("berlaku_mulai") or "").strip()
     selesai = str((doc or {}).get("berlaku_selesai") or "").strip()
     if mulai and selesai and mulai > selesai:
