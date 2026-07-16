@@ -48,6 +48,22 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#307] Persediaan: jenis transaksi SAKTI dilengkapi — 2026-07-16
+
+- **Melengkapi peta jenis transaksi persediaan → SAKTI (pustaka §3.2).** Menambah
+  jenis **Masuk**: **Rampasan** (M05), **Reklasifikasi Masuk** (M06),
+  **Reklasifikasi dari Aset** (M07); dan **Keluar**: **Penghapusan Lainnya** (K06),
+  **Reklasifikasi Keluar** (K07) di `JENIS_MASUK`/`JENIS_KELUAR`.
+- Jenis baru **muncul otomatis** di dialog masuk/keluar/transaksi massal (UI
+  mengambil dari `/persediaan/jenis-transaksi`) — memakai jalur FIFO/validasi yang
+  sama, tanpa perubahan frontend. Kode M05–M07/K06–K07 = kode internal aplikasi
+  (perlu verifikasi kode SAKTI resmi).
+- Uji unit diperluas (set jenis + validasi jenis baru) → **404 lulus**. Ditunda
+  (governance, menunggu keputusan): Koreksi sebagai jenis tersendiri, penghapusan
+  definitif 2-tahap (H01/H02), alur approval operator→approver.
+
+---
+
 ## [#306] Master Pegawai — data kepegawaian menyeluruh satker (adopsi SIMAN-G) — 2026-07-16
 
 - **Modul referensi baru: Master Pegawai.** BERBEDA dari Referensi Pejabat

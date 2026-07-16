@@ -102,10 +102,15 @@ class TestStatusStok:
 class TestTransaksiMasuk:
     def test_jenis_masuk_lengkap_dengan_kode_sakti(self):
         assert set(JENIS_MASUK) == {
-            "saldo_awal", "pembelian", "transfer_masuk", "hibah_masuk", "perolehan_lainnya",
+            "saldo_awal", "pembelian", "transfer_masuk", "hibah_masuk",
+            "rampasan", "reklasifikasi_masuk", "reklasifikasi_dari_aset",
+            "perolehan_lainnya",
         }
         for label, kode in JENIS_MASUK.values():
             assert label and kode.startswith("M")
+        # jenis SAKTI baru (pustaka §3.2) dapat divalidasi & menambah layer
+        assert validate_transaksi_masuk("rampasan", 2, 5000) == (True, "")
+        assert validate_transaksi_masuk("reklasifikasi_dari_aset", 1, 1000) == (True, "")
 
     def test_validasi_masuk_valid(self):
         assert validate_transaksi_masuk("pembelian", 5, 12000) == (True, "")
@@ -137,9 +142,13 @@ class TestTransaksiKeluar:
     def test_jenis_keluar_lengkap_dengan_kode_sakti(self):
         assert set(JENIS_KELUAR) == {
             "habis_pakai", "transfer_keluar", "hibah_keluar", "usang", "rusak",
+            "penghapusan_lainnya", "reklasifikasi_keluar",
         }
         for label, kode in JENIS_KELUAR.values():
             assert label and kode.startswith("K")
+        # jenis SAKTI baru (pustaka §3.2) dapat divalidasi (konsumsi FIFO biasa)
+        assert validate_transaksi_keluar("penghapusan_lainnya", 2, 10) == (True, "")
+        assert validate_transaksi_keluar("reklasifikasi_keluar", 1, 10) == (True, "")
 
     def test_validasi_keluar(self):
         assert validate_transaksi_keluar("habis_pakai", 3, 10) == (True, "")
