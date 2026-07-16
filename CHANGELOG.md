@@ -48,6 +48,19 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#302] Laporan Posisi BMN di Neraca: kolom Akun Neraca per golongan — 2026-07-16
+
+- **Memanfaatkan referensi Akun/BAS (#301).** Laporan **Posisi BMN di Neraca**
+  (`GET /pembukuan/posisi-bmn-pdf`) kini menampilkan **kolom "Akun Neraca"** per
+  golongan (mis. gol. 3 → 132111), diambil dari `akun_untuk_golongan` (default
+  riset ditimpa entri satker) — sebelumnya hanya golongan tanpa kode akun.
+- Catatan laporan menegaskan **akun representatif per golongan** (akun per
+  sub-kelompok dapat berbeda — verifikasi Lampiran BAS). Perubahan wiring murni;
+  `py_compile` bersih, smoke test tabel 9-kolom OK, suite 395 lulus.
+- Kolom Akun di DBKP + UI kelola akun/BAS menyusul.
+
+---
+
 ## [#301] Master Referensi Akun Neraca (BAS) per golongan BMN — 2026-07-16
 
 - **Referensi baru (riset)** memetakan **golongan kodefikasi → akun neraca aset**
