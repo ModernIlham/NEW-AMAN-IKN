@@ -18,9 +18,9 @@ from pydantic import BaseModel, Field
 from auth_utils import require_admin, require_user
 from db import db
 from kodefikasi_utils import (
-    GOLONGAN_DEFAULTS, LEVEL_LABELS, derive_level, hierarchy_prefixes,
-    is_persediaan_kode, normalize_kode, parent_of, parse_import_rows,
-    validate_kode,
+    GOLONGAN_DEFAULTS, LEVEL_LABELS, META_FIELDS, derive_level,
+    hierarchy_prefixes, is_persediaan_kode, normalize_kode, parent_of,
+    parse_import_rows, validate_kode,
 )
 
 kodefikasi_router = APIRouter()
@@ -50,7 +50,7 @@ async def _ensure_golongan_seed():
 
 
 def _doc(item: dict) -> dict:
-    return {
+    out = {
         "kode": item["kode"],
         "uraian": item.get("uraian", ""),
         "level": item.get("level"),
@@ -58,6 +58,10 @@ def _doc(item: dict) -> dict:
         "parent_kode": item.get("parent_kode"),
         "is_persediaan": is_persediaan_kode(item["kode"]),
     }
+    # Metadata SIMAN (Satuan/Dasar/Jenis BMN/TB-STB/Bukti Kepemilikan) —
+    # disajikan untuk panel Detail, bukan tabel utama.
+    out["meta"] = {f: item.get(f, "") for f in META_FIELDS}
+    return out
 
 
 @kodefikasi_router.get("/kodefikasi")
@@ -215,19 +219,28 @@ def _rows_from_upload(filename: str, content: bytes):
 
 @kodefikasi_router.post("/kodefikasi/import")
 async def import_kodefikasi(file: UploadFile = File(...), _admin: dict = Depends(require_admin)):
-    """Impor massal (kolom: kode, uraian). Kode sudah ada → uraian diperbarui."""
+    """Impor massal CSV/XLSX aplikasi ATAU keluaran SIMAN V2 per level.
+
+    Kode penuh & uraian dikenali dari header SIMAN (`Kode Barang`,
+    `Nama Sub Subkelompok`, dll.); metadata SIMAN (Satuan/Dasar/Jenis BMN/
+    TB-STB/Bukti Kepemilikan) ikut tersimpan. Kode sudah ada → diperbarui.
+    """
     content = await file.read()
     if len(content) > 10 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File maksimal 10MB")
     rows = _rows_from_upload(file.filename, content)
     entries, errors, dupes = parse_import_rows(rows)
-    inserted = updated = 0
+    inserted = updated = meta_count = 0
     for e in entries:
+        set_fields = {"uraian": e["uraian"], "level": e["level"],
+                      "parent_kode": e["parent_kode"]}
+        meta = {f: e[f] for f in META_FIELDS if f in e}
+        if meta:
+            set_fields.update(meta)
+            meta_count += 1
         res = await db.kodefikasi.update_one(
             {"kode": e["kode"]},
-            {"$set": {"uraian": e["uraian"], "level": e["level"],
-                      "parent_kode": e["parent_kode"]},
-             "$setOnInsert": {"kode": e["kode"]}},
+            {"$set": set_fields, "$setOnInsert": {"kode": e["kode"]}},
             upsert=True,
         )
         if res.upserted_id is not None:
@@ -235,8 +248,10 @@ async def import_kodefikasi(file: UploadFile = File(...), _admin: dict = Depends
         elif res.modified_count:
             updated += 1
     return {
-        "message": f"Impor selesai: {inserted} baru, {updated} diperbarui",
+        "message": f"Impor selesai: {inserted} baru, {updated} diperbarui"
+                   + (f", {meta_count} berinfo SIMAN" if meta_count else ""),
         "inserted": inserted, "updated": updated,
+        "dengan_metadata": meta_count,
         "duplikat_dalam_file": dupes,
         "errors": errors[:50],
         "error_count": len(errors),

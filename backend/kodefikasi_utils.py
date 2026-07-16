@@ -149,20 +149,62 @@ def cek_kode_kodefikasi(kode, terdaftar) -> dict:
                      f"terdaftar. Lengkapi referensi untuk validasi penuh."}
 
 
-def parse_import_rows(rows):
-    """Normalisasi baris impor kodefikasi → (entries, errors).
+# Field metadata tambahan (khas keluaran SIMAN V2 — hanya melekat di level 5).
+META_FIELDS = ("satuan", "dasar", "jenis_bmn", "tb_stb", "bukti_kepemilikan")
 
-    rows: iterable of dict dengan kunci fleksibel ('kode'/'kode_barang',
-    'uraian'/'nama'). Level TIDAK dibaca dari file — selalu diturunkan dari
-    panjang kode agar tidak bisa saling bertentangan. Duplikat kode dalam
-    file: baris terakhir menang (dilaporkan sebagai catatan, bukan error).
+# Alias header KODE PENUH per level (terdalam dulu agar file "sub" memilih kode
+# 7 digit-nya, bukan kolom induk 5 digit yang juga ada di file yang sama).
+_CODE_HEADERS = (
+    "kode barang", "kode_barang",
+    "kode sub kelompok barang", "kode sub subkelompok barang",
+    "kode kelompok barang", "kode bidang barang", "kode golongan",
+    "kode",
+)
+
+# Alias header URAIAN/nama (selain itu, kunci apa pun berawalan "nama" dipakai).
+_NAME_HEADERS = ("uraian", "nama")
+
+# Alias header kolom metadata SIMAN → nama field internal.
+_META_HEADERS = {
+    "satuan": ("satuan",),
+    "dasar": ("dasar",),
+    "jenis_bmn": ("jenis bmn", "jenis_bmn"),
+    "tb_stb": ("tb/stb", "tb / stb", "tb_stb"),
+    "bukti_kepemilikan": ("bukti kepemilikan", "bukti_kepemilikan"),
+}
+
+
+def _pick(low: dict, headers) -> str:
+    """Nilai pertama non-kosong dari daftar header (kunci sudah lower/strip)."""
+    for h in headers:
+        if h in low and str(low[h] or "").strip():
+            return str(low[h]).strip()
+    return ""
+
+
+def parse_import_rows(rows):
+    """Normalisasi baris impor kodefikasi → (entries, errors, dupes).
+
+    Menerima CSV/XLSX aplikasi (kolom `kode`/`kode_barang` + `uraian`/`nama`)
+    MAUPUN keluaran SIMAN V2 per level (`Kode Golongan`/`Kode Bidang Barang`/
+    `Kode Kelompok Barang`/`Kode Sub Kelompok Barang`/`Kode Barang` + `Nama …`).
+    Kode penuh dipilih dari kolom TERDALAM yang tersedia. Kolom metadata SIMAN
+    (Satuan, Dasar, Jenis BMN, TB/STB, Bukti Kepemilikan) ikut terbaca bila ada.
+    Level TIDAK dibaca dari file — selalu diturunkan dari panjang kode. Duplikat
+    kode dalam file: baris terakhir menang (dilaporkan, bukan error).
     """
     entries = {}
     errors = []
     dupes = 0
     for i, row in enumerate(rows, start=2):  # baris 1 = header
-        kode = normalize_kode(row.get("kode") or row.get("kode_barang"))
-        uraian = str(row.get("uraian") or row.get("nama") or "").strip()
+        low = {str(k).strip().lower(): v for k, v in (row or {}).items()}
+        kode = normalize_kode(_pick(low, _CODE_HEADERS))
+        uraian = _pick(low, _NAME_HEADERS)
+        if not uraian:  # header "Nama <Level>" (mis. "nama golongan")
+            for k, v in low.items():
+                if k.startswith("nama") and str(v or "").strip():
+                    uraian = str(v).strip()
+                    break
         if not kode and not uraian:
             continue  # baris kosong
         ok, err = validate_kode(kode)
@@ -174,10 +216,15 @@ def parse_import_rows(rows):
             continue
         if kode in entries:
             dupes += 1
-        entries[kode] = {
+        entry = {
             "kode": kode,
             "uraian": uraian,
             "level": derive_level(kode),
             "parent_kode": parent_of(kode),
         }
+        for field, aliases in _META_HEADERS.items():
+            val = _pick(low, aliases)
+            if val:
+                entry[field] = val
+        entries[kode] = entry
     return list(entries.values()), errors, dupes

@@ -48,6 +48,28 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#312] Kodefikasi: impor keluaran SIMAN V2 + metadata barang — 2026-07-16
+
+- **Impor referensi kode barang langsung dari keluaran SIMAN V2** (5 file per
+  level: Golongan/Bidang/Kelompok/Sub Kelompok/Sub-Sub Kelompok). Parser
+  `parse_import_rows` kini mengenali header khas SIMAN (`Kode Golongan`,
+  `Kode Bidang Barang`, `Kode Kelompok Barang`, `Kode Sub Kelompok Barang`,
+  `Kode Barang`, `Nama …`) — memilih **kode penuh terdalam** di tiap file
+  (mis. 7 digit, bukan kolom induk 5 digit), di samping format `kode,uraian`
+  lama. Level & induk tetap diturunkan dari panjang kode (tak pernah dari file).
+- **Menyimpan metadata barang SIMAN** per kode (level 5): `satuan`, `dasar`,
+  `jenis_bmn`, `tb_stb`, `bukti_kepemilikan` — additif, **tidak** mengubah 4
+  field inti (`kode/uraian/level/parent_kode`) sehingga seluruh integrasi modul
+  (laporan, audit FK, persediaan, penilaian) tetap jalan. `_doc` mengembalikan
+  `meta` untuk panel Detail (menyusul). Impor melaporkan jumlah "berinfo SIMAN".
+- Diuji: `pytest tests/unit` **411 lulus** + verifikasi end-to-end 5 file SIMAN
+  asli (**14.008 entri, 0 error, 0 duplikat**, level 1–5 & induk benar).
+- Menyusul: panel **Detail** (hierarki + metadata, tak tampil di tabel utama) &
+  impor banyak file sekaligus (#K2); **dua format ekspor** (datar + hierarki
+  berkolom golongan→sub-sub + metadata) (#K3).
+
+---
+
 ## [#311] Persediaan → status Aktif + rapikan teks/docstring — 2026-07-16
 
 - **Modul Inventarisasi Persediaan kini berstatus "Aktif"** (dari "Sebagian
