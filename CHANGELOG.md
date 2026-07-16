@@ -48,6 +48,22 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#297] DBR — Daftar Barang Ruangan (PDF per ruangan) — 2026-07-16
+
+- **Artikel penatausahaan baru** memanfaatkan Master Ruangan (#294/#296).
+  `GET /pembukuan/dbr-pdf` mengelompokkan seluruh BMN aktif **per ruangan** →
+  PDF resmi (kop surat, per-ruangan: No/Kode/NUP/Nama/Kondisi/Nilai + subtotal
+  unit & nilai) + **tanda tangan KPB aktif** (`_penandatangan_kpb`).
+- **Lokasi dari data yang ADA** (tanpa fabrikasi): pengguna melekat ke Ruangan
+  (nama di `user`) atau `location` teks bebas; aset tanpa lokasi tetap tampil di
+  bagian **"(lokasi belum dicatat)"** (paling akhir) agar tak hilang dari DBR —
+  sekaligus menyorot data yang perlu dilengkapi.
+- **`ruangan_utils.ruangan_aset` + `kelompok_dbr`** (murni): derivasi ruangan +
+  pengelompokan bernilai (memakai `parse_harga`). **4 unit test** (2 baru);
+  `py_compile` bersih. Tautan `ruangan_id` per aset & KIR menyusul.
+
+---
+
 ## [#296] UI Kelola Referensi Ruangan — 2026-07-16
 
 - **Melengkapi #295 di sisi UI.** Halaman **Referensi Ruangan** (`RuanganPage`)

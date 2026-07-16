@@ -198,8 +198,10 @@ blok **tanda tangan** laporan satker-level **Posisi BMN Neraca & Penyusutan
 nama, gedung, lantai, **Penanggung Jawab Ruangan** dari registry pejabat, unit
 kerja) menata lokasi BMN secara **terstruktur** (dulu teks bebas) — fondasi
 **KIR (Kartu Inventaris Ruangan)** & **DBR (Daftar Barang Ruangan)**.
-Fondasi back-end (`ruangan_utils.py` + `routes/ruangan.py`); UI kelola & tautan
-lokasi aset → ruangan menyusul bertahap.
+Fondasi back-end + UI kelola (#294/#296). **DBR PDF** (`GET /pembukuan/dbr-pdf`,
+#297) mengelompokkan BMN per ruangan dari data aset yang ada (pengguna melekat
+ke Ruangan / lokasi teks bebas; aset tanpa lokasi tetap tampil) + tanda tangan
+KPB aktif. Tautan `ruangan_id` per aset (ke master) & KIR menyusul.
 
 ---
 

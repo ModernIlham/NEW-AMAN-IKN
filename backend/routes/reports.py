@@ -1597,6 +1597,85 @@ async def generate_posisi_bmn_pdf(_user: dict = Depends(require_user_or_query_to
                              headers={"Content-Disposition": 'attachment; filename="Posisi_BMN_Neraca.pdf"'})
 
 
+@reports_router.get("/pembukuan/dbr-pdf")
+async def generate_dbr_pdf(_user: dict = Depends(require_user_or_query_token)):
+    """Daftar Barang Ruangan (DBR) — BMN dikelompokkan per ruangan (PMK 181/2016).
+
+    Ruangan diturunkan dari data aset yang ADA: pengguna melekat ke Ruangan
+    (nama di `user`) atau lokasi teks bebas; aset tanpa lokasi tetap tampil di
+    bagian "(lokasi belum dicatat)" agar tak hilang. Tanda tangan KPB aktif.
+    """
+    from reportlab.platypus import Table, Paragraph, Spacer, KeepTogether
+    from reportlab.lib.units import mm as rl_mm
+    from ruangan_utils import kelompok_dbr
+    from pembukuan_utils import parse_harga
+
+    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    assets = await db.assets.find(
+        active_asset_filter(),
+        {"_id": 0, "asset_code": 1, "NUP": 1, "asset_name": 1, "condition": 1,
+         "purchase_price": 1, "location": 1, "operasional_jenis": 1, "user": 1},
+    ).to_list(500000)
+    rows = kelompok_dbr(assets)
+
+    def fmt_rp(val):
+        try: return f"{int(val):,}".replace(",", ".")
+        except (ValueError, TypeError, OverflowError): return "0"
+
+    today_iso = datetime.now(timezone.utc).date().isoformat()
+    buffer = io.BytesIO()
+    doc = _std_doc(buffer)
+    st = _get_report_styles()
+    elements = []
+    elements.extend(_kop_surat_flowables(settings, doc.width))
+    elements.extend(_title_block("DAFTAR BARANG RUANGAN (DBR)",
+                                 subjudul=f"Posisi per {_fmt_tanggal_id(today_iso)}"))
+    total_jumlah = sum(r["jumlah"] for r in rows)
+    total_nilai = sum(r["nilai"] for r in rows)
+    elements.append(Paragraph(
+        f"{len(rows)} ruangan · {total_jumlah} unit BMN · nilai perolehan "
+        f"Rp{fmt_rp(total_nilai)} (lokasi dari data aset; belum tertaut master ruangan)",
+        st['Meta']))
+    elements.append(Spacer(1, 4*rl_mm))
+
+    if not rows:
+        elements.append(Paragraph("Belum ada aset untuk didaftar.", st['Meta']))
+    for r in rows:
+        head = Paragraph(
+            f"<b>{r['ruangan']}</b> — {r['jumlah']} unit · Rp{fmt_rp(r['nilai'])}",
+            st['Meta'])
+        headers = ["No.", "Kode Barang", "NUP", "Nama Barang", "Kondisi", "Nilai (Rp)"]
+        td = [[Paragraph(h, st['TableHeader']) for h in headers]]
+        for i, a in enumerate(r["aset"], 1):
+            td.append([
+                Paragraph(str(i), st['CellCenter']),
+                Paragraph(str(a.get("asset_code") or "-"), st['CellCenter']),
+                Paragraph(str(a.get("NUP") or "-"), st['CellCenter']),
+                Paragraph(str(a.get("asset_name") or "-"), st['Cell']),
+                Paragraph(str(a.get("condition") or "-"), st['CellCenter']),
+                Paragraph(fmt_rp(parse_harga(a.get("purchase_price"))), st['CellRight']),
+            ])
+        table = Table(td, colWidths=_fit_col_widths([26, 92, 34, 190, 66, 92], doc.width),
+                      repeatRows=1)
+        table.setStyle(_std_table_style(zebra=True))
+        elements.append(KeepTogether([head, Spacer(1, 1.5*rl_mm), table]))
+        elements.append(Spacer(1, 4*rl_mm))
+
+    elements.append(Spacer(1, 10*rl_mm))
+    ttd = await _penandatangan_kpb(settings, today_iso)
+    elements.extend(_signature_block([
+        {'pre': ['.................., .......................'],
+         'header': 'Kuasa Pengguna Barang,',
+         'nama': ttd["nama"],
+         'after': [f"NIP. {ttd['nip']}"]},
+    ], doc.width))
+    footer = _page_footer_factory("Daftar Barang Ruangan (DBR)")
+    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    buffer.seek(0)
+    return StreamingResponse(buffer, media_type="application/pdf",
+                             headers={"Content-Disposition": 'attachment; filename="Daftar_Barang_Ruangan.pdf"'})
+
+
 @reports_router.get("/penilaian/penyusutan-pdf")
 async def generate_penyusutan_pdf(
     per_tanggal: str = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
