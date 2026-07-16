@@ -1395,6 +1395,15 @@ async def generate_dbkp_pdf(activity_id: str, _user: dict = Depends(require_user
     cell_right = st['CellRight']
     header_style = st['TableHeader']
 
+    # Akun neraca per golongan (BAS #300): default riset ditimpa entri satker.
+    from akun_bas_utils import AKUN_NERACA_DEFAULT, akun_untuk_golongan
+    peta_akun = {g: dict(v) for g, v in AKUN_NERACA_DEFAULT.items()}
+    async for m in db.akun_bas.find({}, {"_id": 0}):
+        peta_akun[m["golongan"]] = {"akun": m.get("akun", ""), "uraian": m.get("uraian", "")}
+
+    def _akun(g):
+        return (akun_untuk_golongan(g, peta_akun) or {}).get("akun") or "-"
+
     elements = []
     elements.extend(_kop_surat_flowables(settings, doc.width))
     elements.extend(_title_block("DAFTAR BARANG KUASA PENGGUNA (DBKP)\nPER GOLONGAN BARANG"))
@@ -1406,7 +1415,7 @@ async def generate_dbkp_pdf(activity_id: str, _user: dict = Depends(require_user
         st['Meta']))
     elements.append(Spacer(1, 4*rl_mm))
 
-    headers = ["Gol.", "Uraian Golongan",
+    headers = ["Gol.", "Akun\nNeraca", "Uraian Golongan",
                "Jml\nIntra", "Nilai Intra\n(Rp)",
                "Jml\nEkstra", "Nilai Ekstra\n(Rp)",
                "Jml\nTotal", "Nilai Total\n(Rp)"]
@@ -1414,6 +1423,7 @@ async def generate_dbkp_pdf(activity_id: str, _user: dict = Depends(require_user
     for r in rows:
         table_data.append([
             Paragraph(r["golongan"], cell_center),
+            Paragraph(_akun(r["golongan"]), cell_center),
             Paragraph(r["uraian"], cell_style),
             Paragraph(str(r["jumlah_intra"]), cell_center),
             Paragraph(fmt_rp(r["nilai_intra"]), cell_right),
@@ -1424,6 +1434,7 @@ async def generate_dbkp_pdf(activity_id: str, _user: dict = Depends(require_user
         ])
     table_data.append([
         Paragraph("", cell_center),
+        Paragraph("", cell_center),
         Paragraph("<b>JUMLAH</b>", cell_style),
         Paragraph(f"<b>{total['jumlah_intra']}</b>", cell_center),
         Paragraph(f"<b>{fmt_rp(total['nilai_intra'])}</b>", cell_right),
@@ -1433,7 +1444,7 @@ async def generate_dbkp_pdf(activity_id: str, _user: dict = Depends(require_user
         Paragraph(f"<b>{fmt_rp(total['nilai_total'])}</b>", cell_right),
     ])
 
-    col_widths = _fit_col_widths([32, 180, 62, 100, 62, 100, 62, 100], doc.width)
+    col_widths = _fit_col_widths([32, 54, 150, 58, 94, 58, 94, 58, 94], doc.width)
     table = Table(table_data, colWidths=col_widths, repeatRows=1)
     table.setStyle(_std_table_style(zebra=True, total_row=True))
     elements.append(table)

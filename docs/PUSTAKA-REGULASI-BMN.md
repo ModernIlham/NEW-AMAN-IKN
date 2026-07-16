@@ -218,9 +218,9 @@ Peralatan & Mesin = 132111**, **4 Gedung & Bangunan = 133111**, **5 JIJ =
 162151 (Software)**, **1 Persediaan = 117xxx** (Barang Konsumsi 117111). **Akun
 6-digit per SUB-KELOMPOK bervariasi** — nilai di sini REPRESENTATIF per golongan,
 **[perlu verifikasi Lampiran BAS / KEP-211/PB/2018]** & dapat ditimpa admin
-(pola referensi masa manfaat). **Laporan Posisi BMN di Neraca kini menampilkan
-kolom Akun Neraca per golongan** (#302, `akun_untuk_golongan`); UI kelola & kolom
-di DBKP menyusul.
+(pola referensi masa manfaat). **Laporan Posisi BMN di Neraca (#302) & DBKP per
+Golongan (#303) kini menampilkan kolom Akun Neraca per golongan**
+(`akun_untuk_golongan`); UI kelola akun/BAS menyusul.
 
 ---
 
