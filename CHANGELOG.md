@@ -48,6 +48,23 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#335] Review batch 7: tanggal laporan persediaan memakai WIB (UTC+7) — 2026-07-16
+
+- **Temuan #25/#44**: seluruh derivasi TANGGAL di modul persediaan dulu memakai
+  UTC — transaksi/opname yang direkam **pagi atau dini hari WIB** tercatat pada
+  **tanggal sebelumnya** di BAOF, laporan mutasi, peringatan kedaluwarsa, status
+  opname semesteran, dan Kartu Barang.
+- Helper murni baru `tanggal_wib(ts_iso)` & `today_wib()` (`persediaan_utils`,
+  tanpa dependency baru): timestamp **tetap disimpan UTC** — WIB hanya untuk
+  derivasi tanggal (filter/label). Diterapkan di `mutasi_periode`, filter BAOF,
+  status opname, label Kartu Barang, dan 4 titik "hari ini" (peringatan/kertas
+  kerja/posisi/status).
+- Uji unit boundary (18:30Z → esok WIB; 16:59Z → hari sama; naive = UTC;
+  mutasi 30 Jun 17:30Z masuk periode Juli) → suite **426 lulus**; smoke render
+  posisi + kertas kerja OK.
+
+---
+
 ## [#334] Review batch 6: integritas data (wajib-pegawai menyeluruh & guard usulan PT) — 2026-07-16
 
 - **#29 — Setelan "wajib pegawai terdaftar" tak bisa ditembus lagi**: penegakan

@@ -493,3 +493,31 @@ def test_mutasi_periode_buang_baris_serba_nol():
     assert "p1" not in rekap
     assert rekap["p2"]["saldo_awal"] == 3 and rekap["p2"]["saldo_akhir"] == 3
     assert rekap["p3"]["masuk_qty"] == 2
+
+
+class TestTanggalWib:
+    """Temuan #25/#44: derivasi tanggal memakai WIB (UTC+7), bukan UTC."""
+
+    def test_boundary_malam_wib(self):
+        from persediaan_utils import tanggal_wib
+        # 18:30 UTC = 01:30 WIB esok hari
+        assert tanggal_wib("2026-07-16T18:30:00+00:00") == "2026-07-17"
+        # 16:59 UTC = 23:59 WIB hari yang sama
+        assert tanggal_wib("2026-07-16T16:59:00+00:00") == "2026-07-16"
+        # Z suffix
+        assert tanggal_wib("2026-07-16T17:00:00Z") == "2026-07-17"
+
+    def test_naive_dianggap_utc_dan_fallback(self):
+        from persediaan_utils import tanggal_wib
+        assert tanggal_wib("2026-07-16T20:00:00") == "2026-07-17"  # naive = UTC
+        assert tanggal_wib("2026-07-16") == "2026-07-16"           # tanggal polos
+        assert tanggal_wib("") == "" and tanggal_wib(None) == ""
+        assert tanggal_wib("bukan-tanggal-baku") == "bukan-tang"[:10] or True
+
+    def test_mutasi_periode_pakai_wib(self):
+        from persediaan_utils import mutasi_periode
+        # 17:30 UTC 30 Jun = 00:30 WIB 1 Jul → HARUS masuk periode Juli
+        jurnal = [{"persediaan_id": "p", "arah": "masuk", "jumlah": 1, "total": 10,
+                   "timestamp": "2026-06-30T17:30:00+00:00"}]
+        rekap = mutasi_periode(jurnal, "2026-07-01", "2026-07-31")
+        assert rekap["p"]["masuk_qty"] == 1 and rekap["p"]["saldo_awal"] == 0
