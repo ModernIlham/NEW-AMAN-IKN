@@ -532,3 +532,56 @@ def baris_csv_proses(tiket_list, today_iso) -> list:
                 t.get("created_by") or "",
             ])
     return baris
+
+
+def build_asset_alih_keluar_projection(tiket, now_iso):
+    """Proyeksi master aset saat tiket ALIH STATUS arah KELUAR mencapai status
+    terminal `dihapus_dibukukan` (Prinsip 3: transaksi = jurnal, master =
+    proyeksi — pola build_asset_penghapusan_projection #234).
+
+    Aset telah beralih ke Pengguna Barang lain & dibukukan di sana → keluar
+    dari pembukuan satker: `dihapus=True` + subdoc `penghapusan` (bentuk sama
+    dgn penghapusan SK agar tombstone LBKP/CaLBMN menghitung mutasi KURANG
+    pada periode SK; `jalur` membedakan asal). Kembalikan None bila bukan
+    kasusnya (arah masuk / status lain / jenis bukan alih_status). MURNI.
+    """
+    t = tiket or {}
+    if (t.get("jenis_proses") != "alih_status" or t.get("arah") != "keluar"
+            or t.get("status") != "dihapus_dibukukan"):
+        return None
+    return {
+        "dihapus": True,
+        "penghapusan": {
+            "status": "sk_terbit",
+            "usulan_id": "",
+            "jalur": "alih_status_keluar",
+            "tiket_id": str(t.get("id") or ""),
+            "nomor_sk": str(t.get("nomor_sk_penghapusan") or "").strip(),
+            "tanggal_sk": str(t.get("tanggal_sk_penghapusan") or "").strip()[:10],
+            "diproyeksikan_pada": now_iso,
+        },
+    }
+
+
+def build_asset_idle_serah_projection(tiket, now_iso):
+    """Proyeksi master aset saat tiket BMN IDLE mencapai status terminal
+    `diserahkan` (ke Pengelola Barang). Aset keluar dari pembukuan satker:
+    `dihapus=True` + subdoc `penghapusan` (nomor dokumen = BAST serah;
+    tanggal = tanggal transisi agar LBKP menghitung mutasi KURANG pada
+    periode serah). Kembalikan None bila status bukan `diserahkan`. MURNI.
+    """
+    t = tiket or {}
+    if t.get("status") != "diserahkan":
+        return None
+    return {
+        "dihapus": True,
+        "penghapusan": {
+            "status": "sk_terbit",
+            "usulan_id": "",
+            "jalur": "idle_diserahkan",
+            "tiket_id": str(t.get("id") or ""),
+            "nomor_sk": str(t.get("nomor_bast_serah") or "").strip(),
+            "tanggal_sk": str(now_iso or "")[:10],
+            "diproyeksikan_pada": now_iso,
+        },
+    }

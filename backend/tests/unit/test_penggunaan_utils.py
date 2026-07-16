@@ -341,3 +341,55 @@ class TestProsesJenisBaru:
              "tanggal_berakhir": "2026-08-01"}
         info = info_proses_sementara(t, "2026-07-12")
         assert info["sisa_hari"] == 20 and info["saatnya_perpanjangan"]
+
+
+class TestProyeksiTerminal:
+    """Temuan review #1: transisi terminal harus memproyeksikan master aset."""
+
+    def test_alih_keluar_terminal_diproyeksikan(self):
+        from penggunaan_utils import build_asset_alih_keluar_projection
+        t = {"id": "tk1", "jenis_proses": "alih_status", "arah": "keluar",
+             "status": "dihapus_dibukukan",
+             "nomor_sk_penghapusan": "SK-9/2026",
+             "tanggal_sk_penghapusan": "2026-07-10"}
+        proj = build_asset_alih_keluar_projection(t, "2026-07-16T00:00:00")
+        assert proj["dihapus"] is True
+        p = proj["penghapusan"]
+        assert p["jalur"] == "alih_status_keluar" and p["tiket_id"] == "tk1"
+        assert p["nomor_sk"] == "SK-9/2026" and p["tanggal_sk"] == "2026-07-10"
+
+    def test_alih_masuk_atau_status_lain_tidak(self):
+        from penggunaan_utils import build_asset_alih_keluar_projection
+        base = {"id": "x", "jenis_proses": "alih_status",
+                "arah": "keluar", "status": "dihapus_dibukukan"}
+        assert build_asset_alih_keluar_projection({**base, "arah": "masuk"}, "t") is None
+        assert build_asset_alih_keluar_projection({**base, "status": "bast_selesai"}, "t") is None
+        assert build_asset_alih_keluar_projection(
+            {**base, "jenis_proses": "penggunaan_bersama"}, "t") is None
+        assert build_asset_alih_keluar_projection(None, "t") is None
+
+    def test_idle_diserahkan_diproyeksikan(self):
+        from penggunaan_utils import build_asset_idle_serah_projection
+        t = {"id": "id1", "status": "diserahkan", "nomor_bast_serah": "BAST-S/3"}
+        proj = build_asset_idle_serah_projection(t, "2026-07-16T08:00:00")
+        assert proj["dihapus"] is True
+        p = proj["penghapusan"]
+        assert p["jalur"] == "idle_diserahkan" and p["nomor_sk"] == "BAST-S/3"
+        assert p["tanggal_sk"] == "2026-07-16"   # tanggal transisi → periode LBKP
+
+    def test_idle_status_lain_tidak(self):
+        from penggunaan_utils import build_asset_idle_serah_projection
+        assert build_asset_idle_serah_projection({"status": "usul_serah"}, "t") is None
+        assert build_asset_idle_serah_projection(None, "t") is None
+
+    def test_tombstone_lbkp_menghitung_proyeksi_ini(self):
+        # Aset terproyeksi alih-keluar/idle harus jadi mutasi KURANG di LBKP.
+        from penggunaan_utils import build_asset_alih_keluar_projection
+        from pembukuan_utils import tombstones_penghapusan
+        proj = build_asset_alih_keluar_projection(
+            {"id": "tk", "jenis_proses": "alih_status", "arah": "keluar",
+             "status": "dihapus_dibukukan", "nomor_sk_penghapusan": "SK",
+             "tanggal_sk_penghapusan": "2026-03-01"}, "now")
+        aset = {"asset_code": "3010101001", "purchase_price": "1000000", **proj}
+        ts = tombstones_penghapusan([aset])
+        assert len(ts) == 1 and ts[0]["timestamp"] == "2026-03-01"

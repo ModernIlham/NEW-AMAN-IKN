@@ -48,6 +48,26 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#330] Review batch 2: alih status keluar & BMN idle diserahkan keluar dari pembukuan — 2026-07-16
+
+- **Menutup handoff Penggunaan → Pembukuan yang putus** (temuan review #1,
+  prioritas tinggi): tiket **alih status arah KELUAR** yang mencapai status
+  terminal **"dihapus & dibukukan pengguna baru"**, dan tiket **BMN idle** yang
+  mencapai **"diserahkan ke Pengelola"**, kini **memproyeksikan master aset**
+  (`dihapus=True` + subdoc `penghapusan` berisi jalur/tiket/dokumen) — pola yang
+  sama dengan penghapusan SK (#234) & pemindahtanganan (#256).
+- Efek: aset yang sudah beralih/diserahkan **tidak lagi terhitung** di DBKP,
+  LKB, Posisi BMN Neraca, penyusutan, dan rekonsiliasi; LBKP/CaLBMN otomatis
+  mencatat **mutasi KURANG** pada periode dokumen (via `tombstones_penghapusan`).
+  Arah MASUK tidak diproyeksikan; proyeksi hanya aset yang belum dihapus,
+  `$inc version` (OCC/cache), audit per aset, best-effort.
+- Builder murni `build_asset_alih_keluar_projection` /
+  `build_asset_idle_serah_projection` (`penggunaan_utils.py`) + 5 uji unit →
+  suite **422 lulus**; smoke FakeDB: keluar → 2 aset ter-flag ber-SK, masuk →
+  tidak, idle → aset tunggal ter-flag ber-BAST serah.
+
+---
+
 ## [#329] Review menyeluruh batch 1: keamanan endpoint + LKB kecualikan aset terhapus — 2026-07-16
 
 Hasil **review menyeluruh multi-agen** (70 temuan, 69 terverifikasi adversarial;
