@@ -69,6 +69,8 @@ export default function PersediaanPage({ user, onBack }) {
   const [masuk, setMasuk] = useState(null);
   const [keluar, setKeluar] = useState(null);
   const [riwayat, setRiwayat] = useState(null);
+  // Rincian layer FIFO: {item, rows:[{batch_id,tanggal,qty,harga,expired,ref}], loading}
+  const [layers, setLayers] = useState(null);
   const [jenisMasuk, setJenisMasuk] = useState([]);
   const [jenisKeluar, setJenisKeluar] = useState([]);
   // Register perolehan (Pengadaan) untuk menautkan transaksi masuk ke dokumen sumber
@@ -393,6 +395,20 @@ export default function PersediaanPage({ user, onBack }) {
 
   const fmtRp = (n) => `Rp${Number(n || 0).toLocaleString("id-ID")}`;
 
+  // Rincian layer FIFO (read-only) dari detail item — list sengaja tak memuat batches.
+  const openLayers = async (item) => {
+    setLayers({ item, rows: [], loading: true });
+    try {
+      const r = await axios.get(`${API}/persediaan/${item.id}`);
+      const rows = (r.data?.batches || []).slice()
+        .sort((a, b) => String(a.tanggal || "").localeCompare(String(b.tanggal || "")));
+      setLayers({ item, rows, loading: false });
+    } catch (err) {
+      toast.error(getApiError(err, "Gagal memuat layer FIFO"));
+      setLayers(null);
+    }
+  };
+
   const remove = async (item) => {
     const ok = await confirm({
       title: `Hapus ${item.nama_barang}?`,
@@ -708,6 +724,16 @@ export default function PersediaanPage({ user, onBack }) {
                           data-testid={`persediaan-riwayat-${it.kode_barang}-${it.nup}`}
                         >
                           <History className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openLayers(it)}
+                          aria-label={`Layer FIFO ${it.nama_barang}`}
+                          title="Rincian layer FIFO (saldo per layer)"
+                          className="p-1.5 rounded-md text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 min-w-0 min-h-0"
+                          data-testid={`persediaan-layers-${it.kode_barang}-${it.nup}`}
+                        >
+                          <Layers className="w-3.5 h-3.5" />
                         </button>
                         <button
                           type="button"
@@ -1246,6 +1272,62 @@ export default function PersediaanPage({ user, onBack }) {
                   <p className="mt-0.5 text-muted-foreground">Petugas: {t.petugas}</p>
                 </div>
               ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog rincian layer FIFO (read-only) ── */}
+      <Dialog open={!!layers} onOpenChange={(o) => { if (!o) setLayers(null); }}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Layer FIFO — {layers?.item?.nama_barang}</DialogTitle>
+            <DialogDescription className="text-xs">
+              Saldo per layer (harga melekat) · dikonsumsi tertua dulu · kode {layers?.item?.kode_barang} · NUP {layers?.item?.nup}
+            </DialogDescription>
+          </DialogHeader>
+          {layers?.loading ? (
+            <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-amber-600" /></div>
+          ) : (layers?.rows?.length || 0) === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">Belum ada layer — stok kosong. Catat transaksi masuk untuk membuat layer.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-border bg-muted/40 text-left text-muted-foreground">
+                    <th className="px-2 py-2 font-semibold">Tanggal</th>
+                    <th className="px-2 py-2 font-semibold text-right">Qty</th>
+                    <th className="px-2 py-2 font-semibold text-right">Harga</th>
+                    <th className="px-2 py-2 font-semibold text-right">Nilai</th>
+                    <th className="px-2 py-2 font-semibold">Kedaluwarsa</th>
+                    <th className="px-2 py-2 font-semibold">Ref</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {layers.rows.map((b, idx) => (
+                    <tr key={b.batch_id || idx} className="border-b border-border/60 last:border-0" data-testid={`layer-row-${idx}`}>
+                      <td className="px-2 py-1.5 whitespace-nowrap">{String(b.tanggal || "").slice(0, 10) || "—"}</td>
+                      <td className="px-2 py-1.5 text-right font-mono">{Number(b.qty || 0)}</td>
+                      <td className="px-2 py-1.5 text-right whitespace-nowrap">{fmtRp(b.harga)}</td>
+                      <td className="px-2 py-1.5 text-right whitespace-nowrap font-semibold">{fmtRp(Number(b.qty || 0) * Number(b.harga || 0))}</td>
+                      <td className="px-2 py-1.5 whitespace-nowrap text-muted-foreground">{b.expired || "—"}</td>
+                      <td className="px-2 py-1.5 text-muted-foreground truncate max-w-[110px]" title={b.ref || ""}>{b.ref || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-border font-bold text-foreground">
+                    <td className="px-2 py-2">Jumlah</td>
+                    <td className="px-2 py-2 text-right font-mono">{layers.rows.reduce((s, b) => s + Number(b.qty || 0), 0)}</td>
+                    <td className="px-2 py-2"></td>
+                    <td className="px-2 py-2 text-right whitespace-nowrap">{fmtRp(layers.rows.reduce((s, b) => s + Number(b.qty || 0) * Number(b.harga || 0), 0))}</td>
+                    <td className="px-2 py-2" colSpan={2}></td>
+                  </tr>
+                </tfoot>
+              </table>
+              <p className="text-[10px] text-muted-foreground mt-2">
+                Nilai persediaan = Σ (qty × harga) per layer (FIFO murni, bukan rata-rata). Total qty = stok saat ini {layers?.item?.stok}.
+              </p>
             </div>
           )}
         </DialogContent>

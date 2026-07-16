@@ -48,6 +48,19 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#309] Persediaan: panel rincian layer FIFO (read-only) — 2026-07-16
+
+- **Menampilkan saldo per layer FIFO** yang sebelumnya hanya ada di backend
+  (`GET /persediaan/{id}` mengembalikan `batches`; daftar sengaja tak memuatnya).
+  Tombol **"Layer FIFO"** per barang membuka dialog tabel per layer: tanggal, qty,
+  harga (melekat), **nilai (qty × harga)**, kedaluwarsa, ref — terurut tertua dulu
+  (urutan konsumsi), dengan baris **Jumlah** (total qty = stok, total nilai).
+- Menegaskan penilaian **FIFO murni** (bukan rata-rata) & mendukung telaah "Persediaan
+  per Layer". Murni read-only, tanpa perubahan alur tulis. `eslint --max-warnings=0`
+  bersih, `yarn build` sukses.
+
+---
+
 ## [#308] Persediaan: tautan Pengadaan + tgl/no kontrak di dialog masuk — 2026-07-16
 
 - **Menyalakan integrasi dokumen sumber yang sudah siap di backend.** Dialog
