@@ -71,6 +71,8 @@ export default function PersediaanPage({ user, onBack }) {
   const [riwayat, setRiwayat] = useState(null);
   const [jenisMasuk, setJenisMasuk] = useState([]);
   const [jenisKeluar, setJenisKeluar] = useState([]);
+  // Register perolehan (Pengadaan) untuk menautkan transaksi masuk ke dokumen sumber
+  const [pengadaanList, setPengadaanList] = useState([]);
   const [peringatan, setPeringatan] = useState(null);
   // Status opname semester berjalan: {sudah, label, terakhir, pesan}
   const [opnameStatus, setOpnameStatus] = useState(null);
@@ -127,6 +129,9 @@ export default function PersediaanPage({ user, onBack }) {
     axios.get(`${API}/persediaan/gudang/daftar`)
       .then((r) => setDaftarGudang(r.data?.items || []))
       .catch(() => setDaftarGudang([]));
+    axios.get(`${API}/pengadaan`)
+      .then((r) => setPengadaanList(r.data?.items || []))
+      .catch(() => setPengadaanList([]));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onSearchChange = (v) => {
@@ -216,6 +221,21 @@ export default function PersediaanPage({ user, onBack }) {
       setSaving(false);
     }
   };
+
+  // Tautkan transaksi masuk ke perolehan Pengadaan; isi otomatis field yang masih kosong.
+  const onPickPerolehan = (id) => setMasuk((m) => {
+    if (!m) return m;
+    const d = { ...m.data, perolehan_id: id };
+    const p = pengadaanList.find((x) => x.id === id);
+    if (p) {
+      if (!d.penyedia) d.penyedia = p.pihak || "";
+      if (!d.no_kontrak) d.no_kontrak = p.nomor_kontrak || "";
+      if (!d.tgl_dokumen) d.tgl_dokumen = p.tanggal_bast || "";
+      if (!d.no_bukti) d.no_bukti = p.nomor_bast || "";
+      if (!d.jenis_dokumen) d.jenis_dokumen = "BAST";
+    }
+    return { ...m, data: d };
+  });
 
   const submitMasuk = async () => {
     if (!masuk) return;
@@ -634,7 +654,8 @@ export default function PersediaanPage({ user, onBack }) {
                             data: {
                               jenis: "pembelian", jumlah: "", harga_satuan: "",
                               expired: "", no_bukti: "", jenis_dokumen: "",
-                              tgl_dokumen: "", no_kontrak: "", penyedia: "", keterangan: "",
+                              tgl_dokumen: "", no_kontrak: "", penyedia: "",
+                              perolehan_id: "", keterangan: "",
                             },
                           })}
                           aria-label={`Transaksi masuk ${it.nama_barang}`}
@@ -865,6 +886,24 @@ export default function PersediaanPage({ user, onBack }) {
                   ))}
                 </select>
               </div>
+              {pengadaanList.length > 0 && (
+                <div className="col-span-2">
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-in-perolehan">Perolehan (Pengadaan) — opsional</label>
+                  <select id="psd-in-perolehan"
+                    value={masuk.data.perolehan_id || ""}
+                    onChange={(e) => onPickPerolehan(e.target.value)}
+                    className="w-full h-9 px-2 rounded-lg border border-border bg-background text-sm text-foreground"
+                    data-testid="persediaan-masuk-perolehan">
+                    <option value="">— tanpa tautan dokumen sumber —</option>
+                    {pengadaanList.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {[p.nomor_bast, p.pihak, p.tanggal_bast].filter(Boolean).join(" · ")}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-muted-foreground mt-1">Tautkan ke BAST di modul Pengadaan — mengisi otomatis penyedia/kontrak/tanggal yang masih kosong.</p>
+                </div>
+              )}
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-in-jumlah">Jumlah</label>
                 <Input id="psd-in-jumlah" type="number" min="1" placeholder="0"
@@ -902,6 +941,18 @@ export default function PersediaanPage({ user, onBack }) {
                 <Input id="psd-in-penyedia"
                   value={masuk.data.penyedia}
                   onChange={(e) => setMasuk((m) => ({ ...m, data: { ...m.data, penyedia: e.target.value } }))} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-in-tgldok">Tgl Dokumen</label>
+                <Input id="psd-in-tgldok" type="date"
+                  value={masuk.data.tgl_dokumen}
+                  onChange={(e) => setMasuk((m) => ({ ...m, data: { ...m.data, tgl_dokumen: e.target.value } }))} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-in-nokontrak">No. Kontrak</label>
+                <Input id="psd-in-nokontrak" placeholder="cth. SPK-05/2026"
+                  value={masuk.data.no_kontrak}
+                  onChange={(e) => setMasuk((m) => ({ ...m, data: { ...m.data, no_kontrak: e.target.value } }))} />
               </div>
               <div className="col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-in-ket">Keterangan</label>
