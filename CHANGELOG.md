@@ -48,6 +48,25 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#301] Master Referensi Akun Neraca (BAS) per golongan BMN — 2026-07-16
+
+- **Referensi baru (riset)** memetakan **golongan kodefikasi → akun neraca aset**
+  (Bagan Akun Standar), agar laporan posisi BMN dapat selaras SAKTI/SIMAK. Menutup
+  celah: `kode_akun` selama ini hanya teks bebas.
+- **Default terkonfirmasi** dari Neraca Percobaan Akrual satker + Laporan Posisi
+  BMN di Neraca berbagai K/L (sumber sekunder resmi): 2 Tanah=131111, 3 Peralatan
+  & Mesin=132111, 4 Gedung & Bangunan=133111, 5 JIJ=134111, 6 Aset Tetap
+  Lainnya=135121, 7 KDP=136111, 8 ATB=162151, 1 Persediaan=117xxx. **Akun per
+  sub-kelompok bervariasi** → nilai representatif per golongan, **ditandai
+  perlu-verifikasi Lampiran BAS** & **dapat ditimpa admin** (pola masa manfaat).
+- **`akun_bas_utils.py`** (murni): `AKUN_NERACA_DEFAULT`, `validate_akun_bas`,
+  `akun_untuk_golongan(kode_barang, peta)`. **`routes/akun_bas.py`**: `GET /akun-bas`
+  (default ditimpa entri satker) + upsert/delete admin. Pustaka §2.5.
+- **3 unit test** murni (suite 395 lulus); `py_compile` bersih. Pemanfaatan di
+  kolom Neraca & UI kelola menyusul.
+
+---
+
 ## [#300] KIR — Kartu Inventaris Ruangan (kartu per ruangan) — 2026-07-16
 
 - **Dokumen penatausahaan baru** melengkapi seri ruangan. `GET /pembukuan/kir-pdf`

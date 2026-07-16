@@ -207,6 +207,19 @@ master bila nama cocok (`cocok_ruangan_master`) — tanda tangan PJ Ruangan + KP
 Form aset menyarankan nama ruangan master (datalist, #299) agar penamaan
 konsisten. Tautan `ruangan_id` FK penuh per aset menyusul bila diperlukan.
 
+### 2.5 Referensi Akun Neraca (BAS) per golongan (#301)
+
+Master `akun_bas` memetakan **golongan kodefikasi → akun neraca aset** (Bagan
+Akun Standar), agar laporan posisi BMN bisa selaras SAKTI/SIMAK. Default riset
+(Jul 2026) dari **Neraca Percobaan Akrual tingkat satker + Laporan Posisi BMN
+di Neraca** berbagai K/L (sumber sekunder resmi): **2 Tanah = 131111**, **3
+Peralatan & Mesin = 132111**, **4 Gedung & Bangunan = 133111**, **5 JIJ =
+134111**, **6 Aset Tetap Lainnya = 135121**, **7 KDP = 136111**, **8 ATB =
+162151 (Software)**, **1 Persediaan = 117xxx** (Barang Konsumsi 117111). **Akun
+6-digit per SUB-KELOMPOK bervariasi** — nilai di sini REPRESENTATIF per golongan,
+**[perlu verifikasi Lampiran BAS / KEP-211/PB/2018]** & dapat ditimpa admin
+(pola referensi masa manfaat). Pemanfaatan di kolom Neraca menyusul.
+
 ---
 
 ## 3. Persediaan (PSAP 05 + praktik SAKTI)
