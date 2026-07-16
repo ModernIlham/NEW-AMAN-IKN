@@ -70,7 +70,7 @@ function getQueueDB() {
 
 // Strip non-serializable fields (resolve/reject) before storing/persisting
 function toPlainItem(item, statusKey) {
-  const { tempId, payload, isEdit, editId, usePatch, baseVersion, idempotencyKey, hadConflict, locked, queuedAt } = item;
+  const { tempId, payload, isEdit, editId, usePatch, baseVersion, idempotencyKey, hadConflict, locked, queuedAt, nama_kegiatan } = item;
   return {
     statusKey,
     tempId,
@@ -80,6 +80,7 @@ function toPlainItem(item, statusKey) {
     usePatch: !!usePatch,
     baseVersion: baseVersion ?? null,
     idempotencyKey: idempotencyKey ?? null,
+    nama_kegiatan: nama_kegiatan || "",
     hadConflict: !!hadConflict,
     // 423 Locked (kegiatan disahkan): retry otomatis tidak akan pernah
     // berhasil — auto-flush melewati item ini; hanya retry/dismiss manual.
@@ -327,7 +328,17 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
         } catch { /* gagal ambil NUP baru → jatuh ke penanganan gagal biasa */ }
       }
 
-      const errorMsg = getApiError(err, err.code === "ECONNABORTED" ? "Koneksi timeout" : "Gagal menyimpan");
+      const _baseErr = getApiError(err, err.code === "ECONNABORTED" ? "Koneksi timeout" : "Gagal menyimpan");
+      // Identitas aset agar mudah dicari di antara puluhan ribu aset & banyak
+      // kegiatan (Kode Aset · NUP · Kegiatan). nama_kegiatan di-stamp ke payload
+      // saat enqueue (DashboardPage) karena hook tak tahu nama kegiatan.
+      const _p = item.payload || {};
+      const _ident = [
+        _p.asset_code && `Kode ${_p.asset_code}`,
+        _p.NUP && `NUP ${_p.NUP}`,
+        item.nama_kegiatan && `Keg. ${item.nama_kegiatan}`,
+      ].filter(Boolean).join(" · ");
+      const errorMsg = _ident ? `[${_ident}] ${_baseErr}` : _baseErr;
       // 423 Locked: kegiatan sudah disahkan — retry tidak akan pernah berhasil,
       // jadi tampilkan toast yang jelas (save berjalan di background sehingga
       // form sudah tertutup dan tidak bisa menampilkan errornya sendiri).
@@ -365,7 +376,7 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
     }
   }, [updateStatus, clearStatus, onItemSaved, onItemFailed, onRowSynced, onConflict]);
 
-  const enqueue = useCallback(({ tempId, payload, isEdit, editId, usePatch, baseVersion, idempotencyKey }) => {
+  const enqueue = useCallback(({ tempId, payload, isEdit, editId, usePatch, baseVersion, idempotencyKey, nama_kegiatan }) => {
     const statusKey = isEdit ? editId : tempId;
     // One idempotency key per logical save — REUSED on network-failure retry so
     // the server dedupes. Conflict retries pass none, so a fresh key is minted
@@ -373,6 +384,9 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
     const item = {
       tempId, payload, isEdit, editId, usePatch, baseVersion,
       idempotencyKey: idempotencyKey || genIdempotencyKey(),
+      // Nama kegiatan HANYA untuk pesan gagal (identitas aset) — TIDAK dikirim
+      // ke server (yang dikirim hanya item.payload).
+      nama_kegiatan: nama_kegiatan || "",
       queuedAt: new Date().toISOString(),
     };
 
