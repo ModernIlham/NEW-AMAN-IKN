@@ -473,3 +473,23 @@ class TestBarisCsvTransaksi:
         trx = {"arah": "opname", "nama_barang": "X"}
         rows = baris_csv_transaksi([trx])
         assert all(len(r) == len(HEADER_CSV_TRANSAKSI) for r in rows)
+
+
+def test_mutasi_periode_buang_baris_serba_nol():
+    """Temuan #21: barang yang seluruh aktivitasnya di LUAR periode (dan saldo
+    nol) tidak boleh muncul sebagai baris serba-nol di laporan mutasi."""
+    jurnal = [
+        # aktivitas hanya SETELAH periode → baris harus hilang
+        {"persediaan_id": "p1", "arah": "masuk", "jumlah": 5, "total": 500,
+         "timestamp": "2026-09-01T00:00:00"},
+        # saldo awal dari sebelum periode, tanpa mutasi dalam periode → TETAP tampil
+        {"persediaan_id": "p2", "arah": "masuk", "jumlah": 3, "total": 300,
+         "timestamp": "2026-01-01T00:00:00"},
+        # mutasi dalam periode → tampil
+        {"persediaan_id": "p3", "arah": "masuk", "jumlah": 2, "total": 200,
+         "timestamp": "2026-06-15T00:00:00"},
+    ]
+    rekap = mutasi_periode(jurnal, "2026-06-01", "2026-06-30")
+    assert "p1" not in rekap
+    assert rekap["p2"]["saldo_awal"] == 3 and rekap["p2"]["saldo_akhir"] == 3
+    assert rekap["p3"]["masuk_qty"] == 2

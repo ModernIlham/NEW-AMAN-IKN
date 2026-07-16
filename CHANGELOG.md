@@ -48,6 +48,30 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#332] Review batch 4: integrasi Pengadaan–Persediaan & laporan persediaan — 2026-07-16
+
+- **#11 — Hapus perolehan tak lagi meninggalkan back-link menggantung**: sebelum
+  register perolehan dihapus, `perolehan_id`/snapshot pada aset tertaut dilepas
+  (`_lepas_perolehan_dari_aset` per baris barang).
+- **#17 — Transaksi massal bisa bertaut BAST Pengadaan**: payload massal kini
+  menerima `perolehan_id` (divalidasi **sekali di muka** — 404 sebelum mutasi
+  stok mana pun), diteruskan ke tiap transaksi masuk sehingga **semua jurnal
+  baris membawa snapshot dokumen sumber** (pola transaksi tunggal).
+- **#21 — Laporan Mutasi tanpa baris serba-nol**: barang yang seluruh
+  aktivitasnya di luar periode (saldo & mutasi nol) tidak lagi dimunculkan
+  (`mutasi_periode`, + uji unit; saldo-awal-tanpa-mutasi tetap tampil).
+- **#22 — Kertas kerja opname per Lokasi/Gudang**: `GET
+  /persediaan/opname/kertas-kerja-pdf?gudang=` memfilter satu gudang + subjudul
+  lokasi — opname fisik per gudang.
+- **#31 dilewati dengan alasan**: kategori aset bersumber master `categories`;
+  menyuntik uraian kodefikasi sebagai kategori akan menciptakan nilai kategori
+  liar di filter/laporan (dicatat di backlog).
+- Verifikasi: suite **423 lulus** (+1 uji mutasi); smoke — kertas kerja per
+  gudang render, massal ber-`perolehan_id` (2 jurnal ber-snapshot; id salah →
+  404 sebelum mutasi), hapus perolehan melepas back-link aset.
+
+---
+
 ## [#331] Review batch 3: tanda tangan seluruh dokumen dari registry Pejabat — 2026-07-16
 
 - **Satu resolver tanda tangan lintas modul** (temuan #26): 6 blok "Kuasa

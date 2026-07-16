@@ -329,9 +329,11 @@ async def import_persediaan(file: UploadFile = File(...), _user: dict = Depends(
 
 
 @persediaan_router.get("/persediaan/opname/kertas-kerja-pdf")
-async def opname_kertas_kerja_pdf(_user: dict = Depends(require_user)):
+async def opname_kertas_kerja_pdf(gudang: str = "",
+                                  _user: dict = Depends(require_user)):
     """Kertas kerja opname (pustaka §3.3): saldo buku + kolom fisik KOSONG
-    untuk diisi saat penghitungan — pola "Cetak Bahan Opname Fisik" SAKTI."""
+    untuk diisi saat penghitungan — pola "Cetak Bahan Opname Fisik" SAKTI.
+    Dapat difilter satu Lokasi/Gudang (temuan #22 — opname per gudang)."""
     from io import BytesIO
 
     from reportlab.lib.units import mm as rl_mm
@@ -344,7 +346,10 @@ async def opname_kertas_kerja_pdf(_user: dict = Depends(require_user)):
     )
 
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
-    items = [x async for x in db.persediaan.find({}, {"_id": 0, "batches": 0})]
+    filter_gudang = str(gudang or "").strip()
+    query = ({"lokasi": {"$regex": f"^{re.escape(filter_gudang)}$", "$options": "i"}}
+             if filter_gudang else {})
+    items = [x async for x in db.persediaan.find(query, {"_id": 0, "batches": 0})]
     items.sort(key=lambda x: (x.get("nama_barang") or "", x.get("kode_barang") or ""))
 
     today_iso = datetime.now(timezone.utc).date().isoformat()
@@ -353,7 +358,9 @@ async def opname_kertas_kerja_pdf(_user: dict = Depends(require_user)):
     st = _get_report_styles()
     elements = []
     elements.extend(_kop_surat_flowables(settings, doc.width))
-    elements.extend(_title_block("KERTAS KERJA OPNAME FISIK PERSEDIAAN"))
+    elements.extend(_title_block(
+        "KERTAS KERJA OPNAME FISIK PERSEDIAAN",
+        subjudul=f"Lokasi/Gudang: {filter_gudang}" if filter_gudang else None))
     elements.append(Paragraph(
         f"Saldo buku per {_fmt_tanggal_id(today_iso)} — kolom Stok Fisik & Keterangan diisi saat penghitungan.",
         st['Meta']))
@@ -736,6 +743,7 @@ class TransaksiMassalIn(BaseModel):
     jenis_dokumen: str = ""                 # masuk
     tgl_dokumen: str = ""                   # masuk
     penyedia: str = ""                      # masuk
+    perolehan_id: str = ""                  # masuk — tautan BAST Pengadaan (#17)
     unit_penerima: str = ""                 # keluar
     keterangan: str = ""
     items: list[ItemMassalIn] = Field(min_length=1, max_length=100)
@@ -757,6 +765,10 @@ async def transaksi_massal(payload: TransaksiMassalIn, user: dict = Depends(requ
     if payload.jenis not in peta_jenis:
         valid = ", ".join(peta_jenis)
         raise HTTPException(status_code=400, detail=f"Jenis tidak dikenal (pilihan: {valid})")
+    # Tautan BAST Pengadaan (#17): validasi SEKALI di muka (404 sebelum ada
+    # mutasi stok barang mana pun); snapshot per baris diambil transaksi_masuk.
+    if payload.arah == "masuk" and str(payload.perolehan_id or "").strip():
+        await _ambil_snapshot_perolehan(payload.perolehan_id)
 
     hasil = []
     for it in payload.items:
@@ -767,6 +779,7 @@ async def transaksi_massal(payload: TransaksiMassalIn, user: dict = Depends(requ
                     harga_satuan=it.harga_satuan, expired=it.expired,
                     no_bukti=payload.no_bukti, jenis_dokumen=payload.jenis_dokumen,
                     tgl_dokumen=payload.tgl_dokumen, penyedia=payload.penyedia,
+                    perolehan_id=payload.perolehan_id,
                     keterangan=payload.keterangan,
                 ), user=user)
             else:

@@ -360,6 +360,12 @@ def mutasi_periode(jurnal_rows, dari_iso: str, sampai_iso: str):
         # transaksi setelah `sampai` diabaikan (laporan periode)
     for e in rekap.values():
         e["saldo_akhir"] = e["saldo_awal"] + e["masuk_qty"] - e["keluar_qty"]
+    # Baris serba-nol (tanpa mutasi dalam periode DAN saldo awal/akhir nol —
+    # mis. barang yang seluruh transaksinya SETELAH periode) tidak informatif
+    # di laporan mutasi → dibuang (temuan review #21).
+    rekap = {pid: e for pid, e in rekap.items()
+             if e["saldo_awal"] or e["saldo_akhir"]
+             or e["masuk_qty"] or e["keluar_qty"]}
     return rekap
 
 
