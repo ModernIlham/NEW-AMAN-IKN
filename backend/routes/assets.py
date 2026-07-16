@@ -710,6 +710,54 @@ async def _enforce_pegawai_terdaftar(pengguna_nip):
                    f"'Wajib Pegawai Terdaftar'.")
 
 
+async def buat_aset_draft(data: AssetCreate, audit_user: str = "system") -> dict:
+    """Buat SATU aset draft TANPA foto — dipakai Pengadaan "buat draft aset dari
+    perolehan" (evaluasi #5). JAGA SELARAS dengan create_asset: bentuk dokumen
+    photoless di bawah harus identik dengan `asset_doc` pada create_asset.
+
+    Melewati lapisan Idempotency-Key (pemanggil menangani pengulangan) tetapi
+    TIDAK melewati: kunci kegiatan disahkan, validasi pegawai (opt-in),
+    keunikan kode+NUP per kegiatan, registry field (model AssetCreate), audit,
+    dan notifikasi realtime.
+    """
+    await ensure_activity_not_sealed(data.activity_id)
+    await _enforce_pegawai_terdaftar(data.pengguna_nip)
+    existing = await db.assets.find_one({
+        "asset_code": data.asset_code, "NUP": data.NUP or "",
+        "activity_id": data.activity_id})
+    if existing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Kombinasi Kode Barang '{data.asset_code}' dan NUP '{data.NUP}' sudah digunakan dalam kegiatan ini")
+    asset_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    asset_doc = {
+        "id": asset_id,
+        **data.model_dump(),
+        "photos": [],
+        "photo_gridfs_ids": [],
+        "photo_thumbnails": [],
+        "photo": None,
+        "thumbnail": None,
+        "gallery_thumbnail": None,
+        "thumbnail_index": 0,
+        "document_checklist": [],
+        "created_at": now,
+        "updated_at": now,
+        "version": 1,
+    }
+    await db.assets.insert_one(asset_doc)
+    invalidate_asset_cache()
+    await log_audit("create", data.activity_id, asset_id, data.asset_code,
+                    data.asset_name, audit_user,
+                    detail="Draft aset dibuat dari perolehan Pengadaan",
+                    nup=data.NUP or "")
+    await notify_asset_change(data.activity_id, "asset_created",
+                              {"id": asset_id, "asset_code": data.asset_code,
+                               "asset_name": data.asset_name}, audit_user)
+    return asset_doc
+
+
 @assets_router.post("/assets", response_model=AssetResponse)
 async def create_asset(asset: AssetCreate, request: Request, _user: dict = Depends(require_user)):
     """Create a new asset. Supports Idempotency-Key header to safely retry on network errors."""

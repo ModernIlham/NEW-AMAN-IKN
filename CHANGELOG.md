@@ -48,6 +48,27 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#328] Pengadaan: buat draft aset dari perolehan (evaluasi #5) — 2026-07-16
+
+- **Menutup rantai perolehan → penatausahaan.** Tombol **"Buat Draft Aset"** pada
+  register perolehan (muncul bila ada barang belum bertaut): pilih **kegiatan
+  inventarisasi tujuan** → tiap baris `barang[]` tanpa `asset_id` dibuatkan
+  **aset draft** (status "Belum Diinventarisasi") lalu **tertaut balik** +
+  proyeksi dokumen sumber (`perolehan_id`/BAST).
+- Draft memakai **jalur create aset yang ada**: helper baru `buat_aset_draft`
+  (`routes/assets.py`, bentuk dokumen photoless identik `create_asset`) —
+  registry `AssetCreate`, keunikan kode+NUP per kegiatan, kunci kegiatan
+  disahkan, validasi pegawai opt-in, audit & notifikasi tetap berlaku.
+  **NUP dinomori otomatis** melanjutkan max per (kode, kegiatan); kategori
+  dicocokkan dari `kode_aset`; harga = harga satuan; tanggal = tanggal BAST;
+  jumlah BAST > 1 dicatat di catatan. Baris tanpa kode barang **dilewati**.
+- Endpoint `POST /pengadaan/{id}/buat-draft-aset` + dialog UI di
+  `PengadaanPage.jsx`. Smoke-test end-to-end (FakeDB): draft dibuat NUP lanjut,
+  tertaut balik, baris tertaut/tanpa-kode dilewati, panggilan ulang aman.
+  `pytest` **417 lulus**, `eslint` bersih, `yarn build` sukses.
+
+---
+
 ## [#327] Evaluasi: status perbaikan rekomendasi #1–#5 — 2026-07-16
 
 - `docs/EVALUASI-FITUR-INTEGRASI.md` §7: tabel status perbaikan — **#1 Selesai**
