@@ -522,6 +522,11 @@ const AssetForm = memo(({
   const [kodeQuery, setKodeQuery] = useState("");
   const [kodeResults, setKodeResults] = useState([]);
   const [kodeLoading, setKodeLoading] = useState(false);
+  // Pemilih pengguna dari Master Pegawai (#R3, offline-tolerant). pegawaiAll:
+  // undefined = belum dimuat, null = tak tersedia (offline), array = daftar.
+  const [pegawaiAll, setPegawaiAll] = useState(undefined);
+  const [pegawaiPickerOpen, setPegawaiPickerOpen] = useState(false);
+  const [pegawaiQuery, setPegawaiQuery] = useState("");
   // Asset version (OCC): appended as ?v= cache-buster to all media streaming
   // URLs (photo strip, checklist photos/PDFs) so the browser cache is busted
   // whenever the asset changes.
@@ -546,6 +551,17 @@ const AssetForm = memo(({
     }).catch(() => {});
     return () => { cancelled = true; };
   }, [isOpen, ruanganNames.length]);
+
+  // Muat Master Pegawai sekali saat form dibuka (best-effort; untuk pemilih
+  // pengguna & peringatan "NIP belum terdaftar"). Offline diabaikan (null).
+  useEffect(() => {
+    if (!isOpen || pegawaiAll !== undefined) return undefined;
+    let cancelled = false;
+    axios.get(`${API}/pegawai`).then((r) => {
+      if (!cancelled) setPegawaiAll(r.data?.items || []);
+    }).catch(() => { if (!cancelled) setPegawaiAll(null); });
+    return () => { cancelled = true; };
+  }, [isOpen, pegawaiAll]);
 
   // Cek kodefikasi LIVE (debounce) saat Kode Aset berubah: peringatan lunak bila
   // prefix kode tak terdaftar di referensi. Non-blocking, best-effort — gagal /
@@ -988,6 +1004,36 @@ const AssetForm = memo(({
     clearFieldError("asset_name");
     setKodePickerOpen(false);
     setKodeQuery("");
+  }, [clearFieldError]);
+
+  // Hasil pemilih pegawai (filter client-side by nama/NIP). null = offline.
+  const pegawaiResults = useMemo(() => {
+    if (!Array.isArray(pegawaiAll)) return pegawaiAll;   // undefined/null diteruskan
+    const q = pegawaiQuery.trim().toLowerCase();
+    const list = !q ? pegawaiAll : pegawaiAll.filter((p) =>
+      [p.nama, p.nip].some((v) => String(v || "").toLowerCase().includes(q)));
+    return list.slice(0, 40);
+  }, [pegawaiAll, pegawaiQuery]);
+
+  // Peringatan lunak: NIP pengguna diisi tapi tak ada di Master Pegawai.
+  const penggunaNipWarn = useMemo(() => {
+    const nip = (formData.pengguna_nip || "").trim();
+    if (!nip || !Array.isArray(pegawaiAll)) return false;
+    return !pegawaiAll.some((p) => String(p.nip || "").trim() === nip);
+  }, [formData.pengguna_nip, pegawaiAll]);
+
+  // Pilih pegawai dari master → isi user (nama) + pengguna_nip + jabatan (bila kosong).
+  const onPickPegawai = useCallback((p) => {
+    setFormData(prev => ({
+      ...prev,
+      user: p.nama || prev.user,
+      pengguna_nip: p.nip || prev.pengguna_nip,
+      pengguna_jabatan: (prev.pengguna_jabatan || "").trim() ? prev.pengguna_jabatan : (p.jabatan || ""),
+    }));
+    clearFieldError("user");
+    clearFieldError("pengguna_nip");
+    setPegawaiPickerOpen(false);
+    setPegawaiQuery("");
   }, [clearFieldError]);
 
   // Urutan NUP LOKAL per (kegiatan|kode aset). Backend next-nup hanya menghitung
@@ -2135,11 +2181,48 @@ const AssetForm = memo(({
                 )}
                 <div className="space-y-1">
                   <Label className="text-xs">{PENGGUNA_NAME_LABELS[formData.pengguna_melekat_ke] || "Pengguna"}</Label>
-                  <Input name="user" value={formData.user} onChange={handleInputChange} className="h-8" data-testid="input-pengguna-nama" />
+                  <div className="flex gap-1.5">
+                    <Input name="user" value={formData.user} onChange={handleInputChange} className="h-8 flex-1 min-w-0" data-testid="input-pengguna-nama" />
+                    <DropdownMenu open={pegawaiPickerOpen} onOpenChange={setPegawaiPickerOpen}>
+                      <DropdownMenuTrigger asChild>
+                        <button type="button" title="Pilih dari Master Pegawai" className="h-8 px-2.5 rounded-md border border-input bg-card hover:bg-accent flex items-center gap-1 text-xs shrink-0" data-testid="pengguna-pegawai-picker">
+                          <Search className="w-3.5 h-3.5" /><span className="hidden sm:inline">Pegawai</span>
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="w-[calc(100vw-3rem)] max-w-sm">
+                        <div className="p-2">
+                          <Input placeholder="Cari nama / NIP pegawai…" value={pegawaiQuery} onChange={e => setPegawaiQuery(e.target.value)} className="h-8 mb-2" data-testid="pengguna-pegawai-search" />
+                          <ScrollArea className="h-56">
+                            {pegawaiResults === null ? (
+                              <div className="text-xs text-center text-muted-foreground py-3">Master Pegawai tak tersedia (offline). Ketik manual.</div>
+                            ) : pegawaiResults === undefined ? (
+                              <div className="text-xs text-center text-muted-foreground py-3">Memuat…</div>
+                            ) : pegawaiResults.length === 0 ? (
+                              <div className="text-xs text-center text-muted-foreground py-3">{pegawaiQuery.trim() ? "Tidak ditemukan" : "Belum ada pegawai di master"}</div>
+                            ) : pegawaiResults.map(p => (
+                              <button type="button" key={p.id || p.nip} onClick={() => onPickPegawai(p)} className="w-full text-left px-2 py-1.5 rounded hover:bg-accent flex items-start gap-2 min-w-0" data-testid={`pengguna-pegawai-opt-${p.nip || p.id}`}>
+                                <span className="flex-1 min-w-0">
+                                  <span className="block text-xs text-foreground/90 break-words">{p.nama}</span>
+                                  <span className="block text-[10px] text-muted-foreground font-mono">{p.nip || "tanpa NIP"}{p.jabatan ? ` · ${p.jabatan}` : ""}{p.unit_kerja ? ` · ${p.unit_kerja}` : ""}</span>
+                                </span>
+                                {(formData.pengguna_nip && p.nip === formData.pengguna_nip) && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />}
+                              </button>
+                            ))}
+                          </ScrollArea>
+                        </div>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">NIP/NIK Pegawai</Label>
                   <Input name="pengguna_nip" value={formData.pengguna_nip} onChange={handleInputChange} placeholder="NIP/NIK pegawai pengguna" className="h-8" data-testid="input-pengguna-nip" />
+                  {penggunaNipWarn && (
+                    <p className="text-[10px] text-amber-600 dark:text-amber-400 flex items-start gap-1" data-testid="pengguna-nip-warning">
+                      <AlertTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                      <span>NIP/NIK belum terdaftar di Master Pegawai — daftarkan agar pencatatan konsisten.</span>
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Nomor BAST</Label>
