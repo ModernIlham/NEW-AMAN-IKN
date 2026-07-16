@@ -48,6 +48,20 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#299] Form aset: saran ruangan (master) di field Lokasi — 2026-07-16
+
+- **Menghubungkan aset ke Master Ruangan (#294) secara ringan** tanpa mengubah
+  skema aset. Field **Lokasi** di form aset kini punya **datalist** (autocomplete)
+  berisi ruangan master (`kode — nama`) → penamaan ruangan **konsisten** sehingga
+  **DBR** (#297) mengelompokkan rapi; tetap boleh diketik bebas untuk data lama.
+- Saran dimuat sekali saat form dibuka (`GET /ruangan`, best-effort; offline
+  diabaikan). Perubahan UI murni — nilai tetap tersimpan di field `location` yang
+  ada (tanpa field/registry baru, tanpa dampak offline-snapshot).
+- eslint 0 error, `yarn build` (craco) sukses. Tautan `ruangan_id` FK penuh &
+  KIR per ruangan menyusul bila diperlukan.
+
+---
+
 ## [#298] Tombol unduh DBR di hub Pelaporan — 2026-07-16
 
 - **Menyurfacekan DBR (#297) di UI.** Tombol **"DBR"** ditambahkan di kartu
