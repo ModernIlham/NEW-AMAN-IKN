@@ -158,7 +158,17 @@ async def ubah_pegawai(pegawai_id: str, payload: PegawaiIn,
 
 @pegawai_router.delete("/pegawai/{pegawai_id}")
 async def hapus_pegawai(pegawai_id: str, user: dict = Depends(require_admin)):
-    """Hapus pegawai (admin)."""
+    """Hapus pegawai (admin). Ditolak bila NIP-nya masih dipakai aset (temuan #34)."""
+    peg = await db.pegawai.find_one({"id": pegawai_id}, {"_id": 0, "nip": 1, "nama": 1})
+    if peg and str(peg.get("nip") or "").strip():
+        dipakai = await db.assets.count_documents(
+            {"pengguna_nip": str(peg["nip"]).strip(), "dihapus": {"$ne": True}})
+        if dipakai:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Pegawai {peg.get('nama')} (NIP {peg['nip']}) masih tercatat "
+                       f"sebagai pengguna pada {dipakai} aset — pindahkan aset atau "
+                       f"ubah status pegawai menjadi nonaktif, jangan dihapus.")
     res = await db.pegawai.delete_one({"id": pegawai_id})
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Pegawai tidak ditemukan")

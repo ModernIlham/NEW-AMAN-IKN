@@ -31,6 +31,22 @@ logger = logging.getLogger(__name__)
 reports_router = APIRouter()
 
 
+def _tahun_perolehan(v):
+    """Tahun 4-digit dari tanggal perolehan aneka format (temuan #43).
+
+    'YYYY-MM-DD' → potong 4; 'DD/MM/YYYY' & format lain → cari 19xx/20xx
+    pertama; tak ketemu → '-'. Dulu str[:4] menghasilkan 'DD/M' utk data lama.
+    """
+    import re as _re
+    s = str(v or "").strip()
+    if not s:
+        return "-"
+    if len(s) >= 4 and s[:4].isdigit() and s[:2] in ("19", "20"):
+        return s[:4]
+    m = _re.search(r"(19|20)\d{2}", s)
+    return m.group(0) if m else "-"
+
+
 def _jinja_env():
     """Jinja Environment with HTML/XML autoescaping ON for every report template.
     Autoescape neutralises XSS from user-supplied asset/satker fields rendered
@@ -1120,7 +1136,7 @@ async def generate_dbhi_pdf(activity_id: str, dbhi_type: str, _user: dict = Depe
     for idx, asset in enumerate(filtered, 1):
         val = safe_price(asset)
         total_nilai += val
-        year = str(asset.get("purchase_date", ""))[:4] if asset.get("purchase_date") else "-"
+        year = _tahun_perolehan(asset.get("purchase_date"))
 
         if extra == "berlebih":
             row = [
@@ -2312,7 +2328,10 @@ async def generate_calbmn_pdf(
 
     ambang_pm = fmt_rp(AMBANG_KAPITALISASI_DEFAULT.get("3", 0))
     ambang_gb = fmt_rp(AMBANG_KAPITALISASI_DEFAULT.get("4", 0))
-    satker = settings.get("kop_line2") or settings.get("kop_line1") or "Satuan Kerja"
+    # Temuan #40: field kop_line1/kop_line2 tidak pernah ada di setelan —
+    # pakai field setelan nyata (sub-unit → unit organisasi → instansi).
+    satker = (settings.get("nama_sub_unit") or settings.get("nama_unit_organisasi")
+              or settings.get("nama_instansi") or "Satuan Kerja")
 
     buffer = io.BytesIO()
     doc = _std_doc(buffer)
@@ -3886,7 +3905,8 @@ async def _build_executive_grouped_data(activity_id: str, detail_fields=None):
         status = ", ".join(f"{stat_counts[name]} {abbr}" for name, abbr in stat_abbr if stat_counts.get(name))
 
         brand_model = f"{key.get('brand', '')} {key.get('model', '')}".strip()
-        year = str(key.get("purchase_date", ""))[:4] if key.get("purchase_date") else ""
+        year = _tahun_perolehan(key.get("purchase_date"))
+        year = "" if year == "-" else year
         category = members[0].get("category", "") if members else ""
 
         # Baris detail opsional (di-toggle via query param detail_fields):
@@ -4078,7 +4098,8 @@ async def _build_satker_report_v2(activity_id: str):
         cond = a.get("condition", "") or ""
         cb, cc = cond_map.get(cond, ("", "")) if inv == "Ditemukan" and cond else ("", "")
         sb, sc = stat_map.get(inv, (inv, ""))
-        year = str(a.get("purchase_date", "") or "")[:4]
+        year = _tahun_perolehan(a.get("purchase_date"))
+        year = "" if year == "-" else year
         brand = a.get("brand", "") or ""
         model = a.get("model", "") or ""
         cat_raw = a.get("category") or ""

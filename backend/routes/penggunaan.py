@@ -53,8 +53,22 @@ async def daftar_pemegang(
                 or s in (r["jabatan"] or "").lower()]
     total = len(rows)
     start = (page - 1) * page_size
+    halaman = rows[start:start + page_size]
+    # Perkaya dgn Master Pegawai via NIP (temuan #36) — additif, hanya halaman ini.
+    nips = {r.get("nip") for r in halaman if str(r.get("nip") or "").strip()}
+    if nips:
+        peg_map = {}
+        async for pgw in db.pegawai.find(
+                {"nip": {"$in": list(nips)}},
+                {"_id": 0, "nip": 1, "nama": 1, "unit_kerja": 1, "status": 1}):
+            peg_map[pgw["nip"]] = pgw
+        for r in halaman:
+            m = peg_map.get(str(r.get("nip") or "").strip())
+            r["pegawai_master_nama"] = (m or {}).get("nama", "")
+            r["pegawai_master_unit"] = (m or {}).get("unit_kerja", "")
+            r["pegawai_terdaftar"] = bool(m)
     return {
-        "items": rows[start:start + page_size],
+        "items": halaman,
         "total": total, "page": page, "page_size": page_size,
         "total_pages": max(1, -(-total // page_size)),
         "total_pemegang": total,

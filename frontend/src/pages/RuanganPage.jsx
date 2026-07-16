@@ -56,10 +56,22 @@ export default function RuanganPage({ user, onBack }) {
 
   useEffect(() => {
     load();
-    // Kandidat penanggung jawab: pejabat berperan penanggung_jawab_ruangan.
+    // Kandidat penanggung jawab: pejabat berperan penanggung_jawab_ruangan
+    // yang masih berlaku hari ini (cermin pejabat_utils._berlaku_pada — aktif
+    // dan rentang berlaku_mulai/selesai mencakup tanggal ini).
     axios.get(`${API}/pejabat`).then((r) => {
       const all = r.data?.items || [];
-      setPjList(all.filter((p) => (p.peran || []).includes("penanggung_jawab_ruangan")));
+      const now = new Date();
+      const hariIni = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      setPjList(all.filter((p) => {
+        if (!(p.peran || []).includes("penanggung_jawab_ruangan")) return false;
+        if (p.aktif === false) return false;
+        const mulai = String(p.berlaku_mulai || "").slice(0, 10);
+        const selesai = String(p.berlaku_selesai || "").slice(0, 10);
+        if (mulai && hariIni < mulai) return false;
+        if (selesai && hariIni > selesai) return false;
+        return true;
+      }));
     }).catch(() => {});
   }, [load]);
 
@@ -245,6 +257,11 @@ export default function RuanganPage({ user, onBack }) {
                   <select value={form.penanggung_jawab_id} onChange={(e) => onPickPj(e.target.value)}
                     className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm" data-testid="ruangan-form-pj">
                     <option value="">— pilih dari pejabat —</option>
+                    {form.penanggung_jawab_id && !pjList.some((p) => p.id === form.penanggung_jawab_id) && (
+                      <option value={form.penanggung_jawab_id}>
+                        {form.penanggung_jawab_nama || "Pejabat lama"} (kedaluwarsa)
+                      </option>
+                    )}
                     {pjList.map((p) => <option key={p.id} value={p.id}>{p.nama}{p.jabatan ? ` (${p.jabatan})` : ""}</option>)}
                   </select>
                 </Field>
