@@ -48,6 +48,22 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#318] Form aset: pengguna terhubung ke Master Pegawai — 2026-07-16
+
+- **Pemilih pegawai** pada field Pengguna di form aset (`AssetForm.jsx`). Tombol
+  **Pegawai** membuka dropdown pencarian **Master Pegawai** (`GET /pegawai`,
+  filter nama/NIP); memilih satu **mengisi nama pengguna (`user`) + `pengguna_nip`
+  + `pengguna_jabatan`** (jabatan diisi bila masih kosong). Mendukung permintaan
+  "pencatatan harus pegawai yang terdaftar" + halaman Distribusi Per Pengguna (#317).
+- **Peringatan lunak** "NIP/NIK belum terdaftar di Master Pegawai" bila NIP diisi
+  manual tapi tak cocok — **non-blocking** (tak menghalangi simpan; data lama aman).
+- **Offline-safe**: master dimuat sekali saat form dibuka (best-effort); gagal/offline
+  → pemilih tampil "tak tersedia", ketik manual tetap jalan. Tanpa perubahan
+  registry (`user`/`pengguna_nip`/`pengguna_jabatan` sudah ada). `yarn lint` 0 error,
+  `yarn build` sukses.
+
+---
+
 ## [#317] Laporan Eksekutif: halaman Distribusi Per Pengguna (key NIP/NIK, terhubung Master Pegawai) — 2026-07-16
 
 - **Halaman baru "Distribusi Per Pengguna"** di Laporan Eksekutif. Aset
