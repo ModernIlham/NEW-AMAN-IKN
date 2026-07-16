@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, ShoppingCart, Plus, Search, Trash2, X, Coins,
-  ClipboardCheck, Download, Link2, Paperclip, Upload,
+  ClipboardCheck, Download, Link2, Paperclip, Upload, PackagePlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +36,9 @@ export default function PengadaanPage({ user, onBack }) {
   const [taut, setTaut] = useState(null);
   // Dialog lampiran berkas: {perolehan, uploading}
   const [lamp, setLamp] = useState(null);
+  // Dialog buat draft aset dari perolehan (evaluasi #5): {perolehan, activityId, saving}
+  const [draftAset, setDraftAset] = useState(null);
+  const [kegiatanList, setKegiatanList] = useState([]);
   const lampInputRef = useRef(null);
   const [cari, setCari] = useState("");
   const [hasilCari, setHasilCari] = useState([]);
@@ -57,6 +60,10 @@ export default function PengadaanPage({ user, onBack }) {
     axios.get(`${API}/penganggaran`)
       .then((r) => setOpsiAnggaran(r.data?.items || []))
       .catch(() => setOpsiAnggaran([]));
+    // Daftar kegiatan inventarisasi — tujuan "buat draft aset" (best-effort)
+    axios.get(`${API}/inventory-activities`)
+      .then((r) => setKegiatanList(Array.isArray(r.data) ? r.data : []))
+      .catch(() => setKegiatanList([]));
   }, []);
   useEffect(() => { muat(); }, [muat]);
 
@@ -153,6 +160,30 @@ export default function PengadaanPage({ user, onBack }) {
       muat();
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Gagal menghapus lampiran");
+    }
+  };
+
+  // Buat aset draft dari baris barang yang belum bertaut (evaluasi #5).
+  const buatDraftAset = async () => {
+    if (!draftAset) return;
+    if (!draftAset.activityId) { toast.error("Pilih kegiatan inventarisasi tujuan"); return; }
+    setDraftAset((d) => ({ ...d, saving: true }));
+    try {
+      const r = await axios.post(`${API}/pengadaan/${draftAset.perolehan.id}/buat-draft-aset`, {
+        activity_id: draftAset.activityId,
+      });
+      const d = r.data || {};
+      toast.success(`${d.dibuat} aset draft dibuat di "${d.kegiatan}"`
+        + (d.dilewati_tertaut ? ` · ${d.dilewati_tertaut} sudah tertaut` : "")
+        + (d.dilewati_tanpa_kode ? ` · ${d.dilewati_tanpa_kode} dilewati (tanpa kode barang)` : ""));
+      if ((d.gagal || []).length) {
+        toast.warning(`${d.gagal.length} baris gagal — contoh: ${d.gagal[0]}`);
+      }
+      setDraftAset(null);
+      muat();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal membuat draft aset");
+      setDraftAset((d) => (d ? { ...d, saving: false } : d));
     }
   };
 
@@ -257,6 +288,16 @@ export default function PengadaanPage({ user, onBack }) {
                         </span>
                         <p className="text-sm font-semibold text-foreground flex-1 min-w-[140px] truncate">{p.pihak}</p>
                         <span className="text-[11px] text-muted-foreground">{fmtRp(p.nilai)}</span>
+                        {(p.barang || []).some((b) => !b.asset_id) && (
+                          <button type="button" aria-label="Buat draft aset dari perolehan"
+                            title="Buat draft aset untuk barang yang belum bertaut"
+                            onClick={() => setDraftAset({ perolehan: p, activityId: "", saving: false })}
+                            className="h-7 px-2 rounded-lg border border-emerald-500/40 bg-emerald-600/10 text-emerald-600 dark:text-emerald-400 flex items-center gap-1 text-[10px] font-semibold hover:bg-emerald-600/20 min-h-0 min-w-0"
+                            data-testid={`pengadaan-draft-aset-${p.id}`}>
+                            <PackagePlus className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Buat Draft Aset</span>
+                          </button>
+                        )}
                         <button type="button" aria-label="Lampiran berkas"
                           onClick={() => setLamp({ perolehan: p, uploading: false })}
                           className="h-7 w-7 rounded-lg border border-border text-foreground/70 flex items-center justify-center hover:bg-muted min-h-0 min-w-0"
@@ -531,6 +572,55 @@ export default function PengadaanPage({ user, onBack }) {
               ))}
             </ul>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog buat draft aset dari perolehan (evaluasi #5) ── */}
+      <Dialog open={!!draftAset} onOpenChange={(o) => { if (!o) setDraftAset(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Buat Draft Aset — BAST {draftAset?.perolehan?.nomor_bast}</DialogTitle>
+            <DialogDescription className="text-xs">
+              Tiap baris barang yang <strong>belum bertaut</strong> dibuatkan aset draft
+              (status &quot;Belum Diinventarisasi&quot;) di kegiatan terpilih — NUP otomatis,
+              harga/tanggal/BAST terisi dari perolehan, lalu tertaut balik. Baris tanpa
+              kode barang dilewati (isi kode dulu lewat Tautkan/registrasi).
+            </DialogDescription>
+          </DialogHeader>
+          {draftAset && (
+            <div className="space-y-3">
+              <p className="text-xs text-foreground/90">
+                {(draftAset.perolehan.barang || []).filter((b) => !b.asset_id && (b.kode || "").trim()).length} baris siap dibuatkan draft
+                {(draftAset.perolehan.barang || []).some((b) => !b.asset_id && !(b.kode || "").trim())
+                  && ` · ${(draftAset.perolehan.barang || []).filter((b) => !b.asset_id && !(b.kode || "").trim()).length} baris tanpa kode akan dilewati`}
+              </p>
+              <div>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="draft-aset-kegiatan">Kegiatan inventarisasi tujuan</label>
+                <select id="draft-aset-kegiatan" value={draftAset.activityId}
+                  onChange={(e) => setDraftAset((d) => ({ ...d, activityId: e.target.value }))}
+                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                  data-testid="pengadaan-draft-kegiatan">
+                  <option value="">— pilih kegiatan —</option>
+                  {kegiatanList.map((k) => (
+                    <option key={k.id} value={k.id}>
+                      {k.nama_kegiatan || k.id}{k.tahun ? ` (${k.tahun})` : ""}
+                    </option>
+                  ))}
+                </select>
+                {kegiatanList.length === 0 && (
+                  <p className="text-[10px] text-muted-foreground mt-1">Belum ada kegiatan inventarisasi — buat dulu di halaman kegiatan.</p>
+                )}
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setDraftAset(null)}>Batal</Button>
+            <Button onClick={buatDraftAset} disabled={draftAset?.saving || !draftAset?.activityId}
+              data-testid="pengadaan-draft-submit">
+              {draftAset?.saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <PackagePlus className="w-4 h-4 mr-1.5" />}
+              Buat Draft
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

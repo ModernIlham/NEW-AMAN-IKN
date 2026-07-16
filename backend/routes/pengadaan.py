@@ -256,6 +256,105 @@ async def tautkan_barang(perolehan_id: str, payload: TautkanIn,
     return _enrich(p)
 
 
+class BuatDraftAsetIn(BaseModel):
+    activity_id: str = Field(min_length=1)   # kegiatan tujuan (dipilih saat aksi)
+
+
+@pengadaan_router.post("/pengadaan/{perolehan_id}/buat-draft-aset")
+async def buat_draft_aset_dari_perolehan(perolehan_id: str,
+                                         payload: BuatDraftAsetIn,
+                                         user: dict = Depends(require_user)):
+    """Buat aset draft dari baris barang perolehan yang BELUM bertaut (evaluasi #5).
+
+    Untuk tiap baris `barang[]` tanpa `asset_id`: buat aset draft di kegiatan
+    inventarisasi terpilih lewat jalur create aset yang ada (`buat_aset_draft`
+    — registry/keunikan/kunci-kegiatan/audit tetap berlaku), NUP dinomori
+    otomatis per (kode, kegiatan), lalu tautkan balik `barang[].asset_id` +
+    proyeksi dokumen sumber. Baris tanpa kode barang DILEWATI (isi kode dulu).
+    Satu baris = satu aset draft (harga = harga satuan; jumlah BAST dicatat).
+    """
+    from models import AssetCreate
+    from routes.assets import buat_aset_draft
+
+    p = await db.pengadaan.find_one({"id": perolehan_id}, {"_id": 0})
+    if not p:
+        raise HTTPException(status_code=404, detail="Perolehan tidak ditemukan")
+    act = await db.inventory_activities.find_one(
+        {"id": payload.activity_id}, {"_id": 0, "id": 1, "nama_kegiatan": 1})
+    if not act:
+        raise HTTPException(status_code=404,
+                            detail="Kegiatan inventarisasi tidak ditemukan")
+    kategori_by_kode = {
+        c["kode_aset"]: c.get("label", "")
+        async for c in db.categories.find({}, {"_id": 0, "kode_aset": 1, "label": 1})
+        if c.get("kode_aset")}
+
+    barang = p.get("barang") or []
+    now = datetime.now(timezone.utc).isoformat()
+    dibuat, dilewati_tertaut, dilewati_tanpa_kode = 0, 0, 0
+    gagal = []
+    next_nup = {}   # kode → NUP numerik terakhir dalam kegiatan tujuan
+
+    async def _nup_berikut(kode: str) -> str:
+        if kode not in next_nup:
+            res = await db.assets.aggregate([
+                {"$match": {"activity_id": payload.activity_id, "asset_code": kode}},
+                {"$group": {"_id": None, "max_nup": {"$max": {"$convert": {
+                    "input": "$NUP", "to": "int", "onError": None, "onNull": None}}}}},
+            ]).to_list(1)
+            next_nup[kode] = int((res[0].get("max_nup") if res else None) or 0)
+        next_nup[kode] += 1
+        return str(next_nup[kode])
+
+    for row in barang:
+        if str(row.get("asset_id") or "").strip():
+            dilewati_tertaut += 1
+            continue
+        kode = str(row.get("kode") or "").strip()
+        if not kode:
+            dilewati_tanpa_kode += 1
+            continue
+        jumlah = float(row.get("jumlah") or 1)
+        catatan_jumlah = f" — jumlah pada BAST: {jumlah:g} unit" if jumlah != 1 else ""
+        draft = AssetCreate(
+            asset_code=kode,
+            NUP=await _nup_berikut(kode),
+            asset_name=str(row.get("uraian") or "").strip(),
+            category=kategori_by_kode.get(kode, ""),
+            purchase_date=str(p.get("tanggal_bast") or "").strip()[:10],
+            purchase_price=str(int(round(float(row.get("harga_satuan") or 0)))),
+            nomor_bast=str(p.get("nomor_bast") or "").strip(),
+            nomor_kontrak=str(p.get("nomor_kontrak") or "").strip(),
+            perolehan_dari_nama=str(p.get("pihak") or "").strip(),
+            supplier=str(p.get("pihak") or "").strip(),
+            notes=f"Draft otomatis dari perolehan Pengadaan (BAST {p.get('nomor_bast')}){catatan_jumlah}",
+            activity_id=payload.activity_id,
+        )
+        try:
+            doc = await buat_aset_draft(
+                draft, audit_user=user.get("name") or user.get("username") or "system")
+        except HTTPException as e:
+            gagal.append(f"{row.get('uraian')}: {e.detail}")
+            continue
+        row.update({"asset_id": doc["id"], "asset_code": doc["asset_code"],
+                    "NUP": doc["NUP"], "asset_name": doc["asset_name"]})
+        # Back-link dokumen sumber (§5A gap #6) ke aset draft yang baru dibuat.
+        await db.assets.update_one(
+            {"id": doc["id"]}, {"$set": build_asset_perolehan_projection(p, now)})
+        dibuat += 1
+
+    if dibuat:
+        await db.pengadaan.update_one(
+            {"id": perolehan_id},
+            {"$set": {"barang": barang,
+                      "updated_at": datetime.now(timezone.utc).isoformat()}})
+    p["barang"] = barang
+    return {"dibuat": dibuat, "dilewati_tertaut": dilewati_tertaut,
+            "dilewati_tanpa_kode": dilewati_tanpa_kode, "gagal": gagal[:20],
+            "kegiatan": act.get("nama_kegiatan") or act.get("id"),
+            "perolehan": _enrich(p)}
+
+
 @pengadaan_router.post("/pengadaan/{perolehan_id}/penganggaran")
 async def tautkan_penganggaran(perolehan_id: str,
                                payload: TautkanPenganggaranIn,
