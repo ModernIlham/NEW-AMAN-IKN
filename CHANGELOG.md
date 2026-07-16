@@ -48,6 +48,21 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#319] Dokumen evaluasi menyeluruh fitur & integrasi — 2026-07-16
+
+- **`docs/EVALUASI-FITUR-INTEGRASI.md`** — evaluasi keseluruhan aplikasi &
+  keterhubungan antar-modul (berbasis telaah kode): peta modul + status, matriks
+  integrasi (apa baca/tulis dari mana), temuan gap/inkonsistensi, rekomendasi
+  prioritas (tinggi/sedang/rendah), & daftar item yang perlu verifikasi
+  pemilik/regulasi. Netral & ber-referensi `file:baris`.
+- Temuan utama: integrasi terkuat = Pengadaan→Persediaan (FK tervalidasi) &
+  backup dinamis (semua koleksi); yang longgar = tautan aset↔master
+  (kodefikasi/pegawai/ruangan) berbasis teks/NIP + peringatan lunak (sengaja,
+  demi offline-first). Prioritas: samakan penanda tangan persediaan dgn registry
+  pejabat, satukan sumber akun, verifikasi akun BAS, perkuat tautan pengguna↔pegawai.
+
+---
+
 ## [#318] Form aset: pengguna terhubung ke Master Pegawai — 2026-07-16
 
 - **Pemilih pegawai** pada field Pengguna di form aset (`AssetForm.jsx`). Tombol
