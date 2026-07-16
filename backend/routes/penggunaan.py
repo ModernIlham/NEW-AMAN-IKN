@@ -17,11 +17,13 @@ from pydantic import BaseModel, Field
 
 from auth_utils import require_admin, require_user, require_user_or_query_token
 from db import db, fs_bucket
-from shared_utils import delete_document_from_gridfs, get_document_from_gridfs
+from shared_utils import delete_document_from_gridfs, get_document_from_gridfs, log_audit
 from penggunaan_utils import (
     ARAH_PROSES, JENIS_PROSES_PENGGUNAAN, JENIS_PSP, STATUS_IDLE,
     STATUS_PENGAJUAN_PSP, STATUS_PROSES, TRANSISI_PROSES, baris_csv_idle,
-    baris_csv_proses, baris_csv_psp, indikasi_idle,
+    baris_csv_proses, baris_csv_psp,
+    build_asset_alih_keluar_projection, build_asset_idle_serah_projection,
+    indikasi_idle,
     info_proses_sementara, kunci_pemegang, rekap_idle, rekap_pemegang,
     rekap_proses_penggunaan, rekap_psp, status_pengajuan_psp,
     validate_proses_penggunaan, validate_psp, validate_transisi_idle,
@@ -537,6 +539,38 @@ async def buat_tiket_idle(payload: TiketIdleIn, user: dict = Depends(require_use
     return record
 
 
+async def _proyeksi_terminal_ke_aset(proj: dict, asset_ids: list,
+                                     oleh: str, aksi: str) -> int:
+    """Stamp proyeksi terminal (dihapus=True + subdoc penghapusan) ke aset
+    tertaut — pola penghapusan #234: hanya aset yang BELUM dihapus, `$inc
+    version` (bust cache + OCC), audit per aset. Best-effort: tiket sudah
+    tersimpan; kegagalan proyeksi tak menggagalkan transisi. Kembalikan
+    jumlah aset terproyeksi."""
+    n = 0
+    for aid in asset_ids or []:
+        aid = str(aid or "").strip()
+        if not aid:
+            continue
+        updated = await db.assets.find_one_and_update(
+            {"id": aid, "dihapus": {"$ne": True}},
+            {"$set": proj, "$inc": {"version": 1}},
+            projection={"_id": 0, "id": 1, "activity_id": 1, "asset_code": 1,
+                        "asset_name": 1, "NUP": 1},
+            return_document=True,
+        )
+        if not updated:
+            continue   # sudah dihapus/diproyeksikan atau master tak ada — transisi tetap sah
+        await log_audit(
+            aksi, updated.get("activity_id", ""), updated.get("id", ""),
+            updated.get("asset_code", ""), updated.get("asset_name", ""),
+            username=oleh,
+            detail=f"Aset keluar pembukuan satker ({aksi}) — dokumen "
+                   f"{(proj.get('penghapusan') or {}).get('nomor_sk') or '-'}",
+            nup=updated.get("NUP", ""))
+        n += 1
+    return n
+
+
 @penggunaan_router.post("/penggunaan/idle/{tiket_id}/status")
 async def transisi_idle(tiket_id: str, payload: TransisiIdleIn,
                         admin: dict = Depends(require_admin)):
@@ -566,6 +600,12 @@ async def transisi_idle(tiket_id: str, payload: TransisiIdleIn,
     if not res:
         raise HTTPException(status_code=409,
                             detail="Status tiket berubah oleh proses lain — muat ulang")
+    # Terminal: aset diserahkan ke Pengelola → keluar pembukuan satker
+    # (proyeksi master, temuan review #1 — pola penghapusan #234).
+    proj = build_asset_idle_serah_projection(res, now)
+    if proj:
+        await _proyeksi_terminal_ke_aset(
+            proj, [res.get("asset_id")], admin.get("username"), "idle_diserahkan")
     return res
 
 
@@ -832,6 +872,14 @@ async def transisi_proses(tiket_id: str, payload: TransisiProsesIn,
             status_code=409,
             detail="Status tiket berubah di perangkat lain — muat ulang")
     res.update(set_fields)
+    # Terminal alih status ARAH KELUAR: aset beralih ke Pengguna Barang lain &
+    # dibukukan di sana → keluar pembukuan satker (proyeksi master, temuan
+    # review #1 — pola penghapusan #234). Arah masuk TIDAK diproyeksikan.
+    proj = build_asset_alih_keluar_projection(res, now)
+    if proj:
+        await _proyeksi_terminal_ke_aset(
+            proj, [r.get("asset_id") for r in (res.get("aset") or [])],
+            user.get("username"), "alih_status_keluar")
     return res
 
 
