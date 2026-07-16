@@ -48,6 +48,23 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#292] UI Kelola Referensi Pejabat Penatausahaan — 2026-07-16
+
+- **Melengkapi #291 di sisi UI.** Halaman **Referensi Pejabat** (`PejabatPage`)
+  dibuka dari **Beranda Modul** (tombol di samping "Referensi Kodefikasi Barang")
+  — kini registry pejabat #291 bisa dikelola pengguna, bukan hanya API.
+- **Semua user login** melihat daftar pejabat (nama/NIP, peran, masa berlaku,
+  status); **admin** menambah/mengubah/menghapus lewat dialog: nama, NIP/NRP,
+  jabatan, pangkat/golongan, **peran** (chip multi-pilih: KPB, Petugas
+  Penatausahaan/Operator SIMAK-BMN, Pengurus Barang, Penanggung Jawab Ruangan,
+  PPK, Pengguna Barang), **unit akuntansi** (UAPB…UAPKPB), **No/Tgl SK
+  penunjukan**, **masa berlaku**, status aktif.
+- Pencarian sisi-klien (nama/NIP/jabatan); selaras tema terang/gelap; memakai
+  `GET /pejabat` + `/pejabat/referensi` (#291). Wiring lazy-route di `App.js`.
+- Perubahan UI murni; **eslint bersih**, `yarn build` (craco) sukses.
+
+---
+
 ## [#291] Referensi Pejabat Penatausahaan BMN — fondasi back-end (riset PMK 181/2016) — 2026-07-15
 
 - **Fase baru: manajemen data pejabat/pegawai penatausahaan** — hasil riset

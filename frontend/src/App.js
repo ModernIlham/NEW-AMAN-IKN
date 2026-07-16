@@ -26,6 +26,7 @@ const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 const InfoPage = lazy(() => import("./pages/InfoPage"));
 const ModuleHomePage = lazy(() => import("./pages/ModuleHomePage"));
 const KodefikasiPage = lazy(() => import("./pages/KodefikasiPage"));
+const PejabatPage = lazy(() => import("./pages/PejabatPage"));
 const PersediaanPage = lazy(() => import("./pages/PersediaanPage"));
 const PelaporanPage = lazy(() => import("./pages/PelaporanPage"));
 const PenggunaanPage = lazy(() => import("./pages/PenggunaanPage"));
@@ -253,6 +254,7 @@ function App() {
   }, []);
   // Halaman Referensi Kodefikasi (perkakas Penatausahaan dari Beranda Modul)
   const [showKodefikasi, setShowKodefikasi] = useState(false);
+  const [showPejabat, setShowPejabat] = useState(false);
   // Halaman Master Persediaan (modul Inventarisasi Persediaan — sebagian aktif)
   const [showPersediaan, setShowPersediaan] = useState(false);
   // Halaman hub Pelaporan (arsip laporan lintas kegiatan)
@@ -303,6 +305,18 @@ function App() {
       <div className="App">
         <Suspense fallback={<PageLoader />}>
           <KodefikasiPage user={user} onBack={() => setShowKodefikasi(false)} />
+        </Suspense>
+        <Toaster position="top-right" richColors />
+      </div>
+    );
+  }
+
+  // Referensi Pejabat Penatausahaan — perkakas Penatausahaan, dibuka dari Beranda Modul.
+  if (user && showPejabat) {
+    return (
+      <div className="App">
+        <Suspense fallback={<PageLoader />}>
+          <PejabatPage user={user} onBack={() => setShowPejabat(false)} />
         </Suspense>
         <Toaster position="top-right" richColors />
       </div>
@@ -492,6 +506,7 @@ function App() {
             onShowInfo={() => setShowInfo(true)}
             onEnterInventarisasi={enterInventarisasi}
             onOpenKodefikasi={() => setShowKodefikasi(true)}
+            onOpenPejabat={() => setShowPejabat(true)}
             onOpenPersediaan={() => setShowPersediaan(true)}
             onOpenPelaporan={() => setShowPelaporan(true)}
             onOpenPenggunaan={() => setShowPenggunaan(true)}
