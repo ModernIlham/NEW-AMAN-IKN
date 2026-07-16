@@ -48,6 +48,21 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#322] Kelola Referensi Akun Persediaan (sub-kelompok → 1171xx) — evaluasi #3a — 2026-07-16
+
+- **Endpoint kelola akun persediaan** (`routes/persediaan_akun.py`, terdaftar di
+  `server.py`): `GET /persediaan-akun` (katalog akun 1171xx + daftar override
+  sub-kelompok satker + default 117111), `POST /persediaan-akun` (admin:
+  sub-kelompok 5-digit '1' → akun, `validate_akun_persediaan`), `DELETE
+  /persediaan-akun/{sub_kelompok}` (kembali ke default).
+- Memungkinkan satker **memasukkan kode akun 1171xx terverifikasi** per
+  sub-kelompok (dipakai laporan Posisi Persediaan). Sebelumnya `db.persediaan_akun`
+  hanya bisa lewat DB manual. `py_compile` bersih, suite **417 lulus**, endpoint
+  di-smoke-test (GET/POST/DELETE + validasi tolak sub/akun salah).
+- Menyusul: UI "Referensi Akun Persediaan" (#3b) + riset verifikasi akun (#3c).
+
+---
+
 ## [#321] Akun persediaan golongan-1 satu sumber dari akun_bas (evaluasi #2) — 2026-07-16
 
 - **Menutup temuan evaluasi #2** (dua sistem akun paralel): `AKUN_PERSEDIAAN_UTAMA`
