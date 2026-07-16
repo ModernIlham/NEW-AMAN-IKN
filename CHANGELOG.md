@@ -48,6 +48,30 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#329] Review menyeluruh batch 1: keamanan endpoint + LKB kecualikan aset terhapus — 2026-07-16
+
+Hasil **review menyeluruh multi-agen** (70 temuan, 69 terverifikasi adversarial;
+backlog di sesi pengembangan). Batch 1 = temuan prioritas TINGGI usaha kecil:
+
+- **Keamanan — `GET /users` bocor tanpa autentikasi**: cek admin dulu hanya
+  berjalan bila param `admin_id` dikirim; tanpa param, daftar user (nama, email,
+  role, status online) terbuka anonim. Kini **`require_admin` via JWT**
+  (param lama dipertahankan untuk kompatibilitas).
+- **Keamanan — tulis master Kategori tanpa autentikasi**: `POST /categories` &
+  `DELETE /categories/{id}` kini **wajib login** (`require_user`, sesuai UI yang
+  memang untuk semua user); `DELETE /categories-all` (hapus SEMUA kategori —
+  destruktif) kini **khusus admin**. Sebelumnya siapa pun tanpa login bisa
+  mengosongkan master rujukan impor/validasi/pengadaan/laporan.
+- **Akurasi — LKB (Laporan Kondisi Barang) lebih saji**: query aset LKB tanpa
+  `active_asset_filter()` sehingga aset ber-SK penghapusan tetap terhitung di
+  rekap kondisi & total nilai (tak pernah rekon dgn DBKP/Posisi Neraca). Kini
+  difilter selaras laporan posisi lainnya.
+- Verifikasi: `pytest tests/unit` **417 lulus**; smoke-render LKB (FakeDB) —
+  PDF valid, aset `dihapus` tereksklusi. UI aman: interceptor axios global
+  sudah memasang `Authorization` di semua request.
+
+---
+
 ## [#328] Pengadaan: buat draft aset dari perolehan (evaluasi #5) — 2026-07-16
 
 - **Menutup rantai perolehan → penatausahaan.** Tombol **"Buat Draft Aset"** pada
