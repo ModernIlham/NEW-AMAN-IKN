@@ -160,6 +160,44 @@ class TestParseImportRows:
         ])
         assert errors == [] and entries[0]["kode"] == "301"
 
+    def test_siman_header_golongan_dan_bidang(self):
+        # Keluaran SIMAN V2 per level: header khas per file
+        entries, errors, _ = parse_import_rows([
+            {"Kode Golongan": "1", "Nama Golongan": "PERSEDIAAN"},
+        ])
+        assert errors == [] and entries[0]["kode"] == "1" and entries[0]["level"] == 1
+        entries, _, _ = parse_import_rows([
+            {"Kode Golongan": "1", "Kode Bidang": "01",
+             "Kode Bidang Barang": "101", "Nama Bidang": "BARANG PAKAI HABIS"},
+        ])
+        assert entries[0]["kode"] == "101" and entries[0]["level"] == 2
+
+    def test_siman_pilih_kode_terdalam_bukan_induk(self):
+        # File "sub kelompok": ada kolom induk 5 digit & kode penuh 7 digit —
+        # harus memilih yang 7 digit (terdalam), bukan induknya.
+        entries, _, _ = parse_import_rows([
+            {"Kode Kelompok Barang": "10101", "Kode Sub Kelompok": "01",
+             "Kode Sub Kelompok Barang": "1010101", "Nama Sub Kelompok": "BAHAN BANGUNAN"},
+        ])
+        assert entries[0]["kode"] == "1010101" and entries[0]["level"] == 4
+
+    def test_siman_subsub_dengan_metadata(self):
+        entries, errors, _ = parse_import_rows([
+            {"Kode Sub Kelompok Barang": "1010101", "Kode Sub Subkelompok": "001",
+             "Kode Barang": "1010101001", "Nama Sub Subkelompok": "Aspal",
+             "Satuan": "", "Dasar": "PMK 29/PMK.06/2010",
+             "Jenis BMN": "BARANG PERSEDIAAN", "TB/STB": "STB",
+             "Bukti Kepemilikan": "Tidak Memiliki"},
+        ])
+        assert errors == []
+        e = entries[0]
+        assert e["kode"] == "1010101001" and e["level"] == 5 and e["uraian"] == "Aspal"
+        assert e["dasar"] == "PMK 29/PMK.06/2010"
+        assert e["jenis_bmn"] == "BARANG PERSEDIAAN"
+        assert e["tb_stb"] == "STB"
+        assert e["bukti_kepemilikan"] == "Tidak Memiliki"
+        assert "satuan" not in e  # kosong tidak disimpan
+
 
 # ── FK kodefikasi tervalidasi: level_terdaftar_terdalam (§5A gap #7, #262) ──
 from kodefikasi_utils import level_terdaftar_terdalam
