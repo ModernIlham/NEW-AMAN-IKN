@@ -25,46 +25,19 @@ BACKUP_TEMP_DIR.mkdir(exist_ok=True)
 # 3.4.0: + inventory_history & counters (tiket kegiatan) dalam backup
 APP_VERSION = "3.4.0"
 
-# NOTE: Collection names MUST match what the rest of the app uses.
-# Historically `activities` was listed here by mistake — the real collection
-# is `inventory_activities`. Keeping both for backward compat on restore.
-#
-# Cakupan backup saat ini:
-#   - users, categories, inventory_activities (termasuk ticket_number,
-#     status_pengesahan, pengesahan_dokumen metadata), assets (termasuk
-#     pengguna_melekat_ke/nomor_bast/bast_file_id), report_settings,
-#     audit_logs, compression_quotas, pdf_compression_quotas
-#   - inventory_history: riwayat pengesahan per aset (dasar Kartu Inventarisasi)
-#   - counters: sequence nomor tiket kegiatan (INV-{tahun}-{seq}) — _id string
-#     dipertahankan (lihat KEEP_ID_COLLECTIONS)
-#   - GridFS (fs.files + fs.chunks): SEMUA file biner — foto aset, dokumen
-#     kegiatan, dokumen pengesahan (PDF), dan dokumen BAST memakai satu
-#     bucket default `fs` (db.py), jadi export_gridfs otomatis mencakup semuanya
-#   - uploads/: file di disk (logo laporan dll.)
-BACKUP_COLLECTIONS = [
-    "users", "categories", "inventory_activities", "assets",
-    "report_settings", "audit_logs",
-    "compression_quotas", "pdf_compression_quotas",
-    "inventory_history", "counters",
-]
-# Koleksi yang _id-nya bermakna (bukan ObjectId acak) dan harus ikut
-# di-backup/restore: counters memakai _id string "inventory_activity_ticket_{tahun}".
-KEEP_ID_COLLECTIONS = {"counters"}
-# Legacy name → canonical name map (used when reading older backups)
-LEGACY_COLLECTION_ALIASES = {
-    "activities": "inventory_activities",
-}
-# Sengaja TIDAK di-backup (transient/derivable):
-#   - row_locks: lock edit per baris, TTL 60 dtk — tidak bermakna lintas restore
-#   - otp_store: OTP registrasi, TTL 11 menit
-#   - backup_jobs: progress job backup/restore itu sendiri
-#   - idempotency_keys: dedup replay antrian offline, TTL 24 jam — hanya valid
-#     terhadap state DB saat key dibuat; membawa key ke DB hasil restore justru
-#     bisa menelan save yang sah
-#   - ws_events: capped collection bus event WebSocket (realtime, best-effort)
-# Semua index (termasuk TTL) dibangun ulang oleh indexes.create_indexes()
-# setelah restore dan pada setiap startup server.
-SKIP_COLLECTIONS = ["row_locks", "otp_store", "backup_jobs", "idempotency_keys", "ws_events"]
+# Kebijakan koleksi DINAMIS (#290): daftar koleksi di-ENUMERASI dari DB (bukan
+# hardcode) lewat backup_utils (logika MURNI & teruji unit), sehingga SETIAP
+# koleksi/modul baru otomatis ikut ter-backup, ter-restore, & ter-reset.
+from backup_utils import (  # noqa: E402
+    SKIP_COLLECTIONS, KEEP_ID_COLLECTIONS, RESET_KEEP_COLLECTIONS,
+    LEGACY_COLLECTION_ALIASES, collections_to_process, collections_to_reset,
+    collections_from_backup,
+)
+
+
+async def _app_collections():
+    """Semua koleksi data aplikasi di DB saat ini (dinamis)."""
+    return collections_to_process(await db.list_collection_names())
 
 # In-memory lock to prevent concurrent backup/restore
 _active_lock = asyncio.Lock()
@@ -260,14 +233,15 @@ async def run_backup_task(job_id: str, username: str):
     try:
         await update_job(job_id, status="running", progress=0, message="Memulai proses backup...")
 
-        total_steps = len(BACKUP_COLLECTIONS) + 3  # collections + gridfs + files + finalize
+        cols = await _app_collections()  # DINAMIS: mencakup semua modul
+        total_steps = len(cols) + 3  # collections + gridfs + files + finalize
         current_step = 0
         stats = {}
 
         zip_path = BACKUP_TEMP_DIR / f"{job_id}.zip"
 
         with zipfile.ZipFile(str(zip_path), 'w', zipfile.ZIP_DEFLATED) as zf:
-            for col_name in BACKUP_COLLECTIONS:
+            for col_name in cols:
                 current_step += 1
                 pct = int((current_step / total_steps) * 85)
                 await update_job(job_id, progress=pct, message=f"Backup koleksi: {col_name}...")
@@ -372,14 +346,15 @@ async def run_restore_task(job_id: str, zip_path: Path, username: str):
 
         await update_job(job_id, progress=10, message="Membuat safety backup...")
 
-        # Create safety backup of current data (collections + GridFS metadata)
+        # Create safety backup of current data (SEMUA koleksi aplikasi + GridFS)
+        safety_cols = await _app_collections()
         safety_data = {}
-        for i, col_name in enumerate(BACKUP_COLLECTIONS):
+        for i, col_name in enumerate(safety_cols):
             docs = []
             async for doc in db[col_name].find({}):
                 docs.append(serialize_doc(doc, keep_id=col_name in KEEP_ID_COLLECTIONS))
             safety_data[col_name] = docs
-            pct = 10 + int(((i + 1) / len(BACKUP_COLLECTIONS)) * 15)
+            pct = 10 + int(((i + 1) / max(1, len(safety_cols))) * 15)
             await update_job(job_id, progress=pct, message=f"Safety backup: {col_name}...")
             await asyncio.sleep(0)
 
@@ -393,38 +368,29 @@ async def run_restore_task(job_id: str, zip_path: Path, username: str):
 
         await update_job(job_id, progress=30, message="Memulihkan data koleksi...")
 
-        # Perform restore
+        # Perform restore — iterasi SEMUA koleksi yang ADA di backup (dinamis),
+        # petakan nama legacy → kanonik, lalu wipe + isi ulang tiap koleksi.
         restore_stats = {}
         try:
             with zipfile.ZipFile(str(zip_path), 'r') as zf:
                 zip_names = set(zf.namelist())
-                for i, col_name in enumerate(BACKUP_COLLECTIONS):
-                    pct = 30 + int(((i + 1) / len(BACKUP_COLLECTIONS)) * 35)
+                backup_cols = collections_from_backup(zip_names)
+                for i, zip_col in enumerate(backup_cols):
+                    col_name = LEGACY_COLLECTION_ALIASES.get(zip_col, zip_col)
+                    pct = 30 + int(((i + 1) / max(1, len(backup_cols))) * 35)
                     await update_job(job_id, progress=pct, message=f"Restore: {col_name}...")
 
                     await db[col_name].delete_many({})
-
-                    json_file = f"{col_name}.json"
-                    # Try canonical name first, then any legacy alias
-                    if json_file not in zip_names:
-                        for legacy, canonical in LEGACY_COLLECTION_ALIASES.items():
-                            if canonical == col_name and f"{legacy}.json" in zip_names:
-                                json_file = f"{legacy}.json"
-                                break
-
-                    if json_file in zip_names:
-                        docs = json.loads(zf.read(json_file))
-                        # Normalize: ensure every asset has a `version` field (backfills legacy data)
-                        if col_name == "assets":
-                            for d in docs:
-                                if "version" not in d or d.get("version") is None:
-                                    d["version"] = 1
-                        if docs:
-                            await db[col_name].insert_many(docs)
-                        restore_stats[col_name] = len(docs)
-                    else:
-                        restore_stats[col_name] = 0
-                    logger.info(f"Restore [{job_id}]: {col_name} = {restore_stats[col_name]} docs")
+                    docs = json.loads(zf.read(f"{zip_col}.json"))
+                    # Normalize: pastikan setiap aset punya `version` (backfill data lama)
+                    if col_name == "assets":
+                        for d in docs:
+                            if not d.get("version"):
+                                d["version"] = 1
+                    if docs:
+                        await db[col_name].insert_many(docs)
+                    restore_stats[col_name] = len(docs)
+                    logger.info(f"Restore [{job_id}]: {col_name} = {len(docs)} docs")
                     await asyncio.sleep(0)
 
                 # Backup lama tidak membawa counters.json — bangun ulang sequence
@@ -462,10 +428,11 @@ async def run_restore_task(job_id: str, zip_path: Path, username: str):
             logger.error(f"Restore [{job_id}] failed, rolling back: {e}")
             await update_job(job_id, progress=90, message="Restore gagal, mengembalikan data...")
             try:
-                for col_name in BACKUP_COLLECTIONS:
+                # Kembalikan SEMUA koleksi yang di-snapshot safety ke kondisi semula
+                for col_name, docs in safety_data.items():
                     await db[col_name].delete_many({})
-                    if safety_data.get(col_name):
-                        await db[col_name].insert_many(safety_data[col_name])
+                    if docs:
+                        await db[col_name].insert_many(docs)
                 # Rollback GridFS
                 if safety_gridfs_zip.exists():
                     with zipfile.ZipFile(str(safety_gridfs_zip), 'r') as sz:
@@ -522,7 +489,7 @@ async def get_backup_stats(authorization: str = Header(None)):
     """Get current data statistics for backup preview."""
     await require_admin(authorization)
     stats = {}
-    for col_name in BACKUP_COLLECTIONS:
+    for col_name in await _app_collections():
         stats[col_name] = await db[col_name].count_documents({})
     return {"collections": stats, "total_records": sum(stats.values())}
 
@@ -719,7 +686,7 @@ async def create_backup_legacy(authorization: str = Header(None)):
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
         stats = {}
-        for col_name in BACKUP_COLLECTIONS:
+        for col_name in await _app_collections():
             docs = []
             async for doc in db[col_name].find({}):
                 docs.append(serialize_doc(doc, keep_id=col_name in KEEP_ID_COLLECTIONS))
@@ -770,7 +737,7 @@ async def restore_backup_legacy(file: UploadFile = File(...), authorization: str
     except HTTPException:
         raise
     safety_data = {}
-    for col_name in BACKUP_COLLECTIONS:
+    for col_name in await _app_collections():
         docs = []
         async for doc in db[col_name].find({}):
             docs.append(serialize_doc(doc, keep_id=col_name in KEEP_ID_COLLECTIONS))
@@ -780,16 +747,17 @@ async def restore_backup_legacy(file: UploadFile = File(...), authorization: str
     try:
         zip_buffer.seek(0)
         with zipfile.ZipFile(zip_buffer, 'r') as zf:
-            for col_name in BACKUP_COLLECTIONS:
+            for zip_col in collections_from_backup(zf.namelist()):
+                col_name = LEGACY_COLLECTION_ALIASES.get(zip_col, zip_col)
                 await db[col_name].delete_many({})
-                json_file = f"{col_name}.json"
-                if json_file in zf.namelist():
-                    docs = json.loads(zf.read(json_file))
-                    if docs:
-                        await db[col_name].insert_many(docs)
-                    restore_stats[col_name] = len(docs)
-                else:
-                    restore_stats[col_name] = 0
+                docs = json.loads(zf.read(f"{zip_col}.json"))
+                if col_name == "assets":
+                    for d in docs:
+                        if not d.get("version"):
+                            d["version"] = 1
+                if docs:
+                    await db[col_name].insert_many(docs)
+                restore_stats[col_name] = len(docs)
             for name in zf.namelist():
                 if name.startswith("uploads/") and not name.endswith("/"):
                     rel_path = name[len("uploads/"):]
@@ -800,10 +768,10 @@ async def restore_backup_legacy(file: UploadFile = File(...), authorization: str
                     upload_files_restored += 1
     except Exception:
         logger.exception("Restore gagal — mengembalikan data ke kondisi semula")
-        for col_name in BACKUP_COLLECTIONS:
+        for col_name, docs in safety_data.items():
             await db[col_name].delete_many({})
-            if safety_data.get(col_name):
-                await db[col_name].insert_many(safety_data[col_name])
+            if docs:
+                await db[col_name].insert_many(docs)
         raise HTTPException(status_code=500, detail="Restore gagal, data telah dikembalikan ke kondisi semula.")
     try:
         await repair_ticket_counters()

@@ -281,31 +281,28 @@ async def reset_all_data(data: ResetConfirmation, _admin: dict = Depends(require
     if data.confirmation != "HAPUS SEMUA":
         raise HTTPException(status_code=400, detail="Kata konfirmasi tidak valid")
 
-    deleted_assets = await db.assets.delete_many({})
-    deleted_activities = await db.inventory_activities.delete_many({})
-    deleted_categories = await db.categories.delete_many({})
-    deleted_audit_logs = await db.audit_logs.delete_many({})
-    # Riwayat pengesahan (kartu inventarisasi) dan counter tiket ikut direset —
-    # tanpa ini kartu masih menampilkan riwayat kegiatan yang sudah dihapus.
-    deleted_history = await db.inventory_history.delete_many({})
-    await db.counters.delete_many({})
+    # DINAMIS (#290): hapus SELURUH koleksi data (operasional & referensi) +
+    # GridFS, KECUALI akun & konfigurasi (users/report_settings/quotas) agar admin
+    # tetap bisa login & kop surat tak hilang. Sebelumnya hanya 6 koleksi lama
+    # yang dihapus sehingga modul baru (penilaian, penghapusan, persediaan, dll.)
+    # + foto menyisakan data yatim. Koleksi baru kini otomatis ikut ter-reset.
+    from backup_utils import collections_to_reset
+    all_names = await db.list_collection_names()
+    deleted = {}
+    for col_name in collections_to_reset(all_names):
+        res = await db[col_name].delete_many({})
+        deleted[col_name] = res.deleted_count
+    # Bersihkan GridFS (foto aset & lampiran dokumen yang datanya sudah dihapus)
+    gridfs_files = await db["fs.files"].count_documents({})
+    await db["fs.files"].delete_many({})
+    await db["fs.chunks"].delete_many({})
+    deleted["gridfs_files"] = gridfs_files
 
-    logger.warning(f"SYSTEM RESET by admin {admin_user.get('username')}: "
-                   f"Deleted {deleted_assets.deleted_count} assets, "
-                   f"{deleted_activities.deleted_count} activities, "
-                   f"{deleted_categories.deleted_count} categories, "
-                   f"{deleted_audit_logs.deleted_count} audit logs, "
-                   f"{deleted_history.deleted_count} history records")
+    logger.warning(f"SYSTEM RESET by admin {admin_user.get('username')}: {deleted}")
 
     return {
         "message": "Semua data berhasil dihapus. Sistem telah direset.",
-        "deleted": {
-            "assets": deleted_assets.deleted_count,
-            "activities": deleted_activities.deleted_count,
-            "categories": deleted_categories.deleted_count,
-            "audit_logs": deleted_audit_logs.deleted_count,
-            "inventory_history": deleted_history.deleted_count
-        }
+        "deleted": deleted,
     }
 
 
