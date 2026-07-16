@@ -48,6 +48,21 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#313] Kodefikasi: panel Detail (hierarki + info SIMAN) & impor banyak file — 2026-07-16
+
+- **Panel Detail per kode** (tombol info, untuk semua user) menampilkan
+  **hierarki berjenjang** (Golongan → … → level kode, via `/kodefikasi/lookup`)
+  **dan informasi tambahan SIMAN** (Satuan, Dasar, Jenis BMN, TB/STB, Bukti
+  Kepemilikan). Sesuai permintaan, metadata ini **tidak ditampilkan di tabel
+  utama** — hanya lewat Detail.
+- **Impor banyak file sekaligus**: input impor kini menerima beberapa file (mis.
+  5 file SIMAN per level) — tiap file di-POST berurutan, hasilnya diringkas jadi
+  satu notifikasi (total baru/diperbarui/berinfo SIMAN/error).
+- Perubahan murni frontend (`KodefikasiPage.jsx`); `eslint --max-warnings=0`
+  bersih, `yarn build` sukses. Menyusul: **dua format ekspor** (#K3).
+
+---
+
 ## [#312] Kodefikasi: impor keluaran SIMAN V2 + metadata barang — 2026-07-16
 
 - **Impor referensi kode barang langsung dari keluaran SIMAN V2** (5 file per

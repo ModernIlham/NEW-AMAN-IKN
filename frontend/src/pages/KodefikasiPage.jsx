@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Search, Plus, Upload, Download, Pencil, Trash2, Loader2,
-  ListTree, ChevronLeft, ChevronRight,
+  ListTree, ChevronLeft, ChevronRight, Info,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,6 +37,16 @@ function getApiError(err, fallback) {
   return err?.response?.data?.detail || fallback;
 }
 
+// Label ramah metadata SIMAN (disajikan hanya di panel Detail, bukan tabel utama).
+const META_LABELS = {
+  satuan: "Satuan",
+  dasar: "Dasar",
+  jenis_bmn: "Jenis BMN",
+  tb_stb: "TB/STB",
+  bukti_kepemilikan: "Bukti Kepemilikan",
+};
+const META_ORDER = ["satuan", "dasar", "jenis_bmn", "tb_stb", "bukti_kepemilikan"];
+
 /**
  * Referensi Kodefikasi Barang BMN — fondasi Fase 2.
  *
@@ -57,6 +67,8 @@ export default function KodefikasiPage({ user, onBack }) {
   // Dialog tambah/edit: {mode:"tambah"} | {mode:"edit", kode, uraian}
   const [form, setForm] = useState(null);
   const [saving, setSaving] = useState(false);
+  // Panel Detail: {item, jenjang:[{level,label,kode,uraian}], loading}
+  const [detail, setDetail] = useState(null);
   const fileRef = useRef(null);
   const { confirm, confirmDialog } = useConfirm();
   const searchTimer = useRef(null);
@@ -135,25 +147,49 @@ export default function KodefikasiPage({ user, onBack }) {
     }
   };
 
+  // Impor satu ATAU banyak file sekaligus (mis. 5 file SIMAN per level) —
+  // tiap file di-POST berurutan, hasilnya diringkas jadi satu notifikasi.
   const onImportFile = async (e) => {
-    const file = e.target.files?.[0];
+    const files = Array.from(e.target.files || []);
     e.target.value = ""; // reset supaya file sama bisa dipilih ulang
-    if (!file) return;
+    if (!files.length) return;
     setImporting(true);
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const r = await axios.post(`${API}/kodefikasi/import`, fd);
-      const d = r.data || {};
-      toast.success(d.message || "Impor selesai");
-      if (d.error_count > 0) {
-        toast.warning(`${d.error_count} baris bermasalah — contoh: ${(d.errors || [])[0] || ""}`);
+    const agg = { inserted: 0, updated: 0, meta: 0, errors: 0, gagal: 0 };
+    let contohError = "";
+    for (const file of files) {
+      try {
+        const fd = new FormData();
+        fd.append("file", file);
+        const r = await axios.post(`${API}/kodefikasi/import`, fd);
+        const d = r.data || {};
+        agg.inserted += d.inserted || 0;
+        agg.updated += d.updated || 0;
+        agg.meta += d.dengan_metadata || 0;
+        agg.errors += d.error_count || 0;
+        if (!contohError && (d.errors || [])[0]) contohError = d.errors[0];
+      } catch (err) {
+        agg.gagal += 1;
+        if (!contohError) contohError = getApiError(err, `Gagal: ${file.name}`);
       }
-      load(1, search, level);
+    }
+    const nfile = files.length > 1 ? `${files.length} file — ` : "";
+    toast.success(`${nfile}Impor selesai: ${agg.inserted} baru, ${agg.updated} diperbarui`
+      + (agg.meta ? `, ${agg.meta} berinfo SIMAN` : ""));
+    if (agg.errors > 0 || agg.gagal > 0) {
+      toast.warning(`${agg.errors} baris bermasalah${agg.gagal ? `, ${agg.gagal} file gagal` : ""}`
+        + (contohError ? ` — contoh: ${contohError}` : ""));
+    }
+    load(1, search, level);
+    setImporting(false);
+  };
+
+  const openDetail = async (item) => {
+    setDetail({ item, jenjang: [], loading: true });
+    try {
+      const r = await axios.get(`${API}/kodefikasi/lookup/${item.kode}`);
+      setDetail({ item, jenjang: r.data?.jenjang || [], loading: false });
     } catch (err) {
-      toast.error(getApiError(err, "Gagal mengimpor file"));
-    } finally {
-      setImporting(false);
+      setDetail({ item, jenjang: [], loading: false });
     }
   };
 
@@ -212,7 +248,7 @@ export default function KodefikasiPage({ user, onBack }) {
                   {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
                   <span className="hidden sm:inline">Impor</span>
                 </Button>
-                <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={onImportFile} />
+                <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" multiple className="hidden" onChange={onImportFile} />
                 <Button variant="outline" className="h-10 gap-1.5" onClick={downloadTemplate} data-testid="kodefikasi-template">
                   <Download className="w-4 h-4" /><span className="hidden sm:inline">Template</span>
                 </Button>
@@ -250,7 +286,7 @@ export default function KodefikasiPage({ user, onBack }) {
               <p className="text-sm font-medium text-foreground">Belum ada kode yang cocok</p>
               <p className="text-xs text-muted-foreground mt-1">
                 {isAdmin
-                  ? "Impor daftar kodefikasi (CSV/XLSX kolom kode & uraian) atau tambah manual — 8 golongan standar sudah tersedia otomatis."
+                  ? "Impor daftar kodefikasi (CSV/XLSX kolom kode & uraian, atau 5 file keluaran SIMAN V2 per level sekaligus) — 8 golongan standar sudah tersedia otomatis."
                   : "Coba kata kunci lain, atau minta admin mengimpor daftar kodefikasi."}
               </p>
             </div>
@@ -263,7 +299,7 @@ export default function KodefikasiPage({ user, onBack }) {
                     <th className="px-3 py-2.5 font-semibold">Uraian</th>
                     <th className="px-3 py-2.5 font-semibold">Level</th>
                     <th className="px-3 py-2.5 font-semibold hidden sm:table-cell">Induk</th>
-                    {isAdmin && <th className="px-3 py-2.5 font-semibold text-right">Aksi</th>}
+                    <th className="px-3 py-2.5 font-semibold text-right">Aksi</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -282,28 +318,40 @@ export default function KodefikasiPage({ user, onBack }) {
                         </span>
                       </td>
                       <td className="px-3 py-2 font-mono text-xs text-muted-foreground hidden sm:table-cell">{it.parent_kode || "—"}</td>
-                      {isAdmin && (
-                        <td className="px-3 py-2 text-right whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={() => setForm({ mode: "edit", kode: it.kode, uraian: it.uraian })}
-                            aria-label={`Ubah uraian ${it.kode}`}
-                            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted min-w-0 min-h-0"
-                            data-testid={`kodefikasi-edit-${it.kode}`}
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => remove(it)}
-                            aria-label={`Hapus ${it.kode}`}
-                            className="p-1.5 rounded-md text-muted-foreground hover:text-red-600 hover:bg-red-500/10 min-w-0 min-h-0"
-                            data-testid={`kodefikasi-delete-${it.kode}`}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </td>
-                      )}
+                      <td className="px-3 py-2 text-right whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => openDetail(it)}
+                          aria-label={`Detail ${it.kode}`}
+                          title="Detail (hierarki & info SIMAN)"
+                          className="p-1.5 rounded-md text-blue-600 dark:text-blue-400 hover:bg-blue-500/10 min-w-0 min-h-0"
+                          data-testid={`kodefikasi-detail-${it.kode}`}
+                        >
+                          <Info className="w-3.5 h-3.5" />
+                        </button>
+                        {isAdmin && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setForm({ mode: "edit", kode: it.kode, uraian: it.uraian })}
+                              aria-label={`Ubah uraian ${it.kode}`}
+                              className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted min-w-0 min-h-0"
+                              data-testid={`kodefikasi-edit-${it.kode}`}
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => remove(it)}
+                              aria-label={`Hapus ${it.kode}`}
+                              className="p-1.5 rounded-md text-muted-foreground hover:text-red-600 hover:bg-red-500/10 min-w-0 min-h-0"
+                              data-testid={`kodefikasi-delete-${it.kode}`}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -367,6 +415,62 @@ export default function KodefikasiPage({ user, onBack }) {
             <Button onClick={submitForm} disabled={saving} data-testid="kodefikasi-form-save">
               {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : null}Simpan
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog Detail: hierarki + metadata SIMAN (tak tampil di tabel utama) ── */}
+      <Dialog open={!!detail} onOpenChange={(o) => { if (!o) setDetail(null); }}>
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-mono text-base">{detail?.item?.kode}</DialogTitle>
+            <DialogDescription className="text-xs">
+              {detail?.item?.uraian}
+              {detail?.item?.label_level ? ` · ${detail.item.level} ${detail.item.label_level}` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          {detail && (
+            <div className="space-y-4">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground mb-1.5">Hierarki Kode</p>
+                {detail.loading ? (
+                  <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-blue-600" /></div>
+                ) : (detail.jenjang || []).length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Tidak dapat memuat hierarki.</p>
+                ) : (
+                  <ol className="space-y-1">
+                    {detail.jenjang.map((j) => (
+                      <li key={j.kode} className="flex items-baseline gap-2 text-sm" data-testid={`detail-jenjang-${j.level}`}>
+                        <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${LEVEL_BADGE[j.level] || LEVEL_BADGE[5]}`}>{j.label}</span>
+                        <span className="font-mono text-xs text-muted-foreground shrink-0">{j.kode}</span>
+                        <span className="text-foreground/90">{j.uraian || <span className="text-muted-foreground italic">(belum terdaftar)</span>}</span>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </div>
+
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground mb-1.5">Informasi Tambahan (SIMAN)</p>
+                {META_ORDER.some((k) => (detail.item?.meta?.[k] || "").trim()) ? (
+                  <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-sm">
+                    {META_ORDER.map((k) => (
+                      <React.Fragment key={k}>
+                        <dt className="text-muted-foreground whitespace-nowrap">{META_LABELS[k]}</dt>
+                        <dd className="text-foreground/90 text-right">{(detail.item?.meta?.[k] || "").trim() || "—"}</dd>
+                      </React.Fragment>
+                    ))}
+                  </dl>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Belum ada info tambahan untuk kode ini (biasanya melekat di kode barang 10 digit hasil impor SIMAN).
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDetail(null)}>Tutup</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
