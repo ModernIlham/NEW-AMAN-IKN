@@ -48,6 +48,22 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#320] Persediaan: PDF pakai penanda tangan KPB dari registry Pejabat (evaluasi #1) — 2026-07-16
+
+- **Menutup temuan evaluasi #1/#4** (inkonsistensi penanda tangan): seluruh PDF
+  Persediaan (Nota Dinas, BAOF opname, Laporan Posisi, Laporan Mutasi) kini
+  memakai **Kuasa Pengguna Barang aktif dari registry `pejabat`** (helper
+  `_kpb_signer` → `pejabat_utils.penandatangan_kpb`), **fallback ke setelan
+  kasatker** bila registry kosong — konsisten dengan laporan satker-level
+  (`_penandatangan_kpb`). Sebelumnya membaca `settings.kasatker_*` langsung
+  sehingga KPB dari registry tak muncul.
+- BAOF mempertahankan garis-titik bila belum ada KPB. Kartu Barang (peran
+  "Pengurus Barang Persediaan") tak diubah — peran berbeda.
+- Verifikasi: `pytest tests/unit` **416 lulus**; smoke-render PDF Posisi
+  (FakeDB) → KPB dari registry muncul (bukan setelan), fallback terjaga.
+
+---
+
 ## [#319] Dokumen evaluasi menyeluruh fitur & integrasi — 2026-07-16
 
 - **`docs/EVALUASI-FITUR-INTEGRASI.md`** — evaluasi keseluruhan aplikasi &
