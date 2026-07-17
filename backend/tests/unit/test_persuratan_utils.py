@@ -93,3 +93,47 @@ class TestAgendaCsv:
         assert rows[1][1] == "Keluar" and rows[1][6] == "KPKNL"
         assert rows[1][11] == "2026-07-18"
         assert rows[2][1] == "Masuk" and rows[2][11] == "2026-07-11"
+
+
+# ── Klasifikasi otomatis (persuratan smart) ──
+from persuratan_utils import pilih_klasifikasi, validate_peta_klasifikasi
+
+PETA = [
+    {"modul": "pelaporan", "jenis_naskah": "Laporan", "kode": "PL.02"},
+    {"modul": "", "jenis_naskah": "Berita Acara", "kode": "HK.06"},
+    {"modul": "inventarisasi", "jenis_naskah": "", "kode": "PL.01"},
+]
+
+
+class TestPilihKlasifikasi:
+    def test_eksplisit_menang(self):
+        assert pilih_klasifikasi(PETA, "pelaporan", "Laporan",
+                                 eksplisit="XX.99") == "XX.99"
+
+    def test_aturan_paling_spesifik_menang(self):
+        # modul+jenis (skor 2) mengalahkan aturan jenis-saja (skor 1)
+        peta = PETA + [{"modul": "", "jenis_naskah": "Laporan", "kode": "UM.01"}]
+        assert pilih_klasifikasi(peta, "pelaporan", "Laporan") == "PL.02"
+
+    def test_wildcard_jenis(self):
+        assert pilih_klasifikasi(PETA, "inventarisasi", "Surat Tugas") == "PL.01"
+
+    def test_wildcard_modul_dan_case_insensitive_jenis(self):
+        assert pilih_klasifikasi(PETA, "wasdal", "berita acara") == "HK.06"
+
+    def test_fallback_default(self):
+        assert pilih_klasifikasi(PETA, "umum", "Nota Dinas", default="UM.00") == "UM.00"
+        assert pilih_klasifikasi([], "umum", "Nota Dinas") == ""
+
+
+class TestValidatePeta:
+    def test_peta_sah(self):
+        assert validate_peta_klasifikasi(PETA) == []
+
+    def test_kode_wajib_dan_modul_dikenal(self):
+        errs = validate_peta_klasifikasi([
+            {"modul": "pelaporan", "jenis_naskah": "Laporan", "kode": ""},
+            {"modul": "asing", "jenis_naskah": "", "kode": "A"},
+            {"modul": "", "jenis_naskah": "", "kode": "B"},
+        ])
+        assert len(errs) == 3

@@ -178,3 +178,50 @@ def baris_agenda_csv(items) -> list:
             s.get("keterangan") or (s.get("alasan_batal") or ""),
         ])
     return rows
+
+
+def pilih_klasifikasi(peta, modul, jenis_naskah, eksplisit="", default="") -> str:
+    """Kode klasifikasi arsip untuk sebuah surat — otomatis dari pemetaan.
+
+    Prioritas: (1) kode yang DIISI EKSPLISIT oleh pengguna; (2) aturan
+    pemetaan paling SPESIFIK yang cocok — modul+jenis (skor 2) > salah
+    satunya (skor 1); aturan dengan field kosong = wildcard; seri pertama
+    menang saat skor sama; (3) kode klasifikasi bawaan pengaturan. MURNI.
+
+    peta: list {modul, jenis_naskah, kode} dari pengaturan persuratan.
+    """
+    eksplisit = str(eksplisit or "").strip()
+    if eksplisit:
+        return eksplisit
+    modul = str(modul or "").strip()
+    jenis = str(jenis_naskah or "").strip().casefold()
+    terbaik, skor_terbaik = "", -1
+    for aturan in peta or []:
+        a_modul = str(aturan.get("modul") or "").strip()
+        a_jenis = str(aturan.get("jenis_naskah") or "").strip().casefold()
+        kode = str(aturan.get("kode") or "").strip()
+        if not kode:
+            continue
+        if a_modul and a_modul != modul:
+            continue
+        if a_jenis and a_jenis != jenis:
+            continue
+        skor = (1 if a_modul else 0) + (1 if a_jenis else 0)
+        if skor > skor_terbaik:
+            terbaik, skor_terbaik = kode, skor
+    return terbaik or str(default or "").strip()
+
+
+def validate_peta_klasifikasi(peta) -> list:
+    """Validasi aturan pemetaan klasifikasi → daftar pesan kesalahan."""
+    errors = []
+    for i, aturan in enumerate(peta or [], 1):
+        if not str((aturan or {}).get("kode") or "").strip():
+            errors.append(f"Aturan #{i}: kode klasifikasi wajib diisi")
+        modul = str((aturan or {}).get("modul") or "").strip()
+        if modul and modul not in MODUL_AMAN:
+            errors.append(f"Aturan #{i}: modul tidak dikenal: {modul}")
+        if not modul and not str((aturan or {}).get("jenis_naskah") or "").strip():
+            errors.append(f"Aturan #{i}: isi minimal modul atau jenis naskah "
+                          "(keduanya kosong = aturan tak pernah spesifik)")
+    return errors
