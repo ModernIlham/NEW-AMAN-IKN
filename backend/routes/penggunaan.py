@@ -61,11 +61,13 @@ async def daftar_pemegang(
         peg_map = {}
         async for pgw in db.pegawai.find(
                 {"nip": {"$in": list(nips)}},
-                {"_id": 0, "nip": 1, "nama": 1, "unit_kerja": 1, "status": 1}):
+                {"_id": 0, "nip": 1, "nama": 1, "jabatan": 1,
+                 "unit_kerja": 1, "status": 1}):
             peg_map[pgw["nip"]] = pgw
         for r in halaman:
             m = peg_map.get(str(r.get("nip") or "").strip())
             r["pegawai_master_nama"] = (m or {}).get("nama", "")
+            r["pegawai_master_jabatan"] = (m or {}).get("jabatan", "")
             r["pegawai_master_unit"] = (m or {}).get("unit_kerja", "")
             r["pegawai_terdaftar"] = bool(m)
     return {
