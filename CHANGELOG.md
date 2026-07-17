@@ -48,6 +48,21 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#367] Gelombang 6 (tuntas): ribbon kegiatan ber-afordansi + sliver form berlabel — 2026-07-17
+
+- **Ribbon status kartu kegiatan** kini ber-chevron kecil — jelas bahwa
+  ribbon adalah TOMBOL (validasi/pengesahan) yang aksinya berbeda dari
+  klik kartu.
+- **Sliver buka-form desktop berlabel**: saat panel form dilipat, tombol
+  tepi melebar dan berlabel vertikal "FORM" — jalan kembali ke form
+  Tambah Aset tidak lagi nyaris tak terlihat (5px polos).
+- Catatan: perampingan dialog Buat Kegiatan (2 field wajib + lipatan)
+  DITUNDA sadar — form tsb. dipakai alur lapangan yang sudah stabil;
+  risiko regresi > nilai kosmetiknya. **Gelombang 6 dinyatakan TUNTAS.**
+- Verifikasi: suite **470 lulus**; lint & build frontend sukses.
+
+---
+
 ## [#366] Gelombang 6 (lanjutan): saklar mode di semua ukuran layar + grup Referensi & Master Data — 2026-07-17
 
 - **Saklar Dashboard | Inventarisasi kini berlabel di SEMUA breakpoint**:

@@ -1133,11 +1133,14 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                     if (isDisahkan) { e.stopPropagation(); setPengesahanActivity(act); return; }
                     handleStatusRibbonClick(e, act);
                   }}
-                  className={`absolute top-0 left-0 ${ribbonStyle} text-[10px] font-semibold pl-3 pr-3 py-0.5 rounded-br-lg shadow flex items-center gap-1 min-h-0 min-w-0 leading-none hover:brightness-110 transition-all z-10 cursor-pointer`}
+                  className={`absolute top-0 left-0 ${ribbonStyle} text-[10px] font-semibold pl-3 pr-2 py-0.5 rounded-br-lg shadow flex items-center gap-1 min-h-0 min-w-0 leading-none hover:brightness-110 transition-all z-10 cursor-pointer`}
                   title={isDisahkan ? "Kegiatan telah disahkan — klik untuk detail pengesahan" : "Klik untuk validasi status kegiatan"}
                   data-testid={`activity-status-ribbon-${act.id}`}
                 >
                   {ribbonIcon}<span>{ribbonText}</span>
+                  {/* Afordansi: ribbon ini TOMBOL (aksi beda dari klik kartu) —
+                      chevron kecil menandakannya (audit G6 #6). */}
+                  <ChevronRight className="w-2.5 h-2.5 opacity-80" />
                 </button>
                 <div className="absolute top-3 right-3 flex items-center gap-1 z-10">
                   {canManageActivities && (
