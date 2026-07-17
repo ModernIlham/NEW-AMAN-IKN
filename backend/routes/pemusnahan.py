@@ -209,12 +209,13 @@ async def ba_pemusnahan_pdf(ba_id: str, _user: dict = Depends(require_user)):
         f"Pada tanggal {_fmt_tanggal_id(ba.get('tanggal_ba'))}, berdasarkan "
         f"persetujuan pemusnahan Nomor {ba.get('nomor_persetujuan') or '-'}, "
         f"telah dilaksanakan pemusnahan Barang Milik Negara dengan cara "
-        f"<b>{cara.lower()}</b> terhadap {len(aset)} unit barang dalam kondisi "
+        f"<b>{_esc(cara.lower())}</b> terhadap {len(aset)} unit barang dalam kondisi "
         f"rusak berat yang tidak dapat digunakan, dimanfaatkan, maupun "
         f"dipindahtangankan (PMK 83/PMK.06/2016), dengan rincian sebagai berikut:",
         st['Meta']))
     elements.append(Spacer(1, 4 * rl_mm))
 
+    from xml.sax.saxutils import escape as _esc
     headers = ["No", "Kode Barang", "NUP", "Nama Barang", "Nilai Perolehan"]
     table_data = [[Paragraph(h, st['TableHeader']) for h in headers]]
     total = 0.0
@@ -222,9 +223,9 @@ async def ba_pemusnahan_pdf(ba_id: str, _user: dict = Depends(require_user)):
         total += parse_harga(a.get("harga"))
         table_data.append([
             Paragraph(str(i), st['CellCenter']),
-            Paragraph(a.get("asset_code") or "-", st['Cell']),
+            Paragraph(_esc(a.get("asset_code") or "-"), st['Cell']),
             Paragraph(str(a.get("NUP") or "-"), st['CellCenter']),
-            Paragraph(a.get("asset_name") or "-", st['Cell']),
+            Paragraph(_esc(a.get("asset_name") or "-"), st['Cell']),
             Paragraph(_rp(a.get("harga")), st['CellRight']),
         ])
     table_data.append([
@@ -242,7 +243,7 @@ async def ba_pemusnahan_pdf(ba_id: str, _user: dict = Depends(require_user)):
 
     if str(ba.get("keterangan") or "").strip():
         elements.append(Spacer(1, 3 * rl_mm))
-        elements.append(Paragraph(f"Keterangan: {ba['keterangan']}", st['Meta']))
+        elements.append(Paragraph(f"Keterangan: {_esc(ba['keterangan'])}", st['Meta']))
     elements.append(Spacer(1, 4 * rl_mm))
     elements.append(Paragraph(
         "Demikian Berita Acara Pemusnahan ini dibuat dengan sebenarnya untuk "

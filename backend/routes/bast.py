@@ -123,7 +123,8 @@ async def daftar_bast(asset_id: str = "", q: str = "", nip: str = "",
     if nip.strip():
         query["pihak_kedua.nip"] = nip.strip()
     if q.strip():
-        rx = {"$regex": q.strip(), "$options": "i"}
+        import re as _re
+        rx = {"$regex": _re.escape(q.strip()), "$options": "i"}
         query["$or"] = [{"nomor": rx}, {"pihak_kedua.nama": rx}, {"jenis": rx}]
     total = await db.bast_serah_terima.count_documents(query)
     items = await (db.bast_serah_terima.find(query, _PROJ)
@@ -193,7 +194,7 @@ async def buat_bast(payload: BastIn, user: dict = Depends(require_user)):
         kode_klas = pilih_klasifikasi(atur["peta_klasifikasi"], "penggunaan",
                                       "Berita Acara",
                                       default=atur["kode_klasifikasi_default"])
-        tahun = int(tgl_surat[:4])
+        tahun = int(tgl_surat[:4]) if tgl_surat[:4].isdigit() else now.year
         no_agenda = await _no_agenda_berikut("keluar", tahun)
         nomor_final = bangun_nomor(atur["format_nomor"], no_agenda, tgl_surat,
                                    kode_klasifikasi=kode_klas,

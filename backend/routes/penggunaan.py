@@ -696,13 +696,14 @@ async def daftar_pemegang_pdf(
     elements.extend(_kop_surat_flowables(settings, doc.width))
     elements.extend(_title_block("DAFTAR BARANG YANG DIGUNAKAN",
                                  subjudul="Lampiran BAST Penggunaan BMN (PMK 40/2024)"))
-    identitas = f"Nama pemegang: <b>{nama_tampil}</b>"
+    from xml.sax.saxutils import escape as _esc
+    identitas = f"Nama pemegang: <b>{_esc(nama_tampil)}</b>"
     if nip.strip():
-        identitas += f" · NIP/NIK: {nip.strip()}"
+        identitas += f" · NIP/NIK: {_esc(nip.strip())}"
     if jabatan:
-        identitas += f" · Jabatan: {jabatan}"
+        identitas += f" · Jabatan: {_esc(jabatan)}"
     if melekat:
-        identitas += f" · Melekat ke: {melekat}"
+        identitas += f" · Melekat ke: {_esc(melekat)}"
     elements.append(Paragraph(identitas, st['Meta']))
     elements.append(Paragraph(
         f"Barang Milik Negara sejumlah {len(rows)} unit berikut berada dalam "
