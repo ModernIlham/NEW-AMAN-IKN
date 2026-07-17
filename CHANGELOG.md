@@ -48,6 +48,20 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#358] Gelombang 3 (lanjutan): badge FINAL, pintu Kop/Sampul di hub, legenda nomor eksternal — 2026-07-17
+
+- **Badge status periode pada opsi unduh** LBKP & CaLBMN: tiap opsi kini
+  bersufiks **"· FINAL"** (periode terkunci) atau **"· belum final"** —
+  operator sadar sebelum mengedarkan laporan yang belum dikunci.
+- **Pintu "Kop/Sampul" di hub Pelaporan** (admin): editor pengaturan kop/
+  logo/penanda tangan kini bisa dibuka langsung dari halaman Pelaporan —
+  tak perlu lagi masuk lewat kegiatan inventarisasi tertentu.
+- **Legenda "eks:"** pada header kolom Nomor buku agenda: menjelaskan nomor
+  sah aplikasi eksternal (Srikandi dll.) vs nomor agenda internal.
+- Verifikasi: lint & build frontend sukses (perubahan murni frontend).
+
+---
+
 ## [#357] Gelombang 3 (inti): nomor booking mengalir ke PDF laporan — 2026-07-17
 
 - **Booking → cetak tersambung**: PDF **Berita Acara** (BAHI & BA Tim

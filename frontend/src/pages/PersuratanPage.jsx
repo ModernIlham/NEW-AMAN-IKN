@@ -297,7 +297,9 @@ export default function PersuratanPage({ user, onBack }) {
                 <thead>
                   <tr className="border-b border-border bg-muted/40 text-left text-xs text-muted-foreground">
                     <th className="px-3 py-2.5 font-semibold">Agenda</th>
-                    <th className="px-3 py-2.5 font-semibold">Nomor / Tanggal</th>
+                    <th className="px-3 py-2.5 font-semibold">Nomor / Tanggal
+                      <span className="block font-normal text-[9px] text-muted-foreground normal-case">eks: = nomor sah aplikasi eksternal (Srikandi dll.)</span>
+                    </th>
                     <th className="px-3 py-2.5 font-semibold">Perihal</th>
                     <th className="px-3 py-2.5 font-semibold">Dari / Kepada</th>
                     <th className="px-3 py-2.5 font-semibold">Naskah · Modul</th>
