@@ -48,6 +48,29 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#352] Tata letak BAST dirombak: padat, rapi, resmi — 1 halaman bila muat — 2026-07-17
+
+- **Review ulang seluruh 6 jenis BAST** (permintaan pemilik: seringkas
+  dan sepadat mungkin, profesional resmi pemerintahan; bila mentok baru
+  lanjut halaman kedua):
+  - **Identitas PARA PIHAK berdampingan 2 kolom** dalam bingkai tipis
+    (dengan keterangan peran "yang menyerahkan/menerima" yang otomatis
+    terbalik pada jenis pengembalian) — menghemat ±10 baris vertikal.
+  - **Dasar hukum ditinjau & ditata ulang**: 6 butir → 5 butir dengan
+    sitasi baku (PMK 76/2019 disatukan sebagai *jo.* PMK 246/2014; PP
+    28/2020 disebut sebagai *jo.* PP 27/2014), ditampilkan berukuran
+    kecil dan rapat — nomor & judul resmi tetap utuh.
+  - **Pasal-pasal diringkas** tanpa mengurangi makna hukum (tanggung
+    jawab, mutasi, status/jangka waktu/pengembalian digabung, penutup
+    jadi satu paragraf); spacing antarblok dirapatkan.
+- Hasil terukur (smoke `PdfReader`): BAST **2 aset = 1 halaman** (semua
+  jenis ber-2 tanda tangan); mutasi (3 tanda tangan + KPB) dan BAST
+  5 aset = 2 halaman — sesuai ketentuan "lanjut halaman kedua bila
+  mentok". Lampiran foto tetap di halaman terpisah bila diaktifkan.
+- Verifikasi: suite **468 lulus**; smoke 6 jenis × 2 varian jumlah aset.
+
+---
+
 ## [#351] Persediaan masuk massal ber-nomor LPB + unduh Laporan Penerimaan Barang — 2026-07-17
 
 - **Transaksi masuk massal kini menghasilkan LPB** (Laporan Penerimaan
