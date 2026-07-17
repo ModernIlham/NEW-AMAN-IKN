@@ -48,6 +48,32 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#349] Generator BAST serah terima pengguna: multi-aset, 4+1 jenis, lampiran foto opsional — 2026-07-17
+
+- **BAST per pengguna dari modul Penggunaan** (detail pemegang → tombol
+  "Buat BAST Serah Terima"): format mengikuti dua contoh resmi satker
+  (BAST Rumga & BA Robot Kit) — kop, nomor (bisa dari Booking Nomor),
+  narasi tanggal terbilang, identitas PIHAK KESATU (default KPB dari
+  pengaturan) & PIHAK KEDUA (prefill dari pemegang), dasar hukum
+  (UU 17/2003, PP 27/2014, Perpres 62/2022, PMK 246/2014 jo. 76/2019,
+  PMK 53/2023), PASAL 1 + **tabel multi-aset** (kode/NUP/nama/merk/tahun/
+  kondisi), pasal-pasal sesuai jenis, penutup, ttd 2 pihak + tempat/
+  tanggal, TEMBUSAN — ringkas 1–2 halaman.
+- **Jenis serah terima** (kebutuhan lapangan): penggunaan melekat ke
+  pengguna, operasional per unit/tempat/tugas (**+ daftar penanggung
+  jawab tambahan**), **penggunaan sementara ber-jangka waktu** (pasal
+  status aset & pengembalian; jangka wajib), pengembalian (arah balik),
+  dan lainnya (judul bebas).
+- **Lampiran foto opsional** (setelan `sertakan_foto`): foto sampul tiap
+  aset menjadi halaman lampiran "Foto Bukti Serah Terima Barang".
+- Register `bast_serah_terima` menyimpan tiap BAST (snapshot identitas
+  aset dibekukan; riwayat per aset/pengguna; PDF dirender ulang kapan
+  pun); endpoint GET/POST /bast + GET /bast/{id}/pdf + audit.
+- Verifikasi: suite **468 lulus**; smoke render 4 jenis BAST (multi-aset)
+  + validasi jangka waktu; eslint bersih; build sukses.
+
+---
+
 ## [#348] DBHI info 2 kolom, TEMBUSAN smart di BA, Ketua Tim terisi, tombol Booking sebaris LHI — 2026-07-17
 
 - **DBHI (6 jenis)** kini memakai blok info ringkas **2 kolom × 2 baris**
