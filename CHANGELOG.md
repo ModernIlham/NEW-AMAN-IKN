@@ -48,6 +48,26 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#348] DBHI info 2 kolom, TEMBUSAN smart di BA, Ketua Tim terisi, tombol Booking sebaris LHI — 2026-07-17
+
+- **DBHI (6 jenis)** kini memakai blok info ringkas **2 kolom × 2 baris**
+  (Satker|Nomor SK, Kegiatan|Periode) — seragam dengan RHI & DBKP.
+- **Bagian TEMBUSAN** pada BAHI & BA Tim Internal (kaidah tata naskah:
+  kiri bawah setelah tanda tangan, daftar bernomor, satu tembusan tanpa
+  nomor, TIDAK tampil bila kosong). **Input**-nya di **Pengaturan Sampul
+  LHI → "Tembusan surat/BA" (satu per baris)** — berlaku global untuk
+  semua surat; kegiatan dapat menimpanya (field `tembusan` per kegiatan
+  didukung backend).
+- **Ketua Tim kini terisi otomatis** di blok ttd BAHI: memakai
+  **tim_inti** kegiatan (yang punya penanda Ketua dari form input
+  kegiatan); kegiatan lama tanpa tim_inti tetap memakai tim peneliti.
+- **Tombol "Booking Nomor" di unduhan laporan inventarisasi** kini satu
+  baris dengan "Download LHI Lengkap" (di tengah, sebelum tombol Sampul).
+- Verifikasi: suite **468 lulus**; smoke render BAHI+tembusan+tim_inti,
+  BA Internal+tembusan, DBHI 2 kolom; helper tembusan kosong/1-baris.
+
+---
+
 ## [#347] Referensi Akun BAS satu pintu: master Kodefikasi Segmen Akun (2.899 akun resmi) — 2026-07-17
 
 - **Dua referensi akun disatukan** (permintaan pemilik: "jangan dibagi 2"):

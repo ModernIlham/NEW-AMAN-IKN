@@ -482,6 +482,34 @@ def _blok_ttd_tim_kpb(tim, settings, tanggal_iso, ident, doc_width,
     return els
 
 
+def _blok_tembusan(settings, activity=None):
+    """Bagian TEMBUSAN surat (kaidah tata naskah: kiri bawah setelah tanda
+    tangan; daftar bernomor; tanpa "Yth."; tak tampil bila kosong).
+
+    Sumber: `tembusan` kegiatan (menimpa) → `tembusan_laporan` Pengaturan
+    Sampul LHI (global, satu baris satu tembusan)."""
+    from reportlab.platypus import Paragraph, Spacer, KeepTogether
+    from reportlab.lib.units import mm as rl_mm
+    from xml.sax.saxutils import escape
+    mentah = ""
+    if activity and str(activity.get("tembusan") or "").strip():
+        mentah = str(activity.get("tembusan"))
+    else:
+        mentah = str(settings.get("tembusan_laporan") or "")
+    baris = [b.strip() for b in mentah.splitlines() if b.strip()]
+    if not baris:
+        return []
+    st = _get_report_styles()
+    body = st['Body']
+    flows = [Spacer(1, 6 * rl_mm), Paragraph("<b><u>Tembusan:</u></b>", body)]
+    if len(baris) == 1:
+        flows.append(Paragraph(escape(baris[0]), body))
+    else:
+        for i, b in enumerate(baris, 1):
+            flows.append(Paragraph(f"{i}. {escape(b)}", body))
+    return [KeepTogether(flows)]
+
+
 def _identity_table(rows):
     """Blok identitas 'Label : Nilai' dengan kolom titik dua yang sejajar.
 
@@ -882,6 +910,7 @@ async def generate_berita_acara_pdf(activity_id: str, _user: dict = Depends(requ
     elements.extend(_blok_ttd_tim_kpb(
         tim, settings, tanggal_ba, ident, doc.width,
         label_tim="Tim Peneliti"))
+    elements.extend(_blok_tembusan(settings, activity))
 
     footer = _page_footer_factory("Berita Acara Tim Internal Penelitian BMN Tidak Ditemukan")
     doc.build(elements, onFirstPage=footer, onLaterPages=footer)
@@ -1224,19 +1253,9 @@ async def generate_dbhi_pdf(activity_id: str, dbhi_type: str, _user: dict = Depe
 
     # Activity info
     ident = _activity_identity(activity, settings)
-    satker_name = ident["satker_name"]
-    nomor_sk = activity.get("nomor_surat", "-")
-    # Rentang periode kegiatan inventarisasi — bukan tanggal tunggal (#339+1):
-    # DBHI memotret hasil sepanjang periode pelaksanaan, bukan satu hari.
-    tgl_mulai = _fmt_tanggal_id(activity.get("tanggal_mulai")) or "-"
-    tgl_selesai = _fmt_tanggal_id(activity.get("tanggal_selesai")) or "-"
-    elements.append(Paragraph(f"Satuan Kerja: {satker_name}", info_style))
-    elements.append(Paragraph(
-        f"Kegiatan: {activity.get('nama_kegiatan') or '-'}", info_style))
-    elements.append(Paragraph(
-        f"Nomor SK: {nomor_sk} &nbsp;&nbsp;|&nbsp;&nbsp; Periode Inventarisasi: {tgl_mulai} s.d. {tgl_selesai}",
-        info_style))
-    elements.append(Spacer(1, 4*rl_mm))
+    # Blok info ringkas 2 kolom — seragam dengan RHI & DBKP.
+    elements.append(_info_kegiatan_2kolom(activity, settings, doc.width))
+    elements.append(Spacer(1, 2.5*rl_mm))
 
     # Build table headers based on type
     extra = dbhi_config["extra_cols"]
@@ -2781,7 +2800,9 @@ async def generate_bahi_pdf(activity_id: str, _user: dict = Depends(require_user
     kasatker_nama = ident["kasatker_nama"]
     kasatker_nip = ident["kasatker_nip"]
     kasatker_jabatan = ident["kasatker_jabatan"]
-    tim = activity.get("tim_peneliti", [])
+    # Penanda tangan BAHI = TIM PELAKSANA: tim_inti (punya penanda is_ketua
+    # dari form kegiatan) — fallback tim_peneliti utk kegiatan lama.
+    tim = activity.get("tim_inti") or activity.get("tim_peneliti", [])
     tim_pendukung_list = activity.get("tim_pendukung", [])
     nomor_sk = activity.get("nomor_surat", "-")
     tgl_mulai = _fmt_tanggal_id(activity.get("tanggal_mulai")) or "-"
@@ -2900,6 +2921,7 @@ async def generate_bahi_pdf(activity_id: str, _user: dict = Depends(require_user
         tim, settings, tanggal_ba, ident, doc.width,
         label_tim="Tim Pelaksana Inventarisasi",
         header_mengetahui="Mengetahui/Mengesahkan,"))
+    elements.extend(_blok_tembusan(settings, activity))
 
     footer = _page_footer_factory("Berita Acara Hasil Inventarisasi Barang Milik Negara (BAHI)")
     doc.build(elements, onFirstPage=footer, onLaterPages=footer)
@@ -3097,6 +3119,8 @@ class ReportSettingsUpdate(BaseModel):
     # surat laporan (BAHI/SP/DBHI dkk.) dan tampil di sampul LHI.
     tempat_laporan: Optional[str] = ""
     tanggal_laporan: Optional[str] = ""
+    # Daftar tembusan surat/BA (satu per baris; kosong = bagian tak tampil).
+    tembusan_laporan: Optional[str] = ""
     # Evaluasi #4 (OPT-IN, default OFF): bila True, simpan aset menolak pengguna_nip
     # yang belum terdaftar di Master Pegawai. None = jangan ubah nilai tersimpan.
     wajib_pegawai_terdaftar: Optional[bool] = None
@@ -3120,6 +3144,7 @@ async def get_report_settings(_user: dict = Depends(require_user)):
             "catatan_kaki": "",
             "tempat_laporan": "",
             "tanggal_laporan": "",
+            "tembusan_laporan": "",
             "wajib_pegawai_terdaftar": False,
         }
     return settings
