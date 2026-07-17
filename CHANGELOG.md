@@ -48,6 +48,32 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#342] LHI Lengkap +DBKP, identitas kegiatan di surat, dokumen pendukung dirapikan — 2026-07-17
+
+- **DBKP per Golongan Barang kini masuk paket unduhan "LHI Lengkap"**
+  (urutan: Sampul → BAHI → RHI → 6 DBHI → **DBKP** → SP Hasil → SP
+  Pelaksanaan) dan tercantum pada daftar lampiran di BAHI.
+- **Nama kegiatan kini tampil di surat-surat LHI** — dulu hanya Nomor SK:
+  DBHI (6 jenis) & RHI mendapat baris "Kegiatan: …"; kalimat BAHI, SP
+  Hasil, dan SP Pelaksanaan menyebut nama kegiatan + nomor SK sekaligus.
+- **Dokumen Pendukung Lainnya dirapikan**:
+  - *BA Tim Internal Penelitian BMN Tidak Ditemukan*: nomor BA kini
+    terbaca dari field kegiatan (fallback titik-titik, tak lagi "-");
+    kalimat pembuka memakai narasi tanggal terbilang; blok tanda tangan
+    Tim Peneliti (kanan) kini ber-baris tempat/tanggal.
+  - *SPTJM* & *Surat Koreksi*: "Dibuat di" memakai Tempat Laporan
+    pengaturan (fallback alamat kop) dan "Pada tanggal" berformat
+    Indonesia (dulu tanggal ISO mentah).
+- **Posisi penanda tangan diaudit sesuai kaidah tata naskah**: pembuat
+  dokumen selalu di KANAN dengan baris tempat/tanggal di atasnya,
+  "Mengetahui" di kiri — BAHI/KIR/BA sudah sesuai; satu-satunya
+  penyimpangan (BA Tim Internal tanpa tempat/tanggal) diperbaiki.
+- Verifikasi: suite **461 lulus**; smoke render 10 dokumen (DBHI, BAHI,
+  SP Hasil, SP Pelaksanaan, Sampul, BA Tidak Ditemukan, SPTJM, Surat
+  Koreksi, DBKP) + cek paket LHI memuat DBKP.
+
+---
+
 ## [#341] Modul Persuratan: buku agenda & booking nomor naskah dinas lintas modul — 2026-07-17
 
 - **Registrasi Persuratan** baru (tombol di seksi Penatausahaan, Beranda
