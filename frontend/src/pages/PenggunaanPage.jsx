@@ -122,11 +122,28 @@ export default function PenggunaanPage({ user, onBack }) {
       jenis: "penggunaan_melekat", nomor: "", tanggal: "",
       jangka_dari: "", jangka_sampai: "", sertakan_foto: false, keterangan: "",
       pihak_kedua: { nama: p.nama || "", nip: p.nip || "", jabatan: p.jabatan || p.pegawai_master_unit || "", alamat: "" },
+      // Utk mutasi/handover: PIHAK KESATU = pemegang lama (prefill dari
+      // pemegang yang sedang dibuka); PIHAK KEDUA = pemegang baru.
+      pihak_pertama: { nama: p.nama || "", nip: p.nip || "", jabatan: p.jabatan || "", alamat: "" },
       pj_tambahan: [],
+      terapkan_ke_aset: true,
+      booking_otomatis: false,
       aset: new Set((detail?.rows || []).map((a) => a.id)),
       saving: false,
     });
   };
+
+  const gantiJenisBast = (jenis) => setFormBast((f) => {
+    const p = detail?.pemegang || {};
+    if (jenis === "mutasi_pengguna") {
+      // Handover: pemegang lama jadi PIHAK KESATU, penerima baru dikosongkan.
+      return { ...f, jenis,
+        pihak_pertama: { nama: p.nama || "", nip: p.nip || "", jabatan: p.jabatan || "", alamat: "" },
+        pihak_kedua: { nama: "", nip: "", jabatan: "", alamat: "" } };
+    }
+    return { ...f, jenis,
+      pihak_kedua: { nama: p.nama || "", nip: p.nip || "", jabatan: p.jabatan || p.pegawai_master_unit || "", alamat: "" } };
+  });
 
   const kirimBast = async () => {
     const f = formBast;
@@ -137,11 +154,18 @@ export default function PenggunaanPage({ user, onBack }) {
     try {
       const r = await axios.post(`${API}/bast`, {
         jenis: f.jenis, asset_ids: [...f.aset], pihak_kedua: f.pihak_kedua,
+        pihak_pertama: f.jenis === "mutasi_pengguna" ? f.pihak_pertama : null,
         nomor: f.nomor, tanggal: f.tanggal, jangka_dari: f.jangka_dari,
         jangka_sampai: f.jangka_sampai,
         penanggung_jawab_tambahan: f.pj_tambahan.filter((x) => x.nama.trim()),
         sertakan_foto: f.sertakan_foto, keterangan: f.keterangan,
+        terapkan_ke_aset: ["mutasi_pengguna", "pengembalian"].includes(f.jenis)
+          ? f.terapkan_ke_aset : false,
+        booking_otomatis: f.booking_otomatis,
       });
+      if (["mutasi_pengguna", "pengembalian"].includes(f.jenis) && f.terapkan_ke_aset) {
+        load(page, search); // pemegang berubah — segarkan rekap
+      }
       toast.success("BAST tersimpan — mengunduh PDF…");
       setFormBast(null);
       downloadFileWithProgress(`${API}/bast/${r.data.id}/pdf`,
@@ -1057,7 +1081,7 @@ export default function PenggunaanPage({ user, onBack }) {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium block mb-1">Jenis Serah Terima</label>
-                  <select value={formBast.jenis} onChange={(e) => setFormBast((f) => ({ ...f, jenis: e.target.value }))}
+                  <select value={formBast.jenis} onChange={(e) => gantiJenisBast(e.target.value)}
                     className="w-full h-10 rounded-md border border-input bg-background px-2 text-sm" data-testid="bast-jenis">
                     {jenisBast.map((j) => <option key={j.kode} value={j.kode}>{j.uraian}</option>)}
                   </select>
@@ -1069,8 +1093,36 @@ export default function PenggunaanPage({ user, onBack }) {
               </div>
               <div>
                 <label className="text-xs font-medium block mb-1">Nomor (opsional — dari Booking Nomor)</label>
-                <Input value={formBast.nomor} onChange={(e) => setFormBast((f) => ({ ...f, nomor: e.target.value }))} className="font-mono" placeholder="kosong = titik-titik utk diisi" data-testid="bast-nomor" />
+                <Input value={formBast.nomor} onChange={(e) => setFormBast((f) => ({ ...f, nomor: e.target.value }))} className="font-mono" placeholder={formBast.booking_otomatis ? "otomatis dari Persuratan" : "kosong = titik-titik utk diisi"} disabled={formBast.booking_otomatis} data-testid="bast-nomor" />
+                <label className="flex items-center gap-2 text-[11px] mt-1 cursor-pointer">
+                  <input type="checkbox" checked={formBast.booking_otomatis} className="w-3.5 h-3.5" data-testid="bast-booking-otomatis"
+                    onChange={(e) => setFormBast((f) => ({ ...f, booking_otomatis: e.target.checked, nomor: e.target.checked ? "" : f.nomor }))} />
+                  Pesan nomor otomatis dari Registrasi Persuratan (tercatat di buku agenda)
+                </label>
               </div>
+              {formBast.jenis === "mutasi_pengguna" && (
+                <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-2.5 space-y-2">
+                  <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">Pemegang lama (PIHAK KESATU) — menyerahkan</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input value={formBast.pihak_pertama.nama} placeholder="Nama pemegang lama *" data-testid="bast-lama-nama"
+                      onChange={(e) => setFormBast((f) => ({ ...f, pihak_pertama: { ...f.pihak_pertama, nama: e.target.value } }))} />
+                    <Input value={formBast.pihak_pertama.nip} placeholder="NIP/NIK" className="font-mono"
+                      onChange={(e) => setFormBast((f) => ({ ...f, pihak_pertama: { ...f.pihak_pertama, nip: e.target.value } }))} />
+                    <Input value={formBast.pihak_pertama.jabatan} placeholder="Jabatan" className="col-span-2"
+                      onChange={(e) => setFormBast((f) => ({ ...f, pihak_pertama: { ...f.pihak_pertama, jabatan: e.target.value } }))} />
+                  </div>
+                  <p className="text-[10px] text-amber-700/80 dark:text-amber-300/80">Isian Penerima di bawah = pemegang BARU; KPB ikut menandatangani sebagai Mengetahui.</p>
+                </div>
+              )}
+              {["mutasi_pengguna", "pengembalian"].includes(formBast.jenis) && (
+                <label className="flex items-center gap-2 text-xs cursor-pointer">
+                  <input type="checkbox" checked={formBast.terapkan_ke_aset} className="w-3.5 h-3.5" data-testid="bast-terapkan"
+                    onChange={(e) => setFormBast((f) => ({ ...f, terapkan_ke_aset: e.target.checked }))} />
+                  {formBast.jenis === "mutasi_pengguna"
+                    ? "Handover langsung: pindahkan pengguna aset ke pemegang baru"
+                    : "Kosongkan pengguna pada aset (barang kembali ke satker)"}
+                </label>
+              )}
               {formBast.jenis === "penggunaan_sementara" && (
                 <div className="grid grid-cols-2 gap-3">
                   <div><label className="text-xs font-medium block mb-1">Jangka: dari *</label>
@@ -1170,6 +1222,12 @@ export default function PenggunaanPage({ user, onBack }) {
                 <li key={a.id} className="rounded-lg border border-border p-2.5 text-xs" data-testid={`penggunaan-aset-${a.id}`}>
                   <div className="flex items-center justify-between gap-2">
                     <p className="font-semibold text-foreground">{a.asset_name || "-"}</p>
+                    {a.bast_terakhir?.id && (
+                      <span className="px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-700 dark:text-cyan-400 text-[10px] font-semibold"
+                        title={`BAST ${a.bast_terakhir.jenis} — ${a.bast_terakhir.nomor || "tanpa nomor"} → ${a.bast_terakhir.penerima}`}>
+                        BAST {String(a.bast_terakhir.tanggal || "").slice(0, 10)}
+                      </span>
+                    )}
                     {a.ada_bast ? (
                       <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-[10px] font-semibold">BAST ✓</span>
                     ) : (

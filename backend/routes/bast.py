@@ -38,6 +38,7 @@ _PROJ = {"_id": 0}
 
 JENIS_BAST = {
     "penggunaan_melekat": "Penggunaan Barang Milik Negara (Melekat ke Pengguna)",
+    "mutasi_pengguna": "Mutasi/Alih Pemegang Barang Milik Negara (Handover)",
     "operasional_unit": "Operasional Penggunaan Barang Milik Negara pada Unit/Tempat/Tugas",
     "penggunaan_sementara": "Operasional Penggunaan Sementara Barang Milik Negara",
     "pengembalian": "Pengembalian Barang Milik Negara",
@@ -86,6 +87,13 @@ class BastIn(BaseModel):
     tembusan: Optional[str] = ""              # override; default pengaturan
     sertakan_foto: Optional[bool] = False
     keterangan: Optional[str] = ""
+    # Handover langsung: BAST sekaligus MENERAPKAN perubahan ke master aset
+    # (mutasi → pengguna beralih ke PIHAK KEDUA; pengembalian → pengguna
+    # dikosongkan). Ber-audit + $inc version.
+    terapkan_ke_aset: Optional[bool] = False
+    # Pesan nomor otomatis dari Registrasi Persuratan (tercatat di buku
+    # agenda berstatus dibooking).
+    booking_otomatis: Optional[bool] = False
 
 
 @bast_router.get("/bast/referensi")
@@ -152,12 +160,53 @@ async def buat_bast(payload: BastIn, user: dict = Depends(require_user)):
                    else str(settings.get("alamat_instansi") or "").splitlines()[0]
                    if str(settings.get("alamat_instansi") or "").strip() else ""),
     }
+    if payload.jenis == "mutasi_pengguna" and not (
+            payload.pihak_pertama and str(payload.pihak_pertama.nama or "").strip()):
+        raise HTTPException(status_code=400, detail=(
+            "Mutasi pemegang: isi PIHAK KESATU (pemegang lama) — "
+            "PIHAK KEDUA adalah pemegang baru"))
+
     now = datetime.now(timezone.utc)
+    nomor_final = str(payload.nomor or "").strip()
+    surat_id = ""
+    if payload.booking_otomatis and not nomor_final:
+        # Booking nomor otomatis lewat modul Persuratan (buku agenda keluar).
+        from persuratan_utils import bangun_nomor, pilih_klasifikasi
+        from routes.persuratan import _no_agenda_berikut, _pengaturan
+        tgl_surat = (str(payload.tanggal or "").strip()[:10]
+                     or now.date().isoformat())
+        atur = await _pengaturan()
+        kode_klas = pilih_klasifikasi(atur["peta_klasifikasi"], "penggunaan",
+                                      "Berita Acara",
+                                      default=atur["kode_klasifikasi_default"])
+        tahun = int(tgl_surat[:4])
+        no_agenda = await _no_agenda_berikut("keluar", tahun)
+        nomor_final = bangun_nomor(atur["format_nomor"], no_agenda, tgl_surat,
+                                   kode_klasifikasi=kode_klas,
+                                   kode_unit=atur["kode_unit"])
+        surat_id = str(uuid.uuid4())
+        await db.surat.insert_one({
+            "id": surat_id, "jenis": "keluar", "no_agenda": no_agenda,
+            "tahun": tahun, "nomor": nomor_final, "status": "dibooking",
+            "perihal": f"BAST {JENIS_BAST[payload.jenis]} — {payload.pihak_kedua.nama}",
+            "tujuan": payload.pihak_kedua.nama, "jenis_naskah": "Berita Acara",
+            "modul": "penggunaan", "kegiatan_id": "", "nama_kegiatan": "",
+            "kode_klasifikasi": kode_klas, "kode_keamanan": "B",
+            "tanggal_surat": tgl_surat, "referensi": "BAST",
+            "nomor_eksternal": "", "keterangan": "booking otomatis dari BAST",
+            "dibuat_oleh": user.get("username", "system"),
+            "riwayat": [{"status": "dibooking", "tanggal": now.isoformat(),
+                         "oleh": user.get("username", "system"),
+                         "catatan": "booking otomatis dari BAST"}],
+            "created_at": now.isoformat(), "updated_at": now.isoformat(),
+        })
+
     record = {
         "id": str(uuid.uuid4()),
         "jenis": payload.jenis,
         "judul_lainnya": str(payload.judul_lainnya or "").strip(),
-        "nomor": str(payload.nomor or "").strip(),
+        "nomor": nomor_final,
+        "surat_id": surat_id,
         "tanggal": (str(payload.tanggal or "").strip()[:10]
                     or now.date().isoformat()),
         "pihak_pertama": pihak_pertama,
@@ -175,14 +224,43 @@ async def buat_bast(payload: BastIn, user: dict = Depends(require_user)):
             if str(p.nama or "").strip()],
         "tembusan": str(payload.tembusan or "").strip(),
         "sertakan_foto": bool(payload.sertakan_foto),
+        "terapkan_ke_aset": bool(payload.terapkan_ke_aset),
         "keterangan": str(payload.keterangan or "").strip(),
         "created_by": user.get("username", "system"),
         "created_at": now.isoformat(),
     }
     await db.bast_serah_terima.insert_one({**record})
+
+    # Jejak BAST terakhir pada tiap aset (badge riwayat di UI) + efek data
+    # handover langsung bila diminta.
+    set_aset = {"bast_terakhir": {
+        "id": record["id"], "jenis": payload.jenis, "nomor": nomor_final,
+        "tanggal": record["tanggal"],
+        "penerima": record["pihak_kedua"]["nama"]}}
+    if payload.terapkan_ke_aset and payload.jenis == "mutasi_pengguna":
+        set_aset.update({
+            "user": record["pihak_kedua"]["nama"],
+            "pengguna_nip": record["pihak_kedua"].get("nip", ""),
+            "pengguna_jabatan": record["pihak_kedua"].get("jabatan", ""),
+        })
+    elif payload.terapkan_ke_aset and payload.jenis == "pengembalian":
+        set_aset.update({"user": "", "pengguna_nip": "",
+                         "pengguna_jabatan": "", "pengguna_melekat_ke": ""})
+    await db.assets.update_many(
+        {"id": {"$in": record["asset_ids"]}, "dihapus": {"$ne": True}},
+        {"$set": {**set_aset, "updated_at": now.isoformat()},
+         "$inc": {"version": 1}})
+
+    efek = ""
+    if payload.terapkan_ke_aset and payload.jenis == "mutasi_pengguna":
+        efek = f" (pengguna aset dialihkan ke {record['pihak_kedua']['nama']})"
+    elif payload.terapkan_ke_aset and payload.jenis == "pengembalian":
+        efek = " (pengguna aset dikosongkan)"
     await log_audit("buat_bast", "", username=user.get("username", "system"),
                     detail=(f"BAST {JENIS_BAST[payload.jenis]} — "
-                            f"{len(aset)} aset → {record['pihak_kedua']['nama']}"))
+                            f"{len(aset)} aset → {record['pihak_kedua']['nama']}"
+                            f"{efek}"
+                            + (f"; nomor otomatis {nomor_final}" if surat_id else "")))
     return record
 
 
@@ -284,6 +362,18 @@ async def bast_pdf(bast_id: str, _user: dict = Depends(require_user)):
         nomor_pasal += 1
 
     jenis = b.get("jenis")
+    if jenis == "mutasi_pengguna":
+        pasal("MUTASI PEMEGANG", [
+            "PIHAK KESATU (pemegang lama) menyerahkan BMN tersebut kepada "
+            "PIHAK KEDUA sebagai pemegang baru; seluruh tanggung jawab "
+            "penggunaan, pengamanan, dan pemeliharaan beralih kepada PIHAK "
+            "KEDUA sejak Berita Acara ini ditandatangani.",
+            "Pencatatan pemegang pada daftar barang satker diperbarui sesuai "
+            "Berita Acara ini.",
+            "PIHAK KEDUA tunduk pada ketentuan penggunaan BMN: dilarang "
+            "mengalihkan tanpa persetujuan tertulis, wajib mengembalikan bila "
+            "tidak lagi menjabat/berpindah tugas.",
+        ])
     if jenis in ("penggunaan_melekat", "operasional_unit", "lainnya"):
         pasal("TANGGUNG JAWAB", [
             "Dengan ditandatanganinya Berita Acara ini, PIHAK KEDUA bertanggung "
@@ -329,6 +419,12 @@ async def bast_pdf(bast_id: str, _user: dict = Depends(require_user)):
     ])
 
     el.append(Spacer(1, 4 * rl_mm))
+    signers_mutasi = []
+    if jenis == "mutasi_pengguna":
+        signers_mutasi = [{'header': 'Mengetahui,',
+                           'role': settings.get("kasatker_jabatan", "Kuasa Pengguna Barang,"),
+                           'nama': settings.get("kasatker_nama", ""),
+                           'after': [f"NIP. {settings.get('kasatker_nip', '')}"]}]
     el.extend(_signature_block([
         {'header': 'PIHAK KEDUA,', 'role': 'Yang Menerima' if jenis != 'pengembalian' else 'Yang Menyerahkan',
          'nama': p2.get("nama") or "________________",
@@ -337,7 +433,7 @@ async def bast_pdf(bast_id: str, _user: dict = Depends(require_user)):
          'header': 'PIHAK KESATU,', 'role': 'Yang Menyerahkan' if jenis != 'pengembalian' else 'Yang Menerima',
          'nama': p1.get("nama") or "________________",
          'after': [f"NIP. {p1.get('nip') or '…'}"]},
-    ], doc.width))
+    ] + signers_mutasi, doc.width))
     el.extend(_blok_tembusan(
         {"tembusan_laporan": b.get("tembusan") or settings.get("tembusan_laporan", "")}))
 

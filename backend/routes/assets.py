@@ -108,6 +108,8 @@ LIST_PROJECTION = {
     # Sinkronisasi SIMAN V2: status cocok/selisih + rincian selisih + referensi
     # (nilai penyusutan/buku dsb.) — ringkas, dipakai penanda di halaman aset.
     "siman": 1,
+    # Jejak BAST serah terima terakhir (badge riwayat handover per aset).
+    "bast_terakhir": 1,
     # GridFS-first (dokumen ter-migrasi punya photos=[] tapi gridfs terisi);
     # fallback ke inline untuk dokumen legacy.
     "photo_count": {"$cond": [
