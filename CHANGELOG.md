@@ -48,6 +48,36 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#368] Gelombang 7 (inti): Jurnal Mutasi BMN + Reklasifikasi ber-riwayat + SIMAN sadar-reklasifikasi — 2026-07-17
+
+- **Riset terverifikasi dulu** (pustaka §2.6 baru): dalam praktik SIMAK/SAKTI
+  yang otoritatif adalah **rekaman transaksi ber-kode per NUP** — Buku
+  Barang/DBKP/KIB hanyalah proyeksi; reklasifikasi = pasangan **304/107**
+  periode sama nilai sama, NUP baru di kode baru membawa tanggal & nilai
+  perolehan asli; **kode register SIMAN 16 digit** = identitas yang tak
+  pernah berubah (kunci sanding tahan-reklasifikasi).
+- **Jurnal `mutasi_bmn` append-only** ("Buku Barang" AMAN): logika murni
+  `mutasi_bmn_utils.py` (kode transaksi 100–401 selaras SIMAK/SAKTI, arah
+  tambah/kurang/netral, validasi entri, rekap saldo per sub-sub kelompok per
+  periode) + `GET /pembukuan/mutasi` (filter aset/kode/periode).
+- **Reklasifikasi kodefikasi ber-riwayat** (`POST /pembukuan/reklasifikasi`):
+  kode+NUP diperbarui **in-place** — aset TIDAK dibuat ulang (id internal &
+  kode register SIMAN tetap → sinkron tidak putus); NUP baru berurut di kode
+  tujuan; `riwayat_reklasifikasi` tercatat di aset; pasangan jurnal 304/107
+  terekam; kode '1…' (persediaan) ditolak. Dialog **"Reklasifikasi"** di hub
+  Pelaporan (admin): cari aset → kode tujuan 10 digit → alasan.
+- **Sinkron SIMAN sadar-reklasifikasi**: register cocok tapi kode/NUP beda
+  kini dikenali sebagai **sinyal reklasifikasi** (`siman.reklasifikasi`
+  subdoc) — bukan sekadar daftar selisih field.
+- Kegiatan inventarisasi dipertegas sebagai **pemutakhir** pembukuan (bukan
+  induk) — alur resmi terdokumentasi di pustaka §2.6.
+- Menyusul (G7 lanjutan): pengisian jurnal dari semua modul + backfill,
+  LBKP membaca jurnal, aksi "terapkan reklasifikasi" 1-klik dari kartu SIMAN.
+- Verifikasi: suite **475 lulus** (+5 uji jurnal/reklasifikasi); lint &
+  build frontend sukses.
+
+---
+
 ## [#367] Gelombang 6 (tuntas): ribbon kegiatan ber-afordansi + sliver form berlabel — 2026-07-17
 
 - **Ribbon status kartu kegiatan** kini ber-chevron kecil — jelas bahwa
