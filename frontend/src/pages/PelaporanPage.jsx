@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Search, Loader2, FileText, FileDown, ChevronDown,
   ShieldCheck, Boxes, Scale, Lock, LockOpen, Plus, Trash2, CalendarCheck,
+  Settings,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import { useBackGuard } from "@/hooks/useBackGuard";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import SimanSyncCard from "@/components/pelaporan/SimanSyncCard";
+import ReportSettingsEditor from "@/components/assets/ReportSettingsEditor";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -52,6 +54,7 @@ export default function PelaporanPage({ user, onBack }) {
   const [search, setSearch] = useState("");
   // Register periode pelaporan: {items, ringkasan, label_status, catatan}
   const [periode, setPeriode] = useState(null);
+  const [bukaSampul, setBukaSampul] = useState(false);
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
   const { confirm, confirmDialog } = useConfirm();
@@ -135,6 +138,14 @@ export default function PelaporanPage({ user, onBack }) {
     }
   };
 
+  // Suffix status periode pada opsi unduh: FINAL (terkunci) / belum final.
+  const sufiksPeriode = useCallback((tahun, semester) => {
+    const it = (periode?.items || []).find(
+      (p) => p.tahun === tahun && (p.semester || null) === (semester || null));
+    if (!it) return "";
+    return it.status === "terkunci" ? " · FINAL" : " · belum final";
+  }, [periode]);
+
   const filtered = useMemo(() => {
     const s = search.trim().toLowerCase();
     const rows = !s ? activities : activities.filter((a) =>
@@ -174,11 +185,18 @@ export default function PelaporanPage({ user, onBack }) {
               Laporan resmi lintas kegiatan + laporan persediaan — satu pintu
             </p>
           </div>
+          {isAdmin && (
+            <Button variant="outline" size="sm" className="gap-1.5" data-testid="pelaporan-kop"
+              onClick={() => setBukaSampul((v) => !v)}>
+              <Settings className="w-3.5 h-3.5" />Kop/Sampul
+            </Button>
+          )}
           <BookingNomorButton modul="pelaporan" jenisNaskah="Laporan" referensi="LHI/LBKP" />
         </div>
       </header>
 
       <main className="max-w-5xl mx-auto px-3 sm:px-6 py-4 space-y-3">
+        {bukaSampul && <ReportSettingsEditor onClose={() => setBukaSampul(false)} />}
         {/* ── Pembukuan satker-wide: Posisi BMN di Neraca (komponen LBKP) ── */}
         <div className="bg-card rounded-xl border border-border shadow-sm p-2.5 sm:p-3 flex items-center gap-2 flex-wrap">
           <span className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
@@ -223,12 +241,12 @@ export default function PelaporanPage({ user, onBack }) {
               {(() => {
                 const th = new Date().getFullYear();
                 return [
-                  { label: `Semester I ${th} (Jan–Jun)`, q: `tahun=${th}&semester=1`, f: `LBKP_${th}_S1.pdf` },
-                  { label: `Semester II ${th} (Jul–Des)`, q: `tahun=${th}&semester=2`, f: `LBKP_${th}_S2.pdf` },
-                  { label: `Tahunan ${th}`, q: `tahun=${th}`, f: `LBKP_${th}.pdf` },
-                  { label: `Semester I ${th - 1}`, q: `tahun=${th - 1}&semester=1`, f: `LBKP_${th - 1}_S1.pdf` },
-                  { label: `Semester II ${th - 1}`, q: `tahun=${th - 1}&semester=2`, f: `LBKP_${th - 1}_S2.pdf` },
-                  { label: `Tahunan ${th - 1}`, q: `tahun=${th - 1}`, f: `LBKP_${th - 1}.pdf` },
+                  { label: `Semester I ${th} (Jan–Jun)${sufiksPeriode(th, 1)}`, q: `tahun=${th}&semester=1`, f: `LBKP_${th}_S1.pdf` },
+                  { label: `Semester II ${th} (Jul–Des)${sufiksPeriode(th, 2)}`, q: `tahun=${th}&semester=2`, f: `LBKP_${th}_S2.pdf` },
+                  { label: `Tahunan ${th}${sufiksPeriode(th, null)}`, q: `tahun=${th}`, f: `LBKP_${th}.pdf` },
+                  { label: `Semester I ${th - 1}${sufiksPeriode(th - 1, 1)}`, q: `tahun=${th - 1}&semester=1`, f: `LBKP_${th - 1}_S1.pdf` },
+                  { label: `Semester II ${th - 1}${sufiksPeriode(th - 1, 2)}`, q: `tahun=${th - 1}&semester=2`, f: `LBKP_${th - 1}_S2.pdf` },
+                  { label: `Tahunan ${th - 1}${sufiksPeriode(th - 1, null)}`, q: `tahun=${th - 1}`, f: `LBKP_${th - 1}.pdf` },
                 ].map((o) => (
                   <DropdownMenuItem key={o.label} className="min-h-[42px]"
                     onClick={() => downloadFileWithProgress(`${API}/pembukuan/lbkp-pdf?${o.q}`, o.f, { label: `LBKP ${o.label}` }).catch(() => {})}>
@@ -248,12 +266,12 @@ export default function PelaporanPage({ user, onBack }) {
               {(() => {
                 const th = new Date().getFullYear();
                 return [
-                  { label: `Semester I ${th} (Jan–Jun)`, q: `tahun=${th}&semester=1`, f: `CaLBMN_${th}_S1.pdf` },
-                  { label: `Semester II ${th} (Jul–Des)`, q: `tahun=${th}&semester=2`, f: `CaLBMN_${th}_S2.pdf` },
-                  { label: `Tahunan ${th}`, q: `tahun=${th}`, f: `CaLBMN_${th}.pdf` },
-                  { label: `Semester I ${th - 1}`, q: `tahun=${th - 1}&semester=1`, f: `CaLBMN_${th - 1}_S1.pdf` },
-                  { label: `Semester II ${th - 1}`, q: `tahun=${th - 1}&semester=2`, f: `CaLBMN_${th - 1}_S2.pdf` },
-                  { label: `Tahunan ${th - 1}`, q: `tahun=${th - 1}`, f: `CaLBMN_${th - 1}.pdf` },
+                  { label: `Semester I ${th} (Jan–Jun)${sufiksPeriode(th, 1)}`, q: `tahun=${th}&semester=1`, f: `CaLBMN_${th}_S1.pdf` },
+                  { label: `Semester II ${th} (Jul–Des)${sufiksPeriode(th, 2)}`, q: `tahun=${th}&semester=2`, f: `CaLBMN_${th}_S2.pdf` },
+                  { label: `Tahunan ${th}${sufiksPeriode(th, null)}`, q: `tahun=${th}`, f: `CaLBMN_${th}.pdf` },
+                  { label: `Semester I ${th - 1}${sufiksPeriode(th - 1, 1)}`, q: `tahun=${th - 1}&semester=1`, f: `CaLBMN_${th - 1}_S1.pdf` },
+                  { label: `Semester II ${th - 1}${sufiksPeriode(th - 1, 2)}`, q: `tahun=${th - 1}&semester=2`, f: `CaLBMN_${th - 1}_S2.pdf` },
+                  { label: `Tahunan ${th - 1}${sufiksPeriode(th - 1, null)}`, q: `tahun=${th - 1}`, f: `CaLBMN_${th - 1}.pdf` },
                 ].map((o) => (
                   <DropdownMenuItem key={o.label} className="min-h-[42px]"
                     onClick={() => downloadFileWithProgress(`${API}/pembukuan/calbmn-pdf?${o.q}`, o.f, { label: `CaLBMN ${o.label}` }).catch(() => {})}>
