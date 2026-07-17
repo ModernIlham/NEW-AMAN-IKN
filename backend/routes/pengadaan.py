@@ -316,33 +316,46 @@ async def buat_draft_aset_dari_perolehan(perolehan_id: str,
             dilewati_tanpa_kode += 1
             continue
         jumlah = float(row.get("jumlah") or 1)
-        catatan_jumlah = f" — jumlah pada BAST: {jumlah:g} unit" if jumlah != 1 else ""
-        draft = AssetCreate(
-            asset_code=kode,
-            NUP=await _nup_berikut(kode),
-            asset_name=str(row.get("uraian") or "").strip(),
-            category=kategori_by_kode.get(kode, ""),
-            purchase_date=str(p.get("tanggal_bast") or "").strip()[:10],
-            purchase_price=str(int(round(float(row.get("harga_satuan") or 0)))),
-            nomor_bast=str(p.get("nomor_bast") or "").strip(),
-            nomor_kontrak=str(p.get("nomor_kontrak") or "").strip(),
-            perolehan_dari_nama=str(p.get("pihak") or "").strip(),
-            supplier=str(p.get("pihak") or "").strip(),
-            notes=f"Draft otomatis dari perolehan Pengadaan (BAST {p.get('nomor_bast')}){catatan_jumlah}",
-            activity_id=payload.activity_id,
-        )
-        try:
-            doc = await buat_aset_draft(
-                draft, audit_user=user.get("name") or user.get("username") or "system")
-        except HTTPException as e:
-            gagal.append(f"{row.get('uraian')}: {e.detail}")
+        # BMN ber-jumlah N = N unit ber-NUP masing-masing (audit G4 #10):
+        # pecah jadi N draft ber-NUP berurut bila jumlah bulat 2..50; di luar
+        # itu (pecahan/ekstrem) tetap 1 draft + catatan jumlah.
+        n_unit = int(jumlah) if jumlah == int(jumlah) and 2 <= jumlah <= 50 else 1
+        catatan_jumlah = (f" — jumlah pada BAST: {jumlah:g} unit"
+                          if jumlah != 1 and n_unit == 1 else "")
+        gagal_baris = False
+        for unit_ke in range(1, n_unit + 1):
+            sub = (f" (unit {unit_ke}/{n_unit})" if n_unit > 1 else "")
+            draft = AssetCreate(
+                asset_code=kode,
+                NUP=await _nup_berikut(kode),
+                asset_name=str(row.get("uraian") or "").strip(),
+                category=kategori_by_kode.get(kode, ""),
+                purchase_date=str(p.get("tanggal_bast") or "").strip()[:10],
+                purchase_price=str(int(round(float(row.get("harga_satuan") or 0)))),
+                nomor_bast=str(p.get("nomor_bast") or "").strip(),
+                nomor_kontrak=str(p.get("nomor_kontrak") or "").strip(),
+                perolehan_dari_nama=str(p.get("pihak") or "").strip(),
+                supplier=str(p.get("pihak") or "").strip(),
+                notes=(f"Draft otomatis dari perolehan Pengadaan "
+                       f"(BAST {p.get('nomor_bast')}){sub}{catatan_jumlah}"),
+                activity_id=payload.activity_id,
+            )
+            try:
+                doc = await buat_aset_draft(
+                    draft, audit_user=user.get("name") or user.get("username") or "system")
+            except HTTPException as e:
+                gagal.append(f"{row.get('uraian')}{sub}: {e.detail}")
+                gagal_baris = True
+                break
+            if unit_ke == 1:
+                row.update({"asset_id": doc["id"], "asset_code": doc["asset_code"],
+                            "NUP": doc["NUP"], "asset_name": doc["asset_name"]})
+            # Back-link dokumen sumber (§5A gap #6) ke aset draft yang baru dibuat.
+            await db.assets.update_one(
+                {"id": doc["id"]}, {"$set": build_asset_perolehan_projection(p, now)})
+            dibuat += 1
+        if gagal_baris:
             continue
-        row.update({"asset_id": doc["id"], "asset_code": doc["asset_code"],
-                    "NUP": doc["NUP"], "asset_name": doc["asset_name"]})
-        # Back-link dokumen sumber (§5A gap #6) ke aset draft yang baru dibuat.
-        await db.assets.update_one(
-            {"id": doc["id"]}, {"$set": build_asset_perolehan_projection(p, now)})
-        dibuat += 1
 
     if dibuat:
         await db.pengadaan.update_one(

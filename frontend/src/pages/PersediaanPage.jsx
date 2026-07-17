@@ -970,6 +970,11 @@ export default function PersediaanPage({ user, onBack }) {
                   ))}
                 </select>
               </div>
+              {pengadaanList.length === 0 && (
+                <p className="col-span-2 text-[10px] text-muted-foreground -mt-1">
+                  Belum ada BAST/kontrak tercatat di modul Pengadaan — catat di sana bila ingin menautkan dokumen sumber.
+                </p>
+              )}
               {pengadaanList.length > 0 && (
                 <div className="col-span-2">
                   <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-in-perolehan">Perolehan (Pengadaan) — opsional</label>
@@ -1405,8 +1410,11 @@ export default function PersediaanPage({ user, onBack }) {
           <DialogHeader>
             <DialogTitle>Transaksi Massal — Satu Dokumen</DialogTitle>
             <DialogDescription className="text-xs">
-              Satu bukti (BAST/kuitansi/nota dinas) untuk banyak barang sekaligus.
-              Tiap barang tetap tercatat sebagai transaksi berjurnal FIFO tersendiri.
+              Satu bukti (BAST/kuitansi/nota dinas) untuk banyak barang sekaligus;
+              arah masuk otomatis menghasilkan <b>LPB ber-nomor</b>. Tiap barang tetap
+              tercatat sebagai transaksi berjurnal FIFO tersendiri. (Register modul
+              Pengadaan = tertib dokumen BAST/kontrak — bukan pencatat stok; tautkan
+              lewat kolom Perolehan di bawah.)
             </DialogDescription>
           </DialogHeader>
           {massal && (

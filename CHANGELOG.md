@@ -48,6 +48,21 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#360] Gelombang 4 (lanjutan): draft aset per-NUP, CSV Perencanaan, penjelas pintu masuk — 2026-07-17
+
+- **Draft aset pecah per-NUP**: "Buat Draft Aset" dari perolehan Pengadaan
+  kini membuat **N draft ber-NUP berurut** bila jumlah barang 2–50 unit
+  (BMN: 10 laptop = 10 NUP) — bukan satu draft dengan catatan; di luar
+  rentang itu perilaku lama + catatan jumlah dipertahankan.
+- **Ekspor CSV register usulan RKBMN** (`GET /perencanaan/usulan/export`)
+  + tombol CSV di halaman Perencanaan — melengkapi pola register lain.
+- **Penjelas pintu masuk barang**: dialog Transaksi Massal menjelaskan
+  LPB otomatis & posisi register Pengadaan (tertib dokumen, bukan stok);
+  placeholder saat daftar perolehan kosong menautkan ke modul Pengadaan.
+- Verifikasi: suite **470 lulus**; lint & build frontend sukses.
+
+---
+
 ## [#359] Gelombang 4 (inti): rantai perolehan tersambung — 2026-07-17
 
 - **Dropdown "Usulan RKBMN terkait"** pada dialog usulan Penganggaran —
