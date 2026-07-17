@@ -108,13 +108,20 @@ async def referensi_bast(_user: dict = Depends(require_user)):
 
 
 @bast_router.get("/bast")
-async def daftar_bast(asset_id: str = "", q: str = "", page: int = 1,
-                      page_size: int = 30, _user: dict = Depends(require_user)):
-    """Riwayat BAST (filter per aset / cari nama penerima & nomor)."""
+async def daftar_bast(asset_id: str = "", q: str = "", nip: str = "",
+                      page: int = 1, page_size: int = 30,
+                      _user: dict = Depends(require_user)):
+    """Riwayat BAST (filter per aset / cari nama penerima & nomor).
+
+    `nip` mengunci hasil pada identitas penerima (pihak_kedua.nip) — riwayat
+    per pemegang tidak lagi tercampur nama mirip (audit G2 #7).
+    """
     page, page_size = max(1, page), min(max(1, page_size), 100)
     query = {}
     if asset_id.strip():
         query["asset_ids"] = asset_id.strip()
+    if nip.strip():
+        query["pihak_kedua.nip"] = nip.strip()
     if q.strip():
         rx = {"$regex": q.strip(), "$options": "i"}
         query["$or"] = [{"nomor": rx}, {"pihak_kedua.nama": rx}, {"jenis": rx}]
@@ -319,6 +326,14 @@ async def unggah_bukti_bast(bast_id: str, file: UploadFile = File(...),
                             "content_type": tipe,
                             "diunggah_pada": now,
                             "oleh": user.get("username", "system")}}})
+
+    # Bukti ttd = BAST sah → tautkan ke SEMUA aset objeknya (bast_file_id)
+    # sehingga metrik kelengkapan pemegang ("BAST x/y", badge Lengkap) naik —
+    # sebelumnya generator BAST tak pernah mengisi field ini (audit G2 #1).
+    await db.assets.update_many(
+        {"id": {"$in": b.get("asset_ids") or []}, "dihapus": {"$ne": True}},
+        {"$set": {"bast_file_id": str(file_id), "updated_at": now},
+         "$inc": {"version": 1}})
 
     # Nomor agenda dibooking → otomatis disahkan (bukti ttd = pengesahan).
     disahkan = False

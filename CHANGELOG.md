@@ -48,6 +48,30 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#356] Gelombang 2: BAST menyatu dengan kelengkapan pemegang — 2026-07-17
+
+- **Bukti ttd BAST kini menaikkan kelengkapan**: unggah bukti menautkan
+  `bast_file_id` ke SEMUA aset objek BAST → metrik "BAST x/y" & badge
+  "Lengkap" pemegang langsung hidup (sebelumnya generator BAST tak pernah
+  mengisinya — temuan audit terpenting area Penggunaan).
+- **Badge aset tak lagi bertentangan**: aset ber-BAST tanpa bukti kini
+  berbadge **"Bukti belum diunggah"** (bukan "Tanpa BAST" di samping badge
+  "BAST <tanggal>").
+- **Riwayat BAST terkunci identitas**: difilter **NIP penerima** bila ada
+  (parameter `nip` pada `GET /bast`) — nama mirip tak tercampur.
+- **Penerima BAST dari Master Pegawai**: autocomplete (datalist) di kolom
+  nama — nama persis cocok → NIP & jabatan terisi otomatis; jabatan prefill
+  kini dari **jabatan master** (bukan unit kerja).
+- **Chip "belum di master"** pada baris pemegang yang NIP-nya tak terdaftar
+  di Master Pegawai (enrichment backend yang dulu tak pernah ditampilkan).
+- **Detail pemegang menyegarkan diri** setelah BAST non-mutasi (badge BAST
+  terakhir langsung tampak); **hint saat daftar penyerah kosong** menuntun
+  ke Referensi Pejabat; **helper 1 baris per jenis BAST** menjelaskan kapan
+  memakai jenis apa.
+- Verifikasi: suite **470 lulus**; lint & build frontend sukses.
+
+---
+
 ## [#355] Audit alur seluruh aplikasi + Gelombang 1: keandalan & umpan balik dasar — 2026-07-17
 
 - **Audit uji-alur menyeluruh** (6 penelusur paralel, ±85 temuan berperingkat

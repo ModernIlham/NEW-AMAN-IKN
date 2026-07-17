@@ -86,6 +86,9 @@ export default function PenggunaanPage({ user, onBack }) {
   // pengelolaan BMN: KPB / Petugas Penatausahaan / Pengelola BMN Satker),
   // aktif hari ini — dari registry pejabat + metadata peran_penyerah_bast.
   const [pejabatPenyerah, setPejabatPenyerah] = useState([]);
+  // Master Pegawai utk autocomplete penerima BAST (dimuat sekali saat dialog
+  // BAST pertama dibuka) — identitas satu sumber, NIP tak diketik ulang.
+  const [pegawaiList, setPegawaiList] = useState(null);
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
 
@@ -146,10 +149,15 @@ export default function PenggunaanPage({ user, onBack }) {
 
   const bukaBast = () => {
     const p = detail?.pemegang || {};
+    if (pegawaiList === null) {
+      axios.get(`${API}/pegawai`)
+        .then((r) => setPegawaiList(r.data?.items || []))
+        .catch(() => setPegawaiList([]));
+    }
     setFormBast({
       jenis: "penggunaan_melekat", nomor: "", tanggal: "",
       jangka_dari: "", jangka_sampai: "", sertakan_foto: false, keterangan: "",
-      pihak_kedua: { nama: p.nama || "", nip: p.nip || "", jabatan: p.jabatan || p.pegawai_master_unit || "", alamat: "" },
+      pihak_kedua: { nama: p.nama || "", nip: p.nip || "", jabatan: p.jabatan || p.pegawai_master_jabatan || "", alamat: "" },
       // Utk mutasi/handover: PIHAK KESATU = pemegang lama (prefill dari
       // pemegang yang sedang dibuka); PIHAK KEDUA = pemegang baru.
       pihak_pertama: { nama: p.nama || "", nip: p.nip || "", jabatan: p.jabatan || "", alamat: "" },
@@ -173,7 +181,7 @@ export default function PenggunaanPage({ user, onBack }) {
         pihak_kedua: { nama: "", nip: "", jabatan: "", alamat: "" } };
     }
     return { ...f, jenis,
-      pihak_kedua: { nama: p.nama || "", nip: p.nip || "", jabatan: p.jabatan || p.pegawai_master_unit || "", alamat: "" } };
+      pihak_kedua: { nama: p.nama || "", nip: p.nip || "", jabatan: p.jabatan || p.pegawai_master_jabatan || "", alamat: "" } };
   });
 
   const pilihPenyerah = (id) => setFormBast((f) => {
@@ -212,6 +220,8 @@ export default function PenggunaanPage({ user, onBack }) {
       });
       if (["mutasi_pengguna", "pengembalian"].includes(f.jenis) && f.terapkan_ke_aset) {
         load(page, search); // pemegang berubah — segarkan rekap
+      } else if (detail?.pemegang) {
+        openDetail(detail.pemegang); // badge bast_terakhir baru langsung tampak
       }
       toast.success("BAST tersimpan — mengunduh PDF…");
       if (r.data?.peringatan_pegawai) {
@@ -231,7 +241,11 @@ export default function PenggunaanPage({ user, onBack }) {
     const p = detail?.pemegang || {};
     setRiwayatBast({ items: [], loading: true });
     try {
-      const r = await axios.get(`${API}/bast`, { params: { q: p.nama || "", page_size: 50 } });
+      // Kunci pada NIP bila ada — nama mirip tak tercampur; tanpa NIP
+      // fallback ke pencarian nama.
+      const params = p.nip ? { nip: p.nip, page_size: 50 }
+        : { q: p.nama || "", page_size: 50 };
+      const r = await axios.get(`${API}/bast`, { params });
       setRiwayatBast({ items: r.data?.items || [], label_jenis: r.data?.label_jenis || {}, loading: false });
     } catch {
       toast.error("Gagal memuat riwayat BAST");
@@ -521,6 +535,12 @@ export default function PenggunaanPage({ user, onBack }) {
                       <p className="text-[11px] text-muted-foreground mt-0.5">
                         {[p.nip && `NIP ${p.nip}`, p.jabatan, p.melekat_ke,
                           `${p.jumlah_kegiatan} kegiatan`].filter(Boolean).join(" · ")}
+                        {p.pegawai_terdaftar === false && (
+                          <span className="ml-1.5 px-1.5 py-px rounded bg-orange-500/15 text-orange-600 dark:text-orange-400 font-semibold"
+                            title="NIP pemegang ini belum ada di Master Pegawai — daftarkan lewat halaman Master Pegawai agar identitas satu sumber">
+                            belum di master
+                          </span>
+                        )}
                       </p>
                     </div>
                     <span className="text-xs font-bold text-foreground flex-shrink-0">{p.jumlah_aset} aset</span>
@@ -1225,6 +1245,16 @@ export default function PenggunaanPage({ user, onBack }) {
                     className="w-full h-10 rounded-md border border-input bg-background px-2 text-sm" data-testid="bast-jenis">
                     {jenisBast.map((j) => <option key={j.kode} value={j.kode}>{j.uraian}</option>)}
                   </select>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    {{
+                      penggunaan_melekat: "Barang melekat ke satu pegawai (laptop/HP dinas) — pemakaian sehari-hari.",
+                      mutasi_pengguna: "Alih pemegang lama → baru; KPB ikut tanda tangan Mengetahui; bisa langsung memindahkan data pengguna aset.",
+                      operasional_unit: "Barang dipakai bersama pada unit/tempat/tugas; bisa menambah penanggung jawab per unit.",
+                      penggunaan_sementara: "Pinjam pakai internal ber-jangka waktu — wajib tanggal dari & sampai; barang tetap tercatat di satker.",
+                      pengembalian: "Barang dikembalikan pegawai ke satker; bisa langsung mengosongkan data pengguna aset.",
+                      lainnya: "Jenis bebas — judul BAST diketik sendiri.",
+                    }[formBast.jenis] || ""}
+                  </p>
                 </div>
                 <div>
                   <label className="text-xs font-medium block mb-1">Tanggal BAST</label>
@@ -1287,13 +1317,29 @@ export default function PenggunaanPage({ user, onBack }) {
                     ))}
                   </select>
                   <p className="text-[10px] text-muted-foreground mt-0.5">
-                    Hanya peran pengelolaan BMN (KPB, Petugas Penatausahaan, Pengelola BMN Satker a.n. KPB). Kosong = otomatis memakai KPB aktif.
+                    {pejabatPenyerah.length === 0
+                      ? "Belum ada pejabat berperan penyerah yang berlaku hari ini — tambahkan di halaman Referensi Pejabat (peran KPB / Petugas Penatausahaan / Pengelola BMN Satker); sementara itu otomatis memakai KPB dari pengaturan."
+                      : "Hanya peran pengelolaan BMN (KPB, Petugas Penatausahaan, Pengelola BMN Satker a.n. KPB). Kosong = otomatis memakai KPB aktif."}
                   </p>
                 </div>
               )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div><label className="text-xs font-medium block mb-1">Penerima (PIHAK KEDUA) *</label>
-                  <Input value={formBast.pihak_kedua.nama} onChange={(e) => setFormBast((f) => ({ ...f, pihak_kedua: { ...f.pihak_kedua, nama: e.target.value } }))} data-testid="bast-penerima" /></div>
+                  <Input value={formBast.pihak_kedua.nama} list="bast-pegawai-list"
+                    placeholder="ketik nama — saran dari Master Pegawai"
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      // Nama persis cocok dengan Master Pegawai → NIP & jabatan terisi otomatis.
+                      const m = (pegawaiList || []).find((x) => (x.nama || "") === v);
+                      setFormBast((f) => ({ ...f, pihak_kedua: m
+                        ? { ...f.pihak_kedua, nama: v, nip: m.nip || f.pihak_kedua.nip, jabatan: m.jabatan || f.pihak_kedua.jabatan }
+                        : { ...f.pihak_kedua, nama: v } }));
+                    }} data-testid="bast-penerima" />
+                  <datalist id="bast-pegawai-list">
+                    {(pegawaiList || []).map((x) => (
+                      <option key={x.id || x.nip || x.nama} value={x.nama}>{x.nip ? `NIP ${x.nip}` : ""}</option>
+                    ))}
+                  </datalist></div>
                 <div><label className="text-xs font-medium block mb-1">NIP/NIK</label>
                   <Input value={formBast.pihak_kedua.nip} onChange={(e) => setFormBast((f) => ({ ...f, pihak_kedua: { ...f.pihak_kedua, nip: e.target.value } }))} className="font-mono" /></div>
                 <div><label className="text-xs font-medium block mb-1">Jabatan</label>
@@ -1397,6 +1443,9 @@ export default function PenggunaanPage({ user, onBack }) {
                     )}
                     {a.ada_bast ? (
                       <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-[10px] font-semibold">BAST ✓</span>
+                    ) : a.bast_terakhir?.id ? (
+                      <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px] font-semibold"
+                        title="BAST sudah dibuat — unggah bukti tanda tangan di Riwayat BAST agar tuntas">Bukti belum diunggah</span>
                     ) : (
                       <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px] font-semibold">Tanpa BAST</span>
                     )}
