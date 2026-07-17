@@ -1926,6 +1926,40 @@ const AssetForm = memo(({
           </div>
         )}
 
+        {/* Sinkronisasi SIMAN V2: aset ini berbeda dengan data SIMAN (valid).
+            Rincian + arah sinkron; tindakan "terapkan" ada di Pelaporan ›
+            Sinkronisasi SIMAN agar tidak bentrok dengan draft form ini. */}
+        {!isFormLoading && isEditing && editAsset?.siman?.status === "selisih" && (
+          <div className="mx-3 mt-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg px-2.5 py-1.5 flex-shrink-0" data-testid="siman-form-banner">
+            <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+              ≠ SIMAN — {(editAsset.siman.selisih || []).length} field berbeda dengan data SIMAN V2
+            </p>
+            <ul className="mt-0.5 space-y-0.5">
+              {(editAsset.siman.selisih || []).slice(0, 6).map((s) => (
+                <li key={s.field} className="text-[10px] leading-snug text-amber-700/90 dark:text-amber-300/90">
+                  {s.label}: <span className="line-through opacity-70">{s.aman || "(kosong)"}</span> → <b>{s.siman || "(kosong)"}</b>
+                </li>
+              ))}
+              {(editAsset.siman.selisih || []).length > 6 && (
+                <li className="text-[10px] text-amber-700/70 dark:text-amber-300/70">… dan {(editAsset.siman.selisih || []).length - 6} field lain</li>
+              )}
+            </ul>
+            <p className="text-[10px] mt-1 text-amber-700/80 dark:text-amber-300/80">
+              Sinkronkan lewat menu <b>Pelaporan › Sinkronisasi SIMAN V2</b> (nilai SIMAN = data valid), atau perbaiki manual di form ini.
+            </p>
+          </div>
+        )}
+        {!isFormLoading && isEditing && editAsset?.siman?.status === "tidak_di_siman" && (
+          <div className="mx-3 mt-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg px-2.5 py-1.5 flex-shrink-0" data-testid="siman-form-banner-hilang">
+            <p className="text-[11px] font-semibold text-red-700 dark:text-red-300">
+              Tidak ditemukan di SIMAN V2 (impor {String(editAsset.siman.diperiksa_pada || "").slice(0, 10)})
+            </p>
+            <p className="text-[10px] mt-0.5 text-red-700/80 dark:text-red-300/80">
+              Periksa: aset belum tercatat di SIMAN, sudah dihapuskan, atau kode barang/NUP-nya berubah (reklasifikasi).
+            </p>
+          </div>
+        )}
+
         {/* Mode inventarisasi lapangan — sheet eksklusif menggantikan body form.
             Dirender di dalam <form onSubmit={handleSubmit}> agar tombol submit
             sheet memakai jalur simpan/validasi yang sama persis. */}

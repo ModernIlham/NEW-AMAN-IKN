@@ -129,7 +129,7 @@ dokumen sumber, surat, referensi kodefikasi, kepegawaian. Stack serupa
 | **Dokumen sumber sebagai simpul** — SPM/SP2D/BAST/kontrak direkam sekali; form transaksi auto-fill dan mengunci field yang tertaut (`dokumen_sumber_id`) | Fondasi modul Pengadaan; transaksi & aset menautkan diri ke dokumen |
 | **FIFO batch** untuk valuasi keluar persediaan | Inti modul Persediaan (Bab 7) |
 | **Lifecycle pegawai ↔ aset** — distribusi otomatis membuat `aset_pegawai` + riwayat pemegang; pegawai keluar memicu alert aset belum kembali | Cetak biru modul Penggunaan; data pengguna+BAST kita jadi titik awal |
-| **Interop SIMAN kelas satu** — import/export ~75 kolom + rekonsiliasi Excel↔DB (ONLY_IN_EXCEL / ONLY_IN_APP / DIFFERENCE) | Fitur rekonsiliasi menyusul di modul Pelaporan (sanding SIMAK/SAKTI) |
+| **Interop SIMAN kelas satu** — import/export ~75 kolom + rekonsiliasi Excel↔DB (ONLY_IN_EXCEL / ONLY_IN_APP / DIFFERENCE) | ✅ Terbangun: Sinkronisasi SIMAN V2 di Pelaporan (`routes/siman.py` + `siman_utils.py`) — impor manual ekspor "Master Aset" (SIMAN = data valid), cocokkan via `kode_register` lalu kode+NUP, subdoc `siman` per aset (cocok/selisih/tidak_di_siman + referensi penyusutan/nilai buku), tanda "≠ SIMAN" di kartu & form aset, aksi "terapkan nilai SIMAN" ber-audit; ekspor rekonsiliasi XLSX sudah ada sebelumnya |
 | **UX transaksi**: tab berkode-warna + sub-tab kartu berdeskripsi; deep-link tab via URL; kolom tabel bisa dikustomisasi; seleksi lintas halaman; PDF berat via job async + polling | Panduan UI modul transaksi fase 2+ (pola job async sudah kita punya di backup/export) |
 
 ### 4.2 Anti-pola yang DIHINDARI (ditemukan di referensi)
