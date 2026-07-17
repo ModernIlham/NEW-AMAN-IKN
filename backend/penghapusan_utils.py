@@ -45,9 +45,11 @@ STATUS_USULAN = {
 }
 
 # Alur PMK 83/2016: usulan → persetujuan → SK; tolak bisa di dua tahap.
+# "diproses" boleh KEMBALI ke "diusulkan" (koreksi salah klik — audit G5 #10);
+# status terminal (sk_terbit/ditolak) tetap tak bisa mundur.
 TRANSISI_USULAN = {
     "diusulkan": {"diproses", "ditolak"},
-    "diproses": {"sk_terbit", "ditolak"},
+    "diproses": {"sk_terbit", "ditolak", "diusulkan"},
     "sk_terbit": set(),
     "ditolak": set(),
 }

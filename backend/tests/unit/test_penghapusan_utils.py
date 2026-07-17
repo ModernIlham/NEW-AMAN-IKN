@@ -55,6 +55,7 @@ def test_transisi_usulan_sah_dan_tidak():
     assert boleh_transisi("diusulkan", "ditolak") is True
     assert boleh_transisi("diproses", "sk_terbit") is True
     assert boleh_transisi("diusulkan", "sk_terbit") is False  # tidak boleh lompat
+    assert boleh_transisi("diproses", "diusulkan") is True    # koreksi salah klik
     assert boleh_transisi("sk_terbit", "diusulkan") is False  # final
     assert boleh_transisi("ditolak", "diproses") is False     # final
     # Semua status transisi terdaftar di label

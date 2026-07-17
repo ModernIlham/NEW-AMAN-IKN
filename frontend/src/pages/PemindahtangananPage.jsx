@@ -440,7 +440,7 @@ export default function PemindahtangananPage({ user, onBack }) {
                         <div className="flex justify-center py-3"><Loader2 className="w-4 h-4 animate-spin text-indigo-600" /></div>
                       ) : hasilCari.map((a) => (
                         <button key={a.id} type="button"
-                          onClick={() => { setForm((f) => (f.aset.some((x) => x.id === a.id) ? f : { ...f, aset: [...f.aset, a] })); setCari(""); setHasilCari([]); }}
+                          onClick={() => { setForm((f) => (f.aset.some((x) => x.id === a.id) ? f : { ...f, aset: [...f.aset, a] })); setHasilCari((h) => h.filter((x) => x.id !== a.id)); }}
                           className="w-full px-2.5 py-1.5 text-left hover:bg-muted">
                           <span className="block text-xs font-semibold text-foreground truncate">{a.asset_name}</span>
                           <span className="block text-[10px] text-muted-foreground font-mono">{a.asset_code} · {a.NUP} · {a.condition}</span>

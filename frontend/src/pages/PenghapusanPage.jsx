@@ -254,11 +254,19 @@ export default function PenghapusanPage({ user, onBack }) {
                             </Button>
                           )}
                           {u.status === "diproses" && (
-                            <Button size="sm" className="h-7 text-[11px] min-h-0 bg-emerald-600 hover:bg-emerald-700 text-white"
-                              onClick={() => setFormSk({ usulan: u, nomor_sk: "", tanggal_sk: new Date().toISOString().slice(0, 10), catatan: "", saving: false })}
-                              data-testid={`penghapusan-sk-${u.id}`}>
-                              SK Terbit
-                            </Button>
+                            <>
+                              <Button size="sm" className="h-7 text-[11px] min-h-0 bg-emerald-600 hover:bg-emerald-700 text-white"
+                                onClick={() => setFormSk({ usulan: u, nomor_sk: "", tanggal_sk: new Date().toISOString().slice(0, 10), catatan: "", saving: false })}
+                                data-testid={`penghapusan-sk-${u.id}`}>
+                                SK Terbit
+                              </Button>
+                              <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                                title="Kembalikan ke status diusulkan (koreksi salah klik)"
+                                onClick={() => transisi(u, "diusulkan")}
+                                data-testid={`penghapusan-kembalikan-${u.id}`}>
+                                Kembalikan
+                              </Button>
+                            </>
                           )}
                           <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 text-red-500 hover:text-red-600"
                             onClick={() => tolak(u)}>
