@@ -298,6 +298,25 @@ async def transisi_pt(usulan_id: str, payload: TransisiPtIn,
     # Setelah CAS sukses agar tak double-proyeksi.
     if payload.status == "selesai":
         await _proyeksi_master_pemindahtanganan(res, admin.get("username"))
+        # Jurnal Buku Barang (G7): hibah keluar → 303; bentuk lain keluar
+        # daftar via SK penghapusan → 301 (best-effort, per aset usulan).
+        from pembukuan_utils import parse_harga
+        from shared_utils import catat_mutasi_bmn
+        kode_trx = "303" if res.get("bentuk") == "hibah" else "301"
+        for a_row in res.get("aset") or []:
+            aset = await db.assets.find_one(
+                {"id": a_row.get("asset_id")},
+                {"_id": 0, "asset_code": 1, "NUP": 1, "purchase_price": 1})
+            await catat_mutasi_bmn({
+                "asset_id": a_row.get("asset_id"), "kode_transaksi": kode_trx,
+                "kode_barang": str((aset or {}).get("asset_code") or ""),
+                "nup": str((aset or {}).get("NUP") or ""),
+                "tanggal_buku": now[:10], "jumlah": 1,
+                "nilai": parse_harga((aset or {}).get("purchase_price")),
+                "sumber_modul": "pemindahtanganan", "ref_id": res.get("id"),
+                "keterangan": (f"Pemindahtanganan {res.get('bentuk')} selesai — "
+                               f"SK {res.get('nomor_sk_penghapusan') or '-'}"),
+                "oleh": admin.get("username", "system")})
         # Back-link §5A gap #5: tandai tiket penghapusan sumbernya (dua arah).
         # Best-effort — tak menyentuh version tiket (hindari OCC 409 palsu).
         if res.get("penghapusan_id"):

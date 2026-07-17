@@ -48,6 +48,24 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#369] Gelombang 7 (lanjutan): jurnal terisi dari modul + backfill saldo awal — 2026-07-17
+
+- **Modul-modul kini menulis Buku Barang otomatis** (`catat_mutasi_bmn` di
+  shared_utils — best-effort, tidak pernah menggagalkan transaksi pemanggil):
+  - **Pengadaan** — tiap draft aset dari perolehan → **101/102/103/105**
+    sesuai jenis (kode dari `JENIS_PEROLEHAN`), nilai = harga satuan,
+    tanggal buku = tanggal BAST.
+  - **Penghapusan** — SK terbit → **301** (tanggal buku = tanggal SK).
+  - **Pemindahtanganan** — selesai → **303** (hibah) / **301** (bentuk lain,
+    keluar via SK penghapusan) per aset usulan.
+- **Backfill saldo awal** (`POST /pembukuan/mutasi/backfill`, admin,
+  idempoten): aset aktif tanpa entri jurnal diberi satu entri sintetis
+  **100 Saldo Awal** (tanggal buku = tanggal perolehan) — setiap aset punya
+  titik awal di Buku Barang.
+- Verifikasi: suite **475 lulus**; build frontend sukses (tanpa perubahan UI).
+
+---
+
 ## [#368] Gelombang 7 (inti): Jurnal Mutasi BMN + Reklasifikasi ber-riwayat + SIMAN sadar-reklasifikasi — 2026-07-17
 
 - **Riset terverifikasi dulu** (pustaka §2.6 baru): dalam praktik SIMAK/SAKTI

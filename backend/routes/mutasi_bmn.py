@@ -12,7 +12,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from auth_utils import require_user
+from auth_utils import require_admin, require_user
 from db import db
 from kodefikasi_utils import normalize_kode, validate_kode
 from mutasi_bmn_utils import (
@@ -59,6 +59,48 @@ async def daftar_mutasi(asset_id: str = "", kode_transaksi: str = "",
     return {"items": items, "total": total, "page": page,
             "total_pages": max(1, -(-total // page_size)),
             "label_kode": {k: v[0] for k, v in KODE_TRANSAKSI_BMN.items()}}
+
+
+@mutasi_bmn_router.post("/pembukuan/mutasi/backfill")
+async def backfill_saldo_awal(admin: dict = Depends(require_admin)):
+    """Backfill sekali (idempoten): aset aktif TANPA entri jurnal apa pun
+    diberi satu entri sintetis **100 Saldo Awal** (tanggal buku = tanggal
+    perolehan, fallback created_at) — riset G7: aset tanpa jejak transaksi
+    tetap harus punya titik awal di Buku Barang."""
+    import uuid as _uuid
+
+    from pembukuan_utils import parse_harga
+
+    sudah = set()
+    async for m in db.mutasi_bmn.find({}, {"_id": 0, "asset_id": 1}):
+        sudah.add(m.get("asset_id"))
+    dibuat = 0
+    now = datetime.now(timezone.utc).isoformat()
+    async for a in db.assets.find(
+            {"dihapus": {"$ne": True}},
+            {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1,
+             "purchase_price": 1, "purchase_date": 1, "created_at": 1}):
+        if a["id"] in sudah:
+            continue
+        tgl = (str(a.get("purchase_date") or "").strip()[:10]
+               or str(a.get("created_at") or now)[:10])
+        if len(tgl) != 10 or tgl[4] != "-":
+            tgl = now[:10]
+        await db.mutasi_bmn.insert_one({
+            "id": str(_uuid.uuid4()), "asset_id": a["id"],
+            "kode_transaksi": "100",
+            "kode_barang": str(a.get("asset_code") or ""),
+            "nup": str(a.get("NUP") or ""),
+            "tanggal_buku": tgl, "jumlah": 1,
+            "nilai": parse_harga(a.get("purchase_price")),
+            "sumber_modul": "backfill", "ref_id": "",
+            "keterangan": "Saldo awal sintetis (backfill Buku Barang)",
+            "oleh": admin.get("username", "system"),
+            "created_at": now})
+        dibuat += 1
+    await log_audit("backfill_mutasi_bmn", "", username=admin.get("username", "system"),
+                    detail=f"Backfill saldo awal Buku Barang: {dibuat} aset")
+    return {"dibuat": dibuat, "sudah_berjurnal": len(sudah)}
 
 
 async def _nup_berikut_kode(kode_baru: str) -> str:

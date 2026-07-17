@@ -226,6 +226,22 @@ async def transisi_usulan(usulan_id: str, payload: TransisiIn,
     if payload.status == "sk_terbit":
         res["proyeksi_master"] = await _proyeksi_master_penghapusan(
             res, admin.get("username") or "system")
+        # Jurnal Buku Barang (G7): penghapusan → 301 (best-effort).
+        from pembukuan_utils import parse_harga
+        from shared_utils import catat_mutasi_bmn
+        aset = await db.assets.find_one(
+            {"id": res.get("asset_id")},
+            {"_id": 0, "asset_code": 1, "NUP": 1, "purchase_price": 1})
+        await catat_mutasi_bmn({
+            "asset_id": res.get("asset_id"), "kode_transaksi": "301",
+            "kode_barang": str((aset or {}).get("asset_code") or ""),
+            "nup": str((aset or {}).get("NUP") or ""),
+            "tanggal_buku": (res.get("tanggal_sk") or now[:10]),
+            "jumlah": 1,
+            "nilai": parse_harga((aset or {}).get("purchase_price")),
+            "sumber_modul": "penghapusan", "ref_id": res.get("id"),
+            "keterangan": f"SK Penghapusan {res.get('nomor_sk') or '-'}",
+            "oleh": admin.get("username", "system")})
     return res
 
 
