@@ -8,8 +8,10 @@ import io
 import logging
 import uuid
 from datetime import datetime, timezone
-from fastapi import APIRouter, UploadFile, File
+from fastapi import APIRouter, Depends, UploadFile, File
 from fastapi.responses import StreamingResponse
+
+from auth_utils import require_user
 import httpx
 
 from db import db
@@ -174,15 +176,24 @@ async def compress_pdf_whipdoc(pdf_bytes: bytes, filename: str) -> tuple:
 # API ENDPOINTS
 # ============================================================================
 @pdf_compress_router.post("/compress-pdf")
-async def compress_pdf(file: UploadFile = File(...)):
+async def compress_pdf(file: UploadFile = File(...),
+                       _user: dict = Depends(require_user)):
     """
     Compress PDF using fallback chain: iLoveAPI → WhipDoc.
     Returns compressed PDF file.
     """
+    from fastapi import HTTPException
     try:
         pdf_bytes = await file.read()
         original_size = len(pdf_bytes)
-        filename = file.filename or "document.pdf"
+        # Batas ukuran (DoS memori/kuota) + validasi magic byte %PDF.
+        if original_size > 25 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="PDF melebihi 25MB")
+        if pdf_bytes[:4] != b"%PDF":
+            raise HTTPException(status_code=400, detail="Berkas bukan PDF yang valid")
+        # Sanitasi nama file utk header Content-Disposition (cegah header split).
+        import re as _re
+        filename = _re.sub(r'[\r\n";\\/]+', "_", file.filename or "document.pdf")[:120] or "document.pdf"
 
         # Try iLoveAPI first
         compressed, method = await compress_pdf_iloveapi(pdf_bytes, filename)
@@ -221,13 +232,15 @@ async def compress_pdf(file: UploadFile = File(...)):
                 },
             )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"PDF compression error: {e}")
         return {"error": str(e), "success": False}
 
 
 @pdf_compress_router.get("/pdf-compression-quotas")
-async def get_pdf_compression_quotas():
+async def get_pdf_compression_quotas(_user: dict = Depends(require_user)):
     """Get quota status for all PDF compression services."""
     month = await get_current_month()
     quotas = []

@@ -22,15 +22,17 @@ import_progress = {}
 # ============================================================================
 
 @categories_router.get("/categories")
-async def get_categories(search: str = "", page: int = 1, page_size: int = 50):
+async def get_categories(search: str = "", page: int = 1, page_size: int = 50,
+                         _user: dict = Depends(require_user)):
     """Get categories with search and pagination"""
+    import re as _re
+    page = max(1, page)
+    page_size = min(max(1, page_size), 500)
     query = {}
     if search:
-        query = {"$or": [
-            {"kode_aset": {"$regex": search, "$options": "i"}},
-            {"label": {"$regex": search, "$options": "i"}}
-        ]}
-    
+        rx = {"$regex": _re.escape(search.strip()), "$options": "i"}
+        query = {"$or": [{"kode_aset": rx}, {"label": rx}]}
+
     total = await db.categories.count_documents(query)
     skip = (page - 1) * page_size
     categories = await db.categories.find(query, {"_id": 0}).sort("kode_aset", 1).skip(skip).limit(page_size).to_list(page_size)
@@ -44,7 +46,7 @@ async def get_categories(search: str = "", page: int = 1, page_size: int = 50):
     }
 
 @categories_router.get("/categories/all")
-async def get_all_categories():
+async def get_all_categories(_user: dict = Depends(require_user)):
     """Get all categories (cached for 5 min, for dropdowns)"""
     cache_key = "all"
     if cache_key in _cache_categories:
@@ -90,7 +92,7 @@ async def create_category(category: CategoryCreate, _user: dict = Depends(requir
             "peringatan_kodefikasi": peringatan}
 
 @categories_router.delete("/categories/{category_id}")
-async def delete_category(category_id: str, _user: dict = Depends(require_user)):
+async def delete_category(category_id: str, _admin: dict = Depends(require_admin)):
     """Delete a category (login wajib). Ditolak bila masih dipakai aset (temuan #34)."""
     cat = await db.categories.find_one({"id": category_id}, {"_id": 0, "label": 1})
     if cat and str(cat.get("label") or "").strip():
@@ -267,7 +269,7 @@ async def _do_bulk_import(job_id: str, rows: list):
     import_progress.pop(job_id, None)
 
 @categories_router.get("/categories/import-progress/{job_id}")
-async def get_import_progress(job_id: str):
+async def get_import_progress(job_id: str, _user: dict = Depends(require_user)):
     """Get import progress for a job"""
     if job_id not in import_progress:
         raise HTTPException(status_code=404, detail="Job not found")

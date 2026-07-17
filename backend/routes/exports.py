@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request, Depends
-from auth_utils import require_user
+from auth_utils import require_admin, require_user
 from fastapi.responses import StreamingResponse
 
 from reportlab.lib.pagesizes import A4
@@ -237,8 +237,9 @@ async def get_asset_doc_file(asset_id: str, item_idx: int, file_type: str, file_
 
 @exports_router.delete("/assets/bulk-delete/{activity_id}")
 @limiter.limit("3/minute")
-async def bulk_delete_assets(request: Request, activity_id: str, _user: dict = Depends(require_user)):
-    """Delete all assets for a specific activity"""
+async def bulk_delete_assets(request: Request, activity_id: str, _admin: dict = Depends(require_admin)):
+    """Delete all assets for a specific activity (admin only — hapus permanen
+    massal setara/di atas hapus satu aset yang juga admin-only)."""
     activity = await db.inventory_activities.find_one({"id": activity_id})
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan inventarisasi tidak ditemukan")
@@ -253,7 +254,9 @@ async def bulk_delete_assets(request: Request, activity_id: str, _user: dict = D
     
     logger.info(f"Bulk deleted {result.deleted_count} assets for activity {activity_id}")
     invalidate_asset_cache()
-    audit_user = request.headers.get("X-Audit-User", "unknown")
+    # Pelaku dari identitas TERAUTENTIKASI (bukan header X-Audit-User yang
+    # bisa dipalsukan) — selaras konvensi hardening repo.
+    audit_user = _admin.get("name") or _admin.get("username") or "admin"
     await log_audit("bulk_delete", activity_id, "", "", "", audit_user, detail=f"Hapus massal {result.deleted_count} aset")
     
     return {

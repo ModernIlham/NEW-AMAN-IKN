@@ -59,8 +59,9 @@ async def daftar_periode(_user: dict = Depends(require_user)):
 
 
 @pelaporan_router.post("/pelaporan/periode")
-async def buat_periode(payload: PeriodeIn, user: dict = Depends(require_user)):
-    """Daftarkan periode pelaporan baru (unik per tahun+jenis)."""
+async def buat_periode(payload: PeriodeIn, user: dict = Depends(require_admin)):
+    """Daftarkan periode pelaporan baru (admin — seluruh siklus hidup periode
+    kunci/buka/hapus/tenggat juga admin-only)."""
     data = payload.model_dump()
     errors = validate_periode(data)
     if errors:
