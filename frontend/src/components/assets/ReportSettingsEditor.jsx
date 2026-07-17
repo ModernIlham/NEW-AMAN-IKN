@@ -75,6 +75,7 @@ export default function ReportSettingsEditor({ onClose }) {
     { key: "tempat_laporan", label: "Tempat Laporan (kota penandatanganan)", placeholder: "Contoh: Nusantara" },
     { key: "tanggal_laporan", label: "Tanggal Laporan (baris ttd surat & sampul)", type: "date" },
     { key: "catatan_kaki", label: "Catatan Kaki", placeholder: "Teks tambahan di bagian bawah sampul" },
+    { key: "tembusan_laporan", label: "Tembusan surat/BA (satu per baris — kosongkan bila tidak dipakai)", placeholder: "Kepala Biro Umum\nInspektur\nKepala KPKNL Balikpapan", multiline: true },
   ];
 
   return (
