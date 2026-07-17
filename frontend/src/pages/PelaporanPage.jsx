@@ -7,6 +7,9 @@ import {
   Settings,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -56,6 +59,8 @@ export default function PelaporanPage({ user, onBack }) {
   // Register periode pelaporan: {items, ringkasan, label_status, catatan}
   const [periode, setPeriode] = useState(null);
   const [bukaSampul, setBukaSampul] = useState(false);
+  // Dialog reklasifikasi kodefikasi (G7): {cari, hasil, aset, kode_baru, alasan, saving}
+  const [reklas, setReklas] = useState(null);
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
   const { minta, transitionDialog } = useTransitionDialog();
@@ -200,6 +205,13 @@ export default function PelaporanPage({ user, onBack }) {
             <Button variant="outline" size="sm" className="gap-1.5" data-testid="pelaporan-kop"
               onClick={() => setBukaSampul((v) => !v)}>
               <Settings className="w-3.5 h-3.5" />Kop/Sampul
+            </Button>
+          )}
+          {isAdmin && (
+            <Button variant="outline" size="sm" className="gap-1.5" data-testid="pelaporan-reklas"
+              title="Reklasifikasi kodefikasi aset (SAKTI 304/107) — kode+NUP diperbarui ber-riwayat"
+              onClick={() => setReklas({ cari: "", hasil: [], aset: null, kode_baru: "", alasan: "", saving: false })}>
+              <Boxes className="w-3.5 h-3.5" />Reklasifikasi
             </Button>
           )}
           <BookingNomorButton modul="pelaporan" jenisNaskah="Laporan" referensi="LHI/LBKP" />
@@ -493,6 +505,84 @@ export default function PelaporanPage({ user, onBack }) {
           Angka LBKP/rekonsiliasi bersumber dari data aset & persediaan AMAN — pencatatan resmi tetap di SAKTI/SIMAN.
         </p>
       </main>
+      {/* ── Dialog Reklasifikasi Kodefikasi (G7 — SAKTI 304/107) ── */}
+      <Dialog open={!!reklas} onOpenChange={(o) => { if (!o) setReklas(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reklasifikasi Kodefikasi Aset</DialogTitle>
+            <DialogDescription className="text-xs">
+              Kode & NUP diperbarui pada aset yang sama (riwayat + jurnal 304/107 tercatat;
+              nilai & tanggal perolehan tidak berubah). Kode tujuan = kode barang 10 digit.
+            </DialogDescription>
+          </DialogHeader>
+          {reklas && (
+            <div className="space-y-2.5 text-sm">
+              {!reklas.aset ? (
+                <div>
+                  <Input placeholder="Cari kode/nama aset (min. 2 huruf)" value={reklas.cari}
+                    data-testid="reklas-cari"
+                    onChange={async (e) => {
+                      const v = e.target.value;
+                      setReklas((r) => ({ ...r, cari: v }));
+                      if (v.trim().length >= 2) {
+                        try {
+                          const rr = await axios.get(`${API}/assets`, { params: { search: v.trim(), page_size: 8 } });
+                          setReklas((r) => (r ? { ...r, hasil: rr.data?.items || [] } : r));
+                        } catch { /* biarkan */ }
+                      }
+                    }} />
+                  <div className="mt-1.5 max-h-40 overflow-y-auto divide-y divide-border/60 border border-border rounded-lg">
+                    {(reklas.hasil || []).map((a) => (
+                      <button key={a.id} type="button" className="w-full px-2.5 py-1.5 text-left hover:bg-muted"
+                        onClick={() => setReklas((r) => ({ ...r, aset: a }))}>
+                        <span className="block text-xs font-semibold text-foreground truncate">{a.asset_name}</span>
+                        <span className="block text-[10px] text-muted-foreground font-mono">{a.asset_code} · NUP {a.NUP}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="rounded-lg border border-border p-2 text-xs">
+                    <p className="font-semibold text-foreground">{reklas.aset.asset_name}</p>
+                    <p className="font-mono text-muted-foreground">{reklas.aset.asset_code} · NUP {reklas.aset.NUP}</p>
+                    <button type="button" className="text-[10px] text-blue-600 hover:underline min-w-0 min-h-0 mt-0.5"
+                      onClick={() => setReklas((r) => ({ ...r, aset: null }))}>Ganti aset</button>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium block mb-1">Kode barang tujuan (10 digit) *</label>
+                    <Input value={reklas.kode_baru} inputMode="numeric" className="font-mono" data-testid="reklas-kode"
+                      onChange={(e) => setReklas((r) => ({ ...r, kode_baru: e.target.value.replace(/\D/g, "").slice(0, 10) }))} />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium block mb-1">Alasan</label>
+                    <Input value={reklas.alasan} placeholder="cth. salah penggolongan saat perekaman"
+                      onChange={(e) => setReklas((r) => ({ ...r, alasan: e.target.value }))} />
+                  </div>
+                  <div className="flex justify-end gap-2 pt-1">
+                    <Button variant="outline" onClick={() => setReklas(null)}>Batal</Button>
+                    <Button disabled={reklas.saving || reklas.kode_baru.length !== 10} data-testid="reklas-simpan"
+                      onClick={async () => {
+                        setReklas((r) => ({ ...r, saving: true }));
+                        try {
+                          const rr = await axios.post(`${API}/pembukuan/reklasifikasi`, {
+                            asset_id: reklas.aset.id, kode_baru: reklas.kode_baru, alasan: reklas.alasan });
+                          toast.success(`Reklasifikasi tercatat — kode baru ${rr.data.kode_baru} · NUP ${rr.data.nup_baru}`);
+                          setReklas(null);
+                        } catch (e2) {
+                          toast.error(e2?.response?.data?.detail || "Gagal reklasifikasi");
+                          setReklas((r) => (r ? { ...r, saving: false } : r));
+                        }
+                      }}>
+                      Reklasifikasi
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
       {confirmDialog}
       {transitionDialog}
     </div>

@@ -204,6 +204,7 @@ from routes.penganggaran import penganggaran_router
 from routes.pengadaan import pengadaan_router
 from routes.pelaporan import pelaporan_router
 from routes.siman import siman_router
+from routes.mutasi_bmn import mutasi_bmn_router
 from routes.persuratan import persuratan_router
 from routes.referensi_akun import referensi_akun_router
 from routes.bast import bast_router
@@ -248,6 +249,7 @@ api_router.include_router(penganggaran_router)
 api_router.include_router(pengadaan_router)
 api_router.include_router(pelaporan_router)
 api_router.include_router(siman_router)
+api_router.include_router(mutasi_bmn_router)
 api_router.include_router(persuratan_router)
 api_router.include_router(referensi_akun_router)
 api_router.include_router(bast_router)

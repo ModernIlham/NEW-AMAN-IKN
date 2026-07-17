@@ -226,6 +226,48 @@ ruangan, distribusi DBR/KIR). Logika murni teruji unit (`pegawai_utils.py`:
 (`routes/pegawai.py`, endpoint `/pegawai`, `/pegawai/referensi`,
 `/pegawai/rekap-unit`) + UI kelola (`PegawaiPage.jsx`, dibuka dari Beranda Modul).
 
+### 2.6 Pembukuan sebagai INDUK — jurnal mutasi & reklasifikasi (riset terverifikasi Jul 2026, G7)
+
+Riset internet (sumber: modul Penatausahaan DJKN 2017 mirror kemhan.go.id;
+Kamus SAKTI Reklasifikasi Masuk/Keluar klinikakuntansi.net; DJPb Gunungsitoli
+& Modul Aset Tetap; Kanwil DJKN Lampung-Bengkulu; contoh LBKP PN Bantul —
+sumber primer JDIH terblokir proxy, butir lemah ditandai):
+
+- **Hierarki pembukuan PMK 181/2016**: transaksi/mutasi → Buku Barang
+  (Intra/Ekstra, mencatat SETIAP mutasi) + KIB → **DBKP** (himpunan seluruh
+  BMN satker, dimutakhirkan per semester dari Buku Barang+KIB) → LBKP.
+  Dalam praktik SIMAK/SAKTI, **yang otoritatif adalah rekaman transaksi
+  ber-kode per NUP** — Buku Barang/DBKP/KIB/DBR hanyalah cetakan/proyeksi.
+  Kolom baku rincian per sub-sub kelompok: Kode·Uraian·Satuan·Saldo Awal
+  (K+N)·Mutasi Tambah (K+N)·Mutasi Kurang (K+N)·Saldo Akhir (K+N).
+- **Reklasifikasi (SAKTI 304/107)**: untuk kesalahan/perubahan penggolongan;
+  **pasangan tak terpisahkan** (304 keluar dulu, lalu 107 masuk), periode
+  sama, nilai bruto keluar = masuk; satu NUP lama → satu **NUP BARU di kode
+  baru** membawa tanggal & nilai perolehan asli + akumulasi penyusutan
+  [detail field perlu verifikasi Buku Panduan MAT]. Tidak boleh BMN→KDP.
+- **Inventarisasi = PEMUTAKHIR pembukuan, bukan induk** (menjawab arahan
+  pemilik): hasil opname mengalir balik sebagai transaksi — kondisi→203,
+  salah catat→305, berlebih→perolehan/saldo awal NUP baru, tidak
+  ditemukan→TGR→301 pasca-SK.
+- **Kunci sinkron SIMAN**: kode referensi/register **16 digit** SIMAN V2 =
+  Single Identity Number yang TIDAK pernah berubah — sedangkan kodefikasi+NUP
+  bisa berubah (reklasifikasi) atau duplikat. Register cocok + kode/NUP beda
+  = **sinyal reklasifikasi**, bukan selisih biasa.
+
+**Terapan AMAN (G7, #368):** koleksi **`mutasi_bmn` append-only** (jurnal
+barang ber-kode 100–401 selaras §2.3a; `mutasi_bmn_utils.py` murni teruji:
+arah transaksi, validasi entri, pasangan reklasifikasi, rekap saldo per
+periode) + endpoint `GET /pembukuan/mutasi` & `POST /pembukuan/reklasifikasi`
+(kode+NUP dimutakhirkan **in-place** — id internal & kode register SIMAN
+tetap; NUP baru berurut di kode tujuan; `riwayat_reklasifikasi` pada aset;
+pasangan 304/107 tercatat; kode '1…' persediaan ditolak). Sinkron SIMAN kini
+**sadar-reklasifikasi** (`deteksi_reklasifikasi_siman` → subdoc
+`siman.reklasifikasi`). UI: dialog "Reklasifikasi" di hub Pelaporan (admin).
+**Menyusul (lanjutan G7):** pengisian jurnal dari semua modul (pengadaan→101,
+penghapusan→301, dst. via event), backfill sekali dari audit+register, LBKP
+membaca jurnal bila terisi (fallback derivasi assets tetap), aksi "terapkan
+reklasifikasi" 1-klik dari kartu SIMAN.
+
 ### 2.5 Referensi Akun Neraca (BAS) per golongan (#301)
 
 Master `akun_bas` memetakan **golongan kodefikasi → akun neraca aset** (Bagan

@@ -113,7 +113,13 @@ async def import_siman(request: Request, file: UploadFile = File(...),
             continue
         terpakai.add(id(b))
         selisih = banding_aset(a, b)
-        hasil.append({"aset": a, "baris": b, "selisih": selisih})
+        # Sinyal reklasifikasi (riset G7 §5): kode_register cocok tetapi
+        # kodefikasi/NUP beda → aset direklasifikasi di SIMAN, bukan sekadar
+        # selisih field — UI menampilkannya berbeda.
+        from mutasi_bmn_utils import deteksi_reklasifikasi_siman
+        reklas = deteksi_reklasifikasi_siman(a, b)
+        hasil.append({"aset": a, "baris": b, "selisih": selisih,
+                      "reklasifikasi": reklas})
 
     aset_cocok_id = {r["aset"]["id"] for r in hasil}
     aman_tanpa_siman = [a for a in assets if a["id"] not in aset_cocok_id]
@@ -127,6 +133,7 @@ async def import_siman(request: Request, file: UploadFile = File(...),
         subdoc = {
             "status": "selisih" if r["selisih"] else "cocok",
             "selisih": r["selisih"],
+            "reklasifikasi": r.get("reklasifikasi") or {},
             "referensi": referensi_siman(r["baris"]),
             "kode_register": r["baris"]["kode_register"],
             "import_id": import_id,
