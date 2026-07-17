@@ -1,6 +1,5 @@
 import React, { memo } from "react";
 import { CloudOff, LayoutDashboard, ClipboardCheck } from "lucide-react";
-import { Switch } from "@/components/ui/switch";
 
 // "04 Jul 14.30" — waktu sinkron terakhir snapshot offline
 function formatSyncTime(iso) {
@@ -59,7 +58,7 @@ const StatsBar = memo(({ stats, inventoryMode, setInventoryMode, isOnline, pendi
 
     {/* Large Desktop (lg+): stats grid. Total Nilai gets a wider column
         (1.6fr) because the rupiah figure is far longer than the count cards. */}
-    <div className="hidden lg:grid grid-cols-[1fr_1.6fr_1fr_1fr] gap-3">
+    <div className="hidden lg:grid grid-cols-[1fr_1.6fr_1fr_1fr_auto] gap-3">
       {[
         { label: "Total Aset", value: stats.totalAssets.toLocaleString('id-ID'), color: "text-foreground" },
         { label: "Total Nilai", value: `Rp ${stats.totalValue}`, color: "text-blue-600 dark:text-blue-400" },
@@ -71,6 +70,11 @@ const StatsBar = memo(({ stats, inventoryMode, setInventoryMode, isOnline, pendi
           <div className={`text-xl font-bold ${s.color} truncate text-right`}>{s.value}</div>
         </div>
       ))}
+      <InventoryModeSwitch
+        inventoryMode={inventoryMode}
+        setInventoryMode={setInventoryMode}
+        className="p-1 gap-1 rounded-xl border border-border bg-card shadow-elev-1 self-stretch items-center"
+      />
     </div>
 
     {/* Tablet / Phone Landscape (sm to lg): Compact stats + inline toggle.
@@ -87,9 +91,11 @@ const StatsBar = memo(({ stats, inventoryMode, setInventoryMode, isOnline, pendi
           <div className={`text-base font-bold ${s.color} mt-0.5 truncate`}>{s.value}</div>
         </div>
       ))}
-      <div className="flex-shrink-0 bg-card rounded-xl border border-border px-3 flex items-center justify-center shadow-elev-1" title="Mode Inventarisasi" data-testid="inventory-mode-toggle-tablet-wrapper">
-        <Switch checked={inventoryMode} onCheckedChange={setInventoryMode} aria-label="Mode Inventarisasi" className="min-h-0 min-w-0" data-testid="inventory-mode-toggle-tablet" />
-      </div>
+      <InventoryModeSwitch
+        inventoryMode={inventoryMode}
+        setInventoryMode={setInventoryMode}
+        className="flex-shrink-0 p-1 gap-1 rounded-xl border border-border bg-card shadow-elev-1 items-center"
+      />
     </div>
 
     {/* Mobile Portrait (< sm): kartu saklar mode full-width. Saat mode
