@@ -48,6 +48,33 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#350] Handover langsung: mutasi pemegang & pengembalian ber-efek data + BAST, booking nomor otomatis — 2026-07-17
+
+- **Jenis BAST baru "Mutasi/Alih Pemegang (Handover)"**: PIHAK KESATU =
+  pemegang lama (wajib; prefill dari pemegang yang dibuka), PIHAK KEDUA =
+  pemegang baru; naskah ber-pasal mutasi (tanggung jawab beralih sejak
+  ttd, pencatatan pemegang diperbarui) dan **tanda tangan 3 pihak** —
+  pemegang baru (kiri), pemegang lama (kanan + tempat/tanggal), **KPB
+  "Mengetahui" di tengah bawah**.
+- **Handover langsung (efek data)** — centang "terapkan ke aset":
+  - mutasi → `user`/`pengguna_nip`/`pengguna_jabatan` aset langsung
+    berpindah ke pemegang baru;
+  - pengembalian → pengguna aset dikosongkan (barang kembali ke satker);
+  keduanya ber-audit + `$inc version`; rekap pemegang langsung segar.
+- **Booking nomor otomatis**: centang "Pesan nomor otomatis" → nomor BAST
+  terbit dari Registrasi Persuratan (counter atomik + klasifikasi
+  otomatis) dan tercatat di buku agenda berstatus *dibooking*.
+- **Badge riwayat BAST per aset**: subdoc `bast_terakhir` (id, jenis,
+  nomor, tanggal, penerima) ditulis ke tiap aset setiap BAST dibuat —
+  tampil sebagai badge di daftar aset pemegang (dan tersedia di proyeksi
+  list aset).
+- Verifikasi: suite **468 lulus**; smoke — mutasi memindahkan pengguna
+  (Andi→Citra) + nomor otomatis `B-001/…` + record agenda dibooking +
+  PDF 3 ttd; pengembalian mengosongkan pengguna; mutasi tanpa pemegang
+  lama ditolak 400.
+
+---
+
 ## [#349] Generator BAST serah terima pengguna: multi-aset, 4+1 jenis, lampiran foto opsional — 2026-07-17
 
 - **BAST per pengguna dari modul Penggunaan** (detail pemegang → tombol

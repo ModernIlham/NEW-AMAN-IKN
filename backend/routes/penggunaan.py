@@ -86,7 +86,8 @@ async def aset_pemegang(
     """Daftar aset yang dipegang satu orang (identitas nama+NIP)."""
     key = (" ".join(nama.split()).lower(), nip.strip())
     proj = {**_PROJ, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
-            "location": 1, "condition": 1, "inventory_status": 1}
+            "location": 1, "condition": 1, "inventory_status": 1,
+            "bast_terakhir": 1}
     out = []
     async for a in db.assets.find(
             {"user": {"$exists": True, "$nin": ["", None]}}, proj):
@@ -101,6 +102,7 @@ async def aset_pemegang(
                 "inventory_status": a.get("inventory_status"),
                 "activity_id": a.get("activity_id"),
                 "ada_bast": bool(str(a.get("bast_file_id") or "").strip()),
+                "bast_terakhir": a.get("bast_terakhir") or None,
             })
     out.sort(key=lambda x: (x["asset_name"] or "", x["asset_code"] or ""))
     return {"items": out, "total": len(out)}
