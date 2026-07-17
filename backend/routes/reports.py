@@ -395,6 +395,93 @@ def _tempat_tanggal_laporan(settings, tanggal_iso=""):
     return f"{tempat}, {tgl}"
 
 
+def _info_kegiatan_2kolom(activity, settings, doc_width):
+    """Blok info kegiatan RINGKAS 2 kolom × 2 baris (hemat ruang vertikal
+    RHI/DBKP): Satker | Nomor SK, lalu Kegiatan | Periode."""
+    from reportlab.platypus import Table, TableStyle, Paragraph
+    from xml.sax.saxutils import escape
+    st = _get_report_styles()
+    meta = st['Meta']
+    ident = _activity_identity(activity, settings)
+    periode = (f"{_fmt_tanggal_id(activity.get('tanggal_mulai')) or '-'} s.d. "
+               f"{_fmt_tanggal_id(activity.get('tanggal_selesai')) or '-'}")
+    data = [
+        [Paragraph(f"Satuan Kerja: <b>{escape(str(ident['satker_name']))}</b>", meta),
+         Paragraph(f"Nomor SK: <b>{escape(str(activity.get('nomor_surat') or '-'))}</b>", meta)],
+        [Paragraph(f"Kegiatan: <b>{escape(str(activity.get('nama_kegiatan') or '-'))}</b>", meta),
+         Paragraph(f"Periode Inventarisasi: <b>{periode}</b>", meta)],
+    ]
+    t = Table(data, colWidths=[doc_width * 0.56, doc_width * 0.44], hAlign='LEFT')
+    t.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
+    ]))
+    return t
+
+
+def _blok_ttd_tim_kpb(tim, settings, tanggal_iso, ident, doc_width,
+                      label_tim="Tim Pelaksana Inventarisasi",
+                      header_mengetahui="Mengetahui,"):
+    """Blok tanda tangan BA sesuai kaidah inventarisasi BMN: SELURUH anggota
+    tim bertanda tangan (ketua ditandai; berpasangan kiri-kanan per baris,
+    tempat/tanggal di kanan atas), lalu penanggung jawab UAKPB / Kuasa
+    Pengguna Barang 'Mengetahui' di TENGAH bawah.
+
+    Dasar: praktik BAHI (ditandatangani minimal 3 anggota tim pelaksana,
+    disahkan penanggung jawab UAKPB — PMK 181/2016 & pedoman satker).
+    """
+    from reportlab.platypus import Paragraph, Spacer, Table, TableStyle, KeepTogether
+    from reportlab.lib.units import mm as rl_mm
+    from xml.sax.saxutils import escape
+    st = _get_report_styles()
+    sig = st['Signature']
+    els = []
+
+    anggota = [_member_dict(m) for m in (tim or [])]
+    if not anggota:
+        anggota = [{"nama": "", "nip": ""}]
+    punya_ketua = any(m.get("is_ketua") for m in anggota)
+
+    els.append(Paragraph(f"<b>{label_tim}:</b>", st['Heading']))
+    els.append(Spacer(1, 2 * rl_mm))
+    for i in range(0, len(anggota), 2):
+        pasangan = anggota[i:i + 2]
+        signers = []
+        for j, m in enumerate(pasangan):
+            idx = i + j
+            ketua = m.get("is_ketua") if punya_ketua else (idx == 0)
+            s = {"header": "Ketua Tim," if ketua else "Anggota,",
+                 "nama": m.get("nama") or "________________________",
+                 "after": [f"NIP. {m.get('nip') or '........................'}"]}
+            if i == 0 and j == len(pasangan) - 1:
+                # tempat/tanggal sekali, di kanan atas area tanda tangan
+                s["pre"] = [_tempat_tanggal_laporan(settings, tanggal_iso)]
+            signers.append(s)
+        els.extend(_signature_block(signers, doc_width))
+        els.append(Spacer(1, 5 * rl_mm))
+
+    # Penanggung jawab UAKPB (KPB) mengesahkan — tengah bawah.
+    kolom = [
+        Paragraph(header_mengetahui, sig),
+        Paragraph(escape(str(ident.get("kasatker_jabatan") or "Kuasa Pengguna Barang,")), sig),
+        Spacer(1, 15 * rl_mm),
+        Paragraph(f"<b><u>{escape(str(ident.get('kasatker_nama') or ''))}</u></b>", sig),
+        Paragraph(f"NIP. {escape(str(ident.get('kasatker_nip') or ''))}", sig),
+    ]
+    t = Table([["", kolom, ""]],
+              colWidths=[doc_width * 0.3, doc_width * 0.4, doc_width * 0.3])
+    t.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+    ]))
+    els.append(KeepTogether(t))
+    return els
+
+
 def _identity_table(rows):
     """Blok identitas 'Label : Nilai' dengan kolom titik dua yang sejajar.
 
@@ -790,15 +877,11 @@ async def generate_berita_acara_pdf(activity_id: str, _user: dict = Depends(requ
     elements.append(Paragraph("Demikian Berita Acara ini dibuat dengan sebenar-benarnya.", normal_style))
     elements.append(Spacer(1, 6*rl_mm))
 
-    # Kaidah tata naskah: pembuat BA di KANAN dengan baris tempat/tanggal,
-    # "Mengetahui" di kiri.
-    elements.extend(_signature_block([
-        {'header': 'Mengetahui,', 'role': ident["kasatker_jabatan"], 'nama': ident["kasatker_nama"],
-         'after': [f'NIP. {ident["kasatker_nip"]}']},
-        {'pre': [_tempat_tanggal_laporan(settings, tanggal_ba)],
-         'header': 'Tim Peneliti,', 'role': 'Ketua Tim',
-         'nama': _member_nama(tim[0], '_______________') if tim else '_______________'},
-    ], doc.width))
+    # Kaidah BA penelitian: SELURUH anggota tim peneliti bertanda tangan
+    # (ketua ditandai), lalu Kuasa Pengguna Barang mengetahui di tengah bawah.
+    elements.extend(_blok_ttd_tim_kpb(
+        tim, settings, tanggal_ba, ident, doc.width,
+        label_tim="Tim Peneliti"))
 
     footer = _page_footer_factory("Berita Acara Tim Internal Penelitian BMN Tidak Ditemukan")
     doc.build(elements, onFirstPage=footer, onLaterPages=footer)
@@ -1331,11 +1414,9 @@ async def generate_rhi_pdf(activity_id: str, _user: dict = Depends(require_user_
     elements.extend(_title_block("REKAPITULASI HASIL INVENTARISASI\nBARANG MILIK NEGARA (RHI)"))
 
     ident = _activity_identity(activity, settings)
-    satker_name = ident["satker_name"]
-    elements.append(Paragraph(f"Satuan Kerja: {satker_name}", info_style))
-    elements.append(Paragraph(f"Kegiatan: {activity.get('nama_kegiatan') or '-'}", info_style))
-    elements.append(Paragraph(f"Nomor SK: {activity.get('nomor_surat') or '-'} | Periode: {_fmt_tanggal_id(activity.get('tanggal_mulai')) or '-'} s.d. {_fmt_tanggal_id(activity.get('tanggal_selesai')) or '-'}", info_style))
-    elements.append(Spacer(1, 4*rl_mm))
+    # Info ringkas 2 kolom × 2 baris — RHI diusahakan muat SATU halaman.
+    elements.append(_info_kegiatan_2kolom(activity, settings, doc.width))
+    elements.append(Spacer(1, 2.5*rl_mm))
 
     headers = ["No", "Kategori Hasil Inventarisasi", "Jumlah\n(NUP)", "Nilai (Rp)", "Persentase"]
     header_row = [Paragraph(h.replace("\n", "<br/>"), header_style) for h in headers]
@@ -1384,8 +1465,8 @@ async def generate_rhi_pdf(activity_id: str, _user: dict = Depends(require_user_
     table.setStyle(_std_table_style(zebra=True, total_row=True))
     elements.append(table)
 
-    # Signature
-    elements.append(Spacer(1, 12*rl_mm))
+    # Signature — spacer ringkas agar RHI muat satu halaman
+    elements.append(Spacer(1, 6*rl_mm))
     kasatker_nama = ident["kasatker_nama"]
     kasatker_nip = ident["kasatker_nip"]
     elements.extend(_signature_block([
@@ -1468,11 +1549,9 @@ async def generate_dbkp_pdf(activity_id: str, _user: dict = Depends(require_user
     elements.extend(_title_block("DAFTAR BARANG KUASA PENGGUNA (DBKP)\nPER GOLONGAN BARANG"))
 
     ident = _activity_identity(activity, settings)
-    elements.append(Paragraph(f"Satuan Kerja: {ident['satker_name']}", st['Meta']))
-    elements.append(Paragraph(
-        f"Kegiatan: {activity.get('nama_kegiatan') or '-'} | Periode: {_fmt_tanggal_id(activity.get('tanggal_mulai')) or '-'} s.d. {_fmt_tanggal_id(activity.get('tanggal_selesai')) or '-'}",
-        st['Meta']))
-    elements.append(Spacer(1, 4*rl_mm))
+    # Info ringkas 2 kolom (memuat Nomor SK yang dulu tidak tampil di DBKP).
+    elements.append(_info_kegiatan_2kolom(activity, settings, doc.width))
+    elements.append(Spacer(1, 2.5*rl_mm))
 
     headers = ["Gol.", "Akun\nNeraca", "Uraian Golongan",
                "Jml\nIntra", "Nilai Intra\n(Rp)",
@@ -1516,7 +1595,7 @@ async def generate_dbkp_pdf(activity_id: str, _user: dict = Depends(require_user
         f"(PMK 181/PMK.06/2016): Peralatan dan Mesin ≥ Rp{ambang_pm}; Gedung dan Bangunan ≥ Rp{ambang_gb}; "
         f"golongan lainnya dibukukan intrakomptabel tanpa ambang.", st['Meta']))
 
-    elements.append(Spacer(1, 12*rl_mm))
+    elements.append(Spacer(1, 6*rl_mm))
     elements.extend(_signature_block([
         {'pre': [_tempat_tanggal_laporan(settings)],
          'header': 'Kuasa Pengguna Barang,',
@@ -2805,33 +2884,22 @@ async def generate_bahi_pdf(activity_id: str, _user: dict = Depends(require_user
 
     elements.append(Spacer(1, 10*rl_mm))
 
-    if tim:
-        elements.append(Paragraph("<b>Tim Pelaksana Inventarisasi:</b>", bold_style))
-        for i, member in enumerate(tim, 1):
-            # Anggota bisa dict {nama, jabatan, nip, dari_satker} atau string legacy
-            name = member.get('nama', '-') if isinstance(member, dict) else str(member)
-            elements.append(Paragraph(f"{i}. {name} &nbsp;&nbsp;&nbsp;(.......................)", small_style))
-        elements.append(Spacer(1, 4*rl_mm))
-
+    # Tim pendukung disebut sebagai informasi (bukan penanda tangan BA —
+    # yang menandatangani BAHI adalah tim pelaksana + disahkan KPB).
     if tim_pendukung_list:
         elements.append(Paragraph("<b>Tim Pendukung:</b>", bold_style))
         for i, member in enumerate(tim_pendukung_list, 1):
-            if isinstance(member, dict):
-                name = member.get('nama', '-')
-            else:
-                name = str(member)
-            elements.append(Paragraph(f"{i}. {name} &nbsp;&nbsp;&nbsp;(.......................)", small_style))
-        elements.append(Spacer(1, 6*rl_mm))
+            name = member.get('nama', '-') if isinstance(member, dict) else str(member)
+            elements.append(Paragraph(f"{i}. {name}", small_style))
+        elements.append(Spacer(1, 4*rl_mm))
 
-    elements.extend(_signature_block([
-        {'header': 'Mengetahui,',
-         'nama': kasatker_nama,
-         'after': [f'NIP. {kasatker_nip}']},
-        {'pre': [_tempat_tanggal_laporan(settings, tanggal_ba)],
-         'header': 'Yang membuat Berita Acara,',
-         'nama': _member_nama(tim[0], '________________________') if tim else '________________________',
-         'after': ['NIP. ........................']},
-    ], doc.width))
+    # Kaidah BAHI: ditandatangani SELURUH tim pelaksana inventarisasi
+    # (minimal 3 orang, ketua ditandai) dan disahkan/diketahui penanggung
+    # jawab UAKPB (Kuasa Pengguna Barang) — bukan hanya ketua tim.
+    elements.extend(_blok_ttd_tim_kpb(
+        tim, settings, tanggal_ba, ident, doc.width,
+        label_tim="Tim Pelaksana Inventarisasi",
+        header_mengetahui="Mengetahui/Mengesahkan,"))
 
     footer = _page_footer_factory("Berita Acara Hasil Inventarisasi Barang Milik Negara (BAHI)")
     doc.build(elements, onFirstPage=footer, onLaterPages=footer)

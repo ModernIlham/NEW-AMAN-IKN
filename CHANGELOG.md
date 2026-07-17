@@ -48,6 +48,33 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#344] Naskah BA sesuai kaidah (seluruh tim bertanda tangan), RHI 1 halaman, DBKP ber-nomor SK — 2026-07-17
+
+- **Review naskah kedua Berita Acara** (riset kaidah: BAHI ditandatangani
+  minimal 3 anggota tim pelaksana dan disahkan penanggung jawab UAKPB —
+  bukan hanya ketua):
+  - **BAHI**: blok tanda tangan kini memuat SELURUH anggota Tim Pelaksana
+    Inventarisasi (berpasangan per baris; ketua ditandai "Ketua Tim";
+    tempat/tanggal di kanan atas) + **Kuasa Pengguna Barang
+    "Mengetahui/Mengesahkan" di tengah bawah**; tim pendukung tetap
+    tercantum sebagai informasi (bukan penanda tangan). Daftar lama
+    "nama (…....)" yang bukan blok ttd resmi dihapus.
+  - **BA Tim Internal Penelitian BMN Tidak Ditemukan**: sama — seluruh
+    anggota Tim Peneliti bertanda tangan + KPB mengetahui di tengah;
+    dulu hanya Ketua Tim.
+  - Helper baru `_blok_ttd_tim_kpb()` (dipakai kedua BA; aman untuk tim
+    kosong / tanpa penanda ketua).
+- **RHI dipadatkan agar muat SATU halaman**: blok info jadi 2 kolom × 2
+  baris (Satker|Nomor SK, Kegiatan|Periode — helper
+  `_info_kegiatan_2kolom`), spacer tanda tangan 12→6 mm — terverifikasi
+  smoke `PdfReader` = 1 halaman.
+- **DBKP per Golongan kini menampilkan Nomor SK** (dulu tidak ada) memakai
+  blok info 2 kolom yang sama — sekaligus hemat ruang; spacer ttd 12→6 mm.
+- Verifikasi: suite **468 lulus**; smoke render RHI (1 halaman), DBKP,
+  BAHI & BA Internal dengan tim 3 anggota dan tim kosong.
+
+---
+
 ## [#343] Persuratan smart: klasifikasi nomor otomatis, master kode arsip dinamis, pratinjau nomor live — 2026-07-17
 
 - **Master Kode Klasifikasi Arsip** dikelola dinamis (admin, dialog
