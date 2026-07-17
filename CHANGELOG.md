@@ -48,6 +48,33 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#370] Gelombang 8-1: pengamanan gerbang otorisasi (audit keamanan terverifikasi) — 2026-07-17
+
+Hasil **audit keamanan otomatis** (5 auditor paralel + verifikasi adversarial
+per temuan): 6 celah otorisasi TERKONFIRMASI ditutup —
+- **Hapus massal aset** (`DELETE /assets/bulk-delete/{activity_id}`) kini
+  **admin-only** (sebelumnya `require_user` — operator/viewer bisa menghapus
+  permanen SELURUH aset satu kegiatan, padahal hapus SATU aset admin-only);
+  pelaku audit diambil dari identitas terautentikasi, bukan header
+  `X-Audit-User` yang bisa dipalsukan.
+- **Transisi tiket proses penggunaan** (`/penggunaan/proses/{id}/status`)
+  kini **admin-only** — status terminalnya memproyeksikan aset KELUAR
+  pembukuan satker, setara transisi PSP & idle yang memang admin-only.
+- **`POST /compress-pdf`** kini wajib login (sebelumnya TANPA auth sama
+  sekali — bisa menguras kuota API pihak ketiga) + batas ukuran **25MB** +
+  validasi magic byte `%PDF` + sanitasi nama file header; `GET
+  /pdf-compression-quotas` juga di-gate.
+- **Hapus kategori** (master data) kini **admin-only** (selaras kodefikasi &
+  hapus-semua kategori).
+- **Daftarkan periode pelaporan** kini **admin-only** (seluruh siklus
+  kunci/buka/hapus/tenggat sudah admin-only).
+- **GET `/categories`, `/categories/all`, `/categories/import-progress`**
+  kini wajib login; pencarian kategori di-`re.escape` (anti ReDoS) &
+  `page/page_size` di-clamp (anti skip negatif → 500).
+- Verifikasi: suite **475 lulus**; compile & build hijau.
+
+---
+
 ## [#369] Gelombang 7 (lanjutan): jurnal terisi dari modul + backfill saldo awal — 2026-07-17
 
 - **Modul-modul kini menulis Buku Barang otomatis** (`catat_mutasi_bmn` di

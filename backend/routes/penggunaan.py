@@ -865,8 +865,9 @@ async def buat_proses(payload: ProsesIn, user: dict = Depends(require_user)):
 
 @penggunaan_router.post("/penggunaan/proses/{tiket_id}/status")
 async def transisi_proses(tiket_id: str, payload: TransisiProsesIn,
-                          user: dict = Depends(require_user)):
-    """Pindahkan status tiket (anti-race; dokumen tahap ikut tercatat)."""
+                          user: dict = Depends(require_admin)):
+    """Pindahkan status tiket (admin — status terminal memproyeksikan aset
+    KELUAR pembukuan satker; selaras transisi PSP & idle yang admin-only)."""
     t = await db.penggunaan_proses.find_one({"id": tiket_id}, {"_id": 0})
     if not t:
         raise HTTPException(status_code=404, detail="Tiket tidak ditemukan")
