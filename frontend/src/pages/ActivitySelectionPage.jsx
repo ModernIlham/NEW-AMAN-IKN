@@ -1006,7 +1006,11 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
           <div className="text-center py-20 bg-card rounded-2xl border border-border">
             <FolderOpen className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
             <h3 className="text-lg font-semibold text-foreground/80 mb-2">Belum Ada Kegiatan</h3>
-            <p className="text-muted-foreground mb-4">Buat kegiatan inventarisasi baru untuk memulai</p>
+            <p className="text-muted-foreground mb-4">
+              {canManageActivities
+                ? "Buat kegiatan inventarisasi baru untuk memulai"
+                : "Belum ada kegiatan untuk Anda — hubungi admin/operator untuk membuat kegiatan"}
+            </p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -1112,7 +1116,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                   : computedStatus === "selesai_tanggal"
                   ? "Validasi"
                   : computedStatus === "berlangsung"
-                  ? "On Going"
+                  ? "Berlangsung"
                   : "Belum Dimulai"
               );
               return (
@@ -1166,7 +1170,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                         <Building2 className="w-3 h-3" />{act.kode_satker} - {act.nama_satker}
                       </span>
                     )}
-                    <span className="text-xs text-muted-foreground">{act.tanggal_mulai} - {act.tanggal_selesai || 'Ongoing'}</span>
+                    <span className="text-xs text-muted-foreground">{act.tanggal_mulai} - {act.tanggal_selesai || 'berlangsung'}</span>
                   </div>
                   <h3 className="font-semibold text-foreground text-lg break-words">{act.nama_kegiatan}</h3>
                   {act.deskripsi && <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{act.deskripsi}</p>}
@@ -1619,7 +1623,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                   : status === "belum_lengkap"
                   ? { color: "amber", label: "Belum Lengkap", icon: AlertTriangle, msg: "Tanggal kegiatan sudah berakhir, namun ada aset yang belum lengkap." }
                   : status === "berlangsung"
-                  ? { color: "blue", label: "On Going", icon: PlayCircle, msg: "Kegiatan sedang berlangsung." }
+                  ? { color: "blue", label: "Berlangsung", icon: PlayCircle, msg: "Kegiatan sedang berlangsung." }
                   : { color: "slate", label: "Belum Dimulai", icon: Clock, msg: "Tanggal mulai kegiatan belum tiba." }
               );
               const colorClasses = {

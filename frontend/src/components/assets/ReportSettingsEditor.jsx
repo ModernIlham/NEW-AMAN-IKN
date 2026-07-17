@@ -51,6 +51,7 @@ export default function ReportSettingsEditor({ onClose }) {
   };
 
   const handleDeleteLogo = async () => {
+    if (!window.confirm("Hapus logo instansi dari seluruh kop laporan?")) return;
     try {
       await axios.delete(`${API}/report-settings/logo`);
       setSettings(prev => ({ ...prev, logo_url: "" }));
@@ -84,8 +85,11 @@ export default function ReportSettingsEditor({ onClose }) {
         <h4 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
           <Settings className="w-3.5 h-3.5" /> Pengaturan Sampul LHI
         </h4>
-        <button onClick={onClose} className="text-[10px] text-muted-foreground hover:text-muted-foreground px-2 py-0.5 rounded hover:bg-muted">Tutup</button>
+        <button onClick={onClose} data-testid="report-settings-close" className="text-[10px] text-muted-foreground hover:text-foreground px-2 py-0.5 rounded hover:bg-muted min-w-0 min-h-0">Tutup</button>
       </div>
+      <p className="text-[10px] text-muted-foreground -mt-1.5">
+        Berlaku <b>global</b> untuk semua laporan & semua kegiatan (kop, logo, penanda tangan, tembusan) — bukan hanya kegiatan ini.
+      </p>
 
       {/* Logo Section */}
       <div className="bg-card rounded-lg border border-border p-2.5 space-y-2">
@@ -94,7 +98,7 @@ export default function ReportSettingsEditor({ onClose }) {
           {settings?.logo_url ? (
             <div className="relative">
               <img src={settings.logo_url} alt="Logo" className="w-14 h-14 object-contain rounded border border-border bg-card p-1" />
-              <button onClick={handleDeleteLogo} className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600" data-testid="delete-logo-btn">
+              <button onClick={handleDeleteLogo} className="absolute -top-1 -right-1 w-4 h-4 min-w-0 min-h-0 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600" data-testid="delete-logo-btn">
                 <Trash2 className="w-2.5 h-2.5" />
               </button>
             </div>
@@ -109,7 +113,7 @@ export default function ReportSettingsEditor({ onClose }) {
               data-testid="upload-logo-btn"
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg text-[11px] font-medium hover:bg-blue-100 transition-colors disabled:opacity-50"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-200 text-blue-700 dark:bg-blue-950/40 dark:border-blue-800 dark:text-blue-300 rounded-lg text-[11px] font-medium hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors disabled:opacity-50 min-w-0 min-h-0"
             >
               {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
               {settings?.logo_url ? "Ganti Logo" : "Upload Logo"}

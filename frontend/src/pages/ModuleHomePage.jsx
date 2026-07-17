@@ -318,6 +318,13 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
                         <StatusBadge status={mod.status} />
                       </div>
                       <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug line-clamp-2">{mod.ringkas}</p>
+                      {/* Afordansi: kartu yang benar-benar bisa dibuka diberi CTA
+                          eksplisit (selaras grid Penatausahaan) — tanpa ini,
+                          pengguna tak tahu mana yang navigasi vs dialog konsep. */}
+                      <span className={`inline-flex items-center gap-0.5 text-[10px] font-semibold mt-1 ${
+                        enterable ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground/70"}`}>
+                        {enterable ? "Masuk Modul" : "Lihat Konsep"} <ChevronRight className="w-3 h-3" />
+                      </span>
                     </div>
                   </div>
                 </button>

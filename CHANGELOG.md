@@ -48,6 +48,34 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#355] Audit alur seluruh aplikasi + Gelombang 1: keandalan & umpan balik dasar — 2026-07-17
+
+- **Audit uji-alur menyeluruh** (6 penelusur paralel, ±85 temuan berperingkat
+  lintas 25 halaman): hasil + **alur terbaik per area** + backlog bertahap
+  Gelombang 2–6 dicatat di **`docs/AUDIT-ALUR-APLIKASI.md`**.
+- **Gelombang 1 diterapkan** (keandalan & umpan balik dasar):
+  - **Konfirmasi sebelum hapus** di jalur yang tadinya langsung eksekusi:
+    tiket penertiban & insidentil Wasdal, periode pelaporan, override akun
+    (golongan & sub-kelompok), catatan SK PSP, logo kop.
+  - **Error tak lagi senyap**: gagal memuat referensi persuratan → toast;
+    gagal memuat ringkasan SIMAN → badge "coba lagi" pada kartu; pesan error
+    server diteruskan (`apiErr`) di pemetaan akun; alasan buka-kunci periode
+    kosong → pesan jelas.
+  - **Guard "self" API users diperkuat**: nonaktifkan/hapus/turunkan role
+    diri sendiri kini ditolak berdasarkan identitas terautentikasi (bukan
+    parameter opsional yang bisa dikosongkan).
+  - **Label & istilah dibenahi**: "Email atau Username" saat masuk;
+    "On Going/Ongoing" → "Berlangsung"; empty-state kegiatan menyesuaikan
+    peran; tooltip pil sinkron di header.
+  - **Afordansi Beranda Modul**: kartu Tahap Siklus kini ber-CTA
+    "Masuk Modul ›" / "Lihat Konsep ›" — jelas mana yang bisa dibuka.
+  - **Editor Sampul LHI**: catatan "berlaku global untuk semua laporan/
+    kegiatan", warna aman dark-mode, tap-target 44px & hover dibenahi.
+  - **Pencarian Referensi Akun di-debounce** 350ms (pola Kodefikasi).
+- Verifikasi: suite **470 lulus**; lint 11 berkas terdampak & build sukses.
+
+---
+
 ## [#354] Tabel aset ringkas (BAST & Daftar Barang), pasal textarea, penyerah dari Referensi Pejabat, & review peran pengelolaan BMN — 2026-07-17
 
 - **Tabel aset diringkas jadi dua kolom gabungan** (BAST + "Unduh Daftar

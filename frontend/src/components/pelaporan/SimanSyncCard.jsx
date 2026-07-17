@@ -35,7 +35,7 @@ export default function SimanSyncCard({ isAdmin }) {
   const muatRingkasan = useCallback(() => {
     axios.get(`${API}/siman/ringkasan`)
       .then((r) => setRingkasan(r.data))
-      .catch(() => {});
+      .catch(() => setRingkasan({ gagal: true }));
   }, []);
 
   useEffect(() => { muatRingkasan(); }, [muatRingkasan]);
@@ -111,7 +111,14 @@ export default function SimanSyncCard({ isAdmin }) {
             Impor ekspor &quot;Master Aset&quot; SIMAN (data valid) → aset berbeda ditandai &quot;≠ SIMAN&quot; untuk disinkronkan
           </p>
         </div>
-        {ringkasan && (
+        {ringkasan?.gagal && (
+          <button type="button" onClick={muatRingkasan}
+            className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-500/15 text-red-600 dark:text-red-400 min-w-0 min-h-0"
+            data-testid="siman-ringkas-gagal">
+            Status sinkron gagal dimuat — coba lagi
+          </button>
+        )}
+        {ringkasan && !ringkasan.gagal && (
           <div className="flex items-center gap-1.5 flex-wrap" data-testid="siman-ringkas-badge">
             <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
               {ringkasan.cocok} cocok
