@@ -77,6 +77,10 @@ export default function PenggunaanPage({ user, onBack }) {
   // Dialog BAST serah terima pengguna: {form, aset:Set(id), saving}
   const [formBast, setFormBast] = useState(null);
   const [jenisBast, setJenisBast] = useState([]);
+  // Dialog riwayat BAST pemegang: {items, label_jenis, loading}
+  const [riwayatBast, setRiwayatBast] = useState(null);
+  const buktiRef = useRef(null);
+  const [buktiUntuk, setBuktiUntuk] = useState(null); // id BAST tujuan unggah bukti
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
 
@@ -167,6 +171,9 @@ export default function PenggunaanPage({ user, onBack }) {
         load(page, search); // pemegang berubah — segarkan rekap
       }
       toast.success("BAST tersimpan — mengunduh PDF…");
+      if (r.data?.peringatan_pegawai) {
+        toast.warning(r.data.peringatan_pegawai, { duration: 8000 });
+      }
       setFormBast(null);
       downloadFileWithProgress(`${API}/bast/${r.data.id}/pdf`,
         `BAST_${(f.pihak_kedua.nama || "pengguna").replace(/\s/g, "_")}.pdf`,
@@ -174,6 +181,37 @@ export default function PenggunaanPage({ user, onBack }) {
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Gagal membuat BAST");
       setFormBast((x) => (x ? { ...x, saving: false } : x));
+    }
+  };
+
+  const bukaRiwayatBast = async () => {
+    const p = detail?.pemegang || {};
+    setRiwayatBast({ items: [], loading: true });
+    try {
+      const r = await axios.get(`${API}/bast`, { params: { q: p.nama || "", page_size: 50 } });
+      setRiwayatBast({ items: r.data?.items || [], label_jenis: r.data?.label_jenis || {}, loading: false });
+    } catch {
+      toast.error("Gagal memuat riwayat BAST");
+      setRiwayatBast(null);
+    }
+  };
+
+  const unggahBukti = async (file) => {
+    if (!file || !buktiUntuk) return;
+    const fd = new FormData();
+    fd.append("file", file);
+    try {
+      const r = await axios.post(`${API}/bast/${buktiUntuk}/bukti`, fd,
+        { headers: { "Content-Type": "multipart/form-data" } });
+      toast.success(r.data?.nomor_agenda_disahkan
+        ? "Bukti tersimpan — nomor agenda di Persuratan otomatis DISAHKAN"
+        : "Bukti tanda tangan tersimpan");
+      bukaRiwayatBast();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal mengunggah bukti");
+    } finally {
+      setBuktiUntuk(null);
+      if (buktiRef.current) buktiRef.current.value = "";
     }
   };
 
@@ -1067,6 +1105,64 @@ export default function PenggunaanPage({ user, onBack }) {
       </Dialog>
 
       {/* ── Dialog daftar aset pemegang ── */}
+      {/* ── Dialog Riwayat BAST pemegang (pratinjau/unduh/bukti ttd) ── */}
+      <input ref={buktiRef} type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden"
+        onChange={(e) => unggahBukti(e.target.files?.[0])} data-testid="bast-bukti-input" />
+      <Dialog open={!!riwayatBast} onOpenChange={(o) => { if (!o) setRiwayatBast(null); }}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Riwayat BAST — {detail?.pemegang?.nama}</DialogTitle>
+            <DialogDescription className="text-xs">
+              Pratinjau membuka PDF di tab baru; unggah bukti tanda tangan akan otomatis MENYAHKAN nomor agendanya di Persuratan.
+            </DialogDescription>
+          </DialogHeader>
+          {riwayatBast?.loading ? (
+            <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-sky-600" /></div>
+          ) : (riwayatBast?.items || []).length === 0 ? (
+            <p className="text-center text-xs text-muted-foreground py-6">Belum ada BAST untuk pemegang ini.</p>
+          ) : (
+            <ul className="space-y-2">
+              {riwayatBast.items.map((b) => (
+                <li key={b.id} className="rounded-lg border border-border p-2.5 text-xs" data-testid={`riwayat-bast-${b.id}`}>
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-foreground truncate">
+                        {(riwayatBast.label_jenis || {})[b.jenis] || b.jenis}
+                      </p>
+                      <p className="font-mono text-[11px] text-muted-foreground break-all">
+                        {b.nomor || "(tanpa nomor)"} · {String(b.tanggal || "").slice(0, 10)} · {(b.asset_ids || []).length} aset → {b.pihak_kedua?.nama}
+                      </p>
+                      {b.bukti?.file_id ? (
+                        <p className="text-[10px] text-emerald-600 dark:text-emerald-400">✓ Bukti ttd terunggah ({String(b.bukti.diunggah_pada || "").slice(0, 10)})</p>
+                      ) : (
+                        <p className="text-[10px] text-amber-600 dark:text-amber-400">Bukti ttd belum diunggah</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap">
+                      <Button size="sm" variant="outline" className="h-7 text-[11px]"
+                        onClick={() => window.open(authMediaUrl(`${API}/bast/${b.id}/pdf`), "_blank")}
+                        data-testid={`bast-pratinjau-${b.id}`}>Pratinjau</Button>
+                      <Button size="sm" variant="outline" className="h-7 text-[11px]"
+                        onClick={() => downloadFileWithProgress(`${API}/bast/${b.id}/pdf`,
+                          `BAST_${(b.pihak_kedua?.nama || "pengguna").replace(/\s/g, "_")}.pdf`,
+                          { label: "BAST Serah Terima" }).catch(() => {})}>Unduh</Button>
+                      {b.bukti?.file_id ? (
+                        <Button size="sm" variant="outline" className="h-7 text-[11px]"
+                          onClick={() => window.open(authMediaUrl(`${API}/bast/${b.id}/bukti`), "_blank")}>Lihat Bukti</Button>
+                      ) : (
+                        <Button size="sm" className="h-7 text-[11px]"
+                          onClick={() => { setBuktiUntuk(b.id); buktiRef.current?.click(); }}
+                          data-testid={`bast-unggah-bukti-${b.id}`}>Unggah Bukti TTD</Button>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* ── Dialog Buat BAST Serah Terima (multi-aset, per jenis) ── */}
       <Dialog open={!!formBast} onOpenChange={(o) => { if (!o) setFormBast(null); }}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
@@ -1216,6 +1312,10 @@ export default function PenggunaanPage({ user, onBack }) {
             <Button size="sm" className="h-8 text-xs min-h-0 self-start"
               onClick={bukaBast} data-testid="penggunaan-buat-bast">
               <ScrollText className="w-3.5 h-3.5 mr-1.5" />Buat BAST Serah Terima
+            </Button>
+            <Button size="sm" variant="outline" className="h-8 text-xs min-h-0 self-start"
+              onClick={bukaRiwayatBast} data-testid="penggunaan-riwayat-bast">
+              <FileText className="w-3.5 h-3.5 mr-1.5" />Riwayat BAST
             </Button>
             <ul className="space-y-2">
               {(detail?.rows || []).map((a) => (

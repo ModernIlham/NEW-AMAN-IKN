@@ -21,7 +21,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 
-from auth_utils import require_admin, require_user
+from auth_utils import require_admin, require_user, require_user_or_query_token
 from db import db
 from persediaan_akun_utils import akun_persediaan
 from persediaan_fields import EDITABLE_FIELD_NAMES
@@ -896,7 +896,8 @@ async def daftar_lpb(page: int = 1, page_size: int = 30,
 
 
 @persediaan_router.get("/persediaan/lpb/{lpb_id}/pdf")
-async def lpb_pdf(lpb_id: str, _user: dict = Depends(require_user)):
+async def lpb_pdf(lpb_id: str,
+                  _user: dict = Depends(require_user_or_query_token)):
     """Laporan Penerimaan Barang (LPB) — format resmi satker (contoh docx
     pemilik): kop, info 2 kolom, tabel barang ber-total, tanda tangan 3
     kolom (Dibuat/Diperiksa/Disetujui)."""
@@ -978,6 +979,8 @@ async def lpb_pdf(lpb_id: str, _user: dict = Depends(require_user)):
     # langsung — dititik bila belum diatur), Disetujui (KPB).
     pengurus = await resolve_pejabat_peran("pengurus_barang",
                                            per_iso=lpb.get("tanggal"))
+    pemeriksa = await resolve_pejabat_peran("pemeriksa_lpb",
+                                            per_iso=lpb.get("tanggal"))
     kpb = await resolve_penandatangan_kpb(settings, per_iso=lpb.get("tanggal"))
     sig = st['Signature']
 
@@ -989,7 +992,8 @@ async def lpb_pdf(lpb_id: str, _user: dict = Depends(require_user)):
     ttd = Table([[
         kolom_ttd("Dibuat oleh:<br/>Pengurus Barang,",
                   (pengurus or {}).get("nama"), (pengurus or {}).get("nip")),
-        kolom_ttd("Diperiksa oleh:", "", ""),
+        kolom_ttd("Diperiksa oleh:" + (f"<br/>{(pemeriksa or {}).get('jabatan')}," if (pemeriksa or {}).get('jabatan') else ""),
+                  (pemeriksa or {}).get("nama"), (pemeriksa or {}).get("nip")),
         kolom_ttd("Disetujui oleh:<br/>Kuasa Pengguna Barang,",
                   (kpb or {}).get("nama"), (kpb or {}).get("nip")),
     ]], colWidths=[doc.width / 3.0] * 3)

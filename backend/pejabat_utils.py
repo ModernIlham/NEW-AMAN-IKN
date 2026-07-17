@@ -17,6 +17,7 @@ PERAN_PEJABAT = {
     "pengurus_barang": "Pengurus Barang",
     "penanggung_jawab_ruangan": "Penanggung Jawab Ruangan (KIR/DBR)",
     "ppk": "Pejabat Pembuat Komitmen (PPK)",
+    "pemeriksa_lpb": "Pemeriksa Laporan Penerimaan Barang (LPB)",
     "pengguna_barang": "Pengguna Barang (Menteri/Pimpinan Lembaga)",
 }
 

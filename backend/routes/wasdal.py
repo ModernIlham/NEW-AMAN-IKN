@@ -90,6 +90,12 @@ async def pemantauan_wasdal(
             {"status": {"$nin": ["dihapus_dibukukan", "berakhir", "ditolak"]}}),
         "bmn_idle_aktif": await db.bmn_idle.count_documents(
             {"status": {"$in": ["klarifikasi", "usul_serah"]}}),
+        # BAST penggunaan sementara yang jangka waktunya sudah lewat —
+        # barang mestinya sudah kembali (tindak lanjut manual/pengembalian).
+        "bast_sementara_lewat_tenggat": await db.bast_serah_terima.count_documents(
+            {"jenis": "penggunaan_sementara",
+             "jangka_sampai": {"$gt": "", "$lt":
+                               datetime.now(timezone.utc).date().isoformat()}}),
     }
     return {
         "periode": periode,
@@ -101,6 +107,8 @@ async def pemantauan_wasdal(
             "sk_psp": "SK Penetapan Status Penggunaan",
             "proses_penggunaan_aktif": "Tiket alih status/penggunaan aktif",
             "bmn_idle_aktif": "Tiket BMN idle aktif",
+            "bast_sementara_lewat_tenggat":
+                "BAST penggunaan sementara lewat tenggat kembali",
         },
         "temuan": {k: v[:_MAKS_TAMPIL] for k, v in per_objek.items()},
         "terpotong": {k: max(0, len(v) - _MAKS_TAMPIL)
