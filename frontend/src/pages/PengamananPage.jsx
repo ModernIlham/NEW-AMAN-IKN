@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
+import { useTransitionDialog } from "@/components/ui/TransitionDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import { authMediaUrl } from "@/lib/mediaUrl";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
@@ -76,6 +77,7 @@ export default function PengamananPage({ user, onBack }) {
   const { confirm, confirmDialog } = useConfirm();
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
+  const { minta, transitionDialog } = useTransitionDialog();
 
   const muatKasus = useCallback(() => {
     axios.get(`${API}/pengamanan/kasus`)
@@ -143,8 +145,13 @@ export default function PengamananPage({ user, onBack }) {
 
   const pindahStatusKasus = async (k, ke) => {
     const label = kasus?.label_status?.[ke] || ke;
-    const catatan = window.prompt(`Catatan transisi ke "${label}" (opsional):`, "");
-    if (catatan === null) return;
+    const v = await minta({
+      judul: `Transisi ke "${label}"`,
+      fields: [{ key: "catatan", label: "Catatan", type: "textarea" }],
+      confirmLabel: label,
+    });
+    if (v === null) return;
+    const catatan = v.catatan || "";
     try {
       await axios.post(`${API}/pengamanan/kasus/${k.id}/status`, { status: ke, catatan });
       toast.success(`Status kasus: ${label}`);
@@ -1222,6 +1229,7 @@ export default function PengamananPage({ user, onBack }) {
           )}
         </DialogContent>
       </Dialog>
+      {transitionDialog}
     </div>
   );
 }

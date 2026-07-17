@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
+import { useTransitionDialog } from "@/components/ui/TransitionDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 
@@ -54,6 +55,7 @@ export default function PerencanaanPage({ user, onBack }) {
   const { confirm, confirmDialog } = useConfirm();
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
+  const { minta, transitionDialog } = useTransitionDialog();
 
   const muatUsulan = useCallback(() => {
     axios.get(`${API}/perencanaan/usulan`)
@@ -105,9 +107,13 @@ export default function PerencanaanPage({ user, onBack }) {
   const pindahStatusUsulan = async (u, ke) => {
     const label = usulan?.label_status?.[ke] || ke;
     const wajib = ke === "dikembalikan";
-    const catatan = window.prompt(
-      wajib ? `Catatan perbaikan (WAJIB) untuk "${label}":` : `Catatan untuk "${label}" (opsional):`, "");
-    if (catatan === null) return;
+    const v = await minta({
+      judul: `Status usulan → ${label}`,
+      fields: [{ key: "catatan", label: wajib ? "Catatan perbaikan" : "Catatan", type: "textarea", wajib }],
+      confirmLabel: label,
+    });
+    if (v === null) return;
+    const catatan = v.catatan || "";
     try {
       await axios.post(`${API}/perencanaan/usulan/${u.id}/status`, { status: ke, catatan });
       toast.success(`Status usulan: ${label}`);
@@ -467,6 +473,7 @@ export default function PerencanaanPage({ user, onBack }) {
       </Dialog>
 
       {confirmDialog}
+      {transitionDialog}
     </div>
   );
 }

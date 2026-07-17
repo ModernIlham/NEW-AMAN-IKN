@@ -13,6 +13,7 @@ import {
   DropdownMenuLabel, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { useBackGuard } from "@/hooks/useBackGuard";
+import { useTransitionDialog } from "@/components/ui/TransitionDialog";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import SimanSyncCard from "@/components/pelaporan/SimanSyncCard";
@@ -57,6 +58,7 @@ export default function PelaporanPage({ user, onBack }) {
   const [bukaSampul, setBukaSampul] = useState(false);
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
+  const { minta, transitionDialog } = useTransitionDialog();
   const { confirm, confirmDialog } = useConfirm();
 
   const muatPeriode = useCallback(() => {
@@ -95,9 +97,14 @@ export default function PelaporanPage({ user, onBack }) {
   };
 
   const bukaPeriode = async (p) => {
-    const alasan = window.prompt(`Alasan membuka kunci ${p.label} (wajib, tercatat pada riwayat):`);
-    if (alasan === null) return;
-    if (!alasan.trim()) { toast.error("Alasan wajib diisi — kunci tidak dibuka"); return; }
+    const v = await minta({
+      judul: `Buka kunci ${p.label}`,
+      deskripsi: "Alasan tercatat pada riwayat periode.",
+      fields: [{ key: "alasan", label: "Alasan", type: "textarea", wajib: true }],
+      confirmLabel: "Buka Kunci",
+    });
+    if (v === null) return;
+    const alasan = v.alasan;
     try {
       await axios.post(`${API}/pelaporan/periode/${p.id}/buka`, { alasan });
       toast.success("Kunci periode dibuka");
@@ -125,10 +132,14 @@ export default function PelaporanPage({ user, onBack }) {
   };
 
   const aturTenggat = async (p) => {
-    const tenggat = window.prompt(
-      `Tenggat penyampaian ${p.label} (YYYY-MM-DD; kosongkan untuk menghapus):`,
-      p.tenggat || "");
-    if (tenggat === null) return;
+    const v = await minta({
+      judul: `Tenggat penyampaian ${p.label}`,
+      deskripsi: "Kosongkan untuk menghapus tenggat.",
+      fields: [{ key: "tenggat", label: "Tenggat", type: "date", default: p.tenggat || "" }],
+      confirmLabel: "Simpan",
+    });
+    if (v === null) return;
+    const tenggat = v.tenggat || "";
     try {
       await axios.post(`${API}/pelaporan/periode/${p.id}/tenggat`, { tenggat: tenggat.trim() });
       toast.success(tenggat.trim() ? "Tenggat tersimpan" : "Tenggat dihapus");
@@ -483,6 +494,7 @@ export default function PelaporanPage({ user, onBack }) {
         </p>
       </main>
       {confirmDialog}
+      {transitionDialog}
     </div>
   );
 }

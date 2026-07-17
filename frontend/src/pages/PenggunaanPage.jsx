@@ -13,6 +13,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
+import { useTransitionDialog } from "@/components/ui/TransitionDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import { authMediaUrl } from "@/lib/mediaUrl";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
@@ -91,6 +92,7 @@ export default function PenggunaanPage({ user, onBack }) {
   const [pegawaiList, setPegawaiList] = useState(null);
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
+  const { minta, transitionDialog } = useTransitionDialog();
 
   const load = useCallback(async (p = 1, s = search) => {
     setLoading(true);
@@ -331,18 +333,22 @@ export default function PenggunaanPage({ user, onBack }) {
   const pindahStatusProses = async (t, ke) => {
     const label = proses?.label_status?.[ke] || ke;
     const perluDok = ["disetujui", "ditolak", "bast_selesai", "dihapus_dibukukan", "berjalan"].includes(ke);
-    let nomor = ""; let tanggal = "";
-    if (perluDok) {
-      nomor = window.prompt(`Nomor dokumen untuk "${label}" (persetujuan/BAST/SK/perjanjian, ops.):`, "");
-      if (nomor === null) return;
-      tanggal = window.prompt("Tanggal dokumen (YYYY-MM-DD, ops.):", "");
-      if (tanggal === null) return;
-    }
-    const catatan = window.prompt(`Catatan untuk "${label}" (ops.):`, "");
-    if (catatan === null) return;
+    const v = await minta({
+      judul: `Pindah status → ${label}`,
+      deskripsi: perluDok ? "Isi dokumen dasar transisi (opsional)." : undefined,
+      fields: [
+        ...(perluDok ? [
+          { key: "nomor", label: "Nomor dokumen (persetujuan/BAST/SK/perjanjian)", type: "text" },
+          { key: "tanggal", label: "Tanggal dokumen", type: "date" },
+        ] : []),
+        { key: "catatan", label: "Catatan", type: "textarea" },
+      ],
+      confirmLabel: label,
+    });
+    if (v === null) return;
     try {
       await axios.post(`${API}/penggunaan/proses/${t.id}/status`, {
-        status: ke, catatan, nomor_dokumen: nomor || "", tanggal_dokumen: tanggal || "",
+        status: ke, catatan: v.catatan || "", nomor_dokumen: v.nomor || "", tanggal_dokumen: v.tanggal || "",
       });
       toast.success(`Status tiket: ${label}`);
       loadProses();
@@ -393,18 +399,25 @@ export default function PenggunaanPage({ user, onBack }) {
   const pindahStatusPsp = async (sk, ke) => {
     const payload = { status: ke, nomor_sk: "", tanggal_sk: "", catatan: "" };
     if (ke === "ditetapkan") {
-      const nomor = window.prompt("Nomor SK penetapan:", sk.nomor_sk || "");
-      if (nomor === null) return;
-      const tanggal = window.prompt("Tanggal SK (YYYY-MM-DD):",
-        sk.tanggal_sk || new Date().toISOString().slice(0, 10));
-      if (tanggal === null) return;
-      payload.nomor_sk = nomor; payload.tanggal_sk = tanggal;
+      const v = await minta({
+        judul: "Penetapan SK Penggunaan",
+        fields: [
+          { key: "nomor", label: "Nomor SK penetapan", type: "text", wajib: true, default: sk.nomor_sk || "" },
+          { key: "tanggal", label: "Tanggal SK", type: "date", wajib: true, default: sk.tanggal_sk || new Date().toISOString().slice(0, 10) },
+        ],
+        confirmLabel: "Tetapkan",
+      });
+      if (v === null) return;
+      payload.nomor_sk = v.nomor; payload.tanggal_sk = v.tanggal;
     }
     if (ke === "ditolak" || ke === "draf") {
-      const catatan = window.prompt(ke === "ditolak"
-        ? "Catatan penolakan (wajib):" : "Catatan pengembalian (wajib):", "");
-      if (catatan === null) return;
-      payload.catatan = catatan;
+      const v = await minta({
+        judul: ke === "ditolak" ? "Catatan penolakan" : "Catatan pengembalian",
+        fields: [{ key: "catatan", label: "Catatan", type: "textarea", wajib: true }],
+        confirmLabel: ke === "ditolak" ? "Tolak" : "Kembalikan",
+      });
+      if (v === null) return;
+      payload.catatan = v.catatan;
     }
     try {
       await axios.post(`${API}/penggunaan/psp/${sk.id}/status`, payload);
@@ -1461,6 +1474,7 @@ export default function PenggunaanPage({ user, onBack }) {
           )}
         </DialogContent>
       </Dialog>
+      {transitionDialog}
     </div>
   );
 }

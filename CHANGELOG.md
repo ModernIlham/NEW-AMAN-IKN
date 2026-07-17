@@ -48,6 +48,26 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#363] Gelombang 5 (lanjutan): dialog transisi bersama — window.prompt hilang dari seluruh aplikasi — 2026-07-17
+
+- **Komponen bersama `useTransitionDialog`** (`components/ui/
+  TransitionDialog.jsx`): Dialog kecil ber-field (text/date/textarea) dengan
+  validasi wajib + date-picker, berbasis promise (pola `useConfirm`) — ramah
+  mobile & dark mode.
+- **Seluruh `window.prompt` diganti** (audit lintas #1 — rantai 2–3 prompt
+  native paling menyakitkan di mobile):
+  - Penggunaan: transisi tiket proses (nomor+tanggal+catatan jadi SATU
+    dialog) & status PSP (SK wajib nomor+tanggal; tolak/kembalikan wajib
+    catatan).
+  - Pengamanan: transisi status kasus.
+  - Perencanaan: status usulan RKBMN (catatan wajib saat dikembalikan).
+  - Pelaporan: alasan buka-kunci periode (wajib) & tenggat penyampaian
+    (date-picker, kosongkan = hapus).
+- `window.prompt` kini **0 pemakaian** di seluruh halaman.
+- Verifikasi: suite **470 lulus**; lint & build frontend sukses.
+
+---
+
 ## [#362] Gelombang 5 (inti): temuan wasdal bisa ditindaklanjuti, kandidat Rusak Berat 1-klik, revert Penghapusan — 2026-07-17
 
 - **Temuan Wasdal → tombol "Tindak lanjuti"**: setiap temuan pemantauan kini
