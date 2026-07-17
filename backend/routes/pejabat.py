@@ -106,6 +106,17 @@ async def pejabat_aktif(
     return {"peran": peran, "per_tanggal": per_tanggal, "pejabat": pj}
 
 
+async def _nip_bentrok_pejabat(nip: str, kecuali_id: str = "") -> bool:
+    """True bila NIP sudah dipakai pejabat LAIN di registry (dedup)."""
+    nip = str(nip or "").strip()
+    if not nip:
+        return False
+    q = {"nip": nip}
+    if kecuali_id:
+        q["id"] = {"$ne": kecuali_id}
+    return bool(await db.pejabat.find_one(q, {"_id": 1}))
+
+
 @pejabat_router.post("/pejabat")
 async def buat_pejabat(payload: PejabatIn, user: dict = Depends(require_admin)):
     """Tambah pejabat (admin)."""
@@ -113,6 +124,9 @@ async def buat_pejabat(payload: PejabatIn, user: dict = Depends(require_admin)):
     errors = validate_pejabat(doc)
     if errors:
         raise HTTPException(status_code=400, detail="; ".join(errors))
+    if await _nip_bentrok_pejabat(doc["nip"]):
+        raise HTTPException(status_code=409,
+                            detail=f"NIP {doc['nip']} sudah terdaftar pada pejabat lain")
     now = datetime.now(timezone.utc).isoformat()
     doc.update({"id": str(uuid.uuid4()), "created_at": now, "updated_at": now})
     await db.pejabat.insert_one(dict(doc))
@@ -130,6 +144,9 @@ async def ubah_pejabat(pejabat_id: str, payload: PejabatIn,
     errors = validate_pejabat(doc)
     if errors:
         raise HTTPException(status_code=400, detail="; ".join(errors))
+    if await _nip_bentrok_pejabat(doc["nip"], kecuali_id=pejabat_id):
+        raise HTTPException(status_code=409,
+                            detail=f"NIP {doc['nip']} sudah terdaftar pada pejabat lain")
     doc["updated_at"] = datetime.now(timezone.utc).isoformat()
     res = await db.pejabat.update_one({"id": pejabat_id}, {"$set": doc})
     if res.matched_count == 0:

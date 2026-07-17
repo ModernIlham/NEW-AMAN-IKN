@@ -253,11 +253,19 @@ async def buat_bast(payload: BastIn, user: dict = Depends(require_user)):
     peringatan_pegawai = ""
     nip2 = str(record["pihak_kedua"].get("nip") or "").strip()
     if nip2:
-        peg = await db.pegawai.find_one({"nip": nip2}, {"_id": 0, "nama": 1})
+        peg = await db.pegawai.find_one({"nip": nip2}, {"_id": 0, "nama": 1, "status": 1})
         record["pihak_kedua_terdaftar"] = bool(peg)
         if not peg:
             peringatan_pegawai = (f"NIP {nip2} belum terdaftar di Master "
                                   "Pegawai — periksa ejaan atau daftarkan dulu")
+        else:
+            # Pegawai pensiun/mutasi/nonaktif → peringatan lunak (tak memblokir).
+            from pegawai_utils import is_aktif
+            if not is_aktif(peg):
+                st = str(peg.get("status") or "").strip() or "nonaktif"
+                peringatan_pegawai = (f"Penerima ({peg.get('nama') or nip2}) "
+                                      f"berstatus {st} di Master Pegawai — "
+                                      "pastikan serah terima ini memang tepat")
     await db.bast_serah_terima.insert_one({**record})
 
     # Jejak BAST terakhir pada tiap aset (badge riwayat di UI) + efek data
@@ -569,10 +577,15 @@ async def bast_pdf(bast_id: str,
     an_kpb = bool(b.get("penyerah_atas_nama_kpb")) and jenis != "mutasi_pengguna"
     signers_mengetahui = []
     if jenis == "mutasi_pengguna" or an_kpb:
+        # KPB dari REGISTRY pejabat yang berlaku pada tanggal BAST (bukan
+        # setelan mentah yang bisa kedaluwarsa) — fallback ke setelan kasatker.
+        from pejabat_utils import penandatangan_kpb
+        pj_list = await db.pejabat.find({}, _PROJ).to_list(2000)
+        kpb = penandatangan_kpb(settings, pj_list, b.get("tanggal"))
         signers_mengetahui = [{'header': 'Mengetahui,',
-                               'role': settings.get("kasatker_jabatan", "Kuasa Pengguna Barang,"),
-                               'nama': settings.get("kasatker_nama", ""),
-                               'after': [f"NIP. {settings.get('kasatker_nip', '')}"]}]
+                               'role': kpb["jabatan"],
+                               'nama': kpb["nama"],
+                               'after': [f"NIP. {kpb['nip']}"]}]
     peran_kesatu = ('Yang Menyerahkan' if jenis != 'pengembalian' else 'Yang Menerima')
     if an_kpb:
         peran_kesatu += ' a.n. Kuasa Pengguna Barang'
