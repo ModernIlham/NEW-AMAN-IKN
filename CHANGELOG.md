@@ -48,6 +48,32 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#340] Tanggal laporan: DBHI ber-rentang periode, tempat/tanggal di Sampul LHI, narasi tanggal BAHI terisi — 2026-07-17
+
+- **DBHI (6 jenis: Kondisi Baik/Rusak Ringan/Rusak Berat, Berlebih, Tidak
+  Ditemukan, Dalam Sengketa)**: baris info kini menampilkan **"Periode
+  Inventarisasi: [mulai] s.d. [selesai]"** — bukan lagi tanggal tunggal
+  (DBHI memotret hasil sepanjang periode pelaksanaan).
+- **Pengaturan Sampul LHI** bertambah **Tempat Laporan** (kota) dan
+  **Tanggal Laporan**: tampil di sampul LHI dan otomatis mengisi baris
+  "tempat, tanggal" pada kaki SEMUA surat laporan (BAHI, SP Hasil, SP
+  Pelaksanaan, DBHI, RHI, DBKP, Posisi BMN, DBR, KIR, LBKP, LKB, CaLBMN,
+  penyusutan — 13 titik). Laporan periodik memakai tanggal periodenya
+  sendiri (LBKP/CaLBMN = akhir periode); yang belum diisi tetap
+  titik-titik untuk ditulis tangan.
+- **BAHI**: kalimat pembuka "Pada hari ini, …, tanggal … bulan … tahun …"
+  kini **terisi otomatis** dari Tanggal Berita Acara kegiatan (fallback
+  Tanggal Laporan pengaturan) dalam bentuk terbilang naskah dinas —
+  "Pada hari ini, Jumat, tanggal Tujuh Belas bulan Juli tahun Dua Ribu
+  Dua Puluh Enam (17 Juli 2026)"; nomor BA memakai field
+  `nomor_berita_acara` kegiatan yang selama ini tak terbaca laporan.
+- Helper murni baru `terbilang_id()` & `narasi_hari_tanggal()`
+  (pelaporan_utils, +4 uji unit; kebal placeholder 9999-12-31).
+- Verifikasi: suite **448 lulus** (+4); smoke render DBHI/BAHI/SP
+  Hasil/Sampul LHI + asersi teks helper; eslint bersih; build sukses.
+
+---
+
 ## [#339] Sinkronisasi SIMAN V2: impor ekspor Master Aset + tanda "≠ SIMAN" per aset — 2026-07-17
 
 - **Kanal pembaruan berkala dari SIMAN V2** (SIMAN = data valid; API belum

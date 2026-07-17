@@ -72,6 +72,8 @@ export default function ReportSettingsEditor({ onClose }) {
     { key: "judul_laporan", label: "Judul Laporan", placeholder: "LAPORAN HASIL INVENTARISASI" },
     { key: "subjudul_laporan", label: "Sub Judul", placeholder: "BARANG MILIK NEGARA (BMN)" },
     { key: "tahun_anggaran", label: "Tahun Anggaran", placeholder: "2025" },
+    { key: "tempat_laporan", label: "Tempat Laporan (kota penandatanganan)", placeholder: "Contoh: Nusantara" },
+    { key: "tanggal_laporan", label: "Tanggal Laporan (baris ttd surat & sampul)", type: "date" },
     { key: "catatan_kaki", label: "Catatan Kaki", placeholder: "Teks tambahan di bagian bawah sampul" },
   ];
 
@@ -118,7 +120,7 @@ export default function ReportSettingsEditor({ onClose }) {
 
       {/* Text Fields */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        {fields.map(({ key, label, placeholder, multiline }) => (
+        {fields.map(({ key, label, placeholder, multiline, type }) => (
           <div key={key} className={`space-y-0.5 ${multiline ? "sm:col-span-2" : ""}`}>
             <label className="text-[10px] font-medium text-muted-foreground">{label}</label>
             {multiline ? (
@@ -133,7 +135,7 @@ export default function ReportSettingsEditor({ onClose }) {
             ) : (
             <input
               data-testid={`settings-${key}`}
-              type="text"
+              type={type || "text"}
               value={settings?.[key] || ""}
               onChange={e => handleChange(key, e.target.value)}
               placeholder={placeholder}

@@ -68,3 +68,38 @@ def test_info_tenggat_periode():
                                 "2026-07-25")["tenggat"] is None
     assert info_tenggat_periode({"status": "terbuka"}, "2026-07-12") == {
         "tenggat": None, "lewat": False, "sisa_hari": None}
+
+
+# ── Narasi tanggal Berita Acara (terbilang) ──
+from pelaporan_utils import narasi_hari_tanggal, terbilang_id
+
+
+def test_terbilang_id_dasar():
+    assert terbilang_id(0) == "nol"
+    assert terbilang_id(7) == "tujuh"
+    assert terbilang_id(11) == "sebelas"
+    assert terbilang_id(17) == "tujuh belas"
+    assert terbilang_id(20) == "dua puluh"
+    assert terbilang_id(31) == "tiga puluh satu"
+    assert terbilang_id(100) == "seratus"
+    assert terbilang_id(1999) == "seribu sembilan ratus sembilan puluh sembilan"
+    assert terbilang_id(2026) == "dua ribu dua puluh enam"
+
+
+def test_terbilang_id_tak_valid():
+    assert terbilang_id(-1) == ""
+    assert terbilang_id("abc") == ""
+    assert terbilang_id(None) == ""
+
+
+def test_narasi_hari_tanggal_lengkap():
+    # 2026-07-17 adalah hari Jumat
+    n = narasi_hari_tanggal("2026-07-17T08:00:00Z")
+    assert n == {"hari": "Jumat", "tanggal_terbilang": "Tujuh Belas",
+                 "bulan": "Juli", "tahun_terbilang": "Dua Ribu Dua Puluh Enam"}
+
+
+def test_narasi_hari_tanggal_tak_valid():
+    assert narasi_hari_tanggal("") is None
+    assert narasi_hari_tanggal("bukan tanggal") is None
+    assert narasi_hari_tanggal("9999-12-31") is None  # placeholder SIMAN
