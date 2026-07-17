@@ -76,6 +76,14 @@ export default function PenganggaranPage({ user, onBack }) {
 
   const fmtRp = (n) => `Rp${Math.round(Number(n || 0)).toLocaleString("id-ID")}`;
   const labelStatus = data?.label_status || {};
+  // Usulan RKBMN (Perencanaan) utk dropdown tautan — FK rkbmn_id backend
+  // sudah lengkap; ini mengaktifkannya di UI (audit G4 #1).
+  const [rkbmnList, setRkbmnList] = React.useState([]);
+  React.useEffect(() => {
+    axios.get(`${API}/perencanaan/usulan`)
+      .then((r) => setRkbmnList(r.data?.items || []))
+      .catch(() => {});
+  }, []);
   const labelJenis = data?.label_jenis || {};
   const labelAkun = data?.label_akun || {};
 
@@ -85,6 +93,7 @@ export default function PenganggaranPage({ user, onBack }) {
     try {
       await axios.post(`${API}/penganggaran`, {
         ...form.data,
+        rkbmn_id: form.data.rkbmn_id || "",
         nilai_usulan: Number(form.data.nilai_usulan || 0),
         asset_ids: form.aset.map((a) => a.id),
       });
@@ -228,6 +237,11 @@ export default function PenganggaranPage({ user, onBack }) {
               <div className="bg-card rounded-xl border border-emerald-500/40 p-3 text-center" data-testid="penganggaran-stat-serapan">
                 <p className="text-lg font-bold text-foreground leading-none mt-1.5">{r.serapan_persen}%</p>
                 <p className="text-[10px] text-muted-foreground mt-1">Serapan ({fmtRp(r.nilai.realisasi)})</p>
+                {(data.total_realisasi_pengadaan || 0) > 0 && (
+                  <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-0.5" title="Total nilai perolehan Pengadaan yang tertaut usulan">
+                    Realisasi Pengadaan tertaut: {fmtRp(data.total_realisasi_pengadaan)}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -559,6 +573,28 @@ export default function PenganggaranPage({ user, onBack }) {
                   {Object.entries(labelAkun)
                     .filter(([k]) => (form.data.jenis === "pengadaan" ? k.startsWith("53") : k === "523"))
                     .map(([k, v]) => <option key={k} value={k}>{k} — {v}</option>)}
+                </select>
+              </div>
+              <div className="col-span-2">
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="agr-rkbmn">Usulan RKBMN terkait (opsional — dari modul Perencanaan)</label>
+                <select id="agr-rkbmn" value={form.data.rkbmn_id || ""}
+                  className="w-full h-10 rounded-md border border-input bg-background px-2 text-sm"
+                  data-testid="penganggaran-rkbmn"
+                  onChange={(e) => {
+                    const u = rkbmnList.find((x) => x.id === e.target.value);
+                    setForm((f) => ({ ...f, data: { ...f.data,
+                      rkbmn_id: e.target.value,
+                      uraian: u ? (u.uraian || f.data.uraian) : f.data.uraian,
+                      jenis: u ? (u.jenis === "pengadaan" ? "pengadaan" : "pemeliharaan") : f.data.jenis,
+                      tahun_anggaran: u?.tahun_rkbmn || f.data.tahun_anggaran,
+                    } }));
+                  }}>
+                  <option value="">— tanpa tautan RKBMN —</option>
+                  {rkbmnList.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.tahun_rkbmn} · {u.uraian?.slice(0, 60)} ({u.unit_pengusul || "unit ?"})
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="col-span-2">
