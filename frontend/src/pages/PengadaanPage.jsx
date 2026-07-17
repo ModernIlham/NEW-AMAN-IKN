@@ -301,6 +301,26 @@ export default function PengadaanPage({ user, onBack }) {
                             <span className="hidden sm:inline">Buat Draft Aset</span>
                           </button>
                         )}
+                        {(p.barang || []).some((b) => String(b.kode || "").startsWith("1") && !b.psd_item_id) && (
+                          <button type="button" aria-label="Daftarkan barang konsumsi ke Persediaan"
+                            title="Barang ber-kode '1…' → master persediaan + transaksi masuk berjurnal FIFO"
+                            onClick={async () => {
+                              try {
+                                const r = await axios.post(`${API}/pengadaan/${p.id}/daftarkan-persediaan`);
+                                const d = r.data || {};
+                                toast.success(`${d.masuk || 0} barang masuk persediaan (${d.dibuat_master || 0} master baru)`);
+                                if ((d.gagal || []).length) toast.warning(`Gagal: ${d.gagal.join("; ")}`, { duration: 9000 });
+                                muat();
+                              } catch (e) {
+                                toast.error(e?.response?.data?.detail || "Gagal mendaftarkan ke persediaan");
+                              }
+                            }}
+                            className="h-7 px-2 rounded-lg border border-cyan-500/40 bg-cyan-600/10 text-cyan-600 dark:text-cyan-400 flex items-center gap-1 text-[10px] font-semibold hover:bg-cyan-600/20 min-h-0 min-w-0"
+                            data-testid={`pengadaan-daftarkan-psd-${p.id}`}>
+                            <PackagePlus className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Daftarkan ke Persediaan</span>
+                          </button>
+                        )}
                         <button type="button" aria-label="Lampiran berkas"
                           onClick={() => setLamp({ perolehan: p, uploading: false })}
                           className="h-7 w-7 rounded-lg border border-border text-foreground/70 flex items-center justify-center hover:bg-muted min-h-0 min-w-0"
