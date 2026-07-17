@@ -424,6 +424,18 @@ async def buat_draft_aset_dari_perolehan(perolehan_id: str,
             # Back-link dokumen sumber (§5A gap #6) ke aset draft yang baru dibuat.
             await db.assets.update_one(
                 {"id": doc["id"]}, {"$set": build_asset_perolehan_projection(p, now)})
+            # Jurnal Buku Barang (G7): perolehan → kode 101/102/103/105.
+            from shared_utils import catat_mutasi_bmn
+            kode_trx = str(JENIS_PEROLEHAN.get(p.get("jenis"), ("", "101"))[1]).split("/")[0]
+            await catat_mutasi_bmn({
+                "asset_id": doc["id"], "kode_transaksi": kode_trx or "101",
+                "kode_barang": doc["asset_code"], "nup": str(doc["NUP"]),
+                "tanggal_buku": (str(p.get("tanggal_bast") or "").strip()[:10]
+                                 or now[:10]),
+                "jumlah": 1, "nilai": float(row.get("harga_satuan") or 0),
+                "sumber_modul": "pengadaan", "ref_id": perolehan_id,
+                "keterangan": f"Draft aset dari BAST {p.get('nomor_bast') or '-'}",
+                "oleh": user.get("username", "system")})
             dibuat += 1
         if gagal_baris:
             continue

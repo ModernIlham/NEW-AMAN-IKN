@@ -480,6 +480,27 @@ async def blok_ttd_kpb(settings, per_iso=None):
             'after': [f"NIP. {kpb['nip']}"]}
 
 
+async def catat_mutasi_bmn(entri: dict):
+    """Tulis satu entri jurnal `mutasi_bmn` (Buku Barang, G7) — BEST-EFFORT:
+    entri tak valid / gagal tulis hanya di-log, TIDAK menggagalkan transaksi
+    modul pemanggil (jurnal = pencatatan turunan, bukan gerbang)."""
+    import uuid as _uuid
+    from datetime import datetime as _dt, timezone as _tz
+    try:
+        from mutasi_bmn_utils import validate_entri_mutasi
+        errs = validate_entri_mutasi(entri)
+        if errs:
+            logger.warning("catat_mutasi_bmn dilewati: %s", "; ".join(errs))
+            return False
+        await db.mutasi_bmn.insert_one({
+            **entri, "id": str(_uuid.uuid4()),
+            "created_at": _dt.now(_tz.utc).isoformat()})
+        return True
+    except Exception as e:  # jangan pernah mematahkan alur pemanggil
+        logger.warning("catat_mutasi_bmn gagal: %s", e)
+        return False
+
+
 async def proses_keluar_aktif(asset_ids):
     """Peta asset_id → daftar proses KELUAR aktif lintas register (audit G5
     #11 — penanda in-flight): usulan penghapusan (diusulkan/diproses), usulan
