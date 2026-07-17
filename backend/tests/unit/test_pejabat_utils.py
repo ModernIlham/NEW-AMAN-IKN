@@ -1,7 +1,8 @@
 """Uji referensi pejabat penatausahaan BMN (#290, PMK 181/2016)."""
 from pejabat_utils import (
-    PERAN_PEJABAT, STATUS_KEPEGAWAIAN, UNIT_AKUNTANSI,
-    pejabat_aktif_untuk_peran, penandatangan_kpb, validate_pejabat,
+    PERAN_PEJABAT, PERAN_PEJABAT_META, STATUS_KEPEGAWAIAN, UNIT_AKUNTANSI,
+    peran_penyerah_bast, pejabat_aktif_untuk_peran, penandatangan_kpb,
+    validate_pejabat,
 )
 
 
@@ -11,6 +12,33 @@ def test_referensi_memuat_peran_dan_unit_inti():
     # Jenjang unit akuntansi PMK 181/2016 lengkap
     for k in ("uapb", "uappb_e1", "uappb_w", "uakpb", "uapkpb"):
         assert k in UNIT_AKUNTANSI and UNIT_AKUNTANSI[k]["penanggung_jawab"]
+
+
+def test_metadata_peran_lengkap_dan_konsisten():
+    # Tiap peran punya metadata (domain + ttd_bast + keterangan)
+    for kode in PERAN_PEJABAT:
+        m = PERAN_PEJABAT_META.get(kode)
+        assert m, f"metadata peran '{kode}' hilang"
+        assert m["domain"] in ("bmn", "bmd")
+        assert m["ttd_bast"] in ("penyerah", "penerima", "mengetahui", "tidak")
+        assert str(m.get("keterangan") or "").strip()
+    # 'pengurus_barang' ditandai rezim DAERAH (bukan BMN pusat)
+    assert PERAN_PEJABAT_META["pengurus_barang"]["domain"] == "bmd"
+    # Peran BMN pusat baru tersedia sebagai pengganti yang benar
+    assert "pengelola_bmn_satker" in PERAN_PEJABAT
+    assert PERAN_PEJABAT_META["pengelola_bmn_satker"]["domain"] == "bmn"
+
+
+def test_peran_penyerah_bast_hanya_pengelola_bmn():
+    penyerah = peran_penyerah_bast()
+    # KPB, Petugas Penatausahaan, & Pengelola BMN Satker layak jadi penyerah
+    for k in ("kuasa_pengguna_barang", "penatausahaan_bmn", "pengelola_bmn_satker"):
+        assert k in penyerah
+    # PPK (BAST perolehan) & Penanggung Jawab Ruangan (penerima) bukan penyerah;
+    # 'pengurus_barang' (rezim daerah) juga tidak boleh muncul
+    for k in ("ppk", "penanggung_jawab_ruangan", "pengurus_barang",
+              "pengguna_barang", "pemeriksa_lpb"):
+        assert k not in penyerah
 
 
 def test_status_kepegawaian_mencakup_klasifikasi_inti():

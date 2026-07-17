@@ -656,13 +656,15 @@ async def daftar_pemegang_pdf(
 
     from routes.reports import (
         _fit_col_widths, _get_report_styles, _kop_surat_flowables,
-        _page_footer_factory, _signature_block, _std_doc, _std_table_style,
+        _page_footer_factory, _peta_subsub_kelompok, _sel_identitas_barang,
+        _sel_uraian_barang, _signature_block, _std_doc, _std_table_style,
         _title_block,
     )
 
     key = (" ".join(nama.split()).lower(), nip.strip())
     proj = {**_PROJ, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
-            "location": 1, "condition": 1}
+            "brand": 1, "model": 1, "serial_number": 1,
+            "location": 1, "condition": 1, "bast_file_id": 1}
     rows = []
     jabatan = ""
     melekat = ""
@@ -706,21 +708,26 @@ async def daftar_pemegang_pdf(
         f"dalam keadaan baik saat berakhirnya penggunaan.", st['Meta']))
     elements.append(Spacer(1, 4 * rl_mm))
 
-    headers = ["No", "Kode Barang", "NUP", "Nama Barang", "Lokasi", "Kondisi", "BAST"]
+    # Tabel ringkas (selaras BAST): kolom Identitas (Sub-sub Kelompok · kode ·
+    # NUP) + Uraian (Nama · Merk/Tipe/Spesifikasi) gabungan agar teks panjang lega.
+    subsub = await _peta_subsub_kelompok([a.get("asset_code") for a in rows])
+    from kodefikasi_utils import normalize_kode as _norm
+    headers = ["No", "Identitas Barang\n(Sub-sub Kelompok · Kode · NUP)",
+               "Uraian Barang\n(Nama · Merk/Tipe/Spesifikasi)",
+               "Lokasi", "Kondisi", "BAST"]
     table_data = [[Paragraph(h, st['TableHeader']) for h in headers]]
     for i, a in enumerate(rows, start=1):
         table_data.append([
             Paragraph(str(i), st['CellCenter']),
-            Paragraph(a.get("asset_code") or "-", st['Cell']),
-            Paragraph(str(a.get("NUP") or "-"), st['CellCenter']),
-            Paragraph(a.get("asset_name") or "-", st['Cell']),
+            _sel_identitas_barang(a, subsub.get(_norm(a.get("asset_code")), ""), st),
+            _sel_uraian_barang(a, st),
             Paragraph(a.get("location") or "-", st['Cell']),
             Paragraph(a.get("condition") or "-", st['CellCenter']),
             Paragraph("✓" if str(a.get("bast_file_id") or "").strip() else "—",
                       st['CellCenter']),
         ])
     table = Table(table_data,
-                  colWidths=_fit_col_widths([24, 96, 34, 140, 90, 60, 34], doc.width),
+                  colWidths=_fit_col_widths([20, 150, 185, 74, 52, 30], doc.width),
                   repeatRows=1)
     table.setStyle(_std_table_style(zebra=True))
     elements.append(table)

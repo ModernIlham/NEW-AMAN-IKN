@@ -891,6 +891,70 @@ praktik penomoran & buku agenda: [sipas.id — penomoran surat](https://www.sipa
 [sipas.id — buku agenda](https://www.sipas.id/blog/penanganan-surat-masuk-dan-keluar-sistem-buku-agenda/),
 [integrasolusi.com — pengelolaan surat](https://integrasolusi.com/blog/pengelolaan-surat-keluar-dan-surat-masuk-dengan-buku-agenda/).
 
+## 11B. Peran Pengelolaan BMN & Penanda Tangan BAST (riset terverifikasi Jul 2026)
+
+> Riset internet Jul 2026 (5 agen: riset + verifikasi adversarial + 3 pemetaan
+> kode). Verifikasi menilai **klaim inti didukung, kepercayaan TINGGI**, dengan
+> beberapa penyempurnaan (currency & nomenklatur JFPLB). Batas bukti: portal
+> resmi (peraturan.bpk.go.id, fulltext PMK 181 di JDIH Kemenkeu) sebagian
+> **HTTP 403** dari lingkungan riset — kesimpulan bertumpu pada ekstraksi
+> pencarian ganda + definisi PP/Permendagri yang cocok verbatim.
+
+**Beda "Pengurus Barang" vs "Penatausahaan BMN".** "Pengurus Barang /
+Pengurus Barang Pengelola/Pengguna/Pembantu" & "Penyimpan Barang" adalah
+nomenklatur **Barang Milik DAERAH** — PP 27/2014 mendefinisikannya dengan
+qualifier "Daerah" eksplisit, diperinci **Permendagri No. 7 Tahun 2024**
+(pengganti Permendagri 19/2016 jo. 47/2021). Penatausahaan **BMN PUSAT**
+(PMK 181/2016) **tidak** memakai istilah itu; strukturnya berbasis **unit
+akuntansi** (UAPB → UAPPB-E1 → UAPPB-W → **UAKPB** → UAPKPB) dengan
+penanggung jawab UAKPB = **Kuasa Pengguna Barang (KPB) = Kepala Kantor/
+Satker**. Pelaksana teknisnya kini berupa **Jabatan Fungsional Penata
+Laksana Barang (JFPLB)** (PermenPAN-RB No. 23 Tahun 2018) + role SAKTI
+**Operator–Validator–Approver**. Catatan presisi: "Petugas Penatausahaan/
+Operator/Pengelola BMN Satker" adalah sebutan **praktik/role SAKTI**, bukan
+definisi PMK 181 — yang benar-benar *resmi* adalah Pengelola/Pengguna/Kuasa
+Pengguna Barang, struktur unit akuntansi, & JFPLB. Sebagian K/L masih memakai
+sebutan informal "pengurus/penyimpan barang" (warisan Keppres 42/2002) —
+sebaiknya dihindari agar konsisten rezim pusat.
+
+**Penanda tangan BAST serah terima INTERNAL ke pegawai** (penggunaan melekat,
+mutasi pemegang, pengembalian): **Pihak Kesatu / "yang menyerahkan" = KPB**
+selaku pemegang penguasaan BMN satker (PP 27/2014; **PMK 40/2024** Tata Cara
+Penggunaan BMN). Dalam praktik kewenangan ini **lazim didelegasikan** ke
+pejabat/petugas pengelola BMN satker (mis. Kasubbag Umum/Rumah Tangga atau
+Petugas Penatausahaan/JFPLB) **"a.n. KPB"**, dengan **KPB "Mengetahui"**;
+**Pihak Kedua / penerima = pegawai pemakai / Penanggung Jawab Ruangan** (nama
+tercatat di DBR). **Bukan** penyerah internal: **PPK** (perannya pada **BAST
+PEROLEHAN** penyedia→satker), **Pengurus/Penyimpan Barang** (istilah daerah),
+dan **Pengelola Barang/DJKN** (hanya PSP/pengalihan status). **Penandaan
+ketidakpastian (dipertahankan):** tidak ada satu pasal nasional tunggal yang
+menetapkan penanda tangan BAST serah-terima-ke-pegawai — diatur **SOP/juknis
+internal K/L**; SAKTI/SIMAN tidak menerbitkan BAST internal ini otomatis
+(SAKTI menghasilkan DBR/label & mencatat mutasi).
+
+**Tiga jenis BAST agar referensi penanda tangan tepat:** (1) **Perolehan**
+(Penyedia→PPK→KPB); (2) **Pengelolaan/PSP/Transfer** antar-satker/K/L
+(melibatkan Pengguna/Pengelola Barang/DJKN); (3) **Serah Terima Internal**
+ke pegawai (KPB / petugas a.n. KPB → pegawai). AMAN modul Penggunaan
+menangani jenis (3).
+
+**Terapan AMAN (#353-an, PR-K).** `pejabat_utils.PERAN_PEJABAT` ditata ulang:
+label `pengurus_barang` ditandai **"istilah Barang Milik DAERAH — hindari"**
+(dipertahankan hanya demi data lama); ditambah peran BMN-pusat yang tepat:
+`penatausahaan_bmn` (kini "Petugas Penatausahaan BMN / Penata Laksana Barang
+(JFPLB)"), `pengelola_bmn_satker` (a.n. KPB), `validator_bmn`. Tiap peran
+diberi **metadata** `PERAN_PEJABAT_META` (domain `bmn`/`bmd`, peran BAST
+`penyerah`/`penerima`/`mengetahui`/`tidak`, keterangan berbasis regulasi) yang
+diekspos `/pejabat/referensi` + ditampilkan pada UI Referensi Pejabat.
+Helper `peran_penyerah_bast()` (domain bmn & ttd_bast=penyerah) menyaring
+dropdown **"yang menyerahkan"** pada dialog Buat BAST (halaman Penggunaan):
+hanya **KPB / Petugas Penatausahaan / Pengelola BMN Satker**. Bila penyerah
+BUKAN KPB, BAST otomatis ditandai **"a.n. Kuasa Pengguna Barang"** + baris
+**"Mengetahui, KPB"**. Sumber: PMK 181/PMK.06/2016; PMK 40/2024; PP 27/2014
+jo. PP 28/2020; Permendagri 7/2024 (rezim BMD); PermenPAN-RB 23/2018 (JFPLB);
+KLC/DJKN/DJPb (DBR, wewenang KPB), Kamus SAKTI (role Operator/Validator/
+Approver). **[Sebagian teks primer perlu verifikasi — akses PDF JDIH 403.]**
+
 ## 12. Kendala Umum Satker → Fitur Penangkal AMAN
 
 | Kendala nyata (temuan artikel DJKN/DJPb/BPK/jurnal) | Penangkal di AMAN |
