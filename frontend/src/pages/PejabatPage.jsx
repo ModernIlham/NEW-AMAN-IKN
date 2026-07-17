@@ -11,6 +11,9 @@ import {
 } from "@/components/ui/dialog";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
+import { authMediaUrl } from "@/lib/mediaUrl";
+import SignatureCapture from "@/components/ttd/SignatureCapture";
+import { PenTool } from "lucide-react";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -41,6 +44,8 @@ export default function PejabatPage({ user, onBack }) {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState(null);
+  const [ttdUntuk, setTtdUntuk] = useState(null); // pejabat yang dikelola TTD-nya
+  const [ttdSaving, setTtdSaving] = useState(false);
   const [saving, setSaving] = useState(false);
   const { confirm, confirmDialog } = useConfirm();
 
@@ -235,6 +240,13 @@ export default function PejabatPage({ user, onBack }) {
                       </td>
                       {isAdmin && (
                         <td className="px-3 py-2 text-right whitespace-nowrap">
+                          <button type="button" onClick={() => setTtdUntuk(it)}
+                            aria-label={`Kelola tanda tangan ${it.nama}`}
+                            title={it.ttd_file_id ? "TTD digital tersimpan — kelola" : "Tambah tanda tangan digital"}
+                            className={`p-1.5 rounded-md hover:bg-muted min-w-0 min-h-0 ${it.ttd_file_id ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground hover:text-foreground"}`}
+                            data-testid={`pejabat-ttd-${it.id}`}>
+                            <PenTool className="w-3.5 h-3.5" />
+                          </button>
                           <button type="button" onClick={() => setForm({ ...EMPTY, ...it, mode: "edit" })}
                             aria-label={`Ubah ${it.nama}`}
                             className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted min-w-0 min-h-0"
@@ -363,6 +375,43 @@ export default function PejabatPage({ user, onBack }) {
         </DialogContent>
       </Dialog>
 
+      {/* ── Dialog Kelola Tanda Tangan Digital ── */}
+      <Dialog open={!!ttdUntuk} onOpenChange={(o) => { if (!o) setTtdUntuk(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Tanda Tangan Digital — {ttdUntuk?.nama}</DialogTitle>
+            <DialogDescription className="text-xs">
+              Spesimen ini otomatis tersemat pada blok tanda tangan laporan/BA yang ditandatangani pejabat ini (mis. KPB pada DBKP/LBKP/BAST).
+            </DialogDescription>
+          </DialogHeader>
+          {ttdUntuk?.ttd_file_id && (
+            <div className="rounded-lg border border-border p-2 flex items-center justify-between gap-2 bg-muted/40">
+              <img src={authMediaUrl(`${API}/ttd/spesimen/pejabat/${ttdUntuk.id}`)}
+                alt="TTD tersimpan" className="max-h-16 bg-white rounded px-1" data-testid="pejabat-ttd-thumb" />
+              <Button variant="outline" size="sm" className="h-8 text-xs text-red-500 hover:text-red-600"
+                onClick={async () => {
+                  try {
+                    await axios.delete(`${API}/ttd/spesimen/pejabat/${ttdUntuk.id}`);
+                    toast.success("Spesimen TTD dihapus");
+                    setTtdUntuk(null); load();
+                  } catch (e) { toast.error(e?.response?.data?.detail || "Gagal menghapus"); }
+                }}>Hapus TTD</Button>
+            </div>
+          )}
+          {ttdUntuk && (
+            <SignatureCapture saving={ttdSaving} onSave={async (png) => {
+              setTtdSaving(true);
+              try {
+                await axios.put(`${API}/ttd/spesimen/pejabat/${ttdUntuk.id}`, { png_base64: png });
+                toast.success("Tanda tangan tersimpan");
+                setTtdUntuk(null); load();
+              } catch (e) {
+                toast.error(e?.response?.data?.detail || "Gagal menyimpan tanda tangan");
+              } finally { setTtdSaving(false); }
+            }} />
+          )}
+        </DialogContent>
+      </Dialog>
       {confirmDialog}
     </div>
   );

@@ -470,6 +470,18 @@ async def resolve_pejabat_peran(peran, per_iso=None):
     return pejabat_aktif_untuk_peran(pejabat_list, peran, per_iso)
 
 
+async def ambil_ttd_img(file_id):
+    """Bytes gambar TTD digital (PNG transparan) dari GridFS — None bila
+    kosong/gagal. Dipakai menyematkan tanda tangan ke blok TTD PDF."""
+    fid = str(file_id or "").strip()
+    if not fid:
+        return None
+    try:
+        return await get_document_from_gridfs(fid)
+    except Exception:
+        return None
+
+
 async def blok_ttd_kpb(settings, per_iso=None):
     """Entri `_signature_block` "Kuasa Pengguna Barang" (dengan baris tempat/
     tanggal titik-titik) — nama/NIP dari registry pejabat, fallback setelan."""
@@ -477,6 +489,7 @@ async def blok_ttd_kpb(settings, per_iso=None):
     return {'pre': ['.................., .......................'],
             'header': 'Kuasa Pengguna Barang,',
             'nama': kpb["nama"],
+            'ttd_img': await ambil_ttd_img(kpb.get("ttd_file_id")),
             'after': [f"NIP. {kpb['nip']}"]}
 
 
@@ -573,6 +586,7 @@ async def blok_ttd_kpb_titik(settings, per_iso=None):
     kpb = await resolve_penandatangan_kpb(settings, per_iso)
     return {'pre': [''], 'header': 'Mengetahui,', 'role': 'Kuasa Pengguna Barang,',
             'nama': kpb["nama"] if kpb["nama"] != "-" else '...........................',
+            'ttd_img': await ambil_ttd_img(kpb.get("ttd_file_id")),
             'after': [f"NIP. {kpb['nip'] if kpb['nip'] != '-' else '....................'}"]}
 
 
