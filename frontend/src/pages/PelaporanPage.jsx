@@ -70,8 +70,8 @@ export default function PelaporanPage({ user, onBack }) {
     muatPeriode();
   }, [muatPeriode]);
 
-  const buatPeriode = async (semester) => {
-    const th = new Date().getFullYear();
+  const buatPeriode = async (semester, tahun) => {
+    const th = tahun || new Date().getFullYear();
     try {
       await axios.post(`${API}/pelaporan/periode`, { tahun: th, semester });
       toast.success("Periode terdaftar");
@@ -226,6 +226,8 @@ export default function PelaporanPage({ user, onBack }) {
                   { label: `Semester I ${th} (Jan–Jun)`, q: `tahun=${th}&semester=1`, f: `LBKP_${th}_S1.pdf` },
                   { label: `Semester II ${th} (Jul–Des)`, q: `tahun=${th}&semester=2`, f: `LBKP_${th}_S2.pdf` },
                   { label: `Tahunan ${th}`, q: `tahun=${th}`, f: `LBKP_${th}.pdf` },
+                  { label: `Semester I ${th - 1}`, q: `tahun=${th - 1}&semester=1`, f: `LBKP_${th - 1}_S1.pdf` },
+                  { label: `Semester II ${th - 1}`, q: `tahun=${th - 1}&semester=2`, f: `LBKP_${th - 1}_S2.pdf` },
                   { label: `Tahunan ${th - 1}`, q: `tahun=${th - 1}`, f: `LBKP_${th - 1}.pdf` },
                 ].map((o) => (
                   <DropdownMenuItem key={o.label} className="min-h-[42px]"
@@ -249,6 +251,8 @@ export default function PelaporanPage({ user, onBack }) {
                   { label: `Semester I ${th} (Jan–Jun)`, q: `tahun=${th}&semester=1`, f: `CaLBMN_${th}_S1.pdf` },
                   { label: `Semester II ${th} (Jul–Des)`, q: `tahun=${th}&semester=2`, f: `CaLBMN_${th}_S2.pdf` },
                   { label: `Tahunan ${th}`, q: `tahun=${th}`, f: `CaLBMN_${th}.pdf` },
+                  { label: `Semester I ${th - 1}`, q: `tahun=${th - 1}&semester=1`, f: `CaLBMN_${th - 1}_S1.pdf` },
+                  { label: `Semester II ${th - 1}`, q: `tahun=${th - 1}&semester=2`, f: `CaLBMN_${th - 1}_S2.pdf` },
                   { label: `Tahunan ${th - 1}`, q: `tahun=${th - 1}`, f: `CaLBMN_${th - 1}.pdf` },
                 ].map((o) => (
                   <DropdownMenuItem key={o.label} className="min-h-[42px]"
@@ -288,12 +292,14 @@ export default function PelaporanPage({ user, onBack }) {
                   {(() => {
                     const th = new Date().getFullYear();
                     return [
-                      { label: `Semester I ${th}`, semester: 1 },
-                      { label: `Semester II ${th}`, semester: 2 },
-                      { label: `Tahunan ${th}`, semester: null },
+                      { label: `Semester I ${th}`, semester: 1, tahun: th },
+                      { label: `Semester II ${th}`, semester: 2, tahun: th },
+                      { label: `Tahunan ${th}`, semester: null, tahun: th },
+                      { label: `Semester II ${th - 1}`, semester: 2, tahun: th - 1 },
+                      { label: `Tahunan ${th - 1}`, semester: null, tahun: th - 1 },
                     ].map((o) => (
                       <DropdownMenuItem key={o.label} className="min-h-[42px]"
-                        onClick={() => buatPeriode(o.semester)}>
+                        onClick={() => buatPeriode(o.semester, o.tahun)}>
                         {o.label}
                       </DropdownMenuItem>
                     ));

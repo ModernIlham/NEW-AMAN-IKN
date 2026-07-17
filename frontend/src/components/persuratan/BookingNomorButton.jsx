@@ -97,7 +97,7 @@ export default function BookingNomorButton({
             <DialogTitle>{hasil ? "Nomor Berhasil Dibooking" : "Booking Nomor Surat"}</DialogTitle>
             <DialogDescription className="text-xs">
               {hasil
-                ? "Salin nomor ini ke field nomor dokumen Anda, lalu sahkan di Registrasi Persuratan setelah ditandatangani."
+                ? "Nomor tercatat di buku agenda. Berita Acara kegiatan ini akan otomatis memakai nomor ini pada PDF-nya (bila field nomor BA kegiatan kosong); untuk dokumen lain salin manual. Sahkan di Registrasi Persuratan setelah ditandatangani."
                 : `Modul ${modul} · ${jenisNaskah}${referensi ? ` · ${referensi}` : ""} — nomor tercatat di buku agenda dengan status dibooking.`}
             </DialogDescription>
           </DialogHeader>

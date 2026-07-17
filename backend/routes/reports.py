@@ -309,6 +309,21 @@ def _fit_col_widths(widths, avail):
     return [w * avail / total for w in widths]
 
 
+async def _nomor_terbooking(kegiatan_id, jenis_naskah="Berita Acara"):
+    """Nomor surat keluar ter-booking/disahkan TERBARU untuk kegiatan ini di
+    Registrasi Persuratan — menutup untai booking → cetak: nomor yang dipesan
+    lewat tombol Booking Nomor otomatis tampil di PDF (audit G3 #1). '' bila
+    tidak ada."""
+    if not str(kegiatan_id or "").strip():
+        return ""
+    doc = await db.surat.find_one(
+        {"jenis": "keluar", "kegiatan_id": str(kegiatan_id),
+         "jenis_naskah": jenis_naskah,
+         "status": {"$in": ["dibooking", "disahkan"]}},
+        {"_id": 0, "nomor": 1}, sort=[("created_at", -1)])
+    return str((doc or {}).get("nomor") or "").strip()
+
+
 async def _peta_subsub_kelompok(codes):
     """Peta kode barang → nama Sub-sub Kelompok (uraian kodefikasi TERDALAM
     yang terdaftar). Dipakai tabel aset ringkas: label klasifikasi di atas
@@ -829,8 +844,10 @@ async def generate_berita_acara_pdf(activity_id: str, _user: dict = Depends(requ
     elements = []
     elements.extend(_kop_surat_flowables(settings, doc.width))
 
-    # Header — nomor BA: field kegiatan → titik-titik utk diisi tangan.
+    # Header — nomor BA: field kegiatan → nomor ter-booking Persuratan →
+    # titik-titik utk diisi tangan.
     nomor_ba = (str(activity.get("nomor_berita_acara") or "").strip()
+                or await _nomor_terbooking(activity.get("id"))
                 or "......./......./........")
     elements.extend(_title_block("BERITA ACARA\nTIM INTERNAL PENELITIAN BMN TIDAK DITEMUKAN", nomor=nomor_ba))
 
@@ -2884,7 +2901,9 @@ async def generate_bahi_pdf(activity_id: str, _user: dict = Depends(require_user
 
     ba = activity.get("berita_acara", {})
     ba_nomor = (str(activity.get("nomor_berita_acara") or "").strip()
-                or ba.get("nomor") or "......./......./........")
+                or ba.get("nomor")
+                or await _nomor_terbooking(activity.get("id"))
+                or "......./......./........")
     elements.extend(_title_block("BERITA ACARA\nHASIL INVENTARISASI BARANG MILIK NEGARA", nomor=ba_nomor))
 
     # Narasi tanggal BA terisi otomatis: tanggal BA kegiatan → fallback
