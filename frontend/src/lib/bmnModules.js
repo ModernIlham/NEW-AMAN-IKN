@@ -137,6 +137,7 @@ export const PENATAUSAHAAN_SUBMODULES = [
       "✅ LKB — Laporan Kondisi Barang (rincian per NUP + ringkasan B/RR/RB per golongan, format LKBT-PKPB1)",
       "✅ Periode pelaporan ber-kunci (Semester I/II/Tahunan; terkunci = LBKP & CaLBMN berpenanda FINAL; buka kembali wajib beralasan)",
       "✅ Tenggat penyampaian konfigurabel per periode (surat DJKN/K/L) dengan pengingat sisa hari / lewat tenggat",
+      "✅ Sinkronisasi SIMAN V2: impor ekspor Master Aset (data valid) → aset berbeda bertanda \"≠ SIMAN\" + terapkan nilai SIMAN per aset",
       "Arsip laporan lintas kegiatan dengan penomoran & riwayat",
       "Ekspor rekonsiliasi (format yang bisa disandingkan dengan SIMAK/SAKTI)",
     ],

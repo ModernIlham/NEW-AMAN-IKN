@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
+import SimanSyncCard from "@/components/pelaporan/SimanSyncCard";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -247,6 +248,9 @@ export default function PelaporanPage({ user, onBack }) {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+
+        {/* ── Sinkronisasi berkala dengan SIMAN V2 (impor manual ekspor) ── */}
+        <SimanSyncCard isAdmin={isAdmin} />
 
         {/* ── Periode pelaporan ber-kunci ── */}
         {periode && (

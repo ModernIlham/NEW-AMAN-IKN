@@ -120,6 +120,11 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
 
         {/* Top-right badges */}
         <div className="absolute top-1.5 right-1.5 z-2 flex items-center gap-1">
+          {asset.siman?.status === "selisih" && (
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold text-white bg-amber-600/90 backdrop-blur-sm" title="Data berbeda dengan SIMAN V2" data-testid={`siman-badge-${asset.id}`}>
+              ≠ SIMAN
+            </span>
+          )}
           {asset.condition && (
             <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold text-white backdrop-blur-sm ${COND[asset.condition] || "bg-slate-500"}`}>
               {asset.condition}

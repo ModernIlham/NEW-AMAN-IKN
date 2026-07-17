@@ -108,7 +108,12 @@ const AssetTableRow = memo(({ asset, editId, onEdit, onDelete, onPrintCard }) =>
         </span>
       </td>
       <td className="px-2 py-1 align-middle">
-        <span className={`badge text-xs ${asset.condition === "Baik" ? "badge-success" : asset.condition === "Rusak Ringan" ? "badge-warning" : "badge-error"}`}>{asset.condition || '-'}</span>
+        <div className="flex flex-col gap-0.5 items-start">
+          <span className={`badge text-xs ${asset.condition === "Baik" ? "badge-success" : asset.condition === "Rusak Ringan" ? "badge-warning" : "badge-error"}`}>{asset.condition || '-'}</span>
+          {asset.siman?.status === "selisih" && (
+            <span className="badge badge-warning text-[10px]" title="Data berbeda dengan SIMAN V2">≠ SIMAN</span>
+          )}
+        </div>
       </td>
       <td className="px-2 py-1 align-middle">
         <span className={`badge text-xs ${

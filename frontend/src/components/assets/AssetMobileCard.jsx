@@ -232,6 +232,9 @@ const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, onOpenKartu, on
               </div>
               <div className="flex items-center gap-1 flex-shrink-0">
                 {/* Document count not shown (lazy loaded) */}
+                {asset.siman?.status === "selisih" && (
+                  <span className="badge badge-warning text-[10px]" title="Data berbeda dengan SIMAN V2">≠ SIMAN</span>
+                )}
                 <span className={`badge text-[10px] ${
                   asset.status === "Aktif" ? "badge-success" :
                   asset.status === "Idle" ? "badge-info" :

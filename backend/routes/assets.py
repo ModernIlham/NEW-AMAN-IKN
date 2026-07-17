@@ -105,6 +105,9 @@ LIST_PROJECTION = {
     "created_at": 1, "updated_at": 1, "activity_id": 1,
     "version": 1,  # OCC: client needs this to send If-Match on subsequent writes
     "stiker_photo_index": 1,
+    # Sinkronisasi SIMAN V2: status cocok/selisih + rincian selisih + referensi
+    # (nilai penyusutan/buku dsb.) — ringkas, dipakai penanda di halaman aset.
+    "siman": 1,
     # GridFS-first (dokumen ter-migrasi punya photos=[] tapi gridfs terisi);
     # fallback ke inline untuk dokumen legacy.
     "photo_count": {"$cond": [

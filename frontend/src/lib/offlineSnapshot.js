@@ -53,6 +53,7 @@ const SNAPSHOT_FIELDS = [
   "keterangan_berlebih", "asal_usul_berlebih",
   "nomor_perkara", "pihak_bersengketa", "keterangan_sengketa",
   "photo_count", "doc_total", "doc_checked", "doc_summary",
+  "siman",  // subdoc sinkronisasi SIMAN V2 — badge "≠ SIMAN" tetap tampil offline
 ];
 
 function getDB() {

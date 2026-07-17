@@ -48,6 +48,36 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#339] Sinkronisasi SIMAN V2: impor ekspor Master Aset + tanda "≠ SIMAN" per aset — 2026-07-17
+
+- **Kanal pembaruan berkala dari SIMAN V2** (SIMAN = data valid; API belum
+  tersedia untuk satker → impor manual hasil ekspor sebagai "API semu"):
+  unggah XLSX "Master Aset" (±78 kolom) di **Pelaporan › Sinkronisasi
+  SIMAN V2** → tiap baris dicocokkan ke aset AMAN → perbedaan tercatat per
+  aset → tinjau & **terapkan nilai SIMAN** per aset (ber-audit).
+- **Pencocokan dua lapis**: `Kode Register` SIMAN (ID stabil, tahan
+  reklasifikasi) lalu Kode Barang+NUP; aset AMAN yang belum punya
+  `kode_register` **mengadopsinya otomatis** saat impor.
+- **Field dibanding** (normalisasi kode/angka/tanggal/teks): kode barang
+  (deteksi reklasifikasi), uraian kode, merk, tipe, kondisi, nilai
+  perolehan, tanggal perolehan, nama pengguna, kode register. **Referensi
+  SIMAN tersimpan per aset** tanpa dibanding: nilai penyusutan, nilai buku,
+  umur aset, status penggunaan/PSP, intra/ekstra.
+- **Tanda di halaman aset**: badge "≠ SIMAN" pada kartu galeri, tabel
+  desktop, kartu mobile (ikut snapshot offline), + banner rincian selisih
+  (nilai AMAN ⟶ SIMAN) di form edit aset; opsi menandai aset yang tidak
+  ada di file (khusus ekspor penuh satker) → banner "tidak ditemukan di
+  SIMAN".
+- Riwayat impor tersimpan (`siman_imports`) berikut daftar baris SIMAN yang
+  belum tercatat di AMAN (bahan tindak lanjut lewat impor aset/Pengadaan).
+- Teknis: `siman_utils.py` murni (16 uji unit); jebakan nyata tertangani —
+  tanggal placeholder `9999-12-31` tanpa `strptime`, dimensi sheet ekspor
+  SIMAN yang salah (`reset_dimensions()`), NUP/kode bergaya float Excel;
+  smoke end-to-end memakai **file ekspor SIMAN asli** (165 baris).
+- Verifikasi: suite **444 lulus** (+16); eslint bersih; `yarn build` sukses.
+
+---
+
 ## [#338] Review batch 10 (final): LBKP tanpa tebakan seksi, sapu bersih API legacy & penanda basi — 2026-07-16
 
 - **#63 — LBKP/CaLBMN: mutasi kurang tanpa nilai tak lagi ditebak Ekstra**:
