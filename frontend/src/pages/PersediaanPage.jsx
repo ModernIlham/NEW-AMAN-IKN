@@ -324,7 +324,7 @@ export default function PersediaanPage({ user, onBack }) {
   };
 
   const bukaMassal = () => setMassal({
-    arah: "masuk", jenis: "pembelian", no_bukti: "", jenis_dokumen: "",
+    arah: "masuk", jenis: "pembelian", no_bukti: "", booking_otomatis: false, jenis_dokumen: "",
     tgl_dokumen: "", perolehan_id: "",
     penyedia: "", unit_penerima: "", keterangan: "",
     items: [], cari: "", hasil: [], mencari: false, saving: false, laporan: null,
@@ -363,6 +363,7 @@ export default function PersediaanPage({ user, onBack }) {
     try {
       const r = await axios.post(`${API}/persediaan/transaksi-massal`, {
         arah: massal.arah, jenis: massal.jenis, no_bukti: massal.no_bukti,
+        booking_otomatis: !!massal.booking_otomatis,
         jenis_dokumen: massal.jenis_dokumen, penyedia: massal.penyedia,
         tgl_dokumen: massal.tgl_dokumen, perolehan_id: massal.perolehan_id,
         unit_penerima: massal.unit_penerima, keterangan: massal.keterangan,
@@ -378,8 +379,16 @@ export default function PersediaanPage({ user, onBack }) {
         toast.warning(`${d.sukses}/${d.total} barang tercatat — ${d.gagal} gagal (lihat rincian)`);
         setMassal((m) => ({ ...m, saving: false, laporan: d }));
       } else {
-        toast.success(`Transaksi massal tercatat: ${d.sukses} barang, satu dokumen`);
+        toast.success(`Transaksi massal tercatat: ${d.sukses} barang, satu dokumen`
+          + (d.nomor_lpb ? ` — LPB ${d.nomor_lpb}` : ""));
         setMassal(null);
+      }
+      if (d.lpb_id) {
+        // Laporan Penerimaan Barang langsung terunduh (bisa diunduh ulang
+        // kapan pun lewat riwayat LPB / endpoint yang sama).
+        downloadFileWithProgress(`${API}/persediaan/lpb/${d.lpb_id}/pdf`,
+          `LPB_${(d.nomor_lpb || d.lpb_id.slice(0, 8)).replace(/[\/\s]/g, "_")}.pdf`,
+          { label: "Laporan Penerimaan Barang (LPB)" }).catch(() => {});
       }
       load(1, search, status);
       refreshRingkasan();
@@ -1411,10 +1420,19 @@ export default function PersediaanPage({ user, onBack }) {
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-m-bukti">No. Bukti</label>
-                  <Input id="psd-m-bukti" placeholder="cth. BAST-15/VII/2026"
+                  <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-m-bukti">No. Bukti / LPB</label>
+                  <Input id="psd-m-bukti" placeholder={massal.booking_otomatis ? "otomatis dari Persuratan" : "cth. BAST-15/VII/2026"}
                     value={massal.no_bukti} onChange={(e) => setMField("no_bukti", e.target.value)}
+                    disabled={!!massal.booking_otomatis}
                     data-testid="persediaan-massal-bukti" />
+                  {massal.arah === "masuk" && (
+                    <label className="flex items-center gap-2 text-[11px] mt-1 cursor-pointer text-muted-foreground">
+                      <input type="checkbox" checked={!!massal.booking_otomatis} className="w-3.5 h-3.5"
+                        onChange={(e) => setMassal((m) => ({ ...m, booking_otomatis: e.target.checked, no_bukti: e.target.checked ? "" : m.no_bukti }))}
+                        data-testid="persediaan-massal-booking" />
+                      Nomor LPB otomatis (tercatat di buku agenda Persuratan)
+                    </label>
+                  )}
                 </div>
                 {massal.arah === "masuk" ? (
                   <>

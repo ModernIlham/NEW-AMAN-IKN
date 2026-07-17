@@ -747,6 +747,9 @@ class TransaksiMassalIn(BaseModel):
     perolehan_id: str = ""                  # masuk — tautan BAST Pengadaan (#17)
     unit_penerima: str = ""                 # keluar
     keterangan: str = ""
+    # Nomor LPB otomatis dari Registrasi Persuratan bila no_bukti kosong
+    # (arah masuk; tercatat di buku agenda berstatus dibooking).
+    booking_otomatis: bool = False
     items: list[ItemMassalIn] = Field(min_length=1, max_length=100)
 
 
@@ -771,6 +774,43 @@ async def transaksi_massal(payload: TransaksiMassalIn, user: dict = Depends(requ
     if payload.arah == "masuk" and str(payload.perolehan_id or "").strip():
         await _ambil_snapshot_perolehan(payload.perolehan_id)
 
+    # Nomor LPB: pakai no_bukti; atau pesan otomatis dari Persuratan.
+    import uuid as _uuid
+    nomor_lpb = str(payload.no_bukti or "").strip()
+    surat_id = ""
+    if payload.arah == "masuk" and payload.booking_otomatis and not nomor_lpb:
+        from persuratan_utils import bangun_nomor, pilih_klasifikasi
+        from routes.persuratan import _no_agenda_berikut, _pengaturan
+        now0 = datetime.now(timezone.utc)
+        tgl_surat = (str(payload.tgl_dokumen or "").strip()[:10]
+                     or now0.date().isoformat())
+        atur = await _pengaturan()
+        kode_klas = pilih_klasifikasi(atur["peta_klasifikasi"], "persediaan",
+                                      "Laporan",
+                                      default=atur["kode_klasifikasi_default"])
+        tahun = int(tgl_surat[:4])
+        no_agenda = await _no_agenda_berikut("keluar", tahun)
+        nomor_lpb = bangun_nomor(atur["format_nomor"], no_agenda, tgl_surat,
+                                 kode_klasifikasi=kode_klas,
+                                 kode_unit=atur["kode_unit"])
+        surat_id = str(_uuid.uuid4())
+        await db.surat.insert_one({
+            "id": surat_id, "jenis": "keluar", "no_agenda": no_agenda,
+            "tahun": tahun, "nomor": nomor_lpb, "status": "dibooking",
+            "perihal": f"Laporan Penerimaan Barang (LPB) — {payload.jenis}",
+            "tujuan": str(payload.penyedia or "").strip(),
+            "jenis_naskah": "Laporan", "modul": "persediaan",
+            "kegiatan_id": "", "nama_kegiatan": "",
+            "kode_klasifikasi": kode_klas, "kode_keamanan": "B",
+            "tanggal_surat": tgl_surat, "referensi": "LPB",
+            "nomor_eksternal": "", "keterangan": "booking otomatis dari transaksi massal",
+            "dibuat_oleh": user.get("username", "system"),
+            "riwayat": [{"status": "dibooking", "tanggal": now0.isoformat(),
+                         "oleh": user.get("username", "system"),
+                         "catatan": "booking otomatis dari LPB"}],
+            "created_at": now0.isoformat(), "updated_at": now0.isoformat(),
+        })
+
     hasil = []
     for it in payload.items:
         try:
@@ -778,7 +818,8 @@ async def transaksi_massal(payload: TransaksiMassalIn, user: dict = Depends(requ
                 r = await transaksi_masuk(it.persediaan_id, TransaksiMasukIn(
                     jenis=payload.jenis, jumlah=it.jumlah,
                     harga_satuan=it.harga_satuan, expired=it.expired,
-                    no_bukti=payload.no_bukti, jenis_dokumen=payload.jenis_dokumen,
+                    no_bukti=(nomor_lpb or payload.no_bukti),
+                    jenis_dokumen=payload.jenis_dokumen,
                     tgl_dokumen=payload.tgl_dokumen, penyedia=payload.penyedia,
                     perolehan_id=payload.perolehan_id,
                     keterangan=payload.keterangan,
@@ -795,8 +836,172 @@ async def transaksi_massal(payload: TransaksiMassalIn, user: dict = Depends(requ
             hasil.append({"persediaan_id": it.persediaan_id, "ok": False,
                           "error": str(e.detail)})
     sukses = sum(1 for h in hasil if h["ok"])
+
+    # Register LPB (Laporan Penerimaan Barang) — hanya arah MASUK dengan
+    # minimal satu barang sukses; snapshot barang dibekukan utk dokumen.
+    lpb_id = ""
+    if payload.arah == "masuk" and sukses:
+        ok_ids = [h["persediaan_id"] for h in hasil if h["ok"]]
+        master = {m["id"]: m async for m in db.persediaan.find(
+            {"id": {"$in": ok_ids}},
+            {"_id": 0, "id": 1, "kode_barang": 1, "nup": 1,
+             "nama_barang": 1, "satuan": 1})}
+        baris, total_nilai = [], 0.0
+        for it in payload.items:
+            if it.persediaan_id not in ok_ids:
+                continue
+            m = master.get(it.persediaan_id) or {}
+            total = float(it.jumlah) * float(it.harga_satuan or 0)
+            total_nilai += total
+            baris.append({
+                "persediaan_id": it.persediaan_id,
+                "kode_barang": m.get("kode_barang", ""),
+                "nup": m.get("nup", ""),
+                "nama_barang": m.get("nama_barang", ""),
+                "jumlah": it.jumlah, "satuan": m.get("satuan", ""),
+                "harga_satuan": it.harga_satuan, "total": total,
+                "keterangan": "Kondisi Baik & Lengkap",
+            })
+        lpb_id = str(_uuid.uuid4())
+        await db.lpb.insert_one({
+            "id": lpb_id, "nomor": nomor_lpb, "surat_id": surat_id,
+            "tanggal": (str(payload.tgl_dokumen or "").strip()[:10]
+                        or datetime.now(timezone.utc).date().isoformat()),
+            "jenis": payload.jenis, "jenis_dokumen": payload.jenis_dokumen,
+            "penyedia": str(payload.penyedia or "").strip(),
+            "perolehan_id": str(payload.perolehan_id or "").strip(),
+            "keterangan": str(payload.keterangan or "").strip(),
+            "items": baris, "total_nilai": total_nilai,
+            "jumlah_barang": len(baris),
+            "created_by": user.get("username", "system"),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+
     return {"total": len(hasil), "sukses": sukses, "gagal": len(hasil) - sukses,
-            "hasil": hasil}
+            "hasil": hasil, "lpb_id": lpb_id, "nomor_lpb": nomor_lpb}
+
+
+@persediaan_router.get("/persediaan/lpb")
+async def daftar_lpb(page: int = 1, page_size: int = 30,
+                     _user: dict = Depends(require_user)):
+    """Riwayat Laporan Penerimaan Barang (per transaksi massal masuk)."""
+    page, page_size = max(1, page), min(max(1, page_size), 100)
+    total = await db.lpb.count_documents({})
+    items = await (db.lpb.find({}, {"_id": 0, "items": 0})
+                   .sort("created_at", -1)
+                   .skip((page - 1) * page_size).limit(page_size)
+                   .to_list(page_size))
+    return {"items": items, "total": total, "page": page,
+            "total_pages": max(1, -(-total // page_size))}
+
+
+@persediaan_router.get("/persediaan/lpb/{lpb_id}/pdf")
+async def lpb_pdf(lpb_id: str, _user: dict = Depends(require_user)):
+    """Laporan Penerimaan Barang (LPB) — format resmi satker (contoh docx
+    pemilik): kop, info 2 kolom, tabel barang ber-total, tanda tangan 3
+    kolom (Dibuat/Diperiksa/Disetujui)."""
+    from io import BytesIO
+
+    from fastapi.responses import StreamingResponse
+    from reportlab.lib.units import mm as rl_mm
+    from reportlab.platypus import Paragraph, Spacer, Table, TableStyle
+
+    from shared_utils import resolve_pejabat_peran, resolve_penandatangan_kpb
+    from routes.reports import (
+        _fit_col_widths, _fmt_tanggal_id, _get_report_styles,
+        _kop_surat_flowables, _page_footer_factory, _std_doc,
+        _std_table_style, _title_block,
+    )
+
+    lpb = await db.lpb.find_one({"id": lpb_id}, {"_id": 0})
+    if not lpb:
+        raise HTTPException(status_code=404, detail="LPB tidak ditemukan")
+    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+
+    buffer = BytesIO()
+    doc = _std_doc(buffer, landscape_mode=True)
+    st = _get_report_styles()
+    meta, cell, cellc, cellr = st['Meta'], st['Cell'], st['CellCenter'], st['CellRight']
+
+    def fmt_rp(v):
+        try:
+            return f"{int(v):,}".replace(",", ".")
+        except (ValueError, TypeError):
+            return "0"
+
+    el = []
+    el.extend(_kop_surat_flowables(settings, doc.width))
+    el.extend(_title_block("LAPORAN PENERIMAAN BARANG (LPB)",
+                           nomor=lpb.get("nomor") or "......./......./........"))
+
+    label_jenis = JENIS_MASUK.get(lpb.get("jenis"), lpb.get("jenis") or "-")
+    info = Table([
+        [Paragraph(f"Instansi: <b>{settings.get('nama_instansi') or '-'}</b>", meta),
+         Paragraph(f"Jenis: <b>Persediaan — {label_jenis}</b>", meta)],
+        [Paragraph(f"Kantor/Satker: <b>{settings.get('nama_sub_unit') or settings.get('nama_unit_organisasi') or '-'}</b>", meta),
+         Paragraph(f"No. Bukti/Faktur: <b>{lpb.get('jenis_dokumen') or '-'}</b>", meta)],
+        [Paragraph(f"Tgl Kedatangan: <b>{_fmt_tanggal_id(lpb.get('tanggal')) or '-'}</b>", meta),
+         Paragraph(f"Tautan BAST Pengadaan: <b>{lpb.get('perolehan_id')[:8] + '…' if lpb.get('perolehan_id') else '-'}</b>", meta)],
+        [Paragraph(f"Nama Rekanan/Penyedia: <b>{lpb.get('penyedia') or '-'}</b>", meta),
+         Paragraph(f"Keterangan: <b>{lpb.get('keterangan') or '-'}</b>", meta)],
+    ], colWidths=[doc.width * 0.52, doc.width * 0.48], hAlign='LEFT')
+    info.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+    ]))
+    el.append(info)
+    el.append(Spacer(1, 2.5 * rl_mm))
+
+    data = [["No", "Kode Barang", "Nama Barang", "Qty", "Satuan",
+             "Harga (Rp)", "Total (Rp)", "Keterangan"]]
+    for i, b in enumerate(lpb.get("items") or [], 1):
+        data.append([str(i), b.get("kode_barang") or "-",
+                     Paragraph(b.get("nama_barang") or "-", cell),
+                     str(b.get("jumlah")), b.get("satuan") or "-",
+                     fmt_rp(b.get("harga_satuan")), fmt_rp(b.get("total")),
+                     Paragraph(b.get("keterangan") or "", cell)])
+    data.append(["", "", Paragraph("<b>JUMLAH</b>", cell), "", "", "",
+                 Paragraph(f"<b>{fmt_rp(lpb.get('total_nilai'))}</b>", cellr), ""])
+    t = Table(data, colWidths=_fit_col_widths(
+        [24, 105, 170, 34, 48, 70, 80, 110], doc.width), repeatRows=1)
+    t.setStyle(_std_table_style(zebra=True, total_row=True, extra=[
+        ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+        ('ALIGN', (3, 1), (4, -1), 'CENTER'),
+        ('ALIGN', (5, 1), (6, -1), 'RIGHT'),
+    ]))
+    el.append(t)
+    el.append(Spacer(1, 6 * rl_mm))
+
+    # Tanda tangan 3 kolom: Dibuat (pengurus barang), Diperiksa (atasan
+    # langsung — dititik bila belum diatur), Disetujui (KPB).
+    pengurus = await resolve_pejabat_peran("pengurus_barang",
+                                           per_iso=lpb.get("tanggal"))
+    kpb = await resolve_penandatangan_kpb(settings, per_iso=lpb.get("tanggal"))
+    sig = st['Signature']
+
+    def kolom_ttd(judul, nama, nip):
+        return [Paragraph(judul, sig), Spacer(1, 15 * rl_mm),
+                Paragraph(f"<b><u>{nama or '……………………………'}</u></b>", sig),
+                Paragraph(f"NIP. {nip or '……………………'}", sig)]
+
+    ttd = Table([[
+        kolom_ttd("Dibuat oleh:<br/>Pengurus Barang,",
+                  (pengurus or {}).get("nama"), (pengurus or {}).get("nip")),
+        kolom_ttd("Diperiksa oleh:", "", ""),
+        kolom_ttd("Disetujui oleh:<br/>Kuasa Pengguna Barang,",
+                  (kpb or {}).get("nama"), (kpb or {}).get("nip")),
+    ]], colWidths=[doc.width / 3.0] * 3)
+    ttd.setStyle(TableStyle([('VALIGN', (0, 0), (-1, -1), 'TOP')]))
+    el.append(ttd)
+
+    footer = _page_footer_factory("Laporan Penerimaan Barang (LPB)")
+    doc.build(el, onFirstPage=footer, onLaterPages=footer)
+    buffer.seek(0)
+    return StreamingResponse(buffer, media_type="application/pdf",
+                             headers={"Content-Disposition":
+                                      f'attachment; filename="LPB_{lpb_id[:8]}.pdf"'})
 
 
 @persediaan_router.get("/persediaan/gudang/daftar")
