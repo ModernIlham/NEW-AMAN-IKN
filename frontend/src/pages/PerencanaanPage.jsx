@@ -180,6 +180,17 @@ export default function PerencanaanPage({ user, onBack }) {
           >
             <FileDown className="w-3.5 h-3.5" /><span className="hidden sm:inline">Kertas Kerja</span>
           </button>
+          <button
+            type="button"
+            onClick={() => downloadFileWithProgress(
+              `${API}/perencanaan/usulan/export`, "register_usulan_rkbmn.csv",
+              { label: "Register usulan RKBMN (CSV)" },
+            ).catch(() => {})}
+            className="h-8 px-2.5 rounded-lg border border-border text-xs font-semibold text-foreground/80 flex items-center gap-1.5 hover:bg-muted flex-shrink-0 min-h-0"
+            data-testid="perencanaan-export"
+          >
+            <FileDown className="w-3.5 h-3.5" /><span className="hidden sm:inline">CSV</span>
+          </button>
           <BookingNomorButton modul="perencanaan" jenisNaskah="Laporan" referensi="RKBMN" />
         </div>
       </header>

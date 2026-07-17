@@ -179,6 +179,33 @@ async def list_usulan_rkbmn(_user: dict = Depends(require_user)):
                 "cetakan RKBMN/SPTJM/Hasil Penelaahan.")}
 
 
+@perencanaan_router.get("/perencanaan/usulan/export")
+async def export_usulan_rkbmn(_user: dict = Depends(require_user)):
+    """Ekspor CSV register usulan RKBMN (pola #158 — audit G4 #11)."""
+    import csv as csv_module
+    import io
+
+    from fastapi import Response
+
+    buf = io.StringIO()
+    w = csv_module.writer(buf)
+    w.writerow(["tahun_rkbmn", "jenis", "unit_pengusul", "uraian", "volume",
+                "satuan", "status", "sptjm", "reviu_apip", "kode_barang",
+                "nup", "nama_aset", "keterangan", "dibuat_oleh"])
+    async for u in db.perencanaan_usulan.find({}, {"_id": 0}).sort("updated_at", -1):
+        w.writerow([
+            u.get("tahun_rkbmn"), JENIS_USULAN_RKBMN.get(u.get("jenis"), u.get("jenis")),
+            u.get("unit_pengusul"), u.get("uraian"), u.get("volume"), u.get("satuan"),
+            STATUS_USULAN_RKBMN.get(u.get("status"), u.get("status")),
+            "ya" if u.get("sptjm") else "belum",
+            "ya" if u.get("reviu_apip") else "belum",
+            u.get("asset_code"), u.get("NUP"), u.get("asset_name"),
+            u.get("keterangan"), u.get("created_by"),
+        ])
+    return Response(content=buf.getvalue().encode("utf-8-sig"), media_type="text/csv",
+                    headers={"Content-Disposition": 'attachment; filename="register_usulan_rkbmn.csv"'})
+
+
 @perencanaan_router.post("/perencanaan/usulan")
 async def buat_usulan_rkbmn(payload: UsulanRkbmnIn,
                             user: dict = Depends(require_user)):
