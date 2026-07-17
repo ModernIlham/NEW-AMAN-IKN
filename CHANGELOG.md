@@ -48,6 +48,31 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#343] Persuratan smart: klasifikasi nomor otomatis, master kode arsip dinamis, pratinjau nomor live — 2026-07-17
+
+- **Master Kode Klasifikasi Arsip** dikelola dinamis (admin, dialog
+  "Format Nomor"): tambah/hapus kode + uraian sesuai pedoman klasifikasi
+  arsip instansi; kode yang dipakai aturan pemetaan tak bisa dihapus
+  (409). Menjadi pilihan (datalist) di form booking.
+- **Aturan klasifikasi otomatis**: pemetaan `modul` + `jenis naskah` →
+  kode klasifikasi (field kosong = wildcard; aturan paling SPESIFIK
+  menang; kode manual di form selalu menang; fallback kode bawaan).
+  Saat booking, nomor surat langsung terklasifikasi benar tanpa
+  mengetik kode — mis. semua "Berita Acara" → HK.xx, laporan modul
+  Pelaporan → PL.xx.
+- **Pratinjau nomor live** di dialog booking: perkiraan nomor yang akan
+  terbit (urut berikutnya + klasifikasi terpilih + sumbernya:
+  manual/pemetaan/bawaan) diperbarui setiap field penentu berubah —
+  counter TIDAK naik saat pratinjau; keunikan tetap dijamin counter
+  atomik saat booking sesungguhnya.
+- Teknis: `pilih_klasifikasi()` + `validate_peta_klasifikasi()` murni
+  (+7 uji unit → suite **468**); endpoint klasifikasi CRUD +
+  `/persuratan/pratinjau-nomor`; smoke end-to-end (pratinjau = nomor
+  booking; aturan spesifik menang; duplikat kode ditolak; hapus kode
+  terpakai ditolak).
+
+---
+
 ## [#342] LHI Lengkap +DBKP, identitas kegiatan di surat, dokumen pendukung dirapikan — 2026-07-17
 
 - **DBKP per Golongan Barang kini masuk paket unduhan "LHI Lengkap"**

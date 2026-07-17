@@ -139,6 +139,7 @@ export const PENATAUSAHAAN_SUBMODULES = [
       "✅ Tenggat penyampaian konfigurabel per periode (surat DJKN/K/L) dengan pengingat sisa hari / lewat tenggat",
       "✅ Sinkronisasi SIMAN V2: impor ekspor Master Aset (data valid) → aset berbeda bertanda \"≠ SIMAN\" + terapkan nilai SIMAN per aset",
       "✅ Registrasi Persuratan lintas modul: booking nomor surat keluar (PerANRI 5/2021, format konfigurabel) → disahkan/dibatalkan + agenda surat masuk + ekspor buku agenda",
+      "✅ Klasifikasi nomor surat otomatis: master kode klasifikasi arsip dinamis + aturan pemetaan modul/jenis naskah + pratinjau nomor live saat booking",
       "Arsip laporan lintas kegiatan dengan penomoran & riwayat",
       "Ekspor rekonsiliasi (format yang bisa disandingkan dengan SIMAK/SAKTI)",
     ],

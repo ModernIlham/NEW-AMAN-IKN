@@ -31,7 +31,8 @@ from shared_utils import log_audit
 from persuratan_utils import (
     FORMAT_NOMOR_DEFAULT, JENIS_NASKAH, KODE_KEAMANAN, MODUL_AMAN,
     STATUS_KELUAR, STATUS_MASUK, TRANSISI_KELUAR, TRANSISI_MASUK,
-    bangun_nomor, baris_agenda_csv, placeholder_tak_dikenal,
+    bangun_nomor, baris_agenda_csv, pilih_klasifikasi,
+    placeholder_tak_dikenal, validate_peta_klasifikasi,
     validate_surat_keluar, validate_surat_masuk, validate_transisi,
 )
 
@@ -85,6 +86,15 @@ class PengaturanIn(BaseModel):
     format_nomor: Optional[str] = None
     kode_unit: Optional[str] = None
     kode_klasifikasi_default: Optional[str] = None
+    # Aturan klasifikasi otomatis: [{modul, jenis_naskah, kode}] — field
+    # kosong = wildcard; aturan paling spesifik menang (pilih_klasifikasi).
+    peta_klasifikasi: Optional[list] = None
+
+
+class KlasifikasiIn(BaseModel):
+    kode: str
+    uraian: Optional[str] = ""
+    aktif: Optional[bool] = True
 
 
 async def _pengaturan() -> dict:
@@ -93,6 +103,7 @@ async def _pengaturan() -> dict:
         "format_nomor": s.get("format_nomor") or FORMAT_NOMOR_DEFAULT,
         "kode_unit": s.get("kode_unit") or "",
         "kode_klasifikasi_default": s.get("kode_klasifikasi_default") or "",
+        "peta_klasifikasi": s.get("peta_klasifikasi") or [],
     }
 
 
@@ -129,7 +140,107 @@ async def referensi_persuratan(_user: dict = Depends(require_user)):
         "transisi_keluar": {k: sorted(v) for k, v in TRANSISI_KELUAR.items()},
         "transisi_masuk": {k: sorted(v) for k, v in TRANSISI_MASUK.items()},
         "pengaturan": await _pengaturan(),
+        "klasifikasi": await db.klasifikasi_arsip.find(
+            {"aktif": {"$ne": False}}, _PROJ).sort("kode", 1).to_list(2000),
     }
+
+
+# ── Master kode klasifikasi arsip (dinamis, admin mengelola) ──
+
+@persuratan_router.get("/persuratan/klasifikasi")
+async def daftar_klasifikasi(_user: dict = Depends(require_user)):
+    """Master kode klasifikasi arsip (semua, termasuk nonaktif)."""
+    items = await db.klasifikasi_arsip.find({}, _PROJ).sort("kode", 1).to_list(2000)
+    return {"items": items, "jumlah": len(items)}
+
+
+@persuratan_router.post("/persuratan/klasifikasi")
+async def tambah_klasifikasi(payload: KlasifikasiIn,
+                             user: dict = Depends(require_admin)):
+    """Tambah kode klasifikasi arsip (admin; kode unik)."""
+    kode = payload.kode.strip()
+    if not kode:
+        raise HTTPException(status_code=400, detail="Kode klasifikasi wajib diisi")
+    if await db.klasifikasi_arsip.find_one({"kode": kode}, _PROJ):
+        raise HTTPException(status_code=409, detail=f"Kode {kode} sudah terdaftar")
+    doc = {"id": str(uuid.uuid4()), "kode": kode,
+           "uraian": str(payload.uraian or "").strip(),
+           "aktif": payload.aktif is not False,
+           "created_at": datetime.now(timezone.utc).isoformat()}
+    await db.klasifikasi_arsip.insert_one({**doc})
+    await log_audit("klasifikasi_arsip", "", username=user.get("username", "system"),
+                    detail=f"Tambah kode klasifikasi {kode}")
+    return doc
+
+
+@persuratan_router.put("/persuratan/klasifikasi/{klas_id}")
+async def ubah_klasifikasi(klas_id: str, payload: KlasifikasiIn,
+                           user: dict = Depends(require_admin)):
+    """Ubah kode klasifikasi arsip (admin)."""
+    kode = payload.kode.strip()
+    if not kode:
+        raise HTTPException(status_code=400, detail="Kode klasifikasi wajib diisi")
+    bentrok = await db.klasifikasi_arsip.find_one(
+        {"kode": kode, "id": {"$ne": klas_id}}, _PROJ)
+    if bentrok:
+        raise HTTPException(status_code=409, detail=f"Kode {kode} sudah terdaftar")
+    res = await db.klasifikasi_arsip.find_one_and_update(
+        {"id": klas_id},
+        {"$set": {"kode": kode, "uraian": str(payload.uraian or "").strip(),
+                  "aktif": payload.aktif is not False}},
+        projection=_PROJ, return_document=ReturnDocument.AFTER)
+    if res is None:
+        raise HTTPException(status_code=404, detail="Kode klasifikasi tidak ditemukan")
+    await log_audit("klasifikasi_arsip", "", username=user.get("username", "system"),
+                    detail=f"Ubah kode klasifikasi {kode}")
+    return res
+
+
+@persuratan_router.delete("/persuratan/klasifikasi/{klas_id}")
+async def hapus_klasifikasi(klas_id: str, user: dict = Depends(require_admin)):
+    """Hapus kode klasifikasi. Ditolak bila dipakai aturan pemetaan (#34)."""
+    k = await db.klasifikasi_arsip.find_one({"id": klas_id}, _PROJ)
+    if not k:
+        raise HTTPException(status_code=404, detail="Kode klasifikasi tidak ditemukan")
+    atur = await _pengaturan()
+    dipakai = [a for a in atur["peta_klasifikasi"] if a.get("kode") == k["kode"]]
+    if dipakai:
+        raise HTTPException(status_code=409, detail=(
+            f"Kode {k['kode']} masih dipakai {len(dipakai)} aturan pemetaan — "
+            "hapus/ubah aturannya dulu"))
+    await db.klasifikasi_arsip.delete_one({"id": klas_id})
+    await log_audit("klasifikasi_arsip", "", username=user.get("username", "system"),
+                    detail=f"Hapus kode klasifikasi {k['kode']}")
+    return {"ok": True, "id": klas_id}
+
+
+@persuratan_router.get("/persuratan/pratinjau-nomor")
+async def pratinjau_nomor(jenis_naskah: str = "", modul: str = "",
+                          kode_klasifikasi: str = "", kode_keamanan: str = "B",
+                          tanggal_surat: str = "",
+                          _user: dict = Depends(require_user)):
+    """Pratinjau nomor yang AKAN terbit (tanpa memesan — counter tidak naik).
+
+    Perkiraan: bila ada booking lain sebelum Anda menekan simpan, nomor
+    final bisa bergeser maju — keunikan tetap dijamin counter atomik.
+    """
+    atur = await _pengaturan()
+    tanggal = (str(tanggal_surat or "").strip()[:10]
+               or datetime.now(timezone.utc).date().isoformat())
+    tahun = int(tanggal[:4]) if tanggal[:4].isdigit() else datetime.now(timezone.utc).year
+    c = await db.counters.find_one({"_id": f"surat_keluar_{tahun}"})
+    urut_berikut = int((c or {}).get("seq") or 0) + 1
+    kode = pilih_klasifikasi(atur["peta_klasifikasi"], modul, jenis_naskah,
+                             eksplisit=kode_klasifikasi,
+                             default=atur["kode_klasifikasi_default"])
+    nomor = bangun_nomor(atur["format_nomor"], urut_berikut, tanggal,
+                         kode_klasifikasi=kode, kode_unit=atur["kode_unit"],
+                         kode_keamanan=kode_keamanan)
+    return {"nomor": nomor, "urut_berikut": urut_berikut,
+            "kode_klasifikasi": kode,
+            "sumber_klasifikasi": ("eksplisit" if str(kode_klasifikasi or "").strip()
+                                   else ("pemetaan" if kode and kode != atur["kode_klasifikasi_default"]
+                                         else ("bawaan" if kode else "kosong")))}
 
 
 @persuratan_router.get("/persuratan/pengaturan")
@@ -141,8 +252,17 @@ async def get_pengaturan_persuratan(_user: dict = Depends(require_user)):
 async def set_pengaturan_persuratan(payload: PengaturanIn,
                                     user: dict = Depends(require_admin)):
     """Atur format nomor & kode unit (admin). Placeholder divalidasi."""
-    update = {k: v.strip() for k, v in payload.model_dump().items()
-              if v is not None}
+    mentah = {k: v for k, v in payload.model_dump().items() if v is not None}
+    update = {k: v.strip() for k, v in mentah.items() if isinstance(v, str)}
+    if "peta_klasifikasi" in mentah:
+        peta = [{"modul": str((a or {}).get("modul") or "").strip(),
+                 "jenis_naskah": str((a or {}).get("jenis_naskah") or "").strip(),
+                 "kode": str((a or {}).get("kode") or "").strip()}
+                for a in mentah["peta_klasifikasi"]]
+        errors = validate_peta_klasifikasi(peta)
+        if errors:
+            raise HTTPException(status_code=400, detail="; ".join(errors))
+        update["peta_klasifikasi"] = peta
     if "format_nomor" in update:
         if not update["format_nomor"]:
             update["format_nomor"] = FORMAT_NOMOR_DEFAULT
@@ -226,11 +346,16 @@ async def booking_surat_keluar(payload: SuratKeluarIn,
                      or now.date().isoformat())
     tahun = int(tanggal_surat[:4])
     atur = await _pengaturan()
+    # Klasifikasi otomatis: eksplisit → aturan pemetaan (modul/jenis naskah,
+    # paling spesifik menang) → kode bawaan pengaturan.
+    kode_klas = pilih_klasifikasi(
+        atur["peta_klasifikasi"], data.get("modul"), data.get("jenis_naskah"),
+        eksplisit=data.get("kode_klasifikasi"),
+        default=atur["kode_klasifikasi_default"])
     no_agenda = await _no_agenda_berikut("keluar", tahun)
     nomor = bangun_nomor(
         atur["format_nomor"], no_agenda, tanggal_surat,
-        kode_klasifikasi=(str(data.get("kode_klasifikasi") or "").strip()
-                          or atur["kode_klasifikasi_default"]),
+        kode_klasifikasi=kode_klas,
         kode_unit=atur["kode_unit"],
         kode_keamanan=data.get("kode_keamanan") or "B")
     record = {
@@ -246,8 +371,7 @@ async def booking_surat_keluar(payload: SuratKeluarIn,
         "modul": str(data.get("modul") or "umum").strip(),
         "kegiatan_id": str(data.get("kegiatan_id") or "").strip(),
         "nama_kegiatan": nama_kegiatan,
-        "kode_klasifikasi": (str(data.get("kode_klasifikasi") or "").strip()
-                             or atur["kode_klasifikasi_default"]),
+        "kode_klasifikasi": kode_klas,
         "kode_keamanan": str(data.get("kode_keamanan") or "B").strip().upper(),
         "tanggal_surat": tanggal_surat,
         "referensi": str(data.get("referensi") or "").strip(),

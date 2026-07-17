@@ -1,9 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Search, Loader2, Mail, MailPlus, Inbox, FileDown,
-  CheckCircle2, XCircle, Pencil, Settings2,
+  CheckCircle2, XCircle, Pencil, Settings2, Plus, Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,6 +57,10 @@ export default function PersuratanPage({ user, onBack }) {
   const [formAtur, setFormAtur] = useState(null);
   const [batal, setBatal] = useState(null); // {surat, alasan}
   const [saving, setSaving] = useState(false);
+  const [pratinjau, setPratinjau] = useState(null); // {nomor, sumber_klasifikasi, ...}
+  const [klasifikasi, setKlasifikasi] = useState([]); // master kode klasifikasi
+  const [klasBaru, setKlasBaru] = useState({ kode: "", uraian: "" });
+  const pratinjauTimer = useRef(null);
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
 
@@ -80,11 +84,35 @@ export default function PersuratanPage({ user, onBack }) {
   useEffect(() => { load(1); }, [load]);
 
   useEffect(() => {
-    axios.get(`${API}/persuratan/referensi`).then((r) => setRef(r.data)).catch(() => {});
+    axios.get(`${API}/persuratan/referensi`).then((r) => {
+      setRef(r.data);
+      setKlasifikasi(r.data?.klasifikasi || []);
+    }).catch(() => {});
     axios.get(`${API}/inventory-activities`)
       .then((r) => setKegiatan(Array.isArray(r.data) ? r.data : (r.data?.items || [])))
       .catch(() => {});
   }, []);
+
+  // Pratinjau nomor live: setiap field penentu nomor berubah → perkiraan
+  // nomor berikutnya (counter TIDAK naik; keunikan tetap dijamin saat booking).
+  useEffect(() => {
+    if (!formKeluar || formKeluar.mode === "edit") { setPratinjau(null); return; }
+    if (pratinjauTimer.current) clearTimeout(pratinjauTimer.current);
+    pratinjauTimer.current = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({
+          jenis_naskah: formKeluar.jenis_naskah || "",
+          modul: formKeluar.modul || "",
+          kode_klasifikasi: formKeluar.kode_klasifikasi || "",
+          kode_keamanan: formKeluar.kode_keamanan || "B",
+          tanggal_surat: formKeluar.tanggal_surat || "",
+        });
+        const r = await axios.get(`${API}/persuratan/pratinjau-nomor?${params}`);
+        setPratinjau(r.data);
+      } catch { setPratinjau(null); }
+    }, 350);
+    return () => { if (pratinjauTimer.current) clearTimeout(pratinjauTimer.current); };
+  }, [formKeluar]);
 
   const kirim = async (fn, sukses) => {
     setSaving(true);
@@ -125,6 +153,37 @@ export default function PersuratanPage({ user, onBack }) {
   const simpanAtur = () =>
     kirim(() => axios.post(`${API}/persuratan/pengaturan`, formAtur), "Pengaturan tersimpan");
 
+  const muatKlasifikasi = useCallback(async () => {
+    try {
+      const r = await axios.get(`${API}/persuratan/klasifikasi`);
+      setKlasifikasi(r.data?.items || []);
+    } catch { /* abaikan */ }
+  }, []);
+
+  const tambahKlas = async () => {
+    if (!klasBaru.kode.trim()) { toast.error("Kode klasifikasi wajib diisi"); return; }
+    try {
+      await axios.post(`${API}/persuratan/klasifikasi`, klasBaru);
+      toast.success(`Kode ${klasBaru.kode} ditambahkan`);
+      setKlasBaru({ kode: "", uraian: "" });
+      muatKlasifikasi();
+    } catch (e) { toast.error(apiErr(e, "Gagal menambah kode")); }
+  };
+
+  const hapusKlas = async (k) => {
+    try {
+      await axios.delete(`${API}/persuratan/klasifikasi/${k.id}`);
+      toast.success(`Kode ${k.kode} dihapus`);
+      muatKlasifikasi();
+    } catch (e) { toast.error(apiErr(e, "Gagal menghapus kode")); }
+  };
+
+  const setAturan = (i, field, value) => setFormAtur((f) => ({
+    ...f,
+    peta_klasifikasi: (f.peta_klasifikasi || []).map((a, j) =>
+      j === i ? { ...a, [field]: value } : a),
+  }));
+
   const rk = data?.ringkasan;
   const items = data?.items || [];
   const setK = (k) => (e) => setFormKeluar((f) => ({ ...f, [k]: e.target.value }));
@@ -156,8 +215,11 @@ export default function PersuratanPage({ user, onBack }) {
           {isAdmin && (
             <Button variant="outline" size="sm" className="gap-1.5"
               onClick={async () => {
-                try { const r = await axios.get(`${API}/persuratan/pengaturan`); setFormAtur(r.data); }
-                catch { toast.error("Gagal memuat pengaturan"); }
+                try {
+                  const r = await axios.get(`${API}/persuratan/pengaturan`);
+                  setFormAtur(r.data);
+                  muatKlasifikasi();
+                } catch { toast.error("Gagal memuat pengaturan"); }
               }} data-testid="persuratan-atur-btn">
               <Settings2 className="w-3.5 h-3.5" /><span className="hidden sm:inline">Format Nomor</span>
             </Button>
@@ -360,10 +422,29 @@ export default function PersuratanPage({ user, onBack }) {
                     {(ref?.kode_keamanan || []).map((k) => <option key={k.kode} value={k.kode}>{k.kode} — {k.uraian}</option>)}
                   </select>
                 </Field>
-                <Field label="Kode Klasifikasi Arsip"><Input value={formKeluar.kode_klasifikasi} onChange={setK("kode_klasifikasi")} placeholder={ref?.pengaturan?.kode_klasifikasi_default || "cth. PL.02"} className="font-mono" /></Field>
+                <Field label="Kode Klasifikasi Arsip">
+                  <Input value={formKeluar.kode_klasifikasi} onChange={setK("kode_klasifikasi")}
+                    list="klasifikasi-arsip-list"
+                    placeholder={pratinjau?.kode_klasifikasi ? `otomatis: ${pratinjau.kode_klasifikasi}` : "cth. PL.02"}
+                    className="font-mono" data-testid="keluar-klasifikasi" />
+                </Field>
                 <Field label="Referensi Laporan"><Input value={formKeluar.referensi} onChange={setK("referensi")} placeholder="cth. BAHI / LHI / LBKP S1" /></Field>
               </div>
               <Field label="Keterangan"><Input value={formKeluar.keterangan} onChange={setK("keterangan")} /></Field>
+              {formKeluar.mode !== "edit" && pratinjau?.nomor && (
+                <div className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-2" data-testid="keluar-pratinjau">
+                  <p className="text-[10px] text-muted-foreground">Perkiraan nomor yang akan terbit:</p>
+                  <p className="font-mono text-sm font-bold text-cyan-700 dark:text-cyan-400 break-all">{pratinjau.nomor}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    Klasifikasi: {pratinjau.kode_klasifikasi || "(kosong)"} · {
+                      pratinjau.sumber_klasifikasi === "eksplisit" ? "diisi manual"
+                        : pratinjau.sumber_klasifikasi === "pemetaan" ? "otomatis dari aturan pemetaan"
+                          : pratinjau.sumber_klasifikasi === "bawaan" ? "kode bawaan pengaturan"
+                            : "belum ada aturan/bawaan — atur di Format Nomor"}
+                    {" · "}bisa bergeser bila ada booking lain lebih dulu
+                  </p>
+                </div>
+              )}
             </div>
           )}
           <DialogFooter className="gap-2">
@@ -441,29 +522,100 @@ export default function PersuratanPage({ user, onBack }) {
         </DialogContent>
       </Dialog>
 
-      {/* ── Dialog pengaturan format (admin) ── */}
+      {/* ── Dialog pengaturan format + klasifikasi (admin) ── */}
       <Dialog open={!!formAtur} onOpenChange={(o) => { if (!o) setFormAtur(null); }}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl max-h-[88vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Format Penomoran Surat Keluar</DialogTitle>
+            <DialogTitle>Pengaturan Penomoran & Klasifikasi Surat</DialogTitle>
             <DialogDescription className="text-xs">
-              Placeholder: {"{kode_keamanan} {urut} {kode_klasifikasi} {kode_unit} {bulan} {bulan_romawi} {tahun}"} — susunan PerANRI 5/2021.
+              Susunan PerANRI 5/2021 — placeholder: {"{kode_keamanan} {urut} {kode_klasifikasi} {kode_unit} {bulan} {bulan_romawi} {tahun}"}.
             </DialogDescription>
           </DialogHeader>
           {formAtur && (
-            <div className="space-y-3">
-              <Field label="Format Nomor">
-                <Input value={formAtur.format_nomor} className="font-mono"
-                  onChange={(e) => setFormAtur((f) => ({ ...f, format_nomor: e.target.value }))}
-                  data-testid="atur-format" />
-              </Field>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Kode Unit"><Input value={formAtur.kode_unit} onChange={(e) => setFormAtur((f) => ({ ...f, kode_unit: e.target.value }))} placeholder="cth. OIKN" /></Field>
-                <Field label="Kode Klasifikasi Bawaan"><Input value={formAtur.kode_klasifikasi_default} onChange={(e) => setFormAtur((f) => ({ ...f, kode_klasifikasi_default: e.target.value }))} placeholder="cth. PL.02" className="font-mono" /></Field>
+            <div className="space-y-4">
+              <div className="space-y-3">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground border-b border-border/60 pb-1">Format Nomor</p>
+                <Field label="Format Nomor">
+                  <Input value={formAtur.format_nomor} className="font-mono"
+                    onChange={(e) => setFormAtur((f) => ({ ...f, format_nomor: e.target.value }))}
+                    data-testid="atur-format" />
+                </Field>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Kode Unit"><Input value={formAtur.kode_unit} onChange={(e) => setFormAtur((f) => ({ ...f, kode_unit: e.target.value }))} placeholder="cth. OIKN" /></Field>
+                  <Field label="Kode Klasifikasi Bawaan (fallback)"><Input value={formAtur.kode_klasifikasi_default} onChange={(e) => setFormAtur((f) => ({ ...f, kode_klasifikasi_default: e.target.value }))} placeholder="cth. UM.01" className="font-mono" /></Field>
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  Contoh hasil: <span className="font-mono">B-015/PL.02/OIKN/VII/2026</span>. Perubahan hanya memengaruhi booking BERIKUTNYA.
+                </p>
               </div>
-              <p className="text-[10px] text-muted-foreground">
-                Contoh hasil: <span className="font-mono">B-015/PL.02/OIKN/VII/2026</span>. Perubahan hanya memengaruhi booking BERIKUTNYA.
-              </p>
+
+              <div className="space-y-2">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground border-b border-border/60 pb-1">
+                  Master Kode Klasifikasi Arsip
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  Isi sesuai pedoman klasifikasi arsip instansi Anda — jadi pilihan di form booking &amp; bahan aturan otomatis.
+                </p>
+                {klasifikasi.length > 0 && (
+                  <div className="max-h-36 overflow-y-auto border border-border rounded-lg divide-y divide-border/60">
+                    {klasifikasi.map((k) => (
+                      <div key={k.id} className="flex items-center gap-2 px-2.5 py-1">
+                        <span className="font-mono text-[11px] font-semibold text-foreground w-20 flex-shrink-0">{k.kode}</span>
+                        <span className="text-[11px] text-foreground/80 truncate flex-1">{k.uraian || "—"}</span>
+                        <button type="button" onClick={() => hapusKlas(k)} aria-label={`Hapus ${k.kode}`}
+                          className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-500/10 min-w-0 min-h-0"
+                          data-testid={`klas-hapus-${k.kode}`}>
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <Input value={klasBaru.kode} onChange={(e) => setKlasBaru((b) => ({ ...b, kode: e.target.value }))}
+                    placeholder="Kode (cth. PL.02)" className="font-mono h-9 w-36" data-testid="klas-baru-kode" />
+                  <Input value={klasBaru.uraian} onChange={(e) => setKlasBaru((b) => ({ ...b, uraian: e.target.value }))}
+                    placeholder="Uraian (cth. Pelaporan BMN)" className="h-9 flex-1" data-testid="klas-baru-uraian" />
+                  <Button variant="outline" size="sm" className="h-9 gap-1" onClick={tambahKlas} data-testid="klas-tambah">
+                    <Plus className="w-3.5 h-3.5" />Tambah
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground border-b border-border/60 pb-1">
+                  Aturan Klasifikasi Otomatis
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  Saat booking, kode klasifikasi terisi otomatis dari aturan yang paling spesifik (modul + jenis naskah &gt; salah satunya); kosong = berlaku untuk semua. Kode manual di form selalu menang.
+                </p>
+                {(formAtur.peta_klasifikasi || []).map((a, i) => (
+                  <div key={i} className="flex items-center gap-1.5" data-testid={`aturan-${i}`}>
+                    <select value={a.modul || ""} onChange={(e) => setAturan(i, "modul", e.target.value)}
+                      className="h-9 rounded-md border border-input bg-background px-2 text-xs w-32">
+                      <option value="">semua modul</option>
+                      {(ref?.modul || []).map((m) => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                    <select value={a.jenis_naskah || ""} onChange={(e) => setAturan(i, "jenis_naskah", e.target.value)}
+                      className="h-9 rounded-md border border-input bg-background px-2 text-xs flex-1">
+                      <option value="">semua jenis naskah</option>
+                      {(ref?.jenis_naskah || []).map((j) => <option key={j} value={j}>{j}</option>)}
+                    </select>
+                    <Input value={a.kode || ""} onChange={(e) => setAturan(i, "kode", e.target.value)}
+                      list="klasifikasi-arsip-list" placeholder="kode" className="font-mono h-9 w-24" />
+                    <button type="button" aria-label="Hapus aturan"
+                      onClick={() => setFormAtur((f) => ({ ...f, peta_klasifikasi: f.peta_klasifikasi.filter((_, j) => j !== i) }))}
+                      className="p-1.5 rounded text-muted-foreground hover:text-red-600 hover:bg-red-500/10 min-w-0 min-h-0">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+                <Button variant="outline" size="sm" className="h-8 gap-1 text-[11px]"
+                  onClick={() => setFormAtur((f) => ({ ...f, peta_klasifikasi: [...(f.peta_klasifikasi || []), { modul: "", jenis_naskah: "", kode: "" }] }))}
+                  data-testid="aturan-tambah">
+                  <Plus className="w-3.5 h-3.5" />Tambah Aturan
+                </Button>
+              </div>
             </div>
           )}
           <DialogFooter className="gap-2">
@@ -474,6 +626,11 @@ export default function PersuratanPage({ user, onBack }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Datalist bersama: dipakai input klasifikasi di dialog booking & pengaturan */}
+      <datalist id="klasifikasi-arsip-list">
+        {klasifikasi.map((k) => <option key={k.id} value={k.kode}>{k.uraian}</option>)}
+      </datalist>
     </div>
   );
 }
