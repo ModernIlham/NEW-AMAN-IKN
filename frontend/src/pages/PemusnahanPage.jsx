@@ -54,9 +54,10 @@ export default function PemusnahanPage({ user, onBack }) {
   }, []);
   useEffect(() => { muat(); }, [muat]);
 
-  // Cari aset Rusak Berat untuk daftar BA
+  // Cari aset Rusak Berat untuk daftar BA — query KOSONG menampilkan
+  // kandidat Rusak Berat langsung (1-klik, selaras kandidat Penghapusan).
   useEffect(() => {
-    if (!form || cari.trim().length < 2) { setHasilCari([]); return undefined; }
+    if (!form) { setHasilCari([]); return undefined; }
     clearTimeout(cariTimer.current);
     cariTimer.current = setTimeout(async () => {
       setMencari(true);
@@ -338,13 +339,13 @@ export default function PemusnahanPage({ user, onBack }) {
                   <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
                   <Input id="pms-cari" className="pl-8" placeholder="Cari nama/kode aset (min. 2 huruf)"
                     value={cari} onChange={(e) => setCari(e.target.value)} data-testid="pemusnahan-cari" />
-                  {(mencari || hasilCari.length > 0) && cari.trim().length >= 2 && (
+                  {(mencari || hasilCari.length > 0) && (
                     <div className="absolute z-50 mt-1 w-full max-h-44 overflow-y-auto rounded-lg border border-border bg-card shadow-lg">
                       {mencari ? (
                         <div className="flex justify-center py-3"><Loader2 className="w-4 h-4 animate-spin text-orange-700" /></div>
                       ) : hasilCari.map((a) => (
                         <button key={a.id} type="button"
-                          onClick={() => { tambahAset(a); setCari(""); setHasilCari([]); }}
+                          onClick={() => { tambahAset(a); setHasilCari((h) => h.filter((x) => x.id !== a.id)); }}
                           className="w-full px-2.5 py-1.5 text-left hover:bg-muted">
                           <span className="block text-xs font-semibold text-foreground truncate">{a.asset_name}</span>
                           <span className="block text-[10px] text-muted-foreground font-mono">{a.asset_code} · {a.NUP} · {a.condition}</span>

@@ -48,6 +48,23 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#362] Gelombang 5 (inti): temuan wasdal bisa ditindaklanjuti, kandidat Rusak Berat 1-klik, revert Penghapusan — 2026-07-17
+
+- **Temuan Wasdal → tombol "Tindak lanjuti"**: setiap temuan pemantauan kini
+  membuka tiket penertiban **ter-prefill** (objek, uraian, tautan aset) —
+  temuan tak lagi read-only yang harus disalin manual ke register penertiban.
+- **Kandidat Rusak Berat 1-klik di Pemusnahan**: membuka dialog BA langsung
+  menampilkan daftar aset Rusak Berat tanpa harus mengetik; memilih aset
+  **tidak lagi mereset pencarian** (multi-aset lancar) — juga di
+  Pemindahtanganan.
+- **Revert Penghapusan**: status "diproses" bisa **dikembalikan ke
+  "diusulkan"** (koreksi salah klik); status terminal tetap terkunci
+  (`TRANSISI_USULAN` + tombol "Kembalikan").
+- Verifikasi: suite **470 lulus** (uji transisi diperbarui); lint & build
+  frontend sukses.
+
+---
+
 ## [#361] Gelombang 4 (tuntas): "Daftarkan ke Persediaan" dari BAST konsumsi — 2026-07-17
 
 - **Jalur BAST barang konsumsi tersambung** (`POST /pengadaan/{id}/

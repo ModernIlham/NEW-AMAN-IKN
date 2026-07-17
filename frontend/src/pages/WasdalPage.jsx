@@ -357,11 +357,26 @@ export default function WasdalPage({ user, onBack }) {
                                   <p className="text-xs font-semibold text-foreground min-w-0 truncate">
                                     {t.asset_name || t.pihak || "-"}
                                   </p>
-                                  {t.asset_code && (
-                                    <span className="font-mono text-[10px] text-muted-foreground flex-shrink-0">
-                                      {t.asset_code} · {t.NUP}
-                                    </span>
-                                  )}
+                                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                                    {t.asset_code && (
+                                      <span className="font-mono text-[10px] text-muted-foreground">
+                                        {t.asset_code} · {t.NUP}
+                                      </span>
+                                    )}
+                                    <button type="button"
+                                      title="Buka tiket penertiban ter-prefill dari temuan ini"
+                                      onClick={() => setFormPen({ data: {
+                                        sumber: "pemantauan",
+                                        tanggal_dasar: new Date().toISOString().slice(0, 10),
+                                        objek: kunci,
+                                        uraian: `${g.label}: ${t.asset_name || t.pihak || "-"}${t.detail ? ` — ${t.detail}` : ""}`,
+                                        asset_id: t.asset_id || "",
+                                      }, saving: false })}
+                                      className="px-1.5 py-0.5 rounded text-[10px] font-semibold text-sky-600 dark:text-sky-400 border border-sky-500/40 hover:bg-sky-500/10 min-w-0 min-h-0"
+                                      data-testid={`wasdal-tindaklanjut-${g.jenis}-${i}`}>
+                                      Tindak lanjuti
+                                    </button>
+                                  </div>
                                 </div>
                                 {t.detail && (
                                   <p className="text-[11px] text-muted-foreground mt-0.5">{t.detail}</p>
