@@ -175,6 +175,8 @@ export default function LoginPage({ onLogin, onShowInfo }) {
   const [otpStep, setOtpStep] = useState(false);
   const [otpEmail, setOtpEmail] = useState("");
   const [debugOtp, setDebugOtp] = useState(null);
+  // Alur lupa password: null = tertutup; {email, otp, baru, terkirim, saving}
+  const [reset, setReset] = useState(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -379,6 +381,54 @@ export default function LoginPage({ onLogin, onShowInfo }) {
               </Button>
             </form>
 
+            {isLogin && !reset && (
+              <div className="text-center text-sm -mt-2">
+                <button type="button" onClick={() => setReset({ email: formData.username.includes("@") ? formData.username : "", otp: "", baru: "", terkirim: false, saving: false })}
+                  className="text-blue-600 hover:text-blue-700 font-medium" data-testid="lupa-password">
+                  Lupa password?
+                </button>
+              </div>
+            )}
+            {reset && (
+              <div className="rounded-xl border border-border bg-muted/40 p-3 space-y-2" data-testid="panel-reset">
+                <p className="text-xs font-semibold text-foreground">Reset password via OTP email</p>
+                <Input type="email" placeholder="Email akun" value={reset.email}
+                  onChange={(e) => setReset((r) => ({ ...r, email: e.target.value }))} data-testid="reset-email" />
+                {reset.terkirim && (
+                  <>
+                    <Input placeholder="Kode OTP (6 digit)" inputMode="numeric" value={reset.otp}
+                      onChange={(e) => setReset((r) => ({ ...r, otp: e.target.value.replace(/\D/g, "").slice(0, 6) }))} data-testid="reset-otp" />
+                    <Input type="password" placeholder="Password baru (min. 8 karakter)" value={reset.baru}
+                      onChange={(e) => setReset((r) => ({ ...r, baru: e.target.value }))} data-testid="reset-baru" />
+                  </>
+                )}
+                <div className="flex gap-2">
+                  <Button type="button" variant="outline" className="flex-1 h-9" onClick={() => setReset(null)}>Batal</Button>
+                  <Button type="button" className="flex-1 h-9" disabled={reset.saving} data-testid="reset-kirim"
+                    onClick={async () => {
+                      setReset((r) => ({ ...r, saving: true }));
+                      try {
+                        if (!reset.terkirim) {
+                          const r1 = await axios.post(`${API}/auth/request-reset-otp`, { email: reset.email.trim(), otp: "" });
+                          toast.success(r1.data?.message || "OTP terkirim bila email terdaftar");
+                          if (r1.data?.debug_otp) toast.info(`OTP (debug): ${r1.data.debug_otp}`);
+                          setReset((r) => ({ ...r, terkirim: true, saving: false }));
+                        } else {
+                          const r2 = await axios.post(`${API}/auth/reset-password`, {
+                            email: reset.email.trim(), otp: reset.otp, new_password: reset.baru });
+                          toast.success(r2.data?.message || "Password direset — silakan masuk");
+                          setReset(null);
+                        }
+                      } catch (e2) {
+                        toast.error(e2?.response?.data?.detail || "Gagal memproses reset password");
+                        setReset((r) => (r ? { ...r, saving: false } : r));
+                      }
+                    }}>
+                    {reset.terkirim ? "Setel Password Baru" : "Kirim OTP"}
+                  </Button>
+                </div>
+              </div>
+            )}
             <div className="text-center text-sm">
               <span className="text-muted-foreground">{isLogin ? "Belum punya akun?" : "Sudah punya akun?"}</span>
               <button type="button"
