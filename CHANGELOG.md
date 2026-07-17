@@ -48,6 +48,25 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#372] Gelombang 8-3: pengamanan unggah/berkas (zip-slip, batas ukuran, magic byte, GridFS yatim) — 2026-07-17
+
+Batch upload-hardening dari audit keamanan terverifikasi:
+- **Zip-slip / path traversal saat restore backup ditutup**: entri ZIP yang
+  di-resolve ke luar `UPLOADS_DIR` (absolut atau ber-`..`) ditolak — restore
+  tak bisa lagi menimpa berkas di luar folder uploads.
+- **Batas ukuran impor Excel/CSV** 15MB (cegah zip-bomb/OOM openpyxl);
+  `file.filename` None tak lagi meng-crash (`(file.filename or "")`).
+- **Cek magic byte gambar** pada lampiran (JPEG/PNG/WEBP/GIF) — spoofing tipe
+  via ekstensi ditolak (helper murni `cek_magic_gambar`, teruji).
+- **Content-Disposition aman**: nama file di-sanitasi (buang CR/LF/kutip/`;`/
+  pemisah path) + header `X-Content-Type-Options: nosniff` pada stream
+  lampiran (helper `nama_file_disposition`).
+- **GridFS tak lagi yatim**: re-upload bukti TTD BAST menghapus blob lama;
+  bila BAST terhapus di sela (matched_count 0), blob baru dihapus & 404.
+- Verifikasi: suite **475 lulus**; compile & build hijau.
+
+---
+
 ## [#371] Gelombang 8-2: anti-injeksi (regex ReDoS + markup PDF) & guard tanggal — 2026-07-17
 
 Batch injeksi & keandalan input dari audit keamanan terverifikasi:

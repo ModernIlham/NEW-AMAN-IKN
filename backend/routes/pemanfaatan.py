@@ -271,6 +271,11 @@ async def _terima_lampiran(register_id: str, file: UploadFile, user: dict,
         raise HTTPException(status_code=400, detail="Ukuran lampiran maksimal 10MB")
     if ext == ".pdf" and not file_bytes[:5].startswith(b"%PDF"):
         raise HTTPException(status_code=400, detail="File bukan PDF yang valid")
+    # Cek magic byte gambar (cegah spoofing tipe via ekstensi).
+    from shared_utils import cek_magic_gambar
+    if ext != ".pdf" and not cek_magic_gambar(file_bytes, ext):
+        raise HTTPException(status_code=400,
+                            detail=f"Isi berkas tidak cocok dengan ekstensi {ext}")
 
     from bson import ObjectId
     file_id = ObjectId()

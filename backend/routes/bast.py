@@ -321,12 +321,22 @@ async def unggah_bukti_bast(bast_id: str, file: UploadFile = File(...),
     await grid_in.close()
 
     now = datetime.now(timezone.utc).isoformat()
-    await db.bast_serah_terima.update_one(
+    bukti_lama = (b.get("bukti") or {}).get("file_id")
+    res = await db.bast_serah_terima.update_one(
         {"id": bast_id},
         {"$set": {"bukti": {"file_id": str(file_id), "filename": file.filename,
                             "content_type": tipe,
                             "diunggah_pada": now,
                             "oleh": user.get("username", "system")}}})
+    if res.matched_count == 0:
+        # BAST terhapus di sela — jangan tinggalkan blob yatim di GridFS.
+        from shared_utils import delete_document_from_gridfs
+        await delete_document_from_gridfs(str(file_id))
+        raise HTTPException(status_code=404, detail="BAST tidak ditemukan")
+    # Bukti lama diganti → hapus blob lama (cegah orphan GridFS).
+    if bukti_lama and str(bukti_lama) != str(file_id):
+        from shared_utils import delete_document_from_gridfs
+        await delete_document_from_gridfs(str(bukti_lama))
 
     # Bukti ttd = BAST sah → tautkan ke SEMUA aset objeknya (bast_file_id)
     # sehingga metrik kelengkapan pemegang ("BAST x/y", badge Lengkap) naik —

@@ -411,10 +411,16 @@ async def run_restore_task(job_id: str, zip_path: Path, username: str):
                 # Restore upload files
                 await update_job(job_id, progress=85, message="Memulihkan file uploads...")
                 upload_files_restored = 0
+                uploads_root = UPLOADS_DIR.resolve()
                 for name in zf.namelist():
                     if name.startswith("uploads/") and not name.endswith("/"):
                         rel_path = name[len("uploads/"):]
-                        target = UPLOADS_DIR / rel_path
+                        target = (UPLOADS_DIR / rel_path).resolve()
+                        # Cegah zip-slip / path traversal: target WAJIB di dalam
+                        # UPLOADS_DIR (tolak entri absolut atau ber-"..").
+                        if uploads_root != target and uploads_root not in target.parents:
+                            logger.warning(f"Restore [{job_id}] tolak entri di luar uploads: {name}")
+                            continue
                         target.parent.mkdir(parents=True, exist_ok=True)
                         with open(target, 'wb') as f:
                             f.write(zf.read(name))
