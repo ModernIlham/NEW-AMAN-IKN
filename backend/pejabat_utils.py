@@ -212,11 +212,13 @@ def penandatangan_kpb(settings, pejabat_list, per_iso=None):
             "nama": str(pj.get("nama") or "").strip() or "-",
             "nip": str(pj.get("nip") or "").strip() or "-",
             "jabatan": str(pj.get("jabatan") or "").strip() or "Kuasa Pengguna Barang",
+            "ttd_file_id": str(pj.get("ttd_file_id") or "").strip(),
             "sumber": "registry",
         }
     return {
         "nama": str(settings.get("kasatker_nama") or "").strip() or "-",
         "nip": str(settings.get("kasatker_nip") or "").strip() or "-",
         "jabatan": str(settings.get("kasatker_jabatan") or "").strip() or "Kuasa Pengguna Barang",
+        "ttd_file_id": str(settings.get("kasatker_ttd_file_id") or "").strip(),
         "sumber": "setelan",
     }

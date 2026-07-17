@@ -648,7 +648,23 @@ def _signature_block(signers, doc_width):
             flow.append(Paragraph(s.get('header') or '&nbsp;', sig))
         if has_role:
             flow.append(Paragraph(s.get('role') or '&nbsp;', sig))
-        flow.append(Spacer(1, 15 * rl_mm))  # 3-line gap for wet signature
+        # Gambar TTD digital bila tersedia (bytes PNG transparan) —
+        # menggantikan celah tanda tangan basah; fallback ke Spacer 15mm.
+        ttd = s.get('ttd_img')
+        if ttd:
+            try:
+                from reportlab.platypus import Image as _RLImage
+                _im = _RLImage(io.BytesIO(ttd), mask='auto')
+                _skala = min((doc_width * 0.30) / _im.imageWidth,
+                             (15 * rl_mm) / _im.imageHeight)
+                _im.drawWidth = _im.imageWidth * _skala
+                _im.drawHeight = _im.imageHeight * _skala
+                _im.hAlign = 'CENTER'
+                flow.append(_im)
+            except Exception:
+                flow.append(Spacer(1, 15 * rl_mm))
+        else:
+            flow.append(Spacer(1, 15 * rl_mm))  # 3-line gap for wet signature
         flow.append(Paragraph(f"<b><u>{s.get('nama', '')}</u></b>", sig))
         after = list(s.get('after') or [])
         for line in after:

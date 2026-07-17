@@ -48,6 +48,31 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#374] Tanda Tangan Digital (slice 1): kanvas mulus + foto hapus-background + tersemat ke PDF — 2026-07-17
+
+Fitur baru (riset library terverifikasi): spesimen tanda tangan digital per
+pejabat/pegawai, otomatis tersemat pada blok TTD laporan/BA.
+- **Kanvas goresan mulus** (`react-signature-canvas` di atas signature_pad —
+  kurva Bézier variable-width dari kecepatan, garis menebal saat melambat,
+  latar transparan) — komponen bersama `SignatureCapture`.
+- **Unggah foto → PNG transparan** (`POST /ttd/olah-foto`): background dihapus
+  otomatis dengan Pillow+numpy (normalisasi cahaya → ambang Otsu → alpha
+  anti-alias → auto-crop) — **tanpa library berat/model** (teruji unit).
+- **Spesimen tersimpan** di GridFS per pejabat/pegawai (`ttd_file_id`):
+  `PUT/GET/DELETE /ttd/spesimen/{pejabat|pegawai}/{id}` (simpan admin,
+  hapus blob lama, stream ber-token).
+- **Tersemat ke PDF**: `_signature_block` merender gambar TTD (`RLImage
+  mask='auto'`) menggantikan celah tanda tangan basah bila spesimen ada;
+  KPB dari registry membawa `ttd_file_id` → tanda tangan muncul otomatis di
+  DBKP/LBKP/BAST "Mengetahui KPB". Fallback ke celah kosong bila belum ada.
+- Dikelola dari halaman **Referensi Pejabat** (tombol pena + pratinjau).
+- Catatan: ini e-seal internal satker; e-sign via LINK per dokumen (token
+  penanda tangan + urutan + QR/hash verifikasi) menyusul di slice berikutnya.
+- Verifikasi: suite **478 lulus** (+3 uji TTD); smoke PDF (gambar tersemat);
+  lint & build frontend sukses.
+
+---
+
 ## [#373] Gelombang 8-4: siklus pegawai-pejabat (status & masa jabatan) — 2026-07-17
 
 Batch terakhir audit keamanan — konsistensi identitas orang sepanjang siklus:
