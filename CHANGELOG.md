@@ -48,6 +48,22 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#357] Gelombang 3 (inti): nomor booking mengalir ke PDF laporan — 2026-07-17
+
+- **Booking → cetak tersambung**: PDF **Berita Acara** (BAHI & BA Tim
+  Internal Tidak Ditemukan) kini otomatis memakai **nomor surat ter-booking/
+  disahkan terbaru** kegiatan itu dari Registrasi Persuratan bila field nomor
+  BA kegiatan kosong (`_nomor_terbooking`) — nomor yang dipesan lewat tombol
+  Booking Nomor tak lagi berhenti di clipboard (temuan utama audit area
+  Persuratan-Pelaporan).
+- Dialog hasil Booking Nomor menjelaskan perilaku otomatis ini.
+- **Periode tahun lalu bisa didaftarkan** (Semester II & Tahunan th-1) —
+  LBKP/CaLBMN tahun lalu kini bisa berpenanda FINAL; dropdown unduh LBKP &
+  CaLBMN bertambah **Semester I/II tahun lalu** untuk kebutuhan audit lampau.
+- Verifikasi: suite **470 lulus**; lint & build frontend sukses.
+
+---
+
 ## [#356] Gelombang 2: BAST menyatu dengan kelengkapan pemegang — 2026-07-17
 
 - **Bukti ttd BAST kini menaikkan kelengkapan**: unggah bukti menautkan
