@@ -48,6 +48,29 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#351] Persediaan masuk massal ber-nomor LPB + unduh Laporan Penerimaan Barang — 2026-07-17
+
+- **Transaksi masuk massal kini menghasilkan LPB** (Laporan Penerimaan
+  Barang) — format mengikuti contoh resmi satker (docx pemilik): kop,
+  nomor LPB, info 2 kolom (instansi/satker/tgl kedatangan/rekanan ↔
+  jenis/no bukti/tautan BAST Pengadaan/keterangan), tabel barang
+  (kode/nama/qty/satuan/harga/total/kondisi) + baris JUMLAH, tanda
+  tangan **3 kolom**: Dibuat oleh (Pengurus Barang — otomatis dari
+  registry pejabat), Diperiksa oleh, Disetujui oleh (KPB).
+- **Penomoran langsung tercatat**: centang "Nomor LPB otomatis" → nomor
+  terbit dari Registrasi Persuratan (counter atomik + klasifikasi
+  otomatis, modul persediaan) dan masuk buku agenda berstatus
+  *dibooking*; nomor itu juga menjadi `no_bukti` seluruh transaksi
+  barang dalam dokumen tersebut.
+- **Register `lpb`** menyimpan snapshot barang per transaksi massal
+  (hanya yang sukses); **PDF terunduh otomatis** setelah simpan dan bisa
+  dirender ulang kapan pun (`GET /persediaan/lpb/{id}/pdf`; riwayat di
+  `GET /persediaan/lpb`).
+- Verifikasi: suite **468 lulus**; smoke render LPB (2 barang, total
+  Rp12,88 jt, ttd 3 kolom); eslint bersih; build sukses.
+
+---
+
 ## [#350] Handover langsung: mutasi pemegang & pengembalian ber-efek data + BAST, booking nomor otomatis — 2026-07-17
 
 - **Jenis BAST baru "Mutasi/Alih Pemegang (Handover)"**: PIHAK KESATU =
