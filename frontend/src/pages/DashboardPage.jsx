@@ -1533,11 +1533,19 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
         {perms.canEdit && (
           <button
             onClick={() => setFormPanelVisible(prev => !prev)}
-            className={`hidden lg:flex fixed top-1/2 -translate-y-1/2 z-50 w-5 h-14 bg-card border border-border rounded-r-lg items-center justify-center text-muted-foreground hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-all shadow-md hover:shadow-lg ${formPanelVisible ? 'border-l-0' : ''}`}
+            className={`hidden lg:flex fixed top-1/2 -translate-y-1/2 z-50 bg-card border border-border rounded-r-lg items-center justify-center text-muted-foreground hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-all shadow-md hover:shadow-lg ${formPanelVisible ? 'border-l-0 w-5 h-14 flex-col' : 'w-7 h-28 flex-col gap-1'}`}
             style={{ left: formPanelVisible ? '319px' : '0px', transition: 'left 0.3s ease' }}
-            title={formPanelVisible ? 'Sembunyikan Form' : 'Tampilkan Form'}
+            title={formPanelVisible ? 'Sembunyikan Form' : 'Tampilkan Form Tambah Aset'}
+            data-testid="form-panel-toggle"
           >
-            {formPanelVisible ? <PanelLeftClose className="w-3.5 h-3.5" /> : <PanelLeftOpen className="w-3.5 h-3.5" />}
+            {formPanelVisible ? <PanelLeftClose className="w-3.5 h-3.5" /> : (
+              <>
+                <PanelLeftOpen className="w-3.5 h-3.5" />
+                {/* Saat terlipat, sliver diberi label vertikal agar jalan
+                    kembali ke form terlihat (audit G6 #13). */}
+                <span className="text-[9px] font-bold tracking-wider" style={{ writingMode: 'vertical-rl' }}>FORM</span>
+              </>
+            )}
           </button>
         )}
 
