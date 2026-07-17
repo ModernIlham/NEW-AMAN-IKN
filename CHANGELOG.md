@@ -48,6 +48,35 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#347] Referensi Akun BAS satu pintu: master Kodefikasi Segmen Akun (2.899 akun resmi) — 2026-07-17
+
+- **Dua referensi akun disatukan** (permintaan pemilik: "jangan dibagi 2"):
+  pill "Referensi Akun Neraca" + "Referensi Akun Persediaan" di Beranda
+  Modul diganti SATU pintu **"Referensi Akun BAS"** berisi 3 tab —
+  master **Segmen Akun BAS** + aturan pakai **Akun Aset (per Golongan)** +
+  **Akun Persediaan** (sub-kelompok → 1171xx).
+- **Master baru `referensi_akun`**: **2.899 akun 6 digit** seluruh 8 segmen
+  (Aset/Kewajiban/Ekuitas/Pendapatan/Belanja/Transfer/Pembiayaan/
+  Non-Anggaran) hasil parse dokumen resmi "Referensi Akun" SAKTI/SPAN
+  yang diunggah pemilik; **85 akun belanja diperkaya** metadata
+  belanja↔BMN (gol BMN, kapitalisasi, kategori neraca) dari kertas kerja
+  Excel satker. Seed otomatis saat pertama; admin bisa muat ulang
+  (upsert — entri manual bertanda "satker" tidak hilang), tambah/hapus
+  manual (hapus ditolak bila akun dipakai pemetaan).
+- **Endpoint**: `GET /referensi-akun` (cari + filter segmen + hitung per
+  segmen), `GET /referensi-akun/periksa` (lookup batch), `POST …/seed`,
+  `POST`/`DELETE` admin.
+- **Pemetaan tervalidasi lunak** ke master: akun pada pemetaan golongan/
+  persediaan menampilkan nama resminya, atau tanda "⚠ tak ada di master
+  BAS" (non-blocking) — laporan DBKP/Posisi BMN/persediaan tetap memakai
+  pemetaan yang sama, tidak ada perubahan angka.
+- Verifikasi: suite **468 lulus**; smoke seed 2.899 akun (132111
+  Peralatan dan Mesin, 117111 Barang Konsumsi, 521811 ber-metadata
+  Aset Lancar), pencarian/filter, periksa batch, guard hapus-terpakai,
+  seed ulang idempoten; build sukses.
+
+---
+
 ## [#346] Validasi silang lunak Kelola Kategori ↔ Referensi Kodefikasi (1a) — 2026-07-17
 
 - Kelola Kategori dan Referensi Kodefikasi selama ini dua master kode

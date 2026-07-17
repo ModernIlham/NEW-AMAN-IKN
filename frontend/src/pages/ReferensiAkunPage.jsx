@@ -1,0 +1,404 @@
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import axios from "axios";
+import { toast } from "sonner";
+import {
+  ArrowLeft, Search, Loader2, Landmark, Plus, Trash2, DownloadCloud, Boxes,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { useBackGuard } from "@/hooks/useBackGuard";
+
+const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+
+function apiErr(e, fb) { return e?.response?.data?.detail || fb; }
+
+/**
+ * Referensi Akun BAS — SATU pintu Kodefikasi Segmen Akun (tidak dipecah):
+ * master seluruh akun 6 digit (8 segmen, sumber referensi resmi SAKTI/SPAN)
+ * + dua ATURAN PAKAI turunan sebagai tab: akun aset per golongan BMN dan
+ * akun persediaan per sub-kelompok — keduanya tervalidasi lunak ke master
+ * (kode di luar master hanya ditandai ⚠, tidak ditolak).
+ */
+export default function ReferensiAkunPage({ user, onBack }) {
+  const isAdmin = user?.role === "admin";
+  const [tab, setTab] = useState("master"); // master | aset | persediaan
+  const { confirm, confirmDialog } = useConfirm();
+
+  // ── Master segmen akun ──
+  const [data, setData] = useState(null);
+  const [q, setQ] = useState("");
+  const [segmen, setSegmen] = useState("");
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [seeding, setSeeding] = useState(false);
+  const [baru, setBaru] = useState({ kode: "", nama: "" });
+
+  // ── Pemetaan ──
+  const [aset, setAset] = useState(null);        // {items}
+  const [psd, setPsd] = useState(null);          // {katalog, overrides, default_akun}
+  const [namaAkun, setNamaAkun] = useState({});  // {kode: nama|null} validasi lunak
+  const [formAset, setFormAset] = useState({ golongan: "3", akun: "", uraian: "" });
+  const [formPsd, setFormPsd] = useState({ sub_kelompok: "", akun: "" });
+
+  useBackGuard(useCallback(() => onBack?.(), [onBack]));
+
+  const muatMaster = useCallback(async (p = 1) => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ page: String(p), page_size: "50" });
+      if (q.trim()) params.append("search", q.trim());
+      if (segmen) params.append("segmen", segmen);
+      const r = await axios.get(`${API}/referensi-akun?${params}`);
+      setData(r.data);
+      setPage(p);
+    } catch (e) {
+      toast.error(apiErr(e, "Gagal memuat referensi akun"));
+    } finally {
+      setLoading(false);
+    }
+  }, [q, segmen]);
+
+  useEffect(() => { muatMaster(1); }, [muatMaster]);
+
+  const muatPemetaan = useCallback(async () => {
+    try {
+      const [ra, rp] = await Promise.all([
+        axios.get(`${API}/akun-bas`), axios.get(`${API}/persediaan-akun`)]);
+      setAset(ra.data); setPsd(rp.data);
+      const kode = new Set();
+      (ra.data?.items || []).forEach((i) => i.akun && kode.add(i.akun));
+      (rp.data?.katalog || []).forEach((i) => i.akun && kode.add(i.akun));
+      (rp.data?.overrides || []).forEach((i) => i.akun && kode.add(i.akun));
+      if (kode.size) {
+        const r = await axios.get(`${API}/referensi-akun/periksa?kode=${[...kode].join(",")}`);
+        setNamaAkun(r.data?.akun || {});
+      }
+    } catch { toast.error("Gagal memuat pemetaan akun"); }
+  }, []);
+
+  useEffect(() => { muatPemetaan(); }, [muatPemetaan]);
+
+  const seed = async () => {
+    setSeeding(true);
+    try {
+      const r = await axios.post(`${API}/referensi-akun/seed`);
+      toast.success(`Referensi resmi dimuat: ${r.data.dimuat} akun`);
+      muatMaster(1);
+    } catch (e) { toast.error(apiErr(e, "Gagal memuat referensi resmi")); }
+    finally { setSeeding(false); }
+  };
+
+  const tambahAkun = async () => {
+    if (!baru.kode.trim() || !baru.nama.trim()) { toast.error("Kode & nama akun wajib diisi"); return; }
+    try {
+      await axios.post(`${API}/referensi-akun`, baru);
+      toast.success(`Akun ${baru.kode} tersimpan`);
+      setBaru({ kode: "", nama: "" });
+      muatMaster(page);
+    } catch (e) { toast.error(apiErr(e, "Gagal menyimpan akun")); }
+  };
+
+  const hapusAkun = async (a) => {
+    const ok = await confirm({
+      title: `Hapus akun ${a.kode}?`, description: a.nama,
+      confirmLabel: "Hapus", variant: "danger",
+    });
+    if (!ok) return;
+    try {
+      await axios.delete(`${API}/referensi-akun/${a.kode}`);
+      toast.success(`Akun ${a.kode} dihapus`);
+      muatMaster(page);
+    } catch (e) { toast.error(apiErr(e, "Gagal menghapus")); }
+  };
+
+  const simpanAset = async () => {
+    if (!formAset.akun.trim()) { toast.error("Kode akun wajib diisi"); return; }
+    try {
+      await axios.post(`${API}/akun-bas`, formAset);
+      toast.success(`Golongan ${formAset.golongan} → akun ${formAset.akun}`);
+      setFormAset({ golongan: "3", akun: "", uraian: "" });
+      muatPemetaan();
+    } catch (e) { toast.error(apiErr(e, "Gagal menyimpan pemetaan")); }
+  };
+
+  const hapusAset = async (g) => {
+    try {
+      await axios.delete(`${API}/akun-bas/${g}`);
+      toast.success(`Override golongan ${g} dihapus (kembali ke default)`);
+      muatPemetaan();
+    } catch (e) { toast.error(apiErr(e, "Gagal menghapus")); }
+  };
+
+  const simpanPsd = async () => {
+    if (!formPsd.sub_kelompok.trim() || !formPsd.akun.trim()) {
+      toast.error("Sub-kelompok & akun wajib diisi"); return;
+    }
+    try {
+      await axios.post(`${API}/persediaan-akun`, formPsd);
+      toast.success(`Sub-kelompok ${formPsd.sub_kelompok} → ${formPsd.akun}`);
+      setFormPsd({ sub_kelompok: "", akun: "" });
+      muatPemetaan();
+    } catch (e) { toast.error(apiErr(e, "Gagal menyimpan pemetaan")); }
+  };
+
+  const hapusPsd = async (s) => {
+    try {
+      await axios.delete(`${API}/persediaan-akun/${s}`);
+      toast.success(`Override ${s} dihapus`);
+      muatPemetaan();
+    } catch (e) { toast.error(apiErr(e, "Gagal menghapus")); }
+  };
+
+  const TandaAkun = ({ kode }) => {
+    if (!kode) return null;
+    const nama = namaAkun[kode];
+    if (nama === undefined) return null;
+    return nama
+      ? <span className="text-[10px] text-muted-foreground block truncate" title={nama}>{nama}</span>
+      : <span className="text-[10px] text-amber-600 dark:text-amber-400 block" title="Kode tidak ada di master Segmen Akun BAS (peringatan — non-blocking)">⚠ tak ada di master BAS</span>;
+  };
+
+  const labelSeg = data?.label_segmen || {};
+  const TABS = [
+    ["master", "Segmen Akun BAS"],
+    ["aset", "Akun Aset (Golongan)"],
+    ["persediaan", "Akun Persediaan"],
+  ];
+
+  return (
+    <div className="min-h-screen bg-background" data-testid="referensi-akun-page">
+      <header className="bg-card/95 backdrop-blur-sm border-b border-border px-3 sm:px-6 py-2.5 sticky top-0 z-40">
+        <div className="max-w-5xl mx-auto flex items-center gap-3">
+          <button type="button" onClick={onBack} aria-label="Kembali"
+            className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0"
+            data-testid="referensi-akun-back">
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+          <span className="w-9 h-9 rounded-lg bg-amber-600 flex items-center justify-center flex-shrink-0">
+            <Landmark className="w-4 h-4 text-white" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight">Referensi Akun BAS</h1>
+            <p className="text-[11px] sm:text-xs text-muted-foreground truncate">
+              Kodefikasi Segmen Akun (satu master {data ? `· ${data.total ? "" : ""}${Object.values(data.per_segmen || {}).reduce((a, b) => a + b, 0)} akun` : ""}) + aturan pakai aset & persediaan
+            </p>
+          </div>
+          {isAdmin && tab === "master" && (
+            <Button variant="outline" size="sm" className="gap-1.5" disabled={seeding} onClick={seed}
+              data-testid="referensi-akun-seed">
+              {seeding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <DownloadCloud className="w-3.5 h-3.5" />}
+              <span className="hidden sm:inline">Muat Referensi Resmi</span>
+            </Button>
+          )}
+        </div>
+      </header>
+
+      <main className="max-w-5xl mx-auto px-3 sm:px-6 py-4 space-y-3">
+        <div className="flex bg-muted rounded-lg p-0.5 gap-0.5">
+          {TABS.map(([k, label]) => (
+            <button key={k} type="button" onClick={() => setTab(k)}
+              className={`flex-1 text-[11px] sm:text-xs font-semibold py-1.5 rounded-md transition-colors min-w-0 min-h-0 ${tab === k ? "bg-card text-amber-700 dark:text-amber-400 shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+              data-testid={`referensi-akun-tab-${k}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {tab === "master" && (
+          <>
+            <div className="bg-card rounded-xl border border-border shadow-sm p-2 sm:p-3 space-y-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="relative flex-1 min-w-[160px]">
+                  <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                  <Input value={q} onChange={(e) => setQ(e.target.value)}
+                    placeholder="Cari kode / nama akun…" className="pl-9 h-10" data-testid="referensi-akun-cari" />
+                </div>
+                <select value={segmen} onChange={(e) => setSegmen(e.target.value)}
+                  className="h-10 rounded-md border border-input bg-background px-2 text-sm" data-testid="referensi-akun-segmen">
+                  <option value="">Semua segmen</option>
+                  {Object.entries(labelSeg).map(([k, v]) => (
+                    <option key={k} value={k}>{k} — {v}{data?.per_segmen?.[k] ? ` (${data.per_segmen[k]})` : ""}</option>
+                  ))}
+                </select>
+              </div>
+              {isAdmin && (
+                <div className="flex items-center gap-2">
+                  <Input value={baru.kode} onChange={(e) => setBaru((b) => ({ ...b, kode: e.target.value }))}
+                    placeholder="Kode (6 digit)" className="font-mono h-9 w-32" maxLength={6} data-testid="akun-baru-kode" />
+                  <Input value={baru.nama} onChange={(e) => setBaru((b) => ({ ...b, nama: e.target.value }))}
+                    placeholder="Nama akun (entri manual satker)" className="h-9 flex-1" data-testid="akun-baru-nama" />
+                  <Button variant="outline" size="sm" className="h-9 gap-1" onClick={tambahAkun} data-testid="akun-tambah">
+                    <Plus className="w-3.5 h-3.5" />Tambah
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+              {loading && !data ? (
+                <div className="flex items-center justify-center py-16"><Loader2 className="w-7 h-7 animate-spin text-amber-600" /></div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm min-w-[560px]">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/40 text-left text-xs text-muted-foreground">
+                        <th className="px-3 py-2.5 font-semibold w-24">Kode</th>
+                        <th className="px-3 py-2.5 font-semibold">Nama Akun</th>
+                        <th className="px-3 py-2.5 font-semibold w-28">Segmen</th>
+                        <th className="px-3 py-2.5 font-semibold">Info BMN</th>
+                        {isAdmin && <th className="px-3 py-2.5 w-10"></th>}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(data?.items || []).map((a) => (
+                        <tr key={a.kode} className="border-b border-border/60 last:border-0 hover:bg-muted/50" data-testid={`akun-row-${a.kode}`}>
+                          <td className="px-3 py-1.5 font-mono text-[12px] font-semibold text-foreground">{a.kode}</td>
+                          <td className="px-3 py-1.5 text-[12px] text-foreground/90">
+                            {a.nama}
+                            {a.sumber === "satker" && <span className="ml-1.5 px-1 py-0.5 rounded bg-sky-500/15 text-sky-600 dark:text-sky-400 text-[9px] font-semibold">satker</span>}
+                          </td>
+                          <td className="px-3 py-1.5 text-[11px] text-muted-foreground">{a.segmen}</td>
+                          <td className="px-3 py-1.5 text-[10px] text-muted-foreground">
+                            {[a.uraian_bmn, a.kapitalisasi, a.kategori_neraca].filter(Boolean).join(" · ") || "—"}
+                          </td>
+                          {isAdmin && (
+                            <td className="px-2 py-1.5">
+                              <button type="button" onClick={() => hapusAkun(a)} aria-label={`Hapus ${a.kode}`}
+                                className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-500/10 min-w-0 min-h-0">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                      {(data?.items || []).length === 0 && (
+                        <tr><td colSpan={5} className="text-center text-xs text-muted-foreground py-8">Tidak ada akun yang cocok</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {data && data.total_pages > 1 && (
+                <div className="flex items-center justify-between px-3 py-2 border-t border-border bg-muted/30">
+                  <Button size="sm" variant="ghost" disabled={page <= 1 || loading} onClick={() => muatMaster(page - 1)}>Sebelumnya</Button>
+                  <span className="text-[11px] text-muted-foreground">Hal {data.page}/{data.total_pages} · {data.total} akun</span>
+                  <Button size="sm" variant="ghost" disabled={page >= data.total_pages || loading} onClick={() => muatMaster(page + 1)}>Berikutnya</Button>
+                </div>
+              )}
+            </div>
+            <p className="text-center text-[10px] text-muted-foreground pb-2">
+              Sumber: dokumen resmi &quot;Referensi Akun&quot; SAKTI/SPAN + kertas kerja akun belanja↔BMN satker; entri manual bertanda &quot;satker&quot;.
+            </p>
+          </>
+        )}
+
+        {tab === "aset" && (
+          <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+            <div className="px-3 py-2.5 border-b border-border">
+              <p className="text-xs font-semibold text-foreground">Aturan pakai: golongan BMN → akun neraca (dipakai DBKP/Posisi BMN)</p>
+              <p className="text-[10px] text-muted-foreground">Default riset dapat ditimpa admin; akun tervalidasi lunak ke master Segmen Akun BAS.</p>
+            </div>
+            {isAdmin && (
+              <div className="px-3 py-2 border-b border-border flex items-center gap-2 flex-wrap">
+                <select value={formAset.golongan} onChange={(e) => setFormAset((f) => ({ ...f, golongan: e.target.value }))}
+                  className="h-9 rounded-md border border-input bg-background px-2 text-sm" data-testid="aset-golongan">
+                  {(aset?.items || []).map((i) => <option key={i.golongan} value={i.golongan}>Gol {i.golongan}</option>)}
+                </select>
+                <Input value={formAset.akun} onChange={(e) => setFormAset((f) => ({ ...f, akun: e.target.value }))}
+                  placeholder="Akun (6 digit, cth. 132111)" className="font-mono h-9 w-44" maxLength={6} data-testid="aset-akun" />
+                <Input value={formAset.uraian} onChange={(e) => setFormAset((f) => ({ ...f, uraian: e.target.value }))}
+                  placeholder="Uraian (ops. — otomatis dari master)" className="h-9 flex-1" />
+                <Button variant="outline" size="sm" className="h-9 gap-1" onClick={simpanAset} data-testid="aset-simpan">
+                  <Plus className="w-3.5 h-3.5" />Simpan
+                </Button>
+              </div>
+            )}
+            <div className="divide-y divide-border/60">
+              {(aset?.items || []).map((i) => (
+                <div key={i.golongan} className="px-3 py-2 flex items-center gap-3" data-testid={`aset-row-${i.golongan}`}>
+                  <span className="w-14 text-[11px] font-bold text-foreground flex-shrink-0">Gol {i.golongan}</span>
+                  <div className="w-28 flex-shrink-0">
+                    <span className="font-mono text-[12px] text-foreground">{i.akun || "—"}</span>
+                    <TandaAkun kode={i.akun} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[12px] text-foreground/80 truncate">{i.uraian}</p>
+                    <p className="text-[10px] text-muted-foreground">{i.sumber}</p>
+                  </div>
+                  {isAdmin && i.sumber === "input satker" && (
+                    <button type="button" onClick={() => hapusAset(i.golongan)} aria-label={`Reset golongan ${i.golongan}`}
+                      title="Hapus override (kembali ke default riset)"
+                      className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-500/10 min-w-0 min-h-0 flex-shrink-0">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {tab === "persediaan" && (
+          <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+            <div className="px-3 py-2.5 border-b border-border">
+              <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                <Boxes className="w-3.5 h-3.5" />Aturan pakai: sub-kelompok persediaan → akun 1171xx (dipakai laporan persediaan/LBKP)
+              </p>
+              <p className="text-[10px] text-muted-foreground">
+                Default {psd?.default_akun} — {psd?.default_uraian}; override per sub-kelompok bila perlu. Katalog & override tervalidasi lunak ke master.
+              </p>
+            </div>
+            {isAdmin && (
+              <div className="px-3 py-2 border-b border-border flex items-center gap-2 flex-wrap">
+                <Input value={formPsd.sub_kelompok} onChange={(e) => setFormPsd((f) => ({ ...f, sub_kelompok: e.target.value }))}
+                  placeholder="Sub-kelompok (5 digit, cth. 10101)" className="font-mono h-9 w-52" maxLength={5} data-testid="psd-sub" />
+                <select value={formPsd.akun} onChange={(e) => setFormPsd((f) => ({ ...f, akun: e.target.value }))}
+                  className="h-9 rounded-md border border-input bg-background px-2 text-sm flex-1 min-w-[200px]" data-testid="psd-akun">
+                  <option value="">— pilih akun 1171xx —</option>
+                  {(psd?.katalog || []).map((k) => <option key={k.akun} value={k.akun}>{k.akun} — {k.uraian}</option>)}
+                </select>
+                <Button variant="outline" size="sm" className="h-9 gap-1" onClick={simpanPsd} data-testid="psd-simpan">
+                  <Plus className="w-3.5 h-3.5" />Simpan
+                </Button>
+              </div>
+            )}
+            <div className="px-3 py-2 border-b border-border/60">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-1">Katalog akun persediaan</p>
+              <div className="flex flex-wrap gap-1.5">
+                {(psd?.katalog || []).map((k) => (
+                  <span key={k.akun} className="px-2 py-0.5 rounded-full border border-border text-[10px] text-foreground/80" title={namaAkun[k.akun] || ""}>
+                    <span className="font-mono font-semibold">{k.akun}</span> {k.uraian}
+                    {namaAkun[k.akun] === null && <span className="text-amber-600 dark:text-amber-400 ml-1" title="Tak ada di master BAS">⚠</span>}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="divide-y divide-border/60">
+              {(psd?.overrides || []).length === 0 ? (
+                <p className="text-center text-[11px] text-muted-foreground py-5">Belum ada override — semua sub-kelompok memakai default {psd?.default_akun}.</p>
+              ) : (psd?.overrides || []).map((o) => (
+                <div key={o.sub_kelompok} className="px-3 py-2 flex items-center gap-3" data-testid={`psd-row-${o.sub_kelompok}`}>
+                  <span className="w-20 font-mono text-[12px] font-semibold text-foreground flex-shrink-0">{o.sub_kelompok}</span>
+                  <div className="w-28 flex-shrink-0">
+                    <span className="font-mono text-[12px] text-foreground">{o.akun}</span>
+                    <TandaAkun kode={o.akun} />
+                  </div>
+                  <p className="flex-1 text-[12px] text-foreground/80 truncate">{o.uraian}</p>
+                  {isAdmin && (
+                    <button type="button" onClick={() => hapusPsd(o.sub_kelompok)} aria-label={`Hapus override ${o.sub_kelompok}`}
+                      className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-500/10 min-w-0 min-h-0 flex-shrink-0">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </main>
+
+      {confirmDialog}
+    </div>
+  );
+}
