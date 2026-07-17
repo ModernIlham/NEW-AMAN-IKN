@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 
 from auth_utils import require_admin, require_user, require_user_or_query_token
 from db import db, fs_bucket
-from shared_utils import delete_document_from_gridfs, get_document_from_gridfs
+from shared_utils import delete_document_from_gridfs, get_document_from_gridfs, nama_file_disposition
 from pengamanan_utils import (
     BUTIR_CHECKLIST, JENIS_DOKUMEN, JENIS_KEKURANGAN, JENIS_OBJEK_CHECKLIST,
     KATEGORI_KASUS, KATEGORI_OBJEK_ASURANSI, KATEGORI_SERTIPIKASI,
@@ -391,7 +391,8 @@ async def unduh_lampiran_dokumen(dok_id: str, file_id: str, request: Request,
     return Response(content=data,
                     media_type=meta.get("content_type") or "application/octet-stream",
                     headers={"ETag": etag, "Cache-Control": "private, max-age=86400",
-                             "Content-Disposition": f'inline; filename="{meta.get("filename") or "dokumen"}"'})
+                             "X-Content-Type-Options": "nosniff",
+                             "Content-Disposition": f'inline; filename="{nama_file_disposition(meta.get("filename"))}"'})
 
 
 @pengamanan_router.delete("/pengamanan/dokumen/{dok_id}/lampiran/{file_id}")

@@ -480,6 +480,37 @@ async def blok_ttd_kpb(settings, per_iso=None):
             'after': [f"NIP. {kpb['nip']}"]}
 
 
+def nama_file_disposition(filename, fallback="dokumen"):
+    """Nama file AMAN untuk header Content-Disposition (cegah header/response
+    splitting): buang CR/LF/kutip/`;`/pemisah path, batasi panjang. MURNI."""
+    import re as _re
+    nama = _re.sub(r'[\r\n"\\/;]+', "_", str(filename or "").strip())
+    nama = nama[:120].strip() or fallback
+    return nama
+
+
+# Magic byte per ekstensi gambar (deteksi spoofing tipe upload).
+_MAGIC_GAMBAR = {
+    ".jpg": (b"\xff\xd8\xff",), ".jpeg": (b"\xff\xd8\xff",),
+    ".png": (b"\x89PNG\r\n\x1a\n",),
+    ".webp": (b"RIFF",),   # + "WEBP" di offset 8 (dicek terpisah)
+    ".gif": (b"GIF87a", b"GIF89a"),
+}
+
+
+def cek_magic_gambar(data: bytes, ext: str) -> bool:
+    """True bila `data` cocok magic byte untuk ekstensi gambar `ext`
+    (atau ext bukan gambar yang dikenal → dianggap lolos, dicek terpisah).
+    MURNI."""
+    sigs = _MAGIC_GAMBAR.get(str(ext or "").lower())
+    if not sigs:
+        return True
+    ok = any(data[:len(s)] == s for s in sigs)
+    if ext.lower() == ".webp":
+        return ok and data[8:12] == b"WEBP"
+    return ok
+
+
 async def catat_mutasi_bmn(entri: dict):
     """Tulis satu entri jurnal `mutasi_bmn` (Buku Barang, G7) — BEST-EFFORT:
     entri tak valid / gagal tulis hanya di-log, TIDAK menggagalkan transaksi

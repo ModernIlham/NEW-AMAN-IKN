@@ -213,12 +213,15 @@ async def import_assets(request: Request, file: UploadFile = File(...), force_up
     if activity.get("status_pengesahan") == "disahkan":
         raise HTTPException(status_code=423, detail="Kegiatan sudah disahkan dan terkunci")
 
-    filename = file.filename.lower()
+    filename = (file.filename or "").lower()
     if not (filename.endswith('.csv') or filename.endswith('.xlsx') or filename.endswith('.xls')):
         raise HTTPException(status_code=400, detail="File harus berformat CSV atau Excel (.xlsx)")
-    
+
     try:
         content = await file.read()
+        # Batas ukuran (cegah zip-bomb/decompression openpyxl & OOM).
+        if len(content) > 15 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="Berkas melebihi 15MB")
         
         # Parse file
         if filename.endswith('.csv'):
