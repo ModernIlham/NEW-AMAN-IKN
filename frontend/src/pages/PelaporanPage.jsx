@@ -12,6 +12,7 @@ import {
   DropdownMenuLabel, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { useBackGuard } from "@/hooks/useBackGuard";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import SimanSyncCard from "@/components/pelaporan/SimanSyncCard";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
@@ -53,6 +54,7 @@ export default function PelaporanPage({ user, onBack }) {
   const [periode, setPeriode] = useState(null);
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
+  const { confirm, confirmDialog } = useConfirm();
 
   const muatPeriode = useCallback(() => {
     axios.get(`${API}/pelaporan/periode`)
@@ -91,7 +93,8 @@ export default function PelaporanPage({ user, onBack }) {
 
   const bukaPeriode = async (p) => {
     const alasan = window.prompt(`Alasan membuka kunci ${p.label} (wajib, tercatat pada riwayat):`);
-    if (!alasan || !alasan.trim()) return;
+    if (alasan === null) return;
+    if (!alasan.trim()) { toast.error("Alasan wajib diisi — kunci tidak dibuka"); return; }
     try {
       await axios.post(`${API}/pelaporan/periode/${p.id}/buka`, { alasan });
       toast.success("Kunci periode dibuka");
@@ -102,6 +105,13 @@ export default function PelaporanPage({ user, onBack }) {
   };
 
   const hapusPeriode = async (p) => {
+    const ok = await confirm({
+      title: `Hapus periode ${p.label}?`,
+      description: "Periode beserta status kunci & tenggatnya dihapus dari daftar (tidak menghapus data laporan).",
+      confirmLabel: "Hapus",
+      variant: "danger",
+    });
+    if (!ok) return;
     try {
       await axios.delete(`${API}/pelaporan/periode/${p.id}`);
       toast.success("Periode dihapus");
@@ -448,6 +458,7 @@ export default function PelaporanPage({ user, onBack }) {
           Angka LBKP/rekonsiliasi bersumber dari data aset & persediaan AMAN — pencatatan resmi tetap di SAKTI/SIMAN.
         </p>
       </main>
+      {confirmDialog}
     </div>
   );
 }

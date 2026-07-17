@@ -87,7 +87,11 @@ export default function PersuratanPage({ user, onBack }) {
     axios.get(`${API}/persuratan/referensi`).then((r) => {
       setRef(r.data);
       setKlasifikasi(r.data?.klasifikasi || []);
-    }).catch(() => {});
+    }).catch(() => {
+      // Tanpa referensi, dropdown jenis naskah/klasifikasi kosong & form
+      // booking tak bisa dipakai — jangan gagal senyap.
+      toast.error("Gagal memuat referensi persuratan — muat ulang halaman untuk mencoba lagi");
+    });
     axios.get(`${API}/inventory-activities`)
       .then((r) => setKegiatan(Array.isArray(r.data) ? r.data : (r.data?.items || [])))
       .catch(() => {});

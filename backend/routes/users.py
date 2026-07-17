@@ -48,13 +48,11 @@ async def get_all_users(admin_id: str = "", _admin: dict = Depends(require_admin
 @users_router.put("/users/{user_id}/toggle-active")
 async def toggle_user_active(user_id: str, admin_id: str = "", _admin: dict = Depends(require_admin)):
     """Toggle user active status (admin only, cannot toggle self)"""
-    if admin_id:
-        if admin_id == user_id:
-            raise HTTPException(status_code=400, detail="Admin tidak dapat menonaktifkan dirinya sendiri")
-        admin_user = await db.users.find_one({"id": admin_id})
-        if not admin_user or admin_user.get("role") != "admin":
-            raise HTTPException(status_code=403, detail="Hanya admin yang dapat mengubah status user")
-    
+    # Guard "self" dari identitas TERAUTENTIKASI — bukan param opsional yang
+    # bisa dikosongkan pemanggil (temuan audit keandalan Jul 2026).
+    if _admin.get("id") == user_id:
+        raise HTTPException(status_code=400, detail="Admin tidak dapat menonaktifkan dirinya sendiri")
+
     user = await db.users.find_one({"id": user_id})
     if not user:
         raise HTTPException(status_code=404, detail="User tidak ditemukan")
@@ -95,13 +93,9 @@ async def update_user_name(user_id: str, data: UserUpdate, admin_id: str = "", _
 @users_router.delete("/users/{user_id}")
 async def delete_user(user_id: str, admin_id: str = "", _admin: dict = Depends(require_admin)):
     """Delete a user (admin only, cannot delete self)"""
-    if admin_id:
-        if admin_id == user_id:
-            raise HTTPException(status_code=400, detail="Admin tidak dapat menghapus dirinya sendiri")
-        admin_user = await db.users.find_one({"id": admin_id})
-        if not admin_user or admin_user.get("role") != "admin":
-            raise HTTPException(status_code=403, detail="Hanya admin yang dapat menghapus user")
-    
+    if _admin.get("id") == user_id:
+        raise HTTPException(status_code=400, detail="Admin tidak dapat menghapus dirinya sendiri")
+
     user = await db.users.find_one({"id": user_id})
     if not user:
         raise HTTPException(status_code=404, detail="User tidak ditemukan")
@@ -111,15 +105,14 @@ async def delete_user(user_id: str, admin_id: str = "", _admin: dict = Depends(r
 
 @users_router.put("/users/{user_id}/change-role")
 async def change_user_role(user_id: str, data: dict, _admin: dict = Depends(require_admin)):
-    """Change user role (admin only)"""
-    admin_id = data.get("admin_id", "")
+    """Change user role (admin only; tidak boleh menurunkan role diri sendiri)"""
     new_role = data.get("new_role") or data.get("role", "user")
-    
-    if admin_id:
-        admin_user = await db.users.find_one({"id": admin_id})
-        if not admin_user or admin_user.get("role") != "admin":
-            raise HTTPException(status_code=403, detail="Hanya admin yang dapat mengubah role user")
-    
+
+    # Admin men-demote dirinya = satker bisa kehilangan admin terakhir.
+    if _admin.get("id") == user_id and new_role != "admin":
+        raise HTTPException(status_code=400,
+                            detail="Admin tidak dapat menurunkan role dirinya sendiri")
+
     if new_role not in ["admin", "operator", "viewer"]:
         raise HTTPException(status_code=400, detail="Role harus admin, operator, atau viewer")
     

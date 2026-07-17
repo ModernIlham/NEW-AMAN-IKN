@@ -59,7 +59,11 @@ export default function ReferensiAkunPage({ user, onBack }) {
     }
   }, [q, segmen]);
 
-  useEffect(() => { muatMaster(1); }, [muatMaster]);
+  // Debounce 350ms — pencarian tidak menembak request per ketukan (pola Kodefikasi).
+  useEffect(() => {
+    const t = setTimeout(() => muatMaster(1), 350);
+    return () => clearTimeout(t);
+  }, [muatMaster]);
 
   const muatPemetaan = useCallback(async () => {
     try {
@@ -74,7 +78,7 @@ export default function ReferensiAkunPage({ user, onBack }) {
         const r = await axios.get(`${API}/referensi-akun/periksa?kode=${[...kode].join(",")}`);
         setNamaAkun(r.data?.akun || {});
       }
-    } catch { toast.error("Gagal memuat pemetaan akun"); }
+    } catch (e) { toast.error(apiErr(e, "Gagal memuat pemetaan akun")); }
   }, []);
 
   useEffect(() => { muatPemetaan(); }, [muatPemetaan]);
@@ -123,6 +127,12 @@ export default function ReferensiAkunPage({ user, onBack }) {
   };
 
   const hapusAset = async (g) => {
+    const ok = await confirm({
+      title: `Hapus override golongan ${g}?`,
+      description: "Pemetaan akun golongan ini kembali ke nilai default riset.",
+      confirmLabel: "Hapus", variant: "danger",
+    });
+    if (!ok) return;
     try {
       await axios.delete(`${API}/akun-bas/${g}`);
       toast.success(`Override golongan ${g} dihapus (kembali ke default)`);
@@ -143,6 +153,12 @@ export default function ReferensiAkunPage({ user, onBack }) {
   };
 
   const hapusPsd = async (s) => {
+    const ok = await confirm({
+      title: `Hapus override ${s}?`,
+      description: "Pemetaan akun sub-kelompok ini kembali ke default (117111 Barang Konsumsi).",
+      confirmLabel: "Hapus", variant: "danger",
+    });
+    if (!ok) return;
     try {
       await axios.delete(`${API}/persediaan-akun/${s}`);
       toast.success(`Override ${s} dihapus`);

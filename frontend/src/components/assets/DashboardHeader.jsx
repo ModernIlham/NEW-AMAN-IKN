@@ -59,7 +59,7 @@ const DashboardHeader = memo(({
               <WifiOff className="w-3 h-3" /> Offline
             </span>
           ) : pendingCount > 0 ? (
-            <button onClick={onSync} disabled={syncing} className="flex items-center gap-1 text-[10px] bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded-full font-medium" data-testid="sync-pending-btn">
+            <button onClick={onSync} disabled={syncing} title="Perubahan menunggu sinkron — ketuk untuk sinkronkan sekarang" className="flex items-center gap-1 text-[10px] bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded-full font-medium" data-testid="sync-pending-btn">
               <RefreshCw className={`w-3 h-3 ${syncing ? 'animate-spin' : ''}`} /> {pendingCount}
             </button>
           ) : wsConnected ? (

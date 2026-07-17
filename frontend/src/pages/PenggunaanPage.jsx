@@ -366,6 +366,7 @@ export default function PenggunaanPage({ user, onBack }) {
   };
 
   const hapusPsp = async (sk) => {
+    if (!window.confirm(`Hapus catatan SK ${sk.nomor_sk || "(tanpa nomor)"} beserta lampirannya dari register?`)) return;
     try {
       await axios.delete(`${API}/penggunaan/psp/${sk.id}`);
       toast.success("Catatan SK dihapus");

@@ -12,6 +12,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import { authMediaUrl } from "@/lib/mediaUrl";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
@@ -58,6 +59,7 @@ export default function WasdalPage({ user, onBack }) {
   const lampInsiInputRef = useRef(null);
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
+  const { confirm, confirmDialog } = useConfirm();
 
   const muat = useCallback(() => {
     setLoading(true);
@@ -128,6 +130,13 @@ export default function WasdalPage({ user, onBack }) {
   };
 
   const hapusInsi = async (tiket) => {
+    const ok = await confirm({
+      title: "Hapus tiket insidentil?",
+      description: `Tiket "${(tiket.uraian_pemicu || "").slice(0, 80) || tiket.id}" beserta lampirannya akan dihapus permanen.`,
+      confirmLabel: "Hapus",
+      variant: "danger",
+    });
+    if (!ok) return;
     try {
       await axios.delete(`${API}/wasdal/insidentil/${tiket.id}`);
       toast.success("Tiket dihapus");
@@ -200,6 +209,13 @@ export default function WasdalPage({ user, onBack }) {
   };
 
   const hapusPen = async (tiket) => {
+    const ok = await confirm({
+      title: "Hapus tiket penertiban?",
+      description: `Tiket penertiban "${(tiket.uraian || "").slice(0, 80) || tiket.id}" ber-tenggat 15 hari kerja akan dihapus permanen.`,
+      confirmLabel: "Hapus",
+      variant: "danger",
+    });
+    if (!ok) return;
     try {
       await axios.delete(`${API}/wasdal/penertiban/${tiket.id}`);
       toast.success("Tiket dihapus");
@@ -816,6 +832,7 @@ export default function WasdalPage({ user, onBack }) {
           </div>
         </DialogContent>
       </Dialog>
+      {confirmDialog}
     </div>
   );
 }
