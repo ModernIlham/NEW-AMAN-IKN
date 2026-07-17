@@ -1,4 +1,4 @@
-import React, { memo, useState, useCallback, useMemo, useRef } from "react";
+import React, { memo, useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { Plus, Upload, Trash2, ChevronLeft, ChevronRight, XCircle, FolderOpen, FileUp } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -19,7 +19,19 @@ const CategoryManagerDialog = memo(({ open, onClose, categories, onCategoriesCha
   const [categoryPage, setCategoryPage] = useState(1);
   const [catImportProgress, setCatImportProgress] = useState(null);
   const [isDragOver, setIsDragOver] = useState(false);
+  // Validasi silang lunak Kategori ↔ Referensi Kodefikasi (1a, read-only):
+  // {jumlah_bermasalah, tanpa_kode, ...} + Set kode utk penanda baris.
+  const [cekKodefikasi, setCekKodefikasi] = useState(null);
   const categoryImportRef = useRef(null);
+
+  const muatCekKodefikasi = useCallback(async () => {
+    try {
+      const r = await axios.get(`${API}/integritas/kategori-kodefikasi`);
+      setCekKodefikasi({ ...r.data, set: new Set(r.data.kode_bermasalah || []) });
+    } catch { setCekKodefikasi(null); }
+  }, []);
+
+  useEffect(() => { if (open) muatCekKodefikasi(); }, [open, muatCekKodefikasi]);
 
   const filteredCategories = useMemo(() => {
     const cats = Array.isArray(categories) ? categories : [];
@@ -31,13 +43,17 @@ const CategoryManagerDialog = memo(({ open, onClose, categories, onCategoriesCha
   const handleAddCategory = useCallback(async () => {
     if (!newCategoryName.trim()) { toast.error("Deskripsi kategori wajib diisi"); return; }
     try { 
-      await axios.post(`${API}/categories`, { label: newCategoryName.trim(), kode_aset: newCategoryCode.trim() }); 
+      const r = await axios.post(`${API}/categories`, { label: newCategoryName.trim(), kode_aset: newCategoryCode.trim() }); 
       toast.success("Ditambahkan"); 
+      if (r.data?.peringatan_kodefikasi) {
+        toast.warning(`Kategori tersimpan, tetapi: ${r.data.peringatan_kodefikasi}`, { duration: 8000 });
+      }
       onCategoriesChanged(); 
+      muatCekKodefikasi();
       setNewCategoryName(""); 
       setNewCategoryCode("");
     } catch (e) { toast.error(getApiError(e, "Gagal")); }
-  }, [newCategoryName, newCategoryCode, onCategoriesChanged]);
+  }, [newCategoryName, newCategoryCode, onCategoriesChanged, muatCekKodefikasi]);
 
   const handleDeleteCategory = useCallback(async id => {
     const ok = await confirm({
@@ -117,6 +133,17 @@ const CategoryManagerDialog = memo(({ open, onClose, categories, onCategoriesCha
               <Trash2 className="w-3 h-3 mr-1" />Hapus Semua
             </Button>
           </div>
+
+          {cekKodefikasi && cekKodefikasi.jumlah_bermasalah > 0 && (
+            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg px-3 py-2" data-testid="kategori-kodefikasi-warn">
+              <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+                ⚠ {cekKodefikasi.jumlah_bermasalah} kategori kodenya belum terdaftar di Referensi Kodefikasi
+              </p>
+              <p className="text-[10px] text-amber-700/80 dark:text-amber-300/80 mt-0.5">
+                Non-blocking — data tetap dipakai. Lengkapi Referensi Kodefikasi Barang (Beranda Modul) atau perbaiki kode kategorinya; baris terdampak bertanda ⚠. Rinciannya juga ada di dasbor Integritas.
+              </p>
+            </div>
+          )}
           
           <div
             className={`border-2 border-dashed rounded-lg p-3 space-y-2 transition-colors ${isDragOver ? 'border-emerald-400 bg-emerald-50/80 dark:bg-emerald-900/30' : 'border-emerald-200 dark:border-emerald-700 bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20'}`}
@@ -222,6 +249,9 @@ const CategoryManagerDialog = memo(({ open, onClose, categories, onCategoriesCha
                       <tr key={c.id} className="hover:bg-muted group border-b border-border last:border-b-0">
                         <td className="px-2 py-1.5">
                           <span className="text-[11px] font-mono bg-muted text-muted-foreground px-1.5 py-0.5 rounded whitespace-nowrap">{c.kode_aset || '-'}</span>
+                          {cekKodefikasi?.set?.has(c.kode_aset) && (
+                            <span className="ml-1 text-[10px] text-amber-600 dark:text-amber-400" title="Kode belum terdaftar di Referensi Kodefikasi (peringatan — non-blocking)">⚠</span>
+                          )}
                         </td>
                         <td className="px-2 py-1.5">
                           <span className="text-xs text-foreground break-words line-clamp-2" title={c.label}>{c.label}</span>

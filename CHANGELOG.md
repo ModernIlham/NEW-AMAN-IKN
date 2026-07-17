@@ -48,6 +48,28 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#346] Validasi silang lunak Kelola Kategori ↔ Referensi Kodefikasi (1a) — 2026-07-17
+
+- Kelola Kategori dan Referensi Kodefikasi selama ini dua master kode
+  barang PARALEL tanpa tautan (temuan arsitektural #28) — opsi **1a**
+  (pilihan pemilik): validasi silang LUNAK, tanpa mengubah/menolak data.
+- **Endpoint pindai baru** `GET /integritas/kategori-kodefikasi`
+  (read-only): kategori ber-kode yang belum terdaftar di kodefikasi —
+  hitungan per masalah (golongan tak terdaftar / kode spesifik belum
+  terdaftar / panjang tak valid), rincian 300 teratas, daftar kode
+  bermasalah untuk penanda UI; kategori tanpa kode = sah (info saja).
+- **Register baru di dasbor Integritas** ("Kategori ↔ Kodefikasi") —
+  ikut ringkasan gabungan & ekspor CSV integritas.
+- **UI Kelola Kategori**: banner jumlah kategori bermasalah + arah
+  perbaikan, penanda ⚠ per baris kode yang belum terdaftar, dan toast
+  peringatan saat menambah kategori ber-kode tak terdaftar (kategori
+  tetap tersimpan — non-blocking, pola §5A Prinsip 2).
+- Verifikasi: suite **468 lulus**; smoke 5 kategori (terdaftar penuh /
+  induk-saja / golongan asing / panjang salah / tanpa kode) + peringatan
+  tambah kategori; build sukses.
+
+---
+
 ## [#345] Persuratan: edit surat masuk, anchor nomor eksternal, tombol "Booking Nomor" di 15 halaman — 2026-07-17
 
 - **Surat masuk kini dapat diedit** (tombol pensil di setiap baris masuk):

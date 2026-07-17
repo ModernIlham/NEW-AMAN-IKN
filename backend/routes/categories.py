@@ -72,7 +72,22 @@ async def create_category(category: CategoryCreate, _user: dict = Depends(requir
     await db.categories.insert_one(doc)
     invalidate_category_cache()
     logger.info(f"Category created: {kode} - {label}")
-    return {"id": cat_id, "label": label, "kode_aset": kode}
+
+    # Validasi silang LUNAK ke Referensi Kodefikasi (1a, non-blocking):
+    # kategori tetap tersimpan; UI menampilkan peringatannya bila ada.
+    peringatan = ""
+    if kode:
+        from kodefikasi_utils import cek_kode_kodefikasi
+        terdaftar = set()
+        async for k in db.kodefikasi.find({}, {"_id": 0, "kode": 1}):
+            if k.get("kode"):
+                terdaftar.add(str(k["kode"]))
+        hasil = cek_kode_kodefikasi(kode, terdaftar)
+        if hasil.get("peringatan"):
+            peringatan = hasil.get("pesan") or (
+                "Kode belum terdaftar di Referensi Kodefikasi")
+    return {"id": cat_id, "label": label, "kode_aset": kode,
+            "peringatan_kodefikasi": peringatan}
 
 @categories_router.delete("/categories/{category_id}")
 async def delete_category(category_id: str, _user: dict = Depends(require_user)):

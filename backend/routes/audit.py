@@ -194,6 +194,64 @@ async def integritas_kodefikasi_aset(_user: dict = Depends(require_user)):
     }
 
 
+@audit_router.get("/integritas/kategori-kodefikasi")
+async def integritas_kategori_kodefikasi(_user: dict = Depends(require_user)):
+    """Validasi silang LUNAK Kelola Kategori ↔ Referensi Kodefikasi (1a, §5A
+    Prinsip 2 — READ-ONLY, non-blocking): kedua master kode barang berjalan
+    paralel; endpoint ini melaporkan kategori yang `kode_aset`-nya TIDAK
+    terdaftar (sampai level-nya) di `db.kodefikasi`, tanpa menolak/mengubah
+    data. `kode_bermasalah` = daftar kode utk penanda baris di UI Kelola
+    Kategori; `items` = rincian (dibatasi 300)."""
+    terdaftar = set()
+    async for k in db.kodefikasi.find({}, {"_id": 0, "kode": 1}):
+        if k.get("kode"):
+            terdaftar.add(str(k["kode"]))
+
+    items, kode_bermasalah = [], []
+    n_golongan = n_spesifik = n_invalid = n_tanpa_kode = n_total = 0
+    async for cat in db.categories.find(
+            {}, {"_id": 0, "kode_aset": 1, "label": 1}):
+        n_total += 1
+        kode = normalize_kode(cat.get("kode_aset"))
+        if not kode:
+            n_tanpa_kode += 1  # kategori tanpa kode sah-sah saja — info saja
+            continue
+        level_kode = derive_level(kode)
+        if not level_kode:
+            masalah = "panjang_kode_tak_valid"
+            n_invalid += 1
+        else:
+            dalam = level_terdaftar_terdalam(kode, terdaftar)
+            if dalam >= level_kode:
+                continue
+            masalah = ("golongan_tak_terdaftar" if dalam == 0
+                       else "kode_spesifik_tak_terdaftar")
+            if dalam == 0:
+                n_golongan += 1
+            else:
+                n_spesifik += 1
+        kode_bermasalah.append(str(cat.get("kode_aset") or ""))
+        if len(items) < 300:
+            items.append({"kode_aset": cat.get("kode_aset"),
+                          "label": cat.get("label"), "masalah": masalah})
+
+    return {
+        "jumlah_kategori": n_total,
+        "jumlah_bermasalah": len(kode_bermasalah),
+        "golongan_tak_terdaftar": n_golongan,
+        "kode_spesifik_tak_terdaftar": n_spesifik,
+        "panjang_kode_tak_valid": n_invalid,
+        "tanpa_kode": n_tanpa_kode,
+        "kode_bermasalah": kode_bermasalah,
+        "items": items,
+        "catatan": (
+            "Validasi silang lunak (1a): kategori dengan kode yang belum "
+            "terdaftar di Referensi Kodefikasi. Non-blocking — tidak ada data "
+            "yang ditolak/diubah; lengkapi referensi kodefikasi (atau perbaiki "
+            "kode kategori) untuk menutup temuan."),
+    }
+
+
 @audit_router.get("/integritas/cek-kode")
 async def integritas_cek_kode(asset_code: str = "", _user: dict = Depends(require_user)):
     """§5A Prinsip 2 (READ-ONLY, NON-BLOCKING): validasi LUNAK satu `asset_code`
@@ -389,6 +447,32 @@ async def _ringkas_kodefikasi():
             "jumlah": len(temuan), "per_masalah": hitung_masalah(temuan)}
 
 
+async def _ringkas_kategori_kodefikasi():
+    """Ringkas validasi silang Kelola Kategori ↔ Referensi Kodefikasi (1a):
+    kategori ber-kode yang tak terdaftar (sampai level-nya) di kodefikasi."""
+    terdaftar = set()
+    async for k in db.kodefikasi.find({}, {"_id": 0, "kode": 1}):
+        if k.get("kode"):
+            terdaftar.add(str(k["kode"]))
+    temuan = []
+    async for cat in db.categories.find({}, {"_id": 0, "kode_aset": 1}):
+        kode = normalize_kode(cat.get("kode_aset"))
+        if not kode:
+            continue  # kategori tanpa kode: sah, bukan temuan
+        level_kode = derive_level(kode)
+        if not level_kode:
+            temuan.append({"masalah": "panjang_kode_tak_valid"})
+            continue
+        dalam = level_terdaftar_terdalam(kode, terdaftar)
+        if dalam >= level_kode:
+            continue
+        temuan.append({"masalah": "golongan_tak_terdaftar" if dalam == 0
+                       else "kode_spesifik_tak_terdaftar"})
+    return {"register": "kategori_kodefikasi",
+            "label": "Kategori ↔ Kodefikasi",
+            "jumlah": len(temuan), "per_masalah": hitung_masalah(temuan)}
+
+
 async def _kumpulkan_bagian_integritas():
     """Jalankan SEMUA cek integritas §5A → daftar ringkasan per register.
     Satu sumber untuk endpoint ringkasan JSON & ekspor CSV (hindari duplikasi)."""
@@ -401,6 +485,7 @@ async def _kumpulkan_bagian_integritas():
         await _ringkas_identitas_snapshot(
             "jadwal_pemeliharaan", "jadwal_pemeliharaan", "Jadwal Pemeliharaan"),
         await _ringkas_kodefikasi(),
+        await _ringkas_kategori_kodefikasi(),
     ]
 
 
