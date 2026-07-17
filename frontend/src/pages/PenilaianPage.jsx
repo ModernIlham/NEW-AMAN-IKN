@@ -354,7 +354,7 @@ export default function PenilaianPage({ user, onBack }) {
                 <FileSignature className="w-4 h-4 text-teal-600 flex-shrink-0" />
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-bold text-foreground">Koreksi Nilai & Hasil Penilaian</p>
-                  <p className="text-[10px] text-muted-foreground truncate">
+                  <p className="text-[10px] text-muted-foreground truncate" title="LHIP = Laporan Hasil Inventarisasi dan Penilaian">
                     Revaluasi/koreksi per aset (LHIP/Laporan Penilaian/BA) — resmi di SAKTI
                   </p>
                 </div>

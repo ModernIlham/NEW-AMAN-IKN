@@ -480,6 +480,41 @@ async def blok_ttd_kpb(settings, per_iso=None):
             'after': [f"NIP. {kpb['nip']}"]}
 
 
+async def proses_keluar_aktif(asset_ids):
+    """Peta asset_id → daftar proses KELUAR aktif lintas register (audit G5
+    #11 — penanda in-flight): usulan penghapusan (diusulkan/diproses), usulan
+    pemindahtanganan (belum selesai/ditolak), dan BA pemusnahan. Dipakai cek
+    silang non-blocking saat membuat usulan baru agar satu aset tidak duduk
+    di dua jalur keluar sekaligus tanpa disadari."""
+    ids = [str(a) for a in (asset_ids or []) if str(a or "").strip()]
+    if not ids:
+        return {}
+    peta = {}
+
+    def _tambah(aid, label):
+        peta.setdefault(aid, [])
+        if label not in peta[aid]:
+            peta[aid].append(label)
+
+    async for u in db.usulan_penghapusan.find(
+            {"asset_id": {"$in": ids}, "status": {"$in": ["diusulkan", "diproses"]}},
+            {"_id": 0, "asset_id": 1}):
+        _tambah(u["asset_id"], "usulan penghapusan")
+    async for r in db.pemindahtanganan.find(
+            {"aset.asset_id": {"$in": ids},
+             "status": {"$nin": ["selesai", "ditolak", "batal"]}},
+            {"_id": 0, "aset.asset_id": 1}):
+        for a in r.get("aset") or []:
+            if a.get("asset_id") in ids:
+                _tambah(a["asset_id"], "usulan pemindahtanganan")
+    async for r in db.pemusnahan.find(
+            {"aset.asset_id": {"$in": ids}}, {"_id": 0, "aset.asset_id": 1}):
+        for a in r.get("aset") or []:
+            if a.get("asset_id") in ids:
+                _tambah(a["asset_id"], "BA pemusnahan")
+    return peta
+
+
 async def blok_ttd_kpb_titik(settings, per_iso=None):
     """Entri `_signature_block` "Mengetahui / Kuasa Pengguna Barang" dengan
     fallback garis-titik (pola BA/daftar) — nama/NIP dari registry pejabat."""

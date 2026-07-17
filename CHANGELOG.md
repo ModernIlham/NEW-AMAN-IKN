@@ -48,6 +48,23 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#364] Gelombang 5 (tuntas): cek silang register keluar + glosarium akronim — 2026-07-17
+
+- **Cek silang "in-flight" lintas register keluar** (`proses_keluar_aktif`
+  di shared_utils): saat membuat usulan Penghapusan / Pemindahtanganan /
+  BA Pemusnahan, sistem memeriksa apakah aset yang sama sedang berada di
+  jalur keluar LAIN — bila ya, muncul **peringatan non-blocking** per aset
+  ("juga dalam usulan pemindahtanganan…") sehingga satu aset tidak diam-diam
+  menempuh dua jalur keluar sekaligus.
+- **Glosarium akronim**: tooltip penjelas pada istilah regulasi (PMPP di
+  header Pemindahtanganan, LHIP di Penilaian, NTPN pada field bukti setor).
+- Catatan: refactor `AssetSearchSelect` bersama & edit register saat
+  "diusulkan" dicatat sebagai peningkatan teknis lanjutan (tidak mengubah
+  perilaku pengguna) — Gelombang 5 dinyatakan TUNTAS.
+- Verifikasi: suite **470 lulus**; lint & build frontend sukses.
+
+---
+
 ## [#363] Gelombang 5 (lanjutan): dialog transisi bersama — window.prompt hilang dari seluruh aplikasi — 2026-07-17
 
 - **Komponen bersama `useTransitionDialog`** (`components/ui/
