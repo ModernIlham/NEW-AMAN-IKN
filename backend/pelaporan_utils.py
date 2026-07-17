@@ -120,3 +120,69 @@ def penanda_final(periode) -> str:
         return ""
     tanggal = str(periode.get("tanggal_kunci") or "")[:10]
     return f" — FINAL (terkunci per {tanggal})" if tanggal else " — FINAL"
+
+
+# ── Narasi tanggal Berita Acara (BAHI dkk.) — "Pada hari ini, Jumat, tanggal
+# Tujuh Belas bulan Juli tahun Dua Ribu Dua Puluh Enam". MURNI (teruji unit).
+
+HARI_ID = ("Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu")
+BULAN_ID = ("Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli",
+            "Agustus", "September", "Oktober", "November", "Desember")
+
+_SATUAN_ID = ("nol", "satu", "dua", "tiga", "empat", "lima", "enam", "tujuh",
+              "delapan", "sembilan", "sepuluh", "sebelas")
+
+
+def terbilang_id(n) -> str:
+    """Bilangan bulat 0..999999 → kata bahasa Indonesia (huruf kecil).
+
+    Cukup untuk tanggal (1-31) dan tahun (4 digit). Nilai di luar rentang /
+    bukan angka → ''.
+    """
+    try:
+        n = int(n)
+    except (TypeError, ValueError):
+        return ""
+    if n < 0 or n > 999999:
+        return ""
+    if n < 12:
+        return _SATUAN_ID[n]
+    if n < 20:
+        return f"{_SATUAN_ID[n - 10]} belas"
+    if n < 100:
+        sisa = n % 10
+        return f"{_SATUAN_ID[n // 10]} puluh" + (f" {_SATUAN_ID[sisa]}" if sisa else "")
+    if n < 200:
+        sisa = n % 100
+        return "seratus" + (f" {terbilang_id(sisa)}" if sisa else "")
+    if n < 1000:
+        sisa = n % 100
+        return f"{_SATUAN_ID[n // 100]} ratus" + (f" {terbilang_id(sisa)}" if sisa else "")
+    if n < 2000:
+        sisa = n % 1000
+        return "seribu" + (f" {terbilang_id(sisa)}" if sisa else "")
+    sisa = n % 1000
+    return f"{terbilang_id(n // 1000)} ribu" + (f" {terbilang_id(sisa)}" if sisa else "")
+
+
+def narasi_hari_tanggal(iso) -> dict:
+    """Komponen narasi BA dari tanggal ISO 'YYYY-MM-DD[…]'.
+
+    Kembalikan {hari, tanggal_terbilang, bulan, tahun_terbilang} ber-Kapital
+    Tiap Kata (gaya naskah dinas), atau None bila tanggal tak valid.
+    Tanpa strptime — tahan placeholder 9999-12-31 (dianggap tak valid).
+    """
+    from datetime import date
+    s = str(iso or "").strip()[:10]
+    try:
+        d = date.fromisoformat(s)
+    except ValueError:
+        return None
+    if d.year > 2200:  # placeholder SIMAN 9999-12-31 dkk.
+        return None
+    return {
+        "hari": HARI_ID[d.weekday()],
+        "tanggal_terbilang": terbilang_id(d.day).title(),
+        "bulan": BULAN_ID[d.month - 1],
+        "tahun_terbilang": terbilang_id(d.year).title(),
+    }

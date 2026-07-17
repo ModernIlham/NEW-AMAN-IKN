@@ -382,6 +382,19 @@ def _fmt_tanggal_id(val):
     return sv
 
 
+def _tempat_tanggal_laporan(settings, tanggal_iso=""):
+    """Baris 'Tempat, Tanggal' untuk kaki surat laporan LHI.
+
+    Tempat dari pengaturan sampul (`tempat_laporan`); tanggal dari argumen
+    (mis. tanggal BA kegiatan) atau `tanggal_laporan` pengaturan. Bagian yang
+    belum diisi tetap titik-titik agar bisa ditulis tangan.
+    """
+    tempat = str(settings.get("tempat_laporan") or "").strip() or ".................."
+    tgl = _fmt_tanggal_id(str(tanggal_iso or "").strip()[:10]
+                          or settings.get("tanggal_laporan")) or "......................."
+    return f"{tempat}, {tgl}"
+
+
 def _identity_table(rows):
     """Blok identitas 'Label : Nilai' dengan kolom titik dua yang sejajar.
 
@@ -1109,9 +1122,14 @@ async def generate_dbhi_pdf(activity_id: str, dbhi_type: str, _user: dict = Depe
     ident = _activity_identity(activity, settings)
     satker_name = ident["satker_name"]
     nomor_sk = activity.get("nomor_surat", "-")
-    tgl = _fmt_tanggal_id(activity.get("tanggal_mulai")) or "-"
+    # Rentang periode kegiatan inventarisasi — bukan tanggal tunggal (#339+1):
+    # DBHI memotret hasil sepanjang periode pelaksanaan, bukan satu hari.
+    tgl_mulai = _fmt_tanggal_id(activity.get("tanggal_mulai")) or "-"
+    tgl_selesai = _fmt_tanggal_id(activity.get("tanggal_selesai")) or "-"
     elements.append(Paragraph(f"Satuan Kerja: {satker_name}", info_style))
-    elements.append(Paragraph(f"Nomor SK: {nomor_sk} &nbsp;&nbsp;|&nbsp;&nbsp; Tanggal: {tgl}", info_style))
+    elements.append(Paragraph(
+        f"Nomor SK: {nomor_sk} &nbsp;&nbsp;|&nbsp;&nbsp; Periode Inventarisasi: {tgl_mulai} s.d. {tgl_selesai}",
+        info_style))
     elements.append(Spacer(1, 4*rl_mm))
 
     # Build table headers based on type
@@ -1221,7 +1239,7 @@ async def generate_dbhi_pdf(activity_id: str, dbhi_type: str, _user: dict = Depe
     kasatker_nip = ident["kasatker_nip"]
 
     elements.extend(_signature_block([
-        {'pre': ['.................., .......................'],
+        {'pre': [_tempat_tanggal_laporan(settings)],
          'header': 'Kuasa Pengguna Barang,',
          'nama': kasatker_nama,
          'after': [f'NIP. {kasatker_nip}']},
@@ -1347,7 +1365,7 @@ async def generate_rhi_pdf(activity_id: str, _user: dict = Depends(require_user_
     kasatker_nama = ident["kasatker_nama"]
     kasatker_nip = ident["kasatker_nip"]
     elements.extend(_signature_block([
-        {'pre': ['.................., .......................'],
+        {'pre': [_tempat_tanggal_laporan(settings)],
          'header': 'Kuasa Pengguna Barang,',
          'nama': kasatker_nama,
          'after': [f'NIP. {kasatker_nip}']},
@@ -1476,7 +1494,7 @@ async def generate_dbkp_pdf(activity_id: str, _user: dict = Depends(require_user
 
     elements.append(Spacer(1, 12*rl_mm))
     elements.extend(_signature_block([
-        {'pre': ['.................., .......................'],
+        {'pre': [_tempat_tanggal_laporan(settings)],
          'header': 'Kuasa Pengguna Barang,',
          'nama': ident["kasatker_nama"],
          'after': [f'NIP. {ident["kasatker_nip"]}']},
@@ -1626,7 +1644,7 @@ async def generate_posisi_bmn_pdf(_user: dict = Depends(require_user_or_query_to
     elements.append(Spacer(1, 12*rl_mm))
     ttd = await _penandatangan_kpb(settings, today_iso)
     elements.extend(_signature_block([
-        {'pre': ['.................., .......................'],
+        {'pre': [_tempat_tanggal_laporan(settings, today_iso)],
          'header': 'Kuasa Pengguna Barang,',
          'nama': ttd["nama"],
          'after': [f"NIP. {ttd['nip']}"]},
@@ -1706,7 +1724,7 @@ async def generate_dbr_pdf(_user: dict = Depends(require_user_or_query_token)):
     elements.append(Spacer(1, 10*rl_mm))
     ttd = await _penandatangan_kpb(settings, today_iso)
     elements.extend(_signature_block([
-        {'pre': ['.................., .......................'],
+        {'pre': [_tempat_tanggal_laporan(settings, today_iso)],
          'header': 'Kuasa Pengguna Barang,',
          'nama': ttd["nama"],
          'after': [f"NIP. {ttd['nip']}"]},
@@ -1791,7 +1809,7 @@ async def generate_kir_pdf(_user: dict = Depends(require_user_or_query_token)):
             {'header': 'Penanggung Jawab Ruangan,',
              'nama': (m.get("penanggung_jawab_nama") if m else "") or "-",
              'after': ['']},
-            {'pre': ['.................., .......................'],
+            {'pre': [_tempat_tanggal_laporan(settings)],
              'header': 'Kuasa Pengguna Barang,',
              'nama': ttd_kpb["nama"],
              'after': [f"NIP. {ttd_kpb['nip']}"]},
@@ -1925,7 +1943,7 @@ async def generate_penyusutan_pdf(
     elements.append(Spacer(1, 12*rl_mm))
     ttd = await _penandatangan_kpb(settings, per_tanggal)
     elements.extend(_signature_block([
-        {'pre': ['.................., .......................'],
+        {'pre': [_tempat_tanggal_laporan(settings, per_tanggal)],
          'header': 'Kuasa Pengguna Barang,',
          'nama': ttd["nama"],
          'after': [f"NIP. {ttd['nip']}"]},
@@ -2071,7 +2089,7 @@ async def generate_lbkp_pdf(
     elements.append(Spacer(1, 12 * rl_mm))
     ttd = await _penandatangan_kpb(settings, sampai)
     elements.extend(_signature_block([
-        {'pre': ['.................., .......................'],
+        {'pre': [_tempat_tanggal_laporan(settings, sampai)],
          'header': 'Kuasa Pengguna Barang,',
          'nama': ttd["nama"],
          'after': [f"NIP. {ttd['nip']}"]},
@@ -2215,9 +2233,10 @@ async def generate_lkb_pdf(_user: dict = Depends(require_user_or_query_token)):
         "dicatat pada AMAN. Dokumen resmi LKB (LKBT-PKPB1) tetap dicetak "
         "dari SIMAK-BMN/SAKTI — laporan ini bahan sandingan/kerja.", st['Meta']))
     elements.append(Spacer(1, 10 * rl_mm))
-    ttd = await _penandatangan_kpb(settings, datetime.now(timezone.utc).date().isoformat())
+    tgl_ttd_lkb = datetime.now(timezone.utc).date().isoformat()
+    ttd = await _penandatangan_kpb(settings, tgl_ttd_lkb)
     elements.extend(_signature_block([
-        {'pre': ['.................., .......................'],
+        {'pre': [_tempat_tanggal_laporan(settings, tgl_ttd_lkb)],
          'header': 'Penanggung Jawab UAKPB',
          'role': 'Kuasa Pengguna Barang,',
          'nama': ttd["nama"],
@@ -2467,7 +2486,7 @@ async def generate_calbmn_pdf(
     elements.append(Spacer(1, 10 * rl_mm))
     ttd = await _penandatangan_kpb(settings, sampai)
     elements.extend(_signature_block([
-        {'pre': ['.................., .......................'],
+        {'pre': [_tempat_tanggal_laporan(settings, sampai)],
          'header': 'Kuasa Pengguna Barang,',
          'nama': ttd["nama"],
          'after': [f"NIP. {ttd['nip']}"]},
@@ -2677,13 +2696,26 @@ async def generate_bahi_pdf(activity_id: str, _user: dict = Depends(require_user
     elements.extend(_kop_surat_flowables(settings, doc.width))
 
     ba = activity.get("berita_acara", {})
-    ba_nomor = ba.get("nomor", "......./......./........")
+    ba_nomor = (str(activity.get("nomor_berita_acara") or "").strip()
+                or ba.get("nomor") or "......./......./........")
     elements.extend(_title_block("BERITA ACARA\nHASIL INVENTARISASI BARANG MILIK NEGARA", nomor=ba_nomor))
 
-    elements.append(Paragraph(
-        f"Pada hari ini, .................., tanggal .................. bulan .................. "
-        f"tahun ...................., bertempat di {satker_name}, kami yang bertanda tangan di bawah ini:",
-        normal_style))
+    # Narasi tanggal BA terisi otomatis: tanggal BA kegiatan → fallback
+    # tanggal laporan di Pengaturan Sampul LHI; tanpa keduanya tetap
+    # titik-titik (diisi tangan saat penandatanganan).
+    from pelaporan_utils import narasi_hari_tanggal
+    tanggal_ba = (str(activity.get("tanggal_berita_acara") or "").strip()[:10]
+                  or str(settings.get("tanggal_laporan") or "").strip()[:10])
+    nar = narasi_hari_tanggal(tanggal_ba)
+    if nar:
+        kalimat_ba = (f"Pada hari ini, {nar['hari']}, tanggal {nar['tanggal_terbilang']} "
+                      f"bulan {nar['bulan']} tahun {nar['tahun_terbilang']} "
+                      f"({_fmt_tanggal_id(tanggal_ba)}), bertempat di {satker_name}, "
+                      f"kami yang bertanda tangan di bawah ini:")
+    else:
+        kalimat_ba = (f"Pada hari ini, .................., tanggal .................. bulan .................. "
+                      f"tahun ...................., bertempat di {satker_name}, kami yang bertanda tangan di bawah ini:")
+    elements.append(Paragraph(kalimat_ba, normal_style))
     elements.append(Spacer(1, 3*rl_mm))
 
     elements.append(_identity_table([
@@ -2769,7 +2801,7 @@ async def generate_bahi_pdf(activity_id: str, _user: dict = Depends(require_user
         {'header': 'Mengetahui,',
          'nama': kasatker_nama,
          'after': [f'NIP. {kasatker_nip}']},
-        {'pre': ['.................., .......................'],
+        {'pre': [_tempat_tanggal_laporan(settings, tanggal_ba)],
          'header': 'Yang membuat Berita Acara,',
          'nama': _member_nama(tim[0], '________________________') if tim else '________________________',
          'after': ['NIP. ........................']},
@@ -2852,7 +2884,7 @@ async def generate_sp_hasil_pdf(activity_id: str, _user: dict = Depends(require_
 
     elements.append(Spacer(1, 12*rl_mm))
     elements.extend(_signature_block([
-        {'pre': ['.................., .......................'],
+        {'pre': [_tempat_tanggal_laporan(settings)],
          'header': 'Yang membuat pernyataan,',
          'nama': kasatker_nama,
          'after': [f'{kasatker_jabatan}', f'NIP. {kasatker_nip}']},
@@ -2939,7 +2971,7 @@ async def generate_sp_pelaksanaan_pdf(activity_id: str, _user: dict = Depends(re
 
     elements.append(Spacer(1, 12*rl_mm))
     elements.extend(_signature_block([
-        {'pre': ['.................., .......................'],
+        {'pre': [_tempat_tanggal_laporan(settings)],
          'header': 'Yang membuat pernyataan,',
          'nama': kasatker_nama,
          'after': [f'{kasatker_jabatan}', f'NIP. {kasatker_nip}']},
@@ -2965,6 +2997,10 @@ class ReportSettingsUpdate(BaseModel):
     subjudul_laporan: Optional[str] = "BARANG MILIK NEGARA (BMN)"
     tahun_anggaran: Optional[str] = ""
     catatan_kaki: Optional[str] = ""
+    # Tempat & tanggal laporan — mengisi baris "tempat, tanggal" pada kaki
+    # surat laporan (BAHI/SP/DBHI dkk.) dan tampil di sampul LHI.
+    tempat_laporan: Optional[str] = ""
+    tanggal_laporan: Optional[str] = ""
     # Evaluasi #4 (OPT-IN, default OFF): bila True, simpan aset menolak pengguna_nip
     # yang belum terdaftar di Master Pegawai. None = jangan ubah nilai tersimpan.
     wajib_pegawai_terdaftar: Optional[bool] = None
@@ -2986,6 +3022,8 @@ async def get_report_settings(_user: dict = Depends(require_user)):
             "subjudul_laporan": "BARANG MILIK NEGARA (BMN)",
             "tahun_anggaran": "",
             "catatan_kaki": "",
+            "tempat_laporan": "",
+            "tanggal_laporan": "",
             "wajib_pegawai_terdaftar": False,
         }
     return settings
@@ -3141,6 +3179,14 @@ async def _generate_cover_page(activity, settings):
         elements.append(Paragraph(f"TAHUN ANGGARAN {tahun}", tahun_style))
     else:
         elements.append(Paragraph("TAHUN ANGGARAN ............", tahun_style))
+
+    # Tempat & tanggal laporan (Pengaturan Sampul LHI) — tampil bila diisi.
+    tempat_lap = str(settings.get("tempat_laporan") or "").strip()
+    tgl_lap = _fmt_tanggal_id(settings.get("tanggal_laporan"))
+    if tempat_lap or tgl_lap:
+        elements.append(Spacer(1, 8*rl_mm))
+        elements.append(Paragraph(
+            ", ".join(x for x in (tempat_lap, tgl_lap) if x), info_style))
 
     elements.append(Spacer(1, 30*rl_mm))
     catatan = settings.get("catatan_kaki", "")
