@@ -69,6 +69,7 @@ async def daftar_pemegang(
             r["pegawai_master_nama"] = (m or {}).get("nama", "")
             r["pegawai_master_jabatan"] = (m or {}).get("jabatan", "")
             r["pegawai_master_unit"] = (m or {}).get("unit_kerja", "")
+            r["pegawai_master_status"] = (m or {}).get("status", "")
             r["pegawai_terdaftar"] = bool(m)
     return {
         "items": halaman,

@@ -554,6 +554,12 @@ export default function PenggunaanPage({ user, onBack }) {
                             belum di master
                           </span>
                         )}
+                        {p.pegawai_master_status && p.pegawai_master_status !== "aktif" && (
+                          <span className="ml-1.5 px-1.5 py-px rounded bg-red-500/15 text-red-600 dark:text-red-400 font-semibold"
+                            title="Pemegang berstatus non-aktif di Master Pegawai — pertimbangkan mutasi/pengembalian aset">
+                            {p.pegawai_master_status}
+                          </span>
+                        )}
                       </p>
                     </div>
                     <span className="text-xs font-bold text-foreground flex-shrink-0">{p.jumlah_aset} aset</span>

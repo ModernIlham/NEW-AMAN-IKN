@@ -48,6 +48,28 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#373] Gelombang 8-4: siklus pegawai-pejabat (status & masa jabatan) — 2026-07-17
+
+Batch terakhir audit keamanan — konsistensi identitas orang sepanjang siklus:
+- **Penandatangan "Mengetahui, KPB" pada BAST kini dari REGISTRY pejabat**
+  yang **berlaku pada tanggal BAST** (`penandatangan_kpb`, fallback setelan
+  kasatker) — tak lagi membaca setelan mentah yang bisa kedaluwarsa.
+- **Peringatan penerima non-aktif**: membuat BAST untuk pegawai berstatus
+  pensiun/mutasi/nonaktif memunculkan peringatan lunak (tak memblokir) — via
+  `is_aktif`.
+- **Badge status pemegang non-aktif** di halaman Penggunaan
+  (`pegawai_master_status` diteruskan ke UI) — pemegang pensiun langsung
+  terlihat untuk ditindaklanjuti (mutasi/pengembalian).
+- **Dedup NIP pejabat**: tambah/ubah pejabat menolak NIP yang sudah dipakai
+  pejabat lain (409) — mencegah dua penanda tangan ber-NIP sama.
+- Catatan: resolusi ulang PJ Ruangan KIR terhadap masa berlaku & penegakan
+  status pada `enforce_pegawai_terdaftar` ditandai sebagai penajaman lanjutan
+  (perlu kebijakan pemilik) — **Gelombang 8 & seluruh mandat pengembangan
+  dinyatakan TUNTAS**.
+- Verifikasi: suite **475 lulus**; lint & build frontend sukses.
+
+---
+
 ## [#372] Gelombang 8-3: pengamanan unggah/berkas (zip-slip, batas ukuran, magic byte, GridFS yatim) — 2026-07-17
 
 Batch upload-hardening dari audit keamanan terverifikasi:
