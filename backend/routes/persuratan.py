@@ -311,7 +311,8 @@ async def daftar_surat(jenis: str = "", status: str = "", modul: str = "",
     if tahun.strip().isdigit():
         query["tahun"] = int(tahun)
     if q.strip():
-        rx = {"$regex": q.strip(), "$options": "i"}
+        import re as _re
+        rx = {"$regex": _re.escape(q.strip()), "$options": "i"}
         query["$or"] = [{"nomor": rx}, {"perihal": rx}, {"tujuan": rx},
                         {"pengirim": rx}, {"referensi": rx},
                         {"nama_kegiatan": rx}]

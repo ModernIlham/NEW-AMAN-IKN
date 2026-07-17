@@ -788,7 +788,7 @@ async def transaksi_massal(payload: TransaksiMassalIn, user: dict = Depends(requ
         kode_klas = pilih_klasifikasi(atur["peta_klasifikasi"], "persediaan",
                                       "Laporan",
                                       default=atur["kode_klasifikasi_default"])
-        tahun = int(tgl_surat[:4])
+        tahun = int(tgl_surat[:4]) if tgl_surat[:4].isdigit() else now0.year
         no_agenda = await _no_agenda_berikut("keluar", tahun)
         nomor_lpb = bangun_nomor(atur["format_nomor"], no_agenda, tgl_surat,
                                  kode_klasifikasi=kode_klas,
@@ -1034,10 +1034,11 @@ async def list_persediaan(
                            "$options": "i"}
     if search:
         s = search.strip()
+        s_esc = re.escape(s)
         query["$or"] = [
-            {"kode_barang": {"$regex": f"^{s}" if s.isdigit() else s, "$options": "i"}},
-            {"nama_barang": {"$regex": s, "$options": "i"}},
-            {"merk": {"$regex": s, "$options": "i"}},
+            {"kode_barang": {"$regex": f"^{s_esc}" if s.isdigit() else s_esc, "$options": "i"}},
+            {"nama_barang": {"$regex": s_esc, "$options": "i"}},
+            {"merk": {"$regex": s_esc, "$options": "i"}},
         ]
     # Filter status stok dihitung DI QUERY (bukan pasca-paging) agar total &
     # halaman benar: habis = stok<=0; kritis = 0<stok<=batas (batas>0).

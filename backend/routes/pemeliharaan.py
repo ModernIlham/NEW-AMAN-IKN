@@ -132,6 +132,7 @@ async def dhpb_pdf(
 
     headers = ["No", "Tanggal", "Jenis", "Uraian Pekerjaan", "Pelaksana",
                "No. Bukti", "Kondisi Akhir", "Biaya (Rp)"]
+    from xml.sax.saxutils import escape as _esc
     table_data = [[Paragraph(h, st['TableHeader']) for h in headers]]
     baris_aset = []  # indeks baris judul aset → SPAN selebar tabel
     no = 0
@@ -139,7 +140,7 @@ async def dhpb_pdf(
         label_aset = (f"{g['asset_name'] or '-'} "
                       f"({g['asset_code'] or '-'} · NUP {g['NUP'] or '-'})")
         baris_aset.append(len(table_data))
-        table_data.append([Paragraph(f"<b>{label_aset}</b>", st['Cell']),
+        table_data.append([Paragraph(f"<b>{_esc(label_aset)}</b>", st['Cell']),
                            "", "", "", "", "", "", ""])
         for r in g["items"]:
             no += 1
@@ -148,10 +149,10 @@ async def dhpb_pdf(
                 Paragraph(str(no), st['CellCenter']),
                 Paragraph(_fmt_tanggal_id(r.get("tanggal")), st['CellCenter']),
                 Paragraph((r.get("jenis") or "-").capitalize(), st['CellCenter']),
-                Paragraph((r.get("uraian") or "-"), st['Cell']),
-                Paragraph(r.get("pelaksana") or "-", st['Cell']),
-                Paragraph(r.get("no_bukti") or "-", st['Cell']),
-                Paragraph(r.get("kondisi_setelah") or "-", st['CellCenter']),
+                Paragraph(_esc(r.get("uraian") or "-"), st['Cell']),
+                Paragraph(_esc(r.get("pelaksana") or "-"), st['Cell']),
+                Paragraph(_esc(r.get("no_bukti") or "-"), st['Cell']),
+                Paragraph(_esc(r.get("kondisi_setelah") or "-"), st['CellCenter']),
                 Paragraph(f"{_fmt_rp(r.get('biaya'))}{tanda}", st['CellRight']),
             ])
         table_data.append([

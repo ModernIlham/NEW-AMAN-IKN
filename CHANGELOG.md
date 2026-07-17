@@ -48,6 +48,24 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#371] Gelombang 8-2: anti-injeksi (regex ReDoS + markup PDF) & guard tanggal — 2026-07-17
+
+Batch injeksi & keandalan input dari audit keamanan terverifikasi:
+- **Regex Mongo dari input user kini di-`re.escape`** (anti-ReDoS/regex
+  injection) di pencarian: Persuratan buku agenda (`q` 6 field), Riwayat
+  BAST (`q`), Kodefikasi (`search` kode+uraian), Persediaan master
+  (`search` kode/nama/merk) — melengkapi Kategori (#370).
+- **Markup injection tersimpan → PDF ditutup**: field user (nama aset,
+  uraian, pelaksana, no. bukti, nama pemegang, keterangan) kini di-XML-escape
+  sebelum masuk ReportLab Paragraph di **DHPB Pemeliharaan**, **Daftar Barang
+  Digunakan**, dan **BA Pemusnahan** — selaras pola escape reports.py/bast.py.
+- **Guard tanggal non-numerik**: `int(tgl_surat[:4])` pada booking otomatis
+  BAST & LPB persediaan kini jatuh ke tahun berjalan bila 4 digit awal bukan
+  angka (tak lagi 500 mentah).
+- Verifikasi: suite **475 lulus**; compile & build hijau.
+
+---
+
 ## [#370] Gelombang 8-1: pengamanan gerbang otorisasi (audit keamanan terverifikasi) — 2026-07-17
 
 Hasil **audit keamanan otomatis** (5 auditor paralel + verifikasi adversarial

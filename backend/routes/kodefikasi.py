@@ -77,10 +77,12 @@ async def list_kodefikasi(
     await _ensure_golongan_seed()
     query = {}
     if search:
+        import re as _re
         s = search.strip()
+        s_esc = _re.escape(s)
         query["$or"] = [
-            {"kode": {"$regex": f"^{s}" if s.isdigit() else s, "$options": "i"}},
-            {"uraian": {"$regex": s, "$options": "i"}},
+            {"kode": {"$regex": f"^{s_esc}" if s.isdigit() else s_esc, "$options": "i"}},
+            {"uraian": {"$regex": s_esc, "$options": "i"}},
         ]
     if level:
         query["level"] = level
