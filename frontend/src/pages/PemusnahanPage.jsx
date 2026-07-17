@@ -82,10 +82,11 @@ export default function PemusnahanPage({ user, onBack }) {
     if (form.aset.length === 0) { toast.error("Tambahkan minimal satu aset"); return; }
     setForm((f) => ({ ...f, saving: true }));
     try {
-      await axios.post(`${API}/pemusnahan`, {
+      const rP = await axios.post(`${API}/pemusnahan`, {
         ...form.data, asset_ids: form.aset.map((a) => a.id),
       });
       toast.success("BA Pemusnahan tercatat");
+      (rP.data?.peringatan_proses || []).forEach((w) => toast.warning(w, { duration: 9000 }));
       setForm(null);
       muat();
     } catch (e) {

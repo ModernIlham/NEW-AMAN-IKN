@@ -148,6 +148,13 @@ async def buat_usulan(payload: UsulanIn, user: dict = Depends(require_user)):
         "updated_at": now,
     }
     await db.usulan_penghapusan.insert_one({**record})
+    # Cek silang lintas register keluar (non-blocking, audit G5 #11).
+    from shared_utils import proses_keluar_aktif
+    lain = (await proses_keluar_aktif([asset["id"]])).get(asset["id"], [])
+    lain = [x for x in lain if x != "usulan penghapusan"]
+    record["peringatan_proses"] = (
+        [f"Aset ini juga sedang dalam {', '.join(lain)} — periksa agar tidak dobel jalur keluar"]
+        if lain else [])
     return record
 
 

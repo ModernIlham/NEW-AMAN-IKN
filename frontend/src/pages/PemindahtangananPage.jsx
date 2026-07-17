@@ -82,10 +82,11 @@ export default function PemindahtangananPage({ user, onBack }) {
     if (form.aset.length === 0) { toast.error("Tambahkan minimal satu aset"); return; }
     setForm((f) => ({ ...f, saving: true }));
     try {
-      await axios.post(`${API}/pemindahtanganan`, {
+      const rP = await axios.post(`${API}/pemindahtanganan`, {
         ...form.data, asset_ids: form.aset.map((a) => a.id),
       });
       toast.success("Usulan pemindahtanganan dibuat");
+      (rP.data?.peringatan_proses || []).forEach((w) => toast.warning(w, { duration: 9000 }));
       setForm(null);
       muat();
     } catch (e) {
@@ -175,7 +176,7 @@ export default function PemindahtangananPage({ user, onBack }) {
           </span>
           <div className="min-w-0 flex-1">
             <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight">Pemindahtanganan — Register Usulan</h1>
-            <p className="text-[11px] sm:text-xs text-muted-foreground truncate">
+            <p className="text-[11px] sm:text-xs text-muted-foreground truncate" title="PMPP = Penyertaan Modal Pemerintah Pusat">
               Penjualan · Tukar Menukar · Hibah · PMPP (PMK 111/2016 jo. 165/2021)
             </p>
           </div>
@@ -247,7 +248,7 @@ export default function PemindahtangananPage({ user, onBack }) {
                           <Paperclip className="w-3 h-3" />
                         </button>
                       </div>
-                      <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
+                      <p className="text-[11px] text-muted-foreground mt-0.5 truncate" title="NTPN = Nomor Transaksi Penerimaan Negara (bukti setor ke Kas Negara)">
                         {u.nomor_persetujuan && `Persetujuan ${u.nomor_persetujuan}`}
                         {u.nomor_dokumen && ` · ${labelDokumen[u.bentuk] || "Dokumen"} ${u.nomor_dokumen}`}
                         {u.ntpn && ` · NTPN ${u.ntpn}`}

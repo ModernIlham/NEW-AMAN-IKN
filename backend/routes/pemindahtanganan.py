@@ -196,6 +196,15 @@ async def buat_usulan_pt(payload: UsulanPtIn, user: dict = Depends(require_user)
         "updated_at": now,
     }
     await db.pemindahtanganan.insert_one({**record})
+    # Cek silang lintas register keluar (non-blocking, audit G5 #11).
+    from shared_utils import proses_keluar_aktif
+    ids_baru = [a.get("asset_id") for a in record.get("aset") or []]
+    peta = await proses_keluar_aktif(ids_baru)
+    record["peringatan_proses"] = [
+        f"{next((a.get('asset_name') for a in record['aset'] if a.get('asset_id') == aid), aid)}: "
+        f"juga dalam {', '.join(x for x in labels if x != 'usulan pemindahtanganan')}"
+        for aid, labels in peta.items()
+        if [x for x in labels if x != "usulan pemindahtanganan"]][:10]
     record["saran_jenjang"] = _saran_untuk(record)
     return record
 

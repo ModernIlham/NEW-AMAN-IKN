@@ -74,10 +74,11 @@ export default function PenghapusanPage({ user, onBack }) {
     if (!formUsul) return;
     setFormUsul((f) => ({ ...f, saving: true }));
     try {
-      await axios.post(`${API}/penghapusan/usulan`, {
+      const rP = await axios.post(`${API}/penghapusan/usulan`, {
         asset_id: formUsul.aset.id, keterangan: formUsul.keterangan,
       });
       toast.success("Usulan penghapusan dibuat");
+      (rP.data?.peringatan_proses || []).forEach((w) => toast.warning(w, { duration: 9000 }));
       setFormUsul(null);
       muat();
     } catch (e) {

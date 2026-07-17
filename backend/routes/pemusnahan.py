@@ -120,6 +120,14 @@ async def buat_pemusnahan(payload: PemusnahanIn, user: dict = Depends(require_us
         "updated_at": now,
     }
     await db.pemusnahan.insert_one({**record})
+    # Cek silang lintas register keluar (non-blocking, audit G5 #11).
+    from shared_utils import proses_keluar_aktif
+    peta = await proses_keluar_aktif([a.get("asset_id") for a in record.get("aset") or []])
+    record["peringatan_proses"] = [
+        f"{next((a.get('asset_name') for a in record['aset'] if a.get('asset_id') == aid), aid)}: "
+        f"juga dalam {', '.join(x for x in labels if x != 'BA pemusnahan')}"
+        for aid, labels in peta.items()
+        if [x for x in labels if x != "BA pemusnahan"]][:10]
     return record
 
 
