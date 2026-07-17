@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 
 from auth_utils import require_admin, require_user, require_user_or_query_token
 from db import db, fs_bucket
-from shared_utils import delete_document_from_gridfs, get_document_from_gridfs
+from shared_utils import delete_document_from_gridfs, get_document_from_gridfs, log_audit
 from pengadaan_utils import (
     DOKUMEN_PEROLEHAN, JENIS_PEROLEHAN, LABEL_DOKUMEN_SUMBER,
     build_asset_perolehan_projection, dokumen_kurang_perolehan,
@@ -123,6 +123,77 @@ async def list_pengadaan(_user: dict = Depends(require_user)):
                 "SAKTI (BAST = pemicu, tanpa menunggu SP2D); kanal pengadaan "
                 "resmi SiRUP/SPSE/e-Katalog. Penanda ekstrakomptabel memakai "
                 "ambang PMK 181/2016 (peralatan-mesin Rp1 jt, gedung Rp25 jt).")}
+
+
+@pengadaan_router.post("/pengadaan/{perolehan_id}/daftarkan-persediaan")
+async def daftarkan_persediaan(perolehan_id: str, user: dict = Depends(require_user)):
+    """Barang perolehan ber-kode persediaan (awalan '1') → master persediaan
+    + transaksi masuk berjurnal FIFO (audit G4 #6 — jalur BAST konsumsi).
+
+    Master dicari per kode; bila belum ada dibuat otomatis (kode 10 digit
+    dilengkapi nomor urut, NUP otomatis). Transaksi memakai jalur
+    `transaksi_masuk` yang sudah atomik + berjurnal + ber-FK dokumen sumber.
+    Baris yang sudah pernah didaftarkan (psd_item_id) dilewati.
+    """
+    from routes.persediaan import (PersediaanCreate, TransaksiMasukIn,
+                                   create_persediaan, transaksi_masuk)
+
+    p = await db.pengadaan.find_one({"id": perolehan_id}, {"_id": 0})
+    if not p:
+        raise HTTPException(status_code=404, detail="Perolehan tidak ditemukan")
+    barang = list(p.get("barang") or [])
+    dibuat_master = masuk = dilewati_nonpsd = dilewati_terdaftar = 0
+    gagal = []
+    for row in barang:
+        kode = str(row.get("kode") or "").strip()
+        if not kode.startswith("1"):
+            dilewati_nonpsd += 1
+            continue
+        if str(row.get("psd_item_id") or "").strip():
+            dilewati_terdaftar += 1
+            continue
+        jumlah = max(1, int(float(row.get("jumlah") or 1)))
+        it = await db.persediaan.find_one(
+            {"kode_barang": kode}, {"_id": 0, "id": 1})
+        if not it:
+            try:
+                it = await create_persediaan(PersediaanCreate(
+                    kode_barang=kode,
+                    nama_barang=str(row.get("uraian") or "Barang persediaan").strip()[:300],
+                ), _user=user)
+                dibuat_master += 1
+            except HTTPException as e:
+                gagal.append(f"{row.get('uraian')}: {e.detail}")
+                continue
+        try:
+            await transaksi_masuk(it["id"], TransaksiMasukIn(
+                jenis="pembelian", jumlah=jumlah,
+                harga_satuan=float(row.get("harga_satuan") or 0),
+                no_bukti=str(p.get("nomor_bast") or ""), jenis_dokumen="BAST",
+                tgl_dokumen=str(p.get("tanggal_bast") or ""),
+                no_kontrak=str(p.get("nomor_kontrak") or ""),
+                penyedia=str(p.get("pihak") or ""), perolehan_id=perolehan_id,
+                keterangan="Didaftarkan dari perolehan Pengadaan",
+            ), user=user)
+        except HTTPException as e:
+            gagal.append(f"{row.get('uraian')}: {e.detail}")
+            continue
+        row["psd_item_id"] = it["id"]
+        masuk += 1
+    if masuk:
+        await db.pengadaan.update_one(
+            {"id": perolehan_id},
+            {"$set": {"barang": barang,
+                      "updated_at": datetime.now(timezone.utc).isoformat()}})
+    await log_audit("pengadaan_daftarkan_persediaan", "", perolehan_id,
+                    username=user.get("username", "system"),
+                    detail=(f"BAST {p.get('nomor_bast') or perolehan_id[:8]}: "
+                            f"{masuk} barang masuk persediaan "
+                            f"({dibuat_master} master baru)"))
+    return {"masuk": masuk, "dibuat_master": dibuat_master,
+            "dilewati_bukan_persediaan": dilewati_nonpsd,
+            "dilewati_sudah_terdaftar": dilewati_terdaftar,
+            "gagal": gagal[:20]}
 
 
 @pengadaan_router.get("/pengadaan/export")

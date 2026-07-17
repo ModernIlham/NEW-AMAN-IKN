@@ -48,6 +48,22 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#361] Gelombang 4 (tuntas): "Daftarkan ke Persediaan" dari BAST konsumsi — 2026-07-17
+
+- **Jalur BAST barang konsumsi tersambung** (`POST /pengadaan/{id}/
+  daftarkan-persediaan`): barang perolehan ber-kode persediaan (awalan '1')
+  kini bisa didaftarkan sekali klik — master persediaan dibuat otomatis bila
+  belum ada (kode 10 digit dilengkapi nomor urut, NUP otomatis), lalu
+  transaksi masuk berjalan lewat jalur `transaksi_masuk` yang sudah atomik +
+  berjurnal FIFO + ber-FK dokumen sumber; baris ber-`psd_item_id` dilewati
+  (idempoten).
+- Tombol **"Daftarkan ke Persediaan"** muncul pada baris perolehan yang
+  punya barang konsumsi belum terdaftar — melengkapi "Buat Draft Aset"
+  (simetri aset ↔ persediaan; Gelombang 4 SELESAI).
+- Verifikasi: suite **470 lulus**; lint & build frontend sukses.
+
+---
+
 ## [#360] Gelombang 4 (lanjutan): draft aset per-NUP, CSV Perencanaan, penjelas pintu masuk — 2026-07-17
 
 - **Draft aset pecah per-NUP**: "Buat Draft Aset" dari perolehan Pengadaan
