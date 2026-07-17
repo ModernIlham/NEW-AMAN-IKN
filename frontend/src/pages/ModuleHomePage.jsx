@@ -172,11 +172,15 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
               </p>
             </div>
           </div>
+          {/* Grup Referensi & Master Data (audit G6 #5): grid bertajuk,
+              bukan pil mengambang yang perataannya kacau saat wrap. */}
+          <p className="mt-3 mb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Referensi & Master Data</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
           {onOpenKodefikasi && (
             <button
               type="button"
               onClick={onOpenKodefikasi}
-              className="mt-2 inline-flex items-center gap-1.5 px-3 h-8 rounded-full border border-blue-500/40 bg-blue-600/10 text-blue-600 dark:text-blue-400 text-[11px] font-semibold hover:bg-blue-600/20 transition-colors min-w-0 min-h-0"
+              className="w-full inline-flex justify-between items-center gap-1.5 px-3 h-8 rounded-full border border-blue-500/40 bg-blue-600/10 text-blue-600 dark:text-blue-400 text-[11px] font-semibold hover:bg-blue-600/20 transition-colors min-w-0 min-h-0"
               data-testid="module-open-kodefikasi"
             >
               <ListTree className="w-3.5 h-3.5" />
@@ -188,7 +192,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
             <button
               type="button"
               onClick={onOpenPejabat}
-              className="mt-2 ml-2 inline-flex items-center gap-1.5 px-3 h-8 rounded-full border border-indigo-500/40 bg-indigo-600/10 text-indigo-600 dark:text-indigo-400 text-[11px] font-semibold hover:bg-indigo-600/20 transition-colors min-w-0 min-h-0"
+              className="w-full inline-flex justify-between items-center gap-1.5 px-3 h-8 rounded-full border border-indigo-500/40 bg-indigo-600/10 text-indigo-600 dark:text-indigo-400 text-[11px] font-semibold hover:bg-indigo-600/20 transition-colors min-w-0 min-h-0"
               data-testid="module-open-pejabat"
             >
               <Users className="w-3.5 h-3.5" />
@@ -200,7 +204,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
             <button
               type="button"
               onClick={onOpenRuangan}
-              className="mt-2 ml-2 inline-flex items-center gap-1.5 px-3 h-8 rounded-full border border-teal-500/40 bg-teal-600/10 text-teal-600 dark:text-teal-400 text-[11px] font-semibold hover:bg-teal-600/20 transition-colors min-w-0 min-h-0"
+              className="w-full inline-flex justify-between items-center gap-1.5 px-3 h-8 rounded-full border border-teal-500/40 bg-teal-600/10 text-teal-600 dark:text-teal-400 text-[11px] font-semibold hover:bg-teal-600/20 transition-colors min-w-0 min-h-0"
               data-testid="module-open-ruangan"
             >
               <DoorOpen className="w-3.5 h-3.5" />
@@ -212,7 +216,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
             <button
               type="button"
               onClick={onOpenReferensiAkun}
-              className="mt-2 ml-2 inline-flex items-center gap-1.5 px-3 h-8 rounded-full border border-amber-500/40 bg-amber-600/10 text-amber-600 dark:text-amber-400 text-[11px] font-semibold hover:bg-amber-600/20 transition-colors min-w-0 min-h-0"
+              className="w-full inline-flex justify-between items-center gap-1.5 px-3 h-8 rounded-full border border-amber-500/40 bg-amber-600/10 text-amber-600 dark:text-amber-400 text-[11px] font-semibold hover:bg-amber-600/20 transition-colors min-w-0 min-h-0"
               data-testid="module-open-referensi-akun"
             >
               <Landmark className="w-3.5 h-3.5" />
@@ -224,7 +228,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
             <button
               type="button"
               onClick={onOpenPegawai}
-              className="mt-2 ml-2 inline-flex items-center gap-1.5 px-3 h-8 rounded-full border border-sky-500/40 bg-sky-600/10 text-sky-600 dark:text-sky-400 text-[11px] font-semibold hover:bg-sky-600/20 transition-colors min-w-0 min-h-0"
+              className="w-full inline-flex justify-between items-center gap-1.5 px-3 h-8 rounded-full border border-sky-500/40 bg-sky-600/10 text-sky-600 dark:text-sky-400 text-[11px] font-semibold hover:bg-sky-600/20 transition-colors min-w-0 min-h-0"
               data-testid="module-open-pegawai"
             >
               <IdCard className="w-3.5 h-3.5" />
@@ -236,7 +240,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
             <button
               type="button"
               onClick={onOpenPersuratan}
-              className="mt-2 ml-2 inline-flex items-center gap-1.5 px-3 h-8 rounded-full border border-cyan-500/40 bg-cyan-600/10 text-cyan-700 dark:text-cyan-400 text-[11px] font-semibold hover:bg-cyan-600/20 transition-colors min-w-0 min-h-0"
+              className="w-full inline-flex justify-between items-center gap-1.5 px-3 h-8 rounded-full border border-cyan-500/40 bg-cyan-600/10 text-cyan-700 dark:text-cyan-400 text-[11px] font-semibold hover:bg-cyan-600/20 transition-colors min-w-0 min-h-0"
               data-testid="module-open-persuratan"
             >
               <Mail className="w-3.5 h-3.5" />
@@ -244,6 +248,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
           )}
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 mt-3">
             {PENATAUSAHAAN_SUBMODULES.map((mod) => {
               const Icon = MODULE_ICONS[mod.id] || Package;

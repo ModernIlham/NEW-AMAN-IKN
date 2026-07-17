@@ -48,6 +48,21 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#366] Gelombang 6 (lanjutan): saklar mode di semua ukuran layar + grup Referensi & Master Data — 2026-07-17
+
+- **Saklar Dashboard | Inventarisasi kini berlabel di SEMUA breakpoint**:
+  desktop (lg+) yang sebelumnya **tidak punya saklar sama sekali** kini
+  mendapat kolom saklar di baris statistik; toggle tablet yang tadinya
+  `Switch` polos tanpa teks diganti saklar berlabel yang sama dengan mobile
+  (satu komponen `InventoryModeSwitch` untuk semuanya).
+- **Grup "Referensi & Master Data"** di Beranda Modul: 6 pil mengambang
+  (Kodefikasi, Pejabat, Ruangan, Akun BAS, Pegawai, Persuratan) kini rapi
+  dalam grid bertajuk — perataan tak lagi kacau saat wrap, pengguna baru
+  langsung paham ini kelompok data referensi.
+- Verifikasi: suite **470 lulus**; lint & build frontend sukses.
+
+---
+
 ## [#365] Gelombang 6 (inti): Lupa Password via OTP, pintu Info terlihat, tombol simpan berlabel jelas — 2026-07-17
 
 - **Lupa Password via OTP email** — jalan buntu login tertutup:
