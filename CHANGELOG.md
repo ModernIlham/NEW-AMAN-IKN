@@ -48,6 +48,38 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#341] Modul Persuratan: buku agenda & booking nomor naskah dinas lintas modul — 2026-07-17
+
+- **Registrasi Persuratan** baru (tombol di seksi Penatausahaan, Beranda
+  Modul) — mengakomodir SEMUA jenis laporan/naskah dari modul dan
+  kegiatan mana pun, mengikuti **PerANRI 5/2021** (pustaka §11A, hasil
+  riset internet + sumber tercantum):
+  - **Booking nomor surat keluar**: nomor terbit ATOMIK per tahun takwim
+    saat draf dibuat (dua pengguna tak pernah dapat nomor sama), berstatus
+    `dibooking` → **disahkan** setelah surat ditandatangani, atau
+    **dibatalkan** (wajib alasan; nomor HANGUS — tidak didaur ulang,
+    tetap tercatat agar urutan agenda utuh dan celah nomor dapat
+    dipertanggungjawabkan saat audit).
+  - **Susunan nomor sesuai PerANRI 5/2021**: kode keamanan (B/T/R/SR) +
+    nomor urut + kode klasifikasi arsip + bulan Romawi + tahun — format
+    **konfigurabel ber-placeholder** (admin), contoh
+    `B-015/PL.02/OIKN/VII/2026`.
+  - **Agenda surat masuk** (buku agenda kembar): nomor agenda sendiri per
+    tahun; status diterima → diproses → selesai.
+  - Tiap surat menautkan **jenis naskah** (BA/Laporan/SP/SK/…), **modul
+    asal**, **kegiatan**, dan **referensi laporan** (mis. "BAHI", "LBKP
+    S1") — buku agenda satu pintu lintas modul; surat keluar yang sudah
+    disahkan terkunci (hanya keterangan yang bisa diubah).
+  - Ekspor **buku agenda CSV**; ringkasan dibooking/disahkan/dibatalkan/
+    masuk-terbuka; audit trail booking/pengesahan/pembatalan.
+- Teknis: `persuratan_utils.py` murni (**13 uji unit**: perakitan nomor,
+  validasi, transisi status, baris agenda); counter `db.counters` atomik
+  (pola tiket kegiatan); smoke end-to-end (booking → sahkan → batal →
+  masuk → ekspor; nomor batal terbukti tidak dipakai ulang).
+- Verifikasi: suite **461 lulus** (+13); eslint bersih; build sukses.
+
+---
+
 ## [#340] Tanggal laporan: DBHI ber-rentang periode, tempat/tanggal di Sampul LHI, narasi tanggal BAHI terisi — 2026-07-17
 
 - **DBHI (6 jenis: Kondisi Baik/Rusak Ringan/Rusak Berat, Berlebih, Tidak
