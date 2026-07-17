@@ -24,11 +24,11 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from auth_utils import require_user
+from auth_utils import require_user, require_user_or_query_token
 from db import db
 from shared_utils import log_audit
 
@@ -230,6 +230,16 @@ async def buat_bast(payload: BastIn, user: dict = Depends(require_user)):
         "created_by": user.get("username", "system"),
         "created_at": now.isoformat(),
     }
+    # Validasi LUNAK penerima ke Master Pegawai (non-blocking): NIP tak
+    # terdaftar hanya diberi peringatan — BAST tetap tersimpan.
+    peringatan_pegawai = ""
+    nip2 = str(record["pihak_kedua"].get("nip") or "").strip()
+    if nip2:
+        peg = await db.pegawai.find_one({"nip": nip2}, {"_id": 0, "nama": 1})
+        record["pihak_kedua_terdaftar"] = bool(peg)
+        if not peg:
+            peringatan_pegawai = (f"NIP {nip2} belum terdaftar di Master "
+                                  "Pegawai — periksa ejaan atau daftarkan dulu")
     await db.bast_serah_terima.insert_one({**record})
 
     # Jejak BAST terakhir pada tiap aset (badge riwayat di UI) + efek data
@@ -262,11 +272,83 @@ async def buat_bast(payload: BastIn, user: dict = Depends(require_user)):
                             f"{len(aset)} aset → {record['pihak_kedua']['nama']}"
                             f"{efek}"
                             + (f"; nomor otomatis {nomor_final}" if surat_id else "")))
-    return record
+    return {**record, "peringatan_pegawai": peringatan_pegawai}
+
+
+@bast_router.post("/bast/{bast_id}/bukti")
+async def unggah_bukti_bast(bast_id: str, file: UploadFile = File(...),
+                            user: dict = Depends(require_user)):
+    """Unggah scan BAST bertanda tangan (PDF/gambar ≤10MB) → tersimpan di
+    GridFS; bila nomor BAST berasal dari booking otomatis, nomor agenda di
+    Registrasi Persuratan langsung DISAHKAN (menutup siklus dua langkah)."""
+    b = await db.bast_serah_terima.find_one({"id": bast_id}, _PROJ)
+    if not b:
+        raise HTTPException(status_code=404, detail="BAST tidak ditemukan")
+    nama = str(file.filename or "").lower()
+    if not nama.endswith((".pdf", ".jpg", ".jpeg", ".png")):
+        raise HTTPException(status_code=400,
+                            detail="Berkas harus PDF/JPG/PNG")
+    data = await file.read()
+    if len(data) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Maksimal 10MB")
+
+    from bson import ObjectId
+    from db import fs_bucket
+    tipe = "application/pdf" if nama.endswith(".pdf") else "image/jpeg"
+    file_id = ObjectId()
+    grid_in = fs_bucket.open_upload_stream_with_id(
+        file_id, filename=file.filename,
+        metadata={"content_type": tipe, "size": len(data)})
+    await grid_in.write(data)
+    await grid_in.close()
+
+    now = datetime.now(timezone.utc).isoformat()
+    await db.bast_serah_terima.update_one(
+        {"id": bast_id},
+        {"$set": {"bukti": {"file_id": str(file_id), "filename": file.filename,
+                            "content_type": tipe,
+                            "diunggah_pada": now,
+                            "oleh": user.get("username", "system")}}})
+
+    # Nomor agenda dibooking → otomatis disahkan (bukti ttd = pengesahan).
+    disahkan = False
+    if str(b.get("surat_id") or "").strip():
+        res = await db.surat.find_one_and_update(
+            {"id": b["surat_id"], "status": "dibooking"},
+            {"$set": {"status": "disahkan", "disahkan_pada": now,
+                      "disahkan_oleh": user.get("username", "system"),
+                      "updated_at": now},
+             "$push": {"riwayat": {"status": "disahkan", "tanggal": now,
+                                   "oleh": user.get("username", "system"),
+                                   "catatan": "bukti ttd BAST diunggah"}}})
+        disahkan = res is not None
+    await log_audit("bukti_bast", "", username=user.get("username", "system"),
+                    detail=(f"Unggah bukti ttd BAST {b.get('nomor') or bast_id[:8]}"
+                            + (" — nomor agenda disahkan" if disahkan else "")))
+    return {"ok": True, "nomor_agenda_disahkan": disahkan}
+
+
+@bast_router.get("/bast/{bast_id}/bukti")
+async def unduh_bukti_bast(bast_id: str,
+                           _user: dict = Depends(require_user_or_query_token)):
+    """Stream scan bukti ttd (dipakai pratinjau window.open ber-token)."""
+    from shared_utils import get_document_from_gridfs
+    b = await db.bast_serah_terima.find_one({"id": bast_id}, _PROJ)
+    if not b or not (b.get("bukti") or {}).get("file_id"):
+        raise HTTPException(status_code=404, detail="Bukti belum diunggah")
+    data = await get_document_from_gridfs(b["bukti"]["file_id"])
+    if not data:
+        raise HTTPException(status_code=404, detail="Berkas bukti tidak ditemukan")
+    return StreamingResponse(
+        io.BytesIO(data), media_type=b["bukti"].get("content_type", "application/pdf"),
+        headers={"Content-Disposition":
+                 f'inline; filename="{b["bukti"].get("filename", "bukti.pdf")}"',
+                 "X-Content-Type-Options": "nosniff"})
 
 
 @bast_router.get("/bast/{bast_id}/pdf")
-async def bast_pdf(bast_id: str, _user: dict = Depends(require_user)):
+async def bast_pdf(bast_id: str,
+                   _user: dict = Depends(require_user_or_query_token)):
     """Render BAST 1-2 halaman + lampiran foto opsional."""
     from reportlab.lib.units import mm as rl_mm
     from reportlab.platypus import PageBreak, Paragraph, Spacer, Table, Image as RLImage

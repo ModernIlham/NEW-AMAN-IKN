@@ -48,6 +48,38 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#353] Bukti TTD BAST + pengesahan agenda otomatis, Riwayat BAST, dan penyempurnaan lintas modul — 2026-07-17
+
+- **Unggah bukti BAST bertanda tangan** (`POST /bast/{id}/bukti`, PDF/JPG/PNG
+  ≤ 10 MB ke GridFS): begitu bukti terunggah, **nomor agenda surat yang masih
+  berstatus "dibooking" otomatis DISAHKAN** (siklus booking → sah tuntas tanpa
+  langkah manual di modul Persuratan). Bukti dapat dilihat kembali lewat
+  `GET /bast/{id}/bukti` (streaming ber-token, `inline`).
+- **Dialog "Riwayat BAST"** di halaman Penggunaan (per pemegang): daftar BAST
+  dengan tombol **Pratinjau** (tab baru), **Unduh**, **Unggah Bukti TTD**, dan
+  **Lihat Bukti** — riwayat serah terima kini bisa ditelusuri tanpa keluar
+  dari halaman.
+- **Pratinjau PDF ber-token**: `bast_pdf` dan `lpb_pdf` kini menerima
+  `?token=` (`require_user_or_query_token`) sehingga tombol pratinjau
+  `window.open` berfungsi seperti laporan lain.
+- **Wasdal — penanda tenggat**: kartu lintas modul baru **"BAST penggunaan
+  sementara lewat tenggat kembali"** menghitung BAST `penggunaan_sementara`
+  yang `jangka_sampai`-nya sudah lewat hari ini.
+- **Validasi lunak penerima BAST**: NIP Pihak Kedua dicek ke **Master
+  Pegawai** — jika tidak terdaftar, respons menyertakan `peringatan_pegawai`
+  (muncul sebagai toast) tanpa memblokir pembuatan BAST; jika terdaftar,
+  rekaman diberi tanda `pihak_kedua_terdaftar`.
+- **LPB "Diperiksa oleh" dari peran pejabat**: peran baru **"Pemeriksa
+  Laporan Penerimaan Barang (LPB)"** di master pejabat; kolom tanda tangan
+  pemeriksa pada PDF LPB otomatis terisi nama/NIP/jabatan pejabat periode
+  berjalan (`resolve_pejabat_peran`).
+- Catatan: usulan *handover massal antar-unit/ruangan* sengaja ditunda —
+  mutasi multi-aset per pemegang (PR #350) sudah mencakup kasus umumnya.
+- Verifikasi: suite **468 lulus**; smoke FakeDB (validasi pegawai, bukti →
+  agenda disahkan, penghitung tenggat wasdal); lint & build frontend sukses.
+
+---
+
 ## [#352] Tata letak BAST dirombak: padat, rapi, resmi — 1 halaman bila muat — 2026-07-17
 
 - **Review ulang seluruh 6 jenis BAST** (permintaan pemilik: seringkas
