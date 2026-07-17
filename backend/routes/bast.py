@@ -45,19 +45,20 @@ JENIS_BAST = {
     "lainnya": "Serah Terima Barang Milik Negara",
 }
 
+# Dasar hukum BAST penggunaan BMN — ditinjau ulang & ditata ringkas
+# (nomor + judul resmi tetap utuh; PMK 76/2019 disatukan sebagai jo. dari
+# PMK 246/2014 sesuai kaidah sitasi peraturan berubah).
 DASAR_HUKUM = (
-    "Undang-Undang Republik Indonesia Nomor 17 Tahun 2003 tentang Keuangan Negara;",
-    "Peraturan Pemerintah Republik Indonesia Nomor 27 Tahun 2014 tentang "
-    "Pengelolaan Barang Milik Negara/Daerah serta perubahannya;",
-    "Peraturan Presiden Republik Indonesia Nomor 62 Tahun 2022 tentang "
-    "Otorita Ibu Kota Nusantara;",
-    "Peraturan Menteri Keuangan Republik Indonesia Nomor 246/PMK.06/2014 "
-    "tentang Tata Cara Pelaksanaan Penggunaan Barang Milik Negara;",
-    "Peraturan Menteri Keuangan Republik Indonesia Nomor 76/PMK.06/2019 "
-    "tentang Perubahan Kedua atas PMK Nomor 246/PMK.06/2014;",
-    "Peraturan Menteri Keuangan Republik Indonesia Nomor 53 Tahun 2023 "
-    "tentang Pengelolaan Barang Milik Negara dan Aset Dalam Penguasaan "
-    "di Ibu Kota Nusantara;",
+    "Undang-Undang Nomor 17 Tahun 2003 tentang Keuangan Negara;",
+    "Peraturan Pemerintah Nomor 27 Tahun 2014 tentang Pengelolaan Barang "
+    "Milik Negara/Daerah jo. PP Nomor 28 Tahun 2020;",
+    "Peraturan Presiden Nomor 62 Tahun 2022 tentang Otorita Ibu Kota "
+    "Nusantara;",
+    "Peraturan Menteri Keuangan Nomor 246/PMK.06/2014 tentang Tata Cara "
+    "Pelaksanaan Penggunaan Barang Milik Negara jo. PMK Nomor "
+    "76/PMK.06/2019;",
+    "Peraturan Menteri Keuangan Nomor 53 Tahun 2023 tentang Pengelolaan "
+    "Barang Milik Negara dan Aset Dalam Penguasaan di Ibu Kota Nusantara.",
 )
 
 
@@ -297,44 +298,66 @@ async def bast_pdf(bast_id: str, _user: dict = Depends(require_user)):
     el.extend(_title_block("BERITA ACARA SERAH TERIMA\n" + judul_jenis.upper(),
                            nomor=b.get("nomor") or "......./......./........"))
 
+    jenis_awal = b.get("jenis")
     nar = narasi_hari_tanggal(b.get("tanggal"))
     frasa = (f"Pada hari ini, {nar['hari']}, tanggal {nar['tanggal_terbilang']} "
              f"bulan {nar['bulan']} tahun {nar['tahun_terbilang']} "
              f"({_fmt_tanggal_id(b.get('tanggal'))})" if nar else "Pada hari ini")
-    el.append(Paragraph(f"{frasa}, yang bertanda tangan di bawah ini:", body))
-    el.append(Spacer(1, 2 * rl_mm))
+    el.append(Paragraph(f"{frasa}, kami yang bertanda tangan di bawah ini:", body))
+    el.append(Spacer(1, 1.5 * rl_mm))
 
     p1, p2 = b.get("pihak_pertama") or {}, b.get("pihak_kedua") or {}
-    el.append(_identity_table([("Nama", p1.get("nama") or "-"),
-                               ("NIP", p1.get("nip") or "-"),
-                               ("Jabatan", p1.get("jabatan") or "-"),
-                               ("Alamat", p1.get("alamat") or "-")]))
-    el.append(Paragraph("Yang selanjutnya disebut <b>PIHAK KESATU</b>", body))
-    el.append(Spacer(1, 2 * rl_mm))
-    el.append(_identity_table([("Nama", p2.get("nama") or "-"),
-                               ("NIP/NIK", p2.get("nip") or "-"),
-                               ("Jabatan", p2.get("jabatan") or "-"),
-                               ("Alamat", p2.get("alamat") or "-")]))
-    el.append(Paragraph("Yang selanjutnya disebut <b>PIHAK KEDUA</b>", body))
-    el.append(Spacer(1, 2 * rl_mm))
+    # Identitas PARA PIHAK berdampingan (2 kolom) — padat namun tetap resmi.
+    from xml.sax.saxutils import escape as _esc
+    kecil = st['Small']
+
+    def _kolom_pihak(judul, ph, label_nip):
+        baris = [Paragraph(f"<b>{judul}</b>", kecil)]
+        for lbl, val in (("Nama", ph.get("nama")), (label_nip, ph.get("nip")),
+                         ("Jabatan", ph.get("jabatan")), ("Alamat", ph.get("alamat"))):
+            baris.append(Paragraph(
+                f"{lbl} : <b>{_esc(str(val or '-'))}</b>", kecil))
+        return baris
+
+    tp = Table([[
+        _kolom_pihak("PIHAK KESATU (yang menyerahkan)"
+                     if jenis_awal != "pengembalian"
+                     else "PIHAK KESATU (yang menerima)", p1, "NIP"),
+        _kolom_pihak("PIHAK KEDUA (yang menerima)"
+                     if jenis_awal != "pengembalian"
+                     else "PIHAK KEDUA (yang menyerahkan)", p2, "NIP/NIK"),
+    ]], colWidths=[doc.width * 0.5, doc.width * 0.5])
+    from reportlab.platypus import TableStyle as _TS
+    tp.setStyle(_TS([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (0, -1), 0),
+        ('LEFTPADDING', (1, 0), (1, -1), 8),
+        ('BOX', (0, 0), (-1, -1), 0.4, __import__('reportlab.lib.colors', fromlist=['colors']).HexColor("#9aa5b1")),
+        ('LINEBEFORE', (1, 0), (1, -1), 0.4, __import__('reportlab.lib.colors', fromlist=['colors']).HexColor("#9aa5b1")),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+    ]))
+    el.append(tp)
+    el.append(Spacer(1, 1.5 * rl_mm))
     arah = ("PIHAK KEDUA mengembalikan kepada PIHAK KESATU"
-            if b.get("jenis") == "pengembalian"
-            else "PARA PIHAK sepakat untuk melakukan serah terima")
+            if jenis_awal == "pengembalian"
+            else "PIHAK KESATU dan PIHAK KEDUA (selanjutnya disebut PARA "
+                 "PIHAK) sepakat melakukan serah terima")
     el.append(Paragraph(
-        f"PIHAK KESATU dan PIHAK KEDUA selanjutnya disebut PARA PIHAK. "
-        f"{arah} {judul_jenis} sebagaimana daftar terlampir, dengan dasar hukum:",
-        body))
+        f"{arah} {judul_jenis}, dengan memperhatikan:", body))
     for i, d in enumerate(DASAR_HUKUM, 1):
-        el.append(Paragraph(f"{i}. {d}", st['BodyIndent']))
-    el.append(Spacer(1, 3 * rl_mm))
+        el.append(Paragraph(f"{i}. {d}", kecil))
+    el.append(Spacer(1, 2 * rl_mm))
 
     # PASAL 1 — objek serah terima (tabel multi-aset)
+    el.append(Spacer(1, 1 * rl_mm))
     el.append(Paragraph("<b>PASAL 1 — OBJEK SERAH TERIMA</b>", tengah))
     kalimat1 = ("PIHAK KEDUA menyerahkan kembali dan PIHAK KESATU menerima"
                 if b.get("jenis") == "pengembalian"
                 else "PIHAK KESATU menyerahkan dan PIHAK KEDUA menerima dengan baik")
     el.append(Paragraph(
-        f"{kalimat1} Barang Milik Negara sebagai berikut:", body))
+        f"{kalimat1} Barang Milik Negara sebagai berikut:", kecil))
     data = [["No", "Nama Barang", "Kode Barang", "NUP",
              "Merk/Type/Spesifikasi", "Tahun", "Kondisi"]]
     for i, a in enumerate(b.get("aset") or [], 1):
@@ -348,41 +371,36 @@ async def bast_pdf(bast_id: str, _user: dict = Depends(require_user)):
                                               doc.width), repeatRows=1)
     t.setStyle(_std_table_style(zebra=True))
     el.append(t)
-    el.append(Spacer(1, 3 * rl_mm))
 
     # PASAL 2+ — ketentuan sesuai jenis
     nomor_pasal = 2
     def pasal(judul, isi_list):
         nonlocal nomor_pasal
+        el.append(Spacer(1, 1 * rl_mm))
         el.append(Paragraph(f"<b>PASAL {nomor_pasal} — {judul}</b>", tengah))
         for i, isi in enumerate(isi_list, 1):
             el.append(Paragraph(
-                (f"{i}. {isi}" if len(isi_list) > 1 else isi), st['BodyIndent']))
-        el.append(Spacer(1, 2 * rl_mm))
+                (f"{i}. {isi}" if len(isi_list) > 1 else isi), kecil))
         nomor_pasal += 1
 
     jenis = b.get("jenis")
     if jenis == "mutasi_pengguna":
         pasal("MUTASI PEMEGANG", [
-            "PIHAK KESATU (pemegang lama) menyerahkan BMN tersebut kepada "
-            "PIHAK KEDUA sebagai pemegang baru; seluruh tanggung jawab "
-            "penggunaan, pengamanan, dan pemeliharaan beralih kepada PIHAK "
-            "KEDUA sejak Berita Acara ini ditandatangani.",
-            "Pencatatan pemegang pada daftar barang satker diperbarui sesuai "
-            "Berita Acara ini.",
-            "PIHAK KEDUA tunduk pada ketentuan penggunaan BMN: dilarang "
-            "mengalihkan tanpa persetujuan tertulis, wajib mengembalikan bila "
-            "tidak lagi menjabat/berpindah tugas.",
+            "Seluruh tanggung jawab penggunaan, pengamanan, dan pemeliharaan "
+            "BMN beralih dari PIHAK KESATU kepada PIHAK KEDUA sejak Berita "
+            "Acara ini ditandatangani; pencatatan pemegang pada daftar "
+            "barang satker diperbarui.",
+            "PIHAK KEDUA dilarang mengalihkan BMN tanpa persetujuan tertulis "
+            "dan wajib mengembalikannya bila berpindah tugas/berhenti.",
         ])
     if jenis in ("penggunaan_melekat", "operasional_unit", "lainnya"):
         pasal("TANGGUNG JAWAB", [
-            "Dengan ditandatanganinya Berita Acara ini, PIHAK KEDUA bertanggung "
-            "jawab penuh atas penggunaan, pengamanan, dan pemeliharaan BMN tersebut.",
-            "Apabila PIHAK KEDUA tidak lagi menjabat, berpindah tugas, atau "
-            "berhenti berdasarkan ketentuan yang berlaku, BMN wajib dikembalikan "
-            "kepada PIHAK KESATU dalam kondisi baik.",
-            "PIHAK KEDUA dilarang mengalihkan dan/atau menyerahkan BMN kepada "
-            "pihak lain tanpa sepengetahuan dan persetujuan tertulis PIHAK KESATU.",
+            "Sejak Berita Acara ini ditandatangani, PIHAK KEDUA bertanggung "
+            "jawab penuh atas penggunaan, pengamanan, dan pemeliharaan BMN.",
+            "BMN wajib dikembalikan kepada PIHAK KESATU dalam kondisi baik "
+            "apabila PIHAK KEDUA berpindah tugas/berhenti sesuai ketentuan.",
+            "PIHAK KEDUA dilarang mengalihkan BMN kepada pihak lain tanpa "
+            "persetujuan tertulis PIHAK KESATU.",
         ])
     if jenis == "operasional_unit" and b.get("penanggung_jawab_tambahan"):
         baris = [f"{p.get('nama')} — {p.get('unit_tempat_tugas') or '-'}"
@@ -391,17 +409,14 @@ async def bast_pdf(bast_id: str, _user: dict = Depends(require_user)):
               ["Pembagian penanggung jawab penggunaan pada unit/tempat/tugas:"]
               + baris)
     if jenis == "penggunaan_sementara":
-        pasal("STATUS ASET", [
-            "BMN tetap tercatat pada PIHAK KESATU; penggunaan sementara ini "
-            "tidak mengakibatkan beralihnya hak kepemilikan.",
-            "Aset tetap berada dalam pengawasan dan pengendalian PIHAK KESATU.",
-        ])
-        pasal("JANGKA WAKTU DAN PENGEMBALIAN", [
-            f"Penggunaan sementara berlaku sejak {_fmt_tanggal_id(b.get('jangka_dari')) or '…'} "
-            f"sampai dengan {_fmt_tanggal_id(b.get('jangka_sampai')) or '…'} atau "
-            "sampai adanya pemberitahuan lain dari PIHAK KESATU.",
-            "Setelah jangka waktu berakhir atau sewaktu-waktu diperlukan, PIHAK "
-            "KEDUA wajib mengembalikan BMN dalam kondisi baik.",
+        pasal("STATUS, JANGKA WAKTU, DAN PENGEMBALIAN", [
+            "BMN tetap tercatat pada PIHAK KESATU serta berada dalam "
+            "pengawasannya; penggunaan sementara tidak mengalihkan "
+            "kepemilikan.",
+            f"Berlaku sejak {_fmt_tanggal_id(b.get('jangka_dari')) or '…'} "
+            f"s.d. {_fmt_tanggal_id(b.get('jangka_sampai')) or '…'}; setelah "
+            "berakhir atau sewaktu-waktu diperlukan, PIHAK KEDUA wajib "
+            "mengembalikan BMN dalam kondisi baik.",
         ])
     if jenis == "pengembalian":
         pasal("PERNYATAAN", [
@@ -412,13 +427,13 @@ async def bast_pdf(bast_id: str, _user: dict = Depends(require_user)):
     if b.get("keterangan"):
         pasal("KETERANGAN LAIN", [b["keterangan"]])
     pasal("PENUTUP", [
-        "Apabila di kemudian hari terdapat kekeliruan dalam Berita Acara ini, "
-        "akan diadakan perbaikan sebagaimana mestinya.",
-        "Demikian Berita Acara Serah Terima ini dibuat dan ditandatangani oleh "
-        "PARA PIHAK untuk dipergunakan sebagaimana mestinya.",
+        "Apabila di kemudian hari terdapat kekeliruan akan diadakan "
+        "perbaikan sebagaimana mestinya. Demikian Berita Acara ini dibuat "
+        "dan ditandatangani oleh PARA PIHAK untuk dipergunakan sebagaimana "
+        "mestinya.",
     ])
 
-    el.append(Spacer(1, 4 * rl_mm))
+    el.append(Spacer(1, 3 * rl_mm))
     signers_mutasi = []
     if jenis == "mutasi_pengguna":
         signers_mutasi = [{'header': 'Mengetahui,',
