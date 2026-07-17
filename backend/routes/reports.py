@@ -651,13 +651,21 @@ async def generate_berita_acara_pdf(activity_id: str, _user: dict = Depends(requ
     elements = []
     elements.extend(_kop_surat_flowables(settings, doc.width))
 
-    # Header
-    nomor_ba = activity.get("nomor_berita_acara", "-")
+    # Header — nomor BA: field kegiatan → titik-titik utk diisi tangan.
+    nomor_ba = (str(activity.get("nomor_berita_acara") or "").strip()
+                or "......./......./........")
     elements.extend(_title_block("BERITA ACARA\nTIM INTERNAL PENELITIAN BMN TIDAK DITEMUKAN", nomor=nomor_ba))
 
-    # Intro paragraph
+    # Intro paragraph — narasi tanggal terbilang bila tanggal BA/laporan ada.
     ident = _activity_identity(activity, settings)
-    intro = f"""Pada hari ini, berdasarkan Surat Tugas Nomor {activity.get('nomor_surat', '-')},
+    from pelaporan_utils import narasi_hari_tanggal
+    tanggal_ba = (str(activity.get("tanggal_berita_acara") or "").strip()[:10]
+                  or str(settings.get("tanggal_laporan") or "").strip()[:10])
+    nar = narasi_hari_tanggal(tanggal_ba)
+    frasa_hari = (f"Pada hari ini, {nar['hari']}, tanggal {nar['tanggal_terbilang']} "
+                  f"bulan {nar['bulan']} tahun {nar['tahun_terbilang']} "
+                  f"({_fmt_tanggal_id(tanggal_ba)})," if nar else "Pada hari ini,")
+    intro = f"""{frasa_hari} berdasarkan Surat Tugas Nomor {activity.get('nomor_surat', '-')},
     kami Tim Internal yang ditunjuk untuk melakukan penelitian terhadap BMN yang tidak ditemukan
     pada kegiatan inventarisasi "{activity.get('nama_kegiatan', '-')}",
     menyampaikan hasil penelitian sebagai berikut:"""
@@ -782,10 +790,13 @@ async def generate_berita_acara_pdf(activity_id: str, _user: dict = Depends(requ
     elements.append(Paragraph("Demikian Berita Acara ini dibuat dengan sebenar-benarnya.", normal_style))
     elements.append(Spacer(1, 6*rl_mm))
 
+    # Kaidah tata naskah: pembuat BA di KANAN dengan baris tempat/tanggal,
+    # "Mengetahui" di kiri.
     elements.extend(_signature_block([
         {'header': 'Mengetahui,', 'role': ident["kasatker_jabatan"], 'nama': ident["kasatker_nama"],
          'after': [f'NIP. {ident["kasatker_nip"]}']},
-        {'header': 'Tim Peneliti,', 'role': 'Ketua Tim',
+        {'pre': [_tempat_tanggal_laporan(settings, tanggal_ba)],
+         'header': 'Tim Peneliti,', 'role': 'Ketua Tim',
          'nama': _member_nama(tim[0], '_______________') if tim else '_______________'},
     ], doc.width))
 
@@ -893,10 +904,15 @@ async def generate_sptjm_pdf(activity_id: str, _user: dict = Depends(require_use
 
     elements.append(Spacer(1, 10*rl_mm))
 
-    # Signature
-    tgl = str(activity.get("tanggal_berita_acara") or "").strip() or "......................."
+    # Signature — tempat dari Pengaturan Sampul LHI (fallback alamat kop);
+    # tanggal BA kegiatan → tanggal laporan pengaturan, format Indonesia.
+    tempat = (str(settings.get("tempat_laporan") or "").strip() or alamat_singkat
+              or "..................")
+    tgl = (_fmt_tanggal_id(str(activity.get("tanggal_berita_acara") or "").strip()[:10]
+                           or settings.get("tanggal_laporan"))
+           or ".......................")
     elements.extend(_signature_block([
-        {'pre': [f'Dibuat di: {alamat_singkat}', f'Pada tanggal: {tgl}'],
+        {'pre': [f'Dibuat di: {tempat}', f'Pada tanggal: {tgl}'],
          'header': 'Yang membuat pernyataan,',
          'nama': kasatker,
          'after': [f'NIP. {nip}']},
@@ -1010,10 +1026,15 @@ async def generate_surat_koreksi_pdf(activity_id: str, _user: dict = Depends(req
     elements.append(Paragraph("Demikian Surat Pernyataan ini dibuat dengan sebenar-benarnya.", normal_style))
     elements.append(Spacer(1, 10*rl_mm))
 
-    # Signature
-    tgl = str(activity.get("tanggal_berita_acara") or "").strip() or "......................."
+    # Signature — tempat dari Pengaturan Sampul LHI (fallback alamat kop);
+    # tanggal BA kegiatan → tanggal laporan pengaturan, format Indonesia.
+    tempat = (str(settings.get("tempat_laporan") or "").strip() or alamat_singkat
+              or "..................")
+    tgl = (_fmt_tanggal_id(str(activity.get("tanggal_berita_acara") or "").strip()[:10]
+                           or settings.get("tanggal_laporan"))
+           or ".......................")
     elements.extend(_signature_block([
-        {'pre': [f'Dibuat di: {alamat_singkat}', f'Pada tanggal: {tgl}'],
+        {'pre': [f'Dibuat di: {tempat}', f'Pada tanggal: {tgl}'],
          'header': 'Yang membuat pernyataan,',
          'nama': kasatker,
          'after': [f'NIP. {nip}']},
@@ -1127,6 +1148,8 @@ async def generate_dbhi_pdf(activity_id: str, dbhi_type: str, _user: dict = Depe
     tgl_mulai = _fmt_tanggal_id(activity.get("tanggal_mulai")) or "-"
     tgl_selesai = _fmt_tanggal_id(activity.get("tanggal_selesai")) or "-"
     elements.append(Paragraph(f"Satuan Kerja: {satker_name}", info_style))
+    elements.append(Paragraph(
+        f"Kegiatan: {activity.get('nama_kegiatan') or '-'}", info_style))
     elements.append(Paragraph(
         f"Nomor SK: {nomor_sk} &nbsp;&nbsp;|&nbsp;&nbsp; Periode Inventarisasi: {tgl_mulai} s.d. {tgl_selesai}",
         info_style))
@@ -1310,6 +1333,7 @@ async def generate_rhi_pdf(activity_id: str, _user: dict = Depends(require_user_
     ident = _activity_identity(activity, settings)
     satker_name = ident["satker_name"]
     elements.append(Paragraph(f"Satuan Kerja: {satker_name}", info_style))
+    elements.append(Paragraph(f"Kegiatan: {activity.get('nama_kegiatan') or '-'}", info_style))
     elements.append(Paragraph(f"Nomor SK: {activity.get('nomor_surat') or '-'} | Periode: {_fmt_tanggal_id(activity.get('tanggal_mulai')) or '-'} s.d. {_fmt_tanggal_id(activity.get('tanggal_selesai')) or '-'}", info_style))
     elements.append(Spacer(1, 4*rl_mm))
 
@@ -2728,7 +2752,8 @@ async def generate_bahi_pdf(activity_id: str, _user: dict = Depends(require_user
     elements.append(Spacer(1, 3*rl_mm))
     elements.append(Paragraph(
         f"Berdasarkan Surat Keputusan Nomor {nomor_sk}, telah dilaksanakan kegiatan inventarisasi "
-        f"Barang Milik Negara (BMN) di lingkungan {satker_name} pada periode {tgl_mulai} s.d. {tgl_selesai}.",
+        f"Barang Milik Negara (BMN) “{activity.get('nama_kegiatan') or '-'}” "
+        f"di lingkungan {satker_name} pada periode {tgl_mulai} s.d. {tgl_selesai}.",
         normal_style))
     elements.append(Spacer(1, 3*rl_mm))
 
@@ -2765,6 +2790,7 @@ async def generate_bahi_pdf(activity_id: str, _user: dict = Depends(require_user
         "DBHI BMN Berlebih;",
         "DBHI BMN Tidak Ditemukan;",
         "DBHI BMN Dalam Sengketa;",
+        "Daftar Barang Kuasa Pengguna (DBKP) per Golongan Barang;",
         "Surat Pernyataan Hasil Inventarisasi BMN;",
         "Surat Pernyataan Pelaksanaan Inventarisasi BMN.",
     ]
@@ -2862,7 +2888,8 @@ async def generate_sp_hasil_pdf(activity_id: str, _user: dict = Depends(require_
     elements.append(Spacer(1, 2*rl_mm))
 
     statements = [
-        f"Telah melaksanakan kegiatan inventarisasi Barang Milik Negara (BMN) di lingkungan "
+        f"Telah melaksanakan kegiatan inventarisasi Barang Milik Negara (BMN) "
+        f"“{activity.get('nama_kegiatan') or '-'}” di lingkungan "
         f"{satker_name} sesuai dengan Pedoman Inventarisasi Barang Milik Negara sebagaimana diatur "
         f"dalam Surat Keputusan Nomor {nomor_sk}.",
 
@@ -2947,7 +2974,8 @@ async def generate_sp_pelaksanaan_pdf(activity_id: str, _user: dict = Depends(re
     elements.append(Spacer(1, 2*rl_mm))
 
     statements = [
-        f"Telah melaksanakan kegiatan inventarisasi Barang Milik Negara (BMN) di lingkungan "
+        f"Telah melaksanakan kegiatan inventarisasi Barang Milik Negara (BMN) "
+        f"“{activity.get('nama_kegiatan') or '-'}” di lingkungan "
         f"{satker_name} sesuai dengan tahapan dan prosedur yang diatur dalam Pedoman Inventarisasi "
         f"Barang Milik Negara sebagaimana diatur dalam Surat Keputusan Nomor {nomor_sk}, "
         f"pada periode {tgl_mulai} s.d. {tgl_selesai}.",
@@ -4345,7 +4373,8 @@ async def _get_pdf_buffer_from_response(response):
 @reports_router.get("/inventory-activities/{activity_id}/lhi-pdf")
 async def generate_lhi_pdf(activity_id: str, _user: dict = Depends(require_user_or_query_token)):
     """Generate LHI (Laporan Hasil Inventarisasi BMN) - Complete package PDF
-    Combines: Cover Page + BAHI + RHI + 6 DBHI + SP Hasil + SP Pelaksanaan
+    Combines: Cover Page + BAHI + RHI + 6 DBHI + DBKP per Golongan +
+    SP Hasil + SP Pelaksanaan
     """
     from PyPDF2 import PdfMerger
 
@@ -4377,6 +4406,7 @@ async def generate_lhi_pdf(activity_id: str, _user: dict = Depends(require_user_
         ("DBHI Berlebih", generate_dbhi_pdf, {"activity_id": activity_id, "dbhi_type": "berlebih"}),
         ("DBHI Tidak Ditemukan", generate_dbhi_pdf, {"activity_id": activity_id, "dbhi_type": "tidak-ditemukan"}),
         ("DBHI Sengketa", generate_dbhi_pdf, {"activity_id": activity_id, "dbhi_type": "sengketa"}),
+        ("DBKP per Golongan", generate_dbkp_pdf, {"activity_id": activity_id}),
         ("SP Hasil", generate_sp_hasil_pdf, {"activity_id": activity_id}),
         ("SP Pelaksanaan", generate_sp_pelaksanaan_pdf, {"activity_id": activity_id}),
     ]
