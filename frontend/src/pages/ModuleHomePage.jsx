@@ -112,6 +112,18 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
           >
             {dark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>
+          {onShowInfo && (
+            <button
+              type="button"
+              onClick={onShowInfo}
+              aria-label="Tentang aplikasi"
+              title="Tentang aplikasi & panduan"
+              className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0 text-sm font-bold"
+              data-testid="module-home-info"
+            >
+              ?
+            </button>
+          )}
           <button
             type="button"
             onClick={onLogout}

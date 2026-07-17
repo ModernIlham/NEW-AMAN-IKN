@@ -48,6 +48,23 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#365] Gelombang 6 (inti): Lupa Password via OTP, pintu Info terlihat, tombol simpan berlabel jelas — 2026-07-17
+
+- **Lupa Password via OTP email** — jalan buntu login tertutup:
+  `POST /auth/request-reset-otp` (respons selalu generik agar keberadaan
+  akun tidak bocor; OTP di namespace `reset:` terpisah dari registrasi;
+  rate-limit 3/menit) + `POST /auth/reset-password` (verifikasi OTP +
+  password baru ≥8 karakter). Panel "Lupa password?" di halaman masuk:
+  email → OTP + password baru — memakai infrastruktur OTP yang sudah ada.
+- **Pintu Info/Bantuan terlihat**: tombol "?" di header Beranda Modul —
+  halaman Tentang tidak lagi tersembunyi di balik 3-klik logo.
+- **Tombol simpan lembar lapangan berlabel jelas**: tombol kecil kini
+  "Simpan & Tutup" (dengan tooltip) — tak tertukar dengan "Simpan & Lanjut";
+  hover mengikuti kaidah aksen proyek.
+- Verifikasi: suite **470 lulus**; lint & build frontend sukses.
+
+---
+
 ## [#364] Gelombang 5 (tuntas): cek silang register keluar + glosarium akronim — 2026-07-17
 
 - **Cek silang "in-flight" lintas register keluar** (`proses_keluar_aktif`

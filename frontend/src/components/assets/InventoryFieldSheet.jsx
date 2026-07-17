@@ -601,9 +601,10 @@ const InventoryFieldSheet = ({
               type="submit"
               disabled={isSubmitting}
               data-testid="sheet-submit"
-              className="h-9 rounded-lg border border-border bg-background text-foreground/80 hover:bg-accent text-xs font-semibold transition-colors disabled:opacity-50 disabled:pointer-events-none"
+              title="Simpan lalu tutup lembar (tidak lanjut ke aset berikutnya)"
+              className="h-9 rounded-lg border border-border bg-background text-foreground/80 hover:bg-muted hover:text-foreground text-xs font-semibold transition-colors disabled:opacity-50 disabled:pointer-events-none"
             >
-              Simpan
+              Simpan &amp; Tutup
             </button>
           )}
           <button

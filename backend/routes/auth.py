@@ -173,6 +173,60 @@ async def resend_otp(request: Request, data: OTPVerify):
         "debug_otp": otp if show_debug_otp else None
     }
 
+@auth_router.post("/auth/request-reset-otp")
+@limiter.limit("3/minute")
+async def request_reset_otp(request: Request, data: OTPVerify):
+    """Lupa password: kirim OTP reset ke email akun (audit G6 #1 — jalan
+    buntu login). Respons SELALU generik agar keberadaan akun tidak bocor;
+    OTP disimpan di namespace terpisah ("reset:") agar tak bentrok dengan
+    registrasi pending."""
+    email = data.email.strip().lower()
+    if not email or "@" not in email or "." not in email:
+        raise HTTPException(status_code=400, detail="Format email tidak valid")
+
+    pesan_generik = ("Bila email terdaftar, kode OTP reset password telah "
+                     "dikirim — periksa kotak masuk/spam.")
+    user = await db.users.find_one({"username": email}, {"_id": 0, "id": 1, "name": 1})
+    if not user:
+        return {"message": pesan_generik, "otp_sent": True, "debug_otp": None}
+
+    otp = generate_otp()
+    await store_otp(f"reset:{email}", otp, {"email": email, "user_id": user["id"]})
+    email_sent = await send_otp_email(email, otp, user.get("name") or "")
+    show_debug_otp = (not RESEND_API_KEY or not email_sent) and _debug_otp_allowed()
+    return {"message": pesan_generik, "otp_sent": True,
+            "debug_otp": otp if show_debug_otp else None}
+
+
+@auth_router.post("/auth/reset-password")
+@limiter.limit("5/minute")
+async def reset_password(request: Request, data: dict):
+    """Lupa password langkah 2: verifikasi OTP reset + setel password baru."""
+    email = str(data.get("email") or "").strip().lower()
+    otp = str(data.get("otp") or "").strip()
+    baru = str(data.get("new_password") or "")
+    if not email or not otp:
+        raise HTTPException(status_code=400, detail="Email & kode OTP wajib diisi")
+    if len(baru) < 8:
+        raise HTTPException(status_code=400, detail="Password baru minimal 8 karakter")
+
+    stored = await get_otp(f"reset:{email}")
+    if not stored:
+        raise HTTPException(status_code=400,
+                            detail="OTP tidak ditemukan atau kadaluarsa — minta OTP baru")
+    if stored["otp"] != otp:
+        raise HTTPException(status_code=400, detail="Kode OTP salah")
+
+    from auth_utils import hash_password
+    res = await db.users.update_one(
+        {"username": email},
+        {"$set": {"password": hash_password(baru)}})
+    await delete_otp(f"reset:{email}")
+    if res.matched_count == 0:
+        raise HTTPException(status_code=400, detail="Akun tidak ditemukan")
+    return {"message": "Password berhasil direset — silakan masuk dengan password baru"}
+
+
 @auth_router.post("/auth/verify-otp")
 @limiter.limit("5/minute")
 async def verify_otp(request: Request, data: OTPVerify):
