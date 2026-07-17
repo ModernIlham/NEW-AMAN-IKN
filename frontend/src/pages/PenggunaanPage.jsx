@@ -14,6 +14,7 @@ import {
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import { authMediaUrl } from "@/lib/mediaUrl";
+import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -326,6 +327,7 @@ export default function PenggunaanPage({ user, onBack }) {
               {total} pemegang · {totalLengkap} berkas lengkap (NIP + semua BAST) · lintas kegiatan
             </p>
           </div>
+          <BookingNomorButton modul="penggunaan" jenisNaskah="Berita Acara" referensi="BAST PSP" />
         </div>
       </header>
 

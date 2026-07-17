@@ -13,6 +13,7 @@ import {
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
+import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -221,6 +222,7 @@ export default function PenilaianPage({ user, onBack }) {
             data-testid="penilaian-tanggal"
             aria-label="Posisi per tanggal"
           />
+          <BookingNomorButton modul="penilaian" jenisNaskah="Laporan" referensi="Laporan Penyusutan" />
         </div>
       </header>
 

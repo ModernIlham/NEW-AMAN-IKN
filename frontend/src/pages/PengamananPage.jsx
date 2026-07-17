@@ -15,6 +15,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import { authMediaUrl } from "@/lib/mediaUrl";
+import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -352,6 +353,7 @@ export default function PengamananPage({ user, onBack }) {
               Kesehatan data {data?.total_aset ?? "…"} aset + daftar pantau sengketa
             </p>
           </div>
+          <BookingNomorButton modul="pengamanan" jenisNaskah="Laporan" referensi="Laporan Pengamanan" />
         </div>
       </header>
 

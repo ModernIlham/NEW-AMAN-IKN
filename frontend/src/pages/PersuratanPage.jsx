@@ -29,7 +29,7 @@ const WARNA_STATUS = {
 const KELUAR_KOSONG = {
   perihal: "", tujuan: "", jenis_naskah: "Laporan", modul: "umum",
   kegiatan_id: "", kode_klasifikasi: "", kode_keamanan: "B",
-  tanggal_surat: "", referensi: "", keterangan: "",
+  tanggal_surat: "", referensi: "", nomor_eksternal: "", keterangan: "",
 };
 const MASUK_KOSONG = {
   nomor_surat: "", pengirim: "", perihal: "", tanggal_surat: "",
@@ -96,7 +96,7 @@ export default function PersuratanPage({ user, onBack }) {
   // Pratinjau nomor live: setiap field penentu nomor berubah → perkiraan
   // nomor berikutnya (counter TIDAK naik; keunikan tetap dijamin saat booking).
   useEffect(() => {
-    if (!formKeluar || formKeluar.mode === "edit") { setPratinjau(null); return; }
+    if (!formKeluar || formKeluar.mode) { setPratinjau(null); return; }
     if (pratinjauTimer.current) clearTimeout(pratinjauTimer.current);
     pratinjauTimer.current = setTimeout(async () => {
       try {
@@ -311,6 +311,9 @@ export default function PersuratanPage({ user, onBack }) {
                       </td>
                       <td className="px-3 py-2">
                         <p className="font-mono text-[12px] text-foreground break-all">{s.nomor}</p>
+                        {s.nomor_eksternal && (
+                          <p className="font-mono text-[10px] text-teal-700 dark:text-teal-400 break-all" title="Nomor sah dari aplikasi eksternal">eks: {s.nomor_eksternal}</p>
+                        )}
                         <p className="text-[10px] text-muted-foreground">{s.tanggal_surat || "—"}</p>
                       </td>
                       <td className="px-3 py-2">
@@ -353,6 +356,22 @@ export default function PersuratanPage({ user, onBack }) {
                             </button>
                           </>
                         )}
+                        {s.jenis === "keluar" && s.status === "disahkan" && (
+                          <button type="button" onClick={() => setFormKeluar({ ...KELUAR_KOSONG, ...s, mode: "edit-final" })}
+                            title="Isi nomor eksternal / keterangan" aria-label={`Ubah nomor eksternal ${s.nomor}`}
+                            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted min-w-0 min-h-0"
+                            data-testid={`persuratan-edit-final-${s.id}`}>
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {s.jenis === "masuk" && (
+                          <button type="button" onClick={() => setFormMasuk({ ...MASUK_KOSONG, ...s, nomor_surat: s.nomor, mode: "edit" })}
+                            title="Ubah surat masuk" aria-label={`Ubah surat masuk ${s.nomor}`}
+                            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted min-w-0 min-h-0"
+                            data-testid={`persuratan-edit-masuk-${s.id}`}>
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         {s.jenis === "masuk" && s.status !== "selesai" && (
                           <Button size="sm" variant="outline" className="h-7 text-[11px]"
                             onClick={() => transisi(s, s.status === "diterima" ? "diproses" : "selesai")}
@@ -386,12 +405,25 @@ export default function PersuratanPage({ user, onBack }) {
       <Dialog open={!!formKeluar} onOpenChange={(o) => { if (!o) setFormKeluar(null); }}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{formKeluar?.mode === "edit" ? `Ubah Draf — ${formKeluar?.nomor}` : "Booking Nomor Surat Keluar"}</DialogTitle>
+            <DialogTitle>{formKeluar?.mode === "edit-final" ? `Nomor Eksternal — ${formKeluar?.nomor}` : formKeluar?.mode === "edit" ? `Ubah Draf — ${formKeluar?.nomor}` : "Booking Nomor Surat Keluar"}</DialogTitle>
             <DialogDescription className="text-xs">
               Nomor dipesan sekarang dan menjadi milik surat ini sampai disahkan/dibatalkan.
             </DialogDescription>
           </DialogHeader>
-          {formKeluar && (
+          {formKeluar && formKeluar.mode === "edit-final" && (
+            <div className="space-y-3">
+              <p className="text-[11px] text-muted-foreground">
+                Surat sudah disahkan — hanya nomor eksternal (anchor dari aplikasi lain) dan keterangan yang dapat diubah.
+              </p>
+              <Field label="Nomor Eksternal (aplikasi lain)">
+                <Input value={formKeluar.nomor_eksternal || ""} onChange={setK("nomor_eksternal")}
+                  placeholder="nomor sah dari Srikandi/e-office" className="font-mono"
+                  data-testid="final-nomor-eksternal" />
+              </Field>
+              <Field label="Keterangan"><Input value={formKeluar.keterangan || ""} onChange={setK("keterangan")} /></Field>
+            </div>
+          )}
+          {formKeluar && formKeluar.mode !== "edit-final" && (
             <div className="space-y-3">
               <Field label="Perihal *"><Input value={formKeluar.perihal} onChange={setK("perihal")} placeholder="cth. Penyampaian LHI Semester I 2026" data-testid="keluar-perihal" /></Field>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -429,6 +461,11 @@ export default function PersuratanPage({ user, onBack }) {
                     className="font-mono" data-testid="keluar-klasifikasi" />
                 </Field>
                 <Field label="Referensi Laporan"><Input value={formKeluar.referensi} onChange={setK("referensi")} placeholder="cth. BAHI / LHI / LBKP S1" /></Field>
+                <Field label="Nomor Eksternal (aplikasi lain)">
+                  <Input value={formKeluar.nomor_eksternal || ""} onChange={setK("nomor_eksternal")}
+                    placeholder="nomor sah dari Srikandi/e-office" className="font-mono"
+                    data-testid="keluar-nomor-eksternal" />
+                </Field>
               </div>
               <Field label="Keterangan"><Input value={formKeluar.keterangan} onChange={setK("keterangan")} /></Field>
               {formKeluar.mode !== "edit" && pratinjau?.nomor && (
@@ -450,17 +487,22 @@ export default function PersuratanPage({ user, onBack }) {
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setFormKeluar(null)}>Batal</Button>
             <Button disabled={saving} data-testid="keluar-simpan"
-              onClick={formKeluar?.mode === "edit"
+              onClick={formKeluar?.mode === "edit-final"
+                ? () => kirim(() => axios.put(`${API}/persuratan/${formKeluar.id}`, {
+                    nomor_eksternal: formKeluar.nomor_eksternal,
+                    keterangan: formKeluar.keterangan,
+                  }), "Nomor eksternal tersimpan")
+                : formKeluar?.mode === "edit"
                 ? () => kirim(() => axios.put(`${API}/persuratan/${formKeluar.id}`, {
                     perihal: formKeluar.perihal, tujuan: formKeluar.tujuan,
                     jenis_naskah: formKeluar.jenis_naskah, modul: formKeluar.modul,
                     kegiatan_id: formKeluar.kegiatan_id, kode_klasifikasi: formKeluar.kode_klasifikasi,
                     tanggal_surat: formKeluar.tanggal_surat, referensi: formKeluar.referensi,
-                    keterangan: formKeluar.keterangan,
+                    nomor_eksternal: formKeluar.nomor_eksternal, keterangan: formKeluar.keterangan,
                   }), "Draf surat diperbarui")
                 : booking}>
               {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : null}
-              {formKeluar?.mode === "edit" ? "Simpan" : "Booking Nomor"}
+              {formKeluar?.mode ? "Simpan" : "Booking Nomor"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -470,8 +512,10 @@ export default function PersuratanPage({ user, onBack }) {
       <Dialog open={!!formMasuk} onOpenChange={(o) => { if (!o) setFormMasuk(null); }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Catat Surat Masuk</DialogTitle>
-            <DialogDescription className="text-xs">Nomor agenda masuk terbit otomatis per tahun.</DialogDescription>
+            <DialogTitle>{formMasuk?.mode === "edit" ? `Ubah Surat Masuk — M-${String(formMasuk.no_agenda).padStart(3, "0")}/${formMasuk.tahun}` : "Catat Surat Masuk"}</DialogTitle>
+            <DialogDescription className="text-xs">
+              {formMasuk?.mode === "edit" ? "Koreksi data surat masuk — nomor agenda tetap." : "Nomor agenda masuk terbit otomatis per tahun."}
+            </DialogDescription>
           </DialogHeader>
           {formMasuk && (
             <div className="space-y-3">
@@ -492,8 +536,22 @@ export default function PersuratanPage({ user, onBack }) {
           )}
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setFormMasuk(null)}>Batal</Button>
-            <Button onClick={catatMasuk} disabled={saving} data-testid="masuk-simpan">
-              {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : null}Catat
+            <Button disabled={saving} data-testid="masuk-simpan"
+              onClick={formMasuk?.mode === "edit"
+                ? () => {
+                    const f = formMasuk;
+                    if (!f.nomor_surat?.trim() || !f.pengirim?.trim() || !f.perihal?.trim()) {
+                      toast.error("Nomor surat, pengirim, dan perihal wajib diisi"); return;
+                    }
+                    kirim(() => axios.put(`${API}/persuratan/${f.id}`, {
+                      nomor_surat: f.nomor_surat, pengirim: f.pengirim,
+                      perihal: f.perihal, tanggal_surat: f.tanggal_surat,
+                      modul: f.modul, keterangan: f.keterangan,
+                    }), "Surat masuk diperbarui");
+                  }
+                : catatMasuk}>
+              {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : null}
+              {formMasuk?.mode === "edit" ? "Simpan" : "Catat"}
             </Button>
           </DialogFooter>
         </DialogContent>

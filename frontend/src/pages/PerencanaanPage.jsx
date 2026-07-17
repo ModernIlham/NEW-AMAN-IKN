@@ -13,6 +13,7 @@ import {
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
+import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -179,6 +180,7 @@ export default function PerencanaanPage({ user, onBack }) {
           >
             <FileDown className="w-3.5 h-3.5" /><span className="hidden sm:inline">Kertas Kerja</span>
           </button>
+          <BookingNomorButton modul="perencanaan" jenisNaskah="Laporan" referensi="RKBMN" />
         </div>
       </header>
 

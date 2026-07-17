@@ -8,6 +8,7 @@ import {
   Package, Check
 } from "lucide-react";
 import ReportSettingsEditor from "../ReportSettingsEditor";
+import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 
 const API = (process.env.REACT_APP_BACKEND_URL || "http://localhost:8001") + "/api";
 
@@ -198,6 +199,12 @@ export default function ReportDownloads({
 
   return (
     <>
+      {/* Booking nomor surat utk laporan yang akan diterbitkan dari sini */}
+      <div className="flex justify-end pt-2">
+        <BookingNomorButton modul="inventarisasi" jenisNaskah="Laporan"
+          referensi="LHI" kegiatanId={activityId} />
+      </div>
+
       {/* LHI Section */}
       <div className="border-t border-border pt-3 space-y-2">
         <div className="flex gap-2">

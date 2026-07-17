@@ -14,6 +14,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import { authMediaUrl } from "@/lib/mediaUrl";
+import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -185,6 +186,7 @@ export default function PemusnahanPage({ user, onBack }) {
             className="bg-orange-700 hover:bg-orange-800 text-white flex-shrink-0" data-testid="pemusnahan-tambah">
             <Plus className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">Catat BA</span>
           </Button>
+          <BookingNomorButton modul="pemusnahan" jenisNaskah="Berita Acara" referensi="BA Pemusnahan" />
         </div>
       </header>
 
