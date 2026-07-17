@@ -91,6 +91,8 @@ export default function PersediaanPage({ user, onBack }) {
   const fileImporRef = useRef(null);
   // Transaksi massal per dokumen: {arah, jenis, ..., items[], cari, hasil, laporan}
   const [massal, setMassal] = useState(null);
+  // Dialog riwayat LPB: {items, loading} — unduh ulang LPB kapan pun
+  const [riwayatLpb, setRiwayatLpb] = useState(null);
   const massalTimer = useRef(null);
   const { confirm, confirmDialog } = useConfirm();
   const searchTimer = useRef(null);
@@ -330,6 +332,17 @@ export default function PersediaanPage({ user, onBack }) {
     items: [], cari: "", hasil: [], mencari: false, saving: false, laporan: null,
   });
   const setMField = (k, v) => setMassal((m) => ({ ...m, [k]: v }));
+
+  const bukaRiwayatLpb = async () => {
+    setRiwayatLpb({ items: [], loading: true });
+    try {
+      const r = await axios.get(`${API}/persediaan/lpb`, { params: { page_size: 50 } });
+      setRiwayatLpb({ items: r.data?.items || [], loading: false });
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal memuat riwayat LPB");
+      setRiwayatLpb(null);
+    }
+  };
 
   const tambahItemMassal = (it) => setMassal((m) => {
     if (m.items.some((x) => x.id === it.id)) return { ...m, cari: "", hasil: [] };
@@ -587,6 +600,10 @@ export default function PersediaanPage({ user, onBack }) {
                 <DropdownMenuItem className="min-h-[42px]" data-testid="persediaan-baof"
                   onClick={() => setBaof({ tanggal: new Date().toISOString().slice(0, 10) })}>
                   <ClipboardCheck className="w-4 h-4 mr-2" />BAOF (pilih tanggal)
+                </DropdownMenuItem>
+                <DropdownMenuItem className="min-h-[42px]" data-testid="persediaan-riwayat-lpb"
+                  onClick={bukaRiwayatLpb}>
+                  <FileDown className="w-4 h-4 mr-2" />Riwayat LPB (unduh ulang)
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -1455,7 +1472,16 @@ export default function PersediaanPage({ user, onBack }) {
                       <div className="col-span-2">
                         <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-m-perolehan">Perolehan (Pengadaan) — opsional</label>
                         <select id="psd-m-perolehan" value={massal.perolehan_id}
-                          onChange={(e) => setMField("perolehan_id", e.target.value)}
+                          onChange={(e) => {
+                            const id = e.target.value;
+                            const p = pengadaanList.find((x) => x.id === id);
+                            // Auto-isi field dokumen (selaras dialog masuk tunggal)
+                            setMassal((m) => ({ ...m, perolehan_id: id,
+                              penyedia: m.penyedia || (p?.pihak ?? ""),
+                              tgl_dokumen: m.tgl_dokumen || (p?.tanggal_bast ?? ""),
+                              no_bukti: m.no_bukti || (p?.nomor_bast ?? ""),
+                              jenis_dokumen: m.jenis_dokumen || (p ? "BAST" : m.jenis_dokumen) }));
+                          }}
                           className="w-full h-9 px-2 rounded-lg border border-border bg-background text-sm text-foreground"
                           data-testid="persediaan-massal-perolehan">
                           <option value="">— tanpa tautan dokumen sumber —</option>
@@ -1550,6 +1576,42 @@ export default function PersediaanPage({ user, onBack }) {
               Catat {massal?.items?.length || 0} Barang
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog Riwayat LPB (unduh ulang) ── */}
+      <Dialog open={!!riwayatLpb} onOpenChange={(o) => { if (!o) setRiwayatLpb(null); }}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Riwayat Laporan Penerimaan Barang</DialogTitle>
+            <DialogDescription className="text-xs">
+              Setiap transaksi massal masuk ber-LPB tercatat di sini — unduh ulang kapan pun.
+            </DialogDescription>
+          </DialogHeader>
+          {riwayatLpb?.loading ? (
+            <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-emerald-600" /></div>
+          ) : (riwayatLpb?.items || []).length === 0 ? (
+            <p className="text-center text-xs text-muted-foreground py-6">Belum ada LPB — buat lewat "Transaksi Massal" arah masuk.</p>
+          ) : (
+            <ul className="divide-y divide-border/60">
+              {riwayatLpb.items.map((l) => (
+                <li key={l.id} className="py-2 flex items-center justify-between gap-2" data-testid={`lpb-riwayat-${l.id}`}>
+                  <div className="min-w-0">
+                    <p className="font-mono text-xs text-foreground break-all">{l.nomor || "(tanpa nomor)"}</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {[String(l.tanggal || "").slice(0, 10), l.penyedia].filter(Boolean).join(" · ")}
+                    </p>
+                  </div>
+                  <Button size="sm" variant="outline" className="h-7 text-[11px] flex-shrink-0"
+                    onClick={() => downloadFileWithProgress(`${API}/persediaan/lpb/${l.id}/pdf`,
+                      `LPB_${(l.nomor || l.id.slice(0, 8)).replace(/[\/\s]/g, "_")}.pdf`,
+                      { label: "Laporan Penerimaan Barang" }).catch(() => {})}>
+                    Unduh
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
         </DialogContent>
       </Dialog>
 

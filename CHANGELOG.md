@@ -48,6 +48,24 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#359] Gelombang 4 (inti): rantai perolehan tersambung — 2026-07-17
+
+- **Dropdown "Usulan RKBMN terkait"** pada dialog usulan Penganggaran —
+  mengaktifkan FK `rkbmn_id` yang sudah lengkap di backend: memilih usulan
+  RKBMN dari modul Perencanaan otomatis mengisi uraian/jenis/TA sasaran
+  (tak ada lagi ketik ulang antar modul).
+- **Serapan nyata dari Pengadaan tampil**: kartu Serapan kini menampilkan
+  "Realisasi Pengadaan tertaut" (total nilai perolehan ber-`penganggaran_id`)
+  di samping angka realisasi manual.
+- **Riwayat LPB**: menu Dokumen Persediaan bertambah "Riwayat LPB (unduh
+  ulang)" — LPB tak lagi hilang bila unduhan pertama gagal/tertutup.
+- **Auto-isi picker massal**: memilih Perolehan (Pengadaan) pada dialog
+  Transaksi Massal kini mengisi penyedia/tanggal/no bukti/jenis dokumen —
+  selaras dialog masuk tunggal.
+- Verifikasi: lint & build frontend sukses.
+
+---
+
 ## [#358] Gelombang 3 (lanjutan): badge FINAL, pintu Kop/Sampul di hub, legenda nomor eksternal — 2026-07-17
 
 - **Badge status periode pada opsi unduh** LBKP & CaLBMN: tiap opsi kini
