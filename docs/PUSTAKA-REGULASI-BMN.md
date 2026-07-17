@@ -844,6 +844,53 @@ fisik; barang untuk pemda/masyarakat tidak segera di-BAST-kan.
 
 ---
 
+## 11A. Tata Naskah Dinas & Penomoran Surat (Peraturan ANRI No. 5/2021)
+
+Dasar: **Peraturan ANRI Nomor 5 Tahun 2021 tentang Pedoman Umum Tata
+Naskah Dinas** (BN 2021/758; ditetapkan 25-06-2021) — pedoman UMUM
+nasional bagi seluruh instansi. Catatan: PerANRI No. 5 Tahun **2025**
+adalah tata naskah dinas INTERNAL ANRI (mengganti PerANRI 7/2018), BUKAN
+pengganti pedoman umum 5/2021.
+
+**Susunan nomor naskah dinas korespondensi (eksternal/surat dinas):**
+1. kategori **klasifikasi keamanan** — kode `SR` (Sangat Rahasia), `R`
+   (Rahasia), `T` (Terbatas), `B` (Biasa);
+2. **nomor naskah** — nomor urut dalam SATU TAHUN TAKWIM;
+3. **kode klasifikasi arsip** (mengacu pedoman klasifikasi arsip
+   instansi; contoh praktik pemda: Permendagri 83/2022);
+4. **bulan** (praktik umum ditulis angka Romawi); 5. **tahun terbit**.
+   Contoh praktik: `B-015/PL.02/OIKN/VII/2026` (varian dengan kode unit
+   pengolah lazim di banyak instansi — susunan detail per instansi diatur
+   tata naskah dinas masing-masing) *(perlu verifikasi terhadap TND
+   instansi pengguna)*.
+
+**Buku agenda (praktik kearsipan baku):** tiga tipe — tunggal (satu seri
+nomor masuk+keluar), berpasangan, dan **kembar** (agenda surat masuk dan
+surat keluar TERPISAH, masing-masing berurut per tahun) — tipe kembar
+yang paling umum dan dipakai AMAN. Kolom minimal: nomor urut agenda,
+tanggal terima/kirim, nomor & tanggal surat, pengirim/tujuan, perihal,
+keterangan/disposisi.
+
+**Booking nomor (praktik e-office pemerintahan):** nomor dipesan saat
+draf dibuat (reservasi berurut, atomik) → berstatus *dibooking* sampai
+naskah final **disahkan** (ditandatangani) atau **dibatalkan**. Nomor
+yang batal TIDAK didaur ulang — tetap tercatat pada agenda dengan alasan
+pembatalan, sehingga urutan nomor utuh dan setiap celah dapat
+dipertanggungjawabkan saat audit.
+
+Implementasi AMAN: modul **Persuratan** (`routes/persuratan.py` +
+`persuratan_utils.py`) — register `surat` (keluar & masuk), counter
+atomik per tahun per jenis, format nomor konfigurabel ber-placeholder,
+ekspor buku agenda CSV; semua laporan/naskah dari modul mana pun dapat
+dibooking nomornya di sini (field jenis naskah, modul asal, kegiatan,
+referensi laporan).
+
+Sumber: [Peraturan ANRI No. 5/2021 (JDIH BPK)](https://peraturan.bpk.go.id/Details/173489/peraturan-anri-no-5-tahun-2021);
+[PerANRI 5/2025 — TND internal ANRI (JDIH ANRI)](https://jdih.anri.go.id/peraturan/peraturan-arsip-nasional-republik-indonesia-no-5-tahun-2025);
+praktik penomoran & buku agenda: [sipas.id — penomoran surat](https://www.sipas.id/blog/penomoran-surat/),
+[sipas.id — buku agenda](https://www.sipas.id/blog/penanganan-surat-masuk-dan-keluar-sistem-buku-agenda/),
+[integrasolusi.com — pengelolaan surat](https://integrasolusi.com/blog/pengelolaan-surat-keluar-dan-surat-masuk-dengan-buku-agenda/).
+
 ## 12. Kendala Umum Satker → Fitur Penangkal AMAN
 
 | Kendala nyata (temuan artikel DJKN/DJPb/BPK/jurnal) | Penangkal di AMAN |

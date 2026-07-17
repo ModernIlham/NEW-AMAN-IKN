@@ -33,6 +33,7 @@ const PersediaanAkunPage = lazy(() => import("./pages/PersediaanAkunPage"));
 const PegawaiPage = lazy(() => import("./pages/PegawaiPage"));
 const PersediaanPage = lazy(() => import("./pages/PersediaanPage"));
 const PelaporanPage = lazy(() => import("./pages/PelaporanPage"));
+const PersuratanPage = lazy(() => import("./pages/PersuratanPage"));
 const PenggunaanPage = lazy(() => import("./pages/PenggunaanPage"));
 const PengamananPage = lazy(() => import("./pages/PengamananPage"));
 const PemeliharaanPage = lazy(() => import("./pages/PemeliharaanPage"));
@@ -267,6 +268,8 @@ function App() {
   const [showPersediaan, setShowPersediaan] = useState(false);
   // Halaman hub Pelaporan (arsip laporan lintas kegiatan)
   const [showPelaporan, setShowPelaporan] = useState(false);
+  // Halaman Registrasi Persuratan (buku agenda & booking nomor surat)
+  const [showPersuratan, setShowPersuratan] = useState(false);
   // Halaman Penggunaan (rekap aset per pemegang)
   const [showPenggunaan, setShowPenggunaan] = useState(false);
   // Halaman Pengamanan (dasbor tertib administrasi + sengketa)
@@ -385,6 +388,18 @@ function App() {
       <div className="App">
         <Suspense fallback={<PageLoader />}>
           <PersediaanPage user={user} onBack={() => setShowPersediaan(false)} />
+        </Suspense>
+        <Toaster position="top-right" richColors />
+      </div>
+    );
+  }
+
+  // Registrasi Persuratan — buku agenda & booking nomor naskah dinas.
+  if (user && showPersuratan) {
+    return (
+      <div className="App">
+        <Suspense fallback={<PageLoader />}>
+          <PersuratanPage user={user} onBack={() => setShowPersuratan(false)} />
         </Suspense>
         <Toaster position="top-right" richColors />
       </div>
@@ -569,6 +584,7 @@ function App() {
             onOpenPegawai={() => setShowPegawai(true)}
             onOpenPersediaan={() => setShowPersediaan(true)}
             onOpenPelaporan={() => setShowPelaporan(true)}
+            onOpenPersuratan={() => setShowPersuratan(true)}
             onOpenPenggunaan={() => setShowPenggunaan(true)}
             onOpenPengamanan={() => setShowPengamanan(true)}
             onOpenPemeliharaan={() => setShowPemeliharaan(true)}
