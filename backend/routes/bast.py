@@ -80,6 +80,11 @@ class BastIn(BaseModel):
     asset_ids: List[str]
     pihak_kedua: PihakIn
     pihak_pertama: Optional[PihakIn] = None   # default: kasatker/KPB pengaturan
+    # Penyerah (Pihak Kesatu) adalah pejabat pengelola BMN yang bertindak
+    # ATAS NAMA KPB (mis. Petugas Penatausahaan/Pengelola BMN Satker) — bila
+    # true, dokumen ditandai "a.n. Kuasa Pengguna Barang" + baris "Mengetahui,
+    # KPB" (kaidah pendelegasian penyerahan internal — riset regulasi §11B).
+    penyerah_atas_nama_kpb: Optional[bool] = False
     nomor: Optional[str] = ""                 # bisa dari Booking Nomor persuratan
     tanggal: Optional[str] = ""               # default hari ini
     jangka_dari: Optional[str] = ""           # khusus penggunaan_sementara
@@ -143,7 +148,8 @@ async def buat_bast(payload: BastIn, user: dict = Depends(require_user)):
     aset = await db.assets.find(
         {"id": {"$in": payload.asset_ids}, "dihapus": {"$ne": True}},
         {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
-         "brand": 1, "model": 1, "condition": 1, "purchase_date": 1,
+         "brand": 1, "model": 1, "serial_number": 1, "condition": 1,
+         "purchase_date": 1,
          "photos": 1, "photo_gridfs_ids": 1, "thumbnail_index": 1},
     ).to_list(500)
     if len(aset) != len(set(payload.asset_ids)):
@@ -216,14 +222,18 @@ async def buat_bast(payload: BastIn, user: dict = Depends(require_user)):
         # Snapshot identitas utk dokumen (foto TIDAK disnapshot — diambil
         # saat render bila sertakan_foto).
         "aset": [{k: a.get(k) for k in ("id", "asset_code", "NUP", "asset_name",
-                                        "brand", "model", "condition",
-                                        "purchase_date")} for a in aset],
+                                        "brand", "model", "serial_number",
+                                        "condition", "purchase_date")} for a in aset],
         "jangka_dari": str(payload.jangka_dari or "").strip()[:10],
         "jangka_sampai": str(payload.jangka_sampai or "").strip()[:10],
         "penanggung_jawab_tambahan": [
             p.model_dump() for p in (payload.penanggung_jawab_tambahan or [])
             if str(p.nama or "").strip()],
         "tembusan": str(payload.tembusan or "").strip(),
+        # Delegasi penyerahan a.n. KPB hanya relevan pada non-mutasi (mutasi
+        # sudah otomatis ber-"Mengetahui KPB").
+        "penyerah_atas_nama_kpb": (bool(payload.penyerah_atas_nama_kpb)
+                                   and payload.jenis != "mutasi_pengguna"),
         "sertakan_foto": bool(payload.sertakan_foto),
         "terapkan_ke_aset": bool(payload.terapkan_ke_aset),
         "keterangan": str(payload.keterangan or "").strip(),
@@ -357,7 +367,8 @@ async def bast_pdf(bast_id: str,
     from routes.reports import (
         _blok_tembusan, _fit_col_widths, _fmt_tanggal_id, _get_report_styles,
         _gridfs_photo_data_uri, _identity_table, _kop_surat_flowables,
-        _page_footer_factory, _signature_block, _std_doc, _std_table_style,
+        _page_footer_factory, _peta_subsub_kelompok, _sel_identitas_barang,
+        _sel_uraian_barang, _signature_block, _std_doc, _std_table_style,
         _tempat_tanggal_laporan, _title_block,
     )
 
@@ -440,16 +451,25 @@ async def bast_pdf(bast_id: str,
                 else "PIHAK KESATU menyerahkan dan PIHAK KEDUA menerima dengan baik")
     el.append(Paragraph(
         f"{kalimat1} Barang Milik Negara sebagai berikut:", kecil))
-    data = [["No", "Nama Barang", "Kode Barang", "NUP",
-             "Merk/Type/Spesifikasi", "Tahun", "Kondisi"]]
+    # Tabel ringkas: dua kolom gabungan agar teks panjang lega —
+    # Identitas (Sub-sub Kelompok di atas · kode barang · NUP) + Uraian
+    # (Nama Barang di atas · Merk/Tipe/Spesifikasi).
+    subsub = await _peta_subsub_kelompok(
+        [a.get("asset_code") for a in (b.get("aset") or [])])
+    from kodefikasi_utils import normalize_kode as _norm
+    data = [[Paragraph(h, st['TableHeader']) for h in
+             ("No", "Identitas Barang\n(Sub-sub Kelompok · Kode · NUP)",
+              "Uraian Barang\n(Nama · Merk/Tipe/Spesifikasi)", "Tahun", "Kondisi")]]
     for i, a in enumerate(b.get("aset") or [], 1):
-        merk = " ".join(x for x in (a.get("brand"), a.get("model")) if x) or "-"
         tahun = str(a.get("purchase_date") or "")[:4] or "-"
-        data.append([str(i), Paragraph(a.get("asset_name") or "-", st['Cell']),
-                     a.get("asset_code") or "-", str(a.get("NUP") or "-"),
-                     Paragraph(merk, st['Cell']), tahun,
-                     a.get("condition") or "-"])
-    t = Table(data, colWidths=_fit_col_widths([22, 120, 72, 30, 120, 34, 52],
+        data.append([
+            Paragraph(str(i), st['CellCenter']),
+            _sel_identitas_barang(a, subsub.get(_norm(a.get("asset_code")), ""), st),
+            _sel_uraian_barang(a, st),
+            Paragraph(tahun, st['CellCenter']),
+            Paragraph(a.get("condition") or "-", st['CellCenter']),
+        ])
+    t = Table(data, colWidths=_fit_col_widths([20, 150, 205, 38, 55],
                                               doc.width), repeatRows=1)
     t.setStyle(_std_table_style(zebra=True))
     el.append(t)
@@ -507,7 +527,9 @@ async def bast_pdf(bast_id: str,
             "pada tabel objek serah terima.",
         ])
     if b.get("keterangan"):
-        pasal("KETERANGAN LAIN", [b["keterangan"]])
+        # Isi dari textarea: tiap baris tak-kosong → satu butir pasal.
+        butir = [ln.strip() for ln in str(b["keterangan"]).splitlines() if ln.strip()]
+        pasal("KETENTUAN TAMBAHAN", butir or [b["keterangan"]])
     pasal("PENUTUP", [
         "Apabila di kemudian hari terdapat kekeliruan akan diadakan "
         "perbaikan sebagaimana mestinya. Demikian Berita Acara ini dibuat "
@@ -516,21 +538,27 @@ async def bast_pdf(bast_id: str,
     ])
 
     el.append(Spacer(1, 3 * rl_mm))
-    signers_mutasi = []
-    if jenis == "mutasi_pengguna":
-        signers_mutasi = [{'header': 'Mengetahui,',
-                           'role': settings.get("kasatker_jabatan", "Kuasa Pengguna Barang,"),
-                           'nama': settings.get("kasatker_nama", ""),
-                           'after': [f"NIP. {settings.get('kasatker_nip', '')}"]}]
+    # Baris "Mengetahui, KPB": otomatis pada mutasi; juga pada non-mutasi bila
+    # penyerah bertindak a.n. KPB (pendelegasian) — kaidah §11B.
+    an_kpb = bool(b.get("penyerah_atas_nama_kpb")) and jenis != "mutasi_pengguna"
+    signers_mengetahui = []
+    if jenis == "mutasi_pengguna" or an_kpb:
+        signers_mengetahui = [{'header': 'Mengetahui,',
+                               'role': settings.get("kasatker_jabatan", "Kuasa Pengguna Barang,"),
+                               'nama': settings.get("kasatker_nama", ""),
+                               'after': [f"NIP. {settings.get('kasatker_nip', '')}"]}]
+    peran_kesatu = ('Yang Menyerahkan' if jenis != 'pengembalian' else 'Yang Menerima')
+    if an_kpb:
+        peran_kesatu += ' a.n. Kuasa Pengguna Barang'
     el.extend(_signature_block([
         {'header': 'PIHAK KEDUA,', 'role': 'Yang Menerima' if jenis != 'pengembalian' else 'Yang Menyerahkan',
          'nama': p2.get("nama") or "________________",
          'after': [f"NIP/NIK. {p2.get('nip') or '…'}"]},
         {'pre': [_tempat_tanggal_laporan(settings, b.get("tanggal"))],
-         'header': 'PIHAK KESATU,', 'role': 'Yang Menyerahkan' if jenis != 'pengembalian' else 'Yang Menerima',
+         'header': 'PIHAK KESATU,', 'role': peran_kesatu,
          'nama': p1.get("nama") or "________________",
          'after': [f"NIP. {p1.get('nip') or '…'}"]},
-    ] + signers_mutasi, doc.width))
+    ] + signers_mengetahui, doc.width))
     el.extend(_blok_tembusan(
         {"tembusan_laporan": b.get("tembusan") or settings.get("tembusan_laporan", "")}))
 

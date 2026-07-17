@@ -309,6 +309,69 @@ def _fit_col_widths(widths, avail):
     return [w * avail / total for w in widths]
 
 
+async def _peta_subsub_kelompok(codes):
+    """Peta kode barang → nama Sub-sub Kelompok (uraian kodefikasi TERDALAM
+    yang terdaftar). Dipakai tabel aset ringkas: label klasifikasi di atas
+    kode+NUP. Bila referensi belum lengkap, kembalikan '' (didegradasi rapi)."""
+    from kodefikasi_utils import normalize_kode, hierarchy_prefixes
+    bersih = {normalize_kode(c) for c in codes if str(c or "").strip()}
+    if not bersih:
+        return {}
+    prefixes = set()
+    for c in bersih:
+        for _lvl, pfx in hierarchy_prefixes(c):
+            prefixes.add(pfx)
+    if not prefixes:
+        return {}
+    docs = await db.kodefikasi.find(
+        {"kode": {"$in": list(prefixes)}},
+        {"_id": 0, "kode": 1, "uraian": 1},
+    ).to_list(len(prefixes) + 1)
+    uraian = {d["kode"]: str(d.get("uraian") or "").strip() for d in docs}
+    out = {}
+    for c in bersih:
+        nama = ""
+        for _lvl, pfx in hierarchy_prefixes(c):
+            if uraian.get(pfx):
+                nama = uraian[pfx]      # prefix terdalam yang cocok menang
+        out[c] = nama
+    return out
+
+
+def _sel_identitas_barang(a, subsub_nama, st):
+    """Sel gabungan identitas aset (menghemat lebar tabel): Sub-sub Kelompok
+    di ATAS, lalu 'kode barang · NUP' di BAWAH — memberi ruang lebar untuk
+    teks panjang. `a` = dict aset (asset_code, NUP)."""
+    from reportlab.platypus import Paragraph
+    from xml.sax.saxutils import escape as _esc
+    from kodefikasi_utils import normalize_kode
+    kode = normalize_kode(a.get("asset_code")) or "-"
+    nup = str(a.get("NUP") or "-")
+    baris = []
+    if subsub_nama:
+        baris.append(f"<b>{_esc(subsub_nama)}</b>")
+    baris.append(f"{_esc(kode)} · NUP {_esc(nup)}")
+    return Paragraph("<br/>".join(baris), st['Cell'])
+
+
+def _sel_uraian_barang(a, st):
+    """Sel gabungan uraian aset: Nama Barang di ATAS, lalu Merk/Tipe/
+    Spesifikasi (brand · model · serial) di BAWAH bila ada — satu kolom lebar
+    agar nama/spesifikasi panjang tetap terbaca."""
+    from reportlab.platypus import Paragraph
+    from xml.sax.saxutils import escape as _esc
+    nama = str(a.get("asset_name") or "-")
+    detail = " · ".join(x for x in (
+        str(a.get("brand") or "").strip(),
+        str(a.get("model") or "").strip(),
+        str(a.get("serial_number") or "").strip(),
+    ) if x)
+    baris = [f"<b>{_esc(nama)}</b>"]
+    if detail:
+        baris.append(f'<font size="7.5" color="#556070">{_esc(detail)}</font>')
+    return Paragraph("<br/>".join(baris), st['Cell'])
+
+
 def _activity_identity(activity, settings=None):
     """Identitas satker/kasatker sebuah kegiatan untuk laporan resmi.
 

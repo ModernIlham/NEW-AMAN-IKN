@@ -48,6 +48,40 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#354] Tabel aset ringkas (BAST & Daftar Barang), pasal textarea, penyerah dari Referensi Pejabat, & review peran pengelolaan BMN — 2026-07-17
+
+- **Tabel aset diringkas jadi dua kolom gabungan** (BAST + "Unduh Daftar
+  Barang" pemegang) agar teks panjang lega:
+  - **Identitas Barang** — Sub-sub Kelompok (dari referensi kodefikasi,
+    otomatis) di atas, lalu `kode barang · NUP` di bawah.
+  - **Uraian Barang** — Nama Barang di atas, lalu Merk/Tipe/Spesifikasi
+    (brand · model · serial) di bawah.
+  - Helper bersama baru di `reports.py` (`_peta_subsub_kelompok`,
+    `_sel_identitas_barang`, `_sel_uraian_barang`) dipakai kedua dokumen.
+- **Input pasal/ketentuan tambahan kini `textarea`** (bukan input satu
+  baris): tiap baris menjadi satu butir pada pasal **"Ketentuan Tambahan"**.
+- **"Yang menyerahkan" (PIHAK KESATU) dapat dipilih dari Referensi Pejabat**
+  pada dialog Buat BAST — hanya peran **pengelolaan BMN** yang layak
+  (disaring `peran_penyerah_bast`: KPB, Petugas Penatausahaan BMN, Pengelola
+  BMN Satker). Bila penyerah **bukan KPB**, dokumen otomatis ditandai
+  **"a.n. Kuasa Pengguna Barang"** + baris **"Mengetahui, KPB"** (kaidah
+  pendelegasian). Kosong = otomatis memakai KPB dari pengaturan.
+- **Review peran pengelolaan BMN (riset regulasi terverifikasi, §11B
+  pustaka):** "Pengurus Barang / Penyimpan Barang" adalah istilah **Barang
+  Milik DAERAH** (PP 27/2014; Permendagri 7/2024) — **menyesatkan untuk BMN
+  pusat**; label `pengurus_barang` kini ditandai *"hindari"* (dipertahankan
+  demi data lama). Ditambah peran BMN-pusat yang tepat: **Petugas
+  Penatausahaan BMN / Penata Laksana Barang (JFPLB, PermenPAN-RB 23/2018)**,
+  **Pengelola BMN Satker (a.n. KPB)**, **Verifikator/Validator BMN**. Tiap
+  peran diberi **metadata** (domain bmn/bmd, peran pada BAST, keterangan
+  berbasis regulasi) yang dijelaskan langsung di UI Referensi Pejabat —
+  menjawab "apa beda pengurus penatausahaan BMN vs pengurus barang".
+- Verifikasi: suite **470 lulus** (+2 uji peran/metadata); smoke FakeDB
+  (BAST 2 hlm ringkas + a.n. KPB + Mengetahui + pasal 2 butir; Daftar
+  Barang 1 hlm + Sub-sub Kelompok); lint & build frontend sukses.
+
+---
+
 ## [#353] Bukti TTD BAST + pengesahan agenda otomatis, Riwayat BAST, dan penyempurnaan lintas modul — 2026-07-17
 
 - **Unggah bukti BAST bertanda tangan** (`POST /bast/{id}/bukti`, PDF/JPG/PNG

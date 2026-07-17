@@ -11,14 +11,95 @@ resmi memakai data pejabat yang benar & berlaku pada tanggalnya.
 """
 
 # Peran pejabat dalam penatausahaan BMN (kode → uraian).
+#
+# CATATAN NOMENKLATUR (riset regulasi Jul 2026, terverifikasi; §11B pustaka):
+# aplikasi ini untuk **BMN PUSAT** (PMK 181/2016, PMK 40/2024). Istilah
+# "Pengurus Barang / Pengurus Barang Pengguna/Pembantu" & "Penyimpan Barang"
+# adalah nomenklatur **Barang Milik DAERAH** (PP 27/2014 khusus "Milik Daerah";
+# Permendagri 7/2024, pengganti Permendagri 19/2016) — TIDAK dikenal di
+# penatausahaan BMN pusat & menyesatkan bila dipakai. Struktur resmi BMN pusat
+# berbasis unit akuntansi (UAPB→UAKPB) dengan penanggung jawab **Kuasa Pengguna
+# Barang (KPB)**; pelaksana teknisnya kini **Jabatan Fungsional Penata Laksana
+# Barang (JFPLB)** (PermenPAN-RB 23/2018) — istilah "Operator/Petugas
+# Penatausahaan / Pengelola BMN Satker" adalah sebutan praktik/role SAKTI
+# (Operator–Validator–Approver), bukan definisi PMK 181/2016. Kunci
+# `pengurus_barang` DIPERTAHANKAN hanya demi kompatibilitas data lama (ditandai
+# "hindari"); peran BMN-pusat yang tepat ditambahkan di bawah.
 PERAN_PEJABAT = {
+    "pengguna_barang": "Pengguna Barang (Menteri/Pimpinan Lembaga)",
     "kuasa_pengguna_barang": "Kuasa Pengguna Barang (KPB) — Kepala Satker",
-    "penatausahaan_bmn": "Petugas Penatausahaan BMN / Operator SIMAK-BMN",
-    "pengurus_barang": "Pengurus Barang",
-    "penanggung_jawab_ruangan": "Penanggung Jawab Ruangan (KIR/DBR)",
+    "penatausahaan_bmn": "Petugas Penatausahaan BMN / Penata Laksana Barang (JFPLB) — Operator SIMAK-BMN/SAKTI",
+    "pengelola_bmn_satker": "Pengelola BMN Satker (a.n. KPB — mis. Kasubbag Umum/Rumah Tangga)",
+    "validator_bmn": "Verifikator/Validator BMN (UAKPB / role Validator SAKTI)",
+    "penanggung_jawab_ruangan": "Penanggung Jawab Ruangan / Pemakai (KIR/DBR)",
     "ppk": "Pejabat Pembuat Komitmen (PPK)",
     "pemeriksa_lpb": "Pemeriksa Laporan Penerimaan Barang (LPB)",
-    "pengguna_barang": "Pengguna Barang (Menteri/Pimpinan Lembaga)",
+    "pengurus_barang": "Pengurus/Penyimpan Barang (istilah Barang Milik DAERAH — hindari untuk BMN pusat)",
+}
+
+# Metadata peran (menjawab "apa peran ini & bedanya"): domain rezim
+# ('bmn' pusat / 'bmd' daerah), peran pada BAST ('penyerah'/'penerima'/
+# 'mengetahui'/'tidak'), dan keterangan singkat berbasis regulasi. Dipakai
+# endpoint referensi + penyaring penanda tangan BAST (hanya peran pengelolaan
+# BMN yang layak jadi "yang menyerahkan").
+PERAN_PEJABAT_META = {
+    "pengguna_barang": {
+        "domain": "bmn", "ttd_bast": "tidak",
+        "keterangan": "Menteri/Pimpinan Lembaga (UAPB). Pemegang kewenangan "
+                      "penggunaan BMN tingkat K/L; pada BAST satker diwakili "
+                      "KPB — tidak menandatangani BAST internal.",
+    },
+    "kuasa_pengguna_barang": {
+        "domain": "bmn", "ttd_bast": "penyerah",
+        "keterangan": "Kepala Kantor/Satker, penanggung jawab UAKPB & pemegang "
+                      "penguasaan BMN satker. Penanda tangan UTAMA: penyerah/"
+                      "mengetahui BAST, serta DBKP & LBKP.",
+    },
+    "penatausahaan_bmn": {
+        "domain": "bmn", "ttd_bast": "penyerah",
+        "keterangan": "Pelaksana teknis pembukuan, inventarisasi & pelaporan "
+                      "BMN — Jabatan Fungsional Penata Laksana Barang / JFPLB "
+                      "(PermenPAN-RB 23/2018), Operator SIMAK-BMN/SAKTI yang "
+                      "ditunjuk KPB. Dapat menyerahkan BMN 'a.n. KPB' pada "
+                      "serah terima rutin. Inilah pengganti tepat 'Pengurus "
+                      "Barang' untuk BMN pusat.",
+    },
+    "pengelola_bmn_satker": {
+        "domain": "bmn", "ttd_bast": "penyerah",
+        "keterangan": "Pejabat pengelola BMN satker (mis. Kasubbag Umum/Rumah "
+                      "Tangga) yang menyerahkan BMN ke pegawai atas nama KPB "
+                      "(KPB 'Mengetahui'). Praktik SOP internal; kewenangan "
+                      "asal melekat pada KPB.",
+    },
+    "validator_bmn": {
+        "domain": "bmn", "ttd_bast": "tidak",
+        "keterangan": "Verifikator/Validator UAKPB (role Validator SAKTI): "
+                      "menguji perekaman Operator. Fungsi kontrol internal, "
+                      "bukan pihak dalam BAST.",
+    },
+    "penanggung_jawab_ruangan": {
+        "domain": "bmn", "ttd_bast": "penerima",
+        "keterangan": "Pegawai pemakai / penanggung jawab ruangan (tercatat di "
+                      "DBR/KIR). Pihak Kedua/penerima pada serah terima internal.",
+    },
+    "ppk": {
+        "domain": "bmn", "ttd_bast": "penerima",
+        "keterangan": "Pejabat Pembuat Komitmen: menerima hasil pekerjaan dari "
+                      "penyedia pada BAST PEROLEHAN (vendor→satker). BUKAN "
+                      "penyerah pada serah terima internal ke pegawai.",
+    },
+    "pemeriksa_lpb": {
+        "domain": "bmn", "ttd_bast": "tidak",
+        "keterangan": "Pemeriksa Laporan Penerimaan Barang persediaan. Penanda "
+                      "tangan LPB, bukan pihak dalam BAST.",
+    },
+    "pengurus_barang": {
+        "domain": "bmd", "ttd_bast": "tidak",
+        "keterangan": "Istilah Barang Milik DAERAH (PP 27/2014 khusus 'Daerah'; "
+                      "Permendagri 7/2024, pengganti 19/2016) — HINDARI untuk "
+                      "BMN pusat; padanannya 'Petugas Penatausahaan BMN / Penata "
+                      "Laksana Barang (JFPLB)'. Dipertahankan hanya demi data lama.",
+    },
 }
 
 # Status kepegawaian pejabat/pegawai (adopsi klasifikasi SIMAN-G/BKN) — kode → uraian.
@@ -48,6 +129,14 @@ UNIT_AKUNTANSI = {
     "uapkpb": {"uraian": "Unit Akuntansi Pembantu Kuasa Pengguna Barang",
                "penanggung_jawab": "Pembantu Kuasa Pengguna Barang"},
 }
+
+
+def peran_penyerah_bast():
+    """Kode peran yang LAYAK jadi 'yang menyerahkan' (Pihak Kesatu) pada BAST
+    serah terima internal: domain BMN pusat & ber-peran BAST 'penyerah'.
+    MURNI (teruji unit)."""
+    return [k for k, m in PERAN_PEJABAT_META.items()
+            if m.get("domain") == "bmn" and m.get("ttd_bast") == "penyerah"]
 
 
 def validate_pejabat(doc):

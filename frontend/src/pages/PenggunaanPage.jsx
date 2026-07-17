@@ -7,6 +7,7 @@ import {
   Paperclip, Upload, FileDown,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -81,6 +82,10 @@ export default function PenggunaanPage({ user, onBack }) {
   const [riwayatBast, setRiwayatBast] = useState(null);
   const buktiRef = useRef(null);
   const [buktiUntuk, setBuktiUntuk] = useState(null); // id BAST tujuan unggah bukti
+  // Referensi pejabat yang layak jadi "yang menyerahkan" BAST (peran
+  // pengelolaan BMN: KPB / Petugas Penatausahaan / Pengelola BMN Satker),
+  // aktif hari ini — dari registry pejabat + metadata peran_penyerah_bast.
+  const [pejabatPenyerah, setPejabatPenyerah] = useState([]);
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
 
@@ -118,6 +123,25 @@ export default function PenggunaanPage({ user, onBack }) {
 
   useEffect(() => {
     axios.get(`${API}/bast/referensi`).then((r) => setJenisBast(r.data?.jenis || [])).catch(() => {});
+    // Kandidat "yang menyerahkan": pejabat berperan penyerah BAST (peran
+    // pengelolaan BMN pusat) yang masih berlaku hari ini.
+    Promise.all([
+      axios.get(`${API}/pejabat/referensi`),
+      axios.get(`${API}/pejabat`),
+    ]).then(([ref, list]) => {
+      const boleh = new Set(ref.data?.peran_penyerah_bast || []);
+      const now = new Date();
+      const hariIni = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      setPejabatPenyerah((list.data?.items || []).filter((p) => {
+        if (!(p.peran || []).some((x) => boleh.has(x))) return false;
+        if (p.aktif === false) return false;
+        const mulai = String(p.berlaku_mulai || "").slice(0, 10);
+        const selesai = String(p.berlaku_selesai || "").slice(0, 10);
+        if (mulai && hariIni < mulai) return false;
+        if (selesai && hariIni > selesai) return false;
+        return true;
+      }));
+    }).catch(() => {});
   }, []);
 
   const bukaBast = () => {
@@ -129,6 +153,9 @@ export default function PenggunaanPage({ user, onBack }) {
       // Utk mutasi/handover: PIHAK KESATU = pemegang lama (prefill dari
       // pemegang yang sedang dibuka); PIHAK KEDUA = pemegang baru.
       pihak_pertama: { nama: p.nama || "", nip: p.nip || "", jabatan: p.jabatan || "", alamat: "" },
+      // Utk non-mutasi: "yang menyerahkan" dipilih dari referensi pejabat
+      // (kosong = otomatis memakai KPB dari pengaturan/registry).
+      penyerah: { id: "", nama: "", nip: "", jabatan: "" },
       pj_tambahan: [],
       terapkan_ke_aset: true,
       booking_otomatis: false,
@@ -149,6 +176,15 @@ export default function PenggunaanPage({ user, onBack }) {
       pihak_kedua: { nama: p.nama || "", nip: p.nip || "", jabatan: p.jabatan || p.pegawai_master_unit || "", alamat: "" } };
   });
 
+  const pilihPenyerah = (id) => setFormBast((f) => {
+    const pj = pejabatPenyerah.find((p) => p.id === id);
+    // Bila penyerah BUKAN KPB → bertindak "a.n. KPB" (KPB ikut "Mengetahui").
+    const anKpb = pj ? !(pj.peran || []).includes("kuasa_pengguna_barang") : false;
+    return { ...f, penyerah: pj
+      ? { id, nama: pj.nama || "", nip: pj.nip || "", jabatan: pj.jabatan || "", atas_nama_kpb: anKpb }
+      : { id: "", nama: "", nip: "", jabatan: "", atas_nama_kpb: false } };
+  });
+
   const kirimBast = async () => {
     const f = formBast;
     if (!f) return;
@@ -158,7 +194,14 @@ export default function PenggunaanPage({ user, onBack }) {
     try {
       const r = await axios.post(`${API}/bast`, {
         jenis: f.jenis, asset_ids: [...f.aset], pihak_kedua: f.pihak_kedua,
-        pihak_pertama: f.jenis === "mutasi_pengguna" ? f.pihak_pertama : null,
+        // Mutasi: PIHAK KESATU = pemegang lama. Non-mutasi: pejabat penyerah
+        // terpilih (kosong = biar backend memakai KPB dari pengaturan).
+        pihak_pertama: f.jenis === "mutasi_pengguna"
+          ? f.pihak_pertama
+          : (f.penyerah?.nama?.trim()
+            ? { nama: f.penyerah.nama, nip: f.penyerah.nip, jabatan: f.penyerah.jabatan, alamat: "" }
+            : null),
+        penyerah_atas_nama_kpb: f.jenis !== "mutasi_pengguna" && !!f.penyerah?.atas_nama_kpb,
         nomor: f.nomor, tanggal: f.tanggal, jangka_dari: f.jangka_dari,
         jangka_sampai: f.jangka_sampai,
         penanggung_jawab_tambahan: f.pj_tambahan.filter((x) => x.nama.trim()),
@@ -1227,6 +1270,26 @@ export default function PenggunaanPage({ user, onBack }) {
                     <Input type="date" value={formBast.jangka_sampai} onChange={(e) => setFormBast((f) => ({ ...f, jangka_sampai: e.target.value }))} /></div>
                 </div>
               )}
+              {formBast.jenis !== "mutasi_pengguna" && (
+                <div>
+                  <label className="text-xs font-medium block mb-1">
+                    {formBast.jenis === "pengembalian"
+                      ? "Yang menerima (PIHAK KESATU — wakil satker)"
+                      : "Yang menyerahkan (PIHAK KESATU)"} — dari Referensi Pejabat
+                  </label>
+                  <select value={formBast.penyerah.id} data-testid="bast-penyerah"
+                    className="w-full h-10 rounded-md border border-input bg-background px-2 text-sm"
+                    onChange={(e) => pilihPenyerah(e.target.value)}>
+                    <option value="">Otomatis: Kuasa Pengguna Barang (KPB) dari pengaturan</option>
+                    {pejabatPenyerah.map((p) => (
+                      <option key={p.id} value={p.id}>{p.nama}{p.jabatan ? ` — ${p.jabatan}` : ""}</option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    Hanya peran pengelolaan BMN (KPB, Petugas Penatausahaan, Pengelola BMN Satker a.n. KPB). Kosong = otomatis memakai KPB aktif.
+                  </p>
+                </div>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div><label className="text-xs font-medium block mb-1">Penerima (PIHAK KEDUA) *</label>
                   <Input value={formBast.pihak_kedua.nama} onChange={(e) => setFormBast((f) => ({ ...f, pihak_kedua: { ...f.pihak_kedua, nama: e.target.value } }))} data-testid="bast-penerima" /></div>
@@ -1273,8 +1336,11 @@ export default function PenggunaanPage({ user, onBack }) {
                 Sertakan lampiran foto barang (foto sampul tiap aset)
               </label>
               <div>
-                <label className="text-xs font-medium block mb-1">Keterangan lain (opsional — jadi pasal tersendiri)</label>
-                <Input value={formBast.keterangan} onChange={(e) => setFormBast((f) => ({ ...f, keterangan: e.target.value }))} />
+                <label className="text-xs font-medium block mb-1">Pasal/ketentuan tambahan (opsional)</label>
+                <Textarea value={formBast.keterangan} rows={3} data-testid="bast-keterangan"
+                  placeholder="Satu baris = satu butir ketentuan. Contoh:&#10;Pemeliharaan rutin menjadi tanggung jawab PIHAK KEDUA.&#10;Kerusakan akibat kelalaian diganti sesuai ketentuan."
+                  onChange={(e) => setFormBast((f) => ({ ...f, keterangan: e.target.value }))} />
+                <p className="text-[10px] text-muted-foreground mt-0.5">Tiap baris menjadi satu butir pada pasal "Ketentuan Tambahan".</p>
               </div>
               <div className="flex justify-end gap-2 pt-1">
                 <Button variant="outline" onClick={() => setFormBast(null)}>Batal</Button>

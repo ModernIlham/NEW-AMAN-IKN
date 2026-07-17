@@ -292,16 +292,40 @@ export default function PejabatPage({ user, onBack }) {
                 <div className="flex flex-wrap gap-1.5">
                   {peranRef.map((p) => {
                     const on = (form.peran || []).includes(p.kode);
+                    const bmd = p.domain === "bmd";
                     return (
-                      <button key={p.kode} type="button" onClick={() => togglePeran(p.kode)}
+                      <button key={p.kode} type="button" onClick={() => togglePeran(p.kode)} title={p.keterangan || ""}
                         className={`px-2.5 h-8 rounded-full border text-[11px] font-medium min-w-0 min-h-0 transition-colors ${
-                          on ? "bg-indigo-600 border-indigo-600 text-white" : "border-border text-muted-foreground hover:bg-muted"}`}
+                          on ? "bg-indigo-600 border-indigo-600 text-white"
+                            : bmd ? "border-amber-500/50 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+                            : "border-border text-muted-foreground hover:bg-muted"}`}
                         data-testid={`pejabat-peran-${p.kode}`}>
-                        {p.uraian.split(" — ")[0].split(" / ")[0]}
+                        {bmd ? "⚠ " : ""}{p.uraian.split(" — ")[0].split(" / ")[0]}
                       </button>
                     );
                   })}
                 </div>
+                {/* Penjelasan peran terpilih — menjawab beda tiap peran &
+                    menandai istilah Barang Milik DAERAH agar tak salah pakai. */}
+                {(form.peran || []).length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {(form.peran || []).map((kode) => {
+                      const p = peranRef.find((x) => x.kode === kode);
+                      if (!p?.keterangan) return null;
+                      return (
+                        <li key={kode} className={`text-[10.5px] leading-snug rounded-md px-2 py-1 ${
+                          p.domain === "bmd" ? "bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                            : "bg-muted text-muted-foreground"}`}>
+                          <span className="font-semibold">{p.uraian.split(" — ")[0].split(" (istilah")[0]}:</span>{" "}
+                          {p.keterangan}
+                          {p.ttd_bast && p.ttd_bast !== "tidak" && (
+                            <span className="ml-1 font-medium">· BAST: {p.ttd_bast}</span>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
               </Field>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

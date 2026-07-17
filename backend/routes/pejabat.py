@@ -16,8 +16,8 @@ from auth_utils import require_admin, require_user
 from db import db
 from shared_utils import log_audit
 from pejabat_utils import (
-    PERAN_PEJABAT, STATUS_KEPEGAWAIAN, UNIT_AKUNTANSI,
-    pejabat_aktif_untuk_peran, validate_pejabat,
+    PERAN_PEJABAT, PERAN_PEJABAT_META, STATUS_KEPEGAWAIAN, UNIT_AKUNTANSI,
+    peran_penyerah_bast, pejabat_aktif_untuk_peran, validate_pejabat,
 )
 
 pejabat_router = APIRouter()
@@ -67,9 +67,17 @@ def _bersih(p: PejabatIn) -> dict:
 
 @pejabat_router.get("/pejabat/referensi")
 async def referensi_pejabat(_user: dict = Depends(require_user)):
-    """Referensi peran, status kepegawaian & unit akuntansi (untuk dropdown UI)."""
+    """Referensi peran, status kepegawaian & unit akuntansi (untuk dropdown UI).
+
+    Tiap peran disertai metadata (domain rezim bmn/bmd, peran pada BAST, dan
+    keterangan berbasis regulasi) agar UI dapat menjelaskan perbedaan peran &
+    menyaring penanda tangan BAST. `peran_penyerah_bast` = kode peran yang
+    layak jadi 'yang menyerahkan' pada serah terima internal.
+    """
     return {
-        "peran": [{"kode": k, "uraian": v} for k, v in PERAN_PEJABAT.items()],
+        "peran": [{"kode": k, "uraian": v, **PERAN_PEJABAT_META.get(k, {})}
+                  for k, v in PERAN_PEJABAT.items()],
+        "peran_penyerah_bast": peran_penyerah_bast(),
         "status_kepegawaian": [{"kode": k, "uraian": v} for k, v in STATUS_KEPEGAWAIAN.items()],
         "unit_akuntansi": [{"kode": k, **v} for k, v in UNIT_AKUNTANSI.items()],
     }
