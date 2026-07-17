@@ -90,9 +90,10 @@ class TestAgendaCsv:
              "created_at": "2026-07-11T02:00:00Z"},
         ])
         assert rows[0][0] == "No Agenda"
-        assert rows[1][1] == "Keluar" and rows[1][6] == "KPKNL"
-        assert rows[1][11] == "2026-07-18"
-        assert rows[2][1] == "Masuk" and rows[2][11] == "2026-07-11"
+        assert rows[0][4] == "Nomor Eksternal"
+        assert rows[1][1] == "Keluar" and rows[1][7] == "KPKNL"
+        assert rows[1][12] == "2026-07-18"
+        assert rows[2][1] == "Masuk" and rows[2][12] == "2026-07-11"
 
 
 # ── Klasifikasi otomatis (persuratan smart) ──

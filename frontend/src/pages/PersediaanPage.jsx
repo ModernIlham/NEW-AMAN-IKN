@@ -18,6 +18,7 @@ import {
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
+import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -479,6 +480,7 @@ export default function PersediaanPage({ user, onBack }) {
               {total} barang · stok & nilai mengikuti layer FIFO · transaksi masuk/keluar ber-jurnal
             </p>
           </div>
+          <BookingNomorButton modul="persediaan" jenisNaskah="Laporan" referensi="Laporan Persediaan" />
         </div>
       </header>
 

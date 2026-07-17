@@ -17,6 +17,7 @@ import {
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
+import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -280,6 +281,7 @@ export default function PemeliharaanPage({ user, onBack }) {
           <Button size="sm" onClick={bukaForm} className="bg-orange-600 hover:bg-orange-700 text-white flex-shrink-0" data-testid="pemeliharaan-tambah">
             <Plus className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">Catat</span>
           </Button>
+          <BookingNomorButton modul="pemeliharaan" jenisNaskah="Laporan" referensi="DHPB" />
         </div>
       </header>
 

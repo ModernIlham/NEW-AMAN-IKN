@@ -48,6 +48,31 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#345] Persuratan: edit surat masuk, anchor nomor eksternal, tombol "Booking Nomor" di 15 halaman — 2026-07-17
+
+- **Surat masuk kini dapat diedit** (tombol pensil di setiap baris masuk):
+  nomor surat pengirim, pengirim, perihal, tanggal, modul, keterangan —
+  nomor agenda tetap; nomor surat KELUAR tetap tidak pernah bisa diubah
+  (milik counter agenda).
+- **Field "Nomor Eksternal"** pada surat keluar — anchor **nomor sah dari
+  aplikasi pihak ketiga** (Srikandi/e-office instansi) bila penomoran
+  resmi bukan dari AMAN: terisi saat booking/edit draf, tampil di tabel
+  ("eks: …") dan kolom baru ekspor CSV; surat yang SUDAH DISAHKAN tetap
+  bisa diisi nomor eksternal & keterangannya (tombol pensil khusus) —
+  field lain tetap terkunci.
+- **Tombol "Booking Nomor" tersebar di 15 titik**: halaman unduh laporan
+  inventarisasi (Rekapitulasi ▸ unduhan LHI) + header 14 halaman modul
+  (Pelaporan, Wasdal, Pemeliharaan, Penggunaan, Pemanfaatan, Pemusnahan,
+  Pemindahtanganan, Penghapusan, Pengamanan, Penilaian, Perencanaan,
+  Penganggaran, Pengadaan, Persediaan) — komponen `BookingNomorButton`:
+  modul/jenis naskah/kegiatan/referensi terisi otomatis dari konteks
+  halaman, pratinjau nomor live, hasil booking bisa langsung disalin ke
+  field nomor dokumen.
+- Verifikasi: suite **468 lulus**; smoke persuratan end-to-end; eslint
+  17 file bersih; `yarn build` sukses.
+
+---
+
 ## [#344] Naskah BA sesuai kaidah (seluruh tim bertanda tangan), RHI 1 halaman, DBKP ber-nomor SK — 2026-07-17
 
 - **Review naskah kedua Berita Acara** (riset kaidah: BAHI ditandatangani

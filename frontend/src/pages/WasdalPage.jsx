@@ -14,6 +14,7 @@ import {
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import { authMediaUrl } from "@/lib/mediaUrl";
+import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -263,6 +264,7 @@ export default function WasdalPage({ user, onBack }) {
           >
             <RefreshCw className="w-4 h-4" />
           </button>
+          <BookingNomorButton modul="wasdal" jenisNaskah="Laporan" referensi="Laporan Wasdal" />
         </div>
       </header>
 

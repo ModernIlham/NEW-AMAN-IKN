@@ -14,6 +14,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { authMediaUrl } from "@/lib/mediaUrl";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
+import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -180,6 +181,7 @@ export default function PenghapusanPage({ user, onBack }) {
             data-testid="penghapusan-export">
             <Download className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">CSV</span>
           </Button>
+          <BookingNomorButton modul="penghapusan" jenisNaskah="Surat Keputusan" referensi="SK Penghapusan" />
         </div>
       </header>
 

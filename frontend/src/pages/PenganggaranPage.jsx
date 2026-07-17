@@ -13,6 +13,7 @@ import {
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
+import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -194,6 +195,7 @@ export default function PenganggaranPage({ user, onBack }) {
             className="bg-teal-600 hover:bg-teal-700 text-white flex-shrink-0" data-testid="penganggaran-tambah">
             <Plus className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">Catat Usulan</span>
           </Button>
+          <BookingNomorButton modul="penganggaran" jenisNaskah="Laporan" referensi="Usulan Anggaran" />
         </div>
       </header>
 

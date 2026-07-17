@@ -14,6 +14,7 @@ import {
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import SimanSyncCard from "@/components/pelaporan/SimanSyncCard";
+import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -163,6 +164,7 @@ export default function PelaporanPage({ user, onBack }) {
               Laporan resmi lintas kegiatan + laporan persediaan — satu pintu
             </p>
           </div>
+          <BookingNomorButton modul="pelaporan" jenisNaskah="Laporan" referensi="LHI/LBKP" />
         </div>
       </header>
 

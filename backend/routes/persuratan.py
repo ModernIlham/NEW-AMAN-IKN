@@ -51,6 +51,10 @@ class SuratKeluarIn(BaseModel):
     kode_keamanan: Optional[str] = "B"
     tanggal_surat: Optional[str] = ""   # default: hari ini (UTC date)
     referensi: Optional[str] = ""       # mis. "BAHI", "LHI", "LBKP S1 2026"
+    # Anchor nomor SAH dari sistem lain (Srikandi/e-office instansi dsb.)
+    # bila penomoran resmi tidak dari AMAN — nomor internal tetap dibooking
+    # sebagai nomor agenda, nomor eksternal jadi rujukan silang.
+    nomor_eksternal: Optional[str] = ""
     keterangan: Optional[str] = ""
 
 
@@ -73,12 +77,15 @@ class UbahSuratIn(BaseModel):
     perihal: Optional[str] = None
     tujuan: Optional[str] = None
     pengirim: Optional[str] = None
+    # Hanya untuk surat MASUK: nomor surat dari pengirim boleh dikoreksi.
+    nomor_surat: Optional[str] = None
     jenis_naskah: Optional[str] = None
     modul: Optional[str] = None
     kegiatan_id: Optional[str] = None
     kode_klasifikasi: Optional[str] = None
     tanggal_surat: Optional[str] = None
     referensi: Optional[str] = None
+    nomor_eksternal: Optional[str] = None
     keterangan: Optional[str] = None
 
 
@@ -375,6 +382,7 @@ async def booking_surat_keluar(payload: SuratKeluarIn,
         "kode_keamanan": str(data.get("kode_keamanan") or "B").strip().upper(),
         "tanggal_surat": tanggal_surat,
         "referensi": str(data.get("referensi") or "").strip(),
+        "nomor_eksternal": str(data.get("nomor_eksternal") or "").strip(),
         "keterangan": str(data.get("keterangan") or "").strip(),
         "dibuat_oleh": user.get("username", "system"),
         "riwayat": [{"status": "dibooking", "tanggal": now.isoformat(),
@@ -482,11 +490,20 @@ async def ubah_surat(surat_id: str, payload: UbahSuratIn,
               if v is not None}
     if not update:
         raise HTTPException(status_code=400, detail="Tidak ada yang diubah")
+    if "nomor_surat" in update:
+        # Nomor surat keluar milik counter agenda — tak pernah bisa diubah;
+        # nomor surat MASUK berasal dari pengirim, boleh dikoreksi.
+        if s.get("jenis") != "masuk":
+            raise HTTPException(status_code=409,
+                                detail="Nomor surat keluar tidak dapat diubah")
+        if not update["nomor_surat"]:
+            raise HTTPException(status_code=400, detail="Nomor surat wajib diisi")
+        update["nomor"] = update.pop("nomor_surat")
     if s.get("jenis") == "keluar" and s.get("status") != "dibooking":
-        terlarang = set(update) - {"keterangan"}
+        terlarang = set(update) - {"keterangan", "nomor_eksternal"}
         if terlarang:
             raise HTTPException(status_code=409, detail=(
-                "Surat sudah final — hanya 'keterangan' yang boleh diubah "
+                "Surat sudah final — hanya 'keterangan' dan 'nomor eksternal' yang boleh diubah "
                 f"(ditolak: {', '.join(sorted(terlarang))})"))
     if "modul" in update and update["modul"] and update["modul"] not in MODUL_AMAN:
         raise HTTPException(status_code=400,

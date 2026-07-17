@@ -155,9 +155,10 @@ def validate_transisi(status_lama, status_baru, jenis) -> str:
 def baris_agenda_csv(items) -> list:
     """Baris buku agenda (list of list) untuk ekspor CSV — kolom praktik
     buku agenda kembar."""
-    rows = [["No Agenda", "Jenis", "Status", "Nomor Surat", "Tanggal Surat",
-             "Perihal", "Dari/Kepada", "Jenis Naskah", "Modul", "Kegiatan",
-             "Kode Klasifikasi", "Disahkan/Diterima Pada", "Keterangan"]]
+    rows = [["No Agenda", "Jenis", "Status", "Nomor Surat", "Nomor Eksternal",
+             "Tanggal Surat", "Perihal", "Dari/Kepada", "Jenis Naskah", "Modul",
+             "Kegiatan", "Kode Klasifikasi", "Disahkan/Diterima Pada",
+             "Keterangan"]]
     for s in items or []:
         keluar = s.get("jenis") == "keluar"
         rows.append([
@@ -166,6 +167,7 @@ def baris_agenda_csv(items) -> list:
             (STATUS_KELUAR if keluar else STATUS_MASUK).get(
                 s.get("status"), s.get("status")),
             s.get("nomor"),
+            s.get("nomor_eksternal") or "",
             s.get("tanggal_surat"),
             s.get("perihal"),
             s.get("tujuan") if keluar else s.get("pengirim"),
