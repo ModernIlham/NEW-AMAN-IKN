@@ -74,6 +74,9 @@ export default function PenggunaanPage({ user, onBack }) {
   const [formProses, setFormProses] = useState(null);
   const lampPspInputRef = useRef(null);
   const searchTimer = useRef(null);
+  // Dialog BAST serah terima pengguna: {form, aset:Set(id), saving}
+  const [formBast, setFormBast] = useState(null);
+  const [jenisBast, setJenisBast] = useState([]);
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
 
@@ -108,6 +111,47 @@ export default function PenggunaanPage({ user, onBack }) {
   }, []);
 
   useEffect(() => { load(1, ""); loadIdle(); loadPsp(); loadProses(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    axios.get(`${API}/bast/referensi`).then((r) => setJenisBast(r.data?.jenis || [])).catch(() => {});
+  }, []);
+
+  const bukaBast = () => {
+    const p = detail?.pemegang || {};
+    setFormBast({
+      jenis: "penggunaan_melekat", nomor: "", tanggal: "",
+      jangka_dari: "", jangka_sampai: "", sertakan_foto: false, keterangan: "",
+      pihak_kedua: { nama: p.nama || "", nip: p.nip || "", jabatan: p.jabatan || p.pegawai_master_unit || "", alamat: "" },
+      pj_tambahan: [],
+      aset: new Set((detail?.rows || []).map((a) => a.id)),
+      saving: false,
+    });
+  };
+
+  const kirimBast = async () => {
+    const f = formBast;
+    if (!f) return;
+    if (f.aset.size === 0) { toast.error("Pilih minimal satu aset"); return; }
+    if (!f.pihak_kedua.nama.trim()) { toast.error("Nama penerima wajib diisi"); return; }
+    setFormBast((x) => ({ ...x, saving: true }));
+    try {
+      const r = await axios.post(`${API}/bast`, {
+        jenis: f.jenis, asset_ids: [...f.aset], pihak_kedua: f.pihak_kedua,
+        nomor: f.nomor, tanggal: f.tanggal, jangka_dari: f.jangka_dari,
+        jangka_sampai: f.jangka_sampai,
+        penanggung_jawab_tambahan: f.pj_tambahan.filter((x) => x.nama.trim()),
+        sertakan_foto: f.sertakan_foto, keterangan: f.keterangan,
+      });
+      toast.success("BAST tersimpan — mengunduh PDF…");
+      setFormBast(null);
+      downloadFileWithProgress(`${API}/bast/${r.data.id}/pdf`,
+        `BAST_${(f.pihak_kedua.nama || "pengguna").replace(/\s/g, "_")}.pdf`,
+        { label: "BAST Serah Terima" }).catch(() => {});
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal membuat BAST");
+      setFormBast((x) => (x ? { ...x, saving: false } : x));
+    }
+  };
 
   // Pencarian aset (debounce) untuk dialog catat SK PSP
   useEffect(() => {
@@ -999,6 +1043,102 @@ export default function PenggunaanPage({ user, onBack }) {
       </Dialog>
 
       {/* ── Dialog daftar aset pemegang ── */}
+      {/* ── Dialog Buat BAST Serah Terima (multi-aset, per jenis) ── */}
+      <Dialog open={!!formBast} onOpenChange={(o) => { if (!o) setFormBast(null); }}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Buat BAST — {detail?.pemegang?.nama}</DialogTitle>
+            <DialogDescription className="text-xs">
+              Multi-aset dalam satu BAST; nomor bisa dipesan lewat tombol Booking Nomor lalu ditempel di sini.
+            </DialogDescription>
+          </DialogHeader>
+          {formBast && (
+            <div className="space-y-3 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium block mb-1">Jenis Serah Terima</label>
+                  <select value={formBast.jenis} onChange={(e) => setFormBast((f) => ({ ...f, jenis: e.target.value }))}
+                    className="w-full h-10 rounded-md border border-input bg-background px-2 text-sm" data-testid="bast-jenis">
+                    {jenisBast.map((j) => <option key={j.kode} value={j.kode}>{j.uraian}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium block mb-1">Tanggal BAST</label>
+                  <Input type="date" value={formBast.tanggal} onChange={(e) => setFormBast((f) => ({ ...f, tanggal: e.target.value }))} />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium block mb-1">Nomor (opsional — dari Booking Nomor)</label>
+                <Input value={formBast.nomor} onChange={(e) => setFormBast((f) => ({ ...f, nomor: e.target.value }))} className="font-mono" placeholder="kosong = titik-titik utk diisi" data-testid="bast-nomor" />
+              </div>
+              {formBast.jenis === "penggunaan_sementara" && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div><label className="text-xs font-medium block mb-1">Jangka: dari *</label>
+                    <Input type="date" value={formBast.jangka_dari} onChange={(e) => setFormBast((f) => ({ ...f, jangka_dari: e.target.value }))} /></div>
+                  <div><label className="text-xs font-medium block mb-1">sampai *</label>
+                    <Input type="date" value={formBast.jangka_sampai} onChange={(e) => setFormBast((f) => ({ ...f, jangka_sampai: e.target.value }))} /></div>
+                </div>
+              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div><label className="text-xs font-medium block mb-1">Penerima (PIHAK KEDUA) *</label>
+                  <Input value={formBast.pihak_kedua.nama} onChange={(e) => setFormBast((f) => ({ ...f, pihak_kedua: { ...f.pihak_kedua, nama: e.target.value } }))} data-testid="bast-penerima" /></div>
+                <div><label className="text-xs font-medium block mb-1">NIP/NIK</label>
+                  <Input value={formBast.pihak_kedua.nip} onChange={(e) => setFormBast((f) => ({ ...f, pihak_kedua: { ...f.pihak_kedua, nip: e.target.value } }))} className="font-mono" /></div>
+                <div><label className="text-xs font-medium block mb-1">Jabatan</label>
+                  <Input value={formBast.pihak_kedua.jabatan} onChange={(e) => setFormBast((f) => ({ ...f, pihak_kedua: { ...f.pihak_kedua, jabatan: e.target.value } }))} /></div>
+                <div><label className="text-xs font-medium block mb-1">Alamat/Unit</label>
+                  <Input value={formBast.pihak_kedua.alamat} onChange={(e) => setFormBast((f) => ({ ...f, pihak_kedua: { ...f.pihak_kedua, alamat: e.target.value } }))} /></div>
+              </div>
+              {formBast.jenis === "operasional_unit" && (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium block">Penanggung jawab tambahan per unit/tempat/tugas (opsional)</label>
+                  {formBast.pj_tambahan.map((pj, i) => (
+                    <div key={i} className="flex gap-2">
+                      <Input value={pj.nama} placeholder="Nama" onChange={(e) => setFormBast((f) => ({ ...f, pj_tambahan: f.pj_tambahan.map((x, j) => j === i ? { ...x, nama: e.target.value } : x) }))} />
+                      <Input value={pj.unit_tempat_tugas} placeholder="Unit/tempat/tugas" onChange={(e) => setFormBast((f) => ({ ...f, pj_tambahan: f.pj_tambahan.map((x, j) => j === i ? { ...x, unit_tempat_tugas: e.target.value } : x) }))} />
+                      <button type="button" className="p-1.5 rounded text-red-500 hover:bg-red-500/10 min-w-0 min-h-0" aria-label="Hapus baris"
+                        onClick={() => setFormBast((f) => ({ ...f, pj_tambahan: f.pj_tambahan.filter((_, j) => j !== i) }))}><X className="w-3.5 h-3.5" /></button>
+                    </div>
+                  ))}
+                  <Button size="sm" variant="outline" className="h-7 text-[11px]"
+                    onClick={() => setFormBast((f) => ({ ...f, pj_tambahan: [...f.pj_tambahan, { nama: "", unit_tempat_tugas: "" }] }))}>
+                    <Plus className="w-3 h-3 mr-1" />Tambah penanggung jawab
+                  </Button>
+                </div>
+              )}
+              <div>
+                <label className="text-xs font-medium block mb-1">Aset yang diserahterimakan ({formBast.aset.size} dipilih)</label>
+                <div className="max-h-36 overflow-y-auto border border-border rounded-lg divide-y divide-border/60">
+                  {(detail?.rows || []).map((a) => (
+                    <label key={a.id} className="flex items-center gap-2 px-2.5 py-1.5 text-xs cursor-pointer hover:bg-muted">
+                      <input type="checkbox" checked={formBast.aset.has(a.id)} className="w-3.5 h-3.5"
+                        onChange={(e) => setFormBast((f) => { const s = new Set(f.aset); if (e.target.checked) s.add(a.id); else s.delete(a.id); return { ...f, aset: s }; })} />
+                      <span className="font-mono">{a.asset_code}·{a.NUP}</span>
+                      <span className="truncate flex-1">{a.asset_name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <label className="flex items-center gap-2 text-xs cursor-pointer">
+                <input type="checkbox" checked={formBast.sertakan_foto} className="w-3.5 h-3.5" data-testid="bast-foto"
+                  onChange={(e) => setFormBast((f) => ({ ...f, sertakan_foto: e.target.checked }))} />
+                Sertakan lampiran foto barang (foto sampul tiap aset)
+              </label>
+              <div>
+                <label className="text-xs font-medium block mb-1">Keterangan lain (opsional — jadi pasal tersendiri)</label>
+                <Input value={formBast.keterangan} onChange={(e) => setFormBast((f) => ({ ...f, keterangan: e.target.value }))} />
+              </div>
+              <div className="flex justify-end gap-2 pt-1">
+                <Button variant="outline" onClick={() => setFormBast(null)}>Batal</Button>
+                <Button onClick={kirimBast} disabled={formBast.saving} data-testid="bast-simpan">
+                  {formBast.saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : null}Simpan &amp; Unduh PDF
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={!!detail} onOpenChange={(o) => { if (!o) setDetail(null); }}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
@@ -1020,6 +1160,10 @@ export default function PenggunaanPage({ user, onBack }) {
               ).catch(() => {})}
               data-testid="penggunaan-unduh-daftar">
               <FileText className="w-3.5 h-3.5 mr-1.5" />Unduh Daftar (PDF Lampiran BAST)
+            </Button>
+            <Button size="sm" className="h-8 text-xs min-h-0 self-start"
+              onClick={bukaBast} data-testid="penggunaan-buat-bast">
+              <ScrollText className="w-3.5 h-3.5 mr-1.5" />Buat BAST Serah Terima
             </Button>
             <ul className="space-y-2">
               {(detail?.rows || []).map((a) => (
