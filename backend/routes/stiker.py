@@ -102,9 +102,13 @@ def _gambar_stiker(c, x, y, spec, aset, kop, logo, mm):
     c.setLineWidth(0.5)
     c.line(x, hdr_y, x + w, hdr_y)
 
-    # ── Badan: teks kiri, QR kanan ──
-    qr_sisi = h - hdr - 2 * pad
+    # ── Badan: teks kiri, QR kanan (QR TIDAK setinggi penuh badan —
+    # permintaan pemilik: jangan terlalu besar; 78% tinggi badan, rata
+    # tengah vertikal) ──
+    badan_h = h - hdr - 2 * pad
+    qr_sisi = badan_h * 0.78
     qr_x = x + w - pad - qr_sisi
+    qr_y = y + pad + (badan_h - qr_sisi) / 2
     lebar_teks = qr_x - x - 2 * pad
 
     kode = str(aset.get("asset_code") or "").strip()
@@ -140,7 +144,7 @@ def _gambar_stiker(c, x, y, spec, aset, kop, logo, mm):
         from routes.cards import build_qr_flowable
         qr = build_qr_flowable(payload, qr_sisi)
         if qr is not None:
-            renderPDF.draw(qr, c, qr_x, y + pad)
+            renderPDF.draw(qr, c, qr_x, qr_y)
     except Exception:
         pass
 
@@ -214,10 +218,12 @@ async def cetak_stiker_label(
     kop = await pengaturan_kop(kode_satker=kode_satker_user(_user)) or {}
     logo = _logo_reader(kop.get("logo_url"))
 
-    # ── Grid otomatis: kolom × baris menyesuaikan kertas & ukuran stiker ──
+    # ── Grid otomatis: kolom × baris menyesuaikan kertas & ukuran stiker.
+    # Jarak antar kotak SANGAT RAPAT (permintaan pemilik) — hanya celah
+    # tipis 1.5mm agar mudah dipotong tanpa buang kertas. ──
     page_w, page_h = page
-    margin = 7 * mm
-    gap = 4 * mm
+    margin = 6 * mm
+    gap = 1.5 * mm
     lw, lh = spec["w"] * mm, spec["h"] * mm
     kolom = max(1, int((page_w - 2 * margin + gap) // (lw + gap)))
     baris = max(1, int((page_h - 2 * margin + gap) // (lh + gap)))

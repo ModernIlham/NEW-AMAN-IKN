@@ -48,6 +48,22 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#400] Stiker: jarak antar kotak dirapatkan (celah tipis) + QR diperkecil — 2026-07-18
+
+Umpan balik pemilik atas fitur stiker:
+- **Grid sangat rapat**: jarak antar kotak 4mm → **1,5mm** (celah tipis utk
+  memotong tanpa buang kertas), margin 7mm → 6mm. Muatan per halaman naik:
+  Besar A4 12 (was 10) · A3 16; Sedang A4 27 (was 24) · A3 48 (was 36);
+  Kecil A4 48 (was 40) · A3 102 (was 84) — hint dialog disesuaikan dgn
+  hitungan grid aktual.
+- **QR diperkecil**: tidak lagi setinggi penuh badan stiker — 78% tinggi
+  badan, rata tengah vertikal; ruang teks kiri sedikit bertambah.
+- Verifikasi: smoke render 6 kombinasi lulus, muatan per halaman dihitung
+  ulang dari kode nyata, pratinjau visual diperiksa, 527 tes unit lulus,
+  lint & build sukses.
+
+---
+
 ## [#399] TTD elektronik DIBUBUHKAN langsung ke dokumen PDF yang dikirim — 2026-07-18
 
 Permintaan pemilik: e-sign tidak lagi hanya mengumpulkan tanda tangan —
