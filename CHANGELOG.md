@@ -48,6 +48,43 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#385] Audit BAST resmi: pasal lengkap per jenis, dasar hukum mutakhir (PMK 40/2024), desain naskah dirapikan — 2026-07-18
+
+Audit menyeluruh SEMUA generator BAST (mandat pemilik): riset anatomi BAST
+resmi (PerANRI 5/2021 + rezim penggunaan BMN) → review 3 dimensi → render
+empiris 7 varian (6 jenis + BAST PSP) dengan asersi ketat:
+- **Dasar hukum dimutakhirkan**: PMK 246/PMK.06/2014 jo. 76/2019 sudah
+  DICABUT → diganti **PMK Nomor 40 Tahun 2024** (konsisten dengan BAST PSP);
+  istilah asing "(Handover)" dihapus dari judul jenis.
+- **Pasal-pasal dilengkapi sesuai anatomi resmi** per jenis:
+  - semua jenis: pasal baru **Keadaan Barang & Kelengkapan** (pengecekan
+    bersama) + **Penutup rangkap 2 (dua) berkekuatan hukum sama**;
+  - melekat/operasional/lainnya & mutasi: klausul **larangan
+    memindahtangankan** + **pelaporan kehilangan/kerusakan & tuntutan ganti
+    rugi**; mutasi bertambah pasal **Status Pencatatan** (BMN tetap tercatat
+    di satker, hanya daftar pemegang/DBR/KIB berubah);
+  - penggunaan sementara: "tidak mengalihkan kepemilikan" dikoreksi menjadi
+    **tidak mengalihkan status penggunaan**, + klausul perpanjangan, pasal
+    **Biaya** (pemeliharaan beban penerima) & kewajiban **BAST pengembalian**;
+  - pengembalian: klausul **pemeriksaan fisik**, peralihan kembali tanggung
+    jawab, pemutakhiran pencatatan.
+- **Naskah & desain**: frasa pembuka lengkap ("…bertempat di …"), identitas
+  pihak ber-label sejajar + "selanjutnya disebut PIHAK …", konsiderans
+  "berdasarkan:", isi pasal hitam rata kiri-kanan (bukan abu-abu metadata),
+  judul pasal ber-jarak & anti-yatim (KeepTogether), tabel objek bertambah
+  kolom **Nilai Perolehan + baris JUMLAH**, header tabel dua baris benar.
+- **BAST PSP dirombak ke bentuk pasal** (Objek ber-tabel kondisi+nilai+total,
+  Peralihan Tanggung Jawab, Penutup rangkap 2) + nomor + frasa hari-tanggal
+  terbilang + blok ttd 3 pihak satu kesatuan + spesimen TTD KPB.
+- **Ketahanan**: teks isian ber-'&'/'<' tidak lagi bisa merusak PDF (escape
+  di pasal kustom, PJ tambahan, judul, dan `_signature_block` — berlaku utk
+  seluruh laporan); kop BAST kini per-satker; akses PDF ber-guard satker;
+  caption foto lampiran tak terpisah dari fotonya; footer dibatasi.
+- Verifikasi: render empiris 7 varian lulus asersi (pasal, rangkap, ganti
+  rugi, escape '&', ≤2 halaman); suite **504 lulus**.
+
+---
+
 ## [#384] Isolasi satker MENYELURUH: seluruh register siklus ber-stamp & ter-scope — 2026-07-18
 
 Melengkapi isolasi multi-satker ke SEMUA register siklus BMN (pola stamp +

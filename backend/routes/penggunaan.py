@@ -289,55 +289,103 @@ async def bast_psp_pdf(sk_id: str, _user: dict = Depends(require_user)):
     elements.extend(_kop_surat_flowables(settings, doc.width))
     elements.extend(_title_block(
         "BERITA ACARA SERAH TERIMA\nPENETAPAN STATUS PENGGUNAAN "
-        "BARANG MILIK NEGARA"))
+        "BARANG MILIK NEGARA",
+        nomor="......./......./........"))
     penetap = str(sk.get("penetap") or "").strip()
+    from pelaporan_utils import narasi_hari_tanggal as _nht
+    _hari = datetime.now(timezone.utc).date().isoformat()
+    _nar = _nht(_hari)
+    _frasa_hari = (f"Pada hari ini, {_nar['hari']}, tanggal "
+                   f"{_nar['tanggal_terbilang']}, bulan {_nar['bulan']}, "
+                   f"tahun {_nar['tahun_terbilang']} ({_fmt_tanggal_id(_hari)}), "
+                   if _nar else "Pada hari ini, ")
     elements.append(Paragraph(
-        f"Berdasarkan Surat Keputusan {jenis} Nomor "
+        f"{_frasa_hari}berdasarkan Surat Keputusan {jenis} Nomor "
         f"<b>{sk.get('nomor_sk') or '-'}</b> tanggal "
         f"{_fmt_tanggal_id(sk.get('tanggal_sk'))}"
         + (f" yang ditetapkan oleh {penetap}" if penetap else "")
-        + f", pada hari ini telah dilakukan serah terima {len(aset)} unit "
+        + f", telah dilakukan serah terima {len(aset)} unit "
         f"Barang Milik Negara untuk penyelenggaraan tugas dan fungsi "
-        f"(PMK 40 Tahun 2024), dengan rincian sebagai berikut:",
+        f"(PMK 40 Tahun 2024).",
         st['Meta']))
-    elements.append(Spacer(1, 4 * rl_mm))
+    elements.append(Spacer(1, 2 * rl_mm))
 
-    headers = ["No", "Kode Barang", "NUP", "Nama Barang"]
+    # Struktur PASAL (audit BAST: naskah resmi berbentuk pasal, konsisten
+    # dengan generator BAST utama) + tabel diperkaya kondisi & nilai + total.
+    from reportlab.lib.colors import HexColor as _HC
+    from reportlab.lib.enums import TA_CENTER as _TAC, TA_JUSTIFY as _TAJ
+    from reportlab.lib.styles import ParagraphStyle as _PS
+    from xml.sax.saxutils import escape as _esc
+    _isi = _PS('PspIsi', parent=st['Body'], fontSize=8.6, leading=11.6,
+               alignment=_TAJ, textColor=_HC("#111827"), spaceAfter=1.5)
+    _pasal = _PS('PspPasal', parent=st['Body'], fontSize=9, leading=11.5,
+                 alignment=_TAC, spaceBefore=5, spaceAfter=2.5,
+                 textColor=_HC("#111827"))
+
+    from pembukuan_utils import parse_harga as _ph
+    elements.append(Paragraph("<b>PASAL 1 — OBJEK SERAH TERIMA</b>", _pasal))
+    headers = ["No", "Kode Barang", "NUP", "Nama Barang", "Kondisi",
+               "Nilai Perolehan (Rp)"]
     table_data = [[Paragraph(h, st['TableHeader']) for h in headers]]
+    total_nilai = 0.0
     for i, a in enumerate(aset, start=1):
+        nilai = _ph(a.get("purchase_price"))
+        total_nilai += nilai
         table_data.append([
             Paragraph(str(i), st['CellCenter']),
             Paragraph(a.get("asset_code") or "-", st['Cell']),
             Paragraph(str(a.get("NUP") or "-"), st['CellCenter']),
             Paragraph(a.get("asset_name") or "-", st['Cell']),
+            Paragraph(a.get("condition") or "-", st['CellCenter']),
+            Paragraph(f"{nilai:,.0f}".replace(",", ".") if nilai else "-",
+                      st.get('CellRight', st['CellCenter'])),
         ])
+    table_data.append([
+        Paragraph("", st['Cell']), Paragraph("<b>JUMLAH</b>", st['Cell']),
+        Paragraph("", st['Cell']), Paragraph("", st['Cell']),
+        Paragraph("", st['Cell']),
+        Paragraph(f"<b>{total_nilai:,.0f}</b>".replace(",", "."),
+                  st.get('CellRight', st['CellCenter']))])
     table = Table(table_data,
-                  colWidths=_fit_col_widths([28, 140, 55, 250], doc.width),
+                  colWidths=_fit_col_widths([24, 112, 42, 172, 52, 80], doc.width),
                   repeatRows=1)
-    table.setStyle(_std_table_style(zebra=True))
+    table.setStyle(_std_table_style(zebra=True, total_row=True))
     elements.append(table)
 
+    from reportlab.platypus import KeepTogether as _KT
+    elements.append(_KT([
+        Paragraph("<b>PASAL 2 — PERALIHAN TANGGUNG JAWAB</b>", _pasal),
+        Paragraph(
+            "Terhitung sejak ditandatanganinya Berita Acara ini, tanggung "
+            "jawab penggunaan, pengamanan, pemeliharaan, dan penatausahaan "
+            "Barang Milik Negara sebagaimana dimaksud pada Pasal 1 beralih "
+            "kepada pihak yang menerima, dan dicatat pada Daftar Barang "
+            "Pengguna sesuai ketentuan peraturan perundang-undangan.", _isi)]))
     if str(sk.get("keterangan") or "").strip():
-        elements.append(Spacer(1, 3 * rl_mm))
-        elements.append(Paragraph(f"Keterangan: {sk['keterangan']}", st['Meta']))
-    elements.append(Spacer(1, 4 * rl_mm))
-    elements.append(Paragraph(
-        "Pihak yang menerima bertanggung jawab atas penggunaan, pengamanan, "
-        "dan pemeliharaan barang tersebut sesuai ketentuan pengelolaan BMN. "
-        "Demikian Berita Acara Serah Terima ini dibuat dengan sebenarnya "
-        "untuk dipergunakan sebagaimana mestinya.", st['Meta']))
-    elements.append(Spacer(1, 12 * rl_mm))
+        elements.append(_KT([
+            Paragraph("<b>PASAL 3 — KETENTUAN LAIN</b>", _pasal),
+            Paragraph(_esc(str(sk["keterangan"]).strip()), _isi)]))
+    elements.append(_KT([
+        Paragraph(f"<b>PASAL {4 if str(sk.get('keterangan') or '').strip() else 3}"
+                  f" — PENUTUP</b>", _pasal),
+        Paragraph(
+            "Demikian Berita Acara Serah Terima ini dibuat dengan sebenarnya "
+            "dalam rangkap 2 (dua) yang masing-masing mempunyai kekuatan "
+            "hukum yang sama, untuk dipergunakan sebagaimana mestinya.", _isi)]))
+    elements.append(Spacer(1, 6 * rl_mm))
+    # SATU blok ttd 3 penanda tangan (menyerahkan/menerima berdampingan +
+    # KPB di bawah-tengah) — layout _signature_block pola BA resmi; baris
+    # tempat-tanggal di kolom kanan.
+    from routes.reports import _tempat_tanggal_laporan
     elements.extend(_signature_block([
-        {'pre': [''], 'header': 'Pihak yang Menyerahkan,',
-         'nama': '...........................',
-         'after': ['NIP. ....................']},
-        {'pre': [''], 'header': 'Pihak yang Menerima,',
-         'nama': '...........................',
-         'after': ['NIP. ....................']},
-    ], doc.width))
-    elements.append(Spacer(1, 10 * rl_mm))
-    elements.extend(_signature_block([
-        await blok_ttd_kpb_titik(settings),   # KPB dari registry pejabat (temuan #26)
+        {'header': 'Pihak yang Menyerahkan,',
+         'nama': '................................',
+         'after': ['NIP. -']},
+        {'pre': [_tempat_tanggal_laporan(settings, None)],
+         'header': 'Pihak yang Menerima,',
+         'nama': '................................',
+         'after': ['NIP. -']},
+        await blok_ttd_kpb_titik(settings),   # KPB registry + spesimen TTD
     ], doc.width))
     footer = _page_footer_factory("BAST Penetapan Status Penggunaan BMN")
     doc.build(elements, onFirstPage=footer, onLaterPages=footer)
