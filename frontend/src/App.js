@@ -48,6 +48,7 @@ const PengadaanPage = lazy(() => import("./pages/PengadaanPage"));
 const TtdPublikPage = lazy(() => import("./pages/TtdPublikPage"));
 const TtdPermintaanPage = lazy(() => import("./pages/TtdPermintaanPage"));
 const SatkerPage = lazy(() => import("./pages/SatkerPage"));
+const PengaturanPage = lazy(() => import("./pages/PengaturanPage"));
 
 // ============================================================================
 // LOADING FALLBACK - Shown while lazy components load
@@ -305,6 +306,8 @@ function App() {
   const [showTtd, setShowTtd] = useState(false);
   // Halaman Master Satker (profil & kop per-satker)
   const [showSatker, setShowSatker] = useState(false);
+  // Halaman Pengaturan terpadu (universal / per-satker / sistem)
+  const [showPengaturan, setShowPengaturan] = useState(false);
 
   // ── HALAMAN PUBLIK E-SIGN ──────────────────────────────────────────────
   // /ttd/:id (link tanda tangan yang dibagikan) & /ttd/verifikasi/:id (QR)
@@ -588,6 +591,25 @@ function App() {
     );
   }
 
+  // Pengaturan terpadu — satu pintu setelan universal/per-satker/sistem.
+  if (user && showPengaturan) {
+    return (
+      <div className="App">
+        <Suspense fallback={<PageLoader />}>
+          <PengaturanPage
+            user={user}
+            onBack={() => setShowPengaturan(false)}
+            onOpenSatker={() => { setShowPengaturan(false); setShowSatker(true); }}
+            onOpenReferensiAkun={() => { setShowPengaturan(false); setShowReferensiAkun(true); }}
+            onOpenPersuratan={() => { setShowPengaturan(false); setShowPersuratan(true); }}
+            onOpenPelaporan={() => { setShowPengaturan(false); setShowPelaporan(true); }}
+          />
+        </Suspense>
+        <Toaster position="top-right" richColors />
+      </div>
+    );
+  }
+
   // Master Satker — profil & kop per-satker (multi-satker DB bersama).
   if (user && showSatker) {
     return (
@@ -636,6 +658,7 @@ function App() {
             onOpenPengadaan={() => setShowPengadaan(true)}
             onOpenTtd={() => setShowTtd(true)}
             onOpenSatker={() => setShowSatker(true)}
+            onOpenPengaturan={() => setShowPengaturan(true)}
           />
         </Suspense>
         <Toaster position="top-right" richColors />

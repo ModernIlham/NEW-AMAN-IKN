@@ -48,6 +48,26 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#378] Halaman Pengaturan terpadu: satu pintu setelan universal ↔ per-satker ↔ sistem — 2026-07-18
+
+Konsolidasi setelan yang tersebar (mandat: "jadikan satu halaman setting"):
+- **Halaman "Pengaturan"** baru di Beranda Modul dengan 3 tab:
+  - **Universal** — editor kop/logo/judul laporan global (komponen
+    `ReportSettingsEditor` yang sama dengan di Rekap — satu sumber), plus
+    PINTASAN setelan universal lain di modulnya (Persuratan: format nomor &
+    klasifikasi; Akuntansi BMN: akun BAS/pemetaan/ambang; Pelaporan: periode
+    & tenggat) — tetap satu pintu tanpa duplikasi editor.
+  - **Per-Satker** — panel Master Satker yang sama (komponen `SatkerPanel`
+    hasil ekstraksi) untuk override kop per satker; resolusi
+    kegiatan → satker → universal dijelaskan inline.
+  - **Sistem** — mulai **backup** langsung (job background, panel progres
+    global); restore/reset SENGAJA tetap di halaman pemilihan kegiatan
+    (aksi destruktif berlapis konfirmasi), dengan penjelasan bahwa reset
+    kini mempertahankan seluruh setelan/pemetaan.
+- Verifikasi: suite 491 lulus, lint & build sukses.
+
+---
+
 ## [#377] Master Satker: satker jadi entitas kelas satu + kop laporan per-satker + ikatan user→satker — 2026-07-18
 
 Fondasi multi-satker DB bersama (Mandat-2, sesuai pilihan arsitektur):
