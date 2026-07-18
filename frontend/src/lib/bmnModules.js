@@ -68,19 +68,20 @@ export const PENATAUSAHAAN_SUBMODULES = [
   {
     id: "pembukuan",
     nama: "Pembukuan",
-    status: "segera",
+    status: "sebagian",
     fase: 2,
-    ringkas: "Daftar Barang Kuasa Pengguna & Kartu Identitas Barang.",
+    ringkas: "DBKP global intra/ekstra + Buku Barang (jurnal mutasi) sudah bisa dibuka.",
     deskripsi:
       "Pencatatan BMN ke dalam daftar barang: Daftar Barang Kuasa Pengguna (DBKP) per "
       + "golongan, Kartu Identitas Barang (KIB) untuk tanah/bangunan/kendaraan, saldo awal-"
       + "mutasi-saldo akhir per periode. Setiap transaksi modul lain otomatis membukukan diri.",
     dasarHukum: [PENATAUSAHAAN_DASAR_HUKUM],
     fitur: [
-      "DBKP per golongan/bidang/kelompok mengikuti kodefikasi BMN",
+      "✅ DBKP per golongan mengikuti kodefikasi BMN (intra/ekstra, ambang PMK 181 dapat diatur) — halaman Pembukuan + PDF per kegiatan",
+      "✅ Saldo awal → mutasi masuk/keluar → saldo akhir per semester (LBKP + rekonsiliasi XLSX)",
+      "✅ Buku Barang: jurnal mutasi ber-kode SIMAK/SAKTI (append-only) + reklasifikasi 304/107 ber-riwayat + backfill saldo awal",
       "KIB A-F (tanah, bangunan, kendaraan, dst.) dengan detail khusus per jenis",
-      "Saldo awal → mutasi masuk/keluar → saldo akhir per semester",
-      "Jurnal otomatis dari transaksi perolehan/penghapusan/transfer",
+      "Jurnal otomatis dari SEMUA transaksi perolehan/penghapusan/transfer (auto-posting penuh)",
     ],
     integrasi: [
       "Master aset & hasil inventarisasi menjadi sumber saldo",
@@ -121,7 +122,7 @@ export const PENATAUSAHAAN_SUBMODULES = [
   {
     id: "pelaporan",
     nama: "Pelaporan",
-    status: "sebagian",
+    status: "aktif",
     fase: 2,
     ringkas: "Hub arsip, LBKP, Posisi BMN di Neraca, rekonsiliasi XLSX, CaLBMN pra-isi, dan LKB sudah bisa dibuka.",
     deskripsi:
@@ -141,8 +142,8 @@ export const PENATAUSAHAAN_SUBMODULES = [
       "✅ Registrasi Persuratan lintas modul: booking nomor surat keluar (PerANRI 5/2021, format konfigurabel) → disahkan/dibatalkan + agenda surat masuk + ekspor buku agenda",
       "✅ Klasifikasi nomor surat otomatis: master kode klasifikasi arsip dinamis + aturan pemetaan modul/jenis naskah + pratinjau nomor live saat booking",
       "✅ Tombol \"Booking Nomor\" tersebar di 15 halaman modul/unduh laporan (konteks modul & kegiatan terisi otomatis) + anchor nomor eksternal (Srikandi/e-office) + surat masuk dapat diedit",
-      "Arsip laporan lintas kegiatan dengan penomoran & riwayat",
-      "Ekspor rekonsiliasi (format yang bisa disandingkan dengan SIMAK/SAKTI)",
+      "✅ Arsip laporan lintas kegiatan dengan penomoran & riwayat (naskah ber-nomor Persuratan + kegiatan disahkan + periode FINAL — satu daftar di hub Pelaporan)",
+      "✅ Ekspor rekonsiliasi format sanding SIMAK/SAKTI (rekonsiliasi XLSX Posisi BMN + CSV jurnal persediaan + sinkron SIMAN dua arah)",
     ],
     integrasi: [
       "Menarik data pembukuan + hasil inventarisasi aset & persediaan",
@@ -386,9 +387,9 @@ export const SIKLUS_MODULES = [
     id: "pemusnahan",
     nama: "Pemusnahan",
     urutan: 10,
-    status: "sebagian",
+    status: "aktif",
     fase: 6,
-    ringkas: "Register BA Pemusnahan (persetujuan wajib, aset rusak berat) sudah bisa dibuka.",
+    ringkas: "Register BA Pemusnahan lengkap: kandidat Rusak Berat 1-klik, BA PDF, lampiran, tindak lanjut penghapusan.",
     deskripsi:
       "Pemusnahan BMN yang tidak dapat digunakan/dimanfaatkan/dipindahtangankan: usulan "
       + "(kandidat otomatis dari aset rusak berat hasil inventarisasi), persetujuan, dan "
@@ -400,7 +401,7 @@ export const SIKLUS_MODULES = [
       "✅ Tindak lanjut otomatis: usulan penghapusan per aset BA (satu klik, aset ber-usulan aktif dilewati)",
       "✅ Lampiran bukti per BA: foto pelaksanaan + scan BA bertanda tangan (PDF/gambar)",
       "✅ Ekspor CSV register BA (cara, nilai perolehan, lampiran)",
-      "Kandidat pemusnahan otomatis dari kondisi Rusak Berat + tindak lanjut inventarisasi",
+      "✅ Kandidat pemusnahan otomatis dari kondisi Rusak Berat (pemilih aset 1-klik dibatasi Rusak Berat) + tindak lanjut inventarisasi",
     ],
     integrasi: ["Kondisi & tindak lanjut dari modul inventarisasi menjadi pintu masuk"],
   },

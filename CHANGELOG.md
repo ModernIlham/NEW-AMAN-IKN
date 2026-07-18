@@ -48,6 +48,29 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#380] Badge modul naik: Pemusnahan & Pelaporan AKTIF, Pembukuan punya halaman (Segera → Sebagian) — 2026-07-18
+
+Melengkapi fitur "menyusul" agar badge naik (mandat: badge sebagian/segera →
+aktif), berdasarkan inventaris presisi seluruh registry modul:
+- **Pemusnahan → AKTIF**: butir terakhir (kandidat otomatis Rusak Berat +
+  tindak lanjut inventarisasi) sudah terwujud sejak Gelombang 5 (pemilih aset
+  1-klik dibatasi Rusak Berat) — ditandai ✅.
+- **Pelaporan → AKTIF**: fitur baru **Arsip Laporan Lintas Kegiatan** di hub
+  Pelaporan (`GET /pelaporan/arsip`): naskah ber-nomor dari Persuratan
+  (Laporan/BA) + kegiatan DISAHKAN (paket laporan final) + periode TERKUNCI
+  (FINAL) — satu daftar riwayat ber-pencarian. Butir ekspor rekonsiliasi
+  ditandai ✅ (rekonsiliasi XLSX + CSV jurnal + sinkron SIMAN sudah ada).
+- **Pembukuan → SEBAGIAN** (dari Segera — satu-satunya modul tanpa halaman):
+  halaman **Pembukuan** baru berisi DBKP global per golongan intra/ekstra
+  (endpoint JSON baru `GET /pembukuan/dbkp`, ambang efektif + ringkas Posisi
+  BMN di Neraca + persediaan) dan **Buku Barang** (jurnal mutasi ber-kode
+  SIMAK/SAKTI berhalaman). Kartu modul kini enterable ("Buka Pembukuan").
+  Butir DBKP/saldo/jurnal ditandai ✅; sisa menuju AKTIF: KIB A-F (PMK 181)
+  + auto-posting jurnal penuh.
+- Verifikasi: suite 495 lulus; lint & build sukses.
+
+---
+
 ## [#379] Isolasi data per-satker: operator satker A tidak melihat/mengubah data satker B — 2026-07-18
 
 Penegakan multi-satker DB bersama (M-SCOPE tahap inti — kegiatan + aset):

@@ -182,3 +182,71 @@ async def hapus_periode(periode_id: str, _admin: dict = Depends(require_admin)):
             status_code=409,
             detail="Periode tidak ditemukan atau terkunci (buka dulu kuncinya)")
     return {"ok": True, "id": periode_id}
+
+
+# ============================================================================
+# ARSIP LAPORAN LINTAS KEGIATAN (Mandat-2, M-MODUL — butir terakhir Pelaporan)
+# ============================================================================
+
+@pelaporan_router.get("/pelaporan/arsip")
+async def arsip_laporan(q: str = "", _user: dict = Depends(require_user)):
+    """Arsip laporan LINTAS KEGIATAN & LINTAS PERIODE dalam satu daftar:
+
+    1. Naskah keluar ber-jenis Laporan/Berita Acara dari Registrasi Persuratan
+       (ber-NOMOR resmi + status booking/disahkan = riwayatnya).
+    2. Kegiatan inventarisasi DISAHKAN (paket 13+ laporan finalnya).
+    3. Periode pelaporan TERKUNCI (LBKP/CaLBMN berpenanda FINAL).
+
+    Semuanya sumber data yang sudah ada — arsip ini menyatukannya (tidak
+    membuat penomoran baru). Hasil terurut terbaru dulu.
+    """
+    s = str(q or "").strip().lower()
+    items = []
+
+    async for it in db.surat.find(
+            {"jenis": "keluar", "jenis_naskah": {"$in": ["Laporan", "Berita Acara"]}},
+            {"_id": 0, "id": 1, "nomor": 1, "perihal": 1, "jenis_naskah": 1,
+             "status": 1, "tanggal_surat": 1, "modul": 1, "kegiatan_id": 1,
+             "created_at": 1}).sort("created_at", -1).limit(500):
+        items.append({
+            "tipe": "surat", "id": it.get("id"),
+            "judul": it.get("perihal") or "(tanpa perihal)",
+            "nomor": it.get("nomor") or "", "status": it.get("status") or "",
+            "sub": f"{it.get('jenis_naskah')} · modul {it.get('modul') or '-'}",
+            "tanggal": it.get("tanggal_surat") or (it.get("created_at") or "")[:10],
+            "kegiatan_id": it.get("kegiatan_id") or ""})
+
+    async for a in db.inventory_activities.find(
+            {"status_pengesahan": "disahkan"},
+            {"_id": 0, "id": 1, "nama_kegiatan": 1, "ticket_number": 1,
+             "nomor_surat": 1, "tanggal_pengesahan": 1, "nama_satker": 1,
+             "kode_satker": 1}).sort("tanggal_pengesahan", -1).limit(300):
+        items.append({
+            "tipe": "kegiatan", "id": a.get("id"),
+            "judul": a.get("nama_kegiatan") or a.get("ticket_number") or "(kegiatan)",
+            "nomor": a.get("nomor_surat") or a.get("ticket_number") or "",
+            "status": "disahkan",
+            "sub": f"Paket laporan inventarisasi · {a.get('nama_satker') or '-'}",
+            "tanggal": (a.get("tanggal_pengesahan") or "")[:10],
+            "kegiatan_id": a.get("id")})
+
+    async for p in db.periode_pelaporan.find(
+            {"status": "terkunci"},
+            {"_id": 0, "id": 1, "label": 1, "tahun": 1,
+             "tanggal_kunci": 1}).sort("tanggal_kunci", -1).limit(100):
+        items.append({
+            "tipe": "periode", "id": p.get("id"),
+            "judul": f"Periode {p.get('label') or p.get('tahun')}",
+            "nomor": "", "status": "FINAL",
+            "sub": "LBKP & CaLBMN periode ini berpenanda FINAL",
+            "tanggal": (p.get("tanggal_kunci") or "")[:10],
+            "kegiatan_id": ""})
+
+    if s:
+        items = [i for i in items if s in (i["judul"] + " " + i["nomor"] +
+                                           " " + i["sub"]).lower()]
+    items.sort(key=lambda x: x.get("tanggal") or "", reverse=True)
+    ring = {"surat": 0, "kegiatan": 0, "periode": 0}
+    for i in items:
+        ring[i["tipe"]] = ring.get(i["tipe"], 0) + 1
+    return {"items": items[:500], "ringkas": ring}
