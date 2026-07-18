@@ -48,6 +48,31 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#398] Cetak Stiker Label BMN — 3 ukuran × kertas A4/A3, mengikuti filter aktif — 2026-07-18
+
+Permintaan pemilik (dengan referensi desain label resmi satker): fitur cetak
+stiker yang selama ini belum ada.
+- **Desain meniru contoh resmi**: border kotak, header logo + nama instansi
+  + kode register lengkap, garis pemisah, badan kiri (kode barang + NUP,
+  kategori, nama barang terpotong "..."), **QR besar di kanan** — payload QR
+  memakai format pemindai internal aplikasi (#kode_register / #kode-nup)
+  sehingga stiker langsung bisa discan dari kamera lapangan.
+- **3 ukuran**: Besar ±95×45 mm (A4 10/hal · A3 16/hal), Sedang ±62×30 mm
+  (A4 24/hal · A3 36/hal), Kecil ±45×22 mm (A4 40/hal · A3 84/hal) — grid
+  dihitung otomatis dari ukuran kertas.
+- **Kertas A4 & A3**; kop/nama instansi & logo mengikuti pengaturan satker.
+- **Cakupan mengikuti filter & kelompok**: "semua hasil filter aktif"
+  (search/kategori/kondisi/lokasi/eselon/status stiker/rentang harga/tanggal
+  — parameter identik daftar aset) atau "halaman yang tampil saja";
+  batas 2000 stiker per unduhan dengan catatan bila terpotong.
+- Endpoint `GET /stiker/label` (ter-scope satker); tombol **Stiker** di
+  toolbar Dashboard (desktop + menu mobile) membuka dialog pilihan.
+- Verifikasi: 527 tes unit lulus, smoke render 6 kombinasi ukuran×kertas
+  (isi & jumlah halaman terverifikasi + pratinjau visual dibandingkan
+  referensi), server ter-import, lint bersih (0 warning baru), build sukses.
+
+---
+
 ## [#397] Makna kode akun BAS tampil LANGSUNG membagi baris (header bertingkat level 1–5) — 2026-07-18
 
 Umpan balik pemilik: makna kode hingga 6 digit jangan disembunyikan di balik
