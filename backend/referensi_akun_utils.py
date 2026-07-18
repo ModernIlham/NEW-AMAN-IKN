@@ -85,14 +85,19 @@ def baris_csv_referensi(items, label_segmen) -> list:
     """
     rows = [["Kode", "Nama Akun", "Akun (digit 1)", "Segmen",
              "Kelompok (2 digit)", "Nama Kelompok", "Jenis (3 digit)",
-             "Sumber", "Uraian BMN", "Kapitalisasi", "Kategori Neraca"]]
+             "Sumber", "Uraian BMN", "Kapitalisasi", "Kategori Neraca",
+             "Penjelasan"]]
     for a in items or []:
         kode = str(a.get("kode") or "")
+        penj = str(a.get("penjelasan") or "")
+        if penj and a.get("penjelasan_warisan"):
+            penj = f"[penjelasan kelompok induk] {penj}"
         rows.append([
             kode, a.get("nama") or "", kode[:1],
             (label_segmen or {}).get(kode[:1], ""),
             kode[:2], label_kelompok(kode), kode[:3],
             a.get("sumber") or "", a.get("uraian_bmn") or "",
             a.get("kapitalisasi") or "", a.get("kategori_neraca") or "",
+            penj,
         ])
     return rows

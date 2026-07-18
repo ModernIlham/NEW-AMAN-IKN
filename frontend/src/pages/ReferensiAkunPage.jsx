@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Search, Loader2, Landmark, Plus, Trash2, DownloadCloud, Boxes,
-  Download,
+  Download, ChevronRight, ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +35,7 @@ export default function ReferensiAkunPage({ user, onBack }) {
   const [loading, setLoading] = useState(true);
   const [seeding, setSeeding] = useState(false);
   const [baru, setBaru] = useState({ kode: "", nama: "" });
+  const [buka, setBuka] = useState({}); // {kode: true} — baris penjelasan terbuka
 
   // ── Pemetaan ──
   const [aset, setAset] = useState(null);        // {items}
@@ -339,9 +340,17 @@ export default function ReferensiAkunPage({ user, onBack }) {
                             </tr>
                           );
                         }
+                        const adaPenjelasan = !!String(a.penjelasan || "").trim();
+                        const terbuka = !!buka[a.kode];
+                        const toggle = () => adaPenjelasan && setBuka((b) => ({ ...b, [a.kode]: !b[a.kode] }));
                         rows.push(
-                          <tr key={a.kode} className="border-b border-border/60 last:border-0 hover:bg-muted/50" data-testid={`akun-row-${a.kode}`}>
-                            <td className="px-3 py-1.5 font-mono text-[12px] font-semibold text-foreground">{a.kode}</td>
+                          <tr key={a.kode} className={`border-b border-border/60 last:border-0 hover:bg-muted/50 ${adaPenjelasan ? "cursor-pointer" : ""}`} data-testid={`akun-row-${a.kode}`} onClick={toggle}>
+                            <td className="px-3 py-1.5 font-mono text-[12px] font-semibold text-foreground whitespace-nowrap">
+                              {adaPenjelasan
+                                ? (terbuka ? <ChevronDown className="w-3 h-3 inline mr-1 text-muted-foreground align-[-1px]" /> : <ChevronRight className="w-3 h-3 inline mr-1 text-muted-foreground align-[-1px]" />)
+                                : <span className="inline-block w-3 mr-1" />}
+                              {a.kode}
+                            </td>
                             <td className="px-3 py-1.5 text-[12px] text-foreground/90">
                               {a.nama}
                               {a.sumber === "satker" && <span className="ml-1.5 px-1 py-0.5 rounded bg-sky-500/15 text-sky-600 dark:text-sky-400 text-[9px] font-semibold">satker</span>}
@@ -351,7 +360,7 @@ export default function ReferensiAkunPage({ user, onBack }) {
                             </td>
                             {isAdmin && (
                               <td className="px-2 py-1.5">
-                                <button type="button" onClick={() => hapusAkun(a)} aria-label={`Hapus ${a.kode}`}
+                                <button type="button" onClick={(e) => { e.stopPropagation(); hapusAkun(a); }} aria-label={`Hapus ${a.kode}`}
                                   className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-500/10 min-w-0 min-h-0">
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
@@ -359,6 +368,22 @@ export default function ReferensiAkunPage({ user, onBack }) {
                             )}
                           </tr>
                         );
+                        if (terbuka && adaPenjelasan) {
+                          rows.push(
+                            <tr key={`${a.kode}-penjelasan`} className="border-b border-border/60 bg-muted/30" data-testid={`akun-penjelasan-${a.kode}`}>
+                              <td className="px-3 py-2 align-top text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">Penjelasan</td>
+                              <td colSpan={isAdmin ? 3 : 2} className="px-3 py-2 text-[11px] leading-relaxed text-foreground/80">
+                                {a.penjelasan}
+                                {a.penjelasan_warisan && (
+                                  <span className="block mt-1 text-[10px] italic text-muted-foreground">
+                                    (definisi kelompok/jenis induk — akun rincian mengikuti penjelasan di atasnya)
+                                  </span>
+                                )}
+                                <span className="block mt-1 text-[9px] text-muted-foreground/70">Sumber: KEP-211/PB/2018, kolom Penjelasan</span>
+                              </td>
+                            </tr>
+                          );
+                        }
                         return rows;
                       })}
                       {(data?.items || []).length === 0 && (
@@ -377,8 +402,8 @@ export default function ReferensiAkunPage({ user, onBack }) {
               )}
             </div>
             <p className="text-center text-[10px] text-muted-foreground pb-2">
-              Kategori mengikuti struktur digit BAS: digit 1 = akun/segmen, 2 digit = kelompok akun, 3 digit = jenis akun. Nama kelompok verbatim dari lampiran resmi KEP-211/PB/2018.
-              Sumber: dokumen resmi &quot;Referensi Akun&quot; SAKTI/SPAN + kertas kerja akun belanja↔BMN satker; entri manual bertanda &quot;satker&quot;.
+              Kategori mengikuti struktur digit BAS: digit 1 = akun/segmen, 2 digit = kelompok akun, 3 digit = jenis akun. Nama kelompok &amp; penjelasan tiap akun verbatim dari lampiran resmi KEP-211/PB/2018.
+              Klik baris akun untuk membuka penjelasan resminya. Sumber: dokumen resmi &quot;Referensi Akun&quot; SAKTI/SPAN + kolom Penjelasan KEP-211/PB/2018; entri manual bertanda &quot;satker&quot;.
             </p>
           </>
         )}
