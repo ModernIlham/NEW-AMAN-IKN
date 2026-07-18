@@ -12,9 +12,9 @@ import { makeDownloadProgress } from "@/lib/downloadFile";
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const UKURAN = [
-  ["besar", "Besar", "±95×45 mm — A4: 10/hal · A3: 16/hal"],
-  ["sedang", "Sedang", "±62×30 mm — A4: 24/hal · A3: 36/hal"],
-  ["kecil", "Kecil", "±45×22 mm — A4: 40/hal · A3: 84/hal"],
+  ["besar", "Besar", "±95×45 mm — A4: 12/hal · A3: 16/hal"],
+  ["sedang", "Sedang", "±62×30 mm — A4: 27/hal · A3: 48/hal"],
+  ["kecil", "Kecil", "±45×22 mm — A4: 48/hal · A3: 102/hal"],
 ];
 
 /**
