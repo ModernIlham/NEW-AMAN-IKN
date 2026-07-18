@@ -2,11 +2,16 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import {
-  ChevronDown, ChevronRight, Loader2, RefreshCcw, Upload,
+  AlertTriangle, ChevronDown, ChevronRight, FileDown, Loader2, PackagePlus,
+  RefreshCcw, Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { downloadFileWithProgress } from "@/lib/downloadFile";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+
+// Jeda antar percobaan ulang unggah saat koneksi putus (ms).
+const JEDA_RETRY = [2000, 5000];
 
 function fmtRp(v) {
   const n = Number(v || 0);
@@ -24,12 +29,16 @@ function fmtRp(v) {
 export default function SimanSyncCard({ isAdmin }) {
   const [ringkasan, setRingkasan] = useState(null);
   const [mengunggah, setMengunggah] = useState(false);
+  const [persenUnggah, setPersenUnggah] = useState(0);
   const [tandaiHilang, setTandaiHilang] = useState(false);
   const [terbuka, setTerbuka] = useState(false);
   const [selisih, setSelisih] = useState(null); // {items,total,page,total_pages}
   const [muatSelisih, setMuatSelisih] = useState(false);
   const [bukaAset, setBukaAset] = useState(null); // id aset yang rinciannya terbuka
   const [menerapkan, setMenerapkan] = useState(null); // id aset yang sedang diterapkan
+  // Panel buat draft aset dari baris SIMAN belum tercatat:
+  // {importId, activities, activityId, sibuk, hasil}
+  const [draft, setDraft] = useState(null);
   const fileRef = useRef(null);
 
   const muatRingkasan = useCallback(() => {
@@ -59,26 +68,88 @@ export default function SimanSyncCard({ isAdmin }) {
   const unggah = async (file) => {
     if (!file) return;
     setMengunggah(true);
+    setPersenUnggah(0);
     const fd = new FormData();
     fd.append("file", file);
+    // Andal di koneksi lapangan: timeout longgar + coba ulang otomatis saat
+    // gagal JARINGAN (tanpa respons server). Error 4xx/5xx TIDAK diulang.
+    let r = null;
+    for (let percobaan = 0; ; percobaan++) {
+      try {
+        r = await axios.post(
+          `${API}/siman/import?tandai_tidak_ditemukan=${tandaiHilang}`, fd, {
+            headers: { "Content-Type": "multipart/form-data" },
+            timeout: 180000,
+            onUploadProgress: (ev) => {
+              if (ev.total) setPersenUnggah(Math.round((ev.loaded / ev.total) * 100));
+            },
+          });
+        break;
+      } catch (e) {
+        const putus = !e?.response; // network error / timeout — layak diulang
+        if (putus && percobaan < JEDA_RETRY.length) {
+          toast.info(`Koneksi terputus saat mengunggah — mencoba ulang (${percobaan + 2}/${JEDA_RETRY.length + 1})…`);
+          await new Promise((res) => setTimeout(res, JEDA_RETRY[percobaan]));
+          setPersenUnggah(0);
+          continue;
+        }
+        const status = e?.response?.status;
+        toast.error(
+          status === 429
+            ? "Terlalu sering mengimpor — tunggu ±1 menit lalu coba lagi"
+            : e?.response?.data?.detail
+              || "Gagal mengimpor — koneksi terputus; periksa jaringan lalu coba lagi",
+          { duration: 9000 });
+        setMengunggah(false);
+        if (fileRef.current) fileRef.current.value = "";
+        return;
+      }
+    }
+    const rk = r.data?.ringkasan || {};
+    toast.success(
+      `Impor SIMAN selesai: ${rk.aset_dicek || 0} aset dicek — ` +
+      `${rk.cocok || 0} cocok, ${rk.selisih || 0} selisih` +
+      (rk.siman_tanpa_aset ? `, ${rk.siman_tanpa_aset} baris SIMAN belum tercatat di AMAN` : ""),
+      { duration: 8000 });
+    (r.data?.peringatan || []).forEach((p) => toast.warning(p, { duration: 12000 }));
+    muatRingkasan();
+    setSelisih(null);
+    if (terbuka) ambilSelisih(1);
+    setMengunggah(false);
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
+  const bukaBuatDraft = async (importId) => {
+    setDraft({ importId, activities: null, activityId: "", sibuk: false, hasil: null });
+    try {
+      const r = await axios.get(`${API}/inventory-activities`);
+      const items = Array.isArray(r.data) ? r.data : (r.data?.items || []);
+      setDraft((d) => d && { ...d, activities: items });
+    } catch {
+      toast.error("Gagal memuat daftar kegiatan");
+      setDraft(null);
+    }
+  };
+
+  const jalankanBuatDraft = async () => {
+    if (!draft?.activityId) { toast.error("Pilih kegiatan tujuan dulu"); return; }
+    setDraft((d) => ({ ...d, sibuk: true }));
     try {
       const r = await axios.post(
-        `${API}/siman/import?tandai_tidak_ditemukan=${tandaiHilang}`, fd,
-        { headers: { "Content-Type": "multipart/form-data" } });
-      const rk = r.data?.ringkasan || {};
+        `${API}/siman/import/${draft.importId}/buat-draft`,
+        { activity_id: draft.activityId });
+      const d = r.data || {};
       toast.success(
-        `Impor SIMAN selesai: ${rk.aset_dicek || 0} aset dicek — ` +
-        `${rk.cocok || 0} cocok, ${rk.selisih || 0} selisih` +
-        (rk.siman_tanpa_aset ? `, ${rk.siman_tanpa_aset} baris SIMAN belum tercatat di AMAN` : ""),
-        { duration: 8000 });
+        `${d.dibuat} aset draft dibuat di kegiatan "${d.kegiatan}"` +
+        (d.dilewati_sudah_ada ? ` · ${d.dilewati_sudah_ada} sudah tercatat` : "") +
+        (d.sisa ? ` · ${d.sisa} tersisa (jalankan lagi)` : ""),
+        { duration: 10000 });
+      if ((d.gagal || []).length) toast.warning(`Gagal: ${d.gagal.slice(0, 3).join("; ")}${d.gagal.length > 3 ? "…" : ""}`, { duration: 12000 });
+      setDraft((prev) => prev && { ...prev, sibuk: false, hasil: d });
       muatRingkasan();
-      setSelisih(null);
-      if (terbuka) ambilSelisih(1);
     } catch (e) {
-      toast.error(e?.response?.data?.detail || "Gagal mengimpor file SIMAN");
-    } finally {
-      setMengunggah(false);
-      if (fileRef.current) fileRef.current.value = "";
+      toast.error(e?.response?.data?.detail || "Gagal membuat draft aset");
+      setDraft((prev) => prev && { ...prev, sibuk: false });
     }
   };
 
@@ -138,9 +209,12 @@ export default function SimanSyncCard({ isAdmin }) {
             <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden"
               onChange={(e) => unggah(e.target.files?.[0])} data-testid="siman-file-input" />
             <Button variant="outline" size="sm" className="gap-1.5" disabled={mengunggah}
+              title="Unggah file .xlsx hasil ekspor Master Aset dari SIMAN V2"
               onClick={() => fileRef.current?.click()} data-testid="siman-import-btn">
               {mengunggah ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-              Impor Ekspor SIMAN
+              {mengunggah
+                ? (persenUnggah > 0 && persenUnggah < 100 ? `Mengunggah ${persenUnggah}%` : "Memproses…")
+                : "Impor Ekspor SIMAN"}
             </Button>
           </>
         )}
@@ -248,11 +322,71 @@ export default function SimanSyncCard({ isAdmin }) {
           </div>
         )}
 
-        {impor?.ringkasan?.siman_tanpa_aset > 0 && (
-          <p className="text-[10px] text-muted-foreground">
-            💡 {impor.ringkasan.siman_tanpa_aset} baris SIMAN belum tercatat di AMAN — tambahkan lewat
-            impor aset (menu Inventarisasi) atau draft aset dari Pengadaan agar daftar AMAN selengkap SIMAN.
+        {(impor?.peringatan || []).map((p, i) => (
+          <p key={i} className="flex items-start gap-1.5 text-[10px] text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-lg px-2.5 py-1.5"
+            data-testid="siman-peringatan">
+            <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-px" />{p}
           </p>
+        ))}
+
+        {impor?.ringkasan?.siman_tanpa_aset > 0 && (
+          <div className="rounded-lg border border-border bg-muted/30 px-2.5 py-2 space-y-1.5" data-testid="siman-belum-tercatat">
+            <p className="text-[10px] text-muted-foreground">
+              <b className="text-foreground">{impor.ringkasan.siman_tanpa_aset} baris SIMAN belum tercatat di AMAN</b> —
+              datanya (kode, NUP, nama, merk, nilai, register) bisa langsung dijadikan aset draft
+              untuk dilengkapi foto &amp; lokasi di lapangan, atau diunduh sebagai CSV.
+            </p>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <Button size="sm" variant="outline" className="h-7 text-[11px] gap-1 min-h-0"
+                title="Unduh daftar baris SIMAN yang belum tercatat (CSV)"
+                onClick={() => downloadFileWithProgress(
+                  `${API}/siman/import/${impor.id}/belum-tercatat.csv`,
+                  "siman_belum_tercatat.csv",
+                  { label: "CSV baris SIMAN belum tercatat" }).catch(() => {})}
+                data-testid="siman-csv-belum">
+                <FileDown className="w-3 h-3" />CSV
+              </Button>
+              {isAdmin && !draft && (
+                <Button size="sm" className="h-7 text-[11px] gap-1 min-h-0 bg-teal-600 hover:bg-teal-700 text-white"
+                  title="Buat aset draft massal dari baris SIMAN yang belum tercatat"
+                  onClick={() => bukaBuatDraft(impor.id)} data-testid="siman-buat-draft-btn">
+                  <PackagePlus className="w-3 h-3" />Buat Draft Aset
+                </Button>
+              )}
+            </div>
+            {draft && (
+              <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-border/60">
+                {draft.activities === null ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-teal-600" />
+                ) : (
+                  <>
+                    <select value={draft.activityId}
+                      onChange={(e) => setDraft((d) => ({ ...d, activityId: e.target.value }))}
+                      className="h-8 rounded-md border border-input bg-background px-2 text-[11px] min-w-[160px] flex-1"
+                      data-testid="siman-draft-kegiatan">
+                      <option value="">— Pilih kegiatan tujuan —</option>
+                      {draft.activities.map((a) => (
+                        <option key={a.id} value={a.id}>{a.nama_kegiatan || a.id}</option>
+                      ))}
+                    </select>
+                    <Button size="sm" className="h-8 text-[11px] gap-1 min-h-0 bg-teal-600 hover:bg-teal-700 text-white"
+                      disabled={draft.sibuk || !draft.activityId} onClick={jalankanBuatDraft}
+                      data-testid="siman-draft-jalankan">
+                      {draft.sibuk ? <Loader2 className="w-3 h-3 animate-spin" /> : <PackagePlus className="w-3 h-3" />}
+                      Buat
+                    </Button>
+                    <Button size="sm" variant="outline" className="h-8 text-[11px] min-h-0"
+                      disabled={draft.sibuk} onClick={() => setDraft(null)}>Tutup</Button>
+                  </>
+                )}
+                {draft.hasil && (
+                  <p className="basis-full text-[10px] text-emerald-700 dark:text-emerald-400">
+                    {draft.hasil.dibuat} draft dibuat{draft.hasil.sisa ? ` — ${draft.hasil.sisa} tersisa, klik Buat lagi` : " — selesai"}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>

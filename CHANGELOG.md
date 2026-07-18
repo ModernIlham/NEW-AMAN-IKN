@@ -48,6 +48,43 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#406] SIMAN V2: sinkronisasi diperkuat + tervalidasi + buat draft aset massal dari baris SIMAN — 2026-07-18
+
+Laporan pemilik: sinkronisasi file ekspor SIMAN V2 gagal dilakukan. Diagnosa
+empiris terhadap file asli (daftaraset1_SIMANV2.xlsx, 165 baris): parser inti
+SEHAT (metadata dimensi rusak ekspor SIMAN sudah ditangani `reset_dimensions`
+sejak #338) — kegagalan kemungkinan di lapisan jaringan/varian file. Seluruh
+lapisan diperkuat agar andal di segala situasi + data SIMAN dibuat jauh lebih
+bermanfaat:
+
+- **Deteksi format smart**: header dicari di SEMUA sheet (tidak lagi hanya
+  "Master Aset"/sheet pertama) dan di 25 baris awal (toleran kop/judul di
+  atas tabel) — helper murni `deteksi_header` teruji unit.
+- **Pesan gagal actionable**: .xls lama (minta simpan ulang .xlsx), file
+  rusak/ganti-nama, file kosong terkirim (koneksi putus), sheet tanpa header
+  (sebut nama sheet yang ada), ekspor kosong — semua pesan menyebut solusi.
+- **Validasi satker**: kode satker pada file dibandingkan dengan master
+  satker + kop global AMAN (normalisasi alfanumerik) — file milik satker
+  lain memunculkan peringatan sebelum ditindaklanjuti; duplikat kode+NUP
+  pada file juga dilaporkan.
+- **Unggah andal (web/HP)**: progres % saat mengunggah, timeout longgar
+  180 dtk, COBA ULANG OTOMATIS 2× (jeda 2/5 dtk) khusus gagal jaringan,
+  pesan khusus 429 (terlalu sering) — meminimalkan kegagalan di koneksi
+  lapangan; batas ukuran file 25MB dengan pesan jelas.
+- **Data SIMAN jadi modal aset (baru)**: baris SIMAN yang belum tercatat di
+  AMAN kini tersimpan di register impor (s.d. 5000 baris) dan bisa:
+  (1) diunduh CSV, atau (2) **dibuat aset draft massal 1-klik** ke kegiatan
+  terpilih — kode, NUP, nama, merk, tipe, kondisi, nilai, tanggal, kode
+  register SIMAN langsung terisi; petugas tinggal melengkapi foto & lokasi.
+  Jalur create standar dipakai (kunci kegiatan, keunikan kode+NUP, registry,
+  audit); idempoten — baris yang sudah tercatat otomatis dilewati.
+- Verifikasi empiris terhadap FILE ASLI: impor 165 baris → buat draft 164
+  aset → impor ulang 165 dicek 164 cocok (1 selisih kategori yang memang
+  riil) → buat draft ulang 0 dibuat/164 dilewati. 539 tes unit lulus
+  (+8 baru), smoke lama tetap lulus, lint 0 warning, build sukses.
+
+---
+
 ## [#405] UI/UX gelombang 2: 12 pola lintas-halaman diseragamkan di 25 halaman modul — 2026-07-18
 
 Lanjutan mandat "review menyeluruh — rapikan tampilan di berbagai ukuran

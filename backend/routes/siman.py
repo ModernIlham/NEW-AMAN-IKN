@@ -22,11 +22,15 @@ from db import db
 from report_filters import active_asset_filter
 from shared_utils import limiter, log_audit
 from siman_utils import (
-    FIELD_TERAPKAN, banding_aset, kunci_aset, nilai_terapkan, parse_baris,
-    petakan_header, referensi_siman, ringkas_import,
+    FIELD_TERAPKAN, banding_aset, deteksi_header, kunci_aset, nilai_terapkan,
+    parse_baris, referensi_siman, ringkas_baris_belum_tercatat, ringkas_import,
+    validasi_satker,
 )
 
 siman_router = APIRouter()
+
+_MAKS_UKURAN_FILE = 25 * 1024 * 1024  # 25MB — jauh di atas ekspor satker wajar
+_MAKS_BELUM_TERCATAT = 5000  # baris ringkas yang disimpan utk CSV/buat draft
 
 _PROJ_ASET = {
     "_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
@@ -42,7 +46,7 @@ class TerapkanIn(BaseModel):
 
 
 @siman_router.post("/siman/import")
-@limiter.limit("3/minute")
+@limiter.limit("6/minute")
 async def import_siman(request: Request, file: UploadFile = File(...),
                        tandai_tidak_ditemukan: bool = False,
                        user: dict = Depends(require_admin)):
@@ -53,40 +57,67 @@ async def import_siman(request: Request, file: UploadFile = File(...),
     bukan potongan).
     """
     nama_file = file.filename or ""
-    if not nama_file.lower().endswith((".xlsx", ".xls")):
+    if nama_file.lower().endswith(".xls") and not nama_file.lower().endswith(".xlsx"):
+        raise HTTPException(status_code=400, detail=(
+            "Format .xls lama tidak didukung — buka file lalu simpan ulang "
+            "sebagai .xlsx (Excel Workbook), atau unduh ulang ekspor dari SIMAN V2"))
+    if not nama_file.lower().endswith(".xlsx"):
         raise HTTPException(status_code=400, detail="File harus Excel (.xlsx) hasil ekspor SIMAN V2")
+    isi = await file.read()
+    if len(isi) > _MAKS_UKURAN_FILE:
+        raise HTTPException(status_code=400, detail=(
+            f"File terlalu besar ({len(isi) // (1024 * 1024)}MB — maks 25MB). "
+            "Ekspor per jenis BMN dari SIMAN lalu unggah bertahap"))
+    if not isi:
+        raise HTTPException(status_code=400, detail=(
+            "File kosong terkirim — koneksi kemungkinan terputus saat mengunggah; coba lagi"))
 
     try:
         import openpyxl
-        wb = openpyxl.load_workbook(io.BytesIO(await file.read()),
-                                    read_only=True, data_only=True)
+        wb = openpyxl.load_workbook(io.BytesIO(isi), read_only=True, data_only=True)
     except Exception:
-        raise HTTPException(status_code=400, detail="File Excel tidak dapat dibaca")
-
-    # Sheet "Master Aset" bila ada; selain itu sheet pertama.
-    ws = wb["Master Aset"] if "Master Aset" in wb.sheetnames else wb[wb.sheetnames[0]]
-    # Ekspor SIMAN kerap menulis metadata dimensi yang salah — tanpa reset,
-    # mode read_only hanya melihat baris pertama (terbukti pada file asli).
-    ws.reset_dimensions()
-
-    # Cari baris header (baris pertama yang memuat kolom kode barang + NUP).
-    peta_header, baris_data, ditemukan = None, [], False
-    for row in ws.iter_rows(values_only=True):
-        if not ditemukan:
-            peta, hilang = petakan_header(row)
-            if not hilang:
-                peta_header, ditemukan = peta, True
-            continue
-        b = parse_baris(row, peta_header)
-        if b:
-            baris_data.append(b)
-    wb.close()
-    if not ditemukan:
         raise HTTPException(status_code=400, detail=(
-            "Header tidak dikenali — pastikan file adalah ekspor SIMAN V2 "
-            "dengan kolom 'Kode Barang' dan 'NUP'"))
+            "File Excel tidak dapat dibaca — pastikan file ASLI hasil ekspor "
+            "SIMAN V2 (bukan hasil ganti nama ekstensi) dan tidak rusak saat diunduh"))
+
+    # Cari sheet + baris header di SEMUA sheet: prioritas "Master Aset", lalu
+    # sheet lain — ekspor SIMAN kadang mengganti nama sheet / menambah kop di
+    # baris awal. Metadata dimensi ekspor SIMAN kerap salah (mengaku 1 baris)
+    # sehingga WAJIB reset_dimensions sebelum membaca (terbukti pada file asli).
+    daftar_sheet = list(wb.sheetnames)
+    urutan_sheet = sorted(daftar_sheet, key=lambda n: (n != "Master Aset", n))
+    peta_header, baris_data, sheet_dipakai = None, [], None
+    for nama_sheet in urutan_sheet:
+        ws = wb[nama_sheet]
+        ws.reset_dimensions()
+        rows = ws.iter_rows(values_only=True)
+        awal = [next(rows, None) for _ in range(25)]
+        hasil_deteksi = deteksi_header([r for r in awal if r is not None])
+        if hasil_deteksi is None:
+            continue
+        idx_header, peta_header = hasil_deteksi
+        sheet_dipakai = nama_sheet
+        for row in awal[idx_header + 1:]:
+            if row is None:
+                continue
+            b = parse_baris(row, peta_header)
+            if b:
+                baris_data.append(b)
+        for row in rows:  # lanjutan setelah 25 baris awal
+            b = parse_baris(row, peta_header)
+            if b:
+                baris_data.append(b)
+        break
+    wb.close()
+    if peta_header is None:
+        raise HTTPException(status_code=400, detail=(
+            "Header tidak dikenali di semua sheet — pastikan file adalah ekspor "
+            "SIMAN V2 'Master Aset' dengan kolom 'Kode Barang' dan 'NUP' "
+            f"(sheet pada file: {', '.join(daftar_sheet[:5])})"))
     if not baris_data:
-        raise HTTPException(status_code=400, detail="Tidak ada baris aset pada file")
+        raise HTTPException(status_code=400, detail=(
+            f"Tidak ada baris aset pada sheet '{sheet_dipakai}' — file mungkin "
+            "ekspor kosong; periksa filter saat mengekspor dari SIMAN V2"))
 
     # Peta pencocokan: kode register (paling stabil) & kode+NUP.
     per_register, per_kunci, duplikat_kunci = {}, {}, 0
@@ -159,6 +190,29 @@ async def import_siman(request: Request, file: UploadFile = File(...),
     if ops:
         await db.assets.bulk_write(ops, ordered=False)
 
+    # Validasi satker: kode satker pada FILE vs satker terdaftar di AMAN
+    # (master satker + kop global) — file milik satker lain terdeteksi dini.
+    kode_terdaftar = set()
+    async for s in db.satker.find({}, {"_id": 0, "kode_satker": 1, "kode_satker_lengkap": 1}):
+        kode_terdaftar.add(s.get("kode_satker_lengkap") or "")
+        kode_terdaftar.add(s.get("kode_satker") or "")
+    setelan = await db.report_settings.find_one(
+        {"type": "global"}, {"_id": 0, "kode_satker_lengkap": 1}) or {}
+    kode_terdaftar.add(setelan.get("kode_satker_lengkap") or "")
+    cek_satker = validasi_satker(
+        {b.get("kode_satker") for b in baris_data}, kode_terdaftar)
+    peringatan = []
+    if not cek_satker["cocok"]:
+        peringatan.append(
+            "Kode satker pada file ({}) BERBEDA dengan satker terdaftar di AMAN "
+            "({}) — pastikan file ekspor milik satker Anda".format(
+                ", ".join(cek_satker["kode_file"]) or "-",
+                ", ".join(cek_satker["kode_terdaftar"]) or "-"))
+    if duplikat_kunci:
+        peringatan.append(
+            f"{duplikat_kunci} baris duplikat kode+NUP pada file dilewati "
+            "(baris pertama yang dipakai)")
+
     ringkasan = ringkas_import(
         [{"selisih": r["selisih"]} for r in hasil], siman_tanpa_aset, aman_tanpa_siman)
     register = {
@@ -166,11 +220,18 @@ async def import_siman(request: Request, file: UploadFile = File(...),
         "filename": nama_file,
         "waktu": now,
         "oleh": user.get("username", "system"),
+        "sheet": sheet_dipakai,
         "total_baris": len(baris_data),
         "duplikat_kunci": duplikat_kunci,
         "register_diadopsi": register_diadopsi,
         "tandai_tidak_ditemukan": bool(tandai_tidak_ditemukan),
         "ringkasan": ringkasan,
+        "peringatan": peringatan,
+        "validasi_satker": cek_satker,
+        # Baris SIMAN yang belum tercatat di AMAN — bahan CSV & buat draft.
+        "baris_belum_tercatat": [
+            ringkas_baris_belum_tercatat(b)
+            for b in siman_tanpa_aset[:_MAKS_BELUM_TERCATAT]],
         "satker": sorted({b["nama_satker"] for b in baris_data if b.get("nama_satker")})[:10],
         # Contoh (dibatasi) untuk ditinjau di UI — bukan data lengkap.
         "contoh_siman_tanpa_aset": [
@@ -187,7 +248,8 @@ async def import_siman(request: Request, file: UploadFile = File(...),
                     detail=(f"Impor SIMAN V2 '{nama_file}': {len(baris_data)} baris, "
                             f"{ringkasan['cocok']} cocok, {ringkasan['selisih']} selisih, "
                             f"{ringkasan['siman_tanpa_aset']} belum tercatat di AMAN"))
-    return register
+    # Respons tanpa daftar panjang (CSV/draft mengambilnya dari register).
+    return {k: v for k, v in register.items() if k != "baris_belum_tercatat"}
 
 
 @siman_router.get("/siman/ringkasan")
@@ -202,7 +264,8 @@ async def ringkasan_siman(_user: dict = Depends(require_user)):
     belum_dicek = await db.assets.count_documents(
         active_asset_filter({"siman": {"$exists": False}}))
     riwayat = await db.siman_imports.find(
-        {}, {"_id": 0, "contoh_siman_tanpa_aset": 0, "contoh_aman_tanpa_siman": 0},
+        {}, {"_id": 0, "contoh_siman_tanpa_aset": 0, "contoh_aman_tanpa_siman": 0,
+             "baris_belum_tercatat": 0},
     ).sort("waktu", -1).limit(10).to_list(10)
     return {
         "selisih": selisih, "cocok": cocok,
@@ -215,10 +278,137 @@ async def ringkasan_siman(_user: dict = Depends(require_user)):
 @siman_router.get("/siman/import/{import_id}")
 async def detail_import_siman(import_id: str, _user: dict = Depends(require_user)):
     """Detail satu impor termasuk daftar contoh yang tidak cocok."""
-    reg = await db.siman_imports.find_one({"id": import_id}, {"_id": 0})
+    reg = await db.siman_imports.find_one(
+        {"id": import_id}, {"_id": 0, "baris_belum_tercatat": 0})
     if not reg:
         raise HTTPException(status_code=404, detail="Riwayat impor tidak ditemukan")
     return reg
+
+
+@siman_router.get("/siman/import/{import_id}/belum-tercatat.csv")
+async def csv_belum_tercatat(import_id: str, _user: dict = Depends(require_user)):
+    """Unduh CSV baris SIMAN yang belum tercatat di AMAN (bahan tindak lanjut)."""
+    import csv
+
+    from fastapi.responses import StreamingResponse
+
+    reg = await db.siman_imports.find_one(
+        {"id": import_id}, {"_id": 0, "baris_belum_tercatat": 1, "filename": 1})
+    if not reg:
+        raise HTTPException(status_code=404, detail="Riwayat impor tidak ditemukan")
+    baris = reg.get("baris_belum_tercatat") or []
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["Kode Barang", "NUP", "Nama Barang", "Merk", "Tipe", "Kondisi",
+                "Nilai Perolehan", "Tanggal Perolehan", "Kode Register SIMAN"])
+    for b in baris:
+        w.writerow([b.get("kode_barang", ""), b.get("nup", ""),
+                    b.get("nama_barang", ""), b.get("merk", ""),
+                    b.get("tipe", ""), b.get("kondisi", ""),
+                    b.get("nilai_perolehan", 0), b.get("tanggal_perolehan", ""),
+                    b.get("kode_register", "")])
+    buf.seek(0)
+    return StreamingResponse(
+        iter([("\ufeff" + buf.getvalue()).encode("utf-8")]), media_type="text/csv",
+        headers={"Content-Disposition":
+                 'attachment; filename="siman_belum_tercatat.csv"'})
+
+
+class BuatDraftSimanIn(BaseModel):
+    activity_id: str
+    maks: int = 500  # batas aman satu panggilan; ulangi bila lebih
+
+
+@siman_router.post("/siman/import/{import_id}/buat-draft")
+@limiter.limit("3/minute")
+async def buat_draft_dari_siman(request: Request, import_id: str,
+                                payload: BuatDraftSimanIn,
+                                user: dict = Depends(require_admin)):
+    """Buat aset DRAFT dari baris SIMAN yang belum tercatat di AMAN.
+
+    Data SIMAN langsung menjadi modal awal aset (kode, NUP, nama, merk, tipe,
+    kondisi, nilai, tanggal, kode register) — petugas tinggal melengkapi foto
+    dan lokasi di lapangan. Jalur create standar dipakai (kunci kegiatan,
+    keunikan kode+NUP, registry, audit tetap berlaku); baris yang sudah punya
+    aset (impor ulang) otomatis dilewati.
+    """
+    from models import AssetCreate
+    from routes.assets import buat_aset_draft
+
+    reg = await db.siman_imports.find_one(
+        {"id": import_id}, {"_id": 0, "baris_belum_tercatat": 1, "filename": 1})
+    if not reg:
+        raise HTTPException(status_code=404, detail="Riwayat impor tidak ditemukan")
+    baris = reg.get("baris_belum_tercatat") or []
+    if not baris:
+        raise HTTPException(status_code=400, detail=(
+            "Impor ini tidak menyimpan baris belum tercatat — jalankan impor "
+            "ulang (fitur ini berlaku untuk impor terbaru)"))
+    act = await db.inventory_activities.find_one(
+        {"id": payload.activity_id}, {"_id": 0, "id": 1, "nama_kegiatan": 1})
+    if not act:
+        raise HTTPException(status_code=404, detail="Kegiatan inventarisasi tidak ditemukan")
+
+    kategori_by_kode = {
+        c["kode_aset"]: c.get("label", "")
+        async for c in db.categories.find({}, {"_id": 0, "kode_aset": 1, "label": 1})
+        if c.get("kode_aset")}
+
+    maks = min(max(1, payload.maks), 1000)
+    dibuat, dilewati_sudah_ada, gagal = 0, 0, []
+    now = datetime.now(timezone.utc).isoformat()
+    for b in baris:
+        if dibuat >= maks:
+            break
+        kode, nup = b.get("kode_barang", ""), b.get("nup", "")
+        if not kode or not nup:
+            continue
+        # Lewati bila kini sudah tercatat (impor ulang / dibuat manual).
+        sudah = await db.assets.find_one(
+            {"asset_code": kode, "NUP": nup, "dihapus": {"$ne": True}}, {"_id": 1})
+        if sudah:
+            dilewati_sudah_ada += 1
+            continue
+        draft = AssetCreate(
+            asset_code=kode,
+            NUP=nup,
+            asset_name=b.get("nama_barang") or f"Aset SIMAN {kode}",
+            # Kategori = label kodefikasi lokal; fallback Nama Barang SIMAN
+            # (uraian kodefikasi resmi) agar impor ulang tidak menandai selisih.
+            category=kategori_by_kode.get(kode) or b.get("nama_barang", ""),
+            brand=b.get("merk", ""),
+            model=b.get("tipe", ""),
+            condition=b.get("kondisi") or "Baik",
+            purchase_price=str(int(round(float(b.get("nilai_perolehan") or 0)))),
+            purchase_date=b.get("tanggal_perolehan", ""),
+            kode_register=b.get("kode_register", ""),
+            notes=f"Draft otomatis dari impor SIMAN V2 ({reg.get('filename', '')})",
+            activity_id=payload.activity_id,
+        )
+        try:
+            doc = await buat_aset_draft(
+                draft, audit_user=user.get("name") or user.get("username") or "system")
+            # Tandai langsung tersinkron SIMAN (sumber datanya memang SIMAN).
+            await db.assets.update_one(
+                {"id": doc["id"]},
+                {"$set": {"siman": {"status": "cocok", "selisih": [],
+                                    "kode_register": b.get("kode_register", ""),
+                                    "import_id": import_id,
+                                    "diperiksa_pada": now}}})
+            dibuat += 1
+        except HTTPException as e:
+            gagal.append(f"{kode}·{nup}: {e.detail}")
+            if len(gagal) >= 20:
+                break
+
+    await log_audit("siman_buat_draft", payload.activity_id,
+                    username=user.get("username", "system"),
+                    detail=(f"Buat draft dari impor SIMAN '{reg.get('filename', '')}': "
+                            f"{dibuat} dibuat, {dilewati_sudah_ada} sudah ada, "
+                            f"{len(gagal)} gagal"))
+    return {"dibuat": dibuat, "dilewati_sudah_ada": dilewati_sudah_ada,
+            "gagal": gagal, "sisa": max(0, len(baris) - dibuat - dilewati_sudah_ada),
+            "kegiatan": act.get("nama_kegiatan", "")}
 
 
 @siman_router.get("/siman/selisih")
