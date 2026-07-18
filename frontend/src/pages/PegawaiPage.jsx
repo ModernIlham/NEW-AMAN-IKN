@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Search, Plus, Pencil, Trash2, Loader2, IdCard,
+  ArrowLeft, Search, Plus, Pencil, Trash2, Loader2, IdCard, Upload, Download,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
+import { downloadFileWithProgress } from "@/lib/downloadFile";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -20,12 +22,25 @@ function getApiError(err, fallback) {
 
 const EMPTY = {
   mode: "tambah", nama: "", nip: "", gelar_depan: "", gelar_belakang: "",
-  jenis_kelamin: "", tempat_lahir: "", tanggal_lahir: "", status_kepegawaian: "",
-  pangkat_golongan: "", jabatan: "", jenis_jabatan: "", eselon: "",
+  jenis_kelamin: "", tempat_lahir: "", tanggal_lahir: "", agama: "",
+  status_perkawinan: "", status_kepegawaian: "", sub_kategori_non_asn: "",
+  pangkat_golongan: "", jabatan: "", jenis_jabatan: "", kategori_pegawai: "",
+  eselon: "", eselon1: "", eselon2: "", eselon3: "", eselon4: "", eselon5: "",
   unit_kerja: "", unit_organisasi: "", npwp: "", pendidikan_terakhir: "",
-  no_hp: "", email: "", alamat: "", tmt_jabatan: "", status: "aktif",
-  keterangan: "",
+  no_hp: "", email: "", alamat: "", nama_bank: "", no_rekening: "",
+  nomor_kontrak: "", tgl_mulai_kontrak: "", tgl_selesai_kontrak: "",
+  tmt_jabatan: "", status: "aktif", keterangan: "",
 };
+
+// Status kontrak Non-ASN utk badge (pemegang aset berisiko saat kontrak habis).
+function statusKontrak(p) {
+  const sel = String(p.tgl_selesai_kontrak || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(sel)) return null;
+  const sisa = Math.ceil((new Date(sel) - new Date()) / 86400000);
+  if (sisa < 0) return { habis: true, teks: `Kontrak berakhir ${Math.abs(sisa)} hari lalu` };
+  if (sisa <= 30) return { segera: true, teks: `Kontrak berakhir dalam ${sisa} hari` };
+  return null;
+}
 
 // Nama + gelar untuk tampilan (samakan dengan nama_lengkap di backend).
 function namaLengkap(p) {
@@ -47,11 +62,14 @@ export default function PegawaiPage({ user, onBack }) {
   const isAdmin = user?.role === "admin";
   const [items, setItems] = useState([]);
   const [rekap, setRekap] = useState(null);
-  const [ref, setRef] = useState({ jenis_kelamin: [], status_kepegawaian: [], jenis_jabatan: [], status: [] });
+  const [ref, setRef] = useState({ jenis_kelamin: [], status_kepegawaian: [], jenis_jabatan: [], kategori_pegawai: [], sub_kategori_non_asn: [], agama: [], status_perkawinan: [], status: [] });
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [mengimpor, setMengimpor] = useState(false);
+  const [hasilImpor, setHasilImpor] = useState(null);
+  const fileRef = useRef(null);
   const { confirm, confirmDialog } = useConfirm();
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
@@ -80,9 +98,42 @@ export default function PegawaiPage({ user, onBack }) {
       jenis_kelamin: r.data?.jenis_kelamin || [],
       status_kepegawaian: r.data?.status_kepegawaian || [],
       jenis_jabatan: r.data?.jenis_jabatan || [],
+      kategori_pegawai: r.data?.kategori_pegawai || [],
+      sub_kategori_non_asn: r.data?.sub_kategori_non_asn || [],
+      agama: r.data?.agama || [],
+      status_perkawinan: r.data?.status_perkawinan || [],
       status: r.data?.status || [],
     })).catch(() => {});
   }, [load]);
+
+  const unduhTemplate = () => {
+    downloadFileWithProgress(`${API}/pegawai/template-impor`, "template_impor_pegawai.csv",
+      { label: "Template Impor Pegawai (CSV)" }).catch(() => {});
+  };
+
+  const pilihBerkas = () => fileRef.current?.click();
+
+  const onBerkasDipilih = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // reset agar file sama bisa dipilih ulang
+    if (!file) return;
+    setMengimpor(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const r = await axios.post(`${API}/pegawai/impor`, fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+        timeout: 120000,
+      });
+      setHasilImpor(r.data);
+      toast.success(`Impor selesai: ${r.data.dibuat} baru, ${r.data.diperbarui} diperbarui`);
+      load();
+    } catch (err) {
+      toast.error(getApiError(err, "Gagal mengimpor pegawai"));
+    } finally {
+      setMengimpor(false);
+    }
+  };
 
   const submitForm = async () => {
     if (!form) return;
@@ -160,10 +211,23 @@ export default function PegawaiPage({ user, onBack }) {
                 placeholder="Cari nama / NIP / jabatan / unit kerja / email…" className="pl-9 h-10" data-testid="pegawai-search" />
             </div>
             {isAdmin && (
-              <Button variant="outline" className="h-10 gap-1.5"
-                onClick={() => setForm({ ...EMPTY })} data-testid="pegawai-add">
-                <Plus className="w-4 h-4" /><span className="hidden sm:inline">Tambah</span>
-              </Button>
+              <>
+                <input ref={fileRef} type="file" accept=".xlsx,.xlsm,.csv" className="hidden"
+                  onChange={onBerkasDipilih} data-testid="pegawai-impor-file" />
+                <Button variant="outline" className="h-10 gap-1.5" onClick={unduhTemplate}
+                  data-testid="pegawai-template">
+                  <Download className="w-4 h-4" /><span className="hidden sm:inline">Template</span>
+                </Button>
+                <Button variant="outline" className="h-10 gap-1.5" disabled={mengimpor}
+                  onClick={pilihBerkas} data-testid="pegawai-impor">
+                  {mengimpor ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                  <span className="hidden sm:inline">Impor Excel</span>
+                </Button>
+                <Button variant="outline" className="h-10 gap-1.5"
+                  onClick={() => setForm({ ...EMPTY })} data-testid="pegawai-add">
+                  <Plus className="w-4 h-4" /><span className="hidden sm:inline">Tambah</span>
+                </Button>
+              </>
             )}
           </div>
         </div>
@@ -233,6 +297,16 @@ export default function PegawaiPage({ user, onBack }) {
                               {uraian("status_kepegawaian", it.status_kepegawaian).split(" (")[0]}
                             </span>
                           )}
+                          {(() => {
+                            const k = statusKontrak(it);
+                            if (!k) return null;
+                            return (
+                              <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold ${k.habis ? "bg-red-500/15 text-red-600 dark:text-red-400" : "bg-amber-500/15 text-amber-600 dark:text-amber-400"}`}
+                                title={k.teks}>
+                                <AlertTriangle className="w-2.5 h-2.5" />{k.teks}
+                              </span>
+                            );
+                          })()}
                         </p>
                         <p className="text-[11px] text-muted-foreground font-mono">{it.nip || "—"}</p>
                       </td>
@@ -309,31 +383,66 @@ export default function PegawaiPage({ user, onBack }) {
                     <Select value={form.status_kepegawaian} onChange={set("status_kepegawaian")} data-testid="pegawai-form-status-peg" opts={ref.status_kepegawaian} />
                   </Field>
                   <Field label="Pangkat / Golongan"><Input value={form.pangkat_golongan} onChange={set("pangkat_golongan")} placeholder="cth. Penata (III/c)" /></Field>
+                  {form.status_kepegawaian === "non_asn" && (
+                    <Field label="Sub-Kategori Non-ASN">
+                      <Select value={form.sub_kategori_non_asn} onChange={set("sub_kategori_non_asn")} opts={ref.sub_kategori_non_asn} />
+                    </Field>
+                  )}
                   <Field label="Jenis Jabatan">
                     <Select value={form.jenis_jabatan} onChange={set("jenis_jabatan")} opts={ref.jenis_jabatan} />
                   </Field>
-                  <Field label="Eselon"><Input value={form.eselon} onChange={set("eselon")} placeholder="cth. IV.a" /></Field>
+                  <Field label="Kategori Pegawai (UU ASN)">
+                    <Select value={form.kategori_pegawai} onChange={set("kategori_pegawai")} opts={ref.kategori_pegawai} />
+                  </Field>
+                  <Field label="Eselon (teks)"><Input value={form.eselon} onChange={set("eselon")} placeholder="cth. IV.a" /></Field>
                   <Field label="Status di Satker">
                     <Select value={form.status} onChange={set("status")} data-testid="pegawai-form-status" opts={ref.status} allowEmpty={false} />
                   </Field>
                   <Field label="TMT Jabatan"><Input type="date" value={form.tmt_jabatan} onChange={set("tmt_jabatan")} /></Field>
                 </div>
+                {/* Kontrak Non-ASN — pemantauan pemegang aset saat kontrak berakhir. */}
+                {form.status_kepegawaian === "non_asn" && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-2.5 rounded-lg bg-muted/40 border border-border/60">
+                    <Field label="Nomor Kontrak"><Input value={form.nomor_kontrak} onChange={set("nomor_kontrak")} placeholder="cth. 001/KONTRAK/2026" /></Field>
+                    <Field label="Mulai Kontrak"><Input type="date" value={form.tgl_mulai_kontrak} onChange={set("tgl_mulai_kontrak")} /></Field>
+                    <Field label="Selesai Kontrak"><Input type="date" value={form.tgl_selesai_kontrak} onChange={set("tgl_selesai_kontrak")} /></Field>
+                  </div>
+                )}
               </Group>
 
               <Group title="Jabatan & Unit Kerja">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <Field label="Jabatan" span2><Input value={form.jabatan} onChange={set("jabatan")} placeholder="cth. Analis Pengelolaan BMN" /></Field>
-                  <Field label="Unit Kerja"><Input value={form.unit_kerja} onChange={set("unit_kerja")} placeholder="cth. Bagian Umum" data-testid="pegawai-form-unit" /></Field>
+                </div>
+                {/* Unit kerja berjenjang (Eselon I–V) — bila diisi, jenjang
+                    terdalam otomatis menjadi Unit Kerja efektif di server. */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Field label="Eselon 1"><Input value={form.eselon1} onChange={set("eselon1")} placeholder="cth. Kedeputian / Sekretariat" data-testid="pegawai-form-eselon1" /></Field>
+                  <Field label="Eselon 2"><Input value={form.eselon2} onChange={set("eselon2")} placeholder="cth. Direktorat / Biro" /></Field>
+                  <Field label="Eselon 3"><Input value={form.eselon3} onChange={set("eselon3")} placeholder="cth. Bagian / Subdirektorat" /></Field>
+                  <Field label="Eselon 4"><Input value={form.eselon4} onChange={set("eselon4")} placeholder="cth. Subbagian / Seksi" /></Field>
+                  <Field label="Eselon 5"><Input value={form.eselon5} onChange={set("eselon5")} /></Field>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Field label="Unit Kerja (ringkas)"><Input value={form.unit_kerja} onChange={set("unit_kerja")} placeholder="otomatis dari Eselon terdalam bila kosong" data-testid="pegawai-form-unit" /></Field>
                   <Field label="Unit Organisasi / Satker"><Input value={form.unit_organisasi} onChange={set("unit_organisasi")} /></Field>
                 </div>
               </Group>
 
-              <Group title="Kontak & Lainnya">
+              <Group title="Kontak, Bank & Lainnya">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <Field label="No. HP"><Input value={form.no_hp} onChange={set("no_hp")} inputMode="tel" placeholder="cth. 0812…" /></Field>
                   <Field label="Email"><Input type="email" value={form.email} onChange={set("email")} placeholder="nama@instansi.go.id" data-testid="pegawai-form-email" /></Field>
+                  <Field label="Agama">
+                    <Select value={form.agama} onChange={set("agama")} opts={ref.agama} />
+                  </Field>
+                  <Field label="Status Perkawinan">
+                    <Select value={form.status_perkawinan} onChange={set("status_perkawinan")} opts={ref.status_perkawinan} />
+                  </Field>
                   <Field label="Pendidikan Terakhir"><Input value={form.pendidikan_terakhir} onChange={set("pendidikan_terakhir")} placeholder="cth. S1 Akuntansi" /></Field>
                   <Field label="Alamat"><Input value={form.alamat} onChange={set("alamat")} /></Field>
+                  <Field label="Nama Bank"><Input value={form.nama_bank} onChange={set("nama_bank")} placeholder="cth. BRI" /></Field>
+                  <Field label="No. Rekening"><Input value={form.no_rekening} onChange={set("no_rekening")} className="font-mono" inputMode="numeric" /></Field>
                 </div>
                 <Field label="Keterangan"><Input value={form.keterangan} onChange={set("keterangan")} /></Field>
               </Group>
@@ -344,6 +453,46 @@ export default function PegawaiPage({ user, onBack }) {
             <Button onClick={submitForm} disabled={saving} data-testid="pegawai-form-save">
               {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : null}Simpan
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog hasil impor ── */}
+      <Dialog open={!!hasilImpor} onOpenChange={(o) => { if (!o) setHasilImpor(null); }}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Hasil Impor Pegawai</DialogTitle>
+            <DialogDescription className="text-xs">
+              Baris dinormalkan otomatis (status kepegawaian &amp; status keberadaan dipetakan, NIP dibersihkan, unit kerja dari Eselon terdalam).
+            </DialogDescription>
+          </DialogHeader>
+          {hasilImpor && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-4 gap-2 text-center">
+                {[["Dibaca", hasilImpor.dibaca, "text-foreground"],
+                  ["Baru", hasilImpor.dibuat, "text-emerald-600 dark:text-emerald-400"],
+                  ["Diperbarui", hasilImpor.diperbarui, "text-sky-600 dark:text-sky-400"],
+                  ["Dilewati", hasilImpor.dilewati, "text-amber-600 dark:text-amber-400"]].map(([l, v, c]) => (
+                  <div key={l} className="rounded-lg border border-border p-2">
+                    <p className={`text-lg font-bold ${c}`}>{v}</p>
+                    <p className="text-[10px] text-muted-foreground">{l}</p>
+                  </div>
+                ))}
+              </div>
+              {(hasilImpor.catatan || []).length > 0 && (
+                <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-2.5">
+                  <p className="text-[11px] font-bold text-amber-700 dark:text-amber-400 mb-1">
+                    Catatan ({hasilImpor.catatan.length} baris dilewati):
+                  </p>
+                  <ul className="text-[10px] text-muted-foreground space-y-0.5 max-h-40 overflow-y-auto">
+                    {hasilImpor.catatan.map((c, i) => <li key={i}>• {c}</li>)}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setHasilImpor(null)}>Tutup</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

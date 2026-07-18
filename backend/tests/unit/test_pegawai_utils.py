@@ -1,7 +1,9 @@
 """Uji Master Pegawai (data kepegawaian menyeluruh, adopsi SIMAN-G)."""
 from pegawai_utils import (
-    JENIS_JABATAN, JENIS_KELAMIN, STATUS_PEGAWAI,
-    is_aktif, kelompok_unit_kerja, nama_lengkap, validate_pegawai,
+    JENIS_JABATAN, JENIS_KELAMIN, KATEGORI_PEGAWAI, STATUS_PEGAWAI,
+    baris_impor_ke_pegawai, bersihkan_nip, is_aktif, kelompok_unit_kerja,
+    nama_lengkap, normalisasi_status_kepegawaian, normalisasi_status_pegawai,
+    rekap_eselon, status_kontrak, unit_kerja_terdalam, validate_pegawai,
 )
 
 
@@ -67,3 +69,94 @@ def test_kelompok_unit_kerja():
     assert hasil[1]["jumlah"] == 2
     assert hasil[-1]["jumlah"] == 1
     assert kelompok_unit_kerja([]) == []
+
+
+# ── Pengayaan (adopsi KERJA-BARENG/SIMPEG) ───────────────────────────────────
+
+def test_bersihkan_nip():
+    assert bersihkan_nip("7371122602960002.0") == "7371122602960002"
+    assert bersihkan_nip("198501012010011001") == "198501012010011001"
+    assert bersihkan_nip("-") == ""
+    assert bersihkan_nip("") == ""
+    assert bersihkan_nip(None) == ""
+    # karakter arah tak terlihat dibuang
+    assert bersihkan_nip("‭198501012010011001‬") == "198501012010011001"
+
+
+def test_normalisasi_status_kepegawaian():
+    assert normalisasi_status_kepegawaian("PNS") == ("pns", "")
+    assert normalisasi_status_kepegawaian("CPNS") == ("cpns", "")
+    assert normalisasi_status_kepegawaian("PPPK") == ("pppk", "")
+    assert normalisasi_status_kepegawaian("Konsultan Individual")[0] == "non_asn"
+    assert normalisasi_status_kepegawaian("Konsultan Individual")[1] == "konsultan"
+    assert normalisasi_status_kepegawaian("Tenaga Pendukung") == ("non_asn", "tenaga_pendukung")
+    assert normalisasi_status_kepegawaian("Honorer") == ("non_asn", "")
+    assert normalisasi_status_kepegawaian("") == ("", "")
+
+
+def test_normalisasi_status_pegawai():
+    assert normalisasi_status_pegawai("AKTIF") == "aktif"
+    assert normalisasi_status_pegawai("KELUAR") == "keluar"
+    assert normalisasi_status_pegawai("MUTASI KELUAR") == "mutasi"
+    assert normalisasi_status_pegawai("Pensiun") == "pensiun"
+    assert normalisasi_status_pegawai("MENINGGAL") == "nonaktif"
+    assert normalisasi_status_pegawai("") == "aktif"
+
+
+def test_status_kontrak():
+    habis = status_kontrak({"tgl_selesai_kontrak": "2026-06-30"}, "2026-07-18")
+    assert habis["ada"] and habis["habis"] and habis["sisa_hari"] == -18
+    segera = status_kontrak({"tgl_selesai_kontrak": "2026-08-01"}, "2026-07-18")
+    assert segera["segera"] and not segera["habis"] and segera["sisa_hari"] == 14
+    jauh = status_kontrak({"tgl_selesai_kontrak": "2027-01-01"}, "2026-07-18")
+    assert jauh["ada"] and not jauh["segera"] and not jauh["habis"]
+    assert status_kontrak({}, "2026-07-18")["ada"] is False
+    # tanggal rusak → tidak crash
+    assert status_kontrak({"tgl_selesai_kontrak": "bukan-tgl"}, "2026-07-18")["ada"] is False
+
+
+def test_unit_kerja_terdalam():
+    assert unit_kerja_terdalam({"eselon1": "Ked X", "eselon2": "Dir Y"}) == "Dir Y"
+    assert unit_kerja_terdalam({"eselon1": "Ked X"}) == "Ked X"
+    assert unit_kerja_terdalam({"unit_kerja": "Bagian Umum"}) == "Bagian Umum"
+    assert unit_kerja_terdalam({}) == ""
+
+
+def test_rekap_eselon():
+    daftar = [{"eselon1": "A"}, {"eselon1": "A"}, {"eselon1": "B"}, {"eselon1": ""}]
+    hasil = rekap_eselon(daftar, "eselon1")
+    assert hasil[0] == {"unit": "A", "jumlah": 2}
+    assert hasil[-1]["unit"] == "(belum dicatat)"
+
+
+def test_baris_impor_ke_pegawai():
+    raw = {
+        "NIP/NIK/NRP": "7371122602960002.0", "Nama Lengkap": "A Khalil",
+        "Status Kepegawaian": "Konsultan Individual",
+        "Eselon 1": "Kedeputian X", "Eselon 2": "Direktorat Y",
+        "Jenis Kelamin": "Laki-laki", "Status": "AKTIF",
+        "Tgl Selesai Kontrak": "31/12/2026",
+    }
+    doc, peringatan = baris_impor_ke_pegawai(raw)
+    assert doc["nip"] == "7371122602960002"
+    assert doc["nama"] == "A Khalil"
+    assert doc["status_kepegawaian"] == "non_asn"
+    assert doc["sub_kategori_non_asn"] == "konsultan"
+    assert doc["jenis_kelamin"] == "L"
+    assert doc["status"] == "aktif"
+    assert doc["eselon1"] == "Kedeputian X" and doc["eselon2"] == "Direktorat Y"
+    # unit_kerja efektif = eselon terdalam
+    assert doc["unit_kerja"] == "Direktorat Y"
+    # tanggal dd/mm/yyyy dinormalkan
+    assert doc["tgl_selesai_kontrak"] == "2026-12-31"
+
+
+def test_baris_impor_nama_kosong_dilewati():
+    doc, peringatan = baris_impor_ke_pegawai({"NIP/NIK/NRP": "123"})
+    assert doc["nama"] == "" and any("Nama kosong" in p for p in peringatan)
+
+
+def test_kategori_pegawai_konstanta():
+    for k in ("jpt", "administrator", "pengawas", "pelaksana", "fungsional"):
+        assert k in KATEGORI_PEGAWAI
+    assert "keluar" in STATUS_PEGAWAI

@@ -48,6 +48,41 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#391] Master Pegawai diperkaya (adopsi pola KERJA-BARENG/SIMPEG) + impor Excel massal — 2026-07-18
+
+Studi mendalam aplikasi manajemen SDM KERJA-BARENG (form Tambah Pegawai,
+unit kerja berjenjang, keterkaitan aset↔pegawai) → gelombang pertama
+memperkaya Master Pegawai agar siap menampung data riil satker dan menjadi
+rujukan kuat manajemen aset BMN (pemegang barang, penanggung jawab ruangan,
+penanda tangan):
+- **Impor Excel/CSV massal** (`POST /pegawai/impor`, admin): menormalkan data
+  lapangan yang tak baku — status kepegawaian beragam ("Tenaga Pendukung",
+  "Konsultan Individu", dll. → Non-ASN + sub-kategori), status keberadaan
+  ("AKTIF/KELUAR/MUTASI KELUAR" → kode kanonik), **NIP dibersihkan** dari
+  artefak Excel (mis. "…0002.0" float, karakter arah tak terlihat). Upsert per
+  NIP dalam satker; template CSV dapat diunduh. Diuji empiris terhadap berkas
+  nyata 1.369 pegawai: seluruhnya terbaca & ternormalisasi, 0 gagal.
+- **Data diperkaya**: unit kerja **berjenjang Eselon I–V** (jenjang terdalam
+  otomatis jadi Unit Kerja efektif), kategori pegawai (UU ASN), sub-kategori
+  Non-ASN, agama, status perkawinan, bank & rekening, dan **kontrak Non-ASN**
+  (nomor + mulai/selesai).
+- **Peringatan kontrak**: pegawai Non-ASN dengan kontrak akan/telah berakhir
+  ditandai badge di daftar — mitigasi risiko pemegang aset yang kontraknya
+  habis (pola "alert pemegang keluar" KERJA-BARENG).
+- **Isolasi satker**: pegawai kini ber-stempel `kode_satker`, daftar & rekap
+  ter-scope per satker (era-lama tetap terbuka); NIP unik per satker.
+- **Rekap** kini juga per Eselon I, selain per unit kerja.
+- Verifikasi: 520 tes unit lulus (16 helper murni impor/kontrak/normalisasi),
+  smoke impor 1.369 baris berkas nyata lulus, server ter-import, lint & build
+  sukses.
+
+Roadmap lanjutan (increment berikut): master Unit Kerja berjenjang dengan
+dropdown bertingkat, form 5-tab, halaman Struktur Organisasi, dan keterkaitan
+aset↔pegawai (handover + riwayat pemegang) — bahan sudah dipelajari dari
+KERJA-BARENG.
+
+---
+
 ## [#390] Penjelasan resmi tiap akun BAS (KEP-211/PB/2018) — dapat dibuka per baris + ikut ekspor CSV — 2026-07-18
 
 Pemilik meminta penjelasan/definisi tiap akun ditampilkan (sebelumnya kosong).
