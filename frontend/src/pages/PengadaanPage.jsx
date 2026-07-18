@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, ShoppingCart, Plus, Search, Trash2, X, Coins,
-  ClipboardCheck, Download, Link2, Paperclip, Upload, PackagePlus,
+  ClipboardCheck, Download, Link2, Paperclip, Upload, PackagePlus, Boxes,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -317,7 +317,7 @@ export default function PengadaanPage({ user, onBack }) {
                             }}
                             className="h-7 px-2 rounded-lg border border-cyan-500/40 bg-cyan-600/10 text-cyan-600 dark:text-cyan-400 flex items-center gap-1 text-[10px] font-semibold hover:bg-cyan-600/20 min-h-0 min-w-0"
                             data-testid={`pengadaan-daftarkan-psd-${p.id}`}>
-                            <PackagePlus className="w-3.5 h-3.5" />
+                            <Boxes className="w-3.5 h-3.5" />
                             <span className="hidden sm:inline">Daftarkan ke Persediaan</span>
                           </button>
                         )}
@@ -470,13 +470,13 @@ export default function PengadaanPage({ user, onBack }) {
               <div className="col-span-2 space-y-2">
                 <p className="text-xs font-medium text-foreground">Daftar barang</p>
                 {form.barang.map((b, i) => (
-                  <div key={i} className="rounded-lg border border-border p-2 grid grid-cols-6 gap-2">
+                  <div key={i} className="rounded-lg border border-border p-2 grid grid-cols-6 sm:grid-cols-8 gap-2">
                     <div className="col-span-6 sm:col-span-3">
                       <Input placeholder="Uraian barang" value={b.uraian}
                         onChange={(e) => setFormBarang(i, "uraian", e.target.value)}
                         data-testid={`pengadaan-barang-uraian-${i}`} />
                     </div>
-                    <div className="col-span-3 sm:col-span-1">
+                    <div className="col-span-3 sm:col-span-2">
                       <Input placeholder="Kode (ops.)" className="font-mono" value={b.kode}
                         onChange={(e) => setFormBarang(i, "kode", e.target.value)} />
                     </div>
@@ -484,7 +484,7 @@ export default function PengadaanPage({ user, onBack }) {
                       <Input type="number" min="1" placeholder="Jml" value={b.jumlah}
                         onChange={(e) => setFormBarang(i, "jumlah", e.target.value)} />
                     </div>
-                    <div className="col-span-2 sm:col-span-1 flex gap-1">
+                    <div className="col-span-2 sm:col-span-2 flex gap-1">
                       <Input type="number" min="0" placeholder="Harga satuan" value={b.harga_satuan}
                         onChange={(e) => setFormBarang(i, "harga_satuan", e.target.value)}
                         data-testid={`pengadaan-barang-harga-${i}`} />

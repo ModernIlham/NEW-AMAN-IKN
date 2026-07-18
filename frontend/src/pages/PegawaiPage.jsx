@@ -441,6 +441,11 @@ export default function PegawaiPage({ user, onBack }) {
                           })()}
                         </p>
                         <p className="text-[11px] text-muted-foreground font-mono">{it.nip || "—"}</p>
+                        {(it.jabatan || it.unit_kerja) && (
+                          <p className="sm:hidden text-[10px] text-muted-foreground truncate">
+                            {[it.jabatan, it.unit_kerja].filter(Boolean).join(" · ")}
+                          </p>
+                        )}
                       </td>
                       <td className="px-3 py-2 hidden sm:table-cell">
                         <p className="text-[12px] text-foreground/90">{it.jabatan || "—"}</p>

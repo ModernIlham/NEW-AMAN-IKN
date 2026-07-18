@@ -3,13 +3,16 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Search, Plus, Upload, Download, Pencil, Trash2, Loader2,
-  ListTree, ChevronLeft, ChevronRight, Info, FileDown, Table2,
+  ListTree, ChevronLeft, ChevronRight, ChevronDown, Info, FileDown, Table2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
@@ -249,25 +252,39 @@ export default function KodefikasiPage({ user, onBack }) {
             </div>
             {isAdmin && (
               <>
-                <Button variant="outline" className="h-10 gap-1.5" onClick={() => setForm({ mode: "tambah", kode: "", uraian: "" })} data-testid="kodefikasi-add">
+                <Button variant="outline" className="h-10 gap-1.5" title="Tambah kode kodefikasi baru secara manual"
+                  onClick={() => setForm({ mode: "tambah", kode: "", uraian: "" })} data-testid="kodefikasi-add">
                   <Plus className="w-4 h-4" /><span className="hidden sm:inline">Tambah</span>
                 </Button>
-                <Button variant="outline" className="h-10 gap-1.5" disabled={importing} onClick={() => fileRef.current?.click()} data-testid="kodefikasi-import">
+                <Button variant="outline" className="h-10 gap-1.5" disabled={importing} title="Impor kodefikasi massal dari file CSV/Excel"
+                  onClick={() => fileRef.current?.click()} data-testid="kodefikasi-import">
                   {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
                   <span className="hidden sm:inline">Impor</span>
                 </Button>
                 <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" multiple className="hidden" onChange={onImportFile} />
-                <Button variant="outline" className="h-10 gap-1.5" onClick={downloadTemplate} data-testid="kodefikasi-template">
-                  <Download className="w-4 h-4" /><span className="hidden sm:inline">Template</span>
-                </Button>
               </>
             )}
-            <Button variant="outline" className="h-10 gap-1.5" onClick={() => exportKodefikasi("datar")} data-testid="kodefikasi-export-datar" title="Ekspor datar (Kode, Uraian, Level, Induk)">
-              <FileDown className="w-4 h-4" /><span className="hidden sm:inline">Ekspor Datar</span>
-            </Button>
-            <Button variant="outline" className="h-10 gap-1.5" onClick={() => exportKodefikasi("hierarki")} data-testid="kodefikasi-export-hierarki" title="Ekspor hierarki berkolom (Golongan→Sub-Sub) + info SIMAN">
-              <Table2 className="w-4 h-4" /><span className="hidden sm:inline">Ekspor Hierarki</span>
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="h-10 gap-1.5" data-testid="kodefikasi-unduh"
+                  title="Unduh template impor atau ekspor daftar kodefikasi">
+                  <FileDown className="w-4 h-4" /><span className="hidden sm:inline">Unduh</span><ChevronDown className="w-3 h-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-72">
+                {isAdmin && (
+                  <DropdownMenuItem className="min-h-[42px] gap-2" onClick={downloadTemplate} data-testid="kodefikasi-template">
+                    <Download className="w-4 h-4" />Template Impor (CSV)
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem className="min-h-[42px] gap-2" onClick={() => exportKodefikasi("datar")} data-testid="kodefikasi-export-datar">
+                  <FileDown className="w-4 h-4" />Ekspor Datar — Kode, Uraian, Level, Induk
+                </DropdownMenuItem>
+                <DropdownMenuItem className="min-h-[42px] gap-2" onClick={() => exportKodefikasi("hierarki")} data-testid="kodefikasi-export-hierarki">
+                  <Table2 className="w-4 h-4" />Ekspor Hierarki — Golongan s.d. Sub-Sub + SIMAN
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
           <div className="flex items-center gap-1.5 flex-wrap">
             {LEVEL_FILTERS.map((f) => (

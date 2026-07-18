@@ -420,7 +420,24 @@ export default function ReferensiAkunPage({ user, onBack }) {
                         return rows;
                       })}
                       {(data?.items || []).length === 0 && (
-                        <tr><td colSpan={isAdmin ? 4 : 3} className="text-center text-xs text-muted-foreground py-8">Tidak ada akun yang cocok</td></tr>
+                        <tr>
+                          <td colSpan={isAdmin ? 4 : 3} className="text-center text-xs text-muted-foreground py-8">
+                            {(!q && !segmen) ? (
+                              <span className="inline-flex flex-col items-center gap-2">
+                                <span>Master referensi akun masih kosong.</span>
+                                {isAdmin ? (
+                                  <Button size="sm" variant="outline" className="gap-1.5" disabled={seeding} onClick={seed}
+                                    data-testid="referensi-akun-seed-kosong">
+                                    {seeding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <DownloadCloud className="w-3.5 h-3.5" />}
+                                    Muat Referensi Resmi
+                                  </Button>
+                                ) : (
+                                  <span>Minta admin memuat referensi resmi lewat tombol di atas.</span>
+                                )}
+                              </span>
+                            ) : "Tidak ada akun yang cocok dengan pencarian/filter — coba ubah kata kunci atau segmen."}
+                          </td>
+                        </tr>
                       )}
                     </tbody>
                   </table>

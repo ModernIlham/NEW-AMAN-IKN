@@ -339,6 +339,23 @@ export default function WasdalPage({ user, onBack }) {
               })}
             </div>
 
+            {/* Banner agregat LEWAT TENGGAT HUKUM — dulunya hanya badge kecil
+                jauh di bawah (temuan audit UI/UX): tiket penertiban/insidentil
+                yang melewati tenggat PMK 207 harus langsung terlihat. */}
+            {((pen?.ringkasan?.lewat_tenggat || 0) + (insi?.ringkasan?.lewat_tenggat || 0)) > 0 && (
+              <div className="rounded-xl border border-red-500/50 bg-red-500/10 p-3 flex items-start gap-2.5" data-testid="wasdal-banner-tenggat">
+                <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
+                <div className="text-xs text-red-700 dark:text-red-300 min-w-0">
+                  <b>{(pen?.ringkasan?.lewat_tenggat || 0) + (insi?.ringkasan?.lewat_tenggat || 0)} tiket LEWAT TENGGAT hukum</b>
+                  {" — "}
+                  {(pen?.ringkasan?.lewat_tenggat || 0) > 0 && `${pen.ringkasan.lewat_tenggat} penertiban`}
+                  {(pen?.ringkasan?.lewat_tenggat || 0) > 0 && (insi?.ringkasan?.lewat_tenggat || 0) > 0 && " · "}
+                  {(insi?.ringkasan?.lewat_tenggat || 0) > 0 && `${insi.ringkasan.lewat_tenggat} pemantauan insidentil`}
+                  . Segera tindak lanjuti di bagian Penertiban / Pemantauan Insidentil di bawah.
+                </div>
+              </div>
+            )}
+
             <p className="text-[11px] text-muted-foreground text-center">
               {data.rekap?.total || 0} temuan pemantauan — bahan pra-isi laporan wasdal;
               pelaporan resmi tetap melalui Modul Wasdal SIMAN v2.

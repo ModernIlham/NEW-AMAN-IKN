@@ -302,9 +302,11 @@ export default function PersuratanPage({ user, onBack }) {
                     </th>
                     <th className="px-3 py-2.5 font-semibold">Perihal</th>
                     <th className="px-3 py-2.5 font-semibold">Dari / Kepada</th>
-                    <th className="px-3 py-2.5 font-semibold">Naskah · Modul</th>
+                    <th className="px-3 py-2.5 font-semibold hidden md:table-cell">Naskah · Modul</th>
                     <th className="px-3 py-2.5 font-semibold">Status</th>
-                    <th className="px-3 py-2.5 font-semibold text-right">Aksi</th>
+                    {/* Aksi (Sahkan/Batalkan — inti alur booking) menempel di
+                        kanan saat tabel discroll di layar kecil. */}
+                    <th className="px-3 py-2.5 font-semibold text-right sticky right-0 bg-muted/95 border-l border-border">Aksi</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -329,7 +331,7 @@ export default function PersuratanPage({ user, onBack }) {
                         )}
                       </td>
                       <td className="px-3 py-2 text-[12px] text-foreground/80">{s.jenis === "keluar" ? (s.tujuan || "—") : (s.pengirim || "—")}</td>
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-2 hidden md:table-cell">
                         <p className="text-[11px] text-foreground/80">{s.jenis_naskah || "—"}</p>
                         <p className="text-[10px] text-muted-foreground">{s.modul}</p>
                       </td>
@@ -339,7 +341,7 @@ export default function PersuratanPage({ user, onBack }) {
                         </span>
                         {s.alasan_batal && <p className="text-[9px] text-red-500/80 mt-0.5 max-w-[140px] truncate" title={s.alasan_batal}>{s.alasan_batal}</p>}
                       </td>
-                      <td className="px-3 py-2 text-right whitespace-nowrap">
+                      <td className="px-3 py-2 text-right whitespace-nowrap sticky right-0 bg-card border-l border-border">
                         {s.jenis === "keluar" && s.status === "dibooking" && (
                           <>
                             <button type="button" onClick={() => transisi(s, "disahkan")}

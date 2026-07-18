@@ -105,7 +105,9 @@ export default function PengaturanPage({ user, onBack, onOpenSatker,
               Setelan <b>universal</b> berlaku untuk seluruh aplikasi & semua satker.
               Field kop yang diisi pada tab <b>Per-Satker</b> menimpa nilai di sini untuk laporan satker ybs.
             </p>
-            <ReportSettingsEditor onClose={onBack} />
+            {/* onClose sengaja TIDAK diteruskan: tombol "Tutup" editor dulunya
+                melempar keluar seluruh halaman Pengaturan (bug navigasi). */}
+            <ReportSettingsEditor />
             {pintasan.length > 0 && (
               <div className="space-y-1.5">
                 <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide px-1">Setelan universal lainnya</p>

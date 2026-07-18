@@ -86,7 +86,9 @@ export default function ReportSettingsEditor({ onClose }) {
         <h4 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
           <Settings className="w-3.5 h-3.5" /> Pengaturan Sampul LHI
         </h4>
-        <button onClick={onClose} data-testid="report-settings-close" className="text-[10px] text-muted-foreground hover:text-foreground px-2 py-0.5 rounded hover:bg-muted min-w-0 min-h-0">Tutup</button>
+        {onClose && (
+          <button onClick={onClose} data-testid="report-settings-close" className="text-[10px] text-muted-foreground hover:text-foreground px-2 py-0.5 rounded hover:bg-muted min-w-0 min-h-0">Tutup</button>
+        )}
       </div>
       <p className="text-[10px] text-muted-foreground -mt-1.5">
         Berlaku <b>global</b> untuk semua laporan & semua kegiatan (kop, logo, penanda tangan, tembusan) — bukan hanya kegiatan ini.

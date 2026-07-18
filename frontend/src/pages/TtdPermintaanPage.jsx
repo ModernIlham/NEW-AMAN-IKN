@@ -12,6 +12,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -79,6 +80,7 @@ export default function TtdPermintaanPage({ user, onBack }) {
   const [detail, setDetail] = useState(null);      // record permintaan terpilih
   const [pegawai, setPegawai] = useState([]);
   const [dokFile, setDokFile] = useState(null);    // PDF unggahan utk dibubuhi ttd
+  const { confirm, confirmDialog } = useConfirm();
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
 
@@ -173,6 +175,14 @@ export default function TtdPermintaanPage({ user, onBack }) {
   };
 
   const batalkan = async (it) => {
+    // Destruktif permanen: SEMUA link penanda tangan langsung mati — wajib
+    // konfirmasi (temuan audit UI/UX).
+    const ok = await confirm({
+      title: `Batalkan permintaan "${it.judul}"?`,
+      description: "Semua link tanda tangan yang sudah dibagikan akan mati permanen dan tidak bisa dipulihkan.",
+      confirmLabel: "Batalkan Permintaan", variant: "danger",
+    });
+    if (!ok) return;
     try {
       await axios.delete(`${API}/ttd/permintaan/${it.id}`);
       toast.success("Permintaan dibatalkan");
@@ -553,6 +563,8 @@ export default function TtdPermintaanPage({ user, onBack }) {
           )}
         </DialogContent>
       </Dialog>
+
+      {confirmDialog}
     </div>
   );
 }

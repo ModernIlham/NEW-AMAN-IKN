@@ -243,34 +243,44 @@ export default function PelaporanPage({ user, onBack }) {
             <p className="text-xs font-semibold text-foreground">Posisi BMN di Neraca</p>
             <p className="text-[10px] text-muted-foreground">Seluruh aset per golongan (intra/ekstra, PMK 181) + persediaan FIFO</p>
           </div>
-          <Button variant="outline" size="sm" className="gap-1.5"
+          <Button size="sm" className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
+            title="Laporan Posisi BMN di Neraca (PDF)"
             onClick={() => downloadFileWithProgress(`${API}/pembukuan/posisi-bmn-pdf`, "Posisi_BMN_Neraca.pdf", { label: "Laporan Posisi BMN di Neraca" }).catch(() => {})}
             data-testid="pelaporan-posisi-bmn">
             <FileDown className="w-3.5 h-3.5" />Unduh PDF
           </Button>
-          <Button variant="outline" size="sm" className="gap-1.5"
-            onClick={() => downloadFileWithProgress(`${API}/pembukuan/rekonsiliasi-xlsx`, "Rekonsiliasi_Posisi_BMN.xlsx", { label: "Ekspor Rekonsiliasi (XLSX)" }).catch(() => {})}
-            data-testid="pelaporan-rekonsiliasi">
-            <FileDown className="w-3.5 h-3.5" />Rekonsiliasi XLSX
-          </Button>
-          <Button variant="outline" size="sm" className="gap-1.5"
-            onClick={() => downloadFileWithProgress(`${API}/pembukuan/lkb-pdf`, "Laporan_Kondisi_Barang.pdf", { label: "Laporan Kondisi Barang (LKB)" }).catch(() => {})}
-            data-testid="pelaporan-lkb-kondisi">
-            <FileDown className="w-3.5 h-3.5" />LKB
-          </Button>
-          <Button variant="outline" size="sm" className="gap-1.5"
-            onClick={() => downloadFileWithProgress(`${API}/pembukuan/dbr-pdf`, "Daftar_Barang_Ruangan.pdf", { label: "Daftar Barang Ruangan (DBR)" }).catch(() => {})}
-            data-testid="pelaporan-dbr">
-            <FileDown className="w-3.5 h-3.5" />DBR
-          </Button>
-          <Button variant="outline" size="sm" className="gap-1.5"
-            onClick={() => downloadFileWithProgress(`${API}/pembukuan/kir-pdf`, "Kartu_Inventaris_Ruangan.pdf", { label: "Kartu Inventaris Ruangan (KIR)" }).catch(() => {})}
-            data-testid="pelaporan-kir">
-            <FileDown className="w-3.5 h-3.5" />KIR
-          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-1.5" data-testid="pelaporan-lbkp">
+              <Button variant="outline" size="sm" className="gap-1.5" data-testid="pelaporan-laporan-lain"
+                title="Laporan pembukuan lain: LKB, DBR, KIR, dan rekonsiliasi">
+                <FileDown className="w-3.5 h-3.5" />Laporan Lain<ChevronDown className="w-3 h-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-72">
+              <DropdownMenuLabel className="text-[11px]">Laporan pembukuan satker</DropdownMenuLabel>
+              <DropdownMenuItem className="min-h-[42px]" data-testid="pelaporan-lkb-kondisi"
+                onClick={() => downloadFileWithProgress(`${API}/pembukuan/lkb-pdf`, "Laporan_Kondisi_Barang.pdf", { label: "Laporan Kondisi Barang (LKB)" }).catch(() => {})}>
+                LKB — Laporan Kondisi Barang (PDF)
+              </DropdownMenuItem>
+              <DropdownMenuItem className="min-h-[42px]" data-testid="pelaporan-dbr"
+                onClick={() => downloadFileWithProgress(`${API}/pembukuan/dbr-pdf`, "Daftar_Barang_Ruangan.pdf", { label: "Daftar Barang Ruangan (DBR)" }).catch(() => {})}>
+                DBR — Daftar Barang Ruangan (PDF)
+              </DropdownMenuItem>
+              <DropdownMenuItem className="min-h-[42px]" data-testid="pelaporan-kir"
+                onClick={() => downloadFileWithProgress(`${API}/pembukuan/kir-pdf`, "Kartu_Inventaris_Ruangan.pdf", { label: "Kartu Inventaris Ruangan (KIR)" }).catch(() => {})}>
+                KIR — Kartu Inventaris Ruangan (PDF)
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem className="min-h-[42px]" data-testid="pelaporan-rekonsiliasi"
+                onClick={() => downloadFileWithProgress(`${API}/pembukuan/rekonsiliasi-xlsx`, "Rekonsiliasi_Posisi_BMN.xlsx", { label: "Ekspor Rekonsiliasi (XLSX)" }).catch(() => {})}>
+                Rekonsiliasi Posisi BMN (XLSX)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-1.5" data-testid="pelaporan-lbkp"
+                title="LBKP — Laporan Barang Kuasa Pengguna (semesteran/tahunan)">
                 <FileDown className="w-3.5 h-3.5" />LBKP<ChevronDown className="w-3 h-3" />
               </Button>
             </DropdownMenuTrigger>
@@ -295,7 +305,8 @@ export default function PelaporanPage({ user, onBack }) {
           </DropdownMenu>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-1.5" data-testid="pelaporan-calbmn">
+              <Button variant="outline" size="sm" className="gap-1.5" data-testid="pelaporan-calbmn"
+                title="CaLBMN — Catatan atas Laporan Barang Milik Negara">
                 <FileDown className="w-3.5 h-3.5" />CaLBMN<ChevronDown className="w-3 h-3" />
               </Button>
             </DropdownMenuTrigger>

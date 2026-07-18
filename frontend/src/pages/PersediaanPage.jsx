@@ -5,7 +5,7 @@ import {
   ArrowLeft, Search, Plus, Pencil, Trash2, Loader2, Boxes,
   ChevronLeft, ChevronRight, PackagePlus, PackageMinus, History,
   AlertTriangle, FileDown, ClipboardCheck, ChevronDown, Upload, Download,
-  Layers, X, Warehouse,
+  Layers, X, Warehouse, MoreVertical,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -763,67 +763,55 @@ export default function PersediaanPage({ user, onBack }) {
                         >
                           <ClipboardCheck className="w-3.5 h-3.5" />
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => setPindah({ item: it, lokasi_baru: "", no_bukti: "", keterangan: "", saving: false })}
-                          aria-label={`Pindah gudang ${it.nama_barang}`}
-                          title="Pindah Lokasi/Gudang (ber-jurnal)"
-                          className="p-1.5 rounded-md text-sky-600 dark:text-sky-400 hover:bg-sky-500/10 min-w-0 min-h-0"
-                          data-testid={`persediaan-pindah-${it.kode_barang}-${it.nup}`}
-                        >
-                          <Warehouse className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => openRiwayat(it)}
-                          aria-label={`Riwayat ${it.nama_barang}`}
-                          title="Riwayat transaksi"
-                          className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted min-w-0 min-h-0"
-                          data-testid={`persediaan-riwayat-${it.kode_barang}-${it.nup}`}
-                        >
-                          <History className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => openLayers(it)}
-                          aria-label={`Layer FIFO ${it.nama_barang}`}
-                          title="Rincian layer FIFO (saldo per layer)"
-                          className="p-1.5 rounded-md text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 min-w-0 min-h-0"
-                          data-testid={`persediaan-layers-${it.kode_barang}-${it.nup}`}
-                        >
-                          <Layers className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setForm({
-                            mode: "edit", id: it.id, version: it.version,
-                            data: {
-                              nama_barang: it.nama_barang || "", merk: it.merk || "",
-                              tipe: it.tipe || "", satuan: it.satuan || "Buah",
-                              lokasi: it.lokasi || "", batas_kritis: it.batas_kritis || 0,
-                              expired_default: it.expired_default || "",
-                              tahun_anggaran: it.tahun_anggaran || "",
-                              keterangan: it.keterangan || "",
-                              kode_barang: it.kode_barang, nup: it.nup,
-                            },
-                          })}
-                          aria-label={`Ubah ${it.nama_barang}`}
-                          className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted min-w-0 min-h-0"
-                          data-testid={`persediaan-edit-${it.kode_barang}-${it.nup}`}
-                        >
-                          <Pencil className="w-3.5 h-3.5" />
-                        </button>
-                        {isAdmin && (
-                          <button
-                            type="button"
-                            onClick={() => remove(it)}
-                            aria-label={`Hapus ${it.nama_barang}`}
-                            className="p-1.5 rounded-md text-muted-foreground hover:text-red-600 hover:bg-red-500/10 min-w-0 min-h-0"
-                            data-testid={`persediaan-delete-${it.kode_barang}-${it.nup}`}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
+                        {/* Aksi sekunder ke dropdown BERLABEL — 8 ikon kecil
+                            berjejer membuat kolom aksi >220px & aksi harian
+                            terdorong keluar layar mobile (temuan audit). */}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button type="button"
+                              aria-label={`Aksi lain ${it.nama_barang}`}
+                              title="Aksi lainnya"
+                              className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted min-w-0 min-h-0"
+                              data-testid={`persediaan-lainnya-${it.kode_barang}-${it.nup}`}>
+                              <MoreVertical className="w-3.5 h-3.5" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => setPindah({ item: it, lokasi_baru: "", no_bukti: "", keterangan: "", saving: false })}
+                              data-testid={`persediaan-pindah-${it.kode_barang}-${it.nup}`}>
+                              <Warehouse className="w-4 h-4 mr-2 text-sky-600" />Pindah Lokasi/Gudang
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openRiwayat(it)}
+                              data-testid={`persediaan-riwayat-${it.kode_barang}-${it.nup}`}>
+                              <History className="w-4 h-4 mr-2" />Riwayat Transaksi
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openLayers(it)}
+                              data-testid={`persediaan-layers-${it.kode_barang}-${it.nup}`}>
+                              <Layers className="w-4 h-4 mr-2 text-amber-600" />Layer FIFO (saldo per layer)
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setForm({
+                              mode: "edit", id: it.id, version: it.version,
+                              data: {
+                                nama_barang: it.nama_barang || "", merk: it.merk || "",
+                                tipe: it.tipe || "", satuan: it.satuan || "Buah",
+                                lokasi: it.lokasi || "", batas_kritis: it.batas_kritis || 0,
+                                expired_default: it.expired_default || "",
+                                tahun_anggaran: it.tahun_anggaran || "",
+                                keterangan: it.keterangan || "",
+                                kode_barang: it.kode_barang, nup: it.nup,
+                              },
+                            })} data-testid={`persediaan-edit-${it.kode_barang}-${it.nup}`}>
+                              <Pencil className="w-4 h-4 mr-2" />Ubah Data Barang
+                            </DropdownMenuItem>
+                            {isAdmin && (
+                              <DropdownMenuItem onClick={() => remove(it)}
+                                className="text-red-600 focus:text-red-600"
+                                data-testid={`persediaan-delete-${it.kode_barang}-${it.nup}`}>
+                                <Trash2 className="w-4 h-4 mr-2" />Hapus
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </td>
                     </tr>
                   ))}
@@ -1547,8 +1535,8 @@ export default function PersediaanPage({ user, onBack }) {
                     const gagal = massal.laporan?.hasil?.find((h) => h.persediaan_id === it.id && !h.ok);
                     return (
                       <li key={it.id} className={`rounded-lg border p-2 ${gagal ? "border-red-500/60 bg-red-500/5" : "border-border"}`}>
-                        <div className="flex items-center gap-2">
-                          <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="min-w-0 flex-1 basis-full sm:basis-0">
                             <p className="text-xs font-semibold text-foreground truncate">{it.nama_barang}</p>
                             <p className="text-[10px] text-muted-foreground font-mono">{it.kode_barang} · NUP {it.nup} · stok {it.stok} {it.satuan || ""}</p>
                           </div>
@@ -1559,7 +1547,7 @@ export default function PersediaanPage({ user, onBack }) {
                             <>
                               <Input type="number" min="0" placeholder="Harga" className="w-28 h-8 text-xs"
                                 value={it.harga_satuan} onChange={(e) => setItemMassal(it.id, "harga_satuan", e.target.value)} />
-                              <Input type="date" title="Kedaluwarsa batch (opsional)" className="w-32 h-8 text-xs"
+                              <Input type="date" title="Kedaluwarsa batch (opsional)" className="w-28 sm:w-32 h-8 text-xs"
                                 value={it.expired} onChange={(e) => setItemMassal(it.id, "expired", e.target.value)} />
                             </>
                           )}
