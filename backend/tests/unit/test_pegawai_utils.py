@@ -3,7 +3,8 @@ from pegawai_utils import (
     JENIS_JABATAN, JENIS_KELAMIN, KATEGORI_PEGAWAI, STATUS_PEGAWAI,
     baris_impor_ke_pegawai, bersihkan_nip, is_aktif, kelompok_unit_kerja,
     nama_lengkap, normalisasi_status_kepegawaian, normalisasi_status_pegawai,
-    rekap_eselon, status_kontrak, unit_kerja_terdalam, validate_pegawai,
+    pegawai_perlu_serah_terima, rekap_eselon, status_kontrak,
+    unit_kerja_terdalam, validate_pegawai,
 )
 
 
@@ -160,3 +161,24 @@ def test_kategori_pegawai_konstanta():
     for k in ("jpt", "administrator", "pengawas", "pelaksana", "fungsional"):
         assert k in KATEGORI_PEGAWAI
     assert "keluar" in STATUS_PEGAWAI
+
+
+def test_pegawai_perlu_serah_terima():
+    pegawai = [
+        {"id": "1", "nama": "Keluar Pegang", "nip": "111", "status": "keluar"},
+        {"id": "2", "nama": "Aktif Pegang", "nip": "222", "status": "aktif"},
+        {"id": "3", "nama": "Keluar Kosong", "nip": "333", "status": "keluar"},
+        {"id": "4", "nama": "Tanpa NIP", "nip": "", "status": "keluar"},
+        {"id": "5", "nama": "Kontrak Habis", "nip": "555", "status": "aktif",
+         "tgl_selesai_kontrak": "2026-06-30"},
+        {"id": "6", "nama": "Pensiun Banyak", "nip": "666", "status": "pensiun"},
+        {"id": "7", "nama": "Cuti Pegang", "nip": "777", "status": "cuti"},
+    ]
+    aset = {"111": 2, "222": 3, "555": 1, "666": 5, "777": 4}
+    hasil = pegawai_perlu_serah_terima(pegawai, aset, "2026-07-18")
+    ids = [h["id"] for h in hasil]
+    # aktif & cuti aman; keluar tanpa aset tidak masuk; urut jumlah desc
+    assert ids == ["6", "1", "5"]
+    assert hasil[0]["jumlah_aset"] == 5 and "pensiun" in hasil[0]["alasan"].lower()
+    assert "kontrak berakhir" in hasil[2]["alasan"].lower()
+    assert pegawai_perlu_serah_terima([], {}, "2026-07-18") == []

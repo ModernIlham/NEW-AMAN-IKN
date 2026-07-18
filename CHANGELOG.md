@@ -48,6 +48,29 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#393] Keterkaitan aset↔pegawai: alert "Perlu Serah Terima BMN" — 2026-07-18
+
+Rekomendasi #1 studi KERJA-BARENG (pola "alert pemegang keluar") — menutup
+celah aset hilang saat pegawai pergi:
+- **Panel "Perlu Serah Terima BMN"** di Master Pegawai: pegawai BERISIKO
+  (status keluar/mutasi/pensiun/nonaktif/diperbantukan, atau kontrak Non-ASN
+  sudah/akan habis ≤30 hari) yang **masih tercatat memegang aset** (via
+  `pengguna_nip`) tampil dengan jumlah aset & alasannya, terurut aset
+  terbanyak.
+- **Klik pegawai → daftar asetnya**: kode barang, NUP, nama, kondisi, lokasi,
+  status BAST — beserta petunjuk tindak lanjut (BAST pengembalian / mutasi
+  pemegang di modul Penggunaan → tab Pemegang, fitur yang sudah ada).
+- **Peringatan lunak saat ubah status**: menyimpan pegawai dengan status
+  non-aktif yang masih memegang N aset menampilkan toast peringatan
+  (tidak memblokir — mendorong proses serah terima).
+- Endpoint: `GET /pegawai/perlu-serah-terima` & `GET /pegawai/{id}/aset`
+  (ter-scope satker; guard akses dokumen); helper murni
+  `pegawai_perlu_serah_terima` teruji unit.
+- Verifikasi: 523 tes unit lulus, smoke FakeDB endpoint berisiko + daftar
+  aset + 404 lulus, server ter-import, lint & build sukses.
+
+---
+
 ## [#392] Makna TIAP POLA DIGIT akun BAS (level 1–6) ditampilkan per akun — 2026-07-18
 
 Permintaan pemilik: referensi akun belum menjelaskan arti tiap pola digit

@@ -141,6 +141,44 @@ def kelompok_unit_kerja(pegawai_list):
     ]
 
 
+def pegawai_perlu_serah_terima(pegawai_list, jumlah_aset_per_nip, hari_ini_iso):
+    """Pegawai BERISIKO yang masih memegang aset — perlu serah terima BMN.
+
+    Berisiko = status keberadaan bukan aktif/cuti/tugas_belajar (keluar,
+    mutasi, pensiun, nonaktif, diperbantukan) ATAU kontrak Non-ASN sudah/akan
+    habis (≤30 hari). Hanya pegawai ber-NIP yang tercatat memegang ≥1 aset
+    (peta `jumlah_aset_per_nip`) yang dikembalikan. MURNI (teruji unit).
+
+    Kembalikan [{id, nama, nip, status, jumlah_aset, alasan}] terurut jumlah
+    aset terbanyak dulu (pola alert "pemegang keluar" KERJA-BARENG).
+    """
+    aman = {"aktif", "cuti", "tugas_belajar"}
+    hasil = []
+    for p in (pegawai_list or []):
+        nip = str((p or {}).get("nip") or "").strip()
+        if not nip:
+            continue
+        jumlah = int((jumlah_aset_per_nip or {}).get(nip) or 0)
+        if jumlah <= 0:
+            continue
+        st = str(p.get("status") or "aktif").strip() or "aktif"
+        alasan = []
+        if st not in aman:
+            alasan.append(f"status {STATUS_PEGAWAI.get(st, st)}")
+        k = status_kontrak(p, hari_ini_iso)
+        if k["habis"] or k["segera"]:
+            alasan.append(k["peringatan"].lower())
+        if not alasan:
+            continue
+        hasil.append({
+            "id": p.get("id"), "nama": p.get("nama"), "nip": nip,
+            "status": st, "jumlah_aset": jumlah,
+            "alasan": "; ".join(alasan),
+        })
+    hasil.sort(key=lambda h: -h["jumlah_aset"])
+    return hasil
+
+
 def rekap_eselon(pegawai_list, field="eselon1"):
     """Rekap jumlah pegawai per satuan unit Eselon (default Eselon 1). MURNI.
 
