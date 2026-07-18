@@ -48,6 +48,28 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#411] Alur pengguna: Kembali dari Pengaturan tak lagi terlempar keluar + label CTA kartu seragam — 2026-07-18
+
+Tindak lanjut evaluasi alur pengguna (bagian mandat "benahi alur yang kurang
+pas, flow terjaga, tidak ribet"):
+
+- **Kembali dari sub-halaman Pengaturan balik ke Pengaturan**: membuka
+  Master Satker / Referensi Akun / Persuratan / Pelaporan DARI Pengaturan
+  lalu menekan Kembali dulu melempar pengguna ke Beranda Modul (konteks
+  Pengaturan hilang). Kini navigasi mengingat asalnya — Kembali balik ke
+  Pengaturan bila dibuka dari sana, tetap ke Beranda Modul bila dibuka
+  langsung.
+- **Label ajakan kartu modul seragam**: verba tombol kartu yang berganti-
+  ganti ("Masuk Modul" / "Buka Arsip Pelaporan" / "Buka Pembukuan" / "Buka
+  Master Persediaan") diseragamkan menjadi **"Buka Modul"** untuk semua
+  modul yang dapat dimasuki; "Lihat Konsep" tetap untuk modul yang masih
+  berupa konsep (pembeda yang bermakna).
+- Verifikasi: lint 0 warning, build sukses. (Temuan alur lain — tautan pada
+  petunjuk prasyarat lintas-modul, penyeragaman istilah Pemegang/Pengguna,
+  perampingan Beranda — tercatat sebagai backlog penajaman lanjutan.)
+
+---
+
 ## [#410] Audit performa: indeks kunci + bilah progres ringan (hemat scan penuh saat data besar) — 2026-07-18
 
 Hasil audit performa menyeluruh. Fokus pada yang paling terasa saat data
