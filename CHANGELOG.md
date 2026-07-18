@@ -48,6 +48,29 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#388] Referensi Akun BAS terkategori sesuai makna digit + ekspor CSV — 2026-07-18
+
+Permintaan pemilik: master Segmen Akun BAS tidak lagi tampil rata — kini
+TERKATEGORI mengikuti struktur digit kode akun (KEP-211/PB/2018 jo.
+pemutakhirannya; digit 1 = akun/segmen, 2 digit = kelompok akun, 3 digit =
+jenis akun):
+- **Header kelompok di tabel**: setiap kelompok akun 2-digit berganti muncul
+  baris kategori `NNxxxx — Nama Kelompok` + chip segmen (mis. `52xxxx —
+  Belanja Barang dan Jasa · BELANJA`); kolom "Segmen" yang redundan diganti
+  header kategori. Label 41 kelompok (11 Aset Lancar … 83 Output Kinerja) di
+  modul murni `referensi_akun_utils.py`, diverifikasi silang ke isi referensi
+  resmi SAKTI/SPAN; tes anti-drift menagih label bila seed membawa kelompok
+  baru.
+- **Tombol Ekspor CSV** di tab master: `GET /referensi-akun/export` (semua
+  role, utf-8-sig) mengikuti filter cari & segmen aktif — kolom hierarki
+  lengkap (kode, nama, akun/segmen, kelompok + nama, jenis 3-digit, sumber,
+  uraian BMN, kapitalisasi, kategori neraca) siap olah di Excel.
+- Verifikasi: 509 tes unit lulus (5 baru), smoke empiris endpoint ekspor
+  (FakeDB: header CSV, hierarki, filter, fallback kelompok tak dikenal),
+  server ter-import, lint & build sukses.
+
+---
+
 ## [#387] Perbaikan temuan review akhir: 3 regresi kritis 500 + guard satker & privasi e-sign — 2026-07-18
 
 Review adversarial menyeluruh atas 4 PR terakhir (23 agen menemukan → memverifikasi)
