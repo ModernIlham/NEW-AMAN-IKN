@@ -236,7 +236,8 @@ async def compress_pdf(file: UploadFile = File(...),
         raise
     except Exception as e:
         logger.error(f"PDF compression error: {e}")
-        return {"error": str(e), "success": False}
+        # Jangan bocorkan pesan galat internal ke klien.
+        return {"error": "Gagal mengompres PDF", "success": False}
 
 
 @pdf_compress_router.get("/pdf-compression-quotas")

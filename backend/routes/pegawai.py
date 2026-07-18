@@ -378,10 +378,16 @@ async def impor_pegawai(file: UploadFile = File(...),
 async def ubah_pegawai(pegawai_id: str, payload: PegawaiIn,
                        user: dict = Depends(require_admin)):
     """Ubah pegawai (admin)."""
+    from shared_utils import pastikan_akses_dok_satker
     doc = _bersih(payload)
     errors = validate_pegawai(doc)
     if errors:
         raise HTTPException(status_code=400, detail="; ".join(errors))
+    # Isolasi satker: admin terikat tak boleh mengubah pegawai satker lain.
+    lama = await db.pegawai.find_one({"id": pegawai_id}, {"_id": 0, "kode_satker": 1})
+    if not lama:
+        raise HTTPException(status_code=404, detail="Pegawai tidak ditemukan")
+    await pastikan_akses_dok_satker(user, lama)
     if await _nip_bentrok(doc["nip"], kecuali_id=pegawai_id,
                           kode=kode_satker_user(user)):
         raise HTTPException(status_code=400, detail=f"NIP {doc['nip']} sudah terdaftar")
@@ -409,7 +415,11 @@ async def ubah_pegawai(pegawai_id: str, payload: PegawaiIn,
 @pegawai_router.delete("/pegawai/{pegawai_id}")
 async def hapus_pegawai(pegawai_id: str, user: dict = Depends(require_admin)):
     """Hapus pegawai (admin). Ditolak bila NIP-nya masih dipakai aset (temuan #34)."""
-    peg = await db.pegawai.find_one({"id": pegawai_id}, {"_id": 0, "nip": 1, "nama": 1})
+    from shared_utils import pastikan_akses_dok_satker
+    peg = await db.pegawai.find_one({"id": pegawai_id}, {"_id": 0, "nip": 1, "nama": 1, "kode_satker": 1})
+    if not peg:
+        raise HTTPException(status_code=404, detail="Pegawai tidak ditemukan")
+    await pastikan_akses_dok_satker(user, peg)  # isolasi satker
     if peg and str(peg.get("nip") or "").strip():
         dipakai = await db.assets.count_documents(
             {"pengguna_nip": str(peg["nip"]).strip(), "dihapus": {"$ne": True}})

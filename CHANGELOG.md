@@ -48,6 +48,45 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#409] Audit keamanan menyeluruh: tutup kebocoran lintas-satker & IDOR, rate-limit e-sign, masking NIP publik — 2026-07-18
+
+Hasil audit keamanan menyeluruh (mandat "pemantauan keamanan setiap fitur
+setiap modul"). Sembilan temuan ber-risiko ditutup — tidak ada perubahan
+alur fungsional, murni pengetatan:
+
+- **Isolasi satker pada jejak audit (kritis)**: `GET /audit-logs` dan
+  `/audit-logs/aset-terhapus` kini DI-SCOPE ke kegiatan milik satker user
+  (dulu user/viewer satker mana pun bisa membaca seluruh jejak lintas
+  satker — kode/NUP/nama aset, aksi, pelaku). Super-admin lintas-satker
+  tetap melihat semua.
+- **Dasbor integritas ter-scope**: endpoint `/integritas/*` (snapshot basi
+  penghapusan/pemindahtanganan/PSP/jadwal + kodefikasi aset) kini menyaring
+  register & agregasi aset per satker — tidak lagi membocorkan identitas
+  aset satker lain.
+- **Kartu Inventarisasi (IDOR ditutup)**: `GET /assets/{id}/card` dan
+  `POST /assets/cards/bulk` kini memverifikasi kepemilikan satker — user
+  tak bisa lagi menarik kartu (nama/lokasi/foto/riwayat) aset satker lain
+  via id.
+- **Master Pegawai (tulis lintas-satker ditutup)**: `PUT`/`DELETE /pegawai/{id}`
+  kini menolak admin terikat satker yang menyunting/menghapus pegawai
+  satker lain (termasuk NIP & rekening).
+- **E-sign IDOR + rate-limit**: dokumen asli/ber-TTD, gambar TTD, lembar
+  pengesahan, dan detail permintaan kini hanya untuk PEMBUAT/admin (dulu
+  setiap user login bisa membuka dokumen & PII penanda tangan permintaan
+  siapa pun). Submit e-sign publik & olah-foto kini ber-rate-limit.
+- **NIP di-masking di verifikasi publik**: halaman verifikasi QR (tanpa
+  login) kini menampilkan NIP tersamar (hanya 3 digit akhir) — data
+  pribadi tak lagi terekspos utuh.
+- **Endpoint kuota kompresi ditutup**: `/compression-stats` & `/compression-quotas`
+  kini butuh login (dulu anonim, membocorkan status API key & kuota).
+- **Pesan galat tak bocor**: kompresi PDF/gambar tak lagi mengembalikan
+  pesan exception internal ke klien (dicatat di log server saja).
+- Verifikasi: 543 tes unit lulus, smoke isolasi (audit satker AA vs BB,
+  super-admin lihat semua, IDOR 403, masking NIP) lulus, server ter-import.
+  Frontend tidak berubah.
+
+---
+
 ## [#408] Siklus data satu rumah: backup otomatis terjadwal + arsip server + restore/reset pindah ke Pengaturan › Sistem — 2026-07-18
 
 Pembaruan besar fitur backup/restore/reset sekaligus de-redundansi alur
