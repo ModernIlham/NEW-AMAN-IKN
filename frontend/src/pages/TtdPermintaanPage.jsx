@@ -30,7 +30,7 @@ const WARNA_SIGNER = {
   menunggu: "bg-muted text-muted-foreground",
 };
 
-const SIGNER_KOSONG = { nama: "", nip: "", jabatan: "" };
+const SIGNER_KOSONG = { nama: "", nip: "", jabatan: "", email: "" };
 const FORM_KOSONG = { judul: "", doc_type: "dokumen", mode: "paralel", signers: [{ ...SIGNER_KOSONG }] };
 
 function fmtWaktu(iso) {
@@ -120,7 +120,8 @@ export default function TtdPermintaanPage({ user, onBack }) {
     if (!p) return;
     setForm((f) => {
       const signers = f.signers.map((s, idx) => (idx === i
-        ? { nama: p.nama || "", nip: p.nip || "", jabatan: p.jabatan || "" } : s));
+        ? { ...s, nama: p.nama || "", nip: p.nip || "",
+            jabatan: p.jabatan || "", email: p.email || s.email || "" } : s));
       return { ...f, signers };
     });
   };
@@ -327,6 +328,10 @@ export default function TtdPermintaanPage({ user, onBack }) {
                         placeholder="NIP (opsional)" className="h-8 text-xs" />
                       <Input value={s.jabatan} onChange={(e) => ubahSigner(i, "jabatan", e.target.value)}
                         placeholder="Jabatan (opsional)" className="h-8 text-xs" />
+                      <Input value={s.email} type="email"
+                        onChange={(e) => ubahSigner(i, "email", e.target.value)}
+                        placeholder="Email — link dikirim otomatis (opsional)"
+                        className="h-8 text-xs col-span-2" data-testid={`ttd-form-email-${i}`} />
                     </div>
                   </div>
                 ))}
@@ -363,7 +368,14 @@ export default function TtdPermintaanPage({ user, onBack }) {
               const penuh = l.link.startsWith("http") ? l.link : `${window.location.origin}${l.link}`;
               return (
                 <div key={i} className="rounded-xl border border-border p-2.5 space-y-1.5">
-                  <p className="text-xs font-bold">{i + 1}. {l.nama}</p>
+                  <p className="text-xs font-bold flex items-center gap-1.5 flex-wrap">
+                    {i + 1}. {l.nama}
+                    {l.email ? (
+                      <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${l.email_terkirim ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" : "bg-amber-500/15 text-amber-600 dark:text-amber-400"}`}>
+                        {l.email_terkirim ? `email terkirim ke ${l.email}` : "email gagal terkirim — bagikan manual"}
+                      </span>
+                    ) : null}
+                  </p>
                   <div className="flex items-center gap-1.5">
                     <Input readOnly value={penuh} className="h-8 text-[11px] font-mono" onFocus={(e) => e.target.select()} />
                     <Button type="button" variant="outline" size="sm" className="h-8 text-[11px] flex-shrink-0"

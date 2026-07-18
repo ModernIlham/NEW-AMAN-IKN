@@ -330,6 +330,45 @@ async def send_otp_email(email: str, otp: str, name: str = ""):
         logger.error(f"Failed to send OTP email to {email}: {str(e)}")
         return False
 
+async def send_esign_email(email: str, nama: str, judul: str, link: str) -> bool:
+    """Kirim link tanda tangan elektronik ke penanda tangan (best-effort —
+    gagal kirim TIDAK menggagalkan pembuatan permintaan; link tetap bisa
+    dibagikan manual/WA)."""
+    if not RESEND_API_KEY or not str(email or "").strip():
+        return False
+    from xml.sax.saxutils import escape as _e
+    html_content = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #1e40af; margin-bottom: 16px;">Permintaan Tanda Tangan Elektronik</h2>
+        <p style="color: #374151; font-size: 15px;">Yth. <b>{_e(str(nama or ''))}</b>,</p>
+        <p style="color: #374151; font-size: 15px;">Mohon berkenan menandatangani secara elektronik dokumen:</p>
+        <div style="background: #f3f4f6; padding: 14px 18px; border-radius: 8px; margin: 14px 0;">
+            <b style="color: #111827; font-size: 15px;">{_e(str(judul or ''))}</b>
+        </div>
+        <p style="margin: 22px 0; text-align: center;">
+            <a href="{_e(str(link))}" style="background: #1d4ed8; color: #ffffff; text-decoration: none;
+               padding: 12px 26px; border-radius: 8px; font-size: 15px; font-weight: bold;">
+               Tanda Tangani Sekarang</a>
+        </p>
+        <p style="color: #6b7280; font-size: 13px;">Tautan bersifat pribadi &amp; sekali pakai, berlaku 14 hari.
+        Bila tombol tidak berfungsi, salin tautan berikut ke peramban:<br/>
+        <span style="word-break: break-all; color: #1d4ed8;">{_e(str(link))}</span></p>
+        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 18px 0;">
+        <p style="color: #9ca3af; font-size: 12px;">AMAN — Aplikasi Manajemen Aset &amp; BMN</p>
+    </div>
+    """
+    params = {"from": SENDER_EMAIL, "to": [str(email).strip()],
+              "subject": f"Permintaan Tanda Tangan Elektronik — {str(judul or '')[:80]}",
+              "html": html_content}
+    try:
+        result = await asyncio.to_thread(resend.Emails.send, params)
+        logger.info(f"E-sign email sent to {email}: {result.get('id', 'unknown')}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send e-sign email to {email}: {e}")
+        return False
+
+
 # --- Audit Logging ---
 # Semua field skalar registry (kini termasuk asset_code & eselon1/eselon2 yang
 # dulu terlewat dari audit) + stiker_photo_index yang dilacak sebagai nilai.

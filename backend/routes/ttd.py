@@ -178,6 +178,7 @@ class SignerIn(BaseModel):
     nama: str
     nip: str = ""
     jabatan: str = ""
+    email: str = ""     # opsional — link dikirim otomatis via email bila diisi
 
 
 class PermintaanIn(BaseModel):
@@ -220,11 +221,20 @@ async def buat_permintaan(payload: PermintaanIn, user: dict = Depends(require_wr
         signers.append({
             "signer_id": signer_id, "nama": s.nama.strip(),
             "nip": str(s.nip or "").strip(), "jabatan": str(s.jabatan or "").strip(),
+            "email": str(s.email or "").strip(),
             "urutan": urut, "status": "aktif" if aktif else "menunggu",
             "jti": jti, "signature_file_id": "", "hash": "",
             "signed_at": "", "ip": ""})
         token = create_sign_token(sr_id, signer_id, jti)
-        links.append({"nama": s.nama.strip(), "link": _link_ttd(sr_id, token)})
+        link = _link_ttd(sr_id, token)
+        email_terkirim = False
+        if aktif and str(s.email or "").strip():
+            from shared_utils import send_esign_email
+            email_terkirim = await send_esign_email(
+                s.email, s.nama.strip(), payload.judul.strip() or "Dokumen", link)
+        links.append({"nama": s.nama.strip(), "link": link,
+                      "email": str(s.email or "").strip(),
+                      "email_terkirim": email_terkirim})
         urut += 1
     record = {
         "id": sr_id, "judul": payload.judul.strip() or "Dokumen",
@@ -299,11 +309,18 @@ async def buat_ulang_link(sr_id: str, signer_id: str,
         {"id": sr_id, "signers.signer_id": signer_id},
         {"$set": {"signers.$.jti": jti}})
     token = create_sign_token(sr_id, signer_id, jti)
+    link = _link_ttd(sr_id, token)
+    email_terkirim = False
+    if str(signers[idx].get("email") or "").strip():
+        from shared_utils import send_esign_email
+        email_terkirim = await send_esign_email(
+            signers[idx]["email"], signers[idx].get("nama"),
+            sr.get("judul") or "Dokumen", link)
     await log_audit("terbit_ulang_link_ttd", "", sr_id,
                     username=user.get("username", "system"),
                     detail=f"Link e-sign diterbitkan ulang untuk {signers[idx].get('nama')}")
     return {"nama": signers[idx].get("nama"), "status": signers[idx].get("status"),
-            "link": _link_ttd(sr_id, token)}
+            "link": link, "email_terkirim": email_terkirim}
 
 
 @ttd_router.get("/ttd/tandatangan/{sr_id}")
@@ -391,17 +408,30 @@ async def kirim_tandatangan(sr_id: str, payload: SpesimenIn, request: Request,
     # Langkah 2 (idempoten, baca kondisi TERKINI): aktifkan giliran berikutnya
     # (mode berurutan) & hitung status dokumen dari keadaan nyata.
     segar = await db.signature_requests.find_one(
-        {"id": sr_id}, {"_id": 0, "mode": 1, "status": 1, "signers.status": 1,
-                        "signers.signer_id": 1})
+        {"id": sr_id}, {"_id": 0, "mode": 1, "status": 1, "judul": 1,
+                        "signers.status": 1, "signers.signer_id": 1,
+                        "signers.jti": 1, "signers.email": 1, "signers.nama": 1})
     signers_segar = (segar or {}).get("signers") or []
     if (segar or {}).get("mode") == "berurutan":
-        nxt = next((s.get("signer_id") for s in signers_segar
-                    if s.get("status") == "menunggu"), None)
-        if nxt:
-            await db.signature_requests.update_one(
+        nxt_sg = next((s for s in signers_segar
+                       if s.get("status") == "menunggu"), None)
+        if nxt_sg:
+            res_nxt = await db.signature_requests.update_one(
                 {"id": sr_id, "status": {"$ne": "batal"},
-                 "signers": {"$elemMatch": {"signer_id": nxt, "status": "menunggu"}}},
+                 "signers": {"$elemMatch": {"signer_id": nxt_sg["signer_id"],
+                                            "status": "menunggu"}}},
                 {"$set": {"signers.$.status": "aktif"}})
+            # Giliran maju → beri tahu penanda tangan berikutnya via email
+            # (best-effort; link memakai jti tersimpan — token identik dgn
+            # yang dibagikan pembuat, jadi tidak mematikan link lama).
+            if res_nxt.modified_count and str(nxt_sg.get("email") or "").strip():
+                from shared_utils import send_esign_email
+                tok_nxt = create_sign_token(sr_id, nxt_sg["signer_id"],
+                                            nxt_sg.get("jti") or "")
+                await send_esign_email(
+                    nxt_sg["email"], nxt_sg.get("nama") or "",
+                    (segar or {}).get("judul") or "Dokumen",
+                    _link_ttd(sr_id, tok_nxt))
     semua = bool(signers_segar) and all(
         s.get("status") == "ditandatangani" for s in signers_segar)
     status_dok = "selesai" if semua else "sebagian"
