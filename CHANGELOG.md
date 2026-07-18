@@ -48,6 +48,27 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#386] E-sign kirim email otomatis (Resend) + backfill kode satker data lama — 2026-07-18
+
+Dua kandidat lanjutan terakhir:
+- **Link e-sign terkirim OTOMATIS via email**: field email opsional per
+  penanda tangan (tersaran dari Master Pegawai) — email berisi tombol
+  "Tanda Tangani Sekarang" dikirim saat permintaan dibuat (paralel: semua;
+  berurutan: giliran pertama), saat **giliran maju** ke penanda tangan
+  berikutnya, dan saat link diterbitkan ulang. Best-effort (gagal kirim ≠
+  gagal buat; link tetap bisa dibagikan manual/WA); badge status terkirim
+  di dialog hasil. Memakai infrastruktur Resend yang sudah ada (OTP).
+- **Backfill kode satker untuk data lama** (`POST /satker/backfill`, admin,
+  idempoten): register lama ber-relasi aset (PSP, idle, proses, usulan
+  hapus, BA pemusnahan, PT, pemanfaatan, penertiban, BAST) diisi otomatis
+  dari relasi aset → kegiatan → satker; sisanya (persediaan, pengadaan,
+  penganggaran, RKBMN, pengamanan, insidentil) dapat DIKLAIM ke satu satker
+  pilihan — use-case satker tunggal lama sebelum satker kedua bergabung.
+  UI: tombol "Backfill Data Lama" + laporan per koleksi di Master Satker.
+- Verifikasi: suite 504 lulus, route ter-mount, lint & build sukses.
+
+---
+
 ## [#385] Audit BAST resmi: pasal lengkap per jenis, dasar hukum mutakhir (PMK 40/2024), desain naskah dirapikan — 2026-07-18
 
 Audit menyeluruh SEMUA generator BAST (mandat pemilik): riset anatomi BAST

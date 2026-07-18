@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Building2, Loader2, Pencil, RefreshCcw, Trash2,
+  ArrowLeft, Building2, DatabaseZap, Loader2, Pencil, RefreshCcw, Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,6 +34,7 @@ export function SatkerPanel({ user }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [sinkron, setSinkron] = useState(false);
+  const [backfill, setBackfill] = useState(null); // {kode_sisa, jalan, laporan}
   const [form, setForm] = useState(null);      // profil satker saat dialog edit
   const [saving, setSaving] = useState(false);
   const { confirm, confirmDialog } = useConfirm();
@@ -61,6 +62,20 @@ export function SatkerPanel({ user }) {
       load();
     } catch (e) { toast.error(apiErr(e, "Gagal sinkron")); }
     finally { setSinkron(false); }
+  };
+
+  const jalankanBackfill = async () => {
+    setBackfill((b) => ({ ...b, jalan: true }));
+    try {
+      const r = await axios.post(`${API}/satker/backfill`,
+        backfill?.kode_sisa ? { kode_satker_sisa: backfill.kode_sisa } : {});
+      setBackfill((b) => ({ ...b, jalan: false, laporan: r.data }));
+      toast.success(`Backfill selesai — ${r.data.total} dokumen lama terisi kode satker`);
+      load();
+    } catch (e) {
+      toast.error(apiErr(e, "Gagal menjalankan backfill"));
+      setBackfill((b) => ({ ...b, jalan: false }));
+    }
   };
 
   const bukaEdit = (it) => setForm({
@@ -108,6 +123,12 @@ export function SatkerPanel({ user }) {
             onClick={jalankanSinkron} data-testid="satker-sinkron">
             {sinkron ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <RefreshCcw className="w-3.5 h-3.5 mr-1.5" />}
             Sinkron dari Kegiatan
+          </Button>
+          <Button variant="outline" size="sm" className="h-9 text-xs"
+            title="Isi kode satker pada data lama (dari relasi aset→kegiatan; sisanya opsional ke satu satker)"
+            onClick={() => setBackfill({ kode_sisa: "", jalan: false, laporan: null })}
+            data-testid="satker-backfill">
+            <DatabaseZap className="w-3.5 h-3.5 mr-1.5" />Backfill Data Lama
           </Button>
           <Button size="sm" className="h-9 text-xs" onClick={() => setForm({ ...FORM_KOSONG, _baru: true })}
             data-testid="satker-tambah">
@@ -173,6 +194,66 @@ export function SatkerPanel({ user }) {
         Resolusi kop laporan: nilai kegiatan (paling spesifik) → profil satker di sini → Pengaturan global.
         Field kosong = ikut lapisan di atasnya.
       </p>
+
+      {/* ── Dialog backfill data lama ── */}
+      <Dialog open={!!backfill} onOpenChange={(o) => !o && setBackfill(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Backfill Kode Satker — Data Lama</DialogTitle>
+            <DialogDescription>
+              Dokumen lama tanpa kode satker diisi otomatis dari relasi aset→kegiatan.
+              Sisanya (persediaan, pengadaan, dsb.) dapat diklaim ke satu satker (opsional).
+              Idempoten — hanya mengisi yang kosong.
+            </DialogDescription>
+          </DialogHeader>
+          {backfill && (
+            <div className="space-y-2.5">
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground">
+                  Klaim sisa data lama ke satker (opsional)
+                </label>
+                <select value={backfill.kode_sisa}
+                  onChange={(e) => setBackfill({ ...backfill, kode_sisa: e.target.value })}
+                  className="w-full h-9 mt-1 rounded-md border border-input bg-background px-3 text-sm"
+                  data-testid="backfill-kode-sisa">
+                  <option value="">— jangan klaim (hanya dari relasi aset) —</option>
+                  {items.filter((s) => s.terdaftar).map((s) => (
+                    <option key={s.kode_satker} value={s.kode_satker}>
+                      {s.kode_satker} — {s.nama_satker}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {backfill.laporan && (
+                <div className="rounded-lg bg-muted/60 p-2.5 max-h-44 overflow-y-auto">
+                  <p className="text-[11px] font-bold mb-1">
+                    Total terisi: {backfill.laporan.total} dokumen
+                  </p>
+                  {Object.entries(backfill.laporan.per_koleksi || {})
+                    .filter(([, n]) => n > 0)
+                    .map(([k, n]) => (
+                      <p key={k} className="text-[10px] text-muted-foreground">{k}: {n}</p>
+                    ))}
+                  {backfill.laporan.total === 0 && (
+                    <p className="text-[10px] text-muted-foreground">
+                      Tidak ada dokumen lama yang perlu diisi.
+                    </p>
+                  )}
+                </div>
+              )}
+              <div className="flex justify-end gap-1.5">
+                <Button variant="outline" size="sm" className="h-9 text-xs"
+                  onClick={() => setBackfill(null)}>Tutup</Button>
+                <Button size="sm" className="h-9 text-xs" disabled={backfill.jalan}
+                  onClick={jalankanBackfill} data-testid="backfill-jalankan">
+                  {backfill.jalan ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <DatabaseZap className="w-3.5 h-3.5 mr-1.5" />}
+                  Jalankan Backfill
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* ── Dialog profil satker ── */}
       <Dialog open={!!form} onOpenChange={(o) => !o && setForm(null)}>

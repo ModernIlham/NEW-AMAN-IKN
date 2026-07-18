@@ -170,3 +170,92 @@ async def sinkron_satker(admin: dict = Depends(require_admin)):
                     username=admin.get("username", "system"),
                     detail=f"Sinkron master satker: {baru} satker baru terdaftar")
     return {"ok": True, "baru": baru}
+
+
+@satker_router.post("/satker/backfill")
+async def backfill_kode_satker(payload: dict = None,
+                               admin: dict = Depends(require_admin)):
+    """BACKFILL kode_satker untuk DATA LAMA (sekali jalan, idempoten — hanya
+    dokumen yang kode_satker-nya kosong/hilang yang diisi):
+
+    1. Register ber-relasi aset (asset_id / asset_ids / aset[]): kode
+       diturunkan dari aset → kegiatan → kode_satker.
+    2. Sisanya (persediaan, pengadaan, penganggaran, usulan RKBMN,
+       pengamanan, insidentil, dst.) TANPA relasi kegiatan: diisi
+       `kode_satker_sisa` bila diberikan (use-case: satker tunggal lama
+       mengklaim seluruh data historisnya sebelum satker kedua bergabung).
+
+    Kembalikan laporan jumlah terisi per koleksi."""
+    payload = payload or {}
+    kode_sisa = str(payload.get("kode_satker_sisa") or "").strip()
+    if kode_sisa:
+        ada = await db.satker.find_one({"kode_satker": kode_sisa}, {"_id": 1})
+        if not ada:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Satker {kode_sisa} belum terdaftar di master")
+
+    # Peta aset → kode satker (via kegiatan) — sekali bangun.
+    act_satker = {}
+    async for a in db.inventory_activities.find(
+            {"kode_satker": {"$exists": True, "$ne": ""}},
+            {"_id": 0, "id": 1, "kode_satker": 1}):
+        act_satker[a["id"]] = a["kode_satker"]
+    aset_satker = {}
+    async for a in db.assets.find(
+            {}, {"_id": 0, "id": 1, "activity_id": 1}):
+        k = act_satker.get(a.get("activity_id"))
+        if k:
+            aset_satker[a["id"]] = k
+
+    def _kode_dari_dok(d):
+        aid = d.get("asset_id")
+        if aid and aset_satker.get(aid):
+            return aset_satker[aid]
+        for lid in (d.get("asset_ids") or []):
+            if aset_satker.get(lid):
+                return aset_satker[lid]
+        for ar in (d.get("aset") or []):
+            k = aset_satker.get((ar or {}).get("asset_id"))
+            if k:
+                return k
+        return ""
+
+    KOSONG = {"$in": ["", None]}
+    _q_kosong = {"$or": [{"kode_satker": KOSONG},
+                         {"kode_satker": {"$exists": False}}]}
+    laporan = {}
+
+    # 1) Koleksi ber-relasi aset.
+    RELASI = ("psp", "bmn_idle", "penggunaan_proses", "usulan_penghapusan",
+              "pemusnahan", "pemindahtanganan", "pemanfaatan", "penertiban",
+              "bast_serah_terima")
+    for nama in RELASI:
+        coll = db[nama]
+        terisi = 0
+        async for d in coll.find(_q_kosong, {"_id": 0, "id": 1, "asset_id": 1,
+                                             "asset_ids": 1, "aset.asset_id": 1}):
+            k = _kode_dari_dok(d)
+            if k and d.get("id"):
+                await coll.update_one({"id": d["id"]},
+                                      {"$set": {"kode_satker": k}})
+                terisi += 1
+        laporan[nama] = terisi
+
+    # 2) Sisanya diisi kode_satker_sisa bila diberikan.
+    if kode_sisa:
+        SISA = ("persediaan", "pengadaan", "penganggaran", "perencanaan_usulan",
+                "pemantauan_insidentil", "pengamanan_kasus",
+                "pengamanan_dokumen", "pengamanan_polis") + RELASI
+        for nama in SISA:
+            res = await db[nama].update_many(
+                _q_kosong, {"$set": {"kode_satker": kode_sisa}})
+            laporan[nama] = laporan.get(nama, 0) + res.modified_count
+
+    total = sum(laporan.values())
+    await log_audit("backfill_kode_satker", "", "backfill",
+                    username=admin.get("username", "system"),
+                    detail=(f"Backfill kode_satker: {total} dokumen"
+                            + (f" (sisa → {kode_sisa})" if kode_sisa else "")))
+    return {"ok": True, "total": total, "per_koleksi": laporan,
+            "kode_satker_sisa": kode_sisa}
