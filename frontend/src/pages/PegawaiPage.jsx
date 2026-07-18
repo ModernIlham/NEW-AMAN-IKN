@@ -75,6 +75,8 @@ export default function PegawaiPage({ user, onBack }) {
   const [detailAset, setDetailAset] = useState(null); // {pegawai, items, memuat}
   const [units, setUnits] = useState([]);             // master unit kerja hierarkis
   const [kelolaUnit, setKelolaUnit] = useState(null); // {eselon, nama, parentId, sibuk}
+  const [struktur, setStruktur] = useState(false);    // dialog bagan struktur organisasi
+  const [strukturBuka, setStrukturBuka] = useState({}); // {unitId: true} simpul terbuka
   const fileRef = useRef(null);
   const { confirm, confirmDialog } = useConfirm();
 
@@ -158,6 +160,11 @@ export default function PegawaiPage({ user, onBack }) {
       muatUnits();
     } catch (err) { toast.error(getApiError(err, "Gagal menghapus unit")); }
   };
+
+  // Jumlah pegawai sebuah unit: pegawai yang eselon{level}-nya = nama unit.
+  const jumlahPegawaiUnit = useCallback((u) => items.filter(
+    (p) => String(p[`eselon${u.eselon}`] || "").trim() === u.nama_unit).length,
+  [items]);
 
   const bangunDariPegawai = async () => {
     setKelolaUnit((k) => ({ ...k, sibuk: true }));
@@ -300,6 +307,12 @@ export default function PegawaiPage({ user, onBack }) {
               <Input value={search} onChange={(e) => setSearch(e.target.value)}
                 placeholder="Cari nama / NIP / jabatan / unit kerja / email…" className="pl-9 h-10" data-testid="pegawai-search" />
             </div>
+            {units.length > 0 && (
+              <Button variant="outline" className="h-10 gap-1.5" onClick={() => setStruktur(true)}
+                data-testid="pegawai-struktur">
+                <Network className="w-4 h-4" /><span className="hidden sm:inline">Struktur</span>
+              </Button>
+            )}
             {isAdmin && (
               <>
                 <input ref={fileRef} type="file" accept=".xlsx,.xlsm,.csv" className="hidden"
@@ -657,6 +670,35 @@ export default function PegawaiPage({ user, onBack }) {
         </DialogContent>
       </Dialog>
 
+      {/* ── Dialog bagan Struktur Organisasi (pohon unit + jumlah pegawai) ── */}
+      <Dialog open={struktur} onOpenChange={setStruktur}>
+        <DialogContent className="max-w-2xl max-h-[88vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Struktur Organisasi</DialogTitle>
+            <DialogDescription className="text-xs">
+              Bagan hierarki unit kerja (Eselon I–V) dari master, dengan jumlah pegawai per unit. Klik unit untuk membuka/menutup sub-unitnya; klik jumlah untuk memfilter daftar pegawai.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1" data-testid="struktur-organisasi-pohon">
+            {units.filter((u) => String(u.eselon) === "1").map((akar) => (
+              <PohonUnit key={akar.id} unit={akar} units={units} depth={0}
+                buka={strukturBuka}
+                onToggle={(id) => setStrukturBuka((b) => ({ ...b, [id]: !b[id] }))}
+                jumlah={jumlahPegawaiUnit}
+                onFilter={(nama) => { setSearch(nama); setStruktur(false); }} />
+            ))}
+            {units.filter((u) => String(u.eselon) === "1").length === 0 && (
+              <p className="text-center text-xs text-muted-foreground py-8">
+                Master unit kerja masih kosong — buka &quot;Kelola Unit Kerja&quot; di form pegawai (tab Jabatan &amp; Unit) lalu gunakan &quot;Bangun otomatis dari data pegawai&quot;.
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setStruktur(false)}>Tutup</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* ── Dialog kelola master unit kerja (Eselon I–V, hierarkis) ── */}
       <Dialog open={!!kelolaUnit} onOpenChange={(o) => { if (!o && !kelolaUnit?.sibuk) setKelolaUnit(null); }}>
         <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
@@ -808,6 +850,38 @@ export default function PegawaiPage({ user, onBack }) {
       </Dialog>
 
       {confirmDialog}
+    </div>
+  );
+}
+
+// Simpul bagan struktur organisasi (rekursif): unit + jumlah pegawai +
+// sub-unit yang dapat dibuka/ditutup.
+function PohonUnit({ unit, units, depth, buka, onToggle, jumlah, onFilter }) {
+  const anak = units.filter((u) => u.parent_id === unit.id);
+  const terbuka = buka[unit.id] !== false; // default terbuka
+  const n = jumlah(unit);
+  return (
+    <div style={{ marginLeft: depth ? 16 : 0 }} className={depth ? "border-l border-border/60 pl-2" : ""}>
+      <div className="flex items-center gap-1.5 py-1">
+        <button type="button" onClick={() => anak.length && onToggle(unit.id)}
+          className={`flex items-center gap-1.5 flex-1 min-w-0 text-left rounded px-1.5 py-1 hover:bg-muted min-h-0 ${anak.length ? "" : "cursor-default"}`}
+          data-testid={`struktur-unit-${unit.id}`}>
+          {anak.length > 0
+            ? <span className="text-[10px] text-muted-foreground w-3">{terbuka ? "▾" : "▸"}</span>
+            : <span className="w-3" />}
+          <span className="text-[12px] font-medium text-foreground truncate">{unit.nama_unit}</span>
+          <span className="px-1 py-0.5 rounded bg-muted text-[9px] font-semibold text-muted-foreground uppercase">Es. {unit.eselon}</span>
+        </button>
+        <button type="button" onClick={() => onFilter(unit.nama_unit)}
+          title={`Lihat ${n} pegawai unit ini`}
+          className={`px-2 py-0.5 rounded-full text-[10px] font-bold min-w-0 min-h-0 ${n ? "bg-sky-500/15 text-sky-600 dark:text-sky-400 hover:bg-sky-500/25" : "bg-muted text-muted-foreground/60 cursor-default"}`}>
+          {n} <span className="font-normal">pegawai</span>
+        </button>
+      </div>
+      {terbuka && anak.map((a) => (
+        <PohonUnit key={a.id} unit={a} units={units} depth={depth + 1}
+          buka={buka} onToggle={onToggle} jumlah={jumlah} onFilter={onFilter} />
+      ))}
     </div>
   );
 }

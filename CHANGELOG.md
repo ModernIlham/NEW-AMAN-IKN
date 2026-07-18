@@ -48,6 +48,20 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#396] Bagan Struktur Organisasi (pohon unit Eselon I–V + jumlah pegawai) — 2026-07-18
+
+Penutup roadmap studi KERJA-BARENG:
+- Tombol **"Struktur"** di Master Pegawai membuka **bagan pohon hierarki**
+  unit kerja Eselon I–V dari master: simpul dapat dibuka/ditutup, tiap unit
+  menampilkan badge eselon + **jumlah pegawai**; klik jumlah langsung
+  **memfilter daftar pegawai** ke unit tersebut.
+- Petunjuk bawaan bila master kosong (arahkan ke "Bangun otomatis dari data
+  pegawai").
+- Verifikasi: lint & build sukses (perubahan frontend murni di atas endpoint
+  yang sudah ada).
+
+---
+
 ## [#395] Form pegawai 5-tab + validasi digit rekening per bank + WNI/WNA + saran pangkat per status — 2026-07-18
 
 Sisa roadmap KERJA-BARENG item form:
