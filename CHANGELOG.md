@@ -48,6 +48,46 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#383] Penajaman pasca-audit adversarial: tutup celah isolasi laporan, e-sign anti-race + bagikan/terbit-ulang link, isolasi persediaan & penggunaan — 2026-07-18
+
+Review adversarial 38-agent atas seluruh kode gelombang Mandat-2 (temuan
+diverifikasi refutasi satu-per-satu) + kandidat lanjutan yang dijanjikan:
+- **Isolasi satker DITUTUP MENYELURUH di jalur laporan** (temuan terberat):
+  25 endpoint laporan/pengesahan per-kegiatan (BA, LHI, RHI, DBHI, DBKP,
+  BAHI, SPTJM, SP, surat koreksi, eksekutif, laporan satker, rekap, batch
+  ZIP, dokumen pengesahan, sahkan) kini ber-guard `pastikan_akses_kegiatan`;
+  6 laporan pembukuan GLOBAL (Posisi, LBKP, CaLBMN, LKB, rekonsiliasi)
+  ter-scope aset satker; arsip Pelaporan ter-scope; PUT kegiatan tidak bisa
+  MEMINDAHKAN kegiatan ke satker lain; guard checklist aset kini efektif
+  (projection membawa activity_id); rekap wasdal (`_data_pemantauan`)
+  ter-scope sehingga Laporan Tahunan tidak lagi mencampur satker.
+- **E-sign dikeraskan**: submit tanda tangan kini TULIS ATOMIK per-signer
+  ($elemMatch + posisional; anti lost-update dua penanda tangan paralel,
+  anti "hidup lagi" pasca-batal — blob kalah-race dibersihkan); halaman
+  info menolak link lama yang jti-nya sudah diganti; token sesi BASI di
+  browser tamu tidak lagi memblokir link e-sign valid (fallback ?token=);
+  link/QR selalu absolut (fallback origin CORS bila APP_PUBLIC_URL kosong).
+- **Fitur lanjutan e-sign**: tombol **Terbitkan Link ulang** per penanda
+  tangan di dialog detail (link lama otomatis mati, ber-audit) + tombol
+  **bagikan via WhatsApp/email** dengan pesan siap kirim (di dialog hasil
+  & detail) — link tidak lagi hilang bila dialog pembuatan tertutup.
+- **Kanvas TTD presisi**: bitmap kanvas kini mengikuti lebar container ×
+  devicePixelRatio (pola resmi signature_pad) — goresan tidak lagi meleset
+  dari jari/kursor dan tidak buram di HP.
+- **Isolasi satker persediaan & penggunaan (lanjutan)**: item persediaan
+  baru terikat satker pembuat; daftar + 8 endpoint per-item ber-guard;
+  PSP & tiket idle ber-guard aset + ber-stamp satker; daftar PSP/idle/
+  kandidat ter-scope (data era lama tetap terbuka — konsisten kegiatan).
+- **Pembukuan**: KIB PDF tidak lagi crash (extend vs append blok ttd; juga
+  di Laporan Tahunan Wasdal), "Asal Perolehan" KIB kini terisi
+  (perolehan_dari_nama), jurnal Buku Barang menampilkan uraian & efek
+  per kode, filter id aset jurnal berfungsi, indikator sengketa portofolio
+  dihitung dari field nyata.
+- Verifikasi: suite **504 lulus** (+2 uji scope-field & fallback token),
+  423 route ter-mount, lint & build sukses.
+
+---
+
 ## [#382] SEMUA MODUL AKTIF: SBSK & sanding usulan (Perencanaan) + Laporan Tahunan PMK 207 & portofolio (Wasdal) — 2026-07-18
 
 Dua modul terakhir naik ke AKTIF — seluruh 16 modul registry kini AKTIF

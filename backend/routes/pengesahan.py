@@ -22,7 +22,7 @@ from pymongo import ReturnDocument
 
 from db import db, fs_bucket
 from auth_utils import require_admin, require_user, require_user_or_query_token
-from shared_utils import log_audit, delete_document_from_gridfs, get_document_from_gridfs
+from shared_utils import pastikan_akses_kegiatan_id, log_audit, delete_document_from_gridfs, get_document_from_gridfs
 
 logger = logging.getLogger(__name__)
 pengesahan_router = APIRouter()
@@ -210,6 +210,7 @@ async def get_pengesahan_status(activity_id: str, _user: dict = Depends(require_
     )
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+    await pastikan_akses_kegiatan_id(_user, activity_id)
     activity = await ensure_ticket_number(activity)
     counts = await _pengesahan_counts(activity_id)
     status = activity.get("status_pengesahan") or "draft"
@@ -242,6 +243,7 @@ async def upload_pengesahan_dokumen(
     )
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+    await pastikan_akses_kegiatan_id(admin, activity_id)
     if activity.get("status_pengesahan") == "disahkan":
         raise HTTPException(status_code=423, detail="Kegiatan sudah disahkan dan terkunci")
 
@@ -315,6 +317,7 @@ async def delete_pengesahan_dokumen(
     )
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+    await pastikan_akses_kegiatan_id(admin, activity_id)
     if activity.get("status_pengesahan") == "disahkan":
         raise HTTPException(status_code=423, detail="Kegiatan sudah disahkan dan terkunci")
 
@@ -348,6 +351,7 @@ async def get_pengesahan_dokumen(activity_id: str, doc_id: str, request: Request
     )
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+    await pastikan_akses_kegiatan_id(_user, activity_id)
     docs = activity.get("pengesahan_dokumen") or []
     target = next((d for d in docs if isinstance(d, dict) and d.get("id") == doc_id), None)
     if not target or not target.get("gridfs_id"):
@@ -387,6 +391,7 @@ _HISTORY_ASSET_PROJECTION = {
 @pengesahan_router.post("/inventory-activities/{activity_id}/sahkan")
 async def sahkan_activity(activity_id: str, request: Request, admin: dict = Depends(require_admin)):
     """Sahkan (finalisasi) kegiatan: validasi syarat → kunci → tulis riwayat."""
+    await pastikan_akses_kegiatan_id(admin, activity_id)
     activity = await db.inventory_activities.find_one(
         {"id": activity_id},
         {"_id": 0, "id": 1, "nama_kegiatan": 1, "created_at": 1, "ticket_number": 1,

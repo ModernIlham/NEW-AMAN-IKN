@@ -57,6 +57,13 @@ async def daftar_mutasi(asset_id: str = "", kode_transaksi: str = "",
                    .sort([("tanggal_buku", -1), ("created_at", -1)])
                    .skip((page - 1) * page_size).limit(page_size)
                    .to_list(page_size))
+    # Perkaya untuk tampilan: uraian & efek dari peta kode (entri jurnal
+    # sendiri sengaja ramping — hanya kode).
+    for it in items:
+        info = KODE_TRANSAKSI_BMN.get(str(it.get("kode_transaksi") or ""))
+        if info:
+            it.setdefault("uraian_transaksi", info[0])
+            it.setdefault("efek", info[1])
     return {"items": items, "total": total, "page": page,
             "total_pages": max(1, -(-total // page_size)),
             "label_kode": {k: v[0] for k, v in KODE_TRANSAKSI_BMN.items()}}
@@ -277,7 +284,7 @@ class KibIn(BaseModel):
 def _aset_kib_proj():
     return {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
             "brand": 1, "serial_number": 1, "location": 1, "condition": 1,
-            "purchase_price": 1, "purchase_date": 1, "perolehan_dari": 1,
+            "purchase_price": 1, "purchase_date": 1, "perolehan_dari_nama": 1,
             "activity_id": 1, "kib": 1, "photo_gridfs_ids": 1}
 
 
@@ -381,7 +388,7 @@ async def kib_pdf(asset_id: str, _user: dict = Depends(require_user_or_query_tok
         ("Merk / Tipe", aset.get("brand") or ""),
         ("Nomor Seri Pabrik", aset.get("serial_number") or ""),
         ("Lokasi", aset.get("location") or ""),
-        ("Asal Perolehan", aset.get("perolehan_dari") or ""),
+        ("Asal Perolehan", aset.get("perolehan_dari_nama") or ""),
         ("Tanggal Perolehan", _fmt_tanggal_id(str(aset.get("purchase_date") or "")[:10])
          if aset.get("purchase_date") else ""),
         ("Nilai Perolehan", f"Rp{harga:,.0f}".replace(",", ".") if harga else ""),
@@ -433,7 +440,7 @@ async def kib_pdf(asset_id: str, _user: dict = Depends(require_user_or_query_tok
     try:
         from routes.reports import _signature_block
         from shared_utils import blok_ttd_kpb
-        el.append(_signature_block([await blok_ttd_kpb(settings)], doc.width))
+        el.extend(_signature_block([await blok_ttd_kpb(settings)], doc.width))
     except Exception:
         pass
 

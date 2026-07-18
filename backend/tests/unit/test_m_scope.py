@@ -41,6 +41,23 @@ def test_scope_query_kegiatan():
     assert q == {"a": 1}
 
 
+def test_scope_query_field_satker_dan_guard_dok():
+    run = asyncio.run
+    # Lintas-satker → query utuh
+    assert su.scope_query_field_satker({"kode_satker": ""}, {"a": 1}) == {"a": 1}
+    # Terikat → item satker sendiri + era lama (kosong/None/hilang)
+    out = su.scope_query_field_satker({"kode_satker": "527"}, {"a": 1})
+    assert out == {"a": 1, "kode_satker": {"$in": ["527", "", None]}}
+    # Guard dokumen: era lama & satker sendiri terbuka; satker lain 403
+    run(su.pastikan_akses_dok_satker({"kode_satker": "527"}, {}))
+    run(su.pastikan_akses_dok_satker({"kode_satker": "527"}, {"kode_satker": ""}))
+    run(su.pastikan_akses_dok_satker({"kode_satker": "527"}, {"kode_satker": "527"}))
+    run(su.pastikan_akses_dok_satker({"kode_satker": ""}, {"kode_satker": "111"}))
+    with pytest.raises(HTTPException) as e:
+        run(su.pastikan_akses_dok_satker({"kode_satker": "527"}, {"kode_satker": "111"}))
+    assert e.value.status_code == 403
+
+
 def test_scope_query_aset(monkeypatch):
     run = asyncio.run
 

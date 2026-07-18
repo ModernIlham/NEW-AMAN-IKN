@@ -1048,7 +1048,7 @@ async def get_asset_checklist_full(asset_id: str, _user: dict = Depends(require_
         state — the actual photo bytes are loaded by the <img> tag on demand)
       - documents: array of {name, idx} (NO data field)
     """
-    asset = await db.assets.find_one({"id": asset_id}, {"_id": 0, "document_checklist": 1})
+    asset = await db.assets.find_one({"id": asset_id}, {"_id": 0, "document_checklist": 1, "activity_id": 1})
     if not asset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
     await pastikan_akses_aset(_user, asset)
@@ -1153,7 +1153,7 @@ def _not_modified(request: Request, etag: str):
 async def get_asset_checklist_photo(asset_id: str, item_idx: int, photo_idx: int, request: Request,
                                     _user: dict = Depends(require_user_or_query_token)):
     """Stream a single inline checklist photo by item & photo index."""
-    asset = await db.assets.find_one({"id": asset_id}, {"_id": 0, "document_checklist": 1, "version": 1})
+    asset = await db.assets.find_one({"id": asset_id}, {"_id": 0, "document_checklist": 1, "version": 1, "activity_id": 1})
     if not asset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
     await pastikan_akses_aset(_user, asset)
@@ -1188,7 +1188,7 @@ async def get_asset_checklist_photo(asset_id: str, item_idx: int, photo_idx: int
 async def get_asset_checklist_document(asset_id: str, item_idx: int, doc_idx: int, request: Request,
                                        _user: dict = Depends(require_user_or_query_token)):
     """Stream a single inline checklist PDF by item & document index."""
-    asset = await db.assets.find_one({"id": asset_id}, {"_id": 0, "document_checklist": 1, "version": 1})
+    asset = await db.assets.find_one({"id": asset_id}, {"_id": 0, "document_checklist": 1, "version": 1, "activity_id": 1})
     if not asset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
     await pastikan_akses_aset(_user, asset)

@@ -55,7 +55,7 @@ export default function PembukuanPage({ user, onBack }) {
   const muatJurnal = useCallback(async (p = 1) => {
     try {
       const params = new URLSearchParams({ page: String(p), page_size: "50" });
-      if (q.trim()) params.append("asset_id", "");
+      if (q.trim()) params.append("asset_id", q.trim());
       const r = await axios.get(`${API}/pembukuan/mutasi?${params}`);
       setJurnal(r.data);
       setPage(p);
@@ -244,7 +244,7 @@ export default function PembukuanPage({ user, onBack }) {
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="text-[12px] font-semibold truncate">
-                        {m.uraian_transaksi || m.kode_transaksi} — {m.nama_barang || m.asset_id}
+                        {m.uraian_transaksi || m.kode_transaksi} — {m.nama_barang || m.kode_barang || m.asset_id}
                       </p>
                       <p className="text-[10px] text-muted-foreground truncate">
                         {m.tanggal_buku} · {m.kode_barang || "-"}{m.nup ? `/${m.nup}` : ""}

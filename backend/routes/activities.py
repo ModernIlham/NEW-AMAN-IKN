@@ -639,6 +639,14 @@ async def update_inventory_activity(activity_id: str, activity: InventoryActivit
     # Validate required satker fields
     if not activity.kode_satker.strip():
         raise HTTPException(status_code=400, detail="Kode Satker wajib diisi")
+
+    # ISOLASI SATKER: user terikat tidak boleh MEMINDAHKAN kegiatan ke
+    # kode satker lain lewat PUT (guard existing saja tidak cukup).
+    _kode_user = kode_satker_user(_user)
+    if _kode_user and activity.kode_satker.strip() != _kode_user:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Akun Anda terikat satker {_kode_user} — tidak dapat memindahkan kegiatan ke satker lain")
     if not activity.nama_satker.strip():
         raise HTTPException(status_code=400, detail="Nama Satker wajib diisi")
 

@@ -216,8 +216,9 @@ async def arsip_laporan(q: str = "", _user: dict = Depends(require_user)):
             "tanggal": it.get("tanggal_surat") or (it.get("created_at") or "")[:10],
             "kegiatan_id": it.get("kegiatan_id") or ""})
 
+    from shared_utils import scope_query_kegiatan
     async for a in db.inventory_activities.find(
-            {"status_pengesahan": "disahkan"},
+            await scope_query_kegiatan(_user, {"status_pengesahan": "disahkan"}),
             {"_id": 0, "id": 1, "nama_kegiatan": 1, "ticket_number": 1,
              "nomor_surat": 1, "tanggal_pengesahan": 1, "nama_satker": 1,
              "kode_satker": 1}).sort("tanggal_pengesahan", -1).limit(300):
