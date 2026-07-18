@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from auth_utils import require_admin, require_user
+from auth_utils import require_admin, require_user, require_writer
 from db import db
 from shared_utils import blok_ttd_kpb
 from pemeliharaan_utils import (
@@ -245,7 +245,7 @@ async def export_jadwal(_user: dict = Depends(require_user)):
 
 
 @pemeliharaan_router.post("/pemeliharaan/jadwal")
-async def create_jadwal(payload: JadwalIn, user: dict = Depends(require_user)):
+async def create_jadwal(payload: JadwalIn, user: dict = Depends(require_writer)):
     """Buat jadwal pemeliharaan berkala untuk satu aset."""
     data = payload.model_dump()
     errors = validate_jadwal(data)
@@ -278,7 +278,7 @@ async def create_jadwal(payload: JadwalIn, user: dict = Depends(require_user)):
 
 @pemeliharaan_router.put("/pemeliharaan/jadwal/{jadwal_id}")
 async def update_jadwal(jadwal_id: str, payload: JadwalUpdate,
-                        _user: dict = Depends(require_user)):
+                        _user: dict = Depends(require_writer)):
     """Ubah interval/mulai/keterangan sebuah jadwal berkala."""
     data = payload.model_dump()
     errors = validate_jadwal(data)
@@ -369,7 +369,7 @@ async def list_pemeliharaan(
 
 
 @pemeliharaan_router.post("/pemeliharaan")
-async def create_pemeliharaan(payload: PemeliharaanIn, user: dict = Depends(require_user)):
+async def create_pemeliharaan(payload: PemeliharaanIn, user: dict = Depends(require_writer)):
     """Catat satu kejadian pemeliharaan; opsional perbarui kondisi aset."""
     data = payload.model_dump()
     today_iso = datetime.now(timezone.utc).date().isoformat()

@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from auth_utils import require_admin, require_user
+from auth_utils import require_admin, require_user, require_writer
 from db import db
 from penganggaran_utils import (
     AKUN_BAS, JENIS_ANGGARAN, STATUS_ANGGARAN,
@@ -193,7 +193,7 @@ async def _ambil_snapshot_rkbmn(rkbmn_id: str) -> dict:
 
 @penganggaran_router.post("/penganggaran")
 async def buat_usulan_anggaran(payload: UsulanAnggaranIn,
-                               user: dict = Depends(require_user)):
+                               user: dict = Depends(require_writer)):
     """Buat usulan penganggaran (opsional tertaut aset + FK usulan RKBMN)."""
     data = payload.model_dump()
     errors = validate_usulan_anggaran(data)

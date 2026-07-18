@@ -12,7 +12,9 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Upl
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from auth_utils import require_admin, require_user, require_user_or_query_token
+from auth_utils import (
+    require_admin, require_user, require_user_or_query_token, require_writer,
+)
 from db import db, fs_bucket
 from shared_utils import delete_document_from_gridfs, get_document_from_gridfs, log_audit
 from penghapusan_utils import (
@@ -113,7 +115,7 @@ async def export_usulan_penghapusan(_user: dict = Depends(require_user)):
 
 
 @penghapusan_router.post("/penghapusan/usulan")
-async def buat_usulan(payload: UsulanIn, user: dict = Depends(require_user)):
+async def buat_usulan(payload: UsulanIn, user: dict = Depends(require_writer)):
     """Buat tiket usulan penghapusan untuk satu aset kandidat."""
     asset = await db.assets.find_one({"id": payload.asset_id}, _PROJ)
     if not asset:
@@ -267,7 +269,7 @@ def _lampiran_ext(filename: str) -> str:
 
 @penghapusan_router.post("/penghapusan/usulan/{usulan_id}/lampiran")
 async def unggah_lampiran_usulan(usulan_id: str, file: UploadFile = File(...),
-                                 user: dict = Depends(require_user)):
+                                 user: dict = Depends(require_writer)):
     """Unggah scan SK/dokumen pendukung (PDF/gambar, maks 10MB, 10 berkas)."""
     u = await db.usulan_penghapusan.find_one(
         {"id": usulan_id}, {"_id": 0, "id": 1, "lampiran": 1})

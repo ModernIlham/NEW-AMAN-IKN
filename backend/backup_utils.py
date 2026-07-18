@@ -21,10 +21,16 @@ SKIP_COLLECTIONS = {
 # backup/restore: counters (_id = "inventory_activity_ticket_{tahun}").
 KEEP_ID_COLLECTIONS = {"counters"}
 
-# Reset "HAPUS SEMUA": wipe seluruh data operasional & referensi + GridFS, TAPI
-# pertahankan akun & konfigurasi agar admin tetap bisa login & kop surat tak hilang.
+# Reset "HAPUS SEMUA": wipe seluruh data OPERASIONAL + GridFS, TAPI pertahankan
+# akun & seluruh KONFIGURASI/pemetaan agar pasca-reset admin tetap bisa login,
+# kop surat tak hilang, dan setelan akuntansi/persuratan yang disusun satker
+# (pemetaan akun BAS, override masa manfaat, format nomor, kode klasifikasi)
+# tidak perlu di-setup ulang manual. `akun_bas`/`persediaan_akun` KHUSUSNYA
+# tidak punya seed otomatis — kehilangannya = pemetaan lenyap permanen.
 RESET_KEEP_COLLECTIONS = {
     "users", "report_settings", "compression_quotas", "pdf_compression_quotas",
+    "persuratan_settings", "klasifikasi_arsip", "masa_manfaat",
+    "akun_bas", "persediaan_akun", "referensi_akun",
 }
 
 # Legacy name → canonical (untuk membaca backup lama; mis. activities.json).

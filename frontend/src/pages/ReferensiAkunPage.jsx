@@ -40,6 +40,9 @@ export default function ReferensiAkunPage({ user, onBack }) {
   const [namaAkun, setNamaAkun] = useState({});  // {kode: nama|null} validasi lunak
   const [formAset, setFormAset] = useState({ golongan: "3", akun: "", uraian: "" });
   const [formPsd, setFormPsd] = useState({ sub_kelompok: "", akun: "" });
+  // Ambang kapitalisasi intra/ekstra (PMK 181 → dapat dioverride admin)
+  const [ambang, setAmbang] = useState(null);   // {efektif, default, override}
+  const [formAmbang, setFormAmbang] = useState(null); // {"3": "...", "4": "..."} saat edit
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
 
@@ -67,9 +70,11 @@ export default function ReferensiAkunPage({ user, onBack }) {
 
   const muatPemetaan = useCallback(async () => {
     try {
-      const [ra, rp] = await Promise.all([
-        axios.get(`${API}/akun-bas`), axios.get(`${API}/persediaan-akun`)]);
+      const [ra, rp, rk] = await Promise.all([
+        axios.get(`${API}/akun-bas`), axios.get(`${API}/persediaan-akun`),
+        axios.get(`${API}/pembukuan/ambang-kapitalisasi`).catch(() => null)]);
       setAset(ra.data); setPsd(rp.data);
+      if (rk?.data) setAmbang(rk.data);
       const kode = new Set();
       (ra.data?.items || []).forEach((i) => i.akun && kode.add(i.akun));
       (rp.data?.katalog || []).forEach((i) => i.akun && kode.add(i.akun));
@@ -165,6 +170,38 @@ export default function ReferensiAkunPage({ user, onBack }) {
       muatPemetaan();
     } catch (e) { toast.error(apiErr(e, "Gagal menghapus")); }
   };
+
+  const simpanAmbang = async () => {
+    const body = {};
+    for (const g of ["3", "4"]) {
+      const v = String(formAmbang?.[g] ?? "").replace(/[^\d]/g, "");
+      if (!v || Number(v) <= 0) { toast.error(`Ambang golongan ${g} harus angka > 0`); return; }
+      body[g] = Number(v);
+    }
+    try {
+      const r = await axios.put(`${API}/pembukuan/ambang-kapitalisasi`, { ambang: body });
+      toast.success("Ambang kapitalisasi tersimpan — laporan DBKP/LBKP/Posisi memakai nilai baru");
+      setAmbang((a) => ({ ...(a || {}), efektif: r.data?.efektif || body, override: body }));
+      setFormAmbang(null);
+    } catch (e) { toast.error(apiErr(e, "Gagal menyimpan ambang")); }
+  };
+
+  const resetAmbang = async () => {
+    const ok = await confirm({
+      title: "Kembalikan ambang ke default PMK 181?",
+      description: "Peralatan & Mesin Rp1.000.000 · Gedung & Bangunan Rp25.000.000.",
+      confirmLabel: "Kembalikan",
+    });
+    if (!ok) return;
+    try {
+      const r = await axios.put(`${API}/pembukuan/ambang-kapitalisasi`, { ambang: {} });
+      toast.success("Ambang kembali ke default PMK 181");
+      setAmbang((a) => ({ ...(a || {}), efektif: r.data?.efektif, override: {} }));
+      setFormAmbang(null);
+    } catch (e) { toast.error(apiErr(e, "Gagal mengembalikan default")); }
+  };
+
+  const fmtRp = (v) => `Rp${Number(v || 0).toLocaleString("id-ID")}`;
 
   const TandaAkun = ({ kode }) => {
     if (!kode) return null;
@@ -309,6 +346,57 @@ export default function ReferensiAkunPage({ user, onBack }) {
           </>
         )}
 
+        {tab === "aset" && ambang && (
+          <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="ambang-kapitalisasi-card">
+            <div className="px-3 py-2.5 border-b border-border flex items-center justify-between gap-2 flex-wrap">
+              <div>
+                <p className="text-xs font-semibold text-foreground">Ambang kapitalisasi intra/ekstrakomptabel (PMK 181/PMK.06/2016)</p>
+                <p className="text-[10px] text-muted-foreground">
+                  Barang bernilai satuan di bawah ambang dibukukan EKSTRAKOMPTABEL (tidak masuk neraca) — dipakai DBKP, LBKP, CaLBMN &amp; Posisi BMN.
+                </p>
+              </div>
+              {isAdmin && !formAmbang && (
+                <div className="flex items-center gap-1.5">
+                  {Object.keys(ambang.override || {}).length > 0 && (
+                    <Button variant="ghost" size="sm" className="h-8 text-[11px]" onClick={resetAmbang}>Kembalikan default</Button>
+                  )}
+                  <Button variant="outline" size="sm" className="h-8 text-[11px]"
+                    onClick={() => setFormAmbang({
+                      3: String(ambang.efektif?.["3"] ?? ""), 4: String(ambang.efektif?.["4"] ?? "") })}
+                    data-testid="ambang-ubah">
+                    Ubah Ambang
+                  </Button>
+                </div>
+              )}
+            </div>
+            <div className="px-3 py-2.5 grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {[["3", "Peralatan dan Mesin"], ["4", "Gedung dan Bangunan"]].map(([g, label]) => (
+                <div key={g} className="rounded-lg border border-border p-2.5">
+                  <p className="text-[11px] font-bold text-foreground">Golongan {g} — {label}</p>
+                  {formAmbang ? (
+                    <Input inputMode="numeric" value={formAmbang[g]}
+                      onChange={(e) => setFormAmbang((f) => ({ ...f, [g]: e.target.value.replace(/[^\d]/g, "") }))}
+                      className="h-9 mt-1 font-mono" data-testid={`ambang-input-${g}`} />
+                  ) : (
+                    <p className="text-sm font-mono font-semibold mt-0.5">
+                      ≥ {fmtRp(ambang.efektif?.[g])}
+                      {ambang.override?.[g] != null && Number(ambang.override[g]) !== Number(ambang.default?.[g]) && (
+                        <span className="ml-1.5 px-1 py-0.5 rounded bg-sky-500/15 text-sky-600 dark:text-sky-400 text-[9px] font-semibold align-middle">override satker</span>
+                      )}
+                    </p>
+                  )}
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Default PMK 181: {fmtRp(ambang.default?.[g])}</p>
+                </div>
+              ))}
+            </div>
+            {formAmbang && (
+              <div className="px-3 pb-2.5 flex items-center justify-end gap-1.5">
+                <Button variant="ghost" size="sm" className="h-8 text-[11px]" onClick={() => setFormAmbang(null)}>Batal</Button>
+                <Button size="sm" className="h-8 text-[11px]" onClick={simpanAmbang} data-testid="ambang-simpan">Simpan Ambang</Button>
+              </div>
+            )}
+          </div>
+        )}
         {tab === "aset" && (
           <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
             <div className="px-3 py-2.5 border-b border-border">

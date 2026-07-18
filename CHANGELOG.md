@@ -48,6 +48,33 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#376] Pengamanan akses & data: viewer read-only ditegakkan server, reset simpan pemetaan, ambang kapitalisasi jadi setelan — 2026-07-18
+
+Tiga penguatan hasil audit keamanan & backup (Mandat-2):
+- **`require_writer` — viewer read-only kini ditegakkan SERVER** (bukan hanya
+  disembunyikan UI): **62 endpoint tulis** di 23 modul (aset, kegiatan,
+  persediaan, persuratan, BAST, pengadaan…s.d. e-sign) menolak role `viewer`
+  dengan 403 berpesan jelas; role legacy `user` = operator. Endpoint baca-rupa
+  (kartu massal, validasi, kompres media, unduh laporan) sengaja tetap terbuka
+  semua role.
+- **Reset data tidak lagi menghapus pemetaan/konfigurasi satker**:
+  `RESET_KEEP` kini juga mempertahankan `akun_bas`, `persediaan_akun` (tanpa
+  seed otomatis — hilang = setup ulang manual), `masa_manfaat`,
+  `persuratan_settings`, `klasifikasi_arsip`, `referensi_akun`. Semuanya tetap
+  ikut backup.
+- **Ambang kapitalisasi PMK 181 jadi SETELAN** (`GET/PUT
+  /pembukuan/ambang-kapitalisasi`, admin): override golongan 3/4 tersimpan di
+  `report_settings {type: "kapitalisasi"}` (selamat reset, ikut backup) dan
+  dipakai SEMUA laporan pembukuan — DBKP, LBKP, CaLBMN, Posisi BMN,
+  rekonsiliasi XLSX — termasuk catatan kaki ambangnya. Golongan selain 3/4
+  ditolak (tanah/jalan tidak boleh diam-diam keluar neraca); nilai rusak jatuh
+  ke default (teruji). UI: kartu "Ambang Kapitalisasi" di Referensi Akun BAS
+  tab Akun Aset (ubah/kembalikan default, badge override).
+- Verifikasi: suite **487 lulus** (+5 uji baru), 405 route ter-mount, lint &
+  build frontend sukses.
+
+---
+
 ## [#375] Tanda Tangan Digital (slice 2): e-sign via LINK — halaman publik, urutan, QR & lembar pengesahan — 2026-07-18
 
 Setiap penanda tangan kini bisa menandatangani dokumen **melalui link yang

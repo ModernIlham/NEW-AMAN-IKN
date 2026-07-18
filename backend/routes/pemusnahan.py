@@ -11,7 +11,9 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from auth_utils import require_admin, require_user, require_user_or_query_token
+from auth_utils import (
+    require_admin, require_user, require_user_or_query_token, require_writer,
+)
 from db import db, fs_bucket
 from shared_utils import blok_ttd_kpb_titik, delete_document_from_gridfs, get_document_from_gridfs
 from pemusnahan_utils import (
@@ -86,7 +88,7 @@ async def export_pemusnahan(_user: dict = Depends(require_user)):
 
 
 @pemusnahan_router.post("/pemusnahan")
-async def buat_pemusnahan(payload: PemusnahanIn, user: dict = Depends(require_user)):
+async def buat_pemusnahan(payload: PemusnahanIn, user: dict = Depends(require_writer)):
     """Catat satu BA pemusnahan multi-aset (aset harus rusak berat)."""
     data = payload.model_dump()
     today_iso = datetime.now(timezone.utc).date().isoformat()
@@ -133,7 +135,7 @@ async def buat_pemusnahan(payload: PemusnahanIn, user: dict = Depends(require_us
 
 @pemusnahan_router.post("/pemusnahan/{ba_id}/usulkan-penghapusan")
 async def usulkan_penghapusan_dari_ba(ba_id: str,
-                                      user: dict = Depends(require_user)):
+                                      user: dict = Depends(require_writer)):
     """Buat usulan penghapusan (register Penghapusan) untuk aset BA ini.
 
     Tindak lanjut PMK 83/2016: barang yang telah dimusnahkan diusulkan
@@ -288,7 +290,7 @@ def _lampiran_ext(filename: str) -> str:
 
 @pemusnahan_router.post("/pemusnahan/{ba_id}/lampiran")
 async def unggah_lampiran_ba(ba_id: str, file: UploadFile = File(...),
-                             user: dict = Depends(require_user)):
+                             user: dict = Depends(require_writer)):
     """Unggah foto bukti/scan BA (PDF/gambar, maks 10MB, 10 berkas)."""
     ba = await db.pemusnahan.find_one({"id": ba_id}, {"_id": 0, "id": 1, "lampiran": 1})
     if not ba:

@@ -56,6 +56,23 @@ def golongan_of(kode_barang) -> str:
     return s[0] if s and s[0].isdigit() else ""
 
 
+def gabung_ambang(override) -> dict:
+    """Gabungkan override setelan (dict golongan → rupiah) di atas default
+    PMK 181. Hanya golongan ber-digit tunggal dengan nilai angka > 0 yang
+    diterima; nilai tak valid diabaikan (jatuh ke default) — setelan rusak
+    tidak boleh membuat seluruh barang jadi intra/ekstra secara diam-diam.
+    """
+    hasil = dict(AMBANG_KAPITALISASI_DEFAULT)
+    for k, v in (override or {}).items():
+        g = str(k or "").strip()
+        if not (len(g) == 1 and g.isdigit()):
+            continue
+        harga = parse_harga(v)
+        if harga > 0:
+            hasil[g] = harga
+    return hasil
+
+
 def klasifikasi_komptabel(kode_barang, harga_satuan, ambang=None) -> str:
     """'intra' | 'ekstra' menurut ambang kapitalisasi golongan barang.
 

@@ -17,7 +17,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 
-from auth_utils import require_admin, require_user
+from auth_utils import require_admin, require_user, require_writer
 from db import db
 from report_filters import active_asset_filter
 from shared_utils import limiter, log_audit
@@ -239,7 +239,7 @@ async def daftar_selisih_siman(page: int = 1, page_size: int = 50,
 
 @siman_router.post("/siman/terapkan/{asset_id}")
 async def terapkan_siman(asset_id: str, payload: TerapkanIn,
-                         user: dict = Depends(require_user)):
+                         user: dict = Depends(require_writer)):
     """Terapkan nilai SIMAN ke aset AMAN (menyingkronkan kembali).
 
     Default seluruh selisih; `fields` membatasi field tertentu. Nilai SIMAN

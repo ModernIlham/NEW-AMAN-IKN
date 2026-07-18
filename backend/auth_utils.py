@@ -152,6 +152,21 @@ async def require_admin(user: dict = Depends(require_user)) -> dict:
     return user
 
 
+async def require_writer(user: dict = Depends(require_user)) -> dict:
+    """Gate endpoint TULIS: tolak role 'viewer' (read-only kini ditegakkan di
+    SERVER, bukan hanya disembunyikan UI). Role legacy 'user' = operator;
+    role tak dikenal diperlakukan sebagai operator (kompatibilitas akun lama
+    tanpa field role)."""
+    role = user.get("role") or "operator"
+    if role == "user":  # legacy
+        role = "operator"
+    if role == "viewer":
+        raise HTTPException(
+            status_code=403,
+            detail="Akun viewer hanya dapat membaca data — hubungi admin untuk akses tulis")
+    return user
+
+
 async def require_user_or_query_token(
     authorization: str = Header(default="", alias="Authorization"),
     token: str = Query(default=""),

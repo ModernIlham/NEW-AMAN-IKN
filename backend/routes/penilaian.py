@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from auth_utils import require_admin, require_user
+from auth_utils import require_admin, require_user, require_writer
 from db import db
 from kodefikasi_utils import GOLONGAN_DEFAULTS
 from report_filters import active_asset_filter
@@ -224,7 +224,7 @@ async def riwayat_nilai_aset(asset_id: str, _user: dict = Depends(require_user))
 
 @penilaian_router.post("/penilaian/koreksi")
 async def catat_koreksi_nilai(payload: KoreksiNilaiIn,
-                              user: dict = Depends(require_user)):
+                              user: dict = Depends(require_writer)):
     """Catat satu peristiwa nilai untuk satu aset (status SAKTI: belum)."""
     data = payload.model_dump()
     errors = validate_koreksi_nilai(data)
@@ -299,7 +299,7 @@ async def _proyeksi_master_revaluasi(koreksi: dict, oleh: str) -> bool:
 
 @penilaian_router.post("/penilaian/koreksi/{koreksi_id}/sakti")
 async def tandai_tercatat_sakti(koreksi_id: str,
-                                user: dict = Depends(require_user)):
+                                user: dict = Depends(require_writer)):
     """Tandai koreksi sudah divalidasi & di-approve di SAKTI (anti-race).
 
     Saat transisi BERHASIL, PROYEKSIKAN nilai wajar ke master aset

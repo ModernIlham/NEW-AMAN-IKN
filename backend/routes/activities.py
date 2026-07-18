@@ -15,7 +15,7 @@ from PIL import Image as PILImage
 from bson import ObjectId  # noqa: F401  (kept for downstream import use)
 
 from db import db
-from auth_utils import require_user, require_admin
+from auth_utils import require_admin, require_user, require_writer
 from routes.media import auto_compress_image
 from routes.pdf_compress import compress_pdf_iloveapi, compress_pdf_whipdoc
 from shared_utils import (
@@ -376,7 +376,7 @@ async def satker_lookup(kode: str = "", nama: str = "", _user: dict = Depends(re
     return None
 
 @activities_router.post("/inventory-activities")
-async def create_inventory_activity(activity: InventoryActivityCreate, _user: dict = Depends(require_user)):
+async def create_inventory_activity(activity: InventoryActivityCreate, _user: dict = Depends(require_writer)):
     """Create a new inventory activity"""
     # Validate required satker fields
     if not activity.kode_satker.strip():
@@ -589,7 +589,7 @@ async def get_inventory_activity_document(
 
 @activities_router.put("/inventory-activities/{activity_id}")
 async def update_inventory_activity(activity_id: str, activity: InventoryActivityCreate,
-                                    _user: dict = Depends(require_user)):
+                                    _user: dict = Depends(require_writer)):
     """Update an existing inventory activity"""
     existing = await db.inventory_activities.find_one({"id": activity_id})
     if not existing:

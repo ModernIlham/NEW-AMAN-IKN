@@ -21,7 +21,9 @@ from typing import Optional
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 
-from auth_utils import require_admin, require_user, require_user_or_query_token
+from auth_utils import (
+    require_admin, require_user, require_user_or_query_token, require_writer,
+)
 from db import db
 from persediaan_akun_utils import akun_persediaan
 from persediaan_fields import EDITABLE_FIELD_NAMES
@@ -288,7 +290,7 @@ async def export_transaksi_persediaan(_user: dict = Depends(require_user)):
 
 
 @persediaan_router.post("/persediaan/import")
-async def import_persediaan(file: UploadFile = File(...), _user: dict = Depends(require_user)):
+async def import_persediaan(file: UploadFile = File(...), _user: dict = Depends(require_writer)):
     """Impor massal master (CSV/XLSX): kode 16+NUP sudah ada → perbarui field
     non-identitas; selain itu buat baru (kode 10 digit → nomor urut otomatis,
     NUP kosong → otomatis). Stok/layer TIDAK tersentuh impor."""
@@ -754,7 +756,7 @@ class TransaksiMassalIn(BaseModel):
 
 
 @persediaan_router.post("/persediaan/transaksi-massal")
-async def transaksi_massal(payload: TransaksiMassalIn, user: dict = Depends(require_user)):
+async def transaksi_massal(payload: TransaksiMassalIn, user: dict = Depends(require_writer)):
     """Satu dokumen (BAST/kuitansi/nota) untuk BANYAK barang sekaligus.
 
     Tiap barang diproses lewat jalur transaksi tunggal yang sudah atomik +
@@ -1080,7 +1082,7 @@ async def get_persediaan(item_id: str, _user: dict = Depends(require_user)):
 
 
 @persediaan_router.post("/persediaan")
-async def create_persediaan(data: PersediaanCreate, _user: dict = Depends(require_user)):
+async def create_persediaan(data: PersediaanCreate, _user: dict = Depends(require_writer)):
     kode = str(data.kode_barang or "").strip()
     ok, err = validate_kode_persediaan(kode)
     if not ok:
@@ -1137,7 +1139,7 @@ async def update_persediaan(
     item_id: str,
     data: PersediaanUpdate,
     if_match: str = Header("", alias="If-Match"),
-    _user: dict = Depends(require_user),
+    _user: dict = Depends(require_writer),
 ):
     """Ubah field non-identitas master (OCC: wajib If-Match versi terkini)."""
     # Whitelist dari registry (persediaan_fields) — field identitas/terkelola
@@ -1199,7 +1201,7 @@ async def _ambil_snapshot_perolehan(perolehan_id: str) -> dict:
 
 
 @persediaan_router.post("/persediaan/{item_id}/masuk")
-async def transaksi_masuk(item_id: str, data: TransaksiMasukIn, user: dict = Depends(require_user)):
+async def transaksi_masuk(item_id: str, data: TransaksiMasukIn, user: dict = Depends(require_writer)):
     """Transaksi MASUK: layer FIFO baru + stok naik + jurnal (pustaka §3).
 
     Pencatatan perpetual: master diperbarui ATOMIK ($push layer + $inc stok
@@ -1292,7 +1294,7 @@ class TransaksiKeluarIn(BaseModel):
 
 
 @persediaan_router.post("/persediaan/{item_id}/keluar")
-async def transaksi_keluar(item_id: str, data: TransaksiKeluarIn, user: dict = Depends(require_user)):
+async def transaksi_keluar(item_id: str, data: TransaksiKeluarIn, user: dict = Depends(require_writer)):
     """Transaksi KELUAR: konsumsi layer FIFO tertua + jurnal (pustaka §3).
 
     Nilai keluar = Σ (qty terpakai × harga layer) — bukan rata-rata.
@@ -1377,7 +1379,7 @@ class PindahGudangIn(BaseModel):
 
 @persediaan_router.post("/persediaan/{item_id}/pindah-gudang")
 async def pindah_gudang_persediaan(item_id: str, data: PindahGudangIn,
-                                   user: dict = Depends(require_user)):
+                                   user: dict = Depends(require_writer)):
     """Pindahkan barang ke Lokasi/Gudang lain — ber-jurnal.
 
     Mutasi lokasi seluruh record: stok & layer FIFO TIDAK berubah; jurnal
@@ -1448,7 +1450,7 @@ class OpnameIn(BaseModel):
 
 
 @persediaan_router.post("/persediaan/{item_id}/opname")
-async def opname_persediaan(item_id: str, data: OpnameIn, user: dict = Depends(require_user)):
+async def opname_persediaan(item_id: str, data: OpnameIn, user: dict = Depends(require_writer)):
     """Rekam hasil opname SATU barang (pustaka §3.3 — hanya yang selisih).
 
     fisik < buku → kekurangan dikonsumsi FIFO; fisik > buku → layer

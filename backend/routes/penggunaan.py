@@ -16,7 +16,9 @@ from fastapi import (
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from auth_utils import require_admin, require_user, require_user_or_query_token
+from auth_utils import (
+    require_admin, require_user, require_user_or_query_token, require_writer,
+)
 from db import db, fs_bucket
 from shared_utils import blok_ttd_kpb_titik, delete_document_from_gridfs, get_document_from_gridfs, log_audit
 from penggunaan_utils import (
@@ -169,7 +171,7 @@ async def export_psp(_user: dict = Depends(require_user)):
 
 
 @penggunaan_router.post("/penggunaan/psp")
-async def catat_psp(payload: PspIn, user: dict = Depends(require_user)):
+async def catat_psp(payload: PspIn, user: dict = Depends(require_writer)):
     """Catat satu SK penetapan penggunaan multi-aset (snapshot identitas)."""
     from datetime import datetime as dt
 
@@ -373,7 +375,7 @@ def _lampiran_ext(filename: str) -> str:
 
 @penggunaan_router.post("/penggunaan/psp/{sk_id}/lampiran")
 async def unggah_lampiran_psp(sk_id: str, file: UploadFile = File(...),
-                              user: dict = Depends(require_user)):
+                              user: dict = Depends(require_writer)):
     """Unggah scan SK/dokumen pendukung (PDF/gambar, maks 10MB, 10 berkas)."""
     sk = await db.psp.find_one({"id": sk_id}, {"_id": 0, "id": 1, "lampiran": 1})
     if not sk:
@@ -520,7 +522,7 @@ async def export_idle(_user: dict = Depends(require_user)):
 
 
 @penggunaan_router.post("/penggunaan/idle")
-async def buat_tiket_idle(payload: TiketIdleIn, user: dict = Depends(require_user)):
+async def buat_tiket_idle(payload: TiketIdleIn, user: dict = Depends(require_writer)):
     """Buka tiket klarifikasi idle untuk satu aset kandidat."""
     a = await db.assets.find_one({"id": payload.asset_id}, _PROJ_IDLE)
     if not a:
@@ -825,7 +827,7 @@ async def export_proses(_user: dict = Depends(require_user)):
 
 
 @penggunaan_router.post("/penggunaan/proses")
-async def buat_proses(payload: ProsesIn, user: dict = Depends(require_user)):
+async def buat_proses(payload: ProsesIn, user: dict = Depends(require_writer)):
     """Buka tiket proses baru (status awal draf; aset multi ber-snapshot)."""
     data = payload.model_dump()
     errors = validate_proses_penggunaan(data)

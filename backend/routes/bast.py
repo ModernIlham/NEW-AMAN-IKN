@@ -28,7 +28,9 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from auth_utils import require_user, require_user_or_query_token
+from auth_utils import (
+    require_user, require_user_or_query_token, require_writer,
+)
 from db import db
 from shared_utils import log_audit
 
@@ -137,7 +139,7 @@ async def daftar_bast(asset_id: str = "", q: str = "", nip: str = "",
 
 
 @bast_router.post("/bast")
-async def buat_bast(payload: BastIn, user: dict = Depends(require_user)):
+async def buat_bast(payload: BastIn, user: dict = Depends(require_writer)):
     """Simpan BAST ke register (multi-aset; snapshot identitas aset dibekukan
     agar dokumen historis tak berubah saat master aset berubah)."""
     if payload.jenis not in JENIS_BAST:
@@ -303,7 +305,7 @@ async def buat_bast(payload: BastIn, user: dict = Depends(require_user)):
 
 @bast_router.post("/bast/{bast_id}/bukti")
 async def unggah_bukti_bast(bast_id: str, file: UploadFile = File(...),
-                            user: dict = Depends(require_user)):
+                            user: dict = Depends(require_writer)):
     """Unggah scan BAST bertanda tangan (PDF/gambar ≤10MB) → tersimpan di
     GridFS; bila nomor BAST berasal dari booking otomatis, nomor agenda di
     Registrasi Persuratan langsung DISAHKAN (menutup siklus dua langkah)."""

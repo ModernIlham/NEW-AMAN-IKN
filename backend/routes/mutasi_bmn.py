@@ -12,7 +12,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from auth_utils import require_admin, require_user
+from auth_utils import require_admin, require_user, require_writer
 from db import db
 from kodefikasi_utils import normalize_kode, validate_kode
 from mutasi_bmn_utils import (
@@ -116,7 +116,7 @@ async def _nup_berikut_kode(kode_baru: str) -> str:
 
 @mutasi_bmn_router.post("/pembukuan/reklasifikasi")
 async def reklasifikasi_aset(payload: ReklasifikasiIn,
-                             user: dict = Depends(require_user)):
+                             user: dict = Depends(require_writer)):
     """Reklasifikasi kodefikasi aset (SAKTI 304/107, riset §3):
     kode+NUP dimutakhirkan IN-PLACE (aset tidak dibuat ulang — nilai &
     tanggal perolehan, id internal, dan kode register SIMAN tetap), NUP baru
@@ -176,3 +176,58 @@ async def reklasifikasi_aset(payload: ReklasifikasiIn,
                             f"{riwayat['nup_lama']} → {kode_baru}/{nup_baru}"))
     return {"ok": True, "kode_baru": kode_baru, "nup_baru": nup_baru,
             "riwayat": riwayat}
+
+
+# ============================================================================
+# SETELAN AMBANG KAPITALISASI (PMK 181 → dapat diatur admin, Mandat-2)
+# ============================================================================
+
+class AmbangIn(BaseModel):
+    ambang: dict   # {"3": 1000000, "4": 25000000} — golongan digit → rupiah
+
+
+@mutasi_bmn_router.get("/pembukuan/ambang-kapitalisasi")
+async def lihat_ambang(_user: dict = Depends(require_user)):
+    """Ambang kapitalisasi intra/ekstra EFEKTIF + default PMK 181 + override
+    tersimpan. Semua laporan pembukuan (DBKP/LBKP/Posisi) memakai nilai ini."""
+    from pembukuan_utils import AMBANG_KAPITALISASI_DEFAULT
+    from shared_utils import ambang_kapitalisasi
+    doc = await db.report_settings.find_one(
+        {"type": "kapitalisasi"}, {"_id": 0, "ambang": 1}) or {}
+    return {"efektif": await ambang_kapitalisasi(),
+            "default": AMBANG_KAPITALISASI_DEFAULT,
+            "override": doc.get("ambang") or {}}
+
+
+@mutasi_bmn_router.put("/pembukuan/ambang-kapitalisasi")
+async def simpan_ambang(payload: AmbangIn,
+                        admin: dict = Depends(require_admin)):
+    """Simpan override ambang kapitalisasi (admin). Kosongkan dict = kembali
+    ke default PMK 181. Hanya golongan 3 (Peralatan & Mesin) dan 4 (Gedung &
+    Bangunan) yang punya ambang menurut PMK 181; golongan lain ditolak agar
+    tidak diam-diam mengeluarkan tanah/jalan dari neraca."""
+    from pembukuan_utils import parse_harga
+    bersih = {}
+    for k, v in (payload.ambang or {}).items():
+        g = str(k or "").strip()
+        if g not in ("3", "4"):
+            raise HTTPException(
+                status_code=400,
+                detail="Hanya golongan 3 dan 4 yang ber-ambang (PMK 181)")
+        harga = parse_harga(v)
+        if harga <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Ambang golongan {g} harus angka rupiah > 0")
+        bersih[g] = harga
+    await db.report_settings.update_one(
+        {"type": "kapitalisasi"},
+        {"$set": {"ambang": bersih,
+                  "updated_at": datetime.now(timezone.utc).isoformat(),
+                  "updated_by": admin.get("username", "system")}},
+        upsert=True)
+    await log_audit("ubah_ambang_kapitalisasi", "", "kapitalisasi",
+                    username=admin.get("username", "system"),
+                    detail=f"Override ambang kapitalisasi: {bersih or 'default PMK 181'}")
+    from shared_utils import ambang_kapitalisasi
+    return {"ok": True, "efektif": await ambang_kapitalisasi()}

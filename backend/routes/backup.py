@@ -29,7 +29,7 @@ APP_VERSION = "3.4.0"
 # koleksi/modul baru otomatis ikut ter-backup, ter-restore, & ter-reset.
 from backup_utils import (  # noqa: E402
     SKIP_COLLECTIONS, KEEP_ID_COLLECTIONS, RESET_KEEP_COLLECTIONS,
-    LEGACY_COLLECTION_ALIASES, collections_to_process, collections_to_reset,
+    LEGACY_COLLECTION_ALIASES, collections_to_process,
     collections_from_backup,
 )
 
