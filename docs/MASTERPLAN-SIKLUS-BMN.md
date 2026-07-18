@@ -18,10 +18,17 @@
 
 ## 1. Ringkasan Eksekutif
 
-AMAN hari ini adalah aplikasi **inventarisasi aset** yang matang: kegiatan
+> **Status per v2.4 (Juli 2026):** roadmap masterplan ini telah TEREALISASI
+> secara luas. AMAN kini menjalankan siklus penuh BMN — seluruh 12 tahap +
+> master pendukung aktif di Beranda Modul — berjalan **multi-satker
+> terisolasi**, dengan **sinkronisasi SIMAN V2**, **tanda tangan
+> elektronik**, **cetak stiker label**, dan **backup otomatis terjadwal**.
+> Bagian di bawah dipertahankan sebagai rekam jejak arah & prinsip integrasi.
+
+AMAN bermula sebagai aplikasi **inventarisasi aset** yang matang: kegiatan
 ber-tiket, mode lapangan offline-first, kolaborasi real-time aman (OCC +
 locking), kamera + scan QR, peta GIS, 13+ laporan resmi, dan pengesahan
-berkekuatan dokumen. Dalam siklus pengelolaan BMN, posisi ini adalah
+berkekuatan dokumen. Dalam siklus pengelolaan BMN, posisi awal ini adalah
 **Penatausahaan › Inventarisasi**.
 
 Masterplan ini mengarahkan pengembangan selanjutnya:

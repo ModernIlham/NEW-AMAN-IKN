@@ -2,7 +2,7 @@
 
 > Sistem Inventarisasi Barang Milik Negara (BMN) berbasis web, standar pemerintah Indonesia (SE 17/SE/M/2024 & LKPP 85/2025)
 
-**Versi:** 2.3 (Juli 2026) — Peta aset interaktif + ekspor GIS, kamera lapangan penuh, CI/CD auto-deploy
+**Versi:** 2.4 (Juli 2026) — Siklus penuh BMN: sinkronisasi SIMAN V2 tangguh + buat draft aset, cetak stiker label, tanda tangan elektronik pada dokumen, master SDM & referensi akun BAS, isolasi multi-satker, backup otomatis, dan perombakan UI/UX menyeluruh 26 halaman
 
 ---
 
@@ -19,15 +19,17 @@ tiap rilis/PR (termasuk catatan teknis penting soal aturan tap-target 44px di �
 
 ## 🧭 Arah Pengembangan — Siklus Penuh Pengelolaan BMN
 
-AMAN berkembang bertahap dari aplikasi inventarisasi menjadi platform siklus
-penuh pengelolaan BMN (PP 27/2014). **Beranda Modul** — halaman pertama
-setelah login — memetakan seluruh tahap siklus: *Penatausahaan ›
-Inventarisasi Aset* aktif penuh; **SEMUA 14 modul siklus lainnya sudah
-Sebagian Aktif** (Persediaan, Pelaporan, Perencanaan, Penganggaran,
-Pengadaan, Penggunaan, Pemanfaatan, Penilaian, Pengamanan, Pemeliharaan,
-Pemindahtanganan, Pemusnahan, Penghapusan, Wasdal) — seluruh kartu siklus
-bisa dimasuki; hanya sub-modul Pembukuan/KIB yang masih **Segera Hadir**
-(menunggu verifikasi lampiran PMK 181).
+AMAN telah menjadi platform siklus penuh pengelolaan BMN (PP 27/2014).
+**Beranda Modul** — halaman pertama setelah login — memetakan seluruh tahap
+siklus: *Penatausahaan › Inventarisasi Aset* aktif penuh; **SEMUA modul
+siklus lainnya aktif** (Persediaan, Pelaporan, Pembukuan, Perencanaan,
+Penganggaran, Pengadaan, Penggunaan, Pemanfaatan, Penilaian, Pengamanan,
+Pemeliharaan, Pemindahtanganan, Pemusnahan, Penghapusan, Wasdal) beserta
+master pendukung (Kodefikasi, Pegawai, Pejabat, Ruangan, Unit Kerja,
+Referensi Akun BAS, Satker). Aplikasi berjalan **multi-satker terisolasi**
+(data tiap satker terpisah; super-admin lintas-satker), dengan
+**sinkronisasi SIMAN V2**, **tanda tangan elektronik**, **cetak stiker
+label BMN**, dan **backup otomatis terjadwal**.
 
 - Rencana induk & prinsip integrasi antar modul: [`docs/MASTERPLAN-SIKLUS-BMN.md`](./docs/MASTERPLAN-SIKLUS-BMN.md)
 - Rujukan regulasi & alur bisnis: [`docs/PUSTAKA-REGULASI-BMN.md`](./docs/PUSTAKA-REGULASI-BMN.md)
@@ -137,6 +139,21 @@ pra-isi** untuk SIMAN v2 (#122) + **register penertiban ber-tenggat
 insidentil 10+5 hari kerja dengan PDF Berita Acara** (#142) + **arsip
 lampiran per tiket insidentil** (#156).
 **Seluruh kartu modul siklus kini bisa dimasuki dari Beranda Modul.**
+
+---
+
+## 🆕 Highlight Rilis v2.4 (Juli 2026)
+
+- 🔄 **Sinkronisasi SIMAN V2 tangguh** — impor ekspor "Master Aset" dengan deteksi header di semua sheet, unggah andal (progres %, timeout longgar, coba-ulang otomatis saat koneksi putus), validasi kode satker, tanda "≠ SIMAN" per aset; baris SIMAN belum tercatat bisa **diunduh CSV atau dibuat aset draft massal 1-klik** (#405).
+- 🏷️ **Cetak Stiker Label BMN** — 3 ukuran (besar/sedang/kecil) × kertas A4/A3 penuh-halaman, ikut filter & kelompok, QR ber-payload kode register + logo di tengah (level H), header nama/kode satker, rekap jumlah per ukuran (#397–#402).
+- ✍️ **Tanda Tangan Elektronik** — TTD via link per penanda tangan (kanvas mulus / foto→PNG transparan), **dibubuhkan langsung ke dokumen PDF unggahan**, QR + hash verifikasi publik (NIP di-masking), token sekali-pakai (#398).
+- 👥 **Master SDM & Referensi** — Master Pegawai (impor Excel massal), Referensi Pejabat, Unit Kerja Eselon I–V, keterkaitan aset↔pegawai (panel Perlu Serah Terima BMN), **Referensi Akun BAS per makna digit 1–6** (KEP-211/PB/2018) (#391–#394).
+- 🔐 **Isolasi multi-satker & keamanan** — jejak audit, kartu inventarisasi, dan dokumen e-sign ter-scope ketat per satker (tutup kebocoran & IDOR); reset melindungi seluruh master referensi; rate-limit e-sign (#408).
+- ⚡ **Performa** — bilah progres inventarisasi memakai agregasi ringan, indeks database kunci (SIMAN/pemegang/persuratan/pegawai) (#409).
+- 💾 **Backup otomatis** — terjadwal harian + arsip server + retensi + pulihkan langsung dari arsip; siklus data satu rumah di **Pengaturan › Sistem** (#407).
+- 🎨 **Perombakan UI/UX menyeluruh 26 halaman** — nominal tak patah, tak berdesakan di HP, CTA alur menonjol, tooltip lengkap, empty-state ber-arah (#403–#404).
+
+Detail lengkap per PR di [`CHANGELOG.md`](./CHANGELOG.md) (#403–#411).
 
 ---
 
