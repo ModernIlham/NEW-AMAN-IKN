@@ -27,6 +27,7 @@ import {
   BulkDeleteDialog,
   AssetGalleryView,
 } from "@/components/assets";
+import CetakStikerDialog from "@/components/assets/CetakStikerDialog";
 // Heavy panels - lazy loaded (only when user opens them)
 const BatchEditPanel = lazy(() => import("@/components/assets/BatchEditPanel"));
 const AnalyticsPanel = lazy(() => import("@/components/assets/AnalyticsPanel"));
@@ -1403,6 +1404,17 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     } catch (err) { console.error('Print card error:', err); progress.error(getApiError(err, "Gagal cetak kartu")); }
   }, []);
 
+  // ── Cetak Stiker Label BMN (3 ukuran × A4/A3, ikut filter aktif) ──
+  const [stikerOpen, setStikerOpen] = useState(false);
+  const buildStikerParams = useCallback(() => {
+    const params = new URLSearchParams();
+    if (debouncedSearch) params.append("search", debouncedSearch);
+    if (filterCategory && filterCategory !== "Semua") params.append("category", filterCategory);
+    if (activity?.id) params.append("activity_id", activity.id);
+    buildFilterParams(params);
+    return params;
+  }, [debouncedSearch, filterCategory, activity, buildFilterParams]);
+
   const handlePrintBulkCards = useCallback(async () => {
     if (assets.length === 0) { toast.error("Tidak ada aset untuk dicetak"); return; }
     const progress = makeDownloadProgress(`${assets.length} kartu inventaris`);
@@ -1606,6 +1618,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
               activeFilterCount={activeFilterCount} showAdvancedFilter={showAdvancedFilter} setShowAdvancedFilter={setShowAdvancedFilter}
               sortBy={sortBy} setSortBy={setSortBy} exporting={exporting} handleExport={handleExport} handleExportExecutivePDF={handleExportExecutivePDF}
               handlePreviewExecutive={handlePreviewExecutive} perms={perms} openDialog={openDialog} handlePrintBulkCards={handlePrintBulkCards}
+              onCetakStiker={() => setStikerOpen(true)}
               assetsCount={assets.length} filters={filters} filterOptions={filterOptions} handleAdvancedFilterChange={handleAdvancedFilterChange}
               resetAdvancedFilters={resetAdvancedFilters} handleCategoryReset={() => { handleCategoryReset(); refreshData(1); }}
               refreshData={refreshData} viewMode={viewMode} setViewMode={setViewMode}
@@ -1764,6 +1777,8 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
 
       <BulkDeleteDialog open={dialogs.bulkDelete} onClose={v => setDialog('bulkDelete', v)} activityId={activity?.id} activityName={activity?.nama_kegiatan} totalItems={totalItems} onSuccess={() => refreshData(1)} />
       <CategoryManagerDialog open={dialogs.categoryManager} onClose={v => setDialog('categoryManager', v)} categories={categories} onCategoriesChanged={doFetchCategories} />
+      <CetakStikerDialog open={stikerOpen} onOpenChange={setStikerOpen}
+        buildParams={buildStikerParams} totalItems={totalItems} pageAssets={assets} />
       <Suspense fallback={null}>
         {dialogs.import && <LazyImportDialog open={dialogs.import} onClose={handleImportClose} onSuccess={() => { clearDropFile(); refreshData(1); doFetchCategories(); }} activityId={activity?.id} preloadFile={dropFile} />}
         {dialogs.userManagement && <LazyUserManagementDialog open={dialogs.userManagement} onClose={() => closeDialog('userManagement')} currentUser={user} />}

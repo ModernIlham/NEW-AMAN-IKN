@@ -2,7 +2,7 @@ import React, { memo, useState, useEffect, useRef } from "react";
 import {
   Search, Filter, Download, Upload, Settings,
   Loader2, Trash2, Eye, FileText, FileSpreadsheet, CreditCard,
-  List, LayoutGrid, MapPinned,
+  List, LayoutGrid, MapPinned, Tags,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,7 +58,7 @@ const DashboardToolbar = memo(function DashboardToolbar({
   sortBy, setSortBy,
   exporting, handleExport, handleExportExecutivePDF, handlePreviewExecutive,
   perms, openDialog,
-  handlePrintBulkCards, assetsCount,
+  handlePrintBulkCards, onCetakStiker, assetsCount,
   filters, filterOptions, handleAdvancedFilterChange,
   resetAdvancedFilters, handleCategoryReset,
   refreshData,
@@ -212,6 +212,10 @@ const DashboardToolbar = memo(function DashboardToolbar({
           <Button variant="outline" size="sm" className="h-8 text-xs" onClick={handlePrintBulkCards} disabled={assetsCount === 0}>
             <CreditCard className="w-3 h-3 mr-1" />Cetak Kartu ({assetsCount})
           </Button>
+          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onCetakStiker} disabled={assetsCount === 0}
+            data-testid="toolbar-cetak-stiker">
+            <Tags className="w-3 h-3 mr-1" />Stiker
+          </Button>
         </div>
 
         {/* Mobile/Tablet toolbar — satu baris kontrol ringkas (semua h-9).
@@ -292,6 +296,9 @@ const DashboardToolbar = memo(function DashboardToolbar({
               )}
               <DropdownMenuItem onClick={handlePrintBulkCards} disabled={assetsCount === 0}>
                 <CreditCard className="w-4 h-4 mr-2" />Cetak Kartu
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onCetakStiker} disabled={assetsCount === 0} data-testid="mobile-cetak-stiker">
+                <Tags className="w-4 h-4 mr-2" />Cetak Stiker Label
               </DropdownMenuItem>
               {perms.canBulkDelete && (
                 <DropdownMenuItem
