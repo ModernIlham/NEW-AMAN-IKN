@@ -48,6 +48,24 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#402] Stiker: gap aman QR (mesin cutting) + info sub-sub kelompok + logo di tengah QR (kecil) — 2026-07-18
+
+Tiga permintaan pemilik:
+- **Gap aman QR dari garis tepi** (1,8mm dari tepi kanan/bawah & garis
+  header) — antisipasi meleset di mesin cutting: QR tidak ikut terpotong.
+- **Info SUB-SUB KELOMPOK aset** tampil di stiker (semua ukuran): uraian
+  di-resolve batch dari master kodefikasi berdasarkan kode barang, fallback
+  kategori aset.
+- **Stiker KECIL: logo instansi di tengah QR** (tidak ada ruang logo di
+  header) dengan kotak putih + koreksi galat QR dinaikkan ke LEVEL H (30%)
+  — keterbacaan dibuktikan empiris: QR ber-logo hasil render DIDEKODE ULANG
+  dan menghasilkan payload persis (#kode register).
+- Verifikasi: 531 tes unit lulus, smoke render 6 kombinasi + uraian sub-sub
+  tampil, dekode QR ber-logo lulus, pratinjau visual diperiksa, server
+  ter-import, build sukses.
+
+---
+
 ## [#401] Stiker: ukuran optimal penuh-halaman, nama satker di header, QR mepet tepi, ukuran per aset — 2026-07-18
 
 Empat permintaan pemilik sekaligus:

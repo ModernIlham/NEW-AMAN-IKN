@@ -47,6 +47,22 @@ def _logo_reader(logo_url: str):
         return None
 
 
+def _qr_drawing(payload: str, size: float, level: str = "M"):
+    """QR lokal dengan level koreksi galat dapat diatur — level "H" (30%)
+    dipakai saat logo ditumpangkan di tengah QR agar tetap terbaca."""
+    try:
+        from reportlab.graphics.barcode import qr
+        from reportlab.graphics.shapes import Drawing
+        widget = qr.QrCodeWidget(payload, barLevel=level, barBorder=1)
+        x0, y0, x1, y1 = widget.getBounds()
+        w, h = (x1 - x0) or 1, (y1 - y0) or 1
+        d = Drawing(size, size, transform=[size / w, 0, 0, size / h, 0, 0])
+        d.add(widget)
+        return d
+    except Exception:
+        return None
+
+
 def _potong_baris(teks, font, size, lebar, maks_baris):
     """Pecah teks ke maks N baris selebar `lebar`; baris terakhir di-'...'."""
     from reportlab.lib.utils import simpleSplit
@@ -105,14 +121,19 @@ def _gambar_stiker(c, x, y, w, h, target, aset, kop, logo, mm):
     c.setLineWidth(0.5)
     c.line(x, hdr_y, x + w, hdr_y)
 
-    # ── Badan: teks kiri, QR kanan MEPET tepi (kanan/bawah/garis header) ──
-    qr_sisi = h - hdr
-    qr_x = x + w - qr_sisi
+    # ── Badan: teks kiri, QR kanan dengan GAP AMAN dari garis tepi
+    # (antisipasi meleset di mesin cutting — QR tidak ikut terpotong) ──
+    pad_qr = 1.8 * mm
+    qr_sisi = h - hdr - 2 * pad_qr
+    qr_x = x + w - pad_qr - qr_sisi
+    qr_y = y + pad_qr
     lebar_teks = qr_x - x - 2 * pad
 
     kode = str(aset.get("asset_code") or "").strip()
     nup = str(aset.get("NUP") or "").strip()
-    kategori = str(aset.get("category") or "").strip()
+    # Sub-sub kelompok dari kodefikasi (di-resolve batch oleh endpoint);
+    # fallback kategori aset.
+    subsub = str(aset.get("_subsub") or aset.get("category") or "").strip()
     nama_brg = str(aset.get("asset_name") or "").strip()
 
     ty = y + h - hdr - pad - f_kode
@@ -126,26 +147,39 @@ def _gambar_stiker(c, x, y, w, h, target, aset, kop, logo, mm):
                  - stringWidth(label_nup, "Helvetica-Bold", f_kode))
         c.drawString(max(nx, x + pad), ty, label_nup)
     ty -= f_teks * 1.25
-    if kategori and target["baris_desc"] >= 2:
+    if subsub:
         c.setFont("Helvetica", f_teks)
-        c.drawString(x + pad, ty, kategori[:40])
-        ty -= f_teks * 1.5
+        c.drawString(x + pad, ty, subsub[:48])
+        ty -= f_teks * (1.5 if target["baris_desc"] >= 2 else 1.2)
     c.setFont("Helvetica", f_teks)
     for baris in _potong_baris(nama_brg, "Helvetica", f_teks, lebar_teks,
                                target["baris_desc"]):
         c.drawString(x + pad, ty, baris)
         ty -= f_teks * 1.2
 
-    # QR — payload format pemindai kartu (#kreg / #kode-nup).
+    # QR — payload format pemindai kartu (#kreg / #kode-nup). Stiker KECIL
+    # tak punya ruang logo di header → logo ditaruh DI TENGAH QR dengan
+    # koreksi galat tertinggi (level H, 30%) agar QR tetap terbaca.
     kreg = str(aset.get("kode_register") or "").strip()
     payload = f"#{kreg}" if kreg else f"#{kode}-{nup or '0'}"
+    logo_di_qr = logo is not None and (w / mm) < 60
     try:
         from reportlab.graphics import renderPDF
-
-        from routes.cards import build_qr_flowable
-        qr = build_qr_flowable(payload, qr_sisi)
-        if qr is not None:
-            renderPDF.draw(qr, c, qr_x, y)
+        d = _qr_drawing(payload, qr_sisi, level="H" if logo_di_qr else "M")
+        if d is not None:
+            renderPDF.draw(d, c, qr_x, qr_y)
+            if logo_di_qr:
+                kotak = qr_sisi * 0.26
+                sisi_logo = qr_sisi * 0.22
+                cx = qr_x + (qr_sisi - kotak) / 2
+                cy = qr_y + (qr_sisi - kotak) / 2
+                c.setFillGray(1)
+                c.rect(cx, cy, kotak, kotak, stroke=0, fill=1)
+                c.setFillGray(0)
+                c.drawImage(logo, qr_x + (qr_sisi - sisi_logo) / 2,
+                            qr_y + (qr_sisi - sisi_logo) / 2,
+                            width=sisi_logo, height=sisi_logo,
+                            preserveAspectRatio=True, mask="auto")
     except Exception:
         pass
 
@@ -240,6 +274,23 @@ async def cetak_stiker_label(
     if not aset:
         raise HTTPException(status_code=404,
                             detail="Tidak ada aset sesuai filter/pilihan")
+
+    # Uraian SUB-SUB KELOMPOK dari master kodefikasi (satu query batch) —
+    # tampil di stiker sebagai info kategori terinci; fallback kategori aset.
+    import re as _re
+    kode_set = {_re.sub(r"\D", "", str(a.get("asset_code") or ""))
+                for a in aset}
+    kode_set.discard("")
+    peta_subsub = {}
+    if kode_set:
+        async for k in db.kodefikasi.find(
+                {"kode": {"$in": sorted(kode_set)}},
+                {"_id": 0, "kode": 1, "uraian": 1}):
+            peta_subsub[k["kode"]] = k["uraian"]
+    for a in aset:
+        kd = _re.sub(r"\D", "", str(a.get("asset_code") or ""))
+        if peta_subsub.get(kd):
+            a["_subsub"] = peta_subsub[kd]
 
     kop = await pengaturan_kop(kode_satker=kode_satker_user(_user)) or {}
     logo = _logo_reader(kop.get("logo_url"))
