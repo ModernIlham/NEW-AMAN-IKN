@@ -61,6 +61,9 @@ export default function PelaporanPage({ user, onBack }) {
   const [bukaSampul, setBukaSampul] = useState(false);
   // Dialog reklasifikasi kodefikasi (G7): {cari, hasil, aset, kode_baru, alasan, saving}
   const [reklas, setReklas] = useState(null);
+  // Arsip laporan lintas kegiatan (surat ber-nomor + kegiatan disahkan + periode FINAL)
+  const [arsip, setArsip] = useState(null);
+  const [qArsip, setQArsip] = useState("");
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
   const { minta, transitionDialog } = useTransitionDialog();
@@ -77,6 +80,9 @@ export default function PelaporanPage({ user, onBack }) {
       .then((r) => setActivities(Array.isArray(r.data) ? r.data : (r.data?.items || [])))
       .catch(() => toast.error("Gagal memuat daftar kegiatan"))
       .finally(() => setLoading(false));
+    axios.get(`${API}/pelaporan/arsip`)
+      .then((r) => setArsip(r.data))
+      .catch(() => setArsip({ items: [], ringkas: {} }));
     muatPeriode();
   }, [muatPeriode]);
 
@@ -177,6 +183,14 @@ export default function PelaporanPage({ user, onBack }) {
       { label: `${item.nama} — ${activity.nama_kegiatan || ""}` },
     ).catch(() => {});
   };
+
+  const tampilArsip = useMemo(() => {
+    const s = qArsip.trim().toLowerCase();
+    const items = arsip?.items || [];
+    if (!s) return items;
+    return items.filter((i) =>
+      `${i.judul} ${i.nomor} ${i.sub}`.toLowerCase().includes(s));
+  }, [arsip, qArsip]);
 
   return (
     <div className="min-h-screen bg-background" data-testid="pelaporan-page">
@@ -304,6 +318,60 @@ export default function PelaporanPage({ user, onBack }) {
               })()}
             </DropdownMenuContent>
           </DropdownMenu>
+        </div>
+
+        {/* ── ARSIP LAPORAN lintas kegiatan & periode (satu daftar) ── */}
+        <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="pelaporan-arsip">
+          <div className="px-3 py-2.5 border-b border-border flex items-center gap-2 flex-wrap">
+            <span className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center flex-shrink-0">
+              <FileText className="w-4 h-4 text-white" />
+            </span>
+            <div className="flex-1 min-w-[140px]">
+              <p className="text-xs font-semibold text-foreground">Arsip Laporan Lintas Kegiatan</p>
+              <p className="text-[10px] text-muted-foreground">
+                Naskah ber-nomor (Persuratan) + kegiatan disahkan + periode FINAL — satu daftar riwayat
+              </p>
+            </div>
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input value={qArsip} onChange={(e) => setQArsip(e.target.value)}
+                placeholder="Cari nomor/judul…" className="pl-8 h-8 w-44 text-xs" data-testid="arsip-cari" />
+            </div>
+          </div>
+          {!arsip ? (
+            <div className="py-6 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" /></div>
+          ) : tampilArsip.length === 0 ? (
+            <p className="text-center text-[11px] text-muted-foreground py-6">
+              Belum ada arsip — booking nomor laporan, sahkan kegiatan, atau kunci periode akan muncul di sini.
+            </p>
+          ) : (
+            <div className="divide-y divide-border/60 max-h-72 overflow-y-auto">
+              {tampilArsip.slice(0, 60).map((it) => (
+                <div key={`${it.tipe}-${it.id}`} className="px-3 py-2 flex items-center gap-2.5">
+                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase flex-shrink-0 ${
+                    it.tipe === "kegiatan" ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                      : it.tipe === "periode" ? "bg-slate-500/15 text-slate-600 dark:text-slate-400"
+                        : "bg-cyan-500/15 text-cyan-700 dark:text-cyan-400"}`}>
+                    {it.tipe}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[12px] font-semibold truncate">{it.judul}</p>
+                    <p className="text-[10px] text-muted-foreground truncate">
+                      {it.nomor ? `${it.nomor} · ` : ""}{it.sub}{it.tanggal ? ` · ${it.tanggal}` : ""}
+                    </p>
+                  </div>
+                  <span className="px-1.5 py-0.5 rounded-full bg-muted text-[9px] font-bold text-muted-foreground flex-shrink-0 uppercase">
+                    {it.status || "-"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          {arsip && (
+            <p className="px-3 py-1.5 text-[10px] text-muted-foreground border-t border-border">
+              {arsip.ringkas?.surat || 0} naskah ber-nomor · {arsip.ringkas?.kegiatan || 0} kegiatan disahkan · {arsip.ringkas?.periode || 0} periode FINAL
+            </p>
+          )}
         </div>
 
         {/* ── Sinkronisasi berkala dengan SIMAN V2 (impor manual ekspor) ── */}

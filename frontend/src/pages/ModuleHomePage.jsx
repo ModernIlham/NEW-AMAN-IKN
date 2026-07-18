@@ -57,7 +57,7 @@ function StatusBadge({ status }) {
  * tahap siklus lain sudah punya kamarnya masing-masing dengan status Segera
  * Hadir — klik kartunya menampilkan konsep, rencana fitur, dan fase roadmap.
  */
-export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onShowInfo, onEnterInventarisasi, onOpenKodefikasi, onOpenPejabat, onOpenRuangan, onOpenReferensiAkun, onOpenPegawai, onOpenPersuratan, onOpenPersediaan, onOpenPelaporan, onOpenPenggunaan, onOpenPengamanan, onOpenPemeliharaan, onOpenPerencanaan, onOpenPenilaian, onOpenPenghapusan, onOpenPemanfaatan, onOpenPemusnahan, onOpenPemindahtanganan, onOpenWasdal, onOpenPenganggaran, onOpenPengadaan, onOpenTtd, onOpenSatker, onOpenPengaturan }) {
+export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onShowInfo, onEnterInventarisasi, onOpenKodefikasi, onOpenPejabat, onOpenRuangan, onOpenReferensiAkun, onOpenPegawai, onOpenPersuratan, onOpenPersediaan, onOpenPelaporan, onOpenPenggunaan, onOpenPengamanan, onOpenPemeliharaan, onOpenPerencanaan, onOpenPenilaian, onOpenPenghapusan, onOpenPemanfaatan, onOpenPemusnahan, onOpenPemindahtanganan, onOpenWasdal, onOpenPenganggaran, onOpenPengadaan, onOpenTtd, onOpenSatker, onOpenPengaturan, onOpenPembukuan }) {
   const [detail, setDetail] = useState(null); // modul yang dibuka konsepnya
   const activateInfo = useTripleClick(onShowInfo);
   const DetailIcon = detail ? (MODULE_ICONS[detail.id] || Package) : null;
@@ -71,6 +71,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
     if (mod.id === "inventarisasi-aset") onEnterInventarisasi();
     else if (mod.id === "inventarisasi-persediaan" && onOpenPersediaan) onOpenPersediaan();
     else if (mod.id === "pelaporan" && onOpenPelaporan) onOpenPelaporan();
+    else if (mod.id === "pembukuan" && onOpenPembukuan) onOpenPembukuan();
     else if (mod.id === "penggunaan" && onOpenPenggunaan) onOpenPenggunaan();
     else if (mod.id === "pengamanan" && onOpenPengamanan) onOpenPengamanan();
     else if (mod.id === "pemeliharaan" && onOpenPemeliharaan) onOpenPemeliharaan();
@@ -291,7 +292,8 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
               const aktif = mod.id === "inventarisasi-aset";
               const enterable = aktif
                 || (mod.id === "inventarisasi-persediaan" && !!onOpenPersediaan)
-                || (mod.id === "pelaporan" && !!onOpenPelaporan);
+                || (mod.id === "pelaporan" && !!onOpenPelaporan)
+                || (mod.id === "pembukuan" && !!onOpenPembukuan);
               return (
                 <button
                   key={mod.id}
@@ -316,6 +318,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
                     <span className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 group-hover:gap-1.5 transition-all">
                       {aktif ? "Masuk Modul"
                         : mod.id === "pelaporan" ? "Buka Arsip Pelaporan"
+                        : mod.id === "pembukuan" ? "Buka Pembukuan"
                         : "Buka Master Persediaan"} <ChevronRight className="w-3.5 h-3.5" />
                     </span>
                   )}

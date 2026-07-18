@@ -231,3 +231,35 @@ async def simpan_ambang(payload: AmbangIn,
                     detail=f"Override ambang kapitalisasi: {bersih or 'default PMK 181'}")
     from shared_utils import ambang_kapitalisasi
     return {"ok": True, "efektif": await ambang_kapitalisasi()}
+
+
+# ============================================================================
+# DBKP JSON — Daftar Barang Kuasa Pengguna GLOBAL (halaman modul Pembukuan)
+# ============================================================================
+
+@mutasi_bmn_router.get("/pembukuan/dbkp")
+async def dbkp_json(_user: dict = Depends(require_user)):
+    """Rekap DBKP per golongan (intra/ekstrakomptabel, ambang efektif) atas
+    SELURUH aset aktif — sumber halaman Pembukuan. Ter-scope satker user."""
+    from kodefikasi_utils import GOLONGAN_DEFAULTS
+    from pembukuan_utils import build_dbkp_rows, posisi_neraca
+    from persediaan_utils import nilai_persediaan_dari_batches
+    from report_filters import active_asset_filter
+    from shared_utils import ambang_kapitalisasi, scope_query_aset
+
+    q = await scope_query_aset(_user, active_asset_filter())
+    assets = await db.assets.find(
+        q, {"_id": 0, "asset_code": 1, "purchase_price": 1,
+            "nilai_wajar_terakhir": 1}).to_list(500000)
+    uraian_map = {k: u for k, u in GOLONGAN_DEFAULTS}
+    async for k in db.kodefikasi.find({"level": 1}, {"_id": 0, "kode": 1, "uraian": 1}):
+        if k.get("uraian"):
+            uraian_map[k["kode"]] = k["uraian"]
+    amb = await ambang_kapitalisasi()
+    rows, total = build_dbkp_rows(assets, uraian_map, ambang=amb)
+    p_jumlah, p_nilai = 0, 0.0
+    async for it in db.persediaan.find({}, {"_id": 0, "batches": 1}):
+        p_jumlah += 1
+        p_nilai += nilai_persediaan_dari_batches(it.get("batches"))
+    return {"rows": rows, "total": total, "ambang": amb,
+            "posisi": posisi_neraca(rows, total, p_jumlah, p_nilai)}
