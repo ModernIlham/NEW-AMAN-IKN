@@ -18,6 +18,7 @@ from auth_utils import (
 )
 from db import db, fs_bucket
 from shared_utils import (
+    kode_satker_user, scope_query_field_satker,
     delete_document_from_gridfs, get_document_from_gridfs, log_audit,
 )
 from pemindahtanganan_utils import (
@@ -100,7 +101,7 @@ async def export_pemindahtanganan(_user: dict = Depends(require_user)):
                 "tanggal_persetujuan", "nomor_dokumen", "ntpn",
                 "nomor_sk_penghapusan", "tanggal_usulan", "keterangan",
                 "jumlah_lampiran", "dibuat_oleh"])
-    async for u in db.pemindahtanganan.find({}, {"_id": 0}).sort("created_at", -1):
+    async for u in db.pemindahtanganan.find(scope_query_field_satker(_user), {"_id": 0}).sort("created_at", -1):
         aset = u.get("aset") or []
         w.writerow([
             BENTUK_PEMINDAHTANGANAN.get(u.get("bentuk"), u.get("bentuk")),
@@ -122,7 +123,7 @@ async def export_pemindahtanganan(_user: dict = Depends(require_user)):
 async def list_pemindahtanganan(_user: dict = Depends(require_user)):
     """Register usulan (terbaru dulu) + ringkasan + peringatan tenggat."""
     today_iso = datetime.now(timezone.utc).date().isoformat()
-    items = [u async for u in db.pemindahtanganan.find({}, {"_id": 0})
+    items = [u async for u in db.pemindahtanganan.find(scope_query_field_satker(_user), {"_id": 0})
              .sort("created_at", -1).limit(500)]
     for u in items:
         u["peringatan"] = peringatan_pt(u, today_iso)
@@ -176,6 +177,7 @@ async def buat_usulan_pt(payload: UsulanPtIn, user: dict = Depends(require_write
     now = datetime.now(timezone.utc).isoformat()
     record = {
         "id": str(uuid.uuid4()),
+        "kode_satker": kode_satker_user(user),
         "bentuk": data["bentuk"],
         "pihak": data["pihak"].strip(),
         "keterangan": str(data.get("keterangan") or "").strip(),

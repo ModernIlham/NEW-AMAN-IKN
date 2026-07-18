@@ -20,7 +20,7 @@ from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
 )
 from db import db, fs_bucket
-from shared_utils import blok_ttd_kpb_titik, delete_document_from_gridfs, get_document_from_gridfs
+from shared_utils import kode_satker_user, scope_query_field_satker, blok_ttd_kpb_titik, delete_document_from_gridfs, get_document_from_gridfs
 from wasdal_utils import (
     AMBANG_BERLARUT_HARI, JENIS_TEMUAN, OBJEK_WASDAL, PEMICU_INSIDENTIL,
     STATUS_INSIDENTIL, SUMBER_PENERTIBAN, STATUS_PENERTIBAN,
@@ -57,16 +57,17 @@ async def _data_pemantauan(ambang_hari: int, user=None):
 
     q_aset = await scope_query_aset(user, {}) if user is not None else {}
     assets = [a async for a in db.assets.find(q_aset, _PROJ_ASET)]
+    _sq = (lambda q: scope_query_field_satker(user, q)) if user is not None else (lambda q: q)
     pemanfaatan = [p async for p in db.pemanfaatan.find(
-        {}, {"_id": 0, "id": 1, "bentuk": 1, "pihak": 1, "asset_name": 1,
+        _sq({}), {"_id": 0, "id": 1, "bentuk": 1, "pihak": 1, "asset_name": 1,
              "berakhir": 1, "nomor_persetujuan": 1, "nomor_perjanjian": 1,
              "ntpn": 1})]
     usulan_hapus = [u async for u in db.usulan_penghapusan.find(
-        {"status": {"$in": ["diusulkan", "diproses"]}},
+        _sq({"status": {"$in": ["diusulkan", "diproses"]}}),
         {"_id": 0, "id": 1, "asset_id": 1, "asset_name": 1, "status": 1,
          "created_at": 1})]
     usulan_pt = [u async for u in db.pemindahtanganan.find(
-        {"status": "disetujui"},
+        _sq({"status": "disetujui"}),
         {"_id": 0, "id": 1, "bentuk": 1, "pihak": 1, "status": 1,
          "tanggal_persetujuan": 1})]
     pemeliharaan = [r async for r in db.pemeliharaan.find(
@@ -143,7 +144,7 @@ class SelesaiPenertibanIn(BaseModel):
 async def daftar_penertiban(_user: dict = Depends(require_user)):
     """Register penertiban + sisa/lewat tenggat + rekap."""
     today_iso = datetime.now(timezone.utc).date().isoformat()
-    items = [t async for t in db.penertiban.find({}, {"_id": 0})
+    items = [t async for t in db.penertiban.find(scope_query_field_satker(_user), {"_id": 0})
              .sort("created_at", -1).limit(500)]
     for t in items:
         t["info_tenggat"] = status_tenggat_penertiban(t, today_iso)
@@ -168,7 +169,7 @@ async def export_penertiban(_user: dict = Depends(require_user)):
     from fastapi.responses import Response as HttpResponse
 
     today_iso = datetime.now(timezone.utc).date().isoformat()
-    items = [t async for t in db.penertiban.find({}, {"_id": 0})
+    items = [t async for t in db.penertiban.find(scope_query_field_satker(_user), {"_id": 0})
              .sort("created_at", -1)]
     buf = io.StringIO()
     w = csv_module.writer(buf)
@@ -198,6 +199,7 @@ async def catat_penertiban(payload: PenertibanIn,
     now = datetime.now(timezone.utc).isoformat()
     record = {
         "id": str(uuid.uuid4()),
+        "kode_satker": kode_satker_user(user),
         "sumber": data["sumber"],
         "tanggal_dasar": data["tanggal_dasar"].strip()[:10],
         "tenggat": tambah_hari_kerja(data["tanggal_dasar"]),
@@ -280,7 +282,7 @@ class LaporInsidentilIn(BaseModel):
 async def daftar_insidentil(_user: dict = Depends(require_user)):
     """Register pemantauan insidentil + tenggat aktif per tiket + rekap."""
     today_iso = datetime.now(timezone.utc).date().isoformat()
-    items = [t async for t in db.pemantauan_insidentil.find({}, {"_id": 0})
+    items = [t async for t in db.pemantauan_insidentil.find(scope_query_field_satker(_user), {"_id": 0})
              .sort("created_at", -1).limit(500)]
     for t in items:
         t["info_tenggat"] = info_tenggat_insidentil(t, today_iso)
@@ -306,7 +308,7 @@ async def export_insidentil(_user: dict = Depends(require_user)):
     from fastapi.responses import Response as HttpResponse
 
     today_iso = datetime.now(timezone.utc).date().isoformat()
-    items = [t async for t in db.pemantauan_insidentil.find({}, {"_id": 0})
+    items = [t async for t in db.pemantauan_insidentil.find(scope_query_field_satker(_user), {"_id": 0})
              .sort("created_at", -1)]
     buf = io.StringIO()
     w = csv_module.writer(buf)
@@ -329,6 +331,7 @@ async def catat_insidentil(payload: InsidentilIn,
     now = datetime.now(timezone.utc).isoformat()
     record = {
         "id": str(uuid.uuid4()),
+        "kode_satker": kode_satker_user(user),
         "pemicu": data["pemicu"],
         "tanggal_mulai": data["tanggal_mulai"].strip()[:10],
         "objek": str(data.get("objek") or "").strip(),

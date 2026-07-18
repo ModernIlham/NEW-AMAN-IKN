@@ -15,7 +15,7 @@ from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
 )
 from db import db, fs_bucket
-from shared_utils import blok_ttd_kpb_titik, delete_document_from_gridfs, get_document_from_gridfs
+from shared_utils import kode_satker_user, scope_query_field_satker, blok_ttd_kpb_titik, delete_document_from_gridfs, get_document_from_gridfs
 from pemusnahan_utils import (
     CARA_PEMUSNAHAN, kelayakan_musnah, rekap_pemusnahan,
     usulan_penghapusan_dari_ba, validate_pemusnahan,
@@ -39,7 +39,7 @@ class PemusnahanIn(BaseModel):
 @pemusnahan_router.get("/pemusnahan")
 async def list_pemusnahan(_user: dict = Depends(require_user)):
     """Register BA pemusnahan (terbaru dulu) + ringkasan + status usulan."""
-    items = [r async for r in db.pemusnahan.find({}, {"_id": 0})
+    items = [r async for r in db.pemusnahan.find(scope_query_field_satker(_user), {"_id": 0})
              .sort("tanggal_ba", -1).limit(500)]
     # Satu kueri: aset BA mana yang sudah punya usulan penghapusan aktif
     semua_id = [a.get("asset_id") for r in items for a in (r.get("aset") or [])]
@@ -73,7 +73,7 @@ async def export_pemusnahan(_user: dict = Depends(require_user)):
     w.writerow(["nomor_ba", "tanggal_ba", "cara", "nomor_persetujuan",
                 "jumlah_aset", "nilai_perolehan", "keterangan",
                 "jumlah_lampiran", "dibuat_oleh"])
-    async for r in db.pemusnahan.find({}, {"_id": 0}).sort("tanggal_ba", -1):
+    async for r in db.pemusnahan.find(scope_query_field_satker(_user), {"_id": 0}).sort("tanggal_ba", -1):
         aset = r.get("aset") or []
         w.writerow([
             r.get("nomor_ba"), r.get("tanggal_ba"),
@@ -110,6 +110,7 @@ async def buat_pemusnahan(payload: PemusnahanIn, user: dict = Depends(require_wr
     now = datetime.now(timezone.utc).isoformat()
     record = {
         "id": str(uuid.uuid4()),
+        "kode_satker": kode_satker_user(user),
         "nomor_ba": data["nomor_ba"].strip(),
         "tanggal_ba": str(data["tanggal_ba"]).strip()[:10],
         "cara": data["cara"],

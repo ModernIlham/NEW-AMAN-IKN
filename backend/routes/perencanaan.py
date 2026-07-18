@@ -166,7 +166,7 @@ class TransisiRkbmnIn(BaseModel):
 @perencanaan_router.get("/perencanaan/usulan")
 async def list_usulan_rkbmn(_user: dict = Depends(require_user)):
     """Register usulan RKBMN per unit (terbaru dulu) + ringkasan."""
-    items = [u async for u in db.perencanaan_usulan.find({}, {"_id": 0})
+    items = [u async for u in db.perencanaan_usulan.find(scope_query_field_satker(_user), {"_id": 0})
              .sort("updated_at", -1).limit(500)]
     return {"items": items, "ringkasan": rekap_usulan_rkbmn(items),
             "label_jenis": JENIS_USULAN_RKBMN,
@@ -192,7 +192,7 @@ async def export_usulan_rkbmn(_user: dict = Depends(require_user)):
     w.writerow(["tahun_rkbmn", "jenis", "unit_pengusul", "uraian", "volume",
                 "satuan", "status", "sptjm", "reviu_apip", "kode_barang",
                 "nup", "nama_aset", "keterangan", "dibuat_oleh"])
-    async for u in db.perencanaan_usulan.find({}, {"_id": 0}).sort("updated_at", -1):
+    async for u in db.perencanaan_usulan.find(scope_query_field_satker(_user), {"_id": 0}).sort("updated_at", -1):
         w.writerow([
             u.get("tahun_rkbmn"), JENIS_USULAN_RKBMN.get(u.get("jenis"), u.get("jenis")),
             u.get("unit_pengusul"), u.get("uraian"), u.get("volume"), u.get("satuan"),
@@ -225,6 +225,7 @@ async def buat_usulan_rkbmn(payload: UsulanRkbmnIn,
     now = datetime.now(timezone.utc).isoformat()
     record = {
         "id": str(uuid.uuid4()),
+        "kode_satker": kode_satker_user(user),
         "tahun_rkbmn": data["tahun_rkbmn"].strip(),
         "jenis": data["jenis"],
         "unit_pengusul": data["unit_pengusul"].strip(),
@@ -350,7 +351,7 @@ async def sanding_usulan(usulan_id: str, kode_barang: str = "",
     (param menimpa snapshot aset usulan) + baris standar relevan + catatan
     analisis untuk reviewer (PMK 153/2021 jo. PMK 138/2024)."""
     from perencanaan_utils import sanding_usulan_aset
-    from shared_utils import scope_query_aset
+    from shared_utils import kode_satker_user, scope_query_field_satker, scope_query_aset
     usulan = await db.perencanaan_usulan.find_one({"id": usulan_id}, {"_id": 0})
     if not usulan:
         raise HTTPException(status_code=404, detail="Usulan tidak ditemukan")
