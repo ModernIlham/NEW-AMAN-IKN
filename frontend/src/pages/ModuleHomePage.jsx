@@ -332,10 +332,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
                   <p className="text-[11px] text-muted-foreground mt-1 leading-snug">{mod.ringkas}</p>
                   {enterable && (
                     <span className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 group-hover:gap-1.5 transition-all">
-                      {aktif ? "Masuk Modul"
-                        : mod.id === "pelaporan" ? "Buka Arsip Pelaporan"
-                        : mod.id === "pembukuan" ? "Buka Pembukuan"
-                        : "Buka Master Persediaan"} <ChevronRight className="w-3.5 h-3.5" />
+                      Buka Modul <ChevronRight className="w-3.5 h-3.5" />
                     </span>
                   )}
                 </button>
@@ -395,7 +392,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
                           pengguna tak tahu mana yang navigasi vs dialog konsep. */}
                       <span className={`inline-flex items-center gap-0.5 text-[10px] font-semibold mt-1 ${
                         enterable ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground/70"}`}>
-                        {enterable ? "Masuk Modul" : "Lihat Konsep"} <ChevronRight className="w-3 h-3" />
+                        {enterable ? "Buka Modul" : "Lihat Konsep"} <ChevronRight className="w-3 h-3" />
                       </span>
                     </div>
                   </div>

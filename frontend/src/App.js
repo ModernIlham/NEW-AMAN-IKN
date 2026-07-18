@@ -309,6 +309,22 @@ function App() {
   const [showSatker, setShowSatker] = useState(false);
   // Halaman Pengaturan terpadu (universal / per-satker / sistem)
   const [showPengaturan, setShowPengaturan] = useState(false);
+  // Asal navigasi: bila sub-halaman (Satker/ReferensiAkun/Persuratan/
+  // Pelaporan) DIBUKA DARI Pengaturan, tombol Kembali-nya balik ke Pengaturan
+  // (bukan terlempar ke Beranda Modul). Ref agar tak memicu render.
+  const asalPengaturan = useRef(false);
+  const bukaDariPengaturan = (buka) => {
+    asalPengaturan.current = true;
+    setShowPengaturan(false);
+    buka();
+  };
+  const kembaliSubHalaman = (tutup) => {
+    tutup();
+    if (asalPengaturan.current) {
+      asalPengaturan.current = false;
+      setShowPengaturan(true);
+    }
+  };
   // Halaman Pembukuan (DBKP global + Buku Barang)
   const [showPembukuan, setShowPembukuan] = useState(false);
 
@@ -383,7 +399,7 @@ function App() {
     return (
       <div className="App">
         <Suspense fallback={<PageLoader />}>
-          <ReferensiAkunPage user={user} onBack={() => setShowReferensiAkun(false)} />
+          <ReferensiAkunPage user={user} onBack={() => kembaliSubHalaman(() => setShowReferensiAkun(false))} />
         </Suspense>
         <Toaster position="top-right" richColors />
       </div>
@@ -419,7 +435,7 @@ function App() {
     return (
       <div className="App">
         <Suspense fallback={<PageLoader />}>
-          <PersuratanPage user={user} onBack={() => setShowPersuratan(false)} />
+          <PersuratanPage user={user} onBack={() => kembaliSubHalaman(() => setShowPersuratan(false))} />
         </Suspense>
         <Toaster position="top-right" richColors />
       </div>
@@ -431,7 +447,7 @@ function App() {
     return (
       <div className="App">
         <Suspense fallback={<PageLoader />}>
-          <PelaporanPage user={user} onBack={() => setShowPelaporan(false)} />
+          <PelaporanPage user={user} onBack={() => kembaliSubHalaman(() => setShowPelaporan(false))} />
         </Suspense>
         <Toaster position="top-right" richColors />
       </div>
@@ -604,10 +620,10 @@ function App() {
             dark={dark}
             toggleDark={toggleDark}
             onBack={() => setShowPengaturan(false)}
-            onOpenSatker={() => { setShowPengaturan(false); setShowSatker(true); }}
-            onOpenReferensiAkun={() => { setShowPengaturan(false); setShowReferensiAkun(true); }}
-            onOpenPersuratan={() => { setShowPengaturan(false); setShowPersuratan(true); }}
-            onOpenPelaporan={() => { setShowPengaturan(false); setShowPelaporan(true); }}
+            onOpenSatker={() => bukaDariPengaturan(() => setShowSatker(true))}
+            onOpenReferensiAkun={() => bukaDariPengaturan(() => setShowReferensiAkun(true))}
+            onOpenPersuratan={() => bukaDariPengaturan(() => setShowPersuratan(true))}
+            onOpenPelaporan={() => bukaDariPengaturan(() => setShowPelaporan(true))}
           />
         </Suspense>
         <Toaster position="top-right" richColors />
@@ -632,7 +648,7 @@ function App() {
     return (
       <div className="App">
         <Suspense fallback={<PageLoader />}>
-          <SatkerPage user={user} onBack={() => setShowSatker(false)} />
+          <SatkerPage user={user} onBack={() => kembaliSubHalaman(() => setShowSatker(false))} />
         </Suspense>
         <Toaster position="top-right" richColors />
       </div>
