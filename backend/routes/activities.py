@@ -482,7 +482,30 @@ async def create_inventory_activity(activity: InventoryActivityCreate, _user: di
     
     await db.inventory_activities.insert_one(doc)
     logger.info(f"Inventory activity created: {activity.nomor_surat}")
-    
+
+    # Auto-registrasi MASTER SATKER (M-SATKER): satker baru dari kegiatan
+    # langsung terdaftar (kode+nama+eselon1) tanpa menimpa profil kop yang
+    # sudah dirawat admin ($setOnInsert saja). Best-effort: gagal ≠ batal.
+    try:
+        await db.satker.update_one(
+            {"kode_satker": activity.kode_satker.strip()},
+            {"$setOnInsert": {
+                "id": str(uuid.uuid4()),
+                "kode_satker": activity.kode_satker.strip(),
+                "nama_satker": activity.nama_satker.strip(),
+                "nama_unit_organisasi": "", "nama_sub_unit": "",
+                "alamat": str(activity.alamat_satker or "").strip()
+                if hasattr(activity, "alamat_satker") else "",
+                "tempat_laporan": "", "tembusan_laporan": "",
+                "telepon": "", "email": "",
+                "eselon1": activity.eselon1 or [] if hasattr(activity, "eselon1") else [],
+                "aktif": True, "created_at": now, "updated_at": now,
+                "updated_by": "auto-kegiatan",
+            }},
+            upsert=True)
+    except Exception:
+        logger.warning("Auto-registrasi master satker gagal (non-fatal)", exc_info=True)
+
     # Return the created document without MongoDB ObjectId
     created_doc = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
     # Replace heavy GridFS-stored documents with metadata-only entries for response

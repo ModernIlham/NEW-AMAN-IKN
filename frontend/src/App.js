@@ -47,6 +47,7 @@ const PenganggaranPage = lazy(() => import("./pages/PenganggaranPage"));
 const PengadaanPage = lazy(() => import("./pages/PengadaanPage"));
 const TtdPublikPage = lazy(() => import("./pages/TtdPublikPage"));
 const TtdPermintaanPage = lazy(() => import("./pages/TtdPermintaanPage"));
+const SatkerPage = lazy(() => import("./pages/SatkerPage"));
 
 // ============================================================================
 // LOADING FALLBACK - Shown while lazy components load
@@ -302,6 +303,8 @@ function App() {
   const [showPengadaan, setShowPengadaan] = useState(false);
   // Halaman dasbor Tanda Tangan Elektronik (permintaan e-sign via link)
   const [showTtd, setShowTtd] = useState(false);
+  // Halaman Master Satker (profil & kop per-satker)
+  const [showSatker, setShowSatker] = useState(false);
 
   // ── HALAMAN PUBLIK E-SIGN ──────────────────────────────────────────────
   // /ttd/:id (link tanda tangan yang dibagikan) & /ttd/verifikasi/:id (QR)
@@ -585,6 +588,18 @@ function App() {
     );
   }
 
+  // Master Satker — profil & kop per-satker (multi-satker DB bersama).
+  if (user && showSatker) {
+    return (
+      <div className="App">
+        <Suspense fallback={<PageLoader />}>
+          <SatkerPage user={user} onBack={() => setShowSatker(false)} />
+        </Suspense>
+        <Toaster position="top-right" richColors />
+      </div>
+    );
+  }
+
   // Beranda Modul — rumah Siklus Pengelolaan BMN. Tampil setelah login
   // sampai user memilih modul; modul selain Inventarisasi menampilkan
   // konsep "Segera Hadir" di dalam halaman ini.
@@ -620,6 +635,7 @@ function App() {
             onOpenPenganggaran={() => setShowPenganggaran(true)}
             onOpenPengadaan={() => setShowPengadaan(true)}
             onOpenTtd={() => setShowTtd(true)}
+            onOpenSatker={() => setShowSatker(true)}
           />
         </Suspense>
         <Toaster position="top-right" richColors />

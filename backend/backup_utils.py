@@ -30,7 +30,7 @@ KEEP_ID_COLLECTIONS = {"counters"}
 RESET_KEEP_COLLECTIONS = {
     "users", "report_settings", "compression_quotas", "pdf_compression_quotas",
     "persuratan_settings", "klasifikasi_arsip", "masa_manfaat",
-    "akun_bas", "persediaan_akun", "referensi_akun",
+    "akun_bas", "persediaan_akun", "referensi_akun", "satker",
 }
 
 # Legacy name → canonical (untuk membaca backup lama; mis. activities.json).

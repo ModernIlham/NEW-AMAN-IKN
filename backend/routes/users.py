@@ -103,6 +103,31 @@ async def delete_user(user_id: str, admin_id: str = "", _admin: dict = Depends(r
     await db.users.delete_one({"id": user_id})
     return {"message": "User berhasil dihapus"}
 
+@users_router.put("/users/{user_id}/satker")
+async def set_user_satker(user_id: str, data: dict, _admin: dict = Depends(require_admin)):
+    """Ikat user ke satu satker (M-SATKER, multi-satker DB bersama).
+
+    `kode_satker` terisi = user bekerja untuk satker itu (isolasi data
+    ditegakkan bertahap di M-SCOPE); KOSONG = lintas-satker. Admin dengan
+    kode_satker kosong berperan sebagai SUPER-ADMIN (melihat semua satker) —
+    pola ini dipilih alih-alih role kelima agar tidak menyentuh seluruh
+    permukaan role yang ada."""
+    kode = str(data.get("kode_satker") or "").strip()
+    user = await db.users.find_one({"id": user_id}, {"_id": 0, "id": 1})
+    if not user:
+        raise HTTPException(status_code=404, detail="User tidak ditemukan")
+    if kode:
+        ada = await db.satker.find_one({"kode_satker": kode}, {"_id": 1})
+        if not ada:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Satker {kode} belum terdaftar di Master Satker — daftarkan dulu")
+    await db.users.update_one({"id": user_id}, {"$set": {"kode_satker": kode}})
+    return {"message": ("User diikat ke satker " + kode) if kode
+            else "User dilepas dari ikatan satker (lintas-satker)",
+            "kode_satker": kode}
+
+
 @users_router.put("/users/{user_id}/change-role")
 async def change_user_role(user_id: str, data: dict, _admin: dict = Depends(require_admin)):
     """Change user role (admin only; tidak boleh menurunkan role diri sendiri)"""

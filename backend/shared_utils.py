@@ -470,6 +470,19 @@ async def resolve_pejabat_peran(peran, per_iso=None):
     return pejabat_aktif_untuk_peran(pejabat_list, peran, per_iso)
 
 
+async def pengaturan_kop(activity=None, kode_satker=""):
+    """Setelan kop EFEKTIF untuk laporan sebuah kegiatan: report_settings
+    global di-overlay kop MASTER SATKER (field non-kosong menimpa) berdasar
+    `kode_satker` kegiatan. Tanpa kode satker → setelan global apa adanya."""
+    from satker_utils import gabung_kop
+    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    kode = str(kode_satker or (activity or {}).get("kode_satker") or "").strip()
+    if not kode:
+        return settings
+    satker = await db.satker.find_one({"kode_satker": kode}, {"_id": 0})
+    return gabung_kop(settings, satker) if satker else settings
+
+
 async def ambang_kapitalisasi() -> dict:
     """Ambang kapitalisasi PMK 181 EFEKTIF: default digabung override setelan
     admin (dokumen `report_settings {type: "kapitalisasi"}`, field `ambang`).
