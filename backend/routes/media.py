@@ -270,7 +270,7 @@ async def compress_image(request: CompressRequest, _user: dict = Depends(require
 
 
 @media_router.get("/compression-stats")
-async def get_compression_stats():
+async def get_compression_stats(_user: dict = Depends(require_user)):
     """Get current Tinify compression usage stats (backward compatible)."""
     stats = {
         "tinify_available": TINIFY_AVAILABLE,
@@ -285,13 +285,15 @@ async def get_compression_stats():
             tinify.validate()
             stats["compressions_this_month"] = getattr(tinify, 'compression_count', 0) or 0
             stats["remaining"] = 500 - stats["compressions_this_month"]
-        except Exception as e:
-            stats["error"] = str(e)
+        except Exception:
+            # Jangan bocorkan pesan galat internal SDK ke klien.
+            logger.warning("Gagal validasi Tinify saat ambil stats", exc_info=True)
+            stats["error"] = "Gagal memuat kuota kompresi"
     return stats
 
 
 @media_router.get("/compression-quotas")
-async def get_all_compression_quotas():
+async def get_all_compression_quotas(_user: dict = Depends(require_user)):
     """Get quota status for ALL compression services."""
     month = await get_current_month()
     quotas = []

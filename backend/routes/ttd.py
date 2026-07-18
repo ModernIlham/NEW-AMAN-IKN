@@ -27,7 +27,7 @@ from auth_utils import (
 from db import db, fs_bucket
 from shared_utils import (
     cek_magic_gambar, delete_document_from_gridfs, get_document_from_gridfs,
-    log_audit,
+    limiter, log_audit,
 )
 from ttd_utils import foto_ke_png_transparan, png_transparan_valid
 
@@ -77,7 +77,8 @@ def _png_dari_base64(s: str) -> bytes:
 
 
 @ttd_router.post("/ttd/olah-foto")
-async def olah_foto(file: UploadFile = File(...),
+@limiter.limit("20/minute")
+async def olah_foto(request: Request, file: UploadFile = File(...),
                     _user: dict = Depends(require_user_or_sign_token)):
     """Foto TTD di kertas → PNG TRANSPARAN (hapus background otomatis). Balikan
     pratinjau data-URL base64; klien menampilkan lalu menyimpannya sebagai
@@ -314,6 +315,23 @@ async def buat_permintaan_dengan_dokumen(
     return {**hasil, "dok_nama": file.filename, "dok_halaman": n_hal}
 
 
+def _mask_nip(nip) -> str:
+    """Masking NIP untuk tampilan publik: hanya 3 digit terakhir terlihat."""
+    s = str(nip or "").strip()
+    if len(s) <= 3:
+        return s
+    return "•" * (len(s) - 3) + s[-3:]
+
+
+def _pastikan_pemilik_sr(sr: dict, user: dict) -> None:
+    """403 bila user bukan pembuat permintaan & bukan admin (cegah IDOR:
+    dokumen/PII penanda tangan hanya untuk pembuat & admin)."""
+    if (sr or {}).get("created_by") != (user or {}).get("username") and \
+            (user or {}).get("role") != "admin":
+        raise HTTPException(status_code=403,
+                            detail="Hanya pembuat permintaan atau admin yang berhak")
+
+
 async def _ambil_dokumen_sr(sr_id: str):
     """(sr, bytes PDF asli) — 404 bila permintaan/dokumen tak ada."""
     sr = await db.signature_requests.find_one({"id": sr_id}, _PROJ)
@@ -331,9 +349,10 @@ async def _ambil_dokumen_sr(sr_id: str):
 
 @ttd_router.get("/ttd/permintaan/{sr_id}/dokumen")
 async def dokumen_asli(sr_id: str,
-                       _user: dict = Depends(require_user_or_query_token)):
+                       user: dict = Depends(require_user_or_query_token)):
     """Stream dokumen PDF asli (pratinjau dasbor pembuat)."""
     sr, data = await _ambil_dokumen_sr(sr_id)
+    _pastikan_pemilik_sr(sr, user)
     return StreamingResponse(
         io.BytesIO(data), media_type="application/pdf",
         headers={"Content-Disposition":
@@ -358,7 +377,7 @@ async def dokumen_untuk_penanda_tangan(sr_id: str,
 
 @ttd_router.get("/ttd/permintaan/{sr_id}/dokumen-ttd")
 async def dokumen_ber_ttd(sr_id: str,
-                          _user: dict = Depends(require_user_or_query_token)):
+                          user: dict = Depends(require_user_or_query_token)):
     """Dokumen PDF asli DENGAN BUBUHAN tanda tangan elektronik di halaman
     terakhir: gambar ttd + nama/NIP/jabatan + waktu per penanda tangan yang
     sudah meneken, plus QR verifikasi & kode. Dibangun on-the-fly sehingga
@@ -482,11 +501,12 @@ async def daftar_permintaan(_user: dict = Depends(require_user)):
 
 
 @ttd_router.get("/ttd/permintaan/{sr_id}")
-async def detail_permintaan(sr_id: str, _user: dict = Depends(require_user)):
+async def detail_permintaan(sr_id: str, user: dict = Depends(require_user)):
     """Detail status per penanda tangan (untuk dasbor pembuat)."""
     sr = await db.signature_requests.find_one({"id": sr_id}, {**_PROJ, "signers.jti": 0})
     if not sr:
         raise HTTPException(status_code=404, detail="Permintaan tidak ditemukan")
+    _pastikan_pemilik_sr(sr, user)  # isolasi: hanya pembuat/admin
     return sr
 
 
@@ -572,6 +592,7 @@ async def info_tandatangan(sr_id: str, tok: dict = Depends(require_sign_token)):
 
 
 @ttd_router.post("/ttd/tandatangan/{sr_id}/kirim")
+@limiter.limit("15/minute")
 async def kirim_tandatangan(sr_id: str, payload: SpesimenIn, request: Request,
                             tok: dict = Depends(require_sign_token)):
     """Kirim gambar tanda tangan (PNG transparan) via link publik."""
@@ -669,9 +690,12 @@ async def kirim_tandatangan(sr_id: str, payload: SpesimenIn, request: Request,
 
 @ttd_router.get("/ttd/tandatangan/{sr_id}/gambar/{signer_id}")
 async def gambar_ttd_signer(sr_id: str, signer_id: str,
-                            _user: dict = Depends(require_user_or_query_token)):
+                            user: dict = Depends(require_user_or_query_token)):
     """Stream gambar tanda tangan seorang penanda tangan (pratinjau dasbor)."""
     sr = await db.signature_requests.find_one({"id": sr_id}, _PROJ)
+    if not sr:
+        raise HTTPException(status_code=404, detail="Permintaan tidak ditemukan")
+    _pastikan_pemilik_sr(sr, user)
     sg = next((s for s in (sr or {}).get("signers") or []
                if s.get("signer_id") == signer_id), None)
     fid = str((sg or {}).get("signature_file_id") or "").strip()
@@ -700,7 +724,9 @@ async def verifikasi_publik(sr_id: str):
         "status": sr.get("status"), "dibuat": sr.get("created_at"),
         "penanda_tangan": [
             {"nama": s.get("nama"), "jabatan": s.get("jabatan"),
-             "nip": s.get("nip"), "status": s.get("status"),
+             # NIP di-masking di halaman verifikasi PUBLIK (data pribadi):
+             # cukup 3 digit akhir untuk memastikan kecocokan, sisanya bintang.
+             "nip": _mask_nip(s.get("nip")), "status": s.get("status"),
              "signed_at": s.get("signed_at")}
             for s in sr.get("signers") or []],
         "catatan": ("Tanda tangan elektronik internal satker (integritas + "
@@ -710,7 +736,7 @@ async def verifikasi_publik(sr_id: str):
 
 
 @ttd_router.get("/ttd/permintaan/{sr_id}/lembar-pdf")
-async def lembar_pdf(sr_id: str, _user: dict = Depends(require_user_or_query_token)):
+async def lembar_pdf(sr_id: str, user: dict = Depends(require_user_or_query_token)):
     """Lembar Pengesahan Tanda Tangan Elektronik: judul dokumen + daftar
     penanda tangan dengan GAMBAR tanda tangan, waktu, NIP, dan QR verifikasi."""
     from reportlab.lib.units import mm as rl_mm

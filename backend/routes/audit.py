@@ -7,6 +7,9 @@ import logging
 from fastapi import APIRouter, Depends
 from db import db
 from auth_utils import require_user
+from shared_utils import (
+    id_kegiatan_satker, kode_satker_user, scope_query_aset,
+)
 from penghapusan_utils import normalisasi_jejak_terhapus, rekap_jejak_terhapus
 from integritas_utils import (
     FIELD_IDENTITAS, drift_identitas_daftar, drift_identitas_tunggal,
@@ -31,13 +34,48 @@ logger = logging.getLogger(__name__)
 audit_router = APIRouter()
 
 
+async def _batas_activity_satker(user, activity_id: str):
+    """Terapkan isolasi satker pada query audit_log by activity_id.
+
+    Kembalikan (query_activity_filter, kosong_paksa):
+      - user lintas-satker → ({activity_id} bila diminta, else {}), False.
+      - user terikat satker → activity_id DIBATASI ke kegiatan satkernya;
+        bila diminta activity_id di luar satker → kosong_paksa=True (hasil
+        kosong, bukan bocor lintas satker). Log tanpa activity_id (aksi
+        sistem/lintas modul) tidak tampil bagi user terikat — sengaja.
+    """
+    kode = kode_satker_user(user)
+    if not kode:
+        return ({"activity_id": activity_id} if activity_id else {}), False
+    allowed = set(await id_kegiatan_satker(kode))
+    if activity_id:
+        if activity_id not in allowed:
+            return {}, True
+        return {"activity_id": activity_id}, False
+    return {"activity_id": {"$in": list(allowed)}}, False
+
+
+async def _filter_register_satker(user, query=None) -> dict:
+    """Filter register turunan (usulan_penghapusan/pemindahtanganan/psp/
+    jadwal_pemeliharaan) ke kegiatan milik satker user. Lintas-satker → apa
+    adanya. Mencegah dasbor integritas membocorkan snapshot identitas aset
+    (kode/NUP/nama) lintas satker ke user terikat."""
+    q = dict(query or {})
+    kode = kode_satker_user(user)
+    if kode:
+        q["activity_id"] = {"$in": await id_kegiatan_satker(kode)}
+    return q
+
+
 @audit_router.get("/audit-logs")
 async def get_audit_logs(activity_id: str = "", asset_id: str = "", page: int = 1, page_size: int = 50,
-                         _user: dict = Depends(require_user)):
-    """Get audit logs with optional filtering"""
+                         user: dict = Depends(require_user)):
+    """Get audit logs with optional filtering (ter-scope satker)."""
     query = {}
-    if activity_id:
-        query["activity_id"] = activity_id
+    scope, kosong = await _batas_activity_satker(user, activity_id)
+    if kosong:
+        return {"logs": [], "total": 0, "page": 1, "page_size": page_size, "total_pages": 1}
+    query.update(scope)
     if asset_id:
         query["asset_id"] = asset_id
 
@@ -62,16 +100,19 @@ async def get_audit_logs(activity_id: str = "", asset_id: str = "", page: int = 
 @audit_router.get("/audit-logs/aset-terhapus")
 async def get_jejak_aset_terhapus(activity_id: str = "", page: int = 1,
                                   page_size: int = 50,
-                                  _user: dict = Depends(require_user)):
-    """Jejak Aset Terhapus — arsip read-only dari audit log.
+                                  user: dict = Depends(require_user)):
+    """Jejak Aset Terhapus — arsip read-only dari audit log (ter-scope satker).
 
     Aset yang dihapus permanen tetap tertelusur (kode/NUP/nama/nilai/oleh/
     waktu) tanpa mengubah mekanisme penghapusan. Nilai perolehan diambil
     dari perubahan yang direkam saat penghapusan.
     """
     query = {"action": {"$in": ["delete", "bulk_delete"]}}
-    if activity_id:
-        query["activity_id"] = activity_id
+    scope, kosong = await _batas_activity_satker(user, activity_id)
+    if kosong:
+        return {"items": [], "ringkasan": rekap_jejak_terhapus([]), "total": 0,
+                "page": 1, "page_size": page_size, "total_pages": 1, "catatan": ""}
+    query.update(scope)
     page = max(page, 1)
     page_size = min(max(page_size, 1), 200)
     total = await db.audit_logs.count_documents(query)
@@ -94,7 +135,7 @@ async def get_jejak_aset_terhapus(activity_id: str = "", page: int = 1,
 
 
 @audit_router.get("/integritas/identitas-penghapusan")
-async def integritas_identitas_penghapusan(_user: dict = Depends(require_user)):
+async def integritas_identitas_penghapusan(user: dict = Depends(require_user)):
     """§5A Prinsip 1 (READ-ONLY): deteksi snapshot identitas aset yang BASI pada
     register `usulan_penghapusan`.
 
@@ -110,7 +151,7 @@ async def integritas_identitas_penghapusan(_user: dict = Depends(require_user)):
     proj_master = {"_id": 0, "asset_code": 1, "NUP": 1, "asset_name": 1}
     items = []
     n_basi = n_hilang = 0
-    async for u in db.usulan_penghapusan.find({}, proj_snap):
+    async for u in db.usulan_penghapusan.find(await _filter_register_satker(user), proj_snap):
         aid = u.get("asset_id")
         master = await db.assets.find_one({"id": aid}, proj_master) if aid else None
         snap = {f: u.get(f) for f in FIELD_IDENTITAS}
@@ -139,7 +180,7 @@ async def integritas_identitas_penghapusan(_user: dict = Depends(require_user)):
 
 
 @audit_router.get("/integritas/kodefikasi-aset")
-async def integritas_kodefikasi_aset(_user: dict = Depends(require_user)):
+async def integritas_kodefikasi_aset(user: dict = Depends(require_user)):
     """§5A Prinsip 2 (READ-ONLY): kodefikasi sebagai FK tervalidasi.
 
     Kode barang aset diturunkan dari prefix, tetapi TAK divalidasi sebagai FK ke
@@ -157,7 +198,7 @@ async def integritas_kodefikasi_aset(_user: dict = Depends(require_user)):
     items = []
     n_golongan = n_spesifik = n_invalid = 0
     async for grp in db.assets.aggregate([
-        {"$match": active_asset_filter()},
+        {"$match": await scope_query_aset(user, active_asset_filter())},
         {"$group": {"_id": "$asset_code", "jumlah_aset": {"$sum": 1}}},
     ]):
         kode = normalize_kode(grp.get("_id"))
@@ -266,12 +307,12 @@ async def integritas_cek_kode(asset_code: str = "", _user: dict = Depends(requir
 
 
 @audit_router.get("/integritas/identitas-pemindahtanganan")
-async def integritas_identitas_pemindahtanganan(_user: dict = Depends(require_user)):
+async def integritas_identitas_pemindahtanganan(user: dict = Depends(require_user)):
     """§5A Prinsip 1 (READ-ONLY, lanjutan #261): deteksi snapshot identitas aset
     basi pada register `pemindahtanganan` (yang membekukan identitas per baris
     `aset[]`). Master di-lookup BATCH via `$in` (hindari N+1)."""
     usulan_list = [u async for u in db.pemindahtanganan.find(
-        {}, {"_id": 0, "id": 1, "bentuk": 1, "status": 1, "aset": 1})]
+        await _filter_register_satker(user), {"_id": 0, "id": 1, "bentuk": 1, "status": 1, "aset": 1})]
     ids = {str(r.get("asset_id") or "")
            for u in usulan_list for r in (u.get("aset") or [])
            if r.get("asset_id")}
@@ -305,12 +346,12 @@ async def integritas_identitas_pemindahtanganan(_user: dict = Depends(require_us
 
 
 @audit_router.get("/integritas/identitas-psp")
-async def integritas_identitas_psp(_user: dict = Depends(require_user)):
+async def integritas_identitas_psp(user: dict = Depends(require_user)):
     """§5A Prinsip 1 (READ-ONLY, lanjutan #261/#263): deteksi snapshot identitas
     aset basi pada register SK PSP Penggunaan (`db.psp`, per baris `aset[]`).
     Master di-lookup BATCH via `$in` (hindari N+1)."""
     sk_list = [s async for s in db.psp.find(
-        {}, {"_id": 0, "id": 1, "nomor_sk": 1, "status_pengajuan": 1, "aset": 1})]
+        await _filter_register_satker(user), {"_id": 0, "id": 1, "nomor_sk": 1, "status_pengajuan": 1, "aset": 1})]
     ids = {str(r.get("asset_id") or "")
            for s in sk_list for r in (s.get("aset") or [])
            if r.get("asset_id")}
@@ -339,12 +380,12 @@ async def integritas_identitas_psp(_user: dict = Depends(require_user)):
 
 
 @audit_router.get("/integritas/identitas-jadwal-pemeliharaan")
-async def integritas_identitas_jadwal_pemeliharaan(_user: dict = Depends(require_user)):
+async def integritas_identitas_jadwal_pemeliharaan(user: dict = Depends(require_user)):
     """§5A Prinsip 1 (READ-ONLY, lanjutan #261/#263/#264): deteksi snapshot
     identitas aset basi pada register `jadwal_pemeliharaan` (membekukan identitas
     per record). Master di-lookup BATCH via `$in` (hindari N+1)."""
     jadwal = [j async for j in db.jadwal_pemeliharaan.find(
-        {}, {"_id": 0, "id": 1, "asset_id": 1, "asset_code": 1, "NUP": 1,
+        await _filter_register_satker(user), {"_id": 0, "id": 1, "asset_id": 1, "asset_code": 1, "NUP": 1,
              "asset_name": 1, "jatuh_tempo": 1})]
     ids = {str(j.get("asset_id") or "") for j in jadwal if j.get("asset_id")}
     master_by_id = {}

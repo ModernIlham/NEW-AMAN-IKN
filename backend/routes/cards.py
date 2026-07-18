@@ -26,6 +26,7 @@ from xml.sax.saxutils import escape as _xml_escape
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from auth_utils import require_user
+from shared_utils import pastikan_akses_aset, scope_query_aset
 
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib import colors
@@ -1090,11 +1091,12 @@ async def _fetch_asset_history(asset):
 
 
 @cards_router.get("/assets/{asset_id}/card")
-async def get_asset_card_pdf(asset_id: str, _user: dict = Depends(require_user)):
+async def get_asset_card_pdf(asset_id: str, user: dict = Depends(require_user)):
     """Kartu Inventarisasi (1 aset = 1 halaman A4 landscape, 4 panel fold)."""
     asset = await db.assets.find_one({"id": asset_id}, {"_id": 0})
     if not asset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    await pastikan_akses_aset(user, asset)  # isolasi satker
 
     history = await _fetch_asset_history(asset)
     # Aset GridFS-only: suntik foto sampul dari GridFS sebelum kartu dibangun.
@@ -1115,12 +1117,14 @@ async def get_asset_card_pdf(asset_id: str, _user: dict = Depends(require_user))
 
 
 @cards_router.post("/assets/cards/bulk")
-async def get_bulk_asset_cards(asset_ids: List[str], _user: dict = Depends(require_user)):
+async def get_bulk_asset_cards(asset_ids: List[str], user: dict = Depends(require_user)):
     """Kartu Inventarisasi massal: satu halaman A4 landscape (4 panel fold) per aset."""
     if not asset_ids:
         raise HTTPException(status_code=400, detail="Tidak ada aset yang dipilih")
-
-    assets = await db.assets.find({"id": {"$in": asset_ids}}, {"_id": 0}).to_list(len(asset_ids))
+    # Isolasi satker: user terikat hanya boleh mencetak aset satkernya —
+    # scope via activity_id ∈ kegiatan-satker (cegah IDOR lintas satker).
+    q = await scope_query_aset(user, {"id": {"$in": asset_ids}})
+    assets = await db.assets.find(q, {"_id": 0}).to_list(len(asset_ids))
     if not assets:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
 
