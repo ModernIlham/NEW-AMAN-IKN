@@ -12,9 +12,10 @@ import { makeDownloadProgress } from "@/lib/downloadFile";
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const UKURAN = [
-  ["besar", "Besar", "±95×45 mm — A4: 12/hal · A3: 16/hal"],
-  ["sedang", "Sedang", "±62×30 mm — A4: 27/hal · A3: 48/hal"],
-  ["kecil", "Kecil", "±45×22 mm — A4: 48/hal · A3: 102/hal"],
+  ["besar", "Besar", "A4: 12/hal (±98×46) · A3: 27/hal (±94×44)"],
+  ["sedang", "Sedang", "A4: 27/hal (±65×30) · A3: 65/hal (±56×30)"],
+  ["kecil", "Kecil", "A4: 48/hal (±48×22) · A3: 102/hal (±46×23)"],
+  ["per_aset", "Sesuai pilihan per aset", "memakai field \"Ukuran Stiker\" tiap aset — hasil dikelompokkan besar → sedang → kecil"],
 ];
 
 /**
@@ -74,7 +75,7 @@ export default function CetakStikerDialog({ open, onOpenChange, buildParams, tot
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><Tags className="w-4 h-4" />Cetak Stiker Label BMN</DialogTitle>
           <DialogDescription className="text-xs">
-            Desain mengikuti label resmi satker: logo + nama instansi, kode register, kode barang/NUP, nama barang, dan QR yang dikenali pemindai aplikasi.
+            Desain mengikuti label resmi satker: logo + nama instansi + nama satker, kode barang/NUP, nama barang, dan QR yang dikenali pemindai aplikasi. Grid otomatis memenuhi seluruh ruang kertas (sisa hanya margin &amp; celah potong).
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">

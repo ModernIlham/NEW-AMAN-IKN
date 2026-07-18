@@ -48,6 +48,31 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#401] Stiker: ukuran optimal penuh-halaman, nama satker di header, QR mepet tepi, ukuran per aset — 2026-07-18
+
+Empat permintaan pemilik sekaligus:
+- **Ukuran paling optimal utk A4 & A3**: kolom/baris dibulatkan ke ukuran
+  target lalu label DIRENTANGKAN memenuhi SELURUH ruang kertas (sisa hanya
+  margin 6mm + celah potong 1,5mm). Muatan: Besar A4 12 (±98×46mm) ·
+  A3 27 (±94×44mm, dari 16); Sedang A4 27 (±65×30) · A3 65 (±56×30, dari
+  48); Kecil A4 48 (±48×22) · A3 102 (±46×23). Helper murni `grid_optimal`
+  teruji unit (grid terbukti mengisi penuh area cetak).
+- **Nama satker di header**: baris kode registrasi di bawah judul diganti
+  NAMA SATKER (resolusi kop: nama_sub_unit → nama_unit_organisasi); kode
+  register tetap terbawa di payload QR.
+- **QR mepet garis tepi**: menempel garis header, tepi kanan, dan tepi
+  bawah stiker (tanpa padding) — setinggi penuh badan stiker.
+- **Ukuran per aset + dikelompokkan**: opsi cetak baru "Sesuai pilihan per
+  aset" memakai field `Ukuran Stiker` tiap aset (sudah ada di form aset,
+  edit cepat, dan ubah massal) — hasil cetak DIKELOMPOKKAN besar → sedang
+  → kecil, tiap kelompok grid halamannya sendiri; nilai kosong memakai
+  sedang.
+- Verifikasi: 531 tes unit lulus (4 baru grid/kelompok), smoke render 6
+  kombinasi + mode per_aset (3 halaman terkelompok benar) lulus, pratinjau
+  visual penuh-halaman diperiksa, lint & build sukses.
+
+---
+
 ## [#400] Stiker: jarak antar kotak dirapatkan (celah tipis) + QR diperkecil — 2026-07-18
 
 Umpan balik pemilik atas fitur stiker:
