@@ -470,6 +470,72 @@ async def resolve_pejabat_peran(peran, per_iso=None):
     return pejabat_aktif_untuk_peran(pejabat_list, peran, per_iso)
 
 
+# ============================================================================
+# ISOLASI DATA PER-SATKER (M-SCOPE, multi-satker DB bersama)
+# ============================================================================
+
+def kode_satker_user(user) -> str:
+    """Kode satker yang mengikat user; '' = lintas-satker (super-admin/pusat)."""
+    return str((user or {}).get("kode_satker") or "").strip()
+
+
+async def id_kegiatan_satker(kode: str) -> list:
+    """Seluruh id kegiatan milik satu satker — dipakai memfilter koleksi
+    turunan yang berelasi lewat activity_id (aset dkk.)."""
+    return [a["id"] async for a in db.inventory_activities.find(
+        {"kode_satker": kode}, {"_id": 0, "id": 1})]
+
+
+async def scope_query_kegiatan(user, query=None) -> dict:
+    """Sisipkan filter kode_satker ke query kegiatan bila user terikat satker."""
+    q = dict(query or {})
+    kode = kode_satker_user(user)
+    if kode:
+        q["kode_satker"] = kode
+    return q
+
+
+async def scope_query_aset(user, query=None) -> dict:
+    """Sisipkan filter activity_id ∈ kegiatan-satker ke query aset bila user
+    terikat satker. Bila query sudah menunjuk activity_id tertentu, cukup
+    biarkan — pemeriksaan kepemilikan kegiatan dilakukan guard terpisah."""
+    q = dict(query or {})
+    kode = kode_satker_user(user)
+    if not kode or "activity_id" in q:
+        return q
+    q["activity_id"] = {"$in": await id_kegiatan_satker(kode)}
+    return q
+
+
+async def pastikan_akses_kegiatan(user, activity) -> None:
+    """403 bila user terikat satker lain dari kegiatan ini. Kegiatan tanpa
+    kode_satker (data era lama) dianggap terbuka."""
+    from fastapi import HTTPException
+    kode = kode_satker_user(user)
+    milik = str((activity or {}).get("kode_satker") or "").strip()
+    if kode and milik and milik != kode:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Data milik satker {milik} — akun Anda terikat satker {kode}")
+
+
+async def pastikan_akses_kegiatan_id(user, activity_id: str) -> None:
+    """Varian by-id: no-op untuk user lintas-satker / id kosong."""
+    if not kode_satker_user(user) or not str(activity_id or "").strip():
+        return
+    act = await db.inventory_activities.find_one(
+        {"id": activity_id}, {"_id": 0, "kode_satker": 1})
+    if act:
+        await pastikan_akses_kegiatan(user, act)
+
+
+async def pastikan_akses_aset(user, asset) -> None:
+    """Guard aset lewat kegiatan induknya (asset.activity_id)."""
+    if not kode_satker_user(user):
+        return
+    await pastikan_akses_kegiatan_id(user, (asset or {}).get("activity_id"))
+
+
 async def pengaturan_kop(activity=None, kode_satker=""):
     """Setelan kop EFEKTIF untuk laporan sebuah kegiatan: report_settings
     global di-overlay kop MASTER SATKER (field non-kosong menimpa) berdasar

@@ -210,6 +210,8 @@ async def import_assets(request: Request, file: UploadFile = File(...), force_up
     activity = await db.inventory_activities.find_one({"id": activity_id})
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan inventarisasi tidak ditemukan")
+    from shared_utils import pastikan_akses_kegiatan
+    await pastikan_akses_kegiatan(_user, activity)
     if activity.get("status_pengesahan") == "disahkan":
         raise HTTPException(status_code=423, detail="Kegiatan sudah disahkan dan terkunci")
 

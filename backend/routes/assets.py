@@ -23,6 +23,8 @@ from shared_utils import (
     get_idempotent_response, store_idempotent_response, reserve_idempotency_key,
     ensure_activity_not_sealed,
     get_document_from_gridfs, delete_document_from_gridfs,
+    kode_satker_user, pastikan_akses_aset, pastikan_akses_kegiatan_id,
+    scope_query_aset,
 )
 from routes.websocket import notify_asset_change
 from photo_rotate_utils import normalisasi_derajat, rotate_jpeg_bytes
@@ -348,6 +350,10 @@ async def get_assets(
         perolehan_dari=perolehan_dari, user_filter=user_filter, pengguna_nip=pengguna_nip,
         beli_dari=beli_dari, beli_sampai=beli_sampai,
     )
+    # ISOLASI SATKER (M-SCOPE): activity_id spesifik → wajib milik satker
+    # user; tanpa activity_id → batasi ke seluruh kegiatan satkernya.
+    await pastikan_akses_kegiatan_id(_user, activity_id)
+    query = await scope_query_aset(_user, query)
 
     # Extended sort options
     # Tiebreaker `id` di setiap opsi: sort Mongo tidak stabil antar-query
@@ -430,6 +436,7 @@ async def get_assets_offline_snapshot(
     """
     if not activity_id:
         raise HTTPException(status_code=400, detail="activity_id wajib diisi")
+    await pastikan_akses_kegiatan_id(_user, activity_id)
 
     limit = min(max(limit, 1), 1000)
     skip = max(skip, 0)
@@ -488,14 +495,18 @@ async def get_assets_offline_snapshot(
 @assets_router.get("/assets/filter-options")
 async def get_filter_options(activity_id: str = "", _user: dict = Depends(require_user)):
     """Get distinct values for filter dropdowns (cached 3 min per activity)"""
-    cache_key = activity_id or "__all__"
+    # Cache key MEMBAWA kode satker user — tanpa ini, cache "__all__" yang
+    # diisi user lintas-satker bocor ke user satker lain (M-SCOPE).
+    await pastikan_akses_kegiatan_id(_user, activity_id)
+    cache_key = f"{kode_satker_user(_user)}|{activity_id or '__all__'}"
     if cache_key in _cache_filter_opts:
         return _cache_filter_opts[cache_key]
-    
+
     query = {}
     if activity_id:
         query["activity_id"] = activity_id
-    
+    query = await scope_query_aset(_user, query)
+
     # Get distinct values for each filterable field
     locations, eselon1s, eselon2s, conditions, statuses, stiker_statuses, inventory_statuses = await asyncio.gather(
         db.assets.distinct("location", query),
@@ -526,13 +537,15 @@ async def get_filter_options(activity_id: str = "", _user: dict = Depends(requir
 async def get_assets_stats(search: str = "", category: str = "", activity_id: str = "",
                            _user: dict = Depends(require_user)):
     """Get aggregate stats (cached 1 min per unique query)"""
-    cache_key = f"{activity_id}|{search}|{category}"
+    await pastikan_akses_kegiatan_id(_user, activity_id)
+    cache_key = f"{kode_satker_user(_user)}|{activity_id}|{search}|{category}"
     if cache_key in _cache_stats:
         return _cache_stats[cache_key]
 
     query = {}
     if activity_id:
         query["activity_id"] = activity_id
+    query = await scope_query_aset(_user, query)
     if search:
         rx = _rx(search)
         query["$or"] = [
@@ -580,13 +593,15 @@ async def get_assets_stats(search: str = "", category: str = "", activity_id: st
 @assets_router.get("/assets/analytics")
 async def get_assets_analytics(activity_id: str = "", _user: dict = Depends(require_user)):
     """Get analytics data for charts (cached 2 min per activity)"""
-    cache_key = activity_id or "_all"
+    await pastikan_akses_kegiatan_id(_user, activity_id)
+    cache_key = f"{kode_satker_user(_user)}|{activity_id or '_all'}"
     if cache_key in _cache_analytics:
         return _cache_analytics[cache_key]
-    
+
     query = {}
     if activity_id:
         query["activity_id"] = activity_id
+    query = await scope_query_aset(_user, query)
 
     price_convert = {"$convert": {"input": "$purchase_price", "to": "double", "onError": 0, "onNull": 0}}
 
@@ -651,9 +666,11 @@ async def get_next_nup(activity_id: str = "", asset_code: str = "", category: st
     number is computed over the same scope. NUP is stored as a string; values
     that aren't parseable as integers are ignored via $convert onError.
     """
+    await pastikan_akses_kegiatan_id(_user, activity_id)
     query = {}
     if activity_id:
         query["activity_id"] = activity_id
+    query = await scope_query_aset(_user, query)
     if asset_code:
         query["asset_code"] = asset_code
     elif category:
@@ -772,6 +789,8 @@ async def create_asset(asset: AssetCreate, request: Request, _user: dict = Depen
         elif _idem == "pending":
             raise HTTPException(status_code=409, detail="Permintaan dengan kunci idempotensi ini sedang diproses, coba lagi sebentar")
 
+    # ISOLASI SATKER: aset hanya boleh dibuat pada kegiatan satker user.
+    await pastikan_akses_kegiatan_id(_user, asset.activity_id)
     # Kegiatan yang sudah disahkan terkunci — tolak penambahan aset (423)
     await ensure_activity_not_sealed(asset.activity_id)
     await _enforce_pegawai_terdaftar(asset.pengguna_nip)
@@ -924,6 +943,7 @@ async def get_asset(asset_id: str, exclude_media: bool = False, _user: dict = De
     asset = await db.assets.find_one({"id": asset_id}, {"_id": 0})
     if not asset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    await pastikan_akses_aset(_user, asset)
     # Kontrak GET penuh = "beserta media". Dokumen bersih (GridFS-only,
     # photos=[]) dihidrasikan dari blob agar konsumen lama tetap bekerja.
     if not (asset.get("photos") or []) and (asset.get("photo_gridfs_ids") or []):
@@ -951,10 +971,11 @@ async def get_asset_media(asset_id: str, _user: dict = Depends(require_user)):
     Full-size photos are in GridFS and accessed via /assets/{id}/photos/{index}."""
     asset = await db.assets.find_one({"id": asset_id}, {
         "_id": 0, "id": 1, "photos": 1, "photo_thumbnails": 1,
-        "photo_gridfs_ids": 1, "document_checklist": 1
+        "photo_gridfs_ids": 1, "document_checklist": 1, "activity_id": 1
     })
     if not asset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    await pastikan_akses_aset(_user, asset)
     
     # Return thumbnails for display; if no thumbnails yet (legacy), generate on the fly
     photo_thumbnails = asset.get("photo_thumbnails", []) or []
@@ -1006,6 +1027,7 @@ async def get_asset_checklist_full(asset_id: str, _user: dict = Depends(require_
     asset = await db.assets.find_one({"id": asset_id}, {"_id": 0, "document_checklist": 1})
     if not asset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    await pastikan_akses_aset(_user, asset)
     checklist = asset.get("document_checklist", []) or []
     normalized = []
     for item in checklist:
@@ -1110,6 +1132,7 @@ async def get_asset_checklist_photo(asset_id: str, item_idx: int, photo_idx: int
     asset = await db.assets.find_one({"id": asset_id}, {"_id": 0, "document_checklist": 1, "version": 1})
     if not asset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    await pastikan_akses_aset(_user, asset)
     checklist = asset.get("document_checklist", []) or []
     if item_idx < 0 or item_idx >= len(checklist):
         raise HTTPException(status_code=404, detail="Item tidak ditemukan")
@@ -1144,6 +1167,7 @@ async def get_asset_checklist_document(asset_id: str, item_idx: int, doc_idx: in
     asset = await db.assets.find_one({"id": asset_id}, {"_id": 0, "document_checklist": 1, "version": 1})
     if not asset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    await pastikan_akses_aset(_user, asset)
     checklist = asset.get("document_checklist", []) or []
     if item_idx < 0 or item_idx >= len(checklist):
         raise HTTPException(status_code=404, detail="Item tidak ditemukan")
@@ -1194,10 +1218,12 @@ async def get_asset_photo_full(asset_id: str, photo_index: int, request: Request
     ~100-250KB image instead of the full ~900KB original.
     """
     asset = await db.assets.find_one({"id": asset_id}, {
-        "_id": 0, "photo_gridfs_ids": 1, "photos": 1, "photo_thumbnails": 1, "version": 1
+        "_id": 0, "photo_gridfs_ids": 1, "photos": 1, "photo_thumbnails": 1,
+        "version": 1, "activity_id": 1
     })
     if not asset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    await pastikan_akses_aset(_user, asset)
 
     preview_w = w if (w in _PREVIEW_WIDTHS and not thumb) else 0
     etag = (f'"{asset_id}-p{photo_index}{"-t" if thumb else ""}'
@@ -1315,6 +1341,7 @@ async def rotate_asset_photo(asset_id: str, photo_index: int, request: Request,
     existing = await db.assets.find_one({"id": asset_id})
     if not existing:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    await pastikan_akses_aset(_user, existing)
     await ensure_activity_not_sealed(existing.get("activity_id"))
 
     # --- OCC (If-Match) ---
@@ -1465,6 +1492,7 @@ async def upload_asset_bast(
     )
     if not existing:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    await pastikan_akses_aset(user, existing)
     # Kegiatan yang sudah disahkan terkunci — sama seperti mutasi aset lain
     await ensure_activity_not_sealed(existing.get("activity_id"))
 
@@ -1538,10 +1566,12 @@ async def get_asset_bast(asset_id: str, request: Request,
     Authorization header) → menerima header ATAU ?token=<jwt>. ETag berbasis
     bast_file_id (unik per unggahan) → cacheable."""
     asset = await db.assets.find_one(
-        {"id": asset_id}, {"_id": 0, "bast_file_id": 1, "bast_filename": 1}
+        {"id": asset_id},
+        {"_id": 0, "bast_file_id": 1, "bast_filename": 1, "activity_id": 1}
     )
     if not asset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    await pastikan_akses_aset(_user, asset)
     file_id = asset.get("bast_file_id") or ""
     if not file_id:
         raise HTTPException(status_code=404, detail="Aset belum memiliki dokumen BAST")
@@ -1574,6 +1604,9 @@ async def update_asset(asset_id: str, asset: AssetCreate, request: Request,
 
     # Kegiatan yang sudah disahkan terkunci — cek activity asal DAN tujuan
     # (bila aset dipindah antar kegiatan lewat PUT).
+    await pastikan_akses_aset(_user, existing)
+    if asset.activity_id and asset.activity_id != existing.get("activity_id"):
+        await pastikan_akses_kegiatan_id(_user, asset.activity_id)
     await ensure_activity_not_sealed(existing.get("activity_id"))
     if asset.activity_id and asset.activity_id != existing.get("activity_id"):
         await ensure_activity_not_sealed(asset.activity_id)
@@ -1794,10 +1827,12 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
     if not existing:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
 
+    await pastikan_akses_aset(_user, existing)
     # Kegiatan yang sudah disahkan terkunci — cek activity asal DAN tujuan
     await ensure_activity_not_sealed(existing.get("activity_id"))
     body_activity_id = body.get("activity_id")
     if body_activity_id and body_activity_id != existing.get("activity_id"):
+        await pastikan_akses_kegiatan_id(_user, body_activity_id)
         await ensure_activity_not_sealed(body_activity_id)
     if "pengguna_nip" in body:
         await _enforce_pegawai_terdaftar(body.get("pengguna_nip"))
@@ -2186,6 +2221,7 @@ async def delete_asset(asset_id: str, request: Request, _admin: dict = Depends(r
     asset_doc = await db.assets.find_one({"id": asset_id}, {"_id": 0})
     if not asset_doc:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    await pastikan_akses_aset(_admin, asset_doc)
 
     # Kegiatan yang sudah disahkan terkunci — tolak penghapusan aset (423)
     await ensure_activity_not_sealed(asset_doc.get("activity_id"))
