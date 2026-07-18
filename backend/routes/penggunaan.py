@@ -20,7 +20,11 @@ from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
 )
 from db import db, fs_bucket
-from shared_utils import kode_satker_user, scope_query_field_satker, blok_ttd_kpb_titik, delete_document_from_gridfs, get_document_from_gridfs, log_audit
+from shared_utils import (kode_satker_user, scope_query_aset,
+                          scope_query_field_satker, blok_ttd_kpb_titik,
+                          pastikan_akses_dok_satker,
+                          delete_document_from_gridfs,
+                          get_document_from_gridfs, log_audit)
 from penggunaan_utils import (
     ARAH_PROSES, JENIS_PROSES_PENGGUNAAN, JENIS_PSP, STATUS_IDLE,
     STATUS_PENGAJUAN_PSP, STATUS_PROSES, TRANSISI_PROSES, baris_csv_idle,
@@ -192,7 +196,9 @@ async def catat_psp(payload: PspIn, user: dict = Depends(require_writer)):
             raise HTTPException(status_code=404, detail=f"Aset {aid} tidak ditemukan")
         await pastikan_akses_aset(user, a)
         aset_rows.append({"asset_id": a["id"], "asset_code": a.get("asset_code"),
-                          "NUP": a.get("NUP"), "asset_name": a.get("asset_name")})
+                          "NUP": a.get("NUP"), "asset_name": a.get("asset_name"),
+                          "condition": a.get("condition"),
+                          "purchase_price": a.get("purchase_price")})
     now = dt.now(timezone.utc).isoformat()
     status_awal = "draf" if data.get("sebagai_draf") else "ditetapkan"
     record = {
@@ -275,11 +281,26 @@ async def bast_psp_pdf(sk_id: str, _user: dict = Depends(require_user)):
     sk = await db.psp.find_one({"id": sk_id}, {"_id": 0})
     if not sk:
         raise HTTPException(status_code=404, detail="SK tidak ditemukan")
+    await pastikan_akses_dok_satker(_user, sk)
     if status_pengajuan_psp(sk) != "ditetapkan":
         raise HTTPException(status_code=400,
                             detail="BAST hanya untuk usulan yang sudah ditetapkan (SK terbit)")
-    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    from shared_utils import pengaturan_kop
+    settings = await pengaturan_kop(kode_satker=sk.get("kode_satker"))
     aset = sk.get("aset") or []
+    # SK era lama men-snapshot tanpa kondisi/nilai perolehan — lengkapi saat
+    # render dari master aset agar kolom Kondisi & Nilai tidak selalu kosong.
+    kurang = [str(a.get("asset_id") or "") for a in aset
+              if "purchase_price" not in a or "condition" not in a]
+    if any(kurang):
+        peta = {m["id"]: m async for m in db.assets.find(
+            {"id": {"$in": [k for k in kurang if k]}},
+            {"_id": 0, "id": 1, "condition": 1, "purchase_price": 1})}
+        for a in aset:
+            m = peta.get(str(a.get("asset_id") or ""))
+            if m:
+                a.setdefault("condition", m.get("condition"))
+                a.setdefault("purchase_price", m.get("purchase_price"))
     jenis = JENIS_PSP.get(sk.get("jenis"), sk.get("jenis") or "-")
 
     buffer = BytesIO()
@@ -524,7 +545,7 @@ class TransisiIdleIn(BaseModel):
 
 _PROJ_IDLE = {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
               "status": 1, "user": 1, "inventory_status": 1, "location": 1,
-              "activity_id": 1}
+              "activity_id": 1, "condition": 1, "purchase_price": 1}
 
 
 @penggunaan_router.get("/penggunaan/idle")

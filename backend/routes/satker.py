@@ -224,6 +224,12 @@ async def backfill_kode_satker(payload: dict = None,
     KOSONG = {"$in": ["", None]}
     _q_kosong = {"$or": [{"kode_satker": KOSONG},
                          {"kode_satker": {"$exists": False}}]}
+    # Klaim-sisa TIDAK boleh menyentuh kode_satker == "" — string kosong
+    # adalah stempel sengaja "lintas-satker" oleh super-admin; hanya dokumen
+    # yang benar-benar belum pernah distempel (None / field absen) yang sah
+    # diklaim massal.
+    _q_belum_distempel = {"$or": [{"kode_satker": None},
+                                  {"kode_satker": {"$exists": False}}]}
     laporan = {}
 
     # 1) Koleksi ber-relasi aset.
@@ -249,7 +255,7 @@ async def backfill_kode_satker(payload: dict = None,
                 "pengamanan_dokumen", "pengamanan_polis") + RELASI
         for nama in SISA:
             res = await db[nama].update_many(
-                _q_kosong, {"$set": {"kode_satker": kode_sisa}})
+                _q_belum_distempel, {"$set": {"kode_satker": kode_sisa}})
             laporan[nama] = laporan.get(nama, 0) + res.modified_count
 
     total = sum(laporan.values())
