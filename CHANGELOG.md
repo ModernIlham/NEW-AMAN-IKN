@@ -48,6 +48,28 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#412] Dokumentasi v2.4: PRD (halaman Info), README & masterplan diperbarui menyeluruh — 2026-07-18
+
+Pemutakhiran seluruh dokumentasi setelah sistem matang (bagian akhir mandat
+"update semua dokumentasi + halaman PRD terupdate tanpa terkecuali"):
+
+- **Halaman Info/PRD** (`InfoPage.jsx`) dinaikkan ke **v2.4**: hero &
+  ringkasan mencerminkan platform siklus PENUH BMN; seksi "Apa yang Baru"
+  diganti dengan 6 kartu rilis v2.4 (Sinkron SIMAN V2, Stiker & TTD, Master
+  & Referensi, Keamanan multi-satker, Performa & backup, Perombakan UI 26
+  halaman); seksi Fitur ditambah 7 kartu baru (SIMAN, stiker, TTD, master
+  SDM, siklus 12 tahap, persuratan, backup otomatis); statistik & arsitektur
+  (45+ route, isolasi multi-satker) dimutakhirkan. Header mobile sudah
+  dirapikan sebelumnya (#407) sehingga tombol Kembali tak bertumpuk.
+- **README.md** → v2.4: ringkasan arah, status modul (semua aktif +
+  multi-satker), dan blok "Highlight Rilis v2.4" berisi 8 sorotan utama
+  dengan rujukan PR.
+- **MASTERPLAN-SIKLUS-BMN.md**: catatan status "roadmap telah terealisasi
+  luas per v2.4" di ringkasan eksekutif.
+- Verifikasi: lint 0 warning, build produksi sukses.
+
+---
+
 ## [#411] Alur pengguna: Kembali dari Pengaturan tak lagi terlempar keluar + label CTA kartu seragam — 2026-07-18
 
 Tindak lanjut evaluasi alur pengguna (bagian mandat "benahi alur yang kurang

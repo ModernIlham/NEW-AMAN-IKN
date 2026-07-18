@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from "react";
-import { ArrowLeft, Download, FileText, Presentation, ChevronDown, ChevronRight, Package, Shield, Users, Camera, Upload, BarChart3, FileSpreadsheet, Printer, RefreshCw, Globe, CheckCircle2, XCircle, Clock, Layers, Database, Server, Monitor, Wifi, Lock, Zap, BookOpen, DollarSign, Calendar, Target, AlertTriangle, MapPinned, GitBranch, Sparkles } from "lucide-react";
+import { ArrowLeft, Download, FileText, Presentation, ChevronDown, ChevronRight, Package, Shield, Users, Camera, Upload, BarChart3, FileSpreadsheet, Printer, RefreshCw, Globe, CheckCircle2, XCircle, Clock, Layers, Database, Server, Monitor, Wifi, Lock, Zap, BookOpen, DollarSign, Calendar, Target, AlertTriangle, MapPinned, GitBranch, Sparkles, Mail } from "lucide-react";
 import { downloadFileWithProgress } from "../lib/downloadFile";
 
 const API = process.env.REACT_APP_BACKEND_URL;
@@ -326,29 +326,31 @@ export default function InfoPage({ onBack }) {
         <div className="relative text-center mb-16">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-blue-500/10 border border-blue-500/20 rounded-full text-blue-400 text-xs mb-6">
             <Zap className="w-3.5 h-3.5" />
-            Product Requirements Document — v2.3 · Juli 2026
+            Product Requirements Document — v2.4 · Juli 2026
           </div>
           <h1 className="text-4xl md:text-5xl font-bold text-white mb-4 leading-tight">
             AMAN<br />
             <span className="bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">Aplikasi Manajemen Aset Negara</span>
           </h1>
           <p className="text-lg text-slate-400 max-w-2xl mx-auto mb-5">
-            Satu aplikasi untuk seluruh siklus inventarisasi Barang Milik Negara: dari impor data SIMAN,
-            pendataan lapangan dengan kamera dan scan QR, sampai laporan resmi siap tanda tangan dan
-            pengesahan berkekuatan dokumen — tetap bekerja penuh saat sinyal hilang.
+            Satu aplikasi untuk SELURUH SIKLUS pengelolaan Barang Milik Negara — perencanaan,
+            penganggaran, pengadaan, penggunaan, pemeliharaan, penatausahaan, pemanfaatan, penilaian,
+            pemindahtanganan, sampai pemusnahan/penghapusan. Dari impor & sinkronisasi SIMAN V2,
+            pendataan lapangan dengan kamera + scan QR, cetak stiker label, tanda tangan elektronik
+            langsung pada dokumen, hingga laporan resmi siap sah — tetap bekerja penuh saat sinyal hilang.
           </p>
           <div className="flex items-center justify-center gap-2 flex-wrap mb-8">
-            {["Offline-first", "Real-time multi-user", "SE-17/MK.1/2024", "Peta GIS + KML/KMZ/SHP", "CI/CD otomatis"].map((chip) => (
+            {["Offline-first", "Real-time multi-user", "Multi-satker terisolasi", "Sinkron SIMAN V2", "TTD elektronik", "Peta GIS + KML/KMZ/SHP", "Backup otomatis", "CI/CD otomatis"].map((chip) => (
               <span key={chip} className="px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700 text-slate-300 text-[11px]">{chip}</span>
             ))}
           </div>
 
           {/* Stats */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 max-w-4xl mx-auto">
-            <StatCard icon={Layers} value="20+" label="Modul Fitur" color="blue" />
+            <StatCard icon={Layers} value="12" label="Tahap Siklus BMN" color="blue" />
             <StatCard icon={FileText} value="13+" label="Laporan Resmi PDF" color="green" />
             <StatCard icon={MapPinned} value="GIS" label="Peta + KML/KMZ/SHP" color="cyan" />
-            <StatCard icon={FileSpreadsheet} value="46" label="Kolom Import/Export" color="orange" />
+            <StatCard icon={FileSpreadsheet} value="Multi" label="Master: Pegawai, Pejabat, Kodefikasi, Akun BAS" color="orange" />
             <StatCard icon={Users} value="Multi" label="User Real-time + Offline" color="purple" />
           </div>
         </div>
@@ -403,66 +405,73 @@ export default function InfoPage({ onBack }) {
         </div>
 
         {/* ── SECTIONS ── */}
-        <CollapsibleSection id="rilis" title="Apa yang Baru — Rilis v2.3" icon={Sparkles} defaultOpen={true}>
+        <CollapsibleSection id="rilis" title="Apa yang Baru — Rilis v2.4" icon={Sparkles} defaultOpen={true}>
           <p className="text-sm text-slate-400 mb-5">
-            Rangkaian pembaruan Juli 2026 berfokus pada pekerjaan lapangan: peta aset interaktif,
-            alur kamera + scan QR beruntun, dan laporan dengan kop surat resmi. Detail lengkap per
-            perubahan tercatat di CHANGELOG repositori.
+            Rilis v2.4 (Juli 2026) memperluas aplikasi dari inventarisasi menjadi platform
+            SIKLUS PENUH BMN: sinkronisasi SIMAN V2 yang tangguh, cetak stiker label, tanda tangan
+            elektronik pada dokumen, master SDM & referensi akun BAS, plus pengetatan keamanan
+            multi-satker, penajaman performa, dan perombakan tata letak menyeluruh 26 halaman.
+            Detail lengkap per perubahan tercatat di CHANGELOG repositori.
           </p>
           <div className="grid md:grid-cols-2 gap-4">
             <ReleaseCard
-              tag="PETA ASET" date="Juli 2026" color="teal"
-              title="Peta interaktif menyatu di halaman utama"
+              tag="SINKRON SIMAN V2" date="Juli 2026" color="teal"
+              title="Sinkronisasi SIMAN yang tangguh & bermanfaat"
               points={[
-                "Lembar peta menggantikan baris data tanpa meninggalkan halaman — header, mode, dan filter tetap aktif",
-                "Pencarian, filter lanjutan, dan Barang Serupa langsung menyaring pin di peta",
-                "Geser pin untuk membetulkan koordinat — tersimpan otomatis dan aman dari konflik antar-pengguna",
-                "Pin berlapis info: warna status, badge foto, border hijau saat pengguna + NIP + BAST lengkap",
+                "Impor ekspor 'Master Aset' SIMAN V2 — deteksi header di semua sheet, tahan metadata dimensi rusak",
+                "Unggah andal di lapangan: progres %, timeout longgar, coba-ulang otomatis saat koneksi putus",
+                "Validasi kode satker + tandai selisih per aset (≠ SIMAN) untuk disinkronkan (SIMAN = data valid)",
+                "Baris SIMAN belum tercatat → unduh CSV atau BUAT ASET DRAFT massal 1-klik (kode/NUP/nilai terisi)",
               ]}
             />
             <ReleaseCard
-              tag="EKSPOR GIS" date="Juli 2026" color="cyan"
-              title="Unduh titik peta ke KML, KMZ, dan Shapefile"
+              tag="STIKER & TTD" date="Juli 2026" color="orange"
+              title="Cetak stiker label BMN + tanda tangan elektronik"
               points={[
-                "27 atribut per titik — identitas, kondisi, pengguna, sampai jumlah foto",
-                "Mengikuti filter yang sedang aktif, jadi hasil unduhan = apa yang tampil",
-                "Shapefile ZIP lengkap dengan proyeksi WGS84 (.prj) — siap dibuka di ArcGIS/QGIS",
+                "Stiker 3 ukuran (besar/sedang/kecil) × kertas A4/A3, penuh-halaman, ikut filter & kelompok aktif",
+                "QR ber-payload kode register, logo di tengah QR (level H) dengan keterbacaan terbukti",
+                "TTD elektronik via link per penanda tangan (QR + hash verifikasi, token sekali-pakai)",
+                "Dokumen PDF dikirim → ditandatangani via link → diunduh sudah ber-TTD (bubuhan di halaman akhir)",
               ]}
             />
             <ReleaseCard
-              tag="KAMERA LAPANGAN" date="Juli 2026" color="orange"
-              title="Alur pendataan beruntun tanpa keluar kamera"
+              tag="MASTER & REFERENSI" date="Juli 2026" color="cyan"
+              title="Master SDM lengkap + referensi akun BAS per-digit"
               points={[
-                "Flash, gestur kecerahan (tahan + geser), dan watermark jam/GPS otomatis",
-                "Simpan & Baru instan — antrean simpan bekerja di belakang, petugas lanjut ke aset berikutnya",
-                "Simpan & Scan: scan QR stiker → panel edit selengkap lembar edit cepat → scan berikutnya",
+                "Master Pegawai (impor Excel massal), Referensi Pejabat penanda tangan, Unit Kerja berjenjang Eselon I–V",
+                "Keterkaitan aset ↔ pegawai: panel 'Perlu Serah Terima BMN' + peringatan status kepegawaian",
+                "Referensi Akun BAS terkategori per makna digit 1–6 (KEP-211/PB/2018) + penjelasan + ekspor CSV",
+                "Reset data melindungi seluruh master referensi (kodefikasi, pegawai, pejabat, ruangan, unit kerja)",
               ]}
             />
             <ReleaseCard
-              tag="LAPORAN" date="Juli 2026" color="green"
-              title="Kop surat resmi & penanda tangan yang benar"
+              tag="KEAMANAN" date="Juli 2026" color="purple"
+              title="Isolasi multi-satker & pengetatan menyeluruh"
               points={[
-                "Kop 3 baris (instansi, unit, sub-unit) + alamat multi-baris yang dapat diatur sendiri",
-                "Seluruh tanda tangan memakai jabatan \"Kuasa Pengguna Barang\"",
-                "Blok identitas rata titik dua, tanggal gaya Indonesia di semua laporan",
+                "Jejak audit, kartu inventarisasi, dan dokumen e-sign ter-scope ketat per satker (tutup kebocoran & IDOR)",
+                "Master Pegawai: admin terikat tak bisa menyunting data satker lain",
+                "NIP di-masking di verifikasi publik; rate-limit pada e-sign & pemrosesan foto",
+                "Viewer read-only ditegakkan server; token e-sign 14 hari sekali-pakai; anti path-traversal backup",
               ]}
             />
             <ReleaseCard
-              tag="FONDASI" date="Juli 2026" color="purple"
-              title="Gerbang kualitas otomatis di setiap perubahan"
+              tag="PERFORMA & DATA" date="Juli 2026" color="green"
+              title="Penajaman performa + backup andal"
               points={[
-                "GitHub Actions: test backend + lint & build frontend wajib hijau sebelum merge",
-                "Auto-deploy ke server produksi begitu perubahan masuk ke main",
-                "Registry field aset — satu sumber kebenaran, drift antar-modul tertangkap test",
+                "Bilah progres inventarisasi memakai agregasi ringan (tak lagi full-scan tiap menit)",
+                "Indeks database kunci ditambahkan (SIMAN, pemegang, persuratan, pegawai)",
+                "Backup OTOMATIS terjadwal harian + arsip server + retensi; pulihkan langsung dari arsip",
+                "Siklus data satu rumah di Pengaturan › Sistem (backup/pulihkan/reset), tanpa pintu ganda",
               ]}
             />
             <ReleaseCard
-              tag="MOBILE" date="Juli 2026" color="blue"
-              title="Tata letak HP yang lebih lega"
+              tag="TATA LETAK 26 HALAMAN" date="Juli 2026" color="blue"
+              title="Perombakan UI/UX menyeluruh semua modul"
               points={[
-                "Padding & jarak antar blok dirapatkan khusus layar kecil — baris data dapat ruang lebih",
-                "Bar peta dua baris di HP, popup pin dengan bingkai foto dan info padat",
-                "Target sentuh tombol tetap ≥44px sesuai pedoman aksesibilitas",
+                "Nominal Rupiah tak patah, header & baris aksi tak berdesakan di layar kecil",
+                "Tombol langkah maju alur menonjol (solid warna modul); tooltip semua ikon & singkatan",
+                "Empty-state ber-arah, data kunci jadi badge, ikon lucide konsisten",
+                "Optimasi mobile: toolbar ringkas 1–2 baris, penanda SIMAN di bawah foto, hapus surat salah catat",
               ]}
             />
           </div>
@@ -512,7 +521,7 @@ export default function InfoPage({ onBack }) {
         <CollapsibleSection id="arsitektur" title="Arsitektur & Teknologi" icon={Server} defaultOpen={true}>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <ArchBlock icon={Monitor} title="Frontend" items={["React 19 + Tailwind CSS", "Shadcn/UI + Leaflet (Peta Aset)", "Offline-first: IndexedDB + Service Worker", "Responsive & Dark Mode"]} color="blue" />
-            <ArchBlock icon={Server} title="Backend" items={["Python FastAPI (Async), 19 modul route", "WebSocket + Event Bus lintas worker", "OCC (version/If-Match) + Idempotency-Key", "JWT + OTP Email Authentication"]} color="green" />
+            <ArchBlock icon={Server} title="Backend" items={["Python FastAPI (Async), 45+ modul route", "WebSocket + Event Bus lintas worker", "OCC (version/If-Match) + Idempotency-Key", "JWT + OTP Email + isolasi multi-satker"]} color="green" />
             <ArchBlock icon={Database} title="Database" items={["MongoDB 7.0 + Motor (async)", "GridFS: foto, dokumen, BAST", "Capped collection ws_events", "UUID-based Records"]} color="orange" />
             <ArchBlock icon={Globe} title="Infrastructure" items={["VPS: Nginx + Supervisor", "CI/CD GitHub Actions — test tiap PR, auto-deploy saat merge", "Multi-worker uvicorn + SSL (Let's Encrypt)", "WeasyPrint + ReportLab (PDF)"]} color="purple" />
           </div>
@@ -527,7 +536,7 @@ export default function InfoPage({ onBack }) {
           </div>
         </CollapsibleSection>
 
-        <CollapsibleSection id="fitur" title="Fitur & Fungsionalitas (20+ Modul)" icon={Layers}>
+        <CollapsibleSection id="fitur" title="Fitur & Fungsionalitas (Siklus Penuh BMN)" icon={Layers}>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <FeatureCard icon={Package} title="Manajemen Aset Lengkap" description="CRUD aset dengan 45+ field: identitas, perolehan, organisasi, kondisi, GPS, stiker, dokumen" color="blue" items={["Partial update (PATCH diff) — hanya field berubah", "Validasi kode aset 10 digit & register 32 hex", "Barang Serupa: grup per kode + batch edit"]} />
             <FeatureCard icon={Target} title="Mode Inventarisasi Lapangan" description="Lembar input satu layar untuk petugas lapangan: cepat, minim ketik" color="green" items={["Status & kondisi sekali ketuk + progress bar", "Salin lokasi/pengguna dari aset sebelumnya", "GPS cache instan + kamera langsung"]} />
@@ -543,7 +552,13 @@ export default function InfoPage({ onBack }) {
             <FeatureCard icon={Users} title="Pengguna Melekat-ke + BAST" description="Pengguna aset terstruktur: Individual / Jabatan / Operasional" color="blue" items={["Nama jabatan kondisional (Jabatan)", "Jenis operasional: Kegiatan/Acara/Kebutuhan atau Ruangan", "Nomor BAST + unggah & preview dokumen BAST"]} />
             <FeatureCard icon={Upload} title="Import & Export 46 Kolom" description="CSV/XLSX dua arah dengan template dropdown dan validasi per baris" color="green" items={["Deteksi duplikat + pilihan update", "XLSX 4 sheet dengan foto HD embedded", "Export PDF landscape + progres unduhan"]} />
             <FeatureCard icon={Shield} title="Keamanan & Audit" description="JWT + OTP email, role-based access, jejak audit menyeluruh" color="orange" items={["Audit trail semua perubahan per field", "Auto-logout: sesi 401 & idle 30 menit", "Rate limiting + heartbeat sesi"]} />
-            <FeatureCard icon={RefreshCw} title="Backup & Restore Penuh" description="Backup semua koleksi + GridFS (foto, dokumen, BAST, pengesahan)" color="purple" items={["Termasuk riwayat pengesahan & counter tiket", "Restore membangun ulang index & counter", "Background job, format ZIP"]} />
+            <FeatureCard icon={RefreshCw} title="Backup, Restore & Reset" description="Siklus data satu rumah di Pengaturan › Sistem — semua koleksi + GridFS" color="purple" items={["Backup OTOMATIS terjadwal harian + arsip server + retensi", "Pulihkan langsung dari arsip; reset melindungi master referensi", "Background job ZIP + anti path-traversal"]} />
+            <FeatureCard icon={RefreshCw} title="Sinkronisasi SIMAN V2" description="Kanal pembaruan berkala via impor ekspor 'Master Aset' SIMAN V2" color="teal" items={["Deteksi header semua sheet + unggah andal (retry saat putus)", "Tandai selisih per aset (≠ SIMAN) + validasi kode satker", "Baris belum tercatat → CSV atau buat aset draft massal 1-klik"]} />
+            <FeatureCard icon={Package} title="Cetak Stiker Label BMN" description="Stiker 3 ukuran × kertas A4/A3, penuh-halaman, ikut filter & kelompok" color="orange" items={["QR ber-payload kode register + logo di tengah (level H)", "Header nama/kode satker; ukuran per aset dikelompokkan", "Rekap jumlah per ukuran sebelum cetak"]} />
+            <FeatureCard icon={FileText} title="Tanda Tangan Elektronik" description="TTD digital via link per penanda tangan — sah untuk administrasi internal" color="pink" items={["Kanvas goresan mulus atau foto kertas → PNG transparan", "Bubuhkan langsung ke dokumen PDF unggahan", "QR + hash verifikasi publik (NIP di-masking), token sekali-pakai"]} />
+            <FeatureCard icon={Users} title="Master SDM & Referensi" description="Master Pegawai, Pejabat penanda tangan, Unit Kerja Eselon I–V" color="blue" items={["Impor Excel massal + validasi rekening/WNI-WNA", "Keterkaitan aset↔pegawai: panel Perlu Serah Terima BMN", "Referensi Akun BAS per makna digit 1–6 (KEP-211/PB/2018)"]} />
+            <FeatureCard icon={Layers} title="Siklus BMN 12 Tahap" description="Perencanaan → Penghapusan: register & alur resmi tiap tahap" color="cyan" items={["Penganggaran/Pengadaan/Penggunaan/Pemeliharaan/Pemanfaatan", "Penilaian/Pemindahtanganan/Pemusnahan/Penghapusan + Wasdal", "Pembukuan (DBKP/Buku Barang, KIB A–F PMK181) + Pelaporan (LBKP/CaLBMN)"]} />
+            <FeatureCard icon={Mail} title="Persuratan Terpadu" description="Buku agenda & booking nomor naskah dinas lintas modul (PerANRI 5/2021)" color="green" items={["Booking nomor surat keluar → sahkan setelah tanda tangan", "Auto-klasifikasi + kode klasifikasi dinamis + nomor eksternal", "Hapus surat salah catat (kecuali keluar sudah disahkan)"]} />
           </div>
         </CollapsibleSection>
 
