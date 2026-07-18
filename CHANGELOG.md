@@ -48,6 +48,35 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#408] Siklus data satu rumah: backup otomatis terjadwal + arsip server + restore/reset pindah ke Pengaturan › Sistem — 2026-07-18
+
+Pembaruan besar fitur backup/restore/reset sekaligus de-redundansi alur
+(mandat "kelompokkan sesuai posisi yang pas sesuai alurnya"):
+
+- **Backup otomatis harian (BARU)**: server membuat backup sendiri pada jam
+  terjadwal (WIB) dan menyimpannya ke ARSIP SERVER persisten; arsip terlama
+  dihapus otomatis melebihi kuota retensi (setelan aktif/jam/retensi di
+  Pengaturan › Sistem). Scheduler aman multi-worker (klaim tanggal atomik
+  di DB) dan toleran server mati pada jam persisnya.
+- **Arsip backup di server (BARU)**: daftar berkas (nama, ukuran, waktu,
+  jenis) + unduh + hapus + **pulihkan langsung dari arsip** (tanpa unggah
+  ulang; konfirmasi berlapis; arsip asli tidak dikonsumsi proses restore).
+  Backup manual kini punya opsi "simpan juga ke arsip server". Nama berkas
+  divalidasi ketat anti path-traversal (teruji unit).
+- **Satu rumah siklus data**: dialog Pulihkan & Reset PINDAH ke Pengaturan ›
+  Sistem (komponen bersama `DataSistemDialogs`); pintu ganda di halaman
+  pemilihan kegiatan DIHAPUS (tinggal penunjuk arah) — tidak ada lagi
+  fungsi kembar di dua tempat.
+- **Reset kini melindungi master referensi**: kodefikasi barang (impor
+  Excel), kategori, hierarki akun BAS, unit kerja, pegawai, pejabat, dan
+  ruangan SELAMAT dari reset-all (sebelumnya ikut terhapus — setup ulang
+  manual yang mahal). Reset tetap membersihkan seluruh data operasional.
+- Verifikasi: 543 tes unit lulus (+9 baru: retensi, jadwal, anti-traversal,
+  master selamat reset), smoke endpoint arsip/otomatis lulus, server
+  ter-import, lint 0 warning, build sukses.
+
+---
+
 ## [#407] UI mobile sesuai arahan pemilik: penanda SIMAN di bawah foto, toolbar ringkas, hapus surat, arsip 1 baris, Info tersembunyi — 2026-07-18
 
 Enam permintaan langsung pemilik (berdasar tangkapan layar HP):

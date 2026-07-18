@@ -54,10 +54,10 @@ def test_reset_hapus_semua_kecuali_akun_dan_konfigurasi():
     # Akun & konfigurasi DIPERTAHANKAN
     for keep in RESET_KEEP_COLLECTIONS:
         assert keep not in to_reset
-    # Data OPERASIONAL + modul baru DIHAPUS (minus koleksi konfigurasi
-    # yang kini dipertahankan — mis. masa_manfaat)
+    # Data OPERASIONAL + modul baru DIHAPUS (minus koleksi konfigurasi/master
+    # yang kini dipertahankan — mis. masa_manfaat, kodefikasi, categories)
     for m in [c for c in MODUL_BARU if c not in RESET_KEEP_COLLECTIONS] + [
-            "assets", "categories", "audit_logs", "counters",
+            "assets", "audit_logs", "counters",
             "inventory_history", "inventory_activities"]:
         assert m in to_reset, f"{m} harus ikut direset"
     # Transient & GridFS tidak masuk daftar hapus (ditangani terpisah / auto-TTL)
@@ -98,3 +98,50 @@ def test_aman_untuk_masukan_kosong():
     assert collections_to_process(None) == []
     assert collections_to_reset(None) == []
     assert collections_from_backup(None) == []
+
+
+def test_reset_pertahankan_master_referensi():
+    """Audit #407: master referensi yang disusun payah-payah (kodefikasi impor
+    Excel, master pegawai/pejabat/ruangan, unit kerja berjenjang, hierarki akun)
+    harus SELAMAT dari reset-all — reset = bersihkan data operasional saja."""
+    db = SAMPLE_DB + ["referensi_akun_hierarki", "unit_kerja", "pegawai",
+                      "pejabat", "ruangan"]
+    to_reset = set(collections_to_reset(db))
+    for keep in ("kodefikasi", "categories", "referensi_akun_hierarki",
+                 "unit_kerja", "pegawai", "pejabat", "ruangan"):
+        assert keep not in to_reset, f"{keep} harus selamat dari reset"
+        assert keep in collections_to_process(db), f"{keep} tetap ikut backup"
+
+
+def test_nama_arsip_valid_anti_traversal():
+    from backup_utils import nama_arsip_valid
+    assert nama_arsip_valid("backup_otomatis_20260718_020000.zip")
+    assert nama_arsip_valid("backup_manual_20260718_235959.zip")
+    for jahat in ("../etc/passwd", "backup_otomatis_20260718_020000.zip/..",
+                  "backup_otomatis_2026.zip", "lain.zip", "", None,
+                  "backup_otomatis_20260718_020000.ZIP"):
+        assert not nama_arsip_valid(jahat), jahat
+
+
+def test_arsip_retensi_hapus_terlama():
+    from backup_utils import arsip_untuk_dihapus
+    daftar = [f"backup_otomatis_2026071{i}_020000.zip" for i in range(5)] + ["asing.zip"]
+    assert arsip_untuk_dihapus(daftar, 3) == [
+        "backup_otomatis_20260710_020000.zip",
+        "backup_otomatis_20260711_020000.zip"]
+    assert arsip_untuk_dihapus(daftar, 10) == []
+    assert arsip_untuk_dihapus([], 3) == []
+    # retensi minimal 1 — tidak pernah menghapus semuanya
+    assert len(arsip_untuk_dihapus(daftar, 0)) == 4
+
+
+def test_saat_jadwal_tiba():
+    from datetime import datetime
+    from backup_utils import saat_jadwal_tiba
+    w = datetime(2026, 7, 18, 2, 5)
+    assert saat_jadwal_tiba("02:00", w, "") is True
+    assert saat_jadwal_tiba("02:00", w, "2026-07-17") is True  # kemarin → jalan
+    assert saat_jadwal_tiba("02:00", w, "2026-07-18") is False  # sudah hari ini
+    assert saat_jadwal_tiba("03:00", w, "") is False            # belum jamnya
+    assert saat_jadwal_tiba("", w, "") is False                 # tak dikonfigurasi
+    assert saat_jadwal_tiba("2:00", w, "") is False             # format salah

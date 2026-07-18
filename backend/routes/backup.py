@@ -21,6 +21,10 @@ backup_router = APIRouter(prefix="/backup", tags=["backup"])
 UPLOADS_DIR = Path(__file__).parent.parent / "uploads"
 BACKUP_TEMP_DIR = Path(__file__).parent.parent / "backup_temp"
 BACKUP_TEMP_DIR.mkdir(exist_ok=True)
+# Arsip backup PERSISTEN di server (tidak kena pembersihan 1 jam) — diisi
+# backup otomatis terjadwal & backup manual ber-opsi "arsipkan di server".
+BACKUP_ARSIP_DIR = Path(__file__).parent.parent / "backup_arsip"
+BACKUP_ARSIP_DIR.mkdir(exist_ok=True)
 # 3.4.0: + inventory_history & counters (tiket kegiatan) dalam backup
 APP_VERSION = "3.4.0"
 
@@ -29,8 +33,8 @@ APP_VERSION = "3.4.0"
 # koleksi/modul baru otomatis ikut ter-backup, ter-restore, & ter-reset.
 from backup_utils import (  # noqa: E402
     SKIP_COLLECTIONS, KEEP_ID_COLLECTIONS, RESET_KEEP_COLLECTIONS,
-    LEGACY_COLLECTION_ALIASES, collections_to_process,
-    collections_from_backup,
+    LEGACY_COLLECTION_ALIASES, arsip_untuk_dihapus, collections_to_process,
+    collections_from_backup, nama_arsip_valid, saat_jadwal_tiba,
 )
 
 
@@ -227,8 +231,12 @@ async def import_gridfs(zf: zipfile.ZipFile, progress_cb=None) -> int:
 # BACKGROUND BACKUP TASK
 # ============================================================================
 
-async def run_backup_task(job_id: str, username: str):
-    """Background task that creates backup ZIP with progress tracking."""
+async def run_backup_task(job_id: str, username: str, arsipkan: str = ""):
+    """Background task that creates backup ZIP with progress tracking.
+
+    `arsipkan` ("otomatis"/"manual") = pindahkan ZIP hasil ke arsip persisten
+    server (BACKUP_ARSIP_DIR) — tidak kena pembersihan berkas temp 1 jam.
+    """
     try:
         await update_job(job_id, status="running", progress=0, message="Memulai proses backup...")
 
@@ -294,10 +302,22 @@ async def run_backup_task(job_id: str, username: str):
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         filename = f"backup_{timestamp}.zip"
 
+        arsip_nama = ""
+        if arsipkan in ("otomatis", "manual"):
+            arsip_nama = f"backup_{arsipkan}_{timestamp}.zip"
+            try:
+                shutil.move(str(zip_path), str(BACKUP_ARSIP_DIR / arsip_nama))
+                filename = arsip_nama
+            except Exception as e:
+                logger.warning(f"Backup [{job_id}]: gagal arsipkan ({e}) — file tetap di temp")
+                arsip_nama = ""
+
         await update_job(
             job_id, status="completed", progress=100,
-            message="Backup selesai! Siap diunduh.",
+            message=("Backup selesai & tersimpan di arsip server." if arsip_nama
+                     else "Backup selesai! Siap diunduh."),
             filename=filename,
+            arsip_nama=arsip_nama,
             file_size=file_size,
             stats=stats,
             total_records=sum(v for k, v in stats.items() if k != "gridfs_files"),
@@ -500,8 +520,12 @@ async def get_backup_stats(authorization: str = Header(None)):
 
 
 @backup_router.post("/start")
-async def start_backup(authorization: str = Header(None)):
-    """Start a background backup job. Returns job_id for progress tracking."""
+async def start_backup(authorization: str = Header(None), arsipkan: bool = False):
+    """Start a background backup job. Returns job_id for progress tracking.
+
+    `arsipkan=true` = simpan hasil ke arsip persisten server (selain tetap
+    bisa diunduh) — untuk cadangan yang menetap tanpa perlu mengunduh.
+    """
     user = await require_admin(authorization)
     await cleanup_stale_jobs()
     await cleanup_old_files()
@@ -524,7 +548,8 @@ async def start_backup(authorization: str = Header(None)):
     }
     await db.backup_jobs.insert_one(job)
 
-    asyncio.create_task(run_backup_task(job_id, user.get("username")))
+    asyncio.create_task(run_backup_task(job_id, user.get("username"),
+                                        arsipkan="manual" if arsipkan else ""))
     logger.info(f"Backup job {job_id} started by {user.get('username')}")
 
     return {"job_id": job_id, "message": "Proses backup dimulai di background"}
@@ -654,6 +679,9 @@ async def download_backup(
         raise HTTPException(status_code=404, detail="Backup tidak ditemukan atau belum selesai")
 
     zip_path = BACKUP_TEMP_DIR / f"{job_id}.zip"
+    # Hasil yang diarsipkan berpindah ke arsip persisten — layani dari sana.
+    if not zip_path.exists() and nama_arsip_valid(job.get("arsip_nama")):
+        zip_path = BACKUP_ARSIP_DIR / job["arsip_nama"]
     if not zip_path.exists():
         raise HTTPException(status_code=404, detail="File backup sudah dihapus (expired)")
 
@@ -680,3 +708,195 @@ async def dismiss_job(job_id: str, authorization: str = Header(None)):
         if p.exists():
             p.unlink(missing_ok=True)
     return {"ok": True}
+
+
+# ============================================================================
+# ARSIP BACKUP DI SERVER + JADWAL OTOMATIS HARIAN (audit backup #407)
+# ============================================================================
+# Setelan tersimpan di report_settings {"type": "backup_otomatis"}:
+#   aktif (bool) · jam ("HH:MM" WIB) · retensi (jumlah arsip dipertahankan)
+#   · terakhir ("YYYY-MM-DD" — tanggal WIB backup otomatis terakhir jalan).
+# Scheduler dipanggil dari startup server; klaim tanggal via find_one_and_update
+# ATOMIK sehingga aman multi-worker (hanya satu worker yang menjalankan).
+
+WIB = timezone(timedelta(hours=7))
+_SETELAN_OTOMATIS_DEFAULT = {"aktif": False, "jam": "02:00", "retensi": 7,
+                             "terakhir": ""}
+
+
+def _daftar_arsip():
+    out = []
+    for p in sorted(BACKUP_ARSIP_DIR.iterdir() if BACKUP_ARSIP_DIR.exists() else []):
+        if p.is_file() and nama_arsip_valid(p.name):
+            st = p.stat()
+            out.append({
+                "nama": p.name,
+                "ukuran": st.st_size,
+                "waktu": datetime.fromtimestamp(st.st_mtime, tz=timezone.utc).isoformat(),
+                "jenis": "otomatis" if "_otomatis_" in p.name else "manual",
+            })
+    out.sort(key=lambda x: x["nama"], reverse=True)
+    return out
+
+
+def _terapkan_retensi(retensi: int):
+    nama_semua = [a["nama"] for a in _daftar_arsip()]
+    for nama in arsip_untuk_dihapus(nama_semua, retensi):
+        try:
+            (BACKUP_ARSIP_DIR / nama).unlink(missing_ok=True)
+            logger.info(f"Retensi arsip backup: {nama} dihapus")
+        except Exception as e:
+            logger.warning(f"Retensi arsip backup gagal hapus {nama}: {e}")
+
+
+async def _jalankan_backup_otomatis(retensi: int):
+    """Satu siklus backup otomatis: job + tunggu selesai + terapkan retensi."""
+    job_id = str(uuid.uuid4())[:12]
+    await db.backup_jobs.insert_one({
+        "job_id": job_id, "type": "backup", "status": "queued", "progress": 0,
+        "message": "Backup otomatis terjadwal...",
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "started_by": "backup-otomatis",
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    })
+    await run_backup_task(job_id, "backup-otomatis", arsipkan="otomatis")
+    _terapkan_retensi(retensi)
+
+
+async def backup_scheduler_loop():
+    """Loop harian: cek tiap 5 menit; jalankan pada/tepat setelah jam setelan."""
+    while True:
+        try:
+            s = await db.report_settings.find_one(
+                {"type": "backup_otomatis"}, {"_id": 0}) or {}
+            if s.get("aktif"):
+                now_wib = datetime.now(WIB)
+                if saat_jadwal_tiba(s.get("jam", "02:00"), now_wib,
+                                    s.get("terakhir", "")):
+                    aktif_job = await db.backup_jobs.find_one(
+                        {"status": {"$in": ["running", "queued"]}}, {"_id": 1})
+                    if not aktif_job:
+                        hari_ini = now_wib.strftime("%Y-%m-%d")
+                        # Klaim ATOMIK — worker lain melihat `terakhir` sudah
+                        # hari ini dan tidak ikut menjalankan.
+                        klaim = await db.report_settings.find_one_and_update(
+                            {"type": "backup_otomatis", "aktif": True,
+                             "terakhir": {"$ne": hari_ini}},
+                            {"$set": {"terakhir": hari_ini}})
+                        if klaim:
+                            logger.info("Backup otomatis terjadwal: mulai")
+                            await _jalankan_backup_otomatis(
+                                int(s.get("retensi", 7) or 7))
+        except Exception as e:
+            logger.warning(f"Scheduler backup otomatis: {e}")
+        await asyncio.sleep(300)
+
+
+def start_backup_scheduler():
+    """Dipanggil dari startup server — jalankan loop di background."""
+    asyncio.create_task(backup_scheduler_loop())
+
+
+@backup_router.get("/otomatis")
+async def get_setelan_otomatis(authorization: str = Header(None)):
+    """Setelan backup otomatis + ringkas arsip (untuk panel Pengaturan)."""
+    await require_admin(authorization)
+    s = await db.report_settings.find_one(
+        {"type": "backup_otomatis"}, {"_id": 0, "type": 0}) or {}
+    arsip = _daftar_arsip()
+    return {**_SETELAN_OTOMATIS_DEFAULT, **s,
+            "jumlah_arsip": len(arsip),
+            "total_ukuran": sum(a["ukuran"] for a in arsip)}
+
+
+@backup_router.post("/otomatis")
+async def set_setelan_otomatis(payload: dict, authorization: str = Header(None)):
+    """Simpan setelan backup otomatis (aktif, jam WIB, retensi)."""
+    user = await require_admin(authorization)
+    import re as _re
+    jam = str(payload.get("jam", "02:00")).strip()
+    if not _re.match(r"^([01]\d|2[0-3]):[0-5]\d$", jam):
+        raise HTTPException(status_code=400,
+                            detail="Format jam harus HH:MM (24 jam, WIB)")
+    try:
+        retensi = max(1, min(60, int(payload.get("retensi", 7))))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Retensi harus angka 1-60")
+    await db.report_settings.update_one(
+        {"type": "backup_otomatis"},
+        {"$set": {"aktif": bool(payload.get("aktif")), "jam": jam,
+                  "retensi": retensi}},
+        upsert=True)
+    logger.info(f"Setelan backup otomatis diubah oleh {user.get('username')}: "
+                f"aktif={bool(payload.get('aktif'))} jam={jam} retensi={retensi}")
+    return {"ok": True}
+
+
+@backup_router.get("/arsip")
+async def daftar_arsip_backup(authorization: str = Header(None)):
+    """Daftar berkas backup yang tersimpan di arsip server."""
+    await require_admin(authorization)
+    return {"items": _daftar_arsip()}
+
+
+@backup_router.get("/arsip/{nama}")
+async def unduh_arsip_backup(nama: str, authorization: str = Header(None),
+                             token: str | None = None):
+    """Unduh satu berkas arsip (dukung ?token= utk navigasi browser langsung)."""
+    effective_auth = authorization
+    if not effective_auth and token:
+        effective_auth = f"Bearer {token}"
+    await require_admin(effective_auth)
+    if not nama_arsip_valid(nama):
+        raise HTTPException(status_code=400, detail="Nama berkas arsip tidak dikenal")
+    p = BACKUP_ARSIP_DIR / nama
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="Berkas arsip tidak ditemukan")
+    return FileResponse(path=str(p), media_type="application/zip", filename=nama,
+                        headers={"Content-Disposition": f'attachment; filename="{nama}"'})
+
+
+@backup_router.delete("/arsip/{nama}")
+async def hapus_arsip_backup(nama: str, authorization: str = Header(None)):
+    """Hapus satu berkas arsip backup (admin)."""
+    user = await require_admin(authorization)
+    if not nama_arsip_valid(nama):
+        raise HTTPException(status_code=400, detail="Nama berkas arsip tidak dikenal")
+    p = BACKUP_ARSIP_DIR / nama
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="Berkas arsip tidak ditemukan")
+    p.unlink(missing_ok=True)
+    logger.info(f"Arsip backup {nama} dihapus oleh {user.get('username')}")
+    return {"ok": True}
+
+
+@backup_router.post("/restore/dari-arsip/{nama}")
+async def restore_dari_arsip(nama: str, authorization: str = Header(None)):
+    """Mulai restore langsung dari berkas arsip server (tanpa unggah ulang)."""
+    user = await require_admin(authorization)
+    await cleanup_stale_jobs()
+    if not nama_arsip_valid(nama):
+        raise HTTPException(status_code=400, detail="Nama berkas arsip tidak dikenal")
+    sumber = BACKUP_ARSIP_DIR / nama
+    if not sumber.exists():
+        raise HTTPException(status_code=404, detail="Berkas arsip tidak ditemukan")
+    active = await db.backup_jobs.find_one({"status": "running"}, {"_id": 0})
+    if active:
+        raise HTTPException(status_code=409,
+                            detail="Sudah ada proses backup/restore yang sedang berjalan")
+    job_id = str(uuid.uuid4())[:12]
+    # Salin ke temp — proses restore boleh menghapus berkas kerjanya tanpa
+    # mengorbankan arsip asli.
+    zip_path = BACKUP_TEMP_DIR / f"restore_{job_id}.zip"
+    shutil.copyfile(str(sumber), str(zip_path))
+    await db.backup_jobs.insert_one({
+        "job_id": job_id, "type": "restore", "status": "queued", "progress": 0,
+        "message": "Menunggu mulai...",
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "started_by": user.get("username"),
+        "source_file": nama,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    })
+    asyncio.create_task(run_restore_task(job_id, zip_path, user.get("username")))
+    logger.info(f"Restore dari arsip {nama} dimulai oleh {user.get('username')}")
+    return {"job_id": job_id, "message": "Proses restore dari arsip dimulai di background"}
