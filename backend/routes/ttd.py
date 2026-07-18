@@ -15,7 +15,8 @@ from datetime import datetime, timezone
 from typing import List
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import (APIRouter, Depends, File, Form, HTTPException, Request,
+                     UploadFile)
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -256,6 +257,213 @@ async def buat_permintaan(payload: PermintaanIn, user: dict = Depends(require_wr
             "links": links}
 
 
+@ttd_router.post("/ttd/permintaan/unggah")
+async def buat_permintaan_dengan_dokumen(
+    file: UploadFile = File(...),
+    judul: str = Form(""),
+    mode: str = Form("paralel"),
+    signers: str = Form("[]"),
+    user: dict = Depends(require_writer),
+):
+    """Permintaan TTD DENGAN dokumen PDF terlampir (permintaan pemilik):
+    kirim dokumen yang hendak di-ttd LANGSUNG — penanda tangan meneken via
+    link seperti biasa, lalu tanda tangan DIBUBUHKAN ke halaman terakhir
+    dokumen (unduh 'Dokumen ber-TTD')."""
+    nama = str(file.filename or "").lower()
+    if not nama.endswith(".pdf"):
+        raise HTTPException(status_code=400,
+                            detail="Dokumen harus berformat PDF")
+    data = await file.read()
+    if len(data) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Maksimal 20MB")
+    try:
+        from pypdf import PdfReader
+        n_hal = len(PdfReader(io.BytesIO(data)).pages)
+    except Exception:
+        raise HTTPException(status_code=400,
+                            detail="Berkas PDF tidak dapat dibaca/terenkripsi")
+    import json as _json
+    try:
+        daftar = _json.loads(signers or "[]")
+        assert isinstance(daftar, list)
+    except Exception:
+        raise HTTPException(status_code=400,
+                            detail="Format daftar penanda tangan tidak valid")
+    payload = PermintaanIn(
+        judul=str(judul or "").strip() or str(file.filename or "Dokumen"),
+        doc_type="dokumen_unggahan", doc_ref="", mode=mode,
+        signers=[SignerIn(
+            nama=str((s or {}).get("nama") or ""),
+            nip=str((s or {}).get("nip") or ""),
+            jabatan=str((s or {}).get("jabatan") or ""),
+            email=str((s or {}).get("email") or ""),
+        ) for s in daftar])
+    hasil = await buat_permintaan(payload=payload, user=user)
+
+    file_id = ObjectId()
+    grid_in = fs_bucket.open_upload_stream_with_id(
+        file_id, filename=file.filename,
+        metadata={"content_type": "application/pdf", "size": len(data)})
+    await grid_in.write(data)
+    await grid_in.close()
+    await db.signature_requests.update_one(
+        {"id": hasil["id"]},
+        {"$set": {"dok_file_id": str(file_id),
+                  "dok_nama": str(file.filename or "dokumen.pdf"),
+                  "dok_halaman": n_hal}})
+    return {**hasil, "dok_nama": file.filename, "dok_halaman": n_hal}
+
+
+async def _ambil_dokumen_sr(sr_id: str):
+    """(sr, bytes PDF asli) — 404 bila permintaan/dokumen tak ada."""
+    sr = await db.signature_requests.find_one({"id": sr_id}, _PROJ)
+    if not sr:
+        raise HTTPException(status_code=404, detail="Permintaan tidak ditemukan")
+    fid = str(sr.get("dok_file_id") or "").strip()
+    if not fid:
+        raise HTTPException(status_code=404,
+                            detail="Permintaan ini tidak melampirkan dokumen")
+    data = await get_document_from_gridfs(fid)
+    if not data:
+        raise HTTPException(status_code=404, detail="Berkas dokumen tidak ditemukan")
+    return sr, data
+
+
+@ttd_router.get("/ttd/permintaan/{sr_id}/dokumen")
+async def dokumen_asli(sr_id: str,
+                       _user: dict = Depends(require_user_or_query_token)):
+    """Stream dokumen PDF asli (pratinjau dasbor pembuat)."""
+    sr, data = await _ambil_dokumen_sr(sr_id)
+    return StreamingResponse(
+        io.BytesIO(data), media_type="application/pdf",
+        headers={"Content-Disposition":
+                 f'inline; filename="{sr.get("dok_nama", "dokumen.pdf")}"',
+                 "X-Content-Type-Options": "nosniff"})
+
+
+@ttd_router.get("/ttd/tandatangan/{sr_id}/dokumen")
+async def dokumen_untuk_penanda_tangan(sr_id: str,
+                                       tok: dict = Depends(require_sign_token)):
+    """Stream dokumen asli untuk PENANDA TANGAN (via link e-sign) — agar yang
+    meneken bisa MEMBACA dulu apa yang ditandatanganinya."""
+    if tok["sr"] != sr_id:
+        raise HTTPException(status_code=401, detail="Token tidak cocok dokumen")
+    sr, data = await _ambil_dokumen_sr(sr_id)
+    return StreamingResponse(
+        io.BytesIO(data), media_type="application/pdf",
+        headers={"Content-Disposition":
+                 f'inline; filename="{sr.get("dok_nama", "dokumen.pdf")}"',
+                 "X-Content-Type-Options": "nosniff"})
+
+
+@ttd_router.get("/ttd/permintaan/{sr_id}/dokumen-ttd")
+async def dokumen_ber_ttd(sr_id: str,
+                          _user: dict = Depends(require_user_or_query_token)):
+    """Dokumen PDF asli DENGAN BUBUHAN tanda tangan elektronik di halaman
+    terakhir: gambar ttd + nama/NIP/jabatan + waktu per penanda tangan yang
+    sudah meneken, plus QR verifikasi & kode. Dibangun on-the-fly sehingga
+    selalu memuat tanda tangan terbaru."""
+    from pypdf import PdfReader, PdfWriter
+    from reportlab.lib.units import mm as rl_mm
+    from reportlab.lib.utils import ImageReader
+    from reportlab.pdfgen import canvas as rl_canvas
+
+    sr, data = await _ambil_dokumen_sr(sr_id)
+    penanda = [s for s in (sr.get("signers") or [])
+               if str(s.get("signature_file_id") or "").strip()]
+    if not penanda:
+        raise HTTPException(status_code=400,
+                            detail="Belum ada tanda tangan yang masuk")
+
+    reader = PdfReader(io.BytesIO(data))
+    hal_akhir = reader.pages[-1]
+    lebar = float(hal_akhir.mediabox.width)
+    tinggi = float(hal_akhir.mediabox.height)
+
+    # ── Overlay stempel ttd: slot berderet (maks 3/baris) di area bawah ──
+    buf_ov = io.BytesIO()
+    c = rl_canvas.Canvas(buf_ov, pagesize=(lebar, tinggi))
+    margin = 14 * rl_mm
+    per_baris = min(3, len(penanda))
+    slot_w = (lebar - 2 * margin) / per_baris
+    slot_h = 30 * rl_mm
+    for i, s in enumerate(penanda):
+        kol = i % per_baris
+        brs = i // per_baris
+        x = margin + kol * slot_w
+        y = margin + brs * slot_h
+        c.setFont("Helvetica", 6.5)
+        c.setFillGray(0.35)
+        c.drawCentredString(x + slot_w / 2, y + slot_h - 8,
+                            "Ditandatangani secara elektronik")
+        c.setFillGray(0)
+        img_data = await get_document_from_gridfs(s["signature_file_id"])
+        if img_data:
+            try:
+                img = ImageReader(io.BytesIO(img_data))
+                iw, ih = img.getSize()
+                maks_w, maks_h = slot_w - 8 * rl_mm, 13 * rl_mm
+                sk = min(maks_w / iw, maks_h / ih)
+                c.drawImage(img, x + (slot_w - iw * sk) / 2,
+                            y + slot_h - 10 - ih * sk,
+                            width=iw * sk, height=ih * sk, mask="auto")
+            except Exception:
+                pass
+        c.setFont("Helvetica-Bold", 8)
+        nama_y = y + 9 * rl_mm
+        c.drawCentredString(x + slot_w / 2, nama_y, str(s.get("nama") or "")[:38])
+        # Garis bawah nama dibatasi ±70mm agar tak membentang penuh saat
+        # penanda tangan tunggal (slot = selebar halaman).
+        garis_w = min(slot_w - 12 * rl_mm, 70 * rl_mm)
+        c.setLineWidth(0.5)
+        c.line(x + (slot_w - garis_w) / 2, nama_y - 1.5,
+               x + (slot_w + garis_w) / 2, nama_y - 1.5)
+        c.setFont("Helvetica", 6.5)
+        info = []
+        if s.get("jabatan"):
+            info.append(str(s["jabatan"])[:40])
+        if s.get("nip"):
+            info.append(f"NIP. {s['nip']}")
+        if s.get("signed_at"):
+            info.append(str(s["signed_at"])[:10])
+        for j, baris in enumerate(info[:3]):
+            c.drawCentredString(x + slot_w / 2, nama_y - 8 - j * 7, baris)
+    # QR verifikasi + kode di pojok kanan-bawah.
+    try:
+        from reportlab.graphics import renderPDF
+
+        from routes.cards import build_qr_flowable
+        verif = (_APP_URL + f"/ttd/verifikasi/{sr_id}") if _APP_URL \
+            else f"/ttd/verifikasi/{sr_id}"
+        qr = build_qr_flowable(verif, 12 * rl_mm)
+        if qr is not None:
+            renderPDF.draw(qr, c, lebar - margin - 12 * rl_mm, 2 * rl_mm)
+        c.setFont("Helvetica", 5.5)
+        c.setFillGray(0.4)
+        c.drawRightString(lebar - margin - 13 * rl_mm, 5 * rl_mm,
+                          f"Verifikasi: {sr_id[:8]}")
+    except Exception:
+        pass
+    c.save()
+    buf_ov.seek(0)
+
+    overlay = PdfReader(buf_ov).pages[0]
+    writer = PdfWriter()
+    for idx, page in enumerate(reader.pages):
+        if idx == len(reader.pages) - 1:
+            page.merge_page(overlay)
+        writer.add_page(page)
+    out = io.BytesIO()
+    writer.write(out)
+    out.seek(0)
+    nama_dok = str(sr.get("dok_nama") or "dokumen.pdf").rsplit(".", 1)[0]
+    return StreamingResponse(
+        out, media_type="application/pdf",
+        headers={"Content-Disposition":
+                 f'inline; filename="{nama_dok}_ber-TTD.pdf"',
+                 "X-Content-Type-Options": "nosniff"})
+
+
 @ttd_router.get("/ttd/permintaan")
 async def daftar_permintaan(_user: dict = Depends(require_user)):
     """Daftar permintaan tanda tangan (terbaru dulu) + ringkas status.
@@ -357,7 +565,10 @@ async def info_tandatangan(sr_id: str, tok: dict = Depends(require_sign_token)):
     return {"id": sr_id, "judul": sr.get("judul"), "doc_type": sr.get("doc_type"),
             "mode": sr.get("mode"), "status_dokumen": sr.get("status"),
             "penanda_tangan": _publik_signer(sg), "boleh_ttd": bisa,
-            "alasan": alasan}
+            "alasan": alasan,
+            # dokumen terlampir → halaman publik menampilkan tombol baca
+            "ada_dokumen": bool(str(sr.get("dok_file_id") or "").strip()),
+            "dok_nama": sr.get("dok_nama", "")}
 
 
 @ttd_router.post("/ttd/tandatangan/{sr_id}/kirim")

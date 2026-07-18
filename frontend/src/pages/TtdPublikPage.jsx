@@ -215,6 +215,14 @@ function TandaTangan({ id, token }) {
         </div>
         <StatusPill status={sg.status} />
       </div>
+      {info.ada_dokumen && (
+        <Button variant="outline" size="sm" className="h-9 text-xs w-full"
+          onClick={() => window.open(`${API}/ttd/tandatangan/${id}/dokumen?token=${encodeURIComponent(token)}`, "_blank", "noopener")}
+          data-testid="ttd-lihat-dokumen">
+          <ShieldCheck className="w-3.5 h-3.5 mr-1.5" />
+          Baca dokumen yang akan ditandatangani{info.dok_nama ? ` — ${info.dok_nama}` : ""}
+        </Button>
+      )}
       {info.boleh_ttd ? (
         <>
           <p className="text-xs text-muted-foreground">
