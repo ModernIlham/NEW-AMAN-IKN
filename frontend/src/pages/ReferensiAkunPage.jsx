@@ -3,11 +3,13 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Search, Loader2, Landmark, Plus, Trash2, DownloadCloud, Boxes,
+  Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
+import { downloadFileWithProgress } from "@/lib/downloadFile";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -213,6 +215,16 @@ export default function ReferensiAkunPage({ user, onBack }) {
   };
 
   const labelSeg = data?.label_segmen || {};
+  const labelKel = data?.label_kelompok || {};
+
+  const eksporCsv = () => {
+    const params = {};
+    if (q.trim()) params.search = q.trim();
+    if (segmen) params.segmen = segmen;
+    downloadFileWithProgress(`${API}/referensi-akun/export`, "referensi_akun_bas.csv",
+      { label: "Ekspor Referensi Akun BAS (CSV)", params }).catch(() => {});
+  };
+
   const TABS = [
     ["master", "Segmen Akun BAS"],
     ["aset", "Akun Aset (Golongan)"],
@@ -274,6 +286,12 @@ export default function ReferensiAkunPage({ user, onBack }) {
                     <option key={k} value={k}>{k} — {v}{data?.per_segmen?.[k] ? ` (${data.per_segmen[k]})` : ""}</option>
                   ))}
                 </select>
+                <Button variant="outline" size="sm" className="h-10 gap-1.5" onClick={eksporCsv}
+                  data-testid="referensi-akun-ekspor">
+                  <Download className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Ekspor CSV</span>
+                  <span className="sm:hidden">CSV</span>
+                </Button>
               </div>
               {isAdmin && (
                 <div className="flex items-center gap-2">
@@ -298,35 +316,53 @@ export default function ReferensiAkunPage({ user, onBack }) {
                       <tr className="border-b border-border bg-muted/40 text-left text-xs text-muted-foreground">
                         <th className="px-3 py-2.5 font-semibold w-24">Kode</th>
                         <th className="px-3 py-2.5 font-semibold">Nama Akun</th>
-                        <th className="px-3 py-2.5 font-semibold w-28">Segmen</th>
                         <th className="px-3 py-2.5 font-semibold">Info BMN</th>
                         {isAdmin && <th className="px-3 py-2.5 w-10"></th>}
                       </tr>
                     </thead>
                     <tbody>
-                      {(data?.items || []).map((a) => (
-                        <tr key={a.kode} className="border-b border-border/60 last:border-0 hover:bg-muted/50" data-testid={`akun-row-${a.kode}`}>
-                          <td className="px-3 py-1.5 font-mono text-[12px] font-semibold text-foreground">{a.kode}</td>
-                          <td className="px-3 py-1.5 text-[12px] text-foreground/90">
-                            {a.nama}
-                            {a.sumber === "satker" && <span className="ml-1.5 px-1 py-0.5 rounded bg-sky-500/15 text-sky-600 dark:text-sky-400 text-[9px] font-semibold">satker</span>}
-                          </td>
-                          <td className="px-3 py-1.5 text-[11px] text-muted-foreground">{a.segmen}</td>
-                          <td className="px-3 py-1.5 text-[10px] text-muted-foreground">
-                            {[a.uraian_bmn, a.kapitalisasi, a.kategori_neraca].filter(Boolean).join(" · ") || "—"}
-                          </td>
-                          {isAdmin && (
-                            <td className="px-2 py-1.5">
-                              <button type="button" onClick={() => hapusAkun(a)} aria-label={`Hapus ${a.kode}`}
-                                className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-500/10 min-w-0 min-h-0">
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                      {/* Baris dikelompokkan sesuai MAKNA DIGIT kode akun BAS
+                          (KEP-211/PB/2018): header muncul tiap kelompok akun
+                          (2 digit pertama) berganti — data sudah terurut kode. */}
+                      {(data?.items || []).flatMap((a, idx, arr) => {
+                        const kel = String(a.kode || "").slice(0, 2);
+                        const kelSebelum = idx > 0 ? String(arr[idx - 1].kode || "").slice(0, 2) : "";
+                        const rows = [];
+                        if (kel && kel !== kelSebelum) {
+                          rows.push(
+                            <tr key={`kel-${kel}`} className="bg-amber-500/10 border-b border-border/60" data-testid={`akun-kelompok-${kel}`}>
+                              <td colSpan={isAdmin ? 4 : 3} className="px-3 py-1.5">
+                                <span className="font-mono text-[11px] font-bold text-amber-700 dark:text-amber-400">{kel}xxxx</span>
+                                <span className="text-[11px] font-semibold text-foreground"> — {labelKel[kel] || `Kelompok ${kel}`}</span>
+                                <span className="ml-2 px-1.5 py-0.5 rounded bg-muted text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">{labelSeg[kel[0]] || a.segmen}</span>
+                              </td>
+                            </tr>
+                          );
+                        }
+                        rows.push(
+                          <tr key={a.kode} className="border-b border-border/60 last:border-0 hover:bg-muted/50" data-testid={`akun-row-${a.kode}`}>
+                            <td className="px-3 py-1.5 font-mono text-[12px] font-semibold text-foreground">{a.kode}</td>
+                            <td className="px-3 py-1.5 text-[12px] text-foreground/90">
+                              {a.nama}
+                              {a.sumber === "satker" && <span className="ml-1.5 px-1 py-0.5 rounded bg-sky-500/15 text-sky-600 dark:text-sky-400 text-[9px] font-semibold">satker</span>}
                             </td>
-                          )}
-                        </tr>
-                      ))}
+                            <td className="px-3 py-1.5 text-[10px] text-muted-foreground">
+                              {[a.uraian_bmn, a.kapitalisasi, a.kategori_neraca].filter(Boolean).join(" · ") || "—"}
+                            </td>
+                            {isAdmin && (
+                              <td className="px-2 py-1.5">
+                                <button type="button" onClick={() => hapusAkun(a)} aria-label={`Hapus ${a.kode}`}
+                                  className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-500/10 min-w-0 min-h-0">
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </td>
+                            )}
+                          </tr>
+                        );
+                        return rows;
+                      })}
                       {(data?.items || []).length === 0 && (
-                        <tr><td colSpan={5} className="text-center text-xs text-muted-foreground py-8">Tidak ada akun yang cocok</td></tr>
+                        <tr><td colSpan={isAdmin ? 4 : 3} className="text-center text-xs text-muted-foreground py-8">Tidak ada akun yang cocok</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -341,6 +377,7 @@ export default function ReferensiAkunPage({ user, onBack }) {
               )}
             </div>
             <p className="text-center text-[10px] text-muted-foreground pb-2">
+              Kategori mengikuti struktur digit BAS (KEP-211/PB/2018 jo. pemutakhirannya): digit 1 = akun/segmen, 2 digit = kelompok akun, 3 digit = jenis akun.
               Sumber: dokumen resmi &quot;Referensi Akun&quot; SAKTI/SPAN + kertas kerja akun belanja↔BMN satker; entri manual bertanda &quot;satker&quot;.
             </p>
           </>

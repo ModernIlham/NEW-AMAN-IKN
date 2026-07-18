@@ -27,6 +27,7 @@ from pydantic import BaseModel
 
 from auth_utils import require_admin, require_user
 from db import db
+from referensi_akun_utils import KELOMPOK_LABEL, baris_csv_referensi
 from shared_utils import log_audit
 
 referensi_akun_router = APIRouter()
@@ -110,7 +111,37 @@ async def daftar_referensi_akun(search: str = "", segmen: str = "",
         per_segmen[g["_id"]] = g["n"]
     return {"items": items, "total": total, "page": page,
             "total_pages": max(1, -(-total // page_size)),
-            "per_segmen": per_segmen, "label_segmen": SEGMEN_LABEL}
+            "per_segmen": per_segmen, "label_segmen": SEGMEN_LABEL,
+            "label_kelompok": KELOMPOK_LABEL}
+
+
+@referensi_akun_router.get("/referensi-akun/export")
+async def export_referensi_akun(search: str = "", segmen: str = "",
+                                _user: dict = Depends(require_user)):
+    """Ekspor CSV master Kodefikasi Segmen Akun + kolom hierarki digit
+    (akun/segmen · kelompok · jenis) — mengikuti filter cari & segmen yang
+    sedang aktif di halaman (tanpa paginasi; pola export register)."""
+    import csv as csv_module
+    import io
+
+    from fastapi import Response
+
+    await _seed(hanya_bila_kosong=True)
+    q = {}
+    if str(segmen).strip() in SEGMEN_LABEL:
+        q["kode"] = {"$regex": f"^{segmen.strip()}"}
+    if search.strip():
+        rx = {"$regex": re.escape(search.strip()), "$options": "i"}
+        q["$or"] = [{"kode": rx}, {"nama": rx}]
+    items = [a async for a in db.referensi_akun.find(q, _PROJ).sort("kode", 1)]
+    buf = io.StringIO()
+    w = csv_module.writer(buf)
+    for row in baris_csv_referensi(items, SEGMEN_LABEL):
+        w.writerow(row)
+    return Response(
+        content=buf.getvalue().encode("utf-8-sig"), media_type="text/csv",
+        headers={"Content-Disposition":
+                 'attachment; filename="referensi_akun_bas.csv"'})
 
 
 @referensi_akun_router.get("/referensi-akun/periksa")
