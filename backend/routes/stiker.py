@@ -1,15 +1,16 @@
-"""Cetak STIKER LABEL BMN — 3 ukuran (besar/sedang/kecil) pada kertas A4/A3.
+"""Cetak STIKER LABEL BMN — ukuran OPTIMAL memenuhi seluruh ruang A4/A3.
 
-Desain meniru contoh label resmi satker (referensi pemilik): border kotak,
-header logo + nama instansi + kode register lengkap, garis pemisah, badan
-kiri (kode barang + NUP, kategori, nama barang terpotong "..."), QR besar di
-kanan. Payload QR memakai format yang sama dengan Kartu Inventarisasi
-(`#kode_register` / `#kode-nup`) sehingga pemindai internal aplikasi langsung
-mengenalinya.
+Desain meniru contoh label resmi satker: border kotak, header logo + nama
+instansi + NAMA SATKER, garis pemisah, badan kiri (kode barang + NUP,
+kategori, nama barang terpotong "..."), QR di kanan MEPET garis tepi
+(kanan/bawah/garis header). Payload QR memakai format pemindai internal
+(`#kode_register` / `#kode-nup`).
 
-Cakupan aset MENGIKUTI FILTER AKTIF daftar aset (search/kategori/kondisi/
-lokasi/eselon/status stiker/dll. — parameter identik `GET /assets`) atau
-daftar `asset_ids` eksplisit (mis. halaman yang sedang tampil).
+Grid dihitung `grid_optimal` (stiker_utils): kolom/baris dibulatkan ke
+ukuran target lalu label DIRENTANGKAN mengisi penuh area cetak — sisa ruang
+hanya margin 6mm + celah potong 1,5mm. Mode `ukuran=per_aset` mencetak
+SESUAI PILIHAN tiap aset (field `stiker_ukuran`) dan MENGELOMPOKKAN hasil
+per ukuran (besar → sedang → kecil).
 """
 import io
 
@@ -20,19 +21,16 @@ from auth_utils import require_user
 from db import db
 from shared_utils import (kode_satker_user, pastikan_akses_kegiatan_id,
                           pengaturan_kop, scope_query_aset)
+from stiker_utils import (GAP_MM, MARGIN_MM, TARGET_STIKER, grid_optimal,
+                          kelompokkan_per_ukuran)
 
 stiker_router = APIRouter()
 
-# (lebar, tinggi, tinggi header, jumlah baris deskripsi) dalam mm.
-UKURAN_STIKER = {
-    "besar": {"w": 95, "h": 45, "header": 12, "baris_desc": 3},
-    "sedang": {"w": 62, "h": 30, "header": 8.5, "baris_desc": 2},
-    "kecil": {"w": 45, "h": 22, "header": 6.5, "baris_desc": 1},
-}
 MAKS_STIKER = 2000
 
 _PROJ_STIKER = {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
-                "category": 1, "kode_register": 1, "activity_id": 1}
+                "category": 1, "kode_register": 1, "activity_id": 1,
+                "stiker_ukuran": 1}
 
 
 def _logo_reader(logo_url: str):
@@ -59,29 +57,29 @@ def _potong_baris(teks, font, size, lebar, maks_baris):
     return baris
 
 
-def _gambar_stiker(c, x, y, spec, aset, kop, logo, mm):
-    """Gambar SATU stiker di posisi (x, y) = pojok kiri-bawah. Meniru desain
-    referensi: border, header (logo+instansi+kode register), garis, badan
-    kiri + QR kanan."""
+def _gambar_stiker(c, x, y, w, h, target, aset, kop, logo, mm):
+    """Gambar SATU stiker di (x, y) pojok kiri-bawah, dimensi (w, h) pt.
+
+    Header: logo + nama instansi + NAMA SATKER (bukan lagi kode register —
+    permintaan pemilik); QR MEPET garis tepi kanan/bawah/garis header."""
     from reportlab.pdfbase.pdfmetrics import stringWidth
 
-    w, h = spec["w"] * mm, spec["h"] * mm
-    hdr = spec["header"] * mm
+    hdr = target["header"] * mm
     pad = 1.6 * mm
-    s = spec["w"] / 95.0  # faktor skala relatif desain besar
+    s = (w / mm) / 95.0  # faktor skala relatif desain besar
     f_satker = max(4.6, 8.5 * s)
-    f_kreg = max(4.0, 7.0 * s)
+    f_sub = max(4.0, 7.0 * s)
     f_kode = max(4.6, 8.0 * s)
     f_teks = max(4.2, 7.0 * s)
 
     c.setLineWidth(0.8)
     c.rect(x, y, w, h)
 
-    # ── Header: logo kiri + nama instansi (tengah) + kode register ──
+    # ── Header: logo kiri + nama instansi + nama satker ──
     hdr_y = y + h - hdr
     tengah_x = x + w / 2
     logo_w = 0
-    if logo is not None and spec["w"] >= 60:
+    if logo is not None and (w / mm) >= 60:
         sisi = hdr - 1.2 * mm
         try:
             c.drawImage(logo, x + pad, hdr_y + 0.6 * mm, width=sisi,
@@ -91,24 +89,25 @@ def _gambar_stiker(c, x, y, spec, aset, kop, logo, mm):
             logo_w = 0
     nama = str(kop.get("nama_instansi") or kop.get("nama_unit_organisasi")
                or "").strip()
-    kreg = str(aset.get("kode_register") or "").strip()
+    satker = str(kop.get("nama_sub_unit") or kop.get("nama_unit_organisasi")
+                 or "").strip()
+    if satker == nama:
+        satker = str(kop.get("nama_unit_organisasi") or "").strip() \
+            if kop.get("nama_sub_unit") else ""
     c.setFont("Helvetica-Bold", f_satker)
     c.drawCentredString(tengah_x + logo_w / 2, y + h - hdr / 2 - f_satker * 0.1,
                         nama[:60])
-    if kreg:
-        c.setFont("Helvetica", f_kreg)
+    if satker:
+        c.setFont("Helvetica", f_sub)
         c.drawCentredString(tengah_x + logo_w / 2,
-                            y + h - hdr / 2 - f_satker - f_kreg * 0.35, kreg[:40])
+                            y + h - hdr / 2 - f_satker - f_sub * 0.35,
+                            satker[:60])
     c.setLineWidth(0.5)
     c.line(x, hdr_y, x + w, hdr_y)
 
-    # ── Badan: teks kiri, QR kanan (QR TIDAK setinggi penuh badan —
-    # permintaan pemilik: jangan terlalu besar; 78% tinggi badan, rata
-    # tengah vertikal) ──
-    badan_h = h - hdr - 2 * pad
-    qr_sisi = badan_h * 0.78
-    qr_x = x + w - pad - qr_sisi
-    qr_y = y + pad + (badan_h - qr_sisi) / 2
+    # ── Badan: teks kiri, QR kanan MEPET tepi (kanan/bawah/garis header) ──
+    qr_sisi = h - hdr
+    qr_x = x + w - qr_sisi
     lebar_teks = qr_x - x - 2 * pad
 
     kode = str(aset.get("asset_code") or "").strip()
@@ -127,26 +126,51 @@ def _gambar_stiker(c, x, y, spec, aset, kop, logo, mm):
                  - stringWidth(label_nup, "Helvetica-Bold", f_kode))
         c.drawString(max(nx, x + pad), ty, label_nup)
     ty -= f_teks * 1.25
-    if kategori and spec["baris_desc"] >= 2:
+    if kategori and target["baris_desc"] >= 2:
         c.setFont("Helvetica", f_teks)
         c.drawString(x + pad, ty, kategori[:40])
         ty -= f_teks * 1.5
     c.setFont("Helvetica", f_teks)
     for baris in _potong_baris(nama_brg, "Helvetica", f_teks, lebar_teks,
-                               spec["baris_desc"]):
+                               target["baris_desc"]):
         c.drawString(x + pad, ty, baris)
         ty -= f_teks * 1.2
 
     # QR — payload format pemindai kartu (#kreg / #kode-nup).
+    kreg = str(aset.get("kode_register") or "").strip()
     payload = f"#{kreg}" if kreg else f"#{kode}-{nup or '0'}"
     try:
         from reportlab.graphics import renderPDF
+
         from routes.cards import build_qr_flowable
         qr = build_qr_flowable(payload, qr_sisi)
         if qr is not None:
-            renderPDF.draw(qr, c, qr_x, qr_y)
+            renderPDF.draw(qr, c, qr_x, y)
     except Exception:
         pass
+
+
+def _gambar_grup(c, aset_grup, ukuran, page_w, page_h, kop, logo, mm,
+                 mulai_halaman_baru):
+    """Gambar satu KELOMPOK ukuran (grid penuh sendiri). Return True bila
+    ada halaman yang tergambar."""
+    target = TARGET_STIKER[ukuran]
+    kolom, baris, lw_mm, lh_mm = grid_optimal(
+        page_w / mm, page_h / mm, target["w"], target["h"])
+    lw, lh = lw_mm * mm, lh_mm * mm
+    margin = MARGIN_MM * mm
+    gap = GAP_MM * mm
+    per_hal = kolom * baris
+    for i, a in enumerate(aset_grup):
+        pos = i % per_hal
+        if pos == 0 and (i or mulai_halaman_baru):
+            c.showPage()
+        kol = pos % kolom
+        brs = pos // kolom
+        x = margin + kol * (lw + gap)
+        y = page_h - margin - (brs + 1) * lh - brs * gap
+        _gambar_stiker(c, x, y, lw, lh, target, a, kop, logo, mm)
+    return bool(aset_grup)
 
 
 @stiker_router.get("/stiker/label")
@@ -175,15 +199,17 @@ async def cetak_stiker_label(
     beli_sampai: str = "",
     _user: dict = Depends(require_user),
 ):
-    """PDF stiker label siap cetak (grid otomatis sesuai ukuran & kertas)."""
+    """PDF stiker label siap cetak. `ukuran=per_aset` → tiap aset memakai
+    ukuran pilihannya sendiri (field `stiker_ukuran`), hasil dikelompokkan
+    per ukuran (besar → sedang → kecil)."""
     from reportlab.lib.pagesizes import A3, A4
     from reportlab.lib.units import mm
     from reportlab.pdfgen import canvas as rl_canvas
 
-    spec = UKURAN_STIKER.get(str(ukuran).strip().lower())
-    if not spec:
+    ukuran = str(ukuran).strip().lower()
+    if ukuran not in ("per_aset", *TARGET_STIKER):
         raise HTTPException(status_code=400,
-                            detail="Ukuran harus besar/sedang/kecil")
+                            detail="Ukuran harus besar/sedang/kecil/per_aset")
     kertas_map = {"A4": A4, "A3": A3}
     page = kertas_map.get(str(kertas).strip().upper())
     if page is None:
@@ -218,33 +244,24 @@ async def cetak_stiker_label(
     kop = await pengaturan_kop(kode_satker=kode_satker_user(_user)) or {}
     logo = _logo_reader(kop.get("logo_url"))
 
-    # ── Grid otomatis: kolom × baris menyesuaikan kertas & ukuran stiker.
-    # Jarak antar kotak SANGAT RAPAT (permintaan pemilik) — hanya celah
-    # tipis 1.5mm agar mudah dipotong tanpa buang kertas. ──
     page_w, page_h = page
-    margin = 6 * mm
-    gap = 1.5 * mm
-    lw, lh = spec["w"] * mm, spec["h"] * mm
-    kolom = max(1, int((page_w - 2 * margin + gap) // (lw + gap)))
-    baris = max(1, int((page_h - 2 * margin + gap) // (lh + gap)))
-    per_hal = kolom * baris
-
     buf = io.BytesIO()
     c = rl_canvas.Canvas(buf, pagesize=page)
     c.setTitle(f"Stiker Label BMN — {ukuran} — {kertas}")
-    for i, a in enumerate(aset):
-        pos = i % per_hal
-        if i and pos == 0:
-            c.showPage()
-        kol = pos % kolom
-        brs = pos // kolom
-        x = margin + kol * (lw + gap)
-        y = page_h - margin - (brs + 1) * lh - brs * gap
-        _gambar_stiker(c, x, y, spec, a, kop, logo, mm)
+    if ukuran == "per_aset":
+        # Kelompokkan sesuai pilihan tiap aset; tiap kelompok grid sendiri.
+        ada = False
+        for u, grup in kelompokkan_per_ukuran(aset):
+            _gambar_grup(c, grup, u, page_w, page_h, kop, logo, mm,
+                         mulai_halaman_baru=ada)
+            ada = True
+    else:
+        _gambar_grup(c, aset, ukuran, page_w, page_h, kop, logo, mm,
+                     mulai_halaman_baru=False)
     if terpotong:
         c.showPage()
         c.setFont("Helvetica", 9)
-        c.drawString(margin, page_h - margin - 12,
+        c.drawString(MARGIN_MM * mm, page_h - MARGIN_MM * mm - 12,
                      f"Catatan: hasil melebihi batas {MAKS_STIKER} stiker — "
                      "persempit filter lalu cetak lagi untuk sisanya.")
     c.save()
