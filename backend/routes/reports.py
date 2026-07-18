@@ -21,7 +21,7 @@ from pydantic import BaseModel
 
 from db import db
 from auth_utils import require_user, require_admin, require_user_or_query_token
-from shared_utils import ambang_kapitalisasi, get_photo_from_gridfs
+from shared_utils import ambang_kapitalisasi, get_photo_from_gridfs, pengaturan_kop
 from report_filters import active_asset_filter
 from report_utils import hitung_status_stiker, distribusi_pengguna
 from markupsafe import Markup
@@ -832,7 +832,7 @@ async def generate_berita_acara_pdf(activity_id: str, _user: dict = Depends(requ
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
 
-    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    settings = await pengaturan_kop(activity)
     # proyeksi: buang media base64 yang tidak dipakai laporan ini (hemat memori/IO)
     assets = await db.assets.find(
         {"activity_id": activity_id},
@@ -1033,7 +1033,7 @@ async def generate_sptjm_pdf(activity_id: str, _user: dict = Depends(require_use
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
 
-    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    settings = await pengaturan_kop(activity)
     # proyeksi: buang media base64 yang tidak dipakai laporan ini (hemat memori/IO)
     assets = await db.assets.find(
         {"activity_id": activity_id},
@@ -1151,7 +1151,7 @@ async def generate_surat_koreksi_pdf(activity_id: str, _user: dict = Depends(req
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
 
-    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    settings = await pengaturan_kop(activity)
     # proyeksi: buang media base64 yang tidak dipakai laporan ini (hemat memori/IO)
     assets = await db.assets.find(
         {"activity_id": activity_id},
@@ -1312,7 +1312,7 @@ async def generate_dbhi_pdf(activity_id: str, dbhi_type: str, _user: dict = Depe
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
 
-    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    settings = await pengaturan_kop(activity)
     # proyeksi: buang media base64 yang tidak dipakai laporan ini (hemat memori/IO)
     all_assets = await db.assets.find(
         {"activity_id": activity_id},
@@ -1489,7 +1489,7 @@ async def generate_rhi_pdf(activity_id: str, _user: dict = Depends(require_user_
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
 
-    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    settings = await pengaturan_kop(activity)
     # proyeksi: buang media base64 yang tidak dipakai laporan ini (hemat memori/IO)
     assets = await db.assets.find(
         {"activity_id": activity_id},
@@ -1622,7 +1622,7 @@ async def generate_dbkp_pdf(activity_id: str, _user: dict = Depends(require_user
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
 
-    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    settings = await pengaturan_kop(activity)
     # Kecualikan aset yang sudah DIHAPUS (SK penghapusan, #234) agar DBKP tidak
     # double-count nilai BMN yang tak lagi dimiliki (§5A Prinsip 3).
     assets = await db.assets.find(
@@ -2869,7 +2869,7 @@ async def generate_bahi_pdf(activity_id: str, _user: dict = Depends(require_user
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
 
-    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    settings = await pengaturan_kop(activity)
     # proyeksi: buang media base64 yang tidak dipakai laporan ini (hemat memori/IO)
     assets = await db.assets.find(
         {"activity_id": activity_id},
@@ -3044,7 +3044,7 @@ async def generate_sp_hasil_pdf(activity_id: str, _user: dict = Depends(require_
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
 
-    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    settings = await pengaturan_kop(activity)
     ident = _activity_identity(activity, settings)
     satker_name = ident["satker_name"]
     kasatker_nama = ident["kasatker_nama"]
@@ -3128,7 +3128,7 @@ async def generate_sp_pelaksanaan_pdf(activity_id: str, _user: dict = Depends(re
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
 
-    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    settings = await pengaturan_kop(activity)
     ident = _activity_identity(activity, settings)
     satker_name = ident["satker_name"]
     kasatker_nama = ident["kasatker_nama"]
@@ -3493,7 +3493,7 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
     activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
     if not activity:
         return None
-    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    settings = await pengaturan_kop(activity)
     # proyeksi: buang media base64 yang tidak dipakai (hemat memori/IO);
     # 'photos' TETAP diambil (foto sampul & stiker di-embed pada laporan data)
     # dan 'document_checklist' TETAP diambil (statistik & kolom kelengkapan dokumen).
@@ -4060,7 +4060,7 @@ async def _build_executive_grouped_data(activity_id: str, detail_fields=None):
     activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
     if not activity:
         return None
-    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    settings = await pengaturan_kop(activity)
     categories = await db.categories.find({}, {"_id": 0}).to_list(10000)
     cat_map = {c.get("kode_aset", ""): c.get("label", "") for c in categories}
 
@@ -4575,7 +4575,7 @@ async def generate_lhi_pdf(activity_id: str, _user: dict = Depends(require_user_
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
 
-    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    settings = await pengaturan_kop(activity)
 
     merger = PdfMerger()
 
@@ -4684,7 +4684,7 @@ async def batch_download_pdf_zip(activity_id: str, request: BatchPDFRequest,
                     continue
 
                 if report_type == "cover":
-                    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+                    settings = await pengaturan_kop(activity)
                     cover_buffer = await _generate_cover_page(activity, settings)
                     if cover_buffer.getbuffer().nbytes > 0:
                         zf.writestr(f"Sampul_LHI_{activity_id[:8]}.pdf", cover_buffer.getvalue())

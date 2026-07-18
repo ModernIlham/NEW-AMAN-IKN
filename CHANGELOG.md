@@ -48,6 +48,31 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#377] Master Satker: satker jadi entitas kelas satu + kop laporan per-satker + ikatan user→satker — 2026-07-18
+
+Fondasi multi-satker DB bersama (Mandat-2, sesuai pilihan arsitektur):
+- **Koleksi master `satker`** (kode unik): profil + field kop per-satker
+  (unit organisasi, sub-unit, alamat, tempat & tembusan laporan, kontak,
+  eselon1). CRUD admin + **Sinkron dari Kegiatan** (registrasi otomatis
+  semua satker yang sudah ada di kegiatan, idempoten, tidak menimpa profil).
+  Satker BARU juga terdaftar otomatis saat kegiatan pertamanya dibuat.
+  Master masuk `RESET_KEEP` (selamat reset, tetap ikut backup).
+- **Kop laporan per-satker**: resolusi `kegiatan → master satker → global`
+  (`gabung_kop`, teruji): field satker non-kosong menimpa setelan global;
+  baris ke-3 kop otomatis = nama satker bila tidak diisi. Diterapkan pada
+  **13 generator laporan ber-kegiatan** (LHI, DBHI, BA, DBKP kegiatan, dst.)
+  via `pengaturan_kop(activity)` — laporan global tetap memakai setelan global.
+- **Halaman "Master Satker"** di Beranda Modul: daftar (terdaftar / belum +
+  jumlah kegiatan), sinkron 1-klik, form profil kop, hapus (ditolak bila
+  masih dipakai kegiatan).
+- **Ikatan user → satker** (`PUT /users/{id}/satker` + dropdown di Kelola
+  Pengguna): kode terisi = user bekerja untuk satker itu; KOSONG =
+  lintas-satker — **admin lintas-satker berperan super-admin** (pola ini
+  dipilih alih-alih role kelima). Penegakan isolasi data menyusul (M-SCOPE).
+- Verifikasi: suite **491 lulus** (+4 uji resolusi kop), lint & build sukses.
+
+---
+
 ## [#376] Pengamanan akses & data: viewer read-only ditegakkan server, reset simpan pemetaan, ambang kapitalisasi jadi setelan — 2026-07-18
 
 Tiga penguatan hasil audit keamanan & backup (Mandat-2):

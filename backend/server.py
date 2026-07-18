@@ -198,6 +198,7 @@ from routes.pegawai import pegawai_router
 from routes.penghapusan import penghapusan_router
 from routes.pemanfaatan import pemanfaatan_router
 from routes.pemusnahan import pemusnahan_router
+from routes.satker import satker_router
 from routes.pemindahtanganan import pemindahtanganan_router
 from routes.wasdal import wasdal_router
 from routes.penganggaran import penganggaran_router
@@ -244,6 +245,7 @@ api_router.include_router(pegawai_router)
 api_router.include_router(penghapusan_router)
 api_router.include_router(pemanfaatan_router)
 api_router.include_router(pemusnahan_router)
+api_router.include_router(satker_router)
 api_router.include_router(pemindahtanganan_router)
 api_router.include_router(wasdal_router)
 api_router.include_router(penganggaran_router)

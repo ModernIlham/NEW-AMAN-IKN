@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { 
   Users, ShieldCheck, Loader2, KeyRound, Trash2, Eye, EyeOff, 
   Mail, UserPlus, Edit3, Check, X, Send, RefreshCw, 
@@ -32,7 +32,7 @@ const ROLES = {
 const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
 // Clean Minimal User Row
-const UserRow = ({ user, isSelf, adminId, onRefresh, onUpdateLocalUser }) => {
+const UserRow = ({ user, isSelf, adminId, onRefresh, onUpdateLocalUser, satkerList = [] }) => {
   const [expanded, setExpanded] = useState(false);
   const [editName, setEditName] = useState(false);
   const [nameVal, setNameVal] = useState(user.name || '');
@@ -64,6 +64,15 @@ const UserRow = ({ user, isSelf, adminId, onRefresh, onUpdateLocalUser }) => {
       toast.success(`Role → ${ROLES[r]?.label}`);
       onRefresh();
     } catch { toast.error("Gagal"); }
+  };
+
+  const chgSatker = async (kode) => {
+    try {
+      const v = kode === "__semua__" ? "" : kode;
+      await axios.put(`${API}/users/${user.id}/satker`, { kode_satker: v });
+      toast.success(v ? `Terikat ke satker ${v}` : "Lintas-satker (semua)");
+      onRefresh();
+    } catch (e) { toast.error(getApiError(e, "Gagal mengubah satker")); }
   };
 
   const saveName = async () => {
@@ -208,6 +217,24 @@ const UserRow = ({ user, isSelf, adminId, onRefresh, onUpdateLocalUser }) => {
                 </SelectContent>
               </Select>
             )}
+
+            {/* Ikatan satker (multi-satker DB bersama): kosong = lintas-satker.
+                Admin lintas-satker berperan super-admin. */}
+            {satkerList.length > 0 && (
+              <Select value={user.kode_satker || "__semua__"} onValueChange={chgSatker}>
+                <SelectTrigger className="h-6 w-[130px] text-[10px] bg-card border-border" data-testid={`user-satker-${user.id}`}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__semua__" className="text-xs">Semua satker</SelectItem>
+                  {satkerList.map(s => (
+                    <SelectItem key={s.kode_satker} value={s.kode_satker} className="text-xs">
+                      {s.kode_satker} — {s.nama_satker}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             
             {/* Password - Icon only on mobile with tooltip */}
             <TooltipProvider delayDuration={100}>
@@ -304,16 +331,26 @@ function UserManagementDialog({ open, onClose, currentUser }) {
   const isAdmin = currentUser?.role === 'admin';
   const adminId = currentUser?.id || '';
 
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     setLoading(true);
     try {
       const r = await axios.get(`${API}/users?admin_id=${adminId}`);
       setUsers(r.data);
     } catch {}
     setLoading(false);
-  };
+  }, [adminId]);
 
-  useEffect(() => { if (open) fetchUsers(); }, [open]);
+  // Master satker utk ikatan user→satker (multi-satker DB bersama);
+  // gagal senyap — dropdown satker cukup tak muncul.
+  const [satkerList, setSatkerList] = useState([]);
+  useEffect(() => {
+    if (!open) return;
+    axios.get(`${API}/satker`)
+      .then(r => setSatkerList((r.data?.items || []).filter(s => s.terdaftar)))
+      .catch(() => {});
+  }, [open]);
+
+  useEffect(() => { if (open) fetchUsers(); }, [open, fetchUsers]);
 
   const handleUpdateLocalUser = (updatedUser) => {
     try {
@@ -489,13 +526,14 @@ function UserManagementDialog({ open, onClose, currentUser }) {
             {/* User List */}
             <div>
               {users.map(u => (
-                <UserRow 
-                  key={u.id} 
-                  user={u} 
-                  isSelf={u.id === adminId} 
-                  adminId={adminId} 
+                <UserRow
+                  key={u.id}
+                  user={u}
+                  isSelf={u.id === adminId}
+                  adminId={adminId}
                   onRefresh={fetchUsers}
                   onUpdateLocalUser={handleUpdateLocalUser}
+                  satkerList={satkerList}
                 />
               ))}
             </div>
