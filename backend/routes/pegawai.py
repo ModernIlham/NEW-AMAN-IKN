@@ -19,7 +19,8 @@ from pejabat_utils import STATUS_KEPEGAWAIAN
 from pegawai_utils import (
     AGAMA, JENIS_JABATAN, JENIS_KELAMIN, KATEGORI_PEGAWAI, STATUS_PEGAWAI,
     STATUS_PERKAWINAN, SUB_KATEGORI_NON_ASN, baris_impor_ke_pegawai,
-    kelompok_unit_kerja, rekap_eselon, validate_pegawai,
+    kelompok_unit_kerja, pegawai_perlu_serah_terima, rekap_eselon,
+    validate_pegawai,
 )
 
 pegawai_router = APIRouter()
@@ -164,6 +165,67 @@ async def list_pegawai(_user: dict = Depends(require_user)):
     items = await db.pegawai.find(
         scope_query_field_satker(_user), _PROJ).sort("nama", 1).to_list(20000)
     return {"items": items, "jumlah": len(items)}
+
+
+async def _jumlah_aset_per_nip(user) -> dict:
+    """Peta NIP → jumlah aset yang dipegang (aset ter-scope satker user)."""
+    from shared_utils import scope_query_aset
+    q = await scope_query_aset(user, {
+        "dihapus": {"$ne": True},
+        "pengguna_nip": {"$nin": ["", None]},
+    })
+    peta = {}
+    async for g in db.assets.aggregate([
+            {"$match": q},
+            {"$group": {"_id": "$pengguna_nip", "n": {"$sum": 1}}}]):
+        nip = str(g["_id"] or "").strip()
+        if nip:
+            peta[nip] = g["n"]
+    return peta
+
+
+@pegawai_router.get("/pegawai/perlu-serah-terima")
+async def daftar_perlu_serah_terima(_user: dict = Depends(require_user)):
+    """Pegawai BERISIKO yang masih memegang aset — status keluar/mutasi/
+    pensiun/nonaktif/diperbantukan atau kontrak Non-ASN habis/segera habis
+    (pola alert "pemegang keluar"): bahan tindak lanjut serah terima BMN via
+    modul Penggunaan (BAST pengembalian / mutasi pemegang)."""
+    pegawai = await db.pegawai.find(
+        scope_query_field_satker(_user),
+        {"_id": 0, "id": 1, "nama": 1, "nip": 1, "status": 1,
+         "unit_kerja": 1, "tgl_selesai_kontrak": 1}).to_list(20000)
+    peta_aset = await _jumlah_aset_per_nip(_user)
+    hari_ini = datetime.now(timezone.utc).date().isoformat()
+    items = pegawai_perlu_serah_terima(pegawai, peta_aset, hari_ini)
+    # lengkapi unit kerja utk tampilan
+    unit = {p.get("id"): p.get("unit_kerja") for p in pegawai}
+    for it in items:
+        it["unit_kerja"] = unit.get(it["id"], "")
+    return {"items": items, "jumlah": len(items)}
+
+
+@pegawai_router.get("/pegawai/{pegawai_id}/aset")
+async def aset_dipegang_pegawai(pegawai_id: str,
+                                _user: dict = Depends(require_user)):
+    """Daftar aset yang tercatat dipegang seorang pegawai (via NIP)."""
+    from shared_utils import pastikan_akses_dok_satker, scope_query_aset
+    peg = await db.pegawai.find_one({"id": pegawai_id}, _PROJ)
+    if not peg:
+        raise HTTPException(status_code=404, detail="Pegawai tidak ditemukan")
+    await pastikan_akses_dok_satker(_user, peg)
+    nip = str(peg.get("nip") or "").strip()
+    if not nip:
+        return {"pegawai": {"id": pegawai_id, "nama": peg.get("nama"),
+                            "nip": ""}, "items": [], "jumlah": 0}
+    q = await scope_query_aset(_user, {
+        "pengguna_nip": nip, "dihapus": {"$ne": True}})
+    items = await db.assets.find(q, {
+        "_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
+        "condition": 1, "location": 1, "activity_id": 1, "bast_file_id": 1,
+    }).sort("asset_code", 1).to_list(2000)
+    return {"pegawai": {"id": pegawai_id, "nama": peg.get("nama"),
+                        "nip": nip},
+            "items": items, "jumlah": len(items)}
 
 
 @pegawai_router.post("/pegawai")
@@ -317,7 +379,18 @@ async def ubah_pegawai(pegawai_id: str, payload: PegawaiIn,
     await log_audit("ubah_pegawai", "", pegawai_id,
                     username=user.get("username", "system"),
                     detail=f"Ubah pegawai {doc['nama']}")
-    return {"ok": True, "id": pegawai_id}
+    # Peringatan lunak: status berubah ke non-aktif padahal masih memegang
+    # aset → dorong proses serah terima (tidak memblokir penyimpanan).
+    peringatan = ""
+    if doc["status"] not in ("aktif", "cuti", "tugas_belajar") and doc["nip"]:
+        dipegang = await db.assets.count_documents(
+            {"pengguna_nip": doc["nip"], "dihapus": {"$ne": True}})
+        if dipegang:
+            peringatan = (
+                f"{doc['nama']} masih tercatat memegang {dipegang} aset — "
+                "proses serah terima di modul Penggunaan (BAST pengembalian "
+                "atau mutasi pemegang)")
+    return {"ok": True, "id": pegawai_id, "peringatan": peringatan}
 
 
 @pegawai_router.delete("/pegawai/{pegawai_id}")

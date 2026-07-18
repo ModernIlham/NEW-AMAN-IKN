@@ -69,6 +69,8 @@ export default function PegawaiPage({ user, onBack }) {
   const [saving, setSaving] = useState(false);
   const [mengimpor, setMengimpor] = useState(false);
   const [hasilImpor, setHasilImpor] = useState(null);
+  const [serahTerima, setSerahTerima] = useState([]); // pegawai berisiko masih pegang aset
+  const [detailAset, setDetailAset] = useState(null); // {pegawai, items, memuat}
   const fileRef = useRef(null);
   const { confirm, confirmDialog } = useConfirm();
 
@@ -90,7 +92,22 @@ export default function PegawaiPage({ user, onBack }) {
     axios.get(`${API}/pegawai/rekap-unit`)
       .then((r) => setRekap(r.data))
       .catch(() => setRekap(null));
+    // Pegawai berisiko yang masih memegang aset (alert serah terima BMN).
+    axios.get(`${API}/pegawai/perlu-serah-terima`)
+      .then((r) => setSerahTerima(r.data?.items || []))
+      .catch(() => setSerahTerima([]));
   }, []);
+
+  const bukaDetailAset = async (p) => {
+    setDetailAset({ pegawai: p, items: [], memuat: true });
+    try {
+      const r = await axios.get(`${API}/pegawai/${p.id}/aset`);
+      setDetailAset({ pegawai: p, items: r.data?.items || [], memuat: false });
+    } catch (err) {
+      toast.error(getApiError(err, "Gagal memuat aset pegawai"));
+      setDetailAset(null);
+    }
+  };
 
   useEffect(() => {
     load();
@@ -146,8 +163,10 @@ export default function PegawaiPage({ user, onBack }) {
         await axios.post(`${API}/pegawai`, body);
         toast.success(`Pegawai ${form.nama} ditambahkan`);
       } else {
-        await axios.put(`${API}/pegawai/${form.id}`, body);
+        const r = await axios.put(`${API}/pegawai/${form.id}`, body);
         toast.success(`Pegawai ${form.nama} diperbarui`);
+        // Peringatan lunak: status non-aktif tapi masih memegang aset.
+        if (r.data?.peringatan) toast.warning(r.data.peringatan, { duration: 9000 });
       }
       setForm(null);
       load();
@@ -231,6 +250,35 @@ export default function PegawaiPage({ user, onBack }) {
             )}
           </div>
         </div>
+
+        {/* Alert serah terima BMN — pegawai berisiko (keluar/mutasi/pensiun/
+            kontrak habis) yang masih tercatat memegang aset. */}
+        {serahTerima.length > 0 && (
+          <div className="bg-amber-500/10 border border-amber-500/40 rounded-xl shadow-sm p-2.5 sm:p-3" data-testid="pegawai-serah-terima-panel">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-amber-700 dark:text-amber-400 mb-1.5 flex items-center gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5" />Perlu Serah Terima BMN — {serahTerima.length} pegawai berisiko masih memegang aset
+            </p>
+            <div className="space-y-1">
+              {serahTerima.map((p) => (
+                <button key={p.id} type="button" onClick={() => bukaDetailAset(p)}
+                  className="w-full text-left flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-amber-500/10 min-w-0 min-h-0"
+                  data-testid={`pegawai-serah-terima-${p.id}`}>
+                  <span className="flex-1 min-w-0">
+                    <span className="text-[12px] font-semibold text-foreground">{p.nama}</span>
+                    <span className="text-[10px] text-muted-foreground font-mono ml-1.5">{p.nip}</span>
+                    <span className="block text-[10px] text-amber-700 dark:text-amber-400 truncate">{p.alasan}{p.unit_kerja ? ` · ${p.unit_kerja}` : ""}</span>
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-400 text-[10px] font-bold whitespace-nowrap">
+                    {p.jumlah_aset} aset
+                  </span>
+                </button>
+              ))}
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-1.5">
+              Tindak lanjut: proses <b>BAST pengembalian</b> atau <b>mutasi pemegang</b> di modul Penggunaan → tab Pemegang.
+            </p>
+          </div>
+        )}
 
         {rekap && (rekap.unit || []).length > 0 && (
           <div className="bg-card rounded-xl border border-border shadow-sm p-2.5 sm:p-3" data-testid="pegawai-rekap-unit">
@@ -453,6 +501,41 @@ export default function PegawaiPage({ user, onBack }) {
             <Button onClick={submitForm} disabled={saving} data-testid="pegawai-form-save">
               {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : null}Simpan
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog aset yang dipegang pegawai berisiko ── */}
+      <Dialog open={!!detailAset} onOpenChange={(o) => { if (!o) setDetailAset(null); }}>
+        <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Aset dipegang — {detailAset?.pegawai?.nama}</DialogTitle>
+            <DialogDescription className="text-xs">
+              NIP {detailAset?.pegawai?.nip || "—"} · {detailAset?.pegawai?.alasan}. Proses serah terima via modul Penggunaan → tab Pemegang (BAST pengembalian / mutasi pemegang).
+            </DialogDescription>
+          </DialogHeader>
+          {detailAset?.memuat ? (
+            <div className="flex items-center justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-amber-600" /></div>
+          ) : (
+            <div className="divide-y divide-border/60 border border-border rounded-lg overflow-hidden">
+              {(detailAset?.items || []).length === 0 ? (
+                <p className="text-center text-xs text-muted-foreground py-6">Tidak ada aset tercatat atas NIP ini.</p>
+              ) : (detailAset?.items || []).map((a) => (
+                <div key={a.id} className="px-3 py-2 flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[12px] font-semibold text-foreground truncate">{a.asset_name || "—"}</p>
+                    <p className="text-[10px] text-muted-foreground font-mono">{a.asset_code}{a.NUP ? ` · NUP ${a.NUP}` : ""}{a.location ? ` · ${a.location}` : ""}</p>
+                  </div>
+                  {a.condition && <span className="text-[10px] text-muted-foreground whitespace-nowrap">{a.condition}</span>}
+                  {a.bast_file_id
+                    ? <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-[9px] font-semibold">BAST ✓</span>
+                    : <span className="px-1.5 py-0.5 rounded bg-slate-500/15 text-muted-foreground text-[9px] font-semibold">tanpa BAST</span>}
+                </div>
+              ))}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDetailAset(null)}>Tutup</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
