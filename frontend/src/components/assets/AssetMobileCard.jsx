@@ -1,5 +1,5 @@
 import React, { memo, useState, useRef } from "react";
-import { Camera, MapPin, Briefcase, Tag, Trash2, Lock, Cloud, Check, RotateCcw, MoreVertical, BookOpen, History, CreditCard, AlertTriangle } from "lucide-react";
+import { Camera, MapPin, Briefcase, Tag, Trash2, Lock, Cloud, Check, RotateCcw, RefreshCcw, MoreVertical, BookOpen, History, CreditCard, AlertTriangle } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuTrigger,
@@ -202,21 +202,35 @@ const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, onOpenKartu, on
               />
             </div>
           )}
-          {hasPhoto && onOpenPhoto ? (
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onOpenPhoto(asset); }}
-              className="w-14 h-14 rounded-lg border border-border overflow-hidden bg-muted flex items-center justify-center flex-shrink-0 cursor-zoom-in active:ring-2 active:ring-blue-400"
-              aria-label={`Lihat foto ${asset.asset_code || asset.asset_name || ''}`.trim()}
-              data-testid={`card-photo-${asset.id}`}
-            >
-              <img src={coverPhoto} alt="" className="w-full h-full object-cover" loading="lazy" />
-            </button>
-          ) : (
-            <div className="w-14 h-14 rounded-lg border border-border overflow-hidden bg-muted flex items-center justify-center flex-shrink-0">
-              {hasPhoto ? <img src={coverPhoto} alt="" className="w-full h-full object-cover" loading="lazy" /> : <Camera className="w-5 h-5 text-muted-foreground" />}
-            </div>
-          )}
+          <div className="flex flex-col items-center gap-1 flex-shrink-0">
+            {hasPhoto && onOpenPhoto ? (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onOpenPhoto(asset); }}
+                className="w-14 h-14 rounded-lg border border-border overflow-hidden bg-muted flex items-center justify-center flex-shrink-0 cursor-zoom-in active:ring-2 active:ring-blue-400 min-w-0 min-h-0"
+                aria-label={`Lihat foto ${asset.asset_code || asset.asset_name || ''}`.trim()}
+                data-testid={`card-photo-${asset.id}`}
+              >
+                <img src={coverPhoto} alt="" className="w-full h-full object-cover" loading="lazy" />
+              </button>
+            ) : (
+              <div className="w-14 h-14 rounded-lg border border-border overflow-hidden bg-muted flex items-center justify-center flex-shrink-0">
+                {hasPhoto ? <img src={coverPhoto} alt="" className="w-full h-full object-cover" loading="lazy" /> : <Camera className="w-5 h-5 text-muted-foreground" />}
+              </div>
+            )}
+            {/* Penanda selisih SIMAN: ikon-saja di bawah foto (permintaan
+                pemilik) — teks "≠ SIMAN" tidak lagi memakan ruang baris badge. */}
+            {asset.siman?.status === "selisih" && (
+              <span
+                className="w-5 h-5 rounded-full bg-amber-500/15 border border-amber-500/40 flex items-center justify-center"
+                title="Data berbeda dengan SIMAN V2 — tinjau di Penatausahaan › Pelaporan"
+                aria-label="Data berbeda dengan SIMAN V2"
+                data-testid={`card-siman-${asset.id}`}
+              >
+                <RefreshCcw className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+              </span>
+            )}
+          </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-1">
               <div className="min-w-0">
@@ -232,9 +246,6 @@ const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, onOpenKartu, on
               </div>
               <div className="flex items-center gap-1 flex-shrink-0">
                 {/* Document count not shown (lazy loaded) */}
-                {asset.siman?.status === "selisih" && (
-                  <span className="badge badge-warning text-[10px]" title="Data berbeda dengan SIMAN V2">≠ SIMAN</span>
-                )}
                 <span className={`badge text-[10px] ${
                   asset.status === "Aktif" ? "badge-success" :
                   asset.status === "Idle" ? "badge-info" :

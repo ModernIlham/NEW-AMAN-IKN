@@ -48,6 +48,37 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#407] UI mobile sesuai arahan pemilik: penanda SIMAN di bawah foto, toolbar ringkas, hapus surat, arsip 1 baris, Info tersembunyi — 2026-07-18
+
+Enam permintaan langsung pemilik (berdasar tangkapan layar HP):
+
+- **Penanda SIMAN di kartu aset (HP)**: chip teks "≠ SIMAN" dipindah dari
+  baris badge menjadi IKON kecil bulat amber di BAWAH FOTO (ikon sinkron,
+  tooltip penjelas) — baris badge lega, tetap terlihat jelas.
+- **Persuratan — tombol HAPUS surat (baru)**: admin dapat menghapus surat
+  salah catat / batal dibuat (masuk & keluar) dengan konfirmasi bergaya;
+  surat keluar yang sudah DISAHKAN ditolak server (harus dibatalkan dulu —
+  jejak nomor resmi terjaga; nomor agenda hangus, tidak dipakai ulang).
+  Endpoint `DELETE /persuratan/{id}` ber-audit.
+- **Persuratan — toolbar maks 2 baris di HP**: baris 1 pencarian + CSV,
+  baris 2 filter jenis/status + 2 aksi; kolom Aksi tabel diringkas (label
+  "Sahkan" jadi ikon di HP, semua tombol ber-tooltip).
+- **Referensi Akun BAS — toolbar 1 baris di HP** (meniru Referensi Kode
+  Barang): pencarian menyusut, filter segmen dibatasi lebar, ekspor cukup
+  ikon.
+- **Arsip laporan — tombol Posisi BMN 1 baris**: PDF / Lainnya / LBKP /
+  CaLBMN jadi 4 tombol ringkas se-baris (grid) di HP dengan teks to the
+  point + tooltip kepanjangan.
+- **Halaman Info/PRD kembali TERSEMBUNYI**: tombol "i" di Beranda Modul
+  dihapus — akses hanya via 3× klik beruntun pada logo (semua pintu
+  terlihat sudah tidak ada); header halaman Info dirapikan di HP (tombol
+  Kembali ikon-saja, tak lagi bertumpuk dengan konten — tombol diberi
+  min-h-0 melawan aturan 44px).
+- Verifikasi: 539 tes unit lulus, smoke endpoint hapus surat (409 utk
+  disahkan, 404, sukses+audit) lulus, lint 6 file 0 warning, build sukses.
+
+---
+
 ## [#406] SIMAN V2: sinkronisasi diperkuat + tervalidasi + buat draft aset massal dari baris SIMAN — 2026-07-18
 
 Laporan pemilik: sinkronisasi file ekspor SIMAN V2 gagal dilakukan. Diagnosa

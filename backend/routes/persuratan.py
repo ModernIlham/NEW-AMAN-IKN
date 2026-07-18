@@ -522,6 +522,29 @@ async def ubah_surat(surat_id: str, payload: UbahSuratIn,
     return res
 
 
+@persuratan_router.delete("/persuratan/{surat_id}")
+async def hapus_surat(surat_id: str, user: dict = Depends(require_admin)):
+    """Hapus surat salah catat / batal dibuat (khusus admin).
+
+    Surat keluar yang sudah DISAHKAN tidak dapat dihapus — batalkan dulu
+    (beralasan) agar jejak nomor resmi tetap tercatat. Nomor agenda yang
+    telanjur terpakai HANGUS (tidak dipakai ulang) demi keunikan penomoran.
+    """
+    s = await db.surat.find_one({"id": surat_id}, _PROJ)
+    if not s:
+        raise HTTPException(status_code=404, detail="Surat tidak ditemukan")
+    if s.get("jenis") == "keluar" and s.get("status") == "disahkan":
+        raise HTTPException(status_code=409, detail=(
+            "Surat keluar yang sudah DISAHKAN tidak dapat dihapus — batalkan "
+            "dulu (dengan alasan) agar jejak nomor resmi tetap tercatat"))
+    await db.surat.delete_one({"id": surat_id})
+    await log_audit("hapus_surat", s.get("kegiatan_id", ""),
+                    username=user.get("username", "system"),
+                    detail=(f"Hapus surat {s.get('jenis')} {s.get('nomor')} "
+                            f"(status {s.get('status')}; nomor agenda hangus)"))
+    return {"ok": True}
+
+
 @persuratan_router.get("/persuratan/export")
 async def export_agenda(jenis: str = "", tahun: str = "",
                         _user: dict = Depends(require_user)):
