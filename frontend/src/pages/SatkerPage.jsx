@@ -25,8 +25,11 @@ const FORM_KOSONG = {
  * Master Satker — satker sebagai entitas kelas satu (multi-satker, DB bersama).
  * Kop laporan per-satker: field yang diisi di sini MENIMPA setelan global
  * untuk semua laporan kegiatan satker ybs. (resolusi kegiatan → satker → global).
+ *
+ * `SatkerPanel` = isi + logika tanpa header halaman — dipakai halaman ini DAN
+ * tab "Per-Satker" pada halaman Pengaturan terpadu.
  */
-export default function SatkerPage({ user, onBack }) {
+export function SatkerPanel({ user }) {
   const isAdmin = user?.role === "admin";
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -34,8 +37,6 @@ export default function SatkerPage({ user, onBack }) {
   const [form, setForm] = useState(null);      // profil satker saat dialog edit
   const [saving, setSaving] = useState(false);
   const { confirm, confirmDialog } = useConfirm();
-
-  useBackGuard(useCallback(() => onBack?.(), [onBack]));
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -100,98 +101,78 @@ export default function SatkerPage({ user, onBack }) {
   const items = data?.items || [];
 
   return (
-    <div className="min-h-screen bg-background" data-testid="satker-page">
-      <header className="bg-card/95 backdrop-blur-sm border-b border-border px-3 sm:px-6 py-2.5 sticky top-0 z-40">
-        <div className="max-w-5xl mx-auto flex items-center gap-3">
-          <button type="button" onClick={onBack} aria-label="Kembali"
-            className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0"
-            data-testid="satker-back">
-            <ArrowLeft className="w-4 h-4" />
-          </button>
-          <span className="w-9 h-9 rounded-lg bg-emerald-700 flex items-center justify-center flex-shrink-0">
-            <Building2 className="w-4 h-4 text-white" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight">Master Satker</h1>
-            <p className="text-[11px] text-muted-foreground leading-tight truncate">
-              Profil & kop per-satker — menimpa setelan global pada laporan satker ybs.
-            </p>
-          </div>
-          {isAdmin && (
-            <div className="flex items-center gap-1.5">
-              <Button variant="outline" size="sm" className="h-9 text-xs" disabled={sinkron}
-                onClick={jalankanSinkron} data-testid="satker-sinkron">
-                {sinkron ? <Loader2 className="w-3.5 h-3.5 animate-spin sm:mr-1.5" /> : <RefreshCcw className="w-3.5 h-3.5 sm:mr-1.5" />}
-                <span className="hidden sm:inline">Sinkron dari Kegiatan</span>
-              </Button>
-              <Button size="sm" className="h-9 text-xs" onClick={() => setForm({ ...FORM_KOSONG, _baru: true })}
-                data-testid="satker-tambah">
-                Tambah
-              </Button>
-            </div>
-          )}
+    <div className="space-y-2.5">
+      {isAdmin && (
+        <div className="flex items-center justify-end gap-1.5">
+          <Button variant="outline" size="sm" className="h-9 text-xs" disabled={sinkron}
+            onClick={jalankanSinkron} data-testid="satker-sinkron">
+            {sinkron ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <RefreshCcw className="w-3.5 h-3.5 mr-1.5" />}
+            Sinkron dari Kegiatan
+          </Button>
+          <Button size="sm" className="h-9 text-xs" onClick={() => setForm({ ...FORM_KOSONG, _baru: true })}
+            data-testid="satker-tambah">
+            Tambah
+          </Button>
         </div>
-      </header>
+      )}
 
-      <main className="max-w-5xl mx-auto p-3 sm:p-6 space-y-2.5">
-        {loading ? (
-          <div className="py-16 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto text-muted-foreground" /></div>
-        ) : items.length === 0 ? (
-          <div className="py-16 text-center space-y-2">
-            <Building2 className="w-10 h-10 mx-auto text-muted-foreground/50" />
-            <p className="text-sm text-muted-foreground">Belum ada satker.</p>
-            <p className="text-xs text-muted-foreground">
-              Satker terdaftar OTOMATIS saat kegiatan pertama dibuat, atau klik <b>Sinkron dari Kegiatan</b>.
-            </p>
-          </div>
-        ) : (
-          items.map((it) => (
-            <div key={it.kode_satker} className="rounded-xl border border-border bg-card p-3 flex items-start gap-3"
-              data-testid={`satker-row-${it.kode_satker}`}>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-bold flex items-center gap-2 flex-wrap">
-                  <span className="font-mono text-[12px] px-1.5 py-0.5 rounded bg-muted">{it.kode_satker}</span>
-                  <span className="truncate">{it.nama_satker || <i className="text-muted-foreground">tanpa nama</i>}</span>
-                  {!it.terdaftar && (
-                    <span className="px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px] font-bold">
-                      belum di master
-                    </span>
-                  )}
-                </p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  {it.jumlah_kegiatan || 0} kegiatan
-                  {it.alamat ? ` · ${it.alamat}` : ""}
-                  {it.tempat_laporan ? ` · tempat laporan: ${it.tempat_laporan}` : ""}
-                </p>
-                {(it.nama_unit_organisasi || it.nama_sub_unit) && (
-                  <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
-                    Kop: {[it.nama_unit_organisasi, it.nama_sub_unit].filter(Boolean).join(" › ")}
-                  </p>
+      {loading ? (
+        <div className="py-16 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto text-muted-foreground" /></div>
+      ) : items.length === 0 ? (
+        <div className="py-16 text-center space-y-2">
+          <Building2 className="w-10 h-10 mx-auto text-muted-foreground/50" />
+          <p className="text-sm text-muted-foreground">Belum ada satker.</p>
+          <p className="text-xs text-muted-foreground">
+            Satker terdaftar OTOMATIS saat kegiatan pertama dibuat, atau klik <b>Sinkron dari Kegiatan</b>.
+          </p>
+        </div>
+      ) : (
+        items.map((it) => (
+          <div key={it.kode_satker} className="rounded-xl border border-border bg-card p-3 flex items-start gap-3"
+            data-testid={`satker-row-${it.kode_satker}`}>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold flex items-center gap-2 flex-wrap">
+                <span className="font-mono text-[12px] px-1.5 py-0.5 rounded bg-muted">{it.kode_satker}</span>
+                <span className="truncate">{it.nama_satker || <i className="text-muted-foreground">tanpa nama</i>}</span>
+                {!it.terdaftar && (
+                  <span className="px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px] font-bold">
+                    belum di master
+                  </span>
                 )}
-              </div>
-              {isAdmin && (
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  <button type="button" onClick={() => bukaEdit(it)} aria-label={`Ubah ${it.kode_satker}`}
-                    className="h-8 w-8 rounded-lg border border-border flex items-center justify-center hover:bg-muted min-w-0 min-h-0"
-                    data-testid={`satker-edit-${it.kode_satker}`}>
-                    <Pencil className="w-3.5 h-3.5" />
-                  </button>
-                  {it.terdaftar && !it.jumlah_kegiatan && (
-                    <button type="button" onClick={() => hapus(it)} aria-label={`Hapus ${it.kode_satker}`}
-                      className="h-8 w-8 rounded-lg border border-border text-red-500 flex items-center justify-center hover:bg-red-500/10 min-w-0 min-h-0">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                {it.jumlah_kegiatan || 0} kegiatan
+                {it.alamat ? ` · ${it.alamat}` : ""}
+                {it.tempat_laporan ? ` · tempat laporan: ${it.tempat_laporan}` : ""}
+              </p>
+              {(it.nama_unit_organisasi || it.nama_sub_unit) && (
+                <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
+                  Kop: {[it.nama_unit_organisasi, it.nama_sub_unit].filter(Boolean).join(" › ")}
+                </p>
               )}
             </div>
-          ))
-        )}
-        <p className="text-center text-[10px] text-muted-foreground pt-1 pb-3">
-          Resolusi kop laporan: nilai kegiatan (paling spesifik) → profil satker di sini → Pengaturan global.
-          Field kosong = ikut lapisan di atasnya.
-        </p>
-      </main>
+            {isAdmin && (
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <button type="button" onClick={() => bukaEdit(it)} aria-label={`Ubah ${it.kode_satker}`}
+                  className="h-8 w-8 rounded-lg border border-border flex items-center justify-center hover:bg-muted min-w-0 min-h-0"
+                  data-testid={`satker-edit-${it.kode_satker}`}>
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+                {it.terdaftar && !it.jumlah_kegiatan && (
+                  <button type="button" onClick={() => hapus(it)} aria-label={`Hapus ${it.kode_satker}`}
+                    className="h-8 w-8 rounded-lg border border-border text-red-500 flex items-center justify-center hover:bg-red-500/10 min-w-0 min-h-0">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ))
+      )}
+      <p className="text-center text-[10px] text-muted-foreground pt-1 pb-3">
+        Resolusi kop laporan: nilai kegiatan (paling spesifik) → profil satker di sini → Pengaturan global.
+        Field kosong = ikut lapisan di atasnya.
+      </p>
 
       {/* ── Dialog profil satker ── */}
       <Dialog open={!!form} onOpenChange={(o) => !o && setForm(null)}>
@@ -251,6 +232,35 @@ export default function SatkerPage({ user, onBack }) {
       </Dialog>
 
       {confirmDialog}
+    </div>
+  );
+}
+
+export default function SatkerPage({ user, onBack }) {
+  useBackGuard(useCallback(() => onBack?.(), [onBack]));
+  return (
+    <div className="min-h-screen bg-background" data-testid="satker-page">
+      <header className="bg-card/95 backdrop-blur-sm border-b border-border px-3 sm:px-6 py-2.5 sticky top-0 z-40">
+        <div className="max-w-5xl mx-auto flex items-center gap-3">
+          <button type="button" onClick={onBack} aria-label="Kembali"
+            className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0"
+            data-testid="satker-back">
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+          <span className="w-9 h-9 rounded-lg bg-emerald-700 flex items-center justify-center flex-shrink-0">
+            <Building2 className="w-4 h-4 text-white" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight">Master Satker</h1>
+            <p className="text-[11px] text-muted-foreground leading-tight truncate">
+              Profil & kop per-satker — menimpa setelan global pada laporan satker ybs.
+            </p>
+          </div>
+        </div>
+      </header>
+      <main className="max-w-5xl mx-auto p-3 sm:p-6">
+        <SatkerPanel user={user} />
+      </main>
     </div>
   );
 }

@@ -4,7 +4,7 @@ import {
   ClipboardList, ShoppingCart, UserCheck, Handshake, ShieldCheck, Scale,
   ArrowLeftRight, Flame, FileX, Eye, BookOpen, Boxes, FileText, ClipboardCheck,
   CheckCircle2, Link2, CalendarClock, Banknote, Wrench, Landmark, ListTree,
-  Users, DoorOpen, IdCard, Mail, FileSignature, Building2,
+  Users, DoorOpen, IdCard, Mail, FileSignature, Building2, Settings,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -57,7 +57,7 @@ function StatusBadge({ status }) {
  * tahap siklus lain sudah punya kamarnya masing-masing dengan status Segera
  * Hadir — klik kartunya menampilkan konsep, rencana fitur, dan fase roadmap.
  */
-export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onShowInfo, onEnterInventarisasi, onOpenKodefikasi, onOpenPejabat, onOpenRuangan, onOpenReferensiAkun, onOpenPegawai, onOpenPersuratan, onOpenPersediaan, onOpenPelaporan, onOpenPenggunaan, onOpenPengamanan, onOpenPemeliharaan, onOpenPerencanaan, onOpenPenilaian, onOpenPenghapusan, onOpenPemanfaatan, onOpenPemusnahan, onOpenPemindahtanganan, onOpenWasdal, onOpenPenganggaran, onOpenPengadaan, onOpenTtd, onOpenSatker }) {
+export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onShowInfo, onEnterInventarisasi, onOpenKodefikasi, onOpenPejabat, onOpenRuangan, onOpenReferensiAkun, onOpenPegawai, onOpenPersuratan, onOpenPersediaan, onOpenPelaporan, onOpenPenggunaan, onOpenPengamanan, onOpenPemeliharaan, onOpenPerencanaan, onOpenPenilaian, onOpenPenghapusan, onOpenPemanfaatan, onOpenPemusnahan, onOpenPemindahtanganan, onOpenWasdal, onOpenPenganggaran, onOpenPengadaan, onOpenTtd, onOpenSatker, onOpenPengaturan }) {
   const [detail, setDetail] = useState(null); // modul yang dibuka konsepnya
   const activateInfo = useTripleClick(onShowInfo);
   const DetailIcon = detail ? (MODULE_ICONS[detail.id] || Package) : null;
@@ -245,6 +245,18 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
             >
               <Mail className="w-3.5 h-3.5" />
               Registrasi Persuratan
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {onOpenPengaturan && (
+            <button
+              type="button"
+              onClick={onOpenPengaturan}
+              className="w-full inline-flex justify-between items-center gap-1.5 px-3 h-8 rounded-full border border-slate-500/40 bg-slate-600/10 text-slate-700 dark:text-slate-300 text-[11px] font-semibold hover:bg-slate-600/20 transition-colors min-w-0 min-h-0"
+              data-testid="module-open-pengaturan"
+            >
+              <Settings className="w-3.5 h-3.5" />
+              Pengaturan
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
           )}
