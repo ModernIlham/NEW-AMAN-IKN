@@ -17,7 +17,8 @@ from db import db
 from shared_utils import kode_satker_user, log_audit, scope_query_field_satker
 from pejabat_utils import STATUS_KEPEGAWAIAN
 from pegawai_utils import (
-    AGAMA, JENIS_JABATAN, JENIS_KELAMIN, KATEGORI_PEGAWAI, STATUS_PEGAWAI,
+    AGAMA, DIGIT_BANK, JENIS_IDENTITAS_WNA, JENIS_JABATAN, JENIS_KELAMIN,
+    KATEGORI_PEGAWAI, KEWARGANEGARAAN, PANGKAT_GOLONGAN, STATUS_PEGAWAI,
     STATUS_PERKAWINAN, SUB_KATEGORI_NON_ASN, baris_impor_ke_pegawai,
     kelompok_unit_kerja, pegawai_perlu_serah_terima, rekap_eselon,
     validate_pegawai,
@@ -33,6 +34,9 @@ class PegawaiIn(BaseModel):
     nip: Optional[str] = ""
     gelar_depan: Optional[str] = ""
     gelar_belakang: Optional[str] = ""
+    kewarganegaraan: Optional[str] = ""
+    jenis_identitas_wna: Optional[str] = ""
+    nomor_identitas_wna: Optional[str] = ""
     jenis_kelamin: Optional[str] = ""
     tempat_lahir: Optional[str] = ""
     tanggal_lahir: Optional[str] = ""
@@ -73,6 +77,9 @@ def _bersih(p: PegawaiIn) -> dict:
         "nip": str(p.nip or "").strip(),
         "gelar_depan": str(p.gelar_depan or "").strip(),
         "gelar_belakang": str(p.gelar_belakang or "").strip(),
+        "kewarganegaraan": str(p.kewarganegaraan or "").strip().lower(),
+        "jenis_identitas_wna": str(p.jenis_identitas_wna or "").strip().lower(),
+        "nomor_identitas_wna": str(p.nomor_identitas_wna or "").strip(),
         "jenis_kelamin": str(p.jenis_kelamin or "").strip().upper(),
         "tempat_lahir": str(p.tempat_lahir or "").strip(),
         "tanggal_lahir": str(p.tanggal_lahir or "").strip()[:10],
@@ -142,6 +149,12 @@ async def referensi_pegawai(_user: dict = Depends(require_user)):
         "agama": _opt(AGAMA),
         "status_perkawinan": _opt(STATUS_PERKAWINAN),
         "status": _opt(STATUS_PEGAWAI),
+        "kewarganegaraan": _opt(KEWARGANEGARAAN),
+        "jenis_identitas_wna": _opt(JENIS_IDENTITAS_WNA),
+        # saran pangkat MENGIKUTI status kepegawaian + peta digit bank utk
+        # peringatan lunak rekening (pola form KERJA-BARENG).
+        "pangkat_golongan": PANGKAT_GOLONGAN,
+        "digit_bank": DIGIT_BANK,
     }
 
 

@@ -68,6 +68,75 @@ STATUS_PERKAWINAN = {
     "cerai_hidup": "Cerai Hidup", "cerai_mati": "Cerai Mati",
 }
 
+# Kewarganegaraan & identitas WNA (pola form KERJA-BARENG).
+KEWARGANEGARAAN = {"wni": "WNI", "wna": "WNA"}
+JENIS_IDENTITAS_WNA = {"paspor": "Paspor", "kitas": "KITAS", "kitap": "KITAP"}
+
+# Pilihan pangkat/golongan MENGIKUTI status kepegawaian (referensi resmi;
+# pola form KERJA-BARENG). Tetap boleh isian bebas — daftar ini utk saran.
+PANGKAT_GOLONGAN = {
+    "pns": [
+        "Juru Muda (I/a)", "Juru Muda Tingkat I (I/b)", "Juru (I/c)",
+        "Juru Tingkat I (I/d)",
+        "Pengatur Muda (II/a)", "Pengatur Muda Tingkat I (II/b)",
+        "Pengatur (II/c)", "Pengatur Tingkat I (II/d)",
+        "Penata Muda (III/a)", "Penata Muda Tingkat I (III/b)",
+        "Penata (III/c)", "Penata Tingkat I (III/d)",
+        "Pembina (IV/a)", "Pembina Tingkat I (IV/b)",
+        "Pembina Utama Muda (IV/c)", "Pembina Utama Madya (IV/d)",
+        "Pembina Utama (IV/e)",
+    ],
+    "pppk": [f"Golongan {r}" for r in (
+        "I II III IV V VI VII VIII IX X XI XII XIII XIV XV XVI XVII".split())],
+    "tni": [
+        "Prajurit Dua", "Prajurit Satu", "Prajurit Kepala",
+        "Kopral Dua", "Kopral Satu", "Kopral Kepala",
+        "Sersan Dua", "Sersan Satu", "Sersan Kepala", "Sersan Mayor",
+        "Pembantu Letnan Dua", "Pembantu Letnan Satu",
+        "Letnan Dua", "Letnan Satu", "Kapten",
+        "Mayor", "Letnan Kolonel", "Kolonel",
+        "Brigadir Jenderal", "Mayor Jenderal", "Letnan Jenderal", "Jenderal",
+    ],
+    "polri": [
+        "Bhayangkara Dua", "Bhayangkara Satu", "Bhayangkara Kepala",
+        "Ajun Brigadir Polisi Dua", "Ajun Brigadir Polisi Satu",
+        "Ajun Brigadir Polisi",
+        "Brigadir Polisi Dua", "Brigadir Polisi Satu", "Brigadir Polisi",
+        "Brigadir Polisi Kepala",
+        "Ajun Inspektur Polisi Dua", "Ajun Inspektur Polisi Satu",
+        "Inspektur Polisi Dua", "Inspektur Polisi Satu",
+        "Ajun Komisaris Polisi", "Komisaris Polisi",
+        "Ajun Komisaris Besar Polisi", "Komisaris Besar Polisi",
+        "Brigadir Jenderal Polisi", "Inspektur Jenderal Polisi",
+        "Komisaris Jenderal Polisi", "Jenderal Polisi",
+    ],
+}
+PANGKAT_GOLONGAN["cpns"] = PANGKAT_GOLONGAN["pns"]
+
+# Jumlah digit rekening bank umum di Indonesia (utk PERINGATAN LUNAK —
+# beberapa bank punya variasi; bank di luar daftar tidak diperiksa).
+DIGIT_BANK = {
+    "bri": 15, "bni": 10, "mandiri": 13, "btn": 16,
+    "bsi": 10, "bank syariah indonesia": 10, "bank syariah indonesia (bsi)": 10,
+    "bca": 10, "cimb niaga": 13, "danamon": 10,
+}
+
+
+def periksa_rekening(nama_bank, no_rekening):
+    """Peringatan LUNAK bila jumlah digit rekening tak lazim utk bank tsb.
+
+    Kembalikan string peringatan (kosong bila cocok/tak diperiksa). Bank
+    tak dikenal atau rekening kosong → tidak diperiksa. MURNI (teruji)."""
+    bank = str(nama_bank or "").strip().lower()
+    digit = re.sub(r"\D", "", str(no_rekening or ""))
+    if not bank or not digit:
+        return ""
+    harus = DIGIT_BANK.get(bank)
+    if harus is None or len(digit) == harus:
+        return ""
+    return (f"No. rekening {str(nama_bank).strip()} lazimnya {harus} digit "
+            f"(saat ini {len(digit)} digit) — periksa kembali")
+
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _TGL_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 

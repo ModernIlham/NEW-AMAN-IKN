@@ -163,6 +163,29 @@ def test_kategori_pegawai_konstanta():
     assert "keluar" in STATUS_PEGAWAI
 
 
+def test_periksa_rekening_dan_referensi_baru():
+    from pegawai_utils import (DIGIT_BANK, JENIS_IDENTITAS_WNA,
+                               KEWARGANEGARAAN, PANGKAT_GOLONGAN,
+                               periksa_rekening)
+    # cocok → tanpa peringatan; beda → peringatan lunak; tak dikenal → kosong
+    assert periksa_rekening("BRI", "1" * 15) == ""
+    assert "15 digit" in periksa_rekening("BRI", "12345")
+    assert periksa_rekening("Bank Antah", "12345") == ""
+    assert periksa_rekening("", "12345") == ""
+    assert periksa_rekening("BNI", "") == ""
+    # pemisah non-digit diabaikan saat menghitung
+    assert periksa_rekening("BNI", "12-3456-7890") == ""
+    assert DIGIT_BANK["mandiri"] == 13
+    assert set(KEWARGANEGARAAN) == {"wni", "wna"}
+    assert set(JENIS_IDENTITAS_WNA) == {"paspor", "kitas", "kitap"}
+    # pangkat mengikuti status; CPNS = daftar PNS
+    assert "Penata (III/c)" in PANGKAT_GOLONGAN["pns"]
+    assert PANGKAT_GOLONGAN["cpns"] == PANGKAT_GOLONGAN["pns"]
+    assert len(PANGKAT_GOLONGAN["pppk"]) == 17
+    assert "Kolonel" in PANGKAT_GOLONGAN["tni"]
+    assert "Komisaris Polisi" in PANGKAT_GOLONGAN["polri"]
+
+
 def test_pegawai_perlu_serah_terima():
     pegawai = [
         {"id": "1", "nama": "Keluar Pegang", "nip": "111", "status": "keluar"},
