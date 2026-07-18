@@ -639,17 +639,28 @@ def _signature_block(signers, doc_width):
     has_role = any(s.get('role') for s in signers)
     max_after = max((len(s.get('after') or []) for s in signers), default=0)
 
+    # Safe-escape teks penandatangan: '&' yang bukan entitas dan '<' yang
+    # bukan tag di-escape supaya nama/jabatan berkarakter khusus ("R&D")
+    # tidak merusak parser XML Paragraph — markup sengaja (mis. <b>) tetap
+    # dihormati untuk pemanggil yang memakainya.
+    import re as _re_sig
+
+    def _aman(s):
+        s = str(s or '')
+        s = _re_sig.sub(r'&(?![a-zA-Z]{2,8};|#\d+;)', '&amp;', s)
+        return _re_sig.sub(r'<(?![a-zA-Z/!])', '&lt;', s)
+
     def _col(s):
         flow = []
         pre = list(s.get('pre') or [])
         for _ in range(max_pre - len(pre)):
             flow.append(Paragraph('&nbsp;', sig))
         for line in pre:
-            flow.append(Paragraph(line, sig))
+            flow.append(Paragraph(_aman(line), sig))
         if has_header:
-            flow.append(Paragraph(s.get('header') or '&nbsp;', sig))
+            flow.append(Paragraph(_aman(s.get('header')) or '&nbsp;', sig))
         if has_role:
-            flow.append(Paragraph(s.get('role') or '&nbsp;', sig))
+            flow.append(Paragraph(_aman(s.get('role')) or '&nbsp;', sig))
         # Gambar TTD digital bila tersedia (bytes PNG transparan) —
         # menggantikan celah tanda tangan basah; fallback ke Spacer 15mm.
         ttd = s.get('ttd_img')
@@ -667,10 +678,10 @@ def _signature_block(signers, doc_width):
                 flow.append(Spacer(1, 15 * rl_mm))
         else:
             flow.append(Spacer(1, 15 * rl_mm))  # 3-line gap for wet signature
-        flow.append(Paragraph(f"<b><u>{s.get('nama', '')}</u></b>", sig))
+        flow.append(Paragraph(f"<b><u>{_aman(s.get('nama', ''))}</u></b>", sig))
         after = list(s.get('after') or [])
         for line in after:
-            flow.append(Paragraph(line, sig))
+            flow.append(Paragraph(_aman(line), sig))
         for _ in range(max_after - len(after)):
             flow.append(Paragraph('&nbsp;', sig))
         return flow

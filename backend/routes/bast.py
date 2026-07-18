@@ -40,25 +40,24 @@ _PROJ = {"_id": 0}
 
 JENIS_BAST = {
     "penggunaan_melekat": "Penggunaan Barang Milik Negara (Melekat ke Pengguna)",
-    "mutasi_pengguna": "Mutasi/Alih Pemegang Barang Milik Negara (Handover)",
+    "mutasi_pengguna": "Mutasi/Alih Pemegang Barang Milik Negara",
     "operasional_unit": "Operasional Penggunaan Barang Milik Negara pada Unit/Tempat/Tugas",
     "penggunaan_sementara": "Operasional Penggunaan Sementara Barang Milik Negara",
     "pengembalian": "Pengembalian Barang Milik Negara",
     "lainnya": "Serah Terima Barang Milik Negara",
 }
 
-# Dasar hukum BAST penggunaan BMN — ditinjau ulang & ditata ringkas
-# (nomor + judul resmi tetap utuh; PMK 76/2019 disatukan sebagai jo. dari
-# PMK 246/2014 sesuai kaidah sitasi peraturan berubah).
+# Dasar hukum BAST penggunaan BMN — dimutakhirkan (audit resmi): rezim
+# PMK 246/PMK.06/2014 jo. 76/2019 telah DICABUT dan digantikan PMK Nomor 40
+# Tahun 2024 tentang Tata Cara Pelaksanaan Penggunaan BMN.
 DASAR_HUKUM = (
     "Undang-Undang Nomor 17 Tahun 2003 tentang Keuangan Negara;",
     "Peraturan Pemerintah Nomor 27 Tahun 2014 tentang Pengelolaan Barang "
     "Milik Negara/Daerah jo. PP Nomor 28 Tahun 2020;",
     "Peraturan Presiden Nomor 62 Tahun 2022 tentang Otorita Ibu Kota "
     "Nusantara;",
-    "Peraturan Menteri Keuangan Nomor 246/PMK.06/2014 tentang Tata Cara "
-    "Pelaksanaan Penggunaan Barang Milik Negara jo. PMK Nomor "
-    "76/PMK.06/2019;",
+    "Peraturan Menteri Keuangan Nomor 40 Tahun 2024 tentang Tata Cara "
+    "Pelaksanaan Penggunaan Barang Milik Negara;",
     "Peraturan Menteri Keuangan Nomor 53 Tahun 2023 tentang Pengelolaan "
     "Barang Milik Negara dan Aset Dalam Penguasaan di Ibu Kota Nusantara.",
 )
@@ -161,7 +160,7 @@ async def buat_bast(payload: BastIn, user: dict = Depends(require_writer)):
         {"id": {"$in": payload.asset_ids}, "dihapus": {"$ne": True}},
         {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
          "brand": 1, "model": 1, "serial_number": 1, "condition": 1,
-         "purchase_date": 1,
+         "purchase_date": 1, "purchase_price": 1,
          "photos": 1, "photo_gridfs_ids": 1, "thumbnail_index": 1},
     ).to_list(500)
     if len(aset) != len(set(payload.asset_ids)):
@@ -414,58 +413,93 @@ async def bast_pdf(bast_id: str,
     b = await db.bast_serah_terima.find_one({"id": bast_id}, _PROJ)
     if not b:
         raise HTTPException(status_code=404, detail="BAST tidak ditemukan")
-    settings = await db.report_settings.find_one({"type": "global"}, _PROJ) or {}
+    from shared_utils import pastikan_akses_dok_satker, pengaturan_kop
+    await pastikan_akses_dok_satker(_user, b)
+    # Kop mengikuti SATKER pembuat BAST (resolusi satker → global).
+    settings = await pengaturan_kop(kode_satker=b.get("kode_satker"))
 
+    from xml.sax.saxutils import escape as _esc
     judul_jenis = (b.get("judul_lainnya") or JENIS_BAST.get(b.get("jenis"), "")
                    if b.get("jenis") == "lainnya"
                    else JENIS_BAST.get(b.get("jenis"), ""))
+    # Baris kedua judul: hindari dobel "SERAH TERIMA SERAH TERIMA ..." bila
+    # judul kustom sudah diawali frasa itu.
+    judul_baris2 = judul_jenis
+    if judul_baris2.lower().startswith("serah terima"):
+        judul_baris2 = judul_baris2[len("serah terima"):].strip() or judul_jenis
     buffer = io.BytesIO()
     doc = _std_doc(buffer)
     st = _get_report_styles()
-    body, bold = st['Body'], st['Heading']
-    tengah = st['Signature']
+    body = st['Body']
+
+    # Gaya khusus naskah BAST: isi pasal HITAM rata kiri-kanan (bukan Small
+    # abu-abu metadata) + judul pasal tebal-tengah ber-jarak — resmi & lega.
+    from reportlab.lib.colors import HexColor
+    from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY
+    from reportlab.lib.styles import ParagraphStyle
+    isi = ParagraphStyle('BastIsi', parent=body, fontSize=8.6, leading=11.6,
+                         alignment=TA_JUSTIFY, textColor=HexColor("#111827"),
+                         spaceAfter=1.5)
+    lbl_pasal = ParagraphStyle('BastPasal', parent=body, fontSize=9,
+                               leading=11.5, alignment=TA_CENTER,
+                               spaceBefore=5, spaceAfter=2.5,
+                               textColor=HexColor("#111827"))
+    ket = ParagraphStyle('BastKet', parent=isi, fontSize=8.2, leading=10.8)
 
     el = []
     el.extend(_kop_surat_flowables(settings, doc.width))
-    el.extend(_title_block("BERITA ACARA SERAH TERIMA\n" + judul_jenis.upper(),
+    el.extend(_title_block("BERITA ACARA SERAH TERIMA\n"
+                           + _esc(judul_baris2.upper()),
                            nomor=b.get("nomor") or "......./......./........"))
 
     jenis_awal = b.get("jenis")
     nar = narasi_hari_tanggal(b.get("tanggal"))
-    frasa = (f"Pada hari ini, {nar['hari']}, tanggal {nar['tanggal_terbilang']} "
-             f"bulan {nar['bulan']} tahun {nar['tahun_terbilang']} "
+    tempat = str(settings.get("tempat_laporan")
+                 or settings.get("alamat_instansi") or "").strip()
+    frasa = (f"Pada hari ini, {nar['hari']}, tanggal {nar['tanggal_terbilang']}, "
+             f"bulan {nar['bulan']}, tahun {nar['tahun_terbilang']} "
              f"({_fmt_tanggal_id(b.get('tanggal'))})" if nar else "Pada hari ini")
-    el.append(Paragraph(f"{frasa}, kami yang bertanda tangan di bawah ini:", body))
+    if tempat:
+        frasa += f", bertempat di {_esc(tempat.splitlines()[0])}"
+    el.append(Paragraph(f"{frasa}, kami yang bertanda tangan di bawah ini:", isi))
     el.append(Spacer(1, 1.5 * rl_mm))
 
     p1, p2 = b.get("pihak_pertama") or {}, b.get("pihak_kedua") or {}
-    # Identitas PARA PIHAK berdampingan (2 kolom) — padat namun tetap resmi.
-    from xml.sax.saxutils import escape as _esc
-    kecil = st['Small']
+    from reportlab.platypus import TableStyle as _TS
+    _garis = HexColor("#9aa5b1")
 
-    def _kolom_pihak(judul, ph, label_nip):
-        baris = [Paragraph(f"<b>{judul}</b>", kecil)]
+    def _kolom_pihak(peran, sebutan, ph, label_nip):
+        """Identitas satu pihak: label SEJAJAR (tabel label:nilai) + baris
+        'selanjutnya disebut ...' — mengikuti anatomi BAST resmi."""
+        rows = []
         for lbl, val in (("Nama", ph.get("nama")), (label_nip, ph.get("nip")),
-                         ("Jabatan", ph.get("jabatan")), ("Alamat", ph.get("alamat"))):
-            baris.append(Paragraph(
-                f"{lbl} : <b>{_esc(str(val or '-'))}</b>", kecil))
-        return baris
+                         ("Jabatan", ph.get("jabatan")),
+                         ("Alamat", ph.get("alamat"))):
+            rows.append([Paragraph(lbl, ket),
+                         Paragraph(f": <b>{_esc(str(val or '-'))}</b>", ket)])
+        dalam = Table(rows, colWidths=[46, doc.width * 0.5 - 46 - 14])
+        dalam.setStyle(_TS([('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                            ('RIGHTPADDING', (0, 0), (-1, -1), 2),
+                            ('TOPPADDING', (0, 0), (-1, -1), 0.5),
+                            ('BOTTOMPADDING', (0, 0), (-1, -1), 0.5)]))
+        return [Paragraph(f"<b>{peran}</b>", ket), dalam,
+                Paragraph(f"<i>— selanjutnya disebut <b>{sebutan}</b> —</i>", ket)]
 
     tp = Table([[
         _kolom_pihak("PIHAK KESATU (yang menyerahkan)"
                      if jenis_awal != "pengembalian"
-                     else "PIHAK KESATU (yang menerima)", p1, "NIP"),
+                     else "PIHAK KESATU (yang menerima)", "PIHAK KESATU", p1, "NIP"),
         _kolom_pihak("PIHAK KEDUA (yang menerima)"
                      if jenis_awal != "pengembalian"
-                     else "PIHAK KEDUA (yang menyerahkan)", p2, "NIP/NIK"),
+                     else "PIHAK KEDUA (yang menyerahkan)", "PIHAK KEDUA", p2, "NIP/NIK"),
     ]], colWidths=[doc.width * 0.5, doc.width * 0.5])
-    from reportlab.platypus import TableStyle as _TS
     tp.setStyle(_TS([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('LEFTPADDING', (0, 0), (0, -1), 0),
         ('LEFTPADDING', (1, 0), (1, -1), 8),
-        ('BOX', (0, 0), (-1, -1), 0.4, __import__('reportlab.lib.colors', fromlist=['colors']).HexColor("#9aa5b1")),
-        ('LINEBEFORE', (1, 0), (1, -1), 0.4, __import__('reportlab.lib.colors', fromlist=['colors']).HexColor("#9aa5b1")),
+        ('BOX', (0, 0), (-1, -1), 0.4, _garis),
+        ('LINEBEFORE', (1, 0), (1, -1), 0.4, _garis),
         ('TOPPADDING', (0, 0), (-1, -1), 3),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
         ('RIGHTPADDING', (0, 0), (-1, -1), 6),
@@ -474,106 +508,159 @@ async def bast_pdf(bast_id: str,
     el.append(Spacer(1, 1.5 * rl_mm))
     arah = ("PIHAK KEDUA mengembalikan kepada PIHAK KESATU"
             if jenis_awal == "pengembalian"
-            else "PIHAK KESATU dan PIHAK KEDUA (selanjutnya disebut PARA "
-                 "PIHAK) sepakat melakukan serah terima")
+            else "PIHAK KESATU dan PIHAK KEDUA — secara bersama-sama disebut "
+                 "PARA PIHAK — sepakat melakukan serah terima")
     el.append(Paragraph(
-        f"{arah} {judul_jenis}, dengan memperhatikan:", body))
+        f"{arah} {_esc(judul_jenis)}, berdasarkan:", isi))
     for i, d in enumerate(DASAR_HUKUM, 1):
-        el.append(Paragraph(f"{i}. {d}", kecil))
-    el.append(Spacer(1, 2 * rl_mm))
+        el.append(Paragraph(f"{i}. {d}", ket))
+    el.append(Spacer(1, 1.5 * rl_mm))
 
-    # PASAL 1 — objek serah terima (tabel multi-aset)
-    el.append(Spacer(1, 1 * rl_mm))
-    el.append(Paragraph("<b>PASAL 1 — OBJEK SERAH TERIMA</b>", tengah))
+    # PASAL 1 — objek serah terima (tabel multi-aset + nilai + total)
+    el.append(Paragraph("<b>PASAL 1 — OBJEK SERAH TERIMA</b>", lbl_pasal))
     kalimat1 = ("PIHAK KEDUA menyerahkan kembali dan PIHAK KESATU menerima"
                 if b.get("jenis") == "pengembalian"
-                else "PIHAK KESATU menyerahkan dan PIHAK KEDUA menerima dengan baik")
+                else "PIHAK KESATU menyerahkan dan PIHAK KEDUA menerima penyerahan")
     el.append(Paragraph(
-        f"{kalimat1} Barang Milik Negara sebagai berikut:", kecil))
-    # Tabel ringkas: dua kolom gabungan agar teks panjang lega —
-    # Identitas (Sub-sub Kelompok di atas · kode barang · NUP) + Uraian
-    # (Nama Barang di atas · Merk/Tipe/Spesifikasi).
+        f"{kalimat1} Barang Milik Negara dengan rincian sebagai berikut:", isi))
     subsub = await _peta_subsub_kelompok(
         [a.get("asset_code") for a in (b.get("aset") or [])])
     from kodefikasi_utils import normalize_kode as _norm
+    from pembukuan_utils import parse_harga as _ph
     data = [[Paragraph(h, st['TableHeader']) for h in
-             ("No", "Identitas Barang\n(Sub-sub Kelompok · Kode · NUP)",
-              "Uraian Barang\n(Nama · Merk/Tipe/Spesifikasi)", "Tahun", "Kondisi")]]
+             ("No", "Identitas Barang<br/>(Sub-sub Kelompok · Kode · NUP)",
+              "Uraian Barang<br/>(Nama · Merk/Tipe/Spesifikasi)", "Tahun",
+              "Kondisi", "Nilai Perolehan (Rp)")]]
+    total_nilai = 0.0
     for i, a in enumerate(b.get("aset") or [], 1):
-        tahun = str(a.get("purchase_date") or "")[:4] or "-"
+        tgl = str(a.get("purchase_date") or "")
+        tahun = tgl[:4] if len(tgl) >= 4 and tgl[:4].isdigit() else (
+            tgl[-4:] if len(tgl) >= 4 and tgl[-4:].isdigit() else "-")
+        nilai = _ph(a.get("purchase_price"))
+        total_nilai += nilai
         data.append([
             Paragraph(str(i), st['CellCenter']),
             _sel_identitas_barang(a, subsub.get(_norm(a.get("asset_code")), ""), st),
             _sel_uraian_barang(a, st),
             Paragraph(tahun, st['CellCenter']),
             Paragraph(a.get("condition") or "-", st['CellCenter']),
+            Paragraph(f"{nilai:,.0f}".replace(",", ".") if nilai else "-",
+                      st['CellRight'] if 'CellRight' in st else st['CellCenter']),
         ])
-    t = Table(data, colWidths=_fit_col_widths([20, 150, 205, 38, 55],
+    data.append([Paragraph("", st['Cell']),
+                 Paragraph("<b>JUMLAH</b>", st['Cell']), Paragraph("", st['Cell']),
+                 Paragraph("", st['Cell']), Paragraph("", st['Cell']),
+                 Paragraph(f"<b>{total_nilai:,.0f}</b>".replace(",", "."),
+                           st['CellRight'] if 'CellRight' in st else st['CellCenter'])])
+    t = Table(data, colWidths=_fit_col_widths([24, 130, 168, 36, 50, 78],
                                               doc.width), repeatRows=1)
-    t.setStyle(_std_table_style(zebra=True))
+    t.setStyle(_std_table_style(zebra=True, total_row=True))
     el.append(t)
 
-    # PASAL 2+ — ketentuan sesuai jenis
+    # PASAL 2+ — ketentuan sesuai jenis. Tiap pasal dibungkus KeepTogether
+    # agar judul tidak yatim terpisah dari isinya saat pecah halaman.
+    from reportlab.platypus import KeepTogether
     nomor_pasal = 2
+
     def pasal(judul, isi_list):
         nonlocal nomor_pasal
-        el.append(Spacer(1, 1 * rl_mm))
-        el.append(Paragraph(f"<b>PASAL {nomor_pasal} — {judul}</b>", tengah))
-        for i, isi in enumerate(isi_list, 1):
-            el.append(Paragraph(
-                (f"{i}. {isi}" if len(isi_list) > 1 else isi), kecil))
+        blok = [Paragraph(f"<b>PASAL {nomor_pasal} — {judul}</b>", lbl_pasal)]
+        for i, teks in enumerate(isi_list, 1):
+            blok.append(Paragraph(
+                (f"({i}) {teks}" if len(isi_list) > 1 else teks), isi))
+        el.append(KeepTogether(blok))
         nomor_pasal += 1
 
     jenis = b.get("jenis")
+    # Pasal umum: keadaan barang & kelengkapan — anatomi BAST resmi.
+    pasal("KEADAAN BARANG DAN KELENGKAPAN", [
+        "Serah terima meliputi fisik barang beserta kelengkapan/dokumen "
+        "pendukungnya, dalam keadaan sebagaimana tercantum pada kolom "
+        "Kondisi tabel Pasal 1; PARA PIHAK telah melakukan pengecekan "
+        "bersama atas barang dimaksud sebelum menandatangani Berita Acara ini.",
+    ])
     if jenis == "mutasi_pengguna":
-        pasal("MUTASI PEMEGANG", [
-            "Seluruh tanggung jawab penggunaan, pengamanan, dan pemeliharaan "
-            "BMN beralih dari PIHAK KESATU kepada PIHAK KEDUA sejak Berita "
-            "Acara ini ditandatangani; pencatatan pemegang pada daftar "
-            "barang satker diperbarui.",
-            "PIHAK KEDUA dilarang mengalihkan BMN tanpa persetujuan tertulis "
-            "dan wajib mengembalikannya bila berpindah tugas/berhenti.",
+        pasal("MUTASI PEMEGANG DAN TANGGUNG JAWAB", [
+            "Terhitung sejak ditandatanganinya Berita Acara ini, tanggung "
+            "jawab penggunaan, pengamanan, dan pemeliharaan BMN beralih dari "
+            "PIHAK KESATU kepada PIHAK KEDUA.",
+            "PIHAK KEDUA dilarang memindahtangankan, mengubah bentuk, atau "
+            "mengalihkan BMN kepada pihak lain tanpa persetujuan tertulis, "
+            "dan wajib mengembalikannya apabila berpindah tugas/berhenti.",
+            "Kehilangan atau kerusakan akibat kelalaian PIHAK KEDUA wajib "
+            "segera dilaporkan dan dapat dikenakan tuntutan ganti rugi "
+            "sesuai ketentuan peraturan perundang-undangan.",
+        ])
+        pasal("STATUS PENCATATAN", [
+            "BMN tetap tercatat sebagai Barang Milik Negara pada satuan "
+            "kerja; mutasi ini hanya mengubah pencatatan pemegang pada "
+            "daftar barang/Daftar Barang Ruangan/Kartu Identitas Barang.",
         ])
     if jenis in ("penggunaan_melekat", "operasional_unit", "lainnya"):
         pasal("TANGGUNG JAWAB", [
-            "Sejak Berita Acara ini ditandatangani, PIHAK KEDUA bertanggung "
-            "jawab penuh atas penggunaan, pengamanan, dan pemeliharaan BMN.",
+            "Terhitung sejak ditandatanganinya Berita Acara ini, PIHAK KEDUA "
+            "bertanggung jawab penuh atas penggunaan, pengamanan, dan "
+            "pemeliharaan BMN untuk kepentingan kedinasan.",
             "BMN wajib dikembalikan kepada PIHAK KESATU dalam kondisi baik "
             "apabila PIHAK KEDUA berpindah tugas/berhenti sesuai ketentuan.",
-            "PIHAK KEDUA dilarang mengalihkan BMN kepada pihak lain tanpa "
-            "persetujuan tertulis PIHAK KESATU.",
+            "PIHAK KEDUA dilarang memindahtangankan atau mengalihkan BMN "
+            "kepada pihak lain tanpa persetujuan tertulis PIHAK KESATU.",
+            "Kehilangan atau kerusakan akibat kelalaian PIHAK KEDUA wajib "
+            "segera dilaporkan kepada PIHAK KESATU dan dapat dikenakan "
+            "tuntutan ganti rugi sesuai ketentuan peraturan "
+            "perundang-undangan.",
         ])
     if jenis == "operasional_unit" and b.get("penanggung_jawab_tambahan"):
-        baris = [f"{p.get('nama')} — {p.get('unit_tempat_tugas') or '-'}"
+        baris = [f"{_esc(str(p.get('nama') or '-'))} — "
+                 f"{_esc(str(p.get('unit_tempat_tugas') or '-'))}"
                  for p in b["penanggung_jawab_tambahan"]]
         pasal("PENANGGUNG JAWAB PENGGUNAAN",
               ["Pembagian penanggung jawab penggunaan pada unit/tempat/tugas:"]
               + baris)
     if jenis == "penggunaan_sementara":
-        pasal("STATUS, JANGKA WAKTU, DAN PENGEMBALIAN", [
-            "BMN tetap tercatat pada PIHAK KESATU serta berada dalam "
-            "pengawasannya; penggunaan sementara tidak mengalihkan "
-            "kepemilikan.",
-            f"Berlaku sejak {_fmt_tanggal_id(b.get('jangka_dari')) or '…'} "
-            f"s.d. {_fmt_tanggal_id(b.get('jangka_sampai')) or '…'}; setelah "
-            "berakhir atau sewaktu-waktu diperlukan, PIHAK KEDUA wajib "
-            "mengembalikan BMN dalam kondisi baik.",
+        pasal("STATUS DAN JANGKA WAKTU", [
+            "Penggunaan sementara tidak mengalihkan status penggunaan — BMN "
+            "tetap tercatat pada Daftar Barang Pengguna PIHAK KESATU dan "
+            "berada dalam pengawasannya; PIHAK KEDUA dilarang mengubah "
+            "status, memindahtangankan, atau membebani BMN.",
+            f"Jangka waktu penggunaan sementara terhitung sejak "
+            f"{_fmt_tanggal_id(b.get('jangka_dari')) or '…'} sampai dengan "
+            f"{_fmt_tanggal_id(b.get('jangka_sampai')) or '…'} dan dapat "
+            "diperpanjang sesuai ketentuan dengan persetujuan pejabat yang "
+            "berwenang.",
+        ])
+        pasal("BIAYA DAN PENGEMBALIAN", [
+            "Biaya pemeliharaan dan pengamanan BMN selama jangka waktu "
+            "penggunaan sementara dibebankan kepada PIHAK KEDUA, kecuali "
+            "diperjanjikan lain.",
+            "Pada saat jangka waktu berakhir atau sewaktu-waktu diperlukan, "
+            "PIHAK KEDUA wajib menyerahkan kembali BMN kepada PIHAK KESATU "
+            "dalam keadaan baik yang dituangkan dalam Berita Acara Serah "
+            "Terima pengembalian.",
         ])
     if jenis == "pengembalian":
-        pasal("PERNYATAAN", [
-            "PIHAK KEDUA menyatakan telah mengembalikan seluruh BMN tersebut dan "
-            "PIHAK KESATU menyatakan menerima dalam kondisi sebagaimana tercantum "
-            "pada tabel objek serah terima.",
+        pasal("PERNYATAAN DAN PEMERIKSAAN", [
+            "PIHAK KEDUA menyatakan telah mengembalikan seluruh BMN tersebut "
+            "dan PIHAK KESATU telah melakukan pemeriksaan fisik serta "
+            "menerima BMN dalam keadaan sebagaimana tercantum pada tabel "
+            "objek serah terima.",
+            "Terhitung sejak ditandatanganinya Berita Acara ini, tanggung "
+            "jawab penggunaan, pengamanan, dan pemeliharaan BMN kembali "
+            "beralih kepada PIHAK KESATU; pencatatan pemegang pada daftar "
+            "barang satuan kerja dimutakhirkan.",
         ])
     if b.get("keterangan"):
-        # Isi dari textarea: tiap baris tak-kosong → satu butir pasal.
-        butir = [ln.strip() for ln in str(b["keterangan"]).splitlines() if ln.strip()]
-        pasal("KETENTUAN TAMBAHAN", butir or [b["keterangan"]])
+        # Isi dari textarea: tiap baris tak-kosong → satu butir pasal
+        # (di-escape — teks bebas berkarakter '&'/'<' tak boleh merusak PDF).
+        butir = [_esc(ln.strip())
+                 for ln in str(b["keterangan"]).splitlines() if ln.strip()]
+        pasal("KETENTUAN TAMBAHAN", butir or [_esc(str(b["keterangan"]))])
     pasal("PENUTUP", [
-        "Apabila di kemudian hari terdapat kekeliruan akan diadakan "
-        "perbaikan sebagaimana mestinya. Demikian Berita Acara ini dibuat "
-        "dan ditandatangani oleh PARA PIHAK untuk dipergunakan sebagaimana "
-        "mestinya.",
+        "Demikian Berita Acara Serah Terima ini dibuat dengan sebenarnya "
+        "dalam rangkap 2 (dua) — 1 (satu) rangkap untuk PIHAK KESATU dan "
+        "1 (satu) rangkap untuk PIHAK KEDUA — yang masing-masing mempunyai "
+        "kekuatan hukum yang sama; apabila di kemudian hari terdapat "
+        "kekeliruan akan diadakan perbaikan sebagaimana mestinya.",
     ])
 
     el.append(Spacer(1, 3 * rl_mm))
@@ -584,24 +671,28 @@ async def bast_pdf(bast_id: str,
     if jenis == "mutasi_pengguna" or an_kpb:
         # KPB dari REGISTRY pejabat yang berlaku pada tanggal BAST (bukan
         # setelan mentah yang bisa kedaluwarsa) — fallback ke setelan kasatker.
+        # Spesimen TTD digital KPB ikut tersemat (konsisten laporan lain).
         from pejabat_utils import penandatangan_kpb
+        from shared_utils import ambil_ttd_img
         pj_list = await db.pejabat.find({}, _PROJ).to_list(2000)
         kpb = penandatangan_kpb(settings, pj_list, b.get("tanggal"))
         signers_mengetahui = [{'header': 'Mengetahui,',
                                'role': kpb["jabatan"],
                                'nama': kpb["nama"],
-                               'after': [f"NIP. {kpb['nip']}"]}]
-    peran_kesatu = ('Yang Menyerahkan' if jenis != 'pengembalian' else 'Yang Menerima')
+                               'after': [f"NIP. {kpb['nip']}"],
+                               'ttd_img': await ambil_ttd_img(kpb.get("ttd_file_id"))}]
+    peran_kesatu = ('Yang Menyerahkan,' if jenis != 'pengembalian' else 'Yang Menerima,')
     if an_kpb:
-        peran_kesatu += ' a.n. Kuasa Pengguna Barang'
+        peran_kesatu = peran_kesatu.rstrip(',') + ' a.n. Kuasa Pengguna Barang,'
     el.extend(_signature_block([
-        {'header': 'PIHAK KEDUA,', 'role': 'Yang Menerima' if jenis != 'pengembalian' else 'Yang Menyerahkan',
-         'nama': p2.get("nama") or "________________",
-         'after': [f"NIP/NIK. {p2.get('nip') or '…'}"]},
+        {'header': 'PIHAK KEDUA,',
+         'role': 'Yang Menerima,' if jenis != 'pengembalian' else 'Yang Menyerahkan,',
+         'nama': p2.get("nama") or "................................",
+         'after': [f"NIP/NIK. {p2.get('nip') or '-'}"]},
         {'pre': [_tempat_tanggal_laporan(settings, b.get("tanggal"))],
          'header': 'PIHAK KESATU,', 'role': peran_kesatu,
-         'nama': p1.get("nama") or "________________",
-         'after': [f"NIP. {p1.get('nip') or '…'}"]},
+         'nama': p1.get("nama") or "................................",
+         'after': [f"NIP. {p1.get('nip') or '-'}"]},
     ] + signers_mengetahui, doc.width))
     el.extend(_blok_tembusan(
         {"tembusan_laporan": b.get("tembusan") or settings.get("tembusan_laporan", "")}))
@@ -632,11 +723,13 @@ async def bast_pdf(bast_id: str,
                 skala = min((doc.width * 0.6) / img.imageWidth, 80 * rl_mm / img.imageHeight)
                 img.drawWidth, img.drawHeight = img.imageWidth * skala, img.imageHeight * skala
                 img.hAlign = 'CENTER'
-                foto_el.append(Paragraph(
-                    f"<b>{a.get('asset_code')} · NUP {a.get('NUP')}</b> — {a.get('asset_name')}",
-                    body))
-                foto_el.append(img)
-                foto_el.append(Spacer(1, 4 * rl_mm))
+                from reportlab.platypus import KeepTogether as _KT
+                foto_el.append(_KT([
+                    Paragraph(
+                        f"<b>{_esc(str(a.get('asset_code') or ''))} · NUP "
+                        f"{_esc(str(a.get('NUP') or ''))}</b> — "
+                        f"{_esc(str(a.get('asset_name') or ''))}", body),
+                    img, Spacer(1, 4 * rl_mm)]))
             except Exception:
                 continue
         if foto_el:
@@ -644,7 +737,7 @@ async def bast_pdf(bast_id: str,
             el.extend(_title_block("LAMPIRAN\nFOTO BUKTI SERAH TERIMA BARANG"))
             el.extend(foto_el)
 
-    footer = _page_footer_factory(f"BAST — {judul_jenis}")
+    footer = _page_footer_factory(f"BAST — {judul_jenis[:60]}")
     doc.build(el, onFirstPage=footer, onLaterPages=footer)
     buffer.seek(0)
     return StreamingResponse(buffer, media_type="application/pdf",
