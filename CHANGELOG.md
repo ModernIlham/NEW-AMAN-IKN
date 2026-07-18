@@ -48,6 +48,32 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#399] TTD elektronik DIBUBUHKAN langsung ke dokumen PDF yang dikirim — 2026-07-18
+
+Permintaan pemilik: e-sign tidak lagi hanya mengumpulkan tanda tangan —
+kirim dokumen yang hendak di-ttd LANGSUNG, dan tanda tangan yang masuk
+dibubuhkan ke dokumennya:
+- **Unggah PDF saat membuat permintaan** (opsional, ≤20MB): dokumen
+  tersimpan aman (GridFS), penanda tangan menandatangani via link seperti
+  biasa — dan kini bisa **membaca dokumen terlebih dulu** dari halaman link
+  ("Baca dokumen yang akan ditandatangani").
+- **Unduh "Dokumen ber-TTD"**: dokumen asli + bubuhan tanda tangan di
+  halaman terakhir — gambar ttd, nama (bergaris), jabatan, NIP, tanggal per
+  penanda tangan (slot rapi maks 3/baris), plus **QR verifikasi + kode**
+  di pojok; dibangun on-the-fly sehingga selalu memuat ttd terbaru.
+  Halaman-halaman asli tidak berubah.
+- Dasbor TTD: tombol **Dokumen Asli** & **Dokumen ber-TTD** pada detail
+  permintaan; Lembar Pengesahan tetap tersedia.
+- Endpoint: `POST /ttd/permintaan/unggah` (validasi PDF terbaca + jumlah
+  halaman), `GET …/dokumen` (dasbor & tamu ber-token sign), `GET
+  …/dokumen-ttd` (overlay pypdf + reportlab).
+- Verifikasi: smoke end-to-end FakeDB+FakeGridFS (unggah 2 halaman → teken
+  1 & 2 penanda tangan → PDF hasil diperiksa isi & dirender visual; token
+  silang 401; non-PDF 400; belum ada ttd 400), 527 tes unit lulus, server
+  ter-import, lint & build sukses.
+
+---
+
 ## [#398] Cetak Stiker Label BMN — 3 ukuran × kertas A4/A3, mengikuti filter aktif — 2026-07-18
 
 Permintaan pemilik (dengan referensi desain label resmi satker): fitur cetak

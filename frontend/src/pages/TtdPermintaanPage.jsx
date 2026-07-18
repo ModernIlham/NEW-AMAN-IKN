@@ -2,9 +2,9 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import {
-  ArrowLeft, BadgeCheck, Copy, FileDown, FileSignature, Link2,
+  ArrowLeft, BadgeCheck, Copy, FileDown, FileSignature, FileText, Link2,
   Loader2, Mail, MessageCircle, PenTool, Plus, Search, ShieldCheck,
-  Trash2, Users, XCircle,
+  Trash2, Upload, Users, XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -78,6 +78,7 @@ export default function TtdPermintaanPage({ user, onBack }) {
   const [hasil, setHasil] = useState(null);        // {judul, links:[{nama,link}]} pasca-buat
   const [detail, setDetail] = useState(null);      // record permintaan terpilih
   const [pegawai, setPegawai] = useState([]);
+  const [dokFile, setDokFile] = useState(null);    // PDF unggahan utk dibubuhi ttd
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
 
@@ -133,14 +134,41 @@ export default function TtdPermintaanPage({ user, onBack }) {
     }
     setSaving(true);
     try {
-      const r = await axios.post(`${API}/ttd/permintaan`, form);
+      let r;
+      if (dokFile) {
+        // Dokumen PDF terlampir → ttd yang masuk dibubuhkan ke dokumen.
+        const fd = new FormData();
+        fd.append("file", dokFile);
+        fd.append("judul", form.judul);
+        fd.append("mode", form.mode);
+        fd.append("signers", JSON.stringify(form.signers));
+        r = await axios.post(`${API}/ttd/permintaan/unggah`, fd, {
+          headers: { "Content-Type": "multipart/form-data" }, timeout: 120000,
+        });
+      } else {
+        r = await axios.post(`${API}/ttd/permintaan`, form);
+      }
       setHasil(r.data);
       setForm(null);
+      setDokFile(null);
       load();
     } catch (e) {
       toast.error(apiErr(e, "Gagal membuat permintaan"));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const unduhDokumen = async (it, berTtd) => {
+    const dasar = (it.dok_nama || it.judul || it.id).replace(/\.pdf$/i, "")
+      .slice(0, 40).replace(/[^\w-]+/g, "_");
+    try {
+      await downloadFileWithProgress(
+        `${API}/ttd/permintaan/${it.id}/${berTtd ? "dokumen-ttd" : "dokumen"}`,
+        berTtd ? `${dasar}_ber-TTD.pdf` : `${dasar}.pdf`,
+        { label: berTtd ? "Dokumen ber-TTD" : "Dokumen asli" });
+    } catch (e) {
+      toast.error(apiErr(e, "Gagal mengunduh dokumen"));
     }
   };
 
@@ -209,7 +237,7 @@ export default function TtdPermintaanPage({ user, onBack }) {
               Kirim link e-sign · pantau status · unduh lembar pengesahan
             </p>
           </div>
-          <Button size="sm" className="h-9 text-xs" onClick={() => setForm({ ...FORM_KOSONG, signers: [{ ...SIGNER_KOSONG }] })}
+          <Button size="sm" className="h-9 text-xs" onClick={() => { setDokFile(null); setForm({ ...FORM_KOSONG, signers: [{ ...SIGNER_KOSONG }] }); }}
             data-testid="ttd-buat">
             <Plus className="w-3.5 h-3.5 mr-1" />Minta TTD
           </Button>
@@ -298,6 +326,26 @@ export default function TtdPermintaanPage({ user, onBack }) {
                     <option value="berurutan">Berurutan — sesuai giliran</option>
                   </select>
                 </div>
+              </div>
+              {/* Dokumen PDF terlampir — ttd yang masuk DIBUBUHKAN ke halaman
+                  terakhir dokumen (unduh "Dokumen ber-TTD" setelah diteken). */}
+              <div className="rounded-xl border border-dashed border-border p-2.5 space-y-1.5">
+                <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                  <Upload className="w-3.5 h-3.5" />Dokumen PDF untuk dibubuhi TTD (opsional)
+                </label>
+                <input type="file" accept=".pdf"
+                  onChange={(e) => setDokFile(e.target.files?.[0] || null)}
+                  className="block w-full text-xs text-muted-foreground file:mr-2 file:rounded-md file:border file:border-border file:bg-muted file:px-2.5 file:py-1.5 file:text-xs file:font-semibold"
+                  data-testid="ttd-form-dokumen" />
+                {dokFile ? (
+                  <p className="text-[10px] text-emerald-600 dark:text-emerald-400">
+                    {dokFile.name} — tanda tangan akan dibubuhkan otomatis di halaman terakhir; penanda tangan dapat membaca dokumen dari link.
+                  </p>
+                ) : (
+                  <p className="text-[10px] text-muted-foreground">
+                    Tanpa dokumen: permintaan hanya mengumpulkan ttd (Lembar Pengesahan). Dengan PDF: unduh &quot;Dokumen ber-TTD&quot; berisi bubuhan ttd + QR verifikasi.
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -486,6 +534,19 @@ export default function TtdPermintaanPage({ user, onBack }) {
                   data-testid="ttd-unduh-lembar">
                   <FileDown className="w-3.5 h-3.5 mr-1.5" />Lembar Pengesahan (PDF)
                 </Button>
+                {detail.dok_file_id && (
+                  <>
+                    <Button variant="outline" onClick={() => unduhDokumen(detail, false)} className="h-9 text-xs"
+                      data-testid="ttd-unduh-dokumen">
+                      <FileText className="w-3.5 h-3.5 mr-1.5" />Dokumen Asli
+                    </Button>
+                    <Button variant="outline" onClick={() => unduhDokumen(detail, true)} className="h-9 text-xs text-emerald-700 dark:text-emerald-400"
+                      title="Dokumen dengan bubuhan tanda tangan yang sudah masuk + QR verifikasi"
+                      data-testid="ttd-unduh-dokumen-ttd">
+                      <FileSignature className="w-3.5 h-3.5 mr-1.5" />Dokumen ber-TTD
+                    </Button>
+                  </>
+                )}
                 <Button onClick={() => setDetail(null)} className="h-9 text-xs">Tutup</Button>
               </DialogFooter>
             </>
