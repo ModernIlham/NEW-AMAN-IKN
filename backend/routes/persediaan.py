@@ -1238,7 +1238,7 @@ async def transaksi_masuk(item_id: str, data: TransaksiMasukIn, user: dict = Dep
     if not item:
         raise HTTPException(status_code=404, detail="Barang persediaan tidak ditemukan")
     from shared_utils import pastikan_akses_dok_satker
-    await pastikan_akses_dok_satker(_user, item)
+    await pastikan_akses_dok_satker(user, item)
 
     expired = (data.expired or item.get("expired_default") or "").strip()
     layer = buat_layer(batch_id, now.isoformat(), data.jumlah, data.harga_satuan, expired, ref)
@@ -1321,7 +1321,7 @@ async def transaksi_keluar(item_id: str, data: TransaksiKeluarIn, user: dict = D
         if not item:
             raise HTTPException(status_code=404, detail="Barang persediaan tidak ditemukan")
         from shared_utils import pastikan_akses_dok_satker
-        await pastikan_akses_dok_satker(_user, item)
+        await pastikan_akses_dok_satker(user, item)
         stok_sebelum = int(item.get("stok", 0) or 0)
         ok, err = validate_transaksi_keluar(data.jenis, data.jumlah, stok_sebelum)
         if not ok:
@@ -1406,7 +1406,7 @@ async def pindah_gudang_persediaan(item_id: str, data: PindahGudangIn,
     if not item:
         raise HTTPException(status_code=404, detail="Barang persediaan tidak ditemukan")
     from shared_utils import pastikan_akses_dok_satker
-    await pastikan_akses_dok_satker(_user, item)
+    await pastikan_akses_dok_satker(user, item)
     lokasi_lama = str(item.get("lokasi") or "").strip()
     ok, err = validate_pindah_gudang(lokasi_lama, data.lokasi_baru)
     if not ok:
@@ -1481,7 +1481,7 @@ async def opname_persediaan(item_id: str, data: OpnameIn, user: dict = Depends(r
         if not item:
             raise HTTPException(status_code=404, detail="Barang persediaan tidak ditemukan")
         from shared_utils import pastikan_akses_dok_satker
-        await pastikan_akses_dok_satker(_user, item)
+        await pastikan_akses_dok_satker(user, item)
         stok_sebelum = int(item.get("stok", 0) or 0)
         batches_lama = item.get("batches") or []
         batch_id = str(uuid.uuid4())
@@ -1660,11 +1660,11 @@ async def kartu_barang_pdf(item_id: str, _user: dict = Depends(require_user)):
 @persediaan_router.delete("/persediaan/{item_id}")
 async def delete_persediaan(item_id: str, _admin: dict = Depends(require_admin)):
     """Hapus master — hanya bila stok 0 & tanpa layer (jejak transaksi aman)."""
-    item = await db.persediaan.find_one({"id": item_id}, {"_id": 0, "stok": 1, "batches": 1})
+    item = await db.persediaan.find_one({"id": item_id}, {"_id": 0, "stok": 1, "batches": 1, "kode_satker": 1})
     if not item:
         raise HTTPException(status_code=404, detail="Barang persediaan tidak ditemukan")
     from shared_utils import pastikan_akses_dok_satker
-    await pastikan_akses_dok_satker(_user, item)
+    await pastikan_akses_dok_satker(_admin, item)
     if int(item.get("stok", 0) or 0) > 0 or (item.get("batches") or []):
         raise HTTPException(status_code=409,
                             detail="Barang masih punya stok/layer — keluarkan stoknya dulu lewat transaksi")

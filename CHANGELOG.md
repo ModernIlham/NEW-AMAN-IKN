@@ -48,6 +48,46 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#387] Perbaikan temuan review akhir: 3 regresi kritis 500 + guard satker & privasi e-sign — 2026-07-18
+
+Review adversarial menyeluruh atas 4 PR terakhir (23 agen menemukan → memverifikasi)
+mengonfirmasi 12 temuan; semuanya diperbaiki di sini:
+
+**Kritis (500 di produksi):**
+- **Persediaan**: 5 guard hasil sweep memanggil `pastikan_akses_dok_satker(_user, …)`
+  padahal parameter handler bernama `user`/`_admin` → `NameError` pada SEMUA mutasi
+  stok (masuk/keluar/pindah gudang/opname/hapus). Diperbaiki + proyeksi hapus
+  kini menyertakan `kode_satker` agar guard efektif.
+- **Penggunaan**: `scope_query_aset` hanya diimpor lokal → `NameError` di daftar
+  pemegang, aset pemegang, dan PDF daftar pemegang. Impor dinaikkan ke level modul.
+- **Perencanaan**: impor `kode_satker_user`/`scope_query_field_satker` hilang di
+  level modul → daftar/ekspor/buat usulan RKBMN 500. Diperbaiki.
+
+**Fungsional & keamanan:**
+- **BAST**: snapshot aset kini menyimpan `purchase_price` (kolom Nilai Perolehan
+  tidak lagi selalu "-" dan JUMLAH 0); pembuatan BAST memvalidasi kepemilikan
+  tiap aset lintas satker (`pastikan_akses_aset`); unggah & unduh bukti ttd
+  kini ber-guard satker.
+- **BAST PSP**: PDF ber-guard satker + kop mengikuti satker SK; snapshot SK baru
+  menyimpan kondisi & nilai perolehan, SK lama dilengkapi saat render dari
+  master aset — kolom Kondisi/Nilai terisi benar.
+- **E-sign**: status "sebagian" tidak lagi bisa menimpa "selesai" pada submit
+  paralel (status final hanya bergerak maju); `_basis_url_publik` membaca
+  `ALLOWED_ORIGINS` lebih dulu (selaras server.py); daftar permintaan kini
+  privat — non-admin hanya melihat permintaan buatannya dan IP penanda tangan
+  tak pernah ikut daftar.
+- **Wasdal**: Laporan Tahunan PMK 207 kini men-scope penertiban & pemantauan
+  insidentil per satker (sebelumnya lintas satker bocor ke laporan).
+- **Backfill**: klaim-sisa hanya menyentuh dokumen yang benar-benar belum
+  distempel (`None`/absen) — stempel lintas-satker `""` milik super-admin tak
+  ikut terklaim.
+- **UI**: kanvas tanda tangan mempertahankan goresan saat rotasi/resize layar
+  (`toData`/`fromData`); dialog backfill terkunci selama proses berjalan.
+- Verifikasi: compileall + pyflakes bersih, suite 504 lulus, smoke render 7
+  varian BAST lulus, server ter-import, lint & build sukses.
+
+---
+
 ## [#386] E-sign kirim email otomatis (Resend) + backfill kode satker data lama — 2026-07-18
 
 Dua kandidat lanjutan terakhir:

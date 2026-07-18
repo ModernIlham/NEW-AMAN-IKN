@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from auth_utils import require_admin, require_user, require_writer
 from db import db
 from pemeliharaan_utils import rekap_pemeliharaan
+from shared_utils import kode_satker_user, scope_query_field_satker
 from perencanaan_utils import (
     JENIS_USULAN_RKBMN, STATUS_USULAN_RKBMN, TRANSISI_USULAN_RKBMN,
     rekap_rkbmn, rekap_usulan_rkbmn, validate_transisi_rkbmn,

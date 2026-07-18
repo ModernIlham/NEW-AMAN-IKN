@@ -32,7 +32,8 @@ from auth_utils import (
     require_user, require_user_or_query_token, require_writer,
 )
 from db import db
-from shared_utils import kode_satker_user, log_audit
+from shared_utils import (kode_satker_user, log_audit, pastikan_akses_aset,
+                          pastikan_akses_dok_satker)
 
 bast_router = APIRouter()
 
@@ -160,12 +161,14 @@ async def buat_bast(payload: BastIn, user: dict = Depends(require_writer)):
         {"id": {"$in": payload.asset_ids}, "dihapus": {"$ne": True}},
         {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
          "brand": 1, "model": 1, "serial_number": 1, "condition": 1,
-         "purchase_date": 1, "purchase_price": 1,
+         "purchase_date": 1, "purchase_price": 1, "activity_id": 1,
          "photos": 1, "photo_gridfs_ids": 1, "thumbnail_index": 1},
     ).to_list(500)
     if len(aset) != len(set(payload.asset_ids)):
         raise HTTPException(status_code=404,
                             detail="Sebagian aset tidak ditemukan/terhapus")
+    for a in aset:
+        await pastikan_akses_aset(user, a)
 
     settings = await db.report_settings.find_one({"type": "global"}, _PROJ) or {}
     p1 = payload.pihak_pertama
@@ -235,7 +238,8 @@ async def buat_bast(payload: BastIn, user: dict = Depends(require_writer)):
         # saat render bila sertakan_foto).
         "aset": [{k: a.get(k) for k in ("id", "asset_code", "NUP", "asset_name",
                                         "brand", "model", "serial_number",
-                                        "condition", "purchase_date")} for a in aset],
+                                        "condition", "purchase_date",
+                                        "purchase_price")} for a in aset],
         "jangka_dari": str(payload.jangka_dari or "").strip()[:10],
         "jangka_sampai": str(payload.jangka_sampai or "").strip()[:10],
         "penanggung_jawab_tambahan": [
@@ -314,6 +318,7 @@ async def unggah_bukti_bast(bast_id: str, file: UploadFile = File(...),
     b = await db.bast_serah_terima.find_one({"id": bast_id}, _PROJ)
     if not b:
         raise HTTPException(status_code=404, detail="BAST tidak ditemukan")
+    await pastikan_akses_dok_satker(user, b)
     nama = str(file.filename or "").lower()
     if not nama.endswith((".pdf", ".jpg", ".jpeg", ".png")):
         raise HTTPException(status_code=400,
@@ -384,6 +389,7 @@ async def unduh_bukti_bast(bast_id: str,
     b = await db.bast_serah_terima.find_one({"id": bast_id}, _PROJ)
     if not b or not (b.get("bukti") or {}).get("file_id"):
         raise HTTPException(status_code=404, detail="Bukti belum diunggah")
+    await pastikan_akses_dok_satker(_user, b)
     data = await get_document_from_gridfs(b["bukti"]["file_id"])
     if not data:
         raise HTTPException(status_code=404, detail="Berkas bukti tidak ditemukan")

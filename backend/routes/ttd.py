@@ -38,11 +38,15 @@ _PROJ = {"_id": 0}
 # Basis URL publik untuk link tanda tangan (frontend). Tanpa APP_PUBLIC_URL,
 # jatuh ke origin CORS pertama (deploy nyata selalu mengisinya) supaya link
 # yang dibagikan & QR verifikasi TIDAK pernah berupa path relatif yang mati.
+# ALLOWED_ORIGINS dibaca lebih dulu — server.py memprioritaskannya untuk CORS;
+# CORS_ORIGINS dipertahankan sebagai nama legacy.
 def _basis_url_publik() -> str:
     u = os.environ.get("APP_PUBLIC_URL", "").strip().rstrip("/")
     if u:
         return u
-    for o in os.environ.get("CORS_ORIGINS", "").split(","):
+    sumber = (os.environ.get("ALLOWED_ORIGINS", "")
+              or os.environ.get("CORS_ORIGINS", ""))
+    for o in sumber.split(","):
         o = o.strip().rstrip("/")
         if o.startswith("http") and "localhost" not in o:
             return o
@@ -254,8 +258,13 @@ async def buat_permintaan(payload: PermintaanIn, user: dict = Depends(require_wr
 
 @ttd_router.get("/ttd/permintaan")
 async def daftar_permintaan(_user: dict = Depends(require_user)):
-    """Daftar permintaan tanda tangan (terbaru dulu) + ringkas status."""
-    items = await (db.signature_requests.find({}, {**_PROJ, "signers.jti": 0})
+    """Daftar permintaan tanda tangan (terbaru dulu) + ringkas status.
+    Non-admin hanya melihat permintaan buatannya sendiri; IP penanda tangan
+    tidak pernah ikut daftar (data forensik — cukup di audit internal)."""
+    q = ({} if _user.get("role") == "admin"
+         else {"created_by": _user.get("username", "")})
+    items = await (db.signature_requests.find(
+        q, {**_PROJ, "signers.jti": 0, "signers.ip": 0})
                    .sort("created_at", -1).limit(200).to_list(200))
     for it in items:
         sg = it.get("signers") or []
@@ -435,8 +444,11 @@ async def kirim_tandatangan(sr_id: str, payload: SpesimenIn, request: Request,
     semua = bool(signers_segar) and all(
         s.get("status") == "ditandatangani" for s in signers_segar)
     status_dok = "selesai" if semua else "sebagian"
+    # "sebagian" tidak boleh menimpa "selesai" — dua submit paralel bisa
+    # membuat pembacaan basi; status final hanya bergerak maju.
+    kunci_status = (["batal"] if semua else ["batal", "selesai"])
     await db.signature_requests.update_one(
-        {"id": sr_id, "status": {"$ne": "batal"}},
+        {"id": sr_id, "status": {"$nin": kunci_status}},
         {"$set": {"status": status_dok}})
     await log_audit("kirim_ttd", "", sr_id, username=sg.get("nama") or "tamu",
                     detail=f"E-sign '{sr.get('judul')}' oleh {sg.get('nama')}")

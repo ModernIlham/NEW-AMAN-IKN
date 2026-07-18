@@ -41,12 +41,16 @@ export default function SignatureCapture({ onSave, saving = false, tokenQuery = 
       const ratio = Math.max(window.devicePixelRatio || 1, 1);
       const w = wrap.clientWidth || 560;
       const h = 200;
+      // Goresan yang sudah ada JANGAN hilang saat rotasi layar / resize —
+      // simpan data titik lalu gambar ulang setelah bitmap diskalakan.
+      const goresan = sigRef.current?.toData?.();
       canvas.width = w * ratio;
       canvas.height = h * ratio;
       canvas.style.width = `${w}px`;
       canvas.style.height = `${h}px`;
       canvas.getContext("2d").scale(ratio, ratio);
       sigRef.current?.clear();
+      if (goresan?.length) sigRef.current?.fromData?.(goresan);
     };
     resize();
     window.addEventListener("resize", resize);

@@ -196,7 +196,10 @@ export function SatkerPanel({ user }) {
       </p>
 
       {/* ── Dialog backfill data lama ── */}
-      <Dialog open={!!backfill} onOpenChange={(o) => !o && setBackfill(null)}>
+      {/* Selama backfill berjalan dialog dikunci — menutupnya menyembunyikan
+          hasil laporan padahal operasi server tetap berlanjut. */}
+      <Dialog open={!!backfill}
+        onOpenChange={(o) => !o && !backfill?.jalan && setBackfill(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Backfill Kode Satker — Data Lama</DialogTitle>
@@ -243,6 +246,7 @@ export function SatkerPanel({ user }) {
               )}
               <div className="flex justify-end gap-1.5">
                 <Button variant="outline" size="sm" className="h-9 text-xs"
+                  disabled={backfill.jalan}
                   onClick={() => setBackfill(null)}>Tutup</Button>
                 <Button size="sm" className="h-9 text-xs" disabled={backfill.jalan}
                   onClick={jalankanBackfill} data-testid="backfill-jalankan">

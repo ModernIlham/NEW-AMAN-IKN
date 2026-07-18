@@ -776,9 +776,13 @@ async def laporan_tahunan_wasdal_pdf(
     periode, per_objek, rekap, total_aset = await _data_pemantauan(AMBANG_BERLARUT_HARI, _user)
     porto = await _data_portofolio(_user)
     tertib = [t async for t in db.penertiban.find(
-        {"created_at": {"$gte": awal, "$lte": akhir + "T~"}}, {"_id": 0})]
+        scope_query_field_satker(
+            _user, {"created_at": {"$gte": awal, "$lte": akhir + "T~"}}),
+        {"_id": 0})]
     insidentil = [i async for i in db.pemantauan_insidentil.find(
-        {"created_at": {"$gte": awal, "$lte": akhir + "T~"}}, {"_id": 0})]
+        scope_query_field_satker(
+            _user, {"created_at": {"$gte": awal, "$lte": akhir + "T~"}}),
+        {"_id": 0})]
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
 
     buffer = BytesIO()
