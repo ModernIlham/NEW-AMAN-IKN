@@ -5,9 +5,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from siman_utils import (  # noqa: E402
-    banding_aset, kunci_aset, nilai_terapkan, norm_kode, norm_nup,
-    norm_tanggal, parse_baris, petakan_header, referensi_siman,
-    ringkas_import,
+    banding_aset, deteksi_header, kunci_aset, nilai_terapkan, norm_kode,
+    norm_kode_satker, norm_nup, norm_tanggal, parse_baris, petakan_header,
+    referensi_siman, ringkas_baris_belum_tercatat, ringkas_import,
+    validasi_satker,
 )
 
 HEADER_SIMAN = [
@@ -150,3 +151,57 @@ class TestRingkasan:
         assert r["aset_dicek"] == 3 and r["cocok"] == 1 and r["selisih"] == 2
         assert r["per_field"] == {"condition": 2, "purchase_price": 1}
         assert r["siman_tanpa_aset"] == 2 and r["aman_tanpa_siman"] == 1
+
+
+class TestDeteksiHeader:
+    def test_header_di_baris_pertama(self):
+        hasil = deteksi_header([HEADER_SIMAN, ("1", "MESIN", "126", "Dep")])
+        assert hasil is not None
+        idx, peta = hasil
+        assert idx == 0 and "kode_barang" in peta and "nup" in peta
+
+    def test_header_setelah_kop_judul(self):
+        # Ekspor dengan judul/kop di baris-baris awal sebelum header tabel.
+        rows = [("DAFTAR ASET SIMAN V2",), (None,), ("Per 30 Juni 2026",),
+                tuple(HEADER_SIMAN), ("1", "MESIN")]
+        idx, peta = deteksi_header(rows)
+        assert idx == 3 and "kode_barang" in peta
+
+    def test_tanpa_header_dikembalikan_none(self):
+        assert deteksi_header([("a", "b"), ("c", "d")]) is None
+        # Kolom kode barang tanpa NUP → tetap bukan header valid.
+        assert deteksi_header([("Kode Barang", "Nama Barang")]) is None
+
+
+class TestValidasiSatker:
+    def test_norm_kode_satker(self):
+        assert norm_kode_satker("126.01.1600691778.000-KP") == "126011600691778000KP"
+        assert norm_kode_satker(" 126011600691778000kp ") == "126011600691778000KP"
+        assert norm_kode_satker(None) == ""
+
+    def test_cocok_bila_beririsan(self):
+        r = validasi_satker({"126011600691778000KP"},
+                            {"126.01.1600691778.000KP", "LAIN"})
+        assert r["cocok"] is True
+
+    def test_beda_terdeteksi(self):
+        r = validasi_satker({"126011600691778000KP"}, {"999999000000000000XX"})
+        assert r["cocok"] is False
+        assert r["kode_file"] == ["126011600691778000KP"]
+
+    def test_sisi_kosong_dianggap_cocok(self):
+        assert validasi_satker(set(), {"X"})["cocok"] is True
+        assert validasi_satker({"X"}, set())["cocok"] is True
+        assert validasi_satker({""}, {"X"})["cocok"] is True
+
+
+class TestRingkasBelumTercatat:
+    def test_field_lengkap(self):
+        b = _parse()
+        r = ringkas_baris_belum_tercatat(b)
+        assert r["kode_barang"] == "3030203001" and r["nup"] == "1"
+        assert r["nilai_perolehan"] == 1300000.0
+        assert r["kode_register"] == b["kode_register"]
+        assert set(r) == {"kode_barang", "nup", "nama_barang", "merk", "tipe",
+                          "kondisi", "nilai_perolehan", "tanggal_perolehan",
+                          "kode_register"}

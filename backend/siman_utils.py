@@ -139,6 +139,61 @@ def petakan_header(header_row):
     return peta, hilang
 
 
+def deteksi_header(rows, maks_baris=25):
+    """Cari baris header di antara `rows` (iterable of tuple) → (idx, peta)|None.
+
+    Ekspor SIMAN kadang menaruh judul/kop di baris awal sebelum header tabel;
+    scan maksimal `maks_baris` baris pertama dan ambil baris pertama yang
+    memuat kolom wajib (kode barang + NUP).
+    """
+    for i, row in enumerate(rows):
+        if i >= maks_baris:
+            break
+        peta, hilang = petakan_header(row)
+        if not hilang:
+            return i, peta
+    return None
+
+
+def norm_kode_satker(v) -> str:
+    """Kode satker utk perbandingan: alfanumerik kapital saja
+    ('126.01.1600691778.000-KP' == '126011600691778000KP')."""
+    return re.sub(r"[^0-9A-Za-z]", "", str(v or "")).upper()
+
+
+def validasi_satker(kode_file_set, kode_terdaftar_set):
+    """Bandingkan kode satker pada FILE dengan kode satker TERDAFTAR di AMAN.
+
+    Kembalikan {"cocok": bool, "kode_file": [...], "kode_terdaftar": [...]}.
+    Bila salah satu sisi kosong (file tanpa kolom satker / AMAN belum diisi)
+    dianggap cocok — validasi hanya bermakna saat keduanya terisi.
+    """
+    file_norm = {norm_kode_satker(k) for k in (kode_file_set or set())} - {""}
+    daftar_norm = {norm_kode_satker(k) for k in (kode_terdaftar_set or set())} - {""}
+    cocok = (not file_norm or not daftar_norm
+             or bool(file_norm & daftar_norm))
+    return {
+        "cocok": cocok,
+        "kode_file": sorted(file_norm)[:5],
+        "kode_terdaftar": sorted(daftar_norm)[:5],
+    }
+
+
+def ringkas_baris_belum_tercatat(b):
+    """Baris SIMAN tanpa padanan aset AMAN → dict ringkas utk register/CSV/draft."""
+    return {
+        "kode_barang": b.get("kode_barang", ""),
+        "nup": b.get("nup", ""),
+        "nama_barang": b.get("nama_barang", ""),
+        "merk": b.get("merk", ""),
+        "tipe": b.get("tipe", ""),
+        "kondisi": b.get("kondisi", ""),
+        "nilai_perolehan": b.get("nilai_perolehan", 0),
+        "tanggal_perolehan": b.get("tanggal_perolehan", ""),
+        "kode_register": b.get("kode_register", ""),
+    }
+
+
 def parse_baris(row, peta_header):
     """Satu baris data XLSX → dict SIMAN ternormalisasi; None bila kosong.
 
