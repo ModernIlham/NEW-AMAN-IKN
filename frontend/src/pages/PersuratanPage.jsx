@@ -190,6 +190,7 @@ export default function PersuratanPage({ user, onBack }) {
 
   const rk = data?.ringkasan;
   const items = data?.items || [];
+  const adaFilter = !!(q.trim() || fJenis || fStatus); // pembeda "belum ada data" vs "hasil filter kosong"
   const setK = (k) => (e) => setFormKeluar((f) => ({ ...f, [k]: e.target.value }));
   const setM = (k) => (e) => setFormMasuk((f) => ({ ...f, [k]: e.target.value }));
   const opsiStatus = useMemo(() => (
@@ -218,6 +219,7 @@ export default function PersuratanPage({ user, onBack }) {
           </div>
           {isAdmin && (
             <Button variant="outline" size="sm" className="gap-1.5"
+              title="Pengaturan format nomor" aria-label="Pengaturan format nomor"
               onClick={async () => {
                 try {
                   const r = await axios.get(`${API}/persuratan/pengaturan`);
@@ -255,14 +257,16 @@ export default function PersuratanPage({ user, onBack }) {
               data-testid="persuratan-cari" />
           </div>
           <select value={fJenis} onChange={(e) => { setFJenis(e.target.value); setFStatus(""); }}
+            aria-label="Filter jenis surat" title="Filter jenis surat"
             className="h-10 rounded-md border border-input bg-background px-2 text-sm" data-testid="persuratan-f-jenis">
-            <option value="">Keluar + Masuk</option>
+            <option value="">Jenis: Keluar + Masuk</option>
             <option value="keluar">Surat Keluar</option>
             <option value="masuk">Surat Masuk</option>
           </select>
           <select value={fStatus} onChange={(e) => setFStatus(e.target.value)}
+            aria-label="Filter status surat" title="Filter status surat"
             className="h-10 rounded-md border border-input bg-background px-2 text-sm" data-testid="persuratan-f-status">
-            <option value="">Semua status</option>
+            <option value="">Status: semua</option>
             {opsiStatus.map((s) => <option key={s.kode} value={s.kode}>{s.uraian}</option>)}
           </select>
           <Button className="h-10 gap-1.5" onClick={() => setFormKeluar({ ...KELUAR_KOSONG })}
@@ -274,6 +278,7 @@ export default function PersuratanPage({ user, onBack }) {
             <Inbox className="w-4 h-4" /><span className="hidden sm:inline">Catat Surat Masuk</span><span className="sm:hidden">Masuk</span>
           </Button>
           <Button variant="outline" className="h-10 gap-1.5"
+            title="Unduh buku agenda (CSV)" aria-label="Unduh buku agenda (CSV)"
             onClick={() => downloadFileWithProgress(`${API}/persuratan/export${fJenis ? `?jenis=${fJenis}` : ""}`, "Buku_Agenda_Surat.csv", { label: "Buku Agenda (CSV)" }).catch(() => {})}
             data-testid="persuratan-export">
             <FileDown className="w-4 h-4" /><span className="hidden sm:inline">CSV</span>
@@ -286,10 +291,26 @@ export default function PersuratanPage({ user, onBack }) {
           ) : items.length === 0 ? (
             <div className="text-center py-16 px-4">
               <Mail className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
-              <p className="text-sm font-medium text-foreground">Belum ada surat teragenda</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Booking nomor surat keluar SEBELUM naskah difinalkan, lalu sahkan setelah ditandatangani.
+              <p className="text-sm font-medium text-foreground">
+                {adaFilter ? "Tidak ada surat yang cocok" : "Belum ada surat teragenda"}
               </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {adaFilter
+                  ? "Coba kata kunci lain atau hapus filter pencarian."
+                  : "Booking nomor surat keluar SEBELUM naskah difinalkan, lalu sahkan setelah ditandatangani."}
+              </p>
+              {adaFilter ? (
+                <Button variant="outline" size="sm" className="mt-3"
+                  onClick={() => { setQ(""); setFJenis(""); setFStatus(""); }}
+                  data-testid="persuratan-clear-filter">
+                  Hapus pencarian
+                </Button>
+              ) : (
+                <Button size="sm" className="mt-3 gap-1.5 bg-cyan-600 hover:bg-cyan-700 text-white"
+                  onClick={() => setFormKeluar({ ...KELUAR_KOSONG })} data-testid="persuratan-empty-booking">
+                  <MailPlus className="w-4 h-4" />Booking Surat Keluar
+                </Button>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -297,9 +318,7 @@ export default function PersuratanPage({ user, onBack }) {
                 <thead>
                   <tr className="border-b border-border bg-muted/40 text-left text-xs text-muted-foreground">
                     <th className="px-3 py-2.5 font-semibold">Agenda</th>
-                    <th className="px-3 py-2.5 font-semibold">Nomor / Tanggal
-                      <span className="block font-normal text-[9px] text-muted-foreground normal-case">eks: = nomor sah aplikasi eksternal (Srikandi dll.)</span>
-                    </th>
+                    <th className="px-3 py-2.5 font-semibold">Nomor / Tanggal</th>
                     <th className="px-3 py-2.5 font-semibold">Perihal</th>
                     <th className="px-3 py-2.5 font-semibold">Dari / Kepada</th>
                     <th className="px-3 py-2.5 font-semibold hidden md:table-cell">Naskah · Modul</th>
@@ -324,10 +343,10 @@ export default function PersuratanPage({ user, onBack }) {
                         )}
                         <p className="text-[10px] text-muted-foreground">{s.tanggal_surat || "—"}</p>
                       </td>
-                      <td className="px-3 py-2">
-                        <p className="text-[12px] text-foreground/90">{s.perihal}</p>
+                      <td className="px-3 py-2 max-w-[280px]">
+                        <p className="text-[12px] text-foreground/90 line-clamp-2" title={s.perihal}>{s.perihal}</p>
                         {(s.referensi || s.nama_kegiatan) && (
-                          <p className="text-[10px] text-muted-foreground truncate">{[s.referensi, s.nama_kegiatan].filter(Boolean).join(" · ")}</p>
+                          <p className="text-[10px] text-muted-foreground truncate" title={[s.referensi, s.nama_kegiatan].filter(Boolean).join(" · ")}>{[s.referensi, s.nama_kegiatan].filter(Boolean).join(" · ")}</p>
                         )}
                       </td>
                       <td className="px-3 py-2 text-[12px] text-foreground/80">{s.jenis === "keluar" ? (s.tujuan || "—") : (s.pengirim || "—")}</td>
@@ -344,12 +363,12 @@ export default function PersuratanPage({ user, onBack }) {
                       <td className="px-3 py-2 text-right whitespace-nowrap sticky right-0 bg-card border-l border-border">
                         {s.jenis === "keluar" && s.status === "dibooking" && (
                           <>
-                            <button type="button" onClick={() => transisi(s, "disahkan")}
+                            <Button size="sm" onClick={() => transisi(s, "disahkan")}
                               title="Sahkan (surat final ditandatangani)" aria-label={`Sahkan ${s.nomor}`}
-                              className="p-1.5 rounded-md text-emerald-600 hover:bg-emerald-500/10 min-w-0 min-h-0"
+                              className="h-7 text-[11px] min-h-0 bg-emerald-600 hover:bg-emerald-700 text-white"
                               data-testid={`persuratan-sahkan-${s.id}`}>
-                              <CheckCircle2 className="w-4 h-4" />
-                            </button>
+                              <CheckCircle2 className="w-3.5 h-3.5 mr-1" />Sahkan
+                            </Button>
                             <button type="button" onClick={() => setBatal({ surat: s, alasan: "" })}
                               title="Batalkan (nomor hangus)" aria-label={`Batalkan ${s.nomor}`}
                               className="p-1.5 rounded-md text-red-500 hover:bg-red-500/10 min-w-0 min-h-0"
@@ -381,7 +400,8 @@ export default function PersuratanPage({ user, onBack }) {
                           </button>
                         )}
                         {s.jenis === "masuk" && s.status !== "selesai" && (
-                          <Button size="sm" variant="outline" className="h-7 text-[11px]"
+                          <Button size="sm"
+                            className={`h-7 text-[11px] min-h-0 text-white ${s.status === "diterima" ? "bg-cyan-600 hover:bg-cyan-700" : "bg-emerald-600 hover:bg-emerald-700"}`}
                             onClick={() => transisi(s, s.status === "diterima" ? "diproses" : "selesai")}
                             data-testid={`persuratan-masuk-lanjut-${s.id}`}>
                             {s.status === "diterima" ? "Proses" : "Selesai"}
@@ -406,6 +426,7 @@ export default function PersuratanPage({ user, onBack }) {
         <p className="text-center text-[10px] text-muted-foreground pb-4">
           Kaidah: nomor dipesan (booking) saat draf → disahkan setelah tanda tangan; nomor batal hangus &
           tercatat beralasan — urutan agenda tetap utuh (PerANRI 5/2021 · buku agenda kembar).
+          Tanda &quot;eks:&quot; pada kolom nomor = nomor sah dari aplikasi eksternal (Srikandi dll.).
         </p>
       </main>
 

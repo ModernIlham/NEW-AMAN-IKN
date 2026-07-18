@@ -158,7 +158,7 @@ export default function PenghapusanPage({ user, onBack }) {
     <div className="min-h-screen bg-background" data-testid="penghapusan-page">
       {/* ── Header ── */}
       <header className="bg-card/95 backdrop-blur-sm border-b border-border px-3 sm:px-6 py-2.5 sticky top-0 z-40">
-        <div className="max-w-5xl mx-auto flex items-center gap-3">
+        <div className="max-w-5xl mx-auto flex flex-wrap items-center gap-2 sm:gap-3 gap-y-2">
           <button
             type="button"
             onClick={onBack}
@@ -172,7 +172,7 @@ export default function PenghapusanPage({ user, onBack }) {
             <FileX className="w-4 h-4 text-white" />
           </span>
           <div className="min-w-0 flex-1">
-            <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight">Penghapusan — Kandidat & Usulan</h1>
+            <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight truncate">Penghapusan — Kandidat & Usulan</h1>
             <p className="text-[11px] sm:text-xs text-muted-foreground truncate">
               Usul → proses → SK terbit · PMK 83/PMK.06/2016
             </p>
@@ -194,15 +194,15 @@ export default function PenghapusanPage({ user, onBack }) {
         ) : !data ? null : (
           <>
             {/* ── Ringkasan ── */}
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               <div className="bg-card rounded-xl border border-border p-3 text-center" data-testid="penghapusan-stat-jumlah">
                 <FileX className="w-5 h-5 text-red-500 mx-auto mb-1" />
                 <p className="text-lg font-bold text-foreground leading-none">{data.ringkasan.jumlah}</p>
                 <p className="text-[10px] text-muted-foreground mt-1">Kandidat usul hapus</p>
               </div>
-              <div className="bg-card rounded-xl border border-border p-3 text-center" data-testid="penghapusan-stat-nilai">
+              <div className="bg-card rounded-xl border border-border p-3 text-center col-span-2 sm:col-span-1 order-last sm:order-none" data-testid="penghapusan-stat-nilai">
                 <Coins className="w-5 h-5 text-blue-500 mx-auto mb-1" />
-                <p className="text-sm sm:text-lg font-bold text-foreground leading-none break-all">{fmtRp(data.ringkasan.nilai)}</p>
+                <p className="text-sm sm:text-lg font-bold text-foreground leading-none truncate whitespace-nowrap tabular-nums" title={fmtRp(data.ringkasan.nilai)}>{fmtRp(data.ringkasan.nilai)}</p>
                 <p className="text-[10px] text-muted-foreground mt-1">Nilai perolehan kandidat</p>
               </div>
               <div className="bg-card rounded-xl border border-border p-3 text-center" data-testid="penghapusan-stat-usulan">
@@ -232,6 +232,12 @@ export default function PenghapusanPage({ user, onBack }) {
                         </span>
                         <p className="text-xs font-semibold text-foreground truncate flex-1 min-w-[120px]">{u.asset_name || "-"}</p>
                         <span className="font-mono text-[10px] text-muted-foreground">{u.asset_code} · {u.NUP}</span>
+                        {u.nomor_sk && (
+                          <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-mono font-semibold flex-shrink-0"
+                            title={u.tanggal_sk ? `SK terbit tanggal ${u.tanggal_sk}` : "Nomor SK penghapusan"}>
+                            SK {u.nomor_sk}
+                          </span>
+                        )}
                         <button type="button" aria-label="Lampiran usulan"
                           onClick={() => setLamp({ usulan: u, uploading: false })}
                           className="h-6 w-6 rounded-lg border border-border text-foreground/70 flex items-center justify-center hover:bg-muted min-h-0 min-w-0"
@@ -239,16 +245,16 @@ export default function PenghapusanPage({ user, onBack }) {
                           <Paperclip className="w-3 h-3" />
                         </button>
                       </div>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                      <p className="text-[10px] text-muted-foreground mt-0.5 truncate"
+                        title={`${labelJalur[u.jalur] || u.jalur}${u.keterangan ? ` · ${u.keterangan}` : ""} · oleh ${u.created_by}`}>
                         {labelJalur[u.jalur] || u.jalur}
-                        {u.nomor_sk && ` · SK: ${u.nomor_sk}${u.tanggal_sk ? ` (${u.tanggal_sk})` : ""}`}
                         {u.keterangan && ` · ${u.keterangan}`}
                         {` · oleh ${u.created_by}`}
                       </p>
                       {isAdmin && (u.status === "diusulkan" || u.status === "diproses") && (
-                        <div className="flex gap-1.5 mt-1.5">
+                        <div className="flex flex-wrap gap-1.5 mt-1.5">
                           {u.status === "diusulkan" && (
-                            <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                            <Button size="sm" className="h-7 text-[11px] min-h-0 bg-amber-600 hover:bg-amber-700 text-white"
                               onClick={() => transisi(u, "diproses")}
                               data-testid={`penghapusan-proses-${u.id}`}>
                               Proses
@@ -298,10 +304,11 @@ export default function PenghapusanPage({ user, onBack }) {
                   ) : (
                     <ul className="divide-y divide-border/60 mt-2">
                       {b.rows.map((a) => (
-                        <li key={a.id} className="px-3 py-2 flex items-center gap-2" data-testid={`penghapusan-row-${a.id}`}>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-xs font-semibold text-foreground truncate">{a.asset_name || "-"}</p>
-                            <p className="text-[10px] text-muted-foreground font-mono truncate">
+                        <li key={a.id} className="px-3 py-2 flex flex-wrap items-center gap-2" data-testid={`penghapusan-row-${a.id}`}>
+                          <div className="min-w-[120px] flex-1">
+                            <p className="text-xs font-semibold text-foreground truncate" title={a.asset_name || "-"}>{a.asset_name || "-"}</p>
+                            <p className="text-[10px] text-muted-foreground font-mono truncate"
+                              title={`${a.asset_code} · ${a.NUP}${a.location ? ` · ${a.location}` : ""}${a.keterangan ? ` · ${a.keterangan}` : ""}`}>
                               {a.asset_code} · {a.NUP}{a.location ? ` · ${a.location}` : ""}
                               {a.keterangan ? ` · ${a.keterangan}` : ""}
                             </p>
@@ -361,7 +368,7 @@ export default function PenghapusanPage({ user, onBack }) {
                             <span className="font-mono">{r.asset_code || "-"}</span>
                             {r.NUP && <span className="text-blue-600 font-semibold"> / {r.NUP}</span>}
                             {r.asset_name && <span className="text-muted-foreground"> — {r.asset_name}</span>}
-                            {r.massal && <span className="ml-1 text-[10px] text-red-500">(massal)</span>}
+                            {r.massal && <span className="ml-1 text-[10px] text-red-500" title="Dihapus lewat operasi hapus massal">(massal)</span>}
                           </td>
                           <td className="px-2 py-1.5 text-right text-foreground/90 whitespace-nowrap">{fmtRp(r.nilai)}</td>
                           <td className="px-2 py-1.5 text-muted-foreground whitespace-nowrap">{r.oleh || "-"}</td>

@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Search, Loader2, FileText, FileDown, ChevronDown,
   ShieldCheck, Boxes, Scale, Lock, LockOpen, Plus, Trash2, CalendarCheck,
-  Settings,
+  Settings, Clock,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
@@ -196,7 +196,7 @@ export default function PelaporanPage({ user, onBack }) {
     <div className="min-h-screen bg-background" data-testid="pelaporan-page">
       {/* ── Header ── */}
       <header className="bg-card/95 backdrop-blur-sm border-b border-border px-3 sm:px-6 py-2.5 sticky top-0 z-40">
-        <div className="max-w-5xl mx-auto flex items-center gap-3">
+        <div className="max-w-5xl mx-auto flex flex-wrap items-center gap-2 sm:gap-3 gap-y-2">
           <button
             type="button"
             onClick={onBack}
@@ -210,22 +210,24 @@ export default function PelaporanPage({ user, onBack }) {
             <FileText className="w-4 h-4 text-white" />
           </span>
           <div className="min-w-0 flex-1">
-            <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight">Arsip Pelaporan</h1>
+            <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight truncate">Arsip Pelaporan</h1>
             <p className="text-[11px] sm:text-xs text-muted-foreground truncate">
               Laporan resmi lintas kegiatan + laporan persediaan — satu pintu
             </p>
           </div>
           {isAdmin && (
             <Button variant="outline" size="sm" className="gap-1.5" data-testid="pelaporan-kop"
+              title="Pengaturan kop & sampul laporan" aria-label="Kop/Sampul laporan"
               onClick={() => setBukaSampul((v) => !v)}>
-              <Settings className="w-3.5 h-3.5" />Kop/Sampul
+              <Settings className="w-3.5 h-3.5" /><span className="hidden sm:inline">Kop/Sampul</span>
             </Button>
           )}
           {isAdmin && (
             <Button variant="outline" size="sm" className="gap-1.5" data-testid="pelaporan-reklas"
               title="Reklasifikasi kodefikasi aset (SAKTI 304/107) — kode+NUP diperbarui ber-riwayat"
+              aria-label="Reklasifikasi kodefikasi aset"
               onClick={() => setReklas({ cari: "", hasil: [], aset: null, kode_baru: "", alasan: "", saving: false })}>
-              <Boxes className="w-3.5 h-3.5" />Reklasifikasi
+              <Boxes className="w-3.5 h-3.5" /><span className="hidden sm:inline">Reklasifikasi</span>
             </Button>
           )}
           <BookingNomorButton modul="pelaporan" jenisNaskah="Laporan" referensi="LHI/LBKP" />
@@ -243,92 +245,95 @@ export default function PelaporanPage({ user, onBack }) {
             <p className="text-xs font-semibold text-foreground">Posisi BMN di Neraca</p>
             <p className="text-[10px] text-muted-foreground">Seluruh aset per golongan (intra/ekstra, PMK 181) + persediaan FIFO</p>
           </div>
-          <Button size="sm" className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
-            title="Laporan Posisi BMN di Neraca (PDF)"
-            onClick={() => downloadFileWithProgress(`${API}/pembukuan/posisi-bmn-pdf`, "Posisi_BMN_Neraca.pdf", { label: "Laporan Posisi BMN di Neraca" }).catch(() => {})}
-            data-testid="pelaporan-posisi-bmn">
-            <FileDown className="w-3.5 h-3.5" />Unduh PDF
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-1.5" data-testid="pelaporan-laporan-lain"
-                title="Laporan pembukuan lain: LKB, DBR, KIR, dan rekonsiliasi">
-                <FileDown className="w-3.5 h-3.5" />Laporan Lain<ChevronDown className="w-3 h-3" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-72">
-              <DropdownMenuLabel className="text-[11px]">Laporan pembukuan satker</DropdownMenuLabel>
-              <DropdownMenuItem className="min-h-[42px]" data-testid="pelaporan-lkb-kondisi"
-                onClick={() => downloadFileWithProgress(`${API}/pembukuan/lkb-pdf`, "Laporan_Kondisi_Barang.pdf", { label: "Laporan Kondisi Barang (LKB)" }).catch(() => {})}>
-                LKB — Laporan Kondisi Barang (PDF)
-              </DropdownMenuItem>
-              <DropdownMenuItem className="min-h-[42px]" data-testid="pelaporan-dbr"
-                onClick={() => downloadFileWithProgress(`${API}/pembukuan/dbr-pdf`, "Daftar_Barang_Ruangan.pdf", { label: "Daftar Barang Ruangan (DBR)" }).catch(() => {})}>
-                DBR — Daftar Barang Ruangan (PDF)
-              </DropdownMenuItem>
-              <DropdownMenuItem className="min-h-[42px]" data-testid="pelaporan-kir"
-                onClick={() => downloadFileWithProgress(`${API}/pembukuan/kir-pdf`, "Kartu_Inventaris_Ruangan.pdf", { label: "Kartu Inventaris Ruangan (KIR)" }).catch(() => {})}>
-                KIR — Kartu Inventaris Ruangan (PDF)
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="min-h-[42px]" data-testid="pelaporan-rekonsiliasi"
-                onClick={() => downloadFileWithProgress(`${API}/pembukuan/rekonsiliasi-xlsx`, "Rekonsiliasi_Posisi_BMN.xlsx", { label: "Ekspor Rekonsiliasi (XLSX)" }).catch(() => {})}>
-                Rekonsiliasi Posisi BMN (XLSX)
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-1.5" data-testid="pelaporan-lbkp"
-                title="LBKP — Laporan Barang Kuasa Pengguna (semesteran/tahunan)">
-                <FileDown className="w-3.5 h-3.5" />LBKP<ChevronDown className="w-3 h-3" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64">
-              {(() => {
-                const th = new Date().getFullYear();
-                return [
-                  { label: `Semester I ${th} (Jan–Jun)${sufiksPeriode(th, 1)}`, q: `tahun=${th}&semester=1`, f: `LBKP_${th}_S1.pdf` },
-                  { label: `Semester II ${th} (Jul–Des)${sufiksPeriode(th, 2)}`, q: `tahun=${th}&semester=2`, f: `LBKP_${th}_S2.pdf` },
-                  { label: `Tahunan ${th}${sufiksPeriode(th, null)}`, q: `tahun=${th}`, f: `LBKP_${th}.pdf` },
-                  { label: `Semester I ${th - 1}${sufiksPeriode(th - 1, 1)}`, q: `tahun=${th - 1}&semester=1`, f: `LBKP_${th - 1}_S1.pdf` },
-                  { label: `Semester II ${th - 1}${sufiksPeriode(th - 1, 2)}`, q: `tahun=${th - 1}&semester=2`, f: `LBKP_${th - 1}_S2.pdf` },
-                  { label: `Tahunan ${th - 1}${sufiksPeriode(th - 1, null)}`, q: `tahun=${th - 1}`, f: `LBKP_${th - 1}.pdf` },
-                ].map((o) => (
-                  <DropdownMenuItem key={o.label} className="min-h-[42px]"
-                    onClick={() => downloadFileWithProgress(`${API}/pembukuan/lbkp-pdf?${o.q}`, o.f, { label: `LBKP ${o.label}` }).catch(() => {})}>
-                    {o.label}
-                  </DropdownMenuItem>
-                ));
-              })()}
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-1.5" data-testid="pelaporan-calbmn"
-                title="CaLBMN — Catatan atas Laporan Barang Milik Negara">
-                <FileDown className="w-3.5 h-3.5" />CaLBMN<ChevronDown className="w-3 h-3" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64">
-              {(() => {
-                const th = new Date().getFullYear();
-                return [
-                  { label: `Semester I ${th} (Jan–Jun)${sufiksPeriode(th, 1)}`, q: `tahun=${th}&semester=1`, f: `CaLBMN_${th}_S1.pdf` },
-                  { label: `Semester II ${th} (Jul–Des)${sufiksPeriode(th, 2)}`, q: `tahun=${th}&semester=2`, f: `CaLBMN_${th}_S2.pdf` },
-                  { label: `Tahunan ${th}${sufiksPeriode(th, null)}`, q: `tahun=${th}`, f: `CaLBMN_${th}.pdf` },
-                  { label: `Semester I ${th - 1}${sufiksPeriode(th - 1, 1)}`, q: `tahun=${th - 1}&semester=1`, f: `CaLBMN_${th - 1}_S1.pdf` },
-                  { label: `Semester II ${th - 1}${sufiksPeriode(th - 1, 2)}`, q: `tahun=${th - 1}&semester=2`, f: `CaLBMN_${th - 1}_S2.pdf` },
-                  { label: `Tahunan ${th - 1}${sufiksPeriode(th - 1, null)}`, q: `tahun=${th - 1}`, f: `CaLBMN_${th - 1}.pdf` },
-                ].map((o) => (
-                  <DropdownMenuItem key={o.label} className="min-h-[42px]"
-                    onClick={() => downloadFileWithProgress(`${API}/pembukuan/calbmn-pdf?${o.q}`, o.f, { label: `CaLBMN ${o.label}` }).catch(() => {})}>
-                    {o.label}
-                  </DropdownMenuItem>
-                ));
-              })()}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {/* Grup unduhan — turun rapi sebagai baris kedua di mobile */}
+          <div className="w-full sm:w-auto flex flex-wrap items-center gap-1.5">
+            <Button size="sm" className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
+              title="Laporan Posisi BMN di Neraca (PDF)"
+              onClick={() => downloadFileWithProgress(`${API}/pembukuan/posisi-bmn-pdf`, "Posisi_BMN_Neraca.pdf", { label: "Laporan Posisi BMN di Neraca" }).catch(() => {})}
+              data-testid="pelaporan-posisi-bmn">
+              <FileDown className="w-3.5 h-3.5" />Unduh PDF
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1.5" data-testid="pelaporan-laporan-lain"
+                  title="Laporan pembukuan lain: LKB, DBR, KIR, dan rekonsiliasi">
+                  <FileDown className="w-3.5 h-3.5" />Laporan Lain<ChevronDown className="w-3 h-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-72">
+                <DropdownMenuLabel className="text-[11px]">Laporan pembukuan satker</DropdownMenuLabel>
+                <DropdownMenuItem className="min-h-[42px]" data-testid="pelaporan-lkb-kondisi"
+                  onClick={() => downloadFileWithProgress(`${API}/pembukuan/lkb-pdf`, "Laporan_Kondisi_Barang.pdf", { label: "Laporan Kondisi Barang (LKB)" }).catch(() => {})}>
+                  LKB — Laporan Kondisi Barang (PDF)
+                </DropdownMenuItem>
+                <DropdownMenuItem className="min-h-[42px]" data-testid="pelaporan-dbr"
+                  onClick={() => downloadFileWithProgress(`${API}/pembukuan/dbr-pdf`, "Daftar_Barang_Ruangan.pdf", { label: "Daftar Barang Ruangan (DBR)" }).catch(() => {})}>
+                  DBR — Daftar Barang Ruangan (PDF)
+                </DropdownMenuItem>
+                <DropdownMenuItem className="min-h-[42px]" data-testid="pelaporan-kir"
+                  onClick={() => downloadFileWithProgress(`${API}/pembukuan/kir-pdf`, "Kartu_Inventaris_Ruangan.pdf", { label: "Kartu Inventaris Ruangan (KIR)" }).catch(() => {})}>
+                  KIR — Kartu Inventaris Ruangan (PDF)
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="min-h-[42px]" data-testid="pelaporan-rekonsiliasi"
+                  onClick={() => downloadFileWithProgress(`${API}/pembukuan/rekonsiliasi-xlsx`, "Rekonsiliasi_Posisi_BMN.xlsx", { label: "Ekspor Rekonsiliasi (XLSX)" }).catch(() => {})}>
+                  Rekonsiliasi Posisi BMN (XLSX)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1.5" data-testid="pelaporan-lbkp"
+                  title="LBKP — Laporan Barang Kuasa Pengguna (semesteran/tahunan)">
+                  <FileDown className="w-3.5 h-3.5" />LBKP<ChevronDown className="w-3 h-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                {(() => {
+                  const th = new Date().getFullYear();
+                  return [
+                    { label: `Semester I ${th} (Jan–Jun)${sufiksPeriode(th, 1)}`, q: `tahun=${th}&semester=1`, f: `LBKP_${th}_S1.pdf` },
+                    { label: `Semester II ${th} (Jul–Des)${sufiksPeriode(th, 2)}`, q: `tahun=${th}&semester=2`, f: `LBKP_${th}_S2.pdf` },
+                    { label: `Tahunan ${th}${sufiksPeriode(th, null)}`, q: `tahun=${th}`, f: `LBKP_${th}.pdf` },
+                    { label: `Semester I ${th - 1}${sufiksPeriode(th - 1, 1)}`, q: `tahun=${th - 1}&semester=1`, f: `LBKP_${th - 1}_S1.pdf` },
+                    { label: `Semester II ${th - 1}${sufiksPeriode(th - 1, 2)}`, q: `tahun=${th - 1}&semester=2`, f: `LBKP_${th - 1}_S2.pdf` },
+                    { label: `Tahunan ${th - 1}${sufiksPeriode(th - 1, null)}`, q: `tahun=${th - 1}`, f: `LBKP_${th - 1}.pdf` },
+                  ].map((o) => (
+                    <DropdownMenuItem key={o.label} className="min-h-[42px]"
+                      onClick={() => downloadFileWithProgress(`${API}/pembukuan/lbkp-pdf?${o.q}`, o.f, { label: `LBKP ${o.label}` }).catch(() => {})}>
+                      {o.label}
+                    </DropdownMenuItem>
+                  ));
+                })()}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1.5" data-testid="pelaporan-calbmn"
+                  title="CaLBMN — Catatan atas Laporan Barang Milik Negara">
+                  <FileDown className="w-3.5 h-3.5" />CaLBMN<ChevronDown className="w-3 h-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                {(() => {
+                  const th = new Date().getFullYear();
+                  return [
+                    { label: `Semester I ${th} (Jan–Jun)${sufiksPeriode(th, 1)}`, q: `tahun=${th}&semester=1`, f: `CaLBMN_${th}_S1.pdf` },
+                    { label: `Semester II ${th} (Jul–Des)${sufiksPeriode(th, 2)}`, q: `tahun=${th}&semester=2`, f: `CaLBMN_${th}_S2.pdf` },
+                    { label: `Tahunan ${th}${sufiksPeriode(th, null)}`, q: `tahun=${th}`, f: `CaLBMN_${th}.pdf` },
+                    { label: `Semester I ${th - 1}${sufiksPeriode(th - 1, 1)}`, q: `tahun=${th - 1}&semester=1`, f: `CaLBMN_${th - 1}_S1.pdf` },
+                    { label: `Semester II ${th - 1}${sufiksPeriode(th - 1, 2)}`, q: `tahun=${th - 1}&semester=2`, f: `CaLBMN_${th - 1}_S2.pdf` },
+                    { label: `Tahunan ${th - 1}${sufiksPeriode(th - 1, null)}`, q: `tahun=${th - 1}`, f: `CaLBMN_${th - 1}.pdf` },
+                  ].map((o) => (
+                    <DropdownMenuItem key={o.label} className="min-h-[42px]"
+                      onClick={() => downloadFileWithProgress(`${API}/pembukuan/calbmn-pdf?${o.q}`, o.f, { label: `CaLBMN ${o.label}` }).catch(() => {})}>
+                      {o.label}
+                    </DropdownMenuItem>
+                  ));
+                })()}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
 
         {/* ── ARSIP LAPORAN lintas kegiatan & periode (satu daftar) ── */}
@@ -343,10 +348,26 @@ export default function PelaporanPage({ user, onBack }) {
                 Naskah ber-nomor (Persuratan) + kegiatan disahkan + periode FINAL — satu daftar riwayat
               </p>
             </div>
-            <div className="relative">
+            {arsip && (
+              <>
+                <span className="px-1.5 py-0.5 rounded-full bg-muted text-[10px] font-semibold text-muted-foreground flex-shrink-0"
+                  title="Naskah ber-nomor dari Persuratan">
+                  {arsip.ringkas?.surat || 0} naskah
+                </span>
+                <span className="px-1.5 py-0.5 rounded-full bg-muted text-[10px] font-semibold text-muted-foreground flex-shrink-0"
+                  title="Kegiatan inventarisasi disahkan">
+                  {arsip.ringkas?.kegiatan || 0} disahkan
+                </span>
+                <span className="px-1.5 py-0.5 rounded-full bg-muted text-[10px] font-semibold text-muted-foreground flex-shrink-0"
+                  title="Periode pelaporan FINAL (terkunci)">
+                  {arsip.ringkas?.periode || 0} FINAL
+                </span>
+              </>
+            )}
+            <div className="relative w-full sm:w-auto">
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input value={qArsip} onChange={(e) => setQArsip(e.target.value)}
-                placeholder="Cari nomor/judul…" className="pl-8 h-8 w-44 text-xs" data-testid="arsip-cari" />
+                placeholder="Cari nomor/judul…" className="pl-8 h-8 w-full sm:w-44 text-xs" data-testid="arsip-cari" />
             </div>
           </div>
           {!arsip ? (
@@ -377,11 +398,6 @@ export default function PelaporanPage({ user, onBack }) {
                 </div>
               ))}
             </div>
-          )}
-          {arsip && (
-            <p className="px-3 py-1.5 text-[10px] text-muted-foreground border-t border-border">
-              {arsip.ringkas?.surat || 0} naskah ber-nomor · {arsip.ringkas?.kegiatan || 0} kegiatan disahkan · {arsip.ringkas?.periode || 0} periode FINAL
-            </p>
           )}
         </div>
 
@@ -434,17 +450,17 @@ export default function PelaporanPage({ user, onBack }) {
             ) : (
               <ul className="divide-y divide-border/60">
                 {periode.items.map((p) => (
-                  <li key={p.id} className="px-3 py-2 flex items-center gap-2 flex-wrap" data-testid={`pelaporan-periode-${p.id}`}>
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold flex items-center gap-1 ${
+                  <li key={p.id} className="px-3 py-2 flex items-center gap-2 gap-y-1.5 flex-wrap" data-testid={`pelaporan-periode-${p.id}`}>
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold flex items-center gap-1 flex-shrink-0 ${
                       p.status === "terkunci"
                         ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
                         : "bg-amber-500/15 text-amber-600 dark:text-amber-400"}`}>
                       {p.status === "terkunci" ? <Lock className="w-3 h-3" /> : <LockOpen className="w-3 h-3" />}
                       {periode.label_status?.[p.status] || p.status}
                     </span>
-                    <p className="text-xs font-semibold text-foreground flex-1 min-w-[120px]">{p.label}</p>
+                    <p className="text-xs font-semibold text-foreground min-w-0 flex-1 truncate">{p.label}</p>
                     {p.status === "terkunci" && (
-                      <span className="text-[10px] text-muted-foreground">
+                      <span className="text-[10px] text-muted-foreground w-full sm:w-auto">
                         terkunci {String(p.tanggal_kunci || "").slice(0, 10)} oleh {p.dikunci_oleh}
                       </span>
                     )}
@@ -454,33 +470,40 @@ export default function PelaporanPage({ user, onBack }) {
                       </span>
                     )}
                     {p.info_tenggat?.tenggat && !p.info_tenggat.lewat && (
-                      <span className="text-[10px] text-muted-foreground">
+                      <span className="text-[10px] text-muted-foreground w-full sm:w-auto">
                         tenggat {p.info_tenggat.tenggat} (sisa {p.info_tenggat.sisa_hari} hari)
                       </span>
                     )}
-                    {isAdmin && p.status === "terbuka" && (
-                      <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
-                        onClick={() => aturTenggat(p)} data-testid={`pelaporan-periode-tenggat-${p.id}`}>
-                        <CalendarCheck className="w-3 h-3 mr-1" />Tenggat
-                      </Button>
-                    )}
-                    {isAdmin && p.status === "terbuka" && (
-                      <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
-                        onClick={() => kunciPeriode(p)} data-testid={`pelaporan-periode-kunci-${p.id}`}>
-                        <Lock className="w-3 h-3 mr-1" />Kunci
-                      </Button>
-                    )}
-                    {isAdmin && p.status === "terkunci" && (
-                      <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
-                        onClick={() => bukaPeriode(p)} data-testid={`pelaporan-periode-buka-${p.id}`}>
-                        <LockOpen className="w-3 h-3 mr-1" />Buka
-                      </Button>
-                    )}
-                    {isAdmin && p.status === "terbuka" && (
-                      <button type="button" aria-label="Hapus periode" onClick={() => hapusPeriode(p)}
-                        className="h-7 w-7 rounded-lg border border-border text-red-500 flex items-center justify-center hover:bg-red-500/10 min-h-0 min-w-0">
-                        <Trash2 className="w-3 h-3" />
-                      </button>
+                    {isAdmin && (
+                      <div className="flex items-center gap-1 ml-auto flex-shrink-0">
+                        {p.status === "terbuka" && (
+                          <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                            title="Atur tenggat penyampaian periode"
+                            onClick={() => aturTenggat(p)} data-testid={`pelaporan-periode-tenggat-${p.id}`}>
+                            <CalendarCheck className="w-3 h-3 mr-1" />Tenggat
+                          </Button>
+                        )}
+                        {p.status === "terbuka" && (
+                          <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                            title="Kunci periode — laporan periode ini FINAL"
+                            onClick={() => kunciPeriode(p)} data-testid={`pelaporan-periode-kunci-${p.id}`}>
+                            <Lock className="w-3 h-3 mr-1" />Kunci
+                          </Button>
+                        )}
+                        {p.status === "terkunci" && (
+                          <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                            title="Buka kunci periode (alasan tercatat)"
+                            onClick={() => bukaPeriode(p)} data-testid={`pelaporan-periode-buka-${p.id}`}>
+                            <LockOpen className="w-3 h-3 mr-1" />Buka
+                          </Button>
+                        )}
+                        {p.status === "terbuka" && (
+                          <button type="button" aria-label="Hapus periode" title="Hapus periode" onClick={() => hapusPeriode(p)}
+                            className="h-7 w-7 rounded-lg border border-border text-red-500 flex items-center justify-center hover:bg-red-500/10 min-h-0 min-w-0">
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
                     )}
                   </li>
                 ))}
@@ -514,20 +537,30 @@ export default function PelaporanPage({ user, onBack }) {
           </Button>
         </div>
 
-        {/* ── Pencarian kegiatan ── */}
-        <div className="relative">
-          <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Cari kegiatan, tiket, atau satker…"
-            className="pl-9 h-10"
-            data-testid="pelaporan-search"
-          />
-        </div>
-
-        {/* ── Daftar kegiatan ── */}
+        {/* ── Daftar kegiatan (laporan per kegiatan inventarisasi) ── */}
         <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+          <div className="px-3 py-2.5 border-b border-border flex items-center gap-2 flex-wrap">
+            <span className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center flex-shrink-0">
+              <FileText className="w-4 h-4 text-white" />
+            </span>
+            <div className="flex-1 min-w-[140px]">
+              <p className="text-xs font-bold text-foreground">Laporan per Kegiatan Inventarisasi</p>
+              <p className="text-[10px] text-muted-foreground">LHI, RHI, BAHI, DBKP, SP, dan laporan eksekutif — per kegiatan</p>
+            </div>
+            <span className="px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 text-[10px] font-semibold flex-shrink-0">
+              {filtered.length} kegiatan
+            </span>
+            <div className="relative w-full sm:w-auto">
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Cari kegiatan, tiket, atau satker…"
+                className="pl-8 h-8 w-full sm:w-56 text-xs"
+                data-testid="pelaporan-search"
+              />
+            </div>
+          </div>
           {loading ? (
             <div className="flex items-center justify-center py-16">
               <Loader2 className="w-7 h-7 animate-spin text-indigo-600" />
@@ -552,9 +585,14 @@ export default function PelaporanPage({ user, onBack }) {
                         {[a.ticket_number, a.nama_satker, fmtPeriode(a)].filter(Boolean).join(" · ")}
                       </p>
                     </div>
-                    {disahkan && (
+                    {disahkan ? (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 text-[10px] font-semibold flex-shrink-0">
                         <ShieldCheck className="w-3 h-3" />Disahkan
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px] font-semibold flex-shrink-0"
+                        title="Kegiatan belum disahkan — laporan masih dapat berubah">
+                        <Clock className="w-3 h-3" />Belum disahkan
                       </span>
                     )}
                     <DropdownMenu>

@@ -38,8 +38,8 @@ function statusKontrak(p) {
   const sel = String(p.tgl_selesai_kontrak || "").slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(sel)) return null;
   const sisa = Math.ceil((new Date(sel) - new Date()) / 86400000);
-  if (sisa < 0) return { habis: true, teks: `Kontrak berakhir ${Math.abs(sisa)} hari lalu` };
-  if (sisa <= 30) return { segera: true, teks: `Kontrak berakhir dalam ${sisa} hari` };
+  if (sisa < 0) return { habis: true, teks: `Kontrak berakhir ${Math.abs(sisa)} hari lalu`, singkat: "kontrak habis" };
+  if (sisa <= 30) return { segera: true, teks: `Kontrak berakhir dalam ${sisa} hari`, singkat: `kontrak ≤${sisa} hr` };
   return null;
 }
 
@@ -282,7 +282,7 @@ export default function PegawaiPage({ user, onBack }) {
     <div className="min-h-screen bg-background" data-testid="pegawai-page">
       <header className="bg-card/95 backdrop-blur-sm border-b border-border px-3 sm:px-6 py-2.5 sticky top-0 z-40">
         <div className="max-w-5xl mx-auto flex items-center gap-3">
-          <button type="button" onClick={onBack} aria-label="Kembali ke Beranda Modul"
+          <button type="button" onClick={onBack} title="Kembali ke Beranda Modul" aria-label="Kembali ke Beranda Modul"
             className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0"
             data-testid="pegawai-back">
             <ArrowLeft className="w-4 h-4" />
@@ -309,6 +309,7 @@ export default function PegawaiPage({ user, onBack }) {
             </div>
             {units.length > 0 && (
               <Button variant="outline" className="h-10 gap-1.5" onClick={() => setStruktur(true)}
+                title="Struktur Organisasi" aria-label="Struktur Organisasi"
                 data-testid="pegawai-struktur">
                 <Network className="w-4 h-4" /><span className="hidden sm:inline">Struktur</span>
               </Button>
@@ -318,15 +319,18 @@ export default function PegawaiPage({ user, onBack }) {
                 <input ref={fileRef} type="file" accept=".xlsx,.xlsm,.csv" className="hidden"
                   onChange={onBerkasDipilih} data-testid="pegawai-impor-file" />
                 <Button variant="outline" className="h-10 gap-1.5" onClick={unduhTemplate}
+                  title="Unduh Template Impor (CSV)" aria-label="Unduh Template Impor (CSV)"
                   data-testid="pegawai-template">
                   <Download className="w-4 h-4" /><span className="hidden sm:inline">Template</span>
                 </Button>
                 <Button variant="outline" className="h-10 gap-1.5" disabled={mengimpor}
+                  title="Impor Excel/CSV" aria-label="Impor Excel/CSV"
                   onClick={pilihBerkas} data-testid="pegawai-impor">
                   {mengimpor ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
                   <span className="hidden sm:inline">Impor Excel</span>
                 </Button>
-                <Button variant="outline" className="h-10 gap-1.5"
+                <Button className="h-10 gap-1.5 bg-sky-600 hover:bg-sky-700 text-white"
+                  title="Tambah Pegawai" aria-label="Tambah Pegawai"
                   onClick={() => bukaForm({ ...EMPTY })} data-testid="pegawai-add">
                   <Plus className="w-4 h-4" /><span className="hidden sm:inline">Tambah</span>
                 </Button>
@@ -369,7 +373,7 @@ export default function PegawaiPage({ user, onBack }) {
             <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground mb-2">
               Rekap per Unit Kerja — {rekap.jumlah_unit} unit · {rekap.jumlah_pegawai} pegawai
             </p>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
               {rekap.unit.map((u) => {
                 const tanpaUnit = u.unit_kerja === "(unit kerja belum dicatat)";
                 return (
@@ -406,6 +410,12 @@ export default function PegawaiPage({ user, onBack }) {
                 {isAdmin ? "Tambah data pegawai satker (seluruh pegawai & unit kerjanya)."
                   : "Minta admin menambah data pegawai."}
               </p>
+              {isAdmin && items.length === 0 && (
+                <Button size="sm" className="mt-3 gap-1.5 bg-sky-600 hover:bg-sky-700 text-white"
+                  onClick={() => bukaForm({ ...EMPTY })} data-testid="pegawai-empty-tambah">
+                  <Plus className="w-4 h-4" />Tambah Pegawai
+                </Button>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -433,9 +443,9 @@ export default function PegawaiPage({ user, onBack }) {
                             const k = statusKontrak(it);
                             if (!k) return null;
                             return (
-                              <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold ${k.habis ? "bg-red-500/15 text-red-600 dark:text-red-400" : "bg-amber-500/15 text-amber-600 dark:text-amber-400"}`}
+                              <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold whitespace-nowrap ${k.habis ? "bg-red-500/15 text-red-600 dark:text-red-400" : "bg-amber-500/15 text-amber-600 dark:text-amber-400"}`}
                                 title={k.teks}>
-                                <AlertTriangle className="w-2.5 h-2.5" />{k.teks}
+                                <AlertTriangle className="w-2.5 h-2.5" />{k.singkat}
                               </span>
                             );
                           })()}
@@ -462,13 +472,13 @@ export default function PegawaiPage({ user, onBack }) {
                       {isAdmin && (
                         <td className="px-3 py-2 text-right whitespace-nowrap">
                           <button type="button" onClick={() => bukaForm({ ...EMPTY, ...it, mode: "edit" })}
-                            aria-label={`Ubah ${it.nama}`}
+                            title={`Ubah ${it.nama}`} aria-label={`Ubah ${it.nama}`}
                             className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted min-w-0 min-h-0"
                             data-testid={`pegawai-edit-${it.id}`}>
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
                           <button type="button" onClick={() => remove(it)}
-                            aria-label={`Hapus ${it.nama}`}
+                            title={`Hapus ${it.nama}`} aria-label={`Hapus ${it.nama}`}
                             className="p-1.5 rounded-md text-muted-foreground hover:text-red-600 hover:bg-red-500/10 min-w-0 min-h-0"
                             data-testid={`pegawai-delete-${it.id}`}>
                             <Trash2 className="w-3.5 h-3.5" />
@@ -502,7 +512,8 @@ export default function PegawaiPage({ user, onBack }) {
                   ["kepegawaian", "Kepegawaian"], ["jabatan", "Jabatan & Unit"],
                   ["kontak", "Kontak & Bank"]].map(([k, label]) => (
                   <button key={k} type="button" onClick={() => setTabForm(k)}
-                    className={`flex-1 text-[10px] sm:text-[11px] font-semibold py-1.5 rounded-md min-w-0 min-h-0 ${tabForm === k ? "bg-card text-sky-700 dark:text-sky-400 shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                    className={`flex-1 truncate px-1 text-[10px] sm:text-[11px] font-semibold py-1.5 rounded-md min-w-0 min-h-0 ${tabForm === k ? "bg-card text-sky-700 dark:text-sky-400 shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                    title={label}
                     data-testid={`pegawai-tab-${k}`}>
                     {label}
                   </button>
@@ -511,7 +522,7 @@ export default function PegawaiPage({ user, onBack }) {
 
               {tabForm === "identitas" && (
                 <div className="space-y-3">
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                     <Field label="Gelar Depan"><Input value={form.gelar_depan} onChange={set("gelar_depan")} placeholder="cth. Dr." /></Field>
                     <Field label="Nama *" span2><Input value={form.nama} onChange={set("nama")} data-testid="pegawai-form-nama" /></Field>
                     <Field label="Gelar Belakang"><Input value={form.gelar_belakang} onChange={set("gelar_belakang")} placeholder="cth. S.E." /></Field>
@@ -668,7 +679,7 @@ export default function PegawaiPage({ user, onBack }) {
           )}
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setForm(null)}>Batal</Button>
-            <Button onClick={submitForm} disabled={saving} data-testid="pegawai-form-save">
+            <Button onClick={submitForm} disabled={saving} className="bg-sky-600 hover:bg-sky-700 text-white" data-testid="pegawai-form-save">
               {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : null}Simpan
             </Button>
           </DialogFooter>
@@ -744,7 +755,7 @@ export default function PegawaiPage({ user, onBack }) {
                   onChange={(e) => setKelolaUnit((k) => ({ ...k, nama: e.target.value }))}
                   placeholder={`Nama unit Eselon ${kelolaUnit.eselon}`} className="h-9 flex-1 min-w-[160px]"
                   data-testid="unit-nama" />
-                <Button size="sm" variant="outline" className="h-9 gap-1" disabled={kelolaUnit.sibuk}
+                <Button size="sm" className="h-9 gap-1 bg-sky-600 hover:bg-sky-700 text-white" disabled={kelolaUnit.sibuk}
                   onClick={tambahUnit} data-testid="unit-tambah">
                   <Plus className="w-3.5 h-3.5" />Tambah
                 </Button>
@@ -763,7 +774,7 @@ export default function PegawaiPage({ user, onBack }) {
                       {u.sumber === "derivasi pegawai" && (
                         <span className="px-1 py-0.5 rounded bg-sky-500/15 text-sky-600 dark:text-sky-400 text-[9px] font-semibold">otomatis</span>
                       )}
-                      <button type="button" onClick={() => hapusUnit(u)} aria-label={`Hapus ${u.nama_unit}`}
+                      <button type="button" onClick={() => hapusUnit(u)} title={`Hapus ${u.nama_unit}`} aria-label={`Hapus ${u.nama_unit}`}
                         className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-500/10 min-w-0 min-h-0">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -893,7 +904,7 @@ function PohonUnit({ unit, units, depth, buka, onToggle, jumlah, onFilter }) {
 
 function Field({ label, children, span2 }) {
   return (
-    <div className={span2 ? "col-span-2" : ""}>
+    <div className={span2 ? "col-span-full sm:col-span-2" : ""}>
       <label className="text-xs font-medium text-foreground block mb-1">{label}</label>
       {children}
     </div>

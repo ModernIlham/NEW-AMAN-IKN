@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, BadgeCheck, Copy, FileDown, FileSignature, FileText, Link2,
-  Loader2, Mail, MessageCircle, PenTool, Plus, Search, ShieldCheck,
+  Loader2, Mail, MessageCircle, PenTool, Plus, Search, SearchX, ShieldCheck,
   Trash2, Upload, Users, XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,13 @@ const WARNA_SIGNER = {
   ditandatangani: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
   aktif: "bg-blue-500/15 text-blue-600 dark:text-blue-400",
   menunggu: "bg-muted text-muted-foreground",
+};
+// Label ramah pengguna utk enum status (temuan audit: enum mentah ambigu).
+const LABEL_STATUS = {
+  terkirim: "Terkirim", sebagian: "Sebagian TTD", selesai: "Selesai", batal: "Batal",
+};
+const LABEL_SIGNER = {
+  ditandatangani: "Sudah TTD", aktif: "Giliran aktif", menunggu: "Menunggu",
 };
 
 const SIGNER_KOSONG = { nama: "", nip: "", jabatan: "", email: "" };
@@ -128,6 +135,8 @@ export default function TtdPermintaanPage({ user, onBack }) {
       return { ...f, signers };
     });
   };
+
+  const bukaFormBuat = () => { setDokFile(null); setForm({ ...FORM_KOSONG, signers: [{ ...SIGNER_KOSONG }] }); };
 
   const buat = async () => {
     if (!form.judul.trim()) { toast.error("Judul dokumen wajib diisi"); return; }
@@ -247,7 +256,7 @@ export default function TtdPermintaanPage({ user, onBack }) {
               Kirim link e-sign · pantau status · unduh lembar pengesahan
             </p>
           </div>
-          <Button size="sm" className="h-9 text-xs" onClick={() => { setDokFile(null); setForm({ ...FORM_KOSONG, signers: [{ ...SIGNER_KOSONG }] }); }}
+          <Button size="sm" className="h-9 text-xs" onClick={bukaFormBuat}
             data-testid="ttd-buat">
             <Plus className="w-3.5 h-3.5 mr-1" />Minta TTD
           </Button>
@@ -255,6 +264,19 @@ export default function TtdPermintaanPage({ user, onBack }) {
       </header>
 
       <main className="max-w-5xl mx-auto p-3 sm:p-6 space-y-3">
+        {/* Ringkasan jumlah per status — sekilas tahu berapa yang masih menunggu. */}
+        {!loading && items.length > 0 && (
+          <div className="flex gap-1.5 flex-wrap" data-testid="ttd-ringkas-status">
+            {["terkirim", "sebagian", "selesai", "batal"].map((st) => {
+              const n = items.filter((i) => i.status === st).length;
+              return n > 0 ? (
+                <span key={st} className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${WARNA_STATUS[st]}`}>
+                  {n} {LABEL_STATUS[st]}
+                </span>
+              ) : null;
+            })}
+          </div>
+        )}
         <div className="relative">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cari judul / nama penanda tangan…"
@@ -264,14 +286,30 @@ export default function TtdPermintaanPage({ user, onBack }) {
         {loading ? (
           <div className="py-16 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto text-muted-foreground" /></div>
         ) : tampil.length === 0 ? (
-          <div className="py-16 text-center space-y-2">
-            <PenTool className="w-10 h-10 mx-auto text-muted-foreground/50" />
-            <p className="text-sm text-muted-foreground">Belum ada permintaan tanda tangan.</p>
-            <p className="text-xs text-muted-foreground">
-              Klik <b>Minta TTD</b> — setiap penanda tangan mendapat <b>link pribadi</b> untuk
-              menandatangani dari HP/komputernya tanpa akun.
-            </p>
-          </div>
+          items.length === 0 ? (
+            <div className="py-16 text-center space-y-2">
+              <PenTool className="w-10 h-10 mx-auto text-muted-foreground/50" />
+              <p className="text-sm text-muted-foreground">Belum ada permintaan tanda tangan.</p>
+              <p className="text-xs text-muted-foreground">
+                Klik <b>Minta TTD</b> — setiap penanda tangan mendapat <b>link pribadi</b> untuk
+                menandatangani dari HP/komputernya tanpa akun.
+              </p>
+              <Button size="sm" className="mt-3 h-9 text-xs" onClick={bukaFormBuat}
+                data-testid="ttd-empty-buat">
+                <Plus className="w-3.5 h-3.5 mr-1" />Minta TTD
+              </Button>
+            </div>
+          ) : (
+            // Data ada, hanya tersaring pencarian — jangan mengaku "belum ada".
+            <div className="py-16 text-center space-y-2">
+              <SearchX className="w-10 h-10 mx-auto text-muted-foreground/50" />
+              <p className="text-sm text-muted-foreground">Tidak ada hasil untuk &quot;{q}&quot;</p>
+              <Button variant="outline" size="sm" className="mt-1 h-9 text-xs"
+                onClick={() => setQ("")} data-testid="ttd-clear-cari">
+                Hapus pencarian
+              </Button>
+            </div>
+          )
         ) : (
           <div className="space-y-2">
             {tampil.map((it) => (
@@ -280,8 +318,8 @@ export default function TtdPermintaanPage({ user, onBack }) {
                 data-testid={`ttd-item-${it.id}`}>
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm font-bold truncate">{it.judul}</p>
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase flex-shrink-0 ${WARNA_STATUS[it.status] || "bg-muted text-muted-foreground"}`}>
-                    {it.status}
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0 ${WARNA_STATUS[it.status] || "bg-muted text-muted-foreground"}`}>
+                    {LABEL_STATUS[it.status] || it.status}
                   </span>
                 </div>
                 <p className="text-[11px] text-muted-foreground mt-1 flex items-center gap-3 flex-wrap">
@@ -434,22 +472,22 @@ export default function TtdPermintaanPage({ user, onBack }) {
                       </span>
                     ) : null}
                   </p>
-                  <div className="flex items-center gap-1.5">
-                    <Input readOnly value={penuh} className="h-8 text-[11px] font-mono" onFocus={(e) => e.target.select()} />
+                  <div className="flex items-center gap-1.5 gap-y-1.5 flex-wrap">
+                    <Input readOnly value={penuh} className="h-8 text-[11px] font-mono min-w-[140px] flex-1" onFocus={(e) => e.target.select()} />
                     <Button type="button" variant="outline" size="sm" className="h-8 text-[11px] flex-shrink-0"
                       onClick={() => salin(penuh)} data-testid={`ttd-salin-${i}`}>
                       <Copy className="w-3 h-3 mr-1" />Salin
                     </Button>
                     <Button type="button" variant="outline" size="sm"
-                      className="h-8 w-8 p-0 flex-shrink-0 text-emerald-600"
-                      title="Bagikan via WhatsApp"
+                      className="h-8 w-8 p-0 min-h-0 min-w-0 flex-shrink-0 text-emerald-600"
+                      title="Bagikan via WhatsApp" aria-label="Bagikan via WhatsApp"
                       onClick={() => bagikanWa(l.nama, hasil?.judul, penuh)}
                       data-testid={`ttd-wa-${i}`}>
                       <MessageCircle className="w-3.5 h-3.5" />
                     </Button>
                     <Button type="button" variant="outline" size="sm"
-                      className="h-8 w-8 p-0 flex-shrink-0"
-                      title="Bagikan via email"
+                      className="h-8 w-8 p-0 min-h-0 min-w-0 flex-shrink-0"
+                      title="Bagikan via email" aria-label="Bagikan via email"
                       onClick={() => bagikanEmail(l.nama, hasil?.judul, penuh)}>
                       <Mail className="w-3.5 h-3.5" />
                     </Button>
@@ -474,7 +512,7 @@ export default function TtdPermintaanPage({ user, onBack }) {
                 <DialogDescription>
                   {detail.mode === "berurutan" ? "Berurutan" : "Paralel"} · dibuat {fmtWaktu(detail.created_at)} oleh {detail.created_by}
                   {" · "}
-                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${WARNA_STATUS[detail.status] || ""}`}>{detail.status}</span>
+                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${WARNA_STATUS[detail.status] || ""}`}>{LABEL_STATUS[detail.status] || detail.status}</span>
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-2">
@@ -494,7 +532,7 @@ export default function TtdPermintaanPage({ user, onBack }) {
                           className="h-10 max-w-[90px] object-contain bg-white rounded border border-border p-0.5 flex-shrink-0" />
                       ) : null}
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0 ${WARNA_SIGNER[s.status] || "bg-muted text-muted-foreground"}`}>
-                        {s.status}
+                        {LABEL_SIGNER[s.status] || s.status}
                       </span>
                     </div>
                     {s.status !== "ditandatangani" && detail.status !== "batal" && (
@@ -507,18 +545,22 @@ export default function TtdPermintaanPage({ user, onBack }) {
                         {linkUlang[s.signer_id] && (
                           <>
                             <Button type="button" variant="outline" size="sm"
-                              className="h-7 w-7 p-0 text-emerald-600" title="Bagikan via WhatsApp"
+                              className="h-7 w-7 p-0 min-h-0 min-w-0 text-emerald-600"
+                              title="Bagikan via WhatsApp" aria-label="Bagikan via WhatsApp"
                               onClick={() => bagikanWa(s.nama, detail.judul, linkUlang[s.signer_id])}>
                               <MessageCircle className="w-3 h-3" />
                             </Button>
                             <Button type="button" variant="outline" size="sm"
-                              className="h-7 w-7 p-0" title="Bagikan via email"
+                              className="h-7 w-7 p-0 min-h-0 min-w-0"
+                              title="Bagikan via email" aria-label="Bagikan via email"
                               onClick={() => bagikanEmail(s.nama, detail.judul, linkUlang[s.signer_id])}>
                               <Mail className="w-3 h-3" />
                             </Button>
-                            <span className="text-[9px] text-muted-foreground truncate max-w-[180px] font-mono">
-                              {linkUlang[s.signer_id]}
-                            </span>
+                            <Button type="button" variant="outline" size="sm" className="h-7 text-[10px] min-h-0 min-w-0"
+                              title={linkUlang[s.signer_id]}
+                              onClick={() => salin(linkUlang[s.signer_id])}>
+                              <Copy className="w-3 h-3 mr-1" />Salin lagi
+                            </Button>
                           </>
                         )}
                       </div>
@@ -536,7 +578,8 @@ export default function TtdPermintaanPage({ user, onBack }) {
               </div>
               <DialogFooter className="flex-wrap gap-1.5">
                 {detail.status !== "batal" && (
-                  <Button variant="outline" onClick={() => batalkan(detail)} className="h-9 text-xs text-red-600">
+                  <Button variant="outline" onClick={() => batalkan(detail)}
+                    className="h-9 text-xs text-red-600 border-red-500/40 hover:bg-red-500/10">
                     <XCircle className="w-3.5 h-3.5 mr-1.5" />Batalkan
                   </Button>
                 )}

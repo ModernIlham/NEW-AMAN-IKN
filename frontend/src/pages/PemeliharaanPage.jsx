@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, Wrench, Plus, Search, Trash2, X,
   CalendarDays, Coins, Boxes, ClipboardList, Download, FileText,
-  CalendarClock, Pencil,
+  CalendarClock, Pencil, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -79,6 +79,8 @@ export default function PemeliharaanPage({ user, onBack }) {
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
 
   const fmtRp = (n) => `Rp${Number(n || 0).toLocaleString("id-ID")}`;
+  // Nominal ringkas utk kartu sempit (mis. "Rp1,2 jt"); nilai penuh via title
+  const fmtRpCompact = (n) => `Rp${new Intl.NumberFormat("id-ID", { notation: "compact", maximumFractionDigits: 1 }).format(Number(n || 0))}`;
   const fmtTgl = (iso) => {
     if (!iso) return "-";
     const d = new Date(`${iso}T00:00:00`);
@@ -254,7 +256,7 @@ export default function PemeliharaanPage({ user, onBack }) {
     <div className="min-h-screen bg-background" data-testid="pemeliharaan-page">
       {/* ── Header ── */}
       <header className="bg-card/95 backdrop-blur-sm border-b border-border px-3 sm:px-6 py-2.5 sticky top-0 z-40">
-        <div className="max-w-5xl mx-auto flex items-center gap-3">
+        <div className="max-w-5xl mx-auto flex flex-wrap items-center gap-2 sm:gap-3 gap-y-2">
           <button
             type="button"
             onClick={onBack}
@@ -268,18 +270,13 @@ export default function PemeliharaanPage({ user, onBack }) {
             <Wrench className="w-4 h-4 text-white" />
           </span>
           <div className="min-w-0 flex-1">
-            <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight">Pemeliharaan BMN</h1>
+            <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight truncate">Pemeliharaan BMN</h1>
             <p className="text-[11px] sm:text-xs text-muted-foreground truncate">
               Riwayat & biaya per aset — bahan Daftar Hasil Pemeliharaan (PP 27/2014)
             </p>
           </div>
-          <Button size="sm" variant="outline" className="flex-shrink-0"
-            onClick={() => downloadFileWithProgress(`${API}/pemeliharaan/export`, "riwayat_pemeliharaan.csv", { label: "Ekspor Riwayat Pemeliharaan (CSV)" }).catch(() => {})}
-            data-testid="pemeliharaan-export">
-            <Download className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">CSV</span>
-          </Button>
           <Button size="sm" onClick={bukaForm} className="bg-orange-600 hover:bg-orange-700 text-white flex-shrink-0" data-testid="pemeliharaan-tambah">
-            <Plus className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">Catat</span>
+            <Plus className="w-4 h-4 mr-1.5" />Catat
           </Button>
           <BookingNomorButton modul="pemeliharaan" jenisNaskah="Laporan" referensi="DHPB" />
         </div>
@@ -287,15 +284,15 @@ export default function PemeliharaanPage({ user, onBack }) {
 
       <main className="max-w-5xl mx-auto px-3 sm:px-6 py-4 space-y-3">
         {/* ── Kartu rekap ── */}
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           <div className="bg-card rounded-xl border border-border p-3 text-center" data-testid="pemeliharaan-stat-kegiatan">
             <ClipboardList className="w-5 h-5 text-orange-500 mx-auto mb-1" />
             <p className="text-lg font-bold text-foreground leading-none">{rekap?.jumlah ?? "…"}</p>
             <p className="text-[10px] text-muted-foreground mt-1">Kegiatan{tahun ? ` (${tahun})` : ""}</p>
           </div>
-          <div className="bg-card rounded-xl border border-border p-3 text-center" data-testid="pemeliharaan-stat-biaya">
+          <div className="bg-card rounded-xl border border-border p-3 text-center col-span-2 sm:col-span-1 order-last sm:order-none" data-testid="pemeliharaan-stat-biaya">
             <Coins className="w-5 h-5 text-emerald-500 mx-auto mb-1" />
-            <p className="text-sm sm:text-lg font-bold text-foreground leading-none break-all">{rekap ? fmtRp(rekap.total_biaya) : "…"}</p>
+            <p className="text-sm sm:text-lg font-bold text-foreground leading-none truncate whitespace-nowrap tabular-nums" title={rekap ? fmtRp(rekap.total_biaya) : undefined}>{rekap ? fmtRpCompact(rekap.total_biaya) : "…"}</p>
             <p className="text-[10px] text-muted-foreground mt-1">Total biaya{tahun ? ` (${tahun})` : ""}</p>
           </div>
           <div className="bg-card rounded-xl border border-border p-3 text-center" data-testid="pemeliharaan-stat-aset">
@@ -307,7 +304,7 @@ export default function PemeliharaanPage({ user, onBack }) {
 
         {/* ── Jadwal berkala (pedoman DKPB Ps. 46(2) PP 27/2014) ── */}
         <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-          <div className="px-3 py-2 border-b border-border flex items-center gap-2">
+          <div className="px-3 py-2 border-b border-border flex flex-wrap items-center gap-2 gap-y-1.5">
             <CalendarClock className="w-4 h-4 text-orange-500" />
             <p className="text-xs font-bold text-foreground">Jadwal Berkala</p>
             {(jadwal?.terlambat || 0) > 0 && (
@@ -320,24 +317,26 @@ export default function PemeliharaanPage({ user, onBack }) {
                 {jadwal.segera} segera
               </span>
             )}
-            {(jadwal?.items || []).length > 0 && (
+            <div className="ml-auto flex gap-1.5">
+              {(jadwal?.items || []).length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => downloadFileWithProgress(`${API}/pemeliharaan/jadwal/export`, "jadwal_pemeliharaan.csv", { label: "Ekspor Jadwal Pemeliharaan (CSV)" }).catch(() => {})}
+                  className="h-7 px-2.5 rounded-lg border border-border text-xs font-semibold text-foreground/80 flex items-center gap-1 hover:bg-muted min-h-0"
+                  data-testid="pemeliharaan-jadwal-export"
+                >
+                  <Download className="w-3.5 h-3.5" />CSV
+                </button>
+              )}
               <button
                 type="button"
-                onClick={() => downloadFileWithProgress(`${API}/pemeliharaan/jadwal/export`, "jadwal_pemeliharaan.csv", { label: "Ekspor Jadwal Pemeliharaan (CSV)" }).catch(() => {})}
-                className="ml-auto h-7 px-2.5 rounded-lg border border-border text-xs font-semibold text-foreground/80 flex items-center gap-1 hover:bg-muted min-h-0"
-                data-testid="pemeliharaan-jadwal-export"
+                onClick={() => bukaFormJadwal()}
+                className="h-7 px-2.5 rounded-lg border border-border text-xs font-semibold text-foreground/80 flex items-center gap-1 hover:bg-muted min-h-0"
+                data-testid="pemeliharaan-jadwal-tambah"
               >
-                <Download className="w-3.5 h-3.5" />CSV
+                <Plus className="w-3.5 h-3.5" />Tambah
               </button>
-            )}
-            <button
-              type="button"
-              onClick={() => bukaFormJadwal()}
-              className={`${(jadwal?.items || []).length > 0 ? "" : "ml-auto "}h-7 px-2.5 rounded-lg border border-border text-xs font-semibold text-foreground/80 flex items-center gap-1 hover:bg-muted min-h-0`}
-              data-testid="pemeliharaan-jadwal-tambah"
-            >
-              <Plus className="w-3.5 h-3.5" />Tambah
-            </button>
+            </div>
           </div>
           {(jadwal?.items || []).length === 0 ? (
             <p className="text-xs text-muted-foreground text-center py-4 px-3">
@@ -395,7 +394,8 @@ export default function PemeliharaanPage({ user, onBack }) {
         {/* ── Aset dengan biaya terbesar ── */}
         {(rekap?.per_aset || []).length > 0 && (
           <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-            <div className="px-3 py-2 border-b border-border">
+            <div className="px-3 py-2 border-b border-border flex items-center gap-2">
+              <Coins className="w-4 h-4 text-emerald-500" />
               <p className="text-xs font-bold text-foreground">Aset dengan biaya pemeliharaan terbesar</p>
             </div>
             <ul className="divide-y divide-border/60">
@@ -412,6 +412,7 @@ export default function PemeliharaanPage({ user, onBack }) {
                       <span className="block text-[10px] text-muted-foreground font-mono">{a.asset_code} · {a.NUP} · {a.jumlah}× · terakhir {fmtTgl(a.terakhir)}</span>
                     </span>
                     <span className="text-xs font-bold text-foreground flex-shrink-0">{fmtRp(a.total_biaya)}</span>
+                    <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
                   </button>
                 </li>
               ))}
@@ -441,11 +442,12 @@ export default function PemeliharaanPage({ user, onBack }) {
           </select>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="h-8 text-xs" data-testid="pemeliharaan-dhpb">
+              <Button variant="outline" size="sm" className="h-8 text-xs" title="Daftar Hasil Pemeliharaan Barang" data-testid="pemeliharaan-dhpb">
                 <FileText className="w-3.5 h-3.5 mr-1.5" />DHPB (PDF)
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-64">
+              <p className="px-2 py-1 text-[10px] text-muted-foreground">DHPB — Daftar Hasil Pemeliharaan Barang</p>
               {[
                 { label: `Tahun penuh ${tahunDhpb}`, q: "" },
                 { label: `Semester I ${tahunDhpb} (Jan–Jun)`, q: "&semester=1" },
@@ -466,6 +468,11 @@ export default function PemeliharaanPage({ user, onBack }) {
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+          <Button variant="outline" size="sm" className="h-8 text-xs" title="Ekspor Riwayat Pemeliharaan (CSV)"
+            onClick={() => downloadFileWithProgress(`${API}/pemeliharaan/export`, "riwayat_pemeliharaan.csv", { label: "Ekspor Riwayat Pemeliharaan (CSV)" }).catch(() => {})}
+            data-testid="pemeliharaan-export">
+            <Download className="w-3.5 h-3.5 mr-1.5" />CSV
+          </Button>
           {asetFilter && (
             <button
               type="button"
@@ -477,11 +484,17 @@ export default function PemeliharaanPage({ user, onBack }) {
               <X className="w-3.5 h-3.5" />
             </button>
           )}
-          <span className="text-[11px] text-muted-foreground ml-auto">{daftar?.total ?? 0} catatan</span>
         </div>
 
         {/* ── Daftar catatan ── */}
         <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+          <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
+            <ClipboardList className="w-4 h-4 text-orange-500" />
+            <p className="text-xs font-bold text-foreground flex-1">Riwayat Pemeliharaan</p>
+            <span className="px-2 py-0.5 rounded-full bg-orange-500/15 text-orange-600 dark:text-orange-400 text-[10px] font-semibold">
+              {daftar?.total ?? 0} catatan
+            </span>
+          </div>
           {loadingDaftar ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-6 h-6 animate-spin text-orange-600" />
@@ -534,7 +547,7 @@ export default function PemeliharaanPage({ user, onBack }) {
                           type="button"
                           onClick={() => hapus(r)}
                           aria-label="Hapus catatan"
-                          className="h-7 w-7 rounded-lg border border-border text-red-500 flex items-center justify-center hover:bg-red-500/10"
+                          className="h-7 w-7 rounded-lg border border-border text-red-500 flex items-center justify-center hover:bg-red-500/10 min-h-0 min-w-0"
                           data-testid={`pemeliharaan-hapus-${r.id}`}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -550,10 +563,14 @@ export default function PemeliharaanPage({ user, onBack }) {
 
         {/* ── Navigasi halaman ── */}
         {(daftar?.total_pages || 1) > 1 && (
-          <div className="flex items-center justify-center gap-3 pb-4">
-            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Sebelumnya</Button>
+          <div className="flex items-center justify-center gap-2 pb-4">
+            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} className="gap-1">
+              <ChevronLeft className="w-4 h-4" />Sebelumnya
+            </Button>
             <span className="text-xs text-muted-foreground">Hal. {page} / {daftar.total_pages}</span>
-            <Button variant="outline" size="sm" disabled={page >= daftar.total_pages} onClick={() => setPage((p) => p + 1)}>Berikutnya</Button>
+            <Button variant="outline" size="sm" disabled={page >= daftar.total_pages} onClick={() => setPage((p) => p + 1)} className="gap-1">
+              Berikutnya<ChevronRight className="w-4 h-4" />
+            </Button>
           </div>
         )}
       </main>
@@ -578,7 +595,7 @@ export default function PemeliharaanPage({ user, onBack }) {
                       <span className="block text-[10px] text-muted-foreground font-mono">{form.aset.asset_code} · {form.aset.NUP}</span>
                     </span>
                     <button type="button" onClick={() => setForm((f) => ({ ...f, aset: null }))} aria-label="Ganti aset"
-                      className="h-7 w-7 rounded-lg border border-border text-foreground/70 flex items-center justify-center hover:bg-muted flex-shrink-0">
+                      className="h-7 w-7 rounded-lg border border-border text-foreground/70 flex items-center justify-center hover:bg-muted flex-shrink-0 min-h-0 min-w-0">
                       <X className="w-3.5 h-3.5" />
                     </button>
                   </div>

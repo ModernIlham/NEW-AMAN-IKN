@@ -208,7 +208,7 @@ export default function PemanfaatanPage({ user, onBack }) {
     <div className="min-h-screen bg-background" data-testid="pemanfaatan-page">
       {/* ── Header ── */}
       <header className="bg-card/95 backdrop-blur-sm border-b border-border px-3 sm:px-6 py-2.5 sticky top-0 z-40">
-        <div className="max-w-5xl mx-auto flex items-center gap-3">
+        <div className="max-w-5xl mx-auto flex flex-wrap items-center gap-2 sm:gap-3 gap-y-2">
           <button type="button" onClick={onBack} aria-label="Kembali ke Beranda Modul"
             className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0"
             data-testid="pemanfaatan-back">
@@ -218,7 +218,7 @@ export default function PemanfaatanPage({ user, onBack }) {
             <Handshake className="w-4 h-4 text-white" />
           </span>
           <div className="min-w-0 flex-1">
-            <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight">Pemanfaatan — Register Perjanjian</h1>
+            <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight truncate">Pemanfaatan — Register Perjanjian</h1>
             <p className="text-[11px] sm:text-xs text-muted-foreground truncate">
               Sewa · Pinjam Pakai · KSP · BGS/BSG · KSPI · KETUPI (PMK 115/2020)
             </p>
@@ -261,7 +261,7 @@ export default function PemanfaatanPage({ user, onBack }) {
               </div>
               <div className="bg-card rounded-xl border border-border p-3 text-center" data-testid="pemanfaatan-stat-nilai">
                 <Coins className="w-5 h-5 text-blue-500 mx-auto mb-1" />
-                <p className="text-sm sm:text-base font-bold text-foreground leading-none break-all">{fmtRp(r.total_nilai)}</p>
+                <p className="text-sm sm:text-base font-bold text-foreground leading-none truncate whitespace-nowrap tabular-nums" title={fmtRp(r.total_nilai)}>{fmtRp(r.total_nilai)}</p>
                 <p className="text-[10px] text-muted-foreground mt-1">Nilai tercatat (PNBP ke Kas Negara)</p>
               </div>
             </div>
@@ -272,6 +272,11 @@ export default function PemanfaatanPage({ user, onBack }) {
                 <div className="text-center py-10 px-4">
                   <Handshake className="w-8 h-8 text-muted-foreground/50 mx-auto mb-2" />
                   <p className="text-sm text-muted-foreground">Belum ada perjanjian pemanfaatan tercatat.</p>
+                  <p className="text-xs text-muted-foreground mt-1">Gunakan tombol Catat di kanan atas untuk merekam perjanjian pertama.</p>
+                  <Button size="sm" className="mt-3 bg-teal-600 hover:bg-teal-700 text-white"
+                    onClick={() => buka()} data-testid="pemanfaatan-empty-catat">
+                    <Plus className="w-4 h-4 mr-1.5" />Catat Perjanjian
+                  </Button>
                 </div>
               ) : (
                 <ul className="divide-y divide-border/60">
@@ -284,18 +289,30 @@ export default function PemanfaatanPage({ user, onBack }) {
                         <span className="px-1.5 py-0.5 rounded bg-teal-500/15 text-teal-600 dark:text-teal-400 text-[10px] font-semibold">
                           {labelBentuk[p.bentuk] || p.bentuk}
                         </span>
-                        <p className="text-sm font-semibold text-foreground flex-1 min-w-[140px] truncate">{p.mitra}</p>
-                        <span className="text-xs font-bold text-foreground">{fmtRp(p.nilai)}</span>
+                        <span className="font-mono text-[10px] text-muted-foreground flex-shrink-0" title="Periode perjanjian">
+                          {p.mulai} s.d. {p.berakhir}
+                        </span>
+                        {p.nomor_perjanjian && (
+                          <span className="font-mono text-[10px] text-muted-foreground flex-shrink-0" title="Nomor perjanjian">
+                            {p.nomor_perjanjian}
+                          </span>
+                        )}
+                        <p className="text-sm font-semibold text-foreground flex-1 min-w-[140px] truncate" title={p.mitra}>{p.mitra}</p>
+                        <span className="text-xs font-bold text-foreground whitespace-nowrap tabular-nums" title={fmtRp(p.nilai)}>{fmtRp(p.nilai)}</span>
                       </div>
-                      <p className="text-[11px] text-muted-foreground mt-1 truncate">
-                        {p.mulai} s.d. {p.berakhir}
-                        {p.asset_name && <> · {p.asset_name} <span className="font-mono">({p.asset_code} · {p.NUP})</span></>}
-                        {p.nomor_perjanjian && ` · Perjanjian ${p.nomor_perjanjian}`}
-                        {p.keterangan && ` · ${p.keterangan}`}
-                      </p>
-                      {p.kekurangan?.length > 0 && (
-                        <p className="text-[11px] text-red-500/90 mt-0.5">{p.kekurangan.join("; ")}</p>
+                      {(p.asset_name || p.keterangan) && (
+                        <p className="text-[11px] text-muted-foreground mt-1 truncate"
+                          title={[p.asset_name ? `${p.asset_name} (${p.asset_code} · ${p.NUP})` : "", p.keterangan || ""].filter(Boolean).join(" · ")}>
+                          {p.asset_name && <>{p.asset_name} <span className="font-mono">({p.asset_code} · {p.NUP})</span></>}
+                          {p.asset_name && p.keterangan ? " · " : ""}
+                          {p.keterangan}
+                        </p>
                       )}
+                      {(p.kekurangan || []).map((k) => (
+                        <p key={k} className="text-[11px] text-red-500/90 mt-0.5 flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3 flex-shrink-0" />{k}
+                        </p>
+                      ))}
                       {(p.peringatan_kontribusi || []).map((w) => (
                         <p key={w} className="text-[11px] text-amber-600 dark:text-amber-400 mt-0.5 flex items-center gap-1">
                           <AlertTriangle className="w-3 h-3 flex-shrink-0" />{w}
@@ -312,13 +329,14 @@ export default function PemanfaatanPage({ user, onBack }) {
                           {p.nomor_penetapan_fasilitas ? ` — ${p.nomor_penetapan_fasilitas}` : ""}
                         </p>
                       )}
-                      <div className="flex gap-1.5 mt-1.5">
+                      <div className="flex flex-wrap gap-1.5 gap-y-1.5 mt-1.5">
                         <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
                           onClick={() => setLamp({ perjanjian: p, jenis: "lampiran", uploading: false })}
                           data-testid={`pemanfaatan-lampiran-${p.id}`}>
                           <Paperclip className="w-3 h-3 mr-1" />Lampiran{(p.lampiran || []).length > 0 && ` (${p.lampiran.length})`}
                         </Button>
                         <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                          title="Wasdal = Pengawasan & Pengendalian (laporan monitoring pelaksanaan pemanfaatan)"
                           onClick={() => setLamp({ perjanjian: p, jenis: "wasdal", uploading: false })}
                           data-testid={`pemanfaatan-wasdal-${p.id}`}>
                           <Paperclip className="w-3 h-3 mr-1" />Wasdal{(p.lampiran_wasdal || []).length > 0 && ` (${p.lampiran_wasdal.length})`}
@@ -421,6 +439,7 @@ export default function PemanfaatanPage({ user, onBack }) {
                 <Input id="pmf-jmitra" placeholder="BUMN/PT/koperasi/Pemda"
                   value={form.data.jenis_mitra} onChange={(e) => setField("jenis_mitra", e.target.value)} />
               </div>
+              <p className="col-span-2 text-[10px] font-bold uppercase tracking-wide text-muted-foreground border-t border-border pt-2 mt-1">Periode & nilai</p>
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmf-mulai">Mulai</label>
                 <Input id="pmf-mulai" type="date" value={form.data.mulai}
@@ -436,6 +455,7 @@ export default function PemanfaatanPage({ user, onBack }) {
                 <Input id="pmf-nilai" type="number" min="0" placeholder="0"
                   value={form.data.nilai} onChange={(e) => setField("nilai", e.target.value)} />
               </div>
+              <p className="col-span-2 text-[10px] font-bold uppercase tracking-wide text-muted-foreground border-t border-border pt-2 mt-1">Dokumen & kepatuhan</p>
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmf-setuju">No. Persetujuan Pengelola</label>
                 <Input id="pmf-setuju" placeholder="cth. S-11/KNL.05/2026"

@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, Flame, Plus, Search, Trash2, X, Coins, Download,
-  FileText, Paperclip, Upload,
+  Check, FileDown, FileText, Paperclip, Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -72,6 +72,7 @@ export default function PemusnahanPage({ user, onBack }) {
   }, [cari, form]);
 
   const fmtRp = (n) => `Rp${Math.round(Number(n || 0)).toLocaleString("id-ID")}`;
+  const bukaForm = () => { setCari(""); setHasilCari([]); setForm({ data: { ...FORM_KOSONG }, aset: [], saving: false }); };
   const setField = (k, v) => setForm((f) => ({ ...f, data: { ...f.data, [k]: v } }));
   const tambahAset = (a) => setForm((f) => (
     f.aset.some((x) => x.id === a.id) ? { ...f } : { ...f, aset: [...f.aset, a] }
@@ -164,7 +165,7 @@ export default function PemusnahanPage({ user, onBack }) {
     <div className="min-h-screen bg-background" data-testid="pemusnahan-page">
       {/* ── Header ── */}
       <header className="bg-card/95 backdrop-blur-sm border-b border-border px-3 sm:px-6 py-2.5 sticky top-0 z-40">
-        <div className="max-w-5xl mx-auto flex items-center gap-3">
+        <div className="max-w-5xl mx-auto flex flex-wrap items-center gap-2 sm:gap-3 gap-y-2">
           <button type="button" onClick={onBack} aria-label="Kembali ke Beranda Modul"
             className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0"
             data-testid="pemusnahan-back">
@@ -174,8 +175,8 @@ export default function PemusnahanPage({ user, onBack }) {
             <Flame className="w-4 h-4 text-white" />
           </span>
           <div className="min-w-0 flex-1">
-            <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight">Pemusnahan — Register BA</h1>
-            <p className="text-[11px] sm:text-xs text-muted-foreground truncate">
+            <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight truncate">Pemusnahan — Register BA</h1>
+            <p className="hidden sm:block text-xs text-muted-foreground truncate">
               Setelah persetujuan + pelaksanaan · PMK 83/PMK.06/2016
             </p>
           </div>
@@ -184,7 +185,7 @@ export default function PemusnahanPage({ user, onBack }) {
             data-testid="pemusnahan-export">
             <Download className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">CSV</span>
           </Button>
-          <Button size="sm" onClick={() => { setCari(""); setHasilCari([]); setForm({ data: { ...FORM_KOSONG }, aset: [], saving: false }); }}
+          <Button size="sm" onClick={bukaForm}
             className="bg-orange-700 hover:bg-orange-800 text-white flex-shrink-0" data-testid="pemusnahan-tambah">
             <Plus className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">Catat BA</span>
           </Button>
@@ -200,7 +201,7 @@ export default function PemusnahanPage({ user, onBack }) {
         ) : !data ? null : (
           <>
             {/* ── Ringkasan ── */}
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               <div className="bg-card rounded-xl border border-border p-3 text-center" data-testid="pemusnahan-stat-ba">
                 <FileText className="w-5 h-5 text-orange-500 mx-auto mb-1" />
                 <p className="text-lg font-bold text-foreground leading-none">{data.ringkasan.jumlah_ba}</p>
@@ -211,9 +212,9 @@ export default function PemusnahanPage({ user, onBack }) {
                 <p className="text-lg font-bold text-foreground leading-none">{data.ringkasan.jumlah_aset}</p>
                 <p className="text-[10px] text-muted-foreground mt-1">Aset dimusnahkan</p>
               </div>
-              <div className="bg-card rounded-xl border border-border p-3 text-center" data-testid="pemusnahan-stat-nilai">
+              <div className="bg-card rounded-xl border border-border p-3 text-center col-span-2 sm:col-span-1" data-testid="pemusnahan-stat-nilai">
                 <Coins className="w-5 h-5 text-blue-500 mx-auto mb-1" />
-                <p className="text-sm sm:text-lg font-bold text-foreground leading-none break-all">{fmtRp(data.ringkasan.nilai)}</p>
+                <p className="text-sm sm:text-lg font-bold text-foreground leading-none truncate whitespace-nowrap tabular-nums" title={fmtRp(data.ringkasan.nilai)}>{fmtRp(data.ringkasan.nilai)}</p>
                 <p className="text-[10px] text-muted-foreground mt-1">Nilai perolehan</p>
               </div>
             </div>
@@ -224,6 +225,11 @@ export default function PemusnahanPage({ user, onBack }) {
                 <div className="text-center py-10 px-4">
                   <Flame className="w-8 h-8 text-muted-foreground/50 mx-auto mb-2" />
                   <p className="text-sm text-muted-foreground">Belum ada BA pemusnahan tercatat.</p>
+                  <p className="text-xs text-muted-foreground mt-1">Setelah persetujuan &amp; pelaksanaan, catat Berita Acara Pemusnahan di sini.</p>
+                  <Button size="sm" className="mt-3 bg-orange-700 hover:bg-orange-800 text-white"
+                    onClick={bukaForm} data-testid="pemusnahan-empty-tambah">
+                    <Plus className="w-4 h-4 mr-1.5" />Catat BA Pertama
+                  </Button>
                 </div>
               ) : (
                 <ul className="divide-y divide-border/60">
@@ -237,8 +243,8 @@ export default function PemusnahanPage({ user, onBack }) {
                         <span className="text-[11px] text-muted-foreground">{r.tanggal_ba}</span>
                         <span className="text-[11px] text-muted-foreground ml-auto">{(r.aset || []).length} aset</span>
                         {(r.aset_diusulkan || 0) >= (r.aset || []).length ? (
-                          <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-[10px] font-semibold">
-                            ✓ Diusulkan hapus
+                          <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-[10px] font-semibold inline-flex items-center gap-0.5">
+                            <Check className="w-3 h-3" />Diusulkan hapus
                           </span>
                         ) : (
                           <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
@@ -261,7 +267,7 @@ export default function PemusnahanPage({ user, onBack }) {
                           ).catch(() => {})}
                           className="h-7 w-7 rounded-lg border border-border text-foreground/70 flex items-center justify-center hover:bg-muted min-h-0 min-w-0"
                           data-testid={`pemusnahan-unduh-${r.id}`}>
-                          <FileText className="w-3 h-3" />
+                          <FileDown className="w-3 h-3" />
                         </button>
                         {isAdmin && (
                           <button type="button" onClick={() => hapus(r)} aria-label="Hapus BA"
@@ -270,16 +276,20 @@ export default function PemusnahanPage({ user, onBack }) {
                           </button>
                         )}
                       </div>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                      <p className="text-[11px] text-muted-foreground mt-0.5 truncate"
+                        title={`Persetujuan: ${r.nomor_persetujuan}${r.keterangan ? ` · ${r.keterangan}` : ""} · oleh ${r.created_by}`}>
                         Persetujuan: {r.nomor_persetujuan}{r.keterangan && ` · ${r.keterangan}`} · oleh {r.created_by}
                       </p>
                       <ul className="mt-1 space-y-0.5">
-                        {(r.aset || []).map((a) => (
+                        {(r.aset || []).slice(0, 5).map((a) => (
                           <li key={a.asset_id} className="text-[11px] text-foreground/80 flex justify-between gap-2">
                             <span className="truncate">{a.asset_name} <span className="font-mono text-muted-foreground">({a.asset_code} · {a.NUP})</span></span>
                             <span className="flex-shrink-0">{fmtRp(a.harga)}</span>
                           </li>
                         ))}
+                        {(r.aset || []).length > 5 && (
+                          <li className="text-[11px] text-muted-foreground">+{(r.aset || []).length - 5} aset lainnya</li>
+                        )}
                       </ul>
                     </li>
                   ))}
@@ -338,7 +348,7 @@ export default function PemusnahanPage({ user, onBack }) {
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pms-cari">Tambah aset (Rusak Berat)</label>
                 <div className="relative">
                   <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
-                  <Input id="pms-cari" className="pl-8" placeholder="Cari nama/kode aset (min. 2 huruf)"
+                  <Input id="pms-cari" className="pl-8" placeholder="Ketik untuk menyaring — kosongkan untuk melihat kandidat Rusak Berat"
                     value={cari} onChange={(e) => setCari(e.target.value)} data-testid="pemusnahan-cari" />
                   {(mencari || hasilCari.length > 0) && (
                     <div className="absolute z-50 mt-1 w-full max-h-44 overflow-y-auto rounded-lg border border-border bg-card shadow-lg">

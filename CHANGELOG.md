@@ -48,6 +48,61 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#405] UI/UX gelombang 2: 12 pola lintas-halaman diseragamkan di 25 halaman modul — 2026-07-18
+
+Lanjutan mandat "review menyeluruh — rapikan tampilan di berbagai ukuran
+layar": eksekusi pola perbaikan seragam (P1–P11) atas seluruh sisa temuan
+audit, dikerjakan paralel per halaman (25 agen + 25 reviewer diff, 9 temuan
+reviewer ditindaklanjuti sebelum rilis):
+
+- **Nominal Rupiah tak patah lagi (P1)**: semua kartu statistik ber-`break-all`
+  (Pemeliharaan, Penghapusan, Pemusnahan, Pemindahtanganan, Perencanaan,
+  Penilaian, Penganggaran, Pemanfaatan, Pembukuan, Info) kini satu baris utuh
+  (`tabular-nums` + nilai penuh di tooltip); grid ringkasan responsif
+  `grid-cols-2 sm:grid-cols-3` dengan kartu nominal lebar penuh di mobile
+  (posisi diatur agar grid tidak berlubang).
+- **Header halaman & seksi tidak berjejal (P2/P3)**: container header semua
+  modul kini `flex-wrap` + judul `truncate`; baris aksi register
+  (Penghapusan, Pemanfaatan, Pengamanan, Wasdal, Penilaian, Satker, TTD,
+  Pelaporan, Referensi Akun) membungkus rapi di layar 320–375px.
+- **Alur kerja terlihat (P4)**: tombol transisi maju kini solid warna modul —
+  "Proses" (Penghapusan, amber), "Setujui/Laksanakan" (Pemindahtanganan,
+  indigo), aksi utama 4 seksi Pengamanan (amber, label tampil di mobile),
+  "Sahkan" (Persuratan), "Buat BAST" (Penggunaan, sky), CTA Tambah
+  (Pegawai/Pejabat/Ruangan); Tolak/Hapus tetap outline merah.
+- **Icon-only ramah sentuh (P5)**: seluruh tombol ikon-saja atau berlabel
+  tersembunyi di mobile kini punya title + aria-label (Persediaan toolbar,
+  Wasdal, Kodefikasi, Pegawai, dll.); ikon "Massal" Persediaan diganti
+  ListPlus agar Layers eksklusif bermakna layer FIFO.
+- **Empty-state berarah (P6/P7)**: daftar kosong kini memberi arahan + CTA
+  yang memanggil handler tombol header (Pemusnahan, Pemindahtanganan,
+  Pemanfaatan, Persediaan, Pengadaan, Penganggaran, Pegawai, Persuratan,
+  Pembukuan); halaman ber-filter membedakan "belum ada data" vs "tidak
+  cocok filter" + tombol hapus pencarian (Pejabat, Ruangan, TTD, Pembukuan).
+- **Data kunci menonjol (P8)**: nomor SK (Penghapusan), NTPN/No. Dokumen
+  (Pemindahtanganan), periode polis (Pengamanan), nilai lama→baru
+  (Penilaian), nilai mutasi (Pembukuan) diangkat dari kalimat gabungan
+  menjadi badge font-mono tersendiri.
+- **Ikon seragam & istilah dijelaskan (P9/P10)**: karakter teks ✓ ○ ⚠ diganti
+  ikon lucide; singkatan birokrasi (DHPB, Wasdal, SPTJM, NTPN, KPB, BAS,
+  LHIP, dst.) diberi kepanjangan via tooltip/teks.
+- **Kartu utama ber-header (P11)**: Riwayat Pemeliharaan, arsip Pelaporan,
+  dan kartu utama lain kini berjudul + ikon + badge jumlah, konsisten
+  dengan seksi sekunder.
+- **Bonus temuan audit**: toggle tema di halaman Pengaturan (wiring state
+  dari App agar tidak dobel instans), konfirmasi hapus bergaya (useConfirm)
+  di Penggunaan, kartu statistik baru di Persediaan/Penggunaan, saring
+  client-side dialog daftar aset Pengamanan, teks roadmap internal dihapus
+  dari kaki halaman Penggunaan, banner opname Persediaan dibedakan warna
+  (sky) dari peringatan stok (amber), daftar aset per BA Pemusnahan
+  diringkas 5 baris + "+N lainnya".
+- Verifikasi: 531 tes unit lulus, lint 26 file berubah 0 warning, build
+  produksi sukses; 9 catatan reviewer diff (grid berlubang, break-all
+  tersisa, min-h-0 kurang, angka total menyesatkan, wiring tema) semua
+  dibereskan.
+
+---
+
 ## [#404] UI/UX gelombang 1: 15 perbaikan prioritas dari audit menyeluruh 26 halaman — 2026-07-18
 
 Mandat pemilik: "review menyeluruh semua modul selain inventarisasi — rapikan

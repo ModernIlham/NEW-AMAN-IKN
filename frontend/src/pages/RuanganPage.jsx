@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Search, Plus, Pencil, Trash2, Loader2, DoorOpen,
+  ArrowLeft, Search, Plus, Pencil, Trash2, Loader2, DoorOpen, AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -160,12 +160,25 @@ export default function RuanganPage({ user, onBack }) {
                 placeholder="Cari kode / nama / gedung / penanggung jawab…" className="pl-9 h-10" data-testid="ruangan-search" />
             </div>
             {isAdmin && (
-              <Button variant="outline" className="h-10 gap-1.5"
-                onClick={() => setForm({ ...EMPTY })} data-testid="ruangan-add">
+              <Button className="h-10 gap-1.5 bg-teal-600 hover:bg-teal-700 text-white"
+                onClick={() => setForm({ ...EMPTY })} title="Tambah Ruangan" aria-label="Tambah Ruangan"
+                data-testid="ruangan-add">
                 <Plus className="w-4 h-4" /><span className="hidden sm:inline">Tambah</span>
               </Button>
             )}
           </div>
+          {items.length > 0 && (
+            <div className="flex items-center gap-1.5 flex-wrap mt-2">
+              <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-[10px] font-semibold">
+                {items.filter((i) => i.aktif !== false).length} aktif
+              </span>
+              {items.some((i) => i.aktif === false) && (
+                <span className="px-2 py-0.5 rounded-full bg-slate-500/15 text-muted-foreground text-[10px] font-semibold">
+                  {items.filter((i) => i.aktif === false).length} nonaktif
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
@@ -176,11 +189,27 @@ export default function RuanganPage({ user, onBack }) {
           ) : filtered.length === 0 ? (
             <div className="text-center py-16 px-4">
               <DoorOpen className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
-              <p className="text-sm font-medium text-foreground">Belum ada ruangan</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {isAdmin ? "Tambah ruangan untuk menata lokasi BMN (dasar KIR/DBR)."
-                  : "Minta admin menambah data ruangan."}
+              <p className="text-sm font-medium text-foreground">
+                {items.length === 0 ? "Belum ada ruangan" : "Tidak ada yang cocok"}
               </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {items.length === 0
+                  ? (isAdmin ? "Tambah ruangan untuk menata lokasi BMN (dasar KIR/DBR)."
+                    : "Minta admin menambah data ruangan.")
+                  : "Coba kata kunci lain atau hapus pencarian."}
+              </p>
+              {isAdmin && items.length === 0 && (
+                <Button size="sm" className="mt-3 gap-1.5 bg-teal-600 hover:bg-teal-700 text-white"
+                  onClick={() => setForm({ ...EMPTY })} data-testid="ruangan-empty-tambah">
+                  <Plus className="w-4 h-4" />Tambah Ruangan
+                </Button>
+              )}
+              {items.length > 0 && (
+                <Button variant="outline" size="sm" className="mt-3"
+                  onClick={() => setSearch("")} data-testid="ruangan-clear-search">
+                  Hapus pencarian
+                </Button>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -209,7 +238,11 @@ export default function RuanganPage({ user, onBack }) {
                       <td className="px-3 py-2 text-[11px] text-muted-foreground whitespace-nowrap hidden sm:table-cell">
                         {[it.gedung, it.lantai ? `Lt. ${it.lantai}` : ""].filter(Boolean).join(" · ") || "—"}
                       </td>
-                      <td className="px-3 py-2 text-[12px] text-foreground/90">{it.penanggung_jawab_nama || "—"}</td>
+                      <td className="px-3 py-2 text-[12px] text-foreground/90">
+                        <p className="truncate max-w-[160px] sm:max-w-[220px]" title={it.penanggung_jawab_nama || undefined}>
+                          {it.penanggung_jawab_nama || "—"}
+                        </p>
+                      </td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
                           it.aktif === false
@@ -269,6 +302,12 @@ export default function RuanganPage({ user, onBack }) {
                     )}
                     {pjList.map((p) => <option key={p.id} value={p.id}>{p.nama}{p.jabatan ? ` (${p.jabatan})` : ""}</option>)}
                   </select>
+                  {pjList.length === 0 && (
+                    <p className="text-[10px] text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-md px-2 py-1 mt-1 flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+                      Belum ada pejabat berperan &quot;Penanggung Jawab Ruangan&quot; — tambahkan di Referensi Pejabat agar bisa dipilih.
+                    </p>
+                  )}
                 </Field>
                 <Field label="Unit Kerja"><Input value={form.unit_kerja} onChange={(e) => setForm((f) => ({ ...f, unit_kerja: e.target.value }))} /></Field>
               </div>
@@ -281,16 +320,12 @@ export default function RuanganPage({ user, onBack }) {
                 </label>
               </Field>
               <Field label="Keterangan"><Input value={form.keterangan} onChange={(e) => setForm((f) => ({ ...f, keterangan: e.target.value }))} /></Field>
-              {pjList.length === 0 && (
-                <p className="text-[11px] text-muted-foreground">
-                  Belum ada pejabat berperan &quot;Penanggung Jawab Ruangan&quot; — tambahkan di Referensi Pejabat agar bisa dipilih.
-                </p>
-              )}
             </div>
           )}
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setForm(null)}>Batal</Button>
-            <Button onClick={submitForm} disabled={saving} data-testid="ruangan-form-save">
+            <Button onClick={submitForm} disabled={saving}
+              className="bg-teal-600 hover:bg-teal-700 text-white" data-testid="ruangan-form-save">
               {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : null}Simpan
             </Button>
           </DialogFooter>

@@ -4,7 +4,7 @@ import {
   ClipboardList, ShoppingCart, UserCheck, Handshake, ShieldCheck, Scale,
   ArrowLeftRight, Flame, FileX, Eye, BookOpen, Boxes, FileText, ClipboardCheck,
   CheckCircle2, Link2, CalendarClock, Banknote, Wrench, Landmark, ListTree,
-  Users, DoorOpen, IdCard, Mail, FileSignature, Building2, Settings,
+  Users, DoorOpen, IdCard, Mail, FileSignature, Building2, Settings, Info,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -91,7 +91,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
     <div className="min-h-screen bg-background" data-testid="module-home">
       {/* ── Header ── */}
       <header className="bg-card/95 backdrop-blur-sm border-b border-border px-3 sm:px-6 py-2.5 sticky top-0 z-40">
-        <div className="max-w-6xl mx-auto flex items-center gap-3">
+        <div className="max-w-6xl mx-auto flex flex-wrap items-center gap-2 sm:gap-3 gap-y-2">
           <div
             className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-blue-500 flex items-center justify-center shadow-sm cursor-pointer flex-shrink-0"
             {...(onShowInfo ? { onClick: activateInfo, title: "" } : {})}
@@ -99,7 +99,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
             <Package className="w-5 h-5 text-white" />
           </div>
           <div className="min-w-0 flex-1">
-            <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight">AMAN — Manajemen Aset Negara</h1>
+            <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight truncate">AMAN — Manajemen Aset Negara</h1>
             <p className="text-[11px] sm:text-xs text-muted-foreground truncate">
               Siklus Pengelolaan BMN · {user?.full_name || user?.username}
             </p>
@@ -119,10 +119,10 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
               onClick={onShowInfo}
               aria-label="Tentang aplikasi"
               title="Tentang aplikasi & panduan"
-              className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0 text-sm font-bold"
+              className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0"
               data-testid="module-home-info"
             >
-              ?
+              <Info className="w-4 h-4" />
             </button>
           )}
           <button
@@ -173,119 +173,145 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
               </p>
             </div>
           </div>
-          {/* Grup Referensi & Master Data (audit G6 #5): grid bertajuk,
-              bukan pil mengambang yang perataannya kacau saat wrap. */}
+          {/* Grup pintasan (audit G6 #5): grid bertajuk, bukan pil mengambang.
+              Gaya pil seragam — aksen warna hanya di ikon supaya mudah dipindai;
+              dipecah dua tajuk: data referensi vs alat administrasi. */}
           <p className="mt-3 mb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Referensi & Master Data</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
           {onOpenKodefikasi && (
             <button
               type="button"
               onClick={onOpenKodefikasi}
-              className="w-full inline-flex justify-between items-center gap-1.5 px-3 h-8 rounded-full border border-blue-500/40 bg-blue-600/10 text-blue-600 dark:text-blue-400 text-[11px] font-semibold hover:bg-blue-600/20 transition-colors min-w-0 min-h-0"
+              className="w-full inline-flex items-center gap-1.5 px-3 h-8 rounded-full border border-border bg-muted/40 text-foreground text-[11px] font-semibold hover:bg-muted transition-colors min-w-0 min-h-0"
               data-testid="module-open-kodefikasi"
             >
-              <ListTree className="w-3.5 h-3.5" />
-              Referensi Kodefikasi Barang
-              <ChevronRight className="w-3.5 h-3.5" />
+              <span className="flex items-center gap-1.5 min-w-0 flex-1">
+                <ListTree className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+                <span className="truncate">Referensi Kodefikasi Barang</span>
+              </span>
+              <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
             </button>
           )}
           {onOpenPejabat && (
             <button
               type="button"
               onClick={onOpenPejabat}
-              className="w-full inline-flex justify-between items-center gap-1.5 px-3 h-8 rounded-full border border-indigo-500/40 bg-indigo-600/10 text-indigo-600 dark:text-indigo-400 text-[11px] font-semibold hover:bg-indigo-600/20 transition-colors min-w-0 min-h-0"
+              className="w-full inline-flex items-center gap-1.5 px-3 h-8 rounded-full border border-border bg-muted/40 text-foreground text-[11px] font-semibold hover:bg-muted transition-colors min-w-0 min-h-0"
               data-testid="module-open-pejabat"
             >
-              <Users className="w-3.5 h-3.5" />
-              Referensi Pejabat
-              <ChevronRight className="w-3.5 h-3.5" />
+              <span className="flex items-center gap-1.5 min-w-0 flex-1">
+                <Users className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0" />
+                <span className="truncate">Referensi Pejabat</span>
+              </span>
+              <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
             </button>
           )}
           {onOpenRuangan && (
             <button
               type="button"
               onClick={onOpenRuangan}
-              className="w-full inline-flex justify-between items-center gap-1.5 px-3 h-8 rounded-full border border-teal-500/40 bg-teal-600/10 text-teal-600 dark:text-teal-400 text-[11px] font-semibold hover:bg-teal-600/20 transition-colors min-w-0 min-h-0"
+              className="w-full inline-flex items-center gap-1.5 px-3 h-8 rounded-full border border-border bg-muted/40 text-foreground text-[11px] font-semibold hover:bg-muted transition-colors min-w-0 min-h-0"
               data-testid="module-open-ruangan"
             >
-              <DoorOpen className="w-3.5 h-3.5" />
-              Referensi Ruangan
-              <ChevronRight className="w-3.5 h-3.5" />
+              <span className="flex items-center gap-1.5 min-w-0 flex-1">
+                <DoorOpen className="w-3.5 h-3.5 text-teal-500 flex-shrink-0" />
+                <span className="truncate">Referensi Ruangan</span>
+              </span>
+              <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
             </button>
           )}
           {onOpenReferensiAkun && (
             <button
               type="button"
               onClick={onOpenReferensiAkun}
-              className="w-full inline-flex justify-between items-center gap-1.5 px-3 h-8 rounded-full border border-amber-500/40 bg-amber-600/10 text-amber-600 dark:text-amber-400 text-[11px] font-semibold hover:bg-amber-600/20 transition-colors min-w-0 min-h-0"
+              className="w-full inline-flex items-center gap-1.5 px-3 h-8 rounded-full border border-border bg-muted/40 text-foreground text-[11px] font-semibold hover:bg-muted transition-colors min-w-0 min-h-0"
               data-testid="module-open-referensi-akun"
             >
-              <Landmark className="w-3.5 h-3.5" />
-              Referensi Akun BAS
-              <ChevronRight className="w-3.5 h-3.5" />
+              <span className="flex items-center gap-1.5 min-w-0 flex-1">
+                <Landmark className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+                <span className="truncate">Referensi Akun BAS</span>
+              </span>
+              <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
             </button>
           )}
           {onOpenPegawai && (
             <button
               type="button"
               onClick={onOpenPegawai}
-              className="w-full inline-flex justify-between items-center gap-1.5 px-3 h-8 rounded-full border border-sky-500/40 bg-sky-600/10 text-sky-600 dark:text-sky-400 text-[11px] font-semibold hover:bg-sky-600/20 transition-colors min-w-0 min-h-0"
+              className="w-full inline-flex items-center gap-1.5 px-3 h-8 rounded-full border border-border bg-muted/40 text-foreground text-[11px] font-semibold hover:bg-muted transition-colors min-w-0 min-h-0"
               data-testid="module-open-pegawai"
             >
-              <IdCard className="w-3.5 h-3.5" />
-              Master Pegawai
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          )}
-          {onOpenPersuratan && (
-            <button
-              type="button"
-              onClick={onOpenPersuratan}
-              className="w-full inline-flex justify-between items-center gap-1.5 px-3 h-8 rounded-full border border-cyan-500/40 bg-cyan-600/10 text-cyan-700 dark:text-cyan-400 text-[11px] font-semibold hover:bg-cyan-600/20 transition-colors min-w-0 min-h-0"
-              data-testid="module-open-persuratan"
-            >
-              <Mail className="w-3.5 h-3.5" />
-              Registrasi Persuratan
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          )}
-          {onOpenPengaturan && (
-            <button
-              type="button"
-              onClick={onOpenPengaturan}
-              className="w-full inline-flex justify-between items-center gap-1.5 px-3 h-8 rounded-full border border-slate-500/40 bg-slate-600/10 text-slate-700 dark:text-slate-300 text-[11px] font-semibold hover:bg-slate-600/20 transition-colors min-w-0 min-h-0"
-              data-testid="module-open-pengaturan"
-            >
-              <Settings className="w-3.5 h-3.5" />
-              Pengaturan
-              <ChevronRight className="w-3.5 h-3.5" />
+              <span className="flex items-center gap-1.5 min-w-0 flex-1">
+                <IdCard className="w-3.5 h-3.5 text-sky-500 flex-shrink-0" />
+                <span className="truncate">Master Pegawai</span>
+              </span>
+              <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
             </button>
           )}
           {onOpenSatker && (
             <button
               type="button"
               onClick={onOpenSatker}
-              className="w-full inline-flex justify-between items-center gap-1.5 px-3 h-8 rounded-full border border-emerald-500/40 bg-emerald-600/10 text-emerald-700 dark:text-emerald-400 text-[11px] font-semibold hover:bg-emerald-600/20 transition-colors min-w-0 min-h-0"
+              className="w-full inline-flex items-center gap-1.5 px-3 h-8 rounded-full border border-border bg-muted/40 text-foreground text-[11px] font-semibold hover:bg-muted transition-colors min-w-0 min-h-0"
               data-testid="module-open-satker"
             >
-              <Building2 className="w-3.5 h-3.5" />
-              Master Satker
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          )}
-          {onOpenTtd && (
-            <button
-              type="button"
-              onClick={onOpenTtd}
-              className="w-full inline-flex justify-between items-center gap-1.5 px-3 h-8 rounded-full border border-violet-500/40 bg-violet-600/10 text-violet-600 dark:text-violet-400 text-[11px] font-semibold hover:bg-violet-600/20 transition-colors min-w-0 min-h-0"
-              data-testid="module-open-ttd"
-            >
-              <FileSignature className="w-3.5 h-3.5" />
-              Tanda Tangan Elektronik
-              <ChevronRight className="w-3.5 h-3.5" />
+              <span className="flex items-center gap-1.5 min-w-0 flex-1">
+                <Building2 className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+                <span className="truncate">Master Satker</span>
+              </span>
+              <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
             </button>
           )}
           </div>
+          {(onOpenPersuratan || onOpenTtd || onOpenPengaturan) && (
+            <>
+              <p className="mt-3 mb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Administrasi & Alat</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
+              {onOpenPersuratan && (
+                <button
+                  type="button"
+                  onClick={onOpenPersuratan}
+                  className="w-full inline-flex items-center gap-1.5 px-3 h-8 rounded-full border border-border bg-muted/40 text-foreground text-[11px] font-semibold hover:bg-muted transition-colors min-w-0 min-h-0"
+                  data-testid="module-open-persuratan"
+                >
+                  <span className="flex items-center gap-1.5 min-w-0 flex-1">
+                    <Mail className="w-3.5 h-3.5 text-cyan-500 flex-shrink-0" />
+                    <span className="truncate">Registrasi Persuratan</span>
+                  </span>
+                  <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                </button>
+              )}
+              {onOpenTtd && (
+                <button
+                  type="button"
+                  onClick={onOpenTtd}
+                  className="w-full inline-flex items-center gap-1.5 px-3 h-8 rounded-full border border-border bg-muted/40 text-foreground text-[11px] font-semibold hover:bg-muted transition-colors min-w-0 min-h-0"
+                  data-testid="module-open-ttd"
+                >
+                  <span className="flex items-center gap-1.5 min-w-0 flex-1">
+                    <FileSignature className="w-3.5 h-3.5 text-violet-500 flex-shrink-0" />
+                    <span className="truncate">Tanda Tangan Elektronik</span>
+                  </span>
+                  <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                </button>
+              )}
+              {onOpenPengaturan && (
+                <button
+                  type="button"
+                  onClick={onOpenPengaturan}
+                  className="w-full inline-flex items-center gap-1.5 px-3 h-8 rounded-full border border-border bg-muted/40 text-foreground text-[11px] font-semibold hover:bg-muted transition-colors min-w-0 min-h-0"
+                  data-testid="module-open-pengaturan"
+                >
+                  <span className="flex items-center gap-1.5 min-w-0 flex-1">
+                    <Settings className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
+                    <span className="truncate">Pengaturan</span>
+                  </span>
+                  <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                </button>
+              )}
+              </div>
+            </>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 mt-3">
             {PENATAUSAHAAN_SUBMODULES.map((mod) => {
               const Icon = MODULE_ICONS[mod.id] || Package;
@@ -330,7 +356,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
 
         {/* ── Tahap siklus lainnya ── */}
         <section>
-          <div className="flex items-center gap-2 mb-3 px-1">
+          <div className="flex flex-wrap items-center gap-2 gap-y-1 mb-3 px-1">
             <h3 className="font-bold text-foreground text-sm sm:text-base">Tahap Siklus Lainnya</h3>
             <span className="text-[11px] text-muted-foreground">— kamar sudah disiapkan, modul menyusul bertahap</span>
           </div>
@@ -390,7 +416,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
         </section>
 
         <p className="text-center text-[11px] text-muted-foreground pb-4">
-          Klik modul mana pun untuk melihat konsep & rencana fiturnya. Roadmap lengkap: docs/MASTERPLAN-SIKLUS-BMN.md
+          Klik modul mana pun untuk melihat konsep & rencana fiturnya — info lengkap ada di tombol info di kanan atas.
         </p>
       </main>
 

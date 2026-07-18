@@ -2,11 +2,12 @@ import React, { useCallback, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Building2, ChevronRight, DatabaseBackup, Globe2, Landmark,
-  Loader2, Mail, CalendarClock, Settings as SettingsIcon, ShieldAlert,
+  ArrowLeft, Building2, ChevronRight, DatabaseBackup, Globe2, Info, Landmark,
+  Loader2, Mail, CalendarClock, Moon, Settings as SettingsIcon, ShieldAlert, Sun,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useBackGuard } from "@/hooks/useBackGuard";
+import { useDarkMode } from "@/hooks/useDarkMode";
 import { getApiError } from "../lib/utils";
 import ReportSettingsEditor from "@/components/assets/ReportSettingsEditor";
 import { SatkerPanel } from "./SatkerPage";
@@ -16,7 +17,7 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 /**
  * Pengaturan Terpadu — SATU pintu seluruh setelan aplikasi (Mandat-2):
  *  - Universal : kop/logo/judul laporan global (report_settings) — berlaku
- *    untuk semua satker KECUALI di-override per satker.
+ *    untuk semua satker KECUALI ditimpa per satker.
  *  - Per-Satker: master satker + kop per-satker (menimpa universal).
  *  - Lainnya   : pintasan setelan yang hidup di modulnya (persuratan,
  *    akuntansi/ambang, periode pelaporan) supaya tetap satu pintu.
@@ -24,8 +25,13 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
  *    pemilihan kegiatan (aksi berbahaya sengaja tidak dipindah).
  */
 export default function PengaturanPage({ user, onBack, onOpenSatker,
-  onOpenReferensiAkun, onOpenPersuratan, onOpenPelaporan }) {
+  onOpenReferensiAkun, onOpenPersuratan, onOpenPelaporan, dark, toggleDark }) {
   const isAdmin = user?.role === "admin";
+  // Tema: pakai prop dari App bila diteruskan; fallback hook lokal (state awal
+  // sinkron via localStorage) supaya toggle tetap berfungsi seperti di ModuleHomePage.
+  const temaLokal = useDarkMode();
+  const isDark = dark ?? temaLokal.dark;
+  const toggleTema = toggleDark ?? temaLokal.toggle;
   const [tab, setTab] = useState("universal"); // universal | satker | sistem
   const [backupLoading, setBackupLoading] = useState(false);
 
@@ -71,7 +77,7 @@ export default function PengaturanPage({ user, onBack, onOpenSatker,
     <div className="min-h-screen bg-background" data-testid="pengaturan-page">
       <header className="bg-card/95 backdrop-blur-sm border-b border-border px-3 sm:px-6 py-2.5 sticky top-0 z-40">
         <div className="max-w-5xl mx-auto flex items-center gap-3">
-          <button type="button" onClick={onBack} aria-label="Kembali"
+          <button type="button" onClick={onBack} aria-label="Kembali" title="Kembali"
             className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0"
             data-testid="pengaturan-back">
             <ArrowLeft className="w-4 h-4" />
@@ -80,11 +86,21 @@ export default function PengaturanPage({ user, onBack, onOpenSatker,
             <SettingsIcon className="w-4 h-4 text-white" />
           </span>
           <div className="min-w-0 flex-1">
-            <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight">Pengaturan</h1>
+            <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight truncate">Pengaturan</h1>
             <p className="text-[11px] text-muted-foreground leading-tight truncate">
-              Satu pintu: universal → dapat di-override per-satker → sistem
+              Satu pintu: universal → dapat ditimpa per-satker → sistem
             </p>
           </div>
+          <button
+            type="button"
+            onClick={toggleTema}
+            aria-label={isDark ? "Mode terang" : "Mode gelap"}
+            title={isDark ? "Mode terang" : "Mode gelap"}
+            className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0"
+            data-testid="pengaturan-theme"
+          >
+            {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </button>
         </div>
       </header>
 
@@ -101,10 +117,13 @@ export default function PengaturanPage({ user, onBack, onOpenSatker,
 
         {tab === "universal" && (
           <div className="space-y-3">
-            <p className="text-[11px] text-muted-foreground px-1">
-              Setelan <b>universal</b> berlaku untuk seluruh aplikasi & semua satker.
-              Field kop yang diisi pada tab <b>Per-Satker</b> menimpa nilai di sini untuk laporan satker ybs.
-            </p>
+            <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 px-3 py-2 flex items-start gap-2">
+              <Info className="w-3.5 h-3.5 text-blue-500 flex-shrink-0 mt-0.5" />
+              <p className="text-[11px] text-muted-foreground">
+                Setelan <b>universal</b> berlaku untuk seluruh aplikasi & semua satker.
+                Field kop yang diisi pada tab <b>Per-Satker</b> menimpa nilai di sini untuk laporan satker yang bersangkutan.
+              </p>
+            </div>
             {/* onClose sengaja TIDAK diteruskan: tombol "Tutup" editor dulunya
                 melempar keluar seluruh halaman Pengaturan (bug navigasi). */}
             <ReportSettingsEditor />
@@ -129,13 +148,16 @@ export default function PengaturanPage({ user, onBack, onOpenSatker,
 
         {tab === "satker" && (
           <div className="space-y-2">
-            <p className="text-[11px] text-muted-foreground px-1">
-              Kop per-satker <b>menimpa</b> setelan universal untuk laporan kegiatan satker ybs.
-              Resolusi: kegiatan → satker → universal.
-              {onOpenSatker && (
-                <> {" "}Halaman penuh: <button type="button" className="underline font-semibold min-w-0 min-h-0" onClick={onOpenSatker}>Master Satker</button>.</>
-              )}
-            </p>
+            <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 px-3 py-2 flex items-start gap-2">
+              <Info className="w-3.5 h-3.5 text-blue-500 flex-shrink-0 mt-0.5" />
+              <p className="text-[11px] text-muted-foreground">
+                Kop per-satker <b>menimpa</b> setelan universal untuk laporan kegiatan satker yang bersangkutan.
+                Urutan resolusi: kegiatan → satker → universal.
+                {onOpenSatker && (
+                  <> {" "}Halaman penuh: <button type="button" className="underline font-semibold min-w-0 min-h-0" onClick={onOpenSatker}>Master Satker</button>.</>
+                )}
+              </p>
+            </div>
             <SatkerPanel user={user} />
           </div>
         )}
@@ -147,7 +169,7 @@ export default function PengaturanPage({ user, onBack, onOpenSatker,
                 <DatabaseBackup className="w-4 h-4" />Backup seluruh data
               </p>
               <p className="text-[11px] text-muted-foreground">
-                Mencadangkan SEMUA koleksi data + berkas (GridFS/unggahan) menjadi satu ZIP —
+                Mencadangkan SEMUA koleksi data + berkas (foto & dokumen unggahan) menjadi satu ZIP —
                 daftar koleksi dinamis, modul baru otomatis ikut. Proses berjalan di background.
               </p>
               <Button size="sm" className="h-9 text-xs" disabled={!isAdmin || backupLoading}
@@ -167,6 +189,10 @@ export default function PengaturanPage({ user, onBack, onOpenSatker,
                 berlapis. Reset TIDAK menghapus akun & seluruh setelan/pemetaan (kop, satker,
                 akun BAS, masa manfaat, ambang, persuratan) — semuanya selamat.
               </p>
+              {/* Breadcrumb visual: jalur menuju lokasi aksi restore/reset */}
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-muted-foreground bg-muted rounded-full px-2 py-0.5">
+                Beranda <ChevronRight className="w-3 h-3" /> Inventarisasi Aset <ChevronRight className="w-3 h-3" /> Pilih Kegiatan
+              </span>
             </div>
           </div>
         )}
