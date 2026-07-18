@@ -133,12 +133,14 @@ class TransisiPengajuanIn(BaseModel):
 @penggunaan_router.get("/penggunaan/psp")
 async def daftar_psp(_user: dict = Depends(require_user)):
     """Register SK penetapan penggunaan + rekap + cakupan aset."""
-    items = [s async for s in db.psp.find({}, {"_id": 0})
+    from shared_utils import scope_query_aset, scope_query_field_satker
+    items = [s async for s in db.psp.find(
+                 scope_query_field_satker(_user), {"_id": 0})
              .sort("tanggal_sk", -1).limit(500)]
     for s in items:
         # Normalisasi record lama tanpa field status (= SK sudah terbit)
         s["status_pengajuan"] = status_pengajuan_psp(s)
-    total_aset = await db.assets.count_documents({})
+    total_aset = await db.assets.count_documents(await scope_query_aset(_user, {}))
     ringkasan = rekap_psp(items)
     ringkasan["total_aset"] = total_aset
     return {"items": items, "ringkasan": ringkasan,
@@ -181,16 +183,19 @@ async def catat_psp(payload: PspIn, user: dict = Depends(require_writer)):
     if errors:
         raise HTTPException(status_code=400, detail="; ".join(errors))
     aset_rows = []
+    from shared_utils import kode_satker_user, pastikan_akses_aset
     for aid in dict.fromkeys(data["asset_ids"]):
         a = await db.assets.find_one({"id": aid}, _PROJ_IDLE)
         if not a:
             raise HTTPException(status_code=404, detail=f"Aset {aid} tidak ditemukan")
+        await pastikan_akses_aset(user, a)
         aset_rows.append({"asset_id": a["id"], "asset_code": a.get("asset_code"),
                           "NUP": a.get("NUP"), "asset_name": a.get("asset_name")})
     now = dt.now(timezone.utc).isoformat()
     status_awal = "draf" if data.get("sebagai_draf") else "ditetapkan"
     record = {
         "id": str(uuid.uuid4()),
+        "kode_satker": kode_satker_user(user),
         "nomor_sk": str(data.get("nomor_sk") or "").strip(),
         "tanggal_sk": str(data.get("tanggal_sk") or "").strip()[:10],
         "jenis": data["jenis"],
@@ -468,18 +473,21 @@ class TransisiIdleIn(BaseModel):
 
 
 _PROJ_IDLE = {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
-              "status": 1, "user": 1, "inventory_status": 1, "location": 1}
+              "status": 1, "user": 1, "inventory_status": 1, "location": 1,
+              "activity_id": 1}
 
 
 @penggunaan_router.get("/penggunaan/idle")
 async def daftar_idle(_user: dict = Depends(require_user)):
     """Kandidat BMN idle (PMK 120/2024) + tiket penanganan + ringkasan."""
-    tiket = [t async for t in db.bmn_idle.find({}, {"_id": 0})
+    from shared_utils import scope_query_aset, scope_query_field_satker
+    tiket = [t async for t in db.bmn_idle.find(
+                 scope_query_field_satker(_user), {"_id": 0})
              .sort("created_at", -1).limit(500)]
     tiket_aktif = {t["asset_id"]: t for t in tiket
                    if t.get("status") in ("klarifikasi", "usul_serah")}
     kandidat = []
-    async for a in db.assets.find({}, _PROJ_IDLE):
+    async for a in db.assets.find(await scope_query_aset(_user, {}), _PROJ_IDLE):
         ya, alasan = indikasi_idle(a)
         if not ya:
             continue
@@ -527,6 +535,8 @@ async def buat_tiket_idle(payload: TiketIdleIn, user: dict = Depends(require_wri
     a = await db.assets.find_one({"id": payload.asset_id}, _PROJ_IDLE)
     if not a:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    from shared_utils import kode_satker_user, pastikan_akses_aset
+    await pastikan_akses_aset(user, a)
     ya, alasan = indikasi_idle(a)
     if not ya:
         raise HTTPException(status_code=400,
@@ -540,6 +550,7 @@ async def buat_tiket_idle(payload: TiketIdleIn, user: dict = Depends(require_wri
     now = datetime.now(timezone.utc).isoformat()
     record = {
         "id": str(uuid.uuid4()),
+        "kode_satker": kode_satker_user(user),
         "asset_id": a["id"],
         "asset_code": a.get("asset_code"),
         "NUP": a.get("NUP"),

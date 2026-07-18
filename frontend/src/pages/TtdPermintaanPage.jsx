@@ -3,7 +3,8 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, BadgeCheck, Copy, FileDown, FileSignature, Link2,
-  Loader2, PenTool, Plus, Search, ShieldCheck, Trash2, Users, XCircle,
+  Loader2, Mail, MessageCircle, PenTool, Plus, Search, ShieldCheck,
+  Trash2, Users, XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,6 +49,19 @@ async function salin(teks) {
   } catch {
     toast.error("Gagal menyalin — salin manual dari kolom link");
   }
+}
+
+function pesanTtd(nama, judul, link) {
+  return `Yth. ${nama},\n\nMohon berkenan menandatangani secara elektronik dokumen "${judul}" melalui tautan berikut (berlaku 14 hari, sekali pakai):\n${link}\n\nTerima kasih.`;
+}
+
+function bagikanWa(nama, judul, link) {
+  window.open(`https://wa.me/?text=${encodeURIComponent(pesanTtd(nama, judul, link))}`,
+    "_blank", "noopener");
+}
+
+function bagikanEmail(nama, judul, link) {
+  window.location.href = `mailto:?subject=${encodeURIComponent(`Permintaan Tanda Tangan Elektronik — ${judul}`)}&body=${encodeURIComponent(pesanTtd(nama, judul, link))}`;
 }
 
 /**
@@ -141,11 +155,26 @@ export default function TtdPermintaanPage({ user, onBack }) {
   };
 
   const bukaDetail = async (it) => {
+    setLinkUlang({});
     try {
       const r = await axios.get(`${API}/ttd/permintaan/${it.id}`);
       setDetail(r.data);
     } catch (e) {
       toast.error(apiErr(e, "Gagal memuat detail"));
+    }
+  };
+
+  // Terbitkan ULANG link seorang penanda tangan (link lama otomatis mati).
+  const [linkUlang, setLinkUlang] = useState({}); // {signer_id: link penuh}
+  const terbitkanLink = async (s) => {
+    try {
+      const r = await axios.post(`${API}/ttd/permintaan/${detail.id}/link/${s.signer_id}`);
+      const penuh = r.data.link.startsWith("http")
+        ? r.data.link : `${window.location.origin}${r.data.link}`;
+      setLinkUlang((p) => ({ ...p, [s.signer_id]: penuh }));
+      salin(penuh);
+    } catch (e) {
+      toast.error(apiErr(e, "Gagal menerbitkan ulang link"));
     }
   };
 
@@ -341,6 +370,19 @@ export default function TtdPermintaanPage({ user, onBack }) {
                       onClick={() => salin(penuh)} data-testid={`ttd-salin-${i}`}>
                       <Copy className="w-3 h-3 mr-1" />Salin
                     </Button>
+                    <Button type="button" variant="outline" size="sm"
+                      className="h-8 w-8 p-0 flex-shrink-0 text-emerald-600"
+                      title="Bagikan via WhatsApp"
+                      onClick={() => bagikanWa(l.nama, hasil?.judul, penuh)}
+                      data-testid={`ttd-wa-${i}`}>
+                      <MessageCircle className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button type="button" variant="outline" size="sm"
+                      className="h-8 w-8 p-0 flex-shrink-0"
+                      title="Bagikan via email"
+                      onClick={() => bagikanEmail(l.nama, hasil?.judul, penuh)}>
+                      <Mail className="w-3.5 h-3.5" />
+                    </Button>
                   </div>
                 </div>
               );
@@ -367,22 +409,50 @@ export default function TtdPermintaanPage({ user, onBack }) {
               </DialogHeader>
               <div className="space-y-2">
                 {(detail.signers || []).map((s) => (
-                  <div key={s.signer_id} className="rounded-xl border border-border p-2.5 flex items-center gap-2.5">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold truncate">{s.urutan}. {s.nama}</p>
-                      <p className="text-[11px] text-muted-foreground truncate">
-                        {s.jabatan || "-"}{s.nip ? ` · NIP ${s.nip}` : ""}
-                        {s.signed_at ? ` · ${fmtWaktu(s.signed_at)}` : ""}
-                      </p>
+                  <div key={s.signer_id} className="rounded-xl border border-border p-2.5 space-y-1.5">
+                    <div className="flex items-center gap-2.5">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold truncate">{s.urutan}. {s.nama}</p>
+                        <p className="text-[11px] text-muted-foreground truncate">
+                          {s.jabatan || "-"}{s.nip ? ` · NIP ${s.nip}` : ""}
+                          {s.signed_at ? ` · ${fmtWaktu(s.signed_at)}` : ""}
+                        </p>
+                      </div>
+                      {s.status === "ditandatangani" && s.signature_file_id ? (
+                        <img alt={`TTD ${s.nama}`}
+                          src={`${API}/ttd/tandatangan/${detail.id}/gambar/${s.signer_id}?token=${localStorage.getItem("media_token") || localStorage.getItem("token") || ""}`}
+                          className="h-10 max-w-[90px] object-contain bg-white rounded border border-border p-0.5 flex-shrink-0" />
+                      ) : null}
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0 ${WARNA_SIGNER[s.status] || "bg-muted text-muted-foreground"}`}>
+                        {s.status}
+                      </span>
                     </div>
-                    {s.status === "ditandatangani" && s.signature_file_id ? (
-                      <img alt={`TTD ${s.nama}`}
-                        src={`${API}/ttd/tandatangan/${detail.id}/gambar/${s.signer_id}?token=${localStorage.getItem("media_token") || localStorage.getItem("token") || ""}`}
-                        className="h-10 max-w-[90px] object-contain bg-white rounded border border-border p-0.5 flex-shrink-0" />
-                    ) : null}
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0 ${WARNA_SIGNER[s.status] || "bg-muted text-muted-foreground"}`}>
-                      {s.status}
-                    </span>
+                    {s.status !== "ditandatangani" && detail.status !== "batal" && (
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <Button type="button" variant="outline" size="sm" className="h-7 text-[10px]"
+                          title="Buat link baru (link lama otomatis mati) lalu salin"
+                          onClick={() => terbitkanLink(s)} data-testid={`ttd-link-ulang-${s.signer_id}`}>
+                          <Link2 className="w-3 h-3 mr-1" />Terbitkan Link
+                        </Button>
+                        {linkUlang[s.signer_id] && (
+                          <>
+                            <Button type="button" variant="outline" size="sm"
+                              className="h-7 w-7 p-0 text-emerald-600" title="Bagikan via WhatsApp"
+                              onClick={() => bagikanWa(s.nama, detail.judul, linkUlang[s.signer_id])}>
+                              <MessageCircle className="w-3 h-3" />
+                            </Button>
+                            <Button type="button" variant="outline" size="sm"
+                              className="h-7 w-7 p-0" title="Bagikan via email"
+                              onClick={() => bagikanEmail(s.nama, detail.judul, linkUlang[s.signer_id])}>
+                              <Mail className="w-3 h-3" />
+                            </Button>
+                            <span className="text-[9px] text-muted-foreground truncate max-w-[180px] font-mono">
+                              {linkUlang[s.signer_id]}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
                 <div className="rounded-xl bg-muted/60 p-2.5 text-[11px] text-muted-foreground flex items-start gap-2">

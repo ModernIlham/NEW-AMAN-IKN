@@ -35,8 +35,21 @@ ttd_router = APIRouter()
 _ENTITAS = {"pejabat": db.pejabat, "pegawai": db.pegawai}
 _PROJ = {"_id": 0}
 
-# Basis URL publik untuk link tanda tangan (frontend). Fallback path relatif.
-_APP_URL = os.environ.get("APP_PUBLIC_URL", "").rstrip("/")
+# Basis URL publik untuk link tanda tangan (frontend). Tanpa APP_PUBLIC_URL,
+# jatuh ke origin CORS pertama (deploy nyata selalu mengisinya) supaya link
+# yang dibagikan & QR verifikasi TIDAK pernah berupa path relatif yang mati.
+def _basis_url_publik() -> str:
+    u = os.environ.get("APP_PUBLIC_URL", "").strip().rstrip("/")
+    if u:
+        return u
+    for o in os.environ.get("CORS_ORIGINS", "").split(","):
+        o = o.strip().rstrip("/")
+        if o.startswith("http") and "localhost" not in o:
+            return o
+    return ""
+
+
+_APP_URL = _basis_url_publik()
 
 
 class SpesimenIn(BaseModel):
@@ -262,6 +275,37 @@ async def batal_permintaan(sr_id: str, user: dict = Depends(require_writer)):
     return {"ok": True}
 
 
+@ttd_router.post("/ttd/permintaan/{sr_id}/link/{signer_id}")
+async def buat_ulang_link(sr_id: str, signer_id: str,
+                          user: dict = Depends(require_writer)):
+    """Terbitkan ULANG link e-sign seorang penanda tangan (pembuat/admin) —
+    dipakai bila link hilang setelah dialog pembuatan ditutup, atau link lama
+    kedaluwarsa/tersebar keliru. jti BARU dibuat sehingga link lama langsung
+    MATI (sekali-pakai tetap terjaga). Ditolak bila sudah ditandatangani."""
+    sr = await db.signature_requests.find_one({"id": sr_id}, _PROJ)
+    if not sr or sr.get("status") == "batal":
+        raise HTTPException(status_code=404, detail="Permintaan tidak ditemukan/dibatalkan")
+    if sr.get("created_by") != user.get("username") and user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Hanya pembuat/admin dapat menerbitkan ulang link")
+    signers = sr.get("signers") or []
+    idx = next((i for i, s in enumerate(signers)
+                if s.get("signer_id") == signer_id), -1)
+    if idx < 0:
+        raise HTTPException(status_code=404, detail="Penanda tangan tidak dikenal")
+    if signers[idx].get("status") == "ditandatangani":
+        raise HTTPException(status_code=409, detail="Sudah ditandatangani — link tidak diperlukan")
+    jti = str(uuid.uuid4())
+    await db.signature_requests.update_one(
+        {"id": sr_id, "signers.signer_id": signer_id},
+        {"$set": {"signers.$.jti": jti}})
+    token = create_sign_token(sr_id, signer_id, jti)
+    await log_audit("terbit_ulang_link_ttd", "", sr_id,
+                    username=user.get("username", "system"),
+                    detail=f"Link e-sign diterbitkan ulang untuk {signers[idx].get('nama')}")
+    return {"nama": signers[idx].get("nama"), "status": signers[idx].get("status"),
+            "link": _link_ttd(sr_id, token)}
+
+
 @ttd_router.get("/ttd/tandatangan/{sr_id}")
 async def info_tandatangan(sr_id: str, tok: dict = Depends(require_sign_token)):
     """Info dokumen + penanda tangan untuk HALAMAN PUBLIK (link e-sign)."""
@@ -273,6 +317,11 @@ async def info_tandatangan(sr_id: str, tok: dict = Depends(require_sign_token)):
     sg = next((s for s in sr.get("signers") or [] if s.get("signer_id") == tok["signer"]), None)
     if not sg:
         raise HTTPException(status_code=404, detail="Penanda tangan tidak dikenal")
+    # Link LAMA yang jti-nya sudah diganti (terbit ulang) harus mati juga di
+    # halaman info — bukan hanya saat kirim.
+    if sg.get("jti") != tok["jti"]:
+        raise HTTPException(status_code=401,
+                            detail="Link ini sudah tidak berlaku (telah diterbitkan ulang)")
     bisa = sg.get("status") == "aktif"
     alasan = ""
     if sg.get("status") == "ditandatangani":
@@ -316,20 +365,49 @@ async def kirim_tandatangan(sr_id: str, payload: SpesimenIn, request: Request,
     await grid_in.close()
     h = hashlib.sha256(data + sg["signer_id"].encode() + now.isoformat().encode()).hexdigest()
 
-    signers[idx].update({
-        "status": "ditandatangani", "signature_file_id": str(file_id),
-        "hash": h, "signed_at": now.isoformat(),
-        "ip": (request.client.host if request.client else "")})
-    # Aktifkan berikutnya (mode berurutan) & hitung status dokumen.
-    if sr.get("mode") == "berurutan":
-        nxt = next((i for i, s in enumerate(signers)
-                    if s.get("status") == "menunggu"), -1)
-        if nxt >= 0:
-            signers[nxt]["status"] = "aktif"
-    semua = all(s.get("status") == "ditandatangani" for s in signers)
+    # TULIS ATOMIK per-signer ($elemMatch + operator posisional) — BUKAN
+    # menulis balik seluruh array. Dua penanda tangan PARALEL yang submit
+    # bersamaan tidak lagi saling menimpa (lost-update), dan filter jti/
+    # status/batal di sini menutup jendela race pembatalan/link-lama yang
+    # terbuka selama upload GridFS multi-await di atas.
+    res = await db.signature_requests.update_one(
+        {"id": sr_id, "status": {"$ne": "batal"},
+         "signers": {"$elemMatch": {"signer_id": tok["signer"],
+                                    "jti": tok["jti"], "status": "aktif"}}},
+        {"$set": {"signers.$.status": "ditandatangani",
+                  "signers.$.signature_file_id": str(file_id),
+                  "signers.$.hash": h,
+                  "signers.$.signed_at": now.isoformat(),
+                  "signers.$.ip": (request.client.host if request.client else "")}})
+    if res.modified_count == 0:
+        # Kalah race (sudah ttd / dibatalkan / link diganti) — bersihkan blob.
+        try:
+            await fs_bucket.delete(file_id)
+        except Exception:
+            pass
+        raise HTTPException(status_code=409,
+                            detail="Link sudah dipakai / permintaan berubah — muat ulang halaman")
+
+    # Langkah 2 (idempoten, baca kondisi TERKINI): aktifkan giliran berikutnya
+    # (mode berurutan) & hitung status dokumen dari keadaan nyata.
+    segar = await db.signature_requests.find_one(
+        {"id": sr_id}, {"_id": 0, "mode": 1, "status": 1, "signers.status": 1,
+                        "signers.signer_id": 1})
+    signers_segar = (segar or {}).get("signers") or []
+    if (segar or {}).get("mode") == "berurutan":
+        nxt = next((s.get("signer_id") for s in signers_segar
+                    if s.get("status") == "menunggu"), None)
+        if nxt:
+            await db.signature_requests.update_one(
+                {"id": sr_id, "status": {"$ne": "batal"},
+                 "signers": {"$elemMatch": {"signer_id": nxt, "status": "menunggu"}}},
+                {"$set": {"signers.$.status": "aktif"}})
+    semua = bool(signers_segar) and all(
+        s.get("status") == "ditandatangani" for s in signers_segar)
     status_dok = "selesai" if semua else "sebagian"
     await db.signature_requests.update_one(
-        {"id": sr_id}, {"$set": {"signers": signers, "status": status_dok}})
+        {"id": sr_id, "status": {"$ne": "batal"}},
+        {"$set": {"status": status_dok}})
     await log_audit("kirim_ttd", "", sr_id, username=sg.get("nama") or "tamu",
                     detail=f"E-sign '{sr.get('judul')}' oleh {sg.get('nama')}")
     return {"ok": True, "status_dokumen": status_dok,

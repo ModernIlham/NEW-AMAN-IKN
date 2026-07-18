@@ -93,10 +93,20 @@ async def require_user_or_sign_token(
 ) -> dict:
     """Gate untuk endpoint yang dipakai BAIK oleh user login MAUPUN penanda
     tangan tamu (halaman link e-sign) — mis. olah foto TTD. Prioritas header
-    Bearer; fallback ?token= bertipe sign."""
+    Bearer; ?token= bertipe sign tetap DICOBA bila Bearer gagal — tamu yang
+    membawa token sesi BASI di localStorage (interceptor global memasangnya
+    otomatis) tidak boleh terkunci padahal link e-sign-nya valid."""
+    bearer_err = None
     if authorization and authorization.startswith("Bearer "):
-        return await _decode_bearer(authorization)
-    tok = await require_sign_token(token)
+        try:
+            return await _decode_bearer(authorization)
+        except HTTPException as e:
+            bearer_err = e
+    try:
+        tok = await require_sign_token(token)
+    except HTTPException:
+        raise bearer_err or HTTPException(status_code=401,
+                                          detail="Autentikasi diperlukan")
     return {"guest": True, "sign": tok, "username": "tamu-ttd", "role": "tamu"}
 
 

@@ -21,7 +21,9 @@ from pydantic import BaseModel
 
 from db import db
 from auth_utils import require_user, require_admin, require_user_or_query_token
-from shared_utils import ambang_kapitalisasi, get_photo_from_gridfs, pengaturan_kop
+from shared_utils import (pastikan_akses_kegiatan_id, ambang_kapitalisasi,
+                          get_photo_from_gridfs, pengaturan_kop,
+                          scope_query_aset)
 from report_filters import active_asset_filter
 from report_utils import hitung_status_stiker, distribusi_pengguna
 from markupsafe import Markup
@@ -735,6 +737,7 @@ async def get_rekapitulasi(activity_id: str, _user: dict = Depends(require_user_
     activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+    await pastikan_akses_kegiatan_id(_user, activity_id)
 
     # proyeksi: buang media base64 yang tidak dipakai laporan ini (hemat memori/IO)
     assets = await db.assets.find(
@@ -831,6 +834,7 @@ async def generate_berita_acara_pdf(activity_id: str, _user: dict = Depends(requ
     activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+    await pastikan_akses_kegiatan_id(_user, activity_id)
 
     settings = await pengaturan_kop(activity)
     # proyeksi: buang media base64 yang tidak dipakai laporan ini (hemat memori/IO)
@@ -1032,6 +1036,7 @@ async def generate_sptjm_pdf(activity_id: str, _user: dict = Depends(require_use
     activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+    await pastikan_akses_kegiatan_id(_user, activity_id)
 
     settings = await pengaturan_kop(activity)
     # proyeksi: buang media base64 yang tidak dipakai laporan ini (hemat memori/IO)
@@ -1150,6 +1155,7 @@ async def generate_surat_koreksi_pdf(activity_id: str, _user: dict = Depends(req
     activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+    await pastikan_akses_kegiatan_id(_user, activity_id)
 
     settings = await pengaturan_kop(activity)
     # proyeksi: buang media base64 yang tidak dipakai laporan ini (hemat memori/IO)
@@ -1311,6 +1317,7 @@ async def generate_dbhi_pdf(activity_id: str, dbhi_type: str, _user: dict = Depe
     activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+    await pastikan_akses_kegiatan_id(_user, activity_id)
 
     settings = await pengaturan_kop(activity)
     # proyeksi: buang media base64 yang tidak dipakai laporan ini (hemat memori/IO)
@@ -1488,6 +1495,7 @@ async def generate_rhi_pdf(activity_id: str, _user: dict = Depends(require_user_
     activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+    await pastikan_akses_kegiatan_id(_user, activity_id)
 
     settings = await pengaturan_kop(activity)
     # proyeksi: buang media base64 yang tidak dipakai laporan ini (hemat memori/IO)
@@ -1621,6 +1629,7 @@ async def generate_dbkp_pdf(activity_id: str, _user: dict = Depends(require_user
     activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+    await pastikan_akses_kegiatan_id(_user, activity_id)
 
     settings = await pengaturan_kop(activity)
     # Kecualikan aset yang sudah DIHAPUS (SK penghapusan, #234) agar DBKP tidak
@@ -1757,7 +1766,7 @@ async def generate_posisi_bmn_pdf(_user: dict = Depends(require_user_or_query_to
     # Posisi BMN di Neraca: hanya aset yang MASIH dimiliki — aset ber-SK
     # penghapusan (#234) dikecualikan agar nilai neraca tidak lebih saji (§5A).
     assets = await db.assets.find(
-        active_asset_filter(),
+        await scope_query_aset(_user, active_asset_filter()),
         {"_id": 0, "asset_code": 1, "purchase_price": 1, "nilai_wajar_terakhir": 1},
     ).to_list(500000)
 
@@ -1890,7 +1899,7 @@ async def generate_dbr_pdf(_user: dict = Depends(require_user_or_query_token)):
 
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
     assets = await db.assets.find(
-        active_asset_filter(),
+        await scope_query_aset(_user, active_asset_filter()),
         {"_id": 0, "asset_code": 1, "NUP": 1, "asset_name": 1, "condition": 1,
          "purchase_price": 1, "location": 1, "operasional_jenis": 1, "user": 1},
     ).to_list(500000)
@@ -1969,7 +1978,7 @@ async def generate_kir_pdf(_user: dict = Depends(require_user_or_query_token)):
 
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
     assets = await db.assets.find(
-        active_asset_filter(),
+        await scope_query_aset(_user, active_asset_filter()),
         {"_id": 0, "asset_code": 1, "NUP": 1, "asset_name": 1, "condition": 1,
          "purchase_price": 1, "location": 1, "operasional_jenis": 1, "user": 1},
     ).to_list(500000)
@@ -2075,7 +2084,7 @@ async def generate_penyusutan_pdf(
     proj = {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
             "purchase_price": 1, "purchase_date": 1, "condition": 1,
             "inventory_status": 1, "nilai_wajar_terakhir": 1, "revaluasi": 1}
-    assets = await db.assets.find(active_asset_filter(), proj).to_list(500000)
+    assets = await db.assets.find(await scope_query_aset(_user, active_asset_filter()), proj).to_list(500000)
     diusulkan_ids = set()
     async for u in db.usulan_penghapusan.find(
             {"status": {"$ne": "ditolak"}}, {"_id": 0, "asset_id": 1}):
@@ -2341,7 +2350,7 @@ async def generate_lkb_pdf(_user: dict = Depends(require_user_or_query_token)):
     # dihapus=True) TIDAK ikut, selaras DBKP/Posisi Neraca/penyusutan/rekonsiliasi
     # (temuan review: tanpa filter ini LKB lebih saji & tak pernah rekon).
     assets = await db.assets.find(
-        active_asset_filter(),
+        await scope_query_aset(_user, active_asset_filter()),
         {"_id": 0, "asset_code": 1, "NUP": 1, "asset_name": 1,
          "condition": 1, "purchase_price": 1},
     ).to_list(500000)
@@ -2740,7 +2749,7 @@ async def generate_rekonsiliasi_xlsx(_user: dict = Depends(require_user_or_query
     # ber-SK penghapusan agar sandingan SAKTI/MonSAKTI tidak selisih hanya karena
     # aset yang sudah dihapus masih ikut terhitung (§5A Prinsip 3).
     assets = await db.assets.find(
-        active_asset_filter(),
+        await scope_query_aset(_user, active_asset_filter()),
         {"_id": 0, "asset_code": 1, "NUP": 1, "asset_name": 1,
          "purchase_price": 1, "location": 1, "condition": 1,
          "nilai_wajar_terakhir": 1},
@@ -2868,6 +2877,7 @@ async def generate_bahi_pdf(activity_id: str, _user: dict = Depends(require_user
     activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+    await pastikan_akses_kegiatan_id(_user, activity_id)
 
     settings = await pengaturan_kop(activity)
     # proyeksi: buang media base64 yang tidak dipakai laporan ini (hemat memori/IO)
@@ -3043,6 +3053,7 @@ async def generate_sp_hasil_pdf(activity_id: str, _user: dict = Depends(require_
     activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+    await pastikan_akses_kegiatan_id(_user, activity_id)
 
     settings = await pengaturan_kop(activity)
     ident = _activity_identity(activity, settings)
@@ -3127,6 +3138,7 @@ async def generate_sp_pelaksanaan_pdf(activity_id: str, _user: dict = Depends(re
     activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+    await pastikan_akses_kegiatan_id(_user, activity_id)
 
     settings = await pengaturan_kop(activity)
     ident = _activity_identity(activity, settings)
@@ -3906,6 +3918,7 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
 async def executive_summary_html(activity_id: str, detail_fields: str = "",
                                  _user: dict = Depends(require_user_or_query_token)):
     """Serve Executive Summary as interactive HTML preview with real data"""
+    await pastikan_akses_kegiatan_id(_user, activity_id)
     from jinja2 import Environment, FileSystemLoader
     data = await _build_executive_summary_data(activity_id, _parse_detail_fields(detail_fields),
                                                with_asset_rows=False)
@@ -3922,6 +3935,7 @@ async def executive_summary_html(activity_id: str, detail_fields: str = "",
 async def generate_executive_summary_pdf(activity_id: str, detail_fields: str = "",
                                          _user: dict = Depends(require_user_or_query_token)):
     """Generate Executive Summary PDF (Part 1: Summary only, no data detail)."""
+    await pastikan_akses_kegiatan_id(_user, activity_id)
     from jinja2 import Environment, FileSystemLoader
     import weasyprint
 
@@ -3951,6 +3965,7 @@ async def generate_executive_data_pdf(activity_id: str, page: int = 1, detail_fi
 
     Each page contains up to 499 assets. page=1 -> assets 1-499, page=2 -> 500-998, etc.
     """
+    await pastikan_akses_kegiatan_id(_user, activity_id)
     from jinja2 import Environment, FileSystemLoader
     import weasyprint
 
@@ -3993,6 +4008,7 @@ async def generate_executive_data_pdf(activity_id: str, page: int = 1, detail_fi
 async def executive_data_info(activity_id: str, detail_fields: str = "",
                               _user: dict = Depends(require_user_or_query_token)):
     """Return info about how many data download pages are available."""
+    await pastikan_akses_kegiatan_id(_user, activity_id)
     data = await _build_executive_summary_data(activity_id, _parse_detail_fields(detail_fields),
                                                with_asset_rows=False)
     if not data:
@@ -4242,6 +4258,7 @@ async def _build_executive_grouped_data(activity_id: str, detail_fields=None):
 async def executive_grouped_html(activity_id: str, detail_fields: str = "",
                                  _user: dict = Depends(require_user_or_query_token)):
     """Serve Laporan Eksekutif per Barang Serupa as HTML preview"""
+    await pastikan_akses_kegiatan_id(_user, activity_id)
     from jinja2 import Environment, FileSystemLoader
     data = await _build_executive_grouped_data(activity_id, _parse_detail_fields(detail_fields))
     if not data:
@@ -4256,6 +4273,7 @@ async def executive_grouped_html(activity_id: str, detail_fields: str = "",
 async def generate_executive_grouped_pdf(activity_id: str, detail_fields: str = "",
                                          _user: dict = Depends(require_user_or_query_token)):
     """Generate Laporan Eksekutif per Barang Serupa (grouped assets) PDF"""
+    await pastikan_akses_kegiatan_id(_user, activity_id)
     from jinja2 import Environment, FileSystemLoader
     import weasyprint
 
@@ -4518,6 +4536,7 @@ async def _build_satker_report_v2(activity_id: str):
 @reports_router.get("/inventory-activities/{activity_id}/laporan-satker-html")
 async def laporan_satker_html(activity_id: str, _user: dict = Depends(require_user_or_query_token)):
     """Serve Laporan per Satker as interactive HTML preview - aggregates ALL activities for this satker"""
+    await pastikan_akses_kegiatan_id(_user, activity_id)
     from jinja2 import Environment, FileSystemLoader
     data = await _build_satker_report_v2(activity_id)
     if not data:
@@ -4532,6 +4551,7 @@ async def laporan_satker_html(activity_id: str, _user: dict = Depends(require_us
 @reports_router.get("/inventory-activities/{activity_id}/laporan-satker-pdf")
 async def laporan_satker_pdf(activity_id: str, _user: dict = Depends(require_user_or_query_token)):
     """Generate Laporan per Satker as PDF using weasyprint"""
+    await pastikan_akses_kegiatan_id(_user, activity_id)
     from jinja2 import Environment, FileSystemLoader
     import weasyprint
     data = await _build_satker_report_v2(activity_id)
@@ -4574,6 +4594,7 @@ async def generate_lhi_pdf(activity_id: str, _user: dict = Depends(require_user_
     activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+    await pastikan_akses_kegiatan_id(_user, activity_id)
 
     settings = await pengaturan_kop(activity)
 
@@ -4662,6 +4683,7 @@ async def batch_download_pdf_zip(activity_id: str, request: BatchPDFRequest,
     activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+    await pastikan_akses_kegiatan_id(_user, activity_id)
 
     if not request.types:
         raise HTTPException(status_code=400, detail="Pilih minimal satu laporan")

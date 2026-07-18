@@ -46,13 +46,17 @@ _PROJ_ASET = {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
 _MAKS_TAMPIL = 100
 
 
-async def _data_pemantauan(ambang_hari: int):
-    """Kumpulkan register → (periode, per_objek, rekap, total_aset)."""
+async def _data_pemantauan(ambang_hari: int, user=None):
+    """Kumpulkan register → (periode, per_objek, rekap, total_aset).
+    Ter-scope satker `user` bila diberikan (M-SCOPE) — pemanggil endpoint
+    WAJIB meneruskan user agar rekap tidak mencampur satker lain."""
+    from shared_utils import scope_query_aset
     today_iso = datetime.now(timezone.utc).date().isoformat()
     periode = periode_wasdal(today_iso)
     tahun = periode["tahun"]
 
-    assets = [a async for a in db.assets.find({}, _PROJ_ASET)]
+    q_aset = await scope_query_aset(user, {}) if user is not None else {}
+    assets = [a async for a in db.assets.find(q_aset, _PROJ_ASET)]
     pemanfaatan = [p async for p in db.pemanfaatan.find(
         {}, {"_id": 0, "id": 1, "bentuk": 1, "pihak": 1, "asset_name": 1,
              "berakhir": 1, "nomor_persetujuan": 1, "nomor_perjanjian": 1,
@@ -80,7 +84,7 @@ async def pemantauan_wasdal(
     _user: dict = Depends(require_user),
 ):
     """Temuan pemantauan per objek wasdal + rekap + periode berjalan."""
-    periode, per_objek, rekap, total_aset = await _data_pemantauan(ambang_hari)
+    periode, per_objek, rekap, total_aset = await _data_pemantauan(ambang_hari, _user)
     # Ringkasan register Pengamanan & Penggunaan (temuan review #12 — dulu
     # wasdal tak membaca kedua register itu). Additif: UI lama tetap jalan.
     lintas_modul = {
@@ -616,7 +620,7 @@ async def laporan_wasdal_pdf(
     )
 
     _MAKS_RINCI = 30
-    periode, per_objek, rekap, total_aset = await _data_pemantauan(ambang_hari)
+    periode, per_objek, rekap, total_aset = await _data_pemantauan(ambang_hari, _user)
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
 
     buffer = BytesIO()
@@ -721,7 +725,8 @@ async def _data_portofolio(user):
     q = await scope_query_aset(user, active_asset_filter())
     assets = await db.assets.find(
         q, {"_id": 0, "asset_code": 1, "purchase_price": 1,
-            "nilai_wajar_terakhir": 1, "sengketa": 1, "status": 1}).to_list(500000)
+            "nilai_wajar_terakhir": 1, "status": 1, "inventory_status": 1,
+            "nomor_perkara": 1, "pihak_bersengketa": 1}).to_list(500000)
     uraian_map = {k: u for k, u in GOLONGAN_DEFAULTS}
     rows, total = build_dbkp_rows(assets, uraian_map,
                                   ambang=await ambang_kapitalisasi())
@@ -765,7 +770,7 @@ async def laporan_tahunan_wasdal_pdf(
     th = tahun or datetime.now(timezone.utc).year
     awal, akhir = f"{th}-01-01", f"{th}-12-31"
 
-    periode, per_objek, rekap, total_aset = await _data_pemantauan(AMBANG_BERLARUT_HARI)
+    periode, per_objek, rekap, total_aset = await _data_pemantauan(AMBANG_BERLARUT_HARI, _user)
     porto = await _data_portofolio(_user)
     tertib = [t async for t in db.penertiban.find(
         {"created_at": {"$gte": awal, "$lte": akhir + "T~"}}, {"_id": 0})]
@@ -848,7 +853,7 @@ async def laporan_tahunan_wasdal_pdf(
         f"(PMK 138/2024) memakai tabel standar pada modul Perencanaan "
         f"({len(porto['sbsk'])} baris standar terdaftar).", st['Small']))
     el.append(Spacer(1, 6 * rl_mm))
-    el.append(_signature_block([await blok_ttd_kpb_titik(settings)], doc.width))
+    el.extend(_signature_block([await blok_ttd_kpb_titik(settings)], doc.width))
 
     footer = _page_footer_factory("Laporan Tahunan Wasdal")
     doc.build(el, onFirstPage=footer, onLaterPages=footer)

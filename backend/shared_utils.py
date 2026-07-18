@@ -536,6 +536,30 @@ async def pastikan_akses_aset(user, asset) -> None:
     await pastikan_akses_kegiatan_id(user, (asset or {}).get("activity_id"))
 
 
+def scope_query_field_satker(user, query=None, field="kode_satker") -> dict:
+    """Filter koleksi yang MEMBAWA kode_satker langsung di dokumennya
+    (persediaan, PSP, idle, …): user terikat melihat dokumen satkernya +
+    dokumen ERA LAMA tanpa kode (kosong/None/tak ada — $in dengan None juga
+    cocok untuk field yang hilang); user lintas-satker melihat semua."""
+    q = dict(query or {})
+    kode = kode_satker_user(user)
+    if kode:
+        q[field] = {"$in": [kode, "", None]}
+    return q
+
+
+async def pastikan_akses_dok_satker(user, doc, field="kode_satker") -> None:
+    """403 bila dokumen terikat satker LAIN (field terisi & berbeda).
+    Dokumen era lama tanpa kode tetap terbuka — konsisten dengan kegiatan."""
+    from fastapi import HTTPException
+    kode = kode_satker_user(user)
+    milik = str((doc or {}).get(field) or "").strip()
+    if kode and milik and milik != kode:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Data milik satker {milik} — akun Anda terikat satker {kode}")
+
+
 async def pengaturan_kop(activity=None, kode_satker=""):
     """Setelan kop EFEKTIF untuk laporan sebuah kegiatan: report_settings
     global di-overlay kop MASTER SATKER (field non-kosong menimpa) berdasar

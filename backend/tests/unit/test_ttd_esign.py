@@ -37,6 +37,25 @@ def test_require_sign_token_valid_dan_invalid():
     assert e3.value.status_code == 401
 
 
+def test_fallback_sign_token_saat_bearer_basi():
+    """Tamu dengan token sesi KEDALUWARSA di localStorage (interceptor global
+    memasangnya otomatis) harus tetap bisa memakai link e-sign yang valid."""
+    import time as _t
+
+    import auth_utils as au
+    basi = pyjwt.encode({"user_id": "u1", "username": "x",
+                         "exp": _t.time() - 10}, au.JWT_SECRET,
+                        algorithm=au.JWT_ALGORITHM)
+    sign = au.create_sign_token("sr-1", "sg-1", "jti-1")
+    out = asyncio.run(au.require_user_or_sign_token(
+        authorization=f"Bearer {basi}", token=sign))
+    assert out.get("guest") is True and out["sign"]["sr"] == "sr-1"
+    # Bearer basi TANPA sign token → tetap 401 (pesan bearer)
+    with pytest.raises(HTTPException):
+        asyncio.run(au.require_user_or_sign_token(
+            authorization=f"Bearer {basi}", token=""))
+
+
 def test_link_ttd_relatif_dan_absolut():
     from routes import ttd as t
     lama = t._APP_URL

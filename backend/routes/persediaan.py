@@ -1030,7 +1030,8 @@ async def list_persediaan(
 ):
     """Daftar master persediaan: cari kode/nama/merk, filter status stok
     dan Lokasi/Gudang (padanan persis, abaikan kapital)."""
-    query = {}
+    from shared_utils import scope_query_field_satker
+    query = scope_query_field_satker(_user)
     if gudang.strip():
         query["lokasi"] = {"$regex": f"^{re.escape(gudang.strip())}$",
                            "$options": "i"}
@@ -1076,6 +1077,8 @@ async def get_persediaan(item_id: str, _user: dict = Depends(require_user)):
     item = await db.persediaan.find_one({"id": item_id}, {"_id": 0})
     if not item:
         raise HTTPException(status_code=404, detail="Barang persediaan tidak ditemukan")
+    from shared_utils import pastikan_akses_dok_satker
+    await pastikan_akses_dok_satker(_user, item)
     out = _doc(item)
     out["batches"] = item.get("batches") or []  # detail menampilkan layer FIFO
     return out
@@ -1110,9 +1113,12 @@ async def create_persediaan(data: PersediaanCreate, _user: dict = Depends(requir
         raise HTTPException(status_code=409, detail=f"Kode {kode} NUP {nup} sudah terdaftar")
 
     now = datetime.now(timezone.utc).isoformat()
+    from shared_utils import kode_satker_user
     doc = {
         "id": str(uuid.uuid4()),
         "kode_barang": kode,
+        # ISOLASI SATKER: item baru terikat satker pembuat ('' = lintas).
+        "kode_satker": kode_satker_user(_user),
         "nup": nup,
         "nup_num": int(nup) if nup.isdigit() else 0,
         "nama_barang": data.nama_barang.strip(),
@@ -1142,6 +1148,11 @@ async def update_persediaan(
     _user: dict = Depends(require_writer),
 ):
     """Ubah field non-identitas master (OCC: wajib If-Match versi terkini)."""
+    from shared_utils import pastikan_akses_dok_satker
+    _item_scope = await db.persediaan.find_one(
+        {"id": item_id}, {"_id": 0, "kode_satker": 1})
+    if _item_scope:
+        await pastikan_akses_dok_satker(_user, _item_scope)
     # Whitelist dari registry (persediaan_fields) — field identitas/terkelola
     # sistem tak akan pernah lolos meski model berubah; test registry menjaga.
     updates = {}
@@ -1226,6 +1237,8 @@ async def transaksi_masuk(item_id: str, data: TransaksiMasukIn, user: dict = Dep
     item = await db.persediaan.find_one({"id": item_id}, {"_id": 0})
     if not item:
         raise HTTPException(status_code=404, detail="Barang persediaan tidak ditemukan")
+    from shared_utils import pastikan_akses_dok_satker
+    await pastikan_akses_dok_satker(_user, item)
 
     expired = (data.expired or item.get("expired_default") or "").strip()
     layer = buat_layer(batch_id, now.isoformat(), data.jumlah, data.harga_satuan, expired, ref)
@@ -1307,6 +1320,8 @@ async def transaksi_keluar(item_id: str, data: TransaksiKeluarIn, user: dict = D
         item = await db.persediaan.find_one({"id": item_id}, {"_id": 0})
         if not item:
             raise HTTPException(status_code=404, detail="Barang persediaan tidak ditemukan")
+        from shared_utils import pastikan_akses_dok_satker
+        await pastikan_akses_dok_satker(_user, item)
         stok_sebelum = int(item.get("stok", 0) or 0)
         ok, err = validate_transaksi_keluar(data.jenis, data.jumlah, stok_sebelum)
         if not ok:
@@ -1390,6 +1405,8 @@ async def pindah_gudang_persediaan(item_id: str, data: PindahGudangIn,
     item = await db.persediaan.find_one({"id": item_id}, {"_id": 0})
     if not item:
         raise HTTPException(status_code=404, detail="Barang persediaan tidak ditemukan")
+    from shared_utils import pastikan_akses_dok_satker
+    await pastikan_akses_dok_satker(_user, item)
     lokasi_lama = str(item.get("lokasi") or "").strip()
     ok, err = validate_pindah_gudang(lokasi_lama, data.lokasi_baru)
     if not ok:
@@ -1463,6 +1480,8 @@ async def opname_persediaan(item_id: str, data: OpnameIn, user: dict = Depends(r
         item = await db.persediaan.find_one({"id": item_id}, {"_id": 0})
         if not item:
             raise HTTPException(status_code=404, detail="Barang persediaan tidak ditemukan")
+        from shared_utils import pastikan_akses_dok_satker
+        await pastikan_akses_dok_satker(_user, item)
         stok_sebelum = int(item.get("stok", 0) or 0)
         batches_lama = item.get("batches") or []
         batch_id = str(uuid.uuid4())
@@ -1562,6 +1581,8 @@ async def kartu_barang_pdf(item_id: str, _user: dict = Depends(require_user)):
     item = await db.persediaan.find_one({"id": item_id}, {"_id": 0})
     if not item:
         raise HTTPException(status_code=404, detail="Barang persediaan tidak ditemukan")
+    from shared_utils import pastikan_akses_dok_satker
+    await pastikan_akses_dok_satker(_user, item)
     rows = [r async for r in db.transaksi_persediaan
             .find({"persediaan_id": item_id}, {"_id": 0}).sort("timestamp", 1)]
     if not rows:
@@ -1642,6 +1663,8 @@ async def delete_persediaan(item_id: str, _admin: dict = Depends(require_admin))
     item = await db.persediaan.find_one({"id": item_id}, {"_id": 0, "stok": 1, "batches": 1})
     if not item:
         raise HTTPException(status_code=404, detail="Barang persediaan tidak ditemukan")
+    from shared_utils import pastikan_akses_dok_satker
+    await pastikan_akses_dok_satker(_user, item)
     if int(item.get("stok", 0) or 0) > 0 or (item.get("batches") or []):
         raise HTTPException(status_code=409,
                             detail="Barang masih punya stok/layer — keluarkan stoknya dulu lewat transaksi")

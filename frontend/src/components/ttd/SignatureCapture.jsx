@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback } from "react";
+import React, { useRef, useState, useCallback, useEffect } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import SignatureCanvas from "react-signature-canvas";
@@ -26,6 +26,32 @@ export default function SignatureCapture({ onSave, saving = false, tokenQuery = 
   const [olah, setOlah] = useState(false);
   const sigRef = useRef(null);
   const fileRef = useRef(null);
+  const wrapRef = useRef(null);
+
+  // Kanvas HARUS diukur ulang mengikuti lebar container × devicePixelRatio —
+  // width/height statis + CSS w-full membuat koordinat goresan MELESET dari
+  // jari/kursor (skala CSS ≠ skala bitmap) dan buram di layar HP. Pola resmi
+  // signature_pad: set bitmap = ukuran CSS × ratio lalu ctx.scale(ratio).
+  useEffect(() => {
+    if (mode !== "gambar") return;
+    const resize = () => {
+      const canvas = sigRef.current?.getCanvas?.();
+      const wrap = wrapRef.current;
+      if (!canvas || !wrap) return;
+      const ratio = Math.max(window.devicePixelRatio || 1, 1);
+      const w = wrap.clientWidth || 560;
+      const h = 200;
+      canvas.width = w * ratio;
+      canvas.height = h * ratio;
+      canvas.style.width = `${w}px`;
+      canvas.style.height = `${h}px`;
+      canvas.getContext("2d").scale(ratio, ratio);
+      sigRef.current?.clear();
+    };
+    resize();
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
+  }, [mode]);
 
   const bersihkan = useCallback(() => {
     sigRef.current?.clear();
@@ -86,11 +112,12 @@ export default function SignatureCapture({ onSave, saving = false, tokenQuery = 
       </div>
 
       {mode === "gambar" ? (
-        <div className="rounded-xl border-2 border-dashed border-border bg-[repeating-linear-gradient(45deg,transparent,transparent_10px,rgba(120,120,120,0.05)_10px,rgba(120,120,120,0.05)_20px)] overflow-hidden">
+        <div ref={wrapRef}
+          className="rounded-xl border-2 border-dashed border-border bg-[repeating-linear-gradient(45deg,transparent,transparent_10px,rgba(120,120,120,0.05)_10px,rgba(120,120,120,0.05)_20px)] overflow-hidden">
           <SignatureCanvas ref={sigRef}
             penColor="#0f172a"
             minWidth={0.7} maxWidth={2.9} velocityFilterWeight={0.7}
-            canvasProps={{ width: 560, height: 200, className: "w-full touch-none", "data-testid": "ttd-canvas" }} />
+            canvasProps={{ className: "touch-none block", "data-testid": "ttd-canvas" }} />
         </div>
       ) : (
         <div className="rounded-xl border-2 border-dashed border-border p-3 text-center space-y-2 bg-[repeating-linear-gradient(45deg,transparent,transparent_10px,rgba(120,120,120,0.05)_10px,rgba(120,120,120,0.05)_20px)]">
