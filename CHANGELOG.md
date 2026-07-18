@@ -48,6 +48,29 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#389] Nama kelompok akun BAS diselaraskan ke lampiran resmi KEP-211/PB/2018 — 2026-07-18
+
+Pemilik mengirim workbook resmi "Kode Akun BAS (KEP-211/PB/2018)" — dipakai
+untuk menggantikan label kelompok hasil derivasi manual dengan nama VERBATIM
+dari lampiran resmi (sheet Akun Kas & Akun Akrual, entri Level 2). Koreksi
+a.l.: `19`/`29` → "Akun Setup" (bukan "Aset Lainnya Khusus BUN"/"Kewajiban
+Akrual Khusus"), `23` → "Dicadangkan untuk Komitmen Belanja", `49` →
+"Pendapatan Penyesuaian", `59` → "Beban Penyesuaian", `61`–`66` memakai nama
+Dana resmi ("Dana Bagi Hasil (DBH)", "Dana Alokasi Umum (DAU)", "Dana
+Alokasi Khusus Fisik/Non Fisik", "Dana Desa", dst.), `69` → "Beban Transfer
+Lain-lain", `79` → "Pengeluaran Pembiayaan Lain-lain", `81`/`82` →
+"Penerimaan/Pengeluaran Non Anggaran".
+- Segmen anggaran (5–8) memakai nama ledger KAS (Belanja/Dana) agar konsisten
+  dengan nama baris master; kelompok khusus akrual (59, 69) memakai nama
+  akrual. Dua kunci legacy (32, 67) yang tak ada di KEP-211 tetap dilabeli
+  agar header tabel tidak kosong.
+- Tes baru mengunci 14 nama kelompok ke lampiran resmi (cegah regresi ke
+  label heuristik lama); footnote halaman menyebut sumber KEP-211/PB/2018.
+- Verifikasi: 510 tes unit lulus (6 di modul referensi akun), smoke ekspor
+  CSV lulus, lint & build sukses.
+
+---
+
 ## [#388] Referensi Akun BAS terkategori sesuai makna digit + ekspor CSV — 2026-07-18
 
 Permintaan pemilik: master Segmen Akun BAS tidak lagi tampil rata — kini

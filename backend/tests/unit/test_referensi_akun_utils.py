@@ -30,6 +30,22 @@ def test_label_kelompok_dikenal_dan_fallback():
     assert label_kelompok(None) == ""
 
 
+def test_label_kelompok_sesuai_nama_resmi_kep211():
+    """Kunci nama kelompok ke lampiran resmi KEP-211/PB/2018 — cegah regresi
+    ke label heuristik lama (mis. 19 'Aset Lainnya Khusus BUN')."""
+    resmi = {
+        "19": "Akun Setup", "23": "Dicadangkan untuk Komitmen Belanja",
+        "29": "Akun Setup", "31": "Ekuitas", "39": "Ekuitas",
+        "49": "Pendapatan Penyesuaian", "59": "Beban Penyesuaian",
+        "61": "Dana Bagi Hasil (DBH)", "62": "Dana Alokasi Umum (DAU)",
+        "66": "Dana Desa", "69": "Beban Transfer Lain-lain",
+        "79": "Pengeluaran Pembiayaan Lain-lain",
+        "81": "Penerimaan Non Anggaran", "82": "Pengeluaran Non Anggaran",
+    }
+    for kode, nama in resmi.items():
+        assert KELOMPOK_LABEL[kode] == nama, kode
+
+
 def test_kelompok_konsisten_dengan_segmennya():
     """Digit pertama tiap kunci kelompok harus segmen yang sah (1–8)."""
     for p in KELOMPOK_LABEL:
