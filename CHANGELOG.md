@@ -48,6 +48,29 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#381] Pembukuan AKTIF: KIB per unit (PMK 181, pola SAKTI) + jurnal otomatis aset baru — 2026-07-18
+
+Dua butir terakhir Pembukuan dilengkapi (riset format KIB SIMAK/SAKTI):
+- **KIB — Kartu Identitas Barang per unit**: jenis terdeteksi dari kode barang
+  (tanah gol 2, bangunan gedung gol 4, alat angkutan 302, alat besar 301,
+  persenjataan 307) dengan **field khusus per jenis** (sertifikat/hak/luas;
+  konstruksi/IMB/lantai; no polisi/rangka/mesin/BPKB; kaliber/no pabrik…):
+  - `GET/PUT /pembukuan/kib/{asset_id}` — spesifikasi field + simpan data
+    (disanitasi per jenis, ber-audit, ter-guard satker),
+  - `GET /pembukuan/kib-pdf/{asset_id}` — kartu PDF resmi: data umum aset +
+    data khusus (kosong = garis titik), foto aset, riwayat mutasi Buku
+    Barang, blok ttd KPB, kop per-satker,
+  - tab **KIB** di halaman Pembukuan: cari aset → form → cetak.
+- **Jurnal otomatis dilengkapi**: aset BARU kini otomatis tercatat di Buku
+  Barang (100 Saldo Awal / 101 Pembelian menurut asal perolehan, best-effort)
+  — melengkapi auto-posting yang sudah ada dari Pengadaan (101), Penghapusan
+  SK (301), Pemindahtanganan (302/303), Reklasifikasi (304/107).
+- **Badge Pembukuan → AKTIF** (seluruh butir ✅). Semua modul Penatausahaan
+  kini aktif.
+- Verifikasi: suite **498 lulus** (+3 uji KIB murni); lint & build sukses.
+
+---
+
 ## [#380] Badge modul naik: Pemusnahan & Pelaporan AKTIF, Pembukuan punya halaman (Segera → Sebagian) — 2026-07-18
 
 Melengkapi fitur "menyusul" agar badge naik (mandat: badge sebagian/segera →

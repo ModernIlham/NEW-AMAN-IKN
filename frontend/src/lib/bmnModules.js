@@ -68,9 +68,9 @@ export const PENATAUSAHAAN_SUBMODULES = [
   {
     id: "pembukuan",
     nama: "Pembukuan",
-    status: "sebagian",
+    status: "aktif",
     fase: 2,
-    ringkas: "DBKP global intra/ekstra + Buku Barang (jurnal mutasi) sudah bisa dibuka.",
+    ringkas: "DBKP intra/ekstra, Buku Barang (jurnal otomatis), dan KIB per unit (PMK 181) lengkap.",
     deskripsi:
       "Pencatatan BMN ke dalam daftar barang: Daftar Barang Kuasa Pengguna (DBKP) per "
       + "golongan, Kartu Identitas Barang (KIB) untuk tanah/bangunan/kendaraan, saldo awal-"
@@ -80,8 +80,8 @@ export const PENATAUSAHAAN_SUBMODULES = [
       "✅ DBKP per golongan mengikuti kodefikasi BMN (intra/ekstra, ambang PMK 181 dapat diatur) — halaman Pembukuan + PDF per kegiatan",
       "✅ Saldo awal → mutasi masuk/keluar → saldo akhir per semester (LBKP + rekonsiliasi XLSX)",
       "✅ Buku Barang: jurnal mutasi ber-kode SIMAK/SAKTI (append-only) + reklasifikasi 304/107 ber-riwayat + backfill saldo awal",
-      "KIB A-F (tanah, bangunan, kendaraan, dst.) dengan detail khusus per jenis",
-      "Jurnal otomatis dari SEMUA transaksi perolehan/penghapusan/transfer (auto-posting penuh)",
+      "✅ KIB per unit (PMK 181/pola SAKTI): tanah, bangunan gedung, alat angkutan, alat besar, persenjataan — field khusus per jenis tersimpan + kartu PDF ber-foto & riwayat mutasi",
+      "✅ Jurnal otomatis dari transaksi: aset baru (100/101), pengadaan (101), penghapusan SK (301), pemindahtanganan (302/303), reklasifikasi (304/107)",
     ],
     integrasi: [
       "Master aset & hasil inventarisasi menjadi sumber saldo",

@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import {
-  ArrowLeft, BookOpen, FileDown, Loader2, ScrollText, Search, Table2,
+  ArrowLeft, BookOpen, FileDown, IdCard, Loader2, Save, ScrollText,
+  Search, Table2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,12 +29,19 @@ const WARNA_EFEK = {
  * append-only). Sumber: seluruh aset aktif (ter-scope satker user).
  */
 export default function PembukuanPage({ user, onBack }) {
-  const [tab, setTab] = useState("dbkp"); // dbkp | jurnal
+  const [tab, setTab] = useState("dbkp"); // dbkp | jurnal | kib
   const [dbkp, setDbkp] = useState(null);
   const [jurnal, setJurnal] = useState(null);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
+  // KIB: pencarian aset → info jenis + form field khusus
+  const [qKib, setQKib] = useState("");
+  const [hasilKib, setHasilKib] = useState([]);   // hasil pencarian aset
+  const [cariKib, setCariKib] = useState(false);
+  const [kib, setKib] = useState(null);           // {jenis,label,fields,data,aset}
+  const [formKib, setFormKib] = useState({});
+  const [simpanKib, setSimpanKib] = useState(false);
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
 
@@ -56,6 +64,41 @@ export default function PembukuanPage({ user, onBack }) {
     }
   }, [q]);
   useEffect(() => { if (tab === "jurnal" && !jurnal) muatJurnal(1); }, [tab, jurnal, muatJurnal]);
+
+  const cariAsetKib = useCallback(async () => {
+    if (!qKib.trim()) return;
+    setCariKib(true);
+    try {
+      const r = await axios.get(`${API}/assets`, {
+        params: { search: qKib.trim(), page_size: 10 } });
+      setHasilKib(r.data?.items || []);
+    } catch (e) {
+      toast.error(apiErr(e, "Gagal mencari aset"));
+    } finally { setCariKib(false); }
+  }, [qKib]);
+
+  const bukaKib = useCallback(async (aset) => {
+    setKib(null);
+    try {
+      const r = await axios.get(`${API}/pembukuan/kib/${aset.id}`);
+      setKib(r.data);
+      setFormKib(r.data?.data || {});
+    } catch (e) {
+      toast.error(apiErr(e, "Aset ini tidak ber-KIB"));
+    }
+  }, []);
+
+  const simpanDataKib = async () => {
+    if (!kib) return;
+    setSimpanKib(true);
+    try {
+      const r = await axios.put(`${API}/pembukuan/kib/${kib.aset.id}`, { data: formKib });
+      setFormKib(r.data?.data || formKib);
+      toast.success("Data KIB tersimpan — siap dicetak");
+    } catch (e) {
+      toast.error(apiErr(e, "Gagal menyimpan KIB"));
+    } finally { setSimpanKib(false); }
+  };
 
   const rows = dbkp?.rows || [];
   const total = dbkp?.total || {};
@@ -84,7 +127,8 @@ export default function PembukuanPage({ user, onBack }) {
 
       <main className="max-w-6xl mx-auto px-3 sm:px-6 py-4 space-y-3">
         <div className="flex bg-muted rounded-lg p-0.5 gap-0.5">
-          {[["dbkp", "DBKP per Golongan", Table2], ["jurnal", "Buku Barang (Jurnal)", ScrollText]].map(([k, label, Icon]) => (
+          {[["dbkp", "DBKP per Golongan", Table2], ["jurnal", "Buku Barang (Jurnal)", ScrollText],
+            ["kib", "KIB (Kartu Identitas)", IdCard]].map(([k, label, Icon]) => (
             <button key={k} type="button" onClick={() => setTab(k)}
               className={`flex-1 text-[11px] sm:text-xs font-semibold py-1.5 rounded-md transition-colors flex items-center justify-center gap-1.5 min-w-0 min-h-0 ${tab === k ? "bg-card text-indigo-700 dark:text-indigo-400 shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
               data-testid={`pembukuan-tab-${k}`}>
@@ -216,6 +260,82 @@ export default function PembukuanPage({ user, onBack }) {
                 <Button size="sm" variant="ghost" disabled={page <= 1} onClick={() => muatJurnal(page - 1)}>Sebelumnya</Button>
                 <span className="text-[11px] text-muted-foreground">Hal {jurnal.page}/{jurnal.total_pages} · {jurnal.total} entri</span>
                 <Button size="sm" variant="ghost" disabled={page >= jurnal.total_pages} onClick={() => muatJurnal(page + 1)}>Berikutnya</Button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === "kib" && (
+          <div className="space-y-3">
+            <div className="bg-card rounded-xl border border-border shadow-sm p-3 space-y-2">
+              <p className="text-xs font-bold flex items-center gap-1.5">
+                <IdCard className="w-4 h-4" />Kartu Identitas Barang — PMK 181 (pola SAKTI)
+              </p>
+              <p className="text-[10px] text-muted-foreground">
+                KIB per-unit untuk <b>tanah</b> (gol 2), <b>bangunan gedung</b> (gol 4), <b>alat angkutan</b> (302),
+                <b> alat besar</b> (301), dan <b>alat persenjataan</b> (307). Cari aset → lengkapi data khusus → cetak kartu.
+              </p>
+              <div className="flex items-center gap-1.5">
+                <div className="relative flex-1">
+                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Input value={qKib} onChange={(e) => setQKib(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && cariAsetKib()}
+                    placeholder="Cari kode/nama aset… (Enter)" className="pl-8 h-9 text-xs" data-testid="kib-cari" />
+                </div>
+                <Button size="sm" variant="outline" className="h-9 text-xs" disabled={cariKib} onClick={cariAsetKib}>
+                  {cariKib ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Cari"}
+                </Button>
+              </div>
+              {hasilKib.length > 0 && (
+                <div className="divide-y divide-border/60 rounded-lg border border-border max-h-48 overflow-y-auto">
+                  {hasilKib.map((a) => (
+                    <button key={a.id} type="button" onClick={() => bukaKib(a)}
+                      className="w-full text-left px-2.5 py-1.5 hover:bg-muted/60 min-w-0 min-h-0"
+                      data-testid={`kib-pilih-${a.id}`}>
+                      <p className="text-[12px] font-semibold truncate">{a.asset_name}</p>
+                      <p className="text-[10px] text-muted-foreground truncate">
+                        {a.asset_code}{a.NUP ? `/${a.NUP}` : ""} · {a.location || "-"}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {kib && (
+              <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="kib-panel">
+                <div className="px-3 py-2.5 border-b border-border flex items-center gap-2 flex-wrap">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold">{kib.label}</p>
+                    <p className="text-[10px] text-muted-foreground truncate">
+                      {kib.aset?.asset_name} · {kib.aset?.asset_code}{kib.aset?.NUP ? `/${kib.aset.NUP}` : ""}
+                    </p>
+                  </div>
+                  <Button size="sm" variant="outline" className="h-8 text-[11px]"
+                    onClick={() => downloadFileWithProgress(
+                      `${API}/pembukuan/kib-pdf/${kib.aset.id}`,
+                      `KIB_${kib.aset.asset_code || "aset"}.pdf`).catch(() => {})}
+                    data-testid="kib-unduh">
+                    <FileDown className="w-3.5 h-3.5 mr-1" />Cetak KIB (PDF)
+                  </Button>
+                </div>
+                <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {(kib.fields || []).map((f) => (
+                    <div key={f.key}>
+                      <label className="text-[11px] text-muted-foreground">{f.label}</label>
+                      <Input value={formKib[f.key] || ""}
+                        onChange={(e) => setFormKib((p) => ({ ...p, [f.key]: e.target.value }))}
+                        className="h-9 mt-0.5 text-sm" data-testid={`kib-field-${f.key}`} />
+                    </div>
+                  ))}
+                </div>
+                <div className="px-3 pb-3 flex justify-end">
+                  <Button size="sm" className="h-9 text-xs" disabled={simpanKib} onClick={simpanDataKib}
+                    data-testid="kib-simpan">
+                    {simpanKib ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <Save className="w-3.5 h-3.5 mr-1.5" />}
+                    Simpan Data KIB
+                  </Button>
+                </div>
               </div>
             )}
           </div>

@@ -875,6 +875,30 @@ async def create_asset(asset: AssetCreate, request: Request, _user: dict = Depen
     
     logger.info(f"Asset created: {asset.asset_code}")
     invalidate_asset_cache()
+
+    # Jurnal Buku Barang otomatis (M-MODUL): aset baru → entri perolehan.
+    # 101 Pembelian bila asal perolehan menyebut beli/pengadaan; selain itu
+    # 100 Saldo Awal (pencatatan pertama). Best-effort — tidak menggagalkan.
+    try:
+        from pembukuan_utils import parse_harga as _ph
+        from shared_utils import catat_mutasi_bmn as _cm
+        _asal = str(getattr(asset, "perolehan_dari_nama", "") or "").lower()
+        _kode_trx = "101" if any(w in _asal for w in ("beli", "pengadaan", "pembelian")) else "100"
+        _tgl = str(asset.purchase_date or "")[:10]
+        if not (len(_tgl) == 10 and _tgl[4] == "-" and _tgl[7] == "-"):
+            _tgl = str(now)[:10]
+        await _cm({
+            "asset_id": asset_id, "kode_transaksi": _kode_trx,
+            "kode_barang": str(asset.asset_code or ""),
+            "nup": str(asset.NUP or ""),
+            "tanggal_buku": _tgl,
+            "jumlah": 1, "nilai": _ph(asset.purchase_price),
+            "sumber_modul": "aset", "ref_id": asset_id,
+            "keterangan": "Pencatatan aset baru",
+            "oleh": _user.get("username", "system")})
+    except Exception:
+        logger.warning("Jurnal otomatis aset baru gagal (non-fatal)", exc_info=True)
+
     # Audit actor comes from the authenticated JWT identity (can't be spoofed);
     # the X-Audit-User header is only a fallback hint.
     audit_user = _user.get("name") or _user.get("username") or request.headers.get("X-Audit-User", "unknown")
