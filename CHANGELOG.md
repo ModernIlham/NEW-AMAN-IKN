@@ -48,6 +48,24 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#395] Form pegawai 5-tab + validasi digit rekening per bank + WNI/WNA + saran pangkat per status — 2026-07-18
+
+Sisa roadmap KERJA-BARENG item form:
+- **Form 5-tab** (Identitas · Pribadi · Kepegawaian · Jabatan & Unit ·
+  Kontak & Bank) menggantikan satu gulungan panjang — lebih ringkas & terarah.
+- **Kewarganegaraan WNI/WNA**: WNI → NIP/NIK/NRP + NPWP; WNA → jenis
+  identitas (Paspor/KITAS/KITAP) + nomor identitas + NPWP opsional.
+- **Peringatan lunak digit rekening per bank** (BRI 15, BNI 10, Mandiri 13,
+  BTN 16, BSI/BCA 10, CIMB 13, Danamon 10): mismatch hanya diberi peringatan
+  kuning, tidak memblokir; helper murni `periksa_rekening` teruji unit.
+- **Saran Pangkat/Golongan MENGIKUTI status kepegawaian**: datalist berubah
+  otomatis (PNS/CPNS 17 jenjang I/a–IV/e, PPPK Golongan I–XVII, TNI, POLRI).
+- Referensi `/pegawai/referensi` diperluas (kewarganegaraan, jenis identitas
+  WNA, peta pangkat per status, peta digit bank).
+- Verifikasi: 527 tes unit lulus, server ter-import, lint & build sukses.
+
+---
+
 ## [#394] Master Unit Kerja berjenjang (Eselon I–V) + pilihan bertingkat form pegawai — 2026-07-18
 
 Rekomendasi #2 studi KERJA-BARENG (pola `UnitKerjaManager`):

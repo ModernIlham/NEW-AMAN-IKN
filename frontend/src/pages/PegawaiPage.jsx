@@ -22,6 +22,7 @@ function getApiError(err, fallback) {
 
 const EMPTY = {
   mode: "tambah", nama: "", nip: "", gelar_depan: "", gelar_belakang: "",
+  kewarganegaraan: "wni", jenis_identitas_wna: "", nomor_identitas_wna: "",
   jenis_kelamin: "", tempat_lahir: "", tanggal_lahir: "", agama: "",
   status_perkawinan: "", status_kepegawaian: "", sub_kategori_non_asn: "",
   pangkat_golongan: "", jabatan: "", jenis_jabatan: "", kategori_pegawai: "",
@@ -66,6 +67,7 @@ export default function PegawaiPage({ user, onBack }) {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState(null);
+  const [tabForm, setTabForm] = useState("identitas"); // tab aktif form 5-tab
   const [saving, setSaving] = useState(false);
   const [mengimpor, setMengimpor] = useState(false);
   const [hasilImpor, setHasilImpor] = useState(null);
@@ -81,6 +83,8 @@ export default function PegawaiPage({ user, onBack }) {
       .then((r) => setUnits(r.data?.items || []))
       .catch(() => setUnits([]));
   }, []);
+
+  const bukaForm = (data) => { setTabForm("identitas"); setForm(data); };
 
   // Opsi bertingkat: opsi Eselon N mengikuti induk Eselon N-1 yang dipilih
   // (dicocokkan via nama — data pegawai menyimpan nama unit). Induk tak
@@ -310,7 +314,7 @@ export default function PegawaiPage({ user, onBack }) {
                   <span className="hidden sm:inline">Impor Excel</span>
                 </Button>
                 <Button variant="outline" className="h-10 gap-1.5"
-                  onClick={() => setForm({ ...EMPTY })} data-testid="pegawai-add">
+                  onClick={() => bukaForm({ ...EMPTY })} data-testid="pegawai-add">
                   <Plus className="w-4 h-4" /><span className="hidden sm:inline">Tambah</span>
                 </Button>
               </>
@@ -439,7 +443,7 @@ export default function PegawaiPage({ user, onBack }) {
                       </td>
                       {isAdmin && (
                         <td className="px-3 py-2 text-right whitespace-nowrap">
-                          <button type="button" onClick={() => setForm({ ...EMPTY, ...it, mode: "edit" })}
+                          <button type="button" onClick={() => bukaForm({ ...EMPTY, ...it, mode: "edit" })}
                             aria-label={`Ubah ${it.nama}`}
                             className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted min-w-0 min-h-0"
                             data-testid={`pegawai-edit-${it.id}`}>
@@ -473,15 +477,51 @@ export default function PegawaiPage({ user, onBack }) {
           </DialogHeader>
           {form && (
             <div className="space-y-4">
-              <Group title="Identitas">
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <Field label="Gelar Depan"><Input value={form.gelar_depan} onChange={set("gelar_depan")} placeholder="cth. Dr." /></Field>
-                  <Field label="Nama *" span2><Input value={form.nama} onChange={set("nama")} data-testid="pegawai-form-nama" /></Field>
-                  <Field label="Gelar Belakang"><Input value={form.gelar_belakang} onChange={set("gelar_belakang")} placeholder="cth. S.E." /></Field>
+              {/* Form 5-TAB (pola KERJA-BARENG): Identitas · Pribadi ·
+                  Kepegawaian · Jabatan & Unit · Kontak & Bank. */}
+              <div className="flex bg-muted rounded-lg p-0.5 gap-0.5 sticky top-0 z-10">
+                {[["identitas", "Identitas"], ["pribadi", "Pribadi"],
+                  ["kepegawaian", "Kepegawaian"], ["jabatan", "Jabatan & Unit"],
+                  ["kontak", "Kontak & Bank"]].map(([k, label]) => (
+                  <button key={k} type="button" onClick={() => setTabForm(k)}
+                    className={`flex-1 text-[10px] sm:text-[11px] font-semibold py-1.5 rounded-md min-w-0 min-h-0 ${tabForm === k ? "bg-card text-sky-700 dark:text-sky-400 shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                    data-testid={`pegawai-tab-${k}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {tabForm === "identitas" && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <Field label="Gelar Depan"><Input value={form.gelar_depan} onChange={set("gelar_depan")} placeholder="cth. Dr." /></Field>
+                    <Field label="Nama *" span2><Input value={form.nama} onChange={set("nama")} data-testid="pegawai-form-nama" /></Field>
+                    <Field label="Gelar Belakang"><Input value={form.gelar_belakang} onChange={set("gelar_belakang")} placeholder="cth. S.E." /></Field>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <Field label="Kewarganegaraan">
+                      <Select value={form.kewarganegaraan || "wni"} onChange={set("kewarganegaraan")} opts={ref.kewarganegaraan} allowEmpty={false} data-testid="pegawai-form-wn" />
+                    </Field>
+                  </div>
+                  {(form.kewarganegaraan || "wni") === "wni" ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-2.5 rounded-lg bg-sky-500/5 border border-sky-500/30">
+                      <Field label="NIP / NIK / NRP"><Input value={form.nip} onChange={set("nip")} className="font-mono" inputMode="numeric" placeholder="8–20 digit (opsional)" data-testid="pegawai-form-nip" /></Field>
+                      <Field label="NPWP"><Input value={form.npwp} onChange={set("npwp")} className="font-mono" /></Field>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-2.5 rounded-lg bg-amber-500/5 border border-amber-500/30">
+                      <Field label="Jenis Identitas WNA">
+                        <Select value={form.jenis_identitas_wna} onChange={set("jenis_identitas_wna")} opts={ref.jenis_identitas_wna} data-testid="pegawai-form-wna-jenis" />
+                      </Field>
+                      <Field label="Nomor Identitas"><Input value={form.nomor_identitas_wna} onChange={set("nomor_identitas_wna")} className="font-mono" placeholder="No. Paspor/KITAS/KITAP" /></Field>
+                      <Field label="NPWP (opsional)"><Input value={form.npwp} onChange={set("npwp")} className="font-mono" /></Field>
+                    </div>
+                  )}
                 </div>
+              )}
+
+              {tabForm === "pribadi" && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <Field label="NIP / NRP"><Input value={form.nip} onChange={set("nip")} className="font-mono" inputMode="numeric" placeholder="18 digit (opsional)" data-testid="pegawai-form-nip" /></Field>
-                  <Field label="NPWP"><Input value={form.npwp} onChange={set("npwp")} className="font-mono" /></Field>
                   <Field label="Jenis Kelamin">
                     <Select value={form.jenis_kelamin} onChange={set("jenis_kelamin")} data-testid="pegawai-form-jk" opts={ref.jenis_kelamin} />
                   </Field>
@@ -489,82 +529,6 @@ export default function PegawaiPage({ user, onBack }) {
                     <Field label="Tempat Lahir"><Input value={form.tempat_lahir} onChange={set("tempat_lahir")} /></Field>
                     <Field label="Tgl Lahir"><Input type="date" value={form.tanggal_lahir} onChange={set("tanggal_lahir")} /></Field>
                   </div>
-                </div>
-              </Group>
-
-              <Group title="Kepegawaian">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <Field label="Status Kepegawaian">
-                    <Select value={form.status_kepegawaian} onChange={set("status_kepegawaian")} data-testid="pegawai-form-status-peg" opts={ref.status_kepegawaian} />
-                  </Field>
-                  <Field label="Pangkat / Golongan"><Input value={form.pangkat_golongan} onChange={set("pangkat_golongan")} placeholder="cth. Penata (III/c)" /></Field>
-                  {form.status_kepegawaian === "non_asn" && (
-                    <Field label="Sub-Kategori Non-ASN">
-                      <Select value={form.sub_kategori_non_asn} onChange={set("sub_kategori_non_asn")} opts={ref.sub_kategori_non_asn} />
-                    </Field>
-                  )}
-                  <Field label="Jenis Jabatan">
-                    <Select value={form.jenis_jabatan} onChange={set("jenis_jabatan")} opts={ref.jenis_jabatan} />
-                  </Field>
-                  <Field label="Kategori Pegawai (UU ASN)">
-                    <Select value={form.kategori_pegawai} onChange={set("kategori_pegawai")} opts={ref.kategori_pegawai} />
-                  </Field>
-                  <Field label="Eselon (teks)"><Input value={form.eselon} onChange={set("eselon")} placeholder="cth. IV.a" /></Field>
-                  <Field label="Status di Satker">
-                    <Select value={form.status} onChange={set("status")} data-testid="pegawai-form-status" opts={ref.status} allowEmpty={false} />
-                  </Field>
-                  <Field label="TMT Jabatan"><Input type="date" value={form.tmt_jabatan} onChange={set("tmt_jabatan")} /></Field>
-                </div>
-                {/* Kontrak Non-ASN — pemantauan pemegang aset saat kontrak berakhir. */}
-                {form.status_kepegawaian === "non_asn" && (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-2.5 rounded-lg bg-muted/40 border border-border/60">
-                    <Field label="Nomor Kontrak"><Input value={form.nomor_kontrak} onChange={set("nomor_kontrak")} placeholder="cth. 001/KONTRAK/2026" /></Field>
-                    <Field label="Mulai Kontrak"><Input type="date" value={form.tgl_mulai_kontrak} onChange={set("tgl_mulai_kontrak")} /></Field>
-                    <Field label="Selesai Kontrak"><Input type="date" value={form.tgl_selesai_kontrak} onChange={set("tgl_selesai_kontrak")} /></Field>
-                  </div>
-                )}
-              </Group>
-
-              <Group title="Jabatan & Unit Kerja">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <Field label="Jabatan" span2><Input value={form.jabatan} onChange={set("jabatan")} placeholder="cth. Analis Pengelolaan BMN" /></Field>
-                </div>
-                {/* Unit kerja berjenjang (Eselon I–V) — pilihan BERTINGKAT dari
-                    master unit (opsi Eselon N mengikuti induk terpilih; tetap
-                    boleh ketik bebas utk unit yang belum terdaftar). Jenjang
-                    terdalam otomatis menjadi Unit Kerja efektif di server. */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {[1, 2, 3, 4, 5].map((lv) => (
-                    <Field key={lv} label={`Eselon ${lv}`}>
-                      <Input value={form[`eselon${lv}`]} onChange={set(`eselon${lv}`)}
-                        list={`opsi-eselon-${lv}`}
-                        placeholder={["cth. Kedeputian / Sekretariat", "cth. Direktorat / Biro", "cth. Bagian / Subdirektorat", "cth. Subbagian / Seksi", ""][lv - 1]}
-                        data-testid={`pegawai-form-eselon${lv}`} />
-                      <datalist id={`opsi-eselon-${lv}`}>
-                        {opsiEselon(lv, form).map((n) => <option key={n} value={n} />)}
-                      </datalist>
-                    </Field>
-                  ))}
-                  {isAdmin && (
-                    <div className="flex items-end">
-                      <Button type="button" variant="outline" size="sm" className="h-10 gap-1.5 w-full"
-                        onClick={() => setKelolaUnit({ eselon: "1", nama: "", parentId: "", sibuk: false })}
-                        data-testid="pegawai-kelola-unit">
-                        <Network className="w-3.5 h-3.5" />Kelola Unit Kerja ({units.length})
-                      </Button>
-                    </div>
-                  )}
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <Field label="Unit Kerja (ringkas)"><Input value={form.unit_kerja} onChange={set("unit_kerja")} placeholder="otomatis dari Eselon terdalam bila kosong" data-testid="pegawai-form-unit" /></Field>
-                  <Field label="Unit Organisasi / Satker"><Input value={form.unit_organisasi} onChange={set("unit_organisasi")} /></Field>
-                </div>
-              </Group>
-
-              <Group title="Kontak, Bank & Lainnya">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <Field label="No. HP"><Input value={form.no_hp} onChange={set("no_hp")} inputMode="tel" placeholder="cth. 0812…" /></Field>
-                  <Field label="Email"><Input type="email" value={form.email} onChange={set("email")} placeholder="nama@instansi.go.id" data-testid="pegawai-form-email" /></Field>
                   <Field label="Agama">
                     <Select value={form.agama} onChange={set("agama")} opts={ref.agama} />
                   </Field>
@@ -573,11 +537,115 @@ export default function PegawaiPage({ user, onBack }) {
                   </Field>
                   <Field label="Pendidikan Terakhir"><Input value={form.pendidikan_terakhir} onChange={set("pendidikan_terakhir")} placeholder="cth. S1 Akuntansi" /></Field>
                   <Field label="Alamat"><Input value={form.alamat} onChange={set("alamat")} /></Field>
-                  <Field label="Nama Bank"><Input value={form.nama_bank} onChange={set("nama_bank")} placeholder="cth. BRI" /></Field>
-                  <Field label="No. Rekening"><Input value={form.no_rekening} onChange={set("no_rekening")} className="font-mono" inputMode="numeric" /></Field>
                 </div>
-                <Field label="Keterangan"><Input value={form.keterangan} onChange={set("keterangan")} /></Field>
-              </Group>
+              )}
+
+              {tabForm === "kepegawaian" && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <Field label="Status Kepegawaian">
+                      <Select value={form.status_kepegawaian} onChange={set("status_kepegawaian")} data-testid="pegawai-form-status-peg" opts={ref.status_kepegawaian} />
+                    </Field>
+                    <Field label="Pangkat / Golongan">
+                      {/* Saran pangkat MENGIKUTI status (PNS/CPNS/PPPK/TNI/POLRI). */}
+                      <Input value={form.pangkat_golongan} onChange={set("pangkat_golongan")} list="opsi-pangkat" placeholder="cth. Penata (III/c)" data-testid="pegawai-form-pangkat" />
+                      <datalist id="opsi-pangkat">
+                        {((ref.pangkat_golongan || {})[form.status_kepegawaian] || (ref.pangkat_golongan || {}).pns || []).map((p) => <option key={p} value={p} />)}
+                      </datalist>
+                    </Field>
+                    {form.status_kepegawaian === "non_asn" && (
+                      <Field label="Sub-Kategori Non-ASN">
+                        <Select value={form.sub_kategori_non_asn} onChange={set("sub_kategori_non_asn")} opts={ref.sub_kategori_non_asn} />
+                      </Field>
+                    )}
+                    <Field label="Status di Satker">
+                      <Select value={form.status} onChange={set("status")} data-testid="pegawai-form-status" opts={ref.status} allowEmpty={false} />
+                    </Field>
+                    <Field label="TMT Jabatan"><Input type="date" value={form.tmt_jabatan} onChange={set("tmt_jabatan")} /></Field>
+                  </div>
+                  {/* Kontrak Non-ASN — pemantauan pemegang aset saat kontrak berakhir. */}
+                  {form.status_kepegawaian === "non_asn" && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-2.5 rounded-lg bg-muted/40 border border-border/60">
+                      <Field label="Nomor Kontrak"><Input value={form.nomor_kontrak} onChange={set("nomor_kontrak")} placeholder="cth. 001/KONTRAK/2026" /></Field>
+                      <Field label="Mulai Kontrak"><Input type="date" value={form.tgl_mulai_kontrak} onChange={set("tgl_mulai_kontrak")} /></Field>
+                      <Field label="Selesai Kontrak"><Input type="date" value={form.tgl_selesai_kontrak} onChange={set("tgl_selesai_kontrak")} /></Field>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {tabForm === "jabatan" && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <Field label="Jabatan" span2><Input value={form.jabatan} onChange={set("jabatan")} placeholder="cth. Analis Pengelolaan BMN" /></Field>
+                    <Field label="Jenis Jabatan">
+                      <Select value={form.jenis_jabatan} onChange={set("jenis_jabatan")} opts={ref.jenis_jabatan} />
+                    </Field>
+                    <Field label="Kategori Pegawai (UU ASN)">
+                      <Select value={form.kategori_pegawai} onChange={set("kategori_pegawai")} opts={ref.kategori_pegawai} />
+                    </Field>
+                    <Field label="Eselon (teks)"><Input value={form.eselon} onChange={set("eselon")} placeholder="cth. IV.a" /></Field>
+                  </div>
+                  {/* Unit kerja berjenjang (Eselon I–V) — pilihan BERTINGKAT dari
+                      master unit; jenjang terdalam otomatis jadi Unit Kerja. */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {[1, 2, 3, 4, 5].map((lv) => (
+                      <Field key={lv} label={`Eselon ${lv}`}>
+                        <Input value={form[`eselon${lv}`]} onChange={set(`eselon${lv}`)}
+                          list={`opsi-eselon-${lv}`}
+                          placeholder={["cth. Kedeputian / Sekretariat", "cth. Direktorat / Biro", "cth. Bagian / Subdirektorat", "cth. Subbagian / Seksi", ""][lv - 1]}
+                          data-testid={`pegawai-form-eselon${lv}`} />
+                        <datalist id={`opsi-eselon-${lv}`}>
+                          {opsiEselon(lv, form).map((n) => <option key={n} value={n} />)}
+                        </datalist>
+                      </Field>
+                    ))}
+                    {isAdmin && (
+                      <div className="flex items-end">
+                        <Button type="button" variant="outline" size="sm" className="h-10 gap-1.5 w-full"
+                          onClick={() => setKelolaUnit({ eselon: "1", nama: "", parentId: "", sibuk: false })}
+                          data-testid="pegawai-kelola-unit">
+                          <Network className="w-3.5 h-3.5" />Kelola Unit Kerja ({units.length})
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <Field label="Unit Kerja (ringkas)"><Input value={form.unit_kerja} onChange={set("unit_kerja")} placeholder="otomatis dari Eselon terdalam bila kosong" data-testid="pegawai-form-unit" /></Field>
+                    <Field label="Unit Organisasi / Satker"><Input value={form.unit_organisasi} onChange={set("unit_organisasi")} /></Field>
+                  </div>
+                </div>
+              )}
+
+              {tabForm === "kontak" && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <Field label="No. HP"><Input value={form.no_hp} onChange={set("no_hp")} inputMode="tel" placeholder="cth. 0812…" /></Field>
+                    <Field label="Email"><Input type="email" value={form.email} onChange={set("email")} placeholder="nama@instansi.go.id" data-testid="pegawai-form-email" /></Field>
+                    <Field label="Nama Bank">
+                      <Input value={form.nama_bank} onChange={set("nama_bank")} list="opsi-bank" placeholder="cth. BRI" data-testid="pegawai-form-bank" />
+                      <datalist id="opsi-bank">
+                        {["BRI", "BNI", "Mandiri", "BTN", "BSI", "BCA", "CIMB Niaga", "Danamon", "Permata", "Maybank"].map((b) => <option key={b} value={b} />)}
+                      </datalist>
+                    </Field>
+                    <Field label="No. Rekening"><Input value={form.no_rekening} onChange={set("no_rekening")} className="font-mono" inputMode="numeric" data-testid="pegawai-form-rekening" /></Field>
+                  </div>
+                  {(() => {
+                    // Peringatan LUNAK digit rekening per bank (non-blocking).
+                    const bank = String(form.nama_bank || "").trim().toLowerCase();
+                    const digit = String(form.no_rekening || "").replace(/\D/g, "");
+                    const harus = (ref.digit_bank || {})[bank];
+                    if (!bank || !digit || !harus || digit.length === harus) return null;
+                    return (
+                      <p className="text-[11px] text-amber-700 dark:text-amber-400 flex items-center gap-1.5 p-2 rounded-lg bg-amber-500/10 border border-amber-500/30" data-testid="pegawai-rekening-warning">
+                        <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                        No. rekening {form.nama_bank} lazimnya {harus} digit (saat ini {digit.length} digit) — periksa kembali.
+                      </p>
+                    );
+                  })()}
+                  <Field label="Keterangan"><Input value={form.keterangan} onChange={set("keterangan")} /></Field>
+                </div>
+              )}
             </div>
           )}
           <DialogFooter className="gap-2">
@@ -740,15 +808,6 @@ export default function PegawaiPage({ user, onBack }) {
       </Dialog>
 
       {confirmDialog}
-    </div>
-  );
-}
-
-function Group({ title, children }) {
-  return (
-    <div className="space-y-3">
-      <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground border-b border-border/60 pb-1">{title}</p>
-      {children}
     </div>
   );
 }
