@@ -48,6 +48,28 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#394] Master Unit Kerja berjenjang (Eselon I–V) + pilihan bertingkat form pegawai — 2026-07-18
+
+Rekomendasi #2 studi KERJA-BARENG (pola `UnitKerjaManager`):
+- **Master Unit Kerja hierarkis**: koleksi `unit_kerja` {nama, eselon 1–5,
+  induk} ter-scope satker; kelola via dialog di Master Pegawai (tab per
+  eselon, tambah dengan pilihan induk Eselon N−1, hapus ber-guard: ditolak
+  bila masih punya sub-unit atau dipakai pegawai).
+- **Bangun otomatis 1-klik dari data pegawai**: jalur Eselon 1–5 seluruh
+  pegawai (termasuk 1.369 hasil impor) diderivasi menjadi master hierarkis
+  (idempoten, unit hasil derivasi ditandai "otomatis") — tanpa entri manual.
+- **Pilihan BERTINGKAT di form pegawai**: field Eselon 1–5 kini ber-datalist;
+  opsi Eselon N mengikuti induk Eselon N−1 yang dipilih (tetap bisa ketik
+  bebas untuk unit yang belum terdaftar — data impor tidak terblokir).
+- Endpoint: `GET/POST /unit-kerja`, `DELETE /unit-kerja/{id}`,
+  `POST /unit-kerja/bangun-dari-pegawai`; modul murni
+  (`validate_unit`, `opsi_bertingkat`, `unit_dari_pegawai`) teruji unit.
+- Verifikasi: 526 tes unit lulus, smoke FakeDB (bangun otomatis idempoten +
+  relasi induk benar, duplikat/tanpa-induk 400, hapus ber-anak/dipakai 409)
+  lulus, server ter-import, lint & build sukses.
+
+---
+
 ## [#393] Keterkaitan aset↔pegawai: alert "Perlu Serah Terima BMN" — 2026-07-18
 
 Rekomendasi #1 studi KERJA-BARENG (pola "alert pemegang keluar") — menutup

@@ -195,6 +195,7 @@ from routes.ruangan import ruangan_router
 from routes.akun_bas import akun_bas_router
 from routes.persediaan_akun import persediaan_akun_router
 from routes.pegawai import pegawai_router
+from routes.unit_kerja import unit_kerja_router
 from routes.penghapusan import penghapusan_router
 from routes.pemanfaatan import pemanfaatan_router
 from routes.pemusnahan import pemusnahan_router
@@ -242,6 +243,7 @@ api_router.include_router(ruangan_router)
 api_router.include_router(akun_bas_router)
 api_router.include_router(persediaan_akun_router)
 api_router.include_router(pegawai_router)
+api_router.include_router(unit_kerja_router)
 api_router.include_router(penghapusan_router)
 api_router.include_router(pemanfaatan_router)
 api_router.include_router(pemusnahan_router)
