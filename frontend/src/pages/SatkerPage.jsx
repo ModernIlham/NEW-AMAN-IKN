@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Building2, DatabaseZap, Loader2, Pencil, RefreshCcw, Trash2,
+  ArrowLeft, Building2, DatabaseZap, Info, Loader2, Pencil, Plus, RefreshCcw, Search, SearchX, Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,6 +38,7 @@ export function SatkerPanel({ user }) {
   const [backfill, setBackfill] = useState(null); // {kode_sisa, jalan, laporan}
   const [form, setForm] = useState(null);      // profil satker saat dialog edit
   const [saving, setSaving] = useState(false);
+  const [q, setQ] = useState("");              // pencarian client-side kode/nama
   const { confirm, confirmDialog } = useConfirm();
 
   const load = useCallback(async () => {
@@ -115,26 +116,55 @@ export function SatkerPanel({ user }) {
   };
 
   const items = data?.items || [];
+  const cari = q.trim().toLowerCase();
+  const tampil = cari
+    ? items.filter((it) =>
+        (it.kode_satker || "").toLowerCase().includes(cari)
+        || (it.nama_satker || "").toLowerCase().includes(cari))
+    : items;
 
   return (
     <div className="space-y-2.5">
       {isAdmin && (
-        <div className="flex items-center justify-end gap-1.5">
+        <div className="flex flex-wrap items-center justify-end gap-1.5 gap-y-1.5">
           <Button variant="outline" size="sm" className="h-9 text-xs" disabled={sinkron}
+            title="Sinkron dari Kegiatan — daftarkan satker yang dipakai kegiatan ke master"
+            aria-label="Sinkron dari Kegiatan"
             onClick={jalankanSinkron} data-testid="satker-sinkron">
             {sinkron ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <RefreshCcw className="w-3.5 h-3.5 mr-1.5" />}
-            Sinkron dari Kegiatan
+            <span className="hidden sm:inline">Sinkron dari Kegiatan</span>
+            <span className="sm:hidden">Sinkron</span>
           </Button>
           <Button variant="outline" size="sm" className="h-9 text-xs"
             title="Isi kode satker pada data lama (dari relasi aset→kegiatan; sisanya opsional ke satu satker)"
+            aria-label="Backfill Data Lama"
             onClick={() => setBackfill({ kode_sisa: "", jalan: false, laporan: null })}
             data-testid="satker-backfill">
-            <DatabaseZap className="w-3.5 h-3.5 mr-1.5" />Backfill Data Lama
+            <DatabaseZap className="w-3.5 h-3.5 mr-1.5" />
+            <span className="hidden sm:inline">Backfill Data Lama</span>
+            <span className="sm:hidden">Backfill</span>
           </Button>
           <Button size="sm" className="h-9 text-xs" onClick={() => setForm({ ...FORM_KOSONG, _baru: true })}
             data-testid="satker-tambah">
-            Tambah
+            <Plus className="w-3.5 h-3.5 mr-1" />Tambah
           </Button>
+        </div>
+      )}
+
+      {/* Aturan inti halaman — tampil di atas daftar, bukan footnote */}
+      <div className="rounded-lg bg-muted/50 border border-border px-3 py-2 text-[11px] text-muted-foreground flex items-start gap-1.5">
+        <Info className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+        <span>
+          Resolusi kop laporan: nilai kegiatan (paling spesifik) → profil satker di sini → Pengaturan global.
+          Field kosong = ikut lapisan di atasnya.
+        </span>
+      </div>
+
+      {!loading && items.length > 0 && (
+        <div className="relative">
+          <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)}
+            placeholder="Cari kode / nama satker…" className="pl-9 h-10" data-testid="satker-search" />
         </div>
       )}
 
@@ -148,16 +178,28 @@ export function SatkerPanel({ user }) {
             Satker terdaftar OTOMATIS saat kegiatan pertama dibuat, atau klik <b>Sinkron dari Kegiatan</b>.
           </p>
         </div>
+      ) : tampil.length === 0 ? (
+        // Data ada, hanya tersaring pencarian — jangan mengaku "belum ada".
+        <div className="py-16 text-center space-y-2">
+          <SearchX className="w-10 h-10 mx-auto text-muted-foreground/50" />
+          <p className="text-sm text-muted-foreground">Tidak ada satker yang cocok dengan &quot;{q}&quot;</p>
+          <Button variant="outline" size="sm" className="mt-1 h-9 text-xs"
+            onClick={() => setQ("")} data-testid="satker-clear-cari">
+            Hapus pencarian
+          </Button>
+        </div>
       ) : (
-        items.map((it) => (
+        tampil.map((it) => (
           <div key={it.kode_satker} className="rounded-xl border border-border bg-card p-3 flex items-start gap-3"
             data-testid={`satker-row-${it.kode_satker}`}>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-bold flex items-center gap-2 flex-wrap">
                 <span className="font-mono text-[12px] px-1.5 py-0.5 rounded bg-muted">{it.kode_satker}</span>
-                <span className="truncate">{it.nama_satker || <i className="text-muted-foreground">tanpa nama</i>}</span>
+                <span className="truncate min-w-0 flex-1" title={it.nama_satker || undefined}>
+                  {it.nama_satker || <i className="text-muted-foreground">tanpa nama</i>}
+                </span>
                 {!it.terdaftar && (
-                  <span className="px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px] font-bold">
+                  <span className="px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px] font-bold whitespace-nowrap flex-shrink-0">
                     belum di master
                   </span>
                 )}
@@ -191,11 +233,6 @@ export function SatkerPanel({ user }) {
           </div>
         ))
       )}
-      <p className="text-center text-[10px] text-muted-foreground pt-1 pb-3">
-        Resolusi kop laporan: nilai kegiatan (paling spesifik) → profil satker di sini → Pengaturan global.
-        Field kosong = ikut lapisan di atasnya.
-      </p>
-
       {/* ── Dialog backfill data lama ── */}
       {/* Selama backfill berjalan dialog dikunci — menutupnya menyembunyikan
           hasil laporan padahal operasi server tetap berlanjut. */}
@@ -207,7 +244,7 @@ export function SatkerPanel({ user }) {
             <DialogDescription>
               Dokumen lama tanpa kode satker diisi otomatis dari relasi aset→kegiatan.
               Sisanya (persediaan, pengadaan, dsb.) dapat diklaim ke satu satker (opsional).
-              Idempoten — hanya mengisi yang kosong.
+              Aman dijalankan berulang — hanya mengisi dokumen yang kode satkernya masih kosong.
             </DialogDescription>
           </DialogHeader>
           {backfill && (
@@ -338,8 +375,10 @@ export default function SatkerPage({ user, onBack }) {
             <Building2 className="w-4 h-4 text-white" />
           </span>
           <div className="min-w-0 flex-1">
-            <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight">Master Satker</h1>
-            <p className="text-[11px] text-muted-foreground leading-tight truncate">
+            <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight truncate"
+              title="Master Satuan Kerja (Satker)">Master Satker</h1>
+            <p className="text-[11px] sm:text-xs text-muted-foreground leading-tight truncate"
+              title="Profil & kop per-satker — menimpa setelan global pada laporan satker yang bersangkutan">
               Profil & kop per-satker — menimpa setelan global pada laporan satker ybs.
             </p>
           </div>

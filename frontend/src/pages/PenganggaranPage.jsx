@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, CalendarClock, Loader2, Wallet, Plus, Search, X, Coins,
-  Download, TicketCheck, Trash2,
+  Download, TicketCheck, Trash2, TrendingUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -173,13 +173,20 @@ export default function PenganggaranPage({ user, onBack }) {
   };
 
   const setTrxField = (k, v) => setTrx((t) => ({ ...t, fields: { ...t.fields, [k]: v } }));
+  // Buka dialog usulan/tahapan baru — dipakai tombol header & CTA empty-state
+  const bukaFormUsulan = () => {
+    setCari(""); setHasilCari([]);
+    setForm({ data: { jenis: "pemeliharaan", uraian: "", tahun_anggaran: String(new Date().getFullYear() + 2), nilai_usulan: "", akun: "523", sumber: "", keterangan: "" }, aset: [], saving: false });
+  };
+  const bukaFormTahapan = () =>
+    setFormTahapan({ data: { nama: "", tanggal: "", tahun_anggaran: String(new Date().getFullYear() + 2), keterangan: "" }, saving: false });
   const r = data?.ringkasan;
 
   return (
     <div className="min-h-screen bg-background" data-testid="penganggaran-page">
       {/* ── Header ── */}
       <header className="bg-card/95 backdrop-blur-sm border-b border-border px-3 sm:px-6 py-2.5 sticky top-0 z-40">
-        <div className="max-w-5xl mx-auto flex items-center gap-3">
+        <div className="max-w-5xl mx-auto flex flex-wrap items-center gap-2 sm:gap-3 gap-y-2">
           <button type="button" onClick={onBack} aria-label="Kembali ke Beranda Modul"
             className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0"
             data-testid="penganggaran-back">
@@ -189,8 +196,9 @@ export default function PenganggaranPage({ user, onBack }) {
             <Wallet className="w-4 h-4 text-white" />
           </span>
           <div className="min-w-0 flex-1">
-            <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight">Penganggaran — Register Usulan</h1>
-            <p className="text-[11px] sm:text-xs text-muted-foreground truncate">
+            <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight truncate">Penganggaran — Register Usulan</h1>
+            <p className="text-[11px] sm:text-xs text-muted-foreground truncate"
+              title="RKBMN: Rencana Kebutuhan BMN · RKA-K/L: Rencana Kerja dan Anggaran K/L · DIPA: Daftar Isian Pelaksanaan Anggaran">
               RKBMN → RKA-K/L → DIPA → realisasi (PMK 62/2023 + 153/2021)
             </p>
           </div>
@@ -199,8 +207,7 @@ export default function PenganggaranPage({ user, onBack }) {
             data-testid="penganggaran-export">
             <Download className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">CSV</span>
           </Button>
-          <Button size="sm"
-            onClick={() => { setCari(""); setHasilCari([]); setForm({ data: { jenis: "pemeliharaan", uraian: "", tahun_anggaran: String(new Date().getFullYear() + 2), nilai_usulan: "", akun: "523", sumber: "", keterangan: "" }, aset: [], saving: false }); }}
+          <Button size="sm" onClick={bukaFormUsulan}
             className="bg-teal-600 hover:bg-teal-700 text-white flex-shrink-0" data-testid="penganggaran-tambah">
             <Plus className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">Catat Usulan</span>
           </Button>
@@ -226,16 +233,17 @@ export default function PenganggaranPage({ user, onBack }) {
               </div>
               <div className="bg-card rounded-xl border border-border p-3 text-center" data-testid="penganggaran-stat-usulan">
                 <Coins className="w-5 h-5 text-teal-500 mx-auto mb-1" />
-                <p className="text-sm sm:text-lg font-bold text-foreground leading-none break-all">{fmtRp(r.nilai.usulan)}</p>
+                <p className="text-sm sm:text-lg font-bold text-foreground leading-none truncate whitespace-nowrap tabular-nums" title={fmtRp(r.nilai.usulan)}>{fmtRp(r.nilai.usulan)}</p>
                 <p className="text-[10px] text-muted-foreground mt-1">Nilai usulan</p>
               </div>
               <div className="bg-card rounded-xl border border-border p-3 text-center" data-testid="penganggaran-stat-dipa">
                 <Coins className="w-5 h-5 text-violet-500 mx-auto mb-1" />
-                <p className="text-sm sm:text-lg font-bold text-foreground leading-none break-all">{fmtRp(r.nilai.dipa)}</p>
+                <p className="text-sm sm:text-lg font-bold text-foreground leading-none truncate whitespace-nowrap tabular-nums" title={fmtRp(r.nilai.dipa)}>{fmtRp(r.nilai.dipa)}</p>
                 <p className="text-[10px] text-muted-foreground mt-1">Nilai DIPA</p>
               </div>
               <div className="bg-card rounded-xl border border-emerald-500/40 p-3 text-center" data-testid="penganggaran-stat-serapan">
-                <p className="text-lg font-bold text-foreground leading-none mt-1.5">{r.serapan_persen}%</p>
+                <TrendingUp className="w-5 h-5 text-emerald-500 mx-auto mb-1" />
+                <p className="text-lg font-bold text-foreground leading-none">{r.serapan_persen}%</p>
                 <p className="text-[10px] text-muted-foreground mt-1">Serapan ({fmtRp(r.nilai.realisasi)})</p>
                 {(data.total_realisasi_pengadaan || 0) > 0 && (
                   <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-0.5" title="Total nilai perolehan Pengadaan yang tertaut usulan">
@@ -249,7 +257,7 @@ export default function PenganggaranPage({ user, onBack }) {
             {(data.per_akun || []).length > 0 && (
               <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
                 <div className="px-3 py-2.5 border-b border-border">
-                  <p className="text-xs font-bold text-foreground">Sanding Rencana vs Realisasi per Akun BAS</p>
+                  <p className="text-xs font-bold text-foreground" title="BAS: Bagan Akun Standar">Sanding Rencana vs Realisasi per Akun BAS</p>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs" data-testid="penganggaran-sanding">
@@ -362,16 +370,24 @@ export default function PenganggaranPage({ user, onBack }) {
                 )}
                 {isAdmin && (
                   <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
-                    onClick={() => setFormTahapan({ data: { nama: "", tanggal: "", tahun_anggaran: String(new Date().getFullYear() + 2), keterangan: "" }, saving: false })}
+                    onClick={bukaFormTahapan}
                     data-testid="penganggaran-kalender-tambah">
                     <Plus className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">Tahapan</span>
                   </Button>
                 )}
               </div>
               {(kalender?.items || []).length === 0 ? (
-                <p className="text-[11px] text-muted-foreground text-center py-4 px-3">
-                  Belum ada tahapan — contoh: penyampaian RKBMN ke Biro/Sekretariat, batas revisi DIPA.
-                </p>
+                <div className="text-center py-4 px-3">
+                  <p className="text-[11px] text-muted-foreground">
+                    Belum ada tahapan — contoh: penyampaian RKBMN ke Biro/Sekretariat, batas revisi DIPA.
+                  </p>
+                  {isAdmin && (
+                    <Button size="sm" variant="outline" className="mt-3" onClick={bukaFormTahapan}
+                      data-testid="penganggaran-kalender-tambah-kosong">
+                      <Plus className="w-4 h-4 mr-1.5" />Catat Tahapan
+                    </Button>
+                  )}
+                </div>
               ) : (
                 <ul className="divide-y divide-border/60">
                   {kalender.items.map((t) => {
@@ -382,7 +398,8 @@ export default function PenganggaranPage({ user, onBack }) {
                         ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
                         : "bg-muted text-foreground/70";
                     const label = info.lewat ? "Lewat tenggat"
-                      : (info.sisa_hari ?? 999) <= 30 ? `${info.sisa_hari} hari lagi` : t.tanggal;
+                      : (info.sisa_hari ?? 999) <= 30 ? `${info.sisa_hari} hari lagi`
+                        : new Date(t.tanggal).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
                     return (
                       <li key={t.id} className="px-3 py-2 flex items-center gap-2" data-testid={`penganggaran-tahapan-${t.id}`}>
                         <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold flex-shrink-0 ${warna}`}>{label}</span>
@@ -407,12 +424,21 @@ export default function PenganggaranPage({ user, onBack }) {
 
             {/* ── Daftar usulan ── */}
             <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+              <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
+                <Wallet className="w-4 h-4 text-teal-600 flex-shrink-0" />
+                <p className="text-xs font-bold text-foreground flex-1">Register Usulan Penganggaran</p>
+                <span className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-semibold text-foreground/70">{data.items.length}</span>
+              </div>
               {data.items.length === 0 ? (
                 <div className="text-center py-10 px-4">
                   <Wallet className="w-8 h-8 text-muted-foreground/50 mx-auto mb-2" />
                   <p className="text-sm text-muted-foreground">
                     Belum ada usulan — mulai dari kertas kerja RKBMN di modul Perencanaan.
                   </p>
+                  <Button size="sm" className="mt-3 bg-teal-600 hover:bg-teal-700 text-white"
+                    onClick={bukaFormUsulan} data-testid="penganggaran-tambah-kosong">
+                    <Plus className="w-4 h-4 mr-1.5" />Catat Usulan Pertama
+                  </Button>
                 </div>
               ) : (
                 <ul className="divide-y divide-border/60">
@@ -422,22 +448,32 @@ export default function PenganggaranPage({ user, onBack }) {
                         <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${WARNA_STATUS[u.status] || "bg-muted"}`}>
                           {labelStatus[u.status] || u.status}
                         </span>
+                        {u.status !== "ditolak" && (
+                          <span className="text-[10px] text-muted-foreground flex-shrink-0" title="Alur: diusulkan → disetujui telaah → masuk DIPA → terealisasi">
+                            tahap {["diusulkan", "disetujui_telaah", "masuk_dipa", "terealisasi"].indexOf(u.status) + 1}/4
+                          </span>
+                        )}
                         <span className="px-1.5 py-0.5 rounded bg-teal-500/15 text-teal-600 dark:text-teal-400 text-[10px] font-semibold">
                           {labelJenis[u.jenis] || u.jenis}{u.akun && ` · ${u.akun}`}
                         </span>
                         <span className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-semibold text-foreground/70">
                           TA {u.tahun_anggaran}
                         </span>
+                        {u.nomor_dipa && (
+                          <span className="px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-600 dark:text-violet-400 font-mono text-[10px] font-semibold flex-shrink-0" title="Nomor DIPA petikan">
+                            {u.nomor_dipa}
+                          </span>
+                        )}
                         <p className="text-sm font-semibold text-foreground flex-1 min-w-[140px] truncate">{u.uraian}</p>
                       </div>
-                      <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
-                        {`Usulan ${fmtRp(u.nilai_usulan)}`}
-                        {Number(u.nilai_disetujui) > 0 && ` · Disetujui ${fmtRp(u.nilai_disetujui)}`}
-                        {u.nomor_dipa && ` · DIPA ${u.nomor_dipa} (${fmtRp(u.nilai_dipa)})`}
-                        {Number(u.nilai_realisasi) > 0 && ` · Realisasi ${fmtRp(u.nilai_realisasi)}`}
-                        {u.sumber && ` · ${u.sumber}`}
-                        {` · oleh ${u.created_by}`}
-                      </p>
+                      <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground mt-0.5">
+                        <span className="whitespace-nowrap">Usulan {fmtRp(u.nilai_usulan)}</span>
+                        {Number(u.nilai_disetujui) > 0 && <span className="whitespace-nowrap">Disetujui {fmtRp(u.nilai_disetujui)}</span>}
+                        {u.nomor_dipa && <span className="whitespace-nowrap">DIPA {fmtRp(u.nilai_dipa)}</span>}
+                        {Number(u.nilai_realisasi) > 0 && <span className="whitespace-nowrap">Realisasi {fmtRp(u.nilai_realisasi)}</span>}
+                        {u.sumber && <span className="truncate max-w-full" title={u.sumber}>{u.sumber}</span>}
+                        <span className="truncate max-w-full">oleh {u.created_by}</span>
+                      </div>
                       {(u.aset || []).length > 0 && (
                         <ul className="mt-1 space-y-0.5">
                           {(u.aset || []).slice(0, 4).map((a) => (
@@ -547,8 +583,8 @@ export default function PenganggaranPage({ user, onBack }) {
         <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Catat Usulan Penganggaran</DialogTitle>
-            <DialogDescription className="text-xs">
-              Alur: diusulkan → disetujui telaah → masuk DIPA → terealisasi (siklus RKBMN t-2).
+            <DialogDescription className="text-xs" title="RKBMN: Rencana Kebutuhan Barang Milik Negara; t-2: dua tahun sebelum TA pelaksanaan">
+              Alur: diusulkan → disetujui telaah → masuk DIPA → terealisasi (siklus RKBMN t-2: usulan diajukan 2 tahun sebelum TA pelaksanaan).
             </DialogDescription>
           </DialogHeader>
           {form && (
@@ -565,7 +601,9 @@ export default function PenganggaranPage({ user, onBack }) {
                 </select>
               </div>
               <div>
-                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="agr-akun">Akun BAS</label>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="agr-akun" title="Bagan Akun Standar">
+                  Akun BAS <span className="font-normal text-muted-foreground">(Bagan Akun Standar)</span>
+                </label>
                 <select id="agr-akun" value={form.data.akun}
                   onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, akun: e.target.value } }))}
                   className="w-full h-9 px-2 rounded-lg border border-border bg-background text-sm text-foreground"

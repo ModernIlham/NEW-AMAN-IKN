@@ -601,6 +601,8 @@ function App() {
         <Suspense fallback={<PageLoader />}>
           <PengaturanPage
             user={user}
+            dark={dark}
+            toggleDark={toggleDark}
             onBack={() => setShowPengaturan(false)}
             onOpenSatker={() => { setShowPengaturan(false); setShowSatker(true); }}
             onOpenReferensiAkun={() => { setShowPengaturan(false); setShowReferensiAkun(true); }}

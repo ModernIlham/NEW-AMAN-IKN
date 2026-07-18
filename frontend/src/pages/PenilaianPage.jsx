@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, Scale, Coins, TrendingDown, Wallet, AlertTriangle,
   BookOpen, FileSignature, Plus, Pencil, Search, Trash2, Download, RefreshCw,
+  CalendarClock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -148,7 +149,7 @@ export default function PenilaianPage({ user, onBack }) {
   const muatRef = useCallback(() => {
     axios.get(`${API}/penilaian/masa-manfaat`)
       .then((r) => setRef(r.data))
-      .catch(() => {});
+      .catch(() => toast.error("Gagal memuat referensi masa manfaat"));
   }, []);
   useEffect(() => { muatPosisi(); }, [muatPosisi]);
   useEffect(() => { muatRef(); }, [muatRef]);
@@ -195,7 +196,7 @@ export default function PenilaianPage({ user, onBack }) {
     <div className="min-h-screen bg-background" data-testid="penilaian-page">
       {/* ── Header ── */}
       <header className="bg-card/95 backdrop-blur-sm border-b border-border px-3 sm:px-6 py-2.5 sticky top-0 z-40">
-        <div className="max-w-5xl mx-auto flex items-center gap-3">
+        <div className="max-w-5xl mx-auto flex flex-wrap items-center gap-2 sm:gap-3 gap-y-2">
           <button
             type="button"
             onClick={onBack}
@@ -209,16 +210,17 @@ export default function PenilaianPage({ user, onBack }) {
             <Scale className="w-4 h-4 text-white" />
           </span>
           <div className="min-w-0 flex-1">
-            <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight">Penilaian — Posisi Penyusutan</h1>
+            <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight truncate">Penilaian — Posisi Penyusutan</h1>
             <p className="text-[11px] sm:text-xs text-muted-foreground truncate">
               Garis lurus semesteran (PMK 65/2017) · masa manfaat KMK 295/2019 jo. 266/2023
             </p>
           </div>
+          <CalendarClock className="w-4 h-4 text-muted-foreground flex-shrink-0 hidden sm:block" title="Posisi per tanggal" />
           <Input
             type="date"
             value={perTanggal}
             onChange={(e) => e.target.value && setPerTanggal(e.target.value)}
-            className="h-8 w-36 text-xs flex-shrink-0"
+            className="h-8 w-28 sm:w-36 text-xs flex-shrink-0"
             data-testid="penilaian-tanggal"
             aria-label="Posisi per tanggal"
           />
@@ -237,17 +239,17 @@ export default function PenilaianPage({ user, onBack }) {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
               <div className="bg-card rounded-xl border border-border p-3 text-center" data-testid="penilaian-stat-perolehan">
                 <Coins className="w-5 h-5 text-blue-500 mx-auto mb-1" />
-                <p className="text-sm sm:text-base font-bold text-foreground leading-none break-all">{fmtRp(data.total.nilai_perolehan)}</p>
+                <p className="text-sm sm:text-base font-bold text-foreground leading-none truncate whitespace-nowrap tabular-nums" title={fmtRp(data.total.nilai_perolehan)}>{fmtRp(data.total.nilai_perolehan)}</p>
                 <p className="text-[10px] text-muted-foreground mt-1">Nilai perolehan ({data.total.jumlah} aset disusutkan)</p>
               </div>
               <div className="bg-card rounded-xl border border-border p-3 text-center" data-testid="penilaian-stat-akumulasi">
                 <TrendingDown className="w-5 h-5 text-red-500 mx-auto mb-1" />
-                <p className="text-sm sm:text-base font-bold text-foreground leading-none break-all">{fmtRp(data.total.akumulasi)}</p>
+                <p className="text-sm sm:text-base font-bold text-foreground leading-none truncate whitespace-nowrap tabular-nums" title={fmtRp(data.total.akumulasi)}>{fmtRp(data.total.akumulasi)}</p>
                 <p className="text-[10px] text-muted-foreground mt-1">Akumulasi penyusutan</p>
               </div>
               <div className="bg-card rounded-xl border border-emerald-500/40 p-3 text-center" data-testid="penilaian-stat-buku">
                 <Wallet className="w-5 h-5 text-emerald-500 mx-auto mb-1" />
-                <p className="text-sm sm:text-base font-bold text-foreground leading-none break-all">{fmtRp(data.total.nilai_buku)}</p>
+                <p className="text-sm sm:text-base font-bold text-foreground leading-none truncate whitespace-nowrap tabular-nums" title={fmtRp(data.total.nilai_buku)}>{fmtRp(data.total.nilai_buku)}</p>
                 <p className="text-[10px] text-muted-foreground mt-1">Nilai buku</p>
               </div>
               <div className="bg-card rounded-xl border border-border p-3 text-center" data-testid="penilaian-stat-habis">
@@ -350,13 +352,15 @@ export default function PenilaianPage({ user, onBack }) {
 
             {/* ── Register koreksi nilai & hasil penilaian (PMK 99/2024 + 118/2017) ── */}
             <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="penilaian-koreksi">
-              <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
-                <FileSignature className="w-4 h-4 text-teal-600 flex-shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-bold text-foreground">Koreksi Nilai & Hasil Penilaian</p>
-                  <p className="text-[10px] text-muted-foreground truncate" title="LHIP = Laporan Hasil Inventarisasi dan Penilaian">
-                    Revaluasi/koreksi per aset (LHIP/Laporan Penilaian/BA) — resmi di SAKTI
-                  </p>
+              <div className="px-3 py-2.5 border-b border-border flex flex-wrap items-center gap-2 gap-y-1.5">
+                <div className="basis-full sm:basis-auto sm:flex-1 min-w-0 flex items-center gap-2">
+                  <FileSignature className="w-4 h-4 text-teal-600 flex-shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold text-foreground">Koreksi Nilai & Hasil Penilaian</p>
+                    <p className="text-[10px] text-muted-foreground truncate" title="Revaluasi/koreksi per aset — LHIP (Laporan Hasil Inventarisasi & Penilaian), Laporan Penilaian, atau BA — resmi di SAKTI">
+                      Revaluasi/koreksi per aset — LHIP (Laporan Hasil Inventarisasi & Penilaian)/Laporan Penilaian/BA — resmi di SAKTI
+                    </p>
+                  </div>
                 </div>
                 {(koreksi?.ringkasan?.belum_tercatat_sakti || 0) > 0 && (
                   <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px] font-semibold flex-shrink-0">
@@ -393,16 +397,19 @@ export default function PenilaianPage({ user, onBack }) {
                         </span>
                         <p className="text-sm font-semibold text-foreground flex-1 min-w-[140px] truncate">{k.asset_name || "-"}</p>
                         <span className="font-mono text-[10px] text-muted-foreground flex-shrink-0">{k.asset_code} · {k.NUP}</span>
+                        <span className="text-[10px] font-mono font-semibold text-foreground/80 flex-shrink-0">
+                          {fmtRp(k.nilai_lama)} → {fmtRp(k.nilai_baru)}
+                        </span>
                       </div>
                       <p className="text-[11px] text-muted-foreground mt-0.5">
                         {[`${koreksi.label_dokumen?.[k.jenis_dokumen] || k.jenis_dokumen} ${k.nomor_dokumen} (${k.tanggal_dokumen})`,
-                          `Rp${Math.round(Number(k.nilai_lama || 0)).toLocaleString("id-ID")} → Rp${Math.round(Number(k.nilai_baru || 0)).toLocaleString("id-ID")}`,
-                          k.dampak_masa_manfaat === "masa_manfaat_baru" && `masa manfaat baru ${k.masa_manfaat_semester} smt (akumulasi reset)`,
+                          k.dampak_masa_manfaat === "masa_manfaat_baru" && `masa manfaat baru ${k.masa_manfaat_semester} semester (akumulasi reset)`,
                           k.penilai_pelaksana, k.catatan, `oleh ${k.created_by}`].filter(Boolean).join(" · ")}
                       </p>
                       <div className="flex gap-1.5 mt-1.5 items-center">
                         {k.status_sakti === "belum_dicatat" && (
-                          <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                          <Button size="sm" variant="outline"
+                            className="h-7 text-[11px] min-h-0 border-amber-500/50 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
                             onClick={() => tandaiSakti(k)}
                             data-testid={`penilaian-koreksi-${k.id}-sakti`}>
                             Tandai tercatat di SAKTI
@@ -537,7 +544,7 @@ export default function PenilaianPage({ user, onBack }) {
                     <span className="text-[11px] text-muted-foreground truncate flex-1">
                       {m.uraian || "—"} · <span className={m.sumber === "input satker" ? "text-emerald-600 dark:text-emerald-400" : ""}>{m.sumber}</span>
                     </span>
-                    <span className="text-xs font-bold text-foreground flex-shrink-0">{m.tahun} th</span>
+                    <span className="text-xs font-bold text-foreground flex-shrink-0" title={`Masa manfaat ${m.tahun} tahun`}>{m.tahun} th</span>
                     {isAdmin && (
                       <>
                         <button type="button" aria-label={`Ubah ${m.kode}`}
@@ -557,7 +564,13 @@ export default function PenilaianPage({ user, onBack }) {
                   </li>
                 ))}
                 {(ref?.items || []).length === 0 && (
-                  <li className="text-[11px] text-muted-foreground text-center py-3">Memuat referensi…</li>
+                  <li className="text-[11px] text-muted-foreground text-center py-3">
+                    {ref === null
+                      ? "Memuat referensi…"
+                      : isAdmin
+                        ? "Belum ada entri — gunakan tombol Tambah untuk mengisi dari lampiran KMK 295/2019."
+                        : "Belum ada entri referensi masa manfaat."}
+                  </li>
                 )}
               </ul>
             </div>

@@ -71,14 +71,15 @@ function FeatureCard({ icon: Icon, title, description, color = "blue", items = [
 function WorkflowStep({ number, title, description, color, isLast }) {
   const colorMap = { blue: "bg-blue-500", green: "bg-emerald-500", orange: "bg-orange-500", red: "bg-red-500", purple: "bg-purple-500", cyan: "bg-cyan-500" };
   return (
-    <div className="flex items-start gap-4">
+    <div className="flex items-stretch gap-4">
       <div className="flex flex-col items-center">
-        <div className={`w-10 h-10 rounded-full ${colorMap[color]} flex items-center justify-center text-white font-bold text-sm shadow-lg`}>
+        <div className={`w-10 h-10 rounded-full ${colorMap[color]} flex items-center justify-center text-white font-bold text-sm shadow-lg shrink-0`}>
           {number}
         </div>
-        {!isLast && <div className="w-0.5 h-16 bg-slate-700 mt-2" />}
+        {/* Konektor mengikuti tinggi konten agar garis tak putus saat deskripsi membungkus */}
+        {!isLast && <div className="w-0.5 flex-1 min-h-8 bg-slate-700 mt-2" />}
       </div>
-      <div className="pb-8">
+      <div className="pb-8 min-w-0">
         <h4 className="font-semibold text-white">{title}</h4>
         <p className="text-sm text-slate-400 mt-1">{description}</p>
       </div>
@@ -86,10 +87,11 @@ function WorkflowStep({ number, title, description, color, isLast }) {
   );
 }
 
-function CollapsibleSection({ title, icon: Icon, children, defaultOpen = false }) {
+function CollapsibleSection({ id, title, icon: Icon, children, defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border border-slate-700/50 rounded-xl overflow-hidden mb-4">
+    // scroll-mt-20 memberi ruang untuk header sticky saat lompat via anchor
+    <div id={id} className="border border-slate-700/50 rounded-xl overflow-hidden mb-4 scroll-mt-20">
       <button onClick={() => setOpen(!open)} className="w-full flex items-center gap-3 px-6 py-4 bg-slate-800/50 hover:bg-slate-800/80 transition-colors text-left">
         {Icon && <Icon className="w-5 h-5 text-blue-400" />}
         <span className="font-semibold text-white flex-1">{title}</span>
@@ -115,7 +117,7 @@ function ArchBlock({ icon: Icon, title, items, color }) {
       </div>
       <ul className="space-y-1.5">
         {items.map((item, i) => (
-          <li key={i} className="text-xs text-slate-400">{item}</li>
+          <li key={i} className="text-xs text-slate-400 break-words">{item}</li>
         ))}
       </ul>
     </div>
@@ -204,7 +206,7 @@ function RABTable() {
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className="w-full min-w-[640px] text-sm">
         <thead>
           <tr className="bg-blue-600/20 text-blue-300">
             <th className="px-3 py-2.5 text-left rounded-tl-lg">No</th>
@@ -229,20 +231,20 @@ function RABTable() {
                     <td className="px-3 py-2 text-slate-300">{item.name}</td>
                     <td className="px-3 py-2 text-center text-slate-400">{item.vol}</td>
                     <td className="px-3 py-2 text-center text-slate-400">{item.unit}</td>
-                    <td className="px-3 py-2 text-right text-slate-400">{fmt(item.price)}</td>
-                    <td className="px-3 py-2 text-right text-slate-300 font-medium">{fmt(item.vol * item.price)}</td>
+                    <td className="px-3 py-2 text-right text-slate-400 whitespace-nowrap tabular-nums">{fmt(item.price)}</td>
+                    <td className="px-3 py-2 text-right text-slate-300 font-medium whitespace-nowrap tabular-nums">{fmt(item.vol * item.price)}</td>
                   </tr>
                 ))}
                 <tr className="bg-slate-800/50">
                   <td colSpan={5} className="px-3 py-2 text-right text-slate-400 text-xs font-medium">Subtotal {cat.label}</td>
-                  <td className="px-3 py-2 text-right text-white font-semibold">{fmt(subtotal)}</td>
+                  <td className="px-3 py-2 text-right text-white font-semibold whitespace-nowrap tabular-nums">{fmt(subtotal)}</td>
                 </tr>
               </React.Fragment>
             );
           })}
           <tr className="bg-blue-600/30">
             <td colSpan={5} className="px-3 py-3 text-right text-white font-bold rounded-bl-lg">TOTAL KESELURUHAN</td>
-            <td className="px-3 py-3 text-right text-blue-300 font-bold text-base rounded-br-lg">Rp {fmt(grandTotal)}</td>
+            <td className="px-3 py-3 text-right text-blue-300 font-bold text-base rounded-br-lg whitespace-nowrap tabular-nums">Rp {fmt(grandTotal)}</td>
           </tr>
         </tbody>
       </table>
@@ -275,21 +277,23 @@ export default function InfoPage({ onBack }) {
     <div className="min-h-screen bg-slate-950 text-slate-200">
       {/* Header */}
       <div className="sticky top-0 z-50 bg-slate-950/95 backdrop-blur-xl border-b border-slate-800">
-        <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 py-3 flex items-center justify-between gap-2">
           <button onClick={onBack} className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors text-sm">
             <ArrowLeft className="w-4 h-4" />
             <span>Kembali</span>
           </button>
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 bg-blue-500 rounded-lg flex items-center justify-center">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-7 h-7 bg-blue-500 rounded-lg flex items-center justify-center shrink-0" title="AMAN — Manajemen Aset Negara">
               <Package className="w-4 h-4 text-white" />
             </div>
-            <span className="font-semibold text-white text-sm">AMAN — Manajemen Aset Negara</span>
+            <span className="font-semibold text-white text-sm hidden md:inline truncate">AMAN — Manajemen Aset Negara</span>
           </div>
           <div className="flex gap-2">
             <button
               onClick={() => handleDownload("ppt")}
               disabled={!!downloading}
+              title="Unduh Slide Presentasi (PPTX)"
+              aria-label="Unduh Slide Presentasi (PPTX)"
               className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500/20 border border-orange-500/30 text-orange-300 rounded-lg text-xs hover:bg-orange-500/30 transition-colors disabled:opacity-50"
             >
               <Presentation className="w-3.5 h-3.5" />
@@ -298,6 +302,8 @@ export default function InfoPage({ onBack }) {
             <button
               onClick={() => handleDownload("proposal")}
               disabled={!!downloading}
+              title="Unduh Proposal Lengkap (DOCX)"
+              aria-label="Unduh Proposal Lengkap (DOCX)"
               className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/20 border border-blue-500/30 text-blue-300 rounded-lg text-xs hover:bg-blue-500/30 transition-colors disabled:opacity-50"
             >
               <FileText className="w-3.5 h-3.5" />
@@ -343,6 +349,23 @@ export default function InfoPage({ onBack }) {
           </div>
         </div>
 
+        {/* ── NAVIGASI CEPAT ANTAR SEKSI ── */}
+        <nav aria-label="Navigasi seksi" className="flex items-center justify-center gap-2 flex-wrap mb-12">
+          {[
+            { href: "#rilis", label: "Apa yang Baru" },
+            { href: "#latar-belakang", label: "Latar Belakang" },
+            { href: "#arsitektur", label: "Arsitektur" },
+            { href: "#fitur", label: "Fitur (20+ Modul)" },
+            { href: "#se17", label: "Klasifikasi SE-17" },
+            { href: "#alur-kerja", label: "Alur Kerja" },
+            { href: "#harga", label: "Harga & RAB" },
+            { href: "#timeline", label: "Timeline" },
+            { href: "#peran", label: "Peran Pengguna" },
+          ].map((s) => (
+            <a key={s.href} href={s.href} className="min-h-0 min-w-0 px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700 text-slate-300 text-[11px] hover:border-blue-500/50 hover:text-blue-300 transition-colors">{s.label}</a>
+          ))}
+        </nav>
+
         {/* ── DOWNLOAD SECTION ── */}
         <div className="grid md:grid-cols-2 gap-4 mb-12">
           <button
@@ -376,7 +399,7 @@ export default function InfoPage({ onBack }) {
         </div>
 
         {/* ── SECTIONS ── */}
-        <CollapsibleSection title="Apa yang Baru — Rilis v2.3" icon={Sparkles} defaultOpen={true}>
+        <CollapsibleSection id="rilis" title="Apa yang Baru — Rilis v2.3" icon={Sparkles} defaultOpen={true}>
           <p className="text-sm text-slate-400 mb-5">
             Rangkaian pembaruan Juli 2026 berfokus pada pekerjaan lapangan: peta aset interaktif,
             alur kamera + scan QR beruntun, dan laporan dengan kop surat resmi. Detail lengkap per
@@ -441,7 +464,7 @@ export default function InfoPage({ onBack }) {
           </div>
         </CollapsibleSection>
 
-        <CollapsibleSection title="Latar Belakang & Dasar Hukum" icon={BookOpen} defaultOpen={true}>
+        <CollapsibleSection id="latar-belakang" title="Latar Belakang & Dasar Hukum" icon={BookOpen} defaultOpen={true}>
           <div className="grid md:grid-cols-2 gap-8">
             <div>
               <h4 className="font-semibold text-white mb-3">Mengapa Sistem Ini Dibutuhkan?</h4>
@@ -482,8 +505,8 @@ export default function InfoPage({ onBack }) {
           </div>
         </CollapsibleSection>
 
-        <CollapsibleSection title="Arsitektur & Teknologi" icon={Server} defaultOpen={true}>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <CollapsibleSection id="arsitektur" title="Arsitektur & Teknologi" icon={Server} defaultOpen={true}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <ArchBlock icon={Monitor} title="Frontend" items={["React 19 + Tailwind CSS", "Shadcn/UI + Leaflet (Peta Aset)", "Offline-first: IndexedDB + Service Worker", "Responsive & Dark Mode"]} color="blue" />
             <ArchBlock icon={Server} title="Backend" items={["Python FastAPI (Async), 19 modul route", "WebSocket + Event Bus lintas worker", "OCC (version/If-Match) + Idempotency-Key", "JWT + OTP Email Authentication"]} color="green" />
             <ArchBlock icon={Database} title="Database" items={["MongoDB 7.0 + Motor (async)", "GridFS: foto, dokumen, BAST", "Capped collection ws_events", "UUID-based Records"]} color="orange" />
@@ -491,15 +514,16 @@ export default function InfoPage({ onBack }) {
           </div>
           <div className="flex items-center justify-center gap-2 flex-wrap py-4">
             {["User Browser", "React SPA (offline-ready)", "Nginx", "FastAPI (multi-worker)", "MongoDB + GridFS"].map((item, i, arr) => (
-              <React.Fragment key={i}>
+              // Chip + panah dibungkus satu span agar panah tak menggantung sendirian saat baris membungkus
+              <span key={i} className="inline-flex items-center gap-2">
                 <span className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-300">{item}</span>
-                {i < arr.length - 1 && <span className="text-blue-400 font-bold">→</span>}
-              </React.Fragment>
+                {i < arr.length - 1 && <span className="text-blue-400 font-bold" aria-hidden="true">→</span>}
+              </span>
             ))}
           </div>
         </CollapsibleSection>
 
-        <CollapsibleSection title="Fitur & Fungsionalitas (20+ Modul)" icon={Layers}>
+        <CollapsibleSection id="fitur" title="Fitur & Fungsionalitas (20+ Modul)" icon={Layers}>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <FeatureCard icon={Package} title="Manajemen Aset Lengkap" description="CRUD aset dengan 45+ field: identitas, perolehan, organisasi, kondisi, GPS, stiker, dokumen" color="blue" items={["Partial update (PATCH diff) — hanya field berubah", "Validasi kode aset 10 digit & register 32 hex", "Barang Serupa: grup per kode + batch edit"]} />
             <FeatureCard icon={Target} title="Mode Inventarisasi Lapangan" description="Lembar input satu layar untuk petugas lapangan: cepat, minim ketik" color="green" items={["Status & kondisi sekali ketuk + progress bar", "Salin lokasi/pengguna dari aset sebelumnya", "GPS cache instan + kamera langsung"]} />
@@ -519,7 +543,7 @@ export default function InfoPage({ onBack }) {
           </div>
         </CollapsibleSection>
 
-        <CollapsibleSection title="Klasifikasi SE-17/MK.1/2024" icon={Shield}>
+        <CollapsibleSection id="se17" title="Klasifikasi SE-17/MK.1/2024" icon={Shield}>
           <div className="grid md:grid-cols-3 gap-6">
             <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-5">
               <div className="flex items-center gap-2 mb-3">
@@ -560,7 +584,7 @@ export default function InfoPage({ onBack }) {
           </div>
         </CollapsibleSection>
 
-        <CollapsibleSection title="Alur Kerja Inventarisasi" icon={Target}>
+        <CollapsibleSection id="alur-kerja" title="Alur Kerja Inventarisasi" icon={Target}>
           <div className="max-w-xl mx-auto">
             <WorkflowStep number="01" title="Buat Kegiatan Inventarisasi" description="Admin membuat kegiatan (nomor tiket INV-{tahun}-{seq} otomatis), mengatur satker, eselon, tim, dan kategori aset" color="blue" />
             <WorkflowStep number="02" title="Siapkan Data Aset" description="Import data BMN dari SIMAN/CSV/XLSX (46 kolom, template dengan dropdown) atau input manual per aset" color="green" />
@@ -571,7 +595,7 @@ export default function InfoPage({ onBack }) {
           </div>
         </CollapsibleSection>
 
-        <CollapsibleSection title="Harga, Lisensi & RAB" icon={DollarSign}>
+        <CollapsibleSection id="harga" title="Harga, Lisensi & RAB" icon={DollarSign}>
           {/* ── Skema Lisensi ── */}
           <div className="grid md:grid-cols-3 gap-4 mb-6">
             <PriceTier
@@ -661,8 +685,8 @@ export default function InfoPage({ onBack }) {
           </div>
         </CollapsibleSection>
 
-        <CollapsibleSection title="Timeline Implementasi" icon={Calendar}>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <CollapsibleSection id="timeline" title="Timeline Implementasi" icon={Calendar}>
+          <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-3">
             {[
               { period: "Bulan 1-2", title: "Analisis & Desain", items: ["Requirement gathering", "UI/UX prototyping", "Desain database"], color: "blue" },
               { period: "Bulan 3-5", title: "Pengembangan Core", items: ["Backend API", "Frontend UI", "Database setup"], color: "green" },
@@ -695,7 +719,7 @@ export default function InfoPage({ onBack }) {
         </CollapsibleSection>
 
         {/* ── PERAN PENGGUNA ── */}
-        <CollapsibleSection title="Peran Pengguna" icon={Users}>
+        <CollapsibleSection id="peran" title="Peran Pengguna" icon={Users}>
           <div className="grid md:grid-cols-3 gap-4">
             {[
               { role: "Admin", color: "blue", icon: Lock, desc: "Full akses ke semua fitur", perms: ["Kelola kegiatan & kategori", "Manajemen user & role", "Pengesahan & kunci kegiatan", "Import/Export, Backup & Reset", "Semua fitur operator"] },

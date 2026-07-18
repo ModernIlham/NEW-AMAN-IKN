@@ -5,6 +5,7 @@ import {
   ArrowLeft, Loader2, Eye, RefreshCw, ChevronDown, BadgeCheck,
   UserCheck, Handshake, ArrowLeftRight, BookOpen, ShieldCheck, FileText,
   Gavel, Plus, Trash2, AlertTriangle, Siren, FileDown, Paperclip, Upload,
+  BarChart3,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -247,11 +248,12 @@ export default function WasdalPage({ user, onBack }) {
     <div className="min-h-screen bg-background" data-testid="wasdal-page">
       {/* ── Header ── */}
       <header className="bg-card/95 backdrop-blur-sm border-b border-border px-3 sm:px-6 py-2.5 sticky top-0 z-40">
-        <div className="max-w-5xl mx-auto flex items-center gap-3">
+        <div className="max-w-5xl mx-auto flex flex-wrap items-center gap-2 sm:gap-3 gap-y-2">
           <button
             type="button"
             onClick={onBack}
             aria-label="Kembali ke Beranda Modul"
+            title="Kembali ke Beranda Modul"
             className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0"
             data-testid="wasdal-back"
           >
@@ -261,23 +263,24 @@ export default function WasdalPage({ user, onBack }) {
             <Eye className="w-4 h-4 text-white" />
           </span>
           <div className="min-w-0 flex-1">
-            <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight">Wasdal — Pemantauan</h1>
+            <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight truncate">Wasdal — Pemantauan</h1>
             <p className="text-[11px] sm:text-xs text-muted-foreground truncate">
               {data ? `${data.periode?.label} · ${data.total_aset} aset dipantau` : "PMK 207/PMK.06/2021"}
             </p>
           </div>
           <button
             type="button"
-            aria-label="Unduh laporan pemantauan (PDF)"
+            aria-label="Unduh laporan pemantauan periode berjalan (PDF)"
+            title="Unduh laporan pemantauan periode berjalan (PDF)"
             onClick={() => downloadFileWithProgress(
               `${API}/wasdal/laporan-pdf`,
               `Laporan_Wasdal_${(data?.periode?.label || "periode").replace(/\s/g, "_")}.pdf`,
               { label: "Laporan Hasil Pemantauan Wasdal" },
             ).catch(() => {})}
-            className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0"
+            className="h-9 px-2.5 rounded-lg border border-border text-foreground/80 flex items-center justify-center gap-1 hover:bg-muted flex-shrink-0 text-[10px] font-bold min-w-0 min-h-0"
             data-testid="wasdal-laporan"
           >
-            <FileText className="w-4 h-4" />
+            <FileText className="w-4 h-4" /><span className="hidden sm:inline">Periode</span>
           </button>
           <button
             type="button"
@@ -297,6 +300,7 @@ export default function WasdalPage({ user, onBack }) {
             type="button"
             onClick={muat}
             aria-label="Muat ulang"
+            title="Muat ulang data pemantauan"
             className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0"
             data-testid="wasdal-reload"
           >
@@ -324,6 +328,7 @@ export default function WasdalPage({ user, onBack }) {
                     type="button"
                     onClick={() => n > 0 && setBuka(buka === kunci ? null : kunci)}
                     disabled={n === 0}
+                    title={n === 0 ? "Tidak ada temuan — objek ini tertib" : "Klik untuk lihat rincian temuan"}
                     className={`bg-card rounded-xl border p-3 text-center transition-colors min-w-0 min-h-0 ${
                       n > 0 ? "border-sky-500/40 hover:bg-sky-500/10" : "border-emerald-500/40 opacity-70"
                     }`}
@@ -333,7 +338,7 @@ export default function WasdalPage({ user, onBack }) {
                       ? <Icon className="w-5 h-5 mx-auto mb-1 text-sky-500" />
                       : <BadgeCheck className="w-5 h-5 mx-auto mb-1 text-emerald-500" />}
                     <p className="text-lg font-bold text-foreground leading-none">{n}</p>
-                    <p className="text-[10px] text-muted-foreground mt-1">{label}</p>
+                    <p className="text-[10px] text-muted-foreground mt-1">{n === 0 ? `${label} · tertib` : label}</p>
                   </button>
                 );
               })}
@@ -363,30 +368,41 @@ export default function WasdalPage({ user, onBack }) {
 
             {/* ── Portofolio BMN + indikator tertib + SBSK ── */}
             {porto && (
-              <div className="bg-card rounded-xl border border-border shadow-sm p-3 space-y-2" data-testid="wasdal-portofolio">
-                <p className="text-xs font-bold">Portofolio BMN &amp; Kesesuaian SBSK (PMK 138/2024)</p>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {[["Aset dipantau", porto.jumlah_aset],
-                    ["PSP terbit", porto.psp_terbit],
-                    ["BMN idle diproses", porto.idle_proses],
-                    ["Sengketa", porto.sengketa]].map(([label, n]) => (
-                    <div key={label} className="rounded-lg border border-border p-2 text-center">
-                      <p className="text-base font-extrabold leading-none">{Number(n || 0).toLocaleString("id-ID")}</p>
-                      <p className="text-[10px] text-muted-foreground mt-1">{label}</p>
-                    </div>
-                  ))}
+              <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="wasdal-portofolio">
+                <div className="px-3 py-2.5 border-b border-border flex flex-wrap items-center gap-2 gap-y-1.5">
+                  <BarChart3 className="w-4 h-4 text-sky-500 flex-shrink-0" />
+                  <p className="text-xs font-bold text-foreground flex-1 min-w-[140px]"
+                    title="SBSK — Standar Barang dan Standar Kebutuhan (PMK 138/PMK.06/2024)">
+                    Portofolio BMN &amp; Kesesuaian SBSK (PMK 138/2024)
+                  </p>
+                  <span className="px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-600 dark:text-sky-400 text-[10px] font-semibold">
+                    {Number(porto.jumlah_aset || 0).toLocaleString("id-ID")} aset
+                  </span>
                 </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {(porto.rows || []).map((r) => (
-                    <span key={r.golongan} className="px-2 py-0.5 rounded-full border border-border text-[10px]">
-                      <b>{r.golongan}</b> {r.uraian}: {r.jumlah_total} unit
-                    </span>
-                  ))}
+                <div className="p-3 space-y-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {[["Aset dipantau", porto.jumlah_aset, null],
+                      ["PSP terbit", porto.psp_terbit, "PSP — Penetapan Status Penggunaan"],
+                      ["BMN idle diproses", porto.idle_proses, "BMN idle — Barang Milik Negara yang tidak digunakan untuk tugas dan fungsi"],
+                      ["Sengketa", porto.sengketa, null]].map(([label, n, penuh]) => (
+                      <div key={label} title={penuh || undefined} className="rounded-lg border border-border p-2 text-center">
+                        <p className="text-base font-extrabold leading-none">{Number(n || 0).toLocaleString("id-ID")}</p>
+                        <p className="text-[10px] text-muted-foreground mt-1">{label}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(porto.rows || []).map((r) => (
+                      <span key={r.golongan} className="px-2 py-0.5 rounded-full border border-border text-[10px]">
+                        <b>{r.golongan}</b> {r.uraian}: {r.jumlah_total} unit
+                      </span>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    {porto.sbsk?.length || 0} baris standar SBSK terdaftar (rawat di modul Perencanaan) —
+                    sanding kebutuhan vs standar dilakukan per usulan RKBMN.
+                  </p>
                 </div>
-                <p className="text-[10px] text-muted-foreground">
-                  {porto.sbsk?.length || 0} baris standar SBSK terdaftar (rawat di modul Perencanaan) —
-                  sanding kebutuhan vs standar dilakukan per usulan RKBMN.
-                </p>
               </div>
             )}
 
@@ -468,9 +484,12 @@ export default function WasdalPage({ user, onBack }) {
             {/* ── Register penertiban (≤15 hari kerja) ── */}
             {pen && (
               <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="wasdal-penertiban">
-                <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
-                  <Gavel className="w-4 h-4 text-amber-500" />
-                  <p className="text-xs font-bold text-foreground flex-1">Penertiban (≤{pen.tenggat_hari_kerja} hari kerja)</p>
+                <div className="px-3 py-2.5 border-b border-border flex flex-wrap items-center gap-2 gap-y-1.5">
+                  <Gavel className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                  <p className="text-xs font-bold text-foreground flex-1 min-w-[140px]"
+                    title={`Tindak lanjut wajib selesai ≤${pen.tenggat_hari_kerja} hari kerja sejak tanggal dasar (PMK 207/2021)`}>
+                    Penertiban (≤{pen.tenggat_hari_kerja} hari kerja)
+                  </p>
                   {(pen.ringkasan?.lewat_tenggat || 0) > 0 && (
                     <span className="px-2 py-0.5 rounded-full bg-red-500/15 text-red-600 dark:text-red-400 text-[10px] font-semibold">
                       {pen.ringkasan.lewat_tenggat} lewat tenggat
@@ -481,12 +500,14 @@ export default function WasdalPage({ user, onBack }) {
                   </span>
                   {(pen.items || []).length > 0 && (
                     <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
+                      title="Ekspor register penertiban (CSV)" aria-label="Ekspor register penertiban (CSV)"
                       onClick={() => downloadFileWithProgress(`${API}/wasdal/penertiban/export`, "register_penertiban_wasdal.csv", { label: "Ekspor Register Penertiban Wasdal (CSV)" }).catch(() => {})}
                       data-testid="wasdal-penertiban-export">
                       <FileDown className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">CSV</span>
                     </Button>
                   )}
                   <Button size="sm" onClick={() => setFormPen({ data: { sumber: "pemantauan", tanggal_dasar: new Date().toISOString().slice(0, 10), objek: "", uraian: "" }, saving: false })}
+                    title="Catat tiket penertiban baru" aria-label="Catat tiket penertiban baru"
                     className="h-7 text-[11px] min-h-0 bg-amber-600 hover:bg-amber-700 text-white" data-testid="wasdal-penertiban-tambah">
                     <Plus className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">Catat</span>
                   </Button>
@@ -525,7 +546,7 @@ export default function WasdalPage({ user, onBack }) {
                             </Button>
                           )}
                           {isAdmin && (
-                            <button type="button" aria-label="Hapus tiket" onClick={() => hapusPen(t)}
+                            <button type="button" aria-label="Hapus tiket" title="Hapus tiket penertiban" onClick={() => hapusPen(t)}
                               className="h-7 w-7 rounded-lg border border-border text-red-500 flex items-center justify-center hover:bg-red-500/10 min-h-0 min-w-0">
                               <Trash2 className="w-3 h-3" />
                             </button>
@@ -550,9 +571,12 @@ export default function WasdalPage({ user, onBack }) {
             {/* ── Pemantauan insidentil (10 + 5 hari kerja) ── */}
             {insi && (
               <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="wasdal-insidentil">
-                <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
-                  <Siren className="w-4 h-4 text-violet-500" />
-                  <p className="text-xs font-bold text-foreground flex-1">Pemantauan Insidentil ({insi.tenggat_pelaksanaan_hk}+{insi.tenggat_lapor_hk} hari kerja)</p>
+                <div className="px-3 py-2.5 border-b border-border flex flex-wrap items-center gap-2 gap-y-1.5">
+                  <Siren className="w-4 h-4 text-violet-500 flex-shrink-0" />
+                  <p className="text-xs font-bold text-foreground flex-1 min-w-[140px]"
+                    title={`Pelaksanaan ≤${insi.tenggat_pelaksanaan_hk} hari kerja sejak mulai; pelaporan ≤${insi.tenggat_lapor_hk} hari kerja sejak tanggal BA`}>
+                    Pemantauan Insidentil ({insi.tenggat_pelaksanaan_hk}+{insi.tenggat_lapor_hk} hari kerja)
+                  </p>
                   {(insi.ringkasan?.lewat_tenggat || 0) > 0 && (
                     <span className="px-2 py-0.5 rounded-full bg-red-500/15 text-red-600 dark:text-red-400 text-[10px] font-semibold">
                       {insi.ringkasan.lewat_tenggat} lewat tenggat
@@ -563,12 +587,14 @@ export default function WasdalPage({ user, onBack }) {
                   </span>
                   {(insi.items || []).length > 0 && (
                     <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
+                      title="Ekspor register pemantauan insidentil (CSV)" aria-label="Ekspor register pemantauan insidentil (CSV)"
                       onClick={() => downloadFileWithProgress(`${API}/wasdal/insidentil/export`, "register_pemantauan_insidentil.csv", { label: "Ekspor Register Pemantauan Insidentil (CSV)" }).catch(() => {})}
                       data-testid="wasdal-insidentil-export">
                       <FileDown className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">CSV</span>
                     </Button>
                   )}
                   <Button size="sm" onClick={() => setFormInsi({ data: { pemicu: "informasi_masyarakat", tanggal_mulai: new Date().toISOString().slice(0, 10), objek: "", uraian: "", lokasi: "" }, saving: false })}
+                    title="Catat pemantauan insidentil baru" aria-label="Catat pemantauan insidentil baru"
                     className="h-7 text-[11px] min-h-0 bg-violet-600 hover:bg-violet-700 text-white" data-testid="wasdal-insidentil-tambah">
                     <Plus className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">Catat</span>
                   </Button>
@@ -601,13 +627,13 @@ export default function WasdalPage({ user, onBack }) {
                               {t.info_tenggat.tahap}: sisa {t.info_tenggat.sisa_hari_kerja ?? "-"} hari kerja
                             </span>
                           )}
-                          <button type="button" aria-label="Lampiran tiket"
+                          <button type="button" aria-label="Lampiran tiket" title="Lampiran tiket (scan BA/foto)"
                             onClick={() => setLampInsi({ tiket: t, uploading: false })}
                             className="h-7 w-7 rounded-lg border border-border text-foreground/70 flex items-center justify-center hover:bg-muted min-h-0 min-w-0"
                             data-testid={`wasdal-insidentil-lampiran-${t.id}`}>
                             <Paperclip className="w-3 h-3" />
                           </button>
-                          <button type="button" aria-label="Unduh BA (PDF)"
+                          <button type="button" aria-label="Unduh BA (PDF)" title="Unduh BA pemantauan (PDF)"
                             onClick={() => downloadFileWithProgress(
                               `${API}/wasdal/insidentil/${t.id}/ba-pdf`,
                               `BA_Pemantauan_Insidentil_${(t.nomor_ba || t.id.slice(0, 8)).replace(/\//g, "-")}.pdf`,
@@ -619,6 +645,7 @@ export default function WasdalPage({ user, onBack }) {
                           </button>
                           {isAdmin && t.status === "berjalan" && (
                             <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                              title="Catat penerbitan BA — Berita Acara pemantauan"
                               onClick={() => setBaInsi({ tiket: t, nomor_ba: "", tanggal_ba: new Date().toISOString().slice(0, 10), hasil: "", saving: false })}
                               data-testid={`wasdal-insidentil-ba-${t.id}`}>
                               BA Terbit
@@ -632,7 +659,7 @@ export default function WasdalPage({ user, onBack }) {
                             </Button>
                           )}
                           {isAdmin && (
-                            <button type="button" aria-label="Hapus tiket" onClick={() => hapusInsi(t)}
+                            <button type="button" aria-label="Hapus tiket" title="Hapus tiket insidentil" onClick={() => hapusInsi(t)}
                               className="h-7 w-7 rounded-lg border border-border text-red-500 flex items-center justify-center hover:bg-red-500/10 min-h-0 min-w-0">
                               <Trash2 className="w-3 h-3" />
                             </button>
@@ -790,7 +817,7 @@ export default function WasdalPage({ user, onBack }) {
                     </span>
                   </button>
                   {isAdmin && (
-                    <button type="button" aria-label="Hapus lampiran" onClick={() => hapusLampiranInsi(f.file_id)}
+                    <button type="button" aria-label="Hapus lampiran" title="Hapus lampiran" onClick={() => hapusLampiranInsi(f.file_id)}
                       className="h-7 w-7 rounded-lg border border-border text-red-500 flex items-center justify-center hover:bg-red-500/10 flex-shrink-0 min-h-0 min-w-0">
                       <Trash2 className="w-3 h-3" />
                     </button>

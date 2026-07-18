@@ -159,13 +159,18 @@ export default function PemindahtangananPage({ user, onBack }) {
   };
 
   const setTrxField = (k, v) => setTrx((t) => ({ ...t, fields: { ...t.fields, [k]: v } }));
+  // Buka dialog usulan baru — dipakai tombol header dan CTA empty-state
+  const bukaFormUsulan = () => {
+    setCari(""); setHasilCari([]);
+    setForm({ data: { bentuk: "hibah", pihak: "", keterangan: "", jenis_bmn: "selain_tanah_bangunan", nilai_wajar: "", tb_terkecuali: false }, aset: [], saving: false });
+  };
   const r = data?.ringkasan;
 
   return (
     <div className="min-h-screen bg-background" data-testid="pemindahtanganan-page">
       {/* ── Header ── */}
       <header className="bg-card/95 backdrop-blur-sm border-b border-border px-3 sm:px-6 py-2.5 sticky top-0 z-40">
-        <div className="max-w-5xl mx-auto flex items-center gap-3">
+        <div className="max-w-5xl mx-auto flex flex-wrap items-center gap-2 sm:gap-3 gap-y-2">
           <button type="button" onClick={onBack} aria-label="Kembali ke Beranda Modul"
             className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0"
             data-testid="pemindahtanganan-back">
@@ -175,7 +180,7 @@ export default function PemindahtangananPage({ user, onBack }) {
             <ArrowLeftRight className="w-4 h-4 text-white" />
           </span>
           <div className="min-w-0 flex-1">
-            <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight">Pemindahtanganan — Register Usulan</h1>
+            <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight truncate">Pemindahtanganan — Register Usulan</h1>
             <p className="text-[11px] sm:text-xs text-muted-foreground truncate" title="PMPP = Penyertaan Modal Pemerintah Pusat">
               Penjualan · Tukar Menukar · Hibah · PMPP (PMK 111/2016 jo. 165/2021)
             </p>
@@ -185,7 +190,7 @@ export default function PemindahtangananPage({ user, onBack }) {
             data-testid="pemindahtanganan-export">
             <Download className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">CSV</span>
           </Button>
-          <Button size="sm" onClick={() => { setCari(""); setHasilCari([]); setForm({ data: { bentuk: "hibah", pihak: "", keterangan: "", jenis_bmn: "selain_tanah_bangunan", nilai_wajar: "", tb_terkecuali: false }, aset: [], saving: false }); }}
+          <Button size="sm" onClick={bukaFormUsulan}
             className="bg-indigo-600 hover:bg-indigo-700 text-white flex-shrink-0" data-testid="pemindahtanganan-tambah">
             <Plus className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">Usulkan</span>
           </Button>
@@ -201,22 +206,25 @@ export default function PemindahtangananPage({ user, onBack }) {
         ) : !data ? null : (
           <>
             {/* ── Ringkasan ── */}
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               <div className="bg-card rounded-xl border border-border p-3 text-center" data-testid="pemindahtanganan-stat-proses">
                 <TicketCheck className="w-5 h-5 text-sky-500 mx-auto mb-1" />
                 <p className="text-lg font-bold text-foreground leading-none">
                   {r.per_status.diusulkan + r.per_status.disetujui + r.per_status.dilaksanakan}
                 </p>
                 <p className="text-[10px] text-muted-foreground mt-1">Usulan berjalan</p>
+                <p className="text-[10px] text-muted-foreground/80 mt-0.5">
+                  {r.per_status.diusulkan} usul · {r.per_status.disetujui} setuju · {r.per_status.dilaksanakan} laksana
+                </p>
               </div>
               <div className="bg-card rounded-xl border border-emerald-500/40 p-3 text-center" data-testid="pemindahtanganan-stat-selesai">
                 <ArrowLeftRight className="w-5 h-5 text-emerald-500 mx-auto mb-1" />
                 <p className="text-lg font-bold text-foreground leading-none">{r.per_status.selesai}</p>
                 <p className="text-[10px] text-muted-foreground mt-1">Selesai (SK terbit)</p>
               </div>
-              <div className="bg-card rounded-xl border border-border p-3 text-center" data-testid="pemindahtanganan-stat-nilai">
+              <div className="bg-card rounded-xl border border-border p-3 text-center col-span-2 sm:col-span-1" data-testid="pemindahtanganan-stat-nilai">
                 <Coins className="w-5 h-5 text-blue-500 mx-auto mb-1" />
-                <p className="text-sm sm:text-lg font-bold text-foreground leading-none break-all">{fmtRp(r.nilai)}</p>
+                <p className="text-sm sm:text-lg font-bold text-foreground leading-none truncate whitespace-nowrap tabular-nums" title={fmtRp(r.nilai)}>{fmtRp(r.nilai)}</p>
                 <p className="text-[10px] text-muted-foreground mt-1">Nilai perolehan ({r.jumlah_aset} aset)</p>
               </div>
             </div>
@@ -227,6 +235,11 @@ export default function PemindahtangananPage({ user, onBack }) {
                 <div className="text-center py-10 px-4">
                   <ArrowLeftRight className="w-8 h-8 text-muted-foreground/50 mx-auto mb-2" />
                   <p className="text-sm text-muted-foreground">Belum ada usulan pemindahtanganan.</p>
+                  <p className="text-xs text-muted-foreground mt-1">Klik tombol Usulkan untuk memulai (alur: diusulkan → disetujui → dilaksanakan → selesai).</p>
+                  <Button size="sm" className="mt-3 bg-indigo-600 hover:bg-indigo-700 text-white" onClick={bukaFormUsulan}
+                    data-testid="pemindahtanganan-empty-usulkan">
+                    <Plus className="w-4 h-4 mr-1.5" />Usulkan
+                  </Button>
                 </div>
               ) : (
                 <ul className="divide-y divide-border/60">
@@ -248,13 +261,35 @@ export default function PemindahtangananPage({ user, onBack }) {
                           <Paperclip className="w-3 h-3" />
                         </button>
                       </div>
-                      <p className="text-[11px] text-muted-foreground mt-0.5 truncate" title="NTPN = Nomor Transaksi Penerimaan Negara (bukti setor ke Kas Negara)">
-                        {u.nomor_persetujuan && `Persetujuan ${u.nomor_persetujuan}`}
-                        {u.nomor_dokumen && ` · ${labelDokumen[u.bentuk] || "Dokumen"} ${u.nomor_dokumen}`}
-                        {u.ntpn && ` · NTPN ${u.ntpn}`}
-                        {u.nomor_sk_penghapusan && ` · SK Hapus ${u.nomor_sk_penghapusan}`}
-                        {u.keterangan && ` · ${u.keterangan}`}
-                        {` · oleh ${u.created_by}`}
+                      {(u.nomor_persetujuan || u.nomor_dokumen || u.ntpn || u.nomor_sk_penghapusan) && (
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                          {u.nomor_persetujuan && (
+                            <span className="px-1.5 py-0.5 rounded bg-muted font-mono text-[10px] text-foreground/80 flex-shrink-0">
+                              Persetujuan {u.nomor_persetujuan}
+                            </span>
+                          )}
+                          {u.nomor_dokumen && (
+                            <span className="px-1.5 py-0.5 rounded bg-muted font-mono text-[10px] text-foreground/80 flex-shrink-0">
+                              {labelDokumen[u.bentuk] || "Dokumen"} {u.nomor_dokumen}
+                            </span>
+                          )}
+                          {u.ntpn && (
+                            <span className="px-1.5 py-0.5 rounded bg-muted font-mono text-[10px] text-foreground/80 flex-shrink-0"
+                              title="NTPN = Nomor Transaksi Penerimaan Negara (bukti setor ke Kas Negara)">
+                              NTPN {u.ntpn}
+                            </span>
+                          )}
+                          {u.nomor_sk_penghapusan && (
+                            <span className="px-1.5 py-0.5 rounded bg-muted font-mono text-[10px] text-foreground/80 flex-shrink-0"
+                              title="Surat Keputusan Penghapusan">
+                              SK Hapus {u.nomor_sk_penghapusan}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      <p className="text-[11px] text-muted-foreground mt-0.5 truncate"
+                        title={`${u.keterangan ? `${u.keterangan} · ` : ""}oleh ${u.created_by}`}>
+                        {u.keterangan && `${u.keterangan} · `}oleh {u.created_by}
                       </p>
                       {(u.peringatan || []).map((w) => (
                         <p key={w} className="text-[11px] text-red-500/90 mt-0.5 flex items-center gap-1">
@@ -270,7 +305,7 @@ export default function PemindahtangananPage({ user, onBack }) {
                           {(u.saran_jenjang.catatan || []).map((c) => (
                             <p key={c} className="text-[10px] text-muted-foreground mt-0.5">• {c}</p>
                           ))}
-                          <p className="text-[9px] text-muted-foreground/80 mt-0.5 italic">{u.saran_jenjang.disclaimer}</p>
+                          <p className="text-[10px] text-muted-foreground/80 mt-0.5 italic">{u.saran_jenjang.disclaimer}</p>
                         </div>
                       )}
                       <ul className="mt-1 space-y-0.5">
@@ -286,14 +321,14 @@ export default function PemindahtangananPage({ user, onBack }) {
                       {isAdmin && ["diusulkan", "disetujui", "dilaksanakan"].includes(u.status) && (
                         <div className="flex gap-1.5 mt-1.5 flex-wrap">
                           {u.status === "diusulkan" && (
-                            <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                            <Button size="sm" className="h-7 text-[11px] min-h-0 bg-indigo-600 hover:bg-indigo-700 text-white"
                               onClick={() => setTrx({ usulan: u, ke: "disetujui", saving: false, fields: { nomor_persetujuan: "", tanggal_persetujuan: new Date().toISOString().slice(0, 10) } })}
                               data-testid={`pemindahtanganan-setujui-${u.id}`}>
                               Setujui
                             </Button>
                           )}
                           {u.status === "disetujui" && (
-                            <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                            <Button size="sm" className="h-7 text-[11px] min-h-0 bg-indigo-600 hover:bg-indigo-700 text-white"
                               onClick={() => setTrx({ usulan: u, ke: "dilaksanakan", saving: false, fields: { nomor_dokumen: "", ntpn: "" } })}
                               data-testid={`pemindahtanganan-laksanakan-${u.id}`}>
                               Laksanakan

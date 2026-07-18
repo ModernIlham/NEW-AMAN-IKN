@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Loader2, ShieldCheck, Scale, BadgeCheck, Camera,
+  ArrowLeft, ChevronRight, Loader2, ShieldCheck, Scale, BadgeCheck, Camera,
   Gavel, Paperclip, Plus, QrCode, MapPin, Search, Trash2, Umbrella,
   Upload, UserCheck, FileText, Download,
 } from "lucide-react";
@@ -54,8 +54,9 @@ export default function PengamananPage({ user, onBack }) {
   const isAdmin = user?.role === "admin";
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  // Dialog daftar aset kurang: {jenis, label, rows, loading}
+  // Dialog daftar aset kurang: {jenis, label, rows, loading} + saringan client-side
   const [detail, setDetail] = useState(null);
+  const [saringDetail, setSaringDetail] = useState("");
   // Register kasus: data GET + dialog kasus baru {data, aset, saving}
   const [kasus, setKasus] = useState(null);
   const [formKasus, setFormKasus] = useState(null);
@@ -178,6 +179,7 @@ export default function PengamananPage({ user, onBack }) {
   };
 
   const openDetail = async (jenis, label) => {
+    setSaringDetail("");
     setDetail({ jenis, label, rows: [], loading: true });
     try {
       const r = await axios.get(`${API}/pengamanan/aset-kurang`, {
@@ -337,6 +339,10 @@ export default function PengamananPage({ user, onBack }) {
 
   const pct = (n) => (data?.total_aset ? Math.round((n / data.total_aset) * 100) : 0);
 
+  // Baris dialog daftar aset kurang setelah saringan nama/kode/NUP
+  const barisDetail = (detail?.rows || []).filter((a) =>
+    `${a.asset_name || ""} ${a.asset_code || ""} ${a.NUP || ""}`.toLowerCase().includes(saringDetail.trim().toLowerCase()));
+
   return (
     <div className="min-h-screen bg-background" data-testid="pengamanan-page">
       {/* ── Header ── */}
@@ -395,6 +401,11 @@ export default function PengamananPage({ user, onBack }) {
                     <Icon className={`w-5 h-5 mx-auto mb-1 ${n > 0 ? "text-amber-500" : "text-muted-foreground"}`} />
                     <p className="text-lg font-bold text-foreground leading-none">{n}</p>
                     <p className="text-[10px] text-muted-foreground mt-1">{label}</p>
+                    {n > 0 && (
+                      <span className="flex items-center justify-center gap-0.5 text-[9px] text-amber-600 dark:text-amber-400 mt-0.5">
+                        lihat daftar <ChevronRight className="w-2.5 h-2.5" />
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -403,9 +414,14 @@ export default function PengamananPage({ user, onBack }) {
             {/* ── Daftar pantau sengketa ── */}
             <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
               <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
-                <Scale className="w-4 h-4 text-violet-500" />
-                <p className="text-xs font-bold text-foreground">Daftar Pantau Sengketa</p>
-                <span className="px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-600 dark:text-violet-400 text-[10px] font-semibold">
+                <Scale className="w-4 h-4 text-violet-500 flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold text-foreground">Daftar Pantau Sengketa</p>
+                  <p className="text-[10px] text-muted-foreground truncate">
+                    Otomatis dari status sengketa modul Inventarisasi — hanya baca
+                  </p>
+                </div>
+                <span className="px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-600 dark:text-violet-400 text-[10px] font-semibold flex-shrink-0">
                   {data.jumlah_sengketa}
                 </span>
               </div>
@@ -434,7 +450,7 @@ export default function PengamananPage({ user, onBack }) {
 
             {/* ── Register BMN bermasalah/sengketa (pustaka §11) ── */}
             <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="pengamanan-kasus">
-              <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
+              <div className="px-3 py-2.5 border-b border-border flex flex-wrap items-center gap-2 gap-y-1.5">
                 <Gavel className="w-4 h-4 text-red-500 flex-shrink-0" />
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-bold text-foreground">Register BMN Bermasalah</p>
@@ -450,14 +466,16 @@ export default function PengamananPage({ user, onBack }) {
                 {(kasus?.items || []).length > 0 && (
                   <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
                     onClick={() => downloadFileWithProgress(`${API}/pengamanan/kasus/export`, "register_kasus_bmn.csv", { label: "Ekspor Register BMN Bermasalah (CSV)" }).catch(() => {})}
+                    title="Ekspor Register BMN Bermasalah (CSV)" aria-label="Ekspor Register BMN Bermasalah (CSV)"
                     data-testid="pengamanan-kasus-export">
                     <Download className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">CSV</span>
                   </Button>
                 )}
-                <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
+                <Button size="sm" className="h-7 text-[11px] min-h-0 flex-shrink-0 bg-amber-600 hover:bg-amber-700 text-white"
                   onClick={() => { setCari(""); setHasilCari([]); setFormKasus({ data: { kategori: "dikuasai_pihak_lain", uraian: "", pihak_lawan: "", nomor_perkara: "", pendamping: "" }, aset: null, saving: false }); }}
+                  aria-label="Buka kasus BMN bermasalah baru"
                   data-testid="pengamanan-kasus-tambah">
-                  <Plus className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">Buka Kasus</span>
+                  <Plus className="w-3.5 h-3.5 mr-1" /><span className="sm:hidden">Buka</span><span className="hidden sm:inline">Buka Kasus</span>
                 </Button>
               </div>
               {(kasus?.items || []).length === 0 ? (
@@ -503,11 +521,14 @@ export default function PengamananPage({ user, onBack }) {
                   ))}
                 </ul>
               )}
+              {kasus?.catatan && (
+                <p className="px-3 py-2 text-[11px] text-muted-foreground border-t border-border">{kasus.catatan}</p>
+              )}
             </div>
 
             {/* ── Arsip dokumen kepemilikan (pustaka §11.3, PP 27/2014 Ps. 43) ── */}
             <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="pengamanan-dokumen">
-              <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
+              <div className="px-3 py-2.5 border-b border-border flex flex-wrap items-center gap-2 gap-y-1.5">
                 <FileText className="w-4 h-4 text-amber-600 flex-shrink-0" />
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-bold text-foreground">Arsip Dokumen Kepemilikan</p>
@@ -523,14 +544,16 @@ export default function PengamananPage({ user, onBack }) {
                 {(dokumen?.items || []).length > 0 && (
                   <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
                     onClick={() => downloadFileWithProgress(`${API}/pengamanan/dokumen/export`, "arsip_dokumen_kepemilikan.csv", { label: "Ekspor Arsip Dokumen Kepemilikan (CSV)" }).catch(() => {})}
+                    title="Ekspor Arsip Dokumen Kepemilikan (CSV)" aria-label="Ekspor Arsip Dokumen Kepemilikan (CSV)"
                     data-testid="pengamanan-dokumen-export">
                     <Download className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">CSV</span>
                   </Button>
                 )}
-                <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
+                <Button size="sm" className="h-7 text-[11px] min-h-0 flex-shrink-0 bg-amber-600 hover:bg-amber-700 text-white"
                   onClick={() => { setCari(""); setHasilCari([]); setFormDok({ data: { jenis: "sertipikat", nomor: "", atas_nama: "", lokasi_simpan: "pengelola_barang", berlaku_sampai: "", kategori_sertipikasi: "", keterangan: "" }, aset: null, saving: false }); }}
+                  aria-label="Catat dokumen kepemilikan baru"
                   data-testid="pengamanan-dokumen-tambah">
-                  <Plus className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">Catat Dokumen</span>
+                  <Plus className="w-3.5 h-3.5 mr-1" /><span className="sm:hidden">Catat</span><span className="hidden sm:inline">Catat Dokumen</span>
                 </Button>
               </div>
               {(dokumen?.items || []).length === 0 ? (
@@ -585,11 +608,14 @@ export default function PengamananPage({ user, onBack }) {
                   })}
                 </ul>
               )}
+              {dokumen?.catatan && (
+                <p className="px-3 py-2 text-[11px] text-muted-foreground border-t border-border">{dokumen.catatan}</p>
+              )}
             </div>
 
             {/* ── Checklist pengamanan per aset (pustaka §11.2) ── */}
             <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="pengamanan-checklist">
-              <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
+              <div className="px-3 py-2.5 border-b border-border flex flex-wrap items-center gap-2 gap-y-1.5">
                 <BadgeCheck className="w-4 h-4 text-emerald-600 flex-shrink-0" />
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-bold text-foreground">Checklist Pengamanan per Aset</p>
@@ -605,14 +631,16 @@ export default function PengamananPage({ user, onBack }) {
                 {(cek?.items || []).length > 0 && (
                   <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
                     onClick={() => downloadFileWithProgress(`${API}/pengamanan/checklist/export`, "checklist_pengamanan.csv", { label: "Ekspor Checklist Pengamanan (CSV)" }).catch(() => {})}
+                    title="Ekspor Checklist Pengamanan (CSV)" aria-label="Ekspor Checklist Pengamanan (CSV)"
                     data-testid="pengamanan-checklist-export">
                     <Download className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">CSV</span>
                   </Button>
                 )}
-                <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
+                <Button size="sm" className="h-7 text-[11px] min-h-0 flex-shrink-0 bg-amber-600 hover:bg-amber-700 text-white"
                   onClick={() => bukaFormCek(null, null)}
+                  aria-label="Isi checklist pengamanan baru"
                   data-testid="pengamanan-checklist-tambah">
-                  <Plus className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">Isi Checklist</span>
+                  <Plus className="w-3.5 h-3.5 mr-1" /><span className="sm:hidden">Isi</span><span className="hidden sm:inline">Isi Checklist</span>
                 </Button>
               </div>
               {(cek?.items || []).length === 0 ? (
@@ -661,11 +689,14 @@ export default function PengamananPage({ user, onBack }) {
                   })}
                 </ul>
               )}
+              {cek?.catatan && (
+                <p className="px-3 py-2 text-[11px] text-muted-foreground border-t border-border">{cek.catatan}</p>
+              )}
             </div>
 
             {/* ── Register polis Asuransi BMN (pustaka §11.5, PMK 43/2025) ── */}
             <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="pengamanan-polis">
-              <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
+              <div className="px-3 py-2.5 border-b border-border flex flex-wrap items-center gap-2 gap-y-1.5">
                 <Umbrella className="w-4 h-4 text-sky-600 flex-shrink-0" />
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-bold text-foreground">Polis Asuransi BMN</p>
@@ -681,14 +712,16 @@ export default function PengamananPage({ user, onBack }) {
                 {(polis?.items || []).length > 0 && (
                   <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
                     onClick={() => downloadFileWithProgress(`${API}/pengamanan/polis/export`, "register_polis_asuransi.csv", { label: "Ekspor Register Polis Asuransi (CSV)" }).catch(() => {})}
+                    title="Ekspor Register Polis Asuransi (CSV)" aria-label="Ekspor Register Polis Asuransi (CSV)"
                     data-testid="pengamanan-polis-export">
                     <Download className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">CSV</span>
                   </Button>
                 )}
-                <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
+                <Button size="sm" className="h-7 text-[11px] min-h-0 flex-shrink-0 bg-amber-600 hover:bg-amber-700 text-white"
                   onClick={() => { setCari(""); setHasilCari([]); setFormPolis({ data: { nomor_polis: "", penanggung: "Konsorsium Asuransi BMN", kategori_objek: "program_preferen", nilai_pertanggungan: "", premi: "", sumber_dana: "dipa", mulai: "", berakhir: "", keterangan: "" }, aset: null, saving: false }); }}
+                  aria-label="Catat polis asuransi baru"
                   data-testid="pengamanan-polis-tambah">
-                  <Plus className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">Catat Polis</span>
+                  <Plus className="w-3.5 h-3.5 mr-1" /><span className="sm:hidden">Catat</span><span className="hidden sm:inline">Catat Polis</span>
                 </Button>
               </div>
               {(polis?.items || []).length === 0 ? (
@@ -704,6 +737,9 @@ export default function PengamananPage({ user, onBack }) {
                           {polis.label_status?.[p.info?.status] || p.info?.status}
                           {p.info?.status === "segera_berakhir" && ` · ${p.info.sisa_hari} hari`}
                         </span>
+                        <span className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono text-foreground/70 flex-shrink-0">
+                          {p.mulai} – {p.berakhir}
+                        </span>
                         <span className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-semibold text-foreground/70">
                           {polis.label_kategori?.[p.kategori_objek] || p.kategori_objek}
                         </span>
@@ -714,7 +750,6 @@ export default function PengamananPage({ user, onBack }) {
                         {[`Polis ${p.nomor_polis}`, p.penanggung,
                           `Pertanggungan Rp${Math.round(Number(p.nilai_pertanggungan || 0)).toLocaleString("id-ID")}`,
                           `Premi Rp${Math.round(Number(p.premi || 0)).toLocaleString("id-ID")} (${polis.label_sumber_dana?.[p.sumber_dana] || p.sumber_dana})`,
-                          `${p.mulai} s.d. ${p.berakhir}`,
                           p.keterangan].filter(Boolean).join(" · ")}
                       </p>
                       {isAdmin && (
@@ -729,11 +764,10 @@ export default function PengamananPage({ user, onBack }) {
                   ))}
                 </ul>
               )}
+              {polis?.catatan && (
+                <p className="px-3 py-2 text-[11px] text-muted-foreground border-t border-border">{polis.catatan}</p>
+              )}
             </div>
-
-            <p className="text-center text-[11px] text-muted-foreground pb-4">
-              {polis?.catatan || cek?.catatan || dokumen?.catatan || kasus?.catatan || ""}
-            </p>
           </>
         )}
       </main>
@@ -1215,17 +1249,29 @@ export default function PengamananPage({ user, onBack }) {
           {detail?.loading ? (
             <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-amber-600" /></div>
           ) : (
-            <ul className="space-y-1.5">
-              {(detail?.rows || []).map((a) => (
-                <li key={a.id} className="rounded-lg border border-border p-2 text-xs flex items-center justify-between gap-2">
-                  <span className="text-foreground/90 min-w-0 truncate">{a.asset_name || "-"}</span>
-                  <span className="font-mono text-[10px] text-muted-foreground flex-shrink-0">{a.asset_code} · {a.NUP}</span>
-                </li>
-              ))}
-              {(detail?.rows || []).length === 200 && (
-                <li className="text-[11px] text-muted-foreground text-center pt-1">Menampilkan 200 pertama.</li>
+            <div className="space-y-2">
+              {(detail?.rows || []).length > 0 && (
+                <Input placeholder="Saring nama/kode…" className="h-8 text-xs"
+                  value={saringDetail} onChange={(e) => setSaringDetail(e.target.value)}
+                  data-testid="pengamanan-detail-saring" />
               )}
-            </ul>
+              <ul className="space-y-1.5">
+                {barisDetail.map((a) => (
+                  <li key={a.id} className="rounded-lg border border-border p-2 text-xs flex items-center justify-between gap-2">
+                    <span className="text-foreground/90 min-w-0 truncate">{a.asset_name || "-"}</span>
+                    <span className="font-mono text-[10px] text-muted-foreground flex-shrink-0">{a.asset_code} · {a.NUP}</span>
+                  </li>
+                ))}
+                {barisDetail.length === 0 && (detail?.rows || []).length > 0 && (
+                  <li className="text-[11px] text-muted-foreground text-center py-3">
+                    Tidak ada aset yang cocok dengan saringan.
+                  </li>
+                )}
+                {(detail?.rows || []).length === 200 && !saringDetail.trim() && (
+                  <li className="text-[11px] text-muted-foreground text-center pt-1">Menampilkan 200 pertama.</li>
+                )}
+              </ul>
+            </div>
           )}
         </DialogContent>
       </Dialog>

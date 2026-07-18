@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, ShoppingCart, Plus, Search, Trash2, X, Coins,
   ClipboardCheck, Download, Link2, Paperclip, Upload, PackagePlus, Boxes,
+  Check, Circle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -208,13 +209,18 @@ export default function PengadaanPage({ user, onBack }) {
   const setFormBarang = (i, k, v) => setForm((f) => ({
     ...f, barang: f.barang.map((b, idx) => (idx === i ? { ...b, [k]: v } : b)),
   }));
+  // Buka dialog catat perolehan baru — dipakai tombol header & empty-state
+  const bukaFormBaru = () => setForm({
+    data: { jenis: "pembelian", pihak: "", nomor_kontrak: "", nomor_bast: "", tanggal_bast: new Date().toISOString().slice(0, 10), keterangan: "", penganggaran_id: "" },
+    barang: [{ ...BARANG_KOSONG }], saving: false,
+  });
   const r = data?.ringkasan;
 
   return (
     <div className="min-h-screen bg-background" data-testid="pengadaan-page">
       {/* ── Header ── */}
       <header className="bg-card/95 backdrop-blur-sm border-b border-border px-3 sm:px-6 py-2.5 sticky top-0 z-40">
-        <div className="max-w-5xl mx-auto flex items-center gap-3">
+        <div className="max-w-5xl mx-auto flex flex-wrap items-center gap-2 sm:gap-3 gap-y-2">
           <button type="button" onClick={onBack} aria-label="Kembali ke Beranda Modul"
             className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0"
             data-testid="pengadaan-back">
@@ -224,7 +230,7 @@ export default function PengadaanPage({ user, onBack }) {
             <ShoppingCart className="w-4 h-4 text-white" />
           </span>
           <div className="min-w-0 flex-1">
-            <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight">Pengadaan — Register Perolehan</h1>
+            <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight truncate">Pengadaan — Register Perolehan</h1>
             <p className="text-[11px] sm:text-xs text-muted-foreground truncate">
               Dokumen sumber per BAST/kontrak (Perpres 16/2018 jo. 46/2025)
             </p>
@@ -234,8 +240,7 @@ export default function PengadaanPage({ user, onBack }) {
             data-testid="pengadaan-export">
             <Download className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">CSV</span>
           </Button>
-          <Button size="sm"
-            onClick={() => setForm({ data: { jenis: "pembelian", pihak: "", nomor_kontrak: "", nomor_bast: "", tanggal_bast: new Date().toISOString().slice(0, 10), keterangan: "", penganggaran_id: "" }, barang: [{ ...BARANG_KOSONG }], saving: false })}
+          <Button size="sm" onClick={bukaFormBaru}
             className="bg-orange-600 hover:bg-orange-700 text-white flex-shrink-0" data-testid="pengadaan-tambah">
             <Plus className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">Catat Perolehan</span>
           </Button>
@@ -280,6 +285,10 @@ export default function PengadaanPage({ user, onBack }) {
                 <div className="text-center py-10 px-4">
                   <ShoppingCart className="w-8 h-8 text-muted-foreground/50 mx-auto mb-2" />
                   <p className="text-sm text-muted-foreground">Belum ada perolehan tercatat — mulai dari BAST/kontrak terbaru.</p>
+                  <Button size="sm" className="mt-3 bg-orange-600 hover:bg-orange-700 text-white"
+                    onClick={bukaFormBaru} data-testid="pengadaan-empty-tambah">
+                    <Plus className="w-4 h-4 mr-1.5" />Catat Perolehan Pertama
+                  </Button>
                 </div>
               ) : (
                 <ul className="divide-y divide-border/60">
@@ -290,7 +299,23 @@ export default function PengadaanPage({ user, onBack }) {
                           {labelJenis[p.jenis] || p.jenis} · {kodeJenis[p.jenis]}
                         </span>
                         <p className="text-sm font-semibold text-foreground flex-1 min-w-[140px] truncate">{p.pihak}</p>
-                        <span className="text-[11px] text-muted-foreground">{fmtRp(p.nilai)}</span>
+                        <span className="text-xs font-bold text-foreground whitespace-nowrap">{fmtRp(p.nilai)}</span>
+                        {(() => {
+                          const w = dokumenWajib[p.jenis] || [];
+                          if (!w.length) return null;
+                          const n = w.filter((k) => (p.dokumen || {})[k]).length;
+                          return (
+                            <span title={`${n} dari ${w.length} dokumen wajib tersedia`}
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-semibold flex-shrink-0 ${
+                                n === w.length
+                                  ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                                  : "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                              }`}
+                              data-testid={`pengadaan-dok-ringkas-${p.id}`}>
+                              {n}/{w.length} dok
+                            </span>
+                          );
+                        })()}
                         {(p.barang || []).some((b) => !b.asset_id) && (
                           <button type="button" aria-label="Buat draft aset dari perolehan"
                             title="Buat draft aset untuk barang yang belum bertaut"
@@ -353,13 +378,15 @@ export default function PengadaanPage({ user, onBack }) {
                           const ada = !!(p.dokumen || {})[k];
                           return (
                             <button key={k} type="button" onClick={() => toggleDokumen(p, k)}
+                              title="Klik untuk menandai dokumen ada/belum"
                               className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border transition-colors min-h-0 ${
                                 ada
                                   ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/40"
                                   : "bg-muted text-muted-foreground border-border hover:text-foreground"
                               }`}
                               data-testid={`pengadaan-dok-${p.id}-${k}`}>
-                              {ada ? "✓ " : "○ "}{labelDokumen[k] || k}
+                              {ada ? <Check className="w-3 h-3 inline mr-0.5" /> : <Circle className="w-3 h-3 inline mr-0.5" />}
+                              {labelDokumen[k] || k}
                             </button>
                           );
                         })}
@@ -374,7 +401,7 @@ export default function PengadaanPage({ user, onBack }) {
                               </span>
                               {b.asset_id ? (
                                 <span className="block text-[10px] text-emerald-600 dark:text-emerald-400 font-mono truncate">
-                                  ⇢ {b.asset_name} ({b.asset_code} · {b.NUP})
+                                  <Link2 className="w-3 h-3 inline mr-0.5 align-[-2px]" />{b.asset_name} ({b.asset_code} · {b.NUP})
                                 </span>
                               ) : (
                                 <span className="block text-[10px] text-amber-600 dark:text-amber-400">Belum tertaut ke aset master</span>

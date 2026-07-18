@@ -52,10 +52,11 @@ export default function PembukuanPage({ user, onBack }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const muatJurnal = useCallback(async (p = 1) => {
+  const muatJurnal = useCallback(async (p = 1, qBaru) => {
     try {
+      const filter = (qBaru !== undefined ? qBaru : q).trim();
       const params = new URLSearchParams({ page: String(p), page_size: "50" });
-      if (q.trim()) params.append("asset_id", q.trim());
+      if (filter) params.append("asset_id", filter);
       const r = await axios.get(`${API}/pembukuan/mutasi?${params}`);
       setJurnal(r.data);
       setPage(p);
@@ -127,12 +128,15 @@ export default function PembukuanPage({ user, onBack }) {
 
       <main className="max-w-6xl mx-auto px-3 sm:px-6 py-4 space-y-3">
         <div className="flex bg-muted rounded-lg p-0.5 gap-0.5">
-          {[["dbkp", "DBKP per Golongan", Table2], ["jurnal", "Buku Barang (Jurnal)", ScrollText],
-            ["kib", "KIB (Kartu Identitas)", IdCard]].map(([k, label, Icon]) => (
-            <button key={k} type="button" onClick={() => setTab(k)}
-              className={`flex-1 text-[11px] sm:text-xs font-semibold py-1.5 rounded-md transition-colors flex items-center justify-center gap-1.5 min-w-0 min-h-0 ${tab === k ? "bg-card text-indigo-700 dark:text-indigo-400 shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+          {[["dbkp", "DBKP", "DBKP per Golongan", Table2],
+            ["jurnal", "Jurnal", "Buku Barang (Jurnal)", ScrollText],
+            ["kib", "KIB", "KIB (Kartu Identitas)", IdCard]].map(([k, pendek, panjang, Icon]) => (
+            <button key={k} type="button" onClick={() => setTab(k)} title={panjang}
+              className={`flex-1 text-[11px] sm:text-xs font-semibold py-1.5 rounded-md transition-colors flex items-center justify-center gap-1.5 min-w-0 min-h-0 whitespace-nowrap ${tab === k ? "bg-card text-indigo-700 dark:text-indigo-400 shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
               data-testid={`pembukuan-tab-${k}`}>
-              <Icon className="w-3.5 h-3.5" />{label}
+              <Icon className="w-3.5 h-3.5 flex-shrink-0" />
+              <span className="sm:hidden">{pendek}</span>
+              <span className="hidden sm:inline">{panjang}</span>
             </button>
           ))}
         </div>
@@ -148,7 +152,7 @@ export default function PembukuanPage({ user, onBack }) {
                 ["Posisi BMN di Neraca", posisi?.total?.jumlah_total, posisi?.total?.nilai_total]].map(([label, n, v]) => (
                 <div key={label} className="rounded-xl border border-border bg-card p-2.5">
                   <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide truncate">{label}</p>
-                  <p className="text-sm font-extrabold mt-0.5">{fmtRp(v)}</p>
+                  <p className="text-sm font-extrabold mt-0.5 truncate whitespace-nowrap tabular-nums" title={fmtRp(v)}>{fmtRp(v)}</p>
                   <p className="text-[10px] text-muted-foreground">{Number(n || 0).toLocaleString("id-ID")} unit/jenis</p>
                 </div>
               ))}
@@ -190,7 +194,15 @@ export default function PembukuanPage({ user, onBack }) {
                       </tr>
                     ))}
                     {rows.length === 0 && (
-                      <tr><td colSpan={7} className="text-center text-xs text-muted-foreground py-8">Belum ada aset dibukukan</td></tr>
+                      <tr>
+                        <td colSpan={7} className="text-center py-10">
+                          <BookOpen className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
+                          <p className="text-xs font-semibold text-muted-foreground">Belum ada aset dibukukan</p>
+                          <p className="text-[11px] text-muted-foreground mt-1">
+                            Aset aktif dari modul Inventarisasi otomatis terbukukan di sini.
+                          </p>
+                        </td>
+                      </tr>
                     )}
                   </tbody>
                   {rows.length > 0 && (
@@ -207,12 +219,16 @@ export default function PembukuanPage({ user, onBack }) {
                   )}
                 </table>
               </div>
-              <p className="px-3 py-2 text-[10px] text-muted-foreground border-t border-border">
-                Ambang kapitalisasi efektif: Peralatan &amp; Mesin ≥ {fmtRp(dbkp?.ambang?.["3"])} ·
-                Gedung &amp; Bangunan ≥ {fmtRp(dbkp?.ambang?.["4"])} — dapat diubah admin di
-                Referensi Akun BAS › Akun Aset. DBKP per kegiatan + LBKP/CaLBMN ada di modul
-                Inventarisasi &amp; Pelaporan.
-              </p>
+              <div className="px-3 py-2 border-t border-border space-y-0.5">
+                <p className="text-[11px] text-muted-foreground">
+                  Ambang kapitalisasi efektif: Peralatan &amp; Mesin ≥ {fmtRp(dbkp?.ambang?.["3"])} ·
+                  Gedung &amp; Bangunan ≥ {fmtRp(dbkp?.ambang?.["4"])} — dapat diubah admin di
+                  Referensi Akun BAS › Akun Aset.
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  DBKP per kegiatan serta LBKP/CaLBMN tersedia di modul Inventarisasi &amp; Pelaporan.
+                </p>
+              </div>
             </div>
           </>
         ))}
@@ -235,9 +251,25 @@ export default function PembukuanPage({ user, onBack }) {
             {!jurnal ? (
               <div className="py-12 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" /></div>
             ) : (jurnal.items || []).length === 0 ? (
-              <p className="text-center text-xs text-muted-foreground py-10">
-                Jurnal kosong — entri tercipta dari saldo awal (backfill), reklasifikasi, dan mutasi lain.
-              </p>
+              <div className="text-center py-10 px-4">
+                <ScrollText className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
+                {q.trim() ? (
+                  <>
+                    <p className="text-xs font-semibold text-muted-foreground">Tidak ada entri yang cocok dengan filter ID aset</p>
+                    <Button size="sm" variant="outline" className="mt-3 h-8 text-xs min-h-0 min-w-0"
+                      onClick={() => { setQ(""); muatJurnal(1, ""); }} data-testid="jurnal-reset-filter">
+                      Hapus filter
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-xs font-semibold text-muted-foreground">Jurnal masih kosong</p>
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Entri tercipta otomatis dari saldo awal (backfill), reklasifikasi, dan mutasi lain.
+                    </p>
+                  </>
+                )}
+              </div>
             ) : (
               <div className="divide-y divide-border/60">
                 {(jurnal.items || []).map((m) => (
@@ -249,11 +281,17 @@ export default function PembukuanPage({ user, onBack }) {
                       <p className="text-[12px] font-semibold truncate">
                         {m.uraian_transaksi || m.kode_transaksi} — {m.nama_barang || m.kode_barang || m.asset_id}
                       </p>
-                      <p className="text-[10px] text-muted-foreground truncate">
+                      <p className="text-[10px] text-muted-foreground truncate"
+                        title={`${m.tanggal_buku} · ${m.kode_barang || "-"}${m.nup ? `/${m.nup}` : ""}${m.oleh ? ` · ${m.oleh}` : ""}`}>
                         {m.tanggal_buku} · {m.kode_barang || "-"}{m.nup ? `/${m.nup}` : ""}
-                        {m.nilai != null ? ` · ${fmtRp(m.nilai)}` : ""}{m.oleh ? ` · ${m.oleh}` : ""}
+                        {m.oleh ? ` · ${m.oleh}` : ""}
                       </p>
                     </div>
+                    {m.nilai != null && (
+                      <span className="ml-auto flex-shrink-0 font-mono text-[11px] font-semibold" title={fmtRp(m.nilai)}>
+                        {fmtRp(m.nilai)}
+                      </span>
+                    )}
                   </div>
                 ))}
               </div>
@@ -308,19 +346,13 @@ export default function PembukuanPage({ user, onBack }) {
             {kib && (
               <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="kib-panel">
                 <div className="px-3 py-2.5 border-b border-border flex items-center gap-2 flex-wrap">
+                  <IdCard className="w-4 h-4 text-indigo-700 dark:text-indigo-400 flex-shrink-0" />
                   <div className="min-w-0 flex-1">
                     <p className="text-xs font-bold">{kib.label}</p>
                     <p className="text-[10px] text-muted-foreground truncate">
                       {kib.aset?.asset_name} · {kib.aset?.asset_code}{kib.aset?.NUP ? `/${kib.aset.NUP}` : ""}
                     </p>
                   </div>
-                  <Button size="sm" variant="outline" className="h-8 text-[11px]"
-                    onClick={() => downloadFileWithProgress(
-                      `${API}/pembukuan/kib-pdf/${kib.aset.id}`,
-                      `KIB_${kib.aset.asset_code || "aset"}.pdf`).catch(() => {})}
-                    data-testid="kib-unduh">
-                    <FileDown className="w-3.5 h-3.5 mr-1" />Cetak KIB (PDF)
-                  </Button>
                 </div>
                 <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {(kib.fields || []).map((f) => (
@@ -332,9 +364,19 @@ export default function PembukuanPage({ user, onBack }) {
                     </div>
                   ))}
                 </div>
-                <div className="px-3 pb-3 flex justify-end">
-                  <Button size="sm" className="h-9 text-xs" disabled={simpanKib} onClick={simpanDataKib}
-                    data-testid="kib-simpan">
+                <div className="px-3 pb-3 flex items-center justify-end gap-2 flex-wrap gap-y-1.5">
+                  <p className="text-[10px] text-muted-foreground mr-auto self-center">
+                    Simpan dahulu sebelum mencetak agar PDF memuat data terbaru.
+                  </p>
+                  <Button size="sm" variant="outline" className="h-9 text-xs"
+                    onClick={() => downloadFileWithProgress(
+                      `${API}/pembukuan/kib-pdf/${kib.aset.id}`,
+                      `KIB_${kib.aset.asset_code || "aset"}.pdf`).catch(() => {})}
+                    data-testid="kib-unduh">
+                    <FileDown className="w-3.5 h-3.5 mr-1.5" />Cetak KIB (PDF)
+                  </Button>
+                  <Button size="sm" className="h-9 text-xs bg-indigo-700 hover:bg-indigo-800 text-white"
+                    disabled={simpanKib} onClick={simpanDataKib} data-testid="kib-simpan">
                     {simpanKib ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <Save className="w-3.5 h-3.5 mr-1.5" />}
                     Simpan Data KIB
                   </Button>

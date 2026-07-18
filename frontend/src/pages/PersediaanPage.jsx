@@ -5,7 +5,7 @@ import {
   ArrowLeft, Search, Plus, Pencil, Trash2, Loader2, Boxes,
   ChevronLeft, ChevronRight, PackagePlus, PackageMinus, History,
   AlertTriangle, FileDown, ClipboardCheck, ChevronDown, Upload, Download,
-  Layers, X, Warehouse, MoreVertical,
+  Layers, X, Warehouse, MoreVertical, ListPlus, CalendarClock,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -488,6 +488,7 @@ export default function PersediaanPage({ user, onBack }) {
             type="button"
             onClick={onBack}
             aria-label="Kembali ke Beranda Modul"
+            title="Kembali ke Beranda Modul"
             className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0"
             data-testid="persediaan-back"
           >
@@ -507,11 +508,12 @@ export default function PersediaanPage({ user, onBack }) {
       </header>
 
       <main className="max-w-5xl mx-auto px-3 sm:px-6 py-4 space-y-3">
-        {/* ── Banner pengingat opname semesteran ── */}
+        {/* ── Banner pengingat opname semesteran (sky = pengingat administratif,
+            amber tetap khusus risiko stok agar keduanya tak saling mengaburkan) ── */}
         {opnameStatus && !opnameStatus.sudah && opnameStatus.pesan && (
-          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-xl p-2.5 sm:p-3 flex items-center gap-2" data-testid="persediaan-opname-banner">
-            <ClipboardCheck className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
-            <p className="text-xs text-amber-800 dark:text-amber-200 flex-1 min-w-0">{opnameStatus.pesan}</p>
+          <div className="bg-sky-50 dark:bg-sky-900/20 border border-sky-300 dark:border-sky-700 rounded-xl p-2.5 sm:p-3 flex items-center gap-2" data-testid="persediaan-opname-banner">
+            <ClipboardCheck className="w-4 h-4 text-sky-600 dark:text-sky-400 flex-shrink-0" />
+            <p className="text-xs text-sky-800 dark:text-sky-200 flex-1 min-w-0">{opnameStatus.pesan}</p>
           </div>
         )}
 
@@ -550,6 +552,52 @@ export default function PersediaanPage({ user, onBack }) {
           </div>
         )}
 
+        {/* ── Kartu statistik stok (pola kartu rekap PemeliharaanPage; klik = filter status) ── */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <button
+            type="button"
+            onClick={() => changeStatus("")}
+            title="Tampilkan semua barang"
+            className={`bg-card rounded-xl border p-3 text-center hover:bg-muted/50 transition-colors min-w-0 min-h-0 ${status === "" ? "border-emerald-500/60" : "border-border"}`}
+            data-testid="persediaan-stat-total"
+          >
+            <Boxes className="w-5 h-5 text-emerald-500 mx-auto mb-1" />
+            <p className="text-lg font-bold text-foreground leading-none">{total}</p>
+            <p className="text-[10px] text-muted-foreground mt-1">Barang tampil</p>
+          </button>
+          <button
+            type="button"
+            onClick={() => changeStatus("kritis")}
+            title="Filter barang berstok kritis"
+            className={`bg-card rounded-xl border p-3 text-center hover:bg-muted/50 transition-colors min-w-0 min-h-0 ${status === "kritis" ? "border-amber-500/60" : "border-border"}`}
+            data-testid="persediaan-stat-kritis"
+          >
+            <AlertTriangle className="w-5 h-5 text-amber-500 mx-auto mb-1" />
+            <p className="text-lg font-bold text-foreground leading-none">{peringatan?.kritis?.length ?? "…"}</p>
+            <p className="text-[10px] text-muted-foreground mt-1">Kritis</p>
+          </button>
+          <button
+            type="button"
+            onClick={() => changeStatus("habis")}
+            title="Filter barang berstok habis"
+            className={`bg-card rounded-xl border p-3 text-center hover:bg-muted/50 transition-colors min-w-0 min-h-0 ${status === "habis" ? "border-red-500/60" : "border-border"}`}
+            data-testid="persediaan-stat-habis"
+          >
+            <AlertTriangle className="w-5 h-5 text-red-500 mx-auto mb-1" />
+            <p className="text-lg font-bold text-foreground leading-none">{peringatan?.habis?.length ?? "…"}</p>
+            <p className="text-[10px] text-muted-foreground mt-1">Habis</p>
+          </button>
+          <div
+            className="bg-card rounded-xl border border-border p-3 text-center"
+            title={peringatan ? `${peringatan.kedaluwarsa.length} kedaluwarsa · ${peringatan.segera_kedaluwarsa.length} segera kedaluwarsa (≤${peringatan.horizon_hari} hari)` : undefined}
+            data-testid="persediaan-stat-kedaluwarsa"
+          >
+            <CalendarClock className="w-5 h-5 text-violet-500 mx-auto mb-1" />
+            <p className="text-lg font-bold text-foreground leading-none">{peringatan?.kedaluwarsa?.length ?? "…"}</p>
+            <p className="text-[10px] text-muted-foreground mt-1">Kedaluwarsa</p>
+          </div>
+        </div>
+
         {/* ── Toolbar ── */}
         <div className="bg-card rounded-xl border border-border shadow-sm p-2 sm:p-3 space-y-2">
           <div className="flex items-center gap-2 flex-wrap">
@@ -563,16 +611,20 @@ export default function PersediaanPage({ user, onBack }) {
                 data-testid="persediaan-search"
               />
             </div>
-            <Button className="h-10 gap-1.5" onClick={() => setForm({ mode: "tambah", data: { ...emptyForm } })} data-testid="persediaan-add">
+            <Button className="h-10 gap-1.5" onClick={() => setForm({ mode: "tambah", data: { ...emptyForm } })}
+              aria-label="Tambah barang persediaan" title="Tambah barang persediaan" data-testid="persediaan-add">
               <Plus className="w-4 h-4" /><span className="hidden sm:inline">Tambah Barang</span>
             </Button>
-            <Button variant="outline" className="h-10 gap-1.5" onClick={bukaMassal} data-testid="persediaan-massal">
-              <Layers className="w-4 h-4" /><span className="hidden sm:inline">Massal</span>
+            {/* Ikon ListPlus (bukan Layers) — Layers eksklusif bermakna layer FIFO */}
+            <Button variant="outline" className="h-10 gap-1.5" onClick={bukaMassal}
+              aria-label="Transaksi massal — satu dokumen banyak barang" title="Transaksi massal — satu dokumen banyak barang" data-testid="persediaan-massal">
+              <ListPlus className="w-4 h-4" /><span className="hidden sm:inline">Massal</span>
             </Button>
             {/* Menu Dokumen: laporan & berita acara dalam satu tombol */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="h-10 gap-1.5" data-testid="persediaan-menu-dokumen">
+                <Button variant="outline" className="h-10 gap-1.5"
+                  aria-label="Menu dokumen — laporan & berita acara" title="Menu dokumen — laporan & berita acara" data-testid="persediaan-menu-dokumen">
                   <FileDown className="w-4 h-4" /><span className="hidden sm:inline">Dokumen</span>
                   <ChevronDown className="w-3.5 h-3.5" />
                 </Button>
@@ -610,7 +662,8 @@ export default function PersediaanPage({ user, onBack }) {
             {/* Menu Data: impor / template / ekspor master */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="h-10 gap-1.5" data-testid="persediaan-menu-data">
+                <Button variant="outline" className="h-10 gap-1.5"
+                  aria-label="Menu data — impor, template & ekspor" title="Menu data — impor, template & ekspor" data-testid="persediaan-menu-data">
                   <Upload className="w-4 h-4" /><span className="hidden sm:inline">Data</span>
                   <ChevronDown className="w-3.5 h-3.5" />
                 </Button>
@@ -680,9 +733,13 @@ export default function PersediaanPage({ user, onBack }) {
               <Boxes className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
               <p className="text-sm font-medium text-foreground">Belum ada barang persediaan</p>
               <p className="text-xs text-muted-foreground mt-1">
-                Tambahkan barang (kode berawalan &apos;1&apos;; 10 digit → nomor urut otomatis).
-                Stok terisi lewat transaksi masuk pada tahap berikutnya.
+                Mulai dengan menambahkan barang — stok terisi lewat transaksi masuk.
               </p>
+              <Button size="sm" className="mt-3 gap-1.5"
+                onClick={() => setForm({ mode: "tambah", data: { ...emptyForm } })}
+                data-testid="persediaan-empty-tambah">
+                <Plus className="w-4 h-4" />Tambah Barang
+              </Button>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -691,7 +748,7 @@ export default function PersediaanPage({ user, onBack }) {
                   <tr className="border-b border-border bg-muted/40 text-left text-xs text-muted-foreground">
                     <th className="px-3 py-2.5 font-semibold">Kode · NUP</th>
                     <th className="px-3 py-2.5 font-semibold">Nama Barang</th>
-                    <th className="px-3 py-2.5 font-semibold">Satuan</th>
+                    <th className="px-3 py-2.5 font-semibold hidden sm:table-cell">Satuan</th>
                     <th className="px-3 py-2.5 font-semibold">Stok</th>
                     <th className="px-3 py-2.5 font-semibold hidden sm:table-cell">Lokasi</th>
                     <th className="px-3 py-2.5 font-semibold text-right">Aksi</th>
@@ -712,9 +769,11 @@ export default function PersediaanPage({ user, onBack }) {
                           </span>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-muted-foreground">{it.satuan || "-"}</td>
+                      <td className="px-3 py-2 text-muted-foreground hidden sm:table-cell">{it.satuan || "-"}</td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         <span className="font-semibold text-foreground">{it.stok}</span>
+                        {/* Satuan menempel di stok saat kolom Satuan tersembunyi (mobile) */}
+                        {it.satuan && <span className="ml-1 text-[10px] text-muted-foreground sm:hidden">{it.satuan}</span>}
                         <span className={`ml-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold ${STATUS_BADGE[it.status_stok] || ""}`}>
                           {it.status_stok}
                         </span>
@@ -1001,6 +1060,8 @@ export default function PersediaanPage({ user, onBack }) {
                   value={masuk.data.expired}
                   onChange={(e) => setMasuk((m) => ({ ...m, data: { ...m.data, expired: e.target.value } }))} />
               </div>
+              {/* Pemisah: field wajib (jumlah/harga/kedaluwarsa) di atas, metadata dokumen di bawah */}
+              <p className="col-span-2 text-[11px] font-semibold text-muted-foreground border-t border-border pt-2 mt-1">Dokumen sumber (opsional)</p>
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-in-bukti">No. Bukti/BAST</label>
                 <Input id="psd-in-bukti" placeholder="cth. BAST-12/2026"
@@ -1552,6 +1613,7 @@ export default function PersediaanPage({ user, onBack }) {
                             </>
                           )}
                           <button type="button" onClick={() => hapusItemMassal(it.id)} aria-label="Hapus barang"
+                            title="Hapus barang dari daftar"
                             className="h-8 w-8 rounded-lg border border-border text-red-500 flex items-center justify-center hover:bg-red-500/10 flex-shrink-0 min-h-0 min-w-0">
                             <X className="w-3.5 h-3.5" />
                           </button>
@@ -1568,7 +1630,7 @@ export default function PersediaanPage({ user, onBack }) {
             <Button variant="outline" onClick={() => setMassal(null)}>Batal</Button>
             <Button onClick={submitMassal} disabled={massal?.saving || (massal?.items?.length || 0) === 0}
               className="bg-emerald-600 hover:bg-emerald-700" data-testid="persediaan-massal-simpan">
-              {massal?.saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Layers className="w-4 h-4 mr-1.5" />}
+              {massal?.saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <ListPlus className="w-4 h-4 mr-1.5" />}
               Catat {massal?.items?.length || 0} Barang
             </Button>
           </DialogFooter>

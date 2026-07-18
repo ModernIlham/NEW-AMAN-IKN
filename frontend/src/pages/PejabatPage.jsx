@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Search, Plus, Pencil, Trash2, Loader2, Users,
+  ArrowLeft, Search, Plus, Pencil, Trash2, Loader2, Users, AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -165,8 +165,9 @@ export default function PejabatPage({ user, onBack }) {
                 placeholder="Cari nama / NIP / jabatan / unit kerja / email…" className="pl-9 h-10" data-testid="pejabat-search" />
             </div>
             {isAdmin && (
-              <Button variant="outline" className="h-10 gap-1.5"
-                onClick={() => setForm({ ...EMPTY })} data-testid="pejabat-add">
+              <Button className="h-10 gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white"
+                onClick={() => setForm({ ...EMPTY })} title="Tambah Pejabat" aria-label="Tambah Pejabat"
+                data-testid="pejabat-add">
                 <Plus className="w-4 h-4" /><span className="hidden sm:inline">Tambah</span>
               </Button>
             )}
@@ -181,11 +182,27 @@ export default function PejabatPage({ user, onBack }) {
           ) : filtered.length === 0 ? (
             <div className="text-center py-16 px-4">
               <Users className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
-              <p className="text-sm font-medium text-foreground">Belum ada pejabat</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {isAdmin ? "Tambah pejabat penatausahaan (KPB, Operator SIMAK-BMN, PPK, dll.)."
-                  : "Minta admin menambah data pejabat penatausahaan."}
+              <p className="text-sm font-medium text-foreground">
+                {items.length === 0 ? "Belum ada pejabat" : "Tidak ada yang cocok"}
               </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {items.length === 0
+                  ? (isAdmin ? "Tambah pejabat penatausahaan (KPB, Operator SIMAK-BMN, PPK, dll.)."
+                    : "Minta admin menambah data pejabat penatausahaan.")
+                  : "Coba kata kunci lain atau hapus pencarian."}
+              </p>
+              {isAdmin && items.length === 0 && (
+                <Button size="sm" className="mt-3 gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white"
+                  onClick={() => setForm({ ...EMPTY })} data-testid="pejabat-empty-tambah">
+                  <Plus className="w-4 h-4" />Tambah Pejabat
+                </Button>
+              )}
+              {items.length > 0 && (
+                <Button variant="outline" size="sm" className="mt-3"
+                  onClick={() => setSearch("")} data-testid="pejabat-clear-search">
+                  Hapus pencarian
+                </Button>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -206,7 +223,8 @@ export default function PejabatPage({ user, onBack }) {
                         <p className="font-semibold text-foreground flex items-center gap-1.5 flex-wrap">
                           {it.nama}
                           {it.status_kepegawaian && (
-                            <span className="px-1.5 py-0.5 rounded bg-slate-500/15 text-muted-foreground text-[9px] font-semibold uppercase">
+                            <span title={statusUraian(it.status_kepegawaian)}
+                              className="px-1.5 py-0.5 rounded bg-slate-500/15 text-muted-foreground text-[9px] font-semibold uppercase">
                               {statusUraian(it.status_kepegawaian).split(" (")[0]}
                             </span>
                           )}
@@ -215,7 +233,7 @@ export default function PejabatPage({ user, onBack }) {
                           {it.jabatan || "—"}{it.nip ? ` · NIP ${it.nip}` : ""}
                         </p>
                         {it.unit_kerja && (
-                          <p className="text-[10px] text-muted-foreground/80 truncate">{it.unit_kerja}</p>
+                          <p className="text-[10px] text-muted-foreground/80 truncate max-w-[160px] sm:max-w-[240px]" title={it.unit_kerja}>{it.unit_kerja}</p>
                         )}
                         {(it.berlaku_mulai || it.berlaku_selesai) && (
                           <p className="sm:hidden text-[10px] text-muted-foreground truncate">
@@ -226,7 +244,8 @@ export default function PejabatPage({ user, onBack }) {
                       <td className="px-3 py-2">
                         <div className="flex flex-wrap gap-1">
                           {(it.peran || []).map((p) => (
-                            <span key={p} className="px-1.5 py-0.5 rounded bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 text-[10px] font-semibold">
+                            <span key={p} title={peranUraian(p)}
+                              className="px-1.5 py-0.5 rounded bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 text-[10px] font-semibold">
                               {peranUraian(p).split(" — ")[0].split(" / ")[0]}
                             </span>
                           ))}
@@ -332,7 +351,7 @@ export default function PejabatPage({ user, onBack }) {
                             : bmd ? "border-amber-500/50 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
                             : "border-border text-muted-foreground hover:bg-muted"}`}
                         data-testid={`pejabat-peran-${p.kode}`}>
-                        {bmd ? "⚠ " : ""}{p.uraian.split(" — ")[0].split(" / ")[0]}
+                        {bmd && <AlertTriangle className="w-3 h-3 inline mr-0.5 align-[-1px]" />}{p.uraian.split(" — ")[0].split(" / ")[0]}
                       </button>
                     );
                   })}

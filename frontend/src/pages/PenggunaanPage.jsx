@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Search, Loader2, UserCheck, ChevronLeft, ChevronRight,
   BadgeCheck, FileWarning, FileText, Plus, X, Trash2, ScrollText,
-  Paperclip, Upload, FileDown,
+  Paperclip, Upload, FileDown, ArrowLeftRight,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,6 +13,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useTransitionDialog } from "@/components/ui/TransitionDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import { authMediaUrl } from "@/lib/mediaUrl";
@@ -92,6 +93,7 @@ export default function PenggunaanPage({ user, onBack }) {
   const [pegawaiList, setPegawaiList] = useState(null);
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
+  const { confirm, confirmDialog } = useConfirm();
   const { minta, transitionDialog } = useTransitionDialog();
 
   const load = useCallback(async (p = 1, s = search) => {
@@ -358,7 +360,12 @@ export default function PenggunaanPage({ user, onBack }) {
   };
 
   const hapusProses = async (t) => {
-    if (!window.confirm(`Hapus tiket ${proses?.label_jenis?.[t.jenis_proses] || t.jenis_proses} (${t.pihak_asal} → ${t.pihak_tujuan})?`)) return;
+    const ok = await confirm({
+      title: "Hapus tiket proses?",
+      description: `${proses?.label_jenis?.[t.jenis_proses] || t.jenis_proses} — ${t.pihak_asal} → ${t.pihak_tujuan}.`,
+      confirmLabel: "Hapus", variant: "danger",
+    });
+    if (!ok) return;
     try {
       await axios.delete(`${API}/penggunaan/proses/${t.id}`);
       toast.success("Tiket dihapus");
@@ -386,7 +393,12 @@ export default function PenggunaanPage({ user, onBack }) {
   };
 
   const hapusPsp = async (sk) => {
-    if (!window.confirm(`Hapus catatan SK ${sk.nomor_sk || "(tanpa nomor)"} beserta lampirannya dari register?`)) return;
+    const ok = await confirm({
+      title: "Hapus catatan SK dari register?",
+      description: `SK ${sk.nomor_sk || "(tanpa nomor)"} — lampirannya ikut terhapus.`,
+      confirmLabel: "Hapus", variant: "danger",
+    });
+    if (!ok) return;
     try {
       await axios.delete(`${API}/penggunaan/psp/${sk.id}`);
       toast.success("Catatan SK dihapus");
@@ -509,6 +521,40 @@ export default function PenggunaanPage({ user, onBack }) {
       </header>
 
       <main className="max-w-5xl mx-auto px-3 sm:px-6 py-4 space-y-3">
+        {/* Ringkasan statistik modul — kesehatan Penggunaan sekilas tanpa scroll */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" data-testid="penggunaan-statistik">
+          <div className="bg-card rounded-xl border border-border p-2.5 flex items-center gap-2">
+            <UserCheck className="w-4 h-4 text-sky-600 flex-shrink-0" />
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-foreground leading-tight tabular-nums">{total}</p>
+              <p className="text-[10px] text-muted-foreground truncate">Total pemegang</p>
+            </div>
+          </div>
+          <div className="bg-card rounded-xl border border-border p-2.5 flex items-center gap-2">
+            <BadgeCheck className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-foreground leading-tight tabular-nums">{totalLengkap}</p>
+              <p className="text-[10px] text-muted-foreground truncate">Berkas lengkap</p>
+            </div>
+          </div>
+          <div className="bg-card rounded-xl border border-border p-2.5 flex items-center gap-2">
+            <FileWarning className="w-4 h-4 text-amber-500 flex-shrink-0" />
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-foreground leading-tight tabular-nums">{idle?.ringkasan?.kandidat || 0}</p>
+              <p className="text-[10px] text-muted-foreground truncate">Kandidat idle</p>
+            </div>
+          </div>
+          <div className="bg-card rounded-xl border border-border p-2.5 flex items-center gap-2">
+            <ScrollText className="w-4 h-4 text-sky-500 flex-shrink-0" />
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-foreground leading-tight tabular-nums">
+                {psp?.ringkasan?.aset_tercakup || 0}<span className="font-normal text-muted-foreground">/{psp?.ringkasan?.total_aset || 0}</span>
+              </p>
+              <p className="text-[10px] text-muted-foreground truncate">Aset ter-PSP</p>
+            </div>
+          </div>
+        </div>
+
         <div className="relative">
           <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
           <Input
@@ -704,6 +750,7 @@ export default function PenggunaanPage({ user, onBack }) {
         {/* ── Tiket proses alih status & penggunaan sementara (PMK 40/2024) ── */}
         <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="penggunaan-proses">
           <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
+            <ArrowLeftRight className="w-4 h-4 text-indigo-500 flex-shrink-0" />
             <div className="min-w-0 flex-1">
               <p className="text-xs font-bold text-foreground">Proses Alih Status & Penggunaan Sementara</p>
               <p className="text-[10px] text-muted-foreground truncate">
@@ -767,7 +814,12 @@ export default function PenggunaanPage({ user, onBack }) {
                   </p>
                   <div className="flex gap-1.5 mt-1.5 flex-wrap items-center">
                     {((proses.transisi?.[t.jenis_proses] || {})[t.status] || []).map((ke) => (
-                      <Button key={ke} size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                      <Button key={ke} size="sm" variant="outline"
+                        className={`h-7 text-[11px] min-h-0 ${ke === "ditolak"
+                          ? "text-red-500"
+                          : ["disetujui", "berjalan", "bast_selesai"].includes(ke)
+                            ? "border-emerald-500/50 text-emerald-600"
+                            : ""}`}
                         onClick={() => pindahStatusProses(t, ke)}
                         data-testid={`penggunaan-proses-${t.id}-ke-${ke}`}>
                         {proses.label_status?.[ke] || ke}
@@ -890,7 +942,7 @@ export default function PenggunaanPage({ user, onBack }) {
         )}
 
         <p className="text-center text-[11px] text-muted-foreground pb-4">
-          Daftar "menyusul" Penggunaan tuntas — tiket proses 4 rezim, BAST PSP PDF, dan alur pengajuan PSP sudah tersedia (PMK 40/2024).
+          Pengajuan resmi alih status/PSP tetap melalui SIMAN/DJKN — halaman ini register pendamping satker.
         </p>
       </main>
 
@@ -1441,23 +1493,25 @@ export default function PenggunaanPage({ user, onBack }) {
             <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-sky-600" /></div>
           ) : (
             <>
-            <Button size="sm" variant="outline" className="h-8 text-xs min-h-0 self-start"
-              onClick={() => downloadFileWithProgress(
-                `${API}/penggunaan/pemegang/daftar-pdf?nama=${encodeURIComponent(detail?.pemegang?.nama || "")}&nip=${encodeURIComponent(detail?.pemegang?.nip || "")}`,
-                `Daftar_Barang_${(detail?.pemegang?.nama || "pemegang").replace(/\s/g, "_")}.pdf`,
-                { label: `Daftar Barang ${detail?.pemegang?.nama}` },
-              ).catch(() => {})}
-              data-testid="penggunaan-unduh-daftar">
-              <FileText className="w-3.5 h-3.5 mr-1.5" />Unduh Daftar (PDF Lampiran BAST)
-            </Button>
-            <Button size="sm" className="h-8 text-xs min-h-0 self-start"
-              onClick={bukaBast} data-testid="penggunaan-buat-bast">
-              <ScrollText className="w-3.5 h-3.5 mr-1.5" />Buat BAST Serah Terima
-            </Button>
-            <Button size="sm" variant="outline" className="h-8 text-xs min-h-0 self-start"
-              onClick={bukaRiwayatBast} data-testid="penggunaan-riwayat-bast">
-              <FileText className="w-3.5 h-3.5 mr-1.5" />Riwayat BAST
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" className="h-8 text-xs min-h-0"
+                onClick={() => downloadFileWithProgress(
+                  `${API}/penggunaan/pemegang/daftar-pdf?nama=${encodeURIComponent(detail?.pemegang?.nama || "")}&nip=${encodeURIComponent(detail?.pemegang?.nip || "")}`,
+                  `Daftar_Barang_${(detail?.pemegang?.nama || "pemegang").replace(/\s/g, "_")}.pdf`,
+                  { label: `Daftar Barang ${detail?.pemegang?.nama}` },
+                ).catch(() => {})}
+                data-testid="penggunaan-unduh-daftar">
+                <FileText className="w-3.5 h-3.5 mr-1.5" />Unduh Daftar (PDF Lampiran BAST)
+              </Button>
+              <Button size="sm" className="h-8 text-xs min-h-0 bg-sky-600 hover:bg-sky-700 text-white"
+                onClick={bukaBast} data-testid="penggunaan-buat-bast">
+                <ScrollText className="w-3.5 h-3.5 mr-1.5" />Buat BAST Serah Terima
+              </Button>
+              <Button size="sm" variant="outline" className="h-8 text-xs min-h-0"
+                onClick={bukaRiwayatBast} data-testid="penggunaan-riwayat-bast">
+                <FileText className="w-3.5 h-3.5 mr-1.5" />Riwayat BAST
+              </Button>
+            </div>
             <ul className="space-y-2">
               {(detail?.rows || []).map((a) => (
                 <li key={a.id} className="rounded-lg border border-border p-2.5 text-xs" data-testid={`penggunaan-aset-${a.id}`}>
@@ -1489,6 +1543,7 @@ export default function PenggunaanPage({ user, onBack }) {
           )}
         </DialogContent>
       </Dialog>
+      {confirmDialog}
       {transitionDialog}
     </div>
   );

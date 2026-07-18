@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Loader2, ClipboardList, CheckCircle2, XCircle, Coins, FileDown,
+  ArrowLeft, ArrowRight, Loader2, ClipboardList, CheckCircle2, XCircle, Coins, FileDown,
   Plus, Scale, Search, Send, Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,9 @@ const WARNA_STATUS_USULAN = {
   ditolak_telaah: "bg-red-500/15 text-red-600 dark:text-red-400",
 };
 
+// Transisi "mundur"/negatif — tampil outline merah, bukan solid biru
+const TRANSISI_MUNDUR = ["dikembalikan", "ditolak_telaah"];
+
 /**
  * Perencanaan — Fase 4 tahap awal: kandidat usulan RKBMN pemeliharaan
  * (PMK 153/2021). Menyaring aset layak (Baik/RR, dioperasikan) vs tidak
@@ -52,6 +55,7 @@ export default function PerencanaanPage({ user, onBack }) {
   const [hasilCari, setHasilCari] = useState([]);
   const [mencari, setMencari] = useState(false);
   const cariTimer = useRef(null);
+  const refTidak = useRef(null); // jalan pintas dari kartu ringkasan "Tidak layak"
   const { confirm, confirmDialog } = useConfirm();
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
@@ -190,7 +194,7 @@ export default function PerencanaanPage({ user, onBack }) {
     <div className="min-h-screen bg-background" data-testid="perencanaan-page">
       {/* ── Header ── */}
       <header className="bg-card/95 backdrop-blur-sm border-b border-border px-3 sm:px-6 py-2.5 sticky top-0 z-40">
-        <div className="max-w-5xl mx-auto flex items-center gap-3">
+        <div className="max-w-5xl mx-auto flex flex-wrap items-center gap-2 sm:gap-3 gap-y-2">
           <button
             type="button"
             onClick={onBack}
@@ -204,7 +208,7 @@ export default function PerencanaanPage({ user, onBack }) {
             <ClipboardList className="w-4 h-4 text-white" />
           </span>
           <div className="min-w-0 flex-1">
-            <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight">Perencanaan — Kandidat RKBMN Pemeliharaan</h1>
+            <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight truncate">Perencanaan — Kandidat RKBMN Pemeliharaan</h1>
             <p className="text-[11px] sm:text-xs text-muted-foreground truncate">
               Saringan kelayakan usulan (PMK 153/2021) + riwayat biaya per aset
             </p>
@@ -226,6 +230,8 @@ export default function PerencanaanPage({ user, onBack }) {
               { label: "Kertas kerja usulan RKBMN" },
             ).catch(() => {})}
             className="h-8 px-2.5 rounded-lg border border-border text-xs font-semibold text-foreground/80 flex items-center gap-1.5 hover:bg-muted flex-shrink-0 min-h-0"
+            title="Unduh kertas kerja usulan RKBMN (XLSX)"
+            aria-label="Unduh kertas kerja usulan RKBMN (XLSX)"
             data-testid="perencanaan-xlsx"
           >
             <FileDown className="w-3.5 h-3.5" /><span className="hidden sm:inline">Kertas Kerja</span>
@@ -237,6 +243,8 @@ export default function PerencanaanPage({ user, onBack }) {
               { label: "Register usulan RKBMN (CSV)" },
             ).catch(() => {})}
             className="h-8 px-2.5 rounded-lg border border-border text-xs font-semibold text-foreground/80 flex items-center gap-1.5 hover:bg-muted flex-shrink-0 min-h-0"
+            title="Unduh register usulan RKBMN (CSV)"
+            aria-label="Unduh register usulan RKBMN (CSV)"
             data-testid="perencanaan-export"
           >
             <FileDown className="w-3.5 h-3.5" /><span className="hidden sm:inline">CSV</span>
@@ -253,31 +261,37 @@ export default function PerencanaanPage({ user, onBack }) {
         ) : !data ? null : (
           <>
             {/* ── Kartu ringkasan ── */}
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               <div className="bg-card rounded-xl border border-emerald-500/40 p-3 text-center" data-testid="perencanaan-stat-layak">
                 <CheckCircle2 className="w-5 h-5 text-emerald-500 mx-auto mb-1" />
                 <p className="text-lg font-bold text-foreground leading-none">{data.ringkasan.layak}</p>
                 <p className="text-[10px] text-muted-foreground mt-1">Layak diusulkan</p>
               </div>
-              <div className="bg-card rounded-xl border border-red-500/40 p-3 text-center" data-testid="perencanaan-stat-tidak">
+              <button
+                type="button"
+                onClick={() => refTidak.current?.scrollIntoView({ behavior: "smooth" })}
+                title="Gulir ke daftar tidak layak beserta alasannya"
+                className="bg-card rounded-xl border border-red-500/40 p-3 text-center hover:bg-red-500/5"
+                data-testid="perencanaan-stat-tidak"
+              >
                 <XCircle className="w-5 h-5 text-red-500 mx-auto mb-1" />
                 <p className="text-lg font-bold text-foreground leading-none">{data.ringkasan.tidak}</p>
                 <p className="text-[10px] text-muted-foreground mt-1">Tidak layak (lihat alasan)</p>
-              </div>
-              <div className="bg-card rounded-xl border border-border p-3 text-center" data-testid="perencanaan-stat-biaya">
+              </button>
+              <div className="bg-card rounded-xl border border-border p-3 text-center col-span-2 sm:col-span-1" data-testid="perencanaan-stat-biaya">
                 <Coins className="w-5 h-5 text-blue-500 mx-auto mb-1" />
-                <p className="text-sm sm:text-lg font-bold text-foreground leading-none break-all">{fmtRp(data.ringkasan.total_biaya_riwayat)}</p>
+                <p className="text-sm sm:text-lg font-bold text-foreground leading-none truncate whitespace-nowrap tabular-nums" title={fmtRp(data.ringkasan.total_biaya_riwayat)}>{fmtRp(data.ringkasan.total_biaya_riwayat)}</p>
                 <p className="text-[10px] text-muted-foreground mt-1">Biaya pemeliharaan TA {data.tahun} (aset layak)</p>
               </div>
             </div>
 
             {/* ── Register usulan RKBMN per unit (PMK 153/2021 + KMK 128/2022) ── */}
             <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="perencanaan-usulan">
-              <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
+              <div className="px-3 py-2.5 border-b border-border flex flex-wrap items-center gap-2 gap-y-1.5">
                 <Send className="w-4 h-4 text-blue-600 flex-shrink-0" />
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-bold text-foreground">Usulan RKBMN per Unit</p>
-                  <p className="text-[10px] text-muted-foreground truncate">
+                  <p className="text-[10px] text-muted-foreground truncate" title="PB = Pengguna Barang; Pengelola = Pengelola Barang (DJKN/Kementerian Keuangan)">
                     Draft → diajukan → disetujui PB → dikirim Pengelola → hasil penelaahan
                   </p>
                 </div>
@@ -286,8 +300,9 @@ export default function PerencanaanPage({ user, onBack }) {
                     {usulan.ringkasan.berjalan} berjalan
                   </span>
                 )}
-                <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
+                <Button size="sm" className="h-7 text-[11px] min-h-0 flex-shrink-0 bg-blue-600 hover:bg-blue-700 text-white"
                   onClick={() => { setCari(""); setHasilCari([]); setFormUsulan({ data: { tahun_rkbmn: String(th + 2), jenis: "pemeliharaan", unit_pengusul: "", uraian: "", volume: "1", satuan: "unit", keterangan: "" }, aset: null, saving: false }); }}
+                  title="Buat usulan RKBMN baru" aria-label="Buat usulan RKBMN baru"
                   data-testid="perencanaan-usulan-tambah">
                   <Plus className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">Buat Usulan</span>
                 </Button>
@@ -311,10 +326,10 @@ export default function PerencanaanPage({ user, onBack }) {
                           RKBMN TA {u.tahun_rkbmn}
                         </span>
                         {u.sptjm && (
-                          <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-[10px] font-semibold">SPTJM</span>
+                          <span title="Surat Pernyataan Tanggung Jawab Mutlak" className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-[10px] font-semibold">SPTJM</span>
                         )}
                         {u.reviu_apip && (
-                          <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-[10px] font-semibold">Reviu APIP</span>
+                          <span title="Sudah direviu Aparat Pengawasan Intern Pemerintah" className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-[10px] font-semibold">Reviu APIP</span>
                         )}
                         <p className="text-sm font-semibold text-foreground flex-1 min-w-[140px] truncate">{u.uraian}</p>
                       </div>
@@ -324,13 +339,21 @@ export default function PerencanaanPage({ user, onBack }) {
                           u.keterangan, `oleh ${u.created_by}`].filter(Boolean).join(" · ")}
                       </p>
                       <div className="flex gap-1.5 mt-1.5 flex-wrap items-center">
-                        {(usulan.transisi?.[u.status] || []).map((ke) => (
-                          <Button key={ke} size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
-                            onClick={() => pindahStatusUsulan(u, ke)}
-                            data-testid={`perencanaan-usulan-${u.id}-ke-${ke}`}>
-                            {usulan.label_status?.[ke] || ke}
-                          </Button>
-                        ))}
+                        {(usulan.transisi?.[u.status] || []).map((ke, idx, daftarKe) => {
+                          const majuPertama = idx === daftarKe.findIndex((k) => !TRANSISI_MUNDUR.includes(k));
+                          return (
+                            <Button key={ke} size="sm" variant={majuPertama ? "default" : "outline"}
+                              className={`h-7 text-[11px] min-h-0 ${majuPertama
+                                ? "bg-blue-600 hover:bg-blue-700 text-white"
+                                : TRANSISI_MUNDUR.includes(ke)
+                                  ? "border-red-500/40 text-red-600 dark:text-red-400 hover:bg-red-500/10"
+                                  : ""}`}
+                              onClick={() => pindahStatusUsulan(u, ke)}
+                              data-testid={`perencanaan-usulan-${u.id}-ke-${ke}`}>
+                              <ArrowRight className="w-3 h-3 mr-1" />{usulan.label_status?.[ke] || ke}
+                            </Button>
+                          );
+                        })}
                         <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
                           onClick={() => bukaSanding(u)}
                           title="Sanding usulan vs aset eksisting + standar SBSK (PMK 138/2024)"
@@ -361,7 +384,7 @@ export default function PerencanaanPage({ user, onBack }) {
                   </p>
                 </div>
                 {isAdmin && (
-                  <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                  <Button size="sm" className="h-7 text-[11px] min-h-0 bg-blue-600 hover:bg-blue-700 text-white"
                     onClick={() => setFormSbsk({ kategori: "barang", peruntukan: "", satuan: "unit", standar: "1", keterangan: "" })}
                     data-testid="sbsk-tambah">
                     <Plus className="w-3.5 h-3.5 mr-1" />Tambah Standar
@@ -370,6 +393,19 @@ export default function PerencanaanPage({ user, onBack }) {
               </div>
               {!sbsk ? (
                 <div className="py-6 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" /></div>
+              ) : (sbsk.items || []).length === 0 ? (
+                <div className="text-center py-4 px-3">
+                  <p className="text-[11px] text-muted-foreground">
+                    Belum ada baris standar — angka batas tertinggi diambil admin dari Lampiran PMK 138/2024 lewat tombol &quot;Tambah Standar&quot;.
+                  </p>
+                  {isAdmin && (
+                    <Button size="sm" className="mt-3 bg-blue-600 hover:bg-blue-700 text-white"
+                      onClick={() => setFormSbsk({ kategori: "barang", peruntukan: "", satuan: "unit", standar: "1", keterangan: "" })}
+                      data-testid="sbsk-tambah-kosong">
+                      <Plus className="w-3.5 h-3.5 mr-1" />Tambah Standar
+                    </Button>
+                  )}
+                </div>
               ) : (
                 <div className="divide-y divide-border/60">
                   {(sbsk.items || []).map((s) => (
@@ -404,8 +440,8 @@ export default function PerencanaanPage({ user, onBack }) {
               ) : (
                 <ul className="divide-y divide-border/60">
                   {data.layak.slice(0, 100).map((a) => (
-                    <li key={a.id} className="px-3 py-2 flex items-center justify-between gap-2" data-testid={`perencanaan-layak-${a.id}`}>
-                      <div className="min-w-0">
+                    <li key={a.id} className="px-3 py-2 flex flex-wrap items-center justify-between gap-2 gap-y-1.5" data-testid={`perencanaan-layak-${a.id}`}>
+                      <div className="min-w-0 flex-1">
                         <p className="text-xs font-semibold text-foreground truncate">{a.asset_name || "-"}</p>
                         <p className="text-[10px] text-muted-foreground font-mono truncate">
                           {a.asset_code} · {a.NUP}{a.location ? ` · ${a.location}` : ""}
@@ -415,7 +451,7 @@ export default function PerencanaanPage({ user, onBack }) {
                         <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${WARNA_KONDISI[a.condition] || "bg-muted text-muted-foreground"}`}>
                           {a.condition || "-"}
                         </span>
-                        <span className="text-xs font-bold text-foreground">
+                        <span className="text-xs font-bold text-foreground whitespace-nowrap">
                           {a.riwayat_jumlah > 0 ? `${a.riwayat_jumlah}× · ${fmtRp(a.riwayat_biaya)}` : "belum ada riwayat"}
                         </span>
                       </div>
@@ -429,7 +465,7 @@ export default function PerencanaanPage({ user, onBack }) {
             </div>
 
             {/* ── Daftar tidak layak ── */}
-            <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+            <div ref={refTidak} className="bg-card rounded-xl border border-border shadow-sm overflow-hidden scroll-mt-16">
               <div className="px-3 py-2 border-b border-border flex items-center gap-2">
                 <XCircle className="w-4 h-4 text-red-500" />
                 <p className="text-xs font-bold text-foreground">Tidak Layak — beserta jalur yang benar</p>
@@ -598,7 +634,7 @@ export default function PerencanaanPage({ user, onBack }) {
                 className="h-9" />
               <div className="flex justify-end gap-1.5 pt-1">
                 <Button variant="outline" size="sm" className="h-9 text-xs" onClick={() => setFormSbsk(null)}>Batal</Button>
-                <Button size="sm" className="h-9 text-xs" onClick={simpanSbsk} data-testid="sbsk-simpan">Simpan</Button>
+                <Button size="sm" className="h-9 text-xs bg-blue-600 hover:bg-blue-700 text-white" onClick={simpanSbsk} data-testid="sbsk-simpan">Simpan</Button>
               </div>
             </div>
           )}
@@ -618,12 +654,12 @@ export default function PerencanaanPage({ user, onBack }) {
             <div className="py-8 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" /></div>
           ) : (
             <div className="space-y-2.5" data-testid="sanding-hasil">
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {[["Eksisting sejenis", sanding.hasil.jumlah_eksisting, "unit"],
                   ["Umur rata-rata", sanding.hasil.umur_rata_tahun ?? "—", "tahun"],
-                  ["Nilai eksisting", `Rp${Math.round(sanding.hasil.nilai_eksisting || 0).toLocaleString("id-ID")}`, ""]].map(([l, v, s]) => (
-                  <div key={l} className="rounded-lg border border-border p-2 text-center">
-                    <p className="text-sm font-extrabold leading-tight break-words">{v}</p>
+                  ["Nilai eksisting", fmtRp(Math.round(sanding.hasil.nilai_eksisting || 0)), ""]].map(([l, v, s], i) => (
+                  <div key={l} className={`rounded-lg border border-border p-2 text-center ${i === 2 ? "col-span-2 sm:col-span-1" : ""}`}>
+                    <p className="text-sm font-extrabold leading-tight truncate whitespace-nowrap tabular-nums" title={String(v)}>{v}</p>
                     <p className="text-[9px] text-muted-foreground">{l}{s ? ` (${s})` : ""}</p>
                   </div>
                 ))}

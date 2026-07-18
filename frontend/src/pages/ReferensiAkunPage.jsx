@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Search, Loader2, Landmark, Plus, Trash2, DownloadCloud, Boxes,
-  Download, ChevronRight, ChevronDown,
+  Download, ChevronRight, ChevronDown, AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -212,7 +212,7 @@ export default function ReferensiAkunPage({ user, onBack }) {
     if (nama === undefined) return null;
     return nama
       ? <span className="text-[10px] text-muted-foreground block truncate" title={nama}>{nama}</span>
-      : <span className="text-[10px] text-amber-600 dark:text-amber-400 block" title="Kode tidak ada di master Segmen Akun BAS (peringatan — non-blocking)">⚠ tak ada di master BAS</span>;
+      : <span className="text-[10px] text-amber-600 dark:text-amber-400 block" title="Kode tidak ada di master Segmen Akun BAS (peringatan — non-blocking)"><AlertTriangle className="w-3 h-3 inline mr-0.5 align-[-1px]" />tak ada di master BAS</span>;
   };
 
   const labelSeg = data?.label_segmen || {};
@@ -226,17 +226,18 @@ export default function ReferensiAkunPage({ user, onBack }) {
       { label: "Ekspor Referensi Akun BAS (CSV)", params }).catch(() => {});
   };
 
+  // [kunci, label lengkap, label pendek mobile]
   const TABS = [
-    ["master", "Segmen Akun BAS"],
-    ["aset", "Akun Aset (Golongan)"],
-    ["persediaan", "Akun Persediaan"],
+    ["master", "Segmen Akun BAS", "Master"],
+    ["aset", "Akun Aset (Golongan)", "Aset"],
+    ["persediaan", "Akun Persediaan", "Persediaan"],
   ];
 
   return (
     <div className="min-h-screen bg-background" data-testid="referensi-akun-page">
       <header className="bg-card/95 backdrop-blur-sm border-b border-border px-3 sm:px-6 py-2.5 sticky top-0 z-40">
         <div className="max-w-5xl mx-auto flex items-center gap-3">
-          <button type="button" onClick={onBack} aria-label="Kembali"
+          <button type="button" onClick={onBack} aria-label="Kembali" title="Kembali"
             className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0"
             data-testid="referensi-akun-back">
             <ArrowLeft className="w-4 h-4" />
@@ -247,11 +248,12 @@ export default function ReferensiAkunPage({ user, onBack }) {
           <div className="min-w-0 flex-1">
             <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight">Referensi Akun BAS</h1>
             <p className="text-[11px] sm:text-xs text-muted-foreground truncate">
-              Kodefikasi Segmen Akun (satu master {data ? `· ${data.total ? "" : ""}${Object.values(data.per_segmen || {}).reduce((a, b) => a + b, 0)} akun` : ""}) + aturan pakai aset & persediaan
+              Kodefikasi Segmen Akun (satu master{data ? ` · ${Object.values(data.per_segmen || {}).reduce((a, b) => a + b, 0)} akun` : ""}) + aturan pakai aset & persediaan
             </p>
           </div>
           {isAdmin && tab === "master" && (
             <Button variant="outline" size="sm" className="gap-1.5" disabled={seeding} onClick={seed}
+              title="Muat Referensi Resmi (isi master akun BAS)" aria-label="Muat Referensi Resmi (isi master akun BAS)"
               data-testid="referensi-akun-seed">
               {seeding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <DownloadCloud className="w-3.5 h-3.5" />}
               <span className="hidden sm:inline">Muat Referensi Resmi</span>
@@ -262,11 +264,12 @@ export default function ReferensiAkunPage({ user, onBack }) {
 
       <main className="max-w-5xl mx-auto px-3 sm:px-6 py-4 space-y-3">
         <div className="flex bg-muted rounded-lg p-0.5 gap-0.5">
-          {TABS.map(([k, label]) => (
-            <button key={k} type="button" onClick={() => setTab(k)}
-              className={`flex-1 text-[11px] sm:text-xs font-semibold py-1.5 rounded-md transition-colors min-w-0 min-h-0 ${tab === k ? "bg-card text-amber-700 dark:text-amber-400 shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+          {TABS.map(([k, label, pendek]) => (
+            <button key={k} type="button" onClick={() => setTab(k)} title={label}
+              className={`flex-1 truncate px-1 text-[11px] sm:text-xs font-semibold py-1.5 rounded-md transition-colors min-w-0 min-h-0 ${tab === k ? "bg-card text-amber-700 dark:text-amber-400 shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
               data-testid={`referensi-akun-tab-${k}`}>
-              {label}
+              <span className="sm:hidden">{pendek}</span>
+              <span className="hidden sm:inline">{label}</span>
             </button>
           ))}
         </div>
@@ -288,6 +291,7 @@ export default function ReferensiAkunPage({ user, onBack }) {
                   ))}
                 </select>
                 <Button variant="outline" size="sm" className="h-10 gap-1.5" onClick={eksporCsv}
+                  title="Ekspor CSV referensi akun" aria-label="Ekspor CSV referensi akun"
                   data-testid="referensi-akun-ekspor">
                   <Download className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Ekspor CSV</span>
@@ -295,17 +299,21 @@ export default function ReferensiAkunPage({ user, onBack }) {
                 </Button>
               </div>
               {isAdmin && (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 gap-y-1.5 flex-wrap">
                   <Input value={baru.kode} onChange={(e) => setBaru((b) => ({ ...b, kode: e.target.value }))}
                     placeholder="Kode (6 digit)" className="font-mono h-9 w-32" maxLength={6} data-testid="akun-baru-kode" />
                   <Input value={baru.nama} onChange={(e) => setBaru((b) => ({ ...b, nama: e.target.value }))}
-                    placeholder="Nama akun (entri manual satker)" className="h-9 flex-1" data-testid="akun-baru-nama" />
+                    placeholder="Nama akun (entri manual satker)" className="h-9 flex-1 min-w-[140px]" data-testid="akun-baru-nama" />
                   <Button variant="outline" size="sm" className="h-9 gap-1" onClick={tambahAkun} data-testid="akun-tambah">
                     <Plus className="w-3.5 h-3.5" />Tambah
                   </Button>
                 </div>
               )}
             </div>
+
+            <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+              <ChevronRight className="w-3 h-3 flex-shrink-0" />Klik baris akun untuk membuka penjelasan resminya
+            </p>
 
             <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
               {loading && !data ? (
@@ -376,7 +384,7 @@ export default function ReferensiAkunPage({ user, onBack }) {
                         const toggle = () => adaPenjelasan && setBuka((b) => ({ ...b, [a.kode]: !b[a.kode] }));
                         rows.push(
                           <tr key={a.kode} className={`border-b border-border/60 last:border-0 hover:bg-muted/50 ${adaPenjelasan ? "cursor-pointer" : ""}`} data-testid={`akun-row-${a.kode}`} onClick={toggle}>
-                            <td className="py-1.5 font-mono text-[12px] font-semibold text-foreground whitespace-nowrap" style={{ paddingLeft: "92px", paddingRight: "12px" }}>
+                            <td className="py-1.5 pl-12 sm:pl-[92px] pr-3 font-mono text-[12px] font-semibold text-foreground whitespace-nowrap">
                               {adaPenjelasan
                                 ? (terbuka ? <ChevronDown className="w-3 h-3 inline mr-1 text-muted-foreground align-[-1px]" /> : <ChevronRight className="w-3 h-3 inline mr-1 text-muted-foreground align-[-1px]" />)
                                 : <span className="inline-block w-3 mr-1" />}
@@ -392,6 +400,7 @@ export default function ReferensiAkunPage({ user, onBack }) {
                             {isAdmin && (
                               <td className="px-2 py-1.5">
                                 <button type="button" onClick={(e) => { e.stopPropagation(); hapusAkun(a); }} aria-label={`Hapus ${a.kode}`}
+                                  title={`Hapus akun ${a.kode}`}
                                   className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-500/10 min-w-0 min-h-0">
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
@@ -402,7 +411,7 @@ export default function ReferensiAkunPage({ user, onBack }) {
                         if (terbuka && adaPenjelasan) {
                           rows.push(
                             <tr key={`${a.kode}-rincian`} className="border-b border-border/60 bg-muted/30" data-testid={`akun-penjelasan-${a.kode}`}>
-                              <td colSpan={isAdmin ? 4 : 3} className="px-3 py-2" style={{ paddingLeft: "92px" }}>
+                              <td colSpan={isAdmin ? 4 : 3} className="pl-12 sm:pl-[92px] pr-3 py-2">
                                 <p className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">Penjelasan</p>
                                 <p className="text-[11px] leading-relaxed text-foreground/80">
                                   {a.penjelasan}
@@ -453,15 +462,15 @@ export default function ReferensiAkunPage({ user, onBack }) {
             </div>
             <p className="text-center text-[10px] text-muted-foreground pb-2">
               Makna kode tampil LANGSUNG membagi baris: header bertingkat per level digit (1 = akun/segmen, 2 = kelompok, 3 = jenis, 4–5 = rincian) dengan indentasi — meniru tata letak lampiran resmi KEP-211/PB/2018.
-              Klik baris akun ber-tanda ▸ untuk membuka penjelasan resminya. Sumber: dokumen resmi &quot;Referensi Akun&quot; SAKTI/SPAN + lampiran KEP-211/PB/2018; entri manual bertanda &quot;satker&quot;.
+              Sumber: dokumen resmi &quot;Referensi Akun&quot; SAKTI/SPAN + lampiran KEP-211/PB/2018; entri manual bertanda &quot;satker&quot;.
             </p>
           </>
         )}
 
         {tab === "aset" && ambang && (
           <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="ambang-kapitalisasi-card">
-            <div className="px-3 py-2.5 border-b border-border flex items-center justify-between gap-2 flex-wrap">
-              <div>
+            <div className="px-3 py-2.5 border-b border-border flex items-center justify-between gap-2 gap-y-1.5 flex-wrap">
+              <div className="min-w-0 flex-1">
                 <p className="text-xs font-semibold text-foreground">Ambang kapitalisasi intra/ekstrakomptabel (PMK 181/PMK.06/2016)</p>
                 <p className="text-[10px] text-muted-foreground">
                   Barang bernilai satuan di bawah ambang dibukukan EKSTRAKOMPTABEL (tidak masuk neraca) — dipakai DBKP, LBKP, CaLBMN &amp; Posisi BMN.
@@ -585,7 +594,7 @@ export default function ReferensiAkunPage({ user, onBack }) {
                 {(psd?.katalog || []).map((k) => (
                   <span key={k.akun} className="px-2 py-0.5 rounded-full border border-border text-[10px] text-foreground/80" title={namaAkun[k.akun] || ""}>
                     <span className="font-mono font-semibold">{k.akun}</span> {k.uraian}
-                    {namaAkun[k.akun] === null && <span className="text-amber-600 dark:text-amber-400 ml-1" title="Tak ada di master BAS">⚠</span>}
+                    {namaAkun[k.akun] === null && <span className="text-amber-600 dark:text-amber-400 ml-1" title="Tak ada di master BAS"><AlertTriangle className="w-3 h-3 inline align-[-1px]" /></span>}
                   </span>
                 ))}
               </div>
@@ -603,6 +612,7 @@ export default function ReferensiAkunPage({ user, onBack }) {
                   <p className="flex-1 text-[12px] text-foreground/80 truncate">{o.uraian}</p>
                   {isAdmin && (
                     <button type="button" onClick={() => hapusPsd(o.sub_kelompok)} aria-label={`Hapus override ${o.sub_kelompok}`}
+                      title={`Hapus override ${o.sub_kelompok} (kembali ke default)`}
                       className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-500/10 min-w-0 min-h-0 flex-shrink-0">
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
