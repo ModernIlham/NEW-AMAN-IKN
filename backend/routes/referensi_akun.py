@@ -27,7 +27,8 @@ from pydantic import BaseModel
 
 from auth_utils import require_admin, require_user
 from db import db
-from referensi_akun_utils import KELOMPOK_LABEL, baris_csv_referensi
+from referensi_akun_utils import (KELOMPOK_LABEL, baris_csv_referensi,
+                                  jalur_digit)
 from shared_utils import log_audit
 
 referensi_akun_router = APIRouter()
@@ -36,9 +37,10 @@ _PROJ = {"_id": 0}
 _SEED_PATH = Path(__file__).parent.parent / "data" / "referensi_akun_bas.json"
 
 # Versi isi seed — dinaikkan saat data seed diperkaya (mis. +penjelasan resmi
-# KEP-211/PB/2018) agar auto-seed MENIMPA ulang koleksi yang sudah terisi di
-# produksi tanpa perlu admin menekan "Muat Referensi Resmi" manual.
-SEED_VERSION = 2
+# KEP-211/PB/2018, +hierarki nama tiap level digit) agar auto-seed MENIMPA
+# ulang koleksi yang sudah terisi di produksi tanpa perlu admin menekan
+# "Muat Referensi Resmi" manual.
+SEED_VERSION = 3
 
 SEGMEN_LABEL = {
     "1": "Aset", "2": "Kewajiban", "3": "Ekuitas", "4": "Pendapatan",
@@ -101,12 +103,21 @@ async def _seed(hanya_bila_kosong: bool) -> dict:
         ops.append(UpdateOne({"kode": kode}, {"$set": doc}, upsert=True))
     if ops:
         await db.referensi_akun.bulk_write(ops, ordered=False)
+    # Hierarki nama tiap level digit (1-5) — dipakai endpoint struktur/{kode}
+    # utk menampilkan makna digit 1 s.d. 6 sebuah akun.
+    ops_h = [UpdateOne({"kode": k},
+                       {"$set": {"kode": k, "uraian": u, "updated_at": now}},
+                       upsert=True)
+             for k, u in (data.get("hierarki") or {}).items()
+             if re.match(r"^\d{1,5}$", str(k)) and str(u or "").strip()]
+    if ops_h:
+        await db.referensi_akun_hierarki.bulk_write(ops_h, ordered=False)
     await db.referensi_akun_meta.update_one(
         {"key": "seed"},
         {"$set": {"key": "seed", "version": SEED_VERSION, "updated_at": now}},
         upsert=True)
-    return {"dimuat": len(ops), "sumber": data.get("sumber", ""),
-            "dilewati": False}
+    return {"dimuat": len(ops), "hierarki": len(ops_h),
+            "sumber": data.get("sumber", ""), "dilewati": False}
 
 
 @referensi_akun_router.get("/referensi-akun")
@@ -157,14 +168,41 @@ async def export_referensi_akun(search: str = "", segmen: str = "",
         rx = {"$regex": re.escape(search.strip()), "$options": "i"}
         q["$or"] = [{"kode": rx}, {"nama": rx}]
     items = [a async for a in db.referensi_akun.find(q, _PROJ).sort("kode", 1)]
+    # Nama Jenis (3 digit) dari hierarki resmi — satu query utk semua prefiks.
+    prefiks3 = sorted({str(a.get("kode") or "")[:3] for a in items
+                       if a.get("kode")})
+    hier = {}
+    if prefiks3:
+        async for h in db.referensi_akun_hierarki.find(
+                {"kode": {"$in": prefiks3}}, {"_id": 0, "kode": 1, "uraian": 1}):
+            hier[h["kode"]] = h["uraian"]
     buf = io.StringIO()
     w = csv_module.writer(buf)
-    for row in baris_csv_referensi(items, SEGMEN_LABEL):
+    for row in baris_csv_referensi(items, SEGMEN_LABEL, hierarki=hier):
         w.writerow(row)
     return Response(
         content=buf.getvalue().encode("utf-8-sig"), media_type="text/csv",
         headers={"Content-Disposition":
                  'attachment; filename="referensi_akun_bas.csv"'})
+
+
+@referensi_akun_router.get("/referensi-akun/struktur/{kode}")
+async def struktur_akun(kode: str, _user: dict = Depends(require_user)):
+    """Makna TIAP POLA DIGIT sebuah kode akun (permintaan pemilik): digit 1
+    = akun/segmen, 2 digit = kelompok, 3 digit = jenis, dst. hingga akun
+    rincian 6 digit — uraian resmi dari hierarki KEP-211/PB/2018."""
+    kode = _valid_kode(kode)
+    await _seed(hanya_bila_kosong=True)
+    prefiks = [kode[:n] for n in range(1, 6)]
+    hier = {}
+    async for h in db.referensi_akun_hierarki.find(
+            {"kode": {"$in": prefiks}}, {"_id": 0, "kode": 1, "uraian": 1}):
+        hier[h["kode"]] = h["uraian"]
+    sendiri = await db.referensi_akun.find_one(
+        {"kode": kode}, {"_id": 0, "nama": 1})
+    return {"kode": kode,
+            "jalur": jalur_digit(kode, hier, (sendiri or {}).get("nama", "")),
+            "sumber": "KEP-211/PB/2018 — hierarki level digit"}
 
 
 @referensi_akun_router.get("/referensi-akun/periksa")
