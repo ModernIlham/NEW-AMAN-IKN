@@ -48,6 +48,33 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#392] Makna TIAP POLA DIGIT akun BAS (level 1–6) ditampilkan per akun — 2026-07-18
+
+Permintaan pemilik: referensi akun belum menjelaskan arti tiap pola digit
+kode (digit 1 apa, 2 digit apa, … hingga 6 digit). Kini setiap baris akun
+yang dibuka menampilkan **jalur makna digit lengkap** dari lampiran resmi
+KEP-211/PB/2018:
+- **1.523 nama induk level 1–5** (mis. `1` ASET → `11` ASET LANCAR → `117`
+  PERSEDIAAN → `1171` Persediaan → `11711` Persediaan Bahan Operasional)
+  disematkan ke seed & koleksi `referensi_akun_hierarki`; level 6 memakai
+  nama akun master. Segmen anggaran (5–8) memakai nama ledger Kas
+  (Belanja/Dana) agar konsisten dengan label kelompok & nama baris.
+- **Endpoint baru** `GET /referensi-akun/struktur/{kode}` → jalur
+  {level, kode, label, uraian} utk digit 1 s.d. 6 (label: akun/segmen,
+  kelompok, jenis, level 4–5, akun rincian).
+- **UI**: SEMUA baris akun kini dapat diklik — panel rincian menampilkan
+  tabel "Makna tiap pola digit" (prefiks `1xxxxx → 11xxxx → …` + nama resmi
+  tiap level) di atas penjelasan resmi akun; dimuat sekali per kode (cache).
+- **Ekspor CSV**: kolom **Nama Jenis** (nama resmi 3-digit) ditambahkan di
+  samping kode jenis.
+- **Propagasi otomatis**: SEED_VERSION=3 → basis produksi ter-upsert ulang
+  saat halaman dibuka; hierarki langsung tersedia tanpa klik manual.
+- Verifikasi: 522 tes unit lulus (jalur digit, cakupan hierarki anti-drift,
+  kolom CSV), smoke endpoint struktur + ekspor lulus, server ter-import,
+  lint & build sukses.
+
+---
+
 ## [#391] Master Pegawai diperkaya (adopsi pola KERJA-BARENG/SIMPEG) + impor Excel massal — 2026-07-18
 
 Studi mendalam aplikasi manajemen SDM KERJA-BARENG (form Tambah Pegawai,

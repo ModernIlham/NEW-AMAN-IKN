@@ -70,6 +70,39 @@ KELOMPOK_LABEL = {
 }
 
 
+# Label tiap LEVEL digit kode akun (struktur KEP-211/PB/2018: Level 1 =
+# 1 digit … Level 6 = 6 digit; istilah fungsional level 1-3 mengikuti
+# literatur BAS: akun/segmen → kelompok → jenis).
+LEVEL_LABEL = {
+    1: "Akun/Segmen — digit 1",
+    2: "Kelompok Akun — 2 digit",
+    3: "Jenis Akun — 3 digit",
+    4: "Level 4 — 4 digit",
+    5: "Level 5 — 5 digit",
+    6: "Akun Rincian — 6 digit",
+}
+
+
+def jalur_digit(kode, hierarki, nama_sendiri="") -> list:
+    """Jalur makna tiap pola digit sebuah kode akun 6 digit. MURNI.
+
+    Kembalikan [{level, kode, label, uraian}] utk level 1..6 — uraian dari
+    peta `hierarki` (kode ≤5 digit → nama resmi KEP-211); level 6 memakai
+    `nama_sendiri` (nama akun master), fallback peta. Level tanpa nama resmi
+    tetap muncul dengan uraian kosong agar strukturnya terlihat utuh."""
+    k = str(kode or "").strip()
+    peta = hierarki or {}
+    out = []
+    for n in range(1, min(len(k), 6) + 1):
+        pref = k[:n]
+        uraian = (str(nama_sendiri or "").strip() or peta.get(pref, "")) \
+            if n == 6 else peta.get(pref, "")
+        out.append({"level": n, "kode": pref,
+                    "label": LEVEL_LABEL.get(n, f"Level {n}"),
+                    "uraian": uraian})
+    return out
+
+
 def label_kelompok(kode) -> str:
     """Nama kelompok akun untuk sebuah kode (dipangkas ke 2 digit pertama);
     kelompok tak dikenal → label generik agar UI/CSV tidak pernah kosong."""
@@ -77,16 +110,18 @@ def label_kelompok(kode) -> str:
     return KELOMPOK_LABEL.get(p, f"Kelompok {p}" if p else "")
 
 
-def baris_csv_referensi(items, label_segmen) -> list:
+def baris_csv_referensi(items, label_segmen, hierarki=None) -> list:
     """Baris CSV master referensi akun + kolom hierarki digit (header dulu).
 
     `items` = dokumen master (kode, nama, sumber, uraian_bmn, kapitalisasi,
-    kategori_neraca); `label_segmen` = peta digit-1 → nama segmen. MURNI.
-    """
+    kategori_neraca); `label_segmen` = peta digit-1 → nama segmen; `hierarki`
+    (opsional) = peta prefiks ≤5 digit → nama resmi utk kolom Nama Jenis.
+    MURNI."""
+    h = hierarki or {}
     rows = [["Kode", "Nama Akun", "Akun (digit 1)", "Segmen",
              "Kelompok (2 digit)", "Nama Kelompok", "Jenis (3 digit)",
-             "Sumber", "Uraian BMN", "Kapitalisasi", "Kategori Neraca",
-             "Penjelasan"]]
+             "Nama Jenis", "Sumber", "Uraian BMN", "Kapitalisasi",
+             "Kategori Neraca", "Penjelasan"]]
     for a in items or []:
         kode = str(a.get("kode") or "")
         penj = str(a.get("penjelasan") or "")
@@ -95,7 +130,7 @@ def baris_csv_referensi(items, label_segmen) -> list:
         rows.append([
             kode, a.get("nama") or "", kode[:1],
             (label_segmen or {}).get(kode[:1], ""),
-            kode[:2], label_kelompok(kode), kode[:3],
+            kode[:2], label_kelompok(kode), kode[:3], h.get(kode[:3], ""),
             a.get("sumber") or "", a.get("uraian_bmn") or "",
             a.get("kapitalisasi") or "", a.get("kategori_neraca") or "",
             penj,
