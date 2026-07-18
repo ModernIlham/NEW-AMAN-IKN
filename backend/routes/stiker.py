@@ -105,19 +105,15 @@ def _gambar_stiker(c, x, y, w, h, target, aset, kop, logo, mm):
             logo_w = 0
     nama = str(kop.get("nama_instansi") or kop.get("nama_unit_organisasi")
                or "").strip()
-    satker = str(kop.get("nama_sub_unit") or kop.get("nama_unit_organisasi")
-                 or "").strip()
-    if satker == nama:
-        satker = str(kop.get("nama_unit_organisasi") or "").strip() \
-            if kop.get("nama_sub_unit") else ""
+    baris2 = str(kop.get("_baris2_stiker") or "").strip()
     c.setFont("Helvetica-Bold", f_satker)
     c.drawCentredString(tengah_x + logo_w / 2, y + h - hdr / 2 - f_satker * 0.1,
                         nama[:60])
-    if satker:
+    if baris2:
         c.setFont("Helvetica", f_sub)
         c.drawCentredString(tengah_x + logo_w / 2,
                             y + h - hdr / 2 - f_satker - f_sub * 0.35,
-                            satker[:60])
+                            baris2[:60])
     c.setLineWidth(0.5)
     c.line(x, hdr_y, x + w, hdr_y)
 
@@ -207,10 +203,73 @@ def _gambar_grup(c, aset_grup, ukuran, page_w, page_h, kop, logo, mm,
     return bool(aset_grup)
 
 
+def _bangun_query_stiker(asset_ids, **f):
+    """Query aset utk stiker: asset_ids eksplisit ATAU filter daftar aset."""
+    ids = [i.strip() for i in str(asset_ids or "").split(",") if i.strip()]
+    if ids:
+        return {"id": {"$in": ids[:MAKS_STIKER]}, "dihapus": {"$ne": True}}
+    from routes.assets import build_asset_search_query
+    return build_asset_search_query(**f)
+
+
+@stiker_router.get("/stiker/rekap-ukuran")
+async def rekap_ukuran_stiker(
+    asset_ids: str = "",
+    search: str = "",
+    category: str = "",
+    activity_id: str = "",
+    condition: str = "",
+    status: str = "",
+    location: str = "",
+    eselon1_filter: str = "",
+    eselon2_filter: str = "",
+    stiker_status: str = "",
+    inventory_status: str = "",
+    price_min: float = None,
+    price_max: float = None,
+    nomor_spm: str = "",
+    perolehan_dari: str = "",
+    user_filter: str = "",
+    pengguna_nip: str = "",
+    beli_dari: str = "",
+    beli_sampai: str = "",
+    _user: dict = Depends(require_user),
+):
+    """Rekap pilihan `stiker_ukuran` aset dlm cakupan cetak — pengguna tahu
+    berapa stiker per ukuran & BERAPA yang belum diisi (akan memakai Sedang)
+    sehingga bisa ditindaklanjuti (isi via form/edit cepat/Ubah Massal)."""
+    query = _bangun_query_stiker(
+        asset_ids, search=search, category=category, activity_id=activity_id,
+        condition=condition, status=status, location=location,
+        eselon1_filter=eselon1_filter, eselon2_filter=eselon2_filter,
+        stiker_status=stiker_status, inventory_status=inventory_status,
+        price_min=price_min, price_max=price_max, nomor_spm=nomor_spm,
+        perolehan_dari=perolehan_dari, user_filter=user_filter,
+        pengguna_nip=pengguna_nip, beli_dari=beli_dari,
+        beli_sampai=beli_sampai)
+    await pastikan_akses_kegiatan_id(_user, activity_id)
+    query = await scope_query_aset(_user, query)
+    rekap = {"besar": 0, "sedang": 0, "kecil": 0, "belum_terisi": 0}
+    total = 0
+    async for g in db.assets.aggregate([
+            {"$match": query},
+            {"$group": {"_id": {"$toLower": {"$ifNull": ["$stiker_ukuran", ""]}},
+                        "n": {"$sum": 1}}}]):
+        kunci = str(g["_id"] or "").strip()
+        total += g["n"]
+        if kunci in rekap:
+            rekap[kunci] += g["n"]
+        else:
+            rekap["belum_terisi"] += g["n"]
+    rekap["total"] = total
+    return rekap
+
+
 @stiker_router.get("/stiker/label")
 async def cetak_stiker_label(
     ukuran: str = "sedang",
     kertas: str = "A4",
+    header_info: str = "nama",
     asset_ids: str = "",
     # ── filter identik GET /assets (mengikuti filter aktif daftar) ──
     search: str = "",
@@ -249,21 +308,15 @@ async def cetak_stiker_label(
     if page is None:
         raise HTTPException(status_code=400, detail="Kertas harus A4 atau A3")
 
-    ids = [i.strip() for i in str(asset_ids or "").split(",") if i.strip()]
-    if ids:
-        query = {"id": {"$in": ids[:MAKS_STIKER]}, "dihapus": {"$ne": True}}
-    else:
-        from routes.assets import build_asset_search_query
-        query = build_asset_search_query(
-            search=search, category=category, activity_id=activity_id,
-            condition=condition, status=status, location=location,
-            eselon1_filter=eselon1_filter, eselon2_filter=eselon2_filter,
-            stiker_status=stiker_status, inventory_status=inventory_status,
-            price_min=price_min, price_max=price_max, nomor_spm=nomor_spm,
-            perolehan_dari=perolehan_dari, user_filter=user_filter,
-            pengguna_nip=pengguna_nip, beli_dari=beli_dari,
-            beli_sampai=beli_sampai,
-        )
+    query = _bangun_query_stiker(
+        asset_ids, search=search, category=category, activity_id=activity_id,
+        condition=condition, status=status, location=location,
+        eselon1_filter=eselon1_filter, eselon2_filter=eselon2_filter,
+        stiker_status=stiker_status, inventory_status=inventory_status,
+        price_min=price_min, price_max=price_max, nomor_spm=nomor_spm,
+        perolehan_dari=perolehan_dari, user_filter=user_filter,
+        pengguna_nip=pengguna_nip, beli_dari=beli_dari,
+        beli_sampai=beli_sampai)
     await pastikan_akses_kegiatan_id(_user, activity_id)
     query = await scope_query_aset(_user, query)
     aset = await (db.assets.find(query, _PROJ_STIKER)
@@ -294,6 +347,19 @@ async def cetak_stiker_label(
 
     kop = await pengaturan_kop(kode_satker=kode_satker_user(_user)) or {}
     logo = _logo_reader(kop.get("logo_url"))
+    # Baris kedua header: NAMA satuan kerja (default) atau KODE SATKER
+    # LENGKAP ±20 digit (switch di dialog) — fallback silang bila kosong.
+    nama_instansi = str(kop.get("nama_instansi")
+                        or kop.get("nama_unit_organisasi") or "").strip()
+    nama_satker = str(kop.get("nama_sub_unit")
+                      or kop.get("nama_unit_organisasi") or "").strip()
+    if nama_satker == nama_instansi and not kop.get("nama_sub_unit"):
+        nama_satker = ""
+    kode_lengkap = str(kop.get("kode_satker_lengkap") or "").strip()
+    if str(header_info).strip().lower() == "kode":
+        kop["_baris2_stiker"] = kode_lengkap or nama_satker
+    else:
+        kop["_baris2_stiker"] = nama_satker
 
     page_w, page_h = page
     buf = io.BytesIO()

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import { Loader2, Tags } from "lucide-react";
@@ -28,7 +28,22 @@ export default function CetakStikerDialog({ open, onOpenChange, buildParams, tot
   const [ukuran, setUkuran] = useState("sedang");
   const [kertas, setKertas] = useState("A4");
   const [cakupan, setCakupan] = useState("filter"); // filter | halaman
+  const [headerInfo, setHeaderInfo] = useState("nama"); // nama | kode (20 digit)
+  const [rekap, setRekap] = useState(null); // rincian pilihan ukuran per aset
   const [sibuk, setSibuk] = useState(false);
+
+  // Rekap pilihan ukuran per aset — dimuat saat mode per_aset dipilih agar
+  // pengguna tahu berapa stiker per ukuran & berapa yang BELUM terisi.
+  useEffect(() => {
+    if (!open || ukuran !== "per_aset") return;
+    const params = cakupan === "halaman"
+      ? new URLSearchParams({ asset_ids: (pageAssets || []).map((a) => a.id).join(",") })
+      : (buildParams?.() || new URLSearchParams());
+    setRekap(null);
+    axios.get(`${API}/stiker/rekap-ukuran?${params.toString()}`)
+      .then((r) => setRekap(r.data))
+      .catch(() => setRekap(null));
+  }, [open, ukuran, cakupan, pageAssets, buildParams]);
 
   const cetak = async () => {
     setSibuk(true);
@@ -39,6 +54,7 @@ export default function CetakStikerDialog({ open, onOpenChange, buildParams, tot
         : (buildParams?.() || new URLSearchParams());
       params.set("ukuran", ukuran);
       params.set("kertas", kertas);
+      params.set("header_info", headerInfo);
       const r = await axios.get(`${API}/stiker/label?${params.toString()}`, {
         responseType: "blob", timeout: 180000,
         onDownloadProgress: progress.onDownloadProgress,
@@ -100,6 +116,49 @@ export default function CetakStikerDialog({ open, onOpenChange, buildParams, tot
                   <input type="radio" name="stiker-ukuran" className="mt-0.5" checked={ukuran === k}
                     onChange={() => setUkuran(k)} data-testid={`stiker-ukuran-${k}`} />
                   <span><b>{label}</b> <span className="text-muted-foreground">— {ket}</span></span>
+                </label>
+              ))}
+            </div>
+          </div>
+          {ukuran === "per_aset" && (
+            <div className="rounded-lg border border-border bg-muted/40 p-2.5" data-testid="stiker-rekap-ukuran">
+              {!rekap ? (
+                <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                  <Loader2 className="w-3 h-3 animate-spin" />Menghitung rincian ukuran…
+                </p>
+              ) : (
+                <>
+                  <p className="text-[11px] font-semibold text-foreground mb-1">
+                    Rincian yang akan dicetak ({rekap.total} stiker):
+                  </p>
+                  <div className="flex flex-wrap gap-1.5 text-[11px]">
+                    <span className="px-2 py-0.5 rounded-full bg-card border border-border">Besar <b>{rekap.besar}</b></span>
+                    <span className="px-2 py-0.5 rounded-full bg-card border border-border">Sedang <b>{rekap.sedang}</b></span>
+                    <span className="px-2 py-0.5 rounded-full bg-card border border-border">Kecil <b>{rekap.kecil}</b></span>
+                    {rekap.belum_terisi > 0 && (
+                      <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/40 font-semibold">
+                        Belum terisi {rekap.belum_terisi}
+                      </span>
+                    )}
+                  </div>
+                  {rekap.belum_terisi > 0 && (
+                    <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-1.5">
+                      {rekap.belum_terisi} aset belum punya pilihan Ukuran Stiker — akan dicetak ukuran <b>Sedang</b>. Tindak lanjut: isi lewat form aset, edit cepat lapangan, atau <b>Ubah Massal → Ukuran Stiker</b>, lalu cetak ulang.
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+          <div>
+            <p className="text-xs font-semibold text-foreground mb-1.5">Info baris kedua header</p>
+            <div className="space-y-1">
+              {[["nama", "Nama satuan kerja"],
+                ["kode", "Kode satker lengkap (±20 digit, cth. 126011600691778000KP) — isi di Pengaturan/Master Satker"]].map(([k, label]) => (
+                <label key={k} className="flex items-start gap-2 text-xs text-foreground/90 cursor-pointer">
+                  <input type="radio" name="stiker-header" className="mt-0.5" checked={headerInfo === k}
+                    onChange={() => setHeaderInfo(k)} data-testid={`stiker-header-${k}`} />
+                  <span>{label}</span>
                 </label>
               ))}
             </div>

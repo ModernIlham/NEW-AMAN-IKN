@@ -51,4 +51,7 @@ def test_peta_kop_konsisten():
     # Regression: pemetaan field tidak berubah diam-diam
     assert PETA_KOP_SATKER["alamat"] == "alamat_instansi"
     assert set(PETA_KOP_SATKER) == {"nama_unit_organisasi", "nama_sub_unit",
-                                    "alamat", "tempat_laporan", "tembusan_laporan"}
+                                    "alamat", "tempat_laporan",
+                                    "tembusan_laporan", "kode_satker_lengkap"}
+    # kode satker lengkap (±20 digit) ikut ter-overlay ke kop utk stiker
+    assert PETA_KOP_SATKER["kode_satker_lengkap"] == "kode_satker_lengkap"
