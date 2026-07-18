@@ -1,18 +1,30 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Building2, ChevronRight, DatabaseBackup, Globe2, Info, Landmark,
-  Loader2, Mail, CalendarClock, Moon, Settings as SettingsIcon, ShieldAlert, Sun,
+  ArrowLeft, Building2, ChevronRight, Clock, DatabaseBackup, FileDown,
+  Globe2, Info, Landmark, Loader2, Mail, CalendarClock, Moon, RotateCcw,
+  Settings as SettingsIcon, ShieldAlert, Sun, Trash2, Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useBackGuard } from "@/hooks/useBackGuard";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useDarkMode } from "@/hooks/useDarkMode";
 import { getApiError } from "../lib/utils";
+import { downloadFileWithProgress } from "@/lib/downloadFile";
 import ReportSettingsEditor from "@/components/assets/ReportSettingsEditor";
+import { ResetAllDialog, RestoreDialog } from "@/components/sistem/DataSistemDialogs";
 import { SatkerPanel } from "./SatkerPage";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+
+function fmtUkuran(b) {
+  const n = Number(b || 0);
+  if (n >= 1e9) return `${(n / 1e9).toFixed(2)} GB`;
+  if (n >= 1e6) return `${(n / 1e6).toFixed(1)} MB`;
+  return `${Math.round(n / 1e3)} KB`;
+}
 
 /**
  * Pengaturan Terpadu — SATU pintu seluruh setelan aplikasi (Mandat-2):
@@ -21,8 +33,8 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
  *  - Per-Satker: master satker + kop per-satker (menimpa universal).
  *  - Lainnya   : pintasan setelan yang hidup di modulnya (persuratan,
  *    akuntansi/ambang, periode pelaporan) supaya tetap satu pintu.
- *  - Sistem    : backup data (job background); restore/reset di halaman
- *    pemilihan kegiatan (aksi berbahaya sengaja tidak dipindah).
+ *  - Sistem    : SIKLUS DATA lengkap satu rumah (#407) — backup manual/
+ *    terjadwal + arsip server + pulihkan (restore) + reset, semua di sini.
  */
 export default function PengaturanPage({ user, onBack, onOpenSatker,
   onOpenReferensiAkun, onOpenPersuratan, onOpenPelaporan, dark, toggleDark }) {
@@ -34,19 +46,85 @@ export default function PengaturanPage({ user, onBack, onOpenSatker,
   const toggleTema = toggleDark ?? temaLokal.toggle;
   const [tab, setTab] = useState("universal"); // universal | satker | sistem
   const [backupLoading, setBackupLoading] = useState(false);
+  const [arsipkanBackup, setArsipkanBackup] = useState(false);
+  // Setelan backup otomatis {aktif, jam, retensi, jumlah_arsip, total_ukuran}
+  const [oto, setOto] = useState(null);
+  const [otoSaving, setOtoSaving] = useState(false);
+  const [arsip, setArsip] = useState(null); // daftar berkas arsip server
+  const [showRestore, setShowRestore] = useState(false);
+  const [showResetAll, setShowResetAll] = useState(false);
+  const { confirm, confirmDialog } = useConfirm();
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
+
+  const muatSistem = useCallback(() => {
+    if (!isAdmin) return;
+    axios.get(`${API}/backup/otomatis`).then((r) => setOto(r.data)).catch(() => {});
+    axios.get(`${API}/backup/arsip`).then((r) => setArsip(r.data?.items || [])).catch(() => setArsip([]));
+  }, [isAdmin]);
+
+  useEffect(() => { if (tab === "sistem") muatSistem(); }, [tab, muatSistem]);
 
   const mulaiBackup = async () => {
     setBackupLoading(true);
     try {
-      await axios.post(`${API}/backup/start`, {}, { timeout: 30000 });
-      toast.success("Backup dimulai di background — progres di panel kanan bawah, hasil ZIP siap diunduh setelah selesai.");
+      await axios.post(`${API}/backup/start?arsipkan=${arsipkanBackup}`, {}, { timeout: 30000 });
+      toast.success(arsipkanBackup
+        ? "Backup dimulai — hasil TERSIMPAN di arsip server (juga bisa diunduh). Progres di panel kanan bawah."
+        : "Backup dimulai di background — progres di panel kanan bawah, hasil ZIP siap diunduh setelah selesai.");
     } catch (e) {
       toast.error(getApiError(e, "Gagal memulai backup"));
     } finally {
       setBackupLoading(false);
     }
+  };
+
+  const simpanOto = async () => {
+    setOtoSaving(true);
+    try {
+      await axios.post(`${API}/backup/otomatis`, {
+        aktif: !!oto?.aktif, jam: oto?.jam || "02:00", retensi: oto?.retensi ?? 7,
+      });
+      toast.success("Setelan backup otomatis tersimpan");
+      muatSistem();
+    } catch (e) {
+      toast.error(getApiError(e, "Gagal menyimpan setelan"));
+    } finally {
+      setOtoSaving(false);
+    }
+  };
+
+  const hapusArsip = async (a) => {
+    const ok = await confirm({
+      title: `Hapus arsip ${a.nama}?`,
+      description: "Berkas backup ini dihapus permanen dari server.",
+      confirmLabel: "Hapus", variant: "danger",
+    });
+    if (!ok) return;
+    try {
+      await axios.delete(`${API}/backup/arsip/${a.nama}`);
+      toast.success("Arsip dihapus");
+      muatSistem();
+    } catch (e) { toast.error(getApiError(e, "Gagal menghapus arsip")); }
+  };
+
+  const pulihkanDariArsip = async (a) => {
+    const ok = await confirm({
+      title: `Pulihkan data dari ${a.nama}?`,
+      description: "SEMUA data saat ini akan DIGANTI dengan isi arsip ini. Safety backup otomatis dibuat dulu — bila gagal, data dikembalikan.",
+      confirmLabel: "Lanjut", variant: "danger",
+    });
+    if (!ok) return;
+    const ok2 = await confirm({
+      title: "Yakin? Konfirmasi terakhir",
+      description: `Restore dari arsip ${String(a.waktu).slice(0, 10)} (${fmtUkuran(a.ukuran)}) berjalan di background dan mengganti seluruh data.`,
+      confirmLabel: "Pulihkan Sekarang", variant: "danger",
+    });
+    if (!ok2) return;
+    try {
+      await axios.post(`${API}/backup/restore/dari-arsip/${a.nama}`);
+      toast.success("Restore dari arsip dimulai — progres di panel kanan bawah.");
+    } catch (e) { toast.error(getApiError(e, "Gagal memulai restore")); }
   };
 
   const TABS = [
@@ -164,6 +242,7 @@ export default function PengaturanPage({ user, onBack, onOpenSatker,
 
         {tab === "sistem" && (
           <div className="space-y-2.5">
+            {/* ── 1. Backup sekarang ── */}
             <div className="rounded-xl border border-border bg-card p-3.5 space-y-2">
               <p className="text-xs font-bold flex items-center gap-1.5">
                 <DatabaseBackup className="w-4 h-4" />Backup seluruh data
@@ -172,31 +251,157 @@ export default function PengaturanPage({ user, onBack, onOpenSatker,
                 Mencadangkan SEMUA koleksi data + berkas (foto & dokumen unggahan) menjadi satu ZIP —
                 daftar koleksi dinamis, modul baru otomatis ikut. Proses berjalan di background.
               </p>
-              <Button size="sm" className="h-9 text-xs" disabled={!isAdmin || backupLoading}
-                onClick={mulaiBackup} data-testid="pengaturan-backup">
-                {backupLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <DatabaseBackup className="w-3.5 h-3.5 mr-1.5" />}
-                Mulai Backup Sekarang
-              </Button>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button size="sm" className="h-9 text-xs" disabled={!isAdmin || backupLoading}
+                  onClick={mulaiBackup} data-testid="pengaturan-backup">
+                  {backupLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <DatabaseBackup className="w-3.5 h-3.5 mr-1.5" />}
+                  Mulai Backup Sekarang
+                </Button>
+                <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer">
+                  <input type="checkbox" checked={arsipkanBackup}
+                    onChange={(e) => setArsipkanBackup(e.target.checked)}
+                    className="w-3.5 h-3.5" data-testid="pengaturan-backup-arsipkan" />
+                  Simpan juga ke arsip server (tidak hanya diunduh)
+                </label>
+              </div>
               {!isAdmin && <p className="text-[10px] text-amber-600 dark:text-amber-400">Hanya admin yang dapat menjalankan backup.</p>}
             </div>
-            <div className="rounded-xl border border-border bg-card p-3.5 space-y-1.5">
+
+            {/* ── 2. Backup otomatis terjadwal ── */}
+            {isAdmin && (
+              <div className="rounded-xl border border-border bg-card p-3.5 space-y-2" data-testid="pengaturan-backup-otomatis">
+                <p className="text-xs font-bold flex items-center gap-1.5">
+                  <Clock className="w-4 h-4 text-sky-500" />Backup otomatis harian
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  Server membuat backup sendiri setiap hari pada jam terjadwal (WIB) dan menyimpannya
+                  di arsip server; arsip terlama dihapus otomatis melebihi kuota retensi.
+                </p>
+                {oto === null ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-sky-600" />
+                ) : (
+                  <div className="flex items-center gap-2 gap-y-1.5 flex-wrap">
+                    <label className="flex items-center gap-1.5 text-[11px] font-semibold cursor-pointer">
+                      <input type="checkbox" checked={!!oto.aktif}
+                        onChange={(e) => setOto((o) => ({ ...o, aktif: e.target.checked }))}
+                        className="w-3.5 h-3.5" data-testid="pengaturan-oto-aktif" />
+                      Aktif
+                    </label>
+                    <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                      Jam
+                      <Input type="time" value={oto.jam || "02:00"}
+                        onChange={(e) => setOto((o) => ({ ...o, jam: e.target.value }))}
+                        className="h-8 w-24 text-xs" data-testid="pengaturan-oto-jam" />
+                      WIB
+                    </label>
+                    <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                      Simpan
+                      <Input type="number" min="1" max="60" value={oto.retensi ?? 7}
+                        onChange={(e) => setOto((o) => ({ ...o, retensi: e.target.value }))}
+                        className="h-8 w-16 text-xs" data-testid="pengaturan-oto-retensi" />
+                      arsip terakhir
+                    </label>
+                    <Button size="sm" variant="outline" className="h-8 text-xs min-h-0" disabled={otoSaving}
+                      onClick={simpanOto} data-testid="pengaturan-oto-simpan">
+                      {otoSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Simpan"}
+                    </Button>
+                    {oto.terakhir && (
+                      <span className="text-[10px] text-muted-foreground">Terakhir jalan: {oto.terakhir}</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── 3. Arsip backup di server ── */}
+            {isAdmin && (
+              <div className="rounded-xl border border-border bg-card overflow-hidden" data-testid="pengaturan-arsip">
+                <div className="px-3.5 py-2.5 border-b border-border flex items-center gap-2 flex-wrap">
+                  <p className="text-xs font-bold flex items-center gap-1.5 flex-1">
+                    <FileDown className="w-4 h-4 text-emerald-600" />Arsip backup di server
+                  </p>
+                  {arsip && (
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-[10px] font-semibold">
+                      {arsip.length} berkas · {fmtUkuran((arsip || []).reduce((a, b) => a + (b.ukuran || 0), 0))}
+                    </span>
+                  )}
+                </div>
+                {arsip === null ? (
+                  <div className="flex items-center justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-emerald-600" /></div>
+                ) : arsip.length === 0 ? (
+                  <p className="text-[11px] text-muted-foreground text-center py-5 px-4">
+                    Belum ada arsip — aktifkan backup otomatis di atas, atau centang
+                    &quot;Simpan juga ke arsip server&quot; saat backup manual.
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-border/60">
+                    {arsip.map((a) => (
+                      <li key={a.nama} className="px-3.5 py-2 flex items-center gap-2 flex-wrap" data-testid={`arsip-${a.nama}`}>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[11px] font-mono font-semibold text-foreground truncate">{a.nama}</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {String(a.waktu).slice(0, 16).replace("T", " ")} UTC · {fmtUkuran(a.ukuran)} · {a.jenis}
+                          </p>
+                        </div>
+                        <button type="button" title="Unduh arsip" aria-label={`Unduh ${a.nama}`}
+                          onClick={() => downloadFileWithProgress(`${API}/backup/arsip/${a.nama}`, a.nama, { label: a.nama }).catch(() => {})}
+                          className="h-7 w-7 rounded-lg border border-border text-foreground/70 flex items-center justify-center hover:bg-muted min-h-0 min-w-0">
+                          <FileDown className="w-3.5 h-3.5" />
+                        </button>
+                        <button type="button" title="Pulihkan data dari arsip ini" aria-label={`Pulihkan dari ${a.nama}`}
+                          onClick={() => pulihkanDariArsip(a)}
+                          className="h-7 w-7 rounded-lg border border-amber-500/40 text-amber-600 dark:text-amber-400 flex items-center justify-center hover:bg-amber-500/10 min-h-0 min-w-0"
+                          data-testid={`arsip-restore-${a.nama}`}>
+                          <RotateCcw className="w-3.5 h-3.5" />
+                        </button>
+                        <button type="button" title="Hapus arsip" aria-label={`Hapus ${a.nama}`}
+                          onClick={() => hapusArsip(a)}
+                          className="h-7 w-7 rounded-lg border border-border text-red-500 flex items-center justify-center hover:bg-red-500/10 min-h-0 min-w-0">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+
+            {/* ── 4. Pulihkan dari file & Reset ── */}
+            <div className="rounded-xl border border-amber-500/30 bg-card p-3.5 space-y-2">
               <p className="text-xs font-bold flex items-center gap-1.5">
                 <ShieldAlert className="w-4 h-4 text-amber-500" />Pulihkan (restore) & Reset data
               </p>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Kedua aksi ini <b>mengganti/menghapus data secara permanen</b>, sehingga sengaja
-                tetap berada di halaman pemilihan kegiatan (modul Inventarisasi) dengan konfirmasi
-                berlapis. Reset TIDAK menghapus akun & seluruh setelan/pemetaan (kop, satker,
-                akun BAS, masa manfaat, ambang, persuratan) — semuanya selamat.
+                Kedua aksi <b>mengganti/menghapus data secara permanen</b> dengan konfirmasi berlapis.
+                Restore membuat <b>safety backup</b> dulu (gagal → data kembali). Reset TIDAK menghapus
+                akun, setelan, pemetaan akuntansi, dan seluruh master referensi (kodefikasi, pegawai,
+                pejabat, ruangan, unit kerja) — semuanya selamat.
               </p>
-              {/* Breadcrumb visual: jalur menuju lokasi aksi restore/reset */}
-              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-muted-foreground bg-muted rounded-full px-2 py-0.5">
-                Beranda <ChevronRight className="w-3 h-3" /> Inventarisasi Aset <ChevronRight className="w-3 h-3" /> Pilih Kegiatan
-              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button size="sm" variant="outline" className="h-9 text-xs gap-1.5 border-amber-500/50 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10"
+                  disabled={!isAdmin} onClick={() => setShowRestore(true)} data-testid="pengaturan-restore">
+                  <Upload className="w-3.5 h-3.5" />Pulihkan dari File Backup
+                </Button>
+                <Button size="sm" variant="outline" className="h-9 text-xs gap-1.5 border-red-500/50 text-red-600 hover:bg-red-500/10"
+                  disabled={!isAdmin} onClick={() => setShowResetAll(true)} data-testid="pengaturan-reset">
+                  <Trash2 className="w-3.5 h-3.5" />Reset Seluruh Data
+                </Button>
+              </div>
+              {!isAdmin && <p className="text-[10px] text-amber-600 dark:text-amber-400">Hanya admin yang dapat memulihkan/mereset data.</p>}
             </div>
           </div>
         )}
       </main>
+
+      {isAdmin && (
+        <ResetAllDialog open={showResetAll} onClose={() => setShowResetAll(false)}
+          userId={user?.id} onSuccess={() => muatSistem()} />
+      )}
+      {isAdmin && (
+        <RestoreDialog open={showRestore} onClose={() => setShowRestore(false)}
+          token={localStorage.getItem("token")} onSuccess={() => muatSistem()} />
+      )}
+      {confirmDialog}
     </div>
   );
 }

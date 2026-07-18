@@ -6,6 +6,7 @@ ter-reset tanpa memutakhirkan daftar manual — mudah diuji unit tanpa DB.
 
 GridFS (`fs.files`/`fs.chunks`) ditangani terpisah oleh routes/backup.py.
 """
+import re
 
 # Transient/derivable — TIDAK di-backup & TIDAK relevan direset:
 #   row_locks (lock edit TTL), otp_store (OTP TTL), backup_jobs (progress job
@@ -22,16 +23,20 @@ SKIP_COLLECTIONS = {
 KEEP_ID_COLLECTIONS = {"counters"}
 
 # Reset "HAPUS SEMUA": wipe seluruh data OPERASIONAL + GridFS, TAPI pertahankan
-# akun & seluruh KONFIGURASI/pemetaan agar pasca-reset admin tetap bisa login,
-# kop surat tak hilang, dan setelan akuntansi/persuratan yang disusun satker
-# (pemetaan akun BAS, override masa manfaat, format nomor, kode klasifikasi)
-# tidak perlu di-setup ulang manual. `akun_bas`/`persediaan_akun` KHUSUSNYA
-# tidak punya seed otomatis — kehilangannya = pemetaan lenyap permanen.
+# akun & seluruh KONFIGURASI/pemetaan/MASTER REFERENSI agar pasca-reset admin
+# tetap bisa login, kop surat tak hilang, dan referensi yang disusun payah-payah
+# (pemetaan akun BAS, kodefikasi barang impor Excel, master pegawai/pejabat/
+# ruangan/unit kerja, override masa manfaat, format nomor, kode klasifikasi)
+# tidak perlu di-setup ulang manual. `akun_bas`/`persediaan_akun`/`kodefikasi`
+# KHUSUSNYA tidak punya seed otomatis — kehilangannya = lenyap permanen.
 RESET_KEEP_COLLECTIONS = {
     "users", "report_settings", "compression_quotas", "pdf_compression_quotas",
     "persuratan_settings", "klasifikasi_arsip", "masa_manfaat",
     "akun_bas", "persediaan_akun", "referensi_akun", "satker",
     "sbsk_standar",
+    # Master referensi (ditambah saat audit backup/restore/reset — #407):
+    "kodefikasi", "categories", "referensi_akun_hierarki",
+    "unit_kerja", "pegawai", "pejabat", "ruangan",
 }
 
 # Legacy name → canonical (untuk membaca backup lama; mis. activities.json).
@@ -62,3 +67,45 @@ def collections_from_backup(zip_names):
     ikut dipulihkan meski DB tujuan masih kosong."""
     return sorted(n[:-5] for n in (zip_names or [])
                   if n.endswith(".json") and n != "metadata.json" and "/" not in n)
+
+
+# ── Arsip backup di server + jadwal otomatis (audit backup #407) ──
+
+# Nama berkas arsip yang SAH: dibuat aplikasi sendiri — menolak traversal/injeksi
+# saat unduh/hapus/restore-dari-arsip lewat parameter nama.
+_NAMA_ARSIP_RE = re.compile(r"^backup_(otomatis|manual)_\d{8}_\d{6}\.zip$")
+
+
+def nama_arsip_valid(nama) -> bool:
+    """True hanya untuk nama berkas arsip buatan aplikasi (anti path-traversal)."""
+    return bool(_NAMA_ARSIP_RE.match(str(nama or "")))
+
+
+def arsip_untuk_dihapus(daftar_nama, retensi):
+    """Nama arsip TERLAMA yang melebihi kuota retensi (urut nama = urut waktu).
+
+    `retensi` = jumlah berkas yang dipertahankan (min 1). Nama tak-valid
+    diabaikan (bukan buatan aplikasi — jangan pernah dihapus otomatis).
+    """
+    sah = sorted(n for n in (daftar_nama or []) if nama_arsip_valid(n))
+    retensi = max(1, int(retensi or 1))
+    return sah[:-retensi] if len(sah) > retensi else []
+
+
+def saat_jadwal_tiba(jam_setelan, waktu_wib, tanggal_terakhir) -> bool:
+    """True bila backup otomatis harian HARUS jalan sekarang.
+
+    jam_setelan   : "HH:MM" (WIB) dari setelan.
+    waktu_wib     : datetime zona WIB saat pengecekan.
+    tanggal_terakhir: "YYYY-MM-DD" backup otomatis terakhir (atau ""/None).
+
+    Jalan bila hari ini belum pernah jalan DAN waktu sudah >= jam setelan —
+    toleran terhadap server sempat mati pada jam persisnya (jalan begitu
+    hidup kembali di hari yang sama).
+    """
+    s = str(jam_setelan or "").strip()
+    if not re.match(r"^\d{2}:\d{2}$", s):
+        return False
+    if str(tanggal_terakhir or "")[:10] == waktu_wib.strftime("%Y-%m-%d"):
+        return False
+    return waktu_wib.strftime("%H:%M") >= s

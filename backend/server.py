@@ -117,6 +117,13 @@ async def startup_event():
         await start_event_bus()
     except Exception as e:
         logger.warning(f"Event bus startup failed (real-time fanout limited to single worker): {e}")
+    # Scheduler backup otomatis harian (arsip server + retensi) — klaim tanggal
+    # atomik di DB sehingga aman dijalankan di banyak worker sekaligus.
+    try:
+        from routes.backup import start_backup_scheduler
+        start_backup_scheduler()
+    except Exception as e:
+        logger.warning(f"Scheduler backup otomatis gagal start (non-fatal): {e}")
     logger.info("Application started successfully")
     logger.info(f"MongoDB connected: {os.environ['DB_NAME']}")
 
