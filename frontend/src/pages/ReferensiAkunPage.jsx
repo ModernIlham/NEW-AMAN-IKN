@@ -36,7 +36,6 @@ export default function ReferensiAkunPage({ user, onBack }) {
   const [seeding, setSeeding] = useState(false);
   const [baru, setBaru] = useState({ kode: "", nama: "" });
   const [buka, setBuka] = useState({}); // {kode: true} — baris penjelasan terbuka
-  const [struktur, setStruktur] = useState({}); // {kode: jalur[]} — makna tiap digit (cache)
 
   // ── Pemetaan ──
   const [aset, setAset] = useState(null);        // {items}
@@ -323,39 +322,64 @@ export default function ReferensiAkunPage({ user, onBack }) {
                       </tr>
                     </thead>
                     <tbody>
-                      {/* Baris dikelompokkan sesuai MAKNA DIGIT kode akun BAS
-                          (KEP-211/PB/2018): header muncul tiap kelompok akun
-                          (2 digit pertama) berganti — data sudah terurut kode. */}
+                      {/* MAKNA KODE TAMPIL LANGSUNG MEMBAGI BARIS (permintaan
+                          pemilik): header bertingkat muncul setiap prefiks
+                          level 1–5 berganti — meniru tata letak lampiran resmi
+                          KEP-211/PB/2018 (level 1–3 tebal, indentasi per
+                          level). Data sudah terurut kode sehingga grup selalu
+                          berdampingan. */}
                       {(data?.items || []).flatMap((a, idx, arr) => {
-                        const kel = String(a.kode || "").slice(0, 2);
-                        const kelSebelum = idx > 0 ? String(arr[idx - 1].kode || "").slice(0, 2) : "";
+                        const kode = String(a.kode || "");
+                        const sebelum = idx > 0 ? String(arr[idx - 1].kode || "") : "";
+                        const hier = data?.hierarki || {};
                         const rows = [];
-                        if (kel && kel !== kelSebelum) {
+                        let namaInduk = "";
+                        for (let lv = 1; lv <= 5; lv += 1) {
+                          const pref = kode.slice(0, lv);
+                          if (!pref || pref === sebelum.slice(0, lv)) {
+                            namaInduk = hier[pref] || namaInduk;
+                            continue;
+                          }
+                          // Nama level: hierarki resmi; level 1-2 punya cadangan
+                          // label segmen/kelompok. Level 4-5 tanpa nama, atau
+                          // namanya mengulang induk → dilewati (hemat baris).
+                          let nama = hier[pref] || "";
+                          if (!nama && lv === 1) nama = labelSeg[pref] || "";
+                          if (!nama && lv === 2) nama = labelKel[pref] || "";
+                          const ulang = nama && namaInduk &&
+                            nama.trim().toLowerCase() === namaInduk.trim().toLowerCase();
+                          if (nama) namaInduk = nama;
+                          if (!nama || (ulang && lv >= 4)) continue;
+                          const gaya = [
+                            "bg-amber-500/20 font-bold",
+                            "bg-amber-500/10 font-semibold",
+                            "bg-muted/70 font-semibold",
+                            "bg-muted/40",
+                            "bg-muted/20",
+                          ][lv - 1];
                           rows.push(
-                            <tr key={`kel-${kel}`} className="bg-amber-500/10 border-b border-border/60" data-testid={`akun-kelompok-${kel}`}>
-                              <td colSpan={isAdmin ? 4 : 3} className="px-3 py-1.5">
-                                <span className="font-mono text-[11px] font-bold text-amber-700 dark:text-amber-400">{kel}xxxx</span>
-                                <span className="text-[11px] font-semibold text-foreground"> — {labelKel[kel] || `Kelompok ${kel}`}</span>
-                                <span className="ml-2 px-1.5 py-0.5 rounded bg-muted text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">{labelSeg[kel[0]] || a.segmen}</span>
+                            <tr key={`lvl-${pref}`} className={`${gaya} border-b border-border/60`} data-testid={`akun-level-${pref}`}>
+                              <td colSpan={isAdmin ? 4 : 3} className="py-1" style={{ paddingLeft: `${12 + (lv - 1) * 16}px` }}>
+                                <span className="font-mono text-[11px] font-bold text-amber-700 dark:text-amber-400">
+                                  {pref}<span className="opacity-40">{"x".repeat(6 - lv)}</span>
+                                </span>
+                                <span className={`text-[11px] text-foreground ${lv <= 2 ? "uppercase" : ""}`}> — {nama}</span>
+                                <span className="ml-2 text-[9px] uppercase tracking-wide text-muted-foreground">
+                                  {["akun/segmen", "kelompok", "jenis", "level 4", "level 5"][lv - 1]} · {lv} digit
+                                </span>
                               </td>
                             </tr>
                           );
                         }
                         const adaPenjelasan = !!String(a.penjelasan || "").trim();
                         const terbuka = !!buka[a.kode];
-                        const toggle = () => {
-                          setBuka((b) => ({ ...b, [a.kode]: !b[a.kode] }));
-                          // Makna tiap digit dimuat sekali per kode (cache).
-                          if (!buka[a.kode] && !struktur[a.kode]) {
-                            axios.get(`${API}/referensi-akun/struktur/${a.kode}`)
-                              .then((r) => setStruktur((s) => ({ ...s, [a.kode]: r.data?.jalur || [] })))
-                              .catch(() => {});
-                          }
-                        };
+                        const toggle = () => adaPenjelasan && setBuka((b) => ({ ...b, [a.kode]: !b[a.kode] }));
                         rows.push(
-                          <tr key={a.kode} className="border-b border-border/60 last:border-0 hover:bg-muted/50 cursor-pointer" data-testid={`akun-row-${a.kode}`} onClick={toggle}>
-                            <td className="px-3 py-1.5 font-mono text-[12px] font-semibold text-foreground whitespace-nowrap">
-                              {terbuka ? <ChevronDown className="w-3 h-3 inline mr-1 text-muted-foreground align-[-1px]" /> : <ChevronRight className="w-3 h-3 inline mr-1 text-muted-foreground align-[-1px]" />}
+                          <tr key={a.kode} className={`border-b border-border/60 last:border-0 hover:bg-muted/50 ${adaPenjelasan ? "cursor-pointer" : ""}`} data-testid={`akun-row-${a.kode}`} onClick={toggle}>
+                            <td className="py-1.5 font-mono text-[12px] font-semibold text-foreground whitespace-nowrap" style={{ paddingLeft: "92px", paddingRight: "12px" }}>
+                              {adaPenjelasan
+                                ? (terbuka ? <ChevronDown className="w-3 h-3 inline mr-1 text-muted-foreground align-[-1px]" /> : <ChevronRight className="w-3 h-3 inline mr-1 text-muted-foreground align-[-1px]" />)
+                                : <span className="inline-block w-3 mr-1" />}
                               {a.kode}
                             </td>
                             <td className="px-3 py-1.5 text-[12px] text-foreground/90">
@@ -375,44 +399,20 @@ export default function ReferensiAkunPage({ user, onBack }) {
                             )}
                           </tr>
                         );
-                        if (terbuka) {
-                          const jalur = struktur[a.kode];
+                        if (terbuka && adaPenjelasan) {
                           rows.push(
                             <tr key={`${a.kode}-rincian`} className="border-b border-border/60 bg-muted/30" data-testid={`akun-penjelasan-${a.kode}`}>
-                              <td colSpan={isAdmin ? 4 : 3} className="px-3 py-2.5 space-y-2">
-                                {/* Makna tiap pola digit (KEP-211/PB/2018) */}
-                                <div>
-                                  <p className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Makna tiap pola digit</p>
-                                  {!jalur ? (
-                                    <p className="text-[10px] text-muted-foreground flex items-center gap-1.5"><Loader2 className="w-3 h-3 animate-spin" />Memuat struktur digit…</p>
-                                  ) : (
-                                    <div className="space-y-0.5" data-testid={`akun-jalur-${a.kode}`}>
-                                      {jalur.map((j) => (
-                                        <div key={j.level} className="flex items-baseline gap-2 text-[11px]">
-                                          <span className="font-mono font-semibold text-amber-700 dark:text-amber-400 w-16 flex-shrink-0 text-right">
-                                            {j.kode}<span className="text-muted-foreground/50">{"x".repeat(6 - j.kode.length)}</span>
-                                          </span>
-                                          <span className="text-[9px] uppercase tracking-wide text-muted-foreground w-40 flex-shrink-0">{j.label}</span>
-                                          <span className="text-foreground/85 min-w-0">{j.uraian || <span className="italic text-muted-foreground/60">(tanpa nama resmi di lampiran)</span>}</span>
-                                        </div>
-                                      ))}
-                                    </div>
+                              <td colSpan={isAdmin ? 4 : 3} className="px-3 py-2" style={{ paddingLeft: "92px" }}>
+                                <p className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">Penjelasan</p>
+                                <p className="text-[11px] leading-relaxed text-foreground/80">
+                                  {a.penjelasan}
+                                  {a.penjelasan_warisan && (
+                                    <span className="block mt-1 text-[10px] italic text-muted-foreground">
+                                      (definisi kelompok/jenis induk — akun rincian mengikuti penjelasan di atasnya)
+                                    </span>
                                   )}
-                                </div>
-                                {adaPenjelasan && (
-                                  <div className="border-t border-border/60 pt-2">
-                                    <p className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">Penjelasan</p>
-                                    <p className="text-[11px] leading-relaxed text-foreground/80">
-                                      {a.penjelasan}
-                                      {a.penjelasan_warisan && (
-                                        <span className="block mt-1 text-[10px] italic text-muted-foreground">
-                                          (definisi kelompok/jenis induk — akun rincian mengikuti penjelasan di atasnya)
-                                        </span>
-                                      )}
-                                    </p>
-                                  </div>
-                                )}
-                                <p className="text-[9px] text-muted-foreground/70">Sumber: KEP-211/PB/2018 — hierarki level digit &amp; kolom Penjelasan</p>
+                                </p>
+                                <p className="text-[9px] text-muted-foreground/70 mt-1">Sumber: KEP-211/PB/2018, kolom Penjelasan</p>
                               </td>
                             </tr>
                           );
@@ -435,8 +435,8 @@ export default function ReferensiAkunPage({ user, onBack }) {
               )}
             </div>
             <p className="text-center text-[10px] text-muted-foreground pb-2">
-              Kategori mengikuti struktur digit BAS: digit 1 = akun/segmen, 2 digit = kelompok akun, 3 digit = jenis akun, hingga akun rincian 6 digit. Nama tiap level &amp; penjelasan verbatim dari lampiran resmi KEP-211/PB/2018.
-              Klik baris akun untuk membuka MAKNA TIAP POLA DIGIT + penjelasan resminya. Sumber: dokumen resmi &quot;Referensi Akun&quot; SAKTI/SPAN + lampiran KEP-211/PB/2018; entri manual bertanda &quot;satker&quot;.
+              Makna kode tampil LANGSUNG membagi baris: header bertingkat per level digit (1 = akun/segmen, 2 = kelompok, 3 = jenis, 4–5 = rincian) dengan indentasi — meniru tata letak lampiran resmi KEP-211/PB/2018.
+              Klik baris akun ber-tanda ▸ untuk membuka penjelasan resminya. Sumber: dokumen resmi &quot;Referensi Akun&quot; SAKTI/SPAN + lampiran KEP-211/PB/2018; entri manual bertanda &quot;satker&quot;.
             </p>
           </>
         )}

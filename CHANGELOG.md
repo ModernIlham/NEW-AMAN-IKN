@@ -48,6 +48,27 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#397] Makna kode akun BAS tampil LANGSUNG membagi baris (header bertingkat level 1–5) — 2026-07-18
+
+Umpan balik pemilik: makna kode hingga 6 digit jangan disembunyikan di balik
+klik — harus tampil DI LUAR dan langsung membagi baris agar pengelompokan
+terbaca seketika. Tabel master kini meniru tata letak lampiran resmi
+KEP-211/PB/2018:
+- **Header bertingkat per level digit** muncul otomatis setiap prefiks
+  berganti: `1xxxxx — ASET` (akun/segmen) → `11xxxx — ASET LANCAR` (kelompok)
+  → `117xxx — PERSEDIAAN` (jenis) → `1171xx` / `11711x` (level 4–5) →
+  baris akun 6 digit; dengan indentasi & gradasi warna per level (level 1–3
+  tebal, meniru cetakan resmi). Level 4–5 yang namanya mengulang induk
+  dilewati agar hemat baris.
+- Respons daftar kini menyertakan peta `hierarki` (nama resmi prefiks level
+  1–5 utk halaman aktif) — satu query, tanpa request per baris.
+- Klik baris akun kini KHUSUS membuka penjelasan resmi (makna digit sudah
+  selalu terlihat); endpoint struktur/{kode} tetap tersedia.
+- Verifikasi: 527 tes unit lulus, smoke daftar (peta hierarki) + ekspor
+  lulus, server ter-import, lint & build sukses.
+
+---
+
 ## [#396] Bagan Struktur Organisasi (pohon unit Eselon I–V + jumlah pegawai) — 2026-07-18
 
 Penutup roadmap studi KERJA-BARENG:
