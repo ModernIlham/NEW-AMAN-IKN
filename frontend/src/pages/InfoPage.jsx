@@ -277,37 +277,41 @@ export default function InfoPage({ onBack }) {
     <div className="min-h-screen bg-slate-950 text-slate-200">
       {/* Header */}
       <div className="sticky top-0 z-50 bg-slate-950/95 backdrop-blur-xl border-b border-slate-800">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 py-3 flex items-center justify-between gap-2">
-          <button onClick={onBack} className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors text-sm">
+        {/* Satu baris rapi di semua ukuran: Kembali ikon-saja di HP; tombol
+            unduh diberi min-w-0 min-h-0 agar tidak dibengkakkan aturan 44px
+            (penyebab header bertumpuk dengan konten di bawahnya). */}
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2.5 sm:py-3 flex items-center gap-2">
+          <button onClick={onBack} aria-label="Kembali" title="Kembali"
+            className="h-9 w-9 sm:w-auto sm:px-3 rounded-lg border border-slate-700 text-slate-400 hover:text-white transition-colors text-sm flex items-center justify-center gap-2 flex-shrink-0 min-w-0 min-h-0">
             <ArrowLeft className="w-4 h-4" />
-            <span>Kembali</span>
+            <span className="hidden sm:inline">Kembali</span>
           </button>
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-2 min-w-0 flex-1 justify-center sm:justify-start">
             <div className="w-7 h-7 bg-blue-500 rounded-lg flex items-center justify-center shrink-0" title="AMAN — Manajemen Aset Negara">
               <Package className="w-4 h-4 text-white" />
             </div>
-            <span className="font-semibold text-white text-sm hidden md:inline truncate">AMAN — Manajemen Aset Negara</span>
+            <span className="font-semibold text-white text-xs sm:text-sm truncate">AMAN<span className="hidden md:inline"> — Manajemen Aset Negara</span></span>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-1.5 sm:gap-2 flex-shrink-0">
             <button
               onClick={() => handleDownload("ppt")}
               disabled={!!downloading}
               title="Unduh Slide Presentasi (PPTX)"
               aria-label="Unduh Slide Presentasi (PPTX)"
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500/20 border border-orange-500/30 text-orange-300 rounded-lg text-xs hover:bg-orange-500/30 transition-colors disabled:opacity-50"
+              className="h-9 flex items-center gap-1.5 px-2.5 sm:px-3 bg-orange-500/20 border border-orange-500/30 text-orange-300 rounded-lg text-xs hover:bg-orange-500/30 transition-colors disabled:opacity-50 min-w-0 min-h-0"
             >
               <Presentation className="w-3.5 h-3.5" />
-              {downloading === "ppt" ? "..." : "PPT"}
+              {downloading === "ppt" ? "…" : "PPT"}
             </button>
             <button
               onClick={() => handleDownload("proposal")}
               disabled={!!downloading}
               title="Unduh Proposal Lengkap (DOCX)"
               aria-label="Unduh Proposal Lengkap (DOCX)"
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/20 border border-blue-500/30 text-blue-300 rounded-lg text-xs hover:bg-blue-500/30 transition-colors disabled:opacity-50"
+              className="h-9 flex items-center gap-1.5 px-2.5 sm:px-3 bg-blue-500/20 border border-blue-500/30 text-blue-300 rounded-lg text-xs hover:bg-blue-500/30 transition-colors disabled:opacity-50 min-w-0 min-h-0"
             >
               <FileText className="w-3.5 h-3.5" />
-              {downloading === "proposal" ? "..." : "Proposal"}
+              {downloading === "proposal" ? "…" : "Proposal"}
             </button>
           </div>
         </div>

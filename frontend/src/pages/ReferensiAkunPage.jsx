@@ -277,25 +277,27 @@ export default function ReferensiAkunPage({ user, onBack }) {
         {tab === "master" && (
           <>
             <div className="bg-card rounded-xl border border-border shadow-sm p-2 sm:p-3 space-y-2">
-              <div className="flex items-center gap-2 flex-wrap">
-                <div className="relative flex-1 min-w-[160px]">
+              {/* Satu baris di HP (pola Referensi Kode Barang): cari menyusut,
+                  segmen dibatasi lebarnya, ekspor cukup ikon. */}
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1 min-w-0">
                   <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
                   <Input value={q} onChange={(e) => setQ(e.target.value)}
                     placeholder="Cari kode / nama akun…" className="pl-9 h-10" data-testid="referensi-akun-cari" />
                 </div>
                 <select value={segmen} onChange={(e) => setSegmen(e.target.value)}
-                  className="h-10 rounded-md border border-input bg-background px-2 text-sm" data-testid="referensi-akun-segmen">
-                  <option value="">Semua segmen</option>
+                  aria-label="Filter segmen akun" title="Filter segmen akun"
+                  className="h-10 rounded-md border border-input bg-background px-2 text-xs sm:text-sm max-w-[110px] sm:max-w-none min-w-0 flex-shrink-0" data-testid="referensi-akun-segmen">
+                  <option value="">Segmen</option>
                   {Object.entries(labelSeg).map(([k, v]) => (
                     <option key={k} value={k}>{k} — {v}{data?.per_segmen?.[k] ? ` (${data.per_segmen[k]})` : ""}</option>
                   ))}
                 </select>
-                <Button variant="outline" size="sm" className="h-10 gap-1.5" onClick={eksporCsv}
+                <Button variant="outline" size="sm" className="h-10 gap-1.5 flex-shrink-0" onClick={eksporCsv}
                   title="Ekspor CSV referensi akun" aria-label="Ekspor CSV referensi akun"
                   data-testid="referensi-akun-ekspor">
                   <Download className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Ekspor CSV</span>
-                  <span className="sm:hidden">CSV</span>
                 </Button>
               </div>
               {isAdmin && (

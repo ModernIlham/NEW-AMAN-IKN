@@ -4,7 +4,7 @@ import {
   ClipboardList, ShoppingCart, UserCheck, Handshake, ShieldCheck, Scale,
   ArrowLeftRight, Flame, FileX, Eye, BookOpen, Boxes, FileText, ClipboardCheck,
   CheckCircle2, Link2, CalendarClock, Banknote, Wrench, Landmark, ListTree,
-  Users, DoorOpen, IdCard, Mail, FileSignature, Building2, Settings, Info,
+  Users, DoorOpen, IdCard, Mail, FileSignature, Building2, Settings,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -113,18 +113,8 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
           >
             {dark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>
-          {onShowInfo && (
-            <button
-              type="button"
-              onClick={onShowInfo}
-              aria-label="Tentang aplikasi"
-              title="Tentang aplikasi & panduan"
-              className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0"
-              data-testid="module-home-info"
-            >
-              <Info className="w-4 h-4" />
-            </button>
-          )}
+          {/* Akses halaman Info/PRD sengaja TERSEMBUNYI: 3x klik beruntun pada
+              logo (useTripleClick) — tanpa tombol yang terlihat langsung. */}
           <button
             type="button"
             onClick={onLogout}

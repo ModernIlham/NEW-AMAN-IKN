@@ -11,6 +11,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -61,6 +62,7 @@ export default function PersuratanPage({ user, onBack }) {
   const [klasifikasi, setKlasifikasi] = useState([]); // master kode klasifikasi
   const [klasBaru, setKlasBaru] = useState({ kode: "", uraian: "" });
   const pratinjauTimer = useRef(null);
+  const { confirm, confirmDialog } = useConfirm();
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
 
@@ -153,6 +155,18 @@ export default function PersuratanPage({ user, onBack }) {
       status === "disahkan" ? `Surat ${s.nomor} disahkan`
         : status === "dibatalkan" ? `Nomor ${s.nomor} dibatalkan (hangus)`
           : `Status → ${status}`);
+
+  const hapusSurat = async (s) => {
+    const ok = await confirm({
+      title: `Hapus surat ${s.nomor}?`,
+      description: s.jenis === "keluar"
+        ? "Catatan booking ini dihapus permanen; nomor agenda yang telanjur terpakai hangus (tidak dipakai ulang)."
+        : "Catatan surat masuk ini dihapus permanen dari buku agenda.",
+      confirmLabel: "Hapus", variant: "danger",
+    });
+    if (!ok) return;
+    kirim(() => axios.delete(`${API}/persuratan/${s.id}`), `Surat ${s.nomor} dihapus`);
+  };
 
   const simpanAtur = () =>
     kirim(() => axios.post(`${API}/persuratan/pengaturan`, formAtur), "Pengaturan tersimpan");
@@ -249,39 +263,42 @@ export default function PersuratanPage({ user, onBack }) {
           </div>
         )}
 
+        {/* Toolbar maks 2 baris di HP: baris 1 cari + CSV, baris 2 filter + 2 aksi. */}
         <div className="bg-card rounded-xl border border-border shadow-sm p-2 sm:p-3 flex items-center gap-2 flex-wrap">
-          <div className="relative flex-1 min-w-[160px]">
-            <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-            <Input value={q} onChange={(e) => setQ(e.target.value)}
-              placeholder="Cari nomor / perihal / tujuan / pengirim…" className="pl-9 h-10"
-              data-testid="persuratan-cari" />
+          <div className="flex items-center gap-2 basis-full sm:basis-auto sm:flex-1 min-w-0">
+            <div className="relative flex-1 min-w-0">
+              <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+              <Input value={q} onChange={(e) => setQ(e.target.value)}
+                placeholder="Cari nomor / perihal / tujuan / pengirim…" className="pl-9 h-10"
+                data-testid="persuratan-cari" />
+            </div>
+            <Button variant="outline" className="h-10 gap-1.5 flex-shrink-0"
+              title="Unduh buku agenda (CSV)" aria-label="Unduh buku agenda (CSV)"
+              onClick={() => downloadFileWithProgress(`${API}/persuratan/export${fJenis ? `?jenis=${fJenis}` : ""}`, "Buku_Agenda_Surat.csv", { label: "Buku Agenda (CSV)" }).catch(() => {})}
+              data-testid="persuratan-export">
+              <FileDown className="w-4 h-4" /><span className="hidden sm:inline">CSV</span>
+            </Button>
           </div>
           <select value={fJenis} onChange={(e) => { setFJenis(e.target.value); setFStatus(""); }}
             aria-label="Filter jenis surat" title="Filter jenis surat"
-            className="h-10 rounded-md border border-input bg-background px-2 text-sm" data-testid="persuratan-f-jenis">
-            <option value="">Jenis: Keluar + Masuk</option>
+            className="h-10 rounded-md border border-input bg-background px-2 text-xs sm:text-sm flex-1 sm:flex-none min-w-0" data-testid="persuratan-f-jenis">
+            <option value="">Jenis: semua</option>
             <option value="keluar">Surat Keluar</option>
             <option value="masuk">Surat Masuk</option>
           </select>
           <select value={fStatus} onChange={(e) => setFStatus(e.target.value)}
             aria-label="Filter status surat" title="Filter status surat"
-            className="h-10 rounded-md border border-input bg-background px-2 text-sm" data-testid="persuratan-f-status">
+            className="h-10 rounded-md border border-input bg-background px-2 text-xs sm:text-sm flex-1 sm:flex-none min-w-0" data-testid="persuratan-f-status">
             <option value="">Status: semua</option>
             {opsiStatus.map((s) => <option key={s.kode} value={s.kode}>{s.uraian}</option>)}
           </select>
-          <Button className="h-10 gap-1.5" onClick={() => setFormKeluar({ ...KELUAR_KOSONG })}
-            data-testid="persuratan-booking-btn">
+          <Button className="h-10 gap-1.5 flex-shrink-0" onClick={() => setFormKeluar({ ...KELUAR_KOSONG })}
+            title="Booking nomor surat keluar" data-testid="persuratan-booking-btn">
             <MailPlus className="w-4 h-4" /><span className="hidden sm:inline">Booking Surat Keluar</span><span className="sm:hidden">Keluar</span>
           </Button>
-          <Button variant="outline" className="h-10 gap-1.5" onClick={() => setFormMasuk({ ...MASUK_KOSONG })}
-            data-testid="persuratan-masuk-btn">
+          <Button variant="outline" className="h-10 gap-1.5 flex-shrink-0" onClick={() => setFormMasuk({ ...MASUK_KOSONG })}
+            title="Catat surat masuk" data-testid="persuratan-masuk-btn">
             <Inbox className="w-4 h-4" /><span className="hidden sm:inline">Catat Surat Masuk</span><span className="sm:hidden">Masuk</span>
-          </Button>
-          <Button variant="outline" className="h-10 gap-1.5"
-            title="Unduh buku agenda (CSV)" aria-label="Unduh buku agenda (CSV)"
-            onClick={() => downloadFileWithProgress(`${API}/persuratan/export${fJenis ? `?jenis=${fJenis}` : ""}`, "Buku_Agenda_Surat.csv", { label: "Buku Agenda (CSV)" }).catch(() => {})}
-            data-testid="persuratan-export">
-            <FileDown className="w-4 h-4" /><span className="hidden sm:inline">CSV</span>
           </Button>
         </div>
 
@@ -365,9 +382,9 @@ export default function PersuratanPage({ user, onBack }) {
                           <>
                             <Button size="sm" onClick={() => transisi(s, "disahkan")}
                               title="Sahkan (surat final ditandatangani)" aria-label={`Sahkan ${s.nomor}`}
-                              className="h-7 text-[11px] min-h-0 bg-emerald-600 hover:bg-emerald-700 text-white"
+                              className="h-7 text-[11px] min-h-0 min-w-0 bg-emerald-600 hover:bg-emerald-700 text-white"
                               data-testid={`persuratan-sahkan-${s.id}`}>
-                              <CheckCircle2 className="w-3.5 h-3.5 mr-1" />Sahkan
+                              <CheckCircle2 className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">Sahkan</span>
                             </Button>
                             <button type="button" onClick={() => setBatal({ surat: s, alasan: "" })}
                               title="Batalkan (nomor hangus)" aria-label={`Batalkan ${s.nomor}`}
@@ -401,11 +418,20 @@ export default function PersuratanPage({ user, onBack }) {
                         )}
                         {s.jenis === "masuk" && s.status !== "selesai" && (
                           <Button size="sm"
-                            className={`h-7 text-[11px] min-h-0 text-white ${s.status === "diterima" ? "bg-cyan-600 hover:bg-cyan-700" : "bg-emerald-600 hover:bg-emerald-700"}`}
+                            className={`h-7 text-[11px] min-h-0 min-w-0 text-white ${s.status === "diterima" ? "bg-cyan-600 hover:bg-cyan-700" : "bg-emerald-600 hover:bg-emerald-700"}`}
                             onClick={() => transisi(s, s.status === "diterima" ? "diproses" : "selesai")}
                             data-testid={`persuratan-masuk-lanjut-${s.id}`}>
                             {s.status === "diterima" ? "Proses" : "Selesai"}
                           </Button>
+                        )}
+                        {isAdmin && !(s.jenis === "keluar" && s.status === "disahkan") && (
+                          <button type="button" onClick={() => hapusSurat(s)}
+                            title="Hapus surat (salah catat / batal dibuat)"
+                            aria-label={`Hapus ${s.nomor}`}
+                            className="p-1.5 rounded-md text-red-500 hover:bg-red-500/10 min-w-0 min-h-0"
+                            data-testid={`persuratan-hapus-${s.id}`}>
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         )}
                       </td>
                     </tr>
@@ -718,6 +744,7 @@ export default function PersuratanPage({ user, onBack }) {
       <datalist id="klasifikasi-arsip-list">
         {klasifikasi.map((k) => <option key={k.id} value={k.kode}>{k.uraian}</option>)}
       </datalist>
+      {confirmDialog}
     </div>
   );
 }
