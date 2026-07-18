@@ -18,6 +18,7 @@ function apiErr(e, fb) { return e?.response?.data?.detail || fb; }
 
 const FORM_KOSONG = {
   kode_satker: "", nama_satker: "", nama_unit_organisasi: "", nama_sub_unit: "",
+  kode_satker_lengkap: "",
   alamat: "", tempat_laporan: "", tembusan_laporan: "", telepon: "", email: "",
 };
 
@@ -288,6 +289,7 @@ export function SatkerPanel({ user }) {
                 <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide">Kop laporan (override global)</p>
                 {[["nama_unit_organisasi", "Unit organisasi (baris 2 kop)"],
                   ["nama_sub_unit", "Sub-unit (baris 3 kop — default: nama satker)"],
+                  ["kode_satker_lengkap", "Kode satker lengkap ±20 digit (utk stiker label, cth. 126011600691778000KP)"],
                   ["alamat", "Alamat"],
                   ["tempat_laporan", "Tempat laporan (kota ttd)"],
                   ["telepon", "Telepon"], ["email", "Email"]].map(([k, label]) => (

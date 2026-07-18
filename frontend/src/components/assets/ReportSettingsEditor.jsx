@@ -69,6 +69,7 @@ export default function ReportSettingsEditor({ onClose }) {
     { key: "nama_instansi", label: "Nama Instansi (baris 1 kop)", placeholder: "Contoh: OTORITA IBU KOTA NUSANTARA REPUBLIK INDONESIA" },
     { key: "nama_unit_organisasi", label: "Unit Organisasi (baris 2, tebal)", placeholder: "Contoh: KUASA PENGGUNA BARANG" },
     { key: "nama_sub_unit", label: "Sub Unit/Satker (baris 3, tebal)", placeholder: "Contoh: SATUAN KERJA D (PP-THD)" },
+    { key: "kode_satker_lengkap", label: "Kode Satker Lengkap (±20 digit — dipakai stiker label)", placeholder: "Contoh: 126011600691778000KP" },
     { key: "alamat_instansi", label: "Alamat Instansi (boleh beberapa baris — tekan Enter)", placeholder: "Gedung Kantor Otorita IKN, Nusantara, Kalimantan\nPerwakilan I: Menara Mandiri II Lantai 5, Jakarta", multiline: true },
     { key: "judul_laporan", label: "Judul Laporan", placeholder: "LAPORAN HASIL INVENTARISASI" },
     { key: "subjudul_laporan", label: "Sub Judul", placeholder: "BARANG MILIK NEGARA (BMN)" },

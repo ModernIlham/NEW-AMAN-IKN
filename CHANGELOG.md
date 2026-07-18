@@ -48,6 +48,26 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#403] Stiker: rekap jumlah per ukuran + switch nama/kode satker (20 digit) — 2026-07-18
+
+Dua permintaan pemilik:
+- **Rekap sebelum cetak (mode per-aset)**: dialog menampilkan rincian
+  "Besar N · Sedang N · Kecil N · Belum terisi N" beserta total — aset yang
+  belum punya pilihan Ukuran Stiker disorot kuning dengan petunjuk tindak
+  lanjut (isi via form aset / edit cepat / Ubah Massal) sebelum tercetak
+  memakai ukuran Sedang. Endpoint `GET /stiker/rekap-ukuran` (filter identik
+  daftar aset, agregasi ter-scope satker).
+- **Switch info header**: baris kedua stiker dapat dipilih — NAMA satuan
+  kerja (default) atau KODE SATKER LENGKAP ±20 digit (cth.
+  126011600691778000KP). Field `kode_satker_lengkap` DITAMBAHKAN ke
+  pengaturan kop GLOBAL (Pengaturan → Kop) dan MASTER SATKER (override per
+  satker, ikut resolusi kop) karena sebelumnya memang belum ada.
+- Verifikasi: 531 tes unit lulus (anti-drift peta kop diperbarui sengaja),
+  smoke rekap (3/0/5/17) + header kode 20 digit lulus, server ter-import,
+  lint & build sukses.
+
+---
+
 ## [#402] Stiker: gap aman QR (mesin cutting) + info sub-sub kelompok + logo di tengah QR (kecil) — 2026-07-18
 
 Tiga permintaan pemilik:

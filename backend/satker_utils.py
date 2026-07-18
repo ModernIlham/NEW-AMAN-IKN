@@ -16,6 +16,7 @@ PETA_KOP_SATKER = {
     "alamat": "alamat_instansi",
     "tempat_laporan": "tempat_laporan",
     "tembusan_laporan": "tembusan_laporan",
+    "kode_satker_lengkap": "kode_satker_lengkap",
 }
 
 

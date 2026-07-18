@@ -30,6 +30,7 @@ _PROJ = {"_id": 0}
 FIELD_KOP_SATKER = (
     "nama_satker", "nama_unit_organisasi", "nama_sub_unit", "alamat",
     "tempat_laporan", "tembusan_laporan", "telepon", "email",
+    "kode_satker_lengkap",
 )
 
 
@@ -43,6 +44,9 @@ class SatkerIn(BaseModel):
     tembusan_laporan: str = ""
     telepon: str = ""
     email: str = ""
+    # Kode satker LENGKAP registrasi BMN (±20 digit, mis.
+    # 126011600691778000KP) — dipakai a.l. baris kedua header stiker.
+    kode_satker_lengkap: str = ""
     eselon1: Optional[List[str]] = None
     aktif: bool = True
 

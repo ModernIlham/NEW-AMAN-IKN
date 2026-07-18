@@ -3244,6 +3244,9 @@ class ReportSettingsUpdate(BaseModel):
     tanggal_laporan: Optional[str] = ""
     # Daftar tembusan surat/BA (satu per baris; kosong = bagian tak tampil).
     tembusan_laporan: Optional[str] = ""
+    # Kode satker LENGKAP registrasi BMN (±20 digit, mis. 126011600691778000KP)
+    # — dipakai a.l. baris kedua header stiker label.
+    kode_satker_lengkap: Optional[str] = ""
     # Evaluasi #4 (OPT-IN, default OFF): bila True, simpan aset menolak pengguna_nip
     # yang belum terdaftar di Master Pegawai. None = jangan ubah nilai tersimpan.
     wajib_pegawai_terdaftar: Optional[bool] = None
