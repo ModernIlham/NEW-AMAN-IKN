@@ -48,6 +48,29 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#413] Perbaikan bug: baris daftar aset tumpang tindih di HP (virtualisasi) — 2026-07-18
+
+Laporan pemilik: saat refresh/perubahan data pada tampilan HP, sebagian baris
+daftar aset tumpang tindih dengan baris lain (sebagian ya, sebagian tidak).
+
+- **Akar masalah**: `VirtualizedMobileCards` memanggil `virtualizer.measure()`
+  secara BLANKET pada tiap perubahan `assets` (`useEffect([assets])`). Panggilan
+  itu me-RESET seluruh cache tinggi baris ke estimasi; lalu ResizeObserver
+  per-baris menyusun ulang satu per satu. Di jendela race tersebut, sebagian
+  baris memposisikan diri (`transform: translateY`) berbasis estimasi tinggi
+  usang sementara baris lain sudah terukur ulang → tumpang tindih parsial.
+  Karena tinggi kartu bervariasi (badge/lokasi yang membungkus), efeknya
+  "sebagian tumpang tindih, sebagian tidak".
+- **Perbaikan**: hapus reset blanket (anti-pola menurut dokumentasi resmi
+  `@tanstack/react-virtual` — `measureElement` + `getItemKey` ber-identitas
+  sudah menangani perubahan data otomatis). Re-measure massal kini HANYA
+  dipicu saat LEBAR container benar-benar berubah (rotasi HP / resize) lewat
+  ResizeObserver ber-guard lebar. Estimasi awal dinaikkan ke 120px agar lebih
+  dekat tinggi nyata (mengurangi koreksi awal).
+- Verifikasi: lint 0 warning, build produksi sukses.
+
+---
+
 ## [#412] Dokumentasi v2.4: PRD (halaman Info), README & masterplan diperbarui menyeluruh — 2026-07-18
 
 Pemutakhiran seluruh dokumentasi setelah sistem matang (bagian akhir mandat

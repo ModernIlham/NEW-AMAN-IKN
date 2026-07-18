@@ -39,18 +39,36 @@ const VirtualizedMobileCards = memo(({
   const virtualizer = useVirtualizer({
     count: assets.length + 1, // +1 baris sentinel load-more / ringkasan
     getScrollElement: () => scrollRef.current,
-    estimateSize: (index) => (index === assets.length ? 64 : 112),
+    estimateSize: (index) => (index === assets.length ? 64 : 120),
     overscan: 6,
     // Kunci ukuran terukur ke IDENTITAS aset (bukan indeks slot) supaya tinggi
     // baris tak "tertukar" antar-aset saat daftar berubah (mis. setelah filter).
     getItemKey: (index) => assets[index]?.id ?? `row-${index}`,
   });
 
-  // Setel ulang cache tinggi baris saat daftar aset berubah (filter/urut/muat) —
-  // mencegah gap sisa dari tinggi baris lama (mis. gap row 1↔2 pasca-filter).
+  // Re-measure HANYA saat LEBAR container berubah (rotasi HP / resize), BUKAN
+  // tiap `assets` berubah. Sebelumnya `virtualizer.measure()` dipanggil blanket
+  // pada tiap perubahan data — itu me-RESET seluruh cache tinggi baris ke
+  // estimasi, lalu ResizeObserver per-baris menyusun ulang satu per satu; di
+  // jendela race itu sebagian baris memakai posisi translateY berbasis estimasi
+  // usang → TUMPANG TINDIH sebagian (paling terasa di HP saat refresh). Dengan
+  // getItemKey ber-identitas + measureElement per-baris, perubahan data sudah
+  // ditangani otomatis tanpa reset paksa (praktik resmi @tanstack/react-virtual).
+  const lastWidthRef = useRef(0);
   useEffect(() => {
-    virtualizer.measure();
-  }, [assets, virtualizer]);
+    const el = scrollRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return undefined;
+    lastWidthRef.current = el.clientWidth;
+    const ro = new ResizeObserver((entries) => {
+      const w = Math.round(entries[0]?.contentRect?.width || 0);
+      if (w && w !== lastWidthRef.current) {
+        lastWidthRef.current = w;
+        virtualizer.measure(); // reflow massal hanya saat lebar benar-benar berubah
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [virtualizer]);
 
   // Jaga aset terseleksi (yang sedang diedit) selalu terlihat: saat editId
   // berubah (mis. auto-lanjut setelah simpan), gulir kartunya ke tengah layar.
