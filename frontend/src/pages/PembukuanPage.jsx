@@ -227,7 +227,10 @@ export default function PembukuanPage({ user, onBack }) {
               <Search className="w-3.5 h-3.5 absolute left-6 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input value={q} onChange={(e) => setQ(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && muatJurnal(1)}
-                placeholder="Filter id aset… (Enter)" className="pl-8 h-9 text-xs" />
+                placeholder="Filter berdasarkan ID aset (bukan nama/kode) — Enter" className="pl-8 h-9 text-xs" />
+              <p className="text-[10px] text-muted-foreground mt-1 pl-5">
+                Filter ini memakai ID aset internal. Cari kode/nama barang di tab <b>KIB</b> atau daftar aset, lalu salin ID-nya ke sini.
+              </p>
             </div>
             {!jurnal ? (
               <div className="py-12 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" /></div>

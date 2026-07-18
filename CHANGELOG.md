@@ -48,6 +48,52 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#404] UI/UX gelombang 1: 15 perbaikan prioritas dari audit menyeluruh 26 halaman — 2026-07-18
+
+Mandat pemilik: "review menyeluruh semua modul selain inventarisasi — rapikan
+tata letak di berbagai ukuran layar, jangan berdesakan, ter-kategori rapi,
+icon & tata letak sesuai". Audit multi-agen atas 26 halaman menghasilkan 187
+temuan; gelombang ini mengeksekusi 15 perbaikan berdampak terbesar:
+
+- **Pengaturan**: tombol "Tutup" editor kop tidak lagi muncul tanpa fungsi di
+  halaman Pengaturan (dulu tampak bisa diklik tapi tidak menutup apa pun).
+- **Pejabat**: masa berlaku yang sudah lewat kini berbadge kuning
+  "Kedaluwarsa" (bukan tetap hijau "Aktif" yang menyesatkan).
+- **TTD**: membatalkan permintaan tanda tangan kini meminta konfirmasi
+  (aksi mematikan semua link ttd yang telanjur dibagikan — permanen).
+- **Wasdal**: banner merah agregat "N tindakan lewat tenggat" muncul di atas
+  register bila ada penertiban/insiden yang melewati due date.
+- **Persuratan**: kolom Aksi dibuat sticky kanan saat tabel discroll
+  horizontal; kolom "Naskah · Modul" disembunyikan di layar sempit.
+- **Persediaan**: 8 tombol ikon per baris diringkas — 3 aksi tersering tetap
+  tampil (Masuk/Keluar/Opname), sisanya masuk menu ⋮ berlabel teks; baris
+  input dialog massal kini membungkus rapi di layar sempit (nama barang jadi
+  baris sendiri).
+- **Pembukuan**: filter jurnal diberi placeholder + keterangan jelas bahwa
+  isinya ID aset (bukan nama/kode) — dulu pengguna menebak-nebak.
+- **Pelaporan**: 7 tombol unduh sejajar dirapikan — "Unduh PDF" (Posisi BMN)
+  jadi CTA utama biru, LKB/DBR/KIR/Rekonsiliasi masuk dropdown "Laporan
+  Lain" bernama LENGKAP ("LKB — Laporan Kondisi Barang", dst.); tooltip
+  kepanjangan pada LBKP & CaLBMN.
+- **Pengadaan**: ikon "Daftarkan ke Persediaan" dibedakan dari "Buat Draft
+  Aset" (Boxes vs PackagePlus); kolom harga satuan form barang dilebarkan
+  (grid 8 kolom di desktop) agar angka rupiah tidak terpotong.
+- **Kodefikasi**: Template + 2 tombol Ekspor digabung ke dropdown "Unduh"
+  berlabel lengkap; tooltip pada Tambah & Impor.
+- **Penggunaan**: kartu utama diberi header berjudul "Daftar Pemegang Aset"
+  + badge jumlah (pola seragam dengan seksi Idle/PSP); paginasi diberi
+  konteks "Pemegang — hal. X/Y"; tombol aksi register SK PSP dipisah ke
+  baris aksi sendiri (tidak lagi berdesakan dengan identitas SK) + tooltip.
+- **Referensi Akun**: master kosong kini menampilkan CTA "Muat Referensi
+  Resmi" langsung di tempat (admin) — dibedakan dari "tidak cocok filter".
+- **Pegawai/Pejabat/Ruangan (mobile)**: kolom yang disembunyikan di layar
+  sempit (jabatan/unit kerja, masa berlaku, gedung/lantai) kini tampil
+  sebagai subbaris kecil di sel Nama — informasi tidak hilang lagi.
+- Verifikasi: 531 tes unit lulus, lint 15 file berubah 0 warning, build
+  produksi sukses. Backend tidak berubah.
+
+---
+
 ## [#403] Stiker: rekap jumlah per ukuran + switch nama/kode satker (20 digit) — 2026-07-18
 
 Dua permintaan pemilik:

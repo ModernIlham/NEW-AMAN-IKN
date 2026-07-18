@@ -217,6 +217,11 @@ export default function PejabatPage({ user, onBack }) {
                         {it.unit_kerja && (
                           <p className="text-[10px] text-muted-foreground/80 truncate">{it.unit_kerja}</p>
                         )}
+                        {(it.berlaku_mulai || it.berlaku_selesai) && (
+                          <p className="sm:hidden text-[10px] text-muted-foreground truncate">
+                            Berlaku {it.berlaku_mulai || "…"} – {it.berlaku_selesai || "kini"}
+                          </p>
+                        )}
                       </td>
                       <td className="px-3 py-2">
                         <div className="flex flex-wrap gap-1">
@@ -231,12 +236,27 @@ export default function PejabatPage({ user, onBack }) {
                         {it.berlaku_mulai || "…"} – {it.berlaku_selesai || "kini"}
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                          it.aktif === false
+                        {(() => {
+                          // Masa berlaku lewat = KEDALUWARSA (amber) — badge
+                          // "Aktif" hijau pada pejabat kedaluwarsa menyesatkan
+                          // dasar penanda tangan dokumen resmi.
+                          const selesai = String(it.berlaku_selesai || "").slice(0, 10);
+                          const habis = it.aktif !== false && selesai &&
+                            selesai < new Date().toISOString().slice(0, 10);
+                          const cls = it.aktif === false
                             ? "bg-slate-500/15 text-muted-foreground"
-                            : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"}`}>
-                          {it.aktif === false ? "Nonaktif" : "Aktif"}
-                        </span>
+                            : habis
+                              ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                              : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400";
+                          const label = it.aktif === false ? "Nonaktif"
+                            : habis ? "Kedaluwarsa" : "Aktif";
+                          return (
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${cls}`}
+                              title={habis ? `Masa berlaku berakhir ${selesai} — perbarui SK/periode` : undefined}>
+                              {label}
+                            </span>
+                          );
+                        })()}
                       </td>
                       {isAdmin && (
                         <td className="px-3 py-2 text-right whitespace-nowrap">

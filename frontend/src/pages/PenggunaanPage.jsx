@@ -521,6 +521,13 @@ export default function PenggunaanPage({ user, onBack }) {
         </div>
 
         <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+          <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
+            <UserCheck className="w-4 h-4 text-sky-600" />
+            <p className="text-xs font-bold text-foreground flex-1">Daftar Pemegang Aset</p>
+            <span className="px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-600 dark:text-sky-400 text-[10px] font-semibold">
+              {total} pemegang
+            </span>
+          </div>
           {loading ? (
             <div className="flex items-center justify-center py-16">
               <Loader2 className="w-7 h-7 animate-spin text-sky-600" />
@@ -584,7 +591,7 @@ export default function PenggunaanPage({ user, onBack }) {
             <Button variant="outline" size="sm" disabled={page <= 1 || loading} onClick={() => load(page - 1, search)} className="gap-1">
               <ChevronLeft className="w-4 h-4" />Sebelumnya
             </Button>
-            <span className="text-xs text-muted-foreground">Hal. {page} / {totalPages}</span>
+            <span className="text-xs text-muted-foreground">Pemegang — hal. {page} / {totalPages}</span>
             <Button variant="outline" size="sm" disabled={page >= totalPages || loading} onClick={() => load(page + 1, search)} className="gap-1">
               Berikutnya<ChevronRight className="w-4 h-4" />
             </Button>
@@ -817,6 +824,8 @@ export default function PenggunaanPage({ user, onBack }) {
                         {psp.label_status_pengajuan?.[sk.status_pengajuan] || sk.status_pengajuan}
                       </span>
                       <span className="text-[11px] text-muted-foreground">{sk.tanggal_sk || "—"} · {(sk.aset || []).length} aset</span>
+                    </div>
+                    <div className="flex gap-1.5 mt-1.5 flex-wrap items-center">
                       {sk.status_pengajuan === "draf" && (
                         <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
                           onClick={() => pindahStatusPsp(sk, "diajukan")}
@@ -833,14 +842,14 @@ export default function PenggunaanPage({ user, onBack }) {
                             onClick={() => pindahStatusPsp(sk, "ditolak")}>Tolak</Button>
                         </>
                       )}
-                      <button type="button" aria-label="Lampiran SK"
+                      <button type="button" aria-label="Lampiran SK" title="Lampiran SK"
                         onClick={() => setLampPsp({ sk, uploading: false })}
                         className="h-7 w-7 rounded-lg border border-border text-foreground/70 flex items-center justify-center hover:bg-muted min-h-0 min-w-0"
                         data-testid={`penggunaan-psp-lampiran-${sk.id}`}>
                         <Paperclip className="w-3 h-3" />
                       </button>
                       {sk.status_pengajuan === "ditetapkan" && (
-                        <button type="button" aria-label="Unduh BAST (PDF)"
+                        <button type="button" aria-label="Unduh BAST (PDF)" title="Unduh BAST (PDF)"
                           onClick={() => downloadFileWithProgress(
                             `${API}/penggunaan/psp/${sk.id}/bast-pdf`,
                             `BAST_PSP_${(sk.nomor_sk || "SK").replace(/[/\s]/g, "-")}.pdf`,
@@ -852,7 +861,7 @@ export default function PenggunaanPage({ user, onBack }) {
                         </button>
                       )}
                       {isAdmin && (
-                        <button type="button" aria-label="Hapus SK" onClick={() => hapusPsp(sk)}
+                        <button type="button" aria-label="Hapus SK" title="Hapus SK" onClick={() => hapusPsp(sk)}
                           className="h-7 w-7 rounded-lg border border-border text-red-500 flex items-center justify-center hover:bg-red-500/10 min-h-0 min-w-0">
                           <Trash2 className="w-3 h-3" />
                         </button>

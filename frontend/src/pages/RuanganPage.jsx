@@ -200,6 +200,11 @@ export default function RuanganPage({ user, onBack }) {
                       <td className="px-3 py-2">
                         <p className="font-semibold text-foreground font-mono text-xs">{it.kode_ruangan}</p>
                         <p className="text-[12px] text-foreground/90">{it.nama_ruangan}</p>
+                        {(it.gedung || it.lantai) && (
+                          <p className="sm:hidden text-[10px] text-muted-foreground truncate">
+                            {[it.gedung, it.lantai ? `Lt. ${it.lantai}` : ""].filter(Boolean).join(" · ")}
+                          </p>
+                        )}
                       </td>
                       <td className="px-3 py-2 text-[11px] text-muted-foreground whitespace-nowrap hidden sm:table-cell">
                         {[it.gedung, it.lantai ? `Lt. ${it.lantai}` : ""].filter(Boolean).join(" · ") || "—"}
