@@ -48,6 +48,33 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#375] Tanda Tangan Digital (slice 2): e-sign via LINK — halaman publik, urutan, QR & lembar pengesahan — 2026-07-18
+
+Setiap penanda tangan kini bisa menandatangani dokumen **melalui link yang
+dibagikan** (WA/email) — dari HP/komputer masing-masing, **tanpa akun**.
+- **Permintaan TTD** (`POST /ttd/permintaan`): judul + daftar penanda tangan →
+  link pribadi per orang (JWT `typ=sign`, umur 14 hari, `jti` **sekali pakai**).
+  Mode **paralel** (semua langsung) atau **berurutan** (sesuai giliran — penanda
+  tangan berikutnya aktif otomatis setelah yang sebelumnya selesai).
+- **Halaman publik `/ttd/:id`** (tanpa login, dicek sebelum gate auth):
+  identitas penanda tangan + kanvas goresan mulus / unggah foto (hapus
+  background otomatis — endpoint `olah-foto` kini menerima token tamu).
+  Kirim → PNG ke GridFS + **hash SHA-256** + waktu + IP tercatat.
+- **Verifikasi publik `/ttd/verifikasi/:id`** (dibuka dari QR): siapa sudah
+  menandatangani & kapan — tanpa membocorkan gambar/hash/jti.
+- **Lembar Pengesahan (PDF)**: tabel penanda tangan ber-gambar TTD + QR
+  verifikasi + kode dokumen (`GET /ttd/permintaan/{id}/lembar-pdf`).
+- **Dasbor "Tanda Tangan Elektronik"** di Beranda Modul: buat permintaan
+  (saran nama dari Master Pegawai), salin link per orang, pantau status
+  (x/y menandatangani), batalkan, unduh lembar pengesahan.
+- Interceptor 401 mengecualikan endpoint tamu (`/ttd/tandatangan|verifikasi|
+  olah-foto`) — link kedaluwarsa tidak lagi men-logout user yang kebetulan
+  sedang login.
+- Verifikasi: suite **482 lulus** (+4 uji token/link e-sign); 13 route `/ttd`
+  ter-mount; lint & build frontend sukses.
+
+---
+
 ## [#374] Tanda Tangan Digital (slice 1): kanvas mulus + foto hapus-background + tersemat ke PDF — 2026-07-17
 
 Fitur baru (riset library terverifikasi): spesimen tanda tangan digital per

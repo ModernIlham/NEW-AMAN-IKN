@@ -55,6 +55,51 @@ def create_media_token(user_id: str, username: str) -> str:
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 
+# Token TANDA TANGAN (typ="sign", umur 14 hari): dipakai link e-sign yang
+# dibagikan ke penanda tangan TAMU (tanpa akun). Membawa id permintaan +
+# id penanda tangan + jti (sekali pakai, ditandai di record). DITOLAK untuk
+# API biasa (tidak punya user_id → _decode_bearer gagal find user).
+SIGN_TOKEN_EXPIRATION_DAYS = 14
+
+
+def create_sign_token(sr_id: str, signer_id: str, jti: str) -> str:
+    payload = {
+        "typ": "sign", "sr": sr_id, "signer": signer_id, "jti": jti,
+        "exp": datetime.now(timezone.utc).timestamp() + SIGN_TOKEN_EXPIRATION_DAYS * 86400,
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+async def require_sign_token(token: str = Query(default="")) -> dict:
+    """Validasi token e-sign (link publik). Kembalikan {sr, signer, jti}.
+    Tidak melakukan lookup user (penanda tangan tamu)."""
+    if not token:
+        raise HTTPException(status_code=401, detail="Token tanda tangan wajib")
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Link tanda tangan kedaluwarsa")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Link tanda tangan tidak valid")
+    if payload.get("typ") != "sign":
+        raise HTTPException(status_code=401, detail="Token bukan untuk tanda tangan")
+    return {"sr": payload.get("sr"), "signer": payload.get("signer"),
+            "jti": payload.get("jti")}
+
+
+async def require_user_or_sign_token(
+    authorization: str = Header(default="", alias="Authorization"),
+    token: str = Query(default=""),
+) -> dict:
+    """Gate untuk endpoint yang dipakai BAIK oleh user login MAUPUN penanda
+    tangan tamu (halaman link e-sign) — mis. olah foto TTD. Prioritas header
+    Bearer; fallback ?token= bertipe sign."""
+    if authorization and authorization.startswith("Bearer "):
+        return await _decode_bearer(authorization)
+    tok = await require_sign_token(token)
+    return {"guest": True, "sign": tok, "username": "tamu-ttd", "role": "tamu"}
+
+
 async def _decode_bearer(authorization: str, allow_media_scope: bool = False) -> dict:
     """Decode an Authorization header value and return the user document.
 

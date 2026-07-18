@@ -45,6 +45,8 @@ const PemindahtangananPage = lazy(() => import("./pages/PemindahtangananPage"));
 const WasdalPage = lazy(() => import("./pages/WasdalPage"));
 const PenganggaranPage = lazy(() => import("./pages/PenganggaranPage"));
 const PengadaanPage = lazy(() => import("./pages/PengadaanPage"));
+const TtdPublikPage = lazy(() => import("./pages/TtdPublikPage"));
+const TtdPermintaanPage = lazy(() => import("./pages/TtdPermintaanPage"));
 
 // ============================================================================
 // LOADING FALLBACK - Shown while lazy components load
@@ -118,7 +120,12 @@ function App() {
       error => {
         const status = error?.response?.status;
         const url = error?.config?.url || '';
-        if (status === 401 && !url.includes('/auth/')) {
+        // /ttd/tandatangan & /ttd/verifikasi dipakai TAMU e-sign (token link,
+        // bukan sesi) — 401 di sana berarti link invalid/kedaluwarsa, BUKAN
+        // sesi berakhir; jangan paksa logout user yang kebetulan login.
+        if (status === 401 && !url.includes('/auth/')
+            && !url.includes('/ttd/tandatangan') && !url.includes('/ttd/verifikasi')
+            && !url.includes('/ttd/olah-foto')) {
           forceLogout("Sesi Anda telah berakhir. Silakan login kembali.");
         }
         return Promise.reject(error);
@@ -293,6 +300,23 @@ function App() {
   const [showPenganggaran, setShowPenganggaran] = useState(false);
   // Halaman Pengadaan (register perolehan)
   const [showPengadaan, setShowPengadaan] = useState(false);
+  // Halaman dasbor Tanda Tangan Elektronik (permintaan e-sign via link)
+  const [showTtd, setShowTtd] = useState(false);
+
+  // ── HALAMAN PUBLIK E-SIGN ──────────────────────────────────────────────
+  // /ttd/:id (link tanda tangan yang dibagikan) & /ttd/verifikasi/:id (QR)
+  // harus bisa dibuka SIAPA PUN TANPA LOGIN — diperiksa SEBELUM gate auth
+  // dan seluruh early-return modul, murni dari pathname.
+  if (window.location.pathname.startsWith('/ttd/')) {
+    return (
+      <div className="App">
+        <Suspense fallback={<PageLoader />}>
+          <TtdPublikPage />
+        </Suspense>
+        <Toaster position="top-right" richColors />
+      </div>
+    );
+  }
 
   if (loading) {
     return <PageLoader />;
@@ -549,6 +573,18 @@ function App() {
     );
   }
 
+  // Tanda Tangan Elektronik — dasbor permintaan e-sign via link.
+  if (user && showTtd) {
+    return (
+      <div className="App">
+        <Suspense fallback={<PageLoader />}>
+          <TtdPermintaanPage user={user} onBack={() => setShowTtd(false)} />
+        </Suspense>
+        <Toaster position="top-right" richColors />
+      </div>
+    );
+  }
+
   // Beranda Modul — rumah Siklus Pengelolaan BMN. Tampil setelah login
   // sampai user memilih modul; modul selain Inventarisasi menampilkan
   // konsep "Segera Hadir" di dalam halaman ini.
@@ -583,6 +619,7 @@ function App() {
             onOpenWasdal={() => setShowWasdal(true)}
             onOpenPenganggaran={() => setShowPenganggaran(true)}
             onOpenPengadaan={() => setShowPengadaan(true)}
+            onOpenTtd={() => setShowTtd(true)}
           />
         </Suspense>
         <Toaster position="top-right" richColors />

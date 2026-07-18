@@ -17,8 +17,10 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
  *    (POST /ttd/olah-foto, Pillow) → pratinjau PNG transparan.
  *
  * onSave(dataUrlPng) dipanggil dengan data-URL PNG transparan.
+ * tokenQuery (opsional): token e-sign untuk penanda tangan TAMU — diteruskan
+ * sebagai ?token= ke /ttd/olah-foto (tanpa header Authorization).
  */
-export default function SignatureCapture({ onSave, saving = false }) {
+export default function SignatureCapture({ onSave, saving = false, tokenQuery = "" }) {
   const [mode, setMode] = useState("gambar");   // "gambar" | "foto"
   const [fotoPng, setFotoPng] = useState(null);  // data-URL hasil olah foto
   const [olah, setOlah] = useState(false);
@@ -36,7 +38,8 @@ export default function SignatureCapture({ onSave, saving = false }) {
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const r = await axios.post(`${API}/ttd/olah-foto`, fd,
+      const url = `${API}/ttd/olah-foto${tokenQuery ? `?token=${encodeURIComponent(tokenQuery)}` : ""}`;
+      const r = await axios.post(url, fd,
         { headers: { "Content-Type": "multipart/form-data" } });
       setFotoPng(r.data?.png_base64 || null);
       toast.success("Background dihapus — periksa hasilnya");
@@ -46,7 +49,7 @@ export default function SignatureCapture({ onSave, saving = false }) {
       setOlah(false);
       if (fileRef.current) fileRef.current.value = "";
     }
-  }, []);
+  }, [tokenQuery]);
 
   const simpan = useCallback(() => {
     let png = null;
