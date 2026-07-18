@@ -184,6 +184,32 @@ async def create_indexes() -> None:
         # Register koreksi nilai penilaian: per aset/tanggal + jalur id
         await db.penilaian_koreksi.create_index([("asset_id", 1), ("tanggal_dokumen", -1)])
         await db.penilaian_koreksi.create_index("id", unique=True)
+        # ── Indeks tambahan hasil audit performa (#409) ──
+        # SIMAN: panel ringkasan menghitung 4x count per status; daftar selisih.
+        await db.assets.create_index("siman.status")
+        await db.assets.create_index([("activity_id", 1), ("siman.status", 1)])
+        # Pemegang aset: rekap per NIP (Master Pegawai) & daftar aset per
+        # pegawai; filter pengguna pada daftar aset (kolom "user").
+        await db.assets.create_index("pengguna_nip")
+        await db.assets.create_index("user")
+        # Persuratan: buku agenda (filter jenis/status, urut tahun+no_agenda)
+        # + jalur id pada setiap operasi surat/BAST/LPB (dulu COLLSCAN penuh).
+        await db.surat.create_index("id", unique=True)
+        await db.surat.create_index([("jenis", 1), ("status", 1)])
+        await db.surat.create_index([("jenis", 1), ("tahun", -1), ("no_agenda", -1)])
+        # Master Pegawai: cek bentrok NIP saat impor massal + daftar per satker.
+        await db.pegawai.create_index("id", unique=True)
+        await db.pegawai.create_index("nip")
+        await db.pegawai.create_index([("kode_satker", 1), ("nama", 1)])
+        # Master Pejabat & Ruangan & Unit Kerja: jalur id (dipakai TTD/lookup).
+        await db.pejabat.create_index("id", unique=True)
+        await db.ruangan.create_index("id", unique=True)
+        await db.unit_kerja.create_index("id", unique=True)
+        # Register impor SIMAN: riwayat terbaru dulu.
+        await db.siman_imports.create_index("waktu")
+        # Register e-sign: daftar per pembuat, terbaru dulu.
+        await db.signature_requests.create_index("id", unique=True)
+        await db.signature_requests.create_index([("created_by", 1), ("created_at", -1)])
         logger.info("Database indexes created successfully")
     except Exception as e:
         logger.error(f"Error creating indexes: {e}")

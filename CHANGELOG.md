@@ -48,6 +48,36 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#410] Audit performa: indeks kunci + bilah progres ringan (hemat scan penuh saat data besar) — 2026-07-18
+
+Hasil audit performa menyeluruh. Fokus pada yang paling terasa saat data
+besar (10k aset, ribuan surat/pegawai):
+
+- **Bilah progres inventarisasi tak lagi memicu full-scan tiap menit**:
+  InventoryProgressBar (selalu tampil di dashboard) dulu memanggil
+  `/rekapitulasi` — menarik SELURUH aset kegiatan ke memori — tiap 60 detik
+  & tiap simpan. Kini memakai endpoint RINGAN
+  `/inventory-activities/{id}/rekap-ringkas` (satu agregasi `$group`
+  total+belum di MongoDB, payload dua angka). Halaman Rekapitulasi lengkap
+  tetap memakai endpoint penuh.
+- **Indeks database kunci ditambahkan** (hasil audit — dulu COLLSCAN):
+  - `assets.siman.status` + `[activity_id, siman.status]` — panel SIMAN
+    (4× count per buka).
+  - `assets.pengguna_nip` & `assets.user` — rekap pemegang, daftar aset per
+    pegawai, filter pengguna.
+  - `surat`: `id` (unik), `[jenis, status]`, `[jenis, tahun, no_agenda]` —
+    buku agenda persuratan + setiap operasi surat/BAST/LPB (dulu koleksi
+    `surat` TANPA indeks sama sekali).
+  - `pegawai`: `id`, `nip`, `[kode_satker, nama]` — cek bentrok NIP impor
+    massal + daftar per satker.
+  - `pejabat`/`ruangan`/`unit_kerja` `id`, `siman_imports.waktu`,
+    `signature_requests` (`id` + `[created_by, created_at]`).
+- Verifikasi: 543 tes unit lulus, smoke rekap-ringkas (agregasi total+belum
+  benar), server ter-import, lint & build sukses. Indeks bersifat idempoten
+  (dibuat saat startup).
+
+---
+
 ## [#409] Audit keamanan menyeluruh: tutup kebocoran lintas-satker & IDOR, rate-limit e-sign, masking NIP publik — 2026-07-18
 
 Hasil audit keamanan menyeluruh (mandat "pemantauan keamanan setiap fitur

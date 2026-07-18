@@ -47,7 +47,9 @@ const InventoryProgressBar = memo(({ activityId, inventoryStatusFilter, onFilter
     } catch { /* cache rusak — abaikan */ }
     const fetchRekap = async () => {
       try {
-        const r = await axios.get(`${API}/inventory-activities/${activityId}/rekapitulasi`);
+        // Endpoint RINGAN (agregasi $group total+belum) — dipoll berkala tanpa
+        // menarik seluruh aset seperti /rekapitulasi (audit performa #409).
+        const r = await axios.get(`${API}/inventory-activities/${activityId}/rekap-ringkas`);
         if (!cancelled) {
           setRekap(r.data);
           // Simpan hanya dua angka yang dipakai bar ini — hemat localStorage

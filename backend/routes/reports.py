@@ -742,6 +742,32 @@ def _page_footer_factory(report_name):
 # REKAPITULASI
 # ============================================================================
 
+@reports_router.get("/inventory-activities/{activity_id}/rekap-ringkas")
+async def get_rekap_ringkas(activity_id: str,
+                            _user: dict = Depends(require_user_or_query_token)):
+    """Rekap RINGAN untuk bilah progres (total + belum diinventarisasi).
+
+    Dipoll tiap ~60 detik oleh InventoryProgressBar. Memakai satu agregasi
+    `$group` di MongoDB (bukan menarik seluruh aset ke memori seperti
+    /rekapitulasi) — beban DB O(indeks), payload dua angka. Aset tanpa
+    `inventory_status` dihitung "Belum Diinventarisasi" (default).
+    """
+    await pastikan_akses_kegiatan_id(_user, activity_id)
+    total = 0
+    belum = 0
+    async for grp in db.assets.aggregate([
+        {"$match": {"activity_id": activity_id}},
+        {"$group": {"_id": {"$ifNull": ["$inventory_status", "Belum Diinventarisasi"]},
+                    "n": {"$sum": 1}}},
+    ]):
+        n = grp.get("n", 0)
+        total += n
+        if (grp.get("_id") or "Belum Diinventarisasi") == "Belum Diinventarisasi":
+            belum += n
+    return {"total_bmn_diteliti": total,
+            "belum_diinventarisasi": {"count": belum}}
+
+
 @reports_router.get("/inventory-activities/{activity_id}/rekapitulasi")
 async def get_rekapitulasi(activity_id: str, _user: dict = Depends(require_user_or_query_token)):
     """Get inventory rekapitulasi summary for an activity"""
