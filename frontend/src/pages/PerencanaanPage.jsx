@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, ClipboardList, CheckCircle2, XCircle, Coins, FileDown,
-  Plus, Search, Send, Trash2,
+  Plus, Scale, Search, Send, Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,6 +62,50 @@ export default function PerencanaanPage({ user, onBack }) {
       .then((r) => setUsulan(r.data))
       .catch(() => {});
   }, []);
+
+  // ── SBSK (PMK 138/2024) + sanding usulan vs aset eksisting ──
+  const [sbsk, setSbsk] = useState(null);
+  const [formSbsk, setFormSbsk] = useState(null);
+  const [sanding, setSanding] = useState(null);   // {usulan, hasil|null}
+  const muatSbsk = useCallback(() => {
+    axios.get(`${API}/perencanaan/sbsk`)
+      .then((r) => setSbsk(r.data))
+      .catch(() => setSbsk({ items: [] }));
+  }, []);
+  useEffect(() => { muatSbsk(); }, [muatSbsk]);
+
+  const simpanSbsk = async () => {
+    if (!formSbsk?.peruntukan?.trim()) { toast.error("Peruntukan wajib diisi"); return; }
+    try {
+      await axios.post(`${API}/perencanaan/sbsk`, {
+        ...formSbsk, standar: Number(formSbsk.standar) || 0 });
+      toast.success("Baris standar SBSK tersimpan");
+      setFormSbsk(null);
+      muatSbsk();
+    } catch (e) { toast.error(e?.response?.data?.detail || "Gagal menyimpan standar"); }
+  };
+
+  const hapusSbsk = async (s) => {
+    const ok = await confirm({
+      title: `Hapus standar "${s.peruntukan}"?`, description: s.keterangan || "",
+      confirmLabel: "Hapus", variant: "danger" });
+    if (!ok) return;
+    try {
+      await axios.delete(`${API}/perencanaan/sbsk/${s.id}`);
+      muatSbsk();
+    } catch (e) { toast.error(e?.response?.data?.detail || "Gagal menghapus"); }
+  };
+
+  const bukaSanding = async (u) => {
+    setSanding({ usulan: u, hasil: null });
+    try {
+      const r = await axios.get(`${API}/perencanaan/usulan/${u.id}/sanding`);
+      setSanding({ usulan: u, hasil: r.data });
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal memuat sanding");
+      setSanding(null);
+    }
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -287,6 +331,12 @@ export default function PerencanaanPage({ user, onBack }) {
                             {usulan.label_status?.[ke] || ke}
                           </Button>
                         ))}
+                        <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                          onClick={() => bukaSanding(u)}
+                          title="Sanding usulan vs aset eksisting + standar SBSK (PMK 138/2024)"
+                          data-testid={`perencanaan-usulan-${u.id}-sanding`}>
+                          <Scale className="w-3.5 h-3.5 mr-1" />Sanding
+                        </Button>
                         {isAdmin && (
                           <button type="button" onClick={() => hapusUsulan(u)} aria-label="Hapus usulan"
                             className="h-7 w-7 min-h-0 min-w-0 rounded flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-red-500/10">
@@ -297,6 +347,49 @@ export default function PerencanaanPage({ user, onBack }) {
                     </li>
                   ))}
                 </ul>
+              )}
+            </div>
+
+            {/* ── Tabel standar SBSK (PMK 138/2024) ── */}
+            <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="perencanaan-sbsk">
+              <div className="px-3 py-2 border-b border-border flex items-center gap-2 flex-wrap">
+                <Scale className="w-4 h-4 text-violet-500" />
+                <div className="flex-1 min-w-[160px]">
+                  <p className="text-xs font-bold text-foreground">Standar Barang &amp; Standar Kebutuhan — SBSK (PMK 138/2024)</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    Batas tertinggi perencanaan kebutuhan; angka dirawat admin dari Lampiran PMK. Dipakai tombol &quot;Sanding&quot; per usulan.
+                  </p>
+                </div>
+                {isAdmin && (
+                  <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
+                    onClick={() => setFormSbsk({ kategori: "barang", peruntukan: "", satuan: "unit", standar: "1", keterangan: "" })}
+                    data-testid="sbsk-tambah">
+                    <Plus className="w-3.5 h-3.5 mr-1" />Tambah Standar
+                  </Button>
+                )}
+              </div>
+              {!sbsk ? (
+                <div className="py-6 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" /></div>
+              ) : (
+                <div className="divide-y divide-border/60">
+                  {(sbsk.items || []).map((s) => (
+                    <div key={s.id} className="px-3 py-1.5 flex items-center gap-2.5">
+                      <span className="px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-600 dark:text-violet-400 text-[9px] font-bold uppercase flex-shrink-0">
+                        {s.kategori}
+                      </span>
+                      <p className="text-[12px] flex-1 min-w-0 truncate">
+                        <b>{s.peruntukan}</b> — {s.standar} {s.satuan}
+                        <span className="text-muted-foreground"> · {s.keterangan}</span>
+                      </p>
+                      {isAdmin && (
+                        <button type="button" onClick={() => hapusSbsk(s)} aria-label={`Hapus standar ${s.peruntukan}`}
+                          className="h-6 w-6 min-h-0 min-w-0 rounded flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-red-500/10">
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
 
@@ -467,6 +560,95 @@ export default function PerencanaanPage({ user, onBack }) {
                   {formUsulan.saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Simpan Draft"}
                 </Button>
               </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog tambah standar SBSK ── */}
+      <Dialog open={!!formSbsk} onOpenChange={(o) => !o && setFormSbsk(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Tambah Standar SBSK</DialogTitle>
+            <DialogDescription>Angka dari Lampiran PMK 138/2024 (batas tertinggi kebutuhan).</DialogDescription>
+          </DialogHeader>
+          {formSbsk && (
+            <div className="space-y-2">
+              <select value={formSbsk.kategori}
+                onChange={(e) => setFormSbsk({ ...formSbsk, kategori: e.target.value })}
+                className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm" data-testid="sbsk-kategori">
+                <option value="ruang_kerja">Ruang kerja (m²)</option>
+                <option value="kendaraan">Kendaraan dinas</option>
+                <option value="barang">Barang/peralatan</option>
+                <option value="tanah_bangunan">Tanah & bangunan</option>
+              </select>
+              <Input value={formSbsk.peruntukan} placeholder="Peruntukan (mis. Pejabat eselon III)"
+                onChange={(e) => setFormSbsk({ ...formSbsk, peruntukan: e.target.value })}
+                className="h-9" data-testid="sbsk-peruntukan" />
+              <div className="grid grid-cols-2 gap-2">
+                <Input value={formSbsk.standar} inputMode="decimal" placeholder="Angka standar"
+                  onChange={(e) => setFormSbsk({ ...formSbsk, standar: e.target.value })}
+                  className="h-9" data-testid="sbsk-standar" />
+                <Input value={formSbsk.satuan} placeholder="Satuan (unit/m²)"
+                  onChange={(e) => setFormSbsk({ ...formSbsk, satuan: e.target.value })}
+                  className="h-9" />
+              </div>
+              <Input value={formSbsk.keterangan} placeholder="Keterangan/rujukan lampiran (opsional)"
+                onChange={(e) => setFormSbsk({ ...formSbsk, keterangan: e.target.value })}
+                className="h-9" />
+              <div className="flex justify-end gap-1.5 pt-1">
+                <Button variant="outline" size="sm" className="h-9 text-xs" onClick={() => setFormSbsk(null)}>Batal</Button>
+                <Button size="sm" className="h-9 text-xs" onClick={simpanSbsk} data-testid="sbsk-simpan">Simpan</Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog hasil sanding usulan ── */}
+      <Dialog open={!!sanding} onOpenChange={(o) => !o && setSanding(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Scale className="w-4 h-4 text-violet-500" />Sanding Usulan vs Eksisting &amp; SBSK
+            </DialogTitle>
+            <DialogDescription className="truncate">{sanding?.usulan?.uraian}</DialogDescription>
+          </DialogHeader>
+          {!sanding?.hasil ? (
+            <div className="py-8 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" /></div>
+          ) : (
+            <div className="space-y-2.5" data-testid="sanding-hasil">
+              <div className="grid grid-cols-3 gap-2">
+                {[["Eksisting sejenis", sanding.hasil.jumlah_eksisting, "unit"],
+                  ["Umur rata-rata", sanding.hasil.umur_rata_tahun ?? "—", "tahun"],
+                  ["Nilai eksisting", `Rp${Math.round(sanding.hasil.nilai_eksisting || 0).toLocaleString("id-ID")}`, ""]].map(([l, v, s]) => (
+                  <div key={l} className="rounded-lg border border-border p-2 text-center">
+                    <p className="text-sm font-extrabold leading-tight break-words">{v}</p>
+                    <p className="text-[9px] text-muted-foreground">{l}{s ? ` (${s})` : ""}</p>
+                  </div>
+                ))}
+              </div>
+              {Object.keys(sanding.hasil.kondisi || {}).length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {Object.entries(sanding.hasil.kondisi).map(([k, n]) => (
+                    <span key={k} className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${WARNA_KONDISI[k] || "bg-muted text-muted-foreground"}`}>
+                      {k}: {n}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="rounded-lg bg-muted/60 p-2.5 space-y-1">
+                {(sanding.hasil.catatan || []).map((c, i) => (
+                  <p key={i} className="text-[11px] text-foreground/90">• {c}</p>
+                ))}
+                {(sanding.hasil.catatan || []).length === 0 && (
+                  <p className="text-[11px] text-muted-foreground">Tidak ada catatan — lengkapi kode barang usulan agar sanding otomatis bekerja.</p>
+                )}
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                Kode barang sanding: <b className="font-mono">{sanding.hasil.kode_barang || "—"}</b> ·
+                Dasar: PMK 153/2021 jo. PMK 138/2024 (SBSK).
+              </p>
             </div>
           )}
         </DialogContent>

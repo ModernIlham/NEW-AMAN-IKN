@@ -48,6 +48,35 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#382] SEMUA MODUL AKTIF: SBSK & sanding usulan (Perencanaan) + Laporan Tahunan PMK 207 & portofolio (Wasdal) — 2026-07-18
+
+Dua modul terakhir naik ke AKTIF — seluruh 16 modul registry kini AKTIF
+(mandat "badge sebagian/segera → aktif" TUNTAS). Riset: PMK 138/2024 (SBSK)
+& PMK 207/2021 (wasdal); angka lampiran dirawat admin (tabel konfigurabel).
+- **Perencanaan → AKTIF**:
+  - **Tabel standar SBSK** (PMK 138/2024) konfigurabel: koleksi
+    `sbsk_standar` ber-seed baris terdokumentasi publik (ruang kerja
+    pimpinan 247 m², kendaraan dinas per eselon — bertanda verifikasi
+    Lampiran), CRUD admin di halaman Perencanaan; masuk RESET_KEEP.
+  - **Sanding usulan** (`GET /perencanaan/usulan/{id}/sanding` + tombol
+    "Sanding" per usulan): aset eksisting sejenis (prefix kode barang) —
+    jumlah, sebaran kondisi, umur rata-rata, nilai — plus baris standar
+    SBSK relevan dan CATATAN analisis otomatis (mis. "volume ≤ Rusak
+    Berat → wajar penggantian" / "melebihi populasi — pastikan dasar
+    SBSK"). Logika murni teruji.
+- **Wasdal → AKTIF**:
+  - **Laporan Tahunan Wasdal** (`GET /wasdal/laporan-tahunan-pdf`)
+    mengikuti struktur Lampiran PMK 207/2021: I. pemantauan per objek,
+    II. penertiban tahun berjalan + tindak lanjut, III. insidentil,
+    IV. portofolio BMN & indikator tertib — PDF siap tanda tangan
+    (tombol "Tahunan" di header Wasdal).
+  - **Portofolio & SBSK** (`GET /wasdal/portofolio` + kartu dasbor):
+    rekap per golongan (reuse DBKP, ambang efektif, scope satker) +
+    indikator PSP/idle/sengketa + jumlah baris standar SBSK.
+- Verifikasi: suite **502 lulus** (+4 uji SBSK/sanding), lint & build sukses.
+
+---
+
 ## [#381] Pembukuan AKTIF: KIB per unit (PMK 181, pola SAKTI) + jurnal otomatis aset baru — 2026-07-18
 
 Dua butir terakhir Pembukuan dilengkapi (riset format KIB SIMAK/SAKTI):

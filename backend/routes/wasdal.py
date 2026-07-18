@@ -701,3 +701,159 @@ async def laporan_wasdal_pdf(
     nama = f"Laporan_Wasdal_{periode['label'].replace(' ', '_')}.pdf"
     return StreamingResponse(buffer, media_type="application/pdf",
                              headers={"Content-Disposition": f'attachment; filename="{nama}"'})
+
+
+# ============================================================================
+# LAPORAN TAHUNAN WASDAL (formulir Lampiran PMK 207/2021) + PORTOFOLIO SBSK
+# (M-MODUL — dua butir terakhir modul Wasdal)
+# ============================================================================
+
+async def _data_portofolio(user):
+    """Portofolio BMN untuk wasdal: rekap per golongan (reuse DBKP) + status
+    penggunaan (PSP/idle/sengketa) + standar SBSK — bahan analisis kesesuaian
+    penggunaan BMN vs SBSK (metrik DJKN). Ter-scope satker user."""
+    from kodefikasi_utils import GOLONGAN_DEFAULTS
+    from pembukuan_utils import build_dbkp_rows
+    from pengamanan_utils import is_sengketa
+    from report_filters import active_asset_filter
+    from shared_utils import ambang_kapitalisasi, scope_query_aset
+
+    q = await scope_query_aset(user, active_asset_filter())
+    assets = await db.assets.find(
+        q, {"_id": 0, "asset_code": 1, "purchase_price": 1,
+            "nilai_wajar_terakhir": 1, "sengketa": 1, "status": 1}).to_list(500000)
+    uraian_map = {k: u for k, u in GOLONGAN_DEFAULTS}
+    rows, total = build_dbkp_rows(assets, uraian_map,
+                                  ambang=await ambang_kapitalisasi())
+    n_sengketa = sum(1 for a in assets if is_sengketa(a))
+    n_psp = await db.psp.count_documents({})
+    n_idle = await db.bmn_idle.count_documents(
+        {"status": {"$in": ["klarifikasi", "usul_serah"]}})
+    standar = await db.sbsk_standar.find({}, {"_id": 0}).to_list(1000)
+    return {"rows": rows, "total": total, "jumlah_aset": len(assets),
+            "psp_terbit": n_psp, "idle_proses": n_idle,
+            "sengketa": n_sengketa, "sbsk": standar}
+
+
+@wasdal_router.get("/wasdal/portofolio")
+async def portofolio_wasdal(_user: dict = Depends(require_user)):
+    """Portofolio aset + indikator tertib penggunaan + tabel standar SBSK
+    (PMK 138/2024) — dasbor analisis kesesuaian untuk pengawasan."""
+    return await _data_portofolio(_user)
+
+
+@wasdal_router.get("/wasdal/laporan-tahunan-pdf")
+async def laporan_tahunan_wasdal_pdf(
+    tahun: int = Query(None, ge=2000, le=2100),
+    _user: dict = Depends(require_user),
+):
+    """LAPORAN TAHUNAN PENGAWASAN DAN PENGENDALIAN BMN tingkat KPB —
+    formulir rekap mengikuti struktur Lampiran PMK 207/PMK.06/2021:
+    (1) pemantauan per objek, (2) penertiban & tindak lanjutnya,
+    (3) pemantauan insidentil, (4) portofolio BMN ringkas — satu tahun."""
+    from io import BytesIO
+
+    from fastapi.responses import StreamingResponse
+    from reportlab.lib.units import mm as rl_mm
+    from reportlab.platypus import Paragraph, Spacer, Table
+
+    from routes.reports import (
+        _get_report_styles, _kop_surat_flowables, _page_footer_factory,
+        _signature_block, _std_doc, _std_table_style, _title_block,
+    )
+
+    th = tahun or datetime.now(timezone.utc).year
+    awal, akhir = f"{th}-01-01", f"{th}-12-31"
+
+    periode, per_objek, rekap, total_aset = await _data_pemantauan(AMBANG_BERLARUT_HARI)
+    porto = await _data_portofolio(_user)
+    tertib = [t async for t in db.penertiban.find(
+        {"created_at": {"$gte": awal, "$lte": akhir + "T~"}}, {"_id": 0})]
+    insidentil = [i async for i in db.pemantauan_insidentil.find(
+        {"created_at": {"$gte": awal, "$lte": akhir + "T~"}}, {"_id": 0})]
+    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+
+    buffer = BytesIO()
+    doc = _std_doc(buffer)
+    st = _get_report_styles()
+    el = []
+    el.extend(_kop_surat_flowables(settings, doc.width))
+    el.extend(_title_block("LAPORAN TAHUNAN\nPENGAWASAN DAN PENGENDALIAN BMN",
+                           subjudul=f"Tingkat Kuasa Pengguna Barang — Tahun {th}"))
+    el.append(Paragraph(
+        f"Disusun mengikuti struktur formulir Lampiran PMK 207/PMK.06/2021 "
+        f"atas {total_aset} BMN dalam penguasaan KPB: hasil pemantauan lima "
+        f"objek wasdal, pelaksanaan penertiban beserta tindak lanjutnya, "
+        f"pemantauan insidentil, dan portofolio BMN. Penyampaian resmi tetap "
+        f"melalui Modul Wasdal SIMAN v2.", st['Meta']))
+    el.append(Spacer(1, 4 * rl_mm))
+
+    # I. Pemantauan per objek
+    el.append(Paragraph("<b>I. HASIL PEMANTAUAN PER OBJEK WASDAL</b>", st['Meta']))
+    td = [[Paragraph(h, st['TableHeader']) for h in ("No", "Objek", "Temuan")]]
+    for i, (kunci, label) in enumerate(OBJEK_WASDAL.items(), 1):
+        td.append([Paragraph(str(i), st['CellCenter']),
+                   Paragraph(label, st['Cell']),
+                   Paragraph(str(rekap["per_objek"].get(kunci, 0)), st['CellCenter'])])
+    t = Table(td, colWidths=[doc.width * 0.08, doc.width * 0.72, doc.width * 0.20],
+              repeatRows=1)
+    t.setStyle(_std_table_style(zebra=True))
+    el.append(t)
+    el.append(Spacer(1, 3 * rl_mm))
+
+    # II. Penertiban tahun berjalan
+    sel = sum(1 for x in tertib if x.get("status") == "selesai")
+    el.append(Paragraph(
+        f"<b>II. PENERTIBAN TAHUN {th}</b> — {len(tertib)} tiket "
+        f"({sel} selesai, {len(tertib) - sel} berjalan; tenggat "
+        f"{TENGGAT_HARI_KERJA} hari kerja per PMK 207).", st['Meta']))
+    if tertib:
+        td2 = [[Paragraph(h, st['TableHeader']) for h in
+                ("No", "Objek/Temuan", "Sumber", "Status")]]
+        for i, x in enumerate(tertib[:30], 1):
+            td2.append([Paragraph(str(i), st['CellCenter']),
+                        Paragraph(str(x.get("uraian") or x.get("temuan") or "-")[:120], st['Cell']),
+                        Paragraph(str(x.get("sumber") or "-"), st['CellCenter']),
+                        Paragraph(str(x.get("status") or "-"), st['CellCenter'])])
+        t2 = Table(td2, colWidths=[doc.width * 0.07, doc.width * 0.53,
+                                   doc.width * 0.20, doc.width * 0.20], repeatRows=1)
+        t2.setStyle(_std_table_style(zebra=True))
+        el.append(t2)
+        if len(tertib) > 30:
+            el.append(Paragraph(f"… dan {len(tertib) - 30} tiket lainnya (lihat register).",
+                                st['Small']))
+    el.append(Spacer(1, 3 * rl_mm))
+
+    # III. Pemantauan insidentil
+    el.append(Paragraph(
+        f"<b>III. PEMANTAUAN INSIDENTIL TAHUN {th}</b> — {len(insidentil)} kegiatan.",
+        st['Meta']))
+    el.append(Spacer(1, 3 * rl_mm))
+
+    # IV. Portofolio BMN ringkas + indikator tertib
+    el.append(Paragraph("<b>IV. PORTOFOLIO BMN & INDIKATOR TERTIB</b>", st['Meta']))
+    td3 = [[Paragraph(h, st['TableHeader']) for h in
+            ("Golongan", "Unit", "Nilai (Rp)")]]
+    for r in porto["rows"]:
+        td3.append([Paragraph(f"{r['golongan']} — {r['uraian']}", st['Cell']),
+                    Paragraph(str(r["jumlah_total"]), st['CellCenter']),
+                    Paragraph(f"{r['nilai_total']:,.0f}".replace(",", "."), st['Cell'])])
+    t3 = Table(td3, colWidths=[doc.width * 0.55, doc.width * 0.15, doc.width * 0.30],
+               repeatRows=1)
+    t3.setStyle(_std_table_style(zebra=True))
+    el.append(t3)
+    el.append(Paragraph(
+        f"PSP terbit: {porto['psp_terbit']} · BMN idle diproses: {porto['idle_proses']} · "
+        f"sengketa: {porto['sengketa']}. Analisis kesesuaian penggunaan vs SBSK "
+        f"(PMK 138/2024) memakai tabel standar pada modul Perencanaan "
+        f"({len(porto['sbsk'])} baris standar terdaftar).", st['Small']))
+    el.append(Spacer(1, 6 * rl_mm))
+    el.append(_signature_block([await blok_ttd_kpb_titik(settings)], doc.width))
+
+    footer = _page_footer_factory("Laporan Tahunan Wasdal")
+    doc.build(el, onFirstPage=footer, onLaterPages=footer)
+    buffer.seek(0)
+    return StreamingResponse(
+        buffer, media_type="application/pdf",
+        headers={"Content-Disposition":
+                 f'attachment; filename="Laporan_Tahunan_Wasdal_{th}.pdf"'})
