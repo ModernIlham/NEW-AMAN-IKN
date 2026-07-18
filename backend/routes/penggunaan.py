@@ -20,7 +20,7 @@ from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
 )
 from db import db, fs_bucket
-from shared_utils import blok_ttd_kpb_titik, delete_document_from_gridfs, get_document_from_gridfs, log_audit
+from shared_utils import kode_satker_user, scope_query_field_satker, blok_ttd_kpb_titik, delete_document_from_gridfs, get_document_from_gridfs, log_audit
 from penggunaan_utils import (
     ARAH_PROSES, JENIS_PROSES_PENGGUNAAN, JENIS_PSP, STATUS_IDLE,
     STATUS_PENGAJUAN_PSP, STATUS_PROSES, TRANSISI_PROSES, baris_csv_idle,
@@ -48,7 +48,8 @@ async def daftar_pemegang(
 ):
     """Rekap pemegang: jumlah aset, kelengkapan BAST, jumlah kegiatan."""
     assets = [a async for a in db.assets.find(
-        {"user": {"$exists": True, "$nin": ["", None]}}, _PROJ)]
+        await scope_query_aset(_user,
+            {"user": {"$exists": True, "$nin": ["", None]}}), _PROJ)]
     rows = rekap_pemegang(assets)
     if search.strip():
         s = search.strip().lower()
@@ -95,7 +96,8 @@ async def aset_pemegang(
             "bast_terakhir": 1}
     out = []
     async for a in db.assets.find(
-            {"user": {"$exists": True, "$nin": ["", None]}}, proj):
+            await scope_query_aset(_user,
+                {"user": {"$exists": True, "$nin": ["", None]}}), proj):
         if kunci_pemegang(a) == key:
             out.append({
                 "id": a.get("id"),
@@ -686,7 +688,8 @@ async def daftar_pemegang_pdf(
     melekat = ""
     nama_tampil = ""
     async for a in db.assets.find(
-            {"user": {"$exists": True, "$nin": ["", None]}}, proj):
+            await scope_query_aset(_user,
+                {"user": {"$exists": True, "$nin": ["", None]}}), proj):
         if kunci_pemegang(a) != key:
             continue
         rows.append(a)
@@ -797,7 +800,7 @@ _DOK_PROSES = {
 @penggunaan_router.get("/penggunaan/proses")
 async def list_proses(_user: dict = Depends(require_user)):
     """Tiket proses alih status & penggunaan sementara + ringkasan."""
-    items = [t async for t in db.penggunaan_proses.find({}, {"_id": 0})
+    items = [t async for t in db.penggunaan_proses.find(scope_query_field_satker(_user), {"_id": 0})
              .sort("updated_at", -1).limit(500)]
     today_iso = datetime.now(timezone.utc).date().isoformat()
     for t in items:
@@ -825,7 +828,7 @@ async def export_proses(_user: dict = Depends(require_user)):
     from fastapi.responses import Response as HttpResponse
 
     today_iso = datetime.now(timezone.utc).date().isoformat()
-    items = [t async for t in db.penggunaan_proses.find({}, {"_id": 0})
+    items = [t async for t in db.penggunaan_proses.find(scope_query_field_satker(_user), {"_id": 0})
              .sort("updated_at", -1)]
     buf = io.StringIO()
     w = csv_module.writer(buf)
@@ -857,6 +860,7 @@ async def buat_proses(payload: ProsesIn, user: dict = Depends(require_writer)):
     now = datetime.now(timezone.utc).isoformat()
     record = {
         "id": str(uuid.uuid4()),
+        "kode_satker": kode_satker_user(user),
         "jenis_proses": data["jenis_proses"],
         "arah": data["arah"],
         "pihak_asal": data["pihak_asal"].strip(),

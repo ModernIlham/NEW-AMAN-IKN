@@ -15,7 +15,7 @@ from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
 )
 from db import db, fs_bucket
-from shared_utils import delete_document_from_gridfs, get_document_from_gridfs, nama_file_disposition
+from shared_utils import kode_satker_user, scope_query_field_satker, delete_document_from_gridfs, get_document_from_gridfs, nama_file_disposition
 from pengamanan_utils import (
     BUTIR_CHECKLIST, JENIS_DOKUMEN, JENIS_KEKURANGAN, JENIS_OBJEK_CHECKLIST,
     KATEGORI_KASUS, KATEGORI_OBJEK_ASURANSI, KATEGORI_SERTIPIKASI,
@@ -40,7 +40,9 @@ _PROJ = {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
 @pengamanan_router.get("/pengamanan/ringkasan")
 async def ringkasan_pengamanan(_user: dict = Depends(require_user)):
     """Kesehatan data seluruh aset + daftar pantau sengketa."""
-    assets = [a async for a in db.assets.find({}, _PROJ)]
+    from shared_utils import scope_query_aset
+    assets = [a async for a in db.assets.find(
+        await scope_query_aset(_user, {}), _PROJ)]
     per, lengkap, sengketa = rekap_kesehatan(assets)
     return {
         "total_aset": len(assets),
@@ -63,8 +65,9 @@ async def aset_kurang(
     if jenis not in JENIS_KEKURANGAN:
         valid = ", ".join(JENIS_KEKURANGAN)
         raise HTTPException(status_code=400, detail=f"Jenis tidak dikenal (pilihan: {valid})")
+    from shared_utils import scope_query_aset
     rows = []
-    async for a in db.assets.find({}, _PROJ):
+    async for a in db.assets.find(await scope_query_aset(_user, {}), _PROJ):
         if jenis in kekurangan_aset(a):
             rows.append({
                 "id": a.get("id"),
@@ -100,7 +103,7 @@ class TransisiKasusIn(BaseModel):
 @pengamanan_router.get("/pengamanan/kasus")
 async def list_kasus(_user: dict = Depends(require_user)):
     """Register BMN bermasalah/sengketa (terbaru dulu) + ringkasan."""
-    items = [k async for k in db.pengamanan_kasus.find({}, {"_id": 0})
+    items = [k async for k in db.pengamanan_kasus.find(scope_query_field_satker(_user), {"_id": 0})
              .sort("updated_at", -1).limit(500)]
     return {"items": items, "ringkasan": rekap_kasus(items),
             "label_kategori": KATEGORI_KASUS,
@@ -120,7 +123,7 @@ async def export_kasus(_user: dict = Depends(require_user)):
 
     from fastapi.responses import Response as HttpResponse
 
-    kasus = [k async for k in db.pengamanan_kasus.find({}, {"_id": 0})
+    kasus = [k async for k in db.pengamanan_kasus.find(scope_query_field_satker(_user), {"_id": 0})
              .sort("updated_at", -1)]
     buf = io.StringIO()
     w = csv_module.writer(buf)
@@ -155,6 +158,7 @@ async def buka_kasus(payload: KasusIn, user: dict = Depends(require_writer)):
     now = datetime.now(timezone.utc).isoformat()
     record = {
         "id": str(uuid.uuid4()),
+        "kode_satker": kode_satker_user(user),
         "asset_id": asset["id"],
         "asset_code": asset.get("asset_code"),
         "NUP": asset.get("NUP"),
@@ -226,7 +230,8 @@ class DokumenIn(BaseModel):
 @pengamanan_router.get("/pengamanan/dokumen")
 async def list_dokumen(asset_id: str = "", _user: dict = Depends(require_user)):
     """Arsip dokumen kepemilikan (terbaru dulu) + ringkasan per jenis."""
-    query = {"asset_id": asset_id} if asset_id else {}
+    query = scope_query_field_satker(
+        _user, {"asset_id": asset_id} if asset_id else {})
     items = [d async for d in db.pengamanan_dokumen.find(query, {"_id": 0})
              .sort("updated_at", -1).limit(500)]
     today_iso = datetime.now(timezone.utc).date().isoformat()
@@ -250,7 +255,7 @@ async def export_dokumen(_user: dict = Depends(require_user)):
     from fastapi.responses import Response as HttpResponse
 
     today_iso = datetime.now(timezone.utc).date().isoformat()
-    dokumen = [d async for d in db.pengamanan_dokumen.find({}, {"_id": 0})
+    dokumen = [d async for d in db.pengamanan_dokumen.find(scope_query_field_satker(_user), {"_id": 0})
                .sort("updated_at", -1)]
     buf = io.StringIO()
     w = csv_module.writer(buf)
@@ -277,6 +282,7 @@ async def catat_dokumen(payload: DokumenIn, user: dict = Depends(require_writer)
     now = datetime.now(timezone.utc).isoformat()
     record = {
         "id": str(uuid.uuid4()),
+        "kode_satker": kode_satker_user(user),
         "asset_id": asset["id"],
         "asset_code": asset.get("asset_code"),
         "NUP": asset.get("NUP"),
@@ -519,7 +525,7 @@ class PolisIn(BaseModel):
 @pengamanan_router.get("/pengamanan/polis")
 async def list_polis(_user: dict = Depends(require_user)):
     """Register polis asuransi BMN (terbaru dulu) + status masa berlaku."""
-    items = [p async for p in db.pengamanan_polis.find({}, {"_id": 0})
+    items = [p async for p in db.pengamanan_polis.find(scope_query_field_satker(_user), {"_id": 0})
              .sort("berakhir", -1).limit(500)]
     today_iso = datetime.now(timezone.utc).date().isoformat()
     for p in items:
@@ -546,7 +552,7 @@ async def export_polis(_user: dict = Depends(require_user)):
     from fastapi.responses import Response as HttpResponse
 
     today_iso = datetime.now(timezone.utc).date().isoformat()
-    polis = [p async for p in db.pengamanan_polis.find({}, {"_id": 0})
+    polis = [p async for p in db.pengamanan_polis.find(scope_query_field_satker(_user), {"_id": 0})
              .sort("berakhir", -1)]
     buf = io.StringIO()
     w = csv_module.writer(buf)
@@ -573,6 +579,7 @@ async def catat_polis(payload: PolisIn, user: dict = Depends(require_writer)):
     now = datetime.now(timezone.utc).isoformat()
     record = {
         "id": str(uuid.uuid4()),
+        "kode_satker": kode_satker_user(user),
         "asset_id": asset["id"],
         "asset_code": asset.get("asset_code"),
         "NUP": asset.get("NUP"),

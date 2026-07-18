@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from auth_utils import require_admin, require_user, require_writer
 from db import db
+from shared_utils import kode_satker_user, scope_query_field_satker
 from penganggaran_utils import (
     AKUN_BAS, JENIS_ANGGARAN, STATUS_ANGGARAN,
     info_tenggat_tahapan, rekap_anggaran, rekap_kalender, sanding_per_akun,
@@ -63,7 +64,7 @@ async def list_penganggaran(_user: dict = Depends(require_user)):
     """
     from pengadaan_utils import nilai_perolehan
 
-    items = [u async for u in db.penganggaran.find({}, {"_id": 0})
+    items = [u async for u in db.penganggaran.find(scope_query_field_satker(_user), {"_id": 0})
              .sort("created_at", -1).limit(500)]
     realisasi = {}
     async for p in db.pengadaan.find(
@@ -101,7 +102,7 @@ async def export_penganggaran(_user: dict = Depends(require_user)):
                 "nilai_usulan", "nilai_disetujui", "nilai_dipa",
                 "nilai_realisasi", "nomor_dipa", "jumlah_aset", "sumber",
                 "keterangan", "dibuat_oleh"])
-    async for u in db.penganggaran.find({}, {"_id": 0}).sort("created_at", -1):
+    async for u in db.penganggaran.find(scope_query_field_satker(_user), {"_id": 0}).sort("created_at", -1):
         akun = u.get("akun") or ""
         w.writerow([
             u.get("tahun_anggaran"),
@@ -212,6 +213,7 @@ async def buat_usulan_anggaran(payload: UsulanAnggaranIn,
     now = datetime.now(timezone.utc).isoformat()
     record = {
         "id": str(uuid.uuid4()),
+        "kode_satker": kode_satker_user(user),
         "jenis": data["jenis"],
         "uraian": data["uraian"].strip(),
         "tahun_anggaran": data["tahun_anggaran"].strip(),

@@ -536,12 +536,16 @@ TINIFY_API_KEY=WX6Md8zwtPLg740tmWF9j5h1s82Ydmb2
 RESEND_API_KEY=re_W7pMzGpS_KWVouHVdY4pLrbqRNVrK2ogu
 SENDER_EMAIL=noreply@amanikn-inventarisasi.com
 JWT_SECRET=inv_mgmt_s3cur3_k3y_2026_pr0d_x7q9w2m4
+APP_PUBLIC_URL="https://amanikn-inventarisasi.com"
 ```
 
 > ⚠️ **PENTING:** 
 > - `DB_NAME` bisa Anda ganti sesuai keinginan
 > - `JWT_SECRET` **HARUS diganti** dengan string random yang lebih kuat untuk production!
 > - `CORS_ORIGINS` sudah diset ke domain Anda
+> - `APP_PUBLIC_URL` = alamat publik frontend — dipakai membentuk **link e-sign
+>   yang dibagikan** dan **QR verifikasi** pada Lembar Pengesahan TTD. Bila
+>   kosong, aplikasi memakai origin pertama `CORS_ORIGINS` sebagai cadangan.
 
 ### 4.4 Buat Direktori Upload
 ```bash

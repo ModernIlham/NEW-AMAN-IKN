@@ -32,7 +32,7 @@ from auth_utils import (
     require_user, require_user_or_query_token, require_writer,
 )
 from db import db
-from shared_utils import log_audit
+from shared_utils import kode_satker_user, log_audit
 
 bast_router = APIRouter()
 
@@ -128,6 +128,8 @@ async def daftar_bast(asset_id: str = "", q: str = "", nip: str = "",
         import re as _re
         rx = {"$regex": _re.escape(q.strip()), "$options": "i"}
         query["$or"] = [{"nomor": rx}, {"pihak_kedua.nama": rx}, {"jenis": rx}]
+    from shared_utils import scope_query_field_satker
+    query = scope_query_field_satker(_user, query)
     total = await db.bast_serah_terima.count_documents(query)
     items = await (db.bast_serah_terima.find(query, _PROJ)
                    .sort("created_at", -1)
@@ -220,6 +222,7 @@ async def buat_bast(payload: BastIn, user: dict = Depends(require_writer)):
 
     record = {
         "id": str(uuid.uuid4()),
+        "kode_satker": kode_satker_user(user),
         "jenis": payload.jenis,
         "judul_lainnya": str(payload.judul_lainnya or "").strip(),
         "nomor": nomor_final,

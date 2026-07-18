@@ -17,7 +17,7 @@ from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
 )
 from db import db, fs_bucket
-from shared_utils import delete_document_from_gridfs, get_document_from_gridfs
+from shared_utils import kode_satker_user, scope_query_field_satker, delete_document_from_gridfs, get_document_from_gridfs
 from pemanfaatan_utils import (
     BENTUK_PEMANFAATAN, DASAR_FASILITAS, LABEL_STATUS_PERJANJIAN,
     dokumen_kurang, peringatan_kontribusi, rekap_pemanfaatan,
@@ -86,7 +86,7 @@ async def export_pemanfaatan(_user: dict = Depends(require_user)):
                 "nomor_perjanjian", "ntpn", "dasar_fasilitas",
                 "nomor_penetapan_fasilitas", "jumlah_lampiran",
                 "jumlah_lampiran_wasdal", "keterangan", "dibuat_oleh"])
-    async for p in db.pemanfaatan.find({}, {"_id": 0}).sort("berakhir", 1):
+    async for p in db.pemanfaatan.find(scope_query_field_satker(_user), {"_id": 0}).sort("berakhir", 1):
         kontribusi = p.get("kontribusi") or []
         status = status_perjanjian(p, today_iso)
         w.writerow([
@@ -115,7 +115,7 @@ async def export_pemanfaatan(_user: dict = Depends(require_user)):
 async def list_pemanfaatan(_user: dict = Depends(require_user)):
     """Register perjanjian + status turunan + ringkasan."""
     today_iso = datetime.now(timezone.utc).date().isoformat()
-    items = [p async for p in db.pemanfaatan.find({}, _PROJ)
+    items = [p async for p in db.pemanfaatan.find(scope_query_field_satker(_user), _PROJ)
              .sort("berakhir", 1).limit(500)]
     for p in items:
         p["status"] = status_perjanjian(p, today_iso)
@@ -150,6 +150,7 @@ async def buat_pemanfaatan(payload: PemanfaatanIn, user: dict = Depends(require_
     now = datetime.now(timezone.utc).isoformat()
     record = {
         "id": str(uuid.uuid4()),
+        "kode_satker": kode_satker_user(user),
         "asset_id": objek["id"] if objek else "",
         "asset_code": objek.get("asset_code") if objek else "",
         "NUP": objek.get("NUP") if objek else "",

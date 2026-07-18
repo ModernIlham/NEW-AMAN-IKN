@@ -18,7 +18,7 @@ from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
 )
 from db import db, fs_bucket
-from shared_utils import delete_document_from_gridfs, get_document_from_gridfs, log_audit
+from shared_utils import kode_satker_user, scope_query_field_satker, delete_document_from_gridfs, get_document_from_gridfs, log_audit
 from pengadaan_utils import (
     DOKUMEN_PEROLEHAN, JENIS_PEROLEHAN, LABEL_DOKUMEN_SUMBER,
     build_asset_perolehan_projection, dokumen_kurang_perolehan,
@@ -113,7 +113,7 @@ def _enrich(p: dict) -> dict:
 @pengadaan_router.get("/pengadaan")
 async def list_pengadaan(_user: dict = Depends(require_user)):
     """Register perolehan (BAST terbaru dulu) + ringkasan + label."""
-    items = [_enrich(p) async for p in db.pengadaan.find({}, {"_id": 0})
+    items = [_enrich(p) async for p in db.pengadaan.find(scope_query_field_satker(_user), {"_id": 0})
              .sort("tanggal_bast", -1).limit(500)]
     return {"items": items, "ringkasan": rekap_perolehan(items),
             "label_jenis": {k: v[0] for k, v in JENIS_PEROLEHAN.items()},
@@ -209,7 +209,7 @@ async def export_pengadaan(_user: dict = Depends(require_user)):
     w.writerow(["jenis", "pihak", "nomor_kontrak", "nomor_bast", "tanggal_bast",
                 "jumlah_barang", "nilai", "dokumen_kurang", "penganggaran",
                 "nomor_dipa", "keterangan", "jumlah_lampiran", "dibuat_oleh"])
-    async for p in db.pengadaan.find({}, {"_id": 0}).sort("tanggal_bast", -1):
+    async for p in db.pengadaan.find(scope_query_field_satker(_user), {"_id": 0}).sort("tanggal_bast", -1):
         w.writerow([
             JENIS_PEROLEHAN.get(p.get("jenis"), (p.get("jenis"),))[0],
             p.get("pihak"), p.get("nomor_kontrak"), p.get("nomor_bast"),
@@ -252,6 +252,7 @@ async def buat_perolehan(payload: PerolehanIn, user: dict = Depends(require_writ
     now = datetime.now(timezone.utc).isoformat()
     record = {
         "id": str(uuid.uuid4()),
+        "kode_satker": kode_satker_user(user),
         "jenis": data["jenis"],
         "pihak": data["pihak"].strip(),
         "nomor_kontrak": str(data.get("nomor_kontrak") or "").strip(),

@@ -48,6 +48,26 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#384] Isolasi satker MENYELURUH: seluruh register siklus ber-stamp & ter-scope — 2026-07-18
+
+Melengkapi isolasi multi-satker ke SEMUA register siklus BMN (pola stamp +
+scope + era-lama-terbuka yang sudah mapan):
+- **11 register ber-stamp `kode_satker`** saat dibuat: pemanfaatan, usulan
+  penghapusan (langsung & dari BA pemusnahan), BA pemusnahan,
+  pemindahtanganan, perolehan pengadaan, usulan penganggaran, usulan RKBMN,
+  penertiban & insidentil wasdal, kasus/dokumen/polis pengamanan, BAST
+  serah terima, proses penggunaan.
+- **±30 daftar/ekspor ter-scope** satker user (termasuk kandidat penghapusan,
+  dasbor pengamanan ringkasan/aset-kurang, rekap pemegang & PDF-nya,
+  register lintas di mesin aturan wasdal, hitung persediaan pada DBKP).
+- Data era lama tanpa kode tetap terbuka — tidak ada data yang mendadak
+  hilang; user lintas-satker (admin pusat) tetap melihat semua.
+- Dokumentasi deploy: `APP_PUBLIC_URL` ditambahkan ke panduan (.env) —
+  dasar link e-sign & QR verifikasi (fallback origin CORS).
+- Verifikasi: suite 504 lulus, 423 route ter-mount, build sukses.
+
+---
+
 ## [#383] Penajaman pasca-audit adversarial: tutup celah isolasi laporan, e-sign anti-race + bagikan/terbit-ulang link, isolasi persediaan & penggunaan — 2026-07-18
 
 Review adversarial 38-agent atas seluruh kode gelombang Mandat-2 (temuan

@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from auth_utils import (require_admin, require_user,
                         require_user_or_query_token, require_writer)
 from db import db
+from shared_utils import scope_query_field_satker
 from kodefikasi_utils import normalize_kode, validate_kode
 from mutasi_bmn_utils import (
     KODE_TRANSAKSI_BMN, buat_pasangan_reklasifikasi, validate_entri_mutasi,
@@ -266,7 +267,8 @@ async def dbkp_json(_user: dict = Depends(require_user)):
     amb = await ambang_kapitalisasi()
     rows, total = build_dbkp_rows(assets, uraian_map, ambang=amb)
     p_jumlah, p_nilai = 0, 0.0
-    async for it in db.persediaan.find({}, {"_id": 0, "batches": 1}):
+    async for it in db.persediaan.find(
+            scope_query_field_satker(_user), {"_id": 0, "batches": 1}):
         p_jumlah += 1
         p_nilai += nilai_persediaan_dari_batches(it.get("batches"))
     return {"rows": rows, "total": total, "ambang": amb,

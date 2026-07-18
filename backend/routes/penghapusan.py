@@ -16,7 +16,7 @@ from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
 )
 from db import db, fs_bucket
-from shared_utils import delete_document_from_gridfs, get_document_from_gridfs, log_audit
+from shared_utils import kode_satker_user, scope_query_field_satker, delete_document_from_gridfs, get_document_from_gridfs, log_audit
 from penghapusan_utils import (
     JALUR_KANDIDAT, STATUS_USULAN, build_asset_penghapusan_projection,
     jalur_kandidat, rekap_kandidat, validate_transisi,
@@ -45,9 +45,11 @@ _MAKS_BARIS = 500
 @penghapusan_router.get("/penghapusan/kandidat")
 async def kandidat_penghapusan(_user: dict = Depends(require_user)):
     """Kandidat usul hapus per jalur + status usulan aktifnya (bila ada)."""
+    from shared_utils import scope_query_aset
     assets = [a async for a in db.assets.find(
-        {"$or": [{"inventory_status": "Tidak Ditemukan"},
-                 {"condition": "Rusak Berat"}]}, _PROJ)]
+        await scope_query_aset(_user, {"$or": [
+            {"inventory_status": "Tidak Ditemukan"},
+            {"condition": "Rusak Berat"}]}), _PROJ)]
     hasil = rekap_kandidat(assets)
     # Lekatkan status usulan aktif per aset agar UI tahu mana yang sudah diusulkan
     usulan_aktif = {}
@@ -82,6 +84,7 @@ async def list_usulan(
             raise HTTPException(status_code=400,
                                 detail=f"Status tidak dikenal (pilihan: {valid})")
         query["status"] = status
+    query = scope_query_field_satker(_user, query)
     items = [u async for u in db.usulan_penghapusan.find(query, {"_id": 0})
              .sort("created_at", -1).limit(500)]
     return {"items": items, "jumlah": len(items), "label_status": STATUS_USULAN,
@@ -101,7 +104,7 @@ async def export_usulan_penghapusan(_user: dict = Depends(require_user)):
     w.writerow(["jalur", "kode_aset", "nup", "nama_aset", "status",
                 "nomor_sk", "tanggal_sk", "tanggal_usulan", "keterangan",
                 "jumlah_lampiran", "dibuat_oleh"])
-    async for u in db.usulan_penghapusan.find({}, {"_id": 0}).sort("created_at", -1):
+    async for u in db.usulan_penghapusan.find(scope_query_field_satker(_user), {"_id": 0}).sort("created_at", -1):
         w.writerow([
             JALUR_KANDIDAT.get(u.get("jalur"), (u.get("jalur"),))[0],
             u.get("asset_code"), u.get("NUP"), u.get("asset_name"),
@@ -133,6 +136,7 @@ async def buat_usulan(payload: UsulanIn, user: dict = Depends(require_writer)):
     now = datetime.now(timezone.utc).isoformat()
     record = {
         "id": str(uuid.uuid4()),
+        "kode_satker": kode_satker_user(user),
         "asset_id": asset["id"],
         "asset_code": asset.get("asset_code"),
         "NUP": asset.get("NUP"),
