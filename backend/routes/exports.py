@@ -28,7 +28,9 @@ from PIL import Image as PILImage
 from asset_fields import SCALAR_FIELD_NAMES
 from routes.assets import build_asset_search_query
 from db import db
-from shared_utils import limiter, invalidate_asset_cache, log_audit, get_photo_from_gridfs
+from shared_utils import (limiter, invalidate_asset_cache, log_audit,
+                          get_photo_from_gridfs, pastikan_akses_kegiatan_id,
+                          scope_query_aset)
 
 logger = logging.getLogger(__name__)
 exports_router = APIRouter()
@@ -243,6 +245,8 @@ async def bulk_delete_assets(request: Request, activity_id: str, _admin: dict = 
     activity = await db.inventory_activities.find_one({"id": activity_id})
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan inventarisasi tidak ditemukan")
+    from shared_utils import pastikan_akses_kegiatan
+    await pastikan_akses_kegiatan(_admin, activity)
     if activity.get("status_pengesahan") == "disahkan":
         raise HTTPException(status_code=423, detail="Kegiatan sudah disahkan dan terkunci")
 
@@ -453,6 +457,8 @@ async def export_geo(
         beli_dari=beli_dari, beli_sampai=beli_sampai,
         ids=id_list,
     )
+    await pastikan_akses_kegiatan_id(_user, activity_id)
+    query = await scope_query_aset(_user, query)
     # Streaming cursor (bukan to_list) + photo_count GridFS-first dengan
     # fallback foto inline legacy — konsisten dengan badge kamera di peta.
     pipeline = [
@@ -513,7 +519,8 @@ async def export_geo(
 async def export_csv(request: Request, activity_id: Optional[str] = None, base_url: str = "",
                      _user: dict = Depends(require_user)):
     """Export assets to CSV format - streaming for large datasets with document checklist"""
-    query = {"activity_id": activity_id} if activity_id else {}
+    await pastikan_akses_kegiatan_id(_user, activity_id)
+    query = await scope_query_aset(_user, {"activity_id": activity_id} if activity_id else {})
     total = await db.assets.count_documents(query)
     if total == 0:
         raise HTTPException(status_code=404, detail="Tidak ada data untuk diexport")
@@ -580,7 +587,8 @@ async def export_csv(request: Request, activity_id: Optional[str] = None, base_u
 async def export_pdf(request: Request, activity_id: Optional[str] = None,
                      _user: dict = Depends(require_user)):
     """Export assets to professional PDF report with HD photos"""
-    query = {"activity_id": activity_id} if activity_id else {}
+    await pastikan_akses_kegiatan_id(_user, activity_id)
+    query = await scope_query_aset(_user, {"activity_id": activity_id} if activity_id else {})
     total = await db.assets.count_documents(query)
     if total == 0:
         raise HTTPException(status_code=404, detail="Tidak ada data untuk diexport")
@@ -837,7 +845,8 @@ async def export_pdf(request: Request, activity_id: Optional[str] = None,
 async def export_xlsx(request: Request, activity_id: Optional[str] = None, base_url: str = "",
                       _user: dict = Depends(require_user)):
     """Export assets to Excel format with thumbnails and document checklist - optimized for large datasets"""
-    query = {"activity_id": activity_id} if activity_id else {}
+    await pastikan_akses_kegiatan_id(_user, activity_id)
+    query = await scope_query_aset(_user, {"activity_id": activity_id} if activity_id else {})
     total = await db.assets.count_documents(query)
     if total == 0:
         raise HTTPException(status_code=404, detail="Tidak ada data untuk diexport")

@@ -48,6 +48,26 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#379] Isolasi data per-satker: operator satker A tidak melihat/mengubah data satker B — 2026-07-18
+
+Penegakan multi-satker DB bersama (M-SCOPE tahap inti — kegiatan + aset):
+- **Helper terpusat** (`shared_utils`, teruji): `kode_satker_user`,
+  `scope_query_kegiatan/aset` (filter `$in` kegiatan satker),
+  `pastikan_akses_kegiatan/_id/aset` (403 dengan pesan jelas; kegiatan era
+  lama tanpa kode tetap terbuka; user tanpa ikatan = lintas-satker).
+- **Kegiatan**: daftar, detail, ubah, hapus, completion-status, satker-list —
+  ter-scope; BUAT kegiatan ditolak bila kode_satker ≠ satker user.
+- **Aset**: daftar+filter+stats+analytics+next-nup+offline-snapshot ter-scope
+  (CACHE KEY kini membawa kode satker — cache "__all__" tidak lagi bocor
+  lintas satker); detail/media/foto/checklist/BAST ter-guard; create/update/
+  patch/delete/rotate/batch-update ter-guard (pindah kegiatan divalidasi ke
+  satker yang sama); import per kegiatan ter-guard.
+- **Ekspor**: CSV/PDF/XLSX/geo (KML/KMZ/SHP) + hapus massal per kegiatan —
+  ter-scope/guard.
+- Verifikasi: suite **495 lulus** (+4 uji helper scope), 411 route ter-mount.
+
+---
+
 ## [#378] Halaman Pengaturan terpadu: satu pintu setelan universal ↔ per-satker ↔ sistem — 2026-07-18
 
 Konsolidasi setelan yang tersebar (mandat: "jadikan satu halaman setting"):

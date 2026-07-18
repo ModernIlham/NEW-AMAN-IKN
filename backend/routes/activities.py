@@ -24,6 +24,8 @@ from shared_utils import (
     get_document_from_gridfs,
     delete_document_from_gridfs,
     delete_photo_from_gridfs,
+    kode_satker_user,
+    pastikan_akses_kegiatan,
 )
 from routes.pengesahan import next_ticket_number, ensure_ticket_number
 
@@ -285,7 +287,11 @@ async def get_inventory_activities(_user: dict = Depends(require_user)):
 
     # Use an aggregation so we can compute $size of photos/documents server-side
     # without materializing them into the response.
-    activities = await db.inventory_activities.aggregate([
+    # ISOLASI SATKER (M-SCOPE): user ber-kode_satker hanya melihat kegiatan
+    # satkernya; user lintas-satker (kode kosong) melihat semua.
+    _kode = kode_satker_user(_user)
+    activities = await db.inventory_activities.aggregate(
+        ([{"$match": {"kode_satker": _kode}}] if _kode else []) + [
         {"$sort": {"created_at": -1}},
         {"$limit": 100},
         {"$addFields": {
@@ -342,8 +348,10 @@ async def get_inventory_activities(_user: dict = Depends(require_user)):
 @activities_router.get("/satker-list")
 async def get_satker_list(_user: dict = Depends(require_user)):
     """Get unique satker pairs (kode_satker + nama_satker) for filter tabs"""
+    _kode = kode_satker_user(_user)
     pipeline = [
-        {"$match": {"kode_satker": {"$exists": True, "$ne": ""}}},
+        {"$match": ({"kode_satker": _kode} if _kode
+                    else {"kode_satker": {"$exists": True, "$ne": ""}})},
         {"$group": {
             "_id": "$kode_satker",
             "nama_satker": {"$first": "$nama_satker"},
@@ -383,6 +391,14 @@ async def create_inventory_activity(activity: InventoryActivityCreate, _user: di
         raise HTTPException(status_code=400, detail="Kode Satker wajib diisi")
     if not activity.nama_satker.strip():
         raise HTTPException(status_code=400, detail="Nama Satker wajib diisi")
+
+    # ISOLASI SATKER: user terikat satker hanya boleh membuat kegiatan
+    # untuk satkernya sendiri.
+    _kode_user = kode_satker_user(_user)
+    if _kode_user and activity.kode_satker.strip() != _kode_user:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Akun Anda terikat satker {_kode_user} — tidak dapat membuat kegiatan satker lain")
 
     # Enforce max file counts
     if activity.photos is not None and len(activity.photos) > MAX_ACTIVITY_PHOTOS:
@@ -554,6 +570,7 @@ async def get_inventory_activity(activity_id: str, _user: dict = Depends(require
     activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+    await pastikan_akses_kegiatan(_user, activity)
     activity = await ensure_ticket_number(activity)
     return _strip_doc_payload(activity)
 
@@ -617,7 +634,8 @@ async def update_inventory_activity(activity_id: str, activity: InventoryActivit
     existing = await db.inventory_activities.find_one({"id": activity_id})
     if not existing:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
-    
+    await pastikan_akses_kegiatan(_user, existing)
+
     # Validate required satker fields
     if not activity.kode_satker.strip():
         raise HTTPException(status_code=400, detail="Kode Satker wajib diisi")
@@ -743,6 +761,10 @@ async def update_inventory_activity(activity_id: str, activity: InventoryActivit
 @activities_router.delete("/inventory-activities/{activity_id}")
 async def delete_inventory_activity(activity_id: str, _admin: dict = Depends(require_admin)):
     """Delete an inventory activity and all its assets (admin only)"""
+    _act_scope = await db.inventory_activities.find_one(
+        {"id": activity_id}, {"_id": 0, "kode_satker": 1})
+    if _act_scope:
+        await pastikan_akses_kegiatan(_admin, _act_scope)
     # Kegiatan yang sudah disahkan terkunci — hapus kegiatan mengkaskade ke
     # semua asetnya, jadi wajib ditolak juga (konsisten dengan bulk-delete).
     sealed = await db.inventory_activities.find_one(
@@ -815,10 +837,11 @@ async def get_completion_status(activity_id: str, _user: dict = Depends(require_
     """
     activity = await db.inventory_activities.find_one(
         {"id": activity_id},
-        {"_id": 0, "tanggal_mulai": 1, "tanggal_selesai": 1}
+        {"_id": 0, "tanggal_mulai": 1, "tanggal_selesai": 1, "kode_satker": 1}
     )
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+    await pastikan_akses_kegiatan(_user, activity)
 
     # Assets with inventory pending
     pending_filter = {

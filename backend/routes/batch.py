@@ -162,6 +162,13 @@ async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user
     if not data.updates:
         raise HTTPException(status_code=400, detail="Tidak ada perubahan yang dikirim")
 
+    # ISOLASI SATKER (M-SCOPE): seluruh aset terpilih harus milik kegiatan
+    # satker user — satu saja milik satker lain → 403 (tolak seluruh batch).
+    from shared_utils import kode_satker_user, pastikan_akses_kegiatan_id
+    if kode_satker_user(_user):
+        for _aid in await db.assets.distinct("activity_id", {"id": {"$in": data.asset_ids}}):
+            await pastikan_akses_kegiatan_id(_user, _aid)
+
     # Filter only allowed fields
     clean_updates = {k: v for k, v in data.updates.items() if k in BATCH_ALLOWED_FIELDS and v is not None}
 
