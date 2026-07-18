@@ -12,7 +12,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from auth_utils import require_admin, require_user, require_writer
+from auth_utils import (require_admin, require_user,
+                        require_user_or_query_token, require_writer)
 from db import db
 from kodefikasi_utils import normalize_kode, validate_kode
 from mutasi_bmn_utils import (
@@ -263,3 +264,184 @@ async def dbkp_json(_user: dict = Depends(require_user)):
         p_nilai += nilai_persediaan_dari_batches(it.get("batches"))
     return {"rows": rows, "total": total, "ambang": amb,
             "posisi": posisi_neraca(rows, total, p_jumlah, p_nilai)}
+
+
+# ============================================================================
+# KIB — KARTU IDENTITAS BARANG per unit (PMK 181, pola SAKTI) — M-MODUL
+# ============================================================================
+
+class KibIn(BaseModel):
+    data: dict
+
+
+def _aset_kib_proj():
+    return {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
+            "brand": 1, "serial_number": 1, "location": 1, "condition": 1,
+            "purchase_price": 1, "purchase_date": 1, "perolehan_dari": 1,
+            "activity_id": 1, "kib": 1, "photo_gridfs_ids": 1}
+
+
+@mutasi_bmn_router.get("/pembukuan/kib/{asset_id}")
+async def lihat_kib(asset_id: str, _user: dict = Depends(require_user)):
+    """Info KIB satu aset: jenis terdeteksi dari kode barang + spesifikasi
+    field khusus jenis itu + data tersimpan. 400 bila jenis BMN tak ber-KIB."""
+    from pembukuan_utils import KIB_FIELDS, KIB_LABELS, jenis_kib
+    from shared_utils import pastikan_akses_aset
+    aset = await db.assets.find_one({"id": asset_id}, _aset_kib_proj())
+    if not aset:
+        raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    await pastikan_akses_aset(_user, aset)
+    jenis = jenis_kib(aset.get("asset_code"))
+    if not jenis:
+        raise HTTPException(
+            status_code=400,
+            detail="KIB hanya untuk tanah, bangunan gedung, alat angkutan (302), "
+                   "alat besar (301), dan alat persenjataan (307) — PMK 181")
+    aset.pop("photo_gridfs_ids", None)
+    return {"jenis": jenis, "label": KIB_LABELS[jenis],
+            "fields": [{"key": k, "label": l} for k, l in KIB_FIELDS[jenis]],
+            "data": aset.get("kib") or {}, "aset": aset}
+
+
+@mutasi_bmn_router.put("/pembukuan/kib/{asset_id}")
+async def simpan_kib(asset_id: str, payload: KibIn,
+                     user: dict = Depends(require_writer)):
+    """Simpan data khusus KIB (disanitasi per jenis) ke dokumen aset."""
+    from pembukuan_utils import bersihkan_kib, jenis_kib
+    from shared_utils import pastikan_akses_aset
+    aset = await db.assets.find_one(
+        {"id": asset_id}, {"_id": 0, "asset_code": 1, "activity_id": 1})
+    if not aset:
+        raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    await pastikan_akses_aset(user, aset)
+    jenis = jenis_kib(aset.get("asset_code"))
+    if not jenis:
+        raise HTTPException(status_code=400, detail="Jenis BMN ini tidak ber-KIB")
+    bersih = bersihkan_kib(jenis, payload.data)
+    await db.assets.update_one(
+        {"id": asset_id},
+        {"$set": {"kib": bersih,
+                  "updated_at": datetime.now(timezone.utc).isoformat()},
+         "$inc": {"version": 1}})
+    await log_audit("simpan_kib", "", asset_id,
+                    username=user.get("username", "system"),
+                    detail=f"Data KIB {jenis} diperbarui")
+    return {"ok": True, "jenis": jenis, "data": bersih}
+
+
+@mutasi_bmn_router.get("/pembukuan/kib-pdf/{asset_id}")
+async def kib_pdf(asset_id: str, _user: dict = Depends(require_user_or_query_token)):
+    """KARTU IDENTITAS BARANG (PDF resmi): identitas aset + field khusus per
+    jenis (terisi dari data tersimpan; kosong = garis titik untuk dilengkapi
+    manual) + riwayat mutasi Buku Barang + blok tanda tangan KPB."""
+    import io as _io
+    from reportlab.lib.units import mm as rl_mm
+    from reportlab.platypus import Image as RLImage, Paragraph, Spacer, Table
+
+    from pembukuan_utils import KIB_FIELDS, KIB_LABELS, jenis_kib, parse_harga
+    from routes.reports import (
+        _fmt_tanggal_id, _get_report_styles, _kop_surat_flowables,
+        _page_footer_factory, _std_doc, _std_table_style, _title_block,
+    )
+    from shared_utils import (
+        get_photo_from_gridfs, pastikan_akses_aset, pengaturan_kop,
+    )
+
+    aset = await db.assets.find_one({"id": asset_id}, _aset_kib_proj())
+    if not aset:
+        raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    await pastikan_akses_aset(_user, aset)
+    jenis = jenis_kib(aset.get("asset_code"))
+    if not jenis:
+        raise HTTPException(status_code=400, detail="Jenis BMN ini tidak ber-KIB")
+
+    activity = await db.inventory_activities.find_one(
+        {"id": aset.get("activity_id")}, {"_id": 0}) if aset.get("activity_id") else None
+    settings = await pengaturan_kop(activity)
+    st = _get_report_styles()
+    buffer = _io.BytesIO()
+    doc = _std_doc(buffer)
+    el = []
+    el.extend(_kop_surat_flowables(settings, doc.width))
+    el.extend(_title_block("KARTU IDENTITAS BARANG (KIB)",
+                           subjudul=KIB_LABELS[jenis]))
+
+    from xml.sax.saxutils import escape as _esc
+    kib = aset.get("kib") or {}
+    kosong = "................................"
+
+    def _v(x):
+        s = str(x or "").strip()
+        return _esc(s) if s else kosong
+
+    harga = parse_harga(aset.get("purchase_price"))
+    umum = [
+        ("Kode Barang / NUP", f"{aset.get('asset_code') or '-'} / {aset.get('NUP') or '-'}"),
+        ("Nama Barang", aset.get("asset_name") or "-"),
+        ("Merk / Tipe", aset.get("brand") or ""),
+        ("Nomor Seri Pabrik", aset.get("serial_number") or ""),
+        ("Lokasi", aset.get("location") or ""),
+        ("Asal Perolehan", aset.get("perolehan_dari") or ""),
+        ("Tanggal Perolehan", _fmt_tanggal_id(str(aset.get("purchase_date") or "")[:10])
+         if aset.get("purchase_date") else ""),
+        ("Nilai Perolehan", f"Rp{harga:,.0f}".replace(",", ".") if harga else ""),
+        ("Kondisi", aset.get("condition") or ""),
+    ]
+    baris = [[Paragraph("<b>DATA UMUM</b>", st['TableHeader']), Paragraph("", st['TableHeader'])]]
+    for label, nilai in umum:
+        baris.append([Paragraph(label, st['Cell']), Paragraph(_v(nilai), st['Cell'])])
+    baris.append([Paragraph(f"<b>DATA KHUSUS — {_esc(KIB_LABELS[jenis])}</b>", st['TableHeader']),
+                  Paragraph("", st['TableHeader'])])
+    for key, label in KIB_FIELDS[jenis]:
+        baris.append([Paragraph(label, st['Cell']), Paragraph(_v(kib.get(key)), st['Cell'])])
+    t = Table(baris, colWidths=[doc.width * 0.38, doc.width * 0.62], repeatRows=0)
+    t.setStyle(_std_table_style(zebra=True))
+    el.append(t)
+
+    # Foto aset (opsional, foto pertama)
+    fids = aset.get("photo_gridfs_ids") or []
+    if fids:
+        try:
+            data = await get_photo_from_gridfs(str(fids[0]))
+            if data:
+                img = RLImage(_io.BytesIO(data))
+                sk = min((doc.width * 0.35) / img.imageWidth, (45 * rl_mm) / img.imageHeight)
+                img.drawWidth, img.drawHeight = img.imageWidth * sk, img.imageHeight * sk
+                el.append(Spacer(1, 3 * rl_mm))
+                el.append(img)
+        except Exception:
+            pass
+
+    # Riwayat mutasi Buku Barang (maks 10 terbaru)
+    mutasi = await (db.mutasi_bmn.find({"asset_id": asset_id}, _PROJ)
+                    .sort([("tanggal_buku", -1)]).limit(10).to_list(10))
+    if mutasi:
+        el.append(Spacer(1, 4 * rl_mm))
+        el.append(Paragraph("<b>Riwayat Mutasi (Buku Barang)</b>", st['Meta']))
+        mb = [[Paragraph(h, st['TableHeader']) for h in ("Tanggal", "Kode", "Uraian", "Nilai")]]
+        for m in mutasi:
+            mb.append([Paragraph(str(m.get("tanggal_buku") or "-"), st['CellCenter']),
+                       Paragraph(str(m.get("kode_transaksi") or "-"), st['CellCenter']),
+                       Paragraph(_esc(str(m.get("uraian_transaksi") or "")), st['Cell']),
+                       Paragraph(f"Rp{parse_harga(m.get('nilai')):,.0f}".replace(",", "."), st['Cell'])])
+        tm = Table(mb, colWidths=[doc.width * 0.16, doc.width * 0.10,
+                                  doc.width * 0.50, doc.width * 0.24], repeatRows=1)
+        tm.setStyle(_std_table_style(zebra=True))
+        el.append(tm)
+
+    el.append(Spacer(1, 6 * rl_mm))
+    try:
+        from routes.reports import _signature_block
+        from shared_utils import blok_ttd_kpb
+        el.append(_signature_block([await blok_ttd_kpb(settings)], doc.width))
+    except Exception:
+        pass
+
+    footer = _page_footer_factory("Kartu Identitas Barang")
+    doc.build(el, onFirstPage=footer, onLaterPages=footer)
+    buffer.seek(0)
+    from fastapi.responses import StreamingResponse as _SR
+    from shared_utils import nama_file_disposition
+    nama = f"KIB_{(aset.get('asset_code') or 'aset')}_{(aset.get('NUP') or '')}.pdf"
+    return _SR(buffer, media_type="application/pdf",
+               headers={"Content-Disposition": nama_file_disposition(nama)})

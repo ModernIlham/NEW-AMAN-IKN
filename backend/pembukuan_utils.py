@@ -359,3 +359,97 @@ def build_lkb_rows(assets, uraian_map=None):
              for k in ("baik", "rusak_ringan", "rusak_berat", "belum", "jumlah")}
     total["nilai"] = sum(r["nilai"] for r in rows)
     return rows, total
+
+
+# ============================================================================
+# KIB — KARTU IDENTITAS BARANG (PMK 181/PMK.06/2016, pola SIMAK/SAKTI)
+# ============================================================================
+# KIB dibuat per-UNIT untuk jenis BMN tertentu: tanah, bangunan gedung, alat
+# angkutan bermotor, alat besar, dan alat persenjataan (riset format SAKTI:
+# menu Pencatatan → KIB per jenis). Jenis dideteksi dari kode barang:
+# golongan (digit 1) + bidang (digit 2-3) mengikuti kodefikasi BMN.
+
+KIB_FIELDS = {
+    "tanah": (
+        ("luas_m2", "Luas Tanah (m²)"),
+        ("status_hak", "Status Hak (HM/HGB/HP/…)"),
+        ("no_sertifikat", "Nomor Sertifikat"),
+        ("tanggal_sertifikat", "Tanggal Sertifikat"),
+        ("alamat", "Alamat / Letak Tanah"),
+        ("penggunaan", "Penggunaan Saat Ini"),
+        ("batas", "Batas-batas (U/S/T/B)"),
+    ),
+    "gedung": (
+        ("konstruksi", "Konstruksi (beton/baja/kayu)"),
+        ("luas_bangunan_m2", "Luas Bangunan (m²)"),
+        ("jumlah_lantai", "Jumlah Lantai"),
+        ("tahun_selesai", "Tahun Selesai Dibangun"),
+        ("status_tanah", "Status Tanah (kode barang tanah induk)"),
+        ("no_imb", "Nomor IMB/PBG"),
+        ("alamat", "Alamat / Letak Bangunan"),
+    ),
+    "angkutan": (
+        ("no_polisi", "Nomor Polisi"),
+        ("no_rangka", "Nomor Rangka"),
+        ("no_mesin", "Nomor Mesin"),
+        ("no_bpkb", "Nomor BPKB"),
+        ("tahun_pembuatan", "Tahun Pembuatan"),
+        ("isi_silinder", "Isi Silinder (cc)"),
+        ("bahan_bakar", "Bahan Bakar"),
+        ("warna", "Warna"),
+    ),
+    "alat_besar": (
+        ("no_mesin", "Nomor Mesin"),
+        ("tahun_pembuatan", "Tahun Pembuatan"),
+        ("kapasitas", "Kapasitas"),
+        ("negara_pembuat", "Negara Pembuat"),
+    ),
+    "senjata": (
+        ("kaliber", "Kaliber"),
+        ("no_pabrik", "Nomor Pabrik"),
+        ("tahun_pembuatan", "Tahun Pembuatan"),
+        ("negara_pembuat", "Negara Pembuat"),
+    ),
+}
+
+KIB_LABELS = {
+    "tanah": "KIB — TANAH",
+    "gedung": "KIB — BANGUNAN GEDUNG",
+    "angkutan": "KIB — ALAT ANGKUTAN BERMOTOR",
+    "alat_besar": "KIB — ALAT BESAR",
+    "senjata": "KIB — ALAT PERSENJATAAN",
+}
+
+
+def jenis_kib(kode_barang):
+    """Jenis KIB untuk sebuah kode barang — None bila jenis BMN itu tidak
+    ber-KIB (mis. peralatan kantor biasa). Deteksi: golongan digit-1, bidang
+    digit 2-3 (301 alat besar, 302 alat angkutan, 307 persenjataan)."""
+    s = str(kode_barang or "").strip()
+    if not s or not s[0].isdigit():
+        return None
+    gol = s[0]
+    if gol == "2":
+        return "tanah"
+    if gol == "4":
+        return "gedung"
+    if gol == "3":
+        bidang = s[:3]
+        if bidang == "301":
+            return "alat_besar"
+        if bidang == "302":
+            return "angkutan"
+        if bidang == "307":
+            return "senjata"
+    return None
+
+
+def bersihkan_kib(jenis, data) -> dict:
+    """Sanitasi payload KIB: hanya key yang dikenal jenis tsb., nilai string
+    ter-trim maks 200 karakter. Key asing dibuang diam-diam."""
+    spec = {k for k, _ in KIB_FIELDS.get(jenis) or ()}
+    out = {}
+    for k, v in (data or {}).items():
+        if k in spec:
+            out[k] = str(v or "").strip()[:200]
+    return out
