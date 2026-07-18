@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Search, Plus, Pencil, Trash2, Loader2, IdCard, Upload, Download,
-  AlertTriangle,
+  AlertTriangle, Network, Wand2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -71,8 +71,28 @@ export default function PegawaiPage({ user, onBack }) {
   const [hasilImpor, setHasilImpor] = useState(null);
   const [serahTerima, setSerahTerima] = useState([]); // pegawai berisiko masih pegang aset
   const [detailAset, setDetailAset] = useState(null); // {pegawai, items, memuat}
+  const [units, setUnits] = useState([]);             // master unit kerja hierarkis
+  const [kelolaUnit, setKelolaUnit] = useState(null); // {eselon, nama, parentId, sibuk}
   const fileRef = useRef(null);
   const { confirm, confirmDialog } = useConfirm();
+
+  const muatUnits = useCallback(() => {
+    axios.get(`${API}/unit-kerja`)
+      .then((r) => setUnits(r.data?.items || []))
+      .catch(() => setUnits([]));
+  }, []);
+
+  // Opsi bertingkat: opsi Eselon N mengikuti induk Eselon N-1 yang dipilih
+  // (dicocokkan via nama — data pegawai menyimpan nama unit). Induk tak
+  // dipilih/tak dikenal → semua unit level itu.
+  const opsiEselon = useCallback((level, f) => {
+    const perLevel = units.filter((u) => String(u.eselon) === String(level));
+    if (level === 1) return perLevel.map((u) => u.nama_unit);
+    const indukNama = String(f?.[`eselon${level - 1}`] || "").trim();
+    const induk = units.find((u) => String(u.eselon) === String(level - 1) && u.nama_unit === indukNama);
+    const anak = induk ? perLevel.filter((u) => u.parent_id === induk.id) : perLevel;
+    return anak.map((u) => u.nama_unit);
+  }, [units]);
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
 
@@ -97,6 +117,53 @@ export default function PegawaiPage({ user, onBack }) {
       .then((r) => setSerahTerima(r.data?.items || []))
       .catch(() => setSerahTerima([]));
   }, []);
+
+  useEffect(() => { muatUnits(); }, [muatUnits]);
+
+  const tambahUnit = async () => {
+    if (!kelolaUnit?.nama?.trim()) { toast.error("Nama unit wajib diisi"); return; }
+    const level = Number(kelolaUnit.eselon);
+    if (level > 1 && !kelolaUnit.parentId) {
+      toast.error(`Pilih induk Eselon ${level - 1} dulu`); return;
+    }
+    setKelolaUnit((k) => ({ ...k, sibuk: true }));
+    try {
+      await axios.post(`${API}/unit-kerja`, {
+        nama_unit: kelolaUnit.nama.trim(), eselon: String(level),
+        parent_id: level > 1 ? kelolaUnit.parentId : "",
+      });
+      toast.success(`Unit Eselon ${level} ditambahkan`);
+      setKelolaUnit((k) => ({ ...k, nama: "", sibuk: false }));
+      muatUnits();
+    } catch (err) {
+      toast.error(getApiError(err, "Gagal menambah unit"));
+      setKelolaUnit((k) => ({ ...k, sibuk: false }));
+    }
+  };
+
+  const hapusUnit = async (u) => {
+    const ok = await confirm({
+      title: `Hapus unit ${u.nama_unit}?`,
+      description: `Eselon ${u.eselon}. Ditolak bila masih punya sub-unit atau dipakai pegawai.`,
+      confirmLabel: "Hapus", variant: "danger",
+    });
+    if (!ok) return;
+    try {
+      await axios.delete(`${API}/unit-kerja/${u.id}`);
+      toast.success(`Unit ${u.nama_unit} dihapus`);
+      muatUnits();
+    } catch (err) { toast.error(getApiError(err, "Gagal menghapus unit")); }
+  };
+
+  const bangunDariPegawai = async () => {
+    setKelolaUnit((k) => ({ ...k, sibuk: true }));
+    try {
+      const r = await axios.post(`${API}/unit-kerja/bangun-dari-pegawai`);
+      toast.success(`Master unit dibangun: ${r.data.dibuat} unit baru dari data pegawai`);
+      muatUnits();
+    } catch (err) { toast.error(getApiError(err, "Gagal membangun master unit")); }
+    finally { setKelolaUnit((k) => ({ ...k, sibuk: false })); }
+  };
 
   const bukaDetailAset = async (p) => {
     setDetailAset({ pegawai: p, items: [], memuat: true });
@@ -462,14 +529,31 @@ export default function PegawaiPage({ user, onBack }) {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <Field label="Jabatan" span2><Input value={form.jabatan} onChange={set("jabatan")} placeholder="cth. Analis Pengelolaan BMN" /></Field>
                 </div>
-                {/* Unit kerja berjenjang (Eselon I–V) — bila diisi, jenjang
+                {/* Unit kerja berjenjang (Eselon I–V) — pilihan BERTINGKAT dari
+                    master unit (opsi Eselon N mengikuti induk terpilih; tetap
+                    boleh ketik bebas utk unit yang belum terdaftar). Jenjang
                     terdalam otomatis menjadi Unit Kerja efektif di server. */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <Field label="Eselon 1"><Input value={form.eselon1} onChange={set("eselon1")} placeholder="cth. Kedeputian / Sekretariat" data-testid="pegawai-form-eselon1" /></Field>
-                  <Field label="Eselon 2"><Input value={form.eselon2} onChange={set("eselon2")} placeholder="cth. Direktorat / Biro" /></Field>
-                  <Field label="Eselon 3"><Input value={form.eselon3} onChange={set("eselon3")} placeholder="cth. Bagian / Subdirektorat" /></Field>
-                  <Field label="Eselon 4"><Input value={form.eselon4} onChange={set("eselon4")} placeholder="cth. Subbagian / Seksi" /></Field>
-                  <Field label="Eselon 5"><Input value={form.eselon5} onChange={set("eselon5")} /></Field>
+                  {[1, 2, 3, 4, 5].map((lv) => (
+                    <Field key={lv} label={`Eselon ${lv}`}>
+                      <Input value={form[`eselon${lv}`]} onChange={set(`eselon${lv}`)}
+                        list={`opsi-eselon-${lv}`}
+                        placeholder={["cth. Kedeputian / Sekretariat", "cth. Direktorat / Biro", "cth. Bagian / Subdirektorat", "cth. Subbagian / Seksi", ""][lv - 1]}
+                        data-testid={`pegawai-form-eselon${lv}`} />
+                      <datalist id={`opsi-eselon-${lv}`}>
+                        {opsiEselon(lv, form).map((n) => <option key={n} value={n} />)}
+                      </datalist>
+                    </Field>
+                  ))}
+                  {isAdmin && (
+                    <div className="flex items-end">
+                      <Button type="button" variant="outline" size="sm" className="h-10 gap-1.5 w-full"
+                        onClick={() => setKelolaUnit({ eselon: "1", nama: "", parentId: "", sibuk: false })}
+                        data-testid="pegawai-kelola-unit">
+                        <Network className="w-3.5 h-3.5" />Kelola Unit Kerja ({units.length})
+                      </Button>
+                    </div>
+                  )}
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <Field label="Unit Kerja (ringkas)"><Input value={form.unit_kerja} onChange={set("unit_kerja")} placeholder="otomatis dari Eselon terdalam bila kosong" data-testid="pegawai-form-unit" /></Field>
@@ -501,6 +585,81 @@ export default function PegawaiPage({ user, onBack }) {
             <Button onClick={submitForm} disabled={saving} data-testid="pegawai-form-save">
               {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : null}Simpan
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog kelola master unit kerja (Eselon I–V, hierarkis) ── */}
+      <Dialog open={!!kelolaUnit} onOpenChange={(o) => { if (!o && !kelolaUnit?.sibuk) setKelolaUnit(null); }}>
+        <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Kelola Unit Kerja (Eselon I–V)</DialogTitle>
+            <DialogDescription className="text-xs">
+              Master hierarkis — unit Eselon N bernaung di bawah Eselon N−1. Dipakai pilihan bertingkat form pegawai &amp; rekap laporan.
+            </DialogDescription>
+          </DialogHeader>
+          {kelolaUnit && (
+            <div className="space-y-3">
+              <Button variant="outline" size="sm" className="h-9 text-xs gap-1.5 w-full" disabled={kelolaUnit.sibuk}
+                onClick={bangunDariPegawai} data-testid="unit-bangun-otomatis">
+                {kelolaUnit.sibuk ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
+                Bangun otomatis dari data pegawai (jalur Eselon 1–5 yang sudah terisi)
+              </Button>
+              <div className="flex bg-muted rounded-lg p-0.5 gap-0.5">
+                {["1", "2", "3", "4", "5"].map((es) => (
+                  <button key={es} type="button"
+                    onClick={() => setKelolaUnit((k) => ({ ...k, eselon: es, parentId: "" }))}
+                    className={`flex-1 text-[11px] font-semibold py-1.5 rounded-md min-w-0 min-h-0 ${kelolaUnit.eselon === es ? "bg-card text-sky-700 dark:text-sky-400 shadow-sm" : "text-muted-foreground"}`}>
+                    Eselon {es}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                {Number(kelolaUnit.eselon) > 1 && (
+                  <select value={kelolaUnit.parentId}
+                    onChange={(e) => setKelolaUnit((k) => ({ ...k, parentId: e.target.value }))}
+                    className="h-9 rounded-md border border-input bg-background px-2 text-sm flex-1 min-w-[150px]"
+                    data-testid="unit-induk">
+                    <option value="">— induk Eselon {Number(kelolaUnit.eselon) - 1} —</option>
+                    {units.filter((u) => String(u.eselon) === String(Number(kelolaUnit.eselon) - 1))
+                      .map((u) => <option key={u.id} value={u.id}>{u.nama_unit}</option>)}
+                  </select>
+                )}
+                <Input value={kelolaUnit.nama}
+                  onChange={(e) => setKelolaUnit((k) => ({ ...k, nama: e.target.value }))}
+                  placeholder={`Nama unit Eselon ${kelolaUnit.eselon}`} className="h-9 flex-1 min-w-[160px]"
+                  data-testid="unit-nama" />
+                <Button size="sm" variant="outline" className="h-9 gap-1" disabled={kelolaUnit.sibuk}
+                  onClick={tambahUnit} data-testid="unit-tambah">
+                  <Plus className="w-3.5 h-3.5" />Tambah
+                </Button>
+              </div>
+              <div className="divide-y divide-border/60 border border-border rounded-lg overflow-hidden max-h-64 overflow-y-auto">
+                {units.filter((u) => String(u.eselon) === kelolaUnit.eselon).length === 0 ? (
+                  <p className="text-center text-[11px] text-muted-foreground py-5">Belum ada unit Eselon {kelolaUnit.eselon}.</p>
+                ) : units.filter((u) => String(u.eselon) === kelolaUnit.eselon).map((u) => {
+                  const induk = units.find((x) => x.id === u.parent_id);
+                  return (
+                    <div key={u.id} className="px-3 py-1.5 flex items-center gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[12px] font-medium text-foreground truncate">{u.nama_unit}</p>
+                        {induk && <p className="text-[10px] text-muted-foreground truncate">↳ {induk.nama_unit}</p>}
+                      </div>
+                      {u.sumber === "derivasi pegawai" && (
+                        <span className="px-1 py-0.5 rounded bg-sky-500/15 text-sky-600 dark:text-sky-400 text-[9px] font-semibold">otomatis</span>
+                      )}
+                      <button type="button" onClick={() => hapusUnit(u)} aria-label={`Hapus ${u.nama_unit}`}
+                        className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-500/10 min-w-0 min-h-0">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" disabled={kelolaUnit?.sibuk} onClick={() => setKelolaUnit(null)}>Tutup</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
