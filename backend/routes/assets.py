@@ -12,7 +12,9 @@ from fastapi.responses import Response
 from db import db, fs_bucket
 from asset_fields import SCALAR_FIELD_NAMES
 from models import AssetCreate, AssetResponse
-from auth_utils import require_user, require_admin, require_user_or_query_token
+from auth_utils import (
+    require_admin, require_user, require_user_or_query_token, require_writer,
+)
 from shared_utils import (
     invalidate_asset_cache, _cache_filter_opts, _cache_stats, _cache_analytics,
     log_audit, compute_changes, create_thumbnail, create_gallery_thumbnail,
@@ -752,7 +754,7 @@ async def buat_aset_draft(data: AssetCreate, audit_user: str = "system") -> dict
 
 
 @assets_router.post("/assets", response_model=AssetResponse)
-async def create_asset(asset: AssetCreate, request: Request, _user: dict = Depends(require_user)):
+async def create_asset(asset: AssetCreate, request: Request, _user: dict = Depends(require_writer)):
     """Create a new asset. Supports Idempotency-Key header to safely retry on network errors."""
     # Idempotency check: if same key was seen within the TTL window (24h), return cached response
     idem_key = request.headers.get("Idempotency-Key", "")
@@ -1276,7 +1278,7 @@ async def get_asset_photo_full(asset_id: str, photo_index: int, request: Request
 
 @assets_router.post("/assets/{asset_id}/photos/{photo_index}/rotate")
 async def rotate_asset_photo(asset_id: str, photo_index: int, request: Request,
-                             _user: dict = Depends(require_user)):
+                             _user: dict = Depends(require_writer)):
     """Putar foto ke-`photo_index` SECARA PERMANEN (default 90° searah jarum jam).
 
     Rotasi mengganti byte foto ASLI di GridFS + regen thumbnail per-foto dan
@@ -1453,7 +1455,7 @@ async def upload_asset_bast(
     asset_id: str,
     request: Request,
     file: UploadFile = File(...),
-    user: dict = Depends(require_user),
+    user: dict = Depends(require_writer),
 ):
     """Unggah dokumen BAST (PDF/gambar, maks 10MB) — menggantikan yang lama."""
     existing = await db.assets.find_one(
@@ -1563,7 +1565,7 @@ async def get_asset_bast(asset_id: str, request: Request,
 
 @assets_router.put("/assets/{asset_id}", response_model=AssetResponse)
 async def update_asset(asset_id: str, asset: AssetCreate, request: Request,
-                       _user: dict = Depends(require_user)):
+                       _user: dict = Depends(require_writer)):
     """Update an existing asset. Supports OCC via If-Match header (expected version).
     Returns 409 Conflict if another user modified the asset in the meantime."""
     existing = await db.assets.find_one({"id": asset_id})
@@ -1769,7 +1771,7 @@ PATCHABLE_FIELDS = frozenset(SCALAR_FIELD_NAMES) | {
 }
 
 @assets_router.patch("/assets/{asset_id}")
-async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(require_user)):
+async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(require_writer)):
     """Partial update — only update the fields provided in the body.
     Supports OCC via If-Match header (expected version) and Idempotency-Key header."""
     # --- Idempotency: replay cached response if same key seen recently ---

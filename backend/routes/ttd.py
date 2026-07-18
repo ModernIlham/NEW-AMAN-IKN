@@ -21,7 +21,7 @@ from pydantic import BaseModel
 
 from auth_utils import (
     create_sign_token, require_admin, require_sign_token, require_user,
-    require_user_or_query_token, require_user_or_sign_token,
+    require_user_or_query_token, require_user_or_sign_token, require_writer,
 )
 from db import db, fs_bucket
 from shared_utils import (
@@ -187,7 +187,7 @@ def _publik_signer(sg):
 
 
 @ttd_router.post("/ttd/permintaan")
-async def buat_permintaan(payload: PermintaanIn, user: dict = Depends(require_user)):
+async def buat_permintaan(payload: PermintaanIn, user: dict = Depends(require_writer)):
     """Buat permintaan tanda tangan + link per penanda tangan. Mode berurutan:
     hanya penanda tangan urutan pertama yang 'aktif'; paralel: semua aktif."""
     if not payload.signers:
@@ -251,7 +251,7 @@ async def detail_permintaan(sr_id: str, _user: dict = Depends(require_user)):
 
 
 @ttd_router.delete("/ttd/permintaan/{sr_id}")
-async def batal_permintaan(sr_id: str, user: dict = Depends(require_user)):
+async def batal_permintaan(sr_id: str, user: dict = Depends(require_writer)):
     """Batalkan permintaan (hanya pembuat atau admin)."""
     sr = await db.signature_requests.find_one({"id": sr_id}, {"_id": 0, "created_by": 1})
     if not sr:

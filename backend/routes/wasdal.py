@@ -16,7 +16,9 @@ from fastapi import (
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from auth_utils import require_admin, require_user, require_user_or_query_token
+from auth_utils import (
+    require_admin, require_user, require_user_or_query_token, require_writer,
+)
 from db import db, fs_bucket
 from shared_utils import blok_ttd_kpb_titik, delete_document_from_gridfs, get_document_from_gridfs
 from wasdal_utils import (
@@ -176,7 +178,7 @@ async def export_penertiban(_user: dict = Depends(require_user)):
 
 @wasdal_router.post("/wasdal/penertiban")
 async def catat_penertiban(payload: PenertibanIn,
-                           user: dict = Depends(require_user)):
+                           user: dict = Depends(require_writer)):
     """Buka tiket penertiban — tenggat otomatis 15 hari kerja."""
     data = payload.model_dump()
     errors = validate_penertiban(data)
@@ -314,7 +316,7 @@ async def export_insidentil(_user: dict = Depends(require_user)):
 
 @wasdal_router.post("/wasdal/insidentil")
 async def catat_insidentil(payload: InsidentilIn,
-                           user: dict = Depends(require_user)):
+                           user: dict = Depends(require_writer)):
     """Buka pemantauan insidentil (pemicu masyarakat/media/audit)."""
     data = payload.model_dump()
     errors = validate_insidentil(data)
@@ -435,7 +437,7 @@ def _lampiran_ext(filename: str) -> str:
 
 @wasdal_router.post("/wasdal/insidentil/{tiket_id}/lampiran")
 async def unggah_lampiran_insidentil(tiket_id: str, file: UploadFile = File(...),
-                                     user: dict = Depends(require_user)):
+                                     user: dict = Depends(require_writer)):
     """Unggah scan BA/foto temuan (PDF/gambar, maks 10MB, 10 berkas)."""
     t = await db.pemantauan_insidentil.find_one(
         {"id": tiket_id}, {"_id": 0, "id": 1, "lampiran": 1})

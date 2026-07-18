@@ -14,7 +14,9 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from auth_utils import require_admin, require_user, require_user_or_query_token
+from auth_utils import (
+    require_admin, require_user, require_user_or_query_token, require_writer,
+)
 from db import db, fs_bucket
 from shared_utils import delete_document_from_gridfs, get_document_from_gridfs, log_audit
 from pengadaan_utils import (
@@ -126,7 +128,7 @@ async def list_pengadaan(_user: dict = Depends(require_user)):
 
 
 @pengadaan_router.post("/pengadaan/{perolehan_id}/daftarkan-persediaan")
-async def daftarkan_persediaan(perolehan_id: str, user: dict = Depends(require_user)):
+async def daftarkan_persediaan(perolehan_id: str, user: dict = Depends(require_writer)):
     """Barang perolehan ber-kode persediaan (awalan '1') → master persediaan
     + transaksi masuk berjurnal FIFO (audit G4 #6 — jalur BAST konsumsi).
 
@@ -223,7 +225,7 @@ async def export_pengadaan(_user: dict = Depends(require_user)):
 
 
 @pengadaan_router.post("/pengadaan")
-async def buat_perolehan(payload: PerolehanIn, user: dict = Depends(require_user)):
+async def buat_perolehan(payload: PerolehanIn, user: dict = Depends(require_writer)):
     """Catat perolehan baru (barang boleh ditautkan ke aset master)."""
     today_iso = datetime.now(timezone.utc).date().isoformat()
     data = payload.model_dump()
@@ -275,7 +277,7 @@ async def buat_perolehan(payload: PerolehanIn, user: dict = Depends(require_user
 
 @pengadaan_router.put("/pengadaan/{perolehan_id}/dokumen")
 async def perbarui_dokumen(perolehan_id: str, payload: DokumenIn,
-                           _user: dict = Depends(require_user)):
+                           _user: dict = Depends(require_writer)):
     """Perbarui checklist dokumen sumber (kunci di luar daftar diabaikan)."""
     p = await db.pengadaan.find_one({"id": perolehan_id}, {"_id": 0})
     if not p:
@@ -293,7 +295,7 @@ async def perbarui_dokumen(perolehan_id: str, payload: DokumenIn,
 
 @pengadaan_router.post("/pengadaan/{perolehan_id}/tautkan")
 async def tautkan_barang(perolehan_id: str, payload: TautkanIn,
-                         _user: dict = Depends(require_user)):
+                         _user: dict = Depends(require_writer)):
     """Tautkan/lepaskan baris barang ke aset master (cegah entri ganda)."""
     p = await db.pengadaan.find_one({"id": perolehan_id}, {"_id": 0})
     if not p:
@@ -335,7 +337,7 @@ class BuatDraftAsetIn(BaseModel):
 @pengadaan_router.post("/pengadaan/{perolehan_id}/buat-draft-aset")
 async def buat_draft_aset_dari_perolehan(perolehan_id: str,
                                          payload: BuatDraftAsetIn,
-                                         user: dict = Depends(require_user)):
+                                         user: dict = Depends(require_writer)):
     """Buat aset draft dari baris barang perolehan yang BELUM bertaut (evaluasi #5).
 
     Untuk tiap baris `barang[]` tanpa `asset_id`: buat aset draft di kegiatan
@@ -455,7 +457,7 @@ async def buat_draft_aset_dari_perolehan(perolehan_id: str,
 @pengadaan_router.post("/pengadaan/{perolehan_id}/penganggaran")
 async def tautkan_penganggaran(perolehan_id: str,
                                payload: TautkanPenganggaranIn,
-                               _user: dict = Depends(require_user)):
+                               _user: dict = Depends(require_writer)):
     """Tautkan/lepaskan perolehan ke usulan Penganggaran (#117 ↔ #115)."""
     p = await db.pengadaan.find_one({"id": perolehan_id}, {"_id": 0})
     if not p:
@@ -490,7 +492,7 @@ def _lampiran_ext(filename: str) -> str:
 @pengadaan_router.post("/pengadaan/{perolehan_id}/lampiran")
 async def unggah_lampiran_perolehan(perolehan_id: str,
                                     file: UploadFile = File(...),
-                                    user: dict = Depends(require_user)):
+                                    user: dict = Depends(require_writer)):
     """Unggah scan dokumen sumber (PDF/gambar, maks 10MB, 10 berkas)."""
     p = await db.pengadaan.find_one(
         {"id": perolehan_id}, {"_id": 0, "id": 1, "lampiran_berkas": 1})

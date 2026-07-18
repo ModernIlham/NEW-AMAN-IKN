@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from auth_utils import require_admin, require_user
+from auth_utils import require_admin, require_user, require_writer
 from db import db
 from pemeliharaan_utils import rekap_pemeliharaan
 from perencanaan_utils import (
@@ -208,7 +208,7 @@ async def export_usulan_rkbmn(_user: dict = Depends(require_user)):
 
 @perencanaan_router.post("/perencanaan/usulan")
 async def buat_usulan_rkbmn(payload: UsulanRkbmnIn,
-                            user: dict = Depends(require_user)):
+                            user: dict = Depends(require_writer)):
     """Buat usulan RKBMN baru (status awal draft; aset opsional)."""
     data = payload.model_dump()
     errors = validate_usulan_rkbmn(data)
@@ -248,7 +248,7 @@ async def buat_usulan_rkbmn(payload: UsulanRkbmnIn,
 
 @perencanaan_router.post("/perencanaan/usulan/{usulan_id}/status")
 async def transisi_usulan_rkbmn(usulan_id: str, payload: TransisiRkbmnIn,
-                                user: dict = Depends(require_user)):
+                                user: dict = Depends(require_writer)):
     """Pindahkan status usulan (anti-race; dikembalikan wajib catatan)."""
     u = await db.perencanaan_usulan.find_one({"id": usulan_id}, {"_id": 0})
     if not u:

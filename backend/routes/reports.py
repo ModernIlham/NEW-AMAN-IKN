@@ -21,7 +21,7 @@ from pydantic import BaseModel
 
 from db import db
 from auth_utils import require_user, require_admin, require_user_or_query_token
-from shared_utils import get_photo_from_gridfs
+from shared_utils import ambang_kapitalisasi, get_photo_from_gridfs
 from report_filters import active_asset_filter
 from report_utils import hitung_status_stiker, distribusi_pengguna
 from markupsafe import Markup
@@ -1616,7 +1616,7 @@ async def generate_dbkp_pdf(activity_id: str, _user: dict = Depends(require_user
     from reportlab.platypus import Table, Paragraph, Spacer
     from reportlab.lib.units import mm as rl_mm
     from kodefikasi_utils import GOLONGAN_DEFAULTS
-    from pembukuan_utils import AMBANG_KAPITALISASI_DEFAULT, build_dbkp_rows
+    from pembukuan_utils import build_dbkp_rows
 
     activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
     if not activity:
@@ -1636,7 +1636,8 @@ async def generate_dbkp_pdf(activity_id: str, _user: dict = Depends(require_user
         if k.get("uraian"):
             uraian_map[k["kode"]] = k["uraian"]
 
-    rows, total = build_dbkp_rows(assets, uraian_map)
+    amb = await ambang_kapitalisasi()
+    rows, total = build_dbkp_rows(assets, uraian_map, ambang=amb)
 
     def fmt_rp(val):
         try: return f"{int(val):,}".replace(",", ".")
@@ -1702,8 +1703,8 @@ async def generate_dbkp_pdf(activity_id: str, _user: dict = Depends(require_user
     table.setStyle(_std_table_style(zebra=True, total_row=True))
     elements.append(table)
 
-    ambang_pm = fmt_rp(AMBANG_KAPITALISASI_DEFAULT.get("3", 0))
-    ambang_gb = fmt_rp(AMBANG_KAPITALISASI_DEFAULT.get("4", 0))
+    ambang_pm = fmt_rp(amb.get("3", 0))
+    ambang_gb = fmt_rp(amb.get("4", 0))
     elements.append(Spacer(1, 3*rl_mm))
     elements.append(Paragraph(
         f"Catatan: pemilahan intrakomptabel/ekstrakomptabel mengikuti nilai satuan minimum kapitalisasi "
@@ -1749,9 +1750,7 @@ async def generate_posisi_bmn_pdf(_user: dict = Depends(require_user_or_query_to
     from reportlab.platypus import Table, Paragraph, Spacer
     from reportlab.lib.units import mm as rl_mm
     from kodefikasi_utils import GOLONGAN_DEFAULTS
-    from pembukuan_utils import (
-        AMBANG_KAPITALISASI_DEFAULT, build_dbkp_rows, posisi_neraca,
-    )
+    from pembukuan_utils import build_dbkp_rows, posisi_neraca
     from persediaan_utils import nilai_persediaan_dari_batches
 
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
@@ -1767,7 +1766,8 @@ async def generate_posisi_bmn_pdf(_user: dict = Depends(require_user_or_query_to
         if k.get("uraian"):
             uraian_map[k["kode"]] = k["uraian"]
 
-    rows, total_aset = build_dbkp_rows(assets, uraian_map)
+    amb = await ambang_kapitalisasi()
+    rows, total_aset = build_dbkp_rows(assets, uraian_map, ambang=amb)
     p_jumlah, p_nilai = 0, 0.0
     async for it in db.persediaan.find({}, {"_id": 0, "batches": 1}):
         p_jumlah += 1
@@ -1848,8 +1848,8 @@ async def generate_posisi_bmn_pdf(_user: dict = Depends(require_user_or_query_to
     table.setStyle(_std_table_style(zebra=True, total_row=True))
     elements.append(table)
 
-    ambang_pm = fmt_rp(AMBANG_KAPITALISASI_DEFAULT.get("3", 0))
-    ambang_gb = fmt_rp(AMBANG_KAPITALISASI_DEFAULT.get("4", 0))
+    ambang_pm = fmt_rp(amb.get("3", 0))
+    ambang_gb = fmt_rp(amb.get("4", 0))
     elements.append(Spacer(1, 3*rl_mm))
     elements.append(Paragraph(
         "Catatan: hanya barang intrakomptabel yang tersaji di neraca; pemilahan mengikuti nilai satuan "
@@ -2217,14 +2217,15 @@ async def generate_lbkp_pdf(
                            "timestamp": t.get("timestamp"), "nilai": nilai})
     # Penghapusan via SK (proyeksi master #234, dihapus=True) → mutasi KURANG di
     # periode SK terbit, melengkapi tombstone hard-delete audit di atas (§5A).
-    tombstones += tombstones_penghapusan(assets)
+    amb = await ambang_kapitalisasi()
+    tombstones += tombstones_penghapusan(assets, ambang=amb)
 
     uraian_map = {k: u for k, u in GOLONGAN_DEFAULTS}
     async for k in db.kodefikasi.find({"level": 1}, {"_id": 0, "kode": 1, "uraian": 1}):
         if k.get("uraian"):
             uraian_map[k["kode"]] = k["uraian"]
 
-    per_kelas, n_tanpa_nilai = build_lbkp_rows(assets, tombstones, dari, sampai, uraian_map)
+    per_kelas, n_tanpa_nilai = build_lbkp_rows(assets, tombstones, dari, sampai, uraian_map, ambang=amb)
     if not per_kelas["gabungan"][0]:
         raise HTTPException(status_code=404,
                             detail=f"Belum ada data aset untuk {label_periode}")
@@ -2487,8 +2488,7 @@ async def generate_calbmn_pdf(
     from kodefikasi_utils import GOLONGAN_DEFAULTS
     from pelaporan_utils import kunci_unik_periode, penanda_final
     from pembukuan_utils import (
-        AMBANG_KAPITALISASI_DEFAULT, build_lbkp_rows, parse_harga,
-        tombstones_penghapusan,
+        build_lbkp_rows, parse_harga, tombstones_penghapusan,
     )
     from pemeliharaan_utils import rentang_periode
     from pengamanan_utils import is_sengketa
@@ -2517,14 +2517,15 @@ async def generate_calbmn_pdf(
                            "timestamp": t.get("timestamp"), "nilai": nilai})
     # Penghapusan via SK (proyeksi master #234, dihapus=True) → mutasi KURANG di
     # periode SK terbit, melengkapi tombstone hard-delete audit di atas (§5A).
-    tombstones += tombstones_penghapusan(assets)
+    amb = await ambang_kapitalisasi()
+    tombstones += tombstones_penghapusan(assets, ambang=amb)
 
     uraian_map = {k: u for k, u in GOLONGAN_DEFAULTS}
     async for k in db.kodefikasi.find({"level": 1}, {"_id": 0, "kode": 1, "uraian": 1}):
         if k.get("uraian"):
             uraian_map[k["kode"]] = k["uraian"]
 
-    per_kelas, n_tanpa_nilai = build_lbkp_rows(assets, tombstones, dari, sampai, uraian_map)
+    per_kelas, n_tanpa_nilai = build_lbkp_rows(assets, tombstones, dari, sampai, uraian_map, ambang=amb)
     if not per_kelas["gabungan"][0]:
         raise HTTPException(status_code=404,
                             detail=f"Belum ada data aset untuk {label_periode}")
@@ -2565,8 +2566,8 @@ async def generate_calbmn_pdf(
         try: return f"{int(val):,}".replace(",", ".")
         except (ValueError, TypeError, OverflowError): return "0"
 
-    ambang_pm = fmt_rp(AMBANG_KAPITALISASI_DEFAULT.get("3", 0))
-    ambang_gb = fmt_rp(AMBANG_KAPITALISASI_DEFAULT.get("4", 0))
+    ambang_pm = fmt_rp(amb.get("3", 0))
+    ambang_gb = fmt_rp(amb.get("4", 0))
     # Temuan #40: field kop_line1/kop_line2 tidak pernah ada di setelan —
     # pakai field setelan nyata (sub-unit → unit organisasi → instansi).
     satker = (settings.get("nama_sub_unit") or settings.get("nama_unit_organisasi")
@@ -2748,7 +2749,8 @@ async def generate_rekonsiliasi_xlsx(_user: dict = Depends(require_user_or_query
     async for k in db.kodefikasi.find({"level": 1}, {"_id": 0, "kode": 1, "uraian": 1}):
         if k.get("uraian"):
             uraian_map[k["kode"]] = k["uraian"]
-    rows, total_aset = build_dbkp_rows(assets, uraian_map)
+    amb = await ambang_kapitalisasi()
+    rows, total_aset = build_dbkp_rows(assets, uraian_map, ambang=amb)
     persediaan = await db.persediaan.find(
         {}, {"_id": 0, "kode_barang": 1, "nup": 1, "nama_barang": 1,
              "satuan": 1, "stok": 1, "batches": 1},

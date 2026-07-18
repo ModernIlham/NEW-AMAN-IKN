@@ -13,7 +13,9 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from auth_utils import require_admin, require_user, require_user_or_query_token
+from auth_utils import (
+    require_admin, require_user, require_user_or_query_token, require_writer,
+)
 from db import db, fs_bucket
 from shared_utils import delete_document_from_gridfs, get_document_from_gridfs
 from pemanfaatan_utils import (
@@ -132,7 +134,7 @@ async def list_pemanfaatan(_user: dict = Depends(require_user)):
 
 
 @pemanfaatan_router.post("/pemanfaatan")
-async def buat_pemanfaatan(payload: PemanfaatanIn, user: dict = Depends(require_user)):
+async def buat_pemanfaatan(payload: PemanfaatanIn, user: dict = Depends(require_writer)):
     """Catat satu perjanjian pemanfaatan."""
     data = payload.model_dump()
     errors = validate_pemanfaatan(data) + validate_fasilitas(data)
@@ -179,7 +181,7 @@ async def buat_pemanfaatan(payload: PemanfaatanIn, user: dict = Depends(require_
 
 @pemanfaatan_router.put("/pemanfaatan/{register_id}")
 async def ubah_pemanfaatan(register_id: str, payload: PemanfaatanIn,
-                           user: dict = Depends(require_user)):
+                           user: dict = Depends(require_writer)):
     """Perbarui perjanjian (melengkapi dokumen/nilai)."""
     data = payload.model_dump()
     errors = validate_pemanfaatan(data) + validate_fasilitas(data)
@@ -202,7 +204,7 @@ async def ubah_pemanfaatan(register_id: str, payload: PemanfaatanIn,
 
 @pemanfaatan_router.post("/pemanfaatan/{register_id}/kontribusi")
 async def catat_kontribusi(register_id: str, payload: KontribusiIn,
-                           user: dict = Depends(require_user)):
+                           user: dict = Depends(require_writer)):
     """Catat pembayaran kontribusi tahunan satu tahun (NTPN wajib)."""
     p = await db.pemanfaatan.find_one({"id": register_id}, _PROJ)
     if not p:
@@ -337,7 +339,7 @@ async def _buang_lampiran(register_id: str, file_id: str, field: str) -> dict:
 
 @pemanfaatan_router.post("/pemanfaatan/{register_id}/lampiran")
 async def unggah_lampiran(register_id: str, file: UploadFile = File(...),
-                          user: dict = Depends(require_user)):
+                          user: dict = Depends(require_writer)):
     """Unggah scan dokumen perjanjian (PDF/gambar, maks 10MB, 10 berkas)."""
     return await _terima_lampiran(register_id, file, user,
                                   "lampiran", "pemanfaatan")
@@ -363,7 +365,7 @@ async def hapus_lampiran(register_id: str, file_id: str,
 
 @pemanfaatan_router.post("/pemanfaatan/{register_id}/wasdal")
 async def unggah_lampiran_wasdal(register_id: str, file: UploadFile = File(...),
-                                 user: dict = Depends(require_user)):
+                                 user: dict = Depends(require_writer)):
     """Unggah laporan wasdal/BA peninjauan per perjanjian (PDF/gambar)."""
     return await _terima_lampiran(register_id, file, user,
                                   "lampiran_wasdal", "pemanfaatan_wasdal")

@@ -16,7 +16,7 @@ from pymongo import UpdateOne, ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 from asset_fields import BATCHABLE_FIELD_NAMES
-from auth_utils import require_user
+from auth_utils import require_user, require_writer
 from db import db
 from shared_utils import (
     invalidate_asset_cache, log_audit,
@@ -39,7 +39,7 @@ class LockRequest(BaseModel):
     asset_id: str
 
 @batch_router.post("/assets/lock")
-async def lock_asset(data: LockRequest, request: Request, x_user_id: str = Header(None), x_user_name: str = Header(None), x_session_id: str = Header(None), _user: dict = Depends(require_user)):
+async def lock_asset(data: LockRequest, request: Request, x_user_id: str = Header(None), x_user_name: str = Header(None), x_session_id: str = Header(None), _user: dict = Depends(require_writer)):
     """Lock an asset row for editing. Atomic lock acquisition via find_one_and_update + insert fallback.
     Race-free: guaranteed only one user can hold the lock at any time."""
     asset_id = data.asset_id
@@ -99,7 +99,7 @@ async def lock_asset(data: LockRequest, request: Request, x_user_id: str = Heade
         }
 
 @batch_router.post("/assets/heartbeat")
-async def heartbeat_lock(data: LockRequest, request: Request, x_user_id: str = Header(None), x_user_name: str = Header(None), x_session_id: str = Header(None), _user: dict = Depends(require_user)):
+async def heartbeat_lock(data: LockRequest, request: Request, x_user_id: str = Header(None), x_user_name: str = Header(None), x_session_id: str = Header(None), _user: dict = Depends(require_writer)):
     """Renew lock TTL (heartbeat). Call every ~15s while editing."""
     asset_id = data.asset_id
     now = datetime.now(timezone.utc)
@@ -113,7 +113,7 @@ async def heartbeat_lock(data: LockRequest, request: Request, x_user_id: str = H
     return {"renewed": result.modified_count > 0}
 
 @batch_router.post("/assets/unlock")
-async def unlock_asset(data: LockRequest, request: Request, x_user_id: str = Header(None), x_session_id: str = Header(None), _user: dict = Depends(require_user)):
+async def unlock_asset(data: LockRequest, request: Request, x_user_id: str = Header(None), x_session_id: str = Header(None), _user: dict = Depends(require_writer)):
     """Release the lock on an asset row."""
     asset_id = data.asset_id
     session_id = x_session_id or "unknown-session"
@@ -155,7 +155,7 @@ BATCH_ALLOWED_FIELDS = set(BATCHABLE_FIELD_NAMES)
 BATCH_SPECIAL_FIELDS = {"batch_photo", "batch_photos", "document_checklist_items"}
 
 @batch_router.put("/assets/batch-update")
-async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user_id: str = Header(None), x_user_name: str = Header(None), x_session_id: str = Header(None), _user: dict = Depends(require_user)):
+async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user_id: str = Header(None), x_user_name: str = Header(None), x_session_id: str = Header(None), _user: dict = Depends(require_writer)):
     """Batch update multiple assets with the same field values."""
     if not data.asset_ids:
         raise HTTPException(status_code=400, detail="Tidak ada aset yang dipilih")

@@ -5,7 +5,7 @@ import logging
 import asyncio
 import csv as csv_module
 from fastapi import APIRouter, HTTPException, UploadFile, File, Request, Depends
-from auth_utils import require_admin, require_user
+from auth_utils import require_admin, require_user, require_writer
 
 from db import db
 from models import CategoryCreate
@@ -56,7 +56,7 @@ async def get_all_categories(_user: dict = Depends(require_user)):
     return categories
 
 @categories_router.post("/categories")
-async def create_category(category: CategoryCreate, _user: dict = Depends(require_user)):
+async def create_category(category: CategoryCreate, _user: dict = Depends(require_writer)):
     """Create a new category (login wajib — temuan review keamanan)."""
     kode = category.kode_aset.strip() if category.kode_aset else ""
     label = category.label.strip()
@@ -119,7 +119,7 @@ async def delete_all_categories(_admin: dict = Depends(require_admin)):
 
 @categories_router.post("/categories/import-bulk")
 @limiter.limit("3/minute")
-async def import_categories_bulk(request: Request, file: UploadFile = File(...), _user: dict = Depends(require_user)):
+async def import_categories_bulk(request: Request, file: UploadFile = File(...), _user: dict = Depends(require_writer)):
     """Bulk import categories from Excel/CSV with progress tracking. Returns job_id for progress polling."""
     filename = file.filename.lower()
     if not (filename.endswith('.csv') or filename.endswith('.xlsx') or filename.endswith('.xls')):

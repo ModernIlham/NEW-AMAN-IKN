@@ -25,7 +25,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from pymongo import ReturnDocument
 
-from auth_utils import require_admin, require_user
+from auth_utils import require_admin, require_user, require_writer
 from db import db
 from shared_utils import log_audit
 from persuratan_utils import (
@@ -338,7 +338,7 @@ async def daftar_surat(jenis: str = "", status: str = "", modul: str = "",
 
 @persuratan_router.post("/persuratan/keluar")
 async def booking_surat_keluar(payload: SuratKeluarIn,
-                               user: dict = Depends(require_user)):
+                               user: dict = Depends(require_writer)):
     """BOOKING nomor surat keluar — nomor terbit atomik, status 'dibooking'.
 
     Nomor tetap milik surat ini sampai disahkan/dibatalkan; pembatalan
@@ -400,7 +400,7 @@ async def booking_surat_keluar(payload: SuratKeluarIn,
 
 @persuratan_router.post("/persuratan/masuk")
 async def agenda_surat_masuk(payload: SuratMasukIn,
-                             user: dict = Depends(require_user)):
+                             user: dict = Depends(require_writer)):
     """Catat surat masuk pada buku agenda (nomor agenda otomatis per tahun)."""
     data = payload.model_dump()
     errors = validate_surat_masuk(data)
@@ -439,7 +439,7 @@ async def agenda_surat_masuk(payload: SuratMasukIn,
 
 @persuratan_router.post("/persuratan/{surat_id}/status")
 async def transisi_surat(surat_id: str, payload: TransisiIn,
-                         user: dict = Depends(require_user)):
+                         user: dict = Depends(require_writer)):
     """Pindahkan status surat (sahkan/batalkan/proses/selesai) — anti-race.
 
     Pembatalan surat keluar WAJIB beralasan (tercatat; nomor hangus).
@@ -481,7 +481,7 @@ async def transisi_surat(surat_id: str, payload: TransisiIn,
 
 @persuratan_router.put("/persuratan/{surat_id}")
 async def ubah_surat(surat_id: str, payload: UbahSuratIn,
-                     user: dict = Depends(require_user)):
+                     user: dict = Depends(require_writer)):
     """Ubah metadata surat. Surat keluar DISAHKAN terkunci (hanya keterangan);
     nomor & no. agenda tidak pernah bisa diubah."""
     s = await db.surat.find_one({"id": surat_id}, _PROJ)

@@ -470,6 +470,17 @@ async def resolve_pejabat_peran(peran, per_iso=None):
     return pejabat_aktif_untuk_peran(pejabat_list, peran, per_iso)
 
 
+async def ambang_kapitalisasi() -> dict:
+    """Ambang kapitalisasi PMK 181 EFEKTIF: default digabung override setelan
+    admin (dokumen `report_settings {type: "kapitalisasi"}`, field `ambang`).
+    Dipakai seluruh laporan pembukuan (DBKP/LBKP/Posisi) agar satker dengan
+    kebijakan ambang berbeda tak perlu ubah kode."""
+    from pembukuan_utils import gabung_ambang
+    doc = await db.report_settings.find_one(
+        {"type": "kapitalisasi"}, {"_id": 0, "ambang": 1}) or {}
+    return gabung_ambang(doc.get("ambang"))
+
+
 async def ambil_ttd_img(file_id):
     """Bytes gambar TTD digital (PNG transparan) dari GridFS — None bila
     kosong/gagal. Dipakai menyematkan tanda tangan ke blok TTD PDF."""

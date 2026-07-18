@@ -13,7 +13,9 @@ from fastapi import (
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from auth_utils import require_admin, require_user, require_user_or_query_token
+from auth_utils import (
+    require_admin, require_user, require_user_or_query_token, require_writer,
+)
 from db import db, fs_bucket
 from shared_utils import (
     delete_document_from_gridfs, get_document_from_gridfs, log_audit,
@@ -140,7 +142,7 @@ async def list_pemindahtanganan(_user: dict = Depends(require_user)):
 
 
 @pemindahtanganan_router.post("/pemindahtanganan")
-async def buat_usulan_pt(payload: UsulanPtIn, user: dict = Depends(require_user)):
+async def buat_usulan_pt(payload: UsulanPtIn, user: dict = Depends(require_writer)):
     """Buat usulan pemindahtanganan multi-aset (snapshot identitas)."""
     data = payload.model_dump()
     errors = validate_usulan_pt(data)
@@ -367,7 +369,7 @@ def _lampiran_ext(filename: str) -> str:
 
 @pemindahtanganan_router.post("/pemindahtanganan/{usulan_id}/lampiran")
 async def unggah_lampiran_pt(usulan_id: str, file: UploadFile = File(...),
-                             user: dict = Depends(require_user)):
+                             user: dict = Depends(require_writer)):
     """Unggah scan dokumen usulan (PDF/gambar, maks 10MB, 10 berkas)."""
     u = await db.pemindahtanganan.find_one(
         {"id": usulan_id}, {"_id": 0, "id": 1, "lampiran": 1})

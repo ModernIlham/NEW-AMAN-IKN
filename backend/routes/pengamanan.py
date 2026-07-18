@@ -11,7 +11,9 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Upl
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from auth_utils import require_admin, require_user, require_user_or_query_token
+from auth_utils import (
+    require_admin, require_user, require_user_or_query_token, require_writer,
+)
 from db import db, fs_bucket
 from shared_utils import delete_document_from_gridfs, get_document_from_gridfs, nama_file_disposition
 from pengamanan_utils import (
@@ -131,7 +133,7 @@ async def export_kasus(_user: dict = Depends(require_user)):
 
 
 @pengamanan_router.post("/pengamanan/kasus")
-async def buka_kasus(payload: KasusIn, user: dict = Depends(require_user)):
+async def buka_kasus(payload: KasusIn, user: dict = Depends(require_writer)):
     """Buka kasus baru untuk satu aset (satu kasus aktif per aset)."""
     data = payload.model_dump()
     errors = validate_kasus(data)
@@ -176,7 +178,7 @@ async def buka_kasus(payload: KasusIn, user: dict = Depends(require_user)):
 
 @pengamanan_router.post("/pengamanan/kasus/{kasus_id}/status")
 async def transisi_kasus(kasus_id: str, payload: TransisiKasusIn,
-                         user: dict = Depends(require_user)):
+                         user: dict = Depends(require_writer)):
     """Pindahkan status kasus (anti-race pada status lama)."""
     kasus = await db.pengamanan_kasus.find_one({"id": kasus_id}, {"_id": 0})
     if not kasus:
@@ -261,7 +263,7 @@ async def export_dokumen(_user: dict = Depends(require_user)):
 
 
 @pengamanan_router.post("/pengamanan/dokumen")
-async def catat_dokumen(payload: DokumenIn, user: dict = Depends(require_user)):
+async def catat_dokumen(payload: DokumenIn, user: dict = Depends(require_writer)):
     """Catat satu dokumen kepemilikan untuk satu aset."""
     data = payload.model_dump()
     errors = validate_dokumen(data) + validate_kategori_sertipikasi(data)
@@ -328,7 +330,7 @@ def _lampiran_ext(filename: str) -> str:
 
 @pengamanan_router.post("/pengamanan/dokumen/{dok_id}/lampiran")
 async def unggah_lampiran_dokumen(dok_id: str, file: UploadFile = File(...),
-                                  user: dict = Depends(require_user)):
+                                  user: dict = Depends(require_writer)):
     """Unggah scan dokumen kepemilikan (PDF/gambar, maks 10MB, 10 berkas)."""
     d = await db.pengamanan_dokumen.find_one(
         {"id": dok_id}, {"_id": 0, "id": 1, "lampiran": 1})
@@ -458,7 +460,7 @@ async def export_checklist(_user: dict = Depends(require_user)):
 
 @pengamanan_router.post("/pengamanan/checklist")
 async def simpan_checklist(payload: ChecklistIn,
-                           user: dict = Depends(require_user)):
+                           user: dict = Depends(require_writer)):
     """Simpan/perbarui checklist satu aset (satu checklist per aset)."""
     data = payload.model_dump()
     errors = validate_checklist(data)
@@ -557,7 +559,7 @@ async def export_polis(_user: dict = Depends(require_user)):
 
 
 @pengamanan_router.post("/pengamanan/polis")
-async def catat_polis(payload: PolisIn, user: dict = Depends(require_user)):
+async def catat_polis(payload: PolisIn, user: dict = Depends(require_writer)):
     """Catat satu polis untuk satu aset (satu aset boleh berpolis ganda)."""
     data = payload.model_dump()
     errors = validate_polis(data)

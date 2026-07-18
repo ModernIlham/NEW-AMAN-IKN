@@ -54,13 +54,30 @@ def test_reset_hapus_semua_kecuali_akun_dan_konfigurasi():
     # Akun & konfigurasi DIPERTAHANKAN
     for keep in RESET_KEEP_COLLECTIONS:
         assert keep not in to_reset
-    # Data operasional & referensi + modul baru DIHAPUS
-    for m in MODUL_BARU + ["assets", "categories", "audit_logs", "counters",
-                           "inventory_history", "inventory_activities"]:
+    # Data OPERASIONAL + modul baru DIHAPUS (minus koleksi konfigurasi
+    # yang kini dipertahankan — mis. masa_manfaat)
+    for m in [c for c in MODUL_BARU if c not in RESET_KEEP_COLLECTIONS] + [
+            "assets", "categories", "audit_logs", "counters",
+            "inventory_history", "inventory_activities"]:
         assert m in to_reset, f"{m} harus ikut direset"
     # Transient & GridFS tidak masuk daftar hapus (ditangani terpisah / auto-TTL)
     for excl in SKIP_COLLECTIONS | {"fs.files", "fs.chunks"}:
         assert excl not in to_reset
+
+
+def test_reset_pertahankan_pemetaan_akuntansi_dan_persuratan():
+    """Regression Mandat-2: pemetaan yang disusun satker TANPA seed otomatis
+    (akun_bas/persediaan_akun) + setelan persuratan/masa manfaat harus
+    selamat dari reset-all — kehilangannya berarti setup ulang manual."""
+    db = SAMPLE_DB + ["persuratan_settings", "klasifikasi_arsip",
+                      "akun_bas", "persediaan_akun", "referensi_akun"]
+    to_reset = set(collections_to_reset(db))
+    for keep in ("akun_bas", "persediaan_akun", "masa_manfaat",
+                 "persuratan_settings", "klasifikasi_arsip", "referensi_akun",
+                 "report_settings", "users"):
+        assert keep not in to_reset, f"{keep} harus selamat dari reset"
+    # ...tapi tetap ikut BACKUP (bukan transient)
+    assert "akun_bas" in collections_to_process(db)
 
 
 def test_collections_from_backup_ambil_json_root_saja():
