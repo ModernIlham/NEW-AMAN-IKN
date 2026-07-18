@@ -143,10 +143,22 @@ async def daftar_referensi_akun(search: str = "", segmen: str = "",
             {"$group": {"_id": {"$substrCP": ["$kode", 0, 1]},
                         "n": {"$sum": 1}}}]):
         per_segmen[g["_id"]] = g["n"]
+    # Nama hierarki (level 1-5) utk prefiks kode di halaman ini — dipakai UI
+    # menggambar HEADER BERTINGKAT langsung di tabel (permintaan pemilik:
+    # makna digit tampil di luar, membagi baris seperti lampiran resmi).
+    prefiks = sorted({str(a.get("kode") or "")[:n]
+                      for a in items for n in range(1, 6)
+                      if a.get("kode")})
+    hierarki = {}
+    if prefiks:
+        async for h in db.referensi_akun_hierarki.find(
+                {"kode": {"$in": prefiks}},
+                {"_id": 0, "kode": 1, "uraian": 1}):
+            hierarki[h["kode"]] = h["uraian"]
     return {"items": items, "total": total, "page": page,
             "total_pages": max(1, -(-total // page_size)),
             "per_segmen": per_segmen, "label_segmen": SEGMEN_LABEL,
-            "label_kelompok": KELOMPOK_LABEL}
+            "label_kelompok": KELOMPOK_LABEL, "hierarki": hierarki}
 
 
 @referensi_akun_router.get("/referensi-akun/export")
