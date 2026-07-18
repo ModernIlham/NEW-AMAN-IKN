@@ -4,12 +4,19 @@ Struktur kode akun 6 digit mengikuti Bagan Akun Standar (PMK 214/PMK.05/2013;
 kodefikasi KEP-211/PB/2018 jo. pemutakhirannya a.l. KEP-291/PB/2022):
 digit 1 = AKUN (segmen besar: 1 Aset … 8 Non-Anggaran), 2 digit pertama =
 KELOMPOK AKUN (mis. 52 Belanja Barang dan Jasa), 3 digit pertama = JENIS AKUN
-(mis. 521 Belanja Barang), digit 4–6 = rincian/objek. Label kelompok di bawah
-diverifikasi silang terhadap isi referensi resmi SAKTI/SPAN yang menjadi seed
-master (`data/referensi_akun_bas.json`).
+(mis. 521 Belanja Barang), digit 4–6 = rincian/objek.
+
+NAMA KELOMPOK di bawah diambil VERBATIM dari lampiran resmi KEP-211/PB/2018
+(workbook "Kode Akun BAS", sheet Akun Kas & Akun Akrual, entri Level 2). Untuk
+segmen anggaran (5 Belanja, 6 Transfer, 7 Pembiayaan, 8 Non-Anggaran) dipakai
+nama ledger KAS (Belanja/Dana) agar konsisten dengan nama baris di master
+(pandangan anggaran satker); kelompok yang hanya ada di ledger AKRUAL
+(mis. 59 Beban Penyesuaian, 69 Beban Transfer Lain-lain) memakai nama akrual.
+Dua kunci legacy (32, 67) tidak ada di KEP-211 tetapi masih muncul di seed
+master lama — dipertahankan agar tabel tidak kehilangan header.
 """
 
-# kelompok akun (2 digit pertama) → nama kelompok
+# kelompok akun (2 digit pertama) → nama kelompok (resmi KEP-211/PB/2018)
 KELOMPOK_LABEL = {
     # 1 — Aset
     "11": "Aset Lancar",
@@ -18,22 +25,22 @@ KELOMPOK_LABEL = {
     "14": "Dana Cadangan",
     "15": "Piutang Jangka Panjang",
     "16": "Aset Lainnya",
-    "19": "Aset Lainnya Khusus BUN",
+    "19": "Akun Setup",
     # 2 — Kewajiban
     "21": "Kewajiban Jangka Pendek",
     "22": "Kewajiban Jangka Panjang",
-    "23": "Kewajiban Dicadangkan (Komitmen Belanja)",
-    "29": "Kewajiban Akrual Khusus (SPAN)",
+    "23": "Dicadangkan untuk Komitmen Belanja",
+    "29": "Akun Setup",
     # 3 — Ekuitas
-    "31": "Ekuitas Dana Lancar & Transaksi Antar Entitas",
-    "32": "Ekuitas Dana Investasi",
-    "39": "Ekuitas (Akrual & Konsolidasi)",
+    "31": "Ekuitas",
+    "32": "Ekuitas Dana Investasi",  # legacy (pra-akrual, tak ada di KEP-211)
+    "39": "Ekuitas",
     # 4 — Pendapatan
     "41": "Pendapatan Perpajakan",
     "42": "Pendapatan Negara Bukan Pajak (PNBP)",
     "43": "Pendapatan Hibah",
-    "49": "Pendapatan Lainnya & Akun Penyesuaian",
-    # 5 — Belanja
+    "49": "Pendapatan Penyesuaian",
+    # 5 — Belanja (nama ledger Kas)
     "51": "Belanja Pegawai",
     "52": "Belanja Barang dan Jasa",
     "53": "Belanja Modal",
@@ -42,23 +49,23 @@ KELOMPOK_LABEL = {
     "56": "Belanja Hibah",
     "57": "Belanja Bantuan Sosial",
     "58": "Belanja Lain-lain",
-    "59": "Beban Non-Kas (Penyusutan/Amortisasi/Penyisihan/Ekstrakomptabel)",
-    # 6 — Transfer
-    "61": "Transfer Dana Bagi Hasil (DBH)",
-    "62": "Transfer Dana Alokasi Umum (DAU)",
-    "63": "Transfer Dana Alokasi Khusus (DAK)",
-    "64": "Transfer Otonomi Khusus, Keistimewaan & Insentif",
-    "65": "Transfer Dana Insentif, TPG & Dana Desa",
-    "66": "Transfer Dana Desa & Keistimewaan",
-    "67": "Transfer Hibah kepada Daerah",
-    "69": "Akun Penyesuaian Transfer",
+    "59": "Beban Penyesuaian",  # akrual: penyusutan/amortisasi/penyisihan
+    # 6 — Transfer ke Daerah dan Dana Desa (nama ledger Kas)
+    "61": "Dana Bagi Hasil (DBH)",
+    "62": "Dana Alokasi Umum (DAU)",
+    "63": "Dana Alokasi Khusus Fisik (DAK Fisik)",
+    "64": "Dana Otonomi Khusus, Keistimewaan DIY & Insentif Daerah",
+    "65": "Dana Alokasi Khusus Non Fisik (DAK Non Fisik)",
+    "66": "Dana Desa",
+    "67": "Hibah kepada Daerah",  # legacy (tak ada di KEP-211)
+    "69": "Beban Transfer Lain-lain",  # akrual
     # 7 — Pembiayaan
     "71": "Penerimaan Pembiayaan",
     "72": "Pengeluaran Pembiayaan",
-    "79": "Akun Penyesuaian Pembiayaan",
+    "79": "Pengeluaran Pembiayaan Lain-lain",
     # 8 — Non-Anggaran
-    "81": "Penerimaan Non-Anggaran (PFK, Kiriman Uang, UP)",
-    "82": "Pengeluaran Non-Anggaran",
+    "81": "Penerimaan Non Anggaran",
+    "82": "Pengeluaran Non Anggaran",
     "83": "Output Kinerja",
 }
 

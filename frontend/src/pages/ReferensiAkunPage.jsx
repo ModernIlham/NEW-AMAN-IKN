@@ -377,7 +377,7 @@ export default function ReferensiAkunPage({ user, onBack }) {
               )}
             </div>
             <p className="text-center text-[10px] text-muted-foreground pb-2">
-              Kategori mengikuti struktur digit BAS (KEP-211/PB/2018 jo. pemutakhirannya): digit 1 = akun/segmen, 2 digit = kelompok akun, 3 digit = jenis akun.
+              Kategori mengikuti struktur digit BAS: digit 1 = akun/segmen, 2 digit = kelompok akun, 3 digit = jenis akun. Nama kelompok verbatim dari lampiran resmi KEP-211/PB/2018.
               Sumber: dokumen resmi &quot;Referensi Akun&quot; SAKTI/SPAN + kertas kerja akun belanja↔BMN satker; entri manual bertanda &quot;satker&quot;.
             </p>
           </>
