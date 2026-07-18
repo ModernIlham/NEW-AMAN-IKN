@@ -56,18 +56,27 @@ def test_baris_csv_referensi_hierarki():
     items = [
         {"kode": "521111", "nama": "Belanja Keperluan Perkantoran",
          "sumber": "resmi", "uraian_bmn": "ATK", "kapitalisasi": "tidak",
-         "kategori_neraca": "-"},
+         "kategori_neraca": "-", "penjelasan": "Belanja untuk perkantoran"},
         {"kode": "132111", "nama": "Peralatan dan Mesin", "sumber": "satker"},
     ]
     rows = baris_csv_referensi(items, _SEGMEN)
-    assert rows[0][0] == "Kode" and len(rows) == 3
+    assert rows[0][0] == "Kode" and rows[0][-1] == "Penjelasan" and len(rows) == 3
     assert rows[1][:7] == ["521111", "Belanja Keperluan Perkantoran", "5",
                            "Belanja", "52", "Belanja Barang dan Jasa", "521"]
-    assert rows[1][7:] == ["resmi", "ATK", "tidak", "-"]
+    assert rows[1][7:] == ["resmi", "ATK", "tidak", "-",
+                           "Belanja untuk perkantoran"]
     assert rows[2][:7] == ["132111", "Peralatan dan Mesin", "1", "Aset",
                            "13", "Aset Tetap", "132"]
     # field opsional kosong → string kosong, bukan None
-    assert rows[2][8] == ""
+    assert rows[2][8] == "" and rows[2][-1] == ""
+
+
+def test_baris_csv_penjelasan_warisan_ditandai():
+    """Penjelasan warisan induk diberi prefiks penanda di CSV."""
+    items = [{"kode": "111119", "nama": "Kas ...", "sumber": "resmi",
+              "penjelasan": "Definisi kelompok kas", "penjelasan_warisan": True}]
+    rows = baris_csv_referensi(items, _SEGMEN)
+    assert rows[1][-1].startswith("[penjelasan kelompok induk]")
 
 
 def test_baris_csv_referensi_kosong():

@@ -35,6 +35,11 @@ referensi_akun_router = APIRouter()
 _PROJ = {"_id": 0}
 _SEED_PATH = Path(__file__).parent.parent / "data" / "referensi_akun_bas.json"
 
+# Versi isi seed — dinaikkan saat data seed diperkaya (mis. +penjelasan resmi
+# KEP-211/PB/2018) agar auto-seed MENIMPA ulang koleksi yang sudah terisi di
+# produksi tanpa perlu admin menekan "Muat Referensi Resmi" manual.
+SEED_VERSION = 2
+
 SEGMEN_LABEL = {
     "1": "Aset", "2": "Kewajiban", "3": "Ekuitas", "4": "Pendapatan",
     "5": "Belanja", "6": "Transfer", "7": "Pembiayaan", "8": "Non-Anggaran",
@@ -57,9 +62,22 @@ def _valid_kode(kode: str) -> str:
     return k
 
 
+async def _perlu_seed(hanya_bila_kosong: bool) -> bool:
+    """True bila seed perlu dijalankan: dipaksa, koleksi kosong, atau versi
+    seed tersimpan tertinggal (data seed sudah diperkaya)."""
+    if not hanya_bila_kosong:
+        return True
+    if await db.referensi_akun.count_documents({}) == 0:
+        return True
+    meta = await db.referensi_akun_meta.find_one(
+        {"key": "seed"}, {"_id": 0, "version": 1})
+    return int((meta or {}).get("version") or 0) < SEED_VERSION
+
+
 async def _seed(hanya_bila_kosong: bool) -> dict:
-    """Muat referensi resmi dari file seed (upsert idempoten)."""
-    if hanya_bila_kosong and await db.referensi_akun.count_documents({}) > 0:
+    """Muat referensi resmi dari file seed (upsert idempoten). Menyertakan
+    penjelasan resmi per akun (kolom Penjelasan KEP-211/PB/2018)."""
+    if not await _perlu_seed(hanya_bila_kosong):
         return {"dimuat": 0, "dilewati": True}
     try:
         data = json.loads(_SEED_PATH.read_text())
@@ -76,12 +94,17 @@ async def _seed(hanya_bila_kosong: bool) -> dict:
         doc = {"kode": kode, "nama": str(a.get("nama") or "").strip(),
                "segmen": SEGMEN_LABEL.get(kode[0], kode[0]),
                "sumber": "resmi", "updated_at": now}
-        for f in ("uraian_bmn", "kapitalisasi", "kategori_neraca"):
+        for f in ("uraian_bmn", "kapitalisasi", "kategori_neraca",
+                  "penjelasan", "penjelasan_warisan"):
             if a.get(f):
                 doc[f] = a[f]
         ops.append(UpdateOne({"kode": kode}, {"$set": doc}, upsert=True))
     if ops:
         await db.referensi_akun.bulk_write(ops, ordered=False)
+    await db.referensi_akun_meta.update_one(
+        {"key": "seed"},
+        {"$set": {"key": "seed", "version": SEED_VERSION, "updated_at": now}},
+        upsert=True)
     return {"dimuat": len(ops), "sumber": data.get("sumber", ""),
             "dilewati": False}
 

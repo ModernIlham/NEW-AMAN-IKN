@@ -48,6 +48,29 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#390] Penjelasan resmi tiap akun BAS (KEP-211/PB/2018) — dapat dibuka per baris + ikut ekspor CSV — 2026-07-18
+
+Pemilik meminta penjelasan/definisi tiap akun ditampilkan (sebelumnya kosong).
+Kolom **Penjelasan** dari lampiran resmi KEP-211/PB/2018 (workbook "Kode Akun
+BAS", sheet Akun Kas & Akrual) kini disematkan ke master:
+- **2.538 dari 2.899 akun (87%) berpenjelasan resmi**. Akun rincian 6-digit
+  yang di dokumen resmi mewarisi definisi induknya diisi lewat **fallback
+  hierarki** (kode sendiri → jenis/kelompok/segmen induk terdekat) dan ditandai
+  "(definisi kelompok/jenis induk)". Teks dibersihkan dari artefak kode
+  pemetaan numerik pada ekstraksi PDF (mis. "…Rupiah 502.000000980" → "…Rupiah"),
+  tanpa merusak teks sah seperti "PPh Pasal 21".
+- **UI**: setiap baris akun dapat **diklik untuk membuka penjelasan resminya**
+  (chevron + baris rincian), lengkap dengan atribusi sumber.
+- **Ekspor CSV**: kolom **Penjelasan** ditambahkan (warisan induk diberi
+  prefiks penanda).
+- **Propagasi otomatis**: versi seed dinaikkan (SEED_VERSION=2) sehingga basis
+  data produksi yang sudah terisi di-upsert ulang otomatis saat halaman dibuka
+  — penjelasan muncul tanpa admin menekan "Muat Referensi Resmi" manual.
+- Verifikasi: 511 tes unit lulus (8 di modul referensi akun), smoke ekspor CSV
+  (kolom Penjelasan + warisan) lulus, server ter-import, lint & build sukses.
+
+---
+
 ## [#389] Nama kelompok akun BAS diselaraskan ke lampiran resmi KEP-211/PB/2018 — 2026-07-18
 
 Pemilik mengirim workbook resmi "Kode Akun BAS (KEP-211/PB/2018)" — dipakai
