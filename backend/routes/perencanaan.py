@@ -286,3 +286,85 @@ async def hapus_usulan_rkbmn(usulan_id: str,
     if not res.deleted_count:
         raise HTTPException(status_code=404, detail="Usulan tidak ditemukan")
     return {"ok": True}
+
+
+# ============================================================================
+# SBSK (PMK 138/2024) — tabel standar konfigurabel + SANDING usulan (M-MODUL)
+# ============================================================================
+
+class SbskIn(BaseModel):
+    kategori: str
+    peruntukan: str
+    satuan: str
+    standar: float
+    keterangan: str = ""
+
+
+@perencanaan_router.get("/perencanaan/sbsk")
+async def daftar_sbsk(_user: dict = Depends(require_user)):
+    """Tabel Standar Barang & Standar Kebutuhan (PMK 138/2024) — dirawat
+    admin dari Lampiran PMK; seed default dimuat OTOMATIS saat kosong."""
+    from perencanaan_utils import SBSK_SEED_DEFAULT
+    if await db.sbsk_standar.estimated_document_count() == 0:
+        now = datetime.now(timezone.utc).isoformat()
+        for s in SBSK_SEED_DEFAULT:
+            await db.sbsk_standar.insert_one(
+                {**s, "id": str(uuid.uuid4()), "sumber": "seed",
+                 "created_at": now})
+    items = await db.sbsk_standar.find({}, {"_id": 0}).sort(
+        [("kategori", 1), ("peruntukan", 1)]).to_list(1000)
+    return {"items": items, "jumlah": len(items),
+            "dasar": "PMK 138/2024 — Standar Barang & Standar Kebutuhan BMN"}
+
+
+@perencanaan_router.post("/perencanaan/sbsk")
+async def tambah_sbsk(payload: SbskIn, admin: dict = Depends(require_admin)):
+    """Tambah/rawat baris standar SBSK (admin — angka dari Lampiran PMK 138)."""
+    from perencanaan_utils import validate_sbsk
+    data = payload.model_dump()
+    errors = validate_sbsk(data)
+    if errors:
+        raise HTTPException(status_code=400, detail="; ".join(errors))
+    record = {**{k: (str(v).strip() if isinstance(v, str) else v)
+                 for k, v in data.items()},
+              "id": str(uuid.uuid4()), "sumber": "input satker",
+              "created_at": datetime.now(timezone.utc).isoformat(),
+              "created_by": admin.get("username", "system")}
+    await db.sbsk_standar.insert_one({**record})
+    return record
+
+
+@perencanaan_router.delete("/perencanaan/sbsk/{sbsk_id}")
+async def hapus_sbsk(sbsk_id: str, _admin: dict = Depends(require_admin)):
+    res = await db.sbsk_standar.delete_one({"id": sbsk_id})
+    if not res.deleted_count:
+        raise HTTPException(status_code=404, detail="Baris standar tidak ditemukan")
+    return {"ok": True}
+
+
+@perencanaan_router.get("/perencanaan/usulan/{usulan_id}/sanding")
+async def sanding_usulan(usulan_id: str, kode_barang: str = "",
+                         _user: dict = Depends(require_user)):
+    """SANDING usulan RKBMN vs aset EKSISTING sejenis + standar SBSK:
+    jumlah/kondisi/umur rata-rata/nilai aset ber-prefix `kode_barang`
+    (param menimpa snapshot aset usulan) + baris standar relevan + catatan
+    analisis untuk reviewer (PMK 153/2021 jo. PMK 138/2024)."""
+    from perencanaan_utils import sanding_usulan_aset
+    from shared_utils import scope_query_aset
+    usulan = await db.perencanaan_usulan.find_one({"id": usulan_id}, {"_id": 0})
+    if not usulan:
+        raise HTTPException(status_code=404, detail="Usulan tidak ditemukan")
+    prefix = (str(kode_barang or "").strip()
+              or str(usulan.get("asset_code") or "")[:3])
+    usulan_sanding = {**usulan, "kode_barang": prefix}
+    q = await scope_query_aset(_user, {})
+    assets = await db.assets.find(
+        q, {"_id": 0, "asset_code": 1, "condition": 1,
+            "purchase_date": 1, "purchase_price": 1}).to_list(200000)
+    standar = await db.sbsk_standar.find({}, {"_id": 0}).to_list(1000)
+    hasil = sanding_usulan_aset(
+        usulan_sanding, assets,
+        datetime.now(timezone.utc).date().isoformat(), standar)
+    return {"usulan": {k: usulan.get(k) for k in
+                       ("id", "uraian", "jenis", "volume", "satuan", "tahun_rkbmn")},
+            "kode_barang": prefix, **hasil}

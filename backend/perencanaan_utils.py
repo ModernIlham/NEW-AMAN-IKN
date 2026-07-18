@@ -9,6 +9,7 @@ biaya modul Pemeliharaan.
 
 Fungsi murni tanpa Mongo/IO agar teruji unit.
 """
+from pembukuan_utils import parse_harga
 
 KONDISI_LAYAK = ("Baik", "Rusak Ringan")
 
@@ -175,4 +176,124 @@ def snapshot_rkbmn(usulan) -> dict:
         "rkbmn_tahun": str(usulan.get("tahun_rkbmn") or "").strip(),
         "rkbmn_jenis": str(usulan.get("jenis") or "").strip(),
         "rkbmn_unit": str(usulan.get("unit_pengusul") or "").strip(),
+    }
+
+
+# ============================================================================
+# SBSK — Standar Barang & Standar Kebutuhan (PMK 138/2024) + SANDING (M-MODUL)
+# ============================================================================
+# Standar berupa TABEL KONFIGURABEL (koleksi `sbsk_standar`) yang dirawat
+# admin dari Lampiran PMK 138/2024 — angka lampiran terlalu rinci untuk
+# di-hardcode dan bisa direvisi. Seed default memuat baris yang
+# terdokumentasi publik + penanda "verifikasi Lampiran" (pola akun_bas).
+
+SBSK_SEED_DEFAULT = (
+    {"kategori": "ruang_kerja", "peruntukan": "Menteri/pimpinan setingkat",
+     "satuan": "m²", "standar": 247,
+     "keterangan": "Luas maksimum ruang kerja (riset publik PMK 138/2024 — verifikasi Lampiran)"},
+    {"kategori": "kendaraan", "peruntukan": "Pejabat eselon I",
+     "satuan": "unit", "standar": 1,
+     "keterangan": "Kendaraan dinas jabatan (verifikasi Lampiran PMK 138/2024)"},
+    {"kategori": "kendaraan", "peruntukan": "Pejabat eselon II",
+     "satuan": "unit", "standar": 1,
+     "keterangan": "Kendaraan dinas jabatan (verifikasi Lampiran PMK 138/2024)"},
+    {"kategori": "barang", "peruntukan": "Komputer/laptop per pegawai",
+     "satuan": "unit", "standar": 1,
+     "keterangan": "Praktik umum standar kebutuhan alat pengolah data (improvisasi — sesuaikan kebijakan K/L)"},
+)
+
+
+def validate_sbsk(data: dict) -> list:
+    """Validasi baris standar SBSK → daftar pesan kesalahan."""
+    errors = []
+    if str(data.get("kategori") or "").strip() not in ("ruang_kerja", "kendaraan", "barang", "tanah_bangunan"):
+        errors.append("Kategori harus ruang_kerja/kendaraan/barang/tanah_bangunan")
+    if not str(data.get("peruntukan") or "").strip():
+        errors.append("Peruntukan (jabatan/penggunaan) wajib diisi")
+    if not str(data.get("satuan") or "").strip():
+        errors.append("Satuan wajib diisi")
+    try:
+        if float(data.get("standar") or 0) <= 0:
+            errors.append("Angka standar harus > 0")
+    except (TypeError, ValueError):
+        errors.append("Angka standar harus angka")
+    return errors
+
+
+def _umur_tahun(purchase_date, kini_iso):
+    """Umur aset dalam tahun (float) dari tanggal perolehan; None bila kosong."""
+    s = str(purchase_date or "")[:10]
+    k = str(kini_iso or "")[:10]
+    if len(s) != 10 or len(k) != 10:
+        return None
+    try:
+        th = int(k[:4]) - int(s[:4])
+        sisa = (int(k[5:7]), int(k[8:10])) < (int(s[5:7]), int(s[8:10]))
+        return max(0, th - (1 if sisa else 0))
+    except ValueError:
+        return None
+
+
+def sanding_usulan_aset(usulan, assets, kini_iso, standar=None):
+    """SANDING satu usulan RKBMN vs aset EKSISTING sejenis + standar SBSK.
+
+    Pencocokan eksisting: `kode_barang` usulan sebagai PREFIX kode aset
+    (kosong = tanpa sanding otomatis; uraian bebas tak bisa dicocokkan).
+    Hasil: jumlah eksisting, sebaran kondisi, umur rata-rata, nilai total,
+    baris standar SBSK yang relevan (match kata peruntukan/uraian), dan
+    CATATAN analisis sederhana untuk reviewer.
+    """
+    prefix = str((usulan or {}).get("kode_barang") or "").strip()
+    cocok = []
+    if prefix:
+        for a in assets or []:
+            if str(a.get("asset_code") or "").startswith(prefix):
+                cocok.append(a)
+    kondisi = {}
+    umur_list = []
+    nilai = 0.0
+    for a in cocok:
+        k = str(a.get("condition") or "Belum dicatat")
+        kondisi[k] = kondisi.get(k, 0) + 1
+        u = _umur_tahun(a.get("purchase_date"), kini_iso)
+        if u is not None:
+            umur_list.append(u)
+        nilai += parse_harga(a.get("purchase_price"))
+    umur_rata = round(sum(umur_list) / len(umur_list), 1) if umur_list else None
+
+    uraian = str((usulan or {}).get("uraian") or "").lower()
+    relevan = []
+    for s in standar or []:
+        kunci = str(s.get("peruntukan") or "").lower()
+        if kunci and (kunci in uraian or any(w in uraian for w in kunci.split()[:2] if len(w) > 3)):
+            relevan.append(s)
+
+    catatan = []
+    vol = 0.0
+    try:
+        vol = float((usulan or {}).get("volume") or 0)
+    except (TypeError, ValueError):
+        pass
+    rb = kondisi.get("Rusak Berat", 0)
+    if prefix and not cocok:
+        catatan.append("Belum ada aset eksisting sejenis — usulan pengadaan baru.")
+    if cocok:
+        catatan.append(f"{len(cocok)} unit eksisting sejenis"
+                       + (f", {rb} Rusak Berat" if rb else "")
+                       + (f", umur rata-rata {umur_rata} th" if umur_rata is not None else "") + ".")
+        if vol and rb and vol <= rb:
+            catatan.append("Volume usulan ≤ jumlah Rusak Berat — wajar sebagai penggantian.")
+        elif vol and vol > len(cocok):
+            catatan.append("Volume usulan melebihi populasi eksisting — pastikan dasar kebutuhan (SBSK).")
+    for s in relevan:
+        catatan.append(f"Standar SBSK terkait: {s.get('peruntukan')} = "
+                       f"{s.get('standar')} {s.get('satuan')} ({s.get('keterangan') or 'PMK 138/2024'}).")
+
+    return {
+        "jumlah_eksisting": len(cocok),
+        "kondisi": kondisi,
+        "umur_rata_tahun": umur_rata,
+        "nilai_eksisting": nilai,
+        "standar_relevan": relevan,
+        "catatan": catatan,
     }

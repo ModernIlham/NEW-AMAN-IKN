@@ -57,6 +57,8 @@ export default function WasdalPage({ user, onBack }) {
   // Dialog lampiran insidentil: {tiket, uploading}
   const [lampInsi, setLampInsi] = useState(null);
   const lampInsiInputRef = useRef(null);
+  // Portofolio BMN + indikator tertib + standar SBSK (PMK 138/2024)
+  const [porto, setPorto] = useState(null);
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
   const { confirm, confirmDialog } = useConfirm();
@@ -82,6 +84,12 @@ export default function WasdalPage({ user, onBack }) {
   }, []);
 
   useEffect(() => { muat(); muatPen(); muatInsi(); }, [muat, muatPen, muatInsi]);
+
+  useEffect(() => {
+    axios.get(`${API}/wasdal/portofolio`)
+      .then((r) => setPorto(r.data))
+      .catch(() => {});
+  }, []);
 
   const simpanInsi = async () => {
     if (!formInsi) return;
@@ -273,6 +281,20 @@ export default function WasdalPage({ user, onBack }) {
           </button>
           <button
             type="button"
+            aria-label="Unduh Laporan Tahunan Wasdal (Lampiran PMK 207)"
+            title="Laporan Tahunan Wasdal — formulir Lampiran PMK 207/2021"
+            onClick={() => downloadFileWithProgress(
+              `${API}/wasdal/laporan-tahunan-pdf`,
+              `Laporan_Tahunan_Wasdal_${new Date().getFullYear()}.pdf`,
+              { label: "Laporan Tahunan Wasdal (Lampiran PMK 207)" },
+            ).catch(() => {})}
+            className="h-9 px-2.5 rounded-lg border border-border text-foreground/80 flex items-center justify-center gap-1 hover:bg-muted flex-shrink-0 text-[10px] font-bold min-w-0 min-h-0"
+            data-testid="wasdal-laporan-tahunan"
+          >
+            <FileText className="w-4 h-4" />Tahunan
+          </button>
+          <button
+            type="button"
             onClick={muat}
             aria-label="Muat ulang"
             className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0"
@@ -321,6 +343,35 @@ export default function WasdalPage({ user, onBack }) {
               {data.rekap?.total || 0} temuan pemantauan — bahan pra-isi laporan wasdal;
               pelaporan resmi tetap melalui Modul Wasdal SIMAN v2.
             </p>
+
+            {/* ── Portofolio BMN + indikator tertib + SBSK ── */}
+            {porto && (
+              <div className="bg-card rounded-xl border border-border shadow-sm p-3 space-y-2" data-testid="wasdal-portofolio">
+                <p className="text-xs font-bold">Portofolio BMN &amp; Kesesuaian SBSK (PMK 138/2024)</p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {[["Aset dipantau", porto.jumlah_aset],
+                    ["PSP terbit", porto.psp_terbit],
+                    ["BMN idle diproses", porto.idle_proses],
+                    ["Sengketa", porto.sengketa]].map(([label, n]) => (
+                    <div key={label} className="rounded-lg border border-border p-2 text-center">
+                      <p className="text-base font-extrabold leading-none">{Number(n || 0).toLocaleString("id-ID")}</p>
+                      <p className="text-[10px] text-muted-foreground mt-1">{label}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {(porto.rows || []).map((r) => (
+                    <span key={r.golongan} className="px-2 py-0.5 rounded-full border border-border text-[10px]">
+                      <b>{r.golongan}</b> {r.uraian}: {r.jumlah_total} unit
+                    </span>
+                  ))}
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  {porto.sbsk?.length || 0} baris standar SBSK terdaftar (rawat di modul Perencanaan) —
+                  sanding kebutuhan vs standar dilakukan per usulan RKBMN.
+                </p>
+              </div>
+            )}
 
             {/* ── Rincian temuan per objek ── */}
             {Object.entries(data.label_objek || {}).map(([kunci, label]) => {
