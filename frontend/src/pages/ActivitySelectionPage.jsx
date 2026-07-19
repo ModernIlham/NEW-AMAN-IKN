@@ -190,7 +190,28 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
     } catch { /* silent */ }
   };
 
-  useEffect(() => { fetchActivities(); fetchSatkerList(); }, []);
+  // Referensi Master Pegawai & Unit Kerja — utk datalist + isi-otomatis
+  // (penanggung jawab & tim tidak lagi diketik bebas; audit W4 #1-3).
+  const [pegawaiRef, setPegawaiRef] = useState([]);
+  const [unitRef, setUnitRef] = useState([]);
+  const fetchReferensiTim = async () => {
+    try {
+      const r = await axios.get(`${API}/pegawai`);
+      setPegawaiRef((r.data?.items || []).map((p) => ({
+        nama: p.nama || "", nip: p.nip || "", jabatan: p.jabatan || "",
+        unit: p.unit_kerja || "" })));
+    } catch { /* silent */ }
+    try {
+      const r = await axios.get(`${API}/unit-kerja`);
+      const arr = Array.isArray(r.data) ? r.data : (r.data?.items || []);
+      setUnitRef([...new Set(arr.map((u) => u.nama_unit || u.nama || "").filter(Boolean))].sort());
+    } catch { /* silent */ }
+  };
+  // Isi-otomatis jabatan/NIP/unit saat nama persis cocok dengan master
+  const dariPegawai = (nama) =>
+    pegawaiRef.find((p) => p.nama === nama) || null;
+
+  useEffect(() => { fetchActivities(); fetchSatkerList(); fetchReferensiTim(); }, []);
 
   // Auto-fill satker: when kode_satker changes, lookup nama_satker + eselon1
   const handleKodeSatkerChange = useCallback((value) => {
@@ -874,11 +895,27 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
               <div className="space-y-1"><Label>Tanggal Selesai</Label><Input type="date" value={form.tanggal_selesai} onChange={e => setForm(p => ({...p, tanggal_selesai: e.target.value}))} /></div>
               <div className="space-y-1 sm:col-span-2">
                 <Label>Penanggung Jawab</Label>
+                {/* Terhubung Master Pegawai: pilih nama dari datalist →
+                    jabatan & NIP terisi otomatis (audit W4 #1). */}
                 <div className="grid grid-cols-3 gap-2">
-                  <Input value={form.penanggung_jawab} onChange={e => setForm(p => ({...p, penanggung_jawab: e.target.value}))} placeholder="Nama lengkap" className="text-xs" />
+                  <Input value={form.penanggung_jawab} list="kegiatan-pegawai-list"
+                    onChange={e => {
+                      const nama = e.target.value;
+                      const peg = dariPegawai(nama);
+                      setForm(p => ({...p, penanggung_jawab: nama,
+                        ...(peg ? { penanggung_jawab_jabatan: peg.jabatan || p.penanggung_jawab_jabatan,
+                                    penanggung_jawab_nip: peg.nip || p.penanggung_jawab_nip } : {})}));
+                    }} placeholder="Nama lengkap (dari Master Pegawai)" className="text-xs" />
                   <Input value={form.penanggung_jawab_jabatan} onChange={e => setForm(p => ({...p, penanggung_jawab_jabatan: e.target.value}))} placeholder="Jabatan" className="text-xs" />
                   <Input value={form.penanggung_jawab_nip} onChange={e => setForm(p => ({...p, penanggung_jawab_nip: e.target.value}))} placeholder="NIP/NIK" className="text-xs" />
                 </div>
+                {/* Datalist bersama: Master Pegawai & Master Unit Kerja */}
+                <datalist id="kegiatan-pegawai-list">
+                  {pegawaiRef.map((p) => <option key={`${p.nama}-${p.nip}`} value={p.nama}>{[p.nip, p.jabatan].filter(Boolean).join(" · ")}</option>)}
+                </datalist>
+                <datalist id="kegiatan-unit-list">
+                  {unitRef.map((u) => <option key={u} value={u} />)}
+                </datalist>
               </div>
               <div className="space-y-1 sm:col-span-2"><Label>Deskripsi</Label><textarea className="w-full border border-border rounded-md p-2 text-sm min-h-[80px] bg-card text-foreground" value={form.deskripsi} onChange={e => setForm(p => ({...p, deskripsi: e.target.value}))} placeholder="Deskripsi kegiatan inventarisasi..." /></div>
             </div>
@@ -902,13 +939,13 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                       <select value={m.is_ketua ? 'ketua' : 'anggota'} aria-label="Peran" onChange={e => { const arr = [...form.tim_inti]; arr[idx] = {...arr[idx], is_ketua: e.target.value === 'ketua'}; setForm(p => ({...p, tim_inti: arr})); }} className="h-8 w-[92px] flex-shrink-0 text-[11px] rounded border border-border bg-card text-foreground px-1">
                         <option value="anggota">Anggota</option><option value="ketua">Ketua</option>
                       </select>
-                      <Input value={m.nama} onChange={e => { const arr = [...form.tim_inti]; arr[idx] = {...arr[idx], nama: e.target.value}; setForm(p => ({...p, tim_inti: arr})); }} placeholder="Nama lengkap" className="h-8 text-xs flex-1 min-w-0" />
+                      <Input value={m.nama} list="kegiatan-pegawai-list" onChange={e => { const nama = e.target.value; const peg = dariPegawai(nama); const arr = [...form.tim_inti]; arr[idx] = {...arr[idx], nama, ...(peg ? { jabatan: peg.jabatan || arr[idx].jabatan, nip: peg.nip || arr[idx].nip, unit: peg.unit || arr[idx].unit } : {})}; setForm(p => ({...p, tim_inti: arr})); }} placeholder="Nama (dari Master Pegawai)" className="h-8 text-xs flex-1 min-w-0" />
                       <button type="button" aria-label="Hapus anggota" onClick={() => setForm(p => ({...p, tim_inti: p.tim_inti.filter((_, i) => i !== idx)}))} className="h-8 w-8 flex-shrink-0 flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"><X className="w-3.5 h-3.5" /></button>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
                       <Input value={m.jabatan} onChange={e => { const arr = [...form.tim_inti]; arr[idx] = {...arr[idx], jabatan: e.target.value}; setForm(p => ({...p, tim_inti: arr})); }} placeholder="Jabatan" className="h-8 text-xs" />
                       <Input value={m.nip} onChange={e => { const arr = [...form.tim_inti]; arr[idx] = {...arr[idx], nip: e.target.value}; setForm(p => ({...p, tim_inti: arr})); }} placeholder="NIP/NIK" className="h-8 text-xs" />
-                      <Input value={m.unit} onChange={e => { const arr = [...form.tim_inti]; arr[idx] = {...arr[idx], unit: e.target.value}; setForm(p => ({...p, tim_inti: arr})); }} placeholder="Unit" className="h-8 text-xs" />
+                      <Input value={m.unit} list="kegiatan-unit-list" onChange={e => { const arr = [...form.tim_inti]; arr[idx] = {...arr[idx], unit: e.target.value}; setForm(p => ({...p, tim_inti: arr})); }} placeholder="Unit" className="h-8 text-xs" />
                     </div>
                   </div>
                 ))}
@@ -927,13 +964,13 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                       <select value={m.is_ketua ? 'ketua' : 'anggota'} aria-label="Peran" onChange={e => { const arr = [...form.tim_pembantu]; arr[idx] = {...arr[idx], is_ketua: e.target.value === 'ketua'}; setForm(p => ({...p, tim_pembantu: arr})); }} className="h-8 w-[92px] flex-shrink-0 text-[11px] rounded border border-border bg-card text-foreground px-1">
                         <option value="anggota">Anggota</option><option value="ketua">Ketua</option>
                       </select>
-                      <Input value={m.nama} onChange={e => { const arr = [...form.tim_pembantu]; arr[idx] = {...arr[idx], nama: e.target.value}; setForm(p => ({...p, tim_pembantu: arr})); }} placeholder="Nama lengkap" className="h-8 text-xs flex-1 min-w-0" />
+                      <Input value={m.nama} list="kegiatan-pegawai-list" onChange={e => { const nama = e.target.value; const peg = dariPegawai(nama); const arr = [...form.tim_pembantu]; arr[idx] = {...arr[idx], nama, ...(peg ? { jabatan: peg.jabatan || arr[idx].jabatan, nip: peg.nip || arr[idx].nip, unit: peg.unit || arr[idx].unit } : {})}; setForm(p => ({...p, tim_pembantu: arr})); }} placeholder="Nama (dari Master Pegawai)" className="h-8 text-xs flex-1 min-w-0" />
                       <button type="button" aria-label="Hapus anggota" onClick={() => setForm(p => ({...p, tim_pembantu: p.tim_pembantu.filter((_, i) => i !== idx)}))} className="h-8 w-8 flex-shrink-0 flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"><X className="w-3.5 h-3.5" /></button>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
                       <Input value={m.jabatan} onChange={e => { const arr = [...form.tim_pembantu]; arr[idx] = {...arr[idx], jabatan: e.target.value}; setForm(p => ({...p, tim_pembantu: arr})); }} placeholder="Jabatan" className="h-8 text-xs" />
                       <Input value={m.nip} onChange={e => { const arr = [...form.tim_pembantu]; arr[idx] = {...arr[idx], nip: e.target.value}; setForm(p => ({...p, tim_pembantu: arr})); }} placeholder="NIP/NIK" className="h-8 text-xs" />
-                      <Input value={m.unit} onChange={e => { const arr = [...form.tim_pembantu]; arr[idx] = {...arr[idx], unit: e.target.value}; setForm(p => ({...p, tim_pembantu: arr})); }} placeholder="Unit" className="h-8 text-xs" />
+                      <Input value={m.unit} list="kegiatan-unit-list" onChange={e => { const arr = [...form.tim_pembantu]; arr[idx] = {...arr[idx], unit: e.target.value}; setForm(p => ({...p, tim_pembantu: arr})); }} placeholder="Unit" className="h-8 text-xs" />
                     </div>
                   </div>
                 ))}

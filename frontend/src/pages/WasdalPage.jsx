@@ -63,6 +63,8 @@ export default function WasdalPage({ user, onBack }) {
   const lampInsiInputRef = useRef(null);
   // Portofolio BMN + indikator tertib + standar SBSK (PMK 138/2024)
   const [porto, setPorto] = useState(null);
+  // Referensi Master Ruangan — saran lokasi pemantauan insidentil
+  const [ruanganList, setRuanganList] = useState([]);
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
   const { confirm, confirmDialog } = useConfirm();
@@ -92,6 +94,9 @@ export default function WasdalPage({ user, onBack }) {
   useEffect(() => {
     axios.get(`${API}/wasdal/portofolio`)
       .then((r) => setPorto(r.data))
+      .catch(() => {});
+    axios.get(`${API}/ruangan`)
+      .then((r) => setRuanganList(r.data?.items || []))
       .catch(() => {});
   }, []);
 
@@ -747,8 +752,16 @@ export default function WasdalPage({ user, onBack }) {
               </div>
               <div className="col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="insi-lokasi">Lokasi (opsional)</label>
-                <Input id="insi-lokasi" value={formInsi.data.lokasi}
+                <Input id="insi-lokasi" value={formInsi.data.lokasi} list="wasdal-ruangan-list"
+                  placeholder="ketik bebas atau pilih dari Master Ruangan"
                   onChange={(e) => setFormInsi((f) => ({ ...f, data: { ...f.data, lokasi: e.target.value } }))} />
+                <datalist id="wasdal-ruangan-list">
+                  {ruanganList.map((r) => (
+                    <option key={r.id || r.kode_ruangan} value={r.nama_ruangan}>
+                      {[r.kode_ruangan, r.gedung].filter(Boolean).join(" · ")}
+                    </option>
+                  ))}
+                </datalist>
               </div>
             </div>
           )}

@@ -67,6 +67,14 @@ export default function PerencanaanPage({ user, onBack }) {
       .catch(() => {});
   }, []);
 
+  // Referensi Master Satker — saran unit/KPB pengusul
+  const [satkerList, setSatkerList] = useState([]);
+  useEffect(() => {
+    axios.get(`${API}/satker`)
+      .then((r) => setSatkerList(r.data?.items || []))
+      .catch(() => {});
+  }, []);
+
   // ── SBSK (PMK 138/2024) + sanding usulan vs aset eksisting ──
   const [sbsk, setSbsk] = useState(null);
   const [formSbsk, setFormSbsk] = useState(null);
@@ -524,9 +532,15 @@ export default function PerencanaanPage({ user, onBack }) {
                 </div>
                 <div className="col-span-2">
                   <label className="text-xs font-medium text-foreground block mb-1" htmlFor="usl-unit">Unit/KPB pengusul</label>
-                  <Input id="usl-unit" placeholder="cth. Satker Balai X" value={formUsulan.data.unit_pengusul}
+                  <Input id="usl-unit" placeholder="ketik bebas atau pilih dari Master Satker" value={formUsulan.data.unit_pengusul}
+                    list="usulan-satker-list"
                     onChange={(e) => setFormUsulan((f) => ({ ...f, data: { ...f.data, unit_pengusul: e.target.value } }))}
                     data-testid="usulan-unit" />
+                  <datalist id="usulan-satker-list">
+                    {satkerList.map((s) => (
+                      <option key={s.kode_satker} value={s.nama_satker || s.kode_satker}>{s.kode_satker}</option>
+                    ))}
+                  </datalist>
                 </div>
                 <div className="col-span-2">
                   <label className="text-xs font-medium text-foreground block mb-1" htmlFor="usl-uraian">Uraian usulan</label>
