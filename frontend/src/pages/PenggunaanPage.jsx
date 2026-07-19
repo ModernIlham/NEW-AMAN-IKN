@@ -126,6 +126,14 @@ export default function PenggunaanPage({ user, onBack }) {
       .catch(() => toast.error("Gagal memuat register PSP"));
   }, []);
 
+  // Referensi Master Satker — saran pihak asal/tujuan proses penggunaan (W7)
+  const [satkerList, setSatkerList] = useState([]);
+  useEffect(() => {
+    axios.get(`${API}/satker`)
+      .then((r) => setSatkerList(r.data?.items || []))
+      .catch(() => {});
+  }, []);
+
   // PSP resmi menurut data impor SIMAN V2 (W5) — kandidat pencatatan 1-klik
   const [pspSiman, setPspSiman] = useState(null);
   const loadPspSiman = useCallback(() => {
@@ -1036,15 +1044,22 @@ export default function PenggunaanPage({ user, onBack }) {
                 </div>
                 <div>
                   <label className="text-xs font-medium text-foreground block mb-1" htmlFor="prs-asal">Pihak asal</label>
-                  <Input id="prs-asal" value={formProses.data.pihak_asal}
+                  <Input id="prs-asal" value={formProses.data.pihak_asal} list="proses-satker-list"
+                    placeholder="ketik bebas atau pilih dari Master Satker"
                     onChange={(e) => setFormProses((f) => ({ ...f, data: { ...f.data, pihak_asal: e.target.value } }))}
                     data-testid="proses-asal" />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-foreground block mb-1" htmlFor="prs-tujuan">Pihak tujuan</label>
-                  <Input id="prs-tujuan" value={formProses.data.pihak_tujuan}
+                  <Input id="prs-tujuan" value={formProses.data.pihak_tujuan} list="proses-satker-list"
+                    placeholder="ketik bebas atau pilih dari Master Satker"
                     onChange={(e) => setFormProses((f) => ({ ...f, data: { ...f.data, pihak_tujuan: e.target.value } }))}
                     data-testid="proses-tujuan" />
+                  <datalist id="proses-satker-list">
+                    {satkerList.map((s) => (
+                      <option key={s.kode_satker} value={s.nama_satker || s.kode_satker}>{s.kode_satker}</option>
+                    ))}
+                  </datalist>
                 </div>
                 <div>
                   <label className="text-xs font-medium text-foreground block mb-1" htmlFor="prs-nomor">No. permohonan (ops.)</label>
