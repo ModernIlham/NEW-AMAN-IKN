@@ -168,6 +168,19 @@ def validate_pegawai(doc):
     tgl = str(d.get("tanggal_lahir") or "").strip()
     if tgl and not _TGL_RE.match(tgl):
         errors.append("Tanggal lahir harus format YYYY-MM-DD")
+    # Penghubung satker & kontrak Non-ASN (W3)
+    ksl = str(d.get("kode_satker_lengkap") or "").strip()
+    if ksl and (not ksl.isdigit() or len(ksl) != 12):
+        errors.append("Kode satker lengkap harus 12 digit angka")
+    ks = str(d.get("kode_satker") or "").strip()
+    if ks and (not ks.isdigit() or len(ks) != 6):
+        errors.append("Kode satker harus 6 digit angka")
+    jk_na = str(d.get("jenis_kontrak_non_asn") or "").strip().lower()
+    if jk_na and jk_na not in JENIS_KONTRAK_NON_ASN:
+        errors.append("Jenis kontrak Non-ASN harus internal/outsourcing")
+    if (jk_na == "outsourcing"
+            and not str(d.get("perusahaan_penyedia") or "").strip()):
+        errors.append("Nama perusahaan penyedia wajib diisi untuk outsourcing")
     return errors
 
 
@@ -491,3 +504,179 @@ def baris_impor_ke_pegawai(raw):
     if doc["nip"] and (not doc["nip"].isdigit() or not (8 <= len(doc["nip"]) <= 20)):
         peringatan.append(f"NIP '{doc['nip']}' bukan 8–20 digit — disimpan apa adanya")
     return doc, peringatan
+
+
+# ---------------------------------------------------------------------------
+# Identitas pintar & masa kerja (riset 2026-07): NIP PNS/NI PPPK 18 digit
+# (Perka BKN 22/2007; digit 13-14 PPPK = frekuensi mulai 21), NRP POLRI
+# 8 digit (YYMM lahir + urut), NRP TNI tidak seragam (5-7 digit — jangan
+# validasi ketat), NIK 16 digit (digit 7-12 tanggal lahir; perempuan +40).
+# BUP: UU ASN 20/2023 Ps.55 (JPT 60; administrator/pengawas/pelaksana 58;
+# fungsional ahli utama 65, ahli madya 60, lainnya 58 — PP 11/2017 jo.
+# 17/2020), UU TNI 3/2025 (tamtama/bintara 55, perwira 58, pati 60-63),
+# UU Polri 5/2026 (tamtama/bintara 59, perwira 60). Fungsi murni.
+# ---------------------------------------------------------------------------
+
+JENIS_KONTRAK_NON_ASN = {
+    "internal": "Kontrak internal instansi (PPNPN/SPK dengan PPK)",
+    "outsourcing": "Outsourcing (melalui perusahaan penyedia)",
+}
+
+
+def _tgl_valid(y, m, d) -> bool:
+    from datetime import date as _date
+    try:
+        _date(int(y), int(m), int(d))
+        return True
+    except ValueError:
+        return False
+
+
+def deteksi_identitas(nomor) -> dict:
+    """Kenali jenis nomor identitas dari formatnya → {jenis, label, keterangan}.
+
+    Deteksi untuk SARAN/label (bukan validasi keras — NRP TNI tidak seragam):
+    18 digit ber-tanggal valid → NIP PNS (digit 13-14 = 01-12) / NI PPPK
+    (13-14 ≥ 21); 16 digit → NIK (Non-ASN); 8 digit ber-bulan valid → NRP
+    POLRI; 5-7 digit → kemungkinan NRP TNI; selain itu → tidak dikenal.
+    """
+    n = str(nomor or "").strip()
+    if not n.isdigit():
+        return {"jenis": "", "label": "No. Identitas", "keterangan": ""}
+    if len(n) == 18 and _tgl_valid(n[0:4], n[4:6], n[6:8]):
+        blok = n[12:14]
+        if "01" <= blok <= "12":
+            return {"jenis": "nip_pns", "label": "NIP",
+                    "keterangan": "NIP PNS (18 digit — lahir "
+                                  f"{n[6:8]}-{n[4:6]}-{n[0:4]}, TMT CPNS {n[10:12]}/{n[8:12]})"}
+        if blok >= "21":
+            return {"jenis": "ni_pppk", "label": "NI PPPK",
+                    "keterangan": f"Nomor Induk PPPK (frekuensi kontrak ke-{int(blok) - 20})"}
+        return {"jenis": "nip", "label": "NIP", "keterangan": "NIP 18 digit"}
+    if len(n) == 16:
+        return {"jenis": "nik", "label": "NIK",
+                "keterangan": "NIK (16 digit — pegawai Non-ASN)"}
+    if len(n) == 8 and "01" <= n[2:4] <= "12":
+        return {"jenis": "nrp_polri", "label": "NRP",
+                "keterangan": "NRP POLRI (8 digit — tahun+bulan lahir + no. register)"}
+    if 5 <= len(n) <= 7:
+        return {"jenis": "nrp_tni", "label": "NRP",
+                "keterangan": "Kemungkinan NRP TNI (format tidak seragam — konfirmasi manual)"}
+    return {"jenis": "", "label": "No. Identitas", "keterangan": ""}
+
+
+def label_nomor_identitas(nomor, status_kepegawaian="") -> str:
+    """Label pendek utk laporan: 'NIP'/'NI PPPK'/'NRP'/'NIK'/'' (kosong).
+
+    Non-ASN TIDAK menampilkan NIK di laporan (privasi — permintaan pemilik);
+    kembalikan "" agar pemanggil melewatkan barisnya. Status kepegawaian
+    (bila terisi) menimpa deteksi format.
+    """
+    st = str(status_kepegawaian or "").strip().lower()
+    if st == "non_asn":
+        return ""
+    if st in ("tni", "polri"):
+        return "NRP"
+    det = deteksi_identitas(nomor)
+    if det["jenis"] == "nik":
+        return ""  # NIK = identitas penduduk, bukan utk dicetak di laporan
+    return det["label"] if det["jenis"] else ("NIP" if str(nomor or "").strip() else "")
+
+
+def baris_identitas_laporan(nomor, status_kepegawaian="") -> str:
+    """Baris 'NIP. xxx' utk blok ttd laporan — label mengikuti jenis nomor;
+    kosong bila tidak layak dicetak (Non-ASN/NIK/kosong)."""
+    n = str(nomor or "").strip()
+    if not n:
+        return ""
+    label = label_nomor_identitas(n, status_kepegawaian)
+    return f"{label}. {n}" if label else ""
+
+
+# BUP (batas usia pensiun) dalam TAHUN per kombinasi status × jabatan.
+def _bup_tahun(pegawai) -> int:
+    p = pegawai or {}
+    st = str(p.get("status_kepegawaian") or "").strip().lower()
+    kat = str(p.get("kategori_pegawai") or "").strip().lower()
+    jab = str(p.get("jabatan") or "").lower()
+    pangkat = str(p.get("pangkat_golongan") or "").lower()
+    if st in ("pns", "cpns", "pppk"):
+        if kat == "jpt":
+            return 60
+        if kat == "fungsional":
+            if "utama" in jab or "utama" in pangkat:
+                return 65
+            if "madya" in jab or "madya" in pangkat:
+                return 60
+            return 58
+        return 58  # administrator/pengawas/pelaksana
+    if st == "tni":
+        perwira = any(x in pangkat for x in (
+            "let", "kapten", "mayor", "kolonel", "jenderal", "laksamana",
+            "marsekal", "brigadir jenderal", "laksma", "marsma"))
+        return 58 if perwira else 55  # pati 60-63 tidak dibedakan (konservatif)
+    if st == "polri":
+        perwira = any(x in pangkat for x in (
+            "ipda", "iptu", "akp", "kompol", "akbp", "kombes", "brigjen",
+            "irjen", "komjen", "jenderal"))
+        return 60 if perwira else 59
+    return 0  # Non-ASN/tak dikenal: tidak ada BUP (pakai kontrak)
+
+
+def info_masa_pegawai(pegawai, hari_ini_iso) -> dict:
+    """Info masa utk baris daftar: pensiun (ASN/TNI/POLRI), akhir jabatan,
+    kontrak (Non-ASN) → {label_identitas, bup, tanggal_pensiun,
+    sisa_hari_pensiun, akhir_jabatan, sisa_hari_jabatan, kontrak{...}}.
+
+    Semua nilai None/"" bila datanya tidak lengkap — tidak menebak."""
+    from datetime import date
+
+    p = pegawai or {}
+    det = deteksi_identitas(p.get("nip"))
+    out = {"label_identitas": det["label"], "jenis_identitas": det["jenis"],
+           "bup": None, "tanggal_pensiun": "", "sisa_hari_pensiun": None,
+           "akhir_jabatan": "", "sisa_hari_jabatan": None}
+    hari = str(hari_ini_iso or "").strip()[:10]
+    try:
+        d_hari = date.fromisoformat(hari)
+    except ValueError:
+        d_hari = None
+    # Pensiun: tanggal_lahir + BUP (akhir bulan ulang tahun disederhanakan
+    # ke tanggal ulang tahun — perkiraan, angka final SK BKN/instansi).
+    bup = _bup_tahun(p)
+    lahir = str(p.get("tanggal_lahir") or "").strip()[:10]
+    if bup and _TGL_RE.match(lahir):
+        try:
+            d_lahir = date.fromisoformat(lahir)
+            d_pensiun = d_lahir.replace(year=d_lahir.year + bup)
+            out["bup"] = bup
+            out["tanggal_pensiun"] = d_pensiun.isoformat()
+            if d_hari:
+                out["sisa_hari_pensiun"] = (d_pensiun - d_hari).days
+        except ValueError:
+            pass
+    # Akhir periode jabatan (bila dicatat)
+    akhir_jab = str(p.get("tanggal_akhir_jabatan") or "").strip()[:10]
+    if _TGL_RE.match(akhir_jab):
+        out["akhir_jabatan"] = akhir_jab
+        if d_hari:
+            try:
+                out["sisa_hari_jabatan"] = (
+                    date.fromisoformat(akhir_jab) - d_hari).days
+            except ValueError:
+                pass
+    out["kontrak"] = status_kontrak(p, hari_ini_iso)
+    return out
+
+
+def baris_identitas_ttd(nomor, placeholder="") -> list:
+    """Baris identitas utk blok tanda tangan PDF (list utk 'after').
+
+    Label mengikuti jenis nomor (NIP/NI PPPK/NRP); NIK Non-ASN TIDAK
+    dicetak (privasi — list kosong); nomor kosong → placeholder titik-titik
+    bila diberikan (konvensi garis ttd)."""
+    n = str(nomor or "").strip()
+    if not n:
+        return [placeholder] if placeholder else []
+    b = baris_identitas_laporan(n)
+    return [b] if b else []

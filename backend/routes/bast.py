@@ -476,11 +476,25 @@ async def bast_pdf(bast_id: str,
 
     def _kolom_pihak(peran, sebutan, ph, label_nip):
         """Identitas satu pihak: label SEJAJAR (tabel label:nilai) + baris
-        'selanjutnya disebut ...' — mengikuti anatomi BAST resmi."""
+        'selanjutnya disebut ...' — mengikuti anatomi BAST resmi.
+
+        Label nomor identitas PINTAR: NRP terdeteksi → 'NRP'; NIK Non-ASN
+        TIDAK dicetak (baris dilewati — privasi, permintaan pemilik)."""
+        from pegawai_utils import deteksi_identitas, label_nomor_identitas
+        nomor = str(ph.get("nip") or "").strip()
+        det = deteksi_identitas(nomor)
+        if det["jenis"] == "nik":
+            baris_nomor = None  # NIK tidak dicetak di BAST
+        else:
+            lbl_pintar = label_nomor_identitas(nomor) if nomor else ""
+            baris_nomor = (lbl_pintar or label_nip, ph.get("nip"))
         rows = []
-        for lbl, val in (("Nama", ph.get("nama")), (label_nip, ph.get("nip")),
-                         ("Jabatan", ph.get("jabatan")),
-                         ("Alamat", ph.get("alamat"))):
+        pasangan = [("Nama", ph.get("nama"))]
+        if baris_nomor:
+            pasangan.append(baris_nomor)
+        pasangan += [("Jabatan", ph.get("jabatan")),
+                     ("Alamat", ph.get("alamat"))]
+        for lbl, val in pasangan:
             rows.append([Paragraph(lbl, ket),
                          Paragraph(f": <b>{_esc(str(val or '-'))}</b>", ket)])
         dalam = Table(rows, colWidths=[46, doc.width * 0.5 - 46 - 14])
@@ -690,15 +704,17 @@ async def bast_pdf(bast_id: str,
     peran_kesatu = ('Yang Menyerahkan,' if jenis != 'pengembalian' else 'Yang Menerima,')
     if an_kpb:
         peran_kesatu = peran_kesatu.rstrip(',') + ' a.n. Kuasa Pengguna Barang,'
+    from pegawai_utils import baris_identitas_ttd
     el.extend(_signature_block([
         {'header': 'PIHAK KEDUA,',
          'role': 'Yang Menerima,' if jenis != 'pengembalian' else 'Yang Menyerahkan,',
          'nama': p2.get("nama") or "................................",
-         'after': [f"NIP/NIK. {p2.get('nip') or '-'}"]},
+         # Label pintar (NIP/NRP); NIK tidak dicetak; kosong → garis titik
+         'after': baris_identitas_ttd(p2.get("nip"), "NIP/NIK. -")},
         {'pre': [_tempat_tanggal_laporan(settings, b.get("tanggal"))],
          'header': 'PIHAK KESATU,', 'role': peran_kesatu,
          'nama': p1.get("nama") or "................................",
-         'after': [f"NIP. {p1.get('nip') or '-'}"]},
+         'after': baris_identitas_ttd(p1.get("nip"), "NIP. -")},
     ] + signers_mengetahui, doc.width))
     el.extend(_blok_tembusan(
         {"tembusan_laporan": b.get("tembusan") or settings.get("tembusan_laporan", "")}))
