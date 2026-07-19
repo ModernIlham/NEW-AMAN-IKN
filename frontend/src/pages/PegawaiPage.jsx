@@ -396,6 +396,14 @@ export default function PegawaiPage({ user, onBack }) {
                   data-testid="pegawai-template">
                   <Download className="w-4 h-4" /><span className="hidden sm:inline">Template</span>
                 </Button>
+                <Button variant="outline" className="h-10 gap-1.5"
+                  onClick={() => downloadFileWithProgress(`${API}/pegawai/export-xlsx`,
+                    "master_pegawai.xlsx", { label: "Ekspor Master Pegawai (Excel)" }).catch(() => {})}
+                  title="Ekspor Excel siap-edit (dropdown + bisa diimpor kembali)"
+                  aria-label="Ekspor Excel siap-edit"
+                  data-testid="pegawai-export-xlsx">
+                  <Download className="w-4 h-4" /><span className="hidden sm:inline">Ekspor Excel</span>
+                </Button>
                 <Button variant="outline" className="h-10 gap-1.5" disabled={mengimpor}
                   title="Impor Excel/CSV" aria-label="Impor Excel/CSV"
                   onClick={pilihBerkas} data-testid="pegawai-impor">

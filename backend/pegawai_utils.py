@@ -350,15 +350,28 @@ KOLOM_IMPOR = {
     "tgl selesai kontrak": "tgl_selesai_kontrak",
     "status": "status",
     "keterangan": "keterangan",
+    "tmt jabatan": "tmt_jabatan",
+    "tgl akhir jabatan": "tanggal_akhir_jabatan",
+    "npwp": "npwp",
+    "pendidikan terakhir": "pendidikan_terakhir",
+    "alamat": "alamat",
+    "jenis kontrak non-asn": "jenis_kontrak_non_asn",
+    "jenis kontrak non asn": "jenis_kontrak_non_asn",
+    "perusahaan penyedia": "perusahaan_penyedia",
+    "kode satker lengkap": "kode_satker_lengkap",
+    "unit kerja": "unit_kerja",
 }
 
 # Urutan kolom template ekspor/impor (header ramah).
 HEADER_IMPOR = [
     "NIP/NIK/NRP", "Nama Lengkap", "Jenis Kelamin", "Tempat Lahir", "Tgl Lahir",
     "Status Kepegawaian", "Pangkat/Golongan", "Jabatan", "Kategori Pegawai",
+    "TMT Jabatan", "Tgl Akhir Jabatan",
     "Eselon 1", "Eselon 2", "Eselon 3", "Eselon 4", "Eselon 5",
-    "No Telepon", "Email", "Nama Bank", "No Rekening",
+    "No Telepon", "Email", "NPWP", "Pendidikan Terakhir", "Alamat",
+    "Nama Bank", "No Rekening",
     "Nomor Kontrak", "Tgl Mulai Kontrak", "Tgl Selesai Kontrak",
+    "Jenis Kontrak Non-ASN", "Perusahaan Penyedia", "Kode Satker Lengkap",
     "Status", "Keterangan",
 ]
 
@@ -415,6 +428,9 @@ def normalisasi_status_pegawai(nilai):
     s = str(nilai or "").strip().lower().replace("_", " ")
     if not s:
         return "aktif"
+    # "Nonaktif" mengandung substring "aktif" — periksa lebih dulu.
+    if "nonaktif" in s or "non aktif" in s or "non-aktif" in s:
+        return "nonaktif"
     if "aktif" in s:
         return "aktif"
     # "MUTASI KELUAR" → mutasi (dicek sebelum 'keluar' karena memuatnya).
@@ -459,6 +475,42 @@ def _norm_tgl(nilai):
     return ""
 
 
+def normalisasi_kategori_pegawai(nilai):
+    """Petakan kategori jabatan (kode ATAU label) → kode KATEGORI_PEGAWAI.
+    Tak dikenal → apa adanya (lower) agar tidak menghilangkan data. MURNI."""
+    s = str(nilai or "").strip().lower()
+    if not s:
+        return ""
+    if s in KATEGORI_PEGAWAI:
+        return s
+    for kode, label in KATEGORI_PEGAWAI.items():
+        if label.lower() == s or kode in s:
+            return kode
+    if "pimpinan tinggi" in s or "jpt" in s:
+        return "jpt"
+    if "administrator" in s:
+        return "administrator"
+    if "pengawas" in s:
+        return "pengawas"
+    if "fungsional" in s:
+        return "fungsional"
+    if "pelaksana" in s:
+        return "pelaksana"
+    return s
+
+
+def normalisasi_jenis_kontrak(nilai):
+    """Petakan jenis kontrak Non-ASN bebas → 'internal'/'outsourcing'/''."""
+    s = str(nilai or "").strip().lower()
+    if not s:
+        return ""
+    if "outsourc" in s or "penyedia" in s or "pihak ketiga" in s:
+        return "outsourcing"
+    if "internal" in s or "ppnpn" in s or "spk" in s or "instansi" in s:
+        return "internal"
+    return ""
+
+
 def baris_impor_ke_pegawai(raw):
     """Ubah satu baris impor (dict {header: nilai}) → dokumen pegawai bersih +
     daftar peringatan lunak. MURNI (teruji unit).
@@ -472,7 +524,10 @@ def baris_impor_ke_pegawai(raw):
         "eselon1", "eselon2", "eselon3", "eselon4", "eselon5",
         "no_hp", "email", "nama_bank", "no_rekening", "nomor_kontrak",
         "tgl_mulai_kontrak", "tgl_selesai_kontrak", "keterangan",
-        "sub_kategori_non_asn", "unit_kerja")}
+        "sub_kategori_non_asn", "unit_kerja",
+        "tmt_jabatan", "tanggal_akhir_jabatan", "npwp",
+        "pendidikan_terakhir", "alamat", "jenis_kontrak_non_asn",
+        "perusahaan_penyedia", "kode_satker_lengkap")}
     doc["status"] = "aktif"
     for header, nilai in (raw or {}).items():
         field = KOLOM_IMPOR.get(str(header or "").strip().lower())
@@ -485,7 +540,9 @@ def baris_impor_ke_pegawai(raw):
             doc["nip"] = bersihkan_nip(nilai)
         elif field == "jenis_kelamin":
             doc["jenis_kelamin"] = _norm_jk(val)
-        elif field in ("tanggal_lahir", "tgl_mulai_kontrak", "tgl_selesai_kontrak"):
+        elif field in ("tanggal_lahir", "tgl_mulai_kontrak",
+                       "tgl_selesai_kontrak", "tmt_jabatan",
+                       "tanggal_akhir_jabatan"):
             doc[field] = _norm_tgl(val)
         elif field == "status_kepegawaian":
             kode, sub = normalisasi_status_kepegawaian(val)
@@ -494,6 +551,12 @@ def baris_impor_ke_pegawai(raw):
                 doc["sub_kategori_non_asn"] = sub
         elif field == "status":
             doc["status"] = normalisasi_status_pegawai(val)
+        elif field == "kategori_pegawai":
+            doc["kategori_pegawai"] = normalisasi_kategori_pegawai(val)
+        elif field == "jenis_kontrak_non_asn":
+            doc["jenis_kontrak_non_asn"] = normalisasi_jenis_kontrak(val)
+        elif field == "kode_satker_lengkap":
+            doc["kode_satker_lengkap"] = re.sub(r"\D", "", val)
         else:
             doc[field] = val
     # Unit kerja efektif dari Eselon terdalam bila unit_kerja kosong.
@@ -680,3 +743,73 @@ def baris_identitas_ttd(nomor, placeholder="") -> list:
         return [placeholder] if placeholder else []
     b = baris_identitas_laporan(n)
     return [b] if b else []
+
+
+# ---------------------------------------------------------------------------
+# Ekspor Excel Master Pegawai (W7) — header = HEADER_IMPOR sehingga hasil
+# ekspor dapat DIIMPOR KEMBALI (round-trip) setelah diedit. Semua label
+# ekspor dipilih agar normalisasi impor mengembalikannya ke kode semula.
+# ---------------------------------------------------------------------------
+
+def label_ekspor_status_kepegawaian(doc) -> str:
+    """Label status kepegawaian untuk sel ekspor — round-trip aman.
+
+    ASN/TNI/POLRI → label resmi; non_asn ber-sub-kategori → label sub
+    (mis. 'Satpam') agar sub-kategorinya ikut pulih saat impor ulang."""
+    d = doc or {}
+    kode = str(d.get("status_kepegawaian") or "").strip().lower()
+    if kode == "non_asn":
+        sub = str(d.get("sub_kategori_non_asn") or "").strip().lower()
+        if sub in SUB_KATEGORI_NON_ASN:
+            return SUB_KATEGORI_NON_ASN[sub]
+        return STATUS_KEPEGAWAIAN["non_asn"]
+    return STATUS_KEPEGAWAIAN.get(kode, str(d.get("status_kepegawaian") or ""))
+
+
+def baris_ekspor_pegawai(doc) -> list:
+    """Satu baris ekspor selaras urutan HEADER_IMPOR. MURNI (teruji round-trip
+    lewat baris_impor_ke_pegawai)."""
+    d = doc or {}
+
+    def g(k):
+        return str(d.get(k) or "").strip()
+
+    return [
+        g("nip"), g("nama"), g("jenis_kelamin"), g("tempat_lahir"),
+        g("tanggal_lahir")[:10],
+        label_ekspor_status_kepegawaian(d),
+        g("pangkat_golongan"), g("jabatan"),
+        KATEGORI_PEGAWAI.get(g("kategori_pegawai").lower(),
+                             g("kategori_pegawai")),
+        g("tmt_jabatan")[:10], g("tanggal_akhir_jabatan")[:10],
+        g("eselon1"), g("eselon2"), g("eselon3"), g("eselon4"), g("eselon5"),
+        g("no_hp"), g("email"), g("npwp"), g("pendidikan_terakhir"),
+        g("alamat"), g("nama_bank"), g("no_rekening"),
+        g("nomor_kontrak"), g("tgl_mulai_kontrak")[:10],
+        g("tgl_selesai_kontrak")[:10],
+        JENIS_KONTRAK_NON_ASN.get(g("jenis_kontrak_non_asn").lower(), ""),
+        g("perusahaan_penyedia"), g("kode_satker_lengkap"),
+        STATUS_PEGAWAI.get(g("status").lower(), g("status") or "Aktif"),
+        g("keterangan"),
+    ]
+
+
+# Opsi dropdown per header (untuk Data Validation di file ekspor) — semua
+# nilai di sini harus dinormalkan balik dengan benar oleh impor.
+OPSI_DROPDOWN_EKSPOR = {
+    "Jenis Kelamin": ["L", "P"],
+    "Status Kepegawaian": (
+        [STATUS_KEPEGAWAIAN[k] for k in ("pns", "cpns", "pppk", "tni", "polri")]
+        + [STATUS_KEPEGAWAIAN["non_asn"]]
+        + list(SUB_KATEGORI_NON_ASN.values())),
+    "Kategori Pegawai": list(KATEGORI_PEGAWAI.values()),
+    "Jenis Kontrak Non-ASN": ["Internal instansi (PPNPN/SPK)",
+                              "Outsourcing (melalui perusahaan penyedia)"],
+    "Nama Bank": ["BRI", "BNI", "Mandiri", "BTN", "BSI", "BCA",
+                  "CIMB Niaga", "Danamon"],
+    "Status": list(STATUS_PEGAWAI.values()),
+}
+
+# Kolom yang wajib berformat TEKS di Excel (menghindari artefak float NIP).
+KOLOM_TEKS_EKSPOR = {"NIP/NIK/NRP", "No Telepon", "NPWP", "No Rekening",
+                     "Nomor Kontrak", "Kode Satker Lengkap"}

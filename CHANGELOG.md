@@ -48,6 +48,30 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#440] Ekspor Master Pegawai ke Excel siap-edit (dropdown + round-trip impor) — 2026-07-19
+
+Tombol **Ekspor Excel** baru di Master Pegawai menghasilkan .xlsx yang
+mudah diekstrak, diedit, lalu diimpor kembali:
+
+- **Tampilan rapi**: header biru beku (freeze A2 + kolom NIP & Nama),
+  auto-filter, zebra baris, lebar kolom proporsional, border halus.
+- **Dropdown di dalam file** (data validation dari sheet Referensi): Jenis
+  Kelamin, Status Kepegawaian (termasuk sub-kategori Non-ASN), Kategori
+  Pegawai, Jenis Kontrak Non-ASN, Nama Bank, Status — berlaku juga untuk
+  500 baris kosong tambahan; nilai di luar daftar tetap boleh (peringatan
+  lunak). Sheet **Referensi** menampilkan daftar nilai sah.
+- **Round-trip impor**: header = header impor; setiap label ekspor dipilih
+  agar normalisasi impor mengembalikannya ke kode semula (teruji unit,
+  termasuk sub-kategori Non-ASN "Satpam" dkk. dan jenis kontrak
+  outsourcing + perusahaan penyedia). Kolom NIP/NPWP/rekening/kode satker
+  dipaksa format teks — tidak rusak jadi float oleh Excel.
+- **Kolom impor bertambah** (kompatibel mundur): TMT Jabatan, Tgl Akhir
+  Jabatan, NPWP, Pendidikan Terakhir, Alamat, Jenis Kontrak Non-ASN,
+  Perusahaan Penyedia, Kode Satker Lengkap, Unit Kerja — plus normalisasi
+  baru kategori pegawai (label↔kode) & jenis kontrak.
+- **Perbaikan bug**: status "Nonaktif" dulu salah ternormalkan jadi
+  "aktif" saat impor (substring); kini dikenali benar.
+
 ## [#439] Header Perencanaan rapi + tombol tanggalan ringkas — 2026-07-19
 
 Header halaman Perencanaan Kebutuhan tidak lagi penuh tombol:
