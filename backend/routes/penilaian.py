@@ -64,7 +64,13 @@ async def list_masa_manfaat(_user: dict = Depends(require_user)):
             items.append({"kode": kode, "uraian": "", "tahun": tahun,
                           "sumber": "bawaan riset (validasi lampiran KMK)"})
     for m in sorted(entri.values(), key=lambda x: x["kode"]):
-        items.append({**m, "sumber": "input satker"})
+        # Bedakan asal entri: dari impor SIMAN (otomatis "SIMAN menang") vs
+        # input admin satker — agar transparan di UI.
+        if m.get("sumber") == "siman":
+            sumber = f"dari SIMAN · {int(m.get('observasi') or 0)} observasi"
+        else:
+            sumber = "input satker"
+        items.append({**m, "sumber": sumber})
     items.sort(key=lambda x: x["kode"])
     return {"items": items, "jumlah": len(items)}
 
@@ -81,7 +87,9 @@ async def upsert_masa_manfaat(payload: MasaManfaatIn,
     await db.masa_manfaat.update_one(
         {"kode": kode},
         {"$set": {"kode": kode, "uraian": str(payload.uraian or "").strip(),
-                  "tahun": int(payload.tahun), "updated_at": now},
+                  "tahun": int(payload.tahun), "sumber": "input satker",
+                  "updated_at": now},
+         "$unset": {"observasi": "", "updated_by": ""},
          "$setOnInsert": {"created_at": now}},
         upsert=True,
     )

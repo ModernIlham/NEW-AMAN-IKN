@@ -4,7 +4,8 @@ import pytest
 from penilaian_utils import (
     GOLONGAN_TANPA_SUSUT, MASA_MANFAAT_DEFAULT, akhir_semester,
     build_asset_revaluasi_projection, dasar_penyusutan, hitung_penyusutan,
-    rekap_penyusutan, semester_index, status_susut, validate_masa_manfaat,
+    masa_manfaat_dari_siman, rekap_penyusutan, semester_index, status_susut,
+    validate_masa_manfaat,
 )
 
 
@@ -260,6 +261,41 @@ def test_validate_masa_manfaat():
     assert any("Golongan" in e for e in validate_masa_manfaat("20101", 7))  # tanah
     assert any("1-60" in e for e in validate_masa_manfaat("30201", 0))
     assert any("1-60" in e for e in validate_masa_manfaat("30201", "x"))
+
+
+def test_masa_manfaat_dari_siman_modus_dan_filter():
+    baris = [
+        # kelompok 30501 → dua kali "5", sekali "7" → modus 5
+        {"kode_barang": "3050101001", "umur_aset": "5"},
+        {"kode_barang": "3050102002", "umur_aset": "5"},
+        {"kode_barang": "3050103003", "umur_aset": "7"},
+        # kelompok 30201 → "10 tahun" (ambil angka) & "10"
+        {"kode_barang": "3020101001", "umur_aset": "10 tahun"},
+        {"kode_barang": "3020102002", "umur_aset": "10"},
+        # golongan 2 (tanah, tak disusutkan) → diabaikan
+        {"kode_barang": "2010101001", "umur_aset": "30"},
+        # nilai di luar rentang wajar → diabaikan
+        {"kode_barang": "3050104004", "umur_aset": "999"},
+        # umur kosong → diabaikan
+        {"kode_barang": "3050105005", "umur_aset": ""},
+        # kode < 5 digit → diabaikan
+        {"kode_barang": "305", "umur_aset": "5"},
+    ]
+    hasil = masa_manfaat_dari_siman(baris)
+    assert hasil["30501"] == {"tahun": 5, "observasi": 3}
+    assert hasil["30201"] == {"tahun": 10, "observasi": 2}
+    assert "20101" not in hasil          # golongan tak disusutkan
+    assert masa_manfaat_dari_siman([]) == {}
+    assert masa_manfaat_dari_siman(None) == {}
+
+
+def test_masa_manfaat_dari_siman_seri_ambil_terkecil():
+    # 5 dan 7 sama-sama 1x (seri) → ambil terkecil (konservatif)
+    baris = [
+        {"kode_barang": "3100101001", "umur_aset": "7"},
+        {"kode_barang": "3100102002", "umur_aset": "5"},
+    ]
+    assert masa_manfaat_dari_siman(baris)["31001"]["tahun"] == 5
 
 
 class TestKoreksiNilai:

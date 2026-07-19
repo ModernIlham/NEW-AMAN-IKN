@@ -48,6 +48,26 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#454] Impor SIMAN V2 memperbarui masa manfaat per kelompok dari kolom "Umur Aset" (SIMAN menang) — 2026-07-19
+
+Menjawab kebutuhan: peraturan masa manfaat (KMK) terus berubah — daripada
+bergantung pada revisi, sistem BELAJAR masa manfaat dari data lapangan SIMAN.
+
+- **Tiap impor SIMAN V2**, kolom "Umur Aset" dirangkum per **KELOMPOK 5 digit**
+  lalu **langsung memperbarui** referensi masa manfaat kelompok terkait
+  (pilihan pemilik: "SIMAN menang"). Terkumpul sedikit demi sedikit dari
+  banyak impor.
+- **Pengaman**: hanya golongan yang disusutkan (3/4/5) & nilai tahun wajar
+  (1–60) yang dipakai; nilai absurd/di luar rentang diabaikan agar penyusutan
+  tak rusak. Per kelompok diambil **modus** (nilai tersering; seri → terkecil,
+  konservatif). Fungsi murni `masa_manfaat_dari_siman` + uji unit.
+- **Transparan**: entri hasil SIMAN ditandai sumber **"dari SIMAN · N
+  observasi"** (biru) di Referensi Masa Manfaat (Penilaian); admin tetap bisa
+  menimpa manual (jadi "input satker"). Kartu Sinkronisasi SIMAN menampilkan
+  "N kelompok masa manfaat diperbarui" pada ringkasan impor terakhir.
+- Berlaku ke seluruh perhitungan penyusutan Penilaian & DBKP karena memakai
+  peta masa manfaat gabungan (DB menimpa bawaan riset KMK).
+
 ## [#453] Pembukuan jurnal — ikon cari HP tak melorot + Penilaian masa manfaat +jo. KMK 339/2024 — 2026-07-19
 
 - **Pembukuan (tab Jurnal) — ikon cari di HP**: ikon `Search` dipindah ke
