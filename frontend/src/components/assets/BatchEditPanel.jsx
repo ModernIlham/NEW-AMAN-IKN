@@ -20,14 +20,17 @@ import { toast } from "sonner";
 import { DEFAULT_DOC_ITEMS } from "./DocumentChecklist";
 import {
   PENGGUNA_MELEKAT_OPTIONS, PENGGUNA_NAME_LABELS, OPERASIONAL_JENIS_OPTIONS,
+  CONDITION_OPTIONS, STATUS_OPTIONS,
 } from "./InventoryFieldSheet";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 
 const STIKER_STATUSES = ["Belum Terpasang", "Sudah Terpasang"];
 const STIKER_SIZES = ["Kecil", "Sedang", "Besar"];
 const MAX_BATCH_PHOTOS = 6;
-const CONDITIONS = ["Baik", "Rusak Ringan", "Rusak Berat"];
-const INVENTORY_STATUSES = ["Belum Diinventarisasi", "Ditemukan", "Tidak Ditemukan", "Berlebih", "Sengketa"];
+// Satu sumber opsi: InventoryFieldSheet (konvensi repo — jangan duplikasi)
+const CONDITIONS = CONDITION_OPTIONS.map((o) => o.value);
+const INVENTORY_STATUSES = ["Belum Diinventarisasi",
+  ...STATUS_OPTIONS.map((o) => o.value)];
 // Selaras dengan opsi Status pada form aset (AssetForm).
 const ASSET_STATUSES = ["Aktif", "Idle", "Maintenance", "Nonaktif"];
 

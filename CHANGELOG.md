@@ -48,6 +48,34 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#441] Audit jangkauan referensi & master data lintas modul — tutup gap tersisa — 2026-07-19
+
+Audit menyeluruh (agen riset kode): apakah referensi/master data +
+administrasi/alat sudah menjangkau SEMUA modul dengan satu sumber yang
+sama. Hasil: sebagian besar SUDAH tersambung benar (penanda tangan dari
+Referensi Pejabat, pengguna aset tervalidasi keras ke Master Pegawai,
+lokasi aset → Master Ruangan, kodefikasi ber-picker, tombol Booking Nomor
+sudah ada di 14 halaman modul; pihak eksternal seperti mitra pemanfaatan/
+JPN/penilai KPKNL memang tepat dibiarkan bebas). Gap tersisa ditutup:
+
+- **Pihak asal & tujuan proses penggunaan** (alih status/pinjam pakai)
+  kini menyarankan **Master Satker** (datalist; ketik bebas tetap boleh).
+- **Satu sumber opsi kondisi & status**: `BatchEditPanel` dan `AssetForm`
+  berhenti mendeklarasikan daftar Baik/Rusak Ringan/Rusak Berat dan status
+  inventarisasi sendiri — kini mengimpor `CONDITION_OPTIONS`/
+  `STATUS_OPTIONS` dari `InventoryFieldSheet` (sumber tunggal sesuai
+  konvensi repo).
+- **Reset konsisten**: `referensi_akun_meta` (penanda versi seed referensi
+  akun) ikut dipertahankan saat reset — konsisten dengan `referensi_akun`.
+
+**Verifikasi backup/restore/reset (mandat)**: TIDAK ada gap — daftar
+koleksi dienumerasi DINAMIS (`db.list_collection_names()`), sehingga semua
+koleksi baru (timeline, PSP, unit kerja, dst.) otomatis tercakup; yang
+dikecualikan hanya data transien yang memang benar dikecualikan (lock TTL,
+OTP, progress job, dedup replay, bus realtime, cache preview). GridFS
+di-backup/restore terpisah. Reset mempertahankan akun + seluruh master
+referensi.
+
 ## [#440] Ekspor Master Pegawai ke Excel siap-edit (dropdown + round-trip impor) — 2026-07-19
 
 Tombol **Ekspor Excel** baru di Master Pegawai menghasilkan .xlsx yang

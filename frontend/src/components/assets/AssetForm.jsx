@@ -17,7 +17,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import { DocumentChecklist, DEFAULT_DOC_ITEMS } from "./DocumentChecklist";
-import InventoryFieldSheet, { PENGGUNA_MELEKAT_OPTIONS, PENGGUNA_NAME_LABELS, OPERASIONAL_JENIS_OPTIONS } from "./InventoryFieldSheet";
+import InventoryFieldSheet, { PENGGUNA_MELEKAT_OPTIONS, PENGGUNA_NAME_LABELS, OPERASIONAL_JENIS_OPTIONS, CONDITION_OPTIONS } from "./InventoryFieldSheet";
 import FullCameraSheet from "./FullCameraSheet";
 import { useBackGuard } from "../../hooks/useBackGuard";
 import { toast } from "sonner";
@@ -2309,7 +2309,7 @@ const AssetForm = memo(({
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1"><Label className="text-xs">Kondisi</Label>
                   <Select value={formData.condition} onValueChange={v => handleSelectChange("condition", v)}><SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="Baik">Baik</SelectItem><SelectItem value="Rusak Ringan">Rusak Ringan</SelectItem><SelectItem value="Rusak Berat">Rusak Berat</SelectItem></SelectContent></Select></div>
+                    <SelectContent>{CONDITION_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.value}</SelectItem>)}</SelectContent></Select></div>
                 <div className="space-y-1"><Label className="text-xs">Status</Label>
                   <Select value={formData.status} onValueChange={v => handleSelectChange("status", v)}><SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
                     <SelectContent>

@@ -37,6 +37,10 @@ RESET_KEEP_COLLECTIONS = {
     # Master referensi (ditambah saat audit backup/restore/reset — #407):
     "kodefikasi", "categories", "referensi_akun_hierarki",
     "unit_kerja", "pegawai", "pejabat", "ruangan",
+    # Penanda versi seed referensi akun — ikut dipertahankan agar konsisten
+    # dengan `referensi_akun` (tanpa ini seed ter-replay; tidak merusak,
+    # tapi inkonsisten — audit W7).
+    "referensi_akun_meta",
 }
 
 # Legacy name → canonical (untuk membaca backup lama; mis. activities.json).
