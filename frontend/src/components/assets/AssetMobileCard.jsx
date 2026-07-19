@@ -1,6 +1,7 @@
 import React, { memo, useState, useRef } from "react";
 import { Camera, MapPin, Briefcase, Tag, Trash2, Lock, Cloud, Check, RotateCcw, RefreshCcw, MoreVertical, BookOpen, History, CreditCard, AlertTriangle, ShieldCheck } from "lucide-react";
 import { sisaGaransi } from "../../lib/garansi";
+import { useSinkronSiman } from "../../lib/simanSync";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuTrigger,
@@ -15,6 +16,7 @@ const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, onOpenKartu, on
   const [startX, setStartX] = useState(0);
   const [isSwiping, setIsSwiping] = useState(false);
   const cardRef = useRef(null);
+  const { busy: simanBusy, synced: simanSynced, sinkron: sinkronSiman } = useSinkronSiman(asset);
   
   // Use thumbnail only (photos array is not included in list API for performance)
   const coverPhoto = asset.thumbnail;
@@ -219,16 +221,29 @@ const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, onOpenKartu, on
                 {hasPhoto ? <img src={coverPhoto} alt="" className="w-full h-full object-cover" loading="lazy" /> : <Camera className="w-5 h-5 text-muted-foreground" />}
               </div>
             )}
-            {/* Penanda selisih SIMAN: ikon-saja di bawah foto (permintaan
-                pemilik) — teks "≠ SIMAN" tidak lagi memakan ruang baris badge. */}
-            {asset.siman?.status === "selisih" && (
-              <span
-                className="w-5 h-5 rounded-full bg-amber-500/15 border border-amber-500/40 flex items-center justify-center"
-                title="Data berbeda dengan SIMAN V2 — tinjau di Penatausahaan › Pelaporan"
-                aria-label="Data berbeda dengan SIMAN V2"
+            {/* Penanda selisih SIMAN: ikon-saja di bawah foto — TOMBOL yang
+                dapat diketuk untuk langsung menyinkronkan nilai SIMAN V2
+                (logika bersama lib/simanSync.js, sama dengan galeri). */}
+            {asset.siman?.status === "selisih" && !simanSynced && (
+              <button
+                type="button"
+                onClick={sinkronSiman}
+                disabled={simanBusy}
+                className="w-6 h-6 min-w-0 min-h-0 rounded-full bg-amber-500/15 border border-amber-500/40 flex items-center justify-center active:scale-90 transition-transform"
+                title="Belum tersinkron dengan SIMAN V2 — ketuk untuk sinkronkan sekarang"
+                aria-label="Sinkronkan dengan SIMAN V2"
                 data-testid={`card-siman-${asset.id}`}
               >
-                <RefreshCcw className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                <RefreshCcw className={`w-3 h-3 text-amber-600 dark:text-amber-400 ${simanBusy ? "animate-spin" : ""}`} />
+              </button>
+            )}
+            {simanSynced && (
+              <span
+                className="w-6 h-6 rounded-full bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center"
+                title="Tersinkron dengan SIMAN V2"
+                data-testid={`card-siman-ok-${asset.id}`}
+              >
+                <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
               </span>
             )}
           </div>

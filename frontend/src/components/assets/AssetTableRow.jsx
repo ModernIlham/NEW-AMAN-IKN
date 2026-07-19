@@ -1,6 +1,7 @@
 import React, { memo, useRef, useState, useEffect } from "react";
-import { Camera, Briefcase, MapPin, Tag, CreditCard, Trash2, ShieldCheck } from "lucide-react";
+import { Camera, Briefcase, MapPin, Tag, CreditCard, Trash2, ShieldCheck, RefreshCcw, Check } from "lucide-react";
 import { sisaGaransi } from "../../lib/garansi";
+import { useSinkronSiman } from "../../lib/simanSync";
 import { Button } from "../ui/button";
 import {
   Tooltip,
@@ -62,6 +63,7 @@ const AssetTableRow = memo(({ asset, editId, onEdit, onDelete, onPrintCard }) =>
   const coverPhoto = asset.thumbnail;
   const hasPhoto = coverPhoto && coverPhoto.length > 10;
   const stikerTerpasang = asset.stiker_status === "Sudah Terpasang";
+  const { busy: simanBusy, synced: simanSynced, sinkron: sinkronSiman } = useSinkronSiman(asset);
   
   // Format price
   const formatPrice = (price) => {
@@ -75,8 +77,8 @@ const AssetTableRow = memo(({ asset, editId, onEdit, onDelete, onPrintCard }) =>
     // Belum tersinkron SIMAN: gradasi orange halus dari pojok kiri-bawah ke
     // atas (pengganti badge teks) — cukup terlihat tanpa mencolok.
     <tr onClick={() => onEdit(asset)}
-      title={asset.siman?.status === "selisih" ? "Data berbeda dengan SIMAN V2 — sinkronkan di Penatausahaan › Pelaporan" : undefined}
-      style={asset.siman?.status === "selisih" ? { backgroundImage: "linear-gradient(to top right, rgba(245,158,11,0.14), rgba(245,158,11,0.04) 45%, transparent 70%)" } : undefined}
+      title={asset.siman?.status === "selisih" && !simanSynced ? "Data berbeda dengan SIMAN V2 — klik ikon di samping NUP untuk sinkronkan" : undefined}
+      style={asset.siman?.status === "selisih" && !simanSynced ? { backgroundImage: "linear-gradient(to top right, rgba(245,158,11,0.14), rgba(245,158,11,0.04) 45%, transparent 70%)" } : undefined}
       className={`hover:bg-blue-50/50 transition-colors cursor-pointer border-b border-border ${editId === asset.id ? "bg-amber-50 border-l-2 border-l-amber-400" : ""}`}>
       <td className="px-1 py-1 w-[60px] align-middle">
         <div className="w-[52px] h-[52px] rounded overflow-hidden bg-muted flex items-center justify-center flex-shrink-0">
@@ -93,6 +95,30 @@ const AssetTableRow = memo(({ asset, editId, onEdit, onDelete, onPrintCard }) =>
           {asset.NUP && (
             <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded font-medium">
               NUP {asset.NUP}
+            </span>
+          )}
+          {/* Sinkron SIMAN tepat di samping kotak NUP — ukuran mengikuti
+              kotak NUP; klik = langsung terapkan nilai SIMAN V2. */}
+          {asset.siman?.status === "selisih" && !simanSynced && (
+            <button
+              type="button"
+              onClick={sinkronSiman}
+              disabled={simanBusy}
+              className="min-w-0 min-h-0 inline-flex items-center justify-center px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/30 transition-colors"
+              title="Belum tersinkron dengan SIMAN V2 — klik untuk sinkronkan sekarang"
+              aria-label="Sinkronkan dengan SIMAN V2"
+              data-testid={`row-siman-${asset.id}`}
+            >
+              <RefreshCcw className={`w-3 h-3 ${simanBusy ? "animate-spin" : ""}`} />
+            </button>
+          )}
+          {simanSynced && (
+            <span
+              className="inline-flex items-center justify-center px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
+              title="Tersinkron dengan SIMAN V2"
+              data-testid={`row-siman-ok-${asset.id}`}
+            >
+              <Check className="w-3 h-3" />
             </span>
           )}
         </div>
