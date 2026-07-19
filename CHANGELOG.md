@@ -48,6 +48,28 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#463] Sinkron SIMAN bisa diklik di list HP & desktop (samping NUP) + saklar teks di HP + liquid menyatu ber-bola mengapung — 2026-07-19
+
+- **Hook bersama `lib/simanSync.js`** (`useSinkronSiman`) — logika sinkron
+  SIMAN satu sumber untuk kartu galeri, kartu HP/tablet, dan baris tabel
+  desktop; penanda tidak muncul kembali sebelum daftar dimuat ulang.
+- **List HP/tablet**: ikon SIMAN di bawah foto kini TOMBOL yang bisa
+  diketuk — langsung menerapkan nilai SIMAN V2 (ikon berputar saat proses,
+  centang hijau saat berhasil).
+- **List desktop**: ikon sinkron dapat diklik TEPAT di samping kotak NUP,
+  ukuran menyesuaikan kotak NUP (amber, hover menebal); berhasil → centang
+  hijau + gradasi orange baris ikut hilang.
+- **Saklar Dashboard ↔ Inventarisasi**: khusus tampilan HP (<640px)
+  memakai TEKS di samping ikon; tablet & desktop tetap ikon-saja.
+- **Liquid galeri disempurnakan** — dua lapisan air: kubah BELAKANG bola
+  (morph organik) + permukaan DEPAN bola sedikit tembus pandang (ombak
+  menyapu kiri↔kanan), sehingga bola sinkronisasi tampak MENGAPUNG
+  SETENGAH TENGGELAM — air mengalungi bola, bola berayun ke atas/bawah/
+  kiri/kanan + oleng ringan. Basis kedua lapisan rata penuh melewati batas
+  foto sehingga benar-benar MENYATU dengan area informasi; posisi bola
+  diturunkan (sebelumnya terlalu ke atas); hover membesar dari dasar
+  (origin-bottom) + seluruh cairan bergolak lebih cepat.
+
 ## [#462] Galeri — efek liquid tombol sinkron SIMAN (idle/hover/proses/sukses) + badge garansi pindah ke kanan-atas — 2026-07-19
 
 - **Efek liquid sinkron SIMAN V2** — tetesan lama (kotak diputar 45°, tanpa

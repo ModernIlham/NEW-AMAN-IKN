@@ -1,12 +1,11 @@
 import React, { memo, useState, useCallback } from "react";
 import { Camera, MapPin, Tag, Images, User, QrCode, CreditCard, Trash2, FileCheck, FileX, Calendar, Lock, ClipboardCheck, Building2, ImageIcon, FileText, ShieldCheck, RefreshCcw as RefreshCcwIcon, Check as CheckIcon } from "lucide-react";
-import axios from "axios";
-import { toast } from "sonner";
 import {
   Tooltip, TooltipContent, TooltipTrigger,
 } from "../ui/tooltip";
 import { authMediaUrl } from "../../lib/mediaUrl";
 import { sisaGaransi } from "../../lib/garansi";
+import { useSinkronSiman } from "../../lib/simanSync";
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const COND = { "Baik": "bg-emerald-500", "Rusak Ringan": "bg-amber-500", "Rusak Berat": "bg-red-500" };
@@ -39,31 +38,9 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
   const photoCount = asset.photo_count || asset.photos?.length || 0;
   const year = extractYear(asset.purchase_date);
   const [hovered, setHovered] = useState(false);
-  // Sinkronisasi SIMAN langsung dari kartu galeri (tetesan air): terapkan
-  // seluruh field selisih (kecuali kode barang — jalur reklasifikasi
-  // terpisah). Sukses → tetesan hilang beranimasi.
-  const [simanBusy, setSimanBusy] = useState(false);
-  const [simanSynced, setSimanSynced] = useState(false);
-  const sinkronSiman = useCallback(async (e) => {
-    e.stopPropagation();
-    const fields = (asset.siman?.selisih || [])
-      .map((sel) => sel.field).filter((f) => f !== "asset_code");
-    if (!fields.length) {
-      toast.info("Selisih tersisa hanya kode barang — sinkronkan lewat Penatausahaan › Pelaporan (reklasifikasi)");
-      return;
-    }
-    setSimanBusy(true);
-    try {
-      await axios.post(`${API}/siman/terapkan/${asset.id}`, { fields });
-      setSimanSynced(true);
-      toast.success(`${asset.asset_code} tersinkron dengan SIMAN V2`);
-      setTimeout(() => setSimanSynced(false), 900);
-    } catch (err) {
-      toast.error(err?.response?.data?.detail || "Gagal sinkron dengan SIMAN");
-    } finally {
-      setSimanBusy(false);
-    }
-  }, [asset.id, asset.asset_code, asset.siman]);
+  // Sinkronisasi SIMAN langsung dari kartu galeri (liquid): logika bersama
+  // di lib/simanSync.js — sukses → cairan terserap beranimasi.
+  const { busy: simanBusy, synced: simanSynced, sinkron: sinkronSiman } = useSinkronSiman(asset);
   // Foto sampul galeri via STREAMING ?w=256 (ter-cache browser + server) —
   // base64 gallery_thumbnail tak lagi dikirim di payload list. Fallback ke
   // data-URI lama (baris legacy/snapshot offline) lalu thumbnail 100px bila
@@ -161,20 +138,22 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
             title="Belum tersinkron dengan SIMAN V2 — klik untuk sinkronkan sekarang"
             aria-label="Sinkronkan dengan SIMAN V2"
             data-testid={`siman-drop-${asset.id}`}
-            className="siman-liquid absolute bottom-0 left-1/2 -translate-x-1/2 z-10 w-12 h-8 flex items-end justify-center pb-0.5 min-w-0 min-h-0"
+            className="siman-liquid absolute bottom-0 left-1/2 -translate-x-1/2 z-10 w-12 h-9 flex items-end justify-center pb-[3px] min-w-0 min-h-0 origin-bottom transition-transform duration-300 hover:scale-110"
           >
             <span className="siman-liquid-blob" aria-hidden="true" />
             <span className="siman-liquid-ball w-5 h-5 rounded-full bg-amber-500 dark:bg-amber-400 shadow-md ring-1 ring-black/10 dark:ring-white/15 flex items-center justify-center">
               <RefreshCcwIcon className={`w-3 h-3 text-white dark:text-amber-950 ${simanBusy ? "animate-spin" : ""}`} />
             </span>
+            <span className="siman-liquid-depan" aria-hidden="true" />
           </button>
         )}
         {simanSynced && (
-          <span className="siman-liquid-sukses absolute bottom-0 left-1/2 -translate-x-1/2 z-10 w-12 h-8 flex items-end justify-center pb-0.5 pointer-events-none">
+          <span className="siman-liquid-sukses absolute bottom-0 left-1/2 -translate-x-1/2 z-10 w-12 h-9 flex items-end justify-center pb-[3px] pointer-events-none">
             <span className="siman-liquid-blob" aria-hidden="true" />
             <span className="relative z-[1] w-5 h-5 rounded-full bg-emerald-500 dark:bg-emerald-400 shadow-md flex items-center justify-center">
               <CheckIcon className="w-3 h-3 text-white dark:text-emerald-950" />
             </span>
+            <span className="siman-liquid-depan" aria-hidden="true" />
           </span>
         )}
 

@@ -420,50 +420,71 @@ body.no-scroll { overflow: hidden; }
 }
 
 /* ===== Liquid sinkron SIMAN (kartu galeri) =====
-   Blob cair berwarna permukaan kartu (--card: putih di light, gelap di dark)
-   yang "meleleh" dari area teks naik ke foto; bola sinkronisasi amber tetap
-   UTUH (bulat sempurna) di dalam cairan. Bagian bawah blob sengaja melewati
-   batas foto (terpotong overflow-hidden) agar menyatu mulus dengan area teks.
-   Status: idle = morph pelan · hover = bergolak + membesar · proses = gejolak
-   cepat · sukses = terserap turun ke area teks (lihat .siman-liquid-sukses).
-   Catatan: aturan reduced-motion global di atas otomatis mematikan animasi. */
+   Genangan cair berwarna permukaan kartu (--card: putih di light, gelap di
+   dark) yang naik dari area informasi ke foto — DUA lapisan air:
+   .siman-liquid-blob  = kubah air BELAKANG bola (morph organik), dan
+   .siman-liquid-depan = permukaan air DEPAN bola (ombak menyapu kiri-kanan)
+   sehingga bola sinkronisasi tampak MENGAPUNG SETENGAH TENGGELAM — air
+   mengalungi bola, bola berayun ke atas/bawah/kiri/kanan (simanLiquidApung).
+   Basis kedua lapisan rata penuh & melewati batas foto (terpotong
+   overflow-hidden) agar MENYATU mulus dengan area informasi di bawahnya.
+   Status: idle = pelan · hover = bergolak + membesar (scale di tombol) ·
+   proses = gejolak cepat · sukses = terserap turun (.siman-liquid-sukses).
+   Catatan: aturan reduced-motion global otomatis mematikan animasi. */
 .siman-liquid-blob {
   position: absolute;
-  left: -3px; right: -3px; top: 3px; bottom: -14px;
+  left: -4px; right: -4px; top: 7px; bottom: -14px;
   background: hsl(var(--card));
-  box-shadow: 0 -2px 10px hsl(var(--foreground) / 0.18);
-  border-radius: 52% 48% 44% 56% / 62% 66% 34% 38%;
-  animation: simanLiquidMorph 5.5s ease-in-out infinite;
-  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
-  will-change: border-radius, transform;
+  box-shadow: 0 -1px 6px hsl(var(--foreground) / 0.1);
+  border-radius: 48% 52% 14% 12% / 58% 62% 8% 9%;
+  animation: simanLiquidMorph 5s ease-in-out infinite;
+  will-change: border-radius;
 }
 @keyframes simanLiquidMorph {
-  0%, 100% { border-radius: 52% 48% 44% 56% / 62% 66% 34% 38%; }
-  25%      { border-radius: 42% 58% 52% 48% / 70% 52% 48% 30%; }
-  50%      { border-radius: 58% 42% 48% 52% / 52% 72% 28% 48%; }
-  75%      { border-radius: 46% 54% 58% 42% / 66% 46% 54% 34%; }
+  0%, 100% { border-radius: 48% 52% 14% 12% / 58% 62% 8% 9%; }
+  25%      { border-radius: 40% 60% 12% 14% / 68% 50% 9% 8%; }
+  50%      { border-radius: 60% 40% 13% 13% / 50% 70% 8% 9%; }
+  75%      { border-radius: 44% 56% 14% 12% / 64% 46% 9% 8%; }
 }
-/* Hover mouse: cairan bergolak lebih hidup + sedikit membesar */
-.siman-liquid:hover .siman-liquid-blob {
-  animation-duration: 1.6s;
-  transform: scale(1.16);
+/* Permukaan air DEPAN bola — sedikit tembus pandang agar separuh bola yang
+   tenggelam masih samar terlihat; puncak ombak menyapu kiri ↔ kanan. */
+.siman-liquid-depan {
+  position: absolute;
+  left: -4px; right: -4px; bottom: -14px; height: 27px;
+  z-index: 2;
+  pointer-events: none;
+  background: hsl(var(--card) / 0.86);
+  border-radius: 46% 54% 0 0 / 34% 26% 0 0;
+  animation: simanLiquidOmbak 2.8s ease-in-out infinite;
+  will-change: border-radius, transform;
 }
-/* Proses sinkronisasi: gejolak cepat */
-.siman-liquid[data-busy="1"] .siman-liquid-blob {
-  animation-duration: 0.75s;
-  transform: scale(1.1);
+@keyframes simanLiquidOmbak {
+  0%, 100% { border-radius: 46% 54% 0 0 / 34% 26% 0 0; transform: translateX(0); }
+  33%      { border-radius: 56% 44% 0 0 / 26% 38% 0 0; transform: translateX(2px); }
+  66%      { border-radius: 50% 50% 0 0 / 40% 24% 0 0; transform: translateX(-2px); }
 }
-/* Bola sinkronisasi — utuh di dalam cairan, mengapung pelan */
+/* Bola sinkronisasi — utuh, mengapung & tenggelam setengah: berayun ke
+   atas/bawah/kiri/kanan + oleng ringan seperti benda terapung. */
 .siman-liquid-ball {
   position: relative;
   z-index: 1;
-  animation: simanLiquidBob 3.2s ease-in-out infinite;
+  animation: simanLiquidApung 3.4s ease-in-out infinite;
 }
-@keyframes simanLiquidBob {
-  0%, 100% { transform: translateY(0); }
-  50%      { transform: translateY(-2px); }
+@keyframes simanLiquidApung {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  25%      { transform: translate(1.5px, -2.5px) rotate(4deg); }
+  50%      { transform: translate(0, 1.5px) rotate(0deg); }
+  75%      { transform: translate(-1.5px, -2px) rotate(-4deg); }
 }
-.siman-liquid:hover .siman-liquid-ball { animation-duration: 1.2s; }
+/* Hover mouse: seluruh cairan bergolak lebih hidup (scale tombol via kelas
+   Tailwind hover:scale-110 origin-bottom — basis tetap menempel batas). */
+.siman-liquid:hover .siman-liquid-blob  { animation-duration: 1.5s; }
+.siman-liquid:hover .siman-liquid-depan { animation-duration: 1s; }
+.siman-liquid:hover .siman-liquid-ball  { animation-duration: 1.3s; }
+/* Proses sinkronisasi: gejolak cepat */
+.siman-liquid[data-busy="1"] .siman-liquid-blob  { animation-duration: 0.7s; }
+.siman-liquid[data-busy="1"] .siman-liquid-depan { animation-duration: 0.55s; }
+.siman-liquid[data-busy="1"] .siman-liquid-ball  { animation-duration: 0.9s; }
 /* Sukses: seluruh cairan (beserta bola centang) terserap turun & memudar */
 .siman-liquid-sukses {
   animation: simanLiquidSlurp 0.85s ease-in forwards;
