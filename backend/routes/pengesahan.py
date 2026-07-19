@@ -610,11 +610,15 @@ async def garansi_sebelumnya(kode_register: str = "", asset_code: str = "",
         raise HTTPException(
             status_code=400,
             detail="Isi kode_register atau pasangan asset_code + NUP")
+    from shared_utils import scope_query_aset
     q = {**identity_query,
          "garansi_hingga": {"$nin": ["", None]},
          "dihapus": {"$ne": True}}
     if exclude_id.strip():
         q["id"] = {"$ne": exclude_id.strip()}
+    # Scope satker (M-SCOPE): identitas kebetulan sama di satker lain tidak
+    # boleh menjadi sumber auto-isi garansi.
+    q = await scope_query_aset(_user, q)
     sumber = await db.assets.find_one(
         q, {"_id": 0, "id": 1, "garansi_hingga": 1, "asset_name": 1,
             "activity_id": 1, "updated_at": 1},

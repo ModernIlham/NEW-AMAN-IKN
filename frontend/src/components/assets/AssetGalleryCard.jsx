@@ -4,6 +4,7 @@ import {
   Tooltip, TooltipContent, TooltipTrigger,
 } from "../ui/tooltip";
 import { authMediaUrl } from "../../lib/mediaUrl";
+import { sisaGaransi } from "../../lib/garansi";
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const COND = { "Baik": "bg-emerald-500", "Rusak Ringan": "bg-amber-500", "Rusak Berat": "bg-red-500" };
@@ -125,6 +126,15 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
               ≠ SIMAN
             </span>
           )}
+          {(() => {
+            const g = sisaGaransi(asset.garansi_hingga);
+            return g ? (
+              <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold text-white backdrop-blur-sm ${g.segera ? "bg-amber-600/90" : "bg-emerald-600/90"}`}
+                title={`Garansi tercatat hingga ${g.hingga} (${g.hari} hari lagi)`}>
+                {g.label}
+              </span>
+            ) : null;
+          })()}
           {asset.condition && (
             <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold text-white backdrop-blur-sm ${COND[asset.condition] || "bg-slate-500"}`}>
               {asset.condition}
