@@ -248,9 +248,11 @@ export default function PelaporanPage({ user, onBack }) {
               Hanya kegiatan inventarisasi yang disahkan/selesai yang ikut dihitung — kegiatan berjalan & data dummy otomatis dikecualikan
             </p>
           </div>
-          {/* Grup unduhan — SATU baris 4 tombol ringkas di HP, sebaris judul di desktop */}
-          <div className="w-full sm:w-auto grid grid-cols-4 gap-1.5 sm:flex sm:items-center">
-            <Button size="sm" className="gap-1 px-1.5 sm:px-3 justify-center bg-blue-600 hover:bg-blue-700 text-white min-w-0"
+          {/* Grup unduhan — SATU baris 5 tombol ringkas di HP (PDF·Lain·LBKP·
+              CaLBMN·LBP jadi satu kesatuan), sebaris judul di desktop. Teks
+              diperkecil + px rapat agar semua muat tanpa melebihi batas. */}
+          <div className="w-full sm:w-auto grid grid-cols-5 gap-1 sm:flex sm:items-center sm:gap-1.5">
+            <Button size="sm" className="gap-1 px-1 sm:px-3 justify-center bg-blue-600 hover:bg-blue-700 text-white min-w-0 text-[11px] sm:text-sm"
               title="Laporan Posisi BMN di Neraca (PDF)"
               onClick={() => downloadFileWithProgress(`${API}/pembukuan/posisi-bmn-pdf`, "Posisi_BMN_Neraca.pdf", { label: "Laporan Posisi BMN di Neraca" }).catch(() => {})}
               data-testid="pelaporan-posisi-bmn">
@@ -259,9 +261,9 @@ export default function PelaporanPage({ user, onBack }) {
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-1 px-1.5 sm:px-3 justify-center min-w-0" data-testid="pelaporan-laporan-lain"
+                <Button variant="outline" size="sm" className="gap-1 px-1 sm:px-3 justify-center min-w-0 text-[11px] sm:text-sm" data-testid="pelaporan-laporan-lain"
                   title="Laporan pembukuan lain: LKB, DBR, KIR, dan rekonsiliasi">
-                  <span className="sm:hidden truncate">Lainnya</span>
+                  <span className="sm:hidden truncate">Lain</span>
                   <span className="hidden sm:inline-flex sm:items-center sm:gap-1.5"><FileDown className="w-3.5 h-3.5" />Laporan Lain</span>
                   <ChevronDown className="w-3 h-3 flex-shrink-0" />
                 </Button>
@@ -289,7 +291,7 @@ export default function PelaporanPage({ user, onBack }) {
             </DropdownMenu>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-1 px-1.5 sm:px-3 justify-center min-w-0" data-testid="pelaporan-lbkp"
+                <Button variant="outline" size="sm" className="gap-0.5 sm:gap-1 px-1 sm:px-3 justify-center min-w-0 text-[11px] sm:text-sm" data-testid="pelaporan-lbkp"
                   title="LBKP — Laporan Barang Kuasa Pengguna (semesteran/tahunan)">
                   <FileDown className="w-3.5 h-3.5 hidden sm:inline flex-shrink-0" /><span className="truncate">LBKP</span><ChevronDown className="w-3 h-3 flex-shrink-0" />
                 </Button>
@@ -315,7 +317,7 @@ export default function PelaporanPage({ user, onBack }) {
             </DropdownMenu>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-1 px-1.5 sm:px-3 justify-center min-w-0" data-testid="pelaporan-calbmn"
+                <Button variant="outline" size="sm" className="gap-0.5 sm:gap-1 px-1 sm:px-3 justify-center min-w-0 text-[11px] sm:text-sm" data-testid="pelaporan-calbmn"
                   title="CaLBMN — Catatan atas Laporan Barang Milik Negara">
                   <FileDown className="w-3.5 h-3.5 hidden sm:inline flex-shrink-0" /><span className="truncate">CaLBMN</span><ChevronDown className="w-3 h-3 flex-shrink-0" />
                 </Button>
@@ -343,7 +345,7 @@ export default function PelaporanPage({ user, onBack }) {
                 format mengikuti LBP resmi (dapat disunting sebelum ttd) */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-1 px-1.5 sm:px-3 justify-center min-w-0" data-testid="pelaporan-lbp"
+                <Button variant="outline" size="sm" className="gap-0.5 sm:gap-1 px-1 sm:px-3 justify-center min-w-0 text-[11px] sm:text-sm" data-testid="pelaporan-lbp"
                   title="LBP — Laporan Barang Pengguna lengkap (.docx, siap disunting)">
                   <FileDown className="w-3.5 h-3.5 hidden sm:inline flex-shrink-0" /><span className="truncate">LBP</span><ChevronDown className="w-3 h-3 flex-shrink-0" />
                 </Button>

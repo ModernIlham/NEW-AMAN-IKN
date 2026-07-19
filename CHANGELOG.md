@@ -48,6 +48,37 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#450] Wasdal 1-baris + kartu padat, baris unduh Neraca satu kesatuan, toolbar Pegawai rapi, popup TTD ringkas — 2026-07-19
+
+Lanjutan umpan balik screenshot HP (5 perbaikan tata letak seluler):
+
+- **Header Wasdal Pemantauan cukup 1 baris di HP**: kelompok aksi header
+  (menu Laporan, muat ulang, booking nomor) tak lagi menumpuk ke baris kedua
+  — `flex-wrap`/`basis-full` dilepas, jarak dirapatkan (`gap-1.5`), semua
+  ikon-only tetap sebaris.
+- **Kartu dashboard per-objek Wasdal dioptimalkan**: dari kartu vertikal
+  (ikon-atas · angka-tengah · label-bawah) menjadi kartu **horizontal padat**
+  ala `StatKartu` (ikon kecil di kiri, angka + label menumpuk di kanan).
+  Perilaku klik (buka rincian), keadaan tertib (`n===0`, hijau/nonaktif), dan
+  `data-testid` dipertahankan.
+- **Arsip Pelaporan — "Posisi BMN di Neraca" jadi satu kesatuan**: tombol
+  **LBP** dipindah ke baris yang sama dengan PDF · Lain · LBKP · CaLBMN
+  (grid `grid-cols-5` di HP, sebaris di desktop). Teks diperkecil
+  (`text-[11px]`) + padding dirapatkan agar kelima tombol pas tanpa melebihi
+  batas kartu.
+- **Toolbar Master Pegawai ditata ulang untuk HP**: tombol data (Struktur ·
+  Template · Ekspor · Impor) dilipat ke **satu menu ⋯** di HP (tetap terpisah
+  berlabel di desktop); pencarian + menu + tombol Tambah kini muat satu baris.
+  Baris filter (Kepegawaian · Status · Unit · Urut + arah) menjadi **grid 2
+  kolom** rapi di HP (bukan membungkus berantakan), jumlah pegawai di baris
+  info tipis.
+- **Popup detail TTD dirapikan lebih lanjut**: tiga aksi unduh (Lembar
+  Pengesahan · Dokumen Asli · Dokumen ber-TTD) dilipat ke satu menu **Unduh**
+  di footer — footer tak lagi menumpuk penuh-lebar/berantakan di HP; baris
+  tetap mendatar & membungkus rapi, kontainer penanda tangan `min-w-0` agar
+  tidak meluber keluar kartu.
+
+
 ## [#449] Kartu ringkasan dashboard modul jadi padat (StatKartu) + popup TTD rapi + tombol Laporan Wasdal ikon — 2026-07-19
 
 Umpan balik screenshot HP:
