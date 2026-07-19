@@ -1013,8 +1013,15 @@ async def generate_berita_acara_pdf(activity_id: str, _user: dict = Depends(requ
     # Rincian BMN Tidak Ditemukan
     if tidak_ditemukan:
         elements.append(_sec("RINCIAN BMN TIDAK DITEMUKAN"))
-        detail_data = [['No', 'Kode Barang', 'NUP', 'Nama BMN', 'Klasifikasi', 'Sub Klasifikasi', 'Nilai (Rp)']]
+        # Format SE PUPR 10/2023 bag.3: tiap barang memuat URAIAN dan TINDAK
+        # LANJUT YANG SUDAH DILAKUKAN — bukan sekadar klasifikasi.
+        detail_data = [['No', 'Kode Barang', 'NUP', 'Nama BMN', 'Klasifikasi', 'Sub Klasifikasi', 'Uraian & Tindak Lanjut', 'Nilai (Rp)']]
         for i, a in enumerate(tidak_ditemukan):
+            uraian_tl = []
+            if str(a.get('uraian_tidak_ditemukan') or '').strip():
+                uraian_tl.append(f"Uraian: {a['uraian_tidak_ditemukan']}")
+            if str(a.get('tindak_lanjut') or '').strip():
+                uraian_tl.append(f"Tindak lanjut: {a['tindak_lanjut']}")
             detail_data.append([
                 str(i+1),
                 a.get('asset_code', '-'),
@@ -1022,13 +1029,14 @@ async def generate_berita_acara_pdf(activity_id: str, _user: dict = Depends(requ
                 Paragraph(a.get('asset_name', '-'), cell_style),
                 Paragraph(a.get('klasifikasi_tidak_ditemukan', '-'), cell_style),
                 Paragraph(a.get('sub_klasifikasi', '-'), cell_style),
+                Paragraph("<br/>".join(uraian_tl) or '-', cell_style),
                 fmt_rp(safe_price(a))
             ])
-        detail_table = Table(detail_data, colWidths=_fit_col_widths([25, 70, 30, 100, 75, 75, 65], doc.width), repeatRows=1)
+        detail_table = Table(detail_data, colWidths=_fit_col_widths([22, 62, 26, 80, 62, 66, 120, 60], doc.width), repeatRows=1)
         detail_table.setStyle(_std_table_style(zebra=True, extra=[
             ('ALIGN', (0, 0), (0, -1), 'CENTER'),
             ('ALIGN', (2, 1), (2, -1), 'CENTER'),
-            ('ALIGN', (6, 1), (6, -1), 'RIGHT'),
+            ('ALIGN', (7, 1), (7, -1), 'RIGHT'),
         ]))
         elements.append(detail_table)
         elements.append(Spacer(1, 4*rl_mm))
@@ -1123,15 +1131,22 @@ async def generate_sptjm_pdf(activity_id: str, _user: dict = Depends(require_use
         ("Alamat", alamat),
     ]))
     elements.append(Spacer(1, 3*rl_mm))
+    # Unsur minimum KMK 403/KMK.06/2013 & SE PUPR 10/2023: identitas,
+    # pernyataan telah verifikasi & penelitian, tanggung jawab penuh atas
+    # kebenaran usulan secara FORMIL dan MATERIIL, bermeterai.
     body = f"""Menyatakan dengan sesungguhnya bahwa:<br/><br/>
     1. Saya bertanggung jawab penuh atas pengelolaan Barang Milik Negara (BMN) yang berada
     dalam penguasaan Satuan Kerja yang saya pimpin.<br/><br/>
     2. Berdasarkan hasil inventarisasi pada kegiatan "<b>{activity.get('nama_kegiatan', '-')}</b>"
     (Nomor Surat: {activity.get('nomor_surat', '-')}), terdapat <b>{total_notfound}</b> NUP BMN
-    dengan total nilai <b>{fmt_rp(total_val_notfound)}</b> yang tidak ditemukan.<br/><br/>
-    3. Saya bersedia menerima sanksi sesuai ketentuan peraturan perundang-undangan yang berlaku
+    dengan total nilai <b>{fmt_rp(total_val_notfound)}</b> yang tidak ditemukan, dan atas BMN
+    tersebut telah dilakukan verifikasi dan penelitian oleh tim internal Satuan Kerja.<br/><br/>
+    3. Saya bertanggung jawab penuh atas kebenaran usulan/pernyataan yang diajukan,
+    baik secara <b>materiil maupun formil</b> (KMK 403/KMK.06/2013).<br/><br/>
+    4. Saya bersedia menerima sanksi sesuai ketentuan peraturan perundang-undangan yang berlaku
     apabila di kemudian hari pernyataan ini tidak benar.<br/><br/>
-    Demikian Surat Pernyataan ini dibuat dengan sebenar-benarnya untuk dipergunakan sebagaimana mestinya."""
+    Demikian Surat Pernyataan ini dibuat dengan sebenar-benarnya di atas meterai yang cukup
+    untuk dipergunakan sebagaimana mestinya."""
     elements.append(Paragraph(body, normal_style))
     elements.append(Spacer(1, 6*rl_mm))
 
@@ -1242,33 +1257,42 @@ async def generate_surat_koreksi_pdf(activity_id: str, _user: dict = Depends(req
         ("Alamat", alamat),
     ]))
     elements.append(Spacer(1, 3*rl_mm))
-    body = f"""Dengan ini menyatakan bahwa berdasarkan hasil inventarisasi pada kegiatan
-    "<b>{activity.get('nama_kegiatan', '-')}</b>" (Nomor Surat: {activity.get('nomor_surat', '-')}),
-    terdapat <b>{total_koreksi}</b> NUP BMN dengan total nilai <b>{fmt_rp(total_val)}</b>
-    yang teridentifikasi sebagai kesalahan pencatatan dan memerlukan koreksi.<br/><br/>
-    Koreksi pencatatan tersebut meliputi perubahan data BMN pada aplikasi SIMAK-BMN
-    sesuai dengan hasil penelitian Tim Internal."""
+    # Format SE PUPR 10/2023 huruf G.5: merujuk Berita Acara penelitian tim
+    # internal, menyatakan BMN tercatat + penyebab kesalahan pencatatan, dan
+    # MENGINSTRUKSIKAN petugas BMN melakukan koreksi pencatatan.
+    no_ba = str(activity.get("nomor_berita_acara") or activity.get("nomor_surat") or "-")
+    body = f"""Menindaklanjuti Berita Acara Tim Internal Penelitian BMN Tidak Ditemukan
+    pada kegiatan "<b>{activity.get('nama_kegiatan', '-')}</b>" (Nomor: {no_ba}),
+    dengan ini menyatakan bahwa BMN dimaksud benar tercatat dalam penatausahaan
+    Satuan Kerja dan terdapat <b>{total_koreksi}</b> NUP BMN dengan total nilai
+    <b>{fmt_rp(total_val)}</b> yang tidak ditemukan karena kesalahan pencatatan.<br/><br/>
+    Sehubungan dengan hal tersebut, saya menginstruksikan kepada petugas BMN Satuan
+    Kerja untuk menindaklanjuti BMN tidak ditemukan dimaksud dengan melakukan
+    KOREKSI PENCATATAN sesuai jenis kesalahan dan tindak lanjut pada rincian di
+    bawah ini, serta mencetak register transaksi harian/histori BMN sebagai bukti
+    koreksi pencatatan (SE Menteri PUPR No. 10/SE/M/2023)."""
     elements.append(Paragraph(body, normal_style))
     elements.append(Spacer(1, 4*rl_mm))
 
     # Rincian
     if koreksi_assets:
         elements.append(Paragraph("<b>Rincian BMN yang Memerlukan Koreksi Pencatatan:</b>", st['Heading']))
-        detail_data = [['No', 'Kode Barang', 'NUP', 'Nama BMN', 'Jenis Koreksi', 'Uraian', 'Nilai (Rp)']]
+        detail_data = [['No', 'Kode Barang', 'NUP', 'Nama BMN', 'Jenis Kesalahan', 'Uraian', 'Tindak Lanjut', 'Nilai (Rp)']]
         for i, a in enumerate(koreksi_assets):
             detail_data.append([
                 str(i+1), a.get('asset_code', '-'), str(a.get('NUP', '-')),
                 Paragraph(a.get('asset_name', '-'), cell_style),
                 Paragraph(a.get('sub_klasifikasi', '-'), cell_style),
                 Paragraph(a.get('uraian_tidak_ditemukan', '-'), cell_style),
+                Paragraph(a.get('tindak_lanjut', '-') or '-', cell_style),
                 fmt_rp(safe_price(a))
             ])
-        detail_data.append(['', '', '', '', '', Paragraph('<b>TOTAL</b>', cell_style), fmt_rp(total_val)])
-        dt = Table(detail_data, colWidths=_fit_col_widths([22, 60, 28, 80, 70, 95, 60], doc.width), repeatRows=1)
+        detail_data.append(['', '', '', '', '', '', Paragraph('<b>TOTAL</b>', cell_style), fmt_rp(total_val)])
+        dt = Table(detail_data, colWidths=_fit_col_widths([20, 55, 26, 72, 62, 80, 80, 55], doc.width), repeatRows=1)
         dt.setStyle(_std_table_style(zebra=True, total_row=True, extra=[
             ('ALIGN', (0, 0), (0, -1), 'CENTER'),
             ('ALIGN', (2, 1), (2, -1), 'CENTER'),
-            ('ALIGN', (6, 1), (6, -1), 'RIGHT'),
+            ('ALIGN', (7, 1), (7, -1), 'RIGHT'),
         ]))
         elements.append(dt)
     else:

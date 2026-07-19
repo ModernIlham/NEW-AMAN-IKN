@@ -48,6 +48,28 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#459] BMN Tidak Ditemukan — 3 surat resmi dilengkapkan sesuai SE PUPR 10/2023 & KMK 403/KMK.06/2013 — 2026-07-19
+
+Dari dua dokumen resmi yang diunggah pemilik (ditranskrip utuh) — audit
+mendalam alur "barang tidak ditemukan" hingga ke surat. Klasifikasi per-aset
+(Kesalahan Pencatatan 7 jenis / Tidak Ditemukan Lainnya) dan ketiga surat
+SUDAH ada; celah kepatuhan format ditemukan lewat smoke-render FakeDB →
+pypdfium2 dan DITUTUP:
+
+- **BA Tim Internal Penelitian**: rincian per barang kini memuat **Uraian**
+  dan **Tindak Lanjut yang sudah dilakukan** (format SE PUPR bag. 3 —
+  sebelumnya hanya klasifikasi/sub).
+- **SPTJM**: ditambah pernyataan **telah dilakukan verifikasi & penelitian
+  tim internal** + tanggung jawab penuh atas kebenaran **materiil maupun
+  formil** (unsur minimum KMK 403/2013) + frasa **di atas meterai yang cukup**.
+- **Surat Pernyataan Koreksi Pencatatan**: kini **merujuk Berita Acara**
+  penelitian, memuat pernyataan BMN tercatat + penyebab kesalahan pencatatan,
+  kalimat **menginstruksikan petugas BMN melakukan koreksi pencatatan** +
+  cetak register transaksi harian/histori sebagai bukti (SE PUPR G.5), dan
+  tabel rincian bertambah kolom **Tindak Lanjut**.
+- Verifikasi: smoke-render ketiga PDF → seluruh unsur wajib ditemukan
+  (pencocokan ternormalisasi spasi); 595 unit test hijau.
+
 ## [#458] Pengecekan keterhubungan fitur baru — scope satker auto-isi garansi + badge garansi di galeri + dokumentasi modul — 2026-07-19
 
 Audit keterhubungan pasca dua fitur besar (perbaikan-umur & garansi) —
