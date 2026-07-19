@@ -7,7 +7,7 @@ from wasdal_utils import (
     temuan_dokumen_kepemilikan, temuan_dokumen_perolehan, temuan_pemanfaatan,
     temuan_pemegang_berisiko, temuan_pemindahtanganan, temuan_pemusnahan,
     temuan_penatausahaan, temuan_pengamanan_pemeliharaan, temuan_penggunaan,
-    temuan_polis_asuransi,
+    temuan_persediaan, temuan_polis_asuransi,
     validate_ba_insidentil, validate_insidentil, validate_lapor_insidentil,
     validate_penertiban, validate_selesai_penertiban,
 )
@@ -141,6 +141,35 @@ def test_dokumen_kepemilikan_kedaluwarsa():
     per_objek = susun_temuan([], [], [], [], [], HARI_INI, dokumen=[lewat])
     assert any(t["jenis"] == "dokumen_kepemilikan_kedaluwarsa"
                for t in per_objek["pengamanan_pemeliharaan"])
+
+
+def test_temuan_persediaan():
+    """Opname semester belum → 1 temuan global; layer kedaluwarsa → temuan
+    per barang; opname sudah + tanpa kedaluwarsa → kosong."""
+    barang_exp = {"id": "ps1", "kode_barang": "1010301001", "nup": "1",
+                  "nama_barang": "Kertas A4",
+                  "batches": [{"qty": 5, "expired": "2026-01-01"},
+                              {"qty": 3, "expired": "2027-01-01"}]}
+    barang_ok = {"id": "ps2", "nama_barang": "Tinta",
+                 "batches": [{"qty": 2, "expired": "2027-06-01"}]}
+    # HARI_INI = 2026-07-12 (Semester II) — opname terakhir Maret = semester lalu
+    hasil = temuan_persediaan([barang_exp, barang_ok], "2026-03-01", HARI_INI)
+    jenis = sorted(t["jenis"] for t in hasil)
+    assert jenis == ["opname_semester_terlambat", "persediaan_kedaluwarsa"]
+    exp = next(t for t in hasil if t["jenis"] == "persediaan_kedaluwarsa")
+    assert exp["asset_name"] == "Kertas A4" and "5 unit" in exp["detail"]
+    # opname semester berjalan sudah + tanpa layer lewat → kosong
+    assert temuan_persediaan([barang_ok], "2026-07-05", HARI_INI) == []
+    # via susun_temuan → objek penatausahaan; pemanggil lama (tanpa pasokan
+    # persediaan) TIDAK memicu alarm opname
+    per_objek = susun_temuan([], [], [], [], [], HARI_INI,
+                             persediaan=[barang_exp],
+                             tanggal_opname_terakhir="2026-07-05")
+    assert any(t["jenis"] == "persediaan_kedaluwarsa"
+               for t in per_objek["penatausahaan"])
+    kosong = susun_temuan([], [], [], [], [], HARI_INI)
+    assert not any(t["jenis"] == "opname_semester_terlambat"
+                   for t in kosong["penatausahaan"])
 
 
 def test_dokumen_perolehan_kurang():

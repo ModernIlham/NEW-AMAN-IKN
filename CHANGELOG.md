@@ -48,6 +48,27 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#426] Integrasi lintas-modul gelombang 8: opname terlambat & persediaan kedaluwarsa jadi temuan Wasdal — 2026-07-19
+
+Register Persediaan sudah menghitung status opname semesteran dan layer
+kedaluwarsa (FIFO), tetapi dasbor Wasdal tidak pernah membacanya. Dua
+temuan baru objek Penatausahaan (PMK 207):
+
+- **`opname_semester_terlambat`**: satu temuan global bila semester
+  berjalan belum ada opname fisik (PSAP 05 — wajib semesteran), lengkap
+  dengan tanggal opname terakhir; hilang otomatis begitu opname dicatat.
+- **`persediaan_kedaluwarsa`**: temuan per barang yang masih menyimpan
+  layer kedaluwarsa — jumlah layer + unit + tanggal terlama + arahan
+  usulkan penghapusan/pemusnahan (risiko lebih saji nilai persediaan).
+- Fungsi murni `temuan_persediaan` memakai `status_opname_semester` &
+  `klasifikasi_kedaluwarsa` yang sudah teruji di modul Persediaan; alarm
+  opname hanya dibangkitkan bila pemanggil memasok data persediaan
+  (pemanggil lama tidak memicu alarm palsu).
+- Verifikasi: 553 tes unit lulus (1 baru), smoke dasbor Wasdal end-to-end
+  (belum pernah opname + 1 barang kedaluwarsa → 2 temuan penatausahaan).
+
+---
+
 ## [#425] Integrasi lintas-modul gelombang 7: setoran hasil penjualan BMN (NTPN) diungkap di narasi PNBP CaLBMN — 2026-07-19
 
 Selama ini narasi PNBP di CaLBMN Bab V hanya menghitung kontribusi
