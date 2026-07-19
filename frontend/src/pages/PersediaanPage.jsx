@@ -746,7 +746,9 @@ export default function PersediaanPage({ user, onBack }) {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/40 text-left text-xs text-muted-foreground">
-                    <th className="px-3 py-2.5 font-semibold">Kode · NUP</th>
+                    {/* Mobile: kolom kode disembunyikan (jadi sub-baris di bawah
+                        nama) agar Nama Barang mendapat bagian yang luas. */}
+                    <th className="px-3 py-2.5 font-semibold hidden sm:table-cell">Kode · NUP</th>
                     <th className="px-3 py-2.5 font-semibold">Nama Barang</th>
                     <th className="px-3 py-2.5 font-semibold hidden sm:table-cell">Satuan</th>
                     <th className="px-3 py-2.5 font-semibold">Stok</th>
@@ -757,7 +759,7 @@ export default function PersediaanPage({ user, onBack }) {
                 <tbody>
                   {items.map((it) => (
                     <tr key={it.id} className="border-b border-border/60 last:border-0 hover:bg-muted/50" data-testid={`persediaan-row-${it.kode_barang}-${it.nup}`}>
-                      <td className="px-3 py-2 font-mono text-xs text-foreground whitespace-nowrap">
+                      <td className="px-3 py-2 font-mono text-xs text-foreground whitespace-nowrap hidden sm:table-cell">
                         {it.kode_barang}
                         <span className="text-muted-foreground"> · {it.nup}</span>
                       </td>
@@ -768,13 +770,18 @@ export default function PersediaanPage({ user, onBack }) {
                             {[it.merk, it.tipe].filter(Boolean).join(" — ")}
                           </span>
                         )}
+                        {/* Mobile: kode·NUP (+lokasi) jadi sub-baris di sini */}
+                        <span className="block sm:hidden font-mono text-[10px] text-muted-foreground mt-0.5">
+                          {it.kode_barang} · {it.nup}{it.lokasi ? ` · ${it.lokasi}` : ""}
+                        </span>
                       </td>
                       <td className="px-3 py-2 text-muted-foreground hidden sm:table-cell">{it.satuan || "-"}</td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         <span className="font-semibold text-foreground">{it.stok}</span>
                         {/* Satuan menempel di stok saat kolom Satuan tersembunyi (mobile) */}
                         {it.satuan && <span className="ml-1 text-[10px] text-muted-foreground sm:hidden">{it.satuan}</span>}
-                        <span className={`ml-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold ${STATUS_BADGE[it.status_stok] || ""}`}>
+                        {/* Badge turun ke baris kedua di HP agar kolom stok ramping */}
+                        <span className={`mt-0.5 sm:mt-0 sm:ml-1.5 block sm:inline-block w-fit px-2 py-0.5 rounded-full text-[10px] font-semibold ${STATUS_BADGE[it.status_stok] || ""}`}>
                           {it.status_stok}
                         </span>
                       </td>

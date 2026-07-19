@@ -12,6 +12,9 @@ import { Input } from "@/components/ui/input";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
@@ -268,45 +271,53 @@ export default function WasdalPage({ user, onBack }) {
               {data ? `${data.periode?.label} · ${data.total_aset} aset dipantau` : "PMK 207/PMK.06/2021"}
             </p>
           </div>
-          <button
-            type="button"
-            aria-label="Unduh laporan pemantauan periode berjalan (PDF)"
-            title="Unduh laporan pemantauan periode berjalan (PDF)"
-            onClick={() => downloadFileWithProgress(
-              `${API}/wasdal/laporan-pdf`,
-              `Laporan_Wasdal_${(data?.periode?.label || "periode").replace(/\s/g, "_")}.pdf`,
-              { label: "Laporan Hasil Pemantauan Wasdal" },
-            ).catch(() => {})}
-            className="h-9 px-2.5 rounded-lg border border-border text-foreground/80 flex items-center justify-center gap-1 hover:bg-muted flex-shrink-0 text-[10px] font-bold min-w-0 min-h-0"
-            data-testid="wasdal-laporan"
-          >
-            <FileText className="w-4 h-4" /><span className="hidden sm:inline">Periode</span>
-          </button>
-          <button
-            type="button"
-            aria-label="Unduh Laporan Tahunan Wasdal (Lampiran PMK 207)"
-            title="Laporan Tahunan Wasdal — formulir Lampiran PMK 207/2021"
-            onClick={() => downloadFileWithProgress(
-              `${API}/wasdal/laporan-tahunan-pdf`,
-              `Laporan_Tahunan_Wasdal_${new Date().getFullYear()}.pdf`,
-              { label: "Laporan Tahunan Wasdal (Lampiran PMK 207)" },
-            ).catch(() => {})}
-            className="h-9 px-2.5 rounded-lg border border-border text-foreground/80 flex items-center justify-center gap-1 hover:bg-muted flex-shrink-0 text-[10px] font-bold min-w-0 min-h-0"
-            data-testid="wasdal-laporan-tahunan"
-          >
-            <FileText className="w-4 h-4" />Tahunan
-          </button>
-          <button
-            type="button"
-            onClick={muat}
-            aria-label="Muat ulang"
-            title="Muat ulang data pemantauan"
-            className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0"
-            data-testid="wasdal-reload"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
-          <BookingNomorButton modul="wasdal" jenisNaskah="Laporan" referensi="Laporan Wasdal" />
+          {/* Aksi header dikelompokkan: 2 tombol unduh jadi 1 dropdown +
+              baris aksi tersendiri di HP (dulu 4 tombol menumpuk di atas
+              judul — umpan balik pengguna). */}
+          <div className="basis-full sm:basis-auto flex items-center justify-end gap-2 flex-shrink-0">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Unduh laporan Wasdal (PDF)"
+                  title="Unduh laporan Wasdal (PDF)"
+                  className="h-9 px-2.5 rounded-lg border border-border text-foreground/80 flex items-center justify-center gap-1 hover:bg-muted flex-shrink-0 text-[11px] font-bold min-w-0 min-h-0"
+                  data-testid="wasdal-laporan-menu"
+                >
+                  <FileText className="w-4 h-4" />Laporan<ChevronDown className="w-3 h-3" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuItem className="min-h-[42px]" data-testid="wasdal-laporan"
+                  onClick={() => downloadFileWithProgress(
+                    `${API}/wasdal/laporan-pdf`,
+                    `Laporan_Wasdal_${(data?.periode?.label || "periode").replace(/\s/g, "_")}.pdf`,
+                    { label: "Laporan Hasil Pemantauan Wasdal" },
+                  ).catch(() => {})}>
+                  <FileDown className="w-4 h-4 mr-2" />Periode berjalan (semesteran)
+                </DropdownMenuItem>
+                <DropdownMenuItem className="min-h-[42px]" data-testid="wasdal-laporan-tahunan"
+                  onClick={() => downloadFileWithProgress(
+                    `${API}/wasdal/laporan-tahunan-pdf`,
+                    `Laporan_Tahunan_Wasdal_${new Date().getFullYear()}.pdf`,
+                    { label: "Laporan Tahunan Wasdal (Lampiran PMK 207)" },
+                  ).catch(() => {})}>
+                  <FileDown className="w-4 h-4 mr-2" />Tahunan (Lampiran PMK 207)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <button
+              type="button"
+              onClick={muat}
+              aria-label="Muat ulang"
+              title="Muat ulang data pemantauan"
+              className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0"
+              data-testid="wasdal-reload"
+            >
+              <RefreshCw className="w-4 h-4" />
+            </button>
+            <BookingNomorButton modul="wasdal" jenisNaskah="Laporan" referensi="Laporan Wasdal" />
+          </div>
         </div>
       </header>
 

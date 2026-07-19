@@ -48,6 +48,27 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#430] Perbaikan cepat UI: popup TTD meluber, header Wasdal menumpuk, kewarganegaraan tak bisa dipilih, row Persediaan HP sempit — 2026-07-19
+
+Empat perbaikan dari umpan balik pengguna:
+
+- **TTD Elektronik**: pop-up detail permintaan tidak lagi meluber keluar
+  kotak — judul/teks panjang kini membungkus (`break-words`) dan dialog
+  memotong luapan horizontal.
+- **Wasdal**: header tidak lagi penuh tombol menumpuk — dua tombol unduh
+  digabung jadi satu dropdown "Laporan" (Periode berjalan / Tahunan PMK
+  207), dan seluruh aksi pindah ke baris tersendiri di HP.
+- **Master Pegawai — BUG kewarganegaraan**: dropdown Kewarganegaraan (dan
+  Jenis Identitas WNA, saran pangkat, peringatan digit bank) kosong karena
+  pemetaan respons referensi di frontend membuang kuncinya. Kini seluruh
+  kunci referensi diambil apa adanya — WNI/WNA bisa dipilih lagi.
+- **Persediaan (HP)**: kolom Kode·NUP pindah jadi sub-baris di bawah nama
+  barang (plus lokasi) dan badge status stok turun ke baris kedua — Nama
+  Barang mendapat bagian yang luas, tanpa scroll samping.
+- Verifikasi: eslint bersih 4 file, `yarn build` sukses.
+
+---
+
 ## [#429] Integrasi lintas-modul gelombang 11 (pamungkas): reklasifikasi terdeteksi SIMAN dirutekan ke mesin Reklasifikasi resmi — 2026-07-19
 
 Item terakhir backlog audit integrasi (15/15). Saat sinkron SIMAN

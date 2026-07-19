@@ -189,16 +189,12 @@ export default function PegawaiPage({ user, onBack }) {
 
   useEffect(() => {
     load();
-    axios.get(`${API}/pegawai/referensi`).then((r) => setRef({
-      jenis_kelamin: r.data?.jenis_kelamin || [],
-      status_kepegawaian: r.data?.status_kepegawaian || [],
-      jenis_jabatan: r.data?.jenis_jabatan || [],
-      kategori_pegawai: r.data?.kategori_pegawai || [],
-      sub_kategori_non_asn: r.data?.sub_kategori_non_asn || [],
-      agama: r.data?.agama || [],
-      status_perkawinan: r.data?.status_perkawinan || [],
-      status: r.data?.status || [],
-    })).catch(() => {});
+    // Ambil SEMUA kunci referensi apa adanya — pemetaan manual sebelumnya
+    // membuang kewarganegaraan/jenis_identitas_wna/pangkat_golongan/digit_bank
+    // sehingga dropdown Kewarganegaraan kosong & tak bisa dipakai (bug).
+    axios.get(`${API}/pegawai/referensi`)
+      .then((r) => setRef((prev) => ({ ...prev, ...(r.data || {}) })))
+      .catch(() => {});
   }, [load]);
 
   const unduhTemplate = () => {
