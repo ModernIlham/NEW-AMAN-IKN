@@ -48,6 +48,31 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#415] Integrasi lintas-modul: polis asuransi lewat & tunggakan kontribusi jadi temuan Wasdal otomatis — 2026-07-19
+
+Mandat pemilik: "manfaatkan segala informasi yang ada untuk saling berkaitan
+dalam pengelolaan BMN". Dua sumber data yang selama ini hanya tercatat di
+modulnya kini mengalir menjadi temuan Wasdal otomatis (mesin aturan murni):
+
+- **Polis asuransi BMN kedaluwarsa → temuan Wasdal** (objek Pengamanan &
+  Pemeliharaan). Register polis Pengamanan (PMK 43/2025) yang masa
+  berlakunya sudah lewat (`berakhir < hari ini`) langsung muncul sebagai
+  temuan — aset strategis tanpa perlindungan tak lagi luput. Dulu Wasdal
+  hanya menghitung total polis, tak menandai yang kedaluwarsa.
+- **Tunggakan kontribusi Pemanfaatan (PNBP) → temuan Wasdal** (objek
+  Pemanfaatan). Kewajiban kontribusi tahunan KSP/BGS-BSG yang belum tercatat
+  pembayarannya (memakai `tahun_tertunggak` dari modul Pemanfaatan) jadi
+  temuan — tunggakan PNBP adalah temuan wasdal klasik.
+- Keduanya additif: `susun_temuan` menerima parameter `polis`, jenis temuan
+  baru (`polis_asuransi_lewat`, `kontribusi_tertunggak`) terdaftar di
+  registry `JENIS_TEMUAN`/`OBJEK_PER_JENIS`; UI Wasdal merender label jenis
+  secara dinamis sehingga otomatis menampilkannya. Ter-scope satker.
+- Verifikasi: 545 tes unit lulus (+2 kasus baru: tunggakan multi-tahun,
+  polis lewat vs aktif vs tanpa tanggal), smoke mesin temuan end-to-end
+  lulus, server ter-import.
+
+---
+
 ## [#414] Semua tahap siklus BMN AKTIF penuh — hapus badge "Sebagian Aktif" — 2026-07-19
 
 Permintaan pemilik: "agar tidak ada Sebagian Aktif di modul lagi; periksa juga

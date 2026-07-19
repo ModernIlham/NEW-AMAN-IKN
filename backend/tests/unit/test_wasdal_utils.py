@@ -5,7 +5,7 @@ from wasdal_utils import (
     rekap_insidentil, rekap_penertiban, rekap_wasdal, sisa_hari_kerja,
     status_tenggat_penertiban, susun_temuan, tambah_hari_kerja,
     temuan_pemanfaatan, temuan_pemindahtanganan, temuan_penatausahaan,
-    temuan_pengamanan_pemeliharaan, temuan_penggunaan,
+    temuan_pengamanan_pemeliharaan, temuan_penggunaan, temuan_polis_asuransi,
     validate_ba_insidentil, validate_insidentil, validate_lapor_insidentil,
     validate_penertiban, validate_selesai_penertiban,
 )
@@ -50,6 +50,41 @@ def test_pemanfaatan():
     assert jenis == {"p2": "perjanjian_berakhir",
                      "p3": "dokumen_pemanfaatan_kurang"}
     assert "persetujuan" in hasil[1]["detail"]
+
+
+def test_pemanfaatan_kontribusi_tertunggak():
+    # KSP kontribusi tahunan 10jt, mulai 2024, belum bayar → tunggak 2024-2026.
+    ksp = {"id": "p9", "bentuk": "ksp", "pihak": "PT Y",
+           "berakhir": "2030-01-01", "mulai": "2024-01-01",
+           "nomor_persetujuan": "S-9", "nomor_perjanjian": "PJ-9",
+           "ntpn": "N9", "kontribusi_tahunan": 10_000_000, "kontribusi": []}
+    hasil = temuan_pemanfaatan([ksp], HARI_INI)
+    jenis = [t["jenis"] for t in hasil]
+    assert "kontribusi_tertunggak" in jenis
+    t = next(t for t in hasil if t["jenis"] == "kontribusi_tertunggak")
+    assert "2024" in t["detail"] and "2026" in t["detail"]
+    # Tertib (semua tahun terbayar) → tanpa temuan tunggakan.
+    tertib = dict(ksp, id="p10", kontribusi=[
+        {"tahun": "2024"}, {"tahun": "2025"}, {"tahun": "2026"}])
+    assert not [t for t in temuan_pemanfaatan([tertib], HARI_INI)
+                if t["jenis"] == "kontribusi_tertunggak"]
+
+
+def test_polis_asuransi_lewat():
+    lewat = {"id": "pol1", "asset_id": "a1", "asset_name": "Gedung A",
+             "nomor_polis": "POL-001", "penanggung": "Konsorsium",
+             "berakhir": "2026-01-01"}
+    aktif = dict(lewat, id="pol2", berakhir="2027-01-01")
+    tanpa = dict(lewat, id="pol3", berakhir="")
+    hasil = temuan_polis_asuransi([lewat, aktif, tanpa], HARI_INI)
+    assert [t["polis_id"] for t in hasil] == ["pol1"]
+    assert hasil[0]["jenis"] == "polis_asuransi_lewat"
+    assert "POL-001" in hasil[0]["detail"] and "2026-01-01" in hasil[0]["detail"]
+    assert hasil[0]["asset_name"] == "Gedung A"
+    # objek benar via susun_temuan
+    per_objek = susun_temuan([], [], [], [], [], HARI_INI, polis=[lewat])
+    assert any(t["jenis"] == "polis_asuransi_lewat"
+               for t in per_objek["pengamanan_pemeliharaan"])
 
 
 def test_pemindahtanganan_dan_penghapusan():

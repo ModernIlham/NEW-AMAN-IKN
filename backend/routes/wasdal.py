@@ -60,8 +60,16 @@ async def _data_pemantauan(ambang_hari: int, user=None):
     _sq = (lambda q: scope_query_field_satker(user, q)) if user is not None else (lambda q: q)
     pemanfaatan = [p async for p in db.pemanfaatan.find(
         _sq({}), {"_id": 0, "id": 1, "bentuk": 1, "pihak": 1, "asset_name": 1,
-             "berakhir": 1, "nomor_persetujuan": 1, "nomor_perjanjian": 1,
-             "ntpn": 1})]
+             "berakhir": 1, "mulai": 1, "nomor_persetujuan": 1,
+             "nomor_perjanjian": 1, "ntpn": 1,
+             # field kontribusi utk deteksi tunggakan PNBP (integrasi Wasdal)
+             "kontribusi_tahunan": 1, "kontribusi": 1})]
+    # Integrasi Pengamanan → Wasdal: polis asuransi BMN yang masa berlakunya
+    # sudah lewat menjadi temuan objek pengamanan & pemeliharaan.
+    polis = [p async for p in db.pengamanan_polis.find(
+        _sq({}), {"_id": 0, "id": 1, "asset_id": 1, "asset_name": 1,
+                  "nama_aset": 1, "nomor_polis": 1, "penanggung": 1,
+                  "berakhir": 1})]
     usulan_hapus = [u async for u in db.usulan_penghapusan.find(
         _sq({"status": {"$in": ["diusulkan", "diproses"]}}),
         {"_id": 0, "id": 1, "asset_id": 1, "asset_name": 1, "status": 1,
@@ -75,7 +83,7 @@ async def _data_pemantauan(ambang_hari: int, user=None):
         {"_id": 0, "asset_id": 1, "tanggal": 1})]
 
     per_objek = susun_temuan(assets, pemanfaatan, usulan_hapus, usulan_pt,
-                             pemeliharaan, today_iso, ambang_hari)
+                             pemeliharaan, today_iso, ambang_hari, polis=polis)
     return periode, per_objek, rekap_wasdal(per_objek), len(assets)
 
 
