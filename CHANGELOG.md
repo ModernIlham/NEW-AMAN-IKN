@@ -48,6 +48,21 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#466] Air sinkron SIMAN natural — satu permukaan penuh selebar kartu, tenang di pinggir, bola diturunkan — 2026-07-19
+
+- **Desain ulang efek air galeri** (umpan balik screenshot): air kini SATU
+  permukaan penuh selebar kartu di dasar foto — datar & tenang di pinggir,
+  hanya di sekitar bola ada gembungan lembut yang bernafas (bergeser
+  kiri↔kanan + naik-turun pelan); air tidak melebihi puncak bola.
+- **Bola diturunkan** hampir menyentuh batas area informasi, mengapung
+  pelan seirama gembungan (naik-turun + oleng ringan); TANPA lapisan
+  transparan dan TANPA air di depan bola (efek setengah tenggelam
+  dihilangkan) — senatural mungkin.
+- **Kode/NUP diangkat sedikit** di atas garis air agar teks putih tetap
+  terbaca (air berwarna permukaan kartu).
+- Hover bola / proses sinkronisasi tetap mempercepat ombak; sukses = air
+  surut turun beranimasi bersama bola centang hijau.
+
 ## [#465] Lookup satker fallback ke Master Satker + auto-isi kode lengkap tanpa nilai basi + dokumentasi — 2026-07-19
 
 - **`satker-lookup` kini FALLBACK ke Master Satker** — sebelumnya hanya
