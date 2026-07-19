@@ -3,13 +3,17 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Search, Plus, Pencil, Trash2, Loader2, IdCard, Upload, Download,
-  AlertTriangle, Network, Wand2,
+  AlertTriangle, Network, Wand2, MoreVertical,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenuLabel, DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
@@ -374,100 +378,158 @@ export default function PegawaiPage({ user, onBack }) {
 
       <main className="max-w-5xl mx-auto px-3 sm:px-6 py-4 space-y-3">
         <div className="bg-card rounded-xl border border-border shadow-sm p-2 sm:p-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="relative flex-1 min-w-[180px]">
+          {/* Baris utama: pencarian + aksi. Di HP tombol data (Struktur/
+              Template/Ekspor/Impor) dilipat ke satu menu ⋯ agar hemat ruang;
+              di desktop tetap tampil terpisah berlabel. Tombol Tambah selalu
+              terlihat sebagai aksi utama. */}
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1 min-w-0">
               <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
               <Input value={search} onChange={(e) => setSearch(e.target.value)}
-                placeholder="Cari nama / NIP / jabatan / unit kerja / email…" className="pl-9 h-10" data-testid="pegawai-search" />
+                placeholder="Cari nama / NIP / jabatan / unit / email…" className="pl-9 h-10" data-testid="pegawai-search" />
             </div>
-            {units.length > 0 && (
-              <Button variant="outline" className="h-10 gap-1.5" onClick={() => setStruktur(true)}
-                title="Struktur Organisasi" aria-label="Struktur Organisasi"
-                data-testid="pegawai-struktur">
-                <Network className="w-4 h-4" /><span className="hidden sm:inline">Struktur</span>
-              </Button>
+            {isAdmin && (
+              <input ref={fileRef} type="file" accept=".xlsx,.xlsm,.csv" className="hidden"
+                onChange={onBerkasDipilih} data-testid="pegawai-impor-file" />
+            )}
+            {/* Desktop: tombol terpisah berlabel */}
+            <div className="hidden sm:flex items-center gap-2">
+              {units.length > 0 && (
+                <Button variant="outline" className="h-10 gap-1.5" onClick={() => setStruktur(true)}
+                  title="Struktur Organisasi" aria-label="Struktur Organisasi"
+                  data-testid="pegawai-struktur">
+                  <Network className="w-4 h-4" />Struktur
+                </Button>
+              )}
+              {isAdmin && (
+                <>
+                  <Button variant="outline" className="h-10 gap-1.5" onClick={unduhTemplate}
+                    title="Unduh Template Impor (CSV)" aria-label="Unduh Template Impor (CSV)"
+                    data-testid="pegawai-template">
+                    <Download className="w-4 h-4" />Template
+                  </Button>
+                  <Button variant="outline" className="h-10 gap-1.5"
+                    onClick={() => downloadFileWithProgress(`${API}/pegawai/export-xlsx`,
+                      "master_pegawai.xlsx", { label: "Ekspor Master Pegawai (Excel)" }).catch(() => {})}
+                    title="Ekspor Excel siap-edit (dropdown + bisa diimpor kembali)"
+                    aria-label="Ekspor Excel siap-edit"
+                    data-testid="pegawai-export-xlsx">
+                    <Download className="w-4 h-4" />Ekspor Excel
+                  </Button>
+                  <Button variant="outline" className="h-10 gap-1.5" disabled={mengimpor}
+                    title="Impor Excel/CSV" aria-label="Impor Excel/CSV"
+                    onClick={pilihBerkas} data-testid="pegawai-impor">
+                    {mengimpor ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                    Impor Excel
+                  </Button>
+                </>
+              )}
+            </div>
+            {/* HP: satu menu ⋯ menampung semua aksi data */}
+            {(units.length > 0 || isAdmin) && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button type="button"
+                    className="sm:hidden h-10 w-10 rounded-lg border border-input bg-background text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0"
+                    aria-label="Menu data pegawai" title="Struktur, template, ekspor, impor"
+                    data-testid="pegawai-menu">
+                    <MoreVertical className="w-4 h-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel className="text-[11px]">Data & berkas pegawai</DropdownMenuLabel>
+                  {units.length > 0 && (
+                    <DropdownMenuItem className="min-h-[42px]" onClick={() => setStruktur(true)} data-testid="pegawai-struktur-m">
+                      <Network className="w-4 h-4 mr-2" />Struktur Organisasi
+                    </DropdownMenuItem>
+                  )}
+                  {isAdmin && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem className="min-h-[42px]" onClick={unduhTemplate} data-testid="pegawai-template-m">
+                        <Download className="w-4 h-4 mr-2" />Unduh Template (CSV)
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className="min-h-[42px]" data-testid="pegawai-export-xlsx-m"
+                        onClick={() => downloadFileWithProgress(`${API}/pegawai/export-xlsx`,
+                          "master_pegawai.xlsx", { label: "Ekspor Master Pegawai (Excel)" }).catch(() => {})}>
+                        <Download className="w-4 h-4 mr-2" />Ekspor Excel
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className="min-h-[42px]" disabled={mengimpor} onClick={pilihBerkas} data-testid="pegawai-impor-m">
+                        {mengimpor ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
+                        Impor Excel/CSV
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
             {isAdmin && (
-              <>
-                <input ref={fileRef} type="file" accept=".xlsx,.xlsm,.csv" className="hidden"
-                  onChange={onBerkasDipilih} data-testid="pegawai-impor-file" />
-                <Button variant="outline" className="h-10 gap-1.5" onClick={unduhTemplate}
-                  title="Unduh Template Impor (CSV)" aria-label="Unduh Template Impor (CSV)"
-                  data-testid="pegawai-template">
-                  <Download className="w-4 h-4" /><span className="hidden sm:inline">Template</span>
-                </Button>
-                <Button variant="outline" className="h-10 gap-1.5"
-                  onClick={() => downloadFileWithProgress(`${API}/pegawai/export-xlsx`,
-                    "master_pegawai.xlsx", { label: "Ekspor Master Pegawai (Excel)" }).catch(() => {})}
-                  title="Ekspor Excel siap-edit (dropdown + bisa diimpor kembali)"
-                  aria-label="Ekspor Excel siap-edit"
-                  data-testid="pegawai-export-xlsx">
-                  <Download className="w-4 h-4" /><span className="hidden sm:inline">Ekspor Excel</span>
-                </Button>
-                <Button variant="outline" className="h-10 gap-1.5" disabled={mengimpor}
-                  title="Impor Excel/CSV" aria-label="Impor Excel/CSV"
-                  onClick={pilihBerkas} data-testid="pegawai-impor">
-                  {mengimpor ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                  <span className="hidden sm:inline">Impor Excel</span>
-                </Button>
-                <Button className="h-10 gap-1.5 bg-sky-600 hover:bg-sky-700 text-white"
-                  title="Tambah Pegawai" aria-label="Tambah Pegawai"
-                  onClick={() => bukaForm({ ...EMPTY })} data-testid="pegawai-add">
-                  <Plus className="w-4 h-4" /><span className="hidden sm:inline">Tambah</span>
-                </Button>
-              </>
+              <Button className="h-10 gap-1.5 bg-sky-600 hover:bg-sky-700 text-white flex-shrink-0"
+                title="Tambah Pegawai" aria-label="Tambah Pegawai"
+                onClick={() => bukaForm({ ...EMPTY })} data-testid="pegawai-add">
+                <Plus className="w-4 h-4" /><span className="hidden sm:inline">Tambah</span>
+              </Button>
             )}
           </div>
-          {/* Baris filter & sortir lanjutan (pola halaman aset) */}
-          <div className="flex items-center gap-1.5 flex-wrap mt-2">
-            <select value={fStatusPeg} onChange={(e) => setFStatusPeg(e.target.value)}
-              aria-label="Filter status kepegawaian" title="Filter status kepegawaian"
-              className="h-9 rounded-md border border-input bg-background px-2 text-xs flex-1 sm:flex-none min-w-0"
-              data-testid="pegawai-f-statuspeg">
-              <option value="">Kepegawaian</option>
-              {(ref.status_kepegawaian || []).map((o) => <option key={o.kode} value={o.kode}>{o.uraian}</option>)}
-            </select>
-            <select value={fStatus} onChange={(e) => setFStatus(e.target.value)}
-              aria-label="Filter status di satker" title="Filter status di satker"
-              className="h-9 rounded-md border border-input bg-background px-2 text-xs flex-1 sm:flex-none min-w-0"
-              data-testid="pegawai-f-status">
-              <option value="">Status</option>
-              {(ref.status || []).map((o) => <option key={o.kode} value={o.kode}>{o.uraian}</option>)}
-            </select>
-            <select value={fUnit} onChange={(e) => setFUnit(e.target.value)}
-              aria-label="Filter unit kerja" title="Filter unit kerja"
-              className="h-9 rounded-md border border-input bg-background px-2 text-xs flex-1 sm:flex-none min-w-0 max-w-[180px]"
-              data-testid="pegawai-f-unit">
-              <option value="">Unit kerja</option>
-              {unitTerpakai.map((u) => <option key={u} value={u}>{u}</option>)}
-            </select>
-            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}
-              aria-label="Urutkan berdasarkan" title="Urutkan berdasarkan"
-              className="h-9 rounded-md border border-input bg-background px-2 text-xs flex-1 sm:flex-none min-w-0"
-              data-testid="pegawai-sort">
-              <option value="nama">Urut: Nama</option>
-              <option value="updated">Urut: Terakhir diubah</option>
-              <option value="pensiun">Urut: Terdekat pensiun</option>
-              <option value="kontrak">Urut: Kontrak berakhir</option>
-              <option value="jabatan">Urut: Jabatan</option>
-              <option value="unit">Urut: Unit kerja</option>
-            </select>
-            <button type="button" onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
-              aria-label={sortDir === "asc" ? "Urut naik (klik utk turun)" : "Urut turun (klik utk naik)"}
-              title={sortDir === "asc" ? "Urut naik (klik utk turun)" : "Urut turun (klik utk naik)"}
-              className="h-9 w-9 rounded-md border border-input bg-background text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0 min-w-0 min-h-0"
-              data-testid="pegawai-sort-dir">
-              {sortDir === "asc" ? "↑" : "↓"}
-            </button>
-            {(fStatus || fStatusPeg || fUnit || sortBy !== "nama") && (
-              <button type="button"
-                onClick={() => { setFStatus(""); setFStatusPeg(""); setFUnit(""); setSortBy("nama"); setSortDir("asc"); }}
-                className="h-9 px-2 rounded-md text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:bg-muted min-w-0 min-h-0"
-                data-testid="pegawai-f-reset">
-                Reset
-              </button>
-            )}
-            <span className="text-[10px] text-muted-foreground ml-auto">{filtered.length}/{items.length} pegawai</span>
+          {/* Baris filter & sortir — di HP jadi grid 2 kolom rapi (bukan
+              membungkus berantakan), sebaris penuh di desktop. */}
+          <div className="mt-2 space-y-1.5">
+            <div className="grid grid-cols-2 sm:flex sm:flex-wrap sm:items-center gap-1.5">
+              <select value={fStatusPeg} onChange={(e) => setFStatusPeg(e.target.value)}
+                aria-label="Filter status kepegawaian" title="Filter status kepegawaian"
+                className="h-9 rounded-md border border-input bg-background px-2 text-xs w-full sm:w-auto min-w-0"
+                data-testid="pegawai-f-statuspeg">
+                <option value="">Kepegawaian</option>
+                {(ref.status_kepegawaian || []).map((o) => <option key={o.kode} value={o.kode}>{o.uraian}</option>)}
+              </select>
+              <select value={fStatus} onChange={(e) => setFStatus(e.target.value)}
+                aria-label="Filter status di satker" title="Filter status di satker"
+                className="h-9 rounded-md border border-input bg-background px-2 text-xs w-full sm:w-auto min-w-0"
+                data-testid="pegawai-f-status">
+                <option value="">Status</option>
+                {(ref.status || []).map((o) => <option key={o.kode} value={o.kode}>{o.uraian}</option>)}
+              </select>
+              <select value={fUnit} onChange={(e) => setFUnit(e.target.value)}
+                aria-label="Filter unit kerja" title="Filter unit kerja"
+                className="h-9 rounded-md border border-input bg-background px-2 text-xs w-full sm:w-auto min-w-0 sm:max-w-[180px]"
+                data-testid="pegawai-f-unit">
+                <option value="">Unit kerja</option>
+                {unitTerpakai.map((u) => <option key={u} value={u}>{u}</option>)}
+              </select>
+              {/* Urut + arah dalam satu sel agar berpasangan */}
+              <div className="flex items-center gap-1.5 min-w-0">
+                <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}
+                  aria-label="Urutkan berdasarkan" title="Urutkan berdasarkan"
+                  className="h-9 rounded-md border border-input bg-background px-2 text-xs flex-1 sm:flex-none min-w-0"
+                  data-testid="pegawai-sort">
+                  <option value="nama">Urut: Nama</option>
+                  <option value="updated">Urut: Terakhir diubah</option>
+                  <option value="pensiun">Urut: Terdekat pensiun</option>
+                  <option value="kontrak">Urut: Kontrak berakhir</option>
+                  <option value="jabatan">Urut: Jabatan</option>
+                  <option value="unit">Urut: Unit kerja</option>
+                </select>
+                <button type="button" onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+                  aria-label={sortDir === "asc" ? "Urut naik (klik utk turun)" : "Urut turun (klik utk naik)"}
+                  title={sortDir === "asc" ? "Urut naik (klik utk turun)" : "Urut turun (klik utk naik)"}
+                  className="h-9 w-9 rounded-md border border-input bg-background text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0 min-w-0 min-h-0"
+                  data-testid="pegawai-sort-dir">
+                  {sortDir === "asc" ? "↑" : "↓"}
+                </button>
+              </div>
+            </div>
+            {/* Baris info tipis: reset (bila ada filter) + jumlah pegawai */}
+            <div className="flex items-center gap-2">
+              {(fStatus || fStatusPeg || fUnit || sortBy !== "nama") && (
+                <button type="button"
+                  onClick={() => { setFStatus(""); setFStatusPeg(""); setFUnit(""); setSortBy("nama"); setSortDir("asc"); }}
+                  className="h-7 px-2 rounded-md text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:bg-muted min-w-0 min-h-0"
+                  data-testid="pegawai-f-reset">
+                  Reset filter
+                </button>
+              )}
+              <span className="text-[10px] text-muted-foreground ml-auto">{filtered.length}/{items.length} pegawai</span>
+            </div>
           </div>
         </div>
 

@@ -256,7 +256,7 @@ export default function WasdalPage({ user, onBack }) {
     <div className="min-h-screen bg-background" data-testid="wasdal-page">
       {/* ── Header ── */}
       <header className="bg-card/95 backdrop-blur-sm border-b border-border px-3 sm:px-6 py-2.5 sticky top-0 z-40">
-        <div className="max-w-5xl mx-auto flex flex-wrap items-center gap-2 sm:gap-3 gap-y-2">
+        <div className="max-w-5xl mx-auto flex items-center gap-1.5 sm:gap-3">
           <button
             type="button"
             onClick={onBack}
@@ -276,10 +276,9 @@ export default function WasdalPage({ user, onBack }) {
               {data ? `${data.periode?.label} · ${data.total_aset} aset dipantau` : "PMK 207/PMK.06/2021"}
             </p>
           </div>
-          {/* Aksi header dikelompokkan: 2 tombol unduh jadi 1 dropdown +
-              baris aksi tersendiri di HP (dulu 4 tombol menumpuk di atas
-              judul — umpan balik pengguna). */}
-          <div className="basis-full sm:basis-auto flex items-center justify-end gap-2 flex-shrink-0">
+          {/* Aksi header ikon-only, tetap 1 baris di HP (umpan balik: jangan
+              menumpuk ke baris kedua). */}
+          <div className="flex items-center justify-end gap-1.5 flex-shrink-0">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
@@ -338,23 +337,28 @@ export default function WasdalPage({ user, onBack }) {
               {Object.entries(data.label_objek || {}).map(([kunci, label]) => {
                 const Icon = IKON_OBJEK[kunci] || Eye;
                 const n = data.rekap?.per_objek?.[kunci] || 0;
+                const ada = n > 0;
                 return (
                   <button
                     key={kunci}
                     type="button"
-                    onClick={() => n > 0 && setBuka(buka === kunci ? null : kunci)}
-                    disabled={n === 0}
-                    title={n === 0 ? "Tidak ada temuan — objek ini tertib" : "Klik untuk lihat rincian temuan"}
-                    className={`bg-card rounded-xl border p-3 text-center transition-colors min-w-0 min-h-0 ${
-                      n > 0 ? "border-sky-500/40 hover:bg-sky-500/10" : "border-emerald-500/40 opacity-70"
+                    onClick={() => ada && setBuka(buka === kunci ? null : kunci)}
+                    disabled={!ada}
+                    title={ada ? "Klik untuk lihat rincian temuan" : "Tidak ada temuan — objek ini tertib"}
+                    className={`bg-card rounded-xl border p-2 flex items-center gap-2 text-left transition-colors min-w-0 min-h-0 ${
+                      ada ? "border-sky-500/40 hover:bg-sky-500/10" : "border-emerald-500/40 opacity-70"
                     }`}
                     data-testid={`wasdal-objek-${kunci}`}
                   >
-                    {n > 0
-                      ? <Icon className="w-5 h-5 mx-auto mb-1 text-sky-500" />
-                      : <BadgeCheck className="w-5 h-5 mx-auto mb-1 text-emerald-500" />}
-                    <p className="text-lg font-bold text-foreground leading-none">{n}</p>
-                    <p className="text-[10px] text-muted-foreground mt-1">{n === 0 ? `${label} · tertib` : label}</p>
+                    <span className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${ada ? "bg-sky-500/10" : "bg-emerald-500/10"}`}>
+                      {ada
+                        ? <Icon className="w-4 h-4 text-sky-500" />
+                        : <BadgeCheck className="w-4 h-4 text-emerald-500" />}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-base font-bold text-foreground leading-none tabular-nums">{n}</p>
+                      <p className="text-[10px] text-muted-foreground leading-tight mt-0.5 break-words">{ada ? label : `${label} · tertib`}</p>
+                    </div>
                   </button>
                 );
               })}

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import {
-  ArrowLeft, BadgeCheck, Copy, FileDown, FileSignature, FileText, Link2,
+  ArrowLeft, BadgeCheck, ChevronDown, Copy, FileDown, FileSignature, FileText, Link2,
   Loader2, Mail, MessageCircle, PenTool, Plus, Search, SearchX, ShieldCheck,
   Trash2, Upload, Users, XCircle,
 } from "lucide-react";
@@ -11,6 +11,9 @@ import { Input } from "@/components/ui/input";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
@@ -518,7 +521,7 @@ export default function TtdPermintaanPage({ user, onBack }) {
                   <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${WARNA_STATUS[detail.status] || ""}`}>{LABEL_STATUS[detail.status] || detail.status}</span>
                 </DialogDescription>
               </DialogHeader>
-              <div className="space-y-2">
+              <div className="space-y-2 min-w-0">
                 {(detail.signers || []).map((s) => (
                   <div key={s.signer_id} className="rounded-xl border border-border p-2.5 space-y-1.5 min-w-0 overflow-hidden">
                     <div className="flex items-center gap-2.5 min-w-0">
@@ -579,30 +582,41 @@ export default function TtdPermintaanPage({ user, onBack }) {
                   </span>
                 </div>
               </div>
-              <DialogFooter className="flex-wrap gap-1.5">
+              {/* Footer padat: aksi unduh (3 dokumen) dilipat ke satu menu
+                  "Unduh" agar tidak menumpuk penuh-lebar di HP (umpan balik:
+                  popup berantakan). Baris tetap mendatar & membungkus rapi. */}
+              <DialogFooter className="flex-row flex-wrap justify-end gap-1.5 space-x-0">
                 {detail.status !== "batal" && (
                   <Button variant="outline" onClick={() => batalkan(detail)}
                     className="h-9 text-xs text-red-600 border-red-500/40 hover:bg-red-500/10">
                     <XCircle className="w-3.5 h-3.5 mr-1.5" />Batalkan
                   </Button>
                 )}
-                <Button variant="outline" onClick={() => unduhLembar(detail)} className="h-9 text-xs"
-                  data-testid="ttd-unduh-lembar">
-                  <FileDown className="w-3.5 h-3.5 mr-1.5" />Lembar Pengesahan (PDF)
-                </Button>
-                {detail.dok_file_id && (
-                  <>
-                    <Button variant="outline" onClick={() => unduhDokumen(detail, false)} className="h-9 text-xs"
-                      data-testid="ttd-unduh-dokumen">
-                      <FileText className="w-3.5 h-3.5 mr-1.5" />Dokumen Asli
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="h-9 text-xs" data-testid="ttd-unduh-menu">
+                      <FileDown className="w-3.5 h-3.5 mr-1.5" />Unduh<ChevronDown className="w-3 h-3 ml-1" />
                     </Button>
-                    <Button variant="outline" onClick={() => unduhDokumen(detail, true)} className="h-9 text-xs text-emerald-700 dark:text-emerald-400"
-                      title="Dokumen dengan bubuhan tanda tangan yang sudah masuk + QR verifikasi"
-                      data-testid="ttd-unduh-dokumen-ttd">
-                      <FileSignature className="w-3.5 h-3.5 mr-1.5" />Dokumen ber-TTD
-                    </Button>
-                  </>
-                )}
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuItem className="min-h-[42px]" onClick={() => unduhLembar(detail)} data-testid="ttd-unduh-lembar">
+                      <FileDown className="w-4 h-4 mr-2" />Lembar Pengesahan (PDF)
+                    </DropdownMenuItem>
+                    {detail.dok_file_id && (
+                      <>
+                        <DropdownMenuItem className="min-h-[42px]" onClick={() => unduhDokumen(detail, false)} data-testid="ttd-unduh-dokumen">
+                          <FileText className="w-4 h-4 mr-2" />Dokumen Asli
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="min-h-[42px] text-emerald-700 dark:text-emerald-400"
+                          onClick={() => unduhDokumen(detail, true)}
+                          title="Dokumen dengan bubuhan tanda tangan yang sudah masuk + QR verifikasi"
+                          data-testid="ttd-unduh-dokumen-ttd">
+                          <FileSignature className="w-4 h-4 mr-2" />Dokumen ber-TTD
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <Button onClick={() => setDetail(null)} className="h-9 text-xs">Tutup</Button>
               </DialogFooter>
             </>
