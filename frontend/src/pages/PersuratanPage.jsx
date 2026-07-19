@@ -324,8 +324,10 @@ export default function PersuratanPage({ user, onBack }) {
           </div>
         )}
 
-        {/* Toolbar maks 2 baris di HP: baris 1 cari + CSV, baris 2 filter + 2 aksi. */}
-        <div className="bg-card rounded-xl border border-border shadow-sm p-2 sm:p-3 flex items-center gap-2 flex-wrap">
+        {/* Toolbar: 1 baris penuh mulai tablet (label aksi diringkas s.d. lg
+            agar cari + filter + 2 aksi muat sebaris di iPad mini 768).
+            Di HP (<sm) tetap 2 baris: baris 1 cari + CSV, baris 2 filter + aksi. */}
+        <div className="bg-card rounded-xl border border-border shadow-sm p-2 sm:p-3 flex items-center gap-2 flex-wrap md:flex-nowrap">
           <div className="flex items-center gap-2 basis-full sm:basis-auto sm:flex-1 min-w-0">
             <div className="relative flex-1 min-w-0">
               <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
@@ -333,11 +335,11 @@ export default function PersuratanPage({ user, onBack }) {
                 placeholder="Cari nomor / perihal / tujuan / pengirim…" className="pl-9 h-10"
                 data-testid="persuratan-cari" />
             </div>
-            <Button variant="outline" className="h-10 gap-1.5 flex-shrink-0"
+            <Button variant="outline" className="h-10 gap-1.5 flex-shrink-0 px-2.5 lg:px-3"
               title="Unduh buku agenda (CSV)" aria-label="Unduh buku agenda (CSV)"
               onClick={() => downloadFileWithProgress(`${API}/persuratan/export${fJenis ? `?jenis=${fJenis}` : ""}`, "Buku_Agenda_Surat.csv", { label: "Buku Agenda (CSV)" }).catch(() => {})}
               data-testid="persuratan-export">
-              <FileDown className="w-4 h-4" /><span className="hidden sm:inline">CSV</span>
+              <FileDown className="w-4 h-4" /><span className="hidden lg:inline">CSV</span>
             </Button>
           </div>
           <select value={fJenis} onChange={(e) => { setFJenis(e.target.value); setFStatus(""); }}
@@ -353,13 +355,13 @@ export default function PersuratanPage({ user, onBack }) {
             <option value="">Status</option>
             {opsiStatus.map((s) => <option key={s.kode} value={s.kode}>{s.uraian}</option>)}
           </select>
-          <Button className="h-10 gap-1.5 flex-shrink-0" onClick={() => setFormKeluar({ ...KELUAR_KOSONG })}
+          <Button className="h-10 gap-1.5 flex-shrink-0 px-2.5 lg:px-3" onClick={() => setFormKeluar({ ...KELUAR_KOSONG })}
             title="Booking nomor surat keluar" data-testid="persuratan-booking-btn">
-            <MailPlus className="w-4 h-4" /><span className="hidden sm:inline">Booking Surat Keluar</span><span className="sm:hidden">Keluar</span>
+            <MailPlus className="w-4 h-4" /><span className="hidden lg:inline">Booking Surat Keluar</span><span className="lg:hidden">Keluar</span>
           </Button>
-          <Button variant="outline" className="h-10 gap-1.5 flex-shrink-0" onClick={() => setFormMasuk({ ...MASUK_KOSONG })}
+          <Button variant="outline" className="h-10 gap-1.5 flex-shrink-0 px-2.5 lg:px-3" onClick={() => setFormMasuk({ ...MASUK_KOSONG })}
             title="Catat surat masuk" data-testid="persuratan-masuk-btn">
-            <Inbox className="w-4 h-4" /><span className="hidden sm:inline">Catat Surat Masuk</span><span className="sm:hidden">Masuk</span>
+            <Inbox className="w-4 h-4" /><span className="hidden lg:inline">Catat Surat Masuk</span><span className="lg:hidden">Masuk</span>
           </Button>
         </div>
 
