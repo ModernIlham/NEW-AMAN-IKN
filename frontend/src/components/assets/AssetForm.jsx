@@ -4,7 +4,7 @@ import {
   Plus, Edit3, X, Camera, Trash2, Check, ChevronDown, Search,
   Package, Briefcase, ShieldCheck, Settings, Tag, Save, Loader2, ClipboardList,
   Info, ChevronRight, BookOpen, Wrench, ArrowRight, HelpCircle, MapPin, LocateFixed,
-  ChevronLeft, CloudOff, Upload, Eye, UserRound, AlertTriangle,
+  ChevronLeft, CloudOff, Upload, Eye, UserRound, AlertTriangle, History,
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -458,6 +458,7 @@ const AssetForm = memo(({
   inventoryMode = false,
   onShowCategoryManager,
   onOpenKartu,
+  onOpenTimeline,
   alwaysExpanded = false
 }) => {
   const [formSection, setFormSection] = useState("basic");
@@ -1854,6 +1855,18 @@ const AssetForm = memo(({
               >
                 <BookOpen className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Kartu</span>
+              </Button>
+            )}
+            {isEditing && onOpenTimeline && editAsset?.id && (
+              <Button
+                type="button" variant="ghost" size="sm"
+                className="h-7 gap-1 px-2 text-[10px] text-violet-700 dark:text-violet-400 hover:bg-violet-100 hover:text-violet-800 dark:hover:bg-violet-900/40 dark:hover:text-violet-300"
+                onClick={() => onOpenTimeline(editAsset.id)}
+                title="Timeline perlakuan aset ini lintas modul"
+                data-testid="asset-form-timeline-btn"
+              >
+                <History className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Timeline</span>
               </Button>
             )}
             {!alwaysExpanded && <Button variant="ghost" size="sm" className="lg:hidden h-7 w-7 p-0" onClick={onClose}><X className="w-4 h-4" /></Button>}

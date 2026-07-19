@@ -48,6 +48,34 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#436] Timeline Aset — induk data = identitas aset lintas modul (arsitektur W5 tahap 1) — 2026-07-19
+
+Jawaban arsitektural atas masalah lama: sistem menjadikan data inventarisasi
+sebagai induk, padahal aset fisik yang sama tercatat ulang di tiap kegiatan
+inventarisasi (satu dokumen aset per kegiatan). Kini **induk data =
+identitas aset** (`kode_register` dari SIMAN → fallback kode barang + NUP)
+dan seluruh perlakuannya lintas modul tersaji sebagai satu garis waktu:
+
+- **Backend `GET /assets/{id}/timeline`** (route baru `timeline.py` + helper
+  murni `timeline_utils.py`, 7 unit test): otomatis menemukan semua dokumen
+  aset ber-identitas sama lintas kegiatan ("saudara"), lalu menggabungkan
+  event dari: pencatatan & pengesahan inventarisasi (lintas kegiatan), Buku
+  Barang/mutasi, SK PSP + BMN idle + proses Penggunaan, Pemanfaatan,
+  Pemeliharaan, kasus & dokumen Pengamanan, koreksi nilai Penilaian, usulan
+  & SK Penghapusan, Pemindahtanganan, BA Pemusnahan, penertiban Wasdal,
+  BAST, reklasifikasi, dan audit log — semua diurutkan terbaru dulu, dengan
+  ringkasan jumlah per modul. Scoping satker ikut aturan M-SCOPE.
+- **Data SIMAN V2 yang menganggur kini dimanfaatkan**: `no_psp`,
+  `tanggal_psp`, `status_penggunaan`, `status_bmn` dari referensi impor
+  SIMAN diangkat menjadi blok "PSP resmi menurut SIMAN V2" + event timeline
+  — modul lain tak lagi buta terhadap PSP yang sudah tercatat resmi.
+- **UI `AssetTimelineDialog`** (lazy): tombol **Timeline** di header form
+  aset (sebelah "Kartu") — badge jumlah kegiatan inventarisasi yang pernah
+  mencatat aset ini, chip filter per modul, garis waktu berwarna per modul,
+  light+dark, ramah HP.
+- Menegaskan prinsip masterplan: kegiatan inventarisasi = **pemutakhir**
+  berkala data barang, bukan induk. Masterplan Bab 5A diperbarui (gap #9).
+
 ## [#435] Semua form ber-referensi terhubung ke data lintas modul (picker/datalist) — 2026-07-19
 
 Sapu menyeluruh 13 titik input teks bebas yang sebenarnya punya master data —
