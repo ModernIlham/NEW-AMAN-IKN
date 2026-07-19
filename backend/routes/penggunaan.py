@@ -31,7 +31,8 @@ from penggunaan_utils import (
     baris_csv_proses, baris_csv_psp,
     build_asset_alih_keluar_projection, build_asset_idle_serah_projection,
     indikasi_idle,
-    info_proses_sementara, kunci_pemegang, rekap_idle, rekap_pemegang,
+    info_proses_sementara, kelompokkan_psp_siman, kunci_pemegang,
+    rekap_idle, rekap_pemegang,
     rekap_proses_penggunaan, rekap_psp, status_pengajuan_psp,
     validate_proses_penggunaan, validate_psp, validate_transisi_idle,
     validate_transisi_pengajuan_psp, validate_transisi_proses,
@@ -157,6 +158,43 @@ async def daftar_psp(_user: dict = Depends(require_user)):
                 "ditetapkan Pengelola Barang atau Pengguna Barang untuk BMN "
                 "tertentu (delegasi). AMAN mencatat cakupan SK per aset — "
                 "dokumen resmi tetap SK yang diterbitkan pejabat berwenang.")}
+
+
+@penggunaan_router.get("/penggunaan/psp-siman")
+async def psp_dari_siman(_user: dict = Depends(require_user)):
+    """PSP resmi menurut data impor SIMAN V2 (W5) — kandidat pencatatan.
+
+    `assets.siman.referensi.no_psp/tanggal_psp/status_penggunaan` adalah
+    bukti PSP otoritatif yang selama ini tersimpan tanpa dibaca modul
+    manapun. Endpoint ini mengelompokkannya per nomor PSP + menandai mana
+    yang sudah/belum tercatat di register SK PSP — bahan tombol "Catat
+    1-klik" (prefill nomor, tanggal, dan daftar aset) di UI."""
+    from shared_utils import scope_query_aset, scope_query_field_satker
+    q = await scope_query_aset(_user, {
+        "siman.referensi.no_psp": {"$nin": ["", None]},
+        "dihapus": {"$ne": True}})
+    aset_rows = await db.assets.find(q, {
+        "_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
+        "siman.referensi.no_psp": 1, "siman.referensi.tanggal_psp": 1,
+        "siman.referensi.status_penggunaan": 1}).to_list(2000)
+    nomor_tercatat, aset_tercakup = set(), set()
+    async for s in db.psp.find(scope_query_field_satker(_user),
+                               {"_id": 0, "nomor_sk": 1, "aset.asset_id": 1}):
+        if s.get("nomor_sk"):
+            nomor_tercatat.add(s["nomor_sk"])
+        for a in s.get("aset", []) or []:
+            if a.get("asset_id"):
+                aset_tercakup.add(a["asset_id"])
+    kelompok = kelompokkan_psp_siman(aset_rows, nomor_tercatat, aset_tercakup)
+    belum = [k for k in kelompok if not k["sudah_tercatat"]]
+    return {"kelompok": kelompok,
+            "jumlah_kelompok": len(kelompok),
+            "belum_tercatat": len(belum),
+            "jumlah_aset": sum(k["jumlah"] for k in kelompok),
+            "catatan": (
+                "Sumber: kolom No. PSP/Tgl PSP/Status Penggunaan hasil impor "
+                "SIMAN V2. Gunakan Catat 1-klik untuk memasukkan SK PSP resmi "
+                "ke register tanpa mengetik ulang.")}
 
 
 @penggunaan_router.get("/penggunaan/psp/export")

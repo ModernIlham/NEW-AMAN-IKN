@@ -585,3 +585,59 @@ def build_asset_idle_serah_projection(tiket, now_iso):
             "diproyeksikan_pada": now_iso,
         },
     }
+
+
+def kelompokkan_psp_siman(aset_rows, nomor_sk_tercatat=None,
+                          asset_id_tercakup=None) -> list:
+    """Kelompokkan aset ber-PSP resmi menurut SIMAN V2 per nomor PSP (W5).
+
+    Data `assets.siman.referensi.no_psp/tanggal_psp/status_penggunaan` hasil
+    impor SIMAN selama ini tersimpan tanpa dibaca modul manapun — padahal
+    itu bukti PSP otoritatif. Fungsi ini menyiapkan kandidat pencatatan
+    1-klik ke register SK PSP:
+
+    - aset_rows: dokumen aset (proyeksi ringan) yang punya no_psp.
+    - nomor_sk_tercatat: set nomor SK yang SUDAH ada di register psp
+      (dinormalkan: strip + upper) → kelompok ditandai `sudah_tercatat`.
+    - asset_id_tercakup: set asset_id yang sudah tercakup SK psp manapun →
+      per kelompok dihitung `aset_belum` (yang layak diprefill).
+
+    Kembalian: list kelompok terurut tanggal_psp terbaru dulu, tiap item
+    {no_psp, tanggal_psp, status_penggunaan, aset[], aset_belum[], jumlah,
+    sudah_tercatat}. MURNI.
+    """
+    tercatat = {str(n or "").strip().upper()
+                for n in (nomor_sk_tercatat or set()) if str(n or "").strip()}
+    tercakup = set(asset_id_tercakup or set())
+    kelompok = {}
+    for a in aset_rows or []:
+        ref = ((a.get("siman") or {}).get("referensi") or {})
+        no = str(ref.get("no_psp") or "").strip()
+        if not no:
+            continue
+        k = kelompok.setdefault(no, {
+            "no_psp": no,
+            "tanggal_psp": str(ref.get("tanggal_psp") or "").strip(),
+            "status_penggunaan": str(ref.get("status_penggunaan") or "").strip(),
+            "aset": [], "aset_belum": [],
+        })
+        # Tanggal/status terisi dari aset mana pun yang punya nilainya
+        if not k["tanggal_psp"] and str(ref.get("tanggal_psp") or "").strip():
+            k["tanggal_psp"] = str(ref.get("tanggal_psp") or "").strip()
+        if (not k["status_penggunaan"]
+                and str(ref.get("status_penggunaan") or "").strip()):
+            k["status_penggunaan"] = str(ref.get("status_penggunaan") or "").strip()
+        baris = {"asset_id": str(a.get("id") or ""),
+                 "asset_code": str(a.get("asset_code") or ""),
+                 "NUP": str(a.get("NUP") or ""),
+                 "asset_name": str(a.get("asset_name") or "")}
+        k["aset"].append(baris)
+        if baris["asset_id"] and baris["asset_id"] not in tercakup:
+            k["aset_belum"].append(baris)
+    hasil = []
+    for k in kelompok.values():
+        k["jumlah"] = len(k["aset"])
+        k["sudah_tercatat"] = k["no_psp"].strip().upper() in tercatat
+        hasil.append(k)
+    hasil.sort(key=lambda x: (x["tanggal_psp"], x["no_psp"]), reverse=True)
+    return hasil

@@ -393,3 +393,46 @@ class TestProyeksiTerminal:
         aset = {"asset_code": "3010101001", "purchase_price": "1000000", **proj}
         ts = tombstones_penghapusan([aset])
         assert len(ts) == 1 and ts[0]["timestamp"] == "2026-03-01"
+
+
+class TestKelompokkanPspSiman:
+    """W5: PSP resmi dari data impor SIMAN V2 → kandidat register SK PSP."""
+
+    def _aset(self, aid, no_psp, tanggal="2023-05-02", status="Digunakan Sendiri"):
+        return {"id": aid, "asset_code": "3050104001", "NUP": aid[-1],
+                "asset_name": "Lemari", "siman": {"referensi": {
+                    "no_psp": no_psp, "tanggal_psp": tanggal,
+                    "status_penggunaan": status}}}
+
+    def test_kelompok_per_nomor_dan_urutan_terbaru(self):
+        from penggunaan_utils import kelompokkan_psp_siman
+        rows = [self._aset("A1", "S-1/2023", "2023-01-01"),
+                self._aset("A2", "S-1/2023", "2023-01-01"),
+                self._aset("A3", "S-9/2024", "2024-06-01")]
+        hasil = kelompokkan_psp_siman(rows)
+        assert [k["no_psp"] for k in hasil] == ["S-9/2024", "S-1/2023"]
+        assert hasil[1]["jumlah"] == 2
+        assert hasil[0]["sudah_tercatat"] is False
+        assert len(hasil[1]["aset_belum"]) == 2
+
+    def test_tanda_sudah_tercatat_dan_aset_tercakup(self):
+        from penggunaan_utils import kelompokkan_psp_siman
+        rows = [self._aset("A1", "S-1/2023"), self._aset("A2", "S-1/2023")]
+        hasil = kelompokkan_psp_siman(
+            rows, nomor_sk_tercatat={" s-1/2023 "},   # normalisasi case/spasi
+            asset_id_tercakup={"A1"})
+        assert hasil[0]["sudah_tercatat"] is True
+        assert [a["asset_id"] for a in hasil[0]["aset_belum"]] == ["A2"]
+
+    def test_tanggal_terisi_dari_aset_manapun_dan_input_kosong(self):
+        from penggunaan_utils import kelompokkan_psp_siman
+        rows = [self._aset("A1", "S-1/2023", tanggal="", status=""),
+                self._aset("A2", "S-1/2023", tanggal="2023-05-02",
+                           status="Digunakan Sendiri")]
+        hasil = kelompokkan_psp_siman(rows)
+        assert hasil[0]["tanggal_psp"] == "2023-05-02"
+        assert hasil[0]["status_penggunaan"] == "Digunakan Sendiri"
+        assert kelompokkan_psp_siman([]) == []
+        assert kelompokkan_psp_siman(None) == []
+        # Aset tanpa no_psp diabaikan
+        assert kelompokkan_psp_siman([{"id": "X", "siman": {}}]) == []

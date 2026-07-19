@@ -323,8 +323,13 @@ berdampak-tertinggi lebih dulu.
    kini diangkat sebagai info PSP resmi + event timeline. UI:
    `AssetTimelineDialog` (tombol "Timeline" di form aset). Menegaskan
    inventarisasi = kegiatan **pemutakhir** berkala, bukan induk data.
-   *Tersisa (W5 lanjutan):* menautkan PSP SIMAN sebagai dokumen sumber di
-   modul Penggunaan; panel dedup lintas kegiatan di halaman Inventarisasi.
+   ✅ **PSP SIMAN → modul Penggunaan sudah (W5 tahap 2)** —
+   `GET /penggunaan/psp-siman` (helper murni `kelompokkan_psp_siman`)
+   mengelompokkan aset ber-PSP resmi per nomor + menandai yang belum ada di
+   register; UI Penggunaan memberi tombol **Catat 1-klik** (form SK PSP
+   terisi otomatis dari data SIMAN — tinjauan pengguna tetap gerbangnya).
+   *Tersisa (W5 lanjutan):* panel dedup lintas kegiatan di halaman
+   Inventarisasi.
 
 > Aturan: tiap gap ditutup sebagai fitur kecil ber-PR (verifikasi → CI → deploy),
 > dengan proyeksi master memakai pola OCC `find_one_and_update` bersyarat +

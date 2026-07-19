@@ -48,6 +48,25 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#437] PSP resmi SIMAN V2 → register SK PSP 1-klik (arsitektur W5 tahap 2) — 2026-07-19
+
+Lanjutan pemanfaatan data impor SIMAN V2: kolom No. PSP / Tgl PSP / Status
+Penggunaan hasil impor kini benar-benar MENGALIR ke modul Penggunaan —
+bukan sekadar tampil di timeline:
+
+- **Backend `GET /penggunaan/psp-siman`**: mengelompokkan seluruh aset yang
+  punya PSP resmi menurut SIMAN (per nomor PSP), menandai mana yang sudah/
+  belum ada di register SK PSP (normalisasi kapital/spasi nomor), dan
+  menghitung aset yang belum tercakup SK manapun. Helper murni
+  `kelompokkan_psp_siman` + 3 unit test; scoping satker M-SCOPE.
+- **UI Penggunaan — panel "PSP resmi menurut SIMAN V2 belum tercatat"** di
+  atas register SK PSP: daftar nomor PSP + tanggal + jumlah aset + status,
+  dengan tombol **Catat 1-klik** yang membuka form Catat SK terisi otomatis
+  (nomor SK, tanggal, daftar aset yang belum tercakup, keterangan sumber)
+  — tinggal tinjau lalu simpan; panel menyegarkan diri setelah SK tercatat.
+- Prinsip: SIMAN tetap sumber otoritatif — AMAN tidak menulis diam-diam;
+  pencatatan selalu lewat tinjauan pengguna (form prefilled, bukan auto).
+
 ## [#436] Timeline Aset — induk data = identitas aset lintas modul (arsitektur W5 tahap 1) — 2026-07-19
 
 Jawaban arsitektural atas masalah lama: sistem menjadikan data inventarisasi
