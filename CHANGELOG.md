@@ -48,6 +48,26 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#425] Integrasi lintas-modul gelombang 7: setoran hasil penjualan BMN (NTPN) diungkap di narasi PNBP CaLBMN — 2026-07-19
+
+Selama ini narasi PNBP di CaLBMN Bab V hanya menghitung kontribusi
+pemanfaatan — setoran hasil PENJUALAN BMN (lelang/langsung) yang NTPN-nya
+sudah tercatat di register Pemindahtanganan tidak pernah diungkap.
+
+- Butir Pemindahtanganan Bab V kini menambah: jumlah **setoran hasil
+  penjualan ber-NTPN ke Kas Negara** yang dilaksanakan dalam periode +
+  total nilai wajar objeknya, dengan pengungkapan jujur bahwa nominal
+  hasil lelang final mengikuti bukti setor/SAKTI (proceeds tidak terekam
+  di register).
+- Tanggal pelaksanaan diambil dari riwayat status "dilaksanakan" (saat
+  NTPN diisi) dan difilter ke periode laporan; bentuk non-penjualan dan
+  pelaksanaan di luar periode tidak ikut.
+- Verifikasi: 552 tes unit lulus; smoke render CaLBMN dengan fixture
+  campuran (1 penjualan dalam periode ikut, hibah & penjualan luar
+  periode tidak) sukses.
+
+---
+
 ## [#424] Integrasi lintas-modul gelombang 6: dokumen sumber perolehan kurang jadi temuan Wasdal — 2026-07-19
 
 Item prioritas tinggi terakhir dari backlog audit integrasi: register
