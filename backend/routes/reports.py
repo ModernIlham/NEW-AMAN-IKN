@@ -2668,6 +2668,22 @@ async def generate_calbmn_pdf(
         {"status": {"$in": ["klarifikasi", "usul_serah"]}})
     n_idle_serah = await db.bmn_idle.count_documents({"status": "diserahkan"})
     n_sengketa = sum(1 for a in assets if is_sengketa(a))
+    # Integrasi Pemindahtanganan → CaLBMN: setoran hasil PENJUALAN BMN
+    # ber-NTPN (dilaksanakan dalam periode) ikut diungkap di narasi PNBP —
+    # selama ini PNBP CaLBMN hanya dari kontribusi pemanfaatan. Nominal
+    # proceeds lelang tidak terekam di register; yang diungkap = jumlah
+    # setoran + nilai wajar objek (angka final dari bukti setor/SAKTI).
+    jual_jumlah, jual_nilai_wajar = 0, 0.0
+    async for pt in db.pemindahtanganan.find(
+            {"bentuk": {"$regex": "^penjualan"}, "ntpn": {"$nin": [None, ""]}},
+            {"_id": 0, "nilai_wajar": 1, "riwayat": 1}):
+        tgl_laksana = ""
+        for r in pt.get("riwayat") or []:
+            if r.get("status") == "dilaksanakan" and r.get("tanggal"):
+                tgl_laksana = str(r["tanggal"])[:10]
+        if tgl_laksana and dari <= tgl_laksana <= sampai:
+            jual_jumlah += 1
+            jual_nilai_wajar += float(pt.get("nilai_wajar") or 0)
     # Integrasi Penilaian → CaLBMN Bab IV: ikhtisar nilai buku (penyusutan
     # garis lurus PMK 65/2017) — pola sama dengan Posisi BMN (#416). Hanya
     # aset masih dimiliki (bukan dihapus) agar tak lebih saji.
@@ -2840,7 +2856,10 @@ async def generate_calbmn_pdf(
         f"kontribusi/setoran ber-NTPN periode ini: {pnbp_jumlah} setoran "
         f"senilai Rp{fmt_rp(pnbp_nilai)}.",
         f"Pemindahtanganan: {n_pt_proses} usulan dalam proses; "
-        f"{n_pt_selesai} selesai (SK Penghapusan terbit).",
+        f"{n_pt_selesai} selesai (SK Penghapusan terbit). Setoran hasil "
+        f"penjualan BMN ber-NTPN ke Kas Negara periode ini: {jual_jumlah} "
+        f"setoran (nilai wajar objek Rp{fmt_rp(jual_nilai_wajar)}; nominal "
+        f"hasil lelang final mengikuti bukti setor/SAKTI).",
         f"Penghapusan: {n_hapus_proses} usulan aktif; {n_hapus_sk} SK "
         f"terbit; {n_pemusnahan} Berita Acara Pemusnahan tercatat.",
         f"BMN idle: {n_idle_aktif} tiket aktif (klarifikasi/usul serah); "
