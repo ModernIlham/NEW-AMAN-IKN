@@ -65,6 +65,48 @@ async def daftar_bentuk(_user: dict = Depends(require_user)):
     ]}
 
 
+@pemanfaatan_router.get("/pemanfaatan/kandidat-idle")
+async def kandidat_idle_pemanfaatan(_user: dict = Depends(require_user)):
+    """Integrasi Penggunaan → Pemanfaatan: aset BMN idle (PMK 120/2024) yang
+    BELUM punya perjanjian pemanfaatan aktif = kandidat Sewa/Pinjam Pakai/KSP
+    (PMK 115/2020). Aset menganggur ditawarkan untuk dimanfaatkan → potensi
+    PNBP, bukan sekadar diserahkan ke Pengelola."""
+    from shared_utils import scope_query_aset
+    from penggunaan_utils import indikasi_idle
+
+    # asset_id yang sudah terikat perjanjian pemanfaatan MASIH BERLAKU
+    # (bukan berakhir/ditolak) — tak perlu ditawarkan lagi.
+    sudah = set()
+    async for p in db.pemanfaatan.find(
+            scope_query_field_satker(_user),
+            {"_id": 0, "asset_id": 1, "status": 1}):
+        aid = str(p.get("asset_id") or "").strip()
+        if aid and p.get("status") not in ("berakhir", "ditolak", "batal"):
+            sudah.add(aid)
+
+    proj = {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
+            "status": 1, "user": 1, "inventory_status": 1, "location": 1,
+            "condition": 1, "purchase_price": 1, "category": 1}
+    kandidat = []
+    async for a in db.assets.find(await scope_query_aset(_user, {}), proj):
+        ya, alasan = indikasi_idle(a)
+        if not ya or a.get("id") in sudah:
+            continue
+        kandidat.append({
+            "asset_id": a["id"], "asset_code": a.get("asset_code"),
+            "NUP": a.get("NUP"), "asset_name": a.get("asset_name"),
+            "category": a.get("category"), "location": a.get("location"),
+            "condition": a.get("condition"),
+            "purchase_price": a.get("purchase_price"), "alasan": alasan})
+    kandidat.sort(key=lambda x: (x["asset_name"] or "", x["asset_code"] or ""))
+    return {"kandidat": kandidat, "jumlah": len(kandidat),
+            "catatan": (
+                "Aset terindikasi idle (Nonaktif/tanpa pengguna) yang belum "
+                "terikat perjanjian pemanfaatan. PMK 120/2024 jo. 115/2020: "
+                "BMN idle dapat dioptimalkan melalui pemanfaatan (Sewa/Pinjam "
+                "Pakai/KSP) sebelum diserahkan ke Pengelola.")}
+
+
 @pemanfaatan_router.get("/pemanfaatan/export")
 async def export_pemanfaatan(_user: dict = Depends(require_user)):
     """Ekspor CSV seluruh register perjanjian pemanfaatan.

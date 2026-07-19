@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, Handshake, Plus, Search, Trash2, X, Pencil,
   CalendarClock, Coins, AlertTriangle, Paperclip, Upload, Download,
+  Recycle, ChevronUp, ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -59,6 +60,9 @@ export default function PemanfaatanPage({ user, onBack }) {
   const [hasilCari, setHasilCari] = useState([]);
   const [mencari, setMencari] = useState(false);
   const cariTimer = useRef(null);
+  // Integrasi Penggunaan → Pemanfaatan: kandidat dari BMN idle
+  const [idle, setIdle] = useState(null); // {kandidat, jumlah}
+  const [idleBuka, setIdleBuka] = useState(false);
   const { confirm, confirmDialog } = useConfirm();
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
@@ -68,6 +72,9 @@ export default function PemanfaatanPage({ user, onBack }) {
       .then((r) => setData(r.data))
       .catch(() => toast.error("Gagal memuat register pemanfaatan"))
       .finally(() => setLoading(false));
+    axios.get(`${API}/pemanfaatan/kandidat-idle`)
+      .then((r) => setIdle(r.data))
+      .catch(() => setIdle(null));
   }, []);
   useEffect(() => { muat(); }, [muat]);
   useEffect(() => {
@@ -109,6 +116,16 @@ export default function PemanfaatanPage({ user, onBack }) {
         keterangan: p.keterangan || "",
       },
     } : { id: null, aset: null, saving: false, data: { ...FORM_KOSONG } });
+  };
+
+  // Buka form perjanjian baru dengan objek BMN sudah terisi (dari kandidat idle).
+  const tawarkanIdle = (k) => {
+    setCari(""); setHasilCari([]); setIdleBuka(false);
+    setForm({
+      id: null, saving: false,
+      aset: { id: k.asset_id, asset_name: k.asset_name, asset_code: k.asset_code, NUP: k.NUP },
+      data: { ...FORM_KOSONG },
+    });
   };
 
   const simpan = async () => {
@@ -265,6 +282,45 @@ export default function PemanfaatanPage({ user, onBack }) {
                 <p className="text-[10px] text-muted-foreground mt-1">Nilai tercatat (PNBP ke Kas Negara)</p>
               </div>
             </div>
+
+            {/* ── Kandidat dari BMN Idle (integrasi Penggunaan) ── */}
+            {(idle?.jumlah || 0) > 0 && (
+              <div className="bg-card rounded-xl border border-teal-500/30 shadow-sm overflow-hidden" data-testid="pemanfaatan-kandidat-idle">
+                <button type="button" onClick={() => setIdleBuka((v) => !v)}
+                  className="w-full px-3 py-2.5 border-b border-border flex items-center gap-2 text-left hover:bg-muted/40 min-w-0 min-h-0">
+                  <Recycle className="w-4 h-4 text-teal-600 flex-shrink-0" />
+                  <p className="text-xs font-bold text-foreground flex-1">Kandidat dari BMN Idle</p>
+                  <span className="px-2 py-0.5 rounded-full bg-teal-500/15 text-teal-600 dark:text-teal-400 text-[10px] font-semibold">
+                    {idle.jumlah} aset
+                  </span>
+                  {idleBuka ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+                </button>
+                {idleBuka && (
+                  <>
+                    <p className="px-3 py-2 text-[10px] text-muted-foreground border-b border-border/60">
+                      Aset menganggur (Nonaktif/tanpa pengguna) yang belum terikat perjanjian — dapat
+                      dioptimalkan lewat Sewa/Pinjam Pakai/KSP (PMK 120/2024 jo. 115/2020) sebelum diserahkan ke Pengelola.
+                    </p>
+                    <ul className="divide-y divide-border/60 max-h-72 overflow-y-auto">
+                      {idle.kandidat.map((k) => (
+                        <li key={k.asset_id} className="px-3 py-2 flex items-center gap-2 flex-wrap" data-testid={`pemanfaatan-idle-${k.asset_id}`}>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-semibold text-foreground truncate">{k.asset_name || "(tanpa nama)"}</p>
+                            <p className="text-[10px] text-muted-foreground font-mono truncate">
+                              {k.asset_code}·{k.NUP}{k.location ? ` · ${k.location}` : ""} · {k.alasan}
+                            </p>
+                          </div>
+                          <Button size="sm" className="h-7 text-[11px] min-h-0 gap-1 bg-teal-600 hover:bg-teal-700 text-white"
+                            onClick={() => tawarkanIdle(k)} data-testid={`pemanfaatan-tawarkan-${k.asset_id}`}>
+                            <Handshake className="w-3.5 h-3.5" />Tawarkan Pemanfaatan
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </div>
+            )}
 
             {/* ── Daftar register ── */}
             <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">

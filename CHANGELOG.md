@@ -48,6 +48,30 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#416] Integrasi Penggunaan → Pemanfaatan: BMN idle jadi kandidat pemanfaatan 1-klik — 2026-07-19
+
+Lanjutan mandat integrasi lintas-modul "manfaatkan segala informasi agar
+saling berkaitan": aset yang terindikasi IDLE (menganggur) di modul
+Penggunaan kini ditawarkan langsung untuk DIMANFAATKAN.
+
+- **Endpoint baru** `GET /pemanfaatan/kandidat-idle`: aset ber-indikasi idle
+  (`indikasi_idle` — Nonaktif/tanpa pengguna, PMK 120/2024) yang BELUM terikat
+  perjanjian pemanfaatan aktif = kandidat Sewa/Pinjam Pakai/KSP (PMK 115/2020).
+  Aset yang perjanjiannya sudah berakhir/ditolak tetap muncul kembali sebagai
+  kandidat. Ter-scope satker.
+- **Panel "Kandidat dari BMN Idle"** di modul Pemanfaatan (dapat diciutkan,
+  badge jumlah): tiap kandidat punya tombol **"Tawarkan Pemanfaatan"** yang
+  membuka form perjanjian baru dengan objek BMN sudah terisi (prefill) —
+  petugas tinggal mengisi mitra & jangka waktu.
+- Nilai: mengubah aset menganggur menjadi potensi PNBP alih-alih hanya
+  diserahkan ke Pengelola. Menyambungkan register BMN idle (Penggunaan) yang
+  selama ini terpisah dengan alur Pemanfaatan.
+- Verifikasi: 545 tes unit lulus, smoke endpoint (a1 idle→kandidat, a2 sudah
+  dimanfaatkan→dikecualikan, a3 aktif→bukan idle) lulus, server ter-import,
+  lint & build sukses.
+
+---
+
 ## [#415] Integrasi lintas-modul: polis asuransi lewat & tunggakan kontribusi jadi temuan Wasdal otomatis — 2026-07-19
 
 Mandat pemilik: "manfaatkan segala informasi yang ada untuk saling berkaitan
