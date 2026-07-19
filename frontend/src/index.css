@@ -419,79 +419,62 @@ body.no-scroll { overflow: hidden; }
   }
 }
 
-/* ===== Liquid sinkron SIMAN (kartu galeri) =====
-   Genangan cair berwarna permukaan kartu (--card: putih di light, gelap di
-   dark) yang naik dari area informasi ke foto — DUA lapisan air:
-   .siman-liquid-blob  = kubah air BELAKANG bola (morph organik), dan
-   .siman-liquid-depan = permukaan air DEPAN bola (ombak menyapu kiri-kanan)
-   sehingga bola sinkronisasi tampak MENGAPUNG SETENGAH TENGGELAM — air
-   mengalungi bola, bola berayun ke atas/bawah/kiri/kanan (simanLiquidApung).
-   Basis kedua lapisan rata penuh & melewati batas foto (terpotong
-   overflow-hidden) agar MENYATU mulus dengan area informasi di bawahnya.
-   Status: idle = pelan · hover = bergolak + membesar (scale di tombol) ·
-   proses = gejolak cepat · sukses = terserap turun (.siman-liquid-sukses).
+/* ===== Air sinkron SIMAN (kartu galeri) =====
+   SATU permukaan air penuh selebar kartu di dasar foto, PEKAT berwarna
+   permukaan kartu (--card: putih di light, gelap di dark) sehingga menyatu
+   mulus dengan area informasi di bawahnya. Datar & tenang di pinggir kartu;
+   hanya di sekitar bola ada gembungan lembut yang bernafas — senatural
+   mungkin: tanpa lapisan transparan, tanpa air di depan bola, air tidak
+   melebihi puncak bola. Bola mengapung pelan di atas permukaan.
+   Hover pada bola / proses sinkronisasi mempercepat ombak (selector ~).
    Catatan: aturan reduced-motion global otomatis mematikan animasi. */
-.siman-liquid-blob {
-  position: absolute;
-  left: -4px; right: -4px; top: 7px; bottom: -14px;
+.siman-air {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 8px;
+  z-index: 9;
   background: hsl(var(--card));
-  box-shadow: 0 -1px 6px hsl(var(--foreground) / 0.1);
-  border-radius: 48% 52% 14% 12% / 58% 62% 8% 9%;
-  animation: simanLiquidMorph 5s ease-in-out infinite;
-  will-change: border-radius;
-}
-@keyframes simanLiquidMorph {
-  0%, 100% { border-radius: 48% 52% 14% 12% / 58% 62% 8% 9%; }
-  25%      { border-radius: 40% 60% 12% 14% / 68% 50% 9% 8%; }
-  50%      { border-radius: 60% 40% 13% 13% / 50% 70% 8% 9%; }
-  75%      { border-radius: 44% 56% 14% 12% / 64% 46% 9% 8%; }
-}
-/* Permukaan air DEPAN bola — sedikit tembus pandang agar separuh bola yang
-   tenggelam masih samar terlihat; puncak ombak menyapu kiri ↔ kanan. */
-.siman-liquid-depan {
-  position: absolute;
-  left: -4px; right: -4px; bottom: -14px; height: 27px;
-  z-index: 2;
   pointer-events: none;
-  background: hsl(var(--card) / 0.86);
-  border-radius: 46% 54% 0 0 / 34% 26% 0 0;
-  animation: simanLiquidOmbak 2.8s ease-in-out infinite;
-  will-change: border-radius, transform;
 }
-@keyframes simanLiquidOmbak {
-  0%, 100% { border-radius: 46% 54% 0 0 / 34% 26% 0 0; transform: translateX(0); }
-  33%      { border-radius: 56% 44% 0 0 / 26% 38% 0 0; transform: translateX(2px); }
-  66%      { border-radius: 50% 50% 0 0 / 40% 24% 0 0; transform: translateX(-2px); }
+.siman-air-gelombang {
+  position: absolute; bottom: 0; left: 50%; width: 116px; height: 17px;
+  z-index: 9;
+  background: hsl(var(--card));
+  border-radius: 100% 100% 0 0;
+  transform: translateX(-50%);
+  transform-origin: 50% 100%;
+  animation: simanAirGelombang 3.4s ease-in-out infinite;
+  pointer-events: none;
+  will-change: transform;
 }
-/* Bola sinkronisasi — utuh, mengapung & tenggelam setengah: berayun ke
-   atas/bawah/kiri/kanan + oleng ringan seperti benda terapung. */
+@keyframes simanAirGelombang {
+  0%, 100% { transform: translateX(-50%) scaleY(1) scaleX(1); }
+  33%      { transform: translateX(calc(-50% + 3px)) scaleY(1.12) scaleX(0.97); }
+  66%      { transform: translateX(calc(-50% - 3px)) scaleY(0.92) scaleX(1.04); }
+}
+/* Bola mengapung pelan di permukaan — naik-turun + oleng ringan,
+   durasi sama dengan gembungan agar terasa satu irama. */
 .siman-liquid-ball {
   position: relative;
   z-index: 1;
-  animation: simanLiquidApung 3.4s ease-in-out infinite;
+  animation: simanApung 3.4s ease-in-out infinite;
 }
-@keyframes simanLiquidApung {
-  0%, 100% { transform: translate(0, 0) rotate(0deg); }
-  25%      { transform: translate(1.5px, -2.5px) rotate(4deg); }
-  50%      { transform: translate(0, 1.5px) rotate(0deg); }
-  75%      { transform: translate(-1.5px, -2px) rotate(-4deg); }
+@keyframes simanApung {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  33%      { transform: translateY(-1.5px) rotate(2.5deg); }
+  66%      { transform: translateY(1px) rotate(-2.5deg); }
 }
-/* Hover mouse: seluruh cairan bergolak lebih hidup (scale tombol via kelas
-   Tailwind hover:scale-110 origin-bottom — basis tetap menempel batas). */
-.siman-liquid:hover .siman-liquid-blob  { animation-duration: 1.5s; }
-.siman-liquid:hover .siman-liquid-depan { animation-duration: 1s; }
-.siman-liquid:hover .siman-liquid-ball  { animation-duration: 1.3s; }
+/* Hover di bola: ombak & apungan lebih hidup */
+.siman-liquid:hover .siman-liquid-ball { animation-duration: 1.4s; }
+.siman-liquid:hover ~ .siman-air-gelombang { animation-duration: 1.4s; }
 /* Proses sinkronisasi: gejolak cepat */
-.siman-liquid[data-busy="1"] .siman-liquid-blob  { animation-duration: 0.7s; }
-.siman-liquid[data-busy="1"] .siman-liquid-depan { animation-duration: 0.55s; }
-.siman-liquid[data-busy="1"] .siman-liquid-ball  { animation-duration: 0.9s; }
-/* Sukses: seluruh cairan (beserta bola centang) terserap turun & memudar */
+.siman-liquid[data-busy="1"] .siman-liquid-ball { animation-duration: 0.9s; }
+.siman-liquid[data-busy="1"] ~ .siman-air-gelombang { animation-duration: 0.7s; }
+/* Sukses: air + bola centang surut turun ke area informasi */
 .siman-liquid-sukses {
   animation: simanLiquidSlurp 0.85s ease-in forwards;
   transform-origin: 50% 100%;
 }
 @keyframes simanLiquidSlurp {
-  0%   { transform: translateX(-50%) translateY(0) scale(1, 1); opacity: 1; }
-  55%  { transform: translateX(-50%) translateY(4px) scale(1.08, 0.72); opacity: 1; }
-  100% { transform: translateX(-50%) translateY(12px) scale(0.55, 0.12); opacity: 0; }
+  0%   { transform: translateY(0) scaleY(1); opacity: 1; }
+  55%  { transform: translateY(3px) scaleY(0.7); opacity: 1; }
+  100% { transform: translateY(9px) scaleY(0.12); opacity: 0; }
 }

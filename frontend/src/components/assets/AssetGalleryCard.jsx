@@ -123,37 +123,39 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
           </label>
         )}
 
-        {/* SIMAN belum tersinkron: LIQUID di perbatasan foto ↔ area teks —
-            blob cair berwarna permukaan kartu (putih/gelap ikut mode) yang
-            morph terus, dengan bola sinkronisasi amber tetap utuh di dalam.
-            Hover = bergolak + membesar; klik = sinkronkan nilai SIMAN V2
-            (terapkan selisih; gejolak cepat selama proses); sukses = cairan
-            terserap turun beranimasi. CSS: .siman-liquid* di index.css. */}
+        {/* SIMAN belum tersinkron: AIR satu permukaan penuh selebar kartu di
+            dasar foto (pekat, warna permukaan kartu — menyatu dengan area
+            informasi). Datar & tenang di pinggir; gembungan lembut bernafas
+            hanya di sekitar bola; bola mengapung pelan di atasnya. Klik bola
+            = sinkronkan nilai SIMAN V2; sukses = air surut beranimasi.
+            CSS: .siman-air* & .siman-liquid* di index.css. */}
         {asset.siman?.status === "selisih" && !simanSynced && (
-          <button
-            type="button"
-            onClick={sinkronSiman}
-            disabled={simanBusy}
-            data-busy={simanBusy ? "1" : "0"}
-            title="Belum tersinkron dengan SIMAN V2 — klik untuk sinkronkan sekarang"
-            aria-label="Sinkronkan dengan SIMAN V2"
-            data-testid={`siman-drop-${asset.id}`}
-            className="siman-liquid absolute bottom-0 left-1/2 -translate-x-1/2 z-10 w-12 h-9 flex items-end justify-center pb-[3px] min-w-0 min-h-0 origin-bottom transition-transform duration-300 hover:scale-110"
-          >
-            <span className="siman-liquid-blob" aria-hidden="true" />
-            <span className="siman-liquid-ball w-5 h-5 rounded-full bg-amber-500 dark:bg-amber-400 shadow-md ring-1 ring-black/10 dark:ring-white/15 flex items-center justify-center">
-              <RefreshCcwIcon className={`w-3 h-3 text-white dark:text-amber-950 ${simanBusy ? "animate-spin" : ""}`} />
-            </span>
-            <span className="siman-liquid-depan" aria-hidden="true" />
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={sinkronSiman}
+              disabled={simanBusy}
+              data-busy={simanBusy ? "1" : "0"}
+              title="Belum tersinkron dengan SIMAN V2 — klik untuk sinkronkan sekarang"
+              aria-label="Sinkronkan dengan SIMAN V2"
+              data-testid={`siman-drop-${asset.id}`}
+              className="siman-liquid absolute bottom-0 left-1/2 -translate-x-1/2 z-10 w-11 h-8 flex items-end justify-center pb-px min-w-0 min-h-0"
+            >
+              <span className="siman-liquid-ball w-5 h-5 rounded-full bg-amber-500 dark:bg-amber-400 shadow-md ring-1 ring-black/10 dark:ring-white/15 flex items-center justify-center">
+                <RefreshCcwIcon className={`w-3 h-3 text-white dark:text-amber-950 ${simanBusy ? "animate-spin" : ""}`} />
+              </span>
+            </button>
+            <span className="siman-air" aria-hidden="true" />
+            <span className="siman-air-gelombang" aria-hidden="true" />
+          </>
         )}
         {simanSynced && (
-          <span className="siman-liquid-sukses absolute bottom-0 left-1/2 -translate-x-1/2 z-10 w-12 h-9 flex items-end justify-center pb-[3px] pointer-events-none">
-            <span className="siman-liquid-blob" aria-hidden="true" />
-            <span className="relative z-[1] w-5 h-5 rounded-full bg-emerald-500 dark:bg-emerald-400 shadow-md flex items-center justify-center">
+          <span className="siman-liquid-sukses absolute inset-x-0 bottom-0 z-10 h-8 pointer-events-none">
+            <span className="siman-air" aria-hidden="true" />
+            <span className="siman-air-gelombang" aria-hidden="true" />
+            <span className="absolute bottom-px left-1/2 -translate-x-1/2 z-[10] w-5 h-5 rounded-full bg-emerald-500 dark:bg-emerald-400 shadow-md flex items-center justify-center">
               <CheckIcon className="w-3 h-3 text-white dark:text-emerald-950" />
             </span>
-            <span className="siman-liquid-depan" aria-hidden="true" />
           </span>
         )}
 
@@ -197,7 +199,9 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
 
         {/* Bottom gradient with code/NUP */}
         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/50 via-40% to-transparent h-2/3 pointer-events-none" />
-        <div className="absolute bottom-0 left-0 right-0 z-2 px-2 pb-1.5 flex items-end justify-between pointer-events-none">
+        {/* Saat air SIMAN tampil di dasar foto, baris kode/NUP diangkat
+            sedikit agar tetap terbaca di atas garis air (teks putih). */}
+        <div className={`absolute bottom-0 left-0 right-0 z-2 px-2 flex items-end justify-between pointer-events-none ${asset.siman?.status === "selisih" || simanSynced ? "pb-[13px]" : "pb-1.5"}`}>
           <div className="leading-tight pointer-events-auto">
             <Tooltip delayDuration={150}>
               <TooltipTrigger asChild>
