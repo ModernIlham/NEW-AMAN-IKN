@@ -48,6 +48,24 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#462] Galeri — efek liquid tombol sinkron SIMAN (idle/hover/proses/sukses) + badge garansi pindah ke kanan-atas — 2026-07-19
+
+- **Efek liquid sinkron SIMAN V2** — tetesan lama (kotak diputar 45°, tanpa
+  animasi cair) diganti BLOB LIQUID sungguhan di perbatasan foto ↔ area teks:
+  warna mengikuti permukaan kartu (`--card`: putih di light, gelap di dark)
+  sehingga tampak "meleleh" dari area teks ke foto, dengan bola sinkronisasi
+  amber tetap UTUH di dalam cairan. Animasi CSS murni (`.siman-liquid*` di
+  `index.css`): idle = morph border-radius pelan + bola mengapung; hover
+  mouse = bergolak lebih cepat + membesar; proses sinkronisasi = gejolak
+  cepat + ikon berputar; sukses = seluruh cairan terserap turun ke area teks
+  sambil memudar (bola centang hijau). Hormati `prefers-reduced-motion`.
+- **Badge garansi galeri kini terlihat** — posisi lama (kanan-bawah foto)
+  tertimpa gradasi hitam bawah dan badge jumlah foto di titik yang sama
+  (plus kelas `z-2` yang bukan kelas Tailwind valid) sehingga tak pernah
+  tampak. Dipindah ke klaster badge KANAN-ATAS foto (sebelum kondisi &
+  tahun) yang selalu bebas overlay — ikon shield + durasi singkat, hijau/
+  amber sesuai sisa garansi, tooltip detail tetap.
+
 ## [#461] Foto pegawai — unggah + krop persegi (geser/zoom) + avatar di row; reset pertahankan foto pegawai — 2026-07-19
 
 - **Unggah foto di Master Pegawai** — tab Identitas form pegawai kini punya
