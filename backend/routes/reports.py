@@ -2667,7 +2667,15 @@ async def generate_calbmn_pdf(
     n_idle_aktif = await db.bmn_idle.count_documents(
         {"status": {"$in": ["klarifikasi", "usul_serah"]}})
     n_idle_serah = await db.bmn_idle.count_documents({"status": "diserahkan"})
-    n_sengketa = sum(1 for a in assets if is_sengketa(a))
+    # Sengketa = union master (is_sengketa) ∪ register kasus AKTIF Pengamanan
+    # (read-side join — kasus berjalan ikut diungkap walau master belum ditandai).
+    kasus_ids = set()
+    async for kk in db.pengamanan_kasus.find(
+            {"status": {"$ne": "selesai"}}, {"_id": 0, "asset_id": 1}):
+        if kk.get("asset_id"):
+            kasus_ids.add(kk["asset_id"])
+    n_sengketa = sum(1 for a in assets
+                     if is_sengketa(a) or a.get("id") in kasus_ids)
     # Integrasi Pemindahtanganan → CaLBMN: setoran hasil PENJUALAN BMN
     # ber-NTPN (dilaksanakan dalam periode) ikut diungkap di narasi PNBP —
     # selama ini PNBP CaLBMN hanya dari kontribusi pemanfaatan. Nominal

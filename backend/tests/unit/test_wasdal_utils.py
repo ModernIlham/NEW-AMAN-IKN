@@ -143,6 +143,28 @@ def test_dokumen_kepemilikan_kedaluwarsa():
                for t in per_objek["pengamanan_pemeliharaan"])
 
 
+def test_sengketa_dari_register_kasus():
+    """Kasus AKTIF di register Pengamanan membuat aset tampil sebagai
+    temuan sengketa walau master belum menandai; tidak dobel bila keduanya."""
+    bersih = dict(ASET_LENGKAP, id="k1")  # master bersih
+    ber_master = dict(ASET_LENGKAP, id="k2", nomor_perkara="No.12/2026")
+    kasus = {"k1": {"kategori": "dikuasai_pihak_lain",
+                    "pihak_lawan": "PT Okupan", "nomor_perkara": ""},
+             "k2": {"kategori": "berperkara", "pihak_lawan": "CV Lawan",
+                    "nomor_perkara": "No.12/2026"}}
+    hasil = temuan_pengamanan_pemeliharaan([bersih, ber_master], [], 2026,
+                                           kasus_aktif=kasus)
+    sengketa = [t for t in hasil if t["jenis"] == "sengketa"]
+    assert len(sengketa) == 2  # satu per aset, tidak dobel
+    d1 = next(t for t in sengketa if t["asset_id"] == "k1")
+    assert "Dikuasai pihak lain" in d1["detail"] and "PT Okupan" in d1["detail"]
+    d2 = next(t for t in sengketa if t["asset_id"] == "k2")
+    assert d2["detail"].startswith("No.12/2026")
+    # tanpa kasus & master bersih → tidak ada temuan sengketa
+    assert not [t for t in temuan_pengamanan_pemeliharaan([bersih], [], 2026)
+                if t["jenis"] == "sengketa"]
+
+
 def test_temuan_persediaan():
     """Opname semester belum → 1 temuan global; layer kedaluwarsa → temuan
     per barang; opname sudah + tanpa kedaluwarsa → kosong."""

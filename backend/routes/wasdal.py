@@ -117,6 +117,16 @@ async def _data_pemantauan(ambang_hari: int, user=None):
         {"jenis": "opname"}, {"_id": 0, "timestamp": 1},
         sort=[("timestamp", -1)])
     tanggal_opname = tanggal_wib((opname_doc or {}).get("timestamp"))
+    # Integrasi register kasus Pengamanan → Wasdal: kasus AKTIF (belum
+    # selesai) membuat asetnya tampil sebagai temuan sengketa meski master
+    # belum menandai (read-side join — master tidak dimutasi).
+    kasus_aktif = {}
+    async for kk in db.pengamanan_kasus.find(
+            _sq({"status": {"$ne": "selesai"}}),
+            {"_id": 0, "asset_id": 1, "kategori": 1, "pihak_lawan": 1,
+             "nomor_perkara": 1}):
+        if kk.get("asset_id"):
+            kasus_aktif[kk["asset_id"]] = kk
 
     per_objek = susun_temuan(assets, pemanfaatan, usulan_hapus, usulan_pt,
                              pemeliharaan, today_iso, ambang_hari, polis=polis,
@@ -124,7 +134,8 @@ async def _data_pemantauan(ambang_hari: int, user=None):
                              dokumen=dokumen, pemusnahan=pemusnahan,
                              aset_ber_sk=aset_ber_sk, pengadaan=pengadaan,
                              persediaan=persediaan,
-                             tanggal_opname_terakhir=tanggal_opname)
+                             tanggal_opname_terakhir=tanggal_opname,
+                             kasus_aktif=kasus_aktif)
     return periode, per_objek, rekap_wasdal(per_objek), len(assets)
 
 

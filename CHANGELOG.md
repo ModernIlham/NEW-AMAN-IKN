@@ -48,6 +48,27 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#427] Integrasi lintas-modul gelombang 9: kasus BMN bermasalah aktif ikut terhitung sengketa — 2026-07-19
+
+Register kasus BMN bermasalah di Pengamanan (dikuasai pihak lain /
+sertipikat tumpang tindih / berperkara) selama ini tidak memengaruhi
+temuan sengketa mana pun — deteksi sengketa hanya membaca field master
+aset. Read-side join (master TIDAK dimutasi, tanpa risiko regresi):
+
+- **Dasbor Wasdal**: aset ber-kasus AKTIF (belum selesai) kini tampil
+  sebagai temuan `sengketa` objek Pengamanan & Pemeliharaan walau master
+  belum menandai — detail memuat kategori kasus, pihak lawan, dan nomor
+  perkara. Tidak dobel bila master juga sudah menandai.
+- **CaLBMN Bab V**: butir Sengketa kini menghitung union {aset ber-tanda
+  master} ∪ {aset ber-kasus aktif} — pengungkapan tak lagi bergantung
+  kedisiplinan menandai master.
+- Kasus berstatus "selesai" otomatis keluar dari hitungan.
+- Verifikasi: 554 tes unit lulus (1 baru: kasus register-only ikut,
+  dedup master+kasus, kasus selesai tak ikut), smoke dasbor end-to-end
+  sukses.
+
+---
+
 ## [#426] Integrasi lintas-modul gelombang 8: opname terlambat & persediaan kedaluwarsa jadi temuan Wasdal — 2026-07-19
 
 Register Persediaan sudah menghitung status opname semesteran dan layer
