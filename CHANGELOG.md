@@ -48,6 +48,43 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#444] LBP selengkap dokumen contoh — surat pengantar, kebijakan lengkap, mutasi per transaksi, lampiran a–i — 2026-07-19
+
+Generator LBP dilengkapi penuh mengikuti seluruh struktur dokumen contoh
+(258 paragraf + 28 tabel pada data uji; sebelumnya 136 + 16):
+
+- **Surat Pengantar** resmi ber-ttd KPB + nomor halaman otomatis di footer.
+- **Kebijakan Akuntansi yang Signifikan LENGKAP** (8 sub-bab seperti
+  contoh): Persediaan (FIFO + 3 dasar nilai), Aset Tetap (6 jenis + KDP),
+  Aset Lainnya, Kebijakan Penyusutan (objek/non-objek/garis lurus
+  semesteran), Amortisasi (5 objek ATB), Kapitalisasi (ambang dari setelan
+  satker), Pencatatan Rusak Berat & Hilang, Akuntansi Berbasis Akrual +
+  butir Jumlah Satuan Kerja.
+- **Nilai BMN diperkaya**: tabel Perkembangan Nilai BMN vs saldo awal
+  periode (peningkatan/penurunan + terbilang) dan Komposisi BMN per jenis
+  aset (narasi saldo per golongan).
+- **Bagian II lengkap a–k**: + Barang Bersejarah, BPYDS, Hibah DK/TP
+  (nihil default) — judul k menjadi "Penyusutan dan Amortisasi".
+- **CaLBMN per golongan selengkap contoh**: narasi saldo + terbilang,
+  tabel 8-kolom Gabungan/Intra/Ekstra, **rincian mutasi per kode
+  transaksi dari jurnal Buku Barang** (pola "Kode | Uraian | Kuantitas |
+  Rupiah" — saldo awal 000 + 101 pembelian + 301 penghapusan dst., kode
+  3xx/4xx otomatis negatif), dan **rincian tanah per NUP** (No/Kode/Nama/
+  NUP/Nilai/Keterangan, batas 150).
+- **3.5 Informasi BMN Lainnya lengkap**: ringkasan register, Dokumen
+  Sumber Tanah (jumlah NUP + nilai), daftar **BMN Bersengketa** dari
+  register pengamanan (aset · kategori · pihak lawan · status), bagian
+  Permasalahan + Langkah Strategis (diisi satker). **3.6 Tindak Lanjut
+  Temuan Pemeriksaan** dengan kerangka tabel LHP.
+- **LAMPIRAN a–i berisi data nyata**: PNBP dari pemanfaatan (setoran
+  ber-NTPN per periode + total terbilang), polis pengasuransian BMN,
+  BMN rumah negara, BAR internal & neraca percobaan (penanda sisip),
+  transfer masuk/keluar & hibah dari jurnal Buku Barang, daftar BMN
+  hilang yang diusulkan (jalur tidak ditemukan), ringkasan wasdal.
+- Helper murni baru `susun_mutasi_per_transaksi`, `kebijakan_akuntansi_lbp`,
+  `struktur_daftar_isi_lengkap`, `LABEL_TRANSAKSI_LBP` + 2 unit test.
+
+
 ## [#443] Generator Laporan Barang Pengguna (LBP) .docx per satker — 2026-07-19
 
 Fitur besar: aplikasi kini dapat MENYUSUN sendiri dokumen LBP lengkap per

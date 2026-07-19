@@ -275,3 +275,206 @@ def struktur_daftar_isi() -> list:
         (2, "3.5 Informasi BMN Lainnya"),
         (1, "PENUTUP"),
     ]
+
+
+# ── Kelengkapan penuh mengikuti contoh LBP resmi (W8 lanjutan) ──────────────
+
+# Uraian kode transaksi Buku Barang untuk tabel mutasi CaLBMN per akun
+# (pola Tabel 17 dokumen contoh: Kode | Uraian | Kuantitas | Rupiah).
+LABEL_TRANSAKSI_LBP = {
+    "000": "Saldo Awal",
+    "100": "Penambahan Saldo Awal",
+    "101": "Pembelian",
+    "102": "Transfer Masuk",
+    "103": "Hibah (Masuk)",
+    "105": "Penyelesaian Pembangunan Dengan KDP",
+    "107": "Reklasifikasi Masuk",
+    "112": "Perolehan Lainnya",
+    "201": "Koreksi Perubahan Kuantitas",
+    "204": "Koreksi Nilai (Revaluasi)",
+    "209": "Koreksi Manual",
+    "301": "Penghapusan",
+    "302": "Transfer Keluar",
+    "304": "Reklasifikasi Keluar",
+    "305": "Koreksi Pencatatan",
+}
+
+
+def label_transaksi_lbp(kode) -> str:
+    k = str(kode or "").strip()
+    return LABEL_TRANSAKSI_LBP.get(k, f"Transaksi {k}" if k else "Transaksi")
+
+
+def susun_mutasi_per_transaksi(jurnal, saldo_awal_qty=0,
+                               saldo_awal_nilai=0.0) -> dict:
+    """Susun tabel "Rincian Mutasi ... yang ditatausahakan" per kode
+    transaksi (pola Tabel 17 dokumen contoh) untuk SATU golongan.
+
+    - jurnal: baris mutasi_bmn periode berjalan {kode_transaksi, jumlah,
+      nilai} (nilai transaksi KURANG boleh positif — dinegatifkan di sini
+      berdasar kelompok kode 3xx/4xx).
+    - saldo_awal_*: baris 000 dari LBKP (saldo awal periode).
+
+    Kembalian {"baris": [(kode, uraian, qty, nilai)], "total": (qty,
+    nilai)} — baris terurut: 000, lalu kode naik. MURNI."""
+    agg = {}
+    for j in jurnal or []:
+        k = str(j.get("kode_transaksi") or "").strip() or "?"
+        q = float(j.get("jumlah") or 0)
+        n = float(j.get("nilai") or 0)
+        if k[:1] in ("3", "4"):
+            q, n = -abs(q), -abs(n)
+        a = agg.setdefault(k, [0.0, 0.0])
+        a[0] += q
+        a[1] += n
+    baris = [("000", LABEL_TRANSAKSI_LBP["000"],
+              float(saldo_awal_qty or 0), float(saldo_awal_nilai or 0))]
+    for k in sorted(agg):
+        baris.append((k, label_transaksi_lbp(k), agg[k][0], agg[k][1]))
+    total_q = sum(b[2] for b in baris)
+    total_n = sum(b[3] for b in baris)
+    return {"baris": baris, "total": (total_q, total_n)}
+
+
+def kebijakan_akuntansi_lbp(ambang=None) -> list:
+    """Sub-bab Kebijakan Akuntansi yang Signifikan (lengkap mengikuti
+    contoh). Kembalian list {judul, isi: [paragraf], daftar: [butir]}."""
+    amb = ambang or {}
+    amb3 = fmt_rp(amb.get("3") or 1_000_000)
+    amb4 = fmt_rp(amb.get("4") or 25_000_000)
+    return [
+        {"judul": "Persediaan",
+         "isi": ["Persediaan merupakan aset lancar dalam bentuk barang atau "
+                 "perlengkapan yang dimaksudkan untuk mendukung kegiatan "
+                 "operasional pemerintah, dan barang-barang yang dimaksudkan "
+                 "untuk dijual dan/atau diserahkan dalam rangka pelayanan "
+                 "kepada masyarakat. Persediaan dicatat di neraca "
+                 "berdasarkan hasil perhitungan fisik pada tanggal neraca.",
+                 "Penilaian persediaan menggunakan metode FIFO (First In "
+                 "First Out): saldo persediaan dihitung berdasarkan harga "
+                 "perolehan lapisan persediaan yang masuk lebih dahulu."],
+         "daftar": ["Harga perolehan, apabila diperoleh dengan pembelian;",
+                    "Harga pokok produksi, apabila diproduksi sendiri;",
+                    "Nilai wajar/estimasi nilai penjualan, apabila "
+                    "diperoleh dengan cara lainnya."]},
+        {"judul": "Aset Tetap",
+         "isi": ["Aset Tetap merupakan aset berwujud yang mempunyai masa "
+                 "manfaat lebih dari 12 (dua belas) bulan untuk digunakan "
+                 "dalam kegiatan pemerintah atau dimanfaatkan masyarakat "
+                 "umum. Aset tetap dilaporkan di neraca berdasarkan harga "
+                 "perolehan atau nilai wajar. Konstruksi Dalam Pengerjaan "
+                 "(KDP) dipindahkan ke aset tetap bersangkutan saat aset "
+                 "selesai dan siap digunakan."],
+         "daftar": ["Tanah", "Peralatan dan Mesin", "Gedung dan Bangunan",
+                    "Jalan, Irigasi dan Jaringan", "Aset Tetap Lainnya",
+                    "Konstruksi Dalam Pengerjaan"]},
+        {"judul": "Aset Lainnya",
+         "isi": ["Aset Lainnya antara lain terdiri dari Aset Tak Berwujud "
+                 "(aset non-keuangan teridentifikasi tanpa wujud fisik, "
+                 "termasuk perangkat lunak, lisensi, dan hak kekayaan "
+                 "intelektual) serta Aset Lain-lain (antara lain aset "
+                 "tetap yang dihentikan dari penggunaan aktif "
+                 "pemerintah)."],
+         "daftar": []},
+        {"judul": "Kebijakan Penyusutan BMN",
+         "isi": ["Sesuai PSAP 07, aset tetap disajikan berdasarkan biaya "
+                 "perolehan dikurangi akumulasi penyusutan. Penyusutan "
+                 "dihitung dan dicatat setiap akhir semester tanpa nilai "
+                 "residu menggunakan metode garis lurus selama masa "
+                 "manfaat (PMK 65/PMK.06/2017; tabel masa manfaat KMK "
+                 "295/KMK.06/2019).",
+                 "Penyusutan tidak dilakukan terhadap: tanah; KDP; aset "
+                 "tetap yang dinyatakan hilang dan telah diusulkan "
+                 "penghapusannya; aset tetap rusak berat/usang yang telah "
+                 "diusulkan penghapusannya; serta aset tetap renovasi yang "
+                 "tidak menambah masa manfaat."],
+         "daftar": ["Gedung dan Bangunan;", "Peralatan dan Mesin;",
+                    "Jalan, Irigasi dan Jaringan;",
+                    "Aset Tetap Lainnya (aset tetap renovasi dan alat "
+                    "musik modern);",
+                    "Aset Lainnya berupa aset tetap yang dihentikan dari "
+                    "penggunaan operasional pemerintah."]},
+        {"judul": "Amortisasi",
+         "isi": ["Amortisasi aset tak berwujud merupakan alokasi harga "
+                 "perolehan secara sistematis selama masa manfaatnya "
+                 "(PMK 251/PMK.06/2015; masa manfaat KMK 620/KM.6/2015 jo. "
+                 "KMK 81/KM.6/2018), dihitung setiap akhir semester dengan "
+                 "metode garis lurus tanpa nilai residu."],
+         "daftar": ["Perangkat Lunak (Software) Komputer;", "Lisensi;",
+                    "Waralaba (Franchise);", "Hak Cipta (Copyright);",
+                    "Hak Paten."]},
+        {"judul": "Kebijakan Kapitalisasi BMN",
+         "isi": ["Sesuai PMK 181/PMK.06/2016, BMN disajikan sebagai "
+                 "intrakomptabel (memenuhi syarat kapitalisasi, disajikan "
+                 "di neraca) dan ekstrakomptabel (tidak memenuhi syarat "
+                 "kapitalisasi). Batas minimum kapitalisasi yang berlaku "
+                 "pada satker ini:"],
+         "daftar": [f"Peralatan dan mesin serta alat olahraga ≥ Rp{amb3};",
+                    f"Gedung dan bangunan ≥ Rp{amb4};",
+                    "Tanah, jalan/irigasi/jaringan, KDP, koleksi "
+                    "perpustakaan, dan barang bercorak kesenian: tanpa "
+                    "batas nilai minimum."]},
+        {"judul": "Pencatatan Aset Rusak Berat dan Hilang",
+         "isi": ["Aset tetap yang dinyatakan hilang berdasarkan dokumen "
+                 "sumber yang sah dan telah diusulkan penghapusannya "
+                 "direklasifikasi ke daftar barang hilang; aset rusak "
+                 "berat/usang yang telah diusulkan penghapusannya "
+                 "direklasifikasi ke daftar barang rusak berat — keduanya "
+                 "tidak dicantumkan dalam laporan barang dan neraca "
+                 "(PMK 65/PMK.06/2017)."],
+         "daftar": []},
+        {"judul": "Akuntansi Berbasis Akrual",
+         "isi": ["Penyusunan laporan menerapkan basis akrual sesuai PP 71 "
+                 "Tahun 2010: perolehan BMN diakui saat hak kepemilikan "
+                 "berpindah meskipun pembayaran belum dilakukan; jurnal "
+                 "persediaan dan penyusutan mempengaruhi beban pada "
+                 "Laporan Operasional serta akun-akun Laporan Perubahan "
+                 "Ekuitas."],
+         "daftar": []},
+    ]
+
+
+def struktur_daftar_isi_lengkap() -> list:
+    """Outline daftar isi LBP LENGKAP (level, judul) — cermin contoh."""
+    return [
+        (1, "KATA PENGANTAR"),
+        (1, "DAFTAR ISI"),
+        (1, "SURAT PENGANTAR"),
+        (1, "I. OVERVIEW LAPORAN BARANG PENGGUNA"),
+        (2, "1.1 Gambaran Umum"),
+        (2, "1.2 Dasar Hukum"),
+        (2, "1.3 Ruang Lingkup Laporan"),
+        (2, "1.4 Kebijakan Umum Penatausahaan BMN"),
+        (2, "1.5 Kebijakan Akuntansi yang Signifikan"),
+        (2, "1.6 Nilai Barang Milik Negara"),
+        (1, "II. LAPORAN BARANG PENGGUNA"),
+        (2, "a. Laporan Posisi BMN di Neraca"),
+        (2, "b. Laporan Persediaan"),
+        (2, "c. Laporan BMN Intrakomptabel"),
+        (2, "d. Laporan BMN Ekstrakomptabel"),
+        (2, "e. Laporan BMN Gabungan"),
+        (2, "f. Laporan Konstruksi Dalam Pengerjaan"),
+        (2, "g. Laporan Aset Tak Berwujud"),
+        (2, "h. Laporan Barang Bersejarah"),
+        (2, "i. Laporan Barang BPYDS"),
+        (2, "j. Laporan Barang Hibah DK/TP"),
+        (2, "k. Laporan Penyusutan dan Amortisasi"),
+        (1, "III. CATATAN ATAS LAPORAN BARANG MILIK NEGARA"),
+        (2, "3.1 Pendahuluan"),
+        (2, "3.2 Ringkasan Mutasi BMN per Golongan"),
+        (2, "3.3 BMN per Akun Neraca"),
+        (2, "3.4 Perbandingan Laporan Barang dan Laporan Keuangan"),
+        (2, "3.5 Informasi BMN Lainnya"),
+        (2, "3.6 Tindak Lanjut Temuan Pemeriksaan"),
+        (1, "LAMPIRAN"),
+        (2, "a. Laporan PNBP dari Pengelolaan BMN"),
+        (2, "b. Laporan Pelaksanaan Pengasuransian BMN"),
+        (2, "c. Laporan BMN Berupa Rumah Negara"),
+        (2, "d. Berita Acara Rekonsiliasi Internal"),
+        (2, "e. Neraca Percobaan dan Laporan Neraca"),
+        (2, "f. Data Transfer Masuk dan Transfer Keluar"),
+        (2, "g. Rekapitulasi Transaksi Hibah"),
+        (2, "h. Daftar BMN Hilang yang Diusulkan ke Pengelola"),
+        (2, "i. Laporan Pengawasan dan Pengendalian"),
+        (1, "PENUTUP"),
+    ]
