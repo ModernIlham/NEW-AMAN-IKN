@@ -1,5 +1,5 @@
 import React, { memo, useRef, useState, useEffect } from "react";
-import { Camera, Briefcase, MapPin, Tag, CreditCard, Trash2 } from "lucide-react";
+import { Camera, Briefcase, MapPin, Tag, CreditCard, Trash2, ShieldCheck } from "lucide-react";
 import { sisaGaransi } from "../../lib/garansi";
 import { Button } from "../ui/button";
 import {
@@ -72,7 +72,11 @@ const AssetTableRow = memo(({ asset, editId, onEdit, onDelete, onPrintCard }) =>
   };
   
   return (
+    // Belum tersinkron SIMAN: gradasi orange halus dari pojok kiri-bawah ke
+    // atas (pengganti badge teks) — cukup terlihat tanpa mencolok.
     <tr onClick={() => onEdit(asset)}
+      title={asset.siman?.status === "selisih" ? "Data berbeda dengan SIMAN V2 — sinkronkan di Penatausahaan › Pelaporan" : undefined}
+      style={asset.siman?.status === "selisih" ? { backgroundImage: "linear-gradient(to top right, rgba(245,158,11,0.14), rgba(245,158,11,0.04) 45%, transparent 70%)" } : undefined}
       className={`hover:bg-blue-50/50 transition-colors cursor-pointer border-b border-border ${editId === asset.id ? "bg-amber-50 border-l-2 border-l-amber-400" : ""}`}>
       <td className="px-1 py-1 w-[60px] align-middle">
         <div className="w-[52px] h-[52px] rounded overflow-hidden bg-muted flex items-center justify-center flex-shrink-0">
@@ -111,15 +115,12 @@ const AssetTableRow = memo(({ asset, editId, onEdit, onDelete, onPrintCard }) =>
       <td className="px-2 py-1 align-middle">
         <div className="flex flex-col gap-0.5 items-start">
           <span className={`badge text-xs ${asset.condition === "Baik" ? "badge-success" : asset.condition === "Rusak Ringan" ? "badge-warning" : "badge-error"}`}>{asset.condition || '-'}</span>
-          {asset.siman?.status === "selisih" && (
-            <span className="badge badge-warning text-[10px]" title="Data berbeda dengan SIMAN V2">≠ SIMAN</span>
-          )}
           {(() => {
             const g = sisaGaransi(asset.garansi_hingga);
             return g ? (
-              <span className={`badge text-[10px] ${g.segera ? "badge-warning" : "badge-success"}`}
-                title={`Garansi tercatat hingga ${g.hingga} (${g.hari} hari lagi)`}>
-                {g.label}
+              <span className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded-full text-[9px] font-bold ${g.segera ? "bg-amber-500/15 text-amber-600 dark:text-amber-400" : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"}`}
+                title={`Garansi${asset.garansi_jenis ? ` ${asset.garansi_jenis}` : ""} hingga ${g.hingga} (${g.hari} hari lagi)`}>
+                <ShieldCheck className="w-2.5 h-2.5" />{g.singkat}
               </span>
             ) : null;
           })()}

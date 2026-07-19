@@ -1,5 +1,7 @@
 import React, { memo, useState, useCallback } from "react";
-import { Camera, MapPin, Tag, Images, User, QrCode, CreditCard, Trash2, FileCheck, FileX, Calendar, Lock, ClipboardCheck, Building2, ImageIcon, FileText } from "lucide-react";
+import { Camera, MapPin, Tag, Images, User, QrCode, CreditCard, Trash2, FileCheck, FileX, Calendar, Lock, ClipboardCheck, Building2, ImageIcon, FileText, ShieldCheck, RefreshCcw as RefreshCcwIcon, Check as CheckIcon } from "lucide-react";
+import axios from "axios";
+import { toast } from "sonner";
 import {
   Tooltip, TooltipContent, TooltipTrigger,
 } from "../ui/tooltip";
@@ -37,6 +39,31 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
   const photoCount = asset.photo_count || asset.photos?.length || 0;
   const year = extractYear(asset.purchase_date);
   const [hovered, setHovered] = useState(false);
+  // Sinkronisasi SIMAN langsung dari kartu galeri (tetesan air): terapkan
+  // seluruh field selisih (kecuali kode barang — jalur reklasifikasi
+  // terpisah). Sukses → tetesan hilang beranimasi.
+  const [simanBusy, setSimanBusy] = useState(false);
+  const [simanSynced, setSimanSynced] = useState(false);
+  const sinkronSiman = useCallback(async (e) => {
+    e.stopPropagation();
+    const fields = (asset.siman?.selisih || [])
+      .map((sel) => sel.field).filter((f) => f !== "asset_code");
+    if (!fields.length) {
+      toast.info("Selisih tersisa hanya kode barang — sinkronkan lewat Penatausahaan › Pelaporan (reklasifikasi)");
+      return;
+    }
+    setSimanBusy(true);
+    try {
+      await axios.post(`${API}/siman/terapkan/${asset.id}`, { fields });
+      setSimanSynced(true);
+      toast.success(`${asset.asset_code} tersinkron dengan SIMAN V2`);
+      setTimeout(() => setSimanSynced(false), 900);
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Gagal sinkron dengan SIMAN");
+    } finally {
+      setSimanBusy(false);
+    }
+  }, [asset.id, asset.asset_code, asset.siman]);
   // Foto sampul galeri via STREAMING ?w=256 (ter-cache browser + server) —
   // base64 gallery_thumbnail tak lagi dikirim di payload list. Fallback ke
   // data-URI lama (baris legacy/snapshot offline) lalu thumbnail 100px bila
@@ -119,22 +146,46 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
           </label>
         )}
 
+        {/* Garansi: pojok kanan-bawah foto (di atas garis bawah) — simple,
+            ikon shield + durasi singkat saja, tanpa teks panjang. */}
+        {(() => {
+          const g = sisaGaransi(asset.garansi_hingga);
+          return g ? (
+            <span
+              className={`absolute bottom-1.5 right-1.5 z-2 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold text-white backdrop-blur-sm shadow-sm ${g.segera ? "bg-amber-500/90" : "bg-emerald-500/90"}`}
+              title={`Garansi${asset.garansi_jenis ? ` ${asset.garansi_jenis}` : ""} hingga ${g.hingga} (${g.hari} hari lagi)`}
+              data-testid={`gallery-garansi-${asset.id}`}
+            >
+              <ShieldCheck className="w-2.5 h-2.5" />{g.singkat}
+            </span>
+          ) : null;
+        })()}
+
+        {/* SIMAN belum tersinkron: TETESAN AIR ikon-only menjorok ke foto,
+            di tengah perbatasan foto ↔ area teks. Hover = membesar; klik =
+            langsung sinkronkan nilai SIMAN V2 (terapkan selisih); hilang
+            beranimasi saat tersinkron. Aman light/dark. */}
+        {asset.siman?.status === "selisih" && !simanSynced && (
+          <button
+            type="button"
+            onClick={sinkronSiman}
+            disabled={simanBusy}
+            title="Belum tersinkron dengan SIMAN V2 — klik untuk sinkronkan sekarang"
+            aria-label="Sinkronkan dengan SIMAN V2"
+            data-testid={`siman-drop-${asset.id}`}
+            className={`absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 z-10 w-6 h-6 rotate-45 rounded-full rounded-tl-none border border-white/60 dark:border-black/30 bg-amber-500 dark:bg-amber-400 shadow-md flex items-center justify-center transition-all duration-300 hover:scale-125 hover:shadow-lg active:scale-95 min-w-0 min-h-0 ${simanBusy ? "animate-pulse" : ""}`}
+          >
+            <RefreshCcwIcon className={`w-3 h-3 -rotate-45 text-white dark:text-amber-950 ${simanBusy ? "animate-spin" : ""}`} />
+          </button>
+        )}
+        {simanSynced && (
+          <span className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 z-10 w-6 h-6 rounded-full bg-emerald-500 dark:bg-emerald-400 flex items-center justify-center shadow-md animate-[ping_0.8s_ease-out_1] opacity-0 transition-opacity duration-700">
+            <CheckIcon className="w-3 h-3 text-white dark:text-emerald-950" />
+          </span>
+        )}
+
         {/* Top-right badges */}
         <div className="absolute top-1.5 right-1.5 z-2 flex items-center gap-1">
-          {asset.siman?.status === "selisih" && (
-            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold text-white bg-amber-600/90 backdrop-blur-sm" title="Data berbeda dengan SIMAN V2" data-testid={`siman-badge-${asset.id}`}>
-              ≠ SIMAN
-            </span>
-          )}
-          {(() => {
-            const g = sisaGaransi(asset.garansi_hingga);
-            return g ? (
-              <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold text-white backdrop-blur-sm ${g.segera ? "bg-amber-600/90" : "bg-emerald-600/90"}`}
-                title={`Garansi tercatat hingga ${g.hingga} (${g.hari} hari lagi)`}>
-                {g.label}
-              </span>
-            ) : null;
-          })()}
           {asset.condition && (
             <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold text-white backdrop-blur-sm ${COND[asset.condition] || "bg-slate-500"}`}>
               {asset.condition}

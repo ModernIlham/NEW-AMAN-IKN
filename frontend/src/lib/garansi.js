@@ -20,6 +20,9 @@ export function sisaGaransi(garansiHingga, now = new Date()) {
   } else {
     label = `Garansi ${hari} hari lagi`;
   }
+  // Durasi SINGKAT ikon-only (badge galeri/list): "45h" / "3bl" / "2th"
+  const singkat = hari > 365 ? `${Math.floor(hari / 365)}th`
+    : hari > 60 ? `${Math.floor(hari / 30)}bl` : `${hari}h`;
   // ≤60 hari = amber (segera habis), sisanya emerald
-  return { hari, label, segera: hari <= 60, hingga: s };
+  return { hari, label, singkat, segera: hari <= 60, hingga: s };
 }

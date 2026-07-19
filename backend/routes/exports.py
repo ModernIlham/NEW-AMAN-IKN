@@ -62,7 +62,7 @@ ASSET_SHEET_HEADERS = ['Foto', 'Foto Stiker', 'Kode Aset', 'NUP', 'Nama Aset', '
                        'Status Inventarisasi', 'Klasifikasi', 'Sub Klasifikasi', 'Uraian Tidak Ditemukan', 'Tindak Lanjut',
                        'Latitude', 'Longitude', 'Kronologis',
                        'Keterangan Berlebih', 'Asal Usul Berlebih', 'Nomor Perkara', 'Pihak Bersengketa', 'Keterangan Sengketa',
-                       'Garansi Hingga',
+                       'Garansi Hingga', 'Jenis Garansi',
                        'Jumlah Foto', 'Tanggal Input']
 
 
@@ -1024,12 +1024,13 @@ async def export_xlsx(request: Request, activity_id: Optional[str] = None, base_
         worksheet.write(row, 42, asset.get('pihak_bersengketa', ''), cell_format)
         worksheet.write(row, 43, asset.get('keterangan_sengketa', ''), cell_format)
         worksheet.write(row, 44, asset.get('garansi_hingga', ''), cell_format)
+        worksheet.write(row, 45, asset.get('garansi_jenis', ''), cell_format)
 
         # Jumlah Foto
         photo_count = len(asset.get('photo_gridfs_ids', []) or asset.get('photos', []))
-        worksheet.write(row, 45, photo_count, cell_format)
+        worksheet.write(row, 46, photo_count, cell_format)
         # Tanggal Input
-        worksheet.write(row, 46, asset.get('created_at', ''), cell_format)
+        worksheet.write(row, 47, asset.get('created_at', ''), cell_format)
         
         # Write document checklist to separate sheet - ONLY items with checked=True (✓ Ada)
         checklist = asset.get('document_checklist', [])

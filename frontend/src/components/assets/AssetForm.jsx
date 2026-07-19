@@ -396,6 +396,7 @@ function buildEditFormData(a, activityId) {
     pihak_bersengketa: a.pihak_bersengketa || "",
     keterangan_sengketa: a.keterangan_sengketa || "",
     garansi_hingga: a.garansi_hingga || "",
+    garansi_jenis: a.garansi_jenis || "",
     document_checklist: mergedChecklist,
     activity_id: activityId || null
   };
@@ -506,7 +507,7 @@ const AssetForm = memo(({
     inventory_status: "Belum Diinventarisasi", klasifikasi_tidak_ditemukan: "", sub_klasifikasi: "", uraian_tidak_ditemukan: "", tindak_lanjut: "",
     koordinat_latitude: "", koordinat_longitude: "", kronologis: "",
     keterangan_berlebih: "", asal_usul_berlebih: "", nomor_perkara: "", pihak_bersengketa: "", keterangan_sengketa: "",
-    garansi_hingga: "",
+    garansi_hingga: "", garansi_jenis: "",
     document_checklist: DEFAULT_DOC_ITEMS.map(name => ({ name, checked: false, notes: "", photos: [], documents: [] })),
     activity_id: activity?.id || null
   }), [activity?.id]);
@@ -1525,7 +1526,7 @@ const AssetForm = memo(({
           "koordinat_latitude", "koordinat_longitude", "kronologis",
           "keterangan_berlebih", "asal_usul_berlebih",
           "nomor_perkara", "pihak_bersengketa", "keterangan_sengketa",
-          "garansi_hingga",
+          "garansi_hingga", "garansi_jenis",
           "activity_id",
         ];
         for (const key of TEXT_FIELDS) {
@@ -2181,10 +2182,19 @@ const AssetForm = memo(({
                 <div className="space-y-1"><Label className="text-xs">Tanggal Beli</Label><Input type="date" name="purchase_date" value={formData.purchase_date} onChange={handleInputChange} className="h-8" /></div>
                 <div className="space-y-1"><Label className="text-xs">Harga (Rp)</Label><Input type="number" name="purchase_price" value={formData.purchase_price} onChange={handleInputChange} className="h-8" /></div>
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Garansi hingga{garansiOtomatis ? <span className="ml-1 text-[10px] text-sky-600 dark:text-sky-400 font-normal">terisi otomatis dari inventarisasi sebelumnya</span> : null}</Label>
-                <Input type="date" name="garansi_hingga" value={formData.garansi_hingga || ""} onChange={handleInputChange} className="h-8" data-testid="asset-garansi" />
-                <p className="text-[10px] text-muted-foreground">Tanggal berakhir garansi (rentang lazim dihitung sejak tanggal perolehan). Kosongkan bila tidak ada.</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs">Garansi hingga{garansiOtomatis ? <span className="ml-1 text-[10px] text-sky-600 dark:text-sky-400 font-normal">otomatis</span> : null}</Label>
+                  <Input type="date" name="garansi_hingga" value={formData.garansi_hingga || ""} onChange={handleInputChange} className="h-8" data-testid="asset-garansi" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Jenis garansi</Label>
+                  <Input name="garansi_jenis" value={formData.garansi_jenis || ""} onChange={handleInputChange} list="garansi-jenis-opsi" placeholder="mis. Pabrikan" className="h-8" data-testid="asset-garansi-jenis" />
+                  <datalist id="garansi-jenis-opsi">
+                    {["Pabrikan", "Distributor", "Toko", "Purna Jual", "Lainnya"].map((j) => <option key={j} value={j} />)}
+                  </datalist>
+                </div>
+                <p className="text-[10px] text-muted-foreground col-span-2 -mt-1">Tanggal berakhir garansi (rentang lazim sejak tanggal perolehan) + jenis/tipenya. Kosongkan bila tidak ada.</p>
               </div>
               <div className="space-y-1"><Label className="text-xs">Lokasi</Label><Input name="location" value={formData.location} onChange={handleInputChange} className="h-8" list="daftar-ruangan-master" placeholder="pilih ruangan / ketik bebas" /><datalist id="daftar-ruangan-master">{ruanganNames.map((n) => <option key={n} value={n} />)}</datalist></div>
               <div className="grid grid-cols-2 gap-2">
@@ -2328,10 +2338,11 @@ const AssetForm = memo(({
                       type="button"
                       onClick={handleBastPreview}
                       data-testid="bast-preview-btn"
-                      className="flex items-center gap-1 text-[11px] text-blue-600 dark:text-blue-400 hover:underline max-w-full"
+                      title={`Lampiran BAST tersedia${bastInfo.filename ? `: ${bastInfo.filename}` : ""} — terhubung otomatis dengan bukti serah terima dari modul Penggunaan`}
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 text-[10px] font-semibold hover:bg-emerald-500/25 max-w-full min-w-0 min-h-0"
                     >
                       <Eye className="w-3 h-3 flex-shrink-0" />
-                      <span className="truncate">Preview{bastInfo.filename ? `: ${bastInfo.filename}` : " BAST"}</span>
+                      <span className="truncate">Lampiran BAST tersedia — lihat foto/dokumen</span>
                     </button>
                   )}
                   {!isEditing && (

@@ -52,7 +52,7 @@ const SNAPSHOT_FIELDS = [
   "koordinat_latitude", "koordinat_longitude", "kronologis",
   "keterangan_berlebih", "asal_usul_berlebih",
   "nomor_perkara", "pihak_bersengketa", "keterangan_sengketa",
-  "garansi_hingga",
+  "garansi_hingga", "garansi_jenis",
   "photo_count", "doc_total", "doc_checked", "doc_summary",
   "siman",  // subdoc sinkronisasi SIMAN V2 — badge "≠ SIMAN" tetap tampil offline
 ];

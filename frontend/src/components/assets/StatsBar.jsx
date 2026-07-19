@@ -16,7 +16,8 @@ function formatSyncTime(iso) {
  * (mode dashboard) dan menyatu di kartu header InventoryProgressBar (mode
  * inventarisasi) — hanya satu instans yang dirender pada satu waktu.
  */
-export const InventoryModeSwitch = memo(({ inventoryMode, setInventoryMode, className = "", iconOnly = false }) => (
+// Ikon-saja di SEMUA ukuran (permintaan pemilik) — label lewat title/aria.
+export const InventoryModeSwitch = memo(({ inventoryMode, setInventoryMode, className = "", iconOnly = true }) => (
   <div className={`grid grid-cols-2 ${className}`} data-testid="stats-mobile-inline">
     <button
       type="button"
@@ -27,7 +28,7 @@ export const InventoryModeSwitch = memo(({ inventoryMode, setInventoryMode, clas
       data-testid="inventory-mode-toggle-dashboard"
       className={`min-h-0 min-w-0 flex items-center justify-center gap-1.5 h-8 ${iconOnly ? 'px-2.5' : 'px-2'} rounded-lg text-xs font-semibold transition-colors ${!inventoryMode ? 'bg-blue-600 text-white shadow-sm' : 'text-muted-foreground'}`}
     >
-      <LayoutDashboard className="w-4 h-4 flex-shrink-0" />{!iconOnly && <span>Dashboard</span>}
+      <LayoutDashboard className="w-4 h-4 flex-shrink-0" />
     </button>
     <button
       type="button"
@@ -38,7 +39,7 @@ export const InventoryModeSwitch = memo(({ inventoryMode, setInventoryMode, clas
       data-testid="inventory-mode-toggle"
       className={`min-h-0 min-w-0 flex items-center justify-center gap-1.5 h-8 ${iconOnly ? 'px-2.5' : 'px-2'} rounded-lg text-xs font-semibold transition-colors ${inventoryMode ? 'bg-emerald-600 text-white shadow-sm' : 'text-muted-foreground'}`}
     >
-      <ClipboardCheck className="w-4 h-4 flex-shrink-0" />{!iconOnly && <span>Inventarisasi</span>}
+      <ClipboardCheck className="w-4 h-4 flex-shrink-0" />
     </button>
   </div>
 ));

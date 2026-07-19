@@ -180,6 +180,11 @@ ASSET_TEMPLATE_SCHEMA = [
      "rule": "Tanggal berakhir garansi (YYYY-MM-DD); rentang lazim dihitung "
              "sejak tanggal perolehan.",
      "sample1": "2027-05-31", "sample2": "", "dropdown": None},
+    {"field": "garansi_jenis", "required": False, "width": 18,
+     "rule": "Jenis/tipe garansi (mis. Pabrikan, Distributor, Toko, "
+             "Purna Jual).",
+     "sample1": "Pabrikan", "sample2": "",
+     "dropdown": ["Pabrikan", "Distributor", "Toko", "Purna Jual", "Lainnya"]},
 ]
 
 
