@@ -223,6 +223,10 @@ class InventoryActivityCreate(BaseModel):
     # === Satuan Kerja ===
     kode_satker: str = ""
     nama_satker: str = ""
+    # Kode satker LENGKAP ±20 digit versi SIMAN V2 (AMAN memakai 6 digit) —
+    # dipakai validasi satker saat impor/sinkron SIMAN agar aset kegiatan
+    # ini terdeteksi tanpa peringatan "kode satker berbeda".
+    kode_satker_lengkap: Optional[str] = ""
     eselon1: Optional[List[dict]] = []  # [{nama: str, eselon2: [str]}]
     # === Tim Inventarisasi (Internal) ===
     tim_inti: Optional[List[dict]] = []  # [{nama, jabatan, nip, unit, is_ketua: bool}]
@@ -258,6 +262,7 @@ class InventoryActivityResponse(BaseModel):
     # === Satuan Kerja ===
     kode_satker: Optional[str] = ""
     nama_satker: Optional[str] = ""
+    kode_satker_lengkap: Optional[str] = ""
     eselon1: Optional[List[dict]] = []  # [{nama: str, eselon2: [str]}]
     # === Tim Inventarisasi (Internal) ===
     tim_inti: Optional[List[dict]] = []
@@ -363,24 +368,57 @@ async def get_satker_list(_user: dict = Depends(require_user)):
     result = await db.inventory_activities.aggregate(pipeline).to_list(100)
     return result
 
+async def _kode_lengkap_master(kode_satker: str) -> str:
+    """Kode satker LENGKAP (±20 digit SIMAN V2) dari master satker, "" bila belum ada."""
+    if not (kode_satker or "").strip():
+        return ""
+    m = await db.satker.find_one(
+        {"kode_satker": kode_satker.strip()}, {"_id": 0, "kode_satker_lengkap": 1})
+    return str((m or {}).get("kode_satker_lengkap") or "").strip()
+
+
+async def _sinkron_kode_satker_lengkap(payload: dict):
+    """Dua arah kegiatan ↔ master satker untuk kode_satker_lengkap:
+    kosong di kegiatan → isi dari master; terisi di kegiatan → backfill
+    master satker yang belum punya (best-effort, tidak menimpa yang ada)."""
+    ksl = str(payload.get("kode_satker_lengkap") or "").strip()
+    payload["kode_satker_lengkap"] = ksl
+    kode = str(payload.get("kode_satker") or "").strip()
+    if not kode:
+        return
+    try:
+        if ksl:
+            await db.satker.update_one(
+                {"kode_satker": kode,
+                 "$or": [{"kode_satker_lengkap": {"$exists": False}},
+                         {"kode_satker_lengkap": ""}]},
+                {"$set": {"kode_satker_lengkap": ksl}})
+        else:
+            payload["kode_satker_lengkap"] = await _kode_lengkap_master(kode)
+    except Exception:
+        logger.warning("Sinkron kode_satker_lengkap kegiatan↔master gagal (non-fatal)", exc_info=True)
+
+
 @activities_router.get("/satker-lookup")
 async def satker_lookup(kode: str = "", nama: str = "", _user: dict = Depends(require_user)):
     """Lookup satker by kode or nama for auto-fill consistency (includes eselon1)"""
     if kode:
         doc = await db.inventory_activities.find_one(
-            {"kode_satker": kode}, {"_id": 0, "kode_satker": 1, "nama_satker": 1, "eselon1": 1}
+            {"kode_satker": kode}, {"_id": 0, "kode_satker": 1, "nama_satker": 1, "eselon1": 1, "kode_satker_lengkap": 1}
         )
         if doc:
-            return {"kode_satker": doc.get("kode_satker", ""), "nama_satker": doc.get("nama_satker", ""), "eselon1": doc.get("eselon1", [])}
+            return {"kode_satker": doc.get("kode_satker", ""), "nama_satker": doc.get("nama_satker", ""), "eselon1": doc.get("eselon1", []),
+                    "kode_satker_lengkap": doc.get("kode_satker_lengkap") or await _kode_lengkap_master(doc.get("kode_satker", ""))}
     if nama:
         # re.escape the user input so an exact (anchored) case-insensitive match
         # can't be abused for ReDoS or blow up on invalid regex metacharacters.
         doc = await db.inventory_activities.find_one(
             {"nama_satker": {"$regex": f"^{re.escape(nama)}$", "$options": "i"}},
-            {"_id": 0, "kode_satker": 1, "nama_satker": 1, "eselon1": 1}
+            {"_id": 0, "kode_satker": 1, "nama_satker": 1, "eselon1": 1, "kode_satker_lengkap": 1}
         )
         if doc:
-            return {"kode_satker": doc.get("kode_satker", ""), "nama_satker": doc.get("nama_satker", ""), "eselon1": doc.get("eselon1", [])}
+            return {"kode_satker": doc.get("kode_satker", ""), "nama_satker": doc.get("nama_satker", ""), "eselon1": doc.get("eselon1", []),
+                    "kode_satker_lengkap": doc.get("kode_satker_lengkap") or await _kode_lengkap_master(doc.get("kode_satker", ""))}
     return None
 
 @activities_router.post("/inventory-activities")
@@ -482,6 +520,9 @@ async def create_inventory_activity(activity: InventoryActivityCreate, _user: di
     # Replace user-supplied raw payload with our processed/persisted versions
     payload["photos"] = photos_to_store
     payload["documents"] = documents_to_store
+    # Kode satker lengkap (±20 digit SIMAN V2): isi dari master bila kosong /
+    # backfill master bila terisi — dipakai validasi satker impor SIMAN.
+    await _sinkron_kode_satker_lengkap(payload)
 
     doc = {
         "id": activity_id,
@@ -509,6 +550,7 @@ async def create_inventory_activity(activity: InventoryActivityCreate, _user: di
                 "id": str(uuid.uuid4()),
                 "kode_satker": activity.kode_satker.strip(),
                 "nama_satker": activity.nama_satker.strip(),
+                "kode_satker_lengkap": str(activity.kode_satker_lengkap or "").strip(),
                 "nama_unit_organisasi": "", "nama_sub_unit": "",
                 "alamat": str(activity.alamat_satker or "").strip()
                 if hasattr(activity, "alamat_satker") else "",
@@ -687,6 +729,9 @@ async def update_inventory_activity(activity_id: str, activity: InventoryActivit
     
     update_data = activity.model_dump()
     update_data["created_at"] = existing.get("created_at")
+    # Kode satker lengkap (±20 digit SIMAN V2): isi dari master bila kosong /
+    # backfill master bila terisi.
+    await _sinkron_kode_satker_lengkap(update_data)
 
     # ── Lazy-load friendly semantics ───────────────────────────────────────
     # When the frontend opens the edit form, it no longer eagerly loads photos

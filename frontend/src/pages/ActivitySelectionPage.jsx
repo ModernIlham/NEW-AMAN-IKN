@@ -145,7 +145,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
     tim_inti: [], tim_pembantu: [],
     tim_peneliti: [], tim_pendukung: [], kasatker_nama: '', kasatker_nip: '', kasatker_jabatan: '',
     alamat_satker: '', nomor_berita_acara: '', tanggal_berita_acara: '', kesimpulan: '',
-    kode_satker: '', nama_satker: '', eselon1: [],
+    kode_satker: '', nama_satker: '', kode_satker_lengkap: '', eselon1: [],
   });
   const [saving, setSaving] = useState(false);
   // Distinguishes a failed fetch (show retry) from a genuinely empty list.
@@ -165,7 +165,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
     tim_inti: [], tim_pembantu: [],
     tim_peneliti: [], tim_pendukung: [], kasatker_nama: '', kasatker_nip: '', kasatker_jabatan: '',
     alamat_satker: '', nomor_berita_acara: '', tanggal_berita_acara: '', kesimpulan: '',
-    kode_satker: '', nama_satker: '', eselon1: [],
+    kode_satker: '', nama_satker: '', kode_satker_lengkap: '', eselon1: [],
   };
 
   const fetchActivities = async () => {
@@ -231,7 +231,8 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
         try {
           const r = await axios.get(`${API}/satker-lookup`, { params: { kode: value.trim() } });
           if (r.data?.nama_satker) {
-            setForm(p => ({ ...p, nama_satker: r.data.nama_satker, eselon1: r.data.eselon1 || [] }));
+            setForm(p => ({ ...p, nama_satker: r.data.nama_satker, eselon1: r.data.eselon1 || [],
+              kode_satker_lengkap: r.data.kode_satker_lengkap || p.kode_satker_lengkap }));
           }
         } catch { /* silent */ }
       }, 400);
@@ -247,7 +248,8 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
         try {
           const r = await axios.get(`${API}/satker-lookup`, { params: { nama: value.trim() } });
           if (r.data?.kode_satker) {
-            setForm(p => ({ ...p, kode_satker: r.data.kode_satker, eselon1: r.data.eselon1 || [] }));
+            setForm(p => ({ ...p, kode_satker: r.data.kode_satker, eselon1: r.data.eselon1 || [],
+              kode_satker_lengkap: r.data.kode_satker_lengkap || p.kode_satker_lengkap }));
           }
         } catch { /* silent */ }
       }, 400);
@@ -381,6 +383,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
       alamat_satker: act.alamat_satker || '', nomor_berita_acara: act.nomor_berita_acara || '',
       tanggal_berita_acara: act.tanggal_berita_acara || '', kesimpulan: act.kesimpulan || '',
       kode_satker: act.kode_satker || '', nama_satker: act.nama_satker || '',
+      kode_satker_lengkap: act.kode_satker_lengkap || '',
       eselon1: act.eselon1 || [],
     });
     setFormErrors({});
@@ -1086,6 +1089,14 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                   <Label className="text-[10px] text-emerald-600 dark:text-emerald-400">Nama Satker <span className="text-red-500">*</span></Label>
                   <Input name="activity-nama_satker" value={form.nama_satker} onChange={e => { handleNamaSatkerChange(e.target.value); clearFormError('nama_satker'); }} placeholder="Contoh: Kantor Wilayah Jakarta" className={`h-7 text-xs${formErrors.nama_satker ? ' border-red-500 focus-visible:ring-red-500' : ''}`} aria-invalid={!!formErrors.nama_satker} data-testid="input-nama-satker" />
                   {formErrors.nama_satker && <p className="text-[11px] text-red-600 dark:text-red-400">{formErrors.nama_satker}</p>}
+                </div>
+                {/* Kode satker LENGKAP ±20 digit versi SIMAN V2 (AMAN memakai
+                    6 digit) — dipakai mencocokkan satker saat sinkronisasi
+                    SIMAN sehingga peringatan "kode satker berbeda" hilang. */}
+                <div className="space-y-0.5 sm:col-span-2">
+                  <Label className="text-[10px] text-emerald-600 dark:text-emerald-400">Kode Satker Lengkap — SIMAN V2 (±20 digit)</Label>
+                  <Input name="activity-kode_satker_lengkap" value={form.kode_satker_lengkap} onChange={e => setForm(p => ({...p, kode_satker_lengkap: e.target.value}))} placeholder="Contoh: 126.01.1600691778.000-KP" className="h-7 text-xs font-mono" data-testid="input-kode-satker-lengkap" />
+                  <p className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80">Opsional — agar aset kegiatan ini terdeteksi saat sinkronisasi SIMAN V2 tanpa peringatan; terisi otomatis dari Master Satker bila sudah ada.</p>
                 </div>
                 <div className="space-y-0.5"><Label className="text-[10px] text-emerald-600 dark:text-emerald-400">Nama Kasatker</Label><Input value={form.kasatker_nama} onChange={e => setForm(p => ({...p, kasatker_nama: e.target.value}))} placeholder="Nama Kepala Satker" className="h-7 text-xs" /></div>
                 <div className="space-y-0.5"><Label className="text-[10px] text-emerald-600 dark:text-emerald-400">NIP Kasatker</Label><Input value={form.kasatker_nip} onChange={e => setForm(p => ({...p, kasatker_nip: e.target.value}))} placeholder="NIP" className="h-7 text-xs" /></div>

@@ -194,6 +194,20 @@ class TestValidasiSatker:
         assert validasi_satker({"X"}, set())["cocok"] is True
         assert validasi_satker({""}, {"X"})["cocok"] is True
 
+    def test_kode_6_digit_terkandung_dalam_20_digit_cocok(self):
+        # AMAN 6 digit vs SIMAN V2 kode lengkap ±20 digit yang memuatnya.
+        r = validasi_satker({"126011600691778000KP"}, {"160069"})
+        assert r["cocok"] is True
+        # Arah sebaliknya (file 6 digit, terdaftar 20 digit) juga cocok.
+        r = validasi_satker({"160069"}, {"126.01.1600691778.000-KP"})
+        assert r["cocok"] is True
+
+    def test_kode_pendek_tidak_memicu_containment(self):
+        # Kode <6 digit terlalu pendek untuk pencocokan terkandung —
+        # hindari cocok palsu (mis. "01" ada di hampir semua kode).
+        r = validasi_satker({"126011600691778000KP"}, {"01"})
+        assert r["cocok"] is False
+
 
 class TestRingkasBelumTercatat:
     def test_field_lengkap(self):
