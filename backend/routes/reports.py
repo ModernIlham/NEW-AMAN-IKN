@@ -2605,9 +2605,11 @@ async def generate_calbmn_pdf(
     sufiks_final = penanda_final(periode_rec)
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
     assets = await db.assets.find(
-        {}, {"_id": 0, "id": 1, "asset_code": 1, "purchase_price": 1,
+        {}, {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
+             "purchase_price": 1, "purchase_date": 1, "condition": 1,
              "created_at": 1, "inventory_status": 1, "nomor_perkara": 1,
-             "pihak_bersengketa": 1, "dihapus": 1, "penghapusan": 1},
+             "pihak_bersengketa": 1, "dihapus": 1, "penghapusan": 1,
+             "nilai_wajar_terakhir": 1, "revaluasi": 1},
     ).to_list(500000)
     tombstones = []
     async for t in db.audit_logs.find(
@@ -2666,6 +2668,23 @@ async def generate_calbmn_pdf(
         {"status": {"$in": ["klarifikasi", "usul_serah"]}})
     n_idle_serah = await db.bmn_idle.count_documents({"status": "diserahkan"})
     n_sengketa = sum(1 for a in assets if is_sengketa(a))
+    # Integrasi Penilaian → CaLBMN Bab IV: ikhtisar nilai buku (penyusutan
+    # garis lurus PMK 65/2017) — pola sama dengan Posisi BMN (#416). Hanya
+    # aset masih dimiliki (bukan dihapus) agar tak lebih saji.
+    from penilaian_utils import MASA_MANFAAT_DEFAULT, rekap_penyusutan
+    peta_susut = dict(MASA_MANFAAT_DEFAULT)
+    async for m in db.masa_manfaat.find({}, {"_id": 0, "kode": 1, "tahun": 1}):
+        peta_susut[m["kode"]] = int(m["tahun"])
+    diusulkan_ids = set()
+    async for u in db.usulan_penghapusan.find(
+            {"status": {"$ne": "ditolak"}}, {"_id": 0, "asset_id": 1}):
+        if u.get("asset_id"):
+            diusulkan_ids.add(u["asset_id"])
+    aset_aktif = [a for a in assets if a.get("dihapus") is not True]
+    susut = rekap_penyusutan(aset_aktif, sampai, peta=peta_susut,
+                             uraian_golongan=uraian_map,
+                             diusulkan_ids=diusulkan_ids)
+
     # Integrasi Penilaian → CaLBMN: register koreksi/revaluasi nilai (PMK
     # 118/2017 jo. 57/2018 jo. 107/2019) diungkap di Bab V — auditor perlu
     # menelusuri koreksi yang belum tervalidasi SAKTI (risiko salah saji).
@@ -2720,7 +2739,7 @@ async def generate_calbmn_pdf(
         f"Gedung dan Bangunan ≥ Rp{ambang_gb}; golongan lain dibukukan "
         f"intrakomptabel tanpa ambang. Penyusutan aset tetap mengikuti "
         f"PMK 1/PMK.06/2013 jo. PMK 65/PMK.06/2017 (garis lurus semesteran — "
-        f"rekap tersedia pada halaman Penilaian); rekonsiliasi internal dengan "
+        f"ikhtisar nilai buku tersaji pada Bab IV); rekonsiliasi internal dengan "
         f"UAKPA dan eksternal dengan KPKNL dilakukan per semester.", st['Meta']))
 
     bab("III. PENDEKATAN PENYUSUNAN LAPORAN")
@@ -2793,6 +2812,25 @@ async def generate_calbmn_pdf(
                        f"dapat dipastikan dicatat pada rekap gabungan saja "
                        f"(tidak ditebak intra/ekstra).")
     elements.append(Paragraph(catatan_iv, st['Meta']))
+
+    # Ikhtisar nilai buku (integrasi Penilaian → CaLBMN, pola Posisi BMN #416)
+    ts = susut["total"]
+    n_henti = len(susut["henti"])
+    n_tanpa = len(susut["tanpa_referensi"])
+    n_tidak = sum(susut["tidak"].values())
+    elements.append(Spacer(1, 2 * rl_mm))
+    elements.append(Paragraph(
+        "<b>Ikhtisar Nilai Buku (penyusutan garis lurus PMK 65/PMK.06/2017)"
+        f"</b> — {ts['jumlah']} aset tersusutkan: nilai perolehan "
+        f"Rp{fmt_rp(ts['nilai_perolehan'])} − akumulasi penyusutan "
+        f"Rp{fmt_rp(ts['akumulasi'])} = nilai buku "
+        f"Rp{fmt_rp(ts['nilai_buku'])}. Lingkup: {susut['jumlah_habis']} aset "
+        f"habis masa manfaat (nilai buku 0, tetap tersaji) · {n_henti} "
+        f"henti-susut (rusak berat/hilang telah diusulkan hapus) · {n_tanpa} "
+        f"tanpa referensi masa manfaat (tidak ditebak) · {n_tidak} kelompok "
+        "tidak disusutkan (tanah/KDP/aset tetap lainnya) — tersaji nilai "
+        "perolehan penuh. Angka final penyusunan Neraca divalidasi via SAKTI.",
+        st['Meta']))
 
     bab("V. INFORMASI BMN LAINNYA")
     butir = [
@@ -2877,6 +2915,17 @@ async def generate_rekonsiliasi_xlsx(_user: dict = Depends(require_user_or_query
     p_nilai = sum(nilai_persediaan_dari_batches(it.get("batches")) for it in persediaan)
     posisi = posisi_neraca(rows, total_aset, len(persediaan), p_nilai)
 
+    # Akun neraca per golongan (BAS #300) — kolom sanding rekonsiliasi agar
+    # operator langsung mencocokkan angka per akun di MonSAKTI (integrasi
+    # referensi akun_bas → ekspor XLSX; pola sama dengan Posisi BMN PDF).
+    from akun_bas_utils import AKUN_NERACA_DEFAULT, akun_untuk_golongan
+    peta_akun = {g: dict(v) for g, v in AKUN_NERACA_DEFAULT.items()}
+    async for m in db.akun_bas.find({}, {"_id": 0}):
+        peta_akun[m["golongan"]] = {"akun": m.get("akun", ""), "uraian": m.get("uraian", "")}
+
+    def _akun(g):
+        return (akun_untuk_golongan(g, peta_akun) or {}).get("akun") or "-"
+
     buffer = io.BytesIO()
     wb = xlsxwriter.Workbook(buffer, {"in_memory": True})
     f_judul = wb.add_format({"bold": True})
@@ -2892,38 +2941,42 @@ async def generate_rekonsiliasi_xlsx(_user: dict = Depends(require_user_or_query
     s1 = wb.add_worksheet("Posisi Golongan")
     s1.write(0, 0, f"Posisi BMN per {today_iso} — sandingan rekonsiliasi SAKTI/MonSAKTI "
                    "(intra/ekstra per ambang PMK 181; persediaan FIFO per layer)", f_judul)
-    kolom1 = ["Gol", "Uraian", "Jml Intra", "Nilai Intra", "Jml Ekstra",
-              "Nilai Ekstra", "Jml Total", "Nilai Total"]
+    kolom1 = ["Gol", "Akun Neraca", "Uraian", "Jml Intra", "Nilai Intra",
+              "Jml Ekstra", "Nilai Ekstra", "Jml Total", "Nilai Total"]
     for c, h in enumerate(kolom1):
         s1.write(2, c, h, f_kepala)
     r = 3
     for row in posisi["aset"]:
         s1.write(r, 0, row["golongan"], f_sel)
-        s1.write(r, 1, row["uraian"], f_sel)
+        s1.write(r, 1, _akun(row["golongan"]), f_sel)
+        s1.write(r, 2, row["uraian"], f_sel)
         for c, key in enumerate(["jumlah_intra", "nilai_intra", "jumlah_ekstra",
-                                 "nilai_ekstra", "jumlah_total", "nilai_total"], start=2):
+                                 "nilai_ekstra", "jumlah_total", "nilai_total"], start=3):
             s1.write_number(r, c, row[key], f_angka)
         r += 1
     p = posisi["persediaan"]
     s1.write(r, 0, "1", f_sel)
-    s1.write(r, 1, "Persediaan (aset lancar — nilai FIFO per layer)", f_sel)
-    for c, v in enumerate([p["jumlah"], p["nilai"], 0, 0, p["jumlah"], p["nilai"]], start=2):
+    s1.write(r, 1, _akun("1"), f_sel)
+    s1.write(r, 2, "Persediaan (aset lancar — nilai FIFO per layer)", f_sel)
+    for c, v in enumerate([p["jumlah"], p["nilai"], 0, 0, p["jumlah"], p["nilai"]], start=3):
         s1.write_number(r, c, v, f_angka)
     r += 1
     g = posisi["total"]
     s1.write(r, 0, "", f_tebal)
-    s1.write(r, 1, "TOTAL POSISI BMN", f_tebal)
+    s1.write(r, 1, "", f_tebal)
+    s1.write(r, 2, "TOTAL POSISI BMN", f_tebal)
     for c, key in enumerate(["jumlah_intra", "nilai_intra", "jumlah_ekstra",
-                             "nilai_ekstra", "jumlah_total", "nilai_total"], start=2):
+                             "nilai_ekstra", "jumlah_total", "nilai_total"], start=3):
         s1.write_number(r, c, g[key], f_tebal_angka)
     s1.set_column(0, 0, 6)
-    s1.set_column(1, 1, 44)
-    s1.set_column(2, 7, 15)
+    s1.set_column(1, 1, 12)
+    s1.set_column(2, 2, 44)
+    s1.set_column(3, 8, 15)
 
     # ── Sheet 2: rincian aset (dasar sanding per NUP) ────────────────
     s2 = wb.add_worksheet("Rincian Aset")
-    kolom2 = ["Kode Barang", "NUP", "Nama Barang", "Gol", "Nilai Buku",
-              "Komptabel", "Kondisi", "Lokasi"]
+    kolom2 = ["Kode Barang", "NUP", "Nama Barang", "Gol", "Akun Neraca",
+              "Nilai Buku", "Komptabel", "Kondisi", "Lokasi"]
     for c, h in enumerate(kolom2):
         s2.write(0, c, h, f_kepala)
     for i, a in enumerate(sorted(
@@ -2932,20 +2985,23 @@ async def generate_rekonsiliasi_xlsx(_user: dict = Depends(require_user_or_query
         # Nilai buku terkini (nilai wajar revaluasi bila ada, #254) agar rincian
         # per-NUP TIE-OUT dengan total golongan Sheet 1 (build_dbkp_rows).
         harga = nilai_buku_aset(a)
+        gol = golongan_of(a.get("asset_code")) or "?"
         s2.write(i, 0, str(a.get("asset_code") or ""), f_sel)
         s2.write(i, 1, str(a.get("NUP") or ""), f_sel)
         s2.write(i, 2, str(a.get("asset_name") or ""), f_sel)
-        s2.write(i, 3, golongan_of(a.get("asset_code")) or "?", f_sel)
-        s2.write_number(i, 4, harga, f_angka)
-        s2.write(i, 5, klasifikasi_komptabel(a.get("asset_code"), harga), f_sel)
-        s2.write(i, 6, str(a.get("condition") or ""), f_sel)
-        s2.write(i, 7, str(a.get("location") or ""), f_sel)
+        s2.write(i, 3, gol, f_sel)
+        s2.write(i, 4, _akun(gol), f_sel)
+        s2.write_number(i, 5, harga, f_angka)
+        s2.write(i, 6, klasifikasi_komptabel(a.get("asset_code"), harga), f_sel)
+        s2.write(i, 7, str(a.get("condition") or ""), f_sel)
+        s2.write(i, 8, str(a.get("location") or ""), f_sel)
     s2.set_column(0, 0, 14)
     s2.set_column(1, 1, 7)
     s2.set_column(2, 2, 38)
     s2.set_column(3, 3, 5)
-    s2.set_column(4, 4, 16)
-    s2.set_column(5, 7, 14)
+    s2.set_column(4, 4, 12)
+    s2.set_column(5, 5, 16)
+    s2.set_column(6, 8, 14)
 
     # ── Sheet 3: rincian persediaan ──────────────────────────────────
     s3 = wb.add_worksheet("Rincian Persediaan")
