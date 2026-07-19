@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Search, Loader2, Landmark, Plus, Trash2, DownloadCloud, Boxes,
-  Download, ChevronRight, ChevronDown, AlertTriangle,
+  Download, ChevronRight, ChevronDown, AlertTriangle, Info,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -552,6 +552,12 @@ export default function ReferensiAkunPage({ user, onBack }) {
                   <div className="flex-1 min-w-0">
                     <p className="text-[12px] text-foreground/80 truncate">{i.uraian}</p>
                     <p className="text-[10px] text-muted-foreground">{i.sumber}</p>
+                    {/* Tautan MASTER ASET: isi nyata yang memakai akun ini */}
+                    <p className={`text-[10px] mt-0.5 ${i.jumlah_aset ? "text-sky-700 dark:text-sky-400 font-semibold" : "text-muted-foreground/60"}`}>
+                      {i.jumlah_aset
+                        ? `${i.jumlah_aset} aset di master · ${fmtRp(i.nilai_aset)}`
+                        : "belum ada aset golongan ini di master"}
+                    </p>
                   </div>
                   {isAdmin && i.sumber === "input satker" && (
                     <button type="button" onClick={() => hapusAset(i.golongan)} aria-label={`Reset golongan ${i.golongan}`}
@@ -591,11 +597,26 @@ export default function ReferensiAkunPage({ user, onBack }) {
               </div>
             )}
             <div className="px-3 py-2 border-b border-border/60">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-1">Katalog akun persediaan</p>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-1">
+                Katalog akun persediaan
+                {(psd?.total_barang || 0) > 0 && (
+                  <span className="ml-1.5 normal-case font-semibold text-sky-700 dark:text-sky-400">
+                    · master: {psd.total_barang} jenis barang · {fmtRp(psd.total_nilai)}
+                  </span>
+                )}
+              </p>
               <div className="flex flex-wrap gap-1.5">
                 {(psd?.katalog || []).map((k) => (
-                  <span key={k.akun} className="px-2 py-0.5 rounded-full border border-border text-[10px] text-foreground/80" title={namaAkun[k.akun] || ""}>
+                  <span key={k.akun}
+                    className={`px-2 py-0.5 rounded-full border text-[10px] ${k.jumlah_barang ? "border-sky-500/40 bg-sky-500/5 text-foreground" : "border-border text-foreground/80"}`}
+                    title={`${namaAkun[k.akun] || ""}${k.jumlah_barang ? ` — ${k.jumlah_barang} barang di master senilai ${fmtRp(k.nilai)}` : " — belum dipakai master persediaan"}`}>
                     <span className="font-mono font-semibold">{k.akun}</span> {k.uraian}
+                    {/* Tautan MASTER PERSEDIAAN: jumlah barang & nilai FIFO per akun */}
+                    {(k.jumlah_barang || 0) > 0 && (
+                      <span className="ml-1 font-semibold text-sky-700 dark:text-sky-400">
+                        {k.jumlah_barang} brg · {fmtRp(k.nilai)}
+                      </span>
+                    )}
                     {namaAkun[k.akun] === null && <span className="text-amber-600 dark:text-amber-400 ml-1" title="Tak ada di master BAS"><AlertTriangle className="w-3 h-3 inline align-[-1px]" /></span>}
                   </span>
                 ))}
@@ -623,6 +644,62 @@ export default function ReferensiAkunPage({ user, onBack }) {
               ))}
             </div>
           </div>
+        )}
+
+        {/* ── Info Kodefikasi Barang (riset PMK 29/2010 + KMK 333/KM.6/2024) ── */}
+        {(tab === "aset" || tab === "persediaan") && (
+          <details className="bg-card rounded-xl border border-border shadow-sm overflow-hidden group" data-testid="info-kodefikasi">
+            <summary className="px-3 py-2.5 cursor-pointer select-none flex items-center gap-2 text-xs font-semibold text-foreground hover:bg-muted/40">
+              <Info className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+              Memahami Kodefikasi Barang BMN (kaitannya dengan akun neraca)
+              <span className="ml-auto text-[10px] text-muted-foreground group-open:hidden">buka</span>
+            </summary>
+            <div className="px-3 pb-3 space-y-2.5 text-[11px] text-foreground/85">
+              <div>
+                <p className="font-bold text-[11px] mb-1">Struktur kode barang: 10 digit, 5 segmen (PMK 29/PMK.06/2010, lampiran terakhir KMK 333/KM.6/2024)</p>
+                <div className="overflow-x-auto">
+                  <div className="flex items-stretch gap-1 font-mono text-center min-w-[420px]">
+                    {[["3", "Golongan", "Peralatan & Mesin"], ["05", "Bidang", "Alat Kantor & RT"],
+                      ["01", "Kelompok", "Alat Kantor"], ["04", "Sub Kelompok", "Alat Penyimpan"],
+                      ["001", "Sub-sub Kelompok", "Lemari Besi/Metal"]].map(([d, seg, contoh]) => (
+                      <div key={seg} className="flex-1 rounded-lg border border-border p-1.5">
+                        <p className="text-sm font-bold text-amber-700 dark:text-amber-400">{d}</p>
+                        <p className="text-[9px] font-sans font-semibold text-foreground">{seg}</p>
+                        <p className="text-[9px] font-sans text-muted-foreground">{contoh}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Contoh 3.05.01.04.001 = Lemari Besi/Metal; identitas unik satu unit = kode barang + NUP (Nomor Urut Pendaftaran).
+                </p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="rounded-lg border border-border p-2">
+                  <p className="font-bold mb-0.5">Golongan → perlakuan</p>
+                  <ul className="space-y-0.5 text-[10px] text-foreground/80">
+                    <li><b>1 Persediaan</b> — aset lancar, dicatat FIFO di modul Persediaan (akun 1171xx), tidak disusutkan.</li>
+                    <li><b>2 Tanah</b> — tidak disusutkan (PMK 65/2017), tanpa ambang kapitalisasi.</li>
+                    <li><b>3 Peralatan &amp; Mesin</b> — disusutkan; ambang kapitalisasi ≥ Rp1 juta/unit (PMK 181/2016).</li>
+                    <li><b>4 Gedung &amp; Bangunan</b> — disusutkan; ambang ≥ Rp25 juta.</li>
+                    <li><b>5 Jalan, Irigasi, Jaringan</b> — disusutkan; akun neraca per BIDANG: 134111 jalan-jembatan / 134112 irigasi / 134113 jaringan.</li>
+                    <li><b>6 Aset Tetap Lainnya</b> — umumnya tidak disusutkan.</li>
+                    <li><b>7 KDP</b> — belum disusutkan sampai selesai dibangun.</li>
+                    <li><b>8 Aset Tak Berwujud</b> — diamortisasi; keluarga akun 162xxx (software 162151, lisensi 162161, dst.).</li>
+                  </ul>
+                </div>
+                <div className="rounded-lg border border-border p-2">
+                  <p className="font-bold mb-0.5">Kaitan kode ↔ akun ↔ master</p>
+                  <ul className="space-y-0.5 text-[10px] text-foreground/80">
+                    <li>Digit pertama kode barang menentukan akun neraca (aturan pakai di tab Aset) — angka "aset di master" di tiap baris menunjukkan isi nyata master yang memakainya.</li>
+                    <li>Untuk golongan 1, sub-sub kelompok dipetakan ke akun 1171xx (tab Persediaan) — barang di bawah akun tampil pada chip katalog.</li>
+                    <li>Barang di bawah ambang kapitalisasi dibukukan EKSTRAKOMPTABEL (tidak masuk neraca) — ambang dapat diatur di tab Aset.</li>
+                    <li>Kode barang bisa berubah lewat KMK perubahan lampiran — perubahan kode di aplikasi wajib lewat menu Reklasifikasi (jurnal 304/107) agar jejak Buku Barang utuh.</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </details>
         )}
       </main>
 

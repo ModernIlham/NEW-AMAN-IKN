@@ -48,6 +48,31 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#431] Referensi Akun BAS tertaut master aset & persediaan + panel edukasi kodefikasi barang — 2026-07-19
+
+Tab Aset & Persediaan di Referensi Akun BAS kini MENGAMBIL DATA DARI
+MASTER (bukan sekadar aturan statis), plus panel pemahaman kodefikasi
+hasil riset regulasi:
+
+- **Tab Aset**: tiap baris golongan → akun kini menampilkan **isi nyata
+  master** — jumlah NUP & total nilai buku aset aktif (ter-scope satker,
+  nilai wajar revaluasi bila ada) yang memakai akun tersebut.
+- **Tab Persediaan**: tiap akun 1171xx di katalog menampilkan **jumlah
+  jenis barang & total nilai FIFO** dari master persediaan (resolusi
+  override sub-kelompok → default), plus total keseluruhan.
+- **Panel "Memahami Kodefikasi Barang BMN"** (dapat dilipat, di kedua
+  tab) — hasil riset PMK 29/PMK.06/2010 jo. KMK 333/KM.6/2024: visual
+  struktur 10 digit (golongan/bidang/kelompok/sub/sub-sub dengan contoh
+  Lemari Besi/Metal 3.05.01.04.001), perlakuan per golongan (penyusutan
+  PMK 65/2017, ambang kapitalisasi PMK 181/2016, golongan 5 ber-akun per
+  bidang 134111/134112/134113, golongan 8 keluarga ATB 162xxx), dan
+  kaitan kode ↔ akun ↔ master ↔ Reklasifikasi.
+- Verifikasi: 554 tes unit lulus; smoke kedua endpoint dengan FakeDB
+  (agregasi golongan & akun benar termasuk nilai wajar revaluasi); eslint
+  bersih & build sukses.
+
+---
+
 ## [#430] Perbaikan cepat UI: popup TTD meluber, header Wasdal menumpuk, kewarganegaraan tak bisa dipilih, row Persediaan HP sempit — 2026-07-19
 
 Empat perbaikan dari umpan balik pengguna:
