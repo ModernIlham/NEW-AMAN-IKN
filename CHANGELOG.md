@@ -48,6 +48,15 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#448] Kodefikasi — 6 segmen filter benar-benar muat 1 baris di HP — 2026-07-19
+
+Lanjutan #447: pada layar HP keenam segmen (Semua…Sub-sub) masih terpotong
+karena padding/font terlalu besar. Kini font mengecil ke `text-[10px]` +
+padding rapat (`px-0.5`) di layar kecil (kembali normal di desktop),
+sehingga keenamnya muat penuh & rata dalam satu baris tanpa terpotong atau
+menggulir.
+
+
 ## [#447] Referensi Kodefikasi Barang — toolbar padat 1 baris + filter segmented utuh — 2026-07-19
 
 Umpan balik screenshot: toolbar hemat ruang.

@@ -285,14 +285,15 @@ export default function KodefikasiPage({ user, onBack }) {
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-          {/* Segmented control: satu bagian utuh, 1 baris (gulir horizontal bila sempit) */}
-          <div className="inline-flex w-full items-stretch rounded-lg border border-border overflow-x-auto overflow-y-hidden">
+          {/* Segmented control: satu bagian utuh, keenam segmen MUAT dalam 1
+              baris — font & padding mengecil di layar kecil agar tak terpotong */}
+          <div className="flex w-full items-stretch rounded-lg border border-border overflow-hidden">
             {LEVEL_FILTERS.map((f) => (
               <button
                 key={f.value}
                 type="button"
                 onClick={() => changeLevel(f.value)}
-                className={`flex-1 h-9 px-3 text-xs font-medium whitespace-nowrap border-l first:border-l-0 border-border min-w-0 min-h-0 transition-colors ${
+                className={`flex-1 h-9 px-0.5 sm:px-2 text-[10px] sm:text-xs font-medium leading-none whitespace-nowrap border-l first:border-l-0 border-border min-w-0 min-h-0 transition-colors ${
                   level === f.value
                     ? "bg-blue-600 text-white"
                     : "text-muted-foreground hover:bg-muted"
