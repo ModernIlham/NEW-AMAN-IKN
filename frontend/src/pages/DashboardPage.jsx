@@ -160,6 +160,7 @@ function sortSnapshotRows(rows, sortBy) {
 const LazyImportDialog = lazy(() => import("@/components/assets/ImportDialog"));
 const LazyUserManagementDialog = lazy(() => import("@/components/assets/UserManagementDialog"));
 const LazyKartuInventarisasiDialog = lazy(() => import("@/components/assets/KartuInventarisasiDialog"));
+const LazyAssetTimelineDialog = lazy(() => import("@/components/assets/AssetTimelineDialog"));
 // Pengesahan (finalisasi kegiatan) hanya di halaman Kegiatan
 // (ActivitySelectionPage), tidak di halaman data.
 
@@ -282,6 +283,8 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   const [auditAssetCode, setAuditAssetCode] = useState("");
   // Kartu Inventarisasi: identitas aset yang riwayatnya sedang dibuka
   const [kartuIdentity, setKartuIdentity] = useState(null);
+  // Timeline Aset — riwayat perlakuan lintas modul per identitas aset (W5)
+  const [timelineAssetId, setTimelineAssetId] = useState(null);
   const [photoLightboxAsset, setPhotoLightboxAsset] = useState(null); // foto baris list → lightbox
 
   // Dialog visibility - consolidated into single reducer
@@ -1374,6 +1377,11 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     });
   }, [activity?.kode_satker, activity?.nama_satker]);
 
+  // Timeline Aset lintas modul — cukup id; identitas & saudara dicari backend.
+  const handleOpenTimeline = useCallback((assetId) => {
+    if (assetId) setTimelineAssetId(assetId);
+  }, []);
+
   // === UI HANDLERS ===
   const handleAnalyticsToggle = useCallback(() => setAnalyticsOpen(prev => !prev), []);
   const handleAuditToggle = useCallback(() => setAuditOpen(prev => !prev), []);
@@ -1564,12 +1572,12 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
         {/* ASSET FORM SIDEBAR - only for admin/operator */}
         {perms.canEdit && (
           <div className={`hidden lg:block ${formPanelVisible ? 'w-[320px] min-w-[320px]' : 'w-0 min-w-0 overflow-hidden'}`} style={{ transition: 'width 0.3s ease, min-width 0.3s ease', willChange: 'width', contain: 'layout style' }}>
-            <AssetForm isOpen={isSidebarOpen || formPanelVisible} onClose={handleFormClose} activity={activity} categories={categories} editAsset={editAssetForForm} onSubmitSuccess={handleFormSubmitSuccess} onOptimisticSubmit={handleOptimisticSubmit} onSaveAndNavigate={handleSaveAndNavigate} onCameraReviewSaved={handleCameraReviewSaved} onExitToNewAsset={() => setEditAssetForForm(null)} assetIndex={editAssetIndex} totalAssetsInView={mobileAssets.length} hasMoreToLoad={mobileCurrentPage < totalPages} saveQueueLength={queueLength} inventoryMode={inventoryMode} onShowCategoryManager={perms.canManageCategories ? () => openDialog('categoryManager') : undefined} onOpenKartu={handleOpenKartu} alwaysExpanded={formPanelVisible} />
+            <AssetForm isOpen={isSidebarOpen || formPanelVisible} onClose={handleFormClose} activity={activity} categories={categories} editAsset={editAssetForForm} onSubmitSuccess={handleFormSubmitSuccess} onOptimisticSubmit={handleOptimisticSubmit} onSaveAndNavigate={handleSaveAndNavigate} onCameraReviewSaved={handleCameraReviewSaved} onExitToNewAsset={() => setEditAssetForForm(null)} assetIndex={editAssetIndex} totalAssetsInView={mobileAssets.length} hasMoreToLoad={mobileCurrentPage < totalPages} saveQueueLength={queueLength} inventoryMode={inventoryMode} onShowCategoryManager={perms.canManageCategories ? () => openDialog('categoryManager') : undefined} onOpenKartu={handleOpenKartu} onOpenTimeline={handleOpenTimeline} alwaysExpanded={formPanelVisible} />
           </div>
         )}
         {perms.canEdit && (
           <div className="lg:hidden">
-            <AssetForm isOpen={isSidebarOpen} onClose={handleFormClose} activity={activity} categories={categories} editAsset={editAssetForForm} onSubmitSuccess={handleFormSubmitSuccess} onOptimisticSubmit={handleOptimisticSubmit} onSaveAndNavigate={handleSaveAndNavigate} onCameraReviewSaved={handleCameraReviewSaved} onExitToNewAsset={() => setEditAssetForForm(null)} assetIndex={editAssetIndex} totalAssetsInView={mobileAssets.length} hasMoreToLoad={mobileCurrentPage < totalPages} saveQueueLength={queueLength} inventoryMode={inventoryMode} onShowCategoryManager={perms.canManageCategories ? () => openDialog('categoryManager') : undefined} onOpenKartu={handleOpenKartu} />
+            <AssetForm isOpen={isSidebarOpen} onClose={handleFormClose} activity={activity} categories={categories} editAsset={editAssetForForm} onSubmitSuccess={handleFormSubmitSuccess} onOptimisticSubmit={handleOptimisticSubmit} onSaveAndNavigate={handleSaveAndNavigate} onCameraReviewSaved={handleCameraReviewSaved} onExitToNewAsset={() => setEditAssetForForm(null)} assetIndex={editAssetIndex} totalAssetsInView={mobileAssets.length} hasMoreToLoad={mobileCurrentPage < totalPages} saveQueueLength={queueLength} inventoryMode={inventoryMode} onShowCategoryManager={perms.canManageCategories ? () => openDialog('categoryManager') : undefined} onOpenKartu={handleOpenKartu} onOpenTimeline={handleOpenTimeline} />
           </div>
         )}
 
@@ -1783,6 +1791,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
         {dialogs.import && <LazyImportDialog open={dialogs.import} onClose={handleImportClose} onSuccess={() => { clearDropFile(); refreshData(1); doFetchCategories(); }} activityId={activity?.id} preloadFile={dropFile} />}
         {dialogs.userManagement && <LazyUserManagementDialog open={dialogs.userManagement} onClose={() => closeDialog('userManagement')} currentUser={user} />}
         {kartuIdentity && <LazyKartuInventarisasiDialog open={!!kartuIdentity} identity={kartuIdentity} onClose={() => setKartuIdentity(null)} />}
+        {timelineAssetId && <LazyAssetTimelineDialog open={!!timelineAssetId} assetId={timelineAssetId} onClose={() => setTimelineAssetId(null)} />}
         {/* Lightbox foto dari baris mode list (tabel/kartu HP) — sama seperti galeri & popup peta. */}
         {photoLightboxAsset && <PhotoLightbox asset={photoLightboxAsset} onClose={() => setPhotoLightboxAsset(null)} onEdit={perms.canEdit ? handleEdit : undefined} siblings={mobileAssets?.length ? mobileAssets : assets} onSelectAsset={setPhotoLightboxAsset} />}
       </Suspense>

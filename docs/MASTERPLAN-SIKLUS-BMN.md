@@ -307,6 +307,24 @@ berdampak-tertinggi lebih dulu.
    identitas + kodefikasi FK) jadi total lintas-cek via helper murni
    `gabung_temuan_integritas` (#266); tanpa me-refactor endpoint detail.
    *Tersisa:* penyegaran otomatis snapshot saat master aset diedit.
+9. ✅ **Timeline Aset — sisi-baca "data induk = identitas aset" (W5)** —
+   `GET /assets/{id}/timeline` (`routes/timeline.py` + helper murni
+   `timeline_utils.py`) menggabungkan seluruh perlakuan SATU aset fisik
+   lintas modul, dikunci pada **identitas** (`kode_register` → fallback
+   `asset_code`+`NUP`), BUKAN `asset_id` — sehingga dokumen aset yang sama
+   di beberapa kegiatan inventarisasi otomatis dikenali satu ("saudara").
+   Sumber event: pencatatan per kegiatan + `inventory_history` (pengesahan),
+   `mutasi_bmn` (Buku Barang), `psp`/`bmn_idle`/`penggunaan_proses`,
+   `pemanfaatan`, `pemeliharaan`, `pengamanan_*`, `penilaian_koreksi`,
+   `usulan_penghapusan`, `pemindahtanganan`, `pemusnahan`, `penertiban`,
+   `bast_serah_terima`, `riwayat_reklasifikasi[]`, `audit_logs`, serta
+   **referensi SIMAN V2 yang sebelumnya menganggur** (`no_psp`,
+   `tanggal_psp`, `status_penggunaan` dll. dari `assets.siman.referensi`)
+   kini diangkat sebagai info PSP resmi + event timeline. UI:
+   `AssetTimelineDialog` (tombol "Timeline" di form aset). Menegaskan
+   inventarisasi = kegiatan **pemutakhir** berkala, bukan induk data.
+   *Tersisa (W5 lanjutan):* menautkan PSP SIMAN sebagai dokumen sumber di
+   modul Penggunaan; panel dedup lintas kegiatan di halaman Inventarisasi.
 
 > Aturan: tiap gap ditutup sebagai fitur kecil ber-PR (verifikasi → CI → deploy),
 > dengan proyeksi master memakai pola OCC `find_one_and_update` bersyarat +
