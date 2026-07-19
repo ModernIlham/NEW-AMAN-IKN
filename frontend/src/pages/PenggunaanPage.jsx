@@ -1354,8 +1354,18 @@ export default function PenggunaanPage({ user, onBack }) {
                 <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-2.5 space-y-2">
                   <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">Pemegang lama (PIHAK KESATU) — menyerahkan</p>
                   <div className="grid grid-cols-2 gap-2">
-                    <Input value={formBast.pihak_pertama.nama} placeholder="Nama pemegang lama *" data-testid="bast-lama-nama"
-                      onChange={(e) => setFormBast((f) => ({ ...f, pihak_pertama: { ...f.pihak_pertama, nama: e.target.value } }))} />
+                    {/* Terhubung Master Pegawai (datalist sama dgn Penerima):
+                        nama cocok → NIP & jabatan terisi otomatis (audit W4). */}
+                    <Input value={formBast.pihak_pertama.nama} list="bast-pegawai-list"
+                      placeholder="Nama pemegang lama *" data-testid="bast-lama-nama"
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        const m = (pegawaiList || []).find((x) => (x.nama || "") === v);
+                        setFormBast((f) => ({ ...f, pihak_pertama: {
+                          ...f.pihak_pertama, nama: v,
+                          ...(m ? { nip: m.nip || f.pihak_pertama.nip,
+                                    jabatan: m.jabatan || f.pihak_pertama.jabatan } : {}) } }));
+                      }} />
                     <Input value={formBast.pihak_pertama.nip} placeholder="NIP/NIK" className="font-mono"
                       onChange={(e) => setFormBast((f) => ({ ...f, pihak_pertama: { ...f.pihak_pertama, nip: e.target.value } }))} />
                     <Input value={formBast.pihak_pertama.jabatan} placeholder="Jabatan" className="col-span-2"

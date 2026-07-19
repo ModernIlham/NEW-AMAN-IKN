@@ -932,7 +932,13 @@ export default function PegawaiPage({ user, onBack }) {
                     )}
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <Field label="Unit Kerja (ringkas)"><Input value={form.unit_kerja} onChange={set("unit_kerja")} placeholder="otomatis dari Eselon terdalam bila kosong" data-testid="pegawai-form-unit" /></Field>
+                    <Field label="Unit Kerja (ringkas)">
+                      {/* Terhubung Master Unit Kerja yang sudah dimuat (audit W4 #9) */}
+                      <Input value={form.unit_kerja} list="pegawai-unit-list" onChange={set("unit_kerja")} placeholder="otomatis dari Eselon terdalam bila kosong" data-testid="pegawai-form-unit" />
+                      <datalist id="pegawai-unit-list">
+                        {[...new Set(units.map((u) => u.nama_unit || "").filter(Boolean))].sort().map((u) => <option key={u} value={u} />)}
+                      </datalist>
+                    </Field>
                     <Field label="Unit Organisasi / Satker"><Input value={form.unit_organisasi} onChange={set("unit_organisasi")} /></Field>
                   </div>
                 </div>

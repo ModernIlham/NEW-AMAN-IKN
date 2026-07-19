@@ -48,6 +48,15 @@ SEGMEN_LABEL = {
 }
 
 
+def prefix_segmen(segmen: str) -> list:
+    """Parse param `segmen`: satu digit segmen BAS ("1".."8") ATAU daftar
+    prefix kode dipisah koma (mis. "13,16,117" = aset tetap + aset lainnya
+    + persediaan) — dipakai datalist pemetaan akun aset agar frontend tidak
+    perlu menarik ratusan akun satu segmen penuh. Prefix tak valid diabaikan."""
+    return [p for p in (s.strip() for s in str(segmen or "").split(","))
+            if p.isdigit() and 1 <= len(p) <= 6 and p[0] in SEGMEN_LABEL]
+
+
 class AkunIn(BaseModel):
     kode: str
     nama: str
@@ -129,8 +138,9 @@ async def daftar_referensi_akun(search: str = "", segmen: str = "",
     page = max(1, page)
     page_size = min(max(1, page_size), 200)
     q = {}
-    if str(segmen).strip() in SEGMEN_LABEL:
-        q["kode"] = {"$regex": f"^{segmen.strip()}"}
+    prefix = prefix_segmen(segmen)
+    if prefix:
+        q["kode"] = {"$regex": "^(" + "|".join(prefix) + ")"}
     if search.strip():
         rx = {"$regex": re.escape(search.strip()), "$options": "i"}
         q["$or"] = [{"kode": rx}, {"nama": rx}]

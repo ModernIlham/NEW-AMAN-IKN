@@ -63,6 +63,8 @@ export default function PemeliharaanPage({ user, onBack }) {
   const [jenisFilter, setJenisFilter] = useState("");
   const [asetFilter, setAsetFilter] = useState(null); // {id, nama}
   const [jenisList, setJenisList] = useState([]);
+  // Referensi Master Pegawai — saran pelaksana internal (penyedia jasa tetap ketik bebas)
+  const [pegawaiList, setPegawaiList] = useState([]);
   // Jadwal berkala: {items, jumlah, terlambat, segera} | null
   const [jadwal, setJadwal] = useState(null);
   // Dialog catat: {data, aset, saving} | null
@@ -129,6 +131,11 @@ export default function PemeliharaanPage({ user, onBack }) {
   useEffect(() => {
     axios.get(`${API}/pemeliharaan/jenis`)
       .then((r) => setJenisList(r.data?.items || []))
+      .catch(() => {});
+    axios.get(`${API}/pegawai`)
+      .then((r) => setPegawaiList((r.data?.items || []).map((p) => ({
+        nama: p.nama || "", jabatan: p.jabatan || "", unit: p.unit_kerja || "",
+      })).filter((p) => p.nama)))
       .catch(() => {});
   }, []);
 
@@ -695,8 +702,15 @@ export default function PemeliharaanPage({ user, onBack }) {
               </div>
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pml-pelaksana">Pelaksana</label>
-                <Input id="pml-pelaksana" placeholder="petugas / penyedia jasa"
+                <Input id="pml-pelaksana" placeholder="petugas / penyedia jasa" list="pml-pegawai-list"
                   value={form.data.pelaksana} onChange={(e) => setField("pelaksana", e.target.value)} />
+                <datalist id="pml-pegawai-list">
+                  {pegawaiList.map((p, i) => (
+                    <option key={`${p.nama}-${i}`} value={p.nama}>
+                      {[p.jabatan, p.unit].filter(Boolean).join(" · ")}
+                    </option>
+                  ))}
+                </datalist>
               </div>
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pml-bukti">No. Bukti</label>

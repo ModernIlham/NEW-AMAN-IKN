@@ -48,6 +48,40 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#435] Semua form ber-referensi terhubung ke data lintas modul (picker/datalist) — 2026-07-19
+
+Sapu menyeluruh 13 titik input teks bebas yang sebenarnya punya master data —
+kini semuanya memberi saran isi (datalist: tetap bisa ketik bebas, tapi bisa
+pilih dari data yang sudah ada) dan sebagian mengisi otomatis field terkait:
+
+- **Buat/Edit Kegiatan** (`ActivitySelectionPage`): Penanggung Jawab, anggota
+  **Tim Inti**, dan **Tim Pembantu** tersambung ke Master Pegawai — pilih nama
+  → jabatan/NIP (dan unit utk tim) terisi otomatis; kolom unit tersambung ke
+  Master Unit Kerja.
+- **Penggunaan — form BAST**: nama Pihak Pertama kini juga pakai daftar pegawai
+  (sebelumnya hanya Pihak Kedua) + isi otomatis NIP/jabatan.
+- **Persediaan**: lokasi/gudang di form barang menyarankan gudang yang sudah
+  dipakai; **unit penerima** (barang keluar & keluar massal) tersambung ke
+  Master Unit Kerja.
+- **Master Ruangan & Master Pejabat**: kolom unit kerja tersambung ke Master
+  Unit Kerja.
+- **Master Pegawai**: kolom unit kerja menyarankan unit dari Master Unit Kerja.
+- **Wasdal — pemantauan insidentil**: lokasi menyarankan Master Ruangan
+  (kode · gedung tampil sebagai keterangan).
+- **Perencanaan — usulan RKBMN**: Unit/KPB pengusul tersambung ke Master
+  Satker (kode satker tampil sebagai keterangan).
+- **Pemeliharaan — catat pelaksanaan**: Pelaksana menyarankan Master Pegawai
+  (jabatan · unit sebagai keterangan); penyedia jasa eksternal tetap bebas.
+- **Referensi Akun — pemetaan golongan→akun aset**: input akun kini
+  menyarankan akun neraca BMN dari master Segmen Akun (prefix 13 aset tetap,
+  16 aset lainnya, 117 persediaan). Backend: param `segmen` di
+  `GET /referensi-akun` kini menerima daftar prefix kode dipisah koma
+  (kompatibel mundur dengan 1 digit; prefix tak valid diabaikan + unit test).
+
+Prinsip: tidak ada dropdown kaku baru — semua pakai `datalist` sehingga alur
+lama (ketik manual) tetap jalan, data lama tidak terkunci, dan form bekerja
+walau master datanya kosong.
+
 ## [#434] Beranda "Peta Perjalanan Siklus BMN" — rombak total desain, informatif & fungsional, light+dark — 2026-07-19
 
 Halaman awal Siklus Pengelolaan BMN dirombak total menjadi peta perjalanan

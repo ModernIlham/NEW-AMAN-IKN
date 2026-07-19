@@ -34,6 +34,7 @@ export default function RuanganPage({ user, onBack }) {
   const isAdmin = user?.role === "admin";
   const [items, setItems] = useState([]);
   const [pjList, setPjList] = useState([]);
+  const [unitList, setUnitList] = useState([]); // Master Unit Kerja (audit W4)
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState(null);
@@ -56,6 +57,11 @@ export default function RuanganPage({ user, onBack }) {
 
   useEffect(() => {
     load();
+    // Unit kerja dari master (audit W4 #7)
+    axios.get(`${API}/unit-kerja`)
+      .then((r) => setUnitList([...new Set((r.data?.items || [])
+        .map((u) => u.nama_unit || "").filter(Boolean))].sort()))
+      .catch(() => setUnitList([]));
     // Kandidat penanggung jawab: pejabat berperan penanggung_jawab_ruangan
     // yang masih berlaku hari ini (cermin pejabat_utils._berlaku_pada — aktif
     // dan rentang berlaku_mulai/selesai mencakup tanggal ini).
@@ -309,7 +315,13 @@ export default function RuanganPage({ user, onBack }) {
                     </p>
                   )}
                 </Field>
-                <Field label="Unit Kerja"><Input value={form.unit_kerja} onChange={(e) => setForm((f) => ({ ...f, unit_kerja: e.target.value }))} /></Field>
+                <Field label="Unit Kerja">
+                  {/* Terhubung Master Unit Kerja (audit W4 #7) */}
+                  <Input value={form.unit_kerja} list="ruangan-unit-list" onChange={(e) => setForm((f) => ({ ...f, unit_kerja: e.target.value }))} />
+                  <datalist id="ruangan-unit-list">
+                    {unitList.map((u) => <option key={u} value={u} />)}
+                  </datalist>
+                </Field>
               </div>
               <Field label="Status">
                 <label className="flex items-center gap-2 h-8">

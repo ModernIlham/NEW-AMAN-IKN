@@ -61,6 +61,7 @@ export default function PersediaanPage({ user, onBack }) {
   const [status, setStatus] = useState("");
   const [gudang, setGudang] = useState("");
   const [daftarGudang, setDaftarGudang] = useState([]);
+  const [unitKerjaList, setUnitKerjaList] = useState([]); // Master Unit Kerja (audit W4)
   const [loading, setLoading] = useState(false);
   const [satuanList, setSatuanList] = useState([]);
   // Dialog: {mode:"tambah", data} | {mode:"edit", id, version, data}
@@ -125,6 +126,11 @@ export default function PersediaanPage({ user, onBack }) {
     axios.get(`${API}/persediaan/jenis-transaksi`)
       .then((r) => { setJenisMasuk(r.data?.masuk || []); setJenisKeluar(r.data?.keluar || []); })
       .catch(() => { setJenisMasuk([]); setJenisKeluar([]); });
+    // Unit penerima terhubung Master Unit Kerja (audit W4 #6)
+    axios.get(`${API}/unit-kerja`)
+      .then((r) => setUnitKerjaList([...new Set((r.data?.items || [])
+        .map((u) => u.nama_unit || "").filter(Boolean))].sort()))
+      .catch(() => setUnitKerjaList([]));
     axios.get(`${API}/persediaan/peringatan`)
       .then((r) => setPeringatan(r.data))
       .catch(() => setPeringatan(null));
@@ -969,7 +975,11 @@ export default function PersediaanPage({ user, onBack }) {
               </div>
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-lokasi">Lokasi/Gudang</label>
-                <Input id="psd-lokasi" value={form.data.lokasi} onChange={(e) => setField("lokasi", e.target.value)} />
+                {/* Terhubung daftar gudang terpakai (audit W4 #5) */}
+                <Input id="psd-lokasi" list="psd-form-gudang" value={form.data.lokasi} onChange={(e) => setField("lokasi", e.target.value)} />
+                <datalist id="psd-form-gudang">
+                  {daftarGudang.map((g) => <option key={g} value={g} />)}
+                </datalist>
               </div>
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-expired">Kedaluwarsa Bawaan</label>
@@ -1161,9 +1171,12 @@ export default function PersediaanPage({ user, onBack }) {
               </div>
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-out-unit">Unit Penerima</label>
-                <Input id="psd-out-unit" placeholder="cth. Bagian Umum"
+                <Input id="psd-out-unit" list="psd-unit-kerja-list" placeholder="cth. Bagian Umum"
                   value={keluar.data.unit_penerima}
                   onChange={(e) => setKeluar((m) => ({ ...m, data: { ...m.data, unit_penerima: e.target.value } }))} />
+                <datalist id="psd-unit-kerja-list">
+                  {unitKerjaList.map((u) => <option key={u} value={u} />)}
+                </datalist>
               </div>
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-out-bukti">No. Bukti</label>
@@ -1576,8 +1589,11 @@ export default function PersediaanPage({ user, onBack }) {
                 ) : (
                   <div>
                     <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-m-unit">Unit Penerima</label>
-                    <Input id="psd-m-unit" placeholder="cth. Bagian Umum"
+                    <Input id="psd-m-unit" list="psd-m-unit-kerja-list" placeholder="cth. Bagian Umum"
                       value={massal.unit_penerima} onChange={(e) => setMField("unit_penerima", e.target.value)} />
+                    <datalist id="psd-m-unit-kerja-list">
+                      {unitKerjaList.map((u) => <option key={u} value={u} />)}
+                    </datalist>
                   </div>
                 )}
                 <div className={massal.arah === "masuk" ? "" : "col-span-1"}>

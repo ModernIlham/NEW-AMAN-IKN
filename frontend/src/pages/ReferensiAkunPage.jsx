@@ -91,6 +91,15 @@ export default function ReferensiAkunPage({ user, onBack }) {
 
   useEffect(() => { muatPemetaan(); }, [muatPemetaan]);
 
+  // Datalist akun neraca BMN dari master (13=aset tetap, 16=aset lainnya,
+  // 117=persediaan) — saran saat admin memetakan golongan → akun.
+  const [akunNeraca, setAkunNeraca] = useState([]);
+  useEffect(() => {
+    axios.get(`${API}/referensi-akun`, { params: { segmen: "13,16,117", page_size: 200 } })
+      .then((r) => setAkunNeraca(r.data?.items || []))
+      .catch(() => {});
+  }, []);
+
   const seed = async () => {
     setSeeding(true);
     try {
@@ -533,7 +542,11 @@ export default function ReferensiAkunPage({ user, onBack }) {
                   {(aset?.items || []).map((i) => <option key={i.golongan} value={i.golongan}>Gol {i.golongan}</option>)}
                 </select>
                 <Input value={formAset.akun} onChange={(e) => setFormAset((f) => ({ ...f, akun: e.target.value }))}
+                  list="aset-akun-list"
                   placeholder="Akun (6 digit, cth. 132111)" className="font-mono h-9 w-44" maxLength={6} data-testid="aset-akun" />
+                <datalist id="aset-akun-list">
+                  {akunNeraca.map((a) => <option key={a.kode} value={a.kode}>{a.nama}</option>)}
+                </datalist>
                 <Input value={formAset.uraian} onChange={(e) => setFormAset((f) => ({ ...f, uraian: e.target.value }))}
                   placeholder="Uraian (ops. — otomatis dari master)" className="h-9 flex-1" />
                 <Button variant="outline" size="sm" className="h-9 gap-1" onClick={simpanAset} data-testid="aset-simpan">

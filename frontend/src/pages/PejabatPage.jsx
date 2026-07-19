@@ -41,6 +41,7 @@ export default function PejabatPage({ user, onBack }) {
   const [peranRef, setPeranRef] = useState([]);
   const [statusRef, setStatusRef] = useState([]);
   const [unitRef, setUnitRef] = useState([]);
+  const [unitList, setUnitList] = useState([]); // Master Unit Kerja (audit W4)
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState(null);
@@ -75,6 +76,11 @@ export default function PejabatPage({ user, onBack }) {
       setStatusRef(r.data?.status_kepegawaian || []);
       setUnitRef(r.data?.unit_akuntansi || []);
     }).catch(() => {});
+    // Unit kerja dari master (audit W4 #8)
+    axios.get(`${API}/unit-kerja`)
+      .then((r) => setUnitList([...new Set((r.data?.items || [])
+        .map((u) => u.nama_unit || "").filter(Boolean))].sort()))
+      .catch(() => setUnitList([]));
   }, [load]);
 
   const togglePeran = (kode) => setForm((f) => {
@@ -334,7 +340,13 @@ export default function PejabatPage({ user, onBack }) {
                     {statusRef.map((s) => <option key={s.kode} value={s.kode}>{s.uraian}</option>)}
                   </select>
                 </Field>
-                <Field label="Unit Kerja"><Input value={form.unit_kerja} onChange={(e) => setForm((f) => ({ ...f, unit_kerja: e.target.value }))} placeholder="cth. Bagian Umum" /></Field>
+                <Field label="Unit Kerja">
+                  {/* Terhubung Master Unit Kerja (audit W4 #8) */}
+                  <Input value={form.unit_kerja} list="pejabat-unit-list" onChange={(e) => setForm((f) => ({ ...f, unit_kerja: e.target.value }))} placeholder="cth. Bagian Umum" />
+                  <datalist id="pejabat-unit-list">
+                    {unitList.map((u) => <option key={u} value={u} />)}
+                  </datalist>
+                </Field>
                 <Field label="No. HP"><Input value={form.no_hp} onChange={(e) => setForm((f) => ({ ...f, no_hp: e.target.value }))} inputMode="tel" placeholder="cth. 0812…" /></Field>
                 <Field label="Email"><Input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} placeholder="nama@instansi.go.id" data-testid="pejabat-form-email" /></Field>
               </div>

@@ -119,3 +119,14 @@ def test_baris_csv_referensi_kosong():
     assert len(rows) == 1
     rows = baris_csv_referensi(None, None)
     assert len(rows) == 1
+
+
+def test_prefix_segmen_satu_digit_dan_daftar():
+    """Param segmen: kompatibel mundur (1 digit) + daftar prefix koma."""
+    from routes.referensi_akun import prefix_segmen
+    assert prefix_segmen("1") == ["1"]
+    assert prefix_segmen("13,16,117") == ["13", "16", "117"]
+    # prefix tak valid diabaikan: bukan digit, segmen tak dikenal, kepanjangan
+    assert prefix_segmen("13,abc,90,1234567,,  16 ") == ["13", "16"]
+    assert prefix_segmen("") == []
+    assert prefix_segmen(None) == []
