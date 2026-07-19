@@ -4,8 +4,9 @@ from wasdal_utils import (
     SUMBER_PENERTIBAN, info_tenggat_insidentil, periode_wasdal,
     rekap_insidentil, rekap_penertiban, rekap_wasdal, sisa_hari_kerja,
     status_tenggat_penertiban, susun_temuan, tambah_hari_kerja,
-    temuan_pemanfaatan, temuan_pemindahtanganan, temuan_penatausahaan,
-    temuan_pengamanan_pemeliharaan, temuan_penggunaan, temuan_polis_asuransi,
+    temuan_pemanfaatan, temuan_pemegang_berisiko, temuan_pemindahtanganan,
+    temuan_penatausahaan, temuan_pengamanan_pemeliharaan, temuan_penggunaan,
+    temuan_polis_asuransi,
     validate_ba_insidentil, validate_insidentil, validate_lapor_insidentil,
     validate_penertiban, validate_selesai_penertiban,
 )
@@ -85,6 +86,29 @@ def test_polis_asuransi_lewat():
     per_objek = susun_temuan([], [], [], [], [], HARI_INI, polis=[lewat])
     assert any(t["jenis"] == "polis_asuransi_lewat"
                for t in per_objek["pengamanan_pemeliharaan"])
+
+
+def test_pemegang_berisiko_keluar():
+    """Integrasi Master Pegawai → Wasdal: pegawai keluar/pensiun yang masih
+    memegang aset = temuan objek Penggunaan; pegawai aktif tidak."""
+    keluar = {"id": "p1", "nama": "Sari", "nip": "111", "status": "keluar"}
+    aktif = {"id": "p2", "nama": "Budi", "nip": "222", "status": "aktif"}
+    pensiun_tanpa_aset = {"id": "p3", "nama": "Tono", "nip": "333",
+                          "status": "pensiun"}
+    peta = {"111": 2, "222": 5}  # NIP 333 tidak memegang aset
+    hasil = temuan_pemegang_berisiko(
+        [keluar, aktif, pensiun_tanpa_aset], peta, HARI_INI)
+    assert [t["pegawai_id"] for t in hasil] == ["p1"]
+    assert hasil[0]["jenis"] == "pemegang_berisiko_keluar"
+    assert hasil[0]["asset_name"] == "Sari" and hasil[0]["nip"] == "111"
+    assert "2 aset" in hasil[0]["detail"]
+    # objek benar via susun_temuan (masuk objek penggunaan)
+    per_objek = susun_temuan([], [], [], [], [], HARI_INI,
+                             pegawai=[keluar], jumlah_aset_per_nip=peta)
+    assert any(t["jenis"] == "pemegang_berisiko_keluar"
+               for t in per_objek["penggunaan"])
+    # tanpa data pegawai → tidak ada temuan & tidak error
+    assert temuan_pemegang_berisiko(None, None, HARI_INI) == []
 
 
 def test_pemindahtanganan_dan_penghapusan():

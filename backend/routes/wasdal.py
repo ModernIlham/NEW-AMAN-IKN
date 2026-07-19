@@ -81,9 +81,18 @@ async def _data_pemantauan(ambang_hari: int, user=None):
     pemeliharaan = [r async for r in db.pemeliharaan.find(
         {"tanggal": {"$gte": f"{tahun}-01-01", "$lte": f"{tahun}-12-31"}},
         {"_id": 0, "asset_id": 1, "tanggal": 1})]
+    # Integrasi Master Pegawai → Wasdal: pemegang berisiko (keluar/pensiun/
+    # kontrak habis) yang masih memegang aset = temuan objek Penggunaan
+    # (deteksi sama dengan /pegawai/perlu-serah-terima).
+    from routes.pegawai import _jumlah_aset_per_nip
+    pegawai = [p async for p in db.pegawai.find(
+        _sq({}), {"_id": 0, "id": 1, "nama": 1, "nip": 1, "status": 1,
+                  "tgl_selesai_kontrak": 1})]
+    peta_aset_nip = await _jumlah_aset_per_nip(user)
 
     per_objek = susun_temuan(assets, pemanfaatan, usulan_hapus, usulan_pt,
-                             pemeliharaan, today_iso, ambang_hari, polis=polis)
+                             pemeliharaan, today_iso, ambang_hari, polis=polis,
+                             pegawai=pegawai, jumlah_aset_per_nip=peta_aset_nip)
     return periode, per_objek, rekap_wasdal(per_objek), len(assets)
 
 
