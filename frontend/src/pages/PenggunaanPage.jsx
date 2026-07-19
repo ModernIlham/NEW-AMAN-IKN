@@ -126,6 +126,34 @@ export default function PenggunaanPage({ user, onBack }) {
       .catch(() => toast.error("Gagal memuat register PSP"));
   }, []);
 
+  // PSP resmi menurut data impor SIMAN V2 (W5) — kandidat pencatatan 1-klik
+  const [pspSiman, setPspSiman] = useState(null);
+  const loadPspSiman = useCallback(() => {
+    axios.get(`${API}/penggunaan/psp-siman`)
+      .then((r) => setPspSiman(r.data))
+      .catch(() => {});
+  }, []);
+  useEffect(() => { loadPspSiman(); }, [loadPspSiman]);
+
+  // Prefill form Catat SK dari satu kelompok PSP SIMAN — tanpa ketik ulang
+  const catatDariSiman = (k) => {
+    const aset = (k.aset_belum.length ? k.aset_belum : k.aset).map((a) => ({
+      id: a.asset_id, asset_code: a.asset_code, NUP: a.NUP,
+      asset_name: a.asset_name,
+    }));
+    setCariPsp(""); setHasilCariPsp([]);
+    setFormPsp({
+      data: {
+        nomor_sk: k.no_psp,
+        tanggal_sk: (k.tanggal_psp || "").slice(0, 10) || new Date().toISOString().slice(0, 10),
+        jenis: "psp", penetap: "",
+        keterangan: `Dicatat dari data PSP impor SIMAN V2${k.status_penggunaan ? ` (${k.status_penggunaan})` : ""}`,
+        sebagai_draf: false,
+      },
+      aset, saving: false,
+    });
+  };
+
   useEffect(() => { load(1, ""); loadIdle(); loadPsp(); loadProses(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -386,6 +414,7 @@ export default function PenggunaanPage({ user, onBack }) {
       toast.success("SK penetapan tercatat");
       setFormPsp(null);
       loadPsp();
+      loadPspSiman();
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Gagal mencatat SK");
       setFormPsp((f) => (f ? { ...f, saving: false } : f));
@@ -859,6 +888,35 @@ export default function PenggunaanPage({ user, onBack }) {
                 <Plus className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">Catat SK</span>
               </Button>
             </div>
+            {(pspSiman?.belum_tercatat || 0) > 0 && (
+              <details className="border-b border-border bg-sky-50/60 dark:bg-sky-950/30"
+                data-testid="penggunaan-psp-siman">
+                <summary className="px-3 py-2 text-[11px] font-semibold text-sky-800 dark:text-sky-300 cursor-pointer select-none">
+                  PSP resmi menurut SIMAN V2 belum tercatat di register:{" "}
+                  {pspSiman.belum_tercatat} SK — klik untuk mencatat tanpa mengetik ulang
+                </summary>
+                <ul className="divide-y divide-border/60">
+                  {(pspSiman.kelompok || []).filter((k) => !k.sudah_tercatat).map((k) => (
+                    <li key={k.no_psp} className="px-3 py-2 flex flex-wrap items-center gap-2">
+                      <div className="flex-1 min-w-[160px]">
+                        <p className="text-xs font-semibold text-foreground break-words">{k.no_psp}</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {[k.tanggal_psp || "tanpa tanggal",
+                            `${k.jumlah} aset`,
+                            k.status_penggunaan].filter(Boolean).join(" · ")}
+                        </p>
+                      </div>
+                      <Button size="sm" variant="outline"
+                        className="h-7 text-[11px] min-h-0 border-sky-300 dark:border-sky-700 text-sky-700 dark:text-sky-300"
+                        onClick={() => catatDariSiman(k)}
+                        data-testid={`penggunaan-psp-siman-catat-${k.no_psp}`}>
+                        Catat 1-klik
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
             {(psp.items || []).length === 0 ? (
               <p className="text-xs text-muted-foreground text-center py-5 px-4">
                 Belum ada SK penetapan tercatat — mulai dari SK PSP terbaru satker.
