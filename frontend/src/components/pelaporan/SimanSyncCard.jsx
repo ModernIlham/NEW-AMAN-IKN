@@ -327,11 +327,23 @@ export default function SimanSyncCard({ isAdmin }) {
                             </tbody>
                           </table>
                         </div>
-                        {a.siman?.referensi && (a.siman.referensi.nilai_penyusutan || a.siman.referensi.nilai_buku) ? (
-                          <p className="text-[10px] text-muted-foreground">
-                            Referensi SIMAN: penyusutan {fmtRp(a.siman.referensi.nilai_penyusutan)} · nilai buku {fmtRp(a.siman.referensi.nilai_buku)}
-                          </p>
-                        ) : null}
+                        {(() => {
+                          const ref = a.siman?.referensi;
+                          if (!ref) return null;
+                          // Nilai referensi SIMAN (tak dibandingkan, hanya info):
+                          // penyusutan & nilai buku dari Penilaian, umur aset dari
+                          // kolom "Umur Aset" SIMAN V2 (kini ditampilkan).
+                          const bagian = [];
+                          if (ref.nilai_penyusutan || ref.nilai_buku) {
+                            bagian.push(`penyusutan ${fmtRp(ref.nilai_penyusutan)} · nilai buku ${fmtRp(ref.nilai_buku)}`);
+                          }
+                          if (ref.umur_aset) bagian.push(`umur aset ${ref.umur_aset}`);
+                          return bagian.length ? (
+                            <p className="text-[10px] text-muted-foreground">
+                              Referensi SIMAN: {bagian.join(" · ")}
+                            </p>
+                          ) : null;
+                        })()}
                         {(() => {
                           const sAC = (a.siman?.selisih || []).find((s) => s.field === "asset_code");
                           const kodeBaru = a.siman?.reklasifikasi?.kode_baru || sAC?.siman || "";

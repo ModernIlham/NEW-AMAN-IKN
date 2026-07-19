@@ -16,25 +16,29 @@ function formatSyncTime(iso) {
  * (mode dashboard) dan menyatu di kartu header InventoryProgressBar (mode
  * inventarisasi) — hanya satu instans yang dirender pada satu waktu.
  */
-export const InventoryModeSwitch = memo(({ inventoryMode, setInventoryMode, className = "" }) => (
+export const InventoryModeSwitch = memo(({ inventoryMode, setInventoryMode, className = "", iconOnly = false }) => (
   <div className={`grid grid-cols-2 ${className}`} data-testid="stats-mobile-inline">
     <button
       type="button"
       onClick={() => setInventoryMode(false)}
       aria-pressed={!inventoryMode}
+      aria-label="Mode Dashboard"
+      title="Mode Dashboard"
       data-testid="inventory-mode-toggle-dashboard"
-      className={`min-h-0 min-w-0 flex items-center justify-center gap-1.5 h-8 px-2 rounded-lg text-xs font-semibold transition-colors ${!inventoryMode ? 'bg-blue-600 text-white shadow-sm' : 'text-muted-foreground'}`}
+      className={`min-h-0 min-w-0 flex items-center justify-center gap-1.5 h-8 ${iconOnly ? 'px-2.5' : 'px-2'} rounded-lg text-xs font-semibold transition-colors ${!inventoryMode ? 'bg-blue-600 text-white shadow-sm' : 'text-muted-foreground'}`}
     >
-      <LayoutDashboard className="w-4 h-4 flex-shrink-0" /> Dashboard
+      <LayoutDashboard className="w-4 h-4 flex-shrink-0" />{!iconOnly && <span>Dashboard</span>}
     </button>
     <button
       type="button"
       onClick={() => setInventoryMode(true)}
       aria-pressed={inventoryMode}
+      aria-label="Mode Inventarisasi"
+      title="Mode Inventarisasi"
       data-testid="inventory-mode-toggle"
-      className={`min-h-0 min-w-0 flex items-center justify-center gap-1.5 h-8 px-2 rounded-lg text-xs font-semibold transition-colors ${inventoryMode ? 'bg-emerald-600 text-white shadow-sm' : 'text-muted-foreground'}`}
+      className={`min-h-0 min-w-0 flex items-center justify-center gap-1.5 h-8 ${iconOnly ? 'px-2.5' : 'px-2'} rounded-lg text-xs font-semibold transition-colors ${inventoryMode ? 'bg-emerald-600 text-white shadow-sm' : 'text-muted-foreground'}`}
     >
-      <ClipboardCheck className="w-4 h-4 flex-shrink-0" /> Inventarisasi
+      <ClipboardCheck className="w-4 h-4 flex-shrink-0" />{!iconOnly && <span>Inventarisasi</span>}
     </button>
   </div>
 ));
@@ -70,9 +74,12 @@ const StatsBar = memo(({ stats, inventoryMode, setInventoryMode, isOnline, pendi
           <div className={`text-xl font-bold ${s.color} truncate text-right`}>{s.value}</div>
         </div>
       ))}
+      {/* Desktop (lg+): saklar ikon-saja (hemat ruang; label lewat tooltip/
+          aria-label). Breakpoint lain tetap berlabel. */}
       <InventoryModeSwitch
         inventoryMode={inventoryMode}
         setInventoryMode={setInventoryMode}
+        iconOnly
         className="p-1 gap-1 rounded-xl border border-border bg-card shadow-elev-1 self-stretch items-center"
       />
     </div>
