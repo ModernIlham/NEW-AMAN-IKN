@@ -20,6 +20,8 @@ DIHENTIKAN (henti-susut) saat aset rusak berat/hilang itu TELAH DIUSULKAN
 penghapusan/pemindahtanganan/pemusnahan — direklasifikasi keluar aset
 tetap (PMK 65/2017, pustaka §5). Fungsi murni tanpa Mongo/IO agar teruji unit.
 """
+import re
+from collections import Counter
 from datetime import date
 
 from pembukuan_utils import golongan_of, parse_harga
@@ -64,6 +66,41 @@ def validate_masa_manfaat(kode, tahun) -> list:
     if not 1 <= t <= 60:
         errors.append("Masa manfaat harus 1-60 tahun")
     return errors
+
+
+def masa_manfaat_dari_siman(baris_list):
+    """Rangkum masa manfaat (kolom "Umur Aset" SIMAN V2) per KELOMPOK 5 digit.
+
+    Dipakai alur "SIMAN menang" (pilihan pemilik): tiap impor, umur aset yang
+    teramati langsung memperbarui referensi masa manfaat kelompok terkait.
+    Prinsip agar aman:
+    - Hanya golongan yang DISUSUTKAN (3/4/5) yang dihitung.
+    - Hanya nilai tahun WAJAR (1-60) — nilai di luar rentang (mis. umur dalam
+      semester atau angka absurd) diabaikan agar tidak merusak penyusutan.
+    - Per kelompok dipakai MODUS (nilai tersering) → tahan pencilan; bila seri
+      diambil tahun TERKECIL (konservatif: penyusutan lebih cepat).
+
+    Kembalikan {kelompok: {"tahun": int, "observasi": int}} (observasi = jumlah
+    baris yang menyumbang nilai valid pada kelompok itu).
+    """
+    per_kelompok = {}
+    for b in baris_list or []:
+        kode = re.sub(r"\D", "", str((b or {}).get("kode_barang") or ""))
+        if len(kode) < 5 or kode[0] not in ("3", "4", "5"):
+            continue
+        cocok = re.search(r"\d+", str((b or {}).get("umur_aset") or ""))
+        if not cocok:
+            continue
+        tahun = int(cocok.group())
+        if not 1 <= tahun <= 60:
+            continue
+        per_kelompok.setdefault(kode[:5], Counter())[tahun] += 1
+    hasil = {}
+    for kelompok, ctr in per_kelompok.items():
+        maks = max(ctr.values())
+        tahun = min(t for t, c in ctr.items() if c == maks)
+        hasil[kelompok] = {"tahun": tahun, "observasi": sum(ctr.values())}
+    return hasil
 
 
 def semester_index(tanggal_iso):

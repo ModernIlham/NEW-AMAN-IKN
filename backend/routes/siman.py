@@ -190,6 +190,26 @@ async def import_siman(request: Request, file: UploadFile = File(...),
     if ops:
         await db.assets.bulk_write(ops, ordered=False)
 
+    # "SIMAN menang" (pilihan pemilik): kolom "Umur Aset" tiap impor langsung
+    # memperbarui referensi masa manfaat kelompok terkait (dipakai Penilaian).
+    # Terkumpul sedikit demi sedikit dari data lapangan → tak bergantung pada
+    # revisi KMK yang terus berubah. Ditandai sumber="siman" agar transparan.
+    from penilaian_utils import masa_manfaat_dari_siman
+    mm_teramati = masa_manfaat_dari_siman(baris_data)
+    mm_ops = [
+        UpdateOne(
+            {"kode": kelompok},
+            {"$set": {"kode": kelompok, "tahun": int(info["tahun"]),
+                      "sumber": "siman", "observasi": int(info["observasi"]),
+                      "updated_at": now, "updated_by": "SIMAN import"},
+             "$setOnInsert": {"created_at": now}},
+            upsert=True,
+        )
+        for kelompok, info in mm_teramati.items()
+    ]
+    if mm_ops:
+        await db.masa_manfaat.bulk_write(mm_ops, ordered=False)
+
     # Validasi satker: kode satker pada FILE vs satker terdaftar di AMAN
     # (master satker + kop global) — file milik satker lain terdeteksi dini.
     kode_terdaftar = set()
@@ -224,6 +244,7 @@ async def import_siman(request: Request, file: UploadFile = File(...),
         "total_baris": len(baris_data),
         "duplikat_kunci": duplikat_kunci,
         "register_diadopsi": register_diadopsi,
+        "masa_manfaat_diperbarui": len(mm_teramati),
         "tandai_tidak_ditemukan": bool(tandai_tidak_ditemukan),
         "ringkasan": ringkasan,
         "peringatan": peringatan,

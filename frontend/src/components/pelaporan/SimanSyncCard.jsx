@@ -260,7 +260,7 @@ export default function SimanSyncCard({ isAdmin }) {
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <p className="text-[10px] text-muted-foreground">
             {impor
-              ? <>Impor terakhir: <b>{String(impor.waktu).slice(0, 10)}</b> · {impor.filename} · {impor.total_baris} baris SIMAN{impor.ringkasan?.siman_tanpa_aset ? <> · <span className="text-amber-600 dark:text-amber-400">{impor.ringkasan.siman_tanpa_aset} baris belum tercatat di AMAN</span></> : null}{impor.register_diadopsi ? <> · {impor.register_diadopsi} kode register diadopsi</> : null}</>
+              ? <>Impor terakhir: <b>{String(impor.waktu).slice(0, 10)}</b> · {impor.filename} · {impor.total_baris} baris SIMAN{impor.ringkasan?.siman_tanpa_aset ? <> · <span className="text-amber-600 dark:text-amber-400">{impor.ringkasan.siman_tanpa_aset} baris belum tercatat di AMAN</span></> : null}{impor.register_diadopsi ? <> · {impor.register_diadopsi} kode register diadopsi</> : null}{impor.masa_manfaat_diperbarui ? <> · <span className="text-sky-600 dark:text-sky-400">{impor.masa_manfaat_diperbarui} kelompok masa manfaat diperbarui (umur SIMAN)</span></> : null}</>
               : "Belum pernah impor — unduh ekspor Master Aset dari SIMAN V2 lalu unggah di sini secara berkala (mis. tiap akhir bulan/semester)."}
           </p>
           {isAdmin && (

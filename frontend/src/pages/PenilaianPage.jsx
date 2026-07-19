@@ -547,7 +547,10 @@ export default function PenilaianPage({ user, onBack }) {
                   <li key={m.kode} className="px-3 py-1.5 flex items-center gap-2" data-testid={`penilaian-ref-${m.kode}`}>
                     <span className="font-mono text-xs text-foreground w-14 flex-shrink-0">{m.kode}</span>
                     <span className="text-[11px] text-muted-foreground truncate flex-1">
-                      {m.uraian || "—"} · <span className={m.sumber === "input satker" ? "text-emerald-600 dark:text-emerald-400" : ""}>{m.sumber}</span>
+                      {m.uraian || "—"} · <span className={
+                        m.sumber === "input satker" ? "text-emerald-600 dark:text-emerald-400"
+                          : m.sumber?.startsWith("dari SIMAN") ? "text-sky-600 dark:text-sky-400 font-medium"
+                            : ""}>{m.sumber}</span>
                     </span>
                     <span className="text-xs font-bold text-foreground flex-shrink-0" title={`Masa manfaat ${m.tahun} tahun`}>{m.tahun} th</span>
                     {isAdmin && (
@@ -557,7 +560,7 @@ export default function PenilaianPage({ user, onBack }) {
                           className="h-6 w-6 rounded border border-border text-foreground/70 flex items-center justify-center hover:bg-muted flex-shrink-0 min-h-0 min-w-0">
                           <Pencil className="w-3 h-3" />
                         </button>
-                        {m.sumber === "input satker" && (
+                        {!String(m.sumber || "").startsWith("bawaan") && (
                           <button type="button" aria-label={`Hapus ${m.kode}`}
                             onClick={() => hapusRef(m)}
                             className="h-6 w-6 rounded border border-border text-red-500 flex items-center justify-center hover:bg-red-500/10 flex-shrink-0 min-h-0 min-w-0">
