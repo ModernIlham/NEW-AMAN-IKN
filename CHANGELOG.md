@@ -48,6 +48,33 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#420] Integrasi lintas-modul gelombang 3: tiga peringatan dini baru di dasbor Wasdal — 2026-07-19
+
+Lanjutan backlog audit integrasi (verifikasi adversarial) — tiga register
+yang datanya sudah lengkap kini mengalir otomatis ke mesin temuan Wasdal
+(PMK 207), dasbor pemantauan, dan laporan wasdal semesteran/tahunan:
+
+- **Pemanfaatan → Wasdal**: perjanjian **jatuh tempo ≤60 hari** jadi
+  peringatan dini `perjanjian_jatuh_tempo` — bentuk yang dapat diperpanjang
+  (Sewa/Pinjam Pakai/KSP/KSPI) diarahkan "ajukan perpanjangan (batas ≥2
+  bulan sebelum berakhir, PMK 115/2020)"; BGS/BSG yang tak dapat
+  diperpanjang diarahkan siapkan pengakhiran/serah terima. Sebelumnya
+  Wasdal baru bereaksi SETELAH perjanjian berakhir.
+- **Pengamanan → Wasdal**: dokumen kepemilikan ber-`berlaku_sampai` lampau
+  (STNK/pajak/IMB dsb.) jadi temuan `dokumen_kepemilikan_kedaluwarsa`
+  objek pengamanan & pemeliharaan — padanan polis asuransi yang sudah ada.
+  Dokumen tanpa masa berlaku (sertipikat) tidak dinilai kedaluwarsa.
+- **Pemusnahan → Wasdal**: aset yang tercantum di **BA Pemusnahan** tetapi
+  belum ada SK penghapusan jadi temuan `dimusnahkan_belum_dihapus`
+  (fisik lenyap namun masih tersaji di neraca = risiko lebih saji) —
+  lengkap dengan umur hari sejak tanggal BA.
+- Tiga fungsi murni baru + 3 tes unit; label baru terender otomatis di
+  dasbor (ikon per objek, label dari registry backend).
+- Verifikasi: 549 tes unit lulus, smoke dasbor Wasdal end-to-end sukses
+  (ketiga jenis temuan muncul di objeknya masing-masing).
+
+---
+
 ## [#419] Integrasi lintas-modul gelombang 2: koreksi nilai di CaLBMN & pemegang berisiko jadi temuan Wasdal — 2026-07-19
 
 Dua integrasi teratas hasil audit lintas-modul menyeluruh (5 klaster,

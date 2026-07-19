@@ -13,9 +13,10 @@ from datetime import date, timedelta
 
 from pegawai_utils import pegawai_perlu_serah_terima
 from pemanfaatan_utils import (
-    LABEL_STATUS_PERJANJIAN, dokumen_kurang, status_perjanjian,
-    tahun_tertunggak,
+    BENTUK_PEMANFAATAN, LABEL_STATUS_PERJANJIAN, dokumen_kurang,
+    status_perjanjian, tahun_tertunggak,
 )
+from pengamanan_utils import JENIS_DOKUMEN
 from penghapusan_utils import JALUR_KANDIDAT, jalur_kandidat
 from pemindahtanganan_utils import peringatan_pt
 
@@ -45,6 +46,9 @@ JENIS_TEMUAN = {
     "rusak_tanpa_pemeliharaan": "Rusak tanpa pemeliharaan tahun berjalan",
     "polis_asuransi_lewat": "Polis asuransi BMN kedaluwarsa",
     "pemegang_berisiko_keluar": "Pemegang berisiko keluar/pensiun belum serah terima BMN",
+    "perjanjian_jatuh_tempo": "Perjanjian pemanfaatan jatuh tempo ≤60 hari",
+    "dokumen_kepemilikan_kedaluwarsa": "Dokumen kepemilikan BMN kedaluwarsa",
+    "dimusnahkan_belum_dihapus": "Sudah dimusnahkan fisik namun belum ada SK penghapusan",
 }
 
 # Objek pemantauan tiap jenis temuan (setiap jenis tepat satu objek)
@@ -64,6 +68,9 @@ OBJEK_PER_JENIS = {
     "rusak_tanpa_pemeliharaan": "pengamanan_pemeliharaan",
     "polis_asuransi_lewat": "pengamanan_pemeliharaan",
     "pemegang_berisiko_keluar": "penggunaan",
+    "perjanjian_jatuh_tempo": "pemanfaatan",
+    "dokumen_kepemilikan_kedaluwarsa": "pengamanan_pemeliharaan",
+    "dimusnahkan_belum_dihapus": "pemindahtanganan",
 }
 
 # Usulan penghapusan yang belum berujung SK melewati ambang ini = berlarut
@@ -126,6 +133,16 @@ def temuan_pemanfaatan(items, today_iso: str):
         elif status == "tidak_lengkap":
             out.append({"jenis": "dokumen_pemanfaatan_kurang", **ident,
                         "detail": "; ".join(dokumen_kurang(p))})
+        elif status == "jatuh_tempo":
+            # Peringatan dini: syarat perpanjangan ≥2 bulan sebelum berakhir
+            # (PMK 115/2020) — bentuk yang tak dapat diperpanjang (BGS/BSG)
+            # diarahkan siapkan pengakhiran/serah terima.
+            dapat = BENTUK_PEMANFAATAN.get(p.get("bentuk"), (None, None, False))[2]
+            arah = ("ajukan perpanjangan (batas ≥2 bulan sebelum berakhir)"
+                    if dapat else
+                    "tidak dapat diperpanjang — siapkan pengakhiran/serah terima")
+            out.append({"jenis": "perjanjian_jatuh_tempo", **ident,
+                        "detail": f"Berakhir {p.get('berakhir') or '-'}; {arah}"})
         # Integrasi Pemanfaatan → Wasdal: kewajiban PNBP tahunan (KSP/BGS-BSG
         # dll.) yang belum tercatat pembayarannya = temuan tertunggak.
         tunggak = tahun_tertunggak(p, today_iso)
@@ -177,6 +194,61 @@ def temuan_polis_asuransi(polis, today_iso: str):
                 "detail": (f"Polis {p.get('nomor_polis') or '-'} "
                            f"({p.get('penanggung') or 'penanggung ?'}) "
                            f"kedaluwarsa {p.get('berakhir')}")})
+    return out
+
+
+def temuan_dokumen_kepemilikan(dokumen, today_iso: str):
+    """Objek PENGAMANAN & PEMELIHARAAN: dokumen kepemilikan BMN (STNK/pajak/
+    IMB dsb.) yang masa berlakunya sudah LEWAT — pengamanan hukum melemah
+    (integrasi register dokumen Pengamanan → temuan Wasdal). Dokumen tanpa
+    `berlaku_sampai` (sertipikat dll.) tidak dinilai kedaluwarsa."""
+    out = []
+    hari_ini = _tgl(today_iso)
+    if not hari_ini:
+        return out
+    for d in dokumen or []:
+        akhir = _tgl(d.get("berlaku_sampai"))
+        if akhir and akhir < hari_ini:
+            jenis_label = JENIS_DOKUMEN.get(d.get("jenis"), d.get("jenis") or "Dokumen")
+            out.append({
+                "jenis": "dokumen_kepemilikan_kedaluwarsa",
+                "dok_id": d.get("id"),
+                "asset_id": d.get("asset_id"),
+                "asset_code": d.get("asset_code"),
+                "NUP": d.get("NUP"),
+                "asset_name": d.get("asset_name"),
+                "detail": (f"{jenis_label} No. {d.get('nomor') or '-'} "
+                           f"kedaluwarsa {d.get('berlaku_sampai')}")})
+    return out
+
+
+def temuan_pemusnahan(pemusnahan, aset_ber_sk, today_iso: str):
+    """Objek PEMINDAHTANGANAN & PENGHAPUSAN: aset yang fisiknya SUDAH
+    dimusnahkan (tercantum di BA Pemusnahan) tetapi BELUM ada SK penghapusan
+    terbit — barang lenyap namun masih tersaji di neraca (integrasi register
+    Pemusnahan → temuan Wasdal; risiko lebih saji, PMK 207 objek
+    pemindahtanganan/penghapusan)."""
+    out = []
+    hari_ini = _tgl(today_iso)
+    ber_sk = aset_ber_sk or set()
+    for ba in pemusnahan or []:
+        tgl_ba = _tgl(ba.get("tanggal_ba"))
+        if not tgl_ba or (hari_ini and tgl_ba > hari_ini):
+            continue  # BA bertanggal depan tidak dinilai
+        umur = (hari_ini - tgl_ba).days if hari_ini else 0
+        for a in ba.get("aset") or []:
+            aid = a.get("asset_id")
+            if not aid or aid in ber_sk:
+                continue
+            out.append({
+                "jenis": "dimusnahkan_belum_dihapus",
+                "asset_id": aid,
+                "asset_code": a.get("asset_code"),
+                "NUP": a.get("NUP"),
+                "asset_name": a.get("asset_name"),
+                "detail": (f"BA {ba.get('nomor_ba') or '-'} tgl "
+                           f"{ba.get('tanggal_ba') or '-'} — {umur} hari "
+                           f"fisik musnah, belum ada SK penghapusan")})
     return out
 
 
@@ -261,7 +333,8 @@ def temuan_pengamanan_pemeliharaan(assets, pemeliharaan, tahun: int):
 def susun_temuan(assets, pemanfaatan, usulan_hapus, usulan_pt,
                  pemeliharaan, today_iso: str,
                  ambang_hari: int = AMBANG_BERLARUT_HARI, polis=None,
-                 pegawai=None, jumlah_aset_per_nip=None) -> dict:
+                 pegawai=None, jumlah_aset_per_nip=None,
+                 dokumen=None, pemusnahan=None, aset_ber_sk=None) -> dict:
     """Seluruh temuan terkelompok per objek → {objek: [temuan...]}."""
     tahun = periode_wasdal(today_iso)["tahun"]
     semua = (temuan_penggunaan(assets)
@@ -272,7 +345,9 @@ def susun_temuan(assets, pemanfaatan, usulan_hapus, usulan_pt,
              + temuan_pengamanan_pemeliharaan(assets, pemeliharaan, tahun)
              + temuan_polis_asuransi(polis, today_iso)
              + temuan_pemegang_berisiko(pegawai, jumlah_aset_per_nip,
-                                        today_iso))
+                                        today_iso)
+             + temuan_dokumen_kepemilikan(dokumen, today_iso)
+             + temuan_pemusnahan(pemusnahan, aset_ber_sk, today_iso))
     per_objek = {k: [] for k in OBJEK_WASDAL}
     for t in semua:
         t["label"] = JENIS_TEMUAN[t["jenis"]]
