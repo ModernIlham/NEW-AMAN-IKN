@@ -1,5 +1,6 @@
 import React, { memo, useState, useRef } from "react";
-import { Camera, MapPin, Briefcase, Tag, Trash2, Lock, Cloud, Check, RotateCcw, RefreshCcw, MoreVertical, BookOpen, History, CreditCard, AlertTriangle } from "lucide-react";
+import { Camera, MapPin, Briefcase, Tag, Trash2, Lock, Cloud, Check, RotateCcw, RefreshCcw, MoreVertical, BookOpen, History, CreditCard, AlertTriangle, ShieldCheck } from "lucide-react";
+import { sisaGaransi } from "../../lib/garansi";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuTrigger,
@@ -321,6 +322,19 @@ const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, onOpenKartu, on
                 <Tag className="w-2.5 h-2.5" />
                 {stikerTerpasang ? `Stiker ${asset.stiker_ukuran || ''}` : 'Belum Stiker'}
               </span>
+              {(() => {
+                const g = sisaGaransi(asset.garansi_hingga);
+                return g ? (
+                  <span
+                    className={`inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${g.segera ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400' : 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400'}`}
+                    title={`Garansi tercatat hingga ${g.hingga} (${g.hari} hari lagi)`}
+                    data-testid={`card-garansi-${asset.id}`}
+                  >
+                    <ShieldCheck className="w-2.5 h-2.5" />
+                    {g.label}
+                  </span>
+                ) : null;
+              })()}
               <span className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
                 asset.inventory_status === "Ditemukan" ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400' : 
                 asset.inventory_status === "Tidak Ditemukan" ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400' : 

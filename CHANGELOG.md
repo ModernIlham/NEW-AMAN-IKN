@@ -48,6 +48,24 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#457] Garansi aset — kolom rentang garansi + auto-isi dari inventarisasi sebelumnya + badge sisa garansi — 2026-07-19
+
+- **Field baru `garansi_hingga`** (tanggal berakhir garansi; rentang lazim
+  dihitung sejak tanggal perolehan) lewat registry `asset_fields.py` →
+  otomatis ikut PATCH, ubah massal, audit, proyeksi list, CSV/impor; plus
+  models, ekspor XLSX ("Garansi Hingga"), template impor, `SNAPSHOT_FIELDS`
+  offline, dan input tanggal di form aset (di bawah Tanggal Beli).
+- **Auto-isi saat inventarisasi**: ketika kode barang + NUP dan/atau kode
+  register yang diketik sama dengan aset dari inventarisasi SEBELUMNYA yang
+  sudah punya garansi tercatat, kolom garansi terisi otomatis (endpoint
+  `GET /assets/garansi-sebelumnya`, pola identitas kartu inventarisasi;
+  debounce 600 ms, offline-tolerant, tidak menimpa isian manual) — informasi
+  garansi terkumpul sekali dan terbawa ke kegiatan berikutnya.
+- **Badge sisa garansi** mudah dibaca di daftar aset (tabel desktop + kartu
+  HP): "Garansi N hari/bln/±th lagi" — hijau; ≤60 hari jadi kuning (segera
+  habis); **hilang otomatis** bila tidak tercatat atau sudah lewat tanggal.
+  Helper bersama `lib/garansi.js`.
+
 ## [#456] Perbaikan menambah umur aset — Tabel Masa Manfaat II (KMK 295/266/339) + Berita Acara Perbaikan wajib + penyusutan ikut umur baru — 2026-07-19
 
 Dari dokumen resmi yang diunggah pemilik (KMK 295/KM.6/2019 jo. 266/KM.6/2023

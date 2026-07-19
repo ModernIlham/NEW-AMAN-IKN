@@ -395,6 +395,7 @@ function buildEditFormData(a, activityId) {
     nomor_perkara: a.nomor_perkara || "",
     pihak_bersengketa: a.pihak_bersengketa || "",
     keterangan_sengketa: a.keterangan_sengketa || "",
+    garansi_hingga: a.garansi_hingga || "",
     document_checklist: mergedChecklist,
     activity_id: activityId || null
   };
@@ -505,12 +506,39 @@ const AssetForm = memo(({
     inventory_status: "Belum Diinventarisasi", klasifikasi_tidak_ditemukan: "", sub_klasifikasi: "", uraian_tidak_ditemukan: "", tindak_lanjut: "",
     koordinat_latitude: "", koordinat_longitude: "", kronologis: "",
     keterangan_berlebih: "", asal_usul_berlebih: "", nomor_perkara: "", pihak_bersengketa: "", keterangan_sengketa: "",
+    garansi_hingga: "",
     document_checklist: DEFAULT_DOC_ITEMS.map(name => ({ name, checked: false, notes: "", photos: [], documents: [] })),
     activity_id: activity?.id || null
   }), [activity?.id]);
 
   const [formData, setFormData] = useState(emptyForm);
   const [editId, setEditId] = useState(null);
+  // Auto-isi GARANSI dari inventarisasi sebelumnya: saat kode barang + NUP
+  // dan/atau kode register sama dengan aset yang pernah tercatat DAN kolom
+  // garansi masih kosong, tanggal berakhir garansi terbawa otomatis
+  // (offline-tolerant: gagal fetch = diam; tetap bisa isi manual).
+  const [garansiOtomatis, setGaransiOtomatis] = useState(false);
+  useEffect(() => {
+    const kode = String(formData.asset_code || "").trim();
+    const nup = String(formData.NUP || "").trim();
+    const reg = String(formData.kode_register || "").trim();
+    if (formData.garansi_hingga || (!reg && !(kode && nup))) return undefined;
+    const t = setTimeout(async () => {
+      try {
+        const r = await axios.get(`${API}/assets/garansi-sebelumnya`, {
+          params: { kode_register: reg, asset_code: kode, NUP: nup,
+                    exclude_id: editId || "" },
+        });
+        if (r.data?.garansi_hingga) {
+          setFormData((p) => (p.garansi_hingga ? p
+            : { ...p, garansi_hingga: r.data.garansi_hingga }));
+          setGaransiOtomatis(true);
+        }
+      } catch { /* offline / tak ada riwayat — biarkan manual */ }
+    }, 600);
+    return () => clearTimeout(t);
+  }, [formData.asset_code, formData.NUP, formData.kode_register,
+      formData.garansi_hingga, editId]);
   // Peringatan kodefikasi LIVE (§5A Prinsip 2, non-blocking): hasil cek
   // GET /integritas/cek-kode untuk asset_code saat ini — hanya info, tak
   // pernah memblokir simpan (data lama boleh punya kode tak terdaftar).
@@ -1497,6 +1525,7 @@ const AssetForm = memo(({
           "koordinat_latitude", "koordinat_longitude", "kronologis",
           "keterangan_berlebih", "asal_usul_berlebih",
           "nomor_perkara", "pihak_bersengketa", "keterangan_sengketa",
+          "garansi_hingga",
           "activity_id",
         ];
         for (const key of TEXT_FIELDS) {
@@ -2151,6 +2180,11 @@ const AssetForm = memo(({
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1"><Label className="text-xs">Tanggal Beli</Label><Input type="date" name="purchase_date" value={formData.purchase_date} onChange={handleInputChange} className="h-8" /></div>
                 <div className="space-y-1"><Label className="text-xs">Harga (Rp)</Label><Input type="number" name="purchase_price" value={formData.purchase_price} onChange={handleInputChange} className="h-8" /></div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Garansi hingga{garansiOtomatis ? <span className="ml-1 text-[10px] text-sky-600 dark:text-sky-400 font-normal">terisi otomatis dari inventarisasi sebelumnya</span> : null}</Label>
+                <Input type="date" name="garansi_hingga" value={formData.garansi_hingga || ""} onChange={handleInputChange} className="h-8" data-testid="asset-garansi" />
+                <p className="text-[10px] text-muted-foreground">Tanggal berakhir garansi (rentang lazim dihitung sejak tanggal perolehan). Kosongkan bila tidak ada.</p>
               </div>
               <div className="space-y-1"><Label className="text-xs">Lokasi</Label><Input name="location" value={formData.location} onChange={handleInputChange} className="h-8" list="daftar-ruangan-master" placeholder="pilih ruangan / ketik bebas" /><datalist id="daftar-ruangan-master">{ruanganNames.map((n) => <option key={n} value={n} />)}</datalist></div>
               <div className="grid grid-cols-2 gap-2">

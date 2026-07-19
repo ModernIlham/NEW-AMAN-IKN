@@ -77,6 +77,10 @@ ASSET_SCALAR_FIELDS = (
     AssetField("nomor_perkara", "Nomor Perkara"),
     AssetField("pihak_bersengketa", "Pihak Bersengketa"),
     AssetField("keterangan_sengketa", "Keterangan Sengketa"),
+    # Garansi aset: tanggal BERAKHIR masa garansi (rentang lazim dihitung
+    # sejak tanggal perolehan). Terisi manual saat inventarisasi ATAU
+    # auto-isi dari riwayat inventarisasi sebelumnya (kode+NUP/register).
+    AssetField("garansi_hingga", "Garansi Hingga", batchable=True),
 )
 
 SCALAR_FIELD_NAMES = tuple(f.name for f in ASSET_SCALAR_FIELDS)
