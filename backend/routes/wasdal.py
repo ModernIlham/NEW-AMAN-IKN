@@ -107,12 +107,24 @@ async def _data_pemantauan(ambang_hari: int, user=None):
     pengadaan = [p async for p in db.pengadaan.find(
         _sq({}), {"_id": 0, "id": 1, "jenis": 1, "nomor_bast": 1,
                   "tanggal_bast": 1, "pihak": 1, "dokumen": 1})]
+    # Integrasi Persediaan → Wasdal: opname semesteran belum dilakukan +
+    # layer kedaluwarsa masih tercatat = temuan objek penatausahaan.
+    from persediaan_utils import tanggal_wib
+    persediaan = [p async for p in db.persediaan.find(
+        {}, {"_id": 0, "id": 1, "kode_barang": 1, "nup": 1,
+             "nama_barang": 1, "batches": 1})]
+    opname_doc = await db.transaksi_persediaan.find_one(
+        {"jenis": "opname"}, {"_id": 0, "timestamp": 1},
+        sort=[("timestamp", -1)])
+    tanggal_opname = tanggal_wib((opname_doc or {}).get("timestamp"))
 
     per_objek = susun_temuan(assets, pemanfaatan, usulan_hapus, usulan_pt,
                              pemeliharaan, today_iso, ambang_hari, polis=polis,
                              pegawai=pegawai, jumlah_aset_per_nip=peta_aset_nip,
                              dokumen=dokumen, pemusnahan=pemusnahan,
-                             aset_ber_sk=aset_ber_sk, pengadaan=pengadaan)
+                             aset_ber_sk=aset_ber_sk, pengadaan=pengadaan,
+                             persediaan=persediaan,
+                             tanggal_opname_terakhir=tanggal_opname)
     return periode, per_objek, rekap_wasdal(per_objek), len(assets)
 
 

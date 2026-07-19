@@ -18,6 +18,7 @@ from pemanfaatan_utils import (
 )
 from pengadaan_utils import dokumen_kurang_perolehan
 from pengamanan_utils import JENIS_DOKUMEN
+from persediaan_utils import klasifikasi_kedaluwarsa, status_opname_semester
 from penghapusan_utils import JALUR_KANDIDAT, jalur_kandidat
 from pemindahtanganan_utils import peringatan_pt
 
@@ -51,6 +52,8 @@ JENIS_TEMUAN = {
     "dokumen_kepemilikan_kedaluwarsa": "Dokumen kepemilikan BMN kedaluwarsa",
     "dimusnahkan_belum_dihapus": "Sudah dimusnahkan fisik namun belum ada SK penghapusan",
     "dokumen_perolehan_kurang": "Dokumen sumber perolehan belum lengkap",
+    "opname_semester_terlambat": "Opname fisik persediaan semester berjalan belum dilakukan",
+    "persediaan_kedaluwarsa": "Persediaan ber-layer kedaluwarsa masih tercatat",
 }
 
 # Objek pemantauan tiap jenis temuan (setiap jenis tepat satu objek)
@@ -74,6 +77,8 @@ OBJEK_PER_JENIS = {
     "dokumen_kepemilikan_kedaluwarsa": "pengamanan_pemeliharaan",
     "dimusnahkan_belum_dihapus": "pemindahtanganan",
     "dokumen_perolehan_kurang": "penatausahaan",
+    "opname_semester_terlambat": "penatausahaan",
+    "persediaan_kedaluwarsa": "penatausahaan",
 }
 
 # Usulan penghapusan yang belum berujung SK melewati ambang ini = berlarut
@@ -246,6 +251,36 @@ def temuan_dokumen_perolehan(pengadaan):
     return out
 
 
+def temuan_persediaan(persediaan_items, tanggal_opname_terakhir,
+                      today_iso: str):
+    """Objek PENATAUSAHAAN: (a) opname fisik semester berjalan belum
+    dilakukan (PSAP 05 — wajib semesteran) dan (b) barang persediaan yang
+    masih menyimpan layer KEDALUWARSA (nilai tersaji berisiko lebih saji /
+    barang tak layak pakai). Integrasi register Persediaan → temuan Wasdal;
+    memakai fungsi murni Persediaan yang sudah teruji."""
+    out = []
+    st = status_opname_semester(tanggal_opname_terakhir, today_iso)
+    if st.get("pesan"):
+        out.append({"jenis": "opname_semester_terlambat",
+                    "asset_name": "Seluruh persediaan",
+                    "detail": st["pesan"]})
+    for it in persediaan_items or []:
+        lewat, _segera = klasifikasi_kedaluwarsa(it.get("batches"), today_iso)
+        if not lewat:
+            continue
+        qty = sum(int(b.get("qty") or 0) for b in lewat)
+        tgl = sorted(str(b.get("expired") or "")[:10] for b in lewat)[0]
+        out.append({
+            "jenis": "persediaan_kedaluwarsa",
+            "persediaan_id": it.get("id"),
+            "asset_code": it.get("kode_barang"),
+            "NUP": it.get("nup"),
+            "asset_name": it.get("nama_barang"),
+            "detail": (f"{len(lewat)} layer ({qty} unit) kedaluwarsa — "
+                       f"terlama {tgl}; usulkan penghapusan/pemusnahan")})
+    return out
+
+
 def temuan_pemusnahan(pemusnahan, aset_ber_sk, today_iso: str):
     """Objek PEMINDAHTANGANAN & PENGHAPUSAN: aset yang fisiknya SUDAH
     dimusnahkan (tercantum di BA Pemusnahan) tetapi BELUM ada SK penghapusan
@@ -359,9 +394,15 @@ def susun_temuan(assets, pemanfaatan, usulan_hapus, usulan_pt,
                  ambang_hari: int = AMBANG_BERLARUT_HARI, polis=None,
                  pegawai=None, jumlah_aset_per_nip=None,
                  dokumen=None, pemusnahan=None, aset_ber_sk=None,
-                 pengadaan=None) -> dict:
-    """Seluruh temuan terkelompok per objek → {objek: [temuan...]}."""
+                 pengadaan=None, persediaan=None,
+                 tanggal_opname_terakhir=None) -> dict:
+    """Seluruh temuan terkelompok per objek → {objek: [temuan...]}.
+
+    `persediaan`/`tanggal_opname_terakhir` sengaja opsional; bila pemanggil
+    tidak memasok data persediaan (None DAN tanpa tanggal opname), temuan
+    opname TIDAK dibangkitkan (hindari alarm palsu dari pemanggil lama)."""
     tahun = periode_wasdal(today_iso)["tahun"]
+    pasok_persediaan = persediaan is not None or tanggal_opname_terakhir
     semua = (temuan_penggunaan(assets)
              + temuan_pemanfaatan(pemanfaatan, today_iso)
              + temuan_pemindahtanganan(assets, usulan_hapus, usulan_pt,
@@ -373,7 +414,9 @@ def susun_temuan(assets, pemanfaatan, usulan_hapus, usulan_pt,
                                         today_iso)
              + temuan_dokumen_kepemilikan(dokumen, today_iso)
              + temuan_pemusnahan(pemusnahan, aset_ber_sk, today_iso)
-             + temuan_dokumen_perolehan(pengadaan))
+             + temuan_dokumen_perolehan(pengadaan)
+             + (temuan_persediaan(persediaan, tanggal_opname_terakhir,
+                                  today_iso) if pasok_persediaan else []))
     per_objek = {k: [] for k in OBJEK_WASDAL}
     for t in semua:
         t["label"] = JENIS_TEMUAN[t["jenis"]]
