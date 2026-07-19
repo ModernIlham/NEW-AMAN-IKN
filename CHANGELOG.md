@@ -48,6 +48,22 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#442] Tombol kotak seragam: tanggalan bersama (Perencanaan + Penilaian), Unduh persegi, Catat ikon — 2026-07-19
+
+Tindak lanjut screenshot pengguna — semua kontrol header memakai kotak
+tombol yang sama persis dengan tombol kembali/Booking Nomor:
+
+- **Komponen bersama `TanggalanButton`** (kotak 9×9 gaya tombol header):
+  strip bulan berwarna, angka tanggal besar, tahun kecil — dipakai di
+  **Perencanaan** (tanggal acuan TA, strip biru) dan kini juga di
+  **Penilaian — Posisi Penyusutan** (menggantikan input date polos
+  "posisi per tanggal", strip ungu; testid `penilaian-tanggal` tetap).
+- **Tombol menu Unduh Perencanaan** menjadi persegi ikon murni (9×9,
+  gaya sama dengan tombol kembali) — tidak ada lagi kotak beda ukuran.
+- **Pemeliharaan**: tombol "Catat" di header menjadi ikon **+** saja
+  (persegi, tooltip "Catat pemeliharaan"; testid tetap).
+
+
 ## [#441] Audit jangkauan referensi & master data lintas modul — tutup gap tersisa — 2026-07-19
 
 Audit menyeluruh (agen riset kode): apakah referensi/master data +
