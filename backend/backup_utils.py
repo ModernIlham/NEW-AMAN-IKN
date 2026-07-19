@@ -29,6 +29,9 @@ KEEP_ID_COLLECTIONS = {"counters"}
 # ruangan/unit kerja, override masa manfaat, format nomor, kode klasifikasi)
 # tidak perlu di-setup ulang manual. `akun_bas`/`persediaan_akun`/`kodefikasi`
 # KHUSUSNYA tidak punya seed otomatis — kehilangannya = lenyap permanen.
+# CATATAN GridFS: reset (server.py reset_all_data) menghapus fs.files/fs.chunks
+# KECUALI berkas ber-`metadata.jenis: "foto_pegawai"` — koleksi `pegawai`
+# dipertahankan, jadi fotonya juga harus tetap ada (hindari foto_file_id yatim).
 RESET_KEEP_COLLECTIONS = {
     "users", "report_settings", "compression_quotas", "pdf_compression_quotas",
     "persuratan_settings", "klasifikasi_arsip", "masa_manfaat",

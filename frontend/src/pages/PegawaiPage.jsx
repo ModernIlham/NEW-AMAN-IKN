@@ -13,6 +13,8 @@ import {
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
+import { authMediaUrl } from "@/lib/mediaUrl";
+import KropFotoDialog from "@/components/pegawai/KropFotoDialog";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -95,7 +97,46 @@ export default function PegawaiPage({ user, onBack }) {
       .catch(() => setUnits([]));
   }, []);
 
-  const bukaForm = (data) => { setTabForm("identitas"); setForm(data); };
+  const bukaForm = (data) => { setTabForm("identitas"); setForm(data); setFotoBlobBaru(null); };
+  // ── Foto pegawai: krop persegi (geser + zoom) → GridFS; avatar di row ──
+  const [kropSrc, setKropSrc] = useState(null);       // dataURL sumber krop
+  const [fotoBlobBaru, setFotoBlobBaru] = useState(null); // blob menunggu (mode tambah)
+  const fotoInputRef = useRef(null);
+  const pilihFotoFile = (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    const rd = new FileReader();
+    rd.onload = () => setKropSrc(rd.result);
+    rd.readAsDataURL(f);
+  };
+  const unggahFoto = async (pegawaiId, blob) => {
+    const fd = new FormData();
+    fd.append("file", blob, "foto.jpg");
+    await axios.post(`${API}/pegawai/${pegawaiId}/foto`, fd);
+  };
+  const simpanKrop = async (blob) => {
+    if (form?.mode === "tambah") {
+      setFotoBlobBaru(blob);           // diunggah setelah pegawai dibuat
+      toast.success("Foto siap — akan diunggah saat pegawai disimpan");
+    } else if (form?.id) {
+      try {
+        await unggahFoto(form.id, blob);
+        toast.success("Foto pegawai diperbarui");
+        load();
+      } catch (err) { toast.error(getApiError(err, "Gagal mengunggah foto")); }
+    }
+    setKropSrc(null);
+  };
+  const AvatarPegawai = ({ p, ukur = "w-9 h-9" }) => p.foto_file_id ? (
+    <img src={authMediaUrl(`${API}/pegawai/${p.id}/foto?v=${p.foto_file_id}`)} alt=""
+      onError={(e) => { e.currentTarget.style.display = "none"; }}
+      className={`${ukur} rounded-full object-cover border border-border flex-shrink-0`} loading="lazy" />
+  ) : (
+    <span className={`${ukur} rounded-full bg-sky-500/15 text-sky-700 dark:text-sky-400 flex items-center justify-center text-[11px] font-bold flex-shrink-0`}>
+      {(p.nama || "?").trim().split(/\s+/).slice(0, 2).map((k) => k[0]).join("").toUpperCase()}
+    </span>
+  );
 
   // Opsi bertingkat: opsi Eselon N mengikuti induk Eselon N-1 yang dipilih
   // (dicocokkan via nama — data pegawai menyimpan nama unit). Induk tak
@@ -254,9 +295,14 @@ export default function PegawaiPage({ user, onBack }) {
     setSaving(true);
     const body = { ...form };
     delete body.mode; delete body.id; delete body.created_at; delete body.updated_at;
+    delete body.foto_file_id; // dikelola endpoint foto terpisah — jangan tertimpa
     try {
       if (form.mode === "tambah") {
-        await axios.post(`${API}/pegawai`, body);
+        const r = await axios.post(`${API}/pegawai`, body);
+        if (fotoBlobBaru && r.data?.id) {
+          try { await unggahFoto(r.data.id, fotoBlobBaru); }
+          catch { toast.warning("Pegawai tersimpan, tetapi foto gagal diunggah — coba lagi lewat Edit"); }
+        }
         toast.success(`Pegawai ${form.nama} ditambahkan`);
       } else {
         const r = await axios.put(`${API}/pegawai/${form.id}`, body);
@@ -575,6 +621,7 @@ export default function PegawaiPage({ user, onBack }) {
                 return (
                   <li key={it.id} className="p-3 space-y-1" data-testid={`pegawai-card-${it.id}`}>
                     <div className="flex items-start gap-2">
+                      <AvatarPegawai p={it} />
                       <div className="min-w-0 flex-1">
                         <p className="font-semibold text-foreground text-sm leading-tight break-words">{namaLengkap(it)}</p>
                         <p className="text-[10px] text-muted-foreground font-mono">
@@ -668,6 +715,7 @@ export default function PegawaiPage({ user, onBack }) {
                     <tr key={it.id} className="border-b border-border/60 last:border-0 hover:bg-muted/50" data-testid={`pegawai-row-${it.id}`}>
                       <td className="px-3 py-2">
                         <p className="font-semibold text-foreground flex items-center gap-1.5 flex-wrap">
+                          <AvatarPegawai p={it} ukur="w-7 h-7" />
                           {namaLengkap(it)}
                           {it.status_kepegawaian && (
                             <span className="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-600 dark:text-sky-400 text-[9px] font-semibold uppercase">
@@ -791,6 +839,22 @@ export default function PegawaiPage({ user, onBack }) {
 
               {tabForm === "identitas" && (
                 <div className="space-y-3">
+                  {/* Foto pegawai — krop persegi (geser + zoom) tampil di row */}
+                  <div className="flex items-center gap-3">
+                    <AvatarPegawai p={fotoBlobBaru ? { nama: form.nama } : form} ukur="w-14 h-14" />
+                    {fotoBlobBaru && <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">Foto baru siap diunggah</span>}
+                    <Button type="button" variant="outline" size="sm" className="h-8 text-xs"
+                      onClick={() => fotoInputRef.current?.click()} data-testid="pegawai-pilih-foto">
+                      Pilih Foto…
+                    </Button>
+                    {form.id && form.foto_file_id && (
+                      <Button type="button" variant="outline" size="sm" className="h-8 text-xs text-red-600"
+                        onClick={async () => { try { await axios.delete(`${API}/pegawai/${form.id}/foto`); toast.success("Foto dihapus"); setForm((f) => ({ ...f, foto_file_id: "" })); load(); } catch (err) { toast.error(getApiError(err, "Gagal menghapus foto")); } }}>
+                        Hapus Foto
+                      </Button>
+                    )}
+                    <input ref={fotoInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={pilihFotoFile} />
+                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                     <Field label="Gelar Depan"><Input value={form.gelar_depan} onChange={set("gelar_depan")} placeholder="cth. Dr." /></Field>
                     <Field label="Nama *" span2><Input value={form.nama} onChange={set("nama")} data-testid="pegawai-form-nama" /></Field>
@@ -1185,6 +1249,8 @@ export default function PegawaiPage({ user, onBack }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <KropFotoDialog src={kropSrc} onBatal={() => setKropSrc(null)} onSimpan={simpanKrop} />
 
       {confirmDialog}
     </div>

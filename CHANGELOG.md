@@ -48,6 +48,29 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#461] Foto pegawai — unggah + krop persegi (geser/zoom) + avatar di row; reset pertahankan foto pegawai — 2026-07-19
+
+- **Unggah foto di Master Pegawai** — tab Identitas form pegawai kini punya
+  bagian Foto: pratinjau avatar, tombol "Pilih Foto…" dan "Hapus Foto".
+  Endpoint baru `POST/GET/DELETE /pegawai/{id}/foto` (GridFS, admin untuk
+  tulis, maks 5 MB, JPEG/PNG/WebP; audit log).
+- **Dialog Krop Foto** (`KropFotoDialog`) — pilih PERSEGI bagian foto yang
+  tampil di daftar: geser (drag mouse/sentuh), zoom in/out 1–4× (slider,
+  roda mouse, tombol ±) dengan titik tengah terjaga, garis bantu
+  rule-of-thirds; hasil dirender ke JPEG 384×384. Mode tambah: foto
+  disimpan dulu lalu diunggah otomatis setelah pegawai dibuat.
+- **Avatar di row data** — foto bulat di kartu HP dan tabel desktop
+  (fallback inisial nama bila tanpa foto; foto gagal dimuat otomatis
+  disembunyikan).
+- **Reset sistem tidak lagi meninggalkan foto pegawai yatim** — koleksi
+  `pegawai` dipertahankan saat reset (master referensi), tapi GridFS
+  sebelumnya dihapus TOTAL sehingga `foto_file_id` menunjuk berkas yang
+  hilang. Kini berkas GridFS ber-`metadata.jenis: "foto_pegawai"` ikut
+  dipertahankan saat reset.
+- **Verifikasi backup/restore**: ekspor GridFS memuat SEMUA berkas
+  (termasuk foto pegawai) + restore memulihkannya dengan `_id` asli —
+  foto pegawai otomatis tercakup penuh tanpa perubahan.
+
 ## [#460] Inventarisasi aset — saklar ikon-only, jenis garansi, badge garansi ringkas, tetesan sinkron SIMAN di galeri, gradasi list, badge lampiran BAST — 2026-07-19
 
 - **Saklar Dashboard ↔ Inventarisasi ikon-saja di SEMUA ukuran** (tanpa teks;

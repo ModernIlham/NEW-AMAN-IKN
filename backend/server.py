@@ -331,10 +331,14 @@ async def reset_all_data(data: ResetConfirmation, _admin: dict = Depends(require
     for col_name in collections_to_reset(all_names):
         res = await db[col_name].delete_many({})
         deleted[col_name] = res.deleted_count
-    # Bersihkan GridFS (foto aset & lampiran dokumen yang datanya sudah dihapus)
-    gridfs_files = await db["fs.files"].count_documents({})
-    await db["fs.files"].delete_many({})
-    await db["fs.chunks"].delete_many({})
+    # Bersihkan GridFS (foto aset & lampiran dokumen yang datanya sudah dihapus),
+    # KECUALI foto pegawai — koleksi `pegawai` dipertahankan saat reset, sehingga
+    # menghapus fotonya akan meninggalkan foto_file_id yatim (avatar rusak).
+    keep_foto = [d["_id"] async for d in db["fs.files"].find(
+        {"metadata.jenis": "foto_pegawai"}, {"_id": 1})]
+    gridfs_files = await db["fs.files"].count_documents({"_id": {"$nin": keep_foto}})
+    await db["fs.files"].delete_many({"_id": {"$nin": keep_foto}})
+    await db["fs.chunks"].delete_many({"files_id": {"$nin": keep_foto}})
     deleted["gridfs_files"] = gridfs_files
 
     logger.warning(f"SYSTEM RESET by admin {admin_user.get('username')}: {deleted}")

@@ -12,8 +12,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from pydantic import BaseModel
 
-from auth_utils import require_admin, require_user
-from db import db
+from auth_utils import require_admin, require_user, require_user_or_query_token
+from db import db, fs_bucket
 from shared_utils import kode_satker_user, log_audit, scope_query_field_satker
 from pejabat_utils import STATUS_KEPEGAWAIAN
 from pegawai_utils import (
@@ -594,3 +594,78 @@ async def hapus_pegawai(pegawai_id: str, user: dict = Depends(require_admin)):
                     username=user.get("username", "system"),
                     detail="Hapus pegawai")
     return {"ok": True, "id": pegawai_id}
+
+
+# ============================================================================
+# FOTO PEGAWAI — persegi hasil krop dari frontend (zoom/geser), GridFS.
+# Otomatis tercakup backup/restore (ekspor GridFS penuh di modul Backup).
+# ============================================================================
+
+_FOTO_MAX = 5 * 1024 * 1024  # 5MB
+
+
+@pegawai_router.post("/pegawai/{pegawai_id}/foto")
+async def upload_foto_pegawai(pegawai_id: str, file: UploadFile = File(...),
+                              admin: dict = Depends(require_admin)):
+    """Unggah foto pegawai (persegi hasil krop di frontend); ganti = hapus lama."""
+    peg = await db.pegawai.find_one({"id": pegawai_id}, {"_id": 0, "id": 1, "foto_file_id": 1, "nama": 1})
+    if not peg:
+        raise HTTPException(status_code=404, detail="Pegawai tidak ditemukan")
+    if (file.content_type or "") not in ("image/jpeg", "image/png", "image/webp"):
+        raise HTTPException(status_code=400, detail="Format harus JPG/PNG/WebP")
+    data = await file.read()
+    if len(data) > _FOTO_MAX:
+        raise HTTPException(status_code=400, detail="Ukuran foto maksimal 5MB")
+    fid = await fs_bucket.upload_from_stream(
+        f"pegawai_{pegawai_id}.jpg", data,
+        metadata={"jenis": "foto_pegawai", "pegawai_id": pegawai_id,
+                  "content_type": file.content_type})
+    lama = peg.get("foto_file_id")
+    if lama:
+        try:
+            from bson import ObjectId
+            await fs_bucket.delete(ObjectId(lama))
+        except Exception:
+            pass
+    now = datetime.now(timezone.utc).isoformat()
+    await db.pegawai.update_one({"id": pegawai_id},
+                                {"$set": {"foto_file_id": str(fid), "updated_at": now}})
+    await log_audit("foto_pegawai", "", username=admin.get("username", "system"),
+                    detail=f"Foto pegawai {peg.get('nama')} diperbarui")
+    return {"ok": True, "foto_file_id": str(fid)}
+
+
+@pegawai_router.get("/pegawai/{pegawai_id}/foto")
+async def get_foto_pegawai(pegawai_id: str,
+                           _user: dict = Depends(require_user_or_query_token)):
+    """Stream foto pegawai (dipakai avatar row + form; cache per file_id)."""
+    peg = await db.pegawai.find_one({"id": pegawai_id}, {"_id": 0, "foto_file_id": 1})
+    if not peg or not peg.get("foto_file_id"):
+        raise HTTPException(status_code=404, detail="Foto tidak ada")
+    from bson import ObjectId
+    try:
+        stream = await fs_bucket.open_download_stream(ObjectId(peg["foto_file_id"]))
+        data = await stream.read()
+    except Exception:
+        raise HTTPException(status_code=404, detail="Foto tidak ditemukan di penyimpanan")
+    ct = (stream.metadata or {}).get("content_type") or "image/jpeg"
+    return Response(content=data, media_type=ct,
+                    headers={"Cache-Control": "private, max-age=86400"})
+
+
+@pegawai_router.delete("/pegawai/{pegawai_id}/foto")
+async def hapus_foto_pegawai(pegawai_id: str, admin: dict = Depends(require_admin)):
+    """Hapus foto pegawai (GridFS + referensi)."""
+    peg = await db.pegawai.find_one({"id": pegawai_id}, {"_id": 0, "foto_file_id": 1})
+    if not peg or not peg.get("foto_file_id"):
+        raise HTTPException(status_code=404, detail="Foto tidak ada")
+    try:
+        from bson import ObjectId
+        await fs_bucket.delete(ObjectId(peg["foto_file_id"]))
+    except Exception:
+        pass
+    now = datetime.now(timezone.utc).isoformat()
+    await db.pegawai.update_one({"id": pegawai_id},
+                                {"$unset": {"foto_file_id": ""},
+                                 "$set": {"updated_at": now}})
+    return {"ok": True}
