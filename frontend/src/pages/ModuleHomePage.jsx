@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import axios from "axios";
 import {
   Package, Moon, Sun, LogOut, ChevronRight, Lock, Sparkles,
   ClipboardList, ShoppingCart, UserCheck, Handshake, ShieldCheck, Scale,
@@ -14,6 +15,8 @@ import {
   SIKLUS_MODULES, PENATAUSAHAAN_SUBMODULES, FASE_ROADMAP, STATUS_LABELS,
   ASAS_PENGELOLAAN, DASAR_HUKUM_UMUM, PENATAUSAHAAN_DASAR_HUKUM,
 } from "@/lib/bmnModules";
+
+const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 // Ikon per modul — dipetakan di sini supaya registry (lib) bebas dependensi UI.
 const MODULE_ICONS = {
@@ -35,6 +38,40 @@ const MODULE_ICONS = {
   "pelaporan": FileText,
 };
 
+// Aksen warna ikon per modul — identitas visual tiap tahap (light+dark aman).
+const MODULE_TILE = {
+  "perencanaan": "from-sky-500 to-blue-600",
+  "penganggaran": "from-amber-500 to-orange-600",
+  "pengadaan": "from-cyan-500 to-teal-600",
+  "penggunaan": "from-emerald-500 to-green-600",
+  "pemanfaatan": "from-teal-500 to-emerald-600",
+  "penilaian": "from-violet-500 to-purple-600",
+  "pengamanan": "from-blue-500 to-indigo-600",
+  "pemeliharaan": "from-orange-500 to-amber-600",
+  "pemindahtanganan": "from-rose-500 to-pink-600",
+  "pemusnahan": "from-red-500 to-rose-600",
+  "penghapusan": "from-slate-500 to-slate-600",
+  "wasdal": "from-indigo-500 to-violet-600",
+  "pembukuan": "from-blue-600 to-indigo-600",
+  "inventarisasi-aset": "from-emerald-600 to-teal-600",
+  "inventarisasi-persediaan": "from-teal-600 to-cyan-600",
+  "pelaporan": "from-indigo-600 to-blue-600",
+};
+
+// Tiga fase alur siklus (urutan modul mengikuti registry) — Wasdal terpisah
+// sebagai pita pengawasan yang MELINGKUPI seluruh siklus.
+const FASE_ALUR = [
+  { id: "perolehan", judul: "Perolehan", sub: "dari rencana menjadi barang",
+    aksen: "text-sky-600 dark:text-sky-400", garis: "border-sky-500/40",
+    ids: ["perencanaan", "penganggaran", "pengadaan"] },
+  { id: "pengelolaan", judul: "Penggunaan & Pengelolaan", sub: "barang bekerja & terjaga",
+    aksen: "text-emerald-600 dark:text-emerald-400", garis: "border-emerald-500/40",
+    ids: ["penggunaan", "pemanfaatan", "penilaian", "pengamanan", "pemeliharaan"] },
+  { id: "pengakhiran", judul: "Pengakhiran", sub: "keluar daftar secara sah",
+    aksen: "text-rose-600 dark:text-rose-400", garis: "border-rose-500/40",
+    ids: ["pemindahtanganan", "pemusnahan", "penghapusan"] },
+];
+
 const STATUS_BADGE_CLS = {
   aktif: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
   segera: "bg-slate-500/10 text-muted-foreground border-border",
@@ -49,22 +86,46 @@ function StatusBadge({ status }) {
   );
 }
 
+function fmtRpSingkat(v) {
+  const n = Number(v || 0);
+  if (n >= 1e12) return `Rp${(n / 1e12).toFixed(1)} T`;
+  if (n >= 1e9) return `Rp${(n / 1e9).toFixed(1)} M`;
+  if (n >= 1e6) return `Rp${(n / 1e6).toFixed(1)} jt`;
+  try { return `Rp${Math.round(n).toLocaleString("id-ID")}`; } catch { return `Rp${n}`; }
+}
+
 /**
- * Beranda Modul — "rumah" Siklus Pengelolaan BMN (PP 27/2014).
+ * Beranda Modul — "Peta Perjalanan Siklus BMN" (PP 27/2014 jo. PP 28/2020).
  *
- * Penatausahaan › Inventarisasi Aset adalah modul AKTIF (aplikasi saat ini);
- * tahap siklus lain sudah punya kamarnya masing-masing dengan status Segera
- * Hadir — klik kartunya menampilkan konsep, rencana fitur, dan fase roadmap.
+ * Desain: hero ber-gradien + statistik hidup dari master, tiga FASE alur
+ * ber-timeline bernomor (Perolehan → Penggunaan & Pengelolaan → Pengakhiran),
+ * pita Wasdal yang melingkupi siklus, dan POROS Penatausahaan di tengah.
+ * Seluruh warna memakai token tema + varian dark: (aman light/dark mode).
  */
 export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onShowInfo, onEnterInventarisasi, onOpenKodefikasi, onOpenPejabat, onOpenRuangan, onOpenReferensiAkun, onOpenPegawai, onOpenPersuratan, onOpenPersediaan, onOpenPelaporan, onOpenPenggunaan, onOpenPengamanan, onOpenPemeliharaan, onOpenPerencanaan, onOpenPenilaian, onOpenPenghapusan, onOpenPemanfaatan, onOpenPemusnahan, onOpenPemindahtanganan, onOpenWasdal, onOpenPenganggaran, onOpenPengadaan, onOpenTtd, onOpenSatker, onOpenPengaturan, onOpenPembukuan }) {
   const [detail, setDetail] = useState(null); // modul yang dibuka konsepnya
+  const [stat, setStat] = useState(null);     // statistik hidup dari master
   const activateInfo = useTripleClick(onShowInfo);
   const DetailIcon = detail ? (MODULE_ICONS[detail.id] || Package) : null;
 
-  const siklusSorted = useMemo(
-    () => [...SIKLUS_MODULES].sort((a, b) => a.urutan - b.urutan),
-    [],
-  );
+  // Statistik hidup: total aset & nilai per satker dari referensi akun BAS
+  // (endpoint ringan yang sudah menautkan master) — gagal senyap, hero tetap
+  // tampil tanpa angka.
+  useEffect(() => {
+    axios.get(`${API}/akun-bas`).then((r) => {
+      const items = r.data?.items || [];
+      setStat({
+        aset: r.data?.total_aset || 0,
+        nilai: items.reduce((a, i) => a + (Number(i.nilai_aset) || 0), 0),
+      });
+    }).catch(() => {});
+  }, []);
+
+  const petaModul = useMemo(() => {
+    const m = {};
+    for (const mod of SIKLUS_MODULES) m[mod.id] = mod;
+    return m;
+  }, []);
 
   const openModule = (mod) => {
     if (mod.id === "inventarisasi-aset") onEnterInventarisasi();
@@ -86,13 +147,59 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
     else setDetail(mod);
   };
 
+  // Baris modul di timeline fase — ringkas, informatif, satu klik langsung.
+  const BarisModul = ({ mod }) => {
+    const Icon = MODULE_ICONS[mod.id] || Package;
+    return (
+      <button
+        type="button"
+        onClick={() => openModule(mod)}
+        data-testid={`module-card-${mod.id}`}
+        className="relative w-full text-left pl-9 pr-2 py-2 rounded-xl hover:bg-muted/70 transition-colors group min-w-0 min-h-0"
+      >
+        {/* Nomor tahap di atas garis timeline */}
+        <span className="absolute left-0 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-card border-2 border-border text-[10px] font-bold text-foreground/70 flex items-center justify-center group-hover:border-blue-500/60 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+          {mod.urutan}
+        </span>
+        <span className="flex items-center gap-2.5 min-w-0">
+          <span className={`w-9 h-9 rounded-xl bg-gradient-to-br ${MODULE_TILE[mod.id] || "from-slate-500 to-slate-600"} flex items-center justify-center flex-shrink-0 shadow-sm group-hover:scale-105 transition-transform`}>
+            <Icon className="w-4 h-4 text-white" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-semibold text-foreground text-[13px] leading-tight truncate">{mod.nama}</span>
+            <span className="block text-[10px] text-muted-foreground leading-snug line-clamp-1">{mod.ringkas}</span>
+          </span>
+          <ChevronRight className="w-4 h-4 text-muted-foreground/50 group-hover:text-blue-500 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
+        </span>
+      </button>
+    );
+  };
+
+  // Pintasan referensi/alat — satu komponen agar seragam & ringkas.
+  const Pintasan = ({ onClick, testid, icon: Icon, warna, label }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full inline-flex items-center gap-1.5 px-3 h-8 rounded-full border border-border bg-muted/40 text-foreground text-[11px] font-semibold hover:bg-muted hover:border-blue-500/40 transition-colors min-w-0 min-h-0"
+      data-testid={testid}
+    >
+      <span className="flex items-center gap-1.5 min-w-0 flex-1">
+        <Icon className={`w-3.5 h-3.5 ${warna} flex-shrink-0`} />
+        <span className="truncate">{label}</span>
+      </span>
+      <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+    </button>
+  );
+
+  const wasdal = petaModul["wasdal"];
+
   return (
     <div className="min-h-screen bg-background" data-testid="module-home">
       {/* ── Header ── */}
       <header className="bg-card/95 backdrop-blur-sm border-b border-border px-3 sm:px-6 py-2.5 sticky top-0 z-40">
         <div className="max-w-6xl mx-auto flex flex-wrap items-center gap-2 sm:gap-3 gap-y-2">
           <div
-            className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-blue-500 flex items-center justify-center shadow-sm cursor-pointer flex-shrink-0"
+            className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-sm cursor-pointer flex-shrink-0"
             {...(onShowInfo ? { onClick: activateInfo, title: "" } : {})}
           >
             <Package className="w-5 h-5 text-white" />
@@ -126,295 +233,158 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-3 sm:px-6 py-5 sm:py-8 space-y-6">
-        {/* ── Sambutan + posisi ── */}
-        <div className="text-center space-y-2">
-          <h2 className="text-xl sm:text-2xl font-bold text-foreground">Siklus Pengelolaan BMN</h2>
-          <p className="text-xs sm:text-sm text-muted-foreground max-w-2xl mx-auto">
-            Satu rumah untuk 12 tahap pengelolaan Barang Milik Negara sesuai siklus resmi
-            Kemenkeu ({DASAR_HUKUM_UMUM.join(" · ")}). Modul dibangun bertahap — mulai dari
-            poros penatausahaan.
-          </p>
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-600/10 border border-blue-500/30 text-blue-600 dark:text-blue-400 text-[11px] font-semibold">
-            Posisi Anda: Penatausahaan › Inventarisasi Aset
-          </span>
-          {/* Asas pengelolaan — legenda diagram resmi */}
-          <div className="flex items-center justify-center gap-1.5 flex-wrap pt-1">
-            {ASAS_PENGELOLAAN.map((asas) => (
-              <span key={asas} className="px-2 py-0.5 rounded-full bg-muted/70 border border-border text-[10px] text-muted-foreground">
-                {asas}
+      <main className="max-w-6xl mx-auto px-3 sm:px-6 py-5 sm:py-7 space-y-5">
+        {/* ── HERO: identitas siklus + statistik hidup ── */}
+        <section className="relative overflow-hidden rounded-3xl border border-blue-500/25 bg-gradient-to-br from-blue-600/10 via-indigo-500/5 to-transparent dark:from-blue-500/15 dark:via-indigo-500/10 p-4 sm:p-6">
+          {/* Ornamen lingkar siklus (dekoratif, aman dua mode) */}
+          <div aria-hidden className="absolute -right-14 -top-14 w-56 h-56 rounded-full border-[10px] border-blue-500/10 dark:border-blue-400/10" />
+          <div aria-hidden className="absolute -right-4 -top-4 w-28 h-28 rounded-full border-[6px] border-indigo-500/10 dark:border-indigo-400/10" />
+          <div className="relative">
+            <h2 className="text-lg sm:text-2xl font-extrabold text-foreground tracking-tight">
+              Peta Perjalanan Siklus BMN
+            </h2>
+            <p className="text-[11px] sm:text-sm text-muted-foreground max-w-2xl mt-1">
+              12 tahap pengelolaan Barang Milik Negara dalam satu rumah — {DASAR_HUKUM_UMUM.join(" · ")}.
+              Ikuti alurnya dari perolehan sampai pengakhiran; semua tercatat di poros Penatausahaan.
+            </p>
+            <div className="flex items-center gap-2 flex-wrap mt-3">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-600 text-white text-[11px] font-bold shadow-sm">
+                <CheckCircle2 className="w-3.5 h-3.5" />16 modul aktif penuh
               </span>
-            ))}
-          </div>
-        </div>
-
-        {/* ── Penatausahaan — poros (posisi kita) ── */}
-        <section className="bg-card rounded-2xl border-2 border-blue-500/40 shadow-sm p-3 sm:p-5" data-testid="module-penatausahaan">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
-              <BookOpen className="w-4 h-4 text-white" />
-            </span>
-            <div>
-              <h3 className="font-bold text-foreground text-sm sm:text-base leading-tight">Penatausahaan</h3>
-              <p className="text-[11px] sm:text-xs text-muted-foreground">
-                Pembukuan · Inventarisasi · Pelaporan — poros pencatatan seluruh siklus
-                <span className="hidden sm:inline"> · {PENATAUSAHAAN_DASAR_HUKUM.split(" — ")[0]}</span>
-              </p>
+              {stat && stat.aset > 0 && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-card border border-border text-[11px] font-semibold text-foreground" data-testid="hero-stat-aset">
+                  <Package className="w-3.5 h-3.5 text-blue-500" />{stat.aset.toLocaleString("id-ID")} aset · {fmtRpSingkat(stat.nilai)}
+                </span>
+              )}
+              <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-card border border-border text-[11px] text-muted-foreground">
+                {ASAS_PENGELOLAAN.join(" · ")}
+              </span>
             </div>
-          </div>
-          {/* Grup pintasan (audit G6 #5): grid bertajuk, bukan pil mengambang.
-              Gaya pil seragam — aksen warna hanya di ikon supaya mudah dipindai;
-              dipecah dua tajuk: data referensi vs alat administrasi. */}
-          <p className="mt-3 mb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Referensi & Master Data</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
-          {onOpenKodefikasi && (
-            <button
-              type="button"
-              onClick={onOpenKodefikasi}
-              className="w-full inline-flex items-center gap-1.5 px-3 h-8 rounded-full border border-border bg-muted/40 text-foreground text-[11px] font-semibold hover:bg-muted transition-colors min-w-0 min-h-0"
-              data-testid="module-open-kodefikasi"
-            >
-              <span className="flex items-center gap-1.5 min-w-0 flex-1">
-                <ListTree className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
-                <span className="truncate">Referensi Kodefikasi Barang</span>
-              </span>
-              <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-            </button>
-          )}
-          {onOpenPejabat && (
-            <button
-              type="button"
-              onClick={onOpenPejabat}
-              className="w-full inline-flex items-center gap-1.5 px-3 h-8 rounded-full border border-border bg-muted/40 text-foreground text-[11px] font-semibold hover:bg-muted transition-colors min-w-0 min-h-0"
-              data-testid="module-open-pejabat"
-            >
-              <span className="flex items-center gap-1.5 min-w-0 flex-1">
-                <Users className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0" />
-                <span className="truncate">Referensi Pejabat</span>
-              </span>
-              <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-            </button>
-          )}
-          {onOpenRuangan && (
-            <button
-              type="button"
-              onClick={onOpenRuangan}
-              className="w-full inline-flex items-center gap-1.5 px-3 h-8 rounded-full border border-border bg-muted/40 text-foreground text-[11px] font-semibold hover:bg-muted transition-colors min-w-0 min-h-0"
-              data-testid="module-open-ruangan"
-            >
-              <span className="flex items-center gap-1.5 min-w-0 flex-1">
-                <DoorOpen className="w-3.5 h-3.5 text-teal-500 flex-shrink-0" />
-                <span className="truncate">Referensi Ruangan</span>
-              </span>
-              <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-            </button>
-          )}
-          {onOpenReferensiAkun && (
-            <button
-              type="button"
-              onClick={onOpenReferensiAkun}
-              className="w-full inline-flex items-center gap-1.5 px-3 h-8 rounded-full border border-border bg-muted/40 text-foreground text-[11px] font-semibold hover:bg-muted transition-colors min-w-0 min-h-0"
-              data-testid="module-open-referensi-akun"
-            >
-              <span className="flex items-center gap-1.5 min-w-0 flex-1">
-                <Landmark className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
-                <span className="truncate">Referensi Akun BAS</span>
-              </span>
-              <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-            </button>
-          )}
-          {onOpenPegawai && (
-            <button
-              type="button"
-              onClick={onOpenPegawai}
-              className="w-full inline-flex items-center gap-1.5 px-3 h-8 rounded-full border border-border bg-muted/40 text-foreground text-[11px] font-semibold hover:bg-muted transition-colors min-w-0 min-h-0"
-              data-testid="module-open-pegawai"
-            >
-              <span className="flex items-center gap-1.5 min-w-0 flex-1">
-                <IdCard className="w-3.5 h-3.5 text-sky-500 flex-shrink-0" />
-                <span className="truncate">Master Pegawai</span>
-              </span>
-              <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-            </button>
-          )}
-          {onOpenSatker && (
-            <button
-              type="button"
-              onClick={onOpenSatker}
-              className="w-full inline-flex items-center gap-1.5 px-3 h-8 rounded-full border border-border bg-muted/40 text-foreground text-[11px] font-semibold hover:bg-muted transition-colors min-w-0 min-h-0"
-              data-testid="module-open-satker"
-            >
-              <span className="flex items-center gap-1.5 min-w-0 flex-1">
-                <Building2 className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
-                <span className="truncate">Master Satker</span>
-              </span>
-              <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-            </button>
-          )}
-          </div>
-          {(onOpenPersuratan || onOpenTtd || onOpenPengaturan) && (
-            <>
-              <p className="mt-3 mb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Administrasi & Alat</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
-              {onOpenPersuratan && (
-                <button
-                  type="button"
-                  onClick={onOpenPersuratan}
-                  className="w-full inline-flex items-center gap-1.5 px-3 h-8 rounded-full border border-border bg-muted/40 text-foreground text-[11px] font-semibold hover:bg-muted transition-colors min-w-0 min-h-0"
-                  data-testid="module-open-persuratan"
-                >
-                  <span className="flex items-center gap-1.5 min-w-0 flex-1">
-                    <Mail className="w-3.5 h-3.5 text-cyan-500 flex-shrink-0" />
-                    <span className="truncate">Registrasi Persuratan</span>
-                  </span>
-                  <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                </button>
-              )}
-              {onOpenTtd && (
-                <button
-                  type="button"
-                  onClick={onOpenTtd}
-                  className="w-full inline-flex items-center gap-1.5 px-3 h-8 rounded-full border border-border bg-muted/40 text-foreground text-[11px] font-semibold hover:bg-muted transition-colors min-w-0 min-h-0"
-                  data-testid="module-open-ttd"
-                >
-                  <span className="flex items-center gap-1.5 min-w-0 flex-1">
-                    <FileSignature className="w-3.5 h-3.5 text-violet-500 flex-shrink-0" />
-                    <span className="truncate">Tanda Tangan Elektronik</span>
-                  </span>
-                  <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                </button>
-              )}
-              {onOpenPengaturan && (
-                <button
-                  type="button"
-                  onClick={onOpenPengaturan}
-                  className="w-full inline-flex items-center gap-1.5 px-3 h-8 rounded-full border border-border bg-muted/40 text-foreground text-[11px] font-semibold hover:bg-muted transition-colors min-w-0 min-h-0"
-                  data-testid="module-open-pengaturan"
-                >
-                  <span className="flex items-center gap-1.5 min-w-0 flex-1">
-                    <Settings className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
-                    <span className="truncate">Pengaturan</span>
-                  </span>
-                  <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                </button>
-              )}
-              </div>
-            </>
-          )}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 mt-3">
-            {PENATAUSAHAAN_SUBMODULES.map((mod) => {
-              const Icon = MODULE_ICONS[mod.id] || Package;
-              const aktif = mod.id === "inventarisasi-aset";
-              const enterable = aktif
-                || (mod.id === "inventarisasi-persediaan" && !!onOpenPersediaan)
-                || (mod.id === "pelaporan" && !!onOpenPelaporan)
-                || (mod.id === "pembukuan" && !!onOpenPembukuan);
-              return (
-                <button
-                  key={mod.id}
-                  type="button"
-                  onClick={() => openModule(mod)}
-                  data-testid={`module-card-${mod.id}`}
-                  className={`text-left rounded-xl border p-3 transition-all group ${
-                    aktif
-                      ? "border-emerald-500/50 bg-emerald-500/5 hover:bg-emerald-500/10 hover:shadow-md"
-                      : "border-border bg-background hover:bg-muted hover:shadow-sm"
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <span className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${aktif ? "bg-emerald-600" : "bg-muted"}`}>
-                      <Icon className={`w-4 h-4 ${aktif ? "text-white" : "text-muted-foreground"}`} />
-                    </span>
-                    <StatusBadge status={mod.status} />
-                  </div>
-                  <p className="font-semibold text-foreground text-xs sm:text-sm leading-tight">{mod.nama}</p>
-                  <p className="text-[11px] text-muted-foreground mt-1 leading-snug">{mod.ringkas}</p>
-                  {enterable && (
-                    <span className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 group-hover:gap-1.5 transition-all">
-                      Buka Modul <ChevronRight className="w-3.5 h-3.5" />
-                    </span>
-                  )}
-                </button>
-              );
-            })}
           </div>
         </section>
 
-        {/* ── Tahap siklus lainnya ── */}
-        <section>
-          <div className="flex flex-wrap items-center gap-2 gap-y-1 mb-3 px-1">
-            <h3 className="font-bold text-foreground text-sm sm:text-base">Tahap Siklus Lainnya</h3>
-            <span className="text-[11px] text-muted-foreground">— seluruh tahap aktif &amp; dapat dibuka</span>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-            {siklusSorted.map((mod) => {
-              const Icon = MODULE_ICONS[mod.id] || Package;
-              const enterable = (mod.id === "penggunaan" && !!onOpenPenggunaan)
-                || (mod.id === "pengamanan" && !!onOpenPengamanan)
-                || (mod.id === "pemeliharaan" && !!onOpenPemeliharaan)
-                || (mod.id === "perencanaan" && !!onOpenPerencanaan)
-                || (mod.id === "penilaian" && !!onOpenPenilaian)
-                || (mod.id === "penghapusan" && !!onOpenPenghapusan)
-                || (mod.id === "pemanfaatan" && !!onOpenPemanfaatan)
-                || (mod.id === "pemusnahan" && !!onOpenPemusnahan)
-                || (mod.id === "pemindahtanganan" && !!onOpenPemindahtanganan)
-                || (mod.id === "wasdal" && !!onOpenWasdal)
-                || (mod.id === "penganggaran" && !!onOpenPenganggaran)
-                || (mod.id === "pengadaan" && !!onOpenPengadaan);
-              return (
-                <button
-                  key={mod.id}
-                  type="button"
-                  onClick={() => openModule(mod)}
-                  data-testid={`module-card-${mod.id}`}
-                  className={`text-left rounded-xl border p-3 hover:shadow-sm transition-all ${
-                    enterable
-                      ? "border-emerald-500/40 bg-emerald-500/5 hover:bg-emerald-500/10"
-                      : "border-border bg-card hover:bg-muted"
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center flex-shrink-0 relative">
-                      <Icon className="w-4 h-4 text-muted-foreground" />
-                      <span className="absolute -top-1.5 -left-1.5 w-4 h-4 rounded-full bg-blue-600 text-white text-[9px] font-bold flex items-center justify-center">
-                        {mod.urutan}
+        {/* ── PETA ALUR: tiga fase ber-timeline (kolom di layar lebar) ── */}
+        <section className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+          {FASE_ALUR.map((fase, fi) => (
+            <div key={fase.id} className="bg-card rounded-2xl border border-border shadow-sm p-3 sm:p-4" data-testid={`fase-${fase.id}`}>
+              <div className="flex items-center gap-2 mb-2">
+                <span className={`text-[22px] font-black leading-none ${fase.aksen} opacity-40`}>{fi + 1}</span>
+                <div className="min-w-0">
+                  <h3 className={`font-bold text-sm leading-tight ${fase.aksen}`}>{fase.judul}</h3>
+                  <p className="text-[10px] text-muted-foreground">{fase.sub}</p>
+                </div>
+              </div>
+              {/* Timeline: garis vertikal + simpul nomor per modul */}
+              <div className={`relative ml-3 border-l-2 border-dashed ${fase.garis} space-y-0.5 py-0.5 -translate-x-[13px] pl-[13px]`}>
+                {fase.ids.map((id) => petaModul[id] && <BarisModul key={id} mod={petaModul[id]} />)}
+              </div>
+            </div>
+          ))}
+        </section>
+
+        {/* ── Pita WASDAL: melingkupi seluruh siklus ── */}
+        {wasdal && (
+          <button
+            type="button"
+            onClick={() => openModule(wasdal)}
+            data-testid="module-card-wasdal"
+            className="w-full text-left rounded-2xl border border-indigo-500/40 bg-gradient-to-r from-indigo-500/10 via-violet-500/5 to-indigo-500/10 hover:from-indigo-500/15 hover:to-indigo-500/15 transition-colors p-3 sm:p-4 flex items-center gap-3 group min-w-0 min-h-0"
+          >
+            <span className={`w-10 h-10 rounded-xl bg-gradient-to-br ${MODULE_TILE.wasdal} flex items-center justify-center flex-shrink-0 shadow-sm`}>
+              <Eye className="w-5 h-5 text-white" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-bold text-foreground text-sm leading-tight">
+                {wasdal.nama} <span className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400">· melingkupi seluruh siklus</span>
+              </span>
+              <span className="block text-[11px] text-muted-foreground leading-snug line-clamp-1">{wasdal.ringkas}</span>
+            </span>
+            <ChevronRight className="w-4 h-4 text-indigo-500 group-hover:translate-x-0.5 transition-transform flex-shrink-0" />
+          </button>
+        )}
+
+        {/* ── POROS PENATAUSAHAAN: pusat pencatatan seluruh siklus ── */}
+        <section className="relative bg-card rounded-3xl border-2 border-blue-500/40 shadow-sm p-3 sm:p-5 overflow-hidden" data-testid="module-penatausahaan">
+          <div aria-hidden className="absolute -left-10 -bottom-10 w-40 h-40 rounded-full border-[8px] border-blue-500/10 dark:border-blue-400/10" />
+          <div className="relative">
+            <div className="flex items-center gap-2.5 mb-1">
+              <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center flex-shrink-0 shadow-sm">
+                <BookOpen className="w-5 h-5 text-white" />
+              </span>
+              <div className="min-w-0">
+                <h3 className="font-extrabold text-foreground text-sm sm:text-base leading-tight">
+                  Penatausahaan <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 align-middle">POROS</span>
+                </h3>
+                <p className="text-[11px] sm:text-xs text-muted-foreground truncate">
+                  Pembukuan · Inventarisasi · Pelaporan — semua tahap bermuara di sini
+                  <span className="hidden sm:inline"> · {PENATAUSAHAAN_DASAR_HUKUM.split(" — ")[0]}</span>
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 mt-3">
+              {PENATAUSAHAAN_SUBMODULES.map((mod) => {
+                const Icon = MODULE_ICONS[mod.id] || Package;
+                return (
+                  <button
+                    key={mod.id}
+                    type="button"
+                    onClick={() => openModule(mod)}
+                    data-testid={`module-card-${mod.id}`}
+                    className="text-left rounded-2xl border border-border bg-background p-3 hover:shadow-md hover:border-blue-500/50 hover:-translate-y-0.5 transition-all group"
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <span className={`w-9 h-9 rounded-xl bg-gradient-to-br ${MODULE_TILE[mod.id] || "from-slate-500 to-slate-600"} flex items-center justify-center flex-shrink-0 shadow-sm group-hover:scale-105 transition-transform`}>
+                        <Icon className="w-4 h-4 text-white" />
                       </span>
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="font-semibold text-foreground text-xs sm:text-sm leading-tight truncate">{mod.nama}</p>
-                        <StatusBadge status={mod.status} />
-                      </div>
-                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug line-clamp-2">{mod.ringkas}</p>
-                      {/* Afordansi: kartu yang benar-benar bisa dibuka diberi CTA
-                          eksplisit (selaras grid Penatausahaan) — tanpa ini,
-                          pengguna tak tahu mana yang navigasi vs dialog konsep. */}
-                      <span className={`inline-flex items-center gap-0.5 text-[10px] font-semibold mt-1 ${
-                        enterable ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground/70"}`}>
-                        {enterable ? "Buka Modul" : "Lihat Konsep"} <ChevronRight className="w-3 h-3" />
-                      </span>
+                      <StatusBadge status={mod.status} />
                     </div>
-                  </div>
-                </button>
-              );
-            })}
+                    <p className="font-semibold text-foreground text-xs sm:text-sm leading-tight">{mod.nama}</p>
+                    <p className="text-[11px] text-muted-foreground mt-1 leading-snug line-clamp-2">{mod.ringkas}</p>
+                    <span className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 dark:text-blue-400 group-hover:gap-1.5 transition-all">
+                      Buka Modul <ChevronRight className="w-3.5 h-3.5" />
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <p className="mt-4 mb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Referensi &amp; Master Data</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
+              {onOpenKodefikasi && <Pintasan onClick={onOpenKodefikasi} testid="module-open-kodefikasi" icon={ListTree} warna="text-blue-500" label="Referensi Kodefikasi Barang" />}
+              {onOpenPejabat && <Pintasan onClick={onOpenPejabat} testid="module-open-pejabat" icon={Users} warna="text-indigo-500" label="Referensi Pejabat" />}
+              {onOpenRuangan && <Pintasan onClick={onOpenRuangan} testid="module-open-ruangan" icon={DoorOpen} warna="text-teal-500" label="Referensi Ruangan" />}
+              {onOpenReferensiAkun && <Pintasan onClick={onOpenReferensiAkun} testid="module-open-referensi-akun" icon={Landmark} warna="text-amber-500" label="Referensi Akun BAS" />}
+              {onOpenPegawai && <Pintasan onClick={onOpenPegawai} testid="module-open-pegawai" icon={IdCard} warna="text-sky-500" label="Master Pegawai" />}
+              {onOpenSatker && <Pintasan onClick={onOpenSatker} testid="module-open-satker" icon={Building2} warna="text-emerald-500" label="Master Satker" />}
+            </div>
+            {(onOpenPersuratan || onOpenTtd || onOpenPengaturan) && (
+              <>
+                <p className="mt-3 mb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Administrasi &amp; Alat</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
+                  {onOpenPersuratan && <Pintasan onClick={onOpenPersuratan} testid="module-open-persuratan" icon={Mail} warna="text-cyan-500" label="Registrasi Persuratan" />}
+                  {onOpenTtd && <Pintasan onClick={onOpenTtd} testid="module-open-ttd" icon={FileSignature} warna="text-violet-500" label="Tanda Tangan Elektronik" />}
+                  {onOpenPengaturan && <Pintasan onClick={onOpenPengaturan} testid="module-open-pengaturan" icon={Settings} warna="text-slate-500" label="Pengaturan" />}
+                </div>
+              </>
+            )}
           </div>
         </section>
 
         <p className="text-center text-[11px] text-muted-foreground pb-4">
-          Klik modul mana pun untuk melihat konsep & rencana fiturnya — info lengkap ada di tombol info di kanan atas.
+          Klik tahap mana pun untuk langsung bekerja — seluruh 16 modul aktif dan saling terhubung.
         </p>
       </main>
 
-      {/* ── Dialog konsep modul (Segera Hadir) ── */}
+      {/* ── Dialog konsep modul ── */}
       <Dialog open={!!detail} onOpenChange={(o) => { if (!o) setDetail(null); }}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
           {detail && (
             <>
               <DialogHeader>
                 <div className="flex items-center gap-2.5">
-                  <span className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center flex-shrink-0">
-                    {DetailIcon && <DetailIcon className="w-5 h-5 text-muted-foreground" />}
+                  <span className={`w-10 h-10 rounded-xl bg-gradient-to-br ${MODULE_TILE[detail.id] || "from-slate-500 to-slate-600"} flex items-center justify-center flex-shrink-0`}>
+                    {DetailIcon && <DetailIcon className="w-5 h-5 text-white" />}
                   </span>
                   <div className="min-w-0 text-left">
                     <DialogTitle className="text-base leading-tight">{detail.nama}</DialogTitle>
