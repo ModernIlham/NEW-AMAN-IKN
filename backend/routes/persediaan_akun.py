@@ -35,22 +35,45 @@ def _validate_sub_kelompok(sub: str):
 
 @persediaan_akun_router.get("/persediaan-akun")
 async def list_persediaan_akun(_user: dict = Depends(require_user)):
-    """Katalog akun 1171xx + daftar override sub-kelompok satker (default 117111)."""
+    """Katalog akun 1171xx + daftar override sub-kelompok satker (default 117111).
+
+    Tiap akun katalog DITAUTKAN ke master persediaan: jumlah jenis barang &
+    total nilai FIFO yang terpetakan ke akun itu (resolusi override →
+    default) — referensi langsung memperlihatkan isi master yang memakainya.
+    """
+    from persediaan_akun_utils import akun_persediaan
+    from persediaan_utils import nilai_persediaan_dari_batches
+
     overrides = []
+    peta_override = {}
     async for m in db.persediaan_akun.find({}, {"_id": 0}):
         overrides.append({
             "sub_kelompok": m.get("sub_kelompok", ""),
             "akun": m.get("akun", ""),
             "uraian": m.get("uraian", "") or AKUN_PERSEDIAAN_DEFAULT.get(m.get("akun", ""), ""),
         })
+        peta_override[m.get("sub_kelompok", "")] = m
     overrides.sort(key=lambda x: x["sub_kelompok"])
-    katalog = [{"akun": k, "uraian": v} for k, v in AKUN_PERSEDIAAN_DEFAULT.items()]
+    # Rekap master persediaan per akun (resolusi sub-kelompok → akun)
+    rekap = {}
+    async for it in db.persediaan.find(
+            {}, {"_id": 0, "kode_barang": 1, "batches": 1}):
+        akun = akun_persediaan(it.get("kode_barang"), peta_override)["akun"]
+        r = rekap.setdefault(akun, {"jumlah": 0, "nilai": 0.0})
+        r["jumlah"] += 1
+        r["nilai"] += nilai_persediaan_dari_batches(it.get("batches"))
+    katalog = [{"akun": k, "uraian": v,
+                "jumlah_barang": rekap.get(k, {}).get("jumlah", 0),
+                "nilai": round(rekap.get(k, {}).get("nilai", 0.0), 2)}
+               for k, v in AKUN_PERSEDIAAN_DEFAULT.items()]
     return {
         "katalog": katalog,
         "overrides": overrides,
         "default_akun": AKUN_PERSEDIAAN_UTAMA,
         "default_uraian": AKUN_PERSEDIAAN_DEFAULT.get(AKUN_PERSEDIAAN_UTAMA, ""),
         "jumlah_override": len(overrides),
+        "total_barang": sum(r["jumlah"] for r in rekap.values()),
+        "total_nilai": round(sum(r["nilai"] for r in rekap.values()), 2),
     }
 
 

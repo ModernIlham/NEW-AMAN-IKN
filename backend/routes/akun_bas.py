@@ -34,19 +34,45 @@ async def _peta_akun():
 
 @akun_bas_router.get("/akun-bas")
 async def list_akun_bas(_user: dict = Depends(require_user)):
-    """Pemetaan golongan → akun neraca (default riset ditimpa entri satker)."""
+    """Pemetaan golongan → akun neraca (default riset ditimpa entri satker).
+
+    Tiap golongan DITAUTKAN ke master aset: jumlah NUP & total nilai buku
+    (nilai wajar revaluasi bila ada) aset aktif ter-scope satker — sehingga
+    referensi akun langsung memperlihatkan isi master yang memakainya.
+    """
+    from pembukuan_utils import golongan_of, nilai_buku_aset
+    from report_filters import active_asset_filter
+    from shared_utils import scope_query_aset
+
     _, entri = await _peta_akun()
+    # Rekap master aset per golongan (scoped satker, aset aktif saja)
+    rekap = {}
+    async for a in db.assets.find(
+            await scope_query_aset(_user, active_asset_filter()),
+            {"_id": 0, "asset_code": 1, "purchase_price": 1,
+             "nilai_wajar_terakhir": 1}):
+        g = golongan_of(a.get("asset_code")) or "?"
+        r = rekap.setdefault(g, {"jumlah": 0, "nilai": 0.0})
+        r["jumlah"] += 1
+        r["nilai"] += nilai_buku_aset(a)
     items = []
     for g in sorted(AKUN_NERACA_DEFAULT):
         if g in entri:
             m = entri[g]
-            items.append({"golongan": g, "akun": m.get("akun", ""),
-                          "uraian": m.get("uraian", ""), "sumber": "input satker"})
+            row = {"golongan": g, "akun": m.get("akun", ""),
+                   "uraian": m.get("uraian", ""), "sumber": "input satker"}
         else:
             d = AKUN_NERACA_DEFAULT[g]
-            items.append({"golongan": g, "akun": d["akun"], "uraian": d["uraian"],
-                          "sumber": "default riset (verifikasi Lampiran BAS)"})
-    return {"items": items, "jumlah": len(items)}
+            row = {"golongan": g, "akun": d["akun"], "uraian": d["uraian"],
+                   "sumber": "default riset (verifikasi Lampiran BAS)"}
+        r = rekap.get(g, {"jumlah": 0, "nilai": 0.0})
+        row["jumlah_aset"] = r["jumlah"]
+        row["nilai_aset"] = round(r["nilai"], 2)
+        items.append(row)
+    tanpa_gol = {g: r for g, r in rekap.items() if g not in AKUN_NERACA_DEFAULT}
+    return {"items": items, "jumlah": len(items),
+            "total_aset": sum(r["jumlah"] for r in rekap.values()),
+            "aset_tanpa_golongan": sum(r["jumlah"] for r in tanpa_gol.values())}
 
 
 @akun_bas_router.post("/akun-bas")
