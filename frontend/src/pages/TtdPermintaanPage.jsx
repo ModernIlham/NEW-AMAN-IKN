@@ -504,12 +504,14 @@ export default function TtdPermintaanPage({ user, onBack }) {
 
       {/* ── Dialog detail/status ── */}
       <Dialog open={!!detail} onOpenChange={(o) => !o && setDetail(null)}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        {/* overflow-x-hidden + break-words: judul/nama panjang tanpa spasi
+            jangan meluber keluar kotak dialog (umpan balik pengguna). */}
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto overflow-x-hidden">
           {detail && (
             <>
               <DialogHeader>
-                <DialogTitle className="pr-6">{detail.judul}</DialogTitle>
-                <DialogDescription>
+                <DialogTitle className="pr-6 break-words">{detail.judul}</DialogTitle>
+                <DialogDescription className="break-words">
                   {detail.mode === "berurutan" ? "Berurutan" : "Paralel"} · dibuat {fmtWaktu(detail.created_at)} oleh {detail.created_by}
                   {" · "}
                   <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${WARNA_STATUS[detail.status] || ""}`}>{LABEL_STATUS[detail.status] || detail.status}</span>
