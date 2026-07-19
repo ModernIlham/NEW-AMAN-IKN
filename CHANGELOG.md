@@ -48,6 +48,34 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#434] Beranda "Peta Perjalanan Siklus BMN" — rombak total desain, informatif & fungsional, light+dark — 2026-07-19
+
+Halaman awal Siklus Pengelolaan BMN dirombak total menjadi peta perjalanan
+yang unik, padat informasi, dan langsung fungsional:
+
+- **Hero ber-gradien** dengan ornamen lingkar siklus + **statistik hidup
+  dari master** (jumlah aset & total nilai satker, endpoint referensi akun
+  yang sudah tertaut master) + badge "16 modul aktif penuh" + asas
+  pengelolaan.
+- **Tiga FASE alur ber-timeline bernomor**: Perolehan (Perencanaan →
+  Penganggaran → Pengadaan), Penggunaan & Pengelolaan (Penggunaan,
+  Pemanfaatan, Penilaian, Pengamanan, Pemeliharaan), Pengakhiran
+  (Pemindahtanganan, Pemusnahan, Penghapusan) — tiap modul jadi baris
+  timeline ringkas (nomor tahap di garis putus-putus, ikon gradien khas
+  per modul, ringkasan 1 baris, langsung klik untuk masuk).
+- **Pita Wasdal** melintang "melingkupi seluruh siklus" — sesuai perannya.
+- **Poros Penatausahaan** sebagai pusat: 4 sub-modul berkartu gradien +
+  grup pintasan Referensi/Master & Administrasi (komponen pintasan
+  seragam, kode lebih ramping).
+- Identitas visual per modul (16 gradien ikon berbeda), micro-interaction
+  (hover angkat/geser), dan seluruh warna memakai token tema + varian
+  `dark:` — konsisten light mode & dark mode.
+- Akses rahasia Info (3x klik logo), dialog konsep, dan seluruh
+  `data-testid` navigasi dipertahankan.
+- Verifikasi: eslint bersih, `yarn build` sukses.
+
+---
+
 ## [#433] Master Pegawai pintar (2/2): filter & sortir lanjutan, kartu HP muat-layar, kolom durasi — 2026-07-19
 
 Paruh kedua perombakan Master Pegawai:
