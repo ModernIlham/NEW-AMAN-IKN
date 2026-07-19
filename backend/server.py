@@ -220,6 +220,7 @@ from routes.persuratan import persuratan_router
 from routes.referensi_akun import referensi_akun_router
 from routes.bast import bast_router
 from routes.timeline import timeline_router
+from routes.lbp import lbp_router
 
 api_router.include_router(auth_router)
 api_router.include_router(categories_router)
@@ -270,6 +271,7 @@ api_router.include_router(persuratan_router)
 api_router.include_router(referensi_akun_router)
 api_router.include_router(bast_router)
 api_router.include_router(timeline_router)
+api_router.include_router(lbp_router)
 
 
 # ============================================================================

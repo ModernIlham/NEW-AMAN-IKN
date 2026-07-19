@@ -48,6 +48,39 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#443] Generator Laporan Barang Pengguna (LBP) .docx per satker — 2026-07-19
+
+Fitur besar: aplikasi kini dapat MENYUSUN sendiri dokumen LBP lengkap per
+satker — format dipelajari mendalam dari dokumen resmi "LBP Otorita Ibu
+Kota Nusantara Tahun 2025 Audited" (1.032 paragraf + 61 tabel dianalisis
+struktur per strukturnya):
+
+- **Endpoint `GET /pelaporan/lbp-docx?tahun=&semester=`** merakit .docx:
+  sampul (instansi/satker/kode/posisi), **Kata Pengantar** ber-ttd KPB,
+  daftar isi, **Bab I Overview** (gambaran umum + nilai netto terbilang,
+  12 dasar hukum baku, ruang lingkup, kebijakan umum, kebijakan akuntansi
+  signifikan — FIFO, garis lurus semesteran, ambang kapitalisasi dari
+  setelan — dan tabel nilai BMN), **Bab II Laporan** (posisi per golongan
+  intra/ekstra/total, persediaan per akun 117xxx, laporan Intrakomptabel/
+  Ekstrakomptabel/Gabungan saldo awal+tambah−kurang=akhir, KDP, ATB,
+  penyusutan per golongan), **Bab III CaLBMN** (ringkasan mutasi per
+  golongan dipecah Gabungan/Intra/Ekstra seperti format resmi, BMN per
+  akun neraca + akumulasi penyusutan per akun 137xxx/169xxx, tabel
+  **Perbandingan Laporan Barang vs Laporan Keuangan**, informasi BMN
+  lainnya dari register nyata: PSP/idle/sengketa/penertiban), penutup
+  ber-ttd. Semua angka dari mesin laporan teruji (build_dbkp_rows,
+  build_lbkp_rows, rekap_penyusutan, FIFO persediaan) — lingkup per
+  satker (M-SCOPE), kop & penandatangan dari resolusi satker.
+- **Helper murni `lbp_utils.py`** (+6 unit test): posisi per akun neraca,
+  akumulasi per akun, perbandingan LB-LK, blok mutasi per golongan,
+  terbilang rupiah, struktur daftar isi.
+- **.docx sengaja dipilih** agar satker mudah menyunting narasi lokal
+  (tindak lanjut BPK, permasalahan, dokumen sumber tanah) sebelum tanda
+  tangan — meniru alur penyusunan LBP sungguhan.
+- **UI**: dropdown "LBP" baru di hub Pelaporan (Semester I/II/Tahunan +
+  tahun lalu, ikut penanda FINAL periode terkunci).
+
+
 ## [#442] Tombol kotak seragam: tanggalan bersama (Perencanaan + Penilaian), Unduh persegi, Catat ikon — 2026-07-19
 
 Tindak lanjut screenshot pengguna — semua kontrol header memakai kotak

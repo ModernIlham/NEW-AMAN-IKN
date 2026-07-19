@@ -336,6 +336,35 @@ export default function PelaporanPage({ user, onBack }) {
                 })()}
               </DropdownMenuContent>
             </DropdownMenu>
+            {/* LBP lengkap (.docx) — dokumen resmi tahunan/semesteran satker,
+                format mengikuti LBP resmi (dapat disunting sebelum ttd) */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1 px-1.5 sm:px-3 justify-center min-w-0" data-testid="pelaporan-lbp"
+                  title="LBP — Laporan Barang Pengguna lengkap (.docx, siap disunting)">
+                  <FileDown className="w-3.5 h-3.5 hidden sm:inline flex-shrink-0" /><span className="truncate">LBP</span><ChevronDown className="w-3 h-3 flex-shrink-0" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-72">
+                {(() => {
+                  const th = new Date().getFullYear();
+                  return [
+                    { label: `Semester I ${th}${sufiksPeriode(th, 1)}`, q: `tahun=${th}&semester=1`, f: `LBP_${th}_S1.docx` },
+                    { label: `Semester II ${th}${sufiksPeriode(th, 2)}`, q: `tahun=${th}&semester=2`, f: `LBP_${th}_S2.docx` },
+                    { label: `Tahunan ${th}${sufiksPeriode(th, null)}`, q: `tahun=${th}`, f: `LBP_${th}.docx` },
+                    { label: `Tahunan ${th - 1}${sufiksPeriode(th - 1, null)}`, q: `tahun=${th - 1}`, f: `LBP_${th - 1}.docx` },
+                  ].map((o) => (
+                    <DropdownMenuItem key={o.label} className="min-h-[42px]"
+                      onClick={() => downloadFileWithProgress(`${API}/pelaporan/lbp-docx?${o.q}`, o.f, { label: `LBP ${o.label} (.docx)` }).catch(() => {})}>
+                      <div>
+                        <p className="text-xs font-semibold">LBP {o.label}</p>
+                        <p className="text-[10px] text-muted-foreground">Dokumen Word lengkap — sampul s.d. CaLBMN, siap disunting</p>
+                      </div>
+                    </DropdownMenuItem>
+                  ));
+                })()}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
