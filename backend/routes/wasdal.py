@@ -102,12 +102,17 @@ async def _data_pemantauan(ambang_hari: int, user=None):
     aset_ber_sk = {u["asset_id"] async for u in db.usulan_penghapusan.find(
         _sq({"status": "sk_terbit"}), {"_id": 0, "asset_id": 1})
         if u.get("asset_id")}
+    # Integrasi Pengadaan → Wasdal: perolehan berdokumen sumber kurang
+    # (BAST/kontrak/SP2D tercecer) = temuan objek penatausahaan.
+    pengadaan = [p async for p in db.pengadaan.find(
+        _sq({}), {"_id": 0, "id": 1, "jenis": 1, "nomor_bast": 1,
+                  "tanggal_bast": 1, "pihak": 1, "dokumen": 1})]
 
     per_objek = susun_temuan(assets, pemanfaatan, usulan_hapus, usulan_pt,
                              pemeliharaan, today_iso, ambang_hari, polis=polis,
                              pegawai=pegawai, jumlah_aset_per_nip=peta_aset_nip,
                              dokumen=dokumen, pemusnahan=pemusnahan,
-                             aset_ber_sk=aset_ber_sk)
+                             aset_ber_sk=aset_ber_sk, pengadaan=pengadaan)
     return periode, per_objek, rekap_wasdal(per_objek), len(assets)
 
 

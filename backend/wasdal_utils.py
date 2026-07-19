@@ -16,6 +16,7 @@ from pemanfaatan_utils import (
     BENTUK_PEMANFAATAN, LABEL_STATUS_PERJANJIAN, dokumen_kurang,
     status_perjanjian, tahun_tertunggak,
 )
+from pengadaan_utils import dokumen_kurang_perolehan
 from pengamanan_utils import JENIS_DOKUMEN
 from penghapusan_utils import JALUR_KANDIDAT, jalur_kandidat
 from pemindahtanganan_utils import peringatan_pt
@@ -49,6 +50,7 @@ JENIS_TEMUAN = {
     "perjanjian_jatuh_tempo": "Perjanjian pemanfaatan jatuh tempo ≤60 hari",
     "dokumen_kepemilikan_kedaluwarsa": "Dokumen kepemilikan BMN kedaluwarsa",
     "dimusnahkan_belum_dihapus": "Sudah dimusnahkan fisik namun belum ada SK penghapusan",
+    "dokumen_perolehan_kurang": "Dokumen sumber perolehan belum lengkap",
 }
 
 # Objek pemantauan tiap jenis temuan (setiap jenis tepat satu objek)
@@ -71,6 +73,7 @@ OBJEK_PER_JENIS = {
     "perjanjian_jatuh_tempo": "pemanfaatan",
     "dokumen_kepemilikan_kedaluwarsa": "pengamanan_pemeliharaan",
     "dimusnahkan_belum_dihapus": "pemindahtanganan",
+    "dokumen_perolehan_kurang": "penatausahaan",
 }
 
 # Usulan penghapusan yang belum berujung SK melewati ambang ini = berlarut
@@ -222,6 +225,27 @@ def temuan_dokumen_kepemilikan(dokumen, today_iso: str):
     return out
 
 
+def temuan_dokumen_perolehan(pengadaan):
+    """Objek PENATAUSAHAAN: perolehan (register Pengadaan) yang dokumen
+    sumber wajibnya belum lengkap — temuan klasik BPK "BAST/kontrak/SP2D
+    tercecer" (integrasi register Pengadaan → temuan Wasdal)."""
+    out = []
+    for p in pengadaan or []:
+        kurang = dokumen_kurang_perolehan(p)
+        if not kurang:
+            continue
+        out.append({
+            "jenis": "dokumen_perolehan_kurang",
+            "perolehan_id": p.get("id"),
+            "jenis_perolehan": p.get("jenis"),
+            "asset_name": (p.get("pihak") or p.get("nomor_bast")
+                           or "Perolehan tanpa identitas"),
+            "detail": (f"BAST {p.get('nomor_bast') or '-'} "
+                       f"({p.get('tanggal_bast') or '-'}) — kurang: "
+                       + "; ".join(kurang))})
+    return out
+
+
 def temuan_pemusnahan(pemusnahan, aset_ber_sk, today_iso: str):
     """Objek PEMINDAHTANGANAN & PENGHAPUSAN: aset yang fisiknya SUDAH
     dimusnahkan (tercantum di BA Pemusnahan) tetapi BELUM ada SK penghapusan
@@ -334,7 +358,8 @@ def susun_temuan(assets, pemanfaatan, usulan_hapus, usulan_pt,
                  pemeliharaan, today_iso: str,
                  ambang_hari: int = AMBANG_BERLARUT_HARI, polis=None,
                  pegawai=None, jumlah_aset_per_nip=None,
-                 dokumen=None, pemusnahan=None, aset_ber_sk=None) -> dict:
+                 dokumen=None, pemusnahan=None, aset_ber_sk=None,
+                 pengadaan=None) -> dict:
     """Seluruh temuan terkelompok per objek → {objek: [temuan...]}."""
     tahun = periode_wasdal(today_iso)["tahun"]
     semua = (temuan_penggunaan(assets)
@@ -347,7 +372,8 @@ def susun_temuan(assets, pemanfaatan, usulan_hapus, usulan_pt,
              + temuan_pemegang_berisiko(pegawai, jumlah_aset_per_nip,
                                         today_iso)
              + temuan_dokumen_kepemilikan(dokumen, today_iso)
-             + temuan_pemusnahan(pemusnahan, aset_ber_sk, today_iso))
+             + temuan_pemusnahan(pemusnahan, aset_ber_sk, today_iso)
+             + temuan_dokumen_perolehan(pengadaan))
     per_objek = {k: [] for k in OBJEK_WASDAL}
     for t in semua:
         t["label"] = JENIS_TEMUAN[t["jenis"]]

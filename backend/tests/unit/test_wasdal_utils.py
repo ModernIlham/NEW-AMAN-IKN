@@ -4,9 +4,10 @@ from wasdal_utils import (
     SUMBER_PENERTIBAN, info_tenggat_insidentil, periode_wasdal,
     rekap_insidentil, rekap_penertiban, rekap_wasdal, sisa_hari_kerja,
     status_tenggat_penertiban, susun_temuan, tambah_hari_kerja,
-    temuan_dokumen_kepemilikan, temuan_pemanfaatan, temuan_pemegang_berisiko,
-    temuan_pemindahtanganan, temuan_pemusnahan, temuan_penatausahaan,
-    temuan_pengamanan_pemeliharaan, temuan_penggunaan, temuan_polis_asuransi,
+    temuan_dokumen_kepemilikan, temuan_dokumen_perolehan, temuan_pemanfaatan,
+    temuan_pemegang_berisiko, temuan_pemindahtanganan, temuan_pemusnahan,
+    temuan_penatausahaan, temuan_pengamanan_pemeliharaan, temuan_penggunaan,
+    temuan_polis_asuransi,
     validate_ba_insidentil, validate_insidentil, validate_lapor_insidentil,
     validate_penertiban, validate_selesai_penertiban,
 )
@@ -140,6 +141,26 @@ def test_dokumen_kepemilikan_kedaluwarsa():
     per_objek = susun_temuan([], [], [], [], [], HARI_INI, dokumen=[lewat])
     assert any(t["jenis"] == "dokumen_kepemilikan_kedaluwarsa"
                for t in per_objek["pengamanan_pemeliharaan"])
+
+
+def test_dokumen_perolehan_kurang():
+    """Perolehan berdokumen kurang → temuan objek penatausahaan; yang
+    lengkap tidak ikut."""
+    kurang = {"id": "g1", "jenis": "pembelian", "nomor_bast": "BAST-1",
+              "tanggal_bast": "2026-06-01", "pihak": "PT Maju",
+              "dokumen": {"kontrak": True, "bast": True}}  # baphp/kuitansi/sp2d kosong
+    lengkap = {"id": "g2", "jenis": "transfer_masuk", "nomor_bast": "BAST-2",
+               "tanggal_bast": "2026-06-02", "pihak": "Satker B",
+               "dokumen": {"bast": True}}
+    hasil = temuan_dokumen_perolehan([kurang, lengkap])
+    assert [t["perolehan_id"] for t in hasil] == ["g1"]
+    assert hasil[0]["jenis"] == "dokumen_perolehan_kurang"
+    assert "BAPHP" in hasil[0]["detail"] and "SP2D" in hasil[0]["detail"]
+    assert hasil[0]["asset_name"] == "PT Maju"
+    per_objek = susun_temuan([], [], [], [], [], HARI_INI, pengadaan=[kurang])
+    assert any(t["jenis"] == "dokumen_perolehan_kurang"
+               for t in per_objek["penatausahaan"])
+    assert temuan_dokumen_perolehan(None) == []
 
 
 def test_pemusnahan_belum_dihapus():
