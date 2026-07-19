@@ -426,9 +426,90 @@ async def create_pemeliharaan(payload: PemeliharaanIn, user: dict = Depends(requ
     return record
 
 
+@pemeliharaan_router.post("/pemeliharaan/{catatan_id}/kapitalisasi")
+async def posting_kapitalisasi(catatan_id: str,
+                               admin: dict = Depends(require_admin)):
+    """Posting PENGEMBANGAN NILAI ASET (jurnal 202) dari catatan pemeliharaan
+    ber-indikasi kapitalisasi (PMK 181) — integrasi Pemeliharaan → Pembukuan.
+
+    Keputusan kualitatif (menambah masa manfaat/kapasitas?) ada di admin —
+    endpoint hanya mengeksekusi setelah disetujui: nilai perolehan aset
+    BERTAMBAH sebesar biaya (DBKP/Neraca ikut naik), jurnal 202 tercatat di
+    Buku Barang, dan catatan ditandai agar tidak dobel-posting (CAS idempoten).
+    """
+    from pembukuan_utils import parse_harga
+    from shared_utils import catat_mutasi_bmn, log_audit
+
+    rec = await db.pemeliharaan.find_one({"id": catatan_id}, {"_id": 0})
+    if not rec:
+        raise HTTPException(status_code=404, detail="Catatan tidak ditemukan")
+    if not rec.get("indikasi_kapitalisasi"):
+        raise HTTPException(
+            status_code=400,
+            detail="Catatan ini tidak berindikasi kapitalisasi (biaya di bawah ambang PMK 181)")
+    aset = await db.assets.find_one(
+        {"id": rec.get("asset_id"), "dihapus": {"$ne": True}},
+        {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1})
+    if not aset:
+        raise HTTPException(status_code=404,
+                            detail="Aset tidak ditemukan / sudah dihapus")
+    biaya = parse_harga(rec.get("biaya"))
+    if biaya <= 0:
+        raise HTTPException(status_code=400, detail="Biaya tidak valid")
+    now = datetime.now(timezone.utc).isoformat()
+    # CAS idempoten: hanya SATU request yang lolos menandai — cegah dobel
+    # penambahan nilai bila tombol diklik dua kali / dua tab.
+    res = await db.pemeliharaan.update_one(
+        {"id": catatan_id, "kapitalisasi_diposting": {"$ne": True}},
+        {"$set": {"kapitalisasi_diposting": True,
+                  "kapitalisasi_oleh": admin.get("username"),
+                  "kapitalisasi_pada": now, "updated_at": now}})
+    if res.modified_count == 0:
+        raise HTTPException(status_code=409,
+                            detail="Sudah pernah diposting sebagai pengembangan nilai")
+    # Nilai perolehan BERTAMBAH — pengembangan nilai menambah nilai yang
+    # dibukukan (DBKP/posisi neraca membaca purchase_price); version naik
+    # untuk bust cache/OCC form.
+    await db.assets.update_one(
+        {"id": aset["id"]},
+        {"$inc": {"purchase_price": biaya, "version": 1},
+         "$set": {"updated_at": now}})
+    await catat_mutasi_bmn({
+        "asset_id": aset["id"], "kode_transaksi": "202",
+        "kode_barang": str(aset.get("asset_code") or ""),
+        "nup": str(aset.get("NUP") or ""),
+        "tanggal_buku": str(rec.get("tanggal") or now)[:10], "jumlah": 1,
+        "nilai": biaya, "sumber_modul": "pemeliharaan", "ref_id": catatan_id,
+        "keterangan": ("Pengembangan nilai dari pemeliharaan: "
+                       + str(rec.get("uraian") or ""))[:200],
+        "oleh": admin.get("username", "system")})
+    await log_audit("kapitalisasi_pemeliharaan", "", asset_id=aset["id"],
+                    asset_code=str(aset.get("asset_code") or ""),
+                    asset_name=str(aset.get("asset_name") or ""),
+                    username=admin.get("username", "system"),
+                    detail=f"Jurnal 202 Rp{int(biaya):,} dari catatan {catatan_id}")
+    return {"ok": True, "nilai_ditambahkan": biaya, "asset_id": aset["id"],
+            "kode_transaksi": "202"}
+
+
 @pemeliharaan_router.delete("/pemeliharaan/{catatan_id}")
 async def delete_pemeliharaan(catatan_id: str, _admin: dict = Depends(require_admin)):
-    """Hapus catatan pemeliharaan (khusus admin, mis. salah input)."""
+    """Hapus catatan pemeliharaan (khusus admin, mis. salah input).
+
+    Catatan yang SUDAH diposting sebagai pengembangan nilai (jurnal 202)
+    tidak boleh dihapus — nilai aset sudah bertambah dan jejaknya harus
+    tetap tertelusur (koreksi nilai lewat register Penilaian bila salah).
+    """
+    rec = await db.pemeliharaan.find_one(
+        {"id": catatan_id}, {"_id": 0, "kapitalisasi_diposting": 1})
+    if not rec:
+        raise HTTPException(status_code=404, detail="Catatan tidak ditemukan")
+    if rec.get("kapitalisasi_diposting"):
+        raise HTTPException(
+            status_code=409,
+            detail=("Catatan sudah diposting sebagai pengembangan nilai "
+                    "(jurnal 202) — tidak dapat dihapus; koreksi nilai "
+                    "dilakukan lewat register Penilaian"))
     res = await db.pemeliharaan.delete_one({"id": catatan_id})
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Catatan tidak ditemukan")
