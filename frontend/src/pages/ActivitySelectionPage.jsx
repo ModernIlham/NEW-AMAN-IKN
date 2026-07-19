@@ -213,6 +213,15 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
 
   useEffect(() => { fetchActivities(); fetchSatkerList(); fetchReferensiTim(); }, []);
 
+  // W5: aset yang tercatat di >1 kegiatan — kegiatan = pemutakhir berkala,
+  // bukan induk; sistem mengenali barang yang sama lintas kegiatan.
+  const [lintasKegiatan, setLintasKegiatan] = useState(null);
+  useEffect(() => {
+    axios.get(`${API}/inventarisasi/aset-lintas-kegiatan`)
+      .then((r) => setLintasKegiatan(r.data))
+      .catch(() => {});
+  }, []);
+
   // Auto-fill satker: when kode_satker changes, lookup nama_satker + eselon1
   const handleKodeSatkerChange = useCallback((value) => {
     setForm(p => ({ ...p, kode_satker: value }));
@@ -705,6 +714,48 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                   </div>
                 )}
               </div>
+            )}
+
+            {(lintasKegiatan?.jumlah || 0) > 0 && (
+              <details className="bg-card rounded-xl border border-border overflow-hidden"
+                data-testid="aset-lintas-kegiatan">
+                <summary className="px-4 py-2.5 cursor-pointer select-none">
+                  <span className="text-xs font-semibold text-foreground">
+                    {lintasKegiatan.jumlah} barang dikenali tercatat di lebih dari satu kegiatan
+                  </span>
+                  <span className="block text-[10px] text-muted-foreground">
+                    Wajar — kegiatan inventarisasi adalah pemutakhir berkala; Timeline Aset
+                    menggabungkannya otomatis per identitas (kode barang + NUP)
+                  </span>
+                </summary>
+                <ul className="divide-y divide-border/60 border-t border-border max-h-72 overflow-y-auto">
+                  {(lintasKegiatan.kelompok || []).slice(0, 30).map((k) => (
+                    <li key={`${k.asset_code}-${k.nup}`} className="px-4 py-2">
+                      <p className="text-xs font-medium text-foreground break-words">
+                        {k.asset_name || "(tanpa nama)"}
+                        <span className="text-muted-foreground font-normal"> · {k.asset_code} NUP {k.nup || "-"}</span>
+                      </p>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {(k.kegiatan || []).map((g, i) => (
+                          <span key={`${g.asset_id}-${i}`}
+                            className={`text-[10px] px-1.5 py-0.5 rounded ${i === 0 ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300" : "bg-muted text-muted-foreground"}`}
+                            title={i === 0 ? "Catatan termutakhir" : undefined}>
+                            {[g.ticket_number || g.nama_kegiatan || "kegiatan",
+                              g.inventory_status, g.condition]
+                              .filter(Boolean).join(" · ")}
+                            {g.status_pengesahan === "disahkan" ? " ✓" : ""}
+                          </span>
+                        ))}
+                      </div>
+                    </li>
+                  ))}
+                  {(lintasKegiatan.kelompok || []).length > 30 && (
+                    <li className="px-4 py-2 text-[10px] text-muted-foreground">
+                      +{lintasKegiatan.kelompok.length - 30} barang lain — lihat detail per aset lewat tombol Timeline di form aset.
+                    </li>
+                  )}
+                </ul>
+              </details>
             )}
 
             <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">

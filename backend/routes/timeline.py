@@ -21,7 +21,7 @@ from timeline_utils import (MODUL_LABEL, buat_event, event_dari_riwayat,
                             event_psp_siman, identitas_aset, info_psp_siman,
                             label_transaksi_buku, query_identitas,
                             ringkas_per_modul, ringkas_perubahan_audit,
-                            urut_events)
+                            susun_kelompok_lintas_kegiatan, urut_events)
 
 timeline_router = APIRouter()
 
@@ -346,3 +346,52 @@ async def get_timeline_aset(asset_id: str, user: dict = Depends(require_user)):
         "ringkasan": ringkas_per_modul(events),
         "label_modul": MODUL_LABEL,
     }
+
+
+@timeline_router.get("/inventarisasi/aset-lintas-kegiatan")
+async def aset_lintas_kegiatan(user: dict = Depends(require_user)):
+    """Aset yang tercatat di LEBIH dari satu kegiatan inventarisasi (W5).
+
+    Menegaskan bahwa kegiatan inventarisasi = pemutakhir berkala, bukan
+    induk: barang fisik yang sama (kode barang + NUP) wajar muncul di
+    beberapa kegiatan. Endpoint ini membuat pengulangan itu TERLIHAT —
+    kelompok per identitas + status/kondisi per kegiatan — sehingga
+    petugas tahu data mana yang termutakhir (timeline aset menggabungkan
+    otomatis; tidak ada yang perlu dihapus)."""
+    match = await scope_query_aset(user, {
+        "dihapus": {"$ne": True},
+        "asset_code": {"$nin": ["", None]}})
+    pipeline = [
+        {"$match": match},
+        {"$project": {"_id": 0, "id": 1, "activity_id": 1, "asset_code": 1,
+                      "NUP": 1, "kode_register": 1, "asset_name": 1,
+                      "inventory_status": 1, "condition": 1, "updated_at": 1}},
+        {"$group": {
+            "_id": {"kode": "$asset_code", "nup": {"$ifNull": ["$NUP", ""]}},
+            "n": {"$sum": 1},
+            "kegiatan": {"$addToSet": "$activity_id"},
+            "docs": {"$push": {
+                "id": "$id", "activity_id": "$activity_id",
+                "asset_name": "$asset_name", "kode_register": "$kode_register",
+                "inventory_status": "$inventory_status",
+                "condition": "$condition", "updated_at": "$updated_at"}},
+        }},
+        # Hanya kelompok yang menyentuh >1 kegiatan (elemen indeks-1 ada)
+        {"$match": {"kegiatan.1": {"$exists": True}}},
+        {"$sort": {"n": -1}},
+        {"$limit": 200},
+    ]
+    groups = await db.assets.aggregate(pipeline).to_list(200)
+    act_ids = sorted({a for g in groups for a in (g.get("kegiatan") or []) if a})
+    kegiatan = {a["id"]: a async for a in db.inventory_activities.find(
+        {"id": {"$in": act_ids}},
+        {"_id": 0, "id": 1, "ticket_number": 1, "name": 1,
+         "status_pengesahan": 1})}
+    kelompok = susun_kelompok_lintas_kegiatan(groups, kegiatan)
+    return {"kelompok": kelompok, "jumlah": len(kelompok),
+            "catatan": (
+                "Barang yang sama tercatat di beberapa kegiatan adalah hal "
+                "wajar (kegiatan = pemutakhir berkala). Timeline Aset "
+                "menggabungkannya otomatis per identitas — gunakan daftar ini "
+                "untuk melihat status termutakhir tiap barang, bukan untuk "
+                "menghapus data lama.")}

@@ -99,3 +99,38 @@ def test_label_transaksi_dan_ringkas_audit():
     assert "+1 lainnya" in r
     assert ringkas_perubahan_audit([]) == ""
     assert ringkas_perubahan_audit(None) == ""
+
+
+def test_susun_kelompok_lintas_kegiatan():
+    """Kelompok kode+NUP di >1 kegiatan dikenali; 1 kegiatan disaring."""
+    from timeline_utils import susun_kelompok_lintas_kegiatan
+    groups = [
+        {"_id": {"kode": "3050104001", "nup": "7"}, "n": 2,
+         "kegiatan": ["K1", "K2"],
+         "docs": [
+             {"id": "A1", "activity_id": "K1", "asset_name": "Lemari",
+              "kode_register": "", "inventory_status": "Sudah",
+              "condition": "Baik", "updated_at": "2024-03-01"},
+             {"id": "A2", "activity_id": "K2", "asset_name": "Lemari",
+              "kode_register": "REG77", "inventory_status": "Sudah",
+              "condition": "RR", "updated_at": "2026-02-01"}]},
+        # Satu kegiatan saja (dobel entri di kegiatan sama) → disaring
+        {"_id": {"kode": "3050104002", "nup": "1"}, "n": 2,
+         "kegiatan": ["K1"], "docs": []},
+    ]
+    info = {"K1": {"ticket_number": "INV-2024-001", "name": "IP 2024",
+                   "status_pengesahan": "disahkan"},
+            "K2": {"ticket_number": "INV-2026-003", "name": "IP 2026",
+                   "status_pengesahan": ""}}
+    hasil = susun_kelompok_lintas_kegiatan(groups, info)
+    assert len(hasil) == 1
+    k = hasil[0]
+    assert k["asset_code"] == "3050104001" and k["jumlah_kegiatan"] == 2
+    # Nama & register terisi dari dokumen mana pun yang punya nilai
+    assert k["asset_name"] == "Lemari" and k["kode_register"] == "REG77"
+    # Terbaru dulu + info kegiatan tergabung
+    assert k["kegiatan"][0]["asset_id"] == "A2"
+    assert k["kegiatan"][0]["ticket_number"] == "INV-2026-003"
+    assert k["kegiatan"][1]["status_pengesahan"] == "disahkan"
+    assert susun_kelompok_lintas_kegiatan([]) == []
+    assert susun_kelompok_lintas_kegiatan(None) == []

@@ -328,8 +328,12 @@ berdampak-tertinggi lebih dulu.
    mengelompokkan aset ber-PSP resmi per nomor + menandai yang belum ada di
    register; UI Penggunaan memberi tombol **Catat 1-klik** (form SK PSP
    terisi otomatis dari data SIMAN — tinjauan pengguna tetap gerbangnya).
-   *Tersisa (W5 lanjutan):* panel dedup lintas kegiatan di halaman
-   Inventarisasi.
+   ✅ **Pengenal barang lintas kegiatan sudah (W5 tahap 3 — penutup)** —
+   `GET /inventarisasi/aset-lintas-kegiatan` (helper murni
+   `susun_kelompok_lintas_kegiatan`) mengelompokkan aset per kode+NUP yang
+   menyentuh >1 kegiatan; panel di halaman Kegiatan menampilkan status/
+   kondisi per kegiatan (termutakhir ditandai) sebagai INFORMASI — tidak
+   ada data yang dihapus. Gap #9 tuntas penuh.
 
 > Aturan: tiap gap ditutup sebagai fitur kecil ber-PR (verifikasi → CI → deploy),
 > dengan proyeksi master memakai pola OCC `find_one_and_update` bersyarat +

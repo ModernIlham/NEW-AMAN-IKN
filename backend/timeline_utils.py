@@ -191,3 +191,60 @@ def ringkas_perubahan_audit(changes, batas=4) -> str:
     if sisa > 0:
         teks += f" +{sisa} lainnya"
     return f"Field berubah: {teks}"
+
+
+def susun_kelompok_lintas_kegiatan(groups, kegiatan_info=None) -> list:
+    """Susun hasil agregasi aset ber-identitas sama LINTAS kegiatan (W5).
+
+    Jawaban atas "sistem belum mengenali barang yang sama di berbagai
+    kegiatan inventarisasi": kelompok = kode barang + NUP; hanya kelompok
+    yang tercatat di LEBIH dari satu kegiatan yang dikembalikan.
+
+    - groups: dokumen hasil $group Mongo:
+      {_id: {kode, nup}, n, kegiatan: [activity_id...],
+       docs: [{id, activity_id, asset_name, kode_register,
+               inventory_status, condition, updated_at}...]}
+    - kegiatan_info: {activity_id: {ticket_number, name, status_pengesahan}}
+
+    Kembalian per kelompok: {asset_code, nup, asset_name, kode_register,
+    jumlah_dokumen, jumlah_kegiatan, kegiatan: [{asset_id, activity_id,
+    ticket_number, nama_kegiatan, status_pengesahan, inventory_status,
+    condition, updated_at}] terbaru dulu}. MURNI.
+    """
+    info = kegiatan_info or {}
+    hasil = []
+    for g in groups or []:
+        gid = g.get("_id") or {}
+        keg_ids = {k for k in (g.get("kegiatan") or []) if k}
+        if len(keg_ids) < 2:
+            continue
+        docs = [d for d in (g.get("docs") or []) if isinstance(d, dict)]
+        docs.sort(key=lambda d: str(d.get("updated_at") or ""), reverse=True)
+        nama = next((str(d.get("asset_name") or "").strip()
+                     for d in docs if str(d.get("asset_name") or "").strip()), "")
+        reg = next((str(d.get("kode_register") or "").strip()
+                    for d in docs if str(d.get("kode_register") or "").strip()), "")
+        hasil.append({
+            "asset_code": _s(gid.get("kode")),
+            "nup": _s(gid.get("nup")),
+            "asset_name": nama,
+            "kode_register": reg,
+            "jumlah_dokumen": int(g.get("n") or len(docs)),
+            "jumlah_kegiatan": len(keg_ids),
+            "kegiatan": [{
+                "asset_id": _s(d.get("id")),
+                "activity_id": _s(d.get("activity_id")),
+                "ticket_number": _s((info.get(d.get("activity_id")) or {})
+                                    .get("ticket_number")),
+                "nama_kegiatan": _s((info.get(d.get("activity_id")) or {})
+                                    .get("name")),
+                "status_pengesahan": _s((info.get(d.get("activity_id")) or {})
+                                        .get("status_pengesahan")),
+                "inventory_status": _s(d.get("inventory_status")),
+                "condition": _s(d.get("condition")),
+                "updated_at": _s(d.get("updated_at")),
+            } for d in docs],
+        })
+    hasil.sort(key=lambda k: (-k["jumlah_kegiatan"], k["asset_code"],
+                              k["nup"]))
+    return hasil
