@@ -459,16 +459,16 @@ async def terapkan_siman(asset_id: str, payload: TerapkanIn,
         changes.append({"field": s["field"], "from": s.get("aman", ""),
                         "to": nilai_terapkan(s)})
 
-    # Reklasifikasi kode barang: jaga keunikan kode+NUP antar aset hidup.
-    kode_baru = set_fields.get("asset_code")
-    if kode_baru:
-        bentrok = await db.assets.count_documents({
-            "asset_code": kode_baru, "NUP": a.get("NUP"),
-            "id": {"$ne": asset_id}, "dihapus": {"$ne": True}})
-        if bentrok:
-            raise HTTPException(status_code=409, detail=(
-                f"Kode {kode_baru} NUP {a.get('NUP')} sudah dipakai aset lain — "
-                "periksa duplikat sebelum menerapkan reklasifikasi"))
+    # Perubahan kode barang = REKLASIFIKASI — tidak boleh lewat jalur
+    # timpa-sinkron (menghapus jejak): wajib via POST /pembukuan/reklasifikasi
+    # agar jurnal 304/107, riwayat_reklasifikasi, dan NUP tujuan tercatat
+    # (integrasi audit #5; kartu sinkron menyediakan tombol khususnya).
+    if "asset_code" in set_fields:
+        raise HTTPException(status_code=409, detail=(
+            "Perubahan kode barang adalah REKLASIFIKASI — gunakan tombol "
+            "Reklasifikasi pada kartu sinkron SIMAN (jurnal 304/107 + riwayat "
+            "tercatat). Field lain tetap bisa diterapkan dengan memilih field "
+            "selain kode barang."))
 
     sisa = [s for s in selisih if s not in terapkan]
     sub.update({"selisih": sisa, "status": "selisih" if sisa else "cocok",
