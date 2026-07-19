@@ -761,3 +761,36 @@ async def enforce_pegawai_terdaftar(pengguna_nip):
             detail=f"NIP/NIK pengguna '{nip}' belum terdaftar di Master Pegawai. "
                    f"Daftarkan pegawai tersebut, atau nonaktifkan setelan "
                    f"'Wajib Pegawai Terdaftar'.")
+
+
+async def filter_aset_perhitungan(query=None) -> dict:
+    """Gerbang W9 untuk endpoint PERHITUNGAN lintas modul: batasi aset pada
+    kegiatan inventarisasi yang LAYAK HITUNG (disahkan / tanggal selesai
+    sudah lewat — fase selesai atau belum lengkap) dan singkirkan aset
+    berkategori dummy. Kegiatan belum dimulai / berlangsung / menunggu
+    validasi = lingkup modul Inventarisasi saja.
+
+    Dipanggil SETELAH scoping satker: bila query sudah membawa
+    `activity_id` ($in satker atau satu id), hasilnya di-IRIS dengan
+    daftar kegiatan layak. Tampilan di dalam modul Inventarisasi TIDAK
+    memakai filter ini."""
+    from datetime import date as _date
+
+    from report_filters import layak_hitung_kegiatan, tanpa_dummy_filter
+    today = _date.today().isoformat()
+    layak = set()
+    async for a in db.inventory_activities.find(
+            {}, {"_id": 0, "id": 1, "status_pengesahan": 1,
+                 "tanggal_selesai": 1}):
+        if layak_hitung_kegiatan(a, today):
+            layak.add(a["id"])
+    q = tanpa_dummy_filter(query)
+    ada = q.get("activity_id")
+    if isinstance(ada, dict) and "$in" in ada:
+        q["activity_id"] = {"$in": [i for i in ada["$in"] if i in layak]}
+    elif isinstance(ada, str):
+        if ada not in layak:
+            q["activity_id"] = {"$in": []}
+    else:
+        q["activity_id"] = {"$in": sorted(layak)}
+    return q

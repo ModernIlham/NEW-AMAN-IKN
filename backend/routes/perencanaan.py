@@ -33,7 +33,9 @@ _MAKS_BARIS = 1000  # daftar dipangkas untuk UI; ringkasan tetap utuh
 
 async def _data_rkbmn(tahun: int):
     """Kumpulkan kandidat RKBMN (dipakai endpoint JSON & XLSX)."""
-    assets = [a async for a in db.assets.find({}, _PROJ_ASET)]
+    from shared_utils import filter_aset_perhitungan
+    assets = [a async for a in db.assets.find(
+        await filter_aset_perhitungan({}), _PROJ_ASET)]
     records = [r async for r in db.pemeliharaan.find({}, _PROJ_BIAYA)]
     per_aset = rekap_pemeliharaan(records, tahun=tahun)["per_aset"]
     biaya_map = {p["asset_id"]: p for p in per_aset if p.get("asset_id")}
@@ -359,7 +361,8 @@ async def sanding_usulan(usulan_id: str, kode_barang: str = "",
     prefix = (str(kode_barang or "").strip()
               or str(usulan.get("asset_code") or "")[:3])
     usulan_sanding = {**usulan, "kode_barang": prefix}
-    q = await scope_query_aset(_user, {})
+    from shared_utils import filter_aset_perhitungan
+    q = await filter_aset_perhitungan(await scope_query_aset(_user, {}))
     assets = await db.assets.find(
         q, {"_id": 0, "asset_code": 1, "condition": 1,
             "purchase_date": 1, "purchase_price": 1}).to_list(200000)

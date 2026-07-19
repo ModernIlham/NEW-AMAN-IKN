@@ -55,7 +55,9 @@ async def _data_pemantauan(ambang_hari: int, user=None):
     periode = periode_wasdal(today_iso)
     tahun = periode["tahun"]
 
+    from shared_utils import filter_aset_perhitungan
     q_aset = await scope_query_aset(user, {}) if user is not None else {}
+    q_aset = await filter_aset_perhitungan(q_aset)
     assets = [a async for a in db.assets.find(q_aset, _PROJ_ASET)]
     _sq = (lambda q: scope_query_field_satker(user, q)) if user is not None else (lambda q: q)
     pemanfaatan = [p async for p in db.pemanfaatan.find(
@@ -783,9 +785,11 @@ async def _data_portofolio(user):
     from pembukuan_utils import build_dbkp_rows
     from pengamanan_utils import is_sengketa
     from report_filters import active_asset_filter
-    from shared_utils import ambang_kapitalisasi, scope_query_aset
+    from shared_utils import (ambang_kapitalisasi, filter_aset_perhitungan,
+                              scope_query_aset)
 
-    q = await scope_query_aset(user, active_asset_filter())
+    q = await filter_aset_perhitungan(
+        await scope_query_aset(user, active_asset_filter()))
     assets = await db.assets.find(
         q, {"_id": 0, "asset_code": 1, "purchase_price": 1,
             "nilai_wajar_terakhir": 1, "status": 1, "inventory_status": 1,

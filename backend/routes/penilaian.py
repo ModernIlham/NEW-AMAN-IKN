@@ -16,7 +16,7 @@ from auth_utils import require_admin, require_user, require_writer
 from db import db
 from kodefikasi_utils import GOLONGAN_DEFAULTS
 from report_filters import active_asset_filter
-from shared_utils import log_audit
+from shared_utils import filter_aset_perhitungan, log_audit
 from penilaian_utils import (
     MASA_MANFAAT_DEFAULT, rekap_penyusutan, validate_masa_manfaat,
     DAMPAK_MASA_MANFAAT, DOKUMEN_KOREKSI, JENIS_KOREKSI_NILAI,
@@ -113,7 +113,8 @@ async def posisi_penyusutan(
     peta, _ = await _peta_masa_manfaat()
     # Rekap penyusutan hanya atas aset yang MASIH dimiliki — aset ber-SK
     # penghapusan (#234) dikecualikan agar nilai buku tidak lebih saji (§5A).
-    assets = [a async for a in db.assets.find(active_asset_filter(), _PROJ)]
+    assets = [a async for a in db.assets.find(
+        await filter_aset_perhitungan(active_asset_filter()), _PROJ)]
     # Aset rusak berat baru henti-susut bila TELAH diusulkan penghapusan
     # (reklas keluar aset tetap, PMK 65/2017); usulan aktif = belum ditolak.
     diusulkan_ids = set()

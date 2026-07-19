@@ -48,6 +48,36 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#445] Gerbang perhitungan: data inventarisasi belum sah & dummy tidak ikut modul lain — 2026-07-19
+
+Mandat: kegiatan inventarisasi yang masih berjalan tidak boleh mewarnai
+angka modul lain, dan data dummy bukan aset.
+
+- **Aturan gerbang (helper murni `layak_hitung_kegiatan`)**: data kegiatan
+  hanya ikut perhitungan lintas modul bila kegiatan **disahkan** ATAU
+  **tanggal selesainya sudah lewat** (fase selesai / belum lengkap).
+  Kegiatan **belum dimulai / sedang berlangsung / menunggu validasi**
+  tetap berada di lingkup modul Inventarisasi saja. Catatan: "Validasi"
+  di UI adalah tampilan sementara dari kegiatan yang tanggal selesainya
+  sudah lewat — di server selalu terurai menjadi selesai/belum lengkap,
+  keduanya masuk hitungan sesuai pengecualian mandat.
+- **Dummy bukan aset**: aset berkategori mengandung "dummy" (penanda uji
+  yang sama dengan blokir pengesahan) disaring dari semua perhitungan
+  (`tanpa_dummy_filter`).
+- **Dipasang di 14 titik perhitungan** via perakit `filter_aset_perhitungan`
+  (iris dengan scoping satker): Posisi BMN di Neraca, DBR, KIR, Laporan
+  Penyusutan (PDF + JSON Penilaian), LKB, LBKP, CaLBMN, Rekonsiliasi SAKTI
+  XLSX, DBKP JSON Pembukuan, pengayaan Referensi Akun BAS (beranda modul),
+  kandidat & sanding RKBMN Perencanaan, portofolio + lampiran PMK 207
+  Wasdal, dan generator LBP.
+- **Yang sengaja TIDAK berubah**: tampilan dalam modul Inventarisasi
+  (daftar aset per kegiatan, statistik kegiatan, pengesahan), Timeline
+  Aset (riwayat menampilkan semua kegiatan), dan picker aset operasional.
+- Catatan transparansi di hub Pelaporan (kartu Posisi BMN) + 2 unit test
+  baru untuk aturan gerbang & filter dummy; smoke LBP membuktikan aset
+  kegiatan berjalan dan aset dummy tidak bocor ke dokumen.
+
+
 ## [#444] LBP selengkap dokumen contoh — surat pengantar, kebijakan lengkap, mutasi per transaksi, lampiran a–i — 2026-07-19
 
 Generator LBP dilengkapi penuh mengikuti seluruh struktur dokumen contoh

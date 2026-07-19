@@ -22,6 +22,7 @@ from pydantic import BaseModel
 from db import db
 from auth_utils import require_user, require_admin, require_user_or_query_token
 from shared_utils import (pastikan_akses_kegiatan_id, ambang_kapitalisasi,
+                          filter_aset_perhitungan,
                           get_photo_from_gridfs, pengaturan_kop,
                           scope_query_aset)
 from report_filters import active_asset_filter
@@ -1803,7 +1804,7 @@ async def generate_posisi_bmn_pdf(_user: dict = Depends(require_user_or_query_to
     # Posisi BMN di Neraca: hanya aset yang MASIH dimiliki — aset ber-SK
     # penghapusan (#234) dikecualikan agar nilai neraca tidak lebih saji (§5A).
     assets = await db.assets.find(
-        await scope_query_aset(_user, active_asset_filter()),
+        await filter_aset_perhitungan(await scope_query_aset(_user, active_asset_filter())),
         {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
          "purchase_price": 1, "purchase_date": 1, "condition": 1,
          "inventory_status": 1, "nilai_wajar_terakhir": 1, "revaluasi": 1},
@@ -1995,7 +1996,7 @@ async def generate_dbr_pdf(_user: dict = Depends(require_user_or_query_token)):
 
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
     assets = await db.assets.find(
-        await scope_query_aset(_user, active_asset_filter()),
+        await filter_aset_perhitungan(await scope_query_aset(_user, active_asset_filter())),
         {"_id": 0, "asset_code": 1, "NUP": 1, "asset_name": 1, "condition": 1,
          "purchase_price": 1, "location": 1, "operasional_jenis": 1, "user": 1},
     ).to_list(500000)
@@ -2074,7 +2075,7 @@ async def generate_kir_pdf(_user: dict = Depends(require_user_or_query_token)):
 
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
     assets = await db.assets.find(
-        await scope_query_aset(_user, active_asset_filter()),
+        await filter_aset_perhitungan(await scope_query_aset(_user, active_asset_filter())),
         {"_id": 0, "asset_code": 1, "NUP": 1, "asset_name": 1, "condition": 1,
          "purchase_price": 1, "location": 1, "operasional_jenis": 1, "user": 1},
     ).to_list(500000)
@@ -2180,7 +2181,7 @@ async def generate_penyusutan_pdf(
     proj = {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
             "purchase_price": 1, "purchase_date": 1, "condition": 1,
             "inventory_status": 1, "nilai_wajar_terakhir": 1, "revaluasi": 1}
-    assets = await db.assets.find(await scope_query_aset(_user, active_asset_filter()), proj).to_list(500000)
+    assets = await db.assets.find(await filter_aset_perhitungan(await scope_query_aset(_user, active_asset_filter())), proj).to_list(500000)
     diusulkan_ids = set()
     async for u in db.usulan_penghapusan.find(
             {"status": {"$ne": "ditolak"}}, {"_id": 0, "asset_id": 1}):
@@ -2306,8 +2307,9 @@ async def generate_lbkp_pdf(
     sufiks_final = penanda_final(periode_rec)
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
     assets = await db.assets.find(
-        {}, {"_id": 0, "asset_code": 1, "purchase_price": 1, "created_at": 1,
-             "dihapus": 1, "penghapusan": 1},
+        await filter_aset_perhitungan({}),
+        {"_id": 0, "asset_code": 1, "purchase_price": 1, "created_at": 1,
+         "dihapus": 1, "penghapusan": 1},
     ).to_list(500000)
     tombstones = []
     async for t in db.audit_logs.find(
@@ -2446,7 +2448,7 @@ async def generate_lkb_pdf(_user: dict = Depends(require_user_or_query_token)):
     # dihapus=True) TIDAK ikut, selaras DBKP/Posisi Neraca/penyusutan/rekonsiliasi
     # (temuan review: tanpa filter ini LKB lebih saji & tak pernah rekon).
     assets = await db.assets.find(
-        await scope_query_aset(_user, active_asset_filter()),
+        await filter_aset_perhitungan(await scope_query_aset(_user, active_asset_filter())),
         {"_id": 0, "asset_code": 1, "NUP": 1, "asset_name": 1,
          "condition": 1, "purchase_price": 1},
     ).to_list(500000)
@@ -2605,7 +2607,8 @@ async def generate_calbmn_pdf(
     sufiks_final = penanda_final(periode_rec)
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
     assets = await db.assets.find(
-        {}, {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
+        await filter_aset_perhitungan({}),
+        {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
              "purchase_price": 1, "purchase_date": 1, "condition": 1,
              "created_at": 1, "inventory_status": 1, "nomor_perkara": 1,
              "pihak_bersengketa": 1, "dihapus": 1, "penghapusan": 1,
@@ -2924,7 +2927,7 @@ async def generate_rekonsiliasi_xlsx(_user: dict = Depends(require_user_or_query
     # ber-SK penghapusan agar sandingan SAKTI/MonSAKTI tidak selisih hanya karena
     # aset yang sudah dihapus masih ikut terhitung (§5A Prinsip 3).
     assets = await db.assets.find(
-        await scope_query_aset(_user, active_asset_filter()),
+        await filter_aset_perhitungan(await scope_query_aset(_user, active_asset_filter())),
         {"_id": 0, "asset_code": 1, "NUP": 1, "asset_name": 1,
          "purchase_price": 1, "location": 1, "condition": 1,
          "nilai_wajar_terakhir": 1},

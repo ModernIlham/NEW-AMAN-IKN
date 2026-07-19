@@ -42,13 +42,15 @@ async def list_akun_bas(_user: dict = Depends(require_user)):
     """
     from pembukuan_utils import golongan_of, nilai_buku_aset
     from report_filters import active_asset_filter
-    from shared_utils import scope_query_aset
+    from shared_utils import (filter_aset_perhitungan,
+                              scope_query_aset)
 
     _, entri = await _peta_akun()
     # Rekap master aset per golongan (scoped satker, aset aktif saja)
     rekap = {}
     async for a in db.assets.find(
-            await scope_query_aset(_user, active_asset_filter()),
+            await filter_aset_perhitungan(
+                await scope_query_aset(_user, active_asset_filter())),
             {"_id": 0, "asset_code": 1, "purchase_price": 1,
              "nilai_wajar_terakhir": 1}):
         g = golongan_of(a.get("asset_code")) or "?"
