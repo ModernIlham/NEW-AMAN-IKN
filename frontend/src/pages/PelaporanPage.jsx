@@ -579,15 +579,18 @@ export default function PelaporanPage({ user, onBack }) {
               {filtered.map((a) => {
                 const disahkan = a.status_pengesahan === "disahkan";
                 return (
-                  <li key={a.id} className="p-3 flex items-center gap-3 flex-wrap hover:bg-muted/40" data-testid={`pelaporan-row-${a.id}`}>
+                  <li key={a.id} className="p-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 hover:bg-muted/40" data-testid={`pelaporan-row-${a.id}`}>
+                    {/* Mobile: judul lebar penuh di atas; badge + Unduh sebaris di bawah
+                        (dulu 3 kolom sebaris → judul terjepit ~40% dan membungkus 5-7 baris). */}
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold text-foreground leading-tight">
                         {a.nama_kegiatan || "(tanpa nama)"}
                       </p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                      <p className="text-[11px] text-muted-foreground mt-0.5 break-words">
                         {[a.ticket_number, a.nama_satker, fmtPeriode(a)].filter(Boolean).join(" · ")}
                       </p>
                     </div>
+                    <div className="flex items-center justify-between sm:justify-end gap-2 flex-shrink-0">
                     {disahkan ? (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 text-[10px] font-semibold flex-shrink-0">
                         <ShieldCheck className="w-3 h-3" />Disahkan
@@ -614,6 +617,7 @@ export default function PelaporanPage({ user, onBack }) {
                         ))}
                       </DropdownMenuContent>
                     </DropdownMenu>
+                    </div>
                   </li>
                 );
               })}

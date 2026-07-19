@@ -48,6 +48,27 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#418] UI mobile: kartu Arsip Pelaporan & buku agenda Persuratan tak lagi terjepit — 2026-07-19
+
+Perbaikan dari umpan balik tangkapan layar HP:
+
+- **Arsip Pelaporan — Laporan per Kegiatan**: judul kegiatan dulu terjepit
+  ~40% lebar (badge + tombol Unduh sebaris) hingga membungkus 5–7 baris.
+  Kini di HP judul tampil lebar penuh; badge status & tombol Unduh pindah
+  ke baris kedua (badge kiri, Unduh kanan). Desktop tidak berubah.
+- **Registrasi Persuratan — buku agenda**: tabel 860px dengan kolom Aksi
+  sticky menutupi kolom Perihal/Dari di layar sempit & nomor terpotong
+  di tengah kata. Kini di HP tiap surat tampil sebagai KARTU bertumpuk:
+  chip agenda + badge status, nomor (utuh), perihal, tanggal + tujuan/
+  pengirim, dan baris aksi ringkas (Sahkan/Batal/Ubah/Hapus) — tanpa
+  scroll samping. Tabel tetap dipakai di ≥sm. Tombol aksi satu sumber
+  (`renderAksi`) untuk tabel & kartu agar perilaku identik.
+- Filter "Jenis: semua"/"Status: semua" dipendekkan jadi "Jenis"/"Status"
+  supaya tidak terpotong ("Jenis: se…") di baris filter HP.
+- Verifikasi: eslint bersih & `yarn build` sukses.
+
+---
+
 ## [#417] Integrasi Penilaian → Neraca: nilai buku penyusutan tersaji di Laporan Posisi BMN — 2026-07-19
 
 Lanjutan mandat integrasi lintas-modul "manfaatkan segala informasi agar saling

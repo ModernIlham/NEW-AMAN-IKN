@@ -213,6 +213,67 @@ export default function PersuratanPage({ user, onBack }) {
         : [...(ref?.status_keluar || []), ...(ref?.status_masuk || [])]
   ), [ref, fJenis]);
 
+  // Aksi per surat — satu sumber untuk sel tabel (desktop) & kartu (mobile).
+  const renderAksi = (s, sfx = "") => (
+    <>
+      {s.jenis === "keluar" && s.status === "dibooking" && (
+        <>
+          <Button size="sm" onClick={() => transisi(s, "disahkan")}
+            title="Sahkan (surat final ditandatangani)" aria-label={`Sahkan ${s.nomor}`}
+            className="h-7 text-[11px] min-h-0 min-w-0 bg-emerald-600 hover:bg-emerald-700 text-white"
+            data-testid={`persuratan-sahkan-${s.id}${sfx}`}>
+            <CheckCircle2 className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">Sahkan</span>
+          </Button>
+          <button type="button" onClick={() => setBatal({ surat: s, alasan: "" })}
+            title="Batalkan (nomor hangus)" aria-label={`Batalkan ${s.nomor}`}
+            className="p-1.5 rounded-md text-red-500 hover:bg-red-500/10 min-w-0 min-h-0"
+            data-testid={`persuratan-batal-${s.id}${sfx}`}>
+            <XCircle className="w-4 h-4" />
+          </button>
+          <button type="button" onClick={() => setFormKeluar({ ...KELUAR_KOSONG, ...s, mode: "edit" })}
+            title="Ubah draf" aria-label={`Ubah ${s.nomor}`}
+            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted min-w-0 min-h-0"
+            data-testid={`persuratan-edit-${s.id}${sfx}`}>
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+        </>
+      )}
+      {s.jenis === "keluar" && s.status === "disahkan" && (
+        <button type="button" onClick={() => setFormKeluar({ ...KELUAR_KOSONG, ...s, mode: "edit-final" })}
+          title="Isi nomor eksternal / keterangan" aria-label={`Ubah nomor eksternal ${s.nomor}`}
+          className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted min-w-0 min-h-0"
+          data-testid={`persuratan-edit-final-${s.id}${sfx}`}>
+          <Pencil className="w-3.5 h-3.5" />
+        </button>
+      )}
+      {s.jenis === "masuk" && (
+        <button type="button" onClick={() => setFormMasuk({ ...MASUK_KOSONG, ...s, nomor_surat: s.nomor, mode: "edit" })}
+          title="Ubah surat masuk" aria-label={`Ubah surat masuk ${s.nomor}`}
+          className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted min-w-0 min-h-0"
+          data-testid={`persuratan-edit-masuk-${s.id}${sfx}`}>
+          <Pencil className="w-3.5 h-3.5" />
+        </button>
+      )}
+      {s.jenis === "masuk" && s.status !== "selesai" && (
+        <Button size="sm"
+          className={`h-7 text-[11px] min-h-0 min-w-0 text-white ${s.status === "diterima" ? "bg-cyan-600 hover:bg-cyan-700" : "bg-emerald-600 hover:bg-emerald-700"}`}
+          onClick={() => transisi(s, s.status === "diterima" ? "diproses" : "selesai")}
+          data-testid={`persuratan-masuk-lanjut-${s.id}${sfx}`}>
+          {s.status === "diterima" ? "Proses" : "Selesai"}
+        </Button>
+      )}
+      {isAdmin && !(s.jenis === "keluar" && s.status === "disahkan") && (
+        <button type="button" onClick={() => hapusSurat(s)}
+          title="Hapus surat (salah catat / batal dibuat)"
+          aria-label={`Hapus ${s.nomor}`}
+          className="p-1.5 rounded-md text-red-500 hover:bg-red-500/10 min-w-0 min-h-0"
+          data-testid={`persuratan-hapus-${s.id}${sfx}`}>
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      )}
+    </>
+  );
+
   return (
     <div className="min-h-screen bg-background" data-testid="persuratan-page">
       <header className="bg-card/95 backdrop-blur-sm border-b border-border px-3 sm:px-6 py-2.5 sticky top-0 z-40">
@@ -282,14 +343,14 @@ export default function PersuratanPage({ user, onBack }) {
           <select value={fJenis} onChange={(e) => { setFJenis(e.target.value); setFStatus(""); }}
             aria-label="Filter jenis surat" title="Filter jenis surat"
             className="h-10 rounded-md border border-input bg-background px-2 text-xs sm:text-sm flex-1 sm:flex-none min-w-0" data-testid="persuratan-f-jenis">
-            <option value="">Jenis: semua</option>
+            <option value="">Jenis</option>
             <option value="keluar">Surat Keluar</option>
             <option value="masuk">Surat Masuk</option>
           </select>
           <select value={fStatus} onChange={(e) => setFStatus(e.target.value)}
             aria-label="Filter status surat" title="Filter status surat"
             className="h-10 rounded-md border border-input bg-background px-2 text-xs sm:text-sm flex-1 sm:flex-none min-w-0" data-testid="persuratan-f-status">
-            <option value="">Status: semua</option>
+            <option value="">Status</option>
             {opsiStatus.map((s) => <option key={s.kode} value={s.kode}>{s.uraian}</option>)}
           </select>
           <Button className="h-10 gap-1.5 flex-shrink-0" onClick={() => setFormKeluar({ ...KELUAR_KOSONG })}
@@ -330,7 +391,43 @@ export default function PersuratanPage({ user, onBack }) {
               )}
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            {/* Mobile (<sm): kartu bertumpuk — tabel 860px + kolom sticky
+                menutupi Perihal/Dari di layar sempit (umpan balik tangkapan layar). */}
+            <ul className="sm:hidden divide-y divide-border/60" data-testid="persuratan-cards-mobile">
+              {items.map((s) => (
+                <li key={s.id} className="p-3 space-y-1" data-testid={`persuratan-card-${s.id}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${s.jenis === "keluar" ? "bg-cyan-500/15 text-cyan-700 dark:text-cyan-400" : "bg-violet-500/15 text-violet-600 dark:text-violet-400"}`}>
+                      {s.jenis === "keluar" ? "K" : "M"}-{String(s.no_agenda).padStart(3, "0")}/{s.tahun}
+                    </span>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${WARNA_STATUS[s.status] || "bg-muted text-muted-foreground"}`}>
+                      {s.status}
+                    </span>
+                  </div>
+                  <p className="font-mono text-[12px] text-foreground break-words leading-snug">{s.nomor}</p>
+                  {s.nomor_eksternal && (
+                    <p className="font-mono text-[10px] text-teal-700 dark:text-teal-400 break-words" title="Nomor sah dari aplikasi eksternal">eks: {s.nomor_eksternal}</p>
+                  )}
+                  <p className="text-[12px] text-foreground/90 line-clamp-2" title={s.perihal}>{s.perihal}</p>
+                  {(s.referensi || s.nama_kegiatan) && (
+                    <p className="text-[10px] text-muted-foreground truncate" title={[s.referensi, s.nama_kegiatan].filter(Boolean).join(" · ")}>{[s.referensi, s.nama_kegiatan].filter(Boolean).join(" · ")}</p>
+                  )}
+                  {s.alasan_batal && (
+                    <p className="text-[10px] text-red-500/80 truncate" title={s.alasan_batal}>{s.alasan_batal}</p>
+                  )}
+                  <div className="flex items-center justify-between gap-2 pt-0.5">
+                    <p className="text-[10px] text-muted-foreground truncate min-w-0">
+                      {[s.tanggal_surat,
+                        s.jenis === "keluar" ? (s.tujuan ? `→ ${s.tujuan}` : "") : (s.pengirim ? `← ${s.pengirim}` : ""),
+                      ].filter(Boolean).join(" · ") || "—"}
+                    </p>
+                    <div className="flex items-center gap-0.5 flex-shrink-0">{renderAksi(s, "-m")}</div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-sm min-w-[860px]">
                 <thead>
                   <tr className="border-b border-border bg-muted/40 text-left text-xs text-muted-foreground">
@@ -378,67 +475,14 @@ export default function PersuratanPage({ user, onBack }) {
                         {s.alasan_batal && <p className="text-[9px] text-red-500/80 mt-0.5 max-w-[140px] truncate" title={s.alasan_batal}>{s.alasan_batal}</p>}
                       </td>
                       <td className="px-3 py-2 text-right whitespace-nowrap sticky right-0 bg-card border-l border-border">
-                        {s.jenis === "keluar" && s.status === "dibooking" && (
-                          <>
-                            <Button size="sm" onClick={() => transisi(s, "disahkan")}
-                              title="Sahkan (surat final ditandatangani)" aria-label={`Sahkan ${s.nomor}`}
-                              className="h-7 text-[11px] min-h-0 min-w-0 bg-emerald-600 hover:bg-emerald-700 text-white"
-                              data-testid={`persuratan-sahkan-${s.id}`}>
-                              <CheckCircle2 className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">Sahkan</span>
-                            </Button>
-                            <button type="button" onClick={() => setBatal({ surat: s, alasan: "" })}
-                              title="Batalkan (nomor hangus)" aria-label={`Batalkan ${s.nomor}`}
-                              className="p-1.5 rounded-md text-red-500 hover:bg-red-500/10 min-w-0 min-h-0"
-                              data-testid={`persuratan-batal-${s.id}`}>
-                              <XCircle className="w-4 h-4" />
-                            </button>
-                            <button type="button" onClick={() => setFormKeluar({ ...KELUAR_KOSONG, ...s, mode: "edit" })}
-                              title="Ubah draf" aria-label={`Ubah ${s.nomor}`}
-                              className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted min-w-0 min-h-0"
-                              data-testid={`persuratan-edit-${s.id}`}>
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                          </>
-                        )}
-                        {s.jenis === "keluar" && s.status === "disahkan" && (
-                          <button type="button" onClick={() => setFormKeluar({ ...KELUAR_KOSONG, ...s, mode: "edit-final" })}
-                            title="Isi nomor eksternal / keterangan" aria-label={`Ubah nomor eksternal ${s.nomor}`}
-                            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted min-w-0 min-h-0"
-                            data-testid={`persuratan-edit-final-${s.id}`}>
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                        {s.jenis === "masuk" && (
-                          <button type="button" onClick={() => setFormMasuk({ ...MASUK_KOSONG, ...s, nomor_surat: s.nomor, mode: "edit" })}
-                            title="Ubah surat masuk" aria-label={`Ubah surat masuk ${s.nomor}`}
-                            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted min-w-0 min-h-0"
-                            data-testid={`persuratan-edit-masuk-${s.id}`}>
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                        {s.jenis === "masuk" && s.status !== "selesai" && (
-                          <Button size="sm"
-                            className={`h-7 text-[11px] min-h-0 min-w-0 text-white ${s.status === "diterima" ? "bg-cyan-600 hover:bg-cyan-700" : "bg-emerald-600 hover:bg-emerald-700"}`}
-                            onClick={() => transisi(s, s.status === "diterima" ? "diproses" : "selesai")}
-                            data-testid={`persuratan-masuk-lanjut-${s.id}`}>
-                            {s.status === "diterima" ? "Proses" : "Selesai"}
-                          </Button>
-                        )}
-                        {isAdmin && !(s.jenis === "keluar" && s.status === "disahkan") && (
-                          <button type="button" onClick={() => hapusSurat(s)}
-                            title="Hapus surat (salah catat / batal dibuat)"
-                            aria-label={`Hapus ${s.nomor}`}
-                            className="p-1.5 rounded-md text-red-500 hover:bg-red-500/10 min-w-0 min-h-0"
-                            data-testid={`persuratan-hapus-${s.id}`}>
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
+                        {renderAksi(s)}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+            </>
           )}
           {data && data.total_pages > 1 && (
             <div className="flex items-center justify-between px-3 py-2 border-t border-border bg-muted/30">
