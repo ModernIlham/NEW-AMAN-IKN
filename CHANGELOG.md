@@ -48,6 +48,18 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#447] Referensi Kodefikasi Barang — toolbar padat 1 baris + filter segmented utuh — 2026-07-19
+
+Umpan balik screenshot: toolbar hemat ruang.
+
+- **Baris cari selalu 1 baris**: tombol Tambah/Impor/Unduh menjadi tombol
+  ikon kotak (10×10) — tidak lagi membungkus ke baris kedua di HP.
+- **Filter level jadi satu bagian utuh**: chip Semua/Golongan/Bidang/
+  Kelompok/Sub/Sub-sub diganti *segmented control* bersambung dalam satu
+  kotak berbingkai, satu baris penuh, menggulir horizontal bila layar
+  sempit (tak lagi pecah dua baris). Tiap segmen membagi lebar rata.
+
+
 ## [#446] Gerbang perhitungan MENYELURUH — semua modul konsumen data aset tersapu — 2026-07-19
 
 Tindak lanjut mandat "belum semua modul tersentuh": sapuan total seluruh

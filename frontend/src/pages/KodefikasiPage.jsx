@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Search, Plus, Upload, Download, Pencil, Trash2, Loader2,
-  ListTree, ChevronLeft, ChevronRight, ChevronDown, Info, FileDown, Table2,
+  ListTree, ChevronLeft, ChevronRight, Info, FileDown, Table2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -237,10 +237,10 @@ export default function KodefikasiPage({ user, onBack }) {
       </header>
 
       <main className="max-w-5xl mx-auto px-3 sm:px-6 py-4 space-y-3">
-        {/* ── Toolbar: cari + filter level + aksi admin ── */}
+        {/* ── Toolbar padat: cari + aksi ikon (1 baris) + segmented filter level ── */}
         <div className="bg-card rounded-xl border border-border shadow-sm p-2 sm:p-3 space-y-2">
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="relative flex-1 min-w-[180px]">
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1 min-w-0">
               <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
               <Input
                 value={search}
@@ -252,23 +252,22 @@ export default function KodefikasiPage({ user, onBack }) {
             </div>
             {isAdmin && (
               <>
-                <Button variant="outline" className="h-10 gap-1.5" title="Tambah kode kodefikasi baru secara manual"
-                  onClick={() => setForm({ mode: "tambah", kode: "", uraian: "" })} data-testid="kodefikasi-add">
-                  <Plus className="w-4 h-4" /><span className="hidden sm:inline">Tambah</span>
+                <Button variant="outline" className="h-10 w-10 p-0 flex-shrink-0" title="Tambah kode kodefikasi baru secara manual"
+                  aria-label="Tambah kode" onClick={() => setForm({ mode: "tambah", kode: "", uraian: "" })} data-testid="kodefikasi-add">
+                  <Plus className="w-4 h-4" />
                 </Button>
-                <Button variant="outline" className="h-10 gap-1.5" disabled={importing} title="Impor kodefikasi massal dari file CSV/Excel"
-                  onClick={() => fileRef.current?.click()} data-testid="kodefikasi-import">
+                <Button variant="outline" className="h-10 w-10 p-0 flex-shrink-0" disabled={importing} title="Impor kodefikasi massal dari file CSV/Excel"
+                  aria-label="Impor kodefikasi" onClick={() => fileRef.current?.click()} data-testid="kodefikasi-import">
                   {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                  <span className="hidden sm:inline">Impor</span>
                 </Button>
                 <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" multiple className="hidden" onChange={onImportFile} />
               </>
             )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="h-10 gap-1.5" data-testid="kodefikasi-unduh"
-                  title="Unduh template impor atau ekspor daftar kodefikasi">
-                  <FileDown className="w-4 h-4" /><span className="hidden sm:inline">Unduh</span><ChevronDown className="w-3 h-3" />
+                <Button variant="outline" className="h-10 w-10 p-0 flex-shrink-0" data-testid="kodefikasi-unduh"
+                  aria-label="Unduh / ekspor kodefikasi" title="Unduh template impor atau ekspor daftar kodefikasi">
+                  <FileDown className="w-4 h-4" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-72">
@@ -286,16 +285,17 @@ export default function KodefikasiPage({ user, onBack }) {
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-          <div className="flex items-center gap-1.5 flex-wrap">
+          {/* Segmented control: satu bagian utuh, 1 baris (gulir horizontal bila sempit) */}
+          <div className="inline-flex w-full items-stretch rounded-lg border border-border overflow-x-auto overflow-y-hidden">
             {LEVEL_FILTERS.map((f) => (
               <button
                 key={f.value}
                 type="button"
                 onClick={() => changeLevel(f.value)}
-                className={`h-8 px-3 rounded-full border text-xs font-medium min-w-0 min-h-0 transition-colors ${
+                className={`flex-1 h-9 px-3 text-xs font-medium whitespace-nowrap border-l first:border-l-0 border-border min-w-0 min-h-0 transition-colors ${
                   level === f.value
-                    ? "bg-blue-600 border-blue-600 text-white"
-                    : "border-border text-muted-foreground hover:bg-muted"
+                    ? "bg-blue-600 text-white"
+                    : "text-muted-foreground hover:bg-muted"
                 }`}
                 data-testid={`kodefikasi-level-${f.value}`}
               >
