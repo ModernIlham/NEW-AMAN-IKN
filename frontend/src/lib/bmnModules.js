@@ -81,7 +81,7 @@ export const PENATAUSAHAAN_SUBMODULES = [
       "✅ Saldo awal → mutasi masuk/keluar → saldo akhir per semester (LBKP + rekonsiliasi XLSX)",
       "✅ Buku Barang: jurnal mutasi ber-kode SIMAK/SAKTI (append-only) + reklasifikasi 304/107 ber-riwayat + backfill saldo awal",
       "✅ KIB per unit (PMK 181/pola SAKTI): tanah, bangunan gedung, alat angkutan, alat besar, persenjataan — field khusus per jenis tersimpan + kartu PDF ber-foto & riwayat mutasi",
-      "✅ Jurnal otomatis dari transaksi: aset baru (100/101), pengadaan (101), penghapusan SK (301), pemindahtanganan (302/303), reklasifikasi (304/107)",
+      "✅ Jurnal otomatis dari transaksi: aset baru (100/101), pengadaan (101), penghapusan SK (301), pemindahtanganan (303 hibah / 301 bentuk lain), reklasifikasi (304/107)",
     ],
     integrasi: [
       "Master aset & hasil inventarisasi menjadi sumber saldo",

@@ -8,6 +8,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useBackGuard } from "@/hooks/useBackGuard";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -42,6 +43,8 @@ export default function PembukuanPage({ user, onBack }) {
   const [kib, setKib] = useState(null);           // {jenis,label,fields,data,aset}
   const [formKib, setFormKib] = useState({});
   const [simpanKib, setSimpanKib] = useState(false);
+  const [backfilling, setBackfilling] = useState(false);
+  const { confirm, confirmDialog } = useConfirm();
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
 
@@ -65,6 +68,32 @@ export default function PembukuanPage({ user, onBack }) {
     }
   }, [q]);
   useEffect(() => { if (tab === "jurnal" && !jurnal) muatJurnal(1); }, [tab, jurnal, muatJurnal]);
+
+  // Backfill saldo awal (admin) — pemicu UI untuk endpoint idempoten yang
+  // sebelumnya hanya bisa dipanggil via API manual (temuan audit klaim-aktif).
+  const jalankanBackfill = useCallback(async () => {
+    const ok = await confirm({
+      title: "Backfill saldo awal Buku Barang?",
+      description:
+        "Aset aktif yang BELUM punya entri jurnal diberi satu entri sintetis " +
+        "100 Saldo Awal (tanggal buku = tanggal perolehan). Idempoten — aman " +
+        "diulang; aset yang sudah berjurnal tidak disentuh.",
+      confirmLabel: "Jalankan",
+    });
+    if (!ok) return;
+    setBackfilling(true);
+    try {
+      const r = await axios.post(`${API}/pembukuan/mutasi/backfill`);
+      toast.success(
+        `Saldo awal dibuat untuk ${r.data?.dibuat ?? 0} aset ` +
+        `(${r.data?.sudah_berjurnal ?? 0} sudah berjurnal)`);
+      muatJurnal(1);
+    } catch (e) {
+      toast.error(apiErr(e, "Gagal menjalankan backfill"));
+    } finally {
+      setBackfilling(false);
+    }
+  }, [confirm, muatJurnal]);
 
   const cariAsetKib = useCallback(async () => {
     if (!qKib.trim()) return;
@@ -235,9 +264,19 @@ export default function PembukuanPage({ user, onBack }) {
 
         {tab === "jurnal" && (
           <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-            <div className="px-3 py-2 border-b border-border flex items-center gap-2">
+            <div className="px-3 py-2 border-b border-border flex items-center gap-2 flex-wrap">
               <ScrollText className="w-4 h-4 text-muted-foreground" />
-              <p className="text-xs font-bold flex-1">Buku Barang — jurnal mutasi ber-kode (append-only, pola SIMAK/SAKTI)</p>
+              <p className="text-xs font-bold flex-1 min-w-[180px]">Buku Barang — jurnal mutasi ber-kode (append-only, pola SIMAK/SAKTI)</p>
+              {user?.role === "admin" && (
+                <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 min-w-0 gap-1"
+                  disabled={backfilling}
+                  title="Beri entri saldo awal (kode 100) untuk aset lama yang belum punya jurnal — idempoten, aman diulang"
+                  onClick={jalankanBackfill}
+                  data-testid="jurnal-backfill-btn">
+                  {backfilling ? <Loader2 className="w-3 h-3 animate-spin" /> : <ScrollText className="w-3 h-3" />}
+                  Backfill Saldo Awal
+                </Button>
+              )}
             </div>
             <div className="relative px-3 py-2 border-b border-border/60">
               <Search className="w-3.5 h-3.5 absolute left-6 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -386,6 +425,7 @@ export default function PembukuanPage({ user, onBack }) {
           </div>
         )}
       </main>
+      {confirmDialog}
     </div>
   );
 }

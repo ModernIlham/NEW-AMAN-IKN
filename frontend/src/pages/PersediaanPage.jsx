@@ -1016,6 +1016,11 @@ export default function PersediaanPage({ user, onBack }) {
                     <option key={j.key} value={j.key}>{j.label} ({j.kode})</option>
                   ))}
                 </select>
+                {jenisMasuk.find((j) => j.key === masuk.data.jenis)?.info && (
+                  <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1">
+                    {jenisMasuk.find((j) => j.key === masuk.data.jenis).info}
+                  </p>
+                )}
               </div>
               {pengadaanList.length === 0 && (
                 <p className="col-span-2 text-[10px] text-muted-foreground -mt-1">
@@ -1134,6 +1139,11 @@ export default function PersediaanPage({ user, onBack }) {
                     <option key={j.key} value={j.key}>{j.label} ({j.kode})</option>
                   ))}
                 </select>
+                {jenisKeluar.find((j) => j.key === keluar.data.jenis)?.info && (
+                  <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1">
+                    {jenisKeluar.find((j) => j.key === keluar.data.jenis).info}
+                  </p>
+                )}
               </div>
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-out-jumlah">Jumlah (maks {keluar.item.stok})</label>
@@ -1492,6 +1502,11 @@ export default function PersediaanPage({ user, onBack }) {
                       <option key={j.key} value={j.key}>{j.label} ({j.kode})</option>
                     ))}
                   </select>
+                  {(massal.arah === "masuk" ? jenisMasuk : jenisKeluar).find((j) => j.key === massal.jenis)?.info && (
+                    <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1">
+                      {(massal.arah === "masuk" ? jenisMasuk : jenisKeluar).find((j) => j.key === massal.jenis).info}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-m-bukti">No. Bukti / LPB</label>

@@ -725,10 +725,25 @@ async def laporan_mutasi_pdf(
 
 @persediaan_router.get("/persediaan/jenis-transaksi")
 async def list_jenis_transaksi(_user: dict = Depends(require_user)):
-    """Jenis transaksi masuk & keluar (peta 1:1 ke SAKTI) untuk dropdown."""
+    """Jenis transaksi masuk & keluar (peta 1:1 ke SAKTI) untuk dropdown.
+
+    M07/K07 (reklasifikasi dari/ke aset) hanya mencatat SISI PERSEDIAAN —
+    register aset tidak disentuh otomatis; `info` mengingatkan operator agar
+    menyesuaikan sisi aset via Pembukuan → Reklasifikasi (kejujuran klaim,
+    hindari dobel catat di Neraca).
+    """
+    info_reklas = ("Hanya mencatat sisi persediaan — sesuaikan register aset "
+                   "secara terpisah (Pembukuan → Reklasifikasi, jurnal 304/107) "
+                   "agar barang tidak tercatat ganda di Neraca.")
+    info_per_key = {"reklasifikasi_dari_aset": info_reklas,
+                    "reklasifikasi_keluar": info_reklas}
     return {
-        "masuk": [{"key": k, "label": v[0], "kode": v[1]} for k, v in JENIS_MASUK.items()],
-        "keluar": [{"key": k, "label": v[0], "kode": v[1]} for k, v in JENIS_KELUAR.items()],
+        "masuk": [{"key": k, "label": v[0], "kode": v[1],
+                   **({"info": info_per_key[k]} if k in info_per_key else {})}
+                  for k, v in JENIS_MASUK.items()],
+        "keluar": [{"key": k, "label": v[0], "kode": v[1],
+                    **({"info": info_per_key[k]} if k in info_per_key else {})}
+                   for k, v in JENIS_KELUAR.items()],
     }
 
 
