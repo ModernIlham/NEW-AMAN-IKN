@@ -48,6 +48,19 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#439] Header Perencanaan rapi + tombol tanggalan ringkas — 2026-07-19
+
+Header halaman Perencanaan Kebutuhan tidak lagi penuh tombol:
+
+- **Tombol tanggalan persegi** menggantikan select "TA" polos: kotak
+  seukuran tombol (strip bulan berwarna, angka tanggal besar, tahun kecil)
+  yang langsung berubah mengikuti tanggal yang dipilih — klik membuka
+  pemilih tanggal; TA riwayat biaya otomatis mengikuti tahun tanggal
+  terpilih. Ringkas, informatif, tetap berbentuk tombol.
+- **Dua tombol unduh digabung** menjadi satu menu "Unduh" (Kertas Kerja
+  RKBMN XLSX + Register Usulan CSV) — pola sama dengan menu Laporan Wasdal;
+  data-testid lama dipertahankan pada item menu.
+
 ## [#438] Pengenal barang lintas kegiatan inventarisasi (arsitektur W5 tahap 3 — penutup) — 2026-07-19
 
 Penutup mandat W5: sistem kini MENGENALI bahwa barang yang sama tercatat

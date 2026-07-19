@@ -5,6 +5,9 @@ import {
   ArrowLeft, ArrowRight, Loader2, ClipboardList, CheckCircle2, XCircle, Coins, FileDown,
   Plus, Scale, Search, Send, Trash2,
 } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -48,6 +51,17 @@ export default function PerencanaanPage({ user, onBack }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [tahun, setTahun] = useState(new Date().getFullYear());
+  // Tanggalan header: tanggal acuan ringkas — TA riwayat biaya mengikuti
+  // tahun dari tanggal yang dipilih (menggantikan select TA polos).
+  const [tanggalAcuan, setTanggalAcuan] = useState(
+    () => new Date().toISOString().slice(0, 10));
+  const tanggalanRef = useRef(null);
+  const pilihTanggalAcuan = (v) => {
+    if (!v) return;
+    setTanggalAcuan(v);
+    const thBaru = parseInt(v.slice(0, 4), 10);
+    if (!Number.isNaN(thBaru)) setTahun(thBaru);
+  };
   // Register usulan RKBMN: data GET + dialog usulan baru {data, aset, saving}
   const [usulan, setUsulan] = useState(null);
   const [formUsulan, setFormUsulan] = useState(null);
@@ -221,42 +235,74 @@ export default function PerencanaanPage({ user, onBack }) {
               Saringan kelayakan usulan (PMK 153/2021) + riwayat biaya per aset
             </p>
           </div>
-          <select
-            value={tahun}
-            onChange={(e) => setTahun(parseInt(e.target.value, 10))}
-            className="h-8 px-2 rounded-lg border border-border bg-background text-xs text-foreground flex-shrink-0"
-            data-testid="perencanaan-tahun"
-            aria-label="Tahun anggaran riwayat biaya"
-          >
-            {[th, th - 1, th - 2].map((t) => <option key={t} value={t}>TA {t}</option>)}
-          </select>
+          {/* Tanggalan ringkas: persegi seukuran tombol — strip bulan, angka
+              tanggal, tahun; klik membuka pemilih tanggal. TA riwayat biaya
+              mengikuti tahun tanggal terpilih. */}
           <button
             type="button"
-            onClick={() => downloadFileWithProgress(
-              `${API}/perencanaan/rkbmn-pemeliharaan-xlsx?tahun=${tahun}`,
-              `Usulan_RKBMN_Pemeliharaan_TA${tahun + 1}.xlsx`,
-              { label: "Kertas kerja usulan RKBMN" },
-            ).catch(() => {})}
-            className="h-8 px-2.5 rounded-lg border border-border text-xs font-semibold text-foreground/80 flex items-center gap-1.5 hover:bg-muted flex-shrink-0 min-h-0"
-            title="Unduh kertas kerja usulan RKBMN (XLSX)"
-            aria-label="Unduh kertas kerja usulan RKBMN (XLSX)"
-            data-testid="perencanaan-xlsx"
+            onClick={() => {
+              const el = tanggalanRef.current;
+              if (!el) return;
+              if (typeof el.showPicker === "function") el.showPicker();
+              else el.click();
+            }}
+            className="h-9 w-10 rounded-lg border border-border bg-background flex flex-col items-stretch overflow-hidden flex-shrink-0 hover:border-blue-500 min-w-0 min-h-0"
+            title={`Tanggal acuan ${tanggalAcuan} — TA ${tahun}. Klik untuk mengganti.`}
+            aria-label="Pilih tanggal acuan tahun anggaran"
+            data-testid="perencanaan-tanggalan"
           >
-            <FileDown className="w-3.5 h-3.5" /><span className="hidden sm:inline">Kertas Kerja</span>
+            <span className="bg-blue-600 text-white text-[7px] font-bold uppercase tracking-wide leading-none py-[2px] text-center">
+              {new Date(`${tanggalAcuan}T00:00:00`).toLocaleDateString("id-ID", { month: "short" })}
+            </span>
+            <span className="text-[13px] font-bold text-foreground leading-none pt-[2px] text-center">
+              {tanggalAcuan.slice(8, 10)}
+            </span>
+            <span className="text-[7px] text-muted-foreground leading-none pb-[2px] text-center">
+              {tanggalAcuan.slice(0, 4)}
+            </span>
           </button>
-          <button
-            type="button"
-            onClick={() => downloadFileWithProgress(
-              `${API}/perencanaan/usulan/export`, "register_usulan_rkbmn.csv",
-              { label: "Register usulan RKBMN (CSV)" },
-            ).catch(() => {})}
-            className="h-8 px-2.5 rounded-lg border border-border text-xs font-semibold text-foreground/80 flex items-center gap-1.5 hover:bg-muted flex-shrink-0 min-h-0"
-            title="Unduh register usulan RKBMN (CSV)"
-            aria-label="Unduh register usulan RKBMN (CSV)"
-            data-testid="perencanaan-export"
-          >
-            <FileDown className="w-3.5 h-3.5" /><span className="hidden sm:inline">CSV</span>
-          </button>
+          <input
+            ref={tanggalanRef} type="date" value={tanggalAcuan}
+            onChange={(e) => pilihTanggalAcuan(e.target.value)}
+            className="sr-only" tabIndex={-1} aria-hidden="true"
+            data-testid="perencanaan-tanggalan-input"
+          />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="h-8 px-2.5 rounded-lg border border-border text-xs font-semibold text-foreground/80 flex items-center gap-1.5 hover:bg-muted flex-shrink-0 min-h-0"
+                title="Unduhan perencanaan"
+                aria-label="Unduhan perencanaan"
+                data-testid="perencanaan-unduh-menu"
+              >
+                <FileDown className="w-3.5 h-3.5" /><span className="hidden sm:inline">Unduh</span>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuItem className="min-h-[42px]" data-testid="perencanaan-xlsx"
+                onClick={() => downloadFileWithProgress(
+                  `${API}/perencanaan/rkbmn-pemeliharaan-xlsx?tahun=${tahun}`,
+                  `Usulan_RKBMN_Pemeliharaan_TA${tahun + 1}.xlsx`,
+                  { label: "Kertas kerja usulan RKBMN" },
+                ).catch(() => {})}>
+                <div>
+                  <p className="text-xs font-semibold">Kertas Kerja RKBMN (XLSX)</p>
+                  <p className="text-[10px] text-muted-foreground">Usulan pemeliharaan TA {tahun + 1}</p>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem className="min-h-[42px]" data-testid="perencanaan-export"
+                onClick={() => downloadFileWithProgress(
+                  `${API}/perencanaan/usulan/export`, "register_usulan_rkbmn.csv",
+                  { label: "Register usulan RKBMN (CSV)" },
+                ).catch(() => {})}>
+                <div>
+                  <p className="text-xs font-semibold">Register Usulan (CSV)</p>
+                  <p className="text-[10px] text-muted-foreground">Seluruh usulan RKBMN tercatat</p>
+                </div>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <BookingNomorButton modul="perencanaan" jenisNaskah="Laporan" referensi="RKBMN" />
         </div>
       </header>
