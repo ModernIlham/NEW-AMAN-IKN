@@ -1,12 +1,58 @@
 import React, { useRef, memo } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Camera, Briefcase, MapPin, Tag, CreditCard, Trash2, History, ClipboardCheck, Lock, Cloud, CloudOff, Check, RotateCcw, Clock, Loader2, AlertTriangle, BookOpen, User } from "lucide-react";
+import { Camera, Briefcase, MapPin, Tag, CreditCard, Trash2, History, ClipboardCheck, Lock, Cloud, CloudOff, Check, RotateCcw, Clock, Loader2, AlertTriangle, BookOpen, User, RefreshCcw, ShieldCheck } from "lucide-react";
+import { sisaGaransi } from "../../lib/garansi";
+import { useSinkronSiman } from "../../lib/simanSync";
 import { Button } from "../ui/button";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "../ui/tooltip";
+
+// Penanda selisih SIMAN per baris — komponen terpisah karena baris digambar
+// di dalam map virtualizer (hook tidak boleh dipanggil di sana): gradasi
+// orange halus menutupi baris + tombol sinkron di samping kotak NUP (klik =
+// terapkan nilai SIMAN V2); centang hijau sesaat setelah tuntas. Logika
+// bersama lib/simanSync.js — status tuntas terhubung lintas-tampilan.
+const SimanMarker = memo(({ asset }) => {
+  const { busy, synced, baruSaja, sinkron } = useSinkronSiman(asset);
+  const selisih = asset.siman?.status === "selisih" && !synced;
+  if (!selisih && !baruSaja) return null;
+  return (
+    <>
+      {selisih && (
+        <span
+          aria-hidden="true"
+          className="absolute inset-0 pointer-events-none"
+          style={{ backgroundImage: "linear-gradient(to top right, rgba(245,158,11,0.14), rgba(245,158,11,0.04) 45%, transparent 70%)" }}
+        />
+      )}
+      {selisih ? (
+        <button
+          type="button"
+          onClick={sinkron}
+          disabled={busy}
+          className="min-w-0 min-h-0 inline-flex items-center justify-center px-1 py-px rounded bg-amber-500/15 border border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/30 transition-colors flex-shrink-0"
+          title="Belum tersinkron dengan SIMAN V2 — klik untuk sinkronkan sekarang"
+          aria-label="Sinkronkan dengan SIMAN V2"
+          data-testid={`row-siman-${asset.id}`}
+        >
+          <RefreshCcw className={`w-2.5 h-2.5 ${busy ? "animate-spin" : ""}`} />
+        </button>
+      ) : (
+        <span
+          className="inline-flex items-center justify-center px-1 py-px rounded bg-emerald-500/15 border border-emerald-500/40 text-emerald-600 dark:text-emerald-400 flex-shrink-0"
+          title="Tersinkron dengan SIMAN V2"
+          data-testid={`row-siman-ok-${asset.id}`}
+        >
+          <Check className="w-2.5 h-2.5" />
+        </span>
+      )}
+    </>
+  );
+});
+SimanMarker.displayName = "SimanMarker";
 
 // Helper: truncated cell with optional icon
 const TruncatedCell = memo(({ text, icon: Icon }) => {
@@ -249,11 +295,12 @@ const VirtualizedAssetTable = memo(({ assets, editId, onEdit, onDelete, onPrintC
                   )}
                 </div>
 
-                {/* Identitas: Code + NUP + Category */}
+                {/* Identitas: Code + NUP + sinkron SIMAN + Category */}
                 <div className="flex-[2] min-w-0 px-1">
                   <div className="flex items-center gap-1">
                     <span className="font-semibold text-[11px] text-foreground truncate">{a.asset_code}</span>
                     {a.NUP && <span className="text-[8px] bg-muted text-muted-foreground px-1 rounded flex-shrink-0">{a.NUP}</span>}
+                    <SimanMarker asset={a} />
                   </div>
                   <div className="text-[10px] text-muted-foreground truncate leading-tight">{a.category || '-'}</div>
                 </div>
@@ -293,11 +340,23 @@ const VirtualizedAssetTable = memo(({ assets, editId, onEdit, onDelete, onPrintC
                   <span className="text-[10px] text-muted-foreground font-medium">{formatPrice(a.purchase_price)}</span>
                 </div>
 
-                {/* Kondisi */}
-                <div className="w-14 flex-shrink-0 flex justify-center">
+                {/* Kondisi (+ badge garansi ringkas di bawahnya bila ada) */}
+                <div className="w-14 flex-shrink-0 flex flex-col items-center justify-center gap-0.5">
                   <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none ${
                     a.condition === "Baik" ? "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400" : a.condition === "Rusak Ringan" ? "bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400" : "bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400"
                   }`}>{a.condition === "Rusak Ringan" ? "R.Ringan" : a.condition === "Rusak Berat" ? "R.Berat" : (a.condition || '-')}</span>
+                  {(() => {
+                    const g = sisaGaransi(a.garansi_hingga);
+                    return g ? (
+                      <span
+                        className={`inline-flex items-center gap-0.5 px-1 rounded-full text-[8px] font-bold leading-tight ${g.segera ? "bg-amber-500/15 text-amber-600 dark:text-amber-400" : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"}`}
+                        title={`Garansi${a.garansi_jenis ? ` ${a.garansi_jenis}` : ""} hingga ${g.hingga} (${g.hari} hari lagi)`}
+                        data-testid={`row-garansi-${a.id}`}
+                      >
+                        <ShieldCheck className="w-2 h-2" />{g.singkat}
+                      </span>
+                    ) : null;
+                  })()}
                 </div>
 
                 {/* Status — column widened to w-14 + "Maintenance" abbreviated so

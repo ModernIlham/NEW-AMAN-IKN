@@ -498,3 +498,10 @@ body.no-scroll { overflow: hidden; }
   55%  { transform: translateY(3px) scaleY(0.7); opacity: 1; }
   100% { transform: translateY(9px) scaleY(0.12); opacity: 0; }
 }
+/* Reduced-motion: aturan global di atas mematikan animasi (0.01ms, 1x) —
+   tanpa override ini frame akhir slurp (opacity 0, forwards) langsung
+   diterapkan sehingga centang sukses tidak pernah terlihat. Tampilkan
+   umpan balik sukses secara statis. */
+@media (prefers-reduced-motion: reduce) {
+  .siman-liquid-sukses { animation: none !important; opacity: 1; }
+}

@@ -191,7 +191,7 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
 
         {/* SPM hover overlay */}
         {hovered && asset.nomor_spm && (
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px] flex items-center justify-center z-5 pointer-events-none">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px] flex items-center justify-center z-[5] pointer-events-none">
             <div className="bg-black/70 text-white px-3 py-2 rounded-lg text-center">
               <span className="text-[9px] text-white/60 block">No. SPM</span>
               <span className="text-xs font-bold">{asset.nomor_spm}</span>
@@ -203,7 +203,7 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/50 via-40% to-transparent h-2/3 pointer-events-none" />
         {/* Saat air SIMAN tampil di dasar foto, baris kode/NUP diangkat
             sedikit agar tetap terbaca di atas garis air (teks putih). */}
-        <div className={`absolute bottom-0 left-0 right-0 z-2 px-2 flex items-end justify-between pointer-events-none ${(asset.siman?.status === "selisih" && !simanSynced) || simanBaruSaja ? "pb-[13px]" : "pb-1.5"}`}>
+        <div className={`absolute bottom-0 left-0 right-0 z-[2] px-2 flex items-end justify-between pointer-events-none ${(asset.siman?.status === "selisih" && !simanSynced) || simanBaruSaja ? "pb-[13px]" : "pb-1.5"}`}>
           <div className="leading-tight pointer-events-auto">
             <Tooltip delayDuration={150}>
               <TooltipTrigger asChild>
