@@ -45,7 +45,8 @@ async def _peta_masa_manfaat():
 
 _PROJ = {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
          "purchase_price": 1, "purchase_date": 1, "condition": 1,
-         "inventory_status": 1, "nilai_wajar_terakhir": 1, "revaluasi": 1}
+         "inventory_status": 1, "nilai_wajar_terakhir": 1, "revaluasi": 1,
+         "masa_manfaat_tambah_tahun": 1}
 _MAKS_BARIS = 500
 
 

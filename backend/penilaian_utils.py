@@ -26,16 +26,44 @@ from datetime import date
 
 from pembukuan_utils import golongan_of, parse_harga
 
-# Kelompok (5 digit) → masa manfaat TAHUN (pustaka §5; butir verifikasi
-# #11: entri "lazim" wajib divalidasi ke lampiran KMK sebelum seed penuh).
+# Kelompok (5 digit) → masa manfaat TAHUN. LENGKAP sesuai Lampiran Tabel
+# Masa Manfaat I KMK 295/KM.6/2019 jo. 266/KM.6/2023 jo. 339/KM.6/2024
+# (dokumen resmi diunggah pemilik, ditranskrip halaman-per-halaman —
+# menuntaskan butir verifikasi #11). Hanya golongan 3/4/5 yang disusutkan
+# aplikasi; golongan lain lihat GOLONGAN_TANPA_SUSUT.
 MASA_MANFAAT_DEFAULT = {
-    "30201": 7,   # Alat Angkutan Darat Bermotor (terverifikasi)
-    "30501": 5,   # Alat Kantor (terverifikasi)
-    "30502": 5,   # Alat Rumah Tangga (terverifikasi)
-    "31001": 4,   # Komputer Unit (lazim)
-    "31002": 4,   # Peralatan Komputer (lazim)
-    "30601": 5,   # Alat Studio (lazim)
-    "30602": 5,   # Alat Komunikasi (lazim)
+    # Golongan 3 — Peralatan dan Mesin
+    "30101": 10, "30102": 8, "30103": 7,
+    "30201": 7, "30202": 2, "30203": 10, "30204": 3, "30205": 20,
+    "30301": 10, "30302": 5, "30303": 5,
+    "30401": 4,
+    "30501": 5, "30502": 5,
+    "30601": 5, "30602": 5, "30603": 10, "30604": 15,
+    "30701": 5, "30702": 5,
+    "30801": 8, "30802": 15, "30803": 15, "30804": 10, "30805": 10,
+    "30806": 7, "30807": 15, "30808": 10,
+    "30901": 10, "30902": 3, "30903": 5, "30904": 4,
+    "31001": 4, "31002": 4,
+    "31101": 5, "31102": 10,
+    "31201": 10, "31202": 10,
+    "31301": 10, "31302": 10, "31303": 15,
+    "31304": 20, "31305": 20,           # KMK 339/2024
+    "31401": 10, "31402": 10,
+    "31501": 5, "31502": 5, "31503": 2, "31504": 10,
+    "31601": 10,
+    "31701": 8,
+    "31801": 7, "31802": 5, "31803": 15,
+    "31901": 3,
+    "32001": 5, "32002": 10, "32101": 15,  # KMK 266/2023
+    # Golongan 4 — Gedung dan Bangunan
+    "40101": 50, "40102": 50, "40201": 50, "40301": 40, "40401": 50,
+    # Golongan 5 — Jalan, Irigasi, dan Jaringan
+    "50101": 10, "50102": 50,
+    "50201": 50, "50202": 50, "50203": 25, "50204": 10, "50205": 30,
+    "50206": 40, "50207": 40,
+    "50301": 30, "50302": 30, "50303": 10, "50304": 10, "50305": 40,
+    "50306": 40, "50307": 30, "50308": 30, "50309": 20, "50310": 5,
+    "50401": 30, "50402": 40, "50403": 20, "50404": 30,
 }
 
 GOLONGAN_TANPA_SUSUT = {
@@ -153,6 +181,10 @@ def status_susut(asset, peta=None, diusulkan=False):
         return ("tanpa_referensi",
                 f"Kelompok {kode[:5] or '?'} belum punya masa manfaat terdaftar — lengkapi referensi KMK",
                 None)
+    # Tambahan masa manfaat akibat PERBAIKAN (PMK 65/2017 Ps.15; Tabel II
+    # KMK 295/266/339) — diakui saat BA serah terima perbaikan di modul
+    # Pemeliharaan dan terakumulasi pada aset.
+    masa += max(0, int(asset.get("masa_manfaat_tambah_tahun") or 0))
     # Gerbang pada TITIK-MULAI EFEKTIF penyusutan (aset revaluasi dimulai dari
     # tanggal revaluasi; lihat dasar_penyusutan) — bukan hanya purchase_date —
     # agar aset revaluasi yang tanggal perolehannya kosong tetap dapat

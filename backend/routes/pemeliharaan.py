@@ -52,6 +52,19 @@ class PemeliharaanIn(BaseModel):
     keterangan: str = ""
 
 
+class KapitalisasiIn(BaseModel):
+    """Data Berita Acara serah terima pekerjaan perbaikan (KMK 295/2019
+    Diktum KEENAM: pengakuan tambahan masa manfaat dilakukan saat penyerahan
+    pekerjaan melalui Berita Acara Serah Terima). Nomor kosong → otomatis."""
+    nomor_ba: str = ""
+    tanggal_serah_terima: str = ""     # default = hari ini
+    pihak_pelaksana: str = ""          # penyedia jasa / pelaksana pekerjaan
+    jabatan_pelaksana: str = ""
+    pihak_penerima: str = ""           # pejabat penerima hasil pekerjaan
+    jabatan_penerima: str = ""
+    terapkan_masa_manfaat: bool = True  # matikan bila perbaikan TIDAK menambah umur
+
+
 # PENTING: rute literal (/rekap, /jenis, /aset/...) HARUS di atas rute
 # berparameter agar tidak tertelan {catatan_id} (lihat SKILL.md).
 
@@ -426,54 +439,123 @@ async def create_pemeliharaan(payload: PemeliharaanIn, user: dict = Depends(requ
     return record
 
 
-@pemeliharaan_router.post("/pemeliharaan/{catatan_id}/kapitalisasi")
-async def posting_kapitalisasi(catatan_id: str,
-                               admin: dict = Depends(require_admin)):
-    """Posting PENGEMBANGAN NILAI ASET (jurnal 202) dari catatan pemeliharaan
-    ber-indikasi kapitalisasi (PMK 181) — integrasi Pemeliharaan → Pembukuan.
+async def _konteks_kapitalisasi(catatan_id: str):
+    """Muat catatan + aset + perhitungan Tabel II — dipakai pratinjau & posting.
 
-    Keputusan kualitatif (menambah masa manfaat/kapasitas?) ada di admin —
-    endpoint hanya mengeksekusi setelah disetujui: nilai perolehan aset
-    BERTAMBAH sebesar biaya (DBKP/Neraca ikut naik), jurnal 202 tercatat di
-    Buku Barang, dan catatan ditandai agar tidak dobel-posting (CAS idempoten).
+    Persentase dihitung terhadap NILAI DASAR PENYUSUTAN (basis revaluasi bila
+    ada, kalau tidak nilai perolehan) SEBELUM biaya perbaikan ditambahkan —
+    sesuai kolom KMK "dari nilai aset (di luar penyusutan)".
     """
     from pembukuan_utils import parse_harga
-    from shared_utils import catat_mutasi_bmn, log_audit
+    from penilaian_utils import dasar_penyusutan
+    from perbaikan_utils import hitung_penambahan_masa_manfaat
 
     rec = await db.pemeliharaan.find_one({"id": catatan_id}, {"_id": 0})
     if not rec:
         raise HTTPException(status_code=404, detail="Catatan tidak ditemukan")
-    if not rec.get("indikasi_kapitalisasi"):
-        raise HTTPException(
-            status_code=400,
-            detail="Catatan ini tidak berindikasi kapitalisasi (biaya di bawah ambang PMK 181)")
     aset = await db.assets.find_one(
         {"id": rec.get("asset_id"), "dihapus": {"$ne": True}},
-        {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1})
+        {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
+         "purchase_price": 1, "purchase_date": 1, "nilai_wajar_terakhir": 1,
+         "revaluasi": 1, "masa_manfaat_tambah_tahun": 1, "location": 1})
     if not aset:
         raise HTTPException(status_code=404,
                             detail="Aset tidak ditemukan / sudah dihapus")
     biaya = parse_harga(rec.get("biaya"))
+    nilai_dasar, _mulai, _sumber = dasar_penyusutan(aset)
+    hitung = hitung_penambahan_masa_manfaat(
+        aset.get("asset_code"), biaya, nilai_dasar)
+    return rec, aset, biaya, nilai_dasar, hitung
+
+
+@pemeliharaan_router.get("/pemeliharaan/{catatan_id}/pratinjau-kapitalisasi")
+async def pratinjau_kapitalisasi(catatan_id: str,
+                                 _user: dict = Depends(require_user)):
+    """Pratinjau efek posting: nilai bertambah + tambahan masa manfaat
+    Tabel II KMK 295/266/339 (persentase biaya terhadap nilai dasar)."""
+    from perbaikan_utils import DASAR_HUKUM_PERBAIKAN
+
+    rec, aset, biaya, nilai_dasar, hitung = await _konteks_kapitalisasi(catatan_id)
+    return {
+        "catatan_id": catatan_id,
+        "sudah_diposting": bool(rec.get("kapitalisasi_diposting")),
+        "indikasi_kapitalisasi": bool(rec.get("indikasi_kapitalisasi")),
+        "biaya": biaya,
+        "nilai_dasar": nilai_dasar,
+        "perbaikan": hitung,   # None = kelompok tak terdaftar di Tabel II
+        "masa_manfaat_tambah_sekarang": int(aset.get("masa_manfaat_tambah_tahun") or 0),
+        "dasar_hukum": DASAR_HUKUM_PERBAIKAN,
+        "ba_perbaikan": rec.get("ba_perbaikan") or None,
+    }
+
+
+@pemeliharaan_router.post("/pemeliharaan/{catatan_id}/kapitalisasi")
+async def posting_kapitalisasi(catatan_id: str,
+                               payload: KapitalisasiIn = None,
+                               admin: dict = Depends(require_admin)):
+    """Posting PENGEMBANGAN NILAI ASET (jurnal 202) dari catatan pemeliharaan
+    ber-indikasi kapitalisasi (PMK 181) — integrasi Pemeliharaan → Pembukuan.
+
+    Sekaligus (PMK 65/2017 Ps.15 + KMK 295/2019 Diktum KEENAM): perbaikan
+    yang menambah umur diakui lewat BERITA ACARA serah terima pekerjaan —
+    payload BA disimpan (nomor otomatis bila kosong), tambahan masa manfaat
+    dari Tabel Masa Manfaat II diterapkan ke aset, dan BA dapat diunduh
+    sebagai PDF. Keputusan kualitatif tetap pada admin; catatan ditandai
+    agar tidak dobel-posting (CAS idempoten).
+    """
+    from shared_utils import catat_mutasi_bmn, log_audit
+
+    ba = payload or KapitalisasiIn()
+    rec, aset, biaya, nilai_dasar, hitung = await _konteks_kapitalisasi(catatan_id)
+    if not rec.get("indikasi_kapitalisasi"):
+        raise HTTPException(
+            status_code=400,
+            detail="Catatan ini tidak berindikasi kapitalisasi (biaya di bawah ambang PMK 181)")
     if biaya <= 0:
         raise HTTPException(status_code=400, detail="Biaya tidak valid")
     now = datetime.now(timezone.utc).isoformat()
+    tgl_ba = str(ba.tanggal_serah_terima or "").strip()[:10] or now[:10]
+    tambah_tahun = int((hitung or {}).get("tambah_tahun") or 0) \
+        if ba.terapkan_masa_manfaat else 0
+    nomor_ba = str(ba.nomor_ba or "").strip()
+    if not nomor_ba:
+        urut = await db.pemeliharaan.count_documents(
+            {"ba_perbaikan.nomor": {"$exists": True}}) + 1
+        nomor_ba = f"BA-PRB/{urut:03d}/{tgl_ba[:4]}"
+    ba_doc = {
+        "nomor": nomor_ba,
+        "tanggal": tgl_ba,
+        "pihak_pelaksana": str(ba.pihak_pelaksana or "").strip(),
+        "jabatan_pelaksana": str(ba.jabatan_pelaksana or "").strip(),
+        "pihak_penerima": str(ba.pihak_penerima or "").strip(),
+        "jabatan_penerima": str(ba.jabatan_penerima or "").strip(),
+        "nilai_dasar": nilai_dasar,
+        "perbaikan": hitung,           # {kelompok, jenis, persentase, ...}|None
+        "tambah_tahun_diterapkan": tambah_tahun,
+        "dibuat_oleh": admin.get("username"),
+        "dibuat_pada": now,
+    }
     # CAS idempoten: hanya SATU request yang lolos menandai — cegah dobel
     # penambahan nilai bila tombol diklik dua kali / dua tab.
     res = await db.pemeliharaan.update_one(
         {"id": catatan_id, "kapitalisasi_diposting": {"$ne": True}},
         {"$set": {"kapitalisasi_diposting": True,
                   "kapitalisasi_oleh": admin.get("username"),
-                  "kapitalisasi_pada": now, "updated_at": now}})
+                  "kapitalisasi_pada": now, "ba_perbaikan": ba_doc,
+                  "updated_at": now}})
     if res.modified_count == 0:
         raise HTTPException(status_code=409,
                             detail="Sudah pernah diposting sebagai pengembangan nilai")
     # Nilai perolehan BERTAMBAH — pengembangan nilai menambah nilai yang
-    # dibukukan (DBKP/posisi neraca membaca purchase_price); version naik
-    # untuk bust cache/OCC form.
+    # dibukukan (DBKP/posisi neraca membaca purchase_price); masa manfaat
+    # bertambah sesuai Tabel II (dibaca status_susut Penilaian/DBKP/LBP);
+    # version naik untuk bust cache/OCC form.
+    inc = {"purchase_price": biaya, "version": 1}
+    if tambah_tahun > 0:
+        inc["masa_manfaat_tambah_tahun"] = tambah_tahun
     await db.assets.update_one(
         {"id": aset["id"]},
-        {"$inc": {"purchase_price": biaya, "version": 1},
-         "$set": {"updated_at": now}})
+        {"$inc": inc, "$set": {"updated_at": now}})
     await catat_mutasi_bmn({
         "asset_id": aset["id"], "kode_transaksi": "202",
         "kode_barang": str(aset.get("asset_code") or ""),
@@ -483,13 +565,117 @@ async def posting_kapitalisasi(catatan_id: str,
         "keterangan": ("Pengembangan nilai dari pemeliharaan: "
                        + str(rec.get("uraian") or ""))[:200],
         "oleh": admin.get("username", "system")})
+    detail_mm = (f" + masa manfaat +{tambah_tahun} th (Tabel II KMK, {nomor_ba})"
+                 if tambah_tahun > 0 else f" (BA {nomor_ba})")
     await log_audit("kapitalisasi_pemeliharaan", "", asset_id=aset["id"],
                     asset_code=str(aset.get("asset_code") or ""),
                     asset_name=str(aset.get("asset_name") or ""),
                     username=admin.get("username", "system"),
-                    detail=f"Jurnal 202 Rp{int(biaya):,} dari catatan {catatan_id}")
+                    detail=f"Jurnal 202 Rp{int(biaya):,} dari catatan {catatan_id}{detail_mm}")
     return {"ok": True, "nilai_ditambahkan": biaya, "asset_id": aset["id"],
-            "kode_transaksi": "202"}
+            "kode_transaksi": "202", "nomor_ba": nomor_ba,
+            "tambah_masa_manfaat_tahun": tambah_tahun,
+            "perbaikan": hitung}
+
+
+@pemeliharaan_router.get("/pemeliharaan/{catatan_id}/ba-perbaikan-pdf")
+async def ba_perbaikan_pdf(catatan_id: str, _user: dict = Depends(require_user)):
+    """BERITA ACARA SERAH TERIMA HASIL PEKERJAAN PERBAIKAN (PDF).
+
+    Dokumen pengakuan tambahan masa manfaat akibat perbaikan (KMK 295/2019
+    Diktum KEENAM) — memuat identitas aset, uraian & biaya pekerjaan,
+    persentase terhadap nilai aset, jenis perbaikan, dan tambahan masa
+    manfaat sesuai Tabel Masa Manfaat II.
+    """
+    from io import BytesIO
+
+    from reportlab.lib.units import mm as rl_mm
+    from reportlab.platypus import Paragraph, Spacer, Table
+
+    from perbaikan_utils import DASAR_HUKUM_PERBAIKAN
+    from routes.reports import (
+        _fit_col_widths, _fmt_tanggal_id, _get_report_styles,
+        _kop_surat_flowables, _page_footer_factory, _signature_block,
+        _std_doc, _std_table_style, _title_block,
+    )
+
+    rec = await db.pemeliharaan.find_one({"id": catatan_id}, {"_id": 0})
+    if not rec:
+        raise HTTPException(status_code=404, detail="Catatan tidak ditemukan")
+    ba = rec.get("ba_perbaikan")
+    if not ba:
+        raise HTTPException(
+            status_code=404,
+            detail="Belum ada Berita Acara — posting kapitalisasi dahulu")
+    hit = ba.get("perbaikan") or {}
+    tambah = int(ba.get("tambah_tahun_diterapkan") or 0)
+
+    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    buffer = BytesIO()
+    doc = _std_doc(buffer)
+    st = _get_report_styles()
+    el = []
+    el.extend(_kop_surat_flowables(settings, doc.width))
+    el.extend(_title_block(
+        "BERITA ACARA SERAH TERIMA HASIL PEKERJAAN PERBAIKAN",
+        subjudul=f"Nomor: {ba.get('nomor') or '-'}"))
+    el.append(Paragraph(
+        f"Pada hari ini, tanggal {_fmt_tanggal_id(ba.get('tanggal'))}, "
+        "telah dilakukan serah terima hasil pekerjaan perbaikan Barang "
+        "Milik Negara dengan rincian sebagai berikut:", st['Body']))
+    el.append(Spacer(1, 3 * rl_mm))
+    from xml.sax.saxutils import escape as _esc
+    pct = hit.get("persentase")
+    baris = [
+        ("Nama Barang", rec.get("asset_name") or "-"),
+        ("Kode Barang · NUP", f"{rec.get('asset_code') or '-'} · {rec.get('NUP') or '-'}"),
+        ("Tanggal Pekerjaan", _fmt_tanggal_id(rec.get("tanggal"))),
+        ("Uraian Pekerjaan", rec.get("uraian") or "-"),
+        ("Pelaksana", rec.get("pelaksana") or ba.get("pihak_pelaksana") or "-"),
+        ("No. Bukti/SPM/Kontrak", rec.get("no_bukti") or "-"),
+        ("Biaya Perbaikan", f"Rp{_fmt_rp(rec.get('biaya'))}"),
+        ("Nilai Aset (di luar penyusutan)", f"Rp{_fmt_rp(ba.get('nilai_dasar'))}"),
+        ("Persentase thd Nilai Aset", f"{pct}%" if pct is not None else "-"),
+        ("Jenis Perbaikan (Tabel II)", hit.get("jenis") or "-"),
+        ("Tambahan Masa Manfaat", f"{tambah} tahun" if tambah > 0
+         else "Tidak menambah masa manfaat"),
+    ]
+    tdata = [[Paragraph(f"<b>{_esc(k)}</b>", st['Cell']),
+              Paragraph(_esc(str(v)), st['Cell'])] for k, v in baris]
+    tbl = Table(tdata, colWidths=_fit_col_widths([160, 340], doc.width))
+    tbl.setStyle(_std_table_style(zebra=True))
+    el.append(tbl)
+    el.append(Spacer(1, 3 * rl_mm))
+    if tambah > 0:
+        el.append(Paragraph(
+            "Dengan ditandatanganinya Berita Acara ini, tambahan masa manfaat "
+            f"sebesar <b>{tambah} tahun</b> atas Aset Tetap tersebut DIAKUI "
+            "terhitung sejak tanggal serah terima pekerjaan, sesuai "
+            f"{DASAR_HUKUM_PERBAIKAN}.", st['Body']))
+    else:
+        el.append(Paragraph(
+            "Perbaikan ini dibukukan sebagai pengembangan nilai aset "
+            f"(jurnal 202) sesuai {DASAR_HUKUM_PERBAIKAN}; berdasarkan "
+            "Tabel Masa Manfaat II tidak terdapat tambahan masa manfaat "
+            "untuk rentang persentase tersebut.", st['Body']))
+    el.append(Spacer(1, 10 * rl_mm))
+    el.extend(_signature_block([
+        {"header": "Yang Menyerahkan,",
+         "role": ba.get("jabatan_pelaksana") or "Pelaksana Pekerjaan",
+         "nama": ba.get("pihak_pelaksana") or "................"},
+        {"header": "Yang Menerima,",
+         "role": ba.get("jabatan_penerima") or "Pejabat Penerima Hasil Pekerjaan",
+         "nama": ba.get("pihak_penerima") or "................"},
+    ], doc.width))
+    footer = _page_footer_factory("BA Perbaikan")
+    doc.build(el, onFirstPage=footer, onLaterPages=footer)
+    buffer.seek(0)
+    from fastapi.responses import StreamingResponse
+    aman = "".join(c if c.isalnum() else "_" for c in (ba.get("nomor") or catatan_id))[:40]
+    return StreamingResponse(
+        buffer, media_type="application/pdf",
+        headers={"Content-Disposition":
+                 f'attachment; filename="BA_Perbaikan_{aman}.pdf"'})
 
 
 @pemeliharaan_router.delete("/pemeliharaan/{catatan_id}")

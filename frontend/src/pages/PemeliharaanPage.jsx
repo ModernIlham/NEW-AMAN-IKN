@@ -237,29 +237,52 @@ export default function PemeliharaanPage({ user, onBack }) {
     }
   };
 
-  // Integrasi Pemeliharaan → Pembukuan: posting pengembangan nilai (jurnal
-  // 202) — keputusan kualitatif admin; nilai perolehan aset bertambah.
-  const postingKapitalisasi = async (row) => {
-    const ok = await confirm({
-      title: "Posting pengembangan nilai aset (jurnal 202)?",
-      description:
-        `${row.uraian} — ${row.asset_name || "-"} (${fmtRp(row.biaya)}). ` +
-        "Nilai perolehan aset BERTAMBAH sebesar biaya ini (DBKP/Neraca ikut " +
-        "naik) dan jurnal 202 tercatat di Buku Barang. Lakukan hanya bila " +
-        "pemeliharaan ini menambah masa manfaat/kapasitas (belanja modal, " +
-        "PMK 181). Tidak dapat dibatalkan dari sini.",
-      confirmLabel: "Posting 202",
-    });
-    if (!ok) return;
+  // Integrasi Pemeliharaan → Pembukuan + Penilaian: posting pengembangan
+  // nilai (jurnal 202) SEKALIGUS pengakuan tambahan masa manfaat Tabel II
+  // KMK 295/266/339 lewat Berita Acara serah terima perbaikan (PMK 65/2017
+  // Ps.15; KMK 295/2019 Diktum KEENAM) — dialog memuat pratinjau efeknya.
+  const [kap, setKap] = useState(null); // {row, pra, nomor_ba, ...form BA}
+  const bukaKapitalisasi = async (row) => {
     try {
-      const r = await axios.post(`${API}/pemeliharaan/${row.id}/kapitalisasi`);
-      toast.success(`Nilai aset bertambah ${fmtRp(r.data?.nilai_ditambahkan)} (jurnal 202)`);
+      const r = await axios.get(`${API}/pemeliharaan/${row.id}/pratinjau-kapitalisasi`);
+      setKap({
+        row, pra: r.data, saving: false,
+        nomor_ba: "", tanggal_serah_terima: row.tanggal || "",
+        pihak_pelaksana: row.pelaksana || "", jabatan_pelaksana: "",
+        pihak_penerima: "", jabatan_penerima: "",
+        terapkan_masa_manfaat: (r.data?.perbaikan?.tambah_tahun || 0) > 0,
+      });
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal memuat pratinjau kapitalisasi");
+    }
+  };
+  const kirimKapitalisasi = async () => {
+    if (!kap) return;
+    setKap((k) => ({ ...k, saving: true }));
+    try {
+      const r = await axios.post(`${API}/pemeliharaan/${kap.row.id}/kapitalisasi`, {
+        nomor_ba: kap.nomor_ba, tanggal_serah_terima: kap.tanggal_serah_terima,
+        pihak_pelaksana: kap.pihak_pelaksana, jabatan_pelaksana: kap.jabatan_pelaksana,
+        pihak_penerima: kap.pihak_penerima, jabatan_penerima: kap.jabatan_penerima,
+        terapkan_masa_manfaat: kap.terapkan_masa_manfaat,
+      });
+      const mm = r.data?.tambah_masa_manfaat_tahun || 0;
+      toast.success(
+        `Nilai aset bertambah ${fmtRp(r.data?.nilai_ditambahkan)} (jurnal 202)` +
+        (mm > 0 ? ` · masa manfaat +${mm} tahun (BA ${r.data?.nomor_ba})` : ""));
+      setKap(null);
       muatRekap();
       muatDaftar();
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Gagal posting pengembangan nilai");
+      setKap((k) => (k ? { ...k, saving: false } : k));
     }
   };
+  const unduhBaPerbaikan = (row) =>
+    downloadFileWithProgress(
+      `${API}/pemeliharaan/${row.id}/ba-perbaikan-pdf`,
+      `BA_Perbaikan_${(row.asset_code || row.id).replace(/[^\w-]/g, "_")}.pdf`,
+      { label: "Berita Acara Perbaikan (PDF)" }).catch(() => {});
 
   const hapus = async (row) => {
     const ok = await confirm({
@@ -585,6 +608,14 @@ export default function PemeliharaanPage({ user, onBack }) {
                             Nilai dikapitalisasi ✓
                           </span>
                         )}
+                        {(r.ba_perbaikan?.tambah_tahun_diterapkan || 0) > 0 && (
+                          <span
+                            className="px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-600 dark:text-violet-400 text-[10px] font-semibold"
+                            title={`Tambahan masa manfaat Tabel II KMK 295/266/339 — BA ${r.ba_perbaikan?.nomor || "-"} (${r.ba_perbaikan?.perbaikan?.jenis || "-"} ${r.ba_perbaikan?.perbaikan?.persentase ?? "-"}% dari nilai aset)`}
+                          >
+                            Masa manfaat +{r.ba_perbaikan.tambah_tahun_diterapkan} th
+                          </span>
+                        )}
                       </div>
                       <p className="text-sm font-semibold text-foreground mt-1">{r.uraian}</p>
                       <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
@@ -599,12 +630,23 @@ export default function PemeliharaanPage({ user, onBack }) {
                       {isAdmin && r.indikasi_kapitalisasi && !r.kapitalisasi_diposting && (
                         <button
                           type="button"
-                          onClick={() => postingKapitalisasi(r)}
-                          title="Posting pengembangan nilai aset (jurnal 202) — nilai perolehan bertambah"
+                          onClick={() => bukaKapitalisasi(r)}
+                          title="Posting pengembangan nilai (jurnal 202) + Berita Acara perbaikan & tambahan masa manfaat Tabel II KMK"
                           className="h-7 px-2 rounded-lg border border-fuchsia-500/40 text-fuchsia-600 dark:text-fuchsia-400 text-[10px] font-semibold flex items-center gap-1 hover:bg-fuchsia-500/10 min-h-0 min-w-0 whitespace-nowrap"
                           data-testid={`pemeliharaan-kapitalisasi-${r.id}`}
                         >
                           Posting 202
+                        </button>
+                      )}
+                      {r.ba_perbaikan && (
+                        <button
+                          type="button"
+                          onClick={() => unduhBaPerbaikan(r)}
+                          title={`Unduh Berita Acara Serah Terima Perbaikan (${r.ba_perbaikan.nomor || "-"})`}
+                          className="h-7 px-2 rounded-lg border border-border text-foreground/80 text-[10px] font-semibold flex items-center gap-1 hover:bg-muted min-h-0 min-w-0 whitespace-nowrap"
+                          data-testid={`pemeliharaan-ba-${r.id}`}
+                        >
+                          <FileText className="w-3 h-3" />BA Perbaikan
                         </button>
                       )}
                       {isAdmin && (
@@ -840,6 +882,103 @@ export default function PemeliharaanPage({ user, onBack }) {
               {formJadwal?.saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <CalendarClock className="w-4 h-4 mr-1.5" />}Simpan Jadwal
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog posting kapitalisasi + Berita Acara perbaikan ── */}
+      <Dialog open={!!kap} onOpenChange={(o) => !o && !kap?.saving && setKap(null)}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto overflow-x-hidden p-4 sm:p-6">
+          {kap && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Posting 202 + Berita Acara Perbaikan</DialogTitle>
+                <DialogDescription className="break-words">
+                  {kap.row.uraian} — {kap.row.asset_name || "-"} ({fmtRp(kap.row.biaya)}).
+                  Pengakuan tambahan masa manfaat dilakukan saat serah terima
+                  pekerjaan melalui Berita Acara (PMK 65/2017 Ps.15 · KMK
+                  295/2019 jo. 266/2023 jo. 339/2024).
+                </DialogDescription>
+              </DialogHeader>
+              {/* Pratinjau efek per Tabel Masa Manfaat II */}
+              <div className="rounded-xl border border-border bg-muted/40 p-2.5 text-xs space-y-1" data-testid="kap-pratinjau">
+                <p>Nilai aset (di luar penyusutan): <b>{fmtRp(kap.pra?.nilai_dasar)}</b></p>
+                <p>Biaya perbaikan: <b>{fmtRp(kap.pra?.biaya)}</b>
+                  {kap.pra?.perbaikan ? <> · <b>{kap.pra.perbaikan.persentase}%</b> dari nilai aset</> : null}</p>
+                {kap.pra?.perbaikan ? (
+                  <p className={kap.pra.perbaikan.tambah_tahun > 0 ? "text-violet-600 dark:text-violet-400 font-semibold" : "text-muted-foreground"}>
+                    Tabel II ({kap.pra.perbaikan.jenis}): tambahan masa manfaat{" "}
+                    <b>{kap.pra.perbaikan.tambah_tahun} tahun</b>
+                    {kap.pra.perbaikan.melebihi_rentang ? " (di atas rentang tabel — dipakai rentang tertinggi)" : ""}
+                  </p>
+                ) : (
+                  <p className="text-muted-foreground">
+                    Kelompok aset ini tidak terdaftar di Tabel Masa Manfaat II —
+                    hanya nilai yang dikapitalisasi (tanpa tambahan umur).
+                  </p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[11px] text-muted-foreground">Nomor BA (kosong = otomatis)</label>
+                    <Input value={kap.nomor_ba} onChange={(e) => setKap((k) => ({ ...k, nomor_ba: e.target.value }))}
+                      placeholder="cth. BA-PRB/001/2026" className="h-9 text-xs font-mono" data-testid="kap-nomor-ba" />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-muted-foreground">Tanggal serah terima *</label>
+                    <Input type="date" value={kap.tanggal_serah_terima}
+                      onChange={(e) => setKap((k) => ({ ...k, tanggal_serah_terima: e.target.value }))}
+                      className="h-9 text-xs" data-testid="kap-tanggal" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[11px] text-muted-foreground">Pihak yang menyerahkan (pelaksana)</label>
+                    <Input value={kap.pihak_pelaksana} onChange={(e) => setKap((k) => ({ ...k, pihak_pelaksana: e.target.value }))}
+                      placeholder="nama pelaksana/penyedia" className="h-9 text-xs" />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-muted-foreground">Jabatan/perusahaan</label>
+                    <Input value={kap.jabatan_pelaksana} onChange={(e) => setKap((k) => ({ ...k, jabatan_pelaksana: e.target.value }))}
+                      placeholder="cth. Direktur CV Maju" className="h-9 text-xs" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[11px] text-muted-foreground">Pihak yang menerima</label>
+                    <Input value={kap.pihak_penerima} onChange={(e) => setKap((k) => ({ ...k, pihak_penerima: e.target.value }))}
+                      placeholder="nama pejabat penerima" className="h-9 text-xs" />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-muted-foreground">Jabatan penerima</label>
+                    <Input value={kap.jabatan_penerima} onChange={(e) => setKap((k) => ({ ...k, jabatan_penerima: e.target.value }))}
+                      placeholder="cth. Pejabat Penerima Hasil Pekerjaan" className="h-9 text-xs" />
+                  </div>
+                </div>
+                {(kap.pra?.perbaikan?.tambah_tahun || 0) > 0 && (
+                  <label className="flex items-start gap-2 text-[11px] text-foreground/90 cursor-pointer">
+                    <input type="checkbox" className="mt-0.5" checked={kap.terapkan_masa_manfaat}
+                      onChange={(e) => setKap((k) => ({ ...k, terapkan_masa_manfaat: e.target.checked }))}
+                      data-testid="kap-terapkan-mm" />
+                    <span>
+                      Terapkan tambahan masa manfaat <b>+{kap.pra.perbaikan.tambah_tahun} tahun</b> ke
+                      aset (penyusutan Penilaian/DBKP/LBP ikut memakai umur baru).
+                      Matikan bila perbaikan ini nyatanya TIDAK menambah umur.
+                    </span>
+                  </label>
+                )}
+              </div>
+              <DialogFooter className="flex-row flex-wrap justify-end gap-1.5 space-x-0">
+                <Button variant="outline" className="h-9 text-xs" disabled={kap.saving}
+                  onClick={() => setKap(null)}>Batal</Button>
+                <Button className="h-9 text-xs" disabled={kap.saving || !kap.tanggal_serah_terima}
+                  onClick={kirimKapitalisasi} data-testid="kap-kirim">
+                  {kap.saving ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : null}
+                  Posting + Terbitkan BA
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 

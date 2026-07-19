@@ -1807,7 +1807,8 @@ async def generate_posisi_bmn_pdf(_user: dict = Depends(require_user_or_query_to
         await filter_aset_perhitungan(await scope_query_aset(_user, active_asset_filter())),
         {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
          "purchase_price": 1, "purchase_date": 1, "condition": 1,
-         "inventory_status": 1, "nilai_wajar_terakhir": 1, "revaluasi": 1},
+         "inventory_status": 1, "nilai_wajar_terakhir": 1, "revaluasi": 1,
+         "masa_manfaat_tambah_tahun": 1},
     ).to_list(500000)
 
     uraian_map = {k: u for k, u in GOLONGAN_DEFAULTS}
@@ -2180,7 +2181,8 @@ async def generate_penyusutan_pdf(
 
     proj = {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
             "purchase_price": 1, "purchase_date": 1, "condition": 1,
-            "inventory_status": 1, "nilai_wajar_terakhir": 1, "revaluasi": 1}
+            "inventory_status": 1, "nilai_wajar_terakhir": 1, "revaluasi": 1,
+            "masa_manfaat_tambah_tahun": 1}
     assets = await db.assets.find(await filter_aset_perhitungan(await scope_query_aset(_user, active_asset_filter())), proj).to_list(500000)
     diusulkan_ids = set()
     async for u in db.usulan_penghapusan.find(
@@ -2612,7 +2614,8 @@ async def generate_calbmn_pdf(
              "purchase_price": 1, "purchase_date": 1, "condition": 1,
              "created_at": 1, "inventory_status": 1, "nomor_perkara": 1,
              "pihak_bersengketa": 1, "dihapus": 1, "penghapusan": 1,
-             "nilai_wajar_terakhir": 1, "revaluasi": 1},
+             "nilai_wajar_terakhir": 1, "revaluasi": 1,
+             "masa_manfaat_tambah_tahun": 1},
     ).to_list(500000)
     tombstones = []
     async for t in db.audit_logs.find(
