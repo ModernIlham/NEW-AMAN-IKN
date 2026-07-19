@@ -176,6 +176,10 @@ ASSET_TEMPLATE_SCHEMA = [
     {"field": "keterangan_sengketa", "required": False, "width": 25,
      "rule": "Keterangan detail sengketa.",
      "sample1": "", "sample2": "", "dropdown": None},
+    {"field": "garansi_hingga", "required": False, "width": 16,
+     "rule": "Tanggal berakhir garansi (YYYY-MM-DD); rentang lazim dihitung "
+             "sejak tanggal perolehan.",
+     "sample1": "2027-05-31", "sample2": "", "dropdown": None},
 ]
 
 

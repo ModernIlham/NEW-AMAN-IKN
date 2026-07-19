@@ -1,5 +1,6 @@
 import React, { memo, useRef, useState, useEffect } from "react";
 import { Camera, Briefcase, MapPin, Tag, CreditCard, Trash2 } from "lucide-react";
+import { sisaGaransi } from "../../lib/garansi";
 import { Button } from "../ui/button";
 import {
   Tooltip,
@@ -113,6 +114,15 @@ const AssetTableRow = memo(({ asset, editId, onEdit, onDelete, onPrintCard }) =>
           {asset.siman?.status === "selisih" && (
             <span className="badge badge-warning text-[10px]" title="Data berbeda dengan SIMAN V2">≠ SIMAN</span>
           )}
+          {(() => {
+            const g = sisaGaransi(asset.garansi_hingga);
+            return g ? (
+              <span className={`badge text-[10px] ${g.segera ? "badge-warning" : "badge-success"}`}
+                title={`Garansi tercatat hingga ${g.hingga} (${g.hari} hari lagi)`}>
+                {g.label}
+              </span>
+            ) : null;
+          })()}
         </div>
       </td>
       <td className="px-2 py-1 align-middle">

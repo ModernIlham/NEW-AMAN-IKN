@@ -583,3 +583,47 @@ async def get_kartu_inventarisasi(kode_register: str = "", asset_code: str = "",
         "total": len(history),
         "query": {"kode_register": kode_register, "asset_code": asset_code, "NUP": NUP, "kode_satker": kode_satker},
     }
+
+
+@pengesahan_router.get("/assets/garansi-sebelumnya")
+async def garansi_sebelumnya(kode_register: str = "", asset_code: str = "",
+                             NUP: str = "", exclude_id: str = "",
+                             _user: dict = Depends(require_user)):
+    """Garansi tercatat dari inventarisasi SEBELUMNYA untuk identitas sama.
+
+    Auto-isi form inventarisasi: saat kode barang + NUP dan/atau kode register
+    yang diketik sama dengan aset yang pernah diinventarisasi, tanggal
+    berakhir garansi yang pernah dicatat ikut terbawa (terkumpul sekali,
+    terpakai di semua kegiatan berikutnya). Identitas: prioritas
+    kode_register; fallback (asset_code, NUP) — pola kartu inventarisasi.
+    NOTE: dideklarasikan di router yang dimuat sebelum assets_router agar
+    tidak tertangkap /assets/{asset_id}.
+    """
+    kode_register = (kode_register or "").strip()
+    asset_code = (asset_code or "").strip()
+    NUP = (NUP or "").strip()
+    if kode_register:
+        identity_query = {"kode_register": kode_register}
+    elif asset_code and NUP:
+        identity_query = {"asset_code": asset_code, "NUP": NUP}
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Isi kode_register atau pasangan asset_code + NUP")
+    q = {**identity_query,
+         "garansi_hingga": {"$nin": ["", None]},
+         "dihapus": {"$ne": True}}
+    if exclude_id.strip():
+        q["id"] = {"$ne": exclude_id.strip()}
+    sumber = await db.assets.find_one(
+        q, {"_id": 0, "id": 1, "garansi_hingga": 1, "asset_name": 1,
+            "activity_id": 1, "updated_at": 1},
+        sort=[("updated_at", -1)],
+    )
+    if not sumber:
+        return {"garansi_hingga": "", "sumber": None}
+    return {"garansi_hingga": sumber.get("garansi_hingga") or "",
+            "sumber": {"asset_id": sumber.get("id"),
+                       "asset_name": sumber.get("asset_name"),
+                       "activity_id": sumber.get("activity_id"),
+                       "updated_at": sumber.get("updated_at")}}
