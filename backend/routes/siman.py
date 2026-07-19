@@ -211,11 +211,18 @@ async def import_siman(request: Request, file: UploadFile = File(...),
         await db.masa_manfaat.bulk_write(mm_ops, ordered=False)
 
     # Validasi satker: kode satker pada FILE vs satker terdaftar di AMAN
-    # (master satker + kop global) — file milik satker lain terdeteksi dini.
+    # (master satker + kop global + KEGIATAN inventarisasi — kegiatan kini
+    # membawa kode_satker_lengkap ±20 digit versi SIMAN V2, sementara AMAN
+    # memakai 6 digit) — file milik satker lain terdeteksi dini, dan file
+    # satker sendiri tidak lagi salah diperingatkan.
     kode_terdaftar = set()
     async for s in db.satker.find({}, {"_id": 0, "kode_satker": 1, "kode_satker_lengkap": 1}):
         kode_terdaftar.add(s.get("kode_satker_lengkap") or "")
         kode_terdaftar.add(s.get("kode_satker") or "")
+    async for keg in db.inventory_activities.find(
+            {}, {"_id": 0, "kode_satker": 1, "kode_satker_lengkap": 1}):
+        kode_terdaftar.add(keg.get("kode_satker_lengkap") or "")
+        kode_terdaftar.add(keg.get("kode_satker") or "")
     setelan = await db.report_settings.find_one(
         {"type": "global"}, {"_id": 0, "kode_satker_lengkap": 1}) or {}
     kode_terdaftar.add(setelan.get("kode_satker_lengkap") or "")

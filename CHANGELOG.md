@@ -48,6 +48,26 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#464] Kode satker lengkap 20 digit di kegiatan — sinkron SIMAN V2 tanpa peringatan satker berbeda — 2026-07-19
+
+- **Konteks**: AMAN memakai kode satker 6 digit, SIMAN V2 memakai kode
+  LENGKAP ±20 digit — impor SIMAN di modul Pelaporan memunculkan peringatan
+  "Kode satker pada file BERBEDA dengan satker terdaftar" meski file milik
+  satker sendiri.
+- **Field baru `kode_satker_lengkap` di KEGIATAN** — form Data Satuan Kerja
+  (opsional, contoh format SIMAN); sinkron DUA ARAH dengan Master Satker:
+  kosong di kegiatan → terisi otomatis dari master (juga saat auto-isi
+  kode/nama satker di form), terisi di kegiatan → backfill master yang
+  belum punya; kegiatan baru ikut mendaftarkan kode lengkap saat
+  auto-registrasi master satker.
+- **Validasi satker impor SIMAN diperluas** — selain master satker + kop
+  global, kini juga membaca kode satker (6 & 20 digit) dari SEMUA kegiatan
+  inventarisasi.
+- **Validasi cerdas 6 ↔ 20 digit** — kode terdaftar (≥6 digit) yang
+  TERKANDUNG di dalam kode file (atau sebaliknya) dianggap cocok, karena
+  kode 20 digit SIMAN memuat kode 6 digit AMAN sebagai segmen; kode <6
+  digit tidak memicu (hindari cocok palsu). Unit test baru (597 lulus).
+
 ## [#463] Sinkron SIMAN bisa diklik di list HP & desktop (samping NUP) + saklar teks di HP + liquid menyatu ber-bola mengapung — 2026-07-19
 
 - **Hook bersama `lib/simanSync.js`** (`useSinkronSiman`) — logika sinkron

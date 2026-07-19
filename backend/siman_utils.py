@@ -167,11 +167,18 @@ def validasi_satker(kode_file_set, kode_terdaftar_set):
     Kembalikan {"cocok": bool, "kode_file": [...], "kode_terdaftar": [...]}.
     Bila salah satu sisi kosong (file tanpa kolom satker / AMAN belum diisi)
     dianggap cocok — validasi hanya bermakna saat keduanya terisi.
+
+    AMAN memakai kode satker 6 digit sedangkan SIMAN V2 memakai kode LENGKAP
+    ±20 digit yang MENGANDUNG 6 digit itu sebagai segmen — maka selain irisan
+    persis, kode terdaftar (≥6 digit) yang terkandung di dalam kode file
+    (atau sebaliknya) juga dianggap cocok.
     """
     file_norm = {norm_kode_satker(k) for k in (kode_file_set or set())} - {""}
     daftar_norm = {norm_kode_satker(k) for k in (kode_terdaftar_set or set())} - {""}
     cocok = (not file_norm or not daftar_norm
-             or bool(file_norm & daftar_norm))
+             or bool(file_norm & daftar_norm)
+             or any(len(d) >= 6 and len(f) >= 6 and (d in f or f in d)
+                    for d in daftar_norm for f in file_norm))
     return {
         "cocok": cocok,
         "kode_file": sorted(file_norm)[:5],
