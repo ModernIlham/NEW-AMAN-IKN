@@ -15,6 +15,16 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 function apiErr(e, fb) { return e?.response?.data?.detail || fb; }
 
+// Belanja modal (53x) → golongan aset neraca (dari digit ke-3 kode BAS).
+// Dipakai menandai tiap akun belanja perolehan aset dengan golongannya.
+const GOL_BELANJA = {
+  "531": { gol: "2", label: "Tanah" },
+  "532": { gol: "3", label: "Peralatan & Mesin" },
+  "533": { gol: "4", label: "Gedung & Bangunan" },
+  "534": { gol: "5", label: "Jalan, Irigasi & Jaringan" },
+  "536": { gol: "6", label: "Aset Tetap Lainnya" },
+};
+
 /**
  * Referensi Akun BAS — SATU pintu Kodefikasi Segmen Akun (tidak dipecah):
  * master seluruh akun 6 digit (8 segmen, sumber referensi resmi SAKTI/SPAN)
@@ -99,6 +109,32 @@ export default function ReferensiAkunPage({ user, onBack }) {
       .then((r) => setAkunNeraca(r.data?.items || []))
       .catch(() => {});
   }, []);
+
+  // Akun BELANJA dari master BAS agar SEMUA yang berkaitan aset & persediaan
+  // dapat difilter: belanja modal (53xxxx = perolehan aset per golongan) &
+  // belanja barang persediaan (5218xx).
+  const [belanjaModal, setBelanjaModal] = useState([]);
+  const [belanjaPsd, setBelanjaPsd] = useState([]);
+  useEffect(() => {
+    axios.get(`${API}/referensi-akun`, { params: { segmen: "53", page_size: 200 } })
+      .then((r) => setBelanjaModal(r.data?.items || [])).catch(() => {});
+    axios.get(`${API}/referensi-akun`, { params: { segmen: "5218", page_size: 200 } })
+      .then((r) => setBelanjaPsd(r.data?.items || [])).catch(() => {});
+  }, []);
+  const [cariBelanja, setCariBelanja] = useState("");
+  const [golBelanja, setGolBelanja] = useState("");        // prefix 3 digit
+  const [cariBelanjaPsd, setCariBelanjaPsd] = useState("");
+  const belanjaModalTampil = useMemo(() => {
+    const cari = cariBelanja.trim().toLowerCase();
+    return belanjaModal.filter((a) => {
+      if (golBelanja && !String(a.kode).startsWith(golBelanja)) return false;
+      return !cari || `${a.kode} ${a.nama}`.toLowerCase().includes(cari);
+    });
+  }, [belanjaModal, cariBelanja, golBelanja]);
+  const belanjaPsdTampil = useMemo(() => {
+    const cari = cariBelanjaPsd.trim().toLowerCase();
+    return belanjaPsd.filter((a) => !cari || `${a.kode} ${a.nama}`.toLowerCase().includes(cari));
+  }, [belanjaPsd, cariBelanjaPsd]);
 
   const seed = async () => {
     setSeeding(true);
@@ -530,6 +566,7 @@ export default function ReferensiAkunPage({ user, onBack }) {
           </div>
         )}
         {tab === "aset" && (
+          <div className="space-y-3">
           <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
             <div className="px-3 py-2.5 border-b border-border">
               <p className="text-xs font-semibold text-foreground">Aturan pakai: golongan BMN → akun neraca (dipakai DBKP/Posisi BMN)</p>
@@ -583,9 +620,57 @@ export default function ReferensiAkunPage({ user, onBack }) {
               ))}
             </div>
           </div>
+
+          {/* SEMUA akun belanja modal (53xxxx) dari master BAS — perolehan aset
+              per golongan; dapat difilter (cari + chip golongan). */}
+          <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="belanja-modal-card">
+            <div className="px-3 py-2.5 border-b border-border">
+              <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                <Landmark className="w-3.5 h-3.5" />Akun belanja modal terkait aset (dari master BAS)
+              </p>
+              <p className="text-[10px] text-muted-foreground">
+                Perolehan aset per golongan: 531 Tanah · 532 Peralatan &amp; Mesin · 533 Gedung &amp; Bangunan · 534 Jalan/Irigasi/Jaringan · 536 Aset Tetap Lainnya.
+              </p>
+            </div>
+            <div className="px-3 py-2 border-b border-border space-y-1.5">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Input value={cariBelanja} onChange={(e) => setCariBelanja(e.target.value)}
+                  placeholder="Cari kode / nama akun belanja…" className="pl-8 h-9 text-xs" data-testid="belanja-modal-cari" />
+              </div>
+              <div className="flex items-center gap-1 flex-wrap">
+                {[["", "Semua"], ...Object.entries(GOL_BELANJA).map(([p, v]) => [p, `${p} ${v.label}`])].map(([p, label]) => (
+                  <button key={p || "semua"} type="button" onClick={() => setGolBelanja(p)}
+                    className={`h-7 px-2 rounded-full border text-[10px] font-medium min-w-0 min-h-0 transition-colors ${golBelanja === p ? "bg-blue-600 border-blue-600 text-white" : "border-border text-muted-foreground hover:bg-muted"}`}
+                    data-testid={`belanja-gol-${p || "semua"}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="divide-y divide-border/60 max-h-72 overflow-y-auto">
+              {belanjaModalTampil.map((a) => {
+                const g = GOL_BELANJA[String(a.kode).slice(0, 3)];
+                return (
+                  <div key={a.kode} className="px-3 py-1.5 flex items-center gap-2.5" data-testid={`belanja-modal-${a.kode}`}>
+                    <span className="font-mono text-[12px] text-foreground w-16 flex-shrink-0">{a.kode}</span>
+                    <p className="text-[11px] text-foreground/80 flex-1 min-w-0 truncate" title={a.nama}>{a.nama}</p>
+                    {g && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 flex-shrink-0">Gol {g.gol}</span>}
+                  </div>
+                );
+              })}
+              {belanjaModalTampil.length === 0 && (
+                <p className="text-[11px] text-muted-foreground text-center py-4">
+                  {belanjaModal.length === 0 ? "Memuat akun dari master BAS… (jika kosong, muat referensi resmi di tab Master)" : "Tidak ada akun belanja yang cocok filter."}
+                </p>
+              )}
+            </div>
+          </div>
+          </div>
         )}
 
         {tab === "persediaan" && (
+          <div className="space-y-3">
           <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
             <div className="px-3 py-2.5 border-b border-border">
               <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
@@ -656,6 +741,39 @@ export default function ReferensiAkunPage({ user, onBack }) {
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* SEMUA akun belanja persediaan (5218xx) dari master BAS — filter. */}
+          <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="belanja-psd-card">
+            <div className="px-3 py-2.5 border-b border-border">
+              <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                <Landmark className="w-3.5 h-3.5" />Akun belanja persediaan terkait (dari master BAS)
+              </p>
+              <p className="text-[10px] text-muted-foreground">
+                Belanja Barang Persediaan (5218xx) — belanja yang menghasilkan persediaan.
+              </p>
+            </div>
+            <div className="px-3 py-2 border-b border-border">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Input value={cariBelanjaPsd} onChange={(e) => setCariBelanjaPsd(e.target.value)}
+                  placeholder="Cari kode / nama akun belanja persediaan…" className="pl-8 h-9 text-xs" data-testid="belanja-psd-cari" />
+              </div>
+            </div>
+            <div className="divide-y divide-border/60 max-h-72 overflow-y-auto">
+              {belanjaPsdTampil.map((a) => (
+                <div key={a.kode} className="px-3 py-1.5 flex items-center gap-2.5" data-testid={`belanja-psd-${a.kode}`}>
+                  <span className="font-mono text-[12px] text-foreground w-16 flex-shrink-0">{a.kode}</span>
+                  <p className="text-[11px] text-foreground/80 flex-1 min-w-0 truncate" title={a.nama}>{a.nama}</p>
+                </div>
+              ))}
+              {belanjaPsdTampil.length === 0 && (
+                <p className="text-[11px] text-muted-foreground text-center py-4">
+                  {belanjaPsd.length === 0 ? "Memuat akun dari master BAS…" : "Tidak ada akun belanja persediaan yang cocok."}
+                </p>
+              )}
+            </div>
+          </div>
           </div>
         )}
 

@@ -48,6 +48,23 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#455] Referensi Akun BAS — daftar SEMUA akun belanja aset & persediaan dari master (dapat difilter) — 2026-07-19
+
+Menjawab: "referensi BAS di halaman aset belum mengambil dari master; agar
+semua akun belanja terkait aset & persediaan dapat difilter."
+
+- **Tab Aset** kini punya kartu **"Akun belanja modal terkait aset (dari
+  master BAS)"** — menarik SEMUA akun **belanja modal 53xxxx** dari master
+  referensi BAS (`/referensi-akun?segmen=53`), ditandai golongan neracanya
+  (531 Tanah · 532 Peralatan & Mesin · 533 Gedung & Bangunan · 534
+  Jalan/Irigasi/Jaringan · 536 Aset Tetap Lainnya). Bisa **dicari** + **chip
+  filter per golongan**.
+- **Tab Persediaan** kini punya kartu **"Akun belanja persediaan terkait
+  (dari master BAS)"** — SEMUA akun **belanja barang persediaan 5218xx**
+  (`/referensi-akun?segmen=5218`), dapat dicari.
+- Data diambil langsung dari master referensi BAS (segmen prefix), bukan
+  daftar terpisah — sehingga selalu sinkron dengan master.
+
 ## [#454] Impor SIMAN V2 memperbarui masa manfaat per kelompok dari kolom "Umur Aset" (SIMAN menang) — 2026-07-19
 
 Menjawab kebutuhan: peraturan masa manfaat (KMK) terus berubah — daripada
