@@ -48,6 +48,37 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#456] Perbaikan menambah umur aset — Tabel Masa Manfaat II (KMK 295/266/339) + Berita Acara Perbaikan wajib + penyusutan ikut umur baru — 2026-07-19
+
+Dari dokumen resmi yang diunggah pemilik (KMK 295/KM.6/2019 jo. 266/KM.6/2023
+jo. 339/KM.6/2024, ditranskrip halaman-per-halaman) + riset PMK 65/2017:
+
+- **Tabel Masa Manfaat II LENGKAP** di `perbaikan_utils.py` — penambahan
+  masa manfaat akibat perbaikan (renovasi/restorasi/overhaul) per kelompok
+  5 digit × rentang persentase biaya terhadap nilai aset (di luar
+  penyusutan). ±90 kelompok golongan 3/4/5 + entri KMK 266 (keimigrasian)
+  & KMK 339 (migas). Helper murni `hitung_penambahan_masa_manfaat` +
+  uji unit (bracket, batas inklusif, pagar melebihi rentang, anti-drift
+  Tabel I↔II).
+- **Tabel Masa Manfaat I LENGKAP** — `MASA_MANFAAT_DEFAULT` yang semula 7
+  entri kini SELURUH kelompok resmi (±90 entri) terverifikasi lampiran KMK;
+  aset yang dulu "tanpa referensi" kini langsung tersusutkan benar.
+- **Alur sesuai KMK 295 Diktum KEENAM**: pengakuan tambahan umur dilakukan
+  saat penyerahan pekerjaan lewat **Berita Acara Serah Terima** — dialog
+  "Posting 202" di Pemeliharaan kini memuat **pratinjau** (% biaya, jenis
+  per tabel, tambahan tahun) + form BA (nomor otomatis `BA-PRB/xxx/tahun`,
+  tanggal serah terima, pihak menyerahkan/menerima); posting menerapkan
+  nilai (jurnal 202) DAN `masa_manfaat_tambah_tahun` ke aset (idempoten CAS).
+- **BA Perbaikan (PDF)** dapat diunduh per catatan — kop satker, identitas
+  aset, uraian/biaya/%, jenis, tambahan umur, dasar hukum, ttd 2 pihak
+  (smoke-test FakeDB → pypdfium2 lolos).
+- **Penyusutan ikut umur baru di semua konsumen**: `status_susut` menambah
+  `masa_manfaat_tambah_tahun` aset → Penilaian, DBKP/Posisi BMN, LBP, dan
+  laporan lain otomatis memakai masa manfaat + tambahan (proyeksi kelima
+  titik panggil dilengkapi field baru).
+- Badge riwayat: **"Masa manfaat +N th"** + tombol **BA Perbaikan** pada
+  catatan yang sudah diposting.
+
 ## [#455] Referensi Akun BAS — daftar SEMUA akun belanja aset & persediaan dari master (dapat difilter) — 2026-07-19
 
 Menjawab: "referensi BAS di halaman aset belum mengambil dari master; agar

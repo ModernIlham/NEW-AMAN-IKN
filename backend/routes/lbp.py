@@ -190,7 +190,8 @@ async def generate_lbp_docx(tahun: int, semester: int = 0,
         "_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
         "purchase_price": 1, "purchase_date": 1, "created_at": 1,
         "dihapus": 1, "penghapusan": 1, "nilai_wajar_terakhir": 1,
-        "revaluasi": 1, "location": 1}).to_list(500000)
+        "revaluasi": 1, "location": 1,
+        "masa_manfaat_tambah_tahun": 1}).to_list(500000)
     aktif = [a for a in assets if not a.get("dihapus")]
 
     uraian_map = {k: u for k, u in GOLONGAN_DEFAULTS}
