@@ -12,6 +12,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import StatKartu from "@/components/ui/StatKartu";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { authMediaUrl } from "@/lib/mediaUrl";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
@@ -261,26 +262,14 @@ export default function PemanfaatanPage({ user, onBack }) {
           <>
             {/* ── Ringkasan ── */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-              <div className="bg-card rounded-xl border border-emerald-500/40 p-3 text-center" data-testid="pemanfaatan-stat-aktif">
-                <Handshake className="w-5 h-5 text-emerald-500 mx-auto mb-1" />
-                <p className="text-lg font-bold text-foreground leading-none">{r.per_status.aktif}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">Aktif</p>
-              </div>
-              <div className="bg-card rounded-xl border border-amber-500/40 p-3 text-center" data-testid="pemanfaatan-stat-tempo">
-                <CalendarClock className="w-5 h-5 text-amber-500 mx-auto mb-1" />
-                <p className="text-lg font-bold text-foreground leading-none">{r.per_status.jatuh_tempo}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">Jatuh tempo ≤60 hari</p>
-              </div>
-              <div className="bg-card rounded-xl border border-red-500/40 p-3 text-center" data-testid="pemanfaatan-stat-kurang">
-                <AlertTriangle className="w-5 h-5 text-red-500 mx-auto mb-1" />
-                <p className="text-lg font-bold text-foreground leading-none">{r.per_status.tidak_lengkap}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">Dokumen belum lengkap</p>
-              </div>
-              <div className="bg-card rounded-xl border border-border p-3 text-center" data-testid="pemanfaatan-stat-nilai">
-                <Coins className="w-5 h-5 text-blue-500 mx-auto mb-1" />
-                <p className="text-sm sm:text-base font-bold text-foreground leading-none truncate whitespace-nowrap tabular-nums" title={fmtRp(r.total_nilai)}>{fmtRp(r.total_nilai)}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">Nilai tercatat (PNBP ke Kas Negara)</p>
-              </div>
+              <StatKartu icon={Handshake} value={r.per_status.aktif} label="Aktif"
+                warna="text-emerald-500" tint="bg-emerald-500/10" testid="pemanfaatan-stat-aktif" />
+              <StatKartu icon={CalendarClock} value={r.per_status.jatuh_tempo} label="Jatuh tempo ≤60 hari"
+                warna="text-amber-500" tint="bg-amber-500/10" testid="pemanfaatan-stat-tempo" />
+              <StatKartu icon={AlertTriangle} value={r.per_status.tidak_lengkap} label="Dokumen belum lengkap"
+                warna="text-red-500" tint="bg-red-500/10" testid="pemanfaatan-stat-kurang" />
+              <StatKartu icon={Coins} value={fmtRp(r.total_nilai)} label="Nilai tercatat (PNBP ke Kas Negara)"
+                warna="text-blue-500" tint="bg-blue-500/10" testid="pemanfaatan-stat-nilai" title={fmtRp(r.total_nilai)} />
             </div>
 
             {/* ── Kandidat dari BMN Idle (integrasi Penggunaan) ── */}

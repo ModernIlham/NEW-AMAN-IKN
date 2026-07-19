@@ -16,6 +16,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import StatKartu from "@/components/ui/StatKartu";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
@@ -560,48 +561,48 @@ export default function PersediaanPage({ user, onBack }) {
 
         {/* ── Kartu statistik stok (pola kartu rekap PemeliharaanPage; klik = filter status) ── */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <button
-            type="button"
-            onClick={() => changeStatus("")}
+          <StatKartu
+            icon={Boxes}
+            value={total}
+            label="Barang tampil"
+            warna="text-emerald-500"
+            tint="bg-emerald-500/10"
             title="Tampilkan semua barang"
-            className={`bg-card rounded-xl border p-3 text-center hover:bg-muted/50 transition-colors min-w-0 min-h-0 ${status === "" ? "border-emerald-500/60" : "border-border"}`}
-            data-testid="persediaan-stat-total"
-          >
-            <Boxes className="w-5 h-5 text-emerald-500 mx-auto mb-1" />
-            <p className="text-lg font-bold text-foreground leading-none">{total}</p>
-            <p className="text-[10px] text-muted-foreground mt-1">Barang tampil</p>
-          </button>
-          <button
-            type="button"
-            onClick={() => changeStatus("kritis")}
+            testid="persediaan-stat-total"
+            onClick={() => changeStatus("")}
+            className={status === "" ? "border-emerald-500/60" : ""}
+          />
+          <StatKartu
+            icon={AlertTriangle}
+            value={peringatan?.kritis?.length ?? "…"}
+            label="Kritis"
+            warna="text-amber-500"
+            tint="bg-amber-500/10"
             title="Filter barang berstok kritis"
-            className={`bg-card rounded-xl border p-3 text-center hover:bg-muted/50 transition-colors min-w-0 min-h-0 ${status === "kritis" ? "border-amber-500/60" : "border-border"}`}
-            data-testid="persediaan-stat-kritis"
-          >
-            <AlertTriangle className="w-5 h-5 text-amber-500 mx-auto mb-1" />
-            <p className="text-lg font-bold text-foreground leading-none">{peringatan?.kritis?.length ?? "…"}</p>
-            <p className="text-[10px] text-muted-foreground mt-1">Kritis</p>
-          </button>
-          <button
-            type="button"
-            onClick={() => changeStatus("habis")}
+            testid="persediaan-stat-kritis"
+            onClick={() => changeStatus("kritis")}
+            className={status === "kritis" ? "border-amber-500/60" : ""}
+          />
+          <StatKartu
+            icon={AlertTriangle}
+            value={peringatan?.habis?.length ?? "…"}
+            label="Habis"
+            warna="text-red-500"
+            tint="bg-red-500/10"
             title="Filter barang berstok habis"
-            className={`bg-card rounded-xl border p-3 text-center hover:bg-muted/50 transition-colors min-w-0 min-h-0 ${status === "habis" ? "border-red-500/60" : "border-border"}`}
-            data-testid="persediaan-stat-habis"
-          >
-            <AlertTriangle className="w-5 h-5 text-red-500 mx-auto mb-1" />
-            <p className="text-lg font-bold text-foreground leading-none">{peringatan?.habis?.length ?? "…"}</p>
-            <p className="text-[10px] text-muted-foreground mt-1">Habis</p>
-          </button>
-          <div
-            className="bg-card rounded-xl border border-border p-3 text-center"
+            testid="persediaan-stat-habis"
+            onClick={() => changeStatus("habis")}
+            className={status === "habis" ? "border-red-500/60" : ""}
+          />
+          <StatKartu
+            icon={CalendarClock}
+            value={peringatan?.kedaluwarsa?.length ?? "…"}
+            label="Kedaluwarsa"
+            warna="text-violet-500"
+            tint="bg-violet-500/10"
             title={peringatan ? `${peringatan.kedaluwarsa.length} kedaluwarsa · ${peringatan.segera_kedaluwarsa.length} segera kedaluwarsa (≤${peringatan.horizon_hari} hari)` : undefined}
-            data-testid="persediaan-stat-kedaluwarsa"
-          >
-            <CalendarClock className="w-5 h-5 text-violet-500 mx-auto mb-1" />
-            <p className="text-lg font-bold text-foreground leading-none">{peringatan?.kedaluwarsa?.length ?? "…"}</p>
-            <p className="text-[10px] text-muted-foreground mt-1">Kedaluwarsa</p>
-          </div>
+            testid="persediaan-stat-kedaluwarsa"
+          />
         </div>
 
         {/* ── Toolbar ── */}

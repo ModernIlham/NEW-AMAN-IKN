@@ -505,8 +505,9 @@ export default function TtdPermintaanPage({ user, onBack }) {
       {/* ── Dialog detail/status ── */}
       <Dialog open={!!detail} onOpenChange={(o) => !o && setDetail(null)}>
         {/* overflow-x-hidden + break-words: judul/nama panjang tanpa spasi
-            jangan meluber keluar kotak dialog (umpan balik pengguna). */}
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto overflow-x-hidden">
+            jangan meluber keluar kotak dialog (umpan balik pengguna).
+            p-4 di HP (base p-6 terlalu sempit → isi berdesakan/meluber). */}
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto overflow-x-hidden p-4 sm:p-6">
           {detail && (
             <>
               <DialogHeader>
@@ -519,8 +520,8 @@ export default function TtdPermintaanPage({ user, onBack }) {
               </DialogHeader>
               <div className="space-y-2">
                 {(detail.signers || []).map((s) => (
-                  <div key={s.signer_id} className="rounded-xl border border-border p-2.5 space-y-1.5">
-                    <div className="flex items-center gap-2.5">
+                  <div key={s.signer_id} className="rounded-xl border border-border p-2.5 space-y-1.5 min-w-0 overflow-hidden">
+                    <div className="flex items-center gap-2.5 min-w-0">
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold truncate">{s.urutan}. {s.nama}</p>
                         <p className="text-[11px] text-muted-foreground truncate">

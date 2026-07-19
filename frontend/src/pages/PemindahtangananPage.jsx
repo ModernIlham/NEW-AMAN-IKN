@@ -11,6 +11,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import StatKartu from "@/components/ui/StatKartu";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { authMediaUrl } from "@/lib/mediaUrl";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
@@ -207,26 +208,36 @@ export default function PemindahtangananPage({ user, onBack }) {
           <>
             {/* ── Ringkasan ── */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              <div className="bg-card rounded-xl border border-border p-3 text-center" data-testid="pemindahtanganan-stat-proses">
-                <TicketCheck className="w-5 h-5 text-sky-500 mx-auto mb-1" />
-                <p className="text-lg font-bold text-foreground leading-none">
-                  {r.per_status.diusulkan + r.per_status.disetujui + r.per_status.dilaksanakan}
-                </p>
-                <p className="text-[10px] text-muted-foreground mt-1">Usulan berjalan</p>
+              <StatKartu
+                icon={TicketCheck}
+                value={r.per_status.diusulkan + r.per_status.disetujui + r.per_status.dilaksanakan}
+                label="Usulan berjalan"
+                warna="text-sky-500"
+                tint="bg-sky-500/10"
+                testid="pemindahtanganan-stat-proses"
+              >
                 <p className="text-[10px] text-muted-foreground/80 mt-0.5">
                   {r.per_status.diusulkan} usul · {r.per_status.disetujui} setuju · {r.per_status.dilaksanakan} laksana
                 </p>
-              </div>
-              <div className="bg-card rounded-xl border border-emerald-500/40 p-3 text-center" data-testid="pemindahtanganan-stat-selesai">
-                <ArrowLeftRight className="w-5 h-5 text-emerald-500 mx-auto mb-1" />
-                <p className="text-lg font-bold text-foreground leading-none">{r.per_status.selesai}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">Selesai (SK terbit)</p>
-              </div>
-              <div className="bg-card rounded-xl border border-border p-3 text-center col-span-2 sm:col-span-1" data-testid="pemindahtanganan-stat-nilai">
-                <Coins className="w-5 h-5 text-blue-500 mx-auto mb-1" />
-                <p className="text-sm sm:text-lg font-bold text-foreground leading-none truncate whitespace-nowrap tabular-nums" title={fmtRp(r.nilai)}>{fmtRp(r.nilai)}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">Nilai perolehan ({r.jumlah_aset} aset)</p>
-              </div>
+              </StatKartu>
+              <StatKartu
+                icon={ArrowLeftRight}
+                value={r.per_status.selesai}
+                label="Selesai (SK terbit)"
+                warna="text-emerald-500"
+                tint="bg-emerald-500/10"
+                testid="pemindahtanganan-stat-selesai"
+                className="border-emerald-500/40"
+              />
+              <StatKartu
+                icon={Coins}
+                value={fmtRp(r.nilai)}
+                label={`Nilai perolehan (${r.jumlah_aset} aset)`}
+                warna="text-blue-500"
+                tint="bg-blue-500/10"
+                testid="pemindahtanganan-stat-nilai"
+                className="col-span-2 sm:col-span-1"
+              />
             </div>
 
             {/* ── Daftar usulan ── */}

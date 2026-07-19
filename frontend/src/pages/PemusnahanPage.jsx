@@ -11,6 +11,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import StatKartu from "@/components/ui/StatKartu";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import { authMediaUrl } from "@/lib/mediaUrl";
@@ -202,21 +203,32 @@ export default function PemusnahanPage({ user, onBack }) {
           <>
             {/* ── Ringkasan ── */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              <div className="bg-card rounded-xl border border-border p-3 text-center" data-testid="pemusnahan-stat-ba">
-                <FileText className="w-5 h-5 text-orange-500 mx-auto mb-1" />
-                <p className="text-lg font-bold text-foreground leading-none">{data.ringkasan.jumlah_ba}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">Berita Acara</p>
-              </div>
-              <div className="bg-card rounded-xl border border-border p-3 text-center" data-testid="pemusnahan-stat-aset">
-                <Flame className="w-5 h-5 text-red-500 mx-auto mb-1" />
-                <p className="text-lg font-bold text-foreground leading-none">{data.ringkasan.jumlah_aset}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">Aset dimusnahkan</p>
-              </div>
-              <div className="bg-card rounded-xl border border-border p-3 text-center col-span-2 sm:col-span-1" data-testid="pemusnahan-stat-nilai">
-                <Coins className="w-5 h-5 text-blue-500 mx-auto mb-1" />
-                <p className="text-sm sm:text-lg font-bold text-foreground leading-none truncate whitespace-nowrap tabular-nums" title={fmtRp(data.ringkasan.nilai)}>{fmtRp(data.ringkasan.nilai)}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">Nilai perolehan</p>
-              </div>
+              <StatKartu
+                icon={FileText}
+                value={data.ringkasan.jumlah_ba}
+                label="Berita Acara"
+                warna="text-orange-500"
+                tint="bg-orange-500/10"
+                testid="pemusnahan-stat-ba"
+              />
+              <StatKartu
+                icon={Flame}
+                value={data.ringkasan.jumlah_aset}
+                label="Aset dimusnahkan"
+                warna="text-red-500"
+                tint="bg-red-500/10"
+                testid="pemusnahan-stat-aset"
+              />
+              <StatKartu
+                icon={Coins}
+                value={fmtRp(data.ringkasan.nilai)}
+                label="Nilai perolehan"
+                warna="text-blue-500"
+                tint="bg-blue-500/10"
+                title={fmtRp(data.ringkasan.nilai)}
+                testid="pemusnahan-stat-nilai"
+                className="col-span-2 sm:col-span-1"
+              />
             </div>
 
             {/* ── Daftar BA ── */}

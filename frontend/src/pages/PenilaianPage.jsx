@@ -11,6 +11,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import StatKartu from "@/components/ui/StatKartu";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
@@ -236,26 +237,31 @@ export default function PenilaianPage({ user, onBack }) {
           <>
             {/* ── Kartu ringkasan ── */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-              <div className="bg-card rounded-xl border border-border p-3 text-center" data-testid="penilaian-stat-perolehan">
-                <Coins className="w-5 h-5 text-blue-500 mx-auto mb-1" />
-                <p className="text-sm sm:text-base font-bold text-foreground leading-none truncate whitespace-nowrap tabular-nums" title={fmtRp(data.total.nilai_perolehan)}>{fmtRp(data.total.nilai_perolehan)}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">Nilai perolehan ({data.total.jumlah} aset disusutkan)</p>
-              </div>
-              <div className="bg-card rounded-xl border border-border p-3 text-center" data-testid="penilaian-stat-akumulasi">
-                <TrendingDown className="w-5 h-5 text-red-500 mx-auto mb-1" />
-                <p className="text-sm sm:text-base font-bold text-foreground leading-none truncate whitespace-nowrap tabular-nums" title={fmtRp(data.total.akumulasi)}>{fmtRp(data.total.akumulasi)}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">Akumulasi penyusutan</p>
-              </div>
-              <div className="bg-card rounded-xl border border-emerald-500/40 p-3 text-center" data-testid="penilaian-stat-buku">
-                <Wallet className="w-5 h-5 text-emerald-500 mx-auto mb-1" />
-                <p className="text-sm sm:text-base font-bold text-foreground leading-none truncate whitespace-nowrap tabular-nums" title={fmtRp(data.total.nilai_buku)}>{fmtRp(data.total.nilai_buku)}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">Nilai buku</p>
-              </div>
-              <div className="bg-card rounded-xl border border-border p-3 text-center" data-testid="penilaian-stat-habis">
-                <AlertTriangle className="w-5 h-5 text-amber-500 mx-auto mb-1" />
-                <p className="text-base font-bold text-foreground leading-none">{data.jumlah_habis}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">Habis masa manfaat (nilai buku 0, tetap tersaji)</p>
-              </div>
+              <StatKartu
+                icon={Coins} warna="text-blue-500" tint="bg-blue-500/10"
+                value={fmtRp(data.total.nilai_perolehan)}
+                label={`Nilai perolehan (${data.total.jumlah} aset disusutkan)`}
+                testid="penilaian-stat-perolehan"
+              />
+              <StatKartu
+                icon={TrendingDown} warna="text-red-500" tint="bg-red-500/10"
+                value={fmtRp(data.total.akumulasi)}
+                label="Akumulasi penyusutan"
+                testid="penilaian-stat-akumulasi"
+              />
+              <StatKartu
+                icon={Wallet} warna="text-emerald-500" tint="bg-emerald-500/10"
+                value={fmtRp(data.total.nilai_buku)}
+                label="Nilai buku"
+                testid="penilaian-stat-buku"
+                className="border-emerald-500/40"
+              />
+              <StatKartu
+                icon={AlertTriangle} warna="text-amber-500" tint="bg-amber-500/10"
+                value={data.jumlah_habis}
+                label="Habis masa manfaat (nilai buku 0, tetap tersaji)"
+                testid="penilaian-stat-habis"
+              />
             </div>
 
             {/* ── Catatan basis revaluasi (PSAP 07: aset direvaluasi disusutkan atas nilai revaluasi) ── */}

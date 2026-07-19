@@ -11,6 +11,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import StatKartu from "@/components/ui/StatKartu";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { authMediaUrl } from "@/lib/mediaUrl";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
@@ -195,21 +196,32 @@ export default function PenghapusanPage({ user, onBack }) {
           <>
             {/* ── Ringkasan ── */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              <div className="bg-card rounded-xl border border-border p-3 text-center" data-testid="penghapusan-stat-jumlah">
-                <FileX className="w-5 h-5 text-red-500 mx-auto mb-1" />
-                <p className="text-lg font-bold text-foreground leading-none">{data.ringkasan.jumlah}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">Kandidat usul hapus</p>
-              </div>
-              <div className="bg-card rounded-xl border border-border p-3 text-center col-span-2 sm:col-span-1 order-last sm:order-none" data-testid="penghapusan-stat-nilai">
-                <Coins className="w-5 h-5 text-blue-500 mx-auto mb-1" />
-                <p className="text-sm sm:text-lg font-bold text-foreground leading-none truncate whitespace-nowrap tabular-nums" title={fmtRp(data.ringkasan.nilai)}>{fmtRp(data.ringkasan.nilai)}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">Nilai perolehan kandidat</p>
-              </div>
-              <div className="bg-card rounded-xl border border-border p-3 text-center" data-testid="penghapusan-stat-usulan">
-                <TicketCheck className="w-5 h-5 text-emerald-500 mx-auto mb-1" />
-                <p className="text-lg font-bold text-foreground leading-none">{usulan?.jumlah ?? 0}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">Tiket usulan</p>
-              </div>
+              <StatKartu
+                icon={FileX}
+                value={data.ringkasan.jumlah}
+                label="Kandidat usul hapus"
+                warna="text-red-500"
+                tint="bg-red-500/10"
+                testid="penghapusan-stat-jumlah"
+              />
+              <StatKartu
+                icon={Coins}
+                value={fmtRp(data.ringkasan.nilai)}
+                label="Nilai perolehan kandidat"
+                warna="text-blue-500"
+                tint="bg-blue-500/10"
+                title={fmtRp(data.ringkasan.nilai)}
+                testid="penghapusan-stat-nilai"
+                className="col-span-2 sm:col-span-1 order-last sm:order-none"
+              />
+              <StatKartu
+                icon={TicketCheck}
+                value={usulan?.jumlah ?? 0}
+                label="Tiket usulan"
+                warna="text-emerald-500"
+                tint="bg-emerald-500/10"
+                testid="penghapusan-stat-usulan"
+              />
             </div>
 
             {/* ── Usulan berjalan ── */}

@@ -12,6 +12,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import StatKartu from "@/components/ui/StatKartu";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { authMediaUrl } from "@/lib/mediaUrl";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
@@ -257,26 +258,35 @@ export default function PengadaanPage({ user, onBack }) {
           <>
             {/* ── Ringkasan ── */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <div className="bg-card rounded-xl border border-border p-3 text-center" data-testid="pengadaan-stat-jumlah">
-                <ShoppingCart className="w-5 h-5 text-orange-500 mx-auto mb-1" />
-                <p className="text-lg font-bold text-foreground leading-none">{r.jumlah}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">Perolehan tercatat</p>
-              </div>
-              <div className="bg-card rounded-xl border border-border p-3 text-center" data-testid="pengadaan-stat-nilai">
-                <Coins className="w-5 h-5 text-blue-500 mx-auto mb-1" />
-                <p className="text-sm sm:text-lg font-bold text-foreground leading-none break-all">{fmtRp(r.nilai)}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">Nilai perolehan</p>
-              </div>
-              <div className="bg-card rounded-xl border border-emerald-500/40 p-3 text-center" data-testid="pengadaan-stat-dokumen">
-                <ClipboardCheck className="w-5 h-5 text-emerald-500 mx-auto mb-1" />
-                <p className="text-lg font-bold text-foreground leading-none">{r.dokumen_lengkap}/{r.jumlah}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">Dokumen lengkap</p>
-              </div>
-              <div className={`bg-card rounded-xl border p-3 text-center ${r.belum_tertaut > 0 ? "border-amber-500/40" : "border-border"}`} data-testid="pengadaan-stat-tertaut">
-                <Link2 className={`w-5 h-5 mx-auto mb-1 ${r.belum_tertaut > 0 ? "text-amber-500" : "text-muted-foreground"}`} />
-                <p className="text-lg font-bold text-foreground leading-none">{r.belum_tertaut}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">Barang belum tertaut aset</p>
-              </div>
+              <StatKartu
+                icon={ShoppingCart} warna="text-orange-500" tint="bg-orange-500/10"
+                value={r.jumlah}
+                label="Perolehan tercatat"
+                testid="pengadaan-stat-jumlah"
+              />
+              <StatKartu
+                icon={Coins} warna="text-blue-500" tint="bg-blue-500/10"
+                value={fmtRp(r.nilai)}
+                label="Nilai perolehan"
+                title={fmtRp(r.nilai)}
+                testid="pengadaan-stat-nilai"
+              />
+              <StatKartu
+                icon={ClipboardCheck} warna="text-emerald-500" tint="bg-emerald-500/10"
+                value={`${r.dokumen_lengkap}/${r.jumlah}`}
+                label="Dokumen lengkap"
+                testid="pengadaan-stat-dokumen"
+                className="border-emerald-500/40"
+              />
+              <StatKartu
+                icon={Link2}
+                warna={r.belum_tertaut > 0 ? "text-amber-500" : "text-muted-foreground"}
+                tint={r.belum_tertaut > 0 ? "bg-amber-500/10" : "bg-muted"}
+                value={r.belum_tertaut}
+                label="Barang belum tertaut aset"
+                testid="pengadaan-stat-tertaut"
+                className={r.belum_tertaut > 0 ? "border-amber-500/40" : ""}
+              />
             </div>
 
             {/* ── Daftar perolehan ── */}
