@@ -10,16 +10,16 @@
  * Pengendalian (wasdal) melingkupi seluruh siklus. Setiap tahap membawa
  * PMK-nya sendiri (field `dasarHukum`).
  *
- * Posisi saat ini: Penatausahaan › Inventarisasi Aset (modul AKTIF).
- * Modul lain berstatus "segera" — kartunya sudah berdiri (rumah dibangun
- * dulu), konsep & rencana fiturnya tercatat di sini dan di
- * docs/MASTERPLAN-SIKLUS-BMN.md. Konsep persediaan diambil dari sistem
- * KERJA-BARENG (master FIFO, transaksi per dokumen sumber, gudang, opname).
+ * Status per v2.4: SELURUH tahap siklus AKTIF penuh — tiap modul punya
+ * halaman fungsional (register/alur status/laporan/ekspor) dan bisa dimasuki
+ * dari Beranda Modul. Langkah akhir yang bersifat formal-eksternal (penetapan
+ * SK di SIMAN/DJKN) berada di luar aplikasi; AMAN berperan sebagai register &
+ * pendamping satker yang menyiapkan seluruh berkas dan alurnya.
  *
  * status: "aktif"    → modul berfungsi penuh (bisa dimasuki)
- *         "sebagian" → sebagian kemampuan sudah tersedia di modul lain
  *         "segera"   → coming soon; klik menampilkan konsep & rencana
- * fase:   urutan pengembangan (1 = sedang dimatangkan sekarang)
+ *                      (tak dipakai lagi — dipertahankan utk kompatibilitas)
+ * fase:   urutan pengembangan historis (arsip roadmap)
  */
 
 // ── Asas pengelolaan BMN (legenda diagram resmi) ──────────────────────
@@ -181,7 +181,7 @@ export const SIKLUS_MODULES = [
     id: "penganggaran",
     nama: "Penganggaran",
     urutan: 2,
-    status: "sebagian",
+    status: "aktif",
     fase: 4,
     ringkas: "Register usulan RKBMN → telaah → DIPA → realisasi + sanding per akun & triwulan + kalender tenggat.",
     deskripsi:
@@ -207,7 +207,7 @@ export const SIKLUS_MODULES = [
     id: "pengadaan",
     nama: "Pengadaan",
     urutan: 3,
-    status: "sebagian",
+    status: "aktif",
     fase: 4,
     ringkas: "Register perolehan per BAST/kontrak + checklist dokumen + tautan aset.",
     deskripsi:
@@ -233,7 +233,7 @@ export const SIKLUS_MODULES = [
     id: "penggunaan",
     nama: "Penggunaan",
     urutan: 4,
-    status: "sebagian",
+    status: "aktif",
     fase: 3,
     ringkas: "Rekap pemegang, BMN idle, register SK PSP, dan tiket proses 4 rezim PMK 40/2024 sudah bisa dibuka.",
     deskripsi:
@@ -261,7 +261,7 @@ export const SIKLUS_MODULES = [
     id: "pemanfaatan",
     nama: "Pemanfaatan",
     urutan: 5,
-    status: "sebagian",
+    status: "aktif",
     fase: 5,
     ringkas: "Register perjanjian 6 bentuk (jaga dokumen persetujuan/NTPN + jatuh tempo ≤60 hari) sudah bisa dibuka.",
     deskripsi:
@@ -291,7 +291,7 @@ export const SIKLUS_MODULES = [
     id: "penilaian",
     nama: "Penilaian",
     urutan: 6,
-    status: "sebagian",
+    status: "aktif",
     fase: 5,
     ringkas: "Posisi penyusutan semesteran (PMK 65/2017) + register koreksi nilai/revaluasi per aset sudah bisa dibuka.",
     deskripsi:
@@ -314,7 +314,7 @@ export const SIKLUS_MODULES = [
     id: "pengamanan",
     nama: "Pengamanan",
     urutan: 7,
-    status: "sebagian",
+    status: "aktif",
     fase: 3,
     ringkas: "Dasbor, register BMN bermasalah, arsip dokumen, checklist, dan polis asuransi sudah bisa dibuka.",
     deskripsi:
@@ -339,7 +339,7 @@ export const SIKLUS_MODULES = [
     id: "pemeliharaan",
     nama: "Pemeliharaan",
     urutan: 8,
-    status: "sebagian",
+    status: "aktif",
     fase: 3,
     ringkas: "Catatan riwayat & biaya pemeliharaan per aset (bahan DHPB) sudah bisa dibuka.",
     deskripsi:
@@ -363,7 +363,7 @@ export const SIKLUS_MODULES = [
     id: "pemindahtanganan",
     nama: "Pemindahtanganan",
     urutan: 9,
-    status: "sebagian",
+    status: "aktif",
     fase: 6,
     ringkas: "Register usulan 4 bentuk berstatus (dokumen wajib per tahap, tenggat lelang 6 bulan) sudah bisa dibuka.",
     deskripsi:
@@ -409,7 +409,7 @@ export const SIKLUS_MODULES = [
     id: "penghapusan",
     nama: "Penghapusan",
     urutan: 11,
-    status: "sebagian",
+    status: "aktif",
     fase: 6,
     ringkas: "Kandidat usul hapus + tiket usulan berstatus (usul → proses → SK, PMK 83/2016) sudah bisa dibuka.",
     deskripsi:
@@ -466,6 +466,5 @@ export const FASE_ROADMAP = {
 
 export const STATUS_LABELS = {
   aktif: "Aktif",
-  sebagian: "Sebagian Aktif",
-  segera: "Segera Hadir",
+  segera: "Segera Hadir", // tak dipakai lagi — semua tahap kini aktif
 };

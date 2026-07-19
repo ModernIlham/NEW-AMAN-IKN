@@ -48,6 +48,28 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#414] Semua tahap siklus BMN AKTIF penuh — hapus badge "Sebagian Aktif" — 2026-07-19
+
+Permintaan pemilik: "agar tidak ada Sebagian Aktif di modul lagi; periksa juga
+yang aktif". Verifikasi: 9 modul berbadge "Sebagian Aktif" (Penganggaran,
+Pengadaan, Penggunaan, Pemanfaatan, Penilaian, Pengamanan, Pemeliharaan,
+Pemindahtanganan, Penghapusan) semuanya sudah punya halaman fungsional penuh
+(445–1550 baris JSX) + route backend + register/alur status/ekspor — bukan
+stub. Statusnya "sebagian" hanya karena langkah akhir formal (penetapan SK)
+dilakukan di SIMAN/DJKN eksternal, di luar kendali aplikasi.
+
+- Seluruh `status: "sebagian"` → `status: "aktif"` (registry `bmnModules.js`) —
+  badge Beranda Modul kini "Aktif" untuk semua tahap; label "Sebagian Aktif"
+  dihapus dari `STATUS_LABELS` & `STATUS_BADGE_CLS`.
+- Dead code status lama dibersihkan (ikon `Sparkles` badge, teks "kamar
+  disiapkan modul menyusul bertahap" → "seluruh tahap aktif & dapat dibuka").
+- Komentar header registry disegarkan (status v2.4: semua tahap aktif).
+- Komentar basi "Sanding SBSK menyusul" di Perencanaan diperbaiki (SBSK sudah
+  tersedia).
+- Verifikasi: lint 0 warning, build sukses.
+
+---
+
 ## [#413] Perbaikan bug: baris daftar aset tumpang tindih di HP (virtualisasi) — 2026-07-18
 
 Laporan pemilik: saat refresh/perubahan data pada tampilan HP, sebagian baris
