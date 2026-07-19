@@ -48,6 +48,31 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#429] Integrasi lintas-modul gelombang 11 (pamungkas): reklasifikasi terdeteksi SIMAN dirutekan ke mesin Reklasifikasi resmi — 2026-07-19
+
+Item terakhir backlog audit integrasi (15/15). Saat sinkron SIMAN
+mendeteksi kode barang berbeda (= reklasifikasi di SIMAN), tombol
+"Terapkan nilai SIMAN" selama ini MENIMPA kode begitu saja — tanpa jurnal
+304/107, tanpa riwayat reklasifikasi, tanpa penataan NUP tujuan. Jejak
+Buku Barang putus.
+
+- **Guard backend**: `POST /siman/terapkan` kini MENOLAK (409) bila
+  `asset_code` termasuk field yang diterapkan, mengarahkan ke mesin
+  Reklasifikasi resmi; field lain tetap bisa diterapkan.
+- **Tombol "Reklasifikasi → {kode baru}"** di kartu sinkron SIMAN: muncul
+  otomatis pada aset yang selisih kode barangnya terdeteksi; konfirmasi
+  berpenjelasan → `POST /pembukuan/reklasifikasi` (kode+NUP in-place,
+  jurnal 304/107 berpasangan, riwayat tercatat, nilai & tanggal perolehan
+  tetap). Pra-isi kode tujuan dari sinyal `siman.reklasifikasi` / selisih.
+- Tombol "Terapkan nilai SIMAN" otomatis mengecualikan kode barang
+  (berlabel "(selain kode)" bila ada selisih kode) — dua jalur terpisah
+  yang jelas: timpa nilai vs reklasifikasi resmi.
+- Verifikasi: 554 tes unit lulus; smoke guard (kode via sinkron → 409
+  berpesan arahan; field lain tetap terapan & kode tak berubah); eslint
+  bersih & build sukses.
+
+---
+
 ## [#428] Integrasi lintas-modul gelombang 10: pemeliharaan kapitalisasi → pengembangan nilai aset (jurnal 202) — 2026-07-19
 
 Modul Pemeliharaan selama ini hanya MENANDAI biaya ber-indikasi

@@ -3,9 +3,10 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   AlertTriangle, ChevronDown, ChevronRight, FileDown, Loader2, PackagePlus,
-  RefreshCcw, Upload,
+  RefreshCcw, Shuffle, Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -36,6 +37,8 @@ export default function SimanSyncCard({ isAdmin }) {
   const [muatSelisih, setMuatSelisih] = useState(false);
   const [bukaAset, setBukaAset] = useState(null); // id aset yang rinciannya terbuka
   const [menerapkan, setMenerapkan] = useState(null); // id aset yang sedang diterapkan
+  const [mereklas, setMereklas] = useState(null);     // id aset yang sedang direklasifikasi
+  const { confirm, confirmDialog } = useConfirm();
   // Panel buat draft aset dari baris SIMAN belum tercatat:
   // {importId, activities, activityId, sibuk, hasil}
   const [draft, setDraft] = useState(null);
@@ -156,7 +159,12 @@ export default function SimanSyncCard({ isAdmin }) {
   const terapkan = async (aset) => {
     setMenerapkan(aset.id);
     try {
-      const r = await axios.post(`${API}/siman/terapkan/${aset.id}`, {});
+      // Kode barang DIKECUALIKAN dari jalur timpa — reklasifikasi punya
+      // jalurnya sendiri (jurnal 304/107 + riwayat); backend menolak bila
+      // disertakan (integrasi audit #5).
+      const fields = (aset.siman?.selisih || [])
+        .map((s) => s.field).filter((f) => f !== "asset_code");
+      const r = await axios.post(`${API}/siman/terapkan/${aset.id}`, { fields });
       toast.success(
         `Aset ${aset.asset_code} NUP ${aset.NUP}: ${r.data.diterapkan.length} field disinkronkan ke nilai SIMAN`);
       muatRingkasan();
@@ -165,6 +173,34 @@ export default function SimanSyncCard({ isAdmin }) {
       toast.error(e?.response?.data?.detail || "Gagal menerapkan nilai SIMAN");
     } finally {
       setMenerapkan(null);
+    }
+  };
+
+  // Integrasi audit #5: reklasifikasi terdeteksi SIMAN dirutekan ke mesin
+  // Reklasifikasi resmi (kode+NUP in-place, jurnal 304/107, riwayat) —
+  // bukan sekadar menimpa kode via sinkron.
+  const reklasSiman = async (aset, kodeBaru) => {
+    const ok = await confirm({
+      title: `Reklasifikasi ${aset.asset_code} → ${kodeBaru}?`,
+      description:
+        "Kode & NUP diperbarui pada aset yang sama (nilai & tanggal perolehan " +
+        "tetap); jurnal 304/107 dan riwayat reklasifikasi tercatat di Buku " +
+        "Barang. Sumber: kode barang SIMAN berbeda dengan AMAN.",
+      confirmLabel: "Reklasifikasi",
+    });
+    if (!ok) return;
+    setMereklas(aset.id);
+    try {
+      const r = await axios.post(`${API}/pembukuan/reklasifikasi`, {
+        asset_id: aset.id, kode_baru: kodeBaru,
+        alasan: "Reklasifikasi terdeteksi dari sinkron SIMAN V2" });
+      toast.success(`Reklasifikasi tercatat — kode baru ${r.data.kode_baru} · NUP ${r.data.nup_baru}`);
+      muatRingkasan();
+      ambilSelisih(selisih?.page || 1);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal reklasifikasi");
+    } finally {
+      setMereklas(null);
     }
   };
 
@@ -296,14 +332,36 @@ export default function SimanSyncCard({ isAdmin }) {
                             Referensi SIMAN: penyusutan {fmtRp(a.siman.referensi.nilai_penyusutan)} · nilai buku {fmtRp(a.siman.referensi.nilai_buku)}
                           </p>
                         ) : null}
-                        <Button size="sm" variant="outline"
-                          className="h-7 text-[11px] gap-1 text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 hover:bg-emerald-500/10"
-                          disabled={menerapkan === a.id}
-                          onClick={() => terapkan(a)}
-                          data-testid={`siman-terapkan-${a.id}`}>
-                          {menerapkan === a.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCcw className="w-3 h-3" />}
-                          Terapkan nilai SIMAN
-                        </Button>
+                        {(() => {
+                          const sAC = (a.siman?.selisih || []).find((s) => s.field === "asset_code");
+                          const kodeBaru = a.siman?.reklasifikasi?.kode_baru || sAC?.siman || "";
+                          const adaLain = (a.siman?.selisih || []).some((s) => s.field !== "asset_code");
+                          return (
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {adaLain && (
+                                <Button size="sm" variant="outline"
+                                  className="h-7 text-[11px] gap-1 text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 hover:bg-emerald-500/10"
+                                  disabled={menerapkan === a.id}
+                                  onClick={() => terapkan(a)}
+                                  data-testid={`siman-terapkan-${a.id}`}>
+                                  {menerapkan === a.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCcw className="w-3 h-3" />}
+                                  Terapkan nilai SIMAN{sAC ? " (selain kode)" : ""}
+                                </Button>
+                              )}
+                              {sAC && kodeBaru && (
+                                <Button size="sm" variant="outline"
+                                  className="h-7 text-[11px] gap-1 text-fuchsia-700 dark:text-fuchsia-400 hover:bg-fuchsia-500/10"
+                                  title="Kode barang SIMAN berbeda — jalankan reklasifikasi resmi (jurnal 304/107 + riwayat), bukan menimpa kode"
+                                  disabled={mereklas === a.id}
+                                  onClick={() => reklasSiman(a, kodeBaru)}
+                                  data-testid={`siman-reklas-${a.id}`}>
+                                  {mereklas === a.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Shuffle className="w-3 h-3" />}
+                                  Reklasifikasi → {kodeBaru}
+                                </Button>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>
@@ -389,6 +447,7 @@ export default function SimanSyncCard({ isAdmin }) {
           </div>
         )}
       </div>
+      {confirmDialog}
     </div>
   );
 }
