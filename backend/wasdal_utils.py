@@ -365,23 +365,35 @@ def temuan_penatausahaan(assets):
     return out
 
 
-def temuan_pengamanan_pemeliharaan(assets, pemeliharaan, tahun: int):
+def temuan_pengamanan_pemeliharaan(assets, pemeliharaan, tahun: int,
+                                   kasus_aktif=None):
     """Objek PENGAMANAN & PEMELIHARAAN.
 
-    Sengketa (status/nomor perkara/pihak) + aset Rusak Ringan/Berat tanpa
-    catatan pemeliharaan pada tahun berjalan.
+    Sengketa (status/nomor perkara/pihak di master ATAU punya kasus AKTIF
+    di register kasus Pengamanan — read-side join, master tidak dimutasi)
+    + aset Rusak Ringan/Berat tanpa catatan pemeliharaan tahun berjalan.
     """
-    from pengamanan_utils import is_sengketa
+    from pengamanan_utils import KATEGORI_KASUS, is_sengketa
 
+    kasus_aktif = kasus_aktif or {}
     dirawat = set()
     for r in pemeliharaan or []:
         if str(r.get("tanggal") or "")[:4] == str(tahun):
             dirawat.add(r.get("asset_id"))
     out = []
     for a in assets or []:
-        if is_sengketa(a):
+        k = kasus_aktif.get(a.get("id"))
+        if is_sengketa(a) or k:
+            detail = str(a.get("nomor_perkara") or "").strip()
+            if k:
+                ket = KATEGORI_KASUS.get(k.get("kategori"),
+                                         k.get("kategori") or "kasus")
+                info = f"{ket} — lawan {k.get('pihak_lawan') or '?'}"
+                if k.get("nomor_perkara") and k["nomor_perkara"] != detail:
+                    info += f" (perkara {k['nomor_perkara']})"
+                detail = "; ".join(x for x in (detail, info) if x)
             out.append({"jenis": "sengketa", **_identitas(a),
-                        "detail": str(a.get("nomor_perkara") or "").strip()})
+                        "detail": detail})
         kondisi = str(a.get("condition") or "").strip()
         if kondisi in ("Rusak Ringan", "Rusak Berat") and a.get("id") not in dirawat:
             out.append({"jenis": "rusak_tanpa_pemeliharaan", **_identitas(a),
@@ -395,7 +407,7 @@ def susun_temuan(assets, pemanfaatan, usulan_hapus, usulan_pt,
                  pegawai=None, jumlah_aset_per_nip=None,
                  dokumen=None, pemusnahan=None, aset_ber_sk=None,
                  pengadaan=None, persediaan=None,
-                 tanggal_opname_terakhir=None) -> dict:
+                 tanggal_opname_terakhir=None, kasus_aktif=None) -> dict:
     """Seluruh temuan terkelompok per objek → {objek: [temuan...]}.
 
     `persediaan`/`tanggal_opname_terakhir` sengaja opsional; bila pemanggil
@@ -408,7 +420,8 @@ def susun_temuan(assets, pemanfaatan, usulan_hapus, usulan_pt,
              + temuan_pemindahtanganan(assets, usulan_hapus, usulan_pt,
                                        today_iso, ambang_hari)
              + temuan_penatausahaan(assets)
-             + temuan_pengamanan_pemeliharaan(assets, pemeliharaan, tahun)
+             + temuan_pengamanan_pemeliharaan(assets, pemeliharaan, tahun,
+                                              kasus_aktif=kasus_aktif)
              + temuan_polis_asuransi(polis, today_iso)
              + temuan_pemegang_berisiko(pegawai, jumlah_aset_per_nip,
                                         today_iso)
