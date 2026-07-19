@@ -48,6 +48,30 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#423] Kejujuran klaim fitur aktif: tombol Backfill Saldo Awal, peringatan M07/K07, label jurnal 301/303 — 2026-07-19
+
+Tiga temuan "diklaim aktif tapi tak berfungsi penuh" dari audit menyeluruh
+kini dibereskan (mandat "periksa juga yang aktif"):
+
+- **Tombol "Backfill Saldo Awal"** (admin) di tab Buku Barang Pembukuan —
+  endpoint idempoten `POST /pembukuan/mutasi/backfill` sudah lama ada
+  tetapi TIDAK punya pemicu di UI mana pun, sehingga aset lama tanpa
+  transaksi tak pernah mendapat entri saldo awal (kode 100) dan Buku
+  Barang tampil kosong/parsial. Kini ada tombol ber-konfirmasi + toast
+  hasil (N dibuat / M sudah berjurnal) + muat ulang jurnal.
+- **Peringatan M07/K07 Persediaan**: jenis transaksi "Reklasifikasi dari
+  Aset"/"Reklasifikasi Keluar" hanya mencatat SISI PERSEDIAAN — register
+  aset tidak disentuh otomatis. Dropdown ketiga dialog transaksi
+  (masuk/keluar/massal) kini menampilkan peringatan amber: sesuaikan sisi
+  aset via Pembukuan → Reklasifikasi (304/107) agar tidak dobel catat di
+  Neraca. Info dikirim dari API (`info` per jenis).
+- **Label badge modul Pembukuan diluruskan**: klaim jurnal pemindahtanganan
+  "302/303" → "303 hibah / 301 bentuk lain" sesuai kode yang benar-benar
+  dibukukan (302 Transfer Keluar belum pernah diproduksi alur mana pun).
+- Verifikasi: 551 tes unit lulus, eslint bersih, `yarn build` sukses.
+
+---
+
 ## [#422] Integrasi lintas-modul gelombang 5: cek-silang realisasi anggaran vs Pengadaan (BAST) — 2026-07-19
 
 Realisasi NYATA dari Pengadaan bertaut kini disandingkan otomatis dengan
