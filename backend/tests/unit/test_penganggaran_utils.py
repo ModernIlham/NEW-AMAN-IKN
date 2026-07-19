@@ -3,8 +3,8 @@ import pytest
 
 from penganggaran_utils import (
     AKUN_BAS, JENIS_ANGGARAN, STATUS_ANGGARAN, TRANSISI_ANGGARAN,
-    rekap_anggaran, sanding_per_akun, validate_transisi_anggaran,
-    validate_usulan_anggaran,
+    rekap_anggaran, rekap_rekonsiliasi, sanding_per_akun,
+    validate_transisi_anggaran, validate_usulan_anggaran,
 )
 
 
@@ -101,6 +101,33 @@ def test_sanding_per_akun():
     assert rows[2]["label"] == "Tanpa akun"
     assert rows[2]["serapan_persen"] == 0.0
     assert sanding_per_akun([]) == []
+
+
+def test_sanding_per_akun_realisasi_bast():
+    """Kolom realisasi BAST (Pengadaan bertaut) + selisih vs realisasi manual."""
+    items = [
+        _u(nilai_realisasi=10_000_000, realisasi_pengadaan=9_000_000),
+        _u(nilai_realisasi=5_000_000, realisasi_pengadaan=5_000_000),
+    ]
+    r = sanding_per_akun(items)[0]
+    assert r["realisasi_bast"] == pytest.approx(14_000_000)
+    assert r["selisih_bast"] == pytest.approx(1_000_000)
+
+
+def test_rekap_rekonsiliasi():
+    """Hanya usulan ber-tautan Pengadaan yang dinilai; selisih ≤ toleransi
+    dianggap pembulatan; realisasi manual 0 padahal BAST ada = perlu."""
+    items = [
+        _u(nilai_realisasi=10_000_000, realisasi_pengadaan=9_000_000),  # perlu
+        _u(nilai_realisasi=5_000_000, realisasi_pengadaan=5_000_000.5),  # toleransi
+        _u(nilai_realisasi=0, realisasi_pengadaan=3_000_000),            # perlu
+        _u(nilai_realisasi=7_000_000, realisasi_pengadaan=0),            # tanpa tautan
+    ]
+    rk = rekap_rekonsiliasi(items)
+    assert rk["jumlah_perlu_rekonsiliasi"] == 2
+    assert rk["total_selisih"] == pytest.approx(1_000_000 - 3_000_000)
+    assert rekap_rekonsiliasi([]) == {"jumlah_perlu_rekonsiliasi": 0,
+                                      "total_selisih": 0.0}
 
 
 def test_sanding_per_triwulan():

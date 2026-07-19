@@ -268,6 +268,8 @@ export default function PenganggaranPage({ user, onBack }) {
                         <th className="text-right px-2 py-1.5 font-semibold">Disetujui</th>
                         <th className="text-right px-2 py-1.5 font-semibold">DIPA</th>
                         <th className="text-right px-2 py-1.5 font-semibold">Realisasi</th>
+                        <th className="text-right px-2 py-1.5 font-semibold" title="Nilai perolehan Pengadaan (BAST) yang bertaut ke usulan akun ini">Realisasi BAST</th>
+                        <th className="text-right px-2 py-1.5 font-semibold" title="Realisasi manual − realisasi BAST; selisih besar = perlu rekonsiliasi">Selisih</th>
                         <th className="text-right px-3 py-1.5 font-semibold">Serapan</th>
                       </tr>
                     </thead>
@@ -282,6 +284,12 @@ export default function PenganggaranPage({ user, onBack }) {
                           <td className="px-2 py-1.5 text-right text-foreground/90 whitespace-nowrap">{fmtRp(a.disetujui)}</td>
                           <td className="px-2 py-1.5 text-right text-foreground/90 whitespace-nowrap">{fmtRp(a.dipa)}</td>
                           <td className="px-2 py-1.5 text-right text-foreground/90 whitespace-nowrap">{fmtRp(a.realisasi)}</td>
+                          <td className="px-2 py-1.5 text-right text-foreground/90 whitespace-nowrap">{fmtRp(a.realisasi_bast || 0)}</td>
+                          <td className="px-2 py-1.5 text-right whitespace-nowrap">
+                            <span className={(a.realisasi_bast || 0) > 0 && Math.abs(a.selisih_bast || 0) > 1 ? "text-amber-600 dark:text-amber-400 font-semibold" : "text-muted-foreground"}>
+                              {fmtRp(a.selisih_bast || 0)}
+                            </span>
+                          </td>
                           <td className="px-3 py-1.5 text-right font-semibold whitespace-nowrap">
                             <span className={a.serapan_persen >= 90 ? "text-emerald-600 dark:text-emerald-400" : a.dipa > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}>
                               {a.serapan_persen}%
@@ -471,6 +479,12 @@ export default function PenganggaranPage({ user, onBack }) {
                         {Number(u.nilai_disetujui) > 0 && <span className="whitespace-nowrap">Disetujui {fmtRp(u.nilai_disetujui)}</span>}
                         {u.nomor_dipa && <span className="whitespace-nowrap">DIPA {fmtRp(u.nilai_dipa)}</span>}
                         {Number(u.nilai_realisasi) > 0 && <span className="whitespace-nowrap">Realisasi {fmtRp(u.nilai_realisasi)}</span>}
+                        {u.perlu_rekonsiliasi && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 font-semibold whitespace-nowrap"
+                            title={`Realisasi manual ${fmtRp(u.nilai_realisasi)} ≠ nilai perolehan Pengadaan bertaut ${fmtRp(u.realisasi_pengadaan)} — sandingkan & perbaiki salah satunya`}>
+                            Perlu rekonsiliasi (selisih {fmtRp(u.selisih_realisasi)})
+                          </span>
+                        )}
                         {u.sumber && <span className="truncate max-w-full" title={u.sumber}>{u.sumber}</span>}
                         <span className="truncate max-w-full">oleh {u.created_by}</span>
                       </div>

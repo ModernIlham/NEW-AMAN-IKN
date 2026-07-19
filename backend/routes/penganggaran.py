@@ -18,9 +18,9 @@ from auth_utils import require_admin, require_user, require_writer
 from db import db
 from shared_utils import kode_satker_user, scope_query_field_satker
 from penganggaran_utils import (
-    AKUN_BAS, JENIS_ANGGARAN, STATUS_ANGGARAN,
-    info_tenggat_tahapan, rekap_anggaran, rekap_kalender, sanding_per_akun,
-    sanding_per_triwulan, validate_tahapan_kalender,
+    AKUN_BAS, JENIS_ANGGARAN, STATUS_ANGGARAN, TOLERANSI_REKONSILIASI,
+    info_tenggat_tahapan, rekap_anggaran, rekap_kalender, rekap_rekonsiliasi,
+    sanding_per_akun, sanding_per_triwulan, validate_tahapan_kalender,
     validate_transisi_anggaran, validate_usulan_anggaran,
 )
 from perencanaan_utils import snapshot_rkbmn
@@ -72,9 +72,20 @@ async def list_penganggaran(_user: dict = Depends(require_user)):
             {"_id": 0, "penganggaran_id": 1, "barang": 1}):
         pid = p.get("penganggaran_id")
         realisasi[pid] = realisasi.get(pid, 0.0) + float(nilai_perolehan(p))
+    from pembukuan_utils import parse_harga
     for u in items:
         u["realisasi_pengadaan"] = realisasi.get(u.get("id"), 0.0)
+        # Cek-silang realisasi manual vs nyata Pengadaan (integrasi #6 audit):
+        # selisih > toleransi (atau realisasi manual 0 padahal BAST ada) =
+        # perlu rekonsiliasi — hanya penanda, tidak mengubah angka tercatat.
+        selisih = round(parse_harga(u.get("nilai_realisasi"))
+                        - u["realisasi_pengadaan"], 2)
+        u["selisih_realisasi"] = selisih
+        u["perlu_rekonsiliasi"] = bool(
+            u["realisasi_pengadaan"] > 0
+            and abs(selisih) > TOLERANSI_REKONSILIASI)
     return {"items": items, "ringkasan": rekap_anggaran(items),
+            "rekonsiliasi": rekap_rekonsiliasi(items),
             "total_realisasi_pengadaan": round(sum(realisasi.values()), 2),
             "per_akun": sanding_per_akun(items),
             "per_triwulan": sanding_per_triwulan(items),
