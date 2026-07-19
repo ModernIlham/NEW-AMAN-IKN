@@ -70,6 +70,12 @@ export default function PegawaiPage({ user, onBack }) {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState(null);
   const [deteksi, setDeteksi] = useState(null); // hasil deteksi jenis nomor identitas
+  // Filter & sortir lanjutan (pola halaman aset)
+  const [fStatus, setFStatus] = useState("");
+  const [fStatusPeg, setFStatusPeg] = useState("");
+  const [fUnit, setFUnit] = useState("");
+  const [sortBy, setSortBy] = useState("nama");
+  const [sortDir, setSortDir] = useState("asc");
   const [tabForm, setTabForm] = useState("identitas"); // tab aktif form 5-tab
   const [saving, setSaving] = useState(false);
   const [mengimpor, setMengimpor] = useState(false);
@@ -284,9 +290,64 @@ export default function PegawaiPage({ user, onBack }) {
   };
 
   const q = search.trim().toLowerCase();
-  const filtered = useMemo(() => (!q ? items : items.filter((it) =>
-    [it.nama, it.nip, it.jabatan, it.unit_kerja, it.email]
-      .some((v) => String(v || "").toLowerCase().includes(q)))), [items, q]);
+  // Filter & sortir lanjutan (pola halaman aset) — semua dihitung klien
+  // karena daftar sudah dimuat penuh per satker.
+  const filtered = useMemo(() => {
+    let hasil = items;
+    if (q) {
+      hasil = hasil.filter((it) =>
+        [it.nama, it.nip, it.jabatan, it.unit_kerja, it.email, it.perusahaan_penyedia]
+          .some((v) => String(v || "").toLowerCase().includes(q)));
+    }
+    if (fStatus) hasil = hasil.filter((it) => (it.status || "aktif") === fStatus);
+    if (fStatusPeg) hasil = hasil.filter((it) => (it.status_kepegawaian || "") === fStatusPeg);
+    if (fUnit) hasil = hasil.filter((it) => (it.unit_kerja || "") === fUnit);
+    const arah = sortDir === "desc" ? -1 : 1;
+    const nilai = (it) => {
+      const im = it.info_masa || {};
+      switch (sortBy) {
+        case "updated": return String(it.updated_at || "");
+        case "pensiun": return im.sisa_hari_pensiun ?? Infinity;
+        case "kontrak": return im.kontrak?.sisa_hari ?? Infinity;
+        case "jabatan": return String(it.jabatan || "").toLowerCase();
+        case "unit": return String(it.unit_kerja || "").toLowerCase();
+        default: return String(it.nama || "").toLowerCase();
+      }
+    };
+    return [...hasil].sort((a, b) => {
+      const va = nilai(a), vb = nilai(b);
+      if (va < vb) return -1 * arah;
+      if (va > vb) return 1 * arah;
+      return String(a.nama || "").localeCompare(String(b.nama || ""));
+    });
+  }, [items, q, fStatus, fStatusPeg, fUnit, sortBy, sortDir]);
+
+  // Unit kerja yang benar-benar terpakai di data (utk pilihan filter)
+  const unitTerpakai = useMemo(
+    () => [...new Set(items.map((it) => it.unit_kerja).filter(Boolean))].sort(),
+    [items]);
+
+  // Format sisa hari → teks ringkas Indonesia ("28 hr lagi"/"3 bln lagi"/
+  // "lewat 12 hr"); null → "".
+  const fmtSisa = (hari) => {
+    if (hari == null) return "";
+    if (hari < 0) return `lewat ${Math.abs(hari)} hr`;
+    if (hari === 0) return "hari ini";
+    if (hari < 90) return `${hari} hr lagi`;
+    if (hari < 730) return `${Math.round(hari / 30)} bln lagi`;
+    return `${Math.round(hari / 365)} th lagi`;
+  };
+  // "diubah X lalu" dari updated_at (ISO)
+  const sejakUpdate = (iso) => {
+    const t = Date.parse(iso || "");
+    if (Number.isNaN(t)) return "";
+    const dtk = Math.max(0, Math.floor((Date.now() - t) / 1000));
+    if (dtk < 3600) return `${Math.max(1, Math.floor(dtk / 60))} mnt lalu`;
+    if (dtk < 86400) return `${Math.floor(dtk / 3600)} jam lalu`;
+    if (dtk < 86400 * 60) return `${Math.floor(dtk / 86400)} hr lalu`;
+    if (dtk < 86400 * 730) return `${Math.floor(dtk / (86400 * 30))} bln lalu`;
+    return `${Math.floor(dtk / (86400 * 365))} th lalu`;
+  };
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
@@ -348,6 +409,57 @@ export default function PegawaiPage({ user, onBack }) {
                 </Button>
               </>
             )}
+          </div>
+          {/* Baris filter & sortir lanjutan (pola halaman aset) */}
+          <div className="flex items-center gap-1.5 flex-wrap mt-2">
+            <select value={fStatusPeg} onChange={(e) => setFStatusPeg(e.target.value)}
+              aria-label="Filter status kepegawaian" title="Filter status kepegawaian"
+              className="h-9 rounded-md border border-input bg-background px-2 text-xs flex-1 sm:flex-none min-w-0"
+              data-testid="pegawai-f-statuspeg">
+              <option value="">Kepegawaian</option>
+              {(ref.status_kepegawaian || []).map((o) => <option key={o.kode} value={o.kode}>{o.uraian}</option>)}
+            </select>
+            <select value={fStatus} onChange={(e) => setFStatus(e.target.value)}
+              aria-label="Filter status di satker" title="Filter status di satker"
+              className="h-9 rounded-md border border-input bg-background px-2 text-xs flex-1 sm:flex-none min-w-0"
+              data-testid="pegawai-f-status">
+              <option value="">Status</option>
+              {(ref.status || []).map((o) => <option key={o.kode} value={o.kode}>{o.uraian}</option>)}
+            </select>
+            <select value={fUnit} onChange={(e) => setFUnit(e.target.value)}
+              aria-label="Filter unit kerja" title="Filter unit kerja"
+              className="h-9 rounded-md border border-input bg-background px-2 text-xs flex-1 sm:flex-none min-w-0 max-w-[180px]"
+              data-testid="pegawai-f-unit">
+              <option value="">Unit kerja</option>
+              {unitTerpakai.map((u) => <option key={u} value={u}>{u}</option>)}
+            </select>
+            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}
+              aria-label="Urutkan berdasarkan" title="Urutkan berdasarkan"
+              className="h-9 rounded-md border border-input bg-background px-2 text-xs flex-1 sm:flex-none min-w-0"
+              data-testid="pegawai-sort">
+              <option value="nama">Urut: Nama</option>
+              <option value="updated">Urut: Terakhir diubah</option>
+              <option value="pensiun">Urut: Terdekat pensiun</option>
+              <option value="kontrak">Urut: Kontrak berakhir</option>
+              <option value="jabatan">Urut: Jabatan</option>
+              <option value="unit">Urut: Unit kerja</option>
+            </select>
+            <button type="button" onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+              aria-label={sortDir === "asc" ? "Urut naik (klik utk turun)" : "Urut turun (klik utk naik)"}
+              title={sortDir === "asc" ? "Urut naik (klik utk turun)" : "Urut turun (klik utk naik)"}
+              className="h-9 w-9 rounded-md border border-input bg-background text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0 min-w-0 min-h-0"
+              data-testid="pegawai-sort-dir">
+              {sortDir === "asc" ? "↑" : "↓"}
+            </button>
+            {(fStatus || fStatusPeg || fUnit || sortBy !== "nama") && (
+              <button type="button"
+                onClick={() => { setFStatus(""); setFStatusPeg(""); setFUnit(""); setSortBy("nama"); setSortDir("asc"); }}
+                className="h-9 px-2 rounded-md text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:bg-muted min-w-0 min-h-0"
+                data-testid="pegawai-f-reset">
+                Reset
+              </button>
+            )}
+            <span className="text-[10px] text-muted-foreground ml-auto">{filtered.length}/{items.length} pegawai</span>
           </div>
         </div>
 
@@ -430,18 +542,106 @@ export default function PegawaiPage({ user, onBack }) {
               )}
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            {/* ── Mobile (<sm): KARTU muat-layar (scroll vertikal saja) —
+                ringkas & padat sampai tombol aksi (umpan balik pengguna). ── */}
+            <ul className="sm:hidden divide-y divide-border/60" data-testid="pegawai-cards-mobile">
+              {filtered.map((it) => {
+                const im = it.info_masa || {};
+                const k = statusKontrak(it);
+                return (
+                  <li key={it.id} className="p-3 space-y-1" data-testid={`pegawai-card-${it.id}`}>
+                    <div className="flex items-start gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-foreground text-sm leading-tight break-words">{namaLengkap(it)}</p>
+                        <p className="text-[10px] text-muted-foreground font-mono">
+                          {im.label_identitas && it.nip ? `${im.label_identitas} ` : ""}{it.nip || "—"}
+                        </p>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold flex-shrink-0 ${
+                        (it.status || "aktif") === "aktif"
+                          ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                          : "bg-slate-500/15 text-muted-foreground"}`}>
+                        {uraian("status", it.status || "aktif")}
+                      </span>
+                    </div>
+                    {(it.jabatan || it.unit_kerja) && (
+                      <p className="text-[11px] text-foreground/80 truncate">
+                        {[it.jabatan, it.unit_kerja].filter(Boolean).join(" · ")}
+                      </p>
+                    )}
+                    <div className="flex items-center gap-1 flex-wrap text-[9px] font-semibold">
+                      {it.status_kepegawaian && (
+                        <span className="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-600 dark:text-sky-400 uppercase">
+                          {uraian("status_kepegawaian", it.status_kepegawaian).split(" (")[0]}
+                        </span>
+                      )}
+                      {it.jenis_kontrak_non_asn === "outsourcing" && (
+                        <span className="px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-600 dark:text-violet-400"
+                          title={`Outsourcing — ${it.perusahaan_penyedia || "?"}`}>
+                          Outsourcing{it.perusahaan_penyedia ? ` · ${it.perusahaan_penyedia}` : ""}
+                        </span>
+                      )}
+                      {im.tanggal_pensiun && (
+                        <span className={`px-1.5 py-0.5 rounded ${((im.sisa_hari_pensiun ?? 9e9) < 365) ? "bg-amber-500/15 text-amber-600 dark:text-amber-400" : "bg-muted text-muted-foreground"}`}
+                          title={`Perkiraan pensiun ${im.tanggal_pensiun} (BUP ${im.bup} th)`}>
+                          Pensiun {fmtSisa(im.sisa_hari_pensiun)}
+                        </span>
+                      )}
+                      {im.akhir_jabatan && (
+                        <span className={`px-1.5 py-0.5 rounded ${((im.sisa_hari_jabatan ?? 9e9) < 90) ? "bg-amber-500/15 text-amber-600 dark:text-amber-400" : "bg-muted text-muted-foreground"}`}
+                          title={`Akhir periode jabatan ${im.akhir_jabatan}`}>
+                          Jabatan {fmtSisa(im.sisa_hari_jabatan)}
+                        </span>
+                      )}
+                      {k && (
+                        <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded whitespace-nowrap ${k.habis ? "bg-red-500/15 text-red-600 dark:text-red-400" : "bg-amber-500/15 text-amber-600 dark:text-amber-400"}`}
+                          title={k.teks}>
+                          <AlertTriangle className="w-2.5 h-2.5" />{k.singkat}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between gap-2 pt-0.5">
+                      <span className="text-[10px] text-muted-foreground">
+                        {it.updated_at ? `diubah ${sejakUpdate(it.updated_at)}` : ""}
+                      </span>
+                      {isAdmin && (
+                        <span className="flex items-center gap-0.5 flex-shrink-0">
+                          <button type="button" onClick={() => bukaForm({ ...EMPTY, ...it, mode: "edit" })}
+                            title={`Ubah ${it.nama}`} aria-label={`Ubah ${it.nama}`}
+                            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted min-w-0 min-h-0"
+                            data-testid={`pegawai-edit-${it.id}-m`}>
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button type="button" onClick={() => remove(it)}
+                            title={`Hapus ${it.nama}`} aria-label={`Hapus ${it.nama}`}
+                            className="p-1.5 rounded-md text-muted-foreground hover:text-red-600 hover:bg-red-500/10 min-w-0 min-h-0"
+                            data-testid={`pegawai-delete-${it.id}-m`}>
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </span>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+            {/* ── Desktop (≥sm): tabel + kolom Masa (durasi) ── */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/40 text-left text-xs text-muted-foreground">
-                    <th className="px-3 py-2.5 font-semibold">Nama / NIP</th>
-                    <th className="px-3 py-2.5 font-semibold hidden sm:table-cell">Jabatan / Unit Kerja</th>
+                    <th className="px-3 py-2.5 font-semibold">Nama / Identitas</th>
+                    <th className="px-3 py-2.5 font-semibold">Jabatan / Unit Kerja</th>
+                    <th className="px-3 py-2.5 font-semibold hidden md:table-cell">Masa</th>
                     <th className="px-3 py-2.5 font-semibold">Status</th>
                     {isAdmin && <th className="px-3 py-2.5 font-semibold text-right">Aksi</th>}
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((it) => (
+                  {filtered.map((it) => {
+                    const im = it.info_masa || {};
+                    return (
                     <tr key={it.id} className="border-b border-border/60 last:border-0 hover:bg-muted/50" data-testid={`pegawai-row-${it.id}`}>
                       <td className="px-3 py-2">
                         <p className="font-semibold text-foreground flex items-center gap-1.5 flex-wrap">
@@ -449,6 +649,12 @@ export default function PegawaiPage({ user, onBack }) {
                           {it.status_kepegawaian && (
                             <span className="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-600 dark:text-sky-400 text-[9px] font-semibold uppercase">
                               {uraian("status_kepegawaian", it.status_kepegawaian).split(" (")[0]}
+                            </span>
+                          )}
+                          {it.jenis_kontrak_non_asn === "outsourcing" && (
+                            <span className="px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-600 dark:text-violet-400 text-[9px] font-semibold"
+                              title={`Outsourcing — ${it.perusahaan_penyedia || "?"}`}>
+                              Outsourcing
                             </span>
                           )}
                           {(() => {
@@ -462,16 +668,39 @@ export default function PegawaiPage({ user, onBack }) {
                             );
                           })()}
                         </p>
-                        <p className="text-[11px] text-muted-foreground font-mono">{it.nip || "—"}</p>
-                        {(it.jabatan || it.unit_kerja) && (
-                          <p className="sm:hidden text-[10px] text-muted-foreground truncate">
-                            {[it.jabatan, it.unit_kerja].filter(Boolean).join(" · ")}
-                          </p>
-                        )}
+                        <p className="text-[11px] text-muted-foreground font-mono">
+                          {im.label_identitas && it.nip ? `${im.label_identitas} ` : ""}{it.nip || "—"}
+                        </p>
                       </td>
-                      <td className="px-3 py-2 hidden sm:table-cell">
+                      <td className="px-3 py-2">
                         <p className="text-[12px] text-foreground/90">{it.jabatan || "—"}</p>
                         <p className="text-[10px] text-muted-foreground/80">{it.unit_kerja || ""}</p>
+                      </td>
+                      <td className="px-3 py-2 hidden md:table-cell">
+                        {/* Kolom MASA: pensiun / akhir jabatan / kontrak (durasi) */}
+                        <div className="space-y-0.5 text-[10px]">
+                          {im.tanggal_pensiun && (
+                            <p className={((im.sisa_hari_pensiun ?? 9e9) < 365) ? "text-amber-600 dark:text-amber-400 font-semibold" : "text-muted-foreground"}
+                              title={`Perkiraan pensiun ${im.tanggal_pensiun} (BUP ${im.bup} th)`}>
+                              Pensiun {fmtSisa(im.sisa_hari_pensiun)}
+                            </p>
+                          )}
+                          {im.akhir_jabatan && (
+                            <p className={((im.sisa_hari_jabatan ?? 9e9) < 90) ? "text-amber-600 dark:text-amber-400 font-semibold" : "text-muted-foreground"}
+                              title={`Akhir periode jabatan ${im.akhir_jabatan}`}>
+                              Jabatan {fmtSisa(im.sisa_hari_jabatan)}
+                            </p>
+                          )}
+                          {im.kontrak?.ada && (
+                            <p className={im.kontrak.habis || im.kontrak.segera ? "text-red-600 dark:text-red-400 font-semibold" : "text-muted-foreground"}
+                              title={`Kontrak s.d. ${im.kontrak.tgl_selesai}`}>
+                              Kontrak {fmtSisa(im.kontrak.sisa_hari)}
+                            </p>
+                          )}
+                          {!im.tanggal_pensiun && !im.akhir_jabatan && !im.kontrak?.ada && (
+                            <p className="text-muted-foreground/50">—</p>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
@@ -480,6 +709,9 @@ export default function PegawaiPage({ user, onBack }) {
                             : "bg-slate-500/15 text-muted-foreground"}`}>
                           {uraian("status", it.status || "aktif")}
                         </span>
+                        {it.updated_at && (
+                          <p className="text-[9px] text-muted-foreground mt-0.5">diubah {sejakUpdate(it.updated_at)}</p>
+                        )}
                       </td>
                       {isAdmin && (
                         <td className="px-3 py-2 text-right whitespace-nowrap">
@@ -498,10 +730,12 @@ export default function PegawaiPage({ user, onBack }) {
                         </td>
                       )}
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
+            </>
           )}
         </div>
       </main>

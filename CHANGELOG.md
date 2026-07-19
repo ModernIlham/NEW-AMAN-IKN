@@ -48,6 +48,27 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#433] Master Pegawai pintar (2/2): filter & sortir lanjutan, kartu HP muat-layar, kolom durasi — 2026-07-19
+
+Paruh kedua perombakan Master Pegawai:
+
+- **Filter & sortir lanjutan** (pola halaman aset): filter status
+  kepegawaian (PNS/PPPK/TNI/POLRI/Non-ASN), status di satker, unit kerja
+  (dari data terpakai); urutkan Nama / Terakhir diubah / Terdekat pensiun /
+  Kontrak berakhir / Jabatan / Unit + arah naik-turun + tombol Reset +
+  penghitung hasil.
+- **Tampilan HP = kartu muat-layar** (scroll vertikal saja): nama + label
+  identitas terdeteksi (NIP/NI PPPK/NRP/NIK) + badge status; jabatan·unit;
+  baris chip durasi; baris bawah "diubah X lalu" + tombol aksi ringkas.
+- **Durasi di setiap baris**: "diubah X lalu" (update terakhir),
+  "Pensiun X lagi" (perkiraan BUP — kuning bila <1 th), "Jabatan X lagi"
+  (akhir periode — kuning bila <90 hr), "Kontrak X lagi" (Non-ASN — merah
+  bila habis/segera). Desktop mendapat kolom "Masa" tersendiri.
+- Badge **Outsourcing** (+nama perusahaan penyedia) tampil di daftar.
+- Verifikasi: eslint bersih, `yarn build` sukses; 558 tes unit tetap lulus.
+
+---
+
 ## [#432] Master Pegawai pintar (1/2): deteksi NIP/NI PPPK/NRP/NIK otomatis, BUP, outsourcing, kode satker, label laporan — 2026-07-19
 
 Paruh pertama perombakan Master Pegawai (hasil riset regulasi: Perka BKN
