@@ -38,10 +38,10 @@ const WARNA_STATUS_USULAN = {
 const TRANSISI_MUNDUR = ["dikembalikan", "ditolak_telaah"];
 
 /**
- * Perencanaan — Fase 4 tahap awal: kandidat usulan RKBMN pemeliharaan
- * (PMK 153/2021). Menyaring aset layak (Baik/RR, dioperasikan) vs tidak
- * (rusak berat/idle/nonaktif) + riwayat biaya pemeliharaan per aset,
- * plus register usulan RKBMN berstatus. Sanding SBSK menyusul.
+ * Perencanaan — Kandidat usulan RKBMN pemeliharaan (PMK 153/2021):
+ * menyaring aset layak (Baik/RR, dioperasikan) vs tidak (rusak berat/idle/
+ * nonaktif) + riwayat biaya pemeliharaan per aset, register usulan RKBMN
+ * berstatus, dan sanding SBSK (PMK 138/2022) yang telah tersedia.
  */
 export default function PerencanaanPage({ user, onBack }) {
   const isAdmin = user?.role === "admin";

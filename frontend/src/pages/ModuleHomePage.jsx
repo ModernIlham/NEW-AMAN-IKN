@@ -37,15 +37,14 @@ const MODULE_ICONS = {
 
 const STATUS_BADGE_CLS = {
   aktif: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
-  sebagian: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30",
   segera: "bg-slate-500/10 text-muted-foreground border-border",
 };
 
 function StatusBadge({ status }) {
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-semibold ${STATUS_BADGE_CLS[status]}`}>
-      {status === "aktif" ? <CheckCircle2 className="w-3 h-3" /> : status === "segera" ? <Lock className="w-3 h-3" /> : <Sparkles className="w-3 h-3" />}
-      {STATUS_LABELS[status]}
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-semibold ${STATUS_BADGE_CLS[status] || STATUS_BADGE_CLS.aktif}`}>
+      {status === "segera" ? <Lock className="w-3 h-3" /> : <CheckCircle2 className="w-3 h-3" />}
+      {STATUS_LABELS[status] || "Aktif"}
     </span>
   );
 }
@@ -345,7 +344,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
         <section>
           <div className="flex flex-wrap items-center gap-2 gap-y-1 mb-3 px-1">
             <h3 className="font-bold text-foreground text-sm sm:text-base">Tahap Siklus Lainnya</h3>
-            <span className="text-[11px] text-muted-foreground">— kamar sudah disiapkan, modul menyusul bertahap</span>
+            <span className="text-[11px] text-muted-foreground">— seluruh tahap aktif &amp; dapat dibuka</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
             {siklusSorted.map((mod) => {
