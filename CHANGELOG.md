@@ -48,6 +48,30 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#428] Integrasi lintas-modul gelombang 10: pemeliharaan kapitalisasi → pengembangan nilai aset (jurnal 202) — 2026-07-19
+
+Modul Pemeliharaan selama ini hanya MENANDAI biaya ber-indikasi
+kapitalisasi (badge "Telaah kapitalisasi", PMK 181) tanpa jalur menaikkan
+nilai aset — kode jurnal 202 "Pengembangan Nilai Aset" ada di Buku Barang
+tetapi tak pernah diproduksi. Kini alur lengkap:
+
+- **Endpoint `POST /pemeliharaan/{id}/kapitalisasi`** (khusus admin —
+  keputusan kualitatif "menambah masa manfaat/kapasitas?" tetap di
+  manusia): nilai perolehan aset **bertambah** sebesar biaya (DBKP/Neraca
+  ikut naik), **jurnal 202** tercatat di Buku Barang, catatan ditandai
+  `kapitalisasi_diposting`. Idempoten via CAS — klik ganda/2 tab tidak
+  bisa dobel-posting; version aset naik (bust cache/OCC).
+- **Tombol "Posting 202"** di baris catatan ber-indikasi (admin) dengan
+  dialog konfirmasi berpenjelasan; setelah diposting badge berubah jadi
+  "Nilai dikapitalisasi ✓" dan tombol hilang.
+- **Guard hapus**: catatan yang sudah diposting TIDAK bisa dihapus (nilai
+  aset sudah bertambah — koreksi lewat register Penilaian), + audit log.
+- Verifikasi: 554 tes unit lulus; smoke end-to-end (nilai 100jt→130jt,
+  version naik, jurnal 202 tercatat, dobel-posting & hapus terblokir 409);
+  eslint bersih & build sukses.
+
+---
+
 ## [#427] Integrasi lintas-modul gelombang 9: kasus BMN bermasalah aktif ikut terhitung sengketa — 2026-07-19
 
 Register kasus BMN bermasalah di Pengamanan (dikuasai pihak lain /

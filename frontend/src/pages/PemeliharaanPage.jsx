@@ -229,6 +229,30 @@ export default function PemeliharaanPage({ user, onBack }) {
     }
   };
 
+  // Integrasi Pemeliharaan → Pembukuan: posting pengembangan nilai (jurnal
+  // 202) — keputusan kualitatif admin; nilai perolehan aset bertambah.
+  const postingKapitalisasi = async (row) => {
+    const ok = await confirm({
+      title: "Posting pengembangan nilai aset (jurnal 202)?",
+      description:
+        `${row.uraian} — ${row.asset_name || "-"} (${fmtRp(row.biaya)}). ` +
+        "Nilai perolehan aset BERTAMBAH sebesar biaya ini (DBKP/Neraca ikut " +
+        "naik) dan jurnal 202 tercatat di Buku Barang. Lakukan hanya bila " +
+        "pemeliharaan ini menambah masa manfaat/kapasitas (belanja modal, " +
+        "PMK 181). Tidak dapat dibatalkan dari sini.",
+      confirmLabel: "Posting 202",
+    });
+    if (!ok) return;
+    try {
+      const r = await axios.post(`${API}/pemeliharaan/${row.id}/kapitalisasi`);
+      toast.success(`Nilai aset bertambah ${fmtRp(r.data?.nilai_ditambahkan)} (jurnal 202)`);
+      muatRekap();
+      muatDaftar();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal posting pengembangan nilai");
+    }
+  };
+
   const hapus = async (row) => {
     const ok = await confirm({
       title: "Hapus catatan pemeliharaan?",
@@ -523,12 +547,20 @@ export default function PemeliharaanPage({ user, onBack }) {
                             Kondisi → {r.kondisi_setelah}
                           </span>
                         )}
-                        {r.indikasi_kapitalisasi && (
+                        {r.indikasi_kapitalisasi && !r.kapitalisasi_diposting && (
                           <span
                             className="px-1.5 py-0.5 rounded bg-fuchsia-500/15 text-fuchsia-600 dark:text-fuchsia-400 text-[10px] font-semibold"
                             title="Biaya ≥ ambang kapitalisasi PMK 181/2016 — telaah apakah menambah masa manfaat/kapasitas (belanja modal, bukan 523)"
                           >
                             Telaah kapitalisasi
+                          </span>
+                        )}
+                        {r.kapitalisasi_diposting && (
+                          <span
+                            className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-[10px] font-semibold"
+                            title={`Sudah diposting sebagai pengembangan nilai (jurnal 202) oleh ${r.kapitalisasi_oleh || "-"}`}
+                          >
+                            Nilai dikapitalisasi ✓
                           </span>
                         )}
                       </div>
@@ -542,6 +574,17 @@ export default function PemeliharaanPage({ user, onBack }) {
                     </div>
                     <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
                       <span className="text-sm font-bold text-foreground">{fmtRp(r.biaya)}</span>
+                      {isAdmin && r.indikasi_kapitalisasi && !r.kapitalisasi_diposting && (
+                        <button
+                          type="button"
+                          onClick={() => postingKapitalisasi(r)}
+                          title="Posting pengembangan nilai aset (jurnal 202) — nilai perolehan bertambah"
+                          className="h-7 px-2 rounded-lg border border-fuchsia-500/40 text-fuchsia-600 dark:text-fuchsia-400 text-[10px] font-semibold flex items-center gap-1 hover:bg-fuchsia-500/10 min-h-0 min-w-0 whitespace-nowrap"
+                          data-testid={`pemeliharaan-kapitalisasi-${r.id}`}
+                        >
+                          Posting 202
+                        </button>
+                      )}
                       {isAdmin && (
                         <button
                           type="button"
