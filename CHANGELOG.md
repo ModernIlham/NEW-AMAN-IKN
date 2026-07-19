@@ -48,6 +48,20 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#468] Air sinkron mengalir — gelombang cekung & cembung berjalan pelan satu arah — 2026-07-19
+
+- **Permukaan air kini benar-benar MENGALIR**: lapisan alun lama (lengkung
+  cembung yang hanya bergoyang kiri-kanan) diganti pita air ber-MASK
+  gelombang sinus berulang — CEMBUNG (puncak) dan CEKUNG (lembah)
+  bergantian mulus — yang digeser linier satu arah tepat satu panjang
+  gelombang per siklus sehingga aliran tak pernah terputus, pelan dan
+  natural. Mask hanya membentuk siluet; warna tetap `hsl(var(--card))`
+  (otomatis ikut mode light/dark).
+- Garis dasar air sedikit diturunkan agar lembah (cekung) terlihat jelas
+  turun; meniskus pemeluk bola & apungan bola tidak berubah.
+- Hover bola = aliran lebih cepat; proses sinkronisasi = deras; sukses =
+  tetap surut beranimasi.
+
 ## [#467] Air sinkron tampak samping + status sinkron SIMAN terhubung lintas-tampilan (list ↔ galeri) — 2026-07-19
 
 - **Permukaan air kini tampak DARI SAMPING** (bukan kubah dari atas):
