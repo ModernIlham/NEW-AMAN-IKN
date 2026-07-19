@@ -48,6 +48,26 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#438] Pengenal barang lintas kegiatan inventarisasi (arsitektur W5 tahap 3 — penutup) — 2026-07-19
+
+Penutup mandat W5: sistem kini MENGENALI bahwa barang yang sama tercatat
+di beberapa kegiatan inventarisasi — dan menampilkannya sebagai informasi,
+bukan masalah (kegiatan = pemutakhir berkala, bukan induk):
+
+- **Backend `GET /inventarisasi/aset-lintas-kegiatan`**: agregasi Mongo
+  mengelompokkan aset per identitas (kode barang + NUP), hanya kelompok
+  yang menyentuh >1 kegiatan yang dikembalikan, lengkap dengan status
+  inventarisasi/kondisi per kegiatan (terbaru dulu) + info tiket & status
+  pengesahan tiap kegiatan. Helper murni `susun_kelompok_lintas_kegiatan`
+  + unit test; scoping satker M-SCOPE; batas 200 kelompok.
+- **UI halaman Kegiatan Inventarisasi**: panel lipat "N barang dikenali
+  tercatat di lebih dari satu kegiatan" — tiap barang menampilkan chip per
+  kegiatan (tiket · status · kondisi, ✓ = disahkan; hijau = catatan
+  termutakhir), dengan penjelasan bahwa Timeline Aset menggabungkan
+  otomatis dan tidak ada data yang perlu dihapus.
+- Masterplan Bab 5A gap #9 kini TUNTAS penuh (timeline + PSP SIMAN +
+  pengenal lintas kegiatan).
+
 ## [#437] PSP resmi SIMAN V2 → register SK PSP 1-klik (arsitektur W5 tahap 2) — 2026-07-19
 
 Lanjutan pemanfaatan data impor SIMAN V2: kolom No. PSP / Tgl PSP / Status
