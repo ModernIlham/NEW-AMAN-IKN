@@ -52,9 +52,10 @@ async def daftar_pemegang(
     _user: dict = Depends(require_user),
 ):
     """Rekap pemegang: jumlah aset, kelengkapan BAST, jumlah kegiatan."""
+    from shared_utils import filter_aset_perhitungan
     assets = [a async for a in db.assets.find(
-        await scope_query_aset(_user,
-            {"user": {"$exists": True, "$nin": ["", None]}}), _PROJ)]
+        await filter_aset_perhitungan(await scope_query_aset(_user,
+            {"user": {"$exists": True, "$nin": ["", None]}})), _PROJ)]
     rows = rekap_pemegang(assets)
     if search.strip():
         s = search.strip().lower()
@@ -99,10 +100,11 @@ async def aset_pemegang(
     proj = {**_PROJ, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
             "location": 1, "condition": 1, "inventory_status": 1,
             "bast_terakhir": 1}
+    from shared_utils import filter_aset_perhitungan
     out = []
     async for a in db.assets.find(
-            await scope_query_aset(_user,
-                {"user": {"$exists": True, "$nin": ["", None]}}), proj):
+            await filter_aset_perhitungan(await scope_query_aset(_user,
+                {"user": {"$exists": True, "$nin": ["", None]}})), proj):
         if kunci_pemegang(a) == key:
             out.append({
                 "id": a.get("id"),
@@ -147,7 +149,9 @@ async def daftar_psp(_user: dict = Depends(require_user)):
     for s in items:
         # Normalisasi record lama tanpa field status (= SK sudah terbit)
         s["status_pengajuan"] = status_pengajuan_psp(s)
-    total_aset = await db.assets.count_documents(await scope_query_aset(_user, {}))
+    from shared_utils import filter_aset_perhitungan
+    total_aset = await db.assets.count_documents(
+        await filter_aset_perhitungan(await scope_query_aset(_user, {})))
     ringkasan = rekap_psp(items)
     ringkasan["total_aset"] = total_aset
     return {"items": items, "ringkasan": ringkasan,
@@ -170,9 +174,10 @@ async def psp_dari_siman(_user: dict = Depends(require_user)):
     yang sudah/belum tercatat di register SK PSP — bahan tombol "Catat
     1-klik" (prefill nomor, tanggal, dan daftar aset) di UI."""
     from shared_utils import scope_query_aset, scope_query_field_satker
-    q = await scope_query_aset(_user, {
+    from shared_utils import filter_aset_perhitungan
+    q = await filter_aset_perhitungan(await scope_query_aset(_user, {
         "siman.referensi.no_psp": {"$nin": ["", None]},
-        "dihapus": {"$ne": True}})
+        "dihapus": {"$ne": True}}))
     aset_rows = await db.assets.find(q, {
         "_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
         "siman.referensi.no_psp": 1, "siman.referensi.tanggal_psp": 1,
@@ -595,8 +600,11 @@ async def daftar_idle(_user: dict = Depends(require_user)):
              .sort("created_at", -1).limit(500)]
     tiket_aktif = {t["asset_id"]: t for t in tiket
                    if t.get("status") in ("klarifikasi", "usul_serah")}
+    from shared_utils import filter_aset_perhitungan
     kandidat = []
-    async for a in db.assets.find(await scope_query_aset(_user, {}), _PROJ_IDLE):
+    async for a in db.assets.find(
+            await filter_aset_perhitungan(await scope_query_aset(_user, {})),
+            _PROJ_IDLE):
         ya, alasan = indikasi_idle(a)
         if not ya:
             continue
@@ -790,13 +798,14 @@ async def daftar_pemegang_pdf(
     proj = {**_PROJ, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
             "brand": 1, "model": 1, "serial_number": 1,
             "location": 1, "condition": 1, "bast_file_id": 1}
+    from shared_utils import filter_aset_perhitungan
     rows = []
     jabatan = ""
     melekat = ""
     nama_tampil = ""
     async for a in db.assets.find(
-            await scope_query_aset(_user,
-                {"user": {"$exists": True, "$nin": ["", None]}}), proj):
+            await filter_aset_perhitungan(await scope_query_aset(_user,
+                {"user": {"$exists": True, "$nin": ["", None]}})), proj):
         if kunci_pemegang(a) != key:
             continue
         rows.append(a)

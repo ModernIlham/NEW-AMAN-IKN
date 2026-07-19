@@ -85,8 +85,11 @@ async def backfill_saldo_awal(admin: dict = Depends(require_admin)):
         sudah.add(m.get("asset_id"))
     dibuat = 0
     now = datetime.now(timezone.utc).isoformat()
+    from shared_utils import filter_aset_perhitungan, scope_query_aset
+    q_backfill = await filter_aset_perhitungan(
+        await scope_query_aset(admin, {"dihapus": {"$ne": True}}))
     async for a in db.assets.find(
-            {"dihapus": {"$ne": True}},
+            q_backfill,
             {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1,
              "purchase_price": 1, "purchase_date": 1, "created_at": 1}):
         if a["id"] in sudah:

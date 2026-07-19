@@ -215,10 +215,11 @@ async def deteksi_identitas_pegawai(nomor: str = "",
 async def _jumlah_aset_per_nip(user) -> dict:
     """Peta NIP → jumlah aset yang dipegang (aset ter-scope satker user)."""
     from shared_utils import scope_query_aset
-    q = await scope_query_aset(user, {
+    from shared_utils import filter_aset_perhitungan
+    q = await filter_aset_perhitungan(await scope_query_aset(user, {
         "dihapus": {"$ne": True},
         "pengguna_nip": {"$nin": ["", None]},
-    })
+    }))
     peta = {}
     async for g in db.assets.aggregate([
             {"$match": q},
@@ -262,8 +263,9 @@ async def aset_dipegang_pegawai(pegawai_id: str,
     if not nip:
         return {"pegawai": {"id": pegawai_id, "nama": peg.get("nama"),
                             "nip": ""}, "items": [], "jumlah": 0}
-    q = await scope_query_aset(_user, {
-        "pengguna_nip": nip, "dihapus": {"$ne": True}})
+    from shared_utils import filter_aset_perhitungan
+    q = await filter_aset_perhitungan(await scope_query_aset(_user, {
+        "pengguna_nip": nip, "dihapus": {"$ne": True}}))
     items = await db.assets.find(q, {
         "_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
         "condition": 1, "location": 1, "activity_id": 1, "bast_file_id": 1,

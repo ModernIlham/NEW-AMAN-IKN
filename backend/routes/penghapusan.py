@@ -45,11 +45,11 @@ _MAKS_BARIS = 500
 @penghapusan_router.get("/penghapusan/kandidat")
 async def kandidat_penghapusan(_user: dict = Depends(require_user)):
     """Kandidat usul hapus per jalur + status usulan aktifnya (bila ada)."""
-    from shared_utils import scope_query_aset
+    from shared_utils import filter_aset_perhitungan, scope_query_aset
     assets = [a async for a in db.assets.find(
-        await scope_query_aset(_user, {"$or": [
+        await filter_aset_perhitungan(await scope_query_aset(_user, {"$or": [
             {"inventory_status": "Tidak Ditemukan"},
-            {"condition": "Rusak Berat"}]}), _PROJ)]
+            {"condition": "Rusak Berat"}]})), _PROJ)]
     hasil = rekap_kandidat(assets)
     # Lekatkan status usulan aktif per aset agar UI tahu mana yang sudah diusulkan
     usulan_aktif = {}

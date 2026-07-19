@@ -48,6 +48,35 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#446] Gerbang perhitungan MENYELURUH — semua modul konsumen data aset tersapu — 2026-07-19
+
+Tindak lanjut mandat "belum semua modul tersentuh": sapuan total seluruh
+titik baca koleksi aset di backend (audit agen per file), gerbang
+layak-hitung + anti-dummy kini terpasang di SEMUA modul konsumen
+(total 31 titik panggilan di 13 file route):
+
+- **Pembukuan (kritis)**: `POST /pembukuan/mutasi/backfill` — backfill
+  saldo awal Buku Barang sebelumnya MENULIS jurnal dari SEMUA aset lintas
+  kegiatan & lintas satker; kini ber-scope satker + gerbang layak-hitung
+  (jurnal sintetis tidak lagi tercipta dari kegiatan yang belum sah).
+- **Kandidat otomatis lintas modul**: BMN idle (Penggunaan), kandidat
+  pemanfaatan, kandidat penghapusan per jalur (juga dipakai kandidat RB
+  Pemusnahan), kandidat PSP dari SIMAN.
+- **Rekap & statistik**: rekap pemegang (list + drill-down aset per
+  pemegang + PDF Daftar Barang yang Digunakan), total aset ringkasan
+  register PSP, hitung aset per NIP (panel "Perlu Serah Terima" Master
+  Pegawai + daftar aset per pegawai + temuan pemegang berisiko Wasdal
+  yang memakainya).
+- **Kesehatan data & integritas**: ringkasan pengamanan + daftar aset
+  berkekurangan; cek integritas kodefikasi (per akun + kartu ringkas).
+- Yang dikonfirmasi TETAP tanpa gerbang (by design): tampilan per
+  kegiatan di modul Inventarisasi (list/stats/ekspor/laporan LHI-BAHI/
+  pengesahan/stiker/kartu), Timeline Aset (lintas kegiatan memang
+  tujuannya), operasi per-aset yang dipilih manual pengguna, alat
+  pembersih duplikat, rekonsiliasi SIMAN (membandingkan seluruh catatan
+  memang fungsinya), dan guard penghapusan master (harus melihat semua).
+
+
 ## [#445] Gerbang perhitungan: data inventarisasi belum sah & dummy tidak ikut modul lain — 2026-07-19
 
 Mandat: kegiatan inventarisasi yang masih berjalan tidak boleh mewarnai
