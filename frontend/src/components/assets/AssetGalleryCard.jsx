@@ -40,7 +40,7 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
   const [hovered, setHovered] = useState(false);
   // Sinkronisasi SIMAN langsung dari kartu galeri (liquid): logika bersama
   // di lib/simanSync.js — sukses → cairan terserap beranimasi.
-  const { busy: simanBusy, synced: simanSynced, sinkron: sinkronSiman } = useSinkronSiman(asset);
+  const { busy: simanBusy, synced: simanSynced, baruSaja: simanBaruSaja, sinkron: sinkronSiman } = useSinkronSiman(asset);
   // Foto sampul galeri via STREAMING ?w=256 (ter-cache browser + server) —
   // base64 gallery_thumbnail tak lagi dikirim di payload list. Fallback ke
   // data-URI lama (baris legacy/snapshot offline) lalu thumbnail 100px bila
@@ -146,13 +146,15 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
               </span>
             </button>
             <span className="siman-air" aria-hidden="true" />
-            <span className="siman-air-gelombang" aria-hidden="true" />
+            <span className="siman-air-ombak" aria-hidden="true" />
+            <span className="siman-air-meniskus" aria-hidden="true" />
           </>
         )}
-        {simanSynced && (
+        {simanBaruSaja && (
           <span className="siman-liquid-sukses absolute inset-x-0 bottom-0 z-10 h-8 pointer-events-none">
             <span className="siman-air" aria-hidden="true" />
-            <span className="siman-air-gelombang" aria-hidden="true" />
+            <span className="siman-air-ombak" aria-hidden="true" />
+            <span className="siman-air-meniskus" aria-hidden="true" />
             <span className="absolute bottom-px left-1/2 -translate-x-1/2 z-[10] w-5 h-5 rounded-full bg-emerald-500 dark:bg-emerald-400 shadow-md flex items-center justify-center">
               <CheckIcon className="w-3 h-3 text-white dark:text-emerald-950" />
             </span>
@@ -201,7 +203,7 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/50 via-40% to-transparent h-2/3 pointer-events-none" />
         {/* Saat air SIMAN tampil di dasar foto, baris kode/NUP diangkat
             sedikit agar tetap terbaca di atas garis air (teks putih). */}
-        <div className={`absolute bottom-0 left-0 right-0 z-2 px-2 flex items-end justify-between pointer-events-none ${asset.siman?.status === "selisih" || simanSynced ? "pb-[13px]" : "pb-1.5"}`}>
+        <div className={`absolute bottom-0 left-0 right-0 z-2 px-2 flex items-end justify-between pointer-events-none ${(asset.siman?.status === "selisih" && !simanSynced) || simanBaruSaja ? "pb-[13px]" : "pb-1.5"}`}>
           <div className="leading-tight pointer-events-auto">
             <Tooltip delayDuration={150}>
               <TooltipTrigger asChild>

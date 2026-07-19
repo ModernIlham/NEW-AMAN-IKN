@@ -48,6 +48,22 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#467] Air sinkron tampak samping + status sinkron SIMAN terhubung lintas-tampilan (list ↔ galeri) — 2026-07-19
+
+- **Permukaan air kini tampak DARI SAMPING** (bukan kubah dari atas):
+  garis air datar penuh selebar kartu + ALUN sangat landai (lengkung
+  ekstra lebar, puncak hanya +4px, bergeser pelan kiri↔kanan seperti
+  alun) + MENISKUS kecil yang memeluk dasar bola dan bernafas — bola
+  mengapung pelan di atasnya; hover/proses tetap mempercepat gerakan.
+- **Status sinkron terhubung lintas-tampilan** — sinkron sukses di mode
+  list tidak lagi memunculkan ikon sinkronisasi saat pindah ke galeri
+  (dan sebaliknya): penanda "sudah disinkronkan" disimpan setingkat modul
+  (`lib/simanSync.js`) dengan kunci `id aset + import_id SIMAN`, sehingga
+  bertahan saat komponen di-mount ulang ketika berganti mode; impor SIMAN
+  BARU otomatis membatalkan penanda (selisih baru tetap tampil).
+- **Animasi sukses hanya sekali** — diputar di komponen tempat sinkron
+  terjadi saja (`baruSaja`), tidak diputar ulang tiap scroll/ganti mode.
+
 ## [#466] Air sinkron SIMAN natural — satu permukaan penuh selebar kartu, tenang di pinggir, bola diturunkan — 2026-07-19
 
 - **Desain ulang efek air galeri** (umpan balik screenshot): air kini SATU

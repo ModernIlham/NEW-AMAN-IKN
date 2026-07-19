@@ -63,7 +63,7 @@ const AssetTableRow = memo(({ asset, editId, onEdit, onDelete, onPrintCard }) =>
   const coverPhoto = asset.thumbnail;
   const hasPhoto = coverPhoto && coverPhoto.length > 10;
   const stikerTerpasang = asset.stiker_status === "Sudah Terpasang";
-  const { busy: simanBusy, synced: simanSynced, sinkron: sinkronSiman } = useSinkronSiman(asset);
+  const { busy: simanBusy, synced: simanSynced, baruSaja: simanBaruSaja, sinkron: sinkronSiman } = useSinkronSiman(asset);
   
   // Format price
   const formatPrice = (price) => {
@@ -112,7 +112,7 @@ const AssetTableRow = memo(({ asset, editId, onEdit, onDelete, onPrintCard }) =>
               <RefreshCcw className={`w-3 h-3 ${simanBusy ? "animate-spin" : ""}`} />
             </button>
           )}
-          {simanSynced && (
+          {simanBaruSaja && (
             <span
               className="inline-flex items-center justify-center px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
               title="Tersinkron dengan SIMAN V2"

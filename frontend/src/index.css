@@ -421,37 +421,55 @@ body.no-scroll { overflow: hidden; }
 
 /* ===== Air sinkron SIMAN (kartu galeri) =====
    SATU permukaan air penuh selebar kartu di dasar foto, PEKAT berwarna
-   permukaan kartu (--card: putih di light, gelap di dark) sehingga menyatu
-   mulus dengan area informasi di bawahnya. Datar & tenang di pinggir kartu;
-   hanya di sekitar bola ada gembungan lembut yang bernafas — senatural
-   mungkin: tanpa lapisan transparan, tanpa air di depan bola, air tidak
-   melebihi puncak bola. Bola mengapung pelan di atas permukaan.
-   Hover pada bola / proses sinkronisasi mempercepat ombak (selector ~).
+   permukaan kartu (--card) — menyatu mulus dengan area informasi.
+   TAMPAK DARI SAMPING: garis air pada dasarnya horizontal; ombak SANGAT
+   landai (elemen lengkung ekstra lebar) bergulir pelan ke kiri↔kanan
+   seperti alun di permukaan; di dasar bola ada MENISKUS kecil (air yang
+   memeluk/merambat naik sedikit pada bola) — bukan kubah dilihat dari
+   atas. Tanpa transparansi, tanpa air di depan bola, air tidak melebihi
+   puncak bola. Bola mengapung pelan.
+   Hover pada bola / proses sinkronisasi mempercepat alun (selector ~).
    Catatan: aturan reduced-motion global otomatis mematikan animasi. */
 .siman-air {
-  position: absolute; left: 0; right: 0; bottom: 0; height: 8px;
+  position: absolute; left: 0; right: 0; bottom: 0; height: 7px;
   z-index: 9;
   background: hsl(var(--card));
   pointer-events: none;
 }
-.siman-air-gelombang {
-  position: absolute; bottom: 0; left: 50%; width: 116px; height: 17px;
+/* Alun permukaan (tampak samping): lengkung SANGAT lebar & rendah —
+   puncaknya hanya +4px di atas garis air, melandai jauh ke pinggir —
+   digeser pelan kiri↔kanan sehingga permukaan tampak berayun. */
+.siman-air-ombak {
+  position: absolute; bottom: 0; left: -20%; width: 140%; height: 11px;
+  z-index: 9;
+  background: hsl(var(--card));
+  border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+  animation: simanOmbakGeser 5.5s ease-in-out infinite;
+  pointer-events: none;
+  will-change: transform;
+}
+@keyframes simanOmbakGeser {
+  0%, 100% { transform: translateX(-4%); }
+  50%      { transform: translateX(4%); }
+}
+/* Meniskus: air memeluk dasar bola (tampak samping) — sedikit merambat
+   naik pada bola lalu turun lagi, bernafas pelan. */
+.siman-air-meniskus {
+  position: absolute; bottom: 0; left: 50%; width: 30px; height: 10px;
   z-index: 9;
   background: hsl(var(--card));
   border-radius: 100% 100% 0 0;
   transform: translateX(-50%);
   transform-origin: 50% 100%;
-  animation: simanAirGelombang 3.4s ease-in-out infinite;
+  animation: simanMeniskus 3.4s ease-in-out infinite;
   pointer-events: none;
-  will-change: transform;
 }
-@keyframes simanAirGelombang {
-  0%, 100% { transform: translateX(-50%) scaleY(1) scaleX(1); }
-  33%      { transform: translateX(calc(-50% + 3px)) scaleY(1.12) scaleX(0.97); }
-  66%      { transform: translateX(calc(-50% - 3px)) scaleY(0.92) scaleX(1.04); }
+@keyframes simanMeniskus {
+  0%, 100% { transform: translateX(-50%) scaleY(1); }
+  50%      { transform: translateX(-50%) scaleY(1.3); }
 }
 /* Bola mengapung pelan di permukaan — naik-turun + oleng ringan,
-   durasi sama dengan gembungan agar terasa satu irama. */
+   seirama meniskus. */
 .siman-liquid-ball {
   position: relative;
   z-index: 1;
@@ -462,12 +480,14 @@ body.no-scroll { overflow: hidden; }
   33%      { transform: translateY(-1.5px) rotate(2.5deg); }
   66%      { transform: translateY(1px) rotate(-2.5deg); }
 }
-/* Hover di bola: ombak & apungan lebih hidup */
+/* Hover di bola: alun & apungan lebih hidup */
 .siman-liquid:hover .siman-liquid-ball { animation-duration: 1.4s; }
-.siman-liquid:hover ~ .siman-air-gelombang { animation-duration: 1.4s; }
+.siman-liquid:hover ~ .siman-air-ombak { animation-duration: 2.2s; }
+.siman-liquid:hover ~ .siman-air-meniskus { animation-duration: 1.4s; }
 /* Proses sinkronisasi: gejolak cepat */
 .siman-liquid[data-busy="1"] .siman-liquid-ball { animation-duration: 0.9s; }
-.siman-liquid[data-busy="1"] ~ .siman-air-gelombang { animation-duration: 0.7s; }
+.siman-liquid[data-busy="1"] ~ .siman-air-ombak { animation-duration: 1.1s; }
+.siman-liquid[data-busy="1"] ~ .siman-air-meniskus { animation-duration: 0.7s; }
 /* Sukses: air + bola centang surut turun ke area informasi */
 .siman-liquid-sukses {
   animation: simanLiquidSlurp 0.85s ease-in forwards;
