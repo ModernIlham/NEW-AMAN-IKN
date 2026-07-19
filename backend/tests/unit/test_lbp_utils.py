@@ -89,3 +89,40 @@ def test_struktur_dan_dasar_hukum():
     assert any("OVERVIEW" in j for _, j in isi)
     assert any("CATATAN ATAS LAPORAN" in j for _, j in isi)
     assert len(DASAR_HUKUM_LBP) >= 10
+
+
+def test_susun_mutasi_per_transaksi():
+    """Tabel per kode transaksi: saldo awal 000 + agregasi jurnal; kode
+    3xx/4xx dinegatifkan; total = saldo awal + mutasi."""
+    from lbp_utils import susun_mutasi_per_transaksi
+    jurnal = [
+        {"kode_transaksi": "101", "jumlah": 2, "nilai": 200.0},
+        {"kode_transaksi": "101", "jumlah": 1, "nilai": 100.0},
+        {"kode_transaksi": "301", "jumlah": 1, "nilai": 50.0},
+    ]
+    m = susun_mutasi_per_transaksi(jurnal, saldo_awal_qty=10,
+                                   saldo_awal_nilai=1000.0)
+    assert m["baris"][0] == ("000", "Saldo Awal", 10.0, 1000.0)
+    peta = {b[0]: b for b in m["baris"]}
+    assert peta["101"][2] == 3 and peta["101"][3] == 300.0
+    assert peta["301"][2] == -1 and peta["301"][3] == -50.0
+    assert m["total"] == (12.0, 1250.0)
+    kosong = susun_mutasi_per_transaksi([], 5, 500.0)
+    assert len(kosong["baris"]) == 1 and kosong["total"] == (5.0, 500.0)
+
+
+def test_kebijakan_akuntansi_dan_daftar_isi_lengkap():
+    from lbp_utils import kebijakan_akuntansi_lbp, struktur_daftar_isi_lengkap
+    keb = kebijakan_akuntansi_lbp({"3": 1_000_000, "4": 25_000_000})
+    judul = [k["judul"] for k in keb]
+    for wajib in ("Persediaan", "Aset Tetap", "Kebijakan Penyusutan BMN",
+                  "Amortisasi", "Kebijakan Kapitalisasi BMN",
+                  "Akuntansi Berbasis Akrual"):
+        assert wajib in judul, wajib
+    kap = next(k for k in keb if k["judul"] == "Kebijakan Kapitalisasi BMN")
+    assert any("1.000.000" in b for b in kap["daftar"])
+    isi = struktur_daftar_isi_lengkap()
+    for wajib in ("SURAT PENGANTAR", "LAMPIRAN",
+                  "3.6 Tindak Lanjut Temuan Pemeriksaan",
+                  "h. Laporan Barang Bersejarah"):
+        assert any(wajib in j for _, j in isi), wajib
