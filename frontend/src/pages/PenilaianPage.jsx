@@ -4,7 +4,6 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, Scale, Coins, TrendingDown, Wallet, AlertTriangle,
   BookOpen, FileSignature, Plus, Pencil, Search, Trash2, Download, RefreshCw,
-  CalendarClock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +14,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
+import TanggalanButton from "@/components/ui/TanggalanButton";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -215,14 +215,13 @@ export default function PenilaianPage({ user, onBack }) {
               Garis lurus semesteran (PMK 65/2017) · masa manfaat KMK 295/2019 jo. 266/2023
             </p>
           </div>
-          <CalendarClock className="w-4 h-4 text-muted-foreground flex-shrink-0 hidden sm:block" title="Posisi per tanggal" />
-          <Input
-            type="date"
-            value={perTanggal}
-            onChange={(e) => e.target.value && setPerTanggal(e.target.value)}
-            className="h-8 w-28 sm:w-36 text-xs flex-shrink-0"
-            data-testid="penilaian-tanggal"
-            aria-label="Posisi per tanggal"
+          {/* Tanggalan kotak seragam (gaya tombol kembali/Booking Nomor):
+              posisi penyusutan dihitung per tanggal terpilih. */}
+          <TanggalanButton
+            value={perTanggal} onChange={setPerTanggal}
+            warna="bg-violet-600"
+            title={`Posisi penyusutan per ${perTanggal}. Klik untuk mengganti tanggal.`}
+            testid="penilaian-tanggal"
           />
           <BookingNomorButton modul="penilaian" jenisNaskah="Laporan" referensi="Laporan Penyusutan" />
         </div>

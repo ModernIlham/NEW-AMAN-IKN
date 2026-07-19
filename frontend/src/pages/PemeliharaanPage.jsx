@@ -306,8 +306,11 @@ export default function PemeliharaanPage({ user, onBack }) {
               Riwayat & biaya per aset — bahan Daftar Hasil Pemeliharaan (PP 27/2014)
             </p>
           </div>
-          <Button size="sm" onClick={bukaForm} className="bg-orange-600 hover:bg-orange-700 text-white flex-shrink-0" data-testid="pemeliharaan-tambah">
-            <Plus className="w-4 h-4 mr-1.5" />Catat
+          <Button size="sm" onClick={bukaForm}
+            className="h-9 w-9 p-0 bg-orange-600 hover:bg-orange-700 text-white flex-shrink-0"
+            title="Catat pemeliharaan" aria-label="Catat pemeliharaan"
+            data-testid="pemeliharaan-tambah">
+            <Plus className="w-4 h-4" />
           </Button>
           <BookingNomorButton modul="pemeliharaan" jenisNaskah="Laporan" referensi="DHPB" />
         </div>
