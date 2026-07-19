@@ -48,6 +48,25 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#458] Pengecekan keterhubungan fitur baru — scope satker auto-isi garansi + badge garansi di galeri + dokumentasi modul — 2026-07-19
+
+Audit keterhubungan pasca dua fitur besar (perbaikan-umur & garansi) —
+celah kecil ditemukan & ditutup:
+
+- **Celah scope satker**: `GET /assets/garansi-sebelumnya` kini melalui
+  `scope_query_aset` — identitas aset yang kebetulan sama di satker LAIN
+  tidak lagi bisa menjadi sumber auto-isi garansi (konsisten M-SCOPE).
+- **Badge garansi di tampilan galeri** (pojok kanan-atas foto) — melengkapi
+  tabel desktop & kartu HP; hijau/kuning sama, hilang bila kosong/lewat.
+- **Verifikasi menyeluruh** (tanpa perubahan karena SUDAH benar):
+  backup dinamis mencakup `pemeliharaan` (ber-subdoc BA) & `masa_manfaat`
+  dipertahankan saat reset; impor aset registry-driven (garansi otomatis
+  ikut); snapshot offline memuat garansi (badge tampil offline); tidak ada
+  pemanggil `hitung_penyusutan` yang melewatkan tambahan umur perbaikan.
+- **Dokumentasi modul** (`bmnModules.js`): Pemeliharaan (+posting 202 ber-BA,
+  +tambahan masa manfaat Tabel II) & Penilaian (Tabel I lengkap, umur dari
+  SIMAN, umur bertambah dari perbaikan) dimutakhirkan.
+
 ## [#457] Garansi aset — kolom rentang garansi + auto-isi dari inventarisasi sebelumnya + badge sisa garansi — 2026-07-19
 
 - **Field baru `garansi_hingga`** (tanggal berakhir garansi; rentang lazim
