@@ -4,9 +4,9 @@ from wasdal_utils import (
     SUMBER_PENERTIBAN, info_tenggat_insidentil, periode_wasdal,
     rekap_insidentil, rekap_penertiban, rekap_wasdal, sisa_hari_kerja,
     status_tenggat_penertiban, susun_temuan, tambah_hari_kerja,
-    temuan_pemanfaatan, temuan_pemegang_berisiko, temuan_pemindahtanganan,
-    temuan_penatausahaan, temuan_pengamanan_pemeliharaan, temuan_penggunaan,
-    temuan_polis_asuransi,
+    temuan_dokumen_kepemilikan, temuan_pemanfaatan, temuan_pemegang_berisiko,
+    temuan_pemindahtanganan, temuan_pemusnahan, temuan_penatausahaan,
+    temuan_pengamanan_pemeliharaan, temuan_penggunaan, temuan_polis_asuransi,
     validate_ba_insidentil, validate_insidentil, validate_lapor_insidentil,
     validate_penertiban, validate_selesai_penertiban,
 )
@@ -109,6 +109,58 @@ def test_pemegang_berisiko_keluar():
                for t in per_objek["penggunaan"])
     # tanpa data pegawai → tidak ada temuan & tidak error
     assert temuan_pemegang_berisiko(None, None, HARI_INI) == []
+
+
+def test_perjanjian_jatuh_tempo():
+    """Perjanjian berakhir ≤60 hari → peringatan dini; arah tindak lanjut
+    beda antara bentuk yang dapat/tidak dapat diperpanjang (PMK 115/2020)."""
+    dekat = {"id": "p1", "bentuk": "sewa", "pihak": "PT X",
+             "asset_name": "Aula", "berakhir": "2026-08-15",  # 34 hari
+             "nomor_persetujuan": "S-1", "nomor_perjanjian": "P-1",
+             "ntpn": "N-1"}
+    bgs = dict(dekat, id="p2", bentuk="bgs_bsg")
+    jauh = dict(dekat, id="p3", berakhir="2027-06-01")
+    hasil = temuan_pemanfaatan([dekat, bgs, jauh], HARI_INI)
+    jt = {t["pemanfaatan_id"]: t for t in hasil
+          if t["jenis"] == "perjanjian_jatuh_tempo"}
+    assert set(jt) == {"p1", "p2"}
+    assert "perpanjangan" in jt["p1"]["detail"]
+    assert "tidak dapat diperpanjang" in jt["p2"]["detail"]
+
+
+def test_dokumen_kepemilikan_kedaluwarsa():
+    lewat = {"id": "d1", "asset_id": "a1", "asset_name": "Mobil Dinas",
+             "jenis": "stnk", "nomor": "STNK-9", "berlaku_sampai": "2026-05-01"}
+    aktif = dict(lewat, id="d2", berlaku_sampai="2027-05-01")
+    tanpa = dict(lewat, id="d3", berlaku_sampai="")  # sertipikat dll.
+    hasil = temuan_dokumen_kepemilikan([lewat, aktif, tanpa], HARI_INI)
+    assert [t["dok_id"] for t in hasil] == ["d1"]
+    assert hasil[0]["jenis"] == "dokumen_kepemilikan_kedaluwarsa"
+    assert "STNK" in hasil[0]["detail"] and "2026-05-01" in hasil[0]["detail"]
+    per_objek = susun_temuan([], [], [], [], [], HARI_INI, dokumen=[lewat])
+    assert any(t["jenis"] == "dokumen_kepemilikan_kedaluwarsa"
+               for t in per_objek["pengamanan_pemeliharaan"])
+
+
+def test_pemusnahan_belum_dihapus():
+    """Aset ber-BA pemusnahan tanpa SK penghapusan = temuan lebih saji;
+    yang sudah ber-SK tidak ikut."""
+    ba = {"nomor_ba": "BA-01", "tanggal_ba": "2026-05-01",
+          "aset": [{"asset_id": "a1", "asset_code": "305", "NUP": "1",
+                    "asset_name": "Kursi Musnah"},
+                   {"asset_id": "a2", "asset_code": "305", "NUP": "2",
+                    "asset_name": "Meja Musnah"}]}
+    hasil = temuan_pemusnahan([ba], {"a2"}, HARI_INI)
+    assert [t["asset_id"] for t in hasil] == ["a1"]
+    assert hasil[0]["jenis"] == "dimusnahkan_belum_dihapus"
+    assert "BA-01" in hasil[0]["detail"] and "72 hari" in hasil[0]["detail"]
+    # BA bertanggal depan tidak dinilai
+    depan = dict(ba, tanggal_ba="2026-12-01")
+    assert temuan_pemusnahan([depan], set(), HARI_INI) == []
+    per_objek = susun_temuan([], [], [], [], [], HARI_INI,
+                             pemusnahan=[ba], aset_ber_sk=set())
+    assert sum(1 for t in per_objek["pemindahtanganan"]
+               if t["jenis"] == "dimusnahkan_belum_dihapus") == 2
 
 
 def test_pemindahtanganan_dan_penghapusan():

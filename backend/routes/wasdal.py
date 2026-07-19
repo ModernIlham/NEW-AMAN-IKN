@@ -89,10 +89,25 @@ async def _data_pemantauan(ambang_hari: int, user=None):
         _sq({}), {"_id": 0, "id": 1, "nama": 1, "nip": 1, "status": 1,
                   "tgl_selesai_kontrak": 1})]
     peta_aset_nip = await _jumlah_aset_per_nip(user)
+    # Integrasi Pengamanan → Wasdal: dokumen kepemilikan (STNK/pajak/IMB)
+    # yang masa berlakunya lewat = temuan objek pengamanan & pemeliharaan.
+    dokumen = [d async for d in db.pengamanan_dokumen.find(
+        _sq({}), {"_id": 0, "id": 1, "asset_id": 1, "asset_code": 1,
+                  "NUP": 1, "asset_name": 1, "jenis": 1, "nomor": 1,
+                  "berlaku_sampai": 1})]
+    # Integrasi Pemusnahan → Wasdal: aset ber-BA pemusnahan tanpa SK
+    # penghapusan = fisik lenyap tapi masih tersaji di neraca (lebih saji).
+    pemusnahan = [r async for r in db.pemusnahan.find(
+        _sq({}), {"_id": 0, "aset": 1, "nomor_ba": 1, "tanggal_ba": 1})]
+    aset_ber_sk = {u["asset_id"] async for u in db.usulan_penghapusan.find(
+        _sq({"status": "sk_terbit"}), {"_id": 0, "asset_id": 1})
+        if u.get("asset_id")}
 
     per_objek = susun_temuan(assets, pemanfaatan, usulan_hapus, usulan_pt,
                              pemeliharaan, today_iso, ambang_hari, polis=polis,
-                             pegawai=pegawai, jumlah_aset_per_nip=peta_aset_nip)
+                             pegawai=pegawai, jumlah_aset_per_nip=peta_aset_nip,
+                             dokumen=dokumen, pemusnahan=pemusnahan,
+                             aset_ber_sk=aset_ber_sk)
     return periode, per_objek, rekap_wasdal(per_objek), len(assets)
 
 
