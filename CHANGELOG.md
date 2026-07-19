@@ -48,7 +48,18 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
-## [#450] Wasdal 1-baris + kartu padat, baris unduh Neraca satu kesatuan, toolbar Pegawai rapi, popup TTD ringkas — 2026-07-19
+## [#451] Saklar mode Dashboard/Inventarisasi ikon-saja di desktop + umur aset SIMAN V2 ditampilkan — 2026-07-19
+
+- **Saklar Dashboard ↔ Inventarisasi ikon-saja di desktop (lg+)**: di layar
+  besar, saklar mode kini hanya menampilkan ikon (Dashboard/Inventarisasi)
+  tanpa teks — hemat ruang di baris statistik. Label tetap tersedia lewat
+  `title`/`aria-label` (tetap ramah pembaca layar). Breakpoint tablet & HP
+  tetap berlabel seperti sebelumnya (`iconOnly` hanya di instans lg+).
+- **Kolom "Umur Aset" impor SIMAN V2 kini dimanfaatkan di UI**: nilai umur
+  aset yang diparse & disimpan pada subdoc `siman.referensi` saat sinkronisasi
+  kini ditampilkan pada baris "Referensi SIMAN" di kartu Sinkronisasi SIMAN
+  (bersama nilai penyusutan & nilai buku) — sebelumnya sudah tersimpan namun
+  belum pernah ditampilkan.
 
 Lanjutan umpan balik screenshot HP (5 perbaikan tata letak seluler):
 
