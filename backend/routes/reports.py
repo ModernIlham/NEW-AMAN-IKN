@@ -1804,7 +1804,9 @@ async def generate_posisi_bmn_pdf(_user: dict = Depends(require_user_or_query_to
     # penghapusan (#234) dikecualikan agar nilai neraca tidak lebih saji (§5A).
     assets = await db.assets.find(
         await scope_query_aset(_user, active_asset_filter()),
-        {"_id": 0, "asset_code": 1, "purchase_price": 1, "nilai_wajar_terakhir": 1},
+        {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
+         "purchase_price": 1, "purchase_date": 1, "condition": 1,
+         "inventory_status": 1, "nilai_wajar_terakhir": 1, "revaluasi": 1},
     ).to_list(500000)
 
     uraian_map = {k: u for k, u in GOLONGAN_DEFAULTS}
@@ -1820,6 +1822,22 @@ async def generate_posisi_bmn_pdf(_user: dict = Depends(require_user_or_query_to
         p_nilai += nilai_persediaan_dari_batches(it.get("batches"))
     posisi = posisi_neraca(rows, total_aset, p_jumlah, p_nilai)
 
+    # Nilai buku (penyusutan garis lurus PMK 65/2017) — neraca pemerintah wajib
+    # menyajikan nilai buku; tautkan mesin `rekap_penyusutan` (teruji unit, #284)
+    # ke Posisi BMN sebagai blok ikhtisar terpisah. Tidak dipaksa jadi satu angka
+    # dengan tabel intra/ekstra (cakupan berbeda: rekap tak memilah ambang & hanya
+    # meliputi aset ber-referensi masa manfaat) agar tidak salah saji — telaah &
+    # lingkupnya dijelaskan eksplisit di catatan blok. Angka final via SAKTI.
+    from penilaian_utils import MASA_MANFAAT_DEFAULT, rekap_penyusutan
+    peta_susut = dict(MASA_MANFAAT_DEFAULT)
+    async for m in db.masa_manfaat.find({}, {"_id": 0, "kode": 1, "tahun": 1}):
+        peta_susut[m["kode"]] = int(m["tahun"])
+    diusulkan_ids = set()
+    async for u in db.usulan_penghapusan.find(
+            {"status": {"$ne": "ditolak"}}, {"_id": 0, "asset_id": 1}):
+        if u.get("asset_id"):
+            diusulkan_ids.add(u["asset_id"])
+
     # Akun neraca per golongan (BAS #300): default riset ditimpa entri satker.
     from akun_bas_utils import AKUN_NERACA_DEFAULT, akun_untuk_golongan
     peta_akun = {g: dict(v) for g, v in AKUN_NERACA_DEFAULT.items()}
@@ -1834,6 +1852,8 @@ async def generate_posisi_bmn_pdf(_user: dict = Depends(require_user_or_query_to
         except (ValueError, TypeError, OverflowError): return "0"
 
     today_iso = datetime.now(timezone.utc).date().isoformat()
+    susut = rekap_penyusutan(assets, today_iso, peta=peta_susut,
+                             uraian_golongan=uraian_map, diusulkan_ids=diusulkan_ids)
     buffer = io.BytesIO()
     doc = _std_doc(buffer, landscape_mode=True)
     st = _get_report_styles()
@@ -1843,7 +1863,7 @@ async def generate_posisi_bmn_pdf(_user: dict = Depends(require_user_or_query_to
                                  subjudul=f"Posisi per {_fmt_tanggal_id(today_iso)}"))
     elements.append(Paragraph(
         f"Seluruh aset satker lintas kegiatan ({posisi['total_aset']['jumlah_total']} NUP aset tetap"
-        f" + {posisi['persediaan']['jumlah']} jenis persediaan) · nilai perolehan; penyusutan menyusul",
+        f" + {posisi['persediaan']['jumlah']} jenis persediaan) · nilai perolehan bruto + ikhtisar nilai buku",
         st['Meta']))
     elements.append(Spacer(1, 4*rl_mm))
 
@@ -1894,6 +1914,44 @@ async def generate_posisi_bmn_pdf(_user: dict = Depends(require_user_or_query_to
     table.setStyle(_std_table_style(zebra=True, total_row=True))
     elements.append(table)
 
+    # Ikhtisar NILAI BUKU (penyusutan garis lurus PMK 65/2017) — integrasi
+    # Penilaian → Neraca. Blok terpisah dengan lingkup jujur: hanya aset ber-
+    # referensi masa manfaat yang disusutkan; tanah/KDP/aset tetap lainnya &
+    # aset tanpa referensi tetap tersaji nilai perolehan penuh (akumulasi 0).
+    ts = susut["total"]
+    elements.append(Spacer(1, 5*rl_mm))
+    elements.append(Paragraph(
+        "IKHTISAR NILAI BUKU (Penyusutan Garis Lurus PMK 65/PMK.06/2017)",
+        st['Heading']))
+    elements.append(Spacer(1, 2*rl_mm))
+    buku_rows = [
+        [Paragraph("Uraian", st['TableHeader']),
+         Paragraph("Nilai (Rp)", st['TableHeader'])],
+        [Paragraph(f"Nilai perolehan aset tersusutkan ({ts['jumlah']} aset)", st['Cell']),
+         Paragraph(fmt_rp(ts["nilai_perolehan"]), st['CellRight'])],
+        [Paragraph("Akumulasi penyusutan s.d. tanggal posisi", st['Cell']),
+         Paragraph(f"({fmt_rp(ts['akumulasi'])})", st['CellRight'])],
+        [Paragraph("<b>Nilai buku aset tersusutkan</b>", st['Cell']),
+         Paragraph(f"<b>{fmt_rp(ts['nilai_buku'])}</b>", st['CellRight'])],
+    ]
+    buku_table = Table(buku_rows,
+                       colWidths=_fit_col_widths([360, 160], doc.width),
+                       repeatRows=1)
+    buku_table.setStyle(_std_table_style(zebra=True, total_row=True))
+    elements.append(buku_table)
+    n_henti = len(susut["henti"])
+    n_tanpa = len(susut["tanpa_referensi"])
+    n_tidak = sum(susut["tidak"].values())
+    elements.append(Spacer(1, 2*rl_mm))
+    elements.append(Paragraph(
+        f"Telaah lingkup penyusutan: {susut['jumlah_habis']} aset habis masa manfaat "
+        f"(nilai buku 0, tetap tersaji) · {n_henti} aset henti-susut (rusak berat/hilang "
+        f"yang telah diusulkan penghapusan) · {n_tanpa} aset tanpa referensi masa manfaat "
+        f"(tidak ditebak — tersaji nilai perolehan penuh) · {n_tidak} aset kelompok tidak "
+        "disusutkan (tanah/KDP/aset tetap lainnya, tersaji nilai perolehan penuh). Rincian "
+        "penyusutan per golongan tersedia pada Laporan Penyusutan BMN. Angka final "
+        "penyusunan Neraca divalidasi melalui SAKTI.", st['Meta']))
+
     ambang_pm = fmt_rp(amb.get("3", 0))
     ambang_gb = fmt_rp(amb.get("4", 0))
     elements.append(Spacer(1, 3*rl_mm))
@@ -1901,7 +1959,8 @@ async def generate_posisi_bmn_pdf(_user: dict = Depends(require_user_or_query_to
         "Catatan: hanya barang intrakomptabel yang tersaji di neraca; pemilahan mengikuti nilai satuan "
         f"minimum kapitalisasi PMK 181/PMK.06/2016 (Peralatan dan Mesin ≥ Rp{ambang_pm}; Gedung dan "
         f"Bangunan ≥ Rp{ambang_gb}; golongan lain tanpa ambang). Jumlah persediaan dihitung per jenis "
-        "barang; komponen KDP, ATB, dan penyusutan menyusul bertahap. Kolom Akun Neraca = akun "
+        "barang; nilai buku setelah penyusutan tersaji pada Ikhtisar di atas (komponen KDP & ATB "
+        "menyusul bertahap). Kolom Akun Neraca = akun "
         "representatif per golongan (referensi BAS); akun per sub-kelompok dapat berbeda — "
         "verifikasi Lampiran BAS.", st['Meta']))
 

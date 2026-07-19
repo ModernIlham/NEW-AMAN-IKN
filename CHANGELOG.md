@@ -48,6 +48,35 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#417] Integrasi Penilaian → Neraca: nilai buku penyusutan tersaji di Laporan Posisi BMN — 2026-07-19
+
+Lanjutan mandat integrasi lintas-modul "manfaatkan segala informasi agar saling
+berkaitan": mesin penyusutan (modul Penilaian) kini menautkan hasilnya ke
+**Laporan Posisi BMN di Neraca**. Neraca pemerintah wajib menyajikan **nilai
+buku**; sebelumnya laporan ini hanya memuat nilai perolehan (catatan
+"penyusutan menyusul").
+
+- **Blok "Ikhtisar Nilai Buku"** ditambahkan pada Laporan Posisi BMN di Neraca
+  (`GET /pembukuan/posisi-bmn-pdf`): nilai perolehan aset tersusutkan −
+  akumulasi penyusutan = nilai buku, memakai mesin `rekap_penyusutan`
+  (garis lurus semesteran PMK 65/PMK.06/2017) yang sudah teruji unit.
+- **Kejujuran lingkup** dijaga: blok dipisah dari tabel intra/ekstra (cakupan
+  berbeda — rekap tak memilah ambang & hanya meliputi aset ber-referensi masa
+  manfaat), sehingga tidak dipaksa jadi satu angka yang berisiko salah saji.
+  Telaah eksplisit: aset habis masa manfaat, henti-susut (rusak berat/hilang
+  yang telah diusulkan hapus), tanpa referensi masa manfaat, dan kelompok tidak
+  disusutkan (tanah/KDP/aset tetap lainnya) semua tersaji nilai perolehan penuh
+  dengan jumlahnya. Aset revaluasi disusutkan atas nilai wajar (masa manfaat
+  reset penuh).
+- Catatan usang "penyusutan menyusul bertahap" diperbarui menjadi rujukan ke
+  Ikhtisar; angka final penyusunan Neraca tetap divalidasi via SAKTI.
+- Verifikasi: 545 tes unit lulus, smoke render PDF Posisi BMN sukses
+  (`%PDF-1.4`, angka nilai buku cocok dengan hitung tangan: perolehan
+  Rp305 jt − akumulasi Rp176,4 jt = nilai buku Rp128,6 jt untuk 2 aset contoh,
+  1 revaluasi, 1 henti-susut, 1 tanpa referensi, 1 tanah dikecualikan).
+
+---
+
 ## [#416] Integrasi Penggunaan → Pemanfaatan: BMN idle jadi kandidat pemanfaatan 1-klik — 2026-07-19
 
 Lanjutan mandat integrasi lintas-modul "manfaatkan segala informasi agar
