@@ -48,6 +48,26 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#424] Integrasi lintas-modul gelombang 6: dokumen sumber perolehan kurang jadi temuan Wasdal — 2026-07-19
+
+Item prioritas tinggi terakhir dari backlog audit integrasi: register
+**Pengadaan** sudah menghitung dokumen sumber wajib per jenis perolehan
+(pembelian: kontrak/BAPHP/BAST/kuitansi/SP2D; hibah: naskah hibah/BAST/
+MPHL-BJS; dst.) tetapi dasbor Wasdal tidak pernah membacanya.
+
+- **Temuan baru `dokumen_perolehan_kurang`** (objek Penatausahaan PMK 207):
+  tiap perolehan yang checklist dokumen wajibnya belum lengkap otomatis
+  muncul di dasbor pemantauan + laporan wasdal semesteran/tahunan, lengkap
+  dengan daftar dokumen yang kurang — temuan klasik BPK "BAST/kontrak/SP2D
+  tercecer".
+- Fungsi murni `temuan_dokumen_perolehan` memakai `dokumen_kurang_perolehan`
+  yang sudah teruji di modul Pengadaan (satu sumber kebenaran, tanpa
+  logika ganda).
+- Verifikasi: 552 tes unit lulus (1 baru: dokumen kurang → temuan; lengkap
+  → tidak ikut; None → aman).
+
+---
+
 ## [#423] Kejujuran klaim fitur aktif: tombol Backfill Saldo Awal, peringatan M07/K07, label jurnal 301/303 — 2026-07-19
 
 Tiga temuan "diklaim aktif tapi tak berfungsi penuh" dari audit menyeluruh
