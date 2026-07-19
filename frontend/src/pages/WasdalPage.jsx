@@ -286,10 +286,10 @@ export default function WasdalPage({ user, onBack }) {
                   type="button"
                   aria-label="Unduh laporan Wasdal (PDF)"
                   title="Unduh laporan Wasdal (PDF)"
-                  className="h-9 px-2.5 rounded-lg border border-border text-foreground/80 flex items-center justify-center gap-1 hover:bg-muted flex-shrink-0 text-[11px] font-bold min-w-0 min-h-0"
+                  className="h-9 w-9 p-0 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0"
                   data-testid="wasdal-laporan-menu"
                 >
-                  <FileText className="w-4 h-4" />Laporan<ChevronDown className="w-3 h-3" />
+                  <FileText className="w-4 h-4" />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-64">

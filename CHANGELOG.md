@@ -48,6 +48,25 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#449] Kartu ringkasan dashboard modul jadi padat (StatKartu) + popup TTD rapi + tombol Laporan Wasdal ikon — 2026-07-19
+
+Umpan balik screenshot HP:
+
+- **Kartu ringkasan modul lebih padat** (`StatKartu` bersama): kartu
+  statistik vertikal boros ruang (ikon-atas · angka-tengah · label-bawah)
+  diganti menjadi kartu horizontal ringkas ala baris "Aset per Pemegang" —
+  ikon tertinta kecil di kiri, angka + label menumpuk di kanan. Diterapkan
+  di 11 halaman: Pemindahtanganan, Penghapusan, Pemusnahan, Penilaian,
+  Pemeliharaan, Pengamanan, Pengadaan, Pemanfaatan, Penganggaran,
+  Perencanaan, Persediaan. Semua angka/label/testid & aksi "lihat daftar"
+  dipertahankan; komponen tunggal agar konsisten & tidak drift.
+- **Popup TTD elektronik dirapikan**: dialog detail permintaan tanda tangan
+  memakai padding lebih pas di HP (`p-4`) + `min-w-0`/`overflow-hidden` pada
+  baris penanda tangan agar isi tidak meluber keluar kartu.
+- **Tombol Laporan di header Wasdal** menjadi ikon persegi saja (tanpa teks
+  & chevron) — seragam dengan tombol ikon lain.
+
+
 ## [#448] Kodefikasi — 6 segmen filter benar-benar muat 1 baris di HP — 2026-07-19
 
 Lanjutan #447: pada layar HP keenam segmen (Semua…Sub-sub) masih terpotong

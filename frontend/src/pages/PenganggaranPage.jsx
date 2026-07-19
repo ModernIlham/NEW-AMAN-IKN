@@ -11,6 +11,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import StatKartu from "@/components/ui/StatKartu";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
@@ -224,33 +225,45 @@ export default function PenganggaranPage({ user, onBack }) {
           <>
             {/* ── Ringkasan ── */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <div className="bg-card rounded-xl border border-border p-3 text-center" data-testid="penganggaran-stat-berjalan">
-                <TicketCheck className="w-5 h-5 text-sky-500 mx-auto mb-1" />
-                <p className="text-lg font-bold text-foreground leading-none">
-                  {r.per_status.diusulkan + r.per_status.disetujui_telaah + r.per_status.masuk_dipa}
-                </p>
-                <p className="text-[10px] text-muted-foreground mt-1">Usulan berjalan</p>
-              </div>
-              <div className="bg-card rounded-xl border border-border p-3 text-center" data-testid="penganggaran-stat-usulan">
-                <Coins className="w-5 h-5 text-teal-500 mx-auto mb-1" />
-                <p className="text-sm sm:text-lg font-bold text-foreground leading-none truncate whitespace-nowrap tabular-nums" title={fmtRp(r.nilai.usulan)}>{fmtRp(r.nilai.usulan)}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">Nilai usulan</p>
-              </div>
-              <div className="bg-card rounded-xl border border-border p-3 text-center" data-testid="penganggaran-stat-dipa">
-                <Coins className="w-5 h-5 text-violet-500 mx-auto mb-1" />
-                <p className="text-sm sm:text-lg font-bold text-foreground leading-none truncate whitespace-nowrap tabular-nums" title={fmtRp(r.nilai.dipa)}>{fmtRp(r.nilai.dipa)}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">Nilai DIPA</p>
-              </div>
-              <div className="bg-card rounded-xl border border-emerald-500/40 p-3 text-center" data-testid="penganggaran-stat-serapan">
-                <TrendingUp className="w-5 h-5 text-emerald-500 mx-auto mb-1" />
-                <p className="text-lg font-bold text-foreground leading-none">{r.serapan_persen}%</p>
-                <p className="text-[10px] text-muted-foreground mt-1">Serapan ({fmtRp(r.nilai.realisasi)})</p>
+              <StatKartu
+                testid="penganggaran-stat-berjalan"
+                icon={TicketCheck}
+                warna="text-sky-500"
+                tint="bg-sky-500/10"
+                value={r.per_status.diusulkan + r.per_status.disetujui_telaah + r.per_status.masuk_dipa}
+                label="Usulan berjalan"
+              />
+              <StatKartu
+                testid="penganggaran-stat-usulan"
+                icon={Coins}
+                warna="text-teal-500"
+                tint="bg-teal-500/10"
+                value={fmtRp(r.nilai.usulan)}
+                label="Nilai usulan"
+              />
+              <StatKartu
+                testid="penganggaran-stat-dipa"
+                icon={Coins}
+                warna="text-violet-500"
+                tint="bg-violet-500/10"
+                value={fmtRp(r.nilai.dipa)}
+                label="Nilai DIPA"
+              />
+              <StatKartu
+                testid="penganggaran-stat-serapan"
+                icon={TrendingUp}
+                warna="text-emerald-500"
+                tint="bg-emerald-500/10"
+                className="border-emerald-500/40"
+                value={`${r.serapan_persen}%`}
+                label={`Serapan (${fmtRp(r.nilai.realisasi)})`}
+              >
                 {(data.total_realisasi_pengadaan || 0) > 0 && (
                   <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-0.5" title="Total nilai perolehan Pengadaan yang tertaut usulan">
                     Realisasi Pengadaan tertaut: {fmtRp(data.total_realisasi_pengadaan)}
                   </p>
                 )}
-              </div>
+              </StatKartu>
             </div>
 
             {/* ── Sanding per akun BAS ── */}

@@ -19,6 +19,7 @@ import { useTransitionDialog } from "@/components/ui/TransitionDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 import TanggalanButton from "@/components/ui/TanggalanButton";
+import StatKartu from "@/components/ui/StatKartu";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -291,27 +292,35 @@ export default function PerencanaanPage({ user, onBack }) {
           <>
             {/* ── Kartu ringkasan ── */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              <div className="bg-card rounded-xl border border-emerald-500/40 p-3 text-center" data-testid="perencanaan-stat-layak">
-                <CheckCircle2 className="w-5 h-5 text-emerald-500 mx-auto mb-1" />
-                <p className="text-lg font-bold text-foreground leading-none">{data.ringkasan.layak}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">Layak diusulkan</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => refTidak.current?.scrollIntoView({ behavior: "smooth" })}
+              <StatKartu
+                icon={CheckCircle2}
+                value={data.ringkasan.layak}
+                label="Layak diusulkan"
+                warna="text-emerald-500"
+                tint="bg-emerald-500/10"
+                testid="perencanaan-stat-layak"
+                className="border-emerald-500/40"
+              />
+              <StatKartu
+                icon={XCircle}
+                value={data.ringkasan.tidak}
+                label="Tidak layak (lihat alasan)"
+                warna="text-red-500"
+                tint="bg-red-500/10"
+                testid="perencanaan-stat-tidak"
+                className="border-red-500/40"
                 title="Gulir ke daftar tidak layak beserta alasannya"
-                className="bg-card rounded-xl border border-red-500/40 p-3 text-center hover:bg-red-500/5"
-                data-testid="perencanaan-stat-tidak"
-              >
-                <XCircle className="w-5 h-5 text-red-500 mx-auto mb-1" />
-                <p className="text-lg font-bold text-foreground leading-none">{data.ringkasan.tidak}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">Tidak layak (lihat alasan)</p>
-              </button>
-              <div className="bg-card rounded-xl border border-border p-3 text-center col-span-2 sm:col-span-1" data-testid="perencanaan-stat-biaya">
-                <Coins className="w-5 h-5 text-blue-500 mx-auto mb-1" />
-                <p className="text-sm sm:text-lg font-bold text-foreground leading-none truncate whitespace-nowrap tabular-nums" title={fmtRp(data.ringkasan.total_biaya_riwayat)}>{fmtRp(data.ringkasan.total_biaya_riwayat)}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">Biaya pemeliharaan TA {data.tahun} (aset layak)</p>
-              </div>
+                onClick={() => refTidak.current?.scrollIntoView({ behavior: "smooth" })}
+              />
+              <StatKartu
+                icon={Coins}
+                value={fmtRp(data.ringkasan.total_biaya_riwayat)}
+                label={`Biaya pemeliharaan TA ${data.tahun} (aset layak)`}
+                warna="text-blue-500"
+                tint="bg-blue-500/10"
+                testid="perencanaan-stat-biaya"
+                className="col-span-2 sm:col-span-1"
+              />
             </div>
 
             {/* ── Register usulan RKBMN per unit (PMK 153/2021 + KMK 128/2022) ── */}

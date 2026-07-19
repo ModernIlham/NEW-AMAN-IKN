@@ -14,6 +14,7 @@ import {
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import StatKartu from "@/components/ui/StatKartu";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
@@ -319,21 +320,32 @@ export default function PemeliharaanPage({ user, onBack }) {
       <main className="max-w-5xl mx-auto px-3 sm:px-6 py-4 space-y-3">
         {/* ── Kartu rekap ── */}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          <div className="bg-card rounded-xl border border-border p-3 text-center" data-testid="pemeliharaan-stat-kegiatan">
-            <ClipboardList className="w-5 h-5 text-orange-500 mx-auto mb-1" />
-            <p className="text-lg font-bold text-foreground leading-none">{rekap?.jumlah ?? "…"}</p>
-            <p className="text-[10px] text-muted-foreground mt-1">Kegiatan{tahun ? ` (${tahun})` : ""}</p>
-          </div>
-          <div className="bg-card rounded-xl border border-border p-3 text-center col-span-2 sm:col-span-1 order-last sm:order-none" data-testid="pemeliharaan-stat-biaya">
-            <Coins className="w-5 h-5 text-emerald-500 mx-auto mb-1" />
-            <p className="text-sm sm:text-lg font-bold text-foreground leading-none truncate whitespace-nowrap tabular-nums" title={rekap ? fmtRp(rekap.total_biaya) : undefined}>{rekap ? fmtRpCompact(rekap.total_biaya) : "…"}</p>
-            <p className="text-[10px] text-muted-foreground mt-1">Total biaya{tahun ? ` (${tahun})` : ""}</p>
-          </div>
-          <div className="bg-card rounded-xl border border-border p-3 text-center" data-testid="pemeliharaan-stat-aset">
-            <Boxes className="w-5 h-5 text-sky-500 mx-auto mb-1" />
-            <p className="text-lg font-bold text-foreground leading-none">{rekap?.jumlah_aset ?? "…"}</p>
-            <p className="text-[10px] text-muted-foreground mt-1">Aset terpelihara</p>
-          </div>
+          <StatKartu
+            icon={ClipboardList}
+            value={rekap?.jumlah ?? "…"}
+            label={`Kegiatan${tahun ? ` (${tahun})` : ""}`}
+            warna="text-orange-500"
+            tint="bg-orange-500/10"
+            testid="pemeliharaan-stat-kegiatan"
+          />
+          <StatKartu
+            icon={Coins}
+            value={rekap ? fmtRpCompact(rekap.total_biaya) : "…"}
+            title={rekap ? fmtRp(rekap.total_biaya) : undefined}
+            label={`Total biaya${tahun ? ` (${tahun})` : ""}`}
+            warna="text-emerald-500"
+            tint="bg-emerald-500/10"
+            testid="pemeliharaan-stat-biaya"
+            className="col-span-2 sm:col-span-1 order-last sm:order-none"
+          />
+          <StatKartu
+            icon={Boxes}
+            value={rekap?.jumlah_aset ?? "…"}
+            label="Aset terpelihara"
+            warna="text-sky-500"
+            tint="bg-sky-500/10"
+            testid="pemeliharaan-stat-aset"
+          />
         </div>
 
         {/* ── Jadwal berkala (pedoman DKPB Ps. 46(2) PP 27/2014) ── */}

@@ -12,6 +12,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import StatKartu from "@/components/ui/StatKartu";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { useTransitionDialog } from "@/components/ui/TransitionDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
@@ -379,34 +380,36 @@ export default function PengamananPage({ user, onBack }) {
           <>
             {/* ── Kartu ringkasan ── */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-              <div className="bg-card rounded-xl border border-emerald-500/40 p-3 text-center" data-testid="pengamanan-stat-lengkap">
-                <BadgeCheck className="w-5 h-5 text-emerald-500 mx-auto mb-1" />
-                <p className="text-lg font-bold text-foreground leading-none">{data.lengkap}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">Data lengkap ({pct(data.lengkap)}%)</p>
-              </div>
+              <StatKartu
+                icon={BadgeCheck}
+                value={data.lengkap}
+                label={`Data lengkap (${pct(data.lengkap)}%)`}
+                warna="text-emerald-500"
+                tint="bg-emerald-500/10"
+                testid="pengamanan-stat-lengkap"
+                className="border-emerald-500/40"
+              />
               {Object.entries(data.label_kekurangan || {}).map(([jenis, label]) => {
                 const Icon = IKON_KEKURANGAN[jenis] || FileText;
                 const n = data.kekurangan?.[jenis] || 0;
                 return (
-                  <button
+                  <StatKartu
                     key={jenis}
-                    type="button"
-                    onClick={() => n > 0 && openDetail(jenis, label)}
-                    disabled={n === 0}
-                    className={`bg-card rounded-xl border p-3 text-center transition-colors min-w-0 min-h-0 ${
-                      n > 0 ? "border-amber-500/40 hover:bg-amber-500/10" : "border-border opacity-60"
-                    }`}
-                    data-testid={`pengamanan-stat-${jenis}`}
+                    icon={Icon}
+                    value={n}
+                    label={label}
+                    warna={n > 0 ? "text-amber-500" : "text-muted-foreground"}
+                    tint={n > 0 ? "bg-amber-500/10" : "bg-muted-foreground/10"}
+                    testid={`pengamanan-stat-${jenis}`}
+                    className={n > 0 ? "border-amber-500/40" : "opacity-60"}
+                    onClick={n > 0 ? () => openDetail(jenis, label) : undefined}
                   >
-                    <Icon className={`w-5 h-5 mx-auto mb-1 ${n > 0 ? "text-amber-500" : "text-muted-foreground"}`} />
-                    <p className="text-lg font-bold text-foreground leading-none">{n}</p>
-                    <p className="text-[10px] text-muted-foreground mt-1">{label}</p>
                     {n > 0 && (
-                      <span className="flex items-center justify-center gap-0.5 text-[9px] text-amber-600 dark:text-amber-400 mt-0.5">
+                      <span className="flex items-center gap-0.5 text-[9px] text-amber-600 dark:text-amber-400 mt-0.5">
                         lihat daftar <ChevronRight className="w-2.5 h-2.5" />
                       </span>
                     )}
-                  </button>
+                  </StatKartu>
                 );
               })}
             </div>
