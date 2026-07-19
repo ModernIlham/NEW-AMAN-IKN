@@ -254,9 +254,11 @@ async def dbkp_json(_user: dict = Depends(require_user)):
     from pembukuan_utils import build_dbkp_rows, posisi_neraca
     from persediaan_utils import nilai_persediaan_dari_batches
     from report_filters import active_asset_filter
-    from shared_utils import ambang_kapitalisasi, scope_query_aset
+    from shared_utils import (ambang_kapitalisasi, filter_aset_perhitungan,
+                              scope_query_aset)
 
-    q = await scope_query_aset(_user, active_asset_filter())
+    q = await filter_aset_perhitungan(
+        await scope_query_aset(_user, active_asset_filter()))
     assets = await db.assets.find(
         q, {"_id": 0, "asset_code": 1, "purchase_price": 1,
             "nilai_wajar_terakhir": 1}).to_list(500000)

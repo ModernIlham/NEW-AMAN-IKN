@@ -244,6 +244,9 @@ export default function PelaporanPage({ user, onBack }) {
           <div className="flex-1 min-w-[140px]">
             <p className="text-xs font-semibold text-foreground">Posisi BMN di Neraca</p>
             <p className="text-[10px] text-muted-foreground">Seluruh aset per golongan (intra/ekstra, PMK 181) + persediaan FIFO</p>
+            <p className="text-[10px] text-amber-600 dark:text-amber-400">
+              Hanya kegiatan inventarisasi yang disahkan/selesai yang ikut dihitung — kegiatan berjalan & data dummy otomatis dikecualikan
+            </p>
           </div>
           {/* Grup unduhan — SATU baris 4 tombol ringkas di HP, sebaris judul di desktop */}
           <div className="w-full sm:w-auto grid grid-cols-4 gap-1.5 sm:flex sm:items-center">

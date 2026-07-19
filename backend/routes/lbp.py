@@ -27,7 +27,8 @@ from lbp_utils import (DASAR_HUKUM_LBP, UPAYA_PERBAIKAN_LBP,
                        fmt_rp, kebijakan_akuntansi_lbp, label_periode_lbp,
                        rupiah_terbilang, struktur_daftar_isi_lengkap,
                        susun_mutasi_per_transaksi, tanggal_akhir_periode)
-from shared_utils import (ambang_kapitalisasi, kode_satker_user,
+from shared_utils import (ambang_kapitalisasi, filter_aset_perhitungan,
+                          kode_satker_user,
                           pengaturan_kop, resolve_penandatangan_kpb,
                           scope_query_aset, scope_query_field_satker)
 
@@ -184,7 +185,7 @@ async def generate_lbp_docx(tahun: int, semester: int = 0,
     ambang = await ambang_kapitalisasi()
 
     # ── Data aset (scoped satker) ──
-    q = await scope_query_aset(user, {})
+    q = await filter_aset_perhitungan(await scope_query_aset(user, {}))
     assets = await db.assets.find(q, {
         "_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
         "purchase_price": 1, "purchase_date": 1, "created_at": 1,
