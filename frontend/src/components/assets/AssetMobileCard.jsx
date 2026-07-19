@@ -16,7 +16,7 @@ const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, onOpenKartu, on
   const [startX, setStartX] = useState(0);
   const [isSwiping, setIsSwiping] = useState(false);
   const cardRef = useRef(null);
-  const { busy: simanBusy, synced: simanSynced, sinkron: sinkronSiman } = useSinkronSiman(asset);
+  const { busy: simanBusy, synced: simanSynced, baruSaja: simanBaruSaja, sinkron: sinkronSiman } = useSinkronSiman(asset);
   
   // Use thumbnail only (photos array is not included in list API for performance)
   const coverPhoto = asset.thumbnail;
@@ -237,7 +237,7 @@ const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, onOpenKartu, on
                 <RefreshCcw className={`w-3 h-3 text-amber-600 dark:text-amber-400 ${simanBusy ? "animate-spin" : ""}`} />
               </button>
             )}
-            {simanSynced && (
+            {simanBaruSaja && (
               <span
                 className="w-6 h-6 rounded-full bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center"
                 title="Tersinkron dengan SIMAN V2"
