@@ -205,3 +205,73 @@ def test_pegawai_perlu_serah_terima():
     assert hasil[0]["jumlah_aset"] == 5 and "pensiun" in hasil[0]["alasan"].lower()
     assert "kontrak berakhir" in hasil[2]["alasan"].lower()
     assert pegawai_perlu_serah_terima([], {}, "2026-07-18") == []
+
+
+def test_deteksi_identitas_semua_jenis():
+    """Deteksi NIP PNS / NI PPPK / NIK / NRP POLRI / NRP TNI dari format."""
+    from pegawai_utils import deteksi_identitas
+    assert deteksi_identitas("195808181984041001")["jenis"] == "nip_pns"
+    assert deteksi_identitas("199001012024211002")["jenis"] == "ni_pppk"
+    assert deteksi_identitas("3506042503900001")["jenis"] == "nik"
+    assert deteksi_identitas("80101234")["jenis"] == "nrp_polri"
+    assert deteksi_identitas("531234")["jenis"] == "nrp_tni"
+    # 18 digit ber-tanggal tak valid → bukan NIP
+    assert deteksi_identitas("999999991984041001")["jenis"] == ""
+    assert deteksi_identitas("")["jenis"] == ""
+    assert deteksi_identitas("abc")["jenis"] == ""
+
+
+def test_baris_identitas_ttd_dan_label_laporan():
+    """Laporan: NRP berlabel NRP; NIK Non-ASN TIDAK dicetak; kosong →
+    placeholder garis titik."""
+    from pegawai_utils import baris_identitas_laporan, baris_identitas_ttd
+    assert baris_identitas_ttd("80101234") == ["NRP. 80101234"]
+    assert baris_identitas_ttd("3506042503900001") == []
+    assert baris_identitas_ttd("", "NIP. ....") == ["NIP. ...."]
+    assert baris_identitas_laporan("195808181984041001") == "NIP. 195808181984041001"
+    assert baris_identitas_laporan("80101234", "polri") == "NRP. 80101234"
+    assert baris_identitas_laporan("195808181984041001", "non_asn") == ""
+
+
+def test_info_masa_pegawai_bup():
+    """BUP per UU 20/2023 (JPT 60, fungsional ahli utama 65) + TNI/POLRI +
+    kontrak Non-ASN; data kurang → None (tidak menebak)."""
+    from pegawai_utils import info_masa_pegawai
+    jpt = info_masa_pegawai({"status_kepegawaian": "pns",
+                             "kategori_pegawai": "jpt",
+                             "tanggal_lahir": "1970-01-01"}, "2026-07-19")
+    assert jpt["bup"] == 60 and jpt["tanggal_pensiun"] == "2030-01-01"
+    utama = info_masa_pegawai({"status_kepegawaian": "pns",
+                               "kategori_pegawai": "fungsional",
+                               "jabatan": "Perencana Ahli Utama",
+                               "tanggal_lahir": "1965-06-01"}, "2026-07-19")
+    assert utama["bup"] == 65
+    polri = info_masa_pegawai({"status_kepegawaian": "polri",
+                               "pangkat_golongan": "Brigadir Polisi",
+                               "tanggal_lahir": "1980-10-01"}, "2026-07-19")
+    assert polri["bup"] == 59
+    non_asn = info_masa_pegawai({"status_kepegawaian": "non_asn",
+                                 "tgl_selesai_kontrak": "2026-12-31"},
+                                "2026-07-19")
+    assert non_asn["bup"] is None and non_asn["kontrak"]["ada"] is True
+    # tanpa tanggal lahir → tidak menebak pensiun
+    kosong = info_masa_pegawai({"status_kepegawaian": "pns",
+                                "kategori_pegawai": "jpt"}, "2026-07-19")
+    assert kosong["tanggal_pensiun"] == ""
+    # akhir jabatan tercatat → sisa hari terhitung
+    jab = info_masa_pegawai({"tanggal_akhir_jabatan": "2026-08-19"}, "2026-07-19")
+    assert jab["sisa_hari_jabatan"] == 31
+
+
+def test_validate_pegawai_field_baru():
+    """Validasi kode satker 6/12 digit + kontrak Non-ASN outsourcing."""
+    from pegawai_utils import validate_pegawai
+    ok = validate_pegawai({"nama": "Budi", "kode_satker": "527010",
+                           "kode_satker_lengkap": "527010401987",
+                           "jenis_kontrak_non_asn": "outsourcing",
+                           "perusahaan_penyedia": "PT Aman Jaya"})
+    assert ok == []
+    err = validate_pegawai({"nama": "Budi", "kode_satker_lengkap": "12345",
+                            "jenis_kontrak_non_asn": "outsourcing"})
+    assert any("12 digit" in e for e in err)
+    assert any("perusahaan penyedia" in e.lower() for e in err)

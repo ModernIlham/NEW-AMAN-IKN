@@ -48,6 +48,38 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#432] Master Pegawai pintar (1/2): deteksi NIP/NI PPPK/NRP/NIK otomatis, BUP, outsourcing, kode satker, label laporan — 2026-07-19
+
+Paruh pertama perombakan Master Pegawai (hasil riset regulasi: Perka BKN
+22/2007, UU ASN 20/2023, UU TNI 3/2025, UU Polri 5/2026, PER-31/PB/2016):
+
+- **Deteksi jenis nomor identitas OTOMATIS** (`deteksi_identitas`, satu
+  sumber logika server): 18 digit ber-tanggal valid → NIP PNS (digit 13-14
+  = bulan TMT) / NI PPPK (digit 13-14 ≥ 21 = frekuensi kontrak); 16 digit
+  → NIK (Non-ASN); 8 digit → NRP POLRI; 5-7 digit → kemungkinan NRP TNI.
+  Label field di form berubah otomatis + keterangan hasil deteksi.
+- **Laporan menghormati jenis nomor**: label "NIP." di blok ttd BAST &
+  BAST pengguna kini pintar — NRP berlabel "NRP.", dan **NIK Non-ASN
+  TIDAK dicetak** (privasi); identitas pihak BAST melewati baris nomor
+  utk pemegang ber-NIK.
+- **Perkiraan pensiun (BUP)** per aturan terbaru: ASN JPT 60 /
+  administrator-pengawas-pelaksana 58 / fungsional ahli utama 65 & madya
+  60; TNI tamtama-bintara 55, perwira 58; POLRI 59/60 — `info_masa` per
+  pegawai di API daftar (tanggal pensiun + sisa hari + sisa jabatan +
+  status kontrak) sebagai bahan kolom durasi.
+- **Field baru**: akhir periode jabatan; Non-ASN → jenis kontrak
+  internal/outsourcing + nama perusahaan penyedia (wajib bila
+  outsourcing); kode satker 6 digit + kode satker lengkap 12 digit
+  (penghubung lintas modul; admin terikat tetap dipaksa satkernya —
+  isolasi M-SCOPE dijaga).
+- **Form kondisional per jenis pegawai**: Non-ASN tanpa pangkat & tanpa
+  TMT jabatan (fokus kontrak); PPPK berlabel "Golongan I–XVII"; TNI/POLRI
+  berlabel "Pangkat" dengan saran pangkat militer/polisi.
+- Verifikasi: 558 tes unit lulus (4 baru: deteksi semua jenis, label
+  laporan, BUP, validasi field baru), eslint & build sukses.
+
+---
+
 ## [#431] Referensi Akun BAS tertaut master aset & persediaan + panel edukasi kodefikasi barang — 2026-07-19
 
 Tab Aset & Persediaan di Referensi Akun BAS kini MENGAMBIL DATA DARI

@@ -18,8 +18,10 @@ from shared_utils import kode_satker_user, log_audit, scope_query_field_satker
 from pejabat_utils import STATUS_KEPEGAWAIAN
 from pegawai_utils import (
     AGAMA, DIGIT_BANK, JENIS_IDENTITAS_WNA, JENIS_JABATAN, JENIS_KELAMIN,
-    KATEGORI_PEGAWAI, KEWARGANEGARAAN, PANGKAT_GOLONGAN, STATUS_PEGAWAI,
+    JENIS_KONTRAK_NON_ASN, KATEGORI_PEGAWAI, KEWARGANEGARAAN,
+    PANGKAT_GOLONGAN, STATUS_PEGAWAI,
     STATUS_PERKAWINAN, SUB_KATEGORI_NON_ASN, baris_impor_ke_pegawai,
+    deteksi_identitas, info_masa_pegawai,
     kelompok_unit_kerja, pegawai_perlu_serah_terima, rekap_eselon,
     validate_pegawai,
 )
@@ -66,7 +68,15 @@ class PegawaiIn(BaseModel):
     nomor_kontrak: Optional[str] = ""
     tgl_mulai_kontrak: Optional[str] = ""
     tgl_selesai_kontrak: Optional[str] = ""
+    # Non-ASN: kontrak internal instansi vs OUTSOURCING + perusahaan penyedia
+    jenis_kontrak_non_asn: Optional[str] = ""
+    perusahaan_penyedia: Optional[str] = ""
     tmt_jabatan: Optional[str] = ""
+    # Akhir periode jabatan (utk hitung sisa masa jabatan di daftar)
+    tanggal_akhir_jabatan: Optional[str] = ""
+    # Penghubung lintas modul: kode satker (6 digit) + kode lengkap 12 digit
+    kode_satker: Optional[str] = ""
+    kode_satker_lengkap: Optional[str] = ""
     status: Optional[str] = "aktif"
     keterangan: Optional[str] = ""
 
@@ -109,7 +119,12 @@ def _bersih(p: PegawaiIn) -> dict:
         "nomor_kontrak": str(p.nomor_kontrak or "").strip(),
         "tgl_mulai_kontrak": str(p.tgl_mulai_kontrak or "").strip()[:10],
         "tgl_selesai_kontrak": str(p.tgl_selesai_kontrak or "").strip()[:10],
+        "jenis_kontrak_non_asn": str(p.jenis_kontrak_non_asn or "").strip().lower(),
+        "perusahaan_penyedia": str(p.perusahaan_penyedia or "").strip(),
         "tmt_jabatan": str(p.tmt_jabatan or "").strip()[:10],
+        "tanggal_akhir_jabatan": str(p.tanggal_akhir_jabatan or "").strip()[:10],
+        "kode_satker": str(p.kode_satker or "").strip(),
+        "kode_satker_lengkap": str(p.kode_satker_lengkap or "").strip(),
         "status": str(p.status or "aktif").strip() or "aktif",
         "keterangan": str(p.keterangan or "").strip(),
     }
@@ -151,6 +166,7 @@ async def referensi_pegawai(_user: dict = Depends(require_user)):
         "status": _opt(STATUS_PEGAWAI),
         "kewarganegaraan": _opt(KEWARGANEGARAAN),
         "jenis_identitas_wna": _opt(JENIS_IDENTITAS_WNA),
+        "jenis_kontrak_non_asn": _opt(JENIS_KONTRAK_NON_ASN),
         # saran pangkat MENGIKUTI status kepegawaian + peta digit bank utk
         # peringatan lunak rekening (pola form KERJA-BARENG).
         "pangkat_golongan": PANGKAT_GOLONGAN,
@@ -174,10 +190,26 @@ async def rekap_unit_pegawai(_user: dict = Depends(require_user)):
 
 @pegawai_router.get("/pegawai")
 async def list_pegawai(_user: dict = Depends(require_user)):
-    """Daftar seluruh pegawai satker (terurut nama)."""
+    """Daftar seluruh pegawai satker (terurut nama).
+
+    Tiap item diperkaya `info_masa` (identitas terdeteksi NIP/NI PPPK/NRP/
+    NIK, perkiraan pensiun per BUP UU 20/2023 / UU TNI 3/2025 / UU Polri
+    5/2026, sisa masa jabatan & kontrak) — bahan kolom durasi di daftar.
+    """
     items = await db.pegawai.find(
         scope_query_field_satker(_user), _PROJ).sort("nama", 1).to_list(20000)
+    hari_ini = datetime.now(timezone.utc).date().isoformat()
+    for it in items:
+        it["info_masa"] = info_masa_pegawai(it, hari_ini)
     return {"items": items, "jumlah": len(items)}
+
+
+@pegawai_router.get("/pegawai/deteksi-identitas")
+async def deteksi_identitas_pegawai(nomor: str = "",
+                                    _user: dict = Depends(require_user)):
+    """Kenali jenis nomor identitas (NIP PNS / NI PPPK / NRP / NIK) dari
+    formatnya — utk label & saran otomatis di form (satu sumber logika)."""
+    return deteksi_identitas(nomor)
 
 
 async def _jumlah_aset_per_nip(user) -> dict:
@@ -252,7 +284,9 @@ async def buat_pegawai(payload: PegawaiIn, user: dict = Depends(require_admin)):
     if await _nip_bentrok(doc["nip"], kode=kode):
         raise HTTPException(status_code=400, detail=f"NIP {doc['nip']} sudah terdaftar")
     now = datetime.now(timezone.utc).isoformat()
-    doc.update({"id": str(uuid.uuid4()), "kode_satker": kode,
+    # Admin terikat satker: dipaksa satkernya (isolasi M-SCOPE);
+    # super-admin ("" ): boleh mengisi kode_satker eksplisit dari form.
+    doc.update({"id": str(uuid.uuid4()), "kode_satker": kode or doc.get("kode_satker", ""),
                 "created_at": now, "updated_at": now})
     await db.pegawai.insert_one(dict(doc))
     await log_audit("buat_pegawai", "", doc["id"],
@@ -391,6 +425,13 @@ async def ubah_pegawai(pegawai_id: str, payload: PegawaiIn,
     if await _nip_bentrok(doc["nip"], kecuali_id=pegawai_id,
                           kode=kode_satker_user(user)):
         raise HTTPException(status_code=400, detail=f"NIP {doc['nip']} sudah terdaftar")
+    # Isolasi M-SCOPE: admin terikat TIDAK bisa memindah pegawai ke satker
+    # lain lewat payload; super-admin boleh — kosong = pertahankan yang lama.
+    kode_user = kode_satker_user(user)
+    if kode_user:
+        doc["kode_satker"] = kode_user
+    elif not doc.get("kode_satker"):
+        doc["kode_satker"] = str(lama.get("kode_satker") or "")
     doc["updated_at"] = datetime.now(timezone.utc).isoformat()
     res = await db.pegawai.update_one({"id": pegawai_id}, {"$set": doc})
     if res.matched_count == 0:

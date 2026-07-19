@@ -30,6 +30,8 @@ const EMPTY = {
   unit_kerja: "", unit_organisasi: "", npwp: "", pendidikan_terakhir: "",
   no_hp: "", email: "", alamat: "", nama_bank: "", no_rekening: "",
   nomor_kontrak: "", tgl_mulai_kontrak: "", tgl_selesai_kontrak: "",
+  jenis_kontrak_non_asn: "", perusahaan_penyedia: "",
+  tanggal_akhir_jabatan: "", kode_satker: "", kode_satker_lengkap: "",
   tmt_jabatan: "", status: "aktif", keterangan: "",
 };
 
@@ -67,6 +69,7 @@ export default function PegawaiPage({ user, onBack }) {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState(null);
+  const [deteksi, setDeteksi] = useState(null); // hasil deteksi jenis nomor identitas
   const [tabForm, setTabForm] = useState("identitas"); // tab aktif form 5-tab
   const [saving, setSaving] = useState(false);
   const [mengimpor, setMengimpor] = useState(false);
@@ -196,6 +199,19 @@ export default function PegawaiPage({ user, onBack }) {
       .then((r) => setRef((prev) => ({ ...prev, ...(r.data || {}) })))
       .catch(() => {});
   }, [load]);
+
+  // Deteksi jenis nomor identitas (NIP PNS / NI PPPK / NRP / NIK) — debounce
+  // ke server agar logika satu sumber dengan label laporan.
+  useEffect(() => {
+    const nomor = String(form?.nip || "").trim();
+    if (!nomor || nomor.length < 5) { setDeteksi(null); return undefined; }
+    const t = setTimeout(() => {
+      axios.get(`${API}/pegawai/deteksi-identitas`, { params: { nomor } })
+        .then((r) => setDeteksi(r.data))
+        .catch(() => setDeteksi(null));
+    }, 350);
+    return () => clearTimeout(t);
+  }, [form?.nip]);
 
   const unduhTemplate = () => {
     downloadFileWithProgress(`${API}/pegawai/template-impor`, "template_impor_pegawai.csv",
@@ -530,7 +546,16 @@ export default function PegawaiPage({ user, onBack }) {
                   </div>
                   {(form.kewarganegaraan || "wni") === "wni" ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-2.5 rounded-lg bg-sky-500/5 border border-sky-500/30">
-                      <Field label="NIP / NIK / NRP"><Input value={form.nip} onChange={set("nip")} className="font-mono" inputMode="numeric" placeholder="8–20 digit (opsional)" data-testid="pegawai-form-nip" /></Field>
+                      <Field label={deteksi?.jenis ? deteksi.label : "NIP / NIK / NRP"}>
+                        <Input value={form.nip} onChange={set("nip")} className="font-mono" inputMode="numeric" placeholder="8–20 digit (opsional)" data-testid="pegawai-form-nip" />
+                        {/* Deteksi jenis nomor OTOMATIS (server, satu sumber
+                            logika): NIP PNS / NI PPPK / NRP / NIK. */}
+                        {deteksi?.keterangan && (
+                          <p className="text-[10px] text-sky-700 dark:text-sky-400 mt-1" data-testid="pegawai-deteksi-identitas">
+                            ✓ {deteksi.keterangan}
+                          </p>
+                        )}
+                      </Field>
                       <Field label="NPWP"><Input value={form.npwp} onChange={set("npwp")} className="font-mono" /></Field>
                     </div>
                   ) : (
@@ -571,13 +596,21 @@ export default function PegawaiPage({ user, onBack }) {
                     <Field label="Status Kepegawaian">
                       <Select value={form.status_kepegawaian} onChange={set("status_kepegawaian")} data-testid="pegawai-form-status-peg" opts={ref.status_kepegawaian} />
                     </Field>
-                    <Field label="Pangkat / Golongan">
-                      {/* Saran pangkat MENGIKUTI status (PNS/CPNS/PPPK/TNI/POLRI). */}
-                      <Input value={form.pangkat_golongan} onChange={set("pangkat_golongan")} list="opsi-pangkat" placeholder="cth. Penata (III/c)" data-testid="pegawai-form-pangkat" />
-                      <datalist id="opsi-pangkat">
-                        {((ref.pangkat_golongan || {})[form.status_kepegawaian] || (ref.pangkat_golongan || {}).pns || []).map((p) => <option key={p} value={p} />)}
-                      </datalist>
-                    </Field>
+                    {/* Pangkat hanya utk PNS/CPNS/PPPK/TNI/POLRI — Non-ASN
+                        tidak punya pangkat/golongan (riset PER-31/PB/2016). */}
+                    {form.status_kepegawaian !== "non_asn" && (
+                      <Field label={form.status_kepegawaian === "pppk" ? "Golongan PPPK (I–XVII)"
+                        : ["tni", "polri"].includes(form.status_kepegawaian) ? "Pangkat"
+                        : "Pangkat / Golongan"}>
+                        <Input value={form.pangkat_golongan} onChange={set("pangkat_golongan")} list="opsi-pangkat"
+                          placeholder={form.status_kepegawaian === "pppk" ? "cth. Golongan IX"
+                            : ["tni", "polri"].includes(form.status_kepegawaian) ? "cth. Kapten / Iptu"
+                            : "cth. Penata (III/c)"} data-testid="pegawai-form-pangkat" />
+                        <datalist id="opsi-pangkat">
+                          {((ref.pangkat_golongan || {})[form.status_kepegawaian] || (ref.pangkat_golongan || {}).pns || []).map((p) => <option key={p} value={p} />)}
+                        </datalist>
+                      </Field>
+                    )}
                     {form.status_kepegawaian === "non_asn" && (
                       <Field label="Sub-Kategori Non-ASN">
                         <Select value={form.sub_kategori_non_asn} onChange={set("sub_kategori_non_asn")} opts={ref.sub_kategori_non_asn} />
@@ -586,11 +619,30 @@ export default function PegawaiPage({ user, onBack }) {
                     <Field label="Status di Satker">
                       <Select value={form.status} onChange={set("status")} data-testid="pegawai-form-status" opts={ref.status} allowEmpty={false} />
                     </Field>
-                    <Field label="TMT Jabatan"><Input type="date" value={form.tmt_jabatan} onChange={set("tmt_jabatan")} /></Field>
+                    {form.status_kepegawaian !== "non_asn" && (
+                      <>
+                        <Field label="TMT Jabatan"><Input type="date" value={form.tmt_jabatan} onChange={set("tmt_jabatan")} /></Field>
+                        <Field label="Akhir Periode Jabatan (ops.)">
+                          <Input type="date" value={form.tanggal_akhir_jabatan} onChange={set("tanggal_akhir_jabatan")} data-testid="pegawai-form-akhir-jabatan" />
+                        </Field>
+                      </>
+                    )}
                   </div>
-                  {/* Kontrak Non-ASN — pemantauan pemegang aset saat kontrak berakhir. */}
+                  {/* Kontrak Non-ASN — internal instansi vs OUTSOURCING (riset
+                      PER-31/PB/2016 + Perpres 16/2018); pemantauan pemegang
+                      aset saat kontrak berakhir. */}
                   {form.status_kepegawaian === "non_asn" && (
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-2.5 rounded-lg bg-muted/40 border border-border/60">
+                      <Field label="Jenis Kontrak">
+                        <Select value={form.jenis_kontrak_non_asn} onChange={set("jenis_kontrak_non_asn")}
+                          opts={ref.jenis_kontrak_non_asn} data-testid="pegawai-form-jenis-kontrak" />
+                      </Field>
+                      {form.jenis_kontrak_non_asn === "outsourcing" && (
+                        <Field label="Perusahaan Penyedia *" span2>
+                          <Input value={form.perusahaan_penyedia} onChange={set("perusahaan_penyedia")}
+                            placeholder="cth. PT Aman Sarana Jasa" data-testid="pegawai-form-penyedia" />
+                        </Field>
+                      )}
                       <Field label="Nomor Kontrak"><Input value={form.nomor_kontrak} onChange={set("nomor_kontrak")} placeholder="cth. 001/KONTRAK/2026" /></Field>
                       <Field label="Mulai Kontrak"><Input type="date" value={form.tgl_mulai_kontrak} onChange={set("tgl_mulai_kontrak")} /></Field>
                       <Field label="Selesai Kontrak"><Input type="date" value={form.tgl_selesai_kontrak} onChange={set("tgl_selesai_kontrak")} /></Field>
@@ -610,6 +662,16 @@ export default function PegawaiPage({ user, onBack }) {
                       <Select value={form.kategori_pegawai} onChange={set("kategori_pegawai")} opts={ref.kategori_pegawai} />
                     </Field>
                     <Field label="Eselon (teks)"><Input value={form.eselon} onChange={set("eselon")} placeholder="cth. IV.a" /></Field>
+                    {/* Penghubung lintas modul: kode satker 6 digit + lengkap
+                        12 digit (selaras field satker aset/laporan). */}
+                    <Field label="Kode Satker (6 digit)">
+                      <Input value={form.kode_satker} onChange={set("kode_satker")} className="font-mono"
+                        inputMode="numeric" maxLength={6} placeholder="cth. 527010" data-testid="pegawai-form-kode-satker" />
+                    </Field>
+                    <Field label="Kode Satker Lengkap (12 digit)">
+                      <Input value={form.kode_satker_lengkap} onChange={set("kode_satker_lengkap")} className="font-mono"
+                        inputMode="numeric" maxLength={12} placeholder="cth. 527010401987" data-testid="pegawai-form-kode-satker-lengkap" />
+                    </Field>
                   </div>
                   {/* Unit kerja berjenjang (Eselon I–V) — pilihan BERTINGKAT dari
                       master unit; jenjang terdalam otomatis jadi Unit Kerja. */}
