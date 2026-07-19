@@ -48,6 +48,18 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#465] Lookup satker fallback ke Master Satker + auto-isi kode lengkap tanpa nilai basi + dokumentasi — 2026-07-19
+
+- **`satker-lookup` kini FALLBACK ke Master Satker** — sebelumnya hanya
+  mencari di kegiatan, sehingga kegiatan PERTAMA untuk satker yang sudah
+  dirawat di Master Satker tidak ter-auto-isi (nama/eselon/kode lengkap).
+- **Auto-isi kode satker lengkap tanpa nilai basi** — saat berganti ke
+  satker lain, hasil lookup menimpa field apa adanya; nilai satker
+  sebelumnya tidak lagi tertinggal (yang bisa ter-backfill ke master
+  satker yang salah).
+- **Dokumentasi** — README & halaman Info menyebut validasi satker cerdas
+  6↔20 digit + sinkron 1-klik dari galeri/list.
+
 ## [#464] Kode satker lengkap 20 digit di kegiatan — sinkron SIMAN V2 tanpa peringatan satker berbeda — 2026-07-19
 
 - **Konteks**: AMAN memakai kode satker 6 digit, SIMAN V2 memakai kode
