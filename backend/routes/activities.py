@@ -399,26 +399,39 @@ async def _sinkron_kode_satker_lengkap(payload: dict):
         logger.warning("Sinkron kode_satker_lengkap kegiatan↔master gagal (non-fatal)", exc_info=True)
 
 
+_PROJ_LOOKUP = {"_id": 0, "kode_satker": 1, "nama_satker": 1, "eselon1": 1,
+                "kode_satker_lengkap": 1}
+
+
+async def _hasil_lookup(doc: dict) -> dict:
+    return {"kode_satker": doc.get("kode_satker", ""),
+            "nama_satker": doc.get("nama_satker", ""),
+            "eselon1": doc.get("eselon1", []) or [],
+            "kode_satker_lengkap": doc.get("kode_satker_lengkap")
+            or await _kode_lengkap_master(doc.get("kode_satker", ""))}
+
+
 @activities_router.get("/satker-lookup")
 async def satker_lookup(kode: str = "", nama: str = "", _user: dict = Depends(require_user)):
-    """Lookup satker by kode or nama for auto-fill consistency (includes eselon1)"""
+    """Lookup satker by kode or nama for auto-fill consistency (includes eselon1).
+
+    Sumber: kegiatan inventarisasi dulu (konsistensi nama antar kegiatan),
+    lalu FALLBACK ke MASTER SATKER — kegiatan PERTAMA untuk satker yang
+    sudah dirawat di master tetap ter-auto-isi.
+    """
     if kode:
-        doc = await db.inventory_activities.find_one(
-            {"kode_satker": kode}, {"_id": 0, "kode_satker": 1, "nama_satker": 1, "eselon1": 1, "kode_satker_lengkap": 1}
-        )
+        doc = (await db.inventory_activities.find_one({"kode_satker": kode}, _PROJ_LOOKUP)
+               or await db.satker.find_one({"kode_satker": kode}, _PROJ_LOOKUP))
         if doc:
-            return {"kode_satker": doc.get("kode_satker", ""), "nama_satker": doc.get("nama_satker", ""), "eselon1": doc.get("eselon1", []),
-                    "kode_satker_lengkap": doc.get("kode_satker_lengkap") or await _kode_lengkap_master(doc.get("kode_satker", ""))}
+            return await _hasil_lookup(doc)
     if nama:
         # re.escape the user input so an exact (anchored) case-insensitive match
         # can't be abused for ReDoS or blow up on invalid regex metacharacters.
-        doc = await db.inventory_activities.find_one(
-            {"nama_satker": {"$regex": f"^{re.escape(nama)}$", "$options": "i"}},
-            {"_id": 0, "kode_satker": 1, "nama_satker": 1, "eselon1": 1, "kode_satker_lengkap": 1}
-        )
+        q_nama = {"nama_satker": {"$regex": f"^{re.escape(nama)}$", "$options": "i"}}
+        doc = (await db.inventory_activities.find_one(q_nama, _PROJ_LOOKUP)
+               or await db.satker.find_one(q_nama, _PROJ_LOOKUP))
         if doc:
-            return {"kode_satker": doc.get("kode_satker", ""), "nama_satker": doc.get("nama_satker", ""), "eselon1": doc.get("eselon1", []),
-                    "kode_satker_lengkap": doc.get("kode_satker_lengkap") or await _kode_lengkap_master(doc.get("kode_satker", ""))}
+            return await _hasil_lookup(doc)
     return None
 
 @activities_router.post("/inventory-activities")

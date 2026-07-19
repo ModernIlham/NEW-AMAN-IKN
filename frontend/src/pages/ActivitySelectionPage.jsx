@@ -232,7 +232,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
           const r = await axios.get(`${API}/satker-lookup`, { params: { kode: value.trim() } });
           if (r.data?.nama_satker) {
             setForm(p => ({ ...p, nama_satker: r.data.nama_satker, eselon1: r.data.eselon1 || [],
-              kode_satker_lengkap: r.data.kode_satker_lengkap || p.kode_satker_lengkap }));
+              kode_satker_lengkap: r.data.kode_satker_lengkap || '' }));
           }
         } catch { /* silent */ }
       }, 400);
@@ -249,7 +249,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
           const r = await axios.get(`${API}/satker-lookup`, { params: { nama: value.trim() } });
           if (r.data?.kode_satker) {
             setForm(p => ({ ...p, kode_satker: r.data.kode_satker, eselon1: r.data.eselon1 || [],
-              kode_satker_lengkap: r.data.kode_satker_lengkap || p.kode_satker_lengkap }));
+              kode_satker_lengkap: r.data.kode_satker_lengkap || '' }));
           }
         } catch { /* silent */ }
       }, 400);
