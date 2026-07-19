@@ -327,11 +327,11 @@ const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, onOpenKartu, on
                 return g ? (
                   <span
                     className={`inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${g.segera ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400' : 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400'}`}
-                    title={`Garansi tercatat hingga ${g.hingga} (${g.hari} hari lagi)`}
+                    title={`Garansi${asset.garansi_jenis ? ` ${asset.garansi_jenis}` : ""} hingga ${g.hingga} (${g.hari} hari lagi)`}
                     data-testid={`card-garansi-${asset.id}`}
                   >
                     <ShieldCheck className="w-2.5 h-2.5" />
-                    {g.label}
+                    {g.singkat}
                   </span>
                 ) : null;
               })()}

@@ -48,6 +48,28 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#460] Inventarisasi aset — saklar ikon-only, jenis garansi, badge garansi ringkas, tetesan sinkron SIMAN di galeri, gradasi list, badge lampiran BAST — 2026-07-19
+
+- **Saklar Dashboard ↔ Inventarisasi ikon-saja di SEMUA ukuran** (tanpa teks;
+  label tetap lewat tooltip/aria).
+- **Jenis garansi** (`garansi_jenis`) — field baru lewat registry (form ber-
+  datalist Pabrikan/Distributor/Toko/Purna Jual/Lainnya, ekspor XLSX,
+  template impor ber-dropdown, snapshot offline); tampil di tooltip badge.
+- **Badge garansi dirombak** — simple ikon shield + durasi singkat
+  ("45h"/"3bl"/"2th") tanpa teks: galeri di POJOK KANAN-BAWAH foto (di atas
+  garis bawah), list desktop & kartu HP ukuran ringkas.
+- **Galeri — belum sinkron SIMAN**: badge teks "≠ SIMAN" diganti ikon
+  TETESAN AIR menjorok ke foto, di tengah perbatasan foto ↔ area teks;
+  hover membesar (animasi), KLIK = langsung menerapkan nilai SIMAN V2
+  (`/siman/terapkan`, kecuali kode barang) dan tetesan hilang beranimasi
+  saat tersinkron; aman mode dark & light.
+- **List desktop — belum sinkron SIMAN**: gradasi orange halus dari pojok
+  kiri-bawah ke atas (pengganti badge teks), dengan tooltip.
+- **Badge Lampiran BAST** di bagian Pengguna form aset (tambah/edit):
+  chip hijau "Lampiran BAST tersedia — lihat foto/dokumen" yang otomatis
+  terhubung dengan bukti serah terima dari modul Penggunaan (bast_file_id
+  satu sumber) — klik untuk pratinjau.
+
 ## [#459] BMN Tidak Ditemukan — 3 surat resmi dilengkapkan sesuai SE PUPR 10/2023 & KMK 403/KMK.06/2013 — 2026-07-19
 
 Dari dua dokumen resmi yang diunggah pemilik (ditranskrip utuh) — audit

@@ -81,6 +81,7 @@ ASSET_SCALAR_FIELDS = (
     # sejak tanggal perolehan). Terisi manual saat inventarisasi ATAU
     # auto-isi dari riwayat inventarisasi sebelumnya (kode+NUP/register).
     AssetField("garansi_hingga", "Garansi Hingga", batchable=True),
+    AssetField("garansi_jenis", "Jenis Garansi", batchable=True),
 )
 
 SCALAR_FIELD_NAMES = tuple(f.name for f in ASSET_SCALAR_FIELDS)
