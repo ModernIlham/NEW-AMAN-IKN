@@ -48,6 +48,26 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#422] Integrasi lintas-modul gelombang 5: cek-silang realisasi anggaran vs Pengadaan (BAST) — 2026-07-19
+
+Realisasi NYATA dari Pengadaan bertaut kini disandingkan otomatis dengan
+realisasi manual di modul Penganggaran (item #6 backlog audit integrasi):
+
+- **Tabel "Sanding per Akun BAS"** bertambah kolom **Realisasi BAST**
+  (total nilai perolehan Pengadaan yang bertaut per akun) dan **Selisih**
+  (realisasi manual − BAST; kuning bila melewati toleransi) — serapan %
+  tetap berbasis realisasi manual (benar secara akuntansi).
+- **Badge "Perlu rekonsiliasi"** (amber) di baris usulan yang punya
+  perolehan bertaut tetapi angka realisasi manualnya beda — termasuk kasus
+  realisasi manual masih 0 padahal BAST sudah ada (perolehan belum ditaut
+  ke realisasi). Tooltip menampilkan kedua angka.
+- Fungsi murni baru `rekap_rekonsiliasi` (jumlah usulan perlu rekonsiliasi
+  + total selisih) ikut di respons API; toleransi Rp1 utk beda pembulatan.
+- Verifikasi: 551 tes unit lulus (2 baru), eslint bersih, `yarn build`
+  sukses.
+
+---
+
 ## [#421] Integrasi lintas-modul gelombang 4: nilai buku di CaLBMN & kolom Akun Neraca di ekspor rekonsiliasi — 2026-07-19
 
 Dua item penatausahaan lanjutan dari backlog audit integrasi:

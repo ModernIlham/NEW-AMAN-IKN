@@ -107,17 +107,44 @@ def sanding_per_akun(items) -> list:
                                    "label": AKUN_BAS.get(akun, "Tanpa akun"),
                                    "jumlah": 0, "usulan": 0.0,
                                    "disetujui": 0.0, "dipa": 0.0,
-                                   "realisasi": 0.0})
+                                   "realisasi": 0.0, "realisasi_bast": 0.0})
         g["jumlah"] += 1
         g["usulan"] += parse_harga(u.get("nilai_usulan"))
         g["disetujui"] += parse_harga(u.get("nilai_disetujui"))
         g["dipa"] += parse_harga(u.get("nilai_dipa"))
         g["realisasi"] += parse_harga(u.get("nilai_realisasi"))
+        # Realisasi NYATA dari Pengadaan bertaut (BAST) — cek-silang terhadap
+        # realisasi manual; serapan_persen tetap berbasis nilai_realisasi
+        # (benar secara akuntansi), selisih hanya penanda rekonsiliasi.
+        g["realisasi_bast"] += parse_harga(u.get("realisasi_pengadaan"))
     rows = sorted(grup.values(), key=lambda g: g["akun"])
     for g in rows:
         g["serapan_persen"] = round(
             g["realisasi"] / g["dipa"] * 100, 1) if g["dipa"] else 0.0
+        g["selisih_bast"] = round(g["realisasi"] - g["realisasi_bast"], 2)
     return rows
+
+
+# Selisih realisasi manual vs BAST di bawah ini dianggap pembulatan.
+TOLERANSI_REKONSILIASI = 1.0
+
+
+def rekap_rekonsiliasi(items, toleransi: float = TOLERANSI_REKONSILIASI) -> dict:
+    """Cek-silang realisasi manual (nilai_realisasi) vs realisasi nyata
+    Pengadaan bertaut (realisasi_pengadaan) → {jumlah_perlu_rekonsiliasi,
+    total_selisih}. Hanya usulan yang PUNYA perolehan bertaut yang dinilai
+    (realisasi_pengadaan > 0); usulan tanpa tautan bukan objek rekonsiliasi."""
+    jumlah, total = 0, 0.0
+    for u in items or []:
+        bast = parse_harga(u.get("realisasi_pengadaan"))
+        if bast <= 0:
+            continue
+        selisih = parse_harga(u.get("nilai_realisasi")) - bast
+        if abs(selisih) > toleransi:
+            jumlah += 1
+            total += selisih
+    return {"jumlah_perlu_rekonsiliasi": jumlah,
+            "total_selisih": round(total, 2)}
 
 
 NAMA_TRIWULAN = {1: "TW I", 2: "TW II", 3: "TW III", 4: "TW IV"}
