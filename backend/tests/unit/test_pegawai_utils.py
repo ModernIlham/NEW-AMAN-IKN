@@ -275,3 +275,84 @@ def test_validate_pegawai_field_baru():
                             "jenis_kontrak_non_asn": "outsourcing"})
     assert any("12 digit" in e for e in err)
     assert any("perusahaan penyedia" in e.lower() for e in err)
+
+
+def test_ekspor_pegawai_round_trip_impor():
+    """Baris ekspor Excel harus pulih jadi dokumen yang sama saat diimpor."""
+    from pegawai_utils import (HEADER_IMPOR, baris_ekspor_pegawai,
+                               baris_impor_ke_pegawai)
+    doc = {
+        "nip": "198501012010011001", "nama": "Budi Santoso",
+        "jenis_kelamin": "L", "tempat_lahir": "Jakarta",
+        "tanggal_lahir": "1985-01-01", "status_kepegawaian": "pns",
+        "pangkat_golongan": "Penata (III/c)", "jabatan": "Analis BMN",
+        "kategori_pegawai": "pelaksana", "tmt_jabatan": "2022-01-01",
+        "tanggal_akhir_jabatan": "2027-01-01",
+        "eselon1": "Sekretariat", "eselon2": "Bagian Umum",
+        "no_hp": "081200000000", "email": "budi@instansi.go.id",
+        "npwp": "123456789012345", "pendidikan_terakhir": "S1",
+        "alamat": "Jl. Merdeka 1", "nama_bank": "BRI",
+        "no_rekening": "123456789012345", "kode_satker_lengkap": "012345678901",
+        "status": "aktif", "keterangan": "-",
+    }
+    baris = baris_ekspor_pegawai(doc)
+    assert len(baris) == len(HEADER_IMPOR)
+    pulih, _ = baris_impor_ke_pegawai(dict(zip(HEADER_IMPOR, baris)))
+    for k in ("nip", "nama", "jenis_kelamin", "tanggal_lahir",
+              "status_kepegawaian", "kategori_pegawai", "tmt_jabatan",
+              "tanggal_akhir_jabatan", "npwp", "alamat",
+              "kode_satker_lengkap", "status"):
+        assert pulih[k] == doc[k], (k, pulih[k])
+    # keterangan "-" dinormalkan jadi kosong oleh impor (konvensi lama)
+    assert pulih["keterangan"] == ""
+
+
+def test_ekspor_non_asn_sub_kategori_pulih():
+    """Non-ASN ber-sub-kategori: label sub diekspor & sub pulih saat impor."""
+    from pegawai_utils import (HEADER_IMPOR, baris_ekspor_pegawai,
+                               baris_impor_ke_pegawai,
+                               label_ekspor_status_kepegawaian)
+    doc = {"nama": "Andi", "status_kepegawaian": "non_asn",
+           "sub_kategori_non_asn": "satpam",
+           "jenis_kontrak_non_asn": "outsourcing",
+           "perusahaan_penyedia": "PT Aman Jaya", "status": "nonaktif"}
+    assert label_ekspor_status_kepegawaian(doc) == "Satpam"
+    pulih, _ = baris_impor_ke_pegawai(
+        dict(zip(HEADER_IMPOR, baris_ekspor_pegawai(doc))))
+    assert pulih["status_kepegawaian"] == "non_asn"
+    assert pulih["sub_kategori_non_asn"] == "satpam"
+    assert pulih["jenis_kontrak_non_asn"] == "outsourcing"
+    assert pulih["perusahaan_penyedia"] == "PT Aman Jaya"
+    # Bug lama: "Nonaktif" mengandung "aktif" → dulu salah jadi aktif
+    assert pulih["status"] == "nonaktif"
+
+
+def test_normalisasi_kategori_dan_jenis_kontrak():
+    from pegawai_utils import (normalisasi_jenis_kontrak,
+                               normalisasi_kategori_pegawai)
+    assert normalisasi_kategori_pegawai("Jabatan Pimpinan Tinggi (JPT)") == "jpt"
+    assert normalisasi_kategori_pegawai("pengawas") == "pengawas"
+    assert normalisasi_kategori_pegawai("Jabatan Fungsional (JF)") == "fungsional"
+    assert normalisasi_kategori_pegawai("") == ""
+    assert normalisasi_jenis_kontrak("Outsourcing (melalui perusahaan penyedia)") == "outsourcing"
+    assert normalisasi_jenis_kontrak("Kontrak internal instansi (PPNPN/SPK dengan PPK)") == "internal"
+    assert normalisasi_jenis_kontrak("") == ""
+
+
+def test_opsi_dropdown_ekspor_semua_ternormalisasi():
+    """Setiap opsi dropdown di file ekspor harus dinormalkan balik dgn benar."""
+    from pegawai_utils import (KATEGORI_PEGAWAI, OPSI_DROPDOWN_EKSPOR,
+                               STATUS_PEGAWAI,
+                               normalisasi_jenis_kontrak,
+                               normalisasi_kategori_pegawai,
+                               normalisasi_status_kepegawaian,
+                               normalisasi_status_pegawai)
+    for v in OPSI_DROPDOWN_EKSPOR["Status Kepegawaian"]:
+        kode, _sub = normalisasi_status_kepegawaian(v)
+        assert kode, v
+    for v in OPSI_DROPDOWN_EKSPOR["Status"]:
+        assert normalisasi_status_pegawai(v) in STATUS_PEGAWAI, v
+    for v in OPSI_DROPDOWN_EKSPOR["Kategori Pegawai"]:
+        assert normalisasi_kategori_pegawai(v) in KATEGORI_PEGAWAI, v
+    for v in OPSI_DROPDOWN_EKSPOR["Jenis Kontrak Non-ASN"]:
+        assert normalisasi_jenis_kontrak(v) in ("internal", "outsourcing"), v

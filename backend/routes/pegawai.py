@@ -308,13 +308,128 @@ async def template_impor_pegawai(_user: dict = Depends(require_user)):
     w.writerow(["198501012010011001", "Budi Santoso", "Laki-laki", "Jakarta",
                 "1985-01-01", "PNS", "Penata (III/c)",
                 "Analis Pengelolaan BMN", "Pejabat Pelaksana",
+                "2022-01-01", "",
                 "Sekretariat", "Bagian Umum", "", "", "", "081200000000",
-                "budi@instansi.go.id", "BRI", "1234567890", "", "", "",
+                "budi@instansi.go.id", "", "S1", "",
+                "BRI", "1234567890", "", "", "", "", "", "",
                 "AKTIF", ""])
     return Response(
         content=buf.getvalue().encode("utf-8-sig"), media_type="text/csv",
         headers={"Content-Disposition":
                  'attachment; filename="template_impor_pegawai.csv"'})
+
+
+@pegawai_router.get("/pegawai/export-xlsx")
+async def export_pegawai_xlsx(_user: dict = Depends(require_user)):
+    """Ekspor Master Pegawai ke Excel siap-edit (W7).
+
+    Header = HEADER_IMPOR sehingga file hasil ekspor bisa langsung diedit
+    lalu DIIMPOR KEMBALI. Kolom pilihan diberi dropdown (data validation
+    dari sheet Referensi), kolom nomor dipaksa format teks (NIP tidak rusak
+    jadi float), header beku + berwarna + auto-filter."""
+    import io
+
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+    from openpyxl.worksheet.datavalidation import DataValidation
+
+    from pegawai_utils import (HEADER_IMPOR, KOLOM_TEKS_EKSPOR,
+                               OPSI_DROPDOWN_EKSPOR, baris_ekspor_pegawai)
+
+    items = await db.pegawai.find(
+        scope_query_field_satker(_user), {"_id": 0}).sort("nama", 1).to_list(20000)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Data Pegawai"
+
+    biru = "1E40AF"
+    header_fill = PatternFill("solid", fgColor=biru)
+    header_font = Font(bold=True, color="FFFFFF", size=10)
+    zebra_fill = PatternFill("solid", fgColor="EFF6FF")
+    tipis = Side(style="thin", color="CBD5E1")
+    border = Border(left=tipis, right=tipis, top=tipis, bottom=tipis)
+
+    ws.append(HEADER_IMPOR)
+    for c in ws[1]:
+        c.fill = header_fill
+        c.font = header_font
+        c.alignment = Alignment(horizontal="center", vertical="center",
+                                wrap_text=True)
+        c.border = border
+    ws.row_dimensions[1].height = 30
+
+    kolom_teks = {i + 1 for i, h in enumerate(HEADER_IMPOR)
+                  if h in KOLOM_TEKS_EKSPOR}
+    for ridx, p in enumerate(items, start=2):
+        for cidx, val in enumerate(baris_ekspor_pegawai(p), start=1):
+            cell = ws.cell(row=ridx, column=cidx, value=val)
+            cell.border = border
+            cell.font = Font(size=10)
+            cell.alignment = Alignment(vertical="center")
+            if cidx in kolom_teks:
+                cell.number_format = "@"
+            if ridx % 2 == 0:
+                cell.fill = zebra_fill
+
+    # Lebar kolom proporsional isi header/nilai umum
+    lebar = {"NIP/NIK/NRP": 22, "Nama Lengkap": 28, "Jabatan": 28,
+             "Status Kepegawaian": 24, "Email": 26, "Alamat": 32,
+             "Eselon 1": 22, "Eselon 2": 22, "Eselon 3": 22,
+             "Eselon 4": 22, "Eselon 5": 22, "Keterangan": 28,
+             "Perusahaan Penyedia": 24, "Jenis Kontrak Non-ASN": 30,
+             "Kategori Pegawai": 26, "Pangkat/Golongan": 22}
+    for i, h in enumerate(HEADER_IMPOR, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = lebar.get(h, 15)
+    ws.freeze_panes = "C2"   # header + kolom NIP & Nama tetap terlihat
+    ws.auto_filter.ref = f"A1:{get_column_letter(len(HEADER_IMPOR))}1"
+
+    # ── Sheet Referensi: sumber dropdown + panduan nilai sah ──
+    ref = wb.create_sheet("Referensi")
+    ref["A1"] = ("Daftar nilai sah per kolom — dipakai dropdown di sheet Data "
+                 "Pegawai. Boleh menulis nilai lain; impor menormalkan "
+                 "sebisanya.")
+    ref["A1"].font = Font(bold=True, size=10)
+    posisi_ref = {}
+    kolom_ref = 1
+    for judul, opsi in OPSI_DROPDOWN_EKSPOR.items():
+        kol = get_column_letter(kolom_ref)
+        sel_judul = ref.cell(row=3, column=kolom_ref, value=judul)
+        sel_judul.font = Font(bold=True, color="FFFFFF", size=10)
+        sel_judul.fill = header_fill
+        for j, v in enumerate(opsi, start=4):
+            ref.cell(row=j, column=kolom_ref, value=v)
+        posisi_ref[judul] = f"Referensi!${kol}$4:${kol}${3 + len(opsi)}"
+        ref.column_dimensions[kol].width = max(
+            [len(judul)] + [len(str(v)) for v in opsi]) + 3
+        kolom_ref += 1
+
+    # Data validation dropdown — berlaku juga utk 500 baris kosong tambahan
+    baris_akhir = max(len(items) + 1, 2) + 500
+    for judul, rentang in posisi_ref.items():
+        if judul not in HEADER_IMPOR:
+            continue
+        idx = HEADER_IMPOR.index(judul) + 1
+        kol = get_column_letter(idx)
+        dv = DataValidation(type="list", formula1=f"={rentang}",
+                            allow_blank=True, showDropDown=False)
+        dv.error = "Pilih dari daftar atau kosongkan"
+        dv.errorTitle = "Nilai di luar daftar"
+        dv.errorStyle = "warning"   # tetap boleh nilai bebas (soft)
+        ws.add_data_validation(dv)
+        dv.add(f"{kol}2:{kol}{baris_akhir}")
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    kode = kode_satker_user(_user)
+    nama_file = f"master_pegawai{('_' + kode) if kode else ''}.xlsx"
+    return Response(
+        content=buf.getvalue(),
+        media_type=("application/vnd.openxmlformats-officedocument"
+                    ".spreadsheetml.sheet"),
+        headers={"Content-Disposition":
+                 f'attachment; filename="{nama_file}"'})
 
 
 @pegawai_router.post("/pegawai/impor")
