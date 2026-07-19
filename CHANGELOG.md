@@ -48,6 +48,27 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#421] Integrasi lintas-modul gelombang 4: nilai buku di CaLBMN & kolom Akun Neraca di ekspor rekonsiliasi — 2026-07-19
+
+Dua item penatausahaan lanjutan dari backlog audit integrasi:
+
+- **Penilaian → CaLBMN Bab IV**: Ikhtisar Nilai Buku (penyusutan garis
+  lurus PMK 65/2017) kini tersaji langsung di CaLBMN — nilai perolehan
+  tersusutkan − akumulasi = nilai buku, lengkap dengan lingkup jujur
+  (habis/henti-susut/tanpa referensi/tidak disusutkan) dan disclaimer
+  SAKTI. Kalimat Bab II yang merujuk "rekap tersedia pada halaman
+  Penilaian" diperbarui merujuk Bab IV. Pola sama dengan Posisi BMN (#417).
+- **Referensi Akun BAS → ekspor Rekonsiliasi XLSX**: sheet "Posisi
+  Golongan" & "Rincian Aset" kini punya kolom **Akun Neraca** (mis.
+  golongan 3 → 132111, persediaan → akun gol 1) sehingga operator langsung
+  mencocokkan angka per akun di MonSAKTI tanpa membuka referensi terpisah —
+  pola peta akun yang sama dengan Posisi BMN PDF.
+- Verifikasi: 549 tes unit lulus; smoke render CaLBMN (Bab IV ikhtisar
+  tampil) & pembacaan ulang XLSX via openpyxl (header + akun 132111 utk
+  golongan 3 di kedua sheet) sukses.
+
+---
+
 ## [#420] Integrasi lintas-modul gelombang 3: tiga peringatan dini baru di dasbor Wasdal — 2026-07-19
 
 Lanjutan backlog audit integrasi (verifikasi adversarial) — tiga register
