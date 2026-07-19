@@ -696,7 +696,9 @@ export default function PersediaanPage({ user, onBack }) {
             </DropdownMenu>
             <input ref={fileImporRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={onImportFile} />
           </div>
-          <div className="flex items-center gap-1.5 flex-wrap">
+          {/* Filter status + gudang: 1 baris mulai tablet (md, iPad mini 768);
+              di HP boleh membungkus. */}
+          <div className="flex items-center gap-1.5 flex-wrap md:flex-nowrap md:overflow-x-auto">
             {STATUS_FILTERS.map((f) => (
               <button
                 key={f.value}

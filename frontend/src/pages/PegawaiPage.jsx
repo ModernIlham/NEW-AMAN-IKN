@@ -2,18 +2,14 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import axios from "axios";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Search, Plus, Pencil, Trash2, Loader2, IdCard, Upload, Download,
-  AlertTriangle, Network, Wand2, MoreVertical,
+  ArrowLeft, Search, Plus, Pencil, Trash2, Loader2, IdCard, Upload,
+  AlertTriangle, Network, Wand2, FileDown, FileSpreadsheet, UserPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-  DropdownMenuLabel, DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
@@ -378,11 +374,11 @@ export default function PegawaiPage({ user, onBack }) {
 
       <main className="max-w-5xl mx-auto px-3 sm:px-6 py-4 space-y-3">
         <div className="bg-card rounded-xl border border-border shadow-sm p-2 sm:p-3">
-          {/* Baris utama: pencarian + aksi. Di HP tombol data (Struktur/
-              Template/Ekspor/Impor) dilipat ke satu menu ⋯ agar hemat ruang;
-              di desktop tetap tampil terpisah berlabel. Tombol Tambah selalu
-              terlihat sebagai aksi utama. */}
-          <div className="flex items-center gap-2">
+          {/* Baris utama: kolom cari memanjang (aksi jadi tombol ikon-saja).
+              Tiap ikon dipilih agar sangat menggambarkan fungsinya + tooltip/
+              aria-label: Struktur (bagan), Template (unduh berkas), Ekspor
+              (lembar Excel), Impor (unggah), Tambah (tambah orang). */}
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <div className="relative flex-1 min-w-0">
               <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
               <Input value={search} onChange={(e) => setSearch(e.target.value)}
@@ -392,115 +388,72 @@ export default function PegawaiPage({ user, onBack }) {
               <input ref={fileRef} type="file" accept=".xlsx,.xlsm,.csv" className="hidden"
                 onChange={onBerkasDipilih} data-testid="pegawai-impor-file" />
             )}
-            {/* Desktop: tombol terpisah berlabel */}
-            <div className="hidden sm:flex items-center gap-2">
-              {units.length > 0 && (
-                <Button variant="outline" className="h-10 gap-1.5" onClick={() => setStruktur(true)}
-                  title="Struktur Organisasi" aria-label="Struktur Organisasi"
-                  data-testid="pegawai-struktur">
-                  <Network className="w-4 h-4" />Struktur
-                </Button>
-              )}
-              {isAdmin && (
-                <>
-                  <Button variant="outline" className="h-10 gap-1.5" onClick={unduhTemplate}
-                    title="Unduh Template Impor (CSV)" aria-label="Unduh Template Impor (CSV)"
-                    data-testid="pegawai-template">
-                    <Download className="w-4 h-4" />Template
-                  </Button>
-                  <Button variant="outline" className="h-10 gap-1.5"
-                    onClick={() => downloadFileWithProgress(`${API}/pegawai/export-xlsx`,
-                      "master_pegawai.xlsx", { label: "Ekspor Master Pegawai (Excel)" }).catch(() => {})}
-                    title="Ekspor Excel siap-edit (dropdown + bisa diimpor kembali)"
-                    aria-label="Ekspor Excel siap-edit"
-                    data-testid="pegawai-export-xlsx">
-                    <Download className="w-4 h-4" />Ekspor Excel
-                  </Button>
-                  <Button variant="outline" className="h-10 gap-1.5" disabled={mengimpor}
-                    title="Impor Excel/CSV" aria-label="Impor Excel/CSV"
-                    onClick={pilihBerkas} data-testid="pegawai-impor">
-                    {mengimpor ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                    Impor Excel
-                  </Button>
-                </>
-              )}
-            </div>
-            {/* HP: satu menu ⋯ menampung semua aksi data */}
-            {(units.length > 0 || isAdmin) && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button type="button"
-                    className="sm:hidden h-10 w-10 rounded-lg border border-input bg-background text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0"
-                    aria-label="Menu data pegawai" title="Struktur, template, ekspor, impor"
-                    data-testid="pegawai-menu">
-                    <MoreVertical className="w-4 h-4" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuLabel className="text-[11px]">Data & berkas pegawai</DropdownMenuLabel>
-                  {units.length > 0 && (
-                    <DropdownMenuItem className="min-h-[42px]" onClick={() => setStruktur(true)} data-testid="pegawai-struktur-m">
-                      <Network className="w-4 h-4 mr-2" />Struktur Organisasi
-                    </DropdownMenuItem>
-                  )}
-                  {isAdmin && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem className="min-h-[42px]" onClick={unduhTemplate} data-testid="pegawai-template-m">
-                        <Download className="w-4 h-4 mr-2" />Unduh Template (CSV)
-                      </DropdownMenuItem>
-                      <DropdownMenuItem className="min-h-[42px]" data-testid="pegawai-export-xlsx-m"
-                        onClick={() => downloadFileWithProgress(`${API}/pegawai/export-xlsx`,
-                          "master_pegawai.xlsx", { label: "Ekspor Master Pegawai (Excel)" }).catch(() => {})}>
-                        <Download className="w-4 h-4 mr-2" />Ekspor Excel
-                      </DropdownMenuItem>
-                      <DropdownMenuItem className="min-h-[42px]" disabled={mengimpor} onClick={pilihBerkas} data-testid="pegawai-impor-m">
-                        {mengimpor ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
-                        Impor Excel/CSV
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-            {isAdmin && (
-              <Button className="h-10 gap-1.5 bg-sky-600 hover:bg-sky-700 text-white flex-shrink-0"
-                title="Tambah Pegawai" aria-label="Tambah Pegawai"
-                onClick={() => bukaForm({ ...EMPTY })} data-testid="pegawai-add">
-                <Plus className="w-4 h-4" /><span className="hidden sm:inline">Tambah</span>
+            {units.length > 0 && (
+              <Button variant="outline" className="h-10 w-10 p-0 flex-shrink-0" onClick={() => setStruktur(true)}
+                title="Struktur Organisasi" aria-label="Struktur Organisasi"
+                data-testid="pegawai-struktur">
+                <Network className="w-4 h-4" />
               </Button>
             )}
+            {isAdmin && (
+              <>
+                <Button variant="outline" className="h-10 w-10 p-0 flex-shrink-0" onClick={unduhTemplate}
+                  title="Unduh Template Impor (CSV)" aria-label="Unduh Template Impor (CSV)"
+                  data-testid="pegawai-template">
+                  <FileDown className="w-4 h-4" />
+                </Button>
+                <Button variant="outline" className="h-10 w-10 p-0 flex-shrink-0"
+                  onClick={() => downloadFileWithProgress(`${API}/pegawai/export-xlsx`,
+                    "master_pegawai.xlsx", { label: "Ekspor Master Pegawai (Excel)" }).catch(() => {})}
+                  title="Ekspor Excel siap-edit (bisa diimpor kembali)"
+                  aria-label="Ekspor Excel siap-edit"
+                  data-testid="pegawai-export-xlsx">
+                  <FileSpreadsheet className="w-4 h-4" />
+                </Button>
+                <Button variant="outline" className="h-10 w-10 p-0 flex-shrink-0" disabled={mengimpor}
+                  title="Impor Excel/CSV" aria-label="Impor Excel/CSV"
+                  onClick={pilihBerkas} data-testid="pegawai-impor">
+                  {mengimpor ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                </Button>
+                <Button className="h-10 w-10 p-0 bg-sky-600 hover:bg-sky-700 text-white flex-shrink-0"
+                  title="Tambah Pegawai" aria-label="Tambah Pegawai"
+                  onClick={() => bukaForm({ ...EMPTY })} data-testid="pegawai-add">
+                  <UserPlus className="w-4 h-4" />
+                </Button>
+              </>
+            )}
           </div>
-          {/* Baris filter & sortir — di HP jadi grid 2 kolom rapi (bukan
-              membungkus berantakan), sebaris penuh di desktop. */}
+          {/* Baris filter & sortir — di HP jadi grid 2 kolom rapi; mulai
+              tablet (md, iPad mini 768) jadi SATU baris penuh (flex-nowrap,
+              tiap kontrol flex-1 berbagi lebar rata) agar tak membungkus. */}
           <div className="mt-2 space-y-1.5">
-            <div className="grid grid-cols-2 sm:flex sm:flex-wrap sm:items-center gap-1.5">
+            <div className="grid grid-cols-2 md:flex md:flex-nowrap md:items-center gap-1.5">
               <select value={fStatusPeg} onChange={(e) => setFStatusPeg(e.target.value)}
                 aria-label="Filter status kepegawaian" title="Filter status kepegawaian"
-                className="h-9 rounded-md border border-input bg-background px-2 text-xs w-full sm:w-auto min-w-0"
+                className="h-9 rounded-md border border-input bg-background px-2 text-xs w-full md:flex-1 min-w-0"
                 data-testid="pegawai-f-statuspeg">
                 <option value="">Kepegawaian</option>
                 {(ref.status_kepegawaian || []).map((o) => <option key={o.kode} value={o.kode}>{o.uraian}</option>)}
               </select>
               <select value={fStatus} onChange={(e) => setFStatus(e.target.value)}
                 aria-label="Filter status di satker" title="Filter status di satker"
-                className="h-9 rounded-md border border-input bg-background px-2 text-xs w-full sm:w-auto min-w-0"
+                className="h-9 rounded-md border border-input bg-background px-2 text-xs w-full md:flex-1 min-w-0"
                 data-testid="pegawai-f-status">
                 <option value="">Status</option>
                 {(ref.status || []).map((o) => <option key={o.kode} value={o.kode}>{o.uraian}</option>)}
               </select>
               <select value={fUnit} onChange={(e) => setFUnit(e.target.value)}
                 aria-label="Filter unit kerja" title="Filter unit kerja"
-                className="h-9 rounded-md border border-input bg-background px-2 text-xs w-full sm:w-auto min-w-0 sm:max-w-[180px]"
+                className="h-9 rounded-md border border-input bg-background px-2 text-xs w-full md:flex-1 min-w-0"
                 data-testid="pegawai-f-unit">
                 <option value="">Unit kerja</option>
                 {unitTerpakai.map((u) => <option key={u} value={u}>{u}</option>)}
               </select>
               {/* Urut + arah dalam satu sel agar berpasangan */}
-              <div className="flex items-center gap-1.5 min-w-0">
+              <div className="flex items-center gap-1.5 min-w-0 md:flex-1">
                 <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}
                   aria-label="Urutkan berdasarkan" title="Urutkan berdasarkan"
-                  className="h-9 rounded-md border border-input bg-background px-2 text-xs flex-1 sm:flex-none min-w-0"
+                  className="h-9 rounded-md border border-input bg-background px-2 text-xs flex-1 min-w-0"
                   data-testid="pegawai-sort">
                   <option value="nama">Urut: Nama</option>
                   <option value="updated">Urut: Terakhir diubah</option>

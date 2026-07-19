@@ -48,6 +48,28 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#452] Master Pegawai toolbar ikon-representatif + filter/toolbar 1 baris di iPad mini (Pegawai/Persuratan/Persediaan) + PDF Neraca masuk menu Lain — 2026-07-19
+
+Umpan balik tata letak (fokus tablet iPad mini 768×1024):
+
+- **Toolbar Master Pegawai**: kolom cari dipanjangkan; tombol Struktur,
+  Template, Ekspor, Impor, dan Tambah menjadi **tombol ikon-saja** dengan ikon
+  yang lebih menggambarkan fungsinya (Struktur=bagan `Network`, Template=unduh
+  berkas `FileDown`, Ekspor=lembar Excel `FileSpreadsheet`, Impor=unggah
+  `Upload`, Tambah=tambah orang `UserPlus`) + tooltip/aria-label. Menu ⋯
+  sebelumnya dibuang — semua aksi kini tampil sebagai ikon.
+- **Baris filter/sortir jadi 1 baris di tablet (md, 768)**: di Master Pegawai
+  (Kepegawaian · Status · Unit · Urut + arah) kini `flex-nowrap` berbagi lebar
+  rata mulai md; di HP tetap grid 2 kolom.
+- **Registrasi Persuratan**: toolbar (cari + filter jenis/status + 2 aksi)
+  dipadatkan (label aksi diringkas s.d. lg) agar muat **1 baris** mulai md;
+  di HP tetap 2 baris.
+- **Master Persediaan**: baris filter status + gudang dijadikan **1 baris**
+  mulai md (`flex-nowrap`).
+- **Arsip Pelaporan — "Posisi BMN di Neraca"**: tombol **Unduh PDF** dipindah
+  menjadi item **paling atas** di menu **"Lain"** (Laporan Lain) — baris tombol
+  jadi 4 (Lain · LBKP · CaLBMN · LBP), lebih hemat ruang.
+
 ## [#451] Saklar mode Dashboard/Inventarisasi ikon-saja di desktop + umur aset SIMAN V2 ditampilkan — 2026-07-19
 
 - **Saklar Dashboard ↔ Inventarisasi ikon-saja di desktop (lg+)**: di layar
@@ -60,6 +82,9 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
   kini ditampilkan pada baris "Referensi SIMAN" di kartu Sinkronisasi SIMAN
   (bersama nilai penyusutan & nilai buku) — sebelumnya sudah tersimpan namun
   belum pernah ditampilkan.
+
+
+## [#450] Wasdal 1-baris + kartu padat, baris unduh Neraca satu kesatuan, toolbar Pegawai rapi, popup TTD ringkas — 2026-07-19
 
 Lanjutan umpan balik screenshot HP (5 perbaikan tata letak seluler):
 
