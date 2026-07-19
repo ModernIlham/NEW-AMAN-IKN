@@ -2666,6 +2666,15 @@ async def generate_calbmn_pdf(
         {"status": {"$in": ["klarifikasi", "usul_serah"]}})
     n_idle_serah = await db.bmn_idle.count_documents({"status": "diserahkan"})
     n_sengketa = sum(1 for a in assets if is_sengketa(a))
+    # Integrasi Penilaian → CaLBMN: register koreksi/revaluasi nilai (PMK
+    # 118/2017 jo. 57/2018 jo. 107/2019) diungkap di Bab V — auditor perlu
+    # menelusuri koreksi yang belum tervalidasi SAKTI (risiko salah saji).
+    from penilaian_utils import rekap_koreksi_nilai
+    koreksi_items = [k async for k in db.penilaian_koreksi.find(
+        {"tanggal_dokumen": {"$lte": sampai}},
+        {"_id": 0, "jenis": 1, "nilai_lama": 1, "nilai_baru": 1,
+         "status_sakti": 1})]
+    rk_koreksi = rekap_koreksi_nilai(koreksi_items)
 
     def fmt_rp(val):
         try: return f"{int(val):,}".replace(",", ".")
@@ -2799,6 +2808,11 @@ async def generate_calbmn_pdf(
         f"BMN idle: {n_idle_aktif} tiket aktif (klarifikasi/usul serah); "
         f"{n_idle_serah} telah diserahkan ke Pengelola Barang.",
         f"Sengketa: {n_sengketa} aset berstatus/berindikasi sengketa.",
+        f"Koreksi/Revaluasi Nilai: {rk_koreksi['jumlah']} peristiwa tercatat "
+        f"di register Penilaian s.d. akhir periode; selisih nilai neto "
+        f"Rp{fmt_rp(rk_koreksi['selisih_total'])}; "
+        f"{rk_koreksi['belum_tercatat_sakti']} koreksi belum tervalidasi di "
+        f"SAKTI (telusuri sandingannya dengan LHIP/Laporan Penilaian).",
     ]
     for b in butir:
         elements.append(Paragraph(f"• {b}", st['Meta']))

@@ -11,6 +11,7 @@ Fungsi murni tanpa Mongo/IO agar teruji unit.
 """
 from datetime import date, timedelta
 
+from pegawai_utils import pegawai_perlu_serah_terima
 from pemanfaatan_utils import (
     LABEL_STATUS_PERJANJIAN, dokumen_kurang, status_perjanjian,
     tahun_tertunggak,
@@ -43,6 +44,7 @@ JENIS_TEMUAN = {
     "sengketa": "Dalam sengketa",
     "rusak_tanpa_pemeliharaan": "Rusak tanpa pemeliharaan tahun berjalan",
     "polis_asuransi_lewat": "Polis asuransi BMN kedaluwarsa",
+    "pemegang_berisiko_keluar": "Pemegang berisiko keluar/pensiun belum serah terima BMN",
 }
 
 # Objek pemantauan tiap jenis temuan (setiap jenis tepat satu objek)
@@ -61,6 +63,7 @@ OBJEK_PER_JENIS = {
     "sengketa": "pengamanan_pemeliharaan",
     "rusak_tanpa_pemeliharaan": "pengamanan_pemeliharaan",
     "polis_asuransi_lewat": "pengamanan_pemeliharaan",
+    "pemegang_berisiko_keluar": "penggunaan",
 }
 
 # Usulan penghapusan yang belum berujung SK melewati ambang ini = berlarut
@@ -130,6 +133,28 @@ def temuan_pemanfaatan(items, today_iso: str):
             out.append({"jenis": "kontribusi_tertunggak", **ident,
                         "detail": ("Kontribusi belum tercatat tahun: "
                                    + ", ".join(str(t) for t in tunggak))})
+    return out
+
+
+def temuan_pemegang_berisiko(pegawai, jumlah_aset_per_nip, today_iso: str):
+    """Objek PENGGUNAAN: pegawai BERISIKO (keluar/pensiun/mutasi/nonaktif/
+    kontrak Non-ASN habis) yang MASIH tercatat memegang aset — perlu serah
+    terima BMN (integrasi Master Pegawai → Wasdal; temuan klasik BPK "aset
+    dipegang pegawai yang sudah keluar", PMK 207 objek Penggunaan).
+
+    `asset_name` diisi nama pegawai agar tampil bermakna di kolom nama
+    dasbor/laporan (temuan ini per-pemegang, bukan per-aset)."""
+    out = []
+    for h in pegawai_perlu_serah_terima(pegawai, jumlah_aset_per_nip,
+                                        today_iso):
+        out.append({
+            "jenis": "pemegang_berisiko_keluar",
+            "pegawai_id": h.get("id"),
+            "nip": h.get("nip"),
+            "asset_name": h.get("nama"),
+            "detail": (f"{h.get('jumlah_aset')} aset masih dipegang — "
+                       f"{h.get('alasan')}"),
+        })
     return out
 
 
@@ -235,7 +260,8 @@ def temuan_pengamanan_pemeliharaan(assets, pemeliharaan, tahun: int):
 
 def susun_temuan(assets, pemanfaatan, usulan_hapus, usulan_pt,
                  pemeliharaan, today_iso: str,
-                 ambang_hari: int = AMBANG_BERLARUT_HARI, polis=None) -> dict:
+                 ambang_hari: int = AMBANG_BERLARUT_HARI, polis=None,
+                 pegawai=None, jumlah_aset_per_nip=None) -> dict:
     """Seluruh temuan terkelompok per objek → {objek: [temuan...]}."""
     tahun = periode_wasdal(today_iso)["tahun"]
     semua = (temuan_penggunaan(assets)
@@ -244,7 +270,9 @@ def susun_temuan(assets, pemanfaatan, usulan_hapus, usulan_pt,
                                        today_iso, ambang_hari)
              + temuan_penatausahaan(assets)
              + temuan_pengamanan_pemeliharaan(assets, pemeliharaan, tahun)
-             + temuan_polis_asuransi(polis, today_iso))
+             + temuan_polis_asuransi(polis, today_iso)
+             + temuan_pemegang_berisiko(pegawai, jumlah_aset_per_nip,
+                                        today_iso))
     per_objek = {k: [] for k in OBJEK_WASDAL}
     for t in semua:
         t["label"] = JENIS_TEMUAN[t["jenis"]]

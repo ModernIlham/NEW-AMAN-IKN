@@ -48,6 +48,31 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#419] Integrasi lintas-modul gelombang 2: koreksi nilai di CaLBMN & pemegang berisiko jadi temuan Wasdal — 2026-07-19
+
+Dua integrasi teratas hasil audit lintas-modul menyeluruh (5 klaster,
+15 peluang terkonfirmasi lewat verifikasi adversarial):
+
+- **Penilaian → CaLBMN (Bab V "Informasi BMN Lainnya")**: register
+  Koreksi/Revaluasi Nilai kini diungkap sebagai butir tersendiri — jumlah
+  peristiwa s.d. akhir periode, selisih nilai neto, dan berapa koreksi yang
+  **belum tervalidasi di SAKTI** (bahan telusur auditor vs LHIP/Laporan
+  Penilaian; revaluasi PMK 118/2017 jo. 57/2018 jo. 107/2019). Sebelumnya
+  Bab V hanya memuat 6 butir tanpa pengungkapan perubahan nilai.
+- **Master Pegawai → Wasdal (objek Penggunaan, PMK 207)**: pegawai BERISIKO
+  (keluar/pensiun/mutasi/nonaktif/kontrak Non-ASN habis) yang **masih
+  tercatat memegang aset** kini otomatis menjadi temuan
+  `pemegang_berisiko_keluar` di dasbor pemantauan Wasdal — deteksi yang sama
+  dengan panel "Perlu Serah Terima BMN" di modul Pegawai, tetapi kini
+  mengalir ke dasbor kepatuhan & laporan wasdal semesteran/tahunan yang
+  dilihat auditor (temuan klasik BPK "aset dipegang pegawai yang sudah
+  keluar"). Fungsi murni `temuan_pemegang_berisiko` + teruji unit.
+- Verifikasi: 546 tes unit lulus (1 tes baru), smoke render CaLBMN sukses
+  (butir koreksi tampil), smoke dasbor Wasdal sukses (temuan masuk objek
+  Penggunaan + rekap per jenis benar).
+
+---
+
 ## [#418] UI mobile: kartu Arsip Pelaporan & buku agenda Persuratan tak lagi terjepit — 2026-07-19
 
 Perbaikan dari umpan balik tangkapan layar HP:
