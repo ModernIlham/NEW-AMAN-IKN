@@ -87,8 +87,11 @@ async def kandidat_idle_pemanfaatan(_user: dict = Depends(require_user)):
     proj = {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
             "status": 1, "user": 1, "inventory_status": 1, "location": 1,
             "condition": 1, "purchase_price": 1, "category": 1}
+    from shared_utils import filter_aset_perhitungan
     kandidat = []
-    async for a in db.assets.find(await scope_query_aset(_user, {}), proj):
+    async for a in db.assets.find(
+            await filter_aset_perhitungan(await scope_query_aset(_user, {})),
+            proj):
         ya, alasan = indikasi_idle(a)
         if not ya or a.get("id") in sudah:
             continue

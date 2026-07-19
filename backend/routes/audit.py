@@ -197,8 +197,10 @@ async def integritas_kodefikasi_aset(user: dict = Depends(require_user)):
 
     items = []
     n_golongan = n_spesifik = n_invalid = 0
+    from shared_utils import filter_aset_perhitungan
     async for grp in db.assets.aggregate([
-        {"$match": await scope_query_aset(user, active_asset_filter())},
+        {"$match": await filter_aset_perhitungan(
+            await scope_query_aset(user, active_asset_filter()))},
         {"$group": {"_id": "$asset_code", "jumlah_aset": {"$sum": 1}}},
     ]):
         kode = normalize_kode(grp.get("_id"))
@@ -470,8 +472,9 @@ async def _ringkas_kodefikasi():
         if k.get("kode"):
             terdaftar.add(str(k["kode"]))
     temuan = []
+    from shared_utils import filter_aset_perhitungan
     async for grp in db.assets.aggregate([
-        {"$match": active_asset_filter()},
+        {"$match": await filter_aset_perhitungan(active_asset_filter())},
         {"$group": {"_id": "$asset_code"}},
     ]):
         kode = normalize_kode(grp.get("_id"))

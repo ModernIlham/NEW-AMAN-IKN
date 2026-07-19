@@ -40,9 +40,10 @@ _PROJ = {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
 @pengamanan_router.get("/pengamanan/ringkasan")
 async def ringkasan_pengamanan(_user: dict = Depends(require_user)):
     """Kesehatan data seluruh aset + daftar pantau sengketa."""
-    from shared_utils import scope_query_aset
+    from shared_utils import filter_aset_perhitungan, scope_query_aset
     assets = [a async for a in db.assets.find(
-        await scope_query_aset(_user, {}), _PROJ)]
+        await filter_aset_perhitungan(await scope_query_aset(_user, {})),
+        _PROJ)]
     per, lengkap, sengketa = rekap_kesehatan(assets)
     return {
         "total_aset": len(assets),
@@ -65,9 +66,11 @@ async def aset_kurang(
     if jenis not in JENIS_KEKURANGAN:
         valid = ", ".join(JENIS_KEKURANGAN)
         raise HTTPException(status_code=400, detail=f"Jenis tidak dikenal (pilihan: {valid})")
-    from shared_utils import scope_query_aset
+    from shared_utils import filter_aset_perhitungan, scope_query_aset
     rows = []
-    async for a in db.assets.find(await scope_query_aset(_user, {}), _PROJ):
+    async for a in db.assets.find(
+            await filter_aset_perhitungan(await scope_query_aset(_user, {})),
+            _PROJ):
         if jenis in kekurangan_aset(a):
             rows.append({
                 "id": a.get("id"),
