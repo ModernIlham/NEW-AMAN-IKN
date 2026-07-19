@@ -146,46 +146,53 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
           </label>
         )}
 
-        {/* Garansi: pojok kanan-bawah foto (di atas garis bawah) — simple,
-            ikon shield + durasi singkat saja, tanpa teks panjang. */}
-        {(() => {
-          const g = sisaGaransi(asset.garansi_hingga);
-          return g ? (
-            <span
-              className={`absolute bottom-1.5 right-1.5 z-2 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold text-white backdrop-blur-sm shadow-sm ${g.segera ? "bg-amber-500/90" : "bg-emerald-500/90"}`}
-              title={`Garansi${asset.garansi_jenis ? ` ${asset.garansi_jenis}` : ""} hingga ${g.hingga} (${g.hari} hari lagi)`}
-              data-testid={`gallery-garansi-${asset.id}`}
-            >
-              <ShieldCheck className="w-2.5 h-2.5" />{g.singkat}
-            </span>
-          ) : null;
-        })()}
-
-        {/* SIMAN belum tersinkron: TETESAN AIR ikon-only menjorok ke foto,
-            di tengah perbatasan foto ↔ area teks. Hover = membesar; klik =
-            langsung sinkronkan nilai SIMAN V2 (terapkan selisih); hilang
-            beranimasi saat tersinkron. Aman light/dark. */}
+        {/* SIMAN belum tersinkron: LIQUID di perbatasan foto ↔ area teks —
+            blob cair berwarna permukaan kartu (putih/gelap ikut mode) yang
+            morph terus, dengan bola sinkronisasi amber tetap utuh di dalam.
+            Hover = bergolak + membesar; klik = sinkronkan nilai SIMAN V2
+            (terapkan selisih; gejolak cepat selama proses); sukses = cairan
+            terserap turun beranimasi. CSS: .siman-liquid* di index.css. */}
         {asset.siman?.status === "selisih" && !simanSynced && (
           <button
             type="button"
             onClick={sinkronSiman}
             disabled={simanBusy}
+            data-busy={simanBusy ? "1" : "0"}
             title="Belum tersinkron dengan SIMAN V2 — klik untuk sinkronkan sekarang"
             aria-label="Sinkronkan dengan SIMAN V2"
             data-testid={`siman-drop-${asset.id}`}
-            className={`absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 z-10 w-6 h-6 rotate-45 rounded-full rounded-tl-none border border-white/60 dark:border-black/30 bg-amber-500 dark:bg-amber-400 shadow-md flex items-center justify-center transition-all duration-300 hover:scale-125 hover:shadow-lg active:scale-95 min-w-0 min-h-0 ${simanBusy ? "animate-pulse" : ""}`}
+            className="siman-liquid absolute bottom-0 left-1/2 -translate-x-1/2 z-10 w-12 h-8 flex items-end justify-center pb-0.5 min-w-0 min-h-0"
           >
-            <RefreshCcwIcon className={`w-3 h-3 -rotate-45 text-white dark:text-amber-950 ${simanBusy ? "animate-spin" : ""}`} />
+            <span className="siman-liquid-blob" aria-hidden="true" />
+            <span className="siman-liquid-ball w-5 h-5 rounded-full bg-amber-500 dark:bg-amber-400 shadow-md ring-1 ring-black/10 dark:ring-white/15 flex items-center justify-center">
+              <RefreshCcwIcon className={`w-3 h-3 text-white dark:text-amber-950 ${simanBusy ? "animate-spin" : ""}`} />
+            </span>
           </button>
         )}
         {simanSynced && (
-          <span className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 z-10 w-6 h-6 rounded-full bg-emerald-500 dark:bg-emerald-400 flex items-center justify-center shadow-md animate-[ping_0.8s_ease-out_1] opacity-0 transition-opacity duration-700">
-            <CheckIcon className="w-3 h-3 text-white dark:text-emerald-950" />
+          <span className="siman-liquid-sukses absolute bottom-0 left-1/2 -translate-x-1/2 z-10 w-12 h-8 flex items-end justify-center pb-0.5 pointer-events-none">
+            <span className="siman-liquid-blob" aria-hidden="true" />
+            <span className="relative z-[1] w-5 h-5 rounded-full bg-emerald-500 dark:bg-emerald-400 shadow-md flex items-center justify-center">
+              <CheckIcon className="w-3 h-3 text-white dark:text-emerald-950" />
+            </span>
           </span>
         )}
 
-        {/* Top-right badges */}
-        <div className="absolute top-1.5 right-1.5 z-2 flex items-center gap-1">
+        {/* Top-right badges (garansi ikut di sini — posisi bawah tertutup
+            gradasi hitam + badge jumlah foto, di atas selalu terlihat) */}
+        <div className="absolute top-1.5 right-1.5 z-[2] flex items-center gap-1">
+          {(() => {
+            const g = sisaGaransi(asset.garansi_hingga);
+            return g ? (
+              <span
+                className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold text-white backdrop-blur-sm shadow-sm ${g.segera ? "bg-amber-500/90" : "bg-emerald-600/90"}`}
+                title={`Garansi${asset.garansi_jenis ? ` ${asset.garansi_jenis}` : ""} hingga ${g.hingga} (${g.hari} hari lagi)`}
+                data-testid={`gallery-garansi-${asset.id}`}
+              >
+                <ShieldCheck className="w-2.5 h-2.5" />{g.singkat}
+              </span>
+            ) : null;
+          })()}
           {asset.condition && (
             <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold text-white backdrop-blur-sm ${COND[asset.condition] || "bg-slate-500"}`}>
               {asset.condition}
