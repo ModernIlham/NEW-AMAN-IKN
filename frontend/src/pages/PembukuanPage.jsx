@@ -278,12 +278,17 @@ export default function PembukuanPage({ user, onBack }) {
                 </Button>
               )}
             </div>
-            <div className="relative px-3 py-2 border-b border-border/60">
-              <Search className="w-3.5 h-3.5 absolute left-6 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <Input value={q} onChange={(e) => setQ(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && muatJurnal(1)}
-                placeholder="Filter berdasarkan ID aset (bukan nama/kode) — Enter" className="pl-8 h-9 text-xs" />
-              <p className="text-[10px] text-muted-foreground mt-1 pl-5">
+            <div className="px-3 py-2 border-b border-border/60">
+              {/* Ikon cari HARUS di wrapper relatif khusus input — kalau tidak,
+                  top-1/2 ikut menghitung tinggi teks bantuan di bawah lalu
+                  ikonnya melorot ke bawah (temuan HP: berantakan kebawah). */}
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Input value={q} onChange={(e) => setQ(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && muatJurnal(1)}
+                  placeholder="Filter berdasarkan ID aset (bukan nama/kode) — Enter" className="pl-8 h-9 text-xs" />
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1">
                 Filter ini memakai ID aset internal. Cari kode/nama barang di tab <b>KIB</b> atau daftar aset, lalu salin ID-nya ke sini.
               </p>
             </div>

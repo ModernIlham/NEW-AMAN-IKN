@@ -22,7 +22,7 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 /**
  * Penilaian — Fase 5 tahap awal: posisi penyusutan aset tetap
  * (PMK 65/2017: garis lurus tanpa residu, semesteran, konvensi semester
- * penuh; masa manfaat KMK 295/2019 jo. 266/2023 per kelompok), register
+ * penuh; masa manfaat KMK 295/2019 jo. 266/2023 jo. 339/2024 per kelompok), register
  * koreksi/revaluasi nilai, dan referensi masa manfaat yang dapat dikelola.
  */
 export default function PenilaianPage({ user, onBack }) {
@@ -213,7 +213,7 @@ export default function PenilaianPage({ user, onBack }) {
           <div className="min-w-0 flex-1">
             <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight truncate">Penilaian — Posisi Penyusutan</h1>
             <p className="text-[11px] sm:text-xs text-muted-foreground truncate">
-              Garis lurus semesteran (PMK 65/2017) · masa manfaat KMK 295/2019 jo. 266/2023
+              Garis lurus semesteran (PMK 65/2017) · masa manfaat KMK 295/2019 jo. 266/2023 jo. 339/2024
             </p>
           </div>
           {/* Tanggalan kotak seragam (gaya tombol kembali/Booking Nomor):
@@ -530,7 +530,7 @@ export default function PenilaianPage({ user, onBack }) {
             <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
               <div className="px-3 py-2 border-b border-border flex items-center gap-2">
                 <BookOpen className="w-4 h-4 text-violet-500" />
-                <p className="text-xs font-bold text-foreground flex-1">Referensi Masa Manfaat (KMK 295/2019 jo. 266/2023)</p>
+                <p className="text-xs font-bold text-foreground flex-1">Referensi Masa Manfaat (KMK 295/2019 jo. 266/2023 jo. 339/2024)</p>
                 {isAdmin && (
                   <button
                     type="button"
@@ -592,7 +592,7 @@ export default function PenilaianPage({ user, onBack }) {
             <DialogTitle>{formRef?.edit ? "Ubah" : "Tambah"} Masa Manfaat</DialogTitle>
             <DialogDescription className="text-xs">
               Kunci = kelompok kodefikasi 5 digit (golongan 3/4/5). Isi dari
-              lampiran KMK 295/2019 jo. 266/2023 — entri satker menimpa bawaan.
+              lampiran KMK 295/2019 jo. 266/2023 jo. 339/2024 — entri satker menimpa bawaan.
             </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-3">

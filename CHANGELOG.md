@@ -48,6 +48,17 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#453] Pembukuan jurnal — ikon cari HP tak melorot + Penilaian masa manfaat +jo. KMK 339/2024 — 2026-07-19
+
+- **Pembukuan (tab Jurnal) — ikon cari di HP**: ikon `Search` dipindah ke
+  wrapper relatif khusus input; sebelumnya `top-1/2`-nya ikut menghitung tinggi
+  teks bantuan di bawah kotak → ikon melorot ke bawah ("berantakan kebawah" di
+  HP). Kini sejajar vertikal di tengah kotak cari.
+- **Penilaian — Referensi Masa Manfaat**: judul & subjudul kini menulis
+  peraturan **KMK 295/2019 jo. 266/2023 jo. 339/2024** (peraturan masa manfaat
+  yang terus diperbarui) — sesuai umpan balik agar informasi peraturan
+  tertulis di judul.
+
 ## [#452] Master Pegawai toolbar ikon-representatif + filter/toolbar 1 baris di iPad mini (Pegawai/Persuratan/Persediaan) + PDF Neraca masuk menu Lain — 2026-07-19
 
 Umpan balik tata letak (fokus tablet iPad mini 768×1024):
