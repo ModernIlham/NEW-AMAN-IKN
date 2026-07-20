@@ -227,6 +227,11 @@ class InventoryActivityCreate(BaseModel):
     # dipakai validasi satker saat impor/sinkron SIMAN agar aset kegiatan
     # ini terdeteksi tanpa peringatan "kode satker berbeda".
     kode_satker_lengkap: Optional[str] = ""
+    # Konfirmasi pengguna atas KONFLIK konsistensi satker (kode↔nama):
+    # True = input saat ini dijadikan kebenaran — rename nama / ganti kode
+    # diterapkan serentak ke semua kegiatan terkait + Master Satker.
+    # TIDAK ikut disimpan ke dokumen (di-pop sebelum insert/update).
+    perbarui_satker: Optional[bool] = False
     eselon1: Optional[List[dict]] = []  # [{nama: str, eselon2: [str]}]
     # === Tim Inventarisasi (Internal) ===
     tim_inti: Optional[List[dict]] = []  # [{nama, jabatan, nip, unit, is_ketua: bool}]
@@ -368,6 +373,85 @@ async def get_satker_list(_user: dict = Depends(require_user)):
     result = await db.inventory_activities.aggregate(pipeline).to_list(100)
     return result
 
+# Koleksi ber-STEMPEL kode_satker langsung di dokumen (daftar kanonik ikut
+# mesin backfill routes/satker.py, ditambah pegawai/unit_kerja/riwayat
+# pengesahan/users) — semuanya ikut dimigrasi saat GANTI KODE satker agar
+# tidak ada dokumen "yatim" di kode lama / user terkunci dari datanya.
+_KOLEKSI_KODE_SATKER = (
+    "psp", "bmn_idle", "penggunaan_proses", "usulan_penghapusan",
+    "pemusnahan", "pemindahtanganan", "pemanfaatan", "penertiban",
+    "bast_serah_terima", "persediaan", "pengadaan", "penganggaran",
+    "perencanaan_usulan", "pemantauan_insidentil", "pengamanan_kasus",
+    "pengamanan_dokumen", "pengamanan_polis",
+    "pegawai", "unit_kerja", "inventory_history", "users",
+)
+
+
+async def _cek_atau_perbarui_satker(activity, exclude_id=None):
+    """Konsistensi kode ↔ nama satker antar kegiatan.
+
+    Tanpa konfirmasi (perbarui_satker=False): konflik → 409 ber-detail
+    TERSTRUKTUR {konflik_satker, jenis, pesan} agar UI bisa menawarkan
+    tombol "perbarui dengan input saat ini".
+    Dengan konfirmasi (perbarui_satker=True): input saat ini dijadikan
+    kebenaran —
+    - RENAME NAMA (kode sama): semua kegiatan ber-kode itu + Master Satker
+      + riwayat pengesahan (tampilan kartu) diganti nama barunya.
+    - GANTI KODE (nama sama): semua kegiatan + Master Satker (re-key) +
+      users terikat + SEMUA koleksi ber-stempel kode dimigrasi serentak
+      (_KOLEKSI_KODE_SATKER) — tanpa ini user terkunci dari datanya dan
+      dokumen modul yatim di kode lama.
+    Aset TIDAK disentuh: relasinya via activity_id (scoping saat query).
+    """
+    kode = activity.kode_satker.strip()
+    nama = activity.nama_satker.strip()
+    q_id = {"id": {"$ne": exclude_id}} if exclude_id else {}
+    ex_kode = await db.inventory_activities.find_one(
+        {"kode_satker": kode, **q_id}, {"_id": 0, "nama_satker": 1})
+    if ex_kode and ex_kode.get("nama_satker", "") != nama:
+        if not activity.perbarui_satker:
+            raise HTTPException(status_code=409, detail={
+                "konflik_satker": True, "jenis": "nama",
+                "pesan": (f"Kode Satker '{kode}' sudah terdaftar dengan nama "
+                          f"'{ex_kode['nama_satker']}'.")})
+        await db.inventory_activities.update_many(
+            {"kode_satker": kode}, {"$set": {"nama_satker": nama}})
+        await db.satker.update_one(
+            {"kode_satker": kode}, {"$set": {"nama_satker": nama}})
+        await db.inventory_history.update_many(
+            {"kode_satker": kode}, {"$set": {"nama_satker": nama}})
+        logger.warning(f"RENAME SATKER {kode}: nama → '{nama}' (konfirmasi pengguna)")
+    ex_nama = await db.inventory_activities.find_one(
+        {"nama_satker": nama, "kode_satker": {"$ne": kode}, **q_id},
+        {"_id": 0, "kode_satker": 1})
+    if ex_nama:
+        if not activity.perbarui_satker:
+            raise HTTPException(status_code=409, detail={
+                "konflik_satker": True, "jenis": "kode",
+                "pesan": (f"Nama Satker '{nama}' sudah terdaftar dengan kode "
+                          f"'{ex_nama['kode_satker']}'.")})
+        kode_lama = ex_nama["kode_satker"]
+        await db.inventory_activities.update_many(
+            {"nama_satker": nama, "kode_satker": kode_lama},
+            {"$set": {"kode_satker": kode}})
+        # Master Satker ikut pindah kode HANYA bila kode baru belum terdaftar
+        # (hindari dua doc master berebut satu kode).
+        if not await db.satker.find_one({"kode_satker": kode}, {"_id": 1}):
+            await db.satker.update_one(
+                {"kode_satker": kode_lama}, {"$set": {"kode_satker": kode}})
+        # Migrasi serentak seluruh dokumen ber-stempel kode lama (termasuk
+        # users terikat — kalau tidak, mereka kehilangan akses datanya).
+        rincian = {}
+        for nama_koleksi in _KOLEKSI_KODE_SATKER:
+            res = await db[nama_koleksi].update_many(
+                {"kode_satker": kode_lama}, {"$set": {"kode_satker": kode}})
+            if res.modified_count:
+                rincian[nama_koleksi] = res.modified_count
+        logger.warning(
+            f"GANTI KODE SATKER '{nama}': {kode_lama} → {kode} "
+            f"(konfirmasi pengguna; migrasi: {rincian or 'tidak ada dokumen lain'})")
+
+
 async def _kode_lengkap_master(kode_satker: str) -> str:
     """Kode satker LENGKAP (±20 digit SIMAN V2) dari master satker, "" bila belum ada."""
     if not (kode_satker or "").strip():
@@ -457,26 +541,10 @@ async def create_inventory_activity(activity: InventoryActivityCreate, _user: di
     if activity.documents is not None and len(activity.documents) > MAX_ACTIVITY_DOCUMENTS:
         raise HTTPException(status_code=400, detail=f"Maksimal {MAX_ACTIVITY_DOCUMENTS} dokumen kegiatan")
     
-    # Enforce satker consistency: if kode_satker exists, nama_satker must match
-    existing_satker = await db.inventory_activities.find_one(
-        {"kode_satker": activity.kode_satker.strip()},
-        {"_id": 0, "nama_satker": 1}
-    )
-    if existing_satker and existing_satker.get("nama_satker", "") != activity.nama_satker.strip():
-        raise HTTPException(
-            status_code=400,
-            detail=f"Kode Satker '{activity.kode_satker}' sudah terdaftar dengan nama '{existing_satker['nama_satker']}'. Nama Satker harus sama."
-        )
-    # Also check reverse: if nama_satker exists, kode_satker must match
-    existing_nama = await db.inventory_activities.find_one(
-        {"nama_satker": activity.nama_satker.strip(), "kode_satker": {"$ne": activity.kode_satker.strip()}},
-        {"_id": 0, "kode_satker": 1}
-    )
-    if existing_nama:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Nama Satker '{activity.nama_satker}' sudah terdaftar dengan kode '{existing_nama['kode_satker']}'. Kode Satker harus sama."
-        )
+    # Konsistensi kode ↔ nama satker: konflik → 409 terstruktur (UI
+    # menawarkan konfirmasi); perbarui_satker=True → rename/ganti kode
+    # diterapkan serentak ke kegiatan lain + Master Satker lalu lolos.
+    await _cek_atau_perbarui_satker(activity)
 
     # Validate unique nomor_surat
     existing = await db.inventory_activities.find_one({"nomor_surat": activity.nomor_surat})
@@ -530,6 +598,7 @@ async def create_inventory_activity(activity: InventoryActivityCreate, _user: di
         documents_to_store = await process_activity_documents(activity.documents)
 
     payload = activity.model_dump()
+    payload.pop("perbarui_satker", None)  # flag konfirmasi — bukan data kegiatan
     # Replace user-supplied raw payload with our processed/persisted versions
     payload["photos"] = photos_to_store
     payload["documents"] = documents_to_store
@@ -711,25 +780,9 @@ async def update_inventory_activity(activity_id: str, activity: InventoryActivit
     if activity.documents is not None and len(activity.documents) > MAX_ACTIVITY_DOCUMENTS:
         raise HTTPException(status_code=400, detail=f"Maksimal {MAX_ACTIVITY_DOCUMENTS} dokumen kegiatan")
 
-    # Enforce satker consistency (exclude self)
-    existing_satker = await db.inventory_activities.find_one(
-        {"kode_satker": activity.kode_satker.strip(), "id": {"$ne": activity_id}},
-        {"_id": 0, "nama_satker": 1}
-    )
-    if existing_satker and existing_satker.get("nama_satker", "") != activity.nama_satker.strip():
-        raise HTTPException(
-            status_code=400,
-            detail=f"Kode Satker '{activity.kode_satker}' sudah terdaftar dengan nama '{existing_satker['nama_satker']}'. Nama Satker harus sama."
-        )
-    existing_nama = await db.inventory_activities.find_one(
-        {"nama_satker": activity.nama_satker.strip(), "kode_satker": {"$ne": activity.kode_satker.strip()}, "id": {"$ne": activity_id}},
-        {"_id": 0, "kode_satker": 1}
-    )
-    if existing_nama:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Nama Satker '{activity.nama_satker}' sudah terdaftar dengan kode '{existing_nama['kode_satker']}'. Kode Satker harus sama."
-        )
+    # Konsistensi kode ↔ nama satker (kecualikan diri sendiri): konflik →
+    # 409 terstruktur; perbarui_satker=True → rename/ganti kode serentak.
+    await _cek_atau_perbarui_satker(activity, exclude_id=activity_id)
     
     # Check unique nomor_surat (exclude self)
     if activity.nomor_surat != existing.get("nomor_surat"):
@@ -741,6 +794,7 @@ async def update_inventory_activity(activity_id: str, activity: InventoryActivit
             raise HTTPException(status_code=400, detail=f"Nomor surat '{activity.nomor_surat}' sudah digunakan sebelumnya")
     
     update_data = activity.model_dump()
+    update_data.pop("perbarui_satker", None)  # flag konfirmasi — bukan data kegiatan
     update_data["created_at"] = existing.get("created_at")
     # Kode satker lengkap (±20 digit SIMAN V2): isi dari master bila kosong /
     # backfill master bila terisi.

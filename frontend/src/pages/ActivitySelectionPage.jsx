@@ -335,6 +335,31 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
     }, 50);
   };
 
+  // Simpan dengan penanganan KONFLIK SATKER: backend menjawab 409 +
+  // detail.konflik_satker bila kode/nama satker input berbeda dengan yang
+  // sudah terdaftar. Tawarkan konfirmasi "perbarui dengan input saat ini" —
+  // disetujui → kirim ulang dengan perbarui_satker=true (rename nama /
+  // ganti kode diterapkan serentak ke semua kegiatan satker itu + Master
+  // Satker). Kembalikan null bila pengguna membatalkan.
+  const simpanDenganKonfirmasiSatker = async (kirim) => {
+    try {
+      return await kirim(false);
+    } catch (err) {
+      const det = err?.response?.data?.detail;
+      if (!det?.konflik_satker) throw err;
+      const ganti = det.jenis === "kode"
+        ? `Ganti kode terdaftar menjadi '${form.kode_satker.trim()}'`
+        : `Ganti nama terdaftar menjadi '${form.nama_satker.trim()}'`;
+      const ok = await confirm({
+        title: "Data Satker Berbeda dengan yang Terdaftar",
+        description: `${det.pesan} ${ganti} sesuai input saat ini? Seluruh kegiatan satker tersebut dan Master Satker ikut diperbarui.`,
+        confirmLabel: "Perbarui dengan Input Ini",
+      });
+      if (!ok) return null;
+      return await kirim(true);
+    }
+  };
+
   const handleCreate = async () => {
     const errs = validateActivityForm();
     if (Object.keys(errs).length > 0) {
@@ -347,7 +372,9 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
     setSaving(true);
     try {
       const payload = { ...form, asset_ids: [] };
-      const r = await axios.post(`${API}/inventory-activities`, payload);
+      const r = await simpanDenganKonfirmasiSatker((perbarui) =>
+        axios.post(`${API}/inventory-activities`, { ...payload, perbarui_satker: perbarui }));
+      if (!r) return; // pengguna membatalkan konfirmasi satker
       toast.success("Kegiatan inventarisasi berhasil dibuat");
       fetchActivities();
       fetchSatkerList();
@@ -436,7 +463,9 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
       const payload = { ...form, asset_ids: editingActivity.asset_ids || [] };
       if (!photosLoaded && form.photos === null) payload.photos = null;
       if (!docsLoaded && form.documents === null) payload.documents = null;
-      await axios.put(`${API}/inventory-activities/${editingActivity.id}`, payload);
+      const r = await simpanDenganKonfirmasiSatker((perbarui) =>
+        axios.put(`${API}/inventory-activities/${editingActivity.id}`, { ...payload, perbarui_satker: perbarui }));
+      if (!r) return; // pengguna membatalkan konfirmasi satker
       toast.success("Kegiatan berhasil diperbarui");
       fetchActivities();
       fetchSatkerList();

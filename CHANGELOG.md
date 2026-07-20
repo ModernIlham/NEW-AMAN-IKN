@@ -48,7 +48,27 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
-## [#468] Air sinkron mengalir — gelombang cekung & cembung berjalan pelan satu arah — 2026-07-19
+## [#468] Air sinkron mengalir (gelombang cekung-cembung) + konfirmasi perbarui satker saat konflik kode↔nama — 2026-07-19
+
+### Konfirmasi perbarui data satker (form kegiatan)
+- **Sebelumnya**: mengganti Nama Satker (atau Kode 6 digit) di Buat/Edit
+  Kegiatan langsung ditolak "…sudah terdaftar dengan …; harus sama" tanpa
+  jalan keluar.
+- **Kini**: backend menjawab 409 TERSTRUKTUR dan UI menampilkan dialog
+  konfirmasi berisi pesan konflik + tombol **"Perbarui dengan Input Ini"**
+  — disetujui → dikirim ulang dengan `perbarui_satker=true`:
+  - **Rename NAMA (kode sama)**: nama baru diterapkan serentak ke SEMUA
+    kegiatan ber-kode itu + Master Satker + riwayat pengesahan (kartu).
+  - **Ganti KODE (nama sama)**: kode baru diterapkan ke semua kegiatan +
+    Master Satker (re-key bila kode baru belum terpakai) + MIGRASI seluruh
+    dokumen ber-stempel kode satker (persediaan, penggunaan/PSP, pemanfaatan,
+    pemindahtanganan, pemusnahan, penghapusan, penganggaran, pengadaan,
+    perencanaan, pengamanan, wasdal, BAST, pegawai, unit kerja, riwayat
+    pengesahan) + user terikat — tidak ada dokumen yatim di kode lama dan
+    user tidak terkunci dari datanya. Aset tidak perlu disentuh (relasi via
+    activity_id, scoping dihitung saat query).
+- Flag konfirmasi tidak ikut tersimpan ke dokumen kegiatan; operasi tercatat
+  di log server.
 
 - **Permukaan air kini benar-benar MENGALIR**: lapisan alun lama (lengkung
   cembung yang hanya bergoyang kiri-kanan) diganti pita air ber-MASK
