@@ -10,6 +10,7 @@ import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import axios from "axios";
 import { MapPinned, RefreshCw, Loader2, Move, X, Filter, Download, Camera, Layers, ChevronDown, Boxes } from "lucide-react";
 import { toast } from "sonner";
+import { compressImageFile } from "../../lib/imageCompression";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuRadioGroup, DropdownMenuRadioItem,
@@ -480,21 +481,79 @@ const AssetMapFullView = memo(function AssetMapFullView({
         wrap.innerHTML =
           '<p style="margin:0 0 6px;font-weight:700;color:#0f172a">Aset baru di titik ini</p>' +
           '<input data-isi="nama" data-testid="peta-tambah-nama" placeholder="Nama barang…" autocomplete="off" style="width:100%;box-sizing:border-box;border:1.5px solid #cbd5e1;border-radius:8px;padding:8px 10px;font-size:13px;outline:none;color:#0f172a;background:#fff" />' +
+          // Foto opsional — ATURAN SAMA dengan form aset: maks 6, kompresi
+          // klien, multi-upload; foto pertama jadi sampul; ada foto →
+          // status inventarisasi otomatis "Ditemukan".
+          '<div style="display:flex;align-items:center;gap:6px;margin-top:7px">' +
+          '<button type="button" data-aksi="kamera" style="flex:1;background:#f1f5f9;color:#0f172a;border:1px solid #cbd5e1;border-radius:8px;padding:7px 6px;font-weight:600;font-size:11px;cursor:pointer">📷 Kamera</button>' +
+          '<button type="button" data-aksi="galeri" data-testid="peta-tambah-foto" style="flex:1;background:#f1f5f9;color:#0f172a;border:1px solid #cbd5e1;border-radius:8px;padding:7px 6px;font-weight:600;font-size:11px;cursor:pointer">🖼 Pilih Foto</button>' +
+          '<span data-isi="jumlah" style="color:#64748b;font-size:10px;white-space:nowrap">0/6</span>' +
+          '</div>' +
+          '<input type="file" accept="image/*" capture="environment" data-isi="in-kamera" style="display:none" />' +
+          '<input type="file" accept="image/*" multiple data-isi="in-galeri" style="display:none" />' +
+          '<div data-isi="pratinjau" style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px"></div>' +
           '<p style="margin:6px 0;color:#64748b;font-size:10px;line-height:1.4">Kategori dummy + NUP & status inventarisasi terisi otomatis — lengkapi detail lain nanti dari daftar aset.</p>' +
           '<button type="button" data-aksi="simpan" data-testid="peta-tambah-simpan" style="width:100%;background:#059669;color:#fff;border:0;border-radius:8px;padding:9px 10px;font-weight:700;font-size:12px;cursor:pointer">Simpan Titik Aset</button>';
         const input = wrap.querySelector('[data-isi="nama"]');
+        const inKamera = wrap.querySelector('[data-isi="in-kamera"]');
+        const inGaleri = wrap.querySelector('[data-isi="in-galeri"]');
+        const elJumlah = wrap.querySelector('[data-isi="jumlah"]');
+        const elPratinjau = wrap.querySelector('[data-isi="pratinjau"]');
+        const btnSimpan = wrap.querySelector('[data-aksi="simpan"]');
+        const fotos = [];
+        let memproses = false;
+        const gambarUlangPratinjau = () => {
+          elJumlah.textContent = memproses ? "memproses…" : `${fotos.length}/6`;
+          elPratinjau.innerHTML = "";
+          fotos.forEach((f, i) => {
+            const kotak = document.createElement("div");
+            kotak.style.cssText = "position:relative;width:40px;height:40px";
+            kotak.innerHTML =
+              `<img src="${f}" alt="" style="width:40px;height:40px;object-fit:cover;border-radius:6px;border:1px solid #cbd5e1" />` +
+              '<button type="button" style="position:absolute;top:-6px;right:-6px;width:16px;height:16px;border-radius:50%;background:#dc2626;color:#fff;border:0;font-size:10px;line-height:1;cursor:pointer;padding:0">×</button>';
+            kotak.querySelector("button").addEventListener("click", () => {
+              fotos.splice(i, 1);
+              gambarUlangPratinjau();
+            });
+            elPratinjau.appendChild(kotak);
+          });
+        };
+        const tambahBerkas = async (files) => {
+          const daftar = Array.from(files || []);
+          if (!daftar.length) return;
+          if (fotos.length >= 6) { toast.error("Maks 6 foto"); return; }
+          memproses = true;
+          btnSimpan.disabled = true;
+          btnSimpan.style.opacity = "0.6";
+          gambarUlangPratinjau();
+          for (const file of daftar) {
+            if (fotos.length >= 6) { toast.error("Maks 6 foto — sisanya dilewati"); break; }
+            try {
+              fotos.push(await compressImageFile(file));
+            } catch { toast.error(`Gagal memproses ${file.name || "foto"}`); }
+          }
+          memproses = false;
+          btnSimpan.disabled = false;
+          btnSimpan.style.opacity = "1";
+          gambarUlangPratinjau();
+        };
+        wrap.querySelector('[data-aksi="kamera"]').addEventListener("click", () => inKamera.click());
+        wrap.querySelector('[data-aksi="galeri"]').addEventListener("click", () => inGaleri.click());
+        inKamera.addEventListener("change", (fe) => { tambahBerkas(fe.target.files); fe.target.value = ""; });
+        inGaleri.addEventListener("change", (fe) => { tambahBerkas(fe.target.files); fe.target.value = ""; });
         const simpan = () => {
+          if (memproses) return;
           const nama = (input.value || "").trim();
           if (!nama) { input.style.borderColor = "#dc2626"; input.focus(); return; }
-          onQuickAddRef.current?.(lat, lng, nama);
+          onQuickAddRef.current?.(lat, lng, nama, fotos.slice());
           map.closePopup(popup);
           // Marker SEMENTARA (biru pudar) — pin final tampil setelah antrean
           // simpan tersinkron dan peta dimuat ulang.
-          L.marker([lat, lng], { icon: markerIcon("#2563eb", false, false), opacity: 0.75 })
+          L.marker([lat, lng], { icon: markerIcon("#2563eb", fotos.length > 0, false), opacity: 0.75 })
             .addTo(map)
             .bindTooltip(`${nama} — tersimpan di antrean`, { direction: "top" });
         };
-        wrap.querySelector('[data-aksi="simpan"]').addEventListener("click", simpan);
+        btnSimpan.addEventListener("click", simpan);
         input.addEventListener("keydown", (ke) => {
           ke.stopPropagation(); // jangan sampai memicu pintasan keyboard peta
           if (ke.key === "Enter") simpan();

@@ -48,6 +48,20 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#473] Tambah-cepat peta — lampirkan foto (kamera / multi file, maks 6) dengan aturan foto form aset — 2026-07-20
+
+- Popup "+ Tambah aset di sini" kini punya bagian FOTO opsional: tombol
+  **Kamera** (jepret langsung) dan **Pilih Foto** (galeri/file,
+  MULTI-UPLOAD sekali pilih), pratinjau mini ber-tombol hapus ×, dan
+  penghitung n/6.
+- **Aturan sama dengan form aset**: maksimal 6 foto (kelebihan ditolak
+  dengan pesan), kompresi di klien (`compressImageFile` yang sama), foto
+  pertama menjadi sampul/thumbnail, dan **ada foto → status inventarisasi
+  otomatis "Ditemukan"** (tanpa foto tetap "Belum Diinventarisasi").
+- Tombol simpan terkunci selama foto sedang diproses; marker sementara
+  kini menampilkan lencana kamera bila titik dibuat dengan foto; semua
+  tetap lewat antrean simpan optimistis (offline-first).
+
 ## [#472] Peta aset — tombol "Tampilkan lokasi Anda" di bawah kontrol zoom — 2026-07-20
 
 - Tombol baru ber-ikon bidik tepat DI BAWAH tombol zoom in/out: klik →
