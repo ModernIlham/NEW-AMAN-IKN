@@ -48,6 +48,17 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#477] Beranda Modul — warna ikon modul dibuat profesional & kohesif (bukan pelangi) — 2026-07-20
+
+- Warna latar ikon tiap modul di halaman Beranda Modul / Peta Pengelolaan
+  BMN sebelumnya memakai gradasi yang terlalu beragam (sky, amber, emerald,
+  violet, orange, rose, red, dst.) sehingga terkesan "pelangi".
+- Diganti **palet dingin profesional & kohesif** — hanya keluarga
+  biru–indigo–sky–cyan–teal–slate (analog, selaras warna merek
+  biru/indigo), tanpa warna hangat/mencolok. Perbedaan halus per fase tetap
+  menjaga modul mudah dikenali; tahap pelepasan (pemindahtanganan/
+  pemusnahan/penghapusan) memakai slate netral. Aman di light & dark.
+
 ## [#476] Air sinkron SIMAN lebih hidup — dua lapisan gelombang variatif + bola mengapung organik — 2026-07-20
 
 - **Gelombang tak lagi monoton**: satu gelombang sinus tunggal yang bergeser

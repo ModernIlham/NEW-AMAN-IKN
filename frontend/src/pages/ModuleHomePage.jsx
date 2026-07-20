@@ -38,24 +38,29 @@ const MODULE_ICONS = {
   "pelaporan": FileText,
 };
 
-// Aksen warna ikon per modul — identitas visual tiap tahap (light+dark aman).
+// Aksen warna ikon per modul — PALET DINGIN PROFESIONAL & KOHESIF:
+// keluarga biru–indigo–sky–cyan–teal–slate saja (analog, selaras warna
+// merek biru/indigo), tanpa warna hangat/mencolok agar tidak seperti
+// pelangi. Perbedaan halus per fase menjaga modul tetap mudah dikenali;
+// tahap "pelepasan" (pemindahtanganan/pemusnahan/penghapusan) memakai
+// slate netral. Aman di light & dark.
 const MODULE_TILE = {
   "perencanaan": "from-sky-500 to-blue-600",
-  "penganggaran": "from-amber-500 to-orange-600",
-  "pengadaan": "from-cyan-500 to-teal-600",
-  "penggunaan": "from-emerald-500 to-green-600",
-  "pemanfaatan": "from-teal-500 to-emerald-600",
-  "penilaian": "from-violet-500 to-purple-600",
-  "pengamanan": "from-blue-500 to-indigo-600",
-  "pemeliharaan": "from-orange-500 to-amber-600",
-  "pemindahtanganan": "from-rose-500 to-pink-600",
-  "pemusnahan": "from-red-500 to-rose-600",
+  "penganggaran": "from-blue-500 to-indigo-600",
+  "pengadaan": "from-cyan-600 to-blue-600",
+  "penggunaan": "from-teal-600 to-cyan-700",
+  "pemanfaatan": "from-cyan-600 to-teal-700",
+  "penilaian": "from-indigo-500 to-blue-700",
+  "pengamanan": "from-blue-600 to-indigo-700",
+  "pemeliharaan": "from-sky-600 to-cyan-700",
+  "pemindahtanganan": "from-slate-500 to-slate-700",
+  "pemusnahan": "from-slate-600 to-slate-800",
   "penghapusan": "from-slate-500 to-slate-600",
-  "wasdal": "from-indigo-500 to-violet-600",
-  "pembukuan": "from-blue-600 to-indigo-600",
-  "inventarisasi-aset": "from-emerald-600 to-teal-600",
-  "inventarisasi-persediaan": "from-teal-600 to-cyan-600",
-  "pelaporan": "from-indigo-600 to-blue-600",
+  "wasdal": "from-indigo-600 to-blue-700",
+  "pembukuan": "from-blue-600 to-indigo-700",
+  "inventarisasi-aset": "from-blue-700 to-indigo-700",
+  "inventarisasi-persediaan": "from-sky-600 to-blue-700",
+  "pelaporan": "from-indigo-600 to-blue-700",
 };
 
 // Tiga fase alur siklus (urutan modul mengikuti registry) — Wasdal terpisah
