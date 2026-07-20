@@ -12,6 +12,12 @@ import uaSettings from "react-useanimations/lib/settings";
 import uaVisibility from "react-useanimations/lib/visibility";
 import uaArchive from "react-useanimations/lib/archive";
 import uaShare from "react-useanimations/lib/share";
+import uaLock from "react-useanimations/lib/lock";
+import uaCheckBox from "react-useanimations/lib/checkBox";
+import uaTrash2 from "react-useanimations/lib/trash2";
+import uaCalendar from "react-useanimations/lib/calendar";
+import uaActivity from "react-useanimations/lib/activity";
+import uaUserPlus from "react-useanimations/lib/userPlus";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
@@ -92,17 +98,29 @@ const MODULE_ANIM = {
   "pelaporan": "ikon-apung",
 };
 
-// Ikon ANIMASI useanimations (Lottie, JSON mentah) untuk modul yang
-// animasinya mengalir mulus & sesuai makna: pemeliharaan = gerigi berputar,
-// wasdal = mata berkedip, pemindahtanganan = panah berbagi/pindah,
-// persediaan = kotak arsip. Modul lain tetap ikon lucide + micro-animation
-// CSS (.ikon-*). Aset animasi berlisensi CC BY 4.0 — atribusi ke
-// useanimations.com ada di halaman Info (kredit) sesuai syarat lisensi.
+// Ikon ANIMASI useanimations (Lottie, JSON mentah) untuk modul yang punya
+// padanan ikon yang BENAR-BENAR sesuai makna: pemeliharaan = gerigi
+// berputar, wasdal = mata berkedip, pemindahtanganan = panah berbagi/
+// pindah, persediaan = kotak arsip, pengamanan = gembok mengunci,
+// inventarisasi aset = centang tercontreng, penghapusan = tong sampah,
+// perencanaan = kalender, pelaporan = garis grafik aktivitas, penggunaan =
+// penetapan pengguna. Karena animasi diputar maju saat hover lalu MUNDUR
+// saat keluar, ikon dua-keadaan (gembok, tong sampah, centang) aman —
+// selalu kembali ke kondisi awal. Modul tanpa padanan pas (penganggaran,
+// pengadaan, pemanfaatan, penilaian, pemusnahan, pembukuan) tetap ikon
+// lucide + micro-animation CSS (.ikon-*). Aset animasi berlisensi CC BY
+// 4.0 — atribusi ke useanimations.com ada di halaman Info (kredit).
 const UA_ICON = {
+  "perencanaan": { data: uaCalendar.animationData, speed: 0.9 },
+  "penggunaan": { data: uaUserPlus.animationData, speed: 0.9 },
+  "pengamanan": { data: uaLock.animationData, speed: 0.9 },
   "pemeliharaan": { data: uaSettings.animationData, speed: 1 },
-  "wasdal": { data: uaVisibility.animationData, speed: 0.85 },
   "pemindahtanganan": { data: uaShare.animationData, speed: 0.9 },
+  "penghapusan": { data: uaTrash2.animationData, speed: 0.9 },
+  "wasdal": { data: uaVisibility.animationData, speed: 0.85 },
+  "inventarisasi-aset": { data: uaCheckBox.animationData, speed: 0.9 },
   "inventarisasi-persediaan": { data: uaArchive.animationData, speed: 0.7 },
+  "pelaporan": { data: uaActivity.animationData, speed: 0.85 },
 };
 
 const kurangiGerak = () =>

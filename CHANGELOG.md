@@ -48,6 +48,28 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#482] Peta Siklus — 6 modul lagi mendapat ikon Lottie beranimasi (total 10) — 2026-07-20
+
+- Melengkapi ikon animasi Peta Siklus: **6 modul lagi** kini memakai ikon
+  Lottie yang benar-benar sesuai maknanya — **Pengamanan** (gembok
+  mengunci), **Inventarisasi Aset** (centang tercontreng), **Penghapusan**
+  (tong sampah), **Perencanaan** (kalender), **Pelaporan** (garis grafik
+  aktivitas), **Penggunaan** (penetapan pengguna). Total 10 dari 16 modul
+  ber-ikon Lottie.
+- Ikon dua-keadaan (gembok, tong sampah, centang) kini AMAN dipakai karena
+  pola hover maju-mundur dari rilis sebelumnya: animasi maju saat kartu
+  di-hover, mundur kembali ke frame awal saat kursor keluar — ikon selalu
+  pulih ke kondisi semula.
+- Modul tanpa padanan yang pas di katalog (Penganggaran, Pengadaan,
+  Pemanfaatan, Penilaian, Pemusnahan, Pembukuan) tetap ikon lucide +
+  micro-animation CSS agar makna ikon tidak dipaksakan.
+- Catatan: permintaan awal memakai lordicon.com, tetapi jaringan
+  environment pengembangan memblokir cdn.lordicon.com sehingga asetnya
+  tidak dapat diunduh; dipakai katalog useanimations yang sudah terpasang
+  (offline & sudah ber-atribusi). Struktur `UA_ICON` menerima JSON Lottie
+  apa pun — ikon lordicon dapat menggantikannya kapan saja bila file
+  disediakan.
+
 ## [#481] Peta Siklus — ikon Lottie kembali ke kondisi semula setelah hover — 2026-07-20
 
 - **Perbaikan**: ikon Lottie (Pemeliharaan, Wasdal, Pemindahtanganan,
