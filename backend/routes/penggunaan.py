@@ -175,8 +175,18 @@ async def psp_dari_siman(_user: dict = Depends(require_user)):
     1-klik" (prefill nomor, tanggal, dan daftar aset) di UI."""
     from shared_utils import scope_query_aset, scope_query_field_satker
     from shared_utils import filter_aset_perhitungan
+    # Prefilter placeholder "belum PSP" yang paling umum langsung di query
+    # (hemat fetch); penyaring lengkap case-insensitive ada di
+    # kelompokkan_psp_siman via norm_no_psp — data lama di DB bisa memuat
+    # placeholder dalam kapitalisasi lain.
     q = await filter_aset_perhitungan(await scope_query_aset(_user, {
-        "siman.referensi.no_psp": {"$nin": ["", None]},
+        "siman.referensi.no_psp": {"$nin": [
+            "", None, "-", "--", "0",
+            "Tidak Ada Inputan", "TIDAK ADA INPUTAN", "tidak ada inputan",
+            "Belum PSP", "BELUM PSP", "belum psp",
+            "Belum Ditetapkan", "belum ditetapkan",
+            "N/A", "n/a", "NA", "na",
+        ]},
         "dihapus": {"$ne": True}}))
     aset_rows = await db.assets.find(q, {
         "_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,

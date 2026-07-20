@@ -55,6 +55,17 @@ KOLOM_SIMAN = {
 # Nilai SIMAN yang berarti "belum diisi" — jangan dianggap selisih.
 _KOSONG_SIMAN = {"", "-", "belum berlokasi", "tidak ada inputan"}
 
+# Nilai kolom "No PSP" yang berarti barang BELUM ter-PSP (placeholder
+# ekspor SIMAN / isian manual) — BUKAN nomor SK. Tanpa penyaringan ini,
+# barang belum PSP ikut terhitung "sudah PSP" di modul Penggunaan &
+# timeline aset (dibanding case-insensitive setelah norm_teks).
+NO_PSP_KOSONG = frozenset({
+    "", "-", "--", "–", "—", "0", "belum", "belum psp",
+    "belum di psp", "belum di-psp", "belum ditetapkan", "belum ada",
+    "tidak ada", "tidak ada inputan", "belum berlokasi",
+    "n/a", "na", "null", "none", "nihil",
+})
+
 # ── Field yang DIBANDINGKAN (AMAN ↔ SIMAN); jenis menentukan normalisasi ──
 # Hanya field yang SIMAN memang otoritatif & AMAN punya padanannya.
 PERBANDINGAN = (
@@ -116,6 +127,16 @@ def norm_tanggal(v) -> str:
 
 def _kosong_siman(v) -> bool:
     return norm_teks(v).lower() in _KOSONG_SIMAN
+
+
+def norm_no_psp(v) -> str:
+    """Nomor PSP ternormalisasi; placeholder "belum PSP" → '' (= belum).
+
+    Dipakai saat parse impor DAN saat konsumen membaca referensi lama di
+    DB (data hasil impor sebelum penyaringan ini ada).
+    """
+    s = norm_teks(v)
+    return "" if s.lower() in NO_PSP_KOSONG else s
 
 
 def kunci_aset(kode, nup) -> str:
@@ -226,7 +247,7 @@ def parse_baris(row, peta_header):
         "nama_pengguna": norm_teks(d.get("nama_pengguna")),
         "lokasi_ruang": norm_teks(d.get("lokasi_ruang")),
         "status_penggunaan": norm_teks(d.get("status_penggunaan")),
-        "no_psp": norm_teks(d.get("no_psp")),
+        "no_psp": norm_no_psp(d.get("no_psp")),
         "intra_ekstra": norm_teks(d.get("intra_ekstra")),
         "umur_aset": norm_teks(d.get("umur_aset")),
         "status_idle": norm_teks(d.get("status_idle")),
