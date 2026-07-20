@@ -436,66 +436,100 @@ body.no-scroll { overflow: hidden; }
   background: hsl(var(--card));
   pointer-events: none;
 }
-/* Aliran permukaan (tampak samping): pita air ber-MASK gelombang sinus
-   berulang — CEMBUNG (puncak) dan CEKUNG (lembah) bergantian mulus — yang
-   digeser linier SATU ARAH tanpa putus (tepat satu panjang gelombang per
-   siklus) sehingga permukaan tampak MENGALIR pelan. Mask hanya membentuk
-   siluet; warnanya tetap hsl(var(--card)) — ikut mode light/dark. */
+/* DUA lapisan gelombang bermask sinus dengan panjang-gelombang, tinggi
+   puncak, kecepatan, dan opasitas BERBEDA. Overlay keduanya membuat siluet
+   permukaan terus berubah bentuk (pola pelayangan / beat) sehingga tampak
+   HIDUP & variatif — bukan satu gelombang monoton. Warna tetap
+   hsl(var(--card)) (ikut mode). Semua gerak via transform (GPU, mulus). */
 .siman-air-alir {
-  position: absolute; bottom: 4px; left: 0; height: 12px;
-  width: calc(100% + 56px);
+  position: absolute; bottom: 4px; left: 0; height: 18px;
+  width: calc(100% + 240px);
+  z-index: 9;
+  background: hsl(var(--card)); opacity: 0.9;
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='18' viewBox='0 0 120 18'><path d='M0 10 C10 2 22 3 32 10 S50 16 62 10 S78 4 90 9 S108 15 120 10 L120 18 L0 18 Z'/></svg>"); mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='18' viewBox='0 0 120 18'><path d='M0 10 C10 2 22 3 32 10 S50 16 62 10 S78 4 90 9 S108 15 120 10 L120 18 L0 18 Z'/></svg>");
+  -webkit-mask-repeat: repeat-x; mask-repeat: repeat-x;
+  -webkit-mask-size: 120px 18px; mask-size: 120px 18px;
+  /* X linier (aliran mulus, mulus-loop 2 ubin) + Y alun bernafas dibake ke
+     nilai keyframe agar puncak naik-turun (tinggi gelombang berubah). */
+  animation: simanAlunBelakang 13s linear infinite;
+  pointer-events: none; will-change: transform;
+}
+@keyframes simanAlunBelakang {
+  0%   { transform: translate3d(0, 0, 0); }
+  12.5%{ transform: translate3d(-30px, -1.6px, 0); }
+  25%  { transform: translate3d(-60px, 0, 0); }
+  37.5%{ transform: translate3d(-90px, 1.3px, 0); }
+  50%  { transform: translate3d(-120px, 0, 0); }
+  62.5%{ transform: translate3d(-150px, -1.6px, 0); }
+  75%  { transform: translate3d(-180px, 0, 0); }
+  87.5%{ transform: translate3d(-210px, 1.3px, 0); }
+  100% { transform: translate3d(-240px, 0, 0); }
+}
+/* Lapisan DEPAN: riak lebih kecil & lebih cepat, sedikit lebih pekat —
+   panjang gelombang 74px (≠ 120px belakang) & kecepatan beda → beat. */
+.siman-air-alir2 {
+  position: absolute; bottom: 3px; left: 0; height: 13px;
+  width: calc(100% + 148px);
   z-index: 9;
   background: hsl(var(--card));
-  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='56' height='12' viewBox='0 0 56 12'><path d='M0 6 C9 2.5 19 2.5 28 6 S47 9.5 56 6 L56 12 L0 12 Z'/></svg>");
-  mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='56' height='12' viewBox='0 0 56 12'><path d='M0 6 C9 2.5 19 2.5 28 6 S47 9.5 56 6 L56 12 L0 12 Z'/></svg>");
-  -webkit-mask-repeat: repeat-x;
-  mask-repeat: repeat-x;
-  -webkit-mask-size: 56px 12px;
-  mask-size: 56px 12px;
-  animation: simanAirAlir 7s linear infinite;
-  pointer-events: none;
-  will-change: transform;
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='74' height='13' viewBox='0 0 74 13'><path d='M0 8 C7 5 14 5 21 8 S34 11 44 8 S60 4 68 8 L74 8 L74 13 L0 13 Z'/></svg>"); mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='74' height='13' viewBox='0 0 74 13'><path d='M0 8 C7 5 14 5 21 8 S34 11 44 8 S60 4 68 8 L74 8 L74 13 L0 13 Z'/></svg>");
+  -webkit-mask-repeat: repeat-x; mask-repeat: repeat-x;
+  -webkit-mask-size: 74px 13px; mask-size: 74px 13px;
+  animation: simanRiakDepan 6.5s linear infinite;
+  pointer-events: none; will-change: transform;
 }
-@keyframes simanAirAlir {
-  from { transform: translateX(0); }
-  to   { transform: translateX(-56px); }
+@keyframes simanRiakDepan {
+  0%   { transform: translate3d(0, 0.4px, 0); }
+  25%  { transform: translate3d(-37px, -0.5px, 0); }
+  50%  { transform: translate3d(-74px, 0.4px, 0); }
+  75%  { transform: translate3d(-111px, -0.5px, 0); }
+  100% { transform: translate3d(-148px, 0.4px, 0); }
 }
-/* Meniskus: air memeluk dasar bola (tampak samping) — sedikit merambat
-   naik pada bola lalu turun lagi, bernafas pelan. */
+/* Meniskus: air memeluk dasar bola — bernafas + sedikit melapis (scaleX)
+   seperti riak menjilat, periode BEDA dari bola & gelombang. */
 .siman-air-meniskus {
-  position: absolute; bottom: 0; left: 50%; width: 30px; height: 10px;
+  position: absolute; bottom: 0; left: 50%; width: 30px; height: 11px;
   z-index: 9;
   background: hsl(var(--card));
-  border-radius: 100% 100% 0 0;
+  border-radius: 100% 100% 42% 42% / 100% 100% 0 0;
   transform: translateX(-50%);
   transform-origin: 50% 100%;
-  animation: simanMeniskus 3.4s ease-in-out infinite;
+  animation: simanMeniskus 4.7s ease-in-out infinite;
   pointer-events: none;
 }
 @keyframes simanMeniskus {
-  0%, 100% { transform: translateX(-50%) scaleY(1); }
-  50%      { transform: translateX(-50%) scaleY(1.3); }
+  0%, 100% { transform: translateX(-50%) scaleY(1) scaleX(1); }
+  50%      { transform: translateX(-50%) scaleY(1.35) scaleX(0.9); }
 }
-/* Bola mengapung pelan di permukaan — naik-turun + oleng ringan,
-   seirama meniskus. */
+/* Bola BENAR-BENAR mengapung: naik-turun tak simetris + geser + oleng
+   seperti benda terapung di ombak nyata. Periode 6.9s — TAK kelipatan
+   periode gelombang (13s/6.5s/4.7s) → gerak gabungan tak pernah berulang
+   persis = terlihat hidup. Easing ease-in-out = apungan lembut. */
 .siman-liquid-ball {
   position: relative;
   z-index: 1;
-  animation: simanApung 3.4s ease-in-out infinite;
+  animation: simanApung 6.9s ease-in-out infinite;
 }
 @keyframes simanApung {
-  0%, 100% { transform: translateY(0) rotate(0deg); }
-  33%      { transform: translateY(-1.5px) rotate(2.5deg); }
-  66%      { transform: translateY(1px) rotate(-2.5deg); }
+  0%   { transform: translate(0, 0) rotate(0deg); }
+  14%  { transform: translate(0.9px, -2px) rotate(3deg); }
+  30%  { transform: translate(1.6px, -0.9px) rotate(1.5deg); }
+  44%  { transform: translate(0.4px, -2.5px) rotate(4deg); }
+  58%  { transform: translate(-1px, 0.6px) rotate(-1.5deg); }
+  72%  { transform: translate(-1.6px, 1.5px) rotate(-3.5deg); }
+  86%  { transform: translate(-0.5px, 0.3px) rotate(-1deg); }
+  100% { transform: translate(0, 0) rotate(0deg); }
 }
-/* Hover di bola: alun & apungan lebih hidup */
-.siman-liquid:hover .siman-liquid-ball { animation-duration: 1.4s; }
-.siman-liquid:hover ~ .siman-air-alir { animation-duration: 3s; }
-.siman-liquid:hover ~ .siman-air-meniskus { animation-duration: 1.4s; }
-/* Proses sinkronisasi: gejolak cepat */
-.siman-liquid[data-busy="1"] .siman-liquid-ball { animation-duration: 0.9s; }
-.siman-liquid[data-busy="1"] ~ .siman-air-alir { animation-duration: 1.4s; }
-.siman-liquid[data-busy="1"] ~ .siman-air-meniskus { animation-duration: 0.7s; }
+/* Hover di bola: seluruh permukaan & apungan lebih hidup (proporsional). */
+.siman-liquid:hover .siman-liquid-ball { animation-duration: 3.4s; }
+.siman-liquid:hover ~ .siman-air-alir { animation-duration: 6.5s; }
+.siman-liquid:hover ~ .siman-air-alir2 { animation-duration: 3.2s; }
+.siman-liquid:hover ~ .siman-air-meniskus { animation-duration: 2.3s; }
+/* Proses sinkronisasi: gejolak cepat. */
+.siman-liquid[data-busy="1"] .siman-liquid-ball { animation-duration: 1.8s; }
+.siman-liquid[data-busy="1"] ~ .siman-air-alir { animation-duration: 3.2s; }
+.siman-liquid[data-busy="1"] ~ .siman-air-alir2 { animation-duration: 1.7s; }
+.siman-liquid[data-busy="1"] ~ .siman-air-meniskus { animation-duration: 1.2s; }
 /* Sukses: air + bola centang surut turun ke area informasi */
 .siman-liquid-sukses {
   animation: simanLiquidSlurp 0.85s ease-in forwards;

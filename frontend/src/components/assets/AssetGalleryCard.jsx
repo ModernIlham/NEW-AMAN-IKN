@@ -147,6 +147,7 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
             </button>
             <span className="siman-air" aria-hidden="true" />
             <span className="siman-air-alir" aria-hidden="true" />
+            <span className="siman-air-alir2" aria-hidden="true" />
             <span className="siman-air-meniskus" aria-hidden="true" />
           </>
         )}
@@ -154,6 +155,7 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
           <span className="siman-liquid-sukses absolute inset-x-0 bottom-0 z-10 h-8 pointer-events-none">
             <span className="siman-air" aria-hidden="true" />
             <span className="siman-air-alir" aria-hidden="true" />
+            <span className="siman-air-alir2" aria-hidden="true" />
             <span className="siman-air-meniskus" aria-hidden="true" />
             <span className="absolute bottom-px left-1/2 -translate-x-1/2 z-[10] w-5 h-5 rounded-full bg-emerald-500 dark:bg-emerald-400 shadow-md flex items-center justify-center">
               <CheckIcon className="w-3 h-3 text-white dark:text-emerald-950" />
