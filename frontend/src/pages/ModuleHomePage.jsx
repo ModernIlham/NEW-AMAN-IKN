@@ -63,6 +63,38 @@ const MODULE_TILE = {
   "pelaporan": "from-indigo-600 to-blue-700",
 };
 
+// Animasi idle HALUS per ikon Peta Siklus — dipilih sesuai MAKNA ikon
+// (timbangan bergoyang, perisai/mata berdenyut, kunci-inggris berputar,
+// panah pindah & keranjang bergeser, api berkobar; sisanya mengapung
+// lembut). Kelas didefinisikan di index.css (.ikon-*). Default: mengapung.
+const MODULE_ANIM = {
+  "perencanaan": "ikon-apung",
+  "penganggaran": "ikon-apung",
+  "pengadaan": "ikon-geser",
+  "penggunaan": "ikon-apung",
+  "pemanfaatan": "ikon-apung",
+  "penilaian": "ikon-ayun",
+  "pengamanan": "ikon-denyut",
+  "pemeliharaan": "ikon-putar",
+  "pemindahtanganan": "ikon-geser",
+  "pemusnahan": "ikon-kobar",
+  "penghapusan": "ikon-apung",
+  "wasdal": "ikon-denyut",
+  "pembukuan": "ikon-apung",
+  "inventarisasi-aset": "ikon-apung",
+  "inventarisasi-persediaan": "ikon-apung",
+  "pelaporan": "ikon-apung",
+};
+
+// Kelas animasi + delay STAGGER stabil dari id (agar ikon tak serempak,
+// terkesan bergelombang). Dipakai di semua titik render ikon modul.
+function ikonAnim(id) {
+  const kelas = MODULE_ANIM[id] || "ikon-apung";
+  let h = 0;
+  for (let i = 0; i < (id || "").length; i++) h = (h + id.charCodeAt(i)) % 13;
+  return { className: kelas, style: { animationDelay: `${(h * 0.16).toFixed(2)}s` } };
+}
+
 // Tiga fase alur siklus (urutan modul mengikuti registry) — Wasdal terpisah
 // sebagai pita pengawasan yang MELINGKUPI seluruh siklus.
 const FASE_ALUR = [
@@ -155,6 +187,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
   // Baris modul di timeline fase — ringkas, informatif, satu klik langsung.
   const BarisModul = ({ mod }) => {
     const Icon = MODULE_ICONS[mod.id] || Package;
+    const anim = ikonAnim(mod.id);
     return (
       <button
         type="button"
@@ -168,7 +201,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
         </span>
         <span className="flex items-center gap-2.5 min-w-0">
           <span className={`w-9 h-9 rounded-xl bg-gradient-to-br ${MODULE_TILE[mod.id] || "from-slate-500 to-slate-600"} flex items-center justify-center flex-shrink-0 shadow-sm group-hover:scale-105 transition-transform`}>
-            <Icon className="w-4 h-4 text-white" />
+            <Icon className={`w-4 h-4 text-white ${anim.className}`} style={anim.style} />
           </span>
           <span className="min-w-0 flex-1">
             <span className="block font-semibold text-foreground text-[13px] leading-tight truncate">{mod.nama}</span>
@@ -296,7 +329,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
             className="w-full text-left rounded-2xl border border-indigo-500/40 bg-gradient-to-r from-indigo-500/10 via-violet-500/5 to-indigo-500/10 hover:from-indigo-500/15 hover:to-indigo-500/15 transition-colors p-3 sm:p-4 flex items-center gap-3 group min-w-0 min-h-0"
           >
             <span className={`w-10 h-10 rounded-xl bg-gradient-to-br ${MODULE_TILE.wasdal} flex items-center justify-center flex-shrink-0 shadow-sm`}>
-              <Eye className="w-5 h-5 text-white" />
+              <Eye className="w-5 h-5 text-white ikon-denyut" />
             </span>
             <span className="min-w-0 flex-1">
               <span className="block font-bold text-foreground text-sm leading-tight">
@@ -330,6 +363,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 mt-3">
               {PENATAUSAHAAN_SUBMODULES.map((mod) => {
                 const Icon = MODULE_ICONS[mod.id] || Package;
+    const anim = ikonAnim(mod.id);
                 return (
                   <button
                     key={mod.id}
@@ -340,7 +374,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
                   >
                     <div className="flex items-center justify-between gap-2 mb-2">
                       <span className={`w-9 h-9 rounded-xl bg-gradient-to-br ${MODULE_TILE[mod.id] || "from-slate-500 to-slate-600"} flex items-center justify-center flex-shrink-0 shadow-sm group-hover:scale-105 transition-transform`}>
-                        <Icon className="w-4 h-4 text-white" />
+                        <Icon className={`w-4 h-4 text-white ${anim.className}`} style={anim.style} />
                       </span>
                       <StatusBadge status={mod.status} />
                     </div>
@@ -389,7 +423,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
               <DialogHeader>
                 <div className="flex items-center gap-2.5">
                   <span className={`w-10 h-10 rounded-xl bg-gradient-to-br ${MODULE_TILE[detail.id] || "from-slate-500 to-slate-600"} flex items-center justify-center flex-shrink-0`}>
-                    {DetailIcon && <DetailIcon className="w-5 h-5 text-white" />}
+                    {DetailIcon && (() => { const da = ikonAnim(detail.id); return <DetailIcon className={`w-5 h-5 text-white ${da.className}`} style={da.style} />; })()}
                   </span>
                   <div className="min-w-0 text-left">
                     <DialogTitle className="text-base leading-tight">{detail.nama}</DialogTitle>

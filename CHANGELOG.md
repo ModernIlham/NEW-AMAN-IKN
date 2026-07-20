@@ -48,6 +48,22 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#478] Peta Siklus — ikon modul beranimasi halus sesuai maknanya — 2026-07-20
+
+- Setiap ikon modul di halaman Beranda Modul / Peta Siklus kini punya
+  **animasi idle yang halus dan sesuai makna ikonnya**: timbangan
+  (Penilaian) bergoyang, perisai (Pengamanan) & mata (Wasdal) berdenyut,
+  kunci-inggris (Pemeliharaan) berputar, panah pindah (Pemindahtanganan) &
+  keranjang (Pengadaan) bergeser, api (Pemusnahan) berkobar; modul lain
+  mengapung lembut.
+- Animasi di-**stagger** (delay stabil dihitung dari id modul) sehingga
+  ikon tidak bergerak serempak — terkesan hidup namun tetap tenang &
+  profesional. Semua gerak `transform`-only (GPU), keyframe rest di
+  0%/100% sehingga `prefers-reduced-motion` otomatis mendiamkannya.
+- Kelas `.ikon-*` di `index.css`; hover tile tetap membesar seperti
+  sebelumnya. Diterapkan di semua titik render ikon (grid fase, poros
+  Penatausahaan, kartu Wasdal, dialog detail modul).
+
 ## [#477] Beranda Modul — warna ikon modul dibuat profesional & kohesif (bukan pelangi) — 2026-07-20
 
 - Warna latar ikon tiap modul di halaman Beranda Modul / Peta Pengelolaan
