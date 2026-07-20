@@ -48,6 +48,22 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#481] Peta Siklus — ikon Lottie kembali ke kondisi semula setelah hover — 2026-07-20
+
+- **Perbaikan**: ikon Lottie (Pemeliharaan, Wasdal, Pemindahtanganan,
+  Inventarisasi Persediaan) tadinya berhenti di **frame akhir** setelah
+  diputar saat hover, sehingga terlihat "nyangkut" dalam kondisi berbeda
+  dari semula. Sekarang saat kursor **keluar** dari kartu, animasi diputar
+  **MUNDUR kembali ke frame awal** — ikon selalu kembali ke kondisi semula.
+- Ikon Lottie kini digerakkan langsung lewat **lottie-web** (bukan lagi
+  komponen tingkat-tinggi `react-useanimations`, tetapi tetap memakai data
+  animasinya) agar arah putar bisa dikontrol: **maju saat hover, mundur
+  saat keluar** — pola yang sama seperti trigger hover ikon animasi pada
+  umumnya. Warna ikon dipaksa putih via `filter` agar kontras di atas tile.
+- Menghormati `prefers-reduced-motion`: bila aktif, ikon diam di frame awal
+  dan tidak diputar. Ikon lucide + CSS `.ikon-*` modul lain tak berubah
+  (sudah otomatis kembali ke posisi awal karena keyframe rest di 0%/100%).
+
 ## [#480] Peta Siklus — animasi ikon hanya diputar sekali saat kartu di-hover — 2026-07-20
 
 - Animasi ikon modul (Lottie useanimations maupun micro-animation CSS
