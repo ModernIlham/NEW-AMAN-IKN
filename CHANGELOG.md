@@ -48,6 +48,33 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#474] Perbaikan: OTP pendaftaran tidak terkirim — alasan gagal jelas + jangan masuk langkah OTP + diagnosa email — 2026-07-20
+
+- **Gejala**: kode OTP pendaftaran akun tidak pernah sampai ke email
+  meski dicoba ulang. Dua akar masalah:
+  1. **Kegagalan kirim dibisukan** — Resend menolak (kunci API kosong /
+     `SENDER_EMAIL` masih alamat uji `onboarding@resend.dev` yang HANYA
+     bisa mengirim ke email pemilik akun Resend) tapi hanya jadi log
+     server; pengguna tak pernah tahu emailnya mustahil terkirim.
+  2. **UI menyesatkan** — respons `otp_sent: false` tetap membawa
+     pengguna ke langkah isi OTP dan pesan gagalnya tampil sebagai
+     toast SUKSES.
+- **Perbaikan backend**: `send_otp_email` kini mengembalikan (ok, ALASAN
+  actionable berbahasa Indonesia — kunci API kosong / domain pengirim
+  belum terverifikasi / kunci tidak valid / galat lain) + 1x coba ulang
+  otomatis untuk galat sementara; pesan respons pendaftaran & kirim-ulang
+  menyertakan alasan; endpoint diagnosa `GET /auth/email-status`
+  (terkonfigurasi / sender / mode uji Resend + catatan perbaikan).
+- **Perbaikan frontend**: gagal kirim → toast GALAT berisi alasan dan
+  TIDAK masuk langkah isi OTP (registrasi, kirim-ulang, dan tambah user
+  oleh admin); alur lupa-password tetap ber-respons generik
+  (anti-enumerasi akun).
+- README: seksi konfigurasi email (RESEND_API_KEY + SENDER_EMAIL domain
+  terverifikasi). Unit test klasifikasi alasan (604 lulus).
+- **Catatan admin**: bila alasan menunjuk konfigurasi, setel env
+  `RESEND_API_KEY` dan `SENDER_EMAIL` domain terverifikasi di VPS lalu
+  restart backend — cek cepat via `GET /api/auth/email-status`.
+
 ## [#473] Tambah-cepat peta — lampirkan foto (kamera / multi file, maks 6) dengan aturan foto form aset — 2026-07-20
 
 - Popup "+ Tambah aset di sini" kini punya bagian FOTO opsional: tombol

@@ -304,9 +304,15 @@ async def reserve_idempotency_key(key: str, stale_seconds: int = 30) -> str:
 
 
 async def send_otp_email(email: str, otp: str, name: str = ""):
+    """Kirim OTP via Resend. Kembalikan (ok, alasan) — alasan berbahasa
+    Indonesia yang ACTIONABLE bila gagal (kunci API kosong / domain pengirim
+    belum terverifikasi / galat lain), bukan False bisu: pendaftar berulang
+    kali "coba ulang" tanpa tahu emailnya memang mustahil terkirim.
+    Galat sementara (jaringan/5xx) dicoba ulang otomatis SEKALI."""
     if not RESEND_API_KEY:
         logger.warning("Resend API key not configured, OTP email not sent")
-        return False
+        return False, ("Layanan email belum dikonfigurasi di server "
+                       "(RESEND_API_KEY kosong) — hubungi administrator")
     html_content = f"""
     <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
         <h2 style="color: #1e40af; margin-bottom: 20px;">Verifikasi Email Anda</h2>
@@ -322,13 +328,30 @@ async def send_otp_email(email: str, otp: str, name: str = ""):
     </div>
     """
     params = {"from": SENDER_EMAIL, "to": [email], "subject": f"Kode Verifikasi OTP: {otp}", "html": html_content}
-    try:
-        result = await asyncio.to_thread(resend.Emails.send, params)
-        logger.info(f"OTP email sent to {email}: {result.get('id', 'unknown')}")
-        return True
-    except Exception as e:
-        logger.error(f"Failed to send OTP email to {email}: {str(e)}")
-        return False
+    galat = ""
+    for percobaan in (1, 2):
+        try:
+            result = await asyncio.to_thread(resend.Emails.send, params)
+            logger.info(f"OTP email sent to {email}: {result.get('id', 'unknown')}")
+            return True, ""
+        except Exception as e:
+            galat = str(e)
+            logger.error(f"Failed to send OTP email to {email} (percobaan {percobaan}): {galat}")
+            g = galat.lower()
+            # Galat konfigurasi PASTI — jangan buang waktu coba ulang.
+            if ("testing email" in g or "verify a domain" in g
+                    or "not verified" in g or "own email address" in g):
+                return False, (
+                    "Domain PENGIRIM email belum terverifikasi — SENDER_EMAIL "
+                    f"saat ini '{SENDER_EMAIL}' (alamat uji Resend hanya bisa "
+                    "mengirim ke email pemilik akun Resend). Administrator perlu "
+                    "menyetel domain terverifikasi di pengaturan server")
+            if "api key" in g or "unauthorized" in g or "401" in g:
+                return False, ("Kunci API layanan email tidak valid — "
+                               "administrator perlu memeriksa RESEND_API_KEY di server")
+            await asyncio.sleep(1.5)
+    return False, (f"Gagal mengirim email ({galat[:120]}) — coba beberapa saat "
+                   "lagi atau hubungi administrator")
 
 async def send_esign_email(email: str, nama: str, judul: str, link: str) -> bool:
     """Kirim link tanda tangan elektronik ke penanda tangan (best-effort —

@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Request, Header
 from db import db
 from models import UserCreate, UserLogin, UserResponse, TokenResponse, OTPRequest, OTPVerify
 from auth_utils import hash_password, verify_password, create_token, create_media_token, get_current_user
-from shared_utils import limiter, generate_otp, send_otp_email, store_otp, get_otp, delete_otp, RESEND_API_KEY
+from shared_utils import limiter, generate_otp, send_otp_email, store_otp, get_otp, delete_otp, RESEND_API_KEY, SENDER_EMAIL
 
 logger = logging.getLogger(__name__)
 auth_router = APIRouter()
@@ -133,14 +133,14 @@ async def request_otp(request: Request, data: OTPRequest):
     })
     
     # Send OTP email
-    email_sent = await send_otp_email(email, otp, data.name)
+    email_sent, email_alasan = await send_otp_email(email, otp, data.name)
     
     # Only expose the OTP when email delivery is unavailable AND debug echo is
     # explicitly enabled for a non-production environment.
     show_debug_otp = (not RESEND_API_KEY or not email_sent) and _debug_otp_allowed()
 
     return {
-        "message": "Kode OTP telah dikirim ke email" if email_sent else "Email gagal terkirim. Hubungi administrator.",
+        "message": "Kode OTP telah dikirim ke email" if email_sent else f"Email gagal terkirim: {email_alasan}",
         "email": email,
         "otp_sent": email_sent,
         "debug_otp": otp if show_debug_otp else None
@@ -163,15 +163,35 @@ async def resend_otp(request: Request, data: OTPVerify):
     otp = generate_otp()
     await store_otp(email, otp, stored["user_data"])
     
-    email_sent = await send_otp_email(email, otp, stored["user_data"].get("name", ""))
+    email_sent, email_alasan = await send_otp_email(email, otp, stored["user_data"].get("name", ""))
     show_debug_otp = (not RESEND_API_KEY or not email_sent) and _debug_otp_allowed()
 
     return {
-        "message": "Kode OTP baru telah dikirim" if email_sent else "Email gagal terkirim. Hubungi administrator.",
+        "message": "Kode OTP baru telah dikirim" if email_sent else f"Email gagal terkirim: {email_alasan}",
         "email": email,
         "otp_sent": email_sent,
         "debug_otp": otp if show_debug_otp else None
     }
+
+@auth_router.get("/auth/email-status")
+async def email_status():
+    """Status konfigurasi layanan email — diagnosa cepat "OTP tidak terkirim".
+    Publik-aman: hanya mengungkap ADA/TIDAKNYA konfigurasi + alamat pengirim
+    (bukan nilai kunci) — sama seperti yang terlihat di email mana pun."""
+    sandbox = SENDER_EMAIL.strip().lower().endswith("@resend.dev")
+    return {
+        "terkonfigurasi": bool(RESEND_API_KEY),
+        "sender_email": SENDER_EMAIL,
+        "mode_uji_resend": sandbox,
+        "catatan": (
+            "" if RESEND_API_KEY and not sandbox else
+            ("Layanan email BELUM dikonfigurasi (RESEND_API_KEY kosong)."
+             if not RESEND_API_KEY else
+             "SENDER_EMAIL masih alamat uji Resend (@resend.dev) — hanya bisa "
+             "mengirim ke email pemilik akun Resend; setel domain terverifikasi "
+             "agar OTP sampai ke semua pendaftar.")),
+    }
+
 
 @auth_router.post("/auth/request-reset-otp")
 @limiter.limit("3/minute")
@@ -192,7 +212,7 @@ async def request_reset_otp(request: Request, data: OTPVerify):
 
     otp = generate_otp()
     await store_otp(f"reset:{email}", otp, {"email": email, "user_id": user["id"]})
-    email_sent = await send_otp_email(email, otp, user.get("name") or "")
+    email_sent, _email_alasan = await send_otp_email(email, otp, user.get("name") or "")
     show_debug_otp = (not RESEND_API_KEY or not email_sent) and _debug_otp_allowed()
     return {"message": pesan_generik, "otp_sent": True,
             "debug_otp": otp if show_debug_otp else None}
