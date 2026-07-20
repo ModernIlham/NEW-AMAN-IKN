@@ -1078,9 +1078,10 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   // kategori DUMMY + kode aset + NUP berurutan otomatis + "Belum
   // Diinventarisasi" — pengguna cukup mengetik nama barang. Lewat antrean
   // optimistis yang sama dengan form (offline-first).
-  const handleQuickAddPeta = useCallback(async (lat, lng, nama) => {
+  const handleQuickAddPeta = useCallback(async (lat, lng, nama, fotos = []) => {
     const dummy = cariKategoriDummy(categories);
     const nup = await reserveDummyNup(activity?.id, dummy?.kode_aset, dummy?.label || "Dummy");
+    const daftarFoto = Array.isArray(fotos) ? fotos.slice(0, 6) : [];
     const payload = {
       asset_code: dummy?.kode_aset || "",
       NUP: nup,
@@ -1088,10 +1089,13 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       category: dummy?.label || "Dummy",
       condition: "Baik", status: "Aktif",
       stiker_status: "Belum Terpasang",
-      inventory_status: "Belum Diinventarisasi",
+      // Aturan sama dengan form aset: ada foto → barang terbukti DITEMUKAN.
+      inventory_status: daftarFoto.length ? "Ditemukan" : "Belum Diinventarisasi",
       koordinat_latitude: Number(lat).toFixed(7),
       koordinat_longitude: Number(lng).toFixed(7),
-      photos: [],
+      photos: daftarFoto,
+      photo: daftarFoto[0] || null,
+      thumbnail_index: 0,
       activity_id: activity?.id || null,
     };
     handleOptimisticSubmit(payload, false);
