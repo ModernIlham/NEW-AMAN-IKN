@@ -399,10 +399,20 @@ const AssetMapFullView = memo(function AssetMapFullView({
       wrap.innerHTML =
         '<button type="button" data-aksi="tambah" data-testid="peta-tambah-disini" style="width:100%;display:flex;align-items:center;justify-content:center;gap:6px;background:#2563eb;color:#fff;border:0;border-radius:8px;padding:9px 10px;font-weight:700;font-size:12px;cursor:pointer">＋ Tambah aset di sini</button>' +
         `<div style="margin-top:5px;color:#64748b;font-size:10px;text-align:center">${lat.toFixed(6)}, ${lng.toFixed(6)}</div>`;
-      const popup = L.popup({ closeButton: true, autoClose: true, className: "aman-peta-tambah" })
+      // Popup TIDAK boleh tertutup oleh apa pun selain tombol tutup /
+      // selesai simpan: closeOnClick & autoClose DIMATIKAN dan SEMUA event
+      // dari isi popup dihentikan sebelum mencapai peta — klik/ketukan ke
+      // input (serta resize akibat keyboard virtual HP + klik sintesisnya)
+      // sebelumnya dianggap interaksi peta (preclick Leaflet) sehingga
+      // popup hilang saat mulai mengetik nama.
+      const popup = L.popup({ closeButton: true, autoClose: false,
+                              closeOnClick: false, className: "aman-peta-tambah" })
         .setLatLng(ev.latlng).setContent(wrap).openOn(map);
       L.DomEvent.disableClickPropagation(wrap);
       L.DomEvent.disableScrollPropagation(wrap);
+      L.DomEvent.on(wrap,
+        "pointerdown mousedown touchstart touchend mouseup click dblclick contextmenu keydown keyup keypress wheel",
+        L.DomEvent.stopPropagation);
       wrap.querySelector('[data-aksi="tambah"]').addEventListener("click", () => {
         wrap.innerHTML =
           '<p style="margin:0 0 6px;font-weight:700;color:#0f172a">Aset baru di titik ini</p>' +
