@@ -48,6 +48,22 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#480] Peta Siklus — animasi ikon hanya diputar sekali saat kartu di-hover — 2026-07-20
+
+- Animasi ikon modul (Lottie useanimations maupun micro-animation CSS
+  `.ikon-*`) **tidak lagi loop terus-menerus**: saat idle semua ikon diam,
+  dan animasi **diputar SEKALI** setiap kartu modul di-hover. Keluar hover
+  me-reset animasi sehingga hover berikutnya memutarnya sekali lagi.
+- Kartu yang memicu ditandai kelas `.peta-kotak` (baris modul di timeline
+  fase, kartu Wasdal, kartu submodul Penatausahaan, tile ikon di dialog
+  detail). Versi CSS lewat selector `.peta-kotak:hover .ikon-*` dengan
+  `animation-iteration-count: 1`; versi Lottie diputar ulang via remount
+  (`key`) per hover dengan `loop=false`.
+- Delay stagger antar ikon dihapus (tidak relevan lagi karena tak ada
+  animasi idle); durasi animasi dipersingkat agar respons hover terasa
+  sigap. Halaman jadi lebih tenang & hemat daya (tanpa animasi berjalan
+  terus di latar).
+
 ## [#479] Peta Siklus — ikon Lottie beranimasi (useanimations) pada modul terpilih — 2026-07-20
 
 - Empat ikon modul di halaman Beranda Modul / Peta Siklus kini memakai
