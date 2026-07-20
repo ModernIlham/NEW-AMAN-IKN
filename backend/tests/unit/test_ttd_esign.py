@@ -76,3 +76,25 @@ def test_publik_signer_tanpa_rahasia():
     pub = _publik_signer(sg)
     assert pub["nama"] == "Budi" and pub["status"] == "aktif"
     assert "jti" not in pub and "hash" not in pub and "ip" not in pub
+
+
+class TestPosisiBersih:
+    """Posisi pembubuhan pilihan penanda tangan: validasi + penjepitan."""
+
+    def test_posisi_valid_dijepit_ke_rentang(self):
+        from routes.ttd import _posisi_bersih
+        p = _posisi_bersih({"halaman": 2, "x": 0.5, "y": 0.7, "lebar": 0.25}, 5)
+        assert p == {"halaman": 2, "x": 0.5, "y": 0.7, "lebar": 0.25}
+        # Nilai liar dijepit, bukan ditolak.
+        p = _posisi_bersih({"halaman": 99, "x": 7, "y": -3, "lebar": 9}, 4)
+        assert p == {"halaman": 4, "x": 0.95, "y": 0.0, "lebar": 0.6}
+        p = _posisi_bersih({"halaman": 1, "x": 0, "y": 0, "lebar": 0.01}, 0)
+        assert p["lebar"] == 0.08
+
+    def test_posisi_tak_valid_jadi_none(self):
+        from routes.ttd import _posisi_bersih
+        assert _posisi_bersih(None) is None
+        assert _posisi_bersih("bukan-dict") is None
+        assert _posisi_bersih({}) is None
+        assert _posisi_bersih({"halaman": 0, "x": 0.1, "y": 0.1, "lebar": 0.2}) is None
+        assert _posisi_bersih({"halaman": 1, "x": "abc", "y": 0.1, "lebar": 0.2}) is None

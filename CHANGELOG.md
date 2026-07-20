@@ -48,6 +48,49 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#469] TTD elektronik — atur letak & ukuran pembubuhan di dokumen + halaman publik responsif + keandalan lapangan — 2026-07-20
+
+### Pembubuhan yang bisa diatur (baru)
+- Setelah menggambar/mengunggah tanda tangan, penanda tangan kini masuk
+  langkah **"Atur Pembubuhan"**: pratinjau halaman dokumen (dirender server
+  per halaman — tanpa unduh PDF penuh), kotak tanda tangan bisa **digeser**
+  (sentuh/mouse) dan **diubah ukurannya** (pegangan pojok + penggeser),
+  **pilih halaman** (default halaman terakhir); tombol "Otomatis saja"
+  mempertahankan perilaku lama (slot otomatis halaman terakhir).
+- Backend: endpoint render halaman `GET /ttd/tandatangan/{id}/dokumen/
+  halaman/{n}` (pypdfium2, rate-limit, cache privat); posisi (halaman +
+  x/y/lebar fraksi) divalidasi & dijepit server, tersimpan per penanda
+  tangan; builder dokumen ber-TTD menggambar di posisi pilihan (keterangan
+  identitas kecil di bawahnya), penanda tanpa posisi tetap memakai slot
+  otomatis, QR verifikasi tetap di halaman terakhir. Smoke-test FakeDB
+  PDF 2 halaman lulus.
+
+### Responsif semua tampilan
+- Kontainer melebar di tablet/desktop (`max-w-2xl`), tinggi kanvas
+  mengikuti lebar (180–280px — tidak lagi 200px gepeng), judul & tombol
+  "Baca dokumen" membungkus rapi di HP sempit, font diperbesar.
+
+### Keandalan segala kondisi (audit 3 lensa → diperbaiki)
+- **Bug kritis rotasi**: `react-signature-canvas` menghapus goresan saat
+  `window.resize` (default `clearOnResize`) — kode pemulihan lama tidak
+  pernah jalan; kini `clearOnResize={false}` + goresan DISKALAKAN ke ukuran
+  baru (rotasi portrait↔landscape tidak memotong tanda tangan; address bar
+  Chrome Android yang menciut tidak lagi menghapus gambar).
+- **Draf tahan reload**: goresan & hasil olah foto tersimpan di
+  sessionStorage — tab terbunuh/di-reload tidak menghapus tanda tangan;
+  draf dibersihkan setelah terkirim.
+- **Jaringan**: timeout eksplisit (info 20 dtk, kirim 60 dtk, olah foto
+  60 dtk); galat jaringan saat muat TIDAK lagi disamarkan "link tidak
+  valid" (yang mendorong terbit-ulang link yang justru mematikan link
+  valid) — kini layar "Koneksi bermasalah" + tombol Coba lagi; kirim
+  terputus → pesan jelas bahwa tanda tangan masih ada; 409 → status
+  dimuat ulang otomatis (submit yang sebenarnya sudah tercatat tidak
+  tampil sebagai galat).
+- **Foto kamera**: diperkecil di KLIEN (maks 1600px, JPEG) sebelum unggah
+  — hemat kuota & cepat di jaringan seluler.
+- **Guard tutup tab** saat tanda tangan siap tapi belum terkirim;
+  Content-Length pada stream dokumen (progres unduhan di viewer HP).
+
 ## [#468] Air sinkron mengalir (gelombang cekung-cembung) + konfirmasi perbarui satker saat konflik kode↔nama — 2026-07-19
 
 ### Konfirmasi perbarui data satker (form kegiatan)
