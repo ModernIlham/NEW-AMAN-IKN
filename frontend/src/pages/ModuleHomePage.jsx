@@ -7,7 +7,7 @@ import {
   CheckCircle2, Link2, CalendarClock, Banknote, Wrench, Landmark, ListTree,
   Users, DoorOpen, IdCard, Mail, FileSignature, Building2, Settings,
 } from "lucide-react";
-import UseAnimations from "react-useanimations";
+import lottie from "lottie-web";
 import uaSettings from "react-useanimations/lib/settings";
 import uaVisibility from "react-useanimations/lib/visibility";
 import uaArchive from "react-useanimations/lib/archive";
@@ -92,46 +92,81 @@ const MODULE_ANIM = {
   "pelaporan": "ikon-apung",
 };
 
-// Ikon ANIMASI useanimations (Lottie) untuk modul yang animasinya mengalir
-// mulus & sesuai makna: pemeliharaan = gerigi berputar, wasdal = mata
-// berkedip, pemindahtanganan = panah berbagi/pindah, persediaan = kotak
-// arsip. Modul lain tetap ikon lucide + micro-animation CSS (.ikon-*).
-// Aset animasi berlisensi CC BY 4.0 — atribusi ke useanimations.com ada di
-// halaman Info (kredit) sesuai syarat lisensi.
+// Ikon ANIMASI useanimations (Lottie, JSON mentah) untuk modul yang
+// animasinya mengalir mulus & sesuai makna: pemeliharaan = gerigi berputar,
+// wasdal = mata berkedip, pemindahtanganan = panah berbagi/pindah,
+// persediaan = kotak arsip. Modul lain tetap ikon lucide + micro-animation
+// CSS (.ikon-*). Aset animasi berlisensi CC BY 4.0 — atribusi ke
+// useanimations.com ada di halaman Info (kredit) sesuai syarat lisensi.
 const UA_ICON = {
-  "pemeliharaan": { anim: uaSettings, speed: 1 },
-  "wasdal": { anim: uaVisibility, speed: 0.85 },
-  "pemindahtanganan": { anim: uaShare, speed: 0.9 },
-  "inventarisasi-persediaan": { anim: uaArchive, speed: 0.7 },
+  "pemeliharaan": { data: uaSettings.animationData, speed: 1 },
+  "wasdal": { data: uaVisibility.animationData, speed: 0.85 },
+  "pemindahtanganan": { data: uaShare.animationData, speed: 0.9 },
+  "inventarisasi-persediaan": { data: uaArchive.animationData, speed: 0.7 },
 };
 
-// Ikon modul terpusat: useanimations (Lottie) bila ada di UA_ICON, selain
-// itu ikon lucide + animasi CSS. SEMUA animasi hanya diputar SEKALI setiap
-// kartu modul (ancestor .peta-kotak) di-hover — saat idle ikon diam, tidak
-// loop terus. Versi CSS-nya diatur lewat selector .peta-kotak:hover di
-// index.css; versi Lottie diputar ulang via remount (key) per hover.
+const kurangiGerak = () =>
+  typeof window !== "undefined" &&
+  window.matchMedia &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// Ikon modul terpusat: useanimations (Lottie via lottie-web) bila ada di
+// UA_ICON, selain itu ikon lucide + animasi CSS. Perilaku hover SAMA untuk
+// keduanya: saat kartu modul (ancestor .peta-kotak) di-hover animasi
+// diputar MAJU sekali; saat kursor keluar animasi diputar MUNDUR kembali ke
+// frame awal — jadi ikon selalu kembali ke kondisi semula (bukan diam di
+// frame akhir). Warna ikon dipaksa putih via filter (JSON aslinya hitam).
 function IkonModul({ id, size = 20 }) {
   const ua = UA_ICON[id];
-  const ref = useRef(null);
-  const [putaran, setPutaran] = useState(0); // >0 = pernah di-hover → main 1x
+  const boxRef = useRef(null);
   useEffect(() => {
-    if (!ua || !ref.current) return undefined;
-    const kotak = ref.current.closest(".peta-kotak");
-    if (!kotak) return undefined;
-    const main = () => setPutaran((n) => n + 1);
-    kotak.addEventListener("mouseenter", main);
-    return () => kotak.removeEventListener("mouseenter", main);
+    if (!ua || !boxRef.current) return undefined;
+    const anim = lottie.loadAnimation({
+      container: boxRef.current,
+      renderer: "svg",
+      loop: false,
+      autoplay: false,
+      animationData: ua.data,
+      rendererSettings: { preserveAspectRatio: "xMidYMid meet" },
+    });
+    anim.setSpeed(ua.speed);
+    anim.goToAndStop(0, true);
+    const kotak = boxRef.current.closest(".peta-kotak");
+    const maju = () => {
+      if (kurangiGerak()) return;
+      anim.setDirection(1);
+      anim.play();
+    };
+    const mundur = () => {
+      if (kurangiGerak()) { anim.goToAndStop(0, true); return; }
+      anim.setDirection(-1);
+      anim.play();
+    };
+    if (kotak) {
+      kotak.addEventListener("mouseenter", maju);
+      kotak.addEventListener("mouseleave", mundur);
+    }
+    return () => {
+      if (kotak) {
+        kotak.removeEventListener("mouseenter", maju);
+        kotak.removeEventListener("mouseleave", mundur);
+      }
+      anim.destroy();
+    };
   }, [ua]);
   if (ua) {
     return (
-      <span ref={ref} style={{ pointerEvents: "none", display: "flex" }}>
-        <UseAnimations
-          key={putaran}
-          animation={ua.anim} size={size} strokeColor="#ffffff"
-          loop={false} autoplay={putaran > 0} speed={ua.speed}
-          wrapperStyle={{ pointerEvents: "none", display: "flex" }}
-        />
-      </span>
+      <span
+        ref={boxRef}
+        aria-hidden
+        style={{
+          width: size, height: size, display: "flex",
+          pointerEvents: "none",
+          // JSON useanimations bergaris hitam → paksa jadi putih agar
+          // kontras di atas tile bergradasi.
+          filter: "brightness(0) invert(1)",
+        }}
+      />
     );
   }
   const Icon = MODULE_ICONS[id] || Package;
