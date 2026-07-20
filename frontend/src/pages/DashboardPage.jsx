@@ -15,6 +15,7 @@ import axios from "axios";
 import { getApiError } from "@/lib/utils";
 import { downloadFileWithProgress, makeDownloadProgress } from "@/lib/downloadFile";
 import { authMediaUrl } from "@/lib/mediaUrl";
+import { reserveDummyNup, cariKategoriDummy } from "@/lib/dummyNup";
 import { syncSnapshot, getSnapshotAssets, snapshotMeta, isSnapshotExpired, upsertSnapshotAsset, removeSnapshotAsset } from "@/lib/offlineSnapshot";
 
 // Import refactored components
@@ -1072,6 +1073,30 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     toast.info(isEdit ? "Menyimpan perubahan..." : "Menambahkan aset...", { duration: 1500 });
   }, [enqueueOptimistic, assets, activity?.id, activity?.nama_kegiatan]);
 
+  // TAMBAH CEPAT dari peta (klik kanan / tekan lama di area peta): aset
+  // terbentuk di titik yang dipilih dengan default halaman tambah aset —
+  // kategori DUMMY + kode aset + NUP berurutan otomatis + "Belum
+  // Diinventarisasi" — pengguna cukup mengetik nama barang. Lewat antrean
+  // optimistis yang sama dengan form (offline-first).
+  const handleQuickAddPeta = useCallback(async (lat, lng, nama) => {
+    const dummy = cariKategoriDummy(categories);
+    const nup = await reserveDummyNup(activity?.id, dummy?.kode_aset, dummy?.label || "Dummy");
+    const payload = {
+      asset_code: dummy?.kode_aset || "",
+      NUP: nup,
+      asset_name: String(nama || "").trim(),
+      category: dummy?.label || "Dummy",
+      condition: "Baik", status: "Aktif",
+      stiker_status: "Belum Terpasang",
+      inventory_status: "Belum Diinventarisasi",
+      koordinat_latitude: Number(lat).toFixed(7),
+      koordinat_longitude: Number(lng).toFixed(7),
+      photos: [],
+      activity_id: activity?.id || null,
+    };
+    handleOptimisticSubmit(payload, false);
+  }, [categories, activity?.id, handleOptimisticSubmit]);
+
   // Peta mengikuti filter aktif: builder query yang SAMA dengan daftar aset
   // (search + kategori + filter lanjutan), tanpa paging — peta yang paging.
   const buildMapParams = useCallback(() => {
@@ -1679,6 +1704,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
                   clientFilter={mapClientFilter}
                   activeFilterCount={activeFilterCount + (debouncedSearch ? 1 : 0)}
                   selectedIds={selectedAssets}
+                  onQuickAdd={perms.canEdit ? handleQuickAddPeta : undefined}
                 />
               </Suspense>
             ) : loading ? (
