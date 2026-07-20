@@ -126,9 +126,13 @@ def info_psp_siman(siman_sub) -> dict:
     yang selama ini tersimpan tapi belum dipakai modul lain.
 
     Kembalian {} bila tidak ada satu pun info bermakna."""
+    # norm_no_psp: placeholder "belum PSP" ("-", "Tidak Ada Inputan" dsb.)
+    # dari referensi lama di DB tidak boleh dianggap nomor PSP — tanpa ini
+    # aset belum ter-PSP mendapat event "PSP menurut SIMAN" palsu.
+    from siman_utils import norm_no_psp
     ref = ((siman_sub or {}).get("referensi") or {})
     info = {
-        "no_psp": _s(ref.get("no_psp")),
+        "no_psp": norm_no_psp(ref.get("no_psp")),
         "tanggal_psp": _s(ref.get("tanggal_psp")),
         "status_penggunaan": _s(ref.get("status_penggunaan")),
         "status_bmn": _s(ref.get("status_bmn")),

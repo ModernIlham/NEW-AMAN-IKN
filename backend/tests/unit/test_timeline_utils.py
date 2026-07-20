@@ -71,6 +71,12 @@ def test_info_dan_event_psp_siman():
     assert event_psp_siman({"referensi": {"status_bmn": "Aktif"}}) == []
     assert info_psp_siman({"referensi": {}}) == {}
     assert info_psp_siman(None) == {}
+    # Placeholder "belum PSP" dari SIMAN ("-"/"Tidak Ada Inputan") BUKAN
+    # nomor PSP — jangan bikin event "PSP menurut SIMAN" palsu.
+    assert event_psp_siman({"referensi": {"no_psp": "-"}}) == []
+    assert event_psp_siman(
+        {"referensi": {"no_psp": "Tidak Ada Inputan"}}) == []
+    assert info_psp_siman({"referensi": {"no_psp": "-"}}) == {}
 
 
 def test_event_dari_riwayat_pola_umum():

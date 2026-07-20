@@ -48,6 +48,29 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#483] Perbaikan PSP dari impor SIMAN — barang belum ter-PSP tak lagi terhitung sudah PSP — 2026-07-20
+
+- **Bug**: kolom "No PSP" pada ekspor SIMAN memakai placeholder (mis. `-`,
+  `Tidak Ada Inputan`) untuk barang yang BELUM ter-PSP. Placeholder ini
+  tersimpan apa adanya saat impor lalu dianggap nomor PSP sungguhan,
+  sehingga barang belum ter-PSP ikut terhitung "sudah PSP": muncul di
+  panel PSP-dari-SIMAN modul Penggunaan (menggerombol jadi kelompok palsu
+  bernomor `-`) dan mendapat event "PSP menurut SIMAN V2" di timeline aset.
+- **Perbaikan berlapis** (fungsi baru `norm_no_psp` di `siman_utils`):
+  1. **Parse impor** — placeholder "belum PSP" (`-`, `--`, `0`,
+     `Tidak Ada Inputan`, `Belum PSP`, `Belum Ditetapkan`, `N/A`, dsb.,
+     case-insensitive) dinormalkan jadi kosong sebelum disimpan.
+  2. **`kelompokkan_psp_siman`** (panel Penggunaan) — menyaring placeholder
+     juga saat MEMBACA, karena referensi lama di DB bisa berasal dari impor
+     sebelum penyaringan ada. Impor ulang file SIMAN juga membersihkan
+     referensi aset yang cocok.
+  3. **Timeline aset** — `info_psp_siman`/`event_psp_siman` memakai
+     normalisasi yang sama; tak ada lagi event PSP palsu.
+  4. **Query endpoint `/penggunaan/psp-siman`** — prefilter placeholder
+     umum langsung di query agar fetch tidak dipenuhi baris bukan-PSP.
+- Unit test baru di ketiga lapisan (parse, kelompokkan, timeline); seluruh
+  608 test unit backend lolos.
+
 ## [#482] Peta Siklus — 6 modul lagi mendapat ikon Lottie beranimasi (total 10) — 2026-07-20
 
 - Melengkapi ikon animasi Peta Siklus: **6 modul lagi** kini memakai ikon

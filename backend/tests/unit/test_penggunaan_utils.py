@@ -436,3 +436,15 @@ class TestKelompokkanPspSiman:
         assert kelompokkan_psp_siman(None) == []
         # Aset tanpa no_psp diabaikan
         assert kelompokkan_psp_siman([{"id": "X", "siman": {}}]) == []
+
+    def test_placeholder_belum_psp_tidak_dihitung(self):
+        # Referensi lama di DB (impor sebelum penyaringan parse ada) bisa
+        # memuat placeholder "belum PSP" — jangan jadi kelompok PSP palsu.
+        from penggunaan_utils import kelompokkan_psp_siman
+        rows = [self._aset("A1", "-"),
+                self._aset("A2", "Tidak Ada Inputan"),
+                self._aset("A3", "BELUM PSP"),
+                self._aset("A4", "S-1/2023")]
+        hasil = kelompokkan_psp_siman(rows)
+        assert [k["no_psp"] for k in hasil] == ["S-1/2023"]
+        assert hasil[0]["jumlah"] == 1

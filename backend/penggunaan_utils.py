@@ -606,13 +606,19 @@ def kelompokkan_psp_siman(aset_rows, nomor_sk_tercatat=None,
     {no_psp, tanggal_psp, status_penggunaan, aset[], aset_belum[], jumlah,
     sudah_tercatat}. MURNI.
     """
+    # Placeholder "belum PSP" (mis. "-", "Tidak Ada Inputan") disaring di
+    # sini juga — referensi lama di DB bisa berasal dari impor sebelum
+    # penyaringan di parse ada. Tanpa ini, barang belum ter-PSP menggerombol
+    # jadi satu "kelompok PSP" palsu bernomor "-".
+    from siman_utils import norm_no_psp
+
     tercatat = {str(n or "").strip().upper()
                 for n in (nomor_sk_tercatat or set()) if str(n or "").strip()}
     tercakup = set(asset_id_tercakup or set())
     kelompok = {}
     for a in aset_rows or []:
         ref = ((a.get("siman") or {}).get("referensi") or {})
-        no = str(ref.get("no_psp") or "").strip()
+        no = norm_no_psp(ref.get("no_psp"))
         if not no:
             continue
         k = kelompok.setdefault(no, {

@@ -6,9 +6,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from siman_utils import (  # noqa: E402
     banding_aset, deteksi_header, kunci_aset, nilai_terapkan, norm_kode,
-    norm_kode_satker, norm_nup, norm_tanggal, parse_baris, petakan_header,
-    referensi_siman, ringkas_baris_belum_tercatat, ringkas_import,
-    validasi_satker,
+    norm_kode_satker, norm_no_psp, norm_nup, norm_tanggal, parse_baris,
+    petakan_header, referensi_siman, ringkas_baris_belum_tercatat,
+    ringkas_import, validasi_satker,
 )
 
 HEADER_SIMAN = [
@@ -64,6 +64,23 @@ class TestNormalisasi:
     def test_kunci_aset(self):
         assert kunci_aset("3030203001", "001") == "3030203001|1"
         assert kunci_aset("", "1") == ""
+
+    def test_norm_no_psp_placeholder_berarti_belum_psp(self):
+        # Placeholder ekspor SIMAN utk barang BELUM ter-PSP → '' (bukan PSP)
+        for v in ("", None, "-", "--", "0", "Tidak Ada Inputan",
+                  "BELUM PSP", "belum ditetapkan", "N/A", "  -  "):
+            assert norm_no_psp(v) == ""
+        # Nomor SK sungguhan dipertahankan apa adanya (rapikan spasi saja)
+        assert norm_no_psp(" KEP-123/MK.6/2023 ") == "KEP-123/MK.6/2023"
+        assert norm_no_psp("S-11/MK.6/2023") == "S-11/MK.6/2023"
+
+    def test_parse_no_psp_placeholder_jadi_kosong(self):
+        # Barang belum PSP di file SIMAN ("-"/"Tidak Ada Inputan") TIDAK
+        # boleh tersimpan sebagai nomor PSP — dulunya lolos & terhitung
+        # "sudah PSP" di modul Penggunaan/timeline.
+        assert _parse(**{"No PSP": "-"})["no_psp"] == ""
+        assert _parse(**{"No PSP": "Tidak Ada Inputan"})["no_psp"] == ""
+        assert _parse(**{"No PSP": "KEP-7/MK.6/2024"})["no_psp"] == "KEP-7/MK.6/2024"
 
 
 class TestParseBaris:
