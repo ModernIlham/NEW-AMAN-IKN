@@ -364,6 +364,69 @@ const AssetMapFullView = memo(function AssetMapFullView({
       },
     });
     new NorthControl({ position: "topright" }).addTo(map);
+
+    // ── "TAMPILKAN LOKASI ANDA": tombol di bawah kontrol zoom (topleft —
+    //    kontrol menumpuk berurutan) → GPS perangkat → titik biru +
+    //    lingkaran akurasi + pan ke lokasi; klik lagi = sembunyikan. ──
+    const lokasiSaya = { marker: null, lingkaran: null, tombol: null, mencari: false };
+    const IKON_LOKASI = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0f172a" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8"/></svg>';
+    const hapusLokasiSaya = () => {
+      if (lokasiSaya.marker) { map.removeLayer(lokasiSaya.marker); lokasiSaya.marker = null; }
+      if (lokasiSaya.lingkaran) { map.removeLayer(lokasiSaya.lingkaran); lokasiSaya.lingkaran = null; }
+    };
+    const LokasiControl = L.Control.extend({
+      onAdd() {
+        const d = L.DomUtil.create("div", "leaflet-bar");
+        const a = L.DomUtil.create("a", "", d);
+        a.href = "#";
+        a.title = "Tampilkan lokasi Anda";
+        a.setAttribute("role", "button");
+        a.setAttribute("aria-label", "Tampilkan lokasi Anda");
+        a.setAttribute("data-testid", "peta-lokasi-saya");
+        a.style.cssText = "display:flex;align-items:center;justify-content:center;width:30px;height:30px";
+        a.innerHTML = IKON_LOKASI;
+        lokasiSaya.tombol = a;
+        L.DomEvent.disableClickPropagation(d);
+        L.DomEvent.on(a, "click", (e) => {
+          L.DomEvent.preventDefault(e);
+          if (lokasiSaya.mencari) return;
+          // Toggle: lokasi sedang tampil → sembunyikan.
+          if (lokasiSaya.marker) { hapusLokasiSaya(); return; }
+          lokasiSaya.mencari = true;
+          a.style.opacity = "0.4";
+          map.locate({ setView: false, enableHighAccuracy: true, timeout: 15000 });
+        });
+        return d;
+      },
+    });
+    new LokasiControl({ position: "topleft" }).addTo(map);
+    map.on("locationfound", (ev) => {
+      lokasiSaya.mencari = false;
+      if (lokasiSaya.tombol) lokasiSaya.tombol.style.opacity = "1";
+      hapusLokasiSaya();
+      const akurasi = Math.round(ev.accuracy || 0);
+      lokasiSaya.lingkaran = L.circle(ev.latlng, {
+        radius: ev.accuracy || 0, color: "#2563eb", weight: 1,
+        fillColor: "#3b82f6", fillOpacity: 0.12, interactive: false,
+      }).addTo(map);
+      lokasiSaya.marker = L.marker(ev.latlng, {
+        interactive: true,
+        icon: L.divIcon({
+          className: "",
+          html: '<div style="width:16px;height:16px;border-radius:50%;background:#2563eb;border:3px solid #fff;box-shadow:0 0 0 2px rgba(37,99,235,.35),0 1px 4px rgba(0,0,0,.4)"></div>',
+          iconSize: [16, 16], iconAnchor: [8, 8],
+        }),
+      }).addTo(map).bindTooltip(`Lokasi Anda (±${akurasi} m)`, { direction: "top" });
+      // Pan + zoom secukupnya ke lokasi (jangan menjauh bila sudah dekat).
+      map.setView(ev.latlng, Math.max(map.getZoom(), 17));
+    });
+    map.on("locationerror", (ev) => {
+      lokasiSaya.mencari = false;
+      if (lokasiSaya.tombol) lokasiSaya.tombol.style.opacity = "1";
+      toast.error(ev?.message && /denied|ditolak/i.test(ev.message)
+        ? "Izin lokasi ditolak — aktifkan izin lokasi browser untuk fitur ini"
+        : "Gagal mendapatkan lokasi Anda — pastikan GPS aktif lalu coba lagi");
+    });
     // Info skala nominal (1:N) + level zoom — diperbarui tiap zoom/geser.
     const scaleInfo = L.control({ position: "bottomleft" });
     scaleInfo.onAdd = () => {
