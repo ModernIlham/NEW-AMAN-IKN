@@ -548,25 +548,29 @@ body.no-scroll { overflow: hidden; }
   .siman-liquid-sukses { animation: none !important; opacity: 1; }
 }
 
-/* ===== Animasi idle ikon Peta Siklus (Beranda Modul) =====
-   Micro-motion HALUS & sesuai makna tiap ikon, di-stagger via
-   animation-delay (dihitung dari id modul) agar tidak serempak — terkesan
-   hidup tapi profesional. Semua keyframe REST di 0%/100% sehingga aturan
+/* ===== Animasi ikon Peta Siklus (Beranda Modul) =====
+   Diputar SEKALI saat kartu modul (.peta-kotak) di-hover — bukan loop
+   terus. Saat idle ikon diam; keluar hover me-reset animasi sehingga hover
+   berikutnya memutarnya sekali lagi. Semua keyframe REST di 0%/100% (gerak
+   selesai kembali ke posisi semula tanpa fill-mode) dan aturan
    reduced-motion global (0.01ms) meninggalkannya diam. Transform-only (GPU). */
 .ikon-apung, .ikon-ayun, .ikon-denyut, .ikon-putar, .ikon-geser, .ikon-kobar {
   will-change: transform;
 }
-.ikon-apung { animation: ikonApung 3.6s ease-in-out infinite; }
+.ikon-ayun  { transform-origin: 50% 30%; }
+.ikon-putar { transform-origin: 50% 50%; }
+.ikon-kobar { transform-origin: 50% 100%; }
+.peta-kotak:hover .ikon-apung  { animation: ikonApung 1.4s ease-in-out 1; }
 @keyframes ikonApung { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-1.6px); } }
-.ikon-ayun  { animation: ikonAyun 3.8s ease-in-out infinite; transform-origin: 50% 30%; }
+.peta-kotak:hover .ikon-ayun   { animation: ikonAyun 1.4s ease-in-out 1; }
 @keyframes ikonAyun { 0%,100% { transform: rotate(0deg); } 25% { transform: rotate(6deg); } 75% { transform: rotate(-6deg); } }
-.ikon-denyut { animation: ikonDenyut 2.8s ease-in-out infinite; }
+.peta-kotak:hover .ikon-denyut { animation: ikonDenyut 1.2s ease-in-out 1; }
 @keyframes ikonDenyut { 0%,100% { transform: scale(1); } 50% { transform: scale(1.12); } }
-.ikon-putar { animation: ikonPutar 4s ease-in-out infinite; transform-origin: 50% 50%; }
+.peta-kotak:hover .ikon-putar  { animation: ikonPutar 1.6s ease-in-out 1; }
 @keyframes ikonPutar { 0%,100% { transform: rotate(0deg); } 30% { transform: rotate(-14deg); } 62% { transform: rotate(10deg); } }
-.ikon-geser { animation: ikonGeser 3.4s ease-in-out infinite; }
+.peta-kotak:hover .ikon-geser  { animation: ikonGeser 1.4s ease-in-out 1; }
 @keyframes ikonGeser { 0%,100% { transform: translateX(0); } 30% { transform: translateX(-1.6px); } 70% { transform: translateX(1.6px); } }
-.ikon-kobar { animation: ikonKobar 1.9s ease-in-out infinite; transform-origin: 50% 100%; }
+.peta-kotak:hover .ikon-kobar  { animation: ikonKobar 1.6s ease-in-out 1; }
 @keyframes ikonKobar {
   0%,100% { transform: scale(1) translateY(0); }
   25%     { transform: scale(1.09,1.12) translateY(-0.6px); }

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import {
   Package, Moon, Sun, LogOut, ChevronRight, Lock, Sparkles,
@@ -68,10 +68,11 @@ const MODULE_TILE = {
   "pelaporan": "from-indigo-600 to-blue-700",
 };
 
-// Animasi idle HALUS per ikon Peta Siklus — dipilih sesuai MAKNA ikon
+// Animasi HALUS per ikon Peta Siklus — dipilih sesuai MAKNA ikon
 // (timbangan bergoyang, perisai/mata berdenyut, kunci-inggris berputar,
 // panah pindah & keranjang bergeser, api berkobar; sisanya mengapung
-// lembut). Kelas didefinisikan di index.css (.ikon-*). Default: mengapung.
+// lembut). Kelas di index.css (.ikon-*) — diputar SEKALI saat kartu modul
+// (.peta-kotak) di-hover, tidak loop terus. Default: mengapung.
 const MODULE_ANIM = {
   "perencanaan": "ikon-apung",
   "penganggaran": "ikon-apung",
@@ -91,19 +92,10 @@ const MODULE_ANIM = {
   "pelaporan": "ikon-apung",
 };
 
-// Kelas animasi + delay STAGGER stabil dari id (agar ikon tak serempak,
-// terkesan bergelombang). Dipakai di semua titik render ikon modul.
-function ikonAnim(id) {
-  const kelas = MODULE_ANIM[id] || "ikon-apung";
-  let h = 0;
-  for (let i = 0; i < (id || "").length; i++) h = (h + id.charCodeAt(i)) % 13;
-  return { className: kelas, style: { animationDelay: `${(h * 0.16).toFixed(2)}s` } };
-}
-
-// Ikon ANIMASI useanimations (Lottie) untuk modul yang animasi loop-nya
-// mengalir mulus & sesuai makna: pemeliharaan = gerigi berputar, wasdal =
-// mata berkedip, pemindahtanganan = panah berbagi/pindah, persediaan =
-// kotak arsip. Modul lain tetap ikon lucide + micro-animation CSS (.ikon-*).
+// Ikon ANIMASI useanimations (Lottie) untuk modul yang animasinya mengalir
+// mulus & sesuai makna: pemeliharaan = gerigi berputar, wasdal = mata
+// berkedip, pemindahtanganan = panah berbagi/pindah, persediaan = kotak
+// arsip. Modul lain tetap ikon lucide + micro-animation CSS (.ikon-*).
 // Aset animasi berlisensi CC BY 4.0 — atribusi ke useanimations.com ada di
 // halaman Info (kredit) sesuai syarat lisensi.
 const UA_ICON = {
@@ -113,23 +105,38 @@ const UA_ICON = {
   "inventarisasi-persediaan": { anim: uaArchive, speed: 0.7 },
 };
 
-// Ikon modul terpusat: useanimations (Lottie, loop) bila ada di UA_ICON,
-// selain itu ikon lucide + micro-animation CSS. `size` px mengikuti tile.
+// Ikon modul terpusat: useanimations (Lottie) bila ada di UA_ICON, selain
+// itu ikon lucide + animasi CSS. SEMUA animasi hanya diputar SEKALI setiap
+// kartu modul (ancestor .peta-kotak) di-hover — saat idle ikon diam, tidak
+// loop terus. Versi CSS-nya diatur lewat selector .peta-kotak:hover di
+// index.css; versi Lottie diputar ulang via remount (key) per hover.
 function IkonModul({ id, size = 20 }) {
   const ua = UA_ICON[id];
+  const ref = useRef(null);
+  const [putaran, setPutaran] = useState(0); // >0 = pernah di-hover → main 1x
+  useEffect(() => {
+    if (!ua || !ref.current) return undefined;
+    const kotak = ref.current.closest(".peta-kotak");
+    if (!kotak) return undefined;
+    const main = () => setPutaran((n) => n + 1);
+    kotak.addEventListener("mouseenter", main);
+    return () => kotak.removeEventListener("mouseenter", main);
+  }, [ua]);
   if (ua) {
     return (
-      <UseAnimations
-        animation={ua.anim} size={size} strokeColor="#ffffff"
-        loop autoplay speed={ua.speed}
-        wrapperStyle={{ pointerEvents: "none", display: "flex" }}
-      />
+      <span ref={ref} style={{ pointerEvents: "none", display: "flex" }}>
+        <UseAnimations
+          key={putaran}
+          animation={ua.anim} size={size} strokeColor="#ffffff"
+          loop={false} autoplay={putaran > 0} speed={ua.speed}
+          wrapperStyle={{ pointerEvents: "none", display: "flex" }}
+        />
+      </span>
     );
   }
   const Icon = MODULE_ICONS[id] || Package;
-  const a = ikonAnim(id);
   const px = size >= 24 ? "w-5 h-5" : "w-4 h-4";
-  return <Icon className={`${px} text-white ${a.className}`} style={a.style} />;
+  return <Icon className={`${px} text-white ${MODULE_ANIM[id] || "ikon-apung"}`} />;
 }
 
 // Tiga fase alur siklus (urutan modul mengikuti registry) — Wasdal terpisah
@@ -227,7 +234,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
         type="button"
         onClick={() => openModule(mod)}
         data-testid={`module-card-${mod.id}`}
-        className="relative w-full text-left pl-9 pr-2 py-2 rounded-xl hover:bg-muted/70 transition-colors group min-w-0 min-h-0"
+        className="peta-kotak relative w-full text-left pl-9 pr-2 py-2 rounded-xl hover:bg-muted/70 transition-colors group min-w-0 min-h-0"
       >
         {/* Nomor tahap di atas garis timeline */}
         <span className="absolute left-0 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-card border-2 border-border text-[10px] font-bold text-foreground/70 flex items-center justify-center group-hover:border-blue-500/60 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
@@ -360,7 +367,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
             type="button"
             onClick={() => openModule(wasdal)}
             data-testid="module-card-wasdal"
-            className="w-full text-left rounded-2xl border border-indigo-500/40 bg-gradient-to-r from-indigo-500/10 via-violet-500/5 to-indigo-500/10 hover:from-indigo-500/15 hover:to-indigo-500/15 transition-colors p-3 sm:p-4 flex items-center gap-3 group min-w-0 min-h-0"
+            className="peta-kotak w-full text-left rounded-2xl border border-indigo-500/40 bg-gradient-to-r from-indigo-500/10 via-violet-500/5 to-indigo-500/10 hover:from-indigo-500/15 hover:to-indigo-500/15 transition-colors p-3 sm:p-4 flex items-center gap-3 group min-w-0 min-h-0"
           >
             <span className={`w-10 h-10 rounded-xl bg-gradient-to-br ${MODULE_TILE.wasdal} flex items-center justify-center flex-shrink-0 shadow-sm`}>
               <IkonModul id="wasdal" size={24} />
@@ -402,7 +409,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
                     type="button"
                     onClick={() => openModule(mod)}
                     data-testid={`module-card-${mod.id}`}
-                    className="text-left rounded-2xl border border-border bg-background p-3 hover:shadow-md hover:border-blue-500/50 hover:-translate-y-0.5 transition-all group"
+                    className="peta-kotak text-left rounded-2xl border border-border bg-background p-3 hover:shadow-md hover:border-blue-500/50 hover:-translate-y-0.5 transition-all group"
                   >
                     <div className="flex items-center justify-between gap-2 mb-2">
                       <span className={`w-9 h-9 rounded-xl bg-gradient-to-br ${MODULE_TILE[mod.id] || "from-slate-500 to-slate-600"} flex items-center justify-center flex-shrink-0 shadow-sm group-hover:scale-105 transition-transform`}>
@@ -454,7 +461,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
             <>
               <DialogHeader>
                 <div className="flex items-center gap-2.5">
-                  <span className={`w-10 h-10 rounded-xl bg-gradient-to-br ${MODULE_TILE[detail.id] || "from-slate-500 to-slate-600"} flex items-center justify-center flex-shrink-0`}>
+                  <span className={`peta-kotak w-10 h-10 rounded-xl bg-gradient-to-br ${MODULE_TILE[detail.id] || "from-slate-500 to-slate-600"} flex items-center justify-center flex-shrink-0`}>
                     {detail && <IkonModul id={detail.id} size={24} />}
                   </span>
                   <div className="min-w-0 text-left">
