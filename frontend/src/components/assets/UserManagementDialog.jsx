@@ -370,6 +370,11 @@ function UserManagementDialog({ open, onClose, currentUser }) {
     setOtpLoading(true);
     try {
       const r = await axios.post(`${API}/auth/request-otp`, { email, password: pw, name: name || email.split('@')[0] });
+      if (!r.data?.otp_sent && !r.data?.debug_otp) {
+        toast.error(r.data?.message || "Email gagal terkirim — periksa konfigurasi email server");
+        setOtpLoading(false);
+        return;
+      }
       toast.success("OTP terkirim");
       setOtpSent(true);
       if (r.data.debug_otp) setDebugOtp(r.data.debug_otp);

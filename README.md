@@ -150,6 +150,7 @@ lampiran per tiket insidentil** (#156).
 - 👥 **Master SDM & Referensi** — Master Pegawai (impor Excel massal, **foto pegawai ber-krop persegi** geser/zoom + avatar di daftar), Referensi Pejabat, Unit Kerja Eselon I–V, keterkaitan aset↔pegawai (panel Perlu Serah Terima BMN), **Referensi Akun BAS per makna digit 1–6** (KEP-211/PB/2018) (#391–#394, #460).
 - 🔐 **Isolasi multi-satker & keamanan** — jejak audit, kartu inventarisasi, dan dokumen e-sign ter-scope ketat per satker (tutup kebocoran & IDOR); reset melindungi seluruh master referensi; rate-limit e-sign (#408).
 - ⚡ **Performa** — bilah progres inventarisasi memakai agregasi ringan, indeks database kunci (SIMAN/pemegang/persuratan/pegawai) (#409).
+- 📧 **Konfigurasi email (OTP & e-sign)** — pendaftaran akun, lupa password, dan notifikasi link TTD memakai [Resend](https://resend.com): setel env `RESEND_API_KEY` **dan** `SENDER_EMAIL` dari **domain terverifikasi** di server. ⚠️ Default `onboarding@resend.dev` adalah alamat uji yang HANYA bisa mengirim ke email pemilik akun Resend — OTP ke pendaftar lain pasti gagal. Diagnosa cepat: `GET /api/auth/email-status`.
 - 💾 **Backup otomatis** — terjadwal harian + arsip server + retensi + pulihkan langsung dari arsip; siklus data satu rumah di **Pengaturan › Sistem** (#407).
 - 🎨 **Perombakan UI/UX menyeluruh 26 halaman** — nominal tak patah, tak berdesakan di HP, CTA alur menonjol, tooltip lengkap, empty-state ber-arah (#403–#404).
 

@@ -69,6 +69,10 @@ function OTPVerification({ email, debugOtp, onVerified, onBack, onDebugOtp }) {
     setResending(true);
     try {
       const res = await axios.post(`${API}/auth/resend-otp`, { email, otp: "" });
+      if (!res.data?.otp_sent && !res.data?.debug_otp) {
+        toast.error(res.data?.message || "Email gagal terkirim — hubungi administrator");
+        return;
+      }
       if (res.data.debug_otp && onDebugOtp) onDebugOtp(res.data.debug_otp);
       toast.success("Kode OTP baru telah dikirim");
       setOtp(["", "", "", "", "", ""]);
@@ -215,6 +219,14 @@ export default function LoginPage({ onLogin, onShowInfo }) {
           password: formData.password,
           name: formData.name
         });
+        // Email GAGAL terkirim (mis. layanan email belum dikonfigurasi di
+        // server) → tampilkan alasannya sebagai GALAT dan JANGAN masuk
+        // langkah isi OTP — sebelumnya pesan gagal tampil sebagai toast
+        // sukses dan pengguna menunggu email yang mustahil datang.
+        if (!res.data?.otp_sent && !res.data?.debug_otp) {
+          toast.error(res.data?.message || "Email gagal terkirim — hubungi administrator");
+          return;
+        }
         setOtpEmail(email);
         setDebugOtp(res.data.debug_otp || null);
         setOtpStep(true);
