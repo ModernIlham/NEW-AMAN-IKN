@@ -143,7 +143,7 @@ function TandaTangan({ id, token }) {
   const [sukses, setSukses] = useState(false);
   // Alur 2 langkah bila ada dokumen: tangkap ttd → ATUR POSISI di dokumen.
   const [pngSiap, setPngSiap] = useState(null);
-  const drafKey = `ttd-draf-${id}`;
+  const drafKey = `ttd-draf-${id}-${(token || "").slice(-12)}`;
 
   const muat = useCallback(() => {
     setKoneksi(false);
@@ -295,11 +295,11 @@ function TandaTangan({ id, token }) {
         <StatusPill status={sg.status} />
       </div>
       {info.ada_dokumen && (
-        <Button variant="outline" size="sm" className="h-auto min-h-9 py-2 text-xs w-full whitespace-normal"
+        <Button variant="outline" size="sm" className="h-auto py-2 text-xs w-full whitespace-normal"
           onClick={() => window.open(`${API}/ttd/tandatangan/${id}/dokumen?token=${encodeURIComponent(token)}`, "_blank", "noopener")}
           data-testid="ttd-lihat-dokumen">
           <ShieldCheck className="w-3.5 h-3.5 mr-1.5 flex-shrink-0" />
-          <span className="text-left">Baca dokumen yang akan ditandatangani{info.dok_nama ? ` — ${info.dok_nama}` : ""}</span>
+          <span className="text-left break-words min-w-0">Baca dokumen yang akan ditandatangani{info.dok_nama ? ` — ${info.dok_nama}` : ""}</span>
         </Button>
       )}
       {info.boleh_ttd ? (

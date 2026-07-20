@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   ChevronLeft, ChevronRight, Loader2, MapPin, Maximize2, SkipForward,
@@ -15,7 +14,12 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
  * - Geser kotak ttd: drag/sentuh di dalam kotak.
  * - Ubah ukuran: pegangan pojok kanan-bawah (drag) atau penggeser ukuran.
  * - Pindah halaman: tombol ◀ ▶ (default halaman terakhir).
- * - "Lewati" → pembubuhan otomatis di halaman terakhir (perilaku lama).
+ * - "Otomatis saja" → pembubuhan otomatis di halaman terakhir (perilaku lama).
+ *
+ * Rasio halaman dibaca dari DIMENSI GAMBAR yang termuat (bukan
+ * getBoundingClientRect — wadah bisa kolaps saat gambar belum ada), dan
+ * posisi DIJEPIT ULANG tiap rasio ttd/halaman berubah sehingga kotak tidak
+ * pernah keluar halaman (termasuk halaman landscape / ttd tinggi).
  *
  * onKirim(posisi|null): posisi = {halaman 1-based, x, y, lebar} — fraksi
  * terhadap lebar/tinggi halaman, (x,y) pojok kiri-atas kotak.
@@ -25,9 +29,11 @@ export default function AturPosisiTtd({ srId, token, jumlahHalaman = 1, pngTtd, 
   const [halaman, setHalaman] = useState(total); // default: halaman terakhir
   const [muatHal, setMuatHal] = useState(true);
   const [gagalHal, setGagalHal] = useState(false);
+  const [cobaKe, setCobaKe] = useState(0);
   // Posisi & ukuran kotak ttd sebagai FRAKSI halaman (tahan zoom/rotasi).
   const [pos, setPos] = useState({ x: 0.55, y: 0.72, lebar: 0.28 });
-  const [rasio, setRasio] = useState(0.45); // tinggi/lebar gambar ttd
+  const [rasio, setRasio] = useState(0.45);      // tinggi/lebar gambar ttd
+  const [rasioHal, setRasioHal] = useState(1.414); // tinggi/lebar halaman
   const wadahRef = useRef(null);
   const dragRef = useRef(null); // {jenis:'geser'|'ukur', px, py, awal:{...}}
 
@@ -39,27 +45,35 @@ export default function AturPosisiTtd({ srId, token, jumlahHalaman = 1, pngTtd, 
     img.src = pngTtd;
   }, [pngTtd]);
 
-  useEffect(() => { setMuatHal(true); setGagalHal(false); }, [halaman]);
+  useEffect(() => { setMuatHal(true); setGagalHal(false); }, [halaman, cobaKe]);
 
-  const urlHalaman = `${API}/ttd/tandatangan/${srId}/dokumen/halaman/${halaman}?token=${encodeURIComponent(token)}`;
+  const urlHalaman = `${API}/ttd/tandatangan/${srId}/dokumen/halaman/${halaman}?token=${encodeURIComponent(token)}&c=${cobaKe}`;
 
-  // Jepit agar kotak selalu utuh di dalam halaman.
+  // Jepit agar kotak SELALU utuh di dalam halaman: kecilkan lebar dulu bila
+  // kotak terlalu tinggi untuk halaman (ttd tinggi / halaman landscape),
+  // baru jepit x/y terhadap tepi.
   const jepit = useCallback((p) => {
-    const lebar = Math.min(0.6, Math.max(0.08, p.lebar));
-    const rect = wadahRef.current?.getBoundingClientRect();
-    const rasioHal = rect && rect.width > 0 ? rect.height / rect.width : 1.414;
-    const tinggiFrak = (lebar * rasio) / rasioHal;
+    let lebar = Math.min(0.6, Math.max(0.08, p.lebar));
+    let tinggiFrak = (lebar * rasio) / rasioHal;
+    if (tinggiFrak > 0.85) {
+      lebar = Math.max(0.08, (0.85 * rasioHal) / rasio);
+      tinggiFrak = (lebar * rasio) / rasioHal;
+    }
     return {
       lebar,
       x: Math.min(1 - lebar, Math.max(0, p.x)),
       y: Math.min(Math.max(0, 1 - tinggiFrak - 0.005), Math.max(0, p.y)),
     };
-  }, [rasio]);
+  }, [rasio, rasioHal]);
+
+  // Rasio ttd/halaman berubah (gambar termuat, pindah halaman landscape…)
+  // → jepit ulang posisi yang ada; nilai awal pun ikut terjepit di sini.
+  useEffect(() => { setPos((p) => jepit(p)); }, [jepit]);
 
   const titik = (e) => (e.touches ? e.touches[0] : e);
 
   const mulai = (jenis) => (e) => {
-    e.preventDefault();
+    if (!e.touches) e.preventDefault(); // touchstart React = pasif; cukup mouse
     e.stopPropagation();
     const t = titik(e);
     dragRef.current = { jenis, px: t.clientX, py: t.clientY, awal: { ...pos } };
@@ -67,7 +81,7 @@ export default function AturPosisiTtd({ srId, token, jumlahHalaman = 1, pngTtd, 
   const gerak = (e) => {
     const d = dragRef.current;
     const rect = wadahRef.current?.getBoundingClientRect();
-    if (!d || !rect || rect.width === 0) return;
+    if (!d || !rect || rect.width < 40 || rect.height < 40) return;
     const t = titik(e);
     const dx = (t.clientX - d.px) / rect.width;
     const dy = (t.clientY - d.py) / rect.height;
@@ -79,8 +93,6 @@ export default function AturPosisiTtd({ srId, token, jumlahHalaman = 1, pngTtd, 
   };
   const selesaiDrag = () => { dragRef.current = null; };
 
-  const rect = wadahRef.current?.getBoundingClientRect();
-  const rasioHal = rect && rect.width > 0 ? rect.height / rect.width : 1.414;
   const tinggiKotak = (pos.lebar * rasio) / rasioHal;
 
   return (
@@ -91,15 +103,15 @@ export default function AturPosisiTtd({ srId, token, jumlahHalaman = 1, pngTtd, 
           Atur letak tanda tangan di dokumen
         </p>
         {total > 1 && (
-          <div className="flex items-center gap-1.5">
-            <Button type="button" variant="outline" size="sm" className="h-8 w-8 p-0 min-w-0 min-h-0"
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="outline" size="sm" className="h-9 w-9 p-0 min-w-0 min-h-0"
               disabled={halaman <= 1} onClick={() => setHalaman((h) => h - 1)} aria-label="Halaman sebelumnya">
               <ChevronLeft className="w-4 h-4" />
             </Button>
             <span className="text-xs font-semibold whitespace-nowrap" data-testid="posisi-halaman">
               Hal. {halaman}/{total}
             </span>
-            <Button type="button" variant="outline" size="sm" className="h-8 w-8 p-0 min-w-0 min-h-0"
+            <Button type="button" variant="outline" size="sm" className="h-9 w-9 p-0 min-w-0 min-h-0"
               disabled={halaman >= total} onClick={() => setHalaman((h) => h + 1)} aria-label="Halaman berikutnya">
               <ChevronRight className="w-4 h-4" />
             </Button>
@@ -110,15 +122,16 @@ export default function AturPosisiTtd({ srId, token, jumlahHalaman = 1, pngTtd, 
       <div
         ref={wadahRef}
         className="relative w-full rounded-xl border border-border overflow-hidden bg-white select-none touch-none"
+        style={muatHal || gagalHal ? { aspectRatio: `1 / ${rasioHal}` } : undefined}
         onMouseMove={gerak} onMouseUp={selesaiDrag} onMouseLeave={selesaiDrag}
-        onTouchMove={gerak} onTouchEnd={selesaiDrag}
+        onTouchMove={gerak} onTouchEnd={selesaiDrag} onTouchCancel={selesaiDrag}
         data-testid="posisi-wadah"
       >
         {gagalHal ? (
-          <div className="aspect-[1/1.414] flex flex-col items-center justify-center gap-2 text-muted-foreground">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted-foreground">
             <p className="text-xs">Gagal memuat pratinjau halaman.</p>
-            <Button type="button" variant="outline" size="sm" className="h-8 text-xs"
-              onClick={() => { setGagalHal(false); setMuatHal(true); setHalaman((h) => h); }}>
+            <Button type="button" variant="outline" size="sm" className="h-8 text-xs min-w-0 min-h-0"
+              onClick={() => setCobaKe((c) => c + 1)}>
               Coba lagi
             </Button>
           </div>
@@ -129,7 +142,12 @@ export default function AturPosisiTtd({ srId, token, jumlahHalaman = 1, pngTtd, 
             alt={`Pratinjau halaman ${halaman}`}
             className="w-full block"
             draggable={false}
-            onLoad={() => setMuatHal(false)}
+            onLoad={(e) => {
+              setMuatHal(false);
+              if (e.target.naturalWidth > 0) {
+                setRasioHal(e.target.naturalHeight / e.target.naturalWidth);
+              }
+            }}
             onError={() => { setMuatHal(false); setGagalHal(true); }}
           />
         )}
@@ -139,8 +157,10 @@ export default function AturPosisiTtd({ srId, token, jumlahHalaman = 1, pngTtd, 
           </div>
         )}
 
-        {/* Kotak tanda tangan — geser untuk memindah, pojok untuk ukuran */}
-        {!gagalHal && (
+        {/* Kotak tanda tangan — geser untuk memindah, pegangan untuk ukuran.
+            Pegangan DI DALAM kotak agar tak terpotong overflow saat kotak
+            menempel tepi halaman. */}
+        {!gagalHal && !muatHal && (
           <div
             className="absolute border-2 border-blue-500 bg-blue-500/10 rounded-md cursor-move shadow-[0_0_0_9999px_rgba(0,0,0,0.06)]"
             style={{
@@ -153,7 +173,7 @@ export default function AturPosisiTtd({ srId, token, jumlahHalaman = 1, pngTtd, 
             <img src={pngTtd} alt="Tanda tangan" draggable={false}
               className="w-full h-full object-contain pointer-events-none" />
             <span
-              className="absolute -right-3 -bottom-3 w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center cursor-nwse-resize shadow-md"
+              className="absolute right-0 bottom-0 w-7 h-7 rounded-tl-lg rounded-br-md bg-blue-600 text-white flex items-center justify-center cursor-nwse-resize shadow-md"
               onMouseDown={mulai("ukur")} onTouchStart={mulai("ukur")}
               aria-label="Ubah ukuran tanda tangan"
               data-testid="posisi-pegangan"
@@ -189,7 +209,7 @@ export default function AturPosisiTtd({ srId, token, jumlahHalaman = 1, pngTtd, 
             <SkipForward className="w-3.5 h-3.5 mr-1.5" />Otomatis saja
           </Button>
         </div>
-        <Button type="button" size="sm" className="h-9 text-xs" disabled={mengirim || gagalHal}
+        <Button type="button" size="sm" className="h-9 text-xs" disabled={mengirim || gagalHal || muatHal}
           onClick={() => onKirim({ halaman, ...pos })} data-testid="posisi-kirim">
           {mengirim ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
           Bubuhkan di Posisi Ini

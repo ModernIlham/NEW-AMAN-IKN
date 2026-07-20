@@ -85,11 +85,22 @@ class TestPosisiBersih:
         from routes.ttd import _posisi_bersih
         p = _posisi_bersih({"halaman": 2, "x": 0.5, "y": 0.7, "lebar": 0.25}, 5)
         assert p == {"halaman": 2, "x": 0.5, "y": 0.7, "lebar": 0.25}
-        # Nilai liar dijepit, bukan ditolak.
+        # Nilai liar dijepit, bukan ditolak — x dijepit BERPASANGAN dengan
+        # lebar (x + lebar ≤ 1) agar kotak tidak keluar tepi kanan.
         p = _posisi_bersih({"halaman": 99, "x": 7, "y": -3, "lebar": 9}, 4)
-        assert p == {"halaman": 4, "x": 0.95, "y": 0.0, "lebar": 0.6}
+        assert p == {"halaman": 4, "x": 0.4, "y": 0.0, "lebar": 0.6}
         p = _posisi_bersih({"halaman": 1, "x": 0, "y": 0, "lebar": 0.01}, 0)
         assert p["lebar"] == 0.08
+
+    def test_infinity_dan_nan_ditolak(self):
+        # json.loads menerima Infinity/NaN — int(inf) melempar OverflowError
+        # dan NaN merusak jepitan; keduanya harus jadi None, bukan 500.
+        import json
+        from routes.ttd import _posisi_bersih
+        p = json.loads('{"halaman": 1e999, "x": 0.1, "y": 0.1, "lebar": 0.2}')
+        assert _posisi_bersih(p, 3) is None
+        p = json.loads('{"halaman": 1, "x": NaN, "y": 0.1, "lebar": 0.2}')
+        assert _posisi_bersih(p, 3) is None
 
     def test_posisi_tak_valid_jadi_none(self):
         from routes.ttd import _posisi_bersih

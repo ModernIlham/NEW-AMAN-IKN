@@ -7,6 +7,19 @@ import { Loader2, Eraser, Upload, PenLine, Camera } from "lucide-react";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
+// Skalakan data goresan signature_pad ke ukuran kanvas baru. signature_pad
+// v2 (dependency react-signature-canvas terpasang) menyimpan tiap goresan
+// sebagai ARRAY titik polos; versi baru sebagai objek {points: [...]} —
+// dukung KEDUANYA (spread array → objek korup yang runtuh jadi titik).
+function skalakanGoresan(data, fx, fy) {
+  const titik = (pt) => ({ ...pt, x: pt.x * fx, y: pt.y * fy });
+  return (data || []).map((g) => (
+    Array.isArray(g)
+      ? g.map(titik)
+      : { ...g, points: (g.points || []).map(titik) }
+  ));
+}
+
 // Foto kamera HP modern bisa >10MB — perkecil DI KLIEN sebelum unggah
 // (server toh men-downscale ke 1600px): hemat kuota & jauh lebih cepat di
 // jaringan seluler. Gagal decode (mis. HEIC) → kirim file asli apa adanya.
@@ -58,10 +71,18 @@ export default function SignatureCapture({ onSave, saving = false, tokenQuery = 
   const simpanDraf = useCallback(() => {
     if (!drafKey) return;
     try {
-      const goresan = sigRef.current?.toData?.() || [];
-      sessionStorage.setItem(drafKey, JSON.stringify({
-        goresan, foto: fotoPng, w: ukuranRef.current.w, h: ukuranRef.current.h,
-      }));
+      // Kanvas tak ter-mount (mode foto) → JANGAN menimpa goresan draf lama
+      // dengan [] — pertahankan yang tersimpan.
+      let goresan = sigRef.current?.toData?.() ?? null;
+      let w = ukuranRef.current.w, h = ukuranRef.current.h;
+      if (goresan === null) {
+        try {
+          const lama = JSON.parse(sessionStorage.getItem(drafKey) || "null");
+          goresan = lama?.goresan || [];
+          w = lama?.w || w; h = lama?.h || h;
+        } catch { goresan = []; }
+      }
+      sessionStorage.setItem(drafKey, JSON.stringify({ goresan, foto: fotoPng, w, h }));
     } catch { /* kuota penuh — draf best-effort */ }
   }, [drafKey, fotoPng]);
 
@@ -85,11 +106,7 @@ export default function SignatureCapture({ onSave, saving = false, tokenQuery = 
       const lama = ukuranRef.current;
       let goresan = sigRef.current?.toData?.() || [];
       if (goresan.length && lama.w > 0 && lama.h > 0 && (lama.w !== w || lama.h !== h)) {
-        const fx = w / lama.w, fy = h / lama.h;
-        goresan = goresan.map((g) => ({
-          ...g,
-          points: (g.points || []).map((pt) => ({ ...pt, x: pt.x * fx, y: pt.y * fy })),
-        }));
+        goresan = skalakanGoresan(goresan, w / lama.w, h / lama.h);
       }
       ukuranRef.current = { w, h };
       canvas.width = w * ratio;
@@ -109,10 +126,7 @@ export default function SignatureCapture({ onSave, saving = false, tokenQuery = 
         if (d?.goresan?.length && sigRef.current) {
           const { w, h } = ukuranRef.current;
           const fx = d.w > 0 ? w / d.w : 1, fy = d.h > 0 ? h / d.h : 1;
-          sigRef.current.fromData(d.goresan.map((g) => ({
-            ...g,
-            points: (g.points || []).map((pt) => ({ ...pt, x: pt.x * fx, y: pt.y * fy })),
-          })));
+          sigRef.current.fromData(skalakanGoresan(d.goresan, fx, fy));
         }
       } catch { /* draf korup — abaikan */ }
     }
