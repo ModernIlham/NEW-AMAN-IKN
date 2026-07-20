@@ -48,6 +48,17 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#471] Perbaikan: popup tambah-cepat peta tidak lagi hilang saat mengetik nama — 2026-07-20
+
+- Popup "+ Tambah aset di sini" sebelumnya TERTUTUP begitu mulai mengetik
+  nama barang: klik/ketukan ke input (dan di HP, keyboard virtual yang
+  terbuka memicu resize + klik sintesis) masih dianggap interaksi peta
+  oleh Leaflet (`preclick` → `closeOnClick`).
+- Kini popup KEBAL — `closeOnClick` & `autoClose` dimatikan dan seluruh
+  event dari isi popup (pointer/mouse/touch/klik/keyboard/scroll)
+  dihentikan sebelum mencapai peta; popup hanya tertutup lewat tombol
+  tutup atau setelah "Simpan Titik Aset".
+
 ## [#470] Peta aset — tambah cepat aset di titik peta (klik kanan / tekan lama), cukup ketik nama — 2026-07-20
 
 - **Tambah cepat dari peta**: klik kanan (desktop) atau TEKAN LAMA (HP &
