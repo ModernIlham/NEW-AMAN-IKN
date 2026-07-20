@@ -547,3 +547,29 @@ body.no-scroll { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
   .siman-liquid-sukses { animation: none !important; opacity: 1; }
 }
+
+/* ===== Animasi idle ikon Peta Siklus (Beranda Modul) =====
+   Micro-motion HALUS & sesuai makna tiap ikon, di-stagger via
+   animation-delay (dihitung dari id modul) agar tidak serempak — terkesan
+   hidup tapi profesional. Semua keyframe REST di 0%/100% sehingga aturan
+   reduced-motion global (0.01ms) meninggalkannya diam. Transform-only (GPU). */
+.ikon-apung, .ikon-ayun, .ikon-denyut, .ikon-putar, .ikon-geser, .ikon-kobar {
+  will-change: transform;
+}
+.ikon-apung { animation: ikonApung 3.6s ease-in-out infinite; }
+@keyframes ikonApung { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-1.6px); } }
+.ikon-ayun  { animation: ikonAyun 3.8s ease-in-out infinite; transform-origin: 50% 30%; }
+@keyframes ikonAyun { 0%,100% { transform: rotate(0deg); } 25% { transform: rotate(6deg); } 75% { transform: rotate(-6deg); } }
+.ikon-denyut { animation: ikonDenyut 2.8s ease-in-out infinite; }
+@keyframes ikonDenyut { 0%,100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+.ikon-putar { animation: ikonPutar 4s ease-in-out infinite; transform-origin: 50% 50%; }
+@keyframes ikonPutar { 0%,100% { transform: rotate(0deg); } 30% { transform: rotate(-14deg); } 62% { transform: rotate(10deg); } }
+.ikon-geser { animation: ikonGeser 3.4s ease-in-out infinite; }
+@keyframes ikonGeser { 0%,100% { transform: translateX(0); } 30% { transform: translateX(-1.6px); } 70% { transform: translateX(1.6px); } }
+.ikon-kobar { animation: ikonKobar 1.9s ease-in-out infinite; transform-origin: 50% 100%; }
+@keyframes ikonKobar {
+  0%,100% { transform: scale(1) translateY(0); }
+  25%     { transform: scale(1.09,1.12) translateY(-0.6px); }
+  50%     { transform: scale(0.95,0.97); }
+  75%     { transform: scale(1.06,1.08) translateY(-0.9px); }
+}
