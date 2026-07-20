@@ -48,6 +48,25 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#476] Air sinkron SIMAN lebih hidup — dua lapisan gelombang variatif + bola mengapung organik — 2026-07-20
+
+- **Gelombang tak lagi monoton**: satu gelombang sinus tunggal yang bergeser
+  linier diganti DUA lapisan bermask — belakang (lebar, puncak tinggi
+  bervariasi + alun bernafas naik-turun) dan depan (riak kecil lebih cepat,
+  panjang gelombang berbeda). Overlay dua panjang-gelombang & kecepatan
+  yang berbeda menghasilkan pola pelayangan (beat) sehingga siluet
+  permukaan terus berubah bentuk — terlihat hidup, ukuran gelombang
+  sangat variatif.
+- **Bola benar-benar mengapung**: apungan naik-turun tak simetris + geser
+  + oleng seperti benda terapung di ombak nyata; periode 6,9 dtk yang BUKAN
+  kelipatan periode gelombang (13/6,5/4,7 dtk) sehingga gerak gabungan tak
+  pernah berulang persis → tidak monoton.
+- **Lebih smooth**: seluruh gerak lewat `transform` (translate3d, GPU),
+  easing lembut; meniskus di dasar bola bernafas + sedikit melapis seperti
+  riak menjilat. Warna tetap `hsl(var(--card))` (ikut light/dark), hover &
+  proses sinkron mempercepat proporsional, `prefers-reduced-motion` tetap
+  dihormati.
+
 ## [#475] Pengaman kunci Resend — bersihkan kutip/spasi/CR-LF dari .env + log diagnosa ter-masker — 2026-07-20
 
 - Lanjutan #472 (galat nyata di produksi: "Kunci API layanan email tidak
