@@ -48,6 +48,15 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#472] Peta aset — tombol "Tampilkan lokasi Anda" di bawah kontrol zoom — 2026-07-20
+
+- Tombol baru ber-ikon bidik tepat DI BAWAH tombol zoom in/out: klik →
+  GPS perangkat (akurasi tinggi) → titik biru + lingkaran akurasi
+  (±meter di tooltip) + peta menggeser/zoom secukupnya ke lokasi
+  (tidak menjauh bila sudah dekat); klik lagi = sembunyikan.
+- Izin lokasi ditolak / GPS gagal → pesan galat berbahasa Indonesia yang
+  menjelaskan langkah berikutnya; tombol meredup selama pencarian lokasi.
+
 ## [#471] Perbaikan: popup tambah-cepat peta tidak lagi hilang saat mengetik nama — 2026-07-20
 
 - Popup "+ Tambah aset di sini" sebelumnya TERTUTUP begitu mulai mengetik
