@@ -37,3 +37,10 @@ def test_sukses(monkeypatch):
     monkeypatch.setattr(su.resend.Emails, "send", lambda params: {"id": "em_1"})
     ok, alasan = asyncio.run(su.send_otp_email("a@b.c", "123456", "Budi"))
     assert ok is True and alasan == ""
+
+
+def test_bersihkan_env_kutip_spasi_crlf():
+    # Kesalahan salin .env paling umum: kutip ikut, spasi/CR-LF di ujung.
+    assert su._bersihkan_env('  "re_abc123"\r\n') == "re_abc123"
+    assert su._bersihkan_env("'re_xyz' ") == "re_xyz"
+    assert su._bersihkan_env(None) == ""

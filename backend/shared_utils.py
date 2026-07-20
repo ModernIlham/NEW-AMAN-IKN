@@ -194,10 +194,22 @@ if TINIFY_API_KEY:
     TINIFY_AVAILABLE = True
 
 # --- Resend Config ---
-RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
-SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "onboarding@resend.dev")
+def _bersihkan_env(nilai) -> str:
+    """Buang spasi/CR-LF & tanda kutip yang kerap ikut tersalin ke .env —
+    kunci yang "terlihat benar" dengan \r di ujung (file diedit di Windows)
+    atau terbungkus kutip ditolak Resend sebagai 401 invalid API key."""
+    return str(nilai or "").strip().strip('"').strip("'").strip()
+
+
+RESEND_API_KEY = _bersihkan_env(os.environ.get("RESEND_API_KEY", ""))
+SENDER_EMAIL = _bersihkan_env(os.environ.get("SENDER_EMAIL", "")) or "onboarding@resend.dev"
 if RESEND_API_KEY:
     resend.api_key = RESEND_API_KEY
+    # Jejak diagnosa di log server (kunci di-masker): admin bisa memastikan
+    # kunci yang TERBACA aplikasi sama dengan yang dimaksud.
+    logger.info(
+        f"Resend siap: kunci {RESEND_API_KEY[:5]}… (panjang {len(RESEND_API_KEY)}), "
+        f"pengirim {SENDER_EMAIL}")
 
 # --- OTP Store (MongoDB-backed for multi-replica support) ---
 

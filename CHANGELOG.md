@@ -48,6 +48,17 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#475] Pengaman kunci Resend — bersihkan kutip/spasi/CR-LF dari .env + log diagnosa ter-masker — 2026-07-20
+
+- Lanjutan #472 (galat nyata di produksi: "Kunci API layanan email tidak
+  valid"): nilai `RESEND_API_KEY` & `SENDER_EMAIL` kini DIBERSIHKAN dari
+  tanda kutip, spasi, dan CR-LF yang kerap ikut tersalin ke `.env`
+  (mis. file diedit di Windows) — kunci yang "terlihat benar" dengan
+  \r di ujung ditolak Resend sebagai 401.
+- Log startup ter-masker (`Resend siap: kunci re_ab… (panjang N), pengirim
+  …`) — admin bisa memastikan kunci yang TERBACA aplikasi sama dengan yang
+  dimaksud tanpa membuka nilai kunci.
+
 ## [#474] Perbaikan: OTP pendaftaran tidak terkirim — alasan gagal jelas + jangan masuk langkah OTP + diagnosa email — 2026-07-20
 
 - **Gejala**: kode OTP pendaftaran akun tidak pernah sampai ke email
