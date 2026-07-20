@@ -784,6 +784,18 @@ export default function InfoPage({ onBack }) {
           <p className="text-xs text-slate-600 mt-2">
             &copy; {new Date().getFullYear()} AMAN v2.3 | Product Requirements Document
           </p>
+          <p className="text-xs text-slate-600 mt-2">
+            Ikon animasi pada Peta Siklus oleh{" "}
+            <a
+              href="https://useanimations.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-400 hover:underline"
+            >
+              UseAnimations
+            </a>{" "}
+            (CC BY 4.0)
+          </p>
         </div>
       </div>
     </div>

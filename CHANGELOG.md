@@ -48,6 +48,25 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#479] Peta Siklus — ikon Lottie beranimasi (useanimations) pada modul terpilih — 2026-07-20
+
+- Empat ikon modul di halaman Beranda Modul / Peta Siklus kini memakai
+  **ikon animasi Lottie dari useanimations.com** yang gerak loop-nya
+  mengalir mulus dan sesuai makna: **Pemeliharaan** (gerigi/setelan
+  berputar), **Wasdal** (mata berkedip), **Pemindahtanganan** (panah
+  berbagi/pindah), dan **Inventarisasi Persediaan** (kotak arsip).
+- Modul lain **tetap** memakai ikon lucide + micro-animation CSS `.ikon-*`
+  dari rilis sebelumnya (mengapung/berdenyut/berputar dsb.) — ikon Lottie
+  hanya dipakai bila animasinya benar-benar cocok di-loop selamanya
+  (animasi buka/tutup seperti gembok/tempat sampah sengaja dihindari agar
+  tetap tampak profesional).
+- Semua titik render ikon disatukan lewat komponen `IkonModul` (grid fase,
+  poros Penatausahaan, kartu Wasdal, dialog detail) sehingga pemilihan
+  Lottie vs lucide konsisten di seluruh halaman.
+- Dependensi baru: `react-useanimations` (kode paket MIT) + `lottie-web`.
+  Aset animasi berlisensi **CC BY 4.0** → **atribusi ke useanimations.com
+  dicantumkan** di footer halaman Info sesuai syarat lisensi.
+
 ## [#478] Peta Siklus — ikon modul beranimasi halus sesuai maknanya — 2026-07-20
 
 - Setiap ikon modul di halaman Beranda Modul / Peta Siklus kini punya
