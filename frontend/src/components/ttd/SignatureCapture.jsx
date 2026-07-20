@@ -7,6 +7,38 @@ import { Loader2, Eraser, Upload, PenLine, Camera } from "lucide-react";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
+// Skalakan data goresan signature_pad ke ukuran kanvas baru. signature_pad
+// v2 (dependency react-signature-canvas terpasang) menyimpan tiap goresan
+// sebagai ARRAY titik polos; versi baru sebagai objek {points: [...]} —
+// dukung KEDUANYA (spread array → objek korup yang runtuh jadi titik).
+function skalakanGoresan(data, fx, fy) {
+  const titik = (pt) => ({ ...pt, x: pt.x * fx, y: pt.y * fy });
+  return (data || []).map((g) => (
+    Array.isArray(g)
+      ? g.map(titik)
+      : { ...g, points: (g.points || []).map(titik) }
+  ));
+}
+
+// Foto kamera HP modern bisa >10MB — perkecil DI KLIEN sebelum unggah
+// (server toh men-downscale ke 1600px): hemat kuota & jauh lebih cepat di
+// jaringan seluler. Gagal decode (mis. HEIC) → kirim file asli apa adanya.
+async function perkecilFoto(file, maksSisi = 1600) {
+  try {
+    const bmp = await createImageBitmap(file);
+    const sk = Math.min(1, maksSisi / Math.max(bmp.width, bmp.height));
+    if (sk >= 1 && file.size < 2 * 1024 * 1024) return file;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bmp.width * sk);
+    canvas.height = Math.round(bmp.height * sk);
+    canvas.getContext("2d").drawImage(bmp, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise((res) => canvas.toBlob(res, "image/jpeg", 0.9));
+    return blob ? new File([blob], "ttd.jpg", { type: "image/jpeg" }) : file;
+  } catch {
+    return file;
+  }
+}
+
 /**
  * SignatureCapture — tangkap tanda tangan digital sebagai PNG transparan.
  *
@@ -16,17 +48,43 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
  *  - "Foto": unggah foto TTD di kertas → backend hapus background otomatis
  *    (POST /ttd/olah-foto, Pillow) → pratinjau PNG transparan.
  *
+ * Keandalan lapangan:
+ *  - clearOnResize={false} + goresan DISKALAKAN ulang saat rotasi/resize —
+ *    tanda tangan tidak pernah hilang/terpotong di tengah menggambar
+ *    (Chrome Android memicu resize saat address bar menciut).
+ *  - drafKey (opsional): goresan & hasil olah foto disimpan ke
+ *    sessionStorage — reload/tab terbunuh tidak menghapus tanda tangan.
+ *  - Foto kamera diperkecil di klien sebelum diunggah.
+ *
  * onSave(dataUrlPng) dipanggil dengan data-URL PNG transparan.
- * tokenQuery (opsional): token e-sign untuk penanda tangan TAMU — diteruskan
- * sebagai ?token= ke /ttd/olah-foto (tanpa header Authorization).
+ * tokenQuery (opsional): token e-sign untuk penanda tangan TAMU.
  */
-export default function SignatureCapture({ onSave, saving = false, tokenQuery = "" }) {
+export default function SignatureCapture({ onSave, saving = false, tokenQuery = "", drafKey = "", labelSimpan = "Simpan Tanda Tangan" }) {
   const [mode, setMode] = useState("gambar");   // "gambar" | "foto"
   const [fotoPng, setFotoPng] = useState(null);  // data-URL hasil olah foto
   const [olah, setOlah] = useState(false);
   const sigRef = useRef(null);
   const fileRef = useRef(null);
   const wrapRef = useRef(null);
+  const ukuranRef = useRef({ w: 0, h: 0 }); // ukuran CSS kanvas terakhir
+
+  const simpanDraf = useCallback(() => {
+    if (!drafKey) return;
+    try {
+      // Kanvas tak ter-mount (mode foto) → JANGAN menimpa goresan draf lama
+      // dengan [] — pertahankan yang tersimpan.
+      let goresan = sigRef.current?.toData?.() ?? null;
+      let w = ukuranRef.current.w, h = ukuranRef.current.h;
+      if (goresan === null) {
+        try {
+          const lama = JSON.parse(sessionStorage.getItem(drafKey) || "null");
+          goresan = lama?.goresan || [];
+          w = lama?.w || w; h = lama?.h || h;
+        } catch { goresan = []; }
+      }
+      sessionStorage.setItem(drafKey, JSON.stringify({ goresan, foto: fotoPng, w, h }));
+    } catch { /* kuota penuh — draf best-effort */ }
+  }, [drafKey, fotoPng]);
 
   // Kanvas HARUS diukur ulang mengikuti lebar container × devicePixelRatio —
   // width/height statis + CSS w-full membuat koordinat goresan MELESET dari
@@ -40,46 +98,72 @@ export default function SignatureCapture({ onSave, saving = false, tokenQuery = 
       if (!canvas || !wrap) return;
       const ratio = Math.max(window.devicePixelRatio || 1, 1);
       const w = wrap.clientWidth || 560;
-      const h = 200;
-      // Goresan yang sudah ada JANGAN hilang saat rotasi layar / resize —
-      // simpan data titik lalu gambar ulang setelah bitmap diskalakan.
-      const goresan = sigRef.current?.toData?.();
+      // Tinggi mengikuti lebar (rasio nyaman menggores) — tidak lagi fix
+      // 200px yang gepeng di tablet/desktop.
+      const h = Math.max(180, Math.min(280, Math.round(w * 0.42)));
+      // Goresan yang ada DISKALAKAN ke ukuran baru (bukan koordinat absolut)
+      // sehingga rotasi portrait↔landscape tidak memotong tanda tangan.
+      const lama = ukuranRef.current;
+      let goresan = sigRef.current?.toData?.() || [];
+      if (goresan.length && lama.w > 0 && lama.h > 0 && (lama.w !== w || lama.h !== h)) {
+        goresan = skalakanGoresan(goresan, w / lama.w, h / lama.h);
+      }
+      ukuranRef.current = { w, h };
       canvas.width = w * ratio;
       canvas.height = h * ratio;
       canvas.style.width = `${w}px`;
       canvas.style.height = `${h}px`;
       canvas.getContext("2d").scale(ratio, ratio);
       sigRef.current?.clear();
-      if (goresan?.length) sigRef.current?.fromData?.(goresan);
+      if (goresan.length) sigRef.current?.fromData?.(goresan);
     };
     resize();
+    // Pulihkan draf (reload / tab terbunuh) sekali setelah kanvas siap.
+    if (drafKey) {
+      try {
+        const d = JSON.parse(sessionStorage.getItem(drafKey) || "null");
+        if (d?.foto) setFotoPng(d.foto);
+        if (d?.goresan?.length && sigRef.current) {
+          const { w, h } = ukuranRef.current;
+          const fx = d.w > 0 ? w / d.w : 1, fy = d.h > 0 ? h / d.h : 1;
+          sigRef.current.fromData(skalakanGoresan(d.goresan, fx, fy));
+        }
+      } catch { /* draf korup — abaikan */ }
+    }
     window.addEventListener("resize", resize);
     return () => window.removeEventListener("resize", resize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
   const bersihkan = useCallback(() => {
     sigRef.current?.clear();
     setFotoPng(null);
-  }, []);
+    if (drafKey) { try { sessionStorage.removeItem(drafKey); } catch { /* noop */ } }
+  }, [drafKey]);
 
   const olahFoto = useCallback(async (file) => {
     if (!file) return;
     setOlah(true);
     try {
+      const kecil = await perkecilFoto(file);
       const fd = new FormData();
-      fd.append("file", file);
+      fd.append("file", kecil, kecil.name || file.name || "ttd.jpg");
       const url = `${API}/ttd/olah-foto${tokenQuery ? `?token=${encodeURIComponent(tokenQuery)}` : ""}`;
       const r = await axios.post(url, fd,
-        { headers: { "Content-Type": "multipart/form-data" } });
+        { headers: { "Content-Type": "multipart/form-data" }, timeout: 60000 });
       setFotoPng(r.data?.png_base64 || null);
       toast.success("Background dihapus — periksa hasilnya");
     } catch (e) {
-      toast.error(e?.response?.data?.detail || "Gagal memproses foto");
+      toast.error(e?.response?.data?.detail
+        || (e?.code === "ECONNABORTED" ? "Waktu habis — jaringan lambat, coba lagi" : "Gagal memproses foto"));
     } finally {
       setOlah(false);
       if (fileRef.current) fileRef.current.value = "";
     }
   }, [tokenQuery]);
+
+  // Draf foto ikut tersimpan begitu hasil olah berubah.
+  useEffect(() => { if (fotoPng !== null) simpanDraf(); }, [fotoPng, simpanDraf]);
 
   const simpan = useCallback(() => {
     let png = null;
@@ -121,6 +205,8 @@ export default function SignatureCapture({ onSave, saving = false, tokenQuery = 
           <SignatureCanvas ref={sigRef}
             penColor="#0f172a"
             minWidth={0.7} maxWidth={2.9} velocityFilterWeight={0.7}
+            clearOnResize={false}
+            onEnd={simpanDraf}
             canvasProps={{ className: "touch-none block", "data-testid": "ttd-canvas" }} />
         </div>
       ) : (
@@ -147,7 +233,7 @@ export default function SignatureCapture({ onSave, saving = false, tokenQuery = 
           <Eraser className="w-3.5 h-3.5 mr-1.5" />Bersihkan
         </Button>
         <Button type="button" size="sm" className="h-9 text-xs" onClick={simpan} disabled={saving} data-testid="ttd-simpan">
-          {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}Simpan Tanda Tangan
+          {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}{labelSimpan}
         </Button>
       </div>
     </div>

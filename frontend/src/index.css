@@ -431,26 +431,34 @@ body.no-scroll { overflow: hidden; }
    Hover pada bola / proses sinkronisasi mempercepat alun (selector ~).
    Catatan: aturan reduced-motion global otomatis mematikan animasi. */
 .siman-air {
-  position: absolute; left: 0; right: 0; bottom: 0; height: 7px;
+  position: absolute; left: 0; right: 0; bottom: 0; height: 5px;
   z-index: 9;
   background: hsl(var(--card));
   pointer-events: none;
 }
-/* Alun permukaan (tampak samping): lengkung SANGAT lebar & rendah —
-   puncaknya hanya +4px di atas garis air, melandai jauh ke pinggir —
-   digeser pelan kiri↔kanan sehingga permukaan tampak berayun. */
-.siman-air-ombak {
-  position: absolute; bottom: 0; left: -20%; width: 140%; height: 11px;
+/* Aliran permukaan (tampak samping): pita air ber-MASK gelombang sinus
+   berulang — CEMBUNG (puncak) dan CEKUNG (lembah) bergantian mulus — yang
+   digeser linier SATU ARAH tanpa putus (tepat satu panjang gelombang per
+   siklus) sehingga permukaan tampak MENGALIR pelan. Mask hanya membentuk
+   siluet; warnanya tetap hsl(var(--card)) — ikut mode light/dark. */
+.siman-air-alir {
+  position: absolute; bottom: 4px; left: 0; height: 12px;
+  width: calc(100% + 56px);
   z-index: 9;
   background: hsl(var(--card));
-  border-radius: 50% 50% 0 0 / 100% 100% 0 0;
-  animation: simanOmbakGeser 5.5s ease-in-out infinite;
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='56' height='12' viewBox='0 0 56 12'><path d='M0 6 C9 2.5 19 2.5 28 6 S47 9.5 56 6 L56 12 L0 12 Z'/></svg>");
+  mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='56' height='12' viewBox='0 0 56 12'><path d='M0 6 C9 2.5 19 2.5 28 6 S47 9.5 56 6 L56 12 L0 12 Z'/></svg>");
+  -webkit-mask-repeat: repeat-x;
+  mask-repeat: repeat-x;
+  -webkit-mask-size: 56px 12px;
+  mask-size: 56px 12px;
+  animation: simanAirAlir 7s linear infinite;
   pointer-events: none;
   will-change: transform;
 }
-@keyframes simanOmbakGeser {
-  0%, 100% { transform: translateX(-4%); }
-  50%      { transform: translateX(4%); }
+@keyframes simanAirAlir {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-56px); }
 }
 /* Meniskus: air memeluk dasar bola (tampak samping) — sedikit merambat
    naik pada bola lalu turun lagi, bernafas pelan. */
@@ -482,11 +490,11 @@ body.no-scroll { overflow: hidden; }
 }
 /* Hover di bola: alun & apungan lebih hidup */
 .siman-liquid:hover .siman-liquid-ball { animation-duration: 1.4s; }
-.siman-liquid:hover ~ .siman-air-ombak { animation-duration: 2.2s; }
+.siman-liquid:hover ~ .siman-air-alir { animation-duration: 3s; }
 .siman-liquid:hover ~ .siman-air-meniskus { animation-duration: 1.4s; }
 /* Proses sinkronisasi: gejolak cepat */
 .siman-liquid[data-busy="1"] .siman-liquid-ball { animation-duration: 0.9s; }
-.siman-liquid[data-busy="1"] ~ .siman-air-ombak { animation-duration: 1.1s; }
+.siman-liquid[data-busy="1"] ~ .siman-air-alir { animation-duration: 1.4s; }
 .siman-liquid[data-busy="1"] ~ .siman-air-meniskus { animation-duration: 0.7s; }
 /* Sukses: air + bola centang surut turun ke area informasi */
 .siman-liquid-sukses {

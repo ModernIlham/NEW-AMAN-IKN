@@ -7,6 +7,7 @@ import {
   ShieldCheck, Users,
 } from "lucide-react";
 import SignatureCapture from "@/components/ttd/SignatureCapture";
+import AturPosisiTtd from "@/components/ttd/AturPosisiTtd";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -47,7 +48,7 @@ function StatusPill({ status }) {
 function Cangkang({ children }) {
   return (
     <div className="min-h-screen bg-background text-foreground flex items-start sm:items-center justify-center p-3 sm:p-6">
-      <div className="w-full max-w-xl">
+      <div className="w-full max-w-xl md:max-w-2xl">
         <div className="flex items-center gap-2.5 mb-4 justify-center">
           <span className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center">
             <FileSignature className="w-5 h-5 text-white" />
@@ -58,7 +59,7 @@ function Cangkang({ children }) {
           </div>
         </div>
         {children}
-        <p className="text-center text-[10px] text-muted-foreground mt-4">
+        <p className="text-center text-[11px] text-muted-foreground mt-4">
           Dokumen ditandatangani secara elektronik — tercatat dengan jejak audit &amp; kode verifikasi.
         </p>
       </div>
@@ -136,30 +137,69 @@ function Verifikasi({ id }) {
 // ── Alur tanda tangan (link dibagikan) ──────────────────────────────────────
 function TandaTangan({ id, token }) {
   const [info, setInfo] = useState(null);
-  const [galat, setGalat] = useState("");
+  const [galat, setGalat] = useState("");        // galat token/permintaan (final)
+  const [koneksi, setKoneksi] = useState(false); // galat JARINGAN (bisa coba lagi)
   const [kirim, setKirim] = useState(false);
   const [sukses, setSukses] = useState(false);
+  // Alur 2 langkah bila ada dokumen: tangkap ttd → ATUR POSISI di dokumen.
+  const [pngSiap, setPngSiap] = useState(null);
+  const drafKey = `ttd-draf-${id}-${(token || "").slice(-12)}`;
 
   const muat = useCallback(() => {
-    axios.get(`${API}/ttd/tandatangan/${id}`, { params: { token } })
-      .then((r) => setInfo(r.data))
-      .catch((e) => setGalat(e?.response?.data?.detail || "Link tidak valid / kedaluwarsa"));
+    setKoneksi(false);
+    axios.get(`${API}/ttd/tandatangan/${id}`, { params: { token }, timeout: 20000 })
+      .then((r) => {
+        setInfo(r.data);
+        // Perangkat lain sudah meneken? Batalkan langkah posisi yang basi.
+        if (r.data?.penanda_tangan?.status === "ditandatangani") setPngSiap(null);
+      })
+      .catch((e) => {
+        if (!e?.response) {
+          // Offline/DNS/timeout ≠ link mati — JANGAN dorong pengguna minta
+          // terbit ulang (itu justru mematikan link yang masih valid).
+          setKoneksi(true);
+          return;
+        }
+        setGalat(e?.response?.data?.detail || "Link tidak valid / kedaluwarsa");
+      });
   }, [id, token]);
   useEffect(() => { muat(); }, [muat]);
 
-  const kirimTtd = useCallback(async (png) => {
+  const kirimTtd = useCallback(async (png, posisi) => {
     setKirim(true);
     try {
-      await axios.post(`${API}/ttd/tandatangan/${id}/kirim`, { png_base64: png },
-        { params: { token } });
+      await axios.post(`${API}/ttd/tandatangan/${id}/kirim`,
+        { png_base64: png, posisi: posisi || null },
+        { params: { token }, timeout: 60000 });
       setSukses(true);
+      setPngSiap(null);
+      try { sessionStorage.removeItem(drafKey); } catch { /* noop */ }
       toast.success("Tanda tangan berhasil dikirim");
     } catch (e) {
-      toast.error(e?.response?.data?.detail || "Gagal mengirim tanda tangan");
+      if (e?.response?.status === 409) {
+        // Bisa jadi submit SEBELUMNYA sudah tercatat tetapi responsnya hilang
+        // di jaringan — muat ulang status agar halaman menunjukkan keadaan
+        // sebenarnya, bukan galat menyesatkan.
+        toast.info("Memeriksa ulang status tanda tangan…");
+        muat();
+      } else if (!e?.response) {
+        toast.error("Koneksi terputus saat mengirim — tanda tangan Anda MASIH ADA, coba kirim lagi");
+      } else {
+        toast.error(e?.response?.data?.detail || "Gagal mengirim tanda tangan");
+      }
     } finally {
       setKirim(false);
     }
-  }, [id, token]);
+  }, [id, token, muat, drafKey]);
+
+  // Jangan biarkan tab tertutup diam-diam saat ttd sudah digambar tapi belum
+  // terkirim (langkah atur posisi).
+  useEffect(() => {
+    if (!pngSiap || sukses) return;
+    const tahan = (e) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", tahan);
+    return () => window.removeEventListener("beforeunload", tahan);
+  }, [pngSiap, sukses]);
 
   if (galat) {
     return (
@@ -171,6 +211,22 @@ function TandaTangan({ id, token }) {
           <p className="text-[11px] text-muted-foreground">
             Minta link baru kepada pembuat dokumen bila link kedaluwarsa (masa berlaku 14 hari).
           </p>
+        </div>
+      </Kartu>
+    );
+  }
+  if (koneksi) {
+    return (
+      <Kartu>
+        <div className="text-center py-6 space-y-3">
+          <CircleAlert className="w-10 h-10 text-amber-500 mx-auto" />
+          <p className="font-bold">Koneksi bermasalah</p>
+          <p className="text-sm text-muted-foreground">
+            Halaman tidak dapat dimuat — periksa jaringan Anda. Link Anda kemungkinan besar MASIH BERLAKU.
+          </p>
+          <Button variant="outline" size="sm" className="h-9 text-xs" onClick={muat} data-testid="ttd-coba-lagi">
+            Coba lagi
+          </Button>
         </div>
       </Kartu>
     );
@@ -197,30 +253,53 @@ function TandaTangan({ id, token }) {
   }
 
   const sg = info.penanda_tangan || {};
+  const bisaAturPosisi = info.ada_dokumen && (info.jumlah_halaman || 0) >= 1;
+
+  // Langkah 2: atur letak & ukuran pembubuhan pada dokumen.
+  if (pngSiap) {
+    return (
+      <Kartu>
+        <div className="space-y-1">
+          <p className="text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wide">Atur pembubuhan</p>
+          <p className="font-extrabold text-base sm:text-lg leading-snug">{info.judul}</p>
+        </div>
+        <AturPosisiTtd
+          srId={id}
+          token={token}
+          jumlahHalaman={info.jumlah_halaman || 1}
+          pngTtd={pngSiap}
+          mengirim={kirim}
+          onBatal={() => setPngSiap(null)}
+          onKirim={(posisi) => kirimTtd(pngSiap, posisi)}
+        />
+      </Kartu>
+    );
+  }
+
   return (
     <Kartu>
       <div className="space-y-1">
         <p className="text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wide">Permintaan tanda tangan</p>
-        <p className="font-extrabold text-lg leading-snug" data-testid="ttd-judul">{info.judul}</p>
+        <p className="font-extrabold text-base sm:text-lg leading-snug" data-testid="ttd-judul">{info.judul}</p>
         <p className="text-xs text-muted-foreground">
           Mode {info.mode === "berurutan" ? "berurutan (sesuai giliran)" : "paralel"} · Status dokumen: {info.status_dokumen}
         </p>
       </div>
       <div className="rounded-xl border border-border p-3 flex items-center justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-sm font-bold truncate">{sg.nama}</p>
-          <p className="text-[11px] text-muted-foreground truncate">
+          <p className="text-sm font-bold truncate" title={sg.nama}>{sg.nama}</p>
+          <p className="text-[11px] sm:text-xs text-muted-foreground truncate" title={`${sg.jabatan || ""}${sg.nip ? ` · NIP ${sg.nip}` : ""}`}>
             {sg.jabatan || "Penanda tangan"}{sg.nip ? ` · NIP ${sg.nip}` : ""}
           </p>
         </div>
         <StatusPill status={sg.status} />
       </div>
       {info.ada_dokumen && (
-        <Button variant="outline" size="sm" className="h-9 text-xs w-full"
+        <Button variant="outline" size="sm" className="h-auto py-2 text-xs w-full whitespace-normal"
           onClick={() => window.open(`${API}/ttd/tandatangan/${id}/dokumen?token=${encodeURIComponent(token)}`, "_blank", "noopener")}
           data-testid="ttd-lihat-dokumen">
-          <ShieldCheck className="w-3.5 h-3.5 mr-1.5" />
-          Baca dokumen yang akan ditandatangani{info.dok_nama ? ` — ${info.dok_nama}` : ""}
+          <ShieldCheck className="w-3.5 h-3.5 mr-1.5 flex-shrink-0" />
+          <span className="text-left break-words min-w-0">Baca dokumen yang akan ditandatangani{info.dok_nama ? ` — ${info.dok_nama}` : ""}</span>
         </Button>
       )}
       {info.boleh_ttd ? (
@@ -228,8 +307,15 @@ function TandaTangan({ id, token }) {
           <p className="text-xs text-muted-foreground">
             Bubuhkan tanda tangan Anda di bawah — <b>gambar langsung</b> di layar (sentuh/mouse)
             atau <b>unggah foto</b> tanda tangan di kertas (background otomatis dihapus).
+            {bisaAturPosisi ? " Setelah itu Anda dapat MENGATUR LETAK & UKURAN tanda tangan di dokumen." : ""}
           </p>
-          <SignatureCapture onSave={kirimTtd} saving={kirim} tokenQuery={token} />
+          <SignatureCapture
+            onSave={(png) => { if (bisaAturPosisi) setPngSiap(png); else kirimTtd(png, null); }}
+            saving={kirim}
+            tokenQuery={token}
+            drafKey={drafKey}
+            labelSimpan={bisaAturPosisi ? "Lanjut Atur Posisi" : "Simpan Tanda Tangan"}
+          />
         </>
       ) : (
         <div className="rounded-xl bg-muted p-3 text-sm text-muted-foreground flex items-start gap-2">

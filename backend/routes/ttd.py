@@ -59,6 +59,41 @@ _APP_URL = _basis_url_publik()
 
 class SpesimenIn(BaseModel):
     png_base64: str   # data-URL atau base64 murni PNG transparan
+    # Posisi pembubuhan pilihan PENANDA TANGAN pada dokumen terlampir
+    # (opsional — tanpa ini stempel memakai slot otomatis halaman terakhir):
+    # {halaman: 1-based, x, y: pojok kiri-atas kotak ttd sebagai FRAKSI
+    #  lebar/tinggi halaman, lebar: fraksi lebar halaman}.
+    posisi: dict | None = None
+
+
+def _posisi_bersih(p, maks_halaman: int = 0):
+    """Validasi + jepit posisi pembubuhan dari klien; None bila tak dipakai.
+
+    Tahan nilai liar apa pun dari JSON: Infinity/NaN (json.loads menerimanya)
+    ditolak eksplisit — int(inf) melempar OverflowError, NaN merusak jepitan.
+    x dijepit BERPASANGAN dengan lebar agar kotak tidak keluar tepi kanan.
+    """
+    if not isinstance(p, dict):
+        return None
+    import math
+    try:
+        halaman_f = float(p.get("halaman"))
+        x = float(p.get("x")); y = float(p.get("y"))
+        lebar = float(p.get("lebar"))
+        if not all(math.isfinite(v) for v in (halaman_f, x, y, lebar)):
+            return None
+        halaman = int(halaman_f)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if halaman < 1:
+        return None
+    if maks_halaman and halaman > maks_halaman:
+        halaman = maks_halaman
+    lebar = min(0.6, max(0.08, lebar))
+    return {"halaman": halaman,
+            "x": min(1.0 - lebar, max(0.0, x)),
+            "y": min(0.95, max(0.0, y)),
+            "lebar": lebar}
 
 
 def _png_dari_base64(s: str) -> bytes:
@@ -360,6 +395,16 @@ async def dokumen_asli(sr_id: str,
                  "X-Content-Type-Options": "nosniff"})
 
 
+def _pastikan_jti_signer(sr: dict, tok: dict):
+    """401 bila token bukan milik signer terdaftar ATAU jti-nya sudah diganti
+    (terbit ulang) — link lama yang dicabut tidak boleh lagi membaca dokumen."""
+    sg = next((s for s in (sr.get("signers") or [])
+               if s.get("signer_id") == tok.get("signer")), None)
+    if not sg or sg.get("jti") != tok.get("jti"):
+        raise HTTPException(status_code=401,
+                            detail="Link ini sudah tidak berlaku (telah diterbitkan ulang)")
+
+
 @ttd_router.get("/ttd/tandatangan/{sr_id}/dokumen")
 async def dokumen_untuk_penanda_tangan(sr_id: str,
                                        tok: dict = Depends(require_sign_token)):
@@ -368,10 +413,53 @@ async def dokumen_untuk_penanda_tangan(sr_id: str,
     if tok["sr"] != sr_id:
         raise HTTPException(status_code=401, detail="Token tidak cocok dokumen")
     sr, data = await _ambil_dokumen_sr(sr_id)
+    _pastikan_jti_signer(sr, tok)
     return StreamingResponse(
         io.BytesIO(data), media_type="application/pdf",
         headers={"Content-Disposition":
                  f'inline; filename="{sr.get("dok_nama", "dokumen.pdf")}"',
+                 # Content-Length → viewer PDF HP bisa menampilkan progres
+                 # unduhan alih-alih layar kosong tanpa kabar.
+                 "Content-Length": str(len(data)),
+                 "X-Content-Type-Options": "nosniff"})
+
+
+@ttd_router.get("/ttd/tandatangan/{sr_id}/dokumen/halaman/{no}")
+@limiter.limit("60/minute")
+async def halaman_dokumen_penanda_tangan(sr_id: str, no: int, request: Request,
+                                         tok: dict = Depends(require_sign_token)):
+    """Render SATU halaman dokumen sebagai PNG untuk PRATINJAU PEMBUBUHAN di
+    halaman publik — penanda tangan memilih letak & ukuran tanda tangannya
+    langsung di atas gambar halaman (tanpa perlu mengunduh PDF penuh)."""
+    if tok["sr"] != sr_id:
+        raise HTTPException(status_code=401, detail="Token tidak cocok dokumen")
+    _sr, data = await _ambil_dokumen_sr(sr_id)
+    _pastikan_jti_signer(_sr, tok)
+    import pypdfium2 as pdfium
+    try:
+        pdf = pdfium.PdfDocument(io.BytesIO(data))
+    except Exception:
+        raise HTTPException(status_code=422, detail="Dokumen tidak dapat dirender")
+    try:
+        total = len(pdf)
+        idx = min(max(1, int(no)), total) - 1
+        page = pdf[idx]
+        # Skala menuju lebar ±1100px — cukup tajam untuk pratinjau posisi,
+        # ringan diunduh di jaringan seluler. Tinggi ikut dibatasi (halaman
+        # ekstrem memanjang tidak boleh menghasilkan bitmap raksasa).
+        skala = 1100 / max(1.0, page.get_width())
+        skala = min(skala, 2400 / max(1.0, page.get_height()))
+        skala = min(2.0, max(0.3, skala))
+        pil = page.render(scale=skala).to_pil()
+        buf = io.BytesIO()
+        pil.save(buf, format="PNG")
+        buf.seek(0)
+    finally:
+        pdf.close()
+    return StreamingResponse(
+        buf, media_type="image/png",
+        headers={"Cache-Control": "private, max-age=600",
+                 "X-Jumlah-Halaman": str(total),
                  "X-Content-Type-Options": "nosniff"})
 
 
@@ -395,18 +483,91 @@ async def dokumen_ber_ttd(sr_id: str,
                             detail="Belum ada tanda tangan yang masuk")
 
     reader = PdfReader(io.BytesIO(data))
+
+    # Pisahkan penanda tangan ber-POSISI PILIHAN (diatur sendiri di halaman
+    # publik: halaman + x/y/lebar fraksi) dari yang memakai slot otomatis.
+    kustom = [s for s in penanda if isinstance(s.get("posisi_ttd"), dict)]
+    otomatis = [s for s in penanda if not isinstance(s.get("posisi_ttd"), dict)]
+
+    per_halaman = {}
+    for s in kustom:
+        p = s["posisi_ttd"]
+        idx = min(max(1, int(p.get("halaman") or 1)), len(reader.pages)) - 1
+        per_halaman.setdefault(idx, []).append(s)
+
+    # Halaman ber-/Rotate: pratinjau posisi dirender pypdfium2 PASCA-rotasi,
+    # sedangkan mediabox pypdf PRA-rotasi — normalisasi rotasi ke konten dulu
+    # supaya overlay (posisi pilihan MAUPUN slot otomatis) WYSIWYG dengan
+    # tampilan. Berlaku untuk semua halaman yang menerima overlay.
+    for idx in set(per_halaman) | {len(reader.pages) - 1}:
+        try:
+            if (reader.pages[idx].rotation or 0) % 360 != 0:
+                reader.pages[idx].transfer_rotation_to_content()
+        except Exception:
+            pass
+
     hal_akhir = reader.pages[-1]
     lebar = float(hal_akhir.mediabox.width)
     tinggi = float(hal_akhir.mediabox.height)
 
-    # ── Overlay stempel ttd: slot berderet (maks 3/baris) di area bawah ──
+    # ── Overlay POSISI PILIHAN: gambar ttd + keterangan kecil di halaman &
+    #    koordinat yang dipilih penanda tangan sendiri ──
+    overlay_kustom = {}
+    for idx, daftar in per_halaman.items():
+        hal = reader.pages[idx]
+        hw = float(hal.mediabox.width)
+        hh = float(hal.mediabox.height)
+        buf_k = io.BytesIO()
+        ck = rl_canvas.Canvas(buf_k, pagesize=(hw, hh))
+        ada_isi = False
+        for s in daftar:
+            p = s["posisi_ttd"]
+            img_data = await get_document_from_gridfs(s["signature_file_id"])
+            if not img_data:
+                continue
+            try:
+                img = ImageReader(io.BytesIO(img_data))
+                iw, ih = img.getSize()
+                # lebar/x/y sudah dijepit _posisi_bersih saat kirim (fraksi);
+                # jepit ULANG terhadap tepi halaman nyata (tepi bawah/kanan
+                # bergantung rasio gambar yang tidak diketahui saat kirim).
+                w_pt = float(p.get("lebar") or 0.25) * hw
+                h_pt = w_pt * (ih / iw)
+                if h_pt > hh - 6:
+                    h_pt = hh - 6
+                    w_pt = h_pt * (iw / ih)
+                x_pt = min(float(p.get("x") or 0) * hw, hw - w_pt)
+                y_pt = max(3.0, hh - float(p.get("y") or 0) * hh - h_pt)
+                ck.drawImage(img, x_pt, y_pt, width=w_pt, height=h_pt,
+                             mask="auto")
+                # Keterangan identitas kecil di bawah gambar (jejak formal).
+                ck.setFont("Helvetica", 6)
+                ck.setFillGray(0.35)
+                ket = f"{str(s.get('nama') or '')[:34]}"
+                if s.get("signed_at"):
+                    ket += f" · {str(s['signed_at'])[:10]}"
+                ck.drawCentredString(x_pt + w_pt / 2, max(2.0, y_pt - 7), ket)
+                ada_isi = True
+            except Exception:
+                pass
+        ck.save()
+        buf_k.seek(0)
+        # Canvas tanpa operasi menghasilkan PDF 0 halaman — jangan sampai
+        # satu blob hilang membuat SELURUH unduhan dokumen-ttd gagal.
+        if ada_isi:
+            try:
+                overlay_kustom[idx] = PdfReader(buf_k).pages[0]
+            except Exception:
+                pass
+
+    # ── Overlay slot OTOMATIS halaman terakhir: berderet maks 3/baris ──
     buf_ov = io.BytesIO()
     c = rl_canvas.Canvas(buf_ov, pagesize=(lebar, tinggi))
     margin = 14 * rl_mm
-    per_baris = min(3, len(penanda))
+    per_baris = min(3, max(1, len(otomatis)))
     slot_w = (lebar - 2 * margin) / per_baris
     slot_h = 30 * rl_mm
-    for i, s in enumerate(penanda):
+    for i, s in enumerate(otomatis):
         kol = i % per_baris
         brs = i // per_baris
         x = margin + kol * slot_w
@@ -469,7 +630,10 @@ async def dokumen_ber_ttd(sr_id: str,
     overlay = PdfReader(buf_ov).pages[0]
     writer = PdfWriter()
     for idx, page in enumerate(reader.pages):
+        if idx in overlay_kustom:
+            page.merge_page(overlay_kustom[idx])
         if idx == len(reader.pages) - 1:
+            # Slot otomatis + QR verifikasi selalu di halaman terakhir.
             page.merge_page(overlay)
         writer.add_page(page)
     out = io.BytesIO()
@@ -587,8 +751,10 @@ async def info_tandatangan(sr_id: str, tok: dict = Depends(require_sign_token)):
             "penanda_tangan": _publik_signer(sg), "boleh_ttd": bisa,
             "alasan": alasan,
             # dokumen terlampir → halaman publik menampilkan tombol baca
+            # + pratinjau pembubuhan (jumlah halaman utk navigasi posisi)
             "ada_dokumen": bool(str(sr.get("dok_file_id") or "").strip()),
-            "dok_nama": sr.get("dok_nama", "")}
+            "dok_nama": sr.get("dok_nama", ""),
+            "jumlah_halaman": int(sr.get("dok_halaman") or 0)}
 
 
 @ttd_router.post("/ttd/tandatangan/{sr_id}/kirim")
@@ -614,6 +780,9 @@ async def kirim_tandatangan(sr_id: str, payload: SpesimenIn, request: Request,
     data = _png_dari_base64(payload.png_base64)
     if not png_transparan_valid(data):
         raise HTTPException(status_code=400, detail="Tanda tangan tidak valid / kosong")
+    # Posisi divalidasi SEBELUM blob diunggah — nilai liar (Infinity dkk.)
+    # tidak boleh meninggalkan blob yatim di GridFS lewat jalur exception.
+    posisi_ttd = _posisi_bersih(payload.posisi, int(sr.get("dok_halaman") or 0))
     now = datetime.now(timezone.utc)
     file_id = ObjectId()
     grid_in = fs_bucket.open_upload_stream_with_id(
@@ -636,6 +805,9 @@ async def kirim_tandatangan(sr_id: str, payload: SpesimenIn, request: Request,
                   "signers.$.signature_file_id": str(file_id),
                   "signers.$.hash": h,
                   "signers.$.signed_at": now.isoformat(),
+                  # Posisi pembubuhan pilihan penanda tangan (None = slot
+                  # otomatis di halaman terakhir seperti sebelumnya).
+                  "signers.$.posisi_ttd": posisi_ttd,
                   "signers.$.ip": (request.client.host if request.client else "")}})
     if res.modified_count == 0:
         # Kalah race (sudah ttd / dibatalkan / link diganti) — bersihkan blob.
