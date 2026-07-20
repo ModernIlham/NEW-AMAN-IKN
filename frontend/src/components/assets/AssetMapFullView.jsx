@@ -156,6 +156,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
   clientFilter,       // (rows) => rows — filter yang sama utk data snapshot offline
   activeFilterCount = 0,
   selectedIds = null, // Set<id> aset terpilih di daftar → peta & ekspor hanya ini
+  onQuickAdd,         // (lat, lng, nama) => void — tambah cepat aset di titik peta
 }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
@@ -182,7 +183,8 @@ const AssetMapFullView = memo(function AssetMapFullView({
   const onEditRef = useRef(onEditAsset);
   const onSaveRef = useRef(onSaveCoords);
   const onCloseRef = useRef(onClose);
-  useEffect(() => { onEditRef.current = onEditAsset; onSaveRef.current = onSaveCoords; onCloseRef.current = onClose; });
+  const onQuickAddRef = useRef(onQuickAdd);
+  useEffect(() => { onEditRef.current = onEditAsset; onSaveRef.current = onSaveCoords; onCloseRef.current = onClose; onQuickAddRef.current = onQuickAdd; });
   onPhotoClickRef.current = (row) => setLightboxRow(row);
 
   // Back HP menutup lembar peta (kembali ke baris data), bukan keluar app.
@@ -330,8 +332,10 @@ const AssetMapFullView = memo(function AssetMapFullView({
     // dipisahkan saat diperbesar; ubin OSM native mentok z19 → maxNativeZoom
     // memberi tahu Leaflet untuk MEMPERBESAR ubin z19 pada z20–22 (agak
     // buram tapi posisi pin makin presisi).
+    // tapHold: tekan-lama di iOS Safari ikut memicu event contextmenu
+    // (Android/desktop sudah bawaan) — dipakai TAMBAH CEPAT di titik peta.
     const map = L.map(containerRef.current, {
-      zoomControl: true, attributionControl: true, maxZoom: 22,
+      zoomControl: true, attributionControl: true, maxZoom: 22, tapHold: true,
     });
     map.setView([-1.4, 116.7], 5); // fallback: kawasan IKN
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -381,6 +385,50 @@ const AssetMapFullView = memo(function AssetMapFullView({
     };
     map.on("zoomend moveend", updateScaleInfo);
     updateScaleInfo();
+
+    // ── TAMBAH CEPAT: klik kanan (desktop) / tekan lama (HP & tablet) di
+    //    area peta → "+ Tambah aset di sini" → cukup ketik NAMA BARANG;
+    //    kategori dummy + kode aset + NUP berurutan + "Belum
+    //    Diinventarisasi" diisi otomatis (default halaman tambah aset) dan
+    //    titik terbentuk di koordinat yang ditekan. ──
+    map.on("contextmenu", (ev) => {
+      if (!onQuickAddRef.current) return; // viewer / tanpa izin edit
+      const { lat, lng } = ev.latlng;
+      const wrap = L.DomUtil.create("div", "");
+      wrap.style.cssText = "font:12px system-ui,sans-serif;min-width:216px";
+      wrap.innerHTML =
+        '<button type="button" data-aksi="tambah" data-testid="peta-tambah-disini" style="width:100%;display:flex;align-items:center;justify-content:center;gap:6px;background:#2563eb;color:#fff;border:0;border-radius:8px;padding:9px 10px;font-weight:700;font-size:12px;cursor:pointer">＋ Tambah aset di sini</button>' +
+        `<div style="margin-top:5px;color:#64748b;font-size:10px;text-align:center">${lat.toFixed(6)}, ${lng.toFixed(6)}</div>`;
+      const popup = L.popup({ closeButton: true, autoClose: true, className: "aman-peta-tambah" })
+        .setLatLng(ev.latlng).setContent(wrap).openOn(map);
+      L.DomEvent.disableClickPropagation(wrap);
+      L.DomEvent.disableScrollPropagation(wrap);
+      wrap.querySelector('[data-aksi="tambah"]').addEventListener("click", () => {
+        wrap.innerHTML =
+          '<p style="margin:0 0 6px;font-weight:700;color:#0f172a">Aset baru di titik ini</p>' +
+          '<input data-isi="nama" data-testid="peta-tambah-nama" placeholder="Nama barang…" autocomplete="off" style="width:100%;box-sizing:border-box;border:1.5px solid #cbd5e1;border-radius:8px;padding:8px 10px;font-size:13px;outline:none;color:#0f172a;background:#fff" />' +
+          '<p style="margin:6px 0;color:#64748b;font-size:10px;line-height:1.4">Kategori dummy + NUP & status inventarisasi terisi otomatis — lengkapi detail lain nanti dari daftar aset.</p>' +
+          '<button type="button" data-aksi="simpan" data-testid="peta-tambah-simpan" style="width:100%;background:#059669;color:#fff;border:0;border-radius:8px;padding:9px 10px;font-weight:700;font-size:12px;cursor:pointer">Simpan Titik Aset</button>';
+        const input = wrap.querySelector('[data-isi="nama"]');
+        const simpan = () => {
+          const nama = (input.value || "").trim();
+          if (!nama) { input.style.borderColor = "#dc2626"; input.focus(); return; }
+          onQuickAddRef.current?.(lat, lng, nama);
+          map.closePopup(popup);
+          // Marker SEMENTARA (biru pudar) — pin final tampil setelah antrean
+          // simpan tersinkron dan peta dimuat ulang.
+          L.marker([lat, lng], { icon: markerIcon("#2563eb", false, false), opacity: 0.75 })
+            .addTo(map)
+            .bindTooltip(`${nama} — tersimpan di antrean`, { direction: "top" });
+        };
+        wrap.querySelector('[data-aksi="simpan"]').addEventListener("click", simpan);
+        input.addEventListener("keydown", (ke) => {
+          ke.stopPropagation(); // jangan sampai memicu pintasan keyboard peta
+          if (ke.key === "Enter") simpan();
+        });
+        setTimeout(() => input.focus(), 80);
+      });
+    });
 
     mapRef.current = map;
     setTimeout(() => map.invalidateSize(), 60);

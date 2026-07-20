@@ -48,6 +48,24 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#470] Peta aset — tambah cepat aset di titik peta (klik kanan / tekan lama), cukup ketik nama — 2026-07-20
+
+- **Tambah cepat dari peta**: klik kanan (desktop) atau TEKAN LAMA (HP &
+  tablet — opsi `tapHold` Leaflet untuk iOS; Android/desktop bawaan) di
+  area peta memunculkan menu **"+ Tambah aset di sini"** → cukup ketik
+  NAMA BARANG → titik aset langsung terbentuk di koordinat yang ditekan.
+- **Default sama dengan halaman tambah aset**: kategori DUMMY + kode aset
+  kategori + **NUP berurutan otomatis** (helper bersama `lib/dummyNup.js`
+  — SATU sumber urutan dengan Mode Kamera Penuh agar tidak kembar),
+  status inventarisasi "Belum Diinventarisasi", kondisi Baik, status
+  Aktif, stiker Belum Terpasang; detail lain dilengkapi nanti dari
+  daftar aset.
+- Lewat **antrean simpan optimistis yang sama** dengan form (offline-first,
+  OCC) — marker sementara biru pudar tampil seketika dengan tooltip
+  "tersimpan di antrean"; pin final muncul setelah antrean tersinkron.
+- Enter di input = simpan; input mencuri fokus tanpa memicu pintasan
+  keyboard peta; hanya tampil untuk pengguna ber-izin edit.
+
 ## [#469] TTD elektronik — atur letak & ukuran pembubuhan di dokumen + halaman publik responsif + keandalan lapangan — 2026-07-20
 
 ### Pembubuhan yang bisa diatur (baru)

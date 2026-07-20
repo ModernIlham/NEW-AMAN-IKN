@@ -28,6 +28,7 @@ import { acquireAccuratePosition } from "../../lib/geolocation";
 import { lebihAkurat } from "../../lib/gpsAkurasi";
 import { bolehSalinKoordinat } from "../../lib/salinKonteks";
 import { compressImageFile, compressDataUrl, generateThumbnailFromDataUrl, dataUrlBytes } from "../../lib/imageCompression";
+import { reserveDummyNup as reserveDummyNupLib } from "../../lib/dummyNup";
 import { statusInventarisasiOtomatis, autoInventarisasiEnabled } from "../../lib/inventoryStatus";
 
 // ============================================================================
@@ -1066,32 +1067,11 @@ const AssetForm = memo(({
     setPegawaiQuery("");
   }, [clearFieldError]);
 
-  // Urutan NUP LOKAL per (kegiatan|kode aset). Backend next-nup hanya menghitung
-  // dari aset yang SUDAH tersimpan di DB, sedangkan aset yang ditangkap beruntun
-  // masih di antrean (belum persist) — sehingga next-nup akan mengembalikan NUP
-  // yang SAMA berulang → kembar. Kita seed dari server (online) / localStorage
-  // (offline) lalu naikkan sendiri untuk tiap aset dummy berikutnya.
-  const nupSeqRef = useRef({});
-  const reserveDummyNup = useCallback(async (assetCode, categoryLabel) => {
-    const key = `${activity?.id || ""}|${assetCode || categoryLabel || ""}`;
-    const lsKey = `aman_nupseq_${key}`;
-    if (nupSeqRef.current[key] == null) {
-      let seed = 0;
-      try { const c = parseInt(localStorage.getItem(lsKey) || "", 10); if (Number.isFinite(c)) seed = c; } catch {}
-      try {
-        const params = new URLSearchParams({ activity_id: activity?.id || "" });
-        if (assetCode) params.set("asset_code", assetCode); else params.set("category", categoryLabel || "");
-        const res = await axios.get(`${API}/assets/next-nup?${params}`);
-        const serverNext = parseInt(res?.data?.next_nup, 10);
-        if (Number.isFinite(serverNext)) seed = Math.max(seed, serverNext - 1);
-      } catch { /* offline: pakai seed lokal */ }
-      nupSeqRef.current[key] = seed;
-    }
-    const issued = (nupSeqRef.current[key] || 0) + 1;
-    nupSeqRef.current[key] = issued;
-    try { localStorage.setItem(lsKey, String(issued)); } catch {}
-    return String(issued);
-  }, [activity?.id]);
+  // Urutan NUP dummy: logika bersama di lib/dummyNup.js (satu sumber urutan
+  // dengan tambah-cepat di peta aset — localStorage key & cache modul sama).
+  const reserveDummyNup = useCallback(
+    (assetCode, categoryLabel) => reserveDummyNupLib(activity?.id, assetCode, categoryLabel),
+    [activity?.id]);
 
   // Kategori "dummy" + NUP otomatis untuk Mode Kamera Penuh: surveyor tidak
   // perlu memilih kategori — Kode Aset di-set ke kategori dummy dan NUP dinomori
