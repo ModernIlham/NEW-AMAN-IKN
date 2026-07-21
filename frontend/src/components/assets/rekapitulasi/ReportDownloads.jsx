@@ -70,6 +70,7 @@ const detailFieldOptions = [
 ];
 
 const allBatchItems = [
+  { key: "lhi", label: "LHI Lengkap (gabungan)", group: "lhi" },
   { key: "cover", label: "Sampul LHI", group: "lhi" },
   { key: "rhi", label: "RHI", group: "resmi" },
   { key: "bahi", label: "BAHI", group: "resmi" },
@@ -86,6 +87,8 @@ const allBatchItems = [
   { key: "sptjm", label: "SPTJM", group: "pendukung" },
   { key: "surat-koreksi", label: "Surat Koreksi", group: "pendukung" },
   { key: "executive-summary", label: "Laporan Eksekutif", group: "pendukung" },
+  { key: "executive-grouped", label: "Eksekutif per Barang Serupa", group: "pendukung" },
+  { key: "executive-data", label: "Data Aset (semua halaman)", group: "pendukung" },
 ];
 
 const batchGroupColors = {
@@ -218,7 +221,7 @@ export default function ReportDownloads({
             <Settings className="w-3.5 h-3.5" /> Sampul
           </button>
         </div>
-        <p className="text-[10px] text-muted-foreground text-center">Sampul + BAHI + RHI + 6 DBHI + SP Hasil + SP Pelaksanaan</p>
+        <p className="text-[10px] text-muted-foreground text-center">Sampul + BAHI + RHI + 6 DBHI + DBKP + SP Hasil + SP Pelaksanaan</p>
         {showSettings && <ReportSettingsEditor onClose={() => setShowSettings(false)} />}
       </div>
 

@@ -48,6 +48,26 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#484] LHI Lengkap utuh kembali + batch ZIP mencakup semua laporan — 2026-07-21
+
+- **Bug (regresi guard satker)**: sejak guard akses per-satker ditambahkan
+  ke semua generator laporan, panggilan INTERNAL dari penyusun LHI Lengkap
+  dan batch ZIP tidak meneruskan `_user` — parameter itu berisi objek
+  `Depends` mentah sehingga guard melempar error dan bagian laporan
+  di-skip DIAM-DIAM. Akibatnya **LHI Lengkap hanya berisi sampul** (BAHI/
+  RHI/DBHI/DBKP/SP hilang) dan **batch ZIP nyaris kosong**.
+- **Perbaikan**: `_user` kini diteruskan ke setiap generator pada kedua
+  jalur; LHI kembali utuh (Sampul + BAHI + RHI + 6 DBHI + DBKP + SP Hasil
+  + SP Pelaksanaan) dan semua pilihan batch ZIP terisi.
+- **Anti diam-diam**: bila ada bagian LHI yang gagal dibuat, unduhan kini
+  GAGAL dengan pesan yang menyebut bagian bermasalah (bukan mengirim PDF
+  parsial tanpa pemberitahuan). Pada batch ZIP, laporan yang gagal dicatat
+  di file `_LAPORAN-GAGAL.txt` di dalam ZIP.
+- **Cakupan batch ZIP dilengkapi** dengan pilihan yang sebelumnya tak
+  tersedia: **LHI Lengkap (gabungan)**, **Eksekutif per Barang Serupa**,
+  dan **Data Aset (semua halaman, otomatis semua bagian 499-an aset)** —
+  kini seluruh laporan per kegiatan bisa diunduh sekali klik dalam satu ZIP.
+
 ## [#483] Perbaikan PSP dari impor SIMAN — barang belum ter-PSP tak lagi terhitung sudah PSP — 2026-07-20
 
 - **Bug**: kolom "No PSP" pada ekspor SIMAN memakai placeholder (mis. `-`,
