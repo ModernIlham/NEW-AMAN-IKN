@@ -248,6 +248,24 @@ def test_baris_identitas_ttd_status_non_asn():
     assert baris_identitas_ttd("-", "NIP. ....") == ["NIP. ...."]
 
 
+def test_baris_identitas_ttd_nik_tertahan_semua_status():
+    """NIK TIDAK pernah dicetak di area ttd — termasuk ASN yang di master
+    masih tercatat NIK (belum ber-NIP) dan TNI/POLRI; cukup nama saja.
+    Pemisah umum (spasi/titik/strip) tidak meloloskan NIK dari deteksi."""
+    from pegawai_utils import baris_identitas_laporan, baris_identitas_ttd
+    # ASN dengan NIK (NIP belum tercatat di master) → tanpa baris nomor
+    assert baris_identitas_ttd("3506042503900001", "NIP. ....", "pns") == []
+    assert baris_identitas_ttd("3506042503900001", "", "pppk") == []
+    # TNI/POLRI dengan NIK (dulu bocor sebagai "NRP. <NIK>") → tertahan
+    assert baris_identitas_ttd("3506042503900001", "", "tni") == []
+    assert baris_identitas_ttd("3506042503900001", "", "polri") == []
+    # NIK ditulis berpemisah → tetap terdeteksi & tertahan
+    assert baris_identitas_ttd("3506 0425 0390 0001") == []
+    assert baris_identitas_ttd("3506.0425.0390.0001", "NIP. ....", "pns") == []
+    # NIP berpemisah tetap dicetak apa adanya dengan label NIP
+    assert baris_identitas_laporan("19580818 198404 1 001") == "NIP. 19580818 198404 1 001"
+
+
 def test_info_masa_pegawai_bup():
     """BUP per UU 20/2023 (JPT 60, fungsional ahli utama 65) + TNI/POLRI +
     kontrak Non-ASN; data kurang → None (tidak menebak)."""

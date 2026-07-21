@@ -70,14 +70,25 @@ async def _filter_register_satker(user, query=None) -> dict:
 
 
 @audit_router.get("/audit-logs")
-async def get_audit_logs(activity_id: str = "", asset_id: str = "", page: int = 1, page_size: int = 50,
+async def get_audit_logs(activity_id: str = "", asset_id: str = "", sistem: bool = False,
+                         page: int = 1, page_size: int = 50,
                          user: dict = Depends(require_user)):
-    """Get audit logs with optional filtering (ter-scope satker)."""
+    """Get audit logs with optional filtering (ter-scope satker).
+
+    `sistem=true` → HANYA log sistem (tanpa activity_id — kejadian master
+    pegawai/kartu dsb.); user terikat satker dibatasi log ber-`kode_satker`
+    miliknya, user lintas-satker melihat semua log sistem."""
     query = {}
-    scope, kosong = await _batas_activity_satker(user, activity_id)
-    if kosong:
-        return {"logs": [], "total": 0, "page": 1, "page_size": page_size, "total_pages": 1}
-    query.update(scope)
+    if sistem:
+        query["activity_id"] = ""
+        kode = kode_satker_user(user)
+        if kode:
+            query["kode_satker"] = kode
+    else:
+        scope, kosong = await _batas_activity_satker(user, activity_id)
+        if kosong:
+            return {"logs": [], "total": 0, "page": 1, "page_size": page_size, "total_pages": 1}
+        query.update(scope)
     if asset_id:
         query["asset_id"] = asset_id
 
