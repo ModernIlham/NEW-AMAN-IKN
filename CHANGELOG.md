@@ -48,6 +48,24 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#486] RHI menjabarkan klasifikasi BMN Tidak Ditemukan + laporan DBHI per klasifikasi — 2026-07-21
+
+- **RHI**: baris "BMN TIDAK DITEMUKAN" kini dijabarkan sub-barisnya —
+  **Kesalahan Pencatatan**, **Tidak Ditemukan Lainnya**, dan (bila ada)
+  **Belum Diklasifikasi** — dengan jumlah, nilai, dan persentase
+  masing-masing; jumlah sub-baris selalu = total baris B. Konsisten dengan
+  rincian yang sudah ada di BAHI & rekapitulasi.
+- **Dua laporan DBHI baru per klasifikasi** (permintaan pemilik):
+  **DBHI Kesalahan Pencatatan** dan **DBHI Tidak Ditemukan Lainnya** —
+  format sama dengan DBHI Tidak Ditemukan (kolom Klasifikasi/Sub
+  Klasifikasi/Uraian/Tindak Lanjut), berisi HANYA aset klasifikasi
+  tersebut. Aset Tidak Ditemukan yang belum diklasifikasi tetap ada di
+  daftar induk DBHI Tidak Ditemukan.
+- Tombol unduh baru di panel Rekapitulasi (badge jumlah per klasifikasi,
+  nonaktif bila 0) + kedua laporan ikut pilihan **Batch Download ZIP**.
+- Smoke render FakeDB: sub-baris RHI tampil benar; DBHI per klasifikasi
+  hanya memuat aset klasifikasinya. 610 unit test lolos.
+
 ## [#485] Penandatangan Non-ASN tanpa baris NIP/NIK di seluruh blok TTD — 2026-07-21
 
 - **Aturan baru (permintaan pemilik)**: bila penandatangan teridentifikasi
