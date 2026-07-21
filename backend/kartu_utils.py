@@ -43,8 +43,11 @@ def _kunci_rahasia() -> bytes:
 
 def normalisasi_uid(v) -> str:
     """UID apa adanya dari reader/ketikan → bentuk seragam: huruf besar,
-    tanpa pemisah (':' '-' '.' spasi). "" bila kosong/bukan alfanumerik."""
+    tanpa pemisah (':' '-' '.' spasi) dan tanpa prefiks '0x'.
+    "" bila kosong/bukan alfanumerik."""
     s = re.sub(r"[\s:.\-]+", "", str(v or "")).upper()
+    if s.startswith("0X"):
+        s = s[2:]
     return s if re.fullmatch(r"[0-9A-F]+|[0-9]+", s or "") else ""
 
 
@@ -74,8 +77,14 @@ def kandidat_uid(v) -> list:
 
     - Input hex sepanjang UID sah → [asli, byte-dibalik].
     - Input desimal murni → [asli, hex-BE, hex-LE] (reader mode desimal).
+      Input SERBA-DIGIT sepanjang UID sah ambigu (bisa hex, bisa desimal) —
+      kedua tafsir dihasilkan agar reader hex-MSB vs hex-LSB vs desimal
+      tetap saling cocok (temuan audit #490: dulu tafsir hex-nya hilang).
     - Lainnya → [asli] saja (tetap bisa dipakai asal reader konsisten).
     Terurut & unik; [] bila input kosong/tak valid.
+    CATATAN: dua kartu FISIK berbeda yang UID-nya saling kebalikan byte
+    memang tak terbedakan oleh desain multi-kandidat ini — pendaftaran
+    ganda akan tertolak 409 sehingga kondisinya terlihat.
     """
     u = normalisasi_uid(v)
     if not u:
@@ -83,7 +92,7 @@ def kandidat_uid(v) -> list:
     hasil = [u]
     if u.isdigit():
         hasil.extend(_hex_dari_desimal(u))
-    elif len(u) in _PANJANG_HEX_SAH and len(u) % 2 == 0:
+    if len(u) in _PANJANG_HEX_SAH and len(u) % 2 == 0:
         try:
             hasil.append(bytes.fromhex(u)[::-1].hex().upper())
         except ValueError:

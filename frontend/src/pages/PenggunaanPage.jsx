@@ -1655,11 +1655,13 @@ export default function PenggunaanPage({ user, onBack }) {
         onPegawai={(p) => {
           const pihak = kartuTapUntuk;
           if (!pihak || !p) return;
-          setFormBast((f) => ({ ...f, [pihak]: {
+          // Null-guard: respons tap bisa tiba SETELAH dialog BAST ditutup
+          // (form null) — tanpa guard, spread f[pihak] melempar & layar putih.
+          setFormBast((f) => (f ? { ...f, [pihak]: {
             ...f[pihak], nama: p.nama || f[pihak]?.nama || "",
             nip: p.nip || f[pihak]?.nip || "",
             jabatan: p.jabatan || f[pihak]?.jabatan || "",
-          } }));
+          } } : f));
         }} />
 
       {confirmDialog}

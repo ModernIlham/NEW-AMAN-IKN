@@ -41,8 +41,9 @@ async def _batas_activity_satker(user, activity_id: str):
       - user lintas-satker → ({activity_id} bila diminta, else {}), False.
       - user terikat satker → activity_id DIBATASI ke kegiatan satkernya;
         bila diminta activity_id di luar satker → kosong_paksa=True (hasil
-        kosong, bukan bocor lintas satker). Log tanpa activity_id (aksi
-        sistem/lintas modul) tidak tampil bagi user terikat — sengaja.
+        kosong, bukan bocor lintas satker). Log SISTEM tanpa activity_id
+        ikut tampil bila field `kode_satker`-nya cocok satker user (mis.
+        kejadian kartu pegawai) — log sistem tanpa kode tetap tersembunyi.
     """
     kode = kode_satker_user(user)
     if not kode:
@@ -52,7 +53,8 @@ async def _batas_activity_satker(user, activity_id: str):
         if activity_id not in allowed:
             return {}, True
         return {"activity_id": activity_id}, False
-    return {"activity_id": {"$in": list(allowed)}}, False
+    return {"$or": [{"activity_id": {"$in": list(allowed)}},
+                    {"activity_id": "", "kode_satker": kode}]}, False
 
 
 async def _filter_register_satker(user, query=None) -> dict:

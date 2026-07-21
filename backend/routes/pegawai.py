@@ -11,7 +11,7 @@ from typing import Optional
 
 from fastapi import (APIRouter, Depends, File, HTTPException, Request,
                      Response, UploadFile)
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from auth_utils import require_admin, require_user, require_user_or_query_token
 from db import db, fs_bucket
@@ -33,7 +33,8 @@ pegawai_router = APIRouter()
 
 # kartu_uid_hashes TIDAK pernah dikirim ke klien (cukup kartu_label utk UI) —
 # hash HMAC memang tak bisa dibalik, tapi tak ada alasan membocorkannya.
-_PROJ = {"_id": 0, "kartu_uid_hashes": 0}
+# kartu_terdaftar_oleh (username admin) juga internal — jejaknya di audit log.
+_PROJ = {"_id": 0, "kartu_uid_hashes": 0, "kartu_terdaftar_oleh": 0}
 
 
 class PegawaiIn(BaseModel):
@@ -345,7 +346,7 @@ async def export_pegawai_xlsx(_user: dict = Depends(require_user)):
                                OPSI_DROPDOWN_EKSPOR, baris_ekspor_pegawai)
 
     items = await db.pegawai.find(
-        scope_query_field_satker(_user), {"_id": 0}).sort("nama", 1).to_list(20000)
+        scope_query_field_satker(_user), _PROJ).sort("nama", 1).to_list(20000)
 
     wb = Workbook()
     ws = wb.active
@@ -695,7 +696,7 @@ _KARTU_PROYEKSI_PUBLIK = {
 
 
 class KartuIn(BaseModel):
-    uid: str
+    uid: str = Field(min_length=1, max_length=64)
 
 
 @pegawai_router.post("/pegawai/kartu/identifikasi")
@@ -717,7 +718,8 @@ async def identifikasi_kartu(request: Request, payload: KartuIn,
     if not peg:
         await log_audit("kartu_tak_dikenal", "", "",
                         username=user.get("username", "system"),
-                        detail=f"Tap kartu tidak dikenal (hash {hashes[0][:8]}…)")
+                        detail=f"Tap kartu tidak dikenal (hash {hashes[0][:8]}…)",
+                        kode_satker=kode_satker_user(user))
         raise HTTPException(status_code=404,
                             detail="Kartu tidak dikenal — daftarkan dulu di Master Pegawai")
     return {"pegawai": peg}
@@ -743,24 +745,38 @@ async def daftar_kartu_pegawai(request: Request, pegawai_id: str,
     hashes = hash_kandidat(payload.uid)
     lain = await db.pegawai.find_one(
         {"kartu_uid_hashes": {"$in": hashes}, "id": {"$ne": pegawai_id}},
-        {"_id": 0, "nama": 1})
+        {"_id": 0, "nama": 1, "kode_satker": 1})
     if lain:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Kartu ini sudah terdaftar pada pegawai lain ({lain.get('nama') or '-'}). "
-                   f"Lepas dulu dari pegawai tersebut.")
+        # Nama pegawai konflik hanya disebut bila SE-SATKER dengan admin —
+        # jangan bocorkan nama pegawai satker lain lewat probing UID.
+        kode_admin = kode_satker_user(admin)
+        se_satker = (not kode_admin
+                     or str(lain.get("kode_satker") or "").strip() in ("", kode_admin))
+        pesan = (f"Kartu ini sudah terdaftar pada pegawai lain "
+                 f"({lain.get('nama') or '-'}). Lepas dulu dari pegawai tersebut."
+                 if se_satker else
+                 "Kartu ini sudah terdaftar pada pegawai satuan kerja lain — "
+                 "hubungi administrator pusat.")
+        raise HTTPException(status_code=409, detail=pesan)
     now = datetime.now(timezone.utc).isoformat()
     label = label_kartu(payload.uid)
-    await db.pegawai.update_one({"id": pegawai_id}, {"$set": {
-        "kartu_uid_hashes": hashes,
-        "kartu_label": label,
-        "kartu_terdaftar_pada": now,
-        "kartu_terdaftar_oleh": admin.get("username", "system"),
-        "updated_at": now,
-    }})
+    try:
+        await db.pegawai.update_one({"id": pegawai_id}, {"$set": {
+            "kartu_uid_hashes": hashes,
+            "kartu_label": label,
+            "kartu_terdaftar_pada": now,
+            "kartu_terdaftar_oleh": admin.get("username", "system"),
+            "updated_at": now,
+        }})
+    except Exception:
+        # Index unik kartu_uid_hashes (bila berhasil terpasang) menutup
+        # celah balapan dua admin mendaftarkan kartu sama bersamaan.
+        raise HTTPException(status_code=409,
+                            detail="Kartu baru saja terdaftar pada pegawai lain — muat ulang lalu coba lagi.")
     await log_audit("daftar_kartu", "", pegawai_id,
                     username=admin.get("username", "system"),
-                    detail=f"Daftarkan kartu {label} untuk {peg.get('nama') or '-'}")
+                    detail=f"Daftarkan kartu {label} untuk {peg.get('nama') or '-'}",
+                    kode_satker=str(peg.get("kode_satker") or ""))
     return {"ok": True, "kartu_label": label, "kartu_terdaftar_pada": now}
 
 
@@ -782,5 +798,6 @@ async def lepas_kartu_pegawai(request: Request, pegawai_id: str,
         "$set": {"updated_at": now}})
     await log_audit("lepas_kartu", "", pegawai_id,
                     username=admin.get("username", "system"),
-                    detail=f"Lepas kartu {peg.get('kartu_label') or ''} dari {peg.get('nama') or '-'}")
+                    detail=f"Lepas kartu {peg.get('kartu_label') or ''} dari {peg.get('nama') or '-'}",
+                    kode_satker=str(peg.get("kode_satker") or ""))
     return {"ok": True}

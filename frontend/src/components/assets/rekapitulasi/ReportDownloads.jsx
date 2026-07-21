@@ -203,7 +203,10 @@ export default function ReportDownloads({
       await downloadFileWithProgress(
         `${API}/inventory-activities/${activityId}/batch-pdf-zip`,
         `Laporan_Batch_${activityId.substring(0, 8)}.zip`,
-        { label: `Batch ZIP (${selected.size} laporan)`, method: "post", data: { types: Array.from(selected) } }
+        { label: `Batch ZIP (${selected.size} laporan)`, method: "post",
+          // detail_fields ikut dikirim agar PDF Eksekutif/Data Aset di ZIP
+          // memuat kolom tambahan yang sama dgn unduhan tunggal.
+          data: { types: Array.from(selected), detail_fields: detailFieldsValue } }
       );
       setBatchMode(false);
       setSelected(new Set());

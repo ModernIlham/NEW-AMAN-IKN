@@ -33,6 +33,12 @@ def test_kandidat_uid_hex_dan_desimal():
     # UID sama dari reader BERBEDA format harus saling beririsan kandidat
     irisan = set(kandidat_uid("92A78230")) & set(kandidat_uid("2460451376"))
     assert irisan, "reader hex vs desimal harus tetap cocok"
+    # UID hex SERBA-DIGIT (mis. 0x12345678): reader hex-MSB vs hex-LSB
+    # harus tetap cocok (audit #490 — dulu tafsir hex-nya hilang)
+    irisan = set(kandidat_uid("12345678")) & set(kandidat_uid("78563412"))
+    assert irisan, "hex serba-digit MSB vs LSB harus tetap cocok"
+    # Prefiks 0x dari sebagian tool NFC diterima
+    assert normalisasi_uid("0x92A78230") == "92A78230"
     assert kandidat_uid("") == []
 
 

@@ -1055,13 +1055,15 @@ const AssetForm = memo(({
     return !pegawaiAll.some((p) => String(p.nip || "").trim() === nip);
   }, [formData.pengguna_nip, pegawaiAll]);
 
-  // Pilih pegawai dari master → isi user (nama) + pengguna_nip + jabatan (bila kosong).
+  // Pilih pegawai dari master → isi user (nama) + pengguna_nip + jabatan.
+  // Jabatan DITIMPA bila master punya nilainya — memilih orang BERBEDA tidak
+  // boleh menyisakan jabatan orang sebelumnya (temuan audit #490).
   const onPickPegawai = useCallback((p) => {
     setFormData(prev => ({
       ...prev,
       user: p.nama || prev.user,
       pengguna_nip: p.nip || prev.pengguna_nip,
-      pengguna_jabatan: (prev.pengguna_jabatan || "").trim() ? prev.pengguna_jabatan : (p.jabatan || ""),
+      pengguna_jabatan: (p.jabatan || "").trim() || prev.pengguna_jabatan,
     }));
     clearFieldError("user");
     clearFieldError("pengguna_nip");

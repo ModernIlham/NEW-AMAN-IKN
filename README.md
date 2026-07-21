@@ -147,7 +147,7 @@ lampiran per tiket insidentil** (#156).
 - 🔄 **Sinkronisasi SIMAN V2 tangguh** — impor ekspor "Master Aset" dengan deteksi header di semua sheet, unggah andal (progres %, timeout longgar, coba-ulang otomatis saat koneksi putus), **validasi kode satker cerdas 6↔20 digit** (kode lengkap SIMAN ikut di kegiatan & Master Satker; kode 6 digit AMAN yang terkandung dalam kode 20 digit dianggap cocok), tanda "≠ SIMAN" per aset + sinkron 1-klik dari galeri/list; baris SIMAN belum tercatat bisa **diunduh CSV atau dibuat aset draft massal 1-klik** (#405, #462–#463).
 - 🏷️ **Cetak Stiker Label BMN** — 3 ukuran (besar/sedang/kecil) × kertas A4/A3 penuh-halaman, ikut filter & kelompok, QR ber-payload kode register + logo di tengah (level H), header nama/kode satker, rekap jumlah per ukuran (#397–#402).
 - ✍️ **Tanda Tangan Elektronik** — TTD via link per penanda tangan (kanvas mulus / foto→PNG transparan), **dibubuhkan langsung ke dokumen PDF unggahan dengan LETAK & UKURAN yang diatur sendiri di pratinjau halaman** (atau slot otomatis), QR + hash verifikasi publik (NIP di-masking), token sekali-pakai; halaman publik responsif + tahan rotasi/reload/jaringan putus (#398, #468).
-- 👥 **Master SDM & Referensi** — Master Pegawai (impor Excel massal, **foto pegawai ber-krop persegi** geser/zoom + avatar di daftar), Referensi Pejabat, Unit Kerja Eselon I–V, keterkaitan aset↔pegawai (panel Perlu Serah Terima BMN), **Referensi Akun BAS per makna digit 1–6** (KEP-211/PB/2018) (#391–#394, #460).
+- 👥 **Master SDM & Referensi** — Master Pegawai (impor Excel massal, **foto pegawai ber-krop persegi** geser/zoom + avatar di daftar), Referensi Pejabat, Unit Kerja Eselon I–V, keterkaitan aset↔pegawai (panel Perlu Serah Terima BMN), **Referensi Akun BAS per makna digit 1–6** (KEP-211/PB/2018), **Kartu Pegawai UID e-KTP/NFC** — tap kartu utk identifikasi cepat di form aset/BAST/TTD elektronik (hanya hash UID tersimpan, tanpa data chip kependudukan) (#391–#394, #460, #487).
 - 🔐 **Isolasi multi-satker & keamanan** — jejak audit, kartu inventarisasi, dan dokumen e-sign ter-scope ketat per satker (tutup kebocoran & IDOR); reset melindungi seluruh master referensi; rate-limit e-sign (#408).
 - ⚡ **Performa** — bilah progres inventarisasi memakai agregasi ringan, indeks database kunci (SIMAN/pemegang/persuratan/pegawai) (#409).
 - 📧 **Konfigurasi email (OTP & e-sign)** — pendaftaran akun, lupa password, dan notifikasi link TTD memakai [Resend](https://resend.com): setel env `RESEND_API_KEY` **dan** `SENDER_EMAIL` dari **domain terverifikasi** di server. ⚠️ Default `onboarding@resend.dev` adalah alamat uji yang HANYA bisa mengirim ke email pemilik akun Resend — OTP ke pendaftar lain pasti gagal. Diagnosa cepat: `GET /api/auth/email-status`.
@@ -272,10 +272,10 @@ Perbaikan menyeluruh untuk kolaborasi multi-user & performa penyimpanan:
 - **Export XLSX**: 4 sheets (Data Aset + Kelengkapan Dokumen + Data Kegiatan + Tim Inventarisasi) dengan foto HD embedded
 - **Export PDF**: Landscape A4 dengan foto thumbnail, summary box, color-coded
 
-### 13+ Laporan PDF Resmi
+### 15+ Laporan PDF Resmi
 | Laporan | Keterangan |
 |---------|------------|
-| DBHI (6 tipe) | Daftar Barang Hasil Inventarisasi |
+| DBHI (8 tipe) | Daftar Barang Hasil Inventarisasi — termasuk per klasifikasi Tidak Ditemukan (Kesalahan Pencatatan & Lainnya) |
 | RHI | Ringkasan Hasil Inventarisasi |
 | BAHI | Berita Acara Hasil Inventarisasi |
 | SP Hasil | Surat Pernyataan Hasil |
@@ -283,11 +283,12 @@ Perbaikan menyeluruh untuk kolaborasi multi-user & performa penyimpanan:
 | Berita Acara | Berita Acara |
 | SPTJM | Surat Pertanggungjawaban Mutlak |
 | Surat Koreksi | Surat Koreksi Inventarisasi |
+| Daftar Pemegang Aset | Rekap per pemegang + rincian aset & kelengkapan BAST |
 | Executive Summary | Ringkasan eksekutif dengan chart |
 | Executive Data | Data detail paginasi |
 | Laporan Satker | Laporan per satuan kerja |
 | LHI Package | Gabungan semua laporan (merged PDF) |
-| Batch ZIP | Download beberapa laporan sekaligus |
+| Batch ZIP | Download SEMUA laporan per kegiatan sekaligus (termasuk LHI & Eksekutif) |
 | Ekspor GIS | Titik peta aset: KML / KMZ / SHP (WGS84) + 27 atribut |
 
 ### Fitur Tambahan

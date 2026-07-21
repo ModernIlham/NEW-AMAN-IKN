@@ -410,12 +410,15 @@ async def send_esign_email(email: str, nama: str, judul: str, link: str) -> bool
 TRACKED_FIELDS = [*SCALAR_FIELD_NAMES, "stiker_photo_index"]
 TRACKED_COUNT_FIELDS = ["photos", "document_checklist"]
 
-async def log_audit(action: str, activity_id: str, asset_id: str = "", asset_code: str = "", asset_name: str = "", username: str = "system", changes: list = None, detail: str = "", nup: str = ""):
+async def log_audit(action: str, activity_id: str, asset_id: str = "", asset_code: str = "", asset_name: str = "", username: str = "system", changes: list = None, detail: str = "", nup: str = "", kode_satker: str = ""):
+    # kode_satker (opsional): log SISTEM tanpa activity_id (mis. kejadian
+    # kartu pegawai) tetap bisa dibatasi & dilihat per satker di halaman
+    # audit — tanpa ini log ber-activity_id "" tak terlihat siapa pun.
     entry = {
         "id": str(uuid.uuid4()), "action": action, "activity_id": activity_id,
         "asset_id": asset_id, "asset_code": asset_code, "nup": nup,
         "asset_name": asset_name, "username": username,
-        "changes": changes or [], "detail": detail,
+        "changes": changes or [], "detail": detail, "kode_satker": kode_satker,
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
     try:
