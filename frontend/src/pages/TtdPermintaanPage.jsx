@@ -2,8 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import {
-  ArrowLeft, BadgeCheck, ChevronDown, Copy, FileDown, FileSignature, FileText, Link2,
-  Loader2, Mail, MessageCircle, PenTool, Plus, Search, SearchX, ShieldCheck,
+  ArrowLeft, BadgeCheck, ChevronDown, Copy, FileDown, FileSignature, FileText, IdCard,
+  Link2, Loader2, Mail, MessageCircle, PenTool, Plus, Search, SearchX, ShieldCheck,
   Trash2, Upload, Users, XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import KartuTapDialog from "@/components/pegawai/KartuTapDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -89,6 +90,8 @@ export default function TtdPermintaanPage({ user, onBack }) {
   const [hasil, setHasil] = useState(null);        // {judul, links:[{nama,link}]} pasca-buat
   const [detail, setDetail] = useState(null);      // record permintaan terpilih
   const [pegawai, setPegawai] = useState([]);
+  // Tap kartu e-KTP utk mengisi penanda tangan ke-i (null = tertutup)
+  const [kartuTapSigner, setKartuTapSigner] = useState(null);
   const [dokFile, setDokFile] = useState(null);    // PDF unggahan utk dibubuhi ttd
   const { confirm, confirmDialog } = useConfirm();
 
@@ -414,6 +417,13 @@ export default function TtdPermintaanPage({ user, onBack }) {
                       <Input value={s.nama} list="ttd-pegawai-list"
                         onChange={(e) => { ubahSigner(i, "nama", e.target.value); isiDariPegawai(i, e.target.value); }}
                         placeholder="Nama lengkap *" className="h-9 text-sm" data-testid={`ttd-form-nama-${i}`} />
+                      {/* Tap kartu e-KTP → identitas penanda tangan terisi */}
+                      <button type="button" title="Tap kartu pegawai (e-KTP/NFC)"
+                        onClick={() => setKartuTapSigner(i)}
+                        className="h-9 w-9 rounded-lg border border-border text-blue-600 flex items-center justify-center hover:bg-blue-500/10 flex-shrink-0 min-w-0 min-h-0"
+                        data-testid={`ttd-tap-kartu-${i}`}>
+                        <IdCard className="w-4 h-4" />
+                      </button>
                       {form.signers.length > 1 && (
                         <button type="button" aria-label="Hapus penanda tangan"
                           onClick={() => setForm((f) => ({ ...f, signers: f.signers.filter((_, idx) => idx !== i) }))}
@@ -623,6 +633,21 @@ export default function TtdPermintaanPage({ user, onBack }) {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Tap kartu e-KTP → identitas penanda tangan ke-i terisi otomatis */}
+      <KartuTapDialog open={kartuTapSigner !== null}
+        onOpenChange={(o) => { if (!o) setKartuTapSigner(null); }}
+        onPegawai={(p) => {
+          const i = kartuTapSigner;
+          if (i === null || !p) return;
+          setForm((f) => ({
+            ...f,
+            signers: f.signers.map((s, idx) => (idx === i
+              ? { ...s, nama: p.nama || s.nama, nip: p.nip || s.nip,
+                  jabatan: p.jabatan || s.jabatan, email: p.email || s.email }
+              : s)),
+          }));
+        }} />
 
       {confirmDialog}
     </div>

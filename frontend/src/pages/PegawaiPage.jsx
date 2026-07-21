@@ -15,6 +15,7 @@ import { useBackGuard } from "@/hooks/useBackGuard";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import { authMediaUrl } from "@/lib/mediaUrl";
 import KropFotoDialog from "@/components/pegawai/KropFotoDialog";
+import KartuTapDialog from "@/components/pegawai/KartuTapDialog";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -101,6 +102,7 @@ export default function PegawaiPage({ user, onBack }) {
   // ── Foto pegawai: krop persegi (geser + zoom) → GridFS; avatar di row ──
   const [kropSrc, setKropSrc] = useState(null);       // dataURL sumber krop
   const [fotoBlobBaru, setFotoBlobBaru] = useState(null); // blob menunggu (mode tambah)
+  const [kartuTapOpen, setKartuTapOpen] = useState(false); // dialog tap kartu e-KTP
   const fotoInputRef = useRef(null);
   const pilihFotoFile = (e) => {
     const f = e.target.files?.[0];
@@ -289,6 +291,32 @@ export default function PegawaiPage({ user, onBack }) {
     }
   };
 
+  // ── Kartu Pegawai (UID e-KTP/NFC) — dikelola endpoint terpisah ──
+  const daftarKartu = async (uid) => {
+    if (!form?.id) return;
+    try {
+      const r = await axios.post(`${API}/pegawai/${form.id}/kartu`, { uid });
+      toast.success(`Kartu ${r.data?.kartu_label || ""} terdaftar untuk ${form.nama}`);
+      setForm((f) => (f ? { ...f, kartu_label: r.data?.kartu_label || "", kartu_terdaftar_pada: r.data?.kartu_terdaftar_pada || "" } : f));
+      load();
+    } catch (err) { toast.error(getApiError(err, "Gagal mendaftarkan kartu")); }
+  };
+  const lepasKartu = async () => {
+    if (!form?.id) return;
+    const ok = await confirm({
+      title: "Lepas Kartu",
+      description: `Lepas kartu ${form.kartu_label || ""} dari ${form.nama}? Tap kartu ini tidak akan dikenali lagi.`,
+      confirmLabel: "Lepas", variant: "danger",
+    });
+    if (!ok) return;
+    try {
+      await axios.delete(`${API}/pegawai/${form.id}/kartu`);
+      toast.success("Kartu dilepas");
+      setForm((f) => (f ? { ...f, kartu_label: "", kartu_terdaftar_pada: "" } : f));
+      load();
+    } catch (err) { toast.error(getApiError(err, "Gagal melepas kartu")); }
+  };
+
   const submitForm = async () => {
     if (!form) return;
     if (!(form.nama || "").trim()) { toast.error("Nama pegawai wajib diisi"); return; }
@@ -296,6 +324,9 @@ export default function PegawaiPage({ user, onBack }) {
     const body = { ...form };
     delete body.mode; delete body.id; delete body.created_at; delete body.updated_at;
     delete body.foto_file_id; // dikelola endpoint foto terpisah — jangan tertimpa
+    // Field kartu dikelola endpoint kartu terpisah — jangan ikut PUT.
+    delete body.kartu_label; delete body.kartu_terdaftar_pada;
+    delete body.kartu_terdaftar_oleh; delete body.kartu_uid_hashes;
     try {
       if (form.mode === "tambah") {
         const r = await axios.post(`${API}/pegawai`, body);
@@ -855,6 +886,35 @@ export default function PegawaiPage({ user, onBack }) {
                     )}
                     <input ref={fotoInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={pilihFotoFile} />
                   </div>
+                  {/* Kartu Pegawai (UID e-KTP/NFC) — pendaftaran cukup TAP;
+                      hanya di mode edit (butuh id). Dikelola endpoint kartu
+                      terpisah, bukan bagian PUT pegawai. */}
+                  {form.id && (
+                    <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-lg bg-blue-500/5 border border-blue-500/30" data-testid="pegawai-kartu-section">
+                      <IdCard className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                      <span className="text-xs font-medium text-foreground">Kartu e-KTP/NFC:</span>
+                      {form.kartu_label ? (
+                        <>
+                          <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                            Terdaftar {form.kartu_label}
+                          </span>
+                          <Button type="button" variant="outline" size="sm" className="h-7 text-[11px] min-w-0 min-h-0"
+                            onClick={() => setKartuTapOpen(true)} data-testid="pegawai-ganti-kartu">Ganti…</Button>
+                          <Button type="button" variant="outline" size="sm" className="h-7 text-[11px] text-red-600 min-w-0 min-h-0"
+                            onClick={lepasKartu} data-testid="pegawai-lepas-kartu">Lepas</Button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-xs text-muted-foreground">belum terdaftar</span>
+                          <Button type="button" variant="outline" size="sm" className="h-7 text-[11px] min-w-0 min-h-0"
+                            onClick={() => setKartuTapOpen(true)} data-testid="pegawai-daftar-kartu">Daftarkan Kartu…</Button>
+                        </>
+                      )}
+                      <span className="w-full text-[10px] text-muted-foreground">
+                        Tap kartu = identifikasi cepat pegawai di form aset, BAST, dan TTD elektronik. Hanya sidik (hash) UID yang disimpan.
+                      </span>
+                    </div>
+                  )}
                   <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                     <Field label="Gelar Depan"><Input value={form.gelar_depan} onChange={set("gelar_depan")} placeholder="cth. Dr." /></Field>
                     <Field label="Nama *" span2><Input value={form.nama} onChange={set("nama")} data-testid="pegawai-form-nama" /></Field>
@@ -1251,6 +1311,10 @@ export default function PegawaiPage({ user, onBack }) {
       </Dialog>
 
       <KropFotoDialog src={kropSrc} onBatal={() => setKropSrc(null)} onSimpan={simpanKrop} />
+
+      {/* Dialog tap kartu — mode raw: UID diteruskan ke endpoint pendaftaran */}
+      <KartuTapDialog open={kartuTapOpen} onOpenChange={setKartuTapOpen}
+        mode="raw" onUid={daftarKartu} />
 
       {confirmDialog}
     </div>

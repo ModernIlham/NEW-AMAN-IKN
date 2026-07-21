@@ -48,6 +48,37 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#489] Kartu Pegawai (UID e-KTP/NFC) — tap kartu utk identifikasi cepat lintas modul — 2026-07-21
+
+- **Fitur baru**: e-KTP (kartu NFC ISO 14443) kini bisa dimanfaatkan
+  sebagai KARTU PEGAWAI lewat UID-nya — TANPA membaca data kependudukan
+  di chip (tidak butuh perangkat SAM/kerja sama Dukcapil).
+- **Pendaftaran mudah** — Master Pegawai › tab Identitas › "Daftarkan
+  Kartu…" → tap kartu di pembaca → selesai. Dukungan pembaca: (1) reader
+  NFC USB mode keyboard (keyboard-wedge — murah & umum, jalan di semua
+  perangkat/browser), (2) Web NFC Android Chrome (best-effort; e-KTP
+  umumnya bukan tag NDEF sehingga reader USB tetap jalur utama), (3) ketik
+  UID manual. Ganti/Lepas kartu tersedia; satu kartu = satu pegawai.
+- **Terintegrasi ke titik-titik kunci** via dialog bersama `KartuTapDialog`:
+  form aset (tombol kartu di samping picker Pegawai — tap → pengguna
+  barang terisi), BAST Penggunaan (Penerima & Pemegang lama), dan TTD
+  elektronik (identitas penanda tangan). Tap → nama, NIP, jabatan terisi
+  otomatis dari Master Pegawai.
+- **Keamanan data & operasi**:
+  - UID mentah TIDAK PERNAH disimpan/di-log — hanya HMAC-SHA256 berkunci
+    rahasia server (`KARTU_UID_SECRET` opsional, fallback `JWT_SECRET`);
+    UI/audit hanya menampilkan 4 karakter terakhir.
+  - Normalisasi multi-format reader: hex MSB/LSB & desimal dari reader
+    berbeda tetap dikenali sebagai kartu yang sama (hash semua kandidat).
+  - Endpoint ber-rate-limit (identifikasi 30/mnt, daftar/lepas 10/mnt),
+    terautentikasi, isolasi satker, dan seluruh pendaftaran/pelepasan +
+    tap kartu tak dikenal tercatat di audit log.
+  - Batas peran DIDOKUMENTASIKAN di UI: UID dapat dikloning — tap kartu =
+    identifikasi cepat/kenyamanan, BUKAN verifikasi keaslian KTP dan
+    BUKAN pengganti TTD elektronik.
+- Field kartu menempel di dokumen pegawai → otomatis ikut backup & selamat
+  reset; index lookup `kartu_uid_hashes`; 5 unit test util baru (615 total).
+
 ## [#488] Peta Aset — tombol hapus di popup marker + pin bersilang setelah dihapus — 2026-07-21
 
 - Popup marker di Peta Aset kini punya **ikon hapus** (tong sampah merah,

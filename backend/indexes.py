@@ -201,6 +201,10 @@ async def create_indexes() -> None:
         await db.pegawai.create_index("id", unique=True)
         await db.pegawai.create_index("nip")
         await db.pegawai.create_index([("kode_satker", 1), ("nama", 1)])
+        # Kartu pegawai (UID e-KTP): lookup tap→pegawai via hash kandidat
+        # (multikey; keunikan lintas-pegawai ditegakkan aplikasi saat daftar).
+        await db.pegawai.create_index("kartu_uid_hashes",
+                                      name="kartu_uid_hashes_lookup")
         # Master Pejabat & Ruangan & Unit Kerja: jalur id (dipakai TTD/lookup).
         await db.pejabat.create_index("id", unique=True)
         await db.ruangan.create_index("id", unique=True)
