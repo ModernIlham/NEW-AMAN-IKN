@@ -692,6 +692,7 @@ async def bast_pdf(bast_id: str,
         # KPB dari REGISTRY pejabat yang berlaku pada tanggal BAST (bukan
         # setelan mentah yang bisa kedaluwarsa) — fallback ke setelan kasatker.
         # Spesimen TTD digital KPB ikut tersemat (konsisten laporan lain).
+        from pegawai_utils import baris_identitas_ttd as _baris_ttd
         from pejabat_utils import penandatangan_kpb
         from shared_utils import ambil_ttd_img
         pj_list = await db.pejabat.find({}, _PROJ).to_list(2000)
@@ -699,22 +700,30 @@ async def bast_pdf(bast_id: str,
         signers_mengetahui = [{'header': 'Mengetahui,',
                                'role': kpb["jabatan"],
                                'nama': kpb["nama"],
-                               'after': [f"NIP. {kpb['nip']}"],
+                               # Non-ASN: baris NIP/NIK tidak dicetak
+                               'after': _baris_ttd(
+                                   kpb['nip'], "NIP. ....................",
+                                   kpb.get("status_kepegawaian")),
                                'ttd_img': await ambil_ttd_img(kpb.get("ttd_file_id"))}]
     peran_kesatu = ('Yang Menyerahkan,' if jenis != 'pengembalian' else 'Yang Menerima,')
     if an_kpb:
         peran_kesatu = peran_kesatu.rstrip(',') + ' a.n. Kuasa Pengguna Barang,'
     from pegawai_utils import baris_identitas_ttd
+    from shared_utils import status_kepegawaian_by_nip
     el.extend(_signature_block([
         {'header': 'PIHAK KEDUA,',
          'role': 'Yang Menerima,' if jenis != 'pengembalian' else 'Yang Menyerahkan,',
          'nama': p2.get("nama") or "................................",
-         # Label pintar (NIP/NRP); NIK tidak dicetak; kosong → garis titik
-         'after': baris_identitas_ttd(p2.get("nip"), "NIP/NIK. -")},
+         # Label pintar (NIP/NRP); Non-ASN/NIK tidak dicetak; kosong → titik
+         'after': baris_identitas_ttd(
+             p2.get("nip"), "NIP/NIK. -",
+             await status_kepegawaian_by_nip(p2.get("nip")))},
         {'pre': [_tempat_tanggal_laporan(settings, b.get("tanggal"))],
          'header': 'PIHAK KESATU,', 'role': peran_kesatu,
          'nama': p1.get("nama") or "................................",
-         'after': baris_identitas_ttd(p1.get("nip"), "NIP. -")},
+         'after': baris_identitas_ttd(
+             p1.get("nip"), "NIP. -",
+             await status_kepegawaian_by_nip(p1.get("nip")))},
     ] + signers_mengetahui, doc.width))
     el.extend(_blok_tembusan(
         {"tembusan_laporan": b.get("tembusan") or settings.get("tembusan_laporan", "")}))

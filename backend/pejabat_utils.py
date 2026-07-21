@@ -213,6 +213,9 @@ def penandatangan_kpb(settings, pejabat_list, per_iso=None):
             "nip": str(pj.get("nip") or "").strip() or "-",
             "jabatan": str(pj.get("jabatan") or "").strip() or "Kuasa Pengguna Barang",
             "ttd_file_id": str(pj.get("ttd_file_id") or "").strip(),
+            # Status ikut dibawa agar blok TTD bisa menahan baris NIP/NIK
+            # bila penandatangan Non-ASN (aturan privasi laporan).
+            "status_kepegawaian": str(pj.get("status_kepegawaian") or "").strip(),
             "sumber": "registry",
         }
     return {
@@ -220,5 +223,6 @@ def penandatangan_kpb(settings, pejabat_list, per_iso=None):
         "nip": str(settings.get("kasatker_nip") or "").strip() or "-",
         "jabatan": str(settings.get("kasatker_jabatan") or "").strip() or "Kuasa Pengguna Barang",
         "ttd_file_id": str(settings.get("kasatker_ttd_file_id") or "").strip(),
+        "status_kepegawaian": "",
         "sumber": "setelan",
     }

@@ -603,7 +603,15 @@ async def dokumen_ber_ttd(sr_id: str,
         if s.get("jabatan"):
             info.append(str(s["jabatan"])[:40])
         if s.get("nip"):
-            info.append(f"NIP. {s['nip']}")
+            # Aturan privasi: penanda tangan Non-ASN (status dari registry
+            # pejabat/Master Pegawai per NIP) atau nomor berformat NIK →
+            # baris NIP/NIK tidak dicetak di stempel dokumen.
+            from pegawai_utils import baris_identitas_laporan
+            from shared_utils import status_kepegawaian_by_nip
+            b_nip = baris_identitas_laporan(
+                s["nip"], await status_kepegawaian_by_nip(s["nip"]))
+            if b_nip:
+                info.append(b_nip)
         if s.get("signed_at"):
             info.append(str(s["signed_at"])[:10])
         for j, baris in enumerate(info[:3]):
@@ -943,7 +951,13 @@ async def lembar_pdf(sr_id: str, user: dict = Depends(require_user_or_query_toke
         if s.get("jabatan"):
             idn += f"<br/><font size=8>{_esc(s['jabatan'])}</font>"
         if s.get("nip"):
-            idn += f"<br/><font size=8>NIP. {_esc(s['nip'])}</font>"
+            # Non-ASN/NIK: baris NIP tidak dicetak di Lembar Pengesahan
+            from pegawai_utils import baris_identitas_laporan
+            from shared_utils import status_kepegawaian_by_nip
+            b_nip = baris_identitas_laporan(
+                s["nip"], await status_kepegawaian_by_nip(s["nip"]))
+            if b_nip:
+                idn += f"<br/><font size=8>{_esc(b_nip)}</font>"
         ttd_cell = Paragraph("<font size=8 color='#94a3b8'>belum ditandatangani</font>", st['Cell'])
         fid = str(s.get("signature_file_id") or "").strip()
         if fid:

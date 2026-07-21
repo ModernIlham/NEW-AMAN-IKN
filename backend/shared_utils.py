@@ -519,20 +519,41 @@ VALID_SUB_KLASIFIKASI_ALL = VALID_SUB_KLASIFIKASI_PENCATATAN + VALID_SUB_KLASIFI
 
 # ── Penanda tangan dokumen resmi (temuan review #26 — satu resolver lintas modul) ──
 
+async def status_kepegawaian_by_nip(nip) -> str:
+    """Kode status kepegawaian ("pns"/"non_asn"/...) seseorang per NIP —
+    registry pejabat dulu, lalu Master Pegawai; "" bila tak ditemukan.
+    Dipakai aturan privasi blok TTD: Non-ASN tidak dicetak NIP/NIK-nya."""
+    n = str(nip or "").strip()
+    if not n or set(n) <= set(".-_ "):
+        return ""
+    for koleksi in (db.pejabat, db.pegawai):
+        doc = await koleksi.find_one(
+            {"nip": n}, {"_id": 0, "status_kepegawaian": 1})
+        if doc and str(doc.get("status_kepegawaian") or "").strip():
+            return str(doc["status_kepegawaian"]).strip()
+    return ""
+
+
 async def resolve_penandatangan_kpb(settings, per_iso=None):
     """Penanda tangan **Kuasa Pengguna Barang** untuk dokumen resmi.
 
     SATU resolver untuk semua modul (dulu 5 modul membaca setelan kasatker
     langsung sehingga KPB dari registry pejabat tidak muncul): KPB aktif dari
     registry `pejabat` pada tanggal dokumen (`per_iso`), fallback setelan
-    laporan (kasatker). Kembalikan {nama, nip, jabatan, sumber}.
+    laporan (kasatker). Kembalikan {nama, nip, jabatan, status_kepegawaian,
+    sumber}.
     """
     from pejabat_utils import penandatangan_kpb
     # Default tanggal = hari ini (temuan #41: tanpa tanggal, rentang berlaku
     # SK pejabat tidak dicek sehingga pejabat kedaluwarsa bisa terpilih).
     per_iso = per_iso or datetime.now(timezone.utc).date().isoformat()
     pejabat_list = await db.pejabat.find({}, {"_id": 0}).to_list(2000)
-    return penandatangan_kpb(settings or {}, pejabat_list, per_iso)
+    kpb = penandatangan_kpb(settings or {}, pejabat_list, per_iso)
+    # Fallback setelan tidak membawa status — lengkapi via lookup NIP agar
+    # aturan Non-ASN tetap berlaku bila orangnya terdaftar di master.
+    if not kpb.get("status_kepegawaian"):
+        kpb["status_kepegawaian"] = await status_kepegawaian_by_nip(kpb.get("nip"))
+    return kpb
 
 
 async def resolve_pejabat_peran(peran, per_iso=None):
@@ -672,13 +693,17 @@ async def ambil_ttd_img(file_id):
 
 async def blok_ttd_kpb(settings, per_iso=None):
     """Entri `_signature_block` "Kuasa Pengguna Barang" (dengan baris tempat/
-    tanggal titik-titik) — nama/NIP dari registry pejabat, fallback setelan."""
+    tanggal titik-titik) — nama/NIP dari registry pejabat, fallback setelan.
+    Penandatangan Non-ASN: baris NIP/NIK TIDAK dicetak (privasi)."""
+    from pegawai_utils import baris_identitas_ttd
     kpb = await resolve_penandatangan_kpb(settings, per_iso)
     return {'pre': ['.................., .......................'],
             'header': 'Kuasa Pengguna Barang,',
             'nama': kpb["nama"],
             'ttd_img': await ambil_ttd_img(kpb.get("ttd_file_id")),
-            'after': [f"NIP. {kpb['nip']}"]}
+            'after': baris_identitas_ttd(
+                kpb["nip"], "NIP. ....................",
+                kpb.get("status_kepegawaian"))}
 
 
 def nama_file_disposition(filename, fallback="dokumen"):
@@ -770,12 +795,16 @@ async def proses_keluar_aktif(asset_ids):
 
 async def blok_ttd_kpb_titik(settings, per_iso=None):
     """Entri `_signature_block` "Mengetahui / Kuasa Pengguna Barang" dengan
-    fallback garis-titik (pola BA/daftar) — nama/NIP dari registry pejabat."""
+    fallback garis-titik (pola BA/daftar) — nama/NIP dari registry pejabat.
+    Penandatangan Non-ASN: baris NIP/NIK TIDAK dicetak (privasi)."""
+    from pegawai_utils import baris_identitas_ttd
     kpb = await resolve_penandatangan_kpb(settings, per_iso)
     return {'pre': [''], 'header': 'Mengetahui,', 'role': 'Kuasa Pengguna Barang,',
             'nama': kpb["nama"] if kpb["nama"] != "-" else '...........................',
             'ttd_img': await ambil_ttd_img(kpb.get("ttd_file_id")),
-            'after': [f"NIP. {kpb['nip'] if kpb['nip'] != '-' else '....................'}"]}
+            'after': baris_identitas_ttd(
+                kpb["nip"], "NIP. ....................",
+                kpb.get("status_kepegawaian"))}
 
 
 async def enforce_pegawai_terdaftar(pengguna_nip):

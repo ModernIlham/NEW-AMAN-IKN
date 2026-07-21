@@ -732,16 +732,18 @@ def info_masa_pegawai(pegawai, hari_ini_iso) -> dict:
     return out
 
 
-def baris_identitas_ttd(nomor, placeholder="") -> list:
+def baris_identitas_ttd(nomor, placeholder="", status_kepegawaian="") -> list:
     """Baris identitas utk blok tanda tangan PDF (list utk 'after').
 
-    Label mengikuti jenis nomor (NIP/NI PPPK/NRP); NIK Non-ASN TIDAK
-    dicetak (privasi — list kosong); nomor kosong → placeholder titik-titik
-    bila diberikan (konvensi garis ttd)."""
+    Label mengikuti jenis nomor (NIP/NI PPPK/NRP); penandatangan Non-ASN
+    ATAU nomor berformat NIK TIDAK dicetak (privasi — list kosong); nomor
+    kosong → placeholder titik-titik bila diberikan (konvensi garis ttd).
+    `status_kepegawaian` (kode registry, mis. "non_asn") menimpa deteksi
+    format — tanpa status, hanya NIK 16 digit yang tertahan."""
     n = str(nomor or "").strip()
-    if not n:
+    if not n or n in ("-", "--"):
         return [placeholder] if placeholder else []
-    b = baris_identitas_laporan(n)
+    b = baris_identitas_laporan(n, status_kepegawaian)
     return [b] if b else []
 
 

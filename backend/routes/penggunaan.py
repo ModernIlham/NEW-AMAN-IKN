@@ -880,11 +880,14 @@ async def daftar_pemegang_pdf(
 
     elements.append(Spacer(1, 12 * rl_mm))
     from pegawai_utils import baris_identitas_ttd
+    from shared_utils import status_kepegawaian_by_nip
     elements.extend(_signature_block([
         {'pre': [''], 'header': 'Pemegang Barang,',
          'nama': nama_tampil,
-         # Label pintar (NIP/NRP); NIK Non-ASN tidak dicetak (privasi)
-         'after': baris_identitas_ttd(nip, "NIP. ....................")},
+         # Label pintar (NIP/NRP); Non-ASN/NIK tidak dicetak (privasi)
+         'after': baris_identitas_ttd(
+             nip, "NIP. ....................",
+             await status_kepegawaian_by_nip(nip))},
         await blok_ttd_kpb_titik(settings),   # KPB dari registry pejabat (temuan #26)
     ], doc.width))
     footer = _page_footer_factory("Daftar Barang yang Digunakan")
