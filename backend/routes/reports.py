@@ -4828,15 +4828,24 @@ async def generate_lhi_pdf(activity_id: str, _user: dict = Depends(require_user_
 
     # 1. Cover page
     sections_added = 0
+    sampul_gagal = False
     try:
         cover_buffer = await _generate_cover_page(activity, settings)
         if cover_buffer.getbuffer().nbytes > 0:
             merger.append(cover_buffer)
             sections_added += 1
+        else:
+            sampul_gagal = True
     except Exception as e:
         logger.warning(f"LHI: Failed to generate cover page: {e}")
+        sampul_gagal = True
 
-    # 2. Generate all PDFs in order as per LKPP 85/2025
+    # 2. Generate all PDFs in order as per LKPP 85/2025.
+    # PENTING: `_user` WAJIB diteruskan ke tiap generator — dipanggil
+    # internal (bukan lewat FastAPI), sehingga tanpa ini parameter _user
+    # berisi objek Depends mentah dan guard satker di dalam generator
+    # melempar error → bagian laporan hilang DIAM-DIAM dari LHI (bug
+    # "LHI tidak terunduh keseluruhan").
     pdf_sections = [
         ("BAHI", generate_bahi_pdf, {"activity_id": activity_id}),
         ("RHI", generate_rhi_pdf, {"activity_id": activity_id}),
@@ -4851,16 +4860,29 @@ async def generate_lhi_pdf(activity_id: str, _user: dict = Depends(require_user_
         ("SP Pelaksanaan", generate_sp_pelaksanaan_pdf, {"activity_id": activity_id}),
     ]
 
+    bagian_gagal = ["Sampul"] if sampul_gagal else []
     for section_name, gen_func, kwargs in pdf_sections:
         try:
-            response = await gen_func(**kwargs)
+            response = await gen_func(**kwargs, _user=_user)
             pdf_buffer = await _get_pdf_buffer_from_response(response)
             if pdf_buffer.getbuffer().nbytes > 0:
                 merger.append(pdf_buffer)
                 sections_added += 1
+            else:
+                bagian_gagal.append(section_name)
         except Exception as e:
             logger.warning(f"LHI: Failed to generate {section_name}: {e}")
+            bagian_gagal.append(section_name)
             continue
+
+    # Semua bagian selalu bisa dirender (tabel kosong pun tetap tercetak),
+    # jadi kegagalan = bug nyata. Jangan kirim LHI parsial diam-diam —
+    # beri tahu bagian mana yang gagal agar bisa dilaporkan/diperbaiki.
+    if bagian_gagal:
+        raise HTTPException(
+            status_code=500,
+            detail="Gagal menyusun LHI lengkap — bagian bermasalah: "
+                   + ", ".join(bagian_gagal))
 
     output = io.BytesIO()
     merger.write(output)
@@ -4918,13 +4940,16 @@ async def batch_download_pdf_zip(activity_id: str, request: BatchPDFRequest,
     generated = []
     errors = []
 
+    # PENTING: `_user` WAJIB diteruskan ke tiap generator — dipanggil
+    # internal (bukan lewat FastAPI), tanpa ini guard satker di dalam
+    # generator melempar error dan laporan hilang DIAM-DIAM dari ZIP.
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
         for report_type in request.types:
             try:
                 if report_type.startswith("dbhi-"):
                     dbhi_type = report_type[5:]
                     if dbhi_type in BATCH_DBHI_TYPES:
-                        response = await generate_dbhi_pdf(activity_id, dbhi_type)
+                        response = await generate_dbhi_pdf(activity_id, dbhi_type, _user=_user)
                         pdf_buffer = await _get_pdf_buffer_from_response(response)
                         filename = f"DBHI_{dbhi_type.replace('-', '_')}_{activity_id[:8]}.pdf"
                         zf.writestr(filename, pdf_buffer.getvalue())
@@ -4939,9 +4964,39 @@ async def batch_download_pdf_zip(activity_id: str, request: BatchPDFRequest,
                         generated.append("Sampul_LHI.pdf")
                     continue
 
+                if report_type == "lhi":
+                    # Paket LHI Lengkap (gabungan semua bagian) ikut ZIP.
+                    response = await generate_lhi_pdf(activity_id, _user=_user)
+                    pdf_buffer = await _get_pdf_buffer_from_response(response)
+                    filename = f"LHI_Lengkap_{activity_id[:8]}.pdf"
+                    zf.writestr(filename, pdf_buffer.getvalue())
+                    generated.append(filename)
+                    continue
+
+                if report_type == "executive-grouped":
+                    response = await generate_executive_grouped_pdf(activity_id, _user=_user)
+                    pdf_buffer = await _get_pdf_buffer_from_response(response)
+                    filename = f"Eksekutif_Barang_Serupa_{activity_id[:8]}.pdf"
+                    zf.writestr(filename, pdf_buffer.getvalue())
+                    generated.append(filename)
+                    continue
+
+                if report_type == "executive-data":
+                    # Seluruh halaman Data Aset (499 aset per halaman).
+                    info = await executive_data_info(activity_id, _user=_user)
+                    for p in info.get("pages", []):
+                        response = await generate_executive_data_pdf(
+                            activity_id, page=p["page"], _user=_user)
+                        pdf_buffer = await _get_pdf_buffer_from_response(response)
+                        filename = (f"Data_Aset_{p['start']}-{p['end']}"
+                                    f"_{activity_id[:8]}.pdf")
+                        zf.writestr(filename, pdf_buffer.getvalue())
+                        generated.append(filename)
+                    continue
+
                 if report_type in BATCH_PDF_MAP:
                     label, gen_func = BATCH_PDF_MAP[report_type]
-                    response = await gen_func(activity_id)
+                    response = await gen_func(activity_id, _user=_user)
                     pdf_buffer = await _get_pdf_buffer_from_response(response)
                     filename = f"{label}_{activity_id[:8]}.pdf"
                     zf.writestr(filename, pdf_buffer.getvalue())
@@ -4950,6 +5005,14 @@ async def batch_download_pdf_zip(activity_id: str, request: BatchPDFRequest,
             except Exception as e:
                 logger.warning(f"Batch ZIP: Failed to generate {report_type}: {e}")
                 errors.append(f"{report_type}: {str(e)}")
+
+        # Kegagalan JANGAN diam-diam: sertakan daftarnya di dalam ZIP agar
+        # pengguna tahu laporan mana yang tidak ikut dan bisa melaporkannya.
+        if errors:
+            zf.writestr(
+                "_LAPORAN-GAGAL.txt",
+                "Laporan berikut GAGAL dibuat dan tidak ada dalam ZIP ini:\n"
+                + "\n".join(f"- {e}" for e in errors) + "\n")
 
     if not generated:
         raise HTTPException(status_code=500, detail="Tidak ada laporan yang berhasil di-generate")
