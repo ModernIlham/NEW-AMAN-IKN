@@ -48,6 +48,34 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#492] Kop surat berlogo: teks instansi dipusatkan rapi di ruang kanan logo — 2026-07-21
+
+Perbaikan tata letak kop surat pada seluruh laporan resmi (Berita Acara,
+SPTJM, Surat Koreksi, DBHI, RHI, BAHI, Daftar Pemegang, dll. — semua yang
+memakai helper kop bersama `_kop_surat_flowables`).
+
+Masalah: pada kop **berlogo**, blok teks instansi dipusatkan pada SELURUH
+lebar halaman (kolom spacer kosong di kanan selebar logo). Akibatnya baris 1
+(nama instansi — biasanya paling panjang) menjulur ke kiri mendekati logo,
+sehingga tampak "melenceng sendiri" dibanding baris 2/3 yang lebih pendek —
+walau secara matematis semuanya berbagi sumbu tengah halaman yang sama.
+
+Perbaikan: logo tetap di kiri, tetapi blok teks kini **dipusatkan pada ruang
+di kanan logo** (tabel 2 kolom `[logo | teks]`, bukan `[logo | teks | spacer]`).
+Dengan begitu setiap baris — termasuk baris 1 — berbagi satu sumbu tengah
+yang bersih dari logo dan sejajar rapi; komposisi seimbang (bobot logo kiri
+diimbangi teks yang terpusat sedikit ke kanan). Lebar kolom logo dibatasi
+maksimal 30% lebar dokumen sehingga logo yang sangat lebar tidak lagi
+membuat kolom teks kolaps (dulu bisa menggagalkan render — `availWidth`
+negatif). Kop tanpa logo tidak berubah (tetap terpusat penuh).
+
+Verifikasi: pengukuran aliran-konten PDF memastikan seluruh baris kop
+(instansi/unit/sub/alamat) berbagi satu sumbu-tengah identik pada semua
+rasio logo (persegi/tinggi/lebar/spanduk) tanpa crash; 616 unit test lulus;
+smoke render FakeDB semua laporan OK.
+
+---
+
 ## [#491] Area TTD tanpa NIK apa pun statusnya + tab Log Sistem di panel audit — 2026-07-21
 
 Lanjutan mandat privasi TTD (#485) & saran audit #490, sesuai arahan pemilik:
