@@ -64,6 +64,7 @@ const supportingDocs = [
   { key: "berita-acara", label: "BA Tidak Ditemukan", icon: BookOpen },
   { key: "sptjm", label: "SPTJM", icon: Shield },
   { key: "surat-koreksi", label: "Surat Koreksi", icon: FileWarning },
+  { key: "daftar-pemegang", label: "Daftar Pemegang Aset", icon: FileText },
 ];
 
 // Kolom tambahan opsional untuk PDF Data Aset eksekutif (kolom "Kondisi &
@@ -96,6 +97,7 @@ const allBatchItems = [
   { key: "berita-acara", label: "BA Tidak Ditemukan", group: "pendukung" },
   { key: "sptjm", label: "SPTJM", group: "pendukung" },
   { key: "surat-koreksi", label: "Surat Koreksi", group: "pendukung" },
+  { key: "daftar-pemegang", label: "Daftar Pemegang Aset", group: "pendukung" },
   { key: "executive-summary", label: "Laporan Eksekutif", group: "pendukung" },
   { key: "executive-grouped", label: "Eksekutif per Barang Serupa", group: "pendukung" },
   { key: "executive-data", label: "Data Aset (semua halaman)", group: "pendukung" },

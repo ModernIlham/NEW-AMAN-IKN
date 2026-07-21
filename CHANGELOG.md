@@ -48,6 +48,23 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#487] Dokumen pendukung baru: Daftar Pemegang Aset per kegiatan — 2026-07-21
+
+- Laporan PDF baru di **Dokumen Pendukung Lainnya**: **Daftar Pemegang
+  Aset** — kop resmi + info kegiatan, lalu:
+  1. **Rekap per pemegang**: nama, NIP/NIK, melekat ke (Individual/
+     Jabatan/Operasional), jabatan, jumlah aset, hitungan BAST terunggah
+     (n/m), dan status kelengkapan (Lengkap/Belum);
+  2. **Rincian aset per pemegang**: kode barang, NUP, nama barang, nomor
+     BAST (+ penanda "terunggah") — urut pemegang ber-aset terbanyak dulu;
+  3. Ringkasan jumlah pemegang, aset ber-pemegang, dan aset tanpa
+     pemegang; ditutup TTD Kuasa Pengguna Barang (aturan Non-ASN berlaku).
+- Pengelompokan pemegang memakai logika yang SAMA dengan halaman Aset per
+  Pemegang modul Penggunaan (`rekap_pemegang` — nama dinormalkan, NIP
+  membedakan orang bernama sama), sehingga angka laporan = angka layar.
+- Ikut pilihan **Batch Download ZIP**. Smoke render FakeDB lolos; 610 unit
+  test lolos.
+
 ## [#486] RHI menjabarkan klasifikasi BMN Tidak Ditemukan + laporan DBHI per klasifikasi — 2026-07-21
 
 - **RHI**: baris "BMN TIDAK DITEMUKAN" kini dijabarkan sub-barisnya —

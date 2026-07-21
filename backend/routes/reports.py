@@ -4877,6 +4877,137 @@ async def laporan_satker_pdf(activity_id: str, _user: dict = Depends(require_use
 
 
 # ============================================================================
+# DAFTAR PEMEGANG ASET — dokumen pendukung per kegiatan
+# ============================================================================
+
+@reports_router.get("/inventory-activities/{activity_id}/daftar-pemegang-pdf")
+async def generate_daftar_pemegang_pdf(activity_id: str,
+                                       _user: dict = Depends(require_user_or_query_token)):
+    """Daftar Pemegang Aset per kegiatan (dokumen pendukung): rekap per
+    pemegang (jumlah aset + kelengkapan BAST terunggah) diikuti rincian aset
+    per pemegang. Sumber data = field pemegang modul inventarisasi, digrup
+    dengan logika yang sama seperti halaman Aset per Pemegang
+    (`penggunaan_utils.rekap_pemegang`)."""
+    from xml.sax.saxutils import escape
+    from reportlab.platypus import Paragraph, Spacer, Table
+    from reportlab.lib.units import mm as rl_mm
+    from penggunaan_utils import kunci_pemegang, rekap_pemegang
+
+    activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
+    if not activity:
+        raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+    await pastikan_akses_kegiatan_id(_user, activity_id)
+    settings = await pengaturan_kop(activity)
+
+    assets = await db.assets.find(
+        {"activity_id": activity_id},
+        {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
+         "user": 1, "pengguna_nip": 1, "pengguna_melekat_ke": 1,
+         "pengguna_jabatan": 1, "operasional_jenis": 1, "nomor_bast": 1,
+         "bast_file_id": 1, "location": 1},
+    ).to_list(100000)
+    rekap = rekap_pemegang(assets)
+    tanpa_pemegang = [a for a in assets if kunci_pemegang(a) is None]
+
+    # Rincian aset per pemegang — kunci sama dengan rekap_pemegang
+    per_kunci = {}
+    for a in assets:
+        k = kunci_pemegang(a)
+        if k is not None:
+            per_kunci.setdefault(k, []).append(a)
+
+    buffer = io.BytesIO()
+    doc = _std_doc(buffer)
+    st = _get_report_styles()
+    cell = st['Cell']
+    cellc = st['CellCenter']
+    header_style = st['TableHeader']
+
+    elements = []
+    elements.extend(_kop_surat_flowables(settings, doc.width))
+    elements.extend(_title_block("DAFTAR PEMEGANG ASET"))
+    elements.append(_info_kegiatan_2kolom(activity, settings, doc.width))
+    elements.append(Spacer(1, 2.5 * rl_mm))
+    elements.append(Paragraph(
+        f"Jumlah pemegang: <b>{len(rekap)}</b> · Aset ber-pemegang: "
+        f"<b>{len(assets) - len(tanpa_pemegang)}</b> · Aset tanpa pemegang: "
+        f"<b>{len(tanpa_pemegang)}</b> (dari {len(assets)} aset kegiatan). "
+        "Kolom BAST menghitung dokumen BAST TERUNGGAH per aset.", st['Meta']))
+    elements.append(Spacer(1, 2.5 * rl_mm))
+
+    # ── Tabel A: rekap per pemegang ──
+    data_a = [[Paragraph(h, header_style) for h in
+               ("No", "Nama Pemegang", "NIP/NIK", "Melekat Ke", "Jabatan",
+                "Jml\nAset", "BAST", "Status")]]
+    for i, p in enumerate(rekap, 1):
+        data_a.append([
+            Paragraph(str(i), cellc),
+            Paragraph(escape(str(p["nama"])), cell),
+            Paragraph(escape(str(p["nip"] or "-")), cellc),
+            Paragraph(escape(str(p["melekat_ke"] or "-")), cellc),
+            Paragraph(escape(str(p["jabatan"] or "-")), cell),
+            Paragraph(str(p["jumlah_aset"]), cellc),
+            Paragraph(f"{p['jumlah_bast']}/{p['jumlah_aset']}", cellc),
+            Paragraph("Lengkap" if p["lengkap"] else "Belum", cellc),
+        ])
+    if not rekap:
+        data_a.append([Paragraph("-", cellc)]
+                      + [Paragraph("Belum ada aset ber-pemegang", cell)]
+                      + [Paragraph("-", cellc) for _ in range(6)])
+    ta = Table(data_a, colWidths=_fit_col_widths(
+        [20, 100, 78, 58, 88, 30, 36, 44], doc.width), repeatRows=1)
+    ta.setStyle(_std_table_style(zebra=True))
+    elements.append(ta)
+
+    # ── Tabel B: rincian aset per pemegang (urutan mengikuti rekap) ──
+    if rekap:
+        elements.append(Spacer(1, 5 * rl_mm))
+        elements.append(Paragraph("<b>Rincian Aset per Pemegang</b>", st['Heading']))
+        elements.append(Spacer(1, 1.5 * rl_mm))
+        data_b = [[Paragraph(h, header_style) for h in
+                   ("No", "Pemegang", "Kode Barang", "NUP", "Nama Barang",
+                    "No. BAST")]]
+        n = 0
+        for p in rekap:
+            kunci = (" ".join(str(p["nama"]).split()).lower(),
+                     str(p["nip"] or "").strip())
+            for a in per_kunci.get(kunci, []):
+                n += 1
+                bast = str(a.get("nomor_bast") or "").strip() or "-"
+                if a.get("bast_file_id"):
+                    bast += " (terunggah)"
+                data_b.append([
+                    Paragraph(str(n), cellc),
+                    Paragraph(escape(str(p["nama"])), cell),
+                    Paragraph(escape(str(a.get("asset_code") or "-")), cellc),
+                    Paragraph(escape(str(a.get("NUP") or "-")), cellc),
+                    Paragraph(escape(str(a.get("asset_name") or "-")), cell),
+                    Paragraph(escape(bast), cell),
+                ])
+        tb = Table(data_b, colWidths=_fit_col_widths(
+            [20, 92, 76, 30, 120, 96], doc.width), repeatRows=1)
+        tb.setStyle(_std_table_style(zebra=True))
+        elements.append(tb)
+
+    elements.append(Spacer(1, 8 * rl_mm))
+    ttd = await _penandatangan_kpb(settings)
+    elements.extend(_signature_block([
+        {'pre': [_tempat_tanggal_laporan(settings)],
+         'header': 'Kuasa Pengguna Barang,',
+         'nama': ttd["nama"],
+         'after': await _baris_nip_ttd(ttd['nip'])},
+    ], doc.width))
+
+    footer = _page_footer_factory("Daftar Pemegang Aset")
+    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    buffer.seek(0)
+    return StreamingResponse(
+        buffer, media_type="application/pdf",
+        headers={"Content-Disposition":
+                 f'attachment; filename="Daftar_Pemegang_Aset_{activity_id[:8]}.pdf"'})
+
+
+# ============================================================================
 # LHI - LAPORAN HASIL INVENTARISASI LENGKAP
 # ============================================================================
 
@@ -4996,6 +5127,7 @@ BATCH_PDF_MAP = {
     "surat-koreksi": ("Surat_Koreksi", generate_surat_koreksi_pdf),
     "executive-summary": ("Laporan_Eksekutif", generate_executive_summary_pdf),
     "dbkp": ("DBKP", generate_dbkp_pdf),
+    "daftar-pemegang": ("Daftar_Pemegang_Aset", generate_daftar_pemegang_pdf),
 }
 
 BATCH_DBHI_TYPES = [
