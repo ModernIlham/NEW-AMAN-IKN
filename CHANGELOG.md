@@ -48,6 +48,52 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#491] Area TTD tanpa NIK apa pun statusnya + tab Log Sistem di panel audit — 2026-07-21
+
+Lanjutan mandat privasi TTD (#485) & saran audit #490, sesuai arahan pemilik:
+NIK tidak boleh pernah muncul di bawah nama pada area tanda tangan — termasuk
+pegawai ASN yang di Master Pegawai masih tercatat NIK (belum ber-NIP): cukup
+nama saja. Plus filter "Log Sistem" yang sebelumnya belum ada di panel audit.
+
+### Area tanda tangan — NIK tertahan di semua status (`pegawai_utils.py`)
+
+- **`label_nomor_identitas`**: pemeriksaan format NIK kini dilakukan SEBELUM
+  cabang status TNI/POLRI — sebelumnya TNI/POLRI dengan NIK tercatat bocor
+  sebagai `NRP. <NIK>` di blok TTD. ASN (PNS/PPPK) ber-NIK sudah tertahan
+  oleh deteksi format; kini seragam untuk semua status: **cukup nama**.
+- **Deteksi kebal pemisah**: NIK/NIP yang ditulis berpemisah umum
+  (`3506 0425 0390 0001`, `3506.0425.0390.0001`) dahulu lolos sebagai "nomor
+  tak dikenal" dan tercetak dengan label NIP default. Deteksi kini membuang
+  spasi/titik/strip dulu (`_RE_PEMISAH_NOMOR`) — NIK berpemisah ikut
+  tertahan, NIP berpemisah tetap tercetak apa adanya dengan label benar.
+- Berlaku otomatis di SEMUA blok TTD karena satu formatter dipakai bersama:
+  laporan ReportLab (`baris_identitas_ttd`/`_baris_nip_ttd`/`blok_ttd_kpb*`),
+  stempel e-sign & Lembar Pengesahan (`routes/ttd.py`). Tabel identitas badan
+  dokumen ("Yang bertanda tangan di bawah ini: … NIP: …") TIDAK diubah —
+  sesuai arahan, aturan ini khusus area tanda tangan.
+- Unit test baru: NIK tertahan utk `pns`/`pppk`/`tni`/`polri`/tanpa status,
+  NIK berpemisah tertahan, NIP berspasi tetap berlabel NIP (616 test lulus).
+
+### Panel Log Audit — tab "Log Sistem" baru
+
+- **Backend** `GET /audit-logs?sistem=true`: hanya log SISTEM (tanpa
+  `activity_id` — kejadian master pegawai & kartu pegawai UID). User terikat
+  satker otomatis dibatasi log ber-`kode_satker` satkernya; super admin
+  melihat semua log sistem.
+- **Log CRUD Master Pegawai kini ber-`kode_satker`** (buat/ubah/hapus/impor/
+  foto — melengkapi log kartu dari #490) sehingga tab Sistem bermakna juga
+  bagi admin satker, bukan hanya super admin.
+- **Frontend `AuditLogPanel`**: tab ke-4 "Sistem" (ikon server) di samping
+  Timeline/Per User/Integritas — label aksi berbahasa Indonesia utk
+  `buat/ubah/hapus/impor/foto_pegawai`, `daftar/lepas_kartu`,
+  `kartu_tak_dikenal`; keterangan cakupan + teks kosong khusus; paginasi
+  sama; pindah tab otomatis memuat ulang dari halaman 1.
+
+Verifikasi: 616 unit test lulus; smoke render FakeDB semua laporan OK
+(Non-ASN + klasifikasi + daftar pemegang); eslint bersih; `yarn build` sukses.
+
+---
+
 ## [#490] Penyempurnaan hasil audit menyeluruh — keandalan & keterhubungan fitur — 2026-07-21
 
 Audit 3 arah (backend, frontend, keterhubungan lintas fitur) atas 11 rilis

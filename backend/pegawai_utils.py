@@ -139,6 +139,9 @@ def periksa_rekening(nama_bank, no_rekening):
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _TGL_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+# Pemisah umum penulisan nomor identitas (spasi/titik/strip) — dibuang
+# sebelum deteksi jenis nomor agar NIK/NIP berformat tetap terkenali.
+_RE_PEMISAH_NOMOR = re.compile(r"[\s.\-]")
 
 
 def validate_pegawai(doc):
@@ -629,20 +632,23 @@ def deteksi_identitas(nomor) -> dict:
 
 
 def label_nomor_identitas(nomor, status_kepegawaian="") -> str:
-    """Label pendek utk laporan: 'NIP'/'NI PPPK'/'NRP'/'NIK'/'' (kosong).
+    """Label pendek utk laporan: 'NIP'/'NI PPPK'/'NRP'/'' (kosong).
 
     Non-ASN TIDAK menampilkan NIK di laporan (privasi — permintaan pemilik);
-    kembalikan "" agar pemanggil melewatkan barisnya. Status kepegawaian
-    (bila terisi) menimpa deteksi format.
+    kembalikan "" agar pemanggil melewatkan barisnya. Nomor berformat NIK
+    juga DITAHAN apa pun statusnya — termasuk ASN yang NIP-nya belum
+    tercatat di master (masih NIK) dan TNI/POLRI: area ttd cukup nama.
+    Deteksi mengabaikan pemisah umum (spasi/titik/strip) supaya NIK
+    '3506 0425 0390 0001' tidak lolos sebagai nomor tak dikenal.
     """
     st = str(status_kepegawaian or "").strip().lower()
     if st == "non_asn":
         return ""
-    if st in ("tni", "polri"):
-        return "NRP"
-    det = deteksi_identitas(nomor)
+    det = deteksi_identitas(_RE_PEMISAH_NOMOR.sub("", str(nomor or "")))
     if det["jenis"] == "nik":
         return ""  # NIK = identitas penduduk, bukan utk dicetak di laporan
+    if st in ("tni", "polri"):
+        return "NRP"
     return det["label"] if det["jenis"] else ("NIP" if str(nomor or "").strip() else "")
 
 
@@ -736,10 +742,10 @@ def baris_identitas_ttd(nomor, placeholder="", status_kepegawaian="") -> list:
     """Baris identitas utk blok tanda tangan PDF (list utk 'after').
 
     Label mengikuti jenis nomor (NIP/NI PPPK/NRP); penandatangan Non-ASN
-    ATAU nomor berformat NIK TIDAK dicetak (privasi — list kosong); nomor
-    kosong → placeholder titik-titik bila diberikan (konvensi garis ttd).
-    `status_kepegawaian` (kode registry, mis. "non_asn") menimpa deteksi
-    format — tanpa status, hanya NIK 16 digit yang tertahan."""
+    ATAU nomor berformat NIK TIDAK dicetak apa pun statusnya (privasi —
+    list kosong; termasuk ASN yang di master masih tercatat NIK, belum
+    NIP: cukup nama). Nomor kosong → placeholder titik-titik bila
+    diberikan (konvensi garis ttd)."""
     n = str(nomor or "").strip()
     if not n or n in ("-", "--"):
         return [placeholder] if placeholder else []

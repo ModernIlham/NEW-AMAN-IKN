@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, memo } from "react";
-import { History, X, ChevronLeft, ChevronRight, User, Clock, Plus, Edit3, Trash2, Layers, FileUp, Users, Package, ShieldCheck, ShieldAlert, RefreshCw } from "lucide-react";
+import { History, X, ChevronLeft, ChevronRight, User, Clock, Plus, Edit3, Trash2, Layers, FileUp, Users, Package, ShieldCheck, ShieldAlert, RefreshCw, Server } from "lucide-react";
 import { Button } from "../ui/button";
 import axios from "axios";
 
@@ -24,6 +24,15 @@ const ACTION_MAP = {
   sahkan: { label: "Pengesahan", color: "text-amber-600", bg: "bg-amber-500", dot: "bg-amber-500" },
   pengesahan_dokumen: { label: "Dokumen Pengesahan", color: "text-amber-600", bg: "bg-amber-500", dot: "bg-amber-500" },
   penghapusan: { label: "Penghapusan (SK)", color: "text-rose-600", bg: "bg-rose-500", dot: "bg-rose-500" },
+  // Log SISTEM (tanpa kegiatan): master pegawai & kartu pegawai UID.
+  buat_pegawai: { label: "Pegawai Baru", color: "text-emerald-600", bg: "bg-emerald-500", dot: "bg-emerald-500" },
+  ubah_pegawai: { label: "Ubah Pegawai", color: "text-blue-600", bg: "bg-blue-500", dot: "bg-blue-500" },
+  hapus_pegawai: { label: "Hapus Pegawai", color: "text-red-600", bg: "bg-red-500", dot: "bg-red-500" },
+  impor_pegawai: { label: "Impor Pegawai", color: "text-purple-600", bg: "bg-purple-500", dot: "bg-purple-500" },
+  foto_pegawai: { label: "Foto Pegawai", color: "text-blue-600", bg: "bg-blue-500", dot: "bg-blue-500" },
+  daftar_kartu: { label: "Daftar Kartu", color: "text-emerald-600", bg: "bg-emerald-500", dot: "bg-emerald-500" },
+  lepas_kartu: { label: "Lepas Kartu", color: "text-amber-600", bg: "bg-amber-500", dot: "bg-amber-500" },
+  kartu_tak_dikenal: { label: "Kartu Tak Dikenal", color: "text-rose-600", bg: "bg-rose-500", dot: "bg-rose-500" },
 };
 
 const FIELD_LABELS = {
@@ -284,7 +293,7 @@ const AuditLogPanel = memo(({ activityId, isOpen, onToggle, selectedAssetId, sel
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
-  const [viewMode, setViewMode] = useState("timeline"); // "timeline" | "user" | "integritas"
+  const [viewMode, setViewMode] = useState("timeline"); // "timeline" | "user" | "integritas" | "sistem"
   const [filterUser, setFilterUser] = useState("");
   const [integritas, setIntegritas] = useState(null);
   const [integritasLoading, setIntegritasLoading] = useState(false);
@@ -304,13 +313,21 @@ const AuditLogPanel = memo(({ activityId, isOpen, onToggle, selectedAssetId, sel
     }
   }, []);
 
+  // Tab "Sistem": log tanpa kegiatan (master/kartu pegawai) — server yang
+  // membatasi per satker user; filter kegiatan/aset tidak berlaku di sini.
+  const sistemMode = viewMode === "sistem" && !selectedAssetId;
+
   const fetchLogs = useCallback(async (p = 1) => {
     setLoading(true);
     setLoadError(false);
     try {
       const params = new URLSearchParams({ page: String(p), page_size: "30" });
-      if (activityId) params.append("activity_id", activityId);
-      if (selectedAssetId) params.append("asset_id", selectedAssetId);
+      if (sistemMode) {
+        params.append("sistem", "true");
+      } else {
+        if (activityId) params.append("activity_id", activityId);
+        if (selectedAssetId) params.append("asset_id", selectedAssetId);
+      }
       const r = await axios.get(`${API}/audit-logs?${params}`);
       setLogs(r.data.logs || []);
       setTotalPages(r.data.total_pages || 1);
@@ -322,7 +339,7 @@ const AuditLogPanel = memo(({ activityId, isOpen, onToggle, selectedAssetId, sel
     } finally {
       setLoading(false);
     }
-  }, [activityId, selectedAssetId]);
+  }, [activityId, selectedAssetId, sistemMode]);
 
   useEffect(() => {
     if (isOpen) {
@@ -389,6 +406,14 @@ const AuditLogPanel = memo(({ activityId, isOpen, onToggle, selectedAssetId, sel
                 >
                   <ShieldCheck className="w-3 h-3" />Integritas
                 </button>
+                <button
+                  onClick={() => setViewMode("sistem")}
+                  className={`flex-1 flex items-center justify-center gap-1 text-[10px] font-semibold py-1 rounded-md transition-colors ${viewMode === "sistem" ? 'bg-card text-blue-600 shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                  data-testid="audit-tab-sistem"
+                  title="Log sistem tanpa kegiatan — master pegawai & kartu pegawai"
+                >
+                  <Server className="w-3 h-3" />Sistem
+                </button>
               </div>
             )}
           </div>
@@ -427,8 +452,12 @@ const AuditLogPanel = memo(({ activityId, isOpen, onToggle, selectedAssetId, sel
             ) : logs.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground px-4">
                 <History className="w-10 h-10 mx-auto mb-3 opacity-20" />
-                <p className="text-xs font-medium">Belum ada riwayat</p>
-                <p className="text-[10px] mt-1">Perubahan pada aset akan tercatat di sini</p>
+                <p className="text-xs font-medium">{sistemMode ? "Belum ada log sistem" : "Belum ada riwayat"}</p>
+                <p className="text-[10px] mt-1">
+                  {sistemMode
+                    ? "Kejadian master pegawai & kartu pegawai akan tercatat di sini"
+                    : "Perubahan pada aset akan tercatat di sini"}
+                </p>
               </div>
             ) : viewMode === "user" && !selectedAssetId ? (
               <div className="p-3">
@@ -447,6 +476,12 @@ const AuditLogPanel = memo(({ activityId, isOpen, onToggle, selectedAssetId, sel
               </div>
             ) : (
               <div className="p-3">
+                {sistemMode && (
+                  <p className="text-[9px] text-muted-foreground px-1 pb-2 leading-relaxed" data-testid="audit-sistem-keterangan">
+                    Log sistem (tanpa kegiatan): master pegawai &amp; kartu pegawai UID.
+                    Admin satker hanya melihat log satuan kerjanya.
+                  </p>
+                )}
                 {logs.map(log => (
                   <TimelineEntry key={log.id} log={log} showAssetInfo={!selectedAssetId} />
                 ))}

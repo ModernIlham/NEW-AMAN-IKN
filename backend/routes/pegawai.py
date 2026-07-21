@@ -299,7 +299,8 @@ async def buat_pegawai(payload: PegawaiIn, user: dict = Depends(require_admin)):
     await db.pegawai.insert_one(dict(doc))
     await log_audit("buat_pegawai", "", doc["id"],
                     username=user.get("username", "system"),
-                    detail=f"Tambah pegawai {doc['nama']}")
+                    detail=f"Tambah pegawai {doc['nama']}",
+                    kode_satker=str(doc.get("kode_satker") or ""))
     return {"ok": True, "id": doc["id"]}
 
 
@@ -525,7 +526,8 @@ async def impor_pegawai(file: UploadFile = File(...),
     await log_audit("impor_pegawai", "", "impor",
                     username=user.get("username", "system"),
                     detail=(f"Impor pegawai: {dibuat} baru, {diperbarui} "
-                            f"diperbarui, {dilewati} dilewati"))
+                            f"diperbarui, {dilewati} dilewati"),
+                    kode_satker=kode_satker_user(user))
     return {"ok": True, "dibaca": len(rows), "dibuat": dibuat,
             "diperbarui": diperbarui, "dilewati": dilewati,
             "catatan": catatan}
@@ -561,7 +563,8 @@ async def ubah_pegawai(pegawai_id: str, payload: PegawaiIn,
         raise HTTPException(status_code=404, detail="Pegawai tidak ditemukan")
     await log_audit("ubah_pegawai", "", pegawai_id,
                     username=user.get("username", "system"),
-                    detail=f"Ubah pegawai {doc['nama']}")
+                    detail=f"Ubah pegawai {doc['nama']}",
+                    kode_satker=str(doc.get("kode_satker") or ""))
     # Peringatan lunak: status berubah ke non-aktif padahal masih memegang
     # aset → dorong proses serah terima (tidak memblokir penyimpanan).
     peringatan = ""
@@ -598,7 +601,8 @@ async def hapus_pegawai(pegawai_id: str, user: dict = Depends(require_admin)):
         raise HTTPException(status_code=404, detail="Pegawai tidak ditemukan")
     await log_audit("hapus_pegawai", "", pegawai_id,
                     username=user.get("username", "system"),
-                    detail="Hapus pegawai")
+                    detail=f"Hapus pegawai {peg.get('nama') or ''}".strip(),
+                    kode_satker=str(peg.get("kode_satker") or ""))
     return {"ok": True, "id": pegawai_id}
 
 
@@ -614,7 +618,7 @@ _FOTO_MAX = 5 * 1024 * 1024  # 5MB
 async def upload_foto_pegawai(pegawai_id: str, file: UploadFile = File(...),
                               admin: dict = Depends(require_admin)):
     """Unggah foto pegawai (persegi hasil krop di frontend); ganti = hapus lama."""
-    peg = await db.pegawai.find_one({"id": pegawai_id}, {"_id": 0, "id": 1, "foto_file_id": 1, "nama": 1})
+    peg = await db.pegawai.find_one({"id": pegawai_id}, {"_id": 0, "id": 1, "foto_file_id": 1, "nama": 1, "kode_satker": 1})
     if not peg:
         raise HTTPException(status_code=404, detail="Pegawai tidak ditemukan")
     if (file.content_type or "") not in ("image/jpeg", "image/png", "image/webp"):
@@ -637,7 +641,8 @@ async def upload_foto_pegawai(pegawai_id: str, file: UploadFile = File(...),
     await db.pegawai.update_one({"id": pegawai_id},
                                 {"$set": {"foto_file_id": str(fid), "updated_at": now}})
     await log_audit("foto_pegawai", "", username=admin.get("username", "system"),
-                    detail=f"Foto pegawai {peg.get('nama')} diperbarui")
+                    detail=f"Foto pegawai {peg.get('nama')} diperbarui",
+                    kode_satker=str(peg.get("kode_satker") or ""))
     return {"ok": True, "foto_file_id": str(fid)}
 
 
