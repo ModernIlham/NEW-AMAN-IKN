@@ -1400,6 +1400,24 @@ DBHI_TYPES = {
         "filter": lambda a: a.get("inventory_status") == "Tidak Ditemukan",
         "extra_cols": "tidak_ditemukan",
     },
+    # Laporan PER KLASIFIKASI Tidak Ditemukan (permintaan pemilik): daftar
+    # tersendiri utk tiap klasifikasi. Aset Tidak Ditemukan yang BELUM
+    # diklasifikasi tidak masuk keduanya — tetap ada di daftar induk
+    # "tidak-ditemukan" dan tampil sebagai "Belum Diklasifikasi" di RHI.
+    "kesalahan-pencatatan": {
+        "title": "DAFTAR BARANG HASIL INVENTARISASI BMN\n"
+                 "BMN TIDAK DITEMUKAN — KESALAHAN PENCATATAN",
+        "filter": lambda a: (a.get("inventory_status") == "Tidak Ditemukan"
+                             and a.get("klasifikasi_tidak_ditemukan") == "Kesalahan Pencatatan"),
+        "extra_cols": "tidak_ditemukan",
+    },
+    "tidak-ditemukan-lainnya": {
+        "title": "DAFTAR BARANG HASIL INVENTARISASI BMN\n"
+                 "BMN TIDAK DITEMUKAN — TIDAK DITEMUKAN LAINNYA",
+        "filter": lambda a: (a.get("inventory_status") == "Tidak Ditemukan"
+                             and a.get("klasifikasi_tidak_ditemukan") == "Tidak Ditemukan Lainnya"),
+        "extra_cols": "tidak_ditemukan",
+    },
     "sengketa": {
         "title": "DAFTAR BARANG HASIL INVENTARISASI BMN\nBMN DALAM SENGKETA",
         "filter": lambda a: a.get("inventory_status") == "Sengketa",
@@ -1628,6 +1646,17 @@ async def generate_rhi_pdf(activity_id: str, _user: dict = Depends(require_user_
     rusak_ringan = [a for a in ditemukan if a.get("condition") == "Rusak Ringan"]
     rusak_berat = [a for a in ditemukan if a.get("condition") == "Rusak Berat"]
 
+    # Rincian klasifikasi Tidak Ditemukan (permintaan pemilik) — konsisten
+    # dengan rekapitulasi & BAHI; yang belum diklasifikasi dipisah agar
+    # jumlah sub-baris selalu = total baris B.
+    td_kesalahan = [a for a in tidak_ditemukan
+                    if a.get("klasifikasi_tidak_ditemukan") == "Kesalahan Pencatatan"]
+    td_lainnya = [a for a in tidak_ditemukan
+                  if a.get("klasifikasi_tidak_ditemukan") == "Tidak Ditemukan Lainnya"]
+    td_belum = [a for a in tidak_ditemukan
+                if a.get("klasifikasi_tidak_ditemukan")
+                not in ("Kesalahan Pencatatan", "Tidak Ditemukan Lainnya")]
+
     buffer = io.BytesIO()
     doc = _std_doc(buffer, landscape_mode=True)
     st = _get_report_styles()
@@ -1655,6 +1684,10 @@ async def generate_rhi_pdf(activity_id: str, _user: dict = Depends(require_user_
         ("  2", "   Kondisi Rusak Ringan", len(rusak_ringan), sum(safe_price(a) for a in rusak_ringan)),
         ("  3", "   Kondisi Rusak Berat", len(rusak_berat), sum(safe_price(a) for a in rusak_berat)),
         ("B", "BMN TIDAK DITEMUKAN", len(tidak_ditemukan), sum(safe_price(a) for a in tidak_ditemukan)),
+        ("  1", "   Kesalahan Pencatatan", len(td_kesalahan), sum(safe_price(a) for a in td_kesalahan)),
+        ("  2", "   Tidak Ditemukan Lainnya", len(td_lainnya), sum(safe_price(a) for a in td_lainnya)),
+        *([("  3", "   Belum Diklasifikasi", len(td_belum), sum(safe_price(a) for a in td_belum))]
+          if td_belum else []),
         ("C", "BMN BERLEBIH", len(berlebih), sum(safe_price(a) for a in berlebih)),
         ("D", "BMN DALAM SENGKETA", len(sengketa), sum(safe_price(a) for a in sengketa)),
         ("E", "BELUM DIINVENTARISASI", len(belum), sum(safe_price(a) for a in belum)),
@@ -4967,7 +5000,8 @@ BATCH_PDF_MAP = {
 
 BATCH_DBHI_TYPES = [
     "kondisi-baik", "kondisi-rusak-ringan", "kondisi-rusak-berat",
-    "berlebih", "tidak-ditemukan", "sengketa"
+    "berlebih", "tidak-ditemukan", "kesalahan-pencatatan",
+    "tidak-ditemukan-lainnya", "sengketa"
 ]
 
 
