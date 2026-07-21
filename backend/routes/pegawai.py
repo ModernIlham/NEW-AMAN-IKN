@@ -9,12 +9,15 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
+from fastapi import (APIRouter, Depends, File, HTTPException, Request,
+                     Response, UploadFile)
 from pydantic import BaseModel
 
 from auth_utils import require_admin, require_user, require_user_or_query_token
 from db import db, fs_bucket
-from shared_utils import kode_satker_user, log_audit, scope_query_field_satker
+from kartu_utils import hash_kandidat, label_kartu, valid_uid
+from shared_utils import (kode_satker_user, limiter, log_audit,
+                          pastikan_akses_dok_satker, scope_query_field_satker)
 from pejabat_utils import STATUS_KEPEGAWAIAN
 from pegawai_utils import (
     AGAMA, DIGIT_BANK, JENIS_IDENTITAS_WNA, JENIS_JABATAN, JENIS_KELAMIN,
@@ -28,7 +31,9 @@ from pegawai_utils import (
 
 pegawai_router = APIRouter()
 
-_PROJ = {"_id": 0}
+# kartu_uid_hashes TIDAK pernah dikirim ke klien (cukup kartu_label utk UI) —
+# hash HMAC memang tak bisa dibalik, tapi tak ada alasan membocorkannya.
+_PROJ = {"_id": 0, "kartu_uid_hashes": 0}
 
 
 class PegawaiIn(BaseModel):
@@ -668,4 +673,114 @@ async def hapus_foto_pegawai(pegawai_id: str, admin: dict = Depends(require_admi
     await db.pegawai.update_one({"id": pegawai_id},
                                 {"$unset": {"foto_file_id": ""},
                                  "$set": {"updated_at": now}})
+    return {"ok": True}
+
+
+# ============================================================================
+# KARTU PEGAWAI (UID e-KTP / kartu NFC) — pendaftaran & identifikasi tap
+#
+# UID kartu TIDAK PERNAH disimpan/di-log mentah — hanya HMAC-SHA256 berkunci
+# rahasia server (kartu_utils). Multi-hash per kartu menoleransi perbedaan
+# format keluaran reader (hex MSB/LSB, desimal). Field ikut dokumen pegawai
+# sehingga otomatis ter-backup & selamat reset (RESET_KEEP pegawai).
+# Batas peran: UID = identifikasi cepat/kenyamanan (pengganti mengetik),
+# BUKAN verifikasi keaslian KTP dan BUKAN pengganti TTD elektronik.
+# ============================================================================
+
+_KARTU_PROYEKSI_PUBLIK = {
+    "_id": 0, "id": 1, "nama": 1, "nip": 1, "jabatan": 1, "unit_kerja": 1,
+    "email": 1, "status": 1, "status_kepegawaian": 1, "foto_file_id": 1,
+    "kartu_label": 1, "kode_satker": 1,
+}
+
+
+class KartuIn(BaseModel):
+    uid: str
+
+
+@pegawai_router.post("/pegawai/kartu/identifikasi")
+@limiter.limit("30/minute")
+async def identifikasi_kartu(request: Request, payload: KartuIn,
+                             user: dict = Depends(require_user)):
+    """Tap kartu → pegawai pemiliknya (identifikasi cepat lintas modul).
+
+    Dipakai komponen Tap Kartu di form aset, BAST, TTD elektronik, dsb.
+    Ber-rate-limit + terautentikasi; kartu tak dikenal dicatat ke audit
+    (sinyal keamanan) tanpa UID mentah — hanya prefiks hash.
+    """
+    err = valid_uid(payload.uid)
+    if err:
+        raise HTTPException(status_code=400, detail=err)
+    hashes = hash_kandidat(payload.uid)
+    q = scope_query_field_satker(user, {"kartu_uid_hashes": {"$in": hashes}})
+    peg = await db.pegawai.find_one(q, _KARTU_PROYEKSI_PUBLIK)
+    if not peg:
+        await log_audit("kartu_tak_dikenal", "", "",
+                        username=user.get("username", "system"),
+                        detail=f"Tap kartu tidak dikenal (hash {hashes[0][:8]}…)")
+        raise HTTPException(status_code=404,
+                            detail="Kartu tidak dikenal — daftarkan dulu di Master Pegawai")
+    return {"pegawai": peg}
+
+
+@pegawai_router.post("/pegawai/{pegawai_id}/kartu")
+@limiter.limit("10/minute")
+async def daftar_kartu_pegawai(request: Request, pegawai_id: str,
+                               payload: KartuIn,
+                               admin: dict = Depends(require_admin)):
+    """Daftarkan (atau ganti) kartu e-KTP/NFC seorang pegawai — cukup tap.
+
+    Satu kartu hanya boleh terikat SATU pegawai (cek silang semua hash
+    kandidat). Pendaftaran ulang menimpa kartu lama pegawai tsb.
+    """
+    err = valid_uid(payload.uid)
+    if err:
+        raise HTTPException(status_code=400, detail=err)
+    peg = await db.pegawai.find_one({"id": pegawai_id}, _PROJ)
+    if not peg:
+        raise HTTPException(status_code=404, detail="Pegawai tidak ditemukan")
+    await pastikan_akses_dok_satker(admin, peg)
+    hashes = hash_kandidat(payload.uid)
+    lain = await db.pegawai.find_one(
+        {"kartu_uid_hashes": {"$in": hashes}, "id": {"$ne": pegawai_id}},
+        {"_id": 0, "nama": 1})
+    if lain:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Kartu ini sudah terdaftar pada pegawai lain ({lain.get('nama') or '-'}). "
+                   f"Lepas dulu dari pegawai tersebut.")
+    now = datetime.now(timezone.utc).isoformat()
+    label = label_kartu(payload.uid)
+    await db.pegawai.update_one({"id": pegawai_id}, {"$set": {
+        "kartu_uid_hashes": hashes,
+        "kartu_label": label,
+        "kartu_terdaftar_pada": now,
+        "kartu_terdaftar_oleh": admin.get("username", "system"),
+        "updated_at": now,
+    }})
+    await log_audit("daftar_kartu", "", pegawai_id,
+                    username=admin.get("username", "system"),
+                    detail=f"Daftarkan kartu {label} untuk {peg.get('nama') or '-'}")
+    return {"ok": True, "kartu_label": label, "kartu_terdaftar_pada": now}
+
+
+@pegawai_router.delete("/pegawai/{pegawai_id}/kartu")
+@limiter.limit("10/minute")
+async def lepas_kartu_pegawai(request: Request, pegawai_id: str,
+                              admin: dict = Depends(require_admin)):
+    """Lepas kartu dari pegawai (kartu hilang / ganti KTP / pegawai keluar)."""
+    peg = await db.pegawai.find_one(
+        {"id": pegawai_id}, {"_id": 0, "nama": 1, "kartu_label": 1,
+                             "kartu_uid_hashes": 1, "kode_satker": 1})
+    if not peg or not peg.get("kartu_uid_hashes"):
+        raise HTTPException(status_code=404, detail="Pegawai belum punya kartu terdaftar")
+    await pastikan_akses_dok_satker(admin, peg)
+    now = datetime.now(timezone.utc).isoformat()
+    await db.pegawai.update_one({"id": pegawai_id}, {
+        "$unset": {"kartu_uid_hashes": "", "kartu_label": "",
+                   "kartu_terdaftar_pada": "", "kartu_terdaftar_oleh": ""},
+        "$set": {"updated_at": now}})
+    await log_audit("lepas_kartu", "", pegawai_id,
+                    username=admin.get("username", "system"),
+                    detail=f"Lepas kartu {peg.get('kartu_label') or ''} dari {peg.get('nama') or '-'}")
     return {"ok": True}

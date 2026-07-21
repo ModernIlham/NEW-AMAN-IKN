@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Search, Loader2, UserCheck, ChevronLeft, ChevronRight,
   BadgeCheck, FileWarning, FileText, Plus, X, Trash2, ScrollText,
-  Paperclip, Upload, FileDown, ArrowLeftRight,
+  Paperclip, Upload, FileDown, ArrowLeftRight, IdCard,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,6 +18,7 @@ import { useTransitionDialog } from "@/components/ui/TransitionDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import { authMediaUrl } from "@/lib/mediaUrl";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
+import KartuTapDialog from "@/components/pegawai/KartuTapDialog";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -91,6 +92,8 @@ export default function PenggunaanPage({ user, onBack }) {
   // Master Pegawai utk autocomplete penerima BAST (dimuat sekali saat dialog
   // BAST pertama dibuka) — identitas satu sumber, NIP tak diketik ulang.
   const [pegawaiList, setPegawaiList] = useState(null);
+  // Tap kartu e-KTP utk mengisi pihak BAST — null | "pihak_kedua" | "pihak_pertama"
+  const [kartuTapUntuk, setKartuTapUntuk] = useState(null);
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
   const { confirm, confirmDialog } = useConfirm();
@@ -1428,9 +1431,12 @@ export default function PenggunaanPage({ user, onBack }) {
                   <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">Pemegang lama (PIHAK KESATU) — menyerahkan</p>
                   <div className="grid grid-cols-2 gap-2">
                     {/* Terhubung Master Pegawai (datalist sama dgn Penerima):
-                        nama cocok → NIP & jabatan terisi otomatis (audit W4). */}
+                        nama cocok → NIP & jabatan terisi otomatis (audit W4).
+                        Tap kartu e-KTP juga bisa (tombol ikon kartu). */}
+                    <div className="flex gap-1.5 min-w-0">
                     <Input value={formBast.pihak_pertama.nama} list="bast-pegawai-list"
                       placeholder="Nama pemegang lama *" data-testid="bast-lama-nama"
+                      className="flex-1 min-w-0"
                       onChange={(e) => {
                         const v = e.target.value;
                         const m = (pegawaiList || []).find((x) => (x.nama || "") === v);
@@ -1439,6 +1445,13 @@ export default function PenggunaanPage({ user, onBack }) {
                           ...(m ? { nip: m.nip || f.pihak_pertama.nip,
                                     jabatan: m.jabatan || f.pihak_pertama.jabatan } : {}) } }));
                       }} />
+                    <button type="button" title="Tap kartu pegawai (e-KTP/NFC)"
+                      onClick={() => setKartuTapUntuk("pihak_pertama")}
+                      className="h-9 px-2 rounded-md border border-input bg-card hover:bg-accent flex items-center shrink-0 min-w-0 min-h-0"
+                      data-testid="bast-lama-tap-kartu">
+                      <IdCard className="w-4 h-4 text-blue-600" />
+                    </button>
+                    </div>
                     <Input value={formBast.pihak_pertama.nip} placeholder="NIP/NIK" className="font-mono"
                       onChange={(e) => setFormBast((f) => ({ ...f, pihak_pertama: { ...f.pihak_pertama, nip: e.target.value } }))} />
                     <Input value={formBast.pihak_pertama.jabatan} placeholder="Jabatan" className="col-span-2"
@@ -1488,8 +1501,10 @@ export default function PenggunaanPage({ user, onBack }) {
               )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div><label className="text-xs font-medium block mb-1">Penerima (PIHAK KEDUA) *</label>
+                  <div className="flex gap-1.5">
                   <Input value={formBast.pihak_kedua.nama} list="bast-pegawai-list"
                     placeholder="ketik nama — saran dari Master Pegawai"
+                    className="flex-1 min-w-0"
                     onChange={(e) => {
                       const v = e.target.value;
                       // Nama persis cocok dengan Master Pegawai → NIP & jabatan terisi otomatis.
@@ -1498,6 +1513,14 @@ export default function PenggunaanPage({ user, onBack }) {
                         ? { ...f.pihak_kedua, nama: v, nip: m.nip || f.pihak_kedua.nip, jabatan: m.jabatan || f.pihak_kedua.jabatan }
                         : { ...f.pihak_kedua, nama: v } }));
                     }} data-testid="bast-penerima" />
+                  {/* Tap kartu e-KTP penerima → identitas terisi otomatis */}
+                  <button type="button" title="Tap kartu pegawai (e-KTP/NFC)"
+                    onClick={() => setKartuTapUntuk("pihak_kedua")}
+                    className="h-9 px-2 rounded-md border border-input bg-card hover:bg-accent flex items-center shrink-0 min-w-0 min-h-0"
+                    data-testid="bast-penerima-tap-kartu">
+                    <IdCard className="w-4 h-4 text-blue-600" />
+                  </button>
+                  </div>
                   <datalist id="bast-pegawai-list">
                     {(pegawaiList || []).map((x) => (
                       <option key={x.id || x.nip || x.nama} value={x.nama}>{x.nip ? `NIP ${x.nip}` : ""}</option>
@@ -1626,6 +1649,19 @@ export default function PenggunaanPage({ user, onBack }) {
           )}
         </DialogContent>
       </Dialog>
+      {/* Tap kartu e-KTP → identitas pihak BAST terisi otomatis */}
+      <KartuTapDialog open={!!kartuTapUntuk}
+        onOpenChange={(o) => { if (!o) setKartuTapUntuk(null); }}
+        onPegawai={(p) => {
+          const pihak = kartuTapUntuk;
+          if (!pihak || !p) return;
+          setFormBast((f) => ({ ...f, [pihak]: {
+            ...f[pihak], nama: p.nama || f[pihak]?.nama || "",
+            nip: p.nip || f[pihak]?.nip || "",
+            jabatan: p.jabatan || f[pihak]?.jabatan || "",
+          } }));
+        }} />
+
       {confirmDialog}
       {transitionDialog}
     </div>

@@ -4,7 +4,7 @@ import {
   Plus, Edit3, X, Camera, Trash2, Check, ChevronDown, Search,
   Package, Briefcase, ShieldCheck, Settings, Tag, Save, Loader2, ClipboardList,
   Info, ChevronRight, BookOpen, Wrench, ArrowRight, HelpCircle, MapPin, LocateFixed,
-  ChevronLeft, CloudOff, Upload, Eye, UserRound, AlertTriangle, History,
+  ChevronLeft, CloudOff, Upload, Eye, UserRound, AlertTriangle, History, IdCard,
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -19,6 +19,7 @@ import {
 import { DocumentChecklist, DEFAULT_DOC_ITEMS } from "./DocumentChecklist";
 import InventoryFieldSheet, { PENGGUNA_MELEKAT_OPTIONS, PENGGUNA_NAME_LABELS, OPERASIONAL_JENIS_OPTIONS, CONDITION_OPTIONS } from "./InventoryFieldSheet";
 import FullCameraSheet from "./FullCameraSheet";
+import KartuTapDialog from "../pegawai/KartuTapDialog";
 import { useBackGuard } from "../../hooks/useBackGuard";
 import { toast } from "sonner";
 import axios from "axios";
@@ -557,6 +558,7 @@ const AssetForm = memo(({
   // undefined = belum dimuat, null = tak tersedia (offline), array = daftar.
   const [pegawaiAll, setPegawaiAll] = useState(undefined);
   const [pegawaiPickerOpen, setPegawaiPickerOpen] = useState(false);
+  const [kartuTapOpen, setKartuTapOpen] = useState(false); // tap kartu e-KTP → isi pengguna
   const [pegawaiQuery, setPegawaiQuery] = useState("");
   // Asset version (OCC): appended as ?v= cache-buster to all media streaming
   // URLs (photo strip, checklist photos/PDFs) so the browser cache is busted
@@ -2254,6 +2256,13 @@ const AssetForm = memo(({
                   <Label className="text-xs">{PENGGUNA_NAME_LABELS[formData.pengguna_melekat_ke] || "Pengguna"}</Label>
                   <div className="flex gap-1.5">
                     <Input name="user" value={formData.user} onChange={handleInputChange} className="h-8 flex-1 min-w-0" data-testid="input-pengguna-nama" />
+                    {/* Tap kartu e-KTP → pegawai terisi otomatis (identifikasi cepat) */}
+                    <button type="button" title="Tap kartu pegawai (e-KTP/NFC)"
+                      onClick={() => setKartuTapOpen(true)}
+                      className="h-8 px-2 rounded-md border border-input bg-card hover:bg-accent flex items-center shrink-0 min-w-0 min-h-0"
+                      data-testid="pengguna-tap-kartu">
+                      <IdCard className="w-3.5 h-3.5 text-blue-600" />
+                    </button>
                     <DropdownMenu open={pegawaiPickerOpen} onOpenChange={setPegawaiPickerOpen}>
                       <DropdownMenuTrigger asChild>
                         <button type="button" title="Pilih dari Master Pegawai" className="h-8 px-2.5 rounded-md border border-input bg-card hover:bg-accent flex items-center gap-1 text-xs shrink-0" data-testid="pengguna-pegawai-picker">
@@ -2672,6 +2681,9 @@ const AssetForm = memo(({
           </form>
         </div>}
       </aside>
+      {/* Tap kartu e-KTP → pegawai dikenali → isi pengguna barang */}
+      <KartuTapDialog open={kartuTapOpen} onOpenChange={setKartuTapOpen}
+        onPegawai={onPickPegawai} />
     </>
   );
 });
