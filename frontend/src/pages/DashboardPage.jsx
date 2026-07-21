@@ -1705,7 +1705,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
                   onClose={() => setMapOpen(false)}
                   canEdit={perms.canEdit}
                   onEditAsset={perms.canEdit ? handleEdit : undefined}
-                  onDeleteAsset={perms.canEdit ? handleDelete : undefined}
+                  onDeleteAsset={perms.canDelete ? handleDelete : undefined}
                   onSaveCoords={handleMapCoordsSave}
                   buildParams={buildMapParams}
                   clientFilter={mapClientFilter}

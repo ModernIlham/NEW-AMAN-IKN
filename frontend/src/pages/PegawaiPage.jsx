@@ -299,7 +299,11 @@ export default function PegawaiPage({ user, onBack }) {
       toast.success(`Kartu ${r.data?.kartu_label || ""} terdaftar untuk ${form.nama}`);
       setForm((f) => (f ? { ...f, kartu_label: r.data?.kartu_label || "", kartu_terdaftar_pada: r.data?.kartu_terdaftar_pada || "" } : f));
       load();
-    } catch (err) { toast.error(getApiError(err, "Gagal mendaftarkan kartu")); }
+    } catch (err) {
+      toast.error(err?.response?.status === 429
+        ? "Terlalu banyak percobaan — tunggu sebentar lalu coba lagi"
+        : getApiError(err, "Gagal mendaftarkan kartu"));
+    }
   };
   const lepasKartu = async () => {
     if (!form?.id) return;

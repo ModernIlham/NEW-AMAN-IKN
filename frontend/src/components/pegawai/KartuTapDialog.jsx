@@ -34,6 +34,8 @@ export default function KartuTapDialog({
   const [galat, setGalat] = useState("");
   const inputRef = useRef(null);
   const sibukRef = useRef(false);
+  const openRef = useRef(open);   // respons telat setelah dialog ditutup DIABAIKAN
+  openRef.current = open;
 
   // Fokus ulang berkala supaya keystroke reader selalu jatuh ke input ini
   // (reader wedge mengetik ke elemen yang sedang fokus).
@@ -63,20 +65,31 @@ export default function KartuTapDialog({
         return;
       }
       const r = await axios.post(`${API}/pegawai/kartu/identifikasi`, { uid });
+      // Dialog sudah ditutup pengguna saat respons tiba → jangan mengisi
+      // form yang sudah dibatalkan / men-toast menyesatkan.
+      if (!openRef.current) return;
       const p = r.data?.pegawai;
       toast.success(`Kartu dikenali: ${p?.nama || "-"}`);
       onPegawai?.(p);
       onOpenChange?.(false);
     } catch (err) {
-      const msg = err?.response?.data?.detail;
-      setGalat(typeof msg === "string" && msg
-        ? msg : "Gagal membaca kartu — periksa koneksi lalu coba lagi");
+      if (!openRef.current) return;
+      if (err?.response?.status === 429) {
+        setGalat("Terlalu banyak percobaan — tunggu sebentar lalu coba lagi.");
+      } else {
+        const msg = err?.response?.data?.detail;
+        setGalat(typeof msg === "string" && msg
+          ? msg : "Gagal membaca kartu — periksa koneksi lalu coba lagi");
+      }
     } finally {
       sibukRef.current = false;
       setSibuk(false);
       setNilai("");
     }
   };
+  // Ref anti-stale utk listener Web NFC (effect hanya rerun saat `open`).
+  const kirimRef = useRef(kirim);
+  kirimRef.current = kirim;
 
   // Web NFC bila tersedia (Android Chrome) — best-effort saja.
   useEffect(() => {
@@ -87,12 +100,11 @@ export default function KartuTapDialog({
         const reader = new window.NDEFReader();
         await reader.scan({ signal: ctrl.signal });
         reader.addEventListener("reading", (e) => {
-          if (e.serialNumber) kirim(e.serialNumber);
+          if (e.serialNumber) kirimRef.current(e.serialNumber);
         }, { signal: ctrl.signal });
       } catch { /* izin ditolak / tak didukung — jalur wedge tetap jalan */ }
     })();
     return () => ctrl.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   return (

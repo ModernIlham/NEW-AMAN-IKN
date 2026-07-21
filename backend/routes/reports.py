@@ -15,7 +15,7 @@ from pathlib import Path
 # Template directory - relative to this file's location (works on any server)
 TEMPLATES_DIR = str(Path(__file__).resolve().parent.parent / "templates")
 
-from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Depends
+from fastapi import APIRouter, HTTPException, Query, Request, UploadFile, File, Depends
 from fastapi.responses import StreamingResponse, HTMLResponse
 from pydantic import BaseModel
 
@@ -23,7 +23,7 @@ from db import db
 from auth_utils import require_user, require_admin, require_user_or_query_token
 from shared_utils import (pastikan_akses_kegiatan_id, ambang_kapitalisasi,
                           filter_aset_perhitungan,
-                          get_photo_from_gridfs, pengaturan_kop,
+                          get_photo_from_gridfs, limiter, pengaturan_kop,
                           scope_query_aset)
 from report_filters import active_asset_filter
 from report_utils import hitung_status_stiker, distribusi_pengguna
@@ -4990,7 +4990,10 @@ async def generate_daftar_pemegang_pdf(activity_id: str,
         elements.append(tb)
 
     elements.append(Spacer(1, 8 * rl_mm))
-    ttd = await _penandatangan_kpb(settings)
+    # per_iso hari ini WAJIB — tanpa tanggal, rentang berlaku SK pejabat
+    # tidak dicek sehingga KPB kedaluwarsa bisa terpilih (temuan #41).
+    ttd = await _penandatangan_kpb(
+        settings, datetime.now(timezone.utc).date().isoformat())
     elements.extend(_signature_block([
         {'pre': [_tempat_tanggal_laporan(settings)],
          'header': 'Kuasa Pengguna Barang,',
@@ -5092,6 +5095,7 @@ async def generate_lhi_pdf(activity_id: str, _user: dict = Depends(require_user_
     # jadi kegagalan = bug nyata. Jangan kirim LHI parsial diam-diam —
     # beri tahu bagian mana yang gagal agar bisa dilaporkan/diperbaiki.
     if bagian_gagal:
+        merger.close()
         raise HTTPException(
             status_code=500,
             detail="Gagal menyusun LHI lengkap — bagian bermasalah: "
@@ -5116,6 +5120,9 @@ async def generate_lhi_pdf(activity_id: str, _user: dict = Depends(require_user_
 
 class BatchPDFRequest(BaseModel):
     types: List[str]
+    # Kolom tambahan PDF Eksekutif (SPM/Perolehan/BAST dll.) — supaya isi
+    # ZIP identik dengan unduhan tunggal yang memakai pilihan yang sama.
+    detail_fields: str = ""
 
 BATCH_PDF_MAP = {
     "rhi": ("RHI", generate_rhi_pdf),
@@ -5138,7 +5145,9 @@ BATCH_DBHI_TYPES = [
 
 
 @reports_router.post("/inventory-activities/{activity_id}/batch-pdf-zip")
-async def batch_download_pdf_zip(activity_id: str, request: BatchPDFRequest,
+@limiter.limit("3/minute")
+async def batch_download_pdf_zip(request: Request, activity_id: str,
+                                 payload: BatchPDFRequest,
                                  _user: dict = Depends(require_user)):
     """Generate a ZIP file containing multiple selected PDF reports"""
     import zipfile
@@ -5148,8 +5157,16 @@ async def batch_download_pdf_zip(activity_id: str, request: BatchPDFRequest,
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
     await pastikan_akses_kegiatan_id(_user, activity_id)
 
-    if not request.types:
+    # Dedup + batasi jumlah tipe: batch kini memuat tipe super-berat (lhi =
+    # 12 sub-laporan; executive-data = semua halaman) — tanpa batas, body
+    # {"types": ["lhi"]*100} membakar CPU menit-menit per request.
+    types = list(dict.fromkeys(payload.types or []))
+    if not types:
         raise HTTPException(status_code=400, detail="Pilih minimal satu laporan")
+    if len(types) > 40:
+        raise HTTPException(status_code=400,
+                            detail="Terlalu banyak laporan dalam satu batch (maks. 40)")
+    detail_fields = str(payload.detail_fields or "")
 
     zip_buffer = io.BytesIO()
     generated = []
@@ -5159,7 +5176,7 @@ async def batch_download_pdf_zip(activity_id: str, request: BatchPDFRequest,
     # internal (bukan lewat FastAPI), tanpa ini guard satker di dalam
     # generator melempar error dan laporan hilang DIAM-DIAM dari ZIP.
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
-        for report_type in request.types:
+        for report_type in types:
             try:
                 if report_type.startswith("dbhi-"):
                     dbhi_type = report_type[5:]
@@ -5169,6 +5186,10 @@ async def batch_download_pdf_zip(activity_id: str, request: BatchPDFRequest,
                         filename = f"DBHI_{dbhi_type.replace('-', '_')}_{activity_id[:8]}.pdf"
                         zf.writestr(filename, pdf_buffer.getvalue())
                         generated.append(filename)
+                    else:
+                        # Kunci tak dikenal TIDAK boleh hilang diam-diam —
+                        # kelas bug yang sama dgn #482.
+                        errors.append(f"{report_type}: tipe DBHI tidak dikenal")
                     continue
 
                 if report_type == "cover":
@@ -5189,7 +5210,8 @@ async def batch_download_pdf_zip(activity_id: str, request: BatchPDFRequest,
                     continue
 
                 if report_type == "executive-grouped":
-                    response = await generate_executive_grouped_pdf(activity_id, _user=_user)
+                    response = await generate_executive_grouped_pdf(
+                        activity_id, detail_fields=detail_fields, _user=_user)
                     pdf_buffer = await _get_pdf_buffer_from_response(response)
                     filename = f"Eksekutif_Barang_Serupa_{activity_id[:8]}.pdf"
                     zf.writestr(filename, pdf_buffer.getvalue())
@@ -5201,7 +5223,8 @@ async def batch_download_pdf_zip(activity_id: str, request: BatchPDFRequest,
                     info = await executive_data_info(activity_id, _user=_user)
                     for p in info.get("pages", []):
                         response = await generate_executive_data_pdf(
-                            activity_id, page=p["page"], _user=_user)
+                            activity_id, page=p["page"],
+                            detail_fields=detail_fields, _user=_user)
                         pdf_buffer = await _get_pdf_buffer_from_response(response)
                         filename = (f"Data_Aset_{p['start']}-{p['end']}"
                                     f"_{activity_id[:8]}.pdf")
@@ -5216,10 +5239,16 @@ async def batch_download_pdf_zip(activity_id: str, request: BatchPDFRequest,
                     filename = f"{label}_{activity_id[:8]}.pdf"
                     zf.writestr(filename, pdf_buffer.getvalue())
                     generated.append(filename)
+                else:
+                    errors.append(f"{report_type}: tipe laporan tidak dikenal")
 
+            except HTTPException as e:
+                logger.warning(f"Batch ZIP: Failed to generate {report_type}: {e.detail}")
+                errors.append(f"{report_type}: {e.detail}")
             except Exception as e:
+                # Jangan bocorkan string error internal ke pengguna.
                 logger.warning(f"Batch ZIP: Failed to generate {report_type}: {e}")
-                errors.append(f"{report_type}: {str(e)}")
+                errors.append(f"{report_type}: gagal dibuat (galat internal — cek log server)")
 
         # Kegagalan JANGAN diam-diam: sertakan daftarnya di dalam ZIP agar
         # pengguna tahu laporan mana yang tidak ikut dan bisa melaporkannya.

@@ -192,6 +192,36 @@ function IkonModul({ id, size = 20 }) {
   return <Icon className={`${px} text-white ${MODULE_ANIM[id] || "ikon-apung"}`} />;
 }
 
+// Baris modul di timeline fase — ringkas, informatif, satu klik langsung.
+// Di LUAR komponen halaman (temuan audit #490): definisi inline membuat
+// tipe komponen baru tiap render → seluruh baris (termasuk 10 instance
+// Lottie) unmount+mount ulang setiap state halaman berubah.
+const BarisModul = ({ mod, onOpen }) => {
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(mod)}
+      data-testid={`module-card-${mod.id}`}
+      className="peta-kotak relative w-full text-left pl-9 pr-2 py-2 rounded-xl hover:bg-muted/70 transition-colors group min-w-0 min-h-0"
+    >
+      {/* Nomor tahap di atas garis timeline */}
+      <span className="absolute left-0 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-card border-2 border-border text-[10px] font-bold text-foreground/70 flex items-center justify-center group-hover:border-blue-500/60 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+        {mod.urutan}
+      </span>
+      <span className="flex items-center gap-2.5 min-w-0">
+        <span className={`w-9 h-9 rounded-xl bg-gradient-to-br ${MODULE_TILE[mod.id] || "from-slate-500 to-slate-600"} flex items-center justify-center flex-shrink-0 shadow-sm group-hover:scale-105 transition-transform`}>
+          <IkonModul id={mod.id} size={20} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block font-semibold text-foreground text-[13px] leading-tight truncate">{mod.nama}</span>
+          <span className="block text-[10px] text-muted-foreground leading-snug line-clamp-1">{mod.ringkas}</span>
+        </span>
+        <ChevronRight className="w-4 h-4 text-muted-foreground/50 group-hover:text-blue-500 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
+      </span>
+    </button>
+  );
+};
+
 // Tiga fase alur siklus (urutan modul mengikuti registry) — Wasdal terpisah
 // sebagai pita pengawasan yang MELINGKUPI seluruh siklus.
 const FASE_ALUR = [
@@ -278,33 +308,6 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
     else if (mod.id === "penganggaran" && onOpenPenganggaran) onOpenPenganggaran();
     else if (mod.id === "pengadaan" && onOpenPengadaan) onOpenPengadaan();
     else setDetail(mod);
-  };
-
-  // Baris modul di timeline fase — ringkas, informatif, satu klik langsung.
-  const BarisModul = ({ mod }) => {
-    return (
-      <button
-        type="button"
-        onClick={() => openModule(mod)}
-        data-testid={`module-card-${mod.id}`}
-        className="peta-kotak relative w-full text-left pl-9 pr-2 py-2 rounded-xl hover:bg-muted/70 transition-colors group min-w-0 min-h-0"
-      >
-        {/* Nomor tahap di atas garis timeline */}
-        <span className="absolute left-0 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-card border-2 border-border text-[10px] font-bold text-foreground/70 flex items-center justify-center group-hover:border-blue-500/60 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-          {mod.urutan}
-        </span>
-        <span className="flex items-center gap-2.5 min-w-0">
-          <span className={`w-9 h-9 rounded-xl bg-gradient-to-br ${MODULE_TILE[mod.id] || "from-slate-500 to-slate-600"} flex items-center justify-center flex-shrink-0 shadow-sm group-hover:scale-105 transition-transform`}>
-            <IkonModul id={mod.id} size={20} />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block font-semibold text-foreground text-[13px] leading-tight truncate">{mod.nama}</span>
-            <span className="block text-[10px] text-muted-foreground leading-snug line-clamp-1">{mod.ringkas}</span>
-          </span>
-          <ChevronRight className="w-4 h-4 text-muted-foreground/50 group-hover:text-blue-500 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
-        </span>
-      </button>
-    );
   };
 
   // Pintasan referensi/alat — satu komponen agar seragam & ringkas.
@@ -408,7 +411,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
               </div>
               {/* Timeline: garis vertikal + simpul nomor per modul */}
               <div className={`relative ml-3 border-l-2 border-dashed ${fase.garis} space-y-0.5 py-0.5 -translate-x-[13px] pl-[13px]`}>
-                {fase.ids.map((id) => petaModul[id] && <BarisModul key={id} mod={petaModul[id]} />)}
+                {fase.ids.map((id) => petaModul[id] && <BarisModul key={id} mod={petaModul[id]} onOpen={openModule} />)}
               </div>
             </div>
           ))}

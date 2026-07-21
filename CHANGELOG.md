@@ -48,6 +48,41 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#490] Penyempurnaan hasil audit menyeluruh — keandalan & keterhubungan fitur — 2026-07-21
+
+Audit 3 arah (backend, frontend, keterhubungan lintas fitur) atas 11 rilis
+sesi terakhir; tidak ada sambungan putus, temuan diperbaiki semua:
+
+- **Bug**: laporan Daftar Pemegang Aset bisa menampilkan KPB yang masa SK-nya
+  habis (resolver dipanggil tanpa tanggal — temuan #41 terulang) → kini
+  selalu dicek per hari ini.
+- **Bug**: respons tap kartu yang tiba SETELAH dialog BAST/TTD ditutup bisa
+  meruntuhkan halaman (layar putih) → null-guard + guard index penanda
+  tangan; respons telat kini diabaikan sepenuhnya oleh dialog tap.
+- **Kartu e-KTP**: UID hex serba-digit kini tetap cocok lintas format reader
+  (kandidat byte-dibalik ikut dihasilkan); prefiks `0x` diterima; index
+  `kartu_uid_hashes` dijadikan UNIK (menutup balapan 2 admin mendaftarkan
+  kartu sama, fallback non-unik bila data lama duplikat); pesan 409 tidak
+  lagi membocorkan nama pegawai satker lain; batas panjang input; pesan
+  khusus saat kena rate-limit (bukan "periksa koneksi" yang menyesatkan).
+- **Audit kartu kini termonitor**: log daftar/lepas/tap-tak-dikenal membawa
+  `kode_satker` dan halaman audit menampilkan log sistem ber-satker bagi
+  admin satkernya (dulu praktis write-only).
+- **Batch ZIP**: ber-rate-limit (3/mnt) + dedup + batas 40 tipe (tipe berat
+  lhi/executive-data bisa dipakai DoS ringan); tipe tak dikenal kini tercatat
+  di `_LAPORAN-GAGAL.txt` (bukan hilang diam-diam); pesan kegagalan tidak
+  membocorkan string error internal; pilihan "Kolom tambahan" kini juga
+  berlaku utk PDF Eksekutif/Data Aset di dalam ZIP (dulu hanya unduhan
+  tunggal).
+- **Frontend**: `lottie-web` dideklarasikan eksplisit di package.json (dulu
+  hanya transitif — rapuh); `BarisModul` di-hoist keluar komponen (10
+  instance Lottie tak lagi re-init tiap render halaman); gerbang hapus di
+  peta memakai `canDelete` (bukan `canEdit`); memilih pegawai BERBEDA via
+  picker/tap kini menimpa jabatan lama (tak menyisakan jabatan orang
+  sebelumnya); LHI menutup merger dgn benar pada jalur gagal.
+- **Dokumentasi**: InfoPage & README dimutakhirkan — DBHI 8 tipe, laporan
+  Daftar Pemegang Aset, Kartu Pegawai e-KTP, aturan Non-ASN, batch ZIP penuh.
+
 ## [#489] Kartu Pegawai (UID e-KTP/NFC) — tap kartu utk identifikasi cepat lintas modul — 2026-07-21
 
 - **Fitur baru**: e-KTP (kartu NFC ISO 14443) kini bisa dimanfaatkan

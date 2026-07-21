@@ -640,13 +640,18 @@ export default function TtdPermintaanPage({ user, onBack }) {
         onPegawai={(p) => {
           const i = kartuTapSigner;
           if (i === null || !p) return;
-          setForm((f) => ({
-            ...f,
-            signers: f.signers.map((s, idx) => (idx === i
-              ? { ...s, nama: p.nama || s.nama, nip: p.nip || s.nip,
-                  jabatan: p.jabatan || s.jabatan, email: p.email || s.email }
-              : s)),
-          }));
+          // Null-guard + guard index: respons tap bisa tiba setelah form
+          // ditutup / signer dihapus — jangan crash / salah baris.
+          setForm((f) => {
+            if (!f || !Array.isArray(f.signers) || i >= f.signers.length) return f;
+            return {
+              ...f,
+              signers: f.signers.map((s, idx) => (idx === i
+                ? { ...s, nama: p.nama || s.nama, nip: p.nip || s.nip,
+                    jabatan: p.jabatan || s.jabatan, email: p.email || s.email }
+                : s)),
+            };
+          });
         }} />
 
       {confirmDialog}
