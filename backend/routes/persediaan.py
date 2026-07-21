@@ -25,6 +25,7 @@ from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
 )
 from db import db
+from pegawai_utils import baris_identitas_ttd
 from persediaan_akun_utils import akun_persediaan
 from persediaan_fields import EDITABLE_FIELD_NAMES
 from persediaan_utils import (
@@ -201,7 +202,9 @@ async def nota_dinas_persediaan(
         {'pre': ['.................., .......................'],
          'header': 'Kuasa Pengguna Barang,',
          'nama': kpb["nama"],
-         'after': [f"NIP. {kpb['nip']}"]},
+         # Non-ASN: baris NIP/NIK tidak dicetak (privasi)
+         'after': baris_identitas_ttd(kpb['nip'], "NIP. ....................",
+                                      kpb.get("status_kepegawaian"))},
     ], doc.width))
 
     footer = _page_footer_factory("Nota Dinas Persediaan")
@@ -464,11 +467,12 @@ async def opname_baof_pdf(
     elements.append(Spacer(1, 12 * rl_mm))
     _kpb = await _kpb_signer(settings)
     _kpb_nama = _kpb["nama"] if _kpb["nama"] != "-" else '...........................'
-    _kpb_nip = _kpb["nip"] if _kpb["nip"] != "-" else '....................'
     elements.extend(_signature_block([
         {'pre': [''], 'header': 'Petugas Penghitung,', 'nama': '...........................', 'after': ['NIP. ....................']},
         {'pre': [''], 'header': 'Saksi,', 'nama': '...........................', 'after': ['NIP. ....................']},
-        {'pre': [''], 'header': 'Mengetahui,', 'role': 'Kuasa Pengguna Barang,', 'nama': _kpb_nama, 'after': [f"NIP. {_kpb_nip}"]},
+        {'pre': [''], 'header': 'Mengetahui,', 'role': 'Kuasa Pengguna Barang,', 'nama': _kpb_nama,
+         'after': baris_identitas_ttd(_kpb["nip"], "NIP. ....................",
+                                      _kpb.get("status_kepegawaian"))},
     ], doc.width))
     footer = _page_footer_factory("Berita Acara Opname Fisik Persediaan")
     doc.build(elements, onFirstPage=footer, onLaterPages=footer)
@@ -623,7 +627,9 @@ async def laporan_posisi_pdf(gudang: str = "",
         {'pre': ['.................., .......................'],
          'header': 'Kuasa Pengguna Barang,',
          'nama': kpb["nama"],
-         'after': [f"NIP. {kpb['nip']}"]},
+         # Non-ASN: baris NIP/NIK tidak dicetak (privasi)
+         'after': baris_identitas_ttd(kpb['nip'], "NIP. ....................",
+                                      kpb.get("status_kepegawaian"))},
     ], doc.width))
     footer = _page_footer_factory("Laporan Posisi Persediaan")
     doc.build(elements, onFirstPage=footer, onLaterPages=footer)
@@ -713,7 +719,9 @@ async def laporan_mutasi_pdf(
         {'pre': ['.................., .......................'],
          'header': 'Kuasa Pengguna Barang,',
          'nama': kpb["nama"],
-         'after': [f"NIP. {kpb['nip']}"]},
+         # Non-ASN: baris NIP/NIK tidak dicetak (privasi)
+         'after': baris_identitas_ttd(kpb['nip'], "NIP. ....................",
+                                      kpb.get("status_kepegawaian"))},
     ], doc.width))
     footer = _page_footer_factory("Laporan Mutasi Persediaan")
     doc.build(elements, onFirstPage=footer, onLaterPages=footer)
@@ -1001,18 +1009,24 @@ async def lpb_pdf(lpb_id: str,
     kpb = await resolve_penandatangan_kpb(settings, per_iso=lpb.get("tanggal"))
     sig = st['Signature']
 
-    def kolom_ttd(judul, nama, nip):
-        return [Paragraph(judul, sig), Spacer(1, 15 * rl_mm),
-                Paragraph(f"<b><u>{nama or '……………………………'}</u></b>", sig),
-                Paragraph(f"NIP. {nip or '……………………'}", sig)]
+    def kolom_ttd(judul, nama, nip, status_kepegawaian=""):
+        # Non-ASN: baris NIP/NIK tidak dicetak (privasi)
+        baris = baris_identitas_ttd(nip, "NIP. ……………………", status_kepegawaian)
+        kolom = [Paragraph(judul, sig), Spacer(1, 15 * rl_mm),
+                 Paragraph(f"<b><u>{nama or '……………………………'}</u></b>", sig)]
+        kolom.extend(Paragraph(b, sig) for b in baris)
+        return kolom
 
     ttd = Table([[
         kolom_ttd("Dibuat oleh:<br/>Pengurus Barang,",
-                  (pengurus or {}).get("nama"), (pengurus or {}).get("nip")),
+                  (pengurus or {}).get("nama"), (pengurus or {}).get("nip"),
+                  (pengurus or {}).get("status_kepegawaian")),
         kolom_ttd("Diperiksa oleh:" + (f"<br/>{(pemeriksa or {}).get('jabatan')}," if (pemeriksa or {}).get('jabatan') else ""),
-                  (pemeriksa or {}).get("nama"), (pemeriksa or {}).get("nip")),
+                  (pemeriksa or {}).get("nama"), (pemeriksa or {}).get("nip"),
+                  (pemeriksa or {}).get("status_kepegawaian")),
         kolom_ttd("Disetujui oleh:<br/>Kuasa Pengguna Barang,",
-                  (kpb or {}).get("nama"), (kpb or {}).get("nip")),
+                  (kpb or {}).get("nama"), (kpb or {}).get("nip"),
+                  (kpb or {}).get("status_kepegawaian")),
     ]], colWidths=[doc.width / 3.0] * 3)
     ttd.setStyle(TableStyle([('VALIGN', (0, 0), (-1, -1), 'TOP')]))
     el.append(ttd)
@@ -1660,7 +1674,10 @@ async def kartu_barang_pdf(item_id: str, _user: dict = Depends(require_user)):
         {'pre': ['.................., .......................'],
          'header': 'Pengurus Barang Persediaan,',
          'nama': str(_pengurus.get("nama") or "").strip() or '...........................',
-         'after': [f"NIP. {str(_pengurus.get('nip') or '').strip() or '....................'}"]},
+         # Non-ASN: baris NIP/NIK tidak dicetak (privasi)
+         'after': baris_identitas_ttd(
+             _pengurus.get("nip"), "NIP. ....................",
+             _pengurus.get("status_kepegawaian"))},
     ], doc.width))
     footer = _page_footer_factory("Kartu Barang Persediaan")
     doc.build(elements, onFirstPage=footer, onLaterPages=footer)

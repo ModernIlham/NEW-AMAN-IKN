@@ -503,9 +503,39 @@ def _info_kegiatan_2kolom(activity, settings, doc_width):
     return t
 
 
+async def _baris_nip_ttd(nip, placeholder="NIP. ...................."):
+    """Baris identitas di bawah nama blok TTD dengan aturan privasi: bila
+    penandatangan ber-status Non-ASN (dicari dari registry pejabat lalu
+    Master Pegawai per NIP) atau nomornya berformat NIK, baris NIP/NIK
+    TIDAK dicetak. Label mengikuti jenis nomor (NIP/NI PPPK/NRP)."""
+    from shared_utils import status_kepegawaian_by_nip
+    from pegawai_utils import baris_identitas_ttd
+    n = str(nip or "").strip()
+    if not n or set(n) <= set(".-_ "):
+        return [placeholder] if placeholder else []
+    return baris_identitas_ttd(n, placeholder, await status_kepegawaian_by_nip(n))
+
+
+async def _peta_status_kepegawaian(nips) -> dict:
+    """{nip: status_kepegawaian} utk sekumpulan NIP — dua query $in; registry
+    pejabat menimpa Master Pegawai. Dipakai blok TTD tim (fungsi sync)."""
+    bersih = {str(n or "").strip() for n in (nips or []) if str(n or "").strip()}
+    bersih = {n for n in bersih if not set(n) <= set(".-_ ")}
+    if not bersih:
+        return {}
+    peta = {}
+    for koleksi in (db.pegawai, db.pejabat):  # pejabat terakhir → menimpa
+        async for d in koleksi.find({"nip": {"$in": list(bersih)}},
+                                    {"_id": 0, "nip": 1, "status_kepegawaian": 1}):
+            if str(d.get("status_kepegawaian") or "").strip():
+                peta[str(d["nip"]).strip()] = str(d["status_kepegawaian"]).strip()
+    return peta
+
+
 def _blok_ttd_tim_kpb(tim, settings, tanggal_iso, ident, doc_width,
                       label_tim="Tim Pelaksana Inventarisasi",
-                      header_mengetahui="Mengetahui,"):
+                      header_mengetahui="Mengetahui,",
+                      status_by_nip=None):
     """Blok tanda tangan BA sesuai kaidah inventarisasi BMN: SELURUH anggota
     tim bertanda tangan (ketua ditandai; berpasangan kiri-kanan per baris,
     tempat/tanggal di kanan atas), lalu penanggung jawab UAKPB / Kuasa
@@ -517,9 +547,11 @@ def _blok_ttd_tim_kpb(tim, settings, tanggal_iso, ident, doc_width,
     from reportlab.platypus import Paragraph, Spacer, Table, TableStyle, KeepTogether
     from reportlab.lib.units import mm as rl_mm
     from xml.sax.saxutils import escape
+    from pegawai_utils import baris_identitas_laporan, baris_identitas_ttd
     st = _get_report_styles()
     sig = st['Signature']
     els = []
+    peta_status = status_by_nip or {}
 
     anggota = [_member_dict(m) for m in (tim or [])]
     if not anggota:
@@ -534,9 +566,13 @@ def _blok_ttd_tim_kpb(tim, settings, tanggal_iso, ident, doc_width,
         for j, m in enumerate(pasangan):
             idx = i + j
             ketua = m.get("is_ketua") if punya_ketua else (idx == 0)
+            nip_m = str(m.get("nip") or "").strip()
             s = {"header": "Ketua Tim," if ketua else "Anggota,",
                  "nama": m.get("nama") or "________________________",
-                 "after": [f"NIP. {m.get('nip') or '........................'}"]}
+                 # Anggota Non-ASN: baris NIP/NIK tidak dicetak (privasi)
+                 "after": baris_identitas_ttd(
+                     nip_m, "NIP. ........................",
+                     peta_status.get(nip_m, ""))}
             if i == 0 and j == len(pasangan) - 1:
                 # tempat/tanggal sekali, di kanan atas area tanda tangan
                 s["pre"] = [_tempat_tanggal_laporan(settings, tanggal_iso)]
@@ -545,13 +581,17 @@ def _blok_ttd_tim_kpb(tim, settings, tanggal_iso, ident, doc_width,
         els.append(Spacer(1, 5 * rl_mm))
 
     # Penanggung jawab UAKPB (KPB) mengesahkan — tengah bawah.
+    nip_kpb = str(ident.get('kasatker_nip') or '').strip()
+    baris_kpb = (baris_identitas_laporan(nip_kpb, peta_status.get(nip_kpb, ""))
+                 if nip_kpb else "NIP. ")
     kolom = [
         Paragraph(header_mengetahui, sig),
         Paragraph(escape(str(ident.get("kasatker_jabatan") or "Kuasa Pengguna Barang,")), sig),
         Spacer(1, 15 * rl_mm),
         Paragraph(f"<b><u>{escape(str(ident.get('kasatker_nama') or ''))}</u></b>", sig),
-        Paragraph(f"NIP. {escape(str(ident.get('kasatker_nip') or ''))}", sig),
     ]
+    if baris_kpb:
+        kolom.append(Paragraph(escape(baris_kpb), sig))
     t = Table([["", kolom, ""]],
               colWidths=[doc_width * 0.3, doc_width * 0.4, doc_width * 0.3])
     t.setStyle(TableStyle([
@@ -1053,9 +1093,12 @@ async def generate_berita_acara_pdf(activity_id: str, _user: dict = Depends(requ
 
     # Kaidah BA penelitian: SELURUH anggota tim peneliti bertanda tangan
     # (ketua ditandai), lalu Kuasa Pengguna Barang mengetahui di tengah bawah.
+    peta_status = await _peta_status_kepegawaian(
+        [m.get("nip") for m in (tim or []) if isinstance(m, dict)]
+        + [ident.get("kasatker_nip")])
     elements.extend(_blok_ttd_tim_kpb(
         tim, settings, tanggal_ba, ident, doc.width,
-        label_tim="Tim Peneliti"))
+        label_tim="Tim Peneliti", status_by_nip=peta_status))
     elements.extend(_blok_tembusan(settings, activity))
 
     footer = _page_footer_factory("Berita Acara Tim Internal Penelitian BMN Tidak Ditemukan")
@@ -1181,7 +1224,7 @@ async def generate_sptjm_pdf(activity_id: str, _user: dict = Depends(require_use
         {'pre': [f'Dibuat di: {tempat}', f'Pada tanggal: {tgl}'],
          'header': 'Yang membuat pernyataan,',
          'nama': kasatker,
-         'after': [f'NIP. {nip}']},
+         'after': await _baris_nip_ttd(nip)},
     ], doc.width))
 
     footer = _page_footer_factory("Surat Pernyataan Tanggung Jawab Mutlak (SPTJM)")
@@ -1313,7 +1356,7 @@ async def generate_surat_koreksi_pdf(activity_id: str, _user: dict = Depends(req
         {'pre': [f'Dibuat di: {tempat}', f'Pada tanggal: {tgl}'],
          'header': 'Yang membuat pernyataan,',
          'nama': kasatker,
-         'after': [f'NIP. {nip}']},
+         'after': await _baris_nip_ttd(nip)},
     ], doc.width))
 
     footer = _page_footer_factory("Surat Pernyataan Koreksi Pencatatan Barang Milik Negara")
@@ -1532,7 +1575,7 @@ async def generate_dbhi_pdf(activity_id: str, dbhi_type: str, _user: dict = Depe
         {'pre': [_tempat_tanggal_laporan(settings)],
          'header': 'Kuasa Pengguna Barang,',
          'nama': kasatker_nama,
-         'after': [f'NIP. {kasatker_nip}']},
+         'after': await _baris_nip_ttd(kasatker_nip)},
     ], doc.width))
 
     footer = _page_footer_factory(dbhi_config["title"].replace("\n", " - "))
@@ -1658,7 +1701,7 @@ async def generate_rhi_pdf(activity_id: str, _user: dict = Depends(require_user_
         {'pre': [_tempat_tanggal_laporan(settings)],
          'header': 'Kuasa Pengguna Barang,',
          'nama': kasatker_nama,
-         'after': [f'NIP. {kasatker_nip}']},
+         'after': await _baris_nip_ttd(kasatker_nip)},
     ], doc.width))
 
     footer = _page_footer_factory("Rekapitulasi Hasil Inventarisasi Barang Milik Negara (RHI)")
@@ -1787,7 +1830,7 @@ async def generate_dbkp_pdf(activity_id: str, _user: dict = Depends(require_user
         {'pre': [_tempat_tanggal_laporan(settings)],
          'header': 'Kuasa Pengguna Barang,',
          'nama': ident["kasatker_nama"],
-         'after': [f'NIP. {ident["kasatker_nip"]}']},
+         'after': await _baris_nip_ttd(ident["kasatker_nip"])},
     ], doc.width))
 
     footer = _page_footer_factory("Daftar Barang Kuasa Pengguna (DBKP) per Golongan")
@@ -1996,7 +2039,7 @@ async def generate_posisi_bmn_pdf(_user: dict = Depends(require_user_or_query_to
         {'pre': [_tempat_tanggal_laporan(settings, today_iso)],
          'header': 'Kuasa Pengguna Barang,',
          'nama': ttd["nama"],
-         'after': [f"NIP. {ttd['nip']}"]},
+         'after': await _baris_nip_ttd(ttd['nip'])},
     ], doc.width))
 
     footer = _page_footer_factory("Laporan Posisi BMN di Neraca")
@@ -2076,7 +2119,7 @@ async def generate_dbr_pdf(_user: dict = Depends(require_user_or_query_token)):
         {'pre': [_tempat_tanggal_laporan(settings, today_iso)],
          'header': 'Kuasa Pengguna Barang,',
          'nama': ttd["nama"],
-         'after': [f"NIP. {ttd['nip']}"]},
+         'after': await _baris_nip_ttd(ttd['nip'])},
     ], doc.width))
     footer = _page_footer_factory("Daftar Barang Ruangan (DBR)")
     doc.build(elements, onFirstPage=footer, onLaterPages=footer)
@@ -2161,7 +2204,7 @@ async def generate_kir_pdf(_user: dict = Depends(require_user_or_query_token)):
             {'pre': [_tempat_tanggal_laporan(settings)],
              'header': 'Kuasa Pengguna Barang,',
              'nama': ttd_kpb["nama"],
-             'after': [f"NIP. {ttd_kpb['nip']}"]},
+             'after': await _baris_nip_ttd(ttd_kpb['nip'])},
         ], doc.width))
         if idx < len(rows) - 1:
             elements.append(PageBreak())
@@ -2296,7 +2339,7 @@ async def generate_penyusutan_pdf(
         {'pre': [_tempat_tanggal_laporan(settings, per_tanggal)],
          'header': 'Kuasa Pengguna Barang,',
          'nama': ttd["nama"],
-         'after': [f"NIP. {ttd['nip']}"]},
+         'after': await _baris_nip_ttd(ttd['nip'])},
     ], doc.width))
 
     footer = _page_footer_factory("Laporan Penyusutan BMN")
@@ -2444,7 +2487,7 @@ async def generate_lbkp_pdf(
         {'pre': [_tempat_tanggal_laporan(settings, sampai)],
          'header': 'Kuasa Pengguna Barang,',
          'nama': ttd["nama"],
-         'after': [f"NIP. {ttd['nip']}"]},
+         'after': await _baris_nip_ttd(ttd['nip'])},
     ], doc.width))
     footer = _page_footer_factory("LBKP per Golongan")
     doc.build(elements, onFirstPage=footer, onLaterPages=footer)
@@ -2592,7 +2635,7 @@ async def generate_lkb_pdf(_user: dict = Depends(require_user_or_query_token)):
          'header': 'Penanggung Jawab UAKPB',
          'role': 'Kuasa Pengguna Barang,',
          'nama': ttd["nama"],
-         'after': [f"NIP. {ttd['nip']}"]},
+         'after': await _baris_nip_ttd(ttd['nip'])},
     ], doc.width))
     footer = _page_footer_factory("Laporan Kondisi Barang (LKB)")
     doc.build(elements, onFirstPage=footer, onLaterPages=footer)
@@ -2922,7 +2965,7 @@ async def generate_calbmn_pdf(
         {'pre': [_tempat_tanggal_laporan(settings, sampai)],
          'header': 'Kuasa Pengguna Barang,',
          'nama': ttd["nama"],
-         'after': [f"NIP. {ttd['nip']}"]},
+         'after': await _baris_nip_ttd(ttd['nip'])},
     ], doc.width))
     footer = _page_footer_factory("CaLBMN — Bahan Penyusunan (Pra-isi)")
     doc.build(elements, onFirstPage=footer, onLaterPages=footer)
@@ -3250,10 +3293,14 @@ async def generate_bahi_pdf(activity_id: str, _user: dict = Depends(require_user
     # Kaidah BAHI: ditandatangani SELURUH tim pelaksana inventarisasi
     # (minimal 3 orang, ketua ditandai) dan disahkan/diketahui penanggung
     # jawab UAKPB (Kuasa Pengguna Barang) — bukan hanya ketua tim.
+    peta_status = await _peta_status_kepegawaian(
+        [m.get("nip") for m in (tim or []) if isinstance(m, dict)]
+        + [ident.get("kasatker_nip")])
     elements.extend(_blok_ttd_tim_kpb(
         tim, settings, tanggal_ba, ident, doc.width,
         label_tim="Tim Pelaksana Inventarisasi",
-        header_mengetahui="Mengetahui/Mengesahkan,"))
+        header_mengetahui="Mengetahui/Mengesahkan,",
+        status_by_nip=peta_status))
     elements.extend(_blok_tembusan(settings, activity))
 
     footer = _page_footer_factory("Berita Acara Hasil Inventarisasi Barang Milik Negara (BAHI)")
@@ -3338,7 +3385,8 @@ async def generate_sp_hasil_pdf(activity_id: str, _user: dict = Depends(require_
         {'pre': [_tempat_tanggal_laporan(settings)],
          'header': 'Yang membuat pernyataan,',
          'nama': kasatker_nama,
-         'after': [f'{kasatker_jabatan}', f'NIP. {kasatker_nip}']},
+         'after': [f'{kasatker_jabatan}',
+                   *await _baris_nip_ttd(kasatker_nip)]},
     ], doc.width))
 
     footer = _page_footer_factory("Surat Pernyataan Hasil Inventarisasi Barang Milik Negara")
@@ -3427,7 +3475,8 @@ async def generate_sp_pelaksanaan_pdf(activity_id: str, _user: dict = Depends(re
         {'pre': [_tempat_tanggal_laporan(settings)],
          'header': 'Yang membuat pernyataan,',
          'nama': kasatker_nama,
-         'after': [f'{kasatker_jabatan}', f'NIP. {kasatker_nip}']},
+         'after': [f'{kasatker_jabatan}',
+                   *await _baris_nip_ttd(kasatker_nip)]},
     ], doc.width))
 
     footer = _page_footer_factory("Surat Pernyataan Pelaksanaan Inventarisasi Barang Milik Negara")

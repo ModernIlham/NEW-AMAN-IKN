@@ -233,6 +233,21 @@ def test_baris_identitas_ttd_dan_label_laporan():
     assert baris_identitas_laporan("195808181984041001", "non_asn") == ""
 
 
+def test_baris_identitas_ttd_status_non_asn():
+    """Aturan blok TTD: penandatangan Non-ASN TIDAK dicetak NIP/NIK-nya
+    apa pun format nomornya; placeholder "-" diperlakukan kosong."""
+    from pegawai_utils import baris_identitas_ttd
+    # Non-ASN dengan nomor apa pun (NIP-like, NIK, bebas) → tanpa baris
+    assert baris_identitas_ttd("195808181984041001", "NIP. ....", "non_asn") == []
+    assert baris_identitas_ttd("3506042503900001", "NIP. ....", "non_asn") == []
+    assert baris_identitas_ttd("K-00123", "NIP. ....", "non_asn") == []
+    # Status ASN → tetap dicetak dengan label yang tepat
+    assert baris_identitas_ttd("195808181984041001", "", "pns") == ["NIP. 195808181984041001"]
+    assert baris_identitas_ttd("80101234", "", "tni") == ["NRP. 80101234"]
+    # "-" (placeholder era lama) = kosong → placeholder titik-titik
+    assert baris_identitas_ttd("-", "NIP. ....") == ["NIP. ...."]
+
+
 def test_info_masa_pegawai_bup():
     """BUP per UU 20/2023 (JPT 60, fungsional ahli utama 65) + TNI/POLRI +
     kontrak Non-ASN; data kurang → None (tidak menebak)."""

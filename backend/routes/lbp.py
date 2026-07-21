@@ -21,6 +21,7 @@ from fastapi import APIRouter, Depends, Response
 
 from auth_utils import require_user
 from db import db
+from pegawai_utils import baris_identitas_laporan
 from lbp_utils import (DASAR_HUKUM_LBP, UPAYA_PERBAIKAN_LBP,
                        baris_akumulasi_per_akun, baris_mutasi_golongan,
                        baris_perbandingan_lb_lk, baris_posisi_per_akun,
@@ -353,8 +354,10 @@ async def generate_lbp_docx(tahun: int, semester: int = 0,
           f"{_fmt_tanggal_id(per_iso)}".strip(), center=False)
     _p(d, "Kuasa Pengguna Barang,", space_after=40)
     _p(d, ttd.get("nama") or "………………………………", bold=True, space_after=0)
-    if ttd.get("nip"):
-        _p(d, f"NIP. {ttd['nip']}", space_after=0)
+    baris_nip_kpb = baris_identitas_laporan(ttd.get("nip"),
+                                            ttd.get("status_kepegawaian"))
+    if baris_nip_kpb:
+        _p(d, baris_nip_kpb, space_after=0)
     d.add_page_break()
 
     _footer_halaman(d)
@@ -378,8 +381,10 @@ async def generate_lbp_docx(tahun: int, semester: int = 0,
     d.add_paragraph()
     _p(d, "Kuasa Pengguna Barang,", space_after=40)
     _p(d, ttd.get("nama") or "………………………………", bold=True, space_after=0)
-    if ttd.get("nip"):
-        _p(d, f"NIP. {ttd['nip']}", space_after=0)
+    baris_nip_kpb = baris_identitas_laporan(ttd.get("nip"),
+                                            ttd.get("status_kepegawaian"))
+    if baris_nip_kpb:
+        _p(d, baris_nip_kpb, space_after=0)
     d.add_page_break()
 
     # BAB I — OVERVIEW
@@ -768,8 +773,10 @@ async def generate_lbp_docx(tahun: int, semester: int = 0,
     _p(d, f"Posisi per {_fmt_tanggal_id(per_iso)}")
     _p(d, "Kuasa Pengguna Barang,", space_after=40)
     _p(d, ttd.get("nama") or "………………………………", bold=True, space_after=0)
-    if ttd.get("nip"):
-        _p(d, f"NIP. {ttd['nip']}", space_after=0)
+    baris_nip_kpb = baris_identitas_laporan(ttd.get("nip"),
+                                            ttd.get("status_kepegawaian"))
+    if baris_nip_kpb:
+        _p(d, baris_nip_kpb, space_after=0)
 
     buf = io.BytesIO()
     d.save(buf)

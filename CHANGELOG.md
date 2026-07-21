@@ -48,6 +48,28 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#485] Penandatangan Non-ASN tanpa baris NIP/NIK di seluruh blok TTD — 2026-07-21
+
+- **Aturan baru (permintaan pemilik)**: bila penandatangan teridentifikasi
+  **Non-ASN**, baris NIP/NIK di bawah namanya **tidak dicetak** — berlaku
+  di SEMUA dokumen bertanda tangan: laporan inventarisasi (SPTJM, Surat
+  Koreksi, DBHI, RHI, DBKP, SP Hasil/Pelaksanaan), BA & BAHI (blok tim +
+  KPB), laporan pembukuan (Posisi BMN, DBR, KIR, Penyusutan, LBKP, LKB,
+  CaLBMN), LBP (DOCX), semua PDF persediaan (Nota Dinas, BA Opname,
+  Posisi, Mutasi, LPB 3 kolom, Kartu Barang), BAST (kedua pihak + KPB),
+  Daftar Barang Digunakan, serta dokumen lintas modul via helper KPB
+  bersama (DHPB pemeliharaan, KIB, BA pemusnahan, laporan wasdal).
+- **TTD elektronik** ikut: stempel pembubuhan pada dokumen dan Lembar
+  Pengesahan tidak lagi mencetak NIP bila penanda tangan Non-ASN (status
+  dicari otomatis dari registry pejabat / Master Pegawai per NIP).
+- Mekanisme satu titik: `penandatangan_kpb` kini MEMBAWA
+  `status_kepegawaian` dari registry pejabat; resolver bersama melengkapi
+  status via lookup master bila fallback setelan; formatter
+  `baris_identitas_ttd` menerima status (Non-ASN/NIK → baris ditiadakan,
+  TNI/POLRI → label NRP). Anggota tim BA/BAHI dicek massal via peta status.
+- Verifikasi: 610 unit test lolos (2 test baru) + smoke render 5 laporan
+  dengan FakeDB — NIP PNS tetap tampil, NIP/NIK Non-ASN tertahan.
+
 ## [#484] LHI Lengkap utuh kembali + batch ZIP mencakup semua laporan — 2026-07-21
 
 - **Bug (regresi guard satker)**: sejak guard akses per-satker ditambahkan

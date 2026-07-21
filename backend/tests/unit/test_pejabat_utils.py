@@ -119,3 +119,15 @@ def test_penandatangan_kpb_registry_vs_fallback():
     # Registry kosong & setelan kosong → tetap aman ("-")
     ttd = penandatangan_kpb({}, [], "2026-07-16")
     assert ttd["nama"] == "-" and ttd["jabatan"] == "Kuasa Pengguna Barang"
+
+
+def test_penandatangan_kpb_membawa_status_kepegawaian():
+    """Status kepegawaian ikut dibawa (aturan blok TTD: Non-ASN tidak
+    dicetak NIP/NIK); fallback setelan tidak punya status → ""."""
+    pj = _pj("KPB NonASN", ["kuasa_pengguna_barang"], "2025-01-01", "")
+    pj["status_kepegawaian"] = "non_asn"
+    ttd = penandatangan_kpb({}, [pj], "2026-07-16")
+    assert ttd["status_kepegawaian"] == "non_asn"
+    ttd = penandatangan_kpb({"kasatker_nama": "X", "kasatker_nip": "1"},
+                            [], "2026-07-16")
+    assert ttd["status_kepegawaian"] == ""
