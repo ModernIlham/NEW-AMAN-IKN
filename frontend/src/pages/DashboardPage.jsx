@@ -1354,10 +1354,10 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
         title: "Batalkan Aset", description: "Aset ini belum tersimpan ke server. Batalkan penambahannya?",
         confirmLabel: "Batalkan", variant: "danger",
       });
-      if (!ok) return;
+      if (!ok) return false;
       dismissSync(id);
       toast.success("Dibatalkan");
-      return;
+      return true;
     }
     const ok = await confirm({
       title: "Hapus Aset",
@@ -1365,13 +1365,13 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       confirmLabel: "Hapus",
       variant: "danger",
     });
-    if (!ok) return;
+    if (!ok) return false;
     // Hapus butuh koneksi (belum ada antrean hapus offline). Tanpa guard ini,
     // saat offline axios.delete gagal → refetch menyajikan snapshot yang masih
     // berisi baris tadi → baris "muncul lagi" & hapus hilang diam-diam.
     if (!isOnlineRef.current) {
       toast.error("Hapus aset memerlukan koneksi internet. Coba lagi saat online.");
-      return;
+      return false;
     }
     setIsDeleting(id);
     // Optimistis: baris langsung HILANG dari layar (tak perlu tunggu server /
@@ -1385,9 +1385,11 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       if (activity?.id) removeSnapshotAsset(activity.id, id);
       toast.success("Dihapus");
       refreshDataRef.current(); // rekonsiliasi (doFetch meng-clamp halaman kosong)
+      return true; // pemanggil (mis. popup peta) perlu tahu hapus benar terjadi
     } catch (err) {
       toast.error(getApiError(err, "Gagal hapus"));
       refreshDataRef.current(); // rollback: muat ulang agar baris kembali bila hapus gagal
+      return false;
     } finally { setIsDeleting(null); }
   }, [confirm, activity?.id, dismissSync]);
 
@@ -1703,6 +1705,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
                   onClose={() => setMapOpen(false)}
                   canEdit={perms.canEdit}
                   onEditAsset={perms.canEdit ? handleEdit : undefined}
+                  onDeleteAsset={perms.canEdit ? handleDelete : undefined}
                   onSaveCoords={handleMapCoordsSave}
                   buildParams={buildMapParams}
                   clientFilter={mapClientFilter}

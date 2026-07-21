@@ -66,7 +66,26 @@ function rowHasPhoto(row) {
 // Pin berwarna via divIcon — menghindari masalah path ikon default leaflet
 // di bundler CRA, sekaligus memberi warna per status inventarisasi.
 // Border hijau = data pengguna lengkap; badge kamera = aset punya foto.
-function markerIcon(color, hasPhoto = false, complete = false) {
+// dihapus=true → pin abu-abu diberi TANDA SILANG merah (aset telah dihapus
+// lewat tombol hapus di popup — pin dibiarkan tampil sebagai jejak visual).
+function markerIcon(color, hasPhoto = false, complete = false, dihapus = false) {
+  if (dihapus) {
+    return L.divIcon({
+      className: "",
+      html: `<div style="position:relative;width:22px;height:22px;opacity:.85">
+        <div style="width:22px;height:22px;border-radius:50% 50% 50% 0;background:#94a3b8;transform:rotate(-45deg);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.45)"></div>
+        <svg width="26" height="26" viewBox="0 0 26 26" style="position:absolute;top:-4px;left:-2px;pointer-events:none">
+          <line x1="4" y1="4" x2="22" y2="22" stroke="#fff" stroke-width="6" stroke-linecap="round"/>
+          <line x1="22" y1="4" x2="4" y2="22" stroke="#fff" stroke-width="6" stroke-linecap="round"/>
+          <line x1="4" y1="4" x2="22" y2="22" stroke="#dc2626" stroke-width="3.2" stroke-linecap="round"/>
+          <line x1="22" y1="4" x2="4" y2="22" stroke="#dc2626" stroke-width="3.2" stroke-linecap="round"/>
+        </svg>
+      </div>`,
+      iconSize: [22, 22],
+      iconAnchor: [11, 22],
+      popupAnchor: [0, -20],
+    });
+  }
   const border = complete ? "2.5px solid #16a34a" : "2px solid #fff";
   const ring = complete ? "box-shadow:0 0 0 1.5px #16a34a, 0 1px 4px rgba(0,0,0,.45)" : "box-shadow:0 1px 4px rgba(0,0,0,.45)";
   const badge = hasPhoto
@@ -152,6 +171,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
   onClose,
   canEdit = false,
   onEditAsset,        // (row) => void — buka form edit (peta TETAP terbuka)
+  onDeleteAsset,      // async (id) => bool — hapus aset (konfirmasi di pemanggil)
   onSaveCoords,       // (row, lat, lng) => void — simpan koordinat (throw = tolak)
   buildParams,        // () => URLSearchParams — filter aktif dashboard (tanpa page)
   clientFilter,       // (rows) => rows — filter yang sama utk data snapshot offline
@@ -182,10 +202,12 @@ const AssetMapFullView = memo(function AssetMapFullView({
   // Callback disimpan di ref agar marker tidak dibangun ulang hanya karena
   // identitas arrow function induk berubah tiap render.
   const onEditRef = useRef(onEditAsset);
+  const onDeleteRef = useRef(onDeleteAsset);
   const onSaveRef = useRef(onSaveCoords);
+  const deletedIdsRef = useRef(new Set()); // id aset terhapus → pin diberi tanda silang
   const onCloseRef = useRef(onClose);
   const onQuickAddRef = useRef(onQuickAdd);
-  useEffect(() => { onEditRef.current = onEditAsset; onSaveRef.current = onSaveCoords; onCloseRef.current = onClose; onQuickAddRef.current = onQuickAdd; });
+  useEffect(() => { onEditRef.current = onEditAsset; onDeleteRef.current = onDeleteAsset; onSaveRef.current = onSaveCoords; onCloseRef.current = onClose; onQuickAddRef.current = onQuickAdd; });
   onPhotoClickRef.current = (row) => setLightboxRow(row);
 
   // Back HP menutup lembar peta (kembali ke baris data), bukan keluar app.
@@ -594,6 +616,16 @@ const AssetMapFullView = memo(function AssetMapFullView({
   // berwarna, baris info berlabel, koordinat, tombol Edit selebar popup.
   const buildPopupEl = useCallback((entry) => {
     const row = entry.row;
+    // Aset sudah dihapus (pin bersilang) → popup ringkas tanpa aksi.
+    if (entry.deleted) {
+      const elHapus = document.createElement("div");
+      elHapus.style.cssText = "width:200px;line-height:1.4";
+      elHapus.innerHTML = `
+        <div style="font-weight:700;font-size:12.5px;color:#0f172a">${esc(row.asset_name || "-")}</div>
+        <div style="font-size:10.5px;color:#64748b;margin-top:2px">${esc(row.asset_code || "-")}${row.NUP ? ` &bull; NUP ${esc(row.NUP)}` : ""}</div>
+        <div style="margin-top:7px;padding:6px 8px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;color:#b91c1c;font-size:11px;font-weight:600">Aset ini telah dihapus.</div>`;
+      return elHapus;
+    }
     const lat = parseCoord(row.koordinat_latitude);
     const lng = parseCoord(row.koordinat_longitude);
     const photoCount = Number(row.photo_count) || 0;
@@ -687,15 +719,47 @@ const AssetMapFullView = memo(function AssetMapFullView({
     coords.style.cssText = "font-family:ui-monospace,SFMono-Regular,monospace;font-size:9.5px;color:#94a3b8;margin-top:6px";
     coords.textContent = `${lat?.toFixed(6)}, ${lng?.toFixed(6)}`;
     el.appendChild(coords);
-    if (onEditRef.current) {
-      const btn = document.createElement("button");
-      btn.textContent = "Edit Aset";
-      btn.style.cssText = "display:block;width:100%;margin-top:7px;padding:7px 0;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:11.5px;font-weight:700;cursor:pointer";
-      btn.addEventListener("click", () => {
-        entry.marker.closePopup();
-        onEditRef.current?.(entry.row); // peta tetap terbuka — form edit muncul di atas/sampingnya
-      });
-      el.appendChild(btn);
+    if (onEditRef.current || onDeleteRef.current) {
+      const aksi = document.createElement("div");
+      aksi.style.cssText = "display:flex;gap:6px;margin-top:7px";
+      if (onEditRef.current) {
+        const btn = document.createElement("button");
+        btn.textContent = "Edit Aset";
+        btn.style.cssText = "display:block;flex:1;min-width:0;padding:7px 0;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:11.5px;font-weight:700;cursor:pointer";
+        btn.addEventListener("click", () => {
+          entry.marker.closePopup();
+          onEditRef.current?.(entry.row); // peta tetap terbuka — form edit muncul di atas/sampingnya
+        });
+        aksi.appendChild(btn);
+      }
+      if (onDeleteRef.current) {
+        // Ikon hapus: langsung menghapus aset (konfirmasi + guard online di
+        // handler dashboard yang sama dengan daftar). Sukses → pin diberi
+        // tanda silang, popup ditutup.
+        const del = document.createElement("button");
+        del.title = "Hapus aset ini";
+        del.setAttribute("data-testid", "map-delete-asset");
+        del.setAttribute("aria-label", "Hapus aset");
+        del.style.cssText = "flex:0 0 44px;display:flex;align-items:center;justify-content:center;padding:7px 0;background:#fee2e2;color:#dc2626;border:1px solid #fecaca;border-radius:8px;cursor:pointer";
+        del.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>`;
+        del.addEventListener("click", async () => {
+          if (del.disabled) return;
+          del.disabled = true;
+          try {
+            const ok = await onDeleteRef.current?.(entry.row.id);
+            if (!ok) return; // batal / offline / gagal — toast dari handler
+            entry.deleted = true;
+            deletedIdsRef.current.add(entry.row.id);
+            entry.iconKey = "dihapus";
+            entry.marker.setIcon(markerIcon("", false, false, true));
+            entry.marker.dragging?.disable?.();
+            entry.draggable = false;
+            entry.marker.closePopup();
+          } finally { del.disabled = false; }
+        });
+        aksi.appendChild(del);
+      }
+      el.appendChild(aksi);
     }
     return el;
   }, []);
@@ -713,6 +777,12 @@ const AssetMapFullView = memo(function AssetMapFullView({
       const lat = parseCoord(row.koordinat_latitude);
       const lng = parseCoord(row.koordinat_longitude);
       if (lat === null || lng === null) continue;
+      // Aset yang dihapus lewat popup: pin bersilang dipertahankan apa
+      // adanya (jangan di-reset ikon/drag-nya oleh sinkronisasi data).
+      if (deletedIdsRef.current.has(row.id)) {
+        seen.add(row.id);
+        continue;
+      }
       seen.add(row.id);
       bounds.push([lat, lng]);
       const color = STATUS_COLORS[row.inventory_status] || STATUS_COLORS["Belum Diinventarisasi"];
@@ -769,9 +839,12 @@ const AssetMapFullView = memo(function AssetMapFullView({
       markersRef.current.set(row.id, entry);
     }
 
-    // Buang pin milik baris yang tak tampil (filter kelompok/filter berubah)
+    // Buang pin milik baris yang tak tampil (filter kelompok/filter berubah).
+    // KECUALI pin bersilang (aset baru dihapus): dibiarkan tampil sebagai
+    // jejak visual sampai peta ditutup, meski barisnya hilang dari data.
     for (const [id, entry] of Array.from(markersRef.current.entries())) {
       if (!seen.has(id)) {
+        if (deletedIdsRef.current.has(id)) continue;
         layer.removeLayer(entry.marker); // dari cluster group (bukan .remove())
         markersRef.current.delete(id);
       }

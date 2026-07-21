@@ -48,6 +48,21 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#488] Peta Aset — tombol hapus di popup marker + pin bersilang setelah dihapus — 2026-07-21
+
+- Popup marker di Peta Aset kini punya **ikon hapus** (tong sampah merah,
+  di samping tombol Edit Aset) yang langsung menghapus data aset tersebut
+  — memakai alur hapus yang SAMA dengan daftar (dialog konfirmasi, wajib
+  online, pembersihan snapshot offline, sinkron daftar/galeri otomatis).
+- Setelah terhapus, **pin TIDAK hilang melainkan diberi TANDA SILANG
+  merah** (pin abu-abu + X) sebagai jejak visual di peta; drag pin
+  dimatikan dan popup-nya berubah menjadi keterangan ringkas "Aset ini
+  telah dihapus". Pin bersilang bertahan meski data peta dimuat ulang, dan
+  hilang wajar saat peta ditutup/dibuka kembali (asetnya memang sudah
+  tiada).
+- Tombol hapus hanya tampil untuk pengguna ber-izin edit; gagal/batal
+  hapus tidak mengubah pin.
+
 ## [#487] Dokumen pendukung baru: Daftar Pemegang Aset per kegiatan — 2026-07-21
 
 - Laporan PDF baru di **Dokumen Pendukung Lainnya**: **Daftar Pemegang
