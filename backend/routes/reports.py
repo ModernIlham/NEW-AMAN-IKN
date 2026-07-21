@@ -130,9 +130,14 @@ def _kop_surat_flowables(settings, doc_width):
 
     flowables = []
     if logo_img is not None and text_flow:
-        # Kolom kosong kanan selebar logo agar teks tetap di tengah halaman
-        side_w = max(logo_img.drawWidth + 2*rl_mm, 2.2*rl_cm)
-        kop_table = Table([[logo_img, text_flow, ""]], colWidths=[side_w, doc_width - 2*side_w, side_w])
+        # Logo di kiri, blok teks instansi DIPUSATKAN pada ruang di kanan logo
+        # (bukan pada seluruh lebar halaman). Dengan begitu setiap baris —
+        # termasuk baris 1 (nama instansi) yang paling panjang — berbagi satu
+        # sumbu tengah yang sama dan tidak menjorok mendekati logo. side_w
+        # dibatasi agar kolom teks tak pernah kolaps (logo lebar → tak crash).
+        side_w = max(logo_img.drawWidth + 3*rl_mm, 2.0*rl_cm)
+        side_w = min(side_w, doc_width * 0.30)
+        kop_table = Table([[logo_img, text_flow]], colWidths=[side_w, doc_width - side_w])
         kop_table.setStyle(TableStyle([
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('ALIGN', (0, 0), (0, 0), 'CENTER'),
