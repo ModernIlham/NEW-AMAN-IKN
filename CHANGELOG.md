@@ -48,6 +48,19 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#514] Perbaikan: basemap peta hilang saat Mode Seleksi aktif — 2026-07-22
+
+- Saat Mode Seleksi (atau "Pilih Area") dinyalakan, **bilah seleksi muncul di
+  atas peta** sehingga kanvas Leaflet bergeser & lebarnya berubah (scrollbar).
+  Tanpa `invalidateSize`, ukuran ubin jadi basi → **basemap (peta dasar) hilang**.
+- Kini peta **menghitung ulang ukuran** (`invalidateSize`) tiap kali Mode
+  Seleksi / Pilih Area berubah — setelah tata letak mengendap (rAF + fallback
+  timeout) — sehingga basemap tetap tampil.
+
+Verifikasi: `yarn lint` bersih; `CI=false yarn build` sukses. (Frontend-only.)
+
+---
+
 ## [#513] Peta Aset — Mode Seleksi marker → terhubung ke daftar & Edit Massal — 2026-07-22
 
 Menambahkan **seleksi marker di peta** yang menyatu dengan seleksi daftar,
