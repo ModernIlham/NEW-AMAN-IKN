@@ -48,6 +48,46 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#529] Logging terstruktur + korelasi request-id (observability) — 2026-07-22
+
+Langkah observability berikutnya: menelusuri satu request lintas banyak baris log
+kini mudah. Modul baru `backend/log_setup.py`:
+
+- **Korelasi request-id** — middleware ASGI **murni** (aman untuk StreamingResponse
+  foto/PDF/ekspor — tak membuffer body) melahirkan/mewarisi id per request,
+  menaruhnya di `ContextVar` sehingga **setiap** baris log request itu membawa
+  `request_id` yang sama, dan menyematkan header respons `X-Request-ID`. Id dari
+  klien (`X-Request-ID`) di-sanitasi (`[A-Za-z0-9._-]`, maks 64).
+- **Access log terstruktur** — satu baris per request (metode, path, status,
+  durasi ms, client_ip); path/method di-sanitasi karakter kontrol (cegah injeksi
+  baris log via `%0A`). Health-check (`/api/health*`) dilewati agar log tak banjir.
+- **Format via env** — `LOG_FORMAT=plain` (default, human-readable + request_id)
+  atau `json` (JSON-lines untuk agregator); `LOG_LEVEL` (default INFO). Mengganti
+  `logging.basicConfig`; 191 pemanggilan `logger.*` yang ada ikut format baru
+  tanpa disentuh.
+- **Status 500 tercatat benar** — exception tak-tertangani (dibalas 500 oleh
+  ServerErrorMiddleware di lapisan lebih luar) tetap dicatat sebagai 500 di access
+  log, bukan 0.
+
+Pengerasan dari tinjauan adversarial:
+
+- **Logger uvicorn disatukan ke root** — `uvicorn`/`uvicorn.error` diarahkan ke
+  handler root (ikut format & JSON), dan access-log bawaan uvicorn dibisukan
+  agar tak ada baris akses GANDA dan skip-health efektif (dulu uvicorn.access
+  tetap membanjiri log health tanpa request_id).
+- **Task latar tak lagi memakai request-id basi** — `run_backup_task`,
+  `run_restore_task`, `_do_bulk_import` men-set id `job:<id>` sendiri (task
+  `asyncio.create_task` mewarisi salinan konteks request pemicu; tanpa ini job
+  3-menit menulis log ber-id request yang sudah tutup).
+- **Sanitasi diperluas** ke karakter kontrol C1 (0x80–0x9F), bukan hanya C0.
+
+Verifikasi: smoke 7 skenario via Starlette TestClient (korelasi id handler↔access;
+propagasi & sanitasi X-Request-ID; StreamingResponse utuh; exception→500;
+health di-skip; anti log-injection path) + tinjauan adversarial. `pytest
+tests/unit` 638 lulus; `compileall` bersih. Backend-only.
+
+---
+
 ## [#528] Gerbang deploy verifikasi kesehatan mendalam (anti false-green #2) — 2026-07-22
 
 Lanjutan observability & pelengkap `/api/health/deep` (#527). Skrip deploy VPS
