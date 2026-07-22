@@ -27,11 +27,11 @@ load_dotenv(ROOT_DIR / '.env')
 from db import db, client
 from shared_utils import limiter
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+# Logging terstruktur + korelasi request-id (observability) — ganti basicConfig.
+# Format & level dari env (LOG_FORMAT=plain|json, LOG_LEVEL); tiap baris membawa
+# request_id. Lihat log_setup.py.
+from log_setup import configure_logging, RequestContextMiddleware
+configure_logging()
 logger = logging.getLogger(__name__)
 
 # Initialize FastAPI
@@ -66,6 +66,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Korelasi request-id + access log terstruktur. Ditambahkan TERAKHIR agar jadi
+# lapisan TERLUAR: request_id ter-set sebelum middleware lain & durasi mencakup
+# seluruh penanganan. ASGI murni → aman untuk StreamingResponse (foto/PDF/ekspor).
+app.add_middleware(RequestContextMiddleware)
 
 # Log config status
 from shared_utils import TINIFY_API_KEY, RESEND_API_KEY
