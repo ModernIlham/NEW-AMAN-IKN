@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Search, Plus, Pencil, Trash2, Loader2, IdCard, Upload,
   AlertTriangle, Network, Wand2, FileDown, FileSpreadsheet, UserPlus, RefreshCw,
+  ImagePlus, Crop,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -108,6 +109,7 @@ export default function PegawaiPage({ user, onBack }) {
   const [kropAsli, setKropAsli] = useState(null);     // File asli (unggah baru); null saat reposisi
   const [kropInitial, setKropInitial] = useState(null); // seed {zoom,x,y} utk reposisi
   const [fotoPending, setFotoPending] = useState(null); // {blob,url,asli,krop} menunggu Simpan
+  const [previewFoto, setPreviewFoto] = useState(null); // {id,nama} atau {url,nama} — pratinjau ukuran penuh
   const [kartuTapOpen, setKartuTapOpen] = useState(false); // dialog tap kartu e-KTP
   const fotoInputRef = useRef(null);
   // Bebaskan URL objek pratinjau saat foto pending berganti / komponen lepas.
@@ -153,15 +155,39 @@ export default function PegawaiPage({ user, onBack }) {
     setKropSrc(null); setKropAsli(null); setKropInitial(null);
     toast.success("Foto siap — akan disimpan saat klik Simpan");
   };
-  const AvatarPegawai = ({ p, ukur = "w-9 h-9" }) => p.foto_file_id ? (
-    <img src={authMediaUrl(`${API}/pegawai/${p.id}/foto?v=${p.foto_file_id}`)} alt=""
-      onError={(e) => { e.currentTarget.style.display = "none"; }}
-      className={`${ukur} rounded-full object-cover border border-border flex-shrink-0`} loading="lazy" />
-  ) : (
-    <span className={`${ukur} rounded-full bg-sky-500/15 text-sky-700 dark:text-sky-400 flex items-center justify-center text-[11px] font-bold flex-shrink-0`}>
-      {(p.nama || "?").trim().split(/\s+/).slice(0, 2).map((k) => k[0]).join("").toUpperCase()}
-    </span>
-  );
+  // Avatar bulat; bila `pratinjau` & ada foto → dapat diklik untuk melihat
+  // foto ukuran penuh (file asli yang diunggah).
+  const AvatarPegawai = ({ p, ukur = "w-9 h-9", pratinjau = false }) => {
+    if (!p.foto_file_id) {
+      return (
+        <span className={`${ukur} rounded-full bg-sky-500/15 text-sky-700 dark:text-sky-400 flex items-center justify-center text-[11px] font-bold flex-shrink-0`}>
+          {(p.nama || "?").trim().split(/\s+/).slice(0, 2).map((k) => k[0]).join("").toUpperCase()}
+        </span>
+      );
+    }
+    const img = (
+      <img src={authMediaUrl(`${API}/pegawai/${p.id}/foto?v=${p.foto_file_id}`)} alt=""
+        onError={(e) => { e.currentTarget.style.display = "none"; }}
+        className={`${ukur} rounded-full object-cover border border-border flex-shrink-0 ${pratinjau ? "cursor-zoom-in" : ""}`} loading="lazy" />
+    );
+    if (!pratinjau) return img;
+    return (
+      <button type="button" className="min-w-0 min-h-0 flex-shrink-0 rounded-full leading-none"
+        onClick={(e) => { e.stopPropagation(); setPreviewFoto({ id: p.id, nama: p.nama }); }}
+        title="Lihat foto ukuran penuh" aria-label={`Lihat foto ${p.nama || ""}`}>
+        {img}
+      </button>
+    );
+  };
+  const hapusFoto = async () => {
+    if (!form?.id) return;
+    try {
+      await axios.delete(`${API}/pegawai/${form.id}/foto`);
+      toast.success("Foto dihapus");
+      setForm((f) => ({ ...f, foto_file_id: "", foto_asli_file_id: "", foto_krop: null }));
+      load();
+    } catch (err) { toast.error(getApiError(err, "Gagal menghapus foto")); }
+  };
 
   // Opsi bertingkat: opsi Eselon N mengikuti induk Eselon N-1 yang dipilih
   // (dicocokkan via nama — data pegawai menyimpan nama unit). Induk tak
@@ -719,7 +745,7 @@ export default function PegawaiPage({ user, onBack }) {
                 return (
                   <li key={it.id} className="p-3 space-y-1" data-testid={`pegawai-card-${it.id}`}>
                     <div className="flex items-start gap-2">
-                      <AvatarPegawai p={it} />
+                      <AvatarPegawai p={it} pratinjau />
                       <div className="min-w-0 flex-1">
                         <p className="font-semibold text-foreground text-sm leading-tight break-words">{namaLengkap(it)}</p>
                         <p className="text-[10px] text-muted-foreground font-mono">
@@ -805,11 +831,11 @@ export default function PegawaiPage({ user, onBack }) {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/40 text-left text-xs text-muted-foreground">
-                    <th className="px-3 py-2.5 font-semibold">Nama / Identitas</th>
-                    <th className="px-3 py-2.5 font-semibold">Jabatan / Unit Kerja</th>
-                    <th className="px-3 py-2.5 font-semibold hidden md:table-cell">Masa</th>
-                    <th className="px-3 py-2.5 font-semibold">Status</th>
-                    {isAdmin && <th className="px-3 py-2.5 font-semibold text-right">Aksi</th>}
+                    <th className="px-2.5 py-2 font-semibold">Nama / Identitas</th>
+                    <th className="px-2.5 py-2 font-semibold">Jabatan / Unit Kerja</th>
+                    <th className="px-2.5 py-2 font-semibold hidden md:table-cell">Masa</th>
+                    <th className="px-2.5 py-2 font-semibold">Status</th>
+                    {isAdmin && <th className="px-2.5 py-2 font-semibold text-right">Aksi</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -817,9 +843,9 @@ export default function PegawaiPage({ user, onBack }) {
                     const im = it.info_masa || {};
                     return (
                     <tr key={it.id} className="border-b border-border/60 last:border-0 hover:bg-muted/50" data-testid={`pegawai-row-${it.id}`}>
-                      <td className="px-3 py-2">
+                      <td className="px-2.5 py-1.5">
                         <p className="font-semibold text-foreground flex items-center gap-1.5 flex-wrap">
-                          <AvatarPegawai p={it} ukur="w-7 h-7" />
+                          <AvatarPegawai p={it} ukur="w-7 h-7" pratinjau />
                           {namaLengkap(it)}
                           {it.status_kepegawaian && (
                             <span className="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-600 dark:text-sky-400 text-[9px] font-semibold uppercase">
@@ -847,7 +873,7 @@ export default function PegawaiPage({ user, onBack }) {
                           {im.label_identitas && it.nip ? `${im.label_identitas} ` : ""}{it.nip || "—"}
                         </p>
                       </td>
-                      <td className="px-3 py-2">
+                      <td className="px-2.5 py-1.5">
                         <p className="text-[12px] text-foreground/90 flex items-center gap-1 flex-wrap">
                           {it.jabatan || "—"}
                           {(it.jenis_pelaksana === "plt" || it.jenis_pelaksana === "plh") && (
@@ -859,7 +885,7 @@ export default function PegawaiPage({ user, onBack }) {
                         </p>
                         <p className="text-[10px] text-muted-foreground/80">{it.unit_kerja || ""}</p>
                       </td>
-                      <td className="px-3 py-2 hidden md:table-cell">
+                      <td className="px-2.5 py-1.5 hidden md:table-cell">
                         {/* Kolom MASA: pensiun / akhir jabatan / kontrak (durasi) */}
                         <div className="space-y-0.5 text-[10px]">
                           {im.tanggal_pensiun && (
@@ -891,7 +917,7 @@ export default function PegawaiPage({ user, onBack }) {
                           )}
                         </div>
                       </td>
-                      <td className="px-3 py-2 whitespace-nowrap">
+                      <td className="px-2.5 py-1.5 whitespace-nowrap">
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
                           (it.status || "aktif") === "aktif"
                             ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
@@ -903,7 +929,7 @@ export default function PegawaiPage({ user, onBack }) {
                         )}
                       </td>
                       {isAdmin && (
-                        <td className="px-3 py-2 text-right whitespace-nowrap">
+                        <td className="px-2.5 py-1.5 text-right whitespace-nowrap">
                           <button type="button" onClick={() => bukaForm({ ...EMPTY, ...it, mode: "edit" })}
                             title={`Ubah ${it.nama}`} aria-label={`Ubah ${it.nama}`}
                             className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted min-w-0 min-h-0"
@@ -957,31 +983,50 @@ export default function PegawaiPage({ user, onBack }) {
 
               {tabForm === "identitas" && (
                 <div className="space-y-3">
-                  {/* Foto pegawai — krop persegi (geser + zoom) tampil di row */}
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {fotoPending ? (
-                      <img src={fotoPending.url} alt="Pratinjau foto"
-                        className="w-14 h-14 rounded-full object-cover border border-border flex-shrink-0" />
-                    ) : (
-                      <AvatarPegawai p={form} ukur="w-14 h-14" />
-                    )}
+                  {/* Foto pegawai — fokus pada foto; kontrol berupa ikon.
+                      Klik foto → pratinjau ukuran penuh (file asli). */}
+                  <div className="flex items-center gap-3">
+                    <button type="button"
+                      onClick={() => {
+                        if (fotoPending) setPreviewFoto({ url: fotoPending.url, nama: form.nama });
+                        else if (form.id && form.foto_file_id) setPreviewFoto({ id: form.id, nama: form.nama });
+                      }}
+                      title={(fotoPending || form.foto_file_id) ? "Lihat foto ukuran penuh" : "Belum ada foto"}
+                      className="min-w-0 min-h-0 rounded-full flex-shrink-0 leading-none"
+                      data-testid="pegawai-foto-pratinjau">
+                      {fotoPending ? (
+                        <img src={fotoPending.url} alt="Pratinjau foto"
+                          className="w-16 h-16 rounded-full object-cover border border-border cursor-zoom-in" />
+                      ) : (
+                        <AvatarPegawai p={form} ukur="w-16 h-16" />
+                      )}
+                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button type="button" onClick={() => fotoInputRef.current?.click()}
+                        title={form.foto_file_id || fotoPending ? "Ganti foto" : "Pilih foto"}
+                        aria-label={form.foto_file_id || fotoPending ? "Ganti foto" : "Pilih foto"}
+                        className="p-2 rounded-lg border border-border text-muted-foreground hover:text-sky-600 hover:bg-sky-500/10 min-w-0 min-h-0"
+                        data-testid="pegawai-pilih-foto">
+                        <ImagePlus className="w-4 h-4" />
+                      </button>
+                      {form.id && form.foto_file_id && !fotoPending && (
+                        <button type="button" onClick={bukaAturUlangFoto}
+                          title="Atur ulang posisi foto" aria-label="Atur ulang posisi foto"
+                          className="p-2 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted min-w-0 min-h-0"
+                          data-testid="pegawai-atur-foto">
+                          <Crop className="w-4 h-4" />
+                        </button>
+                      )}
+                      {form.id && form.foto_file_id && (
+                        <button type="button" onClick={hapusFoto}
+                          title="Hapus foto" aria-label="Hapus foto"
+                          className="p-2 rounded-lg border border-border text-muted-foreground hover:text-red-600 hover:bg-red-500/10 min-w-0 min-h-0"
+                          data-testid="pegawai-hapus-foto">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                     {fotoPending && <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">Foto siap — klik Simpan</span>}
-                    <Button type="button" variant="outline" size="sm" className="h-8 text-xs"
-                      onClick={() => fotoInputRef.current?.click()} data-testid="pegawai-pilih-foto">
-                      {form.foto_file_id || fotoPending ? "Ganti Foto…" : "Pilih Foto…"}
-                    </Button>
-                    {form.id && form.foto_file_id && !fotoPending && (
-                      <Button type="button" variant="outline" size="sm" className="h-8 text-xs"
-                        onClick={bukaAturUlangFoto} data-testid="pegawai-atur-foto">
-                        Atur Ulang Posisi
-                      </Button>
-                    )}
-                    {form.id && form.foto_file_id && (
-                      <Button type="button" variant="outline" size="sm" className="h-8 text-xs text-red-600"
-                        onClick={async () => { try { await axios.delete(`${API}/pegawai/${form.id}/foto`); toast.success("Foto dihapus"); setForm((f) => ({ ...f, foto_file_id: "", foto_asli_file_id: "", foto_krop: null })); load(); } catch (err) { toast.error(getApiError(err, "Gagal menghapus foto")); } }}>
-                        Hapus Foto
-                      </Button>
-                    )}
                     <input ref={fotoInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={pilihFotoFile} />
                   </div>
                   {/* Kartu Pegawai (UID e-KTP/NFC) — pendaftaran cukup TAP;
@@ -1454,6 +1499,33 @@ export default function PegawaiPage({ user, onBack }) {
       {/* Dialog tap kartu — mode raw: UID diteruskan ke endpoint pendaftaran */}
       <KartuTapDialog open={kartuTapOpen} onOpenChange={setKartuTapOpen}
         mode="raw" onUid={daftarKartu} />
+
+      {/* ── Pratinjau foto ukuran penuh (file asli yang diunggah) ── */}
+      <Dialog open={!!previewFoto} onOpenChange={(o) => { if (!o) setPreviewFoto(null); }}>
+        <DialogContent className="max-w-lg p-3">
+          <DialogHeader>
+            <DialogTitle className="text-sm">Foto — {previewFoto?.nama || "Pegawai"}</DialogTitle>
+          </DialogHeader>
+          <div className="flex items-center justify-center bg-muted/40 rounded-lg overflow-hidden min-h-[120px]">
+            {previewFoto?.url ? (
+              <img src={previewFoto.url} alt={`Foto ${previewFoto?.nama || ""}`}
+                className="max-h-[70vh] max-w-full object-contain" />
+            ) : previewFoto?.id ? (
+              /* Utamakan file asli (foto-asli); jatuh ke versi krop bila foto
+                 lama belum menyimpan berkas asli. */
+              <img src={authMediaUrl(`${API}/pegawai/${previewFoto.id}/foto-asli`)}
+                alt={`Foto ${previewFoto?.nama || ""}`}
+                onError={(e) => {
+                  if (!e.currentTarget.dataset.fb) {
+                    e.currentTarget.dataset.fb = "1";
+                    e.currentTarget.src = authMediaUrl(`${API}/pegawai/${previewFoto.id}/foto`);
+                  }
+                }}
+                className="max-h-[70vh] max-w-full object-contain" />
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {confirmDialog}
     </div>
