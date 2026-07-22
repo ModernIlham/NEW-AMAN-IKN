@@ -48,6 +48,25 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#528] Gerbang deploy verifikasi kesehatan mendalam (anti false-green #2) — 2026-07-22
+
+Lanjutan observability & pelengkap `/api/health/deep` (#527). Skrip deploy VPS
+dulu hanya memeriksa liveness dangkal (`/api/health`) pasca-restart — proses bisa
+hidup tapi **MongoDB/GridFS tak terjangkau** (kredensial DB salah, Mongo mati,
+disk penuh), sehingga deploy "sukses" padahal tiap operasi data gagal.
+
+- `deploy_vps.sh` kini, setelah liveness dangkal lolos, **juga** mem-poll
+  `/api/health/deep` sampai ~30 dtk (jendela pemanasan pool koneksi Mongo).
+  200 = Mongo+GridFS sehat → lanjut; 503/timeout → **deploy GAGAL (exit 1)**
+  dengan mencetak respons terakhir untuk diagnosis.
+- URL dapat dioverride via `BACKEND_DEEP_HEALTH_URL`.
+- **Tanpa** auto-rollback pada tahap ini (mekanisme kembalikan-produksi-otomatis
+  disiapkan terpisah setelah persetujuan).
+
+Verifikasi: `bash -n` bersih. Skrip deploy-only (tak memengaruhi runtime app).
+
+---
+
 ## [#527] Probe kesehatan mendalam `/api/health/deep` (observability) — 2026-07-22
 
 Fondasi observability. `/api/health` sengaja instan & tanpa dependensi (dipakai

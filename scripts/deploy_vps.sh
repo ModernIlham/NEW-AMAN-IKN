@@ -48,6 +48,28 @@ for i in $(seq 1 15); do
   sleep 2
 done
 
+# Liveness dangkal saja tidak cukup: proses bisa hidup tapi MongoDB/GridFS tak
+# terjangkau (kredensial DB salah, disk penuh, Mongo mati) → aplikasi "hidup"
+# padahal setiap operasi data gagal. Verifikasi DEEP: /api/health/deep membalas
+# 200 hanya bila Mongo ping + GridFS terbaca; 503 bila degraded → curl -f gagal.
+# Beri jendela retry sendiri (~30 dtk) untuk pemanasan pool koneksi Mongo.
+DEEP_HEALTH_URL="${BACKEND_DEEP_HEALTH_URL:-http://127.0.0.1:8001/api/health/deep}"
+echo "Cek kesehatan mendalam (Mongo+GridFS) di ${DEEP_HEALTH_URL} ..."
+for i in $(seq 1 15); do
+  if curl -fsS --max-time 5 "$DEEP_HEALTH_URL" >/dev/null 2>&1; then
+    echo "Dependensi backend (MongoDB + GridFS) sehat."
+    break
+  fi
+  if [ "$i" -eq 15 ]; then
+    echo "GAGAL: dependensi backend tak sehat setelah restart (deep health 503/timeout)." >&2
+    echo "Respons terakhir /api/health/deep:" >&2
+    curl -sS --max-time 5 "$DEEP_HEALTH_URL" 2>/dev/null | head -c 500 >&2 || true
+    echo >&2
+    exit 1
+  fi
+  sleep 2
+done
+
 # Frontend: dependensi bisa bertambah (mis. leaflet) + build produksi.
 cd frontend
 yarn install --frozen-lockfile
