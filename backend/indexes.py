@@ -224,6 +224,31 @@ async def create_indexes() -> None:
         # Register e-sign: daftar per pembuat, terbaru dulu.
         await db.signature_requests.create_index("id", unique=True)
         await db.signature_requests.create_index([("created_by", 1), ("created_at", -1)])
+
+        # ── Indeks paginasi daftar yang belum tertutup (audit perf lanjutan) ──
+        # Koleksi tumbuh yang DULU tanpa indeks kunci-sort → Mongo sort di memori
+        # tiap halaman (COLLSCAN + in-memory sort), makin lambat seiring data.
+        # Buku Barang (mutasi_bmn): daftar global urut tanggal buku; riwayat per
+        # aset (KIB/timeline/LBP) urut tanggal buku.
+        await db.mutasi_bmn.create_index([("tanggal_buku", -1), ("created_at", -1)])
+        await db.mutasi_bmn.create_index([("asset_id", 1), ("tanggal_buku", -1)])
+        # Riwayat LPB (db.lpb): daftar urut created_at + unduh ulang per id.
+        try:
+            await db.lpb.create_index("id", unique=True, name="unique_lpb_id")
+        except Exception:
+            await db.lpb.create_index("id", name="lpb_id_lookup")
+        await db.lpb.create_index([("created_at", -1)])
+        # BAST serah terima: daftar urut created_at, lihat/unduh per id, badge
+        # riwayat per aset (asset_ids multikey).
+        try:
+            await db.bast_serah_terima.create_index("id", unique=True, name="unique_bast_id")
+        except Exception:
+            await db.bast_serah_terima.create_index("id", name="bast_id_lookup")
+        await db.bast_serah_terima.create_index([("created_at", -1)])
+        await db.bast_serah_terima.create_index("asset_ids")
+        # Buku agenda surat: sort {tahun,no_agenda} saat filter `jenis` TIDAK
+        # dipakai — indeks (jenis,tahun,no_agenda) yang ada tak melayani sort ini.
+        await db.surat.create_index([("tahun", -1), ("no_agenda", -1)])
         logger.info("Database indexes created successfully")
     except Exception as e:
         logger.error(f"Error creating indexes: {e}")

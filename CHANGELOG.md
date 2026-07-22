@@ -48,6 +48,30 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#526] Indeks untuk sort daftar paginasi yang belum tertutup — 2026-07-22
+
+Lanjutan audit performa: beberapa daftar ber-paginasi pada koleksi yang tumbuh
+menyortir field yang **belum ter-indeks**, sehingga MongoDB melakukan COLLSCAN
++ sort di memori tiap halaman — makin lambat seiring bertambahnya data. Ditutup
+dengan indeks kunci-sort (murni performa, tanpa perubahan perilaku/UI/skema).
+
+- **`mutasi_bmn` (Buku Barang)** — dulu **tanpa indeks apa pun**. Ditambah
+  `(tanggal_buku↓, created_at↓)` untuk daftar jurnal global & `(asset_id,
+  tanggal_buku↓)` untuk riwayat per aset (KIB/timeline/LBP).
+- **`lpb` (Riwayat LPB)** — ditambah `id` (unik, unduh ulang per id) &
+  `(created_at↓)` (daftar).
+- **`bast_serah_terima`** — ditambah `id` (unik, lihat/unduh per id),
+  `(created_at↓)` (daftar), & `asset_ids` (multikey, badge riwayat per aset).
+- **`surat` (buku agenda)** — ditambah `(tahun↓, no_agenda↓)`; indeks lama
+  `(jenis, tahun, no_agenda)` tak melayani sort saat filter `jenis` tak dipakai.
+
+Indeks `id` unik memakai pola aman-mundur (fallback non-unik bila data lama
+telanjur duplikat) agar pembuatan indeks tak pernah gagal. Verifikasi:
+`compileall` bersih; `pytest tests/unit` 638 lulus (uji impor app memuat
+`indexes.py`). Backend-only.
+
+---
+
 ## [#525] Sinkron snapshot offline pakai keyset pagination (buang $skip O(n²)) — 2026-07-22
 
 Sinkron cache offline (mode Inventarisasi) menyedot SELURUH aset satu kegiatan
