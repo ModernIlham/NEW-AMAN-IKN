@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import (APIRouter, Depends, File, HTTPException, Request,
+from fastapi import (APIRouter, Depends, File, Form, HTTPException, Request,
                      Response, UploadFile)
 from pydantic import BaseModel, Field
 
@@ -623,11 +623,49 @@ async def hapus_pegawai(pegawai_id: str, user: dict = Depends(require_admin)):
 _FOTO_MAX = 5 * 1024 * 1024  # 5MB
 
 
+def _kecilkan_foto_asli(data: bytes, maks_sisi: int = 1600) -> bytes:
+    """Kecilkan foto ASLI (sumber krop) agar hemat penyimpanan namun cukup
+    tajam untuk diposisikan ulang (keluaran avatar hanya 384px). Datar-kan
+    transparansi ke putih & simpan JPEG. Bila Pillow gagal, kembalikan apa
+    adanya (best-effort)."""
+    try:
+        import io as _io
+
+        from PIL import Image
+        img = Image.open(_io.BytesIO(data))
+        if img.mode in ("RGBA", "LA", "P"):
+            latar = Image.new("RGB", img.size, (255, 255, 255))
+            img = img.convert("RGBA")
+            latar.paste(img, mask=img.split()[-1])
+            img = latar
+        else:
+            img = img.convert("RGB")
+        w, h = img.size
+        if max(w, h) > maks_sisi:
+            skala = maks_sisi / float(max(w, h))
+            img = img.resize((max(1, int(w * skala)), max(1, int(h * skala))),
+                             Image.LANCZOS)
+        buf = _io.BytesIO()
+        img.save(buf, format="JPEG", quality=85, optimize=True)
+        return buf.getvalue()
+    except Exception:
+        return data
+
+
 @pegawai_router.post("/pegawai/{pegawai_id}/foto")
 async def upload_foto_pegawai(pegawai_id: str, file: UploadFile = File(...),
+                              file_asli: UploadFile = File(None),
+                              krop: str = Form(""),
                               admin: dict = Depends(require_admin)):
-    """Unggah foto pegawai (persegi hasil krop di frontend); ganti = hapus lama."""
-    peg = await db.pegawai.find_one({"id": pegawai_id}, {"_id": 0, "id": 1, "foto_file_id": 1, "nama": 1, "kode_satker": 1})
+    """Unggah foto pegawai (persegi hasil krop di frontend); ganti = hapus lama.
+
+    Opsional simpan **foto ASLI** (`file_asli`, dikecilkan) + **parameter krop**
+    (`krop` JSON: zoom/posisi) agar posisi foto dapat DIATUR ULANG tanpa memilih
+    berkas lagi. `file_asli` kosong = pertahankan asli lama (reposisi saja)."""
+    peg = await db.pegawai.find_one(
+        {"id": pegawai_id},
+        {"_id": 0, "id": 1, "foto_file_id": 1, "foto_asli_file_id": 1,
+         "nama": 1, "kode_satker": 1})
     if not peg:
         raise HTTPException(status_code=404, detail="Pegawai tidak ditemukan")
     if (file.content_type or "") not in ("image/jpeg", "image/png", "image/webp"):
@@ -635,24 +673,75 @@ async def upload_foto_pegawai(pegawai_id: str, file: UploadFile = File(...),
     data = await file.read()
     if len(data) > _FOTO_MAX:
         raise HTTPException(status_code=400, detail="Ukuran foto maksimal 5MB")
+    from bson import ObjectId
     fid = await fs_bucket.upload_from_stream(
         f"pegawai_{pegawai_id}.jpg", data,
         metadata={"jenis": "foto_pegawai", "pegawai_id": pegawai_id,
                   "content_type": file.content_type})
+    now = datetime.now(timezone.utc).isoformat()
+    perubahan = {"foto_file_id": str(fid), "updated_at": now}
+
+    # Foto asli (sumber krop) — hanya diganti bila berkas asli baru dikirim.
+    if file_asli is not None:
+        asli_raw = await file_asli.read()
+        if len(asli_raw) > _FOTO_MAX:
+            raise HTTPException(status_code=400, detail="Ukuran foto asli maksimal 5MB")
+        asli = _kecilkan_foto_asli(asli_raw)
+        aid = await fs_bucket.upload_from_stream(
+            f"pegawai_{pegawai_id}_asli.jpg", asli,
+            metadata={"jenis": "foto_pegawai_asli", "pegawai_id": pegawai_id,
+                      "content_type": "image/jpeg"})
+        lama_asli = peg.get("foto_asli_file_id")
+        if lama_asli:
+            try:
+                await fs_bucket.delete(ObjectId(lama_asli))
+            except Exception:
+                pass
+        perubahan["foto_asli_file_id"] = str(aid)
+
+    # Parameter krop (untuk seed dialog reposisi) — best-effort parse.
+    if str(krop or "").strip():
+        import json
+        try:
+            perubahan["foto_krop"] = json.loads(krop)
+        except (ValueError, TypeError):
+            pass
+
     lama = peg.get("foto_file_id")
     if lama:
         try:
-            from bson import ObjectId
             await fs_bucket.delete(ObjectId(lama))
         except Exception:
             pass
-    now = datetime.now(timezone.utc).isoformat()
-    await db.pegawai.update_one({"id": pegawai_id},
-                                {"$set": {"foto_file_id": str(fid), "updated_at": now}})
+    await db.pegawai.update_one({"id": pegawai_id}, {"$set": perubahan})
     await log_audit("foto_pegawai", "", username=admin.get("username", "system"),
                     detail=f"Foto pegawai {peg.get('nama')} diperbarui",
                     kode_satker=str(peg.get("kode_satker") or ""))
-    return {"ok": True, "foto_file_id": str(fid)}
+    return {"ok": True, "foto_file_id": str(fid),
+            "foto_asli_file_id": perubahan.get("foto_asli_file_id",
+                                               peg.get("foto_asli_file_id") or "")}
+
+
+@pegawai_router.get("/pegawai/{pegawai_id}/foto-asli")
+async def get_foto_asli_pegawai(pegawai_id: str,
+                                _user: dict = Depends(require_user_or_query_token)):
+    """Stream foto ASLI (sumber krop) — dipakai dialog "Atur Ulang Posisi".
+    404 bila pegawai/foto era lama yang belum menyimpan berkas asli."""
+    peg = await db.pegawai.find_one({"id": pegawai_id},
+                                    {"_id": 0, "foto_asli_file_id": 1})
+    if not peg or not peg.get("foto_asli_file_id"):
+        raise HTTPException(status_code=404, detail="Foto asli tidak tersedia")
+    from bson import ObjectId
+    try:
+        stream = await fs_bucket.open_download_stream(
+            ObjectId(peg["foto_asli_file_id"]))
+        data = await stream.read()
+    except Exception:
+        raise HTTPException(status_code=404,
+                            detail="Foto asli tidak ditemukan di penyimpanan")
+    ct = (stream.metadata or {}).get("content_type") or "image/jpeg"
+    return Response(content=data, media_type=ct,
+                    headers={"Cache-Control": "private, max-age=86400"})
 
 
 @pegawai_router.get("/pegawai/{pegawai_id}/foto")
@@ -675,19 +764,24 @@ async def get_foto_pegawai(pegawai_id: str,
 
 @pegawai_router.delete("/pegawai/{pegawai_id}/foto")
 async def hapus_foto_pegawai(pegawai_id: str, admin: dict = Depends(require_admin)):
-    """Hapus foto pegawai (GridFS + referensi)."""
-    peg = await db.pegawai.find_one({"id": pegawai_id}, {"_id": 0, "foto_file_id": 1})
+    """Hapus foto pegawai (GridFS + referensi) — termasuk foto asli & krop."""
+    peg = await db.pegawai.find_one(
+        {"id": pegawai_id},
+        {"_id": 0, "foto_file_id": 1, "foto_asli_file_id": 1})
     if not peg or not peg.get("foto_file_id"):
         raise HTTPException(status_code=404, detail="Foto tidak ada")
-    try:
-        from bson import ObjectId
-        await fs_bucket.delete(ObjectId(peg["foto_file_id"]))
-    except Exception:
-        pass
+    from bson import ObjectId
+    for fid in (peg.get("foto_file_id"), peg.get("foto_asli_file_id")):
+        if fid:
+            try:
+                await fs_bucket.delete(ObjectId(fid))
+            except Exception:
+                pass
     now = datetime.now(timezone.utc).isoformat()
-    await db.pegawai.update_one({"id": pegawai_id},
-                                {"$unset": {"foto_file_id": ""},
-                                 "$set": {"updated_at": now}})
+    await db.pegawai.update_one(
+        {"id": pegawai_id},
+        {"$unset": {"foto_file_id": "", "foto_asli_file_id": "", "foto_krop": ""},
+         "$set": {"updated_at": now}})
     return {"ok": True}
 
 

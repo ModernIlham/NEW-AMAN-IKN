@@ -13,7 +13,7 @@ const OUT = 384;    // sisi keluaran (px) — tajam untuk avatar row & form
  * (drag/sentuh) untuk memposisikan, zoom in/out (slider + roda mouse).
  * Hasil digambar ke canvas OUT×OUT → Blob JPEG dikembalikan via onSimpan.
  */
-export default function KropFotoDialog({ src, onBatal, onSimpan }) {
+export default function KropFotoDialog({ src, initial, onBatal, onSimpan }) {
   const imgRef = useRef(null);
   const [dim, setDim] = useState(null);        // {w, h} natural
   const [zoom, setZoom] = useState(1);          // 1 = cover viewport
@@ -22,8 +22,27 @@ export default function KropFotoDialog({ src, onBatal, onSimpan }) {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    setZoom(1); setPos({ x: 0, y: 0 }); setDim(null);
-  }, [src]);
+    // Seed zoom dari parameter krop tersimpan (reposisi); posisi diseed
+    // saat gambar termuat (butuh dimensi natural).
+    setZoom(initial?.zoom ? Math.min(4, Math.max(1, initial.zoom)) : 1);
+    setPos({ x: 0, y: 0 }); setDim(null);
+  }, [src, initial]);
+
+  // Muat gambar: catat dimensi natural & seed posisi dari krop tersimpan
+  // (foto asli sama → skala dasar sama sehingga offset px langsung dipakai).
+  const saatMuat = (e) => {
+    const w = e.target.naturalWidth, h = e.target.naturalHeight;
+    setDim({ w, h });
+    if (initial && (initial.x != null || initial.y != null)) {
+      const z = Math.min(4, Math.max(1, initial.zoom || 1));
+      const sk = (VIEW / Math.min(w, h)) * z;
+      const lb = w * sk, tg = h * sk;
+      setPos({
+        x: Math.min(0, Math.max(VIEW - lb, initial.x || 0)),
+        y: Math.min(0, Math.max(VIEW - tg, initial.y || 0)),
+      });
+    }
+  };
 
   // Skala dasar "cover": sisi terpendek foto memenuhi viewport.
   const base = dim ? VIEW / Math.min(dim.w, dim.h) : 1;
@@ -67,7 +86,8 @@ export default function KropFotoDialog({ src, onBatal, onSimpan }) {
       const sx = -pos.x / skala, sy = -pos.y / skala, sw = VIEW / skala;
       ctx.drawImage(imgRef.current, sx, sy, sw, sw, 0, 0, OUT, OUT);
       const blob = await new Promise((res) => canvas.toBlob(res, "image/jpeg", 0.88));
-      await onSimpan(blob);
+      // Kembalikan parameter krop agar posisi dapat diseed saat reposisi.
+      await onSimpan(blob, { zoom, x: pos.x, y: pos.y });
     } finally {
       setSaving(false);
     }
@@ -95,7 +115,7 @@ export default function KropFotoDialog({ src, onBatal, onSimpan }) {
           >
             <img
               ref={imgRef} src={src} alt="Pratinjau krop foto" draggable={false}
-              onLoad={(e) => setDim({ w: e.target.naturalWidth, h: e.target.naturalHeight })}
+              onLoad={saatMuat}
               style={{ position: "absolute", left: pos.x, top: pos.y, width: lebar, height: tinggi, maxWidth: "none" }}
             />
             {/* Garis bantu rule-of-thirds tipis */}

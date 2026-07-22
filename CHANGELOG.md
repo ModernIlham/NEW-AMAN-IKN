@@ -48,6 +48,32 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#504] Foto pegawai — disimpan bersama form (bukan langsung) + atur ulang posisi — 2026-07-22
+
+Dua perbaikan alur foto Master Pegawai (umpan balik pemilik):
+
+- **Foto tidak lagi langsung terunggah** saat klik "Pakai Foto Ini". Baik saat
+  **tambah maupun edit**, foto hasil krop kini **ditahan** (pratinjau lingkaran
+  + label "Foto siap — klik Simpan") dan **baru diunggah saat tombol Simpan
+  form ditekan**. Menutup form/Batal = foto tidak jadi tersimpan (sebelumnya
+  mode edit langsung menimpa foto lama begitu krop dipilih).
+- **Atur Ulang Posisi** — tombol baru untuk **reposisi foto tersimpan tanpa
+  memilih berkas lagi**. Sistem kini menyimpan **foto ASLI** (dikecilkan ≤1600px,
+  hemat penyimpanan) + **parameter krop** (zoom/posisi); dialog krop dibuka
+  kembali dengan posisi terakhir sebagai titik awal. Foto lama (sebelum fitur
+  ini) yang belum punya berkas asli → jatuh ke "pilih ulang foto".
+
+Teknis: `POST …/pegawai/{id}/foto` menerima opsional `file_asli` (asli, dikecilkan
+via Pillow) + `krop` (JSON); endpoint baru `GET …/pegawai/{id}/foto-asli`; hapus
+foto ikut membersihkan berkas asli + parameter krop. `KropFotoDialog` menerima
+`initial` (seed posisi) & mengembalikan parameter krop. Semua foto (asli+krop)
+otomatis tercakup backup/restore GridFS.
+
+Verifikasi: 629 unit test lulus; `_kecilkan_foto_asli` terverifikasi
+(3000×2000→1600px, flatten RGBA→putih); eslint bersih; `yarn build` sukses.
+
+---
+
 ## [#503] Master Pegawai — rangkap jabatan struktural Plt/Plh pada roster — 2026-07-22
 
 Melengkapi #502 di sisi **Master Pegawai**: roster pegawai kini dapat mencatat

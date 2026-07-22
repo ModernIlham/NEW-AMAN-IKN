@@ -99,37 +99,59 @@ export default function PegawaiPage({ user, onBack }) {
       .catch(() => setUnits([]));
   }, []);
 
-  const bukaForm = (data) => { setTabForm("identitas"); setForm(data); setFotoBlobBaru(null); };
+  const bukaForm = (data) => {
+    setTabForm("identitas"); setForm(data);
+    setFotoPending(null); setKropAsli(null); setKropInitial(null);
+  };
   // ── Foto pegawai: krop persegi (geser + zoom) → GridFS; avatar di row ──
   const [kropSrc, setKropSrc] = useState(null);       // dataURL sumber krop
-  const [fotoBlobBaru, setFotoBlobBaru] = useState(null); // blob menunggu (mode tambah)
+  const [kropAsli, setKropAsli] = useState(null);     // File asli (unggah baru); null saat reposisi
+  const [kropInitial, setKropInitial] = useState(null); // seed {zoom,x,y} utk reposisi
+  const [fotoPending, setFotoPending] = useState(null); // {blob,url,asli,krop} menunggu Simpan
   const [kartuTapOpen, setKartuTapOpen] = useState(false); // dialog tap kartu e-KTP
   const fotoInputRef = useRef(null);
+  // Bebaskan URL objek pratinjau saat foto pending berganti / komponen lepas.
+  useEffect(() => () => { if (fotoPending?.url) URL.revokeObjectURL(fotoPending.url); },
+    [fotoPending]);
   const pilihFotoFile = (e) => {
     const f = e.target.files?.[0];
     e.target.value = "";
     if (!f) return;
     const rd = new FileReader();
-    rd.onload = () => setKropSrc(rd.result);
+    rd.onload = () => { setKropAsli(f); setKropInitial(null); setKropSrc(rd.result); };
     rd.readAsDataURL(f);
   };
-  const unggahFoto = async (pegawaiId, blob) => {
+  // Reposisi foto TERSIMPAN: muat berkas asli (bila ada) + seed parameter krop.
+  const bukaAturUlangFoto = async () => {
+    if (!form?.id) return;
+    try {
+      const r = await axios.get(`${API}/pegawai/${form.id}/foto-asli`,
+                               { responseType: "blob" });
+      const rd = new FileReader();
+      rd.onload = () => {
+        setKropAsli(null);                  // asli tidak berubah — hanya reposisi
+        setKropInitial(form.foto_krop || null);
+        setKropSrc(rd.result);
+      };
+      rd.readAsDataURL(r.data);
+    } catch {
+      toast.info("Foto ini belum menyimpan berkas asli — pilih ulang foto untuk mengatur posisi.");
+      fotoInputRef.current?.click();
+    }
+  };
+  const unggahFoto = async (pegawaiId, pending) => {
     const fd = new FormData();
-    fd.append("file", blob, "foto.jpg");
+    fd.append("file", pending.blob, "foto.jpg");
+    if (pending.asli) fd.append("file_asli", pending.asli, pending.asli.name || "asli.jpg");
+    if (pending.krop) fd.append("krop", JSON.stringify(pending.krop));
     await axios.post(`${API}/pegawai/${pegawaiId}/foto`, fd);
   };
-  const simpanKrop = async (blob) => {
-    if (form?.mode === "tambah") {
-      setFotoBlobBaru(blob);           // diunggah setelah pegawai dibuat
-      toast.success("Foto siap — akan diunggah saat pegawai disimpan");
-    } else if (form?.id) {
-      try {
-        await unggahFoto(form.id, blob);
-        toast.success("Foto pegawai diperbarui");
-        load();
-      } catch (err) { toast.error(getApiError(err, "Gagal mengunggah foto")); }
-    }
-    setKropSrc(null);
+  // Krop selesai → SIAPKAN foto (belum diunggah); unggah saat tombol Simpan
+  // ditekan — konsisten untuk mode tambah maupun edit.
+  const simpanKrop = async (blob, krop) => {
+    setFotoPending({ blob, url: URL.createObjectURL(blob), asli: kropAsli, krop });
+    setKropSrc(null); setKropAsli(null); setKropInitial(null);
+    toast.success("Foto siap — akan disimpan saat klik Simpan");
   };
   const AvatarPegawai = ({ p, ukur = "w-9 h-9" }) => p.foto_file_id ? (
     <img src={authMediaUrl(`${API}/pegawai/${p.id}/foto?v=${p.foto_file_id}`)} alt=""
@@ -335,13 +357,18 @@ export default function PegawaiPage({ user, onBack }) {
     try {
       if (form.mode === "tambah") {
         const r = await axios.post(`${API}/pegawai`, body);
-        if (fotoBlobBaru && r.data?.id) {
-          try { await unggahFoto(r.data.id, fotoBlobBaru); }
+        if (fotoPending && r.data?.id) {
+          try { await unggahFoto(r.data.id, fotoPending); }
           catch { toast.warning("Pegawai tersimpan, tetapi foto gagal diunggah — coba lagi lewat Edit"); }
         }
         toast.success(`Pegawai ${form.nama} ditambahkan`);
       } else {
         const r = await axios.put(`${API}/pegawai/${form.id}`, body);
+        // Foto (bila diubah) baru diunggah sekarang — bukan saat pilih krop.
+        if (fotoPending) {
+          try { await unggahFoto(form.id, fotoPending); }
+          catch { toast.warning("Data tersimpan, tetapi foto gagal diunggah — coba lagi lewat Edit"); }
+        }
         toast.success(`Pegawai ${form.nama} diperbarui`);
         // Peringatan lunak: status non-aktif tapi masih memegang aset.
         if (r.data?.peringatan) toast.warning(r.data.peringatan, { duration: 9000 });
@@ -890,16 +917,27 @@ export default function PegawaiPage({ user, onBack }) {
               {tabForm === "identitas" && (
                 <div className="space-y-3">
                   {/* Foto pegawai — krop persegi (geser + zoom) tampil di row */}
-                  <div className="flex items-center gap-3">
-                    <AvatarPegawai p={fotoBlobBaru ? { nama: form.nama } : form} ukur="w-14 h-14" />
-                    {fotoBlobBaru && <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">Foto baru siap diunggah</span>}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {fotoPending ? (
+                      <img src={fotoPending.url} alt="Pratinjau foto"
+                        className="w-14 h-14 rounded-full object-cover border border-border flex-shrink-0" />
+                    ) : (
+                      <AvatarPegawai p={form} ukur="w-14 h-14" />
+                    )}
+                    {fotoPending && <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">Foto siap — klik Simpan</span>}
                     <Button type="button" variant="outline" size="sm" className="h-8 text-xs"
                       onClick={() => fotoInputRef.current?.click()} data-testid="pegawai-pilih-foto">
-                      Pilih Foto…
+                      {form.foto_file_id || fotoPending ? "Ganti Foto…" : "Pilih Foto…"}
                     </Button>
+                    {form.id && form.foto_file_id && !fotoPending && (
+                      <Button type="button" variant="outline" size="sm" className="h-8 text-xs"
+                        onClick={bukaAturUlangFoto} data-testid="pegawai-atur-foto">
+                        Atur Ulang Posisi
+                      </Button>
+                    )}
                     {form.id && form.foto_file_id && (
                       <Button type="button" variant="outline" size="sm" className="h-8 text-xs text-red-600"
-                        onClick={async () => { try { await axios.delete(`${API}/pegawai/${form.id}/foto`); toast.success("Foto dihapus"); setForm((f) => ({ ...f, foto_file_id: "" })); load(); } catch (err) { toast.error(getApiError(err, "Gagal menghapus foto")); } }}>
+                        onClick={async () => { try { await axios.delete(`${API}/pegawai/${form.id}/foto`); toast.success("Foto dihapus"); setForm((f) => ({ ...f, foto_file_id: "", foto_asli_file_id: "", foto_krop: null })); load(); } catch (err) { toast.error(getApiError(err, "Gagal menghapus foto")); } }}>
                         Hapus Foto
                       </Button>
                     )}
@@ -1351,7 +1389,9 @@ export default function PegawaiPage({ user, onBack }) {
         </DialogContent>
       </Dialog>
 
-      <KropFotoDialog src={kropSrc} onBatal={() => setKropSrc(null)} onSimpan={simpanKrop} />
+      <KropFotoDialog src={kropSrc} initial={kropInitial}
+        onBatal={() => { setKropSrc(null); setKropAsli(null); setKropInitial(null); }}
+        onSimpan={simpanKrop} />
 
       {/* Dialog tap kartu — mode raw: UID diteruskan ke endpoint pendaftaran */}
       <KartuTapDialog open={kartuTapOpen} onOpenChange={setKartuTapOpen}
