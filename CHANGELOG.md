@@ -48,6 +48,32 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#503] Master Pegawai — rangkap jabatan struktural Plt/Plh pada roster — 2026-07-22
+
+Melengkapi #502 di sisi **Master Pegawai**: roster pegawai kini dapat mencatat
+bahwa seorang pegawai memegang **rangkap jabatan struktural sementara** sebagai
+**Plt. (Pelaksana Tugas)** / **Plh. (Pelaksana Harian)** atas jabatan lain —
+selain jabatan definitifnya sendiri.
+
+- **Field baru** `jenis_pelaksana` (`""`/`plt`/`plh`) + `jabatan_pelaksana`
+  (jabatan yang di-Plt/Plh-kan) pada model pegawai + validasi. Jabatan definitif
+  tetap di field `jabatan`.
+- **Form pegawai (tab "Jabatan & Unit")**: dropdown "Rangkap Jabatan Struktural
+  (Plt/Plh)" + input jabatan yang di-Plt/Plh-kan (muncul bila dipilih) +
+  penjelasan efek naskah dinas.
+- **Daftar pegawai**: badge/label **Plt./Plh. [jabatan]** pada baris (kartu HP &
+  tabel desktop); pencarian ikut menjangkau jabatan pelaksana.
+- **Impor/Ekspor Excel**: dua kolom baru **"Jenis Pelaksana (Plt/Plh)"** &
+  **"Jabatan Pelaksana (Rangkap)"** (dengan dropdown Plt./Plh.) — **round-trip
+  aman** (ekspor → edit → impor kembali). Normalisasi impor mengenali
+  "Plt/Plt./Pelaksana Tugas" & "Plh/Plh./Pelaksana Harian".
+- Helper murni `rangkap_jabatan_pelaksana(pegawai)` → "Plt./Plh. [jabatan]".
+
+Verifikasi: 629 unit test lulus (+4 baru: rangkap jabatan, validasi,
+normalisasi, round-trip ekspor/impor); eslint bersih; `yarn build` sukses.
+
+---
+
 ## [#502] Rangkap jabatan struktural Plt/Plh pada Referensi Pejabat — tanda tangan dokumen "Plt./Plh." — 2026-07-22
 
 Referensi Pejabat kini mengakomodir **rangkap jabatan struktural sementara**:

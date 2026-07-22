@@ -18,7 +18,7 @@ from db import db, fs_bucket
 from kartu_utils import hash_kandidat, label_kartu, valid_uid
 from shared_utils import (kode_satker_user, limiter, log_audit,
                           pastikan_akses_dok_satker, scope_query_field_satker)
-from pejabat_utils import STATUS_KEPEGAWAIAN
+from pejabat_utils import JENIS_PELAKSANA, STATUS_KEPEGAWAIAN
 from pegawai_utils import (
     AGAMA, DIGIT_BANK, JENIS_IDENTITAS_WNA, JENIS_JABATAN, JENIS_KELAMIN,
     JENIS_KONTRAK_NON_ASN, KATEGORI_PEGAWAI, KEWARGANEGARAAN,
@@ -54,6 +54,11 @@ class PegawaiIn(BaseModel):
     sub_kategori_non_asn: Optional[str] = ""
     pangkat_golongan: Optional[str] = ""
     jabatan: Optional[str] = ""
+    # Rangkap jabatan struktural sementara (Plt/Plh): jenis_pelaksana
+    # ""/plt/plh + jabatan yang di-Plt/Plh-kan (jabatan definitif tetap di
+    # field `jabatan`).
+    jenis_pelaksana: Optional[str] = ""
+    jabatan_pelaksana: Optional[str] = ""
     jenis_jabatan: Optional[str] = ""
     kategori_pegawai: Optional[str] = ""
     eselon: Optional[str] = ""
@@ -105,6 +110,8 @@ def _bersih(p: PegawaiIn) -> dict:
         "sub_kategori_non_asn": str(p.sub_kategori_non_asn or "").strip(),
         "pangkat_golongan": str(p.pangkat_golongan or "").strip(),
         "jabatan": str(p.jabatan or "").strip(),
+        "jenis_pelaksana": str(p.jenis_pelaksana or "").strip().lower(),
+        "jabatan_pelaksana": str(p.jabatan_pelaksana or "").strip(),
         "jenis_jabatan": str(p.jenis_jabatan or "").strip(),
         "kategori_pegawai": str(p.kategori_pegawai or "").strip(),
         "eselon": str(p.eselon or "").strip(),
@@ -164,6 +171,7 @@ async def referensi_pegawai(_user: dict = Depends(require_user)):
     return {
         "jenis_kelamin": _opt(JENIS_KELAMIN),
         "status_kepegawaian": _opt(STATUS_KEPEGAWAIAN),
+        "jenis_pelaksana": _opt(JENIS_PELAKSANA),
         "jenis_jabatan": _opt(JENIS_JABATAN),
         "kategori_pegawai": _opt(KATEGORI_PEGAWAI),
         "sub_kategori_non_asn": _opt(SUB_KATEGORI_NON_ASN),
@@ -316,7 +324,8 @@ async def template_impor_pegawai(_user: dict = Depends(require_user)):
     w.writerow(HEADER_IMPOR)
     w.writerow(["198501012010011001", "Budi Santoso", "Laki-laki", "Jakarta",
                 "1985-01-01", "PNS", "Penata (III/c)",
-                "Analis Pengelolaan BMN", "Pejabat Pelaksana",
+                "Analis Pengelolaan BMN", "", "",
+                "Pejabat Pelaksana",
                 "2022-01-01", "",
                 "Sekretariat", "Bagian Umum", "", "", "", "081200000000",
                 "budi@instansi.go.id", "", "S1", "",

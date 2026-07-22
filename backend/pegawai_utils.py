@@ -9,7 +9,8 @@ field selain `nama` bersifat opsional. Modul murni ini teruji unit.
 """
 import re
 
-from pejabat_utils import STATUS_KEPEGAWAIAN  # klasifikasi kepegawaian bersama
+from pejabat_utils import (  # klasifikasi & rangkap jabatan bersama
+    JENIS_PELAKSANA, STATUS_KEPEGAWAIAN, prefiks_pelaksana)
 
 # Jenis kelamin (kode → uraian).
 JENIS_KELAMIN = {"L": "Laki-laki", "P": "Perempuan"}
@@ -162,6 +163,9 @@ def validate_pegawai(doc):
     jj = str(d.get("jenis_jabatan") or "").strip()
     if jj and jj not in JENIS_JABATAN:
         errors.append(f"Jenis jabatan tidak dikenal: {jj}")
+    jp = str(d.get("jenis_pelaksana") or "").strip().lower()
+    if jp and jp not in JENIS_PELAKSANA:
+        errors.append(f"Jenis pelaksana tidak dikenal: {jp}")
     st = str(d.get("status") or "").strip()
     if st and st not in STATUS_PEGAWAI:
         errors.append(f"Status pegawai tidak dikenal: {st}")
@@ -203,6 +207,25 @@ def is_aktif(pegawai):
     """True bila pegawai berstatus aktif (status kosong dianggap aktif). MURNI."""
     st = str((pegawai or {}).get("status") or "aktif").strip() or "aktif"
     return st == "aktif"
+
+
+def rangkap_jabatan_pelaksana(pegawai) -> str:
+    """Label rangkap jabatan struktural sementara pegawai — mis.
+    "Plt. Kepala Bagian Umum" / "Plh. Kepala Kantor". Kosong bila pegawai
+    bukan Plt/Plh. Memakai `jabatan_pelaksana` (jabatan yang di-Plt/Plh-kan);
+    bila kosong, jatuh ke `jabatan` definitif. MURNI (teruji unit).
+
+    Ini melengkapi jabatan DEFINITIF (`jabatan`): pegawai tetap memegang
+    jabatannya sendiri + menjalankan jabatan yang di-Plt/Plh-kan (rangkap)."""
+    p = pegawai or {}
+    jenis = str(p.get("jenis_pelaksana") or "").strip().lower()
+    if jenis not in JENIS_PELAKSANA:
+        return ""
+    jab = (str(p.get("jabatan_pelaksana") or "").strip()
+           or str(p.get("jabatan") or "").strip())
+    if not jab:
+        return ""
+    return f"{prefiks_pelaksana(jenis)}{jab}".strip()
 
 
 def kelompok_unit_kerja(pegawai_list):
@@ -341,6 +364,10 @@ KOLOM_IMPOR = {
     "status kepegawaian": "status_kepegawaian",
     "pangkat/golongan": "pangkat_golongan", "pangkat / golongan": "pangkat_golongan",
     "jabatan": "jabatan",
+    "jenis pelaksana (plt/plh)": "jenis_pelaksana",
+    "jenis pelaksana": "jenis_pelaksana", "plt/plh": "jenis_pelaksana",
+    "jabatan pelaksana (rangkap)": "jabatan_pelaksana",
+    "jabatan pelaksana": "jabatan_pelaksana", "jabatan rangkap": "jabatan_pelaksana",
     "kategori pegawai": "kategori_pegawai",
     "eselon 1": "eselon1", "eselon 2": "eselon2", "eselon 3": "eselon3",
     "eselon 4": "eselon4", "eselon 5": "eselon5",
@@ -368,7 +395,9 @@ KOLOM_IMPOR = {
 # Urutan kolom template ekspor/impor (header ramah).
 HEADER_IMPOR = [
     "NIP/NIK/NRP", "Nama Lengkap", "Jenis Kelamin", "Tempat Lahir", "Tgl Lahir",
-    "Status Kepegawaian", "Pangkat/Golongan", "Jabatan", "Kategori Pegawai",
+    "Status Kepegawaian", "Pangkat/Golongan", "Jabatan",
+    "Jenis Pelaksana (Plt/Plh)", "Jabatan Pelaksana (Rangkap)",
+    "Kategori Pegawai",
     "TMT Jabatan", "Tgl Akhir Jabatan",
     "Eselon 1", "Eselon 2", "Eselon 3", "Eselon 4", "Eselon 5",
     "No Telepon", "Email", "NPWP", "Pendidikan Terakhir", "Alamat",
@@ -514,6 +543,19 @@ def normalisasi_jenis_kontrak(nilai):
     return ""
 
 
+def normalisasi_jenis_pelaksana(nilai):
+    """Petakan teks bebas → kode jenis pelaksana ('plt'/'plh'/''). Mengenali
+    'Plt', 'Plt.', 'Pelaksana Tugas', 'Plh', 'Pelaksana Harian'. MURNI."""
+    s = str(nilai or "").strip().lower().rstrip(".")
+    if not s:
+        return ""
+    if s in ("plt", "plt.") or "pelaksana tugas" in s:
+        return "plt"
+    if s in ("plh", "plh.") or "pelaksana harian" in s:
+        return "plh"
+    return ""
+
+
 def baris_impor_ke_pegawai(raw):
     """Ubah satu baris impor (dict {header: nilai}) → dokumen pegawai bersih +
     daftar peringatan lunak. MURNI (teruji unit).
@@ -523,7 +565,8 @@ def baris_impor_ke_pegawai(raw):
     peringatan = []
     doc = {k: "" for k in (
         "nama", "nip", "jenis_kelamin", "tempat_lahir", "tanggal_lahir",
-        "status_kepegawaian", "pangkat_golongan", "jabatan", "kategori_pegawai",
+        "status_kepegawaian", "pangkat_golongan", "jabatan",
+        "jenis_pelaksana", "jabatan_pelaksana", "kategori_pegawai",
         "eselon1", "eselon2", "eselon3", "eselon4", "eselon5",
         "no_hp", "email", "nama_bank", "no_rekening", "nomor_kontrak",
         "tgl_mulai_kontrak", "tgl_selesai_kontrak", "keterangan",
@@ -556,6 +599,8 @@ def baris_impor_ke_pegawai(raw):
             doc["status"] = normalisasi_status_pegawai(val)
         elif field == "kategori_pegawai":
             doc["kategori_pegawai"] = normalisasi_kategori_pegawai(val)
+        elif field == "jenis_pelaksana":
+            doc["jenis_pelaksana"] = normalisasi_jenis_pelaksana(val)
         elif field == "jenis_kontrak_non_asn":
             doc["jenis_kontrak_non_asn"] = normalisasi_jenis_kontrak(val)
         elif field == "kode_satker_lengkap":
@@ -782,11 +827,13 @@ def baris_ekspor_pegawai(doc) -> list:
     def g(k):
         return str(d.get(k) or "").strip()
 
+    _pel = {"plt": "Plt.", "plh": "Plh."}.get(g("jenis_pelaksana").lower(), "")
     return [
         g("nip"), g("nama"), g("jenis_kelamin"), g("tempat_lahir"),
         g("tanggal_lahir")[:10],
         label_ekspor_status_kepegawaian(d),
         g("pangkat_golongan"), g("jabatan"),
+        _pel, g("jabatan_pelaksana"),
         KATEGORI_PEGAWAI.get(g("kategori_pegawai").lower(),
                              g("kategori_pegawai")),
         g("tmt_jabatan")[:10], g("tanggal_akhir_jabatan")[:10],
@@ -806,6 +853,7 @@ def baris_ekspor_pegawai(doc) -> list:
 # nilai di sini harus dinormalkan balik dengan benar oleh impor.
 OPSI_DROPDOWN_EKSPOR = {
     "Jenis Kelamin": ["L", "P"],
+    "Jenis Pelaksana (Plt/Plh)": ["Plt.", "Plh."],
     "Status Kepegawaian": (
         [STATUS_KEPEGAWAIAN[k] for k in ("pns", "cpns", "pppk", "tni", "polri")]
         + [STATUS_KEPEGAWAIAN["non_asn"]]
