@@ -48,6 +48,37 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#524] Resolver penanda tangan KPB ter-scope satker (unifikasi lintas modul) — 2026-07-22
+
+Langkah 2 (penutup) perbaikan integritas TTD multi-satker: setelah PR #523
+membuat pejabat ber-`kode_satker`, resolver penanda tangan kini **menyaring
+kandidat KPB ke satker penerbit dokumen**. Menutup celah di DB multi-satker:
+dulu `db.pejabat.find({})` membaca SELURUH pejabat sehingga KPB satker lain
+(ber-SK lebih baru) bisa terpilih menandatangani dokumen resmi satker ini.
+
+- **Parameter `kode_satker` opsional** ditambahkan ke resolver bersama —
+  `resolve_penandatangan_kpb`, `resolve_pejabat_peran`, `blok_ttd_kpb`,
+  `blok_ttd_kpb_titik` (shared_utils), `_penandatangan_kpb` (reports),
+  `_kpb_signer` (persediaan). Helper baru `_q_pejabat_satker(kode)` membangun
+  query `{"kode_satker": {"$in": [kode, "", None]}}`.
+- **Aman-mundur (default-safe)** — `kode_satker` kosong → query kosong = SEMUA
+  pejabat (perilaku lama persis). Super-admin/lintas-satker & deployment
+  single-satker **tak berubah**. Pejabat era-lama tanpa kode tetap ikut
+  (`$in:[kode,"",None]`).
+- **Benang satker di seluruh call-site** — satker user penerbit dialirkan ke
+  ~20 titik generator dokumen: `reports.py` (9 laporan pembukuan/KIB/pemegang),
+  `bast.py`, `lbp.py`, `persediaan.py` (Nota Dinas/BAOF/Posisi/Mutasi/LPB/Kartu
+  Barang), `penggunaan.py`, `pemusnahan.py`, `wasdal.py`, `pemeliharaan.py`,
+  `mutasi_bmn.py`. Akses dokumen sudah ter-guard per satker, jadi satker user =
+  satker dokumen.
+
+Verifikasi: smoke FakeDB 7 skenario lulus (scope 'A' memilih KPB Satker A
+walau Satker B ber-SK terbaru; scope '' = perilaku lama; backward-compat
+`$in` KPB era-lama; fallback setelan kasatker tetap jalan). `pytest tests/unit`
+638 lulus; `compileall` bersih. (Backend-only, tanpa perubahan skema data.)
+
+---
+
 ## [#523] Isolasi satker untuk Referensi Pejabat (registry penanda tangan) — 2026-07-22
 
 Langkah 1 dari perbaikan integritas TTD multi-satker (roadmap strategis):

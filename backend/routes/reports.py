@@ -24,7 +24,7 @@ from auth_utils import require_user, require_admin, require_user_or_query_token
 from shared_utils import (pastikan_akses_kegiatan_id, ambang_kapitalisasi,
                           filter_aset_perhitungan,
                           get_photo_from_gridfs, limiter, pengaturan_kop,
-                          scope_query_aset)
+                          scope_query_aset, kode_satker_user, _q_pejabat_satker)
 from report_filters import active_asset_filter
 from report_utils import hitung_status_stiker, distribusi_pengguna
 from markupsafe import Markup
@@ -2521,15 +2521,17 @@ async def generate_dbkp_docx(activity_id: str, _user: dict = Depends(require_use
                              headers={"Content-Disposition": f'attachment; filename="DBKP_{activity_id[:8]}.docx"'})
 
 
-async def _penandatangan_kpb(settings, per_iso=None):
+async def _penandatangan_kpb(settings, per_iso=None, kode_satker=""):
     """Penanda tangan Kuasa Pengguna Barang untuk laporan satker-level.
 
     Ambil KPB aktif dari registry `pejabat` pada tanggal laporan; fallback ke
     setelan laporan (kasatker) bila belum ada (#292). Kembalikan {nama, nip,
-    jabatan, sumber}.
+    jabatan, sumber}. `kode_satker` (satker user) membatasi kandidat KPB ke
+    satker penerbit (+ era-lama tanpa kode); kosong = semua (perilaku lama).
     """
     from pejabat_utils import penandatangan_kpb
-    pejabat_list = await db.pejabat.find({}, {"_id": 0}).to_list(2000)
+    pejabat_list = await db.pejabat.find(
+        _q_pejabat_satker(kode_satker), {"_id": 0}).to_list(2000)
     return penandatangan_kpb(settings, pejabat_list, per_iso)
 
 
@@ -2723,7 +2725,7 @@ async def generate_posisi_bmn_pdf(_user: dict = Depends(require_user_or_query_to
         "verifikasi Lampiran BAS.", st['Meta']))
 
     elements.append(Spacer(1, 12*rl_mm))
-    ttd = await _penandatangan_kpb(settings, today_iso)
+    ttd = await _penandatangan_kpb(settings, today_iso, kode_satker_user(_user))
     elements.extend(_signature_block([
         {'pre': [_tempat_tanggal_laporan(settings, today_iso)],
          'header': _header_kpb(ttd),
@@ -2803,7 +2805,7 @@ async def generate_dbr_pdf(_user: dict = Depends(require_user_or_query_token)):
         elements.append(Spacer(1, 4*rl_mm))
 
     elements.append(Spacer(1, 10*rl_mm))
-    ttd = await _penandatangan_kpb(settings, today_iso)
+    ttd = await _penandatangan_kpb(settings, today_iso, kode_satker_user(_user))
     elements.extend(_signature_block([
         {'pre': [_tempat_tanggal_laporan(settings, today_iso)],
          'header': _header_kpb(ttd),
@@ -2844,7 +2846,7 @@ async def generate_kir_pdf(_user: dict = Depends(require_user_or_query_token)):
         except (ValueError, TypeError, OverflowError): return "0"
 
     today_iso = datetime.now(timezone.utc).date().isoformat()
-    ttd_kpb = await _penandatangan_kpb(settings, today_iso)
+    ttd_kpb = await _penandatangan_kpb(settings, today_iso, kode_satker_user(_user))
     buffer = io.BytesIO()
     doc = _std_doc(buffer)
     st = _get_report_styles()
@@ -3023,7 +3025,7 @@ async def generate_penyusutan_pdf(
         "30 Jun/31 Des memuat semester yang ditutup hari itu.", st['Meta']))
 
     elements.append(Spacer(1, 12*rl_mm))
-    ttd = await _penandatangan_kpb(settings, per_tanggal)
+    ttd = await _penandatangan_kpb(settings, per_tanggal, kode_satker_user(_user))
     elements.extend(_signature_block([
         {'pre': [_tempat_tanggal_laporan(settings, per_tanggal)],
          'header': _header_kpb(ttd),
@@ -3171,7 +3173,7 @@ async def generate_lbkp_pdf(
     elements.append(Paragraph(catatan, st['Meta']))
 
     elements.append(Spacer(1, 12 * rl_mm))
-    ttd = await _penandatangan_kpb(settings, sampai)
+    ttd = await _penandatangan_kpb(settings, sampai, kode_satker_user(_user))
     elements.extend(_signature_block([
         {'pre': [_tempat_tanggal_laporan(settings, sampai)],
          'header': _header_kpb(ttd),
@@ -3318,7 +3320,7 @@ async def generate_lkb_pdf(_user: dict = Depends(require_user_or_query_token)):
         "dari SIMAK-BMN/SAKTI — laporan ini bahan sandingan/kerja.", st['Meta']))
     elements.append(Spacer(1, 10 * rl_mm))
     tgl_ttd_lkb = datetime.now(timezone.utc).date().isoformat()
-    ttd = await _penandatangan_kpb(settings, tgl_ttd_lkb)
+    ttd = await _penandatangan_kpb(settings, tgl_ttd_lkb, kode_satker_user(_user))
     elements.extend(_signature_block([
         {'pre': [_tempat_tanggal_laporan(settings, tgl_ttd_lkb)],
          'header': 'Penanggung Jawab UAKPB',
@@ -3649,7 +3651,7 @@ async def generate_calbmn_pdf(
         "sesuai kondisi satker sebelum dokumen difinalkan.", st['Meta']))
 
     elements.append(Spacer(1, 10 * rl_mm))
-    ttd = await _penandatangan_kpb(settings, sampai)
+    ttd = await _penandatangan_kpb(settings, sampai, kode_satker_user(_user))
     elements.extend(_signature_block([
         {'pre': [_tempat_tanggal_laporan(settings, sampai)],
          'header': _header_kpb(ttd),
@@ -5846,7 +5848,8 @@ async def generate_daftar_pemegang_pdf(activity_id: str,
     # per_iso hari ini WAJIB — tanpa tanggal, rentang berlaku SK pejabat
     # tidak dicek sehingga KPB kedaluwarsa bisa terpilih (temuan #41).
     ttd = await _penandatangan_kpb(
-        settings, datetime.now(timezone.utc).date().isoformat())
+        settings, datetime.now(timezone.utc).date().isoformat(),
+        kode_satker_user(_user))
     elements.extend(_signature_block([
         {'pre': [_tempat_tanggal_laporan(settings)],
          'header': _header_kpb(ttd),
@@ -5940,7 +5943,8 @@ async def generate_daftar_pemegang_docx(activity_id: str, _user: dict = Depends(
         DX.data_table(d, ["No", "Pemegang", "Kode Barang", "NUP", "Nama Barang", "No. BAST"],
                       rows_b, align_center={0, 3}, font_size=8)
 
-    ttd = await _penandatangan_kpb(settings, datetime.now(timezone.utc).date().isoformat())
+    ttd = await _penandatangan_kpb(settings, datetime.now(timezone.utc).date().isoformat(),
+                                   kode_satker_user(_user))
     peta = await _peta_status_kepegawaian([ttd.get("nip")])
     DX.signature_single(d, nama=ttd["nama"], header=_header_kpb(ttd),
                         pre_lines=[_tempat_tanggal_laporan(settings)],

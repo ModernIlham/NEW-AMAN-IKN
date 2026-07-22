@@ -446,8 +446,10 @@ async def kib_pdf(asset_id: str, _user: dict = Depends(require_user_or_query_tok
     el.append(Spacer(1, 6 * rl_mm))
     try:
         from routes.reports import _signature_block
-        from shared_utils import blok_ttd_kpb
-        el.extend(_signature_block([await blok_ttd_kpb(settings)], doc.width))
+        from shared_utils import blok_ttd_kpb, kode_satker_user
+        el.extend(_signature_block(
+            [await blok_ttd_kpb(settings, kode_satker=kode_satker_user(_user))],
+            doc.width))
     except Exception:
         pass
 

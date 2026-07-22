@@ -189,7 +189,7 @@ async def generate_lbp_docx(tahun: int, semester: int = 0,
 
     kode = kode_satker_user(user)
     settings = await pengaturan_kop(kode_satker=kode)
-    ttd = await resolve_penandatangan_kpb(settings, per_iso=per_iso)
+    ttd = await resolve_penandatangan_kpb(settings, per_iso=per_iso, kode_satker=kode)
     ambang = await ambang_kapitalisasi()
 
     # ── Data aset (scoped satker) ──

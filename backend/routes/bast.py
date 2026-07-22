@@ -704,8 +704,11 @@ async def bast_pdf(bast_id: str,
         # Spesimen TTD digital KPB ikut tersemat (konsisten laporan lain).
         from pegawai_utils import baris_identitas_ttd as _baris_ttd
         from pejabat_utils import penandatangan_kpb
-        from shared_utils import ambil_ttd_img
-        pj_list = await db.pejabat.find({}, _PROJ).to_list(2000)
+        from shared_utils import ambil_ttd_img, kode_satker_user, _q_pejabat_satker
+        # KPB ter-scope satker penerbit (isolasi M-SCOPE): satker user (BAST
+        # sudah ter-guard per satker) + pejabat era-lama tanpa kode.
+        pj_list = await db.pejabat.find(
+            _q_pejabat_satker(kode_satker_user(_user)), _PROJ).to_list(2000)
         kpb = penandatangan_kpb(settings, pj_list, b.get("tanggal"))
         signers_mengetahui = [{'header': 'Mengetahui,',
                                'role': kpb["jabatan"],

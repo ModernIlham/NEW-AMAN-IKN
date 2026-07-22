@@ -540,7 +540,19 @@ async def status_kepegawaian_by_nip(nip) -> str:
     return ""
 
 
-async def resolve_penandatangan_kpb(settings, per_iso=None):
+def _q_pejabat_satker(kode_satker: str = "") -> dict:
+    """Query registry `pejabat` ter-scope satker untuk resolver penanda tangan.
+
+    Isolasi M-SCOPE lanjutan (langkah 2 setelah pejabat membawa kode_satker):
+    dokumen resmi satker ini hanya boleh ditandatangani pejabat satker ini
+    (atau pejabat era-lama tanpa kode). `kode_satker` kosong → query kosong =
+    SEMUA pejabat (perilaku lama, aman-mundur untuk super-admin/lintas-satker
+    & deployment satker-tunggal). MURNI."""
+    kode = str(kode_satker or "").strip()
+    return {"kode_satker": {"$in": [kode, "", None]}} if kode else {}
+
+
+async def resolve_penandatangan_kpb(settings, per_iso=None, kode_satker=""):
     """Penanda tangan **Kuasa Pengguna Barang** untuk dokumen resmi.
 
     SATU resolver untuk semua modul (dulu 5 modul membaca setelan kasatker
@@ -548,12 +560,17 @@ async def resolve_penandatangan_kpb(settings, per_iso=None):
     registry `pejabat` pada tanggal dokumen (`per_iso`), fallback setelan
     laporan (kasatker). Kembalikan {nama, nip, jabatan, status_kepegawaian,
     sumber}.
+
+    `kode_satker` (opsional) membatasi kandidat KPB ke satker penerbit dokumen
+    (+ pejabat era-lama tanpa kode) agar KPB satker lain tak ikut terpilih di
+    DB multi-satker; kosong = semua pejabat (perilaku lama).
     """
     from pejabat_utils import penandatangan_kpb
     # Default tanggal = hari ini (temuan #41: tanpa tanggal, rentang berlaku
     # SK pejabat tidak dicek sehingga pejabat kedaluwarsa bisa terpilih).
     per_iso = per_iso or datetime.now(timezone.utc).date().isoformat()
-    pejabat_list = await db.pejabat.find({}, {"_id": 0}).to_list(2000)
+    pejabat_list = await db.pejabat.find(
+        _q_pejabat_satker(kode_satker), {"_id": 0}).to_list(2000)
     kpb = penandatangan_kpb(settings or {}, pejabat_list, per_iso)
     # Fallback setelan tidak membawa status — lengkapi via lookup NIP agar
     # aturan Non-ASN tetap berlaku bila orangnya terdaftar di master.
@@ -562,12 +579,16 @@ async def resolve_penandatangan_kpb(settings, per_iso=None):
     return kpb
 
 
-async def resolve_pejabat_peran(peran, per_iso=None):
+async def resolve_pejabat_peran(peran, per_iso=None, kode_satker=""):
     """Pejabat aktif pemegang `peran` (mis. 'pengurus_barang') pada tanggal
-    `per_iso` (default hari ini) dari registry pejabat — None bila belum ada."""
+    `per_iso` (default hari ini) dari registry pejabat — None bila belum ada.
+
+    `kode_satker` (opsional) membatasi kandidat ke satker penerbit dokumen
+    (+ era-lama tanpa kode); kosong = semua pejabat (perilaku lama)."""
     from pejabat_utils import pejabat_aktif_untuk_peran
     per_iso = per_iso or datetime.now(timezone.utc).date().isoformat()
-    pejabat_list = await db.pejabat.find({}, {"_id": 0}).to_list(2000)
+    pejabat_list = await db.pejabat.find(
+        _q_pejabat_satker(kode_satker), {"_id": 0}).to_list(2000)
     return pejabat_aktif_untuk_peran(pejabat_list, peran, per_iso)
 
 
@@ -697,12 +718,13 @@ async def ambil_ttd_img(file_id):
         return None
 
 
-async def blok_ttd_kpb(settings, per_iso=None):
+async def blok_ttd_kpb(settings, per_iso=None, kode_satker=""):
     """Entri `_signature_block` "Kuasa Pengguna Barang" (dengan baris tempat/
     tanggal titik-titik) — nama/NIP dari registry pejabat, fallback setelan.
-    Penandatangan Non-ASN: baris NIP/NIK TIDAK dicetak (privasi)."""
+    Penandatangan Non-ASN: baris NIP/NIK TIDAK dicetak (privasi).
+    `kode_satker` membatasi KPB ke satker penerbit (kosong = semua, lama)."""
     from pegawai_utils import baris_identitas_ttd
-    kpb = await resolve_penandatangan_kpb(settings, per_iso)
+    kpb = await resolve_penandatangan_kpb(settings, per_iso, kode_satker)
     return {'pre': ['.................., .......................'],
             'header': 'Kuasa Pengguna Barang,',
             'nama': kpb["nama"],
@@ -799,12 +821,13 @@ async def proses_keluar_aktif(asset_ids):
     return peta
 
 
-async def blok_ttd_kpb_titik(settings, per_iso=None):
+async def blok_ttd_kpb_titik(settings, per_iso=None, kode_satker=""):
     """Entri `_signature_block` "Mengetahui / Kuasa Pengguna Barang" dengan
     fallback garis-titik (pola BA/daftar) — nama/NIP dari registry pejabat.
-    Penandatangan Non-ASN: baris NIP/NIK TIDAK dicetak (privasi)."""
+    Penandatangan Non-ASN: baris NIP/NIK TIDAK dicetak (privasi).
+    `kode_satker` membatasi KPB ke satker penerbit (kosong = semua, lama)."""
     from pegawai_utils import baris_identitas_ttd
-    kpb = await resolve_penandatangan_kpb(settings, per_iso)
+    kpb = await resolve_penandatangan_kpb(settings, per_iso, kode_satker)
     return {'pre': [''], 'header': 'Mengetahui,', 'role': 'Kuasa Pengguna Barang,',
             'nama': kpb["nama"] if kpb["nama"] != "-" else '...........................',
             'ttd_img': await ambil_ttd_img(kpb.get("ttd_file_id")),
