@@ -249,6 +249,10 @@ async def create_indexes() -> None:
         # Buku agenda surat: sort {tahun,no_agenda} saat filter `jenis` TIDAK
         # dipakai — indeks (jenis,tahun,no_agenda) yang ada tak melayani sort ini.
         await db.surat.create_index([("tahun", -1), ("no_agenda", -1)])
+        # Job latar bersama (jobs.py): lookup per job_id + TTL auto-hapus dokumen
+        # job > 7 hari (created_at BSON datetime) agar koleksi tak menumpuk.
+        await db.background_jobs.create_index("job_id", unique=True)
+        await db.background_jobs.create_index("created_at", expireAfterSeconds=7 * 86400)
         logger.info("Database indexes created successfully")
     except Exception as e:
         logger.error(f"Error creating indexes: {e}")

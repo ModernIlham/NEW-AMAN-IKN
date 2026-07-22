@@ -48,6 +48,33 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#530] Fondasi job latar bersama + impor kategori tahan multi-worker — 2026-07-22
+
+Langkah 1 modul **job latar (background job)**. Modul baru `jobs.py` menyimpan
+state job di MongoDB (`db.background_jobs`) sehingga tahan multi-worker & restart
+proses — fondasi untuk memindahkan ekspor/laporan berat ke antrean async (langkah
+berikutnya) agar tak menahan koneksi/timeout.
+
+- **`jobs.py`**: `buat_job` / `update_job` / `get_job` / `bersihkan_job_basi`
+  (relabel job macet). Dokumen job auto-hapus via **TTL index** 7 hari pada
+  `created_at`; lookup `job_id` ber-indeks unik.
+- **BUG multi-worker diperbaiki**: impor kategori massal dulu menyimpan progres
+  di **dict in-memory** — di `uvicorn --workers 4`, POST menaruh progres di
+  memori satu worker sedangkan polling progres bisa mendarat di worker lain →
+  **404 / progres macet**. Kini persisten di Mongo sehingga polling selalu
+  menemukan job apa pun worker-nya. Progres ditulis ter-throttle (tiap 200
+  baris) agar hemat tulis.
+- **Kontrak frontend tetap**: respons `GET /categories/import-progress/{job_id}`
+  membawa field yang sama (`status/total/processed/imported/skipped/errors/
+  done`) — tanpa perubahan UI. Logika impor (padding kode, dedup, batch 500)
+  tak berubah.
+
+Verifikasi: smoke FakeDB 4 skenario (lifecycle job; relabel job basi; impor
+end-to-end imported=3/skipped=1/errors=1). `pytest tests/unit` 638 lulus;
+`compileall` bersih. Backend-only. Berikutnya: async ekspor XLSX/PDF via jobs.py.
+
+---
+
 ## [#529] Logging terstruktur + korelasi request-id (observability) — 2026-07-22
 
 Langkah observability berikutnya: menelusuri satu request lintas banyak baris log
