@@ -48,6 +48,51 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#495] Berita Acara BMN Tidak Ditemukan lebih detail + versi Word (.docx) — 2026-07-22
+
+Penyempurnaan format Berita Acara BMN Tidak Ditemukan sesuai kaidah
+penatausahaan BMN (riset praktik DJKN/Kemenkeu & SE PUPR 10/2023), plus
+penyediaan versi **Word (.docx) yang bisa disunting** — fondasi untuk versi
+Word laporan lain menyusul.
+
+### Berita Acara Hasil Penelitian — format & penanda tangan
+
+- Judul diselaraskan: **“BERITA ACARA HASIL PENELITIAN — BARANG MILIK NEGARA
+  (BMN) TIDAK DITEMUKAN”**; pembuka menyebut Tim Internal Penelitian yang
+  dibentuk berdasarkan Surat Tugas/Keputusan Kuasa Pengguna Barang.
+- **Penanda tangan diperbaiki** (fokus permintaan): yang menandatangani
+  adalah **Tim Internal Penelitian** (Tim Inti + Pembantu, Ketua ditandai,
+  min. 3 orang) — bukan tim peneliti eksternal seperti sebelumnya —
+  diketahui/disahkan **Kuasa Pengguna Barang** di tengah bawah, dengan
+  tambahan blok **Saksi** (opsional). Aturan Non-ASN/NIK tetap: NIP/NIK tidak
+  dicetak di area tanda tangan.
+- Bagian baru agar lebih lengkap: **DASAR** (rujukan PP 27/2014 jo. 28/2020,
+  PMK penatausahaan/181/2016, PMK 83/2016 penghapusan, PMK 118/2017 &
+  S-115/KN/2017), **METODE PENELITIAN** (penelitian dokumen + peninjauan
+  lapangan), **KESIMPULAN & REKOMENDASI TINDAK LANJUT** yang otomatis
+  memilah per klasifikasi — *Kesalahan Pencatatan → koreksi pencatatan*;
+  *benar hilang → usul penghapusan + SPTJM + Surat Keterangan Kepolisian/
+  Inspektorat, bila lalai → TGR* — dan **DOKUMEN PENDUKUNG**.
+- Konten baku dipisah ke `ba_utils.py` (fungsi murni, ber-unit test) sebagai
+  SATU sumber kebenaran naskah untuk PDF dan Word.
+
+### Versi Word (.docx) editable
+
+- Modul bersama baru **`docx_utils.py`** (kop surat, blok judul, tabel data
+  bergaris, blok tanda tangan tim + KPB + saksi mematuhi aturan Non-ASN,
+  tembusan, nomor halaman) — mencerminkan sistem desain laporan PDF.
+- Endpoint **`GET …/berita-acara-docx`** menghasilkan `.docx` dengan konten &
+  kaidah penanda tangan **identik** PDF (satu sumber data). Tombol **“Word”**
+  di samping tombol BA Tidak Ditemukan pada rekapitulasi inventarisasi.
+- Ini fondasi: versi Word untuk laporan lain akan menyusul memakai
+  `docx_utils` yang sama.
+
+Verifikasi: 620 unit test lulus (+4 `ba_utils`); smoke render BA **PDF & DOCX**
+memverifikasi seluruh bagian resmi, penanda tangan Tim Internal, rekomendasi
+per klasifikasi, dan aturan Non-ASN; eslint bersih; `yarn build` sukses.
+
+---
+
 ## [#494] Hub Pelaporan: tombol "Kop/Sampul" inline dihapus (redundan) — 2026-07-22
 
 Lanjutan konsolidasi setelan kop/sampul (#493). Tombol admin "Kop/Sampul"

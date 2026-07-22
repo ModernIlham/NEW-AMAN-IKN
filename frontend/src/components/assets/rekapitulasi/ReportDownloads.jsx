@@ -5,7 +5,7 @@ import { downloadFileWithProgress } from "../../../lib/downloadFile";
 import {
   Download, BarChart3, BookOpen, FileText, Shield, FileWarning,
   CheckCircle2, XCircle, AlertTriangle, Loader2,
-  Package, Check
+  Package, Check, FileType2
 } from "lucide-react";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 
@@ -60,7 +60,8 @@ const officialReports = [
 ];
 
 const supportingDocs = [
-  { key: "berita-acara", label: "BA Tidak Ditemukan", icon: BookOpen },
+  // `docx: true` → tombol unduh Word (.docx) editable di samping tombol PDF.
+  { key: "berita-acara", label: "BA Tidak Ditemukan", icon: BookOpen, docx: true },
   { key: "sptjm", label: "SPTJM", icon: Shield },
   { key: "surat-koreksi", label: "Surat Koreksi", icon: FileWarning },
   { key: "daftar-pemegang", label: "Daftar Pemegang Aset", icon: FileText },
@@ -122,7 +123,7 @@ const batchGroupColors = {
 };
 
 export default function ReportDownloads({
-  data, activityId, downloading, onDownloadPDF, onDownloadDBHI
+  data, activityId, downloading, onDownloadPDF, onDownloadDBHI, onDownloadDocx
 }) {
   const [batchMode, setBatchMode] = useState(false);
   const [selected, setSelected] = useState(new Set());
@@ -331,14 +332,29 @@ export default function ReportDownloads({
           <FileText className="w-3.5 h-3.5" /> Dokumen Pendukung Lainnya
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          {supportingDocs.map(({ key, label, icon: Icon }) => (
-            <button key={key} onClick={() => onDownloadPDF(key)} disabled={!!downloading}
-              className="flex items-center gap-2 px-3 py-2 bg-slate-600 hover:bg-slate-700 disabled:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 dark:disabled:bg-slate-800/50 dark:disabled:text-slate-500 text-white rounded-lg text-xs font-medium transition-colors">
-              {downloading === key ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Icon className="w-3.5 h-3.5" />}
-              {label}
-            </button>
+          {supportingDocs.map(({ key, label, icon: Icon, docx }) => (
+            <div key={key} className="flex items-stretch gap-1">
+              <button onClick={() => onDownloadPDF(key)} disabled={!!downloading}
+                className="flex-1 flex items-center gap-2 px-3 py-2 bg-slate-600 hover:bg-slate-700 disabled:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 dark:disabled:bg-slate-800/50 dark:disabled:text-slate-500 text-white rounded-lg text-xs font-medium transition-colors">
+                {downloading === key ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Icon className="w-3.5 h-3.5" />}
+                {label}
+              </button>
+              {docx && onDownloadDocx && (
+                <button onClick={() => onDownloadDocx(key)} disabled={!!downloading}
+                  title="Unduh versi Word (.docx) yang bisa disunting"
+                  aria-label={`Unduh ${label} format Word`}
+                  data-testid={`download-docx-${key}`}
+                  className="flex items-center gap-1 px-2 py-2 bg-blue-700 hover:bg-blue-800 disabled:bg-blue-300 dark:bg-blue-800 dark:hover:bg-blue-700 dark:disabled:bg-blue-900/50 dark:disabled:text-blue-400 text-white rounded-lg text-[11px] font-semibold transition-colors">
+                  {downloading === `${key}-docx` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileType2 className="w-3.5 h-3.5" />}
+                  Word
+                </button>
+              )}
+            </div>
           ))}
         </div>
+        <p className="text-[10px] text-muted-foreground mt-1.5">
+          BA Tidak Ditemukan tersedia dalam Word (.docx) yang bisa disunting sebelum ditandatangani.
+        </p>
       </div>
 
       {/* Batch Download ZIP */}

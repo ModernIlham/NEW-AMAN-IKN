@@ -64,6 +64,26 @@ function RekapitulasiPanel({ activityId, isOpen, onToggle, embedded = false, onT
     }
   };
 
+  // Unduh versi Word (.docx) editable. Saat ini: Berita Acara Tidak Ditemukan
+  // (endpoint berita-acara-docx); tipe lain menyusul.
+  const handleDownloadDocx = async (type) => {
+    const endpoints = { "berita-acara": "berita-acara-docx" };
+    const filenames = { "berita-acara": "Berita_Acara" };
+    const endpoint = endpoints[type];
+    if (!endpoint) return;
+    const name = filenames[type] || type;
+    setDownloading(`${type}-docx`);
+    try {
+      await downloadFileWithProgress(
+        `${API}/inventory-activities/${activityId}/${endpoint}`,
+        `${name}_${activityId.substring(0, 8)}.docx`,
+        { label: `${name} (Word)` }
+      );
+    } catch { /* toast error sudah ditangani helper */ } finally {
+      setDownloading("");
+    }
+  };
+
   const handleDownloadDBHI = async (type, label) => {
     setDownloading(type);
     try {
@@ -100,6 +120,7 @@ function RekapitulasiPanel({ activityId, isOpen, onToggle, embedded = false, onT
             downloading={downloading}
             onDownloadPDF={handleDownloadPDF}
             onDownloadDBHI={handleDownloadDBHI}
+            onDownloadDocx={handleDownloadDocx}
           />
         </>
       )}

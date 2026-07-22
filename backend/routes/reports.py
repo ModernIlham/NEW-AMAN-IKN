@@ -554,7 +554,7 @@ async def _peta_status_kepegawaian(nips) -> dict:
 def _blok_ttd_tim_kpb(tim, settings, tanggal_iso, ident, doc_width,
                       label_tim="Tim Pelaksana Inventarisasi",
                       header_mengetahui="Mengetahui,",
-                      status_by_nip=None):
+                      status_by_nip=None, saksi=None):
     """Blok tanda tangan BA sesuai kaidah inventarisasi BMN: SELURUH anggota
     tim bertanda tangan (ketua ditandai; berpasangan kiri-kanan per baris,
     tempat/tanggal di kanan atas), lalu penanggung jawab UAKPB / Kuasa
@@ -596,6 +596,23 @@ def _blok_ttd_tim_kpb(tim, settings, tanggal_iso, ident, doc_width,
                 # tempat/tanggal sekali, di kanan atas area tanda tangan
                 s["pre"] = [_tempat_tanggal_laporan(settings, tanggal_iso)]
             signers.append(s)
+        els.extend(_signature_block(signers, doc_width))
+        els.append(Spacer(1, 5 * rl_mm))
+
+    # Saksi (opsional) — mis. pemegang barang/penanggung jawab ruangan.
+    saksi_list = [_member_dict(m) for m in (saksi or [])]
+    for i in range(0, len(saksi_list), 2):
+        pasangan = saksi_list[i:i + 2]
+        signers = []
+        for m in pasangan:
+            nip_s = str(m.get("nip") or "").strip()
+            signers.append({
+                "header": "Saksi,",
+                "role": str(m.get("jabatan") or "").strip() or None,
+                "nama": m.get("nama") or "________________________",
+                "after": baris_identitas_ttd(
+                    nip_s, "", peta_status.get(nip_s, "")),
+            })
         els.extend(_signature_block(signers, doc_width))
         els.append(Spacer(1, 5 * rl_mm))
 
@@ -922,9 +939,96 @@ async def get_rekapitulasi(activity_id: str, _user: dict = Depends(require_user_
 # BERITA ACARA PDF
 # ============================================================================
 
+async def _data_ba_tidak_ditemukan(activity, settings):
+    """SATU sumber data Berita Acara Hasil Penelitian BMN Tidak Ditemukan —
+    dikonsumsi bersama oleh generator PDF & Word/.docx. Mengembalikan dict
+    berisi identitas, tim, klasifikasi sebab, rekap, rincian, narasi baku
+    (dari ba_utils), penanda tangan (Tim Internal + KPB + saksi) dan tembusan.
+
+    Kaidah penanda tangan: yang bertanda tangan adalah TIM INTERNAL PENELITIAN
+    (tim inti + pembantu), bukan tim peneliti eksternal — sesuai judul & praktik
+    BA hasil penelitian (min. 3 orang), diketahui Kuasa Pengguna Barang."""
+    import ba_utils
+    from pelaporan_utils import narasi_hari_tanggal
+
+    assets = await db.assets.find(
+        {"activity_id": activity["id"]},
+        {"_id": 0, "photos": 0, "photo": 0, "photo_thumbnails": 0, "thumbnail": 0, "gallery_thumbnail": 0, "document_checklist": 0},
+    ).to_list(100000)
+    tidak_ditemukan = [a for a in assets if a.get("inventory_status") == "Tidak Ditemukan"]
+    ditemukan = [a for a in assets if a.get("inventory_status") == "Ditemukan"]
+    kesalahan, lainnya = ba_utils.klasifikasikan_tidak_ditemukan(tidak_ditemukan)
+
+    def safe_price(a):
+        try:
+            return float(a.get("purchase_price", 0) or 0)
+        except (ValueError, TypeError):
+            return 0.0
+
+    ident = _activity_identity(activity, settings)
+    tanggal_ba = (str(activity.get("tanggal_berita_acara") or "").strip()[:10]
+                  or str(settings.get("tanggal_laporan") or "").strip()[:10])
+    nar = narasi_hari_tanggal(tanggal_ba)
+    tempat = str(settings.get("tempat_laporan") or "").strip() or ".................."
+    if nar:
+        frasa_hari = (f"Pada hari ini, {nar['hari']}, tanggal {nar['tanggal_terbilang']} "
+                      f"bulan {nar['bulan']} tahun {nar['tahun_terbilang']} "
+                      f"({_fmt_tanggal_id(tanggal_ba)}), bertempat di {tempat},")
+    else:
+        frasa_hari = (f"Pada hari ini, .................., tanggal .................. "
+                      f"bulan .................. tahun ...................., "
+                      f"bertempat di {tempat},")
+    nomor_st = str(activity.get("nomor_surat") or "-")
+    intro = (f"{frasa_hari} kami yang bertanda tangan di bawah ini selaku Tim "
+             f"Internal Penelitian Barang Milik Negara (BMN) Tidak Ditemukan yang "
+             f"dibentuk berdasarkan Surat Tugas/Keputusan Kuasa Pengguna Barang "
+             f"Nomor {nomor_st}, telah melaksanakan penelitian terhadap BMN yang "
+             f"tidak ditemukan pada kegiatan inventarisasi "
+             f"“{activity.get('nama_kegiatan', '-')}” di lingkungan "
+             f"{ident['satker_name']}, dengan hasil sebagai berikut:")
+
+    tim_inti = [_member_dict(m) for m in (activity.get("tim_inti") or [])]
+    tim_pembantu = [_member_dict(m) for m in (activity.get("tim_pembantu") or [])]
+    tim_peneliti = [_member_dict(m) for m in (activity.get("tim_peneliti") or [])]
+    tim_pendukung = [_member_dict(m) for m in (activity.get("tim_pendukung") or [])]
+    saksi = [_member_dict(m) for m in (activity.get("saksi") or [])]
+    # Penanda tangan = Tim Internal Penelitian (inti + pembantu). Bila kosong,
+    # jatuh ke tim peneliti agar BA tetap ada penanda tangannya.
+    tim_ttd = tim_inti + tim_pembantu or tim_peneliti
+
+    # tembusan: kegiatan menimpa → pengaturan global
+    mentah = (str(activity.get("tembusan") or "").strip()
+              or str(settings.get("tembusan_laporan") or ""))
+    tembusan_lines = [b.strip() for b in mentah.splitlines() if b.strip()]
+
+    peta_status = await _peta_status_kepegawaian(
+        [m.get("nip") for m in (tim_ttd + saksi) if isinstance(m, dict)]
+        + [ident.get("kasatker_nip")])
+
+    nomor_ba = (str(activity.get("nomor_berita_acara") or "").strip()
+                or await _nomor_terbooking(activity.get("id"))
+                or "......./......./........")
+
+    return {
+        "assets": assets, "ditemukan": ditemukan, "tidak_ditemukan": tidak_ditemukan,
+        "kesalahan": kesalahan, "lainnya": lainnya, "safe_price": safe_price,
+        "ident": ident, "tanggal_ba": tanggal_ba, "nomor_ba": nomor_ba,
+        "intro": intro, "tempat": tempat,
+        "dasar": list(ba_utils.DASAR_HUKUM_BA),
+        "metode": list(ba_utils.METODE_PENELITIAN_BA),
+        "rekomendasi": ba_utils.rekomendasi_tindak_lanjut(len(kesalahan), len(lainnya)),
+        "dokumen_pendukung": ba_utils.dokumen_pendukung_ba(bool(lainnya)),
+        "penutup": ba_utils.PENUTUP_BA,
+        "tim_inti": tim_inti, "tim_pembantu": tim_pembantu,
+        "tim_peneliti": tim_peneliti, "tim_pendukung": tim_pendukung,
+        "tim_ttd": tim_ttd, "saksi": saksi,
+        "tembusan_lines": tembusan_lines, "peta_status": peta_status,
+    }
+
+
 @reports_router.get("/inventory-activities/{activity_id}/berita-acara-pdf")
 async def generate_berita_acara_pdf(activity_id: str, _user: dict = Depends(require_user_or_query_token)):
-    """Generate Berita Acara Tim Internal Penelitian BMN Tidak Ditemukan (PDF)"""
+    """Generate Berita Acara Hasil Penelitian BMN Tidak Ditemukan (PDF)"""
     from reportlab.platypus import Table, Paragraph, Spacer
     from reportlab.lib.units import mm as rl_mm
 
@@ -934,17 +1038,11 @@ async def generate_berita_acara_pdf(activity_id: str, _user: dict = Depends(requ
     await pastikan_akses_kegiatan_id(_user, activity_id)
 
     settings = await pengaturan_kop(activity)
-    # proyeksi: buang media base64 yang tidak dipakai laporan ini (hemat memori/IO)
-    assets = await db.assets.find(
-        {"activity_id": activity_id},
-        {"_id": 0, "photos": 0, "photo": 0, "photo_thumbnails": 0, "thumbnail": 0, "gallery_thumbnail": 0, "document_checklist": 0},
-    ).to_list(100000)
-    tidak_ditemukan = [a for a in assets if a.get("inventory_status") == "Tidak Ditemukan"]
-    ditemukan = [a for a in assets if a.get("inventory_status") == "Ditemukan"]
-
-    def safe_price(a):
-        try: return float(a.get("purchase_price", 0) or 0)
-        except: return 0
+    D = await _data_ba_tidak_ditemukan(activity, settings)
+    assets = D["assets"]
+    ditemukan = D["ditemukan"]
+    tidak_ditemukan = D["tidak_ditemukan"]
+    safe_price = D["safe_price"]
 
     def fmt_rp(val):
         try: return f"Rp {int(val):,}".replace(",", ".")
@@ -958,107 +1056,102 @@ async def generate_berita_acara_pdf(activity_id: str, _user: dict = Depends(requ
     cell_style = st['Cell']
     bold_style = st['Heading']
 
+    from xml.sax.saxutils import escape as _esc_ba
+    ident = D["ident"]
+    tanggal_ba = D["tanggal_ba"]
+
     elements = []
     elements.extend(_kop_surat_flowables(settings, doc.width))
-
-    # Header — nomor BA: field kegiatan → nomor ter-booking Persuratan →
-    # titik-titik utk diisi tangan.
-    nomor_ba = (str(activity.get("nomor_berita_acara") or "").strip()
-                or await _nomor_terbooking(activity.get("id"))
-                or "......./......./........")
-    elements.extend(_title_block("BERITA ACARA\nTIM INTERNAL PENELITIAN BMN TIDAK DITEMUKAN", nomor=nomor_ba))
-
-    # Intro paragraph — narasi tanggal terbilang bila tanggal BA/laporan ada.
-    ident = _activity_identity(activity, settings)
-    from pelaporan_utils import narasi_hari_tanggal
-    tanggal_ba = (str(activity.get("tanggal_berita_acara") or "").strip()[:10]
-                  or str(settings.get("tanggal_laporan") or "").strip()[:10])
-    nar = narasi_hari_tanggal(tanggal_ba)
-    frasa_hari = (f"Pada hari ini, {nar['hari']}, tanggal {nar['tanggal_terbilang']} "
-                  f"bulan {nar['bulan']} tahun {nar['tahun_terbilang']} "
-                  f"({_fmt_tanggal_id(tanggal_ba)})," if nar else "Pada hari ini,")
-    intro = f"""{frasa_hari} berdasarkan Surat Tugas Nomor {activity.get('nomor_surat', '-')},
-    kami Tim Internal yang ditunjuk untuk melakukan penelitian terhadap BMN yang tidak ditemukan
-    pada kegiatan inventarisasi "{activity.get('nama_kegiatan', '-')}",
-    menyampaikan hasil penelitian sebagai berikut:"""
-    elements.append(Paragraph(intro, normal_style))
+    elements.extend(_title_block(
+        "BERITA ACARA HASIL PENELITIAN\nBARANG MILIK NEGARA (BMN) TIDAK DITEMUKAN",
+        nomor=D["nomor_ba"]))
+    elements.append(Paragraph(D["intro"], normal_style))
     elements.append(Spacer(1, 4*rl_mm))
 
-    # Penomoran bagian dinamis — beberapa bagian bersyarat, jadi angka romawi
-    # dihitung berurutan (dulu "III." muncul dua kali).
-    _romawi = iter(["I", "II", "III", "IV", "V", "VI", "VII"])
+    # Penomoran bagian dinamis (angka romawi berurutan; sebagian bersyarat).
+    _romawi = iter(["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"])
     def _sec(judul):
         return Paragraph(f"<b>{next(_romawi)}. {judul}</b>", bold_style)
 
-    # Tim Inventarisasi (Internal)
-    tim_inti = activity.get("tim_inti", [])
-    tim_pembantu_list_rhi = activity.get("tim_pembantu", [])
-    if tim_inti or tim_pembantu_list_rhi:
-        elements.append(_sec("TIM INVENTARISASI (INTERNAL)"))
+    def _daftar_nomor(items):
+        for i, teks in enumerate(items, 1):
+            elements.append(Paragraph(f"{i}. {_esc_ba(teks)}", normal_style))
+
+    # I. DASAR
+    elements.append(_sec("DASAR"))
+    _daftar_nomor(D["dasar"])
+    elements.append(Spacer(1, 3*rl_mm))
+
+    # II. SUSUNAN TIM INTERNAL PENELITIAN (penanda tangan)
+    if D["tim_inti"] or D["tim_pembantu"]:
+        elements.append(_sec("SUSUNAN TIM INTERNAL PENELITIAN"))
         inv_style = _std_table_style(extra=[('ALIGN', (0, 0), (0, -1), 'CENTER')])
         tim_col_widths = _fit_col_widths([25, 55, 110, 95, 95, 80], doc.width)
-        if tim_inti:
-            elements.append(Paragraph("<b>Tim Inti (Pelaksana)</b>", small_style))
-            ti_data = [['No', 'Peran', 'Nama', 'Jabatan', 'NIP/NIK', 'Unit']]
-            for i, m in enumerate(map(_member_dict, tim_inti)):
-                ti_data.append([str(i+1), 'Ketua Tim' if m.get('is_ketua') else 'Anggota', Paragraph(m.get('nama', '-'), cell_style), Paragraph(m.get('jabatan', '-'), cell_style), Paragraph(str(m.get('nip', '-')), cell_style), Paragraph(m.get('unit', '-'), cell_style)])
-            ti_table = Table(ti_data, colWidths=tim_col_widths, repeatRows=1)
-            ti_table.setStyle(inv_style)
-            elements.append(ti_table)
+
+        def _tim_tbl(judul, members):
+            elements.append(Paragraph(f"<b>{judul}</b>", small_style))
+            data = [['No', 'Peran', 'Nama', 'Jabatan', 'NIP/NIK', 'Unit']]
+            for i, m in enumerate(members):
+                data.append([str(i+1),
+                             'Ketua Tim' if m.get('is_ketua') else 'Anggota',
+                             Paragraph(m.get('nama', '-') or '-', cell_style),
+                             Paragraph(m.get('jabatan', '-') or '-', cell_style),
+                             Paragraph(str(m.get('nip', '-') or '-'), cell_style),
+                             Paragraph(m.get('unit', '-') or '-', cell_style)])
+            t = Table(data, colWidths=tim_col_widths, repeatRows=1)
+            t.setStyle(inv_style)
+            elements.append(t)
             elements.append(Spacer(1, 2*rl_mm))
-        if tim_pembantu_list_rhi:
-            elements.append(Paragraph("<b>Tim Pembantu</b>", small_style))
-            tp2_data = [['No', 'Peran', 'Nama', 'Jabatan', 'NIP/NIK', 'Unit']]
-            for i, m in enumerate(map(_member_dict, tim_pembantu_list_rhi)):
-                tp2_data.append([str(i+1), 'Ketua Tim' if m.get('is_ketua') else 'Anggota', Paragraph(m.get('nama', '-'), cell_style), Paragraph(m.get('jabatan', '-'), cell_style), Paragraph(str(m.get('nip', '-')), cell_style), Paragraph(m.get('unit', '-'), cell_style)])
-            tp2_table = Table(tp2_data, colWidths=tim_col_widths, repeatRows=1)
-            tp2_table.setStyle(inv_style)
-            elements.append(tp2_table)
-        elements.append(Spacer(1, 4*rl_mm))
+        if D["tim_inti"]:
+            _tim_tbl("Tim Inti (Pelaksana)", D["tim_inti"])
+        if D["tim_pembantu"]:
+            _tim_tbl("Tim Pembantu", D["tim_pembantu"])
+        elements.append(Spacer(1, 2*rl_mm))
 
-    # Tim Peneliti (Eksternal)
-    elements.append(_sec("TIM PENELITI (EKSTERNAL)"))
-    tim = activity.get("tim_peneliti", [])
-    if tim:
-        tim_data = [['No', 'Nama', 'Jabatan', 'NIP/NIK', 'Dari Satker']]
-        for i, m in enumerate(map(_member_dict, tim)):
-            tim_data.append([str(i+1), Paragraph(m.get('nama', '-'), cell_style), Paragraph(m.get('jabatan', '-'), cell_style), Paragraph(str(m.get('nip', '-') or '-'), cell_style), Paragraph(m.get('dari_satker', '-') or '-', cell_style)])
-        tim_table = Table(tim_data, colWidths=_fit_col_widths([25, 125, 110, 95, 100], doc.width), repeatRows=1)
-        tim_table.setStyle(_std_table_style(extra=[('ALIGN', (0, 0), (0, -1), 'CENTER')]))
-        elements.append(tim_table)
-    else:
-        elements.append(Paragraph("Tim peneliti belum ditentukan.", small_style))
-    elements.append(Spacer(1, 4*rl_mm))
+    # (opsional) Tim pendamping eksternal — informasi
+    if D["tim_peneliti"] or D["tim_pendukung"]:
+        elements.append(_sec("TIM PENDAMPING (EKSTERNAL)"))
 
-    # Tim Pendukung (Eksternal)
-    tim_pendukung = activity.get("tim_pendukung", [])
-    if tim_pendukung:
-        elements.append(_sec("TIM PENDUKUNG (EKSTERNAL)"))
-        tp_data = [['No', 'Nama', 'Jabatan', 'NIP', 'Dari Pihak']]
-        for i, m in enumerate(map(_member_dict, tim_pendukung)):
-            tp_data.append([str(i+1), Paragraph(m.get('nama', '-'), cell_style), Paragraph(m.get('jabatan', '-'), cell_style), Paragraph(str(m.get('nip', '-')), cell_style), Paragraph(m.get('dari_pihak', '-'), cell_style)])
-        tp_table = Table(tp_data, colWidths=_fit_col_widths([25, 125, 110, 95, 100], doc.width), repeatRows=1)
-        tp_table.setStyle(_std_table_style(extra=[('ALIGN', (0, 0), (0, -1), 'CENTER')]))
-        elements.append(tp_table)
-        elements.append(Spacer(1, 4*rl_mm))
+        def _tim_eks(judul, members, kol4):
+            elements.append(Paragraph(f"<b>{judul}</b>", small_style))
+            data = [['No', 'Nama', 'Jabatan', 'NIP/NIK', kol4]]
+            key4 = 'dari_satker' if kol4 == 'Dari Satker' else 'dari_pihak'
+            for i, m in enumerate(members):
+                data.append([str(i+1), Paragraph(m.get('nama', '-') or '-', cell_style),
+                             Paragraph(m.get('jabatan', '-') or '-', cell_style),
+                             Paragraph(str(m.get('nip', '-') or '-'), cell_style),
+                             Paragraph(m.get(key4, '-') or '-', cell_style)])
+            t = Table(data, colWidths=_fit_col_widths([25, 125, 110, 95, 100], doc.width), repeatRows=1)
+            t.setStyle(_std_table_style(extra=[('ALIGN', (0, 0), (0, -1), 'CENTER')]))
+            elements.append(t)
+            elements.append(Spacer(1, 2*rl_mm))
+        if D["tim_peneliti"]:
+            _tim_eks("Tim Peneliti", D["tim_peneliti"], "Dari Satker")
+        if D["tim_pendukung"]:
+            _tim_eks("Tim Pendukung", D["tim_pendukung"], "Dari Pihak")
+        elements.append(Spacer(1, 2*rl_mm))
 
-    # Rekapitulasi
+    # METODE PENELITIAN
+    elements.append(_sec("METODE PENELITIAN"))
+    elements.append(Paragraph("Penelitian dilaksanakan melalui:", normal_style))
+    _daftar_nomor(D["metode"])
+    elements.append(Spacer(1, 3*rl_mm))
+
+    # REKAPITULASI
     elements.append(_sec("REKAPITULASI HASIL PENELITIAN"))
     total = len(assets)
     total_val = sum(safe_price(a) for a in assets)
     found_val = sum(safe_price(a) for a in ditemukan)
     notfound_val = sum(safe_price(a) for a in tidak_ditemukan)
-
-    kesalahan = [a for a in tidak_ditemukan if a.get("klasifikasi_tidak_ditemukan") == "Kesalahan Pencatatan"]
-    lainnya = [a for a in tidak_ditemukan if a.get("klasifikasi_tidak_ditemukan") == "Tidak Ditemukan Lainnya"]
-
+    kesalahan = D["kesalahan"]
+    lainnya = D["lainnya"]
     rekap_data = [
         ['No', 'Uraian', 'Jumlah NUP', 'Nilai (Rp)'],
         ['1', 'BMN yang Diteliti', str(total), fmt_rp(total_val)],
         ['2', 'BMN Ditemukan', str(len(ditemukan)), fmt_rp(found_val)],
         ['3', 'BMN Tidak Ditemukan', str(len(tidak_ditemukan)), fmt_rp(notfound_val)],
         ['', '  a. Kesalahan Pencatatan', str(len(kesalahan)), fmt_rp(sum(safe_price(a) for a in kesalahan))],
-        ['', '  b. Tidak Ditemukan Lainnya', str(len(lainnya)), fmt_rp(sum(safe_price(a) for a in lainnya))],
+        ['', '  b. Tidak Ditemukan Lainnya (hilang)', str(len(lainnya)), fmt_rp(sum(safe_price(a) for a in lainnya))],
     ]
     rekap_table = Table(rekap_data, colWidths=_fit_col_widths([30, 220, 70, 110], doc.width), repeatRows=1)
     rekap_table.setStyle(_std_table_style(extra=[
@@ -1069,11 +1162,9 @@ async def generate_berita_acara_pdf(activity_id: str, _user: dict = Depends(requ
     elements.append(rekap_table)
     elements.append(Spacer(1, 4*rl_mm))
 
-    # Rincian BMN Tidak Ditemukan
+    # RINCIAN BMN TIDAK DITEMUKAN
     if tidak_ditemukan:
         elements.append(_sec("RINCIAN BMN TIDAK DITEMUKAN"))
-        # Format SE PUPR 10/2023 bag.3: tiap barang memuat URAIAN dan TINDAK
-        # LANJUT YANG SUDAH DILAKUKAN — bukan sekadar klasifikasi.
         detail_data = [['No', 'Kode Barang', 'NUP', 'Nama BMN', 'Klasifikasi', 'Sub Klasifikasi', 'Uraian & Tindak Lanjut', 'Nilai (Rp)']]
         for i, a in enumerate(tidak_ditemukan):
             uraian_tl = []
@@ -1082,15 +1173,12 @@ async def generate_berita_acara_pdf(activity_id: str, _user: dict = Depends(requ
             if str(a.get('tindak_lanjut') or '').strip():
                 uraian_tl.append(f"Tindak lanjut: {a['tindak_lanjut']}")
             detail_data.append([
-                str(i+1),
-                a.get('asset_code', '-'),
-                str(a.get('NUP', '-')),
-                Paragraph(a.get('asset_name', '-'), cell_style),
-                Paragraph(a.get('klasifikasi_tidak_ditemukan', '-'), cell_style),
-                Paragraph(a.get('sub_klasifikasi', '-'), cell_style),
+                str(i+1), a.get('asset_code', '-'), str(a.get('NUP', '-')),
+                Paragraph(a.get('asset_name', '-') or '-', cell_style),
+                Paragraph(a.get('klasifikasi_tidak_ditemukan', '-') or '-', cell_style),
+                Paragraph(a.get('sub_klasifikasi', '-') or '-', cell_style),
                 Paragraph("<br/>".join(uraian_tl) or '-', cell_style),
-                fmt_rp(safe_price(a))
-            ])
+                fmt_rp(safe_price(a))])
         detail_table = Table(detail_data, colWidths=_fit_col_widths([22, 62, 26, 80, 62, 66, 120, 60], doc.width), repeatRows=1)
         detail_table.setStyle(_std_table_style(zebra=True, extra=[
             ('ALIGN', (0, 0), (0, -1), 'CENTER'),
@@ -1100,27 +1188,31 @@ async def generate_berita_acara_pdf(activity_id: str, _user: dict = Depends(requ
         elements.append(detail_table)
         elements.append(Spacer(1, 4*rl_mm))
 
-    # Kesimpulan
-    elements.append(_sec("KESIMPULAN"))
-    kesimpulan_text = activity.get("kesimpulan", "Belum ada kesimpulan.")
-    elements.append(Paragraph(kesimpulan_text or "Belum ada kesimpulan.", normal_style))
-    elements.append(Spacer(1, 8*rl_mm))
+    # KESIMPULAN DAN REKOMENDASI TINDAK LANJUT
+    elements.append(_sec("KESIMPULAN DAN REKOMENDASI TINDAK LANJUT"))
+    kesimpulan_text = str(activity.get("kesimpulan") or "").strip()
+    if kesimpulan_text:
+        elements.append(Paragraph(_esc_ba(kesimpulan_text), normal_style))
+        elements.append(Spacer(1, 2*rl_mm))
+    _daftar_nomor(D["rekomendasi"])
+    elements.append(Spacer(1, 3*rl_mm))
 
-    # Signatures
-    elements.append(Paragraph("Demikian Berita Acara ini dibuat dengan sebenar-benarnya.", normal_style))
+    # DOKUMEN PENDUKUNG
+    elements.append(_sec("DOKUMEN PENDUKUNG"))
+    elements.append(Paragraph("Berita Acara ini dilengkapi dokumen pendukung sebagai berikut:", normal_style))
+    _daftar_nomor(D["dokumen_pendukung"])
     elements.append(Spacer(1, 6*rl_mm))
 
-    # Kaidah BA penelitian: SELURUH anggota tim peneliti bertanda tangan
-    # (ketua ditandai), lalu Kuasa Pengguna Barang mengetahui di tengah bawah.
-    peta_status = await _peta_status_kepegawaian(
-        [m.get("nip") for m in (tim or []) if isinstance(m, dict)]
-        + [ident.get("kasatker_nip")])
+    # Penutup + tanda tangan (Tim Internal + Saksi + KPB Mengetahui)
+    elements.append(Paragraph(D["penutup"], normal_style))
+    elements.append(Spacer(1, 6*rl_mm))
     elements.extend(_blok_ttd_tim_kpb(
-        tim, settings, tanggal_ba, ident, doc.width,
-        label_tim="Tim Peneliti", status_by_nip=peta_status))
+        D["tim_ttd"], settings, tanggal_ba, ident, doc.width,
+        label_tim="Tim Internal Penelitian", status_by_nip=D["peta_status"],
+        saksi=D["saksi"]))
     elements.extend(_blok_tembusan(settings, activity))
 
-    footer = _page_footer_factory("Berita Acara Tim Internal Penelitian BMN Tidak Ditemukan")
+    footer = _page_footer_factory("Berita Acara Hasil Penelitian BMN Tidak Ditemukan")
     doc.build(elements, onFirstPage=footer, onLaterPages=footer)
     buffer.seek(0)
 
@@ -1128,6 +1220,137 @@ async def generate_berita_acara_pdf(activity_id: str, _user: dict = Depends(requ
         buffer,
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename=Berita_Acara_{activity_id[:8]}.pdf"}
+    )
+
+
+@reports_router.get("/inventory-activities/{activity_id}/berita-acara-docx")
+async def generate_berita_acara_docx(activity_id: str, _user: dict = Depends(require_user_or_query_token)):
+    """Versi Word (.docx) — editable — dari Berita Acara Hasil Penelitian BMN
+    Tidak Ditemukan. Konten & kaidah penanda tangan identik dengan PDF (satu
+    sumber data `_data_ba_tidak_ditemukan`); satker dapat menyesuaikan naskah
+    sebelum ditandatangani."""
+    import docx_utils as DX
+
+    activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
+    if not activity:
+        raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+    await pastikan_akses_kegiatan_id(_user, activity_id)
+
+    settings = await pengaturan_kop(activity)
+    D = await _data_ba_tidak_ditemukan(activity, settings)
+    safe_price = D["safe_price"]
+
+    def fmt_rp(val):
+        try:
+            return f"Rp {int(val):,}".replace(",", ".")
+        except (ValueError, TypeError):
+            return "Rp 0"
+
+    d = DX.doc_baru()
+    DX.page_footer(d, "Berita Acara Hasil Penelitian BMN Tidak Ditemukan")
+    DX.kop_surat(d, settings)
+    DX.title_block(d, "BERITA ACARA HASIL PENELITIAN\nBARANG MILIK NEGARA (BMN) TIDAK DITEMUKAN",
+                   nomor=D["nomor_ba"])
+    DX.para(d, D["intro"])
+
+    _rom = iter(["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"])
+
+    def _daftar(items):
+        for i, t in enumerate(items, 1):
+            DX.para(d, f"{i}. {t}", space_after=2)
+
+    DX.section(d, "DASAR", next(_rom))
+    _daftar(D["dasar"])
+
+    if D["tim_inti"] or D["tim_pembantu"]:
+        DX.section(d, "SUSUNAN TIM INTERNAL PENELITIAN", next(_rom))
+
+        def _tim_tbl(judul, members):
+            DX.para(d, judul, bold=True, justify=False, space_after=2)
+            rows = [[str(i+1), 'Ketua Tim' if m.get('is_ketua') else 'Anggota',
+                     m.get('nama', '-') or '-', m.get('jabatan', '-') or '-',
+                     str(m.get('nip', '-') or '-'), m.get('unit', '-') or '-']
+                    for i, m in enumerate(members)]
+            DX.data_table(d, ['No', 'Peran', 'Nama', 'Jabatan', 'NIP/NIK', 'Unit'],
+                          rows, align_center={0}, widths_cm=[1.0, 2.0, 4.0, 3.5, 3.2, 2.5])
+        if D["tim_inti"]:
+            _tim_tbl("Tim Inti (Pelaksana)", D["tim_inti"])
+        if D["tim_pembantu"]:
+            _tim_tbl("Tim Pembantu", D["tim_pembantu"])
+
+    if D["tim_peneliti"] or D["tim_pendukung"]:
+        DX.section(d, "TIM PENDAMPING (EKSTERNAL)", next(_rom))
+
+        def _tim_eks(judul, members, kol4, key4):
+            DX.para(d, judul, bold=True, justify=False, space_after=2)
+            rows = [[str(i+1), m.get('nama', '-') or '-', m.get('jabatan', '-') or '-',
+                     str(m.get('nip', '-') or '-'), m.get(key4, '-') or '-']
+                    for i, m in enumerate(members)]
+            DX.data_table(d, ['No', 'Nama', 'Jabatan', 'NIP/NIK', kol4], rows,
+                          align_center={0}, widths_cm=[1.0, 4.5, 4.0, 3.2, 3.5])
+        if D["tim_peneliti"]:
+            _tim_eks("Tim Peneliti", D["tim_peneliti"], "Dari Satker", "dari_satker")
+        if D["tim_pendukung"]:
+            _tim_eks("Tim Pendukung", D["tim_pendukung"], "Dari Pihak", "dari_pihak")
+
+    DX.section(d, "METODE PENELITIAN", next(_rom))
+    DX.para(d, "Penelitian dilaksanakan melalui:", space_after=2)
+    _daftar(D["metode"])
+
+    DX.section(d, "REKAPITULASI HASIL PENELITIAN", next(_rom))
+    assets = D["assets"]
+    ditemukan = D["ditemukan"]
+    tidak_ditemukan = D["tidak_ditemukan"]
+    kesalahan = D["kesalahan"]
+    lainnya = D["lainnya"]
+    DX.data_table(d, ['No', 'Uraian', 'Jumlah NUP', 'Nilai (Rp)'], [
+        ['1', 'BMN yang Diteliti', str(len(assets)), fmt_rp(sum(safe_price(a) for a in assets))],
+        ['2', 'BMN Ditemukan', str(len(ditemukan)), fmt_rp(sum(safe_price(a) for a in ditemukan))],
+        ['3', 'BMN Tidak Ditemukan', str(len(tidak_ditemukan)), fmt_rp(sum(safe_price(a) for a in tidak_ditemukan))],
+        ['', 'a. Kesalahan Pencatatan', str(len(kesalahan)), fmt_rp(sum(safe_price(a) for a in kesalahan))],
+        ['', 'b. Tidak Ditemukan Lainnya (hilang)', str(len(lainnya)), fmt_rp(sum(safe_price(a) for a in lainnya))],
+    ], align_center={0, 2}, align_right={3}, widths_cm=[1.0, 9.5, 2.5, 3.5])
+
+    if tidak_ditemukan:
+        DX.section(d, "RINCIAN BMN TIDAK DITEMUKAN", next(_rom))
+        rows = []
+        for i, a in enumerate(tidak_ditemukan):
+            uraian_tl = []
+            if str(a.get('uraian_tidak_ditemukan') or '').strip():
+                uraian_tl.append(f"Uraian: {a['uraian_tidak_ditemukan']}")
+            if str(a.get('tindak_lanjut') or '').strip():
+                uraian_tl.append(f"Tindak lanjut: {a['tindak_lanjut']}")
+            rows.append([str(i+1), a.get('asset_code', '-') or '-', str(a.get('NUP', '-')),
+                         a.get('asset_name', '-') or '-',
+                         a.get('klasifikasi_tidak_ditemukan', '-') or '-',
+                         a.get('sub_klasifikasi', '-') or '-',
+                         "\n".join(uraian_tl) or '-', fmt_rp(safe_price(a))])
+        DX.data_table(d, ['No', 'Kode Barang', 'NUP', 'Nama BMN', 'Klasifikasi',
+                          'Sub Klasifikasi', 'Uraian & Tindak Lanjut', 'Nilai (Rp)'],
+                      rows, align_center={0, 2}, align_right={7}, font_size=8)
+
+    DX.section(d, "KESIMPULAN DAN REKOMENDASI TINDAK LANJUT", next(_rom))
+    kesimpulan_text = str(activity.get("kesimpulan") or "").strip()
+    if kesimpulan_text:
+        DX.para(d, kesimpulan_text)
+    _daftar(D["rekomendasi"])
+
+    DX.section(d, "DOKUMEN PENDUKUNG", next(_rom))
+    DX.para(d, "Berita Acara ini dilengkapi dokumen pendukung sebagai berikut:", space_after=2)
+    _daftar(D["dokumen_pendukung"])
+
+    DX.para(d, D["penutup"], space_before=6)
+    tempat_tanggal = _tempat_tanggal_laporan(settings, D["tanggal_ba"])
+    DX.signature_block(d, D["tim_ttd"], D["ident"], tempat_tanggal,
+                       label_tim="Tim Internal Penelitian",
+                       status_by_nip=D["peta_status"], saksi=D["saksi"])
+    DX.tembusan(d, D["tembusan_lines"])
+
+    data = DX.to_bytes(d)
+    return StreamingResponse(
+        io.BytesIO(data),
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f"attachment; filename=Berita_Acara_{activity_id[:8]}.docx"}
     )
 
 
