@@ -113,6 +113,23 @@ def test_reset_pertahankan_master_referensi():
         assert keep in collections_to_process(db), f"{keep} tetap ikut backup"
 
 
+def test_gridfs_dipertahankan_saat_reset():
+    """Reset tak boleh menghapus GridFS yang tertaut koleksi RESET_KEEP —
+    foto pegawai (krop + asli) & spesimen TTD pegawai/pejabat — agar
+    foto_file_id/foto_asli_file_id/ttd_file_id tidak yatim."""
+    from backup_utils import gridfs_dipertahankan_saat_reset
+    # DIPERTAHANKAN
+    assert gridfs_dipertahankan_saat_reset({"jenis": "foto_pegawai"})
+    assert gridfs_dipertahankan_saat_reset({"jenis": "foto_pegawai_asli"})
+    assert gridfs_dipertahankan_saat_reset({"kind": "ttd_spesimen"})
+    # DIHAPUS (operasional / tak tertaut koleksi dipertahankan)
+    assert not gridfs_dipertahankan_saat_reset({"kind": "ttd_sign"})
+    assert not gridfs_dipertahankan_saat_reset({"jenis": "foto_aset"})
+    assert not gridfs_dipertahankan_saat_reset({"content_type": "application/pdf"})
+    assert not gridfs_dipertahankan_saat_reset({})
+    assert not gridfs_dipertahankan_saat_reset(None)
+
+
 def test_nama_arsip_valid_anti_traversal():
     from backup_utils import nama_arsip_valid
     assert nama_arsip_valid("backup_otomatis_20260718_020000.zip")

@@ -49,6 +49,27 @@ RESET_KEEP_COLLECTIONS = {
 # Legacy name → canonical (untuk membaca backup lama; mis. activities.json).
 LEGACY_COLLECTION_ALIASES = {"activities": "inventory_activities"}
 
+# GridFS yang DIPERTAHANKAN saat reset "HAPUS SEMUA" — berkas yang tertaut ke
+# koleksi RESET_KEEP (pegawai/pejabat) sehingga menghapusnya = referensi yatim:
+#   • foto_pegawai / foto_pegawai_asli → pegawai.foto_file_id/foto_asli_file_id
+#     (foto krop tampil + foto asli utk atur-ulang posisi — jenis di metadata)
+#   • ttd_spesimen → pegawai/pejabat.ttd_file_id (spesimen tanda tangan; kind)
+# CATATAN: berkas OPERASIONAL (ttd_sign, dokumen e-sign, foto aset, lampiran)
+# TIDAK dipertahankan — koleksi induknya memang ikut direset.
+RESET_KEEP_GRIDFS_JENIS = {"foto_pegawai", "foto_pegawai_asli"}
+RESET_KEEP_GRIDFS_KIND = {"ttd_spesimen"}
+
+
+def gridfs_dipertahankan_saat_reset(metadata) -> bool:
+    """True bila satu berkas GridFS harus SELAMAT dari reset-all (tertaut koleksi
+    yang dipertahankan: foto & spesimen TTD pegawai/pejabat). MURNI.
+
+    Penanda dibaca dari `metadata`: `jenis` (foto) atau `kind` (spesimen ttd).
+    """
+    m = metadata or {}
+    return (str(m.get("jenis") or "") in RESET_KEEP_GRIDFS_JENIS
+            or str(m.get("kind") or "") in RESET_KEEP_GRIDFS_KIND)
+
 
 def collections_to_process(all_names, skip=None):
     """Saring daftar nama koleksi → hanya koleksi DATA aplikasi.

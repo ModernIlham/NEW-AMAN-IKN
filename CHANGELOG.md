@@ -48,6 +48,32 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#512] Reset "Hapus Semua" — pertahankan foto asli & spesimen TTD (anti-yatim) — 2026-07-22
+
+Audit backup/restore/reset agar **sesuai fitur terkini**. Arsitekturnya sudah
+**dinamis** (daftar koleksi dienumerasi dari DB), sehingga field baru pada
+koleksi yang ada — mis. `cara_bayar_kontrak` (aset) dan `status_pegawai_satker`
+(pegawai) — **otomatis** ikut ter-backup/restore/reset tanpa perubahan. Yang
+ditemukan & diperbaiki adalah celah pada **reset**:
+
+- **Reset kini mempertahankan GridFS yang tertaut koleksi yang dipertahankan.**
+  Sebelumnya reset hanya menyelamatkan foto pegawai (krop). Padahal koleksi
+  `pegawai` & `pejabat` **dipertahankan** saat reset, sedangkan berkas berikut
+  ikut terhapus → referensi **yatim**:
+  - **Foto pegawai asli** (`foto_asli_file_id`, untuk atur-ulang posisi foto),
+  - **Spesimen tanda tangan** (`ttd_file_id`) pegawai & pejabat.
+  Kini ketiganya (foto krop + foto asli + spesimen TTD) selamat dari reset;
+  berkas operasional (foto aset, dokumen/e-sign) tetap terhapus sebagaimana
+  mestinya.
+- Kebijakan penanda GridFS dipindah ke modul murni `backup_utils`
+  (`gridfs_dipertahankan_saat_reset`) + **uji unit anti-drift**.
+- Versi format backup dinaikkan **3.4.0 → 3.5.0** (backup/restore tetap
+  mencakup SELURUH GridFS — tak berubah).
+
+Verifikasi: `pytest tests/unit` 638 lulus.
+
+---
+
 ## [#511] Master Pegawai — Referensi Status Pegawai (SIMPEG) + kategori Pendidikan Terakhir — 2026-07-22
 
 - **Field baru "Status Pegawai (Satker)"** pada tab Kepegawaian — dropdown
