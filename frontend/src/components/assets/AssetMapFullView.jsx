@@ -930,6 +930,19 @@ const AssetMapFullView = memo(function AssetMapFullView({
     return () => { try { mapRef.current?.boxZoom?.enable(); } catch { /* map dilepas */ } };
   }, [selectMode]);
 
+  // Bilah Mode Seleksi / "Pilih Area" muncul-hilang DI ATAS peta → kanvas
+  // leaflet bergeser & lebarnya bisa berubah (scrollbar). Tanpa invalidateSize,
+  // ukuran ubin jadi basi → BASEMAP HILANG. Hitung ulang setelah tata letak
+  // mengendap (rAF + fallback timeout).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return undefined;
+    const recalc = () => { try { map.invalidateSize({ animate: false }); } catch { /* map dilepas */ } };
+    const raf = requestAnimationFrame(recalc);
+    const t = setTimeout(recalc, 160);
+    return () => { cancelAnimationFrame(raf); clearTimeout(t); };
+  }, [selectMode, drawArea]);
+
   // Kotak seleksi (rubber-band) berbasis Pointer Events → jalan di PC (Shift+
   // seret) maupun HP (tombol "Pilih Area" lalu seret satu jari). Semua pin di
   // dalam kotak ditambahkan ke seleksi. Pan peta dinonaktifkan selama menggambar.
