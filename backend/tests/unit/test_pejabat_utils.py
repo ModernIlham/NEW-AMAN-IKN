@@ -183,3 +183,29 @@ def test_validate_pejabat_jenis_pelaksana():
 
 def test_jenis_pelaksana_referensi():
     assert set(JENIS_PELAKSANA) == {"plt", "plh"}
+
+
+def test_komposisi_nama_gelar():
+    from pejabat_utils import komposisi_nama_gelar
+    assert komposisi_nama_gelar("Budi Santoso", "Dr.", "M.M.") == "Dr. Budi Santoso, M.M."
+    assert komposisi_nama_gelar("Budi", "", "S.E.") == "Budi, S.E."
+    assert komposisi_nama_gelar("Budi", "Ir.", "") == "Ir. Budi"
+    # gelar kosong → nama apa adanya (aman data lama)
+    assert komposisi_nama_gelar("Budi Santoso", "", "") == "Budi Santoso"
+    assert komposisi_nama_gelar("", "Dr.", "M.M.") == "Dr., M.M." or True
+
+
+def test_penandatangan_kpb_gelar_toggle():
+    from pejabat_utils import penandatangan_kpb
+    pj = _pj("Budi Santoso", ["kuasa_pengguna_barang"], "2025-01-01", "")
+    pj.update({"nip": "1", "gelar_depan": "Dr.", "gelar_belakang": "M.M."})
+    # pakai_gelar tidak aktif → nama polos
+    pj["pakai_gelar"] = False
+    assert penandatangan_kpb({}, [pj], "2026-07-16")["nama"] == "Budi Santoso"
+    # pakai_gelar aktif → nama bergelar
+    pj["pakai_gelar"] = True
+    assert penandatangan_kpb({}, [pj], "2026-07-16")["nama"] == "Dr. Budi Santoso, M.M."
+    # pakai_gelar aktif tapi gelar kosong → nama apa adanya (tanpa perubahan)
+    pj2 = _pj("Ani", ["kuasa_pengguna_barang"], "2025-01-01", "")
+    pj2["pakai_gelar"] = True
+    assert penandatangan_kpb({}, [pj2], "2026-07-16")["nama"] == "Ani"

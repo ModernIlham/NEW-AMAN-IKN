@@ -144,6 +144,20 @@ def prefiks_pelaksana(jenis_pelaksana) -> str:
     return f"{pre} " if pre else ""
 
 
+def komposisi_nama_gelar(nama, gelar_depan="", gelar_belakang="") -> str:
+    """Susun nama penanda tangan dengan gelar akademik:
+    "Gelar Depan Nama, Gelar Belakang". Komponen kosong dilewati; gelar
+    kosong → nama apa adanya (aman untuk data lama yang gelarnya sudah
+    menyatu di `nama`). MURNI (teruji unit)."""
+    nama = str(nama or "").strip()
+    gd = str(gelar_depan or "").strip()
+    gb = str(gelar_belakang or "").strip()
+    hasil = (f"{gd} {nama}").strip() if gd else nama
+    if gb:
+        hasil = f"{hasil}, {gb}" if hasil else gb
+    return hasil
+
+
 def prefiks_jabatan_pelaksana(jabatan, jenis_pelaksana) -> str:
     """Sisipkan "Plt."/"Plh." di depan nama jabatan bila pejabat menjabat
     sebagai pelaksana tugas/harian (rangkap jabatan sementara).
@@ -259,8 +273,15 @@ def penandatangan_kpb(settings, pejabat_list, per_iso=None):
     if pj:
         jenis = str(pj.get("jenis_pelaksana") or "").strip().lower()
         jab_dasar = str(pj.get("jabatan") or "").strip() or "Kuasa Pengguna Barang"
+        nama_dasar = str(pj.get("nama") or "").strip() or "-"
+        # Gelar akademik ditampilkan pada TTD bila pejabat mengaktifkan
+        # `pakai_gelar` (gelar disimpan terpisah dari nama).
+        nama_ttd = (komposisi_nama_gelar(nama_dasar, pj.get("gelar_depan"),
+                                         pj.get("gelar_belakang"))
+                    if pj.get("pakai_gelar") and nama_dasar != "-"
+                    else nama_dasar)
         return {
-            "nama": str(pj.get("nama") or "").strip() or "-",
+            "nama": nama_ttd,
             "nip": str(pj.get("nip") or "").strip() or "-",
             # Bila KPB dijabat Plt/Plh, jabatan diberi awalan "Plt./Plh." dan
             # penanda tangan memakai nama & NIP dirinya sendiri (rangkap jabatan).

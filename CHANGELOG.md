@@ -48,6 +48,29 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#508] Gelar akademik pada tanda tangan laporan — saklar per pejabat — 2026-07-22
+
+Kadang pimpinan ingin mencantumkan gelar akademik pada tanda tangan dokumen,
+kadang tidak. Kini mudah diatur di **Referensi Pejabat**:
+
+- Field **Gelar Depan** & **Gelar Belakang** (terpisah dari nama) + saklar
+  **"Cantumkan gelar pada nama di TTD laporan"** pada tiap pejabat.
+- Bila aktif, nama penanda tangan disusun **"Gelar Depan Nama, Gelar Belakang"**
+  (mis. *Dr. Andi Wijaya, M.M.*) pada **seluruh laporan yang penanda tangannya
+  bersumber Referensi Pejabat** (KIR, Posisi BMN, Penyusutan, LBKP, LKB, CaLBMN,
+  Daftar Pemegang, BAST, Nota Dinas/BA Persediaan, LPB, LBP). Nonaktif → nama
+  polos.
+- **Aman untuk data lama**: gelar kosong → nama apa adanya (tanpa perubahan);
+  helper murni `komposisi_nama_gelar` (idempoten). Pada laporan **per-kegiatan**
+  (BA/RHI/SPTJM/Koreksi/DBKP/DBHI) nama kasatker tetap bebas-teks per kegiatan
+  (sudah bisa diketik dengan/atau tanpa gelar sesuai kebutuhan).
+
+Verifikasi: 636 unit test lulus (+2 baru); smoke render Posisi BMN menampilkan
+"Dr. Andi Wijaya, M.M." pada TTD; smoke Non-ASN & Plt tanpa regresi;
+`yarn lint` bersih; `yarn build` sukses.
+
+---
+
 ## [#507] Master Pegawai — foto berbasis ikon + pratinjau ukuran penuh + tabel lebih padat — 2026-07-22
 
 Penyempurnaan UI Master Pegawai (umpan balik pemilik):

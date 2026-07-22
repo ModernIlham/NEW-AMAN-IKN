@@ -22,7 +22,8 @@ function getApiError(err, fallback) {
 }
 
 const EMPTY = {
-  mode: "tambah", nama: "", nip: "", jabatan: "", pangkat_golongan: "",
+  mode: "tambah", nama: "", gelar_depan: "", gelar_belakang: "", pakai_gelar: false,
+  nip: "", jabatan: "", pangkat_golongan: "",
   status_kepegawaian: "", unit_kerja: "", no_hp: "", email: "",
   peran: [], jenis_pelaksana: "", unit_akuntansi: "", sk_nomor: "", sk_tanggal: "",
   berlaku_mulai: "", berlaku_selesai: "", aktif: true, keterangan: "",
@@ -96,7 +97,9 @@ export default function PejabatPage({ user, onBack }) {
     if (!(form.peran || []).length) { toast.error("Pilih minimal satu peran"); return; }
     setSaving(true);
     const body = {
-      nama: form.nama, nip: form.nip, jabatan: form.jabatan,
+      nama: form.nama, gelar_depan: form.gelar_depan,
+      gelar_belakang: form.gelar_belakang, pakai_gelar: form.pakai_gelar,
+      nip: form.nip, jabatan: form.jabatan,
       pangkat_golongan: form.pangkat_golongan,
       status_kepegawaian: form.status_kepegawaian, unit_kerja: form.unit_kerja,
       no_hp: form.no_hp, email: form.email, peran: form.peran,
@@ -337,8 +340,18 @@ export default function PejabatPage({ user, onBack }) {
           {form && (
             <div className="space-y-3">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Field label="Nama *"><Input value={form.nama} onChange={(e) => setForm((f) => ({ ...f, nama: e.target.value }))} data-testid="pejabat-form-nama" /></Field>
+                <Field label="Nama * (tanpa gelar)"><Input value={form.nama} onChange={(e) => setForm((f) => ({ ...f, nama: e.target.value }))} data-testid="pejabat-form-nama" /></Field>
                 <Field label="NIP / NRP"><Input value={form.nip} onChange={(e) => setForm((f) => ({ ...f, nip: e.target.value }))} className="font-mono" /></Field>
+                <Field label="Gelar Depan"><Input value={form.gelar_depan} onChange={(e) => setForm((f) => ({ ...f, gelar_depan: e.target.value }))} placeholder="cth. Dr., Ir." data-testid="pejabat-form-gelar-depan" /></Field>
+                <Field label="Gelar Belakang"><Input value={form.gelar_belakang} onChange={(e) => setForm((f) => ({ ...f, gelar_belakang: e.target.value }))} placeholder="cth. S.E., M.M." data-testid="pejabat-form-gelar-belakang" /></Field>
+                <Field label="Gelar pada Tanda Tangan">
+                  <label className="flex items-center gap-2 h-10">
+                    <input type="checkbox" checked={form.pakai_gelar === true}
+                      onChange={(e) => setForm((f) => ({ ...f, pakai_gelar: e.target.checked }))}
+                      className="w-4 h-4" data-testid="pejabat-form-pakai-gelar" />
+                    <span className="text-sm text-foreground">Cantumkan gelar pada nama di TTD laporan</span>
+                  </label>
+                </Field>
                 <Field label="Jabatan"><Input value={form.jabatan} onChange={(e) => setForm((f) => ({ ...f, jabatan: e.target.value }))} /></Field>
                 <Field label="Pangkat / Golongan"><Input value={form.pangkat_golongan} onChange={(e) => setForm((f) => ({ ...f, pangkat_golongan: e.target.value }))} placeholder="cth. Penata (III/c)" /></Field>
                 <Field label="Status Kepegawaian">

@@ -28,6 +28,11 @@ _PROJ = {"_id": 0}
 
 class PejabatIn(BaseModel):
     nama: str
+    # Gelar akademik terpisah dari nama; ditampilkan pada TTD dokumen bila
+    # `pakai_gelar` aktif (nama disimpan tanpa gelar).
+    gelar_depan: Optional[str] = ""
+    gelar_belakang: Optional[str] = ""
+    pakai_gelar: Optional[bool] = False
     nip: Optional[str] = ""
     jabatan: Optional[str] = ""
     pangkat_golongan: Optional[str] = ""
@@ -52,6 +57,9 @@ class PejabatIn(BaseModel):
 def _bersih(p: PejabatIn) -> dict:
     return {
         "nama": str(p.nama or "").strip(),
+        "gelar_depan": str(p.gelar_depan or "").strip(),
+        "gelar_belakang": str(p.gelar_belakang or "").strip(),
+        "pakai_gelar": bool(p.pakai_gelar) if p.pakai_gelar is not None else False,
         "nip": str(p.nip or "").strip(),
         "jabatan": str(p.jabatan or "").strip(),
         "pangkat_golongan": str(p.pangkat_golongan or "").strip(),
