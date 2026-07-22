@@ -39,6 +39,13 @@ _BIRU = "1F4E79"
 _ABU = "D9E2F3"
 
 
+def _hdr_kpb(ttd, label="Kuasa Pengguna Barang"):
+    """Baris jabatan KPB dengan awalan 'Plt./Plh.' bila dijabat pelaksana
+    tugas/harian (rangkap jabatan). Selalu berakhiran koma."""
+    from pejabat_utils import prefiks_pelaksana
+    return f"{prefiks_pelaksana((ttd or {}).get('jenis_pelaksana'))}{label},"
+
+
 def _set_shading(cell, hexcolor):
     from docx.oxml.ns import qn
     from docx.oxml import OxmlElement
@@ -352,7 +359,7 @@ async def generate_lbp_docx(tahun: int, semester: int = 0,
     d.add_paragraph()
     _p(d, f"{settings.get('tempat_laporan') or ''} "
           f"{_fmt_tanggal_id(per_iso)}".strip(), center=False)
-    _p(d, "Kuasa Pengguna Barang,", space_after=40)
+    _p(d, _hdr_kpb(ttd), space_after=40)
     _p(d, ttd.get("nama") or "………………………………", bold=True, space_after=0)
     baris_nip_kpb = baris_identitas_laporan(ttd.get("nip"),
                                             ttd.get("status_kepegawaian"))
@@ -379,7 +386,7 @@ async def generate_lbp_docx(tahun: int, semester: int = 0,
           "yang telah melalui rekonsiliasi internal dengan unit akuntansi "
           "keuangan.")
     d.add_paragraph()
-    _p(d, "Kuasa Pengguna Barang,", space_after=40)
+    _p(d, _hdr_kpb(ttd), space_after=40)
     _p(d, ttd.get("nama") or "………………………………", bold=True, space_after=0)
     baris_nip_kpb = baris_identitas_laporan(ttd.get("nip"),
                                             ttd.get("status_kepegawaian"))
@@ -771,7 +778,7 @@ async def generate_lbp_docx(tahun: int, semester: int = 0,
           "pengambilan keputusan pengelolaan BMN.")
     d.add_paragraph()
     _p(d, f"Posisi per {_fmt_tanggal_id(per_iso)}")
-    _p(d, "Kuasa Pengguna Barang,", space_after=40)
+    _p(d, _hdr_kpb(ttd), space_after=40)
     _p(d, ttd.get("nama") or "………………………………", bold=True, space_after=0)
     baris_nip_kpb = baris_identitas_laporan(ttd.get("nip"),
                                             ttd.get("status_kepegawaian"))

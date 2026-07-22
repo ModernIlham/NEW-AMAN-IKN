@@ -24,7 +24,7 @@ function getApiError(err, fallback) {
 const EMPTY = {
   mode: "tambah", nama: "", nip: "", jabatan: "", pangkat_golongan: "",
   status_kepegawaian: "", unit_kerja: "", no_hp: "", email: "",
-  peran: [], unit_akuntansi: "", sk_nomor: "", sk_tanggal: "",
+  peran: [], jenis_pelaksana: "", unit_akuntansi: "", sk_nomor: "", sk_tanggal: "",
   berlaku_mulai: "", berlaku_selesai: "", aktif: true, keterangan: "",
 };
 
@@ -40,6 +40,7 @@ export default function PejabatPage({ user, onBack }) {
   const [items, setItems] = useState([]);
   const [peranRef, setPeranRef] = useState([]);
   const [statusRef, setStatusRef] = useState([]);
+  const [pelaksanaRef, setPelaksanaRef] = useState([]);
   const [unitRef, setUnitRef] = useState([]);
   const [unitList, setUnitList] = useState([]); // Master Unit Kerja (audit W4)
   const [search, setSearch] = useState("");
@@ -74,6 +75,7 @@ export default function PejabatPage({ user, onBack }) {
     axios.get(`${API}/pejabat/referensi`).then((r) => {
       setPeranRef(r.data?.peran || []);
       setStatusRef(r.data?.status_kepegawaian || []);
+      setPelaksanaRef(r.data?.jenis_pelaksana || []);
       setUnitRef(r.data?.unit_akuntansi || []);
     }).catch(() => {});
     // Unit kerja dari master (audit W4 #8)
@@ -98,6 +100,7 @@ export default function PejabatPage({ user, onBack }) {
       pangkat_golongan: form.pangkat_golongan,
       status_kepegawaian: form.status_kepegawaian, unit_kerja: form.unit_kerja,
       no_hp: form.no_hp, email: form.email, peran: form.peran,
+      jenis_pelaksana: form.jenis_pelaksana,
       unit_akuntansi: form.unit_akuntansi, sk_nomor: form.sk_nomor,
       sk_tanggal: form.sk_tanggal, berlaku_mulai: form.berlaku_mulai,
       berlaku_selesai: form.berlaku_selesai, aktif: form.aktif,
@@ -234,8 +237,15 @@ export default function PejabatPage({ user, onBack }) {
                               {statusUraian(it.status_kepegawaian).split(" (")[0]}
                             </span>
                           )}
+                          {(it.jenis_pelaksana === "plt" || it.jenis_pelaksana === "plh") && (
+                            <span title={it.jenis_pelaksana === "plt" ? "Pelaksana Tugas (jabatan definitif lowong)" : "Pelaksana Harian (pejabat definitif berhalangan sementara)"}
+                              className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[9px] font-semibold uppercase">
+                              {it.jenis_pelaksana === "plt" ? "Plt." : "Plh."}
+                            </span>
+                          )}
                         </p>
                         <p className="text-[11px] text-muted-foreground">
+                          {(it.jenis_pelaksana === "plt" ? "Plt. " : it.jenis_pelaksana === "plh" ? "Plh. " : "")}
                           {it.jabatan || "—"}{it.nip ? ` · NIP ${it.nip}` : ""}
                         </p>
                         {it.unit_kerja && (
@@ -388,6 +398,24 @@ export default function PejabatPage({ user, onBack }) {
                       );
                     })}
                   </ul>
+                )}
+              </Field>
+
+              <Field label="Rangkap Jabatan Struktural (Plt/Plh)">
+                <select value={form.jenis_pelaksana || ""}
+                  onChange={(e) => setForm((f) => ({ ...f, jenis_pelaksana: e.target.value }))}
+                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                  data-testid="pejabat-form-pelaksana">
+                  <option value="">Pejabat definitif (bukan Plt/Plh)</option>
+                  {pelaksanaRef.map((p) => <option key={p.kode} value={p.kode}>{p.uraian}</option>)}
+                </select>
+                {form.jenis_pelaksana && (
+                  <p className="mt-1 text-[10.5px] leading-snug rounded-md px-2 py-1 bg-amber-500/10 text-amber-700 dark:text-amber-300">
+                    Tanda tangan dokumen memakai awalan{" "}
+                    <span className="font-semibold">{form.jenis_pelaksana === "plt" ? "“Plt.”" : "“Plh.”"}</span>{" "}
+                    di depan jabatan ({form.jabatan || "Kuasa Pengguna Barang"}), dengan nama & NIP pejabat pelaksana sendiri.
+                    Isi masa berlaku SK Plt/Plh di bawah agar berakhir otomatis.
+                  </p>
                 )}
               </Field>
 

@@ -2533,6 +2533,14 @@ async def _penandatangan_kpb(settings, per_iso=None):
     return penandatangan_kpb(settings, pejabat_list, per_iso)
 
 
+def _header_kpb(ttd, label="Kuasa Pengguna Barang"):
+    """Baris jabatan penanda tangan KPB dengan awalan 'Plt./Plh.' bila KPB
+    dijabat pelaksana tugas/harian (rangkap jabatan). Selalu berakhiran koma
+    (konvensi blok tanda tangan). Tanpa jenis pelaksana → label apa adanya."""
+    from pejabat_utils import prefiks_pelaksana
+    return f"{prefiks_pelaksana((ttd or {}).get('jenis_pelaksana'))}{label},"
+
+
 @reports_router.get("/pembukuan/posisi-bmn-pdf")
 async def generate_posisi_bmn_pdf(_user: dict = Depends(require_user_or_query_token)):
     """Laporan Posisi BMN di Neraca — komponen LBKP (pustaka §2.3).
@@ -2718,7 +2726,7 @@ async def generate_posisi_bmn_pdf(_user: dict = Depends(require_user_or_query_to
     ttd = await _penandatangan_kpb(settings, today_iso)
     elements.extend(_signature_block([
         {'pre': [_tempat_tanggal_laporan(settings, today_iso)],
-         'header': 'Kuasa Pengguna Barang,',
+         'header': _header_kpb(ttd),
          'nama': ttd["nama"],
          'after': await _baris_nip_ttd(ttd['nip'])},
     ], doc.width))
@@ -2798,7 +2806,7 @@ async def generate_dbr_pdf(_user: dict = Depends(require_user_or_query_token)):
     ttd = await _penandatangan_kpb(settings, today_iso)
     elements.extend(_signature_block([
         {'pre': [_tempat_tanggal_laporan(settings, today_iso)],
-         'header': 'Kuasa Pengguna Barang,',
+         'header': _header_kpb(ttd),
          'nama': ttd["nama"],
          'after': await _baris_nip_ttd(ttd['nip'])},
     ], doc.width))
@@ -2883,7 +2891,7 @@ async def generate_kir_pdf(_user: dict = Depends(require_user_or_query_token)):
              'nama': (m.get("penanggung_jawab_nama") if m else "") or "-",
              'after': ['']},
             {'pre': [_tempat_tanggal_laporan(settings)],
-             'header': 'Kuasa Pengguna Barang,',
+             'header': _header_kpb(ttd_kpb),
              'nama': ttd_kpb["nama"],
              'after': await _baris_nip_ttd(ttd_kpb['nip'])},
         ], doc.width))
@@ -3018,7 +3026,7 @@ async def generate_penyusutan_pdf(
     ttd = await _penandatangan_kpb(settings, per_tanggal)
     elements.extend(_signature_block([
         {'pre': [_tempat_tanggal_laporan(settings, per_tanggal)],
-         'header': 'Kuasa Pengguna Barang,',
+         'header': _header_kpb(ttd),
          'nama': ttd["nama"],
          'after': await _baris_nip_ttd(ttd['nip'])},
     ], doc.width))
@@ -3166,7 +3174,7 @@ async def generate_lbkp_pdf(
     ttd = await _penandatangan_kpb(settings, sampai)
     elements.extend(_signature_block([
         {'pre': [_tempat_tanggal_laporan(settings, sampai)],
-         'header': 'Kuasa Pengguna Barang,',
+         'header': _header_kpb(ttd),
          'nama': ttd["nama"],
          'after': await _baris_nip_ttd(ttd['nip'])},
     ], doc.width))
@@ -3314,7 +3322,7 @@ async def generate_lkb_pdf(_user: dict = Depends(require_user_or_query_token)):
     elements.extend(_signature_block([
         {'pre': [_tempat_tanggal_laporan(settings, tgl_ttd_lkb)],
          'header': 'Penanggung Jawab UAKPB',
-         'role': 'Kuasa Pengguna Barang,',
+         'role': _header_kpb(ttd),
          'nama': ttd["nama"],
          'after': await _baris_nip_ttd(ttd['nip'])},
     ], doc.width))
@@ -3644,7 +3652,7 @@ async def generate_calbmn_pdf(
     ttd = await _penandatangan_kpb(settings, sampai)
     elements.extend(_signature_block([
         {'pre': [_tempat_tanggal_laporan(settings, sampai)],
-         'header': 'Kuasa Pengguna Barang,',
+         'header': _header_kpb(ttd),
          'nama': ttd["nama"],
          'after': await _baris_nip_ttd(ttd['nip'])},
     ], doc.width))
@@ -5841,7 +5849,7 @@ async def generate_daftar_pemegang_pdf(activity_id: str,
         settings, datetime.now(timezone.utc).date().isoformat())
     elements.extend(_signature_block([
         {'pre': [_tempat_tanggal_laporan(settings)],
-         'header': 'Kuasa Pengguna Barang,',
+         'header': _header_kpb(ttd),
          'nama': ttd["nama"],
          'after': await _baris_nip_ttd(ttd['nip'])},
     ], doc.width))
@@ -5934,7 +5942,7 @@ async def generate_daftar_pemegang_docx(activity_id: str, _user: dict = Depends(
 
     ttd = await _penandatangan_kpb(settings, datetime.now(timezone.utc).date().isoformat())
     peta = await _peta_status_kepegawaian([ttd.get("nip")])
-    DX.signature_single(d, nama=ttd["nama"], header="Kuasa Pengguna Barang,",
+    DX.signature_single(d, nama=ttd["nama"], header=_header_kpb(ttd),
                         pre_lines=[_tempat_tanggal_laporan(settings)],
                         nip=ttd["nip"], status=peta.get(str(ttd.get("nip") or "").strip(), ""))
 

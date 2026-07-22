@@ -51,6 +51,13 @@ async def _kpb_signer(settings, per_iso=None):
     return await resolve_penandatangan_kpb(settings, per_iso)
 
 
+def _hdr_kpb(kpb, label="Kuasa Pengguna Barang"):
+    """Baris jabatan KPB dengan awalan 'Plt./Plh.' bila dijabat pelaksana
+    tugas/harian (rangkap jabatan). Selalu berakhiran koma."""
+    from pejabat_utils import prefiks_pelaksana
+    return f"{prefiks_pelaksana((kpb or {}).get('jenis_pelaksana'))}{label},"
+
+
 class PersediaanCreate(BaseModel):
     kode_barang: str = Field(min_length=1, max_length=KODE_PENUH_LEN)
     nup: str = ""                     # kosong → otomatis
@@ -200,7 +207,7 @@ async def nota_dinas_persediaan(
     kpb = await _kpb_signer(settings)
     elements.extend(_signature_block([
         {'pre': ['.................., .......................'],
-         'header': 'Kuasa Pengguna Barang,',
+         'header': _hdr_kpb(kpb),
          'nama': kpb["nama"],
          # Non-ASN: baris NIP/NIK tidak dicetak (privasi)
          'after': baris_identitas_ttd(kpb['nip'], "NIP. ....................",
@@ -470,7 +477,7 @@ async def opname_baof_pdf(
     elements.extend(_signature_block([
         {'pre': [''], 'header': 'Petugas Penghitung,', 'nama': '...........................', 'after': ['NIP. ....................']},
         {'pre': [''], 'header': 'Saksi,', 'nama': '...........................', 'after': ['NIP. ....................']},
-        {'pre': [''], 'header': 'Mengetahui,', 'role': 'Kuasa Pengguna Barang,', 'nama': _kpb_nama,
+        {'pre': [''], 'header': 'Mengetahui,', 'role': _hdr_kpb(_kpb), 'nama': _kpb_nama,
          'after': baris_identitas_ttd(_kpb["nip"], "NIP. ....................",
                                       _kpb.get("status_kepegawaian"))},
     ], doc.width))
@@ -625,7 +632,7 @@ async def laporan_posisi_pdf(gudang: str = "",
     kpb = await _kpb_signer(settings)
     elements.extend(_signature_block([
         {'pre': ['.................., .......................'],
-         'header': 'Kuasa Pengguna Barang,',
+         'header': _hdr_kpb(kpb),
          'nama': kpb["nama"],
          # Non-ASN: baris NIP/NIK tidak dicetak (privasi)
          'after': baris_identitas_ttd(kpb['nip'], "NIP. ....................",
@@ -717,7 +724,7 @@ async def laporan_mutasi_pdf(
     kpb = await _kpb_signer(settings)
     elements.extend(_signature_block([
         {'pre': ['.................., .......................'],
-         'header': 'Kuasa Pengguna Barang,',
+         'header': _hdr_kpb(kpb),
          'nama': kpb["nama"],
          # Non-ASN: baris NIP/NIK tidak dicetak (privasi)
          'after': baris_identitas_ttd(kpb['nip'], "NIP. ....................",
@@ -1024,7 +1031,7 @@ async def lpb_pdf(lpb_id: str,
         kolom_ttd("Diperiksa oleh:" + (f"<br/>{(pemeriksa or {}).get('jabatan')}," if (pemeriksa or {}).get('jabatan') else ""),
                   (pemeriksa or {}).get("nama"), (pemeriksa or {}).get("nip"),
                   (pemeriksa or {}).get("status_kepegawaian")),
-        kolom_ttd("Disetujui oleh:<br/>Kuasa Pengguna Barang,",
+        kolom_ttd(f"Disetujui oleh:<br/>{_hdr_kpb(kpb)}",
                   (kpb or {}).get("nama"), (kpb or {}).get("nip"),
                   (kpb or {}).get("status_kepegawaian")),
     ]], colWidths=[doc.width / 3.0] * 3)
