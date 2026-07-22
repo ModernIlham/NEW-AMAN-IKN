@@ -58,6 +58,10 @@ async def create_indexes() -> None:
         # Snapshot feed sort {created_at:-1, id:1} — tanpa tiebreak id di indeks,
         # Mongo melakukan in-memory sort seluruh aset kegiatan di tiap halaman.
         await db.assets.create_index([("activity_id", 1), ("created_at", -1), ("id", 1)])
+        # Offline snapshot KEYSET (PR-OPT-G): paginasi cursor {id > c} sort {id:1}
+        # difilter activity_id → seek O(log n), ganti $skip O(skip). Indeks ini
+        # melayani prefix activity_id + range/sort id tanpa in-memory sort.
+        await db.assets.create_index([("activity_id", 1), ("id", 1)], name="snapshot_keyset_activity_id")
         try:
             await db.assets.create_index([
                 ("asset_name", "text"), ("asset_code", "text"),

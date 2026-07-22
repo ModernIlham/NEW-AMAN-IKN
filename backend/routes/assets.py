@@ -412,14 +412,18 @@ async def get_assets_offline_snapshot(
     activity_id: str,
     since: str = "",
     skip: int = 0,
+    cursor: str = "",
     limit: int = 1000,
     _user: dict = Depends(require_user),
 ):
     """Delta feed for the client-side offline read cache (inventory mode).
 
     Returns list-projection assets (LIST_PROJECTION — NO photos / full
-    document_checklist) for ONE activity, paged with skip/limit so 10k assets
-    stream in chunks of <= 1000. With `since` (ISO timestamp from a previous
+    document_checklist) for ONE activity, paged via KEYSET cursor (`cursor` =
+    `id` of the previous page's last row) so 10k assets stream in chunks of
+    <= 1000 without the O(skip) rescan that `$skip` pays each page (a full sync
+    was O(n²)). Legacy `skip` param still honoured for not-yet-deployed clients.
+    With `since` (ISO timestamp from a previous
     response's `server_time`) only assets changed after that moment are
     returned — creates/PUT/PATCH/batch all stamp `updated_at`.
 
@@ -440,39 +444,52 @@ async def get_assets_offline_snapshot(
 
     limit = min(max(limit, 1), 1000)
     skip = max(skip, 0)
+    cursor = str(cursor or "").strip()
 
     # Capture server_time BEFORE querying: anything written while we stream
     # pages is (re-)fetched by the next delta — upserts are idempotent.
     server_time = datetime.now(timezone.utc).isoformat()
 
-    query = {"activity_id": activity_id}
+    base_query = {"activity_id": activity_id}
     if since:
         # Legacy docs created before updated_at stamping existed only have
         # created_at — cover both so a fresh row is never missed.
-        query["$or"] = [
+        base_query["$or"] = [
             {"updated_at": {"$gt": since}},
             {"updated_at": {"$exists": False}, "created_at": {"$gt": since}},
         ]
 
-    # Deterministic total order (created_at can tie on imports; id breaks the
-    # tie) so skip/limit pages never overlap or skip rows.
-    pipeline = [
-        {"$match": query},
-        {"$sort": {"created_at": -1, "id": 1}},
-        {"$skip": skip},
-        {"$limit": limit},
-        {"$project": LIST_PROJECTION},
-    ]
+    # Urutan total pada `id` (UUID unik & selalu ada — indeks (activity_id,id)).
+    # KEYSET: cursor = id item terakhir → next page = {id > cursor}, seek
+    # O(log n) bukan $skip O(skip). id dipilih (bukan created_at) karena unik &
+    # non-null DIJAMIN oleh indeks unik + tiap jalur tulis; created_at bisa
+    # hilang di sebagian dok sehingga predikat $lt akan MENJATUHKAN baris
+    # (kehilangan data senyap di cache offline). Klien order-agnostik (upsert
+    # per id) → urutan id tak memengaruhi kebenaran. `skip` lama tetap konsisten
+    # karena sort-nya sama.
+    match = dict(base_query)
+    if cursor:
+        keyset = {"id": {"$gt": cursor}}
+        match = {"$and": [base_query, keyset]} if "$or" in match else {**match, **keyset}
+
+    pipeline = [{"$match": match}, {"$sort": {"id": 1}}]
+    if not cursor and skip:
+        pipeline.append({"$skip": skip})
+    pipeline += [{"$limit": limit}, {"$project": LIST_PROJECTION}]
+
     total, assets = await asyncio.gather(
-        db.assets.count_documents(query),
+        db.assets.count_documents(base_query),
         db.assets.aggregate(pipeline).to_list(limit),
     )
+    # Kursor halaman berikut = id item terakhir bila halaman PENUH (mungkin masih
+    # ada); halaman tak-penuh → "" (penanda selesai, kembar dgn items<limit).
+    next_cursor = assets[-1]["id"] if len(assets) == limit and assets else ""
 
     # Tombstones only make sense for a delta, and only need to be sent once
-    # per sync run (first page).
+    # per sync run (first page = tanpa cursor & skip==0).
     deleted_ids = []
     requires_full_refresh = False
-    if since and skip == 0:
+    if since and not cursor and skip == 0:
         tomb_query = {"action": "delete", "activity_id": activity_id, "timestamp": {"$gt": since}}
         tombstones = await db.audit_logs.find(tomb_query, {"_id": 0, "asset_id": 1}).to_list(10000)
         deleted_ids = [t["asset_id"] for t in tombstones if t.get("asset_id")]
@@ -486,6 +503,7 @@ async def get_assets_offline_snapshot(
         "total": total,
         "skip": skip,
         "limit": limit,
+        "next_cursor": next_cursor,
         "server_time": server_time,
         "deleted_ids": deleted_ids,
         "requires_full_refresh": requires_full_refresh,
