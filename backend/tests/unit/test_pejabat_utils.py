@@ -1,7 +1,8 @@
 """Uji referensi pejabat penatausahaan BMN (#290, PMK 181/2016)."""
 from pejabat_utils import (
-    PERAN_PEJABAT, PERAN_PEJABAT_META, STATUS_KEPEGAWAIAN, UNIT_AKUNTANSI,
-    peran_penyerah_bast, pejabat_aktif_untuk_peran, penandatangan_kpb,
+    JENIS_PELAKSANA, PERAN_PEJABAT, PERAN_PEJABAT_META, STATUS_KEPEGAWAIAN,
+    UNIT_AKUNTANSI, peran_penyerah_bast, pejabat_aktif_untuk_peran,
+    penandatangan_kpb, prefiks_jabatan_pelaksana, prefiks_pelaksana,
     validate_pejabat,
 )
 
@@ -131,3 +132,54 @@ def test_penandatangan_kpb_membawa_status_kepegawaian():
     ttd = penandatangan_kpb({"kasatker_nama": "X", "kasatker_nip": "1"},
                             [], "2026-07-16")
     assert ttd["status_kepegawaian"] == ""
+
+
+def test_prefiks_pelaksana():
+    assert prefiks_pelaksana("plt") == "Plt. "
+    assert prefiks_pelaksana("PLH") == "Plh. "
+    assert prefiks_pelaksana("") == "" and prefiks_pelaksana(None) == ""
+    assert prefiks_pelaksana("lainnya") == ""
+
+
+def test_prefiks_jabatan_pelaksana():
+    assert (prefiks_jabatan_pelaksana("Kuasa Pengguna Barang", "plt")
+            == "Plt. Kuasa Pengguna Barang")
+    assert (prefiks_jabatan_pelaksana("Kepala Kantor", "plh")
+            == "Plh. Kepala Kantor")
+    # Tanpa jenis / jabatan kosong → apa adanya
+    assert prefiks_jabatan_pelaksana("Kepala Kantor", "") == "Kepala Kantor"
+    assert prefiks_jabatan_pelaksana("", "plt") == ""
+    # Idempoten: teks yang sudah diawali Plt./Plh. tidak digandakan
+    assert (prefiks_jabatan_pelaksana("Plt. Kepala Kantor", "plt")
+            == "Plt. Kepala Kantor")
+
+
+def test_penandatangan_kpb_plt_plh_prefiks_jabatan():
+    """KPB registry ber-jenis_pelaksana → jabatan diawali Plt./Plh.; nama & NIP
+    tetap milik pejabat pelaksana; jabatan_dasar tanpa awalan tetap dibawa."""
+    pj = _pj("Budi (Plt)", ["kuasa_pengguna_barang"], "2025-01-01", "")
+    pj["nip"] = "199001012015031002"
+    pj["jabatan"] = "Kuasa Pengguna Barang"
+    pj["jenis_pelaksana"] = "plt"
+    ttd = penandatangan_kpb({}, [pj], "2026-07-16")
+    assert ttd["jabatan"] == "Plt. Kuasa Pengguna Barang"
+    assert ttd["jabatan_dasar"] == "Kuasa Pengguna Barang"
+    assert ttd["jenis_pelaksana"] == "plt"
+    assert ttd["nama"] == "Budi (Plt)" and ttd["nip"] == "199001012015031002"
+    # Pejabat definitif (tanpa jenis) → tanpa awalan
+    pj2 = _pj("Ani", ["kuasa_pengguna_barang"], "2025-01-01", "")
+    ttd2 = penandatangan_kpb({}, [pj2], "2026-07-16")
+    assert ttd2["jabatan"] == "Kuasa Pengguna Barang"
+    assert ttd2["jenis_pelaksana"] == ""
+
+
+def test_validate_pejabat_jenis_pelaksana():
+    base = {"nama": "X", "peran": ["kuasa_pengguna_barang"]}
+    assert validate_pejabat({**base, "jenis_pelaksana": "plt"}) == []
+    assert validate_pejabat({**base, "jenis_pelaksana": ""}) == []
+    errs = validate_pejabat({**base, "jenis_pelaksana": "wakil"})
+    assert any("Jenis pelaksana" in e for e in errs)
+
+
+def test_jenis_pelaksana_referensi():
+    assert set(JENIS_PELAKSANA) == {"plt", "plh"}

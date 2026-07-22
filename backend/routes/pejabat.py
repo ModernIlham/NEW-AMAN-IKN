@@ -16,8 +16,9 @@ from auth_utils import require_admin, require_user
 from db import db
 from shared_utils import log_audit
 from pejabat_utils import (
-    PERAN_PEJABAT, PERAN_PEJABAT_META, STATUS_KEPEGAWAIAN, UNIT_AKUNTANSI,
-    peran_penyerah_bast, pejabat_aktif_untuk_peran, validate_pejabat,
+    JENIS_PELAKSANA, PERAN_PEJABAT, PERAN_PEJABAT_META, STATUS_KEPEGAWAIAN,
+    UNIT_AKUNTANSI, peran_penyerah_bast, pejabat_aktif_untuk_peran,
+    validate_pejabat,
 )
 
 pejabat_router = APIRouter()
@@ -35,6 +36,10 @@ class PejabatIn(BaseModel):
     no_hp: Optional[str] = ""
     email: Optional[str] = ""
     peran: List[str] = []
+    # Rangkap jabatan struktural sementara: "" | "plt" | "plh" (Pelaksana
+    # Tugas / Pelaksana Harian). Bila diisi, TTD dokumen memakai awalan
+    # "Plt./Plh." di depan jabatan dengan nama & NIP pejabat pelaksana.
+    jenis_pelaksana: Optional[str] = ""
     unit_akuntansi: Optional[str] = ""
     sk_nomor: Optional[str] = ""
     sk_tanggal: Optional[str] = ""
@@ -55,6 +60,7 @@ def _bersih(p: PejabatIn) -> dict:
         "no_hp": str(p.no_hp or "").strip(),
         "email": str(p.email or "").strip(),
         "peran": [str(x).strip() for x in (p.peran or []) if str(x).strip()],
+        "jenis_pelaksana": str(p.jenis_pelaksana or "").strip().lower(),
         "unit_akuntansi": str(p.unit_akuntansi or "").strip(),
         "sk_nomor": str(p.sk_nomor or "").strip(),
         "sk_tanggal": str(p.sk_tanggal or "").strip()[:10],
@@ -79,6 +85,7 @@ async def referensi_pejabat(_user: dict = Depends(require_user)):
                   for k, v in PERAN_PEJABAT.items()],
         "peran_penyerah_bast": peran_penyerah_bast(),
         "status_kepegawaian": [{"kode": k, "uraian": v} for k, v in STATUS_KEPEGAWAIAN.items()],
+        "jenis_pelaksana": [{"kode": k, "uraian": v} for k, v in JENIS_PELAKSANA.items()],
         "unit_akuntansi": [{"kode": k, **v} for k, v in UNIT_AKUNTANSI.items()],
     }
 

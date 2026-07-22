@@ -48,6 +48,40 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#502] Rangkap jabatan struktural Plt/Plh pada Referensi Pejabat — tanda tangan dokumen "Plt./Plh." — 2026-07-22
+
+Referensi Pejabat kini mengakomodir **rangkap jabatan struktural sementara**:
+seorang pejabat dapat ditetapkan sebagai **Plt. (Pelaksana Tugas)** atau **Plh.
+(Pelaksana Harian)** atas suatu jabatan. Bila **Kuasa Pengguna Barang (KPB)**
+dijabat oleh Plt/Plh, seluruh dokumen resmi satker-wide otomatis menuliskan
+awalan **"Plt./Plh."** di depan jabatan pada blok tanda tangan, dengan **nama &
+NIP pejabat pelaksana itu sendiri** (kaidah naskah dinas).
+
+- **Field baru `jenis_pelaksana`** (`""`/`plt`/`plh`) pada registry pejabat +
+  validasi + endpoint referensi. Dasar: UU 30/2014 (mandat), SE Kepala BKN
+  2/SE/VII/2019 jo. 1/SE/2021 (kewenangan Plt/Plh). Masa berlaku Plt/Plh
+  mengikuti rentang SK pejabat yang sudah ada (berakhir otomatis).
+- **`pejabat_utils.penandatangan_kpb`** kini mengembalikan `jenis_pelaksana` +
+  `jabatan_dasar` dan memberi awalan "Plt./Plh." pada `jabatan` (helper murni
+  `prefiks_jabatan_pelaksana` / `prefiks_pelaksana`, idempoten & aman kosong).
+- **Mengalir ke semua blok TTD KPB yang bersumber registry**: Posisi BMN,
+  Penyusutan, LBKP, LKB, CaLBMN, KIR, Daftar Pemegang Aset (PDF **dan** Word),
+  Nota Dinas/Opname/BA Persediaan, LPB, LBP, serta "Mengetahui" pada BAST
+  (`bast.py` memakai `kpb["jabatan"]`).
+- **Frontend PejabatPage**: dropdown "Rangkap Jabatan Struktural (Plt/Plh)" +
+  penjelasan efek TTD, badge **Plt./Plh.** di baris daftar, dan jabatan
+  ber-awalan pada tampilan.
+- Laporan **per-kegiatan** (BA, RHI, SPTJM, Surat Koreksi, DBKP, DBHI) tetap
+  memakai penanda tangan kasatker kegiatan (field jabatan bebas) — "Plt./Plh."
+  cukup diketik pada jabatan kasatker kegiatan bila diperlukan.
+
+Verifikasi: 625 unit test lulus (+5 baru untuk prefiks/validasi/penandatangan);
+smoke render Posisi BMN, LKB, KIR, Daftar Pemegang (PDF+Word) menampilkan "Plt.
+Kuasa Pengguna Barang"; smoke Non-ASN & LBP tanpa regresi; eslint bersih;
+`yarn build` sukses.
+
+---
+
 ## [#500] Versi Word (.docx): DBHI (8 tipe) & DBKP — rollout Word SELURUH laporan LHI tuntas — 2026-07-22
 
 Penutup rollout Word (#495–#499). **DBHI** (Daftar Barang Hasil Inventarisasi,

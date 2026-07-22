@@ -112,6 +112,52 @@ STATUS_KEPEGAWAIAN = {
     "non_asn": "Non-ASN (PPNPN/Kontrak)",
 }
 
+# Jenis pelaksana jabatan struktural — RANGKAP JABATAN SEMENTARA (kode → uraian).
+#
+# CATATAN REGULASI (riset Jul 2026; §11B pustaka): dasar penunjukan Plt/Plh
+# adalah MANDAT (UU 30/2014 tentang Administrasi Pemerintahan Ps. 14) dan
+# ketentuan kepegawaian pada SE Kepala BKN No. 2/SE/VII/2019 jo. No. 1/SE/2021
+# ("Kewenangan Pelaksana Tugas & Pelaksana Harian dalam Aspek Kepegawaian").
+# - **Plt (Pelaksana Tugas)**: jabatan definitif LOWONG (pejabat sebelumnya
+#   pensiun/mutasi/berhalangan tetap); pejabat lain ditunjuk menjalankan tugas
+#   sampai pejabat definitif dilantik.
+# - **Plh (Pelaksana Harian)**: pejabat definitif ADA namun berhalangan
+#   SEMENTARA (cuti/dinas luar/sakit); pejabat lain menjalankan tugas harian.
+# Pada NASKAH DINAS, penanda tangan menuliskan "Plt."/"Plh." di depan nama
+# jabatan yang dijabat, memakai NAMA & NIP DIRINYA SENDIRI (bukan pejabat
+# definitif). Rangkap jabatan: yang bersangkutan tetap memegang jabatan
+# definitifnya sendiri + menjalankan jabatan yang di-Plt/Plh-kan.
+JENIS_PELAKSANA = {
+    "plt": "Pelaksana Tugas (Plt.)",
+    "plh": "Pelaksana Harian (Plh.)",
+}
+
+# Prefiks singkat penanda jabatan pelaksana pada baris jabatan naskah dinas.
+_PREFIKS_PELAKSANA = {"plt": "Plt.", "plh": "Plh."}
+
+
+def prefiks_pelaksana(jenis_pelaksana) -> str:
+    """"Plt. " / "Plh. " / "" (dengan spasi ekor) berdasarkan jenis pelaksana.
+    Dipakai memberi awalan pada label jabatan yang sudah baku (mis. header
+    "Kuasa Pengguna Barang,"). MURNI."""
+    pre = _PREFIKS_PELAKSANA.get(str(jenis_pelaksana or "").strip().lower())
+    return f"{pre} " if pre else ""
+
+
+def prefiks_jabatan_pelaksana(jabatan, jenis_pelaksana) -> str:
+    """Sisipkan "Plt."/"Plh." di depan nama jabatan bila pejabat menjabat
+    sebagai pelaksana tugas/harian (rangkap jabatan sementara).
+
+    Idempoten (tidak menggandakan bila teks jabatan sudah diawali Plt./Plh.)
+    & aman untuk jabatan/jenis kosong. MURNI (teruji unit)."""
+    jab = str(jabatan or "").strip()
+    pre = _PREFIKS_PELAKSANA.get(str(jenis_pelaksana or "").strip().lower())
+    if not pre or not jab:
+        return jab
+    if jab.lower().startswith(("plt.", "plt ", "plh.", "plh ")):
+        return jab
+    return f"{pre} {jab}"
+
 # Format email sederhana (murni, tanpa dependensi): satu '@' & domain ber-titik.
 import re as _re
 _EMAIL_RE = _re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -157,6 +203,9 @@ def validate_pejabat(doc):
     stat = str((doc or {}).get("status_kepegawaian") or "").strip()
     if stat and stat not in STATUS_KEPEGAWAIAN:
         errors.append(f"Status kepegawaian tidak dikenal: {stat}")
+    jp = str((doc or {}).get("jenis_pelaksana") or "").strip().lower()
+    if jp and jp not in JENIS_PELAKSANA:
+        errors.append(f"Jenis pelaksana tidak dikenal: {jp}")
     email = str((doc or {}).get("email") or "").strip()
     if email and not _EMAIL_RE.match(email):
         errors.append("Format email tidak valid")
@@ -208,10 +257,16 @@ def penandatangan_kpb(settings, pejabat_list, per_iso=None):
     settings = settings or {}
     pj = pejabat_aktif_untuk_peran(pejabat_list, "kuasa_pengguna_barang", per_iso)
     if pj:
+        jenis = str(pj.get("jenis_pelaksana") or "").strip().lower()
+        jab_dasar = str(pj.get("jabatan") or "").strip() or "Kuasa Pengguna Barang"
         return {
             "nama": str(pj.get("nama") or "").strip() or "-",
             "nip": str(pj.get("nip") or "").strip() or "-",
-            "jabatan": str(pj.get("jabatan") or "").strip() or "Kuasa Pengguna Barang",
+            # Bila KPB dijabat Plt/Plh, jabatan diberi awalan "Plt./Plh." dan
+            # penanda tangan memakai nama & NIP dirinya sendiri (rangkap jabatan).
+            "jabatan": prefiks_jabatan_pelaksana(jab_dasar, jenis),
+            "jabatan_dasar": jab_dasar,
+            "jenis_pelaksana": jenis,
             "ttd_file_id": str(pj.get("ttd_file_id") or "").strip(),
             # Status ikut dibawa agar blok TTD bisa menahan baris NIP/NIK
             # bila penandatangan Non-ASN (aturan privasi laporan).
@@ -222,6 +277,8 @@ def penandatangan_kpb(settings, pejabat_list, per_iso=None):
         "nama": str(settings.get("kasatker_nama") or "").strip() or "-",
         "nip": str(settings.get("kasatker_nip") or "").strip() or "-",
         "jabatan": str(settings.get("kasatker_jabatan") or "").strip() or "Kuasa Pengguna Barang",
+        "jabatan_dasar": str(settings.get("kasatker_jabatan") or "").strip() or "Kuasa Pengguna Barang",
+        "jenis_pelaksana": "",
         "ttd_file_id": str(settings.get("kasatker_ttd_file_id") or "").strip(),
         "status_kepegawaian": "",
         "sumber": "setelan",
