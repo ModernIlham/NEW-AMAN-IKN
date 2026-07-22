@@ -48,6 +48,23 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#519] Optimasi: ekspor XLSX/PDF berfoto tak lagi berisiko meng-OOM server — 2026-07-22
+
+Paket keandalan-server #2 dari roadmap optimasi:
+
+- **Cap ambang aset untuk ekspor berfoto** (`MAX_FOTO_EXPORT_ASSETS = 5000`).
+  Ekspor Excel (embed gambar) & PDF (thumbnail) merakit seluruh dokumen + semua
+  bytes gambar di RAM secara sinkron sampai selesai — tanpa batas, ribuan aset
+  berfoto bisa **meng-OOM & meng-crash backend** (dampak lintas-pengguna). Di
+  atas ambang, ekspor ditolak dengan pesan jelas → arahkan ke **Ekspor CSV**
+  (streaming, ringan) atau persempit filter/kegiatan.
+- **XLSX `in_memory=False`** — xlsxwriter kini merakit arsip di berkas temp
+  disk, bukan RAM, menekan puncak memori saat menyisipkan banyak gambar.
+
+Verifikasi: `pytest tests/unit` 638 lulus; `compileall` bersih. (Backend-only.)
+
+---
+
 ## [#518] Optimasi keandalan backup/restore (ketahanan memori & disk) — 2026-07-22
 
 Paket keandalan-server #1 dari roadmap optimasi (mencegah OOM/disk penuh yang
