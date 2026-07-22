@@ -48,6 +48,23 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#507] Master Pegawai — foto berbasis ikon + pratinjau ukuran penuh + tabel lebih padat — 2026-07-22
+
+Penyempurnaan UI Master Pegawai (umpan balik pemilik):
+
+- **Kontrol foto jadi ikon** (fokus pada foto): tombol teks "Ganti/Atur Ulang/Hapus"
+  diganti tombol **ikon** ringkas — ganti foto (ImagePlus), atur ulang posisi
+  (Crop), hapus foto (Trash2). Foto ditampilkan lebih besar sebagai fokus.
+- **Klik foto → pratinjau ukuran penuh** memakai **berkas asli** yang diunggah
+  (endpoint `foto-asli`; jatuh ke versi krop untuk foto lama) — berlaku di
+  **baris daftar** (kartu HP & tabel desktop) **dan** popup form identitas.
+- **Tabel tablet/desktop lebih padat**: padding sel & header dirapatkan agar
+  informasi pegawai tampil lebih ringkas.
+
+Verifikasi: `yarn lint` 0 error; `CI=false yarn build` sukses. (Frontend-only.)
+
+---
+
 ## [#506] Transparansi BAST usang (reklasifikasi/ganti nama) + masa kerja jabatan (TMT) — 2026-07-22
 
 Dua penyempurnaan siklus aset↔pegawai (lanjutan diskusi alur):
