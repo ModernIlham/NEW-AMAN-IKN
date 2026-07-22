@@ -701,7 +701,9 @@ async def process_photos_for_storage(photos: list) -> dict:
         for photo in photos:
             gid = await store_photo_to_gridfs(photo)
             gridfs_ids.append(gid)
-            thumb = generate_photo_thumbnail(photo, size=100, quality=70)
+            # Decode/resize/encode PIL bersifat CPU-bound — offload ke thread
+            # (PIL melepas GIL) agar tak memblokir event loop (semua request).
+            thumb = await asyncio.to_thread(generate_photo_thumbnail, photo, 100, 70)
             thumbnails.append(thumb or "")
     except Exception as e:
         # Rollback: clean up any already-stored GridFS blobs to prevent orphans
@@ -832,8 +834,8 @@ async def create_asset(asset: AssetCreate, request: Request, _user: dict = Depen
         photo_gridfs_ids = result["gridfs_ids"]
         photo_thumbnails = result["thumbnails"]
         cover_idx = min(asset.thumbnail_index or 0, len(photos) - 1)
-        thumbnail = create_thumbnail(photos[cover_idx])
-        gallery_thumbnail = create_gallery_thumbnail(photos[cover_idx])
+        thumbnail = await asyncio.to_thread(create_thumbnail, photos[cover_idx])
+        gallery_thumbnail = await asyncio.to_thread(create_gallery_thumbnail, photos[cover_idx])
 
     asset_doc = {
         "id": asset_id,
@@ -1274,11 +1276,11 @@ async def get_asset_photo_full(asset_id: str, photo_index: int, request: Request
         if not thumb_b64:
             # Legacy asset without stored per-photo thumbnails: generate on the fly
             if photo_index < len(photos) and photos[photo_index]:
-                thumb_b64 = generate_photo_thumbnail(photos[photo_index]) or ""
+                thumb_b64 = await asyncio.to_thread(generate_photo_thumbnail, photos[photo_index]) or ""
             elif photo_index < len(gridfs_ids) and gridfs_ids[photo_index]:
                 photo_bytes = await get_photo_from_gridfs(gridfs_ids[photo_index])
                 if photo_bytes:
-                    thumb_b64 = generate_photo_thumbnail(base64.b64encode(photo_bytes).decode("utf-8")) or ""
+                    thumb_b64 = await asyncio.to_thread(generate_photo_thumbnail, base64.b64encode(photo_bytes).decode("utf-8")) or ""
         if thumb_b64:
             data = thumb_b64.split(",", 1)[1] if thumb_b64.startswith("data:") else thumb_b64
             try:
@@ -1711,8 +1713,8 @@ async def update_asset(asset_id: str, asset: AssetCreate, request: Request,
         else min(asset.thumbnail_index or 0, max(0, old_count - 1))
 
     if photos and (photos != old_photos or len(photos) != old_count or cover_idx != existing.get("thumbnail_index", 0)):
-        thumbnail = create_thumbnail(photos[cover_idx])
-        gallery_thumbnail = create_gallery_thumbnail(photos[cover_idx])
+        thumbnail = await asyncio.to_thread(create_thumbnail, photos[cover_idx])
+        gallery_thumbnail = await asyncio.to_thread(create_gallery_thumbnail, photos[cover_idx])
         # Store new photos in GridFS + generate per-photo thumbnails (atomic rollback on error)
         result = await process_photos_for_storage(photos)
         photo_gridfs_ids = result["gridfs_ids"]
