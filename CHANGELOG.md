@@ -48,6 +48,26 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#497] Versi Word (.docx): Daftar Pemegang Aset — grup Dokumen Pendukung lengkap — 2026-07-22
+
+Lanjutan rollout Word (#495, #496). **Daftar Pemegang Aset** kini tersedia
+dalam `.docx` editable — melengkapi **seluruh grup Dokumen Pendukung**
+(BA Tidak Ditemukan, SPTJM, Surat Koreksi, Daftar Pemegang) dengan versi Word.
+
+- Endpoint **`…/daftar-pemegang-docx`**: info kegiatan, rekap per pemegang
+  (Tabel A), rincian aset per pemegang (Tabel B), tanda tangan Kuasa Pengguna
+  Barang (KPB per tanggal hari ini — filter SK kedaluwarsa; patuh Non-ASN).
+  Data digrup memakai `penggunaan_utils.rekap_pemegang` — sama dengan versi
+  PDF & halaman Aset per Pemegang.
+- Tombol **“Word”** kini juga di Daftar Pemegang Aset pada rekapitulasi.
+
+Berikutnya: RHI, BAHI, SP Hasil/Pelaksanaan, lalu DBHI (8 tipe) & DBKP.
+
+Verifikasi: 620 unit test lulus; smoke render Daftar Pemegang `.docx` OK;
+eslint bersih; `yarn build` sukses.
+
+---
+
 ## [#496] Versi Word (.docx): SPTJM & Surat Koreksi Pencatatan — 2026-07-22
 
 Lanjutan rollout Word editable (setelah BA, #495). SPTJM dan Surat Pernyataan

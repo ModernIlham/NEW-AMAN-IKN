@@ -5416,6 +5416,93 @@ async def generate_daftar_pemegang_pdf(activity_id: str,
                  f'attachment; filename="Daftar_Pemegang_Aset_{activity_id[:8]}.pdf"'})
 
 
+def _info_kegiatan_rows(activity, ident):
+    """Baris info kegiatan (Label, Nilai) untuk meta_table Word."""
+    periode = (f"{_fmt_tanggal_id(activity.get('tanggal_mulai')) or '-'} s.d. "
+               f"{_fmt_tanggal_id(activity.get('tanggal_selesai')) or '-'}")
+    return [
+        ("Satuan Kerja", ident["satker_name"]),
+        ("Nomor SK", activity.get("nomor_surat") or "-"),
+        ("Kegiatan", activity.get("nama_kegiatan") or "-"),
+        ("Periode Inventarisasi", periode),
+    ]
+
+
+@reports_router.get("/inventory-activities/{activity_id}/daftar-pemegang-docx")
+async def generate_daftar_pemegang_docx(activity_id: str, _user: dict = Depends(require_user_or_query_token)):
+    """Versi Word (.docx) editable Daftar Pemegang Aset."""
+    import docx_utils as DX
+    from penggunaan_utils import kunci_pemegang, rekap_pemegang
+
+    activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
+    if not activity:
+        raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+    await pastikan_akses_kegiatan_id(_user, activity_id)
+    settings = await pengaturan_kop(activity)
+    ident = _activity_identity(activity, settings)
+
+    assets = await db.assets.find(
+        {"activity_id": activity_id},
+        {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
+         "user": 1, "pengguna_nip": 1, "pengguna_melekat_ke": 1,
+         "pengguna_jabatan": 1, "operasional_jenis": 1, "nomor_bast": 1,
+         "bast_file_id": 1, "location": 1},
+    ).to_list(100000)
+    rekap = rekap_pemegang(assets)
+    tanpa_pemegang = [a for a in assets if kunci_pemegang(a) is None]
+    per_kunci = {}
+    for a in assets:
+        k = kunci_pemegang(a)
+        if k is not None:
+            per_kunci.setdefault(k, []).append(a)
+
+    d = DX.doc_baru()
+    DX.page_footer(d, "Daftar Pemegang Aset")
+    DX.kop_surat(d, settings)
+    DX.title_block(d, "DAFTAR PEMEGANG ASET")
+    DX.meta_table(d, _info_kegiatan_rows(activity, ident))
+    DX.para(d, f"Jumlah pemegang: {len(rekap)} · Aset ber-pemegang: "
+               f"{len(assets) - len(tanpa_pemegang)} · Aset tanpa pemegang: "
+               f"{len(tanpa_pemegang)} (dari {len(assets)} aset kegiatan). Kolom BAST "
+               f"menghitung dokumen BAST TERUNGGAH per aset.", size=9, space_before=4)
+
+    rows_a = [[str(i), p["nama"], str(p["nip"] or "-"), str(p["melekat_ke"] or "-"),
+               str(p["jabatan"] or "-"), str(p["jumlah_aset"]),
+               f"{p['jumlah_bast']}/{p['jumlah_aset']}",
+               "Lengkap" if p["lengkap"] else "Belum"]
+              for i, p in enumerate(rekap, 1)]
+    if not rows_a:
+        rows_a = [["-", "Belum ada aset ber-pemegang", "-", "-", "-", "-", "-", "-"]]
+    DX.data_table(d, ["No", "Nama Pemegang", "NIP/NIK", "Melekat Ke", "Jabatan",
+                      "Jml Aset", "BAST", "Status"], rows_a,
+                  align_center={0, 5, 6, 7}, font_size=8)
+
+    if rekap:
+        DX.para(d, "Rincian Aset per Pemegang", bold=True, justify=False, space_before=6, space_after=2)
+        rows_b = []
+        n = 0
+        for p in rekap:
+            kunci = (" ".join(str(p["nama"]).split()).lower(), str(p["nip"] or "").strip())
+            for a in per_kunci.get(kunci, []):
+                n += 1
+                bast = str(a.get("nomor_bast") or "").strip() or "-"
+                if a.get("bast_file_id"):
+                    bast += " (terunggah)"
+                rows_b.append([str(n), p["nama"], str(a.get("asset_code") or "-"),
+                               str(a.get("NUP") or "-"), str(a.get("asset_name") or "-"), bast])
+        DX.data_table(d, ["No", "Pemegang", "Kode Barang", "NUP", "Nama Barang", "No. BAST"],
+                      rows_b, align_center={0, 3}, font_size=8)
+
+    ttd = await _penandatangan_kpb(settings, datetime.now(timezone.utc).date().isoformat())
+    peta = await _peta_status_kepegawaian([ttd.get("nip")])
+    DX.signature_single(d, nama=ttd["nama"], header="Kuasa Pengguna Barang,",
+                        pre_lines=[_tempat_tanggal_laporan(settings)],
+                        nip=ttd["nip"], status=peta.get(str(ttd.get("nip") or "").strip(), ""))
+
+    return StreamingResponse(io.BytesIO(DX.to_bytes(d)), media_type=_DOCX_MIME,
+                             headers={"Content-Disposition": f'attachment; filename="Daftar_Pemegang_Aset_{activity_id[:8]}.docx"'})
+
+
 # ============================================================================
 # LHI - LAPORAN HASIL INVENTARISASI LENGKAP
 # ============================================================================
