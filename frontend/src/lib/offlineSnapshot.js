@@ -43,7 +43,7 @@ const SNAPSHOT_FIELDS = [
   "location", "eselon1", "eselon2", "user", "condition", "status",
   "pengguna_melekat_ke", "pengguna_jabatan", "pengguna_nip", "operasional_jenis", "nomor_bast",
   "bast_file_id", "bast_filename",
-  "nomor_spm", "perolehan_dari_nama", "nomor_kontrak", "nomor_bukti_perolehan",
+  "nomor_spm", "perolehan_dari_nama", "nomor_kontrak", "cara_bayar_kontrak", "nomor_bukti_perolehan",
   "supplier", "notes", "thumbnail", "thumbnail_index", "gallery_thumbnail",
   "created_at", "updated_at", "activity_id", "version",
   "stiker_status", "stiker_ukuran", "stiker_photo_index",

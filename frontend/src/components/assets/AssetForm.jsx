@@ -388,7 +388,8 @@ function buildEditFormData(a, activityId) {
     nomor_bast: a.nomor_bast || "",
     condition: a.condition || "Baik", status: a.status || "Aktif",
     nomor_spm: a.nomor_spm || "", perolehan_dari_nama: a.perolehan_dari_nama || "",
-    nomor_kontrak: a.nomor_kontrak || "", nomor_bukti_perolehan: a.nomor_bukti_perolehan || "",
+    nomor_kontrak: a.nomor_kontrak || "", cara_bayar_kontrak: a.cara_bayar_kontrak || "",
+    nomor_bukti_perolehan: a.nomor_bukti_perolehan || "",
     supplier: a.supplier || "", notes: a.notes || "", photos: [],
     thumbnail_index: a.thumbnail_index || 0,
     stiker_status: a.stiker_status || "Belum Terpasang",
@@ -426,7 +427,7 @@ const FIELD_SECTION = {
   kode_register: "basic", inventory_status: "basic",
   stiker_status: "basic", stiker_ukuran: "basic",
   nomor_spm: "procurement", perolehan_dari_nama: "procurement",
-  nomor_kontrak: "procurement", nomor_bukti_perolehan: "procurement",
+  nomor_kontrak: "procurement", cara_bayar_kontrak: "procurement", nomor_bukti_perolehan: "procurement",
   supplier: "procurement",
 };
 
@@ -512,7 +513,7 @@ const AssetForm = memo(({
     location: "", eselon1: "", eselon2: "", user: "",
     pengguna_melekat_ke: "", pengguna_jabatan: "", pengguna_nip: "", operasional_jenis: "", nomor_bast: "",
     condition: "Baik", status: "Aktif",
-    nomor_spm: "", perolehan_dari_nama: "", nomor_kontrak: "",
+    nomor_spm: "", perolehan_dari_nama: "", nomor_kontrak: "", cara_bayar_kontrak: "",
     nomor_bukti_perolehan: "", supplier: "", notes: "", photos: [],
     thumbnail_index: 0,
     stiker_status: "Belum Terpasang", stiker_ukuran: "", stiker_photo_index: null,
@@ -1512,7 +1513,7 @@ const AssetForm = memo(({
           "kode_register", "serial_number", "purchase_date", "purchase_price",
           "location", "eselon1", "eselon2", "user", "condition", "status",
           "pengguna_melekat_ke", "pengguna_jabatan", "pengguna_nip", "operasional_jenis", "nomor_bast",
-          "nomor_spm", "perolehan_dari_nama", "nomor_kontrak",
+          "nomor_spm", "perolehan_dari_nama", "nomor_kontrak", "cara_bayar_kontrak",
           "nomor_bukti_perolehan", "supplier", "notes",
           "stiker_status", "stiker_ukuran",
           "inventory_status", "klasifikasi_tidak_ditemukan", "sub_klasifikasi",
@@ -2647,6 +2648,14 @@ const AssetForm = memo(({
               <div className="space-y-1"><Label className="text-xs">Nomor SPM</Label><Input name="nomor_spm" value={formData.nomor_spm} onChange={handleInputChange} placeholder="02847T/621001/2024" className="h-8" /></div>
               <div className="space-y-1"><Label className="text-xs">Perolehan Dari</Label><Input name="perolehan_dari_nama" value={formData.perolehan_dari_nama} onChange={handleInputChange} className="h-8" /></div>
               <div className="space-y-1"><Label className="text-xs">Nomor Kontrak</Label><Input name="nomor_kontrak" value={formData.nomor_kontrak} onChange={handleInputChange} className="h-8" /></div>
+              <div className="space-y-1">
+                <Label className="text-xs">Cara Bayar Kontrak</Label>
+                <select name="cara_bayar_kontrak" value={formData.cara_bayar_kontrak} onChange={handleInputChange} className="w-full h-8 px-2 rounded-md border border-input bg-background text-sm" data-testid="asset-cara-bayar-kontrak-select">
+                  <option value="">— Pilih —</option>
+                  <option value="Sekaligus">Sekaligus</option>
+                  <option value="Bertahap (Termin)">Bertahap (Termin)</option>
+                </select>
+              </div>
               <div className="space-y-1"><Label className="text-xs">Bukti Perolehan (BAST)</Label><Input name="nomor_bukti_perolehan" value={formData.nomor_bukti_perolehan} onChange={handleInputChange} className="h-8" /></div>
               <div className="space-y-1"><Label className="text-xs">Supplier</Label><Input name="supplier" value={formData.supplier} onChange={handleInputChange} className="h-8" /></div>
             </>)}
