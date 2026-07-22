@@ -444,3 +444,36 @@ def test_ekspor_pegawai_rangkap_jabatan_round_trip():
     assert pulih["jenis_pelaksana"] == "plt"
     assert pulih["jabatan_pelaksana"] == "Kepala Bagian Umum"
     assert pulih["jabatan"] == "Kepala Subbagian TU"
+
+
+def test_snapshot_pemegang_aset():
+    from pegawai_utils import snapshot_pemegang_aset
+    p = {"nama": "Budi Santoso", "gelar_depan": "Dr.", "gelar_belakang": "M.M.",
+         "jabatan": "Kepala Bagian Umum", "unit_kerja": "Bagian Umum"}
+    s = snapshot_pemegang_aset(p)
+    assert s["user"] == "Dr. Budi Santoso, M.M."
+    assert s["pengguna_jabatan"] == "Kepala Bagian Umum"
+    assert s["pengguna_melekat_ke"] == "Bagian Umum"
+    # unit_kerja kosong → jatuh ke Eselon terdalam
+    s2 = snapshot_pemegang_aset({"nama": "Ani", "eselon4": "Subbagian TU"})
+    assert s2["pengguna_melekat_ke"] == "Subbagian TU"
+
+
+def test_beda_snapshot_pemegang():
+    from pegawai_utils import beda_snapshot_pemegang
+    target = {"user": "Budi Santoso", "pengguna_jabatan": "Kepala Bagian",
+              "pengguna_melekat_ke": "Bagian Umum"}
+    # Aset dengan jabatan lama → hanya jabatan yang beda
+    aset = {"user": "Budi Santoso", "pengguna_jabatan": "Staf",
+            "pengguna_melekat_ke": "Bagian Umum"}
+    assert beda_snapshot_pemegang(aset, target) == {"pengguna_jabatan": "Kepala Bagian"}
+    # Sudah sinkron → kosong (idempoten)
+    assert beda_snapshot_pemegang(dict(target), target) == {}
+    # Nama beda spasi/kapital → dianggap sama (tidak diubah)
+    assert beda_snapshot_pemegang(
+        {"user": "budi  santoso", "pengguna_jabatan": "Kepala Bagian",
+         "pengguna_melekat_ke": "Bagian Umum"}, target) == {}
+    # Target field kosong TIDAK menghapus snapshot lama
+    assert beda_snapshot_pemegang(
+        {"user": "Budi Santoso", "pengguna_jabatan": "Staf"},
+        {"user": "Budi Santoso", "pengguna_jabatan": ""}) == {}

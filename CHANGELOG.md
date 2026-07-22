@@ -48,6 +48,33 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#505] Sinkronisasi data pemegang ke aset — dari Master Pegawai — 2026-07-22
+
+Menutup celah **data pemegang basi** pada aset saat identitas pegawai berubah
+(kenaikan pangkat, perpindahan unit, penyesuaian nama). Kaitan aset↔pegawai
+lewat **NIP (stabil)**, jadi kepemilikan tak pernah putus — tetapi *snapshot*
+nama/jabatan/unit yang tercatat pada aset (dipakai DBR/KIR/BAST) bisa tertinggal.
+
+- **Tombol "Sinkronkan data ke aset yang dipegang"** di form pegawai (tab
+  Jabatan & Unit) + **tawaran otomatis** setelah menyimpan pegawai yang
+  identitasnya berubah & masih memegang aset. Menyegarkan `user`/
+  `pengguna_jabatan`/`pengguna_melekat_ke` pada **aset AKTIF** yang dipegang
+  (match NIP, ter-scope satker).
+- **BAST yang sudah terbit TIDAK diubah** (dokumen historis) — hanya data untuk
+  dokumen **berikutnya**. **Idempoten** (hanya menimpa field yang berbeda; data
+  master kosong tidak menghapus snapshot lama); versi aset dinaikkan; jejak audit.
+- Endpoint: `POST …/pegawai/{id}/sinkron-aset` (terapkan) & `GET …/pegawai/{id}/
+  sinkron-aset/pratinjau` (periksa tanpa menulis). Respons PUT pegawai membawa
+  `sinkron_aset` (jumlah aset & yang perlu disegarkan) bila identitas berubah.
+- Helper murni `snapshot_pemegang_aset` & `beda_snapshot_pemegang` (teruji unit;
+  nama dibandingkan ternormalkan agar beda spasi/kapital tidak memicu perubahan).
+
+Verifikasi: 631 unit test lulus (+2 baru); smoke integrasi (FakeDB): 2 aset
+disegarkan, BAST utuh, versi naik, idempoten, aset NIP-lain & terhapus tak
+tersentuh; eslint bersih; `yarn build` sukses.
+
+---
+
 ## [#504] Foto pegawai — disimpan bersama form (bukan langsung) + atur ulang posisi — 2026-07-22
 
 Dua perbaikan alur foto Master Pegawai (umpan balik pemilik):

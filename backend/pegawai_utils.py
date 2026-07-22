@@ -209,6 +209,41 @@ def is_aktif(pegawai):
     return st == "aktif"
 
 
+def snapshot_pemegang_aset(pegawai) -> dict:
+    """Snapshot identitas pemegang untuk field aset (`user` = nama lengkap,
+    `pengguna_jabatan`, `pengguna_melekat_ke` = unit kerja efektif) dari
+    dokumen pegawai master. Dipakai menyegarkan data pemegang pada aset yang
+    dipegang (mis. setelah kenaikan pangkat/perpindahan unit) — TANPA menyentuh
+    BAST historis. MURNI (teruji unit)."""
+    p = pegawai or {}
+    return {
+        "user": nama_lengkap(p) or str(p.get("nama") or "").strip(),
+        "pengguna_jabatan": str(p.get("jabatan") or "").strip(),
+        "pengguna_melekat_ke": (str(p.get("unit_kerja") or "").strip()
+                                or unit_kerja_terdalam(p)),
+    }
+
+
+def beda_snapshot_pemegang(asset, target) -> dict:
+    """Field snapshot pemegang pada `asset` yang BERBEDA dari `target`
+    (hanya field non-kosong pada target yang diperiksa — data master kosong
+    tidak menghapus snapshot lama). Nama dibandingkan ternormalkan (spasi
+    ganda/kapital diabaikan). Kembalikan {field: nilai_baru}; kosong = sudah
+    sinkron. MURNI & idempoten (teruji unit)."""
+    beda = {}
+    for k, v in (target or {}).items():
+        v = str(v or "").strip()
+        if not v:
+            continue
+        lama = str((asset or {}).get(k) or "").strip()
+        if k == "user":
+            if " ".join(lama.split()).lower() != " ".join(v.split()).lower():
+                beda[k] = v
+        elif lama != v:
+            beda[k] = v
+    return beda
+
+
 def rangkap_jabatan_pelaksana(pegawai) -> str:
     """Label rangkap jabatan struktural sementara pegawai — mis.
     "Plt. Kepala Bagian Umum" / "Plh. Kepala Kantor". Kosong bila pegawai
