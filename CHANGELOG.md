@@ -48,6 +48,39 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#500] Versi Word (.docx): DBHI (8 tipe) & DBKP — rollout Word SELURUH laporan LHI tuntas — 2026-07-22
+
+Penutup rollout Word (#495–#499). **DBHI** (Daftar Barang Hasil Inventarisasi,
+8 tipe kondisi) dan **DBKP** (Daftar Barang Kuasa Pengguna per golongan) kini
+tersedia dalam `.docx` editable — **menuntaskan versi Word untuk SELURUH
+laporan inti LHI**.
+
+- Endpoint **`…/dbhi/{tipe}/docx`** (8 tipe: baik/rusak ringan/rusak berat/
+  berlebih/tidak-ditemukan/kesalahan-pencatatan/tidak-ditemukan-lainnya/
+  sengketa) & **`…/dbkp-docx`** — **landscape**, kolom identik versi PDF; Kode
+  Barang tetap 2 baris (kode + Sub-sub Kelompok); tanda tangan Kuasa Pengguna
+  Barang (patuh Non-ASN). DBKP memakai `build_dbkp_rows` (intra/ekstra, ambang
+  PMK 181) — sama dengan PDF.
+- `docx_utils.doc_baru` menerima `landscape=True` (tabel lebar).
+- Frontend: baris **"Versi Word (.docx)"** per kondisi di bawah grid DBHI; DBKP
+  ikut baris Word grup Laporan Resmi.
+
+### Status rollout Word — SELESAI
+
+| Grup | Laporan | Word |
+|---|---|---|
+| Dokumen Pendukung | BA, SPTJM, Surat Koreksi, Daftar Pemegang | ✅ |
+| Laporan Resmi | RHI, BAHI, SP Hasil, SP Pelaksanaan | ✅ |
+| Tabular | DBHI (8 tipe), DBKP | ✅ |
+
+Seluruh `.docx` memakai fondasi `docx_utils`/`ba_utils` bersama, isi identik
+versi PDF, dan mematuhi aturan Non-ASN pada area tanda tangan.
+
+Verifikasi: 620 unit test lulus; smoke render 8 DBHI + DBKP `.docx` OK; eslint
+bersih; `yarn build` sukses.
+
+---
+
 ## [#499] Versi Word (.docx): SP Hasil & SP Pelaksanaan — Laporan Resmi lengkap — 2026-07-22
 
 Lanjutan rollout Word (#495–#498). **Surat Pernyataan Hasil Inventarisasi** &

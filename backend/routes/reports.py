@@ -2011,6 +2011,96 @@ async def generate_dbhi_pdf(activity_id: str, dbhi_type: str, _user: dict = Depe
                              headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
+@reports_router.get("/inventory-activities/{activity_id}/dbhi/{dbhi_type}/docx")
+async def generate_dbhi_docx(activity_id: str, dbhi_type: str,
+                             _user: dict = Depends(require_user_or_query_token)):
+    """Versi Word (.docx) editable DBHI (semua tipe kondisi) — landscape;
+    kolom identik versi PDF; Kode Barang tetap 2 baris (kode + Sub-sub
+    Kelompok); tanda tangan Kuasa Pengguna Barang (patuh Non-ASN)."""
+    import docx_utils as DX
+    from kodefikasi_utils import normalize_kode as _norm_kode
+
+    if dbhi_type not in DBHI_TYPES:
+        raise HTTPException(status_code=400, detail=f"Tipe DBHI tidak valid. Pilih: {', '.join(DBHI_TYPES.keys())}")
+    cfg = DBHI_TYPES[dbhi_type]
+    activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
+    if not activity:
+        raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+    await pastikan_akses_kegiatan_id(_user, activity_id)
+    settings = await pengaturan_kop(activity)
+    ident = _activity_identity(activity, settings)
+    all_assets = await db.assets.find(
+        {"activity_id": activity_id},
+        {"_id": 0, "photos": 0, "photo": 0, "photo_thumbnails": 0, "thumbnail": 0, "gallery_thumbnail": 0, "document_checklist": 0},
+    ).to_list(100000)
+    filtered = [a for a in all_assets if cfg["filter"](a)]
+    subsub_map = await _peta_subsub_kelompok([a.get("asset_code") for a in filtered])
+    peta_kpb = await _peta_status_kepegawaian([ident.get("kasatker_nip")])
+
+    def kode_sel(a):
+        kode = str(a.get("asset_code", "-") or "-").strip() or "-"
+        nama = subsub_map.get(_norm_kode(a.get("asset_code")), "")
+        return f"{kode}\n{nama}" if nama else kode
+
+    def yr(a):
+        return _tahun_perolehan(a.get("purchase_date"))
+
+    extra = cfg["extra_cols"]
+    total_nilai = sum(_safe_price(a) for a in filtered)
+    if extra == "berlebih":
+        header = ["No", "Kode Barang", "NUP", "Nama Barang", "Tahun Perolehan", "Kondisi",
+                  "Nilai (Rp)", "Lokasi", "Keterangan Berlebih", "Asal Usul", "Tindak Lanjut"]
+        rows = [[str(i), kode_sel(a), str(a.get("NUP", "-")), a.get("asset_name", "-") or "-", yr(a),
+                 a.get("condition", "-") or "-", _fmt_rp_id(_safe_price(a)), a.get("location", "-") or "-",
+                 a.get("keterangan_berlebih", "-") or "-", a.get("asal_usul_berlebih", "-") or "-",
+                 a.get("tindak_lanjut", "-") or "-"] for i, a in enumerate(filtered, 1)]
+        ar = {6}
+    elif extra == "tidak_ditemukan":
+        header = ["No", "Kode Barang", "NUP", "Nama Barang", "Tahun Perolehan", "Nilai (Rp)",
+                  "Lokasi", "Klasifikasi", "Sub Klasifikasi", "Uraian", "Tindak Lanjut"]
+        rows = [[str(i), kode_sel(a), str(a.get("NUP", "-")), a.get("asset_name", "-") or "-", yr(a),
+                 _fmt_rp_id(_safe_price(a)), a.get("location", "-") or "-",
+                 a.get("klasifikasi_tidak_ditemukan", "-") or "-", a.get("sub_klasifikasi", "-") or "-",
+                 a.get("uraian_tidak_ditemukan", "-") or "-", a.get("tindak_lanjut", "-") or "-"]
+                for i, a in enumerate(filtered, 1)]
+        ar = {5}
+    elif extra == "sengketa":
+        header = ["No", "Kode Barang", "NUP", "Nama Barang", "Tahun Perolehan", "Kondisi",
+                  "Nilai (Rp)", "Lokasi", "No. Perkara", "Pihak Bersengketa", "Keterangan Sengketa"]
+        rows = [[str(i), kode_sel(a), str(a.get("NUP", "-")), a.get("asset_name", "-") or "-", yr(a),
+                 a.get("condition", "-") or "-", _fmt_rp_id(_safe_price(a)), a.get("location", "-") or "-",
+                 a.get("nomor_perkara", "-") or "-", a.get("pihak_bersengketa", "-") or "-",
+                 a.get("keterangan_sengketa", "-") or "-"] for i, a in enumerate(filtered, 1)]
+        ar = {6}
+    else:
+        header = ["No", "Kode Barang", "NUP", "Nama Barang", "Merk/Tipe", "Tahun Perolehan",
+                  "Nilai (Rp)", "Lokasi", "Keterangan"]
+        rows = [[str(i), kode_sel(a), str(a.get("NUP", "-")), a.get("asset_name", "-") or "-",
+                 f"{a.get('brand', '')} {a.get('model', '')}".strip() or "-", yr(a),
+                 _fmt_rp_id(_safe_price(a)), a.get("location", "-") or "-", a.get("notes", "-") or "-"]
+                for i, a in enumerate(filtered, 1)]
+        ar = {6}
+    # baris total
+    total_row = [""] * len(header)
+    total_row[0] = f"Total: {len(filtered)} item"
+    total_row[6 if extra != "tidak_ditemukan" else 5] = _fmt_rp_id(total_nilai)
+    rows.append(total_row)
+
+    d = DX.doc_baru(landscape=True, margin_cm=1.6)
+    DX.page_footer(d, cfg["title"].replace("\n", " - "))
+    DX.kop_surat(d, settings)
+    DX.title_block(d, cfg["title"])
+    DX.meta_table(d, _info_kegiatan_rows(activity, ident))
+    d.add_paragraph()
+    DX.data_table(d, header, rows, align_center={0, 2}, align_right=ar, font_size=8)
+    DX.signature_single(d, nama=ident["kasatker_nama"], header="Kuasa Pengguna Barang,",
+                        pre_lines=[_tempat_tanggal_laporan(settings)],
+                        nip=ident["kasatker_nip"],
+                        status=peta_kpb.get(str(ident.get("kasatker_nip") or "").strip(), ""))
+    return StreamingResponse(io.BytesIO(DX.to_bytes(d)), media_type=_DOCX_MIME,
+                             headers={"Content-Disposition": f'attachment; filename="DBHI_{dbhi_type}_{activity_id[:8]}.docx"'})
+
+
 # ============================================================================
 # RHI PDF
 # ============================================================================
@@ -2356,6 +2446,72 @@ async def generate_dbkp_pdf(activity_id: str, _user: dict = Depends(require_user
     buffer.seek(0)
     return StreamingResponse(buffer, media_type="application/pdf",
                              headers={"Content-Disposition": f'attachment; filename="DBKP_{activity_id[:8]}.pdf"'})
+
+
+@reports_router.get("/inventory-activities/{activity_id}/dbkp-docx")
+async def generate_dbkp_docx(activity_id: str, _user: dict = Depends(require_user_or_query_token)):
+    """Versi Word (.docx) editable DBKP per golongan (intra/ekstrakomptabel)."""
+    import docx_utils as DX
+    from kodefikasi_utils import GOLONGAN_DEFAULTS
+    from pembukuan_utils import build_dbkp_rows
+    from akun_bas_utils import AKUN_NERACA_DEFAULT, akun_untuk_golongan
+
+    activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
+    if not activity:
+        raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+    await pastikan_akses_kegiatan_id(_user, activity_id)
+    settings = await pengaturan_kop(activity)
+    ident = _activity_identity(activity, settings)
+    assets = await db.assets.find(
+        active_asset_filter({"activity_id": activity_id}),
+        {"_id": 0, "asset_code": 1, "purchase_price": 1, "nilai_wajar_terakhir": 1},
+    ).to_list(100000)
+    uraian_map = {k: u for k, u in GOLONGAN_DEFAULTS}
+    async for k in db.kodefikasi.find({"level": 1}, {"_id": 0, "kode": 1, "uraian": 1}):
+        if k.get("uraian"):
+            uraian_map[k["kode"]] = k["uraian"]
+    amb = await ambang_kapitalisasi()
+    rows_src, total = build_dbkp_rows(assets, uraian_map, ambang=amb)
+    peta_akun = {g: dict(v) for g, v in AKUN_NERACA_DEFAULT.items()}
+    async for m in db.akun_bas.find({}, {"_id": 0}):
+        peta_akun[m["golongan"]] = {"akun": m.get("akun", ""), "uraian": m.get("uraian", "")}
+
+    def akun(g):
+        return (akun_untuk_golongan(g, peta_akun) or {}).get("akun") or "-"
+
+    def rp(v):
+        try:
+            return f"{int(v):,}".replace(",", ".")
+        except (ValueError, TypeError, OverflowError):
+            return "0"
+
+    header = ["Gol.", "Akun Neraca", "Uraian Golongan", "Jml Intra", "Nilai Intra (Rp)",
+              "Jml Ekstra", "Nilai Ekstra (Rp)", "Jml Total", "Nilai Total (Rp)"]
+    rows = [[r["golongan"], akun(r["golongan"]), r["uraian"], str(r["jumlah_intra"]),
+             rp(r["nilai_intra"]), str(r["jumlah_ekstra"]), rp(r["nilai_ekstra"]),
+             str(r["jumlah_total"]), rp(r["nilai_total"])] for r in rows_src]
+    rows.append(["", "", "JUMLAH", str(total["jumlah_intra"]), rp(total["nilai_intra"]),
+                 str(total["jumlah_ekstra"]), rp(total["nilai_ekstra"]),
+                 str(total["jumlah_total"]), rp(total["nilai_total"])])
+
+    d = DX.doc_baru(landscape=True, margin_cm=1.8)
+    DX.page_footer(d, "Daftar Barang Kuasa Pengguna (DBKP) per Golongan")
+    DX.kop_surat(d, settings)
+    DX.title_block(d, "DAFTAR BARANG KUASA PENGGUNA (DBKP)\nPER GOLONGAN BARANG")
+    DX.meta_table(d, _info_kegiatan_rows(activity, ident))
+    d.add_paragraph()
+    DX.data_table(d, header, rows, align_center={0, 1, 3, 5, 7}, align_right={4, 6, 8}, font_size=8)
+    DX.para(d, f"Catatan: pemilahan intrakomptabel/ekstrakomptabel mengikuti nilai satuan minimum "
+               f"kapitalisasi (PMK 181/PMK.06/2016): Peralatan dan Mesin ≥ Rp{rp(amb.get('3', 0))}; "
+               f"Gedung dan Bangunan ≥ Rp{rp(amb.get('4', 0))}; golongan lainnya dibukukan "
+               f"intrakomptabel tanpa ambang.", size=8, space_before=4)
+    peta = await _peta_status_kepegawaian([ident.get("kasatker_nip")])
+    DX.signature_single(d, nama=ident["kasatker_nama"], header="Kuasa Pengguna Barang,",
+                        pre_lines=[_tempat_tanggal_laporan(settings)],
+                        nip=ident["kasatker_nip"],
+                        status=peta.get(str(ident.get("kasatker_nip") or "").strip(), ""))
+    return StreamingResponse(io.BytesIO(DX.to_bytes(d)), media_type=_DOCX_MIME,
+                             headers={"Content-Disposition": f'attachment; filename="DBKP_{activity_id[:8]}.docx"'})
 
 
 async def _penandatangan_kpb(settings, per_iso=None):

@@ -72,11 +72,13 @@ function RekapitulasiPanel({ activityId, isOpen, onToggle, embedded = false, onT
       "surat-koreksi": "surat-koreksi-docx", "daftar-pemegang": "daftar-pemegang-docx",
       "rhi": "rhi-docx", "bahi": "bahi-docx",
       "sp-hasil": "sp-hasil-docx", "sp-pelaksanaan": "sp-pelaksanaan-docx",
+      "dbkp": "dbkp-docx",
     };
     const filenames = {
       "berita-acara": "Berita_Acara", "sptjm": "SPTJM",
       "surat-koreksi": "Surat_Koreksi", "daftar-pemegang": "Daftar_Pemegang_Aset",
       "rhi": "RHI", "bahi": "BAHI", "sp-hasil": "SP_Hasil", "sp-pelaksanaan": "SP_Pelaksanaan",
+      "dbkp": "DBKP",
     };
     const endpoint = endpoints[type];
     if (!endpoint) return;
@@ -100,6 +102,20 @@ function RekapitulasiPanel({ activityId, isOpen, onToggle, embedded = false, onT
         `${API}/inventory-activities/${activityId}/dbhi/${type}`,
         `DBHI_${label.replace(/\s/g, "_")}_${activityId.substring(0, 8)}.pdf`,
         { label: `DBHI ${label}` }
+      );
+    } catch { /* toast error sudah ditangani helper */ } finally {
+      setDownloading("");
+    }
+  };
+
+  // Unduh DBHI versi Word (.docx) editable untuk satu kondisi.
+  const handleDownloadDBHIDocx = async (type, label) => {
+    setDownloading(`${type}-docx`);
+    try {
+      await downloadFileWithProgress(
+        `${API}/inventory-activities/${activityId}/dbhi/${type}/docx`,
+        `DBHI_${label.replace(/\s/g, "_")}_${activityId.substring(0, 8)}.docx`,
+        { label: `DBHI ${label} (Word)` }
       );
     } catch { /* toast error sudah ditangani helper */ } finally {
       setDownloading("");
@@ -130,6 +146,7 @@ function RekapitulasiPanel({ activityId, isOpen, onToggle, embedded = false, onT
             onDownloadPDF={handleDownloadPDF}
             onDownloadDBHI={handleDownloadDBHI}
             onDownloadDocx={handleDownloadDocx}
+            onDownloadDBHIDocx={handleDownloadDBHIDocx}
           />
         </>
       )}
