@@ -40,7 +40,8 @@ const EMPTY = {
   nomor_kontrak: "", tgl_mulai_kontrak: "", tgl_selesai_kontrak: "",
   jenis_kontrak_non_asn: "", perusahaan_penyedia: "",
   tanggal_akhir_jabatan: "", kode_satker: "", kode_satker_lengkap: "",
-  tmt_jabatan: "", status: "aktif", keterangan: "",
+  tmt_jabatan: "", status: "aktif",
+  status_pegawai_satker: "", status_pegawai_instansi: "", keterangan: "",
 };
 
 // Status kontrak Non-ASN utk badge (pemegang aset berisiko saat kontrak habis).
@@ -72,7 +73,7 @@ function namaLengkap(p) {
 export default function PegawaiPage({ user, onBack }) {
   const isAdmin = user?.role === "admin";
   const [items, setItems] = useState([]);
-  const [ref, setRef] = useState({ jenis_kelamin: [], status_kepegawaian: [], jenis_pelaksana: [], jenis_jabatan: [], kategori_pegawai: [], sub_kategori_non_asn: [], agama: [], status_perkawinan: [], status: [] });
+  const [ref, setRef] = useState({ jenis_kelamin: [], status_kepegawaian: [], jenis_pelaksana: [], jenis_jabatan: [], kategori_pegawai: [], sub_kategori_non_asn: [], agama: [], status_perkawinan: [], status: [], status_pegawai_satker: [], status_pegawai_satker_berinstansi: [], pendidikan: [] });
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState(null);
@@ -1129,7 +1130,16 @@ export default function PegawaiPage({ user, onBack }) {
                   <Field label="Status Perkawinan">
                     <Select value={form.status_perkawinan} onChange={set("status_perkawinan")} opts={ref.status_perkawinan} />
                   </Field>
-                  <Field label="Pendidikan Terakhir"><Input value={form.pendidikan_terakhir} onChange={set("pendidikan_terakhir")} placeholder="cth. S1 Akuntansi" /></Field>
+                  <Field label="Pendidikan Terakhir">
+                    <Select value={form.pendidikan_terakhir} onChange={set("pendidikan_terakhir")}
+                      data-testid="pegawai-form-pendidikan"
+                      opts={(() => {
+                        const base = ref.pendidikan || [];
+                        const cur = (form.pendidikan_terakhir || "").trim();
+                        return cur && !base.some((o) => o.kode === cur)
+                          ? [...base, { kode: cur, uraian: cur }] : base;
+                      })()} />
+                  </Field>
                   <Field label="Alamat"><Input value={form.alamat} onChange={set("alamat")} /></Field>
                 </div>
               )}
@@ -1160,7 +1170,21 @@ export default function PegawaiPage({ user, onBack }) {
                         <Select value={form.sub_kategori_non_asn} onChange={set("sub_kategori_non_asn")} opts={ref.sub_kategori_non_asn} />
                       </Field>
                     )}
-                    <Field label="Status di Satker">
+                    {/* Status pegawai (REFERENSI SIMPEG) = hubungan kerja dgn
+                        satker; terpisah dari Status Keberadaan (aktif/cuti/
+                        pensiun). Sebagian status merujuk instansi lain. */}
+                    <Field label="Status Pegawai (Satker)">
+                      <Select value={form.status_pegawai_satker} onChange={set("status_pegawai_satker")}
+                        data-testid="pegawai-form-status-pegawai-satker" opts={ref.status_pegawai_satker} />
+                    </Field>
+                    {(ref.status_pegawai_satker_berinstansi || []).includes(form.status_pegawai_satker) && (
+                      <Field label="Instansi/Satker Terkait" span2>
+                        <Input value={form.status_pegawai_instansi} onChange={set("status_pegawai_instansi")}
+                          placeholder="Instansi asal/tujuan (perbantuan / dipekerjakan)"
+                          data-testid="pegawai-form-status-instansi" />
+                      </Field>
+                    )}
+                    <Field label="Status Keberadaan">
                       <Select value={form.status} onChange={set("status")} data-testid="pegawai-form-status" opts={ref.status} allowEmpty={false} />
                     </Field>
                     {form.status_kepegawaian !== "non_asn" && (

@@ -360,6 +360,25 @@ def test_ekspor_non_asn_sub_kategori_pulih():
     assert pulih["status"] == "nonaktif"
 
 
+def test_status_pegawai_satker_normalisasi_dan_round_trip():
+    """Status pegawai (SIMPEG): normalisasi kode/uraian & pulih via ekspor."""
+    from pegawai_utils import (HEADER_IMPOR, STATUS_PEGAWAI_SATKER,
+                               baris_ekspor_pegawai, baris_impor_ke_pegawai,
+                               normalisasi_status_pegawai_satker)
+    assert normalisasi_status_pegawai_satker("Diperbantukan Pada") == "diperbantukan_pada"
+    assert normalisasi_status_pegawai_satker("pns") == "pns"
+    assert normalisasi_status_pegawai_satker("CPNS") == "calon_pegawai"
+    assert normalisasi_status_pegawai_satker("") == ""
+    assert normalisasi_status_pegawai_satker("entah apa") == ""
+    doc = {"nama": "Sinta", "status_pegawai_satker": "diperbantukan_pada",
+           "status": "aktif"}
+    baris = baris_ekspor_pegawai(doc)
+    assert len(baris) == len(HEADER_IMPOR)
+    assert STATUS_PEGAWAI_SATKER["diperbantukan_pada"] in baris
+    pulih, _ = baris_impor_ke_pegawai(dict(zip(HEADER_IMPOR, baris)))
+    assert pulih["status_pegawai_satker"] == "diperbantukan_pada"
+
+
 def test_normalisasi_kategori_dan_jenis_kontrak():
     from pegawai_utils import (normalisasi_jenis_kontrak,
                                normalisasi_kategori_pegawai)

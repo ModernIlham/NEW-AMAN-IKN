@@ -22,7 +22,8 @@ from pejabat_utils import JENIS_PELAKSANA, STATUS_KEPEGAWAIAN
 from pegawai_utils import (
     AGAMA, DIGIT_BANK, JENIS_IDENTITAS_WNA, JENIS_JABATAN, JENIS_KELAMIN,
     JENIS_KONTRAK_NON_ASN, KATEGORI_PEGAWAI, KEWARGANEGARAAN,
-    PANGKAT_GOLONGAN, STATUS_PEGAWAI,
+    PANGKAT_GOLONGAN, PENDIDIKAN, STATUS_PEGAWAI, STATUS_PEGAWAI_SATKER,
+    STATUS_PEGAWAI_SATKER_BERINSTANSI,
     STATUS_PERKAWINAN, SUB_KATEGORI_NON_ASN, baris_impor_ke_pegawai,
     beda_snapshot_pemegang, deteksi_identitas, info_masa_pegawai,
     kelompok_unit_kerja, pegawai_perlu_serah_terima, rekap_eselon,
@@ -89,6 +90,12 @@ class PegawaiIn(BaseModel):
     kode_satker: Optional[str] = ""
     kode_satker_lengkap: Optional[str] = ""
     status: Optional[str] = "aktif"
+    # Status kepegawaian di satker (REFERENSI SIMPEG: PNS/CPNS/perbantuan/
+    # dipekerjakan/pejabat negara/dll.) — TERPISAH dari `status` (keberadaan).
+    status_pegawai_satker: Optional[str] = ""
+    # Pelengkap: instansi/satker asal atau tujuan bila status merujuk instansi
+    # lain (perbantuan/dipekerjakan/diperbantukan ke swasta).
+    status_pegawai_instansi: Optional[str] = ""
     keterangan: Optional[str] = ""
 
 
@@ -139,8 +146,13 @@ def _bersih(p: PegawaiIn) -> dict:
         "kode_satker": str(p.kode_satker or "").strip(),
         "kode_satker_lengkap": str(p.kode_satker_lengkap or "").strip(),
         "status": str(p.status or "aktif").strip() or "aktif",
+        "status_pegawai_satker": str(p.status_pegawai_satker or "").strip().lower(),
+        "status_pegawai_instansi": str(p.status_pegawai_instansi or "").strip(),
         "keterangan": str(p.keterangan or "").strip(),
     }
+    # Instansi terkait hanya bermakna utk status perbantuan/dipekerjakan.
+    if doc["status_pegawai_satker"] not in STATUS_PEGAWAI_SATKER_BERINSTANSI:
+        doc["status_pegawai_instansi"] = ""
     # Unit kerja efektif = Eselon terdalam bila field unit_kerja kosong (agar
     # rekap & tampilan tetap punya satu label unit meski data berjenjang).
     if not doc["unit_kerja"]:
@@ -178,6 +190,9 @@ async def referensi_pegawai(_user: dict = Depends(require_user)):
         "agama": _opt(AGAMA),
         "status_perkawinan": _opt(STATUS_PERKAWINAN),
         "status": _opt(STATUS_PEGAWAI),
+        "status_pegawai_satker": _opt(STATUS_PEGAWAI_SATKER),
+        "status_pegawai_satker_berinstansi": sorted(STATUS_PEGAWAI_SATKER_BERINSTANSI),
+        "pendidikan": [{"kode": v, "uraian": v} for v in PENDIDIKAN],
         "kewarganegaraan": _opt(KEWARGANEGARAAN),
         "jenis_identitas_wna": _opt(JENIS_IDENTITAS_WNA),
         "jenis_kontrak_non_asn": _opt(JENIS_KONTRAK_NON_ASN),

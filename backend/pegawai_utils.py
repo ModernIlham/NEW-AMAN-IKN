@@ -22,7 +22,8 @@ JENIS_JABATAN = {
     "pelaksana": "Pelaksana",
 }
 
-# Status keberadaan pegawai di satker (kode → uraian).
+# Status keberadaan/kehadiran pegawai di satker (kode → uraian) — SUMBU
+# LIFECYCLE (menggerakkan badge pensiun/mutasi, hitung masa, snapshot).
 STATUS_PEGAWAI = {
     "aktif": "Aktif",
     "cuti": "Cuti",
@@ -33,6 +34,37 @@ STATUS_PEGAWAI = {
     "keluar": "Keluar/Berhenti",
     "nonaktif": "Nonaktif",
 }
+
+# Status kepegawaian di satker — REFERENSI SIMPEG (kode → uraian). SUMBU
+# HUBUNGAN KERJA pegawai dengan satker, TERPISAH dari STATUS_PEGAWAI (sumbu
+# keberadaan). Sebagian status merujuk instansi lain (perbantuan/dipekerjakan);
+# pemakai melengkapi "instansi terkait" bila status tsb dipilih.
+STATUS_PEGAWAI_SATKER = {
+    "pns": "PNS",
+    "calon_pegawai": "Calon Pegawai (CPNS)",
+    "diperbantukan_pada": "Diperbantukan Pada",
+    "perbantuan_dari": "Perbantuan Dari",
+    "dipekerjakan_pada": "Dipekerjakan Pada",
+    "dipekerjakan_dari": "Dipekerjakan Dari",
+    "non_aktif": "Non Aktif",
+    "pejabat_negara": "Pejabat Negara",
+    "diperbantukan_swasta": "Diperbantukan ke Swasta",
+}
+
+# Status yang MERUJUK instansi/satker lain → UI menampilkan isian pelengkap
+# "Instansi/Satker Terkait" (asal/tujuan perbantuan atau penugasan).
+STATUS_PEGAWAI_SATKER_BERINSTANSI = frozenset({
+    "diperbantukan_pada", "perbantuan_dari", "dipekerjakan_pada",
+    "dipekerjakan_dari", "diperbantukan_swasta",
+})
+
+# Referensi jenjang pendidikan terakhir (kategori baku, urut jenjang) — dipakai
+# sebagai pilihan dropdown form & Data Validation ekspor. Disimpan apa adanya
+# sebagai teks uraian agar kompatibel data lama & impor bebas.
+PENDIDIKAN = [
+    "SD", "SMP", "SMU", "Diploma I", "Diploma II", "Diploma III",
+    "Diploma IV", "S1", "S2", "S3", "Profesor",
+]
 
 # Kategori jabatan pegawai per UU ASN (kode → uraian) — menentukan siapa yang
 # dapat menjadi pejabat/penanggung jawab BMN (adopsi pola KERJA-BARENG/SIMPEG).
@@ -169,6 +201,9 @@ def validate_pegawai(doc):
     st = str(d.get("status") or "").strip()
     if st and st not in STATUS_PEGAWAI:
         errors.append(f"Status pegawai tidak dikenal: {st}")
+    sps = str(d.get("status_pegawai_satker") or "").strip()
+    if sps and sps not in STATUS_PEGAWAI_SATKER:
+        errors.append(f"Status pegawai (satker) tidak dikenal: {sps}")
     email = str(d.get("email") or "").strip()
     if email and not _EMAIL_RE.match(email):
         errors.append("Format email tidak valid")
@@ -414,6 +449,8 @@ KOLOM_IMPOR = {
     "tgl mulai kontrak": "tgl_mulai_kontrak",
     "tgl selesai kontrak": "tgl_selesai_kontrak",
     "status": "status",
+    "status pegawai": "status_pegawai_satker",
+    "status pegawai (satker)": "status_pegawai_satker",
     "keterangan": "keterangan",
     "tmt jabatan": "tmt_jabatan",
     "tgl akhir jabatan": "tanggal_akhir_jabatan",
@@ -439,7 +476,7 @@ HEADER_IMPOR = [
     "Nama Bank", "No Rekening",
     "Nomor Kontrak", "Tgl Mulai Kontrak", "Tgl Selesai Kontrak",
     "Jenis Kontrak Non-ASN", "Perusahaan Penyedia", "Kode Satker Lengkap",
-    "Status", "Keterangan",
+    "Status Pegawai", "Status", "Keterangan",
 ]
 
 
@@ -516,6 +553,24 @@ def normalisasi_status_pegawai(nilai):
     if "meninggal" in s or "wafat" in s:
         return "nonaktif"
     return "aktif"
+
+
+def normalisasi_status_pegawai_satker(nilai):
+    """Petakan status pegawai (SIMPEG) bebas → kode STATUS_PEGAWAI_SATKER.
+    Menerima kode maupun uraian (mis. 'Diperbantukan Pada'). Kosong/asing → "".
+    MURNI (teruji unit)."""
+    s = str(nilai or "").strip()
+    if not s:
+        return ""
+    low = s.lower()
+    if low in STATUS_PEGAWAI_SATKER:
+        return low
+    for kode, ur in STATUS_PEGAWAI_SATKER.items():
+        if low == ur.lower():
+            return kode
+    if low == "cpns" or "calon pegawai" in low:
+        return "calon_pegawai"
+    return ""
 
 
 def _norm_jk(nilai):
@@ -608,7 +663,7 @@ def baris_impor_ke_pegawai(raw):
         "sub_kategori_non_asn", "unit_kerja",
         "tmt_jabatan", "tanggal_akhir_jabatan", "npwp",
         "pendidikan_terakhir", "alamat", "jenis_kontrak_non_asn",
-        "perusahaan_penyedia", "kode_satker_lengkap")}
+        "perusahaan_penyedia", "kode_satker_lengkap", "status_pegawai_satker")}
     doc["status"] = "aktif"
     for header, nilai in (raw or {}).items():
         field = KOLOM_IMPOR.get(str(header or "").strip().lower())
@@ -632,6 +687,8 @@ def baris_impor_ke_pegawai(raw):
                 doc["sub_kategori_non_asn"] = sub
         elif field == "status":
             doc["status"] = normalisasi_status_pegawai(val)
+        elif field == "status_pegawai_satker":
+            doc["status_pegawai_satker"] = normalisasi_status_pegawai_satker(val)
         elif field == "kategori_pegawai":
             doc["kategori_pegawai"] = normalisasi_kategori_pegawai(val)
         elif field == "jenis_pelaksana":
@@ -928,6 +985,7 @@ def baris_ekspor_pegawai(doc) -> list:
         g("tgl_selesai_kontrak")[:10],
         JENIS_KONTRAK_NON_ASN.get(g("jenis_kontrak_non_asn").lower(), ""),
         g("perusahaan_penyedia"), g("kode_satker_lengkap"),
+        STATUS_PEGAWAI_SATKER.get(g("status_pegawai_satker").lower(), ""),
         STATUS_PEGAWAI.get(g("status").lower(), g("status") or "Aktif"),
         g("keterangan"),
     ]
@@ -947,6 +1005,8 @@ OPSI_DROPDOWN_EKSPOR = {
                               "Outsourcing (melalui perusahaan penyedia)"],
     "Nama Bank": ["BRI", "BNI", "Mandiri", "BTN", "BSI", "BCA",
                   "CIMB Niaga", "Danamon"],
+    "Pendidikan Terakhir": list(PENDIDIKAN),
+    "Status Pegawai": list(STATUS_PEGAWAI_SATKER.values()),
     "Status": list(STATUS_PEGAWAI.values()),
 }
 

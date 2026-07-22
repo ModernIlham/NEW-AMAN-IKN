@@ -48,6 +48,32 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#511] Master Pegawai — Referensi Status Pegawai (SIMPEG) + kategori Pendidikan Terakhir — 2026-07-22
+
+- **Field baru "Status Pegawai (Satker)"** pada tab Kepegawaian — dropdown
+  **REFERENSI SIMPEG**: PNS · Calon Pegawai (CPNS) · Diperbantukan Pada ·
+  Perbantuan Dari · Dipekerjakan Pada · Dipekerjakan Dari · Non Aktif ·
+  Pejabat Negara · Diperbantukan ke Swasta. Ini **sumbu hubungan kerja**,
+  terpisah dari status keberadaan.
+- **Input berjenjang**: bila status merujuk instansi lain (perbantuan/
+  dipekerjakan/ke swasta), muncul isian pelengkap **"Instansi/Satker
+  Terkait"** (asal/tujuan). Field pelengkap dikosongkan otomatis bila status
+  tak memerlukannya.
+- **Klarifikasi label**: field lama "Status di Satker" (Aktif/Cuti/Pensiun/…)
+  di-rename menjadi **"Status Keberadaan"** agar tak rancu dengan Status
+  Pegawai — logika lifecycle (badge pensiun/mutasi, hitung masa) tak berubah.
+- **Pendidikan Terakhir jadi kategori**: dropdown baku dari **REFERENSI
+  PENDIDIKAN** (SD · SMP · SMU · Diploma I–IV · S1 · S2 · S3 · Profesor).
+  Nilai lama bebas tetap dipertahankan sebagai opsi agar tak hilang saat edit.
+- **Impor/Ekspor Excel**: kolom baru **"Status Pegawai"** (dengan Data
+  Validation) + dropdown **"Pendidikan Terakhir"**; round-trip impor↔ekspor
+  terjaga (uji unit).
+
+Verifikasi: `pytest tests/unit` 637 lulus (termasuk round-trip pegawai baru);
+`yarn lint` bersih; `CI=false yarn build` sukses.
+
+---
+
 ## [#510] Aset — field "Cara Bayar Kontrak" di bagian Pengadaan — 2026-07-22
 
 - **Field skalar baru `cara_bayar_kontrak`** ditambahkan lewat registry
