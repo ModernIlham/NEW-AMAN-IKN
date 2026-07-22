@@ -101,7 +101,7 @@ LIST_PROJECTION = {
     # Semua field skalar aset dari registry (asset_fields.py) — termasuk
     # field berlebih/sengketa agar form edit offline melihat nilai aslinya.
     **{name: 1 for name in SCALAR_FIELD_NAMES},
-    "bast_file_id": 1, "bast_filename": 1,
+    "bast_file_id": 1, "bast_filename": 1, "bast_snapshot": 1,
     "thumbnail": 1, "thumbnail_index": 1,
     # gallery_thumbnail (256px, ~11-20KB base64/baris) TIDAK ikut lagi: kartu
     # galeri memakai streaming ?w=256 yang ter-cache browser; payload list 50
@@ -1553,11 +1553,15 @@ async def upload_asset_bast(
     # Sengaja TIDAK menaikkan `version` (OCC): unggah BAST terjadi saat form
     # edit masih terbuka — bump version akan membuat PATCH berikutnya 409.
     # Cache-busting GET memakai bast_file_id yang selalu baru per unggahan.
+    # Snapshot kode+nama saat BAST dilampirkan → deteksi BAST usang bila
+    # kode/nama berubah kemudian (reklasifikasi / ganti nama).
+    from penggunaan_utils import snapshot_bast
     result = await db.assets.update_one(
         {"id": asset_id},
         {"$set": {
             "bast_file_id": str(file_id),
             "bast_filename": filename,
+            "bast_snapshot": snapshot_bast(existing),
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }},
     )

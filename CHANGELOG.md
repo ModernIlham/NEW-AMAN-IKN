@@ -48,6 +48,33 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#506] Transparansi BAST usang (reklasifikasi/ganti nama) + masa kerja jabatan (TMT) — 2026-07-22
+
+Dua penyempurnaan siklus aset↔pegawai (lanjutan diskusi alur):
+
+**B — Badge "BAST usang".** Saat aset direklasifikasi (kode berubah) atau namanya
+disesuaikan **setelah BAST terakhir dilampirkan**, sistem kini menandainya agar
+operator sadar BAST tersimpan merujuk **data lama** (BAST historis tetap sah;
+terbitkan BAST baru bila perlu).
+- Saat BAST dilampirkan (baik dari bukti TTD modul Penggunaan maupun unggah
+  manual di form aset), **kode+nama di-snapshot** (`bast_snapshot`).
+- Helper murni `bast_perlu_perbarui(asset)` → True bila kode/nama **sekarang**
+  berbeda dari snapshot. Aset ber-BAST **era lama tanpa snapshot TIDAK ditandai**
+  (konservatif, tanpa positif palsu).
+- Badge **"BAST usang"** (amber) pada dialog *Aset Dipegang* (Master Pegawai) &
+  peringatan pada blok BAST di **form aset**. Snapshot ikut backup/restore.
+
+**C — Masa kerja dalam jabatan (TMT).** Kolom TMT Jabatan kini produktif:
+`info_masa_pegawai` menghitung **"Menjabat N tahun M bulan"** dari **TMT Jabatan
+→ hari ini** (helper murni `durasi_terbilang`), tampil di kolom *Masa* daftar
+pegawai. Melengkapi *Akhir Periode Jabatan* (pasangan mulai↔selesai).
+
+Verifikasi: 634 unit test lulus (+3 baru: `durasi_terbilang`, masa jabatan,
+`bast_perlu_perbarui`/`snapshot_bast`); `yarn lint` bersih (0 error);
+`yarn build` sukses.
+
+---
+
 ## [#505] Sinkronisasi data pemegang ke aset — dari Master Pegawai — 2026-07-22
 
 Menutup celah **data pemegang basi** pada aset saat identitas pegawai berubah

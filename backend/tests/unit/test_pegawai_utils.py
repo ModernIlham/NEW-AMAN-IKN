@@ -477,3 +477,26 @@ def test_beda_snapshot_pemegang():
     assert beda_snapshot_pemegang(
         {"user": "Budi Santoso", "pengguna_jabatan": "Staf"},
         {"user": "Budi Santoso", "pengguna_jabatan": ""}) == {}
+
+
+def test_durasi_terbilang():
+    from pegawai_utils import durasi_terbilang
+    assert durasi_terbilang("2022-01-01", "2025-03-01")["label"] == "3 tahun 2 bulan"
+    assert durasi_terbilang("2025-01-01", "2025-01-20")["label"] == "19 hari"
+    assert durasi_terbilang("2024-01-15", "2025-01-15")["label"] == "1 tahun"
+    # hari negatif → pinjam dari bulan sebelumnya
+    d = durasi_terbilang("2024-01-31", "2024-03-01")
+    assert d["label"] == "1 bulan" and d["hari"] == 30
+    # dari > sampai / tak valid → kosong
+    assert durasi_terbilang("2025-01-01", "2024-01-01")["label"] == ""
+    assert durasi_terbilang("", "2025-01-01")["hari"] is None
+
+
+def test_info_masa_pegawai_masa_jabatan():
+    from pegawai_utils import info_masa_pegawai
+    im = info_masa_pegawai({"tmt_jabatan": "2022-06-01"}, "2025-08-01")
+    assert im["tmt_jabatan"] == "2022-06-01"
+    assert im["masa_jabatan"]["label"] == "3 tahun 2 bulan"
+    # tanpa TMT → kosong
+    im2 = info_masa_pegawai({}, "2025-08-01")
+    assert im2["tmt_jabatan"] == "" and im2["masa_jabatan"]["label"] == ""
