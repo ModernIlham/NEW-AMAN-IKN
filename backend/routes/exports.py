@@ -854,23 +854,11 @@ async def export_pdf(request: Request, activity_id: Optional[str] = None,
         headers={"Content-Disposition": "attachment; filename=laporan_inventaris.pdf"}
     )
 
-@exports_router.get("/export/xlsx")
-@limiter.limit("3/minute")
-async def export_xlsx(request: Request, activity_id: Optional[str] = None, base_url: str = "",
-                      _user: dict = Depends(require_user)):
-    """Export assets to Excel format with thumbnails and document checklist - optimized for large datasets"""
-    await pastikan_akses_kegiatan_id(_user, activity_id)
-    query = await scope_query_aset(_user, {"activity_id": activity_id} if activity_id else {})
-    total = await db.assets.count_documents(query)
-    if total == 0:
-        raise HTTPException(status_code=404, detail="Tidak ada data untuk diexport")
-    if total > MAX_FOTO_EXPORT_ASSETS:
-        raise HTTPException(
-            status_code=400,
-            detail=(f"Terlalu banyak aset ({total}) untuk ekspor Excel berfoto "
-                    f"(maks {MAX_FOTO_EXPORT_ASSETS}). Persempit filter/kegiatan, "
-                    "atau gunakan Ekspor CSV (ringan, tanpa foto)."))
-
+async def bangun_xlsx_bytes(query, activity_id="", base_url=""):
+    """Rakit workbook XLSX aset (Data Aset + foto + Kelengkapan Dokumen +
+    Data Kegiatan + Tim) menjadi bytes. Diekstrak dari endpoint /export/xlsx
+    agar dipakai ULANG oleh worker job latar (ekspor async) TANPA menduplikasi
+    logika. MURNI membangun — pemanggil yang urus auth/scope/cap/response."""
     buffer = io.BytesIO()
     # in_memory=False → xlsxwriter merakit arsip di berkas temp disk (bukan RAM),
     # menekan puncak memori saat menyisipkan banyak gambar.
@@ -1284,12 +1272,102 @@ async def export_xlsx(request: Request, activity_id: Optional[str] = None, base_
     
     workbook.close()
     buffer.seek(0)
-    
+    return buffer.getvalue()
+
+
+@exports_router.get("/export/xlsx")
+@limiter.limit("3/minute")
+async def export_xlsx(request: Request, activity_id: Optional[str] = None, base_url: str = "",
+                      _user: dict = Depends(require_user)):
+    """Export assets to Excel format with thumbnails and document checklist - optimized for large datasets"""
+    await pastikan_akses_kegiatan_id(_user, activity_id)
+    query = await scope_query_aset(_user, {"activity_id": activity_id} if activity_id else {})
+    total = await db.assets.count_documents(query)
+    if total == 0:
+        raise HTTPException(status_code=404, detail="Tidak ada data untuk diexport")
+    if total > MAX_FOTO_EXPORT_ASSETS:
+        raise HTTPException(
+            status_code=400,
+            detail=(f"Terlalu banyak aset ({total}) untuk ekspor Excel berfoto "
+                    f"(maks {MAX_FOTO_EXPORT_ASSETS}). Persempit filter/kegiatan, "
+                    "atau gunakan Ekspor CSV (ringan, tanpa foto)."))
+
+    data = await bangun_xlsx_bytes(query, activity_id, base_url)
     logger.info(f"📤 Exported {total} assets to Excel (activity_id={activity_id})")
-    
     return StreamingResponse(
-        buffer,
+        io.BytesIO(data),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": "attachment; filename=inventory.xlsx"}
     )
+
+
+_XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+# Simpan STRONG reference ke task worker: asyncio hanya memegang weak ref, task
+# fire-and-forget bisa di-GC saat suspended → ekspor mati diam-diam.
+_EKSPOR_TASKS: set = set()
+# Batasi jumlah build ekspor berat yang berjalan bersamaan (tiap build menahan
+# workbook penuh di RAM) agar beberapa ekspor besar tak meng-OOM worker.
+_EKSPOR_SEM = asyncio.Semaphore(2)
+
+
+@exports_router.post("/export/xlsx/async")
+@limiter.limit("6/minute")
+async def export_xlsx_async(request: Request, activity_id: Optional[str] = None,
+                            base_url: str = "", _user: dict = Depends(require_user)):
+    """Ekspor XLSX sebagai JOB LATAR (submit→poll→unduh) — untuk dataset berfoto
+    besar yang bisa melewati batas timeout ~120s pada ekspor sinkron. Kembalikan
+    job_id; klien polling GET /api/jobs/{id} lalu unduh /api/jobs/{id}/download."""
+    await pastikan_akses_kegiatan_id(_user, activity_id)
+    query = await scope_query_aset(_user, {"activity_id": activity_id} if activity_id else {})
+    total = await db.assets.count_documents(query)
+    if total == 0:
+        raise HTTPException(status_code=404, detail="Tidak ada data untuk diexport")
+    if total > MAX_FOTO_EXPORT_ASSETS:
+        raise HTTPException(
+            status_code=400,
+            detail=(f"Terlalu banyak aset ({total}) untuk ekspor Excel berfoto "
+                    f"(maks {MAX_FOTO_EXPORT_ASSETS}). Persempit filter/kegiatan, "
+                    "atau gunakan Ekspor CSV (ringan, tanpa foto)."))
+    from jobs import buat_job
+    nama = f"inventory_{(activity_id or 'semua')[:8]}.xlsx"
+    job_id = await buat_job(
+        "ekspor_xlsx", _user.get("username", ""),
+        status="queued", progress=0, done=False, total=total, nama_file=nama)
+    t = asyncio.create_task(
+        _jalankan_ekspor_xlsx(job_id, query, activity_id or "", base_url, nama))
+    _EKSPOR_TASKS.add(t)
+    t.add_done_callback(_EKSPOR_TASKS.discard)
+    return {"job_id": job_id, "total": total,
+            "message": f"Ekspor Excel dimulai untuk {total} aset."}
+
+
+async def _jalankan_ekspor_xlsx(job_id, query, activity_id, base_url, nama):
+    """Worker job latar: rakit XLSX (reuse bangun_xlsx_bytes) → GridFS."""
+    from log_setup import set_job_id
+    from jobs import update_job, simpan_artifact
+    set_job_id(job_id)   # korelasi log ke JOB (task latar mewarisi konteks request)
+    try:
+        # Batasi konkurensi build berat (workbook penuh di RAM per build).
+        async with _EKSPOR_SEM:
+            await update_job(job_id, status="running", progress=10,
+                             message="Merakit workbook Excel...")
+            data = await bangun_xlsx_bytes(query, activity_id, base_url)
+            await update_job(job_id, progress=90, message="Menyimpan hasil...")
+            await simpan_artifact(job_id, data, nama, _XLSX_MIME)
+        await update_job(job_id, status="done", done=True, progress=100,
+                         message="Ekspor Excel selesai.")
+        logger.info(f"📤 Ekspor XLSX job {job_id} selesai ({len(data)} bytes)")
+    except asyncio.CancelledError:
+        # Task dibatalkan (shutdown/GC) — tandai job agar klien tak polling abadi.
+        try:
+            await update_job(job_id, status="error", done=True,
+                             error_message="Ekspor dibatalkan")
+        except Exception:
+            pass
+        raise
+    except Exception as e:
+        logger.error(f"Ekspor XLSX job {job_id} gagal: {e}")
+        await update_job(job_id, status="error", done=True,
+                         error_message=str(e)[:300])
 

@@ -48,6 +48,43 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#531] Ekspor Excel sebagai job latar (async, tak lagi timeout) — 2026-07-22
+
+Langkah 2 job latar: ekspor XLSX berfoto besar kini bisa jalan sebagai **job
+async** (submit→poll→unduh), lepas dari batas timeout ~120s yang mengancam
+ekspor sinkron di dekat cap 5000 aset.
+
+- **`bangun_xlsx_bytes(query, activity_id, base_url)`** — logika build workbook
+  diekstrak (deterministik, verbatim) dari endpoint `/export/xlsx` agar dipakai
+  ULANG oleh worker. Endpoint sinkron LAMA tetap ada (memanggil helper yang sama;
+  perilaku identik — terverifikasi menghasilkan workbook 2-sheet yang valid).
+- **`POST /api/export/xlsx/async`** → `job_id`; worker merakit workbook lalu
+  menyimpannya ke **GridFS** (multi-worker-safe). Cap 5000 tetap ditegakkan
+  sebelum job dibuat.
+- **Router job generik** `GET /api/jobs/{id}` (status/polling) &
+  `/api/jobs/{id}/download` (dual-auth header|`?token`) — akses **hanya pemilik
+  job atau admin** (fail-closed).
+
+Pengerasan dari tinjauan adversarial (13 agen) sebelum merge:
+
+- **Artifact GridFS tak lagi yatim** — dokumen job auto-hapus via TTL 7 hari,
+  tetapi blob GridFS tak ikut; ditambah penyapu periodik `bersihkan_artifact_yatim`
+  (hapus blob ekspor > 7 hari; foto/dokumen aset tanpa `metadata.job_id` TAK
+  tersentuh) + penjadwalan `bersihkan_job_basi` (relabel job macet) via loop
+  pemeliharaan startup.
+- **Task worker tak bisa di-GC** — strong-reference disimpan +
+  `add_done_callback`; `CancelledError` (shutdown) menandai job agar klien tak
+  polling abadi.
+- **Batas konkurensi** — semaphore (maks 2 build ekspor berat serentak) cegah OOM.
+- **Kontrol akses fail-closed** + **job_id 128-bit** (uuid penuh).
+
+Verifikasi: smoke async end-to-end (worker→GridFS→xlsx valid; status/unduh;
+otorisasi non-pemilik→403; jalur gagal→error) + penyapu (yatim dihapus, foto
+aman). `pytest tests/unit` 638 lulus; `compileall` bersih. Backend-only.
+Berikutnya (JOB-3): frontend task-tray + wire tombol Export ke jalur async.
+
+---
+
 ## [#530] Fondasi job latar bersama + impor kategori tahan multi-worker — 2026-07-22
 
 Langkah 1 modul **job latar (background job)**. Modul baru `jobs.py` menyimpan
