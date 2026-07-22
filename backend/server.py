@@ -325,20 +325,26 @@ async def reset_all_data(data: ResetConfirmation, _admin: dict = Depends(require
     # tetap bisa login & kop surat tak hilang. Sebelumnya hanya 6 koleksi lama
     # yang dihapus sehingga modul baru (penilaian, penghapusan, persediaan, dll.)
     # + foto menyisakan data yatim. Koleksi baru kini otomatis ikut ter-reset.
-    from backup_utils import collections_to_reset
+    from backup_utils import (collections_to_reset, RESET_KEEP_GRIDFS_JENIS,
+                              RESET_KEEP_GRIDFS_KIND)
     all_names = await db.list_collection_names()
     deleted = {}
     for col_name in collections_to_reset(all_names):
         res = await db[col_name].delete_many({})
         deleted[col_name] = res.deleted_count
     # Bersihkan GridFS (foto aset & lampiran dokumen yang datanya sudah dihapus),
-    # KECUALI foto pegawai — koleksi `pegawai` dipertahankan saat reset, sehingga
-    # menghapus fotonya akan meninggalkan foto_file_id yatim (avatar rusak).
-    keep_foto = [d["_id"] async for d in db["fs.files"].find(
-        {"metadata.jenis": "foto_pegawai"}, {"_id": 1})]
-    gridfs_files = await db["fs.files"].count_documents({"_id": {"$nin": keep_foto}})
-    await db["fs.files"].delete_many({"_id": {"$nin": keep_foto}})
-    await db["fs.chunks"].delete_many({"files_id": {"$nin": keep_foto}})
+    # KECUALI berkas yang tertaut koleksi RESET_KEEP (pegawai/pejabat): foto
+    # pegawai (krop + asli) & spesimen TTD — menghapusnya meninggalkan
+    # foto_file_id/foto_asli_file_id/ttd_file_id yatim (avatar/tanda tangan
+    # rusak). Kebijakan penanda ada di backup_utils (teruji unit).
+    keep_query = {"$or": [
+        {"metadata.jenis": {"$in": list(RESET_KEEP_GRIDFS_JENIS)}},
+        {"metadata.kind": {"$in": list(RESET_KEEP_GRIDFS_KIND)}},
+    ]}
+    keep_ids = [d["_id"] async for d in db["fs.files"].find(keep_query, {"_id": 1})]
+    gridfs_files = await db["fs.files"].count_documents({"_id": {"$nin": keep_ids}})
+    await db["fs.files"].delete_many({"_id": {"$nin": keep_ids}})
+    await db["fs.chunks"].delete_many({"files_id": {"$nin": keep_ids}})
     deleted["gridfs_files"] = gridfs_files
 
     logger.warning(f"SYSTEM RESET by admin {admin_user.get('username')}: {deleted}")

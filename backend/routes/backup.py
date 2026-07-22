@@ -26,7 +26,10 @@ BACKUP_TEMP_DIR.mkdir(exist_ok=True)
 BACKUP_ARSIP_DIR = Path(__file__).parent.parent / "backup_arsip"
 BACKUP_ARSIP_DIR.mkdir(exist_ok=True)
 # 3.4.0: + inventory_history & counters (tiket kegiatan) dalam backup
-APP_VERSION = "3.4.0"
+# 3.5.0: reset mempertahankan GridFS tertaut koleksi RESET_KEEP (foto pegawai
+#        krop+asli & spesimen TTD pegawai/pejabat) agar referensi tak yatim.
+#        Backup/restore tetap mencakup SELURUH GridFS (tak berubah).
+APP_VERSION = "3.5.0"
 
 # Kebijakan koleksi DINAMIS (#290): daftar koleksi di-ENUMERASI dari DB (bukan
 # hardcode) lewat backup_utils (logika MURNI & teruji unit), sehingga SETIAP
