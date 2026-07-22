@@ -192,6 +192,8 @@ async def import_categories_bulk(request: Request, file: UploadFile = File(...),
 
 async def _do_bulk_import(job_id: str, rows: list):
     """Background task for bulk category import"""
+    from log_setup import set_job_id
+    set_job_id(job_id)   # korelasi log ke JOB, bukan request pemicu (task latar)
     progress = import_progress[job_id]
     batch_size = 500
     imported = 0

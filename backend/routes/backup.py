@@ -240,6 +240,8 @@ async def run_backup_task(job_id: str, username: str, arsipkan: str = ""):
     `arsipkan` ("otomatis"/"manual") = pindahkan ZIP hasil ke arsip persisten
     server (BACKUP_ARSIP_DIR) — tidak kena pembersihan berkas temp 1 jam.
     """
+    from log_setup import set_job_id
+    set_job_id(job_id)   # korelasi log ke JOB, bukan request pemicu (task latar)
     try:
         await update_job(job_id, status="running", progress=0, message="Memulai proses backup...")
 
@@ -360,6 +362,8 @@ async def run_backup_task(job_id: str, username: str, arsipkan: str = ""):
 
 async def run_restore_task(job_id: str, zip_path: Path, username: str):
     """Background task that restores from backup ZIP with progress tracking."""
+    from log_setup import set_job_id
+    set_job_id(job_id)   # korelasi log ke JOB, bukan request pemicu (task latar)
     try:
         await update_job(job_id, status="running", progress=5, message="Memvalidasi file backup...")
 

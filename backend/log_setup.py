@@ -33,12 +33,22 @@ _RID_SAFE = re.compile(r"[^A-Za-z0-9._-]")
 # path request di-URL-decode oleh server ASGI sehingga `/x%0Ay` → "/x\ny", dan
 # formatter plain menulisnya apa adanya → INJEKSI baris log. (JSON meng-escape,
 # tapi kita bersihkan lintas-format.)
-_CTRL = re.compile(r"[\x00-\x1f\x7f]")
+_CTRL = re.compile(r"[\x00-\x1f\x7f-\x9f]")   # C0 + DEL + C1 (escape terminal)
 
 
 def _bersih_log(nilai, maks: int = 256) -> str:
     """Buang karakter kontrol + batasi panjang nilai user untuk baris log."""
     return _CTRL.sub("", str(nilai or ""))[:maks]
+
+
+def set_job_id(job_id) -> None:
+    """Set id korelasi untuk TASK LATAR (asyncio.create_task) yang mewarisi
+    salinan konteks request pemicunya. Tanpa ini, job backup/restore/impor yang
+    berjalan menit-menit akan menuliskan log ber-request_id milik request yang
+    SUDAH selesai (korelasi menyesatkan). Panggil di baris awal fungsi task —
+    task punya konteksnya sendiri, jadi tak perlu reset."""
+    rid = _RID_SAFE.sub("", str(job_id or ""))[:56] or uuid.uuid4().hex[:12]
+    request_id_ctx.set("job:" + rid)
 # Field terstruktur tambahan yang mungkin ditempel ke record (akses log).
 _EXTRA_FIELDS = ("http_method", "http_path", "http_status", "duration_ms",
                  "client_ip")
@@ -105,6 +115,22 @@ def configure_logging() -> None:
         root.removeHandler(h)
     root.addHandler(handler)
     root.setLevel(level)
+
+    # Satukan logger uvicorn ke ROOT. configure_logging() dipanggil saat import
+    # app — SETELAH Config.__init__ uvicorn memasang loggernya (uvicorn 0.25:
+    # configure_logging di __init__, import app di Config.load) — jadi override
+    # ini bertahan. Manfaat: (1) baris uvicorn startup/error ikut format &
+    # request_id kita (LOG_FORMAT=json → JSON-lines MURNI); (2) access-log tak
+    # lagi GANDA & skip health kita efektif.
+    for _n in ("uvicorn", "uvicorn.error"):
+        _lg = logging.getLogger(_n)
+        _lg.handlers.clear()
+        _lg.propagate = True
+    # Akses ditangani `app.access` kita (ber-request_id + skip health) → bisukan
+    # akses bawaan uvicorn: tanpa handler + tak propagate = tak menulis apa pun.
+    _acc = logging.getLogger("uvicorn.access")
+    _acc.handlers.clear()
+    _acc.propagate = False
 
 
 # Path yang TIDAK dicatat di access log (health-check dipoll sangat sering →

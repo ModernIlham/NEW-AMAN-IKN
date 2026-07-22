@@ -69,6 +69,18 @@ kini mudah. Modul baru `backend/log_setup.py`:
   ServerErrorMiddleware di lapisan lebih luar) tetap dicatat sebagai 500 di access
   log, bukan 0.
 
+Pengerasan dari tinjauan adversarial:
+
+- **Logger uvicorn disatukan ke root** — `uvicorn`/`uvicorn.error` diarahkan ke
+  handler root (ikut format & JSON), dan access-log bawaan uvicorn dibisukan
+  agar tak ada baris akses GANDA dan skip-health efektif (dulu uvicorn.access
+  tetap membanjiri log health tanpa request_id).
+- **Task latar tak lagi memakai request-id basi** — `run_backup_task`,
+  `run_restore_task`, `_do_bulk_import` men-set id `job:<id>` sendiri (task
+  `asyncio.create_task` mewarisi salinan konteks request pemicu; tanpa ini job
+  3-menit menulis log ber-id request yang sudah tutup).
+- **Sanitasi diperluas** ke karakter kontrol C1 (0x80–0x9F), bukan hanya C0.
+
 Verifikasi: smoke 7 skenario via Starlette TestClient (korelasi id handler↔access;
 propagasi & sanitasi X-Request-ID; StreamingResponse utuh; exception→500;
 health di-skip; anti log-injection path) + tinjauan adversarial. `pytest
