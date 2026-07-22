@@ -45,6 +45,7 @@ const FIELD_LABELS = {
   sub_klasifikasi: "Sub Klasifikasi", uraian_tidak_ditemukan: "Uraian Tidak Ditemukan", tindak_lanjut: "Tindak Lanjut",
   koordinat_latitude: "Latitude", koordinat_longitude: "Longitude", kronologis: "Kronologis",
   nomor_spm: "No. SPM", perolehan_dari_nama: "Perolehan Dari", nomor_kontrak: "No. Kontrak",
+  cara_bayar_kontrak: "Cara Bayar Kontrak",
   nomor_bukti_perolehan: "No. Bukti", supplier: "Supplier",
   pengguna_melekat_ke: "Melekat Ke", pengguna_jabatan: "Jabatan Pengguna",
   operasional_jenis: "Jenis Operasional", nomor_bast: "No. BAST",

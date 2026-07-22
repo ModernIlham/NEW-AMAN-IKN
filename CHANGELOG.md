@@ -48,6 +48,26 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#510] Aset — field "Cara Bayar Kontrak" di bagian Pengadaan — 2026-07-22
+
+- **Field skalar baru `cara_bayar_kontrak`** ditambahkan lewat registry
+  (`asset_fields.py`, `batchable=True`) — otomatis mengalir ke proyeksi list,
+  PATCH, batch, ekspor CSV, impor, dan audit. Turunan manual ikut disesuaikan:
+  `models.py` (AssetCreate/AssetResponse), header & kolom ekspor XLSX
+  (`exports.py`), dan skema template impor (`templates.py`, dengan dropdown).
+- **Dropdown "Cara Bayar Kontrak"** muncul tepat di bawah **Nomor Kontrak**
+  pada bagian **Pengadaan** form aset (tambah maupun edit) — pilihan
+  **Sekaligus** / **Bertahap (Termin)**, boleh dikosongkan.
+- **Edit massal (Batch):** field ini juga tersedia sebagai dropdown di panel
+  "Administrasi Perolehan" (dekat Nomor Kontrak), lengkap dengan opsi hapus.
+- **Snapshot offline & label audit** diperbarui agar field ikut tersimpan di
+  IndexedDB dan tampil dengan nama ramah pada Log Perubahan.
+
+Verifikasi: `pytest tests/unit` 636 lulus (termasuk anti-drift registry);
+`yarn lint` bersih; `CI=false yarn build` sukses.
+
+---
+
 ## [#509] Master Pegawai — hapus "Rekap per Unit Kerja" + toolbar HP lebih lega — 2026-07-22
 
 - **Panel "Rekap per Unit Kerja" dihapus** (redundan dengan **Struktur

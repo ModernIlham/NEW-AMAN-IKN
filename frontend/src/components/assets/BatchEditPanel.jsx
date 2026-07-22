@@ -566,6 +566,13 @@ const BatchEditPanel = memo(function BatchEditPanel({
               <ClearableInput placeholder="—" value={updates.nomor_kontrak === "__clear__" ? "" : updates.nomor_kontrak} isClear={updates.nomor_kontrak === "__clear__"} onChange={e => setField("nomor_kontrak", e.target.value)} onClear={() => toggleClearField("nomor_kontrak")} />
             </div>
             <div className="space-y-0.5">
+              <label className="text-[10px] text-muted-foreground flex items-center gap-1"><FileCheck className="w-2.5 h-2.5" />Cara Bayar Kontrak</label>
+              <ClearableSelect value={updates.cara_bayar_kontrak || "__none__"} onValueChange={v => setField("cara_bayar_kontrak", v)}>
+                <SelectItem value="Sekaligus">Sekaligus</SelectItem>
+                <SelectItem value="Bertahap (Termin)">Bertahap (Termin)</SelectItem>
+              </ClearableSelect>
+            </div>
+            <div className="space-y-0.5">
               <label className="text-[10px] text-muted-foreground flex items-center gap-1"><FileCheck className="w-2.5 h-2.5" />Bukti Perolehan (BAST)</label>
               <ClearableInput placeholder="—" value={updates.nomor_bukti_perolehan === "__clear__" ? "" : updates.nomor_bukti_perolehan} isClear={updates.nomor_bukti_perolehan === "__clear__"} onChange={e => setField("nomor_bukti_perolehan", e.target.value)} onClear={() => toggleClearField("nomor_bukti_perolehan")} />
             </div>
