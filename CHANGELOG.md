@@ -48,6 +48,21 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#509] Master Pegawai — hapus "Rekap per Unit Kerja" + toolbar HP lebih lega — 2026-07-22
+
+- **Panel "Rekap per Unit Kerja" dihapus** (redundan dengan **Struktur
+  Organisasi** yang sudah menyajikan jumlah per unit) — beserta state &
+  pemanggilan `rekap-unit` di frontend.
+- **Toolbar HP: kolom pencarian lebih lebar.** Di layar HP (<sm) semua tombol
+  aksi sekunder (Struktur, Unduh Template, Ekspor Excel, Impor) **dikelompokkan
+  ke satu menu ⋮**; tombol **Tambah Pegawai** tetap tampil terpisah. Di tablet/
+  desktop (≥sm) tombol tetap sebaris seperti semula.
+
+Verifikasi: `yarn lint` bersih; `CI=false yarn build` sukses. (Frontend-only;
+endpoint `rekap-unit` tetap ada untuk kompatibilitas namun tak lagi dipakai UI.)
+
+---
+
 ## [#508] Gelar akademik pada tanda tangan laporan — saklar per pejabat — 2026-07-22
 
 Kadang pimpinan ingin mencantumkan gelar akademik pada tanda tangan dokumen,

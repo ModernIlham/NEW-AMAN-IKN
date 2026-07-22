@@ -4,8 +4,11 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Search, Plus, Pencil, Trash2, Loader2, IdCard, Upload,
   AlertTriangle, Network, Wand2, FileDown, FileSpreadsheet, UserPlus, RefreshCw,
-  ImagePlus, Crop,
+  ImagePlus, Crop, MoreVertical,
 } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -69,7 +72,6 @@ function namaLengkap(p) {
 export default function PegawaiPage({ user, onBack }) {
   const isAdmin = user?.role === "admin";
   const [items, setItems] = useState([]);
-  const [rekap, setRekap] = useState(null);
   const [ref, setRef] = useState({ jenis_kelamin: [], status_kepegawaian: [], jenis_pelaksana: [], jenis_jabatan: [], kategori_pegawai: [], sub_kategori_non_asn: [], agama: [], status_perkawinan: [], status: [] });
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
@@ -215,10 +217,6 @@ export default function PegawaiPage({ user, onBack }) {
     } finally {
       setLoading(false);
     }
-    // Rekap per unit kerja (ringkasan adopsi SIMAN-G) — best-effort.
-    axios.get(`${API}/pegawai/rekap-unit`)
-      .then((r) => setRekap(r.data))
-      .catch(() => setRekap(null));
     // Pegawai berisiko yang masih memegang aset (alert serah terima BMN).
     axios.get(`${API}/pegawai/perlu-serah-terima`)
       .then((r) => setSerahTerima(r.data?.items || []))
@@ -558,39 +556,87 @@ export default function PegawaiPage({ user, onBack }) {
               <input ref={fileRef} type="file" accept=".xlsx,.xlsm,.csv" className="hidden"
                 onChange={onBerkasDipilih} data-testid="pegawai-impor-file" />
             )}
-            {units.length > 0 && (
-              <Button variant="outline" className="h-10 w-10 p-0 flex-shrink-0" onClick={() => setStruktur(true)}
-                title="Struktur Organisasi" aria-label="Struktur Organisasi"
-                data-testid="pegawai-struktur">
-                <Network className="w-4 h-4" />
-              </Button>
+            {/* Desktop (≥sm): aksi sekunder sebaris (ikon). */}
+            <div className="hidden sm:flex items-center gap-2">
+              {units.length > 0 && (
+                <Button variant="outline" className="h-10 w-10 p-0 flex-shrink-0" onClick={() => setStruktur(true)}
+                  title="Struktur Organisasi" aria-label="Struktur Organisasi"
+                  data-testid="pegawai-struktur">
+                  <Network className="w-4 h-4" />
+                </Button>
+              )}
+              {isAdmin && (
+                <>
+                  <Button variant="outline" className="h-10 w-10 p-0 flex-shrink-0" onClick={unduhTemplate}
+                    title="Unduh Template Impor (CSV)" aria-label="Unduh Template Impor (CSV)"
+                    data-testid="pegawai-template">
+                    <FileDown className="w-4 h-4" />
+                  </Button>
+                  <Button variant="outline" className="h-10 w-10 p-0 flex-shrink-0"
+                    onClick={() => downloadFileWithProgress(`${API}/pegawai/export-xlsx`,
+                      "master_pegawai.xlsx", { label: "Ekspor Master Pegawai (Excel)" }).catch(() => {})}
+                    title="Ekspor Excel siap-edit (bisa diimpor kembali)"
+                    aria-label="Ekspor Excel siap-edit"
+                    data-testid="pegawai-export-xlsx">
+                    <FileSpreadsheet className="w-4 h-4" />
+                  </Button>
+                  <Button variant="outline" className="h-10 w-10 p-0 flex-shrink-0" disabled={mengimpor}
+                    title="Impor Excel/CSV" aria-label="Impor Excel/CSV"
+                    onClick={pilihBerkas} data-testid="pegawai-impor">
+                    {mengimpor ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                  </Button>
+                </>
+              )}
+            </div>
+
+            {/* HP (<sm): aksi sekunder dikelompokkan ke menu ⋮ supaya kolom
+                cari lebih lebar; tombol Tambah tetap tampil terpisah. */}
+            {(units.length > 0 || isAdmin) && (
+              <div className="sm:hidden flex-shrink-0">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="h-10 w-10 p-0" title="Menu aksi" aria-label="Menu aksi"
+                      data-testid="pegawai-menu">
+                      <MoreVertical className="w-4 h-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-52">
+                    {units.length > 0 && (
+                      <DropdownMenuItem className="min-h-[42px]" onClick={() => setStruktur(true)}
+                        data-testid="pegawai-menu-struktur">
+                        <Network className="w-4 h-4 mr-2" />Struktur Organisasi
+                      </DropdownMenuItem>
+                    )}
+                    {isAdmin && (
+                      <>
+                        <DropdownMenuItem className="min-h-[42px]" onClick={unduhTemplate}
+                          data-testid="pegawai-menu-template">
+                          <FileDown className="w-4 h-4 mr-2" />Unduh Template Impor
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="min-h-[42px]"
+                          onClick={() => downloadFileWithProgress(`${API}/pegawai/export-xlsx`,
+                            "master_pegawai.xlsx", { label: "Ekspor Master Pegawai (Excel)" }).catch(() => {})}
+                          data-testid="pegawai-menu-export">
+                          <FileSpreadsheet className="w-4 h-4 mr-2" />Ekspor Excel
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="min-h-[42px]" disabled={mengimpor} onClick={pilihBerkas}
+                          data-testid="pegawai-menu-impor">
+                          {mengimpor ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}Impor Excel/CSV
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             )}
+
+            {/* Tambah Pegawai — selalu tampil (HP & desktop). */}
             {isAdmin && (
-              <>
-                <Button variant="outline" className="h-10 w-10 p-0 flex-shrink-0" onClick={unduhTemplate}
-                  title="Unduh Template Impor (CSV)" aria-label="Unduh Template Impor (CSV)"
-                  data-testid="pegawai-template">
-                  <FileDown className="w-4 h-4" />
-                </Button>
-                <Button variant="outline" className="h-10 w-10 p-0 flex-shrink-0"
-                  onClick={() => downloadFileWithProgress(`${API}/pegawai/export-xlsx`,
-                    "master_pegawai.xlsx", { label: "Ekspor Master Pegawai (Excel)" }).catch(() => {})}
-                  title="Ekspor Excel siap-edit (bisa diimpor kembali)"
-                  aria-label="Ekspor Excel siap-edit"
-                  data-testid="pegawai-export-xlsx">
-                  <FileSpreadsheet className="w-4 h-4" />
-                </Button>
-                <Button variant="outline" className="h-10 w-10 p-0 flex-shrink-0" disabled={mengimpor}
-                  title="Impor Excel/CSV" aria-label="Impor Excel/CSV"
-                  onClick={pilihBerkas} data-testid="pegawai-impor">
-                  {mengimpor ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                </Button>
-                <Button className="h-10 w-10 p-0 bg-sky-600 hover:bg-sky-700 text-white flex-shrink-0"
-                  title="Tambah Pegawai" aria-label="Tambah Pegawai"
-                  onClick={() => bukaForm({ ...EMPTY })} data-testid="pegawai-add">
-                  <UserPlus className="w-4 h-4" />
-                </Button>
-              </>
+              <Button className="h-10 w-10 p-0 bg-sky-600 hover:bg-sky-700 text-white flex-shrink-0"
+                title="Tambah Pegawai" aria-label="Tambah Pegawai"
+                onClick={() => bukaForm({ ...EMPTY })} data-testid="pegawai-add">
+                <UserPlus className="w-4 h-4" />
+              </Button>
             )}
           </div>
           {/* Baris filter & sortir — di HP jadi grid 2 kolom rapi; mulai
@@ -685,32 +731,6 @@ export default function PegawaiPage({ user, onBack }) {
           </div>
         )}
 
-        {rekap && (rekap.unit || []).length > 0 && (
-          <div className="bg-card rounded-xl border border-border shadow-sm p-2.5 sm:p-3" data-testid="pegawai-rekap-unit">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground mb-2">
-              Rekap per Unit Kerja — {rekap.jumlah_unit} unit · {rekap.jumlah_pegawai} pegawai
-            </p>
-            <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
-              {rekap.unit.map((u) => {
-                const tanpaUnit = u.unit_kerja === "(unit kerja belum dicatat)";
-                return (
-                  <button key={u.unit_kerja} type="button"
-                    onClick={() => !tanpaUnit && setSearch(search === u.unit_kerja ? "" : u.unit_kerja)}
-                    disabled={tanpaUnit}
-                    className={`px-2 py-1 rounded-full border text-[11px] min-w-0 min-h-0 ${
-                      search === u.unit_kerja
-                        ? "border-sky-500 bg-sky-500/15 text-sky-600 dark:text-sky-400 font-semibold"
-                        : tanpaUnit
-                          ? "border-border/60 text-muted-foreground/70 cursor-default"
-                          : "border-border text-foreground/80 hover:bg-muted"}`}
-                    data-testid={`pegawai-rekap-chip-${u.unit_kerja}`}>
-                    {u.unit_kerja} <span className="font-bold">{u.jumlah}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
 
         <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
           {loading ? (
