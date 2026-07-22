@@ -48,6 +48,24 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#527] Probe kesehatan mendalam `/api/health/deep` (observability) — 2026-07-22
+
+Fondasi observability. `/api/health` sengaja instan & tanpa dependensi (dipakai
+deteksi offline frontend), sehingga tak bisa mendeteksi "proses hidup tapi DB
+mati". Ditambah `GET /api/health/deep` yang memverifikasi **aktif** dependensi:
+
+- **MongoDB** — `ping` + catat latensi.
+- **GridFS** — baca ringan `fs.files` (storage foto/dokumen terjangkau).
+- Balas **HTTP 503** bila ada yang tak sehat (agar monitor uptime & gerbang
+  deploy mendeteksi), 200 bila semua sehat; body memuat status per-cek +
+  latensi + versi aplikasi. Tanpa auth, operasi ringan — aman untuk probe.
+
+Verifikasi: smoke 3 skenario (sehat→200; Mongo tumbang→503; GridFS tumbang→503).
+`pytest tests/unit` 638 lulus; `compileall` bersih. Backend-only. Langkah
+berikutnya (PR terpisah): gerbang deploy pakai `/health/deep` + rollback otomatis.
+
+---
+
 ## [#526] Indeks untuk sort daftar paginasi yang belum tertutup — 2026-07-22
 
 Lanjutan audit performa: beberapa daftar ber-paginasi pada koleksi yang tumbuh

@@ -13,6 +13,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from fastapi import FastAPI, APIRouter, Depends
+from fastapi.responses import JSONResponse
 from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
@@ -165,6 +166,51 @@ async def health_check():
 @api_router.get("/user/")
 async def user_health_check():
     return {"status": "ok"}
+
+
+@api_router.get("/health/deep")
+async def deep_health_check():
+    """Probe kesehatan MENDALAM: verifikasi AKTIF konektivitas MongoDB + GridFS
+    (bukan sekadar proses hidup). Untuk pemantauan & gerbang deploy — berbeda
+    dari /api/health yang sengaja instan tanpa dependensi. Balas HTTP 503 bila
+    ada dependensi tak sehat agar monitor/skrip deploy mendeteksinya. Operasi
+    ringan (ping + satu baca ber-proyeksi), tanpa auth, aman untuk probe internal.
+    """
+    import time
+    checks = {}
+    ok = True
+
+    t0 = time.perf_counter()
+    try:
+        await db.command("ping")
+        checks["mongodb"] = {"ok": True,
+                             "latency_ms": round((time.perf_counter() - t0) * 1000, 1)}
+    except Exception as e:
+        ok = False
+        checks["mongodb"] = {"ok": False, "error": str(e)[:200]}
+        logger.error("health/deep: MongoDB ping gagal: %s", e)
+
+    t1 = time.perf_counter()
+    try:
+        # Baca ringan metadata GridFS (fs.files) — verifikasi storage foto/
+        # dokumen terjangkau. Koleksi kosong (belum ada unggahan) → None, tetap
+        # sehat (konektivitas terbukti).
+        await db["fs.files"].find_one({}, {"_id": 1})
+        checks["gridfs"] = {"ok": True,
+                            "latency_ms": round((time.perf_counter() - t1) * 1000, 1)}
+    except Exception as e:
+        ok = False
+        checks["gridfs"] = {"ok": False, "error": str(e)[:200]}
+        logger.error("health/deep: GridFS tak terjangkau: %s", e)
+
+    try:
+        from routes.backup import APP_VERSION as _ver
+    except Exception:
+        _ver = None
+    body = {"ok": ok, "checks": checks}
+    if _ver:
+        body["version"] = _ver
+    return JSONResponse(status_code=200 if ok else 503, content=body)
 
 
 # ============================================================================
