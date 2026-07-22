@@ -8,7 +8,7 @@ import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import axios from "axios";
-import { MapPinned, RefreshCw, Loader2, Move, X, Filter, Download, Camera, Layers, ChevronDown, Boxes } from "lucide-react";
+import { MapPinned, RefreshCw, Loader2, Move, X, Filter, Download, Camera, Layers, ChevronDown, Boxes, MousePointerClick, CheckCheck, Eraser, PencilLine, SquareDashed } from "lucide-react";
 import { toast } from "sonner";
 import { compressImageFile } from "../../lib/imageCompression";
 import {
@@ -68,7 +68,7 @@ function rowHasPhoto(row) {
 // Border hijau = data pengguna lengkap; badge kamera = aset punya foto.
 // dihapus=true → pin abu-abu diberi TANDA SILANG merah (aset telah dihapus
 // lewat tombol hapus di popup — pin dibiarkan tampil sebagai jejak visual).
-function markerIcon(color, hasPhoto = false, complete = false, dihapus = false) {
+function markerIcon(color, hasPhoto = false, complete = false, dihapus = false, selected = false) {
   if (dihapus) {
     return L.divIcon({
       className: "",
@@ -86,18 +86,29 @@ function markerIcon(color, hasPhoto = false, complete = false, dihapus = false) 
       popupAnchor: [0, -20],
     });
   }
-  const border = complete ? "2.5px solid #16a34a" : "2px solid #fff";
-  const ring = complete ? "box-shadow:0 0 0 1.5px #16a34a, 0 1px 4px rgba(0,0,0,.45)" : "box-shadow:0 1px 4px rgba(0,0,0,.45)";
+  const border = selected ? "2.5px solid #fff" : complete ? "2.5px solid #16a34a" : "2px solid #fff";
+  // Pin terpilih (mode seleksi): cincin oranye tebal + lencana centang agar
+  // menonjol jelas di antara pin lain, tanpa mengubah warna status.
+  const ring = selected
+    ? "box-shadow:0 0 0 3px #f59e0b, 0 0 0 6px rgba(245,158,11,.35), 0 1px 5px rgba(0,0,0,.5)"
+    : complete
+      ? "box-shadow:0 0 0 1.5px #16a34a, 0 1px 4px rgba(0,0,0,.45)"
+      : "box-shadow:0 1px 4px rgba(0,0,0,.45)";
   const badge = hasPhoto
     ? `<div style="position:absolute;top:-7px;right:-7px;width:14px;height:14px;border-radius:50%;background:#0f172a;border:1.5px solid #fff;display:flex;align-items:center;justify-content:center;">
          <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+       </div>`
+    : "";
+  const checkBadge = selected
+    ? `<div style="position:absolute;bottom:-3px;left:-6px;width:15px;height:15px;border-radius:50%;background:#f59e0b;border:1.5px solid #fff;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 2px rgba(0,0,0,.4)">
+         <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="4"><polyline points="20 6 9 17 4 12"/></svg>
        </div>`
     : "";
   return L.divIcon({
     className: "",
     html: `<div style="position:relative;width:22px;height:22px">
       <div style="width:22px;height:22px;border-radius:50% 50% 50% 0;background:${color};transform:rotate(-45deg);border:${border};${ring}"></div>
-      ${badge}
+      ${badge}${checkBadge}
     </div>`,
     iconSize: [22, 22],
     iconAnchor: [11, 22],
@@ -178,6 +189,8 @@ const AssetMapFullView = memo(function AssetMapFullView({
   activeFilterCount = 0,
   selectedIds = null, // Set<id> aset terpilih di daftar → peta & ekspor hanya ini
   onQuickAdd,         // (lat, lng, nama) => void — tambah cepat aset di titik peta
+  onSelectionChange,  // (updater|Set) => void — ubah himpunan aset terpilih (map→daftar)
+  onBatchEditSelected,// () => void — tutup peta & buka Edit Massal utk aset terpilih
 }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
@@ -195,6 +208,17 @@ const AssetMapFullView = memo(function AssetMapFullView({
   const [groupKey, setGroupKey] = useState("__semua__"); // filter Barang Serupa
   const [clusterOn, setClusterOn] = useState(true); // kelompokkan pin berdekatan
   const clusterOnRef = useRef(true);
+  // Mode Seleksi: klik/ketuk pin = pilih/lepas (bukan buka popup); Shift+seret
+  // (PC) atau tombol "Pilih Area" (HP) = kotak seleksi. Hanya bila pemanggil
+  // memberi onSelectionChange (butuh izin ubah). Terhubung ke selectedIds daftar.
+  const canSelect = typeof onSelectionChange === "function";
+  const [selectMode, setSelectMode] = useState(false);
+  const [drawArea, setDrawArea] = useState(false); // HP: gambar kotak seleksi 1×
+  const selectModeRef = useRef(false);
+  const drawAreaRef = useRef(false);
+  const mapWrapRef = useRef(null);       // pembungkus ber-posisi utk overlay kotak
+  useEffect(() => { selectModeRef.current = selectMode; }, [selectMode]);
+  useEffect(() => { drawAreaRef.current = drawArea; }, [drawArea]);
   // Guard staleness: hanya hasil load TERBARU yang boleh menulis state —
   // load lama (loop multi-halaman) bisa selesai SETELAH load baru.
   const loadSeqRef = useRef(0);
@@ -313,15 +337,46 @@ const AssetMapFullView = memo(function AssetMapFullView({
   // Barang Serupa. Ada aset terpilih di daftar → peta HANYA menampilkan pin
   // aset terpilih tersebut (juga berpengaruh ke unduh GIS terseleksi).
   const hasSelection = !!(selectedIds && selectedIds.size > 0);
+  const selCount = selectedIds ? selectedIds.size : 0;
   const displayRows = useMemo(() => {
     let base = rows;
-    if (selectedIds && selectedIds.size > 0) base = rows.filter((r) => selectedIds.has(r.id));
+    // Di luar Mode Seleksi, seleksi daftar MENYARING peta (tampilkan yang
+    // terpilih saja). Di dalam Mode Seleksi, tampilkan SEMUA agar pin lain
+    // masih bisa ditambahkan/dilepas (yang terpilih ditandai cincin oranye).
+    if (!selectMode && selectedIds && selectedIds.size > 0) base = rows.filter((r) => selectedIds.has(r.id));
     if (groupKey === "__semua__") return base;
     return base.filter((r) => `${r.asset_code || ""}||${r.asset_name || ""}` === groupKey);
-  }, [rows, groupKey, selectedIds]);
+  }, [rows, groupKey, selectedIds, selectMode]);
 
   // Pusatkan ulang peta saat seleksi dinyalakan/dimatikan (bukan tiap toggle).
   useEffect(() => { didFitRef.current = false; }, [hasSelection]);
+
+  // ── Aksi seleksi (map → daftar via onSelectionChange, kunci = id aset) ──
+  const doToggleOne = useCallback((id) => {
+    onSelectionChange?.((prev) => {
+      const next = new Set(prev || []);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, [onSelectionChange]);
+  const doSelectMany = useCallback((ids) => {
+    if (!ids || !ids.length) return;
+    onSelectionChange?.((prev) => {
+      const next = new Set(prev || []);
+      ids.forEach((id) => next.add(id));
+      return next;
+    });
+  }, [onSelectionChange]);
+  const doSelectAllVisible = useCallback(() => {
+    doSelectMany(displayRows.map((r) => r.id));
+  }, [displayRows, doSelectMany]);
+  const doClearSelection = useCallback(() => {
+    onSelectionChange?.(() => new Set());
+  }, [onSelectionChange]);
+  // Ref agar handler leaflet (dibuat sekali) selalu memanggil versi terbaru.
+  const toggleOneRef = useRef(doToggleOne);
+  const selectManyRef = useRef(doSelectMany);
+  useEffect(() => { toggleOneRef.current = doToggleOne; selectManyRef.current = doSelectMany; });
 
   // Ganti kelompok → pusatkan ulang peta ke pin kelompok tsb.
   const changeGroup = useCallback((v) => {
@@ -788,7 +843,8 @@ const AssetMapFullView = memo(function AssetMapFullView({
       const color = STATUS_COLORS[row.inventory_status] || STATUS_COLORS["Belum Diinventarisasi"];
       const hasPhoto = rowHasPhoto(row);
       const complete = isPenggunaComplete(row);
-      const iconKey = `${color}|${hasPhoto}|${complete}`;
+      const selected = !!(selectedIds && selectedIds.has(row.id));
+      const iconKey = `${color}|${hasPhoto}|${complete}|${selected}`;
       const existing = markersRef.current.get(row.id);
 
       if (existing) {
@@ -799,7 +855,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
           layer.refreshClusters?.(existing.marker); // beri tahu cluster posisi berubah
         }
         existing.lat = lat; existing.lng = lng;
-        if (existing.iconKey !== iconKey) { existing.marker.setIcon(markerIcon(color, hasPhoto, complete)); existing.iconKey = iconKey; }
+        if (existing.iconKey !== iconKey) { existing.marker.setIcon(markerIcon(color, hasPhoto, complete, false, selected)); existing.iconKey = iconKey; }
         if (existing.draggable !== canEdit && existing.marker.dragging) {
           if (canEdit) existing.marker.dragging.enable(); else existing.marker.dragging.disable();
           existing.draggable = canEdit;
@@ -807,11 +863,18 @@ const AssetMapFullView = memo(function AssetMapFullView({
         continue;
       }
 
-      const marker = L.marker([lat, lng], { icon: markerIcon(color, hasPhoto, complete), draggable: !!canEdit });
+      const marker = L.marker([lat, lng], { icon: markerIcon(color, hasPhoto, complete, false, selected), draggable: !!canEdit });
       const entry = { marker, row, lat, lng, iconKey, draggable: !!canEdit };
       // SATU popup per pin (tanpa tooltip hover — dulu tooltip + popup tampil
-      // bertumpuk saat pin diketuk di layar sentuh).
+      // bertumpuk saat pin diketuk di layar sentuh). Dalam Mode Seleksi, klik
+      // pin = pilih/lepas (bukan buka popup) — kendali klik diambil alih di
+      // bawah (buang auto-open bawaan leaflet agar tak bentrok).
       marker.bindPopup(() => buildPopupEl(entry));
+      if (marker._openPopup) marker.off("click", marker._openPopup, marker);
+      marker.on("click", () => {
+        if (selectModeRef.current && toggleOneRef.current) toggleOneRef.current(entry.row.id);
+        else marker.openPopup();
+      });
 
       marker.on("dragend", () => {
         const ll = marker.getLatLng();
@@ -856,7 +919,89 @@ const AssetMapFullView = memo(function AssetMapFullView({
       // pengguna dapat memperbesar manual hingga z22 untuk memisahkan pin.
       map.fitBounds(bounds, { padding: [30, 30], maxZoom: 19 });
     }
-  }, [displayRows, canEdit, buildPopupEl, refreshRowVersion]);
+  }, [displayRows, canEdit, buildPopupEl, refreshRowVersion, selectedIds]);
+
+  // Mode Seleksi mematikan box-zoom bawaan Shift+seret (kita pakai Shift+seret
+  // untuk KOTAK SELEKSI). Dipulihkan saat mode dimatikan.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.boxZoom) return;
+    if (selectMode) map.boxZoom.disable(); else map.boxZoom.enable();
+    return () => { try { mapRef.current?.boxZoom?.enable(); } catch { /* map dilepas */ } };
+  }, [selectMode]);
+
+  // Kotak seleksi (rubber-band) berbasis Pointer Events → jalan di PC (Shift+
+  // seret) maupun HP (tombol "Pilih Area" lalu seret satu jari). Semua pin di
+  // dalam kotak ditambahkan ke seleksi. Pan peta dinonaktifkan selama menggambar.
+  useEffect(() => {
+    const wrap = mapWrapRef.current;
+    const map = mapRef.current;
+    if (!wrap || !map) return;
+    let active = false, startX = 0, startY = 0, boxEl = null, capId = null;
+    const shouldStart = (e) => selectModeRef.current && (e.shiftKey || drawAreaRef.current);
+    // Jangan mulai kotak bila menekan PIN/popup/kontrol (biarkan klik pin =
+    // pilih/lepas). Kotak hanya dari area kosong peta.
+    const onControlOrMarker = (e) => {
+      const t = e.target;
+      return !!(t && t.closest && (t.closest(".leaflet-marker-icon") || t.closest(".leaflet-popup") || t.closest(".leaflet-control") || t.closest(".leaflet-marker-pane")));
+    };
+    const rectOf = () => wrap.getBoundingClientRect();
+    const onDown = (e) => {
+      if (active || !shouldStart(e) || onControlOrMarker(e)) return;
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      const r = rectOf();
+      active = true; startX = e.clientX - r.left; startY = e.clientY - r.top;
+      try { map.dragging.disable(); } catch { /* noop */ }
+      boxEl = document.createElement("div");
+      boxEl.style.cssText = "position:absolute;z-index:650;pointer-events:none;border:2px dashed #f59e0b;background:rgba(245,158,11,.14);border-radius:4px;left:" + startX + "px;top:" + startY + "px;width:0;height:0;";
+      wrap.appendChild(boxEl);
+      capId = e.pointerId;
+      try { wrap.setPointerCapture(capId); } catch { /* noop */ }
+      e.preventDefault();
+    };
+    const onMove = (e) => {
+      if (!active || !boxEl) return;
+      const r = rectOf();
+      const x = e.clientX - r.left, y = e.clientY - r.top;
+      boxEl.style.left = Math.min(startX, x) + "px";
+      boxEl.style.top = Math.min(startY, y) + "px";
+      boxEl.style.width = Math.abs(x - startX) + "px";
+      boxEl.style.height = Math.abs(y - startY) + "px";
+    };
+    const onUp = (e) => {
+      if (!active) return;
+      active = false;
+      try { map.dragging.enable(); } catch { /* noop */ }
+      try { if (capId != null) wrap.releasePointerCapture(capId); } catch { /* noop */ }
+      const r = rectOf();
+      const x = e.clientX - r.left, y = e.clientY - r.top;
+      const moved = Math.abs(x - startX) > 6 || Math.abs(y - startY) > 6;
+      if (boxEl) { boxEl.remove(); boxEl = null; }
+      if (drawAreaRef.current) setDrawArea(false); // sekali pakai (HP)
+      if (!moved) return; // ketukan kecil → biarkan handler pin yang tangani
+      const p1 = map.containerPointToLatLng([Math.min(startX, x), Math.min(startY, y)]);
+      const p2 = map.containerPointToLatLng([Math.max(startX, x), Math.max(startY, y)]);
+      const b = L.latLngBounds(p1, p2);
+      const ids = [];
+      for (const entry of markersRef.current.values()) {
+        if (deletedIdsRef.current.has(entry.row.id)) continue;
+        if (b.contains([entry.lat, entry.lng])) ids.push(entry.row.id);
+      }
+      if (ids.length) { selectManyRef.current?.(ids); toast.success(`${ids.length} pin terpilih dari area`); }
+      else toast.info("Tidak ada pin di dalam area itu");
+    };
+    wrap.addEventListener("pointerdown", onDown);
+    wrap.addEventListener("pointermove", onMove);
+    wrap.addEventListener("pointerup", onUp);
+    wrap.addEventListener("pointercancel", onUp);
+    return () => {
+      wrap.removeEventListener("pointerdown", onDown);
+      wrap.removeEventListener("pointermove", onMove);
+      wrap.removeEventListener("pointerup", onUp);
+      wrap.removeEventListener("pointercancel", onUp);
+      if (boxEl) boxEl.remove();
+    };
+  }, []);
 
   return (
     <div className="space-y-2" data-testid="asset-map-fullview">
@@ -943,6 +1088,15 @@ const AssetMapFullView = memo(function AssetMapFullView({
               <Boxes className={`w-4 h-4 mr-2 ${clusterOn ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground"}`} />
               Pengelompokan Marker: {clusterOn ? "Aktif" : "Mati"}
             </DropdownMenuItem>
+            {canSelect && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="min-h-[42px]" onClick={() => setSelectMode((v) => { if (v) setDrawArea(false); return !v; })} data-testid="map-menu-select-toggle">
+                  <MousePointerClick className={`w-4 h-4 mr-2 ${selectMode ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`} />
+                  Mode Seleksi: {selectMode ? "Aktif" : "Mati"}
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
         <button
@@ -1003,6 +1157,24 @@ const AssetMapFullView = memo(function AssetMapFullView({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        {canSelect && (
+          <button
+            type="button"
+            onClick={() => setSelectMode((v) => { if (v) setDrawArea(false); return !v; })}
+            aria-pressed={selectMode}
+            className={`h-9 px-2.5 rounded-lg border text-xs font-semibold hidden sm:flex items-center justify-center gap-1 flex-shrink-0 transition-colors ${
+              selectMode
+                ? "border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                : "border-border text-foreground/80 hover:bg-muted"
+            }`}
+            aria-label={selectMode ? "Matikan mode seleksi" : "Hidupkan mode seleksi pin"}
+            title={selectMode ? "Klik pin = pilih/lepas · Shift+seret = kotak seleksi" : "Pilih beberapa pin untuk Edit Massal"}
+            data-testid="asset-map-select-toggle"
+          >
+            <MousePointerClick className="w-3.5 h-3.5" />
+            <span>{selectMode ? "Mode Seleksi: Aktif" : "Mode Seleksi"}</span>
+          </button>
+        )}
         <button
           type="button"
           onClick={toggleCluster}
@@ -1032,9 +1204,48 @@ const AssetMapFullView = memo(function AssetMapFullView({
         </button>
       </div>
 
+      {/* ── Bilah Mode Seleksi ── (klik pin = pilih/lepas · Shift+seret / Pilih
+          Area = kotak · Edit Massal membawa pilihan ke daftar) */}
+      {canSelect && selectMode && (
+        <div className="bg-amber-500/10 border border-amber-500/40 rounded-xl shadow-sm p-1.5 sm:p-2 flex items-center gap-1.5 flex-wrap" data-testid="asset-map-selection-bar">
+          <span className="flex items-center gap-1.5 px-2 h-8 rounded-lg bg-amber-500 text-white text-xs font-bold flex-shrink-0">
+            <MousePointerClick className="w-3.5 h-3.5" />{selCount} terpilih
+          </span>
+          <span className="hidden md:inline text-[11px] text-muted-foreground px-1">
+            Klik pin = pilih/lepas · <b>Shift+seret</b> = kotak seleksi
+          </span>
+          <span className="md:hidden text-[11px] text-muted-foreground px-1">
+            Ketuk pin = pilih/lepas
+          </span>
+          <div className="flex-1" />
+          <button type="button" onClick={() => setDrawArea((v) => !v)} aria-pressed={drawArea}
+            className={`h-8 px-2.5 rounded-lg border text-xs font-medium flex items-center gap-1 flex-shrink-0 min-h-0 transition-colors sm:hidden ${drawArea ? "border-amber-500 bg-amber-500/20 text-amber-700 dark:text-amber-300" : "border-border text-foreground/80 hover:bg-muted"}`}
+            title="Seret satu jari untuk menggambar kotak seleksi" data-testid="asset-map-draw-area">
+            <SquareDashed className="w-3.5 h-3.5" />{drawArea ? "Gambar kotak…" : "Pilih Area"}
+          </button>
+          <button type="button" onClick={doSelectAllVisible} disabled={displayRows.length === 0}
+            className="h-8 px-2.5 rounded-lg border border-border text-xs font-medium text-foreground/80 flex items-center gap-1 hover:bg-muted disabled:opacity-50 flex-shrink-0"
+            data-testid="asset-map-select-all-visible">
+            <CheckCheck className="w-3.5 h-3.5" />Pilih Semua
+          </button>
+          <button type="button" onClick={doClearSelection} disabled={selCount === 0}
+            className="h-8 px-2.5 rounded-lg border border-border text-xs font-medium text-foreground/80 flex items-center gap-1 hover:bg-muted disabled:opacity-50 flex-shrink-0"
+            data-testid="asset-map-clear-selection">
+            <Eraser className="w-3.5 h-3.5" />Kosongkan
+          </button>
+          {typeof onBatchEditSelected === "function" && (
+            <button type="button" onClick={() => onBatchEditSelected()} disabled={selCount === 0}
+              className="h-8 px-3 rounded-lg bg-amber-600 text-white text-xs font-bold flex items-center gap-1 hover:bg-amber-700 disabled:opacity-50 flex-shrink-0 shadow-sm"
+              data-testid="asset-map-batch-edit">
+              <PencilLine className="w-3.5 h-3.5" />Edit Massal ({selCount})
+            </button>
+          )}
+        </div>
+      )}
+
       {/* ── Peta ── */}
-      <div className="relative bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-        <div ref={containerRef} className="h-[58vh] sm:h-[62vh] lg:h-[calc(100vh-330px)] min-h-[360px] w-full z-0" data-testid="asset-map-canvas" />
+      <div ref={mapWrapRef} className="relative bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+        <div ref={containerRef} className={`h-[58vh] sm:h-[62vh] lg:h-[calc(100vh-330px)] min-h-[360px] w-full z-0 ${selectMode ? "cursor-crosshair" : ""}`} data-testid="asset-map-canvas" />
         {loading && (
           <div className="absolute inset-0 z-[500] bg-background/50 flex items-center justify-center pointer-events-none">
             <Loader2 className="w-7 h-7 animate-spin text-teal-600" />

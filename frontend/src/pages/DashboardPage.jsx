@@ -631,6 +631,13 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     setShowBatchPanel(true);
   }, []);
 
+  // Peta → Edit Massal: tutup peta lalu tampilkan panel Edit Massal untuk aset
+  // yang dipilih di peta (himpunan `selectedAssets` sama dgn daftar, kunci=id).
+  const handleMapBatchEdit = useCallback(() => {
+    setMapOpen(false);
+    setShowBatchPanel(true);
+  }, []);
+
   // === DATA FETCHING ===
   // OFFLINE READ PATH: serve the list from the local snapshot (filter/sort/
   // paginate client-side). Returns true when data was served. TTL >7 hari
@@ -1712,6 +1719,8 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
                   activeFilterCount={activeFilterCount + (debouncedSearch ? 1 : 0)}
                   selectedIds={selectedAssets}
                   onQuickAdd={perms.canEdit ? handleQuickAddPeta : undefined}
+                  onSelectionChange={perms.canEdit ? setSelectedAssets : undefined}
+                  onBatchEditSelected={perms.canEdit ? handleMapBatchEdit : undefined}
                 />
               </Suspense>
             ) : loading ? (

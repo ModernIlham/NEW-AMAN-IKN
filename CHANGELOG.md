@@ -48,6 +48,33 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#513] Peta Aset — Mode Seleksi marker → terhubung ke daftar & Edit Massal — 2026-07-22
+
+Menambahkan **seleksi marker di peta** yang menyatu dengan seleksi daftar,
+sehingga aset yang dipilih di peta bisa langsung **Edit Massal**.
+
+- **Tombol "Mode Seleksi"** di toolbar peta (PC & HP). Saat aktif, peta
+  menampilkan SEMUA pin (bukan hanya yang terpilih) dan pin terpilih ditandai
+  **cincin oranye + centang**.
+- **Cara memilih:**
+  - **PC:** klik pin = pilih/lepas; **Shift + seret** = kotak seleksi
+    (*rubber-band*) → semua pin di dalam kotak terpilih.
+  - **HP:** ketuk pin = pilih/lepas; tombol **"Pilih Area"** lalu seret satu
+    jari untuk menggambar kotak (pan peta nonaktif selama menggambar).
+  - *(Klik/tekan-lama untuk "+ Tambah titik" tetap seperti semula di luar
+    mode seleksi.)*
+- **Bilah seleksi**: jumlah terpilih · **Pilih Semua (terlihat)** ·
+  **Kosongkan** · **Edit Massal (N)**.
+- **Terhubung ke daftar**: peta & daftar berbagi satu himpunan terpilih
+  (kunci = `id` aset). Memilih di peta otomatis mencentang aset yang sama di
+  daftar; **Edit Massal (N)** menutup peta dan membuka panel Edit Massal untuk
+  aset-aset itu. Hanya untuk peran ber-izin ubah.
+
+Verifikasi: `yarn lint` bersih (AssetMapFullView 0 peringatan);
+`CI=false yarn build` sukses. (Frontend-only.)
+
+---
+
 ## [#512] Reset "Hapus Semua" — pertahankan foto asli & spesimen TTD (anti-yatim) — 2026-07-22
 
 Audit backup/restore/reset agar **sesuai fitur terkini**. Arsitekturnya sudah
