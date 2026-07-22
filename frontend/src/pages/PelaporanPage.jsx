@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Search, Loader2, FileText, FileDown, ChevronDown,
   ShieldCheck, Boxes, Scale, Lock, LockOpen, Plus, Trash2, CalendarCheck,
-  Settings, Clock,
+  Clock,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
@@ -20,7 +20,6 @@ import { useTransitionDialog } from "@/components/ui/TransitionDialog";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import SimanSyncCard from "@/components/pelaporan/SimanSyncCard";
-import ReportSettingsEditor from "@/components/assets/ReportSettingsEditor";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -58,7 +57,6 @@ export default function PelaporanPage({ user, onBack }) {
   const [search, setSearch] = useState("");
   // Register periode pelaporan: {items, ringkasan, label_status, catatan}
   const [periode, setPeriode] = useState(null);
-  const [bukaSampul, setBukaSampul] = useState(false);
   // Dialog reklasifikasi kodefikasi (G7): {cari, hasil, aset, kode_baru, alasan, saving}
   const [reklas, setReklas] = useState(null);
   // Arsip laporan lintas kegiatan (surat ber-nomor + kegiatan disahkan + periode FINAL)
@@ -216,13 +214,6 @@ export default function PelaporanPage({ user, onBack }) {
             </p>
           </div>
           {isAdmin && (
-            <Button variant="outline" size="sm" className="gap-1.5" data-testid="pelaporan-kop"
-              title="Pengaturan kop & sampul laporan" aria-label="Kop/Sampul laporan"
-              onClick={() => setBukaSampul((v) => !v)}>
-              <Settings className="w-3.5 h-3.5" /><span className="hidden sm:inline">Kop/Sampul</span>
-            </Button>
-          )}
-          {isAdmin && (
             <Button variant="outline" size="sm" className="gap-1.5" data-testid="pelaporan-reklas"
               title="Reklasifikasi kodefikasi aset (SAKTI 304/107) — kode+NUP diperbarui ber-riwayat"
               aria-label="Reklasifikasi kodefikasi aset"
@@ -235,7 +226,6 @@ export default function PelaporanPage({ user, onBack }) {
       </header>
 
       <main className="max-w-5xl mx-auto px-3 sm:px-6 py-4 space-y-3">
-        {bukaSampul && <ReportSettingsEditor onClose={() => setBukaSampul(false)} />}
         {/* ── Pembukuan satker-wide: Posisi BMN di Neraca (komponen LBKP) ── */}
         <div className="bg-card rounded-xl border border-border shadow-sm p-2.5 sm:p-3 flex items-center gap-2 flex-wrap">
           <span className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">

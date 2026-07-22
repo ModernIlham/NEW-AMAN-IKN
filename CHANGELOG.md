@@ -48,6 +48,23 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#494] Hub Pelaporan: tombol "Kop/Sampul" inline dihapus (redundan) — 2026-07-22
+
+Lanjutan konsolidasi setelan kop/sampul (#493). Tombol admin "Kop/Sampul"
+di header **Arsip Pelaporan** (hub Pelaporan) membuka editor `ReportSettingsEditor`
+inline yang identik dengan halaman **Pengaturan → Universal** — jadi redundan.
+
+Dihapus dari `PelaporanPage.jsx`: tombol "Kop/Sampul", render editor inline,
+state `bukaSampul`, import `ReportSettingsEditor`, dan ikon `Settings` yang
+tak lagi terpakai. **Tanpa data-loss** — seluruh setelan kop/sampul tetap
+diedit di Pengaturan → Universal (yang meng-*embed* komponen yang sama;
+komponen dipertahankan). Toolbar header tinggal Reklasifikasi + Booking
+Nomor, tetap seimbang di HP/tablet/desktop.
+
+Verifikasi: eslint bersih; `yarn build` sukses. (Tak ada perubahan backend.)
+
+---
+
 ## [#493] Laporan DBHI: sub-sub kelompok di bawah kode barang + tombol Sampul rekapitulasi dihapus — 2026-07-22
 
 Dua penyempurnaan hasil masukan pemilik.
