@@ -14,7 +14,8 @@ from pydantic import BaseModel
 
 from auth_utils import require_admin, require_user
 from db import db
-from shared_utils import log_audit
+from shared_utils import (log_audit, kode_satker_user, scope_query_field_satker,
+                          pastikan_akses_dok_satker)
 from pejabat_utils import (
     JENIS_PELAKSANA, PERAN_PEJABAT, PERAN_PEJABAT_META, STATUS_KEPEGAWAIAN,
     UNIT_AKUNTANSI, peran_penyerah_bast, pejabat_aktif_untuk_peran,
@@ -46,6 +47,9 @@ class PejabatIn(BaseModel):
     # "Plt./Plh." di depan jabatan dengan nama & NIP pejabat pelaksana.
     jenis_pelaksana: Optional[str] = ""
     unit_akuntansi: Optional[str] = ""
+    # Penghubung isolasi satker (M-SCOPE): dokumen resmi satker ini hanya boleh
+    # ditandatangani pejabat satker ini (atau pejabat era-lama tanpa kode).
+    kode_satker: Optional[str] = ""
     sk_nomor: Optional[str] = ""
     sk_tanggal: Optional[str] = ""
     berlaku_mulai: Optional[str] = ""
@@ -70,6 +74,7 @@ def _bersih(p: PejabatIn) -> dict:
         "peran": [str(x).strip() for x in (p.peran or []) if str(x).strip()],
         "jenis_pelaksana": str(p.jenis_pelaksana or "").strip().lower(),
         "unit_akuntansi": str(p.unit_akuntansi or "").strip(),
+        "kode_satker": str(p.kode_satker or "").strip(),
         "sk_nomor": str(p.sk_nomor or "").strip(),
         "sk_tanggal": str(p.sk_tanggal or "").strip()[:10],
         "berlaku_mulai": str(p.berlaku_mulai or "").strip()[:10],
@@ -99,9 +104,10 @@ async def referensi_pejabat(_user: dict = Depends(require_user)):
 
 
 @pejabat_router.get("/pejabat")
-async def list_pejabat(_user: dict = Depends(require_user)):
-    """Daftar pejabat penatausahaan (semua)."""
-    items = await db.pejabat.find({}, _PROJ).sort("nama", 1).to_list(2000)
+async def list_pejabat(user: dict = Depends(require_user)):
+    """Daftar pejabat penatausahaan (ter-scope satker user + era-lama tanpa kode)."""
+    q = scope_query_field_satker(user, {})
+    items = await db.pejabat.find(q, _PROJ).sort("nama", 1).to_list(2000)
     return {"items": items, "jumlah": len(items)}
 
 
@@ -109,24 +115,28 @@ async def list_pejabat(_user: dict = Depends(require_user)):
 async def pejabat_aktif(
     peran: str = Query(..., description="kode peran, mis. kuasa_pengguna_barang"),
     per_tanggal: str = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
-    _user: dict = Depends(require_user),
+    user: dict = Depends(require_user),
 ):
-    """Pejabat yang berlaku & memegang `peran` pada tanggal tertentu (SK terbaru)."""
+    """Pejabat yang berlaku & memegang `peran` pada tanggal tertentu (SK terbaru),
+    ter-scope satker user (+ pejabat era-lama tanpa kode)."""
     if peran not in PERAN_PEJABAT:
         raise HTTPException(status_code=400, detail=f"Peran tidak dikenal: {peran}")
     if not per_tanggal:
         per_tanggal = datetime.now(timezone.utc).date().isoformat()
-    semua = await db.pejabat.find({}, _PROJ).to_list(2000)
+    semua = await db.pejabat.find(scope_query_field_satker(user, {}), _PROJ).to_list(2000)
     pj = pejabat_aktif_untuk_peran(semua, peran, per_tanggal)
     return {"peran": peran, "per_tanggal": per_tanggal, "pejabat": pj}
 
 
-async def _nip_bentrok_pejabat(nip: str, kecuali_id: str = "") -> bool:
-    """True bila NIP sudah dipakai pejabat LAIN di registry (dedup)."""
+async def _nip_bentrok_pejabat(nip: str, kecuali_id: str = "", kode: str = "") -> bool:
+    """True bila NIP sudah dipakai pejabat LAIN DI SATKER SAMA (dedup per-satker;
+    NIP boleh sama antar-satker). Pejabat era-lama tanpa kode ikut dicek."""
     nip = str(nip or "").strip()
     if not nip:
         return False
     q = {"nip": nip}
+    if kode:
+        q["kode_satker"] = {"$in": [kode, "", None]}
     if kecuali_id:
         q["id"] = {"$ne": kecuali_id}
     return bool(await db.pejabat.find_one(q, {"_id": 1}))
@@ -139,7 +149,11 @@ async def buat_pejabat(payload: PejabatIn, user: dict = Depends(require_admin)):
     errors = validate_pejabat(doc)
     if errors:
         raise HTTPException(status_code=400, detail="; ".join(errors))
-    if await _nip_bentrok_pejabat(doc["nip"]):
+    # Admin terikat satker: dipaksa satkernya (isolasi M-SCOPE); super-admin
+    # ("") boleh mengisi kode_satker eksplisit dari form.
+    kode = kode_satker_user(user)
+    doc["kode_satker"] = kode or doc.get("kode_satker", "")
+    if await _nip_bentrok_pejabat(doc["nip"], kode=doc["kode_satker"]):
         raise HTTPException(status_code=409,
                             detail=f"NIP {doc['nip']} sudah terdaftar pada pejabat lain")
     now = datetime.now(timezone.utc).isoformat()
@@ -147,19 +161,28 @@ async def buat_pejabat(payload: PejabatIn, user: dict = Depends(require_admin)):
     await db.pejabat.insert_one(dict(doc))
     await log_audit("buat_pejabat", "", doc["id"],
                     username=user.get("username", "system"),
-                    detail=f"Tambah pejabat {doc['nama']}")
+                    detail=f"Tambah pejabat {doc['nama']}",
+                    kode_satker=str(doc.get("kode_satker") or ""))
     return {"ok": True, "id": doc["id"]}
 
 
 @pejabat_router.put("/pejabat/{pejabat_id}")
 async def ubah_pejabat(pejabat_id: str, payload: PejabatIn,
                        user: dict = Depends(require_admin)):
-    """Ubah pejabat (admin)."""
+    """Ubah pejabat (admin, ter-scope satker)."""
+    existing = await db.pejabat.find_one({"id": pejabat_id}, _PROJ)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Pejabat tidak ditemukan")
+    await pastikan_akses_dok_satker(user, existing)  # 403 bila milik satker lain
     doc = _bersih(payload)
     errors = validate_pejabat(doc)
     if errors:
         raise HTTPException(status_code=400, detail="; ".join(errors))
-    if await _nip_bentrok_pejabat(doc["nip"], kecuali_id=pejabat_id):
+    # Satker dipertahankan/dipaksa: admin terikat → satkernya; super-admin →
+    # nilai form bila diisi, jika tidak pertahankan yang lama.
+    kode = kode_satker_user(user)
+    doc["kode_satker"] = kode or doc.get("kode_satker") or str(existing.get("kode_satker") or "")
+    if await _nip_bentrok_pejabat(doc["nip"], kecuali_id=pejabat_id, kode=doc["kode_satker"]):
         raise HTTPException(status_code=409,
                             detail=f"NIP {doc['nip']} sudah terdaftar pada pejabat lain")
     doc["updated_at"] = datetime.now(timezone.utc).isoformat()
@@ -168,13 +191,18 @@ async def ubah_pejabat(pejabat_id: str, payload: PejabatIn,
         raise HTTPException(status_code=404, detail="Pejabat tidak ditemukan")
     await log_audit("ubah_pejabat", "", pejabat_id,
                     username=user.get("username", "system"),
-                    detail=f"Ubah pejabat {doc['nama']}")
+                    detail=f"Ubah pejabat {doc['nama']}",
+                    kode_satker=str(doc.get("kode_satker") or ""))
     return {"ok": True, "id": pejabat_id}
 
 
 @pejabat_router.delete("/pejabat/{pejabat_id}")
 async def hapus_pejabat(pejabat_id: str, user: dict = Depends(require_admin)):
-    """Hapus pejabat (admin)."""
+    """Hapus pejabat (admin, ter-scope satker)."""
+    existing = await db.pejabat.find_one({"id": pejabat_id}, _PROJ)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Pejabat tidak ditemukan")
+    await pastikan_akses_dok_satker(user, existing)  # 403 bila milik satker lain
     res = await db.pejabat.delete_one({"id": pejabat_id})
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Pejabat tidak ditemukan")

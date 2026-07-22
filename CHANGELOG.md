@@ -48,6 +48,30 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#523] Isolasi satker untuk Referensi Pejabat (registry penanda tangan) — 2026-07-22
+
+Langkah 1 dari perbaikan integritas TTD multi-satker (roadmap strategis):
+registry `pejabat` kini ber-scope satker seperti pegawai/aset.
+
+- **Field `kode_satker` pada pejabat** — dipaksa dari satker admin saat dibuat
+  (super-admin boleh isi eksplisit), seperti pola Master Pegawai (M-SCOPE).
+- **Daftar & pejabat-aktif ter-scope** — endpoint `GET /pejabat` &
+  `/pejabat/aktif` hanya menampilkan pejabat satker user **+ pejabat era-lama
+  tanpa kode** (`$in:[kode,"",None]` — backward-compat penuh; deployment
+  single-satker/­data lama tak berubah).
+- **Guard ubah/hapus** — `pastikan_akses_dok_satker` menolak (403) mengubah/
+  menghapus pejabat milik satker lain.
+- **Dedup NIP per-satker** — NIP unik dalam satker (boleh sama antar-satker).
+
+Catatan: resolusi penanda tangan KPB pada laporan **belum** berubah di PR ini
+(masih membaca seluruh pejabat) — itu langkah 2 (unifikasi resolver), agar
+perubahan berjalur-dokumen-resmi diuji terpisah. Jadi PR ini **tak mengubah
+TTD laporan** yang sudah ada.
+
+Verifikasi: `pytest tests/unit` 638 lulus; `compileall` bersih. (Backend-only.)
+
+---
+
 ## [#522] CI jalankan uji frontend + health-check pasca-deploy (anti false-green) — 2026-07-22
 
 Paket CI/CD & keandalan-deploy dari roadmap optimasi:
