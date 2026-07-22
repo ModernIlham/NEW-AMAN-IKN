@@ -48,6 +48,30 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#496] Versi Word (.docx): SPTJM & Surat Koreksi Pencatatan — 2026-07-22
+
+Lanjutan rollout Word editable (setelah BA, #495). SPTJM dan Surat Pernyataan
+Koreksi Pencatatan kini tersedia dalam **.docx** yang bisa disunting sebelum
+ditandatangani, memakai fondasi `docx_utils` yang sama.
+
+- Endpoint baru **`…/sptjm-docx`** dan **`…/surat-koreksi-docx`** — konten
+  (identitas KPB, narasi pernyataan, lampiran rincian, tempat/tanggal) &
+  kaidah tanda tangan **identik** versi PDF; data ringkas dibangun sekali di
+  `_konten_surat_pernyataan`.
+- `docx_utils`: helper baru **`signature_single`** (tanda tangan tunggal Kuasa
+  Pengguna Barang, patuh aturan Non-ASN/NIK) + **`identity_block`**; `_sig_cell`
+  kini mendukung baris "Dibuat di/Pada tanggal" di atas header.
+- Tombol **“Word”** kini juga muncul di SPTJM & Surat Koreksi pada rekapitulasi
+  inventarisasi (grup Dokumen Pendukung).
+
+Berikutnya menyusul: Daftar Pemegang Aset, RHI, BAHI, SP Hasil/Pelaksanaan,
+lalu DBHI & DBKP.
+
+Verifikasi: 620 unit test lulus; smoke render SPTJM & Surat Koreksi `.docx`
+memverifikasi isi & tanda tangan; eslint bersih; `yarn build` sukses.
+
+---
+
 ## [#495] Berita Acara BMN Tidak Ditemukan lebih detail + versi Word (.docx) — 2026-07-22
 
 Penyempurnaan format Berita Acara BMN Tidak Ditemukan sesuai kaidah

@@ -294,8 +294,9 @@ def data_table(d, header, rows, *, widths_cm=None, align_right=None,
 # Blok tanda tangan (tim + Kuasa Pengguna Barang) — kaidah BA inventarisasi
 # ---------------------------------------------------------------------------
 
-def _sig_cell(cell, header, role, nama, nomor_baris):
-    """Isi satu sel tanda tangan: header + peran + ruang ttd + nama + baris NIP."""
+def _sig_cell(cell, header, role, nama, nomor_baris, pre=None):
+    """Isi satu sel tanda tangan: (pre) + header + peran + ruang ttd + nama +
+    baris NIP. `pre` = baris di ATAS header (mis. 'Dibuat di …', 'tanggal …')."""
     from docx.enum.text import WD_ALIGN_PARAGRAPH
     from docx.shared import Pt
     cell.text = ""
@@ -311,6 +312,8 @@ def _sig_cell(cell, header, role, nama, nomor_baris):
         return p
     # buang paragraf kosong bawaan sel
     cell.paragraphs[0]._p.getparent().remove(cell.paragraphs[0]._p)
+    for baris in (pre or []):
+        _ln(baris)
     if header:
         _ln(header)
     if role:
@@ -414,6 +417,32 @@ def signature_block(d, tim, ident, tempat_tanggal, *, label_tim="Tim",
     third = Emu(usable // 3)
     for i in (0, 1, 2):
         t.rows[0].cells[i].width = third
+
+
+def signature_single(d, *, nama, header="Yang membuat pernyataan,", jabatan=None,
+                     pre_lines=None, nip="", status=""):
+    """Blok tanda tangan TUNGGAL (mis. SPTJM/Surat Koreksi: Kuasa Pengguna
+    Barang) di sisi KANAN. Baris NIP mengikuti aturan Non-ASN/NIK
+    (baris_identitas_laporan). `pre_lines` = tempat/tanggal di atas header."""
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Emu
+    from pegawai_utils import baris_identitas_laporan
+    nomor_baris = baris_identitas_laporan(str(nip or "").strip(), status) if str(nip or "").strip() else "NIP. "
+    usable = int(d.sections[0].page_width - d.sections[0].left_margin - d.sections[0].right_margin)
+    t = d.add_table(rows=1, cols=2)
+    t.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    cells = t.rows[0].cells
+    cells[0].text = ""
+    _sig_cell(cells[1], header, jabatan, nama, nomor_baris, pre=pre_lines)
+    cells[0].width = Emu(usable // 2)
+    cells[1].width = Emu(usable // 2)
+
+
+def identity_block(d, rows, *, intro="Yang bertanda tangan di bawah ini:"):
+    """Intro + tabel identitas 'Label : Nilai' (blok pembuka surat pernyataan)."""
+    if intro:
+        para(d, intro, justify=False, space_after=2)
+    meta_table(d, rows)
 
 
 def tembusan(d, lines):

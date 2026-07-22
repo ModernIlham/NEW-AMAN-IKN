@@ -67,8 +67,14 @@ function RekapitulasiPanel({ activityId, isOpen, onToggle, embedded = false, onT
   // Unduh versi Word (.docx) editable. Saat ini: Berita Acara Tidak Ditemukan
   // (endpoint berita-acara-docx); tipe lain menyusul.
   const handleDownloadDocx = async (type) => {
-    const endpoints = { "berita-acara": "berita-acara-docx" };
-    const filenames = { "berita-acara": "Berita_Acara" };
+    const endpoints = {
+      "berita-acara": "berita-acara-docx", "sptjm": "sptjm-docx",
+      "surat-koreksi": "surat-koreksi-docx",
+    };
+    const filenames = {
+      "berita-acara": "Berita_Acara", "sptjm": "SPTJM",
+      "surat-koreksi": "Surat_Koreksi",
+    };
     const endpoint = endpoints[type];
     if (!endpoint) return;
     const name = filenames[type] || type;
