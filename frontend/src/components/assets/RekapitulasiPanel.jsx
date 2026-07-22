@@ -15,7 +15,6 @@ function RekapitulasiPanel({ activityId, isOpen, onToggle, embedded = false, onT
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState("");
-  const [showSettings, setShowSettings] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!activityId || !isOpen) return;
@@ -99,8 +98,6 @@ function RekapitulasiPanel({ activityId, isOpen, onToggle, embedded = false, onT
             data={data}
             activityId={activityId}
             downloading={downloading}
-            showSettings={showSettings}
-            setShowSettings={setShowSettings}
             onDownloadPDF={handleDownloadPDF}
             onDownloadDBHI={handleDownloadDBHI}
           />

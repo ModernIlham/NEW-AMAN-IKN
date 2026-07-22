@@ -4,10 +4,9 @@ import { toast } from "sonner";
 import { downloadFileWithProgress } from "../../../lib/downloadFile";
 import {
   Download, BarChart3, BookOpen, FileText, Shield, FileWarning,
-  CheckCircle2, XCircle, AlertTriangle, Settings, Loader2,
+  CheckCircle2, XCircle, AlertTriangle, Loader2,
   Package, Check
 } from "lucide-react";
-import ReportSettingsEditor from "../ReportSettingsEditor";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 
 const API = (process.env.REACT_APP_BACKEND_URL || "http://localhost:8001") + "/api";
@@ -123,8 +122,7 @@ const batchGroupColors = {
 };
 
 export default function ReportDownloads({
-  data, activityId, downloading, showSettings, setShowSettings,
-  onDownloadPDF, onDownloadDBHI
+  data, activityId, downloading, onDownloadPDF, onDownloadDBHI
 }) {
   const [batchMode, setBatchMode] = useState(false);
   const [selected, setSelected] = useState(new Set());
@@ -217,7 +215,9 @@ export default function ReportDownloads({
 
   return (
     <>
-      {/* LHI Section */}
+      {/* LHI Section — pengaturan kop/sampul kini terpusat di halaman
+          Pengaturan (Universal & per-satker), jadi tombol Sampul di sini
+          dihapus. Baris tinggal tombol unduh LHI (utama) + Booking Nomor. */}
       <div className="border-t border-border pt-3 space-y-2">
         <div className="flex gap-2 items-stretch">
           <button data-testid="download-lhi" onClick={() => onDownloadPDF("lhi")} disabled={!!downloading}
@@ -226,18 +226,10 @@ export default function ReportDownloads({
             Download LHI Lengkap
           </button>
           <BookingNomorButton modul="inventarisasi" jenisNaskah="Laporan"
-            referensi="LHI" kegiatanId={activityId} size="sm" className="h-auto" />
-          <button data-testid="toggle-settings-btn" onClick={() => setShowSettings(p => !p)}
-            className={`flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-medium transition-all border ${
-              showSettings
-                ? "bg-slate-700 text-white border-slate-700 dark:bg-slate-600 dark:border-slate-500"
-                : "bg-card border-border text-muted-foreground hover:bg-muted"
-            }`}>
-            <Settings className="w-3.5 h-3.5" /> Sampul
-          </button>
+            referensi="LHI" kegiatanId={activityId} size="sm"
+            className="h-auto justify-center sm:min-w-[140px]" />
         </div>
         <p className="text-[10px] text-muted-foreground text-center">Sampul + BAHI + RHI + 6 DBHI + DBKP + SP Hasil + SP Pelaksanaan</p>
-        {showSettings && <ReportSettingsEditor onClose={() => setShowSettings(false)} />}
       </div>
 
       {/* DBHI Buttons */}
@@ -269,7 +261,7 @@ export default function ReportDownloads({
         <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
           <FileText className="w-3.5 h-3.5" /> Laporan Resmi Inventarisasi
         </p>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 mb-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5 mb-2">
           {officialReports.map(({ key, label, icon: Icon, btn }) => (
             <button key={key} data-testid={`download-${key}`} onClick={() => onDownloadPDF(key)} disabled={!!downloading}
               className={`flex items-center gap-1.5 px-2.5 py-2 ${btn} text-white rounded-lg text-[11px] font-medium transition-colors`}>

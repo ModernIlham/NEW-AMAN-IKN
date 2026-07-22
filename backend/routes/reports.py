@@ -377,6 +377,20 @@ def _sel_identitas_barang(a, subsub_nama, st):
     return Paragraph("<br/>".join(baris), st['Cell'])
 
 
+def _sel_kode_barang_subsub(kode, subsub_nama, st):
+    """Sel kolom 'Kode Barang' untuk tabel DBHI: kode di baris ATAS, lalu
+    nama Sub-sub Kelompok (uraian kodefikasi) di baris BAWAH — kecil & abu-abu.
+    Memberi konteks klasifikasi barang tanpa menambah kolom. Bila sub-sub
+    kelompok belum terdaftar di referensi kodefikasi, hanya kode yang tampil."""
+    from reportlab.platypus import Paragraph
+    from xml.sax.saxutils import escape as _esc
+    kode = str(kode or "-").strip() or "-"
+    baris = [_esc(kode)]
+    if subsub_nama:
+        baris.append(f'<font size="7" color="#556070">{_esc(subsub_nama)}</font>')
+    return Paragraph("<br/>".join(baris), st['Cell'])
+
+
 def _sel_uraian_barang(a, st):
     """Sel gabungan uraian aset: Nama Barang di ATAS, lalu Merk/Tipe/
     Spesifikasi (brand · model · serial) di BAWAH bila ada — satu kolom lebar
@@ -1455,6 +1469,17 @@ async def generate_dbhi_pdf(activity_id: str, dbhi_type: str, _user: dict = Depe
     ).to_list(100000)
     filtered = [a for a in all_assets if dbhi_config["filter"](a)]
 
+    # Peta kode barang → nama Sub-sub Kelompok (uraian kodefikasi terdalam)
+    # untuk ditampilkan di bawah kode pada kolom "Kode Barang".
+    from kodefikasi_utils import normalize_kode as _norm_kode
+    subsub_map = await _peta_subsub_kelompok([a.get("asset_code") for a in filtered])
+
+    def sel_kode(a):
+        return _sel_kode_barang_subsub(
+            a.get("asset_code", "-"),
+            subsub_map.get(_norm_kode(a.get("asset_code")), ""),
+            st)
+
     def safe_price(a):
         try:
             return float(a.get("purchase_price", 0) or 0)
@@ -1492,16 +1517,16 @@ async def generate_dbhi_pdf(activity_id: str, dbhi_type: str, _user: dict = Depe
     extra = dbhi_config["extra_cols"]
     if extra == "berlebih":
         headers = ["No", "Kode Barang", "NUP", "Nama Barang", "Tahun\nPerolehan", "Kondisi", "Nilai (Rp)", "Lokasi", "Keterangan\nBerlebih", "Asal Usul", "Tindak Lanjut"]
-        col_widths = [22, 72, 28, 110, 42, 48, 62, 80, 90, 80, 80]
+        col_widths = [22, 104, 28, 92, 42, 48, 62, 80, 90, 80, 80]
     elif extra == "tidak_ditemukan":
         headers = ["No", "Kode Barang", "NUP", "Nama Barang", "Tahun\nPerolehan", "Nilai (Rp)", "Lokasi", "Klasifikasi", "Sub Klasifikasi", "Uraian", "Tindak Lanjut"]
-        col_widths = [22, 72, 28, 100, 42, 62, 70, 70, 80, 80, 80]
+        col_widths = [22, 104, 28, 88, 42, 62, 70, 70, 80, 80, 80]
     elif extra == "sengketa":
         headers = ["No", "Kode Barang", "NUP", "Nama Barang", "Tahun\nPerolehan", "Kondisi", "Nilai (Rp)", "Lokasi", "No. Perkara", "Pihak\nBersengketa", "Keterangan\nSengketa"]
-        col_widths = [22, 72, 28, 100, 42, 48, 62, 70, 70, 80, 80]
+        col_widths = [22, 104, 28, 88, 42, 48, 62, 70, 70, 80, 80]
     else:
         headers = ["No", "Kode Barang", "NUP", "Nama Barang", "Merk/Tipe", "Tahun\nPerolehan", "Nilai (Rp)", "Lokasi", "Keterangan"]
-        col_widths = [25, 80, 30, 130, 80, 45, 72, 110, 110]
+        col_widths = [25, 112, 30, 118, 80, 45, 72, 104, 104]
 
     header_row = [Paragraph(h.replace("\n", "<br/>"), header_style) for h in headers]
     table_data = [header_row]
@@ -1515,7 +1540,7 @@ async def generate_dbhi_pdf(activity_id: str, dbhi_type: str, _user: dict = Depe
         if extra == "berlebih":
             row = [
                 Paragraph(str(idx), cell_center),
-                Paragraph(str(asset.get("asset_code", "-")), cell_style),
+                sel_kode(asset),
                 Paragraph(str(asset.get("NUP", "-")), cell_center),
                 Paragraph(str(asset.get("asset_name", "-")), cell_style),
                 Paragraph(year, cell_center),
@@ -1529,7 +1554,7 @@ async def generate_dbhi_pdf(activity_id: str, dbhi_type: str, _user: dict = Depe
         elif extra == "tidak_ditemukan":
             row = [
                 Paragraph(str(idx), cell_center),
-                Paragraph(str(asset.get("asset_code", "-")), cell_style),
+                sel_kode(asset),
                 Paragraph(str(asset.get("NUP", "-")), cell_center),
                 Paragraph(str(asset.get("asset_name", "-")), cell_style),
                 Paragraph(year, cell_center),
@@ -1543,7 +1568,7 @@ async def generate_dbhi_pdf(activity_id: str, dbhi_type: str, _user: dict = Depe
         elif extra == "sengketa":
             row = [
                 Paragraph(str(idx), cell_center),
-                Paragraph(str(asset.get("asset_code", "-")), cell_style),
+                sel_kode(asset),
                 Paragraph(str(asset.get("NUP", "-")), cell_center),
                 Paragraph(str(asset.get("asset_name", "-")), cell_style),
                 Paragraph(year, cell_center),
@@ -1557,7 +1582,7 @@ async def generate_dbhi_pdf(activity_id: str, dbhi_type: str, _user: dict = Depe
         else:
             row = [
                 Paragraph(str(idx), cell_center),
-                Paragraph(str(asset.get("asset_code", "-")), cell_style),
+                sel_kode(asset),
                 Paragraph(str(asset.get("NUP", "-")), cell_center),
                 Paragraph(str(asset.get("asset_name", "-")), cell_style),
                 Paragraph(f"{asset.get('brand', '')} {asset.get('model', '')}".strip() or "-", cell_style),
