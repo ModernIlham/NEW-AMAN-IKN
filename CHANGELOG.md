@@ -48,6 +48,26 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#515] Perbaikan (akar masalah): basemap putih & hanya marker saat Mode Seleksi — 2026-07-22
+
+Akar masalah sebenarnya dari basemap hilang saat Mode Seleksi (lanjutan
+[#514]): elemen **kanvas Leaflet** diberi `className` dinamis
+(`cursor-crosshair` saat mode aktif). Leaflet menambahkan kelasnya sendiri
+(`.leaflet-container`, `.leaflet-fade-anim`, dst.) ke elemen yang SAMA setelah
+inisialisasi. Saat mode berganti, React **menulis ulang seluruh atribut
+`className`** sehingga **menimpa/menghapus kelas Leaflet** → styling basemap
+lenyap (peta putih), sementara panel marker (absolut) tetap tampil.
+
+- **Perbaikan**: `className` kanvas dibuat **konstan** kembali; kursor
+  crosshair disetel lewat **ref** (`style.cursor`) tanpa menyentuh daftar
+  kelas, jadi kelas Leaflet tak pernah tertimpa.
+- `invalidateSize` saat mode berganti tetap dipertahankan sebagai pengaman
+  terhadap pergeseran tata letak.
+
+Verifikasi: `yarn lint` bersih; `CI=false yarn build` sukses. (Frontend-only.)
+
+---
+
 ## [#514] Perbaikan: basemap peta hilang saat Mode Seleksi aktif — 2026-07-22
 
 - Saat Mode Seleksi (atau "Pilih Area") dinyalakan, **bilah seleksi muncul di

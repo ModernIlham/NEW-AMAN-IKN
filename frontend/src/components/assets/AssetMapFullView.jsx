@@ -931,9 +931,8 @@ const AssetMapFullView = memo(function AssetMapFullView({
   }, [selectMode]);
 
   // Bilah Mode Seleksi / "Pilih Area" muncul-hilang DI ATAS peta → kanvas
-  // leaflet bergeser & lebarnya bisa berubah (scrollbar). Tanpa invalidateSize,
-  // ukuran ubin jadi basi → BASEMAP HILANG. Hitung ulang setelah tata letak
-  // mengendap (rAF + fallback timeout).
+  // leaflet bergeser & lebarnya bisa berubah (scrollbar). Hitung ulang ukuran
+  // setelah tata letak mengendap (rAF + fallback timeout) agar ubin tak basi.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return undefined;
@@ -942,6 +941,16 @@ const AssetMapFullView = memo(function AssetMapFullView({
     const t = setTimeout(recalc, 160);
     return () => { cancelAnimationFrame(raf); clearTimeout(t); };
   }, [selectMode, drawArea]);
+
+  // Kursor crosshair saat Mode Seleksi — DISETEL LEWAT REF (inline style), BUKAN
+  // className React. Elemen kanvas ini juga dikelola Leaflet (menambah kelas
+  // .leaflet-container/.leaflet-fade-anim dll.); bila className-nya diubah React
+  // saat mode berganti, seluruh kelas Leaflet TERTIMPA → basemap hilang &
+  // hanya marker tersisa. Menyetel style.cursor tak menyentuh daftar kelas.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (el) el.style.cursor = selectMode ? "crosshair" : "";
+  }, [selectMode]);
 
   // Kotak seleksi (rubber-band) berbasis Pointer Events → jalan di PC (Shift+
   // seret) maupun HP (tombol "Pilih Area" lalu seret satu jari). Semua pin di
@@ -1258,7 +1267,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
 
       {/* ── Peta ── */}
       <div ref={mapWrapRef} className="relative bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-        <div ref={containerRef} className={`h-[58vh] sm:h-[62vh] lg:h-[calc(100vh-330px)] min-h-[360px] w-full z-0 ${selectMode ? "cursor-crosshair" : ""}`} data-testid="asset-map-canvas" />
+        <div ref={containerRef} className="h-[58vh] sm:h-[62vh] lg:h-[calc(100vh-330px)] min-h-[360px] w-full z-0" data-testid="asset-map-canvas" />
         {loading && (
           <div className="absolute inset-0 z-[500] bg-background/50 flex items-center justify-center pointer-events-none">
             <Loader2 className="w-7 h-7 animate-spin text-teal-600" />
