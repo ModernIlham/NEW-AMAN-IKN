@@ -130,6 +130,13 @@ async def startup_event():
         start_backup_scheduler()
     except Exception as e:
         logger.warning(f"Scheduler backup otomatis gagal start (non-fatal): {e}")
+    # Pemeliharaan job latar: relabel job macet + sapu artifact ekspor yatim di
+    # GridFS (dokumen job auto-hapus via TTL, blob GridFS perlu disapu terpisah).
+    try:
+        from jobs import start_job_maintenance
+        start_job_maintenance()
+    except Exception as e:
+        logger.warning(f"Scheduler pemeliharaan job gagal start (non-fatal): {e}")
     logger.info("Application started successfully")
     logger.info(f"MongoDB connected: {os.environ['DB_NAME']}")
 
@@ -237,6 +244,7 @@ from routes.backup import backup_router
 from routes.audit import audit_router
 from routes.media import media_router
 from routes.exports import exports_router
+from routes.jobs import jobs_router
 from routes.pdf_compress import pdf_compress_router
 from routes.batch import batch_router
 from routes.documents import documents_router
@@ -277,6 +285,7 @@ api_router.include_router(auth_router)
 api_router.include_router(categories_router)
 api_router.include_router(batch_router)      # MUST be before assets_router (specific routes before {asset_id} catch-all)
 api_router.include_router(exports_router)    # MUST be before assets_router
+api_router.include_router(jobs_router)       # status/unduh job latar (ekspor async)
 api_router.include_router(pengesahan_router)  # MUST be before assets_router (/assets/kartu-inventarisasi)
 api_router.include_router(assets_router)
 api_router.include_router(imports_router)
