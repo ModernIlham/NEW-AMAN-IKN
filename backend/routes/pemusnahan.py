@@ -260,7 +260,7 @@ async def ba_pemusnahan_pdf(ba_id: str, _user: dict = Depends(require_user)):
         {'pre': [''], 'header': 'Saksi,',
          'nama': '...........................',
          'after': ['NIP. ....................']},
-        await blok_ttd_kpb_titik(settings),   # KPB dari registry pejabat (temuan #26)
+        await blok_ttd_kpb_titik(settings, kode_satker=kode_satker_user(_user)),   # KPB dari registry pejabat (temuan #26)
     ], doc.width))
     footer = _page_footer_factory("Berita Acara Pemusnahan BMN")
     doc.build(elements, onFirstPage=footer, onLaterPages=footer)

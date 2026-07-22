@@ -459,7 +459,7 @@ async def bast_psp_pdf(sk_id: str, _user: dict = Depends(require_user)):
          'header': 'Pihak yang Menerima,',
          'nama': '................................',
          'after': ['NIP. -']},
-        await blok_ttd_kpb_titik(settings),   # KPB registry + spesimen TTD
+        await blok_ttd_kpb_titik(settings, kode_satker=kode_satker_user(_user)),   # KPB registry + spesimen TTD
     ], doc.width))
     footer = _page_footer_factory("BAST Penetapan Status Penggunaan BMN")
     doc.build(elements, onFirstPage=footer, onLaterPages=footer)
@@ -888,7 +888,7 @@ async def daftar_pemegang_pdf(
          'after': baris_identitas_ttd(
              nip, "NIP. ....................",
              await status_kepegawaian_by_nip(nip))},
-        await blok_ttd_kpb_titik(settings),   # KPB dari registry pejabat (temuan #26)
+        await blok_ttd_kpb_titik(settings, kode_satker=kode_satker_user(_user)),   # KPB dari registry pejabat (temuan #26)
     ], doc.width))
     footer = _page_footer_factory("Daftar Barang yang Digunakan")
     doc.build(elements, onFirstPage=footer, onLaterPages=footer)

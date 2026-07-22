@@ -651,7 +651,7 @@ async def ba_insidentil_pdf(tiket_id: str, _user: dict = Depends(require_user)):
         {'pre': [''], 'header': 'Petugas Pemantauan,',
          'nama': '...........................',
          'after': ['NIP. ....................']},
-        await blok_ttd_kpb_titik(settings),   # KPB dari registry pejabat (temuan #26)
+        await blok_ttd_kpb_titik(settings, kode_satker=kode_satker_user(_user)),   # KPB dari registry pejabat (temuan #26)
     ], doc.width))
     footer = _page_footer_factory("Berita Acara Pemantauan Insidentil BMN")
     doc.build(elements, onFirstPage=footer, onLaterPages=footer)
@@ -762,7 +762,7 @@ async def laporan_wasdal_pdf(
         {'pre': [''], 'header': 'Petugas Pemantauan,',
          'nama': '...........................',
          'after': ['NIP. ....................']},
-        await blok_ttd_kpb_titik(settings),   # KPB dari registry pejabat (temuan #26)
+        await blok_ttd_kpb_titik(settings, kode_satker=kode_satker_user(_user)),   # KPB dari registry pejabat (temuan #26)
     ], doc.width))
     footer = _page_footer_factory("Laporan Hasil Pemantauan Wasdal BMN")
     doc.build(elements, onFirstPage=footer, onLaterPages=footer)
@@ -924,7 +924,7 @@ async def laporan_tahunan_wasdal_pdf(
         f"(PMK 138/2024) memakai tabel standar pada modul Perencanaan "
         f"({len(porto['sbsk'])} baris standar terdaftar).", st['Small']))
     el.append(Spacer(1, 6 * rl_mm))
-    el.extend(_signature_block([await blok_ttd_kpb_titik(settings)], doc.width))
+    el.extend(_signature_block([await blok_ttd_kpb_titik(settings, kode_satker=kode_satker_user(_user))], doc.width))
 
     footer = _page_footer_factory("Laporan Tahunan Wasdal")
     doc.build(el, onFirstPage=footer, onLaterPages=footer)

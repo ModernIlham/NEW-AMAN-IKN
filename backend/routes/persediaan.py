@@ -42,13 +42,17 @@ from pengadaan_utils import snapshot_perolehan
 persediaan_router = APIRouter()
 
 
-async def _kpb_signer(settings, per_iso=None):
+async def _kpb_signer(settings, per_iso=None, user=None):
     """Penanda tangan Kuasa Pengguna Barang untuk PDF persediaan — delegasi ke
     resolver bersama `shared_utils.resolve_penandatangan_kpb` (temuan #26/#41:
     default tanggal = hari ini sehingga rentang berlaku SK pejabat DICEK;
-    fallback setelan kasatker). Kembalikan {nama, nip, jabatan, sumber}."""
-    from shared_utils import resolve_penandatangan_kpb
-    return await resolve_penandatangan_kpb(settings, per_iso)
+    fallback setelan kasatker). Kembalikan {nama, nip, jabatan, sumber}.
+
+    `user` (opsional) membatasi kandidat KPB ke satker penerbit dokumen
+    (isolasi M-SCOPE); tanpa user → semua pejabat (perilaku lama)."""
+    from shared_utils import resolve_penandatangan_kpb, kode_satker_user
+    return await resolve_penandatangan_kpb(settings, per_iso,
+                                           kode_satker_user(user))
 
 
 def _hdr_kpb(kpb, label="Kuasa Pengguna Barang"):
@@ -204,7 +208,7 @@ async def nota_dinas_persediaan(
         elements.append(table)
 
     elements.append(Spacer(1, 12 * rl_mm))
-    kpb = await _kpb_signer(settings)
+    kpb = await _kpb_signer(settings, user=_user)
     elements.extend(_signature_block([
         {'pre': ['.................., .......................'],
          'header': _hdr_kpb(kpb),
@@ -472,7 +476,7 @@ async def opname_baof_pdf(
         elements.append(table)
 
     elements.append(Spacer(1, 12 * rl_mm))
-    _kpb = await _kpb_signer(settings)
+    _kpb = await _kpb_signer(settings, user=_user)
     _kpb_nama = _kpb["nama"] if _kpb["nama"] != "-" else '...........................'
     elements.extend(_signature_block([
         {'pre': [''], 'header': 'Petugas Penghitung,', 'nama': '...........................', 'after': ['NIP. ....................']},
@@ -629,7 +633,7 @@ async def laporan_posisi_pdf(gudang: str = "",
             "sub-akun per jenis perlu verifikasi Lampiran BAS.", st['Meta']))
 
     elements.append(Spacer(1, 12 * rl_mm))
-    kpb = await _kpb_signer(settings)
+    kpb = await _kpb_signer(settings, user=_user)
     elements.extend(_signature_block([
         {'pre': ['.................., .......................'],
          'header': _hdr_kpb(kpb),
@@ -721,7 +725,7 @@ async def laporan_mutasi_pdf(
         elements.append(table)
 
     elements.append(Spacer(1, 12 * rl_mm))
-    kpb = await _kpb_signer(settings)
+    kpb = await _kpb_signer(settings, user=_user)
     elements.extend(_signature_block([
         {'pre': ['.................., .......................'],
          'header': _hdr_kpb(kpb),
@@ -1008,12 +1012,18 @@ async def lpb_pdf(lpb_id: str,
     el.append(Spacer(1, 6 * rl_mm))
 
     # Tanda tangan 3 kolom: Dibuat (pengurus barang), Diperiksa (atasan
-    # langsung — dititik bila belum diatur), Disetujui (KPB).
+    # langsung — dititik bila belum diatur), Disetujui (KPB). Pejabat ter-scope
+    # satker penerbit LPB (isolasi M-SCOPE) + era-lama tanpa kode.
+    from shared_utils import kode_satker_user
+    _kode = kode_satker_user(_user)
     pengurus = await resolve_pejabat_peran("pengurus_barang",
-                                           per_iso=lpb.get("tanggal"))
+                                           per_iso=lpb.get("tanggal"),
+                                           kode_satker=_kode)
     pemeriksa = await resolve_pejabat_peran("pemeriksa_lpb",
-                                            per_iso=lpb.get("tanggal"))
-    kpb = await resolve_penandatangan_kpb(settings, per_iso=lpb.get("tanggal"))
+                                            per_iso=lpb.get("tanggal"),
+                                            kode_satker=_kode)
+    kpb = await resolve_penandatangan_kpb(settings, per_iso=lpb.get("tanggal"),
+                                          kode_satker=_kode)
     sig = st['Signature']
 
     def kolom_ttd(judul, nama, nip, status_kepegawaian=""):
@@ -1675,8 +1685,9 @@ async def kartu_barang_pdf(item_id: str, _user: dict = Depends(require_user)):
     # Kartu Barang ditandatangani PENGURUS BARANG (bukan Kepala Satker) —
     # temuan #27: dulu keliru diisi nama kasatker. Ambil pejabat berperan
     # pengurus_barang dari registry; belum ada → garis titik (jangan fabrikasi).
-    from shared_utils import resolve_pejabat_peran
-    _pengurus = await resolve_pejabat_peran("pengurus_barang") or {}
+    from shared_utils import resolve_pejabat_peran, kode_satker_user
+    _pengurus = await resolve_pejabat_peran(
+        "pengurus_barang", kode_satker=kode_satker_user(_user)) or {}
     elements.extend(_signature_block([
         {'pre': ['.................., .......................'],
          'header': 'Pengurus Barang Persediaan,',
