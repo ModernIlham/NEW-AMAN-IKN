@@ -1,6 +1,5 @@
 """Category CRUD, bulk import, and progress tracking routes."""
 import io
-import uuid
 import logging
 import asyncio
 import csv as csv_module
@@ -10,12 +9,14 @@ from auth_utils import require_admin, require_user, require_writer
 from db import db
 from models import CategoryCreate
 from shared_utils import limiter, invalidate_category_cache, _cache_categories
+from jobs import buat_job, update_job, get_job
 
 logger = logging.getLogger(__name__)
 categories_router = APIRouter()
 
-# In-memory progress store for bulk category import
-import_progress = {}
+# Progres impor kategori kini PERSISTEN di db.background_jobs (jobs.py) — dulu
+# dict in-memory yang RUSAK di uvicorn --workers 4 (poll bisa mendarat di worker
+# lain → 404). Kontrak respons /categories/import-progress dipertahankan.
 
 # ============================================================================
 # CATEGORY ROUTES
@@ -126,10 +127,11 @@ async def import_categories_bulk(request: Request, file: UploadFile = File(...),
         raise HTTPException(status_code=400, detail="File harus berformat CSV atau Excel (.xlsx)")
     
     content = await file.read()
-    job_id = str(uuid.uuid4())
-    
-    # Store progress in memory
-    import_progress[job_id] = {"status": "parsing", "total": 0, "processed": 0, "imported": 0, "skipped": 0, "errors": 0, "done": False}
+    # Job persisten (multi-worker-safe) — kembalikan job_id utk polling progres.
+    job_id = await buat_job(
+        "import_kategori", _user.get("username", ""),
+        status="parsing", total=0, processed=0, imported=0,
+        skipped=0, errors=0, done=False)
     
     # Parse file
     rows = []
@@ -178,34 +180,32 @@ async def import_categories_bulk(request: Request, file: UploadFile = File(...),
                     rows.append(row_dict)
             wb.close()
     except Exception as e:
-        import_progress[job_id] = {"status": "error", "total": 0, "processed": 0, "imported": 0, "skipped": 0, "errors": 0, "done": True, "error_message": str(e)}
+        await update_job(job_id, status="error", done=True, error_message=str(e))
         raise HTTPException(status_code=400, detail=f"Gagal parse file: {str(e)}")
-    
+
     total = len(rows)
-    import_progress[job_id]["total"] = total
-    import_progress[job_id]["status"] = "importing"
-    
+    await update_job(job_id, total=total, status="importing")
+
     # Start background import
     asyncio.create_task(_do_bulk_import(job_id, rows))
     
     return {"job_id": job_id, "total": total, "message": f"Import dimulai: {total} data kategori"}
 
 async def _do_bulk_import(job_id: str, rows: list):
-    """Background task for bulk category import"""
+    """Background task for bulk category import — progres persisten via jobs.py."""
     from log_setup import set_job_id
     set_job_id(job_id)   # korelasi log ke JOB, bukan request pemicu (task latar)
-    progress = import_progress[job_id]
     batch_size = 500
     imported = 0
     skipped = 0
     errors = 0
-    
+
     # Get existing kode_aset set for fast duplicate check
     existing_codes = set()
     async for doc in db.categories.find({}, {"kode_aset": 1, "_id": 0}):
         if doc.get("kode_aset"):
             existing_codes.add(doc["kode_aset"])
-    
+
     batch = []
     for idx, row in enumerate(rows):
         # Map various possible column names
@@ -214,41 +214,37 @@ async def _do_bulk_import(job_id: str, rows: list):
         # Pad to 10 digits if numeric
         if kode.isdigit() and len(kode) < 10:
             kode = kode.zfill(10)
-        
+
         deskripsi = row.get('deskripsi_barang', '') or row.get('deskripsi barang', '') or row.get('deskripsi', '') or row.get('label', '') or row.get('nama', '') or ''
         deskripsi = str(deskripsi).strip()
-        
+
         if not kode or not deskripsi:
             errors += 1
-            progress["processed"] = idx + 1
-            progress["errors"] = errors
-            continue
-        
-        if kode in existing_codes:
+        elif kode in existing_codes:
             skipped += 1
-            progress["processed"] = idx + 1
-            progress["skipped"] = skipped
-            continue
-        
-        existing_codes.add(kode)
-        batch.append({
-            "id": kode,
-            "kode_aset": kode,
-            "label": deskripsi
-        })
-        
-        if len(batch) >= batch_size:
-            try:
-                await db.categories.insert_many(batch, ordered=False)
-                imported += len(batch)
-            except Exception as e:
-                # Handle partial failures (duplicate key etc)
-                imported += len(batch) - getattr(e, 'details', {}).get('nInserted', 0) if hasattr(e, 'details') else len(batch)
-                logger.error(f"Batch insert error: {e}")
-            batch = []
-            progress["imported"] = imported
-            progress["processed"] = idx + 1
-    
+        else:
+            existing_codes.add(kode)
+            batch.append({
+                "id": kode,
+                "kode_aset": kode,
+                "label": deskripsi
+            })
+            if len(batch) >= batch_size:
+                try:
+                    await db.categories.insert_many(batch, ordered=False)
+                    imported += len(batch)
+                except Exception as e:
+                    # Handle partial failures (duplicate key etc)
+                    imported += len(batch) - getattr(e, 'details', {}).get('nInserted', 0) if hasattr(e, 'details') else len(batch)
+                    logger.error(f"Batch insert error: {e}")
+                batch = []
+
+        # Progres persisten DI-THROTTLE (tiap 200 baris): ribuan update Mongo
+        # per-baris boros; polling frontend 500ms cukup halus di granularitas ini.
+        if (idx + 1) % 200 == 0:
+            await update_job(job_id, processed=idx + 1, imported=imported,
+                             skipped=skipped, errors=errors)
+
     # Insert remaining batch
     if batch:
         try:
@@ -256,24 +252,20 @@ async def _do_bulk_import(job_id: str, rows: list):
             imported += len(batch)
         except Exception as e:
             logger.error(f"Final batch error: {e}")
-    
-    progress["imported"] = imported
-    progress["skipped"] = skipped
-    progress["errors"] = errors
-    progress["processed"] = len(rows)
-    progress["status"] = "done"
-    progress["done"] = True
+
+    await update_job(job_id, processed=len(rows), imported=imported,
+                     skipped=skipped, errors=errors, status="done", done=True)
     logger.info(f"Bulk import complete: {imported} imported, {skipped} skipped, {errors} errors")
     invalidate_category_cache()
-    
-    # Auto-cleanup: remove progress entry after 5 minutes to prevent memory leaks
-    await asyncio.sleep(300)
-    import_progress.pop(job_id, None)
+    # Pembersihan dokumen job ditangani TTL index (indexes.py) — tak perlu
+    # sleep+pop manual seperti dulu (dict in-memory).
+
 
 @categories_router.get("/categories/import-progress/{job_id}")
 async def get_import_progress(job_id: str, _user: dict = Depends(require_user)):
-    """Get import progress for a job"""
-    if job_id not in import_progress:
+    """Get import progress for a job (persisten, multi-worker-safe)."""
+    job = await get_job(job_id)
+    if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    return import_progress[job_id]
+    return job
 
