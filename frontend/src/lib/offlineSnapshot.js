@@ -139,7 +139,7 @@ export async function syncSnapshot(activityId, userId, onProgress, { forceFull =
 
   let lastSyncCursor = null; // server_time of the FIRST page = next delta cursor
   const fetchedIds = fullSync ? new Set() : null;
-  let skip = 0;
+  let cursor = ""; // keyset: id item terakhir halaman sebelumnya (ganti offset skip)
   let total = 0;
   let loaded = 0;
   // Kuota IndexedDB terlampaui di tengah sync (perangkat nyaris penuh): berhenti
@@ -147,10 +147,12 @@ export async function syncSnapshot(activityId, userId, onProgress, { forceFull =
   let quotaHit = false;
 
   for (;;) {
-    const params = new URLSearchParams({ activity_id: activityId, skip: String(skip), limit: String(PAGE_LIMIT) });
+    const params = new URLSearchParams({ activity_id: activityId, limit: String(PAGE_LIMIT) });
+    if (cursor) params.append("cursor", cursor);
     if (since) params.append("since", since);
     const r = await axios.get(`${API}/assets/offline-snapshot?${params.toString()}`);
-    const { items = [], deleted_ids: deletedIds = [], requires_full_refresh: needsFull } = r.data || {};
+    const { items = [], deleted_ids: deletedIds = [], requires_full_refresh: needsFull,
+            next_cursor: nextCursor = "" } = r.data || {};
     total = r.data?.total ?? total;
     if (lastSyncCursor === null) lastSyncCursor = r.data?.server_time || new Date().toISOString();
 
@@ -191,7 +193,10 @@ export async function syncSnapshot(activityId, userId, onProgress, { forceFull =
     onProgress?.({ loaded, total, pct: total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : 100 });
 
     if (items.length < PAGE_LIMIT) break;
-    skip += PAGE_LIMIT;
+    // Keyset: lanjut dari id item terakhir (server kirim next_cursor). Bila
+    // server tak beri kursor lagi, berhenti — jaga dari loop tak berujung.
+    cursor = nextCursor;
+    if (!cursor) break;
   }
 
   // Full sync: reconcile deletes — drop rows of this activity the server no

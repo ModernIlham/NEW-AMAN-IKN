@@ -48,6 +48,39 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#525] Sinkron snapshot offline pakai keyset pagination (buang $skip O(n²)) — 2026-07-22
+
+Sinkron cache offline (mode Inventarisasi) menyedot SELURUH aset satu kegiatan
+dalam potongan ≤1000 lewat `GET /assets/offline-snapshot`. Dulu tiap potongan
+memakai `$skip` — MongoDB memindai lalu MEMBUANG `skip` dokumen tiap halaman
+(O(skip)), sehingga satu sinkron penuh 10k+ aset ≈ O(n²). Diganti **keyset
+pagination**: kursor = `id` item terakhir, halaman berikut cukup `{id > cursor}`
+— seek O(log n) via indeks, tanpa buang-hasil.
+
+- **Kursor pada `id` (bukan created_at)** — `id` (UUID) unik & selalu ada
+  dijamin indeks unik + tiap jalur tulis; created_at bisa hilang di sebagian
+  dok → predikat `$lt` akan MENJATUHKAN baris (kehilangan data senyap di cache).
+  Klien order-agnostik (upsert per `id`), jadi urutan `id` tak memengaruhi
+  kebenaran. Sort feed diubah ke `{id: 1}`.
+- **Indeks baru** `(activity_id, id)` (`snapshot_keyset_activity_id`) melayani
+  prefix activity + range/sort `id` tanpa in-memory sort.
+- **Respons `next_cursor`** — `id` item terakhir bila halaman penuh, `""` bila
+  halaman terakhir. Klien (`offlineSnapshot.js`) melacak `cursor` menggantikan
+  `skip += PAGE_LIMIT`; logika delta/tombstone/rekonsiliasi tak berubah.
+- **Aman-mundur** — param `skip` lama tetap dihormati (klien belum-terdeploy);
+  sort `{id:1}` yang sama membuat jalur skip pun konsisten. Delta (`since`)
+  digabung keyset via `$and` sehingga hanya baris berubah yang terkirim.
+- **Lingkup sengaja dibatasi** — daftar aset online (`GET /assets`) TETAP
+  paginasi nomor halaman (tabel desktop butuh akses acak + total_pages); hanya
+  feed snapshot yang di-keyset (aman & bernilai tertinggi).
+
+Verifikasi: smoke FakeDB 6 skenario lulus terhadap handler asli (jahit semua
+halaman → setiap `id` tepat sekali tanpa overlap/lompat; baris tanpa created_at
+TETAP ikut; delta `since`; kompatibilitas `skip` lama; isolasi activity).
+`pytest tests/unit` 638 lulus; eslint + `yarn build` bersih.
+
+---
+
 ## [#524] Resolver penanda tangan KPB ter-scope satker (unifikasi lintas modul) — 2026-07-22
 
 Langkah 2 (penutup) perbaikan integritas TTD multi-satker: setelah PR #523
