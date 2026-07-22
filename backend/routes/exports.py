@@ -35,6 +35,13 @@ from shared_utils import (limiter, invalidate_asset_cache, log_audit,
 logger = logging.getLogger(__name__)
 exports_router = APIRouter()
 
+# Batas aman jumlah aset untuk ekspor BERFOTO (XLSX embed gambar & PDF thumbnail).
+# Build-nya sinkron & menahan seluruh workbook/dokumen + semua bytes gambar di
+# RAM sampai selesai — tanpa cap, ribuan aset berfoto bisa meng-OOM & meng-crash
+# proses backend (dampak lintas-pengguna). Di atas ambang → arahkan ke Ekspor
+# CSV (streaming, ringan, tanpa foto) atau persempit filter/kegiatan.
+MAX_FOTO_EXPORT_ASSETS = 5000
+
 def _safe_price_float(val) -> float:
     """purchase_price berupa string bebas — nilai tak numerik dihitung 0
     (selaras $convert onError:0 pada agregasi ringkasan), bukan error 500."""
@@ -593,7 +600,13 @@ async def export_pdf(request: Request, activity_id: Optional[str] = None,
     total = await db.assets.count_documents(query)
     if total == 0:
         raise HTTPException(status_code=404, detail="Tidak ada data untuk diexport")
-    
+    if total > MAX_FOTO_EXPORT_ASSETS:
+        raise HTTPException(
+            status_code=400,
+            detail=(f"Terlalu banyak aset ({total}) untuk ekspor PDF berfoto "
+                    f"(maks {MAX_FOTO_EXPORT_ASSETS}). Persempit filter/kegiatan, "
+                    "atau gunakan Ekspor CSV (ringan, tanpa foto)."))
+
     # Get stats via aggregation
     match_stage = {"$match": query} if activity_id else {"$match": {}}
     stats_pipeline = [match_stage, {"$group": {
@@ -851,9 +864,17 @@ async def export_xlsx(request: Request, activity_id: Optional[str] = None, base_
     total = await db.assets.count_documents(query)
     if total == 0:
         raise HTTPException(status_code=404, detail="Tidak ada data untuk diexport")
-    
+    if total > MAX_FOTO_EXPORT_ASSETS:
+        raise HTTPException(
+            status_code=400,
+            detail=(f"Terlalu banyak aset ({total}) untuk ekspor Excel berfoto "
+                    f"(maks {MAX_FOTO_EXPORT_ASSETS}). Persempit filter/kegiatan, "
+                    "atau gunakan Ekspor CSV (ringan, tanpa foto)."))
+
     buffer = io.BytesIO()
-    workbook = xlsxwriter.Workbook(buffer, {'in_memory': True, 'constant_memory': False})
+    # in_memory=False → xlsxwriter merakit arsip di berkas temp disk (bukan RAM),
+    # menekan puncak memori saat menyisipkan banyak gambar.
+    workbook = xlsxwriter.Workbook(buffer, {'in_memory': False, 'constant_memory': False})
     
     # === SHEET 1: Data Aset ===
     worksheet = workbook.add_worksheet('Data Aset')
