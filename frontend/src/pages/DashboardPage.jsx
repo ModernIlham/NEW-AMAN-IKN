@@ -15,6 +15,7 @@ import axios from "axios";
 import { getApiError } from "@/lib/utils";
 import { downloadFileWithProgress, makeDownloadProgress } from "@/lib/downloadFile";
 import { authMediaUrl } from "@/lib/mediaUrl";
+import { exportViaJob } from "@/lib/jobExport";
 import { reserveDummyNup, cariKategoriDummy } from "@/lib/dummyNup";
 import { syncSnapshot, getSnapshotAssets, snapshotMeta, isSnapshotExpired, upsertSnapshotAsset, removeSnapshotAsset } from "@/lib/offlineSnapshot";
 
@@ -1479,15 +1480,25 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     if (totalItems === 0) { toast.error("Tidak ada data aset untuk diexport"); return; }
     setExporting(true);
     try {
-      await downloadFileWithProgress(
-        `${API}/export/${fmt}?activity_id=${activity.id}&base_url=${encodeURIComponent(process.env.REACT_APP_BACKEND_URL || '')}`,
-        `inventory_${activity.nama_kegiatan || 'export'}.${fmt === 'xlsx' ? 'xlsx' : fmt}`,
-        {
-          label: `Export ${fmt.toUpperCase()}`,
-          timeout: 300000,
-          timeoutMessage: 'Export timeout - data terlalu besar. Coba export dengan filter kategori.',
-        }
-      );
+      const base = encodeURIComponent(process.env.REACT_APP_BACKEND_URL || '');
+      if (fmt === 'xlsx') {
+        // Excel berfoto berat → JOB LATAR (submit→poll→unduh otomatis) agar tak
+        // kena timeout ~120s pada dataset besar. CSV tetap sinkron (ringan/stream).
+        await exportViaJob(
+          `${API}/export/xlsx/async?activity_id=${activity.id}&base_url=${base}`,
+          { label: "Export Excel" }
+        );
+      } else {
+        await downloadFileWithProgress(
+          `${API}/export/${fmt}?activity_id=${activity.id}&base_url=${base}`,
+          `inventory_${activity.nama_kegiatan || 'export'}.${fmt}`,
+          {
+            label: `Export ${fmt.toUpperCase()}`,
+            timeout: 300000,
+            timeoutMessage: 'Export timeout - data terlalu besar. Coba export dengan filter kategori.',
+          }
+        );
+      }
     } catch (err) {
       console.error('Export error:', err); // toast error sudah ditangani helper
     } finally { setExporting(false); }

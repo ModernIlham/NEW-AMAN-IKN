@@ -48,6 +48,28 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#532] Tombol Export Excel pakai jalur job latar (frontend) — 2026-07-22
+
+Langkah 3 (penutup) job latar: tombol **Export → Excel** kini memakai endpoint
+async `/export/xlsx/async` sehingga ekspor berfoto besar tak lagi menahan
+koneksi/timeout — dari sisi pengguna: klik → progres di toast → **unduh
+otomatis** saat selesai.
+
+- **`lib/jobExport.js`** — helper `exportViaJob(submitUrl)`: POST → dapat
+  `job_id` → poll `GET /api/jobs/{id}` tiap 1,5 dtk (progres/pesan di toast) →
+  saat `done` unduh `GET /api/jobs/{id}/download` via anchor native + `?token`
+  (andal untuk file besar lewat ingress). Toleran 404 sesaat & gangguan jaringan.
+- **`handleExport('xlsx')`** dialihkan ke jalur job; **CSV tetap sinkron**
+  (ringan/stream). Auth submit+poll otomatis via interceptor axios global.
+- Catatan: polling inline — bila pengguna meninggalkan halaman, job tetap jalan
+  di server tetapi unduh-otomatis tak terpicu (bisa diekspor ulang). Task-tray
+  mengambang multi-job = peningkatan berikutnya bila diperlukan.
+
+Verifikasi: `eslint` 0 error (hanya warning lama); `yarn build` sukses.
+Frontend-only.
+
+---
+
 ## [#531] Ekspor Excel sebagai job latar (async, tak lagi timeout) — 2026-07-22
 
 Langkah 2 job latar: ekspor XLSX berfoto besar kini bisa jalan sebagai **job
