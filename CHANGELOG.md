@@ -48,6 +48,27 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#517] Perbaikan tuntas: peta TIDAK berpindah/zoom saat seleksi (semua kasus) — 2026-07-22
+
+Lanjutan [#516] yang belum menuntaskan: peta masih **terlempar ke zoom terjauh**
+saat menyalakan/mematikan Mode Seleksi atau memilih pin. Akar masalah: peta
+melakukan `fitBounds` setiap kali penanda `didFitRef` di-reset — dan reset itu
+masih terpicu saat **mematikan** Mode Seleksi (efek `hasSelection` dgn
+`selectMode` sudah false → reset → refit ke subset terpilih), serta berpotensi
+saat data di-`load` ulang.
+
+- **Perbaikan**: auto-`fitBounds` kini HANYA saat **peta pertama dibuka**
+  (`firstLoadRef`). Perubahan seleksi (berapa pun), menyalakan/mematikan Mode
+  Seleksi, dan reload data **tidak lagi memindah** posisi/zoom peta — tetap di
+  posisi terakhir.
+- Efek refit berbasis `hasSelection` dihapus.
+- Refit tetap tersedia lewat aksi eksplisit: ganti filter **Barang Serupa** &
+  tombol **Muat Ulang**.
+
+Verifikasi: `yarn lint` bersih; `CI=false yarn build` sukses. (Frontend-only.)
+
+---
+
 ## [#516] Perbaikan: memilih pin pertama di Mode Seleksi melempar view menjauh — 2026-07-22
 
 - Saat memilih **pin pertama** di Mode Seleksi (jumlah terpilih 0→1), peta
