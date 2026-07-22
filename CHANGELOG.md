@@ -48,6 +48,30 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#499] Versi Word (.docx): SP Hasil & SP Pelaksanaan — Laporan Resmi lengkap — 2026-07-22
+
+Lanjutan rollout Word (#495–#498). **Surat Pernyataan Hasil Inventarisasi** &
+**Surat Pernyataan Pelaksanaan Inventarisasi** kini tersedia dalam `.docx`
+editable — **melengkapi seluruh grup Laporan Resmi** (RHI, BAHI, SP Hasil,
+SP Pelaksanaan) dengan versi Word.
+
+- Endpoint **`…/sp-hasil-docx`** & **`…/sp-pelaksanaan-docx`** — identitas KPB,
+  butir pernyataan (isi identik versi PDF), klausul tanggung jawab, tanda
+  tangan Kuasa Pengguna Barang (jabatan di bawah nama; patuh Non-ASN). Kerangka
+  dipakai bersama (`_docx_surat_pernyataan_inv`).
+- `docx_utils.signature_single` menerima `jabatan_bawah` (jabatan dicetak di
+  bawah nama, di atas NIP) — kaidah surat pernyataan.
+- Frontend: tombol Word SP Hasil & SP Pelaksanaan di baris "Versi Word" grup
+  Laporan Resmi.
+
+Status rollout: **Dokumen Pendukung ✅ · Laporan Resmi ✅** · sisa DBHI (8 tipe)
+& DBKP ⏭️.
+
+Verifikasi: 620 unit test lulus; smoke render SP Hasil & SP Pelaksanaan `.docx`
+OK; eslint bersih; `yarn build` sukses.
+
+---
+
 ## [#498] Versi Word (.docx): RHI & BAHI — 2026-07-22
 
 Lanjutan rollout Word (#495–#497). **RHI** (Rekapitulasi Hasil Inventarisasi)
