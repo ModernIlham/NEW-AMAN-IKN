@@ -2045,13 +2045,20 @@ async def generate_dbhi_docx(activity_id: str, dbhi_type: str,
     def yr(a):
         return _tahun_perolehan(a.get("purchase_date"))
 
+    def rpx(v):
+        # DBHI: nilai TANPA prefiks "Rp" (header sudah "Nilai (Rp)") — samakan PDF.
+        try:
+            return f"{int(v):,}".replace(",", ".")
+        except (ValueError, TypeError, OverflowError):
+            return "0"
+
     extra = cfg["extra_cols"]
     total_nilai = sum(_safe_price(a) for a in filtered)
     if extra == "berlebih":
         header = ["No", "Kode Barang", "NUP", "Nama Barang", "Tahun Perolehan", "Kondisi",
                   "Nilai (Rp)", "Lokasi", "Keterangan Berlebih", "Asal Usul", "Tindak Lanjut"]
         rows = [[str(i), kode_sel(a), str(a.get("NUP", "-")), a.get("asset_name", "-") or "-", yr(a),
-                 a.get("condition", "-") or "-", _fmt_rp_id(_safe_price(a)), a.get("location", "-") or "-",
+                 a.get("condition", "-") or "-", rpx(_safe_price(a)), a.get("location", "-") or "-",
                  a.get("keterangan_berlebih", "-") or "-", a.get("asal_usul_berlebih", "-") or "-",
                  a.get("tindak_lanjut", "-") or "-"] for i, a in enumerate(filtered, 1)]
         ar = {6}
@@ -2059,7 +2066,7 @@ async def generate_dbhi_docx(activity_id: str, dbhi_type: str,
         header = ["No", "Kode Barang", "NUP", "Nama Barang", "Tahun Perolehan", "Nilai (Rp)",
                   "Lokasi", "Klasifikasi", "Sub Klasifikasi", "Uraian", "Tindak Lanjut"]
         rows = [[str(i), kode_sel(a), str(a.get("NUP", "-")), a.get("asset_name", "-") or "-", yr(a),
-                 _fmt_rp_id(_safe_price(a)), a.get("location", "-") or "-",
+                 rpx(_safe_price(a)), a.get("location", "-") or "-",
                  a.get("klasifikasi_tidak_ditemukan", "-") or "-", a.get("sub_klasifikasi", "-") or "-",
                  a.get("uraian_tidak_ditemukan", "-") or "-", a.get("tindak_lanjut", "-") or "-"]
                 for i, a in enumerate(filtered, 1)]
@@ -2068,7 +2075,7 @@ async def generate_dbhi_docx(activity_id: str, dbhi_type: str,
         header = ["No", "Kode Barang", "NUP", "Nama Barang", "Tahun Perolehan", "Kondisi",
                   "Nilai (Rp)", "Lokasi", "No. Perkara", "Pihak Bersengketa", "Keterangan Sengketa"]
         rows = [[str(i), kode_sel(a), str(a.get("NUP", "-")), a.get("asset_name", "-") or "-", yr(a),
-                 a.get("condition", "-") or "-", _fmt_rp_id(_safe_price(a)), a.get("location", "-") or "-",
+                 a.get("condition", "-") or "-", rpx(_safe_price(a)), a.get("location", "-") or "-",
                  a.get("nomor_perkara", "-") or "-", a.get("pihak_bersengketa", "-") or "-",
                  a.get("keterangan_sengketa", "-") or "-"] for i, a in enumerate(filtered, 1)]
         ar = {6}
@@ -2077,13 +2084,13 @@ async def generate_dbhi_docx(activity_id: str, dbhi_type: str,
                   "Nilai (Rp)", "Lokasi", "Keterangan"]
         rows = [[str(i), kode_sel(a), str(a.get("NUP", "-")), a.get("asset_name", "-") or "-",
                  f"{a.get('brand', '')} {a.get('model', '')}".strip() or "-", yr(a),
-                 _fmt_rp_id(_safe_price(a)), a.get("location", "-") or "-", a.get("notes", "-") or "-"]
+                 rpx(_safe_price(a)), a.get("location", "-") or "-", a.get("notes", "-") or "-"]
                 for i, a in enumerate(filtered, 1)]
         ar = {6}
     # baris total
     total_row = [""] * len(header)
     total_row[0] = f"Total: {len(filtered)} item"
-    total_row[6 if extra != "tidak_ditemukan" else 5] = _fmt_rp_id(total_nilai)
+    total_row[6 if extra != "tidak_ditemukan" else 5] = rpx(total_nilai)
     rows.append(total_row)
 
     d = DX.doc_baru(landscape=True, margin_cm=1.6)
