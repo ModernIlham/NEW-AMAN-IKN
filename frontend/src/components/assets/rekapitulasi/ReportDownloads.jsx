@@ -64,7 +64,7 @@ const supportingDocs = [
   { key: "berita-acara", label: "BA Tidak Ditemukan", icon: BookOpen, docx: true },
   { key: "sptjm", label: "SPTJM", icon: Shield, docx: true },
   { key: "surat-koreksi", label: "Surat Koreksi", icon: FileWarning, docx: true },
-  { key: "daftar-pemegang", label: "Daftar Pemegang Aset", icon: FileText },
+  { key: "daftar-pemegang", label: "Daftar Pemegang Aset", icon: FileText, docx: true },
 ];
 
 // Kolom tambahan opsional untuk PDF Data Aset eksekutif (kolom "Kondisi &
@@ -353,7 +353,7 @@ export default function ReportDownloads({
           ))}
         </div>
         <p className="text-[10px] text-muted-foreground mt-1.5">
-          BA Tidak Ditemukan, SPTJM &amp; Surat Koreksi tersedia dalam Word (.docx) yang bisa disunting sebelum ditandatangani.
+          Seluruh Dokumen Pendukung (BA, SPTJM, Surat Koreksi, Daftar Pemegang) tersedia dalam Word (.docx) yang bisa disunting sebelum ditandatangani.
         </p>
       </div>
 

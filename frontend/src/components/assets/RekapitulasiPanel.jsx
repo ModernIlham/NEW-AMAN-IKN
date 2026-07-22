@@ -69,11 +69,11 @@ function RekapitulasiPanel({ activityId, isOpen, onToggle, embedded = false, onT
   const handleDownloadDocx = async (type) => {
     const endpoints = {
       "berita-acara": "berita-acara-docx", "sptjm": "sptjm-docx",
-      "surat-koreksi": "surat-koreksi-docx",
+      "surat-koreksi": "surat-koreksi-docx", "daftar-pemegang": "daftar-pemegang-docx",
     };
     const filenames = {
       "berita-acara": "Berita_Acara", "sptjm": "SPTJM",
-      "surat-koreksi": "Surat_Koreksi",
+      "surat-koreksi": "Surat_Koreksi", "daftar-pemegang": "Daftar_Pemegang_Aset",
     };
     const endpoint = endpoints[type];
     if (!endpoint) return;
