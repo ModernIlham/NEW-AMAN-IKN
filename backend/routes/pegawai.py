@@ -24,9 +24,9 @@ from pegawai_utils import (
     JENIS_KONTRAK_NON_ASN, KATEGORI_PEGAWAI, KEWARGANEGARAAN,
     PANGKAT_GOLONGAN, STATUS_PEGAWAI,
     STATUS_PERKAWINAN, SUB_KATEGORI_NON_ASN, baris_impor_ke_pegawai,
-    deteksi_identitas, info_masa_pegawai,
+    beda_snapshot_pemegang, deteksi_identitas, info_masa_pegawai,
     kelompok_unit_kerja, pegawai_perlu_serah_terima, rekap_eselon,
-    validate_pegawai,
+    snapshot_pemegang_aset, validate_pegawai,
 )
 
 pegawai_router = APIRouter()
@@ -287,6 +287,85 @@ async def aset_dipegang_pegawai(pegawai_id: str,
     return {"pegawai": {"id": pegawai_id, "nama": peg.get("nama"),
                         "nip": nip},
             "items": items, "jumlah": len(items)}
+
+
+async def _sinkron_pemegang_aset(user, peg, tulis: bool) -> dict:
+    """Hitung (dan bila `tulis`, terapkan) penyegaran snapshot pemegang
+    (nama/jabatan/melekat-ke) pada aset AKTIF yang dipegang pegawai — match
+    NIP, ter-scope satker. Idempoten; hanya menimpa field yang berbeda & data
+    master non-kosong. TIDAK menyentuh `bast_file_id` (BAST historis tetap).
+    Kembalikan {jumlah_aset, perlu_sinkron, diperbarui, per_field, target}."""
+    from pymongo import UpdateOne
+
+    from shared_utils import scope_query_aset
+    nip = str((peg or {}).get("nip") or "").strip()
+    target = snapshot_pemegang_aset(peg)
+    hasil = {"jumlah_aset": 0, "perlu_sinkron": 0, "diperbarui": 0,
+             "per_field": {}, "target": target}
+    if not nip:
+        return hasil
+    # Seluruh aset satker (lintas kegiatan, termasuk yang belum sah) yang
+    # dipegang orang ini — snapshot pemegang harus terkini di mana pun.
+    q = await scope_query_aset(user, {"pengguna_nip": nip,
+                                      "dihapus": {"$ne": True}})
+    assets = await db.assets.find(q, {
+        "_id": 0, "id": 1, "user": 1, "pengguna_jabatan": 1,
+        "pengguna_melekat_ke": 1}).to_list(200000)
+    hasil["jumlah_aset"] = len(assets)
+    now = datetime.now(timezone.utc).isoformat()
+    ops = []
+    for a in assets:
+        beda = beda_snapshot_pemegang(a, target)
+        if not beda:
+            continue
+        hasil["perlu_sinkron"] += 1
+        for k in beda:
+            hasil["per_field"][k] = hasil["per_field"].get(k, 0) + 1
+        if tulis:
+            ops.append(UpdateOne({"id": a["id"]},
+                                 {"$set": {**beda, "updated_at": now},
+                                  "$inc": {"version": 1}}))
+    if tulis and ops:
+        res = await db.assets.bulk_write(ops, ordered=False)
+        hasil["diperbarui"] = res.modified_count or 0
+    return hasil
+
+
+@pegawai_router.get("/pegawai/{pegawai_id}/sinkron-aset/pratinjau")
+async def pratinjau_sinkron_aset(pegawai_id: str,
+                                 _user: dict = Depends(require_user)):
+    """Pratinjau (tanpa menulis): berapa aset dipegang & berapa perlu
+    disegarkan datanya bila disinkronkan dengan master pegawai saat ini."""
+    peg = await db.pegawai.find_one({"id": pegawai_id}, _PROJ)
+    if not peg:
+        raise HTTPException(status_code=404, detail="Pegawai tidak ditemukan")
+    await pastikan_akses_dok_satker(_user, peg)
+    hasil = await _sinkron_pemegang_aset(_user, peg, tulis=False)
+    return {"ok": True, **hasil}
+
+
+@pegawai_router.post("/pegawai/{pegawai_id}/sinkron-aset")
+async def sinkron_aset_pemegang(pegawai_id: str,
+                                user: dict = Depends(require_admin)):
+    """Segarkan data pemegang (nama/jabatan/unit) pada aset AKTIF yang dipegang
+    pegawai ini (match NIP) agar DBR/KIR/BAST BERIKUTNYA memakai data terkini —
+    mis. setelah kenaikan pangkat / perpindahan unit / perubahan nama. BAST
+    yang SUDAH terbit tidak berubah (dokumen historis). Idempoten."""
+    peg = await db.pegawai.find_one({"id": pegawai_id}, _PROJ)
+    if not peg:
+        raise HTTPException(status_code=404, detail="Pegawai tidak ditemukan")
+    await pastikan_akses_dok_satker(user, peg)
+    if not str(peg.get("nip") or "").strip():
+        raise HTTPException(status_code=400,
+                            detail="Pegawai belum punya NIP — tidak ada aset tertaut")
+    hasil = await _sinkron_pemegang_aset(user, peg, tulis=True)
+    if hasil["diperbarui"]:
+        await log_audit("sinkron_aset_pemegang", "", pegawai_id,
+                        username=user.get("username", "system"),
+                        detail=(f"Sinkron data pemegang {peg.get('nama')} ke "
+                                f"{hasil['diperbarui']} aset"),
+                        kode_satker=str(peg.get("kode_satker") or ""))
+    return {"ok": True, **hasil}
 
 
 @pegawai_router.post("/pegawai")
@@ -552,7 +631,11 @@ async def ubah_pegawai(pegawai_id: str, payload: PegawaiIn,
     if errors:
         raise HTTPException(status_code=400, detail="; ".join(errors))
     # Isolasi satker: admin terikat tak boleh mengubah pegawai satker lain.
-    lama = await db.pegawai.find_one({"id": pegawai_id}, {"_id": 0, "kode_satker": 1})
+    # Identitas lama ikut dibaca untuk mendeteksi perlunya sinkron aset.
+    lama = await db.pegawai.find_one(
+        {"id": pegawai_id},
+        {"_id": 0, "kode_satker": 1, "nama": 1, "gelar_depan": 1,
+         "gelar_belakang": 1, "jabatan": 1, "unit_kerja": 1})
     if not lama:
         raise HTTPException(status_code=404, detail="Pegawai tidak ditemukan")
     await pastikan_akses_dok_satker(user, lama)
@@ -585,7 +668,22 @@ async def ubah_pegawai(pegawai_id: str, payload: PegawaiIn,
                 f"{doc['nama']} masih tercatat memegang {dipegang} aset — "
                 "proses serah terima di modul Penggunaan (BAST pengembalian "
                 "atau mutasi pemegang)")
-    return {"ok": True, "id": pegawai_id, "peringatan": peringatan}
+    # Saran sinkron aset: bila identitas (nama/jabatan/unit) berubah & pegawai
+    # masih memegang aset, tawarkan penyegaran snapshot pemegang pada aset
+    # (DBR/KIR/BAST berikutnya) — BAST historis tidak diubah.
+    sinkron = None
+    ident_berubah = (
+        snapshot_pemegang_aset({**lama, "id": pegawai_id})
+        != snapshot_pemegang_aset({**doc, "id": pegawai_id}))
+    if doc["nip"] and ident_berubah:
+        h = await _sinkron_pemegang_aset(user, {**doc, "id": pegawai_id},
+                                         tulis=False)
+        if h["perlu_sinkron"]:
+            sinkron = {"jumlah_aset": h["jumlah_aset"],
+                       "perlu_sinkron": h["perlu_sinkron"],
+                       "per_field": h["per_field"]}
+    return {"ok": True, "id": pegawai_id, "peringatan": peringatan,
+            "sinkron_aset": sinkron}
 
 
 @pegawai_router.delete("/pegawai/{pegawai_id}")

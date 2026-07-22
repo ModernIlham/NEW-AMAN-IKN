@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Search, Plus, Pencil, Trash2, Loader2, IdCard, Upload,
-  AlertTriangle, Network, Wand2, FileDown, FileSpreadsheet, UserPlus,
+  AlertTriangle, Network, Wand2, FileDown, FileSpreadsheet, UserPlus, RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -354,6 +354,7 @@ export default function PegawaiPage({ user, onBack }) {
     // Field kartu dikelola endpoint kartu terpisah — jangan ikut PUT.
     delete body.kartu_label; delete body.kartu_terdaftar_pada;
     delete body.kartu_terdaftar_oleh; delete body.kartu_uid_hashes;
+    let sinkronInfo = null; let pegSinkron = null;
     try {
       if (form.mode === "tambah") {
         const r = await axios.post(`${API}/pegawai`, body);
@@ -372,14 +373,48 @@ export default function PegawaiPage({ user, onBack }) {
         toast.success(`Pegawai ${form.nama} diperbarui`);
         // Peringatan lunak: status non-aktif tapi masih memegang aset.
         if (r.data?.peringatan) toast.warning(r.data.peringatan, { duration: 9000 });
+        // Identitas berubah & masih pegang aset → tawarkan sinkron snapshot.
+        sinkronInfo = r.data?.sinkron_aset || null;
+        pegSinkron = { id: form.id, nama: form.nama };
       }
       setForm(null);
       load();
+      if (sinkronInfo?.perlu_sinkron && pegSinkron)
+        sinkronPemegang(pegSinkron.id, pegSinkron.nama, sinkronInfo);
     } catch (err) {
       toast.error(getApiError(err, "Gagal menyimpan pegawai"));
     } finally {
       setSaving(false);
     }
+  };
+
+  // Tawarkan penyegaran snapshot pemegang pada aset (setelah identitas berubah).
+  // BAST yang sudah terbit TIDAK diubah — hanya data pemegang untuk dokumen
+  // berikutnya (DBR/KIR/BAST). Idempoten di sisi server.
+  const sinkronPemegang = async (id, nama, info) => {
+    const ok = await confirm({
+      title: "Segarkan data pemegang pada aset?",
+      description: `${info.perlu_sinkron} dari ${info.jumlah_aset} aset yang dipegang ${nama} masih memakai data lama (jabatan/nama/unit). Perbarui agar DBR/KIR/BAST berikutnya memakai data terkini? BAST yang sudah terbit tidak berubah.`,
+      confirmLabel: "Sinkronkan",
+    });
+    if (!ok) return;
+    try {
+      const r = await axios.post(`${API}/pegawai/${id}/sinkron-aset`);
+      toast.success(`${r.data?.diperbarui || 0} aset diperbarui dengan data pemegang terkini`);
+      load();
+    } catch (err) { toast.error(getApiError(err, "Gagal menyinkronkan aset")); }
+  };
+
+  // Tombol manual di form (edit): periksa dulu (pratinjau) lalu tawarkan sinkron.
+  const sinkronManual = async () => {
+    if (!form?.id) return;
+    try {
+      const r = await axios.get(`${API}/pegawai/${form.id}/sinkron-aset/pratinjau`);
+      const info = r.data || {};
+      if (!info.jumlah_aset) { toast.info("Pegawai ini tidak tercatat memegang aset."); return; }
+      if (!info.perlu_sinkron) { toast.success("Data pemegang pada aset sudah terkini."); return; }
+      sinkronPemegang(form.id, form.nama, info);
+    } catch (err) { toast.error(getApiError(err, "Gagal memeriksa aset")); }
   };
 
   const remove = async (it) => {
@@ -1167,6 +1202,20 @@ export default function PegawaiPage({ user, onBack }) {
                     </Field>
                     <Field label="Unit Organisasi / Satker"><Input value={form.unit_organisasi} onChange={set("unit_organisasi")} /></Field>
                   </div>
+                  {/* Sinkronkan data pemegang ke aset yang dipegang (setelah
+                      kenaikan pangkat / pindah unit / ganti nama). BAST yang
+                      sudah terbit tidak berubah. */}
+                  {form.id && form.nip && (
+                    <div className="pt-1">
+                      <Button type="button" variant="outline" size="sm" className="h-9 gap-1.5"
+                        onClick={sinkronManual} data-testid="pegawai-sinkron-aset">
+                        <RefreshCw className="w-3.5 h-3.5" />Sinkronkan data ke aset yang dipegang
+                      </Button>
+                      <p className="text-[10.5px] text-muted-foreground mt-1">
+                        Perbarui nama/jabatan/unit pemegang pada aset (DBR/KIR/BAST berikutnya). BAST yang sudah terbit tidak diubah.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 
