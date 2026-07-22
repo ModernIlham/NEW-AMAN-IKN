@@ -130,7 +130,10 @@ async def _decode_bearer(authorization: str, allow_media_scope: bool = False) ->
     # (require_user_or_query_token) — tolak untuk API biasa.
     if payload.get("scope") == "media" and not allow_media_scope:
         raise HTTPException(status_code=401, detail="Invalid token")
-    user = await db.users.find_one({"id": payload.get("user_id")}, {"_id": 0, "password_hash": 0})
+    # Hash bcrypt disimpan di field `password` — WAJIB dikecualikan agar tak
+    # bocor ke klien lewat dokumen user yang dikembalikan require_user/admin.
+    # (`password_hash` disertakan utk keamanan bila ada data lama.)
+    user = await db.users.find_one({"id": payload.get("user_id")}, {"_id": 0, "password": 0, "password_hash": 0})
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
     if not user.get("is_active", True):

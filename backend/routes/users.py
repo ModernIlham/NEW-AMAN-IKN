@@ -65,8 +65,8 @@ async def toggle_user_active(user_id: str, admin_id: str = "", _admin: dict = De
 async def change_user_password(user_id: str, data: dict, _admin: dict = Depends(require_admin)):
     """Change user password"""
     new_password = data.get("new_password", "")
-    if not new_password or len(new_password) < 4:
-        raise HTTPException(status_code=400, detail="Password minimal 4 karakter")
+    if not new_password or len(new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password minimal 8 karakter")
     
     user = await db.users.find_one({"id": user_id})
     if not user:
