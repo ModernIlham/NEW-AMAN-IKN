@@ -28,6 +28,26 @@ fi
 sudo -n supervisorctl restart inventarisasi-backend 2>/dev/null \
   || supervisorctl restart inventarisasi-backend
 
+# Verifikasi backend BENAR-BENAR hidup setelah restart. `supervisorctl restart`
+# bisa mengembalikan 0 walau proses gagal start (mis. import error) → deploy
+# "sukses" padahal situs mati (false-green). Poll /api/health (no-auth, instan)
+# sampai ~30 dtk; gagal → exit non-zero agar job deploy jelas GAGAL.
+HEALTH_URL="${BACKEND_HEALTH_URL:-http://127.0.0.1:8001/api/health}"
+echo "Cek kesehatan backend di ${HEALTH_URL} ..."
+for i in $(seq 1 15); do
+  if curl -fsS --max-time 3 "$HEALTH_URL" >/dev/null 2>&1; then
+    echo "Backend sehat."
+    break
+  fi
+  if [ "$i" -eq 15 ]; then
+    echo "GAGAL: backend tidak sehat setelah restart (health-check timeout)." >&2
+    sudo -n supervisorctl status inventarisasi-backend 2>/dev/null \
+      || supervisorctl status inventarisasi-backend 2>/dev/null || true
+    exit 1
+  fi
+  sleep 2
+done
+
 # Frontend: dependensi bisa bertambah (mis. leaflet) + build produksi.
 cd frontend
 yarn install --frozen-lockfile

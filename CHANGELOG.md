@@ -48,6 +48,25 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#522] CI jalankan uji frontend + health-check pasca-deploy (anti false-green) — 2026-07-22
+
+Paket CI/CD & keandalan-deploy dari roadmap optimasi:
+
+- **Uji frontend kini jalan di CI.** 11 suite (71 uji: OCC, antrean simpan
+  optimistis, guard unload, dll.) sebelumnya tak pernah dieksekusi CI — hanya
+  lint + build. Kini ada langkah `yarn test` di job frontend (semua hijau, ~3s).
+- **Health-check pasca-deploy di VPS.** `supervisorctl restart` bisa
+  mengembalikan sukses walau backend gagal start (import error dsb.) → deploy
+  "sukses" padahal situs mati. `scripts/deploy_vps.sh` kini polling
+  `/api/health` (no-auth, instan) hingga ~30 dtk setelah restart; bila tak
+  sehat, deploy **exit non-zero** (job GAGAL, bukan false-green) + cetak status
+  supervisor. URL health dapat di-override lewat `BACKEND_HEALTH_URL`.
+
+Verifikasi: uji frontend 71 lulus lokal; `bash -n` deploy skrip bersih.
+(CI/CD & skrip deploy — bukan kode aplikasi.)
+
+---
+
 ## [#521] Pengerasan keamanan (hardening cepat berdampak tinggi) — 2026-07-22
 
 Paket keamanan dari roadmap optimasi — perbaikan kecil berisiko-regresi rendah:

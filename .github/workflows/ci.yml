@@ -51,6 +51,10 @@ jobs:
         run: yarn install --frozen-lockfile
       - name: eslint (react-hooks)
         run: yarn lint
+      - name: Uji unit frontend (jest/craco)
+        # Menjaga logika klien kritis (OCC, antrean simpan optimistis, guard
+        # unload, dll.). --passWithNoTests agar tak gagal bila suite kosong.
+        run: CI=true yarn test --watchAll=false --passWithNoTests
       - name: Build produksi
         # CI=false: warning CRA lama tidak menggagalkan build; gerbang error
         # sudah dipegang langkah eslint di atas.
