@@ -48,6 +48,43 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#493] Laporan DBHI: sub-sub kelompok di bawah kode barang + tombol Sampul rekapitulasi dihapus — 2026-07-22
+
+Dua penyempurnaan hasil masukan pemilik.
+
+### Sub-sub Kelompok di kolom Kode Barang (semua kondisi DBHI)
+
+Pada laporan **Daftar Barang Hasil Inventarisasi BMN** untuk seluruh
+kondisi — Baik, Rusak Ringan, Rusak Berat, Berlebih, Tidak Ditemukan,
+Dalam Sengketa — kolom "Kode Barang" kini menampilkan **kode di baris
+atas** dan **nama Sub-sub Kelompok** (uraian kodefikasi terdalam yang
+terdaftar) di baris bawah — kecil & abu-abu — memberi konteks klasifikasi
+tanpa menambah kolom. Helper `_sel_kode_barang_subsub` + peta
+`_peta_subsub_kelompok` atas aset ter-filter; kolom Kode Barang dilebarkan
+untuk memuat dua baris. Terpusat di `generate_dbhi_pdf` sehingga ikut ke
+**LHI Lengkap** & **batch ZIP**. Degradasi rapi bila referensi kodefikasi
+belum lengkap (hanya kode yang tampil, tanpa galat).
+
+### Tombol "Sampul" di rekapitulasi inventarisasi dihapus
+
+Pengaturan kop/sampul kini terpusat di halaman **Pengaturan** (tab
+Universal & per-satker), sehingga tombol "Sampul" (editor pengaturan
+inline) di panel rekapitulasi inventarisasi menjadi redundan. Dihapus:
+tombol + render editor + props `showSettings`/`setShowSettings`
+(`ReportDownloads` & `RekapitulasiPanel`). Komponen `ReportSettingsEditor`
+**dipertahankan** (masih dipakai halaman Pengaturan → Universal & hub
+Pelaporan). **Tanpa data-loss**: seluruh 12 kunci setelan + logo tetap
+dapat diedit di Pengaturan → Universal. Baris tombol dirapikan (LHI utama
++ Booking Nomor) dan grid Laporan Resmi diseimbangkan lintas HP/tablet/
+desktop (`grid-cols-2 sm:grid-cols-3 lg:grid-cols-5`, 5 tombol tanpa sisa
+sel kosong yang janggal).
+
+Verifikasi: 616 unit test lulus; render DBHI FakeDB memverifikasi sub-sub
+kelompok tampil di 6 kondisi + degradasi rapi; audit adversarial diff
+(3 dimensi) nihil temuan; eslint bersih; `yarn build` sukses.
+
+---
+
 ## [#492] Kop surat berlogo: teks instansi dipusatkan rapi di ruang kanan logo — 2026-07-21
 
 Perbaikan tata letak kop surat pada seluruh laporan resmi (Berita Acara,
