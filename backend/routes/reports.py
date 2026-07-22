@@ -4115,6 +4115,92 @@ async def generate_sp_pelaksanaan_pdf(activity_id: str, _user: dict = Depends(re
                              headers={"Content-Disposition": f'attachment; filename="SP_Pelaksanaan_{activity_id[:8]}.pdf"'})
 
 
+async def _docx_surat_pernyataan_inv(activity_id, _user, *, judul, footer_label, buat_statements, nama_file):
+    """Kerangka Word (.docx) Surat Pernyataan Hasil/Pelaksanaan Inventarisasi —
+    struktur sama (identitas KPB + butir pernyataan + klausul + ttd tunggal),
+    hanya judul & butir yang berbeda. `buat_statements(activity, ident)` →
+    daftar kalimat pernyataan."""
+    import docx_utils as DX
+    activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
+    if not activity:
+        raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+    await pastikan_akses_kegiatan_id(_user, activity_id)
+    settings = await pengaturan_kop(activity)
+    ident = _activity_identity(activity, settings)
+    peta = await _peta_status_kepegawaian([ident.get("kasatker_nip")])
+
+    d = DX.doc_baru()
+    DX.page_footer(d, footer_label)
+    DX.kop_surat(d, settings)
+    DX.title_block(d, judul)
+    DX.identity_block(d, [("Nama", ident["kasatker_nama"]), ("NIP", ident["kasatker_nip"]),
+                          ("Jabatan", ident["kasatker_jabatan"]),
+                          ("Unit Organisasi", ident["satker_name"])])
+    DX.para(d, "Menyatakan dengan sesungguhnya bahwa:", bold=True, justify=False, space_before=4, space_after=2)
+    for i, stmt in enumerate(buat_statements(activity, ident), 1):
+        DX.para(d, f"{i}. {stmt}", space_after=2)
+    DX.para(d, "Apabila di kemudian hari terdapat kekeliruan dalam pernyataan ini, maka kami "
+               "bersedia untuk bertanggung jawab sesuai dengan ketentuan peraturan "
+               "perundang-undangan yang berlaku.", space_before=2, space_after=10)
+    DX.signature_single(d, nama=ident["kasatker_nama"], header="Yang membuat pernyataan,",
+                        jabatan=ident["kasatker_jabatan"], jabatan_bawah=True,
+                        pre_lines=[_tempat_tanggal_laporan(settings)],
+                        nip=ident["kasatker_nip"],
+                        status=peta.get(str(ident.get("kasatker_nip") or "").strip(), ""))
+    return StreamingResponse(io.BytesIO(DX.to_bytes(d)), media_type=_DOCX_MIME,
+                             headers={"Content-Disposition": f'attachment; filename="{nama_file}_{activity_id[:8]}.docx"'})
+
+
+@reports_router.get("/inventory-activities/{activity_id}/sp-hasil-docx")
+async def generate_sp_hasil_docx(activity_id: str, _user: dict = Depends(require_user_or_query_token)):
+    """Versi Word (.docx) editable Surat Pernyataan Hasil Inventarisasi BMN."""
+    def stmts(activity, ident):
+        nomor_sk = activity.get("nomor_surat", "-")
+        return [
+            f"Telah melaksanakan kegiatan inventarisasi Barang Milik Negara (BMN) "
+            f"“{activity.get('nama_kegiatan') or '-'}” di lingkungan {ident['satker_name']} "
+            f"sesuai dengan Pedoman Inventarisasi Barang Milik Negara sebagaimana diatur dalam "
+            f"Surat Keputusan Nomor {nomor_sk}.",
+            "Hasil inventarisasi sebagaimana tercantum dalam Laporan Hasil Inventarisasi (LHI) "
+            "yang meliputi Rekapitulasi Hasil Inventarisasi (RHI) dan Daftar Barang Hasil "
+            "Inventarisasi (DBHI) beserta seluruh lampirannya adalah benar dan akurat sesuai "
+            "dengan kondisi serta keberadaan BMN pada saat pelaksanaan inventarisasi.",
+            "Pernyataan ini dibuat untuk dipergunakan sebagaimana mestinya.",
+        ]
+    return await _docx_surat_pernyataan_inv(
+        activity_id, _user,
+        judul="SURAT PERNYATAAN\nHASIL INVENTARISASI BARANG MILIK NEGARA",
+        footer_label="Surat Pernyataan Hasil Inventarisasi Barang Milik Negara",
+        buat_statements=stmts, nama_file="SP_Hasil")
+
+
+@reports_router.get("/inventory-activities/{activity_id}/sp-pelaksanaan-docx")
+async def generate_sp_pelaksanaan_docx(activity_id: str, _user: dict = Depends(require_user_or_query_token)):
+    """Versi Word (.docx) editable Surat Pernyataan Pelaksanaan Inventarisasi BMN."""
+    def stmts(activity, ident):
+        nomor_sk = activity.get("nomor_surat", "-")
+        tgl_mulai = _fmt_tanggal_id(activity.get("tanggal_mulai")) or "-"
+        tgl_selesai = _fmt_tanggal_id(activity.get("tanggal_selesai")) or "-"
+        return [
+            f"Telah melaksanakan kegiatan inventarisasi Barang Milik Negara (BMN) "
+            f"“{activity.get('nama_kegiatan') or '-'}” di lingkungan {ident['satker_name']} "
+            f"sesuai dengan tahapan dan prosedur yang diatur dalam Pedoman Inventarisasi Barang "
+            f"Milik Negara sebagaimana diatur dalam Surat Keputusan Nomor {nomor_sk}, pada "
+            f"periode {tgl_mulai} s.d. {tgl_selesai}.",
+            "Pelaksanaan inventarisasi telah dilakukan secara tertib, lengkap, dan akuntabel, "
+            "meliputi tahap persiapan, pelaksanaan pendataan, identifikasi, pelaporan, dan "
+            "tindak lanjut.",
+            "Seluruh data dan informasi yang terkait dengan pelaksanaan inventarisasi telah "
+            "dikumpulkan dan didokumentasikan dengan baik.",
+            "Pernyataan ini dibuat untuk dipergunakan sebagaimana mestinya.",
+        ]
+    return await _docx_surat_pernyataan_inv(
+        activity_id, _user,
+        judul="SURAT PERNYATAAN\nPELAKSANAAN INVENTARISASI BARANG MILIK NEGARA",
+        footer_label="Surat Pernyataan Pelaksanaan Inventarisasi Barang Milik Negara",
+        buat_statements=stmts, nama_file="SP_Pelaksanaan")
+
+
 # ============================================================================
 # REPORT SETTINGS (Logo, Cover Page)
 # ============================================================================

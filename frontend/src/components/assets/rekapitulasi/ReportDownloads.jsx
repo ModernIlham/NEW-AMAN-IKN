@@ -52,9 +52,9 @@ const officialReports = [
     btn: "bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 dark:bg-indigo-700 dark:hover:bg-indigo-600 dark:disabled:bg-indigo-900/50 dark:disabled:text-indigo-400" },
   { key: "bahi", label: "BAHI (Berita Acara)", icon: BookOpen, docx: true,
     btn: "bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 dark:bg-blue-700 dark:hover:bg-blue-600 dark:disabled:bg-blue-900/50 dark:disabled:text-blue-400" },
-  { key: "sp-hasil", label: "SP Hasil", icon: Shield,
+  { key: "sp-hasil", label: "SP Hasil", icon: Shield, docx: true,
     btn: "bg-teal-600 hover:bg-teal-700 disabled:bg-teal-300 dark:bg-teal-700 dark:hover:bg-teal-600 dark:disabled:bg-teal-900/50 dark:disabled:text-teal-400" },
-  { key: "sp-pelaksanaan", label: "SP Pelaksanaan", icon: FileText,
+  { key: "sp-pelaksanaan", label: "SP Pelaksanaan", icon: FileText, docx: true,
     btn: "bg-cyan-600 hover:bg-cyan-700 disabled:bg-cyan-300 dark:bg-cyan-700 dark:hover:bg-cyan-600 dark:disabled:bg-cyan-900/50 dark:disabled:text-cyan-400" },
   { key: "dbkp", label: "DBKP per Golongan", icon: BookOpen,
     btn: "bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300 dark:bg-violet-700 dark:hover:bg-violet-600 dark:disabled:bg-violet-900/50 dark:disabled:text-violet-400" },
@@ -280,7 +280,7 @@ export default function ReportDownloads({
                 title={`Unduh ${label} format Word yang bisa disunting`}
                 className="flex items-center gap-1 px-2 py-1 bg-blue-700 hover:bg-blue-800 disabled:bg-blue-300 dark:bg-blue-800 dark:hover:bg-blue-700 dark:disabled:bg-blue-900/50 dark:disabled:text-blue-400 text-white rounded-md text-[11px] font-semibold transition-colors min-w-0 min-h-0">
                 {downloading === `${key}-docx` ? <Loader2 className="w-3 h-3 animate-spin" /> : <FileType2 className="w-3 h-3" />}
-                {key.toUpperCase()}
+                {label.split(" (")[0]}
               </button>
             ))}
           </div>
