@@ -48,6 +48,23 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#520] Optimasi: thumbnail foto PIL tak lagi memblokir event loop — 2026-07-22
+
+Paket keandalan-server #3 dari roadmap optimasi:
+
+- Pembuatan thumbnail foto (decode/resize/encode **PIL**, CPU-bound) di jalur
+  **tulis aset** (create/update) dan **stream foto** sebelumnya dieksekusi
+  langsung di event loop async → memblokir SEMUA request lain selama proses.
+- Kini di-offload ke **thread** via `asyncio.to_thread` (PIL melepas GIL) di
+  titik terpanas: `process_photos_for_storage` (per-foto, dipakai setiap
+  create/update), thumbnail sampul pada create & update, dan fallback thumbnail
+  on-the-fly pada endpoint stream foto legacy. Event loop tetap responsif saat
+  banyak foto diproses.
+
+Verifikasi: `pytest tests/unit` 638 lulus; `compileall` bersih. (Backend-only.)
+
+---
+
 ## [#519] Optimasi: ekspor XLSX/PDF berfoto tak lagi berisiko meng-OOM server — 2026-07-22
 
 Paket keandalan-server #2 dari roadmap optimasi:
