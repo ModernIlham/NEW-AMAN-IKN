@@ -1613,6 +1613,159 @@ async def generate_surat_koreksi_pdf(activity_id: str, _user: dict = Depends(req
 
 
 # ============================================================================
+# Versi Word (.docx) editable — SPTJM & Surat Koreksi (bertanda tangan KPB)
+# ============================================================================
+
+_DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+async def _konten_surat_pernyataan(activity, settings):
+    """Data bersama SPTJM & Surat Koreksi: identitas KPB, tempat/tanggal, aset
+    tidak-ditemukan (+ subset kesalahan pencatatan), status kepegawaian KPB."""
+    assets = await db.assets.find(
+        {"activity_id": activity["id"]},
+        {"_id": 0, "photos": 0, "photo": 0, "photo_thumbnails": 0, "thumbnail": 0, "gallery_thumbnail": 0, "document_checklist": 0},
+    ).to_list(100000)
+    tidak_ditemukan = [a for a in assets if a.get("inventory_status") == "Tidak Ditemukan"]
+    koreksi = [a for a in tidak_ditemukan
+               if a.get("klasifikasi_tidak_ditemukan") == "Kesalahan Pencatatan"]
+    ident = _activity_identity(activity, settings)
+    alamat = ident["alamat"]
+    alamat_singkat = alamat.splitlines()[0] if alamat.splitlines() else alamat
+    tempat = (str(settings.get("tempat_laporan") or "").strip() or alamat_singkat
+              or "..................")
+    tgl = (_fmt_tanggal_id(str(activity.get("tanggal_berita_acara") or "").strip()[:10]
+                           or settings.get("tanggal_laporan"))
+           or ".......................")
+    peta = await _peta_status_kepegawaian([ident.get("kasatker_nip")])
+    return {"assets": assets, "tidak_ditemukan": tidak_ditemukan, "koreksi": koreksi,
+            "ident": ident, "alamat": alamat, "tempat": tempat, "tgl": tgl,
+            "status_kpb": peta.get(str(ident.get("kasatker_nip") or "").strip(), "")}
+
+
+def _fmt_rp_id(val):
+    try:
+        return f"Rp {int(val):,}".replace(",", ".")
+    except (ValueError, TypeError):
+        return "Rp 0"
+
+
+def _safe_price(a):
+    try:
+        return float(a.get("purchase_price", 0) or 0)
+    except (ValueError, TypeError):
+        return 0.0
+
+
+@reports_router.get("/inventory-activities/{activity_id}/sptjm-docx")
+async def generate_sptjm_docx(activity_id: str, _user: dict = Depends(require_user_or_query_token)):
+    """Versi Word (.docx) editable SPTJM — konten & tanda tangan identik PDF."""
+    import docx_utils as DX
+    activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
+    if not activity:
+        raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+    await pastikan_akses_kegiatan_id(_user, activity_id)
+    settings = await pengaturan_kop(activity)
+    K = await _konten_surat_pernyataan(activity, settings)
+    ident = K["ident"]
+    td = K["tidak_ditemukan"]
+    total_val = sum(_safe_price(a) for a in td)
+
+    d = DX.doc_baru()
+    DX.page_footer(d, "Surat Pernyataan Tanggung Jawab Mutlak (SPTJM)")
+    DX.kop_surat(d, settings)
+    DX.title_block(d, "SURAT PERNYATAAN TANGGUNG JAWAB MUTLAK")
+    DX.identity_block(d, [("Nama", ident["kasatker_nama"]), ("NIP", ident["kasatker_nip"]),
+                          ("Jabatan", ident["kasatker_jabatan"]), ("Alamat", K["alamat"])])
+    DX.para(d, "Menyatakan dengan sesungguhnya bahwa:", space_after=4)
+    DX.para(d, "1. Saya bertanggung jawab penuh atas pengelolaan Barang Milik Negara (BMN) "
+               "yang berada dalam penguasaan Satuan Kerja yang saya pimpin.")
+    DX.para(d, f"2. Berdasarkan hasil inventarisasi pada kegiatan "
+               f"“{activity.get('nama_kegiatan', '-')}” (Nomor Surat: "
+               f"{activity.get('nomor_surat', '-')}), terdapat {len(td)} NUP BMN dengan total "
+               f"nilai {_fmt_rp_id(total_val)} yang tidak ditemukan, dan atas BMN tersebut "
+               f"telah dilakukan verifikasi dan penelitian oleh tim internal Satuan Kerja.")
+    DX.para(d, "3. Saya bertanggung jawab penuh atas kebenaran usulan/pernyataan yang "
+               "diajukan, baik secara materiil maupun formil (KMK 403/KMK.06/2013).")
+    DX.para(d, "4. Saya bersedia menerima sanksi sesuai ketentuan peraturan "
+               "perundang-undangan yang berlaku apabila di kemudian hari pernyataan ini "
+               "tidak benar.")
+    DX.para(d, "Demikian Surat Pernyataan ini dibuat dengan sebenar-benarnya di atas meterai "
+               "yang cukup untuk dipergunakan sebagaimana mestinya.", space_after=8)
+
+    if td:
+        DX.para(d, "Lampiran: Rincian BMN Tidak Ditemukan", bold=True, justify=False, space_after=2)
+        rows = [[str(i+1), a.get('asset_code', '-') or '-', str(a.get('NUP', '-')),
+                 a.get('asset_name', '-') or '-', _fmt_rp_id(_safe_price(a))]
+                for i, a in enumerate(td)]
+        rows.append(["", "", "", "TOTAL", _fmt_rp_id(total_val)])
+        DX.data_table(d, ['No', 'Kode Barang', 'NUP', 'Nama BMN', 'Nilai (Rp)'], rows,
+                      align_center={0, 2}, align_right={4}, widths_cm=[1.0, 3.0, 1.5, 7.5, 3.5])
+
+    DX.signature_single(d, nama=ident["kasatker_nama"], header="Yang membuat pernyataan,",
+                        pre_lines=[f"Dibuat di: {K['tempat']}", f"Pada tanggal: {K['tgl']}"],
+                        nip=ident["kasatker_nip"], status=K["status_kpb"])
+
+    return StreamingResponse(io.BytesIO(DX.to_bytes(d)), media_type=_DOCX_MIME,
+                             headers={"Content-Disposition": f"attachment; filename=SPTJM_{activity_id[:8]}.docx"})
+
+
+@reports_router.get("/inventory-activities/{activity_id}/surat-koreksi-docx")
+async def generate_surat_koreksi_docx(activity_id: str, _user: dict = Depends(require_user_or_query_token)):
+    """Versi Word (.docx) editable Surat Pernyataan Koreksi Pencatatan."""
+    import docx_utils as DX
+    activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
+    if not activity:
+        raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+    await pastikan_akses_kegiatan_id(_user, activity_id)
+    settings = await pengaturan_kop(activity)
+    K = await _konten_surat_pernyataan(activity, settings)
+    ident = K["ident"]
+    koreksi = K["koreksi"]
+    total_val = sum(_safe_price(a) for a in koreksi)
+    no_ba = str(activity.get("nomor_berita_acara") or activity.get("nomor_surat") or "-")
+
+    d = DX.doc_baru()
+    DX.page_footer(d, "Surat Pernyataan Koreksi Pencatatan Barang Milik Negara")
+    DX.kop_surat(d, settings)
+    DX.title_block(d, "SURAT PERNYATAAN\nKOREKSI PENCATATAN BARANG MILIK NEGARA")
+    DX.identity_block(d, [("Nama", ident["kasatker_nama"]), ("NIP", ident["kasatker_nip"]),
+                          ("Jabatan", ident["kasatker_jabatan"]), ("Alamat", K["alamat"])])
+    DX.para(d, f"Menindaklanjuti Berita Acara Tim Internal Penelitian BMN Tidak Ditemukan "
+               f"pada kegiatan “{activity.get('nama_kegiatan', '-')}” (Nomor: {no_ba}), dengan "
+               f"ini menyatakan bahwa BMN dimaksud benar tercatat dalam penatausahaan Satuan "
+               f"Kerja dan terdapat {len(koreksi)} NUP BMN dengan total nilai "
+               f"{_fmt_rp_id(total_val)} yang tidak ditemukan karena kesalahan pencatatan.")
+    DX.para(d, "Sehubungan dengan hal tersebut, saya menginstruksikan kepada petugas BMN "
+               "Satuan Kerja untuk menindaklanjuti BMN tidak ditemukan dimaksud dengan "
+               "melakukan KOREKSI PENCATATAN sesuai jenis kesalahan dan tindak lanjut pada "
+               "rincian di bawah ini, serta mencetak register transaksi harian/histori BMN "
+               "sebagai bukti koreksi pencatatan (SE Menteri PUPR No. 10/SE/M/2023).",
+           space_after=6)
+
+    if koreksi:
+        DX.para(d, "Rincian BMN yang Memerlukan Koreksi Pencatatan:", bold=True, justify=False, space_after=2)
+        rows = [[str(i+1), a.get('asset_code', '-') or '-', str(a.get('NUP', '-')),
+                 a.get('asset_name', '-') or '-', a.get('sub_klasifikasi', '-') or '-',
+                 a.get('uraian_tidak_ditemukan', '-') or '-', a.get('tindak_lanjut', '-') or '-',
+                 _fmt_rp_id(_safe_price(a))] for i, a in enumerate(koreksi)]
+        rows.append(["", "", "", "", "", "", "TOTAL", _fmt_rp_id(total_val)])
+        DX.data_table(d, ['No', 'Kode Barang', 'NUP', 'Nama BMN', 'Jenis Kesalahan',
+                          'Uraian', 'Tindak Lanjut', 'Nilai (Rp)'], rows,
+                      align_center={0, 2}, align_right={7}, font_size=8)
+    else:
+        DX.para(d, "Tidak ada BMN yang memerlukan koreksi pencatatan.")
+
+    DX.para(d, "Demikian Surat Pernyataan ini dibuat dengan sebenar-benarnya.", space_before=4, space_after=8)
+    DX.signature_single(d, nama=ident["kasatker_nama"], header="Yang membuat pernyataan,",
+                        pre_lines=[f"Dibuat di: {K['tempat']}", f"Pada tanggal: {K['tgl']}"],
+                        nip=ident["kasatker_nip"], status=K["status_kpb"])
+
+    return StreamingResponse(io.BytesIO(DX.to_bytes(d)), media_type=_DOCX_MIME,
+                             headers={"Content-Disposition": f"attachment; filename=Surat_Koreksi_{activity_id[:8]}.docx"})
+
+
+# ============================================================================
 # DBHI PDF REPORTS (LKPP 85/2025)
 # ============================================================================
 

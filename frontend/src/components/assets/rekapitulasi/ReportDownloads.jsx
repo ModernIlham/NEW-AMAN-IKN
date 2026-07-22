@@ -62,8 +62,8 @@ const officialReports = [
 const supportingDocs = [
   // `docx: true` → tombol unduh Word (.docx) editable di samping tombol PDF.
   { key: "berita-acara", label: "BA Tidak Ditemukan", icon: BookOpen, docx: true },
-  { key: "sptjm", label: "SPTJM", icon: Shield },
-  { key: "surat-koreksi", label: "Surat Koreksi", icon: FileWarning },
+  { key: "sptjm", label: "SPTJM", icon: Shield, docx: true },
+  { key: "surat-koreksi", label: "Surat Koreksi", icon: FileWarning, docx: true },
   { key: "daftar-pemegang", label: "Daftar Pemegang Aset", icon: FileText },
 ];
 
@@ -353,7 +353,7 @@ export default function ReportDownloads({
           ))}
         </div>
         <p className="text-[10px] text-muted-foreground mt-1.5">
-          BA Tidak Ditemukan tersedia dalam Word (.docx) yang bisa disunting sebelum ditandatangani.
+          BA Tidak Ditemukan, SPTJM &amp; Surat Koreksi tersedia dalam Word (.docx) yang bisa disunting sebelum ditandatangani.
         </p>
       </div>
 
