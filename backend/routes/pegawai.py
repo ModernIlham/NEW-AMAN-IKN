@@ -283,7 +283,11 @@ async def aset_dipegang_pegawai(pegawai_id: str,
     items = await db.assets.find(q, {
         "_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
         "condition": 1, "location": 1, "activity_id": 1, "bast_file_id": 1,
+        "bast_snapshot": 1,
     }).sort("asset_code", 1).to_list(2000)
+    from penggunaan_utils import bast_perlu_perbarui
+    for it in items:
+        it["bast_perlu_perbarui"] = bast_perlu_perbarui(it)
     return {"pegawai": {"id": pegawai_id, "nama": peg.get("nama"),
                         "nip": nip},
             "items": items, "jumlah": len(items)}

@@ -880,7 +880,13 @@ export default function PegawaiPage({ user, onBack }) {
                               Kontrak {fmtSisa(im.kontrak.sisa_hari)}
                             </p>
                           )}
-                          {!im.tanggal_pensiun && !im.akhir_jabatan && !im.kontrak?.ada && (
+                          {im.masa_jabatan?.label && (
+                            <p className="text-muted-foreground/80"
+                              title={`TMT jabatan ${im.tmt_jabatan} — masa kerja dalam jabatan`}>
+                              Menjabat {im.masa_jabatan.label}
+                            </p>
+                          )}
+                          {!im.tanggal_pensiun && !im.akhir_jabatan && !im.kontrak?.ada && !im.masa_jabatan?.label && (
                             <p className="text-muted-foreground/50">—</p>
                           )}
                         </div>
@@ -1385,9 +1391,12 @@ export default function PegawaiPage({ user, onBack }) {
                     <p className="text-[10px] text-muted-foreground font-mono">{a.asset_code}{a.NUP ? ` · NUP ${a.NUP}` : ""}{a.location ? ` · ${a.location}` : ""}</p>
                   </div>
                   {a.condition && <span className="text-[10px] text-muted-foreground whitespace-nowrap">{a.condition}</span>}
-                  {a.bast_file_id
-                    ? <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-[9px] font-semibold">BAST ✓</span>
-                    : <span className="px-1.5 py-0.5 rounded bg-slate-500/15 text-muted-foreground text-[9px] font-semibold">tanpa BAST</span>}
+                  {a.bast_perlu_perbarui
+                    ? <span title="Kode/nama berubah (reklasifikasi/ganti nama) setelah BAST terakhir — BAST merujuk data lama"
+                        className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[9px] font-semibold whitespace-nowrap">BAST usang</span>
+                    : a.bast_file_id
+                      ? <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-[9px] font-semibold">BAST ✓</span>
+                      : <span className="px-1.5 py-0.5 rounded bg-slate-500/15 text-muted-foreground text-[9px] font-semibold">tanpa BAST</span>}
                 </div>
               ))}
             </div>

@@ -448,3 +448,23 @@ class TestKelompokkanPspSiman:
         hasil = kelompokkan_psp_siman(rows)
         assert [k["no_psp"] for k in hasil] == ["S-1/2023"]
         assert hasil[0]["jumlah"] == 1
+
+
+def test_bast_perlu_perbarui():
+    from penggunaan_utils import bast_perlu_perbarui, snapshot_bast
+    aset = {"asset_code": "3030203001", "asset_name": "Laptop",
+            "bast_file_id": "B1", "bast_snapshot": {"kode": "3030203001", "nama": "Laptop"}}
+    # Sinkron → False
+    assert bast_perlu_perbarui(aset) is False
+    # Kode berubah (reklasifikasi) → True
+    assert bast_perlu_perbarui({**aset, "asset_code": "3030203099"}) is True
+    # Nama berubah → True
+    assert bast_perlu_perbarui({**aset, "asset_name": "Laptop Dinas"}) is True
+    # Nama beda spasi/kapital → dianggap sama (False)
+    assert bast_perlu_perbarui({**aset, "asset_name": "Laptop"}) is False
+    # Tanpa BAST → False
+    assert bast_perlu_perbarui({"asset_code": "x", "bast_snapshot": {"kode": "y"}}) is False
+    # BAST era lama tanpa snapshot → False (konservatif, tanpa positif palsu)
+    assert bast_perlu_perbarui({"asset_code": "x", "bast_file_id": "B1"}) is False
+    # snapshot_bast bentuk benar
+    assert snapshot_bast(aset) == {"kode": "3030203001", "nama": "Laptop"}

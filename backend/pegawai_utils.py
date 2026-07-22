@@ -772,6 +772,47 @@ def _bup_tahun(pegawai) -> int:
     return 0  # Non-ASN/tak dikenal: tidak ada BUP (pakai kontrak)
 
 
+def durasi_terbilang(dari_iso, sampai_iso) -> dict:
+    """Durasi antara dua tanggal (YYYY-MM-DD) → {hari, label}. Label gaya
+    "3 tahun 2 bulan" (komponen nol dilewati; kurang dari 1 bulan → "N hari").
+    `dari` > `sampai` atau tanggal tak valid → {hari: None, label: ""}.
+    MURNI (teruji unit)."""
+    from calendar import monthrange
+    from datetime import date
+
+    d1 = str(dari_iso or "").strip()[:10]
+    d2 = str(sampai_iso or "").strip()[:10]
+    if not (_TGL_RE.match(d1) and _TGL_RE.match(d2)):
+        return {"hari": None, "label": ""}
+    try:
+        a = date.fromisoformat(d1)
+        b = date.fromisoformat(d2)
+    except ValueError:
+        return {"hari": None, "label": ""}
+    if a > b:
+        return {"hari": None, "label": ""}
+    hari_total = (b - a).days
+    tahun = b.year - a.year
+    bulan = b.month - a.month
+    harik = b.day - a.day
+    if harik < 0:
+        bulan -= 1
+        pm = b.month - 1 or 12
+        py = b.year if b.month - 1 else b.year - 1
+        harik += monthrange(py, pm)[1]
+    if bulan < 0:
+        tahun -= 1
+        bulan += 12
+    bagian = []
+    if tahun:
+        bagian.append(f"{tahun} tahun")
+    if bulan:
+        bagian.append(f"{bulan} bulan")
+    if not bagian:
+        bagian.append(f"{harik} hari")
+    return {"hari": hari_total, "label": " ".join(bagian)}
+
+
 def info_masa_pegawai(pegawai, hari_ini_iso) -> dict:
     """Info masa utk baris daftar: pensiun (ASN/TNI/POLRI), akhir jabatan,
     kontrak (Non-ASN) → {label_identitas, bup, tanggal_pensiun,
@@ -814,6 +855,14 @@ def info_masa_pegawai(pegawai, hari_ini_iso) -> dict:
                     date.fromisoformat(akhir_jab) - d_hari).days
             except ValueError:
                 pass
+    # Masa kerja DALAM jabatan: TMT Jabatan → hari ini (kolom "menjabat sejak").
+    # TMT = tanggal MULAI memangku jabatan; dipasangkan dengan Akhir Periode
+    # Jabatan bila jabatan berbatas waktu.
+    tmt = str(p.get("tmt_jabatan") or "").strip()[:10]
+    out["tmt_jabatan"] = tmt if _TGL_RE.match(tmt) else ""
+    out["masa_jabatan"] = (durasi_terbilang(tmt, hari)
+                           if (out["tmt_jabatan"] and d_hari)
+                           else {"hari": None, "label": ""})
     out["kontrak"] = status_kontrak(p, hari_ini_iso)
     return out
 

@@ -252,6 +252,34 @@ def baris_csv_idle(tiket_list) -> list:
     return baris
 
 
+def bast_perlu_perbarui(asset: dict) -> bool:
+    """True bila aset ber-BAST namun **kode/nama SEKARANG berbeda** dari yang
+    di-snapshot saat BAST dilampirkan (mis. setelah reklasifikasi kodefikasi
+    atau penyesuaian nama barang) — artinya BAST terakhir merujuk data lama.
+
+    Aset TANPA snapshot (BAST era lama sebelum fitur ini) TIDAK ditandai —
+    konservatif, tanpa positif palsu. MURNI (teruji unit)."""
+    a = asset or {}
+    if not str(a.get("bast_file_id") or "").strip():
+        return False
+    snap = a.get("bast_snapshot")
+    if not isinstance(snap, dict) or not snap:
+        return False
+    kode_sama = (str(a.get("asset_code") or "").strip()
+                 == str(snap.get("kode") or "").strip())
+    nama_sama = (" ".join(str(a.get("asset_name") or "").split())
+                 == " ".join(str(snap.get("nama") or "").split()))
+    return not (kode_sama and nama_sama)
+
+
+def snapshot_bast(asset: dict) -> dict:
+    """Snapshot kode & nama aset saat BAST dilampirkan (untuk deteksi BAST
+    usang bila kode/nama berubah kemudian). MURNI."""
+    a = asset or {}
+    return {"kode": str(a.get("asset_code") or "").strip(),
+            "nama": str(a.get("asset_name") or "").strip()}
+
+
 def kunci_pemegang(asset: dict):
     """Kunci identitas pemegang: (nama_norm, nip). None bila tanpa pengguna.
 

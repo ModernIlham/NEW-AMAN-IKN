@@ -273,6 +273,16 @@ const StatusInfoCard = ({ status }) => {
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
+// BAST usang: kode/nama aset SEKARANG berbeda dari snapshot saat BAST
+// dilampirkan (reklasifikasi / ganti nama) → BAST terakhir merujuk data lama.
+// Aset tanpa snapshot (BAST era lama) tidak ditandai (tanpa positif palsu).
+const _bastUsangDari = (src) => {
+  const s = src?.bast_snapshot;
+  if (!src?.bast_file_id || !s) return false;
+  const n = (x) => String(x || "").trim().replace(/\s+/g, " ");
+  return n(src.asset_code) !== n(s.kode) || n(src.asset_name) !== n(s.nama);
+};
+
 const axiosLargeUpload = axios.create({
   timeout: 120000,
   maxContentLength: Infinity,
@@ -702,7 +712,7 @@ const AssetForm = memo(({
       const initFromCacheRow = () => {
         const lightData = buildEditFormData(editAsset, activity?.id);
         setAssetVersion(Number(editAsset.version) || 1);
-        setBastInfo(editAsset.bast_file_id ? { file_id: editAsset.bast_file_id, filename: editAsset.bast_filename || "" } : null);
+        setBastInfo(editAsset.bast_file_id ? { file_id: editAsset.bast_file_id, filename: editAsset.bast_filename || "", usang: _bastUsangDari(editAsset) } : null);
         setFormData(lightData);
         // Diff baseline = same cached row, so submit PATCHes only what the
         // user actually changed while offline.
@@ -720,7 +730,7 @@ const AssetForm = memo(({
           if (cancelled) return;
           const a = r.data;
           const lightData = buildEditFormData(a, activity?.id);
-          setBastInfo(a.bast_file_id ? { file_id: a.bast_file_id, filename: a.bast_filename || "" } : null);
+          setBastInfo(a.bast_file_id ? { file_id: a.bast_file_id, filename: a.bast_filename || "", usang: _bastUsangDari(a) } : null);
           setFormData(lightData);
           setIsFormLoading(false);
 
@@ -2335,6 +2345,12 @@ const AssetForm = memo(({
                       <Eye className="w-3 h-3 flex-shrink-0" />
                       <span className="truncate">Lampiran BAST tersedia — lihat foto/dokumen</span>
                     </button>
+                  )}
+                  {bastInfo?.usang && (
+                    <p className="text-[9px] text-amber-600 dark:text-amber-400 font-medium leading-snug"
+                      title="Kode/nama barang berubah (reklasifikasi/penyesuaian) setelah BAST terakhir dilampirkan">
+                      ⚠ Kode/nama berubah setelah BAST terakhir — BAST merujuk data lama (dokumen historis tetap sah; terbitkan BAST baru bila diperlukan).
+                    </p>
                   )}
                   {!isEditing && (
                     <p className="text-[9px] text-muted-foreground italic">Simpan aset terlebih dahulu untuk mengunggah file BAST.</p>

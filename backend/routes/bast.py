@@ -358,10 +358,20 @@ async def unggah_bukti_bast(bast_id: str, file: UploadFile = File(...),
     # Bukti ttd = BAST sah → tautkan ke SEMUA aset objeknya (bast_file_id)
     # sehingga metrik kelengkapan pemegang ("BAST x/y", badge Lengkap) naik —
     # sebelumnya generator BAST tak pernah mengisi field ini (audit G2 #1).
-    await db.assets.update_many(
+    # Snapshot kode+nama per aset → deteksi BAST usang bila berubah kemudian.
+    from pymongo import UpdateOne
+
+    from penggunaan_utils import snapshot_bast
+    _aset_bast = await db.assets.find(
         {"id": {"$in": b.get("asset_ids") or []}, "dihapus": {"$ne": True}},
-        {"$set": {"bast_file_id": str(file_id), "updated_at": now},
-         "$inc": {"version": 1}})
+        {"_id": 0, "id": 1, "asset_code": 1, "asset_name": 1}).to_list(100000)
+    if _aset_bast:
+        await db.assets.bulk_write([
+            UpdateOne({"id": a["id"]},
+                      {"$set": {"bast_file_id": str(file_id), "updated_at": now,
+                                "bast_snapshot": snapshot_bast(a)},
+                       "$inc": {"version": 1}})
+            for a in _aset_bast], ordered=False)
 
     # Nomor agenda dibooking → otomatis disahkan (bukti ttd = pengesahan).
     disahkan = False
