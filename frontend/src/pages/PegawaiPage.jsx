@@ -28,7 +28,8 @@ const EMPTY = {
   kewarganegaraan: "wni", jenis_identitas_wna: "", nomor_identitas_wna: "",
   jenis_kelamin: "", tempat_lahir: "", tanggal_lahir: "", agama: "",
   status_perkawinan: "", status_kepegawaian: "", sub_kategori_non_asn: "",
-  pangkat_golongan: "", jabatan: "", jenis_jabatan: "", kategori_pegawai: "",
+  pangkat_golongan: "", jabatan: "", jenis_pelaksana: "", jabatan_pelaksana: "",
+  jenis_jabatan: "", kategori_pegawai: "",
   eselon: "", eselon1: "", eselon2: "", eselon3: "", eselon4: "", eselon5: "",
   unit_kerja: "", unit_organisasi: "", npwp: "", pendidikan_terakhir: "",
   no_hp: "", email: "", alamat: "", nama_bank: "", no_rekening: "",
@@ -68,7 +69,7 @@ export default function PegawaiPage({ user, onBack }) {
   const isAdmin = user?.role === "admin";
   const [items, setItems] = useState([]);
   const [rekap, setRekap] = useState(null);
-  const [ref, setRef] = useState({ jenis_kelamin: [], status_kepegawaian: [], jenis_jabatan: [], kategori_pegawai: [], sub_kategori_non_asn: [], agama: [], status_perkawinan: [], status: [] });
+  const [ref, setRef] = useState({ jenis_kelamin: [], status_kepegawaian: [], jenis_pelaksana: [], jenis_jabatan: [], kategori_pegawai: [], sub_kategori_non_asn: [], agama: [], status_perkawinan: [], status: [] });
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState(null);
@@ -377,7 +378,7 @@ export default function PegawaiPage({ user, onBack }) {
     let hasil = items;
     if (q) {
       hasil = hasil.filter((it) =>
-        [it.nama, it.nip, it.jabatan, it.unit_kerja, it.email, it.perusahaan_penyedia]
+        [it.nama, it.nip, it.jabatan, it.jabatan_pelaksana, it.unit_kerja, it.email, it.perusahaan_penyedia]
           .some((v) => String(v || "").toLowerCase().includes(q)));
     }
     if (fStatus) hasil = hasil.filter((it) => (it.status || "aktif") === fStatus);
@@ -675,6 +676,12 @@ export default function PegawaiPage({ user, onBack }) {
                         {[it.jabatan, it.unit_kerja].filter(Boolean).join(" · ")}
                       </p>
                     )}
+                    {(it.jenis_pelaksana === "plt" || it.jenis_pelaksana === "plh") && (
+                      <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium truncate"
+                        title="Rangkap jabatan struktural sementara">
+                        {it.jenis_pelaksana === "plt" ? "Plt." : "Plh."} {it.jabatan_pelaksana || it.jabatan}
+                      </p>
+                    )}
                     <div className="flex items-center gap-1 flex-wrap text-[9px] font-semibold">
                       {it.status_kepegawaian && (
                         <span className="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-600 dark:text-sky-400 uppercase">
@@ -779,7 +786,15 @@ export default function PegawaiPage({ user, onBack }) {
                         </p>
                       </td>
                       <td className="px-3 py-2">
-                        <p className="text-[12px] text-foreground/90">{it.jabatan || "—"}</p>
+                        <p className="text-[12px] text-foreground/90 flex items-center gap-1 flex-wrap">
+                          {it.jabatan || "—"}
+                          {(it.jenis_pelaksana === "plt" || it.jenis_pelaksana === "plh") && (
+                            <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[9px] font-semibold"
+                              title="Rangkap jabatan struktural sementara (Plt/Plh)">
+                              {it.jenis_pelaksana === "plt" ? "Plt." : "Plh."} {it.jabatan_pelaksana || it.jabatan}
+                            </span>
+                          )}
+                        </p>
                         <p className="text-[10px] text-muted-foreground/80">{it.unit_kerja || ""}</p>
                       </td>
                       <td className="px-3 py-2 hidden md:table-cell">
@@ -1039,7 +1054,29 @@ export default function PegawaiPage({ user, onBack }) {
               {tabForm === "jabatan" && (
                 <div className="space-y-3">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <Field label="Jabatan" span2><Input value={form.jabatan} onChange={set("jabatan")} placeholder="cth. Analis Pengelolaan BMN" /></Field>
+                    <Field label="Jabatan (definitif)" span2><Input value={form.jabatan} onChange={set("jabatan")} placeholder="cth. Analis Pengelolaan BMN" /></Field>
+                    {/* Rangkap jabatan struktural sementara: Plt (jabatan lowong)
+                        / Plh (pejabat definitif berhalangan sementara). */}
+                    <Field label="Rangkap Jabatan Struktural (Plt/Plh)">
+                      <select value={form.jenis_pelaksana || ""} onChange={set("jenis_pelaksana")}
+                        className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                        data-testid="pegawai-form-jenis-pelaksana">
+                        <option value="">Bukan Plt/Plh (definitif)</option>
+                        {(ref.jenis_pelaksana || []).map((o) => <option key={o.kode} value={o.kode}>{o.uraian}</option>)}
+                      </select>
+                    </Field>
+                    {form.jenis_pelaksana && (
+                      <Field label={`Jabatan yang di-${form.jenis_pelaksana === "plt" ? "Plt" : "Plh"}-kan`}>
+                        <Input value={form.jabatan_pelaksana} onChange={set("jabatan_pelaksana")}
+                          placeholder="cth. Kepala Bagian Umum" data-testid="pegawai-form-jabatan-pelaksana" />
+                      </Field>
+                    )}
+                    {form.jenis_pelaksana && (
+                      <p className="col-span-full text-[10.5px] leading-snug rounded-md px-2 py-1 bg-amber-500/10 text-amber-700 dark:text-amber-300">
+                        Rangkap jabatan: pegawai tetap memegang jabatan definitifnya + menjalankan jabatan yang di-{form.jenis_pelaksana === "plt" ? "Plt" : "Plh"}-kan.
+                        Pada naskah dinas ditulis <span className="font-semibold">{form.jenis_pelaksana === "plt" ? "“Plt.”" : "“Plh.”"}</span> di depan jabatan tersebut.
+                      </p>
+                    )}
                     <Field label="Jenis Jabatan">
                       <Select value={form.jenis_jabatan} onChange={set("jenis_jabatan")} opts={ref.jenis_jabatan} />
                     </Field>

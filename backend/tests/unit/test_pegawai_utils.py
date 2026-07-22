@@ -389,3 +389,58 @@ def test_opsi_dropdown_ekspor_semua_ternormalisasi():
         assert normalisasi_kategori_pegawai(v) in KATEGORI_PEGAWAI, v
     for v in OPSI_DROPDOWN_EKSPOR["Jenis Kontrak Non-ASN"]:
         assert normalisasi_jenis_kontrak(v) in ("internal", "outsourcing"), v
+
+
+def test_rangkap_jabatan_pelaksana():
+    from pegawai_utils import rangkap_jabatan_pelaksana
+    # Plt/Plh dengan jabatan_pelaksana eksplisit
+    assert rangkap_jabatan_pelaksana(
+        {"jenis_pelaksana": "plt", "jabatan_pelaksana": "Kepala Bagian Umum"}
+    ) == "Plt. Kepala Bagian Umum"
+    assert rangkap_jabatan_pelaksana(
+        {"jenis_pelaksana": "plh", "jabatan_pelaksana": "Kepala Kantor"}
+    ) == "Plh. Kepala Kantor"
+    # jabatan_pelaksana kosong → jatuh ke jabatan definitif
+    assert rangkap_jabatan_pelaksana(
+        {"jenis_pelaksana": "plt", "jabatan": "Analis BMN"}
+    ) == "Plt. Analis BMN"
+    # Bukan Plt/Plh → kosong
+    assert rangkap_jabatan_pelaksana(
+        {"jabatan": "Analis BMN"}) == ""
+    assert rangkap_jabatan_pelaksana({"jenis_pelaksana": ""}) == ""
+    assert rangkap_jabatan_pelaksana(None) == ""
+
+
+def test_validate_pegawai_jenis_pelaksana():
+    base = {"nama": "X"}
+    assert validate_pegawai({**base, "jenis_pelaksana": "plt"}) == []
+    assert validate_pegawai({**base, "jenis_pelaksana": ""}) == []
+    errs = validate_pegawai({**base, "jenis_pelaksana": "wakil"})
+    assert any("Jenis pelaksana" in e for e in errs)
+
+
+def test_normalisasi_jenis_pelaksana():
+    from pegawai_utils import normalisasi_jenis_pelaksana
+    for v in ("Plt", "plt.", "PLT", "Pelaksana Tugas"):
+        assert normalisasi_jenis_pelaksana(v) == "plt", v
+    for v in ("Plh", "plh.", "Pelaksana Harian"):
+        assert normalisasi_jenis_pelaksana(v) == "plh", v
+    assert normalisasi_jenis_pelaksana("") == ""
+    assert normalisasi_jenis_pelaksana("Definitif") == ""
+
+
+def test_ekspor_pegawai_rangkap_jabatan_round_trip():
+    """Kolom Plt/Plh + jabatan pelaksana pulih utuh saat impor ulang."""
+    from pegawai_utils import (HEADER_IMPOR, baris_ekspor_pegawai,
+                               baris_impor_ke_pegawai)
+    doc = {"nama": "Citra", "nip": "198501012010012002",
+           "jabatan": "Kepala Subbagian TU",
+           "jenis_pelaksana": "plt",
+           "jabatan_pelaksana": "Kepala Bagian Umum"}
+    baris = baris_ekspor_pegawai(doc)
+    assert len(baris) == len(HEADER_IMPOR)
+    assert "Plt." in baris and "Kepala Bagian Umum" in baris
+    pulih, _ = baris_impor_ke_pegawai(dict(zip(HEADER_IMPOR, baris)))
+    assert pulih["jenis_pelaksana"] == "plt"
+    assert pulih["jabatan_pelaksana"] == "Kepala Bagian Umum"
+    assert pulih["jabatan"] == "Kepala Subbagian TU"
