@@ -56,7 +56,7 @@ const officialReports = [
     btn: "bg-teal-600 hover:bg-teal-700 disabled:bg-teal-300 dark:bg-teal-700 dark:hover:bg-teal-600 dark:disabled:bg-teal-900/50 dark:disabled:text-teal-400" },
   { key: "sp-pelaksanaan", label: "SP Pelaksanaan", icon: FileText, docx: true,
     btn: "bg-cyan-600 hover:bg-cyan-700 disabled:bg-cyan-300 dark:bg-cyan-700 dark:hover:bg-cyan-600 dark:disabled:bg-cyan-900/50 dark:disabled:text-cyan-400" },
-  { key: "dbkp", label: "DBKP per Golongan", icon: BookOpen,
+  { key: "dbkp", label: "DBKP per Golongan", icon: BookOpen, docx: true,
     btn: "bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300 dark:bg-violet-700 dark:hover:bg-violet-600 dark:disabled:bg-violet-900/50 dark:disabled:text-violet-400" },
 ];
 
@@ -124,7 +124,7 @@ const batchGroupColors = {
 };
 
 export default function ReportDownloads({
-  data, activityId, downloading, onDownloadPDF, onDownloadDBHI, onDownloadDocx
+  data, activityId, downloading, onDownloadPDF, onDownloadDBHI, onDownloadDocx, onDownloadDBHIDocx
 }) {
   const [batchMode, setBatchMode] = useState(false);
   const [selected, setSelected] = useState(new Set());
@@ -256,6 +256,27 @@ export default function ReportDownloads({
             );
           })}
         </div>
+        {onDownloadDBHIDocx && (
+          <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+            <span className="text-[10px] text-muted-foreground">Versi Word (.docx):</span>
+            {dbhiItems.map(({ type, label, path }) => {
+              const count = path(data) || 0;
+              return (
+                <button key={type} data-testid={`dbhi-docx-${type}`}
+                  onClick={() => onDownloadDBHIDocx(type, label)} disabled={!!downloading || count <= 0}
+                  title={`Unduh DBHI ${label} format Word yang bisa disunting`}
+                  className={`flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold transition-colors min-w-0 min-h-0 ${
+                    count > 0
+                      ? "bg-blue-700 hover:bg-blue-800 dark:bg-blue-800 dark:hover:bg-blue-700 text-white"
+                      : "bg-muted border border-border text-muted-foreground cursor-not-allowed"
+                  }`}>
+                  {downloading === `${type}-docx` ? <Loader2 className="w-3 h-3 animate-spin" /> : <FileType2 className="w-3 h-3" />}
+                  <span className="truncate">{label}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Official Reports */}

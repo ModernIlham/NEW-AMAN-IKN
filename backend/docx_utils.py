@@ -27,8 +27,9 @@ _ZEBRA = "F2F6FB"         # baris selang-seling
 # Dasar dokumen & elemen kecil
 # ---------------------------------------------------------------------------
 
-def doc_baru(margin_cm=2.2, font="Cambria", size=11):
-    """Document A4 baru dengan margin & font standar laporan."""
+def doc_baru(margin_cm=2.2, font="Cambria", size=11, landscape=False):
+    """Document A4 baru dengan margin & font standar laporan. `landscape=True`
+    untuk laporan tabel lebar (DBHI/DBKP)."""
     from docx import Document
     from docx.shared import Cm, Pt
     from docx.enum.section import WD_ORIENT
@@ -36,10 +37,11 @@ def doc_baru(margin_cm=2.2, font="Cambria", size=11):
     st = d.styles["Normal"]
     st.font.name = font
     st.font.size = Pt(size)
+    pjg, lbr = (Cm(21.0), Cm(29.7)) if landscape else (Cm(29.7), Cm(21.0))
     for s in d.sections:
-        s.orientation = WD_ORIENT.PORTRAIT
-        s.page_height = Cm(29.7)
-        s.page_width = Cm(21.0)
+        s.orientation = WD_ORIENT.LANDSCAPE if landscape else WD_ORIENT.PORTRAIT
+        s.page_height = pjg
+        s.page_width = lbr
         s.top_margin = Cm(margin_cm)
         s.bottom_margin = Cm(margin_cm)
         s.left_margin = Cm(margin_cm)
