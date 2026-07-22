@@ -7,7 +7,7 @@ import io
 import uuid
 import base64
 import logging
-import random
+import secrets
 import string
 import asyncio
 from datetime import datetime, timezone
@@ -214,7 +214,8 @@ if RESEND_API_KEY:
 # --- OTP Store (MongoDB-backed for multi-replica support) ---
 
 def generate_otp(length=6):
-    return ''.join(random.choices(string.digits, k=length))
+    # secrets (CSPRNG), bukan random — OTP dipakai utk verifikasi/reset akun.
+    return ''.join(secrets.choice(string.digits) for _ in range(length))
 
 async def store_otp(email, otp, user_data):
     """Store OTP in MongoDB with TTL expiry"""
@@ -339,7 +340,9 @@ async def send_otp_email(email: str, otp: str, name: str = ""):
         <p style="color: #9ca3af; font-size: 12px;">Sistem Inventaris Aset</p>
     </div>
     """
-    params = {"from": SENDER_EMAIL, "to": [email], "subject": f"Kode Verifikasi OTP: {otp}", "html": html_content}
+    # Subjek generik — JANGAN taruh OTP di subjek (tampil di pratinjau notifikasi
+    # HP/lockscreen). OTP hanya di badan email.
+    params = {"from": SENDER_EMAIL, "to": [email], "subject": "Kode Verifikasi OTP — Sistem Inventaris Aset", "html": html_content}
     galat = ""
     for percobaan in (1, 2):
         try:

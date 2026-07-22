@@ -48,6 +48,26 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#521] Pengerasan keamanan (hardening cepat berdampak tinggi) — 2026-07-22
+
+Paket keamanan dari roadmap optimasi — perbaikan kecil berisiko-regresi rendah:
+
+- **OTP pakai CSPRNG** (`secrets`, bukan `random`) — OTP dipakai untuk
+  verifikasi/reset akun, harus tak-terprediksi.
+- **Hash password tak lagi bocor ke klien** — hash bcrypt disimpan di field
+  `password`, tetapi proyeksi `require_user`/`require_admin` hanya mengecualikan
+  `password_hash` (field tak ada). Kini mengecualikan **`password` + `password_hash`**
+  sehingga dokumen user yang dikembalikan tak membawa hash. (Login memakai query
+  tersendiri — tak terpengaruh.)
+- **OTP tak lagi di subjek email** — subjek dibuat generik; OTP hanya di badan
+  (mencegah bocor di pratinjau notifikasi HP/lockscreen).
+- **Panjang minimum password admin-set diseragamkan ke ≥8** (sebelumnya 4),
+  selaras dengan registrasi.
+
+Verifikasi: `pytest tests/unit` 638 lulus; `compileall` bersih. (Backend-only.)
+
+---
+
 ## [#520] Optimasi: thumbnail foto PIL tak lagi memblokir event loop — 2026-07-22
 
 Paket keandalan-server #3 dari roadmap optimasi:
