@@ -2150,6 +2150,85 @@ async def generate_rhi_pdf(activity_id: str, _user: dict = Depends(require_user_
                              headers={"Content-Disposition": f'attachment; filename="RHI_{activity_id[:8]}.pdf"'})
 
 
+@reports_router.get("/inventory-activities/{activity_id}/rhi-docx")
+async def generate_rhi_docx(activity_id: str, _user: dict = Depends(require_user_or_query_token)):
+    """Versi Word (.docx) editable RHI (Rekapitulasi Hasil Inventarisasi BMN)."""
+    import docx_utils as DX
+    activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
+    if not activity:
+        raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+    await pastikan_akses_kegiatan_id(_user, activity_id)
+    settings = await pengaturan_kop(activity)
+    ident = _activity_identity(activity, settings)
+    assets = await db.assets.find(
+        {"activity_id": activity_id},
+        {"_id": 0, "photos": 0, "photo": 0, "photo_thumbnails": 0, "thumbnail": 0, "gallery_thumbnail": 0, "document_checklist": 0},
+    ).to_list(100000)
+
+    def sp(a):
+        return _safe_price(a)
+
+    def rp(v):
+        try:
+            return f"{int(v):,}".replace(",", ".")
+        except (ValueError, TypeError):
+            return "0"
+
+    ditemukan = [a for a in assets if a.get("inventory_status") == "Ditemukan"]
+    td = [a for a in assets if a.get("inventory_status") == "Tidak Ditemukan"]
+    berlebih = [a for a in assets if a.get("inventory_status") == "Berlebih"]
+    sengketa = [a for a in assets if a.get("inventory_status") == "Sengketa"]
+    belum = [a for a in assets if (a.get("inventory_status") or "Belum Diinventarisasi") == "Belum Diinventarisasi"]
+    baik = [a for a in ditemukan if a.get("condition") == "Baik"]
+    rr = [a for a in ditemukan if a.get("condition") == "Rusak Ringan"]
+    rb = [a for a in ditemukan if a.get("condition") == "Rusak Berat"]
+    td_kes = [a for a in td if a.get("klasifikasi_tidak_ditemukan") == "Kesalahan Pencatatan"]
+    td_lain = [a for a in td if a.get("klasifikasi_tidak_ditemukan") == "Tidak Ditemukan Lainnya"]
+    td_belum = [a for a in td if a.get("klasifikasi_tidak_ditemukan") not in ("Kesalahan Pencatatan", "Tidak Ditemukan Lainnya")]
+    total_count = len(assets)
+    total_value = sum(sp(a) for a in assets)
+
+    baris = [
+        ("A", "BMN DITEMUKAN", ditemukan),
+        ("1", "   Kondisi Baik", baik),
+        ("2", "   Kondisi Rusak Ringan", rr),
+        ("3", "   Kondisi Rusak Berat", rb),
+        ("B", "BMN TIDAK DITEMUKAN", td),
+        ("1", "   Kesalahan Pencatatan", td_kes),
+        ("2", "   Tidak Ditemukan Lainnya", td_lain),
+    ]
+    if td_belum:
+        baris.append(("3", "   Belum Diklasifikasi", td_belum))
+    baris += [
+        ("C", "BMN BERLEBIH", berlebih),
+        ("D", "BMN DALAM SENGKETA", sengketa),
+        ("E", "BELUM DIINVENTARISASI", belum),
+    ]
+    rows = []
+    for no, label, grp in baris:
+        pct = f"{(len(grp)/total_count*100):.1f}%" if total_count else "0%"
+        rows.append([no, label.strip(), str(len(grp)), rp(sum(sp(a) for a in grp)), pct])
+    rows.append(["", "TOTAL BMN DITELITI", str(total_count), rp(total_value),
+                 "100%" if total_count else "0%"])
+
+    d = DX.doc_baru()
+    DX.page_footer(d, "Rekapitulasi Hasil Inventarisasi Barang Milik Negara (RHI)")
+    DX.kop_surat(d, settings)
+    DX.title_block(d, "REKAPITULASI HASIL INVENTARISASI\nBARANG MILIK NEGARA (RHI)")
+    DX.meta_table(d, _info_kegiatan_rows(activity, ident))
+    d.add_paragraph()
+    DX.data_table(d, ["No", "Kategori Hasil Inventarisasi", "Jumlah (NUP)", "Nilai (Rp)", "Persentase"],
+                  rows, align_center={0, 2, 4}, align_right={3}, widths_cm=[1.2, 8.5, 2.2, 3.2, 2.2])
+    DX.signature_single(d, nama=ident["kasatker_nama"], header="Kuasa Pengguna Barang,",
+                        pre_lines=[_tempat_tanggal_laporan(settings)],
+                        nip=ident["kasatker_nip"],
+                        status=(await _peta_status_kepegawaian([ident.get("kasatker_nip")])).get(
+                            str(ident.get("kasatker_nip") or "").strip(), ""))
+
+    return StreamingResponse(io.BytesIO(DX.to_bytes(d)), media_type=_DOCX_MIME,
+                             headers={"Content-Disposition": f'attachment; filename="RHI_{activity_id[:8]}.docx"'})
+
+
 # ============================================================================
 # DBKP PDF — Daftar Barang Kuasa Pengguna (modul Pembukuan, PMK 181/2016)
 # ============================================================================
@@ -3747,6 +3826,117 @@ async def generate_bahi_pdf(activity_id: str, _user: dict = Depends(require_user
     buffer.seek(0)
     return StreamingResponse(buffer, media_type="application/pdf",
                              headers={"Content-Disposition": f'attachment; filename="BAHI_{activity_id[:8]}.pdf"'})
+
+
+@reports_router.get("/inventory-activities/{activity_id}/bahi-docx")
+async def generate_bahi_docx(activity_id: str, _user: dict = Depends(require_user_or_query_token)):
+    """Versi Word (.docx) editable BAHI (Berita Acara Hasil Inventarisasi BMN).
+    Penanda tangan = Tim Pelaksana Inventarisasi + disahkan Kuasa Pengguna
+    Barang (kaidah BAHI), patuh aturan Non-ASN."""
+    import docx_utils as DX
+    from pelaporan_utils import narasi_hari_tanggal
+    activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
+    if not activity:
+        raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+    await pastikan_akses_kegiatan_id(_user, activity_id)
+    settings = await pengaturan_kop(activity)
+    ident = _activity_identity(activity, settings)
+    assets = await db.assets.find(
+        {"activity_id": activity_id},
+        {"_id": 0, "photos": 0, "photo": 0, "photo_thumbnails": 0, "thumbnail": 0, "gallery_thumbnail": 0, "document_checklist": 0},
+    ).to_list(100000)
+
+    def rp(v):
+        return _fmt_rp_id(v)
+
+    ditemukan = [a for a in assets if a.get("inventory_status") == "Ditemukan"]
+    td = [a for a in assets if a.get("inventory_status") == "Tidak Ditemukan"]
+    berlebih = [a for a in assets if a.get("inventory_status") == "Berlebih"]
+    sengketa = [a for a in assets if a.get("inventory_status") == "Sengketa"]
+    baik = [a for a in ditemukan if a.get("condition") == "Baik"]
+    rr = [a for a in ditemukan if a.get("condition") == "Rusak Ringan"]
+    rb = [a for a in ditemukan if a.get("condition") == "Rusak Berat"]
+    satker_name = ident["satker_name"]
+    tim = activity.get("tim_inti") or activity.get("tim_peneliti", [])
+    tim_pendukung = activity.get("tim_pendukung", [])
+    nomor_sk = activity.get("nomor_surat", "-")
+    tgl_mulai = _fmt_tanggal_id(activity.get("tanggal_mulai")) or "-"
+    tgl_selesai = _fmt_tanggal_id(activity.get("tanggal_selesai")) or "-"
+    ba = activity.get("berita_acara", {}) or {}
+    ba_nomor = (str(activity.get("nomor_berita_acara") or "").strip() or ba.get("nomor")
+                or await _nomor_terbooking(activity.get("id")) or "......./......./........")
+    tanggal_ba = (str(activity.get("tanggal_berita_acara") or "").strip()[:10]
+                  or str(settings.get("tanggal_laporan") or "").strip()[:10])
+    nar = narasi_hari_tanggal(tanggal_ba)
+    if nar:
+        kalimat_ba = (f"Pada hari ini, {nar['hari']}, tanggal {nar['tanggal_terbilang']} "
+                      f"bulan {nar['bulan']} tahun {nar['tahun_terbilang']} "
+                      f"({_fmt_tanggal_id(tanggal_ba)}), bertempat di {satker_name}, kami yang "
+                      f"bertanda tangan di bawah ini:")
+    else:
+        kalimat_ba = (f"Pada hari ini, .................., tanggal .................. bulan "
+                      f".................. tahun ...................., bertempat di {satker_name}, "
+                      f"kami yang bertanda tangan di bawah ini:")
+
+    d = DX.doc_baru()
+    DX.page_footer(d, "Berita Acara Hasil Inventarisasi Barang Milik Negara (BAHI)")
+    DX.kop_surat(d, settings)
+    DX.title_block(d, "BERITA ACARA\nHASIL INVENTARISASI BARANG MILIK NEGARA", nomor=ba_nomor)
+    DX.para(d, kalimat_ba)
+    DX.meta_table(d, [("Nama", ident["kasatker_nama"]), ("NIP", ident["kasatker_nip"]),
+                      ("Jabatan", ident["kasatker_jabatan"]), ("Unit Organisasi", satker_name)])
+    DX.para(d, f"Berdasarkan Surat Keputusan Nomor {nomor_sk}, telah dilaksanakan kegiatan "
+               f"inventarisasi Barang Milik Negara (BMN) “{activity.get('nama_kegiatan') or '-'}” "
+               f"di lingkungan {satker_name} pada periode {tgl_mulai} s.d. {tgl_selesai}.",
+           space_before=4)
+    DX.para(d, "Adapun hasil inventarisasi adalah sebagai berikut:", bold=True, justify=False, space_after=2)
+    butir = [
+        f"Jumlah BMN yang diteliti: {len(assets)} NUP dengan nilai total {rp(sum(_safe_price(a) for a in assets))}",
+        f"BMN Ditemukan: {len(ditemukan)} NUP ({rp(sum(_safe_price(a) for a in ditemukan))})",
+        f"BMN Tidak Ditemukan: {len(td)} NUP ({rp(sum(_safe_price(a) for a in td))})",
+        f"BMN Berlebih: {len(berlebih)} NUP ({rp(sum(_safe_price(a) for a in berlebih))})",
+        f"BMN Dalam Sengketa: {len(sengketa)} NUP ({rp(sum(_safe_price(a) for a in sengketa))})",
+    ]
+    DX.para(d, f"1. {butir[0]}", space_after=1)
+    DX.para(d, f"2. {butir[1]}", space_after=1)
+    for hur, grp in (("a", baik), ("b", rr), ("c", rb)):
+        nm = {"a": "Kondisi Baik", "b": "Kondisi Rusak Ringan", "c": "Kondisi Rusak Berat"}[hur]
+        DX.para(d, f"     {hur}. {nm}: {len(grp)} NUP ({rp(sum(_safe_price(a) for a in grp))})", space_after=1)
+    for i, teks in enumerate(butir[2:], start=3):
+        DX.para(d, f"{i}. {teks}", space_after=1)
+
+    DX.para(d, "Hasil inventarisasi sebagaimana tercantum dalam Laporan Hasil Inventarisasi (LHI) "
+               "yang terdiri dari:", bold=True, justify=False, space_before=4, space_after=2)
+    lampiran = [
+        "Rekapitulasi Hasil Inventarisasi BMN (RHI);",
+        "Daftar Barang Hasil Inventarisasi BMN (DBHI) Kondisi Baik;",
+        "DBHI Kondisi Rusak Ringan;", "DBHI Kondisi Rusak Berat;",
+        "DBHI BMN Berlebih;", "DBHI BMN Tidak Ditemukan;", "DBHI BMN Dalam Sengketa;",
+        "Daftar Barang Kuasa Pengguna (DBKP) per Golongan Barang;",
+        "Surat Pernyataan Hasil Inventarisasi BMN;",
+        "Surat Pernyataan Pelaksanaan Inventarisasi BMN.",
+    ]
+    for i, att in enumerate(lampiran, 1):
+        DX.para(d, f"{i}. {att}", space_after=1)
+    DX.para(d, "Demikian Berita Acara Hasil Inventarisasi ini dibuat dengan sebenar-benarnya "
+               "dan dapat dipertanggungjawabkan.", space_before=4)
+
+    if tim_pendukung:
+        DX.para(d, "Tim Pendukung:", bold=True, justify=False, space_before=4, space_after=1)
+        for i, m in enumerate(tim_pendukung, 1):
+            nm = m.get("nama", "-") if isinstance(m, dict) else str(m)
+            DX.para(d, f"{i}. {nm}", space_after=0)
+
+    peta = await _peta_status_kepegawaian(
+        [m.get("nip") for m in (tim or []) if isinstance(m, dict)] + [ident.get("kasatker_nip")])
+    DX.signature_block(d, tim, ident, _tempat_tanggal_laporan(settings, tanggal_ba),
+                       label_tim="Tim Pelaksana Inventarisasi", status_by_nip=peta,
+                       header_mengetahui="Mengetahui/Mengesahkan,")
+    mentah = (str(activity.get("tembusan") or "").strip() or str(settings.get("tembusan_laporan") or ""))
+    DX.tembusan(d, [b.strip() for b in mentah.splitlines() if b.strip()])
+
+    return StreamingResponse(io.BytesIO(DX.to_bytes(d)), media_type=_DOCX_MIME,
+                             headers={"Content-Disposition": f'attachment; filename="BAHI_{activity_id[:8]}.docx"'})
 
 
 # ============================================================================

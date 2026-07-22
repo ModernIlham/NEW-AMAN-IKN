@@ -48,6 +48,30 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#498] Versi Word (.docx): RHI & BAHI — 2026-07-22
+
+Lanjutan rollout Word (#495–#497). **RHI** (Rekapitulasi Hasil Inventarisasi)
+dan **BAHI** (Berita Acara Hasil Inventarisasi) kini tersedia dalam `.docx`
+editable, memakai fondasi `docx_utils` yang sama.
+
+- **`…/rhi-docx`**: tabel rekap A–E (Ditemukan/Baik/Rusak Ringan/Rusak Berat,
+  Tidak Ditemukan + klasifikasi, Berlebih, Sengketa, Belum Diinventarisasi) +
+  total; tanda tangan Kuasa Pengguna Barang.
+- **`…/bahi-docx`**: narasi tanggal + identitas KPB + ringkasan hasil (butir
+  bernomor + sub a/b/c) + daftar lampiran LHI + penutup; **penanda tangan =
+  Tim Pelaksana Inventarisasi** (min. 3, ketua ditandai) **disahkan Kuasa
+  Pengguna Barang** (kaidah BAHI) + tembusan; patuh aturan Non-ASN.
+- Frontend: baris **“Versi Word (.docx): RHI · BAHI”** di bawah grid Laporan
+  Resmi pada rekapitulasi.
+
+Status rollout: Dokumen Pendukung ✅ · Laporan Resmi (RHI, BAHI ✅ · SP Hasil,
+SP Pelaksanaan ⏭️) · DBHI & DBKP ⏭️.
+
+Verifikasi: 620 unit test lulus; smoke render RHI & BAHI `.docx` (isi + tanda
+tangan) OK; eslint bersih; `yarn build` sukses.
+
+---
+
 ## [#497] Versi Word (.docx): Daftar Pemegang Aset — grup Dokumen Pendukung lengkap — 2026-07-22
 
 Lanjutan rollout Word (#495, #496). **Daftar Pemegang Aset** kini tersedia
