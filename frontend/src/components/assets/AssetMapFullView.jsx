@@ -348,8 +348,10 @@ const AssetMapFullView = memo(function AssetMapFullView({
     return base.filter((r) => `${r.asset_code || ""}||${r.asset_name || ""}` === groupKey);
   }, [rows, groupKey, selectedIds, selectMode]);
 
-  // Pusatkan ulang peta saat seleksi dinyalakan/dimatikan (bukan tiap toggle).
-  useEffect(() => { didFitRef.current = false; }, [hasSelection]);
+  // Pusatkan ulang peta saat seleksi (list) dinyalakan/dimatikan — TAPI JANGAN
+  // saat Mode Seleksi aktif: memilih pin pertama (0→1) tak boleh melempar view
+  // menjauh; posisi/zoom harus tetap agar pemilihan pin nyaman.
+  useEffect(() => { if (!selectMode) didFitRef.current = false; }, [hasSelection, selectMode]);
 
   // ── Aksi seleksi (map → daftar via onSelectionChange, kunci = id aset) ──
   const doToggleOne = useCallback((id) => {

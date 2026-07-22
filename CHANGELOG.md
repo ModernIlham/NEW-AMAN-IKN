@@ -48,6 +48,21 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#516] Perbaikan: memilih pin pertama di Mode Seleksi melempar view menjauh — 2026-07-22
+
+- Saat memilih **pin pertama** di Mode Seleksi (jumlah terpilih 0→1), peta
+  ikut **fit-bounds ulang** ke seluruh pin → view/zoom **terlempar menjauh**.
+- Penyebab: penanda `didFitRef` di-reset tiap `hasSelection` berubah (dirancang
+  untuk perilaku "seleksi daftar menyaring peta"), sehingga di dalam Mode
+  Seleksi pemilihan pin pertama memicu fit-bounds.
+- **Perbaikan**: reset fit-bounds **dilewati saat Mode Seleksi aktif** — posisi
+  & zoom peta tetap saat memilih pin. Refit tetap berlaku untuk aksi
+  pengguna lain (ganti filter Barang Serupa, Muat Ulang).
+
+Verifikasi: `yarn lint` bersih; `CI=false yarn build` sukses. (Frontend-only.)
+
+---
+
 ## [#515] Perbaikan (akar masalah): basemap putih & hanya marker saat Mode Seleksi — 2026-07-22
 
 Akar masalah sebenarnya dari basemap hilang saat Mode Seleksi (lanjutan
