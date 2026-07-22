@@ -248,6 +248,22 @@ async def run_backup_task(job_id: str, username: str, arsipkan: str = ""):
         current_step = 0
         stats = {}
 
+        # Guard ruang disk: perkirakan kebutuhan dari total byte GridFS (foto ~tak
+        # terkompres) + margin JSON/overhead; batalkan LEBIH AWAL bila ruang tak
+        # cukup agar backup tak memenuhi disk VPS (berdampak seluruh aplikasi).
+        try:
+            agg = await db["fs.files"].aggregate(
+                [{"$group": {"_id": None, "total": {"$sum": "$length"}}}]).to_list(1)
+            gridfs_bytes = int((agg[0]["total"] if agg else 0) or 0)
+        except Exception:
+            gridfs_bytes = 0
+        butuh = gridfs_bytes + (200 * 1024 * 1024)
+        bebas = shutil.disk_usage(str(BACKUP_TEMP_DIR)).free
+        if bebas < butuh:
+            raise RuntimeError(
+                f"Ruang disk tidak cukup untuk backup: perlu ~{butuh // (1024 * 1024)} MB, "
+                f"tersedia {bebas // (1024 * 1024)} MB. Kosongkan arsip lama / ruang disk server.")
+
         zip_path = BACKUP_TEMP_DIR / f"{job_id}.zip"
 
         with zipfile.ZipFile(str(zip_path), 'w', zipfile.ZIP_DEFLATED) as zf:
@@ -576,14 +592,20 @@ async def start_restore(
 
     job_id = str(uuid.uuid4())[:12]
 
-    # Save uploaded file to temp
+    # Simpan berkas unggahan ke temp secara STREAMING (per-chunk 1 MB) — jangan
+    # muat seluruh ZIP (bisa ratusan MB–GB karena berisi foto GridFS) ke RAM
+    # dulu; itu vektor OOM di VPS kecil.
     zip_path = BACKUP_TEMP_DIR / f"restore_{job_id}.zip"
     try:
-        content = await file.read()
         with open(zip_path, 'wb') as f:
-            f.write(content)
+            while True:
+                chunk = await file.read(1 << 20)  # 1 MB
+                if not chunk:
+                    break
+                f.write(chunk)
     except Exception:
         logger.exception("Restore: gagal menyimpan file upload")
+        zip_path.unlink(missing_ok=True)
         raise HTTPException(status_code=400, detail="Gagal menyimpan file backup")
 
     # Quick validation
@@ -763,7 +785,15 @@ async def _jalankan_backup_otomatis(retensi: int):
         "updated_at": datetime.now(timezone.utc).isoformat(),
     })
     await run_backup_task(job_id, "backup-otomatis", arsipkan="otomatis")
-    _terapkan_retensi(retensi)
+    # Terapkan retensi HANYA bila backup SUKSES — kalau gagal, JANGAN pangkas
+    # arsip lama (menghindari kehilangan cadangan yang masih valid saat backup
+    # baru gagal, mis. disk penuh).
+    job = await db.backup_jobs.find_one({"job_id": job_id}, {"_id": 0, "status": 1})
+    if job and job.get("status") == "completed":
+        _terapkan_retensi(retensi)
+    else:
+        logger.warning("Backup otomatis GAGAL — retensi arsip TIDAK diterapkan "
+                       "(arsip lama dipertahankan)")
 
 
 async def backup_scheduler_loop():

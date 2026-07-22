@@ -48,6 +48,26 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#518] Optimasi keandalan backup/restore (ketahanan memori & disk) — 2026-07-22
+
+Paket keandalan-server #1 dari roadmap optimasi (mencegah OOM/disk penuh yang
+berdampak seluruh aplikasi):
+
+- **Restore streaming ke disk (per-chunk 1 MB)** — sebelumnya seluruh ZIP
+  unggahan (bisa ratusan MB–GB berisi foto GridFS) dimuat ke RAM dulu
+  (`file.read()`) → vektor OOM di VPS kecil. Kini ditulis per-chunk.
+- **Guard ruang disk sebelum backup** — perkirakan kebutuhan dari total byte
+  GridFS + margin; batalkan lebih awal dengan pesan jelas bila ruang tak cukup,
+  agar backup tak memenuhi disk server.
+- **Retensi arsip hanya saat backup SUKSES** — backup otomatis tak lagi
+  memangkas arsip lama bila backup baru gagal (mis. disk penuh), sehingga
+  cadangan valid tidak hilang.
+
+Verifikasi: `pytest tests/unit` 638 lulus; backend `compileall` bersih.
+(Backend-only.)
+
+---
+
 ## [#517] Perbaikan tuntas: peta TIDAK berpindah/zoom saat seleksi (semua kasus) — 2026-07-22
 
 Lanjutan [#516] yang belum menuntaskan: peta masih **terlempar ke zoom terjauh**
