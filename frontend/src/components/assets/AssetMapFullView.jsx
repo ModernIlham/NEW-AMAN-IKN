@@ -197,6 +197,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
   const layerRef = useRef(null);         // L.LayerGroup pin
   const markersRef = useRef(new Map());  // id -> { marker, row, lat, lng, iconKey, draggable }
   const didFitRef = useRef(false);       // fitBounds hanya saat muat pertama / ganti kelompok
+  const firstLoadRef = useRef(true);     // auto-fit HANYA saat peta pertama dibuka (bukan tiap reload/seleksi)
   const scaleInfoElRef = useRef(null);   // elemen info skala/zoom (diperbarui saat zoom)
   const onPhotoClickRef = useRef(null);  // dipanggil DOM popup → buka lightbox foto
   const [lightboxRow, setLightboxRow] = useState(null); // aset yang fotonya dibuka
@@ -293,8 +294,14 @@ const AssetMapFullView = memo(function AssetMapFullView({
     }
   }, [activityId, buildParams, clientFilter]);
 
-  // Muat data saat lembar peta dibuka.
-  useEffect(() => { didFitRef.current = false; load(); }, [load]);
+  // Muat data saat lembar peta dibuka & saat filter berubah. Auto-fit HANYA
+  // pada muat PERTAMA — reload berikutnya (mis. filter berubah) TIDAK memindah
+  // view agar posisi/zoom pengguna tetap. Refit manual tetap tersedia lewat
+  // "Muat Ulang" & ganti kelompok (yang menyetel didFitRef=false sendiri).
+  useEffect(() => {
+    if (firstLoadRef.current) { didFitRef.current = false; firstLoadRef.current = false; }
+    load();
+  }, [load]);
 
   // Unduh titik peta (KML/KMZ/SHP) lengkap dengan atribut — memakai filter
   // aktif yang SAMA dengan peta/daftar (endpoint /export/geo).
@@ -348,10 +355,11 @@ const AssetMapFullView = memo(function AssetMapFullView({
     return base.filter((r) => `${r.asset_code || ""}||${r.asset_name || ""}` === groupKey);
   }, [rows, groupKey, selectedIds, selectMode]);
 
-  // Pusatkan ulang peta saat seleksi (list) dinyalakan/dimatikan — TAPI JANGAN
-  // saat Mode Seleksi aktif: memilih pin pertama (0→1) tak boleh melempar view
-  // menjauh; posisi/zoom harus tetap agar pemilihan pin nyaman.
-  useEffect(() => { if (!selectMode) didFitRef.current = false; }, [hasSelection, selectMode]);
+  // CATATAN: TIDAK ada auto-refit karena perubahan seleksi/Mode Seleksi. Memilih
+  // pin (berapa pun), menyalakan/mematikan Mode Seleksi, maupun perubahan
+  // himpunan terpilih TIDAK boleh memindah view — posisi & zoom pengguna tetap.
+  // Auto-fit hanya pada buka pertama (firstLoadRef); refit lain manual
+  // (ganti kelompok / Muat Ulang).
 
   // ── Aksi seleksi (map → daftar via onSelectionChange, kunci = id aset) ──
   const doToggleOne = useCallback((id) => {
