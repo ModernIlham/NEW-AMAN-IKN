@@ -253,6 +253,17 @@ async def create_indexes() -> None:
         # job > 7 hari (created_at BSON datetime) agar koleksi tak menumpuk.
         await db.background_jobs.create_index("job_id", unique=True)
         await db.background_jobs.create_index("created_at", expireAfterSeconds=7 * 86400)
+        # Backup/restore single-flight: gerbang ATOMIK "hanya satu job aktif".
+        # Unique HANYA untuk dokumen yang MEMBAWA active_lock (job queued/running);
+        # job terminal meng-$unset lock → keluar dari index → slot terbuka lagi.
+        # partialFilterExpression {$exists:true} kompatibel semua versi MongoDB
+        # (hindari $in yang butuh MongoDB 6.0+). Cegah dua restore konkuren
+        # merusak DB (wipe + reimport berselang).
+        await db.backup_jobs.create_index(
+            "active_lock", unique=True,
+            partialFilterExpression={"active_lock": {"$exists": True}},
+            name="backup_jobs_active_lock_singleflight",
+        )
         logger.info("Database indexes created successfully")
     except Exception as e:
         logger.error(f"Error creating indexes: {e}")

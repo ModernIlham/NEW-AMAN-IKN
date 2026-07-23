@@ -11,6 +11,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Header, UploadFile, File
 from fastapi.responses import FileResponse
 from bson import ObjectId
+from pymongo.errors import DuplicateKeyError
 
 from db import db, fs_bucket
 from auth_utils import get_current_user
@@ -94,18 +95,33 @@ async def require_admin(authorization: str):
     return user
 
 
+# Gerbang single-flight: hanya SATU backup/restore boleh aktif. Dokumen job
+# aktif (queued/running) membawa `active_lock="GLOBAL"`; partial unique index
+# (indexes.py) menolak dokumen kedua. Lock dilepas (unset) saat job mencapai
+# status terminal — lihat update_job / cleanup_stale_jobs.
+_ACTIVE_LOCK = "GLOBAL"
+
+
 async def update_job(job_id: str, **fields):
-    """Update backup job progress in MongoDB."""
+    """Update backup job progress in MongoDB. Saat status terminal
+    (completed/failed), lepas gerbang single-flight (unset active_lock)."""
     fields["updated_at"] = datetime.now(timezone.utc).isoformat()
-    await db.backup_jobs.update_one({"job_id": job_id}, {"$set": fields})
+    update = {"$set": fields}
+    if fields.get("status") in ("completed", "failed"):
+        update["$unset"] = {"active_lock": ""}
+    await db.backup_jobs.update_one({"job_id": job_id}, update)
 
 
 async def cleanup_stale_jobs():
-    """Mark jobs that have been running for > 30 minutes as failed."""
+    """Tandai job macet > 30 menit (running/queued) sebagai failed & LEPAS
+    gerbang single-flight (unset active_lock) agar backup/restore baru bisa
+    mulai — mencegah lock menggantung bila worker mati sebelum menyelesaikan."""
     cutoff = (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat()
     await db.backup_jobs.update_many(
-        {"status": "running", "started_at": {"$lt": cutoff}},
-        {"$set": {"status": "failed", "error": "Timeout: proses terlalu lama", "updated_at": datetime.now(timezone.utc).isoformat()}}
+        {"status": {"$in": ["running", "queued"]}, "started_at": {"$lt": cutoff}},
+        {"$set": {"status": "failed", "error": "Timeout: proses terlalu lama",
+                  "updated_at": datetime.now(timezone.utc).isoformat()},
+         "$unset": {"active_lock": ""}}
     )
 
 
@@ -565,8 +581,10 @@ async def start_backup(authorization: str = Header(None), arsipkan: bool = False
     await cleanup_stale_jobs()
     await cleanup_old_files()
 
-    # Check for already running jobs
-    active = await db.backup_jobs.find_one({"status": "running"}, {"_id": 0})
+    # Fast-path (ramah): tolak cepat bila ada job aktif; gerbang ATOMIK ada di
+    # unique index active_lock (menangkap balapan yang lolos cek ini).
+    active = await db.backup_jobs.find_one(
+        {"status": {"$in": ["queued", "running"]}}, {"_id": 0})
     if active:
         raise HTTPException(status_code=409, detail="Sudah ada proses backup/restore yang sedang berjalan")
 
@@ -575,13 +593,17 @@ async def start_backup(authorization: str = Header(None), arsipkan: bool = False
         "job_id": job_id,
         "type": "backup",
         "status": "queued",
+        "active_lock": _ACTIVE_LOCK,
         "progress": 0,
         "message": "Menunggu mulai...",
         "started_at": datetime.now(timezone.utc).isoformat(),
         "started_by": user.get("username"),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
-    await db.backup_jobs.insert_one(job)
+    try:
+        await db.backup_jobs.insert_one(job)
+    except DuplicateKeyError:
+        raise HTTPException(status_code=409, detail="Sudah ada proses backup/restore yang sedang berjalan")
 
     _track_bg(asyncio.create_task(run_backup_task(
         job_id, user.get("username"),
@@ -603,7 +625,8 @@ async def start_restore(
     if not file.filename.endswith(".zip"):
         raise HTTPException(status_code=400, detail="File harus berformat ZIP")
 
-    active = await db.backup_jobs.find_one({"status": "running"}, {"_id": 0})
+    active = await db.backup_jobs.find_one(
+        {"status": {"$in": ["queued", "running"]}}, {"_id": 0})
     if active:
         raise HTTPException(status_code=409, detail="Sudah ada proses backup/restore yang sedang berjalan")
 
@@ -641,6 +664,7 @@ async def start_restore(
         "job_id": job_id,
         "type": "restore",
         "status": "queued",
+        "active_lock": _ACTIVE_LOCK,
         "progress": 0,
         "message": "Menunggu mulai...",
         "started_at": datetime.now(timezone.utc).isoformat(),
@@ -648,7 +672,11 @@ async def start_restore(
         "source_file": file.filename,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
-    await db.backup_jobs.insert_one(job)
+    try:
+        await db.backup_jobs.insert_one(job)
+    except DuplicateKeyError:
+        zip_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=409, detail="Sudah ada proses backup/restore yang sedang berjalan")
 
     _track_bg(asyncio.create_task(run_restore_task(job_id, zip_path, user.get("username"))))
     logger.info(f"Restore job {job_id} started by {user.get('username')}")
@@ -794,13 +822,19 @@ def _terapkan_retensi(retensi: int):
 async def _jalankan_backup_otomatis(retensi: int):
     """Satu siklus backup otomatis: job + tunggu selesai + terapkan retensi."""
     job_id = str(uuid.uuid4())[:12]
-    await db.backup_jobs.insert_one({
-        "job_id": job_id, "type": "backup", "status": "queued", "progress": 0,
-        "message": "Backup otomatis terjadwal...",
-        "started_at": datetime.now(timezone.utc).isoformat(),
-        "started_by": "backup-otomatis",
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-    })
+    try:
+        await db.backup_jobs.insert_one({
+            "job_id": job_id, "type": "backup", "status": "queued",
+            "active_lock": _ACTIVE_LOCK, "progress": 0,
+            "message": "Backup otomatis terjadwal...",
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "started_by": "backup-otomatis",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+    except DuplicateKeyError:
+        # Ada backup/restore aktif — lewati siklus otomatis ini (bukan galat).
+        logger.info("Backup otomatis dilewati: ada proses backup/restore aktif")
+        return
     await run_backup_task(job_id, "backup-otomatis", arsipkan="otomatis")
     # Terapkan retensi HANYA bila backup SUKSES — kalau gagal, JANGAN pangkas
     # arsip lama (menghindari kehilangan cadangan yang masih valid saat backup
@@ -930,7 +964,8 @@ async def restore_dari_arsip(nama: str, authorization: str = Header(None)):
     sumber = BACKUP_ARSIP_DIR / nama
     if not sumber.exists():
         raise HTTPException(status_code=404, detail="Berkas arsip tidak ditemukan")
-    active = await db.backup_jobs.find_one({"status": "running"}, {"_id": 0})
+    active = await db.backup_jobs.find_one(
+        {"status": {"$in": ["queued", "running"]}}, {"_id": 0})
     if active:
         raise HTTPException(status_code=409,
                             detail="Sudah ada proses backup/restore yang sedang berjalan")
@@ -939,14 +974,20 @@ async def restore_dari_arsip(nama: str, authorization: str = Header(None)):
     # mengorbankan arsip asli.
     zip_path = BACKUP_TEMP_DIR / f"restore_{job_id}.zip"
     shutil.copyfile(str(sumber), str(zip_path))
-    await db.backup_jobs.insert_one({
-        "job_id": job_id, "type": "restore", "status": "queued", "progress": 0,
-        "message": "Menunggu mulai...",
-        "started_at": datetime.now(timezone.utc).isoformat(),
-        "started_by": user.get("username"),
-        "source_file": nama,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-    })
+    try:
+        await db.backup_jobs.insert_one({
+            "job_id": job_id, "type": "restore", "status": "queued",
+            "active_lock": _ACTIVE_LOCK, "progress": 0,
+            "message": "Menunggu mulai...",
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "started_by": user.get("username"),
+            "source_file": nama,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+    except DuplicateKeyError:
+        zip_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=409,
+                            detail="Sudah ada proses backup/restore yang sedang berjalan")
     _track_bg(asyncio.create_task(run_restore_task(job_id, zip_path, user.get("username"))))
     logger.info(f"Restore dari arsip {nama} dimulai oleh {user.get('username')}")
     return {"job_id": job_id, "message": "Proses restore dari arsip dimulai di background"}
