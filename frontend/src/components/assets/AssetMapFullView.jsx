@@ -191,6 +191,9 @@ const AssetMapFullView = memo(function AssetMapFullView({
   onQuickAdd,         // (lat, lng, nama) => void — tambah cepat aset di titik peta
   onSelectionChange,  // (updater|Set) => void — ubah himpunan aset terpilih (map→daftar)
   onBatchEditSelected,// () => void — tutup peta & buka Edit Massal utk aset terpilih
+  visible = true,     // KEEP-ALIVE: komponen tetap ter-mount saat pindah mode; saat
+                      // disembunyikan (display:none) ukuran Leaflet jadi 0 → panggil
+                      // invalidateSize saat tampil lagi agar tak abu-abu/terpotong.
 }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
@@ -412,6 +415,18 @@ const AssetMapFullView = memo(function AssetMapFullView({
     next.addTo(map);
     layerRef.current = next;
   }, []);
+
+  // KEEP-ALIVE: saat peta ditampilkan kembali (visible true) setelah sempat
+  // disembunyikan (display:none), ukuran container Leaflet bisa 0 → hitung ulang
+  // agar tile tak abu-abu/terpotong. ResizeObserver juga menangani, ini jaring
+  // pengaman dengan sedikit jeda agar layout sudah selesai.
+  useEffect(() => {
+    if (!visible || !mapRef.current) return undefined;
+    const t = setTimeout(() => {
+      try { mapRef.current?.invalidateSize(); } catch { /* map sudah dilepas */ }
+    }, 60);
+    return () => clearTimeout(t);
+  }, [visible]);
 
   // Init peta pada mount; rusak saat unmount.
   useEffect(() => {

@@ -278,6 +278,12 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   const [rekapTotal, setRekapTotal] = useState(null);
   const [groupsCount, setGroupsCount] = useState(null);
   const [mapOpen, setMapOpen] = useState(false);
+  // KEEP-ALIVE peta: sekali dibuka, komponen peta tetap ter-mount (hanya
+  // disembunyikan display:none saat pindah mode) → posisi/zoom & data
+  // dipertahankan tanpa refetch dari awal saat bolak-balik mode/seleksi. Data
+  // terbaru diambil hanya lewat tombol "Muat Ulang" di peta.
+  const [mapEverOpened, setMapEverOpened] = useState(false);
+  useEffect(() => { if (mapOpen) setMapEverOpened(true); }, [mapOpen]);
   const [viewMode, setViewMode] = useState('list');
   const viewModeRef = useRef(viewMode);
   viewModeRef.current = viewMode;
@@ -1758,26 +1764,33 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
             {!inventoryMode && !mapOpen && rekapOpen && <Suspense fallback={null}><RekapitulasiPanel embedded activityId={activity?.id} isOpen={rekapOpen} onToggle={() => setRekapOpen(p => !p)} onTotal={setRekapTotal} /></Suspense>}
             {!mapOpen && groupsOpen && <Suspense fallback={null}><AssetGroupsPanel embedded activityId={activity?.id} isOpen={groupsOpen} onToggle={() => setGroupsOpen(p => !p)} onCount={setGroupsCount} onBatchEdit={perms.canEdit ? handleGroupBatchEdit : undefined} /></Suspense>}
 
-            {mapOpen ? (
-              <Suspense fallback={<div className="py-16 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto text-teal-600" /></div>}>
-                <AssetMapFullView
-                  activityId={activity?.id}
-                  activityName={activity?.nama_kegiatan}
-                  onClose={() => setMapOpen(false)}
-                  canEdit={perms.canEdit}
-                  onEditAsset={perms.canEdit ? handleEdit : undefined}
-                  onDeleteAsset={perms.canDelete ? handleDelete : undefined}
-                  onSaveCoords={handleMapCoordsSave}
-                  buildParams={buildMapParams}
-                  clientFilter={mapClientFilter}
-                  activeFilterCount={activeFilterCount + (debouncedSearch ? 1 : 0)}
-                  selectedIds={selectedAssets}
-                  onQuickAdd={perms.canEdit ? handleQuickAddPeta : undefined}
-                  onSelectionChange={perms.canEdit ? setSelectedAssets : undefined}
-                  onBatchEditSelected={perms.canEdit ? handleMapBatchEdit : undefined}
-                />
-              </Suspense>
-            ) : loading ? (
+            {/* Peta KEEP-ALIVE (di luar ternary): sekali dibuka tetap ter-mount,
+                hanya disembunyikan (display:none) saat pindah ke mode lain — posisi
+                & data dipertahankan tanpa refetch dari awal. */}
+            {mapEverOpened && (
+              <div style={{ display: mapOpen ? undefined : "none" }}>
+                <Suspense fallback={<div className="py-16 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto text-teal-600" /></div>}>
+                  <AssetMapFullView
+                    visible={mapOpen}
+                    activityId={activity?.id}
+                    activityName={activity?.nama_kegiatan}
+                    onClose={() => setMapOpen(false)}
+                    canEdit={perms.canEdit}
+                    onEditAsset={perms.canEdit ? handleEdit : undefined}
+                    onDeleteAsset={perms.canDelete ? handleDelete : undefined}
+                    onSaveCoords={handleMapCoordsSave}
+                    buildParams={buildMapParams}
+                    clientFilter={mapClientFilter}
+                    activeFilterCount={activeFilterCount + (debouncedSearch ? 1 : 0)}
+                    selectedIds={selectedAssets}
+                    onQuickAdd={perms.canEdit ? handleQuickAddPeta : undefined}
+                    onSelectionChange={perms.canEdit ? setSelectedAssets : undefined}
+                    onBatchEditSelected={perms.canEdit ? handleMapBatchEdit : undefined}
+                  />
+                </Suspense>
+              </div>
+            )}
+            {mapOpen ? null : loading ? (
               <LoadingIndicator message={loadingMessage} totalItems={totalItems} pageSize={pageSize} currentPage={currentPage} />
             ) : assets.length === 0 ? (
               (activeFilterCount > 0 || searchInput.trim()) ? (
