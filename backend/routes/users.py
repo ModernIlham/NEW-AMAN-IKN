@@ -74,8 +74,14 @@ async def change_user_password(user_id: str, data: dict, _admin: dict = Depends(
     
     hashed = hash_password(new_password)
     # Naikkan sesi_epoch (AUTH-C): admin mengganti password → sesi lama user
-    # tersebut dicabut (token akses & media gugur), memaksa login ulang.
-    await db.users.update_one({"id": user_id}, {"$set": {"password": hashed}, "$inc": {"sesi_epoch": 1}})
+    # tersebut dicabut (token akses & media gugur), memaksa login ulang. Baca
+    # epoch lalu $set (bukan $inc) agar nilai rusak (mis. string dari restore
+    # lama) dinormalkan ke int — $inc pada tipe non-numerik melempar WriteError.
+    try:
+        epoch_baru = int(user.get("sesi_epoch") or 0) + 1
+    except (TypeError, ValueError):
+        epoch_baru = 1
+    await db.users.update_one({"id": user_id}, {"$set": {"password": hashed, "sesi_epoch": epoch_baru}})
     return {"message": "Password berhasil diubah"}
 
 @users_router.put("/users/{user_id}/update-name")

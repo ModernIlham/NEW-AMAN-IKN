@@ -63,9 +63,11 @@ penyerang, sesi lamanya belum tercabut. Ditambah mekanisme **sesi_epoch**:
 
 **Kompatibel mundur:** token lama tanpa klaim = epoch 0; user lama tanpa field
 = epoch 0 → user yang belum pernah reset tetap login normal; yang sudah reset
-otomatis menolak semua token lama. Nilai rusak (mis. dari restore lama) di kedua
-sisi ditangani aman (tak sampai 500). Token tamu e-sign (`typ=sign`) tak
-terpengaruh (jalur `require_sign_token`, bukan `_decode_bearer`).
+otomatis menolak semua token lama. Nilai `sesi_epoch` rusak (mis. string dari
+restore lama) ditangani aman di **semua jalur** — validasi token
+(`_decode_bearer`), login, dan tulis (reset/ubah password membaca lalu `$set`,
+bukan `$inc`, agar tak memicu WriteError/500). Token tamu e-sign (`typ=sign`)
+tak terpengaruh (jalur `require_sign_token`, bukan `_decode_bearer`).
 
 Verifikasi: `pytest tests/unit` **640 lulus** (+1 uji klaim `sesi_epoch`);
 `compileall` bersih. Backend-only.
