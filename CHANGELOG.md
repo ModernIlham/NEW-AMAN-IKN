@@ -48,6 +48,27 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#544] Keamanan: kunci brute-force OTP (reset password & registrasi) — 2026-07-23
+
+Temuan audit terverifikasi [tinggi]: verifikasi OTP (`reset_password`,
+`verify_otp`) membandingkan `stored["otp"] != otp` TANPA penghitung percobaan
+dan TANPA invalidasi saat salah — OTP 6-digit (ruang 10⁶), TTL 10 menit, dan
+rate-limit hanya per-IP. Penyerang terdistribusi dapat menebak paralel satu
+OTP tetap selama 10 menit → pengambilalihan akun tanpa akses email.
+
+- **`shared_utils.py`**: helper `catat_gagal_otp(email, maks=5)` — `$inc attempts`
+  atomik; saat mencapai 5 gagal, OTP DIHAPUS (invalidasi) → brute-force terkunci
+  ke <10 tebakan per OTP, independen dari IP. `store_otp` mereset `attempts=0`
+  saat OTP baru diterbitkan.
+- **`routes/auth.py`**: kedua verifikasi kini `hmac.compare_digest` (konstan-waktu,
+  dibandingkan sebagai bytes agar input non-ASCII tak memicu 500) + memanggil
+  `catat_gagal_otp` pada tiap kegagalan (pesan "OTP dinonaktifkan" saat terkunci).
+
+Verifikasi: `pytest tests/unit` 638 lulus; `compileall` bersih; uji logika
+banding+lockout terpisah. Backend-only.
+
+---
+
 ## [#543] Keamanan: guard satker by-id di Wasdal/Pemusnahan/Perencanaan/Penganggaran — 2026-07-23
 
 Lanjutan audit: daftar keempat modul sudah ter-scope, tapi endpoint yang
