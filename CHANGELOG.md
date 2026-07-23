@@ -48,6 +48,39 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#561] Perkakas uji: harness load/stress Locust + workflow CI/CD + skill aman-testdata — 2026-07-23
+
+Melengkapi fondasi generator sintetis (#560) menjadi rangkaian uji end-to-end
+untuk otomatisasi & skalabilitas pengujian beban/stres:
+
+- **Harness Locust** (`scripts/loadtest/locustfile.py`) — mensimulasikan
+  pengguna satker realistis dengan bobot **baca ≫ tulis ≫ mahal**
+  (login → telusuri daftar/statistik/analitik/snapshot → sesekali `POST /assets`
+  → opsional laporan mahal). Body aset uji dibaca dari NDJSON hasil generator
+  sintetis (`AMAN_DATASET_FILE`); uji-tulis aktif hanya bila `AMAN_ACTIVITY_ID`
+  diset; pakai `Idempotency-Key` per permintaan. Dilengkapi
+  `scripts/loadtest/README.md` termasuk **metode menentukan batas rate-limit
+  dari titik jenuh** (naikkan pengguna sampai p95 melonjak / failure > 1%, bagi
+  throughput jenuh dengan pengguna aktif per satker).
+- **Workflow CI/CD** (`.github/workflows/loadtest.yml`, manual
+  `workflow_dispatch` — tak jalan tiap PR) — **menghasilkan dataset sintetis
+  tepat sebelum uji** lalu menjalankan Locust (efisiensi: dataset tak disimpan
+  di repo, feedback cepat). Tanpa `host` → dry-run (generate + validasi
+  locustfile) sehingga selalu bisa dijalankan tanpa staging/secrets. Langkah
+  generate tak memasang seluruh `requirements.txt` karena generator hanya butuh
+  pustaka standar + `asset_fields` (import `shared_utils` opsional dengan
+  fallback) → runner cepat.
+- **Skill `aman-testdata`** (`.claude/skills/aman-testdata/SKILL.md`) —
+  mengikat semuanya jadi panduan end-to-end (data sintetis → uji beban →
+  wiring CI/CD), termasuk alur menambah strategi generator saat field aset
+  baru ditambahkan ke registry.
+
+Tak menyentuh runtime aplikasi. Melengkapi lima kebutuhan yang diminta: data
+realistis, otomatisasi & skalabilitas (load/stress), data dinamis & adaptif
+(anti-drift registry), pendeteksian anomali (edge-case), dan efisiensi CI/CD.
+
+---
+
 ## [#560] Perkakas uji: generator data sintetis BMN registry-driven (adaptif + edge-case) — 2026-07-23
 
 Fondasi perkakas pengembangan/pengujian untuk mempercepat & memperkuat siklus
