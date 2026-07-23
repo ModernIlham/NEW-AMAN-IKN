@@ -33,7 +33,7 @@ class AssetField:
 ASSET_SCALAR_FIELDS = (
     AssetField("asset_code", "Kode Aset"),
     AssetField("NUP", "NUP"),
-    AssetField("asset_name", "Nama Aset"),
+    AssetField("asset_name", "Nama Aset", batchable=True),
     AssetField("category", "Kategori", batchable=True, import_default="Lainnya"),
     AssetField("brand", "Brand", batchable=True),
     AssetField("model", "Model", batchable=True),
