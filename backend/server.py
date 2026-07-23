@@ -307,6 +307,7 @@ from routes.referensi_akun import referensi_akun_router
 from routes.bast import bast_router
 from routes.timeline import timeline_router
 from routes.lbp import lbp_router
+from routes.email_monitor import email_monitor_router
 
 api_router.include_router(auth_router)
 api_router.include_router(categories_router)
@@ -359,6 +360,7 @@ api_router.include_router(referensi_akun_router)
 api_router.include_router(bast_router)
 api_router.include_router(timeline_router)
 api_router.include_router(lbp_router)
+api_router.include_router(email_monitor_router)  # pemantauan kuota email Resend
 
 
 # ============================================================================

@@ -48,6 +48,35 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#577] Pemantauan kuota email Resend — indikator harian & bulanan (dinamis) — 2026-07-23
+
+Semua email keluar aplikasi (OTP registrasi, OTP lupa password, link tanda
+tangan elektronik) menempuh Resend. Kini penggunaannya **terpantau**.
+
+- **Pencatatan di choke point** — setiap email yang berhasil melewati Resend
+  dihitung di dalam `send_otp_email`/`send_esign_email` (satu titik), dipecah
+  per **jenis** (OTP registrasi / OTP lupa password / e-sign) dan per **status**,
+  diakumulasi **per hari & per bulan** memakai kalender **UTC** agar selaras
+  dengan reset kuota harian Resend.
+- **Indikator** di **Pengaturan › Sistem › Pemantauan Email**: bilah kemajuan
+  Hari ini & Bulan ini (terpakai / batas / sisa, warna hijau→kuning→merah pada
+  ambang 80% & 100%), rincian per jenis, dan alamat pengirim.
+- **Batas dinamis** — default **100/hari** & **3000/bulan** (plan gratis
+  Resend), tetapi **dapat diubah super-admin** (endpoint `PUT /api/email/limit`)
+  bila Resend mengubah ketentuan di kemudian hari — tanpa perlu deploy ulang.
+- **Deteksi otomatis** — bila Resend SENDIRI menolak kirim karena kuota
+  tercapai (harian/bulanan), aplikasi merekamnya (`kuota_tercapai`) dan
+  menampilkan peringatan merah pada indikator + pesan OTP yang jelas ke
+  pengguna. Sinyal ini otomatis hilang di periode berikutnya.
+
+Teknis: koleksi `email_usage` (indeks unik `lingkup+periode`, upsert `$inc`
+atomik), route `routes/email_monitor.py` (`GET /api/email/usage` untuk admin,
+`PUT /api/email/limit` untuk super-admin), helper klasifikasi galat
+`_deteksi_kuota_email` (membedakan kuota kirim dari rate-limit throughput).
+Uji unit menjaga klasifikasi & bentuk ringkasan indikator.
+
+---
+
 ## [#576] Pembubuhan TTD: QR verifikasi kini bisa diatur letak & ukurannya — 2026-07-23
 
 Pada halaman e-sign, langkah **atur pembubuhan** sebelumnya hanya membiarkan

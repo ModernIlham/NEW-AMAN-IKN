@@ -26,6 +26,42 @@ function fmtUkuran(b) {
   return `${Math.round(n / 1e3)} KB`;
 }
 
+// Warna status kuota email: aman (hijau) / hampir (kuning) / penuh (merah).
+const WARNA_KUOTA = {
+  aman: { bar: "bg-emerald-500", teks: "text-emerald-600 dark:text-emerald-400" },
+  hampir: { bar: "bg-amber-500", teks: "text-amber-600 dark:text-amber-400" },
+  penuh: { bar: "bg-red-500", teks: "text-red-600 dark:text-red-400" },
+};
+
+function BarKuota({ judul, d }) {
+  if (!d) return null;
+  const w = WARNA_KUOTA[d.status] || WARNA_KUOTA.aman;
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-2 mb-1">
+        <span className="text-[11px] font-semibold text-foreground">{judul}</span>
+        <span className={`text-[11px] font-bold ${w.teks}`}>
+          {d.terpakai}<span className="text-muted-foreground font-medium"> / {d.limit}</span>
+          <span className="text-muted-foreground font-normal"> · sisa {d.sisa}</span>
+        </span>
+      </div>
+      <div className="h-2.5 rounded-full bg-muted overflow-hidden">
+        <div className={`h-full rounded-full ${w.bar} transition-all`}
+          style={{ width: `${Math.min(100, Math.max(2, d.persen))}%` }} />
+      </div>
+      {(d.rincian || []).length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-1.5">
+          {d.rincian.map((r) => (
+            <span key={r.jenis} className="px-1.5 py-0.5 rounded bg-muted text-[10px] text-muted-foreground">
+              {r.label}: <b className="text-foreground">{r.jumlah}</b>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * Pengaturan Terpadu — SATU pintu seluruh setelan aplikasi (Mandat-2):
  *  - Universal : kop/logo/judul laporan global (report_settings) — berlaku
@@ -59,6 +95,11 @@ export default function PengaturanPage({ user, onBack, onOpenSatker,
   const [arsip, setArsip] = useState(null); // daftar berkas arsip server
   const [showRestore, setShowRestore] = useState(false);
   const [showResetAll, setShowResetAll] = useState(false);
+  // Pemantauan kuota email Resend (100/hari, 3000/bulan — dinamis dari server)
+  const [email, setEmail] = useState(null);
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [limitDraf, setLimitDraf] = useState(null); // {harian, bulanan} saat edit
+  const [limitSaving, setLimitSaving] = useState(false);
   const { confirm, confirmDialog } = useConfirm();
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
@@ -69,7 +110,32 @@ export default function PengaturanPage({ user, onBack, onOpenSatker,
     axios.get(`${API}/backup/arsip`).then((r) => setArsip(r.data?.items || [])).catch(() => setArsip([]));
   }, [isSuperAdmin]);
 
-  useEffect(() => { if (tab === "sistem") muatSistem(); }, [tab, muatSistem]);
+  // Pemantauan email terbuka utk semua admin (read); ubah limit khusus super-admin.
+  const muatEmail = useCallback(() => {
+    setEmailLoading(true);
+    axios.get(`${API}/email/usage`)
+      .then((r) => setEmail(r.data))
+      .catch(() => setEmail(null))
+      .finally(() => setEmailLoading(false));
+  }, []);
+
+  useEffect(() => { if (tab === "sistem") { muatSistem(); muatEmail(); } }, [tab, muatSistem, muatEmail]);
+
+  const simpanLimitEmail = async () => {
+    if (!limitDraf) return;
+    setLimitSaving(true);
+    try {
+      await axios.put(`${API}/email/limit`, {
+        limit_harian: Math.max(1, parseInt(limitDraf.harian, 10) || 0),
+        limit_bulanan: Math.max(1, parseInt(limitDraf.bulanan, 10) || 0),
+      });
+      toast.success("Batas kuota email diperbarui");
+      setLimitDraf(null);
+      muatEmail();
+    } catch (e) {
+      toast.error(getApiError(e, "Gagal menyimpan batas kuota"));
+    } finally { setLimitSaving(false); }
+  };
 
   const mulaiBackup = async () => {
     setBackupLoading(true);
@@ -248,6 +314,90 @@ export default function PengaturanPage({ user, onBack, onOpenSatker,
 
         {tab === "sistem" && (
           <div className="space-y-2.5">
+            {/* ── 0. Pemantauan kuota email (Resend) ── */}
+            <div className="rounded-xl border border-border bg-card p-3.5 space-y-2.5" data-testid="pengaturan-email-monitor">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-bold flex items-center gap-1.5">
+                  <Mail className="w-4 h-4" />Pemantauan Email (Resend)
+                </p>
+                <button type="button" onClick={muatEmail} disabled={emailLoading}
+                  className="h-7 w-7 rounded-md border border-border flex items-center justify-center text-muted-foreground hover:bg-muted min-w-0 min-h-0"
+                  aria-label="Muat ulang" title="Muat ulang" data-testid="email-refresh">
+                  <RotateCcw className={`w-3.5 h-3.5 ${emailLoading ? "animate-spin" : ""}`} />
+                </button>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Semua email keluar (OTP registrasi, OTP lupa password, link tanda tangan)
+                lewat Resend — terpantau di sini. Batas plan gratis: 100/hari &amp; 3.000/bulan.
+              </p>
+
+              {emailLoading && !email ? (
+                <div className="py-6 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" /></div>
+              ) : !email ? (
+                <p className="text-[11px] text-muted-foreground">Gagal memuat data pemantauan email.</p>
+              ) : (
+                <>
+                  {!email.resend_terkonfigurasi && (
+                    <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 flex items-start gap-1.5">
+                      <ShieldAlert className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                      <p className="text-[10.5px] text-amber-700 dark:text-amber-300">
+                        Layanan email (Resend) belum dikonfigurasi di server (RESEND_API_KEY kosong) —
+                        angka di bawah tetap tercatat dari kejadian pengiriman.
+                      </p>
+                    </div>
+                  )}
+                  {(email.kuota_tercapai?.harian || email.kuota_tercapai?.bulanan) && (
+                    <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 flex items-start gap-1.5" data-testid="email-kuota-tercapai">
+                      <ShieldAlert className="w-3.5 h-3.5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                      <p className="text-[10.5px] text-red-700 dark:text-red-300">
+                        Resend menolak kirim karena <b>kuota {email.kuota_tercapai?.harian ? "harian" : "bulanan"} tercapai</b>.
+                        Bila ini berulang, mungkin ketentuan limit Resend berubah — sesuaikan batas di bawah (super-admin).
+                      </p>
+                    </div>
+                  )}
+
+                  <BarKuota judul="Hari ini" d={email.harian} />
+                  <BarKuota judul="Bulan ini" d={email.bulanan} />
+
+                  <p className="text-[10px] text-muted-foreground">
+                    Pengirim: <span className="font-mono">{email.pengirim || "—"}</span> ·
+                    Periode {email.periode?.hari} / {email.periode?.bulan} (reset mengikuti Resend, {email.periode?.zona}).
+                  </p>
+
+                  {/* Ubah batas (dinamis) — khusus super-admin, bila Resend mengubah limit */}
+                  {isSuperAdmin && (
+                    limitDraf ? (
+                      <div className="rounded-lg border border-border bg-muted/40 p-2.5 space-y-2">
+                        <p className="text-[11px] font-semibold">Ubah batas kuota email</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <label className="text-[10px] text-muted-foreground">Per hari
+                            <Input type="number" inputMode="numeric" min="1" value={limitDraf.harian} className="h-8 mt-0.5"
+                              onChange={(e) => setLimitDraf((s) => ({ ...s, harian: e.target.value }))} data-testid="email-limit-harian" />
+                          </label>
+                          <label className="text-[10px] text-muted-foreground">Per bulan
+                            <Input type="number" inputMode="numeric" min="1" value={limitDraf.bulanan} className="h-8 mt-0.5"
+                              onChange={(e) => setLimitDraf((s) => ({ ...s, bulanan: e.target.value }))} data-testid="email-limit-bulanan" />
+                          </label>
+                        </div>
+                        <div className="flex gap-2 justify-end">
+                          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setLimitDraf(null)}>Batal</Button>
+                          <Button size="sm" className="h-8 text-xs" onClick={simpanLimitEmail} disabled={limitSaving} data-testid="email-limit-simpan">
+                            {limitSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}Simpan
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button type="button" data-testid="email-limit-ubah"
+                        onClick={() => setLimitDraf({ harian: email.harian?.limit ?? 100, bulanan: email.bulanan?.limit ?? 3000 })}
+                        className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:underline min-w-0 min-h-0">
+                        Ubah batas kuota (bila ketentuan Resend berubah)
+                      </button>
+                    )
+                  )}
+                </>
+              )}
+            </div>
+
             {/* ── 1. Backup sekarang ── */}
             <div className="rounded-xl border border-border bg-card p-3.5 space-y-2">
               <p className="text-xs font-bold flex items-center gap-1.5">

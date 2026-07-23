@@ -422,7 +422,8 @@ async def reserve_idempotency_key(key: str, stale_seconds: int = 30) -> str:
 
 
 
-async def send_otp_email(email: str, otp: str, name: str = ""):
+async def send_otp_email(email: str, otp: str, name: str = "",
+                         jenis: str = "otp_registrasi"):
     """Kirim OTP via Resend. Kembalikan (ok, alasan) — alasan berbahasa
     Indonesia yang ACTIONABLE bila gagal (kunci API kosong / domain pengirim
     belum terverifikasi / galat lain), bukan False bisu: pendaftar berulang
@@ -454,11 +455,20 @@ async def send_otp_email(email: str, otp: str, name: str = ""):
         try:
             result = await asyncio.to_thread(resend.Emails.send, params)
             logger.info(f"OTP email sent to {email}: {result.get('id', 'unknown')}")
+            await catat_email_terkirim(jenis)
             return True, ""
         except Exception as e:
             galat = str(e)
             logger.error(f"Failed to send OTP email to {email} (percobaan {percobaan}): {galat}")
             g = galat.lower()
+            # Resend menolak karena kuota email tercapai → rekam sinyal otomatis.
+            lk = _deteksi_kuota_email(galat)
+            if lk:
+                await catat_kuota_email_tercapai(lk, galat)
+                return False, (
+                    f"Kuota email {lk} Resend tercapai — email tidak terkirim. "
+                    "Pantau di Pengaturan › Sistem › Pemantauan Email, atau tunggu "
+                    "reset periode berikutnya.")
             # Galat konfigurasi PASTI — jangan buang waktu coba ulang.
             if ("testing email" in g or "verify a domain" in g
                     or "not verified" in g or "own email address" in g):
@@ -474,7 +484,84 @@ async def send_otp_email(email: str, otp: str, name: str = ""):
     return False, (f"Gagal mengirim email ({galat[:120]}) — coba beberapa saat "
                    "lagi atau hubungi administrator")
 
-async def send_esign_email(email: str, nama: str, judul: str, link: str) -> bool:
+# --- Pemantauan kuota email Resend ---------------------------------------
+# Plan gratis Resend: 100 email/hari & 3000 email/bulan. Batas DISIMPAN sebagai
+# setelan (bukan konstanta mati) supaya bisa diubah admin bila Resend mengubah
+# ketentuan di kemudian hari — dinamis tanpa deploy. Selain itu, penolakan
+# "kuota tercapai" dari Resend sendiri direkam sebagai sinyal OTOMATIS bila
+# limit berubah/tercapai. Penghitungan pakai kalender UTC agar selaras dengan
+# reset kuota harian Resend (tengah malam UTC).
+RESEND_LIMIT_HARIAN_DEFAULT = 100
+RESEND_LIMIT_BULANAN_DEFAULT = 3000
+
+
+def _periode_email(now=None):
+    """(kunci_hari 'YYYY-MM-DD', kunci_bulan 'YYYY-MM') dalam UTC."""
+    now = now or datetime.now(timezone.utc)
+    return now.strftime("%Y-%m-%d"), now.strftime("%Y-%m")
+
+
+def _deteksi_kuota_email(pesan: str):
+    """Klasifikasi apakah galat Resend = kuota email tercapai (harian/bulanan).
+    Membedakan dari rate-limit per-detik (2 req/s) yang BUKAN kuota kirim.
+    Kembalikan 'harian' | 'bulanan' | None."""
+    g = str(pesan or "").lower()
+    ada_kuota = ("quota" in g or "limit" in g or "you have reached" in g
+                 or "exceeded" in g)
+    if not ada_kuota:
+        return None
+    # Rate-limit throughput (req/detik) — abaikan, bukan kuota kirim harian.
+    if ("too many requests" in g or "rate limit" in g or "per second" in g) \
+            and "day" not in g and "month" not in g and "quota" not in g:
+        return None
+    if "month" in g:
+        return "bulanan"
+    if "day" in g or "daily" in g:
+        return "harian"
+    # Pesan kuota tanpa satuan jelas → anggap harian (batas yang lebih dulu kena).
+    return "harian"
+
+
+async def catat_email_terkirim(jenis: str, status: str = "terkirim"):
+    """Catat 1 email yang MELEWATI Resend (atomik $inc) untuk pemantauan kuota.
+    Dihitung per HARI & per BULAN (UTC), dipecah per jenis (otp_registrasi/
+    otp_reset/esign/…) dan per status. Best-effort: kegagalan pencatatan tak
+    boleh menggagalkan pengiriman email."""
+    try:
+        hari, bulan = _periode_email()
+        jns = (str(jenis or "lainnya").strip() or "lainnya").replace(".", "_")
+        st = "terkirim" if status == "terkirim" else "gagal"
+        for lingkup, kunci in (("harian", hari), ("bulanan", bulan)):
+            await db.email_usage.update_one(
+                {"lingkup": lingkup, "periode": kunci},
+                {"$inc": {"total": 1, f"per_jenis.{jns}": 1,
+                          f"per_status.{st}": 1},
+                 "$set": {"updated_at": datetime.now(timezone.utc)}},
+                upsert=True)
+    except Exception as e:
+        logger.warning(f"catat_email_terkirim gagal: {e}")
+
+
+async def catat_kuota_email_tercapai(lingkup: str, pesan: str = ""):
+    """Rekam bahwa Resend SENDIRI menolak karena kuota tercapai (harian/
+    bulanan) — sinyal OTOMATIS bila ketentuan limit berubah dari pihak Resend.
+    Disimpan di doc config; indikator menampilkannya bila masih dalam periode."""
+    try:
+        if lingkup not in ("harian", "bulanan"):
+            return
+        await db.email_usage.update_one(
+            {"lingkup": "config", "periode": "config"},
+            {"$set": {f"kuota_tercapai.{lingkup}": {
+                "pada": datetime.now(timezone.utc).isoformat(),
+                "pesan": str(pesan or "")[:200]}}},
+            upsert=True)
+        logger.warning(f"Resend menolak — kuota {lingkup} tercapai: {str(pesan)[:120]}")
+    except Exception:
+        pass
+
+
+async def send_esign_email(email: str, nama: str, judul: str, link: str,
+                           jenis: str = "esign") -> bool:
     """Kirim link tanda tangan elektronik ke penanda tangan (best-effort —
     gagal kirim TIDAK menggagalkan pembuatan permintaan; link tetap bisa
     dibagikan manual/WA)."""
@@ -507,9 +594,13 @@ async def send_esign_email(email: str, nama: str, judul: str, link: str) -> bool
     try:
         result = await asyncio.to_thread(resend.Emails.send, params)
         logger.info(f"E-sign email sent to {email}: {result.get('id', 'unknown')}")
+        await catat_email_terkirim(jenis)
         return True
     except Exception as e:
         logger.error(f"Failed to send e-sign email to {email}: {e}")
+        lk = _deteksi_kuota_email(str(e))
+        if lk:
+            await catat_kuota_email_tercapai(lk, str(e))
         return False
 
 
