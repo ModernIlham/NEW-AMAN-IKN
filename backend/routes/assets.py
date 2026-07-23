@@ -1918,6 +1918,12 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
     update_data = {k: v for k, v in body.items() if k in PATCHABLE_FIELDS}
     has_photo_ops = "photo_ops" in body
 
+    # Field patchable semuanya SKALAR — tolak nilai dict/list agar operator
+    # NoSQL (mis. {"$ne": null}) tak menyusup ke query cek-duplikat & $set.
+    for k, v in update_data.items():
+        if isinstance(v, (dict, list)):
+            raise HTTPException(status_code=400, detail=f"Nilai field '{k}' tidak valid")
+
     if not update_data and not has_photo_ops:
         raise HTTPException(status_code=400, detail="Tidak ada field yang diubah")
 

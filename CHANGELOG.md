@@ -48,6 +48,20 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#546] Keamanan: tolak nilai non-skalar pada PATCH aset (anti operator-injection) — 2026-07-23
+
+Temuan audit injeksi [rendah]: `PATCH /assets/{id}` membaca body JSON mentah dan
+hanya meng-allow-list KUNCI (`PATCHABLE_FIELDS`), bukan TIPE nilai. Writer dapat
+mengirim `{"asset_code": {"$ne": null}}` → operator NoSQL `$ne` menyusup ke query
+cek-duplikat dan nilai dict tertulis via `$set` (merusak tipe field). Ditutup:
+setelah allow-list kunci, tolak 400 bila ada nilai `dict`/`list` (semua field
+patchable memang skalar).
+
+Verifikasi: `pytest tests/unit` 638 lulus; `compileall` bersih. Backend-only.
+Menutup rangkaian pengerasan pasca-audit lanjutan (sapuan 6-agen).
+
+---
+
 ## [#545] Keamanan: pengerasan unggah gambar (decompression-bomb, magic byte, nosniff) — 2026-07-23
 
 Temuan audit unggah/berkas:
