@@ -7,6 +7,7 @@ biaya per tahun anggaran; jadwal pemeliharaan berkala dikelola di sini.
 import uuid
 from datetime import datetime, timezone
 
+from pymongo import ReturnDocument
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
@@ -28,6 +29,30 @@ _PROJ = {"_id": 0}
 # Field ringkas untuk rekap (hemat: tanpa uraian/keterangan panjang).
 _PROJ_REKAP = {"_id": 0, "asset_id": 1, "asset_code": 1, "NUP": 1,
                "asset_name": 1, "tanggal": 1, "jenis": 1, "biaya": 1}
+
+
+async def next_ba_perbaikan_nomor(tahun: str) -> str:
+    """Nomor BA-Perbaikan berikutnya — ATOMIK via `counters` ($inc pada
+    find_one_and_update). Menggantikan `count_documents(...) + 1` yang RAWAN
+    BALAPAN: dua posting kapitalisasi bersamaan bisa membaca hitungan yang sama
+    → nomor BA kembar. $inc MongoDB atomik, jadi tiap pemanggil dapat urut unik
+    (pola sama dengan nomor tiket kegiatan di pengesahan.py).
+
+    Semantik lama DIPERTAHANKAN (hitung berjalan GLOBAL dengan label tahun BA):
+    counter di-seed SEKALI dari jumlah BA yang sudah ada agar nomor baru
+    menyambung tanpa bertabrakan dengan data lama. Celah urut yang terbuang
+    (mis. saat CAS idempoten kalah) tidak masalah."""
+    cid = "ba_perbaikan_seq"
+    if await db.counters.find_one({"_id": cid}) is None:
+        seed = await db.pemeliharaan.count_documents(
+            {"ba_perbaikan.nomor": {"$exists": True}})
+        # $setOnInsert idempoten: pemanggil kedua yang balapan tak menimpa seed.
+        await db.counters.update_one(
+            {"_id": cid}, {"$setOnInsert": {"seq": seed}}, upsert=True)
+    counter = await db.counters.find_one_and_update(
+        {"_id": cid}, {"$inc": {"seq": 1}},
+        upsert=True, return_document=ReturnDocument.AFTER)
+    return f"BA-PRB/{int(counter['seq']):03d}/{tahun}"
 
 
 class JadwalIn(BaseModel):
@@ -541,9 +566,8 @@ async def posting_kapitalisasi(catatan_id: str,
         if ba.terapkan_masa_manfaat else 0
     nomor_ba = str(ba.nomor_ba or "").strip()
     if not nomor_ba:
-        urut = await db.pemeliharaan.count_documents(
-            {"ba_perbaikan.nomor": {"$exists": True}}) + 1
-        nomor_ba = f"BA-PRB/{urut:03d}/{tgl_ba[:4]}"
+        # Nomor otomatis ATOMIK (anti-kembar saat posting bersamaan).
+        nomor_ba = await next_ba_perbaikan_nomor(tgl_ba[:4])
     ba_doc = {
         "nomor": nomor_ba,
         "tanggal": tgl_ba,

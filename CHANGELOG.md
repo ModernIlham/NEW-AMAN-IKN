@@ -48,6 +48,24 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#552] Keandalan: penomeran BA-Perbaikan atomik (anti nomor kembar) — 2026-07-23
+
+Nomor otomatis Berita Acara Perbaikan (`posting_kapitalisasi` di Pemeliharaan)
+sebelumnya dibuat dari `count_documents(...) + 1` — **rawan balapan**: dua
+posting kapitalisasi bersamaan membaca hitungan yang sama lalu menghasilkan
+`BA-PRB/xxx` **kembar**. Diganti ke penghitung ATOMIK via koleksi `counters`
+(`find_one_and_update` `$inc`, `ReturnDocument.AFTER`) — pola sama dengan nomor
+tiket kegiatan (pengesahan.py) yang sudah teruji lintas-worker.
+
+Semantik lama **dipertahankan** (hitung berjalan global berlabel tahun BA):
+penghitung di-*seed* sekali dari jumlah BA yang sudah ada (`$setOnInsert`
+idempoten) agar nomor baru menyambung tanpa bertabrakan dengan data lama.
+Koleksi `counters` sudah ikut backup/restore; seed malas otomatis membangun
+ulang bila arsip lama tak membawanya. Nomor BA yang diisi manual tetap dipakai
+apa adanya (tak menyentuh penghitung).
+
+Verifikasi: `pytest tests/unit` **641 lulus**; `compileall` bersih. Backend-only.
+
 ## [#551] Keamanan: rate-limit laporan pembukuan seluruh-DB (anti-DoS render PDF) — 2026-07-23
 
 Delapan endpoint laporan pembukuan **memindai SELURUH aset satker** lalu
