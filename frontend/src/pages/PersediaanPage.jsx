@@ -23,6 +23,14 @@ import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
+// Kunci idempotensi per sesi transaksi: dibuat saat dialog dibuka, dipakai
+// ulang bila submit diulang (klik ganda / retry jaringan) → server tidak
+// menggandakan stok. Dibuang saat dialog ditutup.
+const newIdem = () =>
+  (typeof crypto !== "undefined" && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : `idem-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
 const STATUS_FILTERS = [
   { value: "", label: "Semua" },
   { value: "aman", label: "Aman" },
@@ -258,7 +266,7 @@ export default function PersediaanPage({ user, onBack }) {
     try {
       const r = await axios.post(`${API}/persediaan/${masuk.item.id}/masuk`, {
         ...d, jumlah, harga_satuan: Number(d.harga_satuan) || 0,
-      });
+      }, { headers: { "Idempotency-Key": masuk.idem } });
       toast.success(`${r.data?.message} — stok kini ${r.data?.stok}`);
       setMasuk(null);
       load(page, search, status);
@@ -277,7 +285,8 @@ export default function PersediaanPage({ user, onBack }) {
     if (!jumlah || jumlah <= 0) { toast.error("Jumlah harus lebih dari 0"); return; }
     setSaving(true);
     try {
-      const r = await axios.post(`${API}/persediaan/${keluar.item.id}/keluar`, { ...d, jumlah });
+      const r = await axios.post(`${API}/persediaan/${keluar.item.id}/keluar`, { ...d, jumlah },
+        { headers: { "Idempotency-Key": keluar.idem } });
       toast.success(`${r.data?.message} — nilai keluar ${fmtRp(r.data?.nilai_keluar)}, stok kini ${r.data?.stok}`);
       setKeluar(null);
       load(page, search, status);
@@ -800,6 +809,7 @@ export default function PersediaanPage({ user, onBack }) {
                           type="button"
                           onClick={() => setMasuk({
                             item: it,
+                            idem: newIdem(),
                             data: {
                               jenis: "pembelian", jumlah: "", harga_satuan: "",
                               expired: "", no_bukti: "", jenis_dokumen: "",
@@ -818,6 +828,7 @@ export default function PersediaanPage({ user, onBack }) {
                           type="button"
                           onClick={() => setKeluar({
                             item: it,
+                            idem: newIdem(),
                             data: { jenis: "habis_pakai", jumlah: "", unit_penerima: "", no_bukti: "", keterangan: "" },
                           })}
                           disabled={!it.stok}
