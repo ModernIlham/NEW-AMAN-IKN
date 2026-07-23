@@ -48,6 +48,31 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#548] Keamanan: pengerasan login — kunci brute-force + setara-waktu anti-enumerasi — 2026-07-23
+
+Dua celah pada `POST /auth/login`:
+
+1. **Enumerasi username via timing.** Saat username tak ditemukan, endpoint
+   langsung balik 401 **tanpa** menjalankan bcrypt, sedangkan username yang ada
+   menjalankan bcrypt (~ratusan ms). Selisih waktu ini membocorkan username mana
+   yang valid. Ditutup: `auth_utils.verify_password_dummy()` menjalankan bcrypt
+   terhadap hash boneka (cost sama) lalu membuang hasilnya, sehingga waktu
+   respons setara antara "user ada" dan "user tidak ada".
+
+2. **Tidak ada kunci brute-force per akun.** Hanya ada rate-limit per-IP
+   (10/menit), tak menahan credential-stuffing terdistribusi. Ditambah: setelah
+   **10** percobaan gagal beruntun, akun dikunci **15 menit** (auto-buka;
+   penghitung di-reset saat login sukses). Field baru di dokumen user:
+   `login_gagal` + `login_terkunci_hingga`. Nilai timestamp rusak diabaikan
+   (tak sampai 500). Pesan tetap generik ("Username atau password salah") kecuali
+   status terkunci (429 dengan sisa menit).
+
+Pesan login sudah generik sejak awal (tak membocorkan akun ada/tidak). Kunci
+auto-expire agar tak menjadi DoS permanen.
+
+Verifikasi: `pytest tests/unit` **639 lulus** (+1 uji `verify_password_dummy`);
+`compileall` bersih. Backend-only.
+
 ## [#547] Keamanan: backup/restore/reset dibatasi KHUSUS super-admin pusat — 2026-07-23
 
 Operasi seluruh-DB (backup, restore, reset) menyentuh data **SEMUA satker**,

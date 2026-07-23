@@ -2,12 +2,12 @@
 import os
 import uuid
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, HTTPException, Request, Header
 
 from db import db
 from models import UserCreate, UserLogin, UserResponse, TokenResponse, OTPRequest, OTPVerify
-from auth_utils import hash_password, verify_password, create_token, create_media_token, get_current_user
+from auth_utils import hash_password, verify_password, verify_password_dummy, create_token, create_media_token, get_current_user
 import hmac
 
 from shared_utils import limiter, generate_otp, send_otp_email, store_otp, get_otp, delete_otp, catat_gagal_otp, RESEND_API_KEY, SENDER_EMAIL
@@ -353,24 +353,63 @@ async def verify_otp(request: Request, data: OTPVerify):
         "message": "Pendaftaran berhasil. Email Anda telah terverifikasi, namun akun menunggu aktivasi dari administrator sebelum dapat digunakan untuk login.",
     }
 
+# Kunci brute-force login: setelah MAKS_GAGAL_LOGIN gagal beruntun, akun
+# dikunci sementara KUNCI_MENIT menit (auto-buka). Pelengkap rate-limit per-IP
+# (10/menit) untuk menahan credential-stuffing terdistribusi. Kunci auto-expire
+# agar tak jadi DoS permanen; penghitung di-reset saat login sukses.
+MAKS_GAGAL_LOGIN = 10
+KUNCI_MENIT = 15
+
+
 @auth_router.post("/auth/login", response_model=TokenResponse)
 @limiter.limit("10/minute")
 async def login(request: Request, credentials: UserLogin):
     """Login user and return JWT token"""
     user = await db.users.find_one({"username": credentials.username}, {"_id": 0})
     if not user:
+        # User tak ada: tetap jalankan bcrypt (hash boneka) agar waktu respons
+        # setara kasus user ada — tanpa ini timing membocorkan username valid.
+        verify_password_dummy(credentials.password)
         raise HTTPException(status_code=401, detail="Username atau password salah")
-    
+
+    # Akun terkunci sementara karena terlalu banyak percobaan gagal?
+    terkunci_hingga = user.get("login_terkunci_hingga")
+    if terkunci_hingga:
+        try:
+            dt = datetime.fromisoformat(terkunci_hingga)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            sekarang = datetime.now(timezone.utc)
+            if dt > sekarang:
+                sisa = int((dt - sekarang).total_seconds() // 60) + 1
+                raise HTTPException(
+                    status_code=429,
+                    detail=(f"Akun terkunci sementara karena terlalu banyak percobaan "
+                            f"gagal. Coba lagi dalam ~{sisa} menit."))
+        except (ValueError, OverflowError):
+            pass  # nilai rusak → abaikan kunci, jangan sampai 500
+
     if not verify_password(credentials.password, user["password"]):
+        # Naikkan penghitung gagal; kunci akun bila melewati ambang.
+        gagal = int(user.get("login_gagal") or 0) + 1
+        set_fields = {"login_gagal": gagal}
+        if gagal >= MAKS_GAGAL_LOGIN:
+            set_fields["login_terkunci_hingga"] = (
+                datetime.now(timezone.utc) + timedelta(minutes=KUNCI_MENIT)).isoformat()
+            set_fields["login_gagal"] = 0  # reset setelah dikunci
+        await db.users.update_one({"id": user["id"]}, {"$set": set_fields})
         raise HTTPException(status_code=401, detail="Username atau password salah")
-    
+
     if not user.get("is_active", True):
         raise HTTPException(status_code=403, detail="Akun Anda telah dinonaktifkan. Hubungi administrator.")
-    
+
     token = create_token(user["id"], user["username"])
 
-    # Update last_active on login
-    await db.users.update_one({"id": user["id"]}, {"$set": {"last_active": datetime.now(timezone.utc).isoformat()}})
+    # Login sukses: perbarui last_active + reset penghitung/kunci gagal.
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {"last_active": datetime.now(timezone.utc).isoformat(), "login_gagal": 0},
+         "$unset": {"login_terkunci_hingga": ""}})
     
     # Normalize legacy role: "user" -> "operator"
     user_role = user.get("role", "operator")

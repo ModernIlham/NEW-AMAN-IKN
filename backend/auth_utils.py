@@ -27,6 +27,26 @@ def hash_password(password: str) -> str:
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
 
+
+# Hash bcrypt "boneka" untuk MENYETARAKAN WAKTU RESPONS login saat username
+# TIDAK ditemukan. Tanpa ini, permintaan dengan username tak-ada kembali jauh
+# lebih cepat (tak menjalankan bcrypt) daripada username ada → penyerang bisa
+# membedakan akun yang ADA vs TIDAK hanya dari waktu respons (enumerasi user).
+# Dihitung sekali saat impor; cost factor sama dengan hash_password (gensalt
+# default) agar durasinya setara.
+_DUMMY_PASSWORD_HASH = bcrypt.hashpw(b"aman-timing-equalizer", bcrypt.gensalt())
+
+
+def verify_password_dummy(plain_password: str) -> bool:
+    """Jalankan bcrypt terhadap hash boneka lalu buang hasilnya — dipakai pada
+    jalur login ketika user TIDAK ditemukan, agar waktu respons setara dengan
+    kasus user ada (anti-enumerasi via timing). SELALU mengembalikan False."""
+    try:
+        bcrypt.checkpw(str(plain_password or "").encode("utf-8"), _DUMMY_PASSWORD_HASH)
+    except Exception:
+        pass
+    return False
+
 def create_token(user_id: str, username: str) -> str:
     payload = {
         "user_id": user_id,
