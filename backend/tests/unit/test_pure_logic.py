@@ -191,6 +191,54 @@ def test_csv_checklist_formatter():
     assert len(xl) == 2 and xl[0]["status"].startswith("✓")
 
 
+def _reshape_checklist_like_projection(checklist):
+    """Tiru hasil aggregation $project pada export_csv: buang isi base64
+    (item.photos → panjang saja; documents → nama saja), pertahankan yang
+    dipakai formatter. Cerminan Python dari $map di routes/exports.py."""
+    out = []
+    for it in checklist:
+        item = {"name": it.get("name"), "checked": it.get("checked"),
+                "notes": it.get("notes")}
+        item["photos"] = [1 for _ in (it.get("photos") or [])]
+        docs = []
+        for d in (it.get("documents") or []):
+            nd = {}
+            if isinstance(d, dict) and "name" in d:  # $$d.name hilang → field diomit
+                nd["name"] = d.get("name")
+            docs.append(nd)
+        item["documents"] = docs
+        out.append(item)
+    return out
+
+
+def test_csv_projection_setara_penuh():
+    # AUDIT PERF: export_csv membuang byte base64 document_checklist via
+    # aggregation. Buktikan keluaran formatter IDENTIK untuk data penuh vs
+    # data ter-proyeksi, dan bahwa hasil proyeksi tak lagi memuat base64.
+    import routes.exports as ex
+    penuh = [
+        {"name": "BAST", "checked": True, "notes": "ok",
+         "photos": ["data:image/jpeg;base64,AAAABBBB", "data:image/jpeg;base64,CCCC"],
+         "documents": [{"name": "surat.pdf", "data": "JVBERi0xLjcKJUVSU..."},
+                       {"name": "lampiran.pdf", "data": "aGVhdnlieXRlcw=="}]},
+        {"name": "Foto Fisik", "checked": False, "notes": "",
+         "photos": ["data:image/jpeg;base64,DDDD"], "documents": []},
+        {"name": "Tanpa Nama Dok", "checked": True, "notes": "x",
+         "photos": [], "documents": [{"data": "tanpa-nama-key"}]},
+    ]
+    ringkas = _reshape_checklist_like_projection(penuh)
+    hasil_penuh = ex.format_document_checklist_for_csv(penuh, "aset-1", "http://x")
+    hasil_ringkas = ex.format_document_checklist_for_csv(ringkas, "aset-1", "http://x")
+    assert hasil_penuh == hasil_ringkas  # keluaran CSV identik
+    # Hasil proyeksi tak boleh membawa base64/byte dokumen apa pun.
+    blob = repr(ringkas)
+    assert "base64" not in blob and "JVBER" not in blob and "heavybytes" not in blob
+    assert "aGVhdnlieXRlcw" not in blob and "tanpa-nama-key" not in blob
+    # Jumlah foto & tautan tetap benar (2 foto item pertama, 1 foto item kedua).
+    assert hasil_ringkas["kelengkapan_foto_links"].count("doc-file/0/photo/") == 2
+    assert "surat.pdf=" in hasil_ringkas["kelengkapan_pdf_links"]
+
+
 @pytest.mark.parametrize("label,data,mx", [
     ("png-alpha-datauri", PNG_DATAURI, 640),
     ("raw-b64", PNG_ALPHA, 110),

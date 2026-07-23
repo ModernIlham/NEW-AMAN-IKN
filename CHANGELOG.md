@@ -48,6 +48,28 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#564] Performa: ekspor CSV buang byte base64 document_checklist di server — 2026-07-23
+
+`GET /export/csv` sebelumnya menarik `document_checklist` **penuh** dari
+MongoDB — termasuk foto base64 (item `photos`) dan byte PDF inline
+(`documents.data`) yang bisa **multi-MB per baris** — padahal formatter CSV
+hanya menulis nama/checked/notes item, **jumlah** foto, dan **nama** dokumen
+(bukan isinya). Untuk aset ber-BAST/PDF inline × ribuan baris, ini mentransfer
+data besar sia-sia dari DB ke aplikasi.
+
+Perbaikan: ganti `find(query, projection)` dengan `aggregate([$match, $project])`
+yang memproyeksikan `document_checklist` via `$map` → hanya membawa
+nama/checked/notes + **panjang** array foto (isi dibuang) + **nama** dokumen
+(byte `data` dibuang). Byte base64 tak pernah meninggalkan MongoDB.
+
+- Tanpa perubahan keluaran CSV — dibuktikan test `test_csv_projection_setara_penuh`
+  (formatter menghasilkan keluaran IDENTIK untuk data penuh vs ter-proyeksi,
+  dan hasil proyeksi tak memuat base64/byte apa pun).
+- Kolom skalar tetap dari registry (`asset_fields.py`) → field baru otomatis ikut.
+- 657 test unit hijau (+1).
+
+---
+
 ## [#563] Performa: indeks kunci-sort/filter daftar aset + GridFS job_id yang hilang — 2026-07-23
 
 Audit performa menemukan beberapa opsi sort/filter `GET /assets` tanpa indeks
