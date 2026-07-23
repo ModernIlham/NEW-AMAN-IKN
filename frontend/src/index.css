@@ -85,6 +85,21 @@ code, .font-mono {
   }
 }
 
+/* Date/time picker di MODE GELAP — perbaikan ikon kalender tak terlihat.
+   Secara default browser merender ikon "buka pemilih tanggal"
+   (::-webkit-calendar-picker-indicator) berwarna GELAP → hilang di latar gelap.
+   `color-scheme: dark` menyuruh browser merender seluruh kontrol tanggal native
+   bertema gelap: ikon jadi TERANG (terlihat), dan popup kalender beserta
+   kolom hari/bulan/tahunnya ikut bertema gelap sesuai tema aplikasi.
+   Berlaku untuk SEMUA input tanggal/waktu native di seluruh halaman. */
+.dark input[type="date"],
+.dark input[type="datetime-local"],
+.dark input[type="month"],
+.dark input[type="week"],
+.dark input[type="time"] {
+  color-scheme: dark;
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: hsl(var(--muted)); }
