@@ -48,6 +48,34 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#539] Keandalan: gerbang atomik single-flight backup/restore — 2026-07-23
+
+Temuan audit terverifikasi (concurrency): guard "hanya satu backup/restore
+berjalan" memakai pola **check-then-insert** yang TIDAK atomik — dua request
+konkuren bisa sama-sama lolos `find_one({status: running})` (job masih
+`queued`) lalu keduanya jalan. Dua restore berselang paling berbahaya:
+`run_restore_task` meng-*wipe* koleksi + re-impor GridFS → data & foto bisa
+rusak/tercampur.
+
+Ditutup dengan gerbang ATOMIK level-DB:
+
+- **`indexes.py`** — partial unique index `backup_jobs.active_lock`
+  (`partialFilterExpression {$exists:true}`, kompatibel semua versi MongoDB —
+  tanpa `$in` yang butuh 6.0+).
+- **`backup.py`** — job aktif (queued/running) membawa `active_lock="GLOBAL"`;
+  insert kedua → `DuplicateKeyError` → 409. Lock dilepas (`$unset`) saat job
+  mencapai status terminal (`update_job` completed/failed) atau di-reap
+  `cleanup_stale_jobs` (kini juga menyapu `queued` macet). Ke-4 pembuat job —
+  backup manual, restore unggah, restore dari arsip, dan **backup otomatis
+  terjadwal** — kini melewati gerbang yang sama (backup otomatis melewati
+  siklus bila ada proses aktif). Fast-path `find_one` diperluas ke
+  `status ∈ {queued, running}` untuk pesan 409 lebih dini.
+
+Verifikasi: `pytest tests/unit` 638 lulus; `compileall` bersih. Backend-only.
+Menuntaskan backlog cacat terkonfirmasi dari audit menyeluruh.
+
+---
+
 ## [#538] Keandalan: strong-ref task latar (cegah GC fire-and-forget) — 2026-07-23
 
 Temuan audit terverifikasi (concurrency): beberapa `asyncio.create_task(...)`
