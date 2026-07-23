@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from auth_utils import require_admin, require_user, require_writer
 from db import db
 from pemeliharaan_utils import rekap_pemeliharaan
-from shared_utils import kode_satker_user, scope_query_field_satker
+from shared_utils import kode_satker_user, scope_query_field_satker, pastikan_akses_dok_satker
 from perencanaan_utils import (
     JENIS_USULAN_RKBMN, STATUS_USULAN_RKBMN, TRANSISI_USULAN_RKBMN,
     rekap_rkbmn, rekap_usulan_rkbmn, validate_transisi_rkbmn,
@@ -257,6 +257,7 @@ async def transisi_usulan_rkbmn(usulan_id: str, payload: TransisiRkbmnIn,
     u = await db.perencanaan_usulan.find_one({"id": usulan_id}, {"_id": 0})
     if not u:
         raise HTTPException(status_code=404, detail="Usulan tidak ditemukan")
+    await pastikan_akses_dok_satker(user, u)
     ke = payload.status
     errors = validate_transisi_rkbmn(u, ke, payload.catatan)
     if errors:
@@ -286,7 +287,8 @@ async def transisi_usulan_rkbmn(usulan_id: str, payload: TransisiRkbmnIn,
 async def hapus_usulan_rkbmn(usulan_id: str,
                              _admin: dict = Depends(require_admin)):
     """Hapus satu usulan dari register (admin)."""
-    res = await db.perencanaan_usulan.delete_one({"id": usulan_id})
+    res = await db.perencanaan_usulan.delete_one(
+        scope_query_field_satker(_admin, {"id": usulan_id}))
     if not res.deleted_count:
         raise HTTPException(status_code=404, detail="Usulan tidak ditemukan")
     return {"ok": True}
@@ -358,6 +360,7 @@ async def sanding_usulan(usulan_id: str, kode_barang: str = "",
     usulan = await db.perencanaan_usulan.find_one({"id": usulan_id}, {"_id": 0})
     if not usulan:
         raise HTTPException(status_code=404, detail="Usulan tidak ditemukan")
+    await pastikan_akses_dok_satker(_user, usulan)
     prefix = (str(kode_barang or "").strip()
               or str(usulan.get("asset_code") or "")[:3])
     usulan_sanding = {**usulan, "kode_barang": prefix}

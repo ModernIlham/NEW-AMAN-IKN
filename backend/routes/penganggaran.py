@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 
 from auth_utils import require_admin, require_user, require_writer
 from db import db
-from shared_utils import kode_satker_user, scope_query_field_satker
+from shared_utils import kode_satker_user, scope_query_field_satker, pastikan_akses_dok_satker
 from penganggaran_utils import (
     AKUN_BAS, JENIS_ANGGARAN, STATUS_ANGGARAN, TOLERANSI_REKONSILIASI,
     info_tenggat_tahapan, rekap_anggaran, rekap_kalender, rekap_rekonsiliasi,
@@ -187,7 +187,7 @@ async def hapus_tahapan_kalender(tahapan_id: str,
     return {"ok": True}
 
 
-async def _ambil_snapshot_rkbmn(rkbmn_id: str) -> dict:
+async def _ambil_snapshot_rkbmn(rkbmn_id: str, user=None) -> dict:
     """Cari usulan RKBMN Perencanaan (bila id diisi) → snapshot FK; 404 bila
     hilang (tiru `_ambil_snapshot_penganggaran` #199)."""
     rid = str(rkbmn_id or "").strip()
@@ -196,10 +196,11 @@ async def _ambil_snapshot_rkbmn(rkbmn_id: str) -> dict:
     u = await db.perencanaan_usulan.find_one(
         {"id": rid},
         {"_id": 0, "id": 1, "uraian": 1, "tahun_rkbmn": 1, "jenis": 1,
-         "unit_pengusul": 1})
+         "unit_pengusul": 1, "kode_satker": 1})
     if not u:
         raise HTTPException(status_code=404,
                             detail="Usulan RKBMN Perencanaan tidak ditemukan")
+    await pastikan_akses_dok_satker(user, u)
     return snapshot_rkbmn(u)
 
 
@@ -212,7 +213,7 @@ async def buat_usulan_anggaran(payload: UsulanAnggaranIn,
     if errors:
         raise HTTPException(status_code=400, detail="; ".join(errors))
     # FK ke simpul Perencanaan (§5A gap #4): bekukan snapshot RKBMN sumber.
-    snap_rkbmn = await _ambil_snapshot_rkbmn(data.get("rkbmn_id"))
+    snap_rkbmn = await _ambil_snapshot_rkbmn(data.get("rkbmn_id"), user)
     aset_rows = []
     for aid in dict.fromkeys(data.get("asset_ids") or []):
         a = await db.assets.find_one({"id": aid}, _PROJ_ASET)
@@ -257,6 +258,7 @@ async def transisi_anggaran(usulan_id: str, payload: TransisiAnggaranIn,
     u = await db.penganggaran.find_one({"id": usulan_id}, {"_id": 0})
     if not u:
         raise HTTPException(status_code=404, detail="Usulan tidak ditemukan")
+    await pastikan_akses_dok_satker(admin, u)
     data = payload.model_dump()
     errors = validate_transisi_anggaran(u, payload.status, data)
     if errors:
@@ -292,7 +294,7 @@ async def hapus_usulan_anggaran(usulan_id: str,
                                 _admin: dict = Depends(require_admin)):
     """Hapus usulan salah input (hanya status diusulkan)."""
     res = await db.penganggaran.delete_one(
-        {"id": usulan_id, "status": "diusulkan"})
+        scope_query_field_satker(_admin, {"id": usulan_id, "status": "diusulkan"}))
     if res.deleted_count == 0:
         raise HTTPException(
             status_code=409,

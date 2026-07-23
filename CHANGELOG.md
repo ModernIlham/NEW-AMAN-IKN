@@ -48,6 +48,32 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#543] Keamanan: guard satker by-id di Wasdal/Pemusnahan/Perencanaan/Penganggaran — 2026-07-23
+
+Lanjutan audit: daftar keempat modul sudah ter-scope, tapi endpoint yang
+mengambil dokumen by-id lalu BACA/UBAH/HAPUS belum ber-guard → user satker A
+bisa memajukan status / menghapus / melihat PDF dokumen satker B (IDOR).
+
+- **Wasdal**: `selesaikan_penertiban`, `terbitkan_ba_insidentil`,
+  `laporkan_insidentil`, `ba_insidentil_pdf` → `pastikan_akses_dok_satker`;
+  `hapus_penertiban`, `hapus_insidentil` → `delete_one` ter-scope
+  (404 mendahului pembersihan lampiran lintas-satker).
+- **Pemusnahan**: `usulkan_penghapusan_dari_ba`, `ba_pemusnahan_pdf` →
+  `pastikan_akses_dok_satker`; `hapus_pemusnahan` → delete ter-scope;
+  `buat_pemusnahan` → `pastikan_akses_aset` (aset via kegiatan; `activity_id`
+  ditambahkan ke proyeksi).
+- **Perencanaan**: `transisi_usulan_rkbmn`, `sanding_usulan` → guard;
+  `hapus_usulan_rkbmn` → delete ter-scope.
+- **Penganggaran**: `transisi_anggaran` → guard; `hapus_usulan_anggaran` →
+  delete ter-scope (filter status dipertahankan); `_ambil_snapshot_rkbmn`
+  meneruskan `user` + guard dokumen RKBMN sumber.
+
+Anti-race `find_one_and_update` tetap utuh; super-admin & dokumen era-lama
+lolos. Verifikasi: `pytest tests/unit` 638 lulus; `compileall` bersih.
+Backend-only.
+
+---
+
 ## [#542] Keamanan: guard satker pada lampiran 8 modul (IDOR sub-resource) — 2026-07-23
 
 Sapuan audit menemukan endpoint LAMPIRAN (unggah/unduh/hapus) di 8 modul
