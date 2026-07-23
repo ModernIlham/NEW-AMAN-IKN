@@ -72,6 +72,11 @@ app.add_middleware(
 # seluruh penanganan. ASGI murni → aman untuk StreamingResponse (foto/PDF/ekspor).
 app.add_middleware(RequestContextMiddleware)
 
+# Pelacak aktivitas request (lintas-worker, ASGI murni) — dipakai konverter
+# WebP latar agar HANYA bekerja saat aplikasi benar-benar sepi.
+from activity_tracker import AktivitasMiddleware
+app.add_middleware(AktivitasMiddleware)
+
 # Log config status
 from shared_utils import TINIFY_API_KEY, RESEND_API_KEY
 if TINIFY_API_KEY:
@@ -151,6 +156,14 @@ async def startup_event():
         start_job_maintenance()
     except Exception as e:
         logger.warning(f"Scheduler pemeliharaan job gagal start (non-fatal): {e}")
+    # Konverter foto → WebP latar: bertahap, hanya saat aplikasi idle, satu
+    # worker (lease atomik), berhenti saat sisa kuota Tinify <= 50. Aman:
+    # verifikasi berlapis sebelum hapus blob lama.
+    try:
+        from webp_converter import start_webp_converter
+        start_webp_converter()
+    except Exception as e:
+        logger.warning(f"Konverter WebP gagal start (non-fatal): {e}")
     logger.info("Application started successfully")
     logger.info(f"MongoDB connected: {os.environ['DB_NAME']}")
 

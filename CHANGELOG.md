@@ -48,6 +48,49 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#570] Konversi foto → WebP latar belakang (adaptif-idle, aman, via Tinify) — 2026-07-23
+
+Sistem konversi foto ASLI aset (`assets.photo_gridfs_ids`, JPEG di GridFS) ke
+**WebP** secara bertahap & otomatis, dirancang agar **tak mengganggu performa
+aplikasi** dan **tak pernah kehilangan foto**.
+
+**Modul baru:**
+- `backend/activity_tracker.py` — pelacak aktivitas request **lintas-worker**
+  (middleware ASGI tipis; tulis "aktivitas terakhir" ke Mongo di-throttle ≤1/5
+  dtk/worker). `aplikasi_idle()` dipakai konverter untuk tahu kapan aplikasi
+  benar-benar sepi.
+- `backend/webp_converter.py` — worker latar:
+  - **Idle-aware**: hanya bekerja bila tak ada request nyata ≥90 dtk; begitu
+    ada aktivitas → berhenti.
+  - **Satu worker**: lease atomik MongoDB (`app_runtime.webp_lease`) agar 2–4
+    worker uvicorn tak dobel-proses / dobel-bakar kuota.
+  - **Hemat kuota**: berhenti bila SISA kuota Tinify ≤ **50** (dari 500/bulan);
+    lanjut sendiri saat kuota reset / ada foto baru.
+  - **Aman (verifikasi berlapis SEBELUM hapus lama)**: (1) sumber JPEG valid,
+    (2) hasil WebP terdekode + **dimensi sama persis** + non-kosong, (3) blob
+    baru **terbaca ulang**. Baru **swap referensi ber-OCC (bump version)** —
+    menutup race dengan edit foto user konkuren — lalu hapus blob lama. Bila
+    verifikasi gagal di titik mana pun → batalkan, foto lama utuh.
+  - **Bertahap & terjadwal**: satu foto per siklus, berjeda (~8 dtk); berhenti
+    saat semua selesai; hanya konversi foto yang MASIH direferensikan aset
+    (hindari bakar kuota untuk blob yatim).
+
+**Perubahan pendukung:**
+- Serve foto penuh (`GET /assets/{id}/photos/{idx}`) kini **content-type-aware**
+  (magic-byte → `image/webp`/`image/jpeg`/…) agar WebP tersaji benar. Thumbnail
+  & preview tetap JPEG (Fase 2).
+- Indeks `fs.files` `metadata.content_type` (pemilihan kandidat efisien).
+- Konversi via Tinify Convert API (`.convert(type="image/webp")`).
+
+**Konfigurasi (env, opsional):** `WEBP_KONVERSI_AKTIF=0` (kill-switch),
+`WEBP_IDLE_DETIK`, `WEBP_JEDA_FOTO`, `WEBP_KUOTA_SISA_MIN`.
+
+Fase 1 = foto asli (prioritas). Thumbnail inline & lampiran modul menyusul.
+Test: +8 unit (gerbang keamanan `verifikasi_webp`, deteksi content-type,
+filter idle) — total 665 hijau.
+
+---
+
 ## [#569] UI mode gelap: ikon pemilih tanggal (date picker) kini terlihat — 2026-07-23
 
 Di mode gelap, ikon "buka pemilih tanggal" pada semua `<input type="date">`
