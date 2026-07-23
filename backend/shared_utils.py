@@ -19,6 +19,11 @@ from pathlib import Path
 from cachetools import TTLCache
 from fastapi import HTTPException
 from PIL import Image as PILImage
+# Pertahanan decompression-bomb (global proses, semua titik dekode PIL): batasi
+# total piksel yang boleh didekode ke ~50MP (default Pillow ~89MP). Pillow
+# melempar DecompressionBombError pada >2× nilai ini → cegah alokasi RAM
+# raksasa dari berkas kecil-terkompres (mis. unggah foto TTD tamu e-sign).
+PILImage.MAX_IMAGE_PIXELS = 50_000_000
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 import tinify
