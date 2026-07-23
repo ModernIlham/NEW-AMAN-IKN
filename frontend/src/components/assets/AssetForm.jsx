@@ -653,6 +653,12 @@ const AssetForm = memo(({
   const originalDataRef = useRef(null);
   const photosModifiedRef = useRef(false);
   const checklistModifiedRef = useRef(false);
+  // True begitu pengguna MEMILIH status inventarisasi secara manual di form ini
+  // (Select penuh atau chip lapangan). Saat true, auto-promosi status (foto +
+  // koordinat → "Ditemukan") DIMATIKAN agar pilihan pengguna — termasuk revert
+  // ke "Belum Diinventarisasi" pada aset ber-foto — menetap. Direset tiap form
+  // dibuka / aset berganti.
+  const statusDipilihManualRef = useRef(false);
   // True once the photo strip for the CURRENT edit target was built from the
   // light fetch (photo_count → streaming thumbnail URLs).
   // While false, photoItems does NOT reflect the photos stored server-side —
@@ -673,6 +679,10 @@ const AssetForm = memo(({
 
   // Derive isEditing from prop immediately — no flash of "Tambah Baru"
   const isEditing = !!editAsset;
+
+  // Reset penanda "status dipilih manual" tiap form dibuka atau aset berganti,
+  // agar auto-promosi status kembali aktif untuk aset berikutnya.
+  useEffect(() => { statusDipilihManualRef.current = false; }, [isOpen, editId]);
 
   // Photo items: tracks each photo as {type: 'existing'|'new', thumbnail, originalIndex?, newData?}
   const [photoItems, setPhotoItems] = useState([]);
@@ -1150,6 +1160,10 @@ const AssetForm = memo(({
   // Dipakai oleh Select "Status Inventarisasi" DAN tombol segmented di
   // InventoryFieldSheet (mode inventarisasi lapangan).
   const handleInventoryStatusChange = useCallback(v => {
+    // Tandai bahwa status dipilih MANUAL → matikan auto-promosi saat simpan agar
+    // pilihan (termasuk kembali ke "Belum Diinventarisasi") menetap (lihat
+    // handleSubmit). Direset tiap form dibuka untuk aset lain.
+    statusDipilihManualRef.current = true;
     setFormData(p => ({
       ...p, inventory_status: v,
       ...(v !== "Tidak Ditemukan" ? { klasifikasi_tidak_ditemukan: "", sub_klasifikasi: "", uraian_tidak_ditemukan: "", tindak_lanjut: "" } : {}),
@@ -1489,17 +1503,20 @@ const AssetForm = memo(({
 
       // Status inventarisasi OTOMATIS (default AKTIF): saat foto + koordinat sudah
       // ada dan status masih default "Belum Diinventarisasi", simpan sebagai
-      // "Sudah Diinventarisasi". Dihitung SEKALI di sini lalu hanya diterapkan ke
-      // PAYLOAD (bukan ke formData) agar validasi di atas tak berubah timing-nya.
-      // Karena hanya naik saat koordinat ADA, aturan "inventarisasi wajib
-      // koordinat" tetap terpenuhi.
+      // "Ditemukan". Dihitung SEKALI di sini lalu hanya diterapkan ke PAYLOAD
+      // (bukan ke formData) agar validasi di atas tak berubah timing-nya. Karena
+      // hanya naik saat koordinat ADA, aturan "inventarisasi wajib koordinat"
+      // tetap terpenuhi.
+      // Jika pengguna MEMILIH status secara manual (termasuk mengembalikan ke
+      // "Belum Diinventarisasi"), auto-promosi DIMATIKAN agar pilihannya menetap
+      // — memperbaiki bug "tak bisa di-revert ke Belum" pada aset ber-foto.
       const hasPhoto = ((photoItems?.length || 0) > 0) || (formData.photos || []).some(Boolean);
       const autoStatus = statusInventarisasiOtomatis({
         inventory_status: formData.inventory_status,
         hasPhoto,
         lat: formData.koordinat_latitude,
         lng: formData.koordinat_longitude,
-        enabled: autoInventarisasiEnabled(),
+        enabled: autoInventarisasiEnabled() && !statusDipilihManualRef.current,
       });
 
       if (isEditing && editId && originalDataRef.current) {

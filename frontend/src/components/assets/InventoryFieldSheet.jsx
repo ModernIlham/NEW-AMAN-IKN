@@ -129,7 +129,7 @@ const InventoryFieldSheet = ({
 }) => {
   const [notesOpen, setNotesOpen] = useState(false);
   // Auto-inventaris: bila ada foto + koordinat & status masih default, saat
-  // simpan status jadi "Sudah Diinventarisasi" (logika di AssetForm.handleSubmit).
+  // simpan status jadi "Ditemukan" (logika di AssetForm.handleSubmit).
   const [autoInv, setAutoInv] = useState(() => autoInventarisasiEnabled());
   const toggleAutoInv = () => {
     setAutoInv((on) => {
@@ -191,6 +191,17 @@ const InventoryFieldSheet = ({
                 </SegButton>
               ))}
             </div>
+            {/* Revert eksplisit ke "Belum Diinventarisasi" — memilih ini
+                mematikan auto-promosi status sehingga menetap walau ada
+                foto+koordinat (mis. koreksi salah tandai di lapangan). */}
+            <button type="button" data-testid="sheet-status-belum"
+              onClick={() => onInventoryStatusChange("Belum Diinventarisasi")}
+              className={`mt-1.5 w-full h-9 rounded-lg border text-xs font-semibold transition-colors ${
+                (status === "Belum Diinventarisasi" || !status)
+                  ? "bg-slate-600 border-slate-600 text-white"
+                  : "border-border text-muted-foreground hover:bg-muted"}`}>
+              Belum Diinventarisasi
+            </button>
           </Card>
 
           {/* Card 2 — Kondisi Fisik */}

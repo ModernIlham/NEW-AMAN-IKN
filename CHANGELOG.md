@@ -48,6 +48,28 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#554] Inventarisasi: auto-status "Ditemukan" (bukan "Sudah Diinventarisasi" yatim) + bisa di-revert ke "Belum" — 2026-07-23
+
+Dua perbaikan status inventarisasi yang saling terkait:
+
+1. **Nilai yatim → valid.** Auto-status saat foto+koordinat lengkap sebelumnya
+   ditulis `"Sudah Diinventarisasi"` — nilai yang TIDAK ada di daftar pilihan
+   resmi (Belum/Ditemukan/Tidak Ditemukan/Berlebih/Sengketa), sehingga tak
+   pernah tampil terseleksi di chip lapangan dan gagal validasi impor. Kini
+   auto-status = **"Ditemukan"** (aset ber-foto memang ditemukan). Migrasi
+   startup backend (idempoten) menormalkan data lama `"Sudah Diinventarisasi"`
+   → `"Ditemukan"`. Berlaku untuk jalur peta, kamera, dan mode cepat.
+
+2. **Bisa di-revert ke "Belum Diinventarisasi".** Dulu memilih "Belum" pada aset
+   ber-foto+koordinat tak menetap — auto-promosi menimpanya kembali saat simpan.
+   Kini AssetForm menandai saat status DIPILIH manual dan mematikan auto-promosi
+   untuk simpan itu, sehingga pilihan (termasuk "Belum") menetap. Lembar cepat
+   (`InventoryFieldSheet`) juga menambah chip **"Belum Diinventarisasi"** agar
+   revert dapat dilakukan langsung di lapangan.
+
+Verifikasi: `craco test` 11 uji `inventoryStatus` lulus (2 baru); `pytest`
+backend 641 lulus; `yarn lint` 0 error; `yarn build` sukses.
+
 ## [#553] UX lapangan: seleksi dipertahankan setelah simpan massal berhasil — 2026-07-23
 
 Sebelumnya `handleBatchUpdate` memanggil `clearSelection()` tepat setelah
