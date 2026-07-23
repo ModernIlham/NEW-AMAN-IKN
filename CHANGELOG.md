@@ -48,6 +48,29 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#538] Keandalan: strong-ref task latar (cegah GC fire-and-forget) — 2026-07-23
+
+Temuan audit terverifikasi (concurrency): beberapa `asyncio.create_task(...)`
+dipanggil TANPA menyimpan referensi. asyncio hanya memegang *weak* ref → task
+fire-and-forget bisa di-GC saat suspended di titik `await` ("Task was destroyed
+but it is pending"), mematikan pekerjaan latar diam-diam. Pola perbaikan sudah
+ada di `exports.py` (`_EKSPOR_TASKS` set + `add_done_callback`), kini diterapkan
+seragam:
+
+- **categories.py** — impor kategori massal (`_do_bulk_import`) kini ber-`_IMPORT_TASKS`
+  (impor tak berhenti separuh jalan / job macet "importing" selamanya).
+- **backup.py** — helper `_track_bg` untuk 4 task: backup, restore (unggah &
+  dari arsip), dan loop scheduler backup otomatis (operasi integritas data &
+  loop terjadwal tak mati diam-diam).
+- **websocket.py** — publish event lintas-worker (`event_bus.publish`) kini
+  ber-`_BG_TASKS` (notifikasi real-time tak hilang di worker lain).
+
+Task yang sudah aman (disimpan di variabel/global: heartbeat WS, loop presence)
+tidak diubah. Verifikasi: `pytest tests/unit` 638 lulus; `compileall` bersih.
+Backend-only.
+
+---
+
 ## [#537] Keandalan: idempotensi reklasifikasi + OCC simpan KIB (Pembukuan) — 2026-07-23
 
 Dua temuan audit terverifikasi [tinggi] di modul Pembukuan (`mutasi_bmn.py`),
