@@ -247,9 +247,19 @@ async def reset_password(request: Request, data: dict):
                     if terkunci else "Kode OTP salah"))
 
     from auth_utils import hash_password
+    # Naikkan sesi_epoch (AUTH-C): seluruh token lama (akses & media) langsung
+    # gugur setelah reset password — perangkat yang mungkin dikuasai penyerang
+    # kehilangan akses. Baca epoch lalu $set (bukan $inc) agar nilai rusak
+    # (mis. string dari restore lama) dinormalkan ke int — $inc pada tipe
+    # non-numerik akan melempar WriteError (500) dan password gagal berubah.
+    u = await db.users.find_one({"username": email}, {"_id": 0, "sesi_epoch": 1})
+    try:
+        epoch_baru = int((u or {}).get("sesi_epoch") or 0) + 1
+    except (TypeError, ValueError):
+        epoch_baru = 1
     res = await db.users.update_one(
         {"username": email},
-        {"$set": {"password": hash_password(baru)}})
+        {"$set": {"password": hash_password(baru), "sesi_epoch": epoch_baru}})
     await delete_otp(f"reset:{email}")
     if res.matched_count == 0:
         raise HTTPException(status_code=400, detail="Akun tidak ditemukan")
@@ -403,7 +413,15 @@ async def login(request: Request, credentials: UserLogin):
     if not user.get("is_active", True):
         raise HTTPException(status_code=403, detail="Akun Anda telah dinonaktifkan. Hubungi administrator.")
 
-    token = create_token(user["id"], user["username"])
+    # Sertakan sesi_epoch user pada token (AUTH-C): reset/ubah password akan
+    # menaikkan epoch → token yang diterbitkan kini otomatis gugur. Guard nilai
+    # rusak (samakan dengan _decode_bearer) agar user dengan epoch korup tak
+    # justru 500 saat login (tak bisa dapat sesi baru).
+    try:
+        sesi_epoch = int(user.get("sesi_epoch") or 0)
+    except (TypeError, ValueError):
+        sesi_epoch = 0
+    token = create_token(user["id"], user["username"], sesi_epoch)
 
     # Login sukses: perbarui last_active + reset penghitung/kunci gagal.
     await db.users.update_one(
@@ -418,7 +436,7 @@ async def login(request: Request, credentials: UserLogin):
     
     return TokenResponse(
         access_token=token,
-        media_token=create_media_token(user["id"], user["username"]),
+        media_token=create_media_token(user["id"], user["username"], sesi_epoch),
         user=UserResponse(
             id=user["id"],
             username=user["username"],

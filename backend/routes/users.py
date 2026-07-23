@@ -73,7 +73,15 @@ async def change_user_password(user_id: str, data: dict, _admin: dict = Depends(
         raise HTTPException(status_code=404, detail="User tidak ditemukan")
     
     hashed = hash_password(new_password)
-    await db.users.update_one({"id": user_id}, {"$set": {"password": hashed}})
+    # Naikkan sesi_epoch (AUTH-C): admin mengganti password → sesi lama user
+    # tersebut dicabut (token akses & media gugur), memaksa login ulang. Baca
+    # epoch lalu $set (bukan $inc) agar nilai rusak (mis. string dari restore
+    # lama) dinormalkan ke int — $inc pada tipe non-numerik melempar WriteError.
+    try:
+        epoch_baru = int(user.get("sesi_epoch") or 0) + 1
+    except (TypeError, ValueError):
+        epoch_baru = 1
+    await db.users.update_one({"id": user_id}, {"$set": {"password": hashed, "sesi_epoch": epoch_baru}})
     return {"message": "Password berhasil diubah"}
 
 @users_router.put("/users/{user_id}/update-name")
