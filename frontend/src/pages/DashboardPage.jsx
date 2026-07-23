@@ -614,7 +614,11 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
           : `${r.data.updated} aset berhasil diupdate`;
         toast.success(msg);
       }
-      clearSelection();
+      // Seleksi DIPERTAHANKAN setelah simpan massal berhasil (permintaan
+      // lapangan): tutup panel edit tetapi biarkan baris tetap terseleksi agar
+      // pengguna bisa lanjut aksi lain atau memverifikasi hasil tanpa memilih
+      // ulang. Kosongkan manual lewat tombol "Batal pilih" bila perlu.
+      setShowBatchPanel(false);
       refreshData();
     } catch (err) {
       console.error("Batch update error:", err?.response?.status, err?.response?.data, err?.message);
@@ -624,7 +628,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       else if (err.response?.status === 413) toast.error("Data terlalu besar — kurangi jumlah foto/file");
       else toast.error(detail || `Gagal batch update: ${err.message || 'Unknown error'}`);
     } finally { setBatchUpdating(false); }
-  }, [selectedAssets, user, clearSelection]);
+  }, [selectedAssets, user]);
 
   const handleGroupBatchEdit = useCallback((assetIds) => {
     if (!assetIds || assetIds.length === 0) return;

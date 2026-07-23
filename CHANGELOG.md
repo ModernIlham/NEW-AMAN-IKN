@@ -48,6 +48,18 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#553] UX lapangan: seleksi dipertahankan setelah simpan massal berhasil — 2026-07-23
+
+Sebelumnya `handleBatchUpdate` memanggil `clearSelection()` tepat setelah
+ubah-massal sukses → seluruh seleksi baris langsung hilang. Untuk kerja lapangan
+yang beruntun, kini **seleksi dipertahankan**: panel edit ditutup tetapi baris
+tetap terseleksi, jadi pengguna dapat lanjut aksi lain atau memverifikasi hasil
+tanpa memilih ulang. Seleksi dapat dikosongkan manual (tombol batal pilih / Esc)
+seperti biasa. Pada kegagalan, seleksi tetap dipertahankan seperti sebelumnya.
+
+Verifikasi: `yarn lint` 0 error; `yarn build` sukses. Frontend-only
+(`DashboardPage.jsx`).
+
 ## [#552] Keandalan: penomeran BA-Perbaikan atomik (anti nomor kembar) — 2026-07-23
 
 Nomor otomatis Berita Acara Perbaikan (`posting_kapitalisasi` di Pemeliharaan)
