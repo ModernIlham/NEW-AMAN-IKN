@@ -48,6 +48,31 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#562] Performa: hentikan blok event loop — offload PIL sinkron di jalur foto aset ke thread — 2026-07-23
+
+Audit performa menemukan jalur tulis/baca foto aset yang menjalankan PIL
+(thumbnail/putar) **sinkron di event loop**, sehingga satu request berat
+memblokir SEMUA request lain di worker itu (VPS jalan 2 worker uvicorn → efek
+terasa). `create_asset`/`update_asset`/`process_photos_for_storage` sudah
+`asyncio.to_thread`, tapi beberapa handler tertinggal — kini diseragamkan:
+
+- **`patch_asset`** (jalur TERPANAS: edit foto lapangan/HP — `photo_ops`
+  add/keep, ganti cover, checklist): 7 titik `create_thumbnail`/
+  `create_gallery_thumbnail`/`generate_photo_thumbnail` → `asyncio.to_thread`.
+- **`rotate_asset_photo`** (putar foto): `rotate_jpeg_bytes` + regen thumbnail
+  cover/per-foto → thread.
+- **`get_asset_media`** & **`get_asset_checklist_full`** (fallback thumbnail
+  aset legacy) + **`migrate_photos_to_gridfs`** (migrasi admin massal): tiap
+  comprehension thumbnail dibungkus satu `to_thread` (satu lompatan thread per
+  batch).
+
+Tidak ada perubahan perilaku/kontrak API — murni memindahkan kerja CPU-bound
+PIL keluar dari event loop (PIL melepas GIL saat encode/decode). Throughput di
+bawah beban tulis foto + putar meningkat; latensi request lain tak lagi
+tersandera oleh satu edit foto besar. 656 test unit tetap hijau.
+
+---
+
 ## [#561] Perkakas uji: harness load/stress Locust + workflow CI/CD + skill aman-testdata — 2026-07-23
 
 Melengkapi fondasi generator sintetis (#560) menjadi rangkaian uji end-to-end
