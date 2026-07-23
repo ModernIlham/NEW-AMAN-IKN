@@ -48,6 +48,41 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#559] Keamanan: rate-limit per-USER + storage bersama lintas-worker (MongoDB, aman) — 2026-07-23
+
+Rate limiter sebelumnya per-IP + in-memory per-worker (VPS jalankan 2 uvicorn
+worker) → batas efektif ~2× & tak konsisten, dan tak adil untuk satker yang
+berbagi satu IP publik (NAT kantor: satu pengguna bisa menghabiskan kuota
+rekan sekantor). Perbaikan:
+
+- **Kunci per-USER** (dari JWT, Bearer atau `?token=`; decode tanpa lookup DB,
+  exp diabaikan karena hanya dipakai sbg kunci). Endpoint publik tanpa token
+  (login/OTP/registrasi) tetap per-IP. Tiap pengguna kini punya jatah sendiri.
+- **Storage bersama lintas-worker** via MongoDB pada DATABASE + KOLEKSI
+  TERDEDIKASI (`aman_ratelimit`/`rl_counters`/`rl_windows`) — terisolasi penuh
+  dari data aplikasi (mustahil bentrok dgn koleksi `counters` app; tak ikut
+  backup). **Aman saat Mongo bermasalah** (diuji): `serverSelectionTimeoutMS`
+  pendek + `swallow_errors` + `in_memory_fallback` → saat Mongo tak terjangkau,
+  SATU permintaan lambat lalu SEMUA jatuh ke in-memory (~3µs), aplikasi jalan
+  terus & tetap membatasi; pulih otomatis. Di uji (pytest) → `memory://` biasa.
+
+**Uji performa & angka (karakteristik AMAN — inventaris BMN, 2 worker, trafik
+satker moderat, simpan lapangan bursty via antrean optimistis):**
+- Overhead limiter itu sendiri **~3µs/op** (343k ops/dtk) in-memory; ~0,5ms
+  dgn Mongo lokal → BUKAN penentu throughput. Storage dipilih demi konsistensi,
+  bukan kecepatan.
+- **Sengaja TANPA plafon global** (tanpa `SlowAPIMiddleware`) — jalur panas
+  (baca/simpan aset, heartbeat, snapshot delta) TIDAK bergantung Mongo
+  per-permintaan; ini menjaga ketahanan OFFLINE-FIRST. "Pembagian tiap user" =
+  jatah per-kategori endpoint berat: auth/OTP **3–10/mnt**, laporan pembukuan
+  **6/mnt**, ekspor **3–10/mnt**, impor/SIMAN **3–6/mnt**, TTD **15–60/mnt**,
+  master pegawai **10–30/mnt**. Baca/simpan aset biasa tak diplafon (kerja
+  lapangan bursty; kebenaran dijaga OCC + idempotency-key + antrean offline).
+
+Verifikasi: `pytest tests/unit` **642 lulus** (+1 uji `_rate_limit_key`
+per-user↔per-IP); `compileall` bersih; uji fail-open Mongo-down terbukti tak
+menggantung.
+
 ## [#558] Peta: keep-alive antar-mode — posisi & data dipertahankan, tak refresh dari awal — 2026-07-23
 
 Sebelumnya komponen peta di-**unmount** setiap kali pindah ke mode list/galeri

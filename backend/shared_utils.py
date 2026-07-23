@@ -4,12 +4,14 @@ Cache, audit logging, thumbnail generation, OTP, constants, limiter.
 """
 import os
 import io
+import sys
 import uuid
 import base64
 import logging
 import secrets
 import string
 import asyncio
+import jwt
 from datetime import datetime, timezone
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
@@ -176,7 +178,87 @@ async def delete_document_from_gridfs(gridfs_id: str):
 
 
 # --- Rate Limiter ---
-limiter = Limiter(key_func=get_remote_address)
+# KUNCI per-USER (dari JWT), bukan per-IP. Alasan karakteristik AMAN: banyak
+# satker memakai SATU IP publik (NAT kantor) — dengan kunci per-IP, satu pengguna
+# aktif bisa menghabiskan kuota & menahan rekan sekantornya. Per-user membuat tiap
+# pengguna punya jatah sendiri. Endpoint publik tanpa token (login/OTP/registrasi)
+# jatuh ke per-IP. Decode JWT TANPA lookup DB (murah, ~mikrodetik); exp diabaikan
+# karena hanya dipakai sebagai KUNCI, bukan otorisasi.
+_RL_JWT_SECRET = os.environ.get("JWT_SECRET")
+
+
+def _rate_limit_key(request) -> str:
+    raw = None
+    try:
+        auth = request.headers.get("authorization", "") if request else ""
+    except Exception:
+        auth = ""
+    if auth.startswith("Bearer "):
+        raw = auth.split(" ", 1)[1]
+    else:
+        try:
+            raw = request.query_params.get("token") or None  # media/laporan ?token=
+        except Exception:
+            raw = None
+    if raw and _RL_JWT_SECRET:
+        try:
+            payload = jwt.decode(raw, _RL_JWT_SECRET, algorithms=["HS256"],
+                                 options={"verify_exp": False})
+            uid = payload.get("user_id")
+            if uid:
+                return f"u:{uid}"
+        except Exception:
+            pass
+    return f"ip:{get_remote_address(request)}"
+
+
+# STORAGE BERSAMA lintas-worker (VPS jalankan 2 uvicorn worker) via MongoDB pada
+# DATABASE + KOLEKSI TERDEDIKASI ("aman_ratelimit"/rl_counters/rl_windows) —
+# TERISOLASI penuh dari data aplikasi (mustahil bentrok dgn koleksi `counters`
+# app; tak ikut backup). Tanpa storage bersama, tiap worker punya penghitung
+# sendiri → batas efektif jadi ~2× dan tak konsisten.
+#
+# AMAN saat Mongo bermasalah (teruji): serverSelectionTimeoutMS pendek +
+# swallow_errors + in_memory_fallback → saat Mongo tak terjangkau, SATU permintaan
+# lambat (~2s deteksi) lalu SEMUA jatuh ke penghitung in-memory (≈3µs), aplikasi
+# tetap jalan & tetap membatasi. Pulih otomatis saat Mongo kembali.
+#
+# Rate-limit HANYA dipasang pada endpoint SPESIFIK yang berat/sensitif
+# (auth/OTP, laporan, ekspor, impor, SIMAN, TTD) via dekorator @limiter.limit —
+# BUKAN global middleware. Ini disengaja: aplikasi OFFLINE-FIRST, jalur panas
+# (baca/simpan aset lapangan, heartbeat, snapshot delta) TIDAK boleh bergantung
+# ke Mongo per-permintaan. Jatah per-user per-kategori itulah "pembagian tiap
+# user": auth/OTP 3–10/mnt, laporan 6/mnt, ekspor 3–10/mnt, impor/SIMAN 3–6/mnt,
+# TTD 15–60/mnt, master pegawai 10–30/mnt.
+#
+# Di lingkungan uji (pytest, infra-free) → memory:// biasa (tak menyentuh Mongo).
+_RL_UNDER_PYTEST = "pytest" in sys.modules
+_RL_MONGO = os.environ.get("MONGO_URL", "") if not _RL_UNDER_PYTEST else ""
+
+if _RL_MONGO:
+    _rl_sep = "&" if "?" in _RL_MONGO else "?"
+    _rl_uri = f"{_RL_MONGO}{_rl_sep}serverSelectionTimeoutMS=1500&connectTimeoutMS=1500"
+    try:
+        limiter = Limiter(
+            key_func=_rate_limit_key,
+            storage_uri=_rl_uri,
+            storage_options={
+                "database_name": "aman_ratelimit",
+                "counter_collection_name": "rl_counters",
+                "window_collection_name": "rl_windows",
+            },
+            strategy="fixed-window",
+            swallow_errors=True,
+            in_memory_fallback_enabled=True,
+        )
+        logger.info("Rate limiter: MongoDB bersama (db=aman_ratelimit) + fallback in-memory")
+    except Exception as e:
+        # Konstruksi gagal (mis. skema URI aneh) → jangan matikan aplikasi;
+        # pakai in-memory per-worker.
+        logger.warning(f"Rate limiter MongoDB gagal init ({e}); pakai in-memory per-worker")
+        limiter = Limiter(key_func=_rate_limit_key)
+else:
+    limiter = Limiter(key_func=_rate_limit_key)
 
 # --- In-Memory Cache ---
 _cache_categories = TTLCache(maxsize=1, ttl=300)
