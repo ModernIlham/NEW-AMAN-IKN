@@ -112,6 +112,7 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
             className="absolute top-0 left-0 z-10 p-2 cursor-pointer"
             onClick={(e) => e.stopPropagation()}
             data-testid={`gallery-select-wrap-${asset.id}`}
+            data-select-box data-asset-id={asset.id}
           >
             <input
               type="checkbox"

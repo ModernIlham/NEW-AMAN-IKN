@@ -48,6 +48,25 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#556] UX: drag-to-select — tekan-tahan kotak select lalu geser menyeleksi rentang (list & galeri) — 2026-07-23
+
+Memilih banyak baris berurutan kini bisa dengan **tekan-tahan** kotak select
+lalu **geser** melewati kotak select baris lain — seluruh yang dilewati ikut
+terseleksi (atau ter-deseleksi bila memulai dari baris yang sudah terpilih;
+arah mengikuti kotak awal). Berlaku di mode **list** (tabel desktop + kartu HP)
+dan **galeri**.
+
+Implementasi hook baru `useDragSelect` via event delegation (`elementFromPoint`)
+sehingga aman untuk daftar tervirtualisasi — tak perlu meneruskan handler ke
+tiap baris; cukup atribut `data-select-box`/`data-asset-id` pada tiap kotak +
+`containerProps` pada pembungkus. HANYA pointer **mouse** — pada sentuh
+(HP/tablet) gerakan tahan-geser tetap menggulir daftar seperti biasa. Klik biasa
+(satu kotak) tetap bekerja; klik pasca-drag ditekan agar tak dobel-toggle.
+
+Verifikasi: `yarn lint` 0 error; `yarn build` sukses. Frontend-only
+(`useDragSelect.js` baru + `DashboardPage`, `VirtualizedAssetTable`,
+`AssetGalleryCard`, `AssetMobileCard`).
+
 ## [#555] Mode cepat: auto-cari GPS hanya bila aset BELUM punya koordinat — 2026-07-23
 
 Saat membuka aset di mode inventarisasi cepat, form otomatis mencari titik GPS

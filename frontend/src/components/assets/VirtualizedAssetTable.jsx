@@ -258,9 +258,10 @@ const VirtualizedAssetTable = memo(({ assets, editId, onEdit, onDelete, onPrintC
                     &times;
                   </button>
                 )}
-                {/* Row checkbox */}
+                {/* Row checkbox — data-select-box menandai target drag-to-select */}
                 {onToggleSelect && (
-                  <div className="w-7 flex-shrink-0 flex justify-center" onClick={e => e.stopPropagation()}>
+                  <div className="w-7 flex-shrink-0 flex justify-center" onClick={e => e.stopPropagation()}
+                    data-select-box data-asset-id={a.id}>
                     <input
                       type="checkbox"
                       checked={selectedAssets?.has(a.id) || false}

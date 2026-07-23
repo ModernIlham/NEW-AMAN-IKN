@@ -17,6 +17,7 @@ import { downloadFileWithProgress, makeDownloadProgress } from "@/lib/downloadFi
 import { authMediaUrl } from "@/lib/mediaUrl";
 import { exportViaJob } from "@/lib/jobExport";
 import { reserveDummyNup, cariKategoriDummy } from "@/lib/dummyNup";
+import { useDragSelect } from "@/lib/useDragSelect";
 import { syncSnapshot, getSnapshotAssets, snapshotMeta, isSnapshotExpired, upsertSnapshotAsset, removeSnapshotAsset } from "@/lib/offlineSnapshot";
 
 // Import refactored components
@@ -492,6 +493,10 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   const [selectedAssets, setSelectedAssets] = useState(new Set());
   const [showBatchPanel, setShowBatchPanel] = useState(false);
   const [batchUpdating, setBatchUpdating] = useState(false);
+  // Drag-to-select: tekan-tahan kotak select lalu geser → seleksi rentang
+  // (mouse; sentuh tetap menggulir). Dipasang lewat containerProps di pembungkus
+  // daftar/galeri + atribut data-select-box pada tiap kotak.
+  const { containerProps: dragSelectProps } = useDragSelect(selectedAssets, setSelectedAssets);
 
   const toggleSelectAsset = useCallback((assetId) => {
     setSelectedAssets(prev => {
@@ -1814,6 +1819,9 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
                 )}
               </>)}
 
+              {/* Pembungkus drag-to-select: containerProps menangkap tekan-geser
+                  lintas kotak select (mouse). */}
+              <div {...(perms.canEdit ? dragSelectProps : {})}>
               {viewMode === 'gallery' ? (
                 <AssetGalleryView assets={mobileAssets} editId={editAssetForForm?.id} onEdit={perms.canEdit ? handleEdit : undefined} onDelete={perms.canDelete ? handleDelete : undefined} onPrintCard={handlePrintCard} onLoadMore={loadMoreMobile} onLoadPrev={loadPrevMobile} hasPrev={mobileFirstPage > 1} isLoadingMore={mobileLoading} hasMore={mobileCurrentPage < totalPages} totalItems={totalItems} rowLocks={rowLocks} currentSessionId={sessionId} selectedAssets={selectedAssets} onToggleSelect={perms.canEdit ? toggleSelectAsset : undefined} />
               ) : (<>
@@ -1829,6 +1837,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
                   <AssetPagination currentPage={currentPage} totalPages={totalPages} totalItems={totalItems} pageSize={pageSize} setPageSize={setPageSize} goToPage={goToPage} />
                 </div>
               </>)}
+              </div>
             </div>)}
           </div>
         </main>
