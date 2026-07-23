@@ -124,12 +124,17 @@ async def sisa_kuota_tinify() -> int:
 
 # ───────────────────────── GridFS util ─────────────────────────
 
-async def _simpan_webp(webp_bytes: bytes) -> str:
-    """Simpan blob WebP baru ke GridFS; kembalikan id (str)."""
+async def _simpan_webp(webp_bytes: bytes, meta_tambahan=None) -> str:
+    """Simpan blob WebP baru ke GridFS; kembalikan id (str). ``meta_tambahan``
+    (mis. jenis/pegawai_id) DIPERTAHANKAN agar serve content-type-aware & query
+    kandidat sumber tetap benar."""
     fid = ObjectId()
+    meta = {"content_type": "image/webp", "size": len(webp_bytes), "webp": True}
+    if meta_tambahan:
+        meta.update({k: v for k, v in meta_tambahan.items() if v is not None})
+    prefix = (meta_tambahan or {}).get("jenis") or "photo"
     grid_in = fs_bucket.open_upload_stream_with_id(
-        fid, filename=f"photo_{uuid.uuid4()}.webp",
-        metadata={"content_type": "image/webp", "size": len(webp_bytes), "webp": True})
+        fid, filename=f"{prefix}_{uuid.uuid4()}.webp", metadata=meta)
     await grid_in.write(webp_bytes)
     await grid_in.close()
     return str(fid)
@@ -145,32 +150,85 @@ async def _tandai_blob(old_id, **fields):
         pass
 
 
-async def _cari_kandidat():
-    """Satu blob foto aset JPEG yang belum WebP & belum di-skip."""
-    return await db["fs.files"].find_one({
-        "metadata.content_type": "image/jpeg",
-        "filename": {"$regex": "^photo_"},
-        "metadata.webp_skip": {"$ne": True},
-    }, {"_id": 1, "metadata.webp_gagal": 1})
+# ───────────────────────── sumber foto (registry) ─────────────────────────
+# Tiap sumber punya: query kandidat fs.files, resolver pemilik (cek referensi +
+# data untuk swap), dan swap referensi atomik. Ditambah sesuai PRIORITAS: foto
+# ASLI aset lebih dulu, lalu foto pegawai. Menambah sumber = tambah satu entri.
+
+async def _aset_pemilik(old_id_str, meta):
+    return await db.assets.find_one({"photo_gridfs_ids": old_id_str}, {"id": 1, "version": 1})
+
+
+async def _aset_swap(owner, old_id_str, new_id_str) -> bool:
+    # OCC: cocokkan version yg dibaca + id lama masih ada; bump version agar
+    # PATCH foto user konkuren gagal OCC & retry (tak menimpa dgn id yg dihapus).
+    res = await db.assets.update_one(
+        {"id": owner["id"], "version": owner.get("version", 0), "photo_gridfs_ids": old_id_str},
+        {"$set": {"photo_gridfs_ids.$": new_id_str}, "$inc": {"version": 1}})
+    return res.matched_count > 0
+
+
+def _pegawai_pemilik(field):
+    async def _p(old_id_str, meta):
+        pid = meta.get("pegawai_id")
+        if not pid:
+            return None
+        return await db.pegawai.find_one({"id": pid, field: old_id_str}, {"id": 1})
+    return _p
+
+
+def _pegawai_swap(field):
+    # Swap optimistis berbasis id: cocok HANYA bila field masih menunjuk id
+    # lama (mis. foto tak diganti user). Serve pegawai sudah content-type-aware.
+    async def _s(owner, old_id_str, new_id_str) -> bool:
+        res = await db.pegawai.update_one({"id": owner["id"], field: old_id_str},
+                                          {"$set": {field: new_id_str}})
+        return res.matched_count > 0
+    return _s
+
+
+SUMBER = [
+    {   # Fase 1 — foto asli aset (prioritas)
+        "nama": "aset",
+        "query": {"metadata.content_type": "image/jpeg",
+                  "filename": {"$regex": "^photo_"},
+                  "metadata.jenis": {"$exists": False},
+                  "metadata.webp_skip": {"$ne": True}},
+        "pemilik": _aset_pemilik, "swap": _aset_swap, "meta": lambda m: {}},
+    {   # Fase 2 — foto pegawai (tampil)
+        "nama": "pegawai",
+        "query": {"metadata.jenis": "foto_pegawai",
+                  "metadata.content_type": {"$in": ["image/jpeg", "image/png"]},
+                  "metadata.webp_skip": {"$ne": True}},
+        "pemilik": _pegawai_pemilik("foto_file_id"), "swap": _pegawai_swap("foto_file_id"),
+        "meta": lambda m: {"jenis": "foto_pegawai", "pegawai_id": m.get("pegawai_id")}},
+    {   # Fase 2 — foto asli pegawai (sumber krop)
+        "nama": "pegawai_asli",
+        "query": {"metadata.jenis": "foto_pegawai_asli",
+                  "metadata.content_type": {"$in": ["image/jpeg", "image/png"]},
+                  "metadata.webp_skip": {"$ne": True}},
+        "pemilik": _pegawai_pemilik("foto_asli_file_id"), "swap": _pegawai_swap("foto_asli_file_id"),
+        "meta": lambda m: {"jenis": "foto_pegawai_asli", "pegawai_id": m.get("pegawai_id")}},
+]
 
 
 # ───────────────────────── inti: konversi satu foto ─────────────────────────
 
-async def konversi_satu() -> str:
-    """Konversi SATU foto aset. Mengembalikan status:
-    kosong | yatim | sumber_rusak | konversi_gagal | verifikasi_gagal |
-    simpan_gagal | berubah | sukses."""
-    f = await _cari_kandidat()
+async def _proses_satu(sumber) -> str:
+    """Konversi SATU foto dari satu sumber. None bila sumber tak punya kandidat;
+    selain itu: yatim|sumber_rusak|konversi_gagal|verifikasi_gagal|simpan_gagal|
+    berubah|sukses."""
+    f = await db["fs.files"].find_one(sumber["query"], {"_id": 1, "metadata": 1})
     if not f:
-        return "kosong"
+        return None
     old_id = f["_id"]
     old_id_str = str(old_id)
+    meta = f.get("metadata") or {}
 
-    # Aset pemilik (untuk swap referensi + OCC version). Hanya foto yang MASIH
-    # direferensikan aset yang dikonversi — hindari bakar kuota utk yatim.
-    asset = await db.assets.find_one({"photo_gridfs_ids": old_id_str},
-                                     {"id": 1, "version": 1})
-    if not asset:
+    # Hanya blob yang MASIH direferensikan pemilik yang dikonversi (hindari bakar
+    # kuota utk yatim).
+    owner = await sumber["pemilik"](old_id_str, meta)
+    if not owner:
         await _tandai_blob(old_id, webp_skip=True)
         return "yatim"
 
@@ -182,11 +240,8 @@ async def konversi_satu() -> str:
 
     webp = await konversi_ke_webp(old_bytes)
     if not webp:
-        n = int(((f.get("metadata") or {}).get("webp_gagal", 0))) + 1
-        if n >= MAKS_GAGAL:
-            await _tandai_blob(old_id, webp_skip=True)
-        else:
-            await _tandai_blob(old_id, webp_gagal=n)
+        n = int(meta.get("webp_gagal", 0)) + 1
+        await _tandai_blob(old_id, **({"webp_skip": True} if n >= MAKS_GAGAL else {"webp_gagal": n}))
         return "konversi_gagal"
 
     # Gerbang keamanan 1: hasil WebP utuh & dimensi identik dgn sumber.
@@ -194,21 +249,17 @@ async def konversi_satu() -> str:
         await _tandai_blob(old_id, webp_skip=True)
         return "verifikasi_gagal"
 
-    # Simpan blob baru, lalu gerbang keamanan 2: baca ULANG blob baru.
-    new_id_str = await _simpan_webp(webp)
+    # Simpan blob baru (metadata sumber dipertahankan), lalu gerbang keamanan 2:
+    # baca ULANG blob baru.
+    new_id_str = await _simpan_webp(webp, sumber["meta"](meta))
     cek = await get_photo_from_gridfs(new_id_str)
     if not cek or not verifikasi_webp(cek, dims[0], dims[1]):
         await delete_photo_from_gridfs(new_id_str)
         return "simpan_gagal"
 
-    # Swap referensi ber-OCC: cocokkan version yg dibaca + id lama masih ada;
-    # bump version agar PATCH foto user konkuren gagal OCC & retry (tak menimpa
-    # dgn id lama yang akan dihapus). Operator posisi `$` mengganti elemen tepat.
-    res = await db.assets.update_one(
-        {"id": asset["id"], "version": asset.get("version", 0), "photo_gridfs_ids": old_id_str},
-        {"$set": {"photo_gridfs_ids.$": new_id_str}, "$inc": {"version": 1}})
-    if res.matched_count == 0:
-        # Aset berubah selagi konversi → batalkan; buang blob baru (yatim).
+    # Swap referensi atomik (OCC utk aset; id-match utk pegawai).
+    if not await sumber["swap"](owner, old_id_str, new_id_str):
+        # Pemilik berubah selagi konversi → batalkan; buang blob baru (yatim).
         await delete_photo_from_gridfs(new_id_str)
         return "berubah"
 
@@ -218,6 +269,16 @@ async def konversi_satu() -> str:
     except Exception:
         pass
     return "sukses"
+
+
+async def konversi_satu() -> str:
+    """Coba tiap sumber sesuai PRIORITAS (foto asli aset → foto pegawai).
+    'kosong' HANYA bila semua sumber tak punya kandidat lagi."""
+    for sumber in SUMBER:
+        hasil = await _proses_satu(sumber)
+        if hasil is not None:
+            return hasil
+    return "kosong"
 
 
 # ───────────────────────── lease worker tunggal ─────────────────────────

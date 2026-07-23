@@ -48,6 +48,31 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#571] Konversi WebP Fase 2: foto pegawai (perluas registry sumber) — 2026-07-23
+
+Melanjutkan konverter WebP latar (#570) ke **foto pegawai** — sesuai urutan
+"prioritaskan foto asli dulu": foto asli aset tetap didahulukan, lalu foto
+pegawai. `webp_converter.py` di-generalisasi jadi **registry sumber** (`SUMBER`):
+
+1. `aset` — `assets.photo_gridfs_ids` (Fase 1, tak berubah; kini query juga
+   mengecualikan blob ber-`metadata.jenis` agar tak menyerempet foto lain).
+2. `pegawai` — `pegawai.foto_file_id` (foto tampil).
+3. `pegawai_asli` — `pegawai.foto_asli_file_id` (sumber krop).
+
+Foto pegawai membawa **back-reference `metadata.pegawai_id`** → resolusi pemilik
+langsung (tanpa scan). Swap referensi optimistis id-match (foto tak diganti user
+di tengah jalan). Blob WebP baru **mempertahankan** `metadata.jenis` +
+`pegawai_id` sehingga endpoint serve pegawai — yang **sudah content-type-aware**
+— menyajikan WebP dengan benar tanpa perubahan. Semua gerbang keamanan Fase 1
+(verifikasi berlapis sebelum hapus lama, satu-worker lease, idle-aware, stop
+kuota ≤50) berlaku sama.
+
+Menyusul: lampiran modul gambar (BAST/PSP/dll.), thumbnail inline (terakhir),
+dan TTD (PNG legal — ditangani terpisah/hati-hati). Test: +2 (registry &
+pelestarian metadata pemilik) — total 667 hijau.
+
+---
+
 ## [#570] Konversi foto → WebP latar belakang (adaptif-idle, aman, via Tinify) — 2026-07-23
 
 Sistem konversi foto ASLI aset (`assets.photo_gridfs_ids`, JPEG di GridFS) ke
