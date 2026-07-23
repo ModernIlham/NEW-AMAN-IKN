@@ -1248,6 +1248,22 @@ async def get_asset_checklist_document(asset_id: str, item_idx: int, doc_idx: in
     )
 
 
+def _tebak_media_type(b: bytes) -> str:
+    """Content-type gambar dari magic-byte. Foto GridFS kini bisa JPEG ATAU
+    WebP (konverter latar), jadi serve foto penuh harus content-type-aware."""
+    if not b or len(b) < 12:
+        return "image/jpeg"
+    if b[:2] == b"\xff\xd8":
+        return "image/jpeg"
+    if b[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if b[:4] == b"RIFF" and b[8:12] == b"WEBP":
+        return "image/webp"
+    if b[:6] in (b"GIF87a", b"GIF89a"):
+        return "image/gif"
+    return "image/jpeg"
+
+
 @assets_router.get("/assets/{asset_id}/photos/{photo_index}")
 async def get_asset_photo_full(asset_id: str, photo_index: int, request: Request, thumb: int = 0,
                                w: int = 0,
@@ -1345,7 +1361,7 @@ async def get_asset_photo_full(asset_id: str, photo_index: int, request: Request
         except Exception:
             pass  # bukan JPEG valid / Pillow gagal — sajikan asli
 
-    return Response(content=photo_bytes, media_type="image/jpeg",
+    return Response(content=photo_bytes, media_type=_tebak_media_type(photo_bytes),
                     headers=_media_headers(etag))
 
 

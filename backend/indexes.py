@@ -273,6 +273,14 @@ async def create_indexes() -> None:
                                               name="gridfs_job_artifact")
         except Exception:
             pass
+        # Konverter WebP latar: mencari foto aset JPEG yang belum dikonversi
+        # (metadata.content_type == "image/jpeg"). Tanpa indeks = COLLSCAN
+        # fs.files tiap siklus; makin lambat seiring bertambahnya foto.
+        try:
+            await db["fs.files"].create_index("metadata.content_type",
+                                              name="gridfs_content_type")
+        except Exception:
+            pass
         # Backup/restore single-flight: gerbang ATOMIK "hanya satu job aktif".
         # Unique HANYA untuk dokumen yang MEMBAWA active_lock (job queued/running);
         # job terminal meng-$unset lock → keluar dari index → slot terbuka lagi.
