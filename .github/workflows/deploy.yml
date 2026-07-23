@@ -1,5 +1,9 @@
-# Auto-deploy ke VPS Hostinger setiap kali main berubah (merge PR), atau
-# manual lewat tab Actions → "Deploy ke Hostinger VPS" → Run workflow.
+# Auto-deploy ke VPS Hostinger — HANYA setelah workflow "CI" selesai SUKSES di
+# main (mencegah commit yang GAGAL CI ter-deploy ke produksi). Juga bisa manual
+# lewat tab Actions → "Deploy ke Hostinger VPS" → Run workflow.
+#
+# Alur: merge PR → push ke main memicu CI → CI hijau memicu deploy ini
+# (via workflow_run). Bila CI merah, deploy tidak jalan.
 #
 # Butuh 3 secret repo (Settings → Secrets and variables → Actions):
 #   VPS_HOST     — IP/hostname VPS
@@ -11,7 +15,12 @@
 name: Deploy ke Hostinger VPS
 
 on:
-  push:
+  # Dipicu saat workflow "CI" selesai. `branches: [main]` menyaring agar hanya
+  # CI-run di cabang main (bukan PR) yang bisa memicu; gerbang sukses ada di
+  # `if` job di bawah. Tetap sediakan trigger manual.
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
 
@@ -22,8 +31,15 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # Deploy HANYA bila: dijalankan manual, ATAU CI selesai dengan SUKSES.
+    # CI merah → job ini di-skip → produksi tidak menerima commit gagal-CI.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Untuk workflow_run: ambil TEPAT commit yang lulus CI (skrip deploy
+          # yang dipipe ke VPS). Untuk dispatch manual: default cabang terpilih.
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
       - name: Deploy via SSH
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}

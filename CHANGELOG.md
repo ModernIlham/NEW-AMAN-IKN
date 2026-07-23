@@ -48,6 +48,25 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#568] Keandalan CI/CD: deploy digerbang pada CI sukses (workflow_run) — 2026-07-23
+
+Sebelumnya `deploy.yml` ter-trigger `on: push: [main]` — **independen** dari CI.
+Akibatnya commit yang **gagal** CI tetap auto-deploy ke produksi (umpan balik
+bocor: gerbang uji tak menjaga rilis). Diperbaiki:
+
+- Trigger diganti ke `workflow_run` atas workflow **"CI"** (`types: [completed]`,
+  `branches: [main]`) + `if: github.event.workflow_run.conclusion == 'success'`.
+  Alur baru: **merge → push memicu CI → CI hijau memicu deploy**. CI merah →
+  deploy di-skip → produksi tak menerima commit gagal-CI.
+- `workflow_dispatch` (deploy manual) dipertahankan, selalu boleh jalan.
+- Checkout dipin ke `workflow_run.head_sha` → skrip deploy yang dipipe ke VPS
+  adalah tepat commit yang lulus CI.
+
+Tanpa perubahan gerbang deploy lain yang sudah ada (validasi kunci SSH, 5×
+retry jangkau VPS, health-check `/api/health/deep` pasca-restart tetap berlaku).
+
+---
+
 ## [#567] Performa: analitik satu-lintasan ($facet) + baca foto detail paralel — 2026-07-23
 
 Dua micro-opt jalur-baca `assets.py` (keluaran identik):
