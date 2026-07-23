@@ -68,6 +68,29 @@ def test_media_token_scope():
     assert dec.get("scope") == "media"
 
 
+def test_rate_limit_key_per_user_vs_ip():
+    # AUTH-B: kunci rate-limit = per-USER dari JWT (Bearer atau ?token=), jatuh
+    # ke per-IP bila tanpa/rusak token. Adil untuk satker ber-NAT bersama.
+    import shared_utils as su
+    import auth_utils as au
+
+    class _H(dict):
+        def get(self, k, d=""):
+            return dict.get(self, k, d)
+
+    class _Req:
+        def __init__(self, auth=None, token=None, host="10.0.0.1"):
+            self.headers = _H({"authorization": auth} if auth else {})
+            self.query_params = _H({"token": token} if token else {})
+            self.client = type("C", (), {"host": host})()
+
+    tok = au.create_token("user-9", "bob")
+    assert su._rate_limit_key(_Req(auth=f"Bearer {tok}")) == "u:user-9"
+    assert su._rate_limit_key(_Req(token=tok)) == "u:user-9"
+    assert su._rate_limit_key(_Req(host="203.0.113.5")) == "ip:203.0.113.5"
+    assert su._rate_limit_key(_Req(auth="Bearer garbage", host="203.0.113.5")) == "ip:203.0.113.5"
+
+
 def test_token_carries_sesi_epoch_for_revocation():
     # AUTH-C: token akses & media membawa klaim sesi_epoch (default 0, dan nilai
     # yang diberikan diteruskan) → dipakai _decode_bearer mencabut token lama
