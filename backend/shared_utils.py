@@ -11,6 +11,7 @@ import secrets
 import string
 import asyncio
 from datetime import datetime, timezone
+from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 from typing import Optional, List
 from pathlib import Path
@@ -225,6 +226,7 @@ async def store_otp(email, otp, user_data):
             "email": email,
             "otp": otp,
             "user_data": user_data,
+            "attempts": 0,  # OTP baru → reset penghitung gagal (anti brute-force)
             "expires_at": datetime.now(timezone.utc).timestamp() + 600,
             "created_at": datetime.now(timezone.utc)
         }},
@@ -244,6 +246,23 @@ async def get_otp(email):
 async def delete_otp(email):
     """Remove OTP from MongoDB"""
     await db.otp_store.delete_one({"email": email})
+
+
+async def catat_gagal_otp(email, maks_percobaan=5) -> bool:
+    """Catat 1 percobaan OTP GAGAL (atomik `$inc`). Bila mencapai batas, OTP
+    DIHAPUS (invalidasi) supaya brute-force terkunci — penyerang harus meminta
+    OTP baru, sehingga ruang tebak tetap kecil meski rate-limit hanya per-IP.
+    Kembalikan True bila OTP baru saja dinonaktifkan (terkunci)."""
+    doc = await db.otp_store.find_one_and_update(
+        {"email": email},
+        {"$inc": {"attempts": 1}},
+        projection={"_id": 0, "attempts": 1},
+        return_document=ReturnDocument.AFTER,
+    )
+    if doc and int(doc.get("attempts") or 0) >= maks_percobaan:
+        await db.otp_store.delete_one({"email": email})
+        return True
+    return False
 
 # --- Row Lock Store (Persistent via MongoDB, 5min TTL with heartbeat) ---
 # Replaced in-memory TTLCache with MongoDB collection `row_locks`

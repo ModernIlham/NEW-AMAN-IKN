@@ -8,7 +8,9 @@ from fastapi import APIRouter, HTTPException, Request, Header
 from db import db
 from models import UserCreate, UserLogin, UserResponse, TokenResponse, OTPRequest, OTPVerify
 from auth_utils import hash_password, verify_password, create_token, create_media_token, get_current_user
-from shared_utils import limiter, generate_otp, send_otp_email, store_otp, get_otp, delete_otp, RESEND_API_KEY, SENDER_EMAIL
+import hmac
+
+from shared_utils import limiter, generate_otp, send_otp_email, store_otp, get_otp, delete_otp, catat_gagal_otp, RESEND_API_KEY, SENDER_EMAIL
 
 logger = logging.getLogger(__name__)
 auth_router = APIRouter()
@@ -234,8 +236,15 @@ async def reset_password(request: Request, data: dict):
     if not stored:
         raise HTTPException(status_code=400,
                             detail="OTP tidak ditemukan atau kadaluarsa — minta OTP baru")
-    if stored["otp"] != otp:
-        raise HTTPException(status_code=400, detail="Kode OTP salah")
+    # Banding konstan-waktu + kunci brute-force (invalidasi OTP setelah N gagal).
+    # Bandingkan sebagai bytes agar input non-ASCII tak memicu TypeError → 500.
+    if not hmac.compare_digest(str(stored.get("otp") or "").encode("utf-8"),
+                               str(otp).encode("utf-8")):
+        terkunci = await catat_gagal_otp(f"reset:{email}")
+        raise HTTPException(
+            status_code=400,
+            detail=("Terlalu banyak percobaan salah — OTP dinonaktifkan, minta OTP baru"
+                    if terkunci else "Kode OTP salah"))
 
     from auth_utils import hash_password
     res = await db.users.update_one(
@@ -264,9 +273,15 @@ async def verify_otp(request: Request, data: OTPVerify):
     if not stored:
         raise HTTPException(status_code=400, detail="OTP tidak ditemukan atau sudah kadaluarsa. Minta OTP baru.")
 
-    # Check if OTP matches
-    if stored["otp"] != otp:
-        raise HTTPException(status_code=400, detail="Kode OTP salah")
+    # Banding konstan-waktu + kunci brute-force (invalidasi OTP setelah N gagal).
+    # Bandingkan sebagai bytes agar input non-ASCII tak memicu TypeError → 500.
+    if not hmac.compare_digest(str(stored.get("otp") or "").encode("utf-8"),
+                               str(otp).encode("utf-8")):
+        terkunci = await catat_gagal_otp(email)
+        raise HTTPException(
+            status_code=400,
+            detail=("Terlalu banyak percobaan salah — OTP dinonaktifkan, minta OTP baru"
+                    if terkunci else "Kode OTP salah"))
 
     # Get user data
     user_data = stored["user_data"]
