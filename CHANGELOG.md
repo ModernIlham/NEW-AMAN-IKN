@@ -48,6 +48,30 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#576] Pembubuhan TTD: QR verifikasi kini bisa diatur letak & ukurannya — 2026-07-23
+
+Pada halaman e-sign, langkah **atur pembubuhan** sebelumnya hanya membiarkan
+penanda tangan memindah & mengubah ukuran **tanda tangan**; **QR verifikasi**
+selalu terpaku otomatis di pojok kanan-bawah halaman terakhir.
+
+Kini QR pun bisa diatur:
+- Centang **"Atur juga posisi & ukuran QR verifikasi"** → muncul kotak QR
+  hijau yang bisa **digeser** (di halaman mana pun) dan **diubah ukurannya**
+  (geret pegangan / penggeser Ukuran QR), persis seperti kotak tanda tangan.
+- **Batas minimal ukuran QR** ditegakkan agar tetap dapat dipindai: slider
+  minimal 10% lebar halaman, dan server memaksa sisi QR **≥ 20 mm** (±2 cm)
+  saat render — mencegah QR terlalu kecil hingga gagal di-scan.
+- Tanpa mencentang, perilaku lama tetap: QR otomatis pojok kanan-bawah
+  halaman terakhir.
+
+Implementasi: dokumen-level `posisi_qr` pada `signature_requests` (dikirim
+lewat endpoint `kirim`, divalidasi `_posisi_qr_bersih` + `QR_MIN_MM`),
+dirender di `dokumen_ber_ttd` (halaman & koordinat/ukuran pilihan, normalisasi
+rotasi ikut). Frontend: kotak QR kedua di `AturPosisiTtd`. Uji unit menjaga
+jepitan min/maks & penolakan nilai liar (Infinity/NaN).
+
+---
+
 ## [#575] BAST: lampiran sertakan foto serah terima (bukan hanya foto barang) — 2026-07-23
 
 Pada Buat BAST, centang *"Sertakan lampiran foto…"* sebelumnya hanya
