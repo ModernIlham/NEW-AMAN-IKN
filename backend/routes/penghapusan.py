@@ -16,7 +16,7 @@ from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
 )
 from db import db, fs_bucket
-from shared_utils import kode_satker_user, scope_query_field_satker, delete_document_from_gridfs, get_document_from_gridfs, log_audit
+from shared_utils import kode_satker_user, scope_query_field_satker, pastikan_akses_dok_satker, delete_document_from_gridfs, get_document_from_gridfs, log_audit
 from penghapusan_utils import (
     JALUR_KANDIDAT, STATUS_USULAN, build_asset_penghapusan_projection,
     jalur_kandidat, rekap_kandidat, validate_transisi,
@@ -203,6 +203,7 @@ async def transisi_usulan(usulan_id: str, payload: TransisiIn,
     u = await db.usulan_penghapusan.find_one({"id": usulan_id}, {"_id": 0})
     if not u:
         raise HTTPException(status_code=404, detail="Usulan tidak ditemukan")
+    await pastikan_akses_dok_satker(admin, u)  # 403 bila usulan milik satker lain
     errors = validate_transisi(u["status"], payload.status, payload.nomor_sk)
     if errors:
         raise HTTPException(status_code=400, detail="; ".join(errors))

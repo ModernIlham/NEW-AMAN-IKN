@@ -48,6 +48,27 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#534] Keamanan: tutup IDOR isolasi satker pada mutasi register siklus — 2026-07-22
+
+Temuan audit menyeluruh (verifikasi): beberapa endpoint MUTASI register siklus
+mengambil dokumen by-id lalu mengubah/menghapus **tanpa** `pastikan_akses_dok_satker`
+— sehingga admin/operator satker A bisa mengubah/menghapus/memajukan status
+dokumen satker B (IDOR lintas-satker), padahal daftar & create sudah ter-scope.
+
+Guard `pastikan_akses_dok_satker` ditambahkan (403 bila milik satker lain; super-
+admin & dokumen era-lama tanpa kode tetap lolos — aman-mundur):
+
+- **Pemindahtanganan** — `POST /pemindahtanganan/{id}/status` (transisi persetujuan).
+- **Pengadaan** — `DELETE /pengadaan/{id}` (hapus register + pelepasan back-link aset).
+- **Pemanfaatan** — `PUT /pemanfaatan/{id}` & `POST /pemanfaatan/{id}/kontribusi`.
+- **Penghapusan** — `POST /penghapusan/usulan/{id}/status` (terbit SK).
+
+Verifikasi: `pytest tests/unit` 638 lulus; uji perilaku guard (A↔B → 403;
+A↔A/super-admin/dok-era-lama → lolos). Backend-only. Bagian dari rangkaian
+pengerasan pasca-audit (menyusul: transaksi persediaan/mutasi idempotensi, dsb.).
+
+---
+
 ## [#533] Ubah Massal: tambah Nama Aset, Garansi Hingga & Jenis Garansi — 2026-07-22
 
 Tiga field kini bisa diubah massal (Ubah Massal / batch edit):

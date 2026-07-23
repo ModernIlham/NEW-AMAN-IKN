@@ -18,7 +18,7 @@ from auth_utils import (
 )
 from db import db, fs_bucket
 from shared_utils import (
-    kode_satker_user, scope_query_field_satker,
+    kode_satker_user, scope_query_field_satker, pastikan_akses_dok_satker,
     delete_document_from_gridfs, get_document_from_gridfs, log_audit,
 )
 from pemindahtanganan_utils import (
@@ -261,6 +261,7 @@ async def transisi_pt(usulan_id: str, payload: TransisiPtIn,
     u = await db.pemindahtanganan.find_one({"id": usulan_id}, {"_id": 0})
     if not u:
         raise HTTPException(status_code=404, detail="Usulan tidak ditemukan")
+    await pastikan_akses_dok_satker(admin, u)  # 403 bila usulan milik satker lain
     data = payload.model_dump()
     errors = validate_transisi_pt(u, payload.status, data)
     if errors:

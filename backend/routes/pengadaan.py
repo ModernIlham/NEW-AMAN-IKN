@@ -18,7 +18,7 @@ from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
 )
 from db import db, fs_bucket
-from shared_utils import kode_satker_user, scope_query_field_satker, delete_document_from_gridfs, get_document_from_gridfs, log_audit
+from shared_utils import kode_satker_user, scope_query_field_satker, pastikan_akses_dok_satker, delete_document_from_gridfs, get_document_from_gridfs, log_audit
 from pengadaan_utils import (
     DOKUMEN_PEROLEHAN, JENIS_PEROLEHAN, LABEL_DOKUMEN_SUMBER,
     build_asset_perolehan_projection, dokumen_kurang_perolehan,
@@ -586,8 +586,12 @@ async def hapus_perolehan(perolehan_id: str,
     Back-link `perolehan_id`/snapshot di aset tertaut DILEPAS dulu (temuan
     review #11 — dulu menggantung menunjuk perolehan yang sudah tidak ada).
     """
-    p = await db.pengadaan.find_one({"id": perolehan_id},
-                                    {"_id": 0, "lampiran_berkas": 1, "barang": 1})
+    p = await db.pengadaan.find_one(
+        {"id": perolehan_id},
+        {"_id": 0, "kode_satker": 1, "lampiran_berkas": 1, "barang": 1})
+    if not p:
+        raise HTTPException(status_code=404, detail="Perolehan tidak ditemukan")
+    await pastikan_akses_dok_satker(_admin, p)  # 403 bila register milik satker lain
     res = await db.pengadaan.delete_one({"id": perolehan_id})
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Perolehan tidak ditemukan")

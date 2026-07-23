@@ -17,7 +17,7 @@ from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
 )
 from db import db, fs_bucket
-from shared_utils import kode_satker_user, scope_query_field_satker, delete_document_from_gridfs, get_document_from_gridfs
+from shared_utils import kode_satker_user, scope_query_field_satker, pastikan_akses_dok_satker, delete_document_from_gridfs, get_document_from_gridfs
 from pemanfaatan_utils import (
     BENTUK_PEMANFAATAN, DASAR_FASILITAS, LABEL_STATUS_PERJANJIAN,
     dokumen_kurang, peringatan_kontribusi, rekap_pemanfaatan,
@@ -229,6 +229,10 @@ async def buat_pemanfaatan(payload: PemanfaatanIn, user: dict = Depends(require_
 async def ubah_pemanfaatan(register_id: str, payload: PemanfaatanIn,
                            user: dict = Depends(require_writer)):
     """Perbarui perjanjian (melengkapi dokumen/nilai)."""
+    existing = await db.pemanfaatan.find_one({"id": register_id}, {"_id": 0, "kode_satker": 1})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Register tidak ditemukan")
+    await pastikan_akses_dok_satker(user, existing)  # 403 bila milik satker lain
     data = payload.model_dump()
     errors = validate_pemanfaatan(data) + validate_fasilitas(data)
     if errors:
@@ -255,6 +259,7 @@ async def catat_kontribusi(register_id: str, payload: KontribusiIn,
     p = await db.pemanfaatan.find_one({"id": register_id}, _PROJ)
     if not p:
         raise HTTPException(status_code=404, detail="Register tidak ditemukan")
+    await pastikan_akses_dok_satker(user, p)  # 403 bila milik satker lain
     today_iso = datetime.now(timezone.utc).date().isoformat()
     data = payload.model_dump()
     errors = validate_kontribusi(data, p, today_iso)
