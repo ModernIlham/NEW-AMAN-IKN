@@ -48,6 +48,32 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#547] Keamanan: backup/restore/reset dibatasi KHUSUS super-admin pusat — 2026-07-23
+
+Operasi seluruh-DB (backup, restore, reset) menyentuh data **SEMUA satker**,
+jadi tak boleh dijalankan admin yang terikat satu satker — hanya **super-admin
+pusat** (admin lintas-satker: `role == "admin"` **dan** `kode_satker` kosong).
+Sebelumnya endpoint ini hanya menuntut `role == "admin"`, sehingga admin satker
+pun bisa mengunduh/menimpa/menghapus data satker lain.
+
+Perjelas batasan **admin vs super-admin**:
+- Admin satker: mengelola **hanya** datanya sendiri (isolasi M-SCOPE) lewat modul.
+- Super-admin pusat: memegang siklus data seluruh sistem (backup/restore/reset).
+
+Ditutup:
+- `auth_utils.py` — helper baru `is_super_admin(user)` + gate `require_super_admin`
+  (403 dengan pesan yang menjelaskan bedanya).
+- `routes/backup.py` — 13 titik gate backup/restore/arsip/otomatis kini menuntut
+  super-admin (bukan sekadar admin).
+- `server.py` — `DELETE /system/reset-all` memakai `require_super_admin` +
+  cek in-body super-admin.
+- Frontend `PengaturanPage.jsx` — tab **Sistem** digerbang `isSuperAdmin`
+  (`role === "admin"` && `kode_satker` kosong); admin satker melihat penjelasan
+  bahwa operasi mencakup data seluruh satker dan hanya untuk super-admin pusat.
+
+Verifikasi: `pytest tests/unit` 638 lulus; `compileall` bersih; `eslint`
+`--max-warnings=0` bersih; `yarn build` sukses.
+
 ## [#546] Keamanan: tolak nilai non-skalar pada PATCH aset (anti operator-injection) — 2026-07-23
 
 Temuan audit injeksi [rendah]: `PATCH /assets/{id}` membaca body JSON mentah dan

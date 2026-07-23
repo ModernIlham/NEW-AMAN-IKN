@@ -39,6 +39,12 @@ function fmtUkuran(b) {
 export default function PengaturanPage({ user, onBack, onOpenSatker,
   onOpenReferensiAkun, onOpenPersuratan, onOpenPelaporan, dark, toggleDark }) {
   const isAdmin = user?.role === "admin";
+  // Backup/restore/reset = operasi SELURUH-DB lintas-satker → KHUSUS super-admin
+  // pusat (admin dengan kode_satker kosong). Admin satker hanya mengelola
+  // satkernya sendiri dan TIDAK boleh menyentuh data satker lain, jadi seluruh
+  // tab Sistem (siklus data) digerbang isSuperAdmin — selaras backend
+  // require_super_admin.
+  const isSuperAdmin = isAdmin && !String(user?.kode_satker || "").trim();
   // Tema: pakai prop dari App bila diteruskan; fallback hook lokal (state awal
   // sinkron via localStorage) supaya toggle tetap berfungsi seperti di ModuleHomePage.
   const temaLokal = useDarkMode();
@@ -58,10 +64,10 @@ export default function PengaturanPage({ user, onBack, onOpenSatker,
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
 
   const muatSistem = useCallback(() => {
-    if (!isAdmin) return;
+    if (!isSuperAdmin) return;
     axios.get(`${API}/backup/otomatis`).then((r) => setOto(r.data)).catch(() => {});
     axios.get(`${API}/backup/arsip`).then((r) => setArsip(r.data?.items || [])).catch(() => setArsip([]));
-  }, [isAdmin]);
+  }, [isSuperAdmin]);
 
   useEffect(() => { if (tab === "sistem") muatSistem(); }, [tab, muatSistem]);
 
@@ -252,7 +258,7 @@ export default function PengaturanPage({ user, onBack, onOpenSatker,
                 daftar koleksi dinamis, modul baru otomatis ikut. Proses berjalan di background.
               </p>
               <div className="flex items-center gap-2 flex-wrap">
-                <Button size="sm" className="h-9 text-xs" disabled={!isAdmin || backupLoading}
+                <Button size="sm" className="h-9 text-xs" disabled={!isSuperAdmin || backupLoading}
                   onClick={mulaiBackup} data-testid="pengaturan-backup">
                   {backupLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <DatabaseBackup className="w-3.5 h-3.5 mr-1.5" />}
                   Mulai Backup Sekarang
@@ -264,11 +270,15 @@ export default function PengaturanPage({ user, onBack, onOpenSatker,
                   Simpan juga ke arsip server (tidak hanya diunduh)
                 </label>
               </div>
-              {!isAdmin && <p className="text-[10px] text-amber-600 dark:text-amber-400">Hanya admin yang dapat menjalankan backup.</p>}
+              {!isSuperAdmin && <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                {isAdmin
+                  ? "Backup mencakup data SELURUH satker — hanya super-admin pusat (admin lintas-satker) yang dapat menjalankannya. Admin satker mengelola datanya sendiri lewat modul."
+                  : "Hanya super-admin pusat (admin lintas-satker) yang dapat menjalankan backup."}
+              </p>}
             </div>
 
             {/* ── 2. Backup otomatis terjadwal ── */}
-            {isAdmin && (
+            {isSuperAdmin && (
               <div className="rounded-xl border border-border bg-card p-3.5 space-y-2" data-testid="pengaturan-backup-otomatis">
                 <p className="text-xs font-bold flex items-center gap-1.5">
                   <Clock className="w-4 h-4 text-sky-500" />Backup otomatis harian
@@ -314,7 +324,7 @@ export default function PengaturanPage({ user, onBack, onOpenSatker,
             )}
 
             {/* ── 3. Arsip backup di server ── */}
-            {isAdmin && (
+            {isSuperAdmin && (
               <div className="rounded-xl border border-border bg-card overflow-hidden" data-testid="pengaturan-arsip">
                 <div className="px-3.5 py-2.5 border-b border-border flex items-center gap-2 flex-wrap">
                   <p className="text-xs font-bold flex items-center gap-1.5 flex-1">
@@ -379,25 +389,29 @@ export default function PengaturanPage({ user, onBack, onOpenSatker,
               </p>
               <div className="flex items-center gap-2 flex-wrap">
                 <Button size="sm" variant="outline" className="h-9 text-xs gap-1.5 border-amber-500/50 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10"
-                  disabled={!isAdmin} onClick={() => setShowRestore(true)} data-testid="pengaturan-restore">
+                  disabled={!isSuperAdmin} onClick={() => setShowRestore(true)} data-testid="pengaturan-restore">
                   <Upload className="w-3.5 h-3.5" />Pulihkan dari File Backup
                 </Button>
                 <Button size="sm" variant="outline" className="h-9 text-xs gap-1.5 border-red-500/50 text-red-600 hover:bg-red-500/10"
-                  disabled={!isAdmin} onClick={() => setShowResetAll(true)} data-testid="pengaturan-reset">
+                  disabled={!isSuperAdmin} onClick={() => setShowResetAll(true)} data-testid="pengaturan-reset">
                   <Trash2 className="w-3.5 h-3.5" />Reset Seluruh Data
                 </Button>
               </div>
-              {!isAdmin && <p className="text-[10px] text-amber-600 dark:text-amber-400">Hanya admin yang dapat memulihkan/mereset data.</p>}
+              {!isSuperAdmin && <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                {isAdmin
+                  ? "Restore/Reset mengganti/menghapus data SELURUH satker — khusus super-admin pusat (admin lintas-satker), bukan admin satker."
+                  : "Hanya super-admin pusat (admin lintas-satker) yang dapat memulihkan/mereset data."}
+              </p>}
             </div>
           </div>
         )}
       </main>
 
-      {isAdmin && (
+      {isSuperAdmin && (
         <ResetAllDialog open={showResetAll} onClose={() => setShowResetAll(false)}
           userId={user?.id} onSuccess={() => muatSistem()} />
       )}
-      {isAdmin && (
+      {isSuperAdmin && (
         <RestoreDialog open={showRestore} onClose={() => setShowRestore(false)}
           token={localStorage.getItem("token")} onSuccess={() => muatSistem()} />
       )}

@@ -88,10 +88,18 @@ def serialize_doc(doc, keep_id: bool = False):
     return result
 
 
-async def require_admin(authorization: str):
+async def require_super_admin(authorization: str):
+    """Backup/restore/reset = operasi SELURUH-DB (mencakup data SEMUA satker) →
+    KHUSUS super-admin pusat (role 'admin' + kode_satker kosong). Admin yang
+    terikat satu satker ditolak: mereka tak boleh mengunduh/menimpa/menghapus
+    data satker lain."""
+    from auth_utils import is_super_admin
     user = await get_current_user(authorization)
-    if user.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Hanya admin yang dapat mengakses fitur backup")
+    if not is_super_admin(user):
+        raise HTTPException(
+            status_code=403,
+            detail=("Khusus super-admin pusat (admin lintas-satker) — admin satker "
+                    "tidak dapat mengakses backup/restore/reset seluruh sistem."))
     return user
 
 
@@ -563,7 +571,7 @@ async def run_restore_task(job_id: str, zip_path: Path, username: str):
 @backup_router.get("/stats")
 async def get_backup_stats(authorization: str = Header(None)):
     """Get current data statistics for backup preview."""
-    await require_admin(authorization)
+    await require_super_admin(authorization)
     stats = {}
     for col_name in await _app_collections():
         stats[col_name] = await db[col_name].count_documents({})
@@ -577,7 +585,7 @@ async def start_backup(authorization: str = Header(None), arsipkan: bool = False
     `arsipkan=true` = simpan hasil ke arsip persisten server (selain tetap
     bisa diunduh) — untuk cadangan yang menetap tanpa perlu mengunduh.
     """
-    user = await require_admin(authorization)
+    user = await require_super_admin(authorization)
     await cleanup_stale_jobs()
     await cleanup_old_files()
 
@@ -619,7 +627,7 @@ async def start_restore(
     authorization: str = Header(None),
 ):
     """Upload backup file and start background restore. Returns job_id."""
-    user = await require_admin(authorization)
+    user = await require_super_admin(authorization)
     await cleanup_stale_jobs()
 
     if not file.filename.endswith(".zip"):
@@ -687,7 +695,7 @@ async def start_restore(
 @backup_router.get("/progress/{job_id}")
 async def get_job_progress(job_id: str, authorization: str = Header(None)):
     """Get progress of a backup/restore job."""
-    await require_admin(authorization)
+    await require_super_admin(authorization)
     job = await db.backup_jobs.find_one({"job_id": job_id}, {"_id": 0})
     if not job:
         raise HTTPException(status_code=404, detail="Job tidak ditemukan")
@@ -697,7 +705,7 @@ async def get_job_progress(job_id: str, authorization: str = Header(None)):
 @backup_router.get("/active")
 async def get_active_job(authorization: str = Header(None)):
     """Get the currently active (running/queued) job, if any."""
-    await require_admin(authorization)
+    await require_super_admin(authorization)
     await cleanup_stale_jobs()
     job = await db.backup_jobs.find_one(
         {"status": {"$in": ["running", "queued"]}},
@@ -742,7 +750,7 @@ async def download_backup(
     effective_auth = authorization
     if not effective_auth and token:
         effective_auth = f"Bearer {token}"
-    await require_admin(effective_auth)
+    await require_super_admin(effective_auth)
 
     job = await db.backup_jobs.find_one({"job_id": job_id, "type": "backup", "status": "completed"}, {"_id": 0})
     if not job:
@@ -767,7 +775,7 @@ async def download_backup(
 @backup_router.post("/dismiss/{job_id}")
 async def dismiss_job(job_id: str, authorization: str = Header(None)):
     """Dismiss/acknowledge a completed or failed job so it stops showing."""
-    await require_admin(authorization)
+    await require_super_admin(authorization)
     await db.backup_jobs.update_one(
         {"job_id": job_id, "status": {"$in": ["completed", "failed"]}},
         {"$set": {"status": "dismissed", "updated_at": datetime.now(timezone.utc).isoformat()}}
@@ -884,7 +892,7 @@ def start_backup_scheduler():
 @backup_router.get("/otomatis")
 async def get_setelan_otomatis(authorization: str = Header(None)):
     """Setelan backup otomatis + ringkas arsip (untuk panel Pengaturan)."""
-    await require_admin(authorization)
+    await require_super_admin(authorization)
     s = await db.report_settings.find_one(
         {"type": "backup_otomatis"}, {"_id": 0, "type": 0}) or {}
     arsip = _daftar_arsip()
@@ -896,7 +904,7 @@ async def get_setelan_otomatis(authorization: str = Header(None)):
 @backup_router.post("/otomatis")
 async def set_setelan_otomatis(payload: dict, authorization: str = Header(None)):
     """Simpan setelan backup otomatis (aktif, jam WIB, retensi)."""
-    user = await require_admin(authorization)
+    user = await require_super_admin(authorization)
     import re as _re
     jam = str(payload.get("jam", "02:00")).strip()
     if not _re.match(r"^([01]\d|2[0-3]):[0-5]\d$", jam):
@@ -919,7 +927,7 @@ async def set_setelan_otomatis(payload: dict, authorization: str = Header(None))
 @backup_router.get("/arsip")
 async def daftar_arsip_backup(authorization: str = Header(None)):
     """Daftar berkas backup yang tersimpan di arsip server."""
-    await require_admin(authorization)
+    await require_super_admin(authorization)
     return {"items": _daftar_arsip()}
 
 
@@ -930,7 +938,7 @@ async def unduh_arsip_backup(nama: str, authorization: str = Header(None),
     effective_auth = authorization
     if not effective_auth and token:
         effective_auth = f"Bearer {token}"
-    await require_admin(effective_auth)
+    await require_super_admin(effective_auth)
     if not nama_arsip_valid(nama):
         raise HTTPException(status_code=400, detail="Nama berkas arsip tidak dikenal")
     p = BACKUP_ARSIP_DIR / nama
@@ -943,7 +951,7 @@ async def unduh_arsip_backup(nama: str, authorization: str = Header(None),
 @backup_router.delete("/arsip/{nama}")
 async def hapus_arsip_backup(nama: str, authorization: str = Header(None)):
     """Hapus satu berkas arsip backup (admin)."""
-    user = await require_admin(authorization)
+    user = await require_super_admin(authorization)
     if not nama_arsip_valid(nama):
         raise HTTPException(status_code=400, detail="Nama berkas arsip tidak dikenal")
     p = BACKUP_ARSIP_DIR / nama
@@ -957,7 +965,7 @@ async def hapus_arsip_backup(nama: str, authorization: str = Header(None)):
 @backup_router.post("/restore/dari-arsip/{nama}")
 async def restore_dari_arsip(nama: str, authorization: str = Header(None)):
     """Mulai restore langsung dari berkas arsip server (tanpa unggah ulang)."""
-    user = await require_admin(authorization)
+    user = await require_super_admin(authorization)
     await cleanup_stale_jobs()
     if not nama_arsip_valid(nama):
         raise HTTPException(status_code=400, detail="Nama berkas arsip tidak dikenal")

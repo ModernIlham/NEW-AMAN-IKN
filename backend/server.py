@@ -366,17 +366,19 @@ async def get_inventory_classifications():
 
 
 # ============================================================================
-# SYSTEM RESET (admin only - hidden feature)
+# SYSTEM RESET (KHUSUS super-admin pusat — fitur tersembunyi)
+# Reset menghapus data SELURUH satker, jadi hanya boleh dijalankan super-admin
+# lintas-satker (admin dengan kode_satker kosong), bukan admin satker.
 # ============================================================================
 
 from models import ResetConfirmation
-from auth_utils import require_admin
+from auth_utils import require_super_admin, is_super_admin
 
 @api_router.delete("/system/reset-all")
-async def reset_all_data(data: ResetConfirmation, _admin: dict = Depends(require_admin)):
+async def reset_all_data(data: ResetConfirmation, _admin: dict = Depends(require_super_admin)):
     admin_user = await db.users.find_one({"id": data.admin_id})
-    if not admin_user or admin_user.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Hanya admin yang dapat melakukan reset sistem")
+    if not admin_user or not is_super_admin(admin_user):
+        raise HTTPException(status_code=403, detail="Hanya super-admin pusat yang dapat melakukan reset sistem")
     if data.confirmation != "HAPUS SEMUA":
         raise HTTPException(status_code=400, detail="Kata konfirmasi tidak valid")
 
