@@ -48,6 +48,29 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#536] Keandalan: Idempotency-Key pada transaksi persediaan (masuk & keluar) — 2026-07-23
+
+Temuan audit terverifikasi [tinggi]: endpoint transaksi persediaan menulis
+stok/jurnal **tanpa Idempotency-Key** — double-submit (klik ganda, retry
+setelah timeout jaringan) menggandakan stok masuk atau pengeluaran. Melanggar
+konvensi baku "semua tulis ber-OCC + Idempotency-Key".
+
+- **Backend** (`routes/persediaan.py`): `POST /persediaan/{id}/masuk` &
+  `.../keluar` kini menerima header `Idempotency-Key` (opsional) dengan pola
+  baku yang sudah dipakai `assets.py`: `get_idempotent_response` → putar ulang
+  respons tersimpan; `reserve_idempotency_key` → klaim atomik (409 bila sedang
+  diproses); `store_idempotent_response` setelah sukses. Param `request`
+  ber-default `None` agar pemanggil internal (impor massal / Pengadaan) yang
+  tak mengoper request tetap jalan. Keluar tetap ber-OCC versi seperti semula.
+- **Frontend** (`pages/PersediaanPage.jsx`): dialog Masuk/Keluar membuat kunci
+  idempotensi per sesi (dibuat saat dibuka, dipakai ulang saat submit diulang,
+  dibuang saat ditutup) dan mengirimnya sebagai header.
+
+Verifikasi: `pytest tests/unit` 638 lulus; `eslint` bersih; `yarn build`
+sukses. Aman-mundur (tanpa header = perilaku lama).
+
+---
+
 ## [#535] Keamanan: isolasi satker penuh pada Penilaian & Pemeliharaan — 2026-07-23
 
 Lanjutan pengerasan pasca-audit. Dua modul siklus ternyata **belum ter-scope

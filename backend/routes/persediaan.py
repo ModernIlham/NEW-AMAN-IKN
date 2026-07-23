@@ -18,7 +18,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile
+from fastapi import (APIRouter, Depends, File, Header, HTTPException, Query,
+                     Request, UploadFile)
 from pydantic import BaseModel, Field
 
 from auth_utils import (
@@ -1258,14 +1259,37 @@ async def _ambil_snapshot_perolehan(perolehan_id: str) -> dict:
 
 
 @persediaan_router.post("/persediaan/{item_id}/masuk")
-async def transaksi_masuk(item_id: str, data: TransaksiMasukIn, user: dict = Depends(require_writer)):
+async def transaksi_masuk(item_id: str, data: TransaksiMasukIn,
+                          request: Request = None,
+                          user: dict = Depends(require_writer)):
     """Transaksi MASUK: layer FIFO baru + stok naik + jurnal (pustaka §3).
 
     Pencatatan perpetual: master diperbarui ATOMIK ($push layer + $inc stok
     + $inc version); jurnal `transaksi_persediaan` menyusul dengan
     stok_sebelum/sesudah — bila penulisan jurnal gagal, layer dikompensasi
     (dicabut lagi) supaya master tidak pernah menyimpan stok tanpa jejak.
+
+    Idempotency-Key (opsional): double-submit/replay jaringan tidak
+    menggandakan stok — respons pertama disimpan & diputar ulang. Pemanggil
+    internal (impor massal / Pengadaan) tak mengoper `request` → dilewati.
     """
+    idem_key = request.headers.get("Idempotency-Key", "") if request is not None else ""
+    if idem_key:
+        from shared_utils import (get_idempotent_response,
+                                  reserve_idempotency_key)
+        cached = await get_idempotent_response(idem_key)
+        if cached and cached.get("response"):
+            return cached["response"]
+        _idem = await reserve_idempotency_key(idem_key)
+        if _idem == "done":
+            cached = await get_idempotent_response(idem_key)
+            if cached and cached.get("response"):
+                return cached["response"]
+        elif _idem == "pending":
+            raise HTTPException(
+                status_code=409,
+                detail="Permintaan dengan kunci idempotensi ini sedang diproses, coba lagi sebentar")
+
     ok, err = validate_transaksi_masuk(data.jenis, data.jumlah, data.harga_satuan)
     if not ok:
         raise HTTPException(status_code=400, detail=err)
@@ -1340,8 +1364,12 @@ async def transaksi_masuk(item_id: str, data: TransaksiMasukIn, user: dict = Dep
         )
         raise HTTPException(status_code=500, detail="Gagal mencatat jurnal — transaksi dibatalkan")
 
-    return {"message": f"{JENIS_MASUK[data.jenis][0]} tercatat", "stok": stok_sesudah,
+    resp = {"message": f"{JENIS_MASUK[data.jenis][0]} tercatat", "stok": stok_sesudah,
             "transaksi": jurnal, "version": updated.get("version")}
+    if idem_key:
+        from shared_utils import store_idempotent_response
+        await store_idempotent_response(idem_key, resp, 200)
+    return resp
 
 
 class TransaksiKeluarIn(BaseModel):
@@ -1353,14 +1381,37 @@ class TransaksiKeluarIn(BaseModel):
 
 
 @persediaan_router.post("/persediaan/{item_id}/keluar")
-async def transaksi_keluar(item_id: str, data: TransaksiKeluarIn, user: dict = Depends(require_writer)):
+async def transaksi_keluar(item_id: str, data: TransaksiKeluarIn,
+                           request: Request = None,
+                           user: dict = Depends(require_writer)):
     """Transaksi KELUAR: konsumsi layer FIFO tertua + jurnal (pustaka §3).
 
     Nilai keluar = Σ (qty terpakai × harga layer) — bukan rata-rata.
     Update master BERSYARAT VERSI (retry 3x saat balapan dengan transaksi
     lain); jurnal menyertakan rincian layer terpakai. Bila tulis jurnal
     gagal → batches & stok dikembalikan ke snapshot sebelumnya.
+
+    Idempotency-Key (opsional): OCC mencegah lost-update, tetapi replay
+    kunci sama tak boleh menggandakan pengeluaran — respons pertama disimpan
+    & diputar ulang. Pemanggil internal (massal) tak mengoper `request`.
     """
+    idem_key = request.headers.get("Idempotency-Key", "") if request is not None else ""
+    if idem_key:
+        from shared_utils import (get_idempotent_response,
+                                  reserve_idempotency_key)
+        cached = await get_idempotent_response(idem_key)
+        if cached and cached.get("response"):
+            return cached["response"]
+        _idem = await reserve_idempotency_key(idem_key)
+        if _idem == "done":
+            cached = await get_idempotent_response(idem_key)
+            if cached and cached.get("response"):
+                return cached["response"]
+        elif _idem == "pending":
+            raise HTTPException(
+                status_code=409,
+                detail="Permintaan dengan kunci idempotensi ini sedang diproses, coba lagi sebentar")
+
     now = datetime.now(timezone.utc)
     for _attempt in range(3):
         item = await db.persediaan.find_one({"id": item_id}, {"_id": 0})
@@ -1424,9 +1475,13 @@ async def transaksi_keluar(item_id: str, data: TransaksiKeluarIn, user: dict = D
             )
             raise HTTPException(status_code=500, detail="Gagal mencatat jurnal — transaksi dibatalkan")
 
-        return {"message": f"{JENIS_KELUAR[data.jenis][0]} tercatat", "stok": stok_sesudah,
+        resp = {"message": f"{JENIS_KELUAR[data.jenis][0]} tercatat", "stok": stok_sesudah,
                 "nilai_keluar": total_nilai, "transaksi": jurnal,
                 "version": updated.get("version")}
+        if idem_key:
+            from shared_utils import store_idempotent_response
+            await store_idempotent_response(idem_key, resp, 200)
+        return resp
 
     raise HTTPException(status_code=409,
                         detail="Barang sedang diubah pengguna lain — coba lagi")
