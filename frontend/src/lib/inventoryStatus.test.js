@@ -8,8 +8,19 @@ import {
 const lengkap = { inventory_status: STATUS_BELUM, hasPhoto: true, lat: "-0.912345", lng: "116.123456", enabled: true };
 
 describe("statusInventarisasiOtomatis", () => {
-  test("naik ke SUDAH bila foto + koordinat + status default 'Belum'", () => {
+  test("auto-status = 'Ditemukan' (bukan 'Sudah Diinventarisasi' yang yatim)", () => {
+    expect(STATUS_SUDAH).toBe("Ditemukan");
+  });
+
+  test("naik ke Ditemukan bila foto + koordinat + status default 'Belum'", () => {
     expect(statusInventarisasiOtomatis(lengkap)).toBe(STATUS_SUDAH);
+  });
+
+  test("revert manual ke 'Belum' MENETAP saat enabled=false (pengguna memilih sendiri)", () => {
+    // AssetForm mematikan `enabled` begitu pengguna memilih status manual —
+    // sehingga "Belum Diinventarisasi" tak di-promosi ulang walau foto+koordinat.
+    expect(statusInventarisasiOtomatis({ ...lengkap, inventory_status: STATUS_BELUM, enabled: false }))
+      .toBe(STATUS_BELUM);
   });
 
   test("naik ke SUDAH juga bila status kosong ('' / undefined)", () => {

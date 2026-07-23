@@ -963,7 +963,7 @@ const FullCameraSheet = memo(function FullCameraSheet({
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-[11px] font-bold text-foreground">Status Inventarisasi</p>
                     {/* Auto-inventaris: bila ada foto + koordinat & status masih
-                        default, saat simpan status jadi "Sudah Diinventarisasi". */}
+                        default, saat simpan status jadi "Ditemukan". */}
                     <button type="button" onClick={toggleAutoInv} aria-pressed={autoInv} data-testid="full-camera-autoinv"
                       className={`inline-flex items-center gap-1 h-6 px-2 rounded-full text-[10px] font-semibold transition-colors ${autoInv ? "bg-emerald-600 text-white" : "bg-muted text-muted-foreground"}`}>
                       <Sparkles className="w-3 h-3" />Auto-inventaris {autoInv ? "ON" : "OFF"}

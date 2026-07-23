@@ -110,6 +110,20 @@ async def startup_event():
             logger.info(f"OCC backfill: set version=1 on {res.modified_count} legacy asset(s)")
     except Exception as e:
         logger.warning(f"OCC version backfill failed (non-fatal): {e}")
+    # Normalisasi status inventarisasi YATIM: nilai lama "Sudah Diinventarisasi"
+    # tidak ada di daftar pilihan resmi (Belum/Ditemukan/Tidak Ditemukan/
+    # Berlebih/Sengketa) sehingga tak terseleksi di UI & gagal validasi impor.
+    # Aset ber-status itu memang ber-foto = ditemukan → ubah ke "Ditemukan".
+    # Idempoten: setelah jalan sekali, filter tak lagi cocok (scan murah).
+    try:
+        res_stat = await db.assets.update_many(
+            {"inventory_status": "Sudah Diinventarisasi"},
+            {"$set": {"inventory_status": "Ditemukan"}},
+        )
+        if res_stat.modified_count:
+            logger.info(f"Status normalize: 'Sudah Diinventarisasi' → 'Ditemukan' pada {res_stat.modified_count} aset")
+    except Exception as e:
+        logger.warning(f"Normalisasi status inventarisasi gagal (non-fatal): {e}")
     # Backfill nomor tiket kegiatan (INV-{tahun}-{seq}) untuk kegiatan lama.
     # Idempotent & aman multi-worker (guard $exists per dokumen).
     try:
