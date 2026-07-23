@@ -48,6 +48,39 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#560] Perkakas uji: generator data sintetis BMN registry-driven (adaptif + edge-case) — 2026-07-23
+
+Fondasi perkakas pengembangan/pengujian untuk mempercepat & memperkuat siklus
+uji ke depan (bukan bagian runtime aplikasi — di `backend/scripts/synthdata/`,
+tak di-import server/route mana pun). Menjawab lima kebutuhan sekaligus:
+
+- **Realistis** — data BMN berkonteks OIKN/IKN: nama barang per kategori, merek,
+  lokasi Kawasan IKN (Sepaku/PPU, Kalimantan Timur), kodefikasi 6-segmen, NIP
+  18-digit, satker 6/20-digit, kegiatan inventarisasi. Tanpa dependency baru
+  (pustaka standar Python saja — ringan untuk CI, tak menyentuh
+  `requirements.txt`).
+- **Adaptif (anti-drift)** — sumber field = `asset_fields.ASSET_SCALAR_FIELDS`
+  (registry yang sama dengan model/ekspor/impor). Pilihan sah (kondisi/status/
+  inventarisasi/stiker/klasifikasi) diambil dari `shared_utils.VALID_*`. Test
+  `test_synthdata_generator.py` menagih tiap field registry punya strateginya:
+  menambah field aset TANPA menambah strateginya menggagalkan CI → data uji
+  selalu relevan dengan fitur terkini.
+- **Anomali / edge-case** — profil `edge`/`mixed` menyuntik kasus tepi yang
+  sering terlewat: tanggal ekstrem (`9999-12-31` jebakan OverflowError, tanggal
+  mustahil), harga/koordinat di luar rentang, unicode/emoji/RTL, string sangat
+  panjang, serta pola mirip SQLi/NoSQL/XSS/path-traversal (disimpan sebagai teks
+  polos) — memperluas cakupan & menguji ketahanan logika.
+- **Deterministik & skalabel** — `seed` sama → keluaran identik (repro CI);
+  100.000 record < 15 detik; format `json`/`ndjson` (stream hemat memori).
+  CLI: `python -m scripts.synthdata --count 500 --profile mixed --seed 42`.
+- **Valid skema** — tiap record (semua profil) lolos model `AssetCreate`.
+
+Jenis data lain juga tersedia: `pegawai`, `satker`, `kegiatan`. Harness
+load/stress (Locust) + wiring CI/CD + skill `aman-testdata` menyusul di PR
+terpisah. Test: +14 (total unit 656 hijau).
+
+---
+
 ## [#559] Keamanan: rate-limit per-USER + storage bersama lintas-worker (MongoDB, aman) — 2026-07-23
 
 Rate limiter sebelumnya per-IP + in-memory per-worker (VPS jalankan 2 uvicorn
