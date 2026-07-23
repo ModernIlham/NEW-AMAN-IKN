@@ -48,6 +48,26 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#551] Keamanan: rate-limit laporan pembukuan seluruh-DB (anti-DoS render PDF) — 2026-07-23
+
+Delapan endpoint laporan pembukuan **memindai SELURUH aset satker** lalu
+merender PDF/XLSX berat (ReportLab/xlsxwriter) tanpa filter kegiatan —
+`posisi-bmn-pdf`, `dbr-pdf`, `kir-pdf`, `penyusutan-pdf`, `lbkp-pdf`, `lkb-pdf`,
+`calbmn-pdf`, `rekonsiliasi-xlsx`. Sebelumnya tanpa rate-limit, sehingga bisa
+di-hammer (mengulang render seluruh-DB) untuk menghabiskan CPU/memori server.
+Kini masing-masing dibatasi **6/menit per-IP** (pola `@limiter.limit` yang sama
+dengan endpoint berat lain di exports/auth/siman). Batas per-endpoint, jadi
+membuka kedelapan laporan berbeda satu kali tetap lancar; hanya pengulangan
+laporan yang SAMA >6×/menit yang ditahan.
+
+Catatan: TTL token media (30 hari) **dipertahankan** — sejak #549 token media
+ikut dicabut saat reset/ubah password (revokasi `sesi_epoch`), sehingga jendela
+paparannya kini dibatasi pencabutan, bukan hanya TTL; memperpendek TTL justru
+merusak stabilitas URL media (tujuan token itu).
+
+Verifikasi: `pytest tests/unit` **641 lulus** (termasuk uji registrasi rute app
+dengan dekorator baru); `compileall` bersih. Backend-only.
+
 ## [#550] Keamanan: tutup bypass autentikasi WebSocket (revokasi + nonaktif + scope) — 2026-07-23
 
 Temuan review adversarial AUTH-C: endpoint `/ws/{activity_id}` memvalidasi token
