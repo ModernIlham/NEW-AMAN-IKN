@@ -48,6 +48,28 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#565] Performa frontend: lottie build "light" + kanvas TTD dimuat lazy — 2026-07-23
+
+Dua kemenangan bundle dari audit performa frontend (aplikasi sudah
+teroptimasi baik: 29 rute lazy, panel berat lazy, daftar tervirtualisasi,
+ekspor server-side — jadi ini penajaman incremental):
+
+- **`ModuleHomePage`** — `import lottie from "lottie-web"` (build penuh ~305 KB
+  raw) diganti `lottie-web/build/player/lottie_light` (SVG-only ~168 KB). Kita
+  hanya memakai `renderer: "svg"`, jadi identik secara fungsi. Hemat ~137 KB raw
+  (~40 kB gzip) pada chunk **landing pasca-login** yang dimuat semua pengguna.
+- **`PejabatPage`** — `SignatureCapture` (react-signature-canvas + signature_pad)
+  dijadikan `React.lazy` + `Suspense`; komponen ini hanya di-mount saat panel
+  bubuh TTD dibuka (`ttdUntuk`), jadi kanvas TTD tak lagi membebani chunk awal
+  halaman Pejabat.
+
+`AssetForm` sengaja **belum** di-lazy-kan: ia selalu ter-mount untuk editor
+(manfaat utama hanya untuk viewer) dan merupakan form inti alur offline-first —
+ditunda agar bisa diuji langsung di aplikasi. Verifikasi: `yarn lint` bersih +
+`yarn build` sukses.
+
+---
+
 ## [#564] Performa: ekspor CSV buang byte base64 document_checklist di server — 2026-07-23
 
 `GET /export/csv` sebelumnya menarik `document_checklist` **penuh** dari
