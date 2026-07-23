@@ -48,6 +48,26 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#540] Keamanan: isolasi satker pada modul Persuratan — 2026-07-23
+
+Sapuan audit lanjutan (fan-out 6 agen) menemukan modul **Persuratan** (`surat`)
+belum ter-isolasi satker sama sekali — buku agenda satker A menampilkan
+SELURUH surat satker lain (perihal/tujuan/pengirim/nomor), dan surat satker B
+bisa disahkan/dibatalkan/diubah/dihapus oleh satker A (IDOR end-to-end).
+
+Ditutup dengan pola baku:
+- `daftar_surat` & `export_agenda` + 4 hitungan ringkasan kini ter-scope
+  `scope_query_field_satker`.
+- `booking_surat_keluar` & `agenda_surat_masuk` menyimpan `kode_satker` penerbit.
+- `transisi_surat` / `ubah_surat` / `hapus_surat` ber-guard
+  `pastikan_akses_dok_satker` (403 lintas-satker; super-admin & surat era-lama
+  tanpa kode tetap lolos — aman-mundur).
+
+Verifikasi: `pytest tests/unit` 638 lulus; `compileall` bersih. Backend-only.
+Bagian dari gelombang perbaikan pasca-audit keamanan lanjutan.
+
+---
+
 ## [#539] Keandalan: gerbang atomik single-flight backup/restore — 2026-07-23
 
 Temuan audit terverifikasi (concurrency): guard "hanya satu backup/restore

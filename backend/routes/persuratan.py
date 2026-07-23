@@ -27,7 +27,8 @@ from pymongo import ReturnDocument
 
 from auth_utils import require_admin, require_user, require_writer
 from db import db
-from shared_utils import log_audit
+from shared_utils import (log_audit, kode_satker_user,
+                          pastikan_akses_dok_satker, scope_query_field_satker)
 from persuratan_utils import (
     FORMAT_NOMOR_DEFAULT, JENIS_NASKAH, KODE_KEAMANAN, MODUL_AMAN,
     STATUS_KELUAR, STATUS_MASUK, TRANSISI_KELUAR, TRANSISI_MASUK,
@@ -316,6 +317,8 @@ async def daftar_surat(jenis: str = "", status: str = "", modul: str = "",
         query["$or"] = [{"nomor": rx}, {"perihal": rx}, {"tujuan": rx},
                         {"pengirim": rx}, {"referensi": rx},
                         {"nama_kegiatan": rx}]
+    # ISOLASI SATKER: user terikat hanya melihat surat satkernya (+ era-lama).
+    query = scope_query_field_satker(_user, query)
     total = await db.surat.count_documents(query)
     items = await (db.surat.find(query, _PROJ)
                    .sort([("tahun", -1), ("no_agenda", -1)])
@@ -323,13 +326,13 @@ async def daftar_surat(jenis: str = "", status: str = "", modul: str = "",
                    .to_list(page_size))
     ringkas = {
         "keluar_dibooking": await db.surat.count_documents(
-            {"jenis": "keluar", "status": "dibooking"}),
+            scope_query_field_satker(_user, {"jenis": "keluar", "status": "dibooking"})),
         "keluar_disahkan": await db.surat.count_documents(
-            {"jenis": "keluar", "status": "disahkan"}),
+            scope_query_field_satker(_user, {"jenis": "keluar", "status": "disahkan"})),
         "keluar_dibatalkan": await db.surat.count_documents(
-            {"jenis": "keluar", "status": "dibatalkan"}),
+            scope_query_field_satker(_user, {"jenis": "keluar", "status": "dibatalkan"})),
         "masuk_terbuka": await db.surat.count_documents(
-            {"jenis": "masuk", "status": {"$in": ["diterima", "diproses"]}}),
+            scope_query_field_satker(_user, {"jenis": "masuk", "status": {"$in": ["diterima", "diproses"]}})),
     }
     return {"items": items, "total": total, "page": page,
             "total_pages": max(1, -(-total // page_size)),
@@ -368,6 +371,7 @@ async def booking_surat_keluar(payload: SuratKeluarIn,
         kode_keamanan=data.get("kode_keamanan") or "B")
     record = {
         "id": str(uuid.uuid4()),
+        "kode_satker": kode_satker_user(user),
         "jenis": "keluar",
         "no_agenda": no_agenda,
         "tahun": tahun,
@@ -412,6 +416,7 @@ async def agenda_surat_masuk(payload: SuratMasukIn,
     no_agenda = await _no_agenda_berikut("masuk", tahun)
     record = {
         "id": str(uuid.uuid4()),
+        "kode_satker": kode_satker_user(user),
         "jenis": "masuk",
         "no_agenda": no_agenda,
         "tahun": tahun,
@@ -447,6 +452,7 @@ async def transisi_surat(surat_id: str, payload: TransisiIn,
     s = await db.surat.find_one({"id": surat_id}, _PROJ)
     if not s:
         raise HTTPException(status_code=404, detail="Surat tidak ditemukan")
+    await pastikan_akses_dok_satker(user, s)
     ke = str(payload.status or "").strip()
     err = validate_transisi(s.get("status"), ke, s.get("jenis"))
     if err:
@@ -487,6 +493,7 @@ async def ubah_surat(surat_id: str, payload: UbahSuratIn,
     s = await db.surat.find_one({"id": surat_id}, _PROJ)
     if not s:
         raise HTTPException(status_code=404, detail="Surat tidak ditemukan")
+    await pastikan_akses_dok_satker(user, s)
     update = {k: str(v).strip() for k, v in payload.model_dump().items()
               if v is not None}
     if not update:
@@ -533,6 +540,7 @@ async def hapus_surat(surat_id: str, user: dict = Depends(require_admin)):
     s = await db.surat.find_one({"id": surat_id}, _PROJ)
     if not s:
         raise HTTPException(status_code=404, detail="Surat tidak ditemukan")
+    await pastikan_akses_dok_satker(user, s)
     if s.get("jenis") == "keluar" and s.get("status") == "disahkan":
         raise HTTPException(status_code=409, detail=(
             "Surat keluar yang sudah DISAHKAN tidak dapat dihapus — batalkan "
@@ -554,6 +562,7 @@ async def export_agenda(jenis: str = "", tahun: str = "",
         query["jenis"] = jenis
     if tahun.strip().isdigit():
         query["tahun"] = int(tahun)
+    query = scope_query_field_satker(_user, query)
     items = await (db.surat.find(query, _PROJ)
                    .sort([("tahun", 1), ("no_agenda", 1)]).to_list(100000))
     buf = io.StringIO()
