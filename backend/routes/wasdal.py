@@ -20,7 +20,7 @@ from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
 )
 from db import db, fs_bucket
-from shared_utils import kode_satker_user, scope_query_field_satker, blok_ttd_kpb_titik, delete_document_from_gridfs, get_document_from_gridfs
+from shared_utils import kode_satker_user, scope_query_field_satker, pastikan_akses_dok_satker, blok_ttd_kpb_titik, delete_document_from_gridfs, get_document_from_gridfs
 from wasdal_utils import (
     AMBANG_BERLARUT_HARI, JENIS_TEMUAN, OBJEK_WASDAL, PEMICU_INSIDENTIL,
     STATUS_INSIDENTIL, SUMBER_PENERTIBAN, STATUS_PENERTIBAN,
@@ -509,9 +509,10 @@ async def unggah_lampiran_insidentil(tiket_id: str, file: UploadFile = File(...)
                                      user: dict = Depends(require_writer)):
     """Unggah scan BA/foto temuan (PDF/gambar, maks 10MB, 10 berkas)."""
     t = await db.pemantauan_insidentil.find_one(
-        {"id": tiket_id}, {"_id": 0, "id": 1, "lampiran": 1})
+        {"id": tiket_id}, {"_id": 0, "id": 1, "lampiran": 1, "kode_satker": 1})
     if not t:
         raise HTTPException(status_code=404, detail="Tiket tidak ditemukan")
+    await pastikan_akses_dok_satker(user, t)
     if len(t.get("lampiran") or []) >= _MAX_LAMPIRAN:
         raise HTTPException(status_code=400,
                             detail=f"Maksimal {_MAX_LAMPIRAN} lampiran per tiket")
@@ -556,7 +557,9 @@ async def unduh_lampiran_insidentil(tiket_id: str, file_id: str, request: Reques
                                     _user: dict = Depends(require_user_or_query_token)):
     """Stream lampiran tiket insidentil (menerima header ATAU ?token)."""
     t = await db.pemantauan_insidentil.find_one(
-        {"id": tiket_id, "lampiran.file_id": file_id}, {"_id": 0, "lampiran.$": 1})
+        scope_query_field_satker(
+            _user, {"id": tiket_id, "lampiran.file_id": file_id}),
+        {"_id": 0, "lampiran.$": 1})
     if not t or not t.get("lampiran"):
         raise HTTPException(status_code=404, detail="Lampiran tidak ditemukan")
     meta = t["lampiran"][0]
@@ -577,7 +580,7 @@ async def hapus_lampiran_insidentil(tiket_id: str, file_id: str,
                                     _admin: dict = Depends(require_admin)):
     """Hapus lampiran salah unggah (khusus admin)."""
     res = await db.pemantauan_insidentil.update_one(
-        {"id": tiket_id},
+        scope_query_field_satker(_admin, {"id": tiket_id}),
         {"$pull": {"lampiran": {"file_id": file_id}},
          "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}})
     if res.matched_count == 0:

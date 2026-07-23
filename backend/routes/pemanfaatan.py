@@ -306,9 +306,10 @@ async def _terima_lampiran(register_id: str, file: UploadFile, user: dict,
                            field: str, kind: str) -> dict:
     """Validasi + simpan satu lampiran GridFS lalu $push ke array `field`."""
     p = await db.pemanfaatan.find_one(
-        {"id": register_id}, {"_id": 0, "id": 1, field: 1})
+        {"id": register_id}, {"_id": 0, "id": 1, field: 1, "kode_satker": 1})
     if not p:
         raise HTTPException(status_code=404, detail="Register tidak ditemukan")
+    await pastikan_akses_dok_satker(user, p)
     if len(p.get(field) or []) >= _MAX_LAMPIRAN:
         raise HTTPException(status_code=400,
                             detail=f"Maksimal {_MAX_LAMPIRAN} lampiran per perjanjian")
@@ -355,10 +356,11 @@ async def _terima_lampiran(register_id: str, file: UploadFile, user: dict,
 
 
 async def _stream_lampiran(register_id: str, file_id: str, request: Request,
-                           field: str) -> Response:
+                           field: str, user: dict) -> Response:
     """Stream satu lampiran dari array `field` (ETag + 304)."""
     p = await db.pemanfaatan.find_one(
-        {"id": register_id, f"{field}.file_id": file_id},
+        scope_query_field_satker(
+            user, {"id": register_id, f"{field}.file_id": file_id}),
         {"_id": 0, f"{field}.$": 1})
     if not p or not p.get(field):
         raise HTTPException(status_code=404, detail="Lampiran tidak ditemukan")
@@ -375,10 +377,11 @@ async def _stream_lampiran(register_id: str, file_id: str, request: Request,
                              "Content-Disposition": f'inline; filename="{meta.get("filename") or "dokumen"}"'})
 
 
-async def _buang_lampiran(register_id: str, file_id: str, field: str) -> dict:
+async def _buang_lampiran(register_id: str, file_id: str, field: str,
+                          user: dict) -> dict:
     """$pull satu entri dari array `field` + hapus berkas GridFS-nya."""
     res = await db.pemanfaatan.update_one(
-        {"id": register_id},
+        scope_query_field_satker(user, {"id": register_id}),
         {"$pull": {field: {"file_id": file_id}},
          "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}})
     if res.matched_count == 0:
@@ -400,14 +403,15 @@ async def unggah_lampiran(register_id: str, file: UploadFile = File(...),
 async def unduh_lampiran(register_id: str, file_id: str, request: Request,
                          _user: dict = Depends(require_user_or_query_token)):
     """Stream lampiran (dipakai window.open → menerima header ATAU ?token)."""
-    return await _stream_lampiran(register_id, file_id, request, "lampiran")
+    return await _stream_lampiran(register_id, file_id, request, "lampiran",
+                                  _user)
 
 
 @pemanfaatan_router.delete("/pemanfaatan/{register_id}/lampiran/{file_id}")
 async def hapus_lampiran(register_id: str, file_id: str,
                          _admin: dict = Depends(require_admin)):
     """Hapus lampiran salah unggah (khusus admin)."""
-    return await _buang_lampiran(register_id, file_id, "lampiran")
+    return await _buang_lampiran(register_id, file_id, "lampiran", _admin)
 
 
 # Lampiran wasdal per perjanjian (pustaka §8: pemanfaatan adalah salah satu
@@ -427,14 +431,14 @@ async def unduh_lampiran_wasdal(register_id: str, file_id: str, request: Request
                                 _user: dict = Depends(require_user_or_query_token)):
     """Stream lampiran wasdal (window.open → header ATAU ?token)."""
     return await _stream_lampiran(register_id, file_id, request,
-                                  "lampiran_wasdal")
+                                  "lampiran_wasdal", _user)
 
 
 @pemanfaatan_router.delete("/pemanfaatan/{register_id}/wasdal/{file_id}")
 async def hapus_lampiran_wasdal(register_id: str, file_id: str,
                                 _admin: dict = Depends(require_admin)):
     """Hapus lampiran wasdal salah unggah (khusus admin)."""
-    return await _buang_lampiran(register_id, file_id, "lampiran_wasdal")
+    return await _buang_lampiran(register_id, file_id, "lampiran_wasdal", _admin)
 
 
 @pemanfaatan_router.delete("/pemanfaatan/{register_id}")

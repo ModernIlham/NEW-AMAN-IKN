@@ -496,9 +496,11 @@ async def unggah_lampiran_perolehan(perolehan_id: str,
                                     user: dict = Depends(require_writer)):
     """Unggah scan dokumen sumber (PDF/gambar, maks 10MB, 10 berkas)."""
     p = await db.pengadaan.find_one(
-        {"id": perolehan_id}, {"_id": 0, "id": 1, "lampiran_berkas": 1})
+        {"id": perolehan_id},
+        {"_id": 0, "id": 1, "lampiran_berkas": 1, "kode_satker": 1})
     if not p:
         raise HTTPException(status_code=404, detail="Perolehan tidak ditemukan")
+    await pastikan_akses_dok_satker(user, p)
     if len(p.get("lampiran_berkas") or []) >= _MAX_LAMPIRAN:
         raise HTTPException(status_code=400,
                             detail=f"Maksimal {_MAX_LAMPIRAN} lampiran per perolehan")
@@ -546,7 +548,8 @@ async def unduh_lampiran_perolehan(perolehan_id: str, file_id: str,
                                    _user: dict = Depends(require_user_or_query_token)):
     """Stream lampiran perolehan (menerima header ATAU ?token)."""
     p = await db.pengadaan.find_one(
-        {"id": perolehan_id, "lampiran_berkas.file_id": file_id},
+        scope_query_field_satker(
+            _user, {"id": perolehan_id, "lampiran_berkas.file_id": file_id}),
         {"_id": 0, "lampiran_berkas.$": 1})
     if not p or not p.get("lampiran_berkas"):
         raise HTTPException(status_code=404, detail="Lampiran tidak ditemukan")
@@ -568,7 +571,7 @@ async def hapus_lampiran_perolehan(perolehan_id: str, file_id: str,
                                    _admin: dict = Depends(require_admin)):
     """Hapus lampiran salah unggah (khusus admin)."""
     res = await db.pengadaan.update_one(
-        {"id": perolehan_id},
+        scope_query_field_satker(_admin, {"id": perolehan_id}),
         {"$pull": {"lampiran_berkas": {"file_id": file_id}},
          "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}})
     if res.matched_count == 0:
