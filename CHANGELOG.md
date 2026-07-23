@@ -48,6 +48,27 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#558] Peta: keep-alive antar-mode — posisi & data dipertahankan, tak refresh dari awal — 2026-07-23
+
+Sebelumnya komponen peta di-**unmount** setiap kali pindah ke mode list/galeri
+atau saat membuka Edit Massal — Leaflet dibuang (`map.remove()`), lalu saat
+dibuka lagi peta **memuat ulang dari awal** dan kembali ke fit-bounds default,
+kehilangan posisi (center/zoom) & hasil geser pengguna.
+
+Kini peta **keep-alive**: sekali dibuka, tetap ter-mount dan hanya
+**disembunyikan** (`display:none`) saat berpindah mode; instance Leaflet, posisi,
+zoom, dan data **dipertahankan** — bolak-balik list ⇄ peta atau seleksi Edit
+Massal ⇄ peta terasa mulus tanpa muat ulang. Data terbaru tetap diambil **hanya**
+saat menekan **"Muat Ulang"** di peta. Saat ditampilkan kembali, `invalidateSize`
+dipanggil agar tile tak abu-abu/terpotong.
+
+Catatan: peta baru di-mount saat **pertama** dibuka (lazy) — pengguna yang tak
+membuka peta tak menanggung biayanya. Perubahan filter tetap memperbarui peta
+(seperti sebelumnya); murni pindah-mode yang tak lagi memicu refetch.
+
+Verifikasi: `yarn lint` 0 error; `yarn build` sukses. Frontend-only
+(`DashboardPage.jsx`, `AssetMapFullView.jsx`).
+
 ## [#557] Peta: tambah aset — gagal simpan ke server tak lagi senyap, ada tombol "Coba Lagi" — 2026-07-23
 
 Menambah aset lewat halaman peta memakai antrean optimistis; bila simpan ke
