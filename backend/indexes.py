@@ -85,6 +85,10 @@ async def create_indexes() -> None:
         # OTP store TTL index - auto-cleanup after 10min
         await db.otp_store.create_index("email", unique=True)
         await db.otp_store.create_index("created_at", expireAfterSeconds=660)
+        # Pemantauan kuota email Resend: satu doc per (lingkup, periode) —
+        # upsert $inc harian/bulanan andal & bebas duplikat.
+        await db.email_usage.create_index(
+            [("lingkup", 1), ("periode", 1)], unique=True, name="email_usage_key")
         # Idempotency keys TTL index - auto-cleanup after 24h (offline queues can
         # replay far beyond 5 minutes; keys must stay reserved until then)
         await db.idempotency_keys.create_index("key", unique=True)

@@ -214,7 +214,8 @@ async def request_reset_otp(request: Request, data: OTPVerify):
 
     otp = generate_otp()
     await store_otp(f"reset:{email}", otp, {"email": email, "user_id": user["id"]})
-    email_sent, _email_alasan = await send_otp_email(email, otp, user.get("name") or "")
+    email_sent, _email_alasan = await send_otp_email(
+        email, otp, user.get("name") or "", jenis="otp_reset")
     show_debug_otp = (not RESEND_API_KEY or not email_sent) and _debug_otp_allowed()
     return {"message": pesan_generik, "otp_sent": True,
             "debug_otp": otp if show_debug_otp else None}
