@@ -12,7 +12,10 @@ from pydantic import BaseModel, Field
 
 from auth_utils import require_admin, require_user, require_writer
 from db import db
-from shared_utils import blok_ttd_kpb, kode_satker_user
+from shared_utils import (
+    blok_ttd_kpb, kode_satker_user, pastikan_akses_aset,
+    pastikan_akses_dok_satker, scope_query_field_satker,
+)
 from pemeliharaan_utils import (
     JENIS_PEMELIHARAAN, baris_csv_jadwal, indikasi_kapitalisasi, jatuh_tempo,
     kelompok_dhpb, rekap_pemeliharaan, rentang_periode, status_jadwal,
@@ -80,7 +83,8 @@ async def rekap(
     _user: dict = Depends(require_user),
 ):
     """Rekap biaya pemeliharaan: total, per jenis, per tahun, per aset."""
-    records = [r async for r in db.pemeliharaan.find({}, _PROJ_REKAP)]
+    records = [r async for r in db.pemeliharaan.find(
+        scope_query_field_satker(_user), _PROJ_REKAP)]
     hasil = rekap_pemeliharaan(records, tahun=tahun)
     hasil["jumlah_aset"] = len(hasil["per_aset"])
     hasil["per_aset"] = hasil["per_aset"][:50]
@@ -121,7 +125,8 @@ async def dhpb_pdf(
 
     dari, sampai, label_periode = rentang_periode(tahun, semester)
     records = [r async for r in db.pemeliharaan.find(
-        {"tanggal": {"$gte": dari, "$lte": sampai}}, _PROJ)]
+        scope_query_field_satker(
+            _user, {"tanggal": {"$gte": dari, "$lte": sampai}}), _PROJ)]
     if not records:
         raise HTTPException(
             status_code=404,
@@ -224,7 +229,8 @@ async def list_jadwal(_user: dict = Depends(require_user)):
     """
     today_iso = datetime.now(timezone.utc).date().isoformat()
     items = []
-    async for j in db.jadwal_pemeliharaan.find({}, _PROJ):
+    async for j in db.jadwal_pemeliharaan.find(
+            scope_query_field_satker(_user), _PROJ):
         due = jatuh_tempo(j)
         j["jatuh_tempo"] = due
         j["status"] = status_jadwal(due, today_iso)
@@ -247,7 +253,8 @@ async def export_jadwal(_user: dict = Depends(require_user)):
     from fastapi.responses import Response as HttpResponse
 
     today_iso = datetime.now(timezone.utc).date().isoformat()
-    items = [j async for j in db.jadwal_pemeliharaan.find({}, _PROJ)]
+    items = [j async for j in db.jadwal_pemeliharaan.find(
+        scope_query_field_satker(_user), _PROJ)]
     buf = io.StringIO()
     w = csv_module.writer(buf)
     for row in baris_csv_jadwal(items, today_iso):
@@ -267,13 +274,16 @@ async def create_jadwal(payload: JadwalIn, user: dict = Depends(require_writer))
         raise HTTPException(status_code=400, detail="; ".join(errors))
     asset = await db.assets.find_one(
         {"id": data["asset_id"]},
-        {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1},
+        {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
+         "activity_id": 1},
     )
     if not asset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    await pastikan_akses_aset(user, asset)
     now = datetime.now(timezone.utc).isoformat()
     record = {
         "id": str(uuid.uuid4()),
+        "kode_satker": kode_satker_user(user),
         "asset_id": asset["id"],
         "asset_code": asset.get("asset_code"),
         "NUP": asset.get("NUP"),
@@ -299,7 +309,7 @@ async def update_jadwal(jadwal_id: str, payload: JadwalUpdate,
     if errors:
         raise HTTPException(status_code=400, detail="; ".join(errors))
     res = await db.jadwal_pemeliharaan.find_one_and_update(
-        {"id": jadwal_id},
+        scope_query_field_satker(_user, {"id": jadwal_id}),
         {"$set": {"interval_bulan": int(data["interval_bulan"]),
                   "mulai": str(data["mulai"]).strip()[:10],
                   "keterangan": str(data.get("keterangan") or "").strip(),
@@ -313,8 +323,9 @@ async def update_jadwal(jadwal_id: str, payload: JadwalUpdate,
 
 @pemeliharaan_router.delete("/pemeliharaan/jadwal/{jadwal_id}")
 async def delete_jadwal(jadwal_id: str, _admin: dict = Depends(require_admin)):
-    """Hapus jadwal berkala (khusus admin)."""
-    res = await db.jadwal_pemeliharaan.delete_one({"id": jadwal_id})
+    """Hapus jadwal berkala (khusus admin, dalam lingkup satker)."""
+    res = await db.jadwal_pemeliharaan.delete_one(
+        scope_query_field_satker(_admin, {"id": jadwal_id}))
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Jadwal tidak ditemukan")
     return {"ok": True, "id": jadwal_id}
@@ -334,7 +345,8 @@ async def export_pemeliharaan(_user: dict = Depends(require_user)):
                 "uraian", "biaya", "kondisi_sebelum", "kondisi_setelah",
                 "telaah_kapitalisasi", "pelaksana", "no_bukti",
                 "keterangan", "dibuat_oleh"])
-    async for c in db.pemeliharaan.find({}, {"_id": 0}) \
+    async for c in db.pemeliharaan.find(
+            scope_query_field_satker(_user), {"_id": 0}) \
             .sort([("tanggal", -1), ("created_at", -1)]):
         w.writerow([
             c.get("asset_code"), c.get("NUP"), c.get("asset_name"),
@@ -371,6 +383,7 @@ async def list_pemeliharaan(
     if tahun:
         # tanggal tersimpan sebagai string ISO → rentang leksikografis aman
         query["tanggal"] = {"$gte": f"{tahun}-01-01", "$lte": f"{tahun}-12-31"}
+    query = scope_query_field_satker(_user, query)
     total = await db.pemeliharaan.count_documents(query)
     skip = (page - 1) * page_size
     cursor = (db.pemeliharaan.find(query, _PROJ)
@@ -393,14 +406,16 @@ async def create_pemeliharaan(payload: PemeliharaanIn, user: dict = Depends(requ
     asset = await db.assets.find_one(
         {"id": data["asset_id"]},
         {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
-         "condition": 1},
+         "condition": 1, "activity_id": 1},
     )
     if not asset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    await pastikan_akses_aset(user, asset)
     now = datetime.now(timezone.utc).isoformat()
     biaya = parse_biaya(data.get("biaya")) or 0.0
     record = {
         "id": str(uuid.uuid4()),
+        "kode_satker": kode_satker_user(user),
         "asset_id": asset["id"],
         # Snapshot identitas agar riwayat tetap terbaca bila aset berubah
         "asset_code": asset.get("asset_code"),
@@ -440,12 +455,13 @@ async def create_pemeliharaan(payload: PemeliharaanIn, user: dict = Depends(requ
     return record
 
 
-async def _konteks_kapitalisasi(catatan_id: str):
+async def _konteks_kapitalisasi(catatan_id: str, user=None):
     """Muat catatan + aset + perhitungan Tabel II — dipakai pratinjau & posting.
 
     Persentase dihitung terhadap NILAI DASAR PENYUSUTAN (basis revaluasi bila
     ada, kalau tidak nilai perolehan) SEBELUM biaya perbaikan ditambahkan —
-    sesuai kolom KMK "dari nilai aset (di luar penyusutan)".
+    sesuai kolom KMK "dari nilai aset (di luar penyusutan)". Bila `user`
+    diberikan, akses lintas-satker diblokir lewat kegiatan induk aset.
     """
     from pembukuan_utils import parse_harga
     from penilaian_utils import dasar_penyusutan
@@ -458,10 +474,13 @@ async def _konteks_kapitalisasi(catatan_id: str):
         {"id": rec.get("asset_id"), "dihapus": {"$ne": True}},
         {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
          "purchase_price": 1, "purchase_date": 1, "nilai_wajar_terakhir": 1,
-         "revaluasi": 1, "masa_manfaat_tambah_tahun": 1, "location": 1})
+         "revaluasi": 1, "masa_manfaat_tambah_tahun": 1, "location": 1,
+         "activity_id": 1})
     if not aset:
         raise HTTPException(status_code=404,
                             detail="Aset tidak ditemukan / sudah dihapus")
+    if user is not None:
+        await pastikan_akses_aset(user, aset)
     biaya = parse_harga(rec.get("biaya"))
     nilai_dasar, _mulai, _sumber = dasar_penyusutan(aset)
     hitung = hitung_penambahan_masa_manfaat(
@@ -476,7 +495,8 @@ async def pratinjau_kapitalisasi(catatan_id: str,
     Tabel II KMK 295/266/339 (persentase biaya terhadap nilai dasar)."""
     from perbaikan_utils import DASAR_HUKUM_PERBAIKAN
 
-    rec, aset, biaya, nilai_dasar, hitung = await _konteks_kapitalisasi(catatan_id)
+    rec, aset, biaya, nilai_dasar, hitung = await _konteks_kapitalisasi(
+        catatan_id, _user)
     return {
         "catatan_id": catatan_id,
         "sudah_diposting": bool(rec.get("kapitalisasi_diposting")),
@@ -507,7 +527,8 @@ async def posting_kapitalisasi(catatan_id: str,
     from shared_utils import catat_mutasi_bmn, log_audit
 
     ba = payload or KapitalisasiIn()
-    rec, aset, biaya, nilai_dasar, hitung = await _konteks_kapitalisasi(catatan_id)
+    rec, aset, biaya, nilai_dasar, hitung = await _konteks_kapitalisasi(
+        catatan_id, admin)
     if not rec.get("indikasi_kapitalisasi"):
         raise HTTPException(
             status_code=400,
@@ -603,6 +624,7 @@ async def ba_perbaikan_pdf(catatan_id: str, _user: dict = Depends(require_user))
     rec = await db.pemeliharaan.find_one({"id": catatan_id}, {"_id": 0})
     if not rec:
         raise HTTPException(status_code=404, detail="Catatan tidak ditemukan")
+    await pastikan_akses_dok_satker(_user, rec)
     ba = rec.get("ba_perbaikan")
     if not ba:
         raise HTTPException(
@@ -688,7 +710,8 @@ async def delete_pemeliharaan(catatan_id: str, _admin: dict = Depends(require_ad
     tetap tertelusur (koreksi nilai lewat register Penilaian bila salah).
     """
     rec = await db.pemeliharaan.find_one(
-        {"id": catatan_id}, {"_id": 0, "kapitalisasi_diposting": 1})
+        scope_query_field_satker(_admin, {"id": catatan_id}),
+        {"_id": 0, "kapitalisasi_diposting": 1})
     if not rec:
         raise HTTPException(status_code=404, detail="Catatan tidak ditemukan")
     if rec.get("kapitalisasi_diposting"):
@@ -697,7 +720,8 @@ async def delete_pemeliharaan(catatan_id: str, _admin: dict = Depends(require_ad
             detail=("Catatan sudah diposting sebagai pengembangan nilai "
                     "(jurnal 202) — tidak dapat dihapus; koreksi nilai "
                     "dilakukan lewat register Penilaian"))
-    res = await db.pemeliharaan.delete_one({"id": catatan_id})
+    res = await db.pemeliharaan.delete_one(
+        scope_query_field_satker(_admin, {"id": catatan_id}))
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Catatan tidak ditemukan")
     return {"ok": True, "id": catatan_id}

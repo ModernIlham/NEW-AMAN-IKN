@@ -48,6 +48,31 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#535] Keamanan: isolasi satker penuh pada Penilaian & Pemeliharaan — 2026-07-23
+
+Lanjutan pengerasan pasca-audit. Dua modul siklus ternyata **belum ter-scope
+satker sama sekali** — daftar, laporan, dan mutasinya membaca/menulis lintas
+satker. Ditutup dengan pola baku (`scope_query_field_satker` untuk daftar,
+`pastikan_akses_aset` untuk write, simpan `kode_satker` pada dokumen baru;
+super-admin & dokumen era-lama tanpa kode tetap lolos — aman-mundur).
+
+- **Penilaian** (`routes/penilaian.py`):
+  - Posisi penyusutan kini di-`scope_query_aset` (satker hanya melihat asetnya).
+  - Register koreksi nilai: daftar & ekspor CSV di-scope; riwayat-nilai per aset,
+    catat koreksi, tandai tercatat-SAKTI, dan hapus kini ber-guard/ber-scope.
+  - Record koreksi baru menyimpan `kode_satker` penerbit.
+- **Pemeliharaan** (`routes/pemeliharaan.py`):
+  - Rekap biaya, DHPB PDF, daftar/ekspor jadwal berkala, daftar & ekspor riwayat
+    di-scope satker.
+  - Catat pemeliharaan (yang **memutakhirkan kondisi aset**) & buat jadwal kini
+    ber-guard `pastikan_akses_aset` + simpan `kode_satker`; ubah/hapus jadwal,
+    pratinjau/posting kapitalisasi (yang **menambah nilai & jurnal 202**),
+    unduh BA Perbaikan, dan hapus catatan kini ber-guard/ber-scope.
+
+Verifikasi: `pytest tests/unit` 638 lulus; `compileall` bersih. Backend-only.
+
+---
+
 ## [#534] Keamanan: tutup IDOR isolasi satker pada mutasi register siklus — 2026-07-22
 
 Temuan audit menyeluruh (verifikasi): beberapa endpoint MUTASI register siklus
