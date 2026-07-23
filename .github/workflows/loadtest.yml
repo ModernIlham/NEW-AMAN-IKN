@@ -1,0 +1,101 @@
+# Uji beban/stres MANUAL (workflow_dispatch) — TIDAK jalan otomatis tiap PR.
+# Mewujudkan "efisiensi CI/CD": dataset sintetis dibuat TEPAT SEBELUM uji
+# sehingga siklus feedback cepat & tak menyimpan berkas data besar di repo.
+#
+# Prasyarat live-run: isi secrets LOADTEST_USERNAME / LOADTEST_PASSWORD
+# (+ opsional LOADTEST_ACTIVITY_ID untuk uji-tulis) dan sediakan `host`
+# lingkungan STAGING. Tanpa `host`, workflow hanya generate dataset + memvalidasi
+# locustfile (dry-run) — selalu bisa dijalankan sebagai pemeriksaan sehat.
+name: Load Test (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      host:
+        description: "URL target STAGING (mis. https://staging.example.go.id). Kosong = dry-run."
+        required: false
+        default: ""
+      users:
+        description: "Jumlah pengguna serempak"
+        required: false
+        default: "100"
+      spawn_rate:
+        description: "Laju ramp (pengguna/detik)"
+        required: false
+        default: "10"
+      run_time:
+        description: "Durasi (mis. 3m, 30s)"
+        required: false
+        default: "3m"
+      dataset_count:
+        description: "Jumlah record aset sintetis"
+        required: false
+        default: "5000"
+      profile:
+        description: "Profil data"
+        required: false
+        default: "mixed"
+        type: choice
+        options: [normal, mixed, edge]
+
+jobs:
+  loadtest:
+    name: Generate dataset + Locust
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # Generator sintetis hanya butuh pustaka standar + asset_fields (ringan);
+      # shared_utils di-import opsional dengan fallback, jadi TAK perlu memasang
+      # seluruh requirements backend di sini → langkah ini cepat.
+      - name: Generate dataset sintetis (tepat sebelum uji)
+        working-directory: backend
+        run: |
+          python -m scripts.synthdata \
+            -n "${{ github.event.inputs.dataset_count }}" \
+            -p "${{ github.event.inputs.profile }}" \
+            --format ndjson \
+            -o ../scripts/loadtest/dataset.ndjson
+          wc -l ../scripts/loadtest/dataset.ndjson
+
+      - name: Validasi sintaks locustfile
+        run: python -m py_compile scripts/loadtest/locustfile.py
+
+      - name: Install Locust
+        run: pip install locust
+
+      - name: Dry-run (validasi locustfile tanpa target live)
+        if: ${{ github.event.inputs.host == '' }}
+        run: |
+          echo "Tidak ada host → dry-run singkat (memastikan locustfile jalan)."
+          locust -f scripts/loadtest/locustfile.py --host http://127.0.0.1:1 \
+            --headless -u 2 -r 2 -t 3s --exit-code-on-error 0 || true
+
+      - name: Jalankan load test
+        if: ${{ github.event.inputs.host != '' }}
+        env:
+          AMAN_USERNAME: ${{ secrets.LOADTEST_USERNAME }}
+          AMAN_PASSWORD: ${{ secrets.LOADTEST_PASSWORD }}
+          AMAN_ACTIVITY_ID: ${{ secrets.LOADTEST_ACTIVITY_ID }}
+          AMAN_DATASET_FILE: scripts/loadtest/dataset.ndjson
+        run: |
+          locust -f scripts/loadtest/locustfile.py \
+            --host "${{ github.event.inputs.host }}" \
+            --headless \
+            -u "${{ github.event.inputs.users }}" \
+            -r "${{ github.event.inputs.spawn_rate }}" \
+            -t "${{ github.event.inputs.run_time }}" \
+            --csv hasil
+
+      - name: Unggah hasil CSV
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hasil-loadtest
+          path: |
+            hasil_*.csv
+          if-no-files-found: ignore
