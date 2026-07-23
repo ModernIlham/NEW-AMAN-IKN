@@ -558,8 +558,26 @@ async def export_csv(request: Request, activity_id: Optional[str] = None, base_u
         yield ",".join([*SCALAR_FIELD_NAMES, "jumlah_foto", "tanggal_input",
                         "kelengkapan_items", "link_foto_kelengkapan", "link_pdf_kelengkapan"]) + "\n"
         
-        projection = {"_id": 0, "photo": 0, "photos": 0, "thumbnail": 0, "photo_thumbnails": 0}
-        cursor = db.assets.find(query, projection).batch_size(500)
+        # Ambil HANYA yang dipakai formatter CSV. document_checklist bisa memuat
+        # foto base64 (item.photos) + byte PDF inline (documents.data) —
+        # multi-MB/baris yang TAK PERNAH ditulis ke CSV. Buang di server via
+        # aggregation $project agar tak ditransfer DB→app; panjang array foto &
+        # nama dokumen dipertahankan (formatter hanya butuh JUMLAH foto + NAMA
+        # dokumen, bukan isinya). Lihat test_csv_projection_setara_penuh.
+        _proj = {n: 1 for n in SCALAR_FIELD_NAMES}
+        _proj.update({
+            "_id": 0, "id": 1, "created_at": 1, "photo_gridfs_ids": 1,
+            "document_checklist": {"$map": {
+                "input": {"$ifNull": ["$document_checklist", []]}, "as": "it",
+                "in": {
+                    "name": "$$it.name", "checked": "$$it.checked", "notes": "$$it.notes",
+                    "photos": {"$map": {"input": {"$ifNull": ["$$it.photos", []]},
+                                        "as": "p", "in": 1}},
+                    "documents": {"$map": {"input": {"$ifNull": ["$$it.documents", []]},
+                                           "as": "d", "in": {"name": "$$d.name"}}},
+                }}},
+        })
+        cursor = db.assets.aggregate([{"$match": query}, {"$project": _proj}])
         
         async for asset in cursor:
             # Format document checklist into separate columns
