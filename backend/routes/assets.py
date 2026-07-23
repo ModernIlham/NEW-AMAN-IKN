@@ -623,44 +623,41 @@ async def get_assets_analytics(activity_id: str = "", _user: dict = Depends(requ
 
     price_convert = {"$convert": {"input": "$purchase_price", "to": "double", "onError": 0, "onNull": 0}}
 
-    # Run all aggregations in parallel
-    by_category = db.assets.aggregate([
+    # SATU lintasan $facet: $match memilih set (via indeks activity_id) SEKALI,
+    # lalu 5 grouping berjalan atas set yang sama — menggantikan 5 aggregation
+    # terpisah yang masing-masing memindai ulang set yang sama. $limit tiap
+    # cabang menyamai batas to_list(...) lama (keluaran identik).
+    facet_res = await db.assets.aggregate([
         {"$match": query},
-        {"$group": {"_id": "$category", "count": {"$sum": 1}, "value": {"$sum": price_convert}}},
-        {"$sort": {"count": -1}},
-        {"$limit": 15}
-    ]).to_list(15)
-
-    by_condition = db.assets.aggregate([
-        {"$match": query},
-        {"$group": {"_id": {"$ifNull": ["$condition", "Tidak Diketahui"]}, "count": {"$sum": 1}}},
-        {"$sort": {"count": -1}}
-    ]).to_list(20)
-
-    by_status = db.assets.aggregate([
-        {"$match": query},
-        {"$group": {"_id": {"$ifNull": ["$status", "Tidak Diketahui"]}, "count": {"$sum": 1}}},
-        {"$sort": {"count": -1}}
-    ]).to_list(20)
-
-    by_location = db.assets.aggregate([
-        {"$match": query},
-        {"$group": {"_id": {"$ifNull": ["$location", "Tidak Diketahui"]}, "count": {"$sum": 1}}},
-        {"$sort": {"count": -1}},
-        {"$limit": 10}
-    ]).to_list(10)
-
-    by_eselon = db.assets.aggregate([
-        {"$match": query},
-        {"$group": {"_id": {"$ifNull": ["$eselon1", "Tidak Diketahui"]}, "count": {"$sum": 1}, "value": {"$sum": price_convert}}},
-        {"$sort": {"value": -1}},
-        {"$limit": 10}
-    ]).to_list(10)
-
-    import asyncio
-    cat_res, cond_res, stat_res, loc_res, eselon_res = await asyncio.gather(
-        by_category, by_condition, by_status, by_location, by_eselon
-    )
+        {"$facet": {
+            "by_category": [
+                {"$group": {"_id": "$category", "count": {"$sum": 1}, "value": {"$sum": price_convert}}},
+                {"$sort": {"count": -1}}, {"$limit": 15},
+            ],
+            "by_condition": [
+                {"$group": {"_id": {"$ifNull": ["$condition", "Tidak Diketahui"]}, "count": {"$sum": 1}}},
+                {"$sort": {"count": -1}}, {"$limit": 20},
+            ],
+            "by_status": [
+                {"$group": {"_id": {"$ifNull": ["$status", "Tidak Diketahui"]}, "count": {"$sum": 1}}},
+                {"$sort": {"count": -1}}, {"$limit": 20},
+            ],
+            "by_location": [
+                {"$group": {"_id": {"$ifNull": ["$location", "Tidak Diketahui"]}, "count": {"$sum": 1}}},
+                {"$sort": {"count": -1}}, {"$limit": 10},
+            ],
+            "by_eselon": [
+                {"$group": {"_id": {"$ifNull": ["$eselon1", "Tidak Diketahui"]}, "count": {"$sum": 1}, "value": {"$sum": price_convert}}},
+                {"$sort": {"value": -1}}, {"$limit": 10},
+            ],
+        }},
+    ]).to_list(1)
+    facets = facet_res[0] if facet_res else {}
+    cat_res = facets.get("by_category", [])
+    cond_res = facets.get("by_condition", [])
+    stat_res = facets.get("by_status", [])
+    loc_res = facets.get("by_location", [])
+    eselon_res = facets.get("by_eselon", [])
 
     result = {
         "by_category": [{"name": r["_id"] or "Lainnya", "count": r["count"], "value": r["value"]} for r in cat_res],
@@ -991,17 +988,20 @@ async def get_asset(asset_id: str, exclude_media: bool = False, _user: dict = De
     # Kontrak GET penuh = "beserta media". Dokumen bersih (GridFS-only,
     # photos=[]) dihidrasikan dari blob agar konsumen lama tetap bekerja.
     if not (asset.get("photos") or []) and (asset.get("photo_gridfs_ids") or []):
-        hydrated = []
-        for gid in asset["photo_gridfs_ids"]:
-            b64 = None
-            if gid:
-                try:
-                    raw = await get_photo_from_gridfs(gid)
-                    if raw:
-                        b64 = "data:image/jpeg;base64," + base64.b64encode(raw).decode("ascii")
-                except Exception:
-                    pass
-            hydrated.append(b64 or "")
+        # Baca semua blob foto PARALEL (I/O GridFS) alih-alih berurutan — detail
+        # aset multi-foto tak lagi N round-trip serial. gather menjaga urutan.
+        async def _hidrasi_foto(gid):
+            if not gid:
+                return ""
+            try:
+                raw = await get_photo_from_gridfs(gid)
+                if raw:
+                    return "data:image/jpeg;base64," + base64.b64encode(raw).decode("ascii")
+            except Exception:
+                pass
+            return ""
+        hydrated = list(await asyncio.gather(
+            *[_hidrasi_foto(gid) for gid in asset["photo_gridfs_ids"]]))
         asset["photos"] = hydrated
         cover = asset.get("thumbnail_index") or 0
         if 0 <= cover < len(hydrated) and hydrated[cover]:
