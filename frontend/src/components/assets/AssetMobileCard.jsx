@@ -196,7 +196,8 @@ const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, onOpenKartu, on
           )}
           {/* Selection checkbox */}
           {onToggleSelect && (
-            <div className="flex items-center mr-1" onClick={e => { e.stopPropagation(); onToggleSelect(); }}>
+            <div className="flex items-center mr-1" onClick={e => { e.stopPropagation(); onToggleSelect(); }}
+              data-select-box data-asset-id={asset.id}>
               <input
                 type="checkbox"
                 checked={selected || false}
