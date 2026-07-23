@@ -48,6 +48,28 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#545] Keamanan: pengerasan unggah gambar (decompression-bomb, magic byte, nosniff) — 2026-07-23
+
+Temuan audit unggah/berkas:
+- **Decompression-bomb PIL** [sedang-rendah]: `Image.MAX_IMAGE_PIXELS` tak pernah
+  diturunkan (default ~89MP) → gambar ~150MP (berkas kecil) dapat ter-dekode ke
+  ratusan MB RAM; endpoint `POST /ttd/olah-foto` bahkan dapat dicapai penanda
+  tangan TAMU e-sign (DoS/OOM di VPS kecil). Ditutup: `shared_utils` menyetel
+  `PILImage.MAX_IMAGE_PIXELS = 50_000_000` **global proses** (semua titik dekode
+  Pillow) → Pillow menolak >100MP; `foto_ke_png_transparan` menangkap
+  `DecompressionBombError` → 400 rapi.
+- **Magic-byte** [rendah]: unggah gambar BAST (`assets.py`) & foto pegawai
+  (`pegawai.py`) sebelumnya hanya percaya ekstensi/`content_type` (bisa
+  dipalsukan). Kini memvalidasi ISI via `cek_magic_gambar` (konsisten dengan
+  lampiran modul lain).
+- **nosniff** [rendah]: respons `GET /pegawai/{id}/foto` & `/foto-asli` kini
+  menyertakan `X-Content-Type-Options: nosniff`.
+
+Verifikasi: `pytest tests/unit` 638 lulus; `compileall` bersih; `MAX_IMAGE_PIXELS`
+terpasang saat impor. Backend-only.
+
+---
+
 ## [#544] Keamanan: kunci brute-force OTP (reset password & registrasi) — 2026-07-23
 
 Temuan audit terverifikasi [tinggi]: verifikasi OTP (`reset_password`,

@@ -790,6 +790,11 @@ async def upload_foto_pegawai(pegawai_id: str, file: UploadFile = File(...),
     data = await file.read()
     if len(data) > _FOTO_MAX:
         raise HTTPException(status_code=400, detail="Ukuran foto maksimal 5MB")
+    # Validasi ISI (magic byte), bukan sekadar content_type yang bisa dipalsukan.
+    from shared_utils import cek_magic_gambar
+    _ext_ct = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
+    if not cek_magic_gambar(data, _ext_ct.get(file.content_type or "", "")):
+        raise HTTPException(status_code=400, detail="Isi berkas tidak cocok tipe gambar")
     from bson import ObjectId
     fid = await fs_bucket.upload_from_stream(
         f"pegawai_{pegawai_id}.jpg", data,
@@ -858,7 +863,8 @@ async def get_foto_asli_pegawai(pegawai_id: str,
                             detail="Foto asli tidak ditemukan di penyimpanan")
     ct = (stream.metadata or {}).get("content_type") or "image/jpeg"
     return Response(content=data, media_type=ct,
-                    headers={"Cache-Control": "private, max-age=86400"})
+                    headers={"Cache-Control": "private, max-age=86400",
+                             "X-Content-Type-Options": "nosniff"})
 
 
 @pegawai_router.get("/pegawai/{pegawai_id}/foto")
@@ -876,7 +882,8 @@ async def get_foto_pegawai(pegawai_id: str,
         raise HTTPException(status_code=404, detail="Foto tidak ditemukan di penyimpanan")
     ct = (stream.metadata or {}).get("content_type") or "image/jpeg"
     return Response(content=data, media_type=ct,
-                    headers={"Cache-Control": "private, max-age=86400"})
+                    headers={"Cache-Control": "private, max-age=86400",
+                             "X-Content-Type-Options": "nosniff"})
 
 
 @pegawai_router.delete("/pegawai/{pegawai_id}/foto")

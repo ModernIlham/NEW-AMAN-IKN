@@ -19,7 +19,12 @@ def foto_ke_png_transparan(img_bytes, warna=(15, 23, 42), ambang=None,
     from PIL import Image, ImageFilter
     import numpy as np
 
-    im = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+    # Batas piksel global (shared_utils) → tolak decompression-bomb dgn 400 rapi
+    # (endpoint olah-foto dapat dicapai penanda tangan TAMU e-sign).
+    try:
+        im = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+    except Image.DecompressionBombError:
+        raise ValueError("Gambar terlalu besar (jumlah piksel berlebih) — perkecil dahulu")
     # Batasi dimensi (hemat memori & seragam) — sisi terpanjang <= 1600px.
     maxdim = max(im.size)
     if maxdim > 1600:

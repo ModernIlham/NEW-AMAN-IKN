@@ -1552,6 +1552,11 @@ async def upload_asset_bast(
         raise HTTPException(status_code=400, detail="Ukuran dokumen BAST maksimal 10MB")
     if ext == ".pdf" and not file_bytes[:5].startswith(b"%PDF"):
         raise HTTPException(status_code=400, detail="File bukan PDF yang valid")
+    # Untuk gambar: validasi ISI (magic byte) — konsisten dgn lampiran modul lain.
+    if ext != ".pdf":
+        from shared_utils import cek_magic_gambar
+        if not cek_magic_gambar(file_bytes, ext):
+            raise HTTPException(status_code=400, detail="Isi berkas tidak cocok tipe gambar")
 
     # Simpan ke GridFS (pola sama dengan pengesahan-dokumen)
     from bson import ObjectId
