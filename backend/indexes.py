@@ -253,6 +253,26 @@ async def create_indexes() -> None:
         # job > 7 hari (created_at BSON datetime) agar koleksi tak menumpuk.
         await db.background_jobs.create_index("job_id", unique=True)
         await db.background_jobs.create_index("created_at", expireAfterSeconds=7 * 86400)
+        # ── Indeks kunci-sort/filter daftar aset yang belum tertutup (audit perf) ──
+        # get_assets menawarkan sort price/condition/eselon1 (dengan tiebreak id)
+        # dan filter condition/eselon/stiker_status/inventory_status. Tanpa indeks,
+        # sort GLOBAL (tanpa activity_id) = in-memory sort → berisiko gagal pada
+        # dataset besar (batas sort agregasi), dan filter = partial scan.
+        # purchase_price PALING berisiko (satu-satunya sort tanpa indeks apa pun).
+        await db.assets.create_index([("purchase_price", 1), ("id", 1)], name="sort_price_id")
+        await db.assets.create_index([("condition", 1), ("id", 1)], name="sort_condition_id")
+        await db.assets.create_index([("eselon1", 1), ("id", 1)], name="sort_eselon1_id")
+        # Filter status lazim per-kegiatan (RHI/DBHI, cetak stiker).
+        await db.assets.create_index([("activity_id", 1), ("inventory_status", 1)])
+        await db.assets.create_index([("activity_id", 1), ("stiker_status", 1)])
+        # GridFS: pembersih artifact-ekspor yatim (jobs.py) memindai fs.files pada
+        # metadata.job_id tiap jam — tanpa indeks = COLLSCAN penuh, makin lambat
+        # seiring bertambahnya foto. sparse: hanya dokumen ber-metadata.job_id.
+        try:
+            await db["fs.files"].create_index("metadata.job_id", sparse=True,
+                                              name="gridfs_job_artifact")
+        except Exception:
+            pass
         # Backup/restore single-flight: gerbang ATOMIK "hanya satu job aktif".
         # Unique HANYA untuk dokumen yang MEMBAWA active_lock (job queued/running);
         # job terminal meng-$unset lock → keluar dari index → slot terbuka lagi.

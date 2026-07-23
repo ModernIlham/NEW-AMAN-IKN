@@ -48,6 +48,29 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#563] Performa: indeks kunci-sort/filter daftar aset + GridFS job_id yang hilang — 2026-07-23
+
+Audit performa menemukan beberapa opsi sort/filter `GET /assets` tanpa indeks
+pendukung → sort **global** (tanpa `activity_id`) memaksa Mongo mengurut di
+memori (berisiko gagal pada dataset besar karena batas sort agregasi), dan
+filter jadi partial scan. Ditambahkan di `create_indexes()`:
+
+- `[(purchase_price, 1), (id, 1)]` — sort harga (satu-satunya sort yang **tak
+  punya indeks apa pun** → paling berisiko).
+- `[(condition, 1), (id, 1)]` dan `[(eselon1, 1), (id, 1)]` — sort kondisi/eselon.
+- `[(activity_id, 1), (inventory_status, 1)]` dan
+  `[(activity_id, 1), (stiker_status, 1)]` — filter status lazim per-kegiatan
+  (RHI/DBHI, cetak stiker).
+- `fs.files` `metadata.job_id` (sparse) — pembersih artifact-ekspor yatim
+  (`jobs.py`) memindai `fs.files` tiap jam; tanpa indeks = COLLSCAN penuh yang
+  memburuk seiring bertambahnya foto.
+
+Deklaratif & idempoten (dibuat sekali, no-op pada boot berikutnya). Tanpa
+perubahan perilaku. Tiebreak `id` pada indeks sort selaras dengan `sort_options`
+yang memang memakai `id` sebagai pemecah seri.
+
+---
+
 ## [#562] Performa: hentikan blok event loop — offload PIL sinkron di jalur foto aset ke thread — 2026-07-23
 
 Audit performa menemukan jalur tulis/baca foto aset yang menjalankan PIL
