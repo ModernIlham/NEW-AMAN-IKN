@@ -48,6 +48,23 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#557] Peta: tambah aset — gagal simpan ke server tak lagi senyap, ada tombol "Coba Lagi" — 2026-07-23
+
+Menambah aset lewat halaman peta memakai antrean optimistis; bila simpan ke
+server GAGAL (mis. foto), sebelumnya galat itu **senyap** di konteks peta —
+pengguna mengira aset berhasil terbentuk. Kini bila status sync baris menjadi
+`failed`, muncul **toast galat persisten** dengan tombol **"Coba Lagi"**
+(mengulang item YANG SAMA via retry — server dedup, tidak menggandakan aset/NUP)
+dan **"Buang"**. Bersifat repeatable: retry yang gagal lagi memunculkan galat
+lagi hingga berhasil; saat tersimpan, toast otomatis ditutup.
+
+Implementasi: `handleOptimisticSubmit` mengembalikan `tempId`; aset yang ditambah
+via peta dipantau lewat efek atas `syncStatuses`. Tanpa perubahan alur simpan
+(idempotency-key tetap → aman diulang).
+
+Verifikasi: `yarn lint` 0 error; `yarn build` sukses. Frontend-only
+(`DashboardPage.jsx`).
+
 ## [#556] UX: drag-to-select — tekan-tahan kotak select lalu geser menyeleksi rentang (list & galeri) — 2026-07-23
 
 Memilih banyak baris berurutan kini bisa dengan **tekan-tahan** kotak select

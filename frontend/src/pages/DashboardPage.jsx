@@ -1053,6 +1053,9 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     refreshData();
   }, [editAssetForForm, unlockAsset]);
 
+  // tempId aset yang ditambah via PETA → {adaFoto}, dipantau efek kegagalan sync.
+  const petaAddRef = useRef(new Map());
+
   const handleOptimisticSubmit = useCallback((payload, isEdit, editId, usePatch = false) => {
     const assetId = isEdit ? editId : `temp_${Date.now()}`;
     // Capture the version the user started editing from (for OCC / If-Match).
@@ -1088,6 +1091,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       // removed only via dismissSync → onItemDismissed.
     });
     toast.info(isEdit ? "Menyimpan perubahan..." : "Menambahkan aset...", { duration: 1500 });
+    return assetId; // tempId — dipakai pemanggil (tambah via peta) memantau status
   }, [enqueueOptimistic, assets, activity?.id, activity?.nama_kegiatan]);
 
   // TAMBAH CEPAT dari peta (klik kanan / tekan lama di area peta): aset
@@ -1115,8 +1119,38 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       thumbnail_index: 0,
       activity_id: activity?.id || null,
     };
-    handleOptimisticSubmit(payload, false);
+    const tempId = handleOptimisticSubmit(payload, false);
+    // Pantau hasil simpan aset yang ditambah lewat PETA. Peta tak menampilkan
+    // daftar chip sync, jadi bila gagal (mis. foto ke server) efek di bawah
+    // memunculkan galat + tombol "Coba Lagi" agar TIDAK senyap.
+    if (tempId) petaAddRef.current.set(tempId, { adaFoto: daftarFoto.length > 0 });
   }, [categories, activity?.id, handleOptimisticSubmit]);
+
+  // Pemantau kegagalan simpan aset yang ditambah via PETA: bila status sync
+  // baris jadi 'failed', tampilkan toast galat persisten + tombol Coba Lagi
+  // (mengulang item YANG SAMA — server dedup, tak dobel) dan Buang. Tutup toast
+  // saat sudah tersimpan. Repeatable: retry yang gagal lagi memunculkannya lagi.
+  useEffect(() => {
+    petaAddRef.current.forEach((info, id) => {
+      const st = syncStatuses[id]?.status;
+      if (st === "failed") {
+        toast.error(info.adaFoto ? "Aset & foto gagal tersimpan ke server"
+          : "Aset gagal tersimpan ke server", {
+          id: `peta-gagal-${id}`,
+          duration: Infinity,
+          description: "Tersimpan di antrean lokal. Coba lagi hingga berhasil.",
+          action: { label: "Coba Lagi", onClick: () => retrySync(id) },
+          cancel: {
+            label: "Buang",
+            onClick: () => { dismissSync(id); petaAddRef.current.delete(id); toast.dismiss(`peta-gagal-${id}`); },
+          },
+        });
+      } else if (st === "saved") {
+        toast.dismiss(`peta-gagal-${id}`);
+        petaAddRef.current.delete(id);
+      }
+    });
+  }, [syncStatuses, retrySync, dismissSync]);
 
   // Peta mengikuti filter aktif: builder query yang SAMA dengan daftar aset
   // (search + kategori + filter lanjutan), tanpa paging — peta yang paging.
