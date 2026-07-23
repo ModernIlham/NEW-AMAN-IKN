@@ -64,6 +64,9 @@ class SpesimenIn(BaseModel):
     # {halaman: 1-based, x, y: pojok kiri-atas kotak ttd sebagai FRAKSI
     #  lebar/tinggi halaman, lebar: fraksi lebar halaman}.
     posisi: dict | None = None
+    # Posisi & UKURAN QR verifikasi pilihan (dokumen-level; None = otomatis
+    # pojok kanan-bawah halaman terakhir). {halaman, x, y, lebar} fraksi.
+    posisi_qr: dict | None = None
 
 
 def _posisi_bersih(p, maks_halaman: int = 0):
@@ -90,6 +93,42 @@ def _posisi_bersih(p, maks_halaman: int = 0):
     if maks_halaman and halaman > maks_halaman:
         halaman = maks_halaman
     lebar = min(0.6, max(0.08, lebar))
+    return {"halaman": halaman,
+            "x": min(1.0 - lebar, max(0.0, x)),
+            "y": min(0.95, max(0.0, y)),
+            "lebar": lebar}
+
+
+# Sisi QR verifikasi minimal (mutlak) agar tetap dapat dipindai — ditegakkan
+# saat render, apa pun ukuran halaman. ±2cm cukup untuk kamera HP biasa.
+QR_MIN_MM = 20.0
+
+
+def _posisi_qr_bersih(p, maks_halaman: int = 0):
+    """Validasi + jepit posisi & UKURAN QR verifikasi pilihan (dokumen-level).
+
+    Seperti _posisi_bersih namun untuk QR: `lebar` (= sisi kotak QR sebagai
+    fraksi lebar halaman) dijepit 0.10–0.40 agar tak terlalu kecil (gagal
+    scan) atau terlalu besar. Batas MUTLAK (QR_MIN_MM) ditegakkan lagi saat
+    render karena fraksi bergantung lebar halaman. None → QR pakai slot
+    otomatis (pojok kanan-bawah halaman terakhir, perilaku lama)."""
+    if not isinstance(p, dict):
+        return None
+    import math
+    try:
+        halaman_f = float(p.get("halaman"))
+        x = float(p.get("x")); y = float(p.get("y"))
+        lebar = float(p.get("lebar"))
+        if not all(math.isfinite(v) for v in (halaman_f, x, y, lebar)):
+            return None
+        halaman = int(halaman_f)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if halaman < 1:
+        return None
+    if maks_halaman and halaman > maks_halaman:
+        halaman = maks_halaman
+    lebar = min(0.40, max(0.10, lebar))
     return {"halaman": halaman,
             "x": min(1.0 - lebar, max(0.0, x)),
             "y": min(0.95, max(0.0, y)),
@@ -495,11 +534,18 @@ async def dokumen_ber_ttd(sr_id: str,
         idx = min(max(1, int(p.get("halaman") or 1)), len(reader.pages)) - 1
         per_halaman.setdefault(idx, []).append(s)
 
+    # QR verifikasi: posisi/ukuran pilihan (dokumen-level) bila diatur penanda
+    # tangan; jika tidak → slot otomatis pojok kanan-bawah halaman terakhir.
+    qr_pos = sr.get("posisi_qr") if isinstance(sr.get("posisi_qr"), dict) else None
+    qr_idx = (min(max(1, int(qr_pos.get("halaman") or 1)), len(reader.pages)) - 1
+              if qr_pos else None)
+
     # Halaman ber-/Rotate: pratinjau posisi dirender pypdfium2 PASCA-rotasi,
     # sedangkan mediabox pypdf PRA-rotasi — normalisasi rotasi ke konten dulu
     # supaya overlay (posisi pilihan MAUPUN slot otomatis) WYSIWYG dengan
     # tampilan. Berlaku untuk semua halaman yang menerima overlay.
-    for idx in set(per_halaman) | {len(reader.pages) - 1}:
+    for idx in (set(per_halaman) | {len(reader.pages) - 1}
+                | ({qr_idx} if qr_idx is not None else set())):
         try:
             if (reader.pages[idx].rotation or 0) % 360 != 0:
                 reader.pages[idx].transfer_rotation_to_content()
@@ -616,32 +662,73 @@ async def dokumen_ber_ttd(sr_id: str,
             info.append(str(s["signed_at"])[:10])
         for j, baris in enumerate(info[:3]):
             c.drawCentredString(x + slot_w / 2, nama_y - 8 - j * 7, baris)
-    # QR verifikasi + kode di pojok kanan-bawah.
-    try:
-        from reportlab.graphics import renderPDF
+    # URL verifikasi publik (dipakai QR otomatis MAUPUN posisi pilihan).
+    verif = (_APP_URL + f"/ttd/verifikasi/{sr_id}") if _APP_URL \
+        else f"/ttd/verifikasi/{sr_id}"
+    # QR otomatis pojok kanan-bawah HANYA bila QR tak diatur posisinya sendiri.
+    if qr_pos is None:
+        try:
+            from reportlab.graphics import renderPDF
 
-        from routes.cards import build_qr_flowable
-        verif = (_APP_URL + f"/ttd/verifikasi/{sr_id}") if _APP_URL \
-            else f"/ttd/verifikasi/{sr_id}"
-        qr = build_qr_flowable(verif, 12 * rl_mm)
-        if qr is not None:
-            renderPDF.draw(qr, c, lebar - margin - 12 * rl_mm, 2 * rl_mm)
-        c.setFont("Helvetica", 5.5)
-        c.setFillGray(0.4)
-        c.drawRightString(lebar - margin - 13 * rl_mm, 5 * rl_mm,
-                          f"Verifikasi: {sr_id[:8]}")
-    except Exception:
-        pass
+            from routes.cards import build_qr_flowable
+            qr = build_qr_flowable(verif, 12 * rl_mm)
+            if qr is not None:
+                renderPDF.draw(qr, c, lebar - margin - 12 * rl_mm, 2 * rl_mm)
+            c.setFont("Helvetica", 5.5)
+            c.setFillGray(0.4)
+            c.drawRightString(lebar - margin - 13 * rl_mm, 5 * rl_mm,
+                              f"Verifikasi: {sr_id[:8]}")
+        except Exception:
+            pass
     c.save()
     buf_ov.seek(0)
 
     overlay = PdfReader(buf_ov).pages[0]
+
+    # ── Overlay QR POSISI PILIHAN (dokumen-level): pada halaman & koordinat/
+    #    ukuran yang diatur, sisi minimal QR_MIN_MM agar tetap dapat dipindai ──
+    overlay_qr = None
+    if qr_pos is not None and qr_idx is not None:
+        halq = reader.pages[qr_idx]
+        qw = float(halq.mediabox.width)
+        qh = float(halq.mediabox.height)
+        # Sisi QR (kotak persegi): fraksi lebar halaman, tapi tak kurang dari
+        # QR_MIN_MM (scannable) dan tak melebihi halaman.
+        side = max(QR_MIN_MM * rl_mm, float(qr_pos.get("lebar") or 0.16) * qw)
+        side = min(side, qw - 4, qh - 4)
+        x_left = min(max(0.0, float(qr_pos.get("x") or 0) * qw), qw - side)
+        # (x,y) posisi = pojok KIRI-ATAS kotak (fraksi) → koord bawah ReportLab.
+        y_bottom = max(2.0, qh - float(qr_pos.get("y") or 0) * qh - side)
+        buf_q = io.BytesIO()
+        cq = rl_canvas.Canvas(buf_q, pagesize=(qw, qh))
+        try:
+            from reportlab.graphics import renderPDF
+
+            from routes.cards import build_qr_flowable
+            qrf = build_qr_flowable(verif, side)
+            if qrf is not None:
+                renderPDF.draw(qrf, cq, x_left, y_bottom)
+            cq.setFont("Helvetica", 5.5)
+            cq.setFillGray(0.4)
+            cq.drawCentredString(x_left + side / 2, max(1.0, y_bottom - 6),
+                                 f"Verifikasi: {sr_id[:8]}")
+        except Exception:
+            pass
+        cq.save()
+        buf_q.seek(0)
+        try:
+            overlay_qr = (qr_idx, PdfReader(buf_q).pages[0])
+        except Exception:
+            overlay_qr = None
     writer = PdfWriter()
     for idx, page in enumerate(reader.pages):
         if idx in overlay_kustom:
             page.merge_page(overlay_kustom[idx])
+        if overlay_qr is not None and idx == overlay_qr[0]:
+            # QR verifikasi di posisi/ukuran pilihan (bisa halaman mana pun).
+            page.merge_page(overlay_qr[1])
         if idx == len(reader.pages) - 1:
-            # Slot otomatis + QR verifikasi selalu di halaman terakhir.
+            # Slot ttd otomatis (+ QR otomatis bila tak diatur) di halaman akhir.
             page.merge_page(overlay)
         writer.add_page(page)
     out = io.BytesIO()
@@ -791,6 +878,11 @@ async def kirim_tandatangan(sr_id: str, payload: SpesimenIn, request: Request,
     # Posisi divalidasi SEBELUM blob diunggah — nilai liar (Infinity dkk.)
     # tidak boleh meninggalkan blob yatim di GridFS lewat jalur exception.
     posisi_ttd = _posisi_bersih(payload.posisi, int(sr.get("dok_halaman") or 0))
+    # QR verifikasi dokumen-level: bila penanda tangan ini memilih posisi/ukuran
+    # QR, simpan di root signature_request (bukan per-signer). None → biarkan
+    # nilai lama (penanda tangan yg tak mengatur QR tak menghapus pilihan orang
+    # lain); pengatur terakhir yang menang.
+    posisi_qr = _posisi_qr_bersih(payload.posisi_qr, int(sr.get("dok_halaman") or 0))
     now = datetime.now(timezone.utc)
     file_id = ObjectId()
     grid_in = fs_bucket.open_upload_stream_with_id(
@@ -805,18 +897,23 @@ async def kirim_tandatangan(sr_id: str, payload: SpesimenIn, request: Request,
     # bersamaan tidak lagi saling menimpa (lost-update), dan filter jti/
     # status/batal di sini menutup jendela race pembatalan/link-lama yang
     # terbuka selama upload GridFS multi-await di atas.
-    res = await db.signature_requests.update_one(
-        {"id": sr_id, "status": {"$ne": "batal"},
-         "signers": {"$elemMatch": {"signer_id": tok["signer"],
-                                    "jti": tok["jti"], "status": "aktif"}}},
-        {"$set": {"signers.$.status": "ditandatangani",
+    set_fields = {"signers.$.status": "ditandatangani",
                   "signers.$.signature_file_id": str(file_id),
                   "signers.$.hash": h,
                   "signers.$.signed_at": now.isoformat(),
                   # Posisi pembubuhan pilihan penanda tangan (None = slot
                   # otomatis di halaman terakhir seperti sebelumnya).
                   "signers.$.posisi_ttd": posisi_ttd,
-                  "signers.$.ip": (request.client.host if request.client else "")}})
+                  "signers.$.ip": (request.client.host if request.client else "")}
+    # Dokumen-level: hanya set bila penanda tangan ini mengatur QR (jangan
+    # timpa jadi None saat tak diatur).
+    if posisi_qr is not None:
+        set_fields["posisi_qr"] = posisi_qr
+    res = await db.signature_requests.update_one(
+        {"id": sr_id, "status": {"$ne": "batal"},
+         "signers": {"$elemMatch": {"signer_id": tok["signer"],
+                                    "jti": tok["jti"], "status": "aktif"}}},
+        {"$set": set_fields})
     if res.modified_count == 0:
         # Kalah race (sudah ttd / dibatalkan / link diganti) — bersihkan blob.
         try:

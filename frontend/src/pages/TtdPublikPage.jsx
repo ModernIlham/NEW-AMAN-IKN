@@ -165,11 +165,11 @@ function TandaTangan({ id, token }) {
   }, [id, token]);
   useEffect(() => { muat(); }, [muat]);
 
-  const kirimTtd = useCallback(async (png, posisi) => {
+  const kirimTtd = useCallback(async (png, posisi, posisiQr) => {
     setKirim(true);
     try {
       await axios.post(`${API}/ttd/tandatangan/${id}/kirim`,
-        { png_base64: png, posisi: posisi || null },
+        { png_base64: png, posisi: posisi || null, posisi_qr: posisiQr || null },
         { params: { token }, timeout: 60000 });
       setSukses(true);
       setPngSiap(null);
@@ -270,7 +270,7 @@ function TandaTangan({ id, token }) {
           pngTtd={pngSiap}
           mengirim={kirim}
           onBatal={() => setPngSiap(null)}
-          onKirim={(posisi) => kirimTtd(pngSiap, posisi)}
+          onKirim={(posisi, posisiQr) => kirimTtd(pngSiap, posisi, posisiQr)}
         />
       </Kartu>
     );

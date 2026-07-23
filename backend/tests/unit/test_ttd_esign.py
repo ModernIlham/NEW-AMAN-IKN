@@ -109,3 +109,35 @@ class TestPosisiBersih:
         assert _posisi_bersih({}) is None
         assert _posisi_bersih({"halaman": 0, "x": 0.1, "y": 0.1, "lebar": 0.2}) is None
         assert _posisi_bersih({"halaman": 1, "x": "abc", "y": 0.1, "lebar": 0.2}) is None
+
+
+class TestPosisiQrBersih:
+    """Posisi & UKURAN QR verifikasi pilihan (dokumen-level): min-size scan."""
+
+    def test_lebar_qr_dijepit_min_max(self):
+        from routes.ttd import _posisi_qr_bersih
+        # Terlalu kecil → dijepit ke 0.10 (agar QR tetap dapat dipindai).
+        assert _posisi_qr_bersih(
+            {"halaman": 1, "x": 0.9, "y": 0.9, "lebar": 0.02})["lebar"] == 0.10
+        # Terlalu besar → dijepit ke 0.40.
+        assert _posisi_qr_bersih(
+            {"halaman": 1, "x": 0.1, "y": 0.1, "lebar": 0.99})["lebar"] == 0.40
+        # x dijepit berpasangan lebar; halaman dijepit ke maks; y ≤ 0.95.
+        p = _posisi_qr_bersih({"halaman": 9, "x": -1, "y": 2, "lebar": 0.2}, 3)
+        assert p == {"halaman": 3, "x": 0.0, "y": 0.95, "lebar": 0.2}
+
+    def test_qr_tak_valid_atau_liar_jadi_none(self):
+        import json
+        from routes.ttd import _posisi_qr_bersih
+        assert _posisi_qr_bersih(None) is None
+        assert _posisi_qr_bersih({}) is None
+        assert _posisi_qr_bersih({"halaman": 0, "x": 0.1, "y": 0.1, "lebar": 0.2}) is None
+        # Infinity/NaN (diterima json.loads) → None, bukan 500.
+        p = json.loads('{"halaman": 1e999, "x": 0.1, "y": 0.1, "lebar": 0.2}')
+        assert _posisi_qr_bersih(p, 3) is None
+        p = json.loads('{"halaman": 1, "x": NaN, "y": 0.1, "lebar": 0.2}')
+        assert _posisi_qr_bersih(p, 3) is None
+
+    def test_qr_min_mm_scannable(self):
+        from routes.ttd import QR_MIN_MM
+        assert QR_MIN_MM >= 15.0   # ambang aman pindai kamera HP
