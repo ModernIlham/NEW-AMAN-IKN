@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState, lazy, Suspense } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import {
@@ -12,7 +12,9 @@ import {
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { authMediaUrl } from "@/lib/mediaUrl";
-import SignatureCapture from "@/components/ttd/SignatureCapture";
+// Lazy: kanvas TTD (react-signature-canvas + signature_pad) hanya dimuat saat
+// panel bubuh TTD dibuka (ttdUntuk), bukan di chunk awal halaman Pejabat.
+const SignatureCapture = lazy(() => import("@/components/ttd/SignatureCapture"));
 import { PenTool } from "lucide-react";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -491,16 +493,18 @@ export default function PejabatPage({ user, onBack }) {
             </div>
           )}
           {ttdUntuk && (
-            <SignatureCapture saving={ttdSaving} onSave={async (png) => {
-              setTtdSaving(true);
-              try {
-                await axios.put(`${API}/ttd/spesimen/pejabat/${ttdUntuk.id}`, { png_base64: png });
-                toast.success("Tanda tangan tersimpan");
-                setTtdUntuk(null); load();
-              } catch (e) {
-                toast.error(e?.response?.data?.detail || "Gagal menyimpan tanda tangan");
-              } finally { setTtdSaving(false); }
-            }} />
+            <Suspense fallback={<div className="py-8 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-teal-600" /></div>}>
+              <SignatureCapture saving={ttdSaving} onSave={async (png) => {
+                setTtdSaving(true);
+                try {
+                  await axios.put(`${API}/ttd/spesimen/pejabat/${ttdUntuk.id}`, { png_base64: png });
+                  toast.success("Tanda tangan tersimpan");
+                  setTtdUntuk(null); load();
+                } catch (e) {
+                  toast.error(e?.response?.data?.detail || "Gagal menyimpan tanda tangan");
+                } finally { setTtdSaving(false); }
+              }} />
+            </Suspense>
           )}
         </DialogContent>
       </Dialog>

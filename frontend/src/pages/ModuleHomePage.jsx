@@ -7,7 +7,9 @@ import {
   CheckCircle2, Link2, CalendarClock, Banknote, Wrench, Landmark, ListTree,
   Users, DoorOpen, IdCard, Mail, FileSignature, Building2, Settings,
 } from "lucide-react";
-import lottie from "lottie-web";
+// Build "light" (SVG-only) — hemat ~137 KB raw (~40 kB gzip) di chunk landing
+// pasca-login; kita hanya memakai renderer "svg" (lihat IkonModul di bawah).
+import lottie from "lottie-web/build/player/lottie_light";
 import uaSettings from "react-useanimations/lib/settings";
 import uaVisibility from "react-useanimations/lib/visibility";
 import uaArchive from "react-useanimations/lib/archive";
