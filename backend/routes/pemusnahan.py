@@ -15,7 +15,7 @@ from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
 )
 from db import db, fs_bucket
-from shared_utils import kode_satker_user, scope_query_field_satker, pastikan_akses_dok_satker, blok_ttd_kpb_titik, delete_document_from_gridfs, get_document_from_gridfs
+from shared_utils import kode_satker_user, scope_query_field_satker, pastikan_akses_dok_satker, pastikan_akses_aset, blok_ttd_kpb_titik, delete_document_from_gridfs, get_document_from_gridfs
 from pemusnahan_utils import (
     CARA_PEMUSNAHAN, kelayakan_musnah, rekap_pemusnahan,
     usulan_penghapusan_dari_ba, validate_pemusnahan,
@@ -23,8 +23,8 @@ from pemusnahan_utils import (
 
 pemusnahan_router = APIRouter()
 
-_PROJ_ASET = {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
-              "purchase_price": 1, "condition": 1}
+_PROJ_ASET = {"_id": 0, "id": 1, "activity_id": 1, "asset_code": 1, "NUP": 1,
+              "asset_name": 1, "purchase_price": 1, "condition": 1}
 
 
 class PemusnahanIn(BaseModel):
@@ -100,6 +100,7 @@ async def buat_pemusnahan(payload: PemusnahanIn, user: dict = Depends(require_wr
         a = await db.assets.find_one({"id": aid}, _PROJ_ASET)
         if not a:
             raise HTTPException(status_code=404, detail=f"Aset {aid} tidak ditemukan")
+        await pastikan_akses_aset(user, a)
         layak, alasan = kelayakan_musnah(a)
         if not layak:
             raise HTTPException(status_code=400,
@@ -146,6 +147,7 @@ async def usulkan_penghapusan_dari_ba(ba_id: str,
     ba = await db.pemusnahan.find_one({"id": ba_id}, {"_id": 0})
     if not ba:
         raise HTTPException(status_code=404, detail="BA tidak ditemukan")
+    await pastikan_akses_dok_satker(user, ba)
     hasil = []
     dibuat = 0
     for a in ba.get("aset") or []:
@@ -193,6 +195,7 @@ async def ba_pemusnahan_pdf(ba_id: str, _user: dict = Depends(require_user)):
     ba = await db.pemusnahan.find_one({"id": ba_id}, {"_id": 0})
     if not ba:
         raise HTTPException(status_code=404, detail="BA tidak ditemukan")
+    await pastikan_akses_dok_satker(_user, ba)
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
     aset = ba.get("aset") or []
     cara = CARA_PEMUSNAHAN.get(ba.get("cara"), ba.get("cara") or "-")
@@ -379,7 +382,8 @@ async def hapus_lampiran_ba(ba_id: str, file_id: str,
 async def hapus_pemusnahan(ba_id: str, _admin: dict = Depends(require_admin)):
     """Hapus BA salah input (khusus admin) + berkas lampirannya."""
     ba = await db.pemusnahan.find_one({"id": ba_id}, {"_id": 0, "lampiran": 1})
-    res = await db.pemusnahan.delete_one({"id": ba_id})
+    res = await db.pemusnahan.delete_one(
+        scope_query_field_satker(_admin, {"id": ba_id}))
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="BA tidak ditemukan")
     for lamp in (ba or {}).get("lampiran") or []:

@@ -291,6 +291,7 @@ async def selesaikan_penertiban(tiket_id: str, payload: SelesaiPenertibanIn,
     t = await db.penertiban.find_one({"id": tiket_id}, {"_id": 0})
     if not t:
         raise HTTPException(status_code=404, detail="Tiket tidak ditemukan")
+    await pastikan_akses_dok_satker(admin, t)
     data = payload.model_dump()
     errors = validate_selesai_penertiban(t, data)
     if errors:
@@ -315,7 +316,8 @@ async def selesaikan_penertiban(tiket_id: str, payload: SelesaiPenertibanIn,
 @wasdal_router.delete("/wasdal/penertiban/{tiket_id}")
 async def hapus_penertiban(tiket_id: str, _admin: dict = Depends(require_admin)):
     """Hapus tiket salah input (khusus admin)."""
-    res = await db.penertiban.delete_one({"id": tiket_id})
+    res = await db.penertiban.delete_one(
+        scope_query_field_satker(_admin, {"id": tiket_id}))
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Tiket tidak ditemukan")
     return {"ok": True, "id": tiket_id}
@@ -423,6 +425,7 @@ async def terbitkan_ba_insidentil(tiket_id: str, payload: BaInsidentilIn,
     t = await db.pemantauan_insidentil.find_one({"id": tiket_id}, {"_id": 0})
     if not t:
         raise HTTPException(status_code=404, detail="Tiket tidak ditemukan")
+    await pastikan_akses_dok_satker(admin, t)
     data = payload.model_dump()
     errors = validate_ba_insidentil(t, data)
     if errors:
@@ -451,6 +454,7 @@ async def laporkan_insidentil(tiket_id: str, payload: LaporInsidentilIn,
     t = await db.pemantauan_insidentil.find_one({"id": tiket_id}, {"_id": 0})
     if not t:
         raise HTTPException(status_code=404, detail="Tiket tidak ditemukan")
+    await pastikan_akses_dok_satker(admin, t)
     data = payload.model_dump()
     errors = validate_lapor_insidentil(t, data)
     if errors:
@@ -475,7 +479,8 @@ async def hapus_insidentil(tiket_id: str, _admin: dict = Depends(require_admin))
     """Hapus tiket salah input (khusus admin) + berkas lampirannya."""
     t = await db.pemantauan_insidentil.find_one(
         {"id": tiket_id}, {"_id": 0, "lampiran": 1})
-    res = await db.pemantauan_insidentil.delete_one({"id": tiket_id})
+    res = await db.pemantauan_insidentil.delete_one(
+        scope_query_field_satker(_admin, {"id": tiket_id}))
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Tiket tidak ditemukan")
     for lamp in (t or {}).get("lampiran") or []:
@@ -612,6 +617,7 @@ async def ba_insidentil_pdf(tiket_id: str, _user: dict = Depends(require_user)):
     t = await db.pemantauan_insidentil.find_one({"id": tiket_id}, {"_id": 0})
     if not t:
         raise HTTPException(status_code=404, detail="Tiket tidak ditemukan")
+    await pastikan_akses_dok_satker(_user, t)
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
 
     buffer = BytesIO()
