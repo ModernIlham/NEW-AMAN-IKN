@@ -2544,7 +2544,8 @@ def _header_kpb(ttd, label="Kuasa Pengguna Barang"):
 
 
 @reports_router.get("/pembukuan/posisi-bmn-pdf")
-async def generate_posisi_bmn_pdf(_user: dict = Depends(require_user_or_query_token)):
+@limiter.limit("6/minute")
+async def generate_posisi_bmn_pdf(request: Request, _user: dict = Depends(require_user_or_query_token)):
     """Laporan Posisi BMN di Neraca — komponen LBKP (pustaka §2.3).
 
     Rekap SELURUH aset satker (lintas kegiatan) per golongan dengan
@@ -2741,7 +2742,8 @@ async def generate_posisi_bmn_pdf(_user: dict = Depends(require_user_or_query_to
 
 
 @reports_router.get("/pembukuan/dbr-pdf")
-async def generate_dbr_pdf(_user: dict = Depends(require_user_or_query_token)):
+@limiter.limit("6/minute")
+async def generate_dbr_pdf(request: Request, _user: dict = Depends(require_user_or_query_token)):
     """Daftar Barang Ruangan (DBR) — BMN dikelompokkan per ruangan (PMK 181/2016).
 
     Ruangan diturunkan dari data aset yang ADA: pengguna melekat ke Ruangan
@@ -2820,7 +2822,8 @@ async def generate_dbr_pdf(_user: dict = Depends(require_user_or_query_token)):
 
 
 @reports_router.get("/pembukuan/kir-pdf")
-async def generate_kir_pdf(_user: dict = Depends(require_user_or_query_token)):
+@limiter.limit("6/minute")
+async def generate_kir_pdf(request: Request, _user: dict = Depends(require_user_or_query_token)):
     """Kartu Inventaris Ruangan (KIR) — satu kartu per ruangan (PMK 181/2016).
 
     Aset dikelompokkan per ruangan (dari data aset, seperti DBR); tiap kartu
@@ -2908,7 +2911,9 @@ async def generate_kir_pdf(_user: dict = Depends(require_user_or_query_token)):
 
 
 @reports_router.get("/penilaian/penyusutan-pdf")
+@limiter.limit("6/minute")
 async def generate_penyusutan_pdf(
+    request: Request,
     per_tanggal: str = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
     _user: dict = Depends(require_user_or_query_token),
 ):
@@ -3041,7 +3046,9 @@ async def generate_penyusutan_pdf(
 
 
 @reports_router.get("/pembukuan/lbkp-pdf")
+@limiter.limit("6/minute")
 async def generate_lbkp_pdf(
+    request: Request,
     tahun: int = Query(..., ge=2000, le=2100),
     semester: int = Query(None, ge=1, le=2),
     _user: dict = Depends(require_user_or_query_token),
@@ -3190,7 +3197,8 @@ async def generate_lbkp_pdf(
 
 
 @reports_router.get("/pembukuan/lkb-pdf")
-async def generate_lkb_pdf(_user: dict = Depends(require_user_or_query_token)):
+@limiter.limit("6/minute")
+async def generate_lkb_pdf(request: Request, _user: dict = Depends(require_user_or_query_token)):
     """Laporan Kondisi Barang — lampiran LBKP tahunan (pustaka §2.3b).
 
     Mengikuti format LKBT-PKPB1: rincian per NUP (kode, nama, NUP,
@@ -3337,7 +3345,9 @@ async def generate_lkb_pdf(_user: dict = Depends(require_user_or_query_token)):
 
 
 @reports_router.get("/pembukuan/calbmn-pdf")
+@limiter.limit("6/minute")
 async def generate_calbmn_pdf(
+    request: Request,
     tahun: int = Query(..., ge=2000, le=2100),
     semester: int = Query(None, ge=1, le=2),
     _user: dict = Depends(require_user_or_query_token),
@@ -3668,7 +3678,8 @@ async def generate_calbmn_pdf(
 
 
 @reports_router.get("/pembukuan/rekonsiliasi-xlsx")
-async def generate_rekonsiliasi_xlsx(_user: dict = Depends(require_user_or_query_token)):
+@limiter.limit("6/minute")
+async def generate_rekonsiliasi_xlsx(request: Request, _user: dict = Depends(require_user_or_query_token)):
     """Ekspor rekonsiliasi Posisi BMN (XLSX) — sandingan SAKTI/MonSAKTI.
 
     Pustaka §2.3: ekspor pembanding rekonsiliasi. Tiga sheet dari data
