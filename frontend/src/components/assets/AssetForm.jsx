@@ -941,8 +941,17 @@ const AssetForm = memo(({
   // Cache GPS: bila fix terakhir masih segar (< 5 menit) pakai langsung agar form
   // instan terisi, lalu tetap minta fix baru di background (hanya menimpa bila
   // pengguna belum mengetik koordinat lain sejak nilai cache diterapkan).
+  //
+  // PENTING (perbaikan): guard juga pada KOORDINAT ASET (prop editAsset), bukan
+  // hanya formData. Saat form baru dibuka, efek init (setFormData) belum sempat
+  // mengisi formData sehingga formData.koordinat_* masih kosong pada render
+  // pertama — tanpa cek editAsset, aset yang SUDAH punya lat/lng ikut memicu
+  // auto-cari GPS. Kini bila aset sudah punya koordinat, TIDAK auto-cari; tunggu
+  // pengguna menekan "Ambil GPS" lalu simpan.
   useEffect(() => {
-    if (isOpen && isEditing && inventoryMode && !formData.koordinat_latitude && !formData.koordinat_longitude) {
+    const asetSudahBerkoordinat = !!(editAsset?.koordinat_latitude && editAsset?.koordinat_longitude);
+    if (isOpen && isEditing && inventoryMode && !asetSudahBerkoordinat
+        && !formData.koordinat_latitude && !formData.koordinat_longitude) {
       let cached = null;
       try { cached = JSON.parse(localStorage.getItem("aman_last_gps") || "null"); } catch {}
       if (cached?.lat && cached?.lng && Date.now() - (cached.ts || 0) < 5 * 60 * 1000) {

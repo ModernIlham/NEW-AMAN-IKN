@@ -48,6 +48,22 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#555] Mode cepat: auto-cari GPS hanya bila aset BELUM punya koordinat — 2026-07-23
+
+Saat membuka aset di mode inventarisasi cepat, form otomatis mencari titik GPS
+— bagus untuk aset baru, tetapi juga ikut memicu untuk aset yang **sudah punya
+lat/lng** (menimpa koordinat lama tanpa diminta). Akarnya balapan render: efek
+auto-GPS membaca `formData` yang masih kosong pada render pertama (efek init
+`setFormData` belum sempat mengisi koordinat aset).
+
+Perbaikan: efek auto-GPS kini juga men-*guard* pada **koordinat prop aset**
+(`editAsset.koordinat_latitude/longitude`, tersedia sinkron). Bila aset sudah
+berkoordinat → **tidak** auto-cari; tunggu pengguna menekan "Ambil GPS" lalu
+simpan. Aset yang belum berkoordinat tetap auto-cari seperti semula.
+
+Verifikasi: `yarn lint` 0 error; `yarn build` sukses. Frontend-only
+(`AssetForm.jsx`).
+
 ## [#554] Inventarisasi: auto-status "Ditemukan" (bukan "Sudah Diinventarisasi" yatim) + bisa di-revert ke "Belum" — 2026-07-23
 
 Dua perbaikan status inventarisasi yang saling terkait:
