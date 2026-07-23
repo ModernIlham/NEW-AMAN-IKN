@@ -48,6 +48,23 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#533] Ubah Massal: tambah Nama Aset, Garansi Hingga & Jenis Garansi — 2026-07-22
+
+Tiga field kini bisa diubah massal (Ubah Massal / batch edit):
+
+- **Nama Aset** (`asset_name`) — di registry `asset_fields.py` di-tandai
+  `batchable=True`; input ditambah di panel bagian "Identitas & Catatan".
+- **Garansi Hingga** (`garansi_hingga`, tanggal) & **Jenis Garansi**
+  (`garansi_jenis`, datalist: Pabrikan/Distributor/Toko/Purna Jual/Lainnya) —
+  keduanya sudah `batchable` di registry, kini punya input di panel bagian
+  "Administrasi Perolehan". Semua mendukung opsi "Kosongkan" seperti field lain.
+
+Backend allow-list ekspor otomatis dari registry (`BATCHABLE_FIELD_NAMES`), jadi
+tetap selaras dengan form aset. Verifikasi: `pytest tests/unit` 638 lulus
+(termasuk uji registry anti-drift); eslint bersih; `yarn build` sukses.
+
+---
+
 ## [#532] Tombol Export Excel pakai jalur job latar (frontend) — 2026-07-22
 
 Langkah 3 (penutup) job latar: tombol **Export → Excel** kini memakai endpoint

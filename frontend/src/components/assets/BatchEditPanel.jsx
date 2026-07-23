@@ -588,12 +588,27 @@ const BatchEditPanel = memo(function BatchEditPanel({
               <label className="text-[10px] text-muted-foreground flex items-center gap-1"><DollarSign className="w-2.5 h-2.5" />Harga (Rp)</label>
               <ClearableInput type="number" placeholder="—" value={updates.purchase_price === "__clear__" ? "" : updates.purchase_price} isClear={updates.purchase_price === "__clear__"} onChange={e => setField("purchase_price", e.target.value)} onClear={() => toggleClearField("purchase_price")} />
             </div>
+            <div className="space-y-0.5">
+              <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Calendar className="w-2.5 h-2.5" />Garansi Hingga</label>
+              <ClearableInput type="date" value={updates.garansi_hingga === "__clear__" ? "" : updates.garansi_hingga} isClear={updates.garansi_hingga === "__clear__"} onChange={e => setField("garansi_hingga", e.target.value)} onClear={() => toggleClearField("garansi_hingga")} />
+            </div>
+            <div className="space-y-0.5">
+              <label className="text-[10px] text-muted-foreground flex items-center gap-1"><FileCheck className="w-2.5 h-2.5" />Jenis Garansi</label>
+              <ClearableInput list="batch-garansi-jenis-opsi" placeholder="mis. Pabrikan" value={updates.garansi_jenis === "__clear__" ? "" : updates.garansi_jenis} isClear={updates.garansi_jenis === "__clear__"} onChange={e => setField("garansi_jenis", e.target.value)} onClear={() => toggleClearField("garansi_jenis")} />
+              <datalist id="batch-garansi-jenis-opsi">
+                {["Pabrikan", "Distributor", "Toko", "Purna Jual", "Lainnya"].map(j => <option key={j} value={j} />)}
+              </datalist>
+            </div>
           </div>
           </Section>
 
           {/* ── Identitas & Catatan ── */}
           <Section icon={Package} title="Identitas & Catatan">
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+            <div className="space-y-0.5">
+              <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Package className="w-2.5 h-2.5" />Nama Aset</label>
+              <ClearableInput placeholder="—" value={updates.asset_name === "__clear__" ? "" : updates.asset_name} isClear={updates.asset_name === "__clear__"} onChange={e => setField("asset_name", e.target.value)} onClear={() => toggleClearField("asset_name")} />
+            </div>
             <div className="space-y-0.5">
               <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Tag className="w-2.5 h-2.5" />Brand</label>
               <ClearableInput placeholder="—" value={updates.brand === "__clear__" ? "" : updates.brand} isClear={updates.brand === "__clear__"} onChange={e => setField("brand", e.target.value)} onClear={() => toggleClearField("brand")} />
