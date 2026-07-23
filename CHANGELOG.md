@@ -48,6 +48,30 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#541] Keamanan: isolasi satker pada Sinkronisasi SIMAN — 2026-07-23
+
+Lanjutan sapuan audit: modul SIMAN V2 (`routes/siman.py`) beroperasi pada
+SELURUH koleksi `assets` tanpa scope satker:
+- `import_siman` (admin) menulis subdoc `siman` + `$inc version` ke aset SEMUA
+  satker & bisa menandai "tidak ditemukan" pada aset satker lain.
+- `terapkan_siman` (writer) menerapkan nilai SIMAN (mengubah field aset) ke aset
+  satker lain by-id.
+- `daftar_selisih_siman` & `ringkasan_siman` membocorkan kode/NUP/nama/harga
+  aset satker lain; register `siman_imports` terbaca lintas-satker.
+
+Ditutup:
+- Kueri aset di `import_siman`, `daftar_selisih_siman`, `ringkasan_siman`
+  di-`scope_query_aset` (super-admin lintas-satker).
+- `terapkan_siman` ber-guard `pastikan_akses_aset`.
+- Record impor menyimpan `kode_satker`; `ringkasan/detail/csv/buat-draft`
+  membaca `siman_imports` ter-scope `scope_query_field_satker` /
+  ber-guard `pastikan_akses_dok_satker`; buat-draft juga ber-guard
+  `pastikan_akses_kegiatan_id` pada kegiatan tujuan.
+
+Verifikasi: `pytest tests/unit` 638 lulus; `compileall` bersih. Backend-only.
+
+---
+
 ## [#540] Keamanan: isolasi satker pada modul Persuratan — 2026-07-23
 
 Sapuan audit lanjutan (fan-out 6 agen) menemukan modul **Persuratan** (`surat`)
