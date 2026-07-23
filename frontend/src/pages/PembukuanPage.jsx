@@ -122,8 +122,16 @@ export default function PembukuanPage({ user, onBack }) {
     if (!kib) return;
     setSimpanKib(true);
     try {
-      const r = await axios.put(`${API}/pembukuan/kib/${kib.aset.id}`, { data: formKib });
+      // OCC: kirim If-Match versi aset yang dibaca (cegah lost-update).
+      const ver = kib.aset?.version;
+      const cfg = (ver === undefined || ver === null)
+        ? {} : { headers: { "If-Match": String(ver) } };
+      const r = await axios.put(`${API}/pembukuan/kib/${kib.aset.id}`, { data: formKib }, cfg);
       setFormKib(r.data?.data || formKib);
+      // Segarkan versi agar simpan berikutnya di sesi yang sama tak self-409.
+      if (r.data?.version !== undefined) {
+        setKib((k) => (k ? { ...k, aset: { ...k.aset, version: r.data.version } } : k));
+      }
       toast.success("Data KIB tersimpan — siap dicetak");
     } catch (e) {
       toast.error(apiErr(e, "Gagal menyimpan KIB"));

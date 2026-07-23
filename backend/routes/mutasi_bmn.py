@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from auth_utils import (require_admin, require_user,
@@ -128,12 +128,35 @@ async def _nup_berikut_kode(kode_baru: str) -> str:
 
 @mutasi_bmn_router.post("/pembukuan/reklasifikasi")
 async def reklasifikasi_aset(payload: ReklasifikasiIn,
+                             request: Request = None,
                              user: dict = Depends(require_writer)):
     """Reklasifikasi kodefikasi aset (SAKTI 304/107, riset §3):
     kode+NUP dimutakhirkan IN-PLACE (aset tidak dibuat ulang — nilai &
     tanggal perolehan, id internal, dan kode register SIMAN tetap), NUP baru
     berurut pada kode tujuan, riwayat tercatat pada aset + pasangan jurnal
-    304/107 pada `mutasi_bmn` (periode sama, nilai bruto sama)."""
+    304/107 pada `mutasi_bmn` (periode sama, nilai bruto sama).
+
+    Idempotency-Key (opsional): reklas menulis SEPASANG jurnal + memutakhirkan
+    aset — double-submit tanpa kunci bisa menghasilkan jurnal ganda & NUP
+    meloncat. Kunci sama → respons pertama diputar ulang (klaim atomik).
+    """
+    idem_key = request.headers.get("Idempotency-Key", "") if request is not None else ""
+    if idem_key:
+        from shared_utils import (get_idempotent_response,
+                                  reserve_idempotency_key)
+        cached = await get_idempotent_response(idem_key)
+        if cached and cached.get("response"):
+            return cached["response"]
+        _idem = await reserve_idempotency_key(idem_key)
+        if _idem == "done":
+            cached = await get_idempotent_response(idem_key)
+            if cached and cached.get("response"):
+                return cached["response"]
+        elif _idem == "pending":
+            raise HTTPException(
+                status_code=409,
+                detail="Permintaan dengan kunci idempotensi ini sedang diproses, coba lagi sebentar")
+
     kode_baru = normalize_kode(payload.kode_baru)
     ok, err = validate_kode(kode_baru)
     if not ok:
@@ -186,8 +209,12 @@ async def reklasifikasi_aset(payload: ReklasifikasiIn,
                     username=oleh,
                     detail=(f"Reklasifikasi {riwayat['kode_lama']}/"
                             f"{riwayat['nup_lama']} → {kode_baru}/{nup_baru}"))
-    return {"ok": True, "kode_baru": kode_baru, "nup_baru": nup_baru,
+    resp = {"ok": True, "kode_baru": kode_baru, "nup_baru": nup_baru,
             "riwayat": riwayat}
+    if idem_key:
+        from shared_utils import store_idempotent_response
+        await store_idempotent_response(idem_key, resp, 200)
+    return resp
 
 
 # ============================================================================
@@ -292,7 +319,7 @@ def _aset_kib_proj():
     return {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
             "brand": 1, "serial_number": 1, "location": 1, "condition": 1,
             "purchase_price": 1, "purchase_date": 1, "perolehan_dari_nama": 1,
-            "activity_id": 1, "kib": 1, "photo_gridfs_ids": 1}
+            "activity_id": 1, "kib": 1, "photo_gridfs_ids": 1, "version": 1}
 
 
 @mutasi_bmn_router.get("/pembukuan/kib/{asset_id}")
@@ -319,12 +346,19 @@ async def lihat_kib(asset_id: str, _user: dict = Depends(require_user)):
 
 @mutasi_bmn_router.put("/pembukuan/kib/{asset_id}")
 async def simpan_kib(asset_id: str, payload: KibIn,
+                     request: Request = None,
                      user: dict = Depends(require_writer)):
-    """Simpan data khusus KIB (disanitasi per jenis) ke dokumen aset."""
+    """Simpan data khusus KIB (disanitasi per jenis) ke dokumen aset.
+
+    OCC via If-Match (opsional): kirim versi aset yang dibaca; server menolak
+    409 bila aset sudah berubah (lost-update cegah dua editor menimpa). Tanpa
+    If-Match tetap jalan (aman-mundur) — versi tetap di-`$inc`.
+    """
     from pembukuan_utils import bersihkan_kib, jenis_kib
     from shared_utils import pastikan_akses_aset
     aset = await db.assets.find_one(
-        {"id": asset_id}, {"_id": 0, "asset_code": 1, "activity_id": 1})
+        {"id": asset_id},
+        {"_id": 0, "asset_code": 1, "activity_id": 1, "version": 1})
     if not aset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
     await pastikan_akses_aset(user, aset)
@@ -332,15 +366,35 @@ async def simpan_kib(asset_id: str, payload: KibIn,
     if not jenis:
         raise HTTPException(status_code=400, detail="Jenis BMN ini tidak ber-KIB")
     bersih = bersihkan_kib(jenis, payload.data)
-    await db.assets.update_one(
-        {"id": asset_id},
-        {"$set": {"kib": bersih,
-                  "updated_at": datetime.now(timezone.utc).isoformat()},
-         "$inc": {"version": 1}})
+    now = datetime.now(timezone.utc).isoformat()
+    if_match = (request.headers.get("If-Match", "") if request is not None else "").strip().strip('"')
+    if if_match:
+        try:
+            cur = int(if_match)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="If-Match tidak valid")
+        # CAS aman-mundur: aset lama tanpa field version (cur==1) tetap cocok.
+        filt = ({"id": asset_id, "$or": [{"version": 1}, {"version": {"$exists": False}}]}
+                if cur == 1 else {"id": asset_id, "version": cur})
+        res = await db.assets.find_one_and_update(
+            filt, {"$set": {"kib": bersih, "updated_at": now},
+                   "$inc": {"version": 1}},
+            projection={"_id": 0, "version": 1}, return_document=True)
+        if res is None:
+            raise HTTPException(
+                status_code=409,
+                detail="Aset diubah pengguna lain — muat ulang KIB lalu simpan ulang")
+        new_version = res.get("version")
+    else:
+        res = await db.assets.find_one_and_update(
+            {"id": asset_id},
+            {"$set": {"kib": bersih, "updated_at": now}, "$inc": {"version": 1}},
+            projection={"_id": 0, "version": 1}, return_document=True)
+        new_version = (res or {}).get("version")
     await log_audit("simpan_kib", "", asset_id,
                     username=user.get("username", "system"),
                     detail=f"Data KIB {jenis} diperbarui")
-    return {"ok": True, "jenis": jenis, "data": bersih}
+    return {"ok": True, "jenis": jenis, "data": bersih, "version": new_version}
 
 
 @mutasi_bmn_router.get("/pembukuan/kib-pdf/{asset_id}")

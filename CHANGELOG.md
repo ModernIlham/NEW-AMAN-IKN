@@ -48,6 +48,28 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#537] Keandalan: idempotensi reklasifikasi + OCC simpan KIB (Pembukuan) — 2026-07-23
+
+Dua temuan audit terverifikasi [tinggi] di modul Pembukuan (`mutasi_bmn.py`),
+kelanjutan konvensi "semua tulis ber-OCC + Idempotency-Key":
+
+- **Reklasifikasi aset** (`POST /pembukuan/reklasifikasi`) menulis SEPASANG
+  jurnal 304/107 + memutakhirkan kode/NUP aset **tanpa Idempotency-Key** —
+  double-submit menghasilkan jurnal ganda & NUP meloncat. Kini menerima header
+  `Idempotency-Key` (pola baku: replay respons tersimpan, klaim atomik → 409
+  bila in-flight).
+- **Simpan KIB** (`PUT /pembukuan/kib/{id}`) menulis **tanpa OCC** → lost-update
+  bila dua editor menyimpan KIB aset yang sama. Kini ber-OCC via `If-Match`:
+  `_aset_kib_proj` mengembalikan `version`, `simpan_kib` melakukan CAS
+  ber-versi (409 bila aset berubah) dan mengembalikan `version` baru. Frontend
+  `PembukuanPage.jsx` mengirim `If-Match` dari versi yang dibaca & menyegarkan
+  versi pasca-simpan. Tanpa If-Match tetap jalan (aman-mundur).
+
+Verifikasi: `pytest tests/unit` 638 lulus; `eslint` bersih; `yarn build`
+sukses.
+
+---
+
 ## [#536] Keandalan: Idempotency-Key pada transaksi persediaan (masuk & keluar) — 2026-07-23
 
 Temuan audit terverifikasi [tinggi]: endpoint transaksi persediaan menulis
