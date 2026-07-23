@@ -14,6 +14,11 @@ from jobs import buat_job, update_job, get_job
 logger = logging.getLogger(__name__)
 categories_router = APIRouter()
 
+# Strong-ref ke task impor latar: asyncio hanya memegang weak ref, task
+# fire-and-forget bisa di-GC saat suspended di titik await → impor mati
+# diam-diam (pola sama seperti exports.py:_EKSPOR_TASKS).
+_IMPORT_TASKS: set = set()
+
 # Progres impor kategori kini PERSISTEN di db.background_jobs (jobs.py) — dulu
 # dict in-memory yang RUSAK di uvicorn --workers 4 (poll bisa mendarat di worker
 # lain → 404). Kontrak respons /categories/import-progress dipertahankan.
@@ -186,9 +191,11 @@ async def import_categories_bulk(request: Request, file: UploadFile = File(...),
     total = len(rows)
     await update_job(job_id, total=total, status="importing")
 
-    # Start background import
-    asyncio.create_task(_do_bulk_import(job_id, rows))
-    
+    # Start background import (strong-ref agar tak di-GC saat suspended)
+    _t = asyncio.create_task(_do_bulk_import(job_id, rows))
+    _IMPORT_TASKS.add(_t)
+    _t.add_done_callback(_IMPORT_TASKS.discard)
+
     return {"job_id": job_id, "total": total, "message": f"Import dimulai: {total} data kategori"}
 
 async def _do_bulk_import(job_id: str, rows: list):

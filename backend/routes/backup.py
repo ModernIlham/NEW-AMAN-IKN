@@ -18,6 +18,18 @@ from auth_utils import get_current_user
 logger = logging.getLogger(__name__)
 backup_router = APIRouter(prefix="/backup", tags=["backup"])
 
+# Strong-ref ke task latar backup/restore/scheduler: asyncio hanya pegang weak
+# ref, task fire-and-forget bisa di-GC saat suspended → operasi integritas data
+# mati diam-diam (pola sama seperti exports.py:_EKSPOR_TASKS).
+_BG_TASKS: set = set()
+
+
+def _track_bg(t):
+    """Tahan strong-ref selama task berjalan, lepas otomatis saat selesai."""
+    _BG_TASKS.add(t)
+    t.add_done_callback(_BG_TASKS.discard)
+    return t
+
 UPLOADS_DIR = Path(__file__).parent.parent / "uploads"
 BACKUP_TEMP_DIR = Path(__file__).parent.parent / "backup_temp"
 BACKUP_TEMP_DIR.mkdir(exist_ok=True)
@@ -571,8 +583,9 @@ async def start_backup(authorization: str = Header(None), arsipkan: bool = False
     }
     await db.backup_jobs.insert_one(job)
 
-    asyncio.create_task(run_backup_task(job_id, user.get("username"),
-                                        arsipkan="manual" if arsipkan else ""))
+    _track_bg(asyncio.create_task(run_backup_task(
+        job_id, user.get("username"),
+        arsipkan="manual" if arsipkan else "")))
     logger.info(f"Backup job {job_id} started by {user.get('username')}")
 
     return {"job_id": job_id, "message": "Proses backup dimulai di background"}
@@ -637,7 +650,7 @@ async def start_restore(
     }
     await db.backup_jobs.insert_one(job)
 
-    asyncio.create_task(run_restore_task(job_id, zip_path, user.get("username")))
+    _track_bg(asyncio.create_task(run_restore_task(job_id, zip_path, user.get("username"))))
     logger.info(f"Restore job {job_id} started by {user.get('username')}")
 
     return {"job_id": job_id, "message": "Proses restore dimulai di background"}
@@ -831,7 +844,7 @@ async def backup_scheduler_loop():
 
 def start_backup_scheduler():
     """Dipanggil dari startup server — jalankan loop di background."""
-    asyncio.create_task(backup_scheduler_loop())
+    _track_bg(asyncio.create_task(backup_scheduler_loop()))
 
 
 @backup_router.get("/otomatis")
@@ -934,6 +947,6 @@ async def restore_dari_arsip(nama: str, authorization: str = Header(None)):
         "source_file": nama,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     })
-    asyncio.create_task(run_restore_task(job_id, zip_path, user.get("username")))
+    _track_bg(asyncio.create_task(run_restore_task(job_id, zip_path, user.get("username"))))
     logger.info(f"Restore dari arsip {nama} dimulai oleh {user.get('username')}")
     return {"job_id": job_id, "message": "Proses restore dari arsip dimulai di background"}

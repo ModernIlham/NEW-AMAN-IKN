@@ -151,6 +151,11 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+# Strong-ref ke task publish fire-and-forget: asyncio hanya pegang weak ref,
+# task bisa di-GC sebelum insert_one selesai → notifikasi lintas-worker hilang
+# (pola sama seperti exports.py:_EKSPOR_TASKS).
+_BG_TASKS: set = set()
+
 
 # Handler invoked by event_bus when a REMOTE worker publishes an event for some activity.
 # Forward it to local WS clients (excluding the original sender by user_id).
@@ -290,7 +295,10 @@ async def notify_asset_change(activity_id: str, event_type: str, asset_data: dic
     }
     await manager.broadcast_local(activity_id, payload, exclude_user_id=user_id)
     # Fire-and-forget remote publish — don't block the request on this
-    asyncio.create_task(event_bus.publish(db, activity_id, payload))
+    # (strong-ref agar task tak di-GC sebelum publish selesai)
+    _t = asyncio.create_task(event_bus.publish(db, activity_id, payload))
+    _BG_TASKS.add(_t)
+    _t.add_done_callback(_BG_TASKS.discard)
 
 
 # Periodic presence re-publish: keeps remote snapshots fresh (they expire after
