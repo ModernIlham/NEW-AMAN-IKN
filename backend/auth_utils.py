@@ -47,10 +47,14 @@ def verify_password_dummy(plain_password: str) -> bool:
         pass
     return False
 
-def create_token(user_id: str, username: str) -> str:
+def create_token(user_id: str, username: str, sesi_epoch: int = 0) -> str:
+    # `sesi_epoch` (AUTH-C): dinaikkan tiap reset/ubah password → token dengan
+    # epoch lama otomatis dicabut di _decode_bearer. Login membaca nilai terbaru
+    # dari dokumen user; default 0 untuk pemanggil lama/bootstrap.
     payload = {
         "user_id": user_id,
         "username": username,
+        "sesi_epoch": int(sesi_epoch or 0),
         "exp": datetime.now(timezone.utc).timestamp() + (JWT_EXPIRATION_HOURS * 3600)
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
@@ -65,11 +69,12 @@ def create_token(user_id: str, username: str) -> str:
 MEDIA_TOKEN_EXPIRATION_DAYS = 30
 
 
-def create_media_token(user_id: str, username: str) -> str:
+def create_media_token(user_id: str, username: str, sesi_epoch: int = 0) -> str:
     payload = {
         "user_id": user_id,
         "username": username,
         "scope": "media",
+        "sesi_epoch": int(sesi_epoch or 0),  # ikut dicabut saat reset password (AUTH-C)
         "exp": datetime.now(timezone.utc).timestamp() + (MEDIA_TOKEN_EXPIRATION_DAYS * 86400),
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
@@ -158,6 +163,21 @@ async def _decode_bearer(authorization: str, allow_media_scope: bool = False) ->
         raise HTTPException(status_code=401, detail="User not found")
     if not user.get("is_active", True):
         raise HTTPException(status_code=403, detail="Akun Anda telah dinonaktifkan. Hubungi administrator.")
+    # Revokasi sesi (AUTH-C): token membawa `sesi_epoch`. Bila lebih kecil dari
+    # epoch user (dinaikkan tiap reset/ubah password), token itu sudah DICABUT →
+    # tolak. Token lama TANPA klaim dianggap epoch 0 (kompatibel mundur): user
+    # yang belum pernah reset (epoch 0) tetap diterima; yang sudah reset (≥1)
+    # otomatis menolak semua token lama.
+    try:
+        user_epoch = int(user.get("sesi_epoch") or 0)
+    except (TypeError, ValueError):
+        user_epoch = 0  # nilai rusak (mis. dari restore lama) → jangan 500
+    try:
+        tok_epoch = int(payload.get("sesi_epoch") or 0)
+    except (TypeError, ValueError):
+        tok_epoch = 0
+    if tok_epoch < user_epoch:
+        raise HTTPException(status_code=401, detail="Sesi telah berakhir — silakan masuk kembali")
     return user
 
 

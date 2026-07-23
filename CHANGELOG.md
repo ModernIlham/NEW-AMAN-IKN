@@ -48,6 +48,28 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#549] Keamanan: revokasi token saat reset/ubah password (sesi_epoch) — 2026-07-23
+
+Sebelumnya token akses (24 jam) & token media (30 hari) tetap berlaku sampai
+kedaluwarsa **walau password sudah direset** — bila perangkat lama dikuasai
+penyerang, sesi lamanya belum tercabut. Ditambah mekanisme **sesi_epoch**:
+
+- Setiap user punya penghitung `sesi_epoch` (default 0). Login menyematkannya
+  ke klaim JWT (token akses & media).
+- Reset password (via OTP) dan admin "ubah password" menaikkan `sesi_epoch`
+  (`$inc`) → seluruh token lama gugur.
+- `_decode_bearer` menolak token yang `sesi_epoch`-nya lebih kecil dari milik
+  user ("Sesi telah berakhir — silakan masuk kembali").
+
+**Kompatibel mundur:** token lama tanpa klaim = epoch 0; user lama tanpa field
+= epoch 0 → user yang belum pernah reset tetap login normal; yang sudah reset
+otomatis menolak semua token lama. Nilai rusak (mis. dari restore lama) di kedua
+sisi ditangani aman (tak sampai 500). Token tamu e-sign (`typ=sign`) tak
+terpengaruh (jalur `require_sign_token`, bukan `_decode_bearer`).
+
+Verifikasi: `pytest tests/unit` **640 lulus** (+1 uji klaim `sesi_epoch`);
+`compileall` bersih. Backend-only.
+
 ## [#548] Keamanan: pengerasan login — kunci brute-force + setara-waktu anti-enumerasi — 2026-07-23
 
 Dua celah pada `POST /auth/login`:

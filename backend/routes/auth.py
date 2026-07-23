@@ -247,9 +247,12 @@ async def reset_password(request: Request, data: dict):
                     if terkunci else "Kode OTP salah"))
 
     from auth_utils import hash_password
+    # Naikkan sesi_epoch (AUTH-C): seluruh token lama (akses & media) langsung
+    # gugur setelah reset password — perangkat yang mungkin dikuasai penyerang
+    # kehilangan akses.
     res = await db.users.update_one(
         {"username": email},
-        {"$set": {"password": hash_password(baru)}})
+        {"$set": {"password": hash_password(baru)}, "$inc": {"sesi_epoch": 1}})
     await delete_otp(f"reset:{email}")
     if res.matched_count == 0:
         raise HTTPException(status_code=400, detail="Akun tidak ditemukan")
@@ -403,7 +406,10 @@ async def login(request: Request, credentials: UserLogin):
     if not user.get("is_active", True):
         raise HTTPException(status_code=403, detail="Akun Anda telah dinonaktifkan. Hubungi administrator.")
 
-    token = create_token(user["id"], user["username"])
+    # Sertakan sesi_epoch user pada token (AUTH-C): reset/ubah password akan
+    # menaikkan epoch → token yang diterbitkan kini otomatis gugur.
+    sesi_epoch = int(user.get("sesi_epoch") or 0)
+    token = create_token(user["id"], user["username"], sesi_epoch)
 
     # Login sukses: perbarui last_active + reset penghitung/kunci gagal.
     await db.users.update_one(
@@ -418,7 +424,7 @@ async def login(request: Request, credentials: UserLogin):
     
     return TokenResponse(
         access_token=token,
-        media_token=create_media_token(user["id"], user["username"]),
+        media_token=create_media_token(user["id"], user["username"], sesi_epoch),
         user=UserResponse(
             id=user["id"],
             username=user["username"],

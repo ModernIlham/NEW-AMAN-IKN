@@ -68,6 +68,22 @@ def test_media_token_scope():
     assert dec.get("scope") == "media"
 
 
+def test_token_carries_sesi_epoch_for_revocation():
+    # AUTH-C: token akses & media membawa klaim sesi_epoch (default 0, dan nilai
+    # yang diberikan diteruskan) → dipakai _decode_bearer mencabut token lama
+    # setelah reset/ubah password.
+    import auth_utils as au
+    dec0 = pyjwt.decode(au.create_token("u1", "alice"), au.JWT_SECRET,
+                        algorithms=[au.JWT_ALGORITHM])
+    assert dec0.get("sesi_epoch") == 0
+    dec3 = pyjwt.decode(au.create_token("u1", "alice", 3), au.JWT_SECRET,
+                        algorithms=[au.JWT_ALGORITHM])
+    assert dec3.get("sesi_epoch") == 3
+    decm = pyjwt.decode(au.create_media_token("u1", "alice", 5), au.JWT_SECRET,
+                        algorithms=[au.JWT_ALGORITHM])
+    assert decm.get("sesi_epoch") == 5 and decm.get("scope") == "media"
+
+
 # ------------------------------------------------------------- shared_utils
 def test_generate_otp():
     import shared_utils as su
