@@ -10,6 +10,7 @@ from typing import Dict, Optional
 from datetime import datetime, timezone
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import jwt
+from cachetools import TTLCache
 
 import event_bus
 from db import db
@@ -187,16 +188,58 @@ def _decode_ws_token(token: str) -> Optional[dict]:
     """Validate the JWT from the WS query string. Returns the payload or None.
 
     Deliberately a light jwt.decode (same secret/algorithm as auth_utils) — no
-    DB lookup, so a burst of reconnecting clients can't hammer MongoDB."""
+    DB lookup, so a burst of reconnecting clients can't hammer MongoDB. Cek yang
+    butuh DB (nonaktif akun + revokasi sesi_epoch) ada di _ws_user_allowed."""
     if not token:
         return None
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
     except jwt.InvalidTokenError:  # covers expired, malformed, bad signature
         return None
+    # Tolak token ber-scope "media" (umur 30 hari, hanya untuk URL media) —
+    # sama seperti _decode_bearer menolaknya di API biasa. Klien WS memakai
+    # token sesi (bukan media), jadi ini menutup jendela penyalahgunaan token
+    # media tanpa biaya DB. (AUTH-C2)
+    if payload.get("scope") == "media":
+        return None
     if not payload.get("user_id"):
         return None
     return payload
+
+
+# Cache status user untuk gerbang WS (aktif + sesi_epoch), TTL pendek: burst
+# reconnect tak menghantam Mongo tiap sambung, tapi pencabutan (nonaktifkan akun
+# / reset password → sesi_epoch naik) tetap berlaku dalam hitungan detik untuk
+# koneksi BARU. (AUTH-C2)
+_WS_USER_TTL = 30
+_ws_user_cache = TTLCache(maxsize=4000, ttl=_WS_USER_TTL)
+
+
+async def _ws_user_allowed(user_id: str, tok_epoch) -> bool:
+    """Gerbang WS pasca-decode (butuh DB, di-cache TTL pendek): user masih ada
+    & aktif DAN token belum dicabut (sesi_epoch token >= milik user). Melengkapi
+    _decode_ws_token yang sengaja tanpa DB. Menutup temuan AUTH-C2: tanpa ini,
+    /ws/{activity_id} melewati cek is_active & revokasi sesi_epoch."""
+    cached = _ws_user_cache.get(user_id)
+    if cached is None:
+        u = await db.users.find_one(
+            {"id": user_id}, {"_id": 0, "is_active": 1, "sesi_epoch": 1})
+        if not u:
+            cached = {"exists": False, "is_active": False, "sesi_epoch": 0}
+        else:
+            try:
+                ep = int(u.get("sesi_epoch") or 0)
+            except (TypeError, ValueError):
+                ep = 0  # nilai rusak (mis. restore lama) → jangan tolak/500
+            cached = {"exists": True, "is_active": u.get("is_active", True), "sesi_epoch": ep}
+        _ws_user_cache[user_id] = cached
+    if not cached["exists"] or not cached["is_active"]:
+        return False
+    try:
+        te = int(tok_epoch or 0)
+    except (TypeError, ValueError):
+        te = 0
+    return te >= cached["sesi_epoch"]
 
 
 @ws_router.websocket("/ws/{activity_id}")
@@ -204,12 +247,16 @@ async def websocket_endpoint(ws: WebSocket, activity_id: str):
     # Authenticate BEFORE registering the connection. Identity comes from the
     # token payload — client-supplied user_id/user_name query params are ignored.
     token_payload = _decode_ws_token(ws.query_params.get("token", ""))
-    if token_payload is None:
+    # Gerbang berlapis (AUTH-C2): decode+scope (tanpa DB) LALU status user
+    # (aktif + revokasi sesi_epoch, ber-cache). Short-circuit `or` menjaga
+    # _ws_user_allowed tak dipanggil bila token sudah invalid.
+    if token_payload is None or not await _ws_user_allowed(
+            token_payload["user_id"], token_payload.get("sesi_epoch")):
         # Accept-then-close so the browser actually receives our app close code
         # (rejecting the handshake would surface as an opaque 1006 instead).
         await ws.accept()
-        await ws.close(code=WS_CLOSE_UNAUTHORIZED, reason="Token tidak valid atau kedaluwarsa")
-        logger.info(f"WS rejected (invalid/missing token) for activity {activity_id}")
+        await ws.close(code=WS_CLOSE_UNAUTHORIZED, reason="Token tidak valid, kedaluwarsa, atau sesi dicabut")
+        logger.info(f"WS rejected (invalid/revoked/inactive token) for activity {activity_id}")
         return
     user_id = token_payload["user_id"]
     user_name = token_payload.get("username") or "Unknown"

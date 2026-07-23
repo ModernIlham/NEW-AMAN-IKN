@@ -48,6 +48,30 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#550] Keamanan: tutup bypass autentikasi WebSocket (revokasi + nonaktif + scope) — 2026-07-23
+
+Temuan review adversarial AUTH-C: endpoint `/ws/{activity_id}` memvalidasi token
+lewat `jwt.decode` **signature-only tanpa lookup user**, sehingga melewati tiga
+kendali yang ditegakkan `_decode_bearer` di API biasa: (1) revokasi `sesi_epoch`
+(#549), (2) `is_active` (akun dinonaktifkan), dan (3) penolakan token ber-scope
+`media`. Akibatnya token media basi (umur 30 hari) atau token user yang sudah
+dicabut/dinonaktifkan tetap bisa masuk kanal kolaborasi real-time.
+
+Ditutup (`routes/websocket.py`):
+- `_decode_ws_token` menolak token ber-scope `media` (murah, tanpa DB — klien WS
+  memakai token sesi, dikonfirmasi di `useWebSocket.js`).
+- Gerbang baru `_ws_user_allowed` melakukan **satu** lookup user saat connect
+  (di-cache TTL 30 dtk agar burst reconnect tak menghantam Mongo) untuk menolak
+  akun nonaktif & token yang `sesi_epoch`-nya sudah dicabut. Nilai epoch rusak
+  ditangani aman. Koneksi ditolak dengan close-code aplikasi 4401.
+
+Catatan: gerbang berlaku saat **connect** (koneksi baru); pencabutan berlaku
+untuk sambungan berikutnya dalam ≤30 dtk (TTL cache). Kompatibel mundur: token
+lama tanpa `sesi_epoch` = epoch 0, user tanpa field = epoch 0.
+
+Verifikasi: `pytest tests/unit` **641 lulus** (+1 uji `_decode_ws_token` tolak
+media/rusak); `compileall` bersih. Backend-only.
+
 ## [#549] Keamanan: revokasi token saat reset/ubah password (sesi_epoch) — 2026-07-23
 
 Sebelumnya token akses (24 jam) & token media (30 hari) tetap berlaku sampai

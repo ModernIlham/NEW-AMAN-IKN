@@ -84,6 +84,19 @@ def test_token_carries_sesi_epoch_for_revocation():
     assert decm.get("sesi_epoch") == 5 and decm.get("scope") == "media"
 
 
+def test_ws_decode_rejects_media_scope_and_garbage():
+    # AUTH-C2: _decode_ws_token menerima token sesi (bawa user_id+epoch) tapi
+    # MENOLAK token ber-scope media (umur 30 hari, tak boleh untuk kanal WS),
+    # token kosong, dan token rusak.
+    import auth_utils as au
+    import routes.websocket as wsmod
+    p = wsmod._decode_ws_token(au.create_token("u1", "alice", 2))
+    assert p and p["user_id"] == "u1" and p.get("sesi_epoch") == 2
+    assert wsmod._decode_ws_token(au.create_media_token("u1", "alice", 2)) is None
+    assert wsmod._decode_ws_token("") is None
+    assert wsmod._decode_ws_token("garbage.token.value") is None
+
+
 # ------------------------------------------------------------- shared_utils
 def test_generate_otp():
     import shared_utils as su
