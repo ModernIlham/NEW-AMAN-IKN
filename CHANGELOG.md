@@ -48,6 +48,24 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#567] Performa: analitik satu-lintasan ($facet) + baca foto detail paralel — 2026-07-23
+
+Dua micro-opt jalur-baca `assets.py` (keluaran identik):
+
+- **`get_assets_analytics`** — sebelumnya 5 aggregation terpisah (kategori,
+  kondisi, status, lokasi, eselon), masing-masing `$match` + memindai **ulang**
+  set yang sama (walau sudah paralel). Digabung jadi **satu** pipeline `$facet`:
+  `$match` memilih set via indeks `activity_id` **sekali**, lalu 5 grouping
+  berjalan atas set itu. `$limit` tiap cabang menyamai batas `to_list(...)` lama.
+  Ter-cache 2 menit → hemat 4 pemindaian ekstra pada tiap cache-miss (dataset besar).
+- **`get_asset`** (mode media penuh) — hidrasi foto dari GridFS dulu berurutan
+  (`await` dalam loop = N round-trip serial); kini `asyncio.gather` membaca semua
+  blob **paralel** (urutan tetap terjaga). Detail aset multi-foto lebih responsif.
+
+Tanpa perubahan kontrak/keluaran API. 657 test unit hijau.
+
+---
+
 ## [#566] Performa: offload pembuatan PDF/XLSX (reportlab + PIL) ke thread — 2026-07-23
 
 Lanjutan penghentian blok event loop (#562). Pembuatan laporan PDF & ekspor
