@@ -1443,7 +1443,8 @@ export default function PenggunaanPage({ user, onBack }) {
                         setFormBast((f) => ({ ...f, pihak_pertama: {
                           ...f.pihak_pertama, nama: v,
                           ...(m ? { nip: m.nip || f.pihak_pertama.nip,
-                                    jabatan: m.jabatan || f.pihak_pertama.jabatan } : {}) } }));
+                                    jabatan: m.jabatan || f.pihak_pertama.jabatan,
+                                    alamat: (m.alamat || m.unit_kerja || m.unit_organisasi || "").trim() || f.pihak_pertama.alamat } : {}) } }));
                       }} />
                     <button type="button" title="Tap kartu pegawai (e-KTP/NFC)"
                       onClick={() => setKartuTapUntuk("pihak_pertama")}
@@ -1510,7 +1511,8 @@ export default function PenggunaanPage({ user, onBack }) {
                       // Nama persis cocok dengan Master Pegawai → NIP & jabatan terisi otomatis.
                       const m = (pegawaiList || []).find((x) => (x.nama || "") === v);
                       setFormBast((f) => ({ ...f, pihak_kedua: m
-                        ? { ...f.pihak_kedua, nama: v, nip: m.nip || f.pihak_kedua.nip, jabatan: m.jabatan || f.pihak_kedua.jabatan }
+                        ? { ...f.pihak_kedua, nama: v, nip: m.nip || f.pihak_kedua.nip, jabatan: m.jabatan || f.pihak_kedua.jabatan,
+                            alamat: (m.alamat || m.unit_kerja || m.unit_organisasi || "").trim() || f.pihak_kedua.alamat }
                         : { ...f.pihak_kedua, nama: v } }));
                     }} data-testid="bast-penerima" />
                   {/* Tap kartu e-KTP penerima → identitas terisi otomatis */}
@@ -1661,6 +1663,7 @@ export default function PenggunaanPage({ user, onBack }) {
             ...f[pihak], nama: p.nama || f[pihak]?.nama || "",
             nip: p.nip || f[pihak]?.nip || "",
             jabatan: p.jabatan || f[pihak]?.jabatan || "",
+            alamat: (p.alamat || p.unit_kerja || p.unit_organisasi || "").trim() || f[pihak]?.alamat || "",
           } } : f));
         }} />
 
