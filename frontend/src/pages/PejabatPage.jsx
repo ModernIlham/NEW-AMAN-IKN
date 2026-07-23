@@ -29,6 +29,7 @@ const EMPTY = {
   status_kepegawaian: "", unit_kerja: "", no_hp: "", email: "",
   peran: [], jenis_pelaksana: "", unit_akuntansi: "", sk_nomor: "", sk_tanggal: "",
   berlaku_mulai: "", berlaku_selesai: "", aktif: true, keterangan: "",
+  kode_satker: "", // pembeda satker (diisi super-admin; admin dipaksa satkernya)
 };
 
 /**
@@ -40,12 +41,18 @@ const EMPTY = {
  */
 export default function PejabatPage({ user, onBack }) {
   const isAdmin = user?.role === "admin";
+  // Super-admin = admin tanpa kode_satker (selaras backend kode_satker_user):
+  // ia melihat pejabat lintas-satker → butuh pembeda & pemilih satker.
+  const isSuperAdmin = isAdmin && !String(user?.kode_satker || "").trim();
   const [items, setItems] = useState([]);
   const [peranRef, setPeranRef] = useState([]);
   const [statusRef, setStatusRef] = useState([]);
   const [pelaksanaRef, setPelaksanaRef] = useState([]);
   const [unitRef, setUnitRef] = useState([]);
   const [unitList, setUnitList] = useState([]); // Master Unit Kerja (audit W4)
+  const [pegawaiList, setPegawaiList] = useState([]); // Master Pegawai (picker PJB-1)
+  const [pegawaiPick, setPegawaiPick] = useState(""); // teks pencarian picker
+  const [satkerList, setSatkerList] = useState([]); // Master Satker (super-admin)
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState(null);
@@ -60,6 +67,15 @@ export default function PejabatPage({ user, onBack }) {
     (kode) => peranRef.find((p) => p.kode === kode)?.uraian || kode, [peranRef]);
   const statusUraian = useCallback(
     (kode) => statusRef.find((s) => s.kode === kode)?.uraian || kode, [statusRef]);
+  const satkerNama = useCallback((kode) => {
+    const k = String(kode || "").trim();
+    if (!k) return "";
+    const s = satkerList.find((x) => String(x.kode_satker) === k);
+    return s?.nama_satker || k;
+  }, [satkerList]);
+
+  // Buka form (tambah/edit) — reset picker Master Pegawai agar tak basi.
+  const openForm = useCallback((next) => { setPegawaiPick(""); setForm(next); }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -86,7 +102,15 @@ export default function PejabatPage({ user, onBack }) {
       .then((r) => setUnitList([...new Set((r.data?.items || [])
         .map((u) => u.nama_unit || "").filter(Boolean))].sort()))
       .catch(() => setUnitList([]));
-  }, [load]);
+    // Master Pegawai → picker auto-isi identitas pejabat (PJB-1, tanpa ketik manual)
+    if (isAdmin) axios.get(`${API}/pegawai`)
+      .then((r) => setPegawaiList(r.data?.items || []))
+      .catch(() => setPegawaiList([]));
+    // Master Satker → pemilih & pembeda satker bagi super-admin (PJB-2)
+    if (isSuperAdmin) axios.get(`${API}/satker`)
+      .then((r) => setSatkerList(r.data?.items || []))
+      .catch(() => setSatkerList([]));
+  }, [load, isAdmin, isSuperAdmin]);
 
   const togglePeran = (kode) => setForm((f) => {
     const has = (f.peran || []).includes(kode);
@@ -110,6 +134,9 @@ export default function PejabatPage({ user, onBack }) {
       sk_tanggal: form.sk_tanggal, berlaku_mulai: form.berlaku_mulai,
       berlaku_selesai: form.berlaku_selesai, aktif: form.aktif,
       keterangan: form.keterangan,
+      // Diabaikan backend utk admin ber-satker (dipaksa satkernya); dipakai
+      // saat super-admin memilih satker eksplisit (PJB-2).
+      kode_satker: form.kode_satker || "",
     };
     try {
       if (form.mode === "tambah") {
@@ -146,7 +173,8 @@ export default function PejabatPage({ user, onBack }) {
 
   const q = search.trim().toLowerCase();
   const filtered = !q ? items : items.filter((it) =>
-    [it.nama, it.nip, it.jabatan, it.unit_kerja, it.email]
+    [it.nama, it.nip, it.jabatan, it.unit_kerja, it.email,
+      it.kode_satker, satkerNama(it.kode_satker)]
       .some((v) => String(v || "").toLowerCase().includes(q)));
 
   return (
@@ -180,7 +208,7 @@ export default function PejabatPage({ user, onBack }) {
             </div>
             {isAdmin && (
               <Button className="h-10 gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white"
-                onClick={() => setForm({ ...EMPTY })} title="Tambah Pejabat" aria-label="Tambah Pejabat"
+                onClick={() => openForm({ ...EMPTY })} title="Tambah Pejabat" aria-label="Tambah Pejabat"
                 data-testid="pejabat-add">
                 <Plus className="w-4 h-4" /><span className="hidden sm:inline">Tambah</span>
               </Button>
@@ -207,7 +235,7 @@ export default function PejabatPage({ user, onBack }) {
               </p>
               {isAdmin && items.length === 0 && (
                 <Button size="sm" className="mt-3 gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white"
-                  onClick={() => setForm({ ...EMPTY })} data-testid="pejabat-empty-tambah">
+                  onClick={() => openForm({ ...EMPTY })} data-testid="pejabat-empty-tambah">
                   <Plus className="w-4 h-4" />Tambah Pejabat
                 </Button>
               )}
@@ -255,6 +283,13 @@ export default function PejabatPage({ user, onBack }) {
                         </p>
                         {it.unit_kerja && (
                           <p className="text-[10px] text-muted-foreground/80 truncate max-w-[160px] sm:max-w-[240px]" title={it.unit_kerja}>{it.unit_kerja}</p>
+                        )}
+                        {isSuperAdmin && (
+                          // Pembeda satker (PJB-2) — super-admin melihat lintas-satker.
+                          <span title={`Satker: ${satkerNama(it.kode_satker) || "tanpa satker"}`}
+                            className="inline-block mt-0.5 px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-700 dark:text-sky-300 text-[9px] font-semibold truncate max-w-[160px] sm:max-w-[240px] align-middle">
+                            {it.kode_satker ? satkerNama(it.kode_satker) : "Tanpa satker"}
+                          </span>
                         )}
                         {(it.berlaku_mulai || it.berlaku_selesai) && (
                           <p className="sm:hidden text-[10px] text-muted-foreground truncate">
@@ -307,7 +342,7 @@ export default function PejabatPage({ user, onBack }) {
                             data-testid={`pejabat-ttd-${it.id}`}>
                             <PenTool className="w-3.5 h-3.5" />
                           </button>
-                          <button type="button" onClick={() => setForm({ ...EMPTY, ...it, mode: "edit" })}
+                          <button type="button" onClick={() => openForm({ ...EMPTY, ...it, mode: "edit" })}
                             aria-label={`Ubah ${it.nama}`}
                             className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted min-w-0 min-h-0"
                             data-testid={`pejabat-edit-${it.id}`}>
@@ -331,7 +366,7 @@ export default function PejabatPage({ user, onBack }) {
       </main>
 
       {/* ── Dialog tambah / edit ── */}
-      <Dialog open={!!form} onOpenChange={(o) => { if (!o) setForm(null); }}>
+      <Dialog open={!!form} onOpenChange={(o) => { if (!o) { setForm(null); setPegawaiPick(""); } }}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{form?.mode === "tambah" ? "Tambah Pejabat" : `Ubah Pejabat — ${form?.nama}`}</DialogTitle>
@@ -341,6 +376,68 @@ export default function PejabatPage({ user, onBack }) {
           </DialogHeader>
           {form && (
             <div className="space-y-3">
+              {/* PJB-1: ambil dari Master Pegawai → auto-isi identitas, tanpa
+                  ketik manual. Field di bawah tetap bisa disunting. */}
+              <div className="rounded-lg border border-indigo-500/30 bg-indigo-500/5 p-2.5">
+                <label className="text-xs font-semibold text-indigo-700 dark:text-indigo-300 block mb-1 flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5" />Ambil dari Master Pegawai (opsional)
+                </label>
+                <Input value={pegawaiPick} list="pejabat-pegawai-list"
+                  placeholder="Ketik nama pegawai untuk mengisi identitas otomatis…"
+                  data-testid="pejabat-form-pegawai-pick"
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setPegawaiPick(v);
+                    const m = (pegawaiList || []).find((x) => (x.nama || "") === v);
+                    if (m) setForm((f) => ({
+                      ...f,
+                      nama: m.nama || f.nama,
+                      nip: m.nip || f.nip,
+                      gelar_depan: m.gelar_depan || f.gelar_depan,
+                      gelar_belakang: m.gelar_belakang || f.gelar_belakang,
+                      jabatan: m.jabatan || f.jabatan,
+                      pangkat_golongan: m.pangkat_golongan || f.pangkat_golongan,
+                      status_kepegawaian: m.status_kepegawaian || f.status_kepegawaian,
+                      unit_kerja: (m.unit_kerja || "").trim() || f.unit_kerja,
+                      no_hp: m.no_hp || f.no_hp,
+                      email: m.email || f.email,
+                      jenis_pelaksana: m.jenis_pelaksana || f.jenis_pelaksana,
+                      // Selaraskan satker pejabat dgn asal pegawai (super-admin).
+                      ...(isSuperAdmin && m.kode_satker ? { kode_satker: m.kode_satker } : {}),
+                    }));
+                  }} />
+                <datalist id="pejabat-pegawai-list">
+                  {pegawaiList.map((p) => (
+                    <option key={p.id} value={p.nama}>
+                      {[p.nip ? `NIP ${p.nip}` : "", p.jabatan || ""].filter(Boolean).join(" · ")}
+                    </option>
+                  ))}
+                </datalist>
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  {pegawaiList.length === 0
+                    ? "Belum ada data Master Pegawai — isi identitas manual di bawah."
+                    : "Pilih pegawai lalu lengkapi Peran & masa berlaku SK di bawah."}
+                </p>
+              </div>
+
+              {isSuperAdmin && (
+                <Field label="Satker">
+                  {/* PJB-2: pembeda satker — super-admin menetapkan pejabat ini
+                      milik satker mana; admin biasa dipaksa satkernya oleh server. */}
+                  <select value={form.kode_satker || ""}
+                    onChange={(e) => setForm((f) => ({ ...f, kode_satker: e.target.value }))}
+                    className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                    data-testid="pejabat-form-satker">
+                    <option value="">— tanpa satker (berlaku lintas-satker / era lama) —</option>
+                    {satkerList.map((s) => (
+                      <option key={s.kode_satker} value={s.kode_satker}>
+                        {s.kode_satker}{s.nama_satker ? ` — ${s.nama_satker}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              )}
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="Nama * (tanpa gelar)"><Input value={form.nama} onChange={(e) => setForm((f) => ({ ...f, nama: e.target.value }))} data-testid="pejabat-form-nama" /></Field>
                 <Field label="NIP / NRP"><Input value={form.nip} onChange={(e) => setForm((f) => ({ ...f, nip: e.target.value }))} className="font-mono" /></Field>

@@ -48,6 +48,30 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#574] Pejabat: picker Master Pegawai + pembeda satker (super-admin) — 2026-07-23
+
+Halaman **Referensi Pejabat Penatausahaan** kini terhubung ke Master Pegawai
+dan memperjelas satker tiap pejabat.
+
+- **PJB-1 — picker Master Pegawai:** di dialog Tambah/Ubah Pejabat ada kotak
+  *"Ambil dari Master Pegawai"* — ketik/pilih nama pegawai lalu identitas
+  terisi otomatis (nama, NIP, gelar depan/belakang, jabatan, pangkat/golongan,
+  status kepegawaian, unit kerja, no. HP, email, Plt/Plh). Tak perlu ketik
+  manual; semua field tetap bisa disunting setelahnya.
+- **PJB-2 — pembeda satker:** tiap satker memang punya pejabat berbeda
+  (backend sudah meng-scope daftar & resolusi penanda tangan per-satker via
+  `_q_pejabat_satker`), tetapi di UI belum ada pembedanya. Kini **super-admin**
+  (admin tanpa `kode_satker`) melihat **badge satker** pada tiap baris pejabat,
+  bisa **mencari** per satker, dan **memilih satker** saat menambah/mengubah
+  pejabat (memilih pegawai dari satker tertentu ikut menyetel satkernya). Admin
+  ber-satker tetap dipaksa ke satkernya sendiri oleh server (isolasi M-SCOPE),
+  sehingga tak perlu memilih.
+
+Semua laporan resmi (DBKP/LBKP/BAST dll.) sudah memakai penanda tangan KPB
+ter-scope satker user — jadi pembeda ini konsisten hingga ke dokumen.
+
+---
+
 ## [#573] BAST: kolom Alamat/Unit auto-isi dari Master Pegawai — 2026-07-23
 
 Pada Buat BAST, memilih pegawai (dari saran Master Pegawai atau Tap Kartu
