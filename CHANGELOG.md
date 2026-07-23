@@ -48,6 +48,17 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#573] BAST: kolom Alamat/Unit auto-isi dari Master Pegawai — 2026-07-23
+
+Pada Buat BAST, memilih pegawai (dari saran Master Pegawai atau Tap Kartu
+e-KTP) sebelumnya hanya mengisi otomatis NIP + Jabatan; kolom **Alamat/Unit**
+selalu manual. Kini ikut terisi dari Master Pegawai: `alamat` → jika kosong,
+fallback ke `unit_kerja` → `unit_organisasi`. Berlaku di ketiga jalur auto-isi
+(saran nama PIHAK KESATU & KEDUA + Tap Kartu), dan mengalir ke PDF BAST (baris
+"Alamat" pada blok identitas kedua pihak). Tetap bisa disunting manual.
+
+---
+
 ## [#572] TTD: goresan tinta kini terlihat di mode gelap (kanvas "kertas" terang) — 2026-07-23
 
 Di halaman tanda tangan elektronik, kanvas TTD manual transparan dengan tinta
