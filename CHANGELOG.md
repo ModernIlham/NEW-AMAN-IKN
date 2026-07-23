@@ -48,6 +48,19 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#569] UI mode gelap: ikon pemilih tanggal (date picker) kini terlihat — 2026-07-23
+
+Di mode gelap, ikon "buka pemilih tanggal" pada semua `<input type="date">`
+(dan datetime-local/month/week/time) berwarna gelap bawaan browser → **tak
+terlihat** di latar gelap. Diperbaiki satu aturan global di `index.css`:
+`.dark input[type="date"]… { color-scheme: dark }`. Ini menyuruh browser
+merender seluruh kontrol tanggal native bertema gelap — ikon jadi **terang**
+(terlihat), dan popup kalender beserta kolom hari/bulan/tahunnya ikut bertema
+gelap sesuai tema aplikasi. Berlaku otomatis di seluruh halaman (21 berkas
+memakai input tanggal native) tanpa menyentuh satu per satu.
+
+---
+
 ## [#568] Keandalan CI/CD: deploy digerbang pada CI sukses (workflow_run) — 2026-07-23
 
 Sebelumnya `deploy.yml` ter-trigger `on: push: [main]` — **independen** dari CI.
