@@ -1028,7 +1028,8 @@ async def get_asset_media(asset_id: str, _user: dict = Depends(require_user)):
     
     # Fallback for legacy assets without thumbnails: generate from full photos
     if photos and not photo_thumbnails:
-        photo_thumbnails = [generate_photo_thumbnail(p) or "" for p in photos]
+        photo_thumbnails = await asyncio.to_thread(
+            lambda pics: [generate_photo_thumbnail(p) or "" for p in pics], photos)
     
     checklist = asset.get("document_checklist", []) or []
     # For document checklist, also return thumbnails for photos
@@ -1037,7 +1038,8 @@ async def get_asset_media(asset_id: str, _user: dict = Depends(require_user)):
         item_photos = item.get("photos", []) or []
         item_photo_thumbs = item.get("photo_thumbnails", []) or []
         if item_photos and not item_photo_thumbs:
-            item_photo_thumbs = [generate_photo_thumbnail(p) or "" for p in item_photos]
+            item_photo_thumbs = await asyncio.to_thread(
+                lambda pics: [generate_photo_thumbnail(p) or "" for p in pics], item_photos)
         checklist_media.append({
             "name": item.get("name", ""),
             "photo_thumbnails": item_photo_thumbs,
@@ -1079,7 +1081,8 @@ async def get_asset_checklist_full(asset_id: str, _user: dict = Depends(require_
         item_thumbs = item.get("photo_thumbnails", []) or []
         # Generate thumbs on the fly for legacy items
         if item_photos and not item_thumbs:
-            item_thumbs = [generate_photo_thumbnail(p) or "" for p in item_photos]
+            item_thumbs = await asyncio.to_thread(
+                lambda pics: [generate_photo_thumbnail(p) or "" for p in pics], item_photos)
         # Trim to actual count — never return more thumbs than photos
         if len(item_thumbs) > len(item_photos):
             item_thumbs = item_thumbs[: len(item_photos)]
@@ -1423,7 +1426,7 @@ async def rotate_asset_photo(asset_id: str, photo_index: int, request: Request,
 
     # Putar (Pillow) → JPEG baru → data-URI untuk helper penyimpanan
     try:
-        rotated = rotate_jpeg_bytes(src_bytes, degrees)
+        rotated = await asyncio.to_thread(rotate_jpeg_bytes, src_bytes, degrees)
     except Exception as e:
         logger.error(f"Rotate gagal aset {asset_id} idx {photo_index}: {e}")
         raise HTTPException(status_code=422, detail="Gagal memutar foto (berkas bukan gambar valid)")
@@ -1446,14 +1449,14 @@ async def rotate_asset_photo(asset_id: str, photo_index: int, request: Request,
     # Regen thumbnail per-foto (strip form + placeholder lightbox)
     while len(thumbnails) <= photo_index:
         thumbnails.append("")
-    thumbnails[photo_index] = generate_photo_thumbnail(rotated_uri) or ""
+    thumbnails[photo_index] = await asyncio.to_thread(generate_photo_thumbnail, rotated_uri) or ""
     set_fields["photo_thumbnails"] = thumbnails
 
     # Foto cover → regen thumbnail daftar (data-URI) + gallery_thumbnail
     cover_idx = int(existing.get("thumbnail_index") or 0)
     if photo_index == cover_idx:
-        set_fields["thumbnail"] = create_thumbnail(rotated_uri)
-        set_fields["gallery_thumbnail"] = create_gallery_thumbnail(rotated_uri)
+        set_fields["thumbnail"] = await asyncio.to_thread(create_thumbnail, rotated_uri)
+        set_fields["gallery_thumbnail"] = await asyncio.to_thread(create_gallery_thumbnail, rotated_uri)
 
     # Tulis ber-OCC (CAS pada version) + $inc version → etag preview lama basi
     cas_filter = _build_cas_filter(asset_id, current_version)
@@ -1981,7 +1984,7 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
             if idx < len(old_thumbnails) and old_thumbnails[idx]:
                 final_thumbnails.append(old_thumbnails[idx])
             elif idx < len(old_photos) and old_photos[idx]:
-                final_thumbnails.append(generate_photo_thumbnail(old_photos[idx]) or "")
+                final_thumbnails.append(await asyncio.to_thread(generate_photo_thumbnail, old_photos[idx]) or "")
             else:
                 final_thumbnails.append("")
 
@@ -2001,7 +2004,7 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
                 gid = await store_photo_to_gridfs(photo_b64)
                 newly_uploaded_gridfs.append(gid)
                 final_gridfs_ids.append(gid)
-                thumb = generate_photo_thumbnail(photo_b64)
+                thumb = await asyncio.to_thread(generate_photo_thumbnail, photo_b64)
                 final_thumbnails.append(thumb or "")
         except Exception as e:
             # Rollback newly uploaded blobs
@@ -2035,8 +2038,8 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
                 except Exception as e:
                     logger.warning(f"photo_ops cover regen: GridFS read failed for asset {asset_id}: {e}")
             if cover_b64:
-                update_data["thumbnail"] = create_thumbnail(cover_b64)
-                update_data["gallery_thumbnail"] = create_gallery_thumbnail(cover_b64)
+                update_data["thumbnail"] = await asyncio.to_thread(create_thumbnail, cover_b64)
+                update_data["gallery_thumbnail"] = await asyncio.to_thread(create_gallery_thumbnail, cover_b64)
             elif cover_idx < len(final_thumbnails) and final_thumbnails[cover_idx]:
                 # Fallback: full-res cover gagal diambil (mis. blob korup) tetapi
                 # thumbnail per-foto cover TERSEDIA → regen composite dari situ
@@ -2044,8 +2047,8 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
                 # cover diganti sambil menghapus foto. thumbnail_index +
                 # photo_thumbnails sudah diperbarui; tanpa ini daftar tetap
                 # menampilkan cover lama sampai cover diubah lagi (bug dilaporkan).
-                update_data["thumbnail"] = create_thumbnail(final_thumbnails[cover_idx])
-                update_data["gallery_thumbnail"] = create_gallery_thumbnail(final_thumbnails[cover_idx])
+                update_data["thumbnail"] = await asyncio.to_thread(create_thumbnail, final_thumbnails[cover_idx])
+                update_data["gallery_thumbnail"] = await asyncio.to_thread(create_gallery_thumbnail, final_thumbnails[cover_idx])
             # keduanya kosong (benar-benar tak ada byte): biarkan thumbnail lama
         else:
             update_data["thumbnail"] = None
@@ -2063,8 +2066,8 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
         old_gridfs = [g for g in (existing.get("photo_gridfs_ids", []) or []) if g]
         old_count = len(old_gridfs) or len(old_photos)
         if photos and (photos != old_photos or len(photos) != old_count or cover_idx != existing.get("thumbnail_index", 0)):
-            update_data["thumbnail"] = create_thumbnail(photos[cover_idx])
-            update_data["gallery_thumbnail"] = create_gallery_thumbnail(photos[cover_idx])
+            update_data["thumbnail"] = await asyncio.to_thread(create_thumbnail, photos[cover_idx])
+            update_data["gallery_thumbnail"] = await asyncio.to_thread(create_gallery_thumbnail, photos[cover_idx])
             # Atomic rollback inside process_photos_for_storage
             result = await process_photos_for_storage(photos)
             newly_uploaded_gridfs.extend(result["gridfs_ids"])
@@ -2120,8 +2123,8 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
                 except Exception as e:
                     logger.warning(f"thumbnail_index cover regen: GridFS read failed for asset {asset_id} idx {new_idx}: {e}")
             if cover_b64:
-                update_data["thumbnail"] = create_thumbnail(cover_b64)
-                update_data["gallery_thumbnail"] = create_gallery_thumbnail(cover_b64)
+                update_data["thumbnail"] = await asyncio.to_thread(create_thumbnail, cover_b64)
+                update_data["gallery_thumbnail"] = await asyncio.to_thread(create_gallery_thumbnail, cover_b64)
                 # JANGAN tulis update_data["photo"]: itu menyuntikkan kembali
                 # base64 full-res ke dokumen yang sudah bersih (GridFS-only).
 
@@ -2183,7 +2186,7 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
             for i, ph in enumerate(resolved_photos):
                 t = resolved_thumbs[i] if i < len(resolved_thumbs) else ""
                 if not t and ph:
-                    t = generate_photo_thumbnail(ph) or ""
+                    t = await asyncio.to_thread(generate_photo_thumbnail, ph) or ""
                 final_thumbs.append(t)
 
             new_checklist.append({
@@ -2349,7 +2352,8 @@ async def migrate_photos_to_gridfs(_admin: dict = Depends(require_admin)):
             for item in checklist:
                 item_photos = item.get("photos", []) or []
                 if item_photos:
-                    item_thumbs = [generate_photo_thumbnail(p) or "" for p in item_photos]
+                    item_thumbs = await asyncio.to_thread(
+                        lambda pics: [generate_photo_thumbnail(p) or "" for p in pics], item_photos)
                     updated_cl.append({**item, "photo_thumbnails": item_thumbs})
                 else:
                     updated_cl.append(item)
