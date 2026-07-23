@@ -48,6 +48,28 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#566] Performa: offload pembuatan PDF/XLSX (reportlab + PIL) ke thread — 2026-07-23
+
+Lanjutan penghentian blok event loop (#562). Pembuatan laporan PDF & ekspor
+XLSX menjalankan kerja CPU-berat **sinkron di event loop** — satu unduhan
+laporan/ekspor besar (ratusan/ribuan aset) membekukan SELURUH worker beberapa
+detik (2 worker uvicorn → separuh kapasitas stall):
+
+- **`reports.py`** — 18 pemanggilan `doc.build(...)` reportlab (BA, SPTJM, DBHI,
+  RHI, DBKP, DBR, KIR, penyusutan, LBKP, LKB, CaLBMN, BAHI, SP, sampul, daftar
+  pemegang, dll.) dibungkus `await asyncio.to_thread(doc.build, ...)`.
+- **`exports.py`** — 2 `doc.build` (`export_pdf`) + 3 `_xlsx_image_buffer` PIL
+  (`bangun_xlsx_bytes`: thumbnail foto/stiker/kelengkapan) di-offload. Catatan:
+  jalur ekspor XLSX "async" (`export_xlsx_async`) TETAP menjalankan perakitan di
+  event loop yang sama sebelum ini — kini PIL-nya benar-benar lepas dari loop.
+
+Semua titik terverifikasi berada di dalam `async def`; `doc.build`/PIL bersifat
+deterministik dengan `elements`/`img_data` sudah dirakit sebelum build, jadi
+offload aman & transparan (tanpa perubahan keluaran). `import asyncio`
+ditambahkan di `reports.py`. 657 test unit hijau.
+
+---
+
 ## [#565] Performa frontend: lottie build "light" + kanvas TTD dimuat lazy — 2026-07-23
 
 Dua kemenangan bundle dari audit performa frontend (aplikasi sudah

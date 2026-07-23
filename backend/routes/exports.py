@@ -826,9 +826,9 @@ async def export_pdf(request: Request, activity_id: Optional[str] = None,
     # Dokumen kecil mendapat footer "Halaman N dari M" via overlay di bawah;
     # menulis nomor halaman ganda di titik yang sama membuat teks bertumpuk.
     if total <= 500:
-        doc.build(elements)
+        await asyncio.to_thread(doc.build, elements)
     else:
-        doc.build(elements, onFirstPage=add_page_number, onLaterPages=add_page_number)
+        await asyncio.to_thread(doc.build, elements, onFirstPage=add_page_number, onLaterPages=add_page_number)
 
     # Add total pages to each page (skip for large docs to save memory/time)
     buffer.seek(0)
@@ -969,7 +969,7 @@ async def bangun_xlsx_bytes(query, activity_id="", base_url=""):
             img_data = asset.get('photo') or asset.get('thumbnail')
         if img_data:
             try:
-                thumb_buffer = _xlsx_image_buffer(img_data, 640, quality=70)
+                thumb_buffer = await asyncio.to_thread(_xlsx_image_buffer, img_data, 640, quality=70)
                 worksheet.insert_image(row, 0, 'image.jpg', {
                     'image_data': thumb_buffer, 'x_scale': 0.22, 'y_scale': 0.22,
                     'x_offset': 4, 'y_offset': 4
@@ -997,7 +997,7 @@ async def bangun_xlsx_bytes(query, activity_id="", base_url=""):
                 logger.error(f"GridFS stiker fetch failed for {asset_id}: {e}")
         if stiker_data:
             try:
-                stiker_buffer = _xlsx_image_buffer(stiker_data, 900, quality=75)
+                stiker_buffer = await asyncio.to_thread(_xlsx_image_buffer, stiker_data, 900, quality=75)
                 worksheet.insert_image(row, 1, 'stiker.jpg', {
                     'image_data': stiker_buffer, 'x_scale': 0.24, 'y_scale': 0.24,
                     'x_offset': 4, 'y_offset': 4
@@ -1092,7 +1092,7 @@ async def bangun_xlsx_bytes(query, activity_id="", base_url=""):
                     
                     # Try to embed thumbnail image
                     try:
-                        thumb_buf = _xlsx_image_buffer(photos[pi], 110, quality=60)
+                        thumb_buf = await asyncio.to_thread(_xlsx_image_buffer, photos[pi], 110, quality=60)
                         
                         # Insert thumbnail image with hyperlink
                         doc_sheet.insert_image(doc_row, col_idx, 'thumb.jpg', {
