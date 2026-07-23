@@ -20,7 +20,10 @@ from pydantic import BaseModel
 from auth_utils import require_admin, require_user, require_writer
 from db import db
 from report_filters import active_asset_filter
-from shared_utils import limiter, log_audit
+from shared_utils import (limiter, log_audit, kode_satker_user,
+                          pastikan_akses_aset, pastikan_akses_dok_satker,
+                          pastikan_akses_kegiatan_id, scope_query_aset,
+                          scope_query_field_satker)
 from siman_utils import (
     FIELD_TERAPKAN, banding_aset, deteksi_header, kunci_aset, nilai_terapkan,
     parse_baris, referensi_siman, ringkas_baris_belum_tercatat, ringkas_import,
@@ -130,7 +133,12 @@ async def import_siman(request: Request, file: UploadFile = File(...),
         else:
             per_kunci[k] = b
 
-    assets = await db.assets.find(active_asset_filter(), _PROJ_ASET).to_list(500000)
+    # ISOLASI SATKER: impor hanya menyentuh aset satker si pengunggah
+    # (super-admin lintas-satker). Cegah penulisan subdoc siman / penandaan
+    # "tidak ditemukan" pada aset satker lain.
+    assets = await db.assets.find(
+        await scope_query_aset(user, active_asset_filter()),
+        _PROJ_ASET).to_list(500000)
 
     now = datetime.now(timezone.utc).isoformat()
     import_id = str(uuid.uuid4())
@@ -244,6 +252,7 @@ async def import_siman(request: Request, file: UploadFile = File(...),
         [{"selisih": r["selisih"]} for r in hasil], siman_tanpa_aset, aman_tanpa_siman)
     register = {
         "id": import_id,
+        "kode_satker": kode_satker_user(user),
         "filename": nama_file,
         "waktu": now,
         "oleh": user.get("username", "system"),
@@ -284,16 +293,17 @@ async def import_siman(request: Request, file: UploadFile = File(...),
 async def ringkasan_siman(_user: dict = Depends(require_user)):
     """Status sinkronisasi terkini + riwayat impor (untuk panel UI)."""
     selisih = await db.assets.count_documents(
-        active_asset_filter({"siman.status": "selisih"}))
+        await scope_query_aset(_user, active_asset_filter({"siman.status": "selisih"})))
     cocok = await db.assets.count_documents(
-        active_asset_filter({"siman.status": "cocok"}))
+        await scope_query_aset(_user, active_asset_filter({"siman.status": "cocok"})))
     tidak_di_siman = await db.assets.count_documents(
-        active_asset_filter({"siman.status": "tidak_di_siman"}))
+        await scope_query_aset(_user, active_asset_filter({"siman.status": "tidak_di_siman"})))
     belum_dicek = await db.assets.count_documents(
-        active_asset_filter({"siman": {"$exists": False}}))
+        await scope_query_aset(_user, active_asset_filter({"siman": {"$exists": False}})))
     riwayat = await db.siman_imports.find(
-        {}, {"_id": 0, "contoh_siman_tanpa_aset": 0, "contoh_aman_tanpa_siman": 0,
-             "baris_belum_tercatat": 0},
+        scope_query_field_satker(_user),
+        {"_id": 0, "contoh_siman_tanpa_aset": 0, "contoh_aman_tanpa_siman": 0,
+         "baris_belum_tercatat": 0},
     ).sort("waktu", -1).limit(10).to_list(10)
     return {
         "selisih": selisih, "cocok": cocok,
@@ -310,6 +320,7 @@ async def detail_import_siman(import_id: str, _user: dict = Depends(require_user
         {"id": import_id}, {"_id": 0, "baris_belum_tercatat": 0})
     if not reg:
         raise HTTPException(status_code=404, detail="Riwayat impor tidak ditemukan")
+    await pastikan_akses_dok_satker(_user, reg)
     return reg
 
 
@@ -321,9 +332,11 @@ async def csv_belum_tercatat(import_id: str, _user: dict = Depends(require_user)
     from fastapi.responses import StreamingResponse
 
     reg = await db.siman_imports.find_one(
-        {"id": import_id}, {"_id": 0, "baris_belum_tercatat": 1, "filename": 1})
+        {"id": import_id},
+        {"_id": 0, "baris_belum_tercatat": 1, "filename": 1, "kode_satker": 1})
     if not reg:
         raise HTTPException(status_code=404, detail="Riwayat impor tidak ditemukan")
+    await pastikan_akses_dok_satker(_user, reg)
     baris = reg.get("baris_belum_tercatat") or []
     buf = io.StringIO()
     w = csv.writer(buf)
@@ -364,9 +377,11 @@ async def buat_draft_dari_siman(request: Request, import_id: str,
     from routes.assets import buat_aset_draft
 
     reg = await db.siman_imports.find_one(
-        {"id": import_id}, {"_id": 0, "baris_belum_tercatat": 1, "filename": 1})
+        {"id": import_id},
+        {"_id": 0, "baris_belum_tercatat": 1, "filename": 1, "kode_satker": 1})
     if not reg:
         raise HTTPException(status_code=404, detail="Riwayat impor tidak ditemukan")
+    await pastikan_akses_dok_satker(user, reg)
     baris = reg.get("baris_belum_tercatat") or []
     if not baris:
         raise HTTPException(status_code=400, detail=(
@@ -376,6 +391,8 @@ async def buat_draft_dari_siman(request: Request, import_id: str,
         {"id": payload.activity_id}, {"_id": 0, "id": 1, "nama_kegiatan": 1})
     if not act:
         raise HTTPException(status_code=404, detail="Kegiatan inventarisasi tidak ditemukan")
+    # Draft dibuat ke kegiatan ini — pastikan milik satker admin.
+    await pastikan_akses_kegiatan_id(user, payload.activity_id)
 
     kategori_by_kode = {
         c["kode_aset"]: c.get("label", "")
@@ -445,7 +462,7 @@ async def daftar_selisih_siman(page: int = 1, page_size: int = 50,
     """Aset yang datanya berbeda dengan SIMAN (untuk tabel tinjau & terapkan)."""
     page = max(1, page)
     page_size = min(max(1, page_size), 200)
-    q = active_asset_filter({"siman.status": "selisih"})
+    q = await scope_query_aset(_user, active_asset_filter({"siman.status": "selisih"}))
     total = await db.assets.count_documents(q)
     items = await (db.assets.find(q, _PROJ_ASET)
                    .sort([("asset_code", 1), ("NUP", 1)])
@@ -469,6 +486,7 @@ async def terapkan_siman(asset_id: str, payload: TerapkanIn,
                                   "version": 1})
     if not a:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    await pastikan_akses_aset(user, a)
     sub = a.get("siman") or {}
     selisih = sub.get("selisih") or []
     if not selisih:
