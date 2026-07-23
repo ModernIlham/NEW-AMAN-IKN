@@ -741,10 +741,13 @@ async def bast_pdf(bast_id: str,
     el.extend(_blok_tembusan(
         {"tembusan_laporan": b.get("tembusan") or settings.get("tembusan_laporan", "")}))
 
-    # Lampiran foto (opsional): foto sampul tiap aset
+    # Lampiran foto (opsional): (A) foto BARANG (sampul tiap aset) + (B) foto
+    # SERAH TERIMA (scan bukti ttd BAST). Sebelumnya hanya foto barang yang
+    # disematkan sehingga bukti serah terima tak pernah ikut tercetak.
     if b.get("sertakan_foto"):
         import base64
-        foto_el = []
+        from reportlab.platypus import KeepTogether as _KT
+        foto_barang_el = []
         aset_master = await db.assets.find(
             {"id": {"$in": b.get("asset_ids") or []}},
             {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
@@ -767,8 +770,7 @@ async def bast_pdf(bast_id: str,
                 skala = min((doc.width * 0.6) / img.imageWidth, 80 * rl_mm / img.imageHeight)
                 img.drawWidth, img.drawHeight = img.imageWidth * skala, img.imageHeight * skala
                 img.hAlign = 'CENTER'
-                from reportlab.platypus import KeepTogether as _KT
-                foto_el.append(_KT([
+                foto_barang_el.append(_KT([
                     Paragraph(
                         f"<b>{_esc(str(a.get('asset_code') or ''))} · NUP "
                         f"{_esc(str(a.get('NUP') or ''))}</b> — "
@@ -776,10 +778,44 @@ async def bast_pdf(bast_id: str,
                     img, Spacer(1, 4 * rl_mm)]))
             except Exception:
                 continue
-        if foto_el:
+
+        # (B) Foto serah terima = scan bukti ttd BAST. Bila gambar → disematkan
+        # penuh; bila PDF → beri catatan bahwa buktinya berkas terpisah.
+        serah_el = []
+        bukti = b.get("bukti") or {}
+        bukti_ct = str(bukti.get("content_type") or "").lower()
+        if bukti.get("file_id") and bukti_ct.startswith("image/"):
+            from shared_utils import get_document_from_gridfs
+            try:
+                b_bytes = await get_document_from_gridfs(str(bukti["file_id"]))
+                if b_bytes:
+                    bimg = RLImage(io.BytesIO(b_bytes))
+                    bskala = min((doc.width * 0.72) / bimg.imageWidth,
+                                 150 * rl_mm / bimg.imageHeight)
+                    bimg.drawWidth = bimg.imageWidth * bskala
+                    bimg.drawHeight = bimg.imageHeight * bskala
+                    bimg.hAlign = 'CENTER'
+                    serah_el.append(_KT([
+                        Paragraph("<b>Dokumen serah terima bertanda tangan</b>", body),
+                        bimg, Spacer(1, 4 * rl_mm)]))
+            except Exception:
+                pass
+        elif bukti.get("file_id"):
+            serah_el.append(Paragraph(
+                "<i>Bukti serah terima tersimpan sebagai berkas terpisah "
+                f"({_esc(str(bukti.get('filename') or 'bukti.pdf'))}).</i>", body))
+
+        if foto_barang_el or serah_el:
             el.append(PageBreak())
             el.extend(_title_block("LAMPIRAN\nFOTO BUKTI SERAH TERIMA BARANG"))
-            el.extend(foto_el)
+            if foto_barang_el:
+                el.append(Paragraph("<b>A. Foto Barang (sampul tiap aset)</b>", body))
+                el.append(Spacer(1, 2 * rl_mm))
+                el.extend(foto_barang_el)
+            if serah_el:
+                el.append(Paragraph("<b>B. Foto Serah Terima</b>", body))
+                el.append(Spacer(1, 2 * rl_mm))
+                el.extend(serah_el)
 
     footer = _page_footer_factory(f"BAST — {judul_jenis[:60]}")
     doc.build(el, onFirstPage=footer, onLaterPages=footer)

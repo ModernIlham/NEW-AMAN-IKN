@@ -1565,10 +1565,10 @@ export default function PenggunaanPage({ user, onBack }) {
                   ))}
                 </div>
               </div>
-              <label className="flex items-center gap-2 text-xs cursor-pointer">
-                <input type="checkbox" checked={formBast.sertakan_foto} className="w-3.5 h-3.5" data-testid="bast-foto"
+              <label className="flex items-start gap-2 text-xs cursor-pointer">
+                <input type="checkbox" checked={formBast.sertakan_foto} className="w-3.5 h-3.5 mt-0.5 shrink-0" data-testid="bast-foto"
                   onChange={(e) => setFormBast((f) => ({ ...f, sertakan_foto: e.target.checked }))} />
-                Sertakan lampiran foto barang (foto sampul tiap aset)
+                <span>Sertakan lampiran foto: <b>foto barang</b> (sampul tiap aset) + <b>foto serah terima</b> (dari scan bukti TTD BAST, bila berupa gambar)</span>
               </label>
               <div>
                 <label className="text-xs font-medium block mb-1">Pasal/ketentuan tambahan (opsional)</label>

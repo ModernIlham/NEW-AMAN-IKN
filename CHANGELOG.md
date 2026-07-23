@@ -48,6 +48,24 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#575] BAST: lampiran sertakan foto serah terima (bukan hanya foto barang) — 2026-07-23
+
+Pada Buat BAST, centang *"Sertakan lampiran foto…"* sebelumnya hanya
+menyematkan **foto barang** (sampul tiap aset) — bukti **serah terima** tak
+pernah ikut tercetak walau sudah diunggah.
+
+Kini lampiran dibagi dua bagian dengan judul jelas:
+- **A. Foto Barang** — sampul tiap aset (seperti sebelumnya).
+- **B. Foto Serah Terima** — diambil dari **scan bukti TTD BAST** (field
+  `bukti`). Bila buktinya **gambar** (JPG/PNG), disematkan penuh; bila **PDF**,
+  diberi catatan bahwa buktinya berkas terpisah (PDF tak dapat disematkan
+  sebagai gambar).
+
+Label centang di form diperbarui agar jelas mencakup kedua jenis foto. Berlaku
+di semua jenis BAST (`backend/routes/bast.py` unduh PDF).
+
+---
+
 ## [#574] Pejabat: picker Master Pegawai + pembeda satker (super-admin) — 2026-07-23
 
 Halaman **Referensi Pejabat Penatausahaan** kini terhubung ke Master Pegawai
