@@ -4,6 +4,7 @@ Extracted from server.py to reduce monolithic file size.
 Contains: Rekapitulasi, DBHI, RHI, BAHI, SP, LHI, Executive Summary,
           Berita Acara, SPTJM, Surat Koreksi, and Report Settings.
 """
+import asyncio
 import io
 import os
 import logging
@@ -1213,7 +1214,7 @@ async def generate_berita_acara_pdf(activity_id: str, _user: dict = Depends(requ
     elements.extend(_blok_tembusan(settings, activity))
 
     footer = _page_footer_factory("Berita Acara Hasil Penelitian BMN Tidak Ditemukan")
-    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    await asyncio.to_thread(doc.build, elements, onFirstPage=footer, onLaterPages=footer)
     buffer.seek(0)
 
     return StreamingResponse(
@@ -1470,7 +1471,7 @@ async def generate_sptjm_pdf(activity_id: str, _user: dict = Depends(require_use
     ], doc.width))
 
     footer = _page_footer_factory("Surat Pernyataan Tanggung Jawab Mutlak (SPTJM)")
-    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    await asyncio.to_thread(doc.build, elements, onFirstPage=footer, onLaterPages=footer)
     buffer.seek(0)
 
     return StreamingResponse(
@@ -1602,7 +1603,7 @@ async def generate_surat_koreksi_pdf(activity_id: str, _user: dict = Depends(req
     ], doc.width))
 
     footer = _page_footer_factory("Surat Pernyataan Koreksi Pencatatan Barang Milik Negara")
-    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    await asyncio.to_thread(doc.build, elements, onFirstPage=footer, onLaterPages=footer)
     buffer.seek(0)
 
     return StreamingResponse(
@@ -2003,7 +2004,7 @@ async def generate_dbhi_pdf(activity_id: str, dbhi_type: str, _user: dict = Depe
     ], doc.width))
 
     footer = _page_footer_factory(dbhi_config["title"].replace("\n", " - "))
-    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    await asyncio.to_thread(doc.build, elements, onFirstPage=footer, onLaterPages=footer)
     buffer.seek(0)
 
     filename = f"DBHI_{dbhi_type}_{activity_id[:8]}.pdf"
@@ -2241,7 +2242,7 @@ async def generate_rhi_pdf(activity_id: str, _user: dict = Depends(require_user_
     ], doc.width))
 
     footer = _page_footer_factory("Rekapitulasi Hasil Inventarisasi Barang Milik Negara (RHI)")
-    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    await asyncio.to_thread(doc.build, elements, onFirstPage=footer, onLaterPages=footer)
     buffer.seek(0)
     return StreamingResponse(buffer, media_type="application/pdf",
                              headers={"Content-Disposition": f'attachment; filename="RHI_{activity_id[:8]}.pdf"'})
@@ -2449,7 +2450,7 @@ async def generate_dbkp_pdf(activity_id: str, _user: dict = Depends(require_user
     ], doc.width))
 
     footer = _page_footer_factory("Daftar Barang Kuasa Pengguna (DBKP) per Golongan")
-    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    await asyncio.to_thread(doc.build, elements, onFirstPage=footer, onLaterPages=footer)
     buffer.seek(0)
     return StreamingResponse(buffer, media_type="application/pdf",
                              headers={"Content-Disposition": f'attachment; filename="DBKP_{activity_id[:8]}.pdf"'})
@@ -2735,7 +2736,7 @@ async def generate_posisi_bmn_pdf(request: Request, _user: dict = Depends(requir
     ], doc.width))
 
     footer = _page_footer_factory("Laporan Posisi BMN di Neraca")
-    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    await asyncio.to_thread(doc.build, elements, onFirstPage=footer, onLaterPages=footer)
     buffer.seek(0)
     return StreamingResponse(buffer, media_type="application/pdf",
                              headers={"Content-Disposition": 'attachment; filename="Posisi_BMN_Neraca.pdf"'})
@@ -2815,7 +2816,7 @@ async def generate_dbr_pdf(request: Request, _user: dict = Depends(require_user_
          'after': await _baris_nip_ttd(ttd['nip'])},
     ], doc.width))
     footer = _page_footer_factory("Daftar Barang Ruangan (DBR)")
-    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    await asyncio.to_thread(doc.build, elements, onFirstPage=footer, onLaterPages=footer)
     buffer.seek(0)
     return StreamingResponse(buffer, media_type="application/pdf",
                              headers={"Content-Disposition": 'attachment; filename="Daftar_Barang_Ruangan.pdf"'})
@@ -2904,7 +2905,7 @@ async def generate_kir_pdf(request: Request, _user: dict = Depends(require_user_
             elements.append(PageBreak())
 
     footer = _page_footer_factory("Kartu Inventaris Ruangan (KIR)")
-    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    await asyncio.to_thread(doc.build, elements, onFirstPage=footer, onLaterPages=footer)
     buffer.seek(0)
     return StreamingResponse(buffer, media_type="application/pdf",
                              headers={"Content-Disposition": 'attachment; filename="Kartu_Inventaris_Ruangan.pdf"'})
@@ -3039,7 +3040,7 @@ async def generate_penyusutan_pdf(
     ], doc.width))
 
     footer = _page_footer_factory("Laporan Penyusutan BMN")
-    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    await asyncio.to_thread(doc.build, elements, onFirstPage=footer, onLaterPages=footer)
     buffer.seek(0)
     return StreamingResponse(buffer, media_type="application/pdf",
                              headers={"Content-Disposition": 'attachment; filename="Laporan_Penyusutan_BMN.pdf"'})
@@ -3188,7 +3189,7 @@ async def generate_lbkp_pdf(
          'after': await _baris_nip_ttd(ttd['nip'])},
     ], doc.width))
     footer = _page_footer_factory("LBKP per Golongan")
-    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    await asyncio.to_thread(doc.build, elements, onFirstPage=footer, onLaterPages=footer)
     buffer.seek(0)
     suffix = f"_S{semester}" if semester else ""
     return StreamingResponse(
@@ -3337,7 +3338,7 @@ async def generate_lkb_pdf(request: Request, _user: dict = Depends(require_user_
          'after': await _baris_nip_ttd(ttd['nip'])},
     ], doc.width))
     footer = _page_footer_factory("Laporan Kondisi Barang (LKB)")
-    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    await asyncio.to_thread(doc.build, elements, onFirstPage=footer, onLaterPages=footer)
     buffer.seek(0)
     return StreamingResponse(
         buffer, media_type="application/pdf",
@@ -3669,7 +3670,7 @@ async def generate_calbmn_pdf(
          'after': await _baris_nip_ttd(ttd['nip'])},
     ], doc.width))
     footer = _page_footer_factory("CaLBMN — Bahan Penyusunan (Pra-isi)")
-    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    await asyncio.to_thread(doc.build, elements, onFirstPage=footer, onLaterPages=footer)
     buffer.seek(0)
     suffix = f"_S{semester}" if semester else ""
     return StreamingResponse(
@@ -4006,7 +4007,7 @@ async def generate_bahi_pdf(activity_id: str, _user: dict = Depends(require_user
     elements.extend(_blok_tembusan(settings, activity))
 
     footer = _page_footer_factory("Berita Acara Hasil Inventarisasi Barang Milik Negara (BAHI)")
-    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    await asyncio.to_thread(doc.build, elements, onFirstPage=footer, onLaterPages=footer)
     buffer.seek(0)
     return StreamingResponse(buffer, media_type="application/pdf",
                              headers={"Content-Disposition": f'attachment; filename="BAHI_{activity_id[:8]}.pdf"'})
@@ -4203,7 +4204,7 @@ async def generate_sp_hasil_pdf(activity_id: str, _user: dict = Depends(require_
     ], doc.width))
 
     footer = _page_footer_factory("Surat Pernyataan Hasil Inventarisasi Barang Milik Negara")
-    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    await asyncio.to_thread(doc.build, elements, onFirstPage=footer, onLaterPages=footer)
     buffer.seek(0)
     return StreamingResponse(buffer, media_type="application/pdf",
                              headers={"Content-Disposition": f'attachment; filename="SP_Hasil_{activity_id[:8]}.pdf"'})
@@ -4293,7 +4294,7 @@ async def generate_sp_pelaksanaan_pdf(activity_id: str, _user: dict = Depends(re
     ], doc.width))
 
     footer = _page_footer_factory("Surat Pernyataan Pelaksanaan Inventarisasi Barang Milik Negara")
-    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    await asyncio.to_thread(doc.build, elements, onFirstPage=footer, onLaterPages=footer)
     buffer.seek(0)
     return StreamingResponse(buffer, media_type="application/pdf",
                              headers={"Content-Disposition": f'attachment; filename="SP_Pelaksanaan_{activity_id[:8]}.pdf"'})
@@ -4600,7 +4601,7 @@ async def _generate_cover_page(activity, settings):
     if catatan:
         elements.append(Paragraph(catatan, footer_style))
 
-    doc.build(elements)
+    await asyncio.to_thread(doc.build, elements)
     buffer.seek(0)
     return buffer
 
@@ -5869,7 +5870,7 @@ async def generate_daftar_pemegang_pdf(activity_id: str,
     ], doc.width))
 
     footer = _page_footer_factory("Daftar Pemegang Aset")
-    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    await asyncio.to_thread(doc.build, elements, onFirstPage=footer, onLaterPages=footer)
     buffer.seek(0)
     return StreamingResponse(
         buffer, media_type="application/pdf",
