@@ -48,6 +48,22 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#572] TTD: goresan tinta kini terlihat di mode gelap (kanvas "kertas" terang) — 2026-07-23
+
+Di halaman tanda tangan elektronik, kanvas TTD manual transparan dengan tinta
+gelap (`#0f172a`) di atas latar kartu yang **gelap** saat mode gelap → goresan
+**nyaris tak terlihat** saat menandatangani. Diperbaiki di `SignatureCapture.jsx`
+(dipakai halaman TTD publik & simpan spesimen pejabat): kanvas kini punya latar
+**"kertas" terang tetap** (di mode gelap MAUPUN terang) sehingga tinta gelap
+selalu kontras & terlihat.
+
+Penting: warna tinta TIDAK diubah jadi putih — kanvas tetap transparan dan PNG
+tersimpan (`getTrimmedCanvas`) tetap transparan + tinta gelap, sehingga benar
+saat disematkan ke PDF berlatar putih (laporan/BAST). Latar terang murni lapisan
+tampilan.
+
+---
+
 ## [#571] Konversi WebP Fase 2: foto pegawai (perluas registry sumber) — 2026-07-23
 
 Melanjutkan konverter WebP latar (#570) ke **foto pegawai** — sesuai urutan

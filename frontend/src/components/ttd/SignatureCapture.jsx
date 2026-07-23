@@ -201,7 +201,11 @@ export default function SignatureCapture({ onSave, saving = false, tokenQuery = 
 
       {mode === "gambar" ? (
         <div ref={wrapRef}
-          className="rounded-xl border-2 border-dashed border-border bg-[repeating-linear-gradient(45deg,transparent,transparent_10px,rgba(120,120,120,0.05)_10px,rgba(120,120,120,0.05)_20px)] overflow-hidden">
+          className="rounded-xl border-2 border-dashed border-border overflow-hidden"
+          style={{ background: "repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(120,120,120,0.06) 10px, rgba(120,120,120,0.06) 20px), #f8fafc" }}>
+          {/* Latar "kertas" TERANG tetap (mode gelap MAUPUN terang) agar goresan
+              tinta gelap #0f172a selalu terlihat. Kanvas transparan → PNG tersimpan
+              (getTrimmedCanvas) tetap transparan+tinta gelap, benar utk PDF putih. */}
           <SignatureCanvas ref={sigRef}
             penColor="#0f172a"
             minWidth={0.7} maxWidth={2.9} velocityFilterWeight={0.7}
