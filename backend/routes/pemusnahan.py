@@ -15,7 +15,7 @@ from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
 )
 from db import db, fs_bucket
-from shared_utils import kode_satker_user, scope_query_field_satker, blok_ttd_kpb_titik, delete_document_from_gridfs, get_document_from_gridfs
+from shared_utils import kode_satker_user, scope_query_field_satker, pastikan_akses_dok_satker, blok_ttd_kpb_titik, delete_document_from_gridfs, get_document_from_gridfs
 from pemusnahan_utils import (
     CARA_PEMUSNAHAN, kelayakan_musnah, rekap_pemusnahan,
     usulan_penghapusan_dari_ba, validate_pemusnahan,
@@ -293,9 +293,11 @@ def _lampiran_ext(filename: str) -> str:
 async def unggah_lampiran_ba(ba_id: str, file: UploadFile = File(...),
                              user: dict = Depends(require_writer)):
     """Unggah foto bukti/scan BA (PDF/gambar, maks 10MB, 10 berkas)."""
-    ba = await db.pemusnahan.find_one({"id": ba_id}, {"_id": 0, "id": 1, "lampiran": 1})
+    ba = await db.pemusnahan.find_one(
+        {"id": ba_id}, {"_id": 0, "id": 1, "lampiran": 1, "kode_satker": 1})
     if not ba:
         raise HTTPException(status_code=404, detail="BA tidak ditemukan")
+    await pastikan_akses_dok_satker(user, ba)
     if len(ba.get("lampiran") or []) >= _MAX_LAMPIRAN:
         raise HTTPException(status_code=400,
                             detail=f"Maksimal {_MAX_LAMPIRAN} lampiran per BA")
@@ -340,7 +342,9 @@ async def unduh_lampiran_ba(ba_id: str, file_id: str, request: Request,
                             _user: dict = Depends(require_user_or_query_token)):
     """Stream lampiran BA (menerima header ATAU ?token untuk window.open)."""
     ba = await db.pemusnahan.find_one(
-        {"id": ba_id, "lampiran.file_id": file_id}, {"_id": 0, "lampiran.$": 1})
+        scope_query_field_satker(
+            _user, {"id": ba_id, "lampiran.file_id": file_id}),
+        {"_id": 0, "lampiran.$": 1})
     if not ba or not ba.get("lampiran"):
         raise HTTPException(status_code=404, detail="Lampiran tidak ditemukan")
     meta = ba["lampiran"][0]
@@ -361,7 +365,7 @@ async def hapus_lampiran_ba(ba_id: str, file_id: str,
                             _admin: dict = Depends(require_admin)):
     """Hapus lampiran salah unggah (khusus admin)."""
     res = await db.pemusnahan.update_one(
-        {"id": ba_id},
+        scope_query_field_satker(_admin, {"id": ba_id}),
         {"$pull": {"lampiran": {"file_id": file_id}},
          "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}})
     if res.matched_count == 0:

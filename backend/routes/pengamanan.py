@@ -15,7 +15,7 @@ from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
 )
 from db import db, fs_bucket
-from shared_utils import kode_satker_user, scope_query_field_satker, delete_document_from_gridfs, get_document_from_gridfs, nama_file_disposition
+from shared_utils import kode_satker_user, scope_query_field_satker, pastikan_akses_dok_satker, delete_document_from_gridfs, get_document_from_gridfs, nama_file_disposition
 from pengamanan_utils import (
     BUTIR_CHECKLIST, JENIS_DOKUMEN, JENIS_KEKURANGAN, JENIS_OBJEK_CHECKLIST,
     KATEGORI_KASUS, KATEGORI_OBJEK_ASURANSI, KATEGORI_SERTIPIKASI,
@@ -342,9 +342,10 @@ async def unggah_lampiran_dokumen(dok_id: str, file: UploadFile = File(...),
                                   user: dict = Depends(require_writer)):
     """Unggah scan dokumen kepemilikan (PDF/gambar, maks 10MB, 10 berkas)."""
     d = await db.pengamanan_dokumen.find_one(
-        {"id": dok_id}, {"_id": 0, "id": 1, "lampiran": 1})
+        {"id": dok_id}, {"_id": 0, "id": 1, "lampiran": 1, "kode_satker": 1})
     if not d:
         raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan")
+    await pastikan_akses_dok_satker(user, d)
     if len(d.get("lampiran") or []) >= _MAX_LAMPIRAN:
         raise HTTPException(status_code=400,
                             detail=f"Maksimal {_MAX_LAMPIRAN} lampiran per dokumen")
@@ -389,7 +390,9 @@ async def unduh_lampiran_dokumen(dok_id: str, file_id: str, request: Request,
                                  _user: dict = Depends(require_user_or_query_token)):
     """Stream lampiran dokumen (menerima header ATAU ?token)."""
     d = await db.pengamanan_dokumen.find_one(
-        {"id": dok_id, "lampiran.file_id": file_id}, {"_id": 0, "lampiran.$": 1})
+        scope_query_field_satker(
+            _user, {"id": dok_id, "lampiran.file_id": file_id}),
+        {"_id": 0, "lampiran.$": 1})
     if not d or not d.get("lampiran"):
         raise HTTPException(status_code=404, detail="Lampiran tidak ditemukan")
     meta = d["lampiran"][0]
@@ -411,7 +414,7 @@ async def hapus_lampiran_dokumen(dok_id: str, file_id: str,
                                  _admin: dict = Depends(require_admin)):
     """Hapus lampiran salah unggah (khusus admin)."""
     res = await db.pengamanan_dokumen.update_one(
-        {"id": dok_id},
+        scope_query_field_satker(_admin, {"id": dok_id}),
         {"$pull": {"lampiran": {"file_id": file_id}},
          "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}})
     if res.matched_count == 0:

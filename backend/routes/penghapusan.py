@@ -277,9 +277,10 @@ async def unggah_lampiran_usulan(usulan_id: str, file: UploadFile = File(...),
                                  user: dict = Depends(require_writer)):
     """Unggah scan SK/dokumen pendukung (PDF/gambar, maks 10MB, 10 berkas)."""
     u = await db.usulan_penghapusan.find_one(
-        {"id": usulan_id}, {"_id": 0, "id": 1, "lampiran": 1})
+        {"id": usulan_id}, {"_id": 0, "id": 1, "lampiran": 1, "kode_satker": 1})
     if not u:
         raise HTTPException(status_code=404, detail="Usulan tidak ditemukan")
+    await pastikan_akses_dok_satker(user, u)
     if len(u.get("lampiran") or []) >= _MAX_LAMPIRAN:
         raise HTTPException(status_code=400,
                             detail=f"Maksimal {_MAX_LAMPIRAN} lampiran per usulan")
@@ -324,7 +325,9 @@ async def unduh_lampiran_usulan(usulan_id: str, file_id: str, request: Request,
                                 _user: dict = Depends(require_user_or_query_token)):
     """Stream lampiran usulan (menerima header ATAU ?token)."""
     u = await db.usulan_penghapusan.find_one(
-        {"id": usulan_id, "lampiran.file_id": file_id}, {"_id": 0, "lampiran.$": 1})
+        scope_query_field_satker(
+            _user, {"id": usulan_id, "lampiran.file_id": file_id}),
+        {"_id": 0, "lampiran.$": 1})
     if not u or not u.get("lampiran"):
         raise HTTPException(status_code=404, detail="Lampiran tidak ditemukan")
     meta = u["lampiran"][0]
@@ -345,7 +348,7 @@ async def hapus_lampiran_usulan(usulan_id: str, file_id: str,
                                 _admin: dict = Depends(require_admin)):
     """Hapus lampiran salah unggah (khusus admin)."""
     res = await db.usulan_penghapusan.update_one(
-        {"id": usulan_id},
+        scope_query_field_satker(_admin, {"id": usulan_id}),
         {"$pull": {"lampiran": {"file_id": file_id}},
          "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}})
     if res.matched_count == 0:

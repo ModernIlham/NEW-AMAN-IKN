@@ -506,9 +506,11 @@ def _lampiran_ext(filename: str) -> str:
 async def unggah_lampiran_psp(sk_id: str, file: UploadFile = File(...),
                               user: dict = Depends(require_writer)):
     """Unggah scan SK/dokumen pendukung (PDF/gambar, maks 10MB, 10 berkas)."""
-    sk = await db.psp.find_one({"id": sk_id}, {"_id": 0, "id": 1, "lampiran": 1})
+    sk = await db.psp.find_one(
+        {"id": sk_id}, {"_id": 0, "id": 1, "lampiran": 1, "kode_satker": 1})
     if not sk:
         raise HTTPException(status_code=404, detail="SK tidak ditemukan")
+    await pastikan_akses_dok_satker(user, sk)
     if len(sk.get("lampiran") or []) >= _MAX_LAMPIRAN:
         raise HTTPException(status_code=400,
                             detail=f"Maksimal {_MAX_LAMPIRAN} lampiran per SK")
@@ -553,7 +555,9 @@ async def unduh_lampiran_psp(sk_id: str, file_id: str, request: Request,
                              _user: dict = Depends(require_user_or_query_token)):
     """Stream lampiran SK PSP (menerima header ATAU ?token)."""
     sk = await db.psp.find_one(
-        {"id": sk_id, "lampiran.file_id": file_id}, {"_id": 0, "lampiran.$": 1})
+        scope_query_field_satker(
+            _user, {"id": sk_id, "lampiran.file_id": file_id}),
+        {"_id": 0, "lampiran.$": 1})
     if not sk or not sk.get("lampiran"):
         raise HTTPException(status_code=404, detail="Lampiran tidak ditemukan")
     meta = sk["lampiran"][0]
@@ -574,7 +578,7 @@ async def hapus_lampiran_psp(sk_id: str, file_id: str,
                              _admin: dict = Depends(require_admin)):
     """Hapus lampiran salah unggah (khusus admin)."""
     res = await db.psp.update_one(
-        {"id": sk_id},
+        scope_query_field_satker(_admin, {"id": sk_id}),
         {"$pull": {"lampiran": {"file_id": file_id}},
          "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}})
     if res.matched_count == 0:

@@ -48,6 +48,31 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#542] Keamanan: guard satker pada lampiran 8 modul (IDOR sub-resource) — 2026-07-23
+
+Sapuan audit menemukan endpoint LAMPIRAN (unggah/unduh/hapus) di 8 modul
+mengambil dokumen INDUK by-id TANPA filter/guard satker — inkonsisten dengan
+CRUD utamanya yang sudah ter-scope. User satker A yang tahu id induk + file_id
+bisa **unduh/hapus/unggah** lampiran milik satker B (dokumen usulan
+penghapusan/pemindahtanganan, BAST pemusnahan, polis pengamanan, dokumen
+pengadaan, SK PSP, BA insidentil wasdal, perjanjian pemanfaatan).
+
+Pola baku diterapkan seragam di: `pemanfaatan`, `penggunaan` (psp),
+`penghapusan`, `pengamanan`, `pemusnahan`, `pengadaan`, `pemindahtanganan`,
+`wasdal`:
+- **Unduh** — filter lookup induk dibungkus `scope_query_field_satker` (induk
+  satker lain → 404).
+- **Unggah** — proyeksi induk menyertakan `kode_satker` + `pastikan_akses_dok_satker`
+  setelah cek 404.
+- **Hapus** — filter `update_one` dibungkus `scope_query_field_satker`.
+
+Semua koleksi induk memang menyimpan `kode_satker` saat create → same-satker
+tak terputus; super-admin & dokumen era-lama tetap lolos (aman-mundur).
+
+Verifikasi: `pytest tests/unit` 638 lulus; `compileall` bersih. Backend-only.
+
+---
+
 ## [#541] Keamanan: isolasi satker pada Sinkronisasi SIMAN — 2026-07-23
 
 Lanjutan sapuan audit: modul SIMAN V2 (`routes/siman.py`) beroperasi pada
