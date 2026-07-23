@@ -165,6 +165,32 @@ async def require_admin(user: dict = Depends(require_user)) -> dict:
     return user
 
 
+def is_super_admin(user: dict) -> bool:
+    """SUPER-ADMIN = admin PUSAT lintas-satker: role 'admin' DAN `kode_satker`
+    KOSONG. Bedanya dengan admin biasa:
+      - Admin satker (role 'admin' + kode_satker terisi): mengelola HANYA
+        satkernya (data ter-isolasi M-SCOPE).
+      - Super-admin (role 'admin' + kode_satker ''): lintas-satker, memegang
+        operasi SELURUH-DB (backup / restore / reset sistem).
+    Model ini (lihat users.py) sengaja memakai kode_satker kosong sebagai
+    penanda super-admin, bukan role kelima."""
+    return (user.get("role") == "admin"
+            and not str(user.get("kode_satker") or "").strip())
+
+
+async def require_super_admin(user: dict = Depends(require_user)) -> dict:
+    """Gate SUPER-ADMIN pusat (lintas-satker) untuk operasi seluruh-DB yang
+    menyentuh SEMUA satker (backup / restore / reset). Admin yang terikat satu
+    satker ditolak 403 — mereka tak boleh mengunduh/menimpa/menghapus data
+    satker lain."""
+    if not is_super_admin(user):
+        raise HTTPException(
+            status_code=403,
+            detail=("Khusus super-admin pusat (admin lintas-satker). Admin satker "
+                    "tidak dapat mengakses backup/restore/reset seluruh sistem."))
+    return user
+
+
 async def require_writer(user: dict = Depends(require_user)) -> dict:
     """Gate endpoint TULIS: tolak role 'viewer' (read-only kini ditegakkan di
     SERVER, bukan hanya disembunyikan UI). Role legacy 'user' = operator;
