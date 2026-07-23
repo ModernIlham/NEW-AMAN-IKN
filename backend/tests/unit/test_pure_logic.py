@@ -38,6 +38,19 @@ def test_password_hash_roundtrip():
     assert au.verify_password("wrong", h) is False
 
 
+def test_verify_password_dummy_always_false_and_runs_bcrypt():
+    # Penyetara waktu login untuk user tak-ada: harus SELALU False, tak pernah
+    # melempar (termasuk input kosong/aneh), dan benar-benar menjalankan bcrypt
+    # (durasi > 0) agar timing setara kasus user ada — anti-enumerasi.
+    import auth_utils as au
+    assert au.verify_password_dummy("apa saja") is False
+    assert au.verify_password_dummy("") is False
+    assert au.verify_password_dummy(None) is False
+    t0 = time.perf_counter()
+    au.verify_password_dummy("x")
+    assert time.perf_counter() - t0 > 0.0
+
+
 def test_jwt_token_claims_and_secret():
     import auth_utils as au
     tok = au.create_token("user-1", "alice")
