@@ -48,6 +48,38 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#588] Cache bersama lintas-worker + rate-limiter via Redis (opsional, ber-feature-flag) — 2026-07-24
+
+Menambah **Redis** sebagai lapisan cache **lintas-worker** opsional. VPS
+menjalankan 2 worker uvicorn; cache ringkasan (stats/opsi-filter/analitik/
+kategori) selama ini `TTLCache` **per-worker**, sehingga setelah tulis aset
+`invalidate_asset_cache()` hanya mengosongkan cache worker yang menangani —
+worker lain menyajikan angka **basi** sampai TTL habis (60–300 dtk). Redis
+menjadikan cache **satu sumber bersama** + invalidasi seketika lintas worker,
+dan memindahkan storage rate-limiter dari MongoDB ke Redis (lebih cepat).
+
+- **Feature flag**: aktif HANYA bila `REDIS_URL` di-set di `backend/.env`.
+  Kosong → cache per-worker + rate-limit MongoDB (perilaku lama, tak berubah).
+  Redis mati/menolak → operasi cache di-swallow (miss → hitung ulang), limiter
+  jatuh ke in-memory; aplikasi tetap jalan. Pipeline deploy tak diubah
+  (`backend/.env` awet lintas rilis). Rollback = hapus `REDIS_URL` + restart.
+- **Invalidasi tanpa scan**: penghitung **generasi** per namespace
+  (`INCR aman:gen:<ns>`) — O(1), atomik, seketika di kedua worker; kunci
+  generasi lama kedaluwarsa via TTL. Kunci cache tetap menyertakan
+  **kode_satker** → **isolasi satker terjaga** (sama seperti cache in-memory).
+- **Rate-limiter**: prioritas storage Redis → MongoDB → in-memory (semua
+  ber-fallback in-memory saat store bermasalah); di pytest tetap in-memory.
+- **Health**: `/api/health/deep` melaporkan `checks.redis` bila diaktifkan
+  (Redis tak sehat = info degradasi, TIDAK menjatuhkan gerbang deploy).
+- **Pemasangan sekali jalan di VPS**: `scripts/setup_redis.sh` (apt install +
+  bind localhost + password + sisip env + restart), panduan `docs/REDIS.md`.
+  Redis bind ke `127.0.0.1` + `requirepass`; `REDIS_URL` hanya sisi server.
+- Modul baru `redis_utils.py` (klien async ber-feature-flag) + helper
+  `cache_get`/`cache_set` di `shared_utils`; dependensi `redis==5.2.1`; uji
+  unit `test_redis_utils.py`.
+
+---
+
 ## [#587] Pencarian cepat via Meilisearch (opsional, ber-feature-flag) — aset, surat, persediaan — 2026-07-24
 
 Menambah **Meilisearch** sebagai mesin pencari eksternal opsional untuk
