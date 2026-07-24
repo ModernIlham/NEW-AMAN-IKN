@@ -28,6 +28,7 @@ from shared_utils import (
 )
 from routes.websocket import notify_asset_change
 from photo_rotate_utils import normalisasi_derajat, rotate_jpeg_bytes
+from meili_utils import jadwalkan_sync, jadwalkan_hapus, cari_id_aset
 
 logger = logging.getLogger(__name__)
 assets_router = APIRouter()
@@ -356,8 +357,14 @@ async def get_assets(
     _user: dict = Depends(require_user),
 ):
     """Get paginated assets with advanced filters - optimized for millions of records"""
+    # PENCARIAN TEKS BEBAS via Meilisearch (bila aktif): resolve kata kunci →
+    # daftar id kandidat ter-scope, lalu batasi kueri Mongo ke id itu. SEMUA
+    # filter lanjutan/sort/paginasi/isolasi tetap dijalankan Mongo (otoritatif).
+    # `meili_ids is None` → Meili nonaktif/gagal → pakai regex Mongo 16-field lama.
+    meili_ids = await cari_id_aset(_user, activity_id, search) if _search_len_ok(search) else None
     query = build_asset_search_query(
-        search=search, category=category, activity_id=activity_id,
+        search=("" if meili_ids is not None else search),
+        category=category, activity_id=activity_id,
         condition=condition, status=status, location=location,
         eselon1_filter=eselon1_filter, eselon2_filter=eselon2_filter,
         stiker_status=stiker_status, inventory_status=inventory_status,
@@ -365,6 +372,9 @@ async def get_assets(
         perolehan_dari=perolehan_dari, user_filter=user_filter, pengguna_nip=pengguna_nip,
         beli_dari=beli_dari, beli_sampai=beli_sampai,
     )
+    if meili_ids is not None:
+        # Daftar kosong = tak ada kecocokan → hasil nihil (bukan "semua").
+        query["id"] = {"$in": meili_ids}
     # ISOLASI SATKER (M-SCOPE): activity_id spesifik → wajib milik satker
     # user; tanpa activity_id → batasi ke seluruh kegiatan satkernya.
     await pastikan_akses_kegiatan_id(_user, activity_id)
@@ -579,7 +589,12 @@ async def get_assets_stats(search: str = "", category: str = "", activity_id: st
     if activity_id:
         query["activity_id"] = activity_id
     query = await scope_query_aset(_user, query)
-    if _search_len_ok(search):
+    # Pencarian teks bebas via Meilisearch bila aktif (konsisten dgn GET /assets
+    # sehingga total statistik = total daftar). Fallback → regex 5-field lama.
+    meili_ids = await cari_id_aset(_user, activity_id, search) if _search_len_ok(search) else None
+    if meili_ids is not None:
+        query["id"] = {"$in": meili_ids}
+    elif _search_len_ok(search):
         rx = _rx(search)
         query["$or"] = [
             {"asset_code": rx},
@@ -907,6 +922,8 @@ async def create_asset(asset: AssetCreate, request: Request, _user: dict = Depen
     
     logger.info(f"Asset created: {asset.asset_code}")
     invalidate_asset_cache()
+    # Sinkron indeks Meilisearch (best-effort, non-blocking; no-op bila nonaktif).
+    jadwalkan_sync("assets", asset_doc)
 
     # Jurnal Buku Barang otomatis (M-MODUL): aset baru → entri perolehan.
     # 101 Pembelian bila asal perolehan menyebut beli/pengadaan; selain itu
@@ -1878,6 +1895,8 @@ async def update_asset(asset_id: str, asset: AssetCreate, request: Request,
     # Respons TANPA media: klien sudah memegang foto/dokumennya sendiri —
     # mengirim balik base64 (bisa >1MB) di tiap simpan memboroskan kuota HP.
     updated_asset = _strip_media(await db.assets.find_one({"id": asset_id}, {"_id": 0}))
+    # Sinkron indeks Meilisearch (best-effort; field skalar pencarian utuh di sini).
+    jadwalkan_sync("assets", updated_asset)
     # Real-time notification
     await notify_asset_change(asset.activity_id, "asset_updated", {"id": asset_id, "asset_code": asset.asset_code, "asset_name": asset.asset_name}, audit_user, user_id=audit_user_id)
     return AssetResponse(**updated_asset)
@@ -2298,6 +2317,8 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
     # Respons TANPA media (lihat _strip_media) — juga memperkecil dokumen
     # idempotency yang disimpan di bawah.
     updated_asset = _strip_media(await db.assets.find_one({"id": asset_id}, {"_id": 0}))
+    # Sinkron indeks Meilisearch (best-effort; no-op bila nonaktif).
+    jadwalkan_sync("assets", updated_asset)
     await notify_asset_change(
         merged.get("activity_id", ""), "asset_updated",
         {"id": asset_id, "asset_code": merged.get("asset_code", ""), "asset_name": merged.get("asset_name", "")},
@@ -2340,6 +2361,8 @@ async def delete_asset(asset_id: str, request: Request, _admin: dict = Depends(r
 
     logger.info(f"Asset deleted: {asset_id}")
     invalidate_asset_cache()
+    # Cabut dari indeks Meilisearch (best-effort; no-op bila nonaktif).
+    jadwalkan_hapus("assets", asset_id)
     audit_user = _admin.get("name") or _admin.get("username") or request.headers.get("X-Audit-User", "unknown")
     audit_user_id = _admin.get("id") or request.headers.get("X-Audit-User-Id", "")
     # Nilai perolehan direkam di changes agar LBKP mutasi-kurang mendatang

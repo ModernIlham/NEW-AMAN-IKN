@@ -26,6 +26,7 @@ from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
 )
 from db import db
+from meili_utils import jadwalkan_sync, jadwalkan_hapus, cari_id_persediaan
 from pegawai_utils import baris_identitas_ttd
 from persediaan_akun_utils import akun_persediaan
 from persediaan_fields import EDITABLE_FIELD_NAMES
@@ -1082,7 +1083,12 @@ async def list_persediaan(
     if gudang.strip():
         query["lokasi"] = {"$regex": f"^{re.escape(gudang.strip())}$",
                            "$options": "i"}
-    if search:
+    # Pencarian teks bebas via Meilisearch bila aktif → id kandidat ter-scope;
+    # fallback → regex Mongo lama. Scope satker tetap ditegakkan query di atas.
+    meili_ids = await cari_id_persediaan(_user, search) if search.strip() else None
+    if meili_ids is not None:
+        query["id"] = {"$in": meili_ids}
+    elif search:
         s = search.strip()
         s_esc = re.escape(s)
         query["$or"] = [
@@ -1184,6 +1190,7 @@ async def create_persediaan(data: PersediaanCreate, _user: dict = Depends(requir
         "updated_at": now,
     }
     await db.persediaan.insert_one({**doc})
+    jadwalkan_sync("persediaan", doc)  # sinkron indeks Meili (best-effort)
     return _doc(doc)
 
 
@@ -1225,6 +1232,7 @@ async def update_persediaan(
         if not exists:
             raise HTTPException(status_code=404, detail="Barang persediaan tidak ditemukan")
         raise HTTPException(status_code=409, detail="Versi berubah — muat ulang data lalu simpan lagi")
+    jadwalkan_sync("persediaan", res)  # sinkron indeks Meili (best-effort)
     return _doc(res)
 
 
@@ -1774,4 +1782,5 @@ async def delete_persediaan(item_id: str, _admin: dict = Depends(require_admin))
         raise HTTPException(status_code=409,
                             detail="Barang masih punya stok/layer — keluarkan stoknya dulu lewat transaksi")
     await db.persediaan.delete_one({"id": item_id})
+    jadwalkan_hapus("persediaan", item_id)  # cabut dari indeks Meili (best-effort)
     return {"message": "Barang persediaan dihapus"}

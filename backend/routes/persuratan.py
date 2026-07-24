@@ -29,6 +29,7 @@ from auth_utils import require_admin, require_user, require_writer
 from db import db
 from shared_utils import (log_audit, kode_satker_user,
                           pastikan_akses_dok_satker, scope_query_field_satker)
+from meili_utils import jadwalkan_sync, jadwalkan_hapus, cari_id_surat
 from persuratan_utils import (
     FORMAT_NOMOR_DEFAULT, JENIS_NASKAH, KODE_KEAMANAN, MODUL_AMAN,
     STATUS_KELUAR, STATUS_MASUK, TRANSISI_KELUAR, TRANSISI_MASUK,
@@ -311,7 +312,12 @@ async def daftar_surat(jenis: str = "", status: str = "", modul: str = "",
         query["modul"] = modul
     if tahun.strip().isdigit():
         query["tahun"] = int(tahun)
-    if q.strip():
+    # Pencarian teks bebas via Meilisearch bila aktif → id kandidat ter-scope;
+    # fallback → regex Mongo lama. Isolasi satker tetap ditegakkan Mongo di bawah.
+    meili_ids = await cari_id_surat(_user, q) if q.strip() else None
+    if meili_ids is not None:
+        query["id"] = {"$in": meili_ids}
+    elif q.strip():
         import re as _re
         rx = {"$regex": _re.escape(q.strip()), "$options": "i"}
         query["$or"] = [{"nomor": rx}, {"perihal": rx}, {"tujuan": rx},
@@ -396,6 +402,7 @@ async def booking_surat_keluar(payload: SuratKeluarIn,
         "updated_at": now.isoformat(),
     }
     await db.surat.insert_one({**record})
+    jadwalkan_sync("surat", record)  # sinkron indeks Meili (best-effort)
     await log_audit("booking_surat", record["kegiatan_id"],
                     username=user.get("username", "system"),
                     detail=f"Booking nomor surat keluar {nomor} — {record['perihal']}")
@@ -436,6 +443,7 @@ async def agenda_surat_masuk(payload: SuratMasukIn,
         "updated_at": now.isoformat(),
     }
     await db.surat.insert_one({**record})
+    jadwalkan_sync("surat", record)  # sinkron indeks Meili (best-effort)
     await log_audit("agenda_surat_masuk", record["kegiatan_id"],
                     username=user.get("username", "system"),
                     detail=f"Agenda surat masuk #{no_agenda}/{tahun}: {record['nomor']}")
@@ -478,6 +486,7 @@ async def transisi_surat(surat_id: str, payload: TransisiIn,
     if res is None:
         raise HTTPException(status_code=409,
                             detail="Status surat berubah — muat ulang dulu")
+    jadwalkan_sync("surat", res)  # sinkron indeks Meili (best-effort)
     await log_audit("status_surat", s.get("kegiatan_id", ""),
                     username=user.get("username", "system"),
                     detail=f"Surat {s.get('nomor')} → {ke}"
@@ -522,6 +531,7 @@ async def ubah_surat(surat_id: str, payload: UbahSuratIn,
     res = await db.surat.find_one_and_update(
         {"id": surat_id}, {"$set": update},
         projection=_PROJ, return_document=ReturnDocument.AFTER)
+    jadwalkan_sync("surat", res)  # sinkron indeks Meili (best-effort)
     await log_audit("ubah_surat", s.get("kegiatan_id", ""),
                     username=user.get("username", "system"),
                     detail=f"Ubah surat {s.get('nomor')}: "
@@ -546,6 +556,7 @@ async def hapus_surat(surat_id: str, user: dict = Depends(require_admin)):
             "Surat keluar yang sudah DISAHKAN tidak dapat dihapus — batalkan "
             "dulu (dengan alasan) agar jejak nomor resmi tetap tercatat"))
     await db.surat.delete_one({"id": surat_id})
+    jadwalkan_hapus("surat", surat_id)  # cabut dari indeks Meili (best-effort)
     await log_audit("hapus_surat", s.get("kegiatan_id", ""),
                     username=user.get("username", "system"),
                     detail=(f"Hapus surat {s.get('jenis')} {s.get('nomor')} "

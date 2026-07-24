@@ -48,6 +48,39 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#587] Pencarian cepat via Meilisearch (opsional, ber-feature-flag) — aset, surat, persediaan — 2026-07-24
+
+Menambah **Meilisearch** sebagai mesin pencari eksternal opsional untuk
+mempercepat pencarian teks bebas pada **Aset**, **Persuratan**, dan
+**Persediaan**. Regex infix Mongo tak bisa memakai index (COLLSCAN dalam
+lingkup satker) dan makin lambat saat data membengkak; Mongo self-hosted kita
+tak punya Atlas Search, jadi mesin pencari eksternal adalah padanan
+"trigram/n-gram" yang tepat (toleran salah ketik + prefiks, milidetik).
+
+- **Feature flag**: aktif HANYA bila `MEILI_URL` & `MEILI_MASTER_KEY` di-set di
+  `backend/.env`. Bila kosong / Meili mati / menolak → pencarian **otomatis
+  jatuh-balik** ke regex Mongo lama. Tidak ada yang rusak. Pipeline deploy
+  TIDAK diubah (deploy mengawetkan `backend/.env`).
+- **Arsitektur aman**: Meili me-resolve kata kunci → daftar **id kandidat**
+  ter-scope, lalu id itu diumpankan ke kueri Mongo yang sudah ada
+  (`{"id": {"$in": [...]}}`). **Semua** filter/urutan/paginasi/**isolasi
+  satker tetap ditegakkan Mongo** (otoritatif) — Meili hanya akselerator
+  pencocokan teks; hasilnya tak bisa membocorkan data lintas-satker. Field
+  harga/PII sensitif tidak diindeks.
+- **Sinkronisasi**: hook best-effort non-blocking pada CRUD (buat/ubah/hapus)
+  ketiga koleksi — kegagalan sinkron tak menggagalkan permintaan.
+- **Reindex massal**: `POST /api/search/reindex` (super-admin) atau CLI
+  `python -m scripts.reindex_search`; status via `GET /api/search/status`
+  (admin). Jalankan setelah aktivasi pertama / impor massal / restore backup.
+- **Pemasangan sekali jalan di VPS**: `scripts/setup_meilisearch.sh` (unduh
+  binari + systemd + master key + sisip env + reindex), unit systemd
+  `scripts/meilisearch.service`, panduan lengkap `docs/MEILISEARCH.md`. Meili
+  bind ke `127.0.0.1` (tak terpapar publik); master key hanya sisi server.
+- Modul baru `meili_utils.py` (klien httpx ber-feature-flag) +
+  `routes/search_admin.py`; uji unit logika murni `test_meili_utils.py`.
+
+---
+
 ## [#586] Optimasi search: abaikan kata kunci < 2 huruf (cegah COLLSCAN 1-huruf) — 2026-07-24
 
 Langkah cepat mempercepat pencarian aset **tanpa mengubah cakupan 16-field**.
