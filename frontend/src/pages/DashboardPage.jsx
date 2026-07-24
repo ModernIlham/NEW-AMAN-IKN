@@ -591,11 +591,16 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     }
   }, [activity?.id, setSearchInput]);
 
-  const handleBatchUpdate = useCallback(async (updates) => {
-    if (selectedAssets.size === 0) return;
+  const handleBatchUpdate = useCallback(async (updates, idsArg) => {
+    // Snapshot ID target dari panel (idsArg): simpan massal KEBAL terhadap
+    // seleksi yang dikosongkan tepat setelah klik Terapkan — JANGAN baca ulang
+    // `selectedAssets` yang bisa keburu kosong (dulu → early-return senyap,
+    // data batal tersimpan tanpa pesan). Fallback ke state bila idsArg absen.
+    const allIds = (Array.isArray(idsArg) && idsArg.length)
+      ? idsArg : Array.from(selectedAssets);
+    if (allIds.length === 0) return;
     setBatchUpdating(true);
     try {
-      const allIds = Array.from(selectedAssets);
       const CHUNK_SIZE = 200;
       if (allIds.length > CHUNK_SIZE) {
         let totalUpdated = 0;

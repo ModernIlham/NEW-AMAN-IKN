@@ -397,6 +397,11 @@ const BatchEditPanel = memo(function BatchEditPanel({
   };
 
   const handleApply = async () => {
+    // Snapshot ID aset terpilih SEKARANG (sinkron, sebelum dialog konfirmasi /
+    // render ulang) agar simpan massal tetap jalan walau pengguna langsung
+    // menekan "Kosongkan" seleksi sesudah menekan Terapkan.
+    const targetIds = selectedAssets instanceof Set
+      ? Array.from(selectedAssets) : [...(selectedAssets || [])];
     const finalUpdates = { ...updates };
 
     // Add active doc checklist items with their files
@@ -438,7 +443,7 @@ const BatchEditPanel = memo(function BatchEditPanel({
       if (!ok) return;
     }
 
-    onApply(finalUpdates);
+    onApply(finalUpdates, targetIds);
   };
 
   const activeDocCount = docItems.filter(d => d._active).length;
