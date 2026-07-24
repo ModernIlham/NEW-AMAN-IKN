@@ -89,6 +89,13 @@ async def create_indexes() -> None:
         # upsert $inc harian/bulanan andal & bebas duplikat.
         await db.email_usage.create_index(
             [("lingkup", 1), ("periode", 1)], unique=True, name="email_usage_key")
+        # Peta kolaboratif: share per-kegiatan + kontribusi (titik/komentar).
+        await db.peta_shares.create_index("id", unique=True, name="peta_share_id")
+        await db.peta_shares.create_index([("activity_id", 1), ("created_at", -1)],
+                                          name="peta_share_activity")
+        await db.peta_kolaborasi.create_index("id", unique=True, name="peta_kontrib_id")
+        await db.peta_kolaborasi.create_index([("share_id", 1), ("created_at", 1)],
+                                              name="peta_kontrib_share")
         # Idempotency keys TTL index - auto-cleanup after 24h (offline queues can
         # replay far beyond 5 minutes; keys must stay reserved until then)
         await db.idempotency_keys.create_index("key", unique=True)

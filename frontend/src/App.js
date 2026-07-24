@@ -46,6 +46,7 @@ const WasdalPage = lazy(() => import("./pages/WasdalPage"));
 const PenganggaranPage = lazy(() => import("./pages/PenganggaranPage"));
 const PengadaanPage = lazy(() => import("./pages/PengadaanPage"));
 const TtdPublikPage = lazy(() => import("./pages/TtdPublikPage"));
+const PetaKolaborasiPage = lazy(() => import("./pages/PetaKolaborasiPage"));
 const TtdPermintaanPage = lazy(() => import("./pages/TtdPermintaanPage"));
 const SatkerPage = lazy(() => import("./pages/SatkerPage"));
 const PengaturanPage = lazy(() => import("./pages/PengaturanPage"));
@@ -128,7 +129,8 @@ function App() {
         // sesi berakhir; jangan paksa logout user yang kebetulan login.
         if (status === 401 && !url.includes('/auth/')
             && !url.includes('/ttd/tandatangan') && !url.includes('/ttd/verifikasi')
-            && !url.includes('/ttd/olah-foto')) {
+            && !url.includes('/ttd/olah-foto')
+            && !url.includes('/peta/kolaborasi')) {
           forceLogout("Sesi Anda telah berakhir. Silakan login kembali.");
         }
         return Promise.reject(error);
@@ -337,6 +339,20 @@ function App() {
       <div className="App">
         <Suspense fallback={<PageLoader />}>
           <TtdPublikPage />
+        </Suspense>
+        <Toaster position="top-right" richColors />
+      </div>
+    );
+  }
+
+  // ── HALAMAN PUBLIK PETA KOLABORATIF ────────────────────────────────────
+  // /peta/kolaborasi/:id?token= dibuka SIAPA PUN saat masa tayang aktif; user
+  // login satker terkait juga pasca-kedaluwarsa — sama gate publik e-sign.
+  if (window.location.pathname.startsWith('/peta/kolaborasi/')) {
+    return (
+      <div className="App">
+        <Suspense fallback={<PageLoader />}>
+          <PetaKolaborasiPage />
         </Suspense>
         <Toaster position="top-right" richColors />
       </div>
