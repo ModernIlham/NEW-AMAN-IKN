@@ -100,6 +100,35 @@ function sisaTayang(iso) {
 const apiErr = (e, fb) => e?.response?.data?.detail || fb;
 
 /**
+ * Muat foto lewat axios→blob agar membawa Bearer (operator, termasuk saat share
+ * KEDALUWARSA) MAUPUN ?token= (tamu) — <img src> biasa hanya bisa kirim token,
+ * sehingga operator gagal memuat foto arsip pasca-kedaluwarsa. Object URL
+ * dibebaskan saat lepas untuk cegah bocor memori.
+ */
+function FotoImg({ url, alt = "", className = "", spinner = false, ...rest }) {
+  const [src, setSrc] = useState(null);
+  const [gagal, setGagal] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    let obj = null;
+    setSrc(null); setGagal(false);
+    axios.get(url, { responseType: "blob", timeout: 25000 })
+      .then((r) => { if (alive) { obj = URL.createObjectURL(r.data); setSrc(obj); } })
+      .catch(() => { if (alive) setGagal(true); });
+    return () => { alive = false; if (obj) URL.revokeObjectURL(obj); };
+  }, [url]);
+  if (src) return <img src={src} alt={alt} className={className} {...rest} />;
+  if (gagal) {
+    return spinner
+      ? <div className="text-white/60 text-sm p-8" {...rest}>Gagal memuat foto</div>
+      : <div className={`${className} bg-muted`} {...rest} />;
+  }
+  return spinner
+    ? <div className="flex items-center justify-center p-8" {...rest}><Loader2 className="w-8 h-8 animate-spin text-white/70" /></div>
+    : <div className={`${className} bg-muted animate-pulse`} {...rest} />;
+}
+
+/**
  * Halaman PUBLIK peta kolaboratif (link ber-token). Paritas fitur dengan Peta
  * Aset: pin berwarna per status, clustering, filter status + Barang Serupa,
  * info titik lengkap, tambah titik ber-marker pratinjau, komentar per titik,
@@ -479,7 +508,7 @@ export default function PetaKolaborasiPage() {
     const q = new URLSearchParams();
     if (thumb) q.set("thumb", "1");
     if (token) q.set("token", token);
-    return `${API}/peta/kolaborasi/${id}/aset/${assetId}/foto/${idx}?${q.toString()}`;
+    return `${API}/peta/kolaborasi/${id}/aset/${encodeURIComponent(assetId)}/foto/${idx}?${q.toString()}`;
   }, [id, token]);
 
   const kirimTitik = async () => {
@@ -768,9 +797,7 @@ export default function PetaKolaborasiPage() {
                             onClick={() => setFotoView({ assetId: dipilih.id, jumlah: dipilih.jumlah_foto, index: i })}
                             className="relative w-14 h-14 flex-shrink-0 rounded-lg overflow-hidden border border-border bg-muted cursor-zoom-in"
                             title="Ketuk untuk lihat foto asli" data-testid={`peta-foto-thumb-${i}`}>
-                            <img src={fotoUrl(dipilih.id, i, true)} alt="" loading="lazy"
-                              onError={(e) => { const p = e.currentTarget.parentElement; if (p) p.style.display = "none"; }}
-                              className="w-full h-full object-cover" />
+                            <FotoImg url={fotoUrl(dipilih.id, i, true)} className="w-full h-full object-cover" />
                           </button>
                         ))}
                       </div>
@@ -856,7 +883,7 @@ export default function PetaKolaborasiPage() {
       {/* Foto layar penuh — HANYA foto ASLI (ketuk latar untuk tutup) */}
       {fotoView && (
         <div className="fixed inset-0 z-[900] bg-black flex items-center justify-center" onClick={() => setFotoView(null)} data-testid="peta-foto-fullscreen">
-          <img src={fotoUrl(fotoView.assetId, fotoView.index, false)} alt="Foto aset"
+          <FotoImg key={`${fotoView.assetId}-${fotoView.index}`} url={fotoUrl(fotoView.assetId, fotoView.index, false)} alt="Foto aset" spinner
             className="max-w-full max-h-full object-contain select-none" onClick={(e) => e.stopPropagation()} />
           <button onClick={() => setFotoView(null)} aria-label="Tutup foto"
             className="absolute top-3 right-3 w-11 h-11 rounded-full bg-white/15 text-white flex items-center justify-center backdrop-blur hover:bg-white/25" data-testid="peta-foto-tutup">
