@@ -48,6 +48,32 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#582] Peta Kolaboratif: paritas fitur dengan Peta Aset (pratinjau titik, info lengkap, filter/kelompok/cluster, moderasi) — 2026-07-24
+
+Menindaklanjuti umpan balik: **halaman peta kolaboratif kini setara Peta Aset**
+internal, bukan peta polos.
+
+- **Marker pratinjau saat menambah titik** — mengetuk peta menaruh **marker
+  hijau berdenyut** tepat di lokasi ("Titik akan ditaruh di sini — seret untuk
+  menggeser"); bisa **diseret** untuk menepatkan sebelum disimpan.
+- **Info titik selengkap Peta Aset** — panel detail menampilkan **pill status +
+  kondisi** berwarna dan baris berlabel **Kategori / Merk-Tipe / Lokasi**
+  (backend menambah field deskriptif aman ini — **tanpa** harga/foto/data pribadi).
+- **Pin berwarna per status** (sama dengan Peta Aset) + **lencana angka** pada
+  titik yang punya komentar.
+- **Filter status**, **Barang Serupa** (kelompok kode+nama), dan
+  **pengelompokan marker (cluster)** — semuanya hadir & bisa di-toggle.
+- **Kontrol peta**: bar skala + skala nominal/zoom, kompas utara, dan
+  **"lokasi saya"** (GPS). **Legenda dipindah ke footer** sehingga **tak lagi
+  menutup tombol zoom** di dalam peta.
+- **Moderasi untuk operator/admin satker** — mode seleksi untuk **menghapus**
+  titik/komentar tak pantas (per item atau massal). Hanya muncul bila
+  `boleh_moderasi`; penghapusan tetap ditegakkan server (`require_writer` + satker).
+- **Tampilan & warna dirapikan** memakai token tema — **mendukung mode gelap**
+  dan konsisten dengan aplikasi.
+
+---
+
 ## [#581] Peta Kolaboratif: bagikan peta kegiatan via link ber-masa-tayang (komentar & titik gotong-royong) — 2026-07-24
 
 Fitur baru **Peta Kolaboratif**. Operator/admin kini bisa **membagikan peta satu

@@ -407,11 +407,14 @@ async def hapus_kontribusi(share_id: str, kontrib_id: str,
 
 # ── Endpoint PUBLIK / HIBRIDA (tamu via token ATAU user login) ─────────────
 async def _titik_aset(share: dict) -> list:
-    """Titik aset kegiatan (koordinat valid) — HANYA field aman untuk publik."""
+    """Titik aset kegiatan (koordinat valid) — HANYA field DESKRIPTIF aman untuk
+    publik (identitas + kategori/status + merk/tipe/lokasi/kondisi untuk verifikasi
+    lapangan). SENGAJA TANPA: nilai/harga, foto, pengguna/NIP (PII), dokumen."""
     cur = db.assets.find(
         {"activity_id": share.get("activity_id"), "dihapus": {"$ne": True}},
         {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
-         "category": 1, "inventory_status": 1,
+         "category": 1, "inventory_status": 1, "condition": 1,
+         "brand": 1, "model": 1, "location": 1,
          "koordinat_latitude": 1, "koordinat_longitude": 1}).limit(MAKS_TITIK_ASET_PUBLIK)
     out = []
     async for a in cur:
@@ -425,7 +428,10 @@ async def _titik_aset(share: dict) -> list:
                     "kode": a.get("asset_code") or "", "nup": a.get("NUP") or "",
                     "nama": a.get("asset_name") or "",
                     "kategori": a.get("category") or "",
-                    "status": a.get("inventory_status") or ""})
+                    "status": a.get("inventory_status") or "",
+                    "kondisi": a.get("condition") or "",
+                    "merk": a.get("brand") or "", "tipe": a.get("model") or "",
+                    "lokasi": a.get("location") or ""})
     return out
 
 
@@ -453,6 +459,9 @@ async def lihat_peta(share_id: str, request: Request,
         "berlaku_sampai": sh.get("berlaku_sampai") or "",
         "kedaluwarsa": _kedaluwarsa(sh),
         "boleh_kontribusi": boleh_kontribusi,
+        # Operator/admin satker share → boleh MODERASI (hapus titik/komentar).
+        # Sekadar penanda UI; penghapusan tetap ditegakkan require_writer + satker.
+        "boleh_moderasi": _operator_satker(sh, ctx),
         "izinkan_titik_publik": bool(sh.get("izinkan_titik_publik", True)),
         "izinkan_komentar_publik": bool(sh.get("izinkan_komentar_publik", True)),
         "tamu": bool(ctx.get("guest")),
