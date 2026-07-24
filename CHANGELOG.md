@@ -48,6 +48,27 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#583] Peta Kolaboratif: tombol ikon ringkas + foto aset (thumbnail → foto asli layar penuh) — 2026-07-24
+
+Penajaman tampilan & foto berdasarkan umpan balik:
+
+- **Tombol jadi ikon-saja agar ringkas** — Cluster, Moderasi, dan Muat Ulang
+  kini tombol ikon persegi; tombol **Tambah Titik** menjadi **FAB bundar** (+).
+  Semua tetap ber-`aria-label`/`title` untuk aksesibilitas.
+- **Foto aset tampil di peta** — panel detail aset menampilkan **thumbnail foto**
+  (bila ada). Backend menyajikannya lewat endpoint peta ber-token
+  (`/peta/kolaborasi/{id}/aset/{aset}/foto/{i}`) dengan **gerbang akses yang sama**
+  (token peta valid / operator satker; ter-scope ke kegiatan share).
+- **Klik thumbnail → foto ASLI layar penuh** — pembuka foto minimalis: **hanya
+  menampilkan foto asli** di latar hitam (ketuk untuk tutup), dengan navigasi
+  panah + penghitung bila aset punya beberapa foto. Tanpa metadata/kontrol lain,
+  sesuai permintaan "benar-benar foto aslinya saja".
+
+Catatan: foto aset kini ikut terlihat oleh pemegang link peta (selagi aktif) —
+perluasan yang disengaja atas permintaan; tetap dibatasi akses share & satker.
+
+---
+
 ## [#582] Peta Kolaboratif: paritas fitur dengan Peta Aset (pratinjau titik, info lengkap, filter/kelompok/cluster, moderasi) — 2026-07-24
 
 Menindaklanjuti umpan balik: **halaman peta kolaboratif kini setara Peta Aset**

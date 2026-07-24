@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import {
   MapPin, MessageSquarePlus, Plus, X, Loader2, Send, Users, Clock,
   AlertTriangle, RefreshCcw, WifiOff, Layers, Boxes, Trash2, ShieldCheck,
-  Eraser, MousePointerClick, MessageSquare,
+  Eraser, MousePointerClick, MessageSquare, ChevronLeft, ChevronRight, ImageIcon,
 } from "lucide-react";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -100,6 +100,35 @@ function sisaTayang(iso) {
 const apiErr = (e, fb) => e?.response?.data?.detail || fb;
 
 /**
+ * Muat foto lewat axios→blob agar membawa Bearer (operator, termasuk saat share
+ * KEDALUWARSA) MAUPUN ?token= (tamu) — <img src> biasa hanya bisa kirim token,
+ * sehingga operator gagal memuat foto arsip pasca-kedaluwarsa. Object URL
+ * dibebaskan saat lepas untuk cegah bocor memori.
+ */
+function FotoImg({ url, alt = "", className = "", spinner = false, ...rest }) {
+  const [src, setSrc] = useState(null);
+  const [gagal, setGagal] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    let obj = null;
+    setSrc(null); setGagal(false);
+    axios.get(url, { responseType: "blob", timeout: 25000 })
+      .then((r) => { if (alive) { obj = URL.createObjectURL(r.data); setSrc(obj); } })
+      .catch(() => { if (alive) setGagal(true); });
+    return () => { alive = false; if (obj) URL.revokeObjectURL(obj); };
+  }, [url]);
+  if (src) return <img src={src} alt={alt} className={className} {...rest} />;
+  if (gagal) {
+    return spinner
+      ? <div className="text-white/60 text-sm p-8" {...rest}>Gagal memuat foto</div>
+      : <div className={`${className} bg-muted`} {...rest} />;
+  }
+  return spinner
+    ? <div className="flex items-center justify-center p-8" {...rest}><Loader2 className="w-8 h-8 animate-spin text-white/70" /></div>
+    : <div className={`${className} bg-muted animate-pulse`} {...rest} />;
+}
+
+/**
  * Halaman PUBLIK peta kolaboratif (link ber-token). Paritas fitur dengan Peta
  * Aset: pin berwarna per status, clustering, filter status + Barang Serupa,
  * info titik lengkap, tambah titik ber-marker pratinjau, komentar per titik,
@@ -126,6 +155,7 @@ export default function PetaKolaborasiPage() {
   const [formTitik, setFormTitik] = useState(null); // {lat,lng,nama_titik,keterangan}
   const [komentarTeks, setKomentarTeks] = useState("");
   const [kirim, setKirim] = useState(false);
+  const [fotoView, setFotoView] = useState(null); // {assetId, jumlah, index} — tampilan foto layar penuh
 
   // Toolbar (paritas Peta Aset)
   const [statusFilter, setStatusFilter] = useState("__semua__");
@@ -208,6 +238,7 @@ export default function PetaKolaborasiPage() {
     jenis: "aset", id: a.id, kode: a.kode, nup: a.nup, nama: a.nama,
     kategori: a.kategori, status: a.status, kondisi: a.kondisi,
     merk: a.merk, tipe: a.tipe, lokasi: a.lokasi,
+    jumlah_foto: a.jumlah_foto || 0,
   }), []);
   const bukaDetailTitik = useCallback((t) => setDipilih({
     jenis: "titik", id: t.id, nama_titik: t.nama_titik, keterangan: t.keterangan,
@@ -472,6 +503,14 @@ export default function PetaKolaborasiPage() {
     return (data.komentar || []).filter((k) => k.target_jenis === dipilih.jenis && k.target_id === dipilih.id);
   }, [data, dipilih]);
 
+  // URL foto aset via endpoint peta ber-token (thumb=kecil / tanpa=foto ASLI).
+  const fotoUrl = useCallback((assetId, idx, thumb) => {
+    const q = new URLSearchParams();
+    if (thumb) q.set("thumb", "1");
+    if (token) q.set("token", token);
+    return `${API}/peta/kolaborasi/${id}/aset/${encodeURIComponent(assetId)}/foto/${idx}?${q.toString()}`;
+  }, [id, token]);
+
   const kirimTitik = async () => {
     if (!formTitik) return;
     if (!formTitik.nama_titik.trim()) { toast.error("Nama titik wajib diisi"); return; }
@@ -632,27 +671,27 @@ export default function PetaKolaborasiPage() {
           </Select>
         )}
         <button
-          type="button" onClick={toggleCluster} aria-pressed={clusterOn}
-          className={`h-8 px-2 rounded-lg border text-[11px] font-medium flex items-center gap-1 flex-shrink-0 transition-colors ${clusterOn ? "border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400" : "border-border text-foreground/80 hover:bg-muted"}`}
-          title={clusterOn ? "Marker berdekatan dikelompokkan" : "Marker tampil satu per satu"}
+          type="button" onClick={toggleCluster} aria-pressed={clusterOn} aria-label={clusterOn ? "Pengelompokan marker: aktif" : "Pengelompokan marker: mati"}
+          className={`h-8 w-8 rounded-lg border flex items-center justify-center flex-shrink-0 transition-colors ${clusterOn ? "border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400" : "border-border text-foreground/80 hover:bg-muted"}`}
+          title={clusterOn ? "Pengelompokan marker aktif — ketuk untuk mematikan" : "Marker tampil satu per satu — ketuk untuk mengelompokkan"}
           data-testid="peta-kolab-cluster"
         >
-          <Boxes className="w-3.5 h-3.5" /><span className="hidden sm:inline">Cluster</span>
+          <Boxes className="w-4 h-4" />
         </button>
         {bolehModerasi && (
           <button
-            type="button" onClick={() => setModerasi((v) => { if (v) setTerpilih(new Set()); return !v; })} aria-pressed={moderasi}
-            className={`h-8 px-2 rounded-lg border text-[11px] font-semibold flex items-center gap-1 flex-shrink-0 transition-colors ${moderasi ? "border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400" : "border-border text-foreground/80 hover:bg-muted"}`}
-            title="Pilih titik kolaborasi untuk dihapus (moderasi)"
+            type="button" onClick={() => setModerasi((v) => { if (v) setTerpilih(new Set()); return !v; })} aria-pressed={moderasi} aria-label={moderasi ? "Mode moderasi: aktif" : "Mode moderasi"}
+            className={`h-8 w-8 rounded-lg border flex items-center justify-center flex-shrink-0 transition-colors ${moderasi ? "border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400" : "border-border text-foreground/80 hover:bg-muted"}`}
+            title="Moderasi — pilih titik kolaborasi untuk dihapus"
             data-testid="peta-kolab-moderasi"
           >
-            <MousePointerClick className="w-3.5 h-3.5" /><span className="hidden sm:inline">Moderasi</span>
+            <MousePointerClick className="w-4 h-4" />
           </button>
         )}
         <button
           type="button" onClick={() => { fitOnceRef.current = false; setLoading(true); muat(); }}
           className="h-8 w-8 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0"
-          aria-label="Muat ulang peta" data-testid="peta-kolab-refresh"
+          aria-label="Muat ulang peta" title="Muat ulang peta" data-testid="peta-kolab-refresh"
         >
           <RefreshCcw className="w-3.5 h-3.5" />
         </button>
@@ -686,10 +725,12 @@ export default function PetaKolaborasiPage() {
         {bolehTitik && (
           <button
             onClick={() => { setDipilih(null); if (modeTambah) { setModeTambah(false); } else { buangPreview(); setModeTambah(true); toast.info("Ketuk peta untuk menaruh titik"); } }}
-            className={`absolute bottom-5 right-4 z-[500] h-12 px-4 rounded-full shadow-lg flex items-center gap-2 text-sm font-semibold ${modeTambah ? "bg-red-600 text-white" : "bg-emerald-600 text-white"}`}
+            aria-label={modeTambah ? "Batal tambah titik" : "Tambah titik"}
+            title={modeTambah ? "Batal" : "Tambah titik kolaborasi"}
+            className={`absolute bottom-5 right-4 z-[500] h-14 w-14 rounded-full shadow-lg flex items-center justify-center ${modeTambah ? "bg-red-600 text-white" : "bg-emerald-600 text-white"}`}
             data-testid="peta-tambah-titik"
           >
-            {modeTambah ? <><X className="w-5 h-5" />Batal</> : <><Plus className="w-5 h-5" />Tambah Titik</>}
+            {modeTambah ? <X className="w-6 h-6" /> : <Plus className="w-6 h-6" />}
           </button>
         )}
         {modeTambah && (
@@ -747,6 +788,21 @@ export default function PetaKolaborasiPage() {
                       </div>
                     ) : null;
                   })()}
+                  {dipilih.jumlah_foto > 0 && (
+                    <div className="mt-2 pt-1.5 border-t border-border">
+                      <p className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1"><ImageIcon className="w-3 h-3" />Foto ({dipilih.jumlah_foto}) — ketuk untuk lihat asli</p>
+                      <div className="flex gap-1.5 overflow-x-auto pb-1">
+                        {Array.from({ length: Math.min(dipilih.jumlah_foto, 8) }).map((_, i) => (
+                          <button key={i} type="button"
+                            onClick={() => setFotoView({ assetId: dipilih.id, jumlah: dipilih.jumlah_foto, index: i })}
+                            className="relative w-14 h-14 flex-shrink-0 rounded-lg overflow-hidden border border-border bg-muted cursor-zoom-in"
+                            title="Ketuk untuk lihat foto asli" data-testid={`peta-foto-thumb-${i}`}>
+                            <FotoImg url={fotoUrl(dipilih.id, i, true)} className="w-full h-full object-cover" />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </>
               ) : (
                 <>
@@ -821,6 +877,31 @@ export default function PetaKolaborasiPage() {
               {kirim ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}Tambah
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Foto layar penuh — HANYA foto ASLI (ketuk latar untuk tutup) */}
+      {fotoView && (
+        <div className="fixed inset-0 z-[900] bg-black flex items-center justify-center" onClick={() => setFotoView(null)} data-testid="peta-foto-fullscreen">
+          <FotoImg key={`${fotoView.assetId}-${fotoView.index}`} url={fotoUrl(fotoView.assetId, fotoView.index, false)} alt="Foto aset" spinner
+            className="max-w-full max-h-full object-contain select-none" onClick={(e) => e.stopPropagation()} />
+          <button onClick={() => setFotoView(null)} aria-label="Tutup foto"
+            className="absolute top-3 right-3 w-11 h-11 rounded-full bg-white/15 text-white flex items-center justify-center backdrop-blur hover:bg-white/25" data-testid="peta-foto-tutup">
+            <X className="w-6 h-6" />
+          </button>
+          {fotoView.jumlah > 1 && (
+            <>
+              <button onClick={(e) => { e.stopPropagation(); setFotoView((v) => ({ ...v, index: (v.index - 1 + v.jumlah) % v.jumlah })); }}
+                aria-label="Foto sebelumnya" className="absolute left-2 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/15 text-white flex items-center justify-center hover:bg-white/25">
+                <ChevronLeft className="w-6 h-6" />
+              </button>
+              <button onClick={(e) => { e.stopPropagation(); setFotoView((v) => ({ ...v, index: (v.index + 1) % v.jumlah })); }}
+                aria-label="Foto berikutnya" className="absolute right-2 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/15 text-white flex items-center justify-center hover:bg-white/25">
+                <ChevronRight className="w-6 h-6" />
+              </button>
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/90 text-xs bg-black/50 px-2.5 py-1 rounded-full">{fotoView.index + 1} / {fotoView.jumlah}</div>
+            </>
+          )}
         </div>
       )}
 
