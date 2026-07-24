@@ -137,7 +137,7 @@ export default function PetaKolaborasiPage() {
   const mapElRef = useRef(null);
   const mapRef = useRef(null);
   const layerRef = useRef(null);
-  const markersRef = useRef(new Map());   // "aset:id" | "titik:id" -> { marker, color, badge }
+  const markersRef = useRef(new Map());   // "aset:id"|"titik:id" -> { marker, point, iconKey, color, badge, selected }
   const previewRef = useRef(null);
   const fitOnceRef = useRef(false);
   const scaleElRef = useRef(null);
@@ -145,10 +145,14 @@ export default function PetaKolaborasiPage() {
   const dipilihRef = useRef(null);
   const terpilihRef = useRef(terpilih);
   const moderasiRef = useRef(false);
+  const clusterOnRef = useRef(true);
+  const bolehModerasiRef = useRef(false);
+  const roRef = useRef(null);
   useEffect(() => { modeTambahRef.current = modeTambah; }, [modeTambah]);
   useEffect(() => { dipilihRef.current = dipilih; }, [dipilih]);
   useEffect(() => { terpilihRef.current = terpilih; }, [terpilih]);
   useEffect(() => { moderasiRef.current = moderasi; }, [moderasi]);
+  useEffect(() => { bolehModerasiRef.current = !!data?.boleh_moderasi; }, [data]);
 
   const muat = useCallback(async () => {
     if (!id) { setGalat("Link peta tidak lengkap."); setLoading(false); return; }
@@ -218,9 +222,11 @@ export default function PetaKolaborasiPage() {
     });
   }, []);
 
-  // ── Inisialisasi peta (sekali) + kontrol skala/utara/lokasi ──
+  // ── Inisialisasi peta SEKALI (tidak dibangun ulang saat data berubah) +
+  //    kontrol skala/utara/lokasi. Peta dibuat saat container mount & data
+  //    pertama ada; DIHANCURKAN hanya saat unmount (efek terpisah di bawah). ──
   useEffect(() => {
-    if (!data || mapRef.current || !mapElRef.current) return undefined;
+    if (!data || mapRef.current || !mapElRef.current) return;
     const map = L.map(mapElRef.current, { zoomControl: true, attributionControl: true, maxZoom: 22, tapHold: true });
     map.setView([-1.4, 116.7], 5);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -303,18 +309,24 @@ export default function PetaKolaborasiPage() {
     };
     map.on("zoomend moveend", updateScale); updateScale();
 
-    layerRef.current = (clusterOn ? buildCluster() : L.layerGroup()).addTo(map);
+    layerRef.current = (clusterOnRef.current ? buildCluster() : L.layerGroup()).addTo(map);
     mapRef.current = map;
     setTimeout(() => map.invalidateSize(), 60);
     const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => map.invalidateSize()) : null;
     if (ro) ro.observe(mapElRef.current);
-    return () => {
-      if (ro) ro.disconnect();
-      map.remove(); mapRef.current = null; layerRef.current = null;
-      markersRef.current = new Map(); previewRef.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    roRef.current = ro;
+    // TANPA cleanup di sini — perubahan `data` TIDAK boleh menghancurkan peta
+    // (view/zoom/lokasi pengguna & marker tetap). Teardown di efek unmount.
   }, [data]);
+
+  // Hancurkan peta HANYA saat komponen dilepas.
+  useEffect(() => () => {
+    try { roRef.current?.disconnect(); } catch { /* noop */ }
+    const m = mapRef.current;
+    if (m) { try { m.remove(); } catch { /* noop */ } }
+    mapRef.current = null; layerRef.current = null;
+    markersRef.current = new Map(); previewRef.current = null;
+  }, []);
 
   // Klik peta di mode "tambah titik" → marker PRATINJAU (draggable) + form.
   useEffect(() => {
@@ -346,63 +358,97 @@ export default function PetaKolaborasiPage() {
     previewRef.current = null;
   }, []);
 
-  // (Re)bangun marker saat data/filter/cluster/mode berubah.
+  // Sinkron marker INKREMENTAL (tak clear+bangun-ulang) — meniru AssetMapFullView
+  // agar view/cluster/spiderfy & seleksi tetap saat data/filter berubah. Handler
+  // klik membaca entry.point sehingga selalu data terbaru. Seleksi (cincin)
+  // diterapkan terpisah oleh efek di bawah.
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !data) return;
-    if (layerRef.current) { try { map.removeLayer(layerRef.current); } catch { /* noop */ } }
-    const layer = clusterOn ? buildCluster() : L.layerGroup();
-    layer.addTo(map);
-    layerRef.current = layer;
-    markersRef.current = new Map();
-    const pts = [];
-    const sel = dipilihRef.current;
-
-    asetTampil.forEach((a) => {
-      const color = STATUS_COLORS[a.status] || STATUS_DEFAULT;
-      const badge = komentarCount[`aset:${a.id}`] || 0;
-      const selected = sel?.jenis === "aset" && sel?.id === a.id;
-      const m = L.marker([a.lat, a.lng], { icon: pinIcon(color, { badge, selected }) });
-      m.on("click", () => bukaDetailAset(a));
+    const map = mapRef.current, layer = layerRef.current;
+    if (!map || !layer || !data) return;
+    const seen = new Set();
+    const bounds = [];
+    const pasang = (key, point, latlng, color, badge, klik) => {
+      seen.add(key);
+      bounds.push(latlng);
+      const iconKey = `${color}|${badge}`;
+      const existing = markersRef.current.get(key);
+      if (existing) {
+        existing.point = point;
+        if (existing.lat !== latlng[0] || existing.lng !== latlng[1]) {
+          existing.marker.setLatLng(latlng);
+          existing.lat = latlng[0]; existing.lng = latlng[1];
+          layer.refreshClusters?.(existing.marker);
+        }
+        if (existing.iconKey !== iconKey) {
+          existing.color = color; existing.badge = badge; existing.iconKey = iconKey;
+          existing.marker.setIcon(pinIcon(color, { badge, selected: existing.selected }));
+        }
+        return;
+      }
+      const m = L.marker(latlng, { icon: pinIcon(color, { badge }) });
+      const entry = { marker: m, point, iconKey, color, badge, selected: false, lat: latlng[0], lng: latlng[1] };
+      m.on("click", () => klik(entry));
       layer.addLayer(m);
-      markersRef.current.set(`aset:${a.id}`, { marker: m, color, badge });
-      pts.push([a.lat, a.lng]);
-    });
-    (data.titik_kolaborasi || []).forEach((t) => {
-      const badge = komentarCount[`titik:${t.id}`] || 0;
-      const selected = (sel?.jenis === "titik" && sel?.id === t.id) || terpilihRef.current.has(t.id);
-      const m = L.marker([t.lat, t.lng], { icon: pinIcon(COLLAB_COLOR, { badge, selected }) });
-      m.on("click", () => {
-        if (moderasiRef.current && bolehModerasi) toggleTerpilih(t.id);
-        else bukaDetailTitik(t);
-      });
-      layer.addLayer(m);
-      markersRef.current.set(`titik:${t.id}`, { marker: m, color: COLLAB_COLOR, badge });
-      pts.push([t.lat, t.lng]);
-    });
+      markersRef.current.set(key, entry);
+    };
 
-    if (!fitOnceRef.current && pts.length) {
-      try { map.fitBounds(L.latLngBounds(pts), { padding: [40, 40], maxZoom: 18 }); } catch { /* noop */ }
+    asetTampil.forEach((a) => pasang(
+      `aset:${a.id}`, a, [a.lat, a.lng],
+      STATUS_COLORS[a.status] || STATUS_DEFAULT, komentarCount[`aset:${a.id}`] || 0,
+      (entry) => bukaDetailAset(entry.point)));
+    (data.titik_kolaborasi || []).forEach((t) => pasang(
+      `titik:${t.id}`, t, [t.lat, t.lng], COLLAB_COLOR, komentarCount[`titik:${t.id}`] || 0,
+      (entry) => {
+        if (moderasiRef.current && bolehModerasiRef.current) toggleTerpilih(entry.point.id);
+        else bukaDetailTitik(entry.point);
+      }));
+
+    for (const [key, entry] of Array.from(markersRef.current.entries())) {
+      if (!seen.has(key)) { layer.removeLayer(entry.marker); markersRef.current.delete(key); }
+    }
+    if (!fitOnceRef.current && bounds.length) {
+      try { map.fitBounds(L.latLngBounds(bounds), { padding: [40, 40], maxZoom: 18 }); } catch { /* noop */ }
       fitOnceRef.current = true;
     }
-  }, [data, asetTampil, clusterOn, komentarCount, terpilih, moderasi, bolehModerasi, bukaDetailAset, bukaDetailTitik, toggleTerpilih]);
+  }, [data, asetTampil, komentarCount, bukaDetailAset, bukaDetailTitik, toggleTerpilih]);
 
-  // Sorot pin terpilih (detail) tanpa membangun ulang seluruh marker.
-  const lastSelRef = useRef(null);
+  // Sorot cincin seleksi (detail `dipilih` + moderasi `terpilih`) secara
+  // INKREMENTAL — hanya setIcon pada marker yang berubah status pilih; `data`
+  // di deps agar cincin diterapkan ulang setelah sinkron membuat marker baru.
   useEffect(() => {
-    const key = dipilih ? `${dipilih.jenis}:${dipilih.id}` : null;
-    const setIcon = (k, selected) => {
-      const e = markersRef.current.get(k);
-      if (e) e.marker.setIcon(pinIcon(e.color, { badge: e.badge, selected }));
-    };
-    if (lastSelRef.current && lastSelRef.current !== key) {
-      const stillTerpilih = lastSelRef.current.startsWith("titik:")
-        && terpilih.has(lastSelRef.current.slice(6));
-      setIcon(lastSelRef.current, stillTerpilih);
+    const keys = new Set();
+    if (dipilih) keys.add(`${dipilih.jenis}:${dipilih.id}`);
+    terpilih.forEach((tid) => keys.add(`titik:${tid}`));
+    markersRef.current.forEach((entry, key) => {
+      const want = keys.has(key);
+      if (entry.selected !== want) {
+        entry.selected = want;
+        entry.marker.setIcon(pinIcon(entry.color, { badge: entry.badge, selected: want }));
+      }
+    });
+  }, [dipilih, terpilih, data]);
+
+  // Hidup/matikan clustering: pindahkan marker yang sudah ada ke layer baru
+  // (tanpa membangun ulang marker) — pin & seleksi tetap.
+  const toggleCluster = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const on = !clusterOnRef.current;
+    clusterOnRef.current = on; setClusterOn(on);
+    const old = layerRef.current;
+    const next = on ? buildCluster() : L.layerGroup();
+    for (const entry of markersRef.current.values()) {
+      try { if (old) old.removeLayer(entry.marker); } catch { /* noop */ }
+      next.addLayer(entry.marker);
     }
-    if (key) setIcon(key, true);
-    lastSelRef.current = key;
-  }, [dipilih, terpilih]);
+    if (old) map.removeLayer(old);
+    next.addTo(map);
+    layerRef.current = next;
+  }, []);
+
+  // Ganti filter → pusatkan ulang peta ke subset (reset flag fit).
+  const changeStatus = useCallback((v) => { setStatusFilter(v); fitOnceRef.current = false; }, []);
+  const changeGroup = useCallback((v) => { setGroupKey(v); fitOnceRef.current = false; }, []);
 
   const butuhNama = useCallback((aksi) => {
     if (data && !data.tamu) { aksi(); return; }
@@ -554,7 +600,7 @@ export default function PetaKolaborasiPage() {
         </span>
         <div className="flex-1" />
         {statuses.length > 0 && (
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <Select value={statusFilter} onValueChange={changeStatus}>
             <SelectTrigger className="h-8 w-auto px-2 text-[11px] gap-1 flex-shrink-0" aria-label="Filter status" data-testid="peta-kolab-filter-status">
               <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: statusFilter === "__semua__" ? "#94a3b8" : (STATUS_COLORS[statusFilter] || STATUS_DEFAULT) }} />
               <SelectValue />
@@ -566,7 +612,7 @@ export default function PetaKolaborasiPage() {
           </Select>
         )}
         {groups.length > 0 && (
-          <Select value={groupKey} onValueChange={setGroupKey}>
+          <Select value={groupKey} onValueChange={changeGroup}>
             <SelectTrigger className="h-8 w-auto max-w-[200px] px-2 text-[11px] gap-1 flex-shrink-0" aria-label="Filter barang serupa" data-testid="peta-kolab-filter-grup">
               <Layers className="w-3.5 h-3.5 text-violet-500 flex-shrink-0" />
               <SelectValue />
@@ -586,7 +632,7 @@ export default function PetaKolaborasiPage() {
           </Select>
         )}
         <button
-          type="button" onClick={() => setClusterOn((v) => !v)} aria-pressed={clusterOn}
+          type="button" onClick={toggleCluster} aria-pressed={clusterOn}
           className={`h-8 px-2 rounded-lg border text-[11px] font-medium flex items-center gap-1 flex-shrink-0 transition-colors ${clusterOn ? "border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400" : "border-border text-foreground/80 hover:bg-muted"}`}
           title={clusterOn ? "Marker berdekatan dikelompokkan" : "Marker tampil satu per satu"}
           data-testid="peta-kolab-cluster"
