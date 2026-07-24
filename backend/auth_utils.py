@@ -135,6 +135,59 @@ async def require_user_or_sign_token(
     return {"guest": True, "sign": tok, "username": "tamu-ttd", "role": "tamu"}
 
 
+# --- Token PETA KOLABORATIF (link publik peta) -----------------------------
+# Mirror token e-sign, tipe "peta". BEDA penting: masa tayang NYATA disimpan di
+# DB (peta_shares.berlaku_sampai) — token diberi exp longgar (plafon) agar link
+# yang sudah tersebar tetap berlaku saat masa tayang DIPERPANJANG (cukup ubah
+# field DB, tanpa mint ulang). Kedaluwarsa/pembatalan ditegakkan di route.
+MAP_TOKEN_EXPIRATION_DAYS = 400
+
+
+def create_map_token(share_id: str, jti: str) -> str:
+    payload = {
+        "typ": "peta", "share": share_id, "jti": jti,
+        "exp": datetime.now(timezone.utc).timestamp() + MAP_TOKEN_EXPIRATION_DAYS * 86400,
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+async def require_map_token(token: str = Query(default="")) -> dict:
+    """Validasi token peta kolaboratif (link publik). Kembalikan {share, jti}.
+    Tidak lookup user (pengunjung tamu). Masa tayang & pembatalan dicek route."""
+    if not token:
+        raise HTTPException(status_code=401, detail="Token peta wajib")
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Link peta kedaluwarsa")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Link peta tidak valid")
+    if payload.get("typ") != "peta":
+        raise HTTPException(status_code=401, detail="Token bukan untuk peta")
+    return {"share": payload.get("share"), "jti": payload.get("jti")}
+
+
+async def require_user_or_map_token(
+    authorization: str = Header(default="", alias="Authorization"),
+    token: str = Query(default=""),
+) -> dict:
+    """Gate peta kolaboratif: user login (Bearer) MAUPUN pengunjung tamu
+    (?token= tipe peta). Bearer diprioritaskan; token sesi BASI yang terpasang
+    otomatis tak boleh mengunci tamu berlink valid (sama pola e-sign)."""
+    bearer_err = None
+    if authorization and authorization.startswith("Bearer "):
+        try:
+            return await _decode_bearer(authorization)
+        except HTTPException as e:
+            bearer_err = e
+    try:
+        tok = await require_map_token(token)
+    except HTTPException:
+        raise bearer_err or HTTPException(status_code=401,
+                                          detail="Autentikasi diperlukan")
+    return {"guest": True, "peta": tok, "username": "tamu-peta", "role": "tamu"}
+
+
 async def _decode_bearer(authorization: str, allow_media_scope: bool = False) -> dict:
     """Decode an Authorization header value and return the user document.
 

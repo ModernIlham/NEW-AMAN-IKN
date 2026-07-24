@@ -8,7 +8,7 @@ import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import axios from "axios";
-import { MapPinned, RefreshCw, Loader2, Move, X, Filter, Download, Camera, Layers, ChevronDown, Boxes, MousePointerClick, CheckCheck, Eraser, PencilLine, SquareDashed } from "lucide-react";
+import { MapPinned, RefreshCw, Loader2, Move, X, Filter, Download, Camera, Layers, ChevronDown, Boxes, MousePointerClick, CheckCheck, Eraser, PencilLine, SquareDashed, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { compressImageFile } from "../../lib/imageCompression";
 import {
@@ -191,6 +191,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
   onQuickAdd,         // (lat, lng, nama) => void — tambah cepat aset di titik peta
   onSelectionChange,  // (updater|Set) => void — ubah himpunan aset terpilih (map→daftar)
   onBatchEditSelected,// () => void — tutup peta & buka Edit Massal utk aset terpilih
+  onShare,            // () => void — buka dialog Bagikan Peta Kolaboratif (link publik)
   visible = true,     // KEEP-ALIVE: komponen tetap ter-mount saat pindah mode; saat
                       // disembunyikan (display:none) ukuran Leaflet jadi 0 → panggil
                       // invalidateSize saat tampil lagi agar tak abu-abu/terpotong.
@@ -1146,6 +1147,18 @@ const AssetMapFullView = memo(function AssetMapFullView({
             )}
           </DropdownMenuContent>
         </DropdownMenu>
+        {onShare && (
+          <button
+            type="button"
+            onClick={onShare}
+            aria-label="Bagikan peta kolaboratif"
+            title="Bagikan peta kolaboratif (link publik)"
+            className="h-9 px-2 lg:px-2.5 rounded-lg border border-blue-300 dark:border-blue-800 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950 flex items-center gap-1 flex-shrink-0 min-w-0 min-h-0"
+            data-testid="asset-map-share"
+          >
+            <Share2 className="w-4 h-4" /><span className="hidden lg:inline text-xs font-semibold">Bagikan</span>
+          </button>
+        )}
         <button
           type="button"
           onClick={onClose}

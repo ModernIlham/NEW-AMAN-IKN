@@ -38,6 +38,7 @@ const RekapitulasiPanel = lazy(() => import("@/components/assets/RekapitulasiPan
 const AuditLogPanel = lazy(() => import("@/components/assets/AuditLogPanel"));
 const AssetGroupsPanel = lazy(() => import("@/components/assets/AssetGroupsPanel"));
 const AssetMapFullView = lazy(() => import("@/components/assets/AssetMapFullView"));
+const BagikanPetaDialog = lazy(() => import("@/components/assets/BagikanPetaDialog"));
 const PhotoLightbox = lazy(() => import("@/components/assets/PhotoLightbox"));
 import DashboardHeader from "@/components/assets/DashboardHeader";
 import StatsBar from "@/components/assets/StatsBar";
@@ -278,6 +279,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   const [rekapTotal, setRekapTotal] = useState(null);
   const [groupsCount, setGroupsCount] = useState(null);
   const [mapOpen, setMapOpen] = useState(false);
+  const [shareMapOpen, setShareMapOpen] = useState(false); // dialog Bagikan Peta Kolaboratif
   // KEEP-ALIVE peta: sekali dibuka, komponen peta tetap ter-mount (hanya
   // disembunyikan display:none saat pindah mode) → posisi/zoom & data
   // dipertahankan tanpa refetch dari awal saat bolak-balik mode/seleksi. Data
@@ -1791,9 +1793,15 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
                     onQuickAdd={perms.canEdit ? handleQuickAddPeta : undefined}
                     onSelectionChange={perms.canEdit ? setSelectedAssets : undefined}
                     onBatchEditSelected={perms.canEdit ? handleMapBatchEdit : undefined}
+                    onShare={perms.canEdit && activity?.id ? () => setShareMapOpen(true) : undefined}
                   />
                 </Suspense>
               </div>
+            )}
+            {shareMapOpen && (
+              <Suspense fallback={null}>
+                <BagikanPetaDialog open={shareMapOpen} onClose={() => setShareMapOpen(false)} activity={activity} />
+              </Suspense>
             )}
             {mapOpen ? null : loading ? (
               <LoadingIndicator message={loadingMessage} totalItems={totalItems} pageSize={pageSize} currentPage={currentPage} />

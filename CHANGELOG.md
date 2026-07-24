@@ -48,6 +48,61 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#581] Peta Kolaboratif: bagikan peta kegiatan via link ber-masa-tayang (komentar & titik gotong-royong) — 2026-07-24
+
+Fitur baru **Peta Kolaboratif**. Operator/admin kini bisa **membagikan peta satu
+kegiatan** lewat **link publik ber-token** dengan **masa tayang**. Selama aktif,
+**siapa pun yang punya link** (tanpa perlu akun) dapat:
+
+- **melihat titik aset** kegiatan pada peta,
+- **berkomentar di tiap titik** (aset maupun titik gotong-royong),
+- **menambah titik baru + komentar** sendiri (kolaboratif; tamu cukup isi nama).
+
+Pengelolaan oleh operator/admin satker kegiatan:
+
+- **Tombol Bagikan** (ikon share) di peta layar-penuh → dialog **Bagikan Peta
+  Kolaboratif**: pilih **masa tayang** (1/3/7/30 hari), judul, dan izin apakah
+  tamu boleh menambah titik / berkomentar. Salin link, bagikan via **WhatsApp**
+  atau **Bagikan…** bawaan perangkat.
+- **Perpanjang** masa tayang kapan saja (link lama tetap berlaku — tak
+  diterbitkan ulang), atau **Batalkan** link (mati untuk publik).
+- **Moderasi**: hapus (soft) titik/komentar yang tidak pantas.
+
+**Keamanan & isolasi:**
+
+- Masa tayang **nyata di basis data** (`berlaku_sampai`); token diberi plafon
+  longgar sehingga *perpanjang* cukup mengubah field DB tanpa mematikan link
+  yang sudah tersebar. **Pembatalan** & **penerbitan ulang** (`jti`) langsung
+  mematikan link lama.
+- Token peta **typ tersendiri** (`typ="peta"`) — tidak bisa tertukar dengan
+  token e-sign/media.
+- **Cegah IDOR**: pengguna login lintas-satker **tanpa link** tak bisa membuka
+  share via UUID — hanya **pemegang link** ATAU **operator/admin satker
+  kegiatan** yang boleh.
+- **Setelah kedaluwarsa**, link hanya bisa dibuka oleh **operator/admin satker
+  + kegiatan** terkait (untuk mengarsipkan & memperpanjang) — pemegang link
+  biasa ditolak, sesuai permintaan.
+- **Terbitkan ulang** (rotasi `jti` + token baru) sebagai **kill-switch** bila
+  link bocor: tautan lama langsung mati, kontribusi tetap tersimpan. Juga jalur
+  resmi menghidupkan kembali link yang **dibatalkan** (pembatalan bersifat
+  permanen; *perpanjang* tak bisa menghidupkannya diam-diam).
+- Penegakan **kedaluwarsa tz-aware** (bukan perbandingan string) — offset zona
+  waktu tak lagi menyesatkan. Masa tayang dijepit agar token yang sudah tersebar
+  tak kedaluwarsa lebih dulu.
+- **Plafon kontribusi per peta** + **rate-limit baca**; toggle izin publik
+  berlaku untuk **semua** pengunjung berlink (tamu maupun user satker lain),
+  hanya operator/admin satker yang lolos.
+- Data yang dibagikan ke publik **minimal & aman** (kode/NUP/nama/kategori/status
+  + koordinat) — **tanpa harga, foto, atau field sensitif**. IP tamu direkam
+  untuk moderasi tetapi **tak pernah** dikirim ke klien.
+- Endpoint kontribusi ber-**rate-limit** (titik 30/mnt, komentar 40/mnt).
+
+Backend: `routes/peta_kolaborasi.py` (+ token peta di `auth_utils.py`, indeks di
+`indexes.py`). Frontend: halaman publik `PetaKolaborasiPage.jsx` (Leaflet ringan,
+di luar auth), dialog `BagikanPetaDialog.jsx`, tombol share di `AssetMapFullView`.
+
+---
+
 ## [#580] UI HP: hapus chip filter cepat (Belum/Ditemukan/Semua) di mode inventarisasi — 2026-07-24
 
 Di **HP**, mode inventarisasi menampilkan chip filter cepat **Belum /
