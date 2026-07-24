@@ -48,6 +48,24 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#579] Perbaikan: Ubah Massal gagal senyap bila seleksi langsung dikosongkan — 2026-07-24
+
+Saat **Ubah Massal** ditekan **Terapkan** lalu pengguna **cepat menekan
+"Kosongkan"** (mengosongkan area seleksi aset), penyimpanan bisa **gagal senyap**
+— data batal tersimpan tanpa pesan galat.
+
+Penyebab: handler simpan membaca ulang state `selectedAssets` yang keburu kosong
+(guard `selectedAssets.size === 0` → `return` diam-diam), dan/atau closure yang
+usang selama dialog konfirmasi / render ulang saat panel di-*unmount*.
+
+Perbaikan: **snapshot ID aset terpilih diambil sinkron** tepat saat tombol
+Terapkan diklik (`BatchEditPanel.handleApply`), lalu diteruskan ke
+`handleBatchUpdate` (DashboardPage). Simpan massal kini memakai snapshot itu —
+**kebal** terhadap seleksi yang dikosongkan setelahnya. Walau area seleksi
+langsung dikosongkan, data tetap tersimpan.
+
+---
+
 ## [#578] UI HP: badge garansi menyatu NUP, status ikon-saja, saklar mode di toolbar, persen di bawah bar — 2026-07-24
 
 Penyempurnaan tata letak **khusus tampilan HP** (mobile, < sm) agar lebih padat
