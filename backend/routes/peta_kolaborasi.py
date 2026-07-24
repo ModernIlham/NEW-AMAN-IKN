@@ -15,10 +15,12 @@ yang boleh mengelola & membuka pasca-kedaluwarsa.
 """
 import os
 import uuid
+import base64
+import asyncio
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel
 
 from auth_utils import (
@@ -28,6 +30,7 @@ from auth_utils import (
 from db import db
 from shared_utils import (
     limiter, log_audit, scope_query_field_satker, pastikan_akses_dok_satker,
+    get_photo_from_gridfs, generate_photo_thumbnail,
 )
 
 peta_kolaborasi_router = APIRouter()
@@ -415,6 +418,7 @@ async def _titik_aset(share: dict) -> list:
         {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
          "category": 1, "inventory_status": 1, "condition": 1,
          "brand": 1, "model": 1, "location": 1,
+         "photo_count": 1, "thumbnail_index": 1,
          "koordinat_latitude": 1, "koordinat_longitude": 1}).limit(MAKS_TITIK_ASET_PUBLIK)
     out = []
     async for a in cur:
@@ -431,7 +435,9 @@ async def _titik_aset(share: dict) -> list:
                     "status": a.get("inventory_status") or "",
                     "kondisi": a.get("condition") or "",
                     "merk": a.get("brand") or "", "tipe": a.get("model") or "",
-                    "lokasi": a.get("location") or ""})
+                    "lokasi": a.get("location") or "",
+                    "jumlah_foto": int(a.get("photo_count") or 0),
+                    "thumbnail_index": int(a.get("thumbnail_index") or 0)})
     return out
 
 
@@ -469,6 +475,70 @@ async def lihat_peta(share_id: str, request: Request,
         "titik_kolaborasi": titik_kolaborasi,
         "komentar": komentar,
     }
+
+
+@peta_kolaborasi_router.get("/peta/kolaborasi/{share_id}/aset/{asset_id}/foto/{indeks}")
+@limiter.limit("240/minute")
+async def foto_aset_peta(share_id: str, asset_id: str, indeks: int, request: Request,
+                        thumb: int = 0,
+                        ctx: dict = Depends(require_user_or_map_token)):
+    """Sajikan foto aset kegiatan untuk peta publik (token peta / user).
+    Diberi gerbang akses share yang SAMA + dipastikan aset milik kegiatan share.
+    ?thumb=1 → thumbnail kecil; tanpa param → foto ASLI (untuk tampilan penuh)."""
+    sh = await _muat_share(share_id)
+    _verifikasi_token_share(sh, ctx)
+    punya_link = await _punya_link(sh, request)
+    boleh_lihat, _, alasan = _akses_peta(sh, ctx, punya_link)
+    if not boleh_lihat:
+        raise HTTPException(status_code=403, detail=alasan)
+    if indeks < 0 or indeks > 200:
+        raise HTTPException(status_code=400, detail="Indeks foto tidak valid")
+    aset = await db.assets.find_one(
+        {"id": asset_id, "activity_id": sh.get("activity_id"), "dihapus": {"$ne": True}},
+        {"_id": 0, "photo_gridfs_ids": 1, "photos": 1, "photo_thumbnails": 1, "version": 1})
+    if not aset:
+        raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    # Pakai helper media aset yang sudah teruji (deteksi tipe + header cache/ETag).
+    from routes.assets import _tebak_media_type, _media_headers, _not_modified  # lazy: hindari siklus impor
+    etag = (f'"peta-{asset_id}-p{indeks}{"-t" if thumb else ""}'
+            f'-v{int(aset.get("version", 1) or 1)}"')
+    nm = _not_modified(request, etag)
+    if nm:
+        return nm
+    gridfs_ids = aset.get("photo_gridfs_ids", []) or []
+    photos = aset.get("photos", []) or []
+    if thumb:
+        thumbnails = aset.get("photo_thumbnails", []) or []
+        tb = thumbnails[indeks] if 0 <= indeks < len(thumbnails) else ""
+        if not tb:
+            if indeks < len(photos) and photos[indeks]:
+                tb = await asyncio.to_thread(generate_photo_thumbnail, photos[indeks]) or ""
+            elif indeks < len(gridfs_ids) and gridfs_ids[indeks]:
+                pb = await get_photo_from_gridfs(gridfs_ids[indeks])
+                if pb:
+                    tb = await asyncio.to_thread(
+                        generate_photo_thumbnail, base64.b64encode(pb).decode("utf-8")) or ""
+        if tb:
+            data = tb.split(",", 1)[1] if tb.startswith("data:") else tb
+            try:
+                return Response(content=base64.b64decode(data), media_type="image/jpeg",
+                                headers=_media_headers(etag))
+            except Exception:
+                pass  # thumbnail rusak → jatuh ke foto penuh
+    photo_bytes = None
+    if indeks < len(gridfs_ids) and gridfs_ids[indeks]:
+        photo_bytes = await get_photo_from_gridfs(gridfs_ids[indeks])
+    if photo_bytes is None and indeks < len(photos):
+        phb = photos[indeks] or ""
+        data = phb.split(",", 1)[1] if phb.startswith("data:") else phb
+        try:
+            photo_bytes = base64.b64decode(data)
+        except Exception:
+            photo_bytes = None
+    if photo_bytes is None:
+        raise HTTPException(status_code=404, detail="Foto tidak ditemukan")
+    return Response(content=photo_bytes, media_type=_tebak_media_type(photo_bytes),
+                    headers=_media_headers(etag))
 
 
 async def _guard_kontribusi(sh: dict, ctx: dict, request: Request,
