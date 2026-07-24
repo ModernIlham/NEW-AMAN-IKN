@@ -8,7 +8,7 @@ from auth_utils import require_admin, require_user, require_writer
 
 from db import db
 from models import CategoryCreate
-from shared_utils import limiter, invalidate_category_cache, _cache_categories
+from shared_utils import limiter, invalidate_category_cache, cache_get, cache_set
 from jobs import buat_job, update_job, get_job
 
 logger = logging.getLogger(__name__)
@@ -55,10 +55,11 @@ async def get_categories(search: str = "", page: int = 1, page_size: int = 50,
 async def get_all_categories(_user: dict = Depends(require_user)):
     """Get all categories (cached for 5 min, for dropdowns)"""
     cache_key = "all"
-    if cache_key in _cache_categories:
-        return _cache_categories[cache_key]
+    _cached = await cache_get("categories", cache_key)
+    if _cached is not None:
+        return _cached
     categories = await db.categories.find({}, {"_id": 0}).sort("kode_aset", 1).to_list(50000)
-    _cache_categories[cache_key] = categories
+    await cache_set("categories", cache_key, categories)
     return categories
 
 @categories_router.post("/categories")

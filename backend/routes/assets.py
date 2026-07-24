@@ -16,7 +16,7 @@ from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
 )
 from shared_utils import (
-    invalidate_asset_cache, _cache_filter_opts, _cache_stats, _cache_analytics,
+    invalidate_asset_cache, cache_get, cache_set,
     log_audit, compute_changes, create_thumbnail, create_gallery_thumbnail,
     store_photo_to_gridfs, get_photo_from_gridfs, delete_photo_from_gridfs,
     generate_photo_thumbnail,
@@ -542,8 +542,9 @@ async def get_filter_options(activity_id: str = "", _user: dict = Depends(requir
     # diisi user lintas-satker bocor ke user satker lain (M-SCOPE).
     await pastikan_akses_kegiatan_id(_user, activity_id)
     cache_key = f"{kode_satker_user(_user)}|{activity_id or '__all__'}"
-    if cache_key in _cache_filter_opts:
-        return _cache_filter_opts[cache_key]
+    _cached = await cache_get("filter_opts", cache_key)
+    if _cached is not None:
+        return _cached
 
     query = {}
     if activity_id:
@@ -573,7 +574,7 @@ async def get_filter_options(activity_id: str = "", _user: dict = Depends(requir
         "stiker_statuses": clean_sort(stiker_statuses),
         "inventory_statuses": clean_sort(inventory_statuses)
     }
-    _cache_filter_opts[cache_key] = result
+    await cache_set("filter_opts", cache_key, result)
     return result
 
 @assets_router.get("/assets/stats")
@@ -582,8 +583,9 @@ async def get_assets_stats(search: str = "", category: str = "", activity_id: st
     """Get aggregate stats (cached 1 min per unique query)"""
     await pastikan_akses_kegiatan_id(_user, activity_id)
     cache_key = f"{kode_satker_user(_user)}|{activity_id}|{search}|{category}"
-    if cache_key in _cache_stats:
-        return _cache_stats[cache_key]
+    _cached = await cache_get("stats", cache_key)
+    if _cached is not None:
+        return _cached
 
     query = {}
     if activity_id:
@@ -635,7 +637,7 @@ async def get_assets_stats(search: str = "", category: str = "", activity_id: st
         }
     else:
         stats = {"total_assets": 0, "total_value": 0, "active_count": 0, "maintenance_count": 0}
-    _cache_stats[cache_key] = stats
+    await cache_set("stats", cache_key, stats)
     return stats
 
 @assets_router.get("/assets/analytics")
@@ -643,8 +645,9 @@ async def get_assets_analytics(activity_id: str = "", _user: dict = Depends(requ
     """Get analytics data for charts (cached 2 min per activity)"""
     await pastikan_akses_kegiatan_id(_user, activity_id)
     cache_key = f"{kode_satker_user(_user)}|{activity_id or '_all'}"
-    if cache_key in _cache_analytics:
-        return _cache_analytics[cache_key]
+    _cached = await cache_get("analytics", cache_key)
+    if _cached is not None:
+        return _cached
 
     query = {}
     if activity_id:
@@ -696,7 +699,7 @@ async def get_assets_analytics(activity_id: str = "", _user: dict = Depends(requ
         "by_location": [{"name": r["_id"] or "Lainnya", "count": r["count"]} for r in loc_res],
         "by_eselon": [{"name": r["_id"] or "Lainnya", "count": r["count"], "value": r["value"]} for r in eselon_res],
     }
-    _cache_analytics[cache_key] = result
+    await cache_set("analytics", cache_key, result)
     return result
 
 

@@ -231,48 +231,107 @@ def _rate_limit_key(request) -> str:
 # user": auth/OTP 3–10/mnt, laporan 6/mnt, ekspor 3–10/mnt, impor/SIMAN 3–6/mnt,
 # TTD 15–60/mnt, master pegawai 10–30/mnt.
 #
-# Di lingkungan uji (pytest, infra-free) → memory:// biasa (tak menyentuh Mongo).
+# PRIORITAS STORAGE: Redis (tercepat, bersama) → MongoDB (bersama) → in-memory.
+# Redis dipakai HANYA bila REDIS_URL di-set (opsional); bila tidak, perilaku
+# persis seperti sebelumnya (MongoDB bersama, atau in-memory bila MONGO_URL
+# kosong). Semua ber-fallback in-memory saat backend storage bermasalah.
+# Di lingkungan uji (pytest, infra-free) → memory:// biasa (tak menyentuh infra).
 _RL_UNDER_PYTEST = "pytest" in sys.modules
+_RL_REDIS = os.environ.get("REDIS_URL", "") if not _RL_UNDER_PYTEST else ""
 _RL_MONGO = os.environ.get("MONGO_URL", "") if not _RL_UNDER_PYTEST else ""
 
-if _RL_MONGO:
-    _rl_sep = "&" if "?" in _RL_MONGO else "?"
-    _rl_uri = f"{_RL_MONGO}{_rl_sep}serverSelectionTimeoutMS=1500&connectTimeoutMS=1500"
-    try:
-        limiter = Limiter(
-            key_func=_rate_limit_key,
-            storage_uri=_rl_uri,
-            storage_options={
-                "database_name": "aman_ratelimit",
-                "counter_collection_name": "rl_counters",
-                "window_collection_name": "rl_windows",
-            },
-            strategy="fixed-window",
-            swallow_errors=True,
-            in_memory_fallback_enabled=True,
-        )
-        logger.info("Rate limiter: MongoDB bersama (db=aman_ratelimit) + fallback in-memory")
-    except Exception as e:
-        # Konstruksi gagal (mis. skema URI aneh) → jangan matikan aplikasi;
-        # pakai in-memory per-worker.
-        logger.warning(f"Rate limiter MongoDB gagal init ({e}); pakai in-memory per-worker")
-        limiter = Limiter(key_func=_rate_limit_key)
-else:
-    limiter = Limiter(key_func=_rate_limit_key)
 
-# --- In-Memory Cache ---
+def _bangun_limiter():
+    if _RL_REDIS:
+        try:
+            lim = Limiter(
+                key_func=_rate_limit_key,
+                storage_uri=_RL_REDIS,
+                strategy="fixed-window",
+                swallow_errors=True,
+                in_memory_fallback_enabled=True,
+            )
+            logger.info("Rate limiter: Redis bersama + fallback in-memory")
+            return lim
+        except Exception as e:
+            # Paket redis tak ada / URI aneh → jangan matikan; coba MongoDB.
+            logger.warning(f"Rate limiter Redis gagal init ({e}); coba MongoDB")
+    if _RL_MONGO:
+        _rl_sep = "&" if "?" in _RL_MONGO else "?"
+        _rl_uri = f"{_RL_MONGO}{_rl_sep}serverSelectionTimeoutMS=1500&connectTimeoutMS=1500"
+        try:
+            lim = Limiter(
+                key_func=_rate_limit_key,
+                storage_uri=_rl_uri,
+                storage_options={
+                    "database_name": "aman_ratelimit",
+                    "counter_collection_name": "rl_counters",
+                    "window_collection_name": "rl_windows",
+                },
+                strategy="fixed-window",
+                swallow_errors=True,
+                in_memory_fallback_enabled=True,
+            )
+            logger.info("Rate limiter: MongoDB bersama (db=aman_ratelimit) + fallback in-memory")
+            return lim
+        except Exception as e:
+            # Konstruksi gagal (mis. skema URI aneh) → jangan matikan aplikasi;
+            # pakai in-memory per-worker.
+            logger.warning(f"Rate limiter MongoDB gagal init ({e}); pakai in-memory per-worker")
+    return Limiter(key_func=_rate_limit_key)
+
+
+limiter = _bangun_limiter()
+
+# --- Cache ringkasan (fallback per-worker) ---
 _cache_categories = TTLCache(maxsize=1, ttl=300)
 _cache_filter_opts = TTLCache(maxsize=50, ttl=180)
 _cache_stats = TTLCache(maxsize=100, ttl=60)
 _cache_analytics = TTLCache(maxsize=50, ttl=120)
 
+# --- Cache BERSAMA lintas-worker via Redis (opsional, ber-feature-flag) ---
+# Bila REDIS_URL di-set, cache ringkasan dipindah ke Redis: satu sumber untuk
+# ke-2 worker uvicorn + invalidasi seketika lintas worker (bump generasi) +
+# beban Mongo turun. Bila REDIS_URL kosong → pakai TTLCache per-worker di atas
+# persis seperti semula. Redis mati → operasi di-swallow (miss → hitung ulang).
+from redis_utils import (redis_aktif as _redis_aktif, redis_get as _redis_get,
+                         redis_set as _redis_set, bump_namespaces as _redis_bump)
+
+# Registry namespace → (TTLCache lokal untuk fallback, TTL detik untuk Redis).
+_CACHE_LOCAL = {
+    "filter_opts": _cache_filter_opts,
+    "stats": _cache_stats,
+    "analytics": _cache_analytics,
+    "categories": _cache_categories,
+}
+_CACHE_TTL = {"filter_opts": 180, "stats": 60, "analytics": 120, "categories": 300}
+
+
+async def cache_get(namespace: str, key: str):
+    """Ambil dari cache: Redis bila aktif, selain itu TTLCache lokal per-worker.
+    Mengembalikan None saat miss (nilai cache tak pernah None)."""
+    if _redis_aktif():
+        return await _redis_get(namespace, key)
+    return _CACHE_LOCAL[namespace].get(key)
+
+
+async def cache_set(namespace: str, key: str, value) -> None:
+    """Simpan ke cache: Redis (dengan TTL) bila aktif, selain itu TTLCache lokal."""
+    if _redis_aktif():
+        await _redis_set(namespace, key, value, _CACHE_TTL[namespace])
+    else:
+        _CACHE_LOCAL[namespace][key] = value
+
+
 def invalidate_category_cache():
-    _cache_categories.clear()
+    _cache_categories.clear()               # lokal (dipakai saat Redis nonaktif)
+    _redis_bump(["categories"])             # bersama (no-op bila Redis nonaktif)
 
 def invalidate_asset_cache():
     _cache_filter_opts.clear()
     _cache_stats.clear()
     _cache_analytics.clear()
+    _redis_bump(["filter_opts", "stats", "analytics"])
 
 # --- Tinify Config ---
 TINIFY_API_KEY = os.environ.get("TINIFY_API_KEY", "")

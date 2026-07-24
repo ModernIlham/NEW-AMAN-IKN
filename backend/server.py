@@ -190,6 +190,11 @@ async def shutdown_event():
         await tutup_client()
     except Exception:
         pass
+    try:
+        from redis_utils import tutup_client as tutup_redis
+        await tutup_redis()
+    except Exception:
+        pass
     client.close()
     logger.info("Application shutdown complete")
 
@@ -257,6 +262,21 @@ async def deep_health_check():
         ok = False
         checks["gridfs"] = {"ok": False, "error": str(e)[:200]}
         logger.error("health/deep: GridFS tak terjangkau: %s", e)
+
+    # Redis (OPSIONAL): hanya diperiksa bila diaktifkan (REDIS_URL di-set). Redis
+    # tak sehat TIDAK menjatuhkan status keseluruhan (cache jatuh-balik ke Mongo/
+    # in-memory) — dilaporkan sebagai info degradasi, bukan kegagalan gerbang.
+    try:
+        from redis_utils import redis_aktif, ping as redis_ping
+        if redis_aktif():
+            t2 = time.perf_counter()
+            r_ok = await redis_ping()
+            checks["redis"] = {"ok": bool(r_ok),
+                               "latency_ms": round((time.perf_counter() - t2) * 1000, 1)}
+            if not r_ok:
+                logger.warning("health/deep: Redis aktif tapi tak merespons PING (cache fallback)")
+    except Exception as e:
+        checks["redis"] = {"ok": False, "error": str(e)[:200]}
 
     try:
         from routes.backup import APP_VERSION as _ver
