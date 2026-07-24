@@ -164,6 +164,17 @@ async def startup_event():
         start_webp_converter()
     except Exception as e:
         logger.warning(f"Konverter WebP gagal start (non-fatal): {e}")
+    # Meilisearch (OPSIONAL, ber-feature-flag): siapkan indeks + setelan bila
+    # MEILI_URL/MEILI_MASTER_KEY di-set. Nonaktif → no-op (pencarian pakai regex
+    # Mongo seperti biasa). Tidak me-reindex data di sini (itu tugas endpoint/
+    # skrip reindex massal agar startup tetap ringan).
+    try:
+        from meili_utils import meili_aktif, pastikan_indeks
+        if meili_aktif():
+            await pastikan_indeks()
+            logger.info("Meilisearch aktif — indeks siap")
+    except Exception as e:
+        logger.warning(f"Penyiapan indeks Meilisearch gagal (non-fatal, fallback regex): {e}")
     logger.info("Application started successfully")
     logger.info(f"MongoDB connected: {os.environ['DB_NAME']}")
 
@@ -172,6 +183,11 @@ async def shutdown_event():
     try:
         from routes.websocket import stop_event_bus
         await stop_event_bus()
+    except Exception:
+        pass
+    try:
+        from meili_utils import tutup_client
+        await tutup_client()
     except Exception:
         pass
     client.close()
@@ -309,6 +325,7 @@ from routes.timeline import timeline_router
 from routes.lbp import lbp_router
 from routes.email_monitor import email_monitor_router
 from routes.peta_kolaborasi import peta_kolaborasi_router
+from routes.search_admin import search_router
 
 api_router.include_router(auth_router)
 api_router.include_router(categories_router)
@@ -363,6 +380,7 @@ api_router.include_router(timeline_router)
 api_router.include_router(lbp_router)
 api_router.include_router(email_monitor_router)  # pemantauan kuota email Resend
 api_router.include_router(peta_kolaborasi_router)  # peta kolaboratif via link publik
+api_router.include_router(search_router)  # administrasi Meilisearch (opsional)
 
 
 # ============================================================================

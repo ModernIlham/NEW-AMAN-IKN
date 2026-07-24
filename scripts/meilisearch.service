@@ -1,0 +1,32 @@
+# Unit systemd Meilisearch untuk AMAN (referensi).
+#
+# Biasanya file ini DITULIS OTOMATIS oleh scripts/setup_meilisearch.sh ke
+# /etc/systemd/system/meilisearch.service. Disertakan di repo sebagai rujukan
+# bila ingin memasang manual.
+#
+# Pemasangan manual:
+#   sudo cp scripts/meilisearch.service /etc/systemd/system/meilisearch.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now meilisearch
+[Unit]
+Description=Meilisearch (mesin pencari AMAN)
+After=network.target
+
+[Service]
+Type=simple
+User=meilisearch
+Group=meilisearch
+# Konfigurasi (master key, path DB, alamat bind) di /etc/meilisearch.toml.
+ExecStart=/usr/local/bin/meilisearch --config-file-path /etc/meilisearch.toml
+Restart=on-failure
+RestartSec=3
+# Pengetatan: Meili hanya butuh baca binari + tulis direktori datanya.
+StateDirectory=meilisearch
+WorkingDirectory=/var/lib/meilisearch
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
