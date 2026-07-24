@@ -44,6 +44,20 @@ def _rx(term: str) -> dict:
     return {"$regex": re.escape(term), "$options": "i"}
 
 
+# Panjang minimum kata kunci pencarian teks bebas. Regex infix 16-field TIDAK
+# bisa memakai index (COLLSCAN dalam lingkup satker), jadi kueri 1 huruf yang
+# selektivitasnya sangat rendah (mis. "a") memindai hampir seluruh aset percuma.
+# Di bawah ambang ini, filter pencarian DIABAIKAN (daftar tampil apa adanya) —
+# tak ada perubahan pada semantik 16-field saat kata kunci cukup panjang.
+MIN_SEARCH_LEN = 2
+
+
+def _search_len_ok(search: str) -> bool:
+    """True bila kata kunci pencarian layak dijalankan (≥ MIN_SEARCH_LEN setelah
+    dipangkas). Kosong/whitespace/1-huruf → False (diperlakukan tanpa pencarian)."""
+    return len((search or "").strip()) >= MIN_SEARCH_LEN
+
+
 async def _collect_asset_blob_ids(asset: dict) -> dict:
     """Gather GridFS blob ids referenced by an asset so they can be deleted
     alongside the doc (prevents orphaned blobs on delete). In this schema only
@@ -177,8 +191,9 @@ def build_asset_search_query(
     if ids:
         query["id"] = {"$in": list(ids)}
 
-    # Multi-field search with regex - EXTENDED to cover all important fields
-    if search:
+    # Multi-field search with regex - EXTENDED to cover all important fields.
+    # Diabaikan bila kata kunci < MIN_SEARCH_LEN (cegah COLLSCAN 1-huruf).
+    if _search_len_ok(search):
         # Try to detect if search is a number (for price search)
         search_as_number = None
         search_as_string = None
@@ -564,7 +579,7 @@ async def get_assets_stats(search: str = "", category: str = "", activity_id: st
     if activity_id:
         query["activity_id"] = activity_id
     query = await scope_query_aset(_user, query)
-    if search:
+    if _search_len_ok(search):
         rx = _rx(search)
         query["$or"] = [
             {"asset_code": rx},

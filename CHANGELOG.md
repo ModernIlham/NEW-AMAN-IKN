@@ -48,6 +48,24 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#586] Optimasi search: abaikan kata kunci < 2 huruf (cegah COLLSCAN 1-huruf) — 2026-07-24
+
+Langkah cepat mempercepat pencarian aset **tanpa mengubah cakupan 16-field**.
+Pencarian teks bebas memakai regex 16-field yang tak bisa memakai index (scan
+dalam lingkup satker); kata kunci **1 huruf** (mis. "a") selektivitasnya sangat
+rendah → memindai hampir seluruh aset percuma. Kini kata kunci **< 2 huruf
+diabaikan** (daftar tampil apa adanya):
+
+- Backend: `build_asset_search_query` (daftar + ekspor geo) dan `/assets/stats`
+  hanya membangun `$or` bila `len(kata_kunci.strip()) ≥ 2` (`_search_len_ok`).
+  Saat kata kunci cukup panjang, **16-field `$or` berjalan persis seperti
+  sebelumnya** — tidak ada perubahan hasil.
+- Frontend: kata kunci "efektif" dijepit di `useAssetFilters` — < 2 huruf tak
+  memicu request sama sekali (hemat beban). Yang **diketik** pengguna tetap
+  terlihat; hanya pemicu pencarian yang dijepit. Konsisten online & offline.
+
+---
+
 ## [#585] Perbaikan: thumbnail foto tak muncul di peta kolaboratif (jumlah_foto selalu 0) — 2026-07-24
 
 Bugfix lanjutan #583: thumbnail foto aset **tidak pernah tampil** karena

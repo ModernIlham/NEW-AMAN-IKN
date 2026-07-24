@@ -13,11 +13,21 @@ function useDebounce(value, delay) {
   return dv;
 }
 
+// Panjang minimum kata kunci pencarian. Di server, pencarian teks bebas memakai
+// regex 16-field yang tak bisa memakai index (COLLSCAN dalam lingkup satker),
+// sehingga kata kunci 1 huruf ("a") memindai hampir seluruh aset percuma. Di
+// bawah ambang ini kata kunci DIPERLAKUKAN KOSONG (tak memicu request & tak
+// dikirim ke server). Nilai yang DIKETIK pengguna tetap terlihat (SearchInput
+// menyimpan state lokal sendiri) — hanya kata kunci "efektif" yang dijepit.
+const MIN_SEARCH_LEN = 2;
+
 export function useAssetFilters({ activityId }) {
   const [searchInput, setSearchInput] = useState("");
   const [filterCategory, setFilterCategory] = useState("Semua");
   const [sortBy, setSortBy] = useState("newest");
-  const debouncedSearch = useDebounce(searchInput, 300);
+  const rawDebouncedSearch = useDebounce(searchInput, 300);
+  // Kata kunci EFEKTIF: < MIN_SEARCH_LEN (setelah dipangkas) → "" (tanpa cari).
+  const debouncedSearch = rawDebouncedSearch.trim().length >= MIN_SEARCH_LEN ? rawDebouncedSearch : "";
 
   const [showAdvancedFilter, setShowAdvancedFilter] = useState(false);
 
