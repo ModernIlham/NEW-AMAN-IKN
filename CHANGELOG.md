@@ -48,6 +48,20 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#584] Perbaikan HP: dialog Bagikan Peta muat di layar + samakan ukuran tombol Bagikan di peta — 2026-07-24
+
+- **Dialog "Bagikan Peta Kolaboratif" muat di HP** — sebelumnya melebihi kanvas
+  di layar kecil. Kini padding lebih ringkas di HP (`p-4`), tinggi dibatasi
+  (`max-h-90vh`) dengan gulir vertikal + `overflow-x-hidden`, dan baris aksi tiap
+  link ditata ulang (jumlah kontribusi pindah baris) agar tombol
+  WhatsApp/Bagikan/Perpanjang/Ganti/Batal membungkus rapi tanpa meluber.
+- **Tombol Bagikan di peta aset seukuran tombol lain** — sebelumnya lebih kecil
+  (kena `min-h-0`) dari tombol Tutup/lainnya di ≤1023px. Kini tombol ikon persegi
+  `h-9 w-9` yang seragam dengan tombol Tutup, dan melebar berlabel "Bagikan" di
+  desktop (≥lg).
+
+---
+
 ## [#583] Peta Kolaboratif: tombol ikon ringkas + foto aset (thumbnail → foto asli layar penuh) — 2026-07-24
 
 Penajaman tampilan & foto berdasarkan umpan balik:
