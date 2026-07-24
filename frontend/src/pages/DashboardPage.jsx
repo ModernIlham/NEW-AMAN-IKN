@@ -1716,7 +1716,6 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
                 rowLocks={rowLocks} sessionId={sessionId}
                 refreshKey={progressRefreshKey}
                 snapshotState={snapshotState}
-                inventoryMode={inventoryMode} setInventoryMode={setInventoryMode}
               />
             )}
             <DashboardToolbar
@@ -1728,6 +1727,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
               assetsCount={assets.length} filters={filters} filterOptions={filterOptions} handleAdvancedFilterChange={handleAdvancedFilterChange}
               resetAdvancedFilters={resetAdvancedFilters} handleCategoryReset={() => { handleCategoryReset(); refreshData(1); }}
               refreshData={refreshData} viewMode={viewMode} setViewMode={setViewMode}
+              inventoryMode={inventoryMode} setInventoryMode={setInventoryMode}
             />
 
             {/* Tiga panel (Analytics/Rekapitulasi/Barang Serupa) disatukan jadi
