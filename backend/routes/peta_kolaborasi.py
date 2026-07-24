@@ -36,6 +36,8 @@ _PROJ = {"_id": 0}
 _DEFAULT_JAM = 72          # masa tayang default 3 hari
 DEFAULT_MAKS_TITIK = 120
 DEFAULT_MAKS_TEKS = 1000
+MAKS_TITIK_ASET_PUBLIK = 5000   # plafon titik aset yang dikirim ke peta publik
+MAKS_KONTRIB_SHARE = 3000       # plafon kontribusi (titik+komentar) per share
 
 
 def _basis_url_publik() -> str:
@@ -73,10 +75,15 @@ def _parse_coord(v) -> Optional[float]:
         return None
 
 
-def _hitung_berlaku(durasi_jam, berlaku_sampai_str, base: datetime) -> str:
-    """Tentukan ISO masa tayang: berlaku_sampai eksplisit > durasi_jam > default.
-    Dijepit ke plafon token (MAP_TOKEN_EXPIRATION_DAYS) & minimal 1 jam."""
-    maks = base + timedelta(days=MAP_TOKEN_EXPIRATION_DAYS)
+def _hitung_berlaku(durasi_jam, berlaku_sampai_str, base: datetime,
+                    plafon_base: Optional[datetime] = None) -> str:
+    """Tentukan ISO masa tayang (UTC): berlaku_sampai eksplisit > durasi_jam >
+    default. Dijepit ke plafon token (MAP_TOKEN_EXPIRATION_DAYS sejak
+    `plafon_base` bila diberi — mis. created_at, agar token yang SUDAH tersebar
+    tak kedaluwarsa lebih dulu dari masa tayang — atau sejak `base`) & minimal
+    1 jam. SELALU dinormalkan ke UTC agar perbandingan kedaluwarsa konsisten
+    (offset non-UTC pada input tak menyesatkan)."""
+    maks = (plafon_base or base) + timedelta(days=MAP_TOKEN_EXPIRATION_DAYS)
     dt = None
     if berlaku_sampai_str:
         try:
@@ -97,12 +104,32 @@ def _hitung_berlaku(durasi_jam, berlaku_sampai_str, base: datetime) -> str:
         dt = maks
     if dt <= base:
         dt = base + timedelta(hours=1)
-    return dt.isoformat()
+    return dt.astimezone(timezone.utc).isoformat()
 
 
 def _kedaluwarsa(share: dict) -> bool:
+    """True bila masa tayang lampau. Bandingkan sebagai datetime AWARE (bukan
+    string leksikografis) agar offset zona waktu pada berlaku_sampai tak
+    menyesatkan; jatuh ke perbandingan string hanya bila parse gagal."""
     bs = str(share.get("berlaku_sampai") or "")
-    return bool(bs) and bs < _now().isoformat()
+    if not bs:
+        return False
+    try:
+        dt = datetime.fromisoformat(bs.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt <= _now()
+    except (ValueError, TypeError):
+        return bs < _now().isoformat()
+
+
+def _parse_iso(s) -> Optional[datetime]:
+    """Parse ISO → datetime aware (UTC bila naif), atau None bila gagal."""
+    try:
+        dt = datetime.fromisoformat(str(s).replace("Z", "+00:00"))
+        return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+    except (ValueError, TypeError):
+        return None
 
 
 def _operator_satker(share: dict, ctx: dict) -> bool:
@@ -290,11 +317,22 @@ async def daftar_share(activity_id: str = Query(...),
 async def perpanjang_share(share_id: str, payload: PerpanjangIn,
                            user: dict = Depends(require_writer)):
     """Perpanjang masa tayang (dari SEKARANG) + opsi izin — link lama tetap
-    berlaku (jti tidak dirotasi)."""
+    berlaku (jti tidak dirotasi). Link yang sudah DIBATALKAN tidak bisa
+    dihidupkan lewat sini (pembatalan bersifat permanen sebagai kill-switch);
+    untuk mengaktifkan kembali gunakan 'terbitkan ulang' yang menerbitkan link
+    BARU & mematikan link lama yang bocor."""
     sh = await _muat_share(share_id)
     await pastikan_akses_dok_satker(user, sh)
+    if sh.get("status") == "batal":
+        raise HTTPException(
+            status_code=409,
+            detail="Link sudah dibatalkan. Terbitkan ulang untuk membuat "
+                   "tautan baru (tautan lama tetap mati).")
     now = _now()
-    berlaku = _hitung_berlaku(payload.durasi_jam, payload.berlaku_sampai, now)
+    # Plafon berlaku dipatok pada USIA TOKEN (created_at) agar link yang sudah
+    # tersebar (exp = created_at + plafon) tak kedaluwarsa lebih dulu dari DB.
+    plafon = _parse_iso(sh.get("created_at")) or now
+    berlaku = _hitung_berlaku(payload.durasi_jam, payload.berlaku_sampai, now, plafon)
     setf = {"berlaku_sampai": berlaku, "status": "aktif",
             "updated_at": now.isoformat()}
     if payload.izinkan_titik_publik is not None:
@@ -307,6 +345,34 @@ async def perpanjang_share(share_id: str, payload: PerpanjangIn,
                     detail=f"Perpanjang masa tayang peta s.d. {berlaku[:16]}",
                     kode_satker=str(sh.get("kode_satker") or ""))
     return {"ok": True, "berlaku_sampai": berlaku}
+
+
+@peta_kolaborasi_router.post("/peta/share/{share_id}/terbitkan-ulang")
+async def terbitkan_ulang_share(share_id: str, payload: PerpanjangIn,
+                                user: dict = Depends(require_writer)):
+    """Terbitkan ulang link: ROTASI jti + mint token BARU (kill-switch link
+    bocor / hidupkan kembali link yang dibatalkan). Semua tautan lama LANGSUNG
+    mati (jti tak cocok). Kontribusi yang sudah masuk tetap tersimpan (share_id
+    sama)."""
+    sh = await _muat_share(share_id)
+    await pastikan_akses_dok_satker(user, sh)
+    now = _now()
+    jti = uuid.uuid4().hex
+    berlaku = _hitung_berlaku(payload.durasi_jam, payload.berlaku_sampai, now)
+    setf = {"jti": jti, "berlaku_sampai": berlaku, "status": "aktif",
+            "updated_at": now.isoformat()}
+    if payload.izinkan_titik_publik is not None:
+        setf["izinkan_titik_publik"] = bool(payload.izinkan_titik_publik)
+    if payload.izinkan_komentar_publik is not None:
+        setf["izinkan_komentar_publik"] = bool(payload.izinkan_komentar_publik)
+    await db.peta_shares.update_one({"id": share_id}, {"$set": setf})
+    token = create_map_token(share_id, jti)
+    await log_audit("terbitkan_ulang_share_peta", sh.get("activity_id", ""), share_id,
+                    username=user.get("username", "system"),
+                    detail=f"Terbitkan ulang link peta (rotasi jti) s.d. {berlaku[:16]}",
+                    kode_satker=str(sh.get("kode_satker") or ""))
+    return {"ok": True, "berlaku_sampai": berlaku,
+            "link": _link_peta(share_id, token), "token": token}
 
 
 @peta_kolaborasi_router.post("/peta/share/{share_id}/batal")
@@ -346,7 +412,7 @@ async def _titik_aset(share: dict) -> list:
         {"activity_id": share.get("activity_id"), "dihapus": {"$ne": True}},
         {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
          "category": 1, "inventory_status": 1,
-         "koordinat_latitude": 1, "koordinat_longitude": 1})
+         "koordinat_latitude": 1, "koordinat_longitude": 1}).limit(MAKS_TITIK_ASET_PUBLIK)
     out = []
     async for a in cur:
         lat = _parse_coord(a.get("koordinat_latitude"))
@@ -364,6 +430,7 @@ async def _titik_aset(share: dict) -> list:
 
 
 @peta_kolaborasi_router.get("/peta/kolaborasi/{share_id}")
+@limiter.limit("120/minute")
 async def lihat_peta(share_id: str, request: Request,
                      ctx: dict = Depends(require_user_or_map_token)):
     """Data peta kolaboratif: titik aset + titik & komentar kolaboratif.
@@ -397,17 +464,27 @@ async def lihat_peta(share_id: str, request: Request,
 
 async def _guard_kontribusi(sh: dict, ctx: dict, request: Request,
                             izin_field: str, aksi: str):
-    """Validasi umum saat menulis (titik/komentar): akses + izin publik."""
+    """Validasi umum saat menulis (titik/komentar): akses + izin publik + plafon."""
     _verifikasi_token_share(sh, ctx)
     punya_link = await _punya_link(sh, request)
     _, boleh_kontribusi, alasan = _akses_peta(sh, ctx, punya_link)
     if not boleh_kontribusi:
         raise HTTPException(status_code=403,
                             detail=alasan or "Masa tayang berakhir — perpanjang untuk berkontribusi lagi.")
-    # Tamu tunduk pada izin publik; user login selalu boleh.
-    if ctx.get("guest") and not bool(sh.get(izin_field, True)):
+    # Toggle izin publik berlaku untuk SEMUA pengunjung berlink (tamu maupun
+    # user login satker lain yang hanya lewat link); hanya operator/admin satker
+    # share yang lolos toggle.
+    if not _operator_satker(sh, ctx) and not bool(sh.get(izin_field, True)):
         raise HTTPException(status_code=403,
                             detail=f"Pembagi menonaktifkan {aksi} publik untuk peta ini.")
+    # Plafon kontribusi per share — cegah pembengkakan tak terbatas & jaga
+    # respons tetap terbatas.
+    jml = await db.peta_kolaborasi.count_documents(
+        {"share_id": sh["id"], "dihapus": {"$ne": True}})
+    if jml >= MAKS_KONTRIB_SHARE:
+        raise HTTPException(
+            status_code=429,
+            detail="Batas kontribusi peta ini telah tercapai. Hubungi pembagi.")
 
 
 @peta_kolaborasi_router.post("/peta/kolaborasi/{share_id}/titik")

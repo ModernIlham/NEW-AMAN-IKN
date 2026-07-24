@@ -82,6 +82,16 @@ Pengelolaan oleh operator/admin satker kegiatan:
 - **Setelah kedaluwarsa**, link hanya bisa dibuka oleh **operator/admin satker
   + kegiatan** terkait (untuk mengarsipkan & memperpanjang) — pemegang link
   biasa ditolak, sesuai permintaan.
+- **Terbitkan ulang** (rotasi `jti` + token baru) sebagai **kill-switch** bila
+  link bocor: tautan lama langsung mati, kontribusi tetap tersimpan. Juga jalur
+  resmi menghidupkan kembali link yang **dibatalkan** (pembatalan bersifat
+  permanen; *perpanjang* tak bisa menghidupkannya diam-diam).
+- Penegakan **kedaluwarsa tz-aware** (bukan perbandingan string) — offset zona
+  waktu tak lagi menyesatkan. Masa tayang dijepit agar token yang sudah tersebar
+  tak kedaluwarsa lebih dulu.
+- **Plafon kontribusi per peta** + **rate-limit baca**; toggle izin publik
+  berlaku untuk **semua** pengunjung berlink (tamu maupun user satker lain),
+  hanya operator/admin satker yang lolos.
 - Data yang dibagikan ke publik **minimal & aman** (kode/NUP/nama/kategori/status
   + koordinat) — **tanpa harga, foto, atau field sensitif**. IP tamu direkam
   untuk moderasi tetapi **tak pernah** dikirim ke klien.

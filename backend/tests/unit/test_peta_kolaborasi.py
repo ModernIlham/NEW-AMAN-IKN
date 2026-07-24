@@ -11,6 +11,12 @@ def _iso(delta_hours):
     return (datetime.now(timezone.utc) + timedelta(hours=delta_hours)).isoformat()
 
 
+def _iso_wib(delta_hours):
+    """Instant relatif SEKARANG, tapi dinyatakan dalam offset +07:00 (WIB)."""
+    dt = datetime.now(timezone.utc) + timedelta(hours=delta_hours)
+    return dt.astimezone(timezone(timedelta(hours=7))).isoformat()
+
+
 def test_parse_coord():
     from routes.peta_kolaborasi import _parse_coord
     assert _parse_coord("1,5") == 1.5          # desimal koma
@@ -26,6 +32,28 @@ def test_kedaluwarsa():
     assert _kedaluwarsa({"berlaku_sampai": _iso(-1)}) is True    # lampau
     assert _kedaluwarsa({"berlaku_sampai": _iso(+1)}) is False   # mendatang
     assert _kedaluwarsa({"berlaku_sampai": ""}) is False         # tak diset → tak habis
+
+
+def test_kedaluwarsa_offset_non_utc():
+    """Offset zona waktu (WIB +07:00) dihormati secara kronologis, bukan
+    perbandingan string leksikografis (regresi temuan keamanan)."""
+    from routes.peta_kolaborasi import _kedaluwarsa
+    # Instant yang SAMA di WIB: 1 jam lampau → habis; 1 jam mendatang → belum.
+    assert _kedaluwarsa({"berlaku_sampai": _iso_wib(-1)}) is True
+    assert _kedaluwarsa({"berlaku_sampai": _iso_wib(+1)}) is False
+    # Naif (tanpa tz) diperlakukan UTC.
+    assert _kedaluwarsa({"berlaku_sampai": "2020-01-01T00:00:00"}) is True
+
+
+def test_hitung_berlaku_plafon_base():
+    """plafon_base (mis. created_at) menjepit masa tayang agar token yang sudah
+    tersebar tak kedaluwarsa lebih dulu (regresi temuan keamanan)."""
+    from routes.peta_kolaborasi import _hitung_berlaku
+    from auth_utils import MAP_TOKEN_EXPIRATION_DAYS
+    base = datetime(2026, 7, 24, 0, 0, tzinfo=timezone.utc)
+    plafon = base - timedelta(days=30)   # token diterbitkan 30 hari lalu
+    d = _hitung_berlaku(10_000_000, None, base, plafon)
+    assert d == (plafon + timedelta(days=MAP_TOKEN_EXPIRATION_DAYS)).astimezone(timezone.utc).isoformat()
 
 
 def test_hitung_berlaku_default_dan_jepit():
