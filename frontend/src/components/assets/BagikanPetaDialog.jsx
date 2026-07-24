@@ -128,7 +128,7 @@ export default function BagikanPetaDialog({ open, onClose, activity }) {
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-lg w-[calc(100%-1.5rem)] max-h-[90vh] overflow-y-auto overflow-x-hidden p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><Share2 className="w-5 h-5 text-blue-600" />Bagikan Peta Kolaboratif</DialogTitle>
           <DialogDescription className="text-xs">
@@ -192,10 +192,10 @@ export default function BagikanPetaDialog({ open, onClose, activity }) {
                   </button>
                 </div>
               )}
+              <p className="text-[10px] text-muted-foreground">{s.jumlah_kontribusi || 0} kontribusi</p>
               <div className="flex flex-wrap items-center gap-1.5">
                 {s.link && <button onClick={() => bagikanWA(s.link, s.judul)} className="h-7 px-2 rounded-md bg-green-600 text-white text-[11px] font-semibold min-w-0 min-h-0">WhatsApp</button>}
                 {s.link && <button onClick={() => bagikanNatif(s.link, s.judul)} className="h-7 px-2 rounded-md border border-border text-[11px] text-muted-foreground min-w-0 min-h-0">Bagikan…</button>}
-                <span className="text-[10px] text-muted-foreground flex-1 text-right">{s.jumlah_kontribusi || 0} kontribusi</span>
                 <button onClick={() => perpanjang(s.id, 168)} title="Perpanjang 7 hari" className="h-7 px-2 rounded-md border border-blue-300 dark:border-blue-800 text-blue-600 dark:text-blue-400 text-[11px] font-semibold flex items-center gap-1 min-w-0 min-h-0" data-testid={`bagikan-perpanjang-${s.id}`}>
                   <RefreshCcw className="w-3 h-3" />Perpanjang
                 </button>

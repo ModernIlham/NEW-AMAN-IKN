@@ -1153,7 +1153,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
             onClick={onShare}
             aria-label="Bagikan peta kolaboratif"
             title="Bagikan peta kolaboratif (link publik)"
-            className="h-9 px-2 lg:px-2.5 rounded-lg border border-blue-300 dark:border-blue-800 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950 flex items-center gap-1 flex-shrink-0 min-w-0 min-h-0"
+            className="h-9 w-9 lg:w-auto lg:px-2.5 rounded-lg border border-blue-300 dark:border-blue-800 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950 flex items-center justify-center lg:justify-start gap-1 flex-shrink-0"
             data-testid="asset-map-share"
           >
             <Share2 className="w-4 h-4" /><span className="hidden lg:inline text-xs font-semibold">Bagikan</span>
