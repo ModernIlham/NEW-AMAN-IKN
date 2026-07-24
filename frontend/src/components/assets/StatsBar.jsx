@@ -18,7 +18,10 @@ function formatSyncTime(iso) {
  */
 // Ikon-saja di tablet & desktop (permintaan pemilik) — KHUSUS HP (<sm)
 // label teks tampil di samping ikon; di ≥sm label tetap lewat title/aria.
-export const InventoryModeSwitch = memo(({ inventoryMode, setInventoryMode, className = "", iconOnly = true }) => (
+// `mobileLabel`: bila false, label teks di <sm juga disembunyikan (ikon-saja) —
+// dipakai saat saklar disisipkan inline di toolbar HP (antara Scan & Peta) agar
+// ringkas. Default true mempertahankan label penuh untuk penempatan berdiri.
+export const InventoryModeSwitch = memo(({ inventoryMode, setInventoryMode, className = "", iconOnly = true, mobileLabel = true }) => (
   <div className={`grid grid-cols-2 ${className}`} data-testid="stats-mobile-inline">
     <button
       type="button"
@@ -30,7 +33,7 @@ export const InventoryModeSwitch = memo(({ inventoryMode, setInventoryMode, clas
       className={`min-h-0 min-w-0 flex items-center justify-center gap-1.5 h-8 ${iconOnly ? 'px-2.5' : 'px-2'} rounded-lg text-xs font-semibold transition-colors ${!inventoryMode ? 'bg-blue-600 text-white shadow-sm' : 'text-muted-foreground'}`}
     >
       <LayoutDashboard className="w-4 h-4 flex-shrink-0" />
-      <span className="sm:hidden truncate">Dashboard</span>
+      {mobileLabel && <span className="sm:hidden truncate">Dashboard</span>}
     </button>
     <button
       type="button"
@@ -42,7 +45,7 @@ export const InventoryModeSwitch = memo(({ inventoryMode, setInventoryMode, clas
       className={`min-h-0 min-w-0 flex items-center justify-center gap-1.5 h-8 ${iconOnly ? 'px-2.5' : 'px-2'} rounded-lg text-xs font-semibold transition-colors ${inventoryMode ? 'bg-emerald-600 text-white shadow-sm' : 'text-muted-foreground'}`}
     >
       <ClipboardCheck className="w-4 h-4 flex-shrink-0" />
-      <span className="sm:hidden truncate">Inventarisasi</span>
+      {mobileLabel && <span className="sm:hidden truncate">Inventarisasi</span>}
     </button>
   </div>
 ));
@@ -109,16 +112,9 @@ const StatsBar = memo(({ stats, inventoryMode, setInventoryMode, isOnline, pendi
       />
     </div>
 
-    {/* Mobile Portrait (< sm): kartu saklar mode full-width. Saat mode
-        inventarisasi aktif, saklar pindah ke kartu header gabungan di
-        InventoryProgressBar — kartu ini tidak dirender agar tidak ganda. */}
-    {!inventoryMode && (
-      <InventoryModeSwitch
-        inventoryMode={inventoryMode}
-        setInventoryMode={setInventoryMode}
-        className="sm:hidden p-1 gap-1 rounded-xl border border-border bg-card shadow-sm"
-      />
-    )}
+    {/* Mobile Portrait (< sm): saklar mode kini disisipkan di toolbar (antara
+        tombol Scan & Peta) — dirender oleh DashboardToolbar, bukan di sini,
+        agar hemat satu baris & konsisten di kedua mode. */}
   </div>
 ));
 

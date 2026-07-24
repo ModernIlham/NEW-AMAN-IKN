@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { CategorySelect, TinifyQuotaIndicator, TinifyQuotaMobile, AdvancedFilter } from "@/components/assets";
 import QrScanButton from "@/components/assets/QrScanButton";
+import { InventoryModeSwitch } from "@/components/assets/StatsBar";
 
 // Kotak cari dengan state LOKAL: tiap ketukan hanya me-render komponen kecil
 // ini, lalu nilainya didorong ke halaman (setSearchInput) setelah jeda 250 ms.
@@ -63,6 +64,7 @@ const DashboardToolbar = memo(function DashboardToolbar({
   resetAdvancedFilters, handleCategoryReset,
   refreshData,
   viewMode, setViewMode,
+  inventoryMode, setInventoryMode,
 }) {
   return (
     <div className="bg-card rounded-xl border border-border shadow-sm p-1.5 sm:p-2.5 print:hidden" data-testid="dashboard-toolbar">
@@ -74,6 +76,17 @@ const DashboardToolbar = memo(function DashboardToolbar({
             <SearchInput value={searchInput} onCommit={setSearchInput} />
           </div>
           <QrScanButton onDetected={onScanCode || setSearchInput} />
+          {/* Saklar mode Dashboard|Inventarisasi — KHUSUS HP (<sm), disisipkan
+              di antara Scan & Peta (permintaan pemilik). Ikon-saja agar ringkas;
+              di ≥sm saklar tetap di StatsBar. */}
+          {setInventoryMode && (
+            <InventoryModeSwitch
+              inventoryMode={inventoryMode}
+              setInventoryMode={setInventoryMode}
+              mobileLabel={false}
+              className="sm:hidden flex-shrink-0 gap-0.5 p-0.5 rounded-lg bg-muted"
+            />
+          )}
           {/* Lembar Peta Aset — di HP/tablet cukup ikon khasnya; toggle */}
           {onOpenMap && (
             <Button

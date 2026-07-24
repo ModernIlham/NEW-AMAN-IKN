@@ -1,7 +1,6 @@
 import React, { memo, useState, useEffect } from "react";
 import { CloudOff, Users, Loader2, HardDriveDownload } from "lucide-react";
 import axios from "axios";
-import { InventoryModeSwitch } from "./StatsBar";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -27,11 +26,12 @@ const QUICK_CHIPS = [
  * chip filter cepat, indikator offline/antrian/rekan, dan status penyiapan
  * data offline (snapshotState dari DashboardPage).
  *
- * Mobile (<sm): SATU kartu gabungan — saklar Dashboard|Inventarisasi + persen,
- * bar progres tipis + status offline ringkas, lalu chip segmen kecil.
+ * Mobile (<sm): SATU kartu ringkas — bar progres tipis, lalu persen + progres
+ * X/Y (sebaris di bawah bar) & status offline, lalu chip segmen kecil. Saklar
+ * mode kini di toolbar (antara Scan & Peta), bukan di sini — hemat satu baris.
  * Tablet/desktop (sm+): satu baris ramping (saklar mode tetap di StatsBar).
  */
-const InventoryProgressBar = memo(({ activityId, inventoryStatusFilter, onFilterChange, isOnline, pendingCount, rowLocks, sessionId, refreshKey, snapshotState, inventoryMode, setInventoryMode }) => {
+const InventoryProgressBar = memo(({ activityId, inventoryStatusFilter, onFilterChange, isOnline, pendingCount, rowLocks, sessionId, refreshKey, snapshotState }) => {
   const [rekap, setRekap] = useState(null);
 
   // Refetch saat activity berubah, saat refreshKey di-bump (save selesai),
@@ -117,26 +117,18 @@ const InventoryProgressBar = memo(({ activityId, inventoryStatusFilter, onFilter
 
   return (
     <div className="print:hidden" data-testid="inventory-progress-bar">
-      {/* ===== Mobile (<sm): kartu header gabungan ===== */}
+      {/* ===== Mobile (<sm): kartu ringkas (saklar mode kini di toolbar) ===== */}
       <div className="sm:hidden bg-card rounded-xl border border-border shadow-sm p-2 space-y-1.5">
-        {/* Baris 1: saklar mode + persentase */}
-        <div className="flex items-center gap-2">
-          <InventoryModeSwitch
-            inventoryMode={inventoryMode}
-            setInventoryMode={setInventoryMode}
-            className="flex-1 min-w-0 gap-0.5 p-0.5 rounded-lg bg-muted"
-          />
-          <span className="text-base font-bold text-emerald-600 dark:text-emerald-400 tabular-nums flex-shrink-0 pr-0.5" data-testid="inventory-progress-pct">{pct}%</span>
-        </div>
-
-        {/* Baris 2: bar progres tipis + teks progres kiri / status offline kanan */}
+        {/* Baris 1: bar progres tipis; persen TEPAT DI BAWAH bar bersebelahan
+            dengan perbandingan X/Y — hemat ruang untuk baris data. */}
         <div>
           <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
             <div className="h-full bg-emerald-500 rounded-full transition-all duration-300" style={{ width: `${pct}%` }} />
           </div>
           <div className="mt-1 flex items-center justify-between gap-2">
-            <span className="text-[10px] text-muted-foreground truncate">
-              {done.toLocaleString('id-ID')}/{total.toLocaleString('id-ID')} diinventarisasi
+            <span className="text-[10px] text-muted-foreground truncate flex items-baseline gap-1 min-w-0">
+              <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 tabular-nums flex-shrink-0" data-testid="inventory-progress-pct">{pct}%</span>
+              <span className="truncate">{done.toLocaleString('id-ID')}/{total.toLocaleString('id-ID')} diinventarisasi</span>
             </span>
             {hasStatus && (
               <span className="flex items-center gap-1.5 flex-shrink-0">
@@ -146,7 +138,7 @@ const InventoryProgressBar = memo(({ activityId, inventoryStatusFilter, onFilter
           </div>
         </div>
 
-        {/* Baris 3: chip filter cepat — pil segmen kecil */}
+        {/* Baris 2: chip filter cepat — pil segmen kecil */}
         <div className="grid grid-cols-3 gap-0.5 p-0.5 rounded-lg bg-muted" data-testid="inventory-quick-chips">
           {QUICK_CHIPS.map(c => {
             const active = (inventoryStatusFilter || "") === c.value;

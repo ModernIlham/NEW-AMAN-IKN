@@ -48,6 +48,33 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#578] UI HP: badge garansi menyatu NUP, status ikon-saja, saklar mode di toolbar, persen di bawah bar — 2026-07-24
+
+Penyempurnaan tata letak **khusus tampilan HP** (mobile, < sm) agar lebih padat
+& hemat ruang untuk baris data.
+
+- **Badge garansi menyatu dengan NUP** — di kartu aset HP, NUP + Garansi kini
+  tampil sebagai **satu pil menyatu** di samping kode aset: dua bagian dipisah
+  **pembatas** (garis border) dan diberi **warna kotak berbeda** (garansi hijau
+  bila aman / kuning bila segera berakhir). Badge garansi dilepas dari baris
+  bawah.
+- **Status inventarisasi = ikon saja** — cukup ikon (✓ ditemukan, ✗ tidak
+  ditemukan, ⊕ berlebih, ⚖ sengketa, ○ belum) berwarna; makna tetap terbaca
+  lewat tooltip & `aria-label`. Menghemat lebar baris.
+- **Saklar mode Dashboard | Inventarisasi pindah ke toolbar** — di HP kini
+  disisipkan **di antara tombol Scan & Peta** (ikon-saja), konsisten di kedua
+  mode; dicabut dari kartu StatsBar mobile & header InventoryProgressBar agar
+  tak dobel.
+- **Persen pindah ke bawah bar** — pada mode inventarisasi HP, persentase kini
+  tepat **di bawah bar progres** dan **bersebelahan** dengan perbandingan
+  X/Y diinventarisasi — satu baris (saklar mode) hilang, ruang untuk baris data
+  bertambah.
+
+Tampilan tablet/desktop (≥ sm) tidak berubah. Diverifikasi tinjauan adversarial
+multi-lensa (tap-target 44px, mode gelap, breakpoint, regresi) — bersih.
+
+---
+
 ## [#577] Pemantauan kuota email Resend — indikator harian & bulanan (dinamis) — 2026-07-23
 
 Semua email keluar aplikasi (OTP registrasi, OTP lupa password, link tanda

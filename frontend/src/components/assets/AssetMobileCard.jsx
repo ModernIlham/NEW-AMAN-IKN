@@ -1,5 +1,5 @@
 import React, { memo, useState, useRef } from "react";
-import { Camera, MapPin, Briefcase, Tag, Trash2, Lock, Cloud, Check, RotateCcw, RefreshCcw, MoreVertical, BookOpen, History, CreditCard, AlertTriangle, ShieldCheck } from "lucide-react";
+import { Camera, MapPin, Briefcase, Tag, Trash2, Lock, Cloud, Check, RotateCcw, RefreshCcw, MoreVertical, BookOpen, History, CreditCard, AlertTriangle, ShieldCheck, CheckCircle2, XCircle, PlusCircle, Scale, CircleDashed } from "lucide-react";
 import { sisaGaransi } from "../../lib/garansi";
 import { useSinkronSiman } from "../../lib/simanSync";
 import {
@@ -32,6 +32,8 @@ const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, onOpenKartu, on
   };
   
   const priceFormatted = formatPrice(asset.purchase_price);
+  // Garansi pindah menyatu dengan NUP (HP): dihitung sekali di sini.
+  const garansi = sisaGaransi(asset.garansi_hingga);
   
   // Swipe handlers
   const handleTouchStart = (e) => {
@@ -253,9 +255,24 @@ const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, onOpenKartu, on
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
                   <span className="font-semibold text-foreground text-sm truncate">{asset.asset_code}</span>
-                  {asset.NUP && (
-                    <span className="text-[9px] bg-muted text-muted-foreground px-1 py-0.5 rounded font-medium flex-shrink-0">
-                      NUP {asset.NUP}
+                  {/* NUP + Garansi = SATU pil menyatu (HP): dua bagian dipisah
+                      pembatas (border) & diberi warna kotak berbeda — garansi
+                      hijau (aman) / kuning (segera). Muncul walau salah satu
+                      kosong. */}
+                  {(asset.NUP || garansi) && (
+                    <span className="inline-flex items-stretch rounded overflow-hidden flex-shrink-0 text-[9px] font-medium border border-border" data-testid={`card-nup-garansi-${asset.id}`}>
+                      {asset.NUP && (
+                        <span className="bg-muted text-muted-foreground px-1 py-0.5 whitespace-nowrap">NUP {asset.NUP}</span>
+                      )}
+                      {garansi && (
+                        <span
+                          className={`px-1 py-0.5 inline-flex items-center gap-0.5 whitespace-nowrap ${asset.NUP ? 'border-l border-border' : ''} ${garansi.segera ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400' : 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400'}`}
+                          title={`Garansi${asset.garansi_jenis ? ` ${asset.garansi_jenis}` : ""} hingga ${garansi.hingga} (${garansi.hari} hari lagi)`}
+                          data-testid={`card-garansi-${asset.id}`}
+                        >
+                          <ShieldCheck className="w-2.5 h-2.5" />{garansi.singkat}
+                        </span>
+                      )}
                     </span>
                   )}
                 </div>
@@ -338,32 +355,28 @@ const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, onOpenKartu, on
                 <Tag className="w-2.5 h-2.5" />
                 {stikerTerpasang ? `Stiker ${asset.stiker_ukuran || ''}` : 'Belum Stiker'}
               </span>
+              {/* Status inventarisasi = IKON SAJA (HP) — makna via warna +
+                  tooltip/aria; label teks dihapus demi hemat ruang. */}
               {(() => {
-                const g = sisaGaransi(asset.garansi_hingga);
-                return g ? (
+                const PETA = {
+                  "Ditemukan": { Icon: CheckCircle2, cls: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400', label: 'Ditemukan' },
+                  "Tidak Ditemukan": { Icon: XCircle, cls: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400', label: 'Tidak Ditemukan' },
+                  "Berlebih": { Icon: PlusCircle, cls: 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400', label: 'Berlebih' },
+                  "Sengketa": { Icon: Scale, cls: 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-400', label: 'Sengketa' },
+                };
+                const m = PETA[asset.inventory_status] || { Icon: CircleDashed, cls: 'bg-muted text-muted-foreground', label: 'Belum Diinventarisasi' };
+                const M = m.Icon;
+                return (
                   <span
-                    className={`inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${g.segera ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400' : 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400'}`}
-                    title={`Garansi${asset.garansi_jenis ? ` ${asset.garansi_jenis}` : ""} hingga ${g.hingga} (${g.hari} hari lagi)`}
-                    data-testid={`card-garansi-${asset.id}`}
+                    className={`inline-flex items-center justify-center w-5 h-5 rounded-full flex-shrink-0 ${m.cls}`}
+                    title={`Status inventarisasi: ${m.label}`}
+                    aria-label={`Status inventarisasi: ${m.label}`}
+                    data-testid={`card-invstatus-${asset.id}`}
                   >
-                    <ShieldCheck className="w-2.5 h-2.5" />
-                    {g.singkat}
+                    <M className="w-3 h-3" />
                   </span>
-                ) : null;
+                );
               })()}
-              <span className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
-                asset.inventory_status === "Ditemukan" ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400' : 
-                asset.inventory_status === "Tidak Ditemukan" ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400' : 
-                asset.inventory_status === "Berlebih" ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400' :
-                asset.inventory_status === "Sengketa" ? 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-400' :
-                'bg-muted text-muted-foreground'
-              }`}>
-                {asset.inventory_status === "Ditemukan" ? '✓ Ditemukan' : 
-                 asset.inventory_status === "Tidak Ditemukan" ? '✗ Tdk Ditemukan' : 
-                 asset.inventory_status === "Berlebih" ? '⊕ Berlebih' :
-                 asset.inventory_status === "Sengketa" ? '⚖ Sengketa' :
-                 'Blm Inventarisasi'}
-              </span>
             </div>
           </div>
         </div>
