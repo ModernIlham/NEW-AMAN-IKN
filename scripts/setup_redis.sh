@@ -64,6 +64,14 @@ else
   log "Memakai password Redis yang sudah ada."
 fi
 
+# Password WAJIB URL-safe: dipakai apa adanya di `requirepass` (tanpa kutip) dan
+# di REDIS_URL (redis://:PASS@...). Karakter seperti @ : / # spasi akan merusak
+# URL/konfigurasi. Default (openssl hex) selalu lolos; hanya override manual
+# ber-karakter aneh yang ditolak — beri pesan jelas alih-alih korupsi senyap.
+if ! printf '%s' "$PASS" | grep -qE '^[A-Za-z0-9._~-]+$'; then
+  err "REDIS_PASSWORD hanya boleh berisi huruf/angka/._~- (URL-safe). Ganti passwordnya."
+fi
+
 # ── 3. Konfigurasi: bind localhost + requirepass (idempoten) ────────────────
 log "Mengonfigurasi $REDIS_CONF (bind localhost + password) ..."
 # Hapus baris lama yang kita kelola, lalu tambahkan yang baru di akhir file.
@@ -94,6 +102,11 @@ done
 [ -f "$BACKEND_ENV" ] || err "backend/.env tidak ditemukan di $BACKEND_ENV — set APP_DIR yang benar."
 REDIS_URL_VAL="redis://:${PASS}@127.0.0.1:${REDIS_PORT}/0"
 sed -i '/^REDIS_URL=/d' "$BACKEND_ENV"
+# Pastikan file diakhiri newline sebelum menambah (cegah baris tergabung bila
+# .env terakhir tak ber-newline). tail -c1 → kosong bila byte terakhir newline.
+if [ -s "$BACKEND_ENV" ] && [ -n "$(tail -c1 "$BACKEND_ENV")" ]; then
+  echo >> "$BACKEND_ENV"
+fi
 echo "REDIS_URL=${REDIS_URL_VAL}" >> "$BACKEND_ENV"
 log "backend/.env diperbarui (REDIS_URL)."
 
