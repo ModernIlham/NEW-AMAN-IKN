@@ -27,9 +27,10 @@ const QUICK_CHIPS = [
  * data offline (snapshotState dari DashboardPage).
  *
  * Mobile (<sm): SATU kartu ringkas — bar progres tipis, lalu persen + progres
- * X/Y (sebaris di bawah bar) & status offline, lalu chip segmen kecil. Saklar
- * mode kini di toolbar (antara Scan & Peta), bukan di sini — hemat satu baris.
- * Tablet/desktop (sm+): satu baris ramping (saklar mode tetap di StatsBar).
+ * X/Y (sebaris di bawah bar) & status offline. Saklar mode di toolbar (antara
+ * Scan & Peta) dan chip filter cepat DIHILANGKAN di HP (sudah ada di Filter
+ * Lanjutan) — hemat ruang untuk baris data.
+ * Tablet/desktop (sm+): satu baris ramping + chip filter (saklar mode di StatsBar).
  */
 const InventoryProgressBar = memo(({ activityId, inventoryStatusFilter, onFilterChange, isOnline, pendingCount, rowLocks, sessionId, refreshKey, snapshotState }) => {
   const [rekap, setRekap] = useState(null);
@@ -137,27 +138,10 @@ const InventoryProgressBar = memo(({ activityId, inventoryStatusFilter, onFilter
             )}
           </div>
         </div>
-
-        {/* Baris 2: chip filter cepat — pil segmen kecil */}
-        <div className="grid grid-cols-3 gap-0.5 p-0.5 rounded-lg bg-muted" data-testid="inventory-quick-chips">
-          {QUICK_CHIPS.map(c => {
-            const active = (inventoryStatusFilter || "") === c.value;
-            return (
-              <button
-                key={c.label}
-                type="button"
-                onClick={() => onFilterChange("inventoryStatus", c.value)}
-                aria-pressed={active}
-                className={`min-h-0 min-w-0 h-7 rounded-md text-[11px] font-semibold transition-colors ${
-                  active ? "bg-blue-600 text-white shadow-sm" : "text-muted-foreground"
-                }`}
-                data-testid={`inventory-chip-${c.label.toLowerCase()}`}
-              >
-                {c.label}
-              </button>
-            );
-          })}
-        </div>
+        {/* Chip filter cepat (Belum/Ditemukan/Semua) DIHILANGKAN di HP —
+            filter status sudah tersedia di Filter Lanjutan/kategori aset;
+            menghapusnya menambah ruang untuk baris data (permintaan pemilik).
+            Di ≥sm chip tetap ada (varian di bawah). */}
       </div>
 
       {/* ===== Tablet/Desktop (sm+): satu baris ramping ===== */}
