@@ -48,6 +48,18 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#585] Perbaikan: thumbnail foto tak muncul di peta kolaboratif (jumlah_foto selalu 0) — 2026-07-24
+
+Bugfix lanjutan #583: thumbnail foto aset **tidak pernah tampil** karena
+`_titik_aset` memproyeksikan field `photo_count` yang **tidak tersimpan** di
+dokumen aset (di daftar aset ia DIHITUNG, bukan disimpan) → `jumlah_foto` selalu
+0 → bagian foto tak pernah dirender. Kini `jumlah_foto` **dihitung di server**
+lewat agregasi (`$size` `photo_gridfs_ids`, fallback `photos`) — sama seperti
+daftar aset — tanpa menarik byte foto. Thumbnail kini muncul di panel detail
+aset dan klik → foto asli layar penuh berfungsi.
+
+---
+
 ## [#584] Perbaikan HP: dialog Bagikan Peta muat di layar + samakan ukuran tombol Bagikan di peta — 2026-07-24
 
 - **Dialog "Bagikan Peta Kolaboratif" muat di HP** — sebelumnya melebihi kanvas

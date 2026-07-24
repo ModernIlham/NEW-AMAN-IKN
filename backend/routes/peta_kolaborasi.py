@@ -413,15 +413,25 @@ async def _titik_aset(share: dict) -> list:
     """Titik aset kegiatan (koordinat valid) — HANYA field DESKRIPTIF aman untuk
     publik (identitas + kategori/status + merk/tipe/lokasi/kondisi untuk verifikasi
     lapangan). SENGAJA TANPA: nilai/harga, foto, pengguna/NIP (PII), dokumen."""
-    cur = db.assets.find(
-        {"activity_id": share.get("activity_id"), "dihapus": {"$ne": True}},
-        {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
-         "category": 1, "inventory_status": 1, "condition": 1,
-         "brand": 1, "model": 1, "location": 1,
-         "photo_count": 1, "thumbnail_index": 1,
-         "koordinat_latitude": 1, "koordinat_longitude": 1}).limit(MAKS_TITIK_ASET_PUBLIK)
+    # jumlah_foto DIHITUNG (bukan field tersimpan): GridFS-first, fallback inline —
+    # sama seperti daftar aset. $size dievaluasi di server; byte foto TIDAK ditarik.
+    pipeline = [
+        {"$match": {"activity_id": share.get("activity_id"), "dihapus": {"$ne": True}}},
+        {"$limit": MAKS_TITIK_ASET_PUBLIK},
+        {"$project": {
+            "_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
+            "category": 1, "inventory_status": 1, "condition": 1,
+            "brand": 1, "model": 1, "location": 1, "thumbnail_index": 1,
+            "koordinat_latitude": 1, "koordinat_longitude": 1,
+            "jumlah_foto": {"$let": {
+                "vars": {"ng": {"$size": {"$ifNull": ["$photo_gridfs_ids", []]}}},
+                "in": {"$cond": [{"$gt": ["$$ng", 0]}, "$$ng",
+                                 {"$size": {"$ifNull": ["$photos", []]}}]},
+            }},
+        }},
+    ]
     out = []
-    async for a in cur:
+    async for a in db.assets.aggregate(pipeline):
         lat = _parse_coord(a.get("koordinat_latitude"))
         lng = _parse_coord(a.get("koordinat_longitude"))
         if lat is None or lng is None:
@@ -436,7 +446,7 @@ async def _titik_aset(share: dict) -> list:
                     "kondisi": a.get("condition") or "",
                     "merk": a.get("brand") or "", "tipe": a.get("model") or "",
                     "lokasi": a.get("location") or "",
-                    "jumlah_foto": int(a.get("photo_count") or 0),
+                    "jumlah_foto": int(a.get("jumlah_foto") or 0),
                     "thumbnail_index": int(a.get("thumbnail_index") or 0)})
     return out
 
