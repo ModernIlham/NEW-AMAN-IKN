@@ -48,6 +48,18 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#580] UI HP: hapus chip filter cepat (Belum/Ditemukan/Semua) di mode inventarisasi — 2026-07-24
+
+Di **HP**, mode inventarisasi menampilkan chip filter cepat **Belum /
+Ditemukan / Semua** pada kartu progres. Chip ini **dihapus khusus di HP**
+karena filter status sudah tersedia di **Filter Lanjutan** (kategori/status
+aset). Menghapusnya membuang satu baris → **menambah wilayah untuk baris data
+aset**.
+
+Tablet/desktop (≥ sm) tidak berubah — chip filter tetap ada di baris ramping.
+
+---
+
 ## [#579] Perbaikan: Ubah Massal gagal senyap bila seleksi langsung dikosongkan — 2026-07-24
 
 Saat **Ubah Massal** ditekan **Terapkan** lalu pengguna **cepat menekan
