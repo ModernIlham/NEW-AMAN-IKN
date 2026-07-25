@@ -83,6 +83,8 @@ export default function PegawaiPage({ user, onBack }) {
   const [deteksi, setDeteksi] = useState(null); // hasil deteksi jenis nomor identitas
   const [autoIsi, setAutoIsi] = useState(null); // {terisi[], sumber, tmt_cpns, wilayah_kode} hasil auto-isi dari NIP/NIK
   const formRef = useRef(null); // cermin `form` terbaru untuk auto-isi tanpa memicu ulang efek
+  const nipAwalRef = useRef(""); // NIP bawaan saat form dibuka — auto-isi hanya bila nomor berubah
+  const formKeyRef = useRef(undefined); // identitas record yang sedang dibuka (deteksi form baru)
   // Filter & sortir lanjutan (pola halaman aset)
   const [fStatus, setFStatus] = useState("");
   const [fStatusPeg, setFStatusPeg] = useState("");
@@ -305,6 +307,17 @@ export default function PegawaiPage({ user, onBack }) {
   // Cermin `form` untuk auto-isi (baca nilai terkini tanpa masuk deps efek).
   useEffect(() => { formRef.current = form; }, [form]);
 
+  // Catat NIP bawaan saat SEBUAH record dibuka (edit) / form baru — dipakai agar
+  // auto-isi hanya jalan saat pengguna benar-benar MEMASUKKAN/mengubah nomor,
+  // bukan sekadar membuka record lama (cegah perubahan form tak diminta).
+  useEffect(() => {
+    const kunci = form ? (form.id || "__baru__") : null;
+    if (kunci !== formKeyRef.current) {
+      formKeyRef.current = kunci;
+      nipAwalRef.current = form ? String(form.nip || "").trim() : "";
+    }
+  }, [form]);
+
   // Terapkan hasil urai NIP/NIK ke field form. Default NON-DESTRUKTIF: hanya
   // isi field yang KOSONG; `paksa` menimpa nilai lama (tombol "Isi ulang").
   const terapkanUrai = useCallback((terurai, paksa = false) => {
@@ -330,7 +343,12 @@ export default function PegawaiPage({ user, onBack }) {
     if (!nomor || nomor.length < 5) { setDeteksi(null); setAutoIsi(null); return undefined; }
     const t = setTimeout(() => {
       axios.get(`${API}/pegawai/deteksi-identitas`, { params: { nomor } })
-        .then((r) => { setDeteksi(r.data); terapkanUrai(r.data?.terurai, false); })
+        .then((r) => {
+          setDeteksi(r.data);
+          // Auto-isi HANYA bila nomor diubah pengguna (bukan nilai bawaan saat buka).
+          if (nomor !== nipAwalRef.current) terapkanUrai(r.data?.terurai, false);
+          else setAutoIsi(null);
+        })
         .catch(() => { setDeteksi(null); setAutoIsi(null); });
     }, 350);
     return () => clearTimeout(t);
