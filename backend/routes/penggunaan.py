@@ -221,7 +221,8 @@ async def export_psp(_user: dict = Depends(require_user)):
 
     from fastapi.responses import Response as HttpResponse
 
-    items = [s async for s in db.psp.find({}, {"_id": 0}).sort("tanggal_sk", -1)]
+    items = [s async for s in db.psp.find(
+        scope_query_field_satker(_user), {"_id": 0}).sort("tanggal_sk", -1)]
     buf = io.StringIO()
     w = csv_module.writer(buf)
     for row in baris_csv_psp(items):
@@ -654,7 +655,8 @@ async def export_idle(_user: dict = Depends(require_user)):
 
     from fastapi.responses import Response as HttpResponse
 
-    tiket = [t async for t in db.bmn_idle.find({}, {"_id": 0})
+    tiket = [t async for t in db.bmn_idle.find(
+        scope_query_field_satker(_user), {"_id": 0})
              .sort("created_at", -1)]
     buf = io.StringIO()
     w = csv_module.writer(buf)
@@ -1012,14 +1014,20 @@ async def buat_proses(payload: ProsesIn, user: dict = Depends(require_writer)):
     errors = validate_proses_penggunaan(data)
     if errors:
         raise HTTPException(status_code=400, detail="; ".join(errors))
+    from shared_utils import pastikan_akses_aset
     aset_rows = []
     for aid in dict.fromkeys(data["asset_ids"]):
         a = await db.assets.find_one(
             {"id": aid},
-            {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1})
+            {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
+             "activity_id": 1})
         if not a:
             raise HTTPException(status_code=404,
                                 detail=f"Aset {aid} tidak ditemukan")
+        # Isolasi satker (REVIEW-9 R8): tanpa guard ini satker lain dapat
+        # membuka tiket atas aset kita, lalu transisi terminalnya menandai
+        # aset kita KELUAR pembukuan (proyeksi dihapus=True + jurnal 302).
+        await pastikan_akses_aset(user, a)
         aset_rows.append({"asset_id": a["id"], "asset_code": a.get("asset_code"),
                           "NUP": a.get("NUP"), "asset_name": a.get("asset_name")})
     now = datetime.now(timezone.utc).isoformat()

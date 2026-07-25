@@ -143,6 +143,7 @@ async def daftarkan_persediaan(perolehan_id: str, user: dict = Depends(require_w
     p = await db.pengadaan.find_one({"id": perolehan_id}, {"_id": 0})
     if not p:
         raise HTTPException(status_code=404, detail="Perolehan tidak ditemukan")
+    await pastikan_akses_dok_satker(user, p)  # isolasi satker (REVIEW-9 R8)
     barang = list(p.get("barang") or [])
     dibuat_master = masuk = dilewati_nonpsd = dilewati_terdaftar = 0
     gagal = []
@@ -288,6 +289,7 @@ async def perbarui_dokumen(perolehan_id: str, payload: DokumenIn,
     p = await db.pengadaan.find_one({"id": perolehan_id}, {"_id": 0})
     if not p:
         raise HTTPException(status_code=404, detail="Perolehan tidak ditemukan")
+    await pastikan_akses_dok_satker(_user, p)  # isolasi satker (REVIEW-9 R8)
     wajib = set(DOKUMEN_PEROLEHAN.get(p.get("jenis"), ()))
     dokumen = {**(p.get("dokumen") or {}),
                **{k: bool(v) for k, v in payload.dokumen.items() if k in wajib}}
@@ -306,6 +308,7 @@ async def tautkan_barang(perolehan_id: str, payload: TautkanIn,
     p = await db.pengadaan.find_one({"id": perolehan_id}, {"_id": 0})
     if not p:
         raise HTTPException(status_code=404, detail="Perolehan tidak ditemukan")
+    await pastikan_akses_dok_satker(_user, p)  # isolasi satker (REVIEW-9 R8)
     barang = p.get("barang") or []
     if payload.index >= len(barang):
         raise HTTPException(status_code=400, detail="Baris barang tidak ada")
@@ -359,11 +362,16 @@ async def buat_draft_aset_dari_perolehan(perolehan_id: str,
     p = await db.pengadaan.find_one({"id": perolehan_id}, {"_id": 0})
     if not p:
         raise HTTPException(status_code=404, detail="Perolehan tidak ditemukan")
+    await pastikan_akses_dok_satker(user, p)  # isolasi satker (REVIEW-9 R8)
     act = await db.inventory_activities.find_one(
-        {"id": payload.activity_id}, {"_id": 0, "id": 1, "nama_kegiatan": 1})
+        {"id": payload.activity_id},
+        {"_id": 0, "id": 1, "nama_kegiatan": 1, "kode_satker": 1})
     if not act:
         raise HTTPException(status_code=404,
                             detail="Kegiatan inventarisasi tidak ditemukan")
+    # Isolasi satker (REVIEW-9 R8): kegiatan TUJUAN juga wajib milik satker
+    # kita — tanpa ini aset draft bisa dijejalkan ke kegiatan satker lain.
+    await pastikan_akses_dok_satker(user, act)
     kategori_by_kode = {
         c["kode_aset"]: c.get("label", "")
         async for c in db.categories.find({}, {"_id": 0, "kode_aset": 1, "label": 1})
@@ -468,6 +476,7 @@ async def tautkan_penganggaran(perolehan_id: str,
     p = await db.pengadaan.find_one({"id": perolehan_id}, {"_id": 0})
     if not p:
         raise HTTPException(status_code=404, detail="Perolehan tidak ditemukan")
+    await pastikan_akses_dok_satker(_user, p)  # isolasi satker (REVIEW-9 R8)
     snap = await _ambil_snapshot_penganggaran(payload.penganggaran_id)
     now = datetime.now(timezone.utc).isoformat()
     await db.pengadaan.update_one(

@@ -55,3 +55,12 @@ impor, template) **sempat terlewat** sebelum ditambal.
 Prinsip: setiap langkah dimigrasi **bertahap dan diverifikasi identik** (assert
 set-equality list lama vs turunan registry sebelum list lama dihapus; test suite
 integrasi yang ada sebagai jaring pengaman untuk pemindahan modul).
+
+
+---
+
+*Status Juli 2026: mayoritas rekomendasi dokumen ini sudah dieksekusi lewat
+seri PR-OPT/OBS/JOB dan audit REVIEW-9 (offload render ke thread, indeks
+kunci, registry anti-drift, cache bersama Redis opsional, job latar
+persisten). Rujuk `.claude/skills/aman-dev/SKILL.md` untuk pola baku yang
+kini wajib diikuti fitur baru.*

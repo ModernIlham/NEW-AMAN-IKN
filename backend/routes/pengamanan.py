@@ -15,7 +15,7 @@ from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
 )
 from db import db, fs_bucket
-from shared_utils import kode_satker_user, scope_query_field_satker, pastikan_akses_dok_satker, delete_document_from_gridfs, get_document_from_gridfs, nama_file_disposition
+from shared_utils import kode_satker_user, scope_query_field_satker, pastikan_akses_dok_satker, pastikan_akses_aset, delete_document_from_gridfs, get_document_from_gridfs, nama_file_disposition
 from pengamanan_utils import (
     BUTIR_CHECKLIST, JENIS_DOKUMEN, JENIS_KEKURANGAN, JENIS_OBJEK_CHECKLIST,
     KATEGORI_KASUS, KATEGORI_OBJEK_ASURANSI, KATEGORI_SERTIPIKASI,
@@ -149,9 +149,10 @@ async def buka_kasus(payload: KasusIn, user: dict = Depends(require_writer)):
     asset = await db.assets.find_one(
         {"id": data["asset_id"]},
         {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
-         "location": 1})
+         "location": 1, "activity_id": 1})
     if not asset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    await pastikan_akses_aset(user, asset)  # isolasi satker (REVIEW-9 R8)
     aktif = await db.pengamanan_kasus.find_one(
         {"asset_id": asset["id"], "status": {"$ne": "selesai"}},
         {"_id": 0, "id": 1})
@@ -283,9 +284,11 @@ async def catat_dokumen(payload: DokumenIn, user: dict = Depends(require_writer)
         raise HTTPException(status_code=400, detail="; ".join(errors))
     asset = await db.assets.find_one(
         {"id": data["asset_id"]},
-        {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1})
+        {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
+         "activity_id": 1})
     if not asset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    await pastikan_akses_aset(user, asset)  # isolasi satker (REVIEW-9 R8)
     now = datetime.now(timezone.utc).isoformat()
     record = {
         "id": str(uuid.uuid4()),
@@ -442,7 +445,8 @@ class ChecklistIn(BaseModel):
 @pengamanan_router.get("/pengamanan/checklist")
 async def list_checklist(_user: dict = Depends(require_user)):
     """Checklist pengamanan per aset (terbaru dulu) + skor + ringkasan."""
-    items = [c async for c in db.pengamanan_checklist.find({}, {"_id": 0})
+    items = [c async for c in db.pengamanan_checklist.find(
+                 scope_query_field_satker(_user), {"_id": 0})
              .sort("updated_at", -1).limit(500)]
     for c in items:
         c["skor"] = skor_checklist(c)
@@ -466,7 +470,8 @@ async def export_checklist(_user: dict = Depends(require_user)):
 
     from fastapi.responses import Response as HttpResponse
 
-    items = [c async for c in db.pengamanan_checklist.find({}, {"_id": 0})
+    items = [c async for c in db.pengamanan_checklist.find(
+                 scope_query_field_satker(_user), {"_id": 0})
              .sort("updated_at", -1)]
     buf = io.StringIO()
     w = csv_module.writer(buf)
@@ -488,15 +493,20 @@ async def simpan_checklist(payload: ChecklistIn,
         raise HTTPException(status_code=400, detail="; ".join(errors))
     asset = await db.assets.find_one(
         {"id": data["asset_id"]},
-        {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1})
+        {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
+         "activity_id": 1})
     if not asset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    await pastikan_akses_aset(user, asset)  # isolasi satker (REVIEW-9 R8)
     now = datetime.now(timezone.utc).isoformat()
     isi = {
         "asset_id": asset["id"],
         "asset_code": asset.get("asset_code"),
         "NUP": asset.get("NUP"),
         "asset_name": asset.get("asset_name"),
+        # Stempel satker: koleksi checklist sebelumnya tanpa kode_satker →
+        # scope_query_field_satker memperlakukannya "era lama terbuka" (bocor).
+        "kode_satker": kode_satker_user(user),
         "jenis_objek": data["jenis_objek"],
         "butir": {k: bool(v) for k, v in data["butir"].items()},
         "keterangan": str(data.get("keterangan") or "").strip(),
@@ -589,9 +599,11 @@ async def catat_polis(payload: PolisIn, user: dict = Depends(require_writer)):
         raise HTTPException(status_code=400, detail="; ".join(errors))
     asset = await db.assets.find_one(
         {"id": data["asset_id"]},
-        {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1})
+        {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
+         "activity_id": 1})
     if not asset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    await pastikan_akses_aset(user, asset)  # isolasi satker (REVIEW-9 R8)
     now = datetime.now(timezone.utc).isoformat()
     record = {
         "id": str(uuid.uuid4()),

@@ -715,10 +715,13 @@ async def get_inventory_activity_document(
     perkara and pihak bersengketa).
     """
     activity = await db.inventory_activities.find_one(
-        {"id": activity_id}, {"_id": 0, "documents": 1}
+        {"id": activity_id}, {"_id": 0, "documents": 1, "kode_satker": 1}
     )
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
+    # Isolasi satker (REVIEW-9 R8): tanpa guard ini user satker lain dapat
+    # men-stream PDF BAST/kontrak (ber-PII) kegiatan mana pun via id + idx.
+    await pastikan_akses_kegiatan(_user, activity)
     docs = activity.get("documents") or []
     if idx < 0 or idx >= len(docs):
         raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan")

@@ -19,7 +19,8 @@ from auth_utils import (
 from db import db, fs_bucket
 from shared_utils import (
     kode_satker_user, scope_query_field_satker, pastikan_akses_dok_satker,
-    delete_document_from_gridfs, get_document_from_gridfs, log_audit,
+    pastikan_akses_aset, delete_document_from_gridfs, get_document_from_gridfs,
+    log_audit,
 )
 from pemindahtanganan_utils import (
     AMBANG_PERSETUJUAN_PT, BENTUK_PEMINDAHTANGANAN, DOKUMEN_PELAKSANAAN,
@@ -33,7 +34,8 @@ from pembukuan_utils import parse_harga
 pemindahtanganan_router = APIRouter()
 
 _PROJ_ASET = {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
-              "purchase_price": 1, "condition": 1, "dihapus": 1}
+              "purchase_price": 1, "condition": 1, "dihapus": 1,
+              "activity_id": 1}
 
 # Status usulan PT yang masih hidup (belum terminal) — dipakai guard anti-ganda.
 _STATUS_PT_AKTIF = ("diusulkan", "disetujui", "dilaksanakan")
@@ -154,6 +156,7 @@ async def buat_usulan_pt(payload: UsulanPtIn, user: dict = Depends(require_write
         a = await db.assets.find_one({"id": aid}, _PROJ_ASET)
         if not a:
             raise HTTPException(status_code=404, detail=f"Aset {aid} tidak ditemukan")
+        await pastikan_akses_aset(user, a)  # isolasi satker (REVIEW-9 R8)
         # Guard temuan #9: aset yang sudah keluar pembukuan tak bisa diusulkan
         # pindah tangan; satu aset tak boleh punya dua usulan PT aktif.
         if a.get("dihapus"):
