@@ -210,6 +210,12 @@ export default function PenggunaanPage({ user, onBack }) {
       // (kosong = otomatis memakai KPB dari pengaturan/registry).
       penyerah: { id: "", nama: "", nip: "", jabatan: "" },
       pj_tambahan: [],
+      // Khusus "pengembalian_almarhum": dasar BA (identitas almarhum) + saksi.
+      // Prefill dari pemegang yang sedang dibuka — biasanya memang almarhumnya.
+      almarhum: { nama: p.nama || "", nip: p.nip || "",
+                  tanggal_meninggal: "", nomor_akta_kematian: "" },
+      saksi: [{ nama: "", jabatan: "", nip: "" },
+              { nama: "", jabatan: "", nip: "" }],
       terapkan_ke_aset: true,
       booking_otomatis: false,
       aset: new Set((detail?.rows || []).map((a) => a.id)),
@@ -258,6 +264,10 @@ export default function PenggunaanPage({ user, onBack }) {
         nomor: f.nomor, tanggal: f.tanggal, jangka_dari: f.jangka_dari,
         jangka_sampai: f.jangka_sampai,
         penanggung_jawab_tambahan: f.pj_tambahan.filter((x) => x.nama.trim()),
+        ...(f.jenis === "pengembalian_almarhum"
+          ? { almarhum: f.almarhum,
+              saksi: (f.saksi || []).filter((x) => (x.nama || "").trim()) }
+          : {}),
         sertakan_foto: f.sertakan_foto, keterangan: f.keterangan,
         terapkan_ke_aset: ["mutasi_pengguna", "pengembalian"].includes(f.jenis)
           ? f.terapkan_ke_aset : false,
@@ -1520,7 +1530,7 @@ export default function PenggunaanPage({ user, onBack }) {
                   <p className="text-[10px] text-amber-700/80 dark:text-amber-300/80">Isian Penerima di bawah = pemegang BARU; KPB ikut menandatangani sebagai Mengetahui.</p>
                 </div>
               )}
-              {["mutasi_pengguna", "pengembalian"].includes(formBast.jenis) && (
+              {["mutasi_pengguna", "pengembalian", "pengembalian_almarhum"].includes(formBast.jenis) && (
                 <label className="flex items-center gap-2 text-xs cursor-pointer">
                   <input type="checkbox" checked={formBast.terapkan_ke_aset} className="w-3.5 h-3.5" data-testid="bast-terapkan"
                     onChange={(e) => setFormBast((f) => ({ ...f, terapkan_ke_aset: e.target.checked }))} />
@@ -1597,6 +1607,47 @@ export default function PenggunaanPage({ user, onBack }) {
                 <div><label className="text-xs font-medium block mb-1">Alamat/Unit</label>
                   <Input value={formBast.pihak_kedua.alamat} onChange={(e) => setFormBast((f) => ({ ...f, pihak_kedua: { ...f.pihak_kedua, alamat: e.target.value } }))} /></div>
               </div>
+              {formBast.jenis === "pengembalian_almarhum" && (
+                <div className="space-y-2 rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-950/30 p-2.5">
+                  <p className="text-[11px] text-amber-800 dark:text-amber-200">
+                    <b>Dasar berita acara.</b> Yang menyerahkan adalah <b>ahli waris / atasan
+                    langsung</b> (isi di PIHAK KEDUA di atas), bukan almarhum. BAST lama atas
+                    nama almarhum <b>tetap sah</b> dan tidak dibatalkan.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div><label className="text-xs font-medium block mb-1">Nama Almarhum *</label>
+                      <Input value={formBast.almarhum.nama} data-testid="bast-almarhum-nama"
+                        onChange={(e) => setFormBast((f) => ({ ...f, almarhum: { ...f.almarhum, nama: e.target.value } }))} /></div>
+                    <div><label className="text-xs font-medium block mb-1">NIP Almarhum</label>
+                      <Input value={formBast.almarhum.nip} className="font-mono"
+                        onChange={(e) => setFormBast((f) => ({ ...f, almarhum: { ...f.almarhum, nip: e.target.value } }))} /></div>
+                    <div><label className="text-xs font-medium block mb-1">Tanggal Meninggal *</label>
+                      <Input type="date" value={formBast.almarhum.tanggal_meninggal} data-testid="bast-almarhum-tanggal"
+                        onChange={(e) => setFormBast((f) => ({ ...f, almarhum: { ...f.almarhum, tanggal_meninggal: e.target.value } }))} /></div>
+                    <div><label className="text-xs font-medium block mb-1">Nomor Akta Kematian</label>
+                      <Input value={formBast.almarhum.nomor_akta_kematian}
+                        onChange={(e) => setFormBast((f) => ({ ...f, almarhum: { ...f.almarhum, nomor_akta_kematian: e.target.value } }))} /></div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium block">Saksi (wajib minimal 2 — pemegang berhalangan tetap)</label>
+                    {(formBast.saksi || []).map((sk, i) => (
+                      <div key={i} className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-1.5">
+                        <Input value={sk.nama} placeholder={`Nama saksi ${i + 1}`} data-testid={`bast-saksi-nama-${i}`}
+                          onChange={(e) => setFormBast((f) => ({ ...f, saksi: f.saksi.map((x, j) => j === i ? { ...x, nama: e.target.value } : x) }))} />
+                        <Input value={sk.jabatan} placeholder="Jabatan"
+                          onChange={(e) => setFormBast((f) => ({ ...f, saksi: f.saksi.map((x, j) => j === i ? { ...x, jabatan: e.target.value } : x) }))} />
+                        <button type="button" className="px-2 rounded border border-border text-muted-foreground hover:bg-muted min-w-0 min-h-0"
+                          aria-label={`Hapus saksi ${i + 1}`}
+                          onClick={() => setFormBast((f) => ({ ...f, saksi: f.saksi.filter((_, j) => j !== i) }))}><X className="w-3.5 h-3.5" /></button>
+                      </div>
+                    ))}
+                    <button type="button" className="text-[11px] font-semibold text-sky-600 dark:text-sky-400 min-w-0 min-h-0"
+                      onClick={() => setFormBast((f) => ({ ...f, saksi: [...(f.saksi || []), { nama: "", jabatan: "", nip: "" }] }))}>
+                      + Tambah saksi
+                    </button>
+                  </div>
+                </div>
+              )}
               {formBast.jenis === "operasional_unit" && (
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium block">Penanggung jawab tambahan per unit/tempat/tugas (opsional)</label>

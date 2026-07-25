@@ -48,6 +48,37 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#609] Pemegang BMN meninggal dunia (4/4): BAST "Pengembalian — Pemegang Meninggal Dunia" — 2026-07-25
+
+Penutup rangkaian [#606]–[#608]. Sebelumnya, saat pemegang wafat petugas
+terpaksa **mengakali** form BAST biasa: tak ada tempat menyebut almarhum, tak
+ada dasar akta kematian, dan tak ada saksi — padahal pihak yang seharusnya
+menyerahkan **berhalangan tetap**.
+
+- **Jenis BAST baru `pengembalian_almarhum`** — *"Pengembalian Barang Milik
+  Negara — Pemegang Meninggal Dunia"*. Ikut keluarga arah-balik: PIHAK KEDUA
+  **menyerahkan** (ahli waris / atasan langsung), PIHAK KESATU **menerima**
+  (pengurus BMN satker), dan bila dicentang, pengguna aset **dikosongkan**
+  seperti pengembalian biasa.
+- **Pasal DASAR PENGEMBALIAN** otomatis tercetak: nama & NIP almarhum, tanggal
+  wafat (format Indonesia), nomor akta kematian, penjelasan bahwa penyerahan
+  dilakukan ahli waris/atasan karena pemegang berhalangan tetap — dan penegasan
+  bahwa **BAST terdahulu TETAP SAH** sebagai bukti rantai penguasaan serta
+  **tidak dibatalkan** oleh berita acara ini.
+- **Saksi wajib min. 2** (divalidasi server). Blok **SAKSI-SAKSI** dicetak di
+  PDF di bawah tanda tangan para pihak — dirender **berpasangan** agar seluruh
+  saksi benar-benar tercetak (`_signature_block` hanya menangani 1–3 dan
+  membuang sisanya bila diberi ≥4).
+- **Form Penggunaan**: blok kondisional berisi identitas almarhum (prefill dari
+  pemegang yang dibuka) + daftar saksi dinamis + penjelas peran, muncul otomatis
+  saat jenis dipilih.
+
+> **Rangkaian lengkap selesai.** Kematian pemegang kini punya jalur utuh:
+> status ber-akta → transaksi baru ditolak → temuan Wasdal berjam-hukum →
+> berita acara pengembalian yang sah. Dokumen historis tak pernah disentuh.
+
+---
+
 ## [#608] Pemegang BMN meninggal dunia (3/4): temuan Wasdal khusus + jam 3 tahun terlihat — 2026-07-25
 
 Lanjutan [#607]. Sebelumnya pemegang yang wafat hanya tercakup **tidak langsung**
