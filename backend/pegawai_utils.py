@@ -751,7 +751,7 @@ def deteksi_identitas(nomor) -> dict:
         if "01" <= blok <= "12":
             return {"jenis": "nip_pns", "label": "NIP",
                     "keterangan": "NIP PNS (18 digit — lahir "
-                                  f"{n[6:8]}-{n[4:6]}-{n[0:4]}, TMT CPNS {n[10:12]}/{n[8:12]})"}
+                                  f"{n[6:8]}-{n[4:6]}-{n[0:4]}, TMT CPNS {n[12:14]}/{n[8:12]})"}
         if blok >= "21":
             return {"jenis": "ni_pppk", "label": "NI PPPK",
                     "keterangan": f"Nomor Induk PPPK (frekuensi kontrak ke-{int(blok) - 20})"}
@@ -766,6 +766,69 @@ def deteksi_identitas(nomor) -> dict:
         return {"jenis": "nrp_tni", "label": "NRP",
                 "keterangan": "Kemungkinan NRP TNI (format tidak seragam — konfirmasi manual)"}
     return {"jenis": "", "label": "No. Identitas", "keterangan": ""}
+
+
+def _abad_dua_digit(yy: int, tahun_kini: int) -> int:
+    """Terka tahun 4-digit dari 2-digit (NIK) memakai pivot tahun berjalan:
+    yy ≤ (tahun_kini % 100) → 20yy (kelahiran belum lampau seabad), selain itu
+    19yy. Mis. tahun_kini 2026 (pivot 26): '05'→2005, '98'→1998, '26'→2026."""
+    pivot = tahun_kini % 100
+    return (2000 + yy) if yy <= pivot else (1900 + yy)
+
+
+def urai_identitas(nomor, tahun_kini: int = None) -> dict:
+    """Urai DATA TERSTRUKTUR yang PASTI dapat diturunkan dari nomor identitas —
+    untuk auto-isi form Master Pegawai. Hanya isi yang deterministik:
+
+    - NIP PNS / NI PPPK (18 digit): tanggal_lahir (digit 1-8 YYYYMMDD),
+      jenis_kelamin (digit 15: 1=L, 2=P), tmt_cpns (digit 9-14 YYYYMM → 'YYYY-MM',
+      hanya PNS). Sumber: Perka BKN 22/2007.
+    - NIK (16 digit): tanggal_lahir (digit 7-12 DDMMYY; PEREMPUAN tanggal+40),
+      jenis_kelamin (tanggal>40 → P), wilayah_kode (digit 1-6). Tahun 2-digit
+      diterka via pivot tahun berjalan.
+    - NRP POLRI (8 digit): hanya isyarat tahun+bulan lahir (tanpa tanggal/gender)
+      → TIDAK auto-isi tanggal penuh (partial), field dibiarkan kosong.
+    - NRP TNI / tak dikenal: nihil (format tidak seragam — jangan tebak).
+
+    `terisi` = daftar field yang berhasil diturunkan (untuk info UI). Fungsi
+    murni & deterministik bila `tahun_kini` diberikan (untuk unit test)."""
+    if tahun_kini is None:
+        from datetime import date as _d
+        tahun_kini = _d.today().year
+    n = str(nomor or "").strip()
+    hasil = {"jenis": "", "tanggal_lahir": "", "jenis_kelamin": "",
+             "tmt_cpns": "", "wilayah_kode": "", "sumber": "", "terisi": []}
+    if not n.isdigit():
+        return hasil
+    jenis = deteksi_identitas(n).get("jenis", "")
+    hasil["jenis"] = jenis
+    if jenis in ("nip_pns", "ni_pppk", "nip") and len(n) == 18 \
+            and _tgl_valid(n[0:4], n[4:6], n[6:8]):
+        hasil["tanggal_lahir"] = f"{n[0:4]}-{n[4:6]}-{n[6:8]}"
+        hasil["terisi"].append("tanggal_lahir")
+        jk = n[14]
+        if jk in ("1", "2"):
+            hasil["jenis_kelamin"] = "L" if jk == "1" else "P"
+            hasil["terisi"].append("jenis_kelamin")
+        if jenis == "nip_pns" and "01" <= n[12:14] <= "12":
+            hasil["tmt_cpns"] = f"{n[8:12]}-{n[12:14]}"  # YYYY-MM
+            hasil["terisi"].append("tmt_cpns")
+        hasil["sumber"] = "NIP"
+    elif jenis == "nik" and len(n) == 16:
+        dd = int(n[6:8])
+        perempuan = dd > 40
+        hari = dd - 40 if perempuan else dd
+        tahun = _abad_dua_digit(int(n[10:12]), tahun_kini)
+        if _tgl_valid(tahun, n[8:10], hari):  # hanya bila tanggal masuk akal
+            hasil["tanggal_lahir"] = f"{tahun:04d}-{n[8:10]}-{hari:02d}"
+            hasil["terisi"].append("tanggal_lahir")
+            hasil["jenis_kelamin"] = "P" if perempuan else "L"
+            hasil["terisi"].append("jenis_kelamin")
+        hasil["wilayah_kode"] = n[0:6]
+        hasil["sumber"] = "NIK"
+    elif jenis == "nrp_polri":
+        hasil["sumber"] = "NRP POLRI"  # parsial — tak cukup untuk auto-isi
+    return hasil
 
 
 def label_nomor_identitas(nomor, status_kepegawaian="") -> str:

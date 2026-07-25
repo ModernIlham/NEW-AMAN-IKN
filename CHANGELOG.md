@@ -48,6 +48,29 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#595] Master Pegawai lebih cerdas: NIP/NIK otomatis mengisi Tgl Lahir & Jenis Kelamin — 2026-07-25
+
+Begitu **NIP/NIK diketik**, sistem membaca makna kodenya dan **langsung mengisi**
+field yang masih kosong di form pegawai — mengurangi input manual & salah ketik.
+Berbasis riset struktur resmi (Perka BKN 22/2007; Dukcapil/Permendagri):
+
+- **NIP PNS / NI PPPK (18 digit)** → **Tgl Lahir** (digit 1–8 `YYYYMMDD`),
+  **Jenis Kelamin** (digit 15: `1`=L, `2`=P), dan **TMT CPNS** (digit 9–14
+  `YYYYMM`, khusus PNS) ditampilkan sebagai info.
+- **NIK (16 digit)** → **Tgl Lahir** (digit 7–12 `DDMMYY`; **perempuan tanggal
+  +40** → sekaligus menentukan jenis kelamin) + **kode wilayah** (digit 1–6)
+  sebagai info. Tahun 2-digit ditebak via pivot tahun berjalan.
+- **NRP POLRI/TNI**: tidak mengisi otomatis (POLRI hanya thn/bln lahir; TNI
+  formatnya tidak seragam) — sesuai kaidah, tak menebak data yang tak pasti.
+- **Non-destruktif**: hanya mengisi field yang **kosong**; tersedia tombol
+  **"Isi ulang dari NIP/NIK"** untuk menimpa manual bila perlu. Ada catatan
+  "terisi otomatis" agar jelas apa yang diisi.
+- **Perbaikan**: tampilan bulan **TMT CPNS** pada hint deteksi sebelumnya salah
+  (menampilkan 2 digit tahun, kini bulan yang benar). Logika satu sumber
+  (`urai_identitas`) dengan label laporan — ada unit test.
+
+---
+
 ## [#594] Desain marker kedua: sampul foto di dalam marker (toggle Pin↔Foto) — Peta Aset & Peta Kolaborasi — 2026-07-25
 
 Menambah **desain marker kedua** tanpa menghapus yang lama. Marker **pin**

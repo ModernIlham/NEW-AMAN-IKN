@@ -221,6 +221,47 @@ def test_deteksi_identitas_semua_jenis():
     assert deteksi_identitas("abc")["jenis"] == ""
 
 
+def test_urai_identitas_auto_isi():
+    """Urai tanggal lahir / jenis kelamin / TMT / wilayah untuk auto-isi form."""
+    from pegawai_utils import urai_identitas
+    # NIP PNS laki-laki (digit 15 = 1): lahir + TMT CPNS + JK
+    p = urai_identitas("195808181984041001")
+    assert p["jenis"] == "nip_pns"
+    assert p["tanggal_lahir"] == "1958-08-18"
+    assert p["jenis_kelamin"] == "L"
+    assert p["tmt_cpns"] == "1984-04"      # bulan digit 13-14 (bukan 84)
+    assert p["sumber"] == "NIP"
+    assert set(p["terisi"]) == {"tanggal_lahir", "jenis_kelamin", "tmt_cpns"}
+    # NIP PNS perempuan (digit 15 = 2)
+    pf = urai_identitas("199203152015032001")
+    assert pf["tanggal_lahir"] == "1992-03-15" and pf["jenis_kelamin"] == "P"
+    assert pf["tmt_cpns"] == "2015-03"
+    # NI PPPK: lahir + JK, TAPI tanpa TMT CPNS (blok 13-14 = frekuensi)
+    pk = urai_identitas("199001012024211002")
+    assert pk["jenis"] == "ni_pppk"
+    assert pk["tanggal_lahir"] == "1990-01-01" and pk["jenis_kelamin"] == "L"
+    assert pk["tmt_cpns"] == ""
+    # NIK laki-laki (tanggal ≤ 31) — tahun 2-digit via pivot deterministik
+    nm = urai_identitas("3506042503900001", tahun_kini=2026)
+    assert nm["jenis"] == "nik"
+    assert nm["tanggal_lahir"] == "1990-03-25" and nm["jenis_kelamin"] == "L"
+    assert nm["wilayah_kode"] == "350604" and nm["sumber"] == "NIK"
+    # NIK perempuan (tanggal + 40 → 65 = lahir tgl 25)
+    nf = urai_identitas("3506046503900002", tahun_kini=2026)
+    assert nf["tanggal_lahir"] == "1990-03-25" and nf["jenis_kelamin"] == "P"
+    # NIK abad muda: yy '05' ≤ pivot 26 → 2005
+    ny = urai_identitas("3506041501050003", tahun_kini=2026)
+    assert ny["tanggal_lahir"] == "2005-01-15"
+    # NRP POLRI: parsial — TIDAK auto-isi tanggal/JK
+    pol = urai_identitas("80101234")
+    assert pol["sumber"] == "NRP POLRI" and pol["tanggal_lahir"] == ""
+    assert pol["terisi"] == []
+    # NRP TNI & tak dikenal & kosong → nihil
+    assert urai_identitas("531234")["terisi"] == []
+    assert urai_identitas("")["terisi"] == []
+    assert urai_identitas("abc")["terisi"] == []
+
+
 def test_baris_identitas_ttd_dan_label_laporan():
     """Laporan: NRP berlabel NRP; NIK Non-ASN TIDAK dicetak; kosong →
     placeholder garis titik."""
