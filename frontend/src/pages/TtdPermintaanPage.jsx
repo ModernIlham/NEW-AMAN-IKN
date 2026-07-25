@@ -43,7 +43,7 @@ const LABEL_SIGNER = {
 };
 
 const SIGNER_KOSONG = { nama: "", nip: "", jabatan: "", email: "" };
-const FORM_KOSONG = { judul: "", doc_type: "dokumen", mode: "paralel", signers: [{ ...SIGNER_KOSONG }] };
+const FORM_KOSONG = { judul: "", doc_type: "dokumen", doc_ref: "", mode: "paralel", signers: [{ ...SIGNER_KOSONG }] };
 
 function fmtWaktu(iso) {
   if (!iso) return "-";
@@ -158,6 +158,7 @@ export default function TtdPermintaanPage({ user, onBack }) {
         fd.append("file", dokFile);
         fd.append("judul", form.judul);
         fd.append("mode", form.mode);
+        fd.append("doc_ref", form.doc_ref || "");
         fd.append("signers", JSON.stringify(form.signers));
         r = await axios.post(`${API}/ttd/permintaan/unggah`, fd, {
           headers: { "Content-Type": "multipart/form-data" }, timeout: 120000,
@@ -381,6 +382,15 @@ export default function TtdPermintaanPage({ user, onBack }) {
                   </select>
                 </div>
               </div>
+              {/* Referensi dokumen sumber — menautkan permintaan TTD ini ke
+                  dokumen asalnya (BAST/Surat/register) untuk penelusuran &
+                  fondasi keterhubungan lintas modul. Opsional. */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground">Referensi dokumen sumber (opsional)</label>
+                <Input value={form.doc_ref} onChange={(e) => setForm({ ...form, doc_ref: e.target.value })}
+                  placeholder="mis. No. BAST / No. Surat / Kode+NUP aset" className="h-10 mt-1"
+                  data-testid="ttd-form-doc-ref" />
+              </div>
               {/* Dokumen PDF terlampir — ttd yang masuk DIBUBUHKAN ke halaman
                   terakhir dokumen (unduh "Dokumen ber-TTD" setelah diteken). */}
               <div className="rounded-xl border border-dashed border-border p-2.5 space-y-1.5">
@@ -529,6 +539,11 @@ export default function TtdPermintaanPage({ user, onBack }) {
                   {detail.mode === "berurutan" ? "Berurutan" : "Paralel"} · dibuat {fmtWaktu(detail.created_at)} oleh {detail.created_by}
                   {" · "}
                   <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${WARNA_STATUS[detail.status] || ""}`}>{LABEL_STATUS[detail.status] || detail.status}</span>
+                  {detail.doc_ref ? (
+                    <span className="block mt-1 text-[11px] text-muted-foreground break-words" data-testid="ttd-detail-doc-ref">
+                      Referensi dokumen: <b className="text-foreground">{detail.doc_ref}</b>
+                    </span>
+                  ) : null}
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-2 min-w-0">
