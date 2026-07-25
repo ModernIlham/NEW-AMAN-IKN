@@ -100,7 +100,12 @@ def test_normalisasi_status_pegawai():
     assert normalisasi_status_pegawai("KELUAR") == "keluar"
     assert normalisasi_status_pegawai("MUTASI KELUAR") == "mutasi"
     assert normalisasi_status_pegawai("Pensiun") == "pensiun"
-    assert normalisasi_status_pegawai("MENINGGAL") == "nonaktif"
+    # Kematian kini KELAS SENDIRI (dulu dilebur ke 'nonaktif' → informasinya
+    # hilang); perlakuan administratifnya berbeda & menjalankan jam 3 tahun.
+    assert normalisasi_status_pegawai("MENINGGAL") == "meninggal"
+    assert normalisasi_status_pegawai("Meninggal Dunia") == "meninggal"
+    assert normalisasi_status_pegawai("wafat") == "meninggal"
+    assert normalisasi_status_pegawai("Almarhum") == "meninggal"
     assert normalisasi_status_pegawai("") == "aktif"
 
 
@@ -449,6 +454,110 @@ def test_opsi_dropdown_ekspor_semua_ternormalisasi():
         assert normalisasi_kategori_pegawai(v) in KATEGORI_PEGAWAI, v
     for v in OPSI_DROPDOWN_EKSPOR["Jenis Kontrak Non-ASN"]:
         assert normalisasi_jenis_kontrak(v) in ("internal", "outsourcing"), v
+
+
+class TestStatusMeninggal:
+    """Status 'Meninggal Dunia' + jam hukum pemberitahuan ahli waris.
+
+    Dasar: UU 1/2004 Pasal 66 ayat (2) jo. PP 38/2016 — tanggung jawab ahli
+    waris HAPUS bila dalam 3 tahun sejak pegawai diketahui meninggal, ahli
+    waris tidak diberi tahu adanya kerugian negara."""
+
+    def test_status_terdaftar_dan_terpisah_dari_nonaktif(self):
+        assert STATUS_PEGAWAI["meninggal"] == "Meninggal Dunia"
+        assert "nonaktif" in STATUS_PEGAWAI  # nonaktif TETAP ada (beda makna)
+
+    def test_is_meninggal(self):
+        from pegawai_utils import is_aktif, is_meninggal
+        alm = {"status": "meninggal"}
+        assert is_meninggal(alm) is True
+        assert is_aktif(alm) is False
+        assert is_meninggal({"status": "nonaktif"}) is False
+        assert is_meninggal({}) is False
+        assert is_meninggal(None) is False
+
+    def test_jam_tak_berlaku_bila_bukan_meninggal_atau_tanpa_tanggal(self):
+        from pegawai_utils import info_kewajiban_ahli_waris
+        # Bukan almarhum → tak berlaku
+        assert info_kewajiban_ahli_waris(
+            {"status": "pensiun", "tanggal_meninggal": "2026-01-01"},
+            "2026-07-25")["berlaku"] is False
+        # Almarhum tanpa tanggal / tanggal ngawur → tak berlaku (tak crash)
+        assert info_kewajiban_ahli_waris(
+            {"status": "meninggal"}, "2026-07-25")["berlaku"] is False
+        assert info_kewajiban_ahli_waris(
+            {"status": "meninggal", "tanggal_meninggal": "bukan-tanggal"},
+            "2026-07-25")["berlaku"] is False
+        # Hari ini ngawur → tak berlaku
+        assert info_kewajiban_ahli_waris(
+            {"status": "meninggal", "tanggal_meninggal": "2026-01-01"},
+            "")["berlaku"] is False
+
+    def test_tingkat_eskalasi_sesuai_sisa_hari(self):
+        from pegawai_utils import info_kewajiban_ahli_waris
+
+        def tingkat(wafat, hari_ini):
+            return info_kewajiban_ahli_waris(
+                {"status": "meninggal", "tanggal_meninggal": wafat},
+                hari_ini)["tingkat"]
+
+        # Batas = wafat + 3 tahun kalender → 2029-01-01
+        assert tingkat("2026-01-01", "2026-07-25") == "pantau"    # ~2,4 th lagi
+        assert tingkat("2026-01-01", "2028-08-01") == "segera"    # 153 hari
+        assert tingkat("2026-01-01", "2028-11-01") == "kritis"    # 61 hari
+        assert tingkat("2026-01-01", "2029-06-01") == "lewat"     # kedaluwarsa
+
+    def test_batas_3_tahun_kalender_dan_hitungan(self):
+        from pegawai_utils import info_kewajiban_ahli_waris
+        info = info_kewajiban_ahli_waris(
+            {"status": "meninggal", "tanggal_meninggal": "2026-01-01"},
+            "2026-01-31")
+        assert info["berlaku"] is True
+        assert info["batas_lapor"] == "2029-01-01"   # 3 tahun KALENDER
+        assert info["hari_sejak_wafat"] == 30
+        # 2026-01-01 → 2029-01-01 = 365+365+366 (2028 kabisat) = 1096 hari,
+        # dikurangi 30 hari yang sudah berjalan.
+        assert info["sisa_hari"] == 1096 - 30
+        assert "2029-01-01" in info["peringatan"]
+
+    def test_wafat_29_februari_tak_crash(self):
+        from pegawai_utils import info_kewajiban_ahli_waris
+        info = info_kewajiban_ahli_waris(
+            {"status": "meninggal", "tanggal_meninggal": "2024-02-29"},
+            "2024-03-01")
+        assert info["berlaku"] is True
+        assert info["batas_lapor"] == "2027-02-28"   # 2027 bukan kabisat
+
+    def test_pemberitahuan_menghentikan_jam(self):
+        from pegawai_utils import info_kewajiban_ahli_waris
+        alm = {"status": "meninggal", "tanggal_meninggal": "2026-01-01",
+               "pemberitahuan_ahli_waris_tanggal": "2026-02-10"}
+        info = info_kewajiban_ahli_waris(alm, "2028-11-01")  # tadinya "kritis"
+        assert info["sudah_diberitahu"] is True
+        assert info["tingkat"] == "selesai"
+        assert info["peringatan"] == ""
+
+    def test_validasi_tanggal_wafat_wajib(self):
+        from pegawai_utils import validate_pegawai
+        kurang = validate_pegawai({"nama": "Budi", "status": "meninggal"})
+        assert any("Tanggal meninggal wajib" in e for e in kurang)
+        lengkap = validate_pegawai({"nama": "Budi", "status": "meninggal",
+                                    "tanggal_meninggal": "2026-01-01"})
+        assert lengkap == []
+        salah = validate_pegawai({"nama": "Budi", "status": "meninggal",
+                                  "tanggal_meninggal": "01-01-2026"})
+        assert any("YYYY-MM-DD" in e for e in salah)
+
+    def test_almarhum_masuk_daftar_perlu_serah_terima(self):
+        # Status meninggal bukan status "aman" → pegawai wafat yang masih
+        # memegang aset otomatis muncul sebagai perlu serah terima.
+        hasil = pegawai_perlu_serah_terima(
+            [{"id": "p1", "nama": "Budi", "nip": "19800101" + "0" * 10,
+              "status": "meninggal", "tanggal_meninggal": "2026-01-01"}],
+            {"198001010000000000": 3}, "2026-07-25")
+        assert len(hasil) == 1
+        assert hasil[0]["jumlah_aset"] == 3
+        assert "Meninggal Dunia" in hasil[0]["alasan"]
 
 
 def test_rangkap_jabatan_pelaksana():

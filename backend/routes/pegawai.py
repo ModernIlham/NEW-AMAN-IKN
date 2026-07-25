@@ -96,6 +96,18 @@ class PegawaiIn(BaseModel):
     # Pelengkap: instansi/satker asal atau tujuan bila status merujuk instansi
     # lain (perbantuan/dipekerjakan/diperbantukan ke swasta).
     status_pegawai_instansi: Optional[str] = ""
+    # Kelengkapan status "Meninggal Dunia" (Peraturan BKN 3/2020: surat
+    # keterangan meninggal memuat nomor akta, tanggal, dan penyebab). Ahli waris
+    # dipakai saat serah terima BMN almarhum & pemberitahuan resmi yang
+    # menghentikan jam 3 tahun (UU 1/2004 Pasal 66 ayat (2)).
+    tanggal_meninggal: Optional[str] = ""
+    nomor_akta_kematian: Optional[str] = ""
+    penyebab_meninggal: Optional[str] = ""
+    ahli_waris_nama: Optional[str] = ""
+    ahli_waris_hubungan: Optional[str] = ""
+    ahli_waris_kontak: Optional[str] = ""
+    pemberitahuan_ahli_waris_tanggal: Optional[str] = ""
+    pemberitahuan_ahli_waris_nomor: Optional[str] = ""
     keterangan: Optional[str] = ""
 
 
@@ -148,11 +160,30 @@ def _bersih(p: PegawaiIn) -> dict:
         "status": str(p.status or "aktif").strip() or "aktif",
         "status_pegawai_satker": str(p.status_pegawai_satker or "").strip().lower(),
         "status_pegawai_instansi": str(p.status_pegawai_instansi or "").strip(),
+        "tanggal_meninggal": str(p.tanggal_meninggal or "").strip()[:10],
+        "nomor_akta_kematian": str(p.nomor_akta_kematian or "").strip(),
+        "penyebab_meninggal": str(p.penyebab_meninggal or "").strip(),
+        "ahli_waris_nama": str(p.ahli_waris_nama or "").strip(),
+        "ahli_waris_hubungan": str(p.ahli_waris_hubungan or "").strip(),
+        "ahli_waris_kontak": str(p.ahli_waris_kontak or "").strip(),
+        "pemberitahuan_ahli_waris_tanggal":
+            str(p.pemberitahuan_ahli_waris_tanggal or "").strip()[:10],
+        "pemberitahuan_ahli_waris_nomor":
+            str(p.pemberitahuan_ahli_waris_nomor or "").strip(),
         "keterangan": str(p.keterangan or "").strip(),
     }
     # Instansi terkait hanya bermakna utk status perbantuan/dipekerjakan.
     if doc["status_pegawai_satker"] not in STATUS_PEGAWAI_SATKER_BERINSTANSI:
         doc["status_pegawai_instansi"] = ""
+    # Kelengkapan kematian hanya bermakna bila status = meninggal — dibersihkan
+    # bila status dikoreksi, agar tak ada data wafat menempel di pegawai hidup.
+    if doc["status"] != "meninggal":
+        for f in ("tanggal_meninggal", "nomor_akta_kematian",
+                  "penyebab_meninggal", "ahli_waris_nama",
+                  "ahli_waris_hubungan", "ahli_waris_kontak",
+                  "pemberitahuan_ahli_waris_tanggal",
+                  "pemberitahuan_ahli_waris_nomor"):
+            doc[f] = ""
     # Unit kerja efektif = Eselon terdalam bila field unit_kerja kosong (agar
     # rekap & tampilan tetap punya satu label unit meski data berjenjang).
     if not doc["unit_kerja"]:

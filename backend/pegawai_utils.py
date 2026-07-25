@@ -32,8 +32,16 @@ STATUS_PEGAWAI = {
     "mutasi": "Mutasi/Pindah",
     "pensiun": "Pensiun",
     "keluar": "Keluar/Berhenti",
+    "meninggal": "Meninggal Dunia",
     "nonaktif": "Nonaktif",
 }
+
+# Batas waktu memberi tahu ahli waris adanya kerugian negara sejak pegawai
+# diketahui meninggal dunia. Lewat batas ini tanggung jawab ahli waris HAPUS
+# demi hukum (UU 1/2004 Pasal 66 ayat (2) jo. PP 38/2016) — karena itu sistem
+# mendetakkan jamnya agar hak tagih negara tidak gugur karena kelalaian
+# administrasi. Dihitung KALENDER (3 tahun), bukan 3×365 hari.
+BATAS_LAPOR_AHLI_WARIS_TAHUN = 3
 
 # Status kepegawaian di satker — REFERENSI SIMPEG (kode → uraian). SUMBU
 # HUBUNGAN KERJA pegawai dengan satker, TERPISAH dari STATUS_PEGAWAI (sumbu
@@ -201,6 +209,18 @@ def validate_pegawai(doc):
     st = str(d.get("status") or "").strip()
     if st and st not in STATUS_PEGAWAI:
         errors.append(f"Status pegawai tidak dikenal: {st}")
+    # Status "Meninggal Dunia" WAJIB bertanggal — tanpa tanggal, jam 3 tahun
+    # pemberitahuan ahli waris tak bisa dihitung dan serah terima BMN almarhum
+    # kehilangan dasarnya (Peraturan BKN 3/2020: surat keterangan meninggal
+    # memuat nomor akta & tanggal kematian).
+    tgl_wafat = str(d.get("tanggal_meninggal") or "").strip()[:10]
+    if st == "meninggal" and not tgl_wafat:
+        errors.append("Tanggal meninggal wajib diisi bila status Meninggal Dunia")
+    if tgl_wafat and not _TGL_RE.match(tgl_wafat):
+        errors.append("Tanggal meninggal harus berformat YYYY-MM-DD")
+    tgl_lapor = str(d.get("pemberitahuan_ahli_waris_tanggal") or "").strip()[:10]
+    if tgl_lapor and not _TGL_RE.match(tgl_lapor):
+        errors.append("Tanggal pemberitahuan ahli waris harus berformat YYYY-MM-DD")
     sps = str(d.get("status_pegawai_satker") or "").strip()
     if sps and sps not in STATUS_PEGAWAI_SATKER:
         errors.append(f"Status pegawai (satker) tidak dikenal: {sps}")
@@ -242,6 +262,88 @@ def is_aktif(pegawai):
     """True bila pegawai berstatus aktif (status kosong dianggap aktif). MURNI."""
     st = str((pegawai or {}).get("status") or "aktif").strip() or "aktif"
     return st == "aktif"
+
+
+def is_meninggal(pegawai):
+    """True bila pegawai berstatus Meninggal Dunia. MURNI.
+
+    Dipisah dari `is_aktif` karena perlakuannya BERBEDA dari nonaktif biasa:
+    almarhum tak dapat menerima serah terima maupun menandatangani apa pun,
+    sehingga transaksi baru kepadanya harus DITOLAK (bukan sekadar diperingatkan)."""
+    return str((pegawai or {}).get("status") or "").strip() == "meninggal"
+
+
+def info_kewajiban_ahli_waris(pegawai, hari_ini_iso):
+    """Jam hukum pemberitahuan ahli waris atas kerugian negara. MURNI (teruji unit).
+
+    Dasar: UU 1/2004 Pasal 66 ayat (2) jo. PP 38/2016 — bila pegawai meninggal
+    dunia, tuntutan ganti kerugian beralih ke ahli waris (terbatas kekayaan yang
+    berasal dari almarhum), TETAPI tanggung jawab itu HAPUS apabila dalam 3 tahun
+    sejak yang bersangkutan diketahui meninggal, ahli waris TIDAK DIBERI TAHU oleh
+    pejabat berwenang. Yang menghentikan jam adalah PEMBERITAHUAN RESMI — bukan
+    kembalinya barang.
+
+    Kembalikan {berlaku, tanggal_meninggal, batas_lapor, hari_sejak_wafat,
+    sisa_hari, tingkat, sudah_diberitahu, peringatan}. `berlaku` False bila
+    pegawai bukan berstatus meninggal / tanggal wafat tak sah — pemanggil cukup
+    memeriksa flag ini. `tingkat`: "selesai" (sudah diberitahu) | "pantau" |
+    "segera" (≤180 hari) | "kritis" (≤90 hari) | "lewat" (kedaluwarsa)."""
+    from datetime import date
+
+    kosong = {"berlaku": False, "tanggal_meninggal": "", "batas_lapor": "",
+              "hari_sejak_wafat": None, "sisa_hari": None, "tingkat": "",
+              "sudah_diberitahu": False, "peringatan": ""}
+    p = pegawai or {}
+    if not is_meninggal(p):
+        return kosong
+    wafat = str(p.get("tanggal_meninggal") or "").strip()[:10]
+    if not _TGL_RE.match(wafat):
+        return kosong
+    hari = str(hari_ini_iso or "").strip()[:10]
+    if not _TGL_RE.match(hari):
+        return kosong
+    try:
+        d_wafat = date.fromisoformat(wafat)
+        d_hari = date.fromisoformat(hari)
+    except (ValueError, OverflowError):
+        return kosong
+    # Batas = 3 tahun KALENDER sejak wafat (29 Feb → 28 Feb pada tahun biasa).
+    try:
+        d_batas = d_wafat.replace(year=d_wafat.year + BATAS_LAPOR_AHLI_WARIS_TAHUN)
+    except ValueError:
+        d_batas = d_wafat.replace(year=d_wafat.year + BATAS_LAPOR_AHLI_WARIS_TAHUN,
+                                  day=28)
+    sisa = (d_batas - d_hari).days
+    sudah = bool(str(p.get("pemberitahuan_ahli_waris_tanggal") or "").strip())
+    hasil = {
+        "berlaku": True, "tanggal_meninggal": wafat,
+        "batas_lapor": d_batas.isoformat(),
+        "hari_sejak_wafat": (d_hari - d_wafat).days,
+        "sisa_hari": sisa, "sudah_diberitahu": sudah,
+    }
+    if sudah:
+        hasil["tingkat"] = "selesai"
+        hasil["peringatan"] = ""
+    elif sisa < 0:
+        hasil["tingkat"] = "lewat"
+        hasil["peringatan"] = (
+            f"Batas pemberitahuan ahli waris terlewat {abs(sisa)} hari — "
+            "hak tagih negara hapus demi hukum; dokumentasikan")
+    elif sisa <= 90:
+        hasil["tingkat"] = "kritis"
+        hasil["peringatan"] = (
+            f"SEGERA — tersisa {sisa} hari untuk memberi tahu ahli waris; "
+            "lewat batas, hak tagih negara hapus")
+    elif sisa <= 180:
+        hasil["tingkat"] = "segera"
+        hasil["peringatan"] = (
+            f"Tersisa {sisa} hari untuk memberi tahu ahli waris secara resmi")
+    else:
+        hasil["tingkat"] = "pantau"
+        hasil["peringatan"] = (
+            f"Batas pemberitahuan ahli waris {d_batas.isoformat()} "
+            f"({sisa} hari lagi)")
+    return hasil
 
 
 def snapshot_pemegang_aset(pegawai) -> dict:
@@ -550,8 +652,11 @@ def normalisasi_status_pegawai(nilai):
         return "diperbantukan"
     if "cuti" in s:
         return "cuti"
-    if "meninggal" in s or "wafat" in s:
-        return "nonaktif"
+    # Kematian punya KELAS SENDIRI (dulu dipetakan ke 'nonaktif' sehingga
+    # informasinya hilang) — perlakuan administratifnya berbeda: butuh akta
+    # kematian, ahli waris, dan menjalankan jam 3 tahun pemberitahuan.
+    if "meninggal" in s or "wafat" in s or "almarhum" in s:
+        return "meninggal"
     return "aktif"
 
 
