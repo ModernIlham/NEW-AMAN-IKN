@@ -184,8 +184,12 @@ export default function BagikanPetaDialog({ open, onClose, activity }) {
               </div>
               {s.link && (
                 <div className="flex items-center gap-1.5">
-                  <div className="flex-1 min-w-0 bg-muted rounded-md px-2 py-1.5 text-[10px] font-mono text-muted-foreground truncate flex items-center gap-1">
-                    <Link2 className="w-3 h-3 flex-shrink-0" /><span className="truncate">{s.link}</span>
+                  <div className="flex-1 min-w-0 bg-muted rounded-md px-2 py-1.5 text-[10px] font-mono text-muted-foreground flex items-center gap-1">
+                    <Link2 className="w-3 h-3 flex-shrink-0" />
+                    {/* min-w-0 + flex-1 pada SPAN teks agar text-overflow:ellipsis ("...")
+                        benar-benar tampil & link panjang tak pernah melebihi kanvas
+                        (truncate pada wadah flex tak memunculkan elipsis). */}
+                    <span className="min-w-0 flex-1 truncate" title={s.link}>{s.link}</span>
                   </div>
                   <button onClick={() => salin(s.link, s.id)} title="Salin" className="h-8 w-8 rounded-md border border-border flex items-center justify-center text-muted-foreground hover:bg-muted min-w-0 min-h-0" data-testid={`bagikan-salin-${s.id}`}>
                     {tersalin === s.id ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}

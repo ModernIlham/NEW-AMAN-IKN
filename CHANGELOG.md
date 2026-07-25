@@ -48,6 +48,18 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#589] Perbaikan HP: link panjang di dialog Bagikan Peta dipotong "…" (tak melebihi kanvas) — 2026-07-25
+
+Di dialog **Bagikan Peta Kolaboratif**, kotak "Link aktif" menaruh `truncate`
+pada **wadah flex** — di sana `text-overflow: ellipsis` tak pernah muncul, dan
+`<span>` teksnya tak punya `min-w-0` sehingga sebagai anak flex ia tak mengecil
+(terpotong keras tanpa "…", berpotensi mendorong lebar melewati kanvas). Kini
+`min-w-0 flex-1 truncate` dipindah ke **span teks** sehingga elipsis benar-benar
+tampil dan link sepanjang apa pun tak pernah melampaui kanvas. Ditambah `title`
+agar URL penuh tetap terbaca saat hover. Tak ada perubahan perilaku salin/bagikan.
+
+---
+
 ## [#588] Cache bersama lintas-worker + rate-limiter via Redis (opsional, ber-feature-flag) — 2026-07-24
 
 Menambah **Redis** sebagai lapisan cache **lintas-worker** opsional. VPS
