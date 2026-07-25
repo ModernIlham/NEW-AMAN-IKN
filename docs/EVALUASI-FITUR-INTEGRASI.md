@@ -146,3 +146,18 @@ tanpa merusak alur offline-first yang sudah berjalan.
 
 **Bonus:** 3 bug UI daftar aset diperbaiki (#325) — filter Nama Pengguna memicu refresh+skeleton;
 gap tinggi baris pasca-filter (virtualized) hilang; pesan gagal menyertakan Kode Aset · NUP · Kegiatan.
+
+
+---
+
+## Pembaruan Pasca-Audit REVIEW-9 (Juli 2026)
+
+Celah integrasi yang tercatat di dokumen ini telah ditutup oleh seri audit
+REVIEW-9 (PR #608–#612): jurnal Buku Barang kini menerima entri dari SEMUA
+jalur keluar/nilai (Penilaian 204/205, Penggunaan & BMN idle 302, Penghapusan
+301, Pemindahtanganan 301/303, Pemeliharaan 202 ber-`jumlah 0`, Pengadaan
+101/102/103/105), dengan guard anti jurnal ganda terpusat di
+`shared_utils.catat_mutasi_bmn` (kunci `asset_id + kode_transaksi + ref_id`)
+dan larangan hapus register yang sudah berjurnal. Isolasi satker kini
+menjangkau seluruh endpoint transisi status, hapus, foto pegawai, dan ekspor
+master persediaan. Lihat CHANGELOG entri [#610]–[#614] untuk rincian.

@@ -498,3 +498,27 @@ dummy · tanpa regresi lint/test.
 kontrak integrasi baru disepakati. Pasangan dokumen:
 `frontend/src/lib/bmnModules.js` (konsep di aplikasi) dan
 `.claude/skills/aman-dev/SKILL.md` (proses kerja).*
+
+
+---
+
+## Status Audit Menyeluruh REVIEW-9 (Juli 2026)
+
+Audit 6 dimensi (integrasi & alur bisnis, keamanan/IDOR, jurnal induk,
+optimasi backend, optimasi frontend, backup/restore/reset) menghasilkan 57
+temuan yang dituntaskan dalam 7 gelombang (PR #608–#612 + dokumentasi):
+
+| Gelombang | Cakupan | Status |
+|---|---|---|
+| R1 | Bug produksi siklus hilir (PDF BA Pemusnahan 500, kode_satker usulan, gate pengembalian_almarhum, scope Wasdal) | ✅ #608 |
+| R2 | Sapu IDOR & guard (TTD per satker, 10 DELETE + 10 transisi ter-scope, almarhum sisi server, Idempotency-Key BAST, OCC pegawai, 14 log audit) | ✅ #609 |
+| R3 | Jurnal Buku Barang lengkap (204/205 revaluasi, 302 alih status & idle, guard anti-ganda, indeks unik persediaan per satker) | ✅ #610 |
+| R4 | Backend bebas render berat (weasyprint + 18 doc.build ke thread, impor bebas N+1, cache Wasdal, indeks audit_logs) | ✅ #611 |
+| R5–R6 | Frontend Master Pegawai/Pembukuan + keandalan backup/restore/reset (retensi manual selamat, manifest-sebelum-wipe, safety ke disk, reindex Meili) | ✅ #612 |
+| R7 | Dokumentasi menyeluruh (README v2.5, catatan penomoran CHANGELOG, docstring BAST 7 jenis, dokumen ini) | ✅ PR ini |
+
+Prinsip yang DIKUNCI oleh audit: (1) SEMUA transaksi keluar/nilai berjurnal di
+`mutasi_bmn` — LBKP/LBP/CaLBMN membaca jurnal, bukan hanya tombstone;
+(2) SEMUA mutasi ber-`ref_id` dokumen sumber → anti jurnal ganda terpusat;
+(3) register yang sudah berjurnal TIDAK dapat dihapus (409 — buat pembalik);
+(4) isolasi satker berlaku sampai transisi status, hapus, foto, dan ekspor.
