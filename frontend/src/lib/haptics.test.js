@@ -1,5 +1,5 @@
 /* eslint-env jest */
-import { resolveHapticPattern, HAPTIC_PATTERNS } from "./haptics";
+import { resolveHapticPattern, HAPTIC_PATTERNS, haptic } from "./haptics";
 
 // Pemetaan nama kejadian → pola getar. Pola tiap kejadian harus BEDA agar
 // pengguna bisa membedakan tanpa melihat layar.
@@ -29,5 +29,42 @@ describe("resolveHapticPattern", () => {
       expect(pat.length).toBeGreaterThan(0);
       pat.forEach((ms) => expect(typeof ms === "number" && ms > 0).toBe(true));
     });
+  });
+});
+
+describe("haptic (dua jalur: Android vibrate + fallback iOS)", () => {
+  const asli = Object.getOwnPropertyDescriptor(navigator, "vibrate");
+  afterEach(() => {
+    try { localStorage.removeItem("aman_haptics"); } catch { /* diam */ }
+    if (asli) Object.defineProperty(navigator, "vibrate", asli);
+    else { try { delete navigator.vibrate; } catch { /* diam */ } }
+    jest.restoreAllMocks();
+  });
+
+  test("Android: memakai navigator.vibrate dengan pola kejadian", () => {
+    const spy = jest.fn(() => true);
+    navigator.vibrate = spy;
+    expect(haptic("shutter")).toBe(true);
+    expect(spy).toHaveBeenCalledWith(HAPTIC_PATTERNS.shutter);
+  });
+
+  test("dimatikan pengguna (aman_haptics=off) → tak menggetarkan, kembalikan false", () => {
+    const spy = jest.fn(() => true);
+    navigator.vibrate = spy;
+    localStorage.setItem("aman_haptics", "off");
+    expect(haptic("shutter")).toBe(false);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  test("tanpa Vibration API (mis. iOS) → fallback membuat kontrol switch, tak melempar", () => {
+    try { delete navigator.vibrate; } catch { /* diam */ }
+    // Jalur iOS (kontrol switch) — di jsdom tak menghasilkan haptic nyata,
+    // tetapi harus aman (tak melempar), mengembalikan boolean, dan benar-benar
+    // menempatkan <input switch> tersembunyi & tak-terfokus (tabindex -1).
+    expect(() => haptic("shutter")).not.toThrow();
+    expect(typeof haptic("shutter")).toBe("boolean");
+    const el = document.querySelector('input[switch]');
+    expect(el).not.toBeNull();
+    expect(el.tabIndex).toBe(-1);
   });
 });

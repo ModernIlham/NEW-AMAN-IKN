@@ -48,6 +48,29 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#605] Getar rana kamera diperkuat (Android) + jalur haptic iOS 17.4+ — 2026-07-25
+
+Lanjutan [#603] — pengguna melaporkan **suara muncul tapi getar tidak** saat
+memotret. Perbaikan:
+
+- **Android**: pola getar rana diperkuat dari `35 ms` → **denyut GANDA
+  `[45, 35, 45]`** ("cha-chunk") — pulsa tunggal pendek kerap tak terasa di
+  sebagian motor getar. Getar juga **dipicu lebih awal** (tepat saat foto
+  terambil, di dalam gestur ketuk) agar lebih andal & terasa "instan".
+- **iOS**: `navigator.vibrate` **diblokir Apple** di Safari. Ditambah jalur
+  best-effort via kontrol **`<input type="checkbox" switch>`** (Safari iOS
+  17.4+) yang memicu haptic ringan saat di-toggle — satu-satunya cara web di
+  iOS. Diam tanpa error pada iOS lebih lama; suara tetap jadi umpan balik utama
+  di iPhone.
+- Tetap best-effort & bisa dimatikan (`aman_haptics`). Uji unit menambah cakupan
+  kedua jalur (Android vibrate + fallback iOS + gerbang preferensi).
+
+> Catatan: bila getar masih tak terasa di Android, cek setelan sistem
+> **"Getar saat sentuh / Haptic feedback"** harus aktif — motor getar dikendalikan
+> OS, aplikasi hanya memintanya.
+
+---
+
 ## [#604] Peta aset: kunci geser marker — aman dilihat, sekali ketuk untuk edit — 2026-07-25
 
 Mencegah **koordinat aset tergeser tak sengaja** saat sekadar melihat peta (di

@@ -488,6 +488,10 @@ const FullCameraSheet = memo(function FullCameraSheet({
     if (photos.length >= maxPhotos) { toast.error(`Maks ${maxPhotos} foto`); return; }
     const vw = video.videoWidth, vh = video.videoHeight;
     if (!vw || !vh) { toast.error("Kamera belum siap"); return; }
+    // Getar DIPICU DI SINI — sedini mungkin setelah semua cek lolos (foto pasti
+    // terambil), tepat di dalam gestur ketuk. Makin dekat ke ketukan makin andal
+    // navigator.vibrate dijalankan browser & makin terasa "instan".
+    haptic("shutter");
     const scale = Math.min(1, 1920 / Math.max(vw, vh));
     const canvas = document.createElement("canvas");
     canvas.width = Math.round(vw * scale);
@@ -530,7 +534,6 @@ const FullCameraSheet = memo(function FullCameraSheet({
     });
 
     const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-    haptic("shutter"); // tik ringan saat foto benar-benar terambil
     playShutterSound(); // klik rana (best-effort; hormati toggle bunyi)
     onCapture(dataUrl);
   }, [photos.length, maxPhotos, formData, onCapture, suspended]);
