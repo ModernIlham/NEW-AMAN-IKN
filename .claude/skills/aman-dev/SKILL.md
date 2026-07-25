@@ -173,25 +173,44 @@ Isolasi bisa salah ke dua arah. Men-scope koleksi yang SENGAJA global sama
 merusaknya dengan membiarkan yang privat terbuka — bedanya kerusakan ini
 sunyi: fitur tetap "jalan", hanya datanya terpecah diam-diam.
 
-Kasus nyata (R10): `penganggaran_kalender` sempat distempel + di-scope.
-Padahal ia KONFIGURASI BERSAMA — satu siklus anggaran nasional, terdaftar di
-`RESET_KEEP_COLLECTIONS` bersama `masa_manfaat`/`akun_bas`/`kodefikasi`, dan
-DUA sapuan isolasi sebelumnya sengaja melewatinya sambil menstempel
-`db.penganggaran` di file yang sama. Setelah di-scope, tahapan baru yang
-dibuat satu satker jadi tak terlihat satker lain — kalender bersama pecah.
+Contoh trap-nya: menstempel koleksi yang seluruh dokumennya memang tanpa
+`kode_satker` DAN memang dipakai bersama (kodefikasi barang, akun BAS, masa
+manfaat) akan memecah satu referensi nasional jadi salinan per satker.
 
-Sebelum menstempel/men-scope koleksi, buktikan dulu ia per-satker:
-1. Apakah ada penulis yang SUDAH menyetel `kode_satker`? (grep penulisnya)
-2. Apakah ia terdaftar di `RESET_KEEP_COLLECTIONS` sebagai konfigurasi?
-3. Apakah sapuan isolasi sebelumnya MELEWATINYA padahal menyentuh file itu?
-   (`git log -p` file tersebut) — kalau ya, itu keputusan, bukan kelalaian.
-4. Uji pertanyaan pemilik: *"kalau dua satker mengisi ini berbeda, apakah
-   keduanya benar?"* Tidak → memang bersama.
+Tetapi hati-hati juga pada bukti yang TERLIHAT meyakinkan padahal bukan:
 
-Petunjuk diagnostik: bila perbaikan yang diusulkan **tidak mengubah perilaku
-apa pun** (mis. menambah `scope_query_field_satker` pada koleksi yang seluruh
-dokumennya tanpa `kode_satker` — `$in` memuat `None` sehingga cocok semua),
-berarti model datanya salah dibaca. Perbaikan yang no-op = temuan yang keliru.
+- **`RESET_KEEP_COLLECTIONS` BUKAN penanda "universal".** Daftar itu hanya
+  berarti "konfigurasi, selamat dari reset". Isinya memuat `satker`,
+  `pegawai`, `pejabat`, dan `ruangan` — semuanya jelas PER SATKER. Menyimpulkan
+  "ada di RESET_KEEP → global" pernah membuat sapuan R10 keliru mengembalikan
+  scoping `penganggaran_kalender` yang sebenarnya sudah benar (dikoreksi R11).
+- **"Sapuan sebelumnya sengaja melewatinya" juga bukan bukti.** Sesi ini
+  membuktikan sapuan sebelumnya melewatkan puluhan endpoint karena lalai,
+  bukan karena memutuskan.
+
+Bukti yang benar-benar menentukan: **teks yang dilihat pengguna**. Kalender
+penganggaran mengembalikan catatan "tenggat internal tiap K/L berbeda (surat
+edaran masing-masing); isi berdasar kalender penganggaran resmi unit Anda" —
+aplikasi sendiri menyatakan datanya milik unit masing-masing.
+
+Urutan bukti sebelum memutuskan sebuah koleksi bersama atau per-satker
+(dari yang paling menentukan):
+1. **Teks yang dilihat pengguna** (catatan endpoint, label UI, docstring yang
+   dikutip ke respons). Kalau aplikasi bilang "isi sesuai unit Anda", itu
+   per-satker — titik.
+2. **Uji pemilik:** *"kalau dua satker mengisi ini berbeda, apakah keduanya
+   benar?"* Ya → per-satker. Tidak (mis. kode barang nasional) → bersama.
+3. **Apakah ada penulis yang SUDAH menyetel `kode_satker`?** (grep penulisnya)
+   Ada → jelas per-satker.
+4. Sisanya (RESET_KEEP, sapuan lampau, ketiadaan indeks) hanya petunjuk lemah
+   — jangan dijadikan dasar tunggal, lihat dua butir di atas.
+
+Petunjuk diagnostik saat menilai TEMUAN ORANG LAIN: bila perbaikan yang
+diusulkan **tidak mengubah perilaku apa pun** (mis. menambah
+`scope_query_field_satker` pada koleksi yang seluruh dokumennya tanpa
+`kode_satker` — `$in` memuat `None` sehingga cocok semua), maka perbaikan itu
+belum lengkap: stempel pada jalur TULIS harus ikut ditambahkan, atau memang
+model datanya salah dibaca. Periksa dulu yang mana.
 
 **Cara memverifikasi, bukan sekadar membaca:** jangan percaya "sudah ditutup di
 gelombang lalu". Grep pola mentahnya di seluruh `routes/` dan periksa satu per
