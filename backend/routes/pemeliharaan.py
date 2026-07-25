@@ -682,7 +682,8 @@ async def ba_perbaikan_pdf(catatan_id: str, _user: dict = Depends(require_user))
     hit = ba.get("perbaikan") or {}
     tambah = int(ba.get("tambah_tahun_diterapkan") or 0)
 
-    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    # KOP PER-SATKER (REVIEW-9 R15) — cacat kembar DHPB di atas.
+    settings = await pengaturan_kop(kode_satker=kode_satker_user(_user))
     buffer = BytesIO()
     doc = _std_doc(buffer)
     st = _get_report_styles()

@@ -252,7 +252,8 @@ async def buat_perolehan(payload: PerolehanIn, user: dict = Depends(require_writ
                "asset_id": "", "asset_code": "", "NUP": "", "asset_name": ""}
         aid = str(b.get("asset_id") or "").strip()
         if aid:
-            a = await db.assets.find_one({"id": aid}, _PROJ_ASET)
+            a = await db.assets.find_one(
+                {"id": aid}, {**_PROJ_ASET, "activity_id": 1})
             if not a:
                 raise HTTPException(status_code=404,
                                     detail=f"Aset {aid} tidak ditemukan")
@@ -321,9 +322,14 @@ async def tautkan_barang(perolehan_id: str, payload: TautkanIn,
     prev_aid = str(row.get("asset_id") or "").strip()   # aset lama (lepas back-link)
     aid = str(payload.asset_id or "").strip()
     if aid:
-        a = await db.assets.find_one({"id": aid}, _PROJ_ASET)
+        a = await db.assets.find_one({"id": aid}, {**_PROJ_ASET, "activity_id": 1})
         if not a:
             raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+        # Guard aset (REVIEW-9 R15): register perolehan sudah ber-guard, tetapi
+        # ASET yang ditautkan belum — tanpa ini identitas aset satker lain
+        # terbaca dan back-link perolehan tertulis ke aset mereka.
+        from shared_utils import pastikan_akses_aset as _paa
+        await _paa(_user, a)
         row.update({"asset_id": a["id"], "asset_code": a.get("asset_code"),
                     "NUP": a.get("NUP"), "asset_name": a.get("asset_name")})
     else:

@@ -4512,8 +4512,13 @@ async def update_report_settings(data: ReportSettingsUpdate,
 
 
 @reports_router.post("/report-settings/logo")
-async def upload_report_logo(file: UploadFile = File(...), _admin: dict = Depends(require_admin)):
-    """Upload/replace the institution logo for report cover page"""
+async def upload_report_logo(file: UploadFile = File(...),
+                             _admin: dict = Depends(require_super_admin)):
+    """Upload/ganti logo instansi pada dokumen GLOBAL (khusus super-admin).
+
+    Sama seperti update_report_settings: logo ini muncul di kop laporan SEMUA
+    satker, jadi bukan wewenang admin satker (REVIEW-9 R15).
+    """
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="File harus berupa gambar (PNG/JPG)")
 
@@ -4533,8 +4538,8 @@ async def upload_report_logo(file: UploadFile = File(...), _admin: dict = Depend
 
 
 @reports_router.delete("/report-settings/logo")
-async def delete_report_logo(_admin: dict = Depends(require_admin)):
-    """Remove the institution logo"""
+async def delete_report_logo(_admin: dict = Depends(require_super_admin)):
+    """Hapus logo instansi GLOBAL (khusus super-admin — REVIEW-9 R15)."""
     await db.report_settings.update_one(
         {"type": "global"},
         {"$set": {"logo_url": ""}},
@@ -4913,9 +4918,23 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
     eselon_chart = [{"name": e[0][:25], "count": e[1]["count"], "value": e[1]["value"], "bar_pct": round(e[1]["count"] / e1_max * 100)} for e in eselon1_breakdown_sorted[:10]]
 
     # Distribusi per PENGGUNA (key = NIP/NIK, tampil nama; terhubung master pegawai)
+    # Scope satker (REVIEW-9 R15): Master Pegawai per-satker. Tanpa ini seluruh
+    # direktori pegawai instansi ikut masuk HTML/PDF Laporan Eksekutif satker
+    # ini. Dibatasi ke NIP yang memang dipakai aset laporan agar sekaligus
+    # ringan.
+    # Di-scope ke satker KEGIATAN (bukan satker pemanggil): laporan ini memang
+    # tentang kegiatan itu, dan pemanggil sudah dijamin berhak atasnya.
+    # Dibatasi pula ke NIP yang benar-benar dipakai aset laporan → sekaligus
+    # ringan.
+    _nip_dipakai = {str(a.get("pengguna_nip") or "").strip()
+                    for a in all_assets if str(a.get("pengguna_nip") or "").strip()}
+    _ks_keg = str((activity or {}).get("kode_satker") or "").strip()
+    _q_peg = {"nip": {"$in": list(_nip_dipakai)}} if _nip_dipakai else {"nip": {"$in": []}}
+    if _ks_keg:
+        _q_peg["kode_satker"] = {"$in": [_ks_keg, "", None]}
     peg_master = {}
-    async for _p in db.pegawai.find({"nip": {"$nin": ["", None]}},
-                                    {"_id": 0, "nip": 1, "nama": 1, "unit_kerja": 1}):
+    async for _p in db.pegawai.find(
+            _q_peg, {"_id": 0, "nip": 1, "nama": 1, "unit_kerja": 1}):
         nip_p = str(_p.get("nip") or "").strip()
         if nip_p:
             peg_master[nip_p] = _p

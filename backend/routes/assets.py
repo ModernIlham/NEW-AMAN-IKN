@@ -13,7 +13,8 @@ from db import db, fs_bucket
 from asset_fields import SCALAR_FIELD_NAMES
 from models import AssetCreate, AssetResponse
 from auth_utils import (
-    require_admin, require_user, require_user_or_query_token, require_writer,
+    require_admin, require_super_admin, require_user,
+    require_user_or_query_token, require_writer,
 )
 from shared_utils import (
     kunci_idem,
@@ -2435,9 +2436,16 @@ async def delete_asset(asset_id: str, request: Request, _admin: dict = Depends(r
 
 
 @assets_router.post("/assets/migrate-gridfs")
-async def migrate_photos_to_gridfs(_admin: dict = Depends(require_admin)):
+async def migrate_photos_to_gridfs(_admin: dict = Depends(require_super_admin)):
     """Migrate existing inline base64 photos to GridFS + generate per-photo thumbnails.
-    Safe to run multiple times — skips assets that already have gridfs_ids."""
+    Safe to run multiple times — skips assets that already have gridfs_ids.
+
+    KHUSUS SUPER-ADMIN (REVIEW-9 R15): operasi ini menyapu SELURUH koleksi
+    assets tanpa filter satker dan MENULIS ULANG dokumen aset (foto → GridFS,
+    thumbnail baru). Dengan `require_admin`, admin satker mana pun dapat
+    memicu penulisan massal atas aset satker lain — migrasi seluruh-DB adalah
+    wewenang pusat, sekelas backup/restore/reset.
+    """
     cursor = db.assets.find(
         {"photos": {"$exists": True, "$ne": []}, "$or": [{"photo_gridfs_ids": {"$exists": False}}, {"photo_gridfs_ids": []}]},
         {"_id": 0, "id": 1, "photos": 1, "document_checklist": 1}

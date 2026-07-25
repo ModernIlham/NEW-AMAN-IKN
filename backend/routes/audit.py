@@ -448,11 +448,18 @@ async def _master_identitas_by_id(ids):
     return out
 
 
-async def _ringkas_identitas_snapshot(coll, register, label):
+async def _ringkas_identitas_snapshot(coll, register, label, user=None):
     """Ringkas cek identitas basi untuk register yang membekukan identitas PER
-    RECORD (usulan_penghapusan, jadwal_pemeliharaan)."""
+    RECORD (usulan_penghapusan, jadwal_pemeliharaan).
+
+    DI-SCOPE SATKER (REVIEW-9 R15): endpoint DETAIL integritas sudah memakai
+    `_filter_register_satker`, tetapi ringkasan dasbor & ekspor CSV belum —
+    jadi cacah temuannya menghitung register SELURUH satker dan membocorkan
+    volume masalah mereka.
+    """
     rows = [r async for r in db[coll].find(
-        {}, {"_id": 0, "asset_id": 1, "asset_code": 1, "NUP": 1,
+        await _filter_register_satker(user),
+        {"_id": 0, "asset_id": 1, "asset_code": 1, "NUP": 1,
              "asset_name": 1})]
     master = await _master_identitas_by_id(r.get("asset_id") for r in rows)
     temuan = []
@@ -464,10 +471,12 @@ async def _ringkas_identitas_snapshot(coll, register, label):
             "per_masalah": hitung_masalah(temuan)}
 
 
-async def _ringkas_identitas_daftar(coll, register, label):
+async def _ringkas_identitas_daftar(coll, register, label, user=None):
     """Ringkas cek identitas basi untuk register ber-`aset[]`
-    (pemindahtanganan, psp)."""
-    docs = [d async for d in db[coll].find({}, {"_id": 0, "aset": 1})]
+    (pemindahtanganan, psp). DI-SCOPE SATKER (REVIEW-9 R15) — lihat catatan
+    pada `_ringkas_identitas_snapshot`."""
+    docs = [d async for d in db[coll].find(
+        await _filter_register_satker(user), {"_id": 0, "aset": 1})]
     master = await _master_identitas_by_id(
         r.get("asset_id") for d in docs for r in (d.get("aset") or []))
     temuan = []
@@ -530,17 +539,23 @@ async def _ringkas_kategori_kodefikasi():
             "jumlah": len(temuan), "per_masalah": hitung_masalah(temuan)}
 
 
-async def _kumpulkan_bagian_integritas():
+async def _kumpulkan_bagian_integritas(user=None):
     """Jalankan SEMUA cek integritas §5A → daftar ringkasan per register.
-    Satu sumber untuk endpoint ringkasan JSON & ekspor CSV (hindari duplikasi)."""
+    Satu sumber untuk endpoint ringkasan JSON & ekspor CSV (hindari duplikasi).
+
+    `user` diteruskan agar cacah temuan DI-SCOPE satker (REVIEW-9 R15) —
+    selaras endpoint detailnya yang sudah memakai `_filter_register_satker`.
+    """
     return [
         await _ringkas_identitas_snapshot(
-            "usulan_penghapusan", "usulan_penghapusan", "Usulan Penghapusan"),
+            "usulan_penghapusan", "usulan_penghapusan", "Usulan Penghapusan",
+            user),
         await _ringkas_identitas_daftar(
-            "pemindahtanganan", "pemindahtanganan", "Pemindahtanganan"),
-        await _ringkas_identitas_daftar("psp", "psp", "SK PSP Penggunaan"),
+            "pemindahtanganan", "pemindahtanganan", "Pemindahtanganan", user),
+        await _ringkas_identitas_daftar("psp", "psp", "SK PSP Penggunaan", user),
         await _ringkas_identitas_snapshot(
-            "jadwal_pemeliharaan", "jadwal_pemeliharaan", "Jadwal Pemeliharaan"),
+            "jadwal_pemeliharaan", "jadwal_pemeliharaan", "Jadwal Pemeliharaan",
+            user),
         await _ringkas_kodefikasi(),
         await _ringkas_kategori_kodefikasi(),
     ]
@@ -553,7 +568,7 @@ async def integritas_ringkasan(_user: dict = Depends(require_user)):
     register + kodefikasi FK) beserta total lintas-cek. Tak menyertakan daftar
     item detail (ambil dari endpoint per-register bila perlu). Tak mengubah data
     apa pun."""
-    hasil = gabung_temuan_integritas(await _kumpulkan_bagian_integritas())
+    hasil = gabung_temuan_integritas(await _kumpulkan_bagian_integritas(_user))
     return {
         **hasil,
         "catatan": (
@@ -574,7 +589,7 @@ async def integritas_ekspor_ringkasan(_user: dict = Depends(require_user)):
     import io
     from fastapi.responses import Response as HttpResponse
 
-    hasil = gabung_temuan_integritas(await _kumpulkan_bagian_integritas())
+    hasil = gabung_temuan_integritas(await _kumpulkan_bagian_integritas(_user))
     buf = io.StringIO()
     w = csv_module.writer(buf)
     for row in ringkasan_csv_baris(hasil, LABEL_MASALAH_INTEGRITAS):
