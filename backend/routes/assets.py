@@ -1176,9 +1176,14 @@ async def _ensure_preview_index():
         pass
 
 
-def _resize_jpeg(photo_bytes: bytes, max_w: int, quality: int = 80) -> bytes:
-    """Perkecil JPEG ke lebar maks `max_w` (rasio dipertahankan). Sinkron &
-    cepat (puluhan ms untuk sumber ≤1920px); hasil di-cache oleh pemanggil."""
+def _resize_webp(photo_bytes: bytes, max_w: int, quality: int = 82) -> bytes:
+    """Perkecil gambar ke lebar maks `max_w` (rasio dipertahankan) → **WebP**.
+    Sumber bisa JPEG (foto lama) atau WebP (foto asli yang sudah dioptimalkan
+    Tinify); keluaran selalu WebP — ~25-35% lebih kecil dari JPEG pada kualitas
+    setara, sehingga preview galeri (w=256) & lightbox (w=1280) yang DITAMPILKAN
+    ke browser lebih ringan. Kualitas mewarisi sumber (untuk foto asli:
+    hasil optimasi Tinify). Sinkron & cepat; hasil di-cache oleh pemanggil.
+    method=6 = kompresi terbaik."""
     import io
     from PIL import Image as PILImage
     img = PILImage.open(io.BytesIO(photo_bytes))
@@ -1188,7 +1193,7 @@ def _resize_jpeg(photo_bytes: bytes, max_w: int, quality: int = 80) -> bytes:
     if w > max_w:
         img = img.resize((max_w, max(1, round(h * max_w / w))), PILImage.LANCZOS)
     out = io.BytesIO()
-    img.save(out, format="JPEG", quality=quality, optimize=True, progressive=True)
+    img.save(out, format="WEBP", quality=quality, method=6)
     return out.getvalue()
 
 
@@ -1324,8 +1329,11 @@ async def get_asset_photo_full(asset_id: str, photo_index: int, request: Request
     await pastikan_akses_aset(_user, asset)
 
     preview_w = w if (w in _PREVIEW_WIDTHS and not thumb) else 0
+    # Penanda "webp" pada kunci preview: entri cache JPEG lama (kunci tanpa
+    # penanda) tak lagi cocok → preview baru dibuat sebagai WebP seketika; entri
+    # JPEG lama kedaluwarsa sendiri via TTL. Juga membuat cache browser refresh.
     etag = (f'"{asset_id}-p{photo_index}{"-t" if thumb else ""}'
-            f'{f"-w{preview_w}" if preview_w else ""}-v{int(asset.get("version", 1) or 1)}"')
+            f'{f"-w{preview_w}webp" if preview_w else ""}-v{int(asset.get("version", 1) or 1)}"')
     not_modified = _not_modified(request, etag)
     if not_modified:
         return not_modified
@@ -1336,7 +1344,8 @@ async def get_asset_photo_full(asset_id: str, photo_index: int, request: Request
         await _ensure_preview_index()
         cached = await db.media_previews.find_one({"_id": etag})
         if cached and cached.get("data"):
-            return Response(content=bytes(cached["data"]), media_type="image/jpeg",
+            _cb = bytes(cached["data"])
+            return Response(content=_cb, media_type=_tebak_media_type(_cb),
                             headers=_media_headers(etag))
 
     gridfs_ids = asset.get("photo_gridfs_ids", []) or []
@@ -1382,10 +1391,11 @@ async def get_asset_photo_full(asset_id: str, photo_index: int, request: Request
     if photo_bytes is None:
         raise HTTPException(status_code=404, detail="Foto tidak ditemukan")
 
-    # Preview: resize sekali → cache → sajikan. Gagal resize → foto asli.
+    # Preview: resize→WebP sekali → cache → sajikan. Gagal / tak lebih kecil →
+    # sajikan foto asli (content-type dideteksi).
     if preview_w:
         try:
-            preview = _resize_jpeg(photo_bytes, preview_w)
+            preview = _resize_webp(photo_bytes, preview_w)
             if len(preview) < len(photo_bytes):
                 try:
                     await db.media_previews.update_one(
@@ -1395,10 +1405,10 @@ async def get_asset_photo_full(asset_id: str, photo_index: int, request: Request
                     )
                 except Exception:
                     pass  # cache best-effort — respons tetap dilayani
-                return Response(content=preview, media_type="image/jpeg",
+                return Response(content=preview, media_type="image/webp",
                                 headers=_media_headers(etag))
         except Exception:
-            pass  # bukan JPEG valid / Pillow gagal — sajikan asli
+            pass  # gambar tak valid / Pillow gagal — sajikan asli
 
     return Response(content=photo_bytes, media_type=_tebak_media_type(photo_bytes),
                     headers=_media_headers(etag))
