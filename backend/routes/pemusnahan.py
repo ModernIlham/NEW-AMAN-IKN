@@ -4,6 +4,7 @@ PMK 83/PMK.06/2016 (pustaka §1 & §12): BA dicatat setelah persetujuan +
 pelaksanaan; objek dibatasi aset rusak berat (kelayakan divalidasi per
 aset). Tindak lanjut penghapusan lewat modul Penghapusan.
 """
+import asyncio
 import uuid
 from datetime import datetime, timezone
 
@@ -285,7 +286,8 @@ async def ba_pemusnahan_pdf(ba_id: str, _user: dict = Depends(require_user)):
         await blok_ttd_kpb_titik(settings, kode_satker=kode_satker_user(_user)),   # KPB dari registry pejabat (temuan #26)
     ], doc.width))
     footer = _page_footer_factory("Berita Acara Pemusnahan BMN")
-    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    await asyncio.to_thread(doc.build, elements, onFirstPage=footer,
+                            onLaterPages=footer)
     buffer.seek(0)
     nama_file = (ba.get("nomor_ba") or "BA").replace("/", "-").replace(" ", "_")
     return StreamingResponse(buffer, media_type="application/pdf",

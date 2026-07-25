@@ -4,6 +4,7 @@ PP 27/2014 Ps. 46-47: catatan per kejadian pemeliharaan menjadi bahan
 Daftar Hasil Pemeliharaan Barang (DHPB, tersedia sebagai PDF) + rekap
 biaya per tahun anggaran; jadwal pemeliharaan berkala dikelola di sini.
 """
+import asyncio
 import uuid
 from datetime import datetime, timezone
 
@@ -235,7 +236,8 @@ async def dhpb_pdf(
         await blok_ttd_kpb(settings, kode_satker=kode_satker_user(_user)),
     ], doc.width))
     footer = _page_footer_factory("DHPB")
-    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    await asyncio.to_thread(doc.build, elements, onFirstPage=footer,
+                            onLaterPages=footer)
     buffer.seek(0)
     from fastapi.responses import StreamingResponse
     suffix = f"_S{semester}" if semester else ""
@@ -717,7 +719,8 @@ async def ba_perbaikan_pdf(catatan_id: str, _user: dict = Depends(require_user))
          "nama": ba.get("pihak_penerima") or "................"},
     ], doc.width))
     footer = _page_footer_factory("BA Perbaikan")
-    doc.build(el, onFirstPage=footer, onLaterPages=footer)
+    await asyncio.to_thread(doc.build, el, onFirstPage=footer,
+                            onLaterPages=footer)
     buffer.seek(0)
     from fastapi.responses import StreamingResponse
     aman = "".join(c if c.isalnum() else "_" for c in (ba.get("nomor") or catatan_id))[:40]

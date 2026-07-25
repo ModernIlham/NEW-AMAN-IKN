@@ -19,6 +19,7 @@ Jenis serah terima (kebutuhan lapangan):
 Register `bast_serah_terima` menyimpan tiap BAST (riwayat per aset dan per
 pengguna terlacak); PDF dirender ulang kapan pun dari register.
 """
+import asyncio
 import io
 import uuid
 from datetime import datetime, timezone
@@ -1006,7 +1007,8 @@ async def bast_pdf(bast_id: str,
                 el.extend(serah_el)
 
     footer = _page_footer_factory(f"BAST — {judul_jenis[:60]}")
-    doc.build(el, onFirstPage=footer, onLaterPages=footer)
+    await asyncio.to_thread(doc.build, el, onFirstPage=footer,
+                            onLaterPages=footer)
     buffer.seek(0)
     return StreamingResponse(buffer, media_type="application/pdf",
                              headers={"Content-Disposition":

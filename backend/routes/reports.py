@@ -5744,8 +5744,14 @@ async def laporan_satker_html(activity_id: str, _user: dict = Depends(require_us
 
 
 @reports_router.get("/inventory-activities/{activity_id}/laporan-satker-pdf")
-async def laporan_satker_pdf(activity_id: str, _user: dict = Depends(require_user_or_query_token)):
-    """Generate Laporan per Satker as PDF using weasyprint"""
+@limiter.limit("4/minute")
+async def laporan_satker_pdf(request: Request, activity_id: str,
+                             _user: dict = Depends(require_user_or_query_token)):
+    """Generate Laporan per Satker as PDF using weasyprint.
+
+    Render weasyprint SANGAT berat (CPU-bound, bisa berdetik-detik) —
+    di-offload ke thread agar event loop tak terblokir + rate-limit
+    (REVIEW-9 R4; pola AUTH-D endpoint mahal)."""
     await pastikan_akses_kegiatan_id(_user, activity_id)
     from jinja2 import Environment, FileSystemLoader
     import weasyprint
@@ -5756,7 +5762,11 @@ async def laporan_satker_pdf(activity_id: str, _user: dict = Depends(require_use
     env = _jinja_env()
     template = env.get_template("laporan_satker_v2.html")
     html_content = template.render(**data)
-    pdf_bytes = weasyprint.HTML(string=html_content).write_pdf()
+
+    def _render_pdf() -> bytes:
+        return weasyprint.HTML(string=html_content).write_pdf()
+
+    pdf_bytes = await asyncio.to_thread(_render_pdf)
     output = io.BytesIO(pdf_bytes)
     filename = f"Laporan_Inventarisasi_{data['kode_satker']}_{activity_id[:8]}.pdf"
     return StreamingResponse(output, media_type="application/pdf",

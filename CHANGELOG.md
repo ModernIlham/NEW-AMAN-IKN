@@ -48,6 +48,29 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#613] Audit REVIEW-9 (4/7): optimasi backend — event loop bebas render berat — 2026-07-25
+
+Gelombang keempat audit 6 dimensi: **tidak ada lagi render dokumen berat yang
+memblokir event loop** + tiga optimasi query/caching.
+
+- 🔴 **Laporan Satker (weasyprint) di-offload ke thread + rate-limit 4/menit**
+  — render weasyprint bisa berdetik-detik CPU-bound; sebelumnya SATU unduhan
+  membekukan seluruh server (semua request lain menunggu). Pola AUTH-D
+  endpoint mahal.
+- 🟠 **18 generator PDF modul di-offload ke thread** — `doc.build` reportlab
+  sinkron di BAST, Buku Barang, Pemeliharaan (DHPB + BA Perbaikan),
+  Pemusnahan, Penggunaan (BAST PSP + daftar pemegang), Persediaan (7 laporan),
+  TTD, dan Wasdal (3 laporan) kini `asyncio.to_thread` — melengkapi
+  OPT-LOOP-2 yang baru mencakup reports.py/exports.py.
+- 🟠 **Impor aset Excel/CSV bebas N+1** — dulu tiap baris memanggil
+  `find_one` dua kali (file 5.000 baris = 10.000 query beruntun); kini
+  aset kegiatan dimuat SEKALI menjadi peta (kode, NUP) → dokumen.
+- 🟠 **Dasbor Wasdal ber-cache TTL 90 detik** per (satker, ambang) — dasbor
+  memuat SELURUH aset + 6 register per kunjungan; laporan PDF/tahunan tetap
+  menghitung segar. Redis bila aktif, TTLCache per-worker bila tidak.
+- 🟡 **Indeks `audit_logs (action, timestamp)`** — filter "Log Sistem"/per-aksi
+  panel audit tidak lagi COLLSCAN koleksi log terbesar.
+
 ## [#612] Audit REVIEW-9 (3/7): jurnal induk lengkap & scope master persediaan — 2026-07-25
 
 Gelombang ketiga audit 6 dimensi: **semua transaksi keluar/nilai kini

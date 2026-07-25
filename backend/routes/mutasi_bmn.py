@@ -5,6 +5,7 @@ ber-kode per aset (pola SIMAK/SAKTI). Endpoint reklasifikasi memutakhirkan
 kode+NUP aset IN-PLACE (id internal & kode register SIMAN tidak berubah)
 sambil merekam pasangan 304/107 dan riwayat pada dokumen aset.
 """
+import asyncio
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -508,7 +509,8 @@ async def kib_pdf(asset_id: str, _user: dict = Depends(require_user_or_query_tok
         pass
 
     footer = _page_footer_factory("Kartu Identitas Barang")
-    doc.build(el, onFirstPage=footer, onLaterPages=footer)
+    await asyncio.to_thread(doc.build, el, onFirstPage=footer,
+                            onLaterPages=footer)
     buffer.seek(0)
     from fastapi.responses import StreamingResponse as _SR
     from shared_utils import nama_file_disposition

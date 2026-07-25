@@ -77,6 +77,9 @@ async def create_indexes() -> None:
         await db.audit_logs.create_index([("activity_id", 1), ("timestamp", -1)])
         await db.audit_logs.create_index([("asset_id", 1), ("timestamp", -1)])
         await db.audit_logs.create_index("timestamp")
+        # Filter "Log Sistem"/per-aksi panel audit menyaring by action —
+        # tanpa indeks ini tiap filter adalah COLLSCAN koleksi log terbesar.
+        await db.audit_logs.create_index([("action", 1), ("timestamp", -1)])
         # Row locks TTL index - auto-expires after expires_at
         await db.row_locks.create_index("asset_id", unique=True)
         await db.row_locks.create_index("expires_at", expireAfterSeconds=0)
