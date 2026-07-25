@@ -8,7 +8,7 @@ import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import axios from "axios";
-import { MapPinned, RefreshCw, Loader2, Move, X, Filter, Download, Camera, Layers, ChevronDown, Boxes, MousePointerClick, CheckCheck, Eraser, PencilLine, SquareDashed, Share2 } from "lucide-react";
+import { MapPinned, RefreshCw, Loader2, Move, X, Filter, Download, Camera, Layers, ChevronDown, Boxes, MousePointerClick, CheckCheck, Eraser, PencilLine, SquareDashed, Share2, ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 import { compressImageFile } from "../../lib/imageCompression";
 import {
@@ -116,6 +116,48 @@ function markerIcon(color, hasPhoto = false, complete = false, dihapus = false, 
   });
 }
 
+// ── DESIGN MARKER KEDUA (opsional, via toggle "Gaya Marker: Foto") ──────────
+// Menampilkan SAMPUL foto aset DI DALAM marker agar langsung terlihat apa
+// fotonya (mengikuti thumbnail_index sampul yang dipilih). Foto dimuat sebagai
+// background-image: online = streaming 256px WebP (ter-cache browser), offline =
+// thumbnail snapshot (data-URI). Klik marker TETAP membuka popup info yang SAMA
+// (handler klik terpisah dari ikon). Border/cincin ikut status & seleksi seperti
+// pin. Aset TANPA foto tetap memakai pin biasa (lihat assetMarkerIcon).
+function photoMarkerIcon(row, { color, complete = false, selected = false } = {}) {
+  const coverSrc = navigator.onLine
+    ? authMediaUrl(`${API}/assets/${row.id}/photos/${row.thumbnail_index || 0}?v=${row.version || 1}&w=256`)
+    : (row.thumbnail || "");
+  // url() PAKAI kutip tunggal + escape &→&amp; agar TIDAK menutup atribut
+  // style="…" (kutip ganda) saat html dipasang via innerHTML — kutip ganda di
+  // dalam url("…") membuat background-image kosong (teruji di Chromium).
+  const cssUrl = coverSrc ? `background-image:url('${String(coverSrc).replace(/&/g, "&amp;").replace(/'/g, "%27")}');` : "";
+  const bc = selected ? "#f59e0b" : complete ? "#16a34a" : "#ffffff";
+  const ring = selected
+    ? "box-shadow:0 0 0 3px #f59e0b,0 0 0 6px rgba(245,158,11,.35),0 2px 6px rgba(0,0,0,.5)"
+    : "box-shadow:0 2px 6px rgba(0,0,0,.5)";
+  const checkBadge = selected
+    ? `<div style="position:absolute;top:-6px;right:-6px;width:16px;height:16px;border-radius:50%;background:#f59e0b;border:1.5px solid #fff;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 2px rgba(0,0,0,.4)"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="4"><polyline points="20 6 9 17 4 12"/></svg></div>`
+    : "";
+  return L.divIcon({
+    className: "",
+    html: `<div style="position:relative;width:46px;height:54px">
+      <div style="width:46px;height:46px;border-radius:12px;overflow:hidden;border:3px solid ${bc};${ring};background-color:${color};background-size:cover;background-position:center;background-repeat:no-repeat;${cssUrl}"></div>
+      <div style="position:absolute;left:50%;top:43px;transform:translateX(-50%);width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-top:9px solid ${bc}"></div>
+      ${checkBadge}
+    </div>`,
+    iconSize: [46, 54],
+    iconAnchor: [23, 54],
+    popupAnchor: [0, -50],
+  });
+}
+
+// Pilih ikon sesuai gaya marker aktif: "photo" + punya foto → marker foto;
+// selain itu (termasuk aset tanpa foto) → pin berwarna seperti biasa.
+function assetMarkerIcon(row, { color, hasPhoto, complete, selected, style }) {
+  if (style === "photo" && hasPhoto) return photoMarkerIcon(row, { color, complete, selected });
+  return markerIcon(color, hasPhoto, complete, false, selected);
+}
+
 function esc(str) {
   return String(str ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
@@ -213,6 +255,15 @@ const AssetMapFullView = memo(function AssetMapFullView({
   const [groupKey, setGroupKey] = useState("__semua__"); // filter Barang Serupa
   const [clusterOn, setClusterOn] = useState(true); // kelompokkan pin berdekatan
   const clusterOnRef = useRef(true);
+  // Gaya marker: "pin" (design 1, bawaan — dipertahankan) ↔ "photo" (design 2,
+  // sampul foto di dalam marker). Disimpan agar pilihan bertahan antar sesi.
+  const [markerStyle, setMarkerStyle] = useState(() => {
+    try { return localStorage.getItem("aman_map_marker_style") === "photo" ? "photo" : "pin"; }
+    catch { return "pin"; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("aman_map_marker_style", markerStyle); } catch { /* storage diblokir */ }
+  }, [markerStyle]);
   // Mode Seleksi: klik/ketuk pin = pilih/lepas (bukan buka popup); Shift+seret
   // (PC) atau tombol "Pilih Area" (HP) = kotak seleksi. Hanya bila pemanggil
   // memberi onSelectionChange (butuh izin ubah). Terhubung ke selectedIds daftar.
@@ -870,7 +921,12 @@ const AssetMapFullView = memo(function AssetMapFullView({
       const hasPhoto = rowHasPhoto(row);
       const complete = isPenggunaComplete(row);
       const selected = !!(selectedIds && selectedIds.has(row.id));
-      const iconKey = `${color}|${hasPhoto}|${complete}|${selected}`;
+      // iconKey menentukan kapan ikon dibangun ulang. Untuk gaya "photo" ikut
+      // sertakan identitas sampul (thumbnail_index + version) agar marker foto
+      // menyegar saat sampul/foto berubah, dan agar ganti gaya memicu rebuild.
+      const iconKey = markerStyle === "photo" && hasPhoto
+        ? `photo|${color}|${complete}|${selected}|${row.thumbnail_index || 0}|${row.version || 1}`
+        : `pin|${color}|${hasPhoto}|${complete}|${selected}`;
       const existing = markersRef.current.get(row.id);
 
       if (existing) {
@@ -881,7 +937,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
           layer.refreshClusters?.(existing.marker); // beri tahu cluster posisi berubah
         }
         existing.lat = lat; existing.lng = lng;
-        if (existing.iconKey !== iconKey) { existing.marker.setIcon(markerIcon(color, hasPhoto, complete, false, selected)); existing.iconKey = iconKey; }
+        if (existing.iconKey !== iconKey) { existing.marker.setIcon(assetMarkerIcon(row, { color, hasPhoto, complete, selected, style: markerStyle })); existing.iconKey = iconKey; }
         if (existing.draggable !== canEdit && existing.marker.dragging) {
           if (canEdit) existing.marker.dragging.enable(); else existing.marker.dragging.disable();
           existing.draggable = canEdit;
@@ -889,7 +945,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
         continue;
       }
 
-      const marker = L.marker([lat, lng], { icon: markerIcon(color, hasPhoto, complete, false, selected), draggable: !!canEdit });
+      const marker = L.marker([lat, lng], { icon: assetMarkerIcon(row, { color, hasPhoto, complete, selected, style: markerStyle }), draggable: !!canEdit });
       const entry = { marker, row, lat, lng, iconKey, draggable: !!canEdit };
       // SATU popup per pin (tanpa tooltip hover — dulu tooltip + popup tampil
       // bertumpuk saat pin diketuk di layar sentuh). Dalam Mode Seleksi, klik
@@ -945,7 +1001,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
       // pengguna dapat memperbesar manual hingga z22 untuk memisahkan pin.
       map.fitBounds(bounds, { padding: [30, 30], maxZoom: 19 });
     }
-  }, [displayRows, canEdit, buildPopupEl, refreshRowVersion, selectedIds]);
+  }, [displayRows, canEdit, buildPopupEl, refreshRowVersion, selectedIds, markerStyle]);
 
   // Mode Seleksi mematikan box-zoom bawaan Shift+seret (kita pakai Shift+seret
   // untuk KOTAK SELEKSI). Dipulihkan saat mode dimatikan.
@@ -1135,6 +1191,10 @@ const AssetMapFullView = memo(function AssetMapFullView({
             <DropdownMenuItem className="min-h-[42px]" onClick={toggleCluster} data-testid="map-menu-cluster-toggle">
               <Boxes className={`w-4 h-4 mr-2 ${clusterOn ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground"}`} />
               Pengelompokan Marker: {clusterOn ? "Aktif" : "Mati"}
+            </DropdownMenuItem>
+            <DropdownMenuItem className="min-h-[42px]" onClick={() => setMarkerStyle((s) => (s === "photo" ? "pin" : "photo"))} data-testid="map-menu-marker-style">
+              <ImageIcon className={`w-4 h-4 mr-2 ${markerStyle === "photo" ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground"}`} />
+              Gaya Marker: {markerStyle === "photo" ? "Foto (sampul)" : "Pin"}
             </DropdownMenuItem>
             {canSelect && (
               <>
