@@ -44,7 +44,13 @@ const EMPTY = {
   jenis_kontrak_non_asn: "", perusahaan_penyedia: "",
   tanggal_akhir_jabatan: "", kode_satker: "", kode_satker_lengkap: "",
   tmt_jabatan: "", status: "aktif",
-  status_pegawai_satker: "", status_pegawai_instansi: "", keterangan: "",
+  status_pegawai_satker: "", status_pegawai_instansi: "",
+  // Kelengkapan status "Meninggal Dunia" — tanggal WAJIB (menjalankan jam
+  // 3 tahun pemberitahuan ahli waris, UU 1/2004 Pasal 66 ayat (2)).
+  tanggal_meninggal: "", nomor_akta_kematian: "", penyebab_meninggal: "",
+  ahli_waris_nama: "", ahli_waris_hubungan: "", ahli_waris_kontak: "",
+  pemberitahuan_ahli_waris_tanggal: "", pemberitahuan_ahli_waris_nomor: "",
+  keterangan: "",
 };
 
 // Status kontrak Non-ASN utk badge (pemegang aset berisiko saat kontrak habis).
@@ -1252,6 +1258,58 @@ export default function PegawaiPage({ user, onBack }) {
                     <Field label="Status Keberadaan">
                       <Select value={form.status} onChange={set("status")} data-testid="pegawai-form-status" opts={ref.status} allowEmpty={false} />
                     </Field>
+                    {/* Kelengkapan wafat — muncul hanya bila status Meninggal
+                        Dunia. Tanggal WAJIB: menjadi dasar serah terima BMN
+                        almarhum sekaligus menjalankan jam 3 tahun pemberitahuan
+                        ahli waris (UU 1/2004 Ps. 66 ayat (2) jo. PP 38/2016). */}
+                    {form.status === "meninggal" && (
+                      <>
+                        <Field label="Tanggal Meninggal *">
+                          <Input type="date" value={form.tanggal_meninggal} onChange={set("tanggal_meninggal")}
+                            data-testid="pegawai-form-tanggal-meninggal" />
+                        </Field>
+                        <Field label="Nomor Akta Kematian">
+                          <Input value={form.nomor_akta_kematian} onChange={set("nomor_akta_kematian")}
+                            placeholder="sesuai surat keterangan kematian"
+                            data-testid="pegawai-form-akta-kematian" />
+                        </Field>
+                        <Field label="Penyebab (ops.)" span2>
+                          <Input value={form.penyebab_meninggal} onChange={set("penyebab_meninggal")}
+                            placeholder="cth. sakit / kecelakaan kerja (tewas)" />
+                        </Field>
+                        <Field label="Nama Ahli Waris">
+                          <Input value={form.ahli_waris_nama} onChange={set("ahli_waris_nama")}
+                            placeholder="penerima/penyerah BMN almarhum"
+                            data-testid="pegawai-form-ahli-waris" />
+                        </Field>
+                        <Field label="Hubungan Ahli Waris">
+                          <Input value={form.ahli_waris_hubungan} onChange={set("ahli_waris_hubungan")}
+                            placeholder="cth. Istri / Suami / Anak" />
+                        </Field>
+                        <Field label="Kontak Ahli Waris" span2>
+                          <Input value={form.ahli_waris_kontak} onChange={set("ahli_waris_kontak")}
+                            placeholder="No. HP / alamat untuk pemberitahuan resmi" />
+                        </Field>
+                        <Field label="Tgl Pemberitahuan Ahli Waris">
+                          <Input type="date" value={form.pemberitahuan_ahli_waris_tanggal}
+                            onChange={set("pemberitahuan_ahli_waris_tanggal")}
+                            data-testid="pegawai-form-pemberitahuan-tanggal" />
+                        </Field>
+                        <Field label="Nomor Surat Pemberitahuan">
+                          <Input value={form.pemberitahuan_ahli_waris_nomor}
+                            onChange={set("pemberitahuan_ahli_waris_nomor")}
+                            placeholder="nomor surat resmi ke ahli waris" />
+                        </Field>
+                        <div className="sm:col-span-2 text-[11px] rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 px-2.5 py-2">
+                          BAST lama atas nama almarhum <b>tetap sah</b> dan tidak dihapus — ia bukti
+                          rantai penguasaan barang. Yang perlu dibuat adalah <b>serah terima baru</b>
+                          {" "}di modul Penggunaan. Bila ada BMN hilang, ahli waris <b>wajib diberi tahu
+                          resmi dalam 3 tahun</b> sejak tanggal wafat; lewat batas itu hak tagih negara
+                          hapus demi hukum. Isi tanggal &amp; nomor surat pemberitahuan di atas bila sudah
+                          dilakukan.
+                        </div>
+                      </>
+                    )}
                     {form.status_kepegawaian !== "non_asn" && (
                       <>
                         <Field label="TMT Jabatan"><Input type="date" value={form.tmt_jabatan} onChange={set("tmt_jabatan")} /></Field>

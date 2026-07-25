@@ -48,6 +48,46 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#606] Pemegang BMN meninggal dunia (1/4): status "Meninggal Dunia" + jam 3 tahun ahli waris — 2026-07-25
+
+Menjawab kasus nyata: **BAST sudah sah, lalu pemegangnya meninggal.** Riset
+peraturan menegaskan **BAST yang sudah sah TIDAK batal** karena penandatangannya
+meninggal — ia akta atas peristiwa yang sudah selesai, dan kematian bukan sebab
+hapusnya perikatan (Pasal 1381 KUHPerdata); hak-kewajiban beralih ke ahli waris
+(hak *saisine*, Pasal 833 jo. 1318 KUHPerdata). **Yang dikelola adalah penguasaan
+barangnya**, lewat serah terima BARU — dokumen lama tetap jadi bukti rantai
+penguasaan dan **tidak boleh dihapus**.
+
+Tahap 1 (fondasi data):
+
+- **Status pegawai baru "Meninggal Dunia"** — kelas tersendiri, bukan lagi
+  dilebur ke `nonaktif`. Sebelumnya impor menormalkan `meninggal`/`wafat` →
+  `nonaktif` sehingga **informasi kematiannya hilang**; kini `meninggal`/`wafat`/
+  `almarhum` → status sendiri. Otomatis ikut ke dropdown Referensi & ekspor Excel.
+- **Kelengkapan wajib**: `tanggal_meninggal` (**wajib** bila status Meninggal),
+  `nomor_akta_kematian`, `penyebab` — mengikuti Peraturan BKN 3/2020 (surat
+  keterangan meninggal memuat nomor akta, tanggal, penyebab).
+- **Data ahli waris** (nama, hubungan, kontak) — dipakai saat serah terima BMN
+  almarhum dan untuk pemberitahuan resmi.
+- ⏱️ **Jam hukum 3 tahun** (`info_kewajiban_ahli_waris`, murni & teruji): bila ada
+  BMN hilang, tanggung jawab ahli waris **HAPUS** apabila dalam **3 tahun** sejak
+  pegawai diketahui meninggal mereka tidak diberi tahu (**UU 1/2004 Pasal 66
+  ayat (2)** jo. **PP 38/2016**). Helper menghitung batas (3 tahun **kalender**,
+  aman untuk 29 Feb), sisa hari, dan tingkat eskalasi: `pantau` → `segera`
+  (≤180 hari) → `kritis` (≤90 hari) → `lewat`. Mengisi **tanggal + nomor surat
+  pemberitahuan** menghentikan jam (`selesai`) — karena syarat hukumnya
+  *"diberi tahu"*, bukan *"barang kembali"*.
+- **Form Master Pegawai**: blok kelengkapan wafat muncul otomatis saat status
+  dipilih, lengkap dengan penjelas bahwa BAST lama tetap sah & batas 3 tahun.
+- Almarhum yang masih memegang aset **otomatis masuk** panel "Perlu Serah Terima
+  BMN" (status meninggal bukan status aman).
+
+> Tahap berikutnya: (2) blokir transaksi baru ke almarhum, (3) temuan Wasdal
+> khusus + tampilan jam 3 tahun, (4) jenis BAST "Pengembalian — Pemegang
+> Meninggal Dunia" (penyerah ahli waris/atasan + saksi).
+
+---
+
 ## [#605] Getar rana kamera diperkuat (Android) + jalur haptic iOS 17.4+ — 2026-07-25
 
 Lanjutan [#603] — pengguna melaporkan **suara muncul tapi getar tidak** saat
