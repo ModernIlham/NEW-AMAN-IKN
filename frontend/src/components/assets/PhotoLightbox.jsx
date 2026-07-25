@@ -277,7 +277,10 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
   // dari foto tajam-lalu-hilang saat efek menyalakan loading.
   const [imgLoading, setImgLoading] = useState(seed.current.photos.length > 0);
   const startX = useRef(0);
-  const builtRef = useRef({ count: seed.current.count, version: seed.current.version });
+  // Ikut menyimpan `id`: dua ASET berbeda bisa punya count+version SAMA (mis.
+  // sama-sama 1 foto versi 1) — tanpa membandingkan id, URL foto tak dibangun
+  // ulang saat pindah aset → foto "tersangkut" milik aset lama.
+  const builtRef = useRef({ id: asset?.id, count: seed.current.count, version: seed.current.version });
   const [downloading, setDownloading] = useState(false);
   const [rot, setRot] = useState(0); // rotasi tampilan foto (0/90/180/270) — preview saja
   const [fullscreen, setFullscreen] = useState(false); // penampil foto layar penuh DALAM aplikasi
@@ -380,8 +383,8 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
     // (yang memicu kedip). w=1280: varian preview tajam (~100-250KB), di-resize
     // & di-cache server sekali (ETag/Cache-Control tetap berlaku).
     const init = buildPhotoUrls(asset);
-    if (init.count !== builtRef.current.count || init.version !== builtRef.current.version) {
-      builtRef.current = { count: init.count, version: init.version };
+    if (asset.id !== builtRef.current.id || init.count !== builtRef.current.count || init.version !== builtRef.current.version) {
+      builtRef.current = { id: asset.id, count: init.count, version: init.version };
       setPhotos(init.photos);
       setThumbs(init.thumbs);
       setIdx(0);
@@ -406,7 +409,7 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
         const v = Number(data.version) || 1;
         if (c !== builtRef.current.count || v !== builtRef.current.version) {
           const next = buildPhotoUrls({ ...asset, photo_count: c, version: v });
-          builtRef.current = { count: next.count, version: next.version };
+          builtRef.current = { id: asset.id, count: next.count, version: next.version };
           setPhotos(next.photos);
           setThumbs(next.thumbs);
           setIdx(i => Math.min(i, Math.max(0, next.photos.length - 1)));

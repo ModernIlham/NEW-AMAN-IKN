@@ -48,6 +48,19 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#592] Perbaikan lightbox: foto tak lagi "tersangkut" aset lama saat pindah antar-aset — 2026-07-25
+
+Di penampil foto (lightbox), geser kartu info untuk pindah ke aset berikutnya/
+sebelumnya kadang tetap menampilkan **foto aset lama**. Akar masalah: penjaga
+pembangunan-ulang URL foto (`builtRef`) hanya membandingkan `count` & `version`
+— dua aset berbeda yang kebetulan sama-sama 1 foto versi 1 (sangat umum) lolos
+tanpa membangun ulang URL, sehingga `<img>` tetap menunjuk foto aset sebelumnya.
+Kini penjaga **juga membandingkan `id` aset** → begitu id berubah, URL foto
+(dan thumbnail placeholder) dibangun ulang, `idx` di-reset ke 0, dan indikator
+"memuat" menyala. Foto yang tampil selalu milik aset yang sedang dibuka.
+
+---
+
 ## [#591] Thumbnail aset → WebP (baru langsung WebP + migrasi lama terjadwal, tanpa kuota Tinify) — 2026-07-25
 
 Optimasi penyimpanan & payload thumbnail pada skala jutaan aset. Thumbnail
