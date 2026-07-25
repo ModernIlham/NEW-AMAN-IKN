@@ -145,11 +145,29 @@ async def _no_agenda_berikut(jenis: str, tahun: int, kode_satker: str = "") -> i
     base = f"surat_{jenis}_{tahun}"
     cid = f"{base}:{kode}" if kode else base
     if kode and await db.counters.find_one({"_id": cid}) is None:
-        # Seed sekali dari no_agenda TERTINGGI milik satker ini pada tahun itu
-        # (migrasi dari counter global: nomor lama satker bisa > jumlahnya).
+        # Seed sekali saat migrasi dari counter GLOBAL ke per-satker.
+        #
+        # PENTING (REVIEW-9 R10): jangan hanya membaca surat yang SUDAH
+        # berstempel kode_satker. Stempel itu baru ditambahkan belakangan dan
+        # tidak pernah di-backfill, jadi di produksi hampir semua surat lama
+        # TANPA kode_satker → query ber-stempel mengembalikan 0 baris → seq
+        # mulai dari 0 → nomor agenda 1,2,3… DIULANG dan bentrok dengan surat
+        # yang sudah terbit (tak ada indeks unik pada nomor/no_agenda, jadi
+        # tabrakan terjadi diam-diam). Karena itu seed = MAKS dari:
+        #   (a) posisi counter GLOBAL lama (batas aman lintas satker), dan
+        #   (b) no_agenda tertinggi milik satker ini (termasuk surat lama tanpa
+        #       stempel — dianggap milik satker ini sesuai konvensi era-lama).
+        # Konsekuensi: satker kedua mulai dari nomor global terakhir sehingga
+        # ada lompatan sekali — jauh lebih baik daripada nomor resmi ganda.
         maks = 0
+        lama = await db.counters.find_one({"_id": base}, {"_id": 0, "seq": 1})
+        try:
+            maks = int((lama or {}).get("seq") or 0)
+        except (TypeError, ValueError):
+            maks = 0
         async for r in db.surat.find(
-                {"jenis": jenis, "tahun": tahun, "kode_satker": kode},
+                {"jenis": jenis, "tahun": tahun,
+                 "kode_satker": {"$in": [kode, "", None]}},
                 {"_id": 0, "no_agenda": 1}):
             try:
                 maks = max(maks, int(r.get("no_agenda") or 0))

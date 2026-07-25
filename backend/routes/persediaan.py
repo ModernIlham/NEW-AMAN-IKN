@@ -539,9 +539,11 @@ async def opname_status(_user: dict = Depends(require_user)):
     from persediaan_utils import status_opname_semester
 
     today_iso = today_wib()   # tanggal lokal WIB (#25/#44)
+    # Isolasi satker (REVIEW-9 R10): tanpa scope, pengingat opname semesteran
+    # satker ini "padam" hanya karena satker LAIN sudah opname (kepatuhan palsu).
     terakhir = await db.transaksi_persediaan.find_one(
-        {"jenis": "opname"}, {"_id": 0, "timestamp": 1},
-        sort=[("timestamp", -1)])
+        await _scope_jurnal(_user, {"jenis": "opname"}),
+        {"_id": 0, "timestamp": 1}, sort=[("timestamp", -1)])
     tanggal = tanggal_wib((terakhir or {}).get("timestamp"))
     return status_opname_semester(tanggal, today_iso)
 
@@ -878,6 +880,10 @@ async def transaksi_massal(payload: TransaksiMassalIn, user: dict = Depends(requ
         await db.surat.insert_one({
             "id": surat_id, "jenis": "keluar", "no_agenda": no_agenda,
             "tahun": tahun, "nomor": nomor_lpb, "status": "dibooking",
+            # Stempel satker (REVIEW-9 R10): tanpa ini surat booking otomatis
+            # muncul di buku agenda & arsip SEMUA satker, dan tak terhitung saat
+            # counter per-satker di-seed.
+            "kode_satker": _ks,
             "perihal": f"Laporan Penerimaan Barang (LPB) — {payload.jenis}",
             "tujuan": str(payload.penyedia or "").strip(),
             "jenis_naskah": "Laporan", "modul": "persediaan",
@@ -1115,7 +1121,11 @@ async def lpb_pdf(lpb_id: str,
 @persediaan_router.get("/persediaan/gudang/daftar")
 async def daftar_gudang(_user: dict = Depends(require_user)):
     """Daftar nilai Lokasi/Gudang unik yang terpakai di master (untuk filter)."""
-    nilai = await db.persediaan.distinct("lokasi")
+    # Isolasi satker (REVIEW-9 R10): dropdown filter jangan memuat nama
+    # gudang/ruang milik satker lain.
+    from shared_utils import scope_query_field_satker
+    nilai = await db.persediaan.distinct(
+        "lokasi", scope_query_field_satker(_user))
     gudang = sorted({str(v).strip() for v in nilai if str(v or "").strip()},
                     key=str.casefold)
     return {"items": gudang, "total": len(gudang)}

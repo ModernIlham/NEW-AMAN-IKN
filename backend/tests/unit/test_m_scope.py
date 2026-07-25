@@ -129,3 +129,19 @@ def test_kelola_akun_admin_tanpa_satker_bukan_admin_role_ditolak():
         _kelola({"role": "operator", "kode_satker": ""},
                 {"role": "viewer", "kode_satker": "111"})
     assert e.value.status_code == 403
+
+
+# ── R10: token berkas ekspor dipersempit ────────────────────────────────────
+
+def test_token_docfile_scope_dan_umur():
+    """Tautan doc-file di dalam CSV/XLSX membawa token; token itu harus
+    SESEMPIT mungkin karena berkas ekspor rutin dikirim ke auditor/KPKNL."""
+    import jwt as _jwt
+    import auth_utils as au
+
+    tok = au.create_docfile_token("u1", "budi", 3)
+    payload = _jwt.decode(tok, au.JWT_SECRET, algorithms=[au.JWT_ALGORITHM])
+    assert payload["scope"] == "docfile"        # bukan "media" (30 hari, ~30 endpoint)
+    assert payload["sesi_epoch"] == 3           # ikut dicabut saat reset password
+    assert au.DOCFILE_TOKEN_EXPIRATION_DAYS == 7
+    assert au.DOCFILE_TOKEN_EXPIRATION_DAYS < au.MEDIA_TOKEN_EXPIRATION_DAYS

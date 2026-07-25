@@ -11,8 +11,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request, Depends
-from auth_utils import (create_media_token, require_admin, require_user,
-                        require_user_or_query_token)
+from auth_utils import (create_docfile_token, require_admin, require_user,
+                        require_user_docfile)
 from fastapi.responses import StreamingResponse
 
 from reportlab.lib.pagesizes import A4
@@ -35,13 +35,18 @@ from shared_utils import (limiter, invalidate_asset_cache, log_audit,
 
 
 def _token_media(user: dict) -> str:
-    """Token ber-scope media untuk DITANAM di tautan ekspor (REVIEW-9 R9).
+    """Token untuk DITANAM di tautan doc-file dalam berkas ekspor.
 
-    Tautan doc-file di dalam CSV/XLSX dibuka belakangan dari spreadsheet —
-    tak ada header Authorization di sana. Token ini membuat tautan tetap bisa
-    dibuka pemiliknya TANPA mengembalikan endpoint ke anonim.
+    Tautan itu dibuka belakangan dari spreadsheet — tak ada header
+    Authorization di sana. Token membuatnya tetap bisa dibuka pemiliknya
+    TANPA mengembalikan endpoint ke anonim.
+
+    Memakai token ber-scope "docfile" (7 hari, HANYA sah untuk rute ini),
+    bukan token media (30 hari, diterima ~30 endpoint) — berkas ekspor rutin
+    dikirim ke KPKNL/auditor, jadi kredensial di dalamnya harus sesempit
+    mungkin (REVIEW-9 R10).
     """
-    return create_media_token(
+    return create_docfile_token(
         str((user or {}).get("id") or ""),
         str((user or {}).get("username") or ""),
         int((user or {}).get("sesi_epoch") or 0))
@@ -206,7 +211,7 @@ def format_document_checklist_for_xlsx(checklist: list, asset_id: str, base_url:
 # yang memegang UUID aset dapat mengunduh dokumen kepemilikan & foto checklist
 # tanpa login, dan UUID itu justru DITANAM aplikasi ke dalam CSV/XLSX yang
 # beredar. Kini endpoint memakai gerbang yang sama dengan saudaranya di
-# assets.py: `require_user_or_query_token` (menerima Bearer ATAU `?token=`)
+# assets.py: gate berautentikasi (menerima Bearer ATAU `?token=`)
 # plus `pastikan_akses_aset`. Tautan di dalam ekspor kini membawa token
 # ber-scope media, sehingga skenario "buka dari spreadsheet" tetap jalan.
 # Hardening lama dipertahankan: Content-Type diturunkan dari JENIS berkas
@@ -223,7 +228,7 @@ def _docfile_url(base_url: str, asset_id: str, idx: int, kind: str, i: int,
 
 @exports_router.get("/assets/{asset_id}/doc-file/{item_idx}/{file_type}/{file_idx}")
 async def get_asset_doc_file(asset_id: str, item_idx: int, file_type: str, file_idx: int,
-                             _user: dict = Depends(require_user_or_query_token)):
+                             _user: dict = Depends(require_user_docfile)):
     """Get a specific file (photo or document) from document_checklist"""
     asset = await db.assets.find_one(
         {"id": asset_id}, {"_id": 0, "document_checklist": 1, "activity_id": 1})

@@ -333,6 +333,10 @@ async def buat_bast(payload: BastIn, request: Request = None,
         await db.surat.insert_one({
             "id": surat_id, "jenis": "keluar", "no_agenda": no_agenda,
             "tahun": tahun, "nomor": nomor_final, "status": "dibooking",
+            # Stempel satker (REVIEW-9 R10): tanpa ini surat booking otomatis
+            # muncul di buku agenda & arsip SEMUA satker, dan tak terhitung saat
+            # counter per-satker di-seed.
+            "kode_satker": _ks,
             "perihal": f"BAST {JENIS_BAST[payload.jenis]} — {payload.pihak_kedua.nama}",
             "tujuan": payload.pihak_kedua.nama, "jenis_naskah": "Berita Acara",
             "modul": "penggunaan", "kegiatan_id": "", "nama_kegiatan": "",

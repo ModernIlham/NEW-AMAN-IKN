@@ -80,6 +80,45 @@ def create_media_token(user_id: str, username: str, sesi_epoch: int = 0) -> str:
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 
+# Token BERKAS EKSPOR (scope="docfile", umur 7 hari): DITANAM ke tautan
+# doc-file di dalam CSV/XLSX hasil ekspor, karena berkas itu dibuka belakangan
+# dari spreadsheet (tak ada header Authorization di sana).
+#
+# Sengaja BUKAN token media (REVIEW-9 R10): token media berumur 30 hari DAN
+# diterima ~30 endpoint (assets, bast, pengesahan, ttd, persediaan, jobs, …),
+# jadi menanamnya ke berkas yang rutin dikirim ke KPKNL/auditor sama dengan
+# membagikan kredensial baca umum atas nama pengekspor. Token ini dipersempit
+# ke SATU rute (doc-file) dan diperpendek jadi 7 hari; pencabutan tetap ikut
+# `sesi_epoch` (reset password mencabutnya).
+DOCFILE_TOKEN_EXPIRATION_DAYS = 7
+
+
+def create_docfile_token(user_id: str, username: str, sesi_epoch: int = 0) -> str:
+    payload = {
+        "user_id": user_id,
+        "username": username,
+        "scope": "docfile",
+        "sesi_epoch": int(sesi_epoch or 0),
+        "exp": datetime.now(timezone.utc).timestamp() + (DOCFILE_TOKEN_EXPIRATION_DAYS * 86400),
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+async def require_user_docfile(
+    authorization: str = Header(default="", alias="Authorization"),
+    token: str = Query(default=""),
+) -> dict:
+    """Gate rute doc-file: Bearer biasa, token media, ATAU token scope
+    "docfile" yang ditanam di tautan ekspor. Guard satker tetap ditegakkan
+    pemanggil lewat `pastikan_akses_aset`."""
+    if authorization and authorization.startswith("Bearer "):
+        return await _decode_bearer(authorization, allow_media_scope=True)
+    if not token:
+        raise HTTPException(status_code=401, detail="Autentikasi diperlukan")
+    return await _decode_bearer(f"Bearer {token}", allow_media_scope=True,
+                                allow_docfile_scope=True)
+
+
 # Token TANDA TANGAN (typ="sign", umur 14 hari): dipakai link e-sign yang
 # dibagikan ke penanda tangan TAMU (tanpa akun). Membawa id permintaan +
 # id penanda tangan + jti (sekali pakai, ditandai di record). DITOLAK untuk
@@ -188,7 +227,8 @@ async def require_user_or_map_token(
     return {"guest": True, "peta": tok, "username": "tamu-peta", "role": "tamu"}
 
 
-async def _decode_bearer(authorization: str, allow_media_scope: bool = False) -> dict:
+async def _decode_bearer(authorization: str, allow_media_scope: bool = False,
+                         allow_docfile_scope: bool = False) -> dict:
     """Decode an Authorization header value and return the user document.
 
     Raises HTTPException(401) on any failure. Shared by the legacy positional
@@ -207,6 +247,10 @@ async def _decode_bearer(authorization: str, allow_media_scope: bool = False) ->
     # Token ber-scope "media" hanya sah untuk endpoint media/laporan
     # (require_user_or_query_token) — tolak untuk API biasa.
     if payload.get("scope") == "media" and not allow_media_scope:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    # Token "docfile" ditanam di tautan CSV/XLSX yang beredar luas — hanya sah
+    # untuk rute doc-file, tidak untuk endpoint lain (REVIEW-9 R10).
+    if payload.get("scope") == "docfile" and not allow_docfile_scope:
         raise HTTPException(status_code=401, detail="Invalid token")
     # Hash bcrypt disimpan di field `password` — WAJIB dikecualikan agar tak
     # bocor ke klien lewat dokumen user yang dikembalikan require_user/admin.

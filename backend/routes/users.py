@@ -182,6 +182,19 @@ async def change_user_role(user_id: str, data: dict, _admin: dict = Depends(requ
         raise HTTPException(status_code=404, detail="User tidak ditemukan")
     pastikan_kelola_akun(_admin, user)  # isolasi satker (REVIEW-9 R9)
 
+    # ESKALASI (REVIEW-9 R10). `pastikan_kelola_akun` sengaja MENGIZINKAN akun
+    # tanpa ikatan satker (pendaftar baru) supaya admin satker bisa meng-onboard.
+    # Tanpa cek tambahan di sini, jalur itu menjadi tangga naik pangkat: admin
+    # satker mempromosikan pendaftar TANPA ikatan menjadi role "admin" → akun
+    # itu memenuhi definisi SUPER-ADMIN (admin + kode_satker kosong) → lolos ke
+    # backup/restore/reset seluruh satker. Akun baru harus DIIKAT dulu.
+    if (not is_super_admin(_admin) and new_role == "admin"
+            and not kode_satker_user(user)):
+        raise HTTPException(
+            status_code=400,
+            detail=("Ikat akun ini ke satker Anda dulu sebelum dijadikan admin "
+                    "— admin tanpa ikatan satker berarti super-admin pusat"))
+
     await db.users.update_one({"id": user_id}, {"$set": {"role": new_role}})
     return {"message": f"Role user diubah menjadi {new_role}", "role": new_role}
 

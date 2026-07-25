@@ -3085,8 +3085,20 @@ async def generate_lbkp_pdf(
          "dihapus": 1, "penghapusan": 1},
     ).to_list(500000)
     tombstones = []
+    # ISOLASI SATKER (REVIEW-9 R10). Tombstone = aset yang DIHAPUS KERAS; ia
+    # masuk laporan sebagai "mutasi kurang" TERPISAH dari query assets di atas.
+    # Karena assets kini ter-scope tetapi tombstone tidak, laporan jadi TIMPANG:
+    # saldo awal/tambah milik satker sendiri, mutasi kurang milik SEMUA satker →
+    # saldo akhir bisa MINUS, dan cacah/nilai penghapusan satker lain bocor.
+    from routes.audit import _batas_activity_satker
+    _tq, _kosong = await _batas_activity_satker(_user, "")
+    # activity_id kosong → _kosong selalu False; filter mustahil dipakai sebagai
+    # jaring pengaman bila kontrak helper berubah (fail-closed, bukan fail-open).
+    _q_tomb = {"action": "delete"} if not _kosong else {"_id": {"$in": []}}
+    if not _kosong:
+        _q_tomb.update(_tq)
     async for t in db.audit_logs.find(
-            {"action": "delete"},
+            _q_tomb,
             {"_id": 0, "asset_code": 1, "timestamp": 1, "changes": 1}):
         nilai = 0.0
         for c in t.get("changes") or []:
@@ -3393,8 +3405,20 @@ async def generate_calbmn_pdf(
              "masa_manfaat_tambah_tahun": 1},
     ).to_list(500000)
     tombstones = []
+    # ISOLASI SATKER (REVIEW-9 R10). Tombstone = aset yang DIHAPUS KERAS; ia
+    # masuk laporan sebagai "mutasi kurang" TERPISAH dari query assets di atas.
+    # Karena assets kini ter-scope tetapi tombstone tidak, laporan jadi TIMPANG:
+    # saldo awal/tambah milik satker sendiri, mutasi kurang milik SEMUA satker →
+    # saldo akhir bisa MINUS, dan cacah/nilai penghapusan satker lain bocor.
+    from routes.audit import _batas_activity_satker
+    _tq, _kosong = await _batas_activity_satker(_user, "")
+    # activity_id kosong → _kosong selalu False; filter mustahil dipakai sebagai
+    # jaring pengaman bila kontrak helper berubah (fail-closed, bukan fail-open).
+    _q_tomb = {"action": "delete"} if not _kosong else {"_id": {"$in": []}}
+    if not _kosong:
+        _q_tomb.update(_tq)
     async for t in db.audit_logs.find(
-            {"action": "delete"},
+            _q_tomb,
             {"_id": 0, "asset_code": 1, "timestamp": 1, "changes": 1}):
         nilai = 0.0
         for c in t.get("changes") or []:

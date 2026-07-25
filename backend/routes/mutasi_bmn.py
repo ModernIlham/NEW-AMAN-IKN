@@ -54,22 +54,20 @@ async def daftar_mutasi(asset_id: str = "", kode_transaksi: str = "",
         if sampai.strip():
             rentang["$lte"] = sampai.strip()[:10]
         q["tanggal_buku"] = rentang
-    # ISOLASI SATKER (REVIEW-9 R9). Entri jurnal sengaja ramping dan TIDAK
-    # membawa kode_satker, jadi disaring lewat aset yang boleh dilihat user.
-    # Tanpa ini Buku Barang seluruh satker (kode barang, NUP, nilai rupiah,
-    # keterangan ber-nomor BAST) terbaca siapa pun yang login.
-    from shared_utils import kode_satker_user, pastikan_akses_aset, scope_query_aset
-    if kode_satker_user(_user):
-        if q.get("asset_id"):
-            aset = await db.assets.find_one(
-                {"id": q["asset_id"]}, {"_id": 0, "id": 1, "activity_id": 1})
-            if not aset:
-                raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
-            await pastikan_akses_aset(_user, aset)
-        else:
-            q["asset_id"] = {"$in": [a["id"] async for a in db.assets.find(
-                await scope_query_aset(_user, {}), {"_id": 0, "id": 1})
-                if a.get("id")]}
+    # ISOLASI SATKER (REVIEW-9 R9, disempurnakan R10). Entri jurnal kini
+    # DISTEMPEL kode_satker saat ditulis (shared_utils.catat_mutasi_bmn), jadi
+    # daftar cukup difilter per field — bukan lewat daftar id aset yang tumbuh
+    # tanpa batas dan dikirim sebagai $in tiap halaman. Entri era-lama tanpa
+    # stempel tetap terbuka sesuai konvensi (tutup lewat POST /satker/backfill).
+    # Bila asset_id diminta eksplisit, kepemilikan asetnya tetap di-guard.
+    from shared_utils import kode_satker_user, pastikan_akses_aset
+    if kode_satker_user(_user) and q.get("asset_id"):
+        aset = await db.assets.find_one(
+            {"id": q["asset_id"]}, {"_id": 0, "id": 1, "activity_id": 1})
+        if not aset:
+            raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+        await pastikan_akses_aset(_user, aset)
+    q = scope_query_field_satker(_user, q)
     total = await db.mutasi_bmn.count_documents(q)
     items = await (db.mutasi_bmn.find(q, _PROJ)
                    .sort([("tanggal_buku", -1), ("created_at", -1)])
