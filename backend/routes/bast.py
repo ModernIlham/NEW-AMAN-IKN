@@ -45,8 +45,16 @@ JENIS_BAST = {
     "operasional_unit": "Operasional Penggunaan Barang Milik Negara pada Unit/Tempat/Tugas",
     "penggunaan_sementara": "Operasional Penggunaan Sementara Barang Milik Negara",
     "pengembalian": "Pengembalian Barang Milik Negara",
+    "pengembalian_almarhum": ("Pengembalian Barang Milik Negara — "
+                              "Pemegang Meninggal Dunia"),
     "lainnya": "Serah Terima Barang Milik Negara",
 }
+
+# Jenis ber-ARAH BALIK (PIHAK KEDUA menyerahkan, PIHAK KESATU menerima).
+# `pengembalian_almarhum` ikut keluarga ini: yang menyerahkan bukan almarhum
+# melainkan AHLI WARIS/ATASAN LANGSUNG — karena itu ia butuh blok dasar
+# (akta kematian) dan SAKSI, pola berita acara "pihak berhalangan tetap".
+_JENIS_PENGEMBALIAN = frozenset({"pengembalian", "pengembalian_almarhum"})
 
 # Dasar hukum BAST penggunaan BMN — dimutakhirkan (audit resmi): rezim
 # PMK 246/PMK.06/2014 jo. 76/2019 telah DICABUT dan digantikan PMK Nomor 40
@@ -76,6 +84,23 @@ class PjTambahanIn(BaseModel):
     unit_tempat_tugas: str = ""
 
 
+class AlmarhumIn(BaseModel):
+    """Identitas pemegang yang meninggal — DASAR berita acara pengembalian.
+    Bukan penanda tangan; ia disebut di blok dasar bersama akta kematiannya."""
+    nama: str = ""
+    nip: str = ""
+    tanggal_meninggal: str = ""
+    nomor_akta_kematian: str = ""
+
+
+class SaksiIn(BaseModel):
+    """Saksi berita acara — WAJIB (min. 2) pada pengembalian almarhum, karena
+    pihak yang seharusnya menyerahkan berhalangan tetap."""
+    nama: str = ""
+    jabatan: str = ""
+    nip: str = ""
+
+
 class BastIn(BaseModel):
     jenis: str
     judul_lainnya: Optional[str] = ""
@@ -92,6 +117,9 @@ class BastIn(BaseModel):
     jangka_dari: Optional[str] = ""           # khusus penggunaan_sementara
     jangka_sampai: Optional[str] = ""
     penanggung_jawab_tambahan: Optional[List[PjTambahanIn]] = None
+    # Khusus `pengembalian_almarhum`: identitas almarhum (dasar BA) + saksi.
+    almarhum: Optional[AlmarhumIn] = None
+    saksi: Optional[List[SaksiIn]] = None
     tembusan: Optional[str] = ""              # override; default pengaturan
     sertakan_foto: Optional[bool] = False
     keterangan: Optional[str] = ""
@@ -189,6 +217,23 @@ async def buat_bast(payload: BastIn, user: dict = Depends(require_writer)):
             and str(payload.jangka_sampai or "").strip()):
         raise HTTPException(status_code=400, detail=(
             "Penggunaan sementara wajib ber-jangka waktu (dari & sampai)"))
+    _saksi = [s for s in (payload.saksi or []) if str(s.nama or "").strip()]
+    if payload.jenis == "pengembalian_almarhum":
+        # Dasar BA: identitas almarhum WAJIB — tanpanya dokumen tak menjelaskan
+        # mengapa yang menyerahkan bukan pemegang tercatat.
+        if not str((payload.almarhum.nama if payload.almarhum else "") or "").strip():
+            raise HTTPException(status_code=400, detail=(
+                "Nama pemegang yang meninggal wajib diisi (dasar berita acara)"))
+        if not str((payload.almarhum.tanggal_meninggal if payload.almarhum else "")
+                   or "").strip():
+            raise HTTPException(status_code=400, detail=(
+                "Tanggal meninggal wajib diisi (dasar berita acara)"))
+        # Saksi WAJIB min. 2 — pihak yang seharusnya menyerahkan berhalangan
+        # tetap, sehingga keabsahan bertumpu pada kesaksian (pola BA berhalangan
+        # tetap; tak diatur norma nasional → dikodifikasi di sini).
+        if len(_saksi) < 2:
+            raise HTTPException(status_code=400, detail=(
+                "Pengembalian BMN almarhum wajib disaksikan minimal 2 saksi"))
 
     aset = await db.assets.find(
         {"id": {"$in": payload.asset_ids}, "dihapus": {"$ne": True}},
@@ -278,6 +323,11 @@ async def buat_bast(payload: BastIn, user: dict = Depends(require_writer)):
         "penanggung_jawab_tambahan": [
             p.model_dump() for p in (payload.penanggung_jawab_tambahan or [])
             if str(p.nama or "").strip()],
+        # Dasar & saksi (khusus pengembalian almarhum; kosong utk jenis lain)
+        "almarhum": (payload.almarhum.model_dump()
+                     if payload.jenis == "pengembalian_almarhum" and payload.almarhum
+                     else {}),
+        "saksi": [s.model_dump() for s in _saksi],
         "tembusan": str(payload.tembusan or "").strip(),
         # Delegasi penyerahan a.n. KPB hanya relevan pada non-mutasi (mutasi
         # sudah otomatis ber-"Mengetahui KPB").
@@ -334,7 +384,7 @@ async def buat_bast(payload: BastIn, user: dict = Depends(require_writer)):
             "pengguna_nip": record["pihak_kedua"].get("nip", ""),
             "pengguna_jabatan": record["pihak_kedua"].get("jabatan", ""),
         })
-    elif payload.terapkan_ke_aset and payload.jenis == "pengembalian":
+    elif payload.terapkan_ke_aset and payload.jenis in _JENIS_PENGEMBALIAN:
         set_aset.update({"user": "", "pengguna_nip": "",
                          "pengguna_jabatan": "", "pengguna_melekat_ke": ""})
     await db.assets.update_many(
@@ -345,7 +395,7 @@ async def buat_bast(payload: BastIn, user: dict = Depends(require_writer)):
     efek = ""
     if payload.terapkan_ke_aset and payload.jenis == "mutasi_pengguna":
         efek = f" (pengguna aset dialihkan ke {record['pihak_kedua']['nama']})"
-    elif payload.terapkan_ke_aset and payload.jenis == "pengembalian":
+    elif payload.terapkan_ke_aset and payload.jenis in _JENIS_PENGEMBALIAN:
         efek = " (pengguna aset dikosongkan)"
     await log_audit("buat_bast", "", username=user.get("username", "system"),
                     detail=(f"BAST {JENIS_BAST[payload.jenis]} — "
@@ -574,10 +624,10 @@ async def bast_pdf(bast_id: str,
 
     tp = Table([[
         _kolom_pihak("PIHAK KESATU (yang menyerahkan)"
-                     if jenis_awal != "pengembalian"
+                     if jenis_awal not in _JENIS_PENGEMBALIAN
                      else "PIHAK KESATU (yang menerima)", "PIHAK KESATU", p1, "NIP"),
         _kolom_pihak("PIHAK KEDUA (yang menerima)"
-                     if jenis_awal != "pengembalian"
+                     if jenis_awal not in _JENIS_PENGEMBALIAN
                      else "PIHAK KEDUA (yang menyerahkan)", "PIHAK KEDUA", p2, "NIP/NIK"),
     ]], colWidths=[doc.width * 0.5, doc.width * 0.5])
     tp.setStyle(_TS([
@@ -593,7 +643,7 @@ async def bast_pdf(bast_id: str,
     el.append(tp)
     el.append(Spacer(1, 1.5 * rl_mm))
     arah = ("PIHAK KEDUA mengembalikan kepada PIHAK KESATU"
-            if jenis_awal == "pengembalian"
+            if jenis_awal in _JENIS_PENGEMBALIAN
             else "PIHAK KESATU dan PIHAK KEDUA — secara bersama-sama disebut "
                  "PARA PIHAK — sepakat melakukan serah terima")
     el.append(Paragraph(
@@ -605,7 +655,7 @@ async def bast_pdf(bast_id: str,
     # PASAL 1 — objek serah terima (tabel multi-aset + nilai + total)
     el.append(Paragraph("<b>PASAL 1 — OBJEK SERAH TERIMA</b>", lbl_pasal))
     kalimat1 = ("PIHAK KEDUA menyerahkan kembali dan PIHAK KESATU menerima"
-                if b.get("jenis") == "pengembalian"
+                if b.get("jenis") in _JENIS_PENGEMBALIAN
                 else "PIHAK KESATU menyerahkan dan PIHAK KEDUA menerima penyerahan")
     el.append(Paragraph(
         f"{kalimat1} Barang Milik Negara dengan rincian sebagai berikut:", isi))
@@ -724,7 +774,28 @@ async def bast_pdf(bast_id: str,
             "dalam keadaan baik yang dituangkan dalam Berita Acara Serah "
             "Terima pengembalian.",
         ])
-    if jenis == "pengembalian":
+    if jenis == "pengembalian_almarhum":
+        alm = b.get("almarhum") or {}
+        _nm = _esc(str(alm.get("nama") or "-"))
+        _nip = str(alm.get("nip") or "").strip()
+        _tgl = str(alm.get("tanggal_meninggal") or "").strip()
+        _akta = str(alm.get("nomor_akta_kematian") or "").strip()
+        ket_alm = [
+            f"BMN dalam berita acara ini sebelumnya tercatat pada pemegang "
+            f"<b>{_nm}</b>" + (f" (NIP {_esc(_nip)})" if _nip else "")
+            + (f" yang telah meninggal dunia pada {_esc(_fmt_tanggal_id(_tgl))}"
+               if _tgl else " yang telah meninggal dunia") + "."
+            + (f" Akta/Surat Keterangan Kematian Nomor {_esc(_akta)}."
+               if _akta else ""),
+            "Karena pemegang tercatat berhalangan tetap, penyerahan dilakukan "
+            "oleh PIHAK KEDUA selaku ahli waris/atasan langsung, disaksikan "
+            "para saksi yang menandatangani berita acara ini.",
+            "Berita Acara Serah Terima terdahulu atas nama pemegang tersebut "
+            "TETAP SAH sebagai bukti rantai penguasaan barang dan tidak "
+            "dibatalkan oleh berita acara ini.",
+        ]
+        pasal("DASAR PENGEMBALIAN (PEMEGANG MENINGGAL DUNIA)", ket_alm)
+    if jenis in _JENIS_PENGEMBALIAN:
         pasal("PERNYATAAN DAN PEMERIKSAAN", [
             "PIHAK KEDUA menyatakan telah mengembalikan seluruh BMN tersebut "
             "dan PIHAK KESATU telah melakukan pemeriksaan fisik serta "
@@ -774,14 +845,16 @@ async def bast_pdf(bast_id: str,
                                    kpb['nip'], "NIP. ....................",
                                    kpb.get("status_kepegawaian")),
                                'ttd_img': await ambil_ttd_img(kpb.get("ttd_file_id"))}]
-    peran_kesatu = ('Yang Menyerahkan,' if jenis != 'pengembalian' else 'Yang Menerima,')
+    peran_kesatu = ('Yang Menyerahkan,' if jenis not in _JENIS_PENGEMBALIAN
+                    else 'Yang Menerima,')
     if an_kpb:
         peran_kesatu = peran_kesatu.rstrip(',') + ' a.n. Kuasa Pengguna Barang,'
     from pegawai_utils import baris_identitas_ttd
     from shared_utils import status_kepegawaian_by_nip
     el.extend(_signature_block([
         {'header': 'PIHAK KEDUA,',
-         'role': 'Yang Menerima,' if jenis != 'pengembalian' else 'Yang Menyerahkan,',
+         'role': ('Yang Menerima,' if jenis not in _JENIS_PENGEMBALIAN
+                  else 'Yang Menyerahkan,'),
          'nama': p2.get("nama") or "................................",
          # Label pintar (NIP/NRP); Non-ASN/NIK tidak dicetak; kosong → titik
          'after': baris_identitas_ttd(
@@ -794,6 +867,27 @@ async def bast_pdf(bast_id: str,
              p1.get("nip"), "NIP. -",
              await status_kepegawaian_by_nip(p1.get("nip")))},
     ] + signers_mengetahui, doc.width))
+    # Blok SAKSI — wajib pada pengembalian almarhum (pihak yang seharusnya
+    # menyerahkan berhalangan tetap), opsional bila diisi pada jenis lain.
+    _saksi_doc = [s for s in (b.get("saksi") or [])
+                  if str((s or {}).get("nama") or "").strip()]
+    if _saksi_doc:
+        el.append(Spacer(1, 2 * rl_mm))
+        el.append(Paragraph("<b>SAKSI-SAKSI:</b>", isi))
+        kolom_saksi = []
+        for i, s in enumerate(_saksi_doc, 1):
+            kolom_saksi.append({
+                'header': f'Saksi {i}.',
+                'role': _esc(str(s.get("jabatan") or "").strip()) or ' ',
+                'nama': _esc(str(s.get("nama") or "").strip()),
+                'after': baris_identitas_ttd(
+                    s.get("nip"), "NIP/NIK. -",
+                    await status_kepegawaian_by_nip(s.get("nip")))})
+        # Dirender BERPASANGAN (2 per baris): _signature_block hanya menangani
+        # 1–3 penanda tangan dan MEMBUANG sisanya bila diberi ≥4 — memecah
+        # sendiri memastikan seluruh saksi benar-benar tercetak.
+        for i in range(0, len(kolom_saksi), 2):
+            el.extend(_signature_block(kolom_saksi[i:i + 2], doc.width))
     el.extend(_blok_tembusan(
         {"tembusan_laporan": b.get("tembusan") or settings.get("tembusan_laporan", "")}))
 
