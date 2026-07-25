@@ -773,6 +773,23 @@ async def transisi_idle(tiket_id: str, payload: TransisiIdleIn,
     if proj:
         await _proyeksi_terminal_ke_aset(
             proj, [res.get("asset_id")], admin.get("username"), "idle_diserahkan")
+        # Jurnal Buku Barang (G7, REVIEW-9 R3): serah BMN idle ke Pengelola →
+        # 302 Transfer Keluar (keluar pembukuan satker; anti-ganda via ref_id).
+        from pembukuan_utils import parse_harga
+        from shared_utils import catat_mutasi_bmn
+        aset = await db.assets.find_one(
+            {"id": res.get("asset_id")},
+            {"_id": 0, "asset_code": 1, "NUP": 1, "purchase_price": 1})
+        await catat_mutasi_bmn({
+            "asset_id": res.get("asset_id"), "kode_transaksi": "302",
+            "kode_barang": str((aset or {}).get("asset_code") or ""),
+            "nup": str((aset or {}).get("NUP") or ""),
+            "tanggal_buku": now[:10], "jumlah": 1,
+            "nilai": parse_harga((aset or {}).get("purchase_price")),
+            "sumber_modul": "penggunaan", "ref_id": res.get("id"),
+            "keterangan": (f"Serah BMN idle ke Pengelola — BAST "
+                           f"{res.get('nomor_bast_serah') or '-'}"),
+            "oleh": admin.get("username", "system")})
     return res
 
 
@@ -1064,6 +1081,27 @@ async def transisi_proses(tiket_id: str, payload: TransisiProsesIn,
         await _proyeksi_terminal_ke_aset(
             proj, [r.get("asset_id") for r in (res.get("aset") or [])],
             user.get("username"), "alih_status_keluar")
+        # Jurnal Buku Barang (G7, REVIEW-9 R3): alih status KELUAR terminal →
+        # 302 Transfer Keluar per aset (best-effort + anti-ganda via ref_id) —
+        # LBKP/LBP menghitung mutasi KURANG dari jurnal, bukan hanya tombstone.
+        from pembukuan_utils import parse_harga
+        from shared_utils import catat_mutasi_bmn
+        for r in res.get("aset") or []:
+            aset = await db.assets.find_one(
+                {"id": r.get("asset_id")},
+                {"_id": 0, "asset_code": 1, "NUP": 1, "purchase_price": 1})
+            await catat_mutasi_bmn({
+                "asset_id": r.get("asset_id"), "kode_transaksi": "302",
+                "kode_barang": str((aset or {}).get("asset_code") or ""),
+                "nup": str((aset or {}).get("NUP") or ""),
+                "tanggal_buku": (str(res.get("tanggal_sk_penghapusan") or "")
+                                 .strip()[:10] or now[:10]),
+                "jumlah": 1,
+                "nilai": parse_harga((aset or {}).get("purchase_price")),
+                "sumber_modul": "penggunaan", "ref_id": res.get("id"),
+                "keterangan": (f"Alih status penggunaan ke {res.get('pihak_tujuan') or '-'}"
+                               f" — SK {res.get('nomor_sk_penghapusan') or '-'}"),
+                "oleh": user.get("username", "system")})
     return res
 
 

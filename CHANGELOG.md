@@ -48,6 +48,40 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#612] Audit REVIEW-9 (3/7): jurnal induk lengkap & scope master persediaan — 2026-07-25
+
+Gelombang ketiga audit 6 dimensi: **semua transaksi keluar/nilai kini
+berjurnal** di Buku Barang (`mutasi_bmn`) — LBKP/LBP tidak lagi kehilangan
+mutasi dari tiga jalur yang sebelumnya bisu — plus isolasi satker master
+persediaan.
+
+**Jurnal induk (Buku Barang / G7):**
+
+- 🔴 **Revaluasi Penilaian kini berjurnal** — `tandai_tercatat_sakti` menulis
+  204 (Koreksi Nilai bertambah) / 205 (berkurang) saat koreksi FINAL:
+  magnitudo positif + `jumlah 0` (rupiah bergeser, kuantitas tidak),
+  tanggal buku = tanggal dokumen penilaian.
+- 🔴 **Alih status keluar & serah BMN idle kini berjurnal** — transisi
+  terminal `dihapus_dibukukan` (proses alih status keluar) dan `diserahkan`
+  (BMN idle → Pengelola) menulis 302 Transfer Keluar per aset; sebelumnya
+  aset hilang dari master (tombstone) tanpa jejak mutasi KURANG di jurnal.
+- 🟠 **Guard jurnal ganda terpusat** — `catat_mutasi_bmn` menolak entri
+  duplikat (aset + kode transaksi + `ref_id` dokumen sumber sama): retry
+  idempoten & alur revert-lalu-terminal-lagi tidak menggandakan mutasi.
+- 🟠 **Dua bug agregator diperbaiki** — `rekap_mutasi_periode` memaksa
+  `jumlah 0` menjadi 1 (`or 1`), menggeser kuantitas pada koreksi nilai;
+  tabel LBP `susun_mutasi_per_transaksi` hanya menegatifkan kode 3xx/4xx
+  sehingga 205 justru MENAMBAH total — kini 205 ikut dinegatifkan + berlabel.
+
+**Master persediaan (isolasi satker):**
+
+- 🟠 **Keunikan kode+NUP & deret NUP kini per satker** — sebelumnya satker B
+  tertolak 409 (atau mewarisi deret NUP satker A) karena cek duplikat dan
+  auto-increment NUP global; kini sejalan pola keunikan NIP pegawai.
+- 🟠 **Impor master tak menimpa satker lain** — update impor by kode+NUP
+  kini difilter satker pengimpor (dulu bisa menimpa field master milik
+  satker lain yang kebetulan ber-kode+NUP sama).
+
 ## [#611] Audit REVIEW-9 (2/7): sapu IDOR & guard lintas modul — 2026-07-25
 
 Gelombang kedua audit 6 dimensi: menutup **celah isolasi satker** (IDOR) yang

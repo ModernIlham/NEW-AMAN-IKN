@@ -292,6 +292,7 @@ LABEL_TRANSAKSI_LBP = {
     "112": "Perolehan Lainnya",
     "201": "Koreksi Perubahan Kuantitas",
     "204": "Koreksi Nilai (Revaluasi)",
+    "205": "Koreksi Nilai Berkurang (Revaluasi)",
     "209": "Koreksi Manual",
     "301": "Penghapusan",
     "302": "Transfer Keluar",
@@ -322,7 +323,9 @@ def susun_mutasi_per_transaksi(jurnal, saldo_awal_qty=0,
         k = str(j.get("kode_transaksi") or "").strip() or "?"
         q = float(j.get("jumlah") or 0)
         n = float(j.get("nilai") or 0)
-        if k[:1] in ("3", "4"):
+        # 205 (Koreksi Nilai Berkurang) satu-satunya kode 2xx berarah KURANG
+        # — jurnal menyimpan magnitudo positif, dinegatifkan di sini.
+        if k[:1] in ("3", "4") or k == "205":
             q, n = -abs(q), -abs(n)
         a = agg.setdefault(k, [0.0, 0.0])
         a[0] += q

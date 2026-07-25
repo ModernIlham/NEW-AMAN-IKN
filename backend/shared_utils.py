@@ -1040,6 +1040,20 @@ async def catat_mutasi_bmn(entri: dict):
         if errs:
             logger.warning("catat_mutasi_bmn dilewati: %s", "; ".join(errs))
             return False
+        # Guard jurnal ganda (REVIEW-9 R3): transaksi ber-ref_id identik
+        # (aset + kode transaksi + dokumen sumber sama) tidak ditulis dua
+        # kali — retry idempoten & alur revert-lalu-terminal-lagi aman.
+        ref = str(entri.get("ref_id") or "").strip()
+        if ref:
+            sudah = await db.mutasi_bmn.find_one(
+                {"asset_id": entri.get("asset_id"),
+                 "kode_transaksi": str(entri.get("kode_transaksi") or "").strip(),
+                 "ref_id": ref}, {"_id": 1})
+            if sudah:
+                logger.info("catat_mutasi_bmn dilewati (sudah tercatat): "
+                            "%s kode %s ref %s", entri.get("asset_id"),
+                            entri.get("kode_transaksi"), ref)
+                return True
         await db.mutasi_bmn.insert_one({
             **entri, "id": str(_uuid.uuid4()),
             "created_at": _dt.now(_tz.utc).isoformat()})

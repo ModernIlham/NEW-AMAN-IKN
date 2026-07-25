@@ -67,6 +67,25 @@ def test_rekap_mutasi_periode():
     assert "3050104001" in r and len(r) == 1
 
 
+def test_rekap_mutasi_koreksi_nilai_jumlah_nol():
+    # Revaluasi (204/205, REVIEW-9 R3): rupiah bergeser, KUANTITAS tidak —
+    # jumlah 0 eksplisit wajib dihormati (dulu dipaksa jadi 1 oleh `or 1`);
+    # field jumlah yang ABSEN tetap dianggap 1 unit (kompatibel entri lama).
+    entries = [
+        {"kode_barang": "3050104001", "kode_transaksi": "204",
+         "tanggal_buku": "2026-03-01", "jumlah": 0, "nilai": 500},
+        {"kode_barang": "3050104001", "kode_transaksi": "205",
+         "tanggal_buku": "2026-03-02", "jumlah": 0, "nilai": 200},
+        {"kode_barang": "3050104001", "kode_transaksi": "101",
+         "tanggal_buku": "2026-03-03", "nilai": 100},  # tanpa jumlah → 1
+    ]
+    b = rekap_mutasi_periode(entries, "2026-01-01", "2026-06-30")["3050104001"]
+    assert b["tambah_n"] == 1 and b["tambah_rp"] == 600      # 204 + 101
+    assert b["kurang_n"] == 0 and b["kurang_rp"] == 200      # 205
+    assert arah_transaksi("204") == "tambah"
+    assert arah_transaksi("205") == "kurang"
+
+
 def test_deteksi_reklasifikasi_siman():
     aset = {"kode_register": "1234567890123456", "asset_code": "3050104001",
             "NUP": "7"}

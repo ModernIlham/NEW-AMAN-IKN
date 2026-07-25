@@ -340,6 +340,29 @@ async def tandai_tercatat_sakti(koreksi_id: str,
             detail="Koreksi tidak ditemukan atau sudah ditandai tercatat")
     res["status_sakti"] = "tercatat_sakti"
     await _proyeksi_master_revaluasi(res, user.get("username"))
+    # Jurnal Buku Barang (G7, REVIEW-9 R3): revaluasi FINAL → 204 (nilai
+    # bertambah) / 205 (nilai berkurang), magnitudo positif + jumlah 0
+    # (kuantitas barang tidak berubah). Best-effort + anti-ganda via ref_id.
+    selisih = float(res.get("selisih") or 0)
+    if selisih:
+        from shared_utils import catat_mutasi_bmn
+        aset = await db.assets.find_one(
+            {"id": res.get("asset_id")},
+            {"_id": 0, "asset_code": 1, "NUP": 1})
+        await catat_mutasi_bmn({
+            "asset_id": res.get("asset_id"),
+            "kode_transaksi": "204" if selisih > 0 else "205",
+            "kode_barang": str((aset or res).get("asset_code") or ""),
+            "nup": str((aset or res).get("NUP") or ""),
+            "tanggal_buku": (str(res.get("tanggal_dokumen") or "").strip()[:10]
+                             or now[:10]),
+            "jumlah": 0, "nilai": abs(selisih),
+            "sumber_modul": "penilaian", "ref_id": res.get("id"),
+            "keterangan": (f"Revaluasi/koreksi nilai {res.get('jenis') or ''} — "
+                           f"dok {res.get('nomor_dokumen') or '-'} "
+                           f"(Rp{int(res.get('nilai_lama') or 0):,} → "
+                           f"Rp{int(res.get('nilai_baru') or 0):,})").strip(),
+            "oleh": user.get("username", "system")})
     return res
 
 
