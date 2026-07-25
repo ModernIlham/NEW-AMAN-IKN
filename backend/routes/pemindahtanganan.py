@@ -335,10 +335,12 @@ async def transisi_pt(usulan_id: str, payload: TransisiPtIn,
 @pemindahtanganan_router.delete("/pemindahtanganan/{usulan_id}")
 async def hapus_usulan_pt(usulan_id: str, _admin: dict = Depends(require_admin)):
     """Hapus usulan salah input (hanya status diusulkan) + berkas lampirannya."""
+    from shared_utils import scope_query_field_satker
     u = await db.pemindahtanganan.find_one(
-        {"id": usulan_id, "status": "diusulkan"}, {"_id": 0, "lampiran": 1})
+        scope_query_field_satker(_admin, {"id": usulan_id, "status": "diusulkan"}),
+        {"_id": 0, "lampiran": 1})
     res = await db.pemindahtanganan.delete_one(
-        {"id": usulan_id, "status": "diusulkan"})
+        scope_query_field_satker(_admin, {"id": usulan_id, "status": "diusulkan"}))
     if res.deleted_count == 0:
         raise HTTPException(
             status_code=409,

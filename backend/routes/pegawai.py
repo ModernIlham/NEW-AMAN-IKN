@@ -433,7 +433,8 @@ async def buat_pegawai(payload: PegawaiIn, user: dict = Depends(require_admin)):
     # Admin terikat satker: dipaksa satkernya (isolasi M-SCOPE);
     # super-admin ("" ): boleh mengisi kode_satker eksplisit dari form.
     doc.update({"id": str(uuid.uuid4()), "kode_satker": kode or doc.get("kode_satker", ""),
-                "created_at": now, "updated_at": now})
+                "created_at": now, "updated_at": now,
+                "version": 1})  # OCC: klien kirim If-Match saat PUT berikutnya
     await db.pegawai.insert_one(dict(doc))
     await log_audit("buat_pegawai", "", doc["id"],
                     username=user.get("username", "system"),
@@ -673,10 +674,9 @@ async def impor_pegawai(file: UploadFile = File(...),
 
 
 @pegawai_router.put("/pegawai/{pegawai_id}")
-async def ubah_pegawai(pegawai_id: str, payload: PegawaiIn,
+async def ubah_pegawai(pegawai_id: str, payload: PegawaiIn, request: Request,
                        user: dict = Depends(require_admin)):
-    """Ubah pegawai (admin)."""
-    from shared_utils import pastikan_akses_dok_satker
+    """Ubah pegawai (admin). OCC opsional via header If-Match (versi terbaca)."""
     doc = _bersih(payload)
     errors = validate_pegawai(doc)
     if errors:
@@ -686,10 +686,26 @@ async def ubah_pegawai(pegawai_id: str, payload: PegawaiIn,
     lama = await db.pegawai.find_one(
         {"id": pegawai_id},
         {"_id": 0, "kode_satker": 1, "nama": 1, "gelar_depan": 1,
-         "gelar_belakang": 1, "jabatan": 1, "unit_kerja": 1})
+         "gelar_belakang": 1, "jabatan": 1, "unit_kerja": 1, "version": 1})
     if not lama:
         raise HTTPException(status_code=404, detail="Pegawai tidak ditemukan")
     await pastikan_akses_dok_satker(user, lama)
+    # OCC (pola sama dgn aset): If-Match opsional — dokumen era lama tanpa
+    # version dianggap versi 1; mismatch → 409 agar klien muat ulang dulu.
+    if_match = request.headers.get("If-Match", "").strip().strip('"')
+    versi_kini = int(lama.get("version") or 1)
+    if if_match:
+        try:
+            harapan = int(if_match)
+        except ValueError:
+            harapan = versi_kini
+        if harapan != versi_kini:
+            raise HTTPException(
+                status_code=409,
+                detail={"message": "Data pegawai telah diubah pengguna lain. "
+                                   "Muat ulang lalu simpan kembali.",
+                        "current_version": versi_kini,
+                        "your_version": harapan})
     if await _nip_bentrok(doc["nip"], kecuali_id=pegawai_id,
                           kode=kode_satker_user(user)):
         raise HTTPException(status_code=400, detail=f"NIP {doc['nip']} sudah terdaftar")
@@ -701,6 +717,9 @@ async def ubah_pegawai(pegawai_id: str, payload: PegawaiIn,
     elif not doc.get("kode_satker"):
         doc["kode_satker"] = str(lama.get("kode_satker") or "")
     doc["updated_at"] = datetime.now(timezone.utc).isoformat()
+    # version di-set eksplisit (bukan $inc) agar dokumen era lama tanpa field
+    # version langsung melompat ke 2 — pembaca basi ber-If-Match 1 tertolak.
+    doc["version"] = versi_kini + 1
     res = await db.pegawai.update_one({"id": pegawai_id}, {"$set": doc})
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Pegawai tidak ditemukan")
@@ -817,6 +836,7 @@ async def upload_foto_pegawai(pegawai_id: str, file: UploadFile = File(...),
          "nama": 1, "kode_satker": 1})
     if not peg:
         raise HTTPException(status_code=404, detail="Pegawai tidak ditemukan")
+    await pastikan_akses_dok_satker(admin, peg)  # isolasi satker
     if (file.content_type or "") not in ("image/jpeg", "image/png", "image/webp"):
         raise HTTPException(status_code=400, detail="Format harus JPG/PNG/WebP")
     data = await file.read()
@@ -881,10 +901,12 @@ async def get_foto_asli_pegawai(pegawai_id: str,
                                 _user: dict = Depends(require_user_or_query_token)):
     """Stream foto ASLI (sumber krop) — dipakai dialog "Atur Ulang Posisi".
     404 bila pegawai/foto era lama yang belum menyimpan berkas asli."""
-    peg = await db.pegawai.find_one({"id": pegawai_id},
-                                    {"_id": 0, "foto_asli_file_id": 1})
+    peg = await db.pegawai.find_one(
+        {"id": pegawai_id},
+        {"_id": 0, "foto_asli_file_id": 1, "kode_satker": 1})
     if not peg or not peg.get("foto_asli_file_id"):
         raise HTTPException(status_code=404, detail="Foto asli tidak tersedia")
+    await pastikan_akses_dok_satker(_user, peg)  # isolasi satker
     from bson import ObjectId
     try:
         stream = await fs_bucket.open_download_stream(
@@ -903,9 +925,11 @@ async def get_foto_asli_pegawai(pegawai_id: str,
 async def get_foto_pegawai(pegawai_id: str,
                            _user: dict = Depends(require_user_or_query_token)):
     """Stream foto pegawai (dipakai avatar row + form; cache per file_id)."""
-    peg = await db.pegawai.find_one({"id": pegawai_id}, {"_id": 0, "foto_file_id": 1})
+    peg = await db.pegawai.find_one(
+        {"id": pegawai_id}, {"_id": 0, "foto_file_id": 1, "kode_satker": 1})
     if not peg or not peg.get("foto_file_id"):
         raise HTTPException(status_code=404, detail="Foto tidak ada")
+    await pastikan_akses_dok_satker(_user, peg)  # isolasi satker
     from bson import ObjectId
     try:
         stream = await fs_bucket.open_download_stream(ObjectId(peg["foto_file_id"]))
@@ -923,9 +947,10 @@ async def hapus_foto_pegawai(pegawai_id: str, admin: dict = Depends(require_admi
     """Hapus foto pegawai (GridFS + referensi) — termasuk foto asli & krop."""
     peg = await db.pegawai.find_one(
         {"id": pegawai_id},
-        {"_id": 0, "foto_file_id": 1, "foto_asli_file_id": 1})
+        {"_id": 0, "foto_file_id": 1, "foto_asli_file_id": 1, "kode_satker": 1})
     if not peg or not peg.get("foto_file_id"):
         raise HTTPException(status_code=404, detail="Foto tidak ada")
+    await pastikan_akses_dok_satker(admin, peg)  # isolasi satker
     from bson import ObjectId
     for fid in (peg.get("foto_file_id"), peg.get("foto_asli_file_id")):
         if fid:

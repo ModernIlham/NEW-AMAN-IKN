@@ -48,6 +48,58 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#611] Audit REVIEW-9 (2/7): sapu IDOR & guard lintas modul — 2026-07-25
+
+Gelombang kedua audit 6 dimensi: menutup **celah isolasi satker** (IDOR) yang
+tersisa dan menyeragamkan guard tulis di jalur-jalur yang belum terlindungi.
+
+**Isolasi satker (IDOR):**
+
+- 🔴 **Modul TTD elektronik tanpa isolasi satker** — permintaan TTD kini
+  distempel `kode_satker`; daftar permintaan admin di-scope per satker
+  (`scope_query_field_satker`); pembatalan/pemilikan (`_pastikan_pemilik_sr`)
+  menolak admin satker lain. Sebelumnya admin satker mana pun bisa melihat dan
+  MEMBATALKAN permintaan TTD satker lain.
+- 🔴 **10 endpoint hapus tanpa scope satker** — DELETE register di Pemanfaatan,
+  Pemindahtanganan, Penghapusan, Penggunaan (3 jalur), dan Pengamanan (4 jalur)
+  kini difilter `scope_query_field_satker` — admin terikat tak bisa menghapus
+  dokumen satker lain via ID.
+- 🟠 **Transisi status lintas satker** — 4 endpoint transisi (PSP, BMN idle,
+  proses alih status Penggunaan, kasus Pengamanan) kini memanggil
+  `pastikan_akses_dok_satker` sebelum mengubah status; melengkapi 6 modul
+  transisi lain yang sudah terlindungi.
+- 🟠 **Foto pegawai lintas satker** — unggah, stream (foto + foto asli), dan
+  hapus foto pegawai kini menegakkan isolasi satker (sebelumnya admin/user
+  satker lain bisa mengganti atau menghapus foto via ID pegawai).
+
+**Guard alur bisnis (lanjutan status Meninggal Dunia):**
+
+- 🟠 **Penegakan sisi-server penugasan aset ke almarhum** —
+  `enforce_pegawai_terdaftar` kini MENOLAK penetapan pemegang BARU berstatus
+  Meninggal Dunia (tanpa opt-in), sambil tetap mengizinkan edit aset yang
+  pemegangnya tidak berubah agar proses penyelesaian aset almarhum tak
+  terhalang (param `nip_lama` di PUT/PATCH aset).
+- 🟠 **PIHAK KESATU BAST almarhum ditolak di semua jenis** — POST /bast
+  memeriksa status pemegang lama ke Master Pegawai; pesan mengarahkan ke
+  jenis "Pengembalian — Pemegang Wafat" (penyerah ahli waris/atasan).
+
+**Keandalan tulis:**
+
+- 🟠 **POST /bast ber-Idempotency-Key** — klik ganda / retry jaringan tidak lagi
+  menggandakan BAST + nomor booking otomatis Persuratan (pola PATCH aset);
+  form BAST Penggunaan mengirim kunci per pembukaan form dan menggantinya
+  setelah kegagalan validasi.
+- 🟡 **OCC PUT /pegawai** — header `If-Match` opsional (409 bila versi berubah);
+  `version` distempel sejak buat & di-set eksplisit saat ubah (dokumen era lama
+  tanpa `version` melompat ke 2 sehingga pembaca basi tetap tertolak).
+
+**Jejak audit:**
+
+- 🟡 **14 titik mutasi kini ber-`log_audit`** — Wasdal (buka/selesai/hapus
+  penertiban, buka/BA/lapor/hapus insidentil), Pemanfaatan (buat/ubah/
+  kontribusi/hapus), Pemusnahan (buat BA, usulkan penghapusan, hapus BA) —
+  sebelumnya ketiga modul tidak menulis log audit sama sekali.
+
 ## [#610] Audit REVIEW-9 (1/7): bug produksi siklus hilir & kebocoran satker pengawasan — 2026-07-25
 
 Gelombang perbaikan pertama dari **audit menyeluruh 6 dimensi** (57 temuan;

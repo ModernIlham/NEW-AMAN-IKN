@@ -284,6 +284,7 @@ async def transisi_pengajuan_psp(sk_id: str, payload: TransisiPengajuanIn,
     sk = await db.psp.find_one({"id": sk_id}, {"_id": 0})
     if not sk:
         raise HTTPException(status_code=404, detail="Usulan tidak ditemukan")
+    await pastikan_akses_dok_satker(admin, sk)  # isolasi satker
     today_iso = dt.now(timezone.utc).date().isoformat()
     data = payload.model_dump()
     errors = validate_transisi_pengajuan_psp(sk, payload.status, data, today_iso)
@@ -472,8 +473,11 @@ async def bast_psp_pdf(sk_id: str, _user: dict = Depends(require_user)):
 @penggunaan_router.delete("/penggunaan/psp/{sk_id}")
 async def hapus_psp(sk_id: str, _admin: dict = Depends(require_admin)):
     """Hapus catatan SK salah input (khusus admin) + berkas lampirannya."""
-    sk = await db.psp.find_one({"id": sk_id}, {"_id": 0, "lampiran": 1})
-    res = await db.psp.delete_one({"id": sk_id})
+    sk = await db.psp.find_one(
+        scope_query_field_satker(_admin, {"id": sk_id}),
+        {"_id": 0, "lampiran": 1})
+    res = await db.psp.delete_one(
+        scope_query_field_satker(_admin, {"id": sk_id}))
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="SK tidak ditemukan")
     for lamp in (sk or {}).get("lampiran") or []:
@@ -740,6 +744,7 @@ async def transisi_idle(tiket_id: str, payload: TransisiIdleIn,
     t = await db.bmn_idle.find_one({"id": tiket_id}, {"_id": 0})
     if not t:
         raise HTTPException(status_code=404, detail="Tiket tidak ditemukan")
+    await pastikan_akses_dok_satker(admin, t)  # isolasi satker
     errors = validate_transisi_idle(t.get("status"), payload.status,
                                     payload.model_dump())
     if errors:
@@ -775,7 +780,8 @@ async def transisi_idle(tiket_id: str, payload: TransisiIdleIn,
 async def hapus_tiket_idle(tiket_id: str, _admin: dict = Depends(require_admin)):
     """Hapus tiket salah input (hanya status klarifikasi)."""
     res = await db.bmn_idle.delete_one(
-        {"id": tiket_id, "status": "klarifikasi"})
+        scope_query_field_satker(_admin, {"id": tiket_id,
+                                          "status": "klarifikasi"}))
     if res.deleted_count == 0:
         raise HTTPException(
             status_code=409,
@@ -1025,6 +1031,7 @@ async def transisi_proses(tiket_id: str, payload: TransisiProsesIn,
     t = await db.penggunaan_proses.find_one({"id": tiket_id}, {"_id": 0})
     if not t:
         raise HTTPException(status_code=404, detail="Tiket tidak ditemukan")
+    await pastikan_akses_dok_satker(user, t)  # isolasi satker
     ke = payload.status
     errors = validate_transisi_proses(t, ke)
     if errors:
@@ -1063,7 +1070,8 @@ async def transisi_proses(tiket_id: str, payload: TransisiProsesIn,
 @penggunaan_router.delete("/penggunaan/proses/{tiket_id}")
 async def hapus_proses(tiket_id: str, _admin: dict = Depends(require_admin)):
     """Hapus satu tiket proses (admin)."""
-    res = await db.penggunaan_proses.delete_one({"id": tiket_id})
+    res = await db.penggunaan_proses.delete_one(
+        scope_query_field_satker(_admin, {"id": tiket_id}))
     if not res.deleted_count:
         raise HTTPException(status_code=404, detail="Tiket tidak ditemukan")
     return {"ok": True}

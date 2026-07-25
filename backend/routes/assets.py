@@ -765,11 +765,13 @@ async def process_photos_for_storage(photos: list) -> dict:
     return {"gridfs_ids": gridfs_ids, "thumbnails": thumbnails}
 
 
-async def _enforce_pegawai_terdaftar(pengguna_nip):
+async def _enforce_pegawai_terdaftar(pengguna_nip, nip_lama=""):
     """Evaluasi #4 (OPT-IN) — delegasi ke penegakan bersama di shared_utils
-    (temuan #29: jalur batch & impor juga harus menegakkan aturan yang sama)."""
+    (temuan #29: jalur batch & impor juga harus menegakkan aturan yang sama).
+    `nip_lama` membiarkan edit aset yang pemegangnya TIDAK berubah (termasuk
+    aset almarhum yang sedang diproses pengembaliannya)."""
     from shared_utils import enforce_pegawai_terdaftar
-    await enforce_pegawai_terdaftar(pengguna_nip)
+    await enforce_pegawai_terdaftar(pengguna_nip, nip_lama)
 
 
 async def buat_aset_draft(data: AssetCreate, audit_user: str = "system") -> dict:
@@ -1731,7 +1733,8 @@ async def update_asset(asset_id: str, asset: AssetCreate, request: Request,
     await ensure_activity_not_sealed(existing.get("activity_id"))
     if asset.activity_id and asset.activity_id != existing.get("activity_id"):
         await ensure_activity_not_sealed(asset.activity_id)
-    await _enforce_pegawai_terdaftar(asset.pengguna_nip)
+    await _enforce_pegawai_terdaftar(asset.pengguna_nip,
+                                     existing.get("pengguna_nip"))
 
     # --- Optimistic Concurrency Control (OCC) ---
     # Client sends If-Match header with the version they loaded. If server has a
@@ -1958,7 +1961,8 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
         await pastikan_akses_kegiatan_id(_user, body_activity_id)
         await ensure_activity_not_sealed(body_activity_id)
     if "pengguna_nip" in body:
-        await _enforce_pegawai_terdaftar(body.get("pengguna_nip"))
+        await _enforce_pegawai_terdaftar(body.get("pengguna_nip"),
+                                         existing.get("pengguna_nip"))
 
     # --- Optimistic Concurrency Control ---
     if_match = request.headers.get("If-Match", "").strip().strip('"')

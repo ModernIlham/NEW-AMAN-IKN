@@ -24,7 +24,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -32,8 +32,9 @@ from auth_utils import (
     require_user, require_user_or_query_token, require_writer,
 )
 from db import db
-from shared_utils import (kode_satker_user, log_audit, pastikan_akses_aset,
-                          pastikan_akses_dok_satker)
+from shared_utils import (get_idempotent_response, kode_satker_user, log_audit,
+                          pastikan_akses_aset, pastikan_akses_dok_satker,
+                          reserve_idempotency_key, store_idempotent_response)
 
 bast_router = APIRouter()
 
@@ -202,9 +203,27 @@ async def kirim_bast_ke_ttd(bast_id: str, user: dict = Depends(require_writer)):
 
 
 @bast_router.post("/bast")
-async def buat_bast(payload: BastIn, user: dict = Depends(require_writer)):
+async def buat_bast(payload: BastIn, request: Request = None,
+                    user: dict = Depends(require_writer)):
     """Simpan BAST ke register (multi-aset; snapshot identitas aset dibekukan
-    agar dokumen historis tak berubah saat master aset berubah)."""
+    agar dokumen historis tak berubah saat master aset berubah).
+    Idempotency-Key opsional: klik ganda / retry jaringan tidak menggandakan
+    BAST + nomor booking otomatis (pola sama dengan PATCH aset)."""
+    idem_key = request.headers.get("Idempotency-Key", "") if request else ""
+    if idem_key:
+        cached = await get_idempotent_response(idem_key)
+        if cached and cached.get("response"):
+            return cached["response"]
+        _idem = await reserve_idempotency_key(idem_key)
+        if _idem == "done":
+            cached = await get_idempotent_response(idem_key)
+            if cached and cached.get("response"):
+                return cached["response"]
+        elif _idem == "pending":
+            raise HTTPException(
+                status_code=409,
+                detail="Permintaan dengan kunci idempotensi ini sedang "
+                       "diproses, coba lagi sebentar")
     if payload.jenis not in JENIS_BAST:
         raise HTTPException(status_code=400,
                             detail=f"Jenis BAST tidak dikenal: {payload.jenis}")
@@ -264,6 +283,22 @@ async def buat_bast(payload: BastIn, user: dict = Depends(require_writer)):
         raise HTTPException(status_code=400, detail=(
             "Mutasi pemegang: isi PIHAK KESATU (pemegang lama) — "
             "PIHAK KEDUA adalah pemegang baru"))
+    # PIHAK KESATU meninggal dunia → TOLAK untuk SEMUA jenis: almarhum tak
+    # dapat menandatangani penyerahan. Termasuk pengembalian_almarhum — di
+    # sana penyerah justru ahli waris/atasan (yang hidup); identitas almarhum
+    # dicatat di blok `almarhum`, bukan sebagai PIHAK KESATU.
+    nip1 = str(pihak_pertama.get("nip") or "").strip()
+    if nip1:
+        from pegawai_utils import is_meninggal
+        peg1 = await db.pegawai.find_one({"nip": nip1},
+                                         {"_id": 0, "nama": 1, "status": 1})
+        if peg1 and is_meninggal(peg1):
+            raise HTTPException(status_code=400, detail=(
+                f"{peg1.get('nama') or nip1} berstatus Meninggal Dunia di "
+                "Master Pegawai — tidak dapat menjadi PIHAK KESATU/"
+                "penanda tangan. Gunakan BAST Pengembalian (Pemegang Wafat) "
+                "dengan penyerah ahli waris/atasan; identitas almarhum diisi "
+                "pada bagian dasar berita acara."))
 
     now = datetime.now(timezone.utc)
     nomor_final = str(payload.nomor or "").strip()
@@ -402,7 +437,10 @@ async def buat_bast(payload: BastIn, user: dict = Depends(require_writer)):
                             f"{len(aset)} aset → {record['pihak_kedua']['nama']}"
                             f"{efek}"
                             + (f"; nomor otomatis {nomor_final}" if surat_id else "")))
-    return {**record, "peringatan_pegawai": peringatan_pegawai}
+    respons = {**record, "peringatan_pegawai": peringatan_pegawai}
+    if idem_key:
+        await store_idempotent_response(idem_key, respons)
+    return respons
 
 
 @bast_router.post("/bast/{bast_id}/bukti")

@@ -20,7 +20,7 @@ from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
 )
 from db import db, fs_bucket
-from shared_utils import kode_satker_user, scope_query_field_satker, pastikan_akses_dok_satker, blok_ttd_kpb_titik, delete_document_from_gridfs, get_document_from_gridfs
+from shared_utils import kode_satker_user, log_audit, scope_query_field_satker, pastikan_akses_dok_satker, blok_ttd_kpb_titik, delete_document_from_gridfs, get_document_from_gridfs
 from wasdal_utils import (
     AMBANG_BERLARUT_HARI, JENIS_TEMUAN, OBJEK_WASDAL, PEMICU_INSIDENTIL,
     STATUS_INSIDENTIL, SUMBER_PENERTIBAN, STATUS_PENERTIBAN,
@@ -298,6 +298,10 @@ async def catat_penertiban(payload: PenertibanIn,
         "updated_at": now,
     }
     await db.penertiban.insert_one({**record})
+    await log_audit("penertiban_buka", "", username=user.get("username", "system"),
+                    detail=(f"Buka tiket penertiban ({record['sumber']}): "
+                            f"{record['uraian'][:80]}"),
+                    kode_satker=record["kode_satker"])
     record["info_tenggat"] = status_tenggat_penertiban(
         record, datetime.now(timezone.utc).date().isoformat())
     return record
@@ -329,6 +333,10 @@ async def selesaikan_penertiban(tiket_id: str, payload: SelesaiPenertibanIn,
     if not res:
         raise HTTPException(status_code=409,
                             detail="Tiket berubah oleh proses lain — muat ulang")
+    await log_audit("penertiban_selesai", "",
+                    username=admin.get("username", "system"),
+                    detail=f"Tutup tiket penertiban: {str(res.get('uraian') or '')[:80]}",
+                    kode_satker=str(res.get("kode_satker") or ""))
     return res
 
 
@@ -339,6 +347,10 @@ async def hapus_penertiban(tiket_id: str, _admin: dict = Depends(require_admin))
         scope_query_field_satker(_admin, {"id": tiket_id}))
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Tiket tidak ditemukan")
+    await log_audit("penertiban_hapus", "",
+                    username=_admin.get("username", "system"),
+                    detail=f"Hapus tiket penertiban {tiket_id}",
+                    kode_satker=kode_satker_user(_admin))
     return {"ok": True, "id": tiket_id}
 
 
@@ -432,6 +444,10 @@ async def catat_insidentil(payload: InsidentilIn,
         "updated_at": now,
     }
     await db.pemantauan_insidentil.insert_one({**record})
+    await log_audit("insidentil_buka", "", username=user.get("username", "system"),
+                    detail=(f"Buka pemantauan insidentil ({record['pemicu']}): "
+                            f"{record['uraian'][:80]}"),
+                    kode_satker=record["kode_satker"])
     record["info_tenggat"] = info_tenggat_insidentil(
         record, datetime.now(timezone.utc).date().isoformat())
     return record
@@ -463,6 +479,10 @@ async def terbitkan_ba_insidentil(tiket_id: str, payload: BaInsidentilIn,
     if not res:
         raise HTTPException(status_code=409,
                             detail="Tiket berubah oleh proses lain — muat ulang")
+    await log_audit("insidentil_ba", "",
+                    username=admin.get("username", "system"),
+                    detail=f"BA pemantauan insidentil terbit: {res.get('nomor_ba')}",
+                    kode_satker=str(res.get("kode_satker") or ""))
     return res
 
 
@@ -490,6 +510,11 @@ async def laporkan_insidentil(tiket_id: str, payload: LaporInsidentilIn,
     if not res:
         raise HTTPException(status_code=409,
                             detail="Tiket berubah oleh proses lain — muat ulang")
+    await log_audit("insidentil_lapor", "",
+                    username=admin.get("username", "system"),
+                    detail=(f"Hasil pemantauan insidentil dilaporkan "
+                            f"({res.get('tanggal_lapor')})"),
+                    kode_satker=str(res.get("kode_satker") or ""))
     return res
 
 
@@ -505,6 +530,10 @@ async def hapus_insidentil(tiket_id: str, _admin: dict = Depends(require_admin))
     for lamp in (t or {}).get("lampiran") or []:
         if lamp.get("file_id"):
             await delete_document_from_gridfs(lamp["file_id"])
+    await log_audit("insidentil_hapus", "",
+                    username=_admin.get("username", "system"),
+                    detail=f"Hapus tiket pemantauan insidentil {tiket_id}",
+                    kode_satker=kode_satker_user(_admin))
     return {"ok": True, "id": tiket_id}
 
 
