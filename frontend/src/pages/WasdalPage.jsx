@@ -31,6 +31,23 @@ const IKON_OBJEK = {
   pengamanan_pemeliharaan: ShieldCheck,
 };
 
+// Eskalasi tenggat 3 tahun pemberitahuan ahli waris (temuan "pemegang
+// meninggal") — UU 1/2004 Ps. 66 ayat (2) jo. PP 38/2016. Lewat batas, hak
+// tagih negara HAPUS demi hukum, jadi kemendesakannya ditandai warna & label.
+const WARNA_TENGGAT = {
+  kritis: "text-red-600 dark:text-red-400",
+  lewat: "text-red-700 dark:text-red-300",
+  segera: "text-orange-600 dark:text-orange-400",
+  pantau: "text-amber-700 dark:text-amber-400",
+  selesai: "text-emerald-700 dark:text-emerald-400",
+};
+const LABEL_TENGGAT = {
+  kritis: "🔴 SEGERA —",
+  lewat: "⚠️ KEDALUWARSA —",
+  segera: "🟠 Mendekati batas —",
+  selesai: "✓ Sudah dilaporkan —",
+};
+
 /**
  * Wasdal — dasbor pemantauan tingkat KPB (PMK 207/2021, pustaka §8).
  * Temuan otomatis dari register yang sudah ada, dikelompokkan per lima
@@ -483,7 +500,12 @@ export default function WasdalPage({ user, onBack }) {
                                   </div>
                                 </div>
                                 {t.detail && (
-                                  <p className="text-[11px] text-muted-foreground mt-0.5">{t.detail}</p>
+                                  <p className={`text-[11px] mt-0.5 ${WARNA_TENGGAT[t.tingkat] || "text-muted-foreground"}`}>
+                                    {LABEL_TENGGAT[t.tingkat] && (
+                                      <span className="font-semibold">{LABEL_TENGGAT[t.tingkat]} </span>
+                                    )}
+                                    {t.detail}
+                                  </p>
                                 )}
                               </li>
                             ))}

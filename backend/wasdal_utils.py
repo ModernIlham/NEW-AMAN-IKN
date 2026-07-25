@@ -11,7 +11,7 @@ Fungsi murni tanpa Mongo/IO agar teruji unit.
 """
 from datetime import date, timedelta
 
-from pegawai_utils import pegawai_perlu_serah_terima
+from pegawai_utils import info_kewajiban_ahli_waris, pegawai_perlu_serah_terima
 from pemanfaatan_utils import (
     BENTUK_PEMANFAATAN, LABEL_STATUS_PERJANJIAN, dokumen_kurang,
     status_perjanjian, tahun_tertunggak,
@@ -49,6 +49,7 @@ JENIS_TEMUAN = {
     "rusak_tanpa_pemeliharaan": "Rusak tanpa pemeliharaan tahun berjalan",
     "polis_asuransi_lewat": "Polis asuransi BMN kedaluwarsa",
     "pemegang_berisiko_keluar": "Pemegang berisiko keluar/pensiun belum serah terima BMN",
+    "pemegang_meninggal_belum_serah_terima": "Pemegang meninggal dunia — BMN belum diserahterimakan",
     "perjanjian_jatuh_tempo": "Perjanjian pemanfaatan jatuh tempo ≤60 hari",
     "dokumen_kepemilikan_kedaluwarsa": "Dokumen kepemilikan BMN kedaluwarsa",
     "dimusnahkan_belum_dihapus": "Sudah dimusnahkan fisik namun belum ada SK penghapusan",
@@ -75,6 +76,7 @@ OBJEK_PER_JENIS = {
     "rusak_tanpa_pemeliharaan": "pengamanan_pemeliharaan",
     "polis_asuransi_lewat": "pengamanan_pemeliharaan",
     "pemegang_berisiko_keluar": "penggunaan",
+    "pemegang_meninggal_belum_serah_terima": "penggunaan",
     "perjanjian_jatuh_tempo": "pemanfaatan",
     "dokumen_kepemilikan_kedaluwarsa": "pengamanan_pemeliharaan",
     "dimusnahkan_belum_dihapus": "pemindahtanganan",
@@ -174,18 +176,55 @@ def temuan_pemegang_berisiko(pegawai, jumlah_aset_per_nip, today_iso: str):
     terima BMN (integrasi Master Pegawai → Wasdal; temuan klasik BPK "aset
     dipegang pegawai yang sudah keluar", PMK 207 objek Penggunaan).
 
+    Pemegang yang MENINGGAL DUNIA dipisah ke jenis tersendiri
+    (`pemegang_meninggal_belum_serah_terima`) karena penanganannya berbeda —
+    serah terima harus lewat ahli waris/atasan, dan ada TENGGAT HUKUM 3 tahun
+    memberi tahu ahli waris bila ada BMN hilang (UU 1/2004 Pasal 66 ayat (2)
+    jo. PP 38/2016) yang ikut dilampirkan agar terlihat di dasbor.
+
     `asset_name` diisi nama pegawai agar tampil bermakna di kolom nama
     dasbor/laporan (temuan ini per-pemegang, bukan per-aset)."""
+    # Peta id/NIP → dokumen pegawai (butuh tanggal wafat & tanggal pemberitahuan
+    # yang tak dibawa oleh pegawai_perlu_serah_terima).
+    peta = {}
+    for p in (pegawai or []):
+        for k in (str((p or {}).get("id") or ""), str((p or {}).get("nip") or "")):
+            if k:
+                peta.setdefault(k, p)
     out = []
     for h in pegawai_perlu_serah_terima(pegawai, jumlah_aset_per_nip,
                                         today_iso):
+        dasar = (f"{h.get('jumlah_aset')} aset masih dipegang — "
+                 f"{h.get('alasan')}")
+        if str(h.get("status") or "") != "meninggal":
+            out.append({
+                "jenis": "pemegang_berisiko_keluar",
+                "pegawai_id": h.get("id"),
+                "nip": h.get("nip"),
+                "asset_name": h.get("nama"),
+                "detail": dasar,
+            })
+            continue
+        peg = peta.get(str(h.get("id") or "")) or peta.get(str(h.get("nip") or "")) or {}
+        jam = info_kewajiban_ahli_waris(peg, today_iso)
+        detail = dasar
+        if jam.get("berlaku"):
+            detail = (f"{h.get('jumlah_aset')} aset masih dipegang — meninggal "
+                      f"{jam['tanggal_meninggal']}")
+            if jam.get("peringatan"):
+                detail += f"; {jam['peringatan']}"
+            elif jam.get("sudah_diberitahu"):
+                detail += "; ahli waris sudah diberi tahu resmi"
         out.append({
-            "jenis": "pemegang_berisiko_keluar",
+            "jenis": "pemegang_meninggal_belum_serah_terima",
             "pegawai_id": h.get("id"),
             "nip": h.get("nip"),
             "asset_name": h.get("nama"),
-            "detail": (f"{h.get('jumlah_aset')} aset masih dipegang — "
-                       f"{h.get('alasan')}"),
+            "detail": detail,
+            # Dipakai UI untuk pewarnaan eskalasi tenggat 3 tahun.
+            "tingkat": jam.get("tingkat", ""),
+            "sisa_hari_lapor": jam.get("sisa_hari"),
+            "batas_lapor": jam.get("batas_lapor", ""),
         })
     return out
 

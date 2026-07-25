@@ -48,6 +48,30 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#608] Pemegang BMN meninggal dunia (3/4): temuan Wasdal khusus + jam 3 tahun terlihat — 2026-07-25
+
+Lanjutan [#607]. Sebelumnya pemegang yang wafat hanya tercakup **tidak langsung**
+sebagai `pemegang_berisiko_keluar` — disamakan dengan pensiun/mutasi, tanpa
+prioritas dan **tanpa peringatan tenggat hukum**. Kini dipisah:
+
+- **Temuan Wasdal baru** `pemegang_meninggal_belum_serah_terima` — *"Pemegang
+  meninggal dunia — BMN belum diserahterimakan"*, objek **Penggunaan** (PMK
+  207/2021). Terpisah karena penanganannya berbeda: serah terima harus lewat
+  **ahli waris/atasan**, bukan almarhum.
+- ⏱️ **Jam 3 tahun tampil di dasbor**: tiap temuan membawa `tingkat`,
+  `sisa_hari_lapor`, dan `batas_lapor`, dengan detail berbunyi mis. *"3 aset
+  masih dipegang — meninggal 2026-01-01; SEGERA — tersisa 61 hari untuk memberi
+  tahu ahli waris; lewat batas, hak tagih negara hapus"*.
+- **Pewarnaan eskalasi** di UI: 🔴 **SEGERA** (≤90 hari, merah) · 🟠 **Mendekati
+  batas** (≤180 hari, oranye) · kuning (pantau) · ⚠️ **KEDALUWARSA** (lewat) ·
+  ✓ **Sudah dilaporkan** (hijau, jam berhenti).
+- Tombol **"Tindak lanjuti"** yang sudah ada otomatis berlaku — uraian tiket
+  penertiban ikut memuat peringatan tenggatnya.
+- Pegawai berstatus non-aktif lain **tetap** memakai temuan lama (tak berubah);
+  almarhum **tanpa tanggal wafat** (data lama) tetap terdeteksi, hanya tanpa jam.
+
+---
+
 ## [#607] Pemegang BMN meninggal dunia (2/4): tolak transaksi baru kepada almarhum — 2026-07-25
 
 Lanjutan [#606]. Sebelumnya pegawai non-aktif **masih bisa dipilih** sebagai
