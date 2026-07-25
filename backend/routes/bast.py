@@ -377,7 +377,12 @@ async def unggah_bukti_bast(bast_id: str, file: UploadFile = File(...),
         {"$set": {"bukti": {"file_id": str(file_id), "filename": file.filename,
                             "content_type": tipe,
                             "diunggah_pada": now,
-                            "oleh": user.get("username", "system")}}})
+                            "oleh": user.get("username", "system")},
+                  # Bukti ttd baru = serah terima sah kembali → cabut penanda
+                  # "TTD dibatalkan" dari pembatalan e-sign sebelumnya (sejajar
+                  # jalur re-sign). Tanpa ini, unggah bukti valid justru
+                  # membalik metrik jadi "TTD BAST dibatalkan".
+                  "tt_dicabut": False}})
     if res.matched_count == 0:
         # BAST terhapus di sela — jangan tinggalkan blob yatim di GridFS.
         from shared_utils import delete_document_from_gridfs
@@ -405,6 +410,11 @@ async def unggah_bukti_bast(bast_id: str, file: UploadFile = File(...),
                                 "bast_snapshot": snapshot_bast(a)},
                        "$inc": {"version": 1}})
             for a in _aset_bast], ordered=False)
+    # Cabut penanda "TTD dibatalkan" pada aset yang BAST-terakhirnya BAST ini
+    # (presisi — tak menyentuh aset dgn BAST lebih baru). Sejajar jalur re-sign.
+    await db.assets.update_many(
+        {"bast_terakhir.id": bast_id, "bast_terakhir.tt_dicabut": True},
+        {"$set": {"bast_terakhir.tt_dicabut": False}})
 
     # Nomor agenda dibooking → otomatis disahkan (bukti ttd = pengesahan).
     disahkan = False

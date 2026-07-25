@@ -48,6 +48,33 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#602] Pengawasan sadar TTD: Wasdal & Pengamanan hitung BAST "TTD dibatalkan" — 2026-07-25
+
+**Lanjutan cascade #601** — pembatalan TTD kini benar-benar **berpengaruh ke
+metrik kepatuhan**, bukan sekadar penanda. Aset yang BAST-nya ada tetapi
+**TTD elektroniknya dibatalkan** kini muncul sebagai kekurangan tersendiri:
+
+- **Pengamanan** (dasbor kesehatan data): kategori baru **"TTD BAST dibatalkan"**
+  (`bast_dicabut`) — aset ber-BAST tapi e-sign batal **tidak lagi dihitung
+  "lengkap"**. Kategori TERPISAH dari "Tanpa BAST" (dokumen betul-betul tak ada),
+  agar makna tak rancu. Ikon perisai-peringatan tersendiri.
+- **Wasdal** (pemantauan Penggunaan, PMK 207): temuan baru **"BAST pemegang ada,
+  tetapi TTD elektronik dibatalkan"** (`pemegang_bast_dicabut`) — dapat langsung
+  **"Tindak lanjuti"** seperti temuan lain.
+- **Presisi & tak ganda**: bila memang belum ada dokumen BAST, tetap
+  "Tanpa BAST"/`pemegang_tanpa_bast` (bukan dua-duanya).
+- **Reversibel penuh**: **mengunggah bukti ttd** (scan sah) kini **mencabut**
+  penanda `tt_dicabut` pada BAST & aset terkait — sejajar jalur TTD-ulang.
+  Tanpa ini, mengunggah bukti valid justru salah membalik metrik jadi
+  "dibatalkan". (Aset presisi: hanya yang BAST-terakhirnya BAST tersebut.)
+
+Rangkaian keterhubungan otomatis (fondasi #1–#6): audit batal → guard dokumen →
+penaut `doc_ref` → tombol "Kirim ke TTD" → back-link → cascade → **metrik
+pengawasan sadar-pembatalan**. Satu pembatalan kini terlihat konsisten lintas
+Penggunaan, Pengawasan, dan Pengamanan.
+
+---
+
 ## [#601] Cascade otomatis: batal TTD → BAST & aset ditandai "dicabut" (sinyal lunak) — 2026-07-25
 
 **Puncak keterhubungan otomatis** — menjawab keluhan "mengelola satu per satu".

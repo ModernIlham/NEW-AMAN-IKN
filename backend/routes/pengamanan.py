@@ -32,6 +32,7 @@ pengamanan_router = APIRouter()
 # Proyeksi hemat: foto cukup 1 elemen pertama untuk uji keberadaan.
 _PROJ = {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
          "kode_register": 1, "location": 1, "user": 1, "bast_file_id": 1,
+         "bast_terakhir": 1,
          "inventory_status": 1, "nomor_perkara": 1, "pihak_bersengketa": 1,
          "keterangan_sengketa": 1, "activity_id": 1,
          "photos": {"$slice": 1}, "photo_gridfs_ids": {"$slice": 1}}

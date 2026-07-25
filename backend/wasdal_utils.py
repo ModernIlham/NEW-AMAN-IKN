@@ -34,6 +34,7 @@ OBJEK_WASDAL = {
 # Kunci jenis temuan → label Indonesia (dipakai UI & endpoint)
 JENIS_TEMUAN = {
     "pemegang_tanpa_bast": "Pemegang tercatat tanpa BAST terunggah",
+    "pemegang_bast_dicabut": "BAST pemegang ada, tetapi TTD elektronik dibatalkan",
     "tanpa_pengguna": "Tanpa pengguna tercatat (indikasi tidak digunakan)",
     "perjanjian_berakhir": "Perjanjian pemanfaatan berakhir",
     "dokumen_pemanfaatan_kurang": "Dokumen pemanfaatan belum lengkap",
@@ -59,6 +60,7 @@ JENIS_TEMUAN = {
 # Objek pemantauan tiap jenis temuan (setiap jenis tepat satu objek)
 OBJEK_PER_JENIS = {
     "pemegang_tanpa_bast": "penggunaan",
+    "pemegang_bast_dicabut": "penggunaan",
     "tanpa_pengguna": "penggunaan",
     "perjanjian_berakhir": "pemanfaatan",
     "dokumen_pemanfaatan_kurang": "pemanfaatan",
@@ -119,6 +121,11 @@ def temuan_penggunaan(assets):
         if _terisi(a.get("user")):
             if not _terisi(a.get("bast_file_id")):
                 out.append({"jenis": "pemegang_tanpa_bast", **_identitas(a),
+                            "detail": f"Pemegang: {str(a.get('user')).strip()}"})
+            elif (a.get("bast_terakhir") or {}).get("tt_dicabut"):
+                # BAST ada, tetapi TTD elektroniknya dibatalkan → serah terima
+                # belum sah sampai ditinjau/di-TTD ulang (temuan tersendiri).
+                out.append({"jenis": "pemegang_bast_dicabut", **_identitas(a),
                             "detail": f"Pemegang: {str(a.get('user')).strip()}"})
         else:
             out.append({"jenis": "tanpa_pengguna", **_identitas(a),

@@ -25,8 +25,20 @@ class TestKekurangan:
         assert "foto" not in kekurangan_aset(a)
 
     def test_label_kekurangan_lengkap(self):
-        assert set(JENIS_KEKURANGAN) == {"foto", "register", "lokasi", "pengguna", "bast"}
+        assert set(JENIS_KEKURANGAN) == {
+            "foto", "register", "lokasi", "pengguna", "bast", "bast_dicabut"}
         assert all(JENIS_KEKURANGAN[k] for k in JENIS_KEKURANGAN)
+
+    def test_bast_dicabut_kategori_terpisah(self):
+        # Ada dokumen BAST tapi TTD e-sign dibatalkan → "bast_dicabut", BUKAN
+        # "bast" (yang berarti dokumen tak ada). Aset jadi tidak lengkap.
+        a = {**_lengkap(), "bast_terakhir": {"id": "b1", "tt_dicabut": True}}
+        kur = kekurangan_aset(a)
+        assert "bast_dicabut" in kur and "bast" not in kur
+        # Tanpa bast_file_id → tetap "bast" (bukan bast_dicabut), tak ganda.
+        b = {**_lengkap(), "bast_file_id": "",
+             "bast_terakhir": {"id": "b1", "tt_dicabut": True}}
+        assert "bast" in kekurangan_aset(b) and "bast_dicabut" not in kekurangan_aset(b)
 
 
 class TestSengketa:
