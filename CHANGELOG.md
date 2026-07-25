@@ -48,6 +48,31 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#590] Keandalan foto di laporan: cegah OOM/crash pada kegiatan raksasa + WeasyPrint tak blok — 2026-07-25
+
+Mitigasi risiko foto saat data membengkak (ratusan ribu–jutaan aset), tanpa
+mengubah tampilan laporan:
+
+- **Cegah OOM pada Laporan Data Aset (PDF).** `executive-data-pdf` dulu meng-
+  *embed* foto (baca GridFS + downscale per aset) untuk **SELURUH** aset ke
+  memori **sebelum** dipotong ke 499/halaman — pada kegiatan berisi ratusan
+  ribu aset ini bisa menghabiskan memori & lambat/crash. Kini embed foto HANYA
+  untuk aset di **halaman yang diminta** (`row_slice`); statistik ringkasan tetap
+  dihitung dari seluruh aset (murni baca field, tanpa foto). Total untuk paginasi
+  diambil dari `asset_count`.
+- **WeasyPrint tak lagi memblok event loop.** Semua render `write_pdf()` laporan
+  eksekutif/data dipindah ke thread (`asyncio.to_thread`) — permintaan lain tak
+  ikut membeku selama PDF dirender (senada offload reportlab sebelumnya).
+- **Foto rusak/None tak lagi 500.** Di `GET /assets/{id}/photos/{index}`, elemen
+  foto legacy yang `None`/non-str kini di-guard (`isinstance`) → jatuh ke 404
+  bersih alih-alih `AttributeError`. Konsisten dengan endpoint checklist.
+
+Ekspor XLSX/PDF berfoto sudah punya batas anti-OOM (`MAX_FOTO_EXPORT_ASSETS`)
+sejak sebelumnya; perbaikan ini menutup jalur laporan eksekutif yang belum
+terbatas.
+
+---
+
 ## [#589] Perbaikan HP: link panjang di dialog Bagikan Peta dipotong "…" (tak melebihi kanvas) — 2026-07-25
 
 Di dialog **Bagikan Peta Kolaboratif**, kotak "Link aktif" menaruh `truncate`

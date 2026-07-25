@@ -1367,14 +1367,15 @@ async def get_asset_photo_full(asset_id: str, photo_index: int, request: Request
         photo_bytes = await get_photo_from_gridfs(gridfs_ids[photo_index])
     if photo_bytes is None and photo_index < len(photos):
         photo_b64 = photos[photo_index]
-        if photo_b64.startswith('data:'):
-            _, data = photo_b64.split(',', 1)
-        else:
-            data = photo_b64
-        try:
-            photo_bytes = base64.b64decode(data)
-        except Exception:
-            photo_bytes = None
+        # Guard: elemen legacy bisa None / non-str (data rusak) — jangan sampai
+        # `.startswith` melempar AttributeError (500); perlakukan sebagai tak ada
+        # (jatuh ke 404 bersih di bawah). Konsisten dgn guard di endpoint checklist.
+        if isinstance(photo_b64, str) and photo_b64:
+            data = photo_b64.split(',', 1)[1] if photo_b64.startswith('data:') else photo_b64
+            try:
+                photo_bytes = base64.b64decode(data)
+            except Exception:
+                photo_bytes = None
     if photo_bytes is None:
         raise HTTPException(status_code=404, detail="Foto tidak ditemukan")
 
