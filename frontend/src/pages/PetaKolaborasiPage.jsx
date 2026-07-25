@@ -49,6 +49,38 @@ function pinIcon(color, { selected = false, badge = 0 } = {}) {
   });
 }
 
+// DESIGN MARKER KEDUA (opsional, via toggle): sampul foto aset DI DALAM marker
+// agar langsung terlihat apa fotonya. coverSrc dibangun pemanggil (URL foto
+// ber-token). Klik marker TETAP membuka popup info yang SAMA. Aset tanpa foto
+// tetap pakai pin (ditangani buildIcon di komponen). Border/cincin ikut seleksi.
+function photoMarkerIconKolab(coverSrc, { color, selected = false, badge = 0 } = {}) {
+  // Sampul dimuat via <img loading="lazy"> (BUKAN background-image) → browser
+  // MENUNDA fetch untuk marker di luar viewport (teruji real-Leaflet: marker
+  // jauh tak menembak request sampai digeser masuk) → batasi request/memori
+  // sampul meski clustering dimatikan. onerror → sembunyikan img sehingga warna
+  // latar tampil (degradasi anggun). src di-escape sebagai atribut HTML.
+  const src = String(coverSrc || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+  const imgHtml = coverSrc
+    ? `<img src="${src}" loading="lazy" decoding="async" alt="" onerror="this.style.display='none'" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"/>`
+    : "";
+  const bc = selected ? "#f59e0b" : "#ffffff";
+  const ring = selected
+    ? "box-shadow:0 0 0 3px #f59e0b,0 0 0 6px rgba(245,158,11,.35),0 2px 6px rgba(0,0,0,.5)"
+    : "box-shadow:0 2px 6px rgba(0,0,0,.5)";
+  const badgeHtml = badge > 0
+    ? `<div style="position:absolute;top:-6px;right:-6px;min-width:15px;height:15px;padding:0 3px;border-radius:999px;background:#0f172a;border:1.5px solid #fff;display:flex;align-items:center;justify-content:center;font:700 8.5px system-ui,sans-serif;color:#fff">${badge > 9 ? "9+" : badge}</div>`
+    : "";
+  return L.divIcon({
+    className: "",
+    html: `<div style="position:relative;width:46px;height:54px">
+      <div style="position:relative;width:46px;height:46px;border-radius:12px;overflow:hidden;border:3px solid ${bc};${ring};background-color:${color}">${imgHtml}</div>
+      <div style="position:absolute;left:50%;top:43px;transform:translateX(-50%);width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-top:9px solid ${bc}"></div>
+      ${badgeHtml}
+    </div>`,
+    iconSize: [46, 54], iconAnchor: [23, 54], popupAnchor: [0, -50],
+  });
+}
+
 // Marker pratinjau (sebelum disimpan) — pin emerald berdenyut + lingkaran halo.
 function previewIcon() {
   return L.divIcon({
@@ -161,6 +193,11 @@ export default function PetaKolaborasiPage() {
   const [statusFilter, setStatusFilter] = useState("__semua__");
   const [groupKey, setGroupKey] = useState("__semua__");
   const [clusterOn, setClusterOn] = useState(true);
+  // Gaya marker: "pin" (design 1, bawaan) ↔ "photo" (design 2, sampul foto).
+  const [markerStyle, setMarkerStyle] = useState(() => {
+    try { return localStorage.getItem("aman_petakolab_marker_style") === "photo" ? "photo" : "pin"; }
+    catch { return "pin"; }
+  });
   const [moderasi, setModerasi] = useState(false);       // mode seleksi (operator)
   const [terpilih, setTerpilih] = useState(() => new Set()); // id titik kolaborasi terpilih
 
@@ -389,6 +426,26 @@ export default function PetaKolaborasiPage() {
     previewRef.current = null;
   }, []);
 
+  useEffect(() => {
+    try { localStorage.setItem("aman_petakolab_marker_style", markerStyle); } catch { /* diblokir */ }
+  }, [markerStyle]);
+
+  // Bangun ikon marker sesuai gaya aktif. Gaya "photo" HANYA untuk titik ASET
+  // yang punya foto → tampilkan sampul (URL ber-token, sama seperti FotoImg
+  // untuk tamu). Titik kolaborasi & aset tanpa foto tetap pin. Dipakai bersama
+  // oleh sinkron marker & efek sorot seleksi agar keduanya konsisten.
+  const buildIcon = useCallback((entry) => {
+    const p = entry.point;
+    if (markerStyle === "photo" && entry.jenis === "aset" && (Number(p?.jumlah_foto) || 0) > 0) {
+      const q = new URLSearchParams();
+      q.set("thumb", "1");
+      if (token) q.set("token", token);
+      const cover = `${API}/peta/kolaborasi/${id}/aset/${encodeURIComponent(p.id)}/foto/${p.thumbnail_index || 0}?${q.toString()}`;
+      return photoMarkerIconKolab(cover, { color: entry.color, badge: entry.badge, selected: entry.selected });
+    }
+    return pinIcon(entry.color, { badge: entry.badge, selected: entry.selected });
+  }, [markerStyle, id, token]);
+
   // Sinkron marker INKREMENTAL (tak clear+bangun-ulang) — meniru AssetMapFullView
   // agar view/cluster/spiderfy & seleksi tetap saat data/filter berubah. Handler
   // klik membaca entry.point sehingga selalu data terbaru. Seleksi (cincin)
@@ -401,7 +458,11 @@ export default function PetaKolaborasiPage() {
     const pasang = (key, point, latlng, color, badge, klik) => {
       seen.add(key);
       bounds.push(latlng);
-      const iconKey = `${color}|${badge}`;
+      const jenis = key.startsWith("aset:") ? "aset" : "titik";
+      // iconKey ikut memuat gaya + identitas sampul (thumbnail_index) → ganti
+      // gaya / ganti sampul memicu rebuild ikon lewat jalur inkremental.
+      const usePhoto = markerStyle === "photo" && jenis === "aset" && (Number(point?.jumlah_foto) || 0) > 0;
+      const iconKey = `${color}|${badge}|${usePhoto ? `p${point.thumbnail_index || 0}` : "n"}`;
       const existing = markersRef.current.get(key);
       if (existing) {
         existing.point = point;
@@ -412,12 +473,13 @@ export default function PetaKolaborasiPage() {
         }
         if (existing.iconKey !== iconKey) {
           existing.color = color; existing.badge = badge; existing.iconKey = iconKey;
-          existing.marker.setIcon(pinIcon(color, { badge, selected: existing.selected }));
+          existing.marker.setIcon(buildIcon(existing));
         }
         return;
       }
-      const m = L.marker(latlng, { icon: pinIcon(color, { badge }) });
-      const entry = { marker: m, point, iconKey, color, badge, selected: false, lat: latlng[0], lng: latlng[1] };
+      const entry = { marker: null, point, iconKey, color, badge, selected: false, lat: latlng[0], lng: latlng[1], jenis };
+      const m = L.marker(latlng, { icon: buildIcon(entry) });
+      entry.marker = m;
       m.on("click", () => klik(entry));
       layer.addLayer(m);
       markersRef.current.set(key, entry);
@@ -441,7 +503,7 @@ export default function PetaKolaborasiPage() {
       try { map.fitBounds(L.latLngBounds(bounds), { padding: [40, 40], maxZoom: 18 }); } catch { /* noop */ }
       fitOnceRef.current = true;
     }
-  }, [data, asetTampil, komentarCount, bukaDetailAset, bukaDetailTitik, toggleTerpilih]);
+  }, [data, asetTampil, komentarCount, bukaDetailAset, bukaDetailTitik, toggleTerpilih, buildIcon, markerStyle]);
 
   // Sorot cincin seleksi (detail `dipilih` + moderasi `terpilih`) secara
   // INKREMENTAL — hanya setIcon pada marker yang berubah status pilih; `data`
@@ -454,10 +516,10 @@ export default function PetaKolaborasiPage() {
       const want = keys.has(key);
       if (entry.selected !== want) {
         entry.selected = want;
-        entry.marker.setIcon(pinIcon(entry.color, { badge: entry.badge, selected: want }));
+        entry.marker.setIcon(buildIcon(entry));
       }
     });
-  }, [dipilih, terpilih, data]);
+  }, [dipilih, terpilih, data, buildIcon]);
 
   // Hidup/matikan clustering: pindahkan marker yang sudah ada ke layer baru
   // (tanpa membangun ulang marker) — pin & seleksi tetap.
@@ -677,6 +739,14 @@ export default function PetaKolaborasiPage() {
           data-testid="peta-kolab-cluster"
         >
           <Boxes className="w-4 h-4" />
+        </button>
+        <button
+          type="button" onClick={() => setMarkerStyle((s) => (s === "photo" ? "pin" : "photo"))} aria-pressed={markerStyle === "photo"} aria-label={markerStyle === "photo" ? "Gaya marker: foto sampul" : "Gaya marker: pin"}
+          className={`h-8 w-8 rounded-lg border flex items-center justify-center flex-shrink-0 transition-colors ${markerStyle === "photo" ? "border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400" : "border-border text-foreground/80 hover:bg-muted"}`}
+          title={markerStyle === "photo" ? "Marker menampilkan foto sampul aset — ketuk untuk kembali ke pin" : "Marker berbentuk pin — ketuk untuk menampilkan foto sampul di marker"}
+          data-testid="peta-kolab-marker-style"
+        >
+          <ImageIcon className="w-4 h-4" />
         </button>
         {bolehModerasi && (
           <button

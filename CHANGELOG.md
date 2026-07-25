@@ -48,6 +48,38 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#594] Desain marker kedua: sampul foto di dalam marker (toggle Pin↔Foto) — Peta Aset & Peta Kolaborasi — 2026-07-25
+
+Menambah **desain marker kedua** tanpa menghapus yang lama. Marker **pin**
+(desain 1) **tetap** jadi bawaan; pengguna kini bisa mengaktifkan **marker foto**
+(desain 2) lewat sebuah tombol — marker menampilkan **sampul foto aset**
+(mengikuti `thumbnail_index` sampul terpilih) langsung di peta, sehingga terlihat
+apa barangnya tanpa membuka popup. **Klik marker tetap membuka popup info yang
+sama.** Tersedia di **kedua peta**: Peta Aset internal (`AssetMapFullView`) dan
+**Peta Kolaborasi** publik (`PetaKolaborasiPage`).
+
+- **Toggle "Gaya Marker: Pin ↔ Foto"** — di menu peta (internal) & tombol toolbar
+  (kolaborasi, ber-`data-testid`). Pilihan **disimpan** (`localStorage`) agar
+  bertahan antar sesi. Default **Pin** (desain lama tak berubah bila tak diaktifkan).
+- **Marker foto** = `divIcon` 46×54 dengan sampul sebagai `background-image`
+  (`background-size:cover`); border/cincin ikut **status & seleksi** seperti pin.
+  Sumber sampul: internal → streaming 256px **WebP** (offline → thumbnail snapshot
+  `row.thumbnail`); kolaborasi → endpoint foto peta ber-`?token=` (thumbnail).
+- **Aset tanpa foto tetap pin** — hanya aset ber-foto yang menjadi marker foto.
+- **Skala aman**: sampul dimuat sebagai `<img loading="lazy" decoding="async">`
+  (bukan `background-image`) → browser **menunda fetch** untuk marker di luar
+  viewport (teruji di real-Leaflet: marker jauh tak menembak request sampai
+  digeser masuk), sehingga jumlah request & memori sampul terbatas **meski
+  clustering dimatikan**. Dipadu clustering + `removeOutsideVisibleBounds`
+  (default) dan sinkron marker **inkremental** (tak bangun-ulang; view/cluster/
+  spiderfy & seleksi terjaga). `iconKey` menyertakan `thumbnail_index`+`version`
+  → sampul menyegar saat foto berubah.
+- **Degradasi anggun**: bila sampul gagal muat (mis. token kedaluwarsa di peta
+  kolaborasi), `img` disembunyikan sehingga **warna latar status** tampil — tanpa
+  ikon "gambar rusak", tanpa crash, dan **klik marker tetap** membuka popup.
+
+---
+
 ## [#593] WebP menyeluruh: preview galeri/lightbox + gambar laporan kini WebP (dari asli optimasi Tinify) — 2026-07-25
 
 Menutup celah terakhir konversi WebP. Foto ASLI sudah dioptimalkan Tinify dan
