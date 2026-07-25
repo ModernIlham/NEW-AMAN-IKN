@@ -387,7 +387,7 @@ _KOLEKSI_KODE_SATKER = (
 )
 
 
-async def _cek_atau_perbarui_satker(activity, exclude_id=None):
+async def _cek_atau_perbarui_satker(activity, exclude_id=None, user=None):
     """Konsistensi kode ↔ nama satker antar kegiatan.
 
     Tanpa konfirmasi (perbarui_satker=False): konflik → 409 ber-detail
@@ -402,7 +402,30 @@ async def _cek_atau_perbarui_satker(activity, exclude_id=None):
       (_KOLEKSI_KODE_SATKER) — tanpa ini user terkunci dari datanya dan
       dokumen modul yatim di kode lama.
     Aset TIDAK disentuh: relasinya via activity_id (scoping saat query).
+
+    BATAS WEWENANG (REVIEW-9 R11). Kedua jalur konfirmasi menulis MASSAL ke
+    dokumen milik kode satker LAIN, dan jalur "ganti kode" bahkan memindahkan
+    seluruh koleksi ber-stempel — termasuk `users`. Tanpa gerbang, user satker
+    A cukup membuat kegiatan ber-NAMA satker B dengan kodenya sendiri lalu
+    menyetel `perbarui_satker=True`: seluruh data DAN akun satker B berpindah
+    menjadi milik A (pengambilalihan penuh). Karena itu migrasi lintas-kode
+    hanya boleh dijalankan super-admin pusat.
     """
+    from auth_utils import is_super_admin
+
+    def _pastikan_boleh_migrasi(kode_lain: str, jenis: str):
+        """Migrasi yang menyentuh kode satker SELAIN milik pemanggil = khusus
+        super-admin. Pemanggil lintas-satker (kode kosong) tetap boleh."""
+        if is_super_admin(user or {}):
+            return
+        milik = kode_satker_user(user)
+        if not milik or str(kode_lain or "").strip() != milik:
+            raise HTTPException(
+                status_code=403,
+                detail=(f"Perubahan {jenis} ini menyentuh data satker "
+                        f"{kode_lain} — hanya super-admin pusat yang dapat "
+                        "menjalankan migrasi lintas satker"))
+
     kode = activity.kode_satker.strip()
     nama = activity.nama_satker.strip()
     q_id = {"id": {"$ne": exclude_id}} if exclude_id else {}
@@ -414,6 +437,7 @@ async def _cek_atau_perbarui_satker(activity, exclude_id=None):
                 "konflik_satker": True, "jenis": "nama",
                 "pesan": (f"Kode Satker '{kode}' sudah terdaftar dengan nama "
                           f"'{ex_kode['nama_satker']}'.")})
+        _pastikan_boleh_migrasi(kode, "nama satker")
         await db.inventory_activities.update_many(
             {"kode_satker": kode}, {"$set": {"nama_satker": nama}})
         await db.satker.update_one(
@@ -431,6 +455,7 @@ async def _cek_atau_perbarui_satker(activity, exclude_id=None):
                 "pesan": (f"Nama Satker '{nama}' sudah terdaftar dengan kode "
                           f"'{ex_nama['kode_satker']}'.")})
         kode_lama = ex_nama["kode_satker"]
+        _pastikan_boleh_migrasi(kode_lama, "kode satker")
         await db.inventory_activities.update_many(
             {"nama_satker": nama, "kode_satker": kode_lama},
             {"$set": {"kode_satker": kode}})
@@ -544,7 +569,7 @@ async def create_inventory_activity(activity: InventoryActivityCreate, _user: di
     # Konsistensi kode ↔ nama satker: konflik → 409 terstruktur (UI
     # menawarkan konfirmasi); perbarui_satker=True → rename/ganti kode
     # diterapkan serentak ke kegiatan lain + Master Satker lalu lolos.
-    await _cek_atau_perbarui_satker(activity)
+    await _cek_atau_perbarui_satker(activity, user=_user)
 
     # Validate unique nomor_surat
     existing = await db.inventory_activities.find_one({"nomor_surat": activity.nomor_surat})
@@ -785,7 +810,7 @@ async def update_inventory_activity(activity_id: str, activity: InventoryActivit
 
     # Konsistensi kode ↔ nama satker (kecualikan diri sendiri): konflik →
     # 409 terstruktur; perbarui_satker=True → rename/ganti kode serentak.
-    await _cek_atau_perbarui_satker(activity, exclude_id=activity_id)
+    await _cek_atau_perbarui_satker(activity, exclude_id=activity_id, user=_user)
     
     # Check unique nomor_surat (exclude self)
     if activity.nomor_surat != existing.get("nomor_surat"):
