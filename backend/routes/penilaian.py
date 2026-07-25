@@ -339,12 +339,17 @@ async def tandai_tercatat_sakti(koreksi_id: str,
             status_code=409,
             detail="Koreksi tidak ditemukan atau sudah ditandai tercatat")
     res["status_sakti"] = "tercatat_sakti"
-    await _proyeksi_master_revaluasi(res, user.get("username"))
+    # "Penilaian tujuan tertentu" bersifat INFORMASIONAL — modul ini sendiri
+    # mengecualikannya dari nilai buku (rekap_koreksi_nilai/susun_riwayat_
+    # nilai) → jangan proyeksikan ke master maupun jurnalkan rupiahnya.
+    informasional = res.get("jenis") == "penilaian_tujuan_tertentu"
+    if not informasional:
+        await _proyeksi_master_revaluasi(res, user.get("username"))
     # Jurnal Buku Barang (G7, REVIEW-9 R3): revaluasi FINAL → 204 (nilai
     # bertambah) / 205 (nilai berkurang), magnitudo positif + jumlah 0
     # (kuantitas barang tidak berubah). Best-effort + anti-ganda via ref_id.
     selisih = float(res.get("selisih") or 0)
-    if selisih:
+    if selisih and not informasional:
         from shared_utils import catat_mutasi_bmn
         aset = await db.assets.find_one(
             {"id": res.get("asset_id")},
@@ -369,7 +374,21 @@ async def tandai_tercatat_sakti(koreksi_id: str,
 @penilaian_router.delete("/penilaian/koreksi/{koreksi_id}")
 async def hapus_koreksi_nilai(koreksi_id: str,
                               _admin: dict = Depends(require_admin)):
-    """Hapus satu catatan koreksi (admin, dalam lingkup satker)."""
+    """Hapus satu catatan koreksi (admin, dalam lingkup satker).
+
+    Koreksi FINAL (tercatat_sakti) TIDAK boleh dihapus — jurnal 204/205 dan
+    proyeksi master sudah terbit (append-only) sehingga hapus-lalu-buat-ulang
+    menggandakan mutasi rupiah di Buku Barang (pola sama dengan larangan
+    hapus catatan pemeliharaan yang sudah berjurnal 202)."""
+    final = await db.penilaian_koreksi.find_one(
+        scope_query_field_satker(
+            _admin, {"id": koreksi_id, "status_sakti": "tercatat_sakti"}),
+        {"_id": 1})
+    if final:
+        raise HTTPException(
+            status_code=409,
+            detail="Koreksi sudah tercatat SAKTI & berjurnal — tidak dapat "
+                   "dihapus; buat koreksi baru sebagai pembalik bila perlu.")
     res = await db.penilaian_koreksi.delete_one(
         scope_query_field_satker(_admin, {"id": koreksi_id}))
     if not res.deleted_count:

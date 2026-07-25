@@ -126,8 +126,16 @@ async def create_indexes() -> None:
         await db.kodefikasi.create_index("kode", unique=True)
         await db.kodefikasi.create_index([("level", 1), ("kode", 1)])
         await db.kodefikasi.create_index("parent_kode")
-        # Persediaan: identitas (kode+NUP) unik; jalur akses id; sort daftar
-        await db.persediaan.create_index([("kode_barang", 1), ("nup", 1)], unique=True)
+        # Persediaan: identitas (kode+NUP) unik PER SATKER (REVIEW-9 R3 —
+        # selaras dup-check aplikasi di create_persediaan). Indeks unik GLOBAL
+        # era lama dilepas dulu: tanpa ini insert satker lain yang lolos
+        # dup-check per-satker meledak DuplicateKeyError 500.
+        try:
+            await db.persediaan.drop_index("kode_barang_1_nup_1")
+        except Exception:
+            pass
+        await db.persediaan.create_index(
+            [("kode_satker", 1), ("kode_barang", 1), ("nup", 1)], unique=True)
         await db.persediaan.create_index("id", unique=True)
         await db.persediaan.create_index([("nama_barang", 1), ("kode_barang", 1)])
         # Jurnal transaksi persediaan: riwayat per barang, terbaru dulu

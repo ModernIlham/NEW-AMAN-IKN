@@ -606,7 +606,9 @@ async def posting_kapitalisasi(catatan_id: str,
         "asset_id": aset["id"], "kode_transaksi": "202",
         "kode_barang": str(aset.get("asset_code") or ""),
         "nup": str(aset.get("NUP") or ""),
-        "tanggal_buku": str(rec.get("tanggal") or now)[:10], "jumlah": 1,
+        # jumlah 0: murni transaksi NILAI pada aset yang sama — tak ada unit
+        # baru (konvensi 204/205; dulu 1 → kuantitas Tabel 17 CaLBMN melenceng).
+        "tanggal_buku": str(rec.get("tanggal") or now)[:10], "jumlah": 0,
         "nilai": biaya, "sumber_modul": "pemeliharaan", "ref_id": catatan_id,
         "keterangan": ("Pengembangan nilai dari pemeliharaan: "
                        + str(rec.get("uraian") or ""))[:200],

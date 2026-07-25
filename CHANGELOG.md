@@ -82,6 +82,35 @@ persediaan.
   kini difilter satker pengimpor (dulu bisa menimpa field master milik
   satker lain yang kebetulan ber-kode+NUP sama).
 
+**Hasil review adversarial 3 lensa (12 agen, semua temuan terverifikasi):**
+
+- 🔴 **Indeks unik persediaan dimigrasi per satker** — indeks global
+  `(kode_barang, nup)` dilepas & diganti `(kode_satker, kode_barang, nup)`;
+  tanpa ini dup-check per-satker lolos lalu insert meledak
+  `DuplicateKeyError` 500 dan satker kedua terblokir permanen.
+- 🟠 **"Daftarkan ke Persediaan" (Pengadaan) di-scope satker** — lookup master
+  by kode tanpa scope memilih master satker lain → jalur create terlewati →
+  transaksi masuk 403 dan baris BAST macet permanen.
+- 🟠 **Ekspor master persediaan di-scope satker** — sebelumnya user satker B
+  mengunduh seluruh master (stok + nilai) satker lain, dan roundtrip
+  ekspor→impor menduplikasinya ke satker B.
+- 🟠 **302 hanya untuk aset yang benar-benar terproyeksi** —
+  `_proyeksi_terminal_ke_aset` kini mengembalikan daftar id terproyeksi;
+  aset yang sudah keluar buku lewat jalur lain (SK penghapusan 301 / tiket
+  idle) tidak dijurnal KURANG dua kali.
+- 🟠 **Koreksi informasional tak berjurnal & tak memproyeksi** — jenis
+  "penilaian tujuan tertentu" (tidak mengubah nilai buku menurut modulnya
+  sendiri) kini dilewati oleh jurnal 204/205 DAN proyeksi
+  `nilai_wajar_terakhir` (cacat pra-R3).
+- 🟠 **Guard hapus register yang sudah berjurnal** — koreksi nilai FINAL
+  (tercatat SAKTI) dan tiket proses terminal `dihapus_dibukukan` kini 409
+  saat dihapus (pola larangan hapus catatan pemeliharaan ber-jurnal 202) —
+  hapus-lalu-buat-ulang tidak lagi menggandakan mutasi.
+- 🟠 **Jurnal 202 pemeliharaan pakai `jumlah 0`** — pengembangan nilai
+  murni rupiah; `jumlah 1` lama menambah 1 unit fiktif per posting pada
+  Tabel 17 CaLBMN.
+- 🟡 Label kode 205 ditambahkan ke timeline aset.
+
 ## [#611] Audit REVIEW-9 (2/7): sapu IDOR & guard lintas modul — 2026-07-25
 
 Gelombang kedua audit 6 dimensi: menutup **celah isolasi satker** (IDOR) yang

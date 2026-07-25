@@ -155,8 +155,13 @@ async def daftarkan_persediaan(perolehan_id: str, user: dict = Depends(require_w
             dilewati_terdaftar += 1
             continue
         jumlah = max(1, int(float(row.get("jumlah") or 1)))
+        # Lookup master DALAM LINGKUP SATKER (REVIEW-9 R3): tanpa scope,
+        # master satker lain yang kebetulan ber-kode sama terpilih → jalur
+        # create terlewati → transaksi_masuk 403 dan baris macet permanen.
+        from shared_utils import scope_query_field_satker
         it = await db.persediaan.find_one(
-            {"kode_barang": kode}, {"_id": 0, "id": 1})
+            scope_query_field_satker(user, {"kode_barang": kode}),
+            {"_id": 0, "id": 1})
         if not it:
             try:
                 it = await create_persediaan(PersediaanCreate(
