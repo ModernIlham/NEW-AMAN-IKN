@@ -1356,7 +1356,10 @@ async def get_asset_photo_full(asset_id: str, photo_index: int, request: Request
         if thumb_b64:
             data = thumb_b64.split(",", 1)[1] if thumb_b64.startswith("data:") else thumb_b64
             try:
-                return Response(content=base64.b64decode(data), media_type="image/jpeg",
+                _tb = base64.b64decode(data)
+                # Deteksi tipe dari magic-byte: thumbnail kini WebP (yang lama
+                # bisa JPEG) — nosniff mengharuskan Content-Type benar.
+                return Response(content=_tb, media_type=_tebak_media_type(_tb),
                                 headers=_media_headers(etag))
             except Exception:
                 pass  # corrupt stored thumbnail — fall through to the full photo

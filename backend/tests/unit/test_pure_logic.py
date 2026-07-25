@@ -138,12 +138,13 @@ def test_decode_data_url_never_raises():
 
 def test_create_thumbnail():
     import shared_utils as su
+    # Thumbnail kini WebP (lebih kecil ~25-35% dari JPEG; didukung browser & PIL).
     thumb = su.create_thumbnail(PNG_DATAURI, size=64)
-    assert isinstance(thumb, str) and thumb.startswith("data:image/jpeg;base64,")
+    assert isinstance(thumb, str) and thumb.startswith("data:image/webp;base64,")
     ti = PILImage.open(io.BytesIO(su.decode_data_url(thumb)))
-    assert ti.format == "JPEG" and ti.mode == "RGB" and max(ti.size) <= 64
+    assert ti.format == "WEBP" and max(ti.size) <= 64
     assert su.create_thumbnail(None) is None
-    assert su.create_gallery_thumbnail(JPG_SMALL).startswith("data:image/jpeg")
+    assert su.create_gallery_thumbnail(JPG_SMALL).startswith("data:image/webp")
 
 
 def test_prepare_image_flattens_alpha():

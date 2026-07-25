@@ -48,6 +48,33 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#591] Thumbnail aset → WebP (baru langsung WebP + migrasi lama terjadwal, tanpa kuota Tinify) — 2026-07-25
+
+Optimasi penyimpanan & payload thumbnail pada skala jutaan aset. Thumbnail
+(`thumbnail`/`gallery_thumbnail`/`photo_thumbnails`) tersimpan base64 di dalam
+dokumen aset — pada data raksasa ini memberatkan daftar, snapshot offline, dan
+penyimpanan. WebP ~25-35% lebih kecil dari JPEG pada kualitas setara.
+
+- **Thumbnail BARU langsung WebP**: `create_thumbnail`/`create_gallery_thumbnail`
+  (dipakai semua jalur tulis aset: create/update/patch/rotate/batch/checklist)
+  kini menghasilkan `data:image/webp`. Didukung penuh browser modern & PIL
+  (laporan/ekspor mendekode via PIL, tak terpengaruh).
+- **Penyajian byte deteksi tipe**: endpoint thumbnail (`/assets/{id}/photos/{i}?thumb=1`
+  dan peta kolaboratif publik) kini menetapkan `Content-Type` dari magic-byte
+  (`_tebak_media_type`) — WebP tersaji benar walau header `nosniff`.
+- **Migrasi thumbnail LAMA terjadwal & aman**: fase baru di `webp_converter.py`
+  me-re-encode thumbnail JPEG lama → WebP secara **lokal (PIL), TANPA Tinify**
+  (jadi **tak menyentuh kuota Tinify** — kuota hanya untuk foto asli GridFS).
+  Sapuan sekali-jalan berbasis kursor `id` (indeks, hemat), **idle & 1-worker
+  lease** (tak ganggu performa), **OCC** (aman dari race edit user), dan hanya
+  disimpan **bila hasil WebP lebih kecil** (tak pernah memperburuk). `updated_at`
+  tak diubah → tak memicu re-sync offline massal. Kill-switch `WEBP_KONVERSI_AKTIF=0`.
+- Uji unit `test_webp_thumbnail.py` (generasi + re-encode). Foto ASLI (GridFS)
+  tetap dikonversi via Tinify seperti sebelumnya; kedua fase kini berjalan
+  berdampingan (fase thumbnail tetap jalan walau kuota Tinify habis).
+
+---
+
 ## [#590] Keandalan foto di laporan: cegah OOM/crash pada kegiatan raksasa + WeasyPrint tak blok — 2026-07-25
 
 Mitigasi risiko foto saat data membengkak (ratusan ribu–jutaan aset), tanpa

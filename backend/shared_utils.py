@@ -733,24 +733,31 @@ def _prepare_image(image_data: Optional[str]):
     return img
 
 def create_thumbnail(image_data: Optional[str], size: int = 100, quality: int = 70) -> Optional[str]:
+    """Thumbnail base64 inline dalam format **WebP** (data-URI ``image/webp``).
+
+    WebP ~25-35% lebih kecil dari JPEG pada kualitas setara → hemat payload
+    base64 di daftar/snapshot offline & penyimpanan dokumen pada skala jutaan
+    aset. WebP didukung penuh browser modern (Android Chrome, iOS Safari 14+)
+    dan PIL (laporan/ekspor mendekode via PIL). Endpoint penyajian byte thumbnail
+    mendeteksi tipe via magic-byte (_tebak_media_type), jadi WebP tersaji benar.
+    method=6 = kompresi terbaik (thumbnail kecil → biaya CPU dapat diabaikan).
+    """
     try:
         img = _prepare_image(image_data)
         if not img:
             return None
         img.thumbnail((size, size))
         buffer = io.BytesIO()
-        # optimize: tabel Huffman optimal (hemat 2-10% byte tanpa penurunan
-        # kualitas); progressive: tampil bertahap di koneksi lambat.
-        img.save(buffer, format="JPEG", quality=quality, optimize=True, progressive=True)
+        img.save(buffer, format="WEBP", quality=quality, method=6)
         buffer.seek(0)
         thumb_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
-        return f"data:image/jpeg;base64,{thumb_base64}"
+        return f"data:image/webp;base64,{thumb_base64}"
     except Exception as e:
         logger.error(f"Thumbnail generation error: {e}")
         return None
 
 def create_gallery_thumbnail(image_data: Optional[str]) -> Optional[str]:
-    """Generate a 256x256 thumbnail for gallery view."""
+    """Generate a 256x256 WebP thumbnail for gallery view."""
     return create_thumbnail(image_data, size=256, quality=65)
 
 # --- Inventory Constants ---
