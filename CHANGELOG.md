@@ -48,6 +48,29 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#604] Peta aset: kunci geser marker — aman dilihat, sekali ketuk untuk edit — 2026-07-25
+
+Mencegah **koordinat aset tergeser tak sengaja** saat sekadar melihat peta (di
+layar sentuh maupun dengan mouse), tanpa mengorbankan kenyamanan mengedit:
+
+- **Default TERKUNCI**: marker tak dapat digeser saat peta dibuka — menggeser/
+  memperbesar peta & mengetuk pin (buka info) tetap normal. Klik pin tetap
+  membuka popup.
+- **Tombol Kunci/Buka** di toolbar peta (hanya bila pengguna boleh mengedit):
+  satu ketuk **membuka** untuk membetulkan koordinat (seret pin → tersimpan
+  otomatis), ketuk lagi untuk **mengunci**. Petunjuk di legenda ikut berganti
+  sesuai keadaan.
+- **Aman by default**: status kunci **tidak disimpan** antar sesi — tiap peta
+  dibuka selalu kembali terkunci (cegah "lupa masih terbuka" lalu tergeser).
+- Robust terhadap **pengelompokan marker (cluster)**: `options.draggable`
+  diperbarui saat dikunci/dibuka sehingga marker yang muncul kembali dari cluster
+  mengikuti keadaan kunci terkini.
+
+Catatan: peta **kolaboratif** publik tak terdampak — marker yang sudah ada di
+sana memang sudah tak bisa digeser (hanya pin pratinjau saat menambah titik).
+
+---
+
 ## [#603] Kamera lapangan: getar & suara rana benar-benar terasa saat memotret — 2026-07-25
 
 Umpan balik saat foto **benar-benar terambil** kini terasa di lapangan (dulu
