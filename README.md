@@ -2,7 +2,7 @@
 
 > Sistem Inventarisasi Barang Milik Negara (BMN) berbasis web, standar pemerintah Indonesia (SE 17/SE/M/2024 & LKPP 85/2025)
 
-**Versi:** 2.4 (Juli 2026) — Siklus penuh BMN: sinkronisasi SIMAN V2 tangguh + buat draft aset, cetak stiker label, tanda tangan elektronik pada dokumen, master SDM & referensi akun BAS, isolasi multi-satker, backup otomatis, dan perombakan UI/UX menyeluruh 26 halaman
+**Versi:** 2.5 (Juli 2026) — Audit menyeluruh 6 dimensi (REVIEW-9): sapu IDOR & guard lintas modul, jurnal Buku Barang lengkap semua transaksi, event loop bebas render berat, keandalan backup/restore/reset, plus pencarian kilat Meilisearch & cache bersama Redis (keduanya opsional ber-feature-flag)
 
 ---
 
@@ -139,6 +139,46 @@ pra-isi** untuk SIMAN v2 (#122) + **register penertiban ber-tenggat
 insidentil 10+5 hari kerja dengan PDF Berita Acara** (#142) + **arsip
 lampiran per tiket insidentil** (#156).
 **Seluruh kartu modul siklus kini bisa dimasuki dari Beranda Modul.**
+
+---
+
+## 🆕 Highlight Rilis v2.5 (Juli 2026)
+
+Seri **audit menyeluruh 6 dimensi (REVIEW-9)** — 57 temuan ditriase menjadi 7
+gelombang perbaikan (PR #608–#612), ditutup pembaruan dokumentasi ini:
+
+- 🛡️ **Sapu IDOR & guard lintas modul** — modul TTD elektronik kini terisolasi
+  per satker (dulu admin satker lain bisa melihat & membatalkan permintaan);
+  10 endpoint hapus + 10 endpoint transisi status ter-scope satker; foto
+  pegawai ber-guard; penugasan aset ke pegawai almarhum ditolak sisi server;
+  `POST /bast` ber-Idempotency-Key; OCC `PUT /pegawai`; 14 titik mutasi
+  Wasdal/Pemanfaatan/Pemusnahan kini menulis log audit (#609).
+- 📚 **Jurnal Buku Barang lengkap** — revaluasi Penilaian (204/205), alih
+  status keluar & serah BMN idle (302) kini berjurnal; guard anti jurnal
+  ganda terpusat; indeks unik persediaan dimigrasi per satker; ekspor/lookup
+  persediaan ter-scope; guard hapus register yang sudah berjurnal (#610).
+- ⚡ **Backend bebas render berat** — laporan weasyprint + 18 generator PDF
+  reportlab di-offload ke thread (dulu SATU unduhan membekukan seluruh
+  server); impor aset Excel bebas N+1; dasbor Wasdal ber-cache; indeks
+  `audit_logs(action)` (#611).
+- 🖥️ **Frontend Master Pegawai & Pembukuan** — avatar tak lagi berkedip/
+  refetch tiap render, daftar 1.300+ pegawai berjendela render, filter
+  jurnal Buku Barang memakai pencarian nama/kode (bukan UUID manual) (#612).
+- 💾 **Keandalan backup/restore/reset** — retensi tak lagi menghapus backup
+  MANUAL (bug urut leksikografis); manifest GridFS diparse sebelum wipe;
+  job macet dideteksi dari denyut progres; safety snapshot ke disk (anti
+  OOM); reindex Meilisearch otomatis pasca-restore/reset (#612).
+- 🔎 **Meilisearch & Redis (opsional, ber-feature-flag)** — pencarian kilat
+  typo-toleran pada daftar aset/surat/persediaan (`MEILI_URL`) dan cache
+  ringkasan + rate-limit bersama lintas worker (`REDIS_URL`); tanpa env
+  tersebut aplikasi berjalan persis seperti sebelumnya (#587–#588).
+  Panduan: [`docs/MEILISEARCH.md`](./docs/MEILISEARCH.md) & [`docs/REDIS.md`](./docs/REDIS.md).
+- ⚰️ **Penanganan pemegang BMN meninggal dunia** — status Meninggal di Master
+  Pegawai (akta/ahli waris), BAST "Pengembalian — Pemegang Wafat" bersaksi
+  ≥2, temuan Wasdal ber-jam 3 tahun (UU 1/2004 Ps. 66(2) jo. PP 38/2016),
+  blok almarhum sebagai penerima/penanda tangan (#604–#607).
+
+Detail lengkap per PR di [`CHANGELOG.md`](./CHANGELOG.md) (#604–#614).
 
 ---
 

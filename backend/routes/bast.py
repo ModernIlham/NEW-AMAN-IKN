@@ -1,20 +1,28 @@
 """BAST SERAH TERIMA PENGGUNA — generator BA serah terima BMN lintas modul.
 
 Format mengikuti contoh resmi satker (BAST Rumga & BA Robot Kit — dua docx
-pemilik; intisari di scratchpad/format_bast.md) + PMK 246/PMK.06/2014 jo.
-76/PMK.06/2019 (penggunaan BMN) & PMK 53/2023 (BMN di IKN):
+pemilik; intisari di scratchpad/format_bast.md) + PMK Nomor 40 Tahun 2024
+(tata cara pelaksanaan penggunaan BMN — menggantikan PMK 246/2014 jo.
+76/2019) & PMK 53/2023 (BMN di IKN):
 kop → judul per jenis → nomor → narasi tanggal terbilang → identitas PIHAK
 KESATU (penyerah) & PIHAK KEDUA (penerima) → dasar hukum → PASAL 1 + tabel
 MULTI-ASET → pasal-pasal sesuai jenis → penutup → ttd 2 pihak → tembusan →
 lampiran foto aset (opsional, sesuai setelan `sertakan_foto`).
 
-Jenis serah terima (kebutuhan lapangan):
-- penggunaan_melekat   : BAST ke pegawai (aset "Melekat ke" perorangan)
-- operasional_unit     : penanggung jawab operasional per unit/tempat/tugas
-                         (+ daftar penanggung jawab tambahan opsional)
-- penggunaan_sementara : pinjam pakai internal ber-jangka waktu
-- pengembalian         : arah balik (PIHAK KEDUA mengembalikan ke satker)
-- lainnya              : jenis bebas (judul manual)
+Tujuh jenis serah terima (kebutuhan lapangan):
+- penggunaan_melekat    : BAST ke pegawai (aset "Melekat ke" perorangan)
+- mutasi_pengguna       : alih pemegang — PIHAK KESATU pemegang lama,
+                          PIHAK KEDUA pemegang baru (opsional efek langsung
+                          ke master aset via `terapkan_ke_aset`)
+- operasional_unit      : penanggung jawab operasional per unit/tempat/tugas
+                          (+ daftar penanggung jawab tambahan opsional)
+- penggunaan_sementara  : pinjam pakai internal ber-jangka waktu
+- pengembalian          : arah balik (PIHAK KEDUA mengembalikan ke satker)
+- pengembalian_almarhum : pengembalian BMN pemegang MENINGGAL DUNIA —
+                          penyerah ahli waris/atasan, wajib blok dasar
+                          (akta kematian) + saksi min. 2 (pola BA pihak
+                          berhalangan tetap)
+- lainnya               : jenis bebas (judul manual)
 
 Register `bast_serah_terima` menyimpan tiap BAST (riwayat per aset dan per
 pengguna terlacak); PDF dirender ulang kapan pun dari register.

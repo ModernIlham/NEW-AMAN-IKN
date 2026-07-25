@@ -7,6 +7,11 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 > Format tanggal: `YYYY-MM-DD`. Semua perubahan UI di bawah sudah di-`yarn build`
 > (craco) hingga sukses sebelum di-merge.
+>
+> **Catatan penomoran:** sejak entri `[#276]`, nomor `[#N]` pada judul entri
+> = **nomor PR + 2** (bergeser karena dua nomor PR hangus). Contoh: entri
+> `[#614]` = PR #612. Tautan PR yang disebut DI DALAM badan entri tetap
+> memakai nomor PR asli.
 
 ---
 
@@ -47,6 +52,28 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 > aturan ini. Solusinya `min-w-0 min-h-0` (dan kalau perlu `leading-none`).
 
 ---
+
+## [#615] Audit REVIEW-9 (7/7 — penutup): dokumentasi menyeluruh v2.5 — 2026-07-25
+
+Gelombang penutup audit 6 dimensi — **seluruh dokumentasi dimutakhirkan
+SETELAH semua perbaikan selesai** (sesuai urutan mandat):
+
+- 📖 **README v2.5** — highlight seri audit REVIEW-9 (7 gelombang, PR
+  #608–#612), fitur opsional Meilisearch & Redis kini terdokumentasi
+  (sebelumnya belum pernah masuk README), rangkuman penanganan pemegang
+  BMN meninggal dunia (#604–#607).
+- 🔢 **Catatan konvensi penomoran CHANGELOG** — entri `[#N]` = nomor PR + 2
+  sejak `[#276]`; kini tertulis eksplisit di kepala berkas (dulu hanya
+  konvensi lisan antar sesi).
+- 📜 **Docstring `routes/bast.py`** — tujuh jenis BAST lengkap (termasuk
+  `mutasi_pengguna` & `pengembalian_almarhum`) + dasar hukum dimutakhirkan
+  ke PMK Nomor 40 Tahun 2024 (menggantikan PMK 246/2014 jo. 76/2019).
+- 🗺️ **MASTERPLAN & EVALUASI-INTEGRASI** — bagian status audit REVIEW-9
+  (tabel 7 gelombang + 4 prinsip yang dikunci audit: semua transaksi
+  berjurnal, semua mutasi ber-ref_id, register berjurnal tak terhapus,
+  isolasi satker menyeluruh).
+- 📱 **Halaman Info (PRD)** — versi v2.5 + kartu rilis "Audit 6 Dimensi".
+- 🗂️ **Folder memory** (ROADMAP/CHANGELOG internal) — status seri audit.
 
 ## [#614] Audit REVIEW-9 (5–6/7): optimasi frontend + keandalan backup/restore/reset — 2026-07-25
 

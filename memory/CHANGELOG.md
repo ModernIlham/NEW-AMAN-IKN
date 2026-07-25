@@ -173,3 +173,12 @@
 - Scroll to top
 - Service worker (PWA)
 - Gallery view virtualized
+
+
+## Juli 2026 — Seri Audit REVIEW-9
+
+Audit 6 dimensi + 7 gelombang perbaikan (PR #608–#612 + dokumentasi):
+IDOR & guard lintas modul, jurnal Buku Barang lengkap, optimasi backend
+(thread offload render PDF) & frontend (Master Pegawai/Pembukuan),
+keandalan backup/restore/reset. Rincian di CHANGELOG.md akar repo
+(entri [#610]–[#615]).

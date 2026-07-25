@@ -155,3 +155,13 @@
 - [ ] Barcode scanning (mobile camera)
 - [ ] Multipart/form-data upload endpoint (hentikan base64 di JSON body)
 - [ ] HTTP/2 + streaming upload
+
+
+## Terlaksana lewat Audit REVIEW-9 (Juli 2026)
+
+- [x] Audit menyeluruh 6 dimensi → 57 temuan, 7 gelombang perbaikan (PR #608–#612)
+- [x] Isolasi satker tuntas (TTD, transisi status, hapus, foto, ekspor)
+- [x] Jurnal Buku Barang lengkap semua transaksi + guard anti-ganda
+- [x] Event loop bebas render berat (weasyprint + 19 PDF ke thread)
+- [x] Keandalan backup/restore/reset (retensi manual selamat, safety ke disk, reindex Meili)
+- [x] Meilisearch & Redis opsional ber-feature-flag (#587–#588)
