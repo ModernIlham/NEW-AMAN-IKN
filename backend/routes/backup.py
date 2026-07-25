@@ -121,12 +121,17 @@ async def update_job(job_id: str, **fields):
 
 
 async def cleanup_stale_jobs():
-    """Tandai job macet > 30 menit (running/queued) sebagai failed & LEPAS
-    gerbang single-flight (unset active_lock) agar backup/restore baru bisa
-    mulai — mencegah lock menggantung bila worker mati sebelum menyelesaikan."""
+    """Tandai job MACET sebagai failed & LEPAS gerbang single-flight (unset
+    active_lock) agar backup/restore baru bisa mulai — mencegah lock
+    menggantung bila worker mati sebelum menyelesaikan.
+
+    Macet = TIDAK ADA DENYUT PROGRES 30 menit (updated_at basi) — bukan umur
+    sejak mulai (REVIEW-9 R6): restore besar yang masih rajin meng-update
+    progres tidak boleh dibunuh di menit ke-30 lalu lock-nya direbut proses
+    lain di tengah wipe+isi ulang koleksi."""
     cutoff = (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat()
     await db.backup_jobs.update_many(
-        {"status": {"$in": ["running", "queued"]}, "started_at": {"$lt": cutoff}},
+        {"status": {"$in": ["running", "queued"]}, "updated_at": {"$lt": cutoff}},
         {"$set": {"status": "failed", "error": "Timeout: proses terlalu lama",
                   "updated_at": datetime.now(timezone.utc).isoformat()},
          "$unset": {"active_lock": ""}}
@@ -234,12 +239,17 @@ async def import_gridfs(zf: zipfile.ZipFile, progress_cb=None) -> int:
         # Legacy backup without GridFS section — skip silently.
         return 0
 
+    # Parse manifest SEBELUM wipe (REVIEW-9 R6): manifest korup dulu meledak
+    # SETELAH GridFS dihapus → seluruh foto lenyap padahal restore koleksi
+    # "berhasil" (galat hanya jadi warning di pemanggil).
+    manifest = json.loads(zf.read("gridfs/manifest.json"))
+
     # Wipe existing GridFS
     await db["fs.files"].delete_many({})
     await db["fs.chunks"].delete_many({})
 
-    manifest = json.loads(zf.read("gridfs/manifest.json"))
     restored = 0
+    gagal = 0
     for entry in manifest:
         file_id = entry["_id"]
         blob_name = f"gridfs/{file_id}.bin"
@@ -262,7 +272,11 @@ async def import_gridfs(zf: zipfile.ZipFile, progress_cb=None) -> int:
                     await progress_cb(restored)
                 await asyncio.sleep(0)
         except Exception as e:
+            gagal += 1
             logger.error(f"GridFS import: failed to restore {file_id}: {e}")
+    if gagal:
+        logger.warning(f"GridFS import: {gagal} dari {len(manifest)} berkas "
+                       f"gagal dipulihkan (sisanya sukses)")
     return restored
 
 
@@ -425,16 +439,22 @@ async def run_restore_task(job_id: str, zip_path: Path, username: str):
         await update_job(job_id, progress=10, message="Membuat safety backup...")
 
         # Create safety backup of current data (SEMUA koleksi aplikasi + GridFS)
+        # — ditulis ke DISK per koleksi (REVIEW-9 R6): dulu seluruh isi DB
+        # ditampung di dict memori sampai restore selesai; pada DB besar worker
+        # bisa OOM justru di tengah proses paling berisiko.
         safety_cols = await _app_collections()
-        safety_data = {}
-        for i, col_name in enumerate(safety_cols):
-            docs = []
-            async for doc in db[col_name].find({}):
-                docs.append(serialize_doc(doc, keep_id=col_name in KEEP_ID_COLLECTIONS))
-            safety_data[col_name] = docs
-            pct = 10 + int(((i + 1) / max(1, len(safety_cols))) * 15)
-            await update_job(job_id, progress=pct, message=f"Safety backup: {col_name}...")
-            await asyncio.sleep(0)
+        safety_data_zip = BACKUP_TEMP_DIR / f"safety_data_{job_id}.zip"
+        with zipfile.ZipFile(str(safety_data_zip), 'w', zipfile.ZIP_DEFLATED) as sz:
+            for i, col_name in enumerate(safety_cols):
+                docs = []
+                async for doc in db[col_name].find({}):
+                    docs.append(serialize_doc(doc, keep_id=col_name in KEEP_ID_COLLECTIONS))
+                sz.writestr(f"{col_name}.json",
+                            json.dumps(docs, ensure_ascii=False, default=str))
+                del docs   # hanya satu koleksi yang pernah berada di memori
+                pct = 10 + int(((i + 1) / max(1, len(safety_cols))) * 15)
+                await update_job(job_id, progress=pct, message=f"Safety backup: {col_name}...")
+                await asyncio.sleep(0)
 
         # Safety backup GridFS: snapshot file_ids + binaries into a temp zip so rollback can repopulate
         safety_gridfs_zip = BACKUP_TEMP_DIR / f"safety_{job_id}.zip"
@@ -512,11 +532,17 @@ async def run_restore_task(job_id: str, zip_path: Path, username: str):
             logger.error(f"Restore [{job_id}] failed, rolling back: {e}")
             await update_job(job_id, progress=90, message="Restore gagal, mengembalikan data...")
             try:
-                # Kembalikan SEMUA koleksi yang di-snapshot safety ke kondisi semula
-                for col_name, docs in safety_data.items():
-                    await db[col_name].delete_many({})
-                    if docs:
-                        await db[col_name].insert_many(docs)
+                # Kembalikan SEMUA koleksi dari snapshot safety di disk
+                with zipfile.ZipFile(str(safety_data_zip), 'r') as sz:
+                    for name in sz.namelist():
+                        if not name.endswith(".json"):
+                            continue
+                        col_name = name[:-5]
+                        docs = json.loads(sz.read(name))
+                        await db[col_name].delete_many({})
+                        if docs:
+                            await db[col_name].insert_many(docs)
+                        await asyncio.sleep(0)
                 # Rollback GridFS
                 if safety_gridfs_zip.exists():
                     with zipfile.ZipFile(str(safety_gridfs_zip), 'r') as sz:
@@ -528,9 +554,11 @@ async def run_restore_task(job_id: str, zip_path: Path, username: str):
             await update_job(job_id, status="failed", error=str(e), message="Restore gagal. Data telah dikembalikan ke kondisi semula.")
             return
         finally:
-            # Always cleanup safety snapshot zip
+            # Always cleanup safety snapshot zips
             if safety_gridfs_zip.exists():
                 safety_gridfs_zip.unlink(missing_ok=True)
+            if safety_data_zip.exists():
+                safety_data_zip.unlink(missing_ok=True)
 
         # Rebuild indexes
         await update_job(job_id, progress=95, message="Membangun ulang index database...")
@@ -539,6 +567,17 @@ async def run_restore_task(job_id: str, zip_path: Path, username: str):
             await create_indexes()
         except Exception as e:
             logger.warning(f"Index rebuild warning: {e}")
+
+        # Reindex Meilisearch (REVIEW-9 R6): isi DB baru saja diganti total —
+        # tanpa ini hasil pencarian menunjuk data pra-restore. Best-effort.
+        try:
+            from meili_utils import meili_aktif, reindex_semua
+            if meili_aktif():
+                await update_job(job_id, progress=97,
+                                 message="Reindex Meilisearch...")
+                await reindex_semua()
+        except Exception as e:
+            logger.warning(f"Meili reindex pasca-restore gagal (non-fatal): {e}")
 
         await update_job(
             job_id, status="completed", progress=100,

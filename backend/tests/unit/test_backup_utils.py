@@ -152,6 +152,25 @@ def test_arsip_retensi_hapus_terlama():
     assert len(arsip_untuk_dihapus(daftar, 0)) == 4
 
 
+def test_arsip_retensi_lindungi_manual_dan_urut_waktu():
+    # REVIEW-9 R6: urut leksikografis NAMA PENUH salah — "manual" < "otomatis"
+    # membuat SEMUA backup manual (termasuk yang paling baru) berada di depan
+    # daftar dan terhapus lebih dulu. Kini: (1) manual TIDAK PERNAH dihapus
+    # otomatis; (2) urut memakai stempel waktu di nama.
+    from backup_utils import arsip_untuk_dihapus
+    daftar = [
+        "backup_manual_20260725_100000.zip",     # manual TERBARU — wajib selamat
+        "backup_manual_20260101_090000.zip",     # manual lama — juga selamat
+        "backup_otomatis_20260724_020000.zip",
+        "backup_otomatis_20260722_020000.zip",   # tertua otomatis → dihapus
+        "backup_otomatis_20260723_020000.zip",
+    ]
+    assert arsip_untuk_dihapus(daftar, 2) == [
+        "backup_otomatis_20260722_020000.zip"]
+    # Hanya manual + kuota longgar → tidak ada yang dihapus sama sekali
+    assert arsip_untuk_dihapus(daftar[:2], 1) == []
+
+
 def test_saat_jadwal_tiba():
     from datetime import datetime
     from backup_utils import saat_jadwal_tiba

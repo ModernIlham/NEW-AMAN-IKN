@@ -16,6 +16,9 @@ import re
 SKIP_COLLECTIONS = {
     "row_locks", "otp_store", "backup_jobs", "idempotency_keys",
     "ws_events", "media_previews",
+    # Progress job latar bersama (ekspor async dll.) — sama transiennya dengan
+    # backup_jobs; membawanya ke DB hasil restore = job "running" hantu.
+    "background_jobs",
 }
 
 # Koleksi yang _id-nya BERMAKNA (bukan ObjectId acak) → wajib dipertahankan saat
@@ -44,6 +47,9 @@ RESET_KEEP_COLLECTIONS = {
     # dengan `referensi_akun` (tanpa ini seed ter-replay; tidak merusak,
     # tapi inkonsisten — audit W7).
     "referensi_akun_meta",
+    # Kalender penganggaran (jadwal siklus yang disusun manual) = konfigurasi
+    # perencanaan, bukan data transaksi — REVIEW-9 R6.
+    "penganggaran_kalender",
 }
 
 # Legacy name → canonical (untuk membaca backup lama; mis. activities.json).
@@ -109,13 +115,27 @@ def nama_arsip_valid(nama) -> bool:
     return bool(_NAMA_ARSIP_RE.match(str(nama or "")))
 
 
-def arsip_untuk_dihapus(daftar_nama, retensi):
-    """Nama arsip TERLAMA yang melebihi kuota retensi (urut nama = urut waktu).
+def _waktu_arsip(nama) -> str:
+    """Kunci urut WAKTU dari nama arsip: potongan `YYYYMMDD_HHMMSS`. MURNI."""
+    return str(nama)[-19:-4]
 
-    `retensi` = jumlah berkas yang dipertahankan (min 1). Nama tak-valid
-    diabaikan (bukan buatan aplikasi — jangan pernah dihapus otomatis).
+
+def arsip_untuk_dihapus(daftar_nama, retensi):
+    """Nama arsip OTOMATIS terlama yang melebihi kuota retensi.
+
+    `retensi` = jumlah arsip otomatis yang dipertahankan (min 1).
+    REVIEW-9 R6 — dua perbaikan sekaligus:
+    1. Urut berdasarkan STEMPEL WAKTU di nama (bukan seluruh nama): urut
+       leksikografis nama penuh menempatkan semua `backup_manual_*` sebelum
+       `backup_otomatis_*` ("m" < "o") sehingga justru backup MANUAL — termasuk
+       yang baru dibuat — terhapus lebih dulu.
+    2. Retensi hanya menyentuh arsip OTOMATIS; backup manual tidak pernah
+       dihapus otomatis (dihapus lewat aksi eksplisit di UI).
+    Nama tak-valid diabaikan (bukan buatan aplikasi — jangan pernah dihapus).
     """
-    sah = sorted(n for n in (daftar_nama or []) if nama_arsip_valid(n))
+    sah = sorted((n for n in (daftar_nama or [])
+                  if nama_arsip_valid(n) and str(n).startswith("backup_otomatis_")),
+                 key=_waktu_arsip)
     retensi = max(1, int(retensi or 1))
     return sah[:-retensi] if len(sah) > retensi else []
 

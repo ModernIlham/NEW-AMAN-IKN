@@ -48,9 +48,36 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
-## [#614] Audit REVIEW-9 (5/7): optimasi frontend — Master Pegawai & filter jurnal — 2026-07-25
+## [#614] Audit REVIEW-9 (5–6/7): optimasi frontend + keandalan backup/restore/reset — 2026-07-25
 
-Gelombang kelima audit 6 dimensi (sisi frontend):
+Gelombang kelima & keenam audit 6 dimensi dalam satu PR.
+
+**Backup/restore/reset (R6):**
+
+- 🔴 **Retensi tidak lagi menghapus backup MANUAL** — urut leksikografis nama
+  penuh salah ("manual" < "otomatis") sehingga semua backup manual — termasuk
+  yang baru dibuat — terhapus lebih dulu saat kuota retensi terlampaui. Kini
+  urut memakai stempel waktu di nama DAN retensi hanya menyentuh arsip
+  otomatis; backup manual hanya bisa dihapus lewat aksi eksplisit di UI.
+- 🔴 **Manifest GridFS diparse SEBELUM wipe** — manifest korup dulu meledak
+  setelah GridFS dihapus: seluruh foto lenyap padahal restore koleksi
+  "berhasil" (galat cuma warning). Kini gagal sebelum ada yang dihapus +
+  jumlah berkas gagal dilaporkan di log.
+- 🟠 **Deteksi job macet memakai `updated_at`** (denyut progres) — restore
+  besar yang masih aktif tidak lagi dibunuh di menit ke-30 (dulu dihitung
+  dari `started_at`) lalu lock-nya direbut proses lain di tengah wipe.
+- 🟠 **Safety backup ditulis ke DISK per koleksi** — dulu seluruh isi DB
+  ditampung di dict memori selama restore (risiko OOM justru di momen paling
+  berisiko); rollback kini membaca dari zip disk.
+- 🟠 **Reindex Meilisearch otomatis pasca-restore & pasca-reset** — hasil
+  pencarian tidak lagi menunjuk data pra-restore/pra-reset (best-effort,
+  no-op bila Meili nonaktif).
+- 🟡 Registry koleksi: `background_jobs` masuk SKIP (progress job transien);
+  `penganggaran_kalender` masuk RESET_KEEP (konfigurasi kalender
+  perencanaan). Kebutuhan restore titik-waktu terpenuhi arsip harian
+  otomatis + manual yang sudah ada.
+
+**Optimasi frontend (R5):**
 
 - 🟠 **Master Pegawai: `AvatarPegawai` diangkat ke level modul** — definisi di
   dalam komponen halaman membuat TIPE komponen baru setiap render, sehingga
