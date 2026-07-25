@@ -191,6 +191,7 @@ async def transisi_kasus(kasus_id: str, payload: TransisiKasusIn,
     kasus = await db.pengamanan_kasus.find_one({"id": kasus_id}, {"_id": 0})
     if not kasus:
         raise HTTPException(status_code=404, detail="Kasus tidak ditemukan")
+    await pastikan_akses_dok_satker(user, kasus)  # isolasi satker
     ke = payload.status
     errors = validate_transisi_kasus(kasus, ke)
     if errors:

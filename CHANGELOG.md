@@ -64,8 +64,10 @@ tersisa dan menyeragamkan guard tulis di jalur-jalur yang belum terlindungi.
   Pemindahtanganan, Penghapusan, Penggunaan (3 jalur), dan Pengamanan (4 jalur)
   kini difilter `scope_query_field_satker` — admin terikat tak bisa menghapus
   dokumen satker lain via ID.
-- 🟠 **Transisi status PSP lintas satker** — `POST /penggunaan/psp/{id}/status`
-  kini memanggil `pastikan_akses_dok_satker` sebelum mengubah status.
+- 🟠 **Transisi status lintas satker** — 4 endpoint transisi (PSP, BMN idle,
+  proses alih status Penggunaan, kasus Pengamanan) kini memanggil
+  `pastikan_akses_dok_satker` sebelum mengubah status; melengkapi 6 modul
+  transisi lain yang sudah terlindungi.
 - 🟠 **Foto pegawai lintas satker** — unggah, stream (foto + foto asli), dan
   hapus foto pegawai kini menegakkan isolasi satker (sebelumnya admin/user
   satker lain bisa mengganti atau menghapus foto via ID pegawai).

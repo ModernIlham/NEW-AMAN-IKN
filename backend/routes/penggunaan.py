@@ -744,6 +744,7 @@ async def transisi_idle(tiket_id: str, payload: TransisiIdleIn,
     t = await db.bmn_idle.find_one({"id": tiket_id}, {"_id": 0})
     if not t:
         raise HTTPException(status_code=404, detail="Tiket tidak ditemukan")
+    await pastikan_akses_dok_satker(admin, t)  # isolasi satker
     errors = validate_transisi_idle(t.get("status"), payload.status,
                                     payload.model_dump())
     if errors:
@@ -1030,6 +1031,7 @@ async def transisi_proses(tiket_id: str, payload: TransisiProsesIn,
     t = await db.penggunaan_proses.find_one({"id": tiket_id}, {"_id": 0})
     if not t:
         raise HTTPException(status_code=404, detail="Tiket tidak ditemukan")
+    await pastikan_akses_dok_satker(user, t)  # isolasi satker
     ke = payload.status
     errors = validate_transisi_proses(t, ke)
     if errors:
