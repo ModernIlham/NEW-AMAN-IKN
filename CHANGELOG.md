@@ -53,6 +53,67 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#618] Audit REVIEW-9 (10–14): tinjauan-atas-tinjauan — 4 celah berat + 3 regresi sendiri — 2026-07-25
+
+Setelah `[#617]`, dua verifikasi independen dijalankan atas hasilnya sendiri:
+satu memburu regresi pada diff-nya, satu menyapu ~25 file rute yang TIDAK
+tersentuh sapuan mana pun. Keduanya menemukan hal nyata — termasuk kesalahan
+pada perbaikan `[#617]` itu sendiri. Semua sudah ditutup di rangkaian ini.
+
+**Celah BERAT yang masih terbuka (bukan temuan lama):**
+
+1. **Pengambilalihan penuh satker lain** (`activities.py`). Konfirmasi
+   "perbarui dengan input saat ini" memigrasi MASSAL seluruh dokumen ber-kode
+   satker lama ke kode baru — 21 koleksi, termasuk `users`. Guard hanya
+   memeriksa kode kegiatan = kode pemanggil, TIDAK kode yang dimigrasi. User
+   satker A cukup membuat kegiatan ber-NAMA satker B dengan kodenya sendiri →
+   seluruh data dan akun satker B berpindah jadi milik A. Kini migrasi
+   lintas-kode khusus super-admin.
+2. **Spesimen tanda tangan** (`ttd.py`). Simpan/lihat/hapus mencari
+   pejabat/pegawai murni by id tanpa guard, padahal gambar itu DISEMATKAN
+   otomatis ke PDF resmi — menimpanya setara memalsukan tanda tangan pejabat
+   satker lain.
+3. **IDOR e-sign** (3 endpoint): dokumen ber-TTD, lembar pengesahan (memuat
+   gambar tanda tangan semua penanda tangan), dan terbit-ulang link e-sign
+   (yang memberi hak menandatangani dokumen resmi satker lain).
+4. **Eskalasi ke super-admin** yang `[#617]` klaim sudah ditutup, ternyata
+   masih terbuka lewat rute lain: `change-role` dapat mempromosikan pendaftar
+   TANPA ikatan satker menjadi "admin" — dan admin tanpa ikatan = super-admin.
+
+**Tiga regresi yang dibawa `[#617]` sendiri:**
+
+- Tombol buka foto/dokumen kelengkapan di kartu galeri **selalu 401** — endpoint
+  doc-file ditutup dari anonim, tetapi tab baru tak membawa header
+  Authorization. Kini lewat `authMediaUrl()`.
+- **Nomor surat ganda**: counter agenda per-satker di-seed dari surat
+  ber-stempel saja, padahal stempel itu belum pernah di-backfill → seed 0 →
+  nomor 1,2,3… terbit ulang. Seed kini = maks(counter global lama, no_agenda
+  tertinggi). Pratinjau memakai jalur seed yang sama agar tak menampilkan
+  nomor yang sudah terpakai.
+- **Direktori akun memaparkan akun super-admin pusat** ke tiap admin satker —
+  helper scope dokumen ikut mencocokkan `kode_satker` kosong, yang pada AKUN
+  justru berarti pusat.
+
+**Koreksi arah sebaliknya.** `penganggaran_kalender` sempat di-scope, lalu
+dikembalikan, lalu dipasang lagi setelah bukti ditimbang: catatan yang
+dikembalikan endpoint itu sendiri berbunyi "tenggat internal tiap K/L berbeda…
+isi berdasar kalender penganggaran resmi unit Anda". Argumen "ada di
+RESET_KEEP berarti universal" tidak berlaku — daftar itu juga memuat `satker`,
+`pegawai`, `pejabat`, `ruangan` yang jelas per-satker.
+
+Selebihnya: LBKP/CaLBMN tombstone penghapusan (saldo akhir bisa MINUS + cacah
+penghapusan satker lain bocor), Buku Barang `$in` seluruh id aset tiap halaman
+(risiko lampaui batas 16 MB BSON) → jurnal kini distempel, token 30-hari
+multi-endpoint di dalam CSV/XLSX ekspor → diganti token 7-hari khusus rute
+doc-file, RKBMN & realisasi anggaran lintas satker, guard aset di Perencanaan/
+Penganggaran/Pemanfaatan, dan cacah "dipakai N pegawai / memegang N aset".
+
+Uji: 745 unit test hijau, `yarn build` sukses. `SKILL.md` ditambah dua bagian
+baru: lima titik buta yang lolos dua gelombang, dan kesalahan ARAH SEBALIKNYA
+(men-scope yang memang bersama) lengkap dengan urutan bukti yang menentukan.
+
+---
+
 ## [#617] Audit REVIEW-9 (9): sapu satker GELOMBANG-2 — 33 kebocoran, termasuk pengambilalihan akun — 2026-07-25
 
 Verifikasi adversarial ulang atas sapuan `[#616]` menemukan bahwa gelombang
