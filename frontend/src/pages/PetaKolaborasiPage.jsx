@@ -54,10 +54,15 @@ function pinIcon(color, { selected = false, badge = 0 } = {}) {
 // ber-token). Klik marker TETAP membuka popup info yang SAMA. Aset tanpa foto
 // tetap pakai pin (ditangani buildIcon di komponen). Border/cincin ikut seleksi.
 function photoMarkerIconKolab(coverSrc, { color, selected = false, badge = 0 } = {}) {
-  // url() PAKAI kutip tunggal + escape &→&amp; agar TIDAK menutup atribut
-  // style="…" (kutip ganda) saat html dipasang via innerHTML — kutip ganda di
-  // dalam url("…") membuat background-image kosong (teruji di Chromium).
-  const cssUrl = coverSrc ? `background-image:url('${String(coverSrc).replace(/&/g, "&amp;").replace(/'/g, "%27")}');` : "";
+  // Sampul dimuat via <img loading="lazy"> (BUKAN background-image) → browser
+  // MENUNDA fetch untuk marker di luar viewport (teruji real-Leaflet: marker
+  // jauh tak menembak request sampai digeser masuk) → batasi request/memori
+  // sampul meski clustering dimatikan. onerror → sembunyikan img sehingga warna
+  // latar tampil (degradasi anggun). src di-escape sebagai atribut HTML.
+  const src = String(coverSrc || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+  const imgHtml = coverSrc
+    ? `<img src="${src}" loading="lazy" decoding="async" alt="" onerror="this.style.display='none'" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"/>`
+    : "";
   const bc = selected ? "#f59e0b" : "#ffffff";
   const ring = selected
     ? "box-shadow:0 0 0 3px #f59e0b,0 0 0 6px rgba(245,158,11,.35),0 2px 6px rgba(0,0,0,.5)"
@@ -68,7 +73,7 @@ function photoMarkerIconKolab(coverSrc, { color, selected = false, badge = 0 } =
   return L.divIcon({
     className: "",
     html: `<div style="position:relative;width:46px;height:54px">
-      <div style="width:46px;height:46px;border-radius:12px;overflow:hidden;border:3px solid ${bc};${ring};background-color:${color};background-size:cover;background-position:center;background-repeat:no-repeat;${cssUrl}"></div>
+      <div style="position:relative;width:46px;height:46px;border-radius:12px;overflow:hidden;border:3px solid ${bc};${ring};background-color:${color}">${imgHtml}</div>
       <div style="position:absolute;left:50%;top:43px;transform:translateX(-50%);width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-top:9px solid ${bc}"></div>
       ${badgeHtml}
     </div>`,

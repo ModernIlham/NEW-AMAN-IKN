@@ -127,10 +127,16 @@ function photoMarkerIcon(row, { color, complete = false, selected = false } = {}
   const coverSrc = navigator.onLine
     ? authMediaUrl(`${API}/assets/${row.id}/photos/${row.thumbnail_index || 0}?v=${row.version || 1}&w=256`)
     : (row.thumbnail || "");
-  // url() PAKAI kutip tunggal + escape &→&amp; agar TIDAK menutup atribut
-  // style="…" (kutip ganda) saat html dipasang via innerHTML — kutip ganda di
-  // dalam url("…") membuat background-image kosong (teruji di Chromium).
-  const cssUrl = coverSrc ? `background-image:url('${String(coverSrc).replace(/&/g, "&amp;").replace(/'/g, "%27")}');` : "";
+  // Sampul dimuat via <img loading="lazy"> (BUKAN background-image) → browser
+  // MENUNDA fetch untuk marker di luar viewport. Teruji di real-Leaflet: marker
+  // yang jauh dari tampilan TIDAK menembak request sampai digeser masuk. Ini
+  // membatasi jumlah request & memori sampul meski clustering dimatikan (layer
+  // biasa tak meng-cull) — background-image justru memuat SEMUA sekaligus.
+  // onerror → sembunyikan img sehingga warna latar (status) tampil (degradasi
+  // anggun tanpa ikon "gambar rusak"). src di-escape sebagai atribut HTML.
+  const imgHtml = coverSrc
+    ? `<img src="${esc(coverSrc)}" loading="lazy" decoding="async" alt="" onerror="this.style.display='none'" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"/>`
+    : "";
   const bc = selected ? "#f59e0b" : complete ? "#16a34a" : "#ffffff";
   const ring = selected
     ? "box-shadow:0 0 0 3px #f59e0b,0 0 0 6px rgba(245,158,11,.35),0 2px 6px rgba(0,0,0,.5)"
@@ -141,7 +147,7 @@ function photoMarkerIcon(row, { color, complete = false, selected = false } = {}
   return L.divIcon({
     className: "",
     html: `<div style="position:relative;width:46px;height:54px">
-      <div style="width:46px;height:46px;border-radius:12px;overflow:hidden;border:3px solid ${bc};${ring};background-color:${color};background-size:cover;background-position:center;background-repeat:no-repeat;${cssUrl}"></div>
+      <div style="position:relative;width:46px;height:46px;border-radius:12px;overflow:hidden;border:3px solid ${bc};${ring};background-color:${color}">${imgHtml}</div>
       <div style="position:absolute;left:50%;top:43px;transform:translateX(-50%);width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-top:9px solid ${bc}"></div>
       ${checkBadge}
     </div>`,

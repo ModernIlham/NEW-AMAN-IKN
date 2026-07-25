@@ -66,14 +66,17 @@ sama.** Tersedia di **kedua peta**: Peta Aset internal (`AssetMapFullView`) dan
   Sumber sampul: internal → streaming 256px **WebP** (offline → thumbnail snapshot
   `row.thumbnail`); kolaborasi → endpoint foto peta ber-`?token=` (thumbnail).
 - **Aset tanpa foto tetap pin** — hanya aset ber-foto yang menjadi marker foto.
-- **Skala aman**: clustering + `removeOutsideVisibleBounds` membatasi jumlah marker
-  foto yang benar-benar dirender/di-fetch; sinkron marker tetap **inkremental**
-  (tak bangun-ulang) sehingga view/cluster/spiderfy & seleksi terjaga. `iconKey`
-  menyertakan `thumbnail_index`+`version` → sampul menyegar saat foto berubah.
-- **Perbaikan quoting divIcon**: `background-image:url(...)` memakai **kutip
-  tunggal** + escape `&`→`&amp;` agar TIDAK menutup atribut `style="…"` saat HTML
-  dipasang via `innerHTML` — kutip ganda di dalam `url("…")` membuat gambar kosong
-  (teruji di Chromium).
+- **Skala aman**: sampul dimuat sebagai `<img loading="lazy" decoding="async">`
+  (bukan `background-image`) → browser **menunda fetch** untuk marker di luar
+  viewport (teruji di real-Leaflet: marker jauh tak menembak request sampai
+  digeser masuk), sehingga jumlah request & memori sampul terbatas **meski
+  clustering dimatikan**. Dipadu clustering + `removeOutsideVisibleBounds`
+  (default) dan sinkron marker **inkremental** (tak bangun-ulang; view/cluster/
+  spiderfy & seleksi terjaga). `iconKey` menyertakan `thumbnail_index`+`version`
+  → sampul menyegar saat foto berubah.
+- **Degradasi anggun**: bila sampul gagal muat (mis. token kedaluwarsa di peta
+  kolaborasi), `img` disembunyikan sehingga **warna latar status** tampil — tanpa
+  ikon "gambar rusak", tanpa crash, dan **klik marker tetap** membuka popup.
 
 ---
 
