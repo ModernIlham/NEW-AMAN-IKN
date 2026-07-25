@@ -241,12 +241,16 @@ async def import_assets(request: Request, file: UploadFile = File(...), force_up
         # Map kode_aset to label for validation
         category_map = {cat.get("kode_aset", ""): cat.get("label", "") for cat in categories if cat.get("kode_aset")}
         
-        # Get existing assets in this activity for duplicate check
+        # Get existing assets in this activity ONCE — peta (kode, NUP) → doc
+        # dipakai ulang oleh SEMUA loop di bawah (REVIEW-9 R4: dulu tiap baris
+        # impor memanggil find_one dua kali → 2N query utk file N baris).
         existing_assets = await db.assets.find(
             {"activity_id": activity_id},
-            {"_id": 0, "asset_code": 1, "NUP": 1}
+            {"_id": 0, "asset_code": 1, "NUP": 1, "asset_name": 1}
         ).to_list(None)
-        existing_asset_keys = {(a.get("asset_code", ""), a.get("NUP", "")) for a in existing_assets}
+        existing_map = {(str(a.get("asset_code") or ""), str(a.get("NUP") or "")): a
+                        for a in existing_assets}
+        existing_asset_keys = set(existing_map)
         
         # Validate ALL rows first
         all_errors = []
@@ -302,7 +306,7 @@ async def import_assets(request: Request, file: UploadFile = File(...), force_up
         for idx, row in enumerate(rows):
             asset_code = str(row.get('asset_code', '')).strip()
             nup = str(row.get('NUP', '')).strip()
-            existing = await db.assets.find_one({"asset_code": asset_code, "NUP": nup, "activity_id": activity_id})
+            existing = existing_map.get((asset_code, nup))
             if existing:
                 duplicates.append({
                     "row": data_start_row + idx,
@@ -344,7 +348,7 @@ async def import_assets(request: Request, file: UploadFile = File(...), force_up
         for row in rows:
             asset_code = str(row.get('asset_code', '')).strip()
             nup = str(row.get('NUP', '')).strip()
-            existing = await db.assets.find_one({"asset_code": asset_code, "NUP": nup, "activity_id": activity_id})
+            existing = existing_map.get((asset_code, nup))
 
             # Semua field skalar dipetakan dari registry (asset_fields.py) —
             # field baru otomatis ikut ter-impor tanpa mengedit mapping ini.

@@ -6,6 +6,7 @@ background-nya via Pillow), tersimpan di GridFS. Blok tanda tangan PDF
 (reports.py `_signature_block`) otomatis menyematkan spesimen KPB. Slice 2
 (menyusul): e-sign via link per dokumen (`signature_requests`).
 """
+import asyncio
 import base64
 import hashlib
 import io
@@ -1224,7 +1225,8 @@ async def lembar_pdf(sr_id: str, user: dict = Depends(require_user_or_query_toke
         st['Small']))
 
     footer = _page_footer_factory("Lembar Pengesahan TTD Elektronik")
-    doc.build(el, onFirstPage=footer, onLaterPages=footer)
+    await asyncio.to_thread(doc.build, el, onFirstPage=footer,
+                            onLaterPages=footer)
     buffer.seek(0)
     return StreamingResponse(buffer, media_type="application/pdf",
                              headers={"Content-Disposition":

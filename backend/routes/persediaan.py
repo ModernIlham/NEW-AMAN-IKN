@@ -13,6 +13,7 @@ Regulasi: docs/PUSTAKA-REGULASI-BMN.md §3 (perpetual + FIFO per layer,
 kode golongan '1', batas kritis & kedaluwarsa untuk peringatan/nota dinas).
 Referensi teknis: modul persediaan KERJA-BARENG (dipelajari menyeluruh).
 """
+import asyncio
 import re
 import uuid
 from datetime import datetime, timezone
@@ -221,7 +222,8 @@ async def nota_dinas_persediaan(
     ], doc.width))
 
     footer = _page_footer_factory("Nota Dinas Persediaan")
-    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    await asyncio.to_thread(doc.build, elements, onFirstPage=footer,
+                            onLaterPages=footer)
     buffer.seek(0)
     fname = f"Nota_Dinas_{'Stok_Kritis' if jenis == 'kritis' else 'Kedaluwarsa'}.pdf"
     from fastapi.responses import StreamingResponse
@@ -420,7 +422,8 @@ async def opname_kertas_kerja_pdf(gudang: str = "",
         {'pre': [''], 'header': 'Mengetahui,', 'nama': '...........................', 'after': ['NIP. ....................']},
     ], doc.width))
     footer = _page_footer_factory("Kertas Kerja Opname Fisik Persediaan")
-    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    await asyncio.to_thread(doc.build, elements, onFirstPage=footer,
+                            onLaterPages=footer)
     buffer.seek(0)
     from fastapi.responses import StreamingResponse
     return StreamingResponse(buffer, media_type="application/pdf",
@@ -497,7 +500,8 @@ async def opname_baof_pdf(
                                       _kpb.get("status_kepegawaian"))},
     ], doc.width))
     footer = _page_footer_factory("Berita Acara Opname Fisik Persediaan")
-    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    await asyncio.to_thread(doc.build, elements, onFirstPage=footer,
+                            onLaterPages=footer)
     buffer.seek(0)
     from fastapi.responses import StreamingResponse
     return StreamingResponse(buffer, media_type="application/pdf",
@@ -654,7 +658,8 @@ async def laporan_posisi_pdf(gudang: str = "",
                                       kpb.get("status_kepegawaian"))},
     ], doc.width))
     footer = _page_footer_factory("Laporan Posisi Persediaan")
-    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    await asyncio.to_thread(doc.build, elements, onFirstPage=footer,
+                            onLaterPages=footer)
     buffer.seek(0)
     from fastapi.responses import StreamingResponse
     return StreamingResponse(buffer, media_type="application/pdf",
@@ -746,7 +751,8 @@ async def laporan_mutasi_pdf(
                                       kpb.get("status_kepegawaian"))},
     ], doc.width))
     footer = _page_footer_factory("Laporan Mutasi Persediaan")
-    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    await asyncio.to_thread(doc.build, elements, onFirstPage=footer,
+                            onLaterPages=footer)
     buffer.seek(0)
     from fastapi.responses import StreamingResponse
     return StreamingResponse(buffer, media_type="application/pdf",
@@ -1060,7 +1066,8 @@ async def lpb_pdf(lpb_id: str,
     el.append(ttd)
 
     footer = _page_footer_factory("Laporan Penerimaan Barang (LPB)")
-    doc.build(el, onFirstPage=footer, onLaterPages=footer)
+    await asyncio.to_thread(doc.build, el, onFirstPage=footer,
+                            onLaterPages=footer)
     buffer.seek(0)
     return StreamingResponse(buffer, media_type="application/pdf",
                              headers={"Content-Disposition":
@@ -1775,7 +1782,8 @@ async def kartu_barang_pdf(item_id: str, _user: dict = Depends(require_user)):
              _pengurus.get("status_kepegawaian"))},
     ], doc.width))
     footer = _page_footer_factory("Kartu Barang Persediaan")
-    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    await asyncio.to_thread(doc.build, elements, onFirstPage=footer,
+                            onLaterPages=footer)
     buffer.seek(0)
     from fastapi.responses import StreamingResponse
     nama_file = (item.get("kode_barang") or item_id)[:20]

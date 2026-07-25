@@ -7,6 +7,7 @@ Rekap per pemegang membaca data yang SUDAH dicatat modul inventarisasi
 usul serah) tersedia di modul ini (PMK 40/2024 & 120/2024 — pustaka §1);
 transisi terminalnya memproyeksikan status ke master aset.
 """
+import asyncio
 import uuid
 from datetime import datetime, timezone
 
@@ -463,7 +464,8 @@ async def bast_psp_pdf(sk_id: str, _user: dict = Depends(require_user)):
         await blok_ttd_kpb_titik(settings, kode_satker=kode_satker_user(_user)),   # KPB registry + spesimen TTD
     ], doc.width))
     footer = _page_footer_factory("BAST Penetapan Status Penggunaan BMN")
-    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    await asyncio.to_thread(doc.build, elements, onFirstPage=footer,
+                            onLaterPages=footer)
     buffer.seek(0)
     nama_file = (sk.get("nomor_sk") or "SK").replace("/", "-").replace(" ", "-")
     return StreamingResponse(buffer, media_type="application/pdf",
@@ -922,7 +924,8 @@ async def daftar_pemegang_pdf(
         await blok_ttd_kpb_titik(settings, kode_satker=kode_satker_user(_user)),   # KPB dari registry pejabat (temuan #26)
     ], doc.width))
     footer = _page_footer_factory("Daftar Barang yang Digunakan")
-    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    await asyncio.to_thread(doc.build, elements, onFirstPage=footer,
+                            onLaterPages=footer)
     buffer.seek(0)
     nama_file = nama_tampil.replace(" ", "_").replace("/", "-")
     return StreamingResponse(buffer, media_type="application/pdf",

@@ -7,6 +7,7 @@ pra-isi laporan wasdal semesteran; kanal resmi pelaporan tetap Modul
 Wasdal SIMAN v2. Pemantauan insidentil ber-BA (isi + PDF + lampiran)
 dikelola lewat register tersendiri di modul ini.
 """
+import asyncio
 import uuid
 from datetime import datetime, timezone
 
@@ -160,7 +161,15 @@ async def pemantauan_wasdal(
     ambang_hari: int = Query(AMBANG_BERLARUT_HARI, ge=1, le=730),
     _user: dict = Depends(require_user),
 ):
-    """Temuan pemantauan per objek wasdal + rekap + periode berjalan."""
+    """Temuan pemantauan per objek wasdal + rekap + periode berjalan.
+    Ber-cache TTL 90 dtk per (satker, ambang) — dasbor ini memuat SELURUH
+    aset + 6 register per kunjungan (REVIEW-9 R4); PDF/laporan tahunan tetap
+    menghitung segar."""
+    from shared_utils import cache_get, cache_set
+    kunci = f"{kode_satker_user(_user) or '*'}:{ambang_hari}"
+    tersimpan = await cache_get("wasdal", kunci)
+    if tersimpan is not None:
+        return tersimpan
     periode, per_objek, rekap, total_aset = await _data_pemantauan(ambang_hari, _user)
     # Ringkasan register Pengamanan & Penggunaan (temuan review #12 — dulu
     # wasdal tak membaca kedua register itu). Additif: UI lama tetap jalan.
@@ -185,7 +194,7 @@ async def pemantauan_wasdal(
                   "jangka_sampai": {"$gt": "", "$lt":
                                     datetime.now(timezone.utc).date().isoformat()}})),
     }
-    return {
+    respons = {
         "periode": periode,
         "rekap": rekap,
         "lintas_modul": lintas_modul,
@@ -206,6 +215,8 @@ async def pemantauan_wasdal(
         "ambang_hari": ambang_hari,
         "total_aset": total_aset,
     }
+    await cache_set("wasdal", kunci, respons)
+    return respons
 
 
 class PenertibanIn(BaseModel):
@@ -711,7 +722,8 @@ async def ba_insidentil_pdf(tiket_id: str, _user: dict = Depends(require_user)):
         await blok_ttd_kpb_titik(settings, kode_satker=kode_satker_user(_user)),   # KPB dari registry pejabat (temuan #26)
     ], doc.width))
     footer = _page_footer_factory("Berita Acara Pemantauan Insidentil BMN")
-    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    await asyncio.to_thread(doc.build, elements, onFirstPage=footer,
+                            onLaterPages=footer)
     buffer.seek(0)
     nama = f"BA_Pemantauan_Insidentil_{(t.get('nomor_ba') or tiket_id[:8]).replace('/', '-')}.pdf"
     return StreamingResponse(buffer, media_type="application/pdf",
@@ -822,7 +834,8 @@ async def laporan_wasdal_pdf(
         await blok_ttd_kpb_titik(settings, kode_satker=kode_satker_user(_user)),   # KPB dari registry pejabat (temuan #26)
     ], doc.width))
     footer = _page_footer_factory("Laporan Hasil Pemantauan Wasdal BMN")
-    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    await asyncio.to_thread(doc.build, elements, onFirstPage=footer,
+                            onLaterPages=footer)
     buffer.seek(0)
     nama = f"Laporan_Wasdal_{periode['label'].replace(' ', '_')}.pdf"
     return StreamingResponse(buffer, media_type="application/pdf",
@@ -984,7 +997,8 @@ async def laporan_tahunan_wasdal_pdf(
     el.extend(_signature_block([await blok_ttd_kpb_titik(settings, kode_satker=kode_satker_user(_user))], doc.width))
 
     footer = _page_footer_factory("Laporan Tahunan Wasdal")
-    doc.build(el, onFirstPage=footer, onLaterPages=footer)
+    await asyncio.to_thread(doc.build, el, onFirstPage=footer,
+                            onLaterPages=footer)
     buffer.seek(0)
     return StreamingResponse(
         buffer, media_type="application/pdf",

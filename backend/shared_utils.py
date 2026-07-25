@@ -298,13 +298,18 @@ from redis_utils import (redis_aktif as _redis_aktif, redis_get as _redis_get,
                          redis_set as _redis_set, bump_namespaces as _redis_bump)
 
 # Registry namespace → (TTLCache lokal untuk fallback, TTL detik untuk Redis).
+_cache_wasdal = TTLCache(maxsize=50, ttl=90)
 _CACHE_LOCAL = {
     "filter_opts": _cache_filter_opts,
     "stats": _cache_stats,
     "analytics": _cache_analytics,
     "categories": _cache_categories,
+    # Dasbor Wasdal memuat SELURUH aset + 6 register per kunjungan — TTL
+    # pendek meredam muat ulang beruntun tanpa risiko data pemantauan basi.
+    "wasdal": _cache_wasdal,
 }
-_CACHE_TTL = {"filter_opts": 180, "stats": 60, "analytics": 120, "categories": 300}
+_CACHE_TTL = {"filter_opts": 180, "stats": 60, "analytics": 120,
+              "categories": 300, "wasdal": 90}
 
 
 async def cache_get(namespace: str, key: str):
