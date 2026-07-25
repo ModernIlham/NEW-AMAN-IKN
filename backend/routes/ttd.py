@@ -772,12 +772,21 @@ async def detail_permintaan(sr_id: str, user: dict = Depends(require_user)):
 @ttd_router.delete("/ttd/permintaan/{sr_id}")
 async def batal_permintaan(sr_id: str, user: dict = Depends(require_writer)):
     """Batalkan permintaan (hanya pembuat atau admin)."""
-    sr = await db.signature_requests.find_one({"id": sr_id}, {"_id": 0, "created_by": 1})
+    sr = await db.signature_requests.find_one(
+        {"id": sr_id}, {"_id": 0, "created_by": 1, "judul": 1, "status": 1})
     if not sr:
         raise HTTPException(status_code=404, detail="Permintaan tidak ditemukan")
     if sr.get("created_by") != user.get("username") and user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Hanya pembuat/admin dapat membatalkan")
     await db.signature_requests.update_one({"id": sr_id}, {"$set": {"status": "batal"}})
+    # Rekam jejak pembatalan — setara buat/tandatangani/terbit-ulang link yang
+    # sudah ber-audit; agar dapat ditelusuri SIAPA & KAPAN membatalkan, dan
+    # menjadi fondasi propagasi lintas modul (langkah observability murni —
+    # tidak menyentuh record konsumen).
+    await log_audit("batal_ttd", "", sr_id,
+                    username=user.get("username", "system"),
+                    detail=(f"Permintaan TTD '{sr.get('judul') or sr_id}' dibatalkan"
+                            f" (status sebelumnya: {sr.get('status') or '-'})"))
     return {"ok": True}
 
 

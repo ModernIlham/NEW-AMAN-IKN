@@ -48,6 +48,23 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#596] TTD elektronik: pembatalan kini terekam di Log Sistem (fondasi keterhubungan lintas modul) — 2026-07-25
+
+Langkah **fondasi** menuju keterhubungan otomatis TTD ↔ modul lain. Sebelumnya
+**pembatalan permintaan TTD** (`DELETE /ttd/permintaan/{id}`) tidak meninggalkan
+jejak apa pun — padahal aksi lain (buat permintaan, tandatangani, terbitkan ulang
+link) sudah ter-audit. Kini pembatalan menulis entri **Log Sistem** `batal_ttd`
+(siapa, kapan, judul dokumen, status sebelumnya), sehingga dapat ditelusuri dan
+menjadi dasar propagasi berikutnya.
+
+- Perubahan **observability murni** — tidak menyentuh record modul konsumen
+  (BAST/aset/surat) sama sekali; nol risiko.
+- Bagian dari rencana bertahap "sinyal lunak" untuk menyatukan TTD/BAST lintas
+  modul (Persuratan, Penggunaan, Wasdal, Pengamanan) — langkah berikutnya:
+  guard dokumen ber-TTD yang dibatalkan, penaut `doc_ref`, lalu back-link FK.
+
+---
+
 ## [#595] Master Pegawai lebih cerdas: NIP/NIK otomatis mengisi Tgl Lahir & Jenis Kelamin — 2026-07-25
 
 Begitu **NIP/NIK diketik**, sistem membaca makna kodenya dan **langsung mengisi**
