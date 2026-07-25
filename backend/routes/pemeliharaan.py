@@ -32,24 +32,39 @@ _PROJ_REKAP = {"_id": 0, "asset_id": 1, "asset_code": 1, "NUP": 1,
                "asset_name": 1, "tanggal": 1, "jenis": 1, "biaya": 1}
 
 
-async def next_ba_perbaikan_nomor(tahun: str) -> str:
+async def next_ba_perbaikan_nomor(tahun: str, kode_satker: str = "") -> str:
     """Nomor BA-Perbaikan berikutnya — ATOMIK via `counters` ($inc pada
     find_one_and_update). Menggantikan `count_documents(...) + 1` yang RAWAN
     BALAPAN: dua posting kapitalisasi bersamaan bisa membaca hitungan yang sama
     → nomor BA kembar. $inc MongoDB atomik, jadi tiap pemanggil dapat urut unik
     (pola sama dengan nomor tiket kegiatan di pengesahan.py).
 
-    Semantik lama DIPERTAHANKAN (hitung berjalan GLOBAL dengan label tahun BA):
-    counter di-seed SEKALI dari jumlah BA yang sudah ada agar nomor baru
-    menyambung tanpa bertabrakan dengan data lama. Celah urut yang terbuang
-    (mis. saat CAS idempoten kalah) tidak masalah."""
-    cid = "ba_perbaikan_seq"
+    Deret PER SATKER (REVIEW-9 R8): sebelumnya counter GLOBAL — nomor BA
+    resmi satu satker "bolong" karena satker lain memakai urutan yang sama.
+    Kini id counter & seed dibatasi `kode_satker`. `kode_satker` kosong
+    (super-admin / data era-lama) tetap memakai id legacy `ba_perbaikan_seq`
+    agar penomoran lama menyambung tanpa lompatan.
+    counter di-seed SEKALI dari jumlah BA satker itu; celah urut terbuang
+    (mis. CAS idempoten kalah) tidak masalah."""
+    kode = str(kode_satker or "").strip()
+    cid = f"ba_perbaikan_seq:{kode}" if kode else "ba_perbaikan_seq"
     if await db.counters.find_one({"_id": cid}) is None:
-        seed = await db.pemeliharaan.count_documents(
-            {"ba_perbaikan.nomor": {"$exists": True}})
+        # Seed dari SEQUENCE TERTINGGI yang sudah dipakai satker ini (bukan
+        # sekadar jumlah) — saat migrasi dari counter global, nomor lama satker
+        # bisa bernilai > jumlahnya; seed=jumlah akan menabraknya. Parse angka
+        # tengah "BA-PRB/NNN/YYYY".
+        seed_q = {"ba_perbaikan.nomor": {"$exists": True}}
+        if kode:
+            seed_q["kode_satker"] = kode
+        maks = 0
+        async for r in db.pemeliharaan.find(
+                seed_q, {"_id": 0, "ba_perbaikan.nomor": 1}):
+            bagian = str((r.get("ba_perbaikan") or {}).get("nomor") or "").split("/")
+            if len(bagian) >= 2 and bagian[1].isdigit():
+                maks = max(maks, int(bagian[1]))
         # $setOnInsert idempoten: pemanggil kedua yang balapan tak menimpa seed.
         await db.counters.update_one(
-            {"_id": cid}, {"$setOnInsert": {"seq": seed}}, upsert=True)
+            {"_id": cid}, {"$setOnInsert": {"seq": maks}}, upsert=True)
     counter = await db.counters.find_one_and_update(
         {"_id": cid}, {"$inc": {"seq": 1}},
         upsert=True, return_document=ReturnDocument.AFTER)
@@ -568,8 +583,10 @@ async def posting_kapitalisasi(catatan_id: str,
         if ba.terapkan_masa_manfaat else 0
     nomor_ba = str(ba.nomor_ba or "").strip()
     if not nomor_ba:
-        # Nomor otomatis ATOMIK (anti-kembar saat posting bersamaan).
-        nomor_ba = await next_ba_perbaikan_nomor(tgl_ba[:4])
+        # Nomor otomatis ATOMIK (anti-kembar saat posting bersamaan) + deret
+        # PER SATKER (REVIEW-9 R8) — nomor BA resmi satker tak "bolong".
+        nomor_ba = await next_ba_perbaikan_nomor(
+            tgl_ba[:4], kode_satker_user(admin))
     ba_doc = {
         "nomor": nomor_ba,
         "tanggal": tgl_ba,

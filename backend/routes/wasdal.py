@@ -868,9 +868,13 @@ async def _data_portofolio(user):
     rows, total = build_dbkp_rows(assets, uraian_map,
                                   ambang=await ambang_kapitalisasi())
     n_sengketa = sum(1 for a in assets if is_sengketa(a))
-    n_psp = await db.psp.count_documents({})
+    # Scope satker (REVIEW-9 R8): count PSP & idle SEBELUMNYA lintas seluruh
+    # satker — angka portofolio pengawasan satker tercampur satker lain.
+    _sq = ((lambda q: scope_query_field_satker(user, q)) if user is not None
+           else (lambda q: q))
+    n_psp = await db.psp.count_documents(_sq({}))
     n_idle = await db.bmn_idle.count_documents(
-        {"status": {"$in": ["klarifikasi", "usul_serah"]}})
+        _sq({"status": {"$in": ["klarifikasi", "usul_serah"]}}))
     standar = await db.sbsk_standar.find({}, {"_id": 0}).to_list(1000)
     return {"rows": rows, "total": total, "jumlah_aset": len(assets),
             "psp_terbit": n_psp, "idle_proses": n_idle,

@@ -53,6 +53,59 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#616] Audit REVIEW-9 (8): sapu FINAL isolasi satker — 20 kebocoran ditutup — 2026-07-25
+
+Sapu verifikasi akhir (workflow adversarial 6 lensa + 22 verifikasi, 20
+terkonfirmasi) menemukan kebocoran antar-satker yang lolos gelombang R2–R7.
+SEMUA temuan tinggi & sedang ditutup:
+
+**Pengamanan (koleksi checklist tanpa `kode_satker` sama sekali):**
+- 🔴 List + ekspor CSV checklist pengamanan kini di-scope satker (dulu
+  membaca `{}` global — seluruh checklist semua satker).
+- 🔴 `simpan_checklist` kini menstempel `kode_satker` + `pastikan_akses_aset`
+  (dulu upsert global by asset_id → timpa checklist satker lain).
+- 🟠 `buka_kasus`, `catat_dokumen`, `catat_polis` kini `pastikan_akses_aset`
+  (dulu satker A dapat membuka kasus/mencatat atas aset satker B — dan
+  cek "satu kasus aktif per aset" yang global memblokir satker B).
+
+**Aset & kegiatan:**
+- 🔴 `GET /assets/{id}?exclude_media=true` — jalur ringan (dipakai SETIAP
+  buka lightbox/form edit) SEBELUMNYA return tanpa `pastikan_akses_aset`
+  → IDOR baca metadata aset satker lain.
+- 🔴 Stream dokumen kegiatan (`/inventory-activities/{id}/documents/{idx}`)
+  kini ber-guard — dulu PDF BAST/kontrak (ber-PII) bisa di-stream lintas
+  satker via id + indeks.
+- 🟠 Agregasi kelompok aset + enumerasi "pilih semua halaman" (batch) kini
+  di-scope (dulu membaca detail/ID aset seluruh satker).
+
+**Register siklus (jalur tulis lintas satker):**
+- 🔴 `buat_proses` (Penggunaan), `buat_usulan` (Penghapusan),
+  `buat_usulan_pt` (Pemindahtanganan) kini `pastikan_akses_aset` — dulu
+  satker A dapat menyusun usulan/tiket atas aset satker B, lalu transisi
+  terminalnya menandai aset B keluar pembukuan.
+- 🟠 Pengadaan: `daftarkan_persediaan`, `perbarui_dokumen`, `tautkan_barang`,
+  `buat_draft_aset_dari_perolehan` (+ kegiatan tujuan), `tautkan_penganggaran`
+  kini `pastikan_akses_dok_satker` — dulu register perolehan satker lain
+  dapat dibaca & dimutasi via ID.
+- 🟠 Ekspor CSV PSP & tiket BMN idle kini di-scope satker.
+
+**Pengaturan & penomoran alur:**
+- 🟠 Portofolio Wasdal: hitungan PSP & BMN idle kini per satker (dulu global
+  — angka portofolio pengawasan tercampur satker lain).
+- 🟠 **Nomor BA-Perbaikan kini DERET PER SATKER** — dulu counter global
+  membuat nomor BA resmi satu satker "bolong" karena satker lain memakai
+  urutan yang sama; seed dari sequence tertinggi satker itu (anti-tabrak
+  saat migrasi dari counter lama).
+
+Dua item sisa (severity rendah) sengaja dibiarkan: endpoint `doc-file`
+checklist adalah URL-kapabilitas PUBLIK by-design (UUID tak tertebak, untuk
+tautan tersemat di CSV/XLSX ekspor), dan snapshot kode/nama aset ke usulan
+Penganggaran/Perencanaan (picker sudah ter-scope; field identitas rendah).
+
+Checklist pencegahan agar kelas temuan ini tak berulang kini baku di
+`.claude/skills/aman-dev/SKILL.md` (5 titik isolasi + aturan indeks/deret/
+cache per satker).
+
 ## [#615] Audit REVIEW-9 (7/7 — penutup): dokumentasi menyeluruh v2.5 — 2026-07-25
 
 Gelombang penutup audit 6 dimensi — **seluruh dokumentasi dimutakhirkan

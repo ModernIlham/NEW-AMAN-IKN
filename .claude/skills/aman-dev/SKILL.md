@@ -13,7 +13,10 @@ pengelolaan BMN — baca `docs/MASTERPLAN-SIKLUS-BMN.md` sebelum menambah modul.
 
 | Area | Lokasi | Catatan |
 |---|---|---|
-| Registry field aset | `backend/asset_fields.py` | SATU sumber kebenaran 42 field skalar → proyeksi list, PATCH, batch, CSV, impor, audit. Tambah field = ikuti panduan di header file; test anti-drift menagih semua turunan |
+| Registry field aset | `backend/asset_fields.py` | SATU sumber kebenaran ±45 field skalar → proyeksi list, PATCH, batch, CSV, impor, audit. Tambah field = ikuti panduan di header file; test anti-drift menagih semua turunan |
+| Helper isolasi satker | `backend/shared_utils.py` | `scope_query_field_satker` / `scope_query_aset` / `pastikan_akses_dok_satker` / `pastikan_akses_aset` / `kode_satker_user` — lihat bagian "Isolasi multi-satker" di bawah |
+| Jurnal Buku Barang | `backend/shared_utils.py:catat_mutasi_bmn` + `mutasi_bmn_utils.py` | Append-only, ber-guard anti-ganda via `ref_id` — lihat bagian "Jurnal" di bawah |
+| Kebijakan backup/reset | `backend/backup_utils.py` | Registry `SKIP_COLLECTIONS` / `RESET_KEEP_COLLECTIONS` — koleksi BARU wajib ditimbang masuk mana |
 | Kodefikasi barang | `backend/kodefikasi_utils.py` + `routes/kodefikasi.py` | Struktur 5 level dari panjang prefix (1/3/5/7/10 digit); digit 1 = domain ('1' persediaan, '2'-'8' aset); seed 8 golongan idempoten; lookup hierarki `/api/kodefikasi/lookup/{kode}` |
 | Route API | `backend/routes/*.py` | assets, exports (geo/xlsx/pdf), reports (ReportLab), activities, auth, backup |
 | Laporan PDF | `backend/routes/reports.py` | Helper wajib dipakai: `_kop_surat_flowables`, `_activity_identity`, `_identity_table`, `_fmt_tanggal_id`, `_signature_block` ("Kuasa Pengguna Barang") |
@@ -64,6 +67,106 @@ pengelolaan BMN — baca `docs/MASTERPLAN-SIKLUS-BMN.md` sebelum menambah modul.
    belum tercakup di sana → riset internet (peraturan + praktik SAKTI),
    TAMBAHKAN ke pustaka (beserta sumber & tanda "perlu verifikasi"), baru
    implementasi. Jangan menebak aturan; jangan data dummy di laporan.
+
+## Isolasi multi-satker — CHECKLIST WAJIB tiap endpoint baru
+
+Audit REVIEW-9 (Juli 2026) menemukan puluhan kebocoran di endpoint yang
+"kelihatannya kecil" — pola bocornya SELALU sama. Untuk SETIAP endpoint
+baru yang menyentuh koleksi ber-`kode_satker`, periksa kelima titik ini
+(inilah kelas endpoint yang dulu bocor — hapus, transisi status, foto,
+ekspor, lookup silang):
+
+1. **INSERT** → stempel `"kode_satker": kode_satker_user(user)` di record.
+2. **LIST / rekap / agregasi / count lintas modul** → bungkus query dengan
+   `scope_query_field_satker(user, q)` (aset: `scope_query_aset`).
+3. **GET-BY-ID / stream file (foto, PDF, GridFS)** → setelah fetch, panggil
+   `await pastikan_akses_dok_satker(user, doc)` (aset:
+   `pastikan_akses_aset`). Endpoint `require_user_or_query_token` (media)
+   juga wajib — token media membawa user penuh.
+4. **UPDATE / DELETE / TRANSISI STATUS** → filter delete/update dengan
+   `scope_query_field_satker(_admin, {"id": ...})` ATAU guard
+   `pastikan_akses_dok_satker` sebelum mutasi. Transisi status = jalur tulis
+   juga (dulu 10 endpoint transisi lolos tanpa guard).
+5. **LOOKUP SILANG antar modul** (mis. Pengadaan mencari master Persediaan
+   by kode) → lookup juga ber-scope; tanpa itu dokumen satker lain terpilih
+   dan alurnya macet/menulis silang.
+
+Aturan pendamping:
+- **Keunikan per satker ≠ indeks unik global.** Bila dup-check aplikasi
+  di-scope per satker, indeks unik Mongo WAJIB menyertakan `kode_satker`
+  (pola migrasi: `drop_index("<nama-otomatis-lama>")` dalam try/except lalu
+  `create_index` baru — lihat `indexes.py` persediaan/idempotency).
+- **Deret nomor otomatis (NUP, agenda, urutan) per satker** — increment yang
+  membaca "max global" membocorkan deret satker lain.
+- **Kunci cache menyertakan satker** (pola namespace `wasdal`:
+  `f"{kode_satker_user(user) or '*'}:{param}"`).
+- Semantik `scope_query_field_satker`: dokumen era-lama TANPA `kode_satker`
+  terbuka untuk semua (disengaja, kompatibel mundur); super-admin (kode "")
+  lintas satker. `pastikan_akses_dok_satker` hanya 403 bila kode dokumen
+  TERISI dan berbeda.
+- **Pengaturan**: kop surat ber-resolusi kegiatan→satker→global; pengaturan
+  `report_settings type:"global"` lain (ambang, wajib_pegawai) memang
+  universal — jangan menambah pengaturan per-alur baru ke "global" tanpa
+  memikirkan satker.
+
+## Jurnal Buku Barang (`mutasi_bmn`) — aturan TERKUNCI audit
+
+1. **Semua transaksi keluar/nilai berjurnal** — modul yang membuat aset
+   keluar buku (SK penghapusan 301, pemindahtanganan 301/303, alih status &
+   idle 302) atau menggeser nilai (pemeliharaan 202, revaluasi 204/205,
+   perolehan 100/101/102/103/105) WAJIB `await catat_mutasi_bmn({...})`
+   (best-effort — tak menggagalkan transaksi pemanggil). LBKP/LBP/CaLBMN
+   membaca JURNAL, bukan hanya tombstone master.
+2. **Selalu sertakan `ref_id`** (id dokumen sumber) — guard anti jurnal
+   ganda terpusat memakai kunci `(asset_id, kode_transaksi, ref_id)`.
+3. **`jumlah: 0` untuk transaksi murni NILAI** (202/204/205 — rupiah
+   bergeser, unit tidak); `jumlah: 1` hanya bila barang benar-benar
+   masuk/keluar.
+4. **204 vs 205**: kode dari tanda selisih; `nilai` = magnitudo POSITIF
+   (konsumen LBP menegatifkan 3xx/4xx **dan 205** — satu-satunya 2xx
+   berarah kurang).
+5. **Register yang sudah berjurnal TIDAK boleh dihapus** — tolak 409, minta
+   koreksi pembalik (pola `hapus_koreksi_nilai`, `hapus_proses`,
+   `delete_pemeliharaan`).
+6. **Jurnalkan hanya aset yang benar-benar terproyeksi** — helper proyeksi
+   terminal mengembalikan daftar id yang berubah; aset yang sudah keluar
+   buku lewat jalur lain tidak dijurnal KURANG dua kali.
+
+## Performa & keandalan tulis — pola baku
+
+- **Render dokumen berat (reportlab `doc.build`, weasyprint `write_pdf`,
+  PIL) WAJIB `await asyncio.to_thread(...)`** — satu render sinkron
+  membekukan seluruh server. Endpoint sangat mahal + `@limiter.limit(...)`
+  (perlu `request: Request` di signature).
+- **Loop impor/massal: muat data pembanding SEKALI jadi peta** — jangan
+  `find_one` per baris (file 5.000 baris = ribuan query beruntun).
+- **POST pencipta dokumen resmi ber-`Idempotency-Key`** (pola PATCH aset /
+  POST /bast): reservasi `reserve_idempotency_key` di awal, cache respons
+  `store_idempotent_response` di akhir. Frontend: satu kunci per pembukaan
+  form, **ganti kunci setelah kegagalan validasi** (reservasi "pending"
+  menggantung ±30 dtk).
+- **Cache ringkasan**: daftarkan namespace di `_CACHE_LOCAL`/`_CACHE_TTL`
+  `shared_utils.py` (Redis bila aktif, TTLCache per-worker bila tidak) —
+  kunci menyertakan satker.
+- **Komponen React JANGAN didefinisikan di dalam komponen halaman** — tipe
+  baru tiap render → seluruh subtree remount (avatar berkedip, fetch
+  ulang). Angkat ke level modul; callback lewat prop.
+- **Daftar ribuan baris**: jendela render (slice + "Tampilkan N lagi"),
+  ingat daftar sering dirender DUA kali (kartu HP + tabel desktop).
+
+## Backup / restore / reset — saat menambah koleksi/fitur
+
+- Koleksi BARU otomatis ikut backup/restore/reset (enumerasi dinamis) —
+  tapi WAJIB ditimbang: transien → `SKIP_COLLECTIONS`; konfigurasi/master →
+  `RESET_KEEP_COLLECTIONS`; `_id` bermakna → `KEEP_ID_COLLECTIONS`
+  (`backend/backup_utils.py`, teruji unit).
+- Retensi arsip hanya menghapus `backup_otomatis_*` terurut STEMPEL WAKTU —
+  jangan pernah menghapus backup manual otomatis.
+- Deteksi job macet memakai `updated_at` (denyut progres), bukan umur sejak
+  mulai.
+- Pola restore: parse manifest SEBELUM wipe; safety snapshot ke DISK per
+  koleksi (bukan dict RAM); reindex Meilisearch pasca-restore/reset bila
+  aktif.
 
 ## Pipeline ship per fitur (urutan eksak)
 
@@ -120,6 +223,18 @@ status modul berubah.
   kedaluwarsa sesaat ("requires re-authorization") — coba ulang dulu
   (token biasanya diperbarui otomatis); bila tetap gagal, PR yang CI-nya
   hijau bisa di-merge manual lewat tombol GitHub, pekerjaan tidak hilang.
+- Check CI "cancelled" berpasangan / run "startup_failure" / antre >10 mnt
+  tanpa job = antrean GitHub Actions macet, BUKAN kegagalan kode — picu
+  ulang dengan `git commit --allow-empty` + push. Insiden 2026-07-25:
+  antrean macet ±35 menit lalu pulih sendiri.
+- Import Python di dalam fungsi menjadikan nama itu VARIABEL LOKAL —
+  pemakaian nama yang sama SEBELUM baris import di fungsi yang sama =
+  `UnboundLocalError` di runtime (lolos compileall!). Contoh nyata: `_esc`
+  di PDF BA Pemusnahan membuat endpoint 500 permanen.
+- Nomor entri CHANGELOG `[#N]` = **nomor PR + 2** (bergeser sejak `[#276]`)
+  — catatan resminya ada di kepala CHANGELOG.md.
+- `rekap`/`agregasi` yang membaca `jumlah` jurnal: field ABSEN = 1 unit,
+  tapi `jumlah: 0` eksplisit harus dihormati (jangan pakai `or 1`).
 
 ## Checklist pemilik proyek (setingan untuk kesuksesan bertahap)
 

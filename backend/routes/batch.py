@@ -462,10 +462,14 @@ async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user
 async def get_asset_groups(activity_id: str = "", request: Request = None, _user: dict = Depends(require_user)):
     """Group assets by same asset_code, asset_name, purchase_date, brand/model, price.
     Returns groups with count >= 2, including detailed member info."""
+    from shared_utils import scope_query_aset
     match = {}
     if activity_id:
         match["activity_id"] = activity_id
-    
+    # Isolasi satker (REVIEW-9 R8): agregasi kelompok aset SEBELUMNYA lintas
+    # SELURUH satker — membocorkan detail anggota (lokasi/pemegang/kondisi).
+    match = await scope_query_aset(_user, match)
+
     pipeline = [
         {"$match": match},
         {"$group": {
@@ -569,6 +573,10 @@ async def get_all_asset_ids(
     if inventory_status:
         query["inventory_status"] = inventory_status
 
+    # Isolasi satker (REVIEW-9 R8): "pilih semua halaman" SEBELUMNYA
+    # mengenumerasi id aset SELURUH satker.
+    from shared_utils import scope_query_aset
+    query = await scope_query_aset(_user, query)
     ids = []
     async for doc in db.assets.find(query, {"_id": 0, "id": 1}):
         ids.append(doc["id"])

@@ -115,3 +115,16 @@ Debug OTP disembunyikan di produksi; loading state tab pemetaan akun.
 > Rincian lokasi kode setiap temuan (file:baris) tersimpan pada laporan
 > penelusur di sesi pengembangan 2026-07-17; gelombang dikerjakan berurutan,
 > satu PR per gelombang.
+
+
+---
+
+## Penutup — status Juli 2026
+
+Seluruh gelombang tindak lanjut audit ini telah selesai. Audit lanjutan yang
+lebih dalam (REVIEW-9, 6 dimensi: keamanan/IDOR, jurnal induk, optimasi
+backend/frontend, backup/restore/reset) dilaksanakan Juli 2026 dan seluruh
+temuannya ditutup pada PR #608–#613 — lihat bagian "Status Audit Menyeluruh
+REVIEW-9" di `docs/MASTERPLAN-SIKLUS-BMN.md` dan CHANGELOG `[#610]`–`[#615]`.
+Checklist pencegahan agar temuan serupa tidak berulang kini baku di
+`.claude/skills/aman-dev/SKILL.md` (isolasi satker, jurnal, performa, backup).

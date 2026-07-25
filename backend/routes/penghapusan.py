@@ -38,7 +38,7 @@ class TransisiIn(BaseModel):
 
 _PROJ = {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
          "purchase_price": 1, "condition": 1, "inventory_status": 1,
-         "location": 1, "uraian_tidak_ditemukan": 1}
+         "location": 1, "uraian_tidak_ditemukan": 1, "activity_id": 1}
 _MAKS_BARIS = 500
 
 
@@ -120,9 +120,11 @@ async def export_usulan_penghapusan(_user: dict = Depends(require_user)):
 @penghapusan_router.post("/penghapusan/usulan")
 async def buat_usulan(payload: UsulanIn, user: dict = Depends(require_writer)):
     """Buat tiket usulan penghapusan untuk satu aset kandidat."""
+    from shared_utils import pastikan_akses_aset
     asset = await db.assets.find_one({"id": payload.asset_id}, _PROJ)
     if not asset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    await pastikan_akses_aset(user, asset)  # isolasi satker (REVIEW-9 R8)
     jalur = jalur_kandidat(asset)
     if not jalur:
         raise HTTPException(

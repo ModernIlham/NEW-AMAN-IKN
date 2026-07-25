@@ -1,9 +1,21 @@
-<!-- Last updated: Feb 2026 v2.4 - Lazy-Load Asset Edit (Dokumen tab) + Lihat PDF Fix -->
+<!-- Last updated: Juli 2026 v2.5 — pasca audit menyeluruh REVIEW-9 -->
+
+> ⚠️ **CATATAN UNTUK AGEN/PEMBACA (Juli 2026):** dokumen ini adalah PRD
+> historis rinci era v2.1–v2.4. Sumber KEBENARAN TERKINI aplikasi:
+> `README.md` (v2.5, highlight per rilis) · `docs/MASTERPLAN-SIKLUS-BMN.md`
+> (peta modul + status audit + prinsip terkunci) · `CHANGELOG.md` (riwayat
+> per PR) · `.claude/skills/aman-dev/SKILL.md` (konvensi wajib: isolasi
+> satker, jurnal, performa, backup) · `frontend/src/pages/InfoPage.jsx`
+> (PRD tampil di aplikasi). Sejak v2.5 aplikasi = platform SIKLUS PENUH BMN
+> multi-satker (±55 modul route, 31 halaman) dengan isolasi satker
+> menyeluruh, jurnal Buku Barang lengkap, e-sign, SIMAN V2, Meilisearch &
+> Redis opsional. Isi di bawah tetap berguna sebagai konteks arsitektur
+> kolaborasi real-time & offline-first yang masih berlaku.
 
 # PRD - Sistem Inventaris Aset Terpadu (AMAN)
 ## Aplikasi Manajemen Aset Negara
 
-**Versi: 2.4 (Feb 2026)** — Production-ready multi-worker dengan kolaborasi real-time anti-corruption + lazy-load kegiatan + lazy-load asset Dokumen tab + Lihat PDF fix
+**Versi: 2.4 (arsip) — terkini: 2.5, lihat catatan di atas**
 
 ## 1. Ringkasan Produk
 

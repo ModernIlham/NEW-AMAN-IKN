@@ -1017,6 +1017,10 @@ async def get_asset(asset_id: str, exclude_media: bool = False, _user: dict = De
         ]).to_list(1)
         if not docs:
             raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+        # Isolasi satker (REVIEW-9 R8): jalur ringan ini SEBELUMNYA langsung
+        # return tanpa guard — IDOR baca metadata aset satker lain by id
+        # (dipanggil pada SETIAP buka lightbox/form edit).
+        await pastikan_akses_aset(_user, docs[0])
         return AssetResponse(**docs[0])
     asset = await db.assets.find_one({"id": asset_id}, {"_id": 0})
     if not asset:
