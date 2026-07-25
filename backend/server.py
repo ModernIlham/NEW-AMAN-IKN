@@ -480,6 +480,15 @@ async def reset_all_data(data: ResetConfirmation, _admin: dict = Depends(require
 
     logger.warning(f"SYSTEM RESET by admin {admin_user.get('username')}: {deleted}")
 
+    # Reindex Meilisearch (REVIEW-9 R6): data operasional baru saja di-wipe —
+    # tanpa ini pencarian masih memunculkan aset/surat yang sudah tak ada.
+    try:
+        from meili_utils import meili_aktif, reindex_semua
+        if meili_aktif():
+            await reindex_semua()
+    except Exception as e:
+        logger.warning(f"Meili reindex pasca-reset gagal (non-fatal): {e}")
+
     return {
         "message": "Semua data berhasil dihapus. Sistem telah direset.",
         "deleted": deleted,
