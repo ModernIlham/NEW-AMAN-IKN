@@ -37,7 +37,7 @@ wasdal_router = APIRouter()
 
 # Proyeksi hemat aset: hanya field yang dibaca mesin aturan.
 _PROJ_ASET = {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
-              "user": 1, "bast_file_id": 1, "condition": 1,
+              "user": 1, "bast_file_id": 1, "bast_terakhir": 1, "condition": 1,
               "purchase_price": 1, "koordinat_latitude": 1,
               "koordinat_longitude": 1, "inventory_status": 1,
               "nomor_perkara": 1, "pihak_bersengketa": 1}

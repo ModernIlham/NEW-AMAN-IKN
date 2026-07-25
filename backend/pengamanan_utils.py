@@ -15,6 +15,7 @@ JENIS_KEKURANGAN = {
     "lokasi": "Tanpa lokasi",
     "pengguna": "Tanpa pengguna",
     "bast": "Tanpa BAST",
+    "bast_dicabut": "TTD BAST dibatalkan",
 }
 
 
@@ -40,6 +41,11 @@ def kekurangan_aset(asset: dict):
         out.append("pengguna")
     if not _terisi(asset.get("bast_file_id")):
         out.append("bast")
+    elif (asset.get("bast_terakhir") or {}).get("tt_dicabut"):
+        # Ada dokumen BAST, tapi TTD elektroniknya DIBATALKAN → tanda tangan
+        # tak berlaku sampai ditinjau/di-TTD ulang. Kategori terpisah agar
+        # tak merancukan makna "Tanpa BAST" (dokumen betul-betul tak ada).
+        out.append("bast_dicabut")
     return out
 
 

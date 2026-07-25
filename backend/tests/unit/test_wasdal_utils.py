@@ -41,6 +41,21 @@ def test_penggunaan():
     assert "Budi" in hasil[0]["detail"]
 
 
+def test_penggunaan_bast_dicabut():
+    # BAST ada (bast_file_id) tetapi TTD e-sign dibatalkan → temuan tersendiri.
+    dicabut = dict(ASET_LENGKAP, id="a3",
+                   bast_terakhir={"id": "b1", "tt_dicabut": True})
+    hasil = temuan_penggunaan([ASET_LENGKAP, dicabut])
+    jenis = [t["jenis"] for t in hasil]
+    # ASET_LENGKAP (tanpa tt_dicabut) tak memicu; hanya aset dicabut.
+    assert jenis == ["pemegang_bast_dicabut"]
+    # Tanpa bast_file_id → tetap pemegang_tanpa_bast, tak ganda.
+    tanpa = dict(ASET_LENGKAP, id="a4", bast_file_id="",
+                 bast_terakhir={"id": "b1", "tt_dicabut": True})
+    jenis2 = [t["jenis"] for t in temuan_penggunaan([tanpa])]
+    assert jenis2 == ["pemegang_tanpa_bast"]
+
+
 def test_pemanfaatan():
     lengkap = {"id": "p1", "bentuk": "sewa", "pihak": "PT X",
                "berakhir": "2027-01-01", "nomor_persetujuan": "S-1",

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import {
-  ArrowLeft, ChevronRight, Loader2, ShieldCheck, Scale, BadgeCheck, Camera,
+  ArrowLeft, ChevronRight, Loader2, ShieldCheck, ShieldAlert, Scale, BadgeCheck, Camera,
   Gavel, Paperclip, Plus, QrCode, MapPin, Search, Trash2, Umbrella,
   Upload, UserCheck, FileText, Download,
 } from "lucide-react";
@@ -27,6 +27,7 @@ const IKON_KEKURANGAN = {
   lokasi: MapPin,
   pengguna: UserCheck,
   bast: FileText,
+  bast_dicabut: ShieldAlert,
 };
 
 /**
