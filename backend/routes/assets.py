@@ -1996,10 +1996,37 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
     update_data = {k: v for k, v in body.items() if k in PATCHABLE_FIELDS}
     has_photo_ops = "photo_ops" in body
 
-    # Field patchable semuanya SKALAR — tolak nilai dict/list agar operator
-    # NoSQL (mis. {"$ne": null}) tak menyusup ke query cek-duplikat & $set.
+    # Tolak operator NoSQL (mis. {"$ne": null}) agar tak menyusup ke query
+    # cek-duplikat & $set.
+    #
+    # PERBAIKAN (REVIEW-9 R15): dulu SEMUA nilai list/dict ditolak, padahal
+    # PATCHABLE_FIELDS memuat `photos` dan `document_checklist` yang memang
+    # BERBENTUK LIST — akibatnya kedua field itu dinyatakan patchable tetapi
+    # SELALU gagal 400, jadi edit kelengkapan dokumen lewat PATCH mustahil.
+    # Kini list diizinkan HANYA untuk field yang memang berbentuk list, dengan
+    # validasi isi; field skalar tetap menolak list/dict seperti semula.
+    _FIELD_LIST = {"photos", "document_checklist"}
+
+    def _bebas_operator(nilai, jalur: str):
+        """Tolak kunci ber-awalan '$' atau bertitik di kedalaman berapa pun."""
+        if isinstance(nilai, dict):
+            for kk, vv in nilai.items():
+                if not isinstance(kk, str) or kk.startswith("$") or "." in kk:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Nilai field '{jalur}' tidak valid")
+                _bebas_operator(vv, jalur)
+        elif isinstance(nilai, list):
+            for vv in nilai:
+                _bebas_operator(vv, jalur)
+
     for k, v in update_data.items():
-        if isinstance(v, (dict, list)):
+        if k in _FIELD_LIST:
+            if not isinstance(v, list):
+                raise HTTPException(status_code=400,
+                                    detail=f"Field '{k}' harus berupa daftar")
+            _bebas_operator(v, k)
+        elif isinstance(v, (dict, list)):
             raise HTTPException(status_code=400, detail=f"Nilai field '{k}' tidak valid")
 
     if not update_data and not has_photo_ops:

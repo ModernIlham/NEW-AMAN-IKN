@@ -910,13 +910,28 @@ async def pastikan_akses_kegiatan(user, activity) -> None:
 
 
 async def pastikan_akses_kegiatan_id(user, activity_id: str) -> None:
-    """Varian by-id: no-op untuk user lintas-satker / id kosong."""
+    """Varian by-id: no-op untuk user lintas-satker / id kosong.
+
+    FAIL-CLOSED bila kegiatan induk TIDAK DITEMUKAN (REVIEW-9 R15). Dulu
+    kegiatan hilang berarti guard lolos diam-diam, sehingga aset "yatim"
+    (activity_id menunjuk kegiatan yang sudah dihapus) dapat dibaca/diubah
+    lintas satker — kepemilikannya justru TIDAK BISA dipastikan, jadi menolak
+    adalah sikap yang benar. Super-admin (kode kosong) sudah keluar lebih awal,
+    sehingga pemulihan data yatim tetap mungkin.
+    """
+    from fastapi import HTTPException
+
     if not kode_satker_user(user) or not str(activity_id or "").strip():
         return
     act = await db.inventory_activities.find_one(
         {"id": activity_id}, {"_id": 0, "kode_satker": 1})
-    if act:
-        await pastikan_akses_kegiatan(user, act)
+    if not act:
+        raise HTTPException(
+            status_code=403,
+            detail=("Kegiatan induk data ini tidak ditemukan sehingga "
+                    "kepemilikan satkernya tak dapat dipastikan — hubungi "
+                    "super-admin untuk merapikan data yatim ini"))
+    await pastikan_akses_kegiatan(user, act)
 
 
 async def pastikan_akses_aset(user, asset) -> None:

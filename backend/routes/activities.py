@@ -25,6 +25,8 @@ from shared_utils import (
     delete_document_from_gridfs,
     delete_photo_from_gridfs,
     kode_satker_user,
+    scope_query_aset,
+    scope_query_field_satker,
     pastikan_akses_kegiatan,
 )
 from routes.pengesahan import next_ticket_number, ensure_ticket_number
@@ -572,7 +574,12 @@ async def create_inventory_activity(activity: InventoryActivityCreate, _user: di
     await _cek_atau_perbarui_satker(activity, user=_user)
 
     # Validate unique nomor_surat
-    existing = await db.inventory_activities.find_one({"nomor_surat": activity.nomor_surat})
+    # Keunikan nomor surat PER SATKER (REVIEW-9 R15). Nomor surat diterbitkan
+    # tiap satker sendiri, jadi cek global membuat satker B ditolak hanya karena
+    # satker A memakai nomor yang sama — sekaligus jadi oracle keberadaan surat
+    # satker lain. Dokumen era-lama tanpa stempel tetap ikut dicek (konvensi).
+    existing = await db.inventory_activities.find_one(
+        scope_query_field_satker(_user, {"nomor_surat": activity.nomor_surat}))
     if existing:
         raise HTTPException(status_code=400, detail=f"Nomor surat '{activity.nomor_surat}' sudah digunakan sebelumnya")
     
@@ -586,8 +593,11 @@ async def create_inventory_activity(activity: InventoryActivityCreate, _user: di
     category_summary = {}
     
     if activity.asset_ids:
+        # Scope satker (REVIEW-9 R15): asset_ids datang dari KLIEN, jadi tanpa
+        # scoping user satker A bisa menyodorkan id aset satker B dan membaca
+        # nilai/kondisi/kategori mereka lewat ringkasan yang dikembalikan.
         assets = await db.assets.find(
-            {"id": {"$in": activity.asset_ids}}, 
+            await scope_query_aset(_user, {"id": {"$in": activity.asset_ids}}), 
             {"_id": 0, "purchase_price": 1, "condition": 1, "status": 1, "category": 1}
         ).to_list(None)
         
@@ -815,7 +825,8 @@ async def update_inventory_activity(activity_id: str, activity: InventoryActivit
     # Check unique nomor_surat (exclude self)
     if activity.nomor_surat != existing.get("nomor_surat"):
         dup = await db.inventory_activities.find_one({
-            "nomor_surat": activity.nomor_surat,
+            **scope_query_field_satker(_user, {
+                "nomor_surat": activity.nomor_surat}),
             "id": {"$ne": activity_id}
         })
         if dup:

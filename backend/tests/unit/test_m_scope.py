@@ -145,3 +145,58 @@ def test_token_docfile_scope_dan_umur():
     assert payload["sesi_epoch"] == 3           # ikut dicabut saat reset password
     assert au.DOCFILE_TOKEN_EXPIRATION_DAYS == 7
     assert au.DOCFILE_TOKEN_EXPIRATION_DAYS < au.MEDIA_TOKEN_EXPIRATION_DAYS
+
+
+# ── R15: PATCH aset — field berbentuk list boleh, operator NoSQL tetap ditolak ──
+
+def test_patch_field_list_diizinkan_operator_ditolak():
+    """`photos` & `document_checklist` ADA di PATCHABLE_FIELDS dan memang
+    berbentuk list. Dulu semua list ditolak → kedua field itu mustahil di-PATCH
+    (selalu 400). Yang harus ditolak hanyalah operator NoSQL."""
+    from fastapi import HTTPException
+
+    # Replika logika guard di routes/assets.py patch_asset.
+    FIELD_LIST = {"photos", "document_checklist"}
+
+    def bebas_operator(nilai, jalur):
+        if isinstance(nilai, dict):
+            for kk, vv in nilai.items():
+                if not isinstance(kk, str) or kk.startswith("$") or "." in kk:
+                    raise HTTPException(status_code=400, detail=jalur)
+                bebas_operator(vv, jalur)
+        elif isinstance(nilai, list):
+            for vv in nilai:
+                bebas_operator(vv, jalur)
+
+    def guard(update):
+        for k, v in update.items():
+            if k in FIELD_LIST:
+                if not isinstance(v, list):
+                    raise HTTPException(status_code=400, detail=k)
+                bebas_operator(v, k)
+            elif isinstance(v, (dict, list)):
+                raise HTTPException(status_code=400, detail=k)
+
+    # Kelengkapan dokumen yang wajar → LOLOS (dulu 400).
+    guard({"document_checklist": [{"nama": "BAST", "ada": True, "files": []}]})
+    guard({"photos": ["data:image/webp;base64,AAAA"]})
+
+    # Operator NoSQL di kedalaman mana pun → DITOLAK.
+    for jahat in (
+        {"document_checklist": [{"nama": {"$ne": None}}]},
+        {"document_checklist": [{"a": {"b": {"$gt": ""}}}]},
+        {"document_checklist": [{"pakai.titik": 1}]},
+    ):
+        try:
+            guard(jahat)
+            raise AssertionError(f"seharusnya ditolak: {jahat}")
+        except HTTPException:
+            pass
+
+    # Field SKALAR tetap menolak list/dict.
+    for jahat in ({"asset_code": {"$ne": None}}, {"NUP": ["a"]}):
+        try:
+            guard(jahat)
+            raise AssertionError(f"seharusnya ditolak: {jahat}")
+        except HTTPException:
+            pass

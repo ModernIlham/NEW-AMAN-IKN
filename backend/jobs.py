@@ -27,15 +27,22 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-async def buat_job(jenis: str, dibuat_oleh: str = "", **extra) -> str:
+async def buat_job(jenis: str, dibuat_oleh: str = "",
+                   kode_satker: str = "", **extra) -> str:
     """Buat dokumen job baru (status 'queued'); kembalikan job_id (12 hex).
 
     `extra` = field awal spesifik-konsumen (mis. total/processed untuk impor).
-    `created_at` disimpan sebagai BSON datetime agar bisa dipakai TTL index."""
+    `created_at` disimpan sebagai BSON datetime agar bisa dipakai TTL index.
+
+    `kode_satker` (REVIEW-9 R15) = satker PEMILIK job. Artifact job ekspor
+    memuat register lengkap satker itu, jadi izin unduhnya harus ikut satker —
+    bukan sekadar "role admin".
+    """
     job_id = uuid.uuid4().hex   # 32 hex (128-bit) — tak dapat ditebak/enumerasi
     doc = {
         "job_id": job_id, "jenis": str(jenis or ""), "status": "queued",
         "dibuat_oleh": str(dibuat_oleh or ""),
+        "kode_satker": str(kode_satker or ""),
         "created_at": _now(), "updated_at": _now(),
     }
     doc.update(extra)

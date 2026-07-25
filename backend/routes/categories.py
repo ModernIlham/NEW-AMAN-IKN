@@ -8,7 +8,8 @@ from auth_utils import require_admin, require_user, require_writer
 
 from db import db
 from models import CategoryCreate
-from shared_utils import limiter, invalidate_category_cache, cache_get, cache_set
+from shared_utils import (limiter, invalidate_category_cache, cache_get,
+                          cache_set, kode_satker_user)
 from jobs import buat_job, update_job, get_job
 
 logger = logging.getLogger(__name__)
@@ -136,6 +137,7 @@ async def import_categories_bulk(request: Request, file: UploadFile = File(...),
     # Job persisten (multi-worker-safe) — kembalikan job_id utk polling progres.
     job_id = await buat_job(
         "import_kategori", _user.get("username", ""),
+        kode_satker=kode_satker_user(_user),  # stempel satker (REVIEW-9 R15)
         status="parsing", total=0, processed=0, imported=0,
         skipped=0, errors=0, done=False)
     
