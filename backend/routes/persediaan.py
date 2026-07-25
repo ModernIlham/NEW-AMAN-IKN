@@ -27,6 +27,7 @@ from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
 )
 from db import db
+from shared_utils import kunci_idem
 from meili_utils import jadwalkan_sync, jadwalkan_hapus, cari_id_persediaan
 from pegawai_utils import baris_identitas_ttd
 from persediaan_akun_utils import akun_persediaan
@@ -1211,8 +1212,12 @@ async def create_persediaan(data: PersediaanCreate, _user: dict = Depends(requir
     # Kode 10 digit → lengkapi 6 digit nomor urut otomatis (increment
     # dari kode terbesar se-prefix; numerik karena panjang seragam).
     if len(kode) == KODE_PREFIX_LEN:
+        # Lingkup SATKER (REVIEW-9 R15): deret 6 digit ini milik satker —
+        # tanpa scope, nomor melompat mengikuti volume satker lain sekaligus
+        # membocorkannya (selaras deret NUP persediaan di R3).
+        from shared_utils import scope_query_field_satker as _sqfs
         max_doc = await db.persediaan.find_one(
-            {"kode_barang": {"$regex": f"^{kode}"}},
+            _sqfs(_user, {"kode_barang": {"$regex": f"^{kode}"}}),
             {"_id": 0, "kode_barang": 1}, sort=[("kode_barang", -1)])
         try:
             kode = next_kode_penuh(kode, (max_doc or {}).get("kode_barang"))
@@ -1350,7 +1355,10 @@ async def transaksi_masuk(item_id: str, data: TransaksiMasukIn,
     menggandakan stok — respons pertama disimpan & diputar ulang. Pemanggil
     internal (impor massal / Pengadaan) tak mengoper `request` → dilewati.
     """
-    idem_key = request.headers.get("Idempotency-Key", "") if request is not None else ""
+    from shared_utils import kunci_idem
+    idem_key = kunci_idem(
+        request.headers.get("Idempotency-Key", "") if request is not None else "",
+        user)
     if idem_key:
         from shared_utils import (get_idempotent_response,
                                   reserve_idempotency_key)
@@ -1472,7 +1480,9 @@ async def transaksi_keluar(item_id: str, data: TransaksiKeluarIn,
     kunci sama tak boleh menggandakan pengeluaran — respons pertama disimpan
     & diputar ulang. Pemanggil internal (massal) tak mengoper `request`.
     """
-    idem_key = request.headers.get("Idempotency-Key", "") if request is not None else ""
+    idem_key = kunci_idem(
+        request.headers.get("Idempotency-Key", "") if request is not None else "",
+        user)
     if idem_key:
         from shared_utils import (get_idempotent_response,
                                   reserve_idempotency_key)

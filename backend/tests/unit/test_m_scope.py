@@ -200,3 +200,20 @@ def test_patch_field_list_diizinkan_operator_ditolak():
             raise AssertionError(f"seharusnya ditolak: {jahat}")
         except HTTPException:
             pass
+
+
+# ── R15: Idempotency-Key terikat pemilik ────────────────────────────────────
+
+def test_kunci_idem_terikat_pemilik():
+    """Kunci idempotensi dipilih KLIEN. Bila disimpan apa adanya, siapa pun
+    yang menebak kunci satker lain dapat memutar ulang respons tersimpan
+    mereka. Kunci efektif harus berbeda per akun."""
+    from shared_utils import kunci_idem
+
+    a = {"id": "u-a", "username": "andi", "kode_satker": "527"}
+    b = {"id": "u-b", "username": "budi", "kode_satker": "999"}
+
+    assert kunci_idem("ABC", a) != kunci_idem("ABC", b)   # inti temuan
+    assert kunci_idem("ABC", a) == kunci_idem("ABC", a)   # tetap idempoten
+    assert kunci_idem("", a) == ""                        # kosong = nonaktif
+    assert "ABC" in kunci_idem("ABC", a)

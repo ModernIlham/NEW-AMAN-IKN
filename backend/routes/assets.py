@@ -16,6 +16,7 @@ from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
 )
 from shared_utils import (
+    kunci_idem,
     invalidate_asset_cache, cache_get, cache_set,
     log_audit, compute_changes, create_thumbnail, create_gallery_thumbnail,
     store_photo_to_gridfs, get_photo_from_gridfs, delete_photo_from_gridfs,
@@ -826,7 +827,7 @@ async def buat_aset_draft(data: AssetCreate, audit_user: str = "system") -> dict
 async def create_asset(asset: AssetCreate, request: Request, _user: dict = Depends(require_writer)):
     """Create a new asset. Supports Idempotency-Key header to safely retry on network errors."""
     # Idempotency check: if same key was seen within the TTL window (24h), return cached response
-    idem_key = request.headers.get("Idempotency-Key", "")
+    idem_key = kunci_idem(request.headers.get("Idempotency-Key", ""), _user)
     if idem_key:
         cached = await get_idempotent_response(idem_key)
         if cached and cached.get("response"):
@@ -1435,7 +1436,7 @@ async def rotate_asset_photo(asset_id: str, photo_index: int, request: Request,
     `{"degrees": 90}` (kelipatan 90; default & minimum efektif 90).
     """
     # --- Idempotency: putar ulang dgn kunci sama tak menggandakan rotasi ---
-    idem_key = request.headers.get("Idempotency-Key", "")
+    idem_key = kunci_idem(request.headers.get("Idempotency-Key", ""), _user)
     if idem_key:
         cached = await get_idempotent_response(idem_key)
         if cached and cached.get("response"):
@@ -1938,7 +1939,7 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
     """Partial update — only update the fields provided in the body.
     Supports OCC via If-Match header (expected version) and Idempotency-Key header."""
     # --- Idempotency: replay cached response if same key seen recently ---
-    idem_key = request.headers.get("Idempotency-Key", "")
+    idem_key = kunci_idem(request.headers.get("Idempotency-Key", ""), _user)
     if idem_key:
         cached = await get_idempotent_response(idem_key)
         if cached and cached.get("response"):

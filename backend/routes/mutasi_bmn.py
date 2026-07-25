@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from auth_utils import (require_admin, require_user,
                         require_user_or_query_token, require_writer)
 from db import db
-from shared_utils import scope_query_field_satker
+from shared_utils import kunci_idem, scope_query_field_satker
 from kodefikasi_utils import normalize_kode, validate_kode
 from mutasi_bmn_utils import (
     KODE_TRANSAKSI_BMN, buat_pasangan_reklasifikasi, validate_entri_mutasi,
@@ -130,10 +130,20 @@ async def backfill_saldo_awal(admin: dict = Depends(require_admin)):
     return {"dibuat": dibuat, "sudah_berjurnal": len(sudah)}
 
 
-async def _nup_berikut_kode(kode_baru: str) -> str:
-    """NUP berikut pada kode tujuan (increment NUP numerik terbesar)."""
+async def _nup_berikut_kode(kode_baru: str, activity_ids=None) -> str:
+    """NUP berikut pada kode tujuan (increment NUP numerik terbesar).
+
+    LINGKUP SATKER (REVIEW-9 R15): deret NUP milik satker, sama seperti NUP
+    persediaan (R3). Tanpa `activity_ids`, MAX diambil lintas satker sehingga
+    NUP hasil reklasifikasi melompat mengikuti volume satker lain — sekaligus
+    membocorkannya. `activity_ids` diturunkan dari satker ASET yang direklas
+    (bukan satker pemanggil) agar super-admin pun menghasilkan deret benar.
+    """
+    _match = {"asset_code": kode_baru, "dihapus": {"$ne": True}}
+    if activity_ids is not None:
+        _match["activity_id"] = {"$in": list(activity_ids)}
     res = await db.assets.aggregate([
-        {"$match": {"asset_code": kode_baru, "dihapus": {"$ne": True}}},
+        {"$match": _match},
         {"$group": {"_id": None, "max_nup": {"$max": {"$convert": {
             "input": "$NUP", "to": "int",
             "onError": None, "onNull": None}}}}},
@@ -155,7 +165,9 @@ async def reklasifikasi_aset(payload: ReklasifikasiIn,
     aset — double-submit tanpa kunci bisa menghasilkan jurnal ganda & NUP
     meloncat. Kunci sama → respons pertama diputar ulang (klaim atomik).
     """
-    idem_key = request.headers.get("Idempotency-Key", "") if request is not None else ""
+    idem_key = kunci_idem(
+        request.headers.get("Idempotency-Key", "") if request is not None else "",
+        user)
     if idem_key:
         from shared_utils import (get_idempotent_response,
                                   reserve_idempotency_key)
@@ -199,7 +211,15 @@ async def reklasifikasi_aset(payload: ReklasifikasiIn,
     now = datetime.now(timezone.utc)
     tgl_buku = (str(payload.tanggal_buku or "").strip()[:10]
                 or now.date().isoformat())
-    nup_baru = await _nup_berikut_kode(kode_baru)
+    # Deret NUP dalam lingkup satker ASET (REVIEW-9 R15).
+    _act = await db.inventory_activities.find_one(
+        {"id": aset.get("activity_id")}, {"_id": 0, "kode_satker": 1})
+    _kode_aset = str((_act or {}).get("kode_satker") or "").strip()
+    _ids = None
+    if _kode_aset:
+        from shared_utils import id_kegiatan_satker
+        _ids = await id_kegiatan_satker(_kode_aset)
+    nup_baru = await _nup_berikut_kode(kode_baru, _ids)
     oleh = user.get("username", "system")
 
     keluar, masuk = buat_pasangan_reklasifikasi(

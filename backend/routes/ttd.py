@@ -27,6 +27,7 @@ from auth_utils import (
 )
 from db import db, fs_bucket
 from shared_utils import (
+    scope_query_field_satker,
     cek_magic_gambar, delete_document_from_gridfs, get_document_from_gridfs,
     limiter, log_audit, pastikan_akses_dok_satker,
 )
@@ -326,8 +327,12 @@ async def buat_permintaan(payload: PermintaanIn, user: dict = Depends(require_wr
     _nip_signer = [str(s.nip or "").strip() for s in payload.signers
                    if str(s.nip or "").strip()]
     if _nip_signer:
+        # Scope satker (REVIEW-9 R15): tanpa ini penolakan "Meninggal Dunia"
+        # menjadi ORACLE — penyerang menebak NIP dan pesan galat memastikan
+        # keberadaan sekaligus NAMA pegawai satker lain.
         _alm = await db.pegawai.find(
-            {"nip": {"$in": _nip_signer}, "status": "meninggal"},
+            scope_query_field_satker(
+                user, {"nip": {"$in": _nip_signer}, "status": "meninggal"}),
             {"_id": 0, "nama": 1, "nip": 1}).to_list(100)
         if _alm:
             _nama = ", ".join(str(a.get("nama") or a.get("nip")) for a in _alm)

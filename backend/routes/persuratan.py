@@ -284,8 +284,17 @@ async def hapus_klasifikasi(klas_id: str, user: dict = Depends(require_admin)):
     k = await db.klasifikasi_arsip.find_one({"id": klas_id}, _PROJ)
     if not k:
         raise HTTPException(status_code=404, detail="Kode klasifikasi tidak ditemukan")
-    atur = await _pengaturan()
-    dipakai = [a for a in atur["peta_klasifikasi"] if a.get("kode") == k["kode"]]
+    # Guard "masih dipakai" harus melihat SELURUH dokumen pengaturan
+    # (REVIEW-9 R15): peta_klasifikasi kini juga ada per satker (type="satker"),
+    # jadi membaca peta GLOBAL saja bisa menghapus kode yang masih dirujuk
+    # aturan pemetaan satker lain — nomor surat mereka lalu kehilangan
+    # klasifikasinya.
+    _dipakai_n = 0
+    async for _st in db.persuratan_settings.find(
+            {}, {"_id": 0, "peta_klasifikasi": 1}):
+        _dipakai_n += sum(1 for a in (_st.get("peta_klasifikasi") or [])
+                          if a.get("kode") == k["kode"])
+    dipakai = [None] * _dipakai_n
     if dipakai:
         raise HTTPException(status_code=409, detail=(
             f"Kode {k['kode']} masih dipakai {len(dipakai)} aturan pemetaan — "

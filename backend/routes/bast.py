@@ -41,9 +41,11 @@ from auth_utils import (
     require_user, require_user_or_query_token, require_writer,
 )
 from db import db
-from shared_utils import (get_idempotent_response, kode_satker_user, log_audit,
-                          pastikan_akses_aset, pastikan_akses_dok_satker,
-                          reserve_idempotency_key, store_idempotent_response)
+from shared_utils import (
+    get_idempotent_response, kode_satker_user, kunci_idem, log_audit,
+    pastikan_akses_aset, pastikan_akses_dok_satker, reserve_idempotency_key,
+    scope_query_field_satker, store_idempotent_response,
+)
 
 bast_router = APIRouter()
 
@@ -218,7 +220,8 @@ async def buat_bast(payload: BastIn, request: Request = None,
     agar dokumen historis tak berubah saat master aset berubah).
     Idempotency-Key opsional: klik ganda / retry jaringan tidak menggandakan
     BAST + nomor booking otomatis (pola sama dengan PATCH aset)."""
-    idem_key = request.headers.get("Idempotency-Key", "") if request else ""
+    idem_key = kunci_idem(
+        request.headers.get("Idempotency-Key", "") if request else "", user)
     if idem_key:
         cached = await get_idempotent_response(idem_key)
         if cached and cached.get("response"):
@@ -299,8 +302,12 @@ async def buat_bast(payload: BastIn, request: Request = None,
     nip1 = str(pihak_pertama.get("nip") or "").strip()
     if nip1:
         from pegawai_utils import is_meninggal
-        peg1 = await db.pegawai.find_one({"nip": nip1},
-                                         {"_id": 0, "nama": 1, "status": 1})
+        # Scope satker (REVIEW-9 R15): Master Pegawai per-satker. Tanpa scope,
+        # validasi ini membaca — dan pesan galatnya MEMBOCORKAN nama — pegawai
+        # satker lain hanya dari tebakan NIP.
+        peg1 = await db.pegawai.find_one(
+            scope_query_field_satker(user, {"nip": nip1}),
+            {"_id": 0, "nama": 1, "status": 1})
         if peg1 and is_meninggal(peg1):
             raise HTTPException(status_code=400, detail=(
                 f"{peg1.get('nama') or nip1} berstatus Meninggal Dunia di "
@@ -394,7 +401,11 @@ async def buat_bast(payload: BastIn, request: Request = None,
     peringatan_pegawai = ""
     nip2 = str(record["pihak_kedua"].get("nip") or "").strip()
     if nip2:
-        peg = await db.pegawai.find_one({"nip": nip2}, {"_id": 0, "nama": 1, "status": 1})
+        # Scope satker (REVIEW-9 R15): flag "terdaftar" + nama penerima harus
+        # dari Master Pegawai SATKER INI, bukan seluruh instansi.
+        peg = await db.pegawai.find_one(
+            scope_query_field_satker(user, {"nip": nip2}),
+            {"_id": 0, "nama": 1, "status": 1})
         record["pihak_kedua_terdaftar"] = bool(peg)
         if not peg:
             peringatan_pegawai = (f"NIP {nip2} belum terdaftar di Master "

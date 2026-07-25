@@ -649,7 +649,8 @@ async def create_inventory_activity(activity: InventoryActivityCreate, _user: di
         "total_value": total_value,
         "summary": summary,
         # Nomor tiket: berurutan per tahun, atomik via counters (pengesahan.py)
-        "ticket_number": await next_ticket_number(),
+        "ticket_number": await next_ticket_number(
+            kode_satker=activity.kode_satker.strip()),
         "status_pengesahan": "draft",
         "created_at": now
     }

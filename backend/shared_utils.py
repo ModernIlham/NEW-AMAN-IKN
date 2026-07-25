@@ -423,6 +423,22 @@ async def catat_gagal_otp(email, maks_percobaan=5) -> bool:
 # Used to prevent duplicate writes when clients retry after network failures.
 # TTL index on `created_at` (expireAfterSeconds=86400) is created in indexes.py.
 
+def kunci_idem(key: str, user=None) -> str:
+    """Ikat Idempotency-Key ke PEMILIKNYA (REVIEW-9 R15).
+
+    Kunci datang dari header yang dipilih KLIEN. Bila disimpan apa adanya,
+    siapa pun yang menebak/mengetahui kunci milik satker lain dapat MEMUTAR
+    ULANG respons tersimpan mereka — isinya dokumen/register satker itu. Kunci
+    efektif karenanya diberi awalan identitas pemanggil, sehingga kunci yang
+    sama dari dua akun tak pernah bertabrakan.
+    """
+    k = str(key or "").strip()
+    if not k:
+        return ""
+    uid = str((user or {}).get("id") or (user or {}).get("username") or "").strip()
+    return f"{uid}:{k}" if uid else k
+
+
 async def get_idempotent_response(key: str) -> Optional[dict]:
     """Return cached response for a given idempotency key, or None."""
     if not key:
