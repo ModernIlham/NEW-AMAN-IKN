@@ -27,6 +27,9 @@ function getApiError(err, fallback) {
   return err?.response?.data?.detail || fallback;
 }
 
+// Label field untuk pesan auto-isi dari NIP/NIK.
+const LABEL_URAI = { tanggal_lahir: "Tgl Lahir", jenis_kelamin: "Jenis Kelamin" };
+
 const EMPTY = {
   mode: "tambah", nama: "", nip: "", gelar_depan: "", gelar_belakang: "",
   kewarganegaraan: "wni", jenis_identitas_wna: "", nomor_identitas_wna: "",
@@ -78,6 +81,10 @@ export default function PegawaiPage({ user, onBack }) {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState(null);
   const [deteksi, setDeteksi] = useState(null); // hasil deteksi jenis nomor identitas
+  const [autoIsi, setAutoIsi] = useState(null); // {terisi[], sumber, tmt_cpns, wilayah_kode} hasil auto-isi dari NIP/NIK
+  const formRef = useRef(null); // cermin `form` terbaru untuk auto-isi tanpa memicu ulang efek
+  const nipAwalRef = useRef(""); // NIP bawaan saat form dibuka — auto-isi hanya bila nomor berubah
+  const formKeyRef = useRef(undefined); // identitas record yang sedang dibuka (deteksi form baru)
   // Filter & sortir lanjutan (pola halaman aset)
   const [fStatus, setFStatus] = useState("");
   const [fStatusPeg, setFStatusPeg] = useState("");
@@ -297,18 +304,55 @@ export default function PegawaiPage({ user, onBack }) {
       .catch(() => {});
   }, [load]);
 
-  // Deteksi jenis nomor identitas (NIP PNS / NI PPPK / NRP / NIK) — debounce
-  // ke server agar logika satu sumber dengan label laporan.
+  // Cermin `form` untuk auto-isi (baca nilai terkini tanpa masuk deps efek).
+  useEffect(() => { formRef.current = form; }, [form]);
+
+  // Catat NIP bawaan saat SEBUAH record dibuka (edit) / form baru — dipakai agar
+  // auto-isi hanya jalan saat pengguna benar-benar MEMASUKKAN/mengubah nomor,
+  // bukan sekadar membuka record lama (cegah perubahan form tak diminta).
+  useEffect(() => {
+    const kunci = form ? (form.id || "__baru__") : null;
+    if (kunci !== formKeyRef.current) {
+      formKeyRef.current = kunci;
+      nipAwalRef.current = form ? String(form.nip || "").trim() : "";
+    }
+  }, [form]);
+
+  // Terapkan hasil urai NIP/NIK ke field form. Default NON-DESTRUKTIF: hanya
+  // isi field yang KOSONG; `paksa` menimpa nilai lama (tombol "Isi ulang").
+  const terapkanUrai = useCallback((terurai, paksa = false) => {
+    const f = formRef.current;
+    if (!terurai || !f) { setAutoIsi(null); return; }
+    const kandidat = { tanggal_lahir: terurai.tanggal_lahir, jenis_kelamin: terurai.jenis_kelamin };
+    const patch = {}; const terisi = [];
+    for (const [k, v] of Object.entries(kandidat)) {
+      if (!v) continue;
+      const kosong = !String(f[k] || "").trim();
+      if ((paksa || kosong) && f[k] !== v) { patch[k] = v; terisi.push(k); }
+    }
+    if (terisi.length) setForm((cur) => (cur ? { ...cur, ...patch } : cur));
+    setAutoIsi(terurai.sumber
+      ? { terisi, sumber: terurai.sumber, tmt_cpns: terurai.tmt_cpns, wilayah_kode: terurai.wilayah_kode }
+      : null);
+  }, []);
+
+  // Deteksi jenis nomor identitas + AUTO-ISI (tgl lahir & jenis kelamin dari
+  // NIP/NIK) — debounce ke server agar logika satu sumber dengan label laporan.
   useEffect(() => {
     const nomor = String(form?.nip || "").trim();
-    if (!nomor || nomor.length < 5) { setDeteksi(null); return undefined; }
+    if (!nomor || nomor.length < 5) { setDeteksi(null); setAutoIsi(null); return undefined; }
     const t = setTimeout(() => {
       axios.get(`${API}/pegawai/deteksi-identitas`, { params: { nomor } })
-        .then((r) => setDeteksi(r.data))
-        .catch(() => setDeteksi(null));
+        .then((r) => {
+          setDeteksi(r.data);
+          // Auto-isi HANYA bila nomor diubah pengguna (bukan nilai bawaan saat buka).
+          if (nomor !== nipAwalRef.current) terapkanUrai(r.data?.terurai, false);
+          else setAutoIsi(null);
+        })
+        .catch(() => { setDeteksi(null); setAutoIsi(null); });
     }, 350);
     return () => clearTimeout(t);
-  }, [form?.nip]);
+  }, [form?.nip, terapkanUrai]);
 
   const unduhTemplate = () => {
     downloadFileWithProgress(`${API}/pegawai/template-impor`, "template_impor_pegawai.csv",
@@ -1099,6 +1143,27 @@ export default function PegawaiPage({ user, onBack }) {
                           <p className="text-[10px] text-sky-700 dark:text-sky-400 mt-1" data-testid="pegawai-deteksi-identitas">
                             ✓ {deteksi.keterangan}
                           </p>
+                        )}
+                        {autoIsi?.terisi?.length > 0 && (
+                          <p className="text-[10px] text-emerald-700 dark:text-emerald-400 mt-0.5" data-testid="pegawai-auto-isi">
+                            ↳ Terisi otomatis dari {autoIsi.sumber}: {autoIsi.terisi.map((k) => LABEL_URAI[k] || k).join(", ")} (lihat tab Pribadi)
+                          </p>
+                        )}
+                        {autoIsi && (autoIsi.tmt_cpns || autoIsi.wilayah_kode) && (
+                          <p className="text-[10px] text-muted-foreground mt-0.5">
+                            {autoIsi.tmt_cpns ? `TMT CPNS ${autoIsi.tmt_cpns}` : ""}
+                            {autoIsi.tmt_cpns && autoIsi.wilayah_kode ? " · " : ""}
+                            {autoIsi.wilayah_kode ? `Kode wilayah ${autoIsi.wilayah_kode}` : ""}
+                          </p>
+                        )}
+                        {(deteksi?.terurai?.tanggal_lahir || deteksi?.terurai?.jenis_kelamin) && (
+                          <button
+                            type="button" onClick={() => terapkanUrai(deteksi.terurai, true)}
+                            className="min-w-0 min-h-0 mt-1 text-[10px] font-semibold text-sky-700 dark:text-sky-400 underline underline-offset-2"
+                            data-testid="pegawai-isi-dari-nomor"
+                          >
+                            Isi ulang Tgl Lahir &amp; Jenis Kelamin dari {deteksi.terurai.sumber || "nomor"}
+                          </button>
                         )}
                       </Field>
                       <Field label="NPWP"><Input value={form.npwp} onChange={set("npwp")} className="font-mono" /></Field>

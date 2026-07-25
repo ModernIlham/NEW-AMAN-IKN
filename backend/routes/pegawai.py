@@ -27,7 +27,7 @@ from pegawai_utils import (
     STATUS_PERKAWINAN, SUB_KATEGORI_NON_ASN, baris_impor_ke_pegawai,
     beda_snapshot_pemegang, deteksi_identitas, info_masa_pegawai,
     kelompok_unit_kerja, pegawai_perlu_serah_terima, rekap_eselon,
-    snapshot_pemegang_aset, validate_pegawai,
+    snapshot_pemegang_aset, urai_identitas, validate_pegawai,
 )
 
 pegawai_router = APIRouter()
@@ -237,8 +237,9 @@ async def list_pegawai(_user: dict = Depends(require_user)):
 async def deteksi_identitas_pegawai(nomor: str = "",
                                     _user: dict = Depends(require_user)):
     """Kenali jenis nomor identitas (NIP PNS / NI PPPK / NRP / NIK) dari
-    formatnya — utk label & saran otomatis di form (satu sumber logika)."""
-    return deteksi_identitas(nomor)
+    formatnya + urai data terstruktur untuk AUTO-ISI form (tanggal lahir,
+    jenis kelamin, TMT CPNS, kode wilayah). Satu sumber logika dgn label laporan."""
+    return {**deteksi_identitas(nomor), "terurai": urai_identitas(nomor)}
 
 
 async def _jumlah_aset_per_nip(user) -> dict:
