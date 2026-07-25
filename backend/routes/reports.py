@@ -4611,9 +4611,9 @@ async def _generate_cover_page(activity, settings):
 # ============================================================================
 
 def _downscale_to_data_uri(raw: bytes, max_w: int = 640, quality: int = 80) -> str:
-    """Perkecil bytes foto (maks lebar 640px, JPEG q80) → data-URI base64.
+    """Perkecil bytes foto (maks lebar 640px) → data-URI base64 **WebP**.
 
-    Meniru _resize_jpeg di routes/assets.py. Dipakai untuk fallback GridFS
+    Meniru _resize_webp di routes/assets.py. Dipakai untuk fallback GridFS
     agar embed foto ke HTML WeasyPrint tetap hemat memori/waktu (template
     menampilkan foto hanya ~58-78px, jadi 640px sudah lebih dari cukup).
     Mengembalikan '' bila gagal (template punya fallback "No Foto").
@@ -4629,8 +4629,10 @@ def _downscale_to_data_uri(raw: bytes, max_w: int = 640, quality: int = 80) -> s
         if w > max_w:
             img = img.resize((max_w, max(1, round(h * max_w / w))), PILImage.LANCZOS)
         out = _io.BytesIO()
-        img.save(out, format="JPEG", quality=quality, optimize=True)
-        return "data:image/jpeg;base64," + base64.b64encode(out.getvalue()).decode("ascii")
+        # WebP: ~25-35% lebih kecil dari JPEG pada kualitas setara → PDF laporan
+        # berfoto lebih ringan. WeasyPrint (via Pillow) merender WebP dgn benar.
+        img.save(out, format="WEBP", quality=quality, method=6)
+        return "data:image/webp;base64," + base64.b64encode(out.getvalue()).decode("ascii")
     except Exception as e:
         logger.debug(f"[reports] downscale foto gagal: {e}")
         return ""

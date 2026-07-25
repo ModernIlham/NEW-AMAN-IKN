@@ -48,6 +48,28 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#593] WebP menyeluruh: preview galeri/lightbox + gambar laporan kini WebP (dari asli optimasi Tinify) — 2026-07-25
+
+Menutup celah terakhir konversi WebP. Foto ASLI sudah dioptimalkan Tinify dan
+thumbnail sudah WebP, TAPI yang **ditampilkan** — preview galeri (`?w=256`),
+lightbox (`?w=1280`), dan gambar yang di-embed ke **laporan PDF** — sebelumnya
+masih di-re-encode ke **JPEG** saat disajikan. Kini semuanya **WebP**:
+
+- **Preview foto (galeri & lightbox)**: `_resize_webp` menggantikan `_resize_jpeg`
+  — hasil resize disajikan & di-cache sebagai WebP (~25-35% lebih ringan di
+  jaringan lapangan). Kualitas mewarisi sumber (foto asli = hasil optimasi
+  Tinify). Kunci cache diberi penanda `webp` → entri JPEG lama otomatis
+  kedaluwarsa via TTL, preview baru langsung WebP; `Content-Type` disajikan
+  sesuai isi (deteksi magic-byte) sehingga aman untuk entri lama maupun baru.
+- **Gambar di laporan PDF**: `_downscale_to_data_uri` (laporan eksekutif/data)
+  meng-embed WebP (WeasyPrint 68 merender WebP via Pillow — terverifikasi) →
+  PDF berfoto lebih kecil.
+- **Aman**: bila encode/resize gagal atau hasil tak lebih kecil, foto **asli**
+  tetap disajikan (tak pernah kosong). Konsumsi kuota Tinify NOL untuk jalur ini
+  (semua lokal, mewarisi kualitas dari foto asli yang sudah dioptimalkan Tinify).
+
+---
+
 ## [#592] Perbaikan lightbox: foto tak lagi "tersangkut" aset lama saat pindah antar-aset — 2026-07-25
 
 Di penampil foto (lightbox), geser kartu info untuk pindah ke aset berikutnya/
