@@ -48,6 +48,34 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#601] Cascade otomatis: batal TTD → BAST & aset ditandai "dicabut" (sinyal lunak) — 2026-07-25
+
+**Puncak keterhubungan otomatis** — menjawab keluhan "mengelola satu per satu".
+Kini **membatalkan permintaan TTD** yang menaut BAST terstruktur (`doc_type='bast'`
++ `doc_ref`, dari tombol "Kirim ke TTD") **otomatis merambat**:
+
+- BAST terkait ditandai **`tt_dicabut`** (+ `tt_dicabut_pada`), dan aset yang
+  BAST-**terakhir**-nya memang BAST itu ditandai `bast_terakhir.tt_dicabut`.
+- **Sinyal lunak, reversibel**: `bast_file_id`/bukti/data **tidak dihapus** —
+  hanya diberi tanda, sehingga dapat ditinjau & ditandatangani ulang.
+- **Terlihat**: di dialog **Riwayat BAST** (Penggunaan) muncul penanda merah
+  **"⚠ TTD elektronik dibatalkan — tanda tangan tidak berlaku"** — hanya bila
+  **belum ada bukti ttd terunggah** (bukti fisik/scan tetap sah, tak diperingati).
+- **Presisi**: hanya menyasar aset yang BAST-terakhirnya BAST tersebut (tak
+  salah tandai aset yang sudah punya BAST lebih baru), dan **hanya permintaan
+  yang benar-benar menandatangani** BAST (`signature_request_id` cocok) yang
+  boleh mencabut. Pembatalan juga tercatat di Log Sistem beserta info BAST.
+- **Aman lintas-satker**: penautan `doc_ref` ke BAST divalidasi kepemilikan
+  saat dibuat (satker pemohon), dan cascade ber-scope satker — tak bisa
+  menyentuh dokumen satker lain. Pembatalan tetap dicatat walau cascade gagal.
+
+Rangkaian lengkap (fondasi #1–#5): audit batal → guard dokumen batal → penaut
+`doc_ref` → tombol "Kirim ke TTD" (penaut terstruktur) → back-link → **cascade**.
+Langkah lanjutan (opsional): metrik/temuan Wasdal & Pengamanan turut
+memperhitungkan `tt_dicabut`.
+
+---
+
 ## [#600] Back-link TTD→BAST: `signature_request_id` tertulis ke BAST saat e-sign selesai — 2026-07-25
 
 Fondasi **#5** — melengkapi **FK dua-arah** TTD↔BAST. Saat **semua** pihak

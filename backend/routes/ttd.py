@@ -288,6 +288,22 @@ async def buat_permintaan(payload: PermintaanIn, user: dict = Depends(require_wr
         raise HTTPException(status_code=400, detail="Minimal satu penanda tangan")
     if payload.mode not in ("berurutan", "paralel"):
         raise HTTPException(status_code=400, detail="Mode harus berurutan/paralel")
+    # Bila menaut BAST terstruktur (doc_type='bast' + doc_ref=id BAST), PASTIKAN
+    # BAST itu milik satker pemohon. Ini gerbang tunggal: back-link penyelesaian
+    # (menulis signature_request_id ke BAST) dan cascade pembatalan sama-sama
+    # digerakkan doc_ref — validasi kepemilikan di sini mencegah SR palsu
+    # menunjuk BAST satker lain (uuid bocor) lalu men-tamper dokumennya.
+    # doc_ref bagi doc_type lain (surat/register) adalah teks bebas → tak divalidasi.
+    if str(payload.doc_type or "") == "bast" and str(payload.doc_ref or "").strip():
+        from shared_utils import scope_query_field_satker
+        pemilik = await db.bast_serah_terima.find_one(
+            scope_query_field_satker(
+                user, {"id": str(payload.doc_ref).strip()}),
+            {"_id": 0, "id": 1})
+        if not pemilik:
+            raise HTTPException(
+                status_code=403,
+                detail="BAST rujukan tidak ditemukan pada satker Anda")
     now = datetime.now(timezone.utc)
     sr_id = str(uuid.uuid4())
     signers, links = [], []
@@ -785,7 +801,8 @@ async def detail_permintaan(sr_id: str, user: dict = Depends(require_user)):
 async def batal_permintaan(sr_id: str, user: dict = Depends(require_writer)):
     """Batalkan permintaan (hanya pembuat atau admin)."""
     sr = await db.signature_requests.find_one(
-        {"id": sr_id}, {"_id": 0, "created_by": 1, "judul": 1, "status": 1})
+        {"id": sr_id}, {"_id": 0, "created_by": 1, "judul": 1, "status": 1,
+                        "doc_type": 1, "doc_ref": 1})
     if not sr:
         raise HTTPException(status_code=404, detail="Permintaan tidak ditemukan")
     if sr.get("created_by") != user.get("username") and user.get("role") != "admin":
@@ -795,11 +812,46 @@ async def batal_permintaan(sr_id: str, user: dict = Depends(require_writer)):
     # sudah ber-audit; agar dapat ditelusuri SIAPA & KAPAN membatalkan, dan
     # menjadi fondasi propagasi lintas modul (langkah observability murni —
     # tidak menyentuh record konsumen).
+    # ── CASCADE SINYAL-LUNAK (propagasi otomatis lintas modul) ──────────────
+    # Bila permintaan ini menaut BAST terstruktur (doc_type='bast' + doc_ref =
+    # id BAST) DAN memang e-sign yang tertaut ke BAST (back-link
+    # signature_request_id == sr_id), TANDAI BAST & aset terkait "TT dicabut".
+    # Penjaga penting:
+    #  - scope_query_field_satker → cegah tulis LINTAS-SATKER (doc_ref mentah tak
+    #    dipercaya; batal hanya oleh pembuat/admin tetapi doc_ref bisa apa saja);
+    #  - signature_request_id == sr_id → hanya permintaan yang BENAR menandatangani
+    #    BAST yang boleh mencabut (bukan permintaan lain yang kebetulan menunjuk);
+    #  - update TANPA gerbang modified_count → aman DI-RETRY (idempoten $set);
+    #  - dibungkus try/except → kegagalan cascade tak menggugurkan pembatalan &
+    #    pencatatan audit (best-effort). TIDAK menghapus data (reversibel).
+    # Aset yang ditandai hanya yang bast_terakhir-nya MEMANG BAST ini (presisi).
+    bast_dicabut = 0
+    if sr.get("doc_type") == "bast" and str(sr.get("doc_ref") or "").strip():
+        doc_ref = str(sr["doc_ref"]).strip()
+        try:
+            from shared_utils import scope_query_field_satker
+            b = await db.bast_serah_terima.find_one(
+                scope_query_field_satker(
+                    user, {"id": doc_ref, "signature_request_id": sr_id}),
+                {"_id": 0, "id": 1})
+            if b:
+                now_iso = datetime.now(timezone.utc).isoformat()
+                await db.bast_serah_terima.update_one(
+                    {"id": doc_ref},
+                    {"$set": {"tt_dicabut": True, "tt_dicabut_pada": now_iso}})
+                await db.assets.update_many(
+                    {"bast_terakhir.id": doc_ref, "dihapus": {"$ne": True}},
+                    {"$set": {"bast_terakhir.tt_dicabut": True}})
+                bast_dicabut = 1
+        except Exception:
+            bast_dicabut = 0  # cascade best-effort — batal & audit tetap jalan
     await log_audit("batal_ttd", "", sr_id,
                     username=user.get("username", "system"),
                     detail=(f"Permintaan TTD '{sr.get('judul') or sr_id}' dibatalkan"
-                            f" (status sebelumnya: {sr.get('status') or '-'})"))
-    return {"ok": True}
+                            f" (status sebelumnya: {sr.get('status') or '-'}"
+                            + (f"; BAST {sr.get('doc_ref')} ditandai dicabut"
+                               if bast_dicabut else "") + ")"))
+    return {"ok": True, "bast_dicabut": bool(bast_dicabut)}
 
 
 @ttd_router.post("/ttd/permintaan/{sr_id}/link/{signer_id}")
@@ -986,10 +1038,18 @@ async def kirim_tandatangan(sr_id: str, payload: SpesimenIn, request: Request,
     # Idempoten ($set nilai sama aman diulang). Menjadi tumpuan cascade
     # pembatalan (sinyal lunak) di langkah berikutnya.
     if semua and sr.get("doc_type") == "bast" and str(sr.get("doc_ref") or "").strip():
+        doc_ref = str(sr["doc_ref"]).strip()
+        # Penyelesaian e-sign menulis back-link + MEMBERSIHKAN penanda "dicabut"
+        # dari pembatalan sebelumnya (bila BAST ini di-TTD ULANG lalu selesai) —
+        # pada BAST maupun aset terkait, agar tanda tak menyesatkan menetap.
         await db.bast_serah_terima.update_one(
-            {"id": str(sr["doc_ref"]).strip()},
+            {"id": doc_ref},
             {"$set": {"signature_request_id": sr_id,
-                      "tt_esign_selesai_pada": datetime.now(timezone.utc).isoformat()}})
+                      "tt_esign_selesai_pada": datetime.now(timezone.utc).isoformat(),
+                      "tt_dicabut": False}})
+        await db.assets.update_many(
+            {"bast_terakhir.id": doc_ref, "bast_terakhir.tt_dicabut": True},
+            {"$set": {"bast_terakhir.tt_dicabut": False}})
     await log_audit("kirim_ttd", "", sr_id, username=sg.get("nama") or "tamu",
                     detail=f"E-sign '{sr.get('judul')}' oleh {sg.get('nama')}")
     return {"ok": True, "status_dokumen": status_dok,
