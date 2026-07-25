@@ -175,7 +175,11 @@ async def dhpb_pdf(
     grup, total_biaya = kelompok_dhpb(records)
     ada_kapitalisasi = any(r.get("indikasi_kapitalisasi") for r in records)
 
-    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    # KOP PER-SATKER (REVIEW-9 R15): pakai overlay `pengaturan_kop`, bukan
+    # report_settings mentah — kalau tidak, DHPB satker ini tercetak dengan kop
+    # instansi global/satker lain.
+    from shared_utils import pengaturan_kop
+    settings = await pengaturan_kop(kode_satker=kode_satker_user(_user))
     buffer = BytesIO()
     doc = _std_doc(buffer, landscape_mode=True)
     st = _get_report_styles()

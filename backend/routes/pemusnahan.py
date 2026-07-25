@@ -213,7 +213,14 @@ async def ba_pemusnahan_pdf(ba_id: str, _user: dict = Depends(require_user)):
     if not ba:
         raise HTTPException(status_code=404, detail="BA tidak ditemukan")
     await pastikan_akses_dok_satker(_user, ba)
-    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    # KOP PER-SATKER (REVIEW-9 R15): BA Pemusnahan adalah naskah RESMI satker
+    # pemilik BA — ambil kop dari overlay per-satker, bukan report_settings
+    # mentah. Kode diambil dari BA-nya sendiri agar konsisten walau diunduh
+    # super-admin pusat.
+    from shared_utils import pengaturan_kop
+    settings = await pengaturan_kop(
+        kode_satker=str(ba.get("kode_satker") or "").strip()
+        or kode_satker_user(_user))
     aset = ba.get("aset") or []
     cara = CARA_PEMUSNAHAN.get(ba.get("cara"), ba.get("cara") or "-")
 

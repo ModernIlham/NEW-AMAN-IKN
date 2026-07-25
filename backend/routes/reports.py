@@ -21,7 +21,8 @@ from fastapi.responses import StreamingResponse, HTMLResponse
 from pydantic import BaseModel
 
 from db import db
-from auth_utils import require_user, require_admin, require_user_or_query_token
+from auth_utils import (require_user, require_admin, require_super_admin,
+                        require_user_or_query_token)
 from shared_utils import (pastikan_akses_kegiatan_id, ambang_kapitalisasi,
                           filter_aset_perhitungan,
                           get_photo_from_gridfs, limiter, pengaturan_kop,
@@ -3072,8 +3073,13 @@ async def generate_lbkp_pdf(
     from pemeliharaan_utils import rentang_periode
 
     dari, sampai, label_periode = rentang_periode(tahun, semester)
+    # Scope satker (REVIEW-9 R15): periode pelaporan kini per-satker, jadi
+    # penanda FINAL pada laporan harus diambil dari periode SATKER INI —
+    # bukan periode satker lain yang kebetulan tahun/semesternya sama.
     periode_rec = await db.periode_pelaporan.find_one(
-        {"kunci_unik": kunci_unik_periode(tahun, semester)}, {"_id": 0})
+        scope_query_field_satker(
+            _user, {"kunci_unik": kunci_unik_periode(tahun, semester)}),
+        {"_id": 0})
     sufiks_final = penanda_final(periode_rec)
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
     # ISOLASI SATKER (REVIEW-9 R9): filter_aset_perhitungan TIDAK men-scope
@@ -3390,8 +3396,13 @@ async def generate_calbmn_pdf(
     from persediaan_utils import nilai_persediaan_dari_batches
 
     dari, sampai, label_periode = rentang_periode(tahun, semester)
+    # Scope satker (REVIEW-9 R15): periode pelaporan kini per-satker, jadi
+    # penanda FINAL pada laporan harus diambil dari periode SATKER INI —
+    # bukan periode satker lain yang kebetulan tahun/semesternya sama.
     periode_rec = await db.periode_pelaporan.find_one(
-        {"kunci_unik": kunci_unik_periode(tahun, semester)}, {"_id": 0})
+        scope_query_field_satker(
+            _user, {"kunci_unik": kunci_unik_periode(tahun, semester)}),
+        {"_id": 0})
     sufiks_final = penanda_final(periode_rec)
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
     # ISOLASI SATKER (REVIEW-9 R9) — lihat catatan di LBKP.
@@ -4478,8 +4489,17 @@ async def get_report_settings(_user: dict = Depends(require_user)):
 
 
 @reports_router.put("/report-settings")
-async def update_report_settings(data: ReportSettingsUpdate, _admin: dict = Depends(require_admin)):
-    """Update report settings (text fields only)"""
+async def update_report_settings(data: ReportSettingsUpdate,
+                                 _admin: dict = Depends(require_super_admin)):
+    """Update report settings GLOBAL (khusus super-admin pusat).
+
+    BATAS WEWENANG (REVIEW-9 R15): dokumen singleton {"type":"global"} ini
+    adalah DASAR kop bagi SEMUA satker — `pengaturan_kop()` menimpanya dengan
+    kop Master Satker per satker. Selama gerbangnya cuma `require_admin`,
+    admin satker mana pun dapat mengubah nama instansi/alamat/judul yang
+    muncul di laporan resmi satker LAIN. Penyetelan kop milik satker sendiri
+    tetap lewat Master Satker (PUT /satker/{kode}), yang sudah ber-guard.
+    """
     update_data = {k: v for k, v in data.dict().items() if v is not None}
     update_data["type"] = "global"
     await db.report_settings.update_one(
