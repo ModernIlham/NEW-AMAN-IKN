@@ -67,8 +67,11 @@ async def list_penganggaran(_user: dict = Depends(require_user)):
     items = [u async for u in db.penganggaran.find(scope_query_field_satker(_user), {"_id": 0})
              .sort("created_at", -1).limit(500)]
     realisasi = {}
+    # Isolasi satker (REVIEW-9 R10): nilai realisasi diambil dari register
+    # Pengadaan — tanpa scope, serapan anggaran satker lain ikut terjumlah.
     async for p in db.pengadaan.find(
-            {"penganggaran_id": {"$nin": ["", None]}},
+            scope_query_field_satker(_user,
+                                     {"penganggaran_id": {"$nin": ["", None]}}),
             {"_id": 0, "penganggaran_id": 1, "barang": 1}):
         pid = p.get("penganggaran_id")
         realisasi[pid] = realisasi.get(pid, 0.0) + float(nilai_perolehan(p))
@@ -140,6 +143,11 @@ class TahapanKalenderIn(BaseModel):
 @penganggaran_router.get("/penganggaran/kalender")
 async def list_kalender_penganggaran(_user: dict = Depends(require_user)):
     """Kalender tahapan (tenggat terdekat dulu) + pengingat sisa hari."""
+    # SENGAJA TIDAK di-scope satker: kalender tahapan = KONFIGURASI bersama
+    # (satu siklus anggaran nasional), sekelas masa_manfaat/akun_bas — lihat
+    # RESET_KEEP_COLLECTIONS di backup_utils.py. Men-scope-nya justru memecah
+    # satu kalender bersama jadi kalender per satker (REVIEW-9 R10: sempat
+    # di-scope, lalu dikembalikan setelah verifikasi model datanya).
     items = [t async for t in db.penganggaran_kalender.find({}, {"_id": 0})
              .sort("tanggal", 1).limit(200)]
     today_iso = datetime.now(timezone.utc).date().isoformat()
@@ -181,6 +189,7 @@ async def buat_tahapan_kalender(payload: TahapanKalenderIn,
 async def hapus_tahapan_kalender(tahapan_id: str,
                                  _admin: dict = Depends(require_admin)):
     """Hapus satu tahapan kalender (admin)."""
+    # Konfigurasi BERSAMA (lihat catatan di list) — tak ber-dimensi satker.
     res = await db.penganggaran_kalender.delete_one({"id": tahapan_id})
     if not res.deleted_count:
         raise HTTPException(status_code=404, detail="Tahapan tidak ditemukan")
@@ -216,9 +225,12 @@ async def buat_usulan_anggaran(payload: UsulanAnggaranIn,
     snap_rkbmn = await _ambil_snapshot_rkbmn(data.get("rkbmn_id"), user)
     aset_rows = []
     for aid in dict.fromkeys(data.get("asset_ids") or []):
-        a = await db.assets.find_one({"id": aid}, _PROJ_ASET)
+        a = await db.assets.find_one(
+            {"id": aid}, {**_PROJ_ASET, "activity_id": 1})
         if not a:
             raise HTTPException(status_code=404, detail=f"Aset {aid} tidak ditemukan")
+        from shared_utils import pastikan_akses_aset
+        await pastikan_akses_aset(user, a)  # isolasi satker (REVIEW-9 R10)
         aset_rows.append({"asset_id": a["id"], "asset_code": a.get("asset_code"),
                           "NUP": a.get("NUP"), "asset_name": a.get("asset_name"),
                           "kondisi": a.get("condition")})

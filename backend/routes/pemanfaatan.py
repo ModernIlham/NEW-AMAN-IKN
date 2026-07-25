@@ -189,9 +189,12 @@ async def buat_pemanfaatan(payload: PemanfaatanIn, user: dict = Depends(require_
     if data.get("asset_id"):
         objek = await db.assets.find_one(
             {"id": data["asset_id"]},
-            {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1})
+            {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
+             "activity_id": 1})
         if not objek:
             raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+        from shared_utils import pastikan_akses_aset
+        await pastikan_akses_aset(user, objek)  # isolasi satker (REVIEW-9 R10)
     now = datetime.now(timezone.utc).isoformat()
     record = {
         "id": str(uuid.uuid4()),

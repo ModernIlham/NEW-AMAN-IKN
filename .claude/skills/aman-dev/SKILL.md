@@ -167,6 +167,32 @@ Dua pelengkap yang juga terbukti berulang:
   benar: `require_user_or_query_token` + tanam `?token=` ber-scope media
   (`create_media_token`) ke dalam tautan ekspor.
 
+### Kesalahan ARAH SEBALIKNYA: men-scope yang memang bersama
+
+Isolasi bisa salah ke dua arah. Men-scope koleksi yang SENGAJA global sama
+merusaknya dengan membiarkan yang privat terbuka — bedanya kerusakan ini
+sunyi: fitur tetap "jalan", hanya datanya terpecah diam-diam.
+
+Kasus nyata (R10): `penganggaran_kalender` sempat distempel + di-scope.
+Padahal ia KONFIGURASI BERSAMA — satu siklus anggaran nasional, terdaftar di
+`RESET_KEEP_COLLECTIONS` bersama `masa_manfaat`/`akun_bas`/`kodefikasi`, dan
+DUA sapuan isolasi sebelumnya sengaja melewatinya sambil menstempel
+`db.penganggaran` di file yang sama. Setelah di-scope, tahapan baru yang
+dibuat satu satker jadi tak terlihat satker lain — kalender bersama pecah.
+
+Sebelum menstempel/men-scope koleksi, buktikan dulu ia per-satker:
+1. Apakah ada penulis yang SUDAH menyetel `kode_satker`? (grep penulisnya)
+2. Apakah ia terdaftar di `RESET_KEEP_COLLECTIONS` sebagai konfigurasi?
+3. Apakah sapuan isolasi sebelumnya MELEWATINYA padahal menyentuh file itu?
+   (`git log -p` file tersebut) — kalau ya, itu keputusan, bukan kelalaian.
+4. Uji pertanyaan pemilik: *"kalau dua satker mengisi ini berbeda, apakah
+   keduanya benar?"* Tidak → memang bersama.
+
+Petunjuk diagnostik: bila perbaikan yang diusulkan **tidak mengubah perilaku
+apa pun** (mis. menambah `scope_query_field_satker` pada koleksi yang seluruh
+dokumennya tanpa `kode_satker` — `$in` memuat `None` sehingga cocok semua),
+berarti model datanya salah dibaca. Perbaikan yang no-op = temuan yang keliru.
+
 **Cara memverifikasi, bukan sekadar membaca:** jangan percaya "sudah ditutup di
 gelombang lalu". Grep pola mentahnya di seluruh `routes/` dan periksa satu per
 satu terhadap kode SAAT INI:

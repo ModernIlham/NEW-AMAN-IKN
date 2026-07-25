@@ -31,12 +31,20 @@ _PROJ_BIAYA = {"_id": 0, "asset_id": 1, "asset_code": 1, "NUP": 1,
 _MAKS_BARIS = 1000  # daftar dipangkas untuk UI; ringkasan tetap utuh
 
 
-async def _data_rkbmn(tahun: int):
-    """Kumpulkan kandidat RKBMN (dipakai endpoint JSON & XLSX)."""
-    from shared_utils import filter_aset_perhitungan
+async def _data_rkbmn(tahun: int, user=None):
+    """Kumpulkan kandidat RKBMN (dipakai endpoint JSON & XLSX).
+
+    ISOLASI SATKER (REVIEW-9 R10): `filter_aset_perhitungan` TIDAK men-scope
+    satker, jadi tanpa `scope_query_aset` kertas kerja RKBMN satu satker berisi
+    aset + biaya pemeliharaan SELURUH satker.
+    """
+    from shared_utils import (filter_aset_perhitungan, scope_query_aset,
+                              scope_query_field_satker)
     assets = [a async for a in db.assets.find(
-        await filter_aset_perhitungan({}), _PROJ_ASET)]
-    records = [r async for r in db.pemeliharaan.find({}, _PROJ_BIAYA)]
+        await filter_aset_perhitungan(await scope_query_aset(user, {})),
+        _PROJ_ASET)]
+    records = [r async for r in db.pemeliharaan.find(
+        scope_query_field_satker(user), _PROJ_BIAYA)]
     per_aset = rekap_pemeliharaan(records, tahun=tahun)["per_aset"]
     biaya_map = {p["asset_id"]: p for p in per_aset if p.get("asset_id")}
     return rekap_rkbmn(assets, biaya_map)
@@ -60,7 +68,7 @@ async def rkbmn_pemeliharaan_xlsx(
 
     if not tahun:
         tahun = datetime.now(timezone.utc).year
-    hasil = await _data_rkbmn(tahun)
+    hasil = await _data_rkbmn(tahun, _user)
     buffer = io_module.BytesIO()
     wb = xlsxwriter.Workbook(buffer, {"in_memory": True})
     f_judul = wb.add_format({"bold": True})
@@ -130,7 +138,7 @@ async def rkbmn_pemeliharaan(
     """Kandidat usulan RKBMN pemeliharaan + riwayat biaya per aset."""
     if not tahun:
         tahun = datetime.now(timezone.utc).year
-    hasil = await _data_rkbmn(tahun)
+    hasil = await _data_rkbmn(tahun, _user)
     dipangkas = {
         "layak": len(hasil["layak"]) > _MAKS_BARIS,
         "tidak": len(hasil["tidak"]) > _MAKS_BARIS,
@@ -220,9 +228,12 @@ async def buat_usulan_rkbmn(payload: UsulanRkbmnIn,
     aset_snapshot = {}
     aid = str(data.get("asset_id") or "").strip()
     if aid:
-        a = await db.assets.find_one({"id": aid}, _PROJ_ASET)
+        a = await db.assets.find_one(
+            {"id": aid}, {**_PROJ_ASET, "activity_id": 1})
         if not a:
             raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+        from shared_utils import pastikan_akses_aset
+        await pastikan_akses_aset(user, a)  # isolasi satker (REVIEW-9 R10)
         aset_snapshot = {"asset_id": a["id"], "asset_code": a.get("asset_code"),
                          "NUP": a.get("NUP"), "asset_name": a.get("asset_name")}
     now = datetime.now(timezone.utc).isoformat()

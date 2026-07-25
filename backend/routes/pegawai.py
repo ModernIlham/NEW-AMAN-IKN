@@ -731,8 +731,11 @@ async def ubah_pegawai(pegawai_id: str, payload: PegawaiIn, request: Request,
     # aset → dorong proses serah terima (tidak memblokir penyimpanan).
     peringatan = ""
     if doc["status"] not in ("aktif", "cuti", "tugas_belajar") and doc["nip"]:
-        dipegang = await db.assets.count_documents(
-            {"pengguna_nip": doc["nip"], "dihapus": {"$ne": True}})
+        # Cacah aset di-scope (REVIEW-9 R10) — angkanya ditampilkan ke user,
+        # jadi jangan memuat aset satker lain.
+        from shared_utils import scope_query_aset as _sqa
+        dipegang = await db.assets.count_documents(await _sqa(
+            user, {"pengguna_nip": doc["nip"], "dihapus": {"$ne": True}}))
         if dipegang:
             peringatan = (
                 f"{doc['nama']} masih tercatat memegang {dipegang} aset — "
@@ -765,8 +768,10 @@ async def hapus_pegawai(pegawai_id: str, user: dict = Depends(require_admin)):
         raise HTTPException(status_code=404, detail="Pegawai tidak ditemukan")
     await pastikan_akses_dok_satker(user, peg)  # isolasi satker
     if peg and str(peg.get("nip") or "").strip():
-        dipakai = await db.assets.count_documents(
-            {"pengguna_nip": str(peg["nip"]).strip(), "dihapus": {"$ne": True}})
+        from shared_utils import scope_query_aset as _sqa
+        dipakai = await db.assets.count_documents(await _sqa(
+            user, {"pengguna_nip": str(peg["nip"]).strip(),
+                   "dihapus": {"$ne": True}}))
         if dipakai:
             raise HTTPException(
                 status_code=409,

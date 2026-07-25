@@ -83,13 +83,19 @@ async def hapus_unit_kerja(unit_id: str, user: dict = Depends(require_admin)):
         raise HTTPException(status_code=404, detail="Unit tidak ditemukan")
     from shared_utils import pastikan_akses_dok_satker
     await pastikan_akses_dok_satker(user, u)
-    anak = await db.unit_kerja.count_documents({"parent_id": unit_id})
+    # Cacah di-scope (REVIEW-9 R10): tanpa itu unit satker ini tak bisa
+    # dihapus hanya karena satker LAIN punya anak/pegawai bernama sama, dan
+    # angkanya membocorkan volume satker lain.
+    from shared_utils import scope_query_field_satker
+    anak = await db.unit_kerja.count_documents(
+        scope_query_field_satker(user, {"parent_id": unit_id}))
     if anak:
         raise HTTPException(status_code=409, detail=(
             f"Unit masih punya {anak} sub-unit — hapus/pindahkan dulu"))
     nama = str(u.get("nama_unit") or "")
     es = str(u.get("eselon") or "1")
-    dipakai = await db.pegawai.count_documents({f"eselon{es}": nama})
+    dipakai = await db.pegawai.count_documents(
+        scope_query_field_satker(user, {f"eselon{es}": nama}))
     if dipakai:
         raise HTTPException(status_code=409, detail=(
             f"Unit dipakai {dipakai} pegawai — perbarui unit pegawai dulu"))
