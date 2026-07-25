@@ -8,7 +8,7 @@ import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import axios from "axios";
-import { MapPinned, RefreshCw, Loader2, Move, X, Filter, Download, Camera, Layers, ChevronDown, Boxes, MousePointerClick, CheckCheck, Eraser, PencilLine, SquareDashed, Share2, ImageIcon } from "lucide-react";
+import { MapPinned, RefreshCw, Loader2, Move, X, Filter, Download, Camera, Layers, ChevronDown, Boxes, MousePointerClick, CheckCheck, Eraser, PencilLine, SquareDashed, Share2, ImageIcon, Lock, LockOpen } from "lucide-react";
 import { toast } from "sonner";
 import { compressImageFile } from "../../lib/imageCompression";
 import {
@@ -270,6 +270,13 @@ const AssetMapFullView = memo(function AssetMapFullView({
   useEffect(() => {
     try { localStorage.setItem("aman_map_marker_style", markerStyle); } catch { /* storage diblokir */ }
   }, [markerStyle]);
+  // Kunci geser marker: default TERKUNCI agar sekadar melihat peta (di layar
+  // sentuh maupun mouse) tak sengaja menggeser koordinat aset yang sudah ada.
+  // Buka (satu ketuk) hanya saat ingin membetulkan posisi. SENGAJA tak disimpan
+  // antar sesi — tiap peta dibuka kembali terkunci demi keamanan (cegah "lupa
+  // masih terbuka"). Hanya relevan bila pengguna memang boleh mengedit (canEdit).
+  const [dragUnlocked, setDragUnlocked] = useState(false);
+  const canDrag = canEdit && dragUnlocked;
   // Mode Seleksi: klik/ketuk pin = pilih/lepas (bukan buka popup); Shift+seret
   // (PC) atau tombol "Pilih Area" (HP) = kotak seleksi. Hanya bila pemanggil
   // memberi onSelectionChange (butuh izin ubah). Terhubung ke selectedIds daftar.
@@ -944,15 +951,21 @@ const AssetMapFullView = memo(function AssetMapFullView({
         }
         existing.lat = lat; existing.lng = lng;
         if (existing.iconKey !== iconKey) { existing.marker.setIcon(assetMarkerIcon(row, { color, hasPhoto, complete, selected, style: markerStyle })); existing.iconKey = iconKey; }
-        if (existing.draggable !== canEdit && existing.marker.dragging) {
-          if (canEdit) existing.marker.dragging.enable(); else existing.marker.dragging.disable();
-          existing.draggable = canEdit;
+        if (existing.draggable !== canDrag) {
+          // options.draggable WAJIB diperbarui: saat marker tersembunyi di dalam
+          // cluster lalu ditampilkan ulang, Leaflet membangun ulang handler drag
+          // dari options.draggable — bukan dari enable/disable sebelumnya. Handler
+          // aktif (marker sedang tampil) langsung di-enable/disable bila ada.
+          existing.marker.options.draggable = canDrag;
+          const d = existing.marker.dragging;
+          if (d) { if (canDrag) d.enable(); else d.disable(); }
+          existing.draggable = canDrag;
         }
         continue;
       }
 
-      const marker = L.marker([lat, lng], { icon: assetMarkerIcon(row, { color, hasPhoto, complete, selected, style: markerStyle }), draggable: !!canEdit });
-      const entry = { marker, row, lat, lng, iconKey, draggable: !!canEdit };
+      const marker = L.marker([lat, lng], { icon: assetMarkerIcon(row, { color, hasPhoto, complete, selected, style: markerStyle }), draggable: !!canDrag });
+      const entry = { marker, row, lat, lng, iconKey, draggable: !!canDrag };
       // SATU popup per pin (tanpa tooltip hover — dulu tooltip + popup tampil
       // bertumpuk saat pin diketuk di layar sentuh). Dalam Mode Seleksi, klik
       // pin = pilih/lepas (bukan buka popup) — kendali klik diambil alih di
@@ -1007,7 +1020,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
       // pengguna dapat memperbesar manual hingga z22 untuk memisahkan pin.
       map.fitBounds(bounds, { padding: [30, 30], maxZoom: 19 });
     }
-  }, [displayRows, canEdit, buildPopupEl, refreshRowVersion, selectedIds, markerStyle]);
+  }, [displayRows, canEdit, canDrag, buildPopupEl, refreshRowVersion, selectedIds, markerStyle]);
 
   // Mode Seleksi mematikan box-zoom bawaan Shift+seret (kita pakai Shift+seret
   // untuk KOTAK SELEKSI). Dipulihkan saat mode dimatikan.
@@ -1213,6 +1226,25 @@ const AssetMapFullView = memo(function AssetMapFullView({
             )}
           </DropdownMenuContent>
         </DropdownMenu>
+        {canEdit && (
+          <button
+            type="button"
+            onClick={() => setDragUnlocked((v) => !v)}
+            aria-label={dragUnlocked ? "Kunci geser marker" : "Buka kunci geser marker"}
+            aria-pressed={dragUnlocked}
+            title={dragUnlocked
+              ? "Geser marker AKTIF — ketuk untuk MENGUNCI (cegah geser tak sengaja)"
+              : "Marker terkunci (aman dilihat) — ketuk untuk membuka & geser koordinat"}
+            className={`h-9 w-9 lg:w-auto lg:px-2.5 rounded-lg border flex items-center justify-center lg:justify-start gap-1 flex-shrink-0 ${
+              dragUnlocked
+                ? "border-amber-400 dark:border-amber-700 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40"
+                : "border-border text-foreground/80 hover:bg-muted"}`}
+            data-testid="asset-map-drag-lock"
+          >
+            {dragUnlocked ? <LockOpen className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+            <span className="hidden lg:inline text-xs font-semibold">{dragUnlocked ? "Geser: Aktif" : "Terkunci"}</span>
+          </button>
+        )}
         {onShare && (
           <button
             type="button"
@@ -1406,11 +1438,15 @@ const AssetMapFullView = memo(function AssetMapFullView({
             pengguna + NIP + BAST lengkap
           </span>
         </div>
-        {canEdit && (
-          <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-            <Move className="w-3 h-3" />Geser pin untuk membetulkan koordinat — tersimpan otomatis
+        {canEdit && (dragUnlocked ? (
+          <span className="flex items-center gap-1 text-[10px] text-amber-700 dark:text-amber-300">
+            <Move className="w-3 h-3" />Geser AKTIF — seret pin untuk membetulkan koordinat (tersimpan otomatis). Ketuk 🔓 untuk mengunci.
           </span>
-        )}
+        ) : (
+          <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+            <Lock className="w-3 h-3" />Marker terkunci (aman dilihat) — ketuk 🔒 di toolbar untuk menggeser koordinat.
+          </span>
+        ))}
       </div>
 
       {/* Lightbox foto — sama seperti mode galeri; dibuka dari popup marker */}
