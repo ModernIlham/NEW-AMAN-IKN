@@ -48,6 +48,26 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#599] "Kirim ke TTD" dari BAST — penaut terstruktur BAST↔e-sign — 2026-07-25
+
+Fondasi **#4** keterhubungan otomatis: menautkan dunia **BAST** ke dunia
+**e-sign** secara **terstruktur**. Di dialog **Riwayat BAST** (modul Penggunaan)
+tiap BAST kini punya tombol **"Kirim ke TTD"** yang:
+
+- Membuat permintaan tanda tangan elektronik dengan **`doc_ref = id BAST`**
+  (penaut terstruktur, bukan teks bebas) dan **penanda tangan otomatis** dari
+  Pihak Pertama & Kedua BAST.
+- Menampilkan **tautan e-sign per penanda tangan** untuk dibagikan (Salin /
+  WhatsApp) — alternatif satu-klik dari mengunggah scan bukti basah.
+- Endpoint `POST /bast/{id}/kirim-ttd` ber-scope satker (`require_writer`).
+
+Inilah penaut terstruktur yang membuat langkah berikutnya andal: back-link
+`signature_request_id` ke BAST saat e-sign **selesai**, lalu **cascade** sinyal
+lunak saat TTD **dibatalkan** (badge BAST/Penggunaan/Wasdal/Pengamanan ikut
+menyesuaikan, data tetap reversibel).
+
+---
+
 ## [#598] TTD elektronik: referensi dokumen sumber (mengaktifkan penaut `doc_ref`) — 2026-07-25
 
 Fondasi **#3** keterhubungan TTD ↔ modul. Saat membuat permintaan TTD kini bisa

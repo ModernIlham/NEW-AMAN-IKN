@@ -140,6 +140,39 @@ async def daftar_bast(asset_id: str = "", q: str = "", nip: str = "",
             "label_jenis": JENIS_BAST}
 
 
+@bast_router.post("/bast/{bast_id}/kirim-ttd")
+async def kirim_bast_ke_ttd(bast_id: str, user: dict = Depends(require_writer)):
+    """Buat permintaan TTD elektronik untuk sebuah BAST — dengan penaut
+    TERSTRUKTUR (`doc_ref` = id BAST) + penanda tangan otomatis dari Pihak
+    Pertama & Kedua BAST. Ini titik masuk yang menautkan dunia BAST ke dunia
+    e-sign secara terstruktur (fondasi propagasi otomatis: back-link
+    signature_request_id ke BAST saat selesai, lalu cascade saat dibatalkan)."""
+    from shared_utils import scope_query_field_satker
+    b = await db.bast_serah_terima.find_one(
+        scope_query_field_satker(user, {"id": bast_id}), _PROJ)
+    if not b:
+        raise HTTPException(status_code=404, detail="BAST tidak ditemukan")
+    from routes.ttd import PermintaanIn, SignerIn, buat_permintaan
+    signers = []
+    for p, peran in ((b.get("pihak_pertama") or {}, "Pihak Pertama"),
+                     (b.get("pihak_kedua") or {}, "Pihak Kedua")):
+        nama = str((p or {}).get("nama") or "").strip()
+        if not nama:
+            continue
+        signers.append(SignerIn(
+            nama=nama, nip=str((p or {}).get("nip") or "").strip(),
+            jabatan=str((p or {}).get("jabatan") or peran).strip()))
+    if not signers:
+        raise HTTPException(
+            status_code=400,
+            detail="BAST belum memiliki pihak yang dapat menandatangani")
+    judul = f"BAST {b.get('nomor') or bast_id}".strip()
+    payload = PermintaanIn(judul=judul, doc_type="bast", doc_ref=str(bast_id),
+                           mode="paralel", signers=signers)
+    # buat_permintaan mengembalikan {id, judul, mode, links:[...]} + mencatat audit.
+    return await buat_permintaan(payload=payload, user=user)
+
+
 @bast_router.post("/bast")
 async def buat_bast(payload: BastIn, user: dict = Depends(require_writer)):
     """Simpan BAST ke register (multi-aset; snapshot identitas aset dibekukan

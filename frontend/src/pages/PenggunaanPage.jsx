@@ -85,6 +85,8 @@ export default function PenggunaanPage({ user, onBack }) {
   const [riwayatBast, setRiwayatBast] = useState(null);
   const buktiRef = useRef(null);
   const [buktiUntuk, setBuktiUntuk] = useState(null); // id BAST tujuan unggah bukti
+  const [ttdHasil, setTtdHasil] = useState(null); // {judul, links:[{nama,link}]} hasil "Kirim ke TTD"
+  const [kirimTtdId, setKirimTtdId] = useState(null); // id BAST yang sedang dikirim ke TTD
   // Referensi pejabat yang layak jadi "yang menyerahkan" BAST (peran
   // pengelolaan BMN: KPB / Petugas Penatausahaan / Pengelola BMN Satker),
   // aktif hari ini — dari registry pejabat + metadata peran_penyerah_bast.
@@ -312,6 +314,22 @@ export default function PenggunaanPage({ user, onBack }) {
     } finally {
       setBuktiUntuk(null);
       if (buktiRef.current) buktiRef.current.value = "";
+    }
+  };
+
+  // Kirim BAST ke TTD elektronik — penaut TERSTRUKTUR (doc_ref = id BAST) +
+  // penanda tangan otomatis dari pihak BAST. Server balas link per penanda
+  // tangan untuk dibagikan (Salin/WhatsApp). Alternatif dari unggah scan bukti.
+  const kirimKeTtd = async (b) => {
+    setKirimTtdId(b.id);
+    try {
+      const r = await axios.post(`${API}/bast/${b.id}/kirim-ttd`);
+      setTtdHasil({ judul: r.data?.judul || "BAST", links: r.data?.links || [] });
+      toast.success("Permintaan TTD elektronik dibuat — bagikan tautan ke penanda tangan");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal membuat permintaan TTD");
+    } finally {
+      setKirimTtdId(null);
     }
   };
 
@@ -1370,9 +1388,16 @@ export default function PenggunaanPage({ user, onBack }) {
                         <Button size="sm" variant="outline" className="h-7 text-[11px]"
                           onClick={() => window.open(authMediaUrl(`${API}/bast/${b.id}/bukti`), "_blank")}>Lihat Bukti</Button>
                       ) : (
-                        <Button size="sm" className="h-7 text-[11px]"
-                          onClick={() => { setBuktiUntuk(b.id); buktiRef.current?.click(); }}
-                          data-testid={`bast-unggah-bukti-${b.id}`}>Unggah Bukti TTD</Button>
+                        <>
+                          <Button size="sm" variant="outline" className="h-7 text-[11px]"
+                            disabled={kirimTtdId === b.id} onClick={() => kirimKeTtd(b)}
+                            data-testid={`bast-kirim-ttd-${b.id}`}>
+                            {kirimTtdId === b.id ? "Mengirim…" : "Kirim ke TTD"}
+                          </Button>
+                          <Button size="sm" className="h-7 text-[11px]"
+                            onClick={() => { setBuktiUntuk(b.id); buktiRef.current?.click(); }}
+                            data-testid={`bast-unggah-bukti-${b.id}`}>Unggah Bukti TTD</Button>
+                        </>
                       )}
                     </div>
                   </div>
@@ -1380,6 +1405,35 @@ export default function PenggunaanPage({ user, onBack }) {
               ))}
             </ul>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog hasil "Kirim ke TTD": tautan e-sign per penanda tangan ── */}
+      <Dialog open={!!ttdHasil} onOpenChange={(o) => { if (!o) setTtdHasil(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="break-words">Tautan Tanda Tangan Elektronik</DialogTitle>
+            <DialogDescription className="break-words">
+              {ttdHasil?.judul} — bagikan tiap tautan ke penanda tangannya (berlaku 14 hari, sekali pakai).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            {(ttdHasil?.links || []).map((l, i) => (
+              <div key={i} className="rounded-lg border border-border p-2.5 text-xs space-y-1" data-testid={`ttd-link-${i}`}>
+                <p className="font-semibold truncate">{l.nama}</p>
+                <p className="text-[10px] text-muted-foreground break-all">{l.link}</p>
+                <div className="flex gap-1.5">
+                  <Button size="sm" variant="outline" className="h-7 text-[10px]"
+                    onClick={() => { navigator.clipboard?.writeText(l.link); toast.success("Tautan disalin"); }}>Salin</Button>
+                  <Button size="sm" variant="outline" className="h-7 text-[10px]"
+                    onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(`Yth. ${l.nama}, mohon tanda tangani secara elektronik melalui tautan berikut:\n${l.link}`)}`, "_blank", "noopener")}>WhatsApp</Button>
+                </div>
+              </div>
+            ))}
+            <p className="text-[10px] text-muted-foreground">
+              Kelola lebih lanjut (terbitkan ulang tautan, unduh Lembar Pengesahan, pantau status) di menu <b>Tanda Tangan Elektronik</b>.
+            </p>
+          </div>
         </DialogContent>
       </Dialog>
 
