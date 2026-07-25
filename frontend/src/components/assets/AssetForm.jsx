@@ -1072,8 +1072,12 @@ const AssetForm = memo(({
   // Hasil pemilih pegawai (filter client-side by nama/NIP). null = offline.
   const pegawaiResults = useMemo(() => {
     if (!Array.isArray(pegawaiAll)) return pegawaiAll;   // undefined/null diteruskan
+    // Pegawai MENINGGAL DUNIA tak dapat dipilih sebagai pemegang aset baru —
+    // almarhum tak mungkin menerima serah terima. Aset yang sudah tercatat atas
+    // namanya TIDAK terhapus; penyelesaiannya lewat pengembalian BMN almarhum.
+    const hidup = pegawaiAll.filter((p) => String(p?.status || "") !== "meninggal");
     const q = pegawaiQuery.trim().toLowerCase();
-    const list = !q ? pegawaiAll : pegawaiAll.filter((p) =>
+    const list = !q ? hidup : hidup.filter((p) =>
       [p.nama, p.nip].some((v) => String(v || "").toLowerCase().includes(q)));
     return list.slice(0, 40);
   }, [pegawaiAll, pegawaiQuery]);

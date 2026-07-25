@@ -304,6 +304,23 @@ async def buat_permintaan(payload: PermintaanIn, user: dict = Depends(require_wr
             raise HTTPException(
                 status_code=403,
                 detail="BAST rujukan tidak ditemukan pada satker Anda")
+    # Penanda tangan yang sudah MENINGGAL DUNIA → tolak sejak awal. Mengirim
+    # link TTD ke almarhum mustahil dipenuhi dan hanya menggantung dokumen di
+    # status "menunggu". Satu query untuk semua NIP (hindari N kueri).
+    _nip_signer = [str(s.nip or "").strip() for s in payload.signers
+                   if str(s.nip or "").strip()]
+    if _nip_signer:
+        _alm = await db.pegawai.find(
+            {"nip": {"$in": _nip_signer}, "status": "meninggal"},
+            {"_id": 0, "nama": 1, "nip": 1}).to_list(100)
+        if _alm:
+            _nama = ", ".join(str(a.get("nama") or a.get("nip")) for a in _alm)
+            raise HTTPException(
+                status_code=400,
+                detail=(f"Penanda tangan berstatus Meninggal Dunia: {_nama}. "
+                        "Ganti dengan pejabat pengganti yang berwenang "
+                        "(mis. atasan langsung/ahli waris) sebelum mengirim "
+                        "permintaan tanda tangan."))
     now = datetime.now(timezone.utc)
     sr_id = str(uuid.uuid4())
     signers, links = [], []

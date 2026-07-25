@@ -48,6 +48,32 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#607] Pemegang BMN meninggal dunia (2/4): tolak transaksi baru kepada almarhum — 2026-07-25
+
+Lanjutan [#606]. Sebelumnya pegawai non-aktif **masih bisa dipilih** sebagai
+pemegang aset maupun penerima BAST (picker tanpa filter status, validasi hanya
+peringatan lunak) — sehingga **BAST baru bisa dibuat atas nama orang yang sudah
+meninggal**. Kini ditutup:
+
+- **BAST — penerima almarhum DITOLAK** (HTTP 400, bukan peringatan). Secara
+  hukum mustahil almarhum menerima serah terima. Pesan mengarahkan ke alur
+  pengembalian BMN almarhum (penyerah: ahli waris/atasan). Status non-aktif
+  lain (pensiun/mutasi) **tetap peringatan lunak** seperti semula — hanya
+  kematian yang memblokir.
+- **E-sign — penanda tangan almarhum DITOLAK** saat membuat permintaan TTD.
+  Mengirim link ke almarhum mustahil dipenuhi dan hanya menggantung dokumen di
+  status "menunggu". Satu kueri untuk semua NIP (tak menambah beban per
+  penanda tangan). Pesan menyarankan mengganti dengan pejabat berwenang.
+- **Picker disaring**: almarhum tak lagi muncul di pemilih pengguna aset
+  (Form Aset) maupun datalist penerima BAST (Penggunaan). Aset yang **sudah**
+  tercatat atas namanya **TIDAK terhapus** — penyelesaiannya lewat pengembalian
+  BMN almarhum, bukan penghapusan diam-diam.
+
+> Prinsip yang dipegang: dokumen historis tak disentuh, dan pengosongan pemegang
+> hanya boleh terjadi lewat BAST (ada dokumennya) — bukan otomatis.
+
+---
+
 ## [#606] Pemegang BMN meninggal dunia (1/4): status "Meninggal Dunia" + jam 3 tahun ahli waris — 2026-07-25
 
 Menjawab kasus nyata: **BAST sudah sah, lalu pemegangnya meninggal.** Riset
