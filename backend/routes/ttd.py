@@ -980,6 +980,16 @@ async def kirim_tandatangan(sr_id: str, payload: SpesimenIn, request: Request,
     await db.signature_requests.update_one(
         {"id": sr_id, "status": {"$nin": kunci_status}},
         {"$set": {"status": status_dok}})
+    # BACK-LINK dua-arah TTD↔BAST: saat SEMUA pihak selesai meneken dan
+    # permintaan ini menaut BAST terstruktur (doc_type='bast' + doc_ref = id
+    # BAST, dari tombol "Kirim ke TTD"), tulis signature_request_id ke BAST.
+    # Idempoten ($set nilai sama aman diulang). Menjadi tumpuan cascade
+    # pembatalan (sinyal lunak) di langkah berikutnya.
+    if semua and sr.get("doc_type") == "bast" and str(sr.get("doc_ref") or "").strip():
+        await db.bast_serah_terima.update_one(
+            {"id": str(sr["doc_ref"]).strip()},
+            {"$set": {"signature_request_id": sr_id,
+                      "tt_esign_selesai_pada": datetime.now(timezone.utc).isoformat()}})
     await log_audit("kirim_ttd", "", sr_id, username=sg.get("nama") or "tamu",
                     detail=f"E-sign '{sr.get('judul')}' oleh {sg.get('nama')}")
     return {"ok": True, "status_dokumen": status_dok,

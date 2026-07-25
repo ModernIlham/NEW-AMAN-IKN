@@ -48,6 +48,22 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#600] Back-link TTD→BAST: `signature_request_id` tertulis ke BAST saat e-sign selesai — 2026-07-25
+
+Fondasi **#5** — melengkapi **FK dua-arah** TTD↔BAST. Saat **semua** pihak
+selesai menandatangani sebuah permintaan yang menaut BAST terstruktur
+(`doc_type='bast'` + `doc_ref` = id BAST, dari tombol "Kirim ke TTD"), sistem
+menulis **`signature_request_id`** (+ `tt_esign_selesai_pada`) ke record
+`bast_serah_terima` yang bersangkutan.
+
+- Idempoten (`$set` nilai sama aman diulang; aman terhadap penyelesaian paralel).
+- Backend murni, tanpa perubahan perilaku lain.
+- Ini tumpuan **cascade pembatalan** (langkah berikutnya): begitu tautan dua-arah
+  ada, membatalkan TTD dapat menandai BAST/aset "dicabut" secara otomatis
+  (sinyal lunak) sehingga badge Penggunaan/Wasdal/Pengamanan menyesuaikan.
+
+---
+
 ## [#599] "Kirim ke TTD" dari BAST — penaut terstruktur BAST↔e-sign — 2026-07-25
 
 Fondasi **#4** keterhubungan otomatis: menautkan dunia **BAST** ke dunia
