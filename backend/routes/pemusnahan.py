@@ -163,6 +163,11 @@ async def usulkan_penghapusan_dari_ba(ba_id: str,
         now = datetime.now(timezone.utc).isoformat()
         # Record ber-TAUT sumber (Pemusnahan → Penghapusan) — helper murni teruji.
         record = usulan_penghapusan_dari_ba(ba, a, now, user.get("username"), str(uuid.uuid4()))
+        # BA era lama tanpa kode_satker → pakai satker pembuat usulan agar
+        # tiket tak pernah lahir tanpa scope (bocor lintas satker).
+        if not record.get("kode_satker"):
+            from shared_utils import kode_satker_user
+            record["kode_satker"] = kode_satker_user(user)
         await db.usulan_penghapusan.insert_one({**record})
         dibuat += 1
         hasil.append({"asset_id": aid, "asset_name": a.get("asset_name"),
@@ -207,6 +212,10 @@ async def ba_pemusnahan_pdf(ba_id: str, _user: dict = Depends(require_user)):
     buffer = BytesIO()
     doc = _std_doc(buffer)
     st = _get_report_styles()
+    # Import di ATAS pemakaian pertama — import lokal menjadikan _esc variabel
+    # lokal fungsi, sehingga pemakaian sebelum baris import melempar
+    # UnboundLocalError (endpoint 500 di setiap panggilan).
+    from xml.sax.saxutils import escape as _esc
     elements = []
     elements.extend(_kop_surat_flowables(settings, doc.width))
     elements.extend(_title_block("BERITA ACARA PEMUSNAHAN BARANG MILIK NEGARA",
@@ -221,7 +230,6 @@ async def ba_pemusnahan_pdf(ba_id: str, _user: dict = Depends(require_user)):
         st['Meta']))
     elements.append(Spacer(1, 4 * rl_mm))
 
-    from xml.sax.saxutils import escape as _esc
     headers = ["No", "Kode Barang", "NUP", "Nama Barang", "Nilai Perolehan"]
     table_data = [[Paragraph(h, st['TableHeader']) for h in headers]]
     total = 0.0

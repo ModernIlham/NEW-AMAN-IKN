@@ -269,11 +269,16 @@ export default function PenggunaanPage({ user, onBack }) {
               saksi: (f.saksi || []).filter((x) => (x.nama || "").trim()) }
           : {}),
         sertakan_foto: f.sertakan_foto, keterangan: f.keterangan,
-        terapkan_ke_aset: ["mutasi_pengguna", "pengembalian"].includes(f.jenis)
+        // pengembalian_almarhum WAJIB ikut di sini — tanpanya checkbox
+        // "kosongkan pengguna" dipaksa false dan aset tetap atas nama almarhum
+        // (alur pengembalian almarhum gagal senyap di langkah terakhirnya).
+        terapkan_ke_aset: ["mutasi_pengguna", "pengembalian",
+                           "pengembalian_almarhum"].includes(f.jenis)
           ? f.terapkan_ke_aset : false,
         booking_otomatis: f.booking_otomatis,
       });
-      if (["mutasi_pengguna", "pengembalian"].includes(f.jenis) && f.terapkan_ke_aset) {
+      if (["mutasi_pengguna", "pengembalian",
+           "pengembalian_almarhum"].includes(f.jenis) && f.terapkan_ke_aset) {
         load(page, search); // pemegang berubah — segarkan rekap
       } else if (detail?.pemegang) {
         openDetail(detail.pemegang); // badge bast_terakhir baru langsung tampak

@@ -95,6 +95,10 @@ def usulan_penghapusan_dari_ba(ba: dict, aset: dict, now_iso: str, oleh, new_id:
         "status": "diusulkan",
         "nomor_sk": "",
         "tanggal_sk": "",
+        # Isolasi multi-satker: tanpa ini scope_query_field_satker menganggap
+        # tiket "era lama" yang terbuka utk SEMUA satker → bocor & bisa
+        # ditransisikan lintas satker.
+        "kode_satker": str(ba.get("kode_satker") or "").strip(),
         "keterangan": alasan_usulan_dari_ba(ba),
         # ── Taut sumber (Pemusnahan → Penghapusan) ──
         "sumber_modul": "pemusnahan",

@@ -69,6 +69,21 @@ def test_usulan_penghapusan_ba_tanpa_nomor_tak_crash():
     assert rec["sumber_ba_id"] == "ba-x" and rec["sumber_ba_nomor"] == ""
 
 
+def test_usulan_penghapusan_bawa_kode_satker():
+    # Isolasi multi-satker: tiket TANPA kode_satker dianggap "era lama" yang
+    # terbuka utk semua satker oleh scope_query_field_satker → wajib tersalin
+    # dari BA sumber (temuan audit REVIEW-9 A2).
+    rec = usulan_penghapusan_dari_ba(
+        _ba(id="ba-9", kode_satker="527010"), {"asset_id": "a3"},
+        "2026-07-25T00:00:00", "budi", "u-3")
+    assert rec["kode_satker"] == "527010"
+    # BA lama tanpa satker → string kosong (pemanggil route mengisi fallback
+    # satker user sebelum insert).
+    rec2 = usulan_penghapusan_dari_ba({"id": "ba-y"}, {"asset_id": "a4"},
+                                      "2026-07-25T00:00:00", "ani", "u-4")
+    assert rec2["kode_satker"] == ""
+
+
 def test_rekap():
     records = [
         {"aset": [{"harga": 100_000}, {"harga": 250_000}]},
