@@ -55,6 +55,11 @@ function _iosHaptic() {
       const input = document.createElement("input");
       input.type = "checkbox";
       input.setAttribute("switch", ""); // atribut khas iOS 17.4+
+      // opacity:0 tak mengeluarkan elemen dari urutan tab — beri tabindex=-1
+      // agar kontrol tak-terlihat ini tak "menangkap" fokus keyboard (aturan
+      // aria-hidden-focus). Jangan pakai `disabled` — switch nonaktif tak
+      // toggle → haptic gagal.
+      input.tabIndex = -1;
       label.appendChild(input);
       document.body.appendChild(label);
       _iosSwitch = label;

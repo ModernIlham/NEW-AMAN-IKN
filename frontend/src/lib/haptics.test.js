@@ -56,11 +56,15 @@ describe("haptic (dua jalur: Android vibrate + fallback iOS)", () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  test("tanpa Vibration API (mis. iOS) → fallback best-effort, tak melempar", () => {
+  test("tanpa Vibration API (mis. iOS) → fallback membuat kontrol switch, tak melempar", () => {
     try { delete navigator.vibrate; } catch { /* diam */ }
     // Jalur iOS (kontrol switch) — di jsdom tak menghasilkan haptic nyata,
-    // tetapi harus aman (tak melempar) dan mengembalikan boolean.
+    // tetapi harus aman (tak melempar), mengembalikan boolean, dan benar-benar
+    // menempatkan <input switch> tersembunyi & tak-terfokus (tabindex -1).
     expect(() => haptic("shutter")).not.toThrow();
     expect(typeof haptic("shutter")).toBe("boolean");
+    const el = document.querySelector('input[switch]');
+    expect(el).not.toBeNull();
+    expect(el.tabIndex).toBe(-1);
   });
 });
