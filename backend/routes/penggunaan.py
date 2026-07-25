@@ -706,13 +706,15 @@ async def buat_tiket_idle(payload: TiketIdleIn, user: dict = Depends(require_wri
 
 
 async def _proyeksi_terminal_ke_aset(proj: dict, asset_ids: list,
-                                     oleh: str, aksi: str) -> int:
+                                     oleh: str, aksi: str) -> list:
     """Stamp proyeksi terminal (dihapus=True + subdoc penghapusan) ke aset
     tertaut — pola penghapusan #234: hanya aset yang BELUM dihapus, `$inc
     version` (bust cache + OCC), audit per aset. Best-effort: tiket sudah
     tersimpan; kegagalan proyeksi tak menggagalkan transisi. Kembalikan
-    jumlah aset terproyeksi."""
-    n = 0
+    DAFTAR id aset yang benar-benar terproyeksi — jurnal 302 pemanggil hanya
+    boleh menyasar aset ini (aset yang sudah keluar buku lewat jalur lain,
+    mis. SK penghapusan 301, tidak dijurnal KURANG dua kali)."""
+    terproyeksi = []
     for aid in asset_ids or []:
         aid = str(aid or "").strip()
         if not aid:
@@ -733,8 +735,8 @@ async def _proyeksi_terminal_ke_aset(proj: dict, asset_ids: list,
             detail=f"Aset keluar pembukuan satker ({aksi}) — dokumen "
                    f"{(proj.get('penghapusan') or {}).get('nomor_sk') or '-'}",
             nup=updated.get("NUP", ""))
-        n += 1
-    return n
+        terproyeksi.append(aid)
+    return terproyeksi
 
 
 @penggunaan_router.post("/penggunaan/idle/{tiket_id}/status")
@@ -771,8 +773,27 @@ async def transisi_idle(tiket_id: str, payload: TransisiIdleIn,
     # (proyeksi master, temuan review #1 — pola penghapusan #234).
     proj = build_asset_idle_serah_projection(res, now)
     if proj:
-        await _proyeksi_terminal_ke_aset(
+        terproyeksi = await _proyeksi_terminal_ke_aset(
             proj, [res.get("asset_id")], admin.get("username"), "idle_diserahkan")
+    # Jurnal Buku Barang (G7, REVIEW-9 R3): serah BMN idle ke Pengelola →
+    # 302 Transfer Keluar — hanya bila aset benar-benar terproyeksi (yang
+    # sudah keluar buku lewat jalur lain tidak dijurnal KURANG lagi).
+    if proj and terproyeksi:
+        from pembukuan_utils import parse_harga
+        from shared_utils import catat_mutasi_bmn
+        aset = await db.assets.find_one(
+            {"id": res.get("asset_id")},
+            {"_id": 0, "asset_code": 1, "NUP": 1, "purchase_price": 1})
+        await catat_mutasi_bmn({
+            "asset_id": res.get("asset_id"), "kode_transaksi": "302",
+            "kode_barang": str((aset or {}).get("asset_code") or ""),
+            "nup": str((aset or {}).get("NUP") or ""),
+            "tanggal_buku": now[:10], "jumlah": 1,
+            "nilai": parse_harga((aset or {}).get("purchase_price")),
+            "sumber_modul": "penggunaan", "ref_id": res.get("id"),
+            "keterangan": (f"Serah BMN idle ke Pengelola — BAST "
+                           f"{res.get('nomor_bast_serah') or '-'}"),
+            "oleh": admin.get("username", "system")})
     return res
 
 
@@ -1061,15 +1082,48 @@ async def transisi_proses(tiket_id: str, payload: TransisiProsesIn,
     # review #1 — pola penghapusan #234). Arah masuk TIDAK diproyeksikan.
     proj = build_asset_alih_keluar_projection(res, now)
     if proj:
-        await _proyeksi_terminal_ke_aset(
+        terproyeksi = await _proyeksi_terminal_ke_aset(
             proj, [r.get("asset_id") for r in (res.get("aset") or [])],
             user.get("username"), "alih_status_keluar")
+        # Jurnal Buku Barang (G7, REVIEW-9 R3): alih status KELUAR terminal →
+        # 302 Transfer Keluar HANYA untuk aset yang benar-benar terproyeksi —
+        # aset yang sudah keluar buku lewat jalur lain (SK penghapusan 301 /
+        # tiket idle) tidak dijurnal KURANG dua kali.
+        from pembukuan_utils import parse_harga
+        from shared_utils import catat_mutasi_bmn
+        for aid in terproyeksi:
+            aset = await db.assets.find_one(
+                {"id": aid},
+                {"_id": 0, "asset_code": 1, "NUP": 1, "purchase_price": 1})
+            await catat_mutasi_bmn({
+                "asset_id": aid, "kode_transaksi": "302",
+                "kode_barang": str((aset or {}).get("asset_code") or ""),
+                "nup": str((aset or {}).get("NUP") or ""),
+                "tanggal_buku": (str(res.get("tanggal_sk_penghapusan") or "")
+                                 .strip()[:10] or now[:10]),
+                "jumlah": 1,
+                "nilai": parse_harga((aset or {}).get("purchase_price")),
+                "sumber_modul": "penggunaan", "ref_id": res.get("id"),
+                "keterangan": (f"Alih status penggunaan ke {res.get('pihak_tujuan') or '-'}"
+                               f" — SK {res.get('nomor_sk_penghapusan') or '-'}"),
+                "oleh": user.get("username", "system")})
     return res
 
 
 @penggunaan_router.delete("/penggunaan/proses/{tiket_id}")
 async def hapus_proses(tiket_id: str, _admin: dict = Depends(require_admin)):
-    """Hapus satu tiket proses (admin)."""
+    """Hapus satu tiket proses (admin). Tiket terminal `dihapus_dibukukan`
+    TIDAK boleh dihapus — jurnal 302 & tombstone aset sudah terbit; hapus-
+    lalu-buat-ulang akan menggandakan mutasi KURANG di Buku Barang."""
+    terminal = await db.penggunaan_proses.find_one(
+        scope_query_field_satker(
+            _admin, {"id": tiket_id, "status": "dihapus_dibukukan"}),
+        {"_id": 1})
+    if terminal:
+        raise HTTPException(
+            status_code=409,
+            detail="Tiket sudah terminal (aset keluar pembukuan & berjurnal) "
+                   "— tidak dapat dihapus.")
     res = await db.penggunaan_proses.delete_one(
         scope_query_field_satker(_admin, {"id": tiket_id}))
     if not res.deleted_count:

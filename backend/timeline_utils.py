@@ -43,6 +43,7 @@ KODE_TRANSAKSI_LABEL = {
     "102": "Transfer masuk",
     "107": "Reklasifikasi masuk",
     "204": "Koreksi nilai (revaluasi)",
+    "205": "Koreksi nilai berkurang (revaluasi)",
     "301": "Penghapusan",
     "302": "Transfer keluar",
     "304": "Reklasifikasi keluar",

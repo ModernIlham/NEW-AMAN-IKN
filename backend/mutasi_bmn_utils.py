@@ -101,7 +101,9 @@ def rekap_mutasi_periode(entries, dari, sampai):
         b = out.setdefault(kode, {"tambah_n": 0, "tambah_rp": 0.0,
                                   "kurang_n": 0, "kurang_rp": 0.0,
                                   "per_kode_transaksi": {}})
-        n = int(e.get("jumlah") or 1)
+        # jumlah 0 EKSPLISIT dihormati (koreksi nilai 204/205: rupiah berubah,
+        # kuantitas tidak) — hanya field yang absen yang dianggap 1 unit.
+        n = int(1 if e.get("jumlah") is None else (e.get("jumlah") or 0))
         rp = float(e.get("nilai") or 0)
         pk = b["per_kode_transaksi"].setdefault(kt, {"n": 0, "rp": 0.0})
         pk["n"] += n

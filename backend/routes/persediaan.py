@@ -268,7 +268,13 @@ async def export_persediaan(_user: dict = Depends(require_user)):
     buf = io.StringIO()
     w = csv_module.writer(buf)
     w.writerow(_TEMPLATE_HEADERS + ["stok", "nilai"])
-    async for it in db.persediaan.find({}, {"_id": 0}).sort([("nama_barang", 1), ("kode_barang", 1)]):
+    # Scope satker (REVIEW-9 R3): tanpa filter, user satker B mengunduh
+    # seluruh master (stok + nilai) satker lain — data yang per item justru
+    # ditolak 403 — dan roundtrip ekspor→impor menduplikasinya ke satker B.
+    from shared_utils import scope_query_field_satker
+    async for it in db.persediaan.find(
+            scope_query_field_satker(_user), {"_id": 0}
+            ).sort([("nama_barang", 1), ("kode_barang", 1)]):
         w.writerow([
             it.get("kode_barang"), it.get("nup"), it.get("nama_barang"),
             it.get("merk"), it.get("tipe"), it.get("satuan"), it.get("lokasi"),
@@ -324,8 +330,11 @@ async def import_persediaan(file: UploadFile = File(...), _user: dict = Depends(
         kode, nup = e["kode_barang"], e["nup"]
         scalar = {k: v for k, v in e.items() if k not in ("kode_barang", "nup")}
         if len(kode) == KODE_PENUH_LEN and nup:
+            # Scope satker (REVIEW-9 R3): impor satker B tidak boleh menimpa
+            # master milik satker A yang kebetulan ber-kode+NUP sama.
+            from shared_utils import scope_query_field_satker
             res = await db.persediaan.update_one(
-                {"kode_barang": kode, "nup": nup},
+                scope_query_field_satker(_user, {"kode_barang": kode, "nup": nup}),
                 {"$set": {**scalar, "updated_at": now}, "$inc": {"version": 1}},
             )
             if res.matched_count:
@@ -1155,18 +1164,23 @@ async def create_persediaan(data: PersediaanCreate, _user: dict = Depends(requir
         except ValueError as e:
             raise HTTPException(status_code=409, detail=str(e))
 
-    # NUP otomatis bila kosong: increment NUP terbesar pada kode sama.
+    # NUP otomatis bila kosong: increment NUP terbesar pada kode sama —
+    # DALAM LINGKUP SATKER pembuat (REVIEW-9 R3: deret NUP & keunikan
+    # kode+NUP berlaku per satker, sejalan keunikan NIP pegawai; item era
+    # lama tanpa kode_satker tetap terhitung milik satker yang melihatnya).
+    from shared_utils import kode_satker_user, scope_query_field_satker
     nup = str(data.nup or "").strip()
     if not nup:
         max_nup_doc = await db.persediaan.find_one(
-            {"kode_barang": kode}, {"_id": 0, "nup": 1},
-            sort=[("nup_num", -1)])
+            scope_query_field_satker(_user, {"kode_barang": kode}),
+            {"_id": 0, "nup": 1}, sort=[("nup_num", -1)])
         nup = next_nup((max_nup_doc or {}).get("nup"))
-    if await db.persediaan.find_one({"kode_barang": kode, "nup": nup}, {"_id": 1}):
+    if await db.persediaan.find_one(
+            scope_query_field_satker(_user, {"kode_barang": kode, "nup": nup}),
+            {"_id": 1}):
         raise HTTPException(status_code=409, detail=f"Kode {kode} NUP {nup} sudah terdaftar")
 
     now = datetime.now(timezone.utc).isoformat()
-    from shared_utils import kode_satker_user
     doc = {
         "id": str(uuid.uuid4()),
         "kode_barang": kode,

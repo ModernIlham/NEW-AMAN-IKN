@@ -48,6 +48,69 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#612] Audit REVIEW-9 (3/7): jurnal induk lengkap & scope master persediaan — 2026-07-25
+
+Gelombang ketiga audit 6 dimensi: **semua transaksi keluar/nilai kini
+berjurnal** di Buku Barang (`mutasi_bmn`) — LBKP/LBP tidak lagi kehilangan
+mutasi dari tiga jalur yang sebelumnya bisu — plus isolasi satker master
+persediaan.
+
+**Jurnal induk (Buku Barang / G7):**
+
+- 🔴 **Revaluasi Penilaian kini berjurnal** — `tandai_tercatat_sakti` menulis
+  204 (Koreksi Nilai bertambah) / 205 (berkurang) saat koreksi FINAL:
+  magnitudo positif + `jumlah 0` (rupiah bergeser, kuantitas tidak),
+  tanggal buku = tanggal dokumen penilaian.
+- 🔴 **Alih status keluar & serah BMN idle kini berjurnal** — transisi
+  terminal `dihapus_dibukukan` (proses alih status keluar) dan `diserahkan`
+  (BMN idle → Pengelola) menulis 302 Transfer Keluar per aset; sebelumnya
+  aset hilang dari master (tombstone) tanpa jejak mutasi KURANG di jurnal.
+- 🟠 **Guard jurnal ganda terpusat** — `catat_mutasi_bmn` menolak entri
+  duplikat (aset + kode transaksi + `ref_id` dokumen sumber sama): retry
+  idempoten & alur revert-lalu-terminal-lagi tidak menggandakan mutasi.
+- 🟠 **Dua bug agregator diperbaiki** — `rekap_mutasi_periode` memaksa
+  `jumlah 0` menjadi 1 (`or 1`), menggeser kuantitas pada koreksi nilai;
+  tabel LBP `susun_mutasi_per_transaksi` hanya menegatifkan kode 3xx/4xx
+  sehingga 205 justru MENAMBAH total — kini 205 ikut dinegatifkan + berlabel.
+
+**Master persediaan (isolasi satker):**
+
+- 🟠 **Keunikan kode+NUP & deret NUP kini per satker** — sebelumnya satker B
+  tertolak 409 (atau mewarisi deret NUP satker A) karena cek duplikat dan
+  auto-increment NUP global; kini sejalan pola keunikan NIP pegawai.
+- 🟠 **Impor master tak menimpa satker lain** — update impor by kode+NUP
+  kini difilter satker pengimpor (dulu bisa menimpa field master milik
+  satker lain yang kebetulan ber-kode+NUP sama).
+
+**Hasil review adversarial 3 lensa (12 agen, semua temuan terverifikasi):**
+
+- 🔴 **Indeks unik persediaan dimigrasi per satker** — indeks global
+  `(kode_barang, nup)` dilepas & diganti `(kode_satker, kode_barang, nup)`;
+  tanpa ini dup-check per-satker lolos lalu insert meledak
+  `DuplicateKeyError` 500 dan satker kedua terblokir permanen.
+- 🟠 **"Daftarkan ke Persediaan" (Pengadaan) di-scope satker** — lookup master
+  by kode tanpa scope memilih master satker lain → jalur create terlewati →
+  transaksi masuk 403 dan baris BAST macet permanen.
+- 🟠 **Ekspor master persediaan di-scope satker** — sebelumnya user satker B
+  mengunduh seluruh master (stok + nilai) satker lain, dan roundtrip
+  ekspor→impor menduplikasinya ke satker B.
+- 🟠 **302 hanya untuk aset yang benar-benar terproyeksi** —
+  `_proyeksi_terminal_ke_aset` kini mengembalikan daftar id terproyeksi;
+  aset yang sudah keluar buku lewat jalur lain (SK penghapusan 301 / tiket
+  idle) tidak dijurnal KURANG dua kali.
+- 🟠 **Koreksi informasional tak berjurnal & tak memproyeksi** — jenis
+  "penilaian tujuan tertentu" (tidak mengubah nilai buku menurut modulnya
+  sendiri) kini dilewati oleh jurnal 204/205 DAN proyeksi
+  `nilai_wajar_terakhir` (cacat pra-R3).
+- 🟠 **Guard hapus register yang sudah berjurnal** — koreksi nilai FINAL
+  (tercatat SAKTI) dan tiket proses terminal `dihapus_dibukukan` kini 409
+  saat dihapus (pola larangan hapus catatan pemeliharaan ber-jurnal 202) —
+  hapus-lalu-buat-ulang tidak lagi menggandakan mutasi.
+- 🟠 **Jurnal 202 pemeliharaan pakai `jumlah 0`** — pengembangan nilai
+  murni rupiah; `jumlah 1` lama menambah 1 unit fiktif per posting pada
+  Tabel 17 CaLBMN.
+- 🟡 Label kode 205 ditambahkan ke timeline aset.
+
 ## [#611] Audit REVIEW-9 (2/7): sapu IDOR & guard lintas modul — 2026-07-25
 
 Gelombang kedua audit 6 dimensi: menutup **celah isolasi satker** (IDOR) yang

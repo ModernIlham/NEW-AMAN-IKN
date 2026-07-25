@@ -111,6 +111,24 @@ def test_susun_mutasi_per_transaksi():
     assert len(kosong["baris"]) == 1 and kosong["total"] == (5.0, 500.0)
 
 
+def test_susun_mutasi_koreksi_nilai_205_dinegatifkan():
+    """205 Koreksi Nilai Berkurang (REVIEW-9 R3): jurnal menyimpan magnitudo
+    positif + jumlah 0; tabel LBP menegatifkan nilainya (satu-satunya kode
+    2xx berarah kurang), 204 tetap positif apa adanya."""
+    from lbp_utils import label_transaksi_lbp, susun_mutasi_per_transaksi
+    jurnal = [
+        {"kode_transaksi": "204", "jumlah": 0, "nilai": 300.0},
+        {"kode_transaksi": "205", "jumlah": 0, "nilai": 100.0},
+    ]
+    m = susun_mutasi_per_transaksi(jurnal, saldo_awal_qty=4,
+                                   saldo_awal_nilai=1000.0)
+    peta = {b[0]: b for b in m["baris"]}
+    assert peta["204"][2] == 0 and peta["204"][3] == 300.0
+    assert peta["205"][2] == 0 and peta["205"][3] == -100.0
+    assert m["total"] == (4.0, 1200.0)   # kuantitas tak bergeser
+    assert "Berkurang" in label_transaksi_lbp("205")
+
+
 def test_kebijakan_akuntansi_dan_daftar_isi_lengkap():
     from lbp_utils import kebijakan_akuntansi_lbp, struktur_daftar_isi_lengkap
     keb = kebijakan_akuntansi_lbp({"3": 1_000_000, "4": 25_000_000})
