@@ -99,16 +99,29 @@ function Verifikasi({ id }) {
   if (!data) {
     return <Kartu><div className="py-10 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto text-muted-foreground" /></div></Kartu>;
   }
+  const dibatalkan = !!data.dibatalkan || data.status === "batal";
   const selesai = data.status === "selesai";
   return (
     <Kartu>
+      {dibatalkan && (
+        <div className="mb-3 rounded-xl border-2 border-red-500 bg-red-500/10 p-3 text-center" data-testid="verif-dibatalkan">
+          <p className="font-extrabold text-red-600 dark:text-red-400 flex items-center justify-center gap-1.5">
+            <CircleAlert className="w-5 h-5" />DOKUMEN DIBATALKAN
+          </p>
+          <p className="text-[11px] text-red-600/90 dark:text-red-400/90 mt-0.5 leading-relaxed">
+            Permintaan tanda tangan ini telah dibatalkan — tanda tangan elektronik yang tercantum <b>tidak berlaku</b>.
+          </p>
+        </div>
+      )}
       <div className="text-center space-y-1.5">
-        <ShieldCheck className={`w-12 h-12 mx-auto ${selesai ? "text-emerald-500" : "text-amber-500"}`} />
+        {dibatalkan
+          ? <CircleAlert className="w-12 h-12 mx-auto text-red-500" />
+          : <ShieldCheck className={`w-12 h-12 mx-auto ${selesai ? "text-emerald-500" : "text-amber-500"}`} />}
         <p className="font-extrabold text-lg" data-testid="verif-judul">{data.judul}</p>
         <p className="text-xs text-muted-foreground">
           Dibuat {fmtWaktu(data.dibuat)} · Status:{" "}
-          <b className={selesai ? "text-emerald-600" : "text-amber-600"}>
-            {selesai ? "SEMUA SUDAH MENANDATANGANI" : (data.status || "-").toUpperCase()}
+          <b className={dibatalkan ? "text-red-600 dark:text-red-400" : (selesai ? "text-emerald-600" : "text-amber-600")}>
+            {dibatalkan ? "DIBATALKAN" : (selesai ? "SEMUA SUDAH MENANDATANGANI" : (data.status || "-").toUpperCase())}
           </b>
         </p>
       </div>
