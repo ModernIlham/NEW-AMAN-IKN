@@ -338,6 +338,7 @@ async def buat_permintaan_dengan_dokumen(
     judul: str = Form(""),
     mode: str = Form("paralel"),
     signers: str = Form("[]"),
+    doc_ref: str = Form(""),      # referensi dokumen sumber (No. BAST/Surat/register)
     user: dict = Depends(require_writer),
 ):
     """Permintaan TTD DENGAN dokumen PDF terlampir (permintaan pemilik):
@@ -366,7 +367,7 @@ async def buat_permintaan_dengan_dokumen(
                             detail="Format daftar penanda tangan tidak valid")
     payload = PermintaanIn(
         judul=str(judul or "").strip() or str(file.filename or "Dokumen"),
-        doc_type="dokumen_unggahan", doc_ref="", mode=mode,
+        doc_type="dokumen_unggahan", doc_ref=str(doc_ref or "").strip(), mode=mode,
         signers=[SignerIn(
             nama=str((s or {}).get("nama") or ""),
             nip=str((s or {}).get("nip") or ""),

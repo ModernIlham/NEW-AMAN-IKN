@@ -48,6 +48,24 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#598] TTD elektronik: referensi dokumen sumber (mengaktifkan penaut `doc_ref`) — 2026-07-25
+
+Fondasi **#3** keterhubungan TTD ↔ modul. Saat membuat permintaan TTD kini bisa
+diisi **"Referensi dokumen sumber"** (mis. No. BAST / No. Surat / Kode+NUP aset).
+Field `doc_ref` sebenarnya sudah dirancang di model tetapi **mati** — jalur JSON
+tak pernah diisi dari form, dan jalur unggah dokumen meng-hardcode kosong.
+Sekarang:
+
+- Form buat permintaan TTD punya isian **Referensi dokumen sumber** (opsional);
+  dikirim baik pada jalur JSON maupun **unggah dokumen** (`doc_ref` sebagai Form
+  field, tak lagi di-hardcode `""`).
+- Referensi ditampilkan di **detail permintaan** untuk penelusuran.
+- Menyalakan kail forward yang menjadi dasar langkah berikutnya (back-link
+  `signature_request_id` ke artefak saat TTD selesai, lalu propagasi
+  pembatalan) — sinyal lunak, bertahap.
+
+---
+
 ## [#597] TTD dibatalkan: dokumen & halaman verifikasi tak lagi tampak sah — 2026-07-25
 
 Menutup celah keandalan (fondasi #2): setelah permintaan TTD **dibatalkan**,
