@@ -18,12 +18,20 @@ performa aplikasi. Prinsip:
   • Otomatis     — satu foto per siklus, berjeda; berhenti saat semua selesai;
                    bangun lagi berkala untuk foto baru.
 
-Fase 1 (modul ini): foto asli aset. Thumbnail inline (kecil) & lampiran modul
-menyusul di fase berikutnya (prioritas = foto asli, sesuai permintaan).
+Fase A — foto ASLI aset & pegawai (GridFS via Tinify, dibatasi kuota).
+Fase B — THUMBNAIL inline base64 (thumbnail/gallery_thumbnail/photo_thumbnails)
+         di dokumen aset: re-encode JPEG→WebP secara LOKAL (PIL), TANPA Tinify
+         (tak menyentuh kuota), sapuan sekali-jalan berbasis kursor `id`, OCC,
+         dan HANYA disimpan bila hasil WebP lebih kecil (tak pernah memperburuk).
+Keduanya idle & lease-gated; Fase B tetap jalan walau kuota foto asli habis.
+
+Thumbnail BARU sudah langsung WebP di titik pembuatan (shared_utils.create_thumbnail);
+Fase B menambal thumbnail LAMA (pra-deploy) yang masih JPEG.
 
 Kill-switch: env ``WEBP_KONVERSI_AKTIF=0`` menonaktifkan tanpa deploy ulang.
 """
 import asyncio
+import base64
 import io
 import logging
 import os
@@ -48,6 +56,15 @@ JEDA_SELESAI = float(os.environ.get("WEBP_JEDA_SELESAI", "600"))
 KUOTA_SISA_MIN = int(os.environ.get("WEBP_KUOTA_SISA_MIN", "50"))
 MAKS_GAGAL = 3
 LEASE_TTL = 120
+
+# ── Fase migrasi THUMBNAIL inline (lokal PIL, TANPA Tinify) ──
+# Thumbnail (thumbnail/gallery_thumbnail/photo_thumbnails) tersimpan base64 JPEG
+# di dalam dokumen aset. Re-encode ke WebP dilakukan LOKAL (PIL) sehingga TIDAK
+# menyentuh kuota Tinify — jadi jalan walau kuota foto asli habis. Sapuan sekali-
+# jalan berbasis kursor `id` (indeks unik) — hemat & tak scan berulang.
+THUMB_BATCH = int(os.environ.get("WEBP_THUMB_BATCH", "25"))
+THUMB_WEBP_Q = int(os.environ.get("WEBP_THUMB_QUALITY", "80"))
+_THUMB_CURSOR_ID = "webp_thumb_cursor"
 
 _task = None
 _worker_id = f"{os.getpid()}-{uuid.uuid4().hex[:6]}"
@@ -82,6 +99,86 @@ def verifikasi_webp(webp_bytes, lebar, tinggi) -> bool:
         return img.size == (lebar, tinggi)
     except Exception:
         return False
+
+
+# ───────────────── re-encode thumbnail inline JPEG → WebP (lokal) ─────────────
+
+def _reencode_thumb_uri(uri):
+    """Data-URI thumbnail JPEG → data-URI WebP, HANYA bila hasilnya lebih kecil.
+
+    Mengembalikan None bila: bukan string / bukan JPEG data-URI / gagal decode /
+    WebP tak lebih kecil (biar tak pernah memperburuk). Re-encode dari JPEG yang
+    sudah lossy → pakai kualitas agak tinggi (THUMB_WEBP_Q) untuk menekan
+    kehilangan; tetap sering lebih kecil karena WebP lebih efisien. Dimensi
+    dipertahankan (tak resize)."""
+    if not isinstance(uri, str) or not uri.startswith("data:image/jpeg"):
+        return None
+    try:
+        from PIL import Image
+        b = base64.b64decode(uri.split(",", 1)[1])
+        img = Image.open(io.BytesIO(b))
+        img.load()
+        buf = io.BytesIO()
+        img.save(buf, format="WEBP", quality=THUMB_WEBP_Q, method=6)
+        wb = buf.getvalue()
+        if not wb or len(wb) >= len(b):
+            return None  # tak lebih kecil → biarkan JPEG apa adanya
+        return "data:image/webp;base64," + base64.b64encode(wb).decode("ascii")
+    except Exception:
+        return None
+
+
+def _reencode_thumbs(a):
+    """Bangun dict field thumbnail yang perlu di-set (JPEG→WebP) untuk satu aset.
+    Kosong bila tak ada yang berubah. Murni (tanpa I/O) → mudah diuji."""
+    updates = {}
+    for field in ("thumbnail", "gallery_thumbnail"):
+        r = _reencode_thumb_uri(a.get(field))
+        if r:
+            updates[field] = r
+    pts = a.get("photo_thumbnails")
+    if isinstance(pts, list) and pts:
+        baru = list(pts)
+        berubah = False
+        for i, t in enumerate(pts):
+            r = _reencode_thumb_uri(t)
+            if r:
+                baru[i] = r
+                berubah = True
+        if berubah:
+            updates["photo_thumbnails"] = baru
+    return updates
+
+
+async def _thumb_batch() -> str:
+    """Sapuan SATU batch aset (kursor `id` menaik) → re-encode thumbnail inline
+    JPEG ke WebP secara LOKAL (tanpa Tinify). OCC (version) menutup race dgn edit
+    user. `updated_at` SENGAJA tak diubah agar tak memicu re-sync offline massal
+    (pola sama dgn swap foto GridFS). Kembalian:
+      kosong  — kursor sudah di ujung (sapuan selesai),
+      sukses  — ada aset yang thumbnailnya dikonversi,
+      lewat   — batch ada tapi tak ada yang perlu/lebih kecil (kursor tetap maju)."""
+    cur = await db.app_runtime.find_one({"_id": _THUMB_CURSOR_ID})
+    last_id = (cur or {}).get("last_id", "")
+    proj = {"_id": 0, "id": 1, "version": 1,
+            "thumbnail": 1, "gallery_thumbnail": 1, "photo_thumbnails": 1}
+    batch = await (db.assets.find({"id": {"$gt": last_id}}, proj)
+                   .sort("id", 1).limit(THUMB_BATCH).to_list(THUMB_BATCH))
+    if not batch:
+        return "kosong"
+    diproses = 0
+    for a in batch:
+        updates = await asyncio.to_thread(_reencode_thumbs, a)
+        if updates:
+            res = await db.assets.update_one(
+                {"id": a["id"], "version": a.get("version", 0)},
+                {"$set": updates, "$inc": {"version": 1}})
+            if res.matched_count:
+                diproses += 1
+        last_id = a["id"]
+    await db.app_runtime.update_one(
+        {"_id": _THUMB_CURSOR_ID}, {"$set": {"last_id": last_id}}, upsert=True)
+    return "sukses" if diproses else "lewat"
 
 
 # ───────────────────────── Tinify & kuota ─────────────────────────
@@ -312,18 +409,26 @@ async def _loop():
                 await asyncio.sleep(300); continue
             if not await _pegang_lease():
                 await asyncio.sleep(JEDA_CEK); continue
-            if await sisa_kuota_tinify() <= KUOTA_SISA_MIN:
-                await asyncio.sleep(1800); continue          # kuota reset bulanan
             if not await activity_tracker.aplikasi_idle(IDLE_DETIK):
                 await asyncio.sleep(JEDA_CEK); continue        # ada aktivitas → tahan
-            status = await konversi_satu()
-            if status == "kosong":
-                await asyncio.sleep(JEDA_SELESAI)              # semua selesai; cek berkala
-            elif status == "sukses":
-                logger.info("WebP: 1 foto asli dikonversi (sisa kuota dijaga > %s)", KUOTA_SISA_MIN)
-                await asyncio.sleep(JEDA_ANTAR_FOTO)
-            else:
-                await asyncio.sleep(2)                          # lewati kandidat bermasalah
+
+            kerja = False
+
+            # Fase A: foto ASLI GridFS via Tinify — DIBATASI kuota bulanan.
+            if await sisa_kuota_tinify() > KUOTA_SISA_MIN:
+                status = await konversi_satu()
+                if status == "sukses":
+                    kerja = True
+                    logger.info("WebP: 1 foto asli dikonversi (sisa kuota dijaga > %s)", KUOTA_SISA_MIN)
+                elif status != "kosong":
+                    kerja = True                                # kandidat bermasalah → lanjut cepat
+
+            # Fase B: migrasi thumbnail inline JPEG→WebP — LOKAL (tanpa Tinify),
+            # tetap jalan walau kuota foto asli habis.
+            if (await _thumb_batch()) in ("sukses", "lewat"):
+                kerja = True
+
+            await asyncio.sleep(JEDA_ANTAR_FOTO if kerja else JEDA_SELESAI)
         except asyncio.CancelledError:
             raise
         except Exception as e:
