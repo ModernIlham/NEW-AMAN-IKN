@@ -897,6 +897,12 @@ const AssetMapFullView = memo(function AssetMapFullView({
             deletedIdsRef.current.add(entry.row.id);
             entry.iconKey = "dihapus";
             entry.marker.setIcon(markerIcon("", false, false, true));
+            // Nonaktifkan geser SEKALIGUS options.draggable — pin terhapus
+            // di-skip oleh efek rekonsiliasi (deletedIdsRef), jadi kunci global
+            // takkan meresetnya. Tanpa ini, Leaflet membangun ulang handler drag
+            // dari options.draggable saat pin muncul lagi dari cluster → pin
+            // terhapus bisa digeser walau peta "Terkunci".
+            entry.marker.options.draggable = false;
             entry.marker.dragging?.disable?.();
             entry.draggable = false;
             entry.marker.closePopup();
