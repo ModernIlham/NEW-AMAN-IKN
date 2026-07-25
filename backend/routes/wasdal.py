@@ -89,7 +89,11 @@ async def _data_pemantauan(ambang_hari: int, user=None):
     from routes.pegawai import _jumlah_aset_per_nip
     pegawai = [p async for p in db.pegawai.find(
         _sq({}), {"_id": 0, "id": 1, "nama": 1, "nip": 1, "status": 1,
-                  "tgl_selesai_kontrak": 1})]
+                  "tgl_selesai_kontrak": 1,
+                  # Untuk jam 3 tahun pemberitahuan ahli waris pada temuan
+                  # "pemegang meninggal" (UU 1/2004 Ps. 66 ayat (2)).
+                  "tanggal_meninggal": 1,
+                  "pemberitahuan_ahli_waris_tanggal": 1})]
     peta_aset_nip = await _jumlah_aset_per_nip(user)
     # Integrasi Pengamanan → Wasdal: dokumen kepemilikan (STNK/pajak/IMB)
     # yang masa berlakunya lewat = temuan objek pengamanan & pemeliharaan.

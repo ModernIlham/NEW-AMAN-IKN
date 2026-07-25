@@ -56,6 +56,65 @@ def test_penggunaan_bast_dicabut():
     assert jenis2 == ["pemegang_tanpa_bast"]
 
 
+class TestPemegangMeninggal:
+    """Pemegang wafat dipisah dari 'berisiko keluar' + membawa jam 3 tahun."""
+
+    NIP = "198001010000000000"
+
+    def _pegawai(self, **extra):
+        return [{"id": "p1", "nama": "Budi", "nip": self.NIP,
+                 "status": "meninggal", "tanggal_meninggal": "2026-01-01",
+                 **extra}]
+
+    def test_jenis_terpisah_dan_terdaftar(self):
+        assert "pemegang_meninggal_belum_serah_terima" in JENIS_TEMUAN
+        assert OBJEK_PER_JENIS["pemegang_meninggal_belum_serah_terima"] == "penggunaan"
+
+    def test_almarhum_pakai_jenis_sendiri_plus_jam(self):
+        hasil = temuan_pemegang_berisiko(
+            self._pegawai(), {self.NIP: 2}, "2026-07-25")
+        assert len(hasil) == 1
+        t = hasil[0]
+        assert t["jenis"] == "pemegang_meninggal_belum_serah_terima"
+        assert t["asset_name"] == "Budi"
+        assert "2 aset masih dipegang" in t["detail"]
+        assert "meninggal 2026-01-01" in t["detail"]
+        assert t["tingkat"] == "pantau"
+        assert t["batas_lapor"] == "2029-01-01"
+        assert isinstance(t["sisa_hari_lapor"], int)
+
+    def test_eskalasi_kritis_terbaca_di_detail(self):
+        t = temuan_pemegang_berisiko(
+            self._pegawai(), {self.NIP: 1}, "2028-11-01")[0]
+        assert t["tingkat"] == "kritis"
+        assert "SEGERA" in t["detail"]
+
+    def test_sudah_diberitahu_tak_lagi_mendesak(self):
+        t = temuan_pemegang_berisiko(
+            self._pegawai(pemberitahuan_ahli_waris_tanggal="2026-02-10"),
+            {self.NIP: 1}, "2028-11-01")[0]
+        assert t["tingkat"] == "selesai"
+        assert "sudah diberi tahu" in t["detail"]
+
+    def test_status_lain_tetap_jenis_lama(self):
+        pensiun = [{"id": "p2", "nama": "Siti", "nip": "19700101" + "0" * 10,
+                    "status": "pensiun"}]
+        t = temuan_pemegang_berisiko(pensiun, {"197001010000000000": 1},
+                                     "2026-07-25")[0]
+        assert t["jenis"] == "pemegang_berisiko_keluar"
+        assert "tingkat" not in t
+
+    def test_almarhum_tanpa_tanggal_wafat_tak_crash(self):
+        # Data lama (status meninggal tanpa tanggal) → tetap jadi temuan,
+        # detail memakai alasan generik, jam tidak berlaku.
+        t = temuan_pemegang_berisiko(
+            [{"id": "p3", "nama": "Andi", "nip": self.NIP, "status": "meninggal"}],
+            {self.NIP: 1}, "2026-07-25")[0]
+        assert t["jenis"] == "pemegang_meninggal_belum_serah_terima"
+        assert t["tingkat"] == ""
+        assert "1 aset masih dipegang" in t["detail"]
+
+
 def test_pemanfaatan():
     lengkap = {"id": "p1", "bentuk": "sewa", "pihak": "PT X",
                "berakhir": "2027-01-01", "nomor_persetujuan": "S-1",
