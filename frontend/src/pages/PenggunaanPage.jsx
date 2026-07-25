@@ -1375,7 +1375,7 @@ export default function PenggunaanPage({ user, onBack }) {
                       ) : (
                         <p className="text-[10px] text-amber-600 dark:text-amber-400">Bukti ttd belum diunggah</p>
                       )}
-                      {b.tt_dicabut ? (
+                      {b.tt_dicabut && !b.bukti?.file_id ? (
                         <p className="text-[10px] font-semibold text-red-600 dark:text-red-400" data-testid={`bast-tt-dicabut-${b.id}`}>
                           ⚠ TTD elektronik dibatalkan — tanda tangan tidak berlaku
                         </p>

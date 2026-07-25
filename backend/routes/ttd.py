@@ -288,6 +288,22 @@ async def buat_permintaan(payload: PermintaanIn, user: dict = Depends(require_wr
         raise HTTPException(status_code=400, detail="Minimal satu penanda tangan")
     if payload.mode not in ("berurutan", "paralel"):
         raise HTTPException(status_code=400, detail="Mode harus berurutan/paralel")
+    # Bila menaut BAST terstruktur (doc_type='bast' + doc_ref=id BAST), PASTIKAN
+    # BAST itu milik satker pemohon. Ini gerbang tunggal: back-link penyelesaian
+    # (menulis signature_request_id ke BAST) dan cascade pembatalan sama-sama
+    # digerakkan doc_ref — validasi kepemilikan di sini mencegah SR palsu
+    # menunjuk BAST satker lain (uuid bocor) lalu men-tamper dokumennya.
+    # doc_ref bagi doc_type lain (surat/register) adalah teks bebas → tak divalidasi.
+    if str(payload.doc_type or "") == "bast" and str(payload.doc_ref or "").strip():
+        from shared_utils import scope_query_field_satker
+        pemilik = await db.bast_serah_terima.find_one(
+            scope_query_field_satker(
+                user, {"id": str(payload.doc_ref).strip()}),
+            {"_id": 0, "id": 1})
+        if not pemilik:
+            raise HTTPException(
+                status_code=403,
+                detail="BAST rujukan tidak ditemukan pada satker Anda")
     now = datetime.now(timezone.utc)
     sr_id = str(uuid.uuid4())
     signers, links = [], []
@@ -798,23 +814,37 @@ async def batal_permintaan(sr_id: str, user: dict = Depends(require_writer)):
     # tidak menyentuh record konsumen).
     # ── CASCADE SINYAL-LUNAK (propagasi otomatis lintas modul) ──────────────
     # Bila permintaan ini menaut BAST terstruktur (doc_type='bast' + doc_ref =
-    # id BAST, dari tombol "Kirim ke TTD"), TANDAI BAST & aset terkait "TT
-    # dicabut". TIDAK menghapus data (bast_file_id/bukti tetap) — reversibel;
-    # cukup memberi sinyal agar badge/temuan hilir memperhitungkannya. Aset yang
-    # ditandai hanya yang bast_terakhir-nya MEMANG BAST ini (presisi, tak salah
-    # sasar aset yang sudah punya BAST lebih baru).
+    # id BAST) DAN memang e-sign yang tertaut ke BAST (back-link
+    # signature_request_id == sr_id), TANDAI BAST & aset terkait "TT dicabut".
+    # Penjaga penting:
+    #  - scope_query_field_satker → cegah tulis LINTAS-SATKER (doc_ref mentah tak
+    #    dipercaya; batal hanya oleh pembuat/admin tetapi doc_ref bisa apa saja);
+    #  - signature_request_id == sr_id → hanya permintaan yang BENAR menandatangani
+    #    BAST yang boleh mencabut (bukan permintaan lain yang kebetulan menunjuk);
+    #  - update TANPA gerbang modified_count → aman DI-RETRY (idempoten $set);
+    #  - dibungkus try/except → kegagalan cascade tak menggugurkan pembatalan &
+    #    pencatatan audit (best-effort). TIDAK menghapus data (reversibel).
+    # Aset yang ditandai hanya yang bast_terakhir-nya MEMANG BAST ini (presisi).
     bast_dicabut = 0
     if sr.get("doc_type") == "bast" and str(sr.get("doc_ref") or "").strip():
         doc_ref = str(sr["doc_ref"]).strip()
-        now_iso = datetime.now(timezone.utc).isoformat()
-        r_bast = await db.bast_serah_terima.update_one(
-            {"id": doc_ref},
-            {"$set": {"tt_dicabut": True, "tt_dicabut_pada": now_iso}})
-        bast_dicabut = r_bast.modified_count
-        if bast_dicabut:
-            await db.assets.update_many(
-                {"bast_terakhir.id": doc_ref, "dihapus": {"$ne": True}},
-                {"$set": {"bast_terakhir.tt_dicabut": True}})
+        try:
+            from shared_utils import scope_query_field_satker
+            b = await db.bast_serah_terima.find_one(
+                scope_query_field_satker(
+                    user, {"id": doc_ref, "signature_request_id": sr_id}),
+                {"_id": 0, "id": 1})
+            if b:
+                now_iso = datetime.now(timezone.utc).isoformat()
+                await db.bast_serah_terima.update_one(
+                    {"id": doc_ref},
+                    {"$set": {"tt_dicabut": True, "tt_dicabut_pada": now_iso}})
+                await db.assets.update_many(
+                    {"bast_terakhir.id": doc_ref, "dihapus": {"$ne": True}},
+                    {"$set": {"bast_terakhir.tt_dicabut": True}})
+                bast_dicabut = 1
+        except Exception:
+            bast_dicabut = 0  # cascade best-effort — batal & audit tetap jalan
     await log_audit("batal_ttd", "", sr_id,
                     username=user.get("username", "system"),
                     detail=(f"Permintaan TTD '{sr.get('judul') or sr_id}' dibatalkan"

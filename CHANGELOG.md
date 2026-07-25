@@ -59,10 +59,15 @@ Kini **membatalkan permintaan TTD** yang menaut BAST terstruktur (`doc_type='bas
 - **Sinyal lunak, reversibel**: `bast_file_id`/bukti/data **tidak dihapus** —
   hanya diberi tanda, sehingga dapat ditinjau & ditandatangani ulang.
 - **Terlihat**: di dialog **Riwayat BAST** (Penggunaan) muncul penanda merah
-  **"⚠ TTD elektronik dibatalkan — tanda tangan tidak berlaku"**.
+  **"⚠ TTD elektronik dibatalkan — tanda tangan tidak berlaku"** — hanya bila
+  **belum ada bukti ttd terunggah** (bukti fisik/scan tetap sah, tak diperingati).
 - **Presisi**: hanya menyasar aset yang BAST-terakhirnya BAST tersebut (tak
-  salah tandai aset yang sudah punya BAST lebih baru). Pembatalan juga tercatat
-  di Log Sistem beserta info BAST yang dicabut.
+  salah tandai aset yang sudah punya BAST lebih baru), dan **hanya permintaan
+  yang benar-benar menandatangani** BAST (`signature_request_id` cocok) yang
+  boleh mencabut. Pembatalan juga tercatat di Log Sistem beserta info BAST.
+- **Aman lintas-satker**: penautan `doc_ref` ke BAST divalidasi kepemilikan
+  saat dibuat (satker pemohon), dan cascade ber-scope satker — tak bisa
+  menyentuh dokumen satker lain. Pembatalan tetap dicatat walau cascade gagal.
 
 Rangkaian lengkap (fondasi #1–#5): audit batal → guard dokumen batal → penaut
 `doc_ref` → tombol "Kirim ke TTD" (penaut terstruktur) → back-link → **cascade**.
