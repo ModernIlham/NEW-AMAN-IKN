@@ -62,7 +62,8 @@ LEASE_TTL = 120
 # di dalam dokumen aset. Re-encode ke WebP dilakukan LOKAL (PIL) sehingga TIDAK
 # menyentuh kuota Tinify — jadi jalan walau kuota foto asli habis. Sapuan sekali-
 # jalan berbasis kursor `id` (indeks unik) — hemat & tak scan berulang.
-THUMB_BATCH = int(os.environ.get("WEBP_THUMB_BATCH", "25"))
+# max(1, ...): cegah footgun `.limit(0)` Mongo (= tanpa batas → muat seluruh koleksi).
+THUMB_BATCH = max(1, int(os.environ.get("WEBP_THUMB_BATCH", "25")))
 THUMB_WEBP_Q = int(os.environ.get("WEBP_THUMB_QUALITY", "80"))
 _THUMB_CURSOR_ID = "webp_thumb_cursor"
 
