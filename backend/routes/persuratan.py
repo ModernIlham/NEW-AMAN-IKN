@@ -131,6 +131,50 @@ async def _pengaturan(kode_satker: str = "") -> dict:
     }
 
 
+async def _seed_agenda(jenis: str, tahun: int, kode: str) -> int:
+    """Nilai awal counter agenda per-satker saat migrasi dari counter GLOBAL.
+
+    Dipakai BERSAMA oleh `_no_agenda_berikut` (yang benar-benar memesan nomor)
+    dan `pratinjau_nomor` (yang hanya menghitung) — bila hanya salah satu tahu
+    cara seed-nya, pratinjau menampilkan nomor 1 yang sudah terpakai.
+
+    PENTING: jangan hanya membaca surat yang SUDAH berstempel kode_satker.
+    Stempel itu ditambahkan belakangan tanpa backfill, jadi di produksi hampir
+    semua surat lama TIDAK berstempel → query ber-stempel mengembalikan 0 baris
+    → seq mulai 0 → nomor agenda 1,2,3… DIULANG dan bentrok dengan surat yang
+    sudah terbit (tak ada indeks unik pada nomor/no_agenda, tabrakan terjadi
+    diam-diam). Karena itu seed = MAKS dari:
+      (a) posisi counter GLOBAL lama (batas aman lintas satker), dan
+      (b) no_agenda tertinggi milik satker ini (termasuk surat lama tanpa
+          stempel — dianggap miliknya sesuai konvensi era-lama).
+    Konsekuensi: satker kedua mulai dari nomor global terakhir sehingga ada
+    lompatan SEKALI — jauh lebih baik daripada nomor resmi ganda.
+    """
+    maks = 0
+    lama = await db.counters.find_one(
+        {"_id": f"surat_{jenis}_{tahun}"}, {"_id": 0, "seq": 1})
+    try:
+        maks = int((lama or {}).get("seq") or 0)
+    except (TypeError, ValueError):
+        maks = 0
+    async for r in db.surat.find(
+            {"jenis": jenis, "tahun": tahun,
+             "kode_satker": {"$in": [kode, "", None]}},
+            {"_id": 0, "no_agenda": 1}):
+        try:
+            maks = max(maks, int(r.get("no_agenda") or 0))
+        except (TypeError, ValueError):
+            continue
+    return maks
+
+
+async def _cid_agenda(jenis: str, tahun: int, kode: str) -> str:
+    """Id dokumen counter agenda. `kode` kosong (super-admin / era lama) tetap
+    memakai id legacy agar deret lama menyambung tanpa lompatan."""
+    base = f"surat_{jenis}_{tahun}"
+    return f"{base}:{kode}" if kode else base
+
+
 async def _no_agenda_berikut(jenis: str, tahun: int, kode_satker: str = "") -> int:
     """Nomor agenda berikutnya (atomik — $inc pada dokumen counter).
 
@@ -138,41 +182,12 @@ async def _no_agenda_berikut(jenis: str, tahun: int, kode_satker: str = "") -> i
     sebelumnya SATU deret dipakai bersama, sehingga booking satker B
     menghabiskan jatah nomor satker A — buku agenda A (yang ter-scope satker)
     tampak bolong 5, 7, 9… dan besarnya lompatan membocorkan volume surat
-    satker lain. `kode_satker` kosong (super-admin / era lama) tetap memakai id
-    legacy agar deret lama menyambung tanpa lompatan.
+    satker lain.
     """
     kode = str(kode_satker or "").strip()
-    base = f"surat_{jenis}_{tahun}"
-    cid = f"{base}:{kode}" if kode else base
+    cid = await _cid_agenda(jenis, tahun, kode)
     if kode and await db.counters.find_one({"_id": cid}) is None:
-        # Seed sekali saat migrasi dari counter GLOBAL ke per-satker.
-        #
-        # PENTING (REVIEW-9 R10): jangan hanya membaca surat yang SUDAH
-        # berstempel kode_satker. Stempel itu baru ditambahkan belakangan dan
-        # tidak pernah di-backfill, jadi di produksi hampir semua surat lama
-        # TANPA kode_satker → query ber-stempel mengembalikan 0 baris → seq
-        # mulai dari 0 → nomor agenda 1,2,3… DIULANG dan bentrok dengan surat
-        # yang sudah terbit (tak ada indeks unik pada nomor/no_agenda, jadi
-        # tabrakan terjadi diam-diam). Karena itu seed = MAKS dari:
-        #   (a) posisi counter GLOBAL lama (batas aman lintas satker), dan
-        #   (b) no_agenda tertinggi milik satker ini (termasuk surat lama tanpa
-        #       stempel — dianggap milik satker ini sesuai konvensi era-lama).
-        # Konsekuensi: satker kedua mulai dari nomor global terakhir sehingga
-        # ada lompatan sekali — jauh lebih baik daripada nomor resmi ganda.
-        maks = 0
-        lama = await db.counters.find_one({"_id": base}, {"_id": 0, "seq": 1})
-        try:
-            maks = int((lama or {}).get("seq") or 0)
-        except (TypeError, ValueError):
-            maks = 0
-        async for r in db.surat.find(
-                {"jenis": jenis, "tahun": tahun,
-                 "kode_satker": {"$in": [kode, "", None]}},
-                {"_id": 0, "no_agenda": 1}):
-            try:
-                maks = max(maks, int(r.get("no_agenda") or 0))
-            except (TypeError, ValueError):
-                continue
+        maks = await _seed_agenda(jenis, tahun, kode)
         # $setOnInsert idempoten: pemanggil kedua yang balapan tak menimpa seed.
         await db.counters.update_one(
             {"_id": cid}, {"$setOnInsert": {"seq": maks}}, upsert=True)
@@ -296,9 +311,20 @@ async def pratinjau_nomor(jenis_naskah: str = "", modul: str = "",
     tanggal = (str(tanggal_surat or "").strip()[:10]
                or datetime.now(timezone.utc).date().isoformat())
     tahun = int(tanggal[:4]) if tanggal[:4].isdigit() else datetime.now(timezone.utc).year
-    _cid = f"surat_keluar_{tahun}:{_ks}" if _ks else f"surat_keluar_{tahun}"
+    # Pakai jalur seed yang SAMA dengan _no_agenda_berikut (REVIEW-9 R11):
+    # sebelum counter per-satker terbentuk, membaca counter kosong menghasilkan
+    # "1" — nomor yang justru sudah terpakai. Pratinjau harus memperkirakan
+    # nomor yang benar-benar akan terbit.
+    _cid = await _cid_agenda("keluar", tahun, _ks)
     c = await db.counters.find_one({"_id": _cid})
-    urut_berikut = int((c or {}).get("seq") or 0) + 1
+    if c is None and _ks:
+        posisi = await _seed_agenda("keluar", tahun, _ks)
+    else:
+        try:
+            posisi = int((c or {}).get("seq") or 0)
+        except (TypeError, ValueError):
+            posisi = 0
+    urut_berikut = posisi + 1
     kode = pilih_klasifikasi(atur["peta_klasifikasi"], modul, jenis_naskah,
                              eksplisit=kode_klasifikasi,
                              default=atur["kode_klasifikasi_default"])

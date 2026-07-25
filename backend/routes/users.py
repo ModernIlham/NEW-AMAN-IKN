@@ -31,8 +31,18 @@ async def get_all_users(admin_id: str = "", _admin: dict = Depends(require_admin
     # Isolasi satker (REVIEW-9 R9): admin SATKER hanya melihat direktori
     # akun satkernya. Tanpa ini ia memetakan seluruh akun satker lain dan
     # memakainya sebagai sasaran endpoint tulis di bawah.
-    users = await db.users.find(
-        scope_query_field_satker(_admin), {"_id": 0, "password": 0}).to_list(100)
+    _q = scope_query_field_satker(_admin)
+    if not is_super_admin(_admin):
+        # Akun PUSAT disembunyikan (REVIEW-9 R11). `scope_query_field_satker`
+        # ikut mencocokkan kode_satker kosong — yang pada AKUN justru berarti
+        # super-admin lintas-satker. Tanpa pengecualian ini, setiap admin
+        # satker melihat username & email pemegang hak tertinggi: sasaran
+        # empuk, padahal mengelolanya sudah 403 (pastikan_kelola_akun).
+        # Akun BARU tanpa ikatan (role viewer) tetap tampil agar bisa
+        # di-onboard.
+        _q = {"$and": [_q, {"$nor": [{"role": "admin",
+                                      "kode_satker": {"$in": ["", None]}}]}]}
+    users = await db.users.find(_q, {"_id": 0, "password": 0}).to_list(100)
     now = datetime.now(timezone.utc)
     for u in users:
         if u.get("role") == "user":
