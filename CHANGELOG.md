@@ -48,6 +48,25 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#603] Kamera lapangan: getar & suara rana benar-benar terasa saat memotret — 2026-07-25
+
+Umpan balik saat foto **benar-benar terambil** kini terasa di lapangan (dulu
+"seperti tak ada getar maupun suara sama sekali"):
+
+- **Getar rana** diperkuat dari denyut `8 ms` → **`35 ms`**. Pulsa sangat pendek
+  (<~20 ms) sering **diabaikan/ tak terasa** di banyak perangkat Android, sehingga
+  seolah tak bergetar. (Catatan: iOS Safari tak mendukung Web Vibration API sama
+  sekali — di iPhone umpan balik mengandalkan suara.)
+- **Suara klik rana** kini benar-benar berbunyi: `AudioContext` dijadikan
+  **singleton** dan **`resume()`** dipanggil di dalam gestur ketuk tombol rana.
+  Sebelumnya context baru lahir dalam keadaan `suspended` di ponsel dan **tak
+  pernah di-resume** → tak ada bunyi. Context tak lagi dibuat-tutup berulang
+  (hindari batas jumlah AudioContext saat memotret cepat).
+- Keduanya tetap **best-effort** (tak pernah menggagalkan pengambilan foto) dan
+  masih bisa dimatikan pengguna (`aman_haptics`, `aman_shutter_sound`).
+
+---
+
 ## [#602] Pengawasan sadar TTD: Wasdal & Pengamanan hitung BAST "TTD dibatalkan" — 2026-07-25
 
 **Lanjutan cascade #601** — pembatalan TTD kini benar-benar **berpengaruh ke

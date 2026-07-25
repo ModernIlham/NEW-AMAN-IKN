@@ -12,7 +12,8 @@ export const HAPTIC_PATTERNS = {
   save: [45],            // simpan — satu getar mantap
   navNext: [14],         // pindah ke aset BERIKUTNYA — tik pendek tunggal
   navPrev: [14, 34, 14], // pindah ke aset SEBELUMNYA — tik ganda (arah terasa beda)
-  shutter: [8],          // ambil foto — tik sangat ringan
+  shutter: [35],         // ambil foto — denyut mantap yang PASTI terasa (pulsa <20 ms
+                         // sering diabaikan/ tak terasa di banyak perangkat Android)
   error: [60, 45, 60],   // gagal/blokir/konflik — getar tegas berulang
   success: [25, 30, 25], // sukses umum (mis. scan QR berhasil)
 };
