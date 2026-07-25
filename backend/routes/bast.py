@@ -300,8 +300,21 @@ async def buat_bast(payload: BastIn, user: dict = Depends(require_writer)):
             peringatan_pegawai = (f"NIP {nip2} belum terdaftar di Master "
                                   "Pegawai — periksa ejaan atau daftarkan dulu")
         else:
+            from pegawai_utils import is_aktif, is_meninggal
+            # Penerima MENINGGAL DUNIA → TOLAK (bukan sekadar peringatan):
+            # secara hukum mustahil almarhum menerima serah terima. BAST lama
+            # atas namanya tetap sah; yang diperlukan adalah serah terima BMN
+            # almarhum kepada ahli waris/pengurus barang, bukan BAST baru
+            # kepadanya.
+            if is_meninggal(peg):
+                raise HTTPException(
+                    status_code=400,
+                    detail=(f"{peg.get('nama') or nip2} berstatus Meninggal "
+                            "Dunia di Master Pegawai — tidak dapat dijadikan "
+                            "penerima serah terima. Gunakan alur pengembalian "
+                            "BMN almarhum (penyerah: ahli waris/atasan) atau "
+                            "pilih penerima lain."))
             # Pegawai pensiun/mutasi/nonaktif → peringatan lunak (tak memblokir).
-            from pegawai_utils import is_aktif
             if not is_aktif(peg):
                 st = str(peg.get("status") or "").strip() or "nonaktif"
                 peringatan_pegawai = (f"Penerima ({peg.get('nama') or nip2}) "

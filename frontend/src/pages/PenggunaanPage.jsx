@@ -1582,8 +1582,11 @@ export default function PenggunaanPage({ user, onBack }) {
                     <IdCard className="w-4 h-4 text-blue-600" />
                   </button>
                   </div>
+                  {/* Almarhum tak ditawarkan sebagai penerima — server juga
+                      menolaknya (serah terima kepada yang telah meninggal
+                      mustahil); gunakan alur pengembalian BMN almarhum. */}
                   <datalist id="bast-pegawai-list">
-                    {(pegawaiList || []).map((x) => (
+                    {(pegawaiList || []).filter((x) => String(x?.status || "") !== "meninggal").map((x) => (
                       <option key={x.id || x.nip || x.nama} value={x.nama}>{x.nip ? `NIP ${x.nip}` : ""}</option>
                     ))}
                   </datalist></div>
