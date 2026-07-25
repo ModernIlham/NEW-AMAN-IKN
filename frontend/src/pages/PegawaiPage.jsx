@@ -72,6 +72,38 @@ function namaLengkap(p) {
   return out;
 }
 
+// Avatar bulat; bila `pratinjau` & ada foto → dapat diklik untuk melihat foto
+// ukuran penuh. LEVEL MODUL (REVIEW-9 R5): definisi di dalam komponen halaman
+// membuat tipe komponen baru tiap render → React me-remount SEMUA avatar
+// (gambar berkedip + fetch ulang) setiap kali state halaman berubah.
+const AvatarPegawai = ({ p, ukur = "w-9 h-9", pratinjau = false, onPreview }) => {
+  if (!p.foto_file_id) {
+    return (
+      <span className={`${ukur} rounded-full bg-sky-500/15 text-sky-700 dark:text-sky-400 flex items-center justify-center text-[11px] font-bold flex-shrink-0`}>
+        {(p.nama || "?").trim().split(/\s+/).slice(0, 2).map((k) => k[0]).join("").toUpperCase()}
+      </span>
+    );
+  }
+  const img = (
+    <img src={authMediaUrl(`${API}/pegawai/${p.id}/foto?v=${p.foto_file_id}`)} alt=""
+      onError={(e) => { e.currentTarget.style.display = "none"; }}
+      className={`${ukur} rounded-full object-cover border border-border flex-shrink-0 ${pratinjau ? "cursor-zoom-in" : ""}`} loading="lazy" />
+  );
+  if (!pratinjau) return img;
+  return (
+    <button type="button" className="min-w-0 min-h-0 flex-shrink-0 rounded-full leading-none"
+      onClick={(e) => { e.stopPropagation(); onPreview?.({ id: p.id, nama: p.nama }); }}
+      title="Lihat foto ukuran penuh" aria-label={`Lihat foto ${p.nama || ""}`}>
+      {img}
+    </button>
+  );
+};
+
+// Jumlah baris awal yang dirender (kartu HP + tabel desktop) — daftar penuh
+// (±1.300+ pegawai) dirender dua kali (dua tata letak) → DOM ribuan baris.
+const BATAS_TAMPIL_AWAL = 150;
+const TAMBAH_TAMPIL = 300;
+
 /**
  * Master Pegawai (data kepegawaian menyeluruh satker, adopsi SIMAN-G).
  *
@@ -170,30 +202,6 @@ export default function PegawaiPage({ user, onBack }) {
     setFotoPending({ blob, url: URL.createObjectURL(blob), asli: kropAsli, krop });
     setKropSrc(null); setKropAsli(null); setKropInitial(null);
     toast.success("Foto siap — akan disimpan saat klik Simpan");
-  };
-  // Avatar bulat; bila `pratinjau` & ada foto → dapat diklik untuk melihat
-  // foto ukuran penuh (file asli yang diunggah).
-  const AvatarPegawai = ({ p, ukur = "w-9 h-9", pratinjau = false }) => {
-    if (!p.foto_file_id) {
-      return (
-        <span className={`${ukur} rounded-full bg-sky-500/15 text-sky-700 dark:text-sky-400 flex items-center justify-center text-[11px] font-bold flex-shrink-0`}>
-          {(p.nama || "?").trim().split(/\s+/).slice(0, 2).map((k) => k[0]).join("").toUpperCase()}
-        </span>
-      );
-    }
-    const img = (
-      <img src={authMediaUrl(`${API}/pegawai/${p.id}/foto?v=${p.foto_file_id}`)} alt=""
-        onError={(e) => { e.currentTarget.style.display = "none"; }}
-        className={`${ukur} rounded-full object-cover border border-border flex-shrink-0 ${pratinjau ? "cursor-zoom-in" : ""}`} loading="lazy" />
-    );
-    if (!pratinjau) return img;
-    return (
-      <button type="button" className="min-w-0 min-h-0 flex-shrink-0 rounded-full leading-none"
-        onClick={(e) => { e.stopPropagation(); setPreviewFoto({ id: p.id, nama: p.nama }); }}
-        title="Lihat foto ukuran penuh" aria-label={`Lihat foto ${p.nama || ""}`}>
-        {img}
-      </button>
-    );
   };
   const hapusFoto = async () => {
     if (!form?.id) return;
@@ -541,6 +549,13 @@ export default function PegawaiPage({ user, onBack }) {
     });
   }, [items, q, fStatus, fStatusPeg, fUnit, sortBy, sortDir]);
 
+  // Jendela render (REVIEW-9 R5): hanya `tampil` baris pertama yang masuk DOM
+  // — filter/cari tetap menyaring SELURUH data; ganti filter mengulang batas.
+  const [tampil, setTampil] = useState(BATAS_TAMPIL_AWAL);
+  useEffect(() => { setTampil(BATAS_TAMPIL_AWAL); },
+    [q, fStatus, fStatusPeg, fUnit, sortBy, sortDir]);
+  const rows = useMemo(() => filtered.slice(0, tampil), [filtered, tampil]);
+
   // Unit kerja yang benar-benar terpakai di data (utk pilihan filter)
   const unitTerpakai = useMemo(
     () => [...new Set(items.map((it) => it.unit_kerja).filter(Boolean))].sort(),
@@ -810,13 +825,13 @@ export default function PegawaiPage({ user, onBack }) {
             {/* ── Mobile (<sm): KARTU muat-layar (scroll vertikal saja) —
                 ringkas & padat sampai tombol aksi (umpan balik pengguna). ── */}
             <ul className="sm:hidden divide-y divide-border/60" data-testid="pegawai-cards-mobile">
-              {filtered.map((it) => {
+              {rows.map((it) => {
                 const im = it.info_masa || {};
                 const k = statusKontrak(it);
                 return (
                   <li key={it.id} className="p-3 space-y-1" data-testid={`pegawai-card-${it.id}`}>
                     <div className="flex items-start gap-2">
-                      <AvatarPegawai p={it} pratinjau />
+                      <AvatarPegawai p={it} pratinjau onPreview={setPreviewFoto} />
                       <div className="min-w-0 flex-1">
                         <p className="font-semibold text-foreground text-sm leading-tight break-words">{namaLengkap(it)}</p>
                         <p className="text-[10px] text-muted-foreground font-mono">
@@ -910,13 +925,13 @@ export default function PegawaiPage({ user, onBack }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((it) => {
+                  {rows.map((it) => {
                     const im = it.info_masa || {};
                     return (
                     <tr key={it.id} className="border-b border-border/60 last:border-0 hover:bg-muted/50" data-testid={`pegawai-row-${it.id}`}>
                       <td className="px-2.5 py-1.5">
                         <p className="font-semibold text-foreground flex items-center gap-1.5 flex-wrap">
-                          <AvatarPegawai p={it} ukur="w-7 h-7" pratinjau />
+                          <AvatarPegawai p={it} ukur="w-7 h-7" pratinjau onPreview={setPreviewFoto} />
                           {namaLengkap(it)}
                           {it.status_kepegawaian && (
                             <span className="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-600 dark:text-sky-400 text-[9px] font-semibold uppercase">
@@ -1021,6 +1036,15 @@ export default function PegawaiPage({ user, onBack }) {
                 </tbody>
               </table>
             </div>
+            {filtered.length > tampil && (
+              <div className="p-2.5 border-t border-border/60 text-center">
+                <button type="button" onClick={() => setTampil((t) => t + TAMBAH_TAMPIL)}
+                  className="h-8 px-4 rounded-md text-xs font-semibold text-sky-700 dark:text-sky-400 hover:bg-sky-500/10 min-w-0 min-h-0"
+                  data-testid="pegawai-tampil-lagi">
+                  Tampilkan {Math.min(TAMBAH_TAMPIL, filtered.length - tampil)} lagi ({filtered.length - tampil} tersisa)
+                </button>
+              </div>
+            )}
             </>
           )}
         </div>

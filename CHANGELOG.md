@@ -48,6 +48,23 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#614] Audit REVIEW-9 (5/7): optimasi frontend — Master Pegawai & filter jurnal — 2026-07-25
+
+Gelombang kelima audit 6 dimensi (sisi frontend):
+
+- 🟠 **Master Pegawai: `AvatarPegawai` diangkat ke level modul** — definisi di
+  dalam komponen halaman membuat TIPE komponen baru setiap render, sehingga
+  React me-remount semua avatar (gambar berkedip + fetch ulang) tiap kali
+  state halaman berubah (ketik di pencarian, buka dialog, dsb.).
+- 🟠 **Master Pegawai: jendela render** — daftar ±1.300+ pegawai dirender
+  PENUH dua kali (kartu HP + tabel desktop → ribuan baris DOM). Kini hanya
+  150 baris pertama yang masuk DOM + tombol "Tampilkan 300 lagi"; pencarian/
+  filter tetap menyaring seluruh data dan mengulang batas.
+- 🟠 **Pembukuan: filter jurnal tidak lagi minta ID internal** — dulu filter
+  Buku Barang menuntut user menyalin ID aset internal (UUID) secara manual;
+  kini ketik nama/kode barang → Enter → pilih dari saran (pola pencarian
+  aset tab KIB), jurnal langsung tersaring.
+
 ## [#613] Audit REVIEW-9 (4/7): optimasi backend — event loop bebas render berat — 2026-07-25
 
 Gelombang keempat audit 6 dimensi: **tidak ada lagi render dokumen berat yang

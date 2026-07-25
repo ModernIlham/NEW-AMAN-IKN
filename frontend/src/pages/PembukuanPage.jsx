@@ -55,18 +55,41 @@ export default function PembukuanPage({ user, onBack }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const muatJurnal = useCallback(async (p = 1, qBaru) => {
+  // Filter jurnal per ASET terpilih (REVIEW-9 R5): dulu input teks mentah
+  // yang menuntut user menyalin ID internal aset — kini cari nama/kode lalu
+  // pilih dari saran (pola cariAsetKib di tab KIB).
+  const [filterAset, setFilterAset] = useState(null);   // {id, asset_name, ...}
+  const [saranAset, setSaranAset] = useState([]);
+  const muatJurnal = useCallback(async (p = 1, asetBaru) => {
     try {
-      const filter = (qBaru !== undefined ? qBaru : q).trim();
+      const aset = asetBaru !== undefined ? asetBaru : filterAset;
       const params = new URLSearchParams({ page: String(p), page_size: "50" });
-      if (filter) params.append("asset_id", filter);
+      if (aset?.id) params.append("asset_id", aset.id);
       const r = await axios.get(`${API}/pembukuan/mutasi?${params}`);
       setJurnal(r.data);
       setPage(p);
     } catch (e) {
       toast.error(apiErr(e, "Gagal memuat jurnal Buku Barang"));
     }
-  }, [q]);
+  }, [filterAset]);
+  const cariAsetJurnal = useCallback(async () => {
+    if (!q.trim()) { setFilterAset(null); setSaranAset([]); muatJurnal(1, null); return; }
+    try {
+      const r = await axios.get(`${API}/assets`, {
+        params: { search: q.trim(), page_size: 8 } });
+      const items = r.data?.items || [];
+      setSaranAset(items);
+      if (items.length === 0) toast.info("Tidak ada aset yang cocok — coba kata kunci lain");
+    } catch (e) {
+      toast.error(apiErr(e, "Gagal mencari aset"));
+    }
+  }, [q, muatJurnal]);
+  const pilihFilterAset = useCallback((a) => {
+    setFilterAset(a);
+    setSaranAset([]);
+    setQ(`${a.asset_name || "?"} (${a.asset_code || "-"}${a.NUP ? `/${a.NUP}` : ""})`);
+    muatJurnal(1, a);
+  }, [muatJurnal]);
   useEffect(() => { if (tab === "jurnal" && !jurnal) muatJurnal(1); }, [tab, jurnal, muatJurnal]);
 
   // Backfill saldo awal (admin) — pemicu UI untuk endpoint idempoten yang
@@ -293,11 +316,23 @@ export default function PembukuanPage({ user, onBack }) {
               <div className="relative">
                 <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <Input value={q} onChange={(e) => setQ(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && muatJurnal(1)}
-                  placeholder="Filter berdasarkan ID aset (bukan nama/kode) — Enter" className="pl-8 h-9 text-xs" />
+                  onKeyDown={(e) => e.key === "Enter" && cariAsetJurnal()}
+                  placeholder="Cari aset (nama / kode barang / NUP) — Enter" className="pl-8 h-9 text-xs" />
               </div>
+              {saranAset.length > 0 && (
+                <div className="mt-1 rounded-md border border-border divide-y divide-border/60 overflow-hidden" data-testid="jurnal-saran-aset">
+                  {saranAset.map((a) => (
+                    <button key={a.id} type="button" onClick={() => pilihFilterAset(a)}
+                      className="w-full text-left px-2.5 py-1.5 text-[11px] hover:bg-muted min-w-0 min-h-0"
+                      data-testid={`jurnal-saran-${a.id}`}>
+                      <span className="font-semibold">{a.asset_name || "?"}</span>
+                      <span className="text-muted-foreground font-mono ml-1.5">{a.asset_code || "-"}{a.NUP ? `/${a.NUP}` : ""}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
               <p className="text-[10px] text-muted-foreground mt-1">
-                Filter ini memakai ID aset internal. Cari kode/nama barang di tab <b>KIB</b> atau daftar aset, lalu salin ID-nya ke sini.
+                Ketik nama/kode barang lalu Enter, pilih asetnya — jurnal tersaring ke aset itu.
               </p>
             </div>
             {!jurnal ? (
@@ -305,11 +340,11 @@ export default function PembukuanPage({ user, onBack }) {
             ) : (jurnal.items || []).length === 0 ? (
               <div className="text-center py-10 px-4">
                 <ScrollText className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
-                {q.trim() ? (
+                {filterAset ? (
                   <>
-                    <p className="text-xs font-semibold text-muted-foreground">Tidak ada entri yang cocok dengan filter ID aset</p>
+                    <p className="text-xs font-semibold text-muted-foreground">Tidak ada entri jurnal untuk aset ini</p>
                     <Button size="sm" variant="outline" className="mt-3 h-8 text-xs min-h-0 min-w-0"
-                      onClick={() => { setQ(""); muatJurnal(1, ""); }} data-testid="jurnal-reset-filter">
+                      onClick={() => { setQ(""); setFilterAset(null); setSaranAset([]); muatJurnal(1, null); }} data-testid="jurnal-reset-filter">
                       Hapus filter
                     </Button>
                   </>
