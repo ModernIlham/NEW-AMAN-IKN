@@ -74,3 +74,74 @@ def test_scope_query_aset(monkeypatch):
     # Tanpa activity_id → dibatasi $in kegiatan satker
     out = run(su.scope_query_aset({"kode_satker": "527"}, {"x": 1}))
     assert out["activity_id"] == {"$in": ["act-1", "act-2"]} and out["x"] == 1
+
+
+# ── R9: guard pengelolaan AKUN lintas satker ────────────────────────────────
+# Beda dari dokumen: pada akun, kode_satker KOSONG + role admin = super-admin
+# pusat (harus paling terlindung), bukan "era lama, terbuka".
+
+def _kelola(admin, target):
+    from auth_utils import pastikan_kelola_akun
+    return pastikan_kelola_akun(admin, target)
+
+
+def test_kelola_akun_super_admin_bebas():
+    su_admin = {"role": "admin", "kode_satker": ""}
+    _kelola(su_admin, {"role": "admin", "kode_satker": "111"})
+    _kelola(su_admin, {"role": "viewer", "kode_satker": ""})
+
+
+def test_kelola_akun_satker_sama_boleh():
+    _kelola({"role": "admin", "kode_satker": "111"},
+            {"role": "operator", "kode_satker": "111"})
+
+
+def test_kelola_akun_satker_lain_ditolak():
+    with pytest.raises(HTTPException) as e:
+        _kelola({"role": "admin", "kode_satker": "111"},
+                {"role": "admin", "kode_satker": "222"})
+    assert e.value.status_code == 403
+
+
+def test_kelola_akun_super_admin_tak_boleh_disentuh_admin_satker():
+    """Akun admin TANPA ikatan satker = super-admin pusat → selalu 403.
+
+    Ini yang mencegah pengambilalihan: admin satker mereset password akun
+    pusat lalu login sebagai super-admin.
+    """
+    with pytest.raises(HTTPException) as e:
+        _kelola({"role": "admin", "kode_satker": "111"},
+                {"role": "admin", "kode_satker": ""})
+    assert e.value.status_code == 403
+
+
+def test_kelola_akun_pendaftar_baru_boleh_di_onboard():
+    """Registrasi mandiri menghasilkan akun viewer nonaktif TANPA ikatan —
+    admin satker tetap harus bisa mengaktifkan lalu mengikatnya."""
+    _kelola({"role": "admin", "kode_satker": "111"},
+            {"role": "viewer", "kode_satker": ""})
+    _kelola({"role": "admin", "kode_satker": "111"}, {"role": "viewer"})
+
+
+def test_kelola_akun_admin_tanpa_satker_bukan_admin_role_ditolak():
+    """Pemanggil tanpa ikatan satker DAN bukan admin → tak berwenang."""
+    with pytest.raises(HTTPException) as e:
+        _kelola({"role": "operator", "kode_satker": ""},
+                {"role": "viewer", "kode_satker": "111"})
+    assert e.value.status_code == 403
+
+
+# ── R10: token berkas ekspor dipersempit ────────────────────────────────────
+
+def test_token_docfile_scope_dan_umur():
+    """Tautan doc-file di dalam CSV/XLSX membawa token; token itu harus
+    SESEMPIT mungkin karena berkas ekspor rutin dikirim ke auditor/KPKNL."""
+    import jwt as _jwt
+    import auth_utils as au
+
+    tok = au.create_docfile_token("u1", "budi", 3)
+    payload = _jwt.decode(tok, au.JWT_SECRET, algorithms=[au.JWT_ALGORITHM])
+    assert payload["scope"] == "docfile"        # bukan "media" (30 hari, ~30 endpoint)
+    assert payload["sesi_epoch"] == 3           # ikut dicabut saat reset password
+    assert au.DOCFILE_TOKEN_EXPIRATION_DAYS == 7
+    assert au.DOCFILE_TOKEN_EXPIRATION_DAYS < au.MEDIA_TOKEN_EXPIRATION_DAYS

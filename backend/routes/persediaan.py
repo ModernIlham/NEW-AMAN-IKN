@@ -45,6 +45,25 @@ from pengadaan_utils import snapshot_perolehan
 persediaan_router = APIRouter()
 
 
+async def _scope_jurnal(user, query=None) -> dict:
+    """Sisipkan isolasi satker ke query jurnal `transaksi_persediaan`.
+
+    Jurnal sengaja RAMPING dan tidak membawa `kode_satker`, jadi isolasi
+    ditegakkan lewat relasi `persediaan_id` → master persediaan yang memang
+    berstempel (pola sama dipakai wasdal.py). Tanpa ini seluruh laporan/ekspor
+    jurnal membocorkan mutasi stok satker lain — data yang justru ditolak 403
+    saat diakses per-item. User lintas-satker (super-admin) apa adanya.
+    """
+    from shared_utils import kode_satker_user, scope_query_field_satker
+    q = dict(query or {})
+    if not kode_satker_user(user):
+        return q
+    ids = [p["id"] async for p in db.persediaan.find(
+        scope_query_field_satker(user), {"_id": 0, "id": 1}) if p.get("id")]
+    q["persediaan_id"] = {"$in": ids}
+    return q
+
+
 async def _kpb_signer(settings, per_iso=None, user=None):
     """Penanda tangan Kuasa Pengguna Barang untuk PDF persediaan — delegasi ke
     resolver bersama `shared_utils.resolve_penandatangan_kpb` (temuan #26/#41:
@@ -122,7 +141,9 @@ async def peringatan_persediaan(
     """
     today_iso = today_wib()   # tanggal lokal WIB (#25/#44)
     habis, kritis, lewat, segera = [], [], [], []
-    cursor = db.persediaan.find({}, {"_id": 0})
+    # Isolasi satker (REVIEW-9 R9): dipakai juga oleh PDF Nota Dinas di bawah.
+    from shared_utils import scope_query_field_satker
+    cursor = db.persediaan.find(scope_query_field_satker(_user), {"_id": 0})
     async for item in cursor:
         stok = int(item.get("stok", 0) or 0)
         st = status_stok(stok, item.get("batas_kritis"))
@@ -302,8 +323,8 @@ async def export_transaksi_persediaan(_user: dict = Depends(require_user)):
 
     from fastapi.responses import Response
 
-    items = [t async for t in db.transaksi_persediaan.find({}, {"_id": 0})
-             .sort("timestamp", 1)]
+    items = [t async for t in db.transaksi_persediaan.find(
+        await _scope_jurnal(_user), {"_id": 0}).sort("timestamp", 1)]
     buf = io.StringIO()
     w = csv_module.writer(buf)
     for row in baris_csv_transaksi(items):
@@ -379,7 +400,9 @@ async def opname_kertas_kerja_pdf(gudang: str = "",
     filter_gudang = str(gudang or "").strip()
     query = ({"lokasi": {"$regex": f"^{re.escape(filter_gudang)}$", "$options": "i"}}
              if filter_gudang else {})
-    items = [x async for x in db.persediaan.find(query, {"_id": 0, "batches": 0})]
+    from shared_utils import scope_query_field_satker
+    items = [x async for x in db.persediaan.find(
+        scope_query_field_satker(_user, query), {"_id": 0, "batches": 0})]
     items.sort(key=lambda x: (x.get("nama_barang") or "", x.get("kode_barang") or ""))
 
     today_iso = today_wib()   # tanggal lokal WIB (#25/#44)
@@ -450,7 +473,7 @@ async def opname_baof_pdf(
 
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
     rows = [r async for r in db.transaksi_persediaan.find(
-        {"jenis": "opname"}, {"_id": 0})]
+        await _scope_jurnal(_user, {"jenis": "opname"}), {"_id": 0})]
     rows = [r for r in rows if tanggal_wib(r.get("timestamp")) == tanggal]
     rows.sort(key=lambda r: (r.get("nama_barang") or "", r.get("timestamp") or ""))
 
@@ -516,9 +539,11 @@ async def opname_status(_user: dict = Depends(require_user)):
     from persediaan_utils import status_opname_semester
 
     today_iso = today_wib()   # tanggal lokal WIB (#25/#44)
+    # Isolasi satker (REVIEW-9 R10): tanpa scope, pengingat opname semesteran
+    # satker ini "padam" hanya karena satker LAIN sudah opname (kepatuhan palsu).
     terakhir = await db.transaksi_persediaan.find_one(
-        {"jenis": "opname"}, {"_id": 0, "timestamp": 1},
-        sort=[("timestamp", -1)])
+        await _scope_jurnal(_user, {"jenis": "opname"}),
+        {"_id": 0, "timestamp": 1}, sort=[("timestamp", -1)])
     tanggal = tanggal_wib((terakhir or {}).get("timestamp"))
     return status_opname_semester(tanggal, today_iso)
 
@@ -559,7 +584,9 @@ async def laporan_posisi_pdf(gudang: str = "",
              if filter_gudang else {})
     grup = {}
     akun_total = {}
-    async for it in db.persediaan.find(query, {"_id": 0}):
+    from shared_utils import scope_query_field_satker
+    async for it in db.persediaan.find(
+            scope_query_field_satker(_user, query), {"_id": 0}):
         stok = int(it.get("stok", 0) or 0)
         nilai = nilai_persediaan_dari_batches(it.get("batches"))
         kel = str(it.get("kode_barang") or "")[:5]
@@ -692,7 +719,8 @@ async def laporan_mutasi_pdf(
         raise HTTPException(status_code=400, detail="Tanggal akhir sebelum tanggal awal")
 
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
-    rows = [r async for r in db.transaksi_persediaan.find({}, {"_id": 0})]
+    rows = [r async for r in db.transaksi_persediaan.find(
+        await _scope_jurnal(_user), {"_id": 0})]
     rekap = mutasi_periode(rows, dari, sampai)
 
     buffer = BytesIO()
@@ -837,12 +865,14 @@ async def transaksi_massal(payload: TransaksiMassalIn, user: dict = Depends(requ
         now0 = datetime.now(timezone.utc)
         tgl_surat = (str(payload.tgl_dokumen or "").strip()[:10]
                      or now0.date().isoformat())
-        atur = await _pengaturan()
+        from shared_utils import kode_satker_user as _ksu2
+        _ks = _ksu2(user)
+        atur = await _pengaturan(_ks)
         kode_klas = pilih_klasifikasi(atur["peta_klasifikasi"], "persediaan",
                                       "Laporan",
                                       default=atur["kode_klasifikasi_default"])
         tahun = int(tgl_surat[:4]) if tgl_surat[:4].isdigit() else now0.year
-        no_agenda = await _no_agenda_berikut("keluar", tahun)
+        no_agenda = await _no_agenda_berikut("keluar", tahun, _ks)
         nomor_lpb = bangun_nomor(atur["format_nomor"], no_agenda, tgl_surat,
                                  kode_klasifikasi=kode_klas,
                                  kode_unit=atur["kode_unit"])
@@ -850,6 +880,10 @@ async def transaksi_massal(payload: TransaksiMassalIn, user: dict = Depends(requ
         await db.surat.insert_one({
             "id": surat_id, "jenis": "keluar", "no_agenda": no_agenda,
             "tahun": tahun, "nomor": nomor_lpb, "status": "dibooking",
+            # Stempel satker (REVIEW-9 R10): tanpa ini surat booking otomatis
+            # muncul di buku agenda & arsip SEMUA satker, dan tak terhitung saat
+            # counter per-satker di-seed.
+            "kode_satker": _ks,
             "perihal": f"Laporan Penerimaan Barang (LPB) — {payload.jenis}",
             "tujuan": str(payload.penyedia or "").strip(),
             "jenis_naskah": "Laporan", "modul": "persediaan",
@@ -916,6 +950,8 @@ async def transaksi_massal(payload: TransaksiMassalIn, user: dict = Depends(requ
                 "keterangan": "Kondisi Baik & Lengkap",
             })
         lpb_id = str(_uuid.uuid4())
+        from shared_utils import kode_satker_user as _ksu
+        _ks_lpb = _ksu(user)
         await db.lpb.insert_one({
             "id": lpb_id, "nomor": nomor_lpb, "surat_id": surat_id,
             "tanggal": (str(payload.tgl_dokumen or "").strip()[:10]
@@ -926,6 +962,10 @@ async def transaksi_massal(payload: TransaksiMassalIn, user: dict = Depends(requ
             "keterangan": str(payload.keterangan or "").strip(),
             "items": baris, "total_nilai": total_nilai,
             "jumlah_barang": len(baris),
+            # Stempel satker (REVIEW-9 R9) — tanpa ini daftar & PDF LPB tak
+            # dapat diisolasi sama sekali (dokumen penerimaan barang memuat
+            # penyedia, harga satuan, dan total nilai).
+            "kode_satker": _ks_lpb,
             "created_by": user.get("username", "system"),
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
@@ -939,8 +979,10 @@ async def daftar_lpb(page: int = 1, page_size: int = 30,
                      _user: dict = Depends(require_user)):
     """Riwayat Laporan Penerimaan Barang (per transaksi massal masuk)."""
     page, page_size = max(1, page), min(max(1, page_size), 100)
-    total = await db.lpb.count_documents({})
-    items = await (db.lpb.find({}, {"_id": 0, "items": 0})
+    from shared_utils import scope_query_field_satker
+    q_lpb = scope_query_field_satker(_user)   # isolasi satker (REVIEW-9 R9)
+    total = await db.lpb.count_documents(q_lpb)
+    items = await (db.lpb.find(q_lpb, {"_id": 0, "items": 0})
                    .sort("created_at", -1)
                    .skip((page - 1) * page_size).limit(page_size)
                    .to_list(page_size))
@@ -970,6 +1012,8 @@ async def lpb_pdf(lpb_id: str,
     lpb = await db.lpb.find_one({"id": lpb_id}, {"_id": 0})
     if not lpb:
         raise HTTPException(status_code=404, detail="LPB tidak ditemukan")
+    from shared_utils import pastikan_akses_dok_satker
+    await pastikan_akses_dok_satker(_user, lpb)  # isolasi satker (REVIEW-9 R9)
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
 
     buffer = BytesIO()
@@ -1077,7 +1121,11 @@ async def lpb_pdf(lpb_id: str,
 @persediaan_router.get("/persediaan/gudang/daftar")
 async def daftar_gudang(_user: dict = Depends(require_user)):
     """Daftar nilai Lokasi/Gudang unik yang terpakai di master (untuk filter)."""
-    nilai = await db.persediaan.distinct("lokasi")
+    # Isolasi satker (REVIEW-9 R10): dropdown filter jangan memuat nama
+    # gudang/ruang milik satker lain.
+    from shared_utils import scope_query_field_satker
+    nilai = await db.persediaan.distinct(
+        "lokasi", scope_query_field_satker(_user))
     gudang = sorted({str(v).strip() for v in nilai if str(v or "").strip()},
                     key=str.casefold)
     return {"items": gudang, "total": len(gudang)}
@@ -1679,6 +1727,14 @@ async def riwayat_persediaan(
     _user: dict = Depends(require_user),
 ):
     """Jurnal transaksi sebuah barang, terbaru dulu."""
+    # Isolasi satker (REVIEW-9 R9): jurnal tak ber-kode satker, jadi guard
+    # lewat master barangnya — sama seperti kartu-barang-pdf & opname.
+    from shared_utils import pastikan_akses_dok_satker
+    item = await db.persediaan.find_one(
+        {"id": item_id}, {"_id": 0, "id": 1, "kode_satker": 1})
+    if not item:
+        raise HTTPException(status_code=404, detail="Barang tidak ditemukan")
+    await pastikan_akses_dok_satker(_user, item)
     query = {"persediaan_id": item_id}
     total = await db.transaksi_persediaan.count_documents(query)
     cursor = (db.transaksi_persediaan.find(query, {"_id": 0})

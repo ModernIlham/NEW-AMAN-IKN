@@ -54,6 +54,20 @@ async def daftar_mutasi(asset_id: str = "", kode_transaksi: str = "",
         if sampai.strip():
             rentang["$lte"] = sampai.strip()[:10]
         q["tanggal_buku"] = rentang
+    # ISOLASI SATKER (REVIEW-9 R9, disempurnakan R10). Entri jurnal kini
+    # DISTEMPEL kode_satker saat ditulis (shared_utils.catat_mutasi_bmn), jadi
+    # daftar cukup difilter per field — bukan lewat daftar id aset yang tumbuh
+    # tanpa batas dan dikirim sebagai $in tiap halaman. Entri era-lama tanpa
+    # stempel tetap terbuka sesuai konvensi (tutup lewat POST /satker/backfill).
+    # Bila asset_id diminta eksplisit, kepemilikan asetnya tetap di-guard.
+    from shared_utils import kode_satker_user, pastikan_akses_aset
+    if kode_satker_user(_user) and q.get("asset_id"):
+        aset = await db.assets.find_one(
+            {"id": q["asset_id"]}, {"_id": 0, "id": 1, "activity_id": 1})
+        if not aset:
+            raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+        await pastikan_akses_aset(_user, aset)
+    q = scope_query_field_satker(_user, q)
     total = await db.mutasi_bmn.count_documents(q)
     items = await (db.mutasi_bmn.find(q, _PROJ)
                    .sort([("tanggal_buku", -1), ("created_at", -1)])
@@ -174,6 +188,10 @@ async def reklasifikasi_aset(payload: ReklasifikasiIn,
         {"id": payload.asset_id, "dihapus": {"$ne": True}}, _PROJ)
     if not aset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    # Isolasi satker (REVIEW-9 R9): tanpa guard ini writer satker lain dapat
+    # mengubah kode barang + NUP aset kita dan menulis jurnal 304/107 atasnya.
+    from shared_utils import pastikan_akses_aset as _paa
+    await _paa(user, aset)
     if normalize_kode(aset.get("asset_code")) == kode_baru:
         raise HTTPException(status_code=400,
                             detail="Kode tujuan sama dengan kode sekarang")

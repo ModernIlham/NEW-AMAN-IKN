@@ -67,8 +67,11 @@ async def list_penganggaran(_user: dict = Depends(require_user)):
     items = [u async for u in db.penganggaran.find(scope_query_field_satker(_user), {"_id": 0})
              .sort("created_at", -1).limit(500)]
     realisasi = {}
+    # Isolasi satker (REVIEW-9 R10): nilai realisasi diambil dari register
+    # Pengadaan — tanpa scope, serapan anggaran satker lain ikut terjumlah.
     async for p in db.pengadaan.find(
-            {"penganggaran_id": {"$nin": ["", None]}},
+            scope_query_field_satker(_user,
+                                     {"penganggaran_id": {"$nin": ["", None]}}),
             {"_id": 0, "penganggaran_id": 1, "barang": 1}):
         pid = p.get("penganggaran_id")
         realisasi[pid] = realisasi.get(pid, 0.0) + float(nilai_perolehan(p))
@@ -140,7 +143,21 @@ class TahapanKalenderIn(BaseModel):
 @penganggaran_router.get("/penganggaran/kalender")
 async def list_kalender_penganggaran(_user: dict = Depends(require_user)):
     """Kalender tahapan (tenggat terdekat dulu) + pengingat sisa hari."""
-    items = [t async for t in db.penganggaran_kalender.find({}, {"_id": 0})
+    # ISOLASI SATKER (REVIEW-9 R11). Kalender ini PER SATKER, bukan konfigurasi
+    # nasional — catatan yang dikembalikan endpoint ini sendiri menyatakan
+    # "tenggat internal tiap K/L berbeda (surat edaran masing-masing); isi
+    # berdasar kalender penganggaran resmi unit Anda". Uji pemilik: bila dua
+    # satker mengisi tanggal berbeda, KEDUANYA benar → per satker.
+    #
+    # Catatan (sempat salah dibaca saat R10): keanggotaan di
+    # RESET_KEEP_COLLECTIONS TIDAK berarti universal — daftar itu juga memuat
+    # `satker`, `pegawai`, `pejabat`, dan `ruangan` yang jelas per-satker.
+    # RESET_KEEP hanya berarti "konfigurasi, selamat dari reset".
+    #
+    # Tahapan lama tanpa stempel tetap tampil untuk semua (aturan era-lama),
+    # jadi migrasi ini tidak menghilangkan kalender bersama yang sudah ada.
+    items = [t async for t in db.penganggaran_kalender.find(
+        scope_query_field_satker(_user), {"_id": 0})
              .sort("tanggal", 1).limit(200)]
     today_iso = datetime.now(timezone.utc).date().isoformat()
     for t in items:
@@ -168,6 +185,8 @@ async def buat_tahapan_kalender(payload: TahapanKalenderIn,
         "tahun_anggaran": data["tahun_anggaran"].strip(),
         "keterangan": str(data.get("keterangan") or "").strip(),
         "created_by": admin.get("username"),
+        # Stempel satker (REVIEW-9 R11) — pasangan dari scope pada list/hapus.
+        "kode_satker": kode_satker_user(admin),
         "created_at": now,
         "updated_at": now,
     }
@@ -181,7 +200,10 @@ async def buat_tahapan_kalender(payload: TahapanKalenderIn,
 async def hapus_tahapan_kalender(tahapan_id: str,
                                  _admin: dict = Depends(require_admin)):
     """Hapus satu tahapan kalender (admin)."""
-    res = await db.penganggaran_kalender.delete_one({"id": tahapan_id})
+    # Isolasi satker (REVIEW-9 R11, lihat catatan di list): admin satker tak
+    # boleh menghapus tahapan milik satker lain.
+    res = await db.penganggaran_kalender.delete_one(
+        scope_query_field_satker(_admin, {"id": tahapan_id}))
     if not res.deleted_count:
         raise HTTPException(status_code=404, detail="Tahapan tidak ditemukan")
     return {"ok": True}
@@ -216,9 +238,12 @@ async def buat_usulan_anggaran(payload: UsulanAnggaranIn,
     snap_rkbmn = await _ambil_snapshot_rkbmn(data.get("rkbmn_id"), user)
     aset_rows = []
     for aid in dict.fromkeys(data.get("asset_ids") or []):
-        a = await db.assets.find_one({"id": aid}, _PROJ_ASET)
+        a = await db.assets.find_one(
+            {"id": aid}, {**_PROJ_ASET, "activity_id": 1})
         if not a:
             raise HTTPException(status_code=404, detail=f"Aset {aid} tidak ditemukan")
+        from shared_utils import pastikan_akses_aset
+        await pastikan_akses_aset(user, a)  # isolasi satker (REVIEW-9 R10)
         aset_rows.append({"asset_id": a["id"], "asset_code": a.get("asset_code"),
                           "NUP": a.get("NUP"), "asset_name": a.get("asset_name"),
                           "kondisi": a.get("condition")})

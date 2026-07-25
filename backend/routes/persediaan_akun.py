@@ -56,8 +56,12 @@ async def list_persediaan_akun(_user: dict = Depends(require_user)):
     overrides.sort(key=lambda x: x["sub_kelompok"])
     # Rekap master persediaan per akun (resolusi sub-kelompok → akun)
     rekap = {}
+    # Isolasi satker (REVIEW-9 R9): rekap ini menjumlah NILAI FIFO master
+    # persediaan — tanpa scope, nilai neraca satker lain ikut terbaca.
+    from shared_utils import scope_query_field_satker
     async for it in db.persediaan.find(
-            {}, {"_id": 0, "kode_barang": 1, "batches": 1}):
+            scope_query_field_satker(_user),
+            {"_id": 0, "kode_barang": 1, "batches": 1}):
         akun = akun_persediaan(it.get("kode_barang"), peta_override)["akun"]
         r = rekap.setdefault(akun, {"jumlah": 0, "nilai": 0.0})
         r["jumlah"] += 1

@@ -28,7 +28,7 @@ from auth_utils import (
 from db import db, fs_bucket
 from shared_utils import (
     cek_magic_gambar, delete_document_from_gridfs, get_document_from_gridfs,
-    limiter, log_audit,
+    limiter, log_audit, pastikan_akses_dok_satker,
 )
 from ttd_utils import foto_ke_png_transparan, png_transparan_valid
 
@@ -187,9 +187,14 @@ async def simpan_spesimen(entitas: str, eid: str, payload: SpesimenIn,
     coll = _ENTITAS.get(entitas)
     if coll is None:
         raise HTTPException(status_code=400, detail="Entitas harus pejabat/pegawai")
-    doc = await coll.find_one({"id": eid}, {"_id": 0, "ttd_file_id": 1, "nama": 1})
+    doc = await coll.find_one(
+        {"id": eid}, {"_id": 0, "ttd_file_id": 1, "nama": 1, "kode_satker": 1})
     if not doc:
         raise HTTPException(status_code=404, detail=f"{entitas} tidak ditemukan")
+    # ISOLASI SATKER (REVIEW-9 R10). Spesimen ini DISEMATKAN otomatis ke PDF
+    # resmi (reports.py `_signature_block`), jadi menimpanya = memalsukan tanda
+    # tangan pejabat satker lain. `require_admin` hanya memeriksa role.
+    await pastikan_akses_dok_satker(admin, doc)
     data = _png_dari_base64(payload.png_base64)
     if not png_transparan_valid(data):
         raise HTTPException(status_code=400, detail="PNG TTD tidak valid / kosong")
@@ -219,8 +224,14 @@ async def lihat_spesimen(entitas: str, eid: str,
     coll = _ENTITAS.get(entitas)
     if coll is None:
         raise HTTPException(status_code=400, detail="Entitas harus pejabat/pegawai")
-    doc = await coll.find_one({"id": eid}, {"_id": 0, "ttd_file_id": 1})
-    fid = str((doc or {}).get("ttd_file_id") or "").strip()
+    doc = await coll.find_one(
+        {"id": eid}, {"_id": 0, "ttd_file_id": 1, "kode_satker": 1})
+    if not doc:
+        raise HTTPException(status_code=404, detail=f"{entitas} tidak ditemukan")
+    # Gambar tanda tangan = data tanda tangan basah dalam bentuk digital;
+    # jangan biarkan siapa pun yang login mengunduh milik satker lain (R10).
+    await pastikan_akses_dok_satker(_user, doc)
+    fid = str(doc.get("ttd_file_id") or "").strip()
     if not fid:
         raise HTTPException(status_code=404, detail="Spesimen TTD belum ada")
     data = await get_document_from_gridfs(fid)
@@ -240,8 +251,12 @@ async def hapus_spesimen(entitas: str, eid: str,
     coll = _ENTITAS.get(entitas)
     if coll is None:
         raise HTTPException(status_code=400, detail="Entitas harus pejabat/pegawai")
-    doc = await coll.find_one({"id": eid}, {"_id": 0, "ttd_file_id": 1})
-    fid = str((doc or {}).get("ttd_file_id") or "").strip()
+    doc = await coll.find_one(
+        {"id": eid}, {"_id": 0, "ttd_file_id": 1, "kode_satker": 1})
+    if not doc:
+        raise HTTPException(status_code=404, detail=f"{entitas} tidak ditemukan")
+    await pastikan_akses_dok_satker(admin, doc)  # isolasi satker (R10)
+    fid = str(doc.get("ttd_file_id") or "").strip()
     await coll.update_one({"id": eid}, {"$set": {"ttd_file_id": ""}})
     if fid:
         await delete_document_from_gridfs(fid)
@@ -575,6 +590,10 @@ async def dokumen_ber_ttd(sr_id: str,
     from reportlab.pdfgen import canvas as rl_canvas
 
     sr, data = await _ambil_dokumen_sr(sr_id)
+    # IDOR (REVIEW-9 R11): dokumen ber-TTD memuat gambar tanda tangan +
+    # NIP + jabatan penanda tangan. Guard pemilik/satker yang sama sudah
+    # dipakai endpoint saudaranya — di sini terlewat.
+    _pastikan_pemilik_sr(sr, user)
     _tolak_bila_batal(sr)  # dokumen ber-TTD dari permintaan batal → tak berlaku
     penanda = [s for s in (sr.get("signers") or [])
                if str(s.get("signature_file_id") or "").strip()]
@@ -899,8 +918,10 @@ async def buat_ulang_link(sr_id: str, signer_id: str,
     sr = await db.signature_requests.find_one({"id": sr_id}, _PROJ)
     if not sr or sr.get("status") == "batal":
         raise HTTPException(status_code=404, detail="Permintaan tidak ditemukan/dibatalkan")
-    if sr.get("created_by") != user.get("username") and user.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Hanya pembuat/admin dapat menerbitkan ulang link")
+    # Guard ber-SATKER (REVIEW-9 R11): cek lama hanya role=='admin',
+    # sehingga admin satker LAIN bisa menerbitkan ulang link e-sign —
+    # link itu memberi hak menandatangani dokumen resmi satker ini.
+    _pastikan_pemilik_sr(sr, user)
     signers = sr.get("signers") or []
     idx = next((i for i, s in enumerate(signers)
                 if s.get("signer_id") == signer_id), -1)
@@ -1161,6 +1182,9 @@ async def lembar_pdf(sr_id: str, user: dict = Depends(require_user_or_query_toke
     sr = await db.signature_requests.find_one({"id": sr_id}, _PROJ)
     if not sr:
         raise HTTPException(status_code=404, detail="Permintaan tidak ditemukan")
+    # IDOR (REVIEW-9 R11): lembar pengesahan memuat GAMBAR tanda tangan
+    # seluruh penanda tangan + NIP.
+    _pastikan_pemilik_sr(sr, user)
     _tolak_bila_batal(sr)  # lembar pengesahan dari permintaan batal → tak berlaku
     settings = await db.report_settings.find_one({"type": "global"}, _PROJ) or {}
     st = _get_report_styles()

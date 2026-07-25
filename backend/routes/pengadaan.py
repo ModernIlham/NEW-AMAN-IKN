@@ -54,13 +54,18 @@ class TautkanPenganggaranIn(BaseModel):
     penganggaran_id: str = ""          # kosong = lepaskan tautan
 
 
-async def _ambil_snapshot_penganggaran(penganggaran_id: str) -> dict:
-    """Cari usulan penganggaran (bila id diisi) → snapshot; 404 bila hilang."""
+async def _ambil_snapshot_penganggaran(penganggaran_id: str, user=None) -> dict:
+    """Cari usulan penganggaran (bila id diisi) → snapshot; 404 bila hilang.
+
+    Isolasi satker (REVIEW-9 R9): pencarian di-scope ke satker pemanggil —
+    tanpa itu writer satker A dapat menautkan perolehannya ke usulan satker B
+    dan ikut membaca uraian/nomor DIPA/tahun anggaran milik B.
+    """
     pid = str(penganggaran_id or "").strip()
     if not pid:
         return snapshot_penganggaran(None)
     u = await db.penganggaran.find_one(
-        {"id": pid},
+        scope_query_field_satker(user, {"id": pid}),
         {"_id": 0, "id": 1, "uraian": 1, "nomor_dipa": 1, "tahun_anggaran": 1})
     if not u:
         raise HTTPException(status_code=404,
@@ -254,7 +259,7 @@ async def buat_perolehan(payload: PerolehanIn, user: dict = Depends(require_writ
             row.update({"asset_id": a["id"], "asset_code": a.get("asset_code"),
                         "NUP": a.get("NUP"), "asset_name": a.get("asset_name")})
         barang_rows.append(row)
-    snap = await _ambil_snapshot_penganggaran(data.get("penganggaran_id"))
+    snap = await _ambil_snapshot_penganggaran(data.get("penganggaran_id"), user)
     now = datetime.now(timezone.utc).isoformat()
     record = {
         "id": str(uuid.uuid4()),
@@ -477,7 +482,7 @@ async def tautkan_penganggaran(perolehan_id: str,
     if not p:
         raise HTTPException(status_code=404, detail="Perolehan tidak ditemukan")
     await pastikan_akses_dok_satker(_user, p)  # isolasi satker (REVIEW-9 R8)
-    snap = await _ambil_snapshot_penganggaran(payload.penganggaran_id)
+    snap = await _ambil_snapshot_penganggaran(payload.penganggaran_id, _user)
     now = datetime.now(timezone.utc).isoformat()
     await db.pengadaan.update_one(
         {"id": perolehan_id}, {"$set": {**snap, "updated_at": now}})

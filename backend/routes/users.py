@@ -5,7 +5,8 @@ from fastapi import APIRouter, HTTPException, Depends
 
 from db import db
 from models import UserUpdate
-from auth_utils import hash_password, require_admin
+from auth_utils import hash_password, is_super_admin, pastikan_kelola_akun, require_admin
+from shared_utils import kode_satker_user, scope_query_field_satker
 
 logger = logging.getLogger(__name__)
 users_router = APIRouter()
@@ -27,7 +28,21 @@ async def get_all_users(admin_id: str = "", _admin: dict = Depends(require_admin
         admin_user = await db.users.find_one({"id": admin_id})
         if not admin_user or admin_user.get("role") != "admin":
             raise HTTPException(status_code=403, detail="Hanya admin yang dapat mengakses daftar user")
-    users = await db.users.find({}, {"_id": 0, "password": 0}).to_list(100)
+    # Isolasi satker (REVIEW-9 R9): admin SATKER hanya melihat direktori
+    # akun satkernya. Tanpa ini ia memetakan seluruh akun satker lain dan
+    # memakainya sebagai sasaran endpoint tulis di bawah.
+    _q = scope_query_field_satker(_admin)
+    if not is_super_admin(_admin):
+        # Akun PUSAT disembunyikan (REVIEW-9 R11). `scope_query_field_satker`
+        # ikut mencocokkan kode_satker kosong — yang pada AKUN justru berarti
+        # super-admin lintas-satker. Tanpa pengecualian ini, setiap admin
+        # satker melihat username & email pemegang hak tertinggi: sasaran
+        # empuk, padahal mengelolanya sudah 403 (pastikan_kelola_akun).
+        # Akun BARU tanpa ikatan (role viewer) tetap tampil agar bisa
+        # di-onboard.
+        _q = {"$and": [_q, {"$nor": [{"role": "admin",
+                                      "kode_satker": {"$in": ["", None]}}]}]}
+    users = await db.users.find(_q, {"_id": 0, "password": 0}).to_list(100)
     now = datetime.now(timezone.utc)
     for u in users:
         if u.get("role") == "user":
@@ -56,7 +71,8 @@ async def toggle_user_active(user_id: str, admin_id: str = "", _admin: dict = De
     user = await db.users.find_one({"id": user_id})
     if not user:
         raise HTTPException(status_code=404, detail="User tidak ditemukan")
-    
+    pastikan_kelola_akun(_admin, user)  # isolasi satker (REVIEW-9 R9)
+
     current_active = user.get("is_active", True)
     await db.users.update_one({"id": user_id}, {"$set": {"is_active": not current_active}})
     return {"message": f"User {'dinonaktifkan' if current_active else 'diaktifkan'}", "is_active": not current_active}
@@ -71,7 +87,10 @@ async def change_user_password(user_id: str, data: dict, _admin: dict = Depends(
     user = await db.users.find_one({"id": user_id})
     if not user:
         raise HTTPException(status_code=404, detail="User tidak ditemukan")
-    
+    # Isolasi satker (REVIEW-9 R9): tanpa guard ini admin satker A mereset
+    # password admin satker B lalu login sebagai dia — pengambilalihan penuh.
+    pastikan_kelola_akun(_admin, user)
+
     hashed = hash_password(new_password)
     # Naikkan sesi_epoch (AUTH-C): admin mengganti password → sesi lama user
     # tersebut dicabut (token akses & media gugur), memaksa login ulang. Baca
@@ -90,7 +109,8 @@ async def update_user_name(user_id: str, data: UserUpdate, admin_id: str = "", _
     user = await db.users.find_one({"id": user_id})
     if not user:
         raise HTTPException(status_code=404, detail="User tidak ditemukan")
-    
+    pastikan_kelola_akun(_admin, user)  # isolasi satker (REVIEW-9 R9)
+
     new_name = data.name.strip()
     if not new_name:
         raise HTTPException(status_code=400, detail="Nama tidak boleh kosong")
@@ -107,7 +127,8 @@ async def delete_user(user_id: str, admin_id: str = "", _admin: dict = Depends(r
     user = await db.users.find_one({"id": user_id})
     if not user:
         raise HTTPException(status_code=404, detail="User tidak ditemukan")
-    
+    pastikan_kelola_akun(_admin, user)  # isolasi satker (REVIEW-9 R9)
+
     await db.users.delete_one({"id": user_id})
     return {"message": "User berhasil dihapus"}
 
@@ -119,11 +140,28 @@ async def set_user_satker(user_id: str, data: dict, _admin: dict = Depends(requi
     ditegakkan bertahap di M-SCOPE); KOSONG = lintas-satker. Admin dengan
     kode_satker kosong berperan sebagai SUPER-ADMIN (melihat semua satker) —
     pola ini dipilih alih-alih role kelima agar tidak menyentuh seluruh
-    permukaan role yang ada."""
+    permukaan role yang ada.
+
+    BATAS WEWENANG (REVIEW-9 R9). Ikatan satker ADALAH batas isolasi itu
+    sendiri, jadi hanya super-admin yang boleh menggesernya bebas. Admin
+    satker dibatasi mengikat ke SATKERNYA SENDIRI (onboarding akun baru):
+    tanpa batas ini ia cukup memanggil endpoint ini atas dirinya sendiri
+    dengan kode_satker kosong untuk naik pangkat jadi super-admin — lolos ke
+    backup/restore/reset SELURUH satker — atau menarik akun satker lain ke
+    satkernya."""
     kode = str(data.get("kode_satker") or "").strip()
-    user = await db.users.find_one({"id": user_id}, {"_id": 0, "id": 1})
+    user = await db.users.find_one(
+        {"id": user_id}, {"_id": 0, "id": 1, "role": 1, "kode_satker": 1})
     if not user:
         raise HTTPException(status_code=404, detail="User tidak ditemukan")
+    if not is_super_admin(_admin):
+        pastikan_kelola_akun(_admin, user)
+        if kode != kode_satker_user(_admin):
+            raise HTTPException(
+                status_code=403,
+                detail=("Admin satker hanya dapat mengikat akun ke satkernya "
+                        "sendiri — melepas ikatan (lintas-satker) khusus "
+                        "super-admin pusat"))
     if kode:
         ada = await db.satker.find_one({"kode_satker": kode}, {"_id": 1})
         if not ada:
@@ -152,7 +190,21 @@ async def change_user_role(user_id: str, data: dict, _admin: dict = Depends(requ
     user = await db.users.find_one({"id": user_id})
     if not user:
         raise HTTPException(status_code=404, detail="User tidak ditemukan")
-    
+    pastikan_kelola_akun(_admin, user)  # isolasi satker (REVIEW-9 R9)
+
+    # ESKALASI (REVIEW-9 R10). `pastikan_kelola_akun` sengaja MENGIZINKAN akun
+    # tanpa ikatan satker (pendaftar baru) supaya admin satker bisa meng-onboard.
+    # Tanpa cek tambahan di sini, jalur itu menjadi tangga naik pangkat: admin
+    # satker mempromosikan pendaftar TANPA ikatan menjadi role "admin" → akun
+    # itu memenuhi definisi SUPER-ADMIN (admin + kode_satker kosong) → lolos ke
+    # backup/restore/reset seluruh satker. Akun baru harus DIIKAT dulu.
+    if (not is_super_admin(_admin) and new_role == "admin"
+            and not kode_satker_user(user)):
+        raise HTTPException(
+            status_code=400,
+            detail=("Ikat akun ini ke satker Anda dulu sebelum dijadikan admin "
+                    "— admin tanpa ikatan satker berarti super-admin pusat"))
+
     await db.users.update_one({"id": user_id}, {"$set": {"role": new_role}})
     return {"message": f"Role user diubah menjadi {new_role}", "role": new_role}
 

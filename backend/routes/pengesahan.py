@@ -525,6 +525,12 @@ async def get_kartu_inventarisasi(kode_register: str = "", asset_code: str = "",
     dibatasi pada satuan kerja yang SAMA — identitas aset yang kebetulan sama
     di satker lain tidak ikut tampil. Record lama tanpa kode_satker (ditulis
     sebelum field ini ada) tetap disertakan; frontend menandainya sebagai legacy.
+
+    ISOLASI SATKER (REVIEW-9 R9): param ini dulu MURNI dari klien, sehingga
+    mengosongkannya (atau mengisi kode satker lain) menampilkan riwayat
+    pengesahan satker lain — petugas, lokasi, pemegang, kondisi, catatan.
+    Kini untuk user terikat satker param dipaksa ke satkernya sendiri; hanya
+    super-admin yang boleh memilih bebas.
     NOTE: route ini dideklarasikan di router yang dimuat SEBELUM assets_router
     agar tidak tertangkap /assets/{asset_id}.
     """
@@ -532,6 +538,10 @@ async def get_kartu_inventarisasi(kode_register: str = "", asset_code: str = "",
     asset_code = (asset_code or "").strip()
     NUP = (NUP or "").strip()
     kode_satker = (kode_satker or "").strip()
+    from shared_utils import kode_satker_user
+    _milik = kode_satker_user(_user)
+    if _milik:
+        kode_satker = _milik   # param klien diabaikan (isolasi R9)
 
     if kode_register:
         identity_query = {"kode_register": kode_register}
@@ -558,8 +568,9 @@ async def get_kartu_inventarisasi(kode_register: str = "", asset_code: str = "",
     # Header identitas: aset terbaru dengan identitas yang sama (tanpa filter
     # satker — aset tidak menyimpan kode_satker); fallback ke record riwayat
     # teratas bila asetnya sudah tidak ada.
+    from shared_utils import scope_query_aset
     asset = await db.assets.find_one(
-        identity_query,
+        await scope_query_aset(_user, identity_query),
         {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "kode_register": 1,
          "asset_name": 1, "category": 1, "location": 1, "user": 1, "eselon1": 1},
         sort=[("created_at", -1)],

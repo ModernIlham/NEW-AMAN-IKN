@@ -109,6 +109,116 @@ Aturan pendamping:
   universal — jangan menambah pengaturan per-alur baru ke "global" tanpa
   memikirkan satker.
 
+### Lima titik buta yang lolos DUA gelombang audit (REVIEW-9 R8 → R9)
+
+Setelah R8 menutup 20 kebocoran, sapuan adversarial ulang masih menemukan 33
+lagi. Semuanya luput karena checklist di atas dibaca sebagai "endpoint CRUD
+biasa". Periksa kelima kelas ini SECARA TERPISAH — bukan bagian dari CRUD:
+
+1. **`require_admin` BUKAN gerbang satker.** Ia hanya mengecek `role ==
+   "admin"`; admin yang terikat satker lolos sepenuhnya. Semua endpoint
+   `/users` dan `/satker` sempat memungkinkan admin satker A mereset password
+   admin B lalu login sebagai dia. Untuk akun, pakai
+   `auth_utils.pastikan_kelola_akun(admin, target)`; untuk operasi seluruh-DB
+   (backfill, migrasi, reset), pakai `require_super_admin`.
+   **Catatan penting:** pada AKUN, `kode_satker` kosong berarti akun PUSAT
+   (super-admin) — kebalikan dari dokumen, di mana kosong berarti "era lama,
+   terbuka". Jangan pakai `pastikan_akses_dok_satker` untuk akun.
+
+2. **Yang mengubah batas isolasi harus super-admin.** `PUT /users/{id}/satker`
+   sempat bisa dipanggil admin atas dirinya sendiri dengan `kode_satker`
+   kosong → naik pangkat jadi super-admin. Setiap field yang MENENTUKAN
+   scope (ikatan satker user, `kode_satker` kegiatan) tidak boleh diubah oleh
+   pemiliknya sendiri ke nilai yang memperluas akses.
+
+3. **Laporan PDF/XLSX agregat sering melewatkan scope walau list-nya benar.**
+   LBKP & CaLBMN memanggil `filter_aset_perhitungan({})` — helper itu TIDAK
+   men-scope satker (docstring-nya menyebut ia dipanggil SESUDAH scoping).
+   Pola benar: `filter_aset_perhitungan(await scope_query_aset(user, {...}))`.
+   Ingat juga register PENDUKUNG di laporan yang sama (persediaan, PSP,
+   pemanfaatan, penghapusan, idle, kasus) — masing-masing perlu di-scope.
+
+4. **Koleksi jurnal/turunan yang tak ber-`kode_satker`.** `transaksi_persediaan`
+   dan `mutasi_bmn` sengaja ramping. Isolasinya lewat RELASI:
+   `persediaan_id` → master persediaan (helper `_scope_jurnal` di
+   `routes/persediaan.py`), `asset_id` → aset → kegiatan (lihat `daftar_mutasi`).
+   Kalau koleksi baru tak bisa distempel, tentukan jalur relasinya SEKARANG —
+   jangan tinggalkan "nanti saja", karena filter apa pun kemudian tak punya
+   pegangan. Kalau BISA distempel (mis. `lpb`), stempel sejak insert pertama.
+
+5. **Master "referensi" yang sebenarnya milik satker.** Referensi UNIVERSAL
+   (kodefikasi barang, akun BAS, masa manfaat, kategori) memang global.
+   Tetapi ruangan, pejabat, dan setelan penomoran melekat pada satker —
+   `ruangan` sempat sepenuhnya terbuka (admin A menghapus ruangan B), dan
+   setelan persuratan dulu satu dokumen `type:"global"` yang bisa ditulis
+   admin mana pun sehingga `kode_unit` satu satker mengubah nomor resmi semua
+   satker. Uji pertanyaan ini: *"kalau dua satker mengisi ini berbeda, apakah
+   keduanya benar?"* Bila ya → per satker, bukan global.
+
+Dua pelengkap yang juga terbukti berulang:
+
+- **WebSocket & endpoint non-REST ikut aturan yang sama.** `/ws/{activity_id}`
+  memvalidasi token tetapi tak pernah membandingkan kegiatan dengan satker
+  user — token JWT TIDAK membawa `kode_satker`, jadi harus dibaca dari
+  dokumen user. Room kolaborasi menyiarkan perubahan aset & daftar user online.
+- **"Publik demi kemudahan" hampir selalu keliru.** `doc-file` dibiarkan anonim
+  dengan alasan tautannya dibuka dari spreadsheet — padahal UUID aset justru
+  ditanam aplikasi ke CSV yang beredar, tanpa TTL dan tanpa pencabutan. Pola
+  benar: `require_user_or_query_token` + tanam `?token=` ber-scope media
+  (`create_media_token`) ke dalam tautan ekspor.
+
+### Kesalahan ARAH SEBALIKNYA: men-scope yang memang bersama
+
+Isolasi bisa salah ke dua arah. Men-scope koleksi yang SENGAJA global sama
+merusaknya dengan membiarkan yang privat terbuka — bedanya kerusakan ini
+sunyi: fitur tetap "jalan", hanya datanya terpecah diam-diam.
+
+Contoh trap-nya: menstempel koleksi yang seluruh dokumennya memang tanpa
+`kode_satker` DAN memang dipakai bersama (kodefikasi barang, akun BAS, masa
+manfaat) akan memecah satu referensi nasional jadi salinan per satker.
+
+Tetapi hati-hati juga pada bukti yang TERLIHAT meyakinkan padahal bukan:
+
+- **`RESET_KEEP_COLLECTIONS` BUKAN penanda "universal".** Daftar itu hanya
+  berarti "konfigurasi, selamat dari reset". Isinya memuat `satker`,
+  `pegawai`, `pejabat`, dan `ruangan` — semuanya jelas PER SATKER. Menyimpulkan
+  "ada di RESET_KEEP → global" pernah membuat sapuan R10 keliru mengembalikan
+  scoping `penganggaran_kalender` yang sebenarnya sudah benar (dikoreksi R11).
+- **"Sapuan sebelumnya sengaja melewatinya" juga bukan bukti.** Sesi ini
+  membuktikan sapuan sebelumnya melewatkan puluhan endpoint karena lalai,
+  bukan karena memutuskan.
+
+Bukti yang benar-benar menentukan: **teks yang dilihat pengguna**. Kalender
+penganggaran mengembalikan catatan "tenggat internal tiap K/L berbeda (surat
+edaran masing-masing); isi berdasar kalender penganggaran resmi unit Anda" —
+aplikasi sendiri menyatakan datanya milik unit masing-masing.
+
+Urutan bukti sebelum memutuskan sebuah koleksi bersama atau per-satker
+(dari yang paling menentukan):
+1. **Teks yang dilihat pengguna** (catatan endpoint, label UI, docstring yang
+   dikutip ke respons). Kalau aplikasi bilang "isi sesuai unit Anda", itu
+   per-satker — titik.
+2. **Uji pemilik:** *"kalau dua satker mengisi ini berbeda, apakah keduanya
+   benar?"* Ya → per-satker. Tidak (mis. kode barang nasional) → bersama.
+3. **Apakah ada penulis yang SUDAH menyetel `kode_satker`?** (grep penulisnya)
+   Ada → jelas per-satker.
+4. Sisanya (RESET_KEEP, sapuan lampau, ketiadaan indeks) hanya petunjuk lemah
+   — jangan dijadikan dasar tunggal, lihat dua butir di atas.
+
+Petunjuk diagnostik saat menilai TEMUAN ORANG LAIN: bila perbaikan yang
+diusulkan **tidak mengubah perilaku apa pun** (mis. menambah
+`scope_query_field_satker` pada koleksi yang seluruh dokumennya tanpa
+`kode_satker` — `$in` memuat `None` sehingga cocok semua), maka perbaikan itu
+belum lengkap: stempel pada jalur TULIS harus ikut ditambahkan, atau memang
+model datanya salah dibaca. Periksa dulu yang mana.
+
+**Cara memverifikasi, bukan sekadar membaca:** jangan percaya "sudah ditutup di
+gelombang lalu". Grep pola mentahnya di seluruh `routes/` dan periksa satu per
+satu terhadap kode SAAT INI:
+`db\.\w+\.(find|count_documents|aggregate)\(\{\}` (query kosong),
+`find_one\(\{"id":` (get-by-id tanpa guard), `counters` (deret nomor),
+`type": "global"` (setelan bersama).
+
 ## Jurnal Buku Barang (`mutasi_bmn`) — aturan TERKUNCI audit
 
 1. **Semua transaksi keluar/nilai berjurnal** — modul yang membuat aset

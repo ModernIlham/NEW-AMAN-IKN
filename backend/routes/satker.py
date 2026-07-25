@@ -18,9 +18,9 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from auth_utils import require_admin, require_user
+from auth_utils import is_super_admin, require_admin, require_super_admin, require_user
 from db import db
-from shared_utils import log_audit
+from shared_utils import kode_satker_user, log_audit
 
 satker_router = APIRouter()
 
@@ -32,6 +32,23 @@ FIELD_KOP_SATKER = (
     "tempat_laporan", "tembusan_laporan", "telepon", "email",
     "kode_satker_lengkap",
 )
+
+
+def _pastikan_satker_sendiri(admin: dict, kode: str) -> None:
+    """403 bila admin SATKER menyentuh master/KOP satker LAIN (REVIEW-9 R9).
+
+    `require_admin` hanya cek role, sehingga tanpa guard ini admin satker A
+    dapat menimpa KOP satker B — dan KOP master itu dipakai `pengaturan_kop`
+    untuk SELURUH laporan/PDF/stiker/BAST satker B — atau menghapus master
+    satker B (bila belum punya kegiatan) beserta profil yang diisi manual."""
+    if is_super_admin(admin):
+        return
+    milik = kode_satker_user(admin)
+    if not milik or str(kode or "").strip() != milik:
+        raise HTTPException(
+            status_code=403,
+            detail=("Master & kop satker lain hanya dapat diubah super-admin "
+                    "pusat — akun Anda terikat satker " + (milik or "-")))
 
 
 class SatkerIn(BaseModel):
@@ -64,7 +81,12 @@ async def daftar_satker(_user: dict = Depends(require_user)):
     """Master satker + jumlah kegiatan per satker (agar terlihat mana yang
     dipakai). Termasuk satker yang BELUM terdaftar di master tetapi muncul di
     kegiatan (status 'belum terdaftar') — kandidat sinkron 1-klik."""
-    master = {m["kode_satker"]: m async for m in db.satker.find({}, _PROJ)}
+    # Isolasi satker (REVIEW-9 R10): user terikat hanya melihat barisnya
+    # sendiri; super-admin pusat tetap melihat seluruh master (dipakai untuk
+    # mengelola & mengikat akun antar satker).
+    _milik = kode_satker_user(_user)
+    _q_master = {"kode_satker": _milik} if _milik else {}
+    master = {m["kode_satker"]: m async for m in db.satker.find(_q_master, _PROJ)}
     pakai = {}
     pipeline = [
         {"$match": {"kode_satker": {"$exists": True, "$ne": ""}}},
@@ -78,6 +100,8 @@ async def daftar_satker(_user: dict = Depends(require_user)):
         items.append({**m, "jumlah_kegiatan": pakai.get(kode, {}).get("n", 0),
                       "terdaftar": True})
     for kode, g in pakai.items():
+        if _milik and kode != _milik:
+            continue
         if kode not in master:
             items.append({"kode_satker": kode, "nama_satker": g.get("nama") or "",
                           "eselon1": g.get("eselon1") or [], "aktif": True,
@@ -89,6 +113,11 @@ async def daftar_satker(_user: dict = Depends(require_user)):
 
 @satker_router.get("/satker/{kode}")
 async def detail_satker(kode: str, _user: dict = Depends(require_user)):
+    # Isolasi satker (REVIEW-9 R10): profil satker memuat alamat, telepon,
+    # email, dan kode registrasi BMN 20 digit — bukan referensi publik.
+    _milik = kode_satker_user(_user)
+    if _milik and str(kode or "").strip() != _milik:
+        raise HTTPException(status_code=403, detail="Profil satker lain")
     doc = await db.satker.find_one({"kode_satker": kode}, _PROJ)
     if not doc:
         raise HTTPException(status_code=404, detail="Satker belum terdaftar di master")
@@ -101,6 +130,7 @@ async def simpan_satker(kode: str, payload: SatkerIn,
     """Daftarkan/perbarui profil & kop satu satker (admin). Upsert by kode —
     kode pada path menang atas body (path = identitas)."""
     k = _valid_kode(kode)
+    _pastikan_satker_sendiri(admin, k)  # isolasi satker (REVIEW-9 R9)
     if not str(payload.nama_satker or "").strip():
         raise HTTPException(status_code=400, detail="Nama satker wajib diisi")
     now = datetime.now(timezone.utc).isoformat()
@@ -128,6 +158,7 @@ async def simpan_satker(kode: str, payload: SatkerIn,
 async def hapus_satker(kode: str, admin: dict = Depends(require_admin)):
     """Hapus satker dari master — DITOLAK bila masih dipakai kegiatan
     (hapus/madah kegiatannya dulu; master bukan tempat menghilangkan jejak)."""
+    _pastikan_satker_sendiri(admin, kode)  # isolasi satker (REVIEW-9 R9)
     n = await db.inventory_activities.count_documents({"kode_satker": kode})
     if n:
         raise HTTPException(status_code=409,
@@ -142,7 +173,7 @@ async def hapus_satker(kode: str, admin: dict = Depends(require_admin)):
 
 
 @satker_router.post("/satker/sinkron")
-async def sinkron_satker(admin: dict = Depends(require_admin)):
+async def sinkron_satker(admin: dict = Depends(require_super_admin)):
     """Registrasi otomatis: setiap satker yang muncul di kegiatan tetapi belum
     ada di master → didaftarkan (kode+nama+eselon1). Idempoten; profil kop
     yang sudah diisi admin TIDAK ditimpa."""
@@ -178,7 +209,7 @@ async def sinkron_satker(admin: dict = Depends(require_admin)):
 
 @satker_router.post("/satker/backfill")
 async def backfill_kode_satker(payload: dict = None,
-                               admin: dict = Depends(require_admin)):
+                               admin: dict = Depends(require_super_admin)):
     """BACKFILL kode_satker untuk DATA LAMA (sekali jalan, idempoten — hanya
     dokumen yang kode_satker-nya kosong/hilang yang diisi):
 
@@ -254,9 +285,15 @@ async def backfill_kode_satker(payload: dict = None,
 
     # 2) Sisanya diisi kode_satker_sisa bila diberikan.
     if kode_sisa:
+        # Koleksi yang BARU distempel di REVIEW-9 R9/R10 ikut di sini, supaya
+        # baris lama (yang terlanjur tanpa stempel dan karenanya terlihat
+        # lintas satker lewat kelonggaran era-lama) bisa ditutup sekali jalan:
+        # lpb, ruangan, surat, mutasi_bmn, pengamanan_checklist.
         SISA = ("persediaan", "pengadaan", "penganggaran", "perencanaan_usulan",
                 "pemantauan_insidentil", "pengamanan_kasus",
-                "pengamanan_dokumen", "pengamanan_polis") + RELASI
+                "pengamanan_dokumen", "pengamanan_polis",
+                "pengamanan_checklist", "lpb", "ruangan", "surat",
+                "mutasi_bmn") + RELASI
         for nama in SISA:
             res = await db[nama].update_many(
                 _q_belum_distempel, {"$set": {"kode_satker": kode_sisa}})

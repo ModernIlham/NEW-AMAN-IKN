@@ -106,8 +106,23 @@ class KlasifikasiIn(BaseModel):
     aktif: Optional[bool] = True
 
 
-async def _pengaturan() -> dict:
+async def _pengaturan(kode_satker: str = "") -> dict:
+    """Setelan penomoran EFEKTIF: dokumen global di-overlay setelan SATKER.
+
+    ISOLASI SATKER (REVIEW-9 R9): dulu hanya ada satu dokumen `{"type":
+    "global"}` yang boleh ditulis admin satker mana pun — mengubah kode_unit /
+    format nomor / peta klasifikasi satu satker langsung mengubah nomor resmi
+    SEMUA satker. Kini tiap satker punya dokumennya sendiri (`type="satker"`),
+    dan global tinggal menjadi default bagi field yang belum diisi satker.
+    `kode_unit` khususnya melekat pada unit (PerANRI 5/2021), bukan instansi.
+    """
     s = await db.persuratan_settings.find_one({"type": "global"}, _PROJ) or {}
+    kode = str(kode_satker or "").strip()
+    if kode:
+        khusus = await db.persuratan_settings.find_one(
+            {"type": "satker", "kode_satker": kode}, _PROJ) or {}
+        # Field non-kosong milik satker menimpa global (pola gabung_kop).
+        s = {**s, **{k: v for k, v in khusus.items() if v not in ("", None, [])}}
     return {
         "format_nomor": s.get("format_nomor") or FORMAT_NOMOR_DEFAULT,
         "kode_unit": s.get("kode_unit") or "",
@@ -116,10 +131,68 @@ async def _pengaturan() -> dict:
     }
 
 
-async def _no_agenda_berikut(jenis: str, tahun: int) -> int:
-    """Nomor agenda berikutnya (atomik — $inc pada dokumen counter)."""
+async def _seed_agenda(jenis: str, tahun: int, kode: str) -> int:
+    """Nilai awal counter agenda per-satker saat migrasi dari counter GLOBAL.
+
+    Dipakai BERSAMA oleh `_no_agenda_berikut` (yang benar-benar memesan nomor)
+    dan `pratinjau_nomor` (yang hanya menghitung) — bila hanya salah satu tahu
+    cara seed-nya, pratinjau menampilkan nomor 1 yang sudah terpakai.
+
+    PENTING: jangan hanya membaca surat yang SUDAH berstempel kode_satker.
+    Stempel itu ditambahkan belakangan tanpa backfill, jadi di produksi hampir
+    semua surat lama TIDAK berstempel → query ber-stempel mengembalikan 0 baris
+    → seq mulai 0 → nomor agenda 1,2,3… DIULANG dan bentrok dengan surat yang
+    sudah terbit (tak ada indeks unik pada nomor/no_agenda, tabrakan terjadi
+    diam-diam). Karena itu seed = MAKS dari:
+      (a) posisi counter GLOBAL lama (batas aman lintas satker), dan
+      (b) no_agenda tertinggi milik satker ini (termasuk surat lama tanpa
+          stempel — dianggap miliknya sesuai konvensi era-lama).
+    Konsekuensi: satker kedua mulai dari nomor global terakhir sehingga ada
+    lompatan SEKALI — jauh lebih baik daripada nomor resmi ganda.
+    """
+    maks = 0
+    lama = await db.counters.find_one(
+        {"_id": f"surat_{jenis}_{tahun}"}, {"_id": 0, "seq": 1})
+    try:
+        maks = int((lama or {}).get("seq") or 0)
+    except (TypeError, ValueError):
+        maks = 0
+    async for r in db.surat.find(
+            {"jenis": jenis, "tahun": tahun,
+             "kode_satker": {"$in": [kode, "", None]}},
+            {"_id": 0, "no_agenda": 1}):
+        try:
+            maks = max(maks, int(r.get("no_agenda") or 0))
+        except (TypeError, ValueError):
+            continue
+    return maks
+
+
+async def _cid_agenda(jenis: str, tahun: int, kode: str) -> str:
+    """Id dokumen counter agenda. `kode` kosong (super-admin / era lama) tetap
+    memakai id legacy agar deret lama menyambung tanpa lompatan."""
+    base = f"surat_{jenis}_{tahun}"
+    return f"{base}:{kode}" if kode else base
+
+
+async def _no_agenda_berikut(jenis: str, tahun: int, kode_satker: str = "") -> int:
+    """Nomor agenda berikutnya (atomik — $inc pada dokumen counter).
+
+    Deret PER SATKER (REVIEW-9 R9), pola sama dengan BA-Perbaikan (R8):
+    sebelumnya SATU deret dipakai bersama, sehingga booking satker B
+    menghabiskan jatah nomor satker A — buku agenda A (yang ter-scope satker)
+    tampak bolong 5, 7, 9… dan besarnya lompatan membocorkan volume surat
+    satker lain.
+    """
+    kode = str(kode_satker or "").strip()
+    cid = await _cid_agenda(jenis, tahun, kode)
+    if kode and await db.counters.find_one({"_id": cid}) is None:
+        maks = await _seed_agenda(jenis, tahun, kode)
+        # $setOnInsert idempoten: pemanggil kedua yang balapan tak menimpa seed.
+        await db.counters.update_one(
+            {"_id": cid}, {"$setOnInsert": {"seq": maks}}, upsert=True)
     c = await db.counters.find_one_and_update(
-        {"_id": f"surat_{jenis}_{tahun}"},
+        {"_id": cid},
         {"$inc": {"seq": 1}},
         upsert=True,
         return_document=ReturnDocument.AFTER,
@@ -148,7 +221,7 @@ async def referensi_persuratan(_user: dict = Depends(require_user)):
         "status_masuk": [{"kode": k, "uraian": v} for k, v in STATUS_MASUK.items()],
         "transisi_keluar": {k: sorted(v) for k, v in TRANSISI_KELUAR.items()},
         "transisi_masuk": {k: sorted(v) for k, v in TRANSISI_MASUK.items()},
-        "pengaturan": await _pengaturan(),
+        "pengaturan": await _pengaturan(kode_satker_user(_user)),
         "klasifikasi": await db.klasifikasi_arsip.find(
             {"aktif": {"$ne": False}}, _PROJ).sort("kode", 1).to_list(2000),
     }
@@ -233,12 +306,25 @@ async def pratinjau_nomor(jenis_naskah: str = "", modul: str = "",
     Perkiraan: bila ada booking lain sebelum Anda menekan simpan, nomor
     final bisa bergeser maju — keunikan tetap dijamin counter atomik.
     """
-    atur = await _pengaturan()
+    _ks = kode_satker_user(_user)
+    atur = await _pengaturan(_ks)
     tanggal = (str(tanggal_surat or "").strip()[:10]
                or datetime.now(timezone.utc).date().isoformat())
     tahun = int(tanggal[:4]) if tanggal[:4].isdigit() else datetime.now(timezone.utc).year
-    c = await db.counters.find_one({"_id": f"surat_keluar_{tahun}"})
-    urut_berikut = int((c or {}).get("seq") or 0) + 1
+    # Pakai jalur seed yang SAMA dengan _no_agenda_berikut (REVIEW-9 R11):
+    # sebelum counter per-satker terbentuk, membaca counter kosong menghasilkan
+    # "1" — nomor yang justru sudah terpakai. Pratinjau harus memperkirakan
+    # nomor yang benar-benar akan terbit.
+    _cid = await _cid_agenda("keluar", tahun, _ks)
+    c = await db.counters.find_one({"_id": _cid})
+    if c is None and _ks:
+        posisi = await _seed_agenda("keluar", tahun, _ks)
+    else:
+        try:
+            posisi = int((c or {}).get("seq") or 0)
+        except (TypeError, ValueError):
+            posisi = 0
+    urut_berikut = posisi + 1
     kode = pilih_klasifikasi(atur["peta_klasifikasi"], modul, jenis_naskah,
                              eksplisit=kode_klasifikasi,
                              default=atur["kode_klasifikasi_default"])
@@ -254,7 +340,7 @@ async def pratinjau_nomor(jenis_naskah: str = "", modul: str = "",
 
 @persuratan_router.get("/persuratan/pengaturan")
 async def get_pengaturan_persuratan(_user: dict = Depends(require_user)):
-    return await _pengaturan()
+    return await _pengaturan(kode_satker_user(_user))
 
 
 @persuratan_router.post("/persuratan/pengaturan")
@@ -286,13 +372,24 @@ async def set_pengaturan_persuratan(payload: PengaturanIn,
                                 detail="Format nomor wajib memuat {urut}")
     if not update:
         raise HTTPException(status_code=400, detail="Tidak ada yang diubah")
-    update["type"] = "global"
-    await db.persuratan_settings.update_one({"type": "global"},
-                                            {"$set": update}, upsert=True)
+    # ISOLASI SATKER (REVIEW-9 R9): admin SATKER menulis dokumen satkernya
+    # sendiri; hanya super-admin yang menyentuh dokumen global (default
+    # bersama). Dulu semua admin menulis satu dokumen global, sehingga
+    # kode_unit/format nomor satu satker mengubah nomor resmi satker lain.
+    _ks = kode_satker_user(user)
+    if _ks:
+        kunci = {"type": "satker", "kode_satker": _ks}
+        update.update(kunci)
+    else:
+        kunci = {"type": "global"}
+        update["type"] = "global"
+    await db.persuratan_settings.update_one(kunci, {"$set": update}, upsert=True)
     await log_audit("pengaturan_persuratan", "",
                     username=user.get("username", "system"),
-                    detail=f"Ubah pengaturan persuratan: {sorted(set(update) - {'type'})}")
-    return await _pengaturan()
+                    detail=(f"Ubah pengaturan persuratan "
+                            f"({_ks or 'global'}): "
+                            f"{sorted(set(update) - {'type', 'kode_satker'})}"))
+    return await _pengaturan(_ks)
 
 
 @persuratan_router.get("/persuratan")
@@ -362,14 +459,15 @@ async def booking_surat_keluar(payload: SuratKeluarIn,
     tanggal_surat = (str(data.get("tanggal_surat") or "").strip()[:10]
                      or now.date().isoformat())
     tahun = int(tanggal_surat[:4])
-    atur = await _pengaturan()
+    _ks = kode_satker_user(user)
+    atur = await _pengaturan(_ks)
     # Klasifikasi otomatis: eksplisit → aturan pemetaan (modul/jenis naskah,
     # paling spesifik menang) → kode bawaan pengaturan.
     kode_klas = pilih_klasifikasi(
         atur["peta_klasifikasi"], data.get("modul"), data.get("jenis_naskah"),
         eksplisit=data.get("kode_klasifikasi"),
         default=atur["kode_klasifikasi_default"])
-    no_agenda = await _no_agenda_berikut("keluar", tahun)
+    no_agenda = await _no_agenda_berikut("keluar", tahun, _ks)
     nomor = bangun_nomor(
         atur["format_nomor"], no_agenda, tanggal_surat,
         kode_klasifikasi=kode_klas,
@@ -420,7 +518,7 @@ async def agenda_surat_masuk(payload: SuratMasukIn,
     nama_kegiatan = await _nama_kegiatan(data.get("kegiatan_id"))
     now = datetime.now(timezone.utc)
     tahun = now.year
-    no_agenda = await _no_agenda_berikut("masuk", tahun)
+    no_agenda = await _no_agenda_berikut("masuk", tahun, kode_satker_user(user))
     record = {
         "id": str(uuid.uuid4()),
         "kode_satker": kode_satker_user(user),

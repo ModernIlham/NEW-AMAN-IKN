@@ -1059,8 +1059,23 @@ async def catat_mutasi_bmn(entri: dict):
                             "%s kode %s ref %s", entri.get("asset_id"),
                             entri.get("kode_transaksi"), ref)
                 return True
+        # Stempel satker (REVIEW-9 R10). Jurnal ini dulu sengaja "ramping" tanpa
+        # kode_satker, sehingga satu-satunya cara mengisolasinya adalah menyaring
+        # lewat DAFTAR id aset milik satker — daftar yang tumbuh tak terbatas dan
+        # dikirim sebagai $in pada SETIAP halaman Buku Barang. Dengan stempel,
+        # daftar mutasi cukup difilter per field seperti koleksi lain.
+        # Diturunkan dari kegiatan induk aset; pemanggil boleh mengoper sendiri.
+        kode = str(entri.get("kode_satker") or "").strip()
+        if not kode and entri.get("asset_id"):
+            aset = await db.assets.find_one(
+                {"id": entri["asset_id"]}, {"_id": 0, "activity_id": 1})
+            act_id = str((aset or {}).get("activity_id") or "").strip()
+            if act_id:
+                act = await db.inventory_activities.find_one(
+                    {"id": act_id}, {"_id": 0, "kode_satker": 1})
+                kode = str((act or {}).get("kode_satker") or "").strip()
         await db.mutasi_bmn.insert_one({
-            **entri, "id": str(_uuid.uuid4()),
+            **entri, "id": str(_uuid.uuid4()), "kode_satker": kode,
             "created_at": _dt.now(_tz.utc).isoformat()})
         return True
     except Exception as e:  # jangan pernah mematahkan alur pemanggil

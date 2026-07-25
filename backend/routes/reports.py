@@ -25,7 +25,8 @@ from auth_utils import require_user, require_admin, require_user_or_query_token
 from shared_utils import (pastikan_akses_kegiatan_id, ambang_kapitalisasi,
                           filter_aset_perhitungan,
                           get_photo_from_gridfs, limiter, pengaturan_kop,
-                          scope_query_aset, kode_satker_user, _q_pejabat_satker)
+                          scope_query_aset, scope_query_field_satker,
+                          kode_satker_user, _q_pejabat_satker)
 from report_filters import active_asset_filter
 from report_utils import hitung_status_stiker, distribusi_pengguna
 from markupsafe import Markup
@@ -2579,7 +2580,8 @@ async def generate_posisi_bmn_pdf(request: Request, _user: dict = Depends(requir
     amb = await ambang_kapitalisasi()
     rows, total_aset = build_dbkp_rows(assets, uraian_map, ambang=amb)
     p_jumlah, p_nilai = 0, 0.0
-    async for it in db.persediaan.find({}, {"_id": 0, "batches": 1}):
+    async for it in db.persediaan.find(
+            scope_query_field_satker(_user), {"_id": 0, "batches": 1}):
         p_jumlah += 1
         p_nilai += nilai_persediaan_dari_batches(it.get("batches"))
     posisi = posisi_neraca(rows, total_aset, p_jumlah, p_nilai)
@@ -3074,14 +3076,29 @@ async def generate_lbkp_pdf(
         {"kunci_unik": kunci_unik_periode(tahun, semester)}, {"_id": 0})
     sufiks_final = penanda_final(periode_rec)
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    # ISOLASI SATKER (REVIEW-9 R9): filter_aset_perhitungan TIDAK men-scope
+    # satker (docstring-nya: dipanggil SESUDAH scoping). Query kosong = saldo
+    # & mutasi SELURUH satker masuk laporan resmi milik satu satker.
     assets = await db.assets.find(
-        await filter_aset_perhitungan({}),
+        await filter_aset_perhitungan(await scope_query_aset(_user, {})),
         {"_id": 0, "asset_code": 1, "purchase_price": 1, "created_at": 1,
          "dihapus": 1, "penghapusan": 1},
     ).to_list(500000)
     tombstones = []
+    # ISOLASI SATKER (REVIEW-9 R10). Tombstone = aset yang DIHAPUS KERAS; ia
+    # masuk laporan sebagai "mutasi kurang" TERPISAH dari query assets di atas.
+    # Karena assets kini ter-scope tetapi tombstone tidak, laporan jadi TIMPANG:
+    # saldo awal/tambah milik satker sendiri, mutasi kurang milik SEMUA satker →
+    # saldo akhir bisa MINUS, dan cacah/nilai penghapusan satker lain bocor.
+    from routes.audit import _batas_activity_satker
+    _tq, _kosong = await _batas_activity_satker(_user, "")
+    # activity_id kosong → _kosong selalu False; filter mustahil dipakai sebagai
+    # jaring pengaman bila kontrak helper berubah (fail-closed, bukan fail-open).
+    _q_tomb = {"action": "delete"} if not _kosong else {"_id": {"$in": []}}
+    if not _kosong:
+        _q_tomb.update(_tq)
     async for t in db.audit_logs.find(
-            {"action": "delete"},
+            _q_tomb,
             {"_id": 0, "asset_code": 1, "timestamp": 1, "changes": 1}):
         nilai = 0.0
         for c in t.get("changes") or []:
@@ -3377,8 +3394,9 @@ async def generate_calbmn_pdf(
         {"kunci_unik": kunci_unik_periode(tahun, semester)}, {"_id": 0})
     sufiks_final = penanda_final(periode_rec)
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    # ISOLASI SATKER (REVIEW-9 R9) — lihat catatan di LBKP.
     assets = await db.assets.find(
-        await filter_aset_perhitungan({}),
+        await filter_aset_perhitungan(await scope_query_aset(_user, {})),
         {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
              "purchase_price": 1, "purchase_date": 1, "condition": 1,
              "created_at": 1, "inventory_status": 1, "nomor_perkara": 1,
@@ -3387,8 +3405,20 @@ async def generate_calbmn_pdf(
              "masa_manfaat_tambah_tahun": 1},
     ).to_list(500000)
     tombstones = []
+    # ISOLASI SATKER (REVIEW-9 R10). Tombstone = aset yang DIHAPUS KERAS; ia
+    # masuk laporan sebagai "mutasi kurang" TERPISAH dari query assets di atas.
+    # Karena assets kini ter-scope tetapi tombstone tidak, laporan jadi TIMPANG:
+    # saldo awal/tambah milik satker sendiri, mutasi kurang milik SEMUA satker →
+    # saldo akhir bisa MINUS, dan cacah/nilai penghapusan satker lain bocor.
+    from routes.audit import _batas_activity_satker
+    _tq, _kosong = await _batas_activity_satker(_user, "")
+    # activity_id kosong → _kosong selalu False; filter mustahil dipakai sebagai
+    # jaring pengaman bila kontrak helper berubah (fail-closed, bukan fail-open).
+    _q_tomb = {"action": "delete"} if not _kosong else {"_id": {"$in": []}}
+    if not _kosong:
+        _q_tomb.update(_tq)
     async for t in db.audit_logs.find(
-            {"action": "delete"},
+            _q_tomb,
             {"_id": 0, "asset_code": 1, "timestamp": 1, "changes": 1}):
         nilai = 0.0
         for c in t.get("changes") or []:
@@ -3412,41 +3442,50 @@ async def generate_calbmn_pdf(
         raise HTTPException(status_code=404,
                             detail=f"Belum ada data aset untuk {label_periode}")
 
+    # ISOLASI SATKER (REVIEW-9 R9): seluruh register pendukung CaLBMN di
+    # bawah membawa kode_satker sendiri, jadi di-scope seragam lewat alias
+    # ini — tanpa itu angka satker lain masuk CaLBMN milik satu satker.
+    def _sqf(q):
+        return scope_query_field_satker(_user, q)
+
     # Persediaan (posisi kini — keterbatasan diungkap di teks)
     p_jumlah, p_nilai = 0, 0.0
-    async for it in db.persediaan.find({}, {"_id": 0, "batches": 1}):
+    async for it in db.persediaan.find(
+            scope_query_field_satker(_user), {"_id": 0, "batches": 1}):
         p_jumlah += 1
         p_nilai += nilai_persediaan_dari_batches(it.get("batches"))
 
     # Informasi BMN lainnya — hitungan register (kueri ringan)
     psp_aset = set()
-    async for s in db.psp.find({}, {"_id": 0, "aset.asset_id": 1}):
+    async for s in db.psp.find(_sqf({}), {"_id": 0, "aset.asset_id": 1}):
         for a in s.get("aset") or []:
             if a.get("asset_id"):
                 psp_aset.add(a["asset_id"])
-    n_pemanfaatan = await db.pemanfaatan.count_documents({})
+    n_pemanfaatan = await db.pemanfaatan.count_documents(_sqf({}))
     pnbp_jumlah, pnbp_nilai = 0, 0.0
-    async for p in db.pemanfaatan.find({}, {"_id": 0, "kontribusi": 1}):
+    async for p in db.pemanfaatan.find(_sqf({}), {"_id": 0, "kontribusi": 1}):
         for k in p.get("kontribusi") or []:
             tgl = str(k.get("tanggal") or "")[:10]
             if dari <= tgl <= sampai:
                 pnbp_jumlah += 1
                 pnbp_nilai += float(k.get("jumlah") or 0)
     n_pt_proses = await db.pemindahtanganan.count_documents(
-        {"status": {"$in": ["diusulkan", "disetujui", "dilaksanakan"]}})
-    n_pt_selesai = await db.pemindahtanganan.count_documents({"status": "selesai"})
+        _sqf({"status": {"$in": ["diusulkan", "disetujui", "dilaksanakan"]}}))
+    n_pt_selesai = await db.pemindahtanganan.count_documents(
+        _sqf({"status": "selesai"}))
     n_hapus_proses = await db.usulan_penghapusan.count_documents(
-        {"status": {"$in": ["diusulkan", "diproses"]}})
-    n_hapus_sk = await db.usulan_penghapusan.count_documents({"status": "sk_terbit"})
-    n_pemusnahan = await db.pemusnahan.count_documents({})
+        _sqf({"status": {"$in": ["diusulkan", "diproses"]}}))
+    n_hapus_sk = await db.usulan_penghapusan.count_documents(
+        _sqf({"status": "sk_terbit"}))
+    n_pemusnahan = await db.pemusnahan.count_documents(_sqf({}))
     n_idle_aktif = await db.bmn_idle.count_documents(
-        {"status": {"$in": ["klarifikasi", "usul_serah"]}})
-    n_idle_serah = await db.bmn_idle.count_documents({"status": "diserahkan"})
+        _sqf({"status": {"$in": ["klarifikasi", "usul_serah"]}}))
+    n_idle_serah = await db.bmn_idle.count_documents(_sqf({"status": "diserahkan"}))
     # Sengketa = union master (is_sengketa) ∪ register kasus AKTIF Pengamanan
     # (read-side join — kasus berjalan ikut diungkap walau master belum ditandai).
     kasus_ids = set()
     async for kk in db.pengamanan_kasus.find(
-            {"status": {"$ne": "selesai"}}, {"_id": 0, "asset_id": 1}):
+            _sqf({"status": {"$ne": "selesai"}}), {"_id": 0, "asset_id": 1}):
         if kk.get("asset_id"):
             kasus_ids.add(kk["asset_id"])
     n_sengketa = sum(1 for a in assets
@@ -3458,7 +3497,8 @@ async def generate_calbmn_pdf(
     # setoran + nilai wajar objek (angka final dari bukti setor/SAKTI).
     jual_jumlah, jual_nilai_wajar = 0, 0.0
     async for pt in db.pemindahtanganan.find(
-            {"bentuk": {"$regex": "^penjualan"}, "ntpn": {"$nin": [None, ""]}},
+            _sqf({"bentuk": {"$regex": "^penjualan"},
+                  "ntpn": {"$nin": [None, ""]}}),
             {"_id": 0, "nilai_wajar": 1, "riwayat": 1}):
         tgl_laksana = ""
         for r in pt.get("riwayat") or []:
@@ -3476,7 +3516,7 @@ async def generate_calbmn_pdf(
         peta_susut[m["kode"]] = int(m["tahun"])
     diusulkan_ids = set()
     async for u in db.usulan_penghapusan.find(
-            {"status": {"$ne": "ditolak"}}, {"_id": 0, "asset_id": 1}):
+            _sqf({"status": {"$ne": "ditolak"}}), {"_id": 0, "asset_id": 1}):
         if u.get("asset_id"):
             diusulkan_ids.add(u["asset_id"])
     aset_aktif = [a for a in assets if a.get("dihapus") is not True]
@@ -3489,7 +3529,7 @@ async def generate_calbmn_pdf(
     # menelusuri koreksi yang belum tervalidasi SAKTI (risiko salah saji).
     from penilaian_utils import rekap_koreksi_nilai
     koreksi_items = [k async for k in db.penilaian_koreksi.find(
-        {"tanggal_dokumen": {"$lte": sampai}},
+        _sqf({"tanggal_dokumen": {"$lte": sampai}}),
         {"_id": 0, "jenis": 1, "nilai_lama": 1, "nilai_baru": 1,
          "status_sakti": 1})]
     rk_koreksi = rekap_koreksi_nilai(koreksi_items)

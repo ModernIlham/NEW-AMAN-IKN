@@ -1,7 +1,14 @@
 """Master Referensi Ruangan — fondasi KIR/DBR & lokasi terstruktur (PMK 181/2016).
 
-Semua user login melihat daftar ruangan; admin mengelola. Tiap ruangan dapat
-menunjuk Penanggung Jawab Ruangan (dari registry pejabat). Slice fondasi: CRUD.
+User login melihat daftar ruangan SATKERNYA; admin satker mengelola miliknya.
+Tiap ruangan dapat menunjuk Penanggung Jawab Ruangan (dari registry pejabat).
+
+ISOLASI SATKER (REVIEW-9 R9). Ruangan itu fisik dan melekat pada gedung satker,
+jadi ia BUKAN referensi universal seperti kodefikasi/akun BAS: dokumen baru
+distempel `kode_satker`, daftar di-scope, dan ubah/hapus di-guard. Keunikan
+`kode_ruangan` pun berlaku PER SATKER — dua satker boleh sama-sama punya
+"R-101"; memakai indeks/cek unik global akan menolak satker kedua sekaligus
+membocorkan eksistensi kode milik satker lain.
 """
 import uuid
 from datetime import datetime, timezone
@@ -12,7 +19,8 @@ from pydantic import BaseModel
 
 from auth_utils import require_admin, require_user
 from db import db
-from shared_utils import log_audit
+from shared_utils import (kode_satker_user, log_audit,
+                          pastikan_akses_dok_satker, scope_query_field_satker)
 from ruangan_utils import validate_ruangan
 
 ruangan_router = APIRouter()
@@ -48,8 +56,9 @@ def _bersih(p: RuanganIn) -> dict:
 
 @ruangan_router.get("/ruangan")
 async def list_ruangan(_user: dict = Depends(require_user)):
-    """Daftar ruangan (semua), urut kode."""
-    items = await db.ruangan.find({}, _PROJ).sort("kode_ruangan", 1).to_list(5000)
+    """Daftar ruangan satker user (+ era lama tanpa stempel), urut kode."""
+    items = await (db.ruangan.find(scope_query_field_satker(_user), _PROJ)
+                   .sort("kode_ruangan", 1).to_list(5000))
     return {"items": items, "jumlah": len(items)}
 
 
@@ -60,10 +69,14 @@ async def buat_ruangan(payload: RuanganIn, user: dict = Depends(require_admin)):
     errors = validate_ruangan(doc)
     if errors:
         raise HTTPException(status_code=400, detail="; ".join(errors))
-    if await db.ruangan.find_one({"kode_ruangan": doc["kode_ruangan"]}, {"_id": 1}):
+    # Keunikan PER SATKER (bukan global) — lihat catatan modul.
+    if await db.ruangan.find_one(
+            scope_query_field_satker(user, {"kode_ruangan": doc["kode_ruangan"]}),
+            {"_id": 1}):
         raise HTTPException(status_code=400, detail=f"Kode ruangan {doc['kode_ruangan']} sudah ada")
     now = datetime.now(timezone.utc).isoformat()
-    doc.update({"id": str(uuid.uuid4()), "created_at": now, "updated_at": now})
+    doc.update({"id": str(uuid.uuid4()), "created_at": now, "updated_at": now,
+                "kode_satker": kode_satker_user(user)})
     await db.ruangan.insert_one(dict(doc))
     await log_audit("buat_ruangan", "", doc["id"],
                     username=user.get("username", "system"),
@@ -79,8 +92,14 @@ async def ubah_ruangan(ruangan_id: str, payload: RuanganIn,
     errors = validate_ruangan(doc)
     if errors:
         raise HTTPException(status_code=400, detail="; ".join(errors))
+    lama = await db.ruangan.find_one(
+        {"id": ruangan_id}, {"_id": 0, "id": 1, "kode_satker": 1})
+    if not lama:
+        raise HTTPException(status_code=404, detail="Ruangan tidak ditemukan")
+    await pastikan_akses_dok_satker(user, lama)  # isolasi satker (REVIEW-9 R9)
     bentrok = await db.ruangan.find_one(
-        {"kode_ruangan": doc["kode_ruangan"], "id": {"$ne": ruangan_id}}, {"_id": 1})
+        scope_query_field_satker(user, {"kode_ruangan": doc["kode_ruangan"],
+                                        "id": {"$ne": ruangan_id}}), {"_id": 1})
     if bentrok:
         raise HTTPException(status_code=400, detail=f"Kode ruangan {doc['kode_ruangan']} sudah dipakai ruangan lain")
     doc["updated_at"] = datetime.now(timezone.utc).isoformat()
@@ -97,18 +116,24 @@ async def ubah_ruangan(ruangan_id: str, payload: RuanganIn,
 async def hapus_ruangan(ruangan_id: str, user: dict = Depends(require_admin)):
     """Hapus ruangan (admin)."""
     r = await db.ruangan.find_one(
-        {"id": ruangan_id}, {"_id": 0, "kode_ruangan": 1, "nama_ruangan": 1})
+        {"id": ruangan_id},
+        {"_id": 0, "kode_ruangan": 1, "nama_ruangan": 1, "kode_satker": 1})
     if r:
+        await pastikan_akses_dok_satker(user, r)  # isolasi satker (REVIEW-9 R9)
         import re as _re
         label = [x for x in (
             f"{r.get('kode_ruangan','')} — {r.get('nama_ruangan','')}".strip(" —"),
             str(r.get("kode_ruangan") or "").strip(),
             str(r.get("nama_ruangan") or "").strip()) if x]
         if label:
-            dipakai = await db.assets.count_documents({
+            # Scope aset ke satker user juga — tanpa itu ruangan satker A tak
+            # bisa dihapus hanya karena satker B punya aset ber-lokasi bernama
+            # sama (dan jumlahnya membocorkan volume aset satker lain).
+            from shared_utils import scope_query_aset
+            dipakai = await db.assets.count_documents(await scope_query_aset(user, {
                 "dihapus": {"$ne": True},
                 "$or": [{"location": {"$regex": f"^{_re.escape(v)}$", "$options": "i"}}
-                        for v in label]})
+                        for v in label]}))
             if dipakai:
                 raise HTTPException(
                     status_code=409,

@@ -53,10 +53,13 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
   const galleryThumb = (!streamErr && streamThumb) || legacyThumb;
   const hasPhoto = !!galleryThumb && (streamThumb ? true : galleryThumb.length > 10);
 
-  // Open photo/document from document checklist in new tab via backend streaming endpoint
+  // Open photo/document from document checklist in new tab via backend streaming
+  // endpoint. WAJIB lewat authMediaUrl: endpoint doc-file tidak lagi anonim
+  // (REVIEW-9 R9), dan tab baru tidak membawa header Authorization — tanpa
+  // ?token= tombol ini selalu 401.
   const openDocFile = useCallback((assetId, itemIndex, type) => {
     const fileType = type === 'photo' ? 'photo' : 'document';
-    const url = `${API}/assets/${assetId}/doc-file/${itemIndex}/${fileType}/0`;
+    const url = authMediaUrl(`${API}/assets/${assetId}/doc-file/${itemIndex}/${fileType}/0`);
     window.open(url, '_blank');
   }, []);
 

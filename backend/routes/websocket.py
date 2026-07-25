@@ -242,6 +242,27 @@ async def _ws_user_allowed(user_id: str, tok_epoch) -> bool:
     return te >= cached["sesi_epoch"]
 
 
+async def _ws_satker_allowed(user_id: str, activity_id: str) -> bool:
+    """True bila user boleh masuk room kegiatan ini (isolasi satker R9).
+
+    Super-admin (kode_satker kosong) lintas-satker; kegiatan era lama tanpa
+    kode_satker tetap terbuka — konsisten dengan `pastikan_akses_kegiatan`.
+    Gagal-baca DB ditutup (fail-closed) agar tak jadi celah senyap.
+    """
+    try:
+        u = await db.users.find_one({"id": user_id}, {"_id": 0, "kode_satker": 1})
+        kode = str((u or {}).get("kode_satker") or "").strip()
+        if not kode:
+            return True
+        act = await db.inventory_activities.find_one(
+            {"id": activity_id}, {"_id": 0, "kode_satker": 1})
+        milik = str((act or {}).get("kode_satker") or "").strip()
+        return (not milik) or milik == kode
+    except Exception:
+        logger.exception("WS satker check gagal")
+        return False
+
+
 @ws_router.websocket("/ws/{activity_id}")
 async def websocket_endpoint(ws: WebSocket, activity_id: str):
     # Authenticate BEFORE registering the connection. Identity comes from the
@@ -260,6 +281,18 @@ async def websocket_endpoint(ws: WebSocket, activity_id: str):
         return
     user_id = token_payload["user_id"]
     user_name = token_payload.get("username") or "Unknown"
+
+    # ISOLASI SATKER (REVIEW-9 R9). Token TIDAK membawa kode_satker, jadi
+    # ikatan satker dibaca dari dokumen user lalu dibandingkan dengan kegiatan
+    # room ini. Tanpa gerbang ini, siapa pun yang tahu sebuah activity_id ikut
+    # menerima siaran perubahan aset (id/kode/nama) + daftar user online satker
+    # lain, dan bisa menyuntik event lock/unlock palsu ke sesi kolaborasi mereka.
+    if not await _ws_satker_allowed(user_id, activity_id):
+        await ws.accept()
+        await ws.close(code=WS_CLOSE_UNAUTHORIZED,
+                       reason="Kegiatan milik satker lain")
+        logger.info(f"WS rejected (satker lain) user={user_id} activity={activity_id}")
+        return
 
     await manager.connect(ws, activity_id, user_id, user_name)
     logger.info(f"WS connected: {user_name} to activity {activity_id} (worker {event_bus.WORKER_ID})")
