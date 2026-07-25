@@ -421,6 +421,16 @@ async def _ambil_dokumen_sr(sr_id: str):
     return sr, data
 
 
+def _tolak_bila_batal(sr: dict) -> None:
+    """410 bila permintaan TTD sudah DIBATALKAN — berkas ber-tanda tangan /
+    lembar pengesahan / gambar TTD tidak boleh lagi disajikan seolah sah
+    (celah A2). Halaman verifikasi publik menandai 'dibatalkan' terpisah."""
+    if (sr or {}).get("status") == "batal":
+        raise HTTPException(
+            status_code=410,
+            detail="Permintaan TTD telah dibatalkan — tanda tangan tidak berlaku")
+
+
 @ttd_router.get("/ttd/permintaan/{sr_id}/dokumen")
 async def dokumen_asli(sr_id: str,
                        user: dict = Depends(require_user_or_query_token)):
@@ -515,6 +525,7 @@ async def dokumen_ber_ttd(sr_id: str,
     from reportlab.pdfgen import canvas as rl_canvas
 
     sr, data = await _ambil_dokumen_sr(sr_id)
+    _tolak_bila_batal(sr)  # dokumen ber-TTD dari permintaan batal → tak berlaku
     penanda = [s for s in (sr.get("signers") or [])
                if str(s.get("signature_file_id") or "").strip()]
     if not penanda:
@@ -982,6 +993,7 @@ async def gambar_ttd_signer(sr_id: str, signer_id: str,
     if not sr:
         raise HTTPException(status_code=404, detail="Permintaan tidak ditemukan")
     _pastikan_pemilik_sr(sr, user)
+    _tolak_bila_batal(sr)  # gambar TTD dari permintaan batal → tak berlaku
     sg = next((s for s in (sr or {}).get("signers") or []
                if s.get("signer_id") == signer_id), None)
     fid = str((sg or {}).get("signature_file_id") or "").strip()
@@ -1005,9 +1017,13 @@ async def verifikasi_publik(sr_id: str):
                         "signers.nip": 1, "signers.status": 1, "signers.signed_at": 1})
     if not sr:
         raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan")
+    dibatalkan = sr.get("status") == "batal"
     return {
         "judul": sr.get("judul"), "doc_type": sr.get("doc_type"),
         "status": sr.get("status"), "dibuat": sr.get("created_at"),
+        # Tanda pembatalan eksplisit agar halaman publik menegaskan dokumen
+        # TIDAK berlaku, alih-alih tampak sah (celah A2).
+        "dibatalkan": dibatalkan,
         "penanda_tangan": [
             {"nama": s.get("nama"), "jabatan": s.get("jabatan"),
              # NIP di-masking di halaman verifikasi PUBLIK (data pribadi):
@@ -1015,7 +1031,10 @@ async def verifikasi_publik(sr_id: str):
              "nip": _mask_nip(s.get("nip")), "status": s.get("status"),
              "signed_at": s.get("signed_at")}
             for s in sr.get("signers") or []],
-        "catatan": ("Tanda tangan elektronik internal satker (integritas + "
+        "catatan": ("PERMINTAAN TANDA TANGAN INI TELAH DIBATALKAN — tanda tangan "
+                    "elektronik yang tercantum TIDAK berlaku."
+                    if dibatalkan else
+                    "Tanda tangan elektronik internal satker (integritas + "
                     "jejak audit). Sah tanpa tanda tangan basah untuk keperluan "
                     "administrasi internal."),
     }
@@ -1036,6 +1055,7 @@ async def lembar_pdf(sr_id: str, user: dict = Depends(require_user_or_query_toke
     sr = await db.signature_requests.find_one({"id": sr_id}, _PROJ)
     if not sr:
         raise HTTPException(status_code=404, detail="Permintaan tidak ditemukan")
+    _tolak_bila_batal(sr)  # lembar pengesahan dari permintaan batal → tak berlaku
     settings = await db.report_settings.find_one({"type": "global"}, _PROJ) or {}
     st = _get_report_styles()
     buffer = io.BytesIO()

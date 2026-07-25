@@ -48,6 +48,24 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#597] TTD dibatalkan: dokumen & halaman verifikasi tak lagi tampak sah — 2026-07-25
+
+Menutup celah keandalan (fondasi #2): setelah permintaan TTD **dibatalkan**,
+dokumen ber-tanda-tangan dan halaman verifikasi QR sebelumnya **masih bisa
+diunduh & tampak sah**. Kini:
+
+- **Berkas ditolak (410)** untuk permintaan berstatus batal pada: dokumen
+  ber-TTD (`/dokumen-ttd`), Lembar Pengesahan (`/lembar-pdf`), dan gambar
+  tanda tangan (`/gambar/{signer}`) — lewat penjaga bersama `_tolak_bila_batal`.
+  Dokumen **asli** (tanpa bubuhan TTD) tetap dapat dilihat.
+- **Halaman verifikasi publik** (dibuka dari QR) kini menegaskan status:
+  spanduk merah **"DOKUMEN DIBATALKAN — tanda tangan tidak berlaku"** + catatan
+  yang sesuai, alih-alih menampilkannya seolah sah.
+
+Bagian dari rangkaian menyatukan TTD/BAST lintas modul (sinyal lunak, bertahap).
+
+---
+
 ## [#596] TTD elektronik: pembatalan kini terekam di Log Sistem (fondasi keterhubungan lintas modul) — 2026-07-25
 
 Langkah **fondasi** menuju keterhubungan otomatis TTD ↔ modul lain. Sebelumnya
