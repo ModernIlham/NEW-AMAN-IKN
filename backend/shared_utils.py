@@ -1099,14 +1099,32 @@ async def blok_ttd_kpb_titik(settings, per_iso=None, kode_satker=""):
                 kpb.get("status_kepegawaian"))}
 
 
-async def enforce_pegawai_terdaftar(pengguna_nip):
+async def enforce_pegawai_terdaftar(pengguna_nip, nip_lama=""):
     """Evaluasi #4 / temuan #29 (OPT-IN, satu penegakan lintas jalur tulis):
     bila setelan `wajib_pegawai_terdaftar` ON dan NIP pengguna diisi tapi
     TIDAK terdaftar di Master Pegawai → HTTPException 400. Default OFF
-    (perilaku lama; entri lapangan/offline & data lama tetap jalan)."""
+    (perilaku lama; entri lapangan/offline & data lama tetap jalan).
+
+    Tambahan (REVIEW-9): PENUGASAN BARU ke pegawai berstatus Meninggal Dunia
+    DITOLAK tanpa opt-in — aset almarhum diselesaikan lewat BAST pengembalian
+    almarhum (saksi ahli waris), bukan ditambah bebannya. `nip_lama` = NIP
+    pemegang sebelum perubahan; bila sama (pemegang tidak berubah), edit field
+    lain pada aset yang masih tercatat atas nama almarhum tetap diizinkan agar
+    proses penyelesaian tidak terhalang."""
     nip = str(pengguna_nip or "").strip()
     if not nip:
         return
+    if nip != str(nip_lama or "").strip():
+        from pegawai_utils import is_meninggal
+        peg = await db.pegawai.find_one(
+            {"nip": nip}, {"_id": 0, "status": 1, "nama": 1})
+        if peg and is_meninggal(peg):
+            raise HTTPException(
+                status_code=400,
+                detail=f"{peg.get('nama') or 'Pegawai'} (NIP {nip}) berstatus "
+                       f"Meninggal Dunia — tidak dapat ditetapkan sebagai "
+                       f"pengguna/pemegang baru. Gunakan BAST Pengembalian "
+                       f"(Pemegang Wafat) untuk menyelesaikan aset almarhum.")
     settings = await db.report_settings.find_one(
         {"type": "global"}, {"_id": 0, "wajib_pegawai_terdaftar": 1}) or {}
     if not settings.get("wajib_pegawai_terdaftar"):

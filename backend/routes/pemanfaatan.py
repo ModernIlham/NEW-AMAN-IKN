@@ -17,7 +17,7 @@ from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
 )
 from db import db, fs_bucket
-from shared_utils import kode_satker_user, scope_query_field_satker, pastikan_akses_dok_satker, delete_document_from_gridfs, get_document_from_gridfs
+from shared_utils import kode_satker_user, log_audit, scope_query_field_satker, pastikan_akses_dok_satker, delete_document_from_gridfs, get_document_from_gridfs
 from pemanfaatan_utils import (
     BENTUK_PEMANFAATAN, DASAR_FASILITAS, LABEL_STATUS_PERJANJIAN,
     dokumen_kurang, peringatan_kontribusi, rekap_pemanfaatan,
@@ -222,6 +222,10 @@ async def buat_pemanfaatan(payload: PemanfaatanIn, user: dict = Depends(require_
         "updated_at": now,
     }
     await db.pemanfaatan.insert_one({**record})
+    await log_audit("pemanfaatan_buat", "", username=user.get("username", "system"),
+                    detail=(f"Catat pemanfaatan {record['bentuk']} — mitra "
+                            f"{record['mitra']}"),
+                    kode_satker=record["kode_satker"])
     return record
 
 
@@ -249,6 +253,9 @@ async def ubah_pemanfaatan(register_id: str, payload: PemanfaatanIn,
         projection=_PROJ, return_document=True)
     if not res:
         raise HTTPException(status_code=404, detail="Register tidak ditemukan")
+    await log_audit("pemanfaatan_ubah", "", username=user.get("username", "system"),
+                    detail=f"Ubah pemanfaatan — mitra {res.get('mitra')}",
+                    kode_satker=str(res.get("kode_satker") or ""))
     return res
 
 
@@ -278,6 +285,11 @@ async def catat_kontribusi(register_id: str, payload: KontribusiIn,
         {"$push": {"kontribusi": entri},
          "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}},
         projection=_PROJ, return_document=True)
+    await log_audit("pemanfaatan_kontribusi", "",
+                    username=user.get("username", "system"),
+                    detail=(f"Kontribusi tahun {entri['tahun']} NTPN "
+                            f"{entri['ntpn']} — mitra {res.get('mitra')}"),
+                    kode_satker=str(res.get("kode_satker") or ""))
     res["peringatan_kontribusi"] = peringatan_kontribusi(res, today_iso)
     return res
 
@@ -444,13 +456,20 @@ async def hapus_lampiran_wasdal(register_id: str, file_id: str,
 @pemanfaatan_router.delete("/pemanfaatan/{register_id}")
 async def hapus_pemanfaatan(register_id: str, _admin: dict = Depends(require_admin)):
     """Hapus register salah input (khusus admin) + berkas lampirannya."""
+    from shared_utils import scope_query_field_satker
     p = await db.pemanfaatan.find_one(
-        {"id": register_id}, {"_id": 0, "lampiran": 1, "lampiran_wasdal": 1})
-    res = await db.pemanfaatan.delete_one({"id": register_id})
+        scope_query_field_satker(_admin, {"id": register_id}),
+        {"_id": 0, "lampiran": 1, "lampiran_wasdal": 1})
+    res = await db.pemanfaatan.delete_one(
+        scope_query_field_satker(_admin, {"id": register_id}))
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Register tidak ditemukan")
     semua = ((p or {}).get("lampiran") or []) + ((p or {}).get("lampiran_wasdal") or [])
     for lamp in semua:
         if lamp.get("file_id"):
             await delete_document_from_gridfs(lamp["file_id"])
+    await log_audit("pemanfaatan_hapus", "",
+                    username=_admin.get("username", "system"),
+                    detail=f"Hapus register pemanfaatan {register_id}",
+                    kode_satker=kode_satker_user(_admin))
     return {"ok": True, "id": register_id}

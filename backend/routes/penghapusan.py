@@ -361,10 +361,12 @@ async def hapus_lampiran_usulan(usulan_id: str, file_id: str,
 @penghapusan_router.delete("/penghapusan/usulan/{usulan_id}")
 async def hapus_usulan(usulan_id: str, _admin: dict = Depends(require_admin)):
     """Hapus tiket salah input (status diusulkan) + berkas lampirannya."""
+    from shared_utils import scope_query_field_satker
     u = await db.usulan_penghapusan.find_one(
-        {"id": usulan_id, "status": "diusulkan"}, {"_id": 0, "lampiran": 1})
+        scope_query_field_satker(_admin, {"id": usulan_id, "status": "diusulkan"}),
+        {"_id": 0, "lampiran": 1})
     res = await db.usulan_penghapusan.delete_one(
-        {"id": usulan_id, "status": "diusulkan"})
+        scope_query_field_satker(_admin, {"id": usulan_id, "status": "diusulkan"}))
     if res.deleted_count == 0:
         raise HTTPException(
             status_code=409,

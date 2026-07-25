@@ -349,11 +349,15 @@ async def buat_permintaan(payload: PermintaanIn, user: dict = Depends(require_wr
                       "email": str(s.email or "").strip(),
                       "email_terkirim": email_terkirim})
         urut += 1
+    from shared_utils import kode_satker_user
     record = {
         "id": sr_id, "judul": payload.judul.strip() or "Dokumen",
         "doc_type": str(payload.doc_type or "dokumen"),
         "doc_ref": str(payload.doc_ref or ""), "mode": payload.mode,
         "status": "terkirim", "signers": signers,
+        # Isolasi multi-satker: tanpa stempel ini admin satker LAIN dapat
+        # melihat & membatalkan permintaan TTD (dokumen + PII penandatangan).
+        "kode_satker": kode_satker_user(user),
         "created_by": user.get("username", "system"),
         "created_at": now.isoformat(),
     }
@@ -432,12 +436,23 @@ def _mask_nip(nip) -> str:
 
 
 def _pastikan_pemilik_sr(sr: dict, user: dict) -> None:
-    """403 bila user bukan pembuat permintaan & bukan admin (cegah IDOR:
-    dokumen/PII penanda tangan hanya untuk pembuat & admin)."""
-    if (sr or {}).get("created_by") != (user or {}).get("username") and \
-            (user or {}).get("role") != "admin":
+    """403 bila user bukan pembuat permintaan & bukan admin SATKER YANG SAMA
+    (cegah IDOR: dokumen/PII penanda tangan hanya untuk pembuat & admin
+    satkernya). Semantik satker meniru pastikan_akses_dok_satker: dokumen era
+    lama tanpa kode tetap terbuka; user tanpa kode (super-admin) lintas-satker."""
+    if (sr or {}).get("created_by") == (user or {}).get("username"):
+        return
+    if (user or {}).get("role") != "admin":
         raise HTTPException(status_code=403,
                             detail="Hanya pembuat permintaan atau admin yang berhak")
+    from shared_utils import kode_satker_user
+    kode = kode_satker_user(user)
+    milik = str((sr or {}).get("kode_satker") or "").strip()
+    if kode and milik and milik != kode:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Permintaan milik satker {milik} — akun Anda terikat "
+                   f"satker {kode}")
 
 
 async def _ambil_dokumen_sr(sr_id: str):
@@ -792,7 +807,10 @@ async def daftar_permintaan(_user: dict = Depends(require_user)):
     """Daftar permintaan tanda tangan (terbaru dulu) + ringkas status.
     Non-admin hanya melihat permintaan buatannya sendiri; IP penanda tangan
     tidak pernah ikut daftar (data forensik — cukup di audit internal)."""
-    q = ({} if _user.get("role") == "admin"
+    # Admin melihat permintaan SATKERNYA (bukan seluruh DB); non-admin hanya
+    # buatannya sendiri. Super-admin (tanpa kode satker) tetap lintas-satker.
+    from shared_utils import scope_query_field_satker
+    q = (scope_query_field_satker(_user, {}) if _user.get("role") == "admin"
          else {"created_by": _user.get("username", "")})
     items = await (db.signature_requests.find(
         q, {**_PROJ, "signers.jti": 0, "signers.ip": 0})
@@ -819,11 +837,10 @@ async def batal_permintaan(sr_id: str, user: dict = Depends(require_writer)):
     """Batalkan permintaan (hanya pembuat atau admin)."""
     sr = await db.signature_requests.find_one(
         {"id": sr_id}, {"_id": 0, "created_by": 1, "judul": 1, "status": 1,
-                        "doc_type": 1, "doc_ref": 1})
+                        "doc_type": 1, "doc_ref": 1, "kode_satker": 1})
     if not sr:
         raise HTTPException(status_code=404, detail="Permintaan tidak ditemukan")
-    if sr.get("created_by") != user.get("username") and user.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Hanya pembuat/admin dapat membatalkan")
+    _pastikan_pemilik_sr(sr, user)  # pembuat / admin SATKER YANG SAMA
     await db.signature_requests.update_one({"id": sr_id}, {"$set": {"status": "batal"}})
     # Rekam jejak pembatalan — setara buat/tandatangani/terbit-ulang link yang
     # sudah ber-audit; agar dapat ditelusuri SIAPA & KAPAN membatalkan, dan

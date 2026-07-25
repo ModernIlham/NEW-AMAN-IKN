@@ -214,7 +214,9 @@ async def transisi_kasus(kasus_id: str, payload: TransisiKasusIn,
 @pengamanan_router.delete("/pengamanan/kasus/{kasus_id}")
 async def hapus_kasus(kasus_id: str, _admin: dict = Depends(require_admin)):
     """Hapus satu kasus dari register (admin)."""
-    res = await db.pengamanan_kasus.delete_one({"id": kasus_id})
+    from shared_utils import scope_query_field_satker
+    res = await db.pengamanan_kasus.delete_one(
+        scope_query_field_satker(_admin, {"id": kasus_id}))
     if not res.deleted_count:
         raise HTTPException(status_code=404, detail="Kasus tidak ditemukan")
     return {"ok": True}
@@ -310,10 +312,14 @@ async def catat_dokumen(payload: DokumenIn, user: dict = Depends(require_writer)
 @pengamanan_router.delete("/pengamanan/dokumen/{dok_id}")
 async def hapus_dokumen(dok_id: str, _admin: dict = Depends(require_admin)):
     """Hapus satu dokumen dari arsip + bersihkan lampirannya (admin)."""
-    d = await db.pengamanan_dokumen.find_one({"id": dok_id}, {"_id": 0, "lampiran": 1})
+    from shared_utils import scope_query_field_satker
+    d = await db.pengamanan_dokumen.find_one(
+        scope_query_field_satker(_admin, {"id": dok_id}),
+        {"_id": 0, "lampiran": 1})
     if not d:
         raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan")
-    await db.pengamanan_dokumen.delete_one({"id": dok_id})
+    await db.pengamanan_dokumen.delete_one(
+        scope_query_field_satker(_admin, {"id": dok_id}))
     for lamp in d.get("lampiran") or []:
         if lamp.get("file_id"):
             await delete_document_from_gridfs(lamp["file_id"])
@@ -510,7 +516,9 @@ async def simpan_checklist(payload: ChecklistIn,
 @pengamanan_router.delete("/pengamanan/checklist/{cek_id}")
 async def hapus_checklist(cek_id: str, _admin: dict = Depends(require_admin)):
     """Hapus satu checklist (admin)."""
-    res = await db.pengamanan_checklist.delete_one({"id": cek_id})
+    from shared_utils import scope_query_field_satker
+    res = await db.pengamanan_checklist.delete_one(
+        scope_query_field_satker(_admin, {"id": cek_id}))
     if not res.deleted_count:
         raise HTTPException(status_code=404, detail="Checklist tidak ditemukan")
     return {"ok": True}
@@ -614,7 +622,9 @@ async def catat_polis(payload: PolisIn, user: dict = Depends(require_writer)):
 @pengamanan_router.delete("/pengamanan/polis/{polis_id}")
 async def hapus_polis(polis_id: str, _admin: dict = Depends(require_admin)):
     """Hapus satu polis dari register (admin)."""
-    res = await db.pengamanan_polis.delete_one({"id": polis_id})
+    from shared_utils import scope_query_field_satker
+    res = await db.pengamanan_polis.delete_one(
+        scope_query_field_satker(_admin, {"id": polis_id}))
     if not res.deleted_count:
         raise HTTPException(status_code=404, detail="Polis tidak ditemukan")
     return {"ok": True}

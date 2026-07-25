@@ -220,6 +220,9 @@ export default function PenggunaanPage({ user, onBack }) {
       booking_otomatis: false,
       aset: new Set((detail?.rows || []).map((a) => a.id)),
       saving: false,
+      // Idempotency-Key sekali per pembukaan form: klik ganda / retry
+      // jaringan tidak menggandakan BAST + nomor booking otomatis.
+      idem: crypto.randomUUID(),
     });
   };
 
@@ -276,7 +279,7 @@ export default function PenggunaanPage({ user, onBack }) {
                            "pengembalian_almarhum"].includes(f.jenis)
           ? f.terapkan_ke_aset : false,
         booking_otomatis: f.booking_otomatis,
-      });
+      }, { headers: { "Idempotency-Key": f.idem } });
       if (["mutasi_pengguna", "pengembalian",
            "pengembalian_almarhum"].includes(f.jenis) && f.terapkan_ke_aset) {
         load(page, search); // pemegang berubah — segarkan rekap
@@ -292,8 +295,13 @@ export default function PenggunaanPage({ user, onBack }) {
         `BAST_${(f.pihak_kedua.nama || "pengguna").replace(/\s/g, "_")}.pdf`,
         { label: "BAST Serah Terima" }).catch(() => {});
     } catch (e) {
-      toast.error(e?.response?.data?.detail || "Gagal membuat BAST");
-      setFormBast((x) => (x ? { ...x, saving: false } : x));
+      toast.error(typeof e?.response?.data?.detail === "string"
+        ? e.response.data.detail : "Gagal membuat BAST");
+      // Kunci idempotensi diganti: kegagalan tervalidasi (400) menyisakan
+      // reservasi "pending" ±30 detik di server — submit ulang setelah user
+      // membetulkan isian adalah PENGAJUAN BARU, bukan retry yang sama.
+      setFormBast((x) => (x
+        ? { ...x, saving: false, idem: crypto.randomUUID() } : x));
     }
   };
 

@@ -15,7 +15,7 @@ from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
 )
 from db import db, fs_bucket
-from shared_utils import kode_satker_user, scope_query_field_satker, pastikan_akses_dok_satker, pastikan_akses_aset, blok_ttd_kpb_titik, delete_document_from_gridfs, get_document_from_gridfs
+from shared_utils import kode_satker_user, log_audit, scope_query_field_satker, pastikan_akses_dok_satker, pastikan_akses_aset, blok_ttd_kpb_titik, delete_document_from_gridfs, get_document_from_gridfs
 from pemusnahan_utils import (
     CARA_PEMUSNAHAN, kelayakan_musnah, rekap_pemusnahan,
     usulan_penghapusan_dari_ba, validate_pemusnahan,
@@ -124,6 +124,10 @@ async def buat_pemusnahan(payload: PemusnahanIn, user: dict = Depends(require_wr
         "updated_at": now,
     }
     await db.pemusnahan.insert_one({**record})
+    await log_audit("pemusnahan_buat", "", username=user.get("username", "system"),
+                    detail=(f"Catat BA pemusnahan {record['nomor_ba']} "
+                            f"({len(aset_rows)} aset, cara {record['cara']})"),
+                    kode_satker=record["kode_satker"])
     # Cek silang lintas register keluar (non-blocking, audit G5 #11).
     from shared_utils import proses_keluar_aktif
     peta = await proses_keluar_aktif([a.get("asset_id") for a in record.get("aset") or []])
@@ -172,6 +176,13 @@ async def usulkan_penghapusan_dari_ba(ba_id: str,
         dibuat += 1
         hasil.append({"asset_id": aid, "asset_name": a.get("asset_name"),
                       "dibuat": True, "alasan": ""})
+    if dibuat:
+        await log_audit("pemusnahan_usulkan_hapus", "",
+                        username=user.get("username", "system"),
+                        detail=(f"Usulan penghapusan {dibuat} aset dari BA "
+                                f"pemusnahan {ba.get('nomor_ba') or ba_id}"),
+                        kode_satker=str(ba.get("kode_satker") or "")
+                                    or kode_satker_user(user))
     return {"total": len(hasil), "dibuat": dibuat,
             "terlewati": len(hasil) - dibuat, "hasil": hasil}
 
@@ -397,4 +408,8 @@ async def hapus_pemusnahan(ba_id: str, _admin: dict = Depends(require_admin)):
     for lamp in (ba or {}).get("lampiran") or []:
         if lamp.get("file_id"):
             await delete_document_from_gridfs(lamp["file_id"])
+    await log_audit("pemusnahan_hapus", "",
+                    username=_admin.get("username", "system"),
+                    detail=f"Hapus BA pemusnahan {ba_id}",
+                    kode_satker=kode_satker_user(_admin))
     return {"ok": True, "id": ba_id}
