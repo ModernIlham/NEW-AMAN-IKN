@@ -81,7 +81,7 @@ async def _data_pemantauan(ambang_hari: int, user=None):
         {"_id": 0, "id": 1, "bentuk": 1, "pihak": 1, "status": 1,
          "tanggal_persetujuan": 1})]
     pemeliharaan = [r async for r in db.pemeliharaan.find(
-        {"tanggal": {"$gte": f"{tahun}-01-01", "$lte": f"{tahun}-12-31"}},
+        _sq({"tanggal": {"$gte": f"{tahun}-01-01", "$lte": f"{tahun}-12-31"}}),
         {"_id": 0, "asset_id": 1, "tanggal": 1})]
     # Integrasi Master Pegawai → Wasdal: pemegang berisiko (keluar/pensiun/
     # kontrak habis) yang masih memegang aset = temuan objek Penggunaan
@@ -117,10 +117,20 @@ async def _data_pemantauan(ambang_hari: int, user=None):
     # layer kedaluwarsa masih tercatat = temuan objek penatausahaan.
     from persediaan_utils import tanggal_wib
     persediaan = [p async for p in db.persediaan.find(
-        {}, {"_id": 0, "id": 1, "kode_barang": 1, "nup": 1,
-             "nama_barang": 1, "batches": 1})]
+        _sq({}), {"_id": 0, "id": 1, "kode_barang": 1, "nup": 1,
+                  "nama_barang": 1, "batches": 1})]
+    # Opname terakhir PER SATKER — jurnal transaksi_persediaan tak ber-kode
+    # satker, jadi disaring via id persediaan milik satker ini. Tanpa ini,
+    # opname SATU satker memadamkan temuan "opname terlambat" SEMUA satker
+    # (kepatuhan palsu) dan persediaan satker lain bocor ke dasbor.
+    if _sq({}) == {}:
+        opname_q = {"jenis": "opname"}
+    else:
+        _ids_persediaan = [p["id"] for p in persediaan if p.get("id")]
+        opname_q = {"jenis": "opname",
+                    "persediaan_id": {"$in": _ids_persediaan}}
     opname_doc = await db.transaksi_persediaan.find_one(
-        {"jenis": "opname"}, {"_id": 0, "timestamp": 1},
+        opname_q, {"_id": 0, "timestamp": 1},
         sort=[("timestamp", -1)])
     tanggal_opname = tanggal_wib((opname_doc or {}).get("timestamp"))
     # Integrasi register kasus Pengamanan → Wasdal: kasus AKTIF (belum
@@ -154,21 +164,26 @@ async def pemantauan_wasdal(
     periode, per_objek, rekap, total_aset = await _data_pemantauan(ambang_hari, _user)
     # Ringkasan register Pengamanan & Penggunaan (temuan review #12 — dulu
     # wasdal tak membaca kedua register itu). Additif: UI lama tetap jalan.
+    # Angka lintas modul WAJIB ter-scope satker — tanpa ini kartu pengawasan
+    # tiap satker menghitung seluruh DB (angka campur antar satker).
+    from shared_utils import scope_query_field_satker
+    _sqc = lambda q: scope_query_field_satker(_user, q)  # noqa: E731
     lintas_modul = {
         "kasus_pengamanan_terbuka": await db.pengamanan_kasus.count_documents(
-            {"status": {"$ne": "selesai"}}),
-        "polis_asuransi": await db.pengamanan_polis.count_documents({}),
-        "sk_psp": await db.psp.count_documents({}),
+            _sqc({"status": {"$ne": "selesai"}})),
+        "polis_asuransi": await db.pengamanan_polis.count_documents(_sqc({})),
+        "sk_psp": await db.psp.count_documents(_sqc({})),
         "proses_penggunaan_aktif": await db.penggunaan_proses.count_documents(
-            {"status": {"$nin": ["dihapus_dibukukan", "berakhir", "ditolak"]}}),
+            _sqc({"status": {"$nin": ["dihapus_dibukukan", "berakhir",
+                                      "ditolak"]}})),
         "bmn_idle_aktif": await db.bmn_idle.count_documents(
-            {"status": {"$in": ["klarifikasi", "usul_serah"]}}),
+            _sqc({"status": {"$in": ["klarifikasi", "usul_serah"]}})),
         # BAST penggunaan sementara yang jangka waktunya sudah lewat —
         # barang mestinya sudah kembali (tindak lanjut manual/pengembalian).
         "bast_sementara_lewat_tenggat": await db.bast_serah_terima.count_documents(
-            {"jenis": "penggunaan_sementara",
-             "jangka_sampai": {"$gt": "", "$lt":
-                               datetime.now(timezone.utc).date().isoformat()}}),
+            _sqc({"jenis": "penggunaan_sementara",
+                  "jangka_sampai": {"$gt": "", "$lt":
+                                    datetime.now(timezone.utc).date().isoformat()}})),
     }
     return {
         "periode": periode,

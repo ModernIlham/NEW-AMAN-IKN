@@ -48,6 +48,33 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#610] Audit REVIEW-9 (1/7): bug produksi siklus hilir & kebocoran satker pengawasan — 2026-07-25
+
+Gelombang perbaikan pertama dari **audit menyeluruh 6 dimensi** (57 temuan;
+integrasi & alur bisnis, optimasi backend/frontend, konsistensi pola, backup,
+dokumentasi). Empat bug **siap-produksi** ditutup:
+
+- 🔴 **PDF Berita Acara Pemusnahan selalu gagal 500** — `_esc` dipakai sebelum
+  di-import (import lokal menjadikannya variabel lokal → `UnboundLocalError` di
+  SETIAP panggilan). Dokumen resmi dasar usulan penghapusan tak pernah bisa
+  dicetak; kini import dipindah ke atas pemakaian.
+- 🔴 **Usulan penghapusan otomatis dari BA Pemusnahan lahir TANPA `kode_satker`**
+  — dianggap "era lama" oleh scope sehingga tampil & bisa ditransisikan satker
+  LAIN sampai SK terbit. Kini kode satker tersalin dari BA (fallback satker
+  pembuat), + uji unit.
+- 🔴 **BAST "Pengembalian — Pemegang Meninggal Dunia" tidak pernah mengosongkan
+  pengguna aset** — submit handler memaksa `terapkan_ke_aset=false` karena jenis
+  baru belum terdaftar di dua daftar gerbang frontend (backend sudah benar).
+  Alur almarhum 4 tahap kini benar-benar tuntas di langkah terakhirnya.
+- 🔴 **Mesin temuan Wasdal membaca data TANPA scope satker**: persediaan
+  (identitas barang satker lain bocor sebagai temuan), opname terakhir (opname
+  SATU satker memadamkan temuan "opname terlambat" SEMUA satker — kepatuhan
+  palsu), pemeliharaan, dan 6 kartu lintas modul (kasus/polis/PSP/proses/idle/
+  BAST sementara) yang menghitung seluruh DB. Semua kini ter-scope; opname
+  dicari per-satker via join id persediaan.
+
+---
+
 ## [#609] Pemegang BMN meninggal dunia (4/4): BAST "Pengembalian — Pemegang Meninggal Dunia" — 2026-07-25
 
 Penutup rangkaian [#606]–[#608]. Sebelumnya, saat pemegang wafat petugas
