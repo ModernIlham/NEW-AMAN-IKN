@@ -542,7 +542,10 @@ export default function TtdPermintaanPage({ user, onBack }) {
                           {s.signed_at ? ` · ${fmtWaktu(s.signed_at)}` : ""}
                         </p>
                       </div>
-                      {s.status === "ditandatangani" && s.signature_file_id ? (
+                      {/* Pratinjau gambar TTD disembunyikan bila permintaan
+                          DIBATALKAN — endpoint gambar kini menolak (410) shg
+                          <img> jadi ikon rusak; status pill tetap tampil. */}
+                      {s.status === "ditandatangani" && s.signature_file_id && detail.status !== "batal" ? (
                         <img alt={`TTD ${s.nama}`}
                           src={`${API}/ttd/tandatangan/${detail.id}/gambar/${s.signer_id}?token=${localStorage.getItem("media_token") || localStorage.getItem("token") || ""}`}
                           className="h-10 max-w-[90px] object-contain bg-white rounded border border-border p-0.5 flex-shrink-0" />
