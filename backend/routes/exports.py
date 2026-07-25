@@ -11,7 +11,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request, Depends
-from auth_utils import require_admin, require_user
+from auth_utils import (create_media_token, require_admin, require_user,
+                        require_user_or_query_token)
 from fastapi.responses import StreamingResponse
 
 from reportlab.lib.pagesizes import A4
@@ -29,8 +30,21 @@ from asset_fields import SCALAR_FIELD_NAMES
 from routes.assets import build_asset_search_query
 from db import db
 from shared_utils import (limiter, invalidate_asset_cache, log_audit,
-                          get_photo_from_gridfs, pastikan_akses_kegiatan_id,
-                          scope_query_aset)
+                          get_photo_from_gridfs, pastikan_akses_aset,
+                          pastikan_akses_kegiatan_id, scope_query_aset)
+
+
+def _token_media(user: dict) -> str:
+    """Token ber-scope media untuk DITANAM di tautan ekspor (REVIEW-9 R9).
+
+    Tautan doc-file di dalam CSV/XLSX dibuka belakangan dari spreadsheet —
+    tak ada header Authorization di sana. Token ini membuat tautan tetap bisa
+    dibuka pemiliknya TANPA mengembalikan endpoint ke anonim.
+    """
+    return create_media_token(
+        str((user or {}).get("id") or ""),
+        str((user or {}).get("username") or ""),
+        int((user or {}).get("sesi_epoch") or 0))
 
 logger = logging.getLogger(__name__)
 exports_router = APIRouter()
@@ -103,7 +117,8 @@ def _xlsx_image_buffer(img_data: str, max_px: int, quality: int = 70) -> io.Byte
 
 # ============================================================================
 
-def format_document_checklist_for_csv(checklist: list, asset_id: str, base_url: str = "") -> dict:
+def format_document_checklist_for_csv(checklist: list, asset_id: str, base_url: str = "",
+                                      token: str = "") -> dict:
     """Format document_checklist for CSV export - returns dict with separate fields"""
     result = {
         "kelengkapan_items": "",
@@ -134,13 +149,14 @@ def format_document_checklist_for_csv(checklist: list, asset_id: str, base_url: 
         # Photo links
         if photos and base_url:
             for pi in range(len(photos)):
-                foto_links.append(f"{base_url}/api/assets/{asset_id}/doc-file/{idx}/photo/{pi}")
+                foto_links.append(_docfile_url(base_url, asset_id, idx, "photo", pi, token))
         
         # Document links
         if documents and base_url:
             for di in range(len(documents)):
                 doc_name = documents[di].get('name', f'doc_{di}.pdf')
-                pdf_links.append(f"{doc_name}={base_url}/api/assets/{asset_id}/doc-file/{idx}/document/{di}")
+                pdf_links.append(
+                    f"{doc_name}=" + _docfile_url(base_url, asset_id, idx, "document", di, token))
     
     result["kelengkapan_items"] = " | ".join(items)
     result["kelengkapan_foto_links"] = " | ".join(foto_links)
@@ -148,7 +164,8 @@ def format_document_checklist_for_csv(checklist: list, asset_id: str, base_url: 
     
     return result
 
-def format_document_checklist_for_xlsx(checklist: list, asset_id: str, base_url: str = "") -> list:
+def format_document_checklist_for_xlsx(checklist: list, asset_id: str, base_url: str = "",
+                                       token: str = "") -> list:
     """Format document_checklist for XLSX export - returns list of dicts for separate sheet"""
     rows = []
     
@@ -174,29 +191,45 @@ def format_document_checklist_for_xlsx(checklist: list, asset_id: str, base_url:
         }
         
         if photos and base_url:
-            row["foto_links"] = [f"{base_url}/api/assets/{asset_id}/doc-file/{idx}/photo/{pi}" for pi in range(len(photos))]
+            row["foto_links"] = [_docfile_url(base_url, asset_id, idx, "photo", pi, token)
+                                 for pi in range(len(photos))]
         
         if documents and base_url:
-            row["dokumen_links"] = [f"{base_url}/api/assets/{asset_id}/doc-file/{idx}/document/{di}" for di in range(len(documents))]
+            row["dokumen_links"] = [_docfile_url(base_url, asset_id, idx, "document", di, token)
+                                    for di in range(len(documents))]
         
         rows.append(row)
     
     return rows
 
-# NOTE (auth posture): this stays a PUBLIC stream — the CSV/XLSX exports embed
-# doc-file links meant to be opened later from a spreadsheet (no auth header/
-# token available there). We DO harden it: the served Content-Type is derived
-# from the file KIND (never the attacker-controllable stored data-URL MIME),
-# and X-Content-Type-Options: nosniff blocks browser MIME-sniffing.
+# NOTE (auth posture, REVIEW-9 R9): dulu stream ini PUBLIK penuh — siapa pun
+# yang memegang UUID aset dapat mengunduh dokumen kepemilikan & foto checklist
+# tanpa login, dan UUID itu justru DITANAM aplikasi ke dalam CSV/XLSX yang
+# beredar. Kini endpoint memakai gerbang yang sama dengan saudaranya di
+# assets.py: `require_user_or_query_token` (menerima Bearer ATAU `?token=`)
+# plus `pastikan_akses_aset`. Tautan di dalam ekspor kini membawa token
+# ber-scope media, sehingga skenario "buka dari spreadsheet" tetap jalan.
+# Hardening lama dipertahankan: Content-Type diturunkan dari JENIS berkas
+# (bukan MIME data-URL tersimpan) + nosniff.
 _DOCFILE_NOSNIFF = {"X-Content-Type-Options": "nosniff"}
 
 
+def _docfile_url(base_url: str, asset_id: str, idx: int, kind: str, i: int,
+                 token: str = "") -> str:
+    """URL berkas checklist + token media opsional (dipakai di ekspor)."""
+    url = f"{base_url}/api/assets/{asset_id}/doc-file/{idx}/{kind}/{i}"
+    return f"{url}?token={token}" if token else url
+
+
 @exports_router.get("/assets/{asset_id}/doc-file/{item_idx}/{file_type}/{file_idx}")
-async def get_asset_doc_file(asset_id: str, item_idx: int, file_type: str, file_idx: int):
+async def get_asset_doc_file(asset_id: str, item_idx: int, file_type: str, file_idx: int,
+                             _user: dict = Depends(require_user_or_query_token)):
     """Get a specific file (photo or document) from document_checklist"""
-    asset = await db.assets.find_one({"id": asset_id}, {"_id": 0, "document_checklist": 1})
+    asset = await db.assets.find_one(
+        {"id": asset_id}, {"_id": 0, "document_checklist": 1, "activity_id": 1})
     if not asset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    await pastikan_akses_aset(_user, asset)   # isolasi satker (REVIEW-9 R9)
 
     checklist = asset.get('document_checklist', [])
     if item_idx >= len(checklist):
@@ -527,6 +560,7 @@ async def export_geo(
 async def export_csv(request: Request, activity_id: Optional[str] = None, base_url: str = "",
                      _user: dict = Depends(require_user)):
     """Export assets to CSV format - streaming for large datasets with document checklist"""
+    _tok = _token_media(_user)   # tautan doc-file di CSV berjalan tanpa header
     await pastikan_akses_kegiatan_id(_user, activity_id)
     query = await scope_query_aset(_user, {"activity_id": activity_id} if activity_id else {})
     total = await db.assets.count_documents(query)
@@ -578,13 +612,14 @@ async def export_csv(request: Request, activity_id: Optional[str] = None, base_u
                 }}},
         })
         cursor = db.assets.aggregate([{"$match": query}, {"$project": _proj}])
-        
+
         async for asset in cursor:
             # Format document checklist into separate columns
             doc_data = format_document_checklist_for_csv(
                 asset.get('document_checklist', []),
                 asset.get('id', ''),
-                base_url
+                base_url,
+                _tok
             )
             
             # Photo count from photo_gridfs_ids or photos array
@@ -872,7 +907,7 @@ async def export_pdf(request: Request, activity_id: Optional[str] = None,
         headers={"Content-Disposition": "attachment; filename=laporan_inventaris.pdf"}
     )
 
-async def bangun_xlsx_bytes(query, activity_id="", base_url=""):
+async def bangun_xlsx_bytes(query, activity_id="", base_url="", token=""):
     """Rakit workbook XLSX aset (Data Aset + foto + Kelengkapan Dokumen +
     Data Kegiatan + Tim) menjadi bytes. Diekstrak dari endpoint /export/xlsx
     agar dipakai ULANG oleh worker job latar (ekspor async) TANPA menduplikasi
@@ -1088,7 +1123,7 @@ async def bangun_xlsx_bytes(query, activity_id="", base_url=""):
             for pi in range(3):  # Max 3 photos
                 col_idx = 5 + pi  # Columns 5, 6, 7
                 if pi < len(photos) and photos[pi] and base_url:
-                    photo_url = f"{base_url}/api/assets/{asset_id}/doc-file/{idx}/photo/{pi}"
+                    photo_url = _docfile_url(base_url, asset_id, idx, "photo", pi, token)
                     
                     # Try to embed thumbnail image
                     try:
@@ -1114,7 +1149,7 @@ async def bangun_xlsx_bytes(query, activity_id="", base_url=""):
             if documents and len(documents) > 0 and documents[0] and base_url:
                 doc_obj = documents[0]
                 doc_name = doc_obj.get('name', 'PDF') if isinstance(doc_obj, dict) else 'PDF'
-                pdf_url = f"{base_url}/api/assets/{asset_id}/doc-file/{idx}/document/0"
+                pdf_url = _docfile_url(base_url, asset_id, idx, "document", 0, token)
                 doc_sheet.write_url(doc_row, 8, pdf_url, link_format, doc_name)
             else:
                 doc_sheet.write(doc_row, 8, "", cell_format)
@@ -1310,7 +1345,7 @@ async def export_xlsx(request: Request, activity_id: Optional[str] = None, base_
                     f"(maks {MAX_FOTO_EXPORT_ASSETS}). Persempit filter/kegiatan, "
                     "atau gunakan Ekspor CSV (ringan, tanpa foto)."))
 
-    data = await bangun_xlsx_bytes(query, activity_id, base_url)
+    data = await bangun_xlsx_bytes(query, activity_id, base_url, _token_media(_user))
     logger.info(f"📤 Exported {total} assets to Excel (activity_id={activity_id})")
     return StreamingResponse(
         io.BytesIO(data),
@@ -1353,14 +1388,15 @@ async def export_xlsx_async(request: Request, activity_id: Optional[str] = None,
         "ekspor_xlsx", _user.get("username", ""),
         status="queued", progress=0, done=False, total=total, nama_file=nama)
     t = asyncio.create_task(
-        _jalankan_ekspor_xlsx(job_id, query, activity_id or "", base_url, nama))
+        _jalankan_ekspor_xlsx(job_id, query, activity_id or "", base_url, nama,
+                              _token_media(_user)))
     _EKSPOR_TASKS.add(t)
     t.add_done_callback(_EKSPOR_TASKS.discard)
     return {"job_id": job_id, "total": total,
             "message": f"Ekspor Excel dimulai untuk {total} aset."}
 
 
-async def _jalankan_ekspor_xlsx(job_id, query, activity_id, base_url, nama):
+async def _jalankan_ekspor_xlsx(job_id, query, activity_id, base_url, nama, token=""):
     """Worker job latar: rakit XLSX (reuse bangun_xlsx_bytes) → GridFS."""
     from log_setup import set_job_id
     from jobs import update_job, simpan_artifact
@@ -1370,7 +1406,7 @@ async def _jalankan_ekspor_xlsx(job_id, query, activity_id, base_url, nama):
         async with _EKSPOR_SEM:
             await update_job(job_id, status="running", progress=10,
                              message="Merakit workbook Excel...")
-            data = await bangun_xlsx_bytes(query, activity_id, base_url)
+            data = await bangun_xlsx_bytes(query, activity_id, base_url, token)
             await update_job(job_id, progress=90, message="Menyimpan hasil...")
             await simpan_artifact(job_id, data, nama, _XLSX_MIME)
         await update_job(job_id, status="done", done=True, progress=100,

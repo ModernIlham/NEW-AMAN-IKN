@@ -284,6 +284,44 @@ async def require_super_admin(user: dict = Depends(require_user)) -> dict:
     return user
 
 
+def pastikan_kelola_akun(admin: dict, target: dict) -> None:
+    """403 bila admin SATKER mengelola akun di luar satkernya.
+
+    `require_admin` hanya memeriksa role, sehingga admin satker A lolos ke
+    seluruh endpoint /users — tanpa guard ini ia dapat mereset password,
+    menghapus, atau mengubah role akun satker B (pengambilalihan lintas
+    satker). Super-admin (kode_satker kosong) tetap lintas-satker.
+
+    Aturan (urut):
+      1. Super-admin pusat → boleh atas semua akun.
+      2. Target super-admin (role admin + TANPA ikatan satker) → SELALU 403.
+         Berbeda dari dokumen, di mana kode_satker kosong berarti "era lama,
+         terbuka": pada AKUN, kosong + role admin berarti akun PUSAT — justru
+         yang paling harus dilindungi (termasuk akun bootstrap pertama).
+      3. Target BELUM terikat satker (pendaftaran baru, non-admin) → boleh.
+         Registrasi mandiri selalu menghasilkan akun nonaktif tanpa ikatan,
+         jadi admin satker tetap dapat mengaktifkan lalu mengikatnya ke
+         satkernya sendiri. Akun ini belum memegang data satker mana pun.
+      4. Selain itu, ikatan satker harus cocok PERSIS.
+    """
+    if is_super_admin(admin):
+        return
+    kode = str((admin or {}).get("kode_satker") or "").strip()
+    milik = str((target or {}).get("kode_satker") or "").strip()
+    if not kode:
+        raise HTTPException(
+            status_code=403, detail="Akun Anda tidak terikat satker mana pun")
+    if is_super_admin(target or {}):
+        raise HTTPException(
+            status_code=403,
+            detail="Akun super-admin pusat hanya dapat dikelola super-admin")
+    if milik and milik != kode:
+        raise HTTPException(
+            status_code=403,
+            detail=("Akun ini milik satker " + milik + " — akun Anda terikat "
+                    "satker " + kode))
+
+
 async def require_writer(user: dict = Depends(require_user)) -> dict:
     """Gate endpoint TULIS: tolak role 'viewer' (read-only kini ditegakkan di
     SERVER, bukan hanya disembunyikan UI). Role legacy 'user' = operator;

@@ -203,8 +203,11 @@ async def arsip_laporan(q: str = "", _user: dict = Depends(require_user)):
     s = str(q or "").strip().lower()
     items = []
 
+    from shared_utils import scope_query_field_satker
     async for it in db.surat.find(
-            {"jenis": "keluar", "jenis_naskah": {"$in": ["Laporan", "Berita Acara"]}},
+            scope_query_field_satker(_user, {
+                "jenis": "keluar",
+                "jenis_naskah": {"$in": ["Laporan", "Berita Acara"]}}),
             {"_id": 0, "id": 1, "nomor": 1, "perihal": 1, "jenis_naskah": 1,
              "status": 1, "tanggal_surat": 1, "modul": 1, "kegiatan_id": 1,
              "created_at": 1}).sort("created_at", -1).limit(500):

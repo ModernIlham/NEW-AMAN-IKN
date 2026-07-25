@@ -53,6 +53,72 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#617] Audit REVIEW-9 (9): sapu satker GELOMBANG-2 — 33 kebocoran, termasuk pengambilalihan akun — 2026-07-25
+
+Verifikasi adversarial ulang atas sapuan `[#616]` menemukan bahwa gelombang
+sebelumnya **belum menutup semuanya**: 53 temuan terkonfirmasi, ~20 di antaranya
+sudah tertutup di `[#616]`, sisanya masih terbuka di `main`. Gelombang ini
+menutup sisanya. Tiga di antaranya **berat** (bukan sekadar baca lintas satker):
+
+**1. Pengambilalihan akun lintas satker (`routes/users.py`).** `require_admin`
+hanya memeriksa `role`, tidak `kode_satker` — sehingga admin satker A dapat
+mereset password admin satker B lalu login sebagai dia (kuasa penuh atas data
+B), menghapus/menonaktifkan akun B, atau mengubah role-nya. Ditambah
+`PUT /users/{id}/satker` yang bisa dipanggil admin atas DIRINYA SENDIRI dengan
+`kode_satker` kosong → naik pangkat jadi **super-admin** (lolos ke
+backup/restore/reset seluruh satker). Ditutup dengan helper baru
+`auth_utils.pastikan_kelola_akun`, dipasang di semua endpoint /users; ikatan
+satker kini hanya boleh digeser super-admin (admin satker tetap dapat mengikat
+akun BARU tanpa ikatan ke satkernya sendiri, agar onboarding tetap jalan).
+
+**2. KOP & master satker lain dapat ditimpa (`routes/satker.py`).** `PUT/DELETE
+/satker/{kode}` tidak membandingkan `kode` dengan satker admin — admin A dapat
+menimpa KOP satker B (dipakai `pengaturan_kop` untuk SELURUH laporan/PDF/stiker
+/BAST B) atau menghapus master B. `POST /satker/backfill` (migrasi seluruh DB,
+17 koleksi) kini `require_super_admin`.
+
+**3. Dokumen kepemilikan dapat diunduh TANPA login (`routes/exports.py`).**
+`GET /assets/{id}/doc-file/...` sepenuhnya anonim — padahal UUID aset justru
+ditanam aplikasi ke CSV/XLSX yang beredar. Kini memakai gerbang yang sama
+dengan saudaranya di `assets.py` (`require_user_or_query_token` +
+`pastikan_akses_aset`), dan tautan di dalam ekspor membawa token ber-scope
+media sehingga skenario "buka dari spreadsheet" tetap jalan.
+
+Sisanya, per modul:
+
+- **Laporan keuangan (`reports.py`)** — LBKP & CaLBMN memanggil
+  `filter_aset_perhitungan({})` tanpa `scope_query_aset`, jadi saldo/mutasi
+  SELURUH satker masuk laporan resmi satu satker; 11 register pendukung CaLBMN
+  (persediaan, PSP, pemanfaatan, pemindahtanganan, penghapusan, pemusnahan,
+  idle, kasus, koreksi nilai) ikut di-scope. Posisi BMN: nilai persediaan
+  lintas satker.
+- **Persediaan** — 9 endpoint: peringatan/nota dinas, ekspor jurnal, opname
+  kertas kerja & BAOF, laporan posisi & mutasi, daftar & PDF LPB, riwayat per
+  barang. Jurnal `transaksi_persediaan` tak ber-`kode_satker`, jadi di-scope
+  lewat relasi `persediaan_id` (helper `_scope_jurnal`, pola wasdal). Dokumen
+  LPB kini **distempel** `kode_satker` saat dibuat.
+- **Buku Barang (`mutasi_bmn.py`)** — daftar jurnal di-scope lewat aset;
+  reklasifikasi (ubah kode barang + NUP + jurnal 304/107) kini ber-guard aset.
+- **Master Ruangan** — daftar/ubah/hapus tanpa isolasi sama sekali; kini
+  distempel + di-scope + di-guard, dan keunikan `kode_ruangan` berlaku **per
+  satker** (dua satker boleh sama-sama punya "R-101").
+- **Persuratan** — satu deret nomor agenda dipakai bersama (booking satker B
+  menghabiskan jatah nomor A, buku agenda A tampak bolong); kini per satker
+  dengan seed dari nomor tertinggi milik satker itu, pola sama dengan
+  BA-Perbaikan di `[#616]`. Setelan penomoran juga per satker (dulu satu
+  dokumen `type="global"` yang bisa ditulis admin satker mana pun — mengubah
+  `kode_unit` satu satker mengubah nomor resmi semua satker).
+- **Lain-lain** — Arsip Pelaporan, kartu inventarisasi (`kode_satker` dulu
+  murni dari klien), rekap akun persediaan, snapshot penganggaran di Pengadaan,
+  dan **WebSocket kolaborasi** (`/ws/{activity_id}`: token tak membawa satker,
+  siapa pun yang tahu sebuah `activity_id` ikut menerima siaran perubahan aset
+  + daftar user online satker lain, dan bisa menyuntik event lock palsu).
+
+Uji: 744 unit test hijau (+6 baru untuk `pastikan_kelola_akun`), `yarn build`
+sukses. `SKILL.md` diperbarui dengan pola berulang yang terbukti lolos DUA kali.
+
+---
+
 ## [#616] Audit REVIEW-9 (8): sapu FINAL isolasi satker — 20 kebocoran ditutup — 2026-07-25
 
 Sapu verifikasi akhir (workflow adversarial 6 lensa + 22 verifikasi, 20

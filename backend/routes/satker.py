@@ -18,9 +18,9 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from auth_utils import require_admin, require_user
+from auth_utils import is_super_admin, require_admin, require_super_admin, require_user
 from db import db
-from shared_utils import log_audit
+from shared_utils import kode_satker_user, log_audit
 
 satker_router = APIRouter()
 
@@ -32,6 +32,23 @@ FIELD_KOP_SATKER = (
     "tempat_laporan", "tembusan_laporan", "telepon", "email",
     "kode_satker_lengkap",
 )
+
+
+def _pastikan_satker_sendiri(admin: dict, kode: str) -> None:
+    """403 bila admin SATKER menyentuh master/KOP satker LAIN (REVIEW-9 R9).
+
+    `require_admin` hanya cek role, sehingga tanpa guard ini admin satker A
+    dapat menimpa KOP satker B — dan KOP master itu dipakai `pengaturan_kop`
+    untuk SELURUH laporan/PDF/stiker/BAST satker B — atau menghapus master
+    satker B (bila belum punya kegiatan) beserta profil yang diisi manual."""
+    if is_super_admin(admin):
+        return
+    milik = kode_satker_user(admin)
+    if not milik or str(kode or "").strip() != milik:
+        raise HTTPException(
+            status_code=403,
+            detail=("Master & kop satker lain hanya dapat diubah super-admin "
+                    "pusat — akun Anda terikat satker " + (milik or "-")))
 
 
 class SatkerIn(BaseModel):
@@ -101,6 +118,7 @@ async def simpan_satker(kode: str, payload: SatkerIn,
     """Daftarkan/perbarui profil & kop satu satker (admin). Upsert by kode —
     kode pada path menang atas body (path = identitas)."""
     k = _valid_kode(kode)
+    _pastikan_satker_sendiri(admin, k)  # isolasi satker (REVIEW-9 R9)
     if not str(payload.nama_satker or "").strip():
         raise HTTPException(status_code=400, detail="Nama satker wajib diisi")
     now = datetime.now(timezone.utc).isoformat()
@@ -128,6 +146,7 @@ async def simpan_satker(kode: str, payload: SatkerIn,
 async def hapus_satker(kode: str, admin: dict = Depends(require_admin)):
     """Hapus satker dari master — DITOLAK bila masih dipakai kegiatan
     (hapus/madah kegiatannya dulu; master bukan tempat menghilangkan jejak)."""
+    _pastikan_satker_sendiri(admin, kode)  # isolasi satker (REVIEW-9 R9)
     n = await db.inventory_activities.count_documents({"kode_satker": kode})
     if n:
         raise HTTPException(status_code=409,
@@ -178,7 +197,7 @@ async def sinkron_satker(admin: dict = Depends(require_admin)):
 
 @satker_router.post("/satker/backfill")
 async def backfill_kode_satker(payload: dict = None,
-                               admin: dict = Depends(require_admin)):
+                               admin: dict = Depends(require_super_admin)):
     """BACKFILL kode_satker untuk DATA LAMA (sekali jalan, idempoten — hanya
     dokumen yang kode_satker-nya kosong/hilang yang diisi):
 

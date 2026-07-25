@@ -109,6 +109,71 @@ Aturan pendamping:
   universal — jangan menambah pengaturan per-alur baru ke "global" tanpa
   memikirkan satker.
 
+### Lima titik buta yang lolos DUA gelombang audit (REVIEW-9 R8 → R9)
+
+Setelah R8 menutup 20 kebocoran, sapuan adversarial ulang masih menemukan 33
+lagi. Semuanya luput karena checklist di atas dibaca sebagai "endpoint CRUD
+biasa". Periksa kelima kelas ini SECARA TERPISAH — bukan bagian dari CRUD:
+
+1. **`require_admin` BUKAN gerbang satker.** Ia hanya mengecek `role ==
+   "admin"`; admin yang terikat satker lolos sepenuhnya. Semua endpoint
+   `/users` dan `/satker` sempat memungkinkan admin satker A mereset password
+   admin B lalu login sebagai dia. Untuk akun, pakai
+   `auth_utils.pastikan_kelola_akun(admin, target)`; untuk operasi seluruh-DB
+   (backfill, migrasi, reset), pakai `require_super_admin`.
+   **Catatan penting:** pada AKUN, `kode_satker` kosong berarti akun PUSAT
+   (super-admin) — kebalikan dari dokumen, di mana kosong berarti "era lama,
+   terbuka". Jangan pakai `pastikan_akses_dok_satker` untuk akun.
+
+2. **Yang mengubah batas isolasi harus super-admin.** `PUT /users/{id}/satker`
+   sempat bisa dipanggil admin atas dirinya sendiri dengan `kode_satker`
+   kosong → naik pangkat jadi super-admin. Setiap field yang MENENTUKAN
+   scope (ikatan satker user, `kode_satker` kegiatan) tidak boleh diubah oleh
+   pemiliknya sendiri ke nilai yang memperluas akses.
+
+3. **Laporan PDF/XLSX agregat sering melewatkan scope walau list-nya benar.**
+   LBKP & CaLBMN memanggil `filter_aset_perhitungan({})` — helper itu TIDAK
+   men-scope satker (docstring-nya menyebut ia dipanggil SESUDAH scoping).
+   Pola benar: `filter_aset_perhitungan(await scope_query_aset(user, {...}))`.
+   Ingat juga register PENDUKUNG di laporan yang sama (persediaan, PSP,
+   pemanfaatan, penghapusan, idle, kasus) — masing-masing perlu di-scope.
+
+4. **Koleksi jurnal/turunan yang tak ber-`kode_satker`.** `transaksi_persediaan`
+   dan `mutasi_bmn` sengaja ramping. Isolasinya lewat RELASI:
+   `persediaan_id` → master persediaan (helper `_scope_jurnal` di
+   `routes/persediaan.py`), `asset_id` → aset → kegiatan (lihat `daftar_mutasi`).
+   Kalau koleksi baru tak bisa distempel, tentukan jalur relasinya SEKARANG —
+   jangan tinggalkan "nanti saja", karena filter apa pun kemudian tak punya
+   pegangan. Kalau BISA distempel (mis. `lpb`), stempel sejak insert pertama.
+
+5. **Master "referensi" yang sebenarnya milik satker.** Referensi UNIVERSAL
+   (kodefikasi barang, akun BAS, masa manfaat, kategori) memang global.
+   Tetapi ruangan, pejabat, dan setelan penomoran melekat pada satker —
+   `ruangan` sempat sepenuhnya terbuka (admin A menghapus ruangan B), dan
+   setelan persuratan dulu satu dokumen `type:"global"` yang bisa ditulis
+   admin mana pun sehingga `kode_unit` satu satker mengubah nomor resmi semua
+   satker. Uji pertanyaan ini: *"kalau dua satker mengisi ini berbeda, apakah
+   keduanya benar?"* Bila ya → per satker, bukan global.
+
+Dua pelengkap yang juga terbukti berulang:
+
+- **WebSocket & endpoint non-REST ikut aturan yang sama.** `/ws/{activity_id}`
+  memvalidasi token tetapi tak pernah membandingkan kegiatan dengan satker
+  user — token JWT TIDAK membawa `kode_satker`, jadi harus dibaca dari
+  dokumen user. Room kolaborasi menyiarkan perubahan aset & daftar user online.
+- **"Publik demi kemudahan" hampir selalu keliru.** `doc-file` dibiarkan anonim
+  dengan alasan tautannya dibuka dari spreadsheet — padahal UUID aset justru
+  ditanam aplikasi ke CSV yang beredar, tanpa TTL dan tanpa pencabutan. Pola
+  benar: `require_user_or_query_token` + tanam `?token=` ber-scope media
+  (`create_media_token`) ke dalam tautan ekspor.
+
+**Cara memverifikasi, bukan sekadar membaca:** jangan percaya "sudah ditutup di
+gelombang lalu". Grep pola mentahnya di seluruh `routes/` dan periksa satu per
+satu terhadap kode SAAT INI:
+`db\.\w+\.(find|count_documents|aggregate)\(\{\}` (query kosong),
+`find_one\(\{"id":` (get-by-id tanpa guard), `counters` (deret nomor),
+`type": "global"` (setelan bersama).
+
 ## Jurnal Buku Barang (`mutasi_bmn`) — aturan TERKUNCI audit
 
 1. **Semua transaksi keluar/nilai berjurnal** — modul yang membuat aset
