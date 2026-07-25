@@ -4670,11 +4670,18 @@ def _parse_detail_fields(detail_fields: str):
 
 
 async def _build_executive_summary_data(activity_id: str, detail_fields=None,
-                                        with_asset_rows: bool = True):
+                                        with_asset_rows: bool = True, row_slice=None):
     """Build all data needed for the executive summary template.
 
     detail_fields: optional set of EXEC_DETAIL_FIELDS keys — extra per-asset
     fields to include in the "Kondisi & Status" column (empty = current behavior).
+
+    row_slice: (start, end) — bila diberikan (bersama with_asset_rows), loop
+    embed-foto MAHAL (baca GridFS + downscale per aset) HANYA dijalankan untuk
+    irisan aset itu. Cegah OOM: dulu foto SELURUH aset (bisa ratusan ribu) di-
+    embed ke memori sebelum halaman dipotong. Statistik ringkasan tetap dihitung
+    dari seluruh aset (murni baca field, tanpa foto/GridFS). `asset_count` di
+    hasil = jumlah TOTAL aset (untuk paginasi), bukan sekadar yang di-embed.
     """
     detail_fields = detail_fields or set()
     activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
@@ -4927,8 +4934,14 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
 
     asset_rows = []
     # Loop mahal (fallback GridFS per aset) — dilewati bila pemanggil hanya
-    # butuh halaman ringkasan (executive-summary-html/pdf, data-info).
-    for a in (all_assets if with_asset_rows else []):
+    # butuh halaman ringkasan (executive-summary-html/pdf, data-info). Bila
+    # row_slice diberikan, HANYA aset halaman itu yang di-embed fotonya (cegah
+    # OOM pada kegiatan berisi ratusan ribu aset).
+    if with_asset_rows:
+        _rows_src = all_assets[row_slice[0]:row_slice[1]] if row_slice else all_assets
+    else:
+        _rows_src = []
+    for a in _rows_src:
         photos = a.get("photos", []) or []
         cover_idx = a.get("thumbnail_index", 0) or 0
         photo_url = photos[cover_idx] if photos and cover_idx < len(photos) else (photos[0] if photos else None)
@@ -5126,7 +5139,7 @@ async def generate_executive_summary_pdf(activity_id: str, detail_fields: str = 
     summary_data = {**data, "asset_pages": [], "assets": []}
     template = env.get_template("executive_summary.html")
     html = template.render(**summary_data)
-    pdf_bytes = weasyprint.HTML(string=html).write_pdf()
+    pdf_bytes = await asyncio.to_thread(lambda: weasyprint.HTML(string=html).write_pdf())
 
     filename = f"Laporan_Eksekutif_{activity_id[:8]}.pdf"
     return StreamingResponse(io.BytesIO(pdf_bytes), media_type="application/pdf",
@@ -5144,21 +5157,25 @@ async def generate_executive_data_pdf(activity_id: str, page: int = 1, detail_fi
     from jinja2 import Environment, FileSystemLoader
     import weasyprint
 
-    data = await _build_executive_summary_data(activity_id, _parse_detail_fields(detail_fields))
+    # Embed foto HANYA untuk aset di halaman yang diminta (row_slice) → cegah
+    # OOM: dulu foto SELURUH aset di-embed sebelum dipotong ke 499.
+    items_per_download = 499
+    start_idx = (max(1, page) - 1) * items_per_download
+    end_idx = start_idx + items_per_download
+
+    data = await _build_executive_summary_data(
+        activity_id, _parse_detail_fields(detail_fields),
+        with_asset_rows=True, row_slice=(start_idx, end_idx))
     if not data:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
 
-    items_per_download = 499
-    all_assets = data.get("assets", [])
-    total_assets = len(all_assets)
+    total_assets = data.get("asset_count", 0)
     total_data_pages = max(1, -(-total_assets // items_per_download))
-
     if page < 1 or page > total_data_pages:
         raise HTTPException(status_code=400, detail=f"Halaman {page} tidak valid. Total: {total_data_pages}")
 
-    start_idx = (page - 1) * items_per_download
-    end_idx = min(start_idx + items_per_download, total_assets)
-    chunk_assets = all_assets[start_idx:end_idx]
+    chunk_assets = data.get("assets", [])  # sudah ter-slice ke halaman ini
+    end_idx = min(end_idx, total_assets)
 
     env = _jinja_env()
     template = env.get_template("executive_summary_data.html")
@@ -5172,7 +5189,8 @@ async def generate_executive_data_pdf(activity_id: str, page: int = 1, detail_fi
         data_page_num=page,
         total_data_pages=total_data_pages,
     )
-    pdf_bytes = weasyprint.HTML(string=html).write_pdf()
+    # Offload render CPU-bound WeasyPrint ke thread agar tak memblok event loop.
+    pdf_bytes = await asyncio.to_thread(lambda: weasyprint.HTML(string=html).write_pdf())
 
     filename = f"Data_Aset_{start_idx+1}-{end_idx}_{activity_id[:8]}.pdf"
     return StreamingResponse(io.BytesIO(pdf_bytes), media_type="application/pdf",
@@ -5459,7 +5477,7 @@ async def generate_executive_grouped_pdf(activity_id: str, detail_fields: str = 
     env = _jinja_env()
     template = env.get_template("executive_grouped.html")
     html = template.render(**data)
-    pdf_bytes = weasyprint.HTML(string=html).write_pdf()
+    pdf_bytes = await asyncio.to_thread(lambda: weasyprint.HTML(string=html).write_pdf())
 
     filename = "Laporan_Eksekutif_Barang_Serupa.pdf"
     return StreamingResponse(io.BytesIO(pdf_bytes), media_type="application/pdf",
