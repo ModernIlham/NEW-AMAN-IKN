@@ -14,7 +14,7 @@ from bson import ObjectId
 from pymongo.errors import DuplicateKeyError
 
 from db import db, fs_bucket
-from auth_utils import get_current_user
+from auth_utils import get_current_user, _KUNCI_EFEMERAL
 
 logger = logging.getLogger(__name__)
 backup_router = APIRouter(prefix="/backup", tags=["backup"])
@@ -101,6 +101,21 @@ async def require_super_admin(authorization: str):
             detail=("Khusus super-admin pusat (admin lintas-satker) — admin satker "
                     "tidak dapat mengakses backup/restore/reset seluruh sistem."))
     return user
+
+
+def _tolak_bila_act_as(x_satker_aktif: str) -> None:
+    """Footgun "Satker Aktif" (temuan tinjauan): restore MENIMPA seluruh satker,
+    sedangkan UI super-admin yang sedang ber-"act-as" satker X hanya menampilkan
+    X — model mentalnya keliru dan ini tak bisa dibatalkan. Tolak (400) selagi
+    act-as, sama seperti guard reset di server.py; ia harus beralih ke "Semua
+    Satker" dulu secara sadar. (get_current_user/_decode_bearer membuang
+    `_satker_aktif`, jadi kita baca langsung dari header X-Satker-Aktif.)"""
+    kode = str(x_satker_aktif or "").strip()
+    if kode:
+        raise HTTPException(
+            status_code=400,
+            detail=(f"Anda sedang bertindak sebagai satker {kode}. Restore menimpa "
+                    "SELURUH satker — beralih ke 'Semua Satker' dulu."))
 
 
 # Gerbang single-flight: hanya SATU backup/restore boleh aktif. Dokumen job
@@ -485,6 +500,14 @@ async def run_restore_task(job_id: str, zip_path: Path, username: str):
                         for d in docs:
                             if not d.get("version"):
                                 d["version"] = 1
+                    # KEAMANAN (temuan tinjauan): jangan pernah tulis field
+                    # efemeral "Satker Aktif" ke dokumen user. Backup dari pihak
+                    # luar bisa menyelundupkan `_super_admin_asli` yang lalu
+                    # meracuni is_super_admin (backdoor ambil-alih akun pusat).
+                    if col_name == "users":
+                        for d in docs:
+                            for _k in _KUNCI_EFEMERAL:
+                                d.pop(_k, None)
                     if docs:
                         await db[col_name].insert_many(docs)
                     restore_stats[col_name] = len(docs)
@@ -664,9 +687,11 @@ async def start_backup(authorization: str = Header(None), arsipkan: bool = False
 async def start_restore(
     file: UploadFile = File(...),
     authorization: str = Header(None),
+    x_satker_aktif: str = Header(default="", alias="X-Satker-Aktif"),
 ):
     """Upload backup file and start background restore. Returns job_id."""
     user = await require_super_admin(authorization)
+    _tolak_bila_act_as(x_satker_aktif)
     await cleanup_stale_jobs()
 
     if not file.filename.endswith(".zip"):
@@ -1002,9 +1027,11 @@ async def hapus_arsip_backup(nama: str, authorization: str = Header(None)):
 
 
 @backup_router.post("/restore/dari-arsip/{nama}")
-async def restore_dari_arsip(nama: str, authorization: str = Header(None)):
+async def restore_dari_arsip(nama: str, authorization: str = Header(None),
+                             x_satker_aktif: str = Header(default="", alias="X-Satker-Aktif")):
     """Mulai restore langsung dari berkas arsip server (tanpa unggah ulang)."""
     user = await require_super_admin(authorization)
+    _tolak_bila_act_as(x_satker_aktif)
     await cleanup_stale_jobs()
     if not nama_arsip_valid(nama):
         raise HTTPException(status_code=400, detail="Nama berkas arsip tidak dikenal")

@@ -7,6 +7,8 @@ satker (agar tak terkunci dari backup/restore).
 """
 import asyncio
 
+import pytest
+
 import auth_utils as au
 
 
@@ -88,3 +90,27 @@ def test_field_efemeral_dibuang(monkeypatch):
     assert "_kode_satker_asli" not in bersih
     # Tanpa penanda, viewer bukan super-admin — backdoor gagal.
     assert au.is_super_admin(bersih) is False
+
+
+def test_pastikan_kelola_akun_target_teracuni_gagal():
+    """KEAMANAN (temuan tinjauan): dokumen TARGET dari DB yang menyelundupkan
+    `_super_admin_asli: False` TAK BOLEH melewati proteksi 'akun pusat hanya
+    dikelola super-admin'. pastikan_kelola_akun membuang field efemeral target
+    lebih dulu, sehingga is_super_admin(target) dinilai ulang dari role+kode dan
+    admin-satker tetap 403 — tak bisa mengambil alih akun pusat via restore
+    backup beracun."""
+    admin_satker = {"id": "a", "role": "admin", "kode_satker": "527"}
+    target_pusat = {"id": "p", "role": "admin", "kode_satker": "",
+                    "_super_admin_asli": False}
+    with pytest.raises(au.HTTPException) as ei:
+        au.pastikan_kelola_akun(admin_satker, target_pusat)
+    assert ei.value.status_code == 403
+
+
+def test_act_as_super_admin_tetap_boleh_kelola():
+    """Penanda PEMANGGIL (super-admin yang sedang act-as) SAH dan JANGAN dibuang:
+    ia tetap boleh mengelola akun satker. Hanya dokumen target yang discrub."""
+    admin_actas = {"id": "s", "role": "admin", "kode_satker": "527",
+                   "_super_admin_asli": True}
+    target = {"id": "t", "role": "viewer", "kode_satker": "527"}
+    assert au.pastikan_kelola_akun(admin_actas, target) is None

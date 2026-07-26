@@ -416,7 +416,16 @@ def pastikan_kelola_akun(admin: dict, target: dict) -> None:
          jadi admin satker tetap dapat mengaktifkan lalu mengikatnya ke
          satkernya sendiri. Akun ini belum memegang data satker mana pun.
       4. Selain itu, ikatan satker harus cocok PERSIS.
+
+    KEAMANAN (temuan tinjauan): `target` selalu dokumen DB MENTAH. Bila dokumen
+    itu menyelundupkan `_super_admin_asli` (mis. hasil restore backup pihak
+    luar), tanpa dibersihkan ia bisa membalik hasil `is_super_admin(target)` di
+    bawah — melewati proteksi "akun pusat hanya dikelola super-admin". Buang
+    field efemeral dari target lebih dulu. `admin` (pemanggil) JANGAN dibuang:
+    penandanya SAH bila sedang act-as (sudah discrub di _decode_bearer).
     """
+    if target:
+        _buang_efemeral(target)
     if is_super_admin(admin):
         return
     kode = str((admin or {}).get("kode_satker") or "").strip()

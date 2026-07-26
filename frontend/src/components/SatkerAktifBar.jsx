@@ -55,6 +55,21 @@ export default function SatkerAktifBar({ user }) {
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
 
+  // Sinkron antar-tab (temuan tinjauan): bila satker aktif diganti di tab lain,
+  // localStorage bersama sudah berubah sehingga tiap request tab INI ikut
+  // ter-scope satker baru — tetapi bilah & data yang tampil masih satker lama
+  // (menyesatkan). `storage` hanya menyala di tab LAIN; muat ulang agar seluruh
+  // tampilan konsisten dengan scope yang benar-benar dikirim.
+  useEffect(() => {
+    const onStorage = (e) => {
+      if (e.key !== "satker_aktif") return;
+      if ((e.newValue || "") !== (getSatkerAktif() || "")) return; // sudah sinkron
+      if ((e.newValue || "") !== aktif) window.location.reload();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [aktif]);
+
   if (!superAdmin) return null;
 
   const pilih = (kode) => {

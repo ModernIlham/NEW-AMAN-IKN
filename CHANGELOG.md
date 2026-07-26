@@ -53,6 +53,50 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#620] Satker Aktif (act-as) super-admin lintas modul + judul berjalan saat diklik — 2026-07-26
+
+Menindaklanjuti umpan balik: judul panjang di Arsip yang terpotong tak terbaca,
+dan super-admin yang wajib bisa memilih satker saat input agar data benar-benar
+terisolasi antar satker.
+
+**Satker Aktif (act-as-satker).** Super-admin pusat (role `admin` + `kode_satker`
+kosong) kini memilih **Satker Aktif** dari bilah atas; **seluruh aplikasi** (lihat
++ input) berperilaku sebagai satker itu. Default **"Semua Satker"** = lintas-satker
+seperti biasa. Penyuntikan dilakukan di **satu titik** — lapisan dependency auth
+(`require_user`/`require_user_or_query_token` membaca header `X-Satker-Aktif`,
+`_terapkan_satker_aktif` menyuntik `kode_satker`) — sehingga SELURUH mesin isolasi
+(`scope_query_*`, `pastikan_akses_*`, stempel INSERT) ikut TANPA menyentuh callsite,
+dan mewarisi semua perbaikan isolasi REVIEW-9. Otoritas tetap super-admin lewat
+penanda `_super_admin_asli` (tak terkunci dari backup/restore/reset saat act-as).
+Frontend: header disisipkan di semua interceptor axios + query `sa=` untuk
+laporan/PDF via `window.open`; `SatkerAktifBar` hanya untuk super-admin; logout
+membersihkan `satker_aktif`.
+
+**Judul berjalan saat diklik.** Komponen `MarqueeOnTap`: judul ter-`truncate`
+berjalan saat ditap untuk menampilkan bagian terpotong; menghormati
+`prefers-reduced-motion` + tooltip hover. Diterapkan ke Arsip Laporan Lintas
+Kegiatan (judul + baris meta) & subjudul header.
+
+**Perbaikan temuan tinjauan adversarial** (19 agen; 8 dikonfirmasi, 6 dibantah):
+
+- **KEAMANAN** — `_buang_efemeral` (buang `_super_admin_asli`/`_satker_aktif`/
+  `_kode_satker_asli`) kini juga diterapkan pada dokumen **target** di
+  `pastikan_kelola_akun` + `admin_user` di `reset_all_data`, dan field efemeral
+  di-strip saat impor user pada **restore** — menutup backdoor ambil-alih akun
+  pusat via restore backup pihak luar.
+- **Footgun** — **restore** (unggah & dari-arsip) kini ditolak (400) selagi
+  super-admin ber-act-as satu satker, sama seperti guard reset (menimpa SELURUH
+  satker padahal UI ter-scope satu satker).
+- Buat kegiatan: auto-isi `kode_satker` dari satker aktif dipindah SEBELUM
+  validasi wajib (dulu kode mati — 400 memicu lebih dulu).
+- Bilah pemilih satker: `daftar_satker` kini menampilkan **seluruh** master untuk
+  super-admin asli meski sedang act-as (dulu daftar menciut jadi satu satker,
+  tak bisa pindah X→Y langsung).
+- Antrean simpan offline: replay memakai satker **saat di-enqueue** (bukan yang
+  aktif kini) — cegah 403 "milik satker lain" bila satker diganti sebelum sinkron.
+- Sinkron antar-tab: ganti satker di satu tab memuat ulang tab lain agar tampilan
+  konsisten dengan scope yang benar-benar dikirim.
+
 ## [#619] Audit REVIEW-9 (15): SELURUH sisa temuan workflow ditutup (20/20) — 2026-07-26
 
 Seluruh kandidat temuan workflow ditriase ULANG terhadap `main` pasca-`[#618]`

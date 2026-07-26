@@ -441,11 +441,17 @@ async def get_inventory_classifications():
 # ============================================================================
 
 from models import ResetConfirmation
-from auth_utils import require_super_admin, is_super_admin
+from auth_utils import require_super_admin, is_super_admin, _buang_efemeral
 
 @api_router.delete("/system/reset-all")
 async def reset_all_data(data: ResetConfirmation, _admin: dict = Depends(require_super_admin)):
     admin_user = await db.users.find_one({"id": data.admin_id})
+    # `admin_id` dipilih klien → dokumennya MENTAH: buang field efemeral agar
+    # `_super_admin_asli` yang mungkin terselundup (restore backup luar) tak
+    # meracuni is_super_admin (temuan tinjauan; require_super_admin sudah
+    # menjaga pemanggil, ini lapis kedua).
+    if admin_user:
+        _buang_efemeral(admin_user)
     if not admin_user or not is_super_admin(admin_user):
         raise HTTPException(status_code=403, detail="Hanya super-admin pusat yang dapat melakukan reset sistem")
     # Footgun "Satker Aktif" (temuan tinjauan): bila super-admin sedang
