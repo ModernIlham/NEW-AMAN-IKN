@@ -2845,7 +2845,14 @@ async def generate_kir_pdf(request: Request, _user: dict = Depends(require_user_
         {"_id": 0, "asset_code": 1, "NUP": 1, "asset_name": 1, "condition": 1,
          "purchase_price": 1, "location": 1, "operasional_jenis": 1, "user": 1},
     ).to_list(500000)
-    master = await db.ruangan.find({}, {"_id": 0}).to_list(5000)
+    # ISOLASI SATKER: master ruangan WAJIB ter-scope. Tanpa ini `master` memuat
+    # ruangan SELURUH satker, lalu `cocok_ruangan_master` di bawah mencocokkan
+    # berdasarkan NAMA ruangan — sehingga nama Penanggung Jawab Ruangan milik
+    # satker lain (yang kebetulan menamai ruangannya sama, mis. "Ruang Rapat")
+    # ikut tercetak di KIR satker ini. Kueri aset di atas sudah ter-scope lewat
+    # `scope_query_aset`; baris inilah satu-satunya yang terlewat.
+    master = await db.ruangan.find(
+        scope_query_field_satker(_user), {"_id": 0}).to_list(5000)
     rows = kelompok_dbr(assets)
 
     def fmt_rp(val):

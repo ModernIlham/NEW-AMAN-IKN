@@ -16,6 +16,7 @@ from pymongo import UpdateOne, ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 from asset_fields import BATCHABLE_FIELD_NAMES
+from spasial_utils import sisip_geo_ke_update
 from auth_utils import require_user, require_writer
 from db import db
 from shared_utils import (
@@ -235,12 +236,22 @@ async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user
     clean_updates["updated_at"] = now_str
     updated_count = len(data.asset_ids)
 
+    # SPASIAL: ubah-massal memakai SATU update_many, sehingga `geo` tak bisa
+    # dihitung per-aset. Aturannya:
+    #   - KEDUA sumbu diisi  -> semua aset memang dipindah ke titik yang sama,
+    #                           `geo` boleh dihitung sekali lalu dipakai bersama;
+    #   - hanya SATU sumbu   -> nilai benar berbeda tiap aset dan tak dapat
+    #                           dihitung di sini, jadi `geo` DIBUANG. Lebih baik
+    #                           aset keluar dari indeks daripada memegang posisi
+    #                           yang salah diam-diam.
+    _geo_unset = sisip_geo_ke_update({}, clean_updates)
+
     # 1. Simple field updates — single update_many (fast)
     if len(clean_updates) > 1:
-        await db.assets.update_many(
-            {"id": {"$in": data.asset_ids}},
-            {"$set": clean_updates}
-        )
+        _ops = {"$set": clean_updates}
+        if _geo_unset:
+            _ops["$unset"] = _geo_unset
+        await db.assets.update_many({"id": {"$in": data.asset_ids}}, _ops)
 
     # 2. Foto massal — kompres SEKALI per foto, lalu distribusikan ke semua aset
     #    (hormati batas 6 foto/aset). `photo_list` gabungan batch_photo + batch_photos.

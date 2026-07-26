@@ -68,14 +68,8 @@ def _now() -> datetime:
 def _parse_coord(v) -> Optional[float]:
     """Koordinat aset tersimpan STRING (bisa desimal koma) — kembalikan float
     berhingga atau None."""
-    if v is None:
-        return None
-    try:
-        import math
-        f = float(str(v).strip().replace(",", "."))
-        return f if math.isfinite(f) else None
-    except (ValueError, TypeError):
-        return None
+    from spasial_utils import parse_koordinat
+    return parse_koordinat(v)
 
 
 def _hitung_berlaku(durasi_jam, berlaku_sampai_str, base: datetime,
