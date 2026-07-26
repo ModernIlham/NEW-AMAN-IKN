@@ -117,7 +117,41 @@ tidak ikut CI. Jalankan di server: `pytest -m integration tests/test_spasial_ind
   ancestors padahal tak ada tingkat yang ditambal. Alternatif sesama tingkat kini
   dikecualikan; kandidat di tingkat lain yang bukan leluhur tetap tertangkap.
 
-Uji: +18 backend (828 total) & +35 frontend, seluruhnya logika murni tanpa Mongo.
+Gelombang kedua temuan (dimensi endpoint & geometri):
+
+- **Pemotongan kandidat membuang tingkat TERDALAM.** `lokasi-di-titik` mengurut
+  `ordinal_level` MENAIK lalu `to_list(50)` — jadi bila plafon kena, yang terbuang
+  justru gedung yang dicari, menyisakan kawasan. Kini diurut MENURUN (plafon
+  membuang tingkat terluas, yang toh disusun ulang dari `ancestors`) dan plafonnya
+  dinaikkan ke 200.
+- **bbox selebar dunia → MongoDB memakai KOMPLEMEN.** Poligon GeoJSON biasa yang
+  luasnya melebihi setengah bola ditafsirkan sebagai kebalikannya; pada zoom sangat
+  jauh viewport berpadding mencapai ukuran itu dan denah hilang **tanpa pesan galat
+  apa pun**. Kotak selebar itu kini sengaja tidak dipakai menyaring.
+- **bbox terbalik/pipih → HTTP 500.** Menghasilkan cincin berverteks kembar yang
+  dijawab MongoDB dengan `OperationFailure`. Kini ditolak 400 dengan pesan jelas.
+  Logikanya diangkat jadi helper murni `kotak_dari_bbox` agar teruji unit.
+- **Validator geometri jatuh sendiri.** `{"type":"Point","coordinates":{"lon":1}}`
+  melempar `KeyError` → HTTP 500, bukan 400 berisi penjelasan. Validator yang crash
+  lebih buruk daripada tidak ada validator. Kini semua bentuk `coordinates` cacat
+  ditolak dengan pesan, diuji parametrik agar tak pernah melempar lagi.
+- **Cincin degenerat lolos.** Cincin tanpa 3 titik berbeda lolos cek "tertutup &
+  4 titik" tetapi ditolak MongoDB saat indeks dibangun — dan satu dokumen rusak
+  bisa menggagalkan pembangunan indeks untuk SELURUH koleksi.
+- **Auto-pilih lantai mengabaikan status.** Gedung dengan satu lantai *draft*
+  (masih digambar) langsung terpilih. Kini hanya lantai `aktif` yang boleh
+  ditetapkan otomatis; lantai draft/nonaktif tetap ditampilkan agar operator sadar.
+- `level_maks` dijepit ke rentang registry (bukan jalan pintas menarik seluruh
+  denah satker); proyeksi `lantai/{gedung_id}` dilengkapi agar respons tak separuh
+  `None`; namespace cache `spasial` yang tak pernah dipakai dihapus — komentarnya
+  menyatakan aturan wajib yang tak ditegakkan apa pun.
+
+Batasan yang **sengaja tidak** diperbaiki, kini didokumentasikan di kode:
+antimeridian (bujur ±180) membuat bbox/titik wakil/luas kacau. Menanganinya berarti
+memecah geometri dan mengubah semua turunan — biaya besar untuk kasus yang tak bisa
+terjadi di sini (Indonesia 95°BT–141°BT).
+
+Uji: +39 backend (849 total) & +35 frontend, seluruhnya logika murni tanpa Mongo.
 
 ## [#623] Spasial Fase 2: registry level + pohon `spasial_node` (hierarki berlapis) — 2026-07-26
 

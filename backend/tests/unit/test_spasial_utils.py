@@ -4,6 +4,8 @@ Fokus pada jebakan yang GAGAL SENYAP (tanpa exception, tanpa log) sehingga
 hanya bisa ditangkap oleh uji: urutan bujur/lintang terbalik, NaN yang lolos
 perbandingan, dan Null Island.
 """
+import pytest
+
 import spasial_utils as su
 
 
@@ -575,6 +577,98 @@ def test_rantai_kosong_aman():
     r = su.pilih_rantai([])
     assert r["terdalam"] is None and r["ancestors"] == []
     assert r["konsisten"] is True
+
+
+# ── ketahanan validator geometri ────────────────────────────────────────────
+
+@pytest.mark.parametrize("geom", [
+    {"type": "Point", "coordinates": {"lon": 1}},        # dict, bukan larik
+    {"type": "Point", "coordinates": "xy"},
+    {"type": "Polygon", "coordinates": "bukan-list"},
+    {"type": "Polygon", "coordinates": {"a": 1}},
+    {"type": "Polygon", "coordinates": [["x", "y", "z", "w"]]},
+    {"type": "Polygon", "coordinates": [[[True, False], [1, 2], [3, 4], [True, False]]]},
+    {"type": "MultiPolygon", "coordinates": [["ring"]]},
+    {"type": "MultiPolygon", "coordinates": [None]},
+    {"type": "Polygon", "coordinates": [[[1, 2], [3, 4], [5, 6], [1, 2]], "x"]},
+])
+def test_validator_menolak_tanpa_pernah_melempar(geom):
+    """Validator TIDAK BOLEH jatuh sendiri.
+
+    `{"type":"Point","coordinates":{"lon":1}}` dulu melempar KeyError sehingga
+    pengguna menerima HTTP 500 alih-alih 400 berisi penjelasan (temuan tinjauan).
+    Sebuah validator yang crash lebih buruk daripada tidak ada validator.
+    """
+    hasil = su.validasi_geometri(geom)     # tak boleh raise
+    assert isinstance(hasil, str) and hasil, f"{geom} seharusnya ditolak dengan pesan"
+
+
+@pytest.mark.parametrize("cincin", [
+    [[1, 1], [1, 1], [1, 1], [1, 1]],                 # satu titik diulang
+    [[1, 1], [2, 2], [1, 1], [1, 1]],                 # hanya 2 titik berbeda (garis)
+])
+def test_cincin_degenerat_ditolak(cincin):
+    """Cincin tanpa 3 titik BERBEDA lolos cek "tertutup & 4 titik" tetapi ditolak
+    MongoDB saat indeks 2dsphere dibangun — dan satu dokumen rusak bisa
+    menggagalkan pembangunan indeks untuk SELURUH koleksi."""
+    galat = su.validasi_geometri({"type": "Polygon", "coordinates": [cincin]})
+    assert galat and "degenerat" in galat
+
+
+def test_poligon_wajar_tetap_lolos():
+    """Perketatan di atas tak boleh menolak denah yang sah — termasuk poligon
+    berlubang (gedung dengan void/atrium di tengah)."""
+    segitiga = [[116.70, -1.40], [116.71, -1.40], [116.71, -1.39], [116.70, -1.40]]
+    assert su.validasi_geometri({"type": "Polygon", "coordinates": [segitiga]}) is None
+    luar = [[116.70, -1.40], [116.80, -1.40], [116.80, -1.30], [116.70, -1.30], [116.70, -1.40]]
+    lubang = [[116.72, -1.38], [116.74, -1.38], [116.74, -1.36], [116.72, -1.36], [116.72, -1.38]]
+    assert su.validasi_geometri({"type": "Polygon", "coordinates": [luar, lubang]}) is None
+    assert su.validasi_geometri({"type": "MultiPolygon", "coordinates": [[luar], [segitiga]]}) is None
+
+
+# ── bbox viewport peta ──────────────────────────────────────────────────────
+
+def test_bbox_wajar_jadi_kotak_geojson():
+    kotak, galat = su.kotak_dari_bbox("116.5,-1.5,116.7,-1.3")
+    assert galat is None and kotak["type"] == "Polygon"
+    cincin = kotak["coordinates"][0]
+    assert len(cincin) == 5 and cincin[0] == cincin[-1]     # tertutup
+    assert su.validasi_geometri(kotak) is None
+
+
+@pytest.mark.parametrize("bbox,petunjuk", [
+    ("116.7,-1.3,116.5,-1.5", "lon_min < lon_maks"),   # terbalik
+    ("116.5,-1.5,116.5,-1.3", "lon_min < lon_maks"),   # pipih (lebar 0)
+    ("116.5,-1.5,116.7,-1.5", "lon_min < lon_maks"),   # pipih (tinggi 0)
+    ("1,2,3", "TEPAT 4"),
+    ("a,b,c,d", "lon_min,lat_min"),
+    ("-500,-1,500,1", "rentang WGS84"),
+])
+def test_bbox_cacat_ditolak_dengan_pesan(bbox, petunjuk):
+    """Kotak terbalik/pipih menghasilkan cincin berverteks kembar; MongoDB
+    membalasnya dengan OperationFailure (HTTP 500) alih-alih hasil kosong."""
+    kotak, galat = su.kotak_dari_bbox(bbox)
+    assert kotak is None and galat and petunjuk in galat
+
+
+def test_bbox_selebar_dunia_tidak_disaring_bukan_galat():
+    """JEBAKAN MONGODB: poligon melebihi setengah bola ditafsirkan sebagai
+    KOMPLEMEN-nya, jadi pada zoom sangat jauh denah akan hilang diam-diam.
+    Kontraknya: (None, None) = sah tapi jangan disaring."""
+    for bbox in ("-180,-85,180,85", "-170,-80,170,80"):
+        kotak, galat = su.kotak_dari_bbox(bbox)
+        assert kotak is None and galat is None, bbox
+    # Tepat di bawah ambang lebar masih disaring seperti biasa.
+    kotak, galat = su.kotak_dari_bbox("0,-80,179,80")
+    assert kotak is not None and galat is None
+    # Kotak seukuran kawasan IKN — jalur normal, jelas disaring.
+    kotak, galat = su.kotak_dari_bbox("116.4,-1.6,117.0,-0.9")
+    assert kotak is not None and galat is None
+
+
+def test_bbox_kosong_bukan_galat():
+    """Tanpa bbox = minta seluruh viewport; dibatasi LOD + plafon fitur."""
+    assert su.kotak_dari_bbox("") == (None, None)
 
 
 # ── ambang akurasi GPS ──────────────────────────────────────────────────────

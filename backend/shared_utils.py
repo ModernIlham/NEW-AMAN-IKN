@@ -299,7 +299,6 @@ from redis_utils import (redis_aktif as _redis_aktif, redis_get as _redis_get,
 
 # Registry namespace → (TTLCache lokal untuk fallback, TTL detik untuk Redis).
 _cache_wasdal = TTLCache(maxsize=50, ttl=90)
-_cache_spasial = TTLCache(maxsize=200, ttl=120)
 _CACHE_LOCAL = {
     "filter_opts": _cache_filter_opts,
     "stats": _cache_stats,
@@ -308,14 +307,9 @@ _CACHE_LOCAL = {
     # Dasbor Wasdal memuat SELURUH aset + 6 register per kunjungan — TTL
     # pendek meredam muat ulang beruntun tanpa risiko data pemantauan basi.
     "wasdal": _cache_wasdal,
-    # Layer peta spasial per-viewport (Fase 3): poligon denah jarang berubah
-    # (hasil survei), sementara menggeser/zoom peta memicu banyak permintaan
-    # berturut-turut. KUNCI cache WAJIB menyertakan kode_satker — tanpa itu
-    # satker A bisa menerima layer milik satker B dari cache bersama.
-    "spasial": _cache_spasial,
 }
 _CACHE_TTL = {"filter_opts": 180, "stats": 60, "analytics": 120,
-              "categories": 300, "wasdal": 90, "spasial": 120}
+              "categories": 300, "wasdal": 90}
 
 
 async def cache_get(namespace: str, key: str):

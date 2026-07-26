@@ -435,9 +435,12 @@ def _cincin_sah(cincin) -> Optional[str]:
     if not isinstance(cincin, (list, tuple)) or len(cincin) < 4:
         return "cincin poligon butuh minimal 4 titik (titik akhir mengulang titik awal)"
     for t in cincin:
-        if not isinstance(t, (list, tuple)) or len(t) < 2:
+        if isinstance(t, (str, bytes, dict)) or not isinstance(t, (list, tuple)) or len(t) < 2:
             return "setiap titik harus berupa pasangan [bujur, lintang]"
         lon, lat = t[0], t[1]
+        # bool adalah subclass int di Python — [True, False] BUKAN koordinat.
+        if isinstance(lon, bool) or isinstance(lat, bool):
+            return "koordinat harus angka"
         if not isinstance(lon, (int, float)) or not isinstance(lat, (int, float)):
             return "koordinat harus angka"
         if not (math.isfinite(lon) and math.isfinite(lat)):
@@ -446,6 +449,14 @@ def _cincin_sah(cincin) -> Optional[str]:
             return f"koordinat di luar rentang WGS84 ({lon}, {lat})"
     if list(cincin[0][:2]) != list(cincin[-1][:2]):
         return "cincin poligon harus TERTUTUP (titik akhir sama dengan titik awal)"
+    # Cincin DEGENERAT (semua titik sama, atau hanya 2 titik berbeda) lolos
+    # semua cek di atas tetapi ditolak MongoDB saat indeks 2dsphere dibangun —
+    # dengan pesan yang tak terbaca operator, dan satu dokumen rusak bisa
+    # menggagalkan pembangunan indeks untuk SELURUH koleksi. Tolak di sini.
+    unik = {(t[0], t[1]) for t in cincin}
+    if len(unik) < 3:
+        return ("cincin poligon degenerat — butuh minimal 3 titik BERBEDA "
+                f"(hanya ada {len(unik)})")
     return None
 
 
@@ -464,6 +475,12 @@ def validasi_geometri(geom) -> Optional[str]:
     koor = geom.get("coordinates")
     if koor is None:
         return "geometri tanpa 'coordinates'"
+    # `coordinates` WAJIB list/tuple sebelum diindeks. Tanpa cek ini, payload
+    # seperti {"type":"Point","coordinates":{"lon":1}} melempar KeyError sehingga
+    # validator sendiri yang jatuh — pengguna menerima HTTP 500, bukan pesan 400
+    # yang menjelaskan salahnya di mana (temuan tinjauan).
+    if isinstance(koor, (str, bytes, dict)) or not isinstance(koor, (list, tuple)):
+        return "'coordinates' harus berupa larik angka bersarang"
     if tipe == "Point":
         return None if bangun_geo_point(
             koor[1] if len(koor) > 1 else None,
@@ -474,6 +491,8 @@ def validasi_geometri(geom) -> Optional[str]:
     for i, pol in enumerate(poligon):
         if not pol:
             return f"poligon ke-{i + 1} kosong"
+        if isinstance(pol, (str, bytes, dict)) or not isinstance(pol, (list, tuple)):
+            return f"poligon ke-{i + 1} harus berupa larik cincin"
         for j, cincin in enumerate(pol):
             galat = _cincin_sah(cincin)
             if galat:
@@ -496,7 +515,17 @@ def _semua_titik(geom) -> list:
 
 
 def hitung_bbox(geom) -> Optional[list]:
-    """[lon_min, lat_min, lon_maks, lat_maks] — dipakai pemuatan peta per-viewport."""
+    """[lon_min, lat_min, lon_maks, lat_maks] — dipakai pemuatan peta per-viewport.
+
+    BATASAN SADAR — antimeridian (bujur ±180) TIDAK ditangani. Poligon yang
+    melintasi garis itu menghasilkan bbox selebar dunia (dan `titik_wakil`
+    mendarat di sisi bumi yang salah, `luas_kasar_m2` ikut kacau). Menanganinya
+    dengan benar berarti memecah geometri jadi dua dan mengubah semua turunan —
+    biaya besar untuk kasus yang TAK BISA terjadi di sini: seluruh wilayah
+    Indonesia berada di 95°BT–141°BT, dan denah ini melayani satker Indonesia.
+    Bila suatu hari dipakai lintas-antimeridian (mis. Pasifik), yang harus
+    ditinjau adalah fungsi ini, `titik_wakil`, dan `luas_kasar_m2` sekaligus.
+    """
     titik = _semua_titik(geom)
     if not titik:
         return None
@@ -660,6 +689,55 @@ def pilih_rantai(kandidat: list) -> dict:
 # Ambang akurasi GPS (meter) — di atas ini ruangan TIDAK di-commit otomatis.
 # Ruangan kantor lazim berukuran 3-8 m; akurasi 30 m berarti titik bisa berada
 # di ruangan mana pun dalam radius itu, jadi menebak justru menyesatkan.
+# Ambang "kotak terlalu lebar untuk disaring" — lihat kotak_dari_bbox.
+LEBAR_BBOX_MAKS_DERAJAT = 180.0
+TINGGI_BBOX_MAKS_DERAJAT = 170.0
+
+
+def kotak_dari_bbox(bbox: str):
+    """Ubah "lon_min,lat_min,lon_maks,lat_maks" menjadi poligon kotak GeoJSON.
+
+    Mengembalikan `(kotak, galat)` dengan TIGA hasil yang bermakna:
+      (kotak, None) — saring dengan $geoIntersects memakai kotak ini
+      (None, pesan) — bbox tak sah, pemanggil balas HTTP 400
+      (None, None)  — bbox SAH tetapi terlalu lebar untuk disaring; pemanggil
+                      WAJIB melewatkan $geoIntersects dan mengandalkan LOD +
+                      plafon fitur.
+
+    Hasil ketiga itu ada karena JEBAKAN MONGODB: poligon GeoJSON biasa yang
+    luasnya melebihi setengah bola ditafsirkan sebagai KOMPLEMEN-nya. Pada zoom
+    sangat jauh viewport berpadding bisa mencakup hampir seluruh dunia, dan
+    kueri lalu mencari di sisi bumi yang SALAH — denah hilang tanpa satu pun
+    pesan galat. Menyaring pada kotak selebar itu memang tak ada gunanya.
+    """
+    if not bbox:
+        return None, None
+    try:
+        bagian = [float(v) for v in str(bbox).split(",")]
+    except (ValueError, TypeError):
+        return None, "bbox harus 'lon_min,lat_min,lon_maks,lat_maks'"
+    if len(bagian) != 4:
+        return None, "bbox harus berisi TEPAT 4 angka: lon_min,lat_min,lon_maks,lat_maks"
+    x1, y1, x2, y2 = bagian
+    if not all(math.isfinite(v) for v in bagian):
+        return None, "bbox mengandung nilai tak berhingga"
+    # Terbalik atau pipih menghasilkan cincin berverteks kembar / berputar
+    # terbalik; MongoDB menjawabnya dengan OperationFailure (HTTP 500), bukan
+    # hasil kosong yang wajar.
+    if x2 <= x1 or y2 <= y1:
+        return None, "bbox harus lon_min < lon_maks dan lat_min < lat_maks"
+    if abs(x1) > BATAS_BUJUR or abs(x2) > BATAS_BUJUR:
+        return None, "bujur bbox di luar rentang WGS84"
+    if abs(y1) > BATAS_LINTANG or abs(y2) > BATAS_LINTANG:
+        return None, "lintang bbox di luar rentang WGS84"
+    if (x2 - x1) >= LEBAR_BBOX_MAKS_DERAJAT or (y2 - y1) >= TINGGI_BBOX_MAKS_DERAJAT:
+        return None, None                      # sah, tapi jangan disaring
+    kotak = {"type": "Polygon", "coordinates": [[
+        [x1, y1], [x2, y1], [x2, y2], [x1, y2], [x1, y1]]]}
+    galat = validasi_geometri(kotak)
+    return (None, f"bbox tidak valid: {galat}") if galat else (kotak, None)
+
+
 AMBANG_AKURASI_RUANGAN_M = 30.0
 
 
