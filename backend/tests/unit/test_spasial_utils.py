@@ -186,3 +186,145 @@ def test_sisip_geo_menangani_dokumen_lama_kosong():
     unset = su.sisip_geo_ke_update({}, perubahan)
     assert unset == {}
     assert perubahan["geo"]["coordinates"] == [116.7, -0.82]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# HIERARKI (Fase 2)
+# ═══════════════════════════════════════════════════════════════════════════
+
+def test_kawasan_lebih_luas_daripada_zona():
+    """KOREKSI INTI hasil riset: UU 26/2007 + PP 21/2021 menetapkan zona sebagai
+    'kawasan dengan fungsi tertentu' — jadi zona SEJENIS kawasan, bukan induknya.
+    Kawasan karena itu berada di ATAS, bukan di bawah zona seperti dugaan awal."""
+    assert su.ordinal_level("KAWASAN") < su.ordinal_level("WP")
+    assert su.parent_level_sah("KAWASAN", "WP") is True
+    assert su.parent_level_sah("WP", "KAWASAN") is False
+
+
+def test_urutan_registry_menaik_dan_ruangan_paling_kecil():
+    ordinals = [b[0] for b in su.LEVEL_SPASIAL]
+    assert ordinals == sorted(ordinals), "registry harus terurut besar->kecil"
+    assert len(set(ordinals)) == len(ordinals), "ordinal wajib unik"
+    # RUANGAN lebih kecil (lebih dalam) daripada GEDUNG dan LANTAI
+    assert su.ordinal_level("GEDUNG") < su.ordinal_level("LANTAI") < su.ordinal_level("RUANGAN")
+
+
+def test_ruangan_satu_satunya_level_wajib():
+    """Ruangan = jangkar KIR & DBR (PMK 181/2016)."""
+    wajib = [lv["kode_baku"] for lv in su.daftar_level() if lv["wajib"]]
+    assert wajib == ["RUANGAN"]
+
+
+def test_preset_penamaan_hanya_mengganti_label_bukan_data():
+    akrab = {lv["kode_baku"]: lv["label"] for lv in su.daftar_level("ikn_akrab")}
+    baku = {lv["kode_baku"]: lv["label"] for lv in su.daftar_level("rdtr_baku")}
+    # Kosakata pemilik dipertahankan di preset akrab...
+    assert akrab["WP"] == "Zona (WP)"
+    assert akrab["SWP"] == "Distrik (Sub-WP)"
+    # ...sementara kode baku tetap benar untuk dokumen resmi.
+    assert baku["WP"] == "Wilayah Perencanaan"
+    assert baku["SWP"] == "Sub Wilayah Perencanaan"
+    assert set(akrab) == set(baku), "kode_baku identik di kedua preset"
+
+
+def test_ordinal_berjarak_agar_level_baru_bisa_disisipkan():
+    """Jarak 10 antar tingkat utama supaya penyisipan tak butuh migrasi."""
+    assert su.ordinal_level("KAWASAN") == 20 and su.ordinal_level("WP") == 30
+    assert su.ordinal_level("SUBBLOK") == 55  # sisipan di antara 50 dan 60
+
+
+def test_lantai_bukan_containment_melainkan_sumbu_z():
+    """Basement lazim MELEBIHI footprint gedung; memaksa containment ketat
+    membuat tiap basement dilaporkan melanggar."""
+    assert su.level_dari_kode("LANTAI")["containment"] == "sumbu_z"
+    assert su.level_dari_kode("GEDUNG")["containment"] == "ketat"
+    assert su.level_dari_kode("PERSIL")["containment"] == "longgar"
+
+
+def test_level_tak_dikenal_ditolak():
+    assert su.level_dari_kode("ENTAHAPA") is None
+    assert su.ordinal_level("") is None
+    assert su.parent_level_sah("ENTAHAPA", "RUANGAN") is False
+
+
+def test_tingkat_boleh_dilompati():
+    """Satker daerah lazim hanya Tapak->Gedung->Lantai->Ruangan tanpa Blok/Persil.
+    Memaksa rantai lengkap akan melahirkan node kosong palsu."""
+    assert su.parent_level_sah("TAPAK", "RUANGAN") is True
+    assert su.parent_level_sah("KAWASAN", "GEDUNG") is True
+
+
+# ── pohon ───────────────────────────────────────────────────────────────────
+
+_POHON = {"ruang": "lantai", "lantai": "gedung", "gedung": "tapak"}
+
+
+def test_rantai_induk_terjauh_ke_terdekat():
+    assert su.rantai_induk("ruang", _POHON) == ["tapak", "gedung", "lantai"]
+    assert su.rantai_induk("tapak", _POHON) == []          # akar
+
+
+def test_jalur_dibungkus_pemisah_di_kedua_ujung():
+    """Pembungkus membuat prefix ',A,' tak salah cocok dengan node 'A2'."""
+    hasil = su.turunkan_pohon("ruang", "lantai", _POHON)
+    assert hasil["jalur"] == ",tapak,gedung,lantai,ruang,"
+    assert hasil["jalur"].startswith(",") and hasil["jalur"].endswith(",")
+    assert hasil["kedalaman"] == 3
+    # Uji anti-salah-cocok yang jadi alasan pembungkus itu ada:
+    assert ",A," not in su.bangun_jalur([], "A2")
+
+
+def test_pindah_ke_akar_mengosongkan_ancestors():
+    hasil = su.turunkan_pohon("gedung", None, _POHON)
+    assert hasil["ancestors"] == []
+    assert hasil["jalur"] == ",gedung,"
+    assert hasil["kedalaman"] == 0
+
+
+def test_siklus_terdeteksi_sebelum_merusak_pohon():
+    """Kasus nyata: operator menyeret Gedung ke bawah Ruangan di dalamnya."""
+    assert su.ada_siklus("gedung", "ruang", _POHON) is True   # keturunan sendiri
+    assert su.ada_siklus("gedung", "gedung", _POHON) is True  # diri sendiri
+    assert su.ada_siklus("gedung", "tapak", _POHON) is False  # sah
+    assert su.ada_siklus("gedung", None, _POHON) is False     # jadi akar
+
+
+def test_pohon_rusak_tak_membuat_menggantung():
+    """Data bersiklus (mis. dari restore rusak) harus berhenti, bukan berputar."""
+    rusak = {"a": "b", "b": "c", "c": "a"}
+    hasil = su.rantai_induk("a", rusak)
+    assert len(hasil) < 64 and len(hasil) > 0
+
+
+# ── ordinal lantai (IMDF) ───────────────────────────────────────────────────
+
+def test_basement_negatif_dan_dasar_nol():
+    assert su.tebak_ordinal_lantai("B1") == -1
+    assert su.tebak_ordinal_lantai("B3") == -3
+    assert su.tebak_ordinal_lantai("Basement 2") == -2
+    for dasar in ("G", "GF", "LD", "Lantai Dasar", "Ground"):
+        assert su.tebak_ordinal_lantai(dasar) == 0, dasar
+
+
+def test_konvensi_indonesia_lantai_1_adalah_dasar():
+    """'Lantai 1' di Indonesia LAZIM berarti lantai dasar — beda dari konvensi
+    Inggris. Itu sebabnya ordinal dipisah dari label."""
+    assert su.tebak_ordinal_lantai("Lantai 1") == 0
+    assert su.tebak_ordinal_lantai("Lt 5") == 4
+    assert su.tebak_ordinal_lantai("2") == 1
+
+
+def test_label_ambigu_tidak_ditebak():
+    """Mezanin & rooftop tingginya RELATIF terhadap gedung — menebaknya justru
+    menaruh lantai di urutan yang salah tanpa ada yang sadar."""
+    for ambigu in ("Mezanin", "M", "Rooftop", "Atap", "", None, "xyz"):
+        assert su.tebak_ordinal_lantai(ambigu) is None, ambigu
+
+
+def test_ordinal_rapat_menutup_celah_tanpa_menggeser_urutan():
+    """Setelah lantai dihapus atau saat gedung melompati lantai 4/13, posisi
+    relatif tetap tetapi tak boleh ada lubang di tengah."""
+    assert su.ordinal_rapat([-2, -1, 0, 2, 5]) == [-2, -1, 0, 1, 2]
+    assert su.ordinal_rapat([0, 1, 2]) == [0, 1, 2]        # sudah rapat
+    assert su.ordinal_rapat([]) == []
+    assert su.ordinal_rapat([3, 3, 4]) == [0, 1]           # duplikat diciutkan

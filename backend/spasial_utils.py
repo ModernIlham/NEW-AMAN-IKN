@@ -161,3 +161,213 @@ def sisip_geo_ke_update(lama: dict, perubahan: dict) -> dict:
         return {}
     perubahan.pop("geo", None)
     return {"geo": ""}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# HIERARKI SPASIAL (Fase 2) — registry level & pohon
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Ordinal BERJARAK 10 supaya tingkat baru bisa disisipkan tanpa migrasi data.
+# `kode_baku` tetap benar untuk ekspor & dokumen resmi; `preset_penamaan` HANYA
+# mengganti label yang dilihat operator — satu data, dua tampilan.
+#
+# Dasar urutan (riset Fase 0, lihat docs/ARSITEKTUR-SPASIAL-IOT.md):
+#   UU 26/2007 Pasal 1 mendefinisikan Kawasan sebagai wilayah berfungsi lindung
+#   atau budi daya; PP 21/2021 mendefinisikan Zona sebagai "KAWASAN dengan
+#   fungsi dan karakteristik tertentu" — jadi zona adalah SEJENIS kawasan,
+#   bukan induknya. Karena itu KAWASAN berada di atas, bukan di bawah zona.
+
+# Mode validasi containment per tingkat:
+#   "ketat"   — geometri anak harus berada di dalam induk
+#   "longgar" — boleh menyembul (persil kadaster & titik sering tak presisi)
+#   "sumbu_z" — BUKAN containment: lantai diuji IoU terhadap gedung, sebab
+#               modelnya 2,5D dan basement lazim melebihi footprint gedung
+#   "akar"    — tak punya induk
+
+LEVEL_SPASIAL = (
+    # ordinal, kode_baku, label ikn_akrab,        label rdtr_baku,          containment
+    (10,  "WILAYAH",  "Wilayah",                "Wilayah / KSN",          "akar"),
+    (20,  "KAWASAN",  "Kawasan",                "Kawasan",                "ketat"),
+    (30,  "WP",       "Zona (WP)",              "Wilayah Perencanaan",    "ketat"),
+    (40,  "SWP",      "Distrik (Sub-WP)",       "Sub Wilayah Perencanaan", "ketat"),
+    (50,  "BLOK",     "Blok",                   "Blok",                   "ketat"),
+    (55,  "SUBBLOK",  "Sub-Blok",               "Sub-Blok",               "ketat"),
+    (60,  "PERSIL",   "Persil / Bidang Tanah",  "Persil (NIB)",           "longgar"),
+    (70,  "TAPAK",    "Kompleks / Tapak",       "Tapak",                  "ketat"),
+    (80,  "GEDUNG",   "Gedung",                 "Gedung",                 "ketat"),
+    (90,  "LANTAI",   "Lantai",                 "Lantai",                 "sumbu_z"),
+    (95,  "SAYAP",    "Sayap / Zona Lantai",    "Seksi",                  "ketat"),
+    (100, "RUANGAN",  "Ruangan",                "Ruangan",                "ketat"),
+    (110, "TITIK",    "Titik / Sub-ruang",      "Fitur",                  "longgar"),
+)
+
+PRESET_PENAMAAN = ("ikn_akrab", "rdtr_baku")
+
+# RUANGAN satu-satunya tingkat WAJIB: dialah jangkar KIR & DBR (PMK 181/2016).
+# Tanpa ruangan, seluruh fitur spasial tak menyambung ke penatausahaan BMN.
+KODE_LEVEL_WAJIB = "RUANGAN"
+
+_PETA_LEVEL = {b[1]: b for b in LEVEL_SPASIAL}
+
+
+def daftar_level(preset: str = "ikn_akrab") -> list:
+    """Registry level terurut dari TERBESAR ke TERKECIL, berlabel sesuai preset."""
+    pakai_baku = preset == "rdtr_baku"
+    return [
+        {"ordinal": ordinal, "kode_baku": kode,
+         "label": label_baku if pakai_baku else label_akrab,
+         "containment": containment, "wajib": kode == KODE_LEVEL_WAJIB}
+        for (ordinal, kode, label_akrab, label_baku, containment) in LEVEL_SPASIAL
+    ]
+
+
+def level_dari_kode(kode_baku: str) -> dict:
+    """Satu baris registry, atau None bila kode tak dikenal."""
+    b = _PETA_LEVEL.get(str(kode_baku or "").strip().upper())
+    if not b:
+        return None
+    return {"ordinal": b[0], "kode_baku": b[1], "label": b[2],
+            "label_baku": b[3], "containment": b[4],
+            "wajib": b[1] == KODE_LEVEL_WAJIB}
+
+
+def ordinal_level(kode_baku: str):
+    b = _PETA_LEVEL.get(str(kode_baku or "").strip().upper())
+    return b[0] if b else None
+
+
+def parent_level_sah(kode_induk: str, kode_anak: str) -> bool:
+    """Induk WAJIB berada di tingkat yang lebih LUAS (ordinal lebih kecil).
+
+    Tingkat boleh DILOMPATI — satker daerah lazim hanya memakai
+    Tapak → Gedung → Lantai → Ruangan tanpa Blok/Persil, dan memaksa node
+    kosong palsu hanya untuk memenuhi rantai justru merusak data.
+    """
+    oi, oa = ordinal_level(kode_induk), ordinal_level(kode_anak)
+    if oi is None or oa is None:
+        return False
+    return oi < oa
+
+
+# ── Pohon: ancestors[] & jalur ──────────────────────────────────────────────
+#
+# `parent_id` adalah SATU-SATUNYA field pohon yang boleh diedit pengguna;
+# `ancestors[]` dan `jalur` SELALU diturunkan ulang dari rantai parent oleh
+# helper di bawah. Menyimpan tiga-tiganya sebagai sumber kebenaran terpisah
+# adalah resep data pohon yang saling bertentangan.
+
+PEMISAH_JALUR = ","
+
+
+def rantai_induk(node_id: str, peta_parent: dict, batas: int = 64) -> list:
+    """Daftar id leluhur dari yang TERJAUH ke induk langsung.
+
+    `peta_parent` = {id_anak: id_induk}. Berhenti pada siklus atau kedalaman
+    berlebih dan mengembalikan apa yang sudah terkumpul — data pohon rusak
+    tidak boleh membuat permintaan menggantung selamanya.
+    """
+    naik, kini, terlihat = [], peta_parent.get(node_id), {node_id}
+    while kini and kini not in terlihat and len(naik) < batas:
+        naik.append(kini)
+        terlihat.add(kini)
+        kini = peta_parent.get(kini)
+    naik.reverse()          # terjauh -> terdekat
+    return naik
+
+
+def bangun_jalur(ancestors: list, node_id: str) -> str:
+    """Materialized path ",A,B,C," — dibungkus pemisah di KEDUA ujung.
+
+    Pembungkus itu yang membuat pencarian sub-pohon aman: prefix ",A," tak
+    akan salah cocok dengan node lain bernama "A2" (yang jalurnya ",A2,").
+    """
+    bagian = [*(ancestors or []), node_id]
+    return PEMISAH_JALUR + PEMISAH_JALUR.join(str(b) for b in bagian) + PEMISAH_JALUR
+
+
+def turunkan_pohon(node_id: str, parent_id, peta_parent: dict) -> dict:
+    """Field pohon turunan untuk satu node: {ancestors, jalur, kedalaman}."""
+    peta = dict(peta_parent or {})
+    if parent_id:
+        peta[node_id] = parent_id
+    else:
+        peta.pop(node_id, None)
+    anc = rantai_induk(node_id, peta)
+    return {"ancestors": anc, "jalur": bangun_jalur(anc, node_id),
+            "kedalaman": len(anc)}
+
+
+def ada_siklus(node_id: str, calon_parent_id, peta_parent: dict) -> bool:
+    """True bila menjadikan `calon_parent_id` induk akan membentuk siklus.
+
+    Kasus nyata: operator menyeret Gedung ke bawah salah satu Ruangan di
+    dalamnya sendiri. Tanpa penjagaan ini, seluruh sub-pohon lenyap dari
+    breadcrumb dan tiap kueri leluhur berputar sampai batas kedalaman.
+    """
+    if not calon_parent_id:
+        return False
+    if calon_parent_id == node_id:
+        return True
+    return node_id in rantai_induk(calon_parent_id, peta_parent or {})
+
+
+# ── Ordinal lantai (gaya IMDF) ──────────────────────────────────────────────
+#
+# `ordinal` INTEGER dipisah dari `label` karena "Lantai 1" di Indonesia ambigu
+# (kadang lantai dasar, kadang satu tingkat di atasnya) dan banyak gedung
+# MENGHILANGKAN lantai 4 dan 13. Ordinal tetap RAPAT; yang melompat hanya
+# labelnya. Mezanin mendapat ordinal SENDIRI, bukan pecahan 0.5 — pecahan
+# merusak pengurutan integer dan tak bisa diindeks dengan rapi.
+#
+#   0  = lantai dengan akses masuk utama
+#   <0 = basement (-1 paling dekat permukaan)
+#   >0 = naik ke atas sampai rooftop
+
+import re as _re
+
+_POLA_BASEMENT = _re.compile(r"^(?:B|BASEMENT|LB)\s*-?\s*(\d+)$", _re.I)
+_POLA_ANGKA = _re.compile(r"^(?:L|LANTAI|LT\.?|FLOOR|F)?\s*(\d+)$", _re.I)
+_LABEL_DASAR = {"G", "GF", "LD", "DASAR", "LANTAI DASAR", "GROUND", "LG", "UG", "P"}
+_LABEL_ATAP = {"R", "RF", "ROOFTOP", "ATAP", "ROOF", "TOP"}
+_LABEL_MEZANIN = {"M", "MZ", "MEZANIN", "MEZZANINE", "SEMI"}
+
+
+def tebak_ordinal_lantai(label) -> Optional[int]:
+    """Tebakan ordinal dari label lantai yang lazim ditulis operator.
+
+    Hanya USULAN untuk mengisi formulir — ordinal final tetap ditentukan
+    manusia, sebab hanya dia yang tahu lantai mana yang punya akses masuk
+    utama. Mengembalikan None bila tak terbaca (mis. "Mezanin": tingginya
+    relatif, tak ada ordinal universal).
+    """
+    s = str(label or "").strip().upper().replace("_", " ")
+    if not s:
+        return None
+    if s in _LABEL_DASAR:
+        return 0
+    if s in _LABEL_ATAP or s in _LABEL_MEZANIN:
+        return None          # butuh konteks gedung — jangan menebak
+    m = _POLA_BASEMENT.match(s)
+    if m:
+        return -int(m.group(1))
+    m = _POLA_ANGKA.match(s)
+    if m:
+        n = int(m.group(1))
+        # Konvensi Indonesia: "Lantai 1" LAZIM berarti lantai dasar.
+        return n - 1 if n >= 1 else None
+    return None
+
+
+def ordinal_rapat(ordinals: list) -> list:
+    """Rapatkan daftar ordinal agar berurutan tanpa celah, urutan dipertahankan.
+
+    Dipakai setelah sebuah lantai dihapus atau saat mengimpor gedung yang
+    melompati lantai 4/13: posisi relatif antar lantai tetap, tetapi tak ada
+    lubang di tengah yang membuat "lantai berikutnya" jadi ambigu. Nilai nol
+    (akses masuk utama) dipertahankan sebagai titik jangkar.
+    """
+    if not ordinals:
+        return []
+    urut = sorted(set(int(o) for o in ordinals))
+    jangkar = urut.index(0) if 0 in urut else 0
+    return [i - jangkar for i in range(len(urut))]
