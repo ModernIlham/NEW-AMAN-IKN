@@ -53,6 +53,98 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#627] Spasial Fase 5: impor denah dari Shapefile / KML / KMZ / GeoJSON — 2026-07-26
+
+Fase 5 program Spasial & IoT: denah yang sudah digambar di QGIS/ArcGIS/Google
+Earth kini bisa DIIMPOR — memenuhi bagian "sistem dapat menerima membaca hasil
+impor misalkan shp, kml, kmz" dari mandat awal.
+
+**Alur dua langkah** (tombol Impor di Hierarki Spasial):
+1. **Pratinjau sinkron** — file diperiksa tanpa menulis apa pun: format, cacah
+   fitur, CRS terdeteksi, daftar field atribut + SAMPEL nilainya. Sampel ini
+   krusial: nama ber-mojibake (encoding DBF salah — jebakan #3 riset Fase 0)
+   harus terlihat SEBELUM tersimpan, bukan sesudahnya.
+2. **Impor via job latar** — operator memetakan tingkat/induk/field nama+kode
+   dan saklar perbaikan topologi; worker mem-parse penuh, membersihkan tiap
+   fitur, lalu menulis node ber-status **DRAFT** (badge kuning di pohon). Draft
+   sengaja tak ikut deteksi lokasi maupun lapisan denah — hasil impor diperiksa
+   manusia dulu, baru diaktifkan.
+
+**Parser (`impor_geo_utils.py`, murni & teruji):**
+- **SHP-zip** via pyshp (`__geo_interface__` menangani pengelompokan cincin/
+  lubang); encoding dari `.cpg`, fallback UTF-8 → CP1252 dengan peringatan.
+- **CRS dari `.prj`**: WGS84 geografis langsung; **UTM (semua zona) dikonversi**
+  via paket `utm` — keluaran SELALU [bujur, lintang] (jebakan #2). Proyeksi lain
+  DITOLAK dengan menyebut namanya: menebak CRS = denah di lokasi salah tanpa
+  satu pun galat. Tanpa `.prj`: koordinat rentang derajat → diasumsikan WGS84
+  ber-peringatan; rentang meter → ditolak tegas.
+- **KML/KMZ**: parser namespace-agnostik; `<!DOCTYPE`/`<!ENTITY` ditolak dini
+  (billion-laughs/XXE); cincin KML yang tak tertutup DITUTUP (RFC 7946);
+  ExtendedData/SimpleData jadi atribut; Placemark titik/garis dilewati.
+- **Pembersihan per fitur**: struktur → topologi → (opsional) `make_valid`
+  ber-**pagar-luas**: perubahan luas > 1% TIDAK diterapkan otomatis (jebakan #1
+  riset — `buffer(0)` memangkas separuh poligon tanpa galat, dilarang di repo
+  ini). Pagar hanya berlaku bila luas asal BERMAKNA: shoelace pada poligon
+  menyilang-diri saling meniadakan (bow-tie simetris "berluas 0", terukur 0 vs
+  61,8 juta m²), dan menerapkan pagar pada angka artefak akan menolak justru
+  kasus perbaikan utama.
+
+**Keamanan & ketahanan**: plafon 20 MB + 2.000 fitur; seluruh atribut sumber
+tersimpan di `properties.impor` (jejak audit); kode ganda otomatis dikosongkan
+ber-peringatan; keunikan kode dicek SATU fetch untuk seluruh batch; parsing +
+shapely di thread; rate-limit pratinjau 12/menit & mulai 6/menit; satu impor
+berjalan pada satu waktu (semaphore); laporan job memuat daftar fitur yang
+dilewati BESERTA alasannya — plafon tampilan 50, jumlah asli tetap dilaporkan.
+Dependensi baru: `utm==0.8.1` (27 KB, sesuai rencana arsitektur Fase 0).
+
+**Perbaikan temuan tinjauan adversarial** (13 temuan bertahan refutasi):
+
+- **Zip-bomb (HIGH)** — `z.read()` dipanggil sebelum ukuran isi diperiksa: zip
+  199 KB mengembang jadi 200 MB dan meng-OOM proses SEBELUM parser sempat
+  berjalan; plafon unggah 20 MB tak menolongnya sama sekali. `_buka_zip_aman()`
+  kini menjumlahkan `ZipInfo.file_size` dari infolist (metadata, tanpa
+  dekompresi) dan menolak di atas 80 MB atau 200 anggota — dipakai jalur KMZ
+  maupun SHP-zip. Terukur: zip 200 MB ditolak tanpa dibuka.
+- **KML berspasi setelah koma** — QGIS/Google Earth lazim menulis
+  `"116.70, -1.40, 0"`; parser berbasis `.split()` memecah `"116.70,"` dari
+  `"-1.40"` sehingga SELURUH Placemark hilang tanpa satu pun galat (impor 0
+  fitur, senyap — kelas jebakan yang sama dengan tiga jebakan riset Fase 0).
+  Diganti pemindaian regex pasangan bujur-lintang.
+- **Nama field DBF kembar** — DBF memotong nama kolom di 10 karakter, jadi
+  `NAMA_BANGUNAN` dan `NAMA_BANGUN_LAMA` sama-sama menjadi `NAMA_BANGU` dan
+  dict atribut menelan salah satunya. Kini di-dedup (`NAMA_BANGU__2`) dengan
+  peringatan di pratinjau.
+- **`insert_many` gagal sebagian** — satu dokumen ditolak membuat seluruh job
+  berstatus `failed` padahal ratusan node draft yang sah SUDAH tertulis (yatim,
+  tanpa laporan). Kini `ordered=False` + `BulkWriteError` dibaca untuk
+  melaporkan jumlah yang benar-benar tertulis.
+- **Pembacaan unggahan** — `file.read()` memuat seluruh badan ke memori sebelum
+  plafon diperiksa; diganti pembacaan bertahap 1 MB yang berhenti di plafon.
+- **Atribut sumber raksasa** — `properties.impor.atribut` disalin apa adanya
+  dari DBF/KML; dokumen node bisa melewati batas 16 MB Mongo dan ditolak saat
+  insert. Kini dipotong 60 kolom × 500 karakter — dan nama kunci yang dipotong
+  40 karakter ikut di-dedup: nama properti KML/GeoJSON panjangnya bebas, jadi
+  dua field ber-awalan sama akan saling menimpa (terukur: 200 kolom runtuh jadi
+  1) — kelas bug yang sama dengan pemotongan 10 karakter DBF.
+- **Progres macet di 5%** untuk file < 25 fitur (kelipatan 25 tak pernah
+  tercapai) — pembaruan kini juga terjadi pada fitur terakhir.
+- **Kosakata status job** — worker menulis `failed`, penyapu job macet
+  (`jobs.bersihkan_job_basi`) menulis `error`; dialog hanya mengenali `failed`
+  sehingga job yang di-relabel penyapu di-poll selamanya. Dialog kini memakai
+  penanda universal `done: true` plus ketiga nama status.
+- **Dialog impor**: balasan pratinjau file lama tak lagi menimpa pratinjau file
+  baru (penjaga nomor urut); polling berhenti setelah 8 kegagalan beruntun atau
+  15 menit alih-alih memanggil `/jobs` tanpa batas; polling berhenti saat dialog
+  ditutup (tak ada `setState` pasca-unmount); dialog **boleh ditutup** selagi
+  impor berjalan — job hidup di server, mengunci dialog hanya menyandera
+  operator; berkas > 20 MB ditolak di klien sebelum diunggah; `value` input file
+  dikosongkan agar memilih berkas bernama sama lagi tetap memicu pembacaan.
+
+Uji: +22 backend (893 total) — fixture dibangun DI DALAM uji (KML string, SHP
+via pyshp Writer in-memory, KMZ zip) sehingga tak ada file biner di repo;
+termasuk uji konversi UTM→WGS84 yang menuntut hasil mendarat di kotak IKN, dan
+uji regresi untuk zip-bomb, KML berspasi, serta dedup nama field DBF.
+
 ## [#626] Spasial Fase 4: gambar poligon denah di aplikasi + validasi topologi — 2026-07-26
 
 Fase 4 program Spasial & IoT: poligon denah kini bisa DIGAMBAR langsung di

@@ -137,6 +137,7 @@ typing_extensions==4.15.0
 tzdata==2025.3
 uritemplate==4.2.0
 urllib3==2.6.3
+utm==0.8.1
 uvicorn==0.25.0
 watchfiles==1.1.1
 weasyprint==68.1

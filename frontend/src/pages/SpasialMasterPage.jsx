@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Plus, Pencil, Trash2, Loader2, Layers, ChevronRight, ChevronDown,
-  Search, MapPinned, LandPlot,
+  Search, MapPinned, LandPlot, Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 // Editor denah dimuat LAZY — Leaflet + geoman berat, dan mayoritas kunjungan
 // halaman pohon tak pernah membuka editor.
 const DenahEditor = lazy(() => import("@/components/spasial/DenahEditor"));
+const ImporDenahDialog = lazy(() => import("@/components/spasial/ImporDenahDialog"));
 
 function getApiError(err, fallback) {
   return err?.response?.data?.detail || fallback;
@@ -44,6 +45,7 @@ export default function SpasialMasterPage({ user, onBack }) {
   const [form, setForm] = useState(null);
   const [saving, setSaving] = useState(false);
   const [editorNode, setEditorNode] = useState(null);  // node yang denahnya digambar
+  const [imporBuka, setImporBuka] = useState(false);   // dialog impor file GIS
   const { confirm, confirmDialog } = useConfirm();
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
@@ -236,6 +238,21 @@ export default function SpasialMasterPage({ user, onBack }) {
           <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-muted text-muted-foreground shrink-0">
             {labelLevel[node.tipe] || node.tipe}
           </span>
+          {/* Hasil impor & gambar setengah-jadi berstatus DRAFT: tak ikut
+              deteksi lokasi maupun lapisan denah sampai diaktifkan manusia. */}
+          {node.status === "draft" && (
+            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 shrink-0"
+                  title="Draft — belum aktif; periksa lalu ubah status jadi Aktif"
+                  data-testid={`spasial-draft-${node.id}`}>
+              draft
+            </span>
+          )}
+          {node.status === "nonaktif" && (
+            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-muted text-muted-foreground/70 shrink-0"
+                  data-testid={`spasial-nonaktif-${node.id}`}>
+              nonaktif
+            </span>
+          )}
           <span className="min-w-0 flex-1 truncate text-sm">
             {node.nama}
             {node.kode ? <span className="text-muted-foreground font-mono text-xs"> · {node.kode}</span> : null}
@@ -301,6 +318,17 @@ export default function SpasialMasterPage({ user, onBack }) {
           />
         </Suspense>
       )}
+      {imporBuka && (
+        <Suspense fallback={null}>
+          <ImporDenahDialog
+            levels={levels}
+            nodes={nodes}
+            labelLevel={labelLevel}
+            onClose={() => setImporBuka(false)}
+            onSaved={loadNodes}
+          />
+        </Suspense>
+      )}
       <div className="max-w-4xl mx-auto p-3 sm:p-4">
         <div className="flex items-center gap-2 mb-3">
           <Button variant="ghost" size="icon" onClick={onBack} aria-label="Kembali">
@@ -327,6 +355,13 @@ export default function SpasialMasterPage({ user, onBack }) {
             <option value="ikn_akrab">Label akrab (Zona/Distrik)</option>
             <option value="rdtr_baku">Kode baku (WP/SWP)</option>
           </select>
+          {isWriter && (
+            <Button variant="outline" onClick={() => setImporBuka(true)} size="sm"
+                    title="Impor denah dari Shapefile / KML / KMZ / GeoJSON"
+                    data-testid="spasial-impor">
+              <Upload className="w-4 h-4 mr-1" /> Impor
+            </Button>
+          )}
           {isWriter && (
             <Button onClick={() => bukaTambah(null)} size="sm" data-testid="spasial-tambah-akar">
               <Plus className="w-4 h-4 mr-1" /> Tambah

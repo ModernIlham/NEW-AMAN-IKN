@@ -19,7 +19,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import (APIRouter, Depends, File, Form, HTTPException, Query,
+                     Request, UploadFile)
 from pydantic import BaseModel
 
 from auth_utils import require_user, require_writer
@@ -747,3 +748,279 @@ async def geojson_viewport(bbox: str = Query("", description="lon_min,lat_min,lo
     return {"type": "FeatureCollection", "features": fitur,
             "jumlah": len(fitur), "jumlah_total": jumlah,
             "terpotong": terpotong, "batas": BATAS_FITUR_PETA}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# IMPOR SHP / KML / KMZ / GeoJSON (Fase 5)
+#
+# Alur: pratinjau SINKRON (parse header + cacah, tanpa menulis apa pun) →
+# operator memilih tingkat/induk/field nama → job LATAR mem-parse penuh,
+# membersihkan tiap fitur (struktur → topologi → make_valid ber-pagar-luas),
+# lalu menulis node ber-status **DRAFT** di bawah induk pilihan. Draft sengaja
+# TIDAK ikut deteksi lokasi maupun lapisan denah (keduanya menyaring "aktif")
+# — hasil impor harus DIPERIKSA manusia dulu, baru diaktifkan lewat form ubah.
+#
+# File TIDAK disimpan di GridFS: byte-nya dipegang closure task (≤ plafon
+# ukuran). Server restart di tengah job → bersihkan_job_basi menandai failed.
+# ═══════════════════════════════════════════════════════════════════════════
+
+MAKS_UKURAN_IMPOR = 20 * 1024 * 1024      # 20 MB — kecamatan penuh pun cukup
+_IMPOR_TASKS = set()                      # pegang referensi task agar tak di-GC
+# Satu impor pada satu waktu per proses: parsing+shapely CPU-berat di VPS kecil,
+# dan dua impor paralel ke pohon yang sama hanya mengundang kekacauan urutan.
+_IMPOR_SEM = asyncio.Semaphore(1)
+
+
+async def _baca_terbatas(file: "UploadFile") -> bytes:
+    """Baca UploadFile BERTAHAP dan berhenti begitu melewati plafon — sehingga
+    file 200 MB tak lebih dulu ditahan penuh di memori sebelum ditolak (temuan
+    tinjauan). `file.read()` polos memuat seluruh body dulu, baru mengecek."""
+    potong, total = [], 0
+    while True:
+        chunk = await file.read(1024 * 1024)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > MAKS_UKURAN_IMPOR:
+            raise HTTPException(
+                status_code=400,
+                detail=f"File melebihi {MAKS_UKURAN_IMPOR // (1024*1024)} MB")
+        potong.append(chunk)
+    return b"".join(potong)
+
+
+def _potong_teks(nilai, batas=120) -> str:
+    return str(nilai or "").strip()[:batas]
+
+
+def _potong_atribut(atribut: dict) -> dict:
+    """Batasi jumlah kunci & panjang nilai atribut impor agar dokumen node tak
+    membengkak melewati batas 16 MB Mongo (temuan tinjauan). 60 kolom × 500 char
+    jauh cukup untuk atribut denah wajar, dan node ditolak DB bila melampaui.
+
+    Kunci yang dipotong 40 karakter bisa BERTABRAKAN: nama properti KML/GeoJSON
+    panjangnya bebas, jadi dua field ber-awalan 40 karakter sama akan saling
+    menimpa dan satu nilai hilang diam-diam — persis kelas bug yang sama dengan
+    pemotongan 10 karakter DBF. Yang bertabrakan diberi akhiran urut."""
+    hasil = {}
+    for k, v in list(atribut.items())[:60]:
+        kunci = str(k)[:40]
+        if kunci in hasil:
+            n = 2
+            while f"{kunci}__{n}" in hasil:
+                n += 1
+            kunci = f"{kunci}__{n}"
+        hasil[kunci] = str(v)[:500]
+    return hasil
+
+
+@spasial_router.post("/spasial/impor/pratinjau")
+@limiter.limit("12/minute")
+async def impor_pratinjau(request: Request, file: UploadFile = File(...),
+                          _user: dict = Depends(require_writer)):
+    """Baca file TANPA menyimpan apa pun: format, cacah fitur, daftar field
+    atribut, CRS terdeteksi, sampel nama, dan peringatan (mojibake/CRS tebakan).
+    Dipakai dialog impor untuk mengisi dropdown "field nama" sebelum mulai."""
+    import impor_geo_utils as ig
+    data = await _baca_terbatas(file)
+    try:
+        hasil = await asyncio.to_thread(ig.parse_file, file.filename or "", data)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    fitur = hasil["fitur"]
+    peringatan = list(hasil.get("peringatan") or [])
+    if len(fitur) > ig.MAKS_FITUR_IMPOR:
+        peringatan.append(
+            f"File berisi {len(fitur)} fitur — hanya {ig.MAKS_FITUR_IMPOR} "
+            "pertama yang akan diimpor; pecah filenya bila perlu semua")
+    # Sampel nama per field agar operator bisa memilih field yang benar —
+    # sekaligus memunculkan mojibake SEBELUM tersimpan (jebakan #3 riset).
+    sampel = {}
+    for f in fitur[:8]:
+        if f.get("nama"):
+            sampel.setdefault("(nama bawaan)", []).append(f["nama"])
+        for k, v in (f.get("atribut") or {}).items():
+            if v:
+                sampel.setdefault(k, []).append(v)
+    sampel = {k: v[:5] for k, v in sampel.items()}
+    if any(ig.deteksi_mojibake(v) for vs in sampel.values() for v in vs):
+        peringatan.append("Sebagian nama tampak RUSAK encoding (mojibake) — "
+                          "periksa sampel; sertakan file .cpg pada shapefile")
+    return {"format": hasil["format"], "jumlah_fitur": len(fitur),
+            "fields": hasil["fields"], "crs": hasil["crs"],
+            "sampel": sampel, "peringatan": peringatan,
+            "maks_fitur": ig.MAKS_FITUR_IMPOR}
+
+
+@spasial_router.post("/spasial/impor")
+@limiter.limit("6/minute")
+async def impor_mulai(request: Request,
+                      file: UploadFile = File(...),
+                      tipe: str = Form(...),
+                      parent_id: str = Form(""),
+                      field_nama: str = Form(""),
+                      field_kode: str = Form(""),
+                      perbaiki: bool = Form(False),
+                      _user: dict = Depends(require_writer)):
+    """Mulai job impor. Validasi tingkat+induk terjadi DI SINI (sinkron, dengan
+    konteks user penuh) supaya galat izin/hierarki muncul seketika — worker
+    hanya mengerjakan yang sudah pasti boleh."""
+    from jobs import buat_job
+
+    data = await _baca_terbatas(file)
+    tipe = str(tipe or "").strip().upper()
+    parent_id = str(parent_id or "").strip()
+    deriv = await _susun_derivasi("__impor__", parent_id or None, _user)
+    _validasi_level(tipe, deriv.pop("_tipe_induk", None))
+    deriv.pop("jalur", None)                  # jalur per-node, disusun worker
+
+    job_id = await buat_job(
+        "impor_spasial", _user.get("username", ""),
+        kode_satker=kode_satker_user(_user),
+        status="queued", progress=0, done=False,
+        nama_file=_potong_teks(file.filename), tipe=tipe)
+    t = asyncio.create_task(_jalankan_impor(
+        job_id, data, _potong_teks(file.filename), tipe, deriv,
+        _potong_teks(field_nama, 40), _potong_teks(field_kode, 40),
+        bool(perbaiki), kode_satker_user(_user), _user.get("username", "")))
+    _IMPOR_TASKS.add(t)
+    t.add_done_callback(_IMPOR_TASKS.discard)
+    await log_audit("impor_spasial_mulai", "", job_id,
+                    username=_user.get("username", "system"),
+                    kode_satker=kode_satker_user(_user),
+                    detail=f"Impor {file.filename} → {tipe}")
+    return {"job_id": job_id}
+
+
+async def _sisip_batch(dok_batch: list) -> int:
+    """insert_many yang mengembalikan JUMLAH NYATA tertulis, tak melempar bila
+    sebagian gagal. `ordered=False` melanjutkan sisa dokumen saat satu ditolak
+    (mis. dokumen kelewat besar); tanpa penanganan ini satu fitur cacat membuat
+    seluruh impor 'failed' padahal ratusan node draft yang sah SUDAH tertulis —
+    yatim tanpa laporan (temuan tinjauan)."""
+    from pymongo.errors import BulkWriteError
+    try:
+        r = await db.spasial_node.insert_many(dok_batch, ordered=False)
+        return len(r.inserted_ids)
+    except BulkWriteError as e:
+        return int((e.details or {}).get("nInserted", 0))
+
+
+async def _jalankan_impor(job_id, data, nama_file, tipe, deriv,
+                          field_nama, field_kode, perbaiki,
+                          kode_satker, username):
+    """Worker job impor: parse → bersihkan per fitur → tulis node DRAFT.
+
+    Kerja CPU (parse + shapely) di thread; penulisan batch insert_many.
+    Laporan disimpan langsung di dokumen job (kecil), bukan artifact.
+    """
+    from jobs import update_job
+    from log_setup import set_job_id
+    import impor_geo_utils as ig
+    set_job_id(job_id)
+    try:
+        async with _IMPOR_SEM:
+            await update_job(job_id, status="running", progress=5,
+                             message="Membaca file…")
+            hasil = await asyncio.to_thread(ig.parse_file, nama_file, data)
+            fitur = hasil["fitur"][:ig.MAKS_FITUR_IMPOR]
+            peringatan = list(hasil.get("peringatan") or [])
+            if len(hasil["fitur"]) > ig.MAKS_FITUR_IMPOR:
+                peringatan.append(
+                    f"{len(hasil['fitur']) - ig.MAKS_FITUR_IMPOR} fitur di atas "
+                    "plafon TIDAK diimpor")
+            total = len(fitur)
+            if total == 0:
+                await update_job(job_id, status="done", done=True, progress=100,
+                                 dibuat=0, dilewati=[], peringatan=peringatan,
+                                 message="Tidak ada fitur poligon di file ini")
+                return
+
+            # Keunikan kode: satu fetch untuk seluruh batch (bukan N kueri).
+            kode_terpakai = set()
+            if field_kode:
+                async for d in db.spasial_node.find(
+                        {"kode_satker": kode_satker, "tipe": tipe,
+                         "kode": {"$ne": ""}, "status": {"$ne": "dihapus"}},
+                        {"_id": 0, "kode": 1}):
+                    kode_terpakai.add(d.get("kode"))
+
+            now = datetime.now(timezone.utc).isoformat()
+            anc = deriv.get("ancestors") or []
+            dibuat, dilewati, dok_batch = 0, [], []
+            for i, f in enumerate(fitur):
+                nama = (_potong_teks(f["atribut"].get(field_nama))
+                        if field_nama else "") or _potong_teks(f.get("nama")) \
+                    or f"{tipe.title()} impor {i + 1}"
+                geom, alasan = await asyncio.to_thread(
+                    ig.bersihkan_fitur, f["geometry"], perbaiki)
+                if geom is None:
+                    dilewati.append({"nama": nama, "alasan": alasan})
+                    continue
+                kode = _potong_teks(f["atribut"].get(field_kode), 40) \
+                    if field_kode else ""
+                if kode and kode in kode_terpakai:
+                    peringatan.append(f"Kode '{kode}' ganda — dikosongkan "
+                                      f"pada '{nama}'")
+                    kode = ""
+                if kode:
+                    kode_terpakai.add(kode)
+                node_id = "sn_" + str(uuid.uuid4())
+                dok_batch.append({
+                    "id": node_id, "kode_satker": kode_satker,
+                    "tipe": tipe, "nama": nama, "kode": kode,
+                    "parent_id": deriv.get("parent_id"),
+                    "ancestors": list(anc),
+                    "ancestors_nama": list(deriv.get("ancestors_nama") or []),
+                    "jalur": su.bangun_jalur(anc, node_id),
+                    "kedalaman": deriv.get("kedalaman", 0),
+                    "ordinal_level": su.ordinal_level(tipe),
+                    "nama_alias": [], "zona_kode": "", "subzona_kode": "",
+                    "fungsi_kawasan": "",
+                    # Atribut sumber tersimpan sebagai jejak audit, TAPI dipotong:
+                    # DBF/KML bisa punya field teks raksasa dan dokumen node yang
+                    # membengkak > 16 MB akan DITOLAK Mongo saat insert (temuan
+                    # tinjauan). Batasi jumlah kunci & panjang nilai.
+                    "properties": {"impor": {"file": nama_file,
+                                             "atribut": _potong_atribut(f["atribut"])}},
+                    "status": "draft",
+                    "geometry": geom,
+                    "bbox": su.hitung_bbox(geom),
+                    "titik_wakil": su.titik_wakil(geom),
+                    "metrik": {"luas_m2": round(su.luas_kasar_m2(geom), 2),
+                               "dihitung_pada": now},
+                    "lantai": None, "lantai_ordinal": None,
+                    "versi": 1, "created_at": now, "updated_at": now,
+                    "created_by": username, "updated_by": username,
+                })
+                if len(dok_batch) >= 100:
+                    dibuat += await _sisip_batch(dok_batch)
+                    dok_batch = []
+                # `total` bisa < 25; perbarui progres di kelipatan 25 ATAU pada
+                # fitur terakhir supaya file kecil pun bergerak dari 5%.
+                if (i + 1) % 25 == 0 or (i + 1) == total:
+                    await update_job(
+                        job_id, progress=5 + int(90 * (i + 1) / total),
+                        message=f"Memproses fitur {i + 1}/{total}…")
+            if dok_batch:
+                dibuat += await _sisip_batch(dok_batch)
+
+            await update_job(
+                job_id, status="done", done=True, progress=100,
+                dibuat=dibuat, total=total,
+                dilewati=dilewati[:50],       # plafon laporan; jumlah tetap utuh
+                jumlah_dilewati=len(dilewati),
+                peringatan=peringatan[:20],
+                message=(f"Selesai: {dibuat} node draft dibuat"
+                         + (f", {len(dilewati)} dilewati" if dilewati else "")))
+            await log_audit("impor_spasial_selesai", "", job_id,
+                            username=username, kode_satker=kode_satker,
+                            detail=f"{nama_file}: {dibuat} dibuat, "
+                                   f"{len(dilewati)} dilewati")
+    except ValueError as e:
+        await update_job(job_id, status="failed", done=True, error=str(e),
+                         message=f"Impor gagal: {e}")
+    except Exception as e:                    # jangan biarkan task mati senyap
+        await update_job(job_id, status="failed", done=True, error=str(e),
+                         message="Impor gagal karena kesalahan tak terduga")
