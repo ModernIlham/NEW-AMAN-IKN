@@ -1,0 +1,405 @@
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import axios from "axios";
+import { toast } from "sonner";
+import {
+  ArrowLeft, Plus, Pencil, Trash2, Loader2, Layers, ChevronRight, ChevronDown,
+  Search, MapPinned,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from "@/components/ui/dialog";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { useBackGuard } from "@/hooks/useBackGuard";
+
+const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+
+function getApiError(err, fallback) {
+  return err?.response?.data?.detail || fallback;
+}
+
+const KATEGORI_LANTAI = ["basement", "dasar", "reguler", "mezanin", "atap", "teknis"];
+
+/**
+ * Master Hierarki Spasial — denah kawasan berlapis (Fase 2).
+ *
+ * Menyusun pohon Kawasan → Zona → Distrik → … → Ruangan. Belum ada geometri
+ * (gambar poligon + deteksi lokasi otomatis menyusul di Fase 3); halaman ini
+ * fokus membangun STRUKTUR-nya. Data ter-isolasi per satker; registry tingkat
+ * (label) mengikuti preset — "Zona (WP)"/"Distrik (Sub-WP)" atau kode baku.
+ */
+export default function SpasialMasterPage({ user, onBack }) {
+  const isWriter = user?.role !== "viewer";
+  const [levels, setLevels] = useState([]);
+  const [nodes, setNodes] = useState([]);
+  const [preset, setPreset] = useState("ikn_akrab");
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState("");
+  const [buka, setBuka] = useState({}); // id → terbuka?
+  const [form, setForm] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const { confirm, confirmDialog } = useConfirm();
+
+  useBackGuard(useCallback(() => onBack?.(), [onBack]));
+
+  const labelLevel = useMemo(() => {
+    const m = {};
+    levels.forEach((l) => { m[l.kode_baku] = l.label || l.label_ui; });
+    return m;
+  }, [levels]);
+  const ordinalLevel = useMemo(() => {
+    const m = {};
+    levels.forEach((l) => { m[l.kode_baku] = l.ordinal_level; });
+    return m;
+  }, [levels]);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [rl, rn] = await Promise.all([
+        axios.get(`${API}/spasial/level?preset=${preset}`),
+        axios.get(`${API}/spasial/node`),
+      ]);
+      setLevels(rl.data?.items || []);
+      setNodes(rn.data?.items || []);
+    } catch (err) {
+      toast.error(getApiError(err, "Gagal memuat hierarki spasial"));
+    } finally {
+      setLoading(false);
+    }
+  }, [preset]);
+
+  useEffect(() => { load(); }, [load]);
+
+  // Pohon dari daftar datar: anak per parent_id (null = akar).
+  const anakDari = useMemo(() => {
+    const m = {};
+    nodes.forEach((n) => {
+      const p = n.parent_id || "__root__";
+      (m[p] = m[p] || []).push(n);
+    });
+    Object.values(m).forEach((arr) => arr.sort(
+      (a, b) => (a.ordinal_level - b.ordinal_level) || String(a.nama).localeCompare(b.nama)));
+    return m;
+  }, [nodes]);
+
+  // Kandidat induk untuk sebuah tipe: node yang tingkatnya lebih LUAS (ordinal
+  // lebih kecil). Registry mengizinkan lompat tingkat, jadi tak dibatasi ketat.
+  const kandidatInduk = useCallback((tipe) => {
+    const o = ordinalLevel[tipe];
+    if (o == null) return [];
+    return nodes
+      .filter((n) => ordinalLevel[n.tipe] < o)
+      .sort((a, b) => (a.ordinal_level - b.ordinal_level) || String(a.nama).localeCompare(b.nama));
+  }, [nodes, ordinalLevel]);
+
+  const cocokCari = useCallback((n) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return [n.nama, n.kode, ...(n.nama_alias || [])]
+      .some((v) => String(v || "").toLowerCase().includes(q));
+  }, [search]);
+
+  const simpan = async () => {
+    if (!form.nama.trim()) { toast.error("Nama wajib diisi"); return; }
+    setSaving(true);
+    try {
+      const body = {
+        tipe: form.tipe, nama: form.nama.trim(), kode: form.kode.trim(),
+        parent_id: form.parent_id || "",
+        nama_alias: form.nama_alias
+          ? form.nama_alias.split(",").map((s) => s.trim()).filter(Boolean) : [],
+        zona_kode: form.zona_kode.trim(),
+      };
+      if (form.tipe === "LANTAI") {
+        body.lantai = {
+          ordinal: form.lantai_ordinal === "" ? null : parseInt(form.lantai_ordinal, 10),
+          label: form.lantai_label.trim(),
+          label_pendek: form.lantai_pendek.trim(),
+          kategori: form.lantai_kategori,
+        };
+      }
+      if (form.mode === "tambah") {
+        await axios.post(`${API}/spasial/node`, body);
+        toast.success("Node ditambahkan");
+      } else {
+        await axios.put(`${API}/spasial/node/${form.id}`, body);
+        toast.success("Node diperbarui");
+      }
+      setForm(null);
+      await load();
+    } catch (err) {
+      toast.error(getApiError(err, "Gagal menyimpan"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const hapus = async (n) => {
+    const ok = await confirm({
+      title: "Hapus node?",
+      description: `Hapus "${n.nama}" (${labelLevel[n.tipe] || n.tipe})? Node yang masih memiliki anak tak dapat dihapus.`,
+      confirmText: "Hapus", danger: true,
+    });
+    if (!ok) return;
+    try {
+      await axios.delete(`${API}/spasial/node/${n.id}`);
+      toast.success("Node dihapus");
+      await load();
+    } catch (err) {
+      toast.error(getApiError(err, "Gagal menghapus"));
+    }
+  };
+
+  const bukaTambah = (parent) => setForm({
+    mode: "tambah", id: null,
+    tipe: parent ? tipeAnakDefault(parent) : (levels[0]?.kode_baku || "KAWASAN"),
+    nama: "", kode: "", parent_id: parent?.id || "",
+    nama_alias: "", zona_kode: "",
+    lantai_ordinal: "", lantai_label: "", lantai_pendek: "", lantai_kategori: "reguler",
+  });
+
+  const bukaUbah = (n) => setForm({
+    mode: "ubah", id: n.id, tipe: n.tipe, nama: n.nama || "", kode: n.kode || "",
+    parent_id: n.parent_id || "", nama_alias: (n.nama_alias || []).join(", "),
+    zona_kode: n.zona_kode || "",
+    lantai_ordinal: n.lantai?.ordinal ?? "", lantai_label: n.lantai?.label || "",
+    lantai_pendek: n.lantai?.label_pendek || "", lantai_kategori: n.lantai?.kategori || "reguler",
+  });
+
+  // Tipe anak yang paling mungkin: tingkat tepat setelah induk (ordinal berikut).
+  const tipeAnakDefault = (parent) => {
+    const urut = [...levels].sort((a, b) => a.ordinal_level - b.ordinal_level);
+    const next = urut.find((l) => l.ordinal_level > ordinalLevel[parent.tipe]);
+    return next?.kode_baku || parent.tipe;
+  };
+
+  const toggle = (id) => setBuka((b) => ({ ...b, [id]: !b[id] }));
+
+  const Baris = ({ node, level }) => {
+    const anak = anakDari[node.id] || [];
+    const terbuka = buka[node.id] ?? level < 1;
+    const tampil = cocokCari(node) || anakTampil(node);
+    if (!tampil) return null;
+    return (
+      <div>
+        <div
+          className="flex items-center gap-1 py-1.5 border-b border-border/60 hover:bg-muted/50 rounded"
+          style={{ paddingLeft: `${level * 16 + 4}px` }}
+          data-testid={`spasial-node-${node.id}`}
+        >
+          <button
+            type="button" onClick={() => toggle(node.id)}
+            className={`shrink-0 p-0.5 rounded ${anak.length ? "" : "invisible"}`}
+            aria-label={terbuka ? "Tutup" : "Buka"}
+          >
+            {terbuka ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+          </button>
+          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-muted text-muted-foreground shrink-0">
+            {labelLevel[node.tipe] || node.tipe}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-sm">
+            {node.nama}
+            {node.kode ? <span className="text-muted-foreground font-mono text-xs"> · {node.kode}</span> : null}
+          </span>
+          {isWriter && (
+            <span className="flex items-center gap-0.5 shrink-0">
+              <button type="button" onClick={() => bukaTambah(node)}
+                className="p-1.5 rounded hover:bg-muted min-w-0 min-h-0" title="Tambah anak">
+                <Plus className="w-3.5 h-3.5 text-emerald-600" />
+              </button>
+              <button type="button" onClick={() => bukaUbah(node)}
+                className="p-1.5 rounded hover:bg-muted min-w-0 min-h-0" title="Ubah">
+                <Pencil className="w-3.5 h-3.5 text-sky-600" />
+              </button>
+              <button type="button" onClick={() => hapus(node)}
+                className="p-1.5 rounded hover:bg-muted min-w-0 min-h-0" title="Hapus">
+                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+              </button>
+            </span>
+          )}
+        </div>
+        {terbuka && anak.map((c) => <Baris key={c.id} node={c} level={level + 1} />)}
+      </div>
+    );
+  };
+
+  // Node tampil bila ia / salah satu keturunannya cocok pencarian.
+  const anakTampil = useCallback((node) => {
+    const stack = [...(anakDari[node.id] || [])];
+    while (stack.length) {
+      const n = stack.pop();
+      if (cocokCari(n)) return true;
+      (anakDari[n.id] || []).forEach((c) => stack.push(c));
+    }
+    return false;
+  }, [anakDari, cocokCari]);
+
+  const akar = anakDari["__root__"] || [];
+
+  return (
+    <div className="min-h-screen bg-background text-foreground">
+      {confirmDialog}
+      <div className="max-w-4xl mx-auto p-3 sm:p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Button variant="ghost" size="icon" onClick={onBack} aria-label="Kembali">
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <MapPinned className="w-5 h-5 text-indigo-500 shrink-0" />
+          <div className="min-w-0">
+            <h1 className="text-base sm:text-lg font-bold truncate">Hierarki Spasial</h1>
+            <p className="text-[11px] text-muted-foreground truncate">
+              Denah kawasan berlapis — Kawasan → Zona → Distrik → … → Ruangan
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <div className="relative flex-1 min-w-[160px]">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input value={search} onChange={(e) => setSearch(e.target.value)}
+              placeholder="Cari nama / kode / alias…" className="pl-8" data-testid="spasial-cari" />
+          </div>
+          <select value={preset} onChange={(e) => setPreset(e.target.value)}
+            className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+            title="Penamaan tingkat" data-testid="spasial-preset">
+            <option value="ikn_akrab">Label akrab (Zona/Distrik)</option>
+            <option value="rdtr_baku">Kode baku (WP/SWP)</option>
+          </select>
+          {isWriter && (
+            <Button onClick={() => bukaTambah(null)} size="sm" data-testid="spasial-tambah-akar">
+              <Plus className="w-4 h-4 mr-1" /> Tambah
+            </Button>
+          )}
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-16 text-muted-foreground">
+            <Loader2 className="w-5 h-5 animate-spin mr-2" /> Memuat…
+          </div>
+        ) : akar.length === 0 ? (
+          <div className="text-center py-16 text-muted-foreground">
+            <Layers className="w-10 h-10 mx-auto mb-2 opacity-40" />
+            <p className="text-sm">Belum ada data. Mulai dari tingkat teratas (mis. Kawasan).</p>
+            {isWriter && (
+              <Button onClick={() => bukaTambah(null)} size="sm" className="mt-3">
+                <Plus className="w-4 h-4 mr-1" /> Tambah tingkat teratas
+              </Button>
+            )}
+          </div>
+        ) : (
+          <div className="rounded-lg border border-border p-1">
+            {akar.map((n) => <Baris key={n.id} node={n} level={0} />)}
+          </div>
+        )}
+      </div>
+
+      {form && (
+        <Dialog open onOpenChange={(o) => !o && setForm(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>{form.mode === "tambah" ? "Tambah Node" : "Ubah Node"}</DialogTitle>
+              <DialogDescription>
+                Tingkat, nama, dan induk. Induk harus tingkat yang lebih luas.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 max-h-[60vh] overflow-y-auto px-0.5">
+              <div>
+                <label className="text-xs font-medium">Tingkat</label>
+                <select value={form.tipe}
+                  onChange={(e) => setForm((f) => ({ ...f, tipe: e.target.value, parent_id: "" }))}
+                  className="w-full h-9 mt-1 rounded-md border border-input bg-background px-2 text-sm"
+                  data-testid="spasial-form-tipe">
+                  {levels.filter((l) => l.aktif !== false).map((l) => (
+                    <option key={l.kode_baku} value={l.kode_baku}>{l.label || l.label_ui}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium">Induk</label>
+                <select value={form.parent_id}
+                  onChange={(e) => setForm((f) => ({ ...f, parent_id: e.target.value }))}
+                  className="w-full h-9 mt-1 rounded-md border border-input bg-background px-2 text-sm"
+                  data-testid="spasial-form-induk">
+                  <option value="">— Tanpa induk (tingkat teratas) —</option>
+                  {kandidatInduk(form.tipe).map((n) => (
+                    <option key={n.id} value={n.id}>
+                      {(labelLevel[n.tipe] || n.tipe)} · {n.nama}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium">Nama</label>
+                <Input value={form.nama} onChange={(e) => setForm((f) => ({ ...f, nama: e.target.value }))}
+                  className="mt-1" data-testid="spasial-form-nama" autoFocus />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs font-medium">Kode <span className="text-muted-foreground">(opsional)</span></label>
+                  <Input value={form.kode} onChange={(e) => setForm((f) => ({ ...f, kode: e.target.value }))}
+                    className="mt-1 font-mono" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium">Alias <span className="text-muted-foreground">(pisah koma)</span></label>
+                  <Input value={form.nama_alias} onChange={(e) => setForm((f) => ({ ...f, nama_alias: e.target.value }))}
+                    className="mt-1" placeholder="Gedung A, Tower A" />
+                </div>
+              </div>
+              {(form.tipe === "BLOK" || form.tipe === "SUBBLOK") && (
+                <div>
+                  <label className="text-xs font-medium">Kode Zona RDTR <span className="text-muted-foreground">(mis. R.2, K.3)</span></label>
+                  <Input value={form.zona_kode} onChange={(e) => setForm((f) => ({ ...f, zona_kode: e.target.value }))}
+                    className="mt-1 font-mono" />
+                </div>
+              )}
+              {form.tipe === "LANTAI" && (
+                <div className="rounded-md border border-border p-2 space-y-2">
+                  <p className="text-[11px] text-muted-foreground">
+                    Ordinal: 0 = lantai akses masuk utama, negatif = basement. "Lantai 1" di Indonesia
+                    lazim berarti lantai dasar — pisahkan dari label.
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="text-xs font-medium">Ordinal</label>
+                      <Input type="number" value={form.lantai_ordinal}
+                        onChange={(e) => setForm((f) => ({ ...f, lantai_ordinal: e.target.value }))}
+                        className="mt-1" placeholder="0" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium">Label</label>
+                      <Input value={form.lantai_label}
+                        onChange={(e) => setForm((f) => ({ ...f, lantai_label: e.target.value }))}
+                        className="mt-1" placeholder="Basement 1" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium">Pendek</label>
+                      <Input value={form.lantai_pendek}
+                        onChange={(e) => setForm((f) => ({ ...f, lantai_pendek: e.target.value }))}
+                        className="mt-1" placeholder="B1" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium">Kategori</label>
+                    <select value={form.lantai_kategori}
+                      onChange={(e) => setForm((f) => ({ ...f, lantai_kategori: e.target.value }))}
+                      className="w-full h-9 mt-1 rounded-md border border-input bg-background px-2 text-sm">
+                      {KATEGORI_LANTAI.map((k) => <option key={k} value={k}>{k}</option>)}
+                    </select>
+                  </div>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setForm(null)} disabled={saving}>Batal</Button>
+              <Button onClick={simpan} disabled={saving} data-testid="spasial-form-simpan">
+                {saving && <Loader2 className="w-4 h-4 mr-1 animate-spin" />} Simpan
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+    </div>
+  );
+}

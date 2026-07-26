@@ -30,6 +30,7 @@ const ModuleHomePage = lazy(() => import("./pages/ModuleHomePage"));
 const KodefikasiPage = lazy(() => import("./pages/KodefikasiPage"));
 const PejabatPage = lazy(() => import("./pages/PejabatPage"));
 const RuanganPage = lazy(() => import("./pages/RuanganPage"));
+const SpasialMasterPage = lazy(() => import("./pages/SpasialMasterPage"));
 const ReferensiAkunPage = lazy(() => import("./pages/ReferensiAkunPage"));
 const PegawaiPage = lazy(() => import("./pages/PegawaiPage"));
 const PersediaanPage = lazy(() => import("./pages/PersediaanPage"));
@@ -279,6 +280,7 @@ function App() {
   const [showKodefikasi, setShowKodefikasi] = useState(false);
   const [showPejabat, setShowPejabat] = useState(false);
   const [showRuangan, setShowRuangan] = useState(false);
+  const [showSpasial, setShowSpasial] = useState(false);
   // Referensi Akun BAS gabungan (segmen akun + pemetaan aset & persediaan)
   const [showReferensiAkun, setShowReferensiAkun] = useState(false);
   const [showPegawai, setShowPegawai] = useState(false);
@@ -404,6 +406,19 @@ function App() {
       <SatkerAktifBar user={user} />
         <Suspense fallback={<PageLoader />}>
           <PejabatPage user={user} onBack={() => setShowPejabat(false)} />
+        </Suspense>
+        <Toaster position="top-right" richColors />
+      </div>
+    );
+  }
+
+  // Hierarki Spasial — denah kawasan berlapis (Fase 2), dari Beranda Modul.
+  if (user && showSpasial) {
+    return (
+      <div className="App">
+      <SatkerAktifBar user={user} />
+        <Suspense fallback={<PageLoader />}>
+          <SpasialMasterPage user={user} onBack={() => setShowSpasial(false)} />
         </Suspense>
         <Toaster position="top-right" richColors />
       </div>
@@ -723,6 +738,7 @@ function App() {
             onOpenKodefikasi={() => setShowKodefikasi(true)}
             onOpenPejabat={() => setShowPejabat(true)}
             onOpenRuangan={() => setShowRuangan(true)}
+            onOpenSpasial={() => setShowSpasial(true)}
             onOpenReferensiAkun={() => setShowReferensiAkun(true)}
             onOpenPegawai={() => setShowPegawai(true)}
             onOpenPersediaan={() => setShowPersediaan(true)}
