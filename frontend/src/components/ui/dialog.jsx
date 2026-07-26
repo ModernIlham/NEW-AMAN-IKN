@@ -49,7 +49,13 @@ const DialogHeader = ({
   ...props
 }) => (
   <div
-    className={cn("flex flex-col space-y-1.5 text-center sm:text-left", className)}
+    className={cn(
+      // `pr-11` menyisakan ruang untuk tombol tutup yang di-absolute-kan di
+      // `right-4` selebar `w-7` (16px + 28px = 44px). Tanpa ini judul panjang
+      // — mis. "Riwayat BAST — <nama pegawai>" — merayap ke bawah tombol ×
+      // dan tabrakan, paling parah di layar HP saat teks ter-center.
+      "flex flex-col space-y-1.5 pr-11 text-center sm:text-left",
+      className)}
     {...props} />
 )
 DialogHeader.displayName = "DialogHeader"
@@ -59,7 +65,10 @@ const DialogFooter = ({
   ...props
 }) => (
   <div
-    className={cn("flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2", className)}
+    className={cn(
+      // gap-2 (bukan space-x saja) agar tetap berjarak ketika membungkus.
+      "flex flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end",
+      className)}
     {...props} />
 )
 DialogFooter.displayName = "DialogFooter"
@@ -67,7 +76,11 @@ DialogFooter.displayName = "DialogFooter"
 const DialogTitle = React.forwardRef(({ className, ...props }, ref) => (
   <DialogPrimitive.Title
     ref={ref}
-    className={cn("text-lg font-semibold leading-none tracking-tight", className)}
+    className={cn(
+      // `leading-none` membuat judul dua baris saling menempel; `break-words`
+      // mencegah nama/nomor panjang tanpa spasi menembus tepi dialog.
+      "text-lg font-semibold leading-tight tracking-tight break-words",
+      className)}
     {...props} />
 ))
 DialogTitle.displayName = DialogPrimitive.Title.displayName

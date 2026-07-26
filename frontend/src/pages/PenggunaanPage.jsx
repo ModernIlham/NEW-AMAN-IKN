@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
@@ -85,6 +86,11 @@ export default function PenggunaanPage({ user, onBack }) {
   const [riwayatBast, setRiwayatBast] = useState(null);
   const buktiRef = useRef(null);
   const [buktiUntuk, setBuktiUntuk] = useState(null); // id BAST tujuan unggah bukti
+  // Foto dokumentasi serah terima (lampiran BAST). Dua mode: PER BARANG
+  // (pilih asetnya) atau SATU foto untuk seluruh barang dalam BAST itu.
+  const fotoStRef = useRef(null);
+  const [fotoSt, setFotoSt] = useState(null);   // {bast, mode:'per'|'semua', asset_id}
+  const [fotoStSibuk, setFotoStSibuk] = useState(false);
   const [ttdHasil, setTtdHasil] = useState(null); // {judul, links:[{nama,link}]} hasil "Kirim ke TTD"
   const [kirimTtdId, setKirimTtdId] = useState(null); // id BAST yang sedang dikirim ke TTD
   // Referensi pejabat yang layak jadi "yang menyerahkan" BAST (peran
@@ -337,6 +343,48 @@ export default function PenggunaanPage({ user, onBack }) {
     } finally {
       setBuktiUntuk(null);
       if (buktiRef.current) buktiRef.current.value = "";
+    }
+  };
+
+  const unggahFotoSerahTerima = async (file) => {
+    if (!file || !fotoSt?.bast?.id) return;
+    const perBarang = fotoSt.mode === "per";
+    if (perBarang && !fotoSt.asset_id) {
+      toast.error("Pilih dulu barangnya");
+      return;
+    }
+    const fd = new FormData();
+    fd.append("file", file);
+    if (perBarang) fd.append("asset_id", fotoSt.asset_id);
+    else fd.append("berlaku_semua", "true");
+    setFotoStSibuk(true);
+    try {
+      await axios.post(`${API}/bast/${fotoSt.bast.id}/foto-serah-terima`, fd,
+        { headers: { "Content-Type": "multipart/form-data" } });
+      toast.success(perBarang
+        ? "Foto serah terima barang tersimpan"
+        : "Foto perwakilan tersimpan — berlaku untuk seluruh barang");
+      bukaRiwayatBast();
+      setFotoSt(null);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal mengunggah foto");
+    } finally {
+      setFotoStSibuk(false);
+      if (fotoStRef.current) fotoStRef.current.value = "";
+    }
+  };
+
+  const hapusFotoSerahTerima = async (assetId, berlakuSemua) => {
+    if (!fotoSt?.bast?.id) return;
+    try {
+      await axios.delete(`${API}/bast/${fotoSt.bast.id}/foto-serah-terima`,
+        { params: berlakuSemua ? { berlaku_semua: true }
+                               : { asset_id: assetId } });
+      toast.success("Foto serah terima dihapus");
+      bukaRiwayatBast();
+      setFotoSt(null);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal menghapus foto");
     }
   };
 
@@ -1174,7 +1222,7 @@ export default function PenggunaanPage({ user, onBack }) {
                   </ul>
                 )}
               </div>
-              <div className="flex justify-end gap-2">
+              <div className="flex flex-wrap justify-end gap-2">
                 <Button variant="outline" size="sm" onClick={() => setFormProses(null)}>Batal</Button>
                 <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white"
                   disabled={formProses.saving || !formProses.data.pihak_asal.trim() || !formProses.data.pihak_tujuan.trim() || formProses.aset.length === 0}
@@ -1275,7 +1323,7 @@ export default function PenggunaanPage({ user, onBack }) {
               )}
             </div>
           )}
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-wrap justify-end gap-2">
             <Button variant="outline" onClick={() => setFormPsp(null)}>Batal</Button>
             <Button onClick={simpanPsp} disabled={formPsp?.saving || (formPsp?.aset?.length || 0) === 0}
               className="bg-sky-600 hover:bg-sky-700 text-white" data-testid="penggunaan-psp-simpan">
@@ -1354,7 +1402,7 @@ export default function PenggunaanPage({ user, onBack }) {
                 data-testid="penggunaan-idle-nomor-bast" />
             </div>
           )}
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-wrap justify-end gap-2">
             <Button variant="outline" onClick={() => setTrxIdle(null)}>Batal</Button>
             <Button disabled={trxIdle?.saving}
               onClick={() => { setTrxIdle((t) => ({ ...t, saving: true })); kirimTransisiIdle(trxIdle.tiket, trxIdle.ke, trxIdle.fields); }}
@@ -1385,8 +1433,8 @@ export default function PenggunaanPage({ user, onBack }) {
             <ul className="space-y-2">
               {riwayatBast.items.map((b) => (
                 <li key={b.id} className="rounded-lg border border-border p-2.5 text-xs" data-testid={`riwayat-bast-${b.id}`}>
-                  <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <div className="min-w-0">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1 basis-full sm:basis-auto">
                       <p className="font-semibold text-foreground truncate">
                         {(riwayatBast.label_jenis || {})[b.jenis] || b.jenis}
                       </p>
@@ -1404,7 +1452,12 @@ export default function PenggunaanPage({ user, onBack }) {
                         </p>
                       ) : null}
                     </div>
-                    <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap">
+                    {/* `flex-shrink-0` DIHAPUS (bug tombol meluber kanvas):
+                        kontainer jadi menolak menyusut sehingga empat tombol
+                        mendorong "Unggah Bukti TTD" keluar tepi dialog alih-alih
+                        membungkus. `w-full` di layar sempit membuat tombol turun
+                        rapi ke barisnya sendiri. */}
+                    <div className="flex w-full flex-wrap items-center gap-1.5 sm:w-auto sm:justify-end">
                       <Button size="sm" variant="outline" className="h-7 text-[11px]"
                         onClick={() => window.open(authMediaUrl(`${API}/bast/${b.id}/pdf`), "_blank")}
                         data-testid={`bast-pratinjau-${b.id}`}>Pratinjau</Button>
@@ -1412,6 +1465,9 @@ export default function PenggunaanPage({ user, onBack }) {
                         onClick={() => downloadFileWithProgress(`${API}/bast/${b.id}/pdf`,
                           `BAST_${(b.pihak_kedua?.nama || "pengguna").replace(/\s/g, "_")}.pdf`,
                           { label: "BAST Serah Terima" }).catch(() => {})}>Unduh</Button>
+                      <Button size="sm" variant="outline" className="h-7 text-[11px]"
+                        onClick={() => setFotoSt({ bast: b, mode: "per", asset_id: "" })}
+                        data-testid={`bast-foto-st-${b.id}`}>Foto Serah Terima</Button>
                       {b.bukti?.file_id ? (
                         <Button size="sm" variant="outline" className="h-7 text-[11px]"
                           onClick={() => window.open(authMediaUrl(`${API}/bast/${b.id}/bukti`), "_blank")}>Lihat Bukti</Button>
@@ -1433,6 +1489,121 @@ export default function PenggunaanPage({ user, onBack }) {
               ))}
             </ul>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog FOTO SERAH TERIMA (lampiran BAST) ──
+          Dua mode sesuai kondisi lapangan: tiap barang punya fotonya sendiri,
+          atau satu foto perwakilan untuk seluruh barang. Foto per barang
+          dicetak berdampingan dengan foto sampul aset; foto perwakilan
+          dicetak sekali di akhir lampiran. */}
+      <input ref={fotoStRef} type="file" accept=".jpg,.jpeg,.png,.webp" className="hidden"
+        onChange={(e) => unggahFotoSerahTerima(e.target.files?.[0])}
+        data-testid="bast-foto-st-input" />
+      <Dialog open={!!fotoSt} onOpenChange={(o) => { if (!o) setFotoSt(null); }}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Foto Serah Terima Barang</DialogTitle>
+            <DialogDescription className="text-xs">
+              Foto ini masuk ke <b>Lampiran Foto Bukti Serah Terima Barang</b> pada
+              PDF BAST — berdampingan dengan foto sampul barangnya.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant={fotoSt?.mode === "per" ? "default" : "outline"}
+              className="h-8 text-xs flex-1 min-w-[9rem]"
+              onClick={() => setFotoSt((f) => ({ ...f, mode: "per" }))}
+              data-testid="foto-st-mode-per">Per barang</Button>
+            <Button size="sm" variant={fotoSt?.mode === "semua" ? "default" : "outline"}
+              className="h-8 text-xs flex-1 min-w-[9rem]"
+              onClick={() => setFotoSt((f) => ({ ...f, mode: "semua", asset_id: "" }))}
+              data-testid="foto-st-mode-semua">Satu untuk semua</Button>
+          </div>
+
+          {fotoSt?.mode === "per" ? (
+            <div className="space-y-1.5">
+              <p className="text-[11px] text-muted-foreground">
+                Pilih barang, lalu unggah fotonya. Barang tanpa foto tetap tampil
+                di lampiran memakai foto sampulnya saja — kolomnya tidak dibiarkan
+                kosong, aset berikutnya maju mengisinya.
+              </p>
+              <ul className="space-y-1 max-h-56 overflow-y-auto pr-1">
+                {/* Sumber identitas barang = SNAPSHOT milik BAST itu sendiri
+                    (`b.aset`), bukan `detail.rows` yang hanya berisi aset yang
+                    dipegang SAAT INI — untuk BAST pengembalian/mutasi, asetnya
+                    sudah tak dipegang lagi sehingga daftarnya akan menampilkan
+                    UUID mentah. `detail.rows` tetap jadi cadangan. */}
+                {(fotoSt?.bast?.asset_ids || []).map((aid) => {
+                  const a = (fotoSt?.bast?.aset || []).find((x) => x.id === aid)
+                    || (detail?.rows || []).find((x) => x.id === aid) || {};
+                  const sudah = (fotoSt?.bast?.foto_serah_terima || {})[aid];
+                  const dipilih = fotoSt?.asset_id === aid;
+                  return (
+                    <li key={aid}>
+                      <button type="button"
+                        onClick={() => setFotoSt((f) => ({ ...f, asset_id: aid }))}
+                        className={`w-full text-left rounded-lg border p-2 text-[11px] transition-colors ${dipilih ? "border-sky-500 bg-sky-500/10" : "border-border hover:bg-muted"}`}
+                        data-testid={`foto-st-aset-${aid}`}>
+                        <span className="block font-semibold text-foreground truncate">
+                          {a.asset_name || aid}
+                        </span>
+                        <span className="block font-mono text-[10px] text-muted-foreground truncate">
+                          {a.asset_code || "-"} · NUP {a.NUP ?? "-"}
+                        </span>
+                        {sudah ? (
+                          <span className="text-[10px] text-emerald-600 dark:text-emerald-400">✓ sudah ada foto</span>
+                        ) : null}
+                      </button>
+                      {sudah ? (
+                        <div className="flex flex-wrap gap-1 pl-2 pt-0.5">
+                          <button type="button" className="text-[10px] underline text-sky-600 dark:text-sky-400"
+                            onClick={() => window.open(authMediaUrl(
+                              `${API}/bast/${fotoSt.bast.id}/foto-serah-terima/${sudah}`), "_blank")}
+                            data-testid={`foto-st-lihat-${aid}`}>Lihat</button>
+                          <button type="button" className="text-[10px] underline text-red-600 dark:text-red-400"
+                            onClick={() => hapusFotoSerahTerima(aid, false)}
+                            data-testid={`foto-st-hapus-${aid}`}>Hapus</button>
+                        </div>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              <p className="text-[11px] text-muted-foreground">
+                Satu foto mewakili <b>seluruh barang</b> dalam BAST ini. Di lampiran,
+                foto ini dicetak sekali di bagian akhir — tidak diulang pada tiap barang.
+              </p>
+              {fotoSt?.bast?.foto_serah_terima_bersama ? (
+                <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border p-2">
+                  <span className="text-[11px] text-emerald-600 dark:text-emerald-400">
+                    ✓ sudah ada foto perwakilan
+                  </span>
+                  <button type="button" className="text-[10px] underline text-sky-600 dark:text-sky-400"
+                    onClick={() => window.open(authMediaUrl(
+                      `${API}/bast/${fotoSt.bast.id}/foto-serah-terima/${fotoSt.bast.foto_serah_terima_bersama}`), "_blank")}
+                    data-testid="foto-st-lihat-bersama">Lihat</button>
+                  <button type="button" className="text-[10px] underline text-red-600 dark:text-red-400"
+                    onClick={() => hapusFotoSerahTerima("", true)}
+                    data-testid="foto-st-hapus-bersama">Hapus</button>
+                </div>
+              ) : null}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" size="sm" className="h-8 text-xs"
+              onClick={() => setFotoSt(null)}>Batal</Button>
+            <Button size="sm" className="h-8 text-xs"
+              disabled={fotoStSibuk || (fotoSt?.mode === "per" && !fotoSt?.asset_id)}
+              onClick={() => fotoStRef.current?.click()}
+              data-testid="foto-st-pilih-berkas">
+              {fotoStSibuk ? "Mengunggah…" : "Pilih Foto…"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1703,7 +1874,7 @@ export default function PenggunaanPage({ user, onBack }) {
                   onChange={(e) => setFormBast((f) => ({ ...f, keterangan: e.target.value }))} />
                 <p className="text-[10px] text-muted-foreground mt-0.5">Tiap baris menjadi satu butir pada pasal "Ketentuan Tambahan".</p>
               </div>
-              <div className="flex justify-end gap-2 pt-1">
+              <div className="flex flex-wrap justify-end gap-2 pt-1">
                 <Button variant="outline" onClick={() => setFormBast(null)}>Batal</Button>
                 <Button onClick={kirimBast} disabled={formBast.saving} data-testid="bast-simpan">
                   {formBast.saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : null}Simpan &amp; Unduh PDF

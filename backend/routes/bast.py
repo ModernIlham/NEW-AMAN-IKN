@@ -33,7 +33,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import (APIRouter, Depends, File, Form, HTTPException, Request,
+                     UploadFile)
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -42,9 +43,9 @@ from auth_utils import (
 )
 from db import db
 from shared_utils import (
-    get_idempotent_response, kode_satker_user, kunci_idem, log_audit,
-    pastikan_akses_aset, pastikan_akses_dok_satker, reserve_idempotency_key,
-    scope_query_field_satker, store_idempotent_response,
+    cek_magic_gambar, get_idempotent_response, kode_satker_user, kunci_idem,
+    log_audit, pastikan_akses_aset, pastikan_akses_dok_satker,
+    reserve_idempotency_key, scope_query_field_satker, store_idempotent_response,
 )
 
 bast_router = APIRouter()
@@ -561,6 +562,138 @@ async def unggah_bukti_bast(bast_id: str, file: UploadFile = File(...),
     return {"ok": True, "nomor_agenda_disahkan": disahkan}
 
 
+@bast_router.post("/bast/{bast_id}/foto-serah-terima")
+async def unggah_foto_serah_terima(bast_id: str, file: UploadFile = File(...),
+                                   asset_id: str = Form(default=""),
+                                   berlaku_semua: bool = Form(default=False),
+                                   user: dict = Depends(require_writer)):
+    """Unggah FOTO dokumentasi serah terima barang untuk lampiran BAST.
+
+    Dua mode, sesuai kenyataan di lapangan:
+
+    - **Per barang** (`asset_id` diisi) — tiap aset punya fotonya sendiri;
+      di lampiran, foto ini berdampingan dengan foto sampul aset tersebut.
+    - **Satu untuk semua** (`berlaku_semua=true`) — satu foto perwakilan
+      mewakili seluruh barang dalam BAST ini; dicetak SEKALI di akhir
+      lampiran, bukan diulang pada tiap aset.
+
+    Berbeda dari `/bukti` yang menyimpan SCAN BAST BERTANDA TANGAN (dan
+    karenanya mengesahkan nomor agenda), endpoint ini murni dokumentasi foto
+    dan TIDAK menyentuh status persuratan.
+    """
+    b = await db.bast_serah_terima.find_one({"id": bast_id}, _PROJ)
+    if not b:
+        raise HTTPException(status_code=404, detail="BAST tidak ditemukan")
+    await pastikan_akses_dok_satker(user, b)
+
+    aid = str(asset_id or "").strip()
+    if not aid and not berlaku_semua:
+        raise HTTPException(
+            status_code=400,
+            detail="Pilih barangnya, atau tandai berlaku untuk semua barang")
+    if aid and aid not in (b.get("asset_ids") or []):
+        raise HTTPException(status_code=400,
+                            detail="Aset itu bukan objek BAST ini")
+
+    nama = str(file.filename or "").lower()
+    if not nama.endswith((".jpg", ".jpeg", ".png", ".webp")):
+        raise HTTPException(status_code=400,
+                            detail="Foto harus JPG/PNG/WebP")
+    data = await file.read()
+    if len(data) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Maksimal 10MB")
+    # `cek_magic_gambar(data, ext)` — WAJIB dua argumen (lihat shared_utils);
+    # memanggilnya dengan satu argumen membuat SETIAP unggahan 500.
+    import os as _os
+    if not cek_magic_gambar(data, _os.path.splitext(nama)[1]):
+        raise HTTPException(status_code=400,
+                            detail="Berkas bukan gambar yang sah")
+
+    from bson import ObjectId
+
+    from db import fs_bucket
+    tipe = "image/png" if nama.endswith(".png") else (
+        "image/webp" if nama.endswith(".webp") else "image/jpeg")
+    file_id = ObjectId()
+    grid_in = fs_bucket.open_upload_stream_with_id(
+        file_id, filename=file.filename,
+        metadata={"content_type": tipe, "size": len(data),
+                  "kind": "foto_serah_terima", "bast_id": bast_id,
+                  "asset_id": aid})
+    await grid_in.write(data)
+    await grid_in.close()
+
+    lama = (str(b.get("foto_serah_terima_bersama") or "") if berlaku_semua
+            else str((b.get("foto_serah_terima") or {}).get(aid) or ""))
+    kunci = ("foto_serah_terima_bersama" if berlaku_semua
+             else f"foto_serah_terima.{aid}")
+    res = await db.bast_serah_terima.update_one(
+        {"id": bast_id},
+        {"$set": {kunci: str(file_id),
+                  "updated_at": datetime.now(timezone.utc).isoformat()}})
+    if res.matched_count == 0:
+        from shared_utils import delete_document_from_gridfs
+        await delete_document_from_gridfs(str(file_id))
+        raise HTTPException(status_code=404, detail="BAST tidak ditemukan")
+    # Ganti foto → buang blob lama supaya GridFS tidak menumpuk yatim.
+    if lama and lama != str(file_id):
+        from shared_utils import delete_document_from_gridfs
+        await delete_document_from_gridfs(lama)
+
+    await log_audit("foto_serah_terima_bast", "",
+                    username=user.get("username", "system"),
+                    detail=(f"Foto serah terima BAST {b.get('nomor') or bast_id[:8]}"
+                            + (" (berlaku semua barang)" if berlaku_semua
+                               else f" — aset {aid[:8]}")))
+    return {"ok": True, "file_id": str(file_id),
+            "berlaku_semua": bool(berlaku_semua), "asset_id": aid}
+
+
+@bast_router.delete("/bast/{bast_id}/foto-serah-terima")
+async def hapus_foto_serah_terima(bast_id: str, asset_id: str = "",
+                                  berlaku_semua: bool = False,
+                                  user: dict = Depends(require_writer)):
+    """Hapus foto serah terima (per barang atau yang berlaku untuk semua)."""
+    b = await db.bast_serah_terima.find_one({"id": bast_id}, _PROJ)
+    if not b:
+        raise HTTPException(status_code=404, detail="BAST tidak ditemukan")
+    await pastikan_akses_dok_satker(user, b)
+    aid = str(asset_id or "").strip()
+    lama = (str(b.get("foto_serah_terima_bersama") or "") if berlaku_semua
+            else str((b.get("foto_serah_terima") or {}).get(aid) or ""))
+    if not lama:
+        raise HTTPException(status_code=404, detail="Foto tidak ditemukan")
+    kunci = ("foto_serah_terima_bersama" if berlaku_semua
+             else f"foto_serah_terima.{aid}")
+    await db.bast_serah_terima.update_one({"id": bast_id}, {"$unset": {kunci: ""}})
+    from shared_utils import delete_document_from_gridfs
+    await delete_document_from_gridfs(lama)
+    return {"ok": True}
+
+
+@bast_router.get("/bast/{bast_id}/foto-serah-terima/{file_id}")
+async def lihat_foto_serah_terima(bast_id: str, file_id: str,
+                                  user: dict = Depends(require_user_or_query_token)):
+    """Stream satu foto serah terima (pratinjau di UI)."""
+    b = await db.bast_serah_terima.find_one({"id": bast_id}, _PROJ)
+    if not b:
+        raise HTTPException(status_code=404, detail="BAST tidak ditemukan")
+    await pastikan_akses_dok_satker(user, b)
+    sah = set(str(v) for v in (b.get("foto_serah_terima") or {}).values() if v)
+    if str(b.get("foto_serah_terima_bersama") or ""):
+        sah.add(str(b["foto_serah_terima_bersama"]))
+    if str(file_id) not in sah:
+        # Cegah endpoint ini jadi pembaca GridFS serba-guna.
+        raise HTTPException(status_code=404, detail="Foto tidak ditemukan")
+    from shared_utils import get_document_from_gridfs
+    data = await get_document_from_gridfs(str(file_id))
+    if not data:
+        raise HTTPException(status_code=404, detail="Berkas tidak ditemukan")
+    return StreamingResponse(io.BytesIO(data), media_type="image/jpeg",
+                             headers={"Cache-Control": "private, max-age=3600",
+                                      "X-Content-Type-Options": "nosniff"})
+
+
 @bast_router.get("/bast/{bast_id}/bukti")
 async def unduh_bukti_bast(bast_id: str,
                            _user: dict = Depends(require_user_or_query_token)):
@@ -960,76 +1093,157 @@ async def bast_pdf(bast_id: str,
     # disematkan sehingga bukti serah terima tak pernah ikut tercetak.
     if b.get("sertakan_foto"):
         import base64
-        from reportlab.platypus import KeepTogether as _KT
-        foto_barang_el = []
+        from reportlab.platypus import Table as _Tbl, TableStyle as _TS
+        from lampiran_foto_utils import (
+            KOLOM as _LK, bagi_baris, ringkas_lampiran, susun_sel_lampiran,
+        )
+        from shared_utils import get_document_from_gridfs
+
         aset_master = await db.assets.find(
             {"id": {"$in": b.get("asset_ids") or []}},
             {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
              "photos": 1, "photo_gridfs_ids": 1, "thumbnail_index": 1},
         ).to_list(500)
-        for a in aset_master:
+        # Pertahankan urutan aset sesuai BAST (find() tidak menjamin urutan).
+        _urut = {aid: i for i, aid in enumerate(b.get("asset_ids") or [])}
+        aset_master.sort(key=lambda a: _urut.get(a.get("id"), 10**6))
+
+        async def _bytes_sampul(a):
+            """Foto sampul aset → bytes (inline base64 atau GridFS)."""
             photos = a.get("photos") or []
             idx = a.get("thumbnail_index", 0) or 0
-            url = photos[idx] if photos and idx < len(photos) else (photos[0] if photos else None)
+            url = photos[idx] if photos and idx < len(photos) else (
+                photos[0] if photos else None)
             if not url:
                 gids = a.get("photo_gridfs_ids") or []
                 if gids:
                     gidx = max(0, min(int(idx), len(gids) - 1))
                     url = await _gridfs_photo_data_uri(gids[gidx]) or None
             if not url or "base64," not in str(url):
-                continue
+                return None
             try:
-                img_bytes = base64.b64decode(str(url).split("base64,", 1)[1])
-                img = RLImage(io.BytesIO(img_bytes))
-                skala = min((doc.width * 0.6) / img.imageWidth, 80 * rl_mm / img.imageHeight)
-                img.drawWidth, img.drawHeight = img.imageWidth * skala, img.imageHeight * skala
-                img.hAlign = 'CENTER'
-                foto_barang_el.append(_KT([
-                    Paragraph(
-                        f"<b>{_esc(str(a.get('asset_code') or ''))} · NUP "
-                        f"{_esc(str(a.get('NUP') or ''))}</b> — "
-                        f"{_esc(str(a.get('asset_name') or ''))}", body),
-                    img, Spacer(1, 4 * rl_mm)]))
+                return base64.b64decode(str(url).split("base64,", 1)[1])
             except Exception:
-                continue
+                return None
 
-        # (B) Foto serah terima = scan bukti ttd BAST. Bila gambar → disematkan
-        # penuh; bila PDF → beri catatan bahwa buktinya berkas terpisah.
-        serah_el = []
-        bukti = b.get("bukti") or {}
-        bukti_ct = str(bukti.get("content_type") or "").lower()
-        if bukti.get("file_id") and bukti_ct.startswith("image/"):
-            from shared_utils import get_document_from_gridfs
-            try:
-                b_bytes = await get_document_from_gridfs(str(bukti["file_id"]))
-                if b_bytes:
-                    bimg = RLImage(io.BytesIO(b_bytes))
-                    bskala = min((doc.width * 0.72) / bimg.imageWidth,
-                                 150 * rl_mm / bimg.imageHeight)
-                    bimg.drawWidth = bimg.imageWidth * bskala
-                    bimg.drawHeight = bimg.imageHeight * bskala
-                    bimg.hAlign = 'CENTER'
-                    serah_el.append(_KT([
-                        Paragraph("<b>Dokumen serah terima bertanda tangan</b>", body),
-                        bimg, Spacer(1, 4 * rl_mm)]))
-            except Exception:
-                pass
-        elif bukti.get("file_id"):
-            serah_el.append(Paragraph(
-                "<i>Bukti serah terima tersimpan sebagai berkas terpisah "
-                f"({_esc(str(bukti.get('filename') or 'bukti.pdf'))}).</i>", body))
+        # Foto serah terima: (a) PER BARANG lewat `foto_serah_terima`
+        # {asset_id: file_id}, dan/atau (b) SATU perwakilan untuk semua barang.
+        # Bukti ttd lama yang berupa gambar tetap dihormati sebagai perwakilan
+        # supaya BAST terdahulu tidak kehilangan lampirannya.
+        foto_st = {k: v for k, v in (b.get("foto_serah_terima") or {}).items() if v}
+        _bukti = b.get("bukti") or {}
+        _bukti_gambar = bool(
+            _bukti.get("file_id")
+            and str(_bukti.get("content_type") or "").lower().startswith("image/"))
+        st_bersama_id = str(b.get("foto_serah_terima_bersama") or "").strip()
+        if not st_bersama_id and _bukti_gambar:
+            st_bersama_id = str(_bukti["file_id"])
 
-        if foto_barang_el or serah_el:
+        # SELURUH aset dioper; yang tak punya foto sampul cukup tak
+        # menghasilkan sel "sampul" — foto serah terimanya TETAP tercetak.
+        # (Dulu aset tanpa sampul disaring lebih dulu sehingga foto serah
+        # terima yang sudah diunggah untuknya lenyap tanpa pesan apa pun.)
+        sampul_bytes = {}
+        for a in aset_master:
+            raw = await _bytes_sampul(a)
+            if raw:
+                sampul_bytes[str(a.get("id"))] = raw
+
+        sel = susun_sel_lampiran(aset_master, foto_st,
+                                 foto_st_bersama=bool(st_bersama_id),
+                                 id_ber_sampul=set(sampul_bytes))
+        # Bukti ttd berupa PDF tak bisa disematkan sebagai gambar, tetapi
+        # keberadaannya tetap perlu dicatat — halaman lampiran harus terbit
+        # walau TIDAK ada satu pun foto (dulu blok ini dilewati seluruhnya).
+        _catatan_bukti_pdf = bool(_bukti.get("file_id")) and not _bukti_gambar
+        if sel or _catatan_bukti_pdf:
+            # Lebar/tinggi sel dihitung dari lebar dokumen supaya 2 kolom x 3
+            # baris benar-benar muat satu halaman tanpa meluber.
+            # Gaya keterangan sel: kecil & rata tengah, didefinisikan lokal
+            # supaya tidak bergantung pada kunci gaya global yang bisa berubah.
+            kecil = ParagraphStyle(
+                "LampiranSel", parent=body, fontSize=7.5, leading=9.5,
+                alignment=TA_CENTER, spaceAfter=2)
+            _gap = 4 * rl_mm
+            lebar_sel = (doc.width - _gap * (_LK - 1)) / _LK
+            # Lebar yang benar-benar tersedia = lebar kolom dikurangi padding
+            # kanan sel; menskala terhadap `lebar_sel` membuat foto landscape
+            # meluber ~2 mm ke kolom sebelah.
+            lebar_gambar = lebar_sel - _gap / 2
+            tinggi_foto = 62 * rl_mm
+
+            async def _bytes_serah(s):
+                if s["jenis"] == "serah_bersama":
+                    fid = st_bersama_id
+                else:
+                    fid = str(s.get("kunci") or "")
+                if not fid:
+                    return None
+                try:
+                    return await get_document_from_gridfs(fid)
+                except Exception:
+                    return None
+
+            def _kotak(judul, raw):
+                """Satu sel: keterangan + foto ter-skala di dalam batas sel."""
+                isi = [Paragraph(f"<b>{_esc(judul)}</b>", kecil)]
+                if raw:
+                    try:
+                        im = RLImage(io.BytesIO(raw))
+                        sk = min(lebar_gambar / im.imageWidth,
+                                 tinggi_foto / im.imageHeight)
+                        im.drawWidth = im.imageWidth * sk
+                        im.drawHeight = im.imageHeight * sk
+                        im.hAlign = "CENTER"
+                        isi.append(im)
+                    except Exception:
+                        isi.append(Paragraph("<i>Foto tidak terbaca.</i>", kecil))
+                else:
+                    isi.append(Paragraph("<i>Foto tidak tersedia.</i>", kecil))
+                return isi
+
+            data_sel = []
+            for s in sel:
+                if s is None:
+                    data_sel.append(None)   # penyeimbang agar pasangan utuh
+                    continue
+                raw = (sampul_bytes.get(s["asset_id"]) if s["jenis"] == "sampul"
+                       else await _bytes_serah(s))
+                data_sel.append(_kotak(s["judul"], raw))
+
             el.append(PageBreak())
             el.extend(_title_block("LAMPIRAN\nFOTO BUKTI SERAH TERIMA BARANG"))
-            if foto_barang_el:
-                el.append(Paragraph("<b>A. Foto Barang (sampul tiap aset)</b>", body))
+            r = ringkas_lampiran(sel)
+            el.append(Paragraph(
+                f"{r['aset']} barang · {r['foto_serah_terima']} foto serah terima"
+                + (" · 1 foto perwakilan untuk seluruh barang"
+                   if r["ada_foto_bersama"] else ""), kecil))
+            el.append(Spacer(1, 3 * rl_mm))
+
+            # Bukti ttd berupa PDF tidak bisa disematkan sebagai gambar;
+            # catatannya DIPULIHKAN di sini (sempat hilang saat lampiran
+            # dirombak) supaya pembaca tahu scan bertanda tangan itu ada
+            # sebagai berkas terpisah.
+            if _catatan_bukti_pdf:
+                el.append(Paragraph(
+                    "<i>Scan BAST bertanda tangan tersimpan sebagai berkas "
+                    f"terpisah ({_esc(str(_bukti.get('filename') or 'bukti.pdf'))}).</i>",
+                    kecil))
                 el.append(Spacer(1, 2 * rl_mm))
-                el.extend(foto_barang_el)
-            if serah_el:
-                el.append(Paragraph("<b>B. Foto Serah Terima</b>", body))
-                el.append(Spacer(1, 2 * rl_mm))
-                el.extend(serah_el)
+
+            if data_sel:
+                baris = bagi_baris(data_sel)
+                tabel = _Tbl(
+                    [[c if c is not None else "" for c in br] for br in baris],
+                    colWidths=[lebar_sel] * _LK, hAlign="CENTER")
+                tabel.setStyle(_TS([
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), _gap / 2),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                    ("TOPPADDING", (0, 0), (-1, -1), 2),
+                ]))
+                el.append(tabel)
 
     footer = _page_footer_factory(f"BAST — {judul_jenis[:60]}")
     await asyncio.to_thread(doc.build, el, onFirstPage=footer,

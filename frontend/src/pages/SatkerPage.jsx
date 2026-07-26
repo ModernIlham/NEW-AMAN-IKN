@@ -282,7 +282,7 @@ export function SatkerPanel({ user }) {
                   )}
                 </div>
               )}
-              <div className="flex justify-end gap-1.5">
+              <div className="flex flex-wrap justify-end gap-1.5">
                 <Button variant="outline" size="sm" className="h-9 text-xs"
                   disabled={backfill.jalan}
                   onClick={() => setBackfill(null)}>Tutup</Button>

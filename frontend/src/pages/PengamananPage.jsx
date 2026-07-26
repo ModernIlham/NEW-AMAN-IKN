@@ -858,7 +858,7 @@ export default function PengamananPage({ user, onBack }) {
                   onChange={(e) => setFormKasus((f) => ({ ...f, data: { ...f.data, pendamping: e.target.value } }))}
                   data-testid="kasus-pendamping" />
               </div>
-              <div className="flex justify-end gap-2">
+              <div className="flex flex-wrap justify-end gap-2">
                 <Button variant="outline" size="sm" onClick={() => setFormKasus(null)}>Batal</Button>
                 <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white"
                   disabled={formKasus.saving || !formKasus.aset || !formKasus.data.uraian.trim() || !formKasus.data.pihak_lawan.trim()}
@@ -973,7 +973,7 @@ export default function PengamananPage({ user, onBack }) {
                     data-testid="dokumen-ket" />
                 </div>
               </div>
-              <div className="flex justify-end gap-2">
+              <div className="flex flex-wrap justify-end gap-2">
                 <Button variant="outline" size="sm" onClick={() => setFormDok(null)}>Batal</Button>
                 <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white"
                   disabled={formDok.saving || !formDok.aset || !formDok.data.nomor.trim()}
@@ -1094,7 +1094,7 @@ export default function PengamananPage({ user, onBack }) {
                     data-testid="polis-ket" />
                 </div>
               </div>
-              <div className="flex justify-end gap-2">
+              <div className="flex flex-wrap justify-end gap-2">
                 <Button variant="outline" size="sm" onClick={() => setFormPolis(null)}>Batal</Button>
                 <Button size="sm" className="bg-sky-600 hover:bg-sky-700 text-white"
                   disabled={formPolis.saving || !formPolis.aset || !formPolis.data.nomor_polis.trim() || !formPolis.data.mulai || !formPolis.data.berakhir}
@@ -1180,7 +1180,7 @@ export default function PengamananPage({ user, onBack }) {
                       onChange={(e) => setFormCek((f) => ({ ...f, data: { ...f.data, keterangan: e.target.value } }))}
                       data-testid="checklist-keterangan" />
                   </div>
-                  <div className="flex justify-end gap-2">
+                  <div className="flex flex-wrap justify-end gap-2">
                     <Button variant="outline" size="sm" onClick={() => setFormCek(null)}>Batal</Button>
                     <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white"
                       disabled={formCek.saving}

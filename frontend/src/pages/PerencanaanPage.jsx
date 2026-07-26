@@ -632,7 +632,7 @@ export default function PerencanaanPage({ user, onBack }) {
                   onChange={(e) => setFormUsulan((f) => ({ ...f, data: { ...f.data, keterangan: e.target.value } }))}
                   data-testid="usulan-keterangan" />
               </div>
-              <div className="flex justify-end gap-2">
+              <div className="flex flex-wrap justify-end gap-2">
                 <Button variant="outline" size="sm" onClick={() => setFormUsulan(null)}>Batal</Button>
                 <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white"
                   disabled={formUsulan.saving || !formUsulan.data.unit_pengusul.trim() || !formUsulan.data.uraian.trim() || !formUsulan.data.satuan.trim()}
@@ -676,7 +676,7 @@ export default function PerencanaanPage({ user, onBack }) {
               <Input value={formSbsk.keterangan} placeholder="Keterangan/rujukan lampiran (opsional)"
                 onChange={(e) => setFormSbsk({ ...formSbsk, keterangan: e.target.value })}
                 className="h-9" />
-              <div className="flex justify-end gap-1.5 pt-1">
+              <div className="flex flex-wrap justify-end gap-1.5 pt-1">
                 <Button variant="outline" size="sm" className="h-9 text-xs" onClick={() => setFormSbsk(null)}>Batal</Button>
                 <Button size="sm" className="h-9 text-xs bg-blue-600 hover:bg-blue-700 text-white" onClick={simpanSbsk} data-testid="sbsk-simpan">Simpan</Button>
               </div>

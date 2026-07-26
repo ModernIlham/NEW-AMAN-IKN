@@ -791,7 +791,7 @@ export default function WasdalPage({ user, onBack }) {
               </div>
             </div>
           )}
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-wrap justify-end gap-2">
             <Button variant="outline" onClick={() => setFormInsi(null)}>Batal</Button>
             <Button onClick={simpanInsi} disabled={formInsi?.saving || !formInsi?.data?.uraian?.trim()}
               className="bg-violet-600 hover:bg-violet-700 text-white" data-testid="wasdal-insidentil-simpan">
@@ -825,7 +825,7 @@ export default function WasdalPage({ user, onBack }) {
               onChange={(e) => setBaInsi((s) => ({ ...s, hasil: e.target.value }))}
               data-testid="wasdal-insidentil-ba-hasil" />
           </div>
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-wrap justify-end gap-2">
             <Button variant="outline" onClick={() => setBaInsi(null)}>Batal</Button>
             <Button onClick={kirimBaInsi} disabled={baInsi?.saving || !baInsi?.nomor_ba?.trim() || !baInsi?.hasil?.trim()}
               className="bg-sky-600 hover:bg-sky-700 text-white" data-testid="wasdal-insidentil-ba-simpan">
@@ -898,7 +898,7 @@ export default function WasdalPage({ user, onBack }) {
             <Input id="insi-lapor-ket" placeholder="mis. via Modul Wasdal SIMAN v2" value={laporInsi?.keterangan || ""}
               onChange={(e) => setLaporInsi((s) => ({ ...s, keterangan: e.target.value }))} />
           </div>
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-wrap justify-end gap-2">
             <Button variant="outline" onClick={() => setLaporInsi(null)}>Batal</Button>
             <Button onClick={kirimLaporInsi} disabled={laporInsi?.saving}
               className="bg-emerald-600 hover:bg-emerald-700 text-white" data-testid="wasdal-insidentil-lapor-simpan">
@@ -955,7 +955,7 @@ export default function WasdalPage({ user, onBack }) {
               </div>
             </div>
           )}
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-wrap justify-end gap-2">
             <Button variant="outline" onClick={() => setFormPen(null)}>Batal</Button>
             <Button onClick={simpanPen} disabled={formPen?.saving || !formPen?.data?.uraian?.trim()}
               className="bg-amber-600 hover:bg-amber-700 text-white" data-testid="wasdal-penertiban-simpan">
@@ -983,7 +983,7 @@ export default function WasdalPage({ user, onBack }) {
             <Input id="pen-tgl-selesai" type="date" value={selesaiPen?.tanggal_selesai || ""}
               onChange={(e) => setSelesaiPen((s) => ({ ...s, tanggal_selesai: e.target.value }))} />
           </div>
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-wrap justify-end gap-2">
             <Button variant="outline" onClick={() => setSelesaiPen(null)}>Batal</Button>
             <Button onClick={kirimSelesaiPen} disabled={selesaiPen?.saving || !selesaiPen?.tindak_lanjut?.trim()}
               className="bg-emerald-600 hover:bg-emerald-700 text-white" data-testid="wasdal-penertiban-selesai-simpan">

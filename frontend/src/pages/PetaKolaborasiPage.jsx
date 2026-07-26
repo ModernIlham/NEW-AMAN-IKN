@@ -941,7 +941,7 @@ export default function PetaKolaborasiPage() {
             placeholder="Keterangan (opsional)"
             className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500"
           />
-          <div className="flex gap-2 justify-end">
+          <div className="flex flex-wrap gap-2 justify-end">
             <button onClick={() => { setFormTitik(null); buangPreview(); }} className="px-3 h-10 rounded-lg border border-border text-sm text-foreground/80">Batal</button>
             <button onClick={kirimTitik} disabled={kirim} className="px-4 h-10 rounded-lg bg-emerald-600 text-white text-sm font-semibold flex items-center gap-1.5 disabled:opacity-50" data-testid="peta-titik-simpan">
               {kirim ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}Tambah
@@ -989,7 +989,7 @@ export default function PetaKolaborasiPage() {
               className="w-full rounded-lg border border-border bg-background px-3 h-10 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500"
               data-testid="peta-nama-input"
             />
-            <div className="flex gap-2 justify-end">
+            <div className="flex flex-wrap gap-2 justify-end">
               <button onClick={() => { setNamaDialog(false); aksiSetelahNama.current = null; }} className="px-3 h-10 rounded-lg border border-border text-sm text-foreground/80">Batal</button>
               <button onClick={simpanNama} className="px-4 h-10 rounded-lg bg-blue-600 text-white text-sm font-semibold" data-testid="peta-nama-simpan">Lanjut</button>
             </div>

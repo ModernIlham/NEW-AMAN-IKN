@@ -84,7 +84,7 @@ export default function AssetTimelineDialog({ open, assetId, onClose }) {
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose?.(); }}>
       <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-hidden p-0"
         data-testid="asset-timeline-dialog">
-        <DialogHeader className="px-4 pt-4 pb-2 border-b border-border flex-shrink-0">
+        <DialogHeader className="px-4 pr-11 pt-4 pb-2 border-b border-border flex-shrink-0">
           <DialogTitle className="flex items-center gap-2 text-sm break-words">
             <History className="w-4 h-4 text-primary flex-shrink-0" />
             Timeline Aset — {aset.asset_name || "…"}

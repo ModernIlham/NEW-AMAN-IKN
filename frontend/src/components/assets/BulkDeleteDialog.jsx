@@ -48,7 +48,7 @@ const BulkDeleteDialog = memo(({ open, onClose, activityId, activityName, totalI
           <p className="text-sm text-muted-foreground">
             Tindakan ini <b>tidak dapat dibatalkan</b>. Semua data aset, foto, dan dokumen kelengkapan akan dihapus permanen.
           </p>
-          <div className="flex gap-3 justify-end">
+          <div className="flex flex-wrap gap-3 justify-end">
             <Button variant="outline" onClick={() => onClose(false)} disabled={deleting}>Batal</Button>
             <Button variant="destructive" onClick={handleDelete} disabled={deleting} className="bg-red-600 hover:bg-red-700">
               {deleting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Menghapus...</> : <><Trash2 className="w-4 h-4 mr-2" />Ya, Hapus Semua</>}
