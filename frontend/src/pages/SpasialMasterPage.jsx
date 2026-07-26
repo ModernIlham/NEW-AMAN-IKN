@@ -145,6 +145,11 @@ export default function SpasialMasterPage({ user, onBack }) {
           ? form.nama_alias.split(",").map((s) => s.trim()).filter(Boolean) : [],
         zona_kode: form.zona_kode.trim(),
       };
+      // Mode ubah membawa status EKSPLISIT (aktivasi draft = keputusan sadar);
+      // mode tambah membiarkan server men-default "aktif". properties sengaja
+      // TIDAK dikirim — server mempertahankan yang tersimpan (jejak impor,
+      // overlay denah) saat field ini absen.
+      if (form.mode === "ubah" && form.status) body.status = form.status;
       if (form.tipe === "LANTAI") {
         body.lantai = {
           ordinal: form.lantai_ordinal === "" ? null : parseInt(form.lantai_ordinal, 10),
@@ -204,6 +209,11 @@ export default function SpasialMasterPage({ user, onBack }) {
     mode: "ubah", id: n.id, tipe: n.tipe, nama: n.nama || "", kode: n.kode || "",
     parent_id: n.parent_id || "", nama_alias: (n.nama_alias || []).join(", "),
     zona_kode: n.zona_kode || "",
+    // Status EKSPLISIT — dulu form tak mengirim status dan server men-default
+    // "aktif", sehingga sekadar mengganti nama draft impor MENGAKTIFKANNYA
+    // diam-diam (temuan Fase 7). Kini server "None = tak diubah" + form ini
+    // jadi satu-satunya tempat aktivasi yang disengaja.
+    status: n.status || "aktif",
     lantai_ordinal: n.lantai?.ordinal ?? "", lantai_label: n.lantai?.label || "",
     lantai_pendek: n.lantai?.label_pendek || "", lantai_kategori: n.lantai?.kategori || "reguler",
   });
@@ -500,6 +510,22 @@ export default function SpasialMasterPage({ user, onBack }) {
                       {KATEGORI_LANTAI.map((k) => <option key={k} value={k}>{k}</option>)}
                     </select>
                   </div>
+                </div>
+              )}
+              {/* Status hanya di mode ubah — aktivasi DRAFT (hasil impor /
+                  gambar setengah jadi) harus keputusan sadar, bukan efek
+                  samping mengganti nama (temuan Fase 7). */}
+              {form.mode === "ubah" && (
+                <div>
+                  <label className="text-xs font-medium">Status</label>
+                  <select value={form.status}
+                    onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
+                    className="w-full h-9 mt-1 rounded-md border border-input bg-background px-2 text-sm"
+                    data-testid="spasial-form-status">
+                    <option value="aktif">Aktif — ikut deteksi & peta</option>
+                    <option value="draft">Draft — belum diperiksa, tak ikut deteksi</option>
+                    <option value="nonaktif">Nonaktif — disimpan tapi dimatikan</option>
+                  </select>
                 </div>
               )}
             </div>

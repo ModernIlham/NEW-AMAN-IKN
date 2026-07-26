@@ -23,7 +23,7 @@ from fastapi import (APIRouter, Depends, File, Form, HTTPException, Query,
                      Request, UploadFile)
 from pydantic import BaseModel
 
-from auth_utils import require_user, require_writer
+from auth_utils import require_user, require_user_or_query_token, require_writer
 from db import db
 from shared_utils import (kode_satker_user, limiter, log_audit,
                           pastikan_akses_dok_satker, scope_query_field_satker)
@@ -103,7 +103,10 @@ class NodeIn(BaseModel):
     subzona_kode: Optional[str] = ""
     fungsi_kawasan: Optional[str] = ""
     properties: Optional[dict] = None
-    status: Optional[str] = "aktif"
+    # None = "tak diubah" pada PUT (dan "aktif" pada POST) — default "aktif"
+    # di sini dulunya membuat status yang TAK dikirim klien tak terbedakan
+    # dari "aktif" eksplisit, sehingga edit apa pun mengaktifkan draft.
+    status: Optional[str] = None
     # Geometri GeoJSON (Fase 3). None = tak diubah pada PUT; {} = dikosongkan.
     geometry: Optional[dict] = None
     prioritas: Optional[int] = None    # kurasi manusia saat area bertumpuk
@@ -120,10 +123,15 @@ def _bersih_node(p: NodeIn) -> dict:
         "zona_kode": str(p.zona_kode or "").strip(),
         "subzona_kode": str(p.subzona_kode or "").strip(),
         "fungsi_kawasan": str(p.fungsi_kawasan or "").strip(),
-        "properties": dict(p.properties or {}),
+        # None = "tak diubah" (semantik yang sama dengan geometry) — pemanggil
+        # create/update yang memutuskan nilai akhirnya. Dulu None dipetakan ke
+        # {}/"aktif" di sini, dan itu dua bug senyap sekaligus: klien yang tak
+        # mengirim properties MENGHAPUS jejak impor + overlay denah, dan klien
+        # yang tak mengirim status MENGAKTIFKAN draft diam-diam (temuan Fase 7).
+        "properties": dict(p.properties) if p.properties is not None else None,
         # Whitelist status — klien TAK boleh menyetel "dihapus" (lihat STATUS_SAH).
-        "status": (lambda s: s if s in STATUS_SAH else "aktif")(
-            str(p.status or "aktif").strip().lower()),
+        "status": (lambda s: s if s in STATUS_SAH else None)(
+            str(p.status or "").strip().lower()),
     }
     # Data lantai hanya bermakna untuk tipe LANTAI.
     if tipe == "LANTAI" and p.lantai is not None:
@@ -269,6 +277,9 @@ async def detail_node(node_id: str, _user: dict = Depends(require_user)):
     if not node or node.get("status") == "dihapus":
         raise HTTPException(status_code=404, detail="Node tidak ditemukan")
     await pastikan_akses_dok_satker(_user, node)  # isolasi satker
+    # Gambar denah yang berlaku untuk editor node ini — miliknya sendiri atau
+    # warisan moyang terdekat (ruangan memakai denah lantainya). Fase 7.
+    node["overlay_efektif"] = await _overlay_efektif(node)
     return node
 
 
@@ -308,6 +319,11 @@ async def buat_node(payload: NodeIn, _user: dict = Depends(require_writer)):
     doc = _bersih_node(payload)
     if not doc["nama"]:
         raise HTTPException(status_code=400, detail="Nama wajib diisi")
+    # Node baru: None jatuh ke bawaan; denah_overlay TIDAK boleh disetel dari
+    # sini — ia dikelola endpoint overlay (bersama blob GridFS-nya).
+    doc["properties"] = doc["properties"] or {}
+    doc["properties"].pop("denah_overlay", None)
+    doc["status"] = doc["status"] or "aktif"
     kode_satker = kode_satker_user(_user)
     node_id = "sn_" + str(uuid.uuid4())
     deriv = await _susun_derivasi(node_id, doc["parent_id"], _user)
@@ -343,6 +359,26 @@ async def ubah_node(node_id: str, payload: NodeIn,
     doc = _bersih_node(payload)
     if not doc["nama"]:
         raise HTTPException(status_code=400, detail="Nama wajib diisi")
+    # None = tak diubah: klien yang tak mengirim properties/status (form pohon)
+    # tak boleh menghapus jejak impor + overlay atau MENGAKTIFKAN draft
+    # diam-diam (temuan Fase 7 — dua-duanya sempat terjadi lewat default lama).
+    #
+    # `properties` TIDAK di-$set utuh melainkan per-kunci (dotted), dan kunci
+    # `denah_overlay` TAK PERNAH disentuh PUT ini — menulis balik snapshot
+    # `lama` kalah balapan dengan unggah/hapus overlay yang mendarat di
+    # sela baca-tulis: node bisa menunjuk blob GridFS yang sudah dihapus
+    # (temuan tinjauan). Field itu eksklusif milik endpoint overlay.
+    props_klien = doc.pop("properties")
+    props_set, props_unset = {}, {}
+    if props_klien is not None:
+        props_klien.pop("denah_overlay", None)
+        for k, v in props_klien.items():
+            props_set[f"properties.{k}"] = v
+        for k in (lama.get("properties") or {}):
+            if k != "denah_overlay" and k not in props_klien:
+                props_unset[f"properties.{k}"] = ""
+    if doc["status"] is None:
+        doc["status"] = lama.get("status") or "aktif"
 
     parent_baru = doc["parent_id"]
     pindah = parent_baru != lama.get("parent_id")
@@ -364,8 +400,10 @@ async def ubah_node(node_id: str, payload: NodeIn,
     doc.update(deriv)
     doc.update({"ordinal_level": su.ordinal_level(doc["tipe"]),
                 "updated_at": now, "updated_by": _user.get("username", "system")})
-    await db.spasial_node.update_one(
-        {"id": node_id}, {"$set": doc, "$inc": {"versi": 1}})
+    update = {"$set": {**doc, **props_set}, "$inc": {"versi": 1}}
+    if props_unset:
+        update["$unset"] = props_unset
+    await db.spasial_node.update_one({"id": node_id}, update)
 
     # Keturunan menyimpan salinan ancestors/jalur/ancestors_nama node ini. Pindah
     # induk mengubah jalur & ancestors mereka; GANTI NAMA saja mengubah
@@ -418,7 +456,8 @@ async def _turunkan_ulang_keturunan(node_id: str, anc_baru: list,
 @spasial_router.delete("/spasial/node/{node_id}")
 async def hapus_node(node_id: str, _user: dict = Depends(require_writer)):
     node = await db.spasial_node.find_one(
-        {"id": node_id}, {"_id": 0, "id": 1, "nama": 1, "tipe": 1, "kode_satker": 1})
+        {"id": node_id}, {"_id": 0, "id": 1, "nama": 1, "tipe": 1,
+                          "kode_satker": 1, "properties.denah_overlay": 1})
     if not node:
         raise HTTPException(status_code=404, detail="Node tidak ditemukan")
     await pastikan_akses_dok_satker(_user, node)  # isolasi satker
@@ -434,6 +473,16 @@ async def hapus_node(node_id: str, _user: dict = Depends(require_writer)):
             status_code=409,
             detail="Node ini masih memiliki anak — hapus atau pindahkan isinya dulu.")
     await db.spasial_node.delete_one({"id": node_id})
+    # Node dihapus KERAS — blob overlay di GridFS ikut dibuang, atau ia yatim
+    # selamanya (tak ada penyapu untuk metadata.overlay_node). Fase 7.
+    ov = (node.get("properties") or {}).get("denah_overlay") or {}
+    if ov.get("file_id"):
+        try:
+            from bson import ObjectId
+            from shared_utils import fs_bucket
+            await fs_bucket.delete(ObjectId(ov["file_id"]))
+        except Exception:
+            pass
     await log_audit("hapus_spasial_node", "", node_id,
                     username=_user.get("username", "system"),
                     kode_satker=str(node.get("kode_satker") or "").strip(),
@@ -771,20 +820,21 @@ _IMPOR_TASKS = set()                      # pegang referensi task agar tak di-GC
 _IMPOR_SEM = asyncio.Semaphore(1)
 
 
-async def _baca_terbatas(file: "UploadFile") -> bytes:
+async def _baca_terbatas(file: "UploadFile", maks: int = None) -> bytes:
     """Baca UploadFile BERTAHAP dan berhenti begitu melewati plafon — sehingga
     file 200 MB tak lebih dulu ditahan penuh di memori sebelum ditolak (temuan
     tinjauan). `file.read()` polos memuat seluruh body dulu, baru mengecek."""
+    maks = maks or MAKS_UKURAN_IMPOR
     potong, total = [], 0
     while True:
         chunk = await file.read(1024 * 1024)
         if not chunk:
             break
         total += len(chunk)
-        if total > MAKS_UKURAN_IMPOR:
+        if total > maks:
             raise HTTPException(
                 status_code=400,
-                detail=f"File melebihi {MAKS_UKURAN_IMPOR // (1024*1024)} MB")
+                detail=f"File melebihi {maks // (1024*1024)} MB")
         potong.append(chunk)
     return b"".join(potong)
 
@@ -1134,3 +1184,221 @@ async def ekspor_template(request: Request, format: str = Query("shp"),
                                  'attachment; filename="template-denah-google-earth.kml"'})
     raise HTTPException(status_code=400,
                         detail=f"Format template '{format}' tak dikenal — pilih shp / kml")
+
+
+# ── Overlay gambar denah dalam-gedung (Fase 7) ──────────────────────────────
+#
+# Masalah yang diselesaikan: interior gedung TIDAK terlihat di citra satelit,
+# jadi menggambar ruangan akurat (Fase 4) butuh alas — gambar denah lantai
+# hasil ekspor CAD/PDF. Gambar disimpan di GridFS, penempatannya (3 sudut
+# lon/lat: tl/tr/bl = transformasi affine penuh) di properties.denah_overlay
+# node, dan DIWARISKAN: editor ruangan menampilkan overlay milik lantai/gedung
+# moyang terdekat (lihat `_overlay_efektif` yang disisipkan ke detail node).
+
+MAKS_GAMBAR_OVERLAY = 10 * 1024 * 1024
+
+
+async def _node_untuk_overlay(node_id: str, _user: dict) -> dict:
+    node = await db.spasial_node.find_one({"id": node_id}, _PROJ)
+    if not node or node.get("status") == "dihapus":
+        raise HTTPException(status_code=404, detail="Node tidak ditemukan")
+    await pastikan_akses_dok_satker(_user, node)
+    return node
+
+
+async def _sudut_bawaan_node(node: dict) -> dict:
+    """Penempatan awal: bbox node → bbox moyang bergeometri TERDEKAT → kotak
+    kecil di sekitar titik_wakil → kotak KIPP IKN. Selalu menghasilkan sudut
+    sah — operator tinggal menggeser, bukan mencari gambarnya dulu di (0,0)."""
+    bb = node.get("bbox")
+    if not bb:
+        for aid in reversed(node.get("ancestors") or []):
+            d = await db.spasial_node.find_one({"id": aid}, {"_id": 0, "bbox": 1})
+            if d and d.get("bbox"):
+                bb = d["bbox"]
+                break
+    if not bb and (node.get("titik_wakil") or {}).get("coordinates"):
+        lon, lat = node["titik_wakil"]["coordinates"][:2]
+        bb = [lon - 0.0008, lat - 0.0006, lon + 0.0008, lat + 0.0006]
+    sudut = su.sudut_overlay_bawaan(bb)
+    return sudut or su.sudut_overlay_bawaan([116.700, -1.410, 116.720, -1.395])
+
+
+async def _overlay_efektif(node: dict):
+    """Overlay node ini, atau milik moyang TERDEKAT yang punya — plus asal-nya
+    (`dari_node`) supaya klien tahu penempatan boleh diubah dari editor mana.
+
+    Moyang disaring ke SATKER node sendiri dan status hidup: id di `ancestors`
+    adalah data (bisa korup/warisan lama menunjuk lintas-satker), dan tanpa
+    saringan itu metadata overlay satker lain — koordinat denah interior,
+    nama file, username — bocor lewat pewarisan (temuan tinjauan)."""
+    ov = (node.get("properties") or {}).get("denah_overlay")
+    if ov:
+        return {**ov, "dari_node": node.get("id"), "dari_nama": node.get("nama")}
+    anc = [a for a in (node.get("ancestors") or []) if a]
+    if not anc:
+        return None
+    satker = str(node.get("kode_satker") or "").strip()
+    docs = await db.spasial_node.find(
+        {"id": {"$in": anc}, "properties.denah_overlay": {"$exists": True},
+         "kode_satker": {"$in": [satker, "", None]},
+         "status": {"$ne": "dihapus"}},
+        {"_id": 0, "id": 1, "nama": 1, "properties.denah_overlay": 1}).to_list(64)
+    peta = {d["id"]: d for d in docs}
+    for aid in reversed(anc):                     # ancestors akar→daun; terdekat = belakang
+        d = peta.get(aid)
+        if d:
+            return {**d["properties"]["denah_overlay"],
+                    "dari_node": aid, "dari_nama": d.get("nama")}
+    return None
+
+
+@spasial_router.post("/spasial/node/{node_id}/overlay")
+@limiter.limit("10/minute")
+async def unggah_overlay(request: Request, node_id: str,
+                         file: UploadFile = File(...),
+                         _user: dict = Depends(require_writer)):
+    """Unggah/ganti gambar denah node. Saat MENGGANTI, penempatan lama
+    dipertahankan (operator mengganti hasil ekspor CAD revisi — posisinya
+    sudah benar); sudut bawaan hanya untuk unggahan pertama."""
+    from bson import ObjectId
+    from shared_utils import fs_bucket
+
+    node = await _node_untuk_overlay(node_id, _user)
+    data = await _baca_terbatas(file, MAKS_GAMBAR_OVERLAY)
+    try:
+        fmt, lebar, tinggi = su.periksa_gambar_overlay(data)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    lama = (node.get("properties") or {}).get("denah_overlay") or {}
+    sudut = lama.get("sudut") if not su.validasi_sudut_overlay(lama.get("sudut")) \
+        else await _sudut_bawaan_node(node)
+    opasitas = su.opasitas_overlay_sah(lama.get("opasitas",
+                                                su.OPASITAS_OVERLAY_BAWAAN))
+
+    file_id = ObjectId()
+    grid_in = fs_bucket.open_upload_stream_with_id(
+        file_id, filename=_potong_teks(file.filename) or "denah.png",
+        metadata={"content_type": su.FORMAT_OVERLAY[fmt], "size": len(data),
+                  "overlay_node": node_id})
+    await grid_in.write(data)
+    await grid_in.close()
+
+    now = datetime.now(timezone.utc).isoformat()
+    overlay = {"file_id": str(file_id),
+               "nama_file": _potong_teks(file.filename) or "denah.png",
+               "format": fmt, "lebar": lebar, "tinggi": tinggi,
+               "sudut": su.rapikan_sudut_overlay(sudut), "opasitas": opasitas,
+               "updated_at": now, "updated_by": _user.get("username", "")}
+    await db.spasial_node.update_one(
+        {"id": node_id},
+        {"$set": {"properties.denah_overlay": overlay,
+                  "updated_at": now, "updated_by": _user.get("username", "")}})
+    # Blob lama dihapus SETELAH metadata menunjuk blob baru — gagal di sini
+    # hanya menyisakan file yatim (disapu bersihkan_artifact_yatim? tidak —
+    # metadata.overlay_node bukan job; yatim langka dan kecil, diterima).
+    if lama.get("file_id"):
+        try:
+            await fs_bucket.delete(ObjectId(lama["file_id"]))
+        except Exception:
+            pass
+    await log_audit("overlay_spasial_unggah", "", node_id,
+                    username=_user.get("username", "system"),
+                    kode_satker=kode_satker_user(_user),
+                    detail=f"{node.get('nama')}: {file.filename} "
+                           f"({lebar}x{tinggi} {fmt})")
+    return {**overlay, "dari_node": node_id, "dari_nama": node.get("nama")}
+
+
+class OverlayPosisiIn(BaseModel):
+    sudut: dict
+    opasitas: float = su.OPASITAS_OVERLAY_BAWAAN
+
+
+@spasial_router.put("/spasial/node/{node_id}/overlay")
+async def atur_overlay(node_id: str, payload: OverlayPosisiIn,
+                       _user: dict = Depends(require_writer)):
+    """Simpan penempatan (3 sudut) + opasitas — dipanggil saat operator selesai
+    menggeser marker sudut di editor."""
+    node = await _node_untuk_overlay(node_id, _user)
+    if not (node.get("properties") or {}).get("denah_overlay"):
+        raise HTTPException(status_code=404,
+                            detail="Node ini belum punya gambar denah — unggah dulu")
+    galat = su.validasi_sudut_overlay(payload.sudut)
+    if galat:
+        raise HTTPException(status_code=400, detail=galat)
+    now = datetime.now(timezone.utc).isoformat()
+    # Filter menyertakan file_id ($exists) — tanpa itu, DELETE overlay yang
+    # mendarat di sela cek-atas dan $set dotted ini MENCIPTAKAN ULANG
+    # denah_overlay parsial tanpa file_id: "overlay hantu" yang memblokir
+    # pewarisan dan tampil kosong diam-diam (temuan tinjauan).
+    r = await db.spasial_node.update_one(
+        {"id": node_id, "properties.denah_overlay.file_id": {"$exists": True}},
+        {"$set": {"properties.denah_overlay.sudut":
+                      su.rapikan_sudut_overlay(payload.sudut),
+                  "properties.denah_overlay.opasitas":
+                      su.opasitas_overlay_sah(payload.opasitas),
+                  "properties.denah_overlay.updated_at": now,
+                  "properties.denah_overlay.updated_by":
+                      _user.get("username", ""),
+                  "updated_at": now}})
+    if r.matched_count == 0:
+        raise HTTPException(status_code=404,
+                            detail="Gambar denah sudah dihapus — muat ulang editor")
+    return {"ok": True}
+
+
+@spasial_router.delete("/spasial/node/{node_id}/overlay")
+async def hapus_overlay(node_id: str, _user: dict = Depends(require_writer)):
+    from bson import ObjectId
+    from shared_utils import fs_bucket
+    node = await _node_untuk_overlay(node_id, _user)
+    ov = (node.get("properties") or {}).get("denah_overlay")
+    if not ov:
+        raise HTTPException(status_code=404, detail="Node ini tak punya gambar denah")
+    await db.spasial_node.update_one(
+        {"id": node_id}, {"$unset": {"properties.denah_overlay": ""},
+                          "$set": {"updated_at":
+                                   datetime.now(timezone.utc).isoformat()}})
+    if ov.get("file_id"):
+        try:
+            await fs_bucket.delete(ObjectId(ov["file_id"]))
+        except Exception:
+            pass
+    await log_audit("overlay_spasial_hapus", "", node_id,
+                    username=_user.get("username", "system"),
+                    kode_satker=kode_satker_user(_user),
+                    detail=str(node.get("nama") or node_id))
+    return {"ok": True}
+
+
+@spasial_router.get("/spasial/overlay/{file_id}")
+async def gambar_overlay(file_id: str, request: Request,
+                         _user: dict = Depends(require_user_or_query_token)):
+    """Stream gambar overlay untuk <img>/Leaflet (token boleh di query —
+    pola media yang sama dengan foto aset). Isolasi satker lewat NODE
+    pemiliknya, bukan sekadar ke-takterkaan ObjectId; koleksi spasial_node
+    kecil (ribuan) sehingga pencarian tanpa indeks di sini murah, dan hasilnya
+    di-cache lama oleh peramban karena file_id baru terbit di tiap unggahan."""
+    from shared_utils import get_document_from_gridfs
+    node = await db.spasial_node.find_one(
+        {"properties.denah_overlay.file_id": str(file_id)},
+        {"_id": 0, "kode_satker": 1, "properties.denah_overlay": 1})
+    if not node:
+        raise HTTPException(status_code=404, detail="Gambar tidak ditemukan")
+    await pastikan_akses_dok_satker(_user, node)
+    data = await get_document_from_gridfs(str(file_id))
+    if data is None:
+        raise HTTPException(status_code=404, detail="Gambar tidak ditemukan")
+    from fastapi.responses import Response
+    ov = node["properties"]["denah_overlay"]
+    etag = f'"ov-{file_id}"'
+    if request.headers.get("if-none-match", "").strip() == etag:
+        return Response(status_code=304, headers={"ETag": etag})
+    return Response(
+        content=data,
+        media_type=su.FORMAT_OVERLAY.get(ov.get("format"),
+                                         "application/octet-stream"),
+        headers={"Cache-Control": "private, max-age=604800", "ETag": etag,
+                 "X-Content-Type-Options": "nosniff"})
