@@ -1,9 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Plus, Pencil, Trash2, Loader2, Layers, ChevronRight, ChevronDown,
-  Search, MapPinned,
+  Search, MapPinned, LandPlot,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,10 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+
+// Editor denah dimuat LAZY — Leaflet + geoman berat, dan mayoritas kunjungan
+// halaman pohon tak pernah membuka editor.
+const DenahEditor = lazy(() => import("@/components/spasial/DenahEditor"));
 
 function getApiError(err, fallback) {
   return err?.response?.data?.detail || fallback;
@@ -39,6 +43,7 @@ export default function SpasialMasterPage({ user, onBack }) {
   const [buka, setBuka] = useState({}); // id → terbuka?
   const [form, setForm] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [editorNode, setEditorNode] = useState(null);  // node yang denahnya digambar
   const { confirm, confirmDialog } = useConfirm();
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
@@ -144,13 +149,20 @@ export default function SpasialMasterPage({ user, onBack }) {
           kategori: form.lantai_kategori,
         };
       }
+      // Respons membawa `peringatan[]` containment — WAJIB ditampilkan. Inilah
+      // satu-satunya UI yang bisa mengubah induk, dan backend sengaja menghitung
+      // containment bentuk TERSIMPAN terhadap induk BARU untuk kasus itu. Karena
+      // pelanggaran containment sengaja TIDAK memblokir simpan, membuang respons
+      // berarti operator tak pernah tahu gedungnya kini di luar batas induknya.
+      let r;
       if (form.mode === "tambah") {
-        await axios.post(`${API}/spasial/node`, body);
+        r = await axios.post(`${API}/spasial/node`, body);
         toast.success("Node ditambahkan");
       } else {
-        await axios.put(`${API}/spasial/node/${form.id}`, body);
+        r = await axios.put(`${API}/spasial/node/${form.id}`, body);
         toast.success("Node diperbarui");
       }
+      for (const p of r?.data?.peringatan || []) toast.warning(p, { duration: 8000 });
       setForm(null);
       await loadNodes();
     } catch (err) {
@@ -256,6 +268,12 @@ export default function SpasialMasterPage({ user, onBack }) {
                 data-testid={`spasial-ubah-${node.id}`}>
                 <Pencil className="w-4 h-4 text-sky-600" />
               </button>
+              <button type="button" onClick={() => setEditorNode(node)}
+                className="tap-expand p-0.5 rounded hover:bg-muted"
+                title={node.bbox ? "Ubah denah (gambar poligon)" : "Gambar denah (poligon)"}
+                data-testid={`spasial-gambar-${node.id}`}>
+                <LandPlot className="w-4 h-4 text-teal-600" />
+              </button>
               <button type="button" onClick={() => hapus(node)}
                 className="tap-expand p-0.5 rounded hover:bg-muted" title="Hapus"
                 data-testid={`spasial-hapus-${node.id}`}>
@@ -274,6 +292,15 @@ export default function SpasialMasterPage({ user, onBack }) {
   return (
     <div className="min-h-screen bg-background text-foreground">
       {confirmDialog}
+      {editorNode && (
+        <Suspense fallback={null}>
+          <DenahEditor
+            node={editorNode}
+            onClose={() => setEditorNode(null)}
+            onSaved={loadNodes}
+          />
+        </Suspense>
+      )}
       <div className="max-w-4xl mx-auto p-3 sm:p-4">
         <div className="flex items-center gap-2 mb-3">
           <Button variant="ghost" size="icon" onClick={onBack} aria-label="Kembali">
