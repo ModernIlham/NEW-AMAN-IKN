@@ -96,8 +96,19 @@ server menegakkan `require_user`), dialog lazy: format + cakupan + saklar
 draft + dua tombol template. Unduhan via blob axios (auth header interceptor,
 tanpa token di URL).
 
-Uji: +13 backend — termasuk uji orientasi cincin pada file mentah, escaping
+Uji: +16 backend — termasuk uji orientasi cincin pada file mentah, escaping
 XML, siklus data tak membuat rekursi abadi, unicode DBF, dan kedua template.
+
+**Temuan tinjauan (dua-duanya lolos CI — CI tak menjalankan serialisasi):**
+- Karakter kontrol C0 di nama node (\x00/\x01, bisa masuk lewat API) membuat
+  ElementTree menghasilkan XML yang TAK TERBACA — satu nama beracun merusak
+  seluruh ekspor KML. Kini disaring (`_bersih_teks`) di semua teks keluaran,
+  termasuk DBF (pembaca ber-semantik C-string terpotong di \x00).
+- `metrik.luas_m2` non-angka dari data lama membuat `float()` melempar di
+  tengah penulisan shapefile — satu node kotor menggagalkan seluruh ekspor.
+  Kini jatuh ke 0 dan ekspor jalan terus.
+- Pertahanan kecil: kode_satker disaring alfanumerik sebelum dikutip di header
+  `Content-Disposition`.
 
 ## [#627] Spasial Fase 5: impor denah dari Shapefile / KML / KMZ / GeoJSON — 2026-07-26
 

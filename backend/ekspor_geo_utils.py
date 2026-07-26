@@ -29,6 +29,17 @@ import xml.etree.ElementTree as ET
 
 KML_NS = "http://www.opengis.net/kml/2.2"
 
+# Karakter kontrol C0 (selain \t \n \r) TIDAK SAH di XML 1.0 — ElementTree
+# menserialisasinya tanpa protes sehingga satu nama node beracun membuat
+# seluruh file KML tak terbaca (temuan tinjauan: parse balik gagal
+# "not well-formed"). DBF juga menyimpannya mentah dan pembaca ber-semantik
+# C-string terpotong di \x00. Disaring di semua teks keluaran.
+_KONTROL_C0 = dict.fromkeys(i for i in range(32) if i not in (9, 10, 13))
+
+
+def _bersih_teks(nilai) -> str:
+    return str(nilai if nilai is not None else "").translate(_KONTROL_C0)
+
 # WKT ESRI untuk WGS84 geografis — dikenali baca_crs_prj impor sebagai 'wgs84'
 # dan oleh QGIS/ArcGIS sebagai EPSG:4326.
 PRJ_WGS84 = ('GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",'
@@ -98,7 +109,7 @@ def ke_geojson(nodes: list) -> bytes:
 def _el(induk, tag, teks=None):
     e = ET.SubElement(induk, f"{{{KML_NS}}}{tag}")
     if teks is not None:
-        e.text = str(teks)
+        e.text = _bersih_teks(teks)
     return e
 
 
@@ -233,9 +244,14 @@ def _tulis_shp(z: "zipfile.ZipFile", nama_dasar: str, nodes: list,
         for _, tipe_f, ukuran, _, kunci in _FIELD_SHP:
             nilai = props.get(kunci)
             if tipe_f == "N":
-                rekord.append(round(float(nilai or 0), 2))
+                # Data lama bisa membawa luas non-angka; satu node kotor tak
+                # boleh menggagalkan seluruh ekspor (temuan tinjauan).
+                try:
+                    rekord.append(round(float(nilai or 0), 2))
+                except (TypeError, ValueError):
+                    rekord.append(0)
             else:
-                rekord.append(str(nilai or "")[:ukuran])
+                rekord.append(_bersih_teks(nilai)[:ukuran])
         w.record(*rekord)
     w.close()
     z.writestr(f"{nama_dasar}.shp", shp.getvalue())

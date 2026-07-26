@@ -1099,7 +1099,10 @@ async def ekspor_denah(request: Request,
 
     media, ext = _FORMAT_EKSPOR[fmt]
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d")
-    nama_file = f"denah-{kode_satker_user(_user) or 'aman'}-{stamp}.{ext}"
+    # kode_satker dikutip di header Content-Disposition — saring ke aman-header
+    # (nilai wajarnya 6 digit, tapi header rusak bukan cara menemukan itu).
+    satker = re.sub(r"[^A-Za-z0-9_-]", "", kode_satker_user(_user)) or "aman"
+    nama_file = f"denah-{satker}-{stamp}.{ext}"
     await log_audit("ekspor_spasial", "", nama_file,
                     username=_user.get("username", "system"),
                     kode_satker=kode_satker_user(_user),

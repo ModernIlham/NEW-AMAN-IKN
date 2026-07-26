@@ -152,6 +152,32 @@ def test_shp_nama_unicode_utf8():
     assert not ig.deteksi_mojibake(hasil["fitur"][0]["atribut"]["NAMA"])
 
 
+# ── Regresi temuan tinjauan ─────────────────────────────────────────────────
+
+def test_karakter_kontrol_di_nama_tak_merusak_kml():
+    """ElementTree menserialisasi \\x00/\\x01 tanpa protes → XML tak terbaca
+    ("not well-formed") dan SELURUH ekspor rusak oleh satu nama beracun
+    (temuan tinjauan). Kini karakter kontrol C0 (selain \\t \\n \\r) disaring."""
+    n = dict(GEDUNG, nama="Gedung\x01Aneh\x00X")
+    fitur = ig.parse_kml(eg.ke_kml([n], {}))          # parse balik HARUS sukses
+    assert fitur[0]["nama"] == "GedungAnehX"
+
+
+def test_karakter_kontrol_di_nama_tak_masuk_dbf():
+    n = dict(GEDUNG, nama="A\x00B")
+    hasil = ig.parse_file("d.zip", eg.ke_shp_zip([n]))
+    assert hasil["fitur"][0]["atribut"]["NAMA"] == "AB"
+
+
+def test_luas_kotor_tak_menggagalkan_ekspor_shp():
+    """metrik.luas_m2 non-angka dari data lama sempat membuat float() melempar
+    di tengah penulisan → seluruh ekspor gagal karena satu node kotor (temuan
+    tinjauan). Kini jatuh ke 0 dan ekspor jalan terus."""
+    n = dict(GEDUNG, metrik={"luas_m2": "bukan-angka"})
+    hasil = ig.parse_file("d.zip", eg.ke_shp_zip([n]))
+    assert hasil["fitur"][0]["atribut"]["NAMA"] == "Menara A"
+
+
 # ── Template ────────────────────────────────────────────────────────────────
 
 def test_template_shp_terbaca_dan_ber_crs():
