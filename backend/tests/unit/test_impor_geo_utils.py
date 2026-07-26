@@ -326,3 +326,29 @@ def test_dedup_nama_field_dbf_kembar():
     assert ig._dedup_fields(["NAMA_BANGU", "NAMA_BANGU", "KODE"]) == \
         ["NAMA_BANGU", "NAMA_BANGU__2", "KODE"]
     assert ig._dedup_fields(["A", "B"]) == ["A", "B"]
+
+
+def test_potong_atribut_tak_menghilangkan_kolom_bertabrakan():
+    """`_potong_atribut` memotong nama kunci di 40 karakter. Nama properti
+    KML/GeoJSON panjangnya bebas, jadi dua field ber-awalan 40 karakter sama
+    akan saling menimpa dan satu nilai hilang DIAM-DIAM — kelas bug yang sama
+    dengan pemotongan 10 karakter DBF. Regresi temuan tinjauan."""
+    import ast
+    import pathlib
+    src = pathlib.Path(__file__).parents[2].joinpath("routes/spasial.py").read_text()
+    fn = [n for n in ast.parse(src).body
+          if isinstance(n, ast.FunctionDef) and n.name == "_potong_atribut"]
+    ns = {}
+    exec(compile(ast.Module(body=fn, type_ignores=[]), "<x>", "exec"), ns)
+    potong = ns["_potong_atribut"]
+
+    a = {"nama_bangunan_gedung_perkantoran_pusat_blok_A": "A",
+         "nama_bangunan_gedung_perkantoran_pusat_blok_B": "B"}
+    assert sorted(potong(a).values()) == ["A", "B"]
+
+    # Plafon tetap ditegakkan: 60 kolom x 500 karakter, walau semua nama kembar.
+    banyak = {("K" * 80) + str(i): "y" * (2 * 1024 * 1024) for i in range(200)}
+    hasil = potong(banyak)
+    assert len(hasil) == 60
+    assert max(len(v) for v in hasil.values()) == 500
+    assert sum(len(k) + len(v) for k, v in hasil.items()) < 60_000

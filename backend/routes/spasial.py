@@ -796,10 +796,21 @@ def _potong_teks(nilai, batas=120) -> str:
 def _potong_atribut(atribut: dict) -> dict:
     """Batasi jumlah kunci & panjang nilai atribut impor agar dokumen node tak
     membengkak melewati batas 16 MB Mongo (temuan tinjauan). 60 kolom × 500 char
-    jauh cukup untuk atribut denah wajar, dan node ditolak DB bila melampaui."""
+    jauh cukup untuk atribut denah wajar, dan node ditolak DB bila melampaui.
+
+    Kunci yang dipotong 40 karakter bisa BERTABRAKAN: nama properti KML/GeoJSON
+    panjangnya bebas, jadi dua field ber-awalan 40 karakter sama akan saling
+    menimpa dan satu nilai hilang diam-diam — persis kelas bug yang sama dengan
+    pemotongan 10 karakter DBF. Yang bertabrakan diberi akhiran urut."""
     hasil = {}
     for k, v in list(atribut.items())[:60]:
-        hasil[str(k)[:40]] = str(v)[:500]
+        kunci = str(k)[:40]
+        if kunci in hasil:
+            n = 2
+            while f"{kunci}__{n}" in hasil:
+                n += 1
+            kunci = f"{kunci}__{n}"
+        hasil[kunci] = str(v)[:500]
     return hasil
 
 

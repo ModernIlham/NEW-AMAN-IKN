@@ -122,7 +122,10 @@ Dependensi baru: `utm==0.8.1` (27 KB, sesuai rencana arsitektur Fase 0).
   plafon diperiksa; diganti pembacaan bertahap 1 MB yang berhenti di plafon.
 - **Atribut sumber raksasa** — `properties.impor.atribut` disalin apa adanya
   dari DBF/KML; dokumen node bisa melewati batas 16 MB Mongo dan ditolak saat
-  insert. Kini dipotong 60 kolom × 500 karakter.
+  insert. Kini dipotong 60 kolom × 500 karakter — dan nama kunci yang dipotong
+  40 karakter ikut di-dedup: nama properti KML/GeoJSON panjangnya bebas, jadi
+  dua field ber-awalan sama akan saling menimpa (terukur: 200 kolom runtuh jadi
+  1) — kelas bug yang sama dengan pemotongan 10 karakter DBF.
 - **Progres macet di 5%** untuk file < 25 fitur (kelipatan 25 tak pernah
   tercapai) — pembaruan kini juga terjadi pada fitur terakhir.
 - **Kosakata status job** — worker menulis `failed`, penyapu job macet
