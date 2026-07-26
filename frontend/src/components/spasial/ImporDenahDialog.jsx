@@ -99,6 +99,15 @@ export default function ImporDenahDialog({ levels, nodes, labelLevel, onClose, o
     }
   }, []);
 
+  // Berhenti MEMANTAU (bukan berhenti mengimpor). Job hidup di server, jadi
+  // panelnya ditandai berakhir secara lokal supaya spinner tak berputar terus
+  // menyiratkan pemantauan yang sudah mati.
+  const hentikanPantau = useCallback((pesan) => {
+    setBerjalan(false);
+    setJob((j) => ({ ...(j || {}), status: "error", done: true, message: pesan }));
+    toast.warning(pesan, { duration: 10000 });
+  }, []);
+
   const poll = useCallback(async (jobId, mulaiPada = 0, gagal = 0) => {
     if (!hidupRef.current) return;             // dialog sudah ditutup
     const t0 = mulaiPada || Date.now();
@@ -120,20 +129,18 @@ export default function ImporDenahDialog({ levels, nodes, labelLevel, onClose, o
     } catch {
       if (!hidupRef.current) return;
       if (++gagal >= MAKS_GAGAL_BERUNTUN) {
-        setBerjalan(false);
-        toast.error("Koneksi ke server terputus — impor mungkin masih berjalan; "
-                    + "tutup dialog dan muat ulang pohon nanti");
+        hentikanPantau("Koneksi ke server terputus — impor mungkin MASIH "
+                       + "berjalan; tutup dialog lalu muat ulang pohon nanti");
         return;
       }
     }
     if (Date.now() - t0 > BATAS_POLL_MS) {
-      setBerjalan(false);
-      toast.warning("Impor berjalan lebih lama dari perkiraan — pantau lewat "
-                    + "pohon spasial; node draft muncul bertahap");
+      hentikanPantau("Impor berjalan lebih lama dari perkiraan — pemantauan "
+                     + "dihentikan; node draft tetap muncul bertahap di pohon");
       return;
     }
     pollRef.current = setTimeout(() => poll(jobId, t0, gagal), JEDA_POLL_MS);
-  }, [onSaved]);
+  }, [onSaved, hentikanPantau]);
 
   const mulai = useCallback(async () => {
     if (!file || !tipe) return;
