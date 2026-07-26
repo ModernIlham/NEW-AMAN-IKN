@@ -234,7 +234,12 @@ export function useDenahSpasial(peta, { aktif = false } = {}) {
 
   // Dimatikan → bersihkan layer & cache supaya dihidupkan lagi tampil data segar.
   useEffect(() => {
-    if (aktif) return;
+    if (aktif) {
+      // Dihidupkan lagi = kesempatan baru; jangan warisi peredam toast dari
+      // kegagalan sesi sebelumnya, kalau tidak galat berikutnya tak terlihat.
+      galatRef.current = false;
+      return;
+    }
     try { batalRef.current?.abort(); } catch { /* sudah selesai */ }
     seqRef.current += 1;
     bersihkanSemua();

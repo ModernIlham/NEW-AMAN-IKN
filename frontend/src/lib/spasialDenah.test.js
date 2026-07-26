@@ -187,6 +187,50 @@ describe("urutFitur", () => {
   });
 });
 
+// ── Kontrak klien ↔ server ──────────────────────────────────────────────────
+// Fixture di bawah MENIRU bentuk respons backend persis (routes/spasial.py).
+// Nama field yang salah tak akan pernah menggagalkan eslint, build, maupun uji
+// lain — ia hanya membuat peta tampil kosong tanpa satu pun galat. Uji ini yang
+// mengikat kedua sisi: bila backend mengganti nama field, ini yang jatuh.
+describe("kontrak bentuk respons server", () => {
+  const responsGeojson = {
+    type: "FeatureCollection",
+    features: [{
+      type: "Feature",
+      geometry: { type: "Polygon", coordinates: [[[116.7, -1.4], [116.71, -1.4], [116.71, -1.39], [116.7, -1.4]]] },
+      properties: { id: "gd-1", tipe: "GEDUNG", nama: "Gedung A", kode: "GA", ordinal_level: 80, parent_id: "tp-1" },
+    }],
+    jumlah: 1, jumlah_total: 1, terpotong: false, batas: 3000,
+  };
+  const responsLantai = {
+    items: [{ id: "lt-1", nama: "Lantai 1", kode: "L1", lantai: { ordinal: 0, label: "Lantai 1" } }],
+    jumlah: 1,
+    gedung: { id: "gd-1", tipe: "GEDUNG", nama: "Gedung A", kode: "GA", ordinal_level: 80 },
+  };
+
+  test("fitur geojson terbaca oleh urutFitur/kelompokPerLevel/gayaFitur", () => {
+    const f = responsGeojson.features;
+    expect(urutFitur(f)).toHaveLength(1);
+    expect(kelompokPerLevel(f).get(80)).toHaveLength(1);
+    // ordinal_level HARUS terbaca; kalau tidak semua fitur jatuh ke lapis 0.
+    expect(f[0].properties.ordinal_level).toBe(ORDINAL_GEDUNG);
+    expect(gayaFitur(f[0].properties.ordinal_level).color).toBe(warnaLevel(80));
+  });
+  test("penanda `terpotong` & pencacah dibaca dengan nama yang benar", () => {
+    expect(typeof responsGeojson.terpotong).toBe("boolean");
+    expect(Number.isFinite(responsGeojson.jumlah_total)).toBe(true);
+    expect(perluMuatUlang(
+      { bbox: { barat: 0, selatan: 0, timur: 10, utara: 10 }, level_maks: 80, terpotong: responsGeojson.terpotong },
+      { barat: 2, selatan: 2, timur: 8, utara: 8 }, 80,
+    )).toBe(false);
+  });
+  test("daftar lantai server terurut benar oleh urutLantaiTampilan", () => {
+    const urut = urutLantaiTampilan(responsLantai.items);
+    expect(urut).toHaveLength(1);
+    expect(ordinalLantai(urut[0])).toBe(0);          // lantai.ordinal, bukan lantai_ordinal
+  });
+});
+
 describe("kelompokPerLevel", () => {
   test("mengelompokkan per ordinal", () => {
     const peta = kelompokPerLevel([fitur(80, "G1"), fitur(80, "G2"), fitur(20, "K")]);

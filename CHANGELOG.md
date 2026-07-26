@@ -182,7 +182,21 @@ Gelombang ketiga (dimensi siklus-hidup Leaflet & kontrak klien-server):
   dirancang jalan dari snapshot lokal); klik ulang gedung yang sama tak lagi
   membuang lantai terpilih; ruangan lantai terpilih digambar sebagai sorotan.
 
-Uji: +39 backend (849 total) & +41 frontend (117 total), seluruhnya logika murni
+Sisa temuan bernilai rendah ikut ditutup: `prioritas` berisi teks (dari impor data
+lama) melempar `ValueError` dan menjatuhkan seluruh endpoint deteksi jadi 500;
+peredam toast galat direset saat lapisan dihidupkan ulang; opsi gaya `redup` yang
+tak pernah dipanggil siapa pun dihapus. Ditambah uji **kontrak klien↔server** yang
+mengikat nama field respons ke pembacaan klien — salah nama field tak akan pernah
+menggagalkan eslint, build, maupun uji lain; ia hanya membuat peta tampil kosong
+tanpa satu pun pesan galat.
+
+Batasan yang didokumentasikan (bukan diperbaiki): `validasi_geometri` bersifat
+STRUKTURAL, bukan topologis. Poligon menyilang-diri (bow-tie), cincin dalam yang
+keluar dari cincin luar, dan cincin bertumpang-tindih belum diperiksa — itu butuh
+operasi geometri sungguhan (shapely) yang memang dijadwalkan masuk pada fase
+menggambar & impor. Sampai saat itu MongoDB tetap jaring terakhirnya.
+
+Uji: +40 backend (850 total) & +44 frontend (120 total), seluruhnya logika murni
 tanpa Mongo maupun Leaflet.
 
 ## [#623] Spasial Fase 2: registry level + pohon `spasial_node` (hierarki berlapis) — 2026-07-26

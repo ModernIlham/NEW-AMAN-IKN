@@ -466,6 +466,15 @@ def validasi_geometri(geom) -> Optional[str]:
     Menolak SEBELUM menyentuh MongoDB, karena geometri rusak membuat
     `create_index`/insert gagal dengan pesan yang tak terbaca operator — dan
     satu dokumen rusak dapat menggagalkan pembangunan indeks untuk semuanya.
+
+    CAKUPAN — ini validasi STRUKTURAL, bukan topologis. Yang diperiksa: bentuk
+    larik, tipe & rentang angka, cincin tertutup, dan cincin degenerat. Yang
+    BELUM diperiksa: poligon menyilang-diri (bow-tie), cincin dalam yang keluar
+    dari cincin luar, dan cincin yang saling tumpang tindih. Memeriksanya butuh
+    operasi geometri sungguhan (shapely) yang sengaja belum ditarik sebagai
+    dependensi di fase ini; ia sudah dijadwalkan untuk validasi topologi pada
+    fase menggambar & impor. Sampai saat itu MongoDB tetap menjadi penjaring
+    terakhir untuk kasus-kasus itu — hanya saja pesannya kurang ramah.
     """
     if not isinstance(geom, dict):
         return "geometri harus objek GeoJSON"
@@ -632,7 +641,14 @@ def peringkat_kandidat(kandidat: list) -> list:
     def kunci(n):
         luas = ((n.get("metrik") or {}).get("luas_m2"))
         luas = luas if isinstance(luas, (int, float)) and luas > 0 else float("inf")
-        return (-int(n.get("prioritas") or 0), luas, str(n.get("nama") or ""))
+        # `prioritas` bisa berisi apa saja setelah impor data lama; `int("tinggi")`
+        # melempar ValueError dan menjatuhkan SELURUH endpoint deteksi jadi HTTP
+        # 500. Nilai tak terbaca diperlakukan sebagai "tanpa prioritas".
+        try:
+            prio = int(n.get("prioritas") or 0)
+        except (TypeError, ValueError):
+            prio = 0
+        return (-prio, luas, str(n.get("nama") or ""))
     return sorted(kandidat or [], key=kunci)
 
 

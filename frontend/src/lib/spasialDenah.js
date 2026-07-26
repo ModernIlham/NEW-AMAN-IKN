@@ -38,17 +38,17 @@ export function warnaLevel(ordinal) {
 // dinding gedung bisa diukur.
 const ORDINAL_FISIK_MIN = 60;
 
-export function gayaFitur(ordinal, { terpilih = false, redup = false } = {}) {
+export function gayaFitur(ordinal, { terpilih = false } = {}) {
   const o = Number(ordinal) || 0;
   const warna = warnaLevel(o);
   const fisik = o >= ORDINAL_FISIK_MIN;
   // Poligon besar nyaris transparan supaya tak menutupi ubin peta & pin aset;
   // makin detail makin pekat karena luasnya makin kecil.
-  const isi = redup ? 0.03 : Math.min(0.2, 0.04 + (o / 100) * 0.12);
+  const isi = Math.min(0.2, 0.04 + (o / 100) * 0.12);
   return {
     color: warna,
     weight: terpilih ? 4 : fisik ? 2 : 1.4,
-    opacity: redup ? 0.45 : 1,
+    opacity: 1,
     fillColor: warna,
     fillOpacity: terpilih ? Math.min(0.34, isi + 0.16) : isi,
     dashArray: fisik ? null : "5,4",

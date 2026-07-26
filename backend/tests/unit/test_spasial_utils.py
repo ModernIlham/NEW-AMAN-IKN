@@ -615,6 +615,17 @@ def test_cincin_degenerat_ditolak(cincin):
     assert galat and "degenerat" in galat
 
 
+def test_prioritas_rusak_tak_menjatuhkan_pemeringkatan():
+    """`prioritas` bisa berisi apa saja setelah impor data lama; `int("tinggi")`
+    melempar ValueError dan menjatuhkan SELURUH endpoint deteksi jadi HTTP 500."""
+    urut = su.peringkat_kandidat([
+        {"id": "a", "nama": "A", "prioritas": "tinggi", "metrik": {"luas_m2": 5}},
+        {"id": "b", "nama": "B", "prioritas": 9, "metrik": {"luas_m2": 500}},
+        {"id": "c", "nama": "C", "prioritas": None, "metrik": {}},
+    ])
+    assert [n["id"] for n in urut] == ["b", "a", "c"]   # 'tinggi' -> tanpa prioritas
+
+
 def test_poligon_wajar_tetap_lolos():
     """Perketatan di atas tak boleh menolak denah yang sah — termasuk poligon
     berlubang (gedung dengan void/atrium di tengah)."""
