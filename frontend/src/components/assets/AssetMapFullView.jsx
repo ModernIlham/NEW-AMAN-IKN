@@ -8,7 +8,7 @@ import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import axios from "axios";
-import { MapPinned, RefreshCw, Loader2, Move, X, Filter, Download, Camera, Layers, ChevronDown, Boxes, MousePointerClick, CheckCheck, Eraser, PencilLine, SquareDashed, Share2, ImageIcon, Lock, LockOpen } from "lucide-react";
+import { MapPinned, RefreshCw, Loader2, Move, X, Filter, Download, Camera, Layers, ChevronDown, Boxes, MousePointerClick, CheckCheck, Eraser, PencilLine, SquareDashed, Share2, ImageIcon, Lock, LockOpen, LandPlot, Building2, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { compressImageFile } from "../../lib/imageCompression";
 import {
@@ -22,6 +22,8 @@ import { getSnapshotAssets } from "../../lib/offlineSnapshot";
 import { downloadFileWithProgress } from "../../lib/downloadFile";
 import { authMediaUrl } from "../../lib/mediaUrl";
 import { useBackGuard } from "../../hooks/useBackGuard";
+import { useDenahSpasial } from "../../hooks/useDenahSpasial";
+import { warnaLevel } from "../../lib/spasialDenah";
 import Lightbox from "./PhotoLightbox";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -270,6 +272,19 @@ const AssetMapFullView = memo(function AssetMapFullView({
   useEffect(() => {
     try { localStorage.setItem("aman_map_marker_style", markerStyle); } catch { /* storage diblokir */ }
   }, [markerStyle]);
+  // ── Lapisan DENAH (poligon kawasan → gedung → ruangan) ──
+  // Mati secara bawaan: satker yang belum memetakan denah tak perlu menanggung
+  // request tambahan tiap geser peta. Pilihan disimpan antar sesi.
+  const [denahOn, setDenahOn] = useState(() => {
+    try { return localStorage.getItem("aman_map_denah") === "1"; } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("aman_map_denah", denahOn ? "1" : "0"); } catch { /* storage diblokir */ }
+  }, [denahOn]);
+  // Instance Leaflet baru ada SETELAH efek init berjalan; state ini yang
+  // memberi tahu hook denah bahwa peta siap dipasangi layer.
+  const [petaSiap, setPetaSiap] = useState(false);
+  const denah = useDenahSpasial(petaSiap ? mapRef.current : null, { aktif: denahOn });
   // Kunci geser marker: default TERKUNCI agar sekadar melihat peta (di layar
   // sentuh maupun mouse) tak sengaja menggeser koordinat aset yang sudah ada.
   // Buka (satu ketuk) hanya saat ingin membetulkan posisi. SENGAJA tak disimpan
@@ -730,11 +745,13 @@ const AssetMapFullView = memo(function AssetMapFullView({
     });
 
     mapRef.current = map;
+    setPetaSiap(true); // lapisan denah baru boleh dipasang setelah peta ada
     setTimeout(() => map.invalidateSize(), 60);
     const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => map.invalidateSize()) : null;
     if (ro) ro.observe(containerRef.current);
     return () => {
       if (ro) ro.disconnect();
+      setPetaSiap(false);
       map.remove();
       mapRef.current = null;
       layerRef.current = null;
@@ -1341,6 +1358,24 @@ const AssetMapFullView = memo(function AssetMapFullView({
         )}
         <button
           type="button"
+          onClick={() => setDenahOn((v) => !v)}
+          aria-pressed={denahOn}
+          className={`h-9 w-9 sm:w-auto sm:px-2.5 rounded-lg border text-xs font-medium flex items-center justify-center sm:justify-start gap-1 flex-shrink-0 transition-colors ${
+            denahOn
+              ? "border-teal-500 bg-teal-500/10 text-teal-600 dark:text-teal-400"
+              : "border-border text-foreground/80 hover:bg-muted"
+          }`}
+          aria-label={denahOn ? "Sembunyikan denah kawasan" : "Tampilkan denah kawasan"}
+          title={denahOn
+            ? "Denah berlapis tampil — poligon kawasan, zona, gedung mengikuti zoom"
+            : "Tampilkan denah kawasan berlapis (kawasan → gedung → ruangan)"}
+          data-testid="asset-map-denah-toggle"
+        >
+          <LandPlot className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">Denah: {denahOn ? "Aktif" : "Mati"}</span>
+        </button>
+        <button
+          type="button"
           onClick={toggleCluster}
           aria-pressed={clusterOn}
           className={`h-9 px-2.5 rounded-lg border text-xs font-medium hidden sm:flex items-center justify-center gap-1 flex-shrink-0 transition-colors ${
@@ -1357,7 +1392,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
         </button>
         <button
           type="button"
-          onClick={() => { didFitRef.current = false; load(); }}
+          onClick={() => { didFitRef.current = false; load(); if (denahOn) denah.muatUlang(); }}
           disabled={loading}
           className="h-9 px-2.5 rounded-lg border border-border text-xs font-medium text-foreground/80 hidden sm:flex items-center justify-center gap-1 hover:bg-muted disabled:opacity-50 flex-shrink-0"
           aria-label="Muat ulang peta"
@@ -1422,6 +1457,105 @@ const AssetMapFullView = memo(function AssetMapFullView({
                 ? "Tidak ada aset berkoordinat yang cocok dengan filter aktif"
                 : "Belum ada aset dengan titik koordinat di kegiatan ini"}
             </span>
+          </div>
+        )}
+
+        {/* ── Panel lapis denah (kanan bawah; kiri bawah dipakai bar skala) ──
+            Tiap tingkat bisa disembunyikan sendiri-sendiri — di kawasan padat,
+            batas blok & persil sering justru mengaburkan gedung yang dicari. */}
+        {denahOn && (
+          <div
+            className="absolute right-2 bottom-10 z-[500] w-[9.5rem] sm:w-44 max-w-[55%] rounded-lg border border-border bg-background/95 backdrop-blur shadow-lg overflow-hidden"
+            data-testid="asset-map-denah-panel"
+          >
+            <div className="px-2 py-1.5 border-b border-border flex items-center gap-1.5">
+              <LandPlot className="w-3.5 h-3.5 text-teal-600 flex-shrink-0" />
+              <span className="text-[11px] font-bold truncate">Lapis Denah</span>
+              {denah.memuat && <Loader2 className="w-3 h-3 animate-spin text-teal-600 ml-auto flex-shrink-0" />}
+            </div>
+            <div className="max-h-40 overflow-y-auto py-0.5">
+              {denah.lapis.length === 0 && !denah.memuat && (
+                <p className="px-2 py-2 text-[10px] text-muted-foreground leading-snug">
+                  Belum ada denah di area ini. Gambar dari menu Referensi → Denah Kawasan.
+                </p>
+              )}
+              {denah.lapis.map((l) => (
+                <button
+                  key={l.ordinal}
+                  type="button"
+                  onClick={() => denah.toggleLapis(l.ordinal)}
+                  aria-pressed={l.tampil}
+                  className={`w-full px-2 py-1 flex items-center gap-1.5 text-left hover:bg-muted transition-colors ${l.tampil ? "" : "opacity-50"}`}
+                  data-testid={`denah-lapis-${l.ordinal}`}
+                >
+                  <span className="w-2.5 h-2.5 rounded-sm border flex-shrink-0"
+                    style={{ background: `${warnaLevel(l.ordinal)}55`, borderColor: warnaLevel(l.ordinal) }} />
+                  <span className="text-[10px] font-medium truncate flex-1">{l.label}</span>
+                  <span className="text-[9px] text-muted-foreground tabular-nums flex-shrink-0">{l.jumlah}</span>
+                  {l.tampil
+                    ? <Eye className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                    : <EyeOff className="w-3 h-3 text-muted-foreground flex-shrink-0" />}
+                </button>
+              ))}
+            </div>
+            {denah.info.terpotong && (
+              <p className="px-2 py-1 border-t border-border text-[9px] text-amber-600 dark:text-amber-400 leading-snug">
+                {denah.info.jumlah_total.toLocaleString("id-ID")} objek di area ini — hanya titik pusat yang digambar. Perbesar peta untuk melihat bentuknya.
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* ── Pemilih lantai (muncul saat sebuah gedung diketuk) ──
+            Urutan MENURUN seperti panel lift: rooftop di atas, basement di bawah. */}
+        {denahOn && denah.gedung && (
+          <div
+            className="absolute left-2 top-2 z-[500] w-32 sm:w-36 rounded-lg border border-border bg-background/95 backdrop-blur shadow-lg overflow-hidden"
+            data-testid="asset-map-lantai-switcher"
+          >
+            <div className="px-2 py-1.5 border-b border-border flex items-center gap-1">
+              <Building2 className="w-3.5 h-3.5 text-red-600 flex-shrink-0" />
+              <span className="text-[10px] font-bold truncate flex-1" title={denah.gedung.nama}>{denah.gedung.nama}</span>
+              <button type="button" onClick={denah.tutupGedung} aria-label="Tutup pemilih lantai"
+                className="w-5 h-5 rounded flex items-center justify-center hover:bg-muted flex-shrink-0"
+                data-testid="denah-tutup-gedung">
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+            <div className="max-h-52 overflow-y-auto py-0.5">
+              {denah.memuatLantai && (
+                <div className="px-2 py-2 flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                  <Loader2 className="w-3 h-3 animate-spin" />Memuat lantai…
+                </div>
+              )}
+              {!denah.memuatLantai && denah.lantai.length === 0 && (
+                <p className="px-2 py-2 text-[10px] text-muted-foreground leading-snug">Gedung ini belum punya denah lantai.</p>
+              )}
+              {denah.lantai.map((lt) => {
+                const aktif = denah.lantaiId === lt.id;
+                return (
+                  <button
+                    key={lt.id}
+                    type="button"
+                    onClick={() => denah.setLantaiId(aktif ? "" : lt.id)}
+                    aria-pressed={aktif}
+                    className={`w-full px-2 py-1.5 flex items-center gap-1.5 text-left transition-colors ${
+                      aktif ? "bg-amber-500/15 text-amber-700 dark:text-amber-300" : "hover:bg-muted"}`}
+                    data-testid={`denah-lantai-${lt.id}`}
+                  >
+                    <span className="w-6 text-[10px] font-mono font-bold text-center flex-shrink-0 tabular-nums">
+                      {Number.isFinite(Number(lt?.lantai?.ordinal)) ? Number(lt.lantai.ordinal) : "–"}
+                    </span>
+                    <span className="text-[10px] font-medium truncate flex-1">{lt.nama}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {denah.lantaiId && (
+              <p className="px-2 py-1 border-t border-border text-[9px] text-muted-foreground leading-snug">
+                Ruangan lantai ini ditampilkan di peta.
+              </p>
+            )}
           </div>
         )}
       </div>

@@ -762,7 +762,7 @@ Semua di bawah `api_router` (`prefix="/api"`, `server.py:39`). Router baru: `rou
 
 | Method | Path | Keterangan |
 |---|---|---|
-| GET | `/spasial/geojson?bbox=&level_maks=&z=` | FeatureCollection per-viewport + LOD. `z<16` → `geometry_ringkas`. > 3.000 fitur → `{terpotong:true, jumlah_total:N}` + hanya bbox/titik_wakil |
+| GET | `/spasial/geojson?bbox=&level_maks=&induk=` | FeatureCollection per-viewport + LOD. > 3.000 fitur → `{terpotong:true, jumlah_total:N}` + hanya bbox/titik_wakil. **Terpasang Fase 3** — dengan dua penyimpangan dari rencana ini: (a) `z`/`geometry_ringkas` TIDAK dipakai; LOD dikerjakan lewat `level_maks` per zoom (tingkat detail dibuang seluruhnya, bukan disederhanakan bentuknya) karena penyederhanaan geometri butuh shapely di jalur panas — dievaluasi ulang bila poligon nyata ternyata berat; (b) ditambah `induk=<node_id>` untuk memuat anak langsung satu node — dibutuhkan agar ruangan SATU lantai bisa dirender tanpa menumpuk seluruh lantai gedung (semua lantai berbagi jejak 2D yang sama) |
 | GET | `/spasial/lantai/{gedung_id}` | Daftar lantai terurut `ordinal` (untuk level switcher) |
 | GET | `/spasial/denah/{lantai_id}/gambar` | Stream gambar denah dari GridFS · `require_user_or_query_token` + `pastikan_akses_dok_satker` |
 | PUT | `/spasial/denah/{lantai_id}/georef` | Simpan `sudut_bumi` (4 sudut) + opasitas + kunci |

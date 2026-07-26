@@ -101,6 +101,9 @@ class NodeIn(BaseModel):
     fungsi_kawasan: Optional[str] = ""
     properties: Optional[dict] = None
     status: Optional[str] = "aktif"
+    # Geometri GeoJSON (Fase 3). None = tak diubah pada PUT; {} = dikosongkan.
+    geometry: Optional[dict] = None
+    prioritas: Optional[int] = None    # kurasi manusia saat area bertumpuk
 
 
 def _bersih_node(p: NodeIn) -> dict:
@@ -133,7 +136,39 @@ def _bersih_node(p: NodeIn) -> dict:
         doc["lantai"] = None
         # Buang turunan basi bila tipe diubah dari LANTAI ke tipe lain.
         doc["lantai_ordinal"] = None
+    if p.prioritas is not None:
+        doc["prioritas"] = int(p.prioritas)
     return doc
+
+
+def _terapkan_geometri(doc: dict, geometry) -> None:
+    """Sisipkan geometri + field TURUNANNYA (bbox, titik wakil, luas) ke `doc`.
+
+    `geometry` None berarti "tidak diubah" (PUT parsial); dict kosong berarti
+    "kosongkan". Geometri divalidasi DULU — geometri rusak yang lolos ke DB
+    membuat pembangunan indeks 2dsphere gagal untuk SELURUH koleksi, bukan
+    hanya untuk dokumen itu.
+
+    Turunan disimpan karena kueri deteksi sengaja TIDAK memproyeksikan
+    `geometry` (demi SLA), sehingga pemeringkatan "area terkecil menang" harus
+    memakai `metrik.luas_m2` yang tersimpan.
+    """
+    if geometry is None:
+        return
+    if not geometry:                      # {} / falsy → kosongkan
+        doc["geometry"] = None
+        doc["bbox"] = None
+        doc["titik_wakil"] = None
+        doc["metrik"] = None
+        return
+    galat = su.validasi_geometri(geometry)
+    if galat:
+        raise HTTPException(status_code=400, detail=f"Geometri tidak valid: {galat}")
+    doc["geometry"] = geometry
+    doc["bbox"] = su.hitung_bbox(geometry)
+    doc["titik_wakil"] = su.titik_wakil(geometry)
+    doc["metrik"] = {"luas_m2": round(su.luas_kasar_m2(geometry), 2),
+                     "dihitung_pada": datetime.now(timezone.utc).isoformat()}
 
 
 # Status yang boleh diset klien. "dihapus" TIDAK termasuk — hapus adalah operasi
@@ -236,6 +271,7 @@ async def buat_node(payload: NodeIn, _user: dict = Depends(require_writer)):
     deriv = await _susun_derivasi(node_id, doc["parent_id"], _user)
     _validasi_level(doc["tipe"], deriv.pop("_tipe_induk", None))
     await _cek_kode_unik(doc["kode"], doc["tipe"], _user)
+    _terapkan_geometri(doc, payload.geometry)
     now = datetime.now(timezone.utc).isoformat()
     doc.update(deriv)
     doc.update({
@@ -278,6 +314,7 @@ async def ubah_node(node_id: str, payload: NodeIn,
     _validasi_level(doc["tipe"], deriv.pop("_tipe_induk", None))
     await _cek_kode_unik(doc["kode"], doc["tipe"], _user, kecuali_id=node_id)
 
+    _terapkan_geometri(doc, payload.geometry)
     now = datetime.now(timezone.utc).isoformat()
     doc.update(deriv)
     doc.update({"ordinal_level": su.ordinal_level(doc["tipe"]),
@@ -352,3 +389,222 @@ async def hapus_node(node_id: str, _user: dict = Depends(require_writer)):
                     kode_satker=str(node.get("kode_satker") or "").strip(),
                     detail=f"Hapus {node.get('tipe')} — {node.get('nama')}")
     return {"ok": True, "id": node_id}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# DETEKSI LOKASI OTOMATIS (Fase 3) — inti permintaan pemilik
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Ordinal GEDUNG. Deteksi dari titik berhenti di sini: lantai & ruangan tak bisa
+# dipilih dari koordinat 2D (semua lantai bertumpuk di footprint yang sama),
+# jadi pengguna memilih lantai lalu ruangan dideteksi di dalamnya.
+ORDINAL_GEDUNG = 80
+
+# Radius pencarian "terdekat" saat titik jatuh di luar SEMUA poligon. Aset di
+# lapangan terbuka (tiang, gardu, taman) itu nyata — jangan diblokir, cukup
+# tawarkan yang terdekat.
+RADIUS_TERDEKAT_M = 500
+
+_PROJ_RANTAI = {"_id": 0, "id": 1, "tipe": 1, "ordinal_level": 1, "nama": 1,
+                "kode": 1, "parent_id": 1, "ancestors": 1, "ancestors_nama": 1,
+                "prioritas": 1, "metrik": 1}
+
+
+class TitikIn(BaseModel):
+    lon: float
+    lat: float
+    akurasi_m: Optional[float] = None
+
+
+def _ringkas(n: dict) -> dict:
+    return {"id": n.get("id"), "tipe": n.get("tipe"), "nama": n.get("nama"),
+            "kode": n.get("kode"), "ordinal_level": n.get("ordinal_level")}
+
+
+@spasial_router.post("/spasial/lokasi-di-titik")
+async def lokasi_di_titik(payload: TitikIn, _user: dict = Depends(require_user)):
+    """Tancapkan titik → rantai wilayah terdeteksi otomatis.
+
+    SATU kueri `$geoIntersects` mengembalikan SELURUH tingkat yang memuat titik
+    sekaligus — inilah alasan pohon disimpan dalam satu koleksi polimorfik.
+    `geometry` sengaja TIDAK diproyeksikan (poligon bisa ribuan verteks; SLA
+    bergantung pada ini).
+
+    Berhenti di GEDUNG: lantai tak dapat ditentukan dari koordinat 2D. Bila
+    gedung hanya punya SATU lantai, lantai itu langsung dikembalikan agar
+    operator tak perlu memilih.
+    """
+    lat = su.parse_lintang(payload.lat)
+    lon = su.parse_bujur(payload.lon)
+    if lat is None or lon is None:
+        raise HTTPException(status_code=400, detail="Koordinat tidak valid")
+    titik = {"type": "Point", "coordinates": [lon, lat]}
+
+    kandidat = await db.spasial_node.find(
+        scope_query_field_satker(_user, {
+            "status": "aktif",
+            "ordinal_level": {"$lte": ORDINAL_GEDUNG},
+            "geometry": {"$geoIntersects": {"$geometry": titik}},
+        }), _PROJ_RANTAI).sort("ordinal_level", 1).to_list(50)
+
+    pilih = su.pilih_rantai(kandidat)
+    terdalam = pilih["terdalam"]
+
+    if not terdalam:
+        # Di luar semua poligon — BUKAN galat. Tawarkan yang terdekat.
+        terdekat = await db.spasial_node.find_one(
+            scope_query_field_satker(_user, {
+                "status": "aktif",
+                "ordinal_level": {"$lte": ORDINAL_GEDUNG},
+                "geometry": {"$near": {"$geometry": titik,
+                                       "$maxDistance": RADIUS_TERDEKAT_M}},
+            }), _PROJ_RANTAI)
+        return {"ditemukan": False, "rantai": [], "terdekat": _ringkas(terdekat) if terdekat else None,
+                "radius_cari_m": RADIUS_TERDEKAT_M,
+                "pesan": ("Di luar kawasan terpetakan."
+                          + (f" Terdekat: {terdekat.get('nama')}." if terdekat else ""))}
+
+    # Rantai SELALU mengikuti pohon (ancestors), bukan gabungan hasil geo —
+    # lihat su.pilih_rantai. Ambil nama leluhur dari snapshot bila ada.
+    nama_leluhur = terdalam.get("ancestors_nama") or []
+    rantai = [{"id": aid, "nama": (nama_leluhur[i] if i < len(nama_leluhur) else "")}
+              for i, aid in enumerate(pilih["ancestors"])]
+    rantai.append(_ringkas(terdalam))
+
+    lantai = []
+    if int(terdalam.get("ordinal_level") or 0) == ORDINAL_GEDUNG:
+        lantai = await db.spasial_node.find(
+            scope_query_field_satker(_user, {"parent_id": terdalam["id"], "tipe": "LANTAI",
+                                             "status": {"$ne": "dihapus"}}),
+            {"_id": 0, "id": 1, "nama": 1, "lantai": 1}).sort("lantai.ordinal", 1).to_list(100)
+
+    return {
+        "ditemukan": True,
+        "rantai": rantai,
+        "terdalam": _ringkas(terdalam),
+        "alternatif": [_ringkas(a) for a in pilih["alternatif"]],
+        "lantai": lantai,
+        # Gedung 1 lantai → langsung terpilih, operator tak perlu memilih.
+        "lantai_terpilih": lantai[0]["id"] if len(lantai) == 1 else None,
+        "perlu_pilih_lantai": len(lantai) > 1,
+        "boleh_auto_ruangan": su.boleh_auto_ruangan(payload.akurasi_m),
+        "akurasi_m": payload.akurasi_m,
+        "konsisten": pilih["konsisten"],
+        "catatan": pilih["catatan"],
+    }
+
+
+@spasial_router.get("/spasial/ruangan-di-titik")
+async def ruangan_di_titik(lon: float, lat: float, lantai_id: str,
+                           _user: dict = Depends(require_user)):
+    """Ruangan yang memuat titik DI DALAM sebuah lantai.
+
+    Nol hasil BUKAN galat: titik bisa berada di koridor/area sirkulasi. Dalam
+    kasus itu daftar ruangan lantai tersebut dikembalikan agar operator memilih.
+    """
+    la = su.parse_lintang(lat)
+    lo = su.parse_bujur(lon)
+    if la is None or lo is None:
+        raise HTTPException(status_code=400, detail="Koordinat tidak valid")
+    lantai = await db.spasial_node.find_one(
+        {"id": lantai_id}, {"_id": 0, "id": 1, "kode_satker": 1, "nama": 1})
+    if not lantai:
+        raise HTTPException(status_code=404, detail="Lantai tidak ditemukan")
+    await pastikan_akses_dok_satker(_user, lantai)   # isolasi satker
+
+    titik = {"type": "Point", "coordinates": [lo, la]}
+    cocok = await db.spasial_node.find(
+        scope_query_field_satker(_user, {
+            "parent_id": lantai_id, "tipe": "RUANGAN", "status": "aktif",
+            "geometry": {"$geoIntersects": {"$geometry": titik}},
+        }), _PROJ_RANTAI).to_list(20)
+    urut = su.peringkat_kandidat(cocok)
+    if urut:
+        return {"ditemukan": True, "ruangan": _ringkas(urut[0]),
+                "alternatif": [_ringkas(r) for r in urut[1:]]}
+    semua = await db.spasial_node.find(
+        scope_query_field_satker(_user, {"parent_id": lantai_id, "tipe": "RUANGAN",
+                                         "status": {"$ne": "dihapus"}}),
+        {"_id": 0, "id": 1, "nama": 1, "kode": 1}).sort("nama", 1).to_list(500)
+    return {"ditemukan": False, "ruangan": None, "daftar_ruangan": semua,
+            "pesan": f"Titik berada di area sirkulasi {lantai.get('nama') or 'lantai ini'}."}
+
+
+@spasial_router.get("/spasial/lantai/{gedung_id}")
+async def lantai_gedung(gedung_id: str, _user: dict = Depends(require_user)):
+    """Lantai sebuah gedung, terurut ordinal (basement → rooftop) untuk switcher."""
+    gedung = await db.spasial_node.find_one(
+        {"id": gedung_id}, {"_id": 0, "id": 1, "nama": 1, "kode_satker": 1})
+    if not gedung:
+        raise HTTPException(status_code=404, detail="Gedung tidak ditemukan")
+    await pastikan_akses_dok_satker(_user, gedung)   # isolasi satker
+    items = await db.spasial_node.find(
+        scope_query_field_satker(_user, {"parent_id": gedung_id, "tipe": "LANTAI",
+                                         "status": {"$ne": "dihapus"}}),
+        {"_id": 0, "id": 1, "nama": 1, "kode": 1, "lantai": 1}
+    ).sort("lantai.ordinal", 1).to_list(200)
+    return {"items": items, "jumlah": len(items), "gedung": _ringkas(gedung)}
+
+
+# Plafon fitur per permintaan peta. Di atas ini klien menerima penanda
+# `terpotong` + hanya bbox/titik wakil — merender puluhan ribu poligon
+# membekukan peramban, dan pengguna toh tak bisa membedakannya di zoom itu.
+BATAS_FITUR_PETA = 3000
+
+
+@spasial_router.get("/spasial/geojson")
+async def geojson_viewport(bbox: str = Query("", description="lon_min,lat_min,lon_maks,lat_maks"),
+                           level_maks: int = Query(100),
+                           induk: str = Query("", description="hanya anak langsung node ini"),
+                           _user: dict = Depends(require_user)):
+    """FeatureCollection untuk render peta, dibatasi viewport & tingkat.
+
+    Dimuat per-viewport (bukan sekali seluruh satker) supaya memori peramban
+    tetap wajar saat denah kawasan lengkap. `level_maks` memungkinkan klien
+    meminta hanya tingkat besar saat zoom jauh.
+
+    `induk` menyaring ke anak LANGSUNG satu node — dipakai peta untuk memuat
+    ruangan SATU lantai saja. Tanpa itu semua lantai gedung akan bertumpuk di
+    tempat yang sama (mereka memang berbagi jejak 2D yang sama). Isolasi satker
+    tetap dari `scope_query_field_satker`, jadi menebak id lantai satker lain
+    hanya menghasilkan koleksi kosong.
+    """
+    q = {"status": "aktif", "geometry": {"$ne": None},
+         "ordinal_level": {"$lte": int(level_maks)}}
+    if induk:
+        q["parent_id"] = induk
+    if bbox:
+        try:
+            x1, y1, x2, y2 = [float(v) for v in bbox.split(",")]
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400,
+                                detail="bbox harus 'lon_min,lat_min,lon_maks,lat_maks'")
+        kotak = {"type": "Polygon", "coordinates": [[
+            [x1, y1], [x2, y1], [x2, y2], [x1, y2], [x1, y1]]]}
+        if su.validasi_geometri(kotak):
+            raise HTTPException(status_code=400, detail="bbox tidak valid")
+        q["geometry"] = {"$geoIntersects": {"$geometry": kotak}}
+
+    query = scope_query_field_satker(_user, q)
+    jumlah = await db.spasial_node.count_documents(query)
+    terpotong = jumlah > BATAS_FITUR_PETA
+    proyeksi = ({"_id": 0, "id": 1, "tipe": 1, "nama": 1, "kode": 1,
+                 "ordinal_level": 1, "titik_wakil": 1, "bbox": 1}
+                if terpotong else
+                {"_id": 0, "id": 1, "tipe": 1, "nama": 1, "kode": 1,
+                 "ordinal_level": 1, "geometry": 1, "bbox": 1, "parent_id": 1})
+    rows = await db.spasial_node.find(query, proyeksi).sort(
+        "ordinal_level", 1).to_list(BATAS_FITUR_PETA)
+
+    fitur = []
+    for r in rows:
+        geom = r.get("geometry") or r.get("titik_wakil")
+        if not geom:
+            continue
+        fitur.append({"type": "Feature", "geometry": geom, "properties": {
+            "id": r.get("id"), "tipe": r.get("tipe"), "nama": r.get("nama"),
+            "kode": r.get("kode"), "ordinal_level": r.get("ordinal_level"),
+            "parent_id": r.get("parent_id")}})
+    return {"type": "FeatureCollection", "features": fitur,
+            "jumlah": len(fitur), "jumlah_total": jumlah,
+            "terpotong": terpotong, "batas": BATAS_FITUR_PETA}

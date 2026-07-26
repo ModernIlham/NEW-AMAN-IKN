@@ -228,6 +228,21 @@ export default function SpasialMasterPage({ user, onBack }) {
             {node.nama}
             {node.kode ? <span className="text-muted-foreground font-mono text-xs"> · {node.kode}</span> : null}
           </span>
+          {/* Sudah punya bentuk di peta? `bbox` ada HANYA bila geometri terisi —
+              dipakai sebagai penanda ringan karena `geometry` sengaja tak ikut
+              dikirim ke daftar pohon (poligon bisa ribuan verteks). */}
+          <span
+            className={`text-[9px] font-semibold px-1.5 py-0.5 rounded shrink-0 ${
+              node.bbox
+                ? "bg-teal-500/15 text-teal-700 dark:text-teal-300"
+                : "bg-muted text-muted-foreground/70"}`}
+            title={node.bbox
+              ? "Sudah punya bentuk (poligon) — tampil di lapisan Denah pada Peta Aset"
+              : "Belum digambar — node ini tak akan muncul di peta"}
+            data-testid={`spasial-geo-${node.id}`}
+          >
+            {node.bbox ? "denah" : "—"}
+          </span>
           {isWriter && (
             <span className="flex items-center gap-1.5 shrink-0">
               {/* tap-expand: ikon kecil, area sentuh ~44px (lihat index.css) */}

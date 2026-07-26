@@ -354,6 +354,15 @@ async def create_indexes() -> None:
             [("kode_satker", 1), ("tipe", 1), ("kode", 1)],
             partialFilterExpression={"kode": {"$exists": True, "$gt": ""}},
             name="spasial_node_kode_per_satker_tipe")
+        # SPASIAL Fase 3: indeks geometri — inti deteksi lokasi otomatis
+        # (tancap titik -> rantai wilayah) & render peta per-viewport.
+        # 2dsphere SELALU sparse: node tanpa geometri (mis. baru disusun
+        # strukturnya) tak masuk indeks sama sekali — memang diinginkan.
+        await db.spasial_node.create_index([("geometry", "2dsphere")],
+                                           name="spasial_node_geometry_2dsphere")
+        # Ordinal lantai per gedung: level switcher basement -> rooftop.
+        await db.spasial_node.create_index([("parent_id", 1), ("lantai.ordinal", 1)],
+                                           name="spasial_node_lantai_ordinal")
         logger.info("Database indexes created successfully")
     except Exception as e:
         logger.error(f"Error creating indexes: {e}")

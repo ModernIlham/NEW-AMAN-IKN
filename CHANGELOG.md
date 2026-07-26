@@ -53,6 +53,52 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#624] Spasial Fase 3: geometri, deteksi lokasi otomatis dari titik, peta berlapis — 2026-07-26
+
+Fase 3 program Spasial & IoT: pohon Fase 2 kini punya BENTUK. Inilah fase yang
+menghidupkan permintaan inti — tancapkan koordinat, wilayahnya terdeteksi sendiri.
+
+**Deteksi lokasi dari satu titik** — `POST /api/spasial/lokasi-di-titik`
+mengembalikan SELURUH rantai yang memuat titik itu (Kawasan → Zona → Distrik →
+Blok → … → Gedung) lewat **satu** kueri `$geoIntersects`; itulah alasan pohon
+disimpan dalam satu koleksi polimorfik. Rantai selalu mengikuti `ancestors` pohon,
+bukan gabungan hasil geo — bila keduanya berbeda (poligon tumpang tindih milik
+cabang lain) hasil geo yang menyimpang ditandai `alternatif` dan diberi catatan,
+bukan diam-diam dipakai. Di luar semua poligon BUKAN galat: dikembalikan tetangga
+terdekat dalam radius 500 m sebagai tawaran.
+
+**Berhenti di Gedung, lantai dipilih manusia** — lantai tak bisa disimpulkan dari
+koordinat 2D (semua lantai berbagi jejak yang sama). Gedung berlantai satu langsung
+terpilih; sisanya memunculkan pemilih lantai. Setelah lantai dipilih,
+`GET /api/spasial/ruangan-di-titik` menentukan ruangannya. Nol hasil juga bukan
+galat — titik bisa berada di koridor, sehingga daftar ruangan lantai itu
+dikembalikan untuk dipilih. Auto-pilih ruangan hanya diizinkan bila akurasi GPS
+≤ 30 m (`boleh_auto_ruangan`); pin manual dianggap paling akurat.
+
+**Denah berlapis di Peta Aset** — saklar "Denah" merender poligon di atas ubin peta
+dengan renderer **canvas** (bukan SVG: ribuan node DOM membuat peramban HP
+tersendat) pada pane sendiri di BAWAH pin aset, sehingga pin tetap bisa diklik.
+Dimuat **per-viewport** dengan bbox berpadding — geser kecil tak menembak request
+baru — dan **LOD per zoom**: zoom jauh hanya Kawasan/Zona, gedung baru diminta pada
+zoom rapat. Plafon keras 3.000 fitur; di atas itu klien menerima titik pusat saja
+plus penanda `terpotong`. Tiap tingkat bisa disembunyikan sendiri lewat panel lapis
+(batas administratif digambar putus-putus, batas fisik utuh). Ketuk gedung →
+pemilih lantai bergaya panel lift (rooftop di atas, basement di bawah) → ruangan
+lantai itu tampil, dimuat lewat parameter `induk` agar lantai lain tak bertumpuk.
+
+**Indeks** — `spasial_node.geometry` 2dsphere + majemuk `(parent_id, lantai.ordinal)`
+supaya urutan lantai datang dari indeks, bukan SORT di memori.
+
+**Catatan verifikasi rencana kueri** — `$geoIntersects` tetap memberi jawaban BENAR
+tanpa indeks; ia hanya memindai seluruh koleksi. Bug "indeks tak terpakai" karena
+itu takkan pernah muncul sebagai hasil salah, hanya sebagai endpoint yang melambat
+seiring denah bertambah. Ditambahkan `tests/test_spasial_indeks.py` yang membaca
+rencana kueri (`explain`) dan menuntut IXSCAN, bukan COLLSCAN, memakai koleksi
+sementara yang di-drop setelahnya. Butuh MongoDB hidup → ber-marker `integration`,
+tidak ikut CI. Jalankan di server: `pytest -m integration tests/test_spasial_indeks.py`.
+
+Uji: +15 backend (825 total) & +34 frontend, seluruhnya logika murni tanpa Mongo.
+
 ## [#623] Spasial Fase 2: registry level + pohon `spasial_node` (hierarki berlapis) — 2026-07-26
 
 Fase 2 program Spasial & IoT: menyusun POHON denah kawasan berlapis. Belum ada

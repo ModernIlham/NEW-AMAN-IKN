@@ -392,3 +392,173 @@ def test_susun_ulang_keturunan_pindah_ke_akar():
     assert d["ancestors"] == ["A"]
     assert d["ancestors_nama"] == ["An"]
     assert d["jalur"] == ",A,B,"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# GEOMETRI & DETEKSI LOKASI (Fase 3)
+# ═══════════════════════════════════════════════════════════════════════════
+
+KOTAK = {"type": "Polygon", "coordinates": [[
+    [116.70, -0.83], [116.71, -0.83], [116.71, -0.82], [116.70, -0.82], [116.70, -0.83]]]}
+
+
+def test_geometri_sah_diterima():
+    assert su.validasi_geometri(KOTAK) is None
+    assert su.validasi_geometri({"type": "MultiPolygon",
+                                 "coordinates": [KOTAK["coordinates"]]}) is None
+
+
+def test_geometri_cincin_tak_tertutup_ditolak():
+    """Cincin tak tertutup membuat MongoDB menolak dokumen dengan pesan yang tak
+    terbaca operator — dan satu dokumen rusak bisa menggagalkan indeks."""
+    terbuka = {"type": "Polygon", "coordinates": [[
+        [116.70, -0.83], [116.71, -0.83], [116.71, -0.82], [116.70, -0.82]]]}
+    pesan = su.validasi_geometri(terbuka)
+    assert pesan and "TERTUTUP" in pesan
+
+
+def test_geometri_kurang_titik_ditolak():
+    kurang = {"type": "Polygon", "coordinates": [[[116.7, -0.83], [116.71, -0.83], [116.7, -0.83]]]}
+    assert su.validasi_geometri(kurang) is not None
+
+
+def test_geometri_koordinat_rusak_ditolak():
+    for jelek in (
+        {"type": "Polygon", "coordinates": [[[999, -0.83], [116.71, -0.83],
+                                             [116.71, -0.82], [999, -0.83]]]},
+        {"type": "Polygon", "coordinates": [[[float("nan"), -0.83], [116.71, -0.83],
+                                             [116.71, -0.82], [float("nan"), -0.83]]]},
+        {"type": "LineString", "coordinates": [[116.7, -0.83], [116.71, -0.83]]},
+        {"type": "Polygon"},
+        "bukan objek", None, {},
+    ):
+        assert su.validasi_geometri(jelek) is not None, jelek
+
+
+def test_bbox_dan_titik_wakil():
+    assert su.hitung_bbox(KOTAK) == [116.70, -0.83, 116.71, -0.82]
+    assert su.titik_wakil(KOTAK)["coordinates"] == [116.705, -0.825]
+    assert su.hitung_bbox({"type": "Polygon", "coordinates": []}) is None
+
+
+def test_luas_kasar_masuk_akal():
+    """0,01° x 0,01° di lintang ~-0,8 ≈ 1.112 m x 1.113 m ≈ 1,24 juta m²."""
+    luas = su.luas_kasar_m2(KOTAK)
+    assert 1_150_000 < luas < 1_300_000, luas
+    assert su.luas_kasar_m2({"type": "Point", "coordinates": [116.7, -0.8]}) == 0.0
+
+
+def test_luas_mengurangi_lubang():
+    """Cincin dalam = lubang, harus DIKURANGKAN — kalau tidak, ruangan berlubang
+    (mis. void/atrium) terhitung lebih luas daripada nyatanya."""
+    dengan_lubang = {"type": "Polygon", "coordinates": [
+        KOTAK["coordinates"][0],
+        [[116.703, -0.827], [116.707, -0.827], [116.707, -0.823], [116.703, -0.823],
+         [116.703, -0.827]],
+    ]}
+    assert su.luas_kasar_m2(dengan_lubang) < su.luas_kasar_m2(KOTAK)
+
+
+def test_ray_casting_dalam_luar_dan_lubang():
+    assert su.titik_di_dalam(116.705, -0.825, KOTAK) is True
+    assert su.titik_di_dalam(116.80, -0.825, KOTAK) is False
+    berlubang = {"type": "Polygon", "coordinates": [
+        KOTAK["coordinates"][0],
+        [[116.703, -0.827], [116.707, -0.827], [116.707, -0.823], [116.703, -0.823],
+         [116.703, -0.827]],
+    ]}
+    assert su.titik_di_dalam(116.705, -0.825, berlubang) is False   # di dalam lubang
+    assert su.titik_di_dalam(116.7015, -0.8285, berlubang) is True  # di luar lubang
+
+
+# ── peringkat kandidat bertumpuk ────────────────────────────────────────────
+
+def test_peringkat_paling_spesifik_menang():
+    """Titik jatuh di beberapa poligon sesama level → yang TERKECIL (paling
+    spesifik) didahulukan, tetapi prioritas kurasi manusia menang di atasnya."""
+    tumpuk = [
+        {"id": "a", "ordinal_level": 80, "nama": "Besar", "metrik": {"luas_m2": 9000}},
+        {"id": "b", "ordinal_level": 80, "nama": "Kecil", "metrik": {"luas_m2": 1200}},
+        {"id": "c", "ordinal_level": 80, "nama": "Dikurasi",
+         "metrik": {"luas_m2": 9999}, "prioritas": 5},
+    ]
+    assert [n["nama"] for n in su.peringkat_kandidat(tumpuk)] == ["Dikurasi", "Kecil", "Besar"]
+
+
+def test_peringkat_tanpa_luas_di_belakang_dan_stabil():
+    """Node tanpa metrik luas tak boleh menang atas yang terukur; urutan tetap
+    deterministik (nama sebagai pemutus) agar hasil tak berubah antar panggilan."""
+    tumpuk = [
+        {"id": "x", "ordinal_level": 80, "nama": "Zeta"},
+        {"id": "y", "ordinal_level": 80, "nama": "Alfa"},
+        {"id": "z", "ordinal_level": 80, "nama": "Terukur", "metrik": {"luas_m2": 500}},
+    ]
+    urut = [n["nama"] for n in su.peringkat_kandidat(tumpuk)]
+    assert urut[0] == "Terukur"
+    assert urut[1:] == ["Alfa", "Zeta"]
+    assert su.peringkat_kandidat([]) == []
+
+
+# ── konsistensi rantai ──────────────────────────────────────────────────────
+
+def test_rantai_konsisten_apa_adanya():
+    kandidat = [
+        {"id": "kikn", "ordinal_level": 20, "nama": "KIKN", "ancestors": []},
+        {"id": "gd", "ordinal_level": 80, "nama": "Gedung A",
+         "ancestors": ["kikn"], "metrik": {"luas_m2": 4600}},
+    ]
+    r = su.pilih_rantai(kandidat)
+    assert r["terdalam"]["id"] == "gd"
+    assert r["ancestors"] == ["kikn"]
+    assert r["konsisten"] is True and r["diabaikan"] == [] and r["catatan"] == ""
+
+
+def test_rantai_tak_konsisten_percayai_terdalam():
+    """Kasus lapangan: batas kawasan digambar kasar sehingga titik jatuh di
+    Gedung A tapi di Kawasan yang KELIRU. Rantai harus mengikuti POHON milik
+    gedung, bukan menggabungkan hasil geo yang bertentangan."""
+    kandidat = [
+        {"id": "kaw_LAIN", "ordinal_level": 20, "nama": "Kawasan Keliru", "ancestors": []},
+        {"id": "gd", "ordinal_level": 80, "nama": "Gedung A",
+         "ancestors": ["ikn", "kikn", "wp1"], "metrik": {"luas_m2": 4600}},
+    ]
+    r = su.pilih_rantai(kandidat)
+    assert r["terdalam"]["id"] == "gd"
+    assert r["ancestors"] == ["ikn", "kikn", "wp1"]      # dari POHON
+    assert r["diabaikan"] == ["kaw_LAIN"]
+    assert r["konsisten"] is False
+    assert r["catatan"] == "rantai_dilengkapi_dari_ancestors"
+
+
+def test_rantai_seri_di_level_terdalam_beri_alternatif():
+    """Dua gedung berimpit → yang paling spesifik dipilih, sisanya jadi pilihan
+    dropdown (bukan ditebak diam-diam)."""
+    kandidat = [
+        {"id": "g1", "ordinal_level": 80, "nama": "Gedung Besar",
+         "ancestors": ["t"], "metrik": {"luas_m2": 9000}},
+        {"id": "g2", "ordinal_level": 80, "nama": "Gedung Kecil",
+         "ancestors": ["t"], "metrik": {"luas_m2": 1000}},
+    ]
+    r = su.pilih_rantai(kandidat)
+    assert r["terdalam"]["id"] == "g2"
+    assert [a["id"] for a in r["alternatif"]] == ["g1"]
+
+
+def test_rantai_kosong_aman():
+    """Titik di luar semua poligon BUKAN galat — aset di lapangan terbuka nyata."""
+    r = su.pilih_rantai([])
+    assert r["terdalam"] is None and r["ancestors"] == []
+    assert r["konsisten"] is True
+
+
+# ── ambang akurasi GPS ──────────────────────────────────────────────────────
+
+def test_akurasi_buruk_tak_auto_commit_ruangan():
+    """Ruangan kantor 3-8 m; akurasi 30 m+ berarti titik bisa di ruangan mana pun."""
+    assert su.boleh_auto_ruangan(8) is True
+    assert su.boleh_auto_ruangan(30) is True        # tepat di ambang
+    assert su.boleh_auto_ruangan(31) is False
+    assert su.boleh_auto_ruangan(45) is False
+    # Tak diketahui = titik ditancapkan manual di peta (justru paling akurat).
+    assert su.boleh_auto_ruangan(None) is True
+    assert su.boleh_auto_ruangan("") is True
