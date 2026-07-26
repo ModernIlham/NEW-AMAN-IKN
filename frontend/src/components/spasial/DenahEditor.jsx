@@ -12,17 +12,39 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "@geoman-io/leaflet-geoman-free";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
+import "@/lib/leafletImageOverlayRotated";   // efek samping: L.imageOverlay.rotated
 import axios from "axios";
 import { toast } from "sonner";
-import { Loader2, Save, Trash2, Wand2, X, AlertTriangle } from "lucide-react";
+import {
+  Loader2, Save, Trash2, Wand2, X, AlertTriangle,
+  ImagePlus, Move, Check, RotateCcw,
+} from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { fiturKeGeometri, payloadSimpan, pusatAwal } from "@/lib/denahEditor";
 import { gayaFitur } from "@/lib/spasialDenah";
+import { sudutKeLatLng, latLngKeSudut, URUTAN_SUDUT } from "@/lib/denahOverlay";
+import { authMediaUrl } from "@/lib/mediaUrl";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+const MAKS_GAMBAR_OVERLAY_MB = 10;
+
+// Marker sudut penempatan gambar — divIcon polos ber-style inline (class
+// Tailwind tak selalu sampai ke pane Leaflet).
+const LABEL_SUDUT = { tl: "1", tr: "2", bl: "3" };
+const JUDUL_SUDUT = { tl: "Kiri-atas gambar", tr: "Kanan-atas gambar", bl: "Kiri-bawah gambar" };
+function ikonSudut(k) {
+  return L.divIcon({
+    className: "",
+    html: `<div title="${JUDUL_SUDUT[k]}" style="width:22px;height:22px;border-radius:50%;` +
+      `background:#0d9488;color:#fff;font:700 11px/22px sans-serif;text-align:center;` +
+      `border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);cursor:move">${LABEL_SUDUT[k]}</div>`,
+    iconSize: [22, 22], iconAnchor: [11, 11],
+  });
+}
 
 // Terjemahan tooltip geoman yang benar-benar tampil di toolbar kita.
 const TERJEMAHAN_ID = {
@@ -54,6 +76,17 @@ export default function DenahEditor({ node, onClose, onSaved }) {
   // menit) akan MEMBALIKKAN suntingan orang lain — ganti nama / pindah induk
   // yang terjadi setelah pohon dimuat ikut terhapus (temuan tinjauan).
   const [detailNode, setDetailNode] = useState(null);
+  // Overlay gambar denah (Fase 7): milik node ini atau warisan moyang terdekat.
+  const [overlay, setOverlay] = useState(null);
+  const [aturPosisi, setAturPosisi] = useState(false);
+  const [opasitas, setOpasitas] = useState(0.7);
+  const [sibukOverlay, setSibukOverlay] = useState(false);
+  const overlayLayerRef = useRef(null);
+  const markerSudutRef = useRef([]);
+  const sudutKiniRef = useRef(null);     // sudut mengikuti drag marker (tanpa re-render)
+  const sudutAsliRef = useRef(null);     // untuk Batal saat mengatur posisi
+  const fileOverlayRef = useRef(null);
+  const { confirm, confirmDialog } = useConfirm();
 
   const nodeId = node?.id;
 
@@ -67,6 +100,13 @@ export default function DenahEditor({ node, onClose, onSaved }) {
       maxZoom: 22, maxNativeZoom: 19,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(map);
+
+    // Pane khusus gambar denah: DI ATAS ubin (200), DI BAWAH vektor gambar
+    // (overlayPane 400) — alas jiplak tak boleh menutupi poligon, dan tak
+    // boleh menelan klik alat gambar.
+    const pane = map.createPane("denah-gambar");
+    pane.style.zIndex = 350;
+    pane.style.pointerEvents = "none";
 
     const grup = new L.FeatureGroup().addTo(map);
     grupGambarRef.current = grup;
@@ -112,6 +152,26 @@ export default function DenahEditor({ node, onClose, onSaved }) {
     };
   }, []);
 
+  // Pasang/ganti layer gambar denah di peta. Dideklarasikan SEBELUM effect
+  // pemuat yang memakainya (dependency array dievaluasi saat render).
+  const pasangOverlay = useCallback((ov) => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (overlayLayerRef.current) {
+      try { overlayLayerRef.current.remove(); } catch { /* sudah lepas */ }
+      overlayLayerRef.current = null;
+    }
+    const ll = sudutKeLatLng(ov?.sudut);
+    if (!ov?.file_id || !ll) return;
+    const layer = L.imageOverlay.rotated(
+      authMediaUrl(`${API}/spasial/overlay/${ov.file_id}`),
+      ll.tl, ll.tr, ll.bl,
+      { opacity: ov.opasitas ?? 0.7, interactive: false, pane: "denah-gambar" });
+    layer.addTo(map);
+    overlayLayerRef.current = layer;
+    sudutKiniRef.current = ov.sudut;
+  }, []);
+
   // ── Muat bentuk tersimpan + konteks sekitar ───────────────────────────────
   useEffect(() => {
     const map = mapRef.current;
@@ -123,6 +183,12 @@ export default function DenahEditor({ node, onClose, onSaved }) {
         const detail = (await axios.get(`${API}/spasial/node/${nodeId}`)).data;
         if (batal) return;
         setDetailNode(detail);
+        // Gambar denah yang berlaku (milik sendiri / warisan lantai-gedung).
+        if (detail?.overlay_efektif) {
+          setOverlay(detail.overlay_efektif);
+          setOpasitas(detail.overlay_efektif.opasitas ?? 0.7);
+          pasangOverlay(detail.overlay_efektif);
+        }
         let induk = null;
         if (detail?.parent_id) {
           try {
@@ -176,7 +242,121 @@ export default function DenahEditor({ node, onClose, onSaved }) {
       }
     })();
     return () => { batal = true; };
-  }, [nodeId]);
+  }, [nodeId, pasangOverlay]);
+
+  // ── Overlay gambar denah (Fase 7) ─────────────────────────────────────────
+  const lepasMarkerSudut = useCallback(() => {
+    for (const m of markerSudutRef.current) {
+      try { m.remove(); } catch { /* peta sudah dibuang */ }
+    }
+    markerSudutRef.current = [];
+  }, []);
+
+  const mulaiAturPosisi = useCallback(() => {
+    const map = mapRef.current;
+    const ll = sudutKeLatLng(sudutKiniRef.current);
+    if (!map || !ll) return;
+    sudutAsliRef.current = sudutKiniRef.current;
+    lepasMarkerSudut();
+    markerSudutRef.current = URUTAN_SUDUT.map((k) => {
+      const m = L.marker(ll[k], { icon: ikonSudut(k), draggable: true,
+                                  pmIgnore: true, zIndexOffset: 1000 }).addTo(map);
+      m.on("drag dragend", () => {
+        const pos = {};
+        URUTAN_SUDUT.forEach((kk, i) => { pos[kk] = markerSudutRef.current[i].getLatLng(); });
+        const sudut = latLngKeSudut(pos);
+        if (sudut) {
+          sudutKiniRef.current = sudut;
+          overlayLayerRef.current?.reposition(pos.tl, pos.tr, pos.bl);
+        }
+      });
+      return m;
+    });
+    setAturPosisi(true);
+  }, [lepasMarkerSudut]);
+
+  const simpanPosisi = useCallback(async () => {
+    setSibukOverlay(true);
+    try {
+      await axios.put(`${API}/spasial/node/${nodeId}/overlay`,
+                      { sudut: sudutKiniRef.current, opasitas });
+      setOverlay((o) => (o ? { ...o, sudut: sudutKiniRef.current, opasitas } : o));
+      lepasMarkerSudut();
+      setAturPosisi(false);
+      toast.success("Penempatan gambar tersimpan");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal menyimpan penempatan");
+    } finally {
+      setSibukOverlay(false);
+    }
+  }, [nodeId, opasitas, lepasMarkerSudut]);
+
+  const batalPosisi = useCallback(() => {
+    const asli = sudutAsliRef.current;
+    const ll = sudutKeLatLng(asli);
+    if (ll) {
+      sudutKiniRef.current = asli;
+      overlayLayerRef.current?.reposition(ll.tl, ll.tr, ll.bl);
+    }
+    lepasMarkerSudut();
+    setAturPosisi(false);
+  }, [lepasMarkerSudut]);
+
+  const unggahOverlay = useCallback(async (f) => {
+    if (!f) return;
+    if (f.size > MAKS_GAMBAR_OVERLAY_MB * 1024 * 1024) {
+      toast.error(`Gambar melebihi ${MAKS_GAMBAR_OVERLAY_MB} MB — perkecil dulu`);
+      return;
+    }
+    setSibukOverlay(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", f);
+      const r = await axios.post(`${API}/spasial/node/${nodeId}/overlay`, fd);
+      setOverlay(r.data);
+      setOpasitas(r.data?.opasitas ?? 0.7);
+      pasangOverlay(r.data);
+      toast.success("Gambar denah terpasang — atur posisinya lalu jiplak ruangan");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal mengunggah gambar denah");
+    } finally {
+      setSibukOverlay(false);
+      if (fileOverlayRef.current) fileOverlayRef.current.value = "";
+    }
+  }, [nodeId, pasangOverlay]);
+
+  const hapusOverlay = useCallback(async () => {
+    const ok = await confirm({
+      title: "Hapus gambar denah?",
+      description: "Gambar alas jiplak node ini dihapus permanen. Poligon yang sudah digambar TIDAK ikut terhapus.",
+      confirmText: "Hapus", variant: "destructive",
+    });
+    if (!ok) return;
+    setSibukOverlay(true);
+    try {
+      await axios.delete(`${API}/spasial/node/${nodeId}/overlay`);
+      batalPosisi();
+      if (overlayLayerRef.current) {
+        try { overlayLayerRef.current.remove(); } catch { /* sudah lepas */ }
+        overlayLayerRef.current = null;
+      }
+      setOverlay(null);
+      toast.success("Gambar denah dihapus");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal menghapus gambar denah");
+    } finally {
+      setSibukOverlay(false);
+    }
+  }, [nodeId, confirm, batalPosisi]);
+
+  // Slider opasitas: visual seketika; tersimpan bersama "Simpan Posisi" (node
+  // sendiri) — untuk overlay warisan hanya berlaku sesi ini.
+  const ubahOpasitas = useCallback((v) => {
+    setOpasitas(v);
+    overlayLayerRef.current?.setOpacity(v);
+  }, []);
+
+  const overlayMilikSendiri = overlay?.dari_node === nodeId;
 
   const kumpulkanGeometri = useCallback(() => {
     const fitur = [];
@@ -270,6 +450,93 @@ export default function DenahEditor({ node, onClose, onSaved }) {
           </DialogDescription>
         </DialogHeader>
 
+        {/* Alas jiplak: gambar denah lantai (Fase 7). Interior tak terlihat di
+            citra satelit — unggah ekspor CAD/PDF (PNG/JPG), tempatkan dengan
+            3 titik sudut, lalu jiplak ruangan di atasnya. */}
+        <div className="px-4 py-1.5 border-b border-border flex flex-wrap items-center gap-2 text-xs"
+             data-testid="denah-overlay-bar">
+          <input ref={fileOverlayRef} type="file" className="hidden"
+                 accept="image/png,image/jpeg,image/webp"
+                 onChange={(e) => unggahOverlay(e.target.files?.[0])}
+                 data-testid="denah-overlay-file" />
+          {!overlay && (
+            <>
+              <Button variant="outline" size="sm" className="h-7 text-xs"
+                      disabled={sibukOverlay || memuat}
+                      onClick={() => fileOverlayRef.current?.click()}
+                      data-testid="denah-overlay-unggah">
+                {sibukOverlay ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+                              : <ImagePlus className="w-3.5 h-3.5 mr-1" />}
+                Unggah Gambar Denah
+              </Button>
+              <span className="text-muted-foreground">
+                alas jiplak dari CAD/PDF (PNG/JPG, maks {MAKS_GAMBAR_OVERLAY_MB} MB)
+              </span>
+            </>
+          )}
+          {overlay && (
+            <>
+              <span className="truncate max-w-[180px]" title={overlay.nama_file}>
+                🖼 {overlay.nama_file}
+                {!overlayMilikSendiri && (
+                  <span className="text-muted-foreground"> (warisan {overlay.dari_nama})</span>
+                )}
+              </span>
+              <label className="flex items-center gap-1.5">
+                <span className="text-muted-foreground">Opasitas</span>
+                <input type="range" min="0.1" max="1" step="0.05" value={opasitas}
+                       onChange={(e) => ubahOpasitas(Number(e.target.value))}
+                       className="w-24 accent-teal-600" data-testid="denah-overlay-opasitas" />
+              </label>
+              {overlayMilikSendiri && !aturPosisi && (
+                <Button variant="outline" size="sm" className="h-7 text-xs"
+                        disabled={sibukOverlay || memuat} onClick={mulaiAturPosisi}
+                        data-testid="denah-overlay-atur">
+                  <Move className="w-3.5 h-3.5 mr-1" />Atur Posisi
+                </Button>
+              )}
+              {aturPosisi && (
+                <>
+                  <Button size="sm" className="h-7 text-xs" disabled={sibukOverlay}
+                          onClick={simpanPosisi} data-testid="denah-overlay-simpan-posisi">
+                    {sibukOverlay ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+                                  : <Check className="w-3.5 h-3.5 mr-1" />}
+                    Simpan Posisi
+                  </Button>
+                  <Button variant="outline" size="sm" className="h-7 text-xs"
+                          disabled={sibukOverlay} onClick={batalPosisi}
+                          data-testid="denah-overlay-batal-posisi">
+                    <RotateCcw className="w-3.5 h-3.5 mr-1" />Batal
+                  </Button>
+                </>
+              )}
+              {overlayMilikSendiri && !aturPosisi && (
+                <>
+                  <Button variant="outline" size="sm" className="h-7 text-xs"
+                          disabled={sibukOverlay} onClick={() => fileOverlayRef.current?.click()}
+                          data-testid="denah-overlay-ganti">
+                    <ImagePlus className="w-3.5 h-3.5 mr-1" />Ganti
+                  </Button>
+                  <Button variant="outline" size="sm" className="h-7 text-xs text-red-600"
+                          disabled={sibukOverlay} onClick={hapusOverlay}
+                          data-testid="denah-overlay-hapus">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                </>
+              )}
+              {!overlayMilikSendiri && (
+                <Button variant="outline" size="sm" className="h-7 text-xs"
+                        disabled={sibukOverlay || memuat}
+                        onClick={() => fileOverlayRef.current?.click()}
+                        title="Unggah gambar khusus node ini (menimpa warisan saat ditampilkan)"
+                        data-testid="denah-overlay-unggah-sendiri">
+                  <ImagePlus className="w-3.5 h-3.5 mr-1" />Unggah utk node ini
+                </Button>
+              )}
+            </>
+          )}
+        </div>
+
         <div className="relative">
           <div ref={containerRef} className="h-[52vh] min-h-[320px] w-full" data-testid="denah-editor-peta" />
           {memuat && (
@@ -317,6 +584,7 @@ export default function DenahEditor({ node, onClose, onSaved }) {
             Simpan Denah
           </Button>
         </div>
+        {confirmDialog}
       </DialogContent>
     </Dialog>
   );

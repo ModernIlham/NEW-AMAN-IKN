@@ -784,3 +784,106 @@ def boleh_auto_ruangan(akurasi_m) -> bool:
     if a is None or a < 0:
         return False
     return a <= AMBANG_AKURASI_RUANGAN_M
+
+
+# ── Overlay gambar denah dalam-gedung (Fase 7) ──────────────────────────────
+# Gambar denah lantai (ekspor CAD/PDF → PNG/JPG) ditempatkan di atas peta
+# lewat TIGA titik sudut: kiri-atas (tl), kanan-atas (tr), kiri-bawah (bl) —
+# cukup untuk posisi + rotasi + skala + aspek (transformasi affine), dan
+# persis kontrak L.ImageOverlay.Rotated di sisi klien.
+
+SUDUT_OVERLAY = ("tl", "tr", "bl")
+OPASITAS_OVERLAY_BAWAAN = 0.7
+MAKS_BENTANG_OVERLAY = 0.5          # derajat ≈ 55 km — lebih dari itu pasti salah tempat
+MAKS_PIKSEL_OVERLAY = 40_000_000    # 40 MP; bom dekompresi ditolak dari METADATA
+FORMAT_OVERLAY = {"PNG": "image/png", "JPEG": "image/jpeg", "WEBP": "image/webp"}
+
+
+def validasi_sudut_overlay(sudut) -> Optional[str]:
+    """Pesan galat penempatan overlay, atau None bila sah.
+
+    Tiga pagar: (1) tiap sudut [bujur, lintang] dalam rentang dunia;
+    (2) tak degenerat — luas jajar genjang tl→tr × tl→bl > ~(10 cm)²,
+    sudut yang bertumpuk membuat transformasi CSS klien meledak jadi NaN;
+    (3) bentang ≤ MAKS_BENTANG_OVERLAY — overlay selebar provinsi adalah
+    salah ketik koordinat, bukan niat."""
+    if not isinstance(sudut, dict):
+        return "sudut harus objek {tl, tr, bl}"
+    titik = {}
+    for k in SUDUT_OVERLAY:
+        p = sudut.get(k)
+        if not isinstance(p, (list, tuple)) or len(p) < 2:
+            return f"sudut '{k}' harus [bujur, lintang]"
+        lon, lat = parse_bujur(p[0]), parse_lintang(p[1])
+        if lon is None or lat is None:
+            return f"sudut '{k}' di luar rentang koordinat dunia"
+        titik[k] = (lon, lat)
+    (x0, y0), (x1, y1), (x2, y2) = titik["tl"], titik["tr"], titik["bl"]
+    luas2 = abs((x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0))
+    if luas2 < 1e-12:
+        return "ketiga sudut bertumpuk/segaris — geser hingga membentuk bidang"
+    lons = [x0, x1, x2]
+    lats = [y0, y1, y2]
+    if max(lons) - min(lons) > MAKS_BENTANG_OVERLAY \
+            or max(lats) - min(lats) > MAKS_BENTANG_OVERLAY:
+        return (f"bentang overlay melebihi {MAKS_BENTANG_OVERLAY}° (~55 km) — "
+                "periksa koordinat sudut")
+    return None
+
+
+def rapikan_sudut_overlay(sudut) -> dict:
+    """Salinan bersih {tl,tr,bl} ber-float murni (buang elevasi/kunci asing)."""
+    return {k: [float(sudut[k][0]), float(sudut[k][1])] for k in SUDUT_OVERLAY}
+
+
+def opasitas_overlay_sah(nilai) -> float:
+    """Jepit opasitas ke [0.05, 1]; nilai rusak jatuh ke bawaan (ini setelan
+    tampilan dari slider UI — dijepit, bukan ditolak)."""
+    try:
+        v = float(nilai)
+    except (TypeError, ValueError):
+        return OPASITAS_OVERLAY_BAWAAN
+    if v != v:                                   # NaN
+        return OPASITAS_OVERLAY_BAWAAN
+    return max(0.05, min(1.0, v))
+
+
+def sudut_overlay_bawaan(bbox) -> Optional[dict]:
+    """Penempatan awal dari bbox [barat, selatan, timur, utara] — gambar
+    memenuhi kotak itu, utara di atas. None bila bbox tak layak."""
+    if not isinstance(bbox, (list, tuple)) or len(bbox) < 4:
+        return None
+    try:
+        b, s, t, u = (float(bbox[0]), float(bbox[1]),
+                      float(bbox[2]), float(bbox[3]))
+    except (TypeError, ValueError):
+        return None
+    if not (b < t and s < u):
+        return None
+    return {"tl": [b, u], "tr": [t, u], "bl": [b, s]}
+
+
+def periksa_gambar_overlay(data: bytes):
+    """(format, lebar, tinggi) atau ValueError berpesan-operator.
+
+    HANYA header yang dibaca — piksel tidak pernah didekode di server (byte
+    asli disimpan apa adanya, peramban yang mendekode), sehingga bom
+    dekompresi tertolak murah dari metadata IHDR. SVG sengaja tak masuk
+    daftar: SVG bisa membawa skrip dan PIL memang tak membukanya.
+    """
+    import io as _io
+    from PIL import Image                       # lazy — jaga impor modul ringan
+    try:
+        img = Image.open(_io.BytesIO(data or b""))
+        fmt = (img.format or "").upper()
+        lebar, tinggi = img.size
+    except Exception:
+        raise ValueError("File bukan gambar yang dikenali — pakai PNG/JPG/WebP")
+    if fmt not in FORMAT_OVERLAY:
+        raise ValueError(f"Format {fmt or 'tak dikenal'} tidak didukung — "
+                         "pakai PNG/JPG/WebP")
+    if lebar * tinggi > MAKS_PIKSEL_OVERLAY:
+        raise ValueError(f"Gambar {lebar}×{tinggi} piksel terlalu besar "
+                         f"(> {MAKS_PIKSEL_OVERLAY // 1_000_000} MP) — "
+                         "perkecil resolusinya")
+    return fmt, lebar, tinggi

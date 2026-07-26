@@ -53,6 +53,64 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#629] Spasial Fase 7: georeferensi denah dalam-gedung — gambar denah sebagai alas jiplak — 2026-07-26
+
+Interior gedung tidak terlihat di citra satelit, jadi menggambar ruangan
+akurat (Fase 4) selama ini menebak-nebak. Kini operator bisa MENGUNGGAH gambar
+denah lantai (ekspor CAD/PDF → PNG/JPG/WebP, maks 10 MB), MENEMPATKANNYA di
+atas peta lewat tiga titik sudut yang digeser (posisi + rotasi + skala + aspek
+= transformasi affine penuh), lalu MENJIPLAK ruangan di atasnya.
+
+**Backend** — gambar di GridFS, penempatan di `properties.denah_overlay`
+(3 sudut lon/lat `tl/tr/bl` + opasitas):
+- `POST/PUT/DELETE /api/spasial/node/{id}/overlay` (writer, ter-scope satker;
+  unggah pertama mendapat penempatan awal dari bbox node → moyang bergeometri
+  terdekat → titik wakil; PENGGANTIAN gambar mempertahankan penempatan).
+- `GET /api/spasial/overlay/{file_id}` — streaming ber-ETag + cache lama
+  (file_id baru tiap unggahan); isolasi satker lewat node PEMILIK, bukan
+  sekadar ketakterkaan ObjectId.
+- Pagar unggahan: baca bertahap ber-plafon, validasi PIL dari HEADER SAJA
+  (piksel tak pernah didekode server — bom dekompresi ditolak murah dari
+  metadata, plafon 40 MP di bawah ambang PIL), SVG tak masuk daftar (bisa
+  membawa skrip), whitelist PNG/JPEG/WebP.
+- **Pewarisan**: `GET /spasial/node/{id}` kini membawa `overlay_efektif` —
+  overlay milik sendiri atau moyang TERDEKAT (editor ruangan otomatis
+  menampilkan denah lantainya).
+- Hapus node (hard delete) kini ikut membuang blob overlay — tanpa ini blob
+  yatim selamanya di GridFS.
+
+**Frontend (DenahEditor)**:
+- Plugin `L.ImageOverlay.Rotated` DI-VENDOR sebagai modul ES
+  (`lib/leafletImageOverlayRotated.js`, lisensi Beerware, atribusi utuh) —
+  paket npm aslinya menulis ke global `L` tanpa impor: lolos build CRA tetapi
+  meledak saat runtime, kelas kegagalan senyap yang kita hindari.
+- Gambar dirender di pane khusus (di ATAS ubin, di BAWAH vektor,
+  pointer-events none) — alas jiplak tak menutup poligon dan tak menelan klik
+  alat gambar.
+- Baris kontrol: unggah/ganti/hapus, slider opasitas (visual seketika,
+  tersimpan bersama posisi), mode **Atur Posisi** dengan 3 marker sudut
+  bernomor yang digeser langsung; overlay warisan tampil read-only placement
+  dengan opsi "unggah untuk node ini".
+- Konversi lon-first server ↔ lat-first Leaflet terkunci di satu modul murni
+  (`lib/denahOverlay.js`) + uji — pembalikan tersebar = denah mendarat di
+  Samudra Hindia.
+
+**Dua bug data-loss LAMA tertangkap saat menelusuri jalur PUT** (bukan bug
+fitur baru — sudah ada sejak Fase 5, terpicu form pohon yang tak mengirim
+`properties`/`status`):
+- PUT node menimpa `properties` dengan `{}` → jejak audit impor (dan kini
+  overlay) TERHAPUS setiap kali node diganti nama dari pohon.
+- Status yang tak dikirim di-default "aktif" → sekadar mengganti nama draft
+  impor MENGAKTIFKANNYA diam-diam.
+Perbaikan: semantik **None = tak diubah** untuk `properties` & `status`
+(konsisten dengan `geometry`), `denah_overlay` hanya bisa diubah endpoint
+overlay (metadata + blob satu paket), dan form pohon mendapat kontrol Status
+eksplisit (aktivasi draft kini keputusan sadar) — dropdown
+Aktif / Draft / Nonaktif.
+
+Uji: +20 backend (926 total; sudut/bom-dekompresi/semantik-None) +4 jest
+(konversi sudut); eslint bersih; build produksi sukses.
+
 ## [#628] Spasial Fase 6: ekspor denah ke SHP / KML / KMZ / GeoJSON + template QGIS/Google Earth — 2026-07-26
 
 Sisi kebalikan mandat impor-ekspor: denah yang tersusun di aplikasi kini bisa
