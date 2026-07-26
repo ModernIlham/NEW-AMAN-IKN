@@ -23,44 +23,60 @@ BARIS_PER_HALAMAN = 3
 SEL_PER_HALAMAN = KOLOM * BARIS_PER_HALAMAN  # 6
 
 
-def susun_sel_lampiran(aset_rows, foto_st_per_aset=None, foto_st_bersama=False):
+def susun_sel_lampiran(aset_rows, foto_st_per_aset=None, foto_st_bersama=False,
+                       id_ber_sampul=None, kolom=KOLOM):
     """Kembalikan daftar SEL lampiran, terurut siap dialirkan ke grid.
 
     Parameter
     ---------
     aset_rows : list[dict]
-        Aset yang punya foto sampul. Tiap item minimal: id, asset_code, NUP,
-        asset_name. Aset TANPA foto sampul jangan dikirim ke sini.
+        SELURUH aset objek BAST (bukan hanya yang berfoto). Tiap item minimal:
+        id, asset_code, NUP, asset_name.
     foto_st_per_aset : dict[str, Any] | None
-        Peta asset_id → penanda foto serah terima MILIK aset itu (nilainya
-        bebas: file_id/URL — modul ini tak membacanya, hanya mengecek ada).
+        Peta asset_id → penanda foto serah terima MILIK aset itu.
     foto_st_bersama : bool
-        True bila ada SATU foto perwakilan yang berlaku untuk seluruh barang.
+        True bila ada SATU foto perwakilan untuk seluruh barang.
+    id_ber_sampul : set[str] | None
+        Id aset yang benar-benar punya foto sampul. `None` = anggap semua
+        punya. Aset di luar himpunan ini TIDAK menghasilkan sel "sampul" —
+        tetapi foto serah terimanya TETAP dicetak (dulu ikut hilang karena
+        aset tanpa sampul disaring lebih dulu).
+    kolom : int
+        Lebar grid; dipakai untuk menyisipkan sel kosong agar PASANGAN
+        (sampul+serah milik aset sama) tidak terbelah antar baris.
 
     Kembalian
     ---------
-    list[dict] dengan kunci:
+    list[dict | None] — `None` = sel kosong penyeimbang. Tiap dict berkunci:
         jenis    : "sampul" | "serah" | "serah_bersama"
         asset_id : id aset ("" untuk serah_bersama)
         judul    : label singkat untuk dicetak di atas foto
-        kunci    : nilai dari `foto_st_per_aset` (untuk jenis serah) — dipakai
-                   pemanggil untuk mengambil gambarnya.
-
-    Aturan penempatan:
-    1. Aset yang PUNYA foto serah terima sendiri → dua sel berdampingan
-       (sampul, serah) sehingga pasangannya terbaca sebagai satu kesatuan.
-    2. Aset TANPA foto serah terima → satu sel saja; sel berikutnya merapat
-       mengisi kolom yang tersisa (halaman tidak berlubang).
-    3. Foto perwakilan bersama dicetak SEKALI di paling akhir.
+        kunci    : nilai dari `foto_st_per_aset` (untuk jenis serah)
     """
     peta = dict(foto_st_per_aset or {})
     sel = []
+
+    def _kolom_sekarang():
+        return len(sel) % kolom if kolom > 0 else 0
+
     for a in aset_rows or []:
         aid = str(a.get("id") or "")
         judul = _judul_aset(a)
-        sel.append({"jenis": "sampul", "asset_id": aid,
-                    "judul": judul, "kunci": None})
-        if aid and peta.get(aid):
+        ada_sampul = id_ber_sampul is None or aid in id_ber_sampul
+        ada_serah = bool(aid and peta.get(aid))
+        if not ada_sampul and not ada_serah:
+            continue                     # tak ada apa pun untuk dicetak
+
+        # Pasangan lengkap harus MULAI di kolom pertama, kalau tidak ia
+        # terbelah: "serah A" akan bersebelahan dengan "sampul B" dan
+        # terbaca seperti salah pasang.
+        if ada_sampul and ada_serah and _kolom_sekarang() != 0:
+            sel.append(None)
+
+        if ada_sampul:
+            sel.append({"jenis": "sampul", "asset_id": aid,
+                        "judul": judul, "kunci": None})
+        if ada_serah:
             sel.append({"jenis": "serah", "asset_id": aid,
                         "judul": f"Serah terima — {judul}",
                         "kunci": peta[aid]})
@@ -98,10 +114,11 @@ def bagi_baris(sel, kolom=KOLOM):
 
 def ringkas_lampiran(sel):
     """Ringkasan untuk catatan kaki lampiran (dipakai di PDF & pengujian)."""
-    n_sampul = sum(1 for s in sel if s["jenis"] == "sampul")
-    n_serah = sum(1 for s in sel if s["jenis"] == "serah")
-    bersama = any(s["jenis"] == "serah_bersama" for s in sel)
-    total = len(sel)
+    isi = [s for s in sel if s]          # buang sel kosong penyeimbang
+    n_sampul = sum(1 for s in isi if s["jenis"] == "sampul")
+    n_serah = sum(1 for s in isi if s["jenis"] == "serah")
+    bersama = any(s["jenis"] == "serah_bersama" for s in isi)
+    total = len(sel)                     # halaman dihitung dari SEL, termasuk kosong
     halaman = max(1, (total + SEL_PER_HALAMAN - 1) // SEL_PER_HALAMAN) if total else 0
     return {"aset": n_sampul, "foto_serah_terima": n_serah,
             "ada_foto_bersama": bersama, "total_foto": total,

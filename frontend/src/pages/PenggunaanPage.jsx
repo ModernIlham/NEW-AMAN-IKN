@@ -374,6 +374,20 @@ export default function PenggunaanPage({ user, onBack }) {
     }
   };
 
+  const hapusFotoSerahTerima = async (assetId, berlakuSemua) => {
+    if (!fotoSt?.bast?.id) return;
+    try {
+      await axios.delete(`${API}/bast/${fotoSt.bast.id}/foto-serah-terima`,
+        { params: berlakuSemua ? { berlaku_semua: true }
+                               : { asset_id: assetId } });
+      toast.success("Foto serah terima dihapus");
+      bukaRiwayatBast();
+      setFotoSt(null);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal menghapus foto");
+    }
+  };
+
   // Kirim BAST ke TTD elektronik — penaut TERSTRUKTUR (doc_ref = id BAST) +
   // penanda tangan otomatis dari pihak BAST. Server balas link per penanda
   // tangan untuk dibagikan (Salin/WhatsApp). Alternatif dari unggah scan bukti.
@@ -1515,8 +1529,14 @@ export default function PenggunaanPage({ user, onBack }) {
                 kosong, aset berikutnya maju mengisinya.
               </p>
               <ul className="space-y-1 max-h-56 overflow-y-auto pr-1">
+                {/* Sumber identitas barang = SNAPSHOT milik BAST itu sendiri
+                    (`b.aset`), bukan `detail.rows` yang hanya berisi aset yang
+                    dipegang SAAT INI — untuk BAST pengembalian/mutasi, asetnya
+                    sudah tak dipegang lagi sehingga daftarnya akan menampilkan
+                    UUID mentah. `detail.rows` tetap jadi cadangan. */}
                 {(fotoSt?.bast?.asset_ids || []).map((aid) => {
-                  const a = (detail?.rows || []).find((x) => x.id === aid) || {};
+                  const a = (fotoSt?.bast?.aset || []).find((x) => x.id === aid)
+                    || (detail?.rows || []).find((x) => x.id === aid) || {};
                   const sudah = (fotoSt?.bast?.foto_serah_terima || {})[aid];
                   const dipilih = fotoSt?.asset_id === aid;
                   return (
@@ -1535,16 +1555,43 @@ export default function PenggunaanPage({ user, onBack }) {
                           <span className="text-[10px] text-emerald-600 dark:text-emerald-400">✓ sudah ada foto</span>
                         ) : null}
                       </button>
+                      {sudah ? (
+                        <div className="flex flex-wrap gap-1 pl-2 pt-0.5">
+                          <button type="button" className="text-[10px] underline text-sky-600 dark:text-sky-400"
+                            onClick={() => window.open(authMediaUrl(
+                              `${API}/bast/${fotoSt.bast.id}/foto-serah-terima/${sudah}`), "_blank")}
+                            data-testid={`foto-st-lihat-${aid}`}>Lihat</button>
+                          <button type="button" className="text-[10px] underline text-red-600 dark:text-red-400"
+                            onClick={() => hapusFotoSerahTerima(aid, false)}
+                            data-testid={`foto-st-hapus-${aid}`}>Hapus</button>
+                        </div>
+                      ) : null}
                     </li>
                   );
                 })}
               </ul>
             </div>
           ) : (
-            <p className="text-[11px] text-muted-foreground">
-              Satu foto mewakili <b>seluruh barang</b> dalam BAST ini. Di lampiran,
-              foto ini dicetak sekali di bagian akhir — tidak diulang pada tiap barang.
-            </p>
+            <div className="space-y-1.5">
+              <p className="text-[11px] text-muted-foreground">
+                Satu foto mewakili <b>seluruh barang</b> dalam BAST ini. Di lampiran,
+                foto ini dicetak sekali di bagian akhir — tidak diulang pada tiap barang.
+              </p>
+              {fotoSt?.bast?.foto_serah_terima_bersama ? (
+                <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border p-2">
+                  <span className="text-[11px] text-emerald-600 dark:text-emerald-400">
+                    ✓ sudah ada foto perwakilan
+                  </span>
+                  <button type="button" className="text-[10px] underline text-sky-600 dark:text-sky-400"
+                    onClick={() => window.open(authMediaUrl(
+                      `${API}/bast/${fotoSt.bast.id}/foto-serah-terima/${fotoSt.bast.foto_serah_terima_bersama}`), "_blank")}
+                    data-testid="foto-st-lihat-bersama">Lihat</button>
+                  <button type="button" className="text-[10px] underline text-red-600 dark:text-red-400"
+                    onClick={() => hapusFotoSerahTerima("", true)}
+                    data-testid="foto-st-hapus-bersama">Hapus</button>
+                </div>
+              ) : null}
+            </div>
           )}
 
           <DialogFooter>

@@ -602,7 +602,10 @@ async def unggah_foto_serah_terima(bast_id: str, file: UploadFile = File(...),
     data = await file.read()
     if len(data) > 10 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Maksimal 10MB")
-    if not cek_magic_gambar(data):
+    # `cek_magic_gambar(data, ext)` — WAJIB dua argumen (lihat shared_utils);
+    # memanggilnya dengan satu argumen membuat SETIAP unggahan 500.
+    import os as _os
+    if not cek_magic_gambar(data, _os.path.splitext(nama)[1]):
         raise HTTPException(status_code=400,
                             detail="Berkas bukan gambar yang sah")
 
@@ -1136,18 +1139,24 @@ async def bast_pdf(bast_id: str,
         if not st_bersama_id and _bukti_gambar:
             st_bersama_id = str(_bukti["file_id"])
 
-        # Hanya aset ber-foto sampul yang masuk grid.
+        # SELURUH aset dioper; yang tak punya foto sampul cukup tak
+        # menghasilkan sel "sampul" — foto serah terimanya TETAP tercetak.
+        # (Dulu aset tanpa sampul disaring lebih dulu sehingga foto serah
+        # terima yang sudah diunggah untuknya lenyap tanpa pesan apa pun.)
         sampul_bytes = {}
-        aset_ber_foto = []
         for a in aset_master:
             raw = await _bytes_sampul(a)
             if raw:
                 sampul_bytes[str(a.get("id"))] = raw
-                aset_ber_foto.append(a)
 
-        sel = susun_sel_lampiran(aset_ber_foto, foto_st,
-                                 foto_st_bersama=bool(st_bersama_id))
-        if sel:
+        sel = susun_sel_lampiran(aset_master, foto_st,
+                                 foto_st_bersama=bool(st_bersama_id),
+                                 id_ber_sampul=set(sampul_bytes))
+        # Bukti ttd berupa PDF tak bisa disematkan sebagai gambar, tetapi
+        # keberadaannya tetap perlu dicatat — halaman lampiran harus terbit
+        # walau TIDAK ada satu pun foto (dulu blok ini dilewati seluruhnya).
+        _catatan_bukti_pdf = bool(_bukti.get("file_id")) and not _bukti_gambar
+        if sel or _catatan_bukti_pdf:
             # Lebar/tinggi sel dihitung dari lebar dokumen supaya 2 kolom x 3
             # baris benar-benar muat satu halaman tanpa meluber.
             # Gaya keterangan sel: kecil & rata tengah, didefinisikan lokal
@@ -1157,6 +1166,10 @@ async def bast_pdf(bast_id: str,
                 alignment=TA_CENTER, spaceAfter=2)
             _gap = 4 * rl_mm
             lebar_sel = (doc.width - _gap * (_LK - 1)) / _LK
+            # Lebar yang benar-benar tersedia = lebar kolom dikurangi padding
+            # kanan sel; menskala terhadap `lebar_sel` membuat foto landscape
+            # meluber ~2 mm ke kolom sebelah.
+            lebar_gambar = lebar_sel - _gap / 2
             tinggi_foto = 62 * rl_mm
 
             async def _bytes_serah(s):
@@ -1177,7 +1190,7 @@ async def bast_pdf(bast_id: str,
                 if raw:
                     try:
                         im = RLImage(io.BytesIO(raw))
-                        sk = min(lebar_sel / im.imageWidth,
+                        sk = min(lebar_gambar / im.imageWidth,
                                  tinggi_foto / im.imageHeight)
                         im.drawWidth = im.imageWidth * sk
                         im.drawHeight = im.imageHeight * sk
@@ -1191,6 +1204,9 @@ async def bast_pdf(bast_id: str,
 
             data_sel = []
             for s in sel:
+                if s is None:
+                    data_sel.append(None)   # penyeimbang agar pasangan utuh
+                    continue
                 raw = (sampul_bytes.get(s["asset_id"]) if s["jenis"] == "sampul"
                        else await _bytes_serah(s))
                 data_sel.append(_kotak(s["judul"], raw))
@@ -1204,17 +1220,30 @@ async def bast_pdf(bast_id: str,
                    if r["ada_foto_bersama"] else ""), kecil))
             el.append(Spacer(1, 3 * rl_mm))
 
-            baris = bagi_baris(data_sel)
-            tabel = _Tbl([[c if c is not None else "" for c in br] for br in baris],
-                         colWidths=[lebar_sel] * _LK, hAlign="CENTER")
-            tabel.setStyle(_TS([
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("LEFTPADDING", (0, 0), (-1, -1), 0),
-                ("RIGHTPADDING", (0, 0), (-1, -1), _gap / 2),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-                ("TOPPADDING", (0, 0), (-1, -1), 2),
-            ]))
-            el.append(tabel)
+            # Bukti ttd berupa PDF tidak bisa disematkan sebagai gambar;
+            # catatannya DIPULIHKAN di sini (sempat hilang saat lampiran
+            # dirombak) supaya pembaca tahu scan bertanda tangan itu ada
+            # sebagai berkas terpisah.
+            if _catatan_bukti_pdf:
+                el.append(Paragraph(
+                    "<i>Scan BAST bertanda tangan tersimpan sebagai berkas "
+                    f"terpisah ({_esc(str(_bukti.get('filename') or 'bukti.pdf'))}).</i>",
+                    kecil))
+                el.append(Spacer(1, 2 * rl_mm))
+
+            if data_sel:
+                baris = bagi_baris(data_sel)
+                tabel = _Tbl(
+                    [[c if c is not None else "" for c in br] for br in baris],
+                    colWidths=[lebar_sel] * _LK, hAlign="CENTER")
+                tabel.setStyle(_TS([
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), _gap / 2),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                    ("TOPPADDING", (0, 0), (-1, -1), 2),
+                ]))
+                el.append(tabel)
 
     footer = _page_footer_factory(f"BAST — {judul_jenis[:60]}")
     await asyncio.to_thread(doc.build, el, onFirstPage=footer,

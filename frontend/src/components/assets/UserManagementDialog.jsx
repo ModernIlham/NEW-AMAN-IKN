@@ -402,7 +402,7 @@ function UserManagementDialog({ open, onClose, currentUser }) {
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="w-[95vw] max-w-sm max-h-[80vh] overflow-hidden flex flex-col p-0 gap-0 rounded-xl [&>button.absolute]:hidden">
         {/* Header */}
-        <DialogHeader className="px-3 sm:px-4 py-2.5 sm:py-3 border-b border-border flex-shrink-0">
+        <DialogHeader className="px-3 pr-11 sm:px-4 sm:pr-11 py-2.5 sm:py-3 border-b border-border flex-shrink-0">
           <DialogTitle className="flex items-center gap-2 text-sm font-semibold text-foreground">
             <div className="w-6 h-6 rounded-lg bg-muted flex items-center justify-center">
               <Users className="w-3.5 h-3.5 text-muted-foreground" />

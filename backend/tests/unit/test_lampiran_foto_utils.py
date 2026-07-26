@@ -46,15 +46,65 @@ def test_satu_foto_perwakilan_dicetak_sekali_di_akhir():
 
 
 def test_campuran_sebagian_aset_punya_foto_sendiri():
-    """Kasus nyata: hanya sebagian barang difoto saat serah terima."""
+    """Kasus nyata: hanya sebagian barang difoto saat serah terima.
+
+    Pasangan a2 TIDAK boleh terbelah antar baris — kalau terbelah, foto
+    "Serah terima — a2" tercetak bersebelahan dengan foto sampul a3 dan
+    terbaca seperti salah pasang. Penyeimbang `None` disisipkan agar
+    pasangan selalu MULAI di kolom pertama.
+    """
     sel = susun_sel_lampiran(_aset(4), {"a2": "f2"})
-    assert [(s["jenis"], s["asset_id"]) for s in sel] == [
-        ("sampul", "a1"),
+    assert [(s["jenis"], s["asset_id"]) if s else None for s in sel] == [
+        ("sampul", "a1"), None,
         ("sampul", "a2"), ("serah", "a2"),
         ("sampul", "a3"),
         ("sampul", "a4"),
     ]
     assert ringkas_lampiran(sel)["foto_serah_terima"] == 1
+    # Bukti nyata di tingkat BARIS (dulu tak pernah diuji → rasa aman palsu)
+    baris = bagi_baris(sel)
+    pasangan = [b for b in baris if b[0] and b[0]["asset_id"] == "a2"]
+    assert len(pasangan) == 1
+    assert pasangan[0][0]["jenis"] == "sampul"
+    assert pasangan[0][1]["jenis"] == "serah"
+
+
+def test_pasangan_tak_pernah_terbelah_antar_baris():
+    """Invariant utama diuji menyeluruh: untuk KOMBINASI apa pun, sel `serah`
+    selalu sebaris dengan sel `sampul` milik aset yang sama."""
+    import itertools
+    for n in range(1, 7):
+        for punya in itertools.product([False, True], repeat=n):
+            peta = {f"a{i+1}": "f" for i, p in enumerate(punya) if p}
+            baris = bagi_baris(susun_sel_lampiran(_aset(n), peta))
+            posisi = {}
+            for bi, b in enumerate(baris):
+                for s in b:
+                    if s:
+                        posisi.setdefault((s["asset_id"], s["jenis"]), bi)
+            for aid in peta:
+                assert posisi[(aid, "sampul")] == posisi[(aid, "serah")], (
+                    f"pasangan {aid} terbelah pada pola {punya}")
+
+
+def test_foto_serah_terima_tetap_tercetak_walau_aset_tanpa_foto_sampul():
+    """REGRESI YANG PERNAH ADA: dulu hanya aset ber-foto sampul yang masuk
+    grid, sehingga foto serah terima yang sudah diunggah untuk aset TANPA
+    foto sampul lenyap dari lampiran tanpa pesan apa pun."""
+    sel = susun_sel_lampiran(_aset(2), {"a1": "f1", "a2": "f2"},
+                             id_ber_sampul={"a1"})
+    jenis = [(s["jenis"], s["asset_id"]) if s else None for s in sel]
+    assert ("serah", "a2") in jenis          # foto a2 TIDAK hilang
+    assert ("sampul", "a2") not in jenis     # tapi sampulnya memang tak ada
+    assert ringkas_lampiran(sel)["foto_serah_terima"] == 2
+
+
+def test_tanpa_sampul_sama_sekali_lampiran_tetap_terbit():
+    """Tak satu pun aset punya foto sampul, tapi ada foto serah terima →
+    lampiran HARUS tetap terbit (dulu blok lampiran dilewati seluruhnya)."""
+    sel = susun_sel_lampiran(_aset(2), {"a1": "f1"}, id_ber_sampul=set())
+    assert [s["jenis"] for s in sel if s] == ["serah"]
+    assert ringkas_lampiran(sel)["perkiraan_halaman"] == 1
 
 
 def test_foto_per_aset_menang_atas_foto_bersama():
