@@ -67,6 +67,13 @@ export default function DenahEditor({ node, onClose, onSaved }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const grupGambarRef = useRef(null);    // layer yang BOLEH diedit (bentuk node ini)
+  // Renderer CANVAS khusus KONTEKS (batas induk + tetangga). Poligon kawasan
+  // hasil impor bisa puluhan ribu verteks; merendernya sebagai SVG default
+  // membangun ratusan <path> secara SINKRON dan MEMBEKUKAN main thread —
+  // spinner ikut membeku sehingga tampak "loading terus". Canvas menggambar
+  // ribuan bentuk tanpa itu. Bentuk yang DIEDIT tetap SVG (geoman butuh
+  // verteks path), jadi hanya konteks yang dipindah ke canvas.
+  const rendererKonteksRef = useRef(null);
   const [memuat, setMemuat] = useState(true);
   const [menyimpan, setMenyimpan] = useState(false);
   const [cek, setCek] = useState(null);  // hasil pratinjau validasi terakhir
@@ -110,6 +117,7 @@ export default function DenahEditor({ node, onClose, onSaved }) {
 
     const grup = new L.FeatureGroup().addTo(map);
     grupGambarRef.current = grup;
+    rendererKonteksRef.current = L.canvas({ padding: 0.5 });
 
     map.pm.setLang("id_kustom", TERJEMAHAN_ID, "en");
     // WAJIB: tanpa ini `_getContainingLayer()` geoman mengembalikan MAP, sehingga
@@ -149,6 +157,7 @@ export default function DenahEditor({ node, onClose, onSaved }) {
       map.remove();
       mapRef.current = null;
       grupGambarRef.current = null;
+      rendererKonteksRef.current = null;
     };
   }, []);
 
@@ -210,7 +219,7 @@ export default function DenahEditor({ node, onClose, onSaved }) {
           // menggambar tak terganggu.
           L.geoJSON({ type: "Feature", geometry: induk.geometry }, {
             style: { color: "#0f766e", weight: 3, dashArray: "8,6", fillOpacity: 0.03 },
-            pmIgnore: true,
+            pmIgnore: true, renderer: rendererKonteksRef.current,
           }).addTo(map).bindTooltip(`Batas induk: ${induk.nama || ""}`, { sticky: true });
         }
         // Tetangga di sekitar sebagai konteks redup (tak bisa diedit).
@@ -220,7 +229,14 @@ export default function DenahEditor({ node, onClose, onSaved }) {
           const b = map.getBounds();
           const bbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]
             .map((v) => v.toFixed(6)).join(",");
-          const ctx = (await axios.get(`${API}/spasial/geojson`, { params: { bbox } })).data;
+          // Konteks dibatasi ke tingkat node ini KE ATAS (ordinal <= level
+          // node): menggambar Gedung tak perlu menarik SETIAP ruangan & lantai
+          // dalam viewport — itu payload + render terberat dan tak berguna
+          // sebagai orientasi. Tanpa batas ini `level_maks` default 100 memuat
+          // seluruh pohon di viewport.
+          const level_maks = Number(detail?.ordinal_level) || 100;
+          const ctx = (await axios.get(`${API}/spasial/geojson`,
+            { params: { bbox, level_maks } })).data;
           if (batal) return;
           for (const f of ctx?.features || []) {
             if (f?.properties?.id === nodeId) continue;   // bentuk sendiri = editable, bukan konteks
@@ -228,6 +244,7 @@ export default function DenahEditor({ node, onClose, onSaved }) {
             L.geoJSON(f, {
               style: { ...gayaFitur(f?.properties?.ordinal_level), opacity: 0.5 },
               pmIgnore: true, interactive: false,
+              renderer: rendererKonteksRef.current,
             }).addTo(map);
           }
         } catch { /* konteks gagal — editor tetap berfungsi */ }

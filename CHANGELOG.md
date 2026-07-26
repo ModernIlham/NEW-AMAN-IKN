@@ -53,6 +53,28 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#631] Perbaikan: editor denah "loading terus" saat kawasan hasil impor besar — 2026-07-26
+
+**Gejala**: membuka editor gambar denah (Hierarki Spasial) memutar spinner
+sangat lama / seolah tak selesai — muncul setelah pengguna mulai MENGIMPOR
+denah (Fase 5), karena poligon kawasan hasil impor bisa berpuluh-ribu verteks.
+
+**Akar**: editor merender batas induk + seluruh fitur tetangga di viewport
+sebagai SVG. Leaflet membangun ratusan/ribuan `<path>` SVG secara SINKRON —
+membekukan main thread; spinner (animasi CSS) ikut membeku sehingga tampak
+"loading terus". Diperberat karena panggilan konteks memakai `level_maks`
+default 100 = MEMUAT SELURUH POHON dalam viewport (setiap ruangan & lantai),
+bukan hanya konteks setingkat.
+
+**Perbaikan** (frontend, DenahEditor):
+- Lapisan KONTEKS (batas induk + tetangga) dipindah ke **renderer Canvas** —
+  menggambar ribuan bentuk tanpa membekukan main thread. Bentuk yang DIEDIT
+  tetap SVG (geoman butuh verteks path).
+- Panggilan konteks `/spasial/geojson` kini membatasi `level_maks` ke ordinal
+  node yang digambar — menggambar Gedung tak lagi menarik setiap ruangan &
+  lantai dalam viewport (payload + render terberat, tak berguna sebagai
+  orientasi).
+
 ## [#630] Spasial Fase 8: temuan Wasdal menunjuk lokasi di denah — 2026-07-26
 
 Tiket **penertiban** dan **pemantauan insidentil** kini bisa menunjuk lokasi
