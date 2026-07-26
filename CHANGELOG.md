@@ -53,6 +53,65 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#622] Spasial Fase 1: field `geo` + indeks 2dsphere pertama + tutup kebocoran KIR — 2026-07-26
+
+Fase 1 dari program Spasial & IoT (arsitektur: `docs/ARSITEKTUR-SPASIAL-IOT.md`).
+PR fondasi terkecil yang mungkin, sekaligus menutup satu kebocoran data nyata.
+
+**KEAMANAN — kebocoran lintas-satker di KIR ditutup.** `routes/reports.py`
+memuat master ruangan dengan `db.ruangan.find({})` **tanpa scope satker**, lalu
+mencocokkannya berdasarkan NAMA ruangan lewat `cocok_ruangan_master`. Akibatnya
+nama Penanggung Jawab Ruangan milik satker lain — yang kebetulan menamai
+ruangannya sama, misalnya "Ruang Rapat" — ikut tercetak di KIR satker ini.
+Kueri asetnya sendiri sudah benar ter-scope lewat `scope_query_aset`; hanya
+baris master ruangan yang terlewat. Endpoint daftar ruangan kanonik
+(`routes/ruangan.py`) sudah memakai `scope_query_field_satker` sejak awal,
+sehingga ini satu-satunya penyimpangan.
+
+**Fondasi geospasial.** Koordinat aset tersimpan sebagai STRING
+(`koordinat_latitude`/`koordinat_longitude`) dan string tidak dapat diindeks
+`2dsphere`, sehingga setiap kueri peta berbasis area adalah full collection
+scan — repo ini sebelumnya **tidak punya satu pun indeks geospasial**.
+
+- `spasial_utils.py` (baru, murni, tanpa dependensi berat): parsing koordinat
+  ber-koma desimal Indonesia, penolakan NaN/inf, batas lintang ±90 vs bujur
+  ±180 yang berbeda, deteksi lintang/bujur tertukar, dan pembentukan GeoJSON
+  Point ber-urutan **[bujur, lintang]** sesuai RFC 7946.
+- Titik **(0,0) "Null Island" ditolak** — itu penanda de-facto parsing gagal;
+  tanpa penolakan ini ribuan aset bisa terpetakan ke satu titik di Teluk Guinea.
+- Field turunan `geo` di-maintain di SELURUH jalur tulis yang menyentuh
+  koordinat: 2 titik insert aset, PATCH (menggabungkan dokumen lama + perubahan
+  karena pengguna lazim memperbaiki satu sumbu saja), ubah-massal, dan impor
+  Excel. Koordinat yang dikosongkan **membuang** `geo`, bukan membiarkannya
+  basi — aset yang koordinatnya dihapus tak boleh tetap muncul di posisi lama.
+- Ubah-massal memakai satu `update_many` sehingga `geo` tak dapat dihitung
+  per-aset: bila hanya SATU sumbu diubah massal, `geo` sengaja dibuang. Aset
+  keluar dari indeks lebih baik daripada memegang posisi yang salah diam-diam.
+- Indeks `assets_geo_2dsphere` — indeks geospasial pertama di repo.
+
+**De-duplikasi.** Dua parser koordinat terpisah (`_geo_coord` di `exports.py`,
+`_parse_coord` di `peta_kolaborasi.py`) dengan kelemahan yang saling melengkapi
+(satu memeriksa rentang tanpa cek berhingga, satunya sebaliknya) kini keduanya
+mendelegasikan ke helper kanonik. Uji khusus menjaga agar perilaku pada masukan
+lazim tidak berubah sehingga ekspor KML/SHP dan Peta Kolaborasi tetap sama.
+
+Uji: +18 (786 total), fokus pada jebakan yang gagal senyap — urutan bujur/lintang
+terbalik, NaN yang lolos perbandingan, dan Null Island.
+
+## [#621] Dokumen arsitektur Spasial & IoT (Fase 0) — 2026-07-26
+
+Riset & arsitektur untuk referensi ruangan berlapis dan pelacakan aset bergerak;
+dokumentasi murni tanpa perubahan kode. Lihat `docs/ARSITEKTUR-SPASIAL-IOT.md`.
+
+Koreksi klasifikasi hierarki: **kawasan** naik ke posisi teratas (UU 26/2007 +
+PP 21/2021 menetapkan zona sebagai *sejenis* kawasan, bukan anaknya), dan
+**RUANGAN** ditambahkan sebagai tingkat terkecil karena dialah jangkar KIR/DBR
+(PMK 181/2016). Urutan final: Kawasan → Zona(WP) → Distrik(SWP) → Blok → Persil
+→ Tapak → Gedung → Lantai → Sayap → Ruangan, dengan kosakata pemilik
+dipertahankan lewat preset penamaan. Koreksi lain: KPIKN bukan induk KIKN
+(saudara sebaya, 56.159 + 196.501 = 252.660 ha), zona RDTR tak bisa jadi
+tingkatan, dan IMEI tidak dapat memberi lokasi.
+
 ## [#620] Satker Aktif (act-as) super-admin lintas modul + judul berjalan saat diklik — 2026-07-26
 
 Menindaklanjuti umpan balik: judul panjang di Arsip yang terpotong tak terbaca,

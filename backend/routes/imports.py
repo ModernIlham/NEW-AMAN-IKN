@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Request, Header,
 import csv as csv_module
 
 from asset_fields import ASSET_SCALAR_FIELDS, import_row_value
+from spasial_utils import terapkan_geo, sisip_geo_ke_update
 from db import db
 from models import AssetCreate
 from auth_utils import require_user, require_writer
@@ -363,10 +364,20 @@ async def import_assets(request: Request, file: UploadFile = File(...), force_up
                 continue
             
             if existing and force_update:
+                # SPASIAL: `asset_data` SELALU memuat kedua sumbu koordinat —
+                # import_row_value mengembalikan default "" untuk kolom yang tak
+                # ada di berkas, sehingga impor memang sudah menimpa koordinat
+                # dengan kosong. `geo` mengikuti: dihitung ulang bila koordinat
+                # sah, DIBUANG bila kosong — agar aset yang koordinatnya terhapus
+                # lewat impor tidak tetap memegang posisi lamanya di indeks.
+                _geo_unset = sisip_geo_ke_update({}, asset_data)
+                _ops = {"$set": asset_data}
+                if _geo_unset:
+                    _ops["$unset"] = _geo_unset
                 # Update existing within the same activity
                 await db.assets.update_one(
                     {"asset_code": asset_code, "NUP": nup, "activity_id": activity_id},
-                    {"$set": asset_data}
+                    _ops
                 )
                 updated += 1
             elif not existing:
@@ -380,6 +391,7 @@ async def import_assets(request: Request, file: UploadFile = File(...), force_up
                 asset_data["document_checklist"] = []
                 asset_data["stiker_photo_index"] = None
                 asset_data["created_at"] = now
+                terapkan_geo(asset_data)   # SPASIAL: turunkan `geo` utk indeks 2dsphere
                 await db.assets.insert_one(asset_data)
                 imported += 1
         

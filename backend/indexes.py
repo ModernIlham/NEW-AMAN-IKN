@@ -323,6 +323,16 @@ async def create_indexes() -> None:
             partialFilterExpression={"active_lock": {"$exists": True}},
             name="backup_jobs_active_lock_singleflight",
         )
+        # SPASIAL (Fase 1): indeks geospasial PERTAMA di repo ini. Koordinat aset
+        # tersimpan sebagai STRING dan tidak dapat diindeks; field `geo` adalah
+        # turunan GeoJSON Point dari pasangan string itu (lihat spasial_utils.py).
+        # Tanpa indeks ini setiap kueri berbasis area ($geoWithin/$geoIntersects
+        # per-bbox peta) adalah full collection scan.
+        #
+        # CATATAN: indeks 2dsphere SELALU sparse — aset TANPA koordinat sah tidak
+        # masuk indeks sama sekali. Itu memang yang diinginkan: mayoritas aset
+        # belum berkoordinat, dan memaksanya masuk indeks hanya memboroskan RAM.
+        await db.assets.create_index([("geo", "2dsphere")], name="assets_geo_2dsphere")
         logger.info("Database indexes created successfully")
     except Exception as e:
         logger.error(f"Error creating indexes: {e}")

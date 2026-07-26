@@ -334,11 +334,10 @@ _KML_STATUS_COLORS = {
 
 
 def _geo_coord(v, limit=180.0):
-    try:
-        n = float(str(v).strip().replace(",", "."))
-        return n if abs(n) <= limit else None
-    except (ValueError, TypeError):
-        return None
+    """Delegasi ke helper kanonik (spasial_utils) — dulu parser terpisah yang
+    tidak memeriksa NaN/inf. Perilaku pada masukan lazim tidak berubah."""
+    from spasial_utils import parse_koordinat
+    return parse_koordinat(v, limit)
 
 
 def _geo_attrs(a: dict) -> list:

@@ -11,6 +11,7 @@ from fastapi.responses import Response
 
 from db import db, fs_bucket
 from asset_fields import SCALAR_FIELD_NAMES
+from spasial_utils import terapkan_geo, sisip_geo_ke_update
 from models import AssetCreate, AssetResponse
 from auth_utils import (
     require_admin, require_super_admin, require_user,
@@ -812,6 +813,10 @@ async def buat_aset_draft(data: AssetCreate, audit_user: str = "system") -> dict
         "updated_at": now,
         "version": 1,
     }
+    # SPASIAL: turunkan `geo` (GeoJSON Point) dari pasangan koordinat string
+    # agar aset masuk indeks 2dsphere. Tanpa ini kueri peta per-area memindai
+    # seluruh koleksi. Lihat spasial_utils.py.
+    terapkan_geo(asset_doc)
     await db.assets.insert_one(asset_doc)
     invalidate_asset_cache()
     await log_audit("create", data.activity_id, asset_id, data.asset_code,
@@ -909,7 +914,10 @@ async def create_asset(asset: AssetCreate, request: Request, _user: dict = Depen
         "updated_at": now,  # delta cursor for /assets/offline-snapshot
         "version": 1,  # OCC: initial version
     }
-    
+
+    # SPASIAL: turunkan `geo` untuk indeks 2dsphere (lihat spasial_utils.py).
+    terapkan_geo(asset_doc)
+
     try:
         await db.assets.insert_one(asset_doc)
     except Exception as e:
@@ -2310,13 +2318,21 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
     # (GET /assets/offline-snapshot?since=...) picks this change up.
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
 
+    # SPASIAL: bila update menyentuh koordinat, hitung ulang `geo` dari gabungan
+    # dokumen lama + perubahan (pengguna lazim memperbaiki SATU sumbu saja).
+    # Mengembalikan bagian $unset agar `geo` ikut hilang saat koordinat dikosongkan.
+    _geo_unset = sisip_geo_ke_update(existing, update_data)
+
     try:
         # Atomic CAS: only succeeds if version is still what client saw.
         # Support legacy docs without version field.
         cas_filter = _build_cas_filter(asset_id, current_version)
+        _ops = {"$set": update_data, "$inc": {"version": 1}}
+        if _geo_unset:
+            _ops["$unset"] = _geo_unset
         result = await db.assets.update_one(
             cas_filter,
-            {"$set": update_data, "$inc": {"version": 1}},
+            _ops,
         )
         if result.matched_count == 0:
             # 409 — rollback newly uploaded GridFS blobs
