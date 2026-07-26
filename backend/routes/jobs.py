@@ -36,8 +36,15 @@ def _boleh_akses(job: dict, user: dict) -> bool:
     if str(user.get("role") or "") in ("admin", "super_admin"):
         milik = str(job.get("kode_satker") or "").strip()
         kode = kode_satker_user(user)
-        # kode kosong = super-admin pusat; milik kosong = job era lama.
-        return (not kode) or (not milik) or milik == kode
+        if not kode:
+            return True          # super-admin pusat: lintas satker
+        # FAIL-CLOSED untuk job TANPA stempel (REVIEW-9 R15b). Pada dokumen
+        # biasa kode kosong berarti "era lama, terbuka"; pada JOB artinya
+        # pembuatnya super-admin pusat — dan artifact ekspornya justru berisi
+        # register LINTAS SATKER. Membukanya untuk admin satker persis
+        # membalikkan maksud isolasi. Job lama tanpa stempel pun ikut tertutup;
+        # pemiliknya sendiri tetap bisa mengunduh lewat cabang di atas.
+        return bool(milik) and milik == kode
     return False
 
 

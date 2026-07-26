@@ -592,14 +592,20 @@ async def create_inventory_activity(activity: InventoryActivityCreate, _user: di
     status_summary = {}
     category_summary = {}
     
+    asset_ids_sah = list(activity.asset_ids or [])
     if activity.asset_ids:
         # Scope satker (REVIEW-9 R15): asset_ids datang dari KLIEN, jadi tanpa
         # scoping user satker A bisa menyodorkan id aset satker B dan membaca
         # nilai/kondisi/kategori mereka lewat ringkasan yang dikembalikan.
         assets = await db.assets.find(
-            await scope_query_aset(_user, {"id": {"$in": activity.asset_ids}}), 
-            {"_id": 0, "purchase_price": 1, "condition": 1, "status": 1, "category": 1}
+            await scope_query_aset(_user, {"id": {"$in": activity.asset_ids}}),
+            {"_id": 0, "id": 1, "purchase_price": 1, "condition": 1,
+             "status": 1, "category": 1}
         ).to_list(None)
+        # Hanya id yang lolos scope yang disimpan & dihitung (R15b) — kalau
+        # tidak, header "total_assets" memakai daftar mentah klien dan tak
+        # cocok dengan ringkasan di bawahnya.
+        asset_ids_sah = [a["id"] for a in assets if a.get("id")]
         
         for a in assets:
             try:
@@ -645,7 +651,11 @@ async def create_inventory_activity(activity: InventoryActivityCreate, _user: di
         "id": activity_id,
         **payload,
         "photo_thumbnails": photo_thumbnails,
-        "total_assets": len(activity.asset_ids or []),
+        # Dihitung dari aset yang BENAR-BENAR masuk ringkasan (REVIEW-9 R15b):
+        # `asset_ids` datang dari klien dan kini di-scope satker, jadi memakai
+        # panjang daftar mentah membuat header ("10 aset") tak cocok dengan
+        # rekap di bawahnya (4 aset).
+        "total_assets": len(asset_ids_sah),
         "total_value": total_value,
         "summary": summary,
         # Nomor tiket: berurutan per tahun, atomik via counters (pengesahan.py)

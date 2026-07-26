@@ -17,6 +17,14 @@ PETA_KOP_SATKER = {
     "tempat_laporan": "tempat_laporan",
     "tembusan_laporan": "tembusan_laporan",
     "kode_satker_lengkap": "kode_satker_lengkap",
+    # REVIEW-9 R15b — lihat catatan pada FIELD_KOP_SATKER (routes/satker.py):
+    # tanpa lima baris ini, membatasi tulis `report_settings` ke super-admin
+    # membuat admin satker tak punya jalan mengatur kop laporannya sendiri.
+    "logo_url": "logo_url",
+    "judul_laporan": "judul_laporan",
+    "subjudul_laporan": "subjudul_laporan",
+    "tahun_anggaran": "tahun_anggaran",
+    "catatan_kaki": "catatan_kaki",
 }
 
 

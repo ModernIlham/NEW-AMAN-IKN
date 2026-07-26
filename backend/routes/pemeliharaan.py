@@ -16,7 +16,7 @@ from auth_utils import require_admin, require_user, require_writer
 from db import db
 from shared_utils import (
     blok_ttd_kpb, kode_satker_user, pastikan_akses_aset,
-    pastikan_akses_dok_satker, scope_query_field_satker,
+    pastikan_akses_dok_satker, pengaturan_kop, scope_query_field_satker,
 )
 from pemeliharaan_utils import (
     JENIS_PEMELIHARAAN, baris_csv_jadwal, indikasi_kapitalisasi, jatuh_tempo,
@@ -178,7 +178,6 @@ async def dhpb_pdf(
     # KOP PER-SATKER (REVIEW-9 R15): pakai overlay `pengaturan_kop`, bukan
     # report_settings mentah — kalau tidak, DHPB satker ini tercetak dengan kop
     # instansi global/satker lain.
-    from shared_utils import pengaturan_kop
     settings = await pengaturan_kop(kode_satker=kode_satker_user(_user))
     buffer = BytesIO()
     doc = _std_doc(buffer, landscape_mode=True)

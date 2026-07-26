@@ -3076,10 +3076,14 @@ async def generate_lbkp_pdf(
     # Scope satker (REVIEW-9 R15): periode pelaporan kini per-satker, jadi
     # penanda FINAL pada laporan harus diambil dari periode SATKER INI —
     # bukan periode satker lain yang kebetulan tahun/semesternya sama.
+    # Urutkan agar DETERMINISTIK (REVIEW-9 R15b): bila satker punya periode
+    # sendiri DAN ada periode era-lama tanpa stempel dengan kunci sama, tanpa
+    # sort Mongo boleh mengembalikan salah satunya — penanda "FINAL" pada
+    # laporan resmi jadi berubah-ubah. kode_satker terisi menang atas null.
     periode_rec = await db.periode_pelaporan.find_one(
         scope_query_field_satker(
             _user, {"kunci_unik": kunci_unik_periode(tahun, semester)}),
-        {"_id": 0})
+        {"_id": 0}, sort=[("kode_satker", -1)])
     sufiks_final = penanda_final(periode_rec)
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
     # ISOLASI SATKER (REVIEW-9 R9): filter_aset_perhitungan TIDAK men-scope
@@ -3399,10 +3403,14 @@ async def generate_calbmn_pdf(
     # Scope satker (REVIEW-9 R15): periode pelaporan kini per-satker, jadi
     # penanda FINAL pada laporan harus diambil dari periode SATKER INI —
     # bukan periode satker lain yang kebetulan tahun/semesternya sama.
+    # Urutkan agar DETERMINISTIK (REVIEW-9 R15b): bila satker punya periode
+    # sendiri DAN ada periode era-lama tanpa stempel dengan kunci sama, tanpa
+    # sort Mongo boleh mengembalikan salah satunya — penanda "FINAL" pada
+    # laporan resmi jadi berubah-ubah. kode_satker terisi menang atas null.
     periode_rec = await db.periode_pelaporan.find_one(
         scope_query_field_satker(
             _user, {"kunci_unik": kunci_unik_periode(tahun, semester)}),
-        {"_id": 0})
+        {"_id": 0}, sort=[("kode_satker", -1)])
     sufiks_final = penanda_final(periode_rec)
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
     # ISOLASI SATKER (REVIEW-9 R9) — lihat catatan di LBKP.

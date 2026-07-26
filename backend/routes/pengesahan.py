@@ -66,9 +66,19 @@ async def next_ticket_number(year: Optional[int] = None,
     if kode and await db.counters.find_one({"_id": cid}) is None:
         # Seed migrasi: mulai dari nomor tiket TERTINGGI yang sudah dipakai
         # satker ini pada tahun itu, agar tak menerbitkan nomor ganda.
+        # Seed HANYA dari kegiatan ber-kode PERSIS milik satker ini.
+        #
+        # PENTING (REVIEW-9 R15b): jangan menyertakan kode ""/None seperti
+        # konvensi era-lama biasa. Kegiatan tanpa kode_satker MASIH memakai
+        # counter GLOBAL (cid legacy), jadi bila seed per-satker ikut menghitung
+        # mereka, KEDUA counter berangkat dari angka sama dan menerbitkan
+        # INV-{tahun}-{seq} KEMBAR — tanpa indeks unik pada ticket_number,
+        # tabrakan itu senyap. Konsekuensi memakai exact-match: satker mulai
+        # dari 1 pada tahun pertamanya, dan nomor lama tanpa stempel tetap
+        # dipegang deret global.
         maks = 0
         async for a in db.inventory_activities.find(
-                {"kode_satker": {"$in": [kode, "", None]},
+                {"kode_satker": kode,
                  "ticket_number": {"$regex": f"^INV-{year}-"}},
                 {"_id": 0, "ticket_number": 1}):
             try:

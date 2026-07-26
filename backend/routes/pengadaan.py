@@ -257,6 +257,12 @@ async def buat_perolehan(payload: PerolehanIn, user: dict = Depends(require_writ
             if not a:
                 raise HTTPException(status_code=404,
                                     detail=f"Aset {aid} tidak ditemukan")
+            # Guard aset (REVIEW-9 R15b): tanpa ini identitas aset satker lain
+            # terbaca DAN `_proyeksi_perolehan_ke_aset` menulis back-link
+            # perolehan ke dokumen aset mereka — sama persis dengan lubang yang
+            # ditutup di `tautkan_barang` di bawah.
+            from shared_utils import pastikan_akses_aset as _paa
+            await _paa(user, a)
             row.update({"asset_id": a["id"], "asset_code": a.get("asset_code"),
                         "NUP": a.get("NUP"), "asset_name": a.get("asset_name")})
         barang_rows.append(row)

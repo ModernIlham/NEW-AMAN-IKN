@@ -31,6 +31,14 @@ FIELD_KOP_SATKER = (
     "nama_satker", "nama_unit_organisasi", "nama_sub_unit", "alamat",
     "tempat_laporan", "tembusan_laporan", "telepon", "email",
     "kode_satker_lengkap",
+    # Ditambahkan REVIEW-9 R15b. Sebelumnya field-field ini HANYA ada pada
+    # dokumen global `report_settings`, sehingga ketika penulisan global
+    # dibatasi super-admin, admin satker kehilangan cara mengatur kop laporan
+    # miliknya sendiri (pada deployment satu-satker, itu berarti TIDAK ADA yang
+    # bisa memasang logo/judul). Kini tiap satker punya salinannya sendiri yang
+    # di-overlay di atas default global oleh `gabung_kop`.
+    "logo_url", "judul_laporan", "subjudul_laporan", "tahun_anggaran",
+    "catatan_kaki",
 )
 
 
@@ -64,6 +72,12 @@ class SatkerIn(BaseModel):
     # Kode satker LENGKAP registrasi BMN (±20 digit, mis.
     # 126011600691778000KP) — dipakai a.l. baris kedua header stiker.
     kode_satker_lengkap: str = ""
+    # Kop laporan milik satker (REVIEW-9 R15b) — kosong = pakai default global.
+    logo_url: str = ""
+    judul_laporan: str = ""
+    subjudul_laporan: str = ""
+    tahun_anggaran: str = ""
+    catatan_kaki: str = ""
     eselon1: Optional[List[str]] = None
     aktif: bool = True
 
