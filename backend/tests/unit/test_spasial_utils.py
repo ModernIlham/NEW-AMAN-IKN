@@ -542,6 +542,32 @@ def test_rantai_seri_di_level_terdalam_beri_alternatif():
     r = su.pilih_rantai(kandidat)
     assert r["terdalam"]["id"] == "g2"
     assert [a["id"] for a in r["alternatif"]] == ["g1"]
+    # REGRESI: alternatif sesama tingkat BUKAN pertanda rantai bertentangan.
+    # $geoIntersects memang memuat titik di batas untuk KEDUA poligon, jadi tiap
+    # titik pada dinding bersama dulu menghasilkan konsisten=False + catatan
+    # "rantai_dilengkapi_dari_ancestors" yang berbohong (tak ada yang ditambal),
+    # sekaligus melaporkan g1 di `alternatif` DAN `diabaikan` sekaligus.
+    assert r["diabaikan"] == []
+    assert r["konsisten"] is True
+    assert r["catatan"] == ""
+
+
+def test_rantai_cabang_lain_tetap_ditandai_tak_konsisten():
+    """Pengecualian alternatif tak boleh menutupi poligon yang BENAR-BENAR
+    bertentangan — kandidat di tingkat LAIN yang bukan leluhur tetap diabaikan."""
+    kandidat = [
+        {"id": "kaw_lain", "ordinal_level": 20, "nama": "Kawasan Lain", "ancestors": []},
+        {"id": "g1", "ordinal_level": 80, "nama": "Gedung Besar",
+         "ancestors": ["kikn", "t"], "metrik": {"luas_m2": 9000}},
+        {"id": "g2", "ordinal_level": 80, "nama": "Gedung Kecil",
+         "ancestors": ["kikn", "t"], "metrik": {"luas_m2": 1000}},
+    ]
+    r = su.pilih_rantai(kandidat)
+    assert r["terdalam"]["id"] == "g2"
+    assert [a["id"] for a in r["alternatif"]] == ["g1"]   # seri tetap alternatif
+    assert r["diabaikan"] == ["kaw_lain"]                  # cabang lain tetap tertangkap
+    assert r["konsisten"] is False
+    assert r["catatan"] == "rantai_dilengkapi_dari_ancestors"
 
 
 def test_rantai_kosong_aman():
@@ -562,3 +588,30 @@ def test_akurasi_buruk_tak_auto_commit_ruangan():
     # Tak diketahui = titik ditancapkan manual di peta (justru paling akurat).
     assert su.boleh_auto_ruangan(None) is True
     assert su.boleh_auto_ruangan("") is True
+    # Format koma desimal Indonesia tetap terbaca sebagai angka.
+    assert su.boleh_auto_ruangan("25,5") is True
+    assert su.boleh_auto_ruangan("30,1") is False
+
+
+def test_akurasi_sangat_buruk_tak_berbalik_jadi_boleh():
+    """REGRESI: gerbang ini pernah TERBALIK di atas 100 km.
+
+    Penyebabnya `parse_koordinat(akurasi_m, 100000.0)` — di luar batas fungsi itu
+    mengembalikan None, dan None ditafsirkan "tak dilaporkan = cukup". Peramban
+    yang jatuh ke penentuan posisi berbasis IP/menara lazim melaporkan akurasi
+    puluhan sampai ratusan KILOMETER, jadi persis nilai terburuk yang lolos dan
+    meng-commit RUANGAN (jangkar KIR/DBR) dari titik radius ratusan km.
+    """
+    for buruk in (100000.1, 150000, 500000, 1e9):
+        assert su.boleh_auto_ruangan(buruk) is False, f"{buruk} m tak boleh lolos"
+    # Nilai rusak juga bukan alasan menebak — beda dari "tak dilaporkan".
+    for rusak in (-5, float("inf"), float("nan"), "abc"):
+        assert su.boleh_auto_ruangan(rusak) is False, f"{rusak!r} tak boleh lolos"
+
+
+def test_akurasi_monoton_tak_ada_celah_membalik():
+    """Sekali False harus tetap False saat akurasi memburuk — tanpa sifat monoton
+    ini celah pembalik seperti di atas bisa muncul lagi tanpa terdeteksi."""
+    nilai = [0, 1, 8, 29.9, 30, 30.1, 100, 1000, 99999, 100000, 100001, 1e6, 1e12]
+    hasil = [su.boleh_auto_ruangan(v) for v in nilai]
+    assert hasil == sorted(hasil, reverse=True), list(zip(nilai, hasil))

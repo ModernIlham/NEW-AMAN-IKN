@@ -97,7 +97,27 @@ rencana kueri (`explain`) dan menuntut IXSCAN, bukan COLLSCAN, memakai koleksi
 sementara yang di-drop setelahnya. Butuh MongoDB hidup → ber-marker `integration`,
 tidak ikut CI. Jalankan di server: `pytest -m integration tests/test_spasial_indeks.py`.
 
-Uji: +15 backend (825 total) & +34 frontend, seluruhnya logika murni tanpa Mongo.
+**Perbaikan temuan tinjauan adversarial:**
+
+- **HIGH — gerbang akurasi GPS TERBALIK di atas 100 km.** `boleh_auto_ruangan`
+  memakai `parse_koordinat(akurasi_m, 100000.0)`, padahal argumen kedua fungsi
+  itu adalah BATAS RENTANG: nilai di luar batas keluar sebagai `None`, dan baris
+  berikutnya menafsirkan `None` sebagai "akurasi tak dilaporkan = cukup". Akibatnya
+  30,1 m ditolak (benar) tetapi 150.000 m diterima. Ini persis kasus yang ambang
+  30 m dibuat untuk memblokir: peramban yang jatuh ke penentuan posisi berbasis
+  IP/menara lazim melaporkan akurasi ratusan kilometer, sehingga RUANGAN — jangkar
+  KIR & DBR — bisa ditetapkan otomatis dari titik yang berada di mana saja dalam
+  radius 150 km. Kini "tak dilaporkan", "dilaporkan & masuk akal", dan "dilaporkan
+  tapi rusak (negatif/NaN/inf)" dibedakan tegas; ditambah uji monotonisitas agar
+  celah pembalik serupa tak bisa muncul lagi diam-diam.
+- **MEDIUM — `alternatif` ikut dihitung `diabaikan`, sehingga `konsisten` palsu-False.**
+  Dua gedung berimpit dinding itu lumrah, dan `$geoIntersects` memang memuat titik
+  di batas untuk KEDUA poligon. Node yang sama lalu dilaporkan di `alternatif` DAN
+  `diabaikan` dengan makna berlawanan, dan `catatan` mengaku rantai ditambal dari
+  ancestors padahal tak ada tingkat yang ditambal. Alternatif sesama tingkat kini
+  dikecualikan; kandidat di tingkat lain yang bukan leluhur tetap tertangkap.
+
+Uji: +18 backend (828 total) & +35 frontend, seluruhnya logika murni tanpa Mongo.
 
 ## [#623] Spasial Fase 2: registry level + pohon `spasial_node` (hierarki berlapis) — 2026-07-26
 

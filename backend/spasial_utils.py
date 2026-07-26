@@ -636,7 +636,16 @@ def pilih_rantai(kandidat: list) -> dict:
         [n for n in kandidat if int(n.get("ordinal_level") or 0) == ordinal_maks])
     terdalam = terdalam_set[0]
     rantai_id = set(terdalam.get("ancestors") or []) | {terdalam.get("id")}
-    diabaikan = [n.get("id") for n in kandidat if n.get("id") not in rantai_id]
+    # Kandidat SEJAJAR di tingkat terdalam sudah sengaja dikembalikan lewat
+    # `alternatif` — mereka BUKAN tanda poligon bertentangan. Dua gedung yang
+    # berimpit dinding itu lumrah, dan $geoIntersects memang memuat titik di
+    # batas untuk KEDUA poligon. Tanpa pengecualian ini setiap titik di dinding
+    # bersama membuat `konsisten` palsu-False dan `catatan` mengaku rantai
+    # ditambal dari ancestors padahal tak ada tingkat yang ditambal — node yang
+    # sama pun dilaporkan dua kali dengan makna berlawanan (temuan tinjauan).
+    id_alternatif = {n.get("id") for n in terdalam_set[1:]}
+    diabaikan = [n.get("id") for n in kandidat
+                 if n.get("id") not in rantai_id and n.get("id") not in id_alternatif]
     konsisten = not diabaikan
     return {
         "terdalam": terdalam,
@@ -657,9 +666,27 @@ AMBANG_AKURASI_RUANGAN_M = 30.0
 def boleh_auto_ruangan(akurasi_m) -> bool:
     """True bila akurasi GPS cukup baik untuk menetapkan RUANGAN otomatis.
 
-    Akurasi tak diketahui (None) diperlakukan sebagai CUKUP: banyak sumber tak
-    melaporkannya (titik yang ditancapkan manual di peta justru paling akurat),
-    dan menolak semuanya membuat fitur ini tak terpakai.
+    TIGA keadaan yang WAJIB dibedakan — menggabungkannya pernah MEMBALIK gerbang
+    ini (temuan tinjauan adversarial):
+
+      1. Tak dilaporkan (None / "")            -> CUKUP. Banyak sumber tak
+         melaporkan akurasi, dan titik yang ditancapkan manual di peta justru
+         yang paling akurat; menolak semuanya membuat fitur ini tak terpakai.
+      2. Dilaporkan & masuk akal               -> bandingkan dengan ambang.
+      3. Dilaporkan tapi TAK masuk akal
+         (negatif, NaN, inf, bukan angka)      -> TOLAK. Nilai rusak bukan
+         alasan untuk menebak ruangan.
+
+    JANGAN memakai `parse_koordinat` dengan batas berhingga di sini. Semantik
+    fungsi itu "rentang koordinat": nilai di LUAR batas keluar sebagai None —
+    yang di sini berarti "tak dilaporkan = cukup". Peramban yang jatuh ke
+    penentuan posisi berbasis IP/menara melaporkan akurasi ratusan KILOMETER,
+    jadi justru nilai TERBURUK yang lolos. Batas 100 km sebelumnya membuat
+    150000 m (radius 150 km) dianggap layak meng-commit ruangan 3-8 m.
     """
-    a = parse_koordinat(akurasi_m, 100000.0)
-    return True if a is None else a <= AMBANG_AKURASI_RUANGAN_M
+    if akurasi_m is None or str(akurasi_m).strip() == "":
+        return True
+    a = parse_koordinat(akurasi_m, math.inf)   # inf = tanpa batas rentang
+    if a is None or a < 0:
+        return False
+    return a <= AMBANG_AKURASI_RUANGAN_M
