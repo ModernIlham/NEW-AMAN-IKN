@@ -501,7 +501,10 @@ export default function PelaporanPage({ user, onBack }) {
                       </span>
                     )}
                     {isAdmin && (
-                      <div className="flex items-center gap-1 ml-auto flex-shrink-0">
+                      // flex-wrap + tanpa flex-shrink-0: tiga tombol aksi
+                      // (Tenggat/Kunci/Hapus) membungkus di layar sempit, bukan
+                      // mendorong tombol terakhir keluar kanvas.
+                      <div className="flex flex-wrap items-center gap-1 sm:ml-auto">
                         {p.status === "terbuka" && (
                           <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
                             title="Atur tenggat penyampaian periode"
@@ -706,7 +709,7 @@ export default function PelaporanPage({ user, onBack }) {
                     <Input value={reklas.alasan} placeholder="cth. salah penggolongan saat perekaman"
                       onChange={(e) => setReklas((r) => ({ ...r, alasan: e.target.value }))} />
                   </div>
-                  <div className="flex justify-end gap-2 pt-1">
+                  <div className="flex flex-wrap justify-end gap-2 pt-1">
                     <Button variant="outline" onClick={() => setReklas(null)}>Batal</Button>
                     <Button disabled={reklas.saving || reklas.kode_baru.length !== 10} data-testid="reklas-simpan"
                       onClick={async () => {

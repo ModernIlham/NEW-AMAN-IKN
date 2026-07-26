@@ -748,7 +748,7 @@ export default function PenilaianPage({ user, onBack }) {
                     data-testid="koreksi-catatan" />
                 </div>
               </div>
-              <div className="flex justify-end gap-2">
+              <div className="flex flex-wrap justify-end gap-2">
                 <Button variant="outline" size="sm" onClick={() => setFormKoreksi(null)}>Batal</Button>
                 <Button size="sm" className="bg-teal-600 hover:bg-teal-700 text-white"
                   disabled={formKoreksi.saving || !formKoreksi.aset || !formKoreksi.data.nomor_dokumen.trim() || !formKoreksi.data.tanggal_dokumen}

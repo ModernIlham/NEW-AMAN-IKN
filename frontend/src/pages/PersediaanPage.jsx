@@ -1361,7 +1361,7 @@ export default function PersediaanPage({ user, onBack }) {
             <Input id="pindah-ket" value={pindah?.keterangan || ""}
               onChange={(e) => setPindah((p) => ({ ...p, keterangan: e.target.value }))} />
           </div>
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-wrap justify-end gap-2">
             <Button variant="outline" onClick={() => setPindah(null)}>Batal</Button>
             <Button onClick={kirimPindahGudang}
               disabled={pindah?.saving || !pindah?.lokasi_baru?.trim()}

@@ -379,7 +379,7 @@ export default function PengaturanPage({ user, onBack, onOpenSatker,
                               onChange={(e) => setLimitDraf((s) => ({ ...s, bulanan: e.target.value }))} data-testid="email-limit-bulanan" />
                           </label>
                         </div>
-                        <div className="flex gap-2 justify-end">
+                        <div className="flex flex-wrap gap-2 justify-end">
                           <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setLimitDraf(null)}>Batal</Button>
                           <Button size="sm" className="h-8 text-xs" onClick={simpanLimitEmail} disabled={limitSaving} data-testid="email-limit-simpan">
                             {limitSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}Simpan

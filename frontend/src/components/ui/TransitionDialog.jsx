@@ -84,7 +84,7 @@ export function useTransitionDialog() {
             </div>
           ))}
         </div>
-        <div className="flex justify-end gap-2 pt-1">
+        <div className="flex flex-wrap justify-end gap-2 pt-1">
           <Button variant="outline" onClick={() => tutup(null)}>Batal</Button>
           <Button onClick={simpan} data-testid="transisi-simpan">
             {state.opsi.confirmLabel || "Simpan"}
