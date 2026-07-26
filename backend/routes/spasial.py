@@ -26,6 +26,7 @@ from db import db
 from shared_utils import (kode_satker_user, log_audit,
                           pastikan_akses_dok_satker, scope_query_field_satker)
 import spasial_utils as su
+import topologi_utils as tu
 
 spasial_router = APIRouter()
 
@@ -164,6 +165,14 @@ def _terapkan_geometri(doc: dict, geometry) -> None:
     galat = su.validasi_geometri(geometry)
     if galat:
         raise HTTPException(status_code=400, detail=f"Geometri tidak valid: {galat}")
+    # Topologi (Fase 4) — bow-tie, lubang di luar shell, cincin tumpang-tindih.
+    # BLOKIR, bukan peringatan: geometri begini merusak pembangunan indeks
+    # 2dsphere untuk SELURUH koleksi. Bila shapely absen, cek ini melewati
+    # dirinya sendiri dan MongoDB kembali jadi jaring terakhir (perilaku Fase 3).
+    galat_topo = tu.validasi_topologi(geometry)
+    if galat_topo:
+        raise HTTPException(status_code=400,
+                            detail=f"Topologi tidak valid: {galat_topo}")
     doc["geometry"] = geometry
     doc["bbox"] = su.hitung_bbox(geometry)
     doc["titik_wakil"] = su.titik_wakil(geometry)
@@ -261,6 +270,33 @@ async def detail_node(node_id: str, _user: dict = Depends(require_user)):
     return node
 
 
+async def _peringatan_containment(geometry, tipe: str, parent_id, _user: dict):
+    """PESAN peringatan bila bentuk keluar dari batas induknya, atau None.
+
+    PERINGATAN — bukan pemblokir (lihat kebijakan di topologi_utils): poligon
+    digambar orang berbeda pada waktu berbeda, dan seluruh desain deteksi
+    Fase 3 sudah menerima containment yang tak sempurna. Memblokir di sini
+    berarti gedung yang benar tak bisa disimpan hanya karena batas kawasan
+    digambar kasar. Induk dicari TER-SCOPE satker — menebak parent_id milik
+    satker lain sekadar menghasilkan "induk tak ketemu" = tanpa peringatan.
+    """
+    if not geometry or not isinstance(geometry, dict) or not parent_id:
+        return None
+    level = su.level_dari_kode(tipe)
+    mode = (level or {}).get("containment")
+    if mode in tu.MODE_TANPA_CEK:
+        return None
+    induk = await db.spasial_node.find_one(
+        scope_query_field_satker(_user, {"id": parent_id}),
+        {"_id": 0, "geometry": 1, "nama": 1})
+    if not induk or not induk.get("geometry"):
+        return None
+    pesan = tu.validasi_containment(geometry, induk["geometry"], mode)
+    if pesan:
+        return f"Terhadap induk \"{induk.get('nama') or parent_id}\": {pesan}"
+    return None
+
+
 @spasial_router.post("/spasial/node")
 async def buat_node(payload: NodeIn, _user: dict = Depends(require_writer)):
     doc = _bersih_node(payload)
@@ -285,7 +321,10 @@ async def buat_node(payload: NodeIn, _user: dict = Depends(require_writer)):
     await log_audit("buat_spasial_node", "", node_id,
                     username=_user.get("username", "system"), kode_satker=kode_satker,
                     detail=f"Tambah {doc['tipe']} — {doc['nama']}")
-    return {"ok": True, "id": node_id}
+    peringatan = await _peringatan_containment(
+        payload.geometry, doc["tipe"], doc["parent_id"], _user)
+    return {"ok": True, "id": node_id,
+            "peringatan": [peringatan] if peringatan else []}
 
 
 @spasial_router.put("/spasial/node/{node_id}")
@@ -334,7 +373,12 @@ async def ubah_node(node_id: str, payload: NodeIn,
                     kode_satker=str(lama.get("kode_satker") or "").strip(),
                     detail=f"Ubah {doc['tipe']} — {doc['nama']}"
                            + (" (pindah induk)" if pindah else ""))
-    return {"ok": True, "id": node_id}
+    # Geometri None = tak diubah pada PUT ini → cek containment pada bentuk
+    # TERSIMPAN, karena pindah induk pun bisa membuatnya keluar batas.
+    geom_cek = payload.geometry if payload.geometry is not None else lama.get("geometry")
+    peringatan = await _peringatan_containment(geom_cek, doc["tipe"], parent_baru, _user)
+    return {"ok": True, "id": node_id,
+            "peringatan": [peringatan] if peringatan else []}
 
 
 async def _turunkan_ulang_keturunan(node_id: str, anc_baru: list,
@@ -421,6 +465,52 @@ class TitikIn(BaseModel):
     lon: float
     lat: float
     akurasi_m: Optional[float] = None
+
+
+class GeometriPratinjauIn(BaseModel):
+    geometry: dict
+    tipe: Optional[str] = ""
+    parent_id: Optional[str] = ""
+
+
+@spasial_router.post("/spasial/validasi-geometri")
+async def validasi_geometri_pratinjau(payload: GeometriPratinjauIn,
+                                      _user: dict = Depends(require_user)):
+    """Periksa geometri TANPA menyimpan — dipanggil editor sebelum "Simpan".
+
+    Mengembalikan galat struktur/topologi (pemblokir), peringatan containment
+    (bukan pemblokir), luas kasar, dan — bila topologi rusak — usulan hasil
+    `make_valid` sebagai PRATINJAU. Perbaikan otomatis tak pernah diterapkan
+    diam-diam saat menyimpan: make_valid bisa memecah poligon atau menggeser
+    bentuk, jadi keputusannya harus di tangan operator.
+
+    `require_user` (bukan writer): ini operasi baca murni, dan viewer yang
+    membuka editor mode lihat tetap berhak melihat status bentuknya.
+    """
+    geom = payload.geometry
+    galat = su.validasi_geometri(geom)
+    if galat:
+        return {"valid": False, "galat": f"Geometri tidak valid: {galat}",
+                "peringatan": [], "luas_m2": None, "perbaikan": None,
+                "topologi_aktif": tu.topologi_aktif()}
+    galat_topo = tu.validasi_topologi(geom)
+    if galat_topo:
+        usul = tu.perbaiki_topologi(geom)
+        # Usulan hanya dikirim bila BENAR-BENAR lolos seluruh validasi —
+        # menawarkan perbaikan yang akan ditolak saat disimpan itu menyesatkan.
+        if usul is not None and (su.validasi_geometri(usul)
+                                 or tu.validasi_topologi(usul)):
+            usul = None
+        return {"valid": False, "galat": f"Topologi tidak valid: {galat_topo}",
+                "peringatan": [], "luas_m2": None, "perbaikan": usul,
+                "topologi_aktif": tu.topologi_aktif()}
+    peringatan = await _peringatan_containment(
+        geom, str(payload.tipe or "").strip().upper(),
+        str(payload.parent_id or "").strip() or None, _user)
+    return {"valid": True, "galat": None,
+            "peringatan": [peringatan] if peringatan else [],
+            "luas_m2": round(su.luas_kasar_m2(geom), 2),
+            "perbaikan": None, "topologi_aktif": tu.topologi_aktif()}
 
 
 def _ringkas(n: dict) -> dict:

@@ -53,6 +53,56 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#626] Spasial Fase 4: gambar poligon denah di aplikasi + validasi topologi — 2026-07-26
+
+Fase 4 program Spasial & IoT: poligon denah kini bisa DIGAMBAR langsung di
+aplikasi — melengkapi celah yang tersisa dari Fase 3, saat geometri hanya bisa
+masuk lewat API.
+
+**Editor denah (`DenahEditor`)** — dibuka dari tombol baru di tiap baris
+Hierarki Spasial. Dialog Leaflet + `@geoman-io/leaflet-geoman-free` (dimuat
+LAZY — mayoritas kunjungan halaman pohon tak pernah membuka editor, jadi berat
+pustakanya tak dibayar semua orang): gambar poligon/persegi, ubah verteks,
+geser, potong lubang (void/atrium), hapus. Batas INDUK tampil sebagai garis
+putus-putus hijau sebagai panduan; tetangga sekitar tampil redup sebagai
+konteks (keduanya tak bisa diedit). Dua goresan terpisah menjadi MultiPolygon —
+kampus dengan dua tapak itu nyata. Cincin hasil geoman DITUTUP otomatis
+(geoman tidak menutup cincin pada `toGeoJSON`, RFC 7946 mewajibkannya).
+
+**Validasi topologi (`topologi_utils.py`, shapely 2.1.2)** — menutup persis
+kelas bug yang Fase 3 dokumentasikan sebagai "belum diperiksa": bow-tie
+(menyilang diri), lubang di luar cincin luar, bagian bersarang, cincin kembar.
+Pesan galat diterjemahkan ke bahasa manusia. Lazy-import + degradasi anggun:
+tanpa shapely seluruh cek melewati dirinya dan MongoDB kembali jadi jaring
+terakhir (perilaku Fase 3) — server tak pernah mati karena libgeos absen.
+
+**Kebijakan blokir vs peringatan (keputusan sadar):**
+- Galat **topologi → BLOKIR** (400): geometri tak sah merusak pembangunan
+  indeks 2dsphere untuk SELURUH koleksi.
+- Pelanggaran **containment → PERINGATAN** saja: poligon digambar orang berbeda
+  pada waktu berbeda, dan seluruh desain deteksi Fase 3 (`pilih_rantai`) sudah
+  menerima containment tak sempurna. Memblokir berarti gedung yang benar tak
+  bisa disimpan hanya karena batas kawasan digambar kasar. Mode per tingkat
+  ikut registry: `ketat` (toleransi ±0,5 m untuk verteks yang menempel batas),
+  `longgar` (persil/titik cukup bersinggungan), `sumbu_z`/akar dilewati.
+
+**Pratinjau sebelum simpan** — `POST /api/spasial/validasi-geometri` memeriksa
+tanpa menyimpan: galat struktur/topologi, peringatan containment, luas kasar.
+Bila topologi rusak, server mengusulkan hasil `make_valid` — usulan DITAWARKAN
+ke operator lewat tombol "Terapkan perbaikan otomatis", tak pernah diterapkan
+diam-diam saat menyimpan (make_valid bisa memecah poligon atau menggeser
+bentuk; keputusannya milik manusia). Usulan hanya dikirim bila benar-benar
+lolos seluruh validasi — menawarkan perbaikan yang akan ditolak itu menyesatkan.
+
+Respons simpan node kini membawa `peringatan[]` (containment) yang ditampilkan
+sebagai toast. Dependensi baru: `shapely==2.1.2` (backend, +22 MB RAM hanya
+saat dipakai) + `@geoman-io/leaflet-geoman-free@2.20.0` (frontend, chunk lazy)
+— keduanya persis yang direncanakan dokumen arsitektur Fase 0.
+
+Uji: +18 backend (868 total; fixture membuktikan tiap kasus topologi memang
+LOLOS cek struktural — kalau tidak, ujinya tak membuktikan apa-apa) & +14
+frontend (134 total).
+
 ## [#625] Spasial Fase 3 (susulan): panel denah tak lagi memicu kotak seleksi — 2026-07-26
 
 Temuan terakhir dari fase refutasi tinjauan #624, yang sempat saya tolak dengan

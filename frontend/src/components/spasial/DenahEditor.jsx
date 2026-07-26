@@ -1,0 +1,298 @@
+// Editor DENAH satu node — gambar/ubah/hapus poligon langsung di aplikasi
+// (Fase 4). Dimuat LAZY dari SpasialMasterPage: Leaflet + geoman itu berat dan
+// mayoritas kunjungan halaman pohon tak pernah membuka editor.
+//
+// Alur simpan: goresan geoman → fiturKeGeometri (lib murni) → pratinjau
+// POST /spasial/validasi-geometri (galat topologi MEMBLOKIR; peringatan
+// containment TIDAK — kebijakan backend, lihat topologi_utils.py) → PUT node.
+// Bila topologi rusak, server bisa mengusulkan hasil `make_valid`; usulan itu
+// DITAWARKAN ke operator, tak pernah diterapkan diam-diam.
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+import "@geoman-io/leaflet-geoman-free";
+import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
+import axios from "axios";
+import { toast } from "sonner";
+import { Loader2, Save, Trash2, Wand2, X, AlertTriangle } from "lucide-react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { fiturKeGeometri, payloadSimpan, pusatAwal } from "@/lib/denahEditor";
+import { gayaFitur } from "@/lib/spasialDenah";
+
+const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+
+// Terjemahan tooltip geoman yang benar-benar tampil di toolbar kita.
+const TERJEMAHAN_ID = {
+  tooltips: {
+    placeMarker: "Klik untuk menaruh titik",
+    firstVertex: "Klik untuk menaruh verteks pertama",
+    continueLine: "Klik untuk verteks berikutnya",
+    finishPoly: "Klik verteks pertama untuk menutup poligon",
+  },
+  buttonTitles: {
+    drawPolyButton: "Gambar poligon",
+    editButton: "Ubah verteks",
+    dragButton: "Geser bentuk",
+    cutButton: "Potong lubang",
+    deleteButton: "Hapus bentuk",
+  },
+};
+
+export default function DenahEditor({ node, onClose, onSaved }) {
+  const containerRef = useRef(null);
+  const mapRef = useRef(null);
+  const grupGambarRef = useRef(null);    // layer yang BOLEH diedit (bentuk node ini)
+  const [memuat, setMemuat] = useState(true);
+  const [menyimpan, setMenyimpan] = useState(false);
+  const [cek, setCek] = useState(null);  // hasil pratinjau validasi terakhir
+  const [kotor, setKotor] = useState(false);
+
+  const nodeId = node?.id;
+
+  // ── Init peta + geoman ────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) return undefined;
+    const map = L.map(containerRef.current, {
+      zoomControl: true, attributionControl: true, maxZoom: 22,
+    });
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 22, maxNativeZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    }).addTo(map);
+
+    const grup = new L.FeatureGroup().addTo(map);
+    grupGambarRef.current = grup;
+
+    map.pm.setLang("id_kustom", TERJEMAHAN_ID, "en");
+    map.pm.addControls({
+      position: "topleft",
+      drawPolygon: true, cutPolygon: true,
+      editMode: true, dragMode: true, removalMode: true,
+      // Bentuk lain tak bermakna untuk denah — sembunyikan agar tak membingungkan.
+      drawMarker: false, drawCircleMarker: false, drawPolyline: false,
+      drawRectangle: true, drawCircle: false, drawText: false, rotateMode: false,
+    });
+    // Goresan baru masuk ke grup kita sendiri supaya "kumpulkan semua bentuk"
+    // saat menyimpan tak ikut menyapu layer konteks/tile.
+    map.on("pm:create", (e) => {
+      try { e.layer.remove(); } catch { /* belum terpasang */ }
+      grup.addLayer(e.layer);
+      setKotor(true); setCek(null);
+    });
+    map.on("pm:cut", (e) => {
+      // pm:cut mengganti layer asal dengan hasil potongan di LUAR grup.
+      try { grup.removeLayer(e.originalLayer); } catch { /* sudah lepas */ }
+      try { e.layer.remove(); } catch { /* belum terpasang */ }
+      grup.addLayer(e.layer);
+      setKotor(true); setCek(null);
+    });
+    map.on("pm:remove", () => { setKotor(true); setCek(null); });
+    grup.on("pm:edit pm:dragend", () => { setKotor(true); setCek(null); });
+
+    mapRef.current = map;
+    setTimeout(() => map.invalidateSize(), 80);
+    return () => {
+      map.remove();
+      mapRef.current = null;
+      grupGambarRef.current = null;
+    };
+  }, []);
+
+  // ── Muat bentuk tersimpan + konteks sekitar ───────────────────────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !nodeId) return undefined;
+    let batal = false;
+    (async () => {
+      setMemuat(true);
+      try {
+        const detail = (await axios.get(`${API}/spasial/node/${nodeId}`)).data;
+        if (batal) return;
+        let induk = null;
+        if (detail?.parent_id) {
+          try {
+            induk = (await axios.get(`${API}/spasial/node/${detail.parent_id}`)).data;
+          } catch { /* induk lintas-hak/terhapus — konteks saja, bukan galat */ }
+        }
+        if (batal) return;
+
+        // Batas INDUK sebagai panduan (garis tebal, tak bisa diedit).
+        if (induk?.geometry) {
+          L.geoJSON({ type: "Feature", geometry: induk.geometry }, {
+            style: { color: "#0f766e", weight: 3, dashArray: "8,6",
+                     fillOpacity: 0.03, interactive: false },
+            pmIgnore: true,
+          }).addTo(map).bindTooltip(`Batas induk: ${induk.nama || ""}`, { sticky: true });
+        }
+        // Tetangga di sekitar sebagai konteks redup (tak bisa diedit).
+        const pusat = pusatAwal(detail, induk);
+        map.setView([pusat.lat, pusat.lng], pusat.zoom);
+        try {
+          const b = map.getBounds();
+          const bbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]
+            .map((v) => v.toFixed(6)).join(",");
+          const ctx = (await axios.get(`${API}/spasial/geojson`, { params: { bbox } })).data;
+          if (batal) return;
+          for (const f of ctx?.features || []) {
+            if (f?.properties?.id === nodeId) continue;   // bentuk sendiri = editable, bukan konteks
+            if (induk && f?.properties?.id === induk.id) continue;
+            L.geoJSON(f, {
+              style: { ...gayaFitur(f?.properties?.ordinal_level), opacity: 0.5 },
+              pmIgnore: true, interactive: false,
+            }).addTo(map);
+          }
+        } catch { /* konteks gagal — editor tetap berfungsi */ }
+
+        // Bentuk NODE INI — masuk grup editable.
+        if (detail?.geometry && !batal) {
+          const lyr = L.geoJSON({ type: "Feature", geometry: detail.geometry });
+          lyr.eachLayer((l) => grupGambarRef.current?.addLayer(l));
+          try { map.fitBounds(grupGambarRef.current.getBounds().pad(0.3)); }
+          catch { /* geometri titik tunggal */ }
+        }
+      } catch {
+        if (!batal) toast.error("Gagal memuat data node");
+      } finally {
+        if (!batal) setMemuat(false);
+      }
+    })();
+    return () => { batal = true; };
+  }, [nodeId]);
+
+  const kumpulkanGeometri = useCallback(() => {
+    const fitur = [];
+    grupGambarRef.current?.eachLayer((l) => {
+      try { fitur.push(l.toGeoJSON()); } catch { /* layer tanpa geometri */ }
+    });
+    return fiturKeGeometri(fitur).geometry;   // null = kosong (hapus bentuk)
+  }, []);
+
+  // ── Pratinjau validasi (tanpa simpan) ─────────────────────────────────────
+  const periksa = useCallback(async () => {
+    const geometry = kumpulkanGeometri();
+    if (geometry === null) return { valid: true, kosong: true, peringatan: [] };
+    try {
+      const r = await axios.post(`${API}/spasial/validasi-geometri`, {
+        geometry, tipe: node?.tipe || "", parent_id: node?.parent_id || "",
+      });
+      return { ...r.data, kosong: false, geometry };
+    } catch (e) {
+      return { valid: false, kosong: false,
+               galat: e?.response?.data?.detail || "Validasi gagal — periksa koneksi",
+               peringatan: [] };
+    }
+  }, [kumpulkanGeometri, node]);
+
+  const simpan = useCallback(async () => {
+    setMenyimpan(true);
+    try {
+      const hasil = await periksa();
+      setCek(hasil);
+      if (!hasil.valid) return;                 // galat tampil di panel bawah
+      const geometry = hasil.kosong ? null : hasil.geometry;
+      const r = await axios.put(`${API}/spasial/node/${nodeId}`,
+                                payloadSimpan(node, geometry));
+      for (const p of r.data?.peringatan || []) toast.warning(p, { duration: 8000 });
+      toast.success(hasil.kosong ? "Bentuk dihapus" : "Denah tersimpan");
+      onSaved?.();
+      onClose?.();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal menyimpan denah");
+    } finally {
+      setMenyimpan(false);
+    }
+  }, [periksa, nodeId, node, onSaved, onClose]);
+
+  // Terapkan usulan make_valid dari server: ganti seluruh isi grup gambar.
+  const terapkanPerbaikan = useCallback(() => {
+    const usul = cek?.perbaikan;
+    if (!usul || !grupGambarRef.current) return;
+    grupGambarRef.current.clearLayers();
+    const lyr = L.geoJSON({ type: "Feature", geometry: usul });
+    lyr.eachLayer((l) => grupGambarRef.current.addLayer(l));
+    setCek(null); setKotor(true);
+    toast.info("Perbaikan otomatis diterapkan — periksa bentuknya lalu simpan");
+  }, [cek]);
+
+  const hapusBentuk = useCallback(() => {
+    grupGambarRef.current?.clearLayers();
+    setKotor(true); setCek(null);
+  }, []);
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose?.()}>
+      <DialogContent
+        className="max-w-4xl p-0 gap-0 overflow-hidden"
+        data-testid="denah-editor"
+        // Escape dipakai geoman untuk MEMBATALKAN goresan yang sedang digambar;
+        // membiarkan Radix ikut menutup dialog berarti satu tekan Escape
+        // membuang seluruh pekerjaan. Tutup lewat tombol Batal/X saja.
+        onEscapeKeyDown={(e) => e.preventDefault()}
+        // Klik di luar saat ada perubahan belum tersimpan = kehilangan gambar
+        // tanpa peringatan — cegah; tanpa perubahan, tutup seperti biasa.
+        onInteractOutside={(e) => { if (kotor) e.preventDefault(); }}
+      >
+        <DialogHeader className="px-4 pt-3 pb-2 border-b border-border">
+          <DialogTitle className="text-sm flex items-center gap-2">
+            Denah: {node?.nama}
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{node?.tipe}</span>
+          </DialogTitle>
+          <DialogDescription className="text-xs">
+            Gambar poligon dengan alat di kiri peta. Garis putus-putus hijau = batas induk.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="relative">
+          <div ref={containerRef} className="h-[52vh] min-h-[320px] w-full" data-testid="denah-editor-peta" />
+          {memuat && (
+            <div className="absolute inset-0 z-[500] bg-background/60 flex items-center justify-center">
+              <Loader2 className="w-6 h-6 animate-spin text-teal-600" />
+            </div>
+          )}
+        </div>
+
+        {/* Panel hasil validasi — galat MEMBLOKIR, peringatan tidak. */}
+        {cek && !cek.valid && (
+          <div className="px-4 py-2 border-t border-border bg-red-500/10 flex items-start gap-2" data-testid="denah-galat">
+            <AlertTriangle className="w-4 h-4 text-red-600 mt-0.5 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs text-red-700 dark:text-red-300">{cek.galat}</p>
+              {cek.perbaikan && (
+                <Button size="sm" variant="outline" className="mt-1.5 h-7 text-xs"
+                        onClick={terapkanPerbaikan} data-testid="denah-terapkan-perbaikan">
+                  <Wand2 className="w-3.5 h-3.5 mr-1" />Terapkan perbaikan otomatis
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+        {cek?.valid && (cek.peringatan || []).map((p, i) => (
+          <div key={i} className="px-4 py-2 border-t border-border bg-amber-500/10 flex items-start gap-2" data-testid="denah-peringatan">
+            <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+            <p className="text-xs text-amber-700 dark:text-amber-300">{p}</p>
+          </div>
+        ))}
+
+        <div className="px-4 py-3 border-t border-border flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={hapusBentuk}
+                  className="text-red-600" data-testid="denah-hapus-bentuk">
+            <Trash2 className="w-3.5 h-3.5 mr-1" />Kosongkan
+          </Button>
+          <div className="flex-1" />
+          <Button variant="outline" size="sm" onClick={() => onClose?.()} data-testid="denah-batal">
+            <X className="w-3.5 h-3.5 mr-1" />Batal
+          </Button>
+          <Button size="sm" onClick={simpan} disabled={menyimpan || memuat || !kotor}
+                  data-testid="denah-simpan">
+            {menyimpan ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+                       : <Save className="w-3.5 h-3.5 mr-1" />}
+            Simpan Denah
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
