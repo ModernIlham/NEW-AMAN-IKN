@@ -65,9 +65,14 @@ export default function SpasialMasterPage({ user, onBack }) {
 
   // Registry tingkat dipisah dari pohon: ganti preset hanya mengubah LABEL, jadi
   // cukup ambil ulang level (tanpa spinner layar-penuh & tanpa memuat ulang node).
+  // timeout WAJIB: tanpa ini, satu request yang menggantung (backend lambat/
+  // mati) meninggalkan `loading` true selamanya — halaman denah berputar tanpa
+  // henti tanpa menampilkan apa pun (bug lapangan). Dengan timeout, request
+  // ditolak → catch → toast → finally membereskan spinner.
   const loadLevels = useCallback(async () => {
     try {
-      const rl = await axios.get(`${API}/spasial/level?preset=${preset}`);
+      const rl = await axios.get(`${API}/spasial/level?preset=${preset}`,
+                                 { timeout: 20000 });
       setLevels(rl.data?.items || []);
     } catch (err) {
       toast.error(getApiError(err, "Gagal memuat daftar tingkat"));
@@ -77,7 +82,7 @@ export default function SpasialMasterPage({ user, onBack }) {
   const loadNodes = useCallback(async () => {
     setLoading(true);
     try {
-      const rn = await axios.get(`${API}/spasial/node`);
+      const rn = await axios.get(`${API}/spasial/node`, { timeout: 20000 });
       setNodes(rn.data?.items || []);
     } catch (err) {
       toast.error(getApiError(err, "Gagal memuat hierarki spasial"));

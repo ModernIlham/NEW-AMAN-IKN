@@ -75,6 +75,12 @@ export default function DenahEditor({ node, onClose, onSaved }) {
   // verteks path), jadi hanya konteks yang dipindah ke canvas.
   const rendererKonteksRef = useRef(null);
   const [memuat, setMemuat] = useState(true);
+  // Peta siap = init selesai. Efek pemuat DIGERBANG oleh ini: dulu ia membaca
+  // mapRef.current langsung dan RETURN DIAM bila map belum ada — meninggalkan
+  // `memuat` tersangkut true (spinner selamanya, peta tak pernah tampil).
+  // Kini pemuat baru jalan setelah peta siap, dan tak pernah keluar tanpa
+  // membereskan spinner (temuan bug lapangan).
+  const [petaSiap, setPetaSiap] = useState(false);
   const [menyimpan, setMenyimpan] = useState(false);
   const [cek, setCek] = useState(null);  // hasil pratinjau validasi terakhir
   const [kotor, setKotor] = useState(false);
@@ -153,11 +159,13 @@ export default function DenahEditor({ node, onClose, onSaved }) {
 
     mapRef.current = map;
     setTimeout(() => map.invalidateSize(), 80);
+    setPetaSiap(true);
     return () => {
       map.remove();
       mapRef.current = null;
       grupGambarRef.current = null;
       rendererKonteksRef.current = null;
+      setPetaSiap(false);
     };
   }, []);
 
@@ -188,12 +196,24 @@ export default function DenahEditor({ node, onClose, onSaved }) {
   // ── Muat bentuk tersimpan + konteks sekitar ───────────────────────────────
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !nodeId) return undefined;
+    if (!petaSiap || !map || !nodeId) return undefined;
     let batal = false;
+    // Watchdog: apa pun yang terjadi (request menggantung, jaringan mati,
+    // galat tak terduga), spinner WAJIB hilang dalam 25 dtk supaya operator
+    // tak menatap loading tanpa akhir. Editor tetap bisa dipakai menggambar.
+    const jagaWaktu = setTimeout(() => {
+      if (!batal) {
+        setMemuat(false);
+        toast.error("Memuat konteks peta lambat/gagal — Anda tetap bisa menggambar");
+      }
+    }, 25000);
+    // Timeout per-request supaya satu endpoint yang menggantung tak menahan
+    // seluruh pemuatan sampai watchdog.
+    const OPS = { timeout: 20000 };
     (async () => {
       setMemuat(true);
       try {
-        const detail = (await axios.get(`${API}/spasial/node/${nodeId}`)).data;
+        const detail = (await axios.get(`${API}/spasial/node/${nodeId}`, OPS)).data;
         if (batal) return;
         setDetailNode(detail);
         // Gambar denah yang berlaku (milik sendiri / warisan lantai-gedung).
@@ -205,7 +225,7 @@ export default function DenahEditor({ node, onClose, onSaved }) {
         let induk = null;
         if (detail?.parent_id) {
           try {
-            induk = (await axios.get(`${API}/spasial/node/${detail.parent_id}`)).data;
+            induk = (await axios.get(`${API}/spasial/node/${detail.parent_id}`, OPS)).data;
           } catch { /* induk lintas-hak/terhapus — konteks saja, bukan galat */ }
         }
         if (batal) return;
@@ -222,21 +242,39 @@ export default function DenahEditor({ node, onClose, onSaved }) {
             pmIgnore: true, renderer: rendererKonteksRef.current,
           }).addTo(map).bindTooltip(`Batas induk: ${induk.nama || ""}`, { sticky: true });
         }
-        // Tetangga di sekitar sebagai konteks redup (tak bisa diedit).
+        // Posisikan peta + muat bentuk NODE INI (editable) LEBIH DULU — inilah
+        // yang dibutuhkan untuk menggambar. Spinner dibereskan tepat setelah
+        // ini; konteks tetangga menyusul di latar. Jadi peta selalu tampil
+        // seketika, bahkan bila panggilan konteks lambat/gagal/menggantung —
+        // penyebab "loading terus tak menampilkan apa pun" (bug lapangan).
         const pusat = pusatAwal(detail, induk);
         map.setView([pusat.lat, pusat.lng], pusat.zoom);
+        if (detail?.geometry) {
+          const lyr = L.geoJSON({ type: "Feature", geometry: detail.geometry });
+          lyr.eachLayer((l) => grupGambarRef.current?.addLayer(l));
+          // maxZoom WAJIB: untuk geometri TITIK, getBounds() sah (kotak
+          // nol-luas) dan fitBounds TIDAK melempar — tanpa plafon peta melompat
+          // ke zoom 22 (temuan tinjauan).
+          try {
+            map.fitBounds(grupGambarRef.current.getBounds().pad(0.3),
+                          { maxZoom: 19 });
+          } catch { /* grup kosong / titik tunggal */ }
+        }
+        clearTimeout(jagaWaktu);
+        if (!batal) setMemuat(false);          // ← peta siap; konteks async
+
+        // Tetangga di sekitar sebagai konteks redup (best-effort, canvas).
         try {
           const b = map.getBounds();
           const bbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]
             .map((v) => v.toFixed(6)).join(",");
           // Konteks dibatasi ke tingkat node ini KE ATAS (ordinal <= level
           // node): menggambar Gedung tak perlu menarik SETIAP ruangan & lantai
-          // dalam viewport — itu payload + render terberat dan tak berguna
-          // sebagai orientasi. Tanpa batas ini `level_maks` default 100 memuat
-          // seluruh pohon di viewport.
+          // dalam viewport — payload + render terberat, tak berguna sebagai
+          // orientasi. Tanpa batas ini `level_maks` default 100 = seluruh pohon.
           const level_maks = Number(detail?.ordinal_level) || 100;
           const ctx = (await axios.get(`${API}/spasial/geojson`,
-            { params: { bbox, level_maks } })).data;
+            { params: { bbox, level_maks }, timeout: 20000 })).data;
           if (batal) return;
           for (const f of ctx?.features || []) {
             if (f?.properties?.id === nodeId) continue;   // bentuk sendiri = editable, bukan konteks
@@ -248,28 +286,15 @@ export default function DenahEditor({ node, onClose, onSaved }) {
             }).addTo(map);
           }
         } catch { /* konteks gagal — editor tetap berfungsi */ }
-
-        // Bentuk NODE INI — masuk grup editable.
-        if (detail?.geometry && !batal) {
-          const lyr = L.geoJSON({ type: "Feature", geometry: detail.geometry });
-          lyr.eachLayer((l) => grupGambarRef.current?.addLayer(l));
-          // maxZoom WAJIB: untuk geometri TITIK, getBounds() sah (kotak
-          // nol-luas) dan fitBounds TIDAK melempar — tanpa plafon, peta
-          // melompat ke zoom 22 dan alas overlay bisa di luar bingkai
-          // (temuan tinjauan; try/catch lama salah asumsi).
-          try {
-            map.fitBounds(grupGambarRef.current.getBounds().pad(0.3),
-                          { maxZoom: 19 });
-          } catch { /* grup kosong */ }
-        }
       } catch {
-        if (!batal) toast.error("Gagal memuat data node");
+        if (!batal) { toast.error("Gagal memuat data node"); }
       } finally {
+        clearTimeout(jagaWaktu);
         if (!batal) setMemuat(false);
       }
     })();
-    return () => { batal = true; };
-  }, [nodeId, pasangOverlay]);
+    return () => { batal = true; clearTimeout(jagaWaktu); };
+  }, [nodeId, petaSiap, pasangOverlay]);
 
   // ── Overlay gambar denah (Fase 7) ─────────────────────────────────────────
   const lepasMarkerSudut = useCallback(() => {
