@@ -99,7 +99,39 @@ sebagai toast. Dependensi baru: `shapely==2.1.2` (backend, +22 MB RAM hanya
 saat dipakai) + `@geoman-io/leaflet-geoman-free@2.20.0` (frontend, chunk lazy)
 — keduanya persis yang direncanakan dokumen arsitektur Fase 0.
 
-Uji: +18 backend (868 total; fixture membuktikan tiap kasus topologi memang
+**Perbaikan temuan tinjauan adversarial** (15 temuan, 7 bertahan refutasi):
+
+- **HIGH — bentuk yang DIHAPUS tetap tersimpan kembali.** Tanpa
+  `setGlobalOptions({layerGroup})`, `_getContainingLayer()` geoman mengembalikan
+  MAP, sehingga "Hapus bentuk" hanya melepas layer dari peta — registry `_layers`
+  milik FeatureGroup tetap memegangnya. `kumpulkanGeometri` meng-iterasi grup,
+  jadi bentuk yang dihapus dipungut lagi, di-PUT, dan diberi toast **sukses
+  palsu**; bentuknya muncul lagi saat editor dibuka ulang. Penghapusan sebagian
+  MultiPolygon bahkan tak punya jalur benar sama sekali.
+- **HIGH — CPU-DoS lewat endpoint pratinjau.** Plafon verteks hanya menjaga
+  `validasi_topologi`; `perbaiki_topologi` tak punya plafon, padahal endpoint
+  memanggilnya persis setelah validasi gagal — termasuk saat gagalnya karena
+  "terlalu besar". Terukur di repo ini: bintang menyilang-diri **101 verteks**
+  = 0,07 detik di validasi tetapi **6,85 detik** di `make_valid`, dan skalanya
+  super-linear. Handler `async` tanpa offload berarti event loop worker beku
+  untuk SEMUA pengguna. Ditutup berlapis: plafon di `perbaiki_topologi` juga,
+  plafon diturunkan 100.000 → **20.000** (angka tinggi memberi rasa aman palsu),
+  seluruh kerja GEOS dipindah ke thread (`asyncio.to_thread`), dan
+  `@limiter.limit("60/minute")` sesuai konvensi repo untuk endpoint berat-CPU.
+- **MEDIUM — `peringatan[]` dibuang form pohon.** Form Ubah Node adalah
+  SATU-SATUNYA UI yang bisa mengubah induk, dan backend sengaja menghitung
+  containment bentuk tersimpan terhadap induk BARU untuk kasus itu — tetapi
+  responsnya dibuang. Karena pelanggaran containment memang tidak memblokir,
+  operator tak pernah tahu gedungnya kini di luar batas induknya.
+- **MEDIUM — editor menyimpan dari prop `node` basi.** PUT mengganti seluruh
+  field; memakai snapshot baris pohon (bisa berumur menit) MEMBALIKKAN ganti
+  nama/pindah induk yang dilakukan orang lain. Kini detail di-fetch ulang tepat
+  sebelum PUT, dengan detail pembukaan dialog sebagai cadangan.
+- **LOW** — tooltip "Batas induk" tak pernah muncul karena `interactive:false`
+  membuat renderer tak mendaftarkan event mouse (`pmIgnore` sudah cukup untuk
+  melindunginya dari edit geoman).
+
+Uji: +21 backend (871 total; fixture membuktikan tiap kasus topologi memang
 LOLOS cek struktural — kalau tidak, ujinya tak membuktikan apa-apa) & +14
 frontend (134 total).
 

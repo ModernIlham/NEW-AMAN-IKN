@@ -149,13 +149,20 @@ export default function SpasialMasterPage({ user, onBack }) {
           kategori: form.lantai_kategori,
         };
       }
+      // Respons membawa `peringatan[]` containment — WAJIB ditampilkan. Inilah
+      // satu-satunya UI yang bisa mengubah induk, dan backend sengaja menghitung
+      // containment bentuk TERSIMPAN terhadap induk BARU untuk kasus itu. Karena
+      // pelanggaran containment sengaja TIDAK memblokir simpan, membuang respons
+      // berarti operator tak pernah tahu gedungnya kini di luar batas induknya.
+      let r;
       if (form.mode === "tambah") {
-        await axios.post(`${API}/spasial/node`, body);
+        r = await axios.post(`${API}/spasial/node`, body);
         toast.success("Node ditambahkan");
       } else {
-        await axios.put(`${API}/spasial/node/${form.id}`, body);
+        r = await axios.put(`${API}/spasial/node/${form.id}`, body);
         toast.success("Node diperbarui");
       }
+      for (const p of r?.data?.peringatan || []) toast.warning(p, { duration: 8000 });
       setForm(null);
       await loadNodes();
     } catch (err) {

@@ -146,6 +146,21 @@ def test_geometri_raksasa_ditolak_sebelum_shapely(monkeypatch):
     assert tu.validasi_topologi(poligon(KOTAK)) is None          # 5 titik → jalan
 
 
+def test_perbaiki_topologi_juga_menjaga_plafon(monkeypatch):
+    """REGRESI (temuan tinjauan): plafon dulu HANYA di validasi_topologi.
+
+    Endpoint pratinjau memanggil perbaiki_topologi tepat SETELAH validasi gagal
+    — termasuk saat gagalnya karena "terlalu besar" — sehingga geometri raksasa
+    justru disalurkan langsung ke `make_valid` tanpa penjaga apa pun. Terukur:
+    bintang menyilang-diri 101 verteks = 0,07 s di validasi tetapi 6,85 s di
+    make_valid, dan skalanya super-linear.
+    """
+    monkeypatch.setattr(tu, "MAKS_TITIK_TOPOLOGI", 4)
+    assert tu.perbaiki_topologi(poligon(BOWTIE)) is None          # 5 titik → ditolak
+    monkeypatch.setattr(tu, "MAKS_TITIK_TOPOLOGI", 100)
+    assert tu.perbaiki_topologi(poligon(BOWTIE)) is not None      # di bawah plafon → jalan
+
+
 # ── degradasi anggun tanpa shapely ──────────────────────────────────────────
 
 def test_tanpa_shapely_semua_cek_melewati_diri(monkeypatch):

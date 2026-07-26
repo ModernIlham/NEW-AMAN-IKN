@@ -33,11 +33,16 @@ MODE_TANPA_CEK = {"sumbu_z", "akar", "", None}
 TOLERANSI_KETAT_DERAJAT = 0.5 / 111_320.0
 
 # Plafon verteks untuk operasi shapely. Goresan tangan berisi puluhan titik;
-# batas kabupaten hasil impor ribuan. Di atas plafon ini operasi GEOS pada VPS
-# kecil bisa makan CPU berarti — dan endpoint pratinjau dapat dipanggil bebas
-# oleh user terautentikasi. Fase impor (SHP/KML) memproses file besar lewat job
-# latar dengan plafonnya sendiri, bukan lewat jalur request-response ini.
-MAKS_TITIK_TOPOLOGI = 100_000
+# denah gedung terperinci ratusan. Di atas plafon ini operasi GEOS pada VPS
+# kecil makan CPU berarti — dan endpoint pratinjau dapat dipanggil bebas oleh
+# user terautentikasi. Fase impor (SHP/KML) memproses file besar lewat job latar
+# dengan plafonnya sendiri, bukan lewat jalur request-response ini.
+#
+# Angka 100.000 SENGAJA diturunkan ke 20.000 setelah pengukuran: `make_valid`
+# pada poligon menyilang-diri berskala SUPER-LINEAR — bintang 201 verteks saja
+# sudah > 60 detik. Plafon tinggi memberi rasa aman palsu; yang menahan beban
+# sesungguhnya adalah kombinasi plafon ketat + rate-limit + offload ke thread.
+MAKS_TITIK_TOPOLOGI = 20_000
 
 
 def jumlah_titik(geom_dict) -> int:
@@ -150,6 +155,13 @@ def perbaiki_topologi(geom_dict):
     """
     sh = _shapely()
     if sh is None:
+        return None
+    # Plafon SAMA seperti validasi_topologi. `make_valid` GEOS pada poligon
+    # menyilang-diri berskala super-linear — beberapa ratus verteks patologis
+    # sudah bisa membeku berpuluh detik — jadi cek ini WAJIB ada di sini juga,
+    # bukan hanya di validasi_topologi. Tanpa ini endpoint pratinjau meneruskan
+    # geometri raksasa langsung ke make_valid (temuan tinjauan: DoS terautentikasi).
+    if jumlah_titik(geom_dict) > MAKS_TITIK_TOPOLOGI:
         return None
     bentuk = _bentuk(geom_dict)
     if bentuk is None:

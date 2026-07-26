@@ -49,6 +49,11 @@ export default function DenahEditor({ node, onClose, onSaved }) {
   const [menyimpan, setMenyimpan] = useState(false);
   const [cek, setCek] = useState(null);  // hasil pratinjau validasi terakhir
   const [kotor, setKotor] = useState(false);
+  // Dokumen node SEGAR dari server. PUT mengganti SELURUH field NodeIn, jadi
+  // membangun payload dari prop `node` (snapshot baris pohon, bisa berumur
+  // menit) akan MEMBALIKKAN suntingan orang lain — ganti nama / pindah induk
+  // yang terjadi setelah pohon dimuat ikut terhapus (temuan tinjauan).
+  const [detailNode, setDetailNode] = useState(null);
 
   const nodeId = node?.id;
 
@@ -67,6 +72,13 @@ export default function DenahEditor({ node, onClose, onSaved }) {
     grupGambarRef.current = grup;
 
     map.pm.setLang("id_kustom", TERJEMAHAN_ID, "en");
+    // WAJIB: tanpa ini `_getContainingLayer()` geoman mengembalikan MAP, sehingga
+    // "Hapus bentuk" hanya melepas layer dari PETA — registry `_layers` milik
+    // FeatureGroup tetap memegangnya. kumpulkanGeometri meng-iterasi grup, jadi
+    // bentuk yang "dihapus" tersimpan kembali dengan toast sukses palsu
+    // (temuan tinjauan). Dengan layerGroup disetel, create/cut/remove geoman
+    // otomatis menambah & mengeluarkan dari grup yang benar.
+    map.pm.setGlobalOptions({ layerGroup: grup });
     map.pm.addControls({
       position: "topleft",
       drawPolygon: true, cutPolygon: true,
@@ -75,21 +87,20 @@ export default function DenahEditor({ node, onClose, onSaved }) {
       drawMarker: false, drawCircleMarker: false, drawPolyline: false,
       drawRectangle: true, drawCircle: false, drawText: false, rotateMode: false,
     });
-    // Goresan baru masuk ke grup kita sendiri supaya "kumpulkan semua bentuk"
-    // saat menyimpan tak ikut menyapu layer konteks/tile.
-    map.on("pm:create", (e) => {
-      try { e.layer.remove(); } catch { /* belum terpasang */ }
-      grup.addLayer(e.layer);
-      setKotor(true); setCek(null);
-    });
+    // Dengan setGlobalOptions({layerGroup}) di atas, geoman sendiri yang
+    // menambah/mengeluarkan layer dari `grup` — handler ini cukup menandai
+    // "ada perubahan" dan membatalkan hasil validasi lama. `removeLayer`
+    // defensif tetap dipasang untuk jalur yang melewatkan layerGroup
+    // (mis. Edit.remove saat verteks tersisa di bawah minimum).
+    map.on("pm:create", () => { setKotor(true); setCek(null); });
     map.on("pm:cut", (e) => {
-      // pm:cut mengganti layer asal dengan hasil potongan di LUAR grup.
       try { grup.removeLayer(e.originalLayer); } catch { /* sudah lepas */ }
-      try { e.layer.remove(); } catch { /* belum terpasang */ }
-      grup.addLayer(e.layer);
       setKotor(true); setCek(null);
     });
-    map.on("pm:remove", () => { setKotor(true); setCek(null); });
+    map.on("pm:remove", (e) => {
+      try { grup.removeLayer(e.layer); } catch { /* sudah lepas */ }
+      setKotor(true); setCek(null);
+    });
     grup.on("pm:edit pm:dragend", () => { setKotor(true); setCek(null); });
 
     mapRef.current = map;
@@ -111,6 +122,7 @@ export default function DenahEditor({ node, onClose, onSaved }) {
       try {
         const detail = (await axios.get(`${API}/spasial/node/${nodeId}`)).data;
         if (batal) return;
+        setDetailNode(detail);
         let induk = null;
         if (detail?.parent_id) {
           try {
@@ -121,9 +133,13 @@ export default function DenahEditor({ node, onClose, onSaved }) {
 
         // Batas INDUK sebagai panduan (garis tebal, tak bisa diedit).
         if (induk?.geometry) {
+          // TETAP interaktif — `interactive:false` membuat renderer tak pernah
+          // mendaftarkan event mouse, sehingga tooltip sticky (butuh mouseover)
+          // tak pernah muncul. `pmIgnore` sudah melindunginya dari edit/cut
+          // geoman, dan klik pada path tetap merambat ke peta sehingga
+          // menggambar tak terganggu.
           L.geoJSON({ type: "Feature", geometry: induk.geometry }, {
-            style: { color: "#0f766e", weight: 3, dashArray: "8,6",
-                     fillOpacity: 0.03, interactive: false },
+            style: { color: "#0f766e", weight: 3, dashArray: "8,6", fillOpacity: 0.03 },
             pmIgnore: true,
           }).addTo(map).bindTooltip(`Batas induk: ${induk.nama || ""}`, { sticky: true });
         }
@@ -193,8 +209,17 @@ export default function DenahEditor({ node, onClose, onSaved }) {
       setCek(hasil);
       if (!hasil.valid) return;                 // galat tampil di panel bawah
       const geometry = hasil.kosong ? null : hasil.geometry;
+      // Ambil detail SEGAR tepat sebelum PUT: dialog bisa terbuka lama sementara
+      // orang lain mengganti nama / memindah induk node ini. PUT mengganti
+      // SELURUH field, jadi memakai snapshot lama akan membalikkan suntingan
+      // mereka tanpa jejak. `detailNode` (hasil GET saat dialog dibuka) jadi
+      // cadangan bila fetch ulang gagal — tetap lebih segar dari prop `node`.
+      let dasar = detailNode || node;
+      try {
+        dasar = (await axios.get(`${API}/spasial/node/${nodeId}`)).data || dasar;
+      } catch { /* jaringan goyah — pakai detail dari pembukaan dialog */ }
       const r = await axios.put(`${API}/spasial/node/${nodeId}`,
-                                payloadSimpan(node, geometry));
+                                payloadSimpan(dasar, geometry));
       for (const p of r.data?.peringatan || []) toast.warning(p, { duration: 8000 });
       toast.success(hasil.kosong ? "Bentuk dihapus" : "Denah tersimpan");
       onSaved?.();
@@ -204,7 +229,7 @@ export default function DenahEditor({ node, onClose, onSaved }) {
     } finally {
       setMenyimpan(false);
     }
-  }, [periksa, nodeId, node, onSaved, onClose]);
+  }, [periksa, nodeId, node, detailNode, onSaved, onClose]);
 
   // Terapkan usulan make_valid dari server: ganti seluruh isi grup gambar.
   const terapkanPerbaikan = useCallback(() => {

@@ -13,17 +13,18 @@ Pola pohon HYBRID: `parent_id` satu-satunya yang boleh diedit pengguna;
 `ancestors[]` + `jalur` SELALU diturunkan darinya oleh helper murni di
 `spasial_utils`. Memindah sebuah node berarti menulis ulang seluruh keturunannya.
 """
+import asyncio
 import re
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from auth_utils import require_user, require_writer
 from db import db
-from shared_utils import (kode_satker_user, log_audit,
+from shared_utils import (kode_satker_user, limiter, log_audit,
                           pastikan_akses_dok_satker, scope_query_field_satker)
 import spasial_utils as su
 import topologi_utils as tu
@@ -169,7 +170,7 @@ def _terapkan_geometri(doc: dict, geometry) -> None:
     # BLOKIR, bukan peringatan: geometri begini merusak pembangunan indeks
     # 2dsphere untuk SELURUH koleksi. Bila shapely absen, cek ini melewati
     # dirinya sendiri dan MongoDB kembali jadi jaring terakhir (perilaku Fase 3).
-    galat_topo = tu.validasi_topologi(geometry)
+    galat_topo = tu.validasi_topologi(geometry)   # dijaga plafon MAKS_TITIK_TOPOLOGI
     if galat_topo:
         raise HTTPException(status_code=400,
                             detail=f"Topologi tidak valid: {galat_topo}")
@@ -291,7 +292,11 @@ async def _peringatan_containment(geometry, tipe: str, parent_id, _user: dict):
         {"_id": 0, "geometry": 1, "nama": 1})
     if not induk or not induk.get("geometry"):
         return None
-    pesan = tu.validasi_containment(geometry, induk["geometry"], mode)
+    # Operasi GEOS (buffer/covers/difference) di THREAD — handler ini `async`,
+    # dan memanggil shapely langsung membekukan event loop worker untuk SEMUA
+    # pengguna selama perhitungan berjalan (temuan tinjauan).
+    pesan = await asyncio.to_thread(
+        tu.validasi_containment, geometry, induk["geometry"], mode)
     if pesan:
         return f"Terhadap induk \"{induk.get('nama') or parent_id}\": {pesan}"
     return None
@@ -474,7 +479,9 @@ class GeometriPratinjauIn(BaseModel):
 
 
 @spasial_router.post("/spasial/validasi-geometri")
-async def validasi_geometri_pratinjau(payload: GeometriPratinjauIn,
+@limiter.limit("60/minute")
+async def validasi_geometri_pratinjau(request: Request,
+                                      payload: GeometriPratinjauIn,
                                       _user: dict = Depends(require_user)):
     """Periksa geometri TANPA menyimpan — dipanggil editor sebelum "Simpan".
 
@@ -485,7 +492,10 @@ async def validasi_geometri_pratinjau(payload: GeometriPratinjauIn,
     bentuk, jadi keputusannya harus di tangan operator.
 
     `require_user` (bukan writer): ini operasi baca murni, dan viewer yang
-    membuka editor mode lihat tetap berhak melihat status bentuknya.
+    membuka editor mode lihat tetap berhak melihat status bentuknya. Karena
+    itu pula endpoint ini DIBATASI kecepatannya dan seluruh kerja GEOS-nya
+    dijalankan di THREAD — tanpa keduanya, satu akun ber-hak-rendah bisa
+    membekukan event loop worker untuk semua orang (temuan tinjauan).
     """
     geom = payload.geometry
     galat = su.validasi_geometri(geom)
@@ -493,14 +503,20 @@ async def validasi_geometri_pratinjau(payload: GeometriPratinjauIn,
         return {"valid": False, "galat": f"Geometri tidak valid: {galat}",
                 "peringatan": [], "luas_m2": None, "perbaikan": None,
                 "topologi_aktif": tu.topologi_aktif()}
-    galat_topo = tu.validasi_topologi(geom)
+    galat_topo = await asyncio.to_thread(tu.validasi_topologi, geom)
     if galat_topo:
-        usul = tu.perbaiki_topologi(geom)
-        # Usulan hanya dikirim bila BENAR-BENAR lolos seluruh validasi —
-        # menawarkan perbaikan yang akan ditolak saat disimpan itu menyesatkan.
-        if usul is not None and (su.validasi_geometri(usul)
-                                 or tu.validasi_topologi(usul)):
-            usul = None
+        # `perbaiki_topologi` menjaga plafon ukurannya sendiri, tetapi bentuk
+        # yang ditolak KARENA terlalu besar jelas tak perlu dicoba diperbaiki.
+        usul = None
+        if "terlalu besar" not in galat_topo:
+            usul = await asyncio.to_thread(tu.perbaiki_topologi, geom)
+            # Usulan hanya dikirim bila BENAR-BENAR lolos seluruh validasi —
+            # menawarkan perbaikan yang akan ditolak saat disimpan itu menyesatkan.
+            if usul is not None:
+                tolak = su.validasi_geometri(usul) or await asyncio.to_thread(
+                    tu.validasi_topologi, usul)
+                if tolak:
+                    usul = None
         return {"valid": False, "galat": f"Topologi tidak valid: {galat_topo}",
                 "peringatan": [], "luas_m2": None, "perbaikan": usul,
                 "topologi_aktif": tu.topologi_aktif()}
