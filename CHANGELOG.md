@@ -53,6 +53,28 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#632] Perbaikan lanjut: editor & halaman denah tak pernah macet di spinner — 2026-07-26
+
+Tindak lanjut #631 yang belum tuntas: pengguna masih melaporkan "loading
+berputar terus, tidak menampilkan apa pun" saat mendesain peta dari awal.
+
+**Akar yang sesungguhnya**: spinner `memuat`/`loading` tersangkut `true`
+SELAMANYA bila salah satu request menggantung — tak ada timeout, jadi
+`finally { setMemuat(false) }` tak pernah tercapai. Karena spinner overlay
+menutupi seluruh editor (z-500), peta yang sudah jadi di bawahnya pun tak
+terlihat — persis "tidak menampilkan apa pun, hanya berputar".
+
+**Perbaikan** (murni ketahanan sisi klien):
+- **DenahEditor**: (1) efek pemuat digerbang state `petaSiap` — tak lagi
+  RETURN DIAM saat map belum ada dan meninggalkan spinner; (2) spinner
+  dibereskan SEGERA setelah bentuk node dimuat — konteks tetangga menyusul di
+  latar, jadi peta selalu tampil seketika meski konteks lambat/gagal;
+  (3) watchdog 25 dtk + timeout 20 dtk per-request — spinner WAJIB hilang
+  apa pun yang terjadi (jaringan mati, backend lambat), editor tetap bisa
+  dipakai menggambar dengan toast peringatan.
+- **SpasialMasterPage**: timeout 20 dtk pada muat tingkat + node, agar
+  halaman pohon pun tak berputar tanpa henti bila backend menggantung.
+
 ## [#631] Perbaikan: editor denah "loading terus" saat kawasan hasil impor besar — 2026-07-26
 
 **Gejala**: membuka editor gambar denah (Hierarki Spasial) memutar spinner
