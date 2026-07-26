@@ -53,6 +53,52 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#628] Spasial Fase 6: ekspor denah ke SHP / KML / KMZ / GeoJSON + template QGIS/Google Earth — 2026-07-26
+
+Sisi kebalikan mandat impor-ekspor: denah yang tersusun di aplikasi kini bisa
+DIEKSPOR ke format GIS baku, dan pengguna tanpa denah bisa mengunduh TEMPLATE
+kosong ber-skema untuk digambar di QGIS / Google Earth lalu diimpor balik.
+
+**Kontrak mutu = round-trip.** Seluruh keluaran modul ekspor
+(`ekspor_geo_utils.py`) diuji terbaca balik oleh parser impor Fase 5 SUNGGUHAN
+— geometri eksak, lubang, MultiPolygon, dan atribut utuh; kedua sisi saling
+mengunci.
+
+**Empat format** — `GET /api/spasial/ekspor?format=…` (operasi baca; viewer
+boleh; ter-scope satker; rate-limit 10/menit; serialisasi di thread):
+- **GeoJSON** — geometri disalin apa adanya (lon-first RFC 7946), properti
+  `nama`/`kode`/`lokasi`/`status`/`luas_m2`; kunci `nama` disengaja agar
+  prapilih dropdown impor memetakannya otomatis saat diimpor balik.
+- **KML/KMZ** — Folder BERSARANG mengikuti hierarki (di Google Earth pohon
+  Kawasan → … → Ruangan tampil sebagai pohon, bukan daftar datar); moyang tanpa
+  geometri tetap hadir sebagai Folder. Dibangun via ElementTree — nama node
+  buatan pengguna (`Blok <A> & "B"`) ter-escape otomatis, bukan dirangkai
+  f-string.
+- **Shapefile-zip** — `denah.*` (poligon) + `denah_titik.*` (Point dipisah:
+  satu shapefile satu tipe shape) + `.prj` WGS84 + `.cpg` UTF-8 + BACA_SAYA.
+  **Orientasi cincin ESRI ditegakkan sendiri** (luar CW, lubang CCW — kebalikan
+  RFC 7946): terverifikasi empiris pyshp 3.1.4 menulis cincin apa adanya DAN
+  pembacanya toleran terhadap orientasi salah, jadi uji round-trip lewat pyshp
+  saja menyesatkan — ada uji khusus yang membaca arah putaran MENTAH dari file.
+
+**Cakupan**: seluruh denah satker atau satu subtree (`dalam` = node + seluruh
+keturunan via indeks multikey `ancestors`); draft ikut secara bawaan (alur
+"perbaiki di QGIS → impor ulang" paling sering justru pada draft), bisa
+dimatikan.
+
+**Template** — `GET /api/spasial/ekspor/template?format=shp|kml`: kerangka
+satu-fitur-contoh ber-kolom NAMA/KODE yang cocok dengan auto-deteksi impor,
+plus petunjuk alur bolak-balik berbahasa Indonesia (BACA_SAYA.txt / deskripsi
+KML).
+
+**UI**: tombol **Ekspor** di Hierarki Spasial (tampil juga untuk viewer —
+server menegakkan `require_user`), dialog lazy: format + cakupan + saklar
+draft + dua tombol template. Unduhan via blob axios (auth header interceptor,
+tanpa token di URL).
+
+Uji: +13 backend — termasuk uji orientasi cincin pada file mentah, escaping
+XML, siklus data tak membuat rekursi abadi, unicode DBF, dan kedua template.
+
 ## [#627] Spasial Fase 5: impor denah dari Shapefile / KML / KMZ / GeoJSON — 2026-07-26
 
 Fase 5 program Spasial & IoT: denah yang sudah digambar di QGIS/ArcGIS/Google

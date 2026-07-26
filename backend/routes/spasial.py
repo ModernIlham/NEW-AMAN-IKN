@@ -1024,3 +1024,110 @@ async def _jalankan_impor(job_id, data, nama_file, tipe, deriv,
     except Exception as e:                    # jangan biarkan task mati senyap
         await update_job(job_id, status="failed", done=True, error=str(e),
                          message="Impor gagal karena kesalahan tak terduga")
+
+
+# ── Ekspor denah (Fase 6) — GeoJSON / KML / KMZ / Shapefile + template ──────
+#
+# Sinkron (bukan job): ekspor = baca + serialisasi, dibatasi _MAKS_NODE dan
+# ukuran geometri denah yang wajar — berbeda dari impor yang berat di parsing
+# + shapely + tulis massal. Serialisasi tetap di thread supaya event loop tak
+# tersandera, dan rate-limit menjaga dari pengunduhan beruntun.
+
+_FORMAT_EKSPOR = {
+    "geojson": ("application/geo+json", "geojson"),
+    "kml": ("application/vnd.google-earth.kml+xml", "kml"),
+    "kmz": ("application/vnd.google-earth.kmz", "kmz"),
+    "shp": ("application/zip", "zip"),
+}
+
+
+def _bangun_ekspor(fmt: str, rows: list, label_level: dict) -> bytes:
+    """Dipanggil di thread — murni CPU, tanpa await."""
+    import ekspor_geo_utils as eg
+    if fmt == "geojson":
+        return eg.ke_geojson(rows)
+    if fmt == "kml":
+        return eg.ke_kml(rows, label_level)
+    if fmt == "kmz":
+        return eg.ke_kmz(eg.ke_kml(rows, label_level))
+    return eg.ke_shp_zip(rows)
+
+
+@spasial_router.get("/spasial/ekspor")
+@limiter.limit("10/minute")
+async def ekspor_denah(request: Request,
+                       format: str = Query("geojson"),
+                       dalam: str = Query("", description="subtree node ini (node + seluruh keturunan)"),
+                       sertakan_draft: bool = Query(True),
+                       _user: dict = Depends(require_user)):
+    """Unduh denah satker sebagai file GIS — kebalikan endpoint impor Fase 5.
+
+    Operasi BACA murni (viewer boleh — mereka sudah bisa membaca node yang
+    sama lewat /spasial/node), ter-scope satker seperti seluruh kueri denah.
+    `dalam` membatasi ke satu subtree via indeks multikey `ancestors` — node
+    akarnya sendiri ikut. Node tanpa geometri tak diekspor KECUALI di KML,
+    tempat moyang tanpa geometri tetap dibutuhkan sebagai Folder hierarki.
+    """
+    from fastapi.responses import Response
+
+    fmt = str(format or "").strip().lower()
+    if fmt not in _FORMAT_EKSPOR:
+        raise HTTPException(status_code=400,
+                            detail=f"Format '{format}' tak dikenal — pilih "
+                                   f"{', '.join(sorted(_FORMAT_EKSPOR))}")
+    q = {"status": {"$ne": "dihapus"}}
+    if not sertakan_draft:
+        q["status"] = {"$nin": ["dihapus", "draft"]}
+    if dalam:
+        q["$or"] = [{"id": dalam}, {"ancestors": dalam}]
+    rows = await (db.spasial_node.find(scope_query_field_satker(_user, q), _PROJ)
+                  .sort([("ordinal_level", 1), ("kode", 1), ("nama", 1)])
+                  .to_list(_MAKS_NODE))
+    # KML memakai node tanpa geometri sebagai Folder; format lain hanya fitur.
+    if fmt not in ("kml", "kmz"):
+        rows = [r for r in rows if r.get("geometry")]
+    if not any(r.get("geometry") for r in rows):
+        raise HTTPException(status_code=400,
+                            detail="Tidak ada node bergeometri pada cakupan ini "
+                                   "— gambar atau impor denah dulu")
+
+    label_level = {l["kode_baku"]: l["label"] for l in su.daftar_level()}
+    try:
+        data = await asyncio.to_thread(_bangun_ekspor, fmt, rows, label_level)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    media, ext = _FORMAT_EKSPOR[fmt]
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d")
+    nama_file = f"denah-{kode_satker_user(_user) or 'aman'}-{stamp}.{ext}"
+    await log_audit("ekspor_spasial", "", nama_file,
+                    username=_user.get("username", "system"),
+                    kode_satker=kode_satker_user(_user),
+                    detail=f"Ekspor {fmt} ({len(rows)} node)")
+    return Response(content=data, media_type=media, headers={
+        "Content-Disposition": f'attachment; filename="{nama_file}"'})
+
+
+@spasial_router.get("/spasial/ekspor/template")
+@limiter.limit("10/minute")
+async def ekspor_template(request: Request, format: str = Query("shp"),
+                          _user: dict = Depends(require_user)):
+    """Template gambar kosong ber-skema: `shp` untuk QGIS/ArcGIS, `kml` untuk
+    Google Earth. Isinya satu fitur contoh + petunjuk alur bolak-balik; tanpa
+    data satker sedikit pun, jadi tak perlu scoping."""
+    from fastapi.responses import Response
+    import ekspor_geo_utils as eg
+
+    fmt = str(format or "").strip().lower()
+    if fmt == "shp":
+        data = await asyncio.to_thread(eg.template_shp_zip)
+        return Response(content=data, media_type="application/zip", headers={
+            "Content-Disposition": 'attachment; filename="template-denah-qgis.zip"'})
+    if fmt == "kml":
+        data = await asyncio.to_thread(eg.template_kml)
+        return Response(content=data,
+                        media_type="application/vnd.google-earth.kml+xml",
+                        headers={"Content-Disposition":
+                                 'attachment; filename="template-denah-google-earth.kml"'})
+    raise HTTPException(status_code=400,
+                        detail=f"Format template '{format}' tak dikenal — pilih shp / kml")
