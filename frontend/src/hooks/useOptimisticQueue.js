@@ -6,6 +6,7 @@ import { getApiError } from "../lib/utils";
 import { checkReachable, REACHABILITY_RETRY_MS } from "../lib/connectivity";
 import { summarizeSyncStatuses } from "../lib/syncStatus";
 import { resolveBaseVersion } from "../lib/occ";
+import { terapkanHeaderSatker } from "../lib/satkerAktif";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -22,7 +23,8 @@ axiosLargeUpload.interceptors.request.use((config) => {
     config.headers = config.headers || {};
     config.headers.Authorization = `Bearer ${token}`;
   }
-  return config;
+  config = terapkanHeaderSatker(config);
+    return config;
 });
 
 /**

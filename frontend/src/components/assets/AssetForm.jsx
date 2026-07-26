@@ -31,6 +31,7 @@ import { bolehSalinKoordinat } from "../../lib/salinKonteks";
 import { compressImageFile, compressDataUrl, generateThumbnailFromDataUrl, dataUrlBytes } from "../../lib/imageCompression";
 import { reserveDummyNup as reserveDummyNupLib } from "../../lib/dummyNup";
 import { statusInventarisasiOtomatis, autoInventarisasiEnabled } from "../../lib/inventoryStatus";
+import { terapkanHeaderSatker } from "../../lib/satkerAktif";
 
 // ============================================================================
 // INVENTORY CLASSIFICATION INFO DATA (SE 17/SE/M/2024)
@@ -299,7 +300,8 @@ axiosLargeUpload.interceptors.request.use((config) => {
     config.headers = config.headers || {};
     config.headers.Authorization = `Bearer ${token}`;
   }
-  return config;
+  config = terapkanHeaderSatker(config);
+    return config;
 });
 
 /**

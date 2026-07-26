@@ -20,5 +20,13 @@ export function authMediaUrl(url) {
   const token = localStorage.getItem("media_token") || localStorage.getItem("token");
   if (!token) return url;
   const sep = url.includes("?") ? "&" : "?";
-  return `${url}${sep}token=${encodeURIComponent(token)}`;
+  let hasil = `${url}${sep}token=${encodeURIComponent(token)}`;
+  // Satker Aktif (act-as) super-admin: URL yang dibuka via window.open tak bisa
+  // mengirim header X-Satker-Aktif, jadi dititip di query `sa` agar laporan/PDF
+  // ikut ter-scope ke satker terpilih.
+  try {
+    const sa = localStorage.getItem("satker_aktif");
+    if (sa) hasil += `&sa=${encodeURIComponent(sa)}`;
+  } catch { /* localStorage tak tersedia */ }
+  return hasil;
 }

@@ -283,7 +283,48 @@ async def get_current_user(authorization: str):
     return await _decode_bearer(authorization)
 
 
-async def require_user(authorization: str = Header(default="", alias="Authorization")) -> dict:
+async def _satker_terdaftar(kode: str) -> bool:
+    """True bila `kode` terdaftar di Master Satker. Diekstrak agar mudah
+    di-mock pada pengujian (koleksi Motor sulit di-monkeypatch langsung)."""
+    return bool(await db.satker.find_one({"kode_satker": kode}, {"_id": 1}))
+
+
+async def _terapkan_satker_aktif(user: dict, x_satker_aktif: str) -> dict:
+    """Terapkan "Satker Aktif" (act-as-satker) untuk SUPER-ADMIN.
+
+    Bila pemanggil super-admin PUSAT (kode_satker kosong) mengirim header
+    `X-Satker-Aktif: <kode>` yang VALID (terdaftar di Master Satker), kita
+    suntikkan kode itu ke dokumen user untuk request ini. Dampaknya:
+    `kode_satker_user` mengembalikan kode itu → SELURUH mesin isolasi yang ada
+    (`scope_query_field_satker`, `scope_query_aset`, `pastikan_akses_*`, dan
+    stempel `kode_satker` saat INSERT) otomatis berperilaku sebagai satker
+    tersebut — TANPA menyentuh satu pun callsite. Identitas otoritas tetap
+    super-admin lewat `_super_admin_asli` (lihat is_super_admin).
+
+    KEAMANAN: header ini DIABAIKAN untuk user yang sudah terikat satker — ia
+    tak boleh berpura-pura jadi satker lain. Kode yang tak terdaftar juga
+    diabaikan (jatuh ke perilaku lintas-satker biasa), bukan ditolak, agar
+    header basi tak mengunci aplikasi.
+    """
+    kode = str(x_satker_aktif or "").strip()
+    # Hanya super-admin PUSAT (belum tersuntik) yang boleh act-as.
+    asli_super = (user.get("role") == "admin"
+                  and not str(user.get("kode_satker") or "").strip())
+    if not kode or not asli_super:
+        return user
+    if not await _satker_terdaftar(kode):
+        return user
+    user["_super_admin_asli"] = True   # otoritas TETAP super-admin
+    user["_kode_satker_asli"] = ""
+    user["_satker_aktif"] = kode
+    user["kode_satker"] = kode         # scoping & stempel ikut satker ini
+    return user
+
+
+async def require_user(
+    authorization: str = Header(default="", alias="Authorization"),
+    x_satker_aktif: str = Header(default="", alias="X-Satker-Aktif"),
+) -> dict:
     """FastAPI Depends-friendly auth gate.
 
     Usage:
@@ -291,8 +332,10 @@ async def require_user(authorization: str = Header(default="", alias="Authorizat
         async def foo(user: dict = Depends(require_user)): ...
 
     Returns the user document (without `password_hash`). Raises 401 / 403.
+    Menerapkan "Satker Aktif" untuk super-admin (lihat _terapkan_satker_aktif).
     """
-    return await _decode_bearer(authorization)
+    user = await _decode_bearer(authorization)
+    return await _terapkan_satker_aktif(user, x_satker_aktif)
 
 
 async def require_admin(user: dict = Depends(require_user)) -> dict:
@@ -310,7 +353,16 @@ def is_super_admin(user: dict) -> bool:
       - Super-admin (role 'admin' + kode_satker ''): lintas-satker, memegang
         operasi SELURUH-DB (backup / restore / reset sistem).
     Model ini (lihat users.py) sengaja memakai kode_satker kosong sebagai
-    penanda super-admin, bukan role kelima."""
+    penanda super-admin, bukan role kelima.
+
+    SATKER AKTIF (act-as): saat super-admin memilih "Satker Aktif", kita
+    menyuntikkan kode itu ke `user["kode_satker"]` supaya SELURUH scoping &
+    stempel berperilaku sebagai satker tersebut. Namun OTORITAS-nya tetap
+    super-admin — jadi bila penanda `_super_admin_asli` ada, itulah yang
+    dipakai (mencegah super-admin terkunci dari backup/restore/kelola satker
+    hanya karena sedang bertindak sebagai satu satker)."""
+    if "_super_admin_asli" in user:
+        return bool(user["_super_admin_asli"])
     return (user.get("role") == "admin"
             and not str(user.get("kode_satker") or "").strip())
 
@@ -384,6 +436,8 @@ async def require_writer(user: dict = Depends(require_user)) -> dict:
 async def require_user_or_query_token(
     authorization: str = Header(default="", alias="Authorization"),
     token: str = Query(default=""),
+    x_satker_aktif: str = Header(default="", alias="X-Satker-Aktif"),
+    sa: str = Query(default=""),
 ) -> dict:
     """Auth gate that accepts EITHER an `Authorization: Bearer <jwt>` header OR
     a `?token=<jwt>` query param (validated against the SAME JWT secret).
@@ -398,9 +452,12 @@ async def require_user_or_query_token(
     posture (fully anonymous media/report reads); the token carries the normal
     24h TTL. A short-lived, media-scoped token is a future improvement.
     """
+    _kode_aktif = x_satker_aktif or sa
     if authorization and authorization.startswith("Bearer "):
-        return await _decode_bearer(authorization, allow_media_scope=True)
+        _u = await _decode_bearer(authorization, allow_media_scope=True)
+        return await _terapkan_satker_aktif(_u, _kode_aktif)
     if token:
-        return await _decode_bearer(f"Bearer {token}", allow_media_scope=True)
+        _u = await _decode_bearer(f"Bearer {token}", allow_media_scope=True)
+        return await _terapkan_satker_aktif(_u, _kode_aktif)
     raise HTTPException(status_code=401, detail="Autentikasi diperlukan")
 
