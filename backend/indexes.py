@@ -183,8 +183,17 @@ async def create_indexes() -> None:
         # Pemantauan insidentil wasdal: daftar per status + jalur id
         await db.pemantauan_insidentil.create_index([("status", 1), ("tanggal_mulai", 1)])
         await db.pemantauan_insidentil.create_index("id", unique=True)
-        # Periode pelaporan: identitas unik per tahun+jenis + jalur id
-        await db.periode_pelaporan.create_index("kunci_unik", unique=True)
+        # Periode pelaporan: identitas unik per tahun+semester PER SATKER
+        # (REVIEW-9 R15). Tiap satker menutup bukunya sendiri, jadi 2026-S1
+        # sah dimiliki banyak satker. Indeks unik GLOBAL era lama dilepas dulu
+        # — tanpa itu satker kedua yang lolos dup-check per-satker meledak
+        # DuplicateKeyError 500 (pola sama seperti persediaan di atas).
+        try:
+            await db.periode_pelaporan.drop_index("kunci_unik_1")
+        except Exception:
+            pass
+        await db.periode_pelaporan.create_index(
+            [("kode_satker", 1), ("kunci_unik", 1)], unique=True)
         await db.periode_pelaporan.create_index("id", unique=True)
         # Kalender penganggaran: urut tenggat + jalur id
         await db.penganggaran_kalender.create_index("tanggal")

@@ -45,16 +45,50 @@ def _year_from_created_at(created_at: str) -> int:
         return datetime.now(timezone.utc).year
 
 
-async def next_ticket_number(year: Optional[int] = None) -> str:
+async def next_ticket_number(year: Optional[int] = None,
+                             kode_satker: str = "") -> str:
     """Nomor tiket berikutnya untuk `year` — atomik via counters findOneAndUpdate.
 
     Aman dipanggil bersamaan dari banyak worker: $inc pada dokumen counter
     adalah operasi atomik MongoDB, jadi dua pemanggil tidak pernah mendapat
     sequence yang sama.
+
+    Deret PER SATKER (REVIEW-9 R15), pola sama dengan BA-Perbaikan (R8) dan
+    nomor agenda surat (R9): satu deret bersama membuat nomor tiket satker A
+    melompat setiap satker B membuat kegiatan, dan besar lompatannya
+    membocorkan volume kegiatan satker lain. `kode_satker` kosong (super-admin
+    / era lama) tetap memakai id legacy agar deret lama menyambung.
     """
     year = year or datetime.now(timezone.utc).year
+    kode = str(kode_satker or "").strip()
+    base = f"inventory_activity_ticket_{year}"
+    cid = f"{base}:{kode}" if kode else base
+    if kode and await db.counters.find_one({"_id": cid}) is None:
+        # Seed migrasi: mulai dari nomor tiket TERTINGGI yang sudah dipakai
+        # satker ini pada tahun itu, agar tak menerbitkan nomor ganda.
+        # Seed HANYA dari kegiatan ber-kode PERSIS milik satker ini.
+        #
+        # PENTING (REVIEW-9 R15b): jangan menyertakan kode ""/None seperti
+        # konvensi era-lama biasa. Kegiatan tanpa kode_satker MASIH memakai
+        # counter GLOBAL (cid legacy), jadi bila seed per-satker ikut menghitung
+        # mereka, KEDUA counter berangkat dari angka sama dan menerbitkan
+        # INV-{tahun}-{seq} KEMBAR — tanpa indeks unik pada ticket_number,
+        # tabrakan itu senyap. Konsekuensi memakai exact-match: satker mulai
+        # dari 1 pada tahun pertamanya, dan nomor lama tanpa stempel tetap
+        # dipegang deret global.
+        maks = 0
+        async for a in db.inventory_activities.find(
+                {"kode_satker": kode,
+                 "ticket_number": {"$regex": f"^INV-{year}-"}},
+                {"_id": 0, "ticket_number": 1}):
+            try:
+                maks = max(maks, int(str(a.get("ticket_number") or "").split("-")[-1]))
+            except (TypeError, ValueError, IndexError):
+                continue
+        await db.counters.update_one(
+            {"_id": cid}, {"$setOnInsert": {"seq": maks}}, upsert=True)
     counter = await db.counters.find_one_and_update(
-        {"_id": f"inventory_activity_ticket_{year}"},
+        {"_id": cid},
         {"$inc": {"seq": 1}},
         upsert=True,
         return_document=ReturnDocument.AFTER,
@@ -74,7 +108,9 @@ async def ensure_ticket_number(activity: Optional[dict]) -> Optional[dict]:
     aid = activity.get("id")
     if not aid:
         return activity
-    ticket = await next_ticket_number(_year_from_created_at(activity.get("created_at")))
+    ticket = await next_ticket_number(
+        _year_from_created_at(activity.get("created_at")),
+        kode_satker=str(activity.get("kode_satker") or "").strip())
     result = await db.inventory_activities.update_one(
         {"id": aid, "ticket_number": {"$exists": False}},
         {"$set": {"ticket_number": ticket}},

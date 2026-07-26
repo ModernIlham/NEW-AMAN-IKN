@@ -423,6 +423,22 @@ async def catat_gagal_otp(email, maks_percobaan=5) -> bool:
 # Used to prevent duplicate writes when clients retry after network failures.
 # TTL index on `created_at` (expireAfterSeconds=86400) is created in indexes.py.
 
+def kunci_idem(key: str, user=None) -> str:
+    """Ikat Idempotency-Key ke PEMILIKNYA (REVIEW-9 R15).
+
+    Kunci datang dari header yang dipilih KLIEN. Bila disimpan apa adanya,
+    siapa pun yang menebak/mengetahui kunci milik satker lain dapat MEMUTAR
+    ULANG respons tersimpan mereka — isinya dokumen/register satker itu. Kunci
+    efektif karenanya diberi awalan identitas pemanggil, sehingga kunci yang
+    sama dari dua akun tak pernah bertabrakan.
+    """
+    k = str(key or "").strip()
+    if not k:
+        return ""
+    uid = str((user or {}).get("id") or (user or {}).get("username") or "").strip()
+    return f"{uid}:{k}" if uid else k
+
+
 async def get_idempotent_response(key: str) -> Optional[dict]:
     """Return cached response for a given idempotency key, or None."""
     if not key:
@@ -910,13 +926,28 @@ async def pastikan_akses_kegiatan(user, activity) -> None:
 
 
 async def pastikan_akses_kegiatan_id(user, activity_id: str) -> None:
-    """Varian by-id: no-op untuk user lintas-satker / id kosong."""
+    """Varian by-id: no-op untuk user lintas-satker / id kosong.
+
+    FAIL-CLOSED bila kegiatan induk TIDAK DITEMUKAN (REVIEW-9 R15). Dulu
+    kegiatan hilang berarti guard lolos diam-diam, sehingga aset "yatim"
+    (activity_id menunjuk kegiatan yang sudah dihapus) dapat dibaca/diubah
+    lintas satker — kepemilikannya justru TIDAK BISA dipastikan, jadi menolak
+    adalah sikap yang benar. Super-admin (kode kosong) sudah keluar lebih awal,
+    sehingga pemulihan data yatim tetap mungkin.
+    """
+    from fastapi import HTTPException
+
     if not kode_satker_user(user) or not str(activity_id or "").strip():
         return
     act = await db.inventory_activities.find_one(
         {"id": activity_id}, {"_id": 0, "kode_satker": 1})
-    if act:
-        await pastikan_akses_kegiatan(user, act)
+    if not act:
+        raise HTTPException(
+            status_code=403,
+            detail=("Kegiatan induk data ini tidak ditemukan sehingga "
+                    "kepemilikan satkernya tak dapat dipastikan — hubungi "
+                    "super-admin untuk merapikan data yatim ini"))
+    await pastikan_akses_kegiatan(user, act)
 
 
 async def pastikan_akses_aset(user, asset) -> None:

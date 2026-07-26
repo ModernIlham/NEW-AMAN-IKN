@@ -69,8 +69,10 @@ async def daftar_pemegang(
     nips = {r.get("nip") for r in halaman if str(r.get("nip") or "").strip()}
     if nips:
         peg_map = {}
+        # Scope satker (REVIEW-9 R15): pengaya rekap pemegang tak boleh
+        # menarik nama/jabatan/unit pegawai satker lain.
         async for pgw in db.pegawai.find(
-                {"nip": {"$in": list(nips)}},
+                scope_query_field_satker(_user, {"nip": {"$in": list(nips)}}),
                 {"_id": 0, "nip": 1, "nama": 1, "jabatan": 1,
                  "unit_kerja": 1, "status": 1}):
             peg_map[pgw["nip"]] = pgw

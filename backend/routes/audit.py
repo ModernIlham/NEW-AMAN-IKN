@@ -9,6 +9,7 @@ from db import db
 from auth_utils import require_user
 from shared_utils import (
     id_kegiatan_satker, kode_satker_user, scope_query_aset,
+    scope_query_field_satker,
 )
 from penghapusan_utils import normalisasi_jejak_terhapus, rekap_jejak_terhapus
 from integritas_utils import (
@@ -62,11 +63,15 @@ async def _filter_register_satker(user, query=None) -> dict:
     jadwal_pemeliharaan) ke kegiatan milik satker user. Lintas-satker → apa
     adanya. Mencegah dasbor integritas membocorkan snapshot identitas aset
     (kode/NUP/nama) lintas satker ke user terikat."""
-    q = dict(query or {})
-    kode = kode_satker_user(user)
-    if kode:
-        q["activity_id"] = {"$in": await id_kegiatan_satker(kode)}
-    return q
+    # PERBAIKAN (REVIEW-9 R15b): dulu memfilter lewat `activity_id`, padahal
+    # TIGA dari empat register ini (usulan_penghapusan, pemindahtanganan, psp)
+    # sama sekali TIDAK menyimpan activity_id — mereka menyimpan `kode_satker`.
+    # `$in` pada field yang HILANG tidak cocok apa pun, jadi filter itu membuat
+    # dasbor & ekspor integritas melaporkan NOL temuan untuk setiap user
+    # terikat satker (dasbor pemantauan yang diam-diam bilang "aman").
+    # Field yang benar adalah kode_satker — selaras daftar jadwal_pemeliharaan
+    # di pemeliharaan.py yang memang memakai scope_query_field_satker.
+    return scope_query_field_satker(user, query)
 
 
 @audit_router.get("/audit-logs")
@@ -448,11 +453,18 @@ async def _master_identitas_by_id(ids):
     return out
 
 
-async def _ringkas_identitas_snapshot(coll, register, label):
+async def _ringkas_identitas_snapshot(coll, register, label, filter_q=None):
     """Ringkas cek identitas basi untuk register yang membekukan identitas PER
-    RECORD (usulan_penghapusan, jadwal_pemeliharaan)."""
+    RECORD (usulan_penghapusan, jadwal_pemeliharaan).
+
+    DI-SCOPE SATKER (REVIEW-9 R15): endpoint DETAIL integritas sudah memakai
+    `_filter_register_satker`, tetapi ringkasan dasbor & ekspor CSV belum —
+    jadi cacah temuannya menghitung register SELURUH satker dan membocorkan
+    volume masalah mereka.
+    """
     rows = [r async for r in db[coll].find(
-        {}, {"_id": 0, "asset_id": 1, "asset_code": 1, "NUP": 1,
+        dict(filter_q or {}),
+        {"_id": 0, "asset_id": 1, "asset_code": 1, "NUP": 1,
              "asset_name": 1})]
     master = await _master_identitas_by_id(r.get("asset_id") for r in rows)
     temuan = []
@@ -464,10 +476,12 @@ async def _ringkas_identitas_snapshot(coll, register, label):
             "per_masalah": hitung_masalah(temuan)}
 
 
-async def _ringkas_identitas_daftar(coll, register, label):
+async def _ringkas_identitas_daftar(coll, register, label, filter_q=None):
     """Ringkas cek identitas basi untuk register ber-`aset[]`
-    (pemindahtanganan, psp)."""
-    docs = [d async for d in db[coll].find({}, {"_id": 0, "aset": 1})]
+    (pemindahtanganan, psp). DI-SCOPE SATKER (REVIEW-9 R15) — lihat catatan
+    pada `_ringkas_identitas_snapshot`."""
+    docs = [d async for d in db[coll].find(
+        dict(filter_q or {}), {"_id": 0, "aset": 1})]
     master = await _master_identitas_by_id(
         r.get("asset_id") for d in docs for r in (d.get("aset") or []))
     temuan = []
@@ -530,17 +544,24 @@ async def _ringkas_kategori_kodefikasi():
             "jumlah": len(temuan), "per_masalah": hitung_masalah(temuan)}
 
 
-async def _kumpulkan_bagian_integritas():
+async def _kumpulkan_bagian_integritas(user=None):
     """Jalankan SEMUA cek integritas §5A → daftar ringkasan per register.
-    Satu sumber untuk endpoint ringkasan JSON & ekspor CSV (hindari duplikasi)."""
+    Satu sumber untuk endpoint ringkasan JSON & ekspor CSV (hindari duplikasi).
+
+    `user` diteruskan agar cacah temuan DI-SCOPE satker (REVIEW-9 R15) —
+    selaras endpoint detailnya yang sudah memakai `_filter_register_satker`.
+    """
+    # Filter dihitung SEKALI lalu dioper (dulu helper dipanggil 4×).
+    _q = await _filter_register_satker(user)
     return [
         await _ringkas_identitas_snapshot(
-            "usulan_penghapusan", "usulan_penghapusan", "Usulan Penghapusan"),
+            "usulan_penghapusan", "usulan_penghapusan", "Usulan Penghapusan", _q),
         await _ringkas_identitas_daftar(
-            "pemindahtanganan", "pemindahtanganan", "Pemindahtanganan"),
-        await _ringkas_identitas_daftar("psp", "psp", "SK PSP Penggunaan"),
+            "pemindahtanganan", "pemindahtanganan", "Pemindahtanganan", _q),
+        await _ringkas_identitas_daftar("psp", "psp", "SK PSP Penggunaan", _q),
         await _ringkas_identitas_snapshot(
-            "jadwal_pemeliharaan", "jadwal_pemeliharaan", "Jadwal Pemeliharaan"),
+            "jadwal_pemeliharaan", "jadwal_pemeliharaan", "Jadwal Pemeliharaan",
+            _q),
         await _ringkas_kodefikasi(),
         await _ringkas_kategori_kodefikasi(),
     ]
@@ -553,7 +574,7 @@ async def integritas_ringkasan(_user: dict = Depends(require_user)):
     register + kodefikasi FK) beserta total lintas-cek. Tak menyertakan daftar
     item detail (ambil dari endpoint per-register bila perlu). Tak mengubah data
     apa pun."""
-    hasil = gabung_temuan_integritas(await _kumpulkan_bagian_integritas())
+    hasil = gabung_temuan_integritas(await _kumpulkan_bagian_integritas(_user))
     return {
         **hasil,
         "catatan": (
@@ -574,7 +595,7 @@ async def integritas_ekspor_ringkasan(_user: dict = Depends(require_user)):
     import io
     from fastapi.responses import Response as HttpResponse
 
-    hasil = gabung_temuan_integritas(await _kumpulkan_bagian_integritas())
+    hasil = gabung_temuan_integritas(await _kumpulkan_bagian_integritas(_user))
     buf = io.StringIO()
     w = csv_module.writer(buf)
     for row in ringkasan_csv_baris(hasil, LABEL_MASALAH_INTEGRITAS):

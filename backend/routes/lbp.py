@@ -231,8 +231,19 @@ async def generate_lbp_docx(tahun: int, semester: int = 0,
 
     # Mutasi periode (LBKP) — tombstone audit + SK penghapusan
     tombstones = []
+    # ISOLASI SATKER (REVIEW-9 R15). Tombstone = aset yang DIHAPUS KERAS; ia
+    # masuk laporan sebagai "mutasi kurang" TERPISAH dari query assets di atas
+    # (yang sudah ter-scope). Tanpa scope di sini, LBP satker ini memuat
+    # penghapusan satker LAIN → saldo akhir bisa MINUS dan cacah/nilai
+    # penghapusan mereka bocor ke laporan resmi. Sama seperti perbaikan
+    # LBKP/CaLBMN di reports.py.
+    from routes.audit import _batas_activity_satker
+    _tq, _kosong = await _batas_activity_satker(user, "")
+    _q_tomb = {"action": "delete"} if not _kosong else {"_id": {"$in": []}}
+    if not _kosong:
+        _q_tomb.update(_tq)
     async for t in db.audit_logs.find(
-            {"action": "delete"},
+            _q_tomb,
             {"_id": 0, "asset_code": 1, "timestamp": 1, "changes": 1}):
         nilai = 0.0
         for c in t.get("changes") or []:

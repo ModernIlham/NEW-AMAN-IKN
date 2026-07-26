@@ -16,7 +16,7 @@ from auth_utils import require_admin, require_user, require_writer
 from db import db
 from shared_utils import (
     blok_ttd_kpb, kode_satker_user, pastikan_akses_aset,
-    pastikan_akses_dok_satker, scope_query_field_satker,
+    pastikan_akses_dok_satker, pengaturan_kop, scope_query_field_satker,
 )
 from pemeliharaan_utils import (
     JENIS_PEMELIHARAAN, baris_csv_jadwal, indikasi_kapitalisasi, jatuh_tempo,
@@ -175,7 +175,10 @@ async def dhpb_pdf(
     grup, total_biaya = kelompok_dhpb(records)
     ada_kapitalisasi = any(r.get("indikasi_kapitalisasi") for r in records)
 
-    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    # KOP PER-SATKER (REVIEW-9 R15): pakai overlay `pengaturan_kop`, bukan
+    # report_settings mentah — kalau tidak, DHPB satker ini tercetak dengan kop
+    # instansi global/satker lain.
+    settings = await pengaturan_kop(kode_satker=kode_satker_user(_user))
     buffer = BytesIO()
     doc = _std_doc(buffer, landscape_mode=True)
     st = _get_report_styles()
@@ -678,7 +681,8 @@ async def ba_perbaikan_pdf(catatan_id: str, _user: dict = Depends(require_user))
     hit = ba.get("perbaikan") or {}
     tambah = int(ba.get("tambah_tahun_diterapkan") or 0)
 
-    settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+    # KOP PER-SATKER (REVIEW-9 R15) — cacat kembar DHPB di atas.
+    settings = await pengaturan_kop(kode_satker=kode_satker_user(_user))
     buffer = BytesIO()
     doc = _std_doc(buffer)
     st = _get_report_styles()

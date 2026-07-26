@@ -13,9 +13,11 @@ from db import db, fs_bucket
 from asset_fields import SCALAR_FIELD_NAMES
 from models import AssetCreate, AssetResponse
 from auth_utils import (
-    require_admin, require_user, require_user_or_query_token, require_writer,
+    require_admin, require_super_admin, require_user,
+    require_user_or_query_token, require_writer,
 )
 from shared_utils import (
+    kunci_idem,
     invalidate_asset_cache, cache_get, cache_set,
     log_audit, compute_changes, create_thumbnail, create_gallery_thumbnail,
     store_photo_to_gridfs, get_photo_from_gridfs, delete_photo_from_gridfs,
@@ -826,7 +828,7 @@ async def buat_aset_draft(data: AssetCreate, audit_user: str = "system") -> dict
 async def create_asset(asset: AssetCreate, request: Request, _user: dict = Depends(require_writer)):
     """Create a new asset. Supports Idempotency-Key header to safely retry on network errors."""
     # Idempotency check: if same key was seen within the TTL window (24h), return cached response
-    idem_key = request.headers.get("Idempotency-Key", "")
+    idem_key = kunci_idem(request.headers.get("Idempotency-Key", ""), _user)
     if idem_key:
         cached = await get_idempotent_response(idem_key)
         if cached and cached.get("response"):
@@ -1435,7 +1437,7 @@ async def rotate_asset_photo(asset_id: str, photo_index: int, request: Request,
     `{"degrees": 90}` (kelipatan 90; default & minimum efektif 90).
     """
     # --- Idempotency: putar ulang dgn kunci sama tak menggandakan rotasi ---
-    idem_key = request.headers.get("Idempotency-Key", "")
+    idem_key = kunci_idem(request.headers.get("Idempotency-Key", ""), _user)
     if idem_key:
         cached = await get_idempotent_response(idem_key)
         if cached and cached.get("response"):
@@ -1938,7 +1940,7 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
     """Partial update — only update the fields provided in the body.
     Supports OCC via If-Match header (expected version) and Idempotency-Key header."""
     # --- Idempotency: replay cached response if same key seen recently ---
-    idem_key = request.headers.get("Idempotency-Key", "")
+    idem_key = kunci_idem(request.headers.get("Idempotency-Key", ""), _user)
     if idem_key:
         cached = await get_idempotent_response(idem_key)
         if cached and cached.get("response"):
@@ -1996,10 +1998,37 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
     update_data = {k: v for k, v in body.items() if k in PATCHABLE_FIELDS}
     has_photo_ops = "photo_ops" in body
 
-    # Field patchable semuanya SKALAR — tolak nilai dict/list agar operator
-    # NoSQL (mis. {"$ne": null}) tak menyusup ke query cek-duplikat & $set.
+    # Tolak operator NoSQL (mis. {"$ne": null}) agar tak menyusup ke query
+    # cek-duplikat & $set.
+    #
+    # PERBAIKAN (REVIEW-9 R15): dulu SEMUA nilai list/dict ditolak, padahal
+    # PATCHABLE_FIELDS memuat `photos` dan `document_checklist` yang memang
+    # BERBENTUK LIST — akibatnya kedua field itu dinyatakan patchable tetapi
+    # SELALU gagal 400, jadi edit kelengkapan dokumen lewat PATCH mustahil.
+    # Kini list diizinkan HANYA untuk field yang memang berbentuk list, dengan
+    # validasi isi; field skalar tetap menolak list/dict seperti semula.
+    _FIELD_LIST = {"photos", "document_checklist"}
+
+    def _bebas_operator(nilai, jalur: str):
+        """Tolak kunci ber-awalan '$' atau bertitik di kedalaman berapa pun."""
+        if isinstance(nilai, dict):
+            for kk, vv in nilai.items():
+                if not isinstance(kk, str) or kk.startswith("$") or "." in kk:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Nilai field '{jalur}' tidak valid")
+                _bebas_operator(vv, jalur)
+        elif isinstance(nilai, list):
+            for vv in nilai:
+                _bebas_operator(vv, jalur)
+
     for k, v in update_data.items():
-        if isinstance(v, (dict, list)):
+        if k in _FIELD_LIST:
+            if not isinstance(v, list):
+                raise HTTPException(status_code=400,
+                                    detail=f"Field '{k}' harus berupa daftar")
+            _bebas_operator(v, k)
+        elif isinstance(v, (dict, list)):
             raise HTTPException(status_code=400, detail=f"Nilai field '{k}' tidak valid")
 
     if not update_data and not has_photo_ops:
@@ -2407,9 +2436,16 @@ async def delete_asset(asset_id: str, request: Request, _admin: dict = Depends(r
 
 
 @assets_router.post("/assets/migrate-gridfs")
-async def migrate_photos_to_gridfs(_admin: dict = Depends(require_admin)):
+async def migrate_photos_to_gridfs(_admin: dict = Depends(require_super_admin)):
     """Migrate existing inline base64 photos to GridFS + generate per-photo thumbnails.
-    Safe to run multiple times — skips assets that already have gridfs_ids."""
+    Safe to run multiple times — skips assets that already have gridfs_ids.
+
+    KHUSUS SUPER-ADMIN (REVIEW-9 R15): operasi ini menyapu SELURUH koleksi
+    assets tanpa filter satker dan MENULIS ULANG dokumen aset (foto → GridFS,
+    thumbnail baru). Dengan `require_admin`, admin satker mana pun dapat
+    memicu penulisan massal atas aset satker lain — migrasi seluruh-DB adalah
+    wewenang pusat, sekelas backup/restore/reset.
+    """
     cursor = db.assets.find(
         {"photos": {"$exists": True, "$ne": []}, "$or": [{"photo_gridfs_ids": {"$exists": False}}, {"photo_gridfs_ids": []}]},
         {"_id": 0, "id": 1, "photos": 1, "document_checklist": 1}

@@ -30,7 +30,8 @@ from asset_fields import SCALAR_FIELD_NAMES
 from routes.assets import build_asset_search_query
 from db import db
 from shared_utils import (limiter, invalidate_asset_cache, log_audit,
-                          get_photo_from_gridfs, pastikan_akses_aset,
+                          get_photo_from_gridfs, kode_satker_user,
+                          pastikan_akses_aset,
                           pastikan_akses_kegiatan_id, scope_query_aset)
 
 
@@ -1391,6 +1392,9 @@ async def export_xlsx_async(request: Request, activity_id: Optional[str] = None,
     nama = f"inventory_{(activity_id or 'semua')[:8]}.xlsx"
     job_id = await buat_job(
         "ekspor_xlsx", _user.get("username", ""),
+        # Stempel satker (REVIEW-9 R15): artifact ekspor memuat register
+        # lengkap satker ini — izin unduhnya ikut satker, bukan sekadar role.
+        kode_satker=kode_satker_user(_user),
         status="queued", progress=0, done=False, total=total, nama_file=nama)
     t = asyncio.create_task(
         _jalankan_ekspor_xlsx(job_id, query, activity_id or "", base_url, nama,

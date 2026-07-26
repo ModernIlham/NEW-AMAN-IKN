@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 from auth_utils import require_admin, require_user
 from db import db
+from shared_utils import kode_satker_user, scope_query_field_satker
 from pelaporan_utils import (
     STATUS_PERIODE, info_tenggat_periode, kunci_unik_periode,
     label_periode_pelaporan, rekap_periode, validate_buka_periode,
@@ -20,6 +21,25 @@ from pelaporan_utils import (
 )
 
 pelaporan_router = APIRouter()
+
+
+def _q_periode(user, query=None) -> dict:
+    """Filter periode pelaporan — pencocokan EKSAK `kode_satker`.
+
+    SENGAJA TIDAK memakai `scope_query_field_satker` (REVIEW-9 R15b). Helper
+    itu ikut mencocokkan kode ""/None (konvensi "era lama terbuka"), yang di
+    sini justru merusak tujuannya: periode lama tanpa stempel akan (a) membuat
+    satker KEDUA ditolak 409 saat mendaftarkan tahun/semester yang sama karena
+    menabrak periode satker LAIN, dan (b) tetap bisa dikunci/dibuka/DIHAPUS
+    lintas satker — persis kebocoran yang hendak ditutup. Periode adalah
+    keadaan alur kerja milik satu satker, jadi kepemilikannya harus tegas.
+    Super-admin (kode kosong) tetap melihat semua.
+    """
+    q = dict(query or {})
+    kode = kode_satker_user(user)
+    if kode:
+        q["kode_satker"] = kode
+    return q
 
 
 class PeriodeIn(BaseModel):
@@ -40,7 +60,11 @@ class TenggatIn(BaseModel):
 async def daftar_periode(_user: dict = Depends(require_user)):
     """Register periode pelaporan (terbaru dulu) + tenggat aktif + rekap."""
     today_iso = datetime.now(timezone.utc).date().isoformat()
-    items = [p async for p in db.periode_pelaporan.find({}, {"_id": 0})
+    # ISOLASI SATKER (REVIEW-9 R15). Periode pelaporan = siklus LBKP/LBP MILIK
+    # SATKER: tiap satker menutup bukunya sendiri. Tanpa scope, register ini
+    # bersama — satker A mengunci periode dan satker B ikut terkunci.
+    items = [p async for p in db.periode_pelaporan.find(
+        _q_periode(_user), {"_id": 0})
              .sort([("tahun", -1), ("semester", -1)]).limit(200)]
     lewat = 0
     for p in items:
@@ -67,12 +91,17 @@ async def buat_periode(payload: PeriodeIn, user: dict = Depends(require_admin)):
     if errors:
         raise HTTPException(status_code=400, detail="; ".join(errors))
     kunci = kunci_unik_periode(data["tahun"], data.get("semester"))
-    if await db.periode_pelaporan.find_one({"kunci_unik": kunci}, {"_id": 1}):
+    _ks = kode_satker_user(user)
+    # Keunikan PER SATKER (REVIEW-9 R15): tahun+semester yang sama sah dimiliki
+    # banyak satker sekaligus.
+    if await db.periode_pelaporan.find_one(
+            _q_periode(user, {"kunci_unik": kunci}), {"_id": 1}):
         raise HTTPException(status_code=409, detail="Periode sudah terdaftar")
     now = datetime.now(timezone.utc).isoformat()
     record = {
         "id": str(uuid.uuid4()),
         "kunci_unik": kunci,
+        "kode_satker": _ks,   # stempel satker (REVIEW-9 R15)
         "tahun": data["tahun"],
         "semester": data.get("semester"),
         "label": label_periode_pelaporan(data["tahun"], data.get("semester")),
@@ -94,7 +123,8 @@ async def buat_periode(payload: PeriodeIn, user: dict = Depends(require_admin)):
 @pelaporan_router.post("/pelaporan/periode/{periode_id}/kunci")
 async def kunci_periode(periode_id: str, admin: dict = Depends(require_admin)):
     """Kunci periode (admin) — laporan periode itu menjadi FINAL."""
-    p = await db.periode_pelaporan.find_one({"id": periode_id}, {"_id": 0})
+    p = await db.periode_pelaporan.find_one(
+        _q_periode(admin, {"id": periode_id}), {"_id": 0})
     if not p:
         raise HTTPException(status_code=404, detail="Periode tidak ditemukan")
     errors = validate_kunci_periode(p)
@@ -103,7 +133,7 @@ async def kunci_periode(periode_id: str, admin: dict = Depends(require_admin)):
     now = datetime.now(timezone.utc).isoformat()
     res = await db.periode_pelaporan.find_one_and_update(
         # Anti-balapan: hanya periode yang masih terbuka
-        {"id": periode_id, "status": "terbuka"},
+        _q_periode(admin, {"id": periode_id, "status": "terbuka"}),
         {"$set": {"status": "terkunci", "tanggal_kunci": now,
                   "dikunci_oleh": admin.get("username"), "updated_at": now},
          "$push": {"riwayat": {"aksi": "dikunci", "tanggal": now,
@@ -119,7 +149,8 @@ async def kunci_periode(periode_id: str, admin: dict = Depends(require_admin)):
 async def buka_periode(periode_id: str, payload: BukaKunciIn,
                        admin: dict = Depends(require_admin)):
     """Buka kembali periode terkunci (admin, wajib beralasan)."""
-    p = await db.periode_pelaporan.find_one({"id": periode_id}, {"_id": 0})
+    p = await db.periode_pelaporan.find_one(
+        _q_periode(admin, {"id": periode_id}), {"_id": 0})
     if not p:
         raise HTTPException(status_code=404, detail="Periode tidak ditemukan")
     data = payload.model_dump()
@@ -128,7 +159,7 @@ async def buka_periode(periode_id: str, payload: BukaKunciIn,
         raise HTTPException(status_code=400, detail="; ".join(errors))
     now = datetime.now(timezone.utc).isoformat()
     res = await db.periode_pelaporan.find_one_and_update(
-        {"id": periode_id, "status": "terkunci"},
+        _q_periode(admin, {"id": periode_id, "status": "terkunci"}),
         {"$set": {"status": "terbuka", "tanggal_kunci": "",
                   "dikunci_oleh": "", "updated_at": now},
          "$push": {"riwayat": {"aksi": "dibuka", "tanggal": now,
@@ -145,7 +176,8 @@ async def buka_periode(periode_id: str, payload: BukaKunciIn,
 async def atur_tenggat_periode(periode_id: str, payload: TenggatIn,
                                admin: dict = Depends(require_admin)):
     """Atur/hapus tenggat penyampaian periode terbuka (admin)."""
-    p = await db.periode_pelaporan.find_one({"id": periode_id}, {"_id": 0})
+    p = await db.periode_pelaporan.find_one(
+        _q_periode(admin, {"id": periode_id}), {"_id": 0})
     if not p:
         raise HTTPException(status_code=404, detail="Periode tidak ditemukan")
     if p.get("status") != "terbuka":
@@ -176,7 +208,7 @@ async def atur_tenggat_periode(periode_id: str, payload: TenggatIn,
 async def hapus_periode(periode_id: str, _admin: dict = Depends(require_admin)):
     """Hapus periode salah input (hanya yang masih terbuka)."""
     res = await db.periode_pelaporan.delete_one(
-        {"id": periode_id, "status": "terbuka"})
+        _q_periode(_admin, {"id": periode_id, "status": "terbuka"}))
     if res.deleted_count == 0:
         raise HTTPException(
             status_code=409,
@@ -203,7 +235,6 @@ async def arsip_laporan(q: str = "", _user: dict = Depends(require_user)):
     s = str(q or "").strip().lower()
     items = []
 
-    from shared_utils import scope_query_field_satker
     async for it in db.surat.find(
             scope_query_field_satker(_user, {
                 "jenis": "keluar",
@@ -235,7 +266,7 @@ async def arsip_laporan(q: str = "", _user: dict = Depends(require_user)):
             "kegiatan_id": a.get("id")})
 
     async for p in db.periode_pelaporan.find(
-            {"status": "terkunci"},
+            _q_periode(_user, {"status": "terkunci"}),
             {"_id": 0, "id": 1, "label": 1, "tahun": 1,
              "tanggal_kunci": 1}).sort("tanggal_kunci", -1).limit(100):
         items.append({

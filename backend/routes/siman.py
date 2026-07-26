@@ -223,12 +223,18 @@ async def import_siman(request: Request, file: UploadFile = File(...),
     # membawa kode_satker_lengkap ±20 digit versi SIMAN V2, sementara AMAN
     # memakai 6 digit) — file milik satker lain terdeteksi dini, dan file
     # satker sendiri tidak lagi salah diperingatkan.
+    # ISOLASI SATKER (REVIEW-9 R15): daftar pembanding dibatasi satker
+    # PEMANGGIL. Tanpa ini daftar memuat kode SELURUH satker terdaftar, lalu
+    # pesan peringatan di bawah mencetaknya kembali ke pengguna — jadi cukup
+    # mengunggah file asal untuk memanen daftar kode satker se-instansi.
+    from shared_utils import scope_query_field_satker as _sqfs
     kode_terdaftar = set()
-    async for s in db.satker.find({}, {"_id": 0, "kode_satker": 1, "kode_satker_lengkap": 1}):
+    async for s in db.satker.find(
+            _sqfs(user, {}), {"_id": 0, "kode_satker": 1, "kode_satker_lengkap": 1}):
         kode_terdaftar.add(s.get("kode_satker_lengkap") or "")
         kode_terdaftar.add(s.get("kode_satker") or "")
     async for keg in db.inventory_activities.find(
-            {}, {"_id": 0, "kode_satker": 1, "kode_satker_lengkap": 1}):
+            _sqfs(user, {}), {"_id": 0, "kode_satker": 1, "kode_satker_lengkap": 1}):
         kode_terdaftar.add(keg.get("kode_satker_lengkap") or "")
         kode_terdaftar.add(keg.get("kode_satker") or "")
     setelan = await db.report_settings.find_one(

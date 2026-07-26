@@ -52,6 +52,14 @@ def test_peta_kop_konsisten():
     assert PETA_KOP_SATKER["alamat"] == "alamat_instansi"
     assert set(PETA_KOP_SATKER) == {"nama_unit_organisasi", "nama_sub_unit",
                                     "alamat", "tempat_laporan",
-                                    "tembusan_laporan", "kode_satker_lengkap"}
+                                    "tembusan_laporan", "kode_satker_lengkap",
+                                    # R15b: kop laporan milik satker sendiri
+                                    "logo_url", "judul_laporan",
+                                    "subjudul_laporan", "tahun_anggaran",
+                                    "catatan_kaki"}
+    # Setiap field kop per-satker WAJIB juga terdaftar di FIELD_KOP_SATKER
+    # (routes/satker.py) — kalau tidak, nilainya tak pernah tersimpan.
+    from routes.satker import FIELD_KOP_SATKER
+    assert set(PETA_KOP_SATKER) <= set(FIELD_KOP_SATKER)
     # kode satker lengkap (±20 digit) ikut ter-overlay ke kop utk stiker
     assert PETA_KOP_SATKER["kode_satker_lengkap"] == "kode_satker_lengkap"

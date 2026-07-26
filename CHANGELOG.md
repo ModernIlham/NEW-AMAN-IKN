@@ -53,6 +53,61 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#619] Audit REVIEW-9 (15): SELURUH sisa temuan workflow ditutup (20/20) — 2026-07-26
+
+Seluruh kandidat temuan workflow ditriase ULANG terhadap `main` pasca-`[#618]`
+(28 diperiksa, 20 ternyata masih terbuka) lalu ditutup semua.
+
+**TINGGI**
+
+1. **`periode_pelaporan` tanpa dimensi satker sama sekali.** Register siklus
+   LBKP/LBP ini dibaca, dibuat, DIKUNCI, dibuka, ditenggat, dan dihapus lintas
+   satker: admin satker A mengunci periode 2026-S1 → SELURUH satker ikut
+   terkunci dan tak dapat menutup buku; ia juga dapat membuka/menghapus kunci
+   satker lain sehingga penanda FINAL pada LBKP/CaLBMN mereka hilang. Satker
+   kedua yang mendaftarkan periode sama pun ditolak 409. Kini dokumen
+   distempel, 8 titik akses di-scope, penanda FINAL diambil dari periode
+   satker sendiri, dan indeks unik diganti majemuk `[kode_satker, kunci_unik]`
+   (indeks global lama di-drop dulu — tanpa itu perbaikannya justru mengubah
+   409 menjadi DuplicateKeyError 500).
+2. **Idempotency-Key tidak terikat pemilik.** Kunci dipilih KLIEN dan disimpan
+   apa adanya, jadi menebak kunci satker lain = MEMUTAR ULANG respons
+   tersimpan mereka. Helper `kunci_idem()` mengikat kunci ke identitas
+   pemanggil, diterapkan di SUMBER (tempat header dibaca) pada 7 handler.
+3. **`report_settings` global + logo ditulis admin satker mana pun.** Dokumen
+   singleton itu DASAR kop SEMUA satker; kini khusus super-admin pusat. Kop
+   milik satker sendiri tetap lewat Master Satker yang sudah ber-guard.
+
+**BUG FUNGSIONAL (bukan isolasi).** `PATCHABLE_FIELDS` memuat `photos` dan
+`document_checklist` yang BERBENTUK LIST, tetapi guard anti-injeksi menolak
+SEMUA nilai list — kedua field itu dinyatakan patchable namun SELALU gagal
+400, sehingga edit kelengkapan dokumen lewat PATCH mustahil. Kini list
+diizinkan khusus untuk field berbentuk list, dengan penolakan operator NoSQL
+REKURSIF (kunci ber-awalan `$` atau bertitik) di kedalaman mana pun.
+
+**SEDANG.** LBP mengulang cacat tombstone yang sudah diperbaiki di LBKP/CaLBMN
+(saldo akhir bisa MINUS + volume penghapusan satker lain bocor); artifact job
+ekspor dapat diunduh admin satker lain (kini job distempel kode_satker);
+`pastikan_akses_kegiatan_id` FAIL-OPEN saat kegiatan induk hilang → aset yatim
+terbuka lintas satker (kini fail-closed, super-admin tetap dapat merapikan);
+migrasi GridFS seluruh-DB hanya `require_admin`; KOP per-satker dilewati di
+DHPB, BA-Perbaikan, dan BA Pemusnahan; LIMA lookup Master Pegawai lintas
+satker (dua di antaranya membocorkan NAMA lewat pesan galat, satu berfungsi
+sebagai oracle "Meninggal Dunia"); TIGA deret nomor bersama yang semestinya
+per satker (tiket kegiatan, NUP reklasifikasi, kode barang persediaan);
+validasi satker impor SIMAN memanen + mencetak balik daftar kode se-instansi;
+dasbor & ekspor CSV integritas menghitung register seluruh satker; tautan aset
+pada register Pengadaan tak ber-guard; keunikan `nomor_surat` kegiatan global;
+ringkasan kegiatan dari `asset_ids` kiriman KLIEN tanpa scope.
+
+**RENDAH.** Guard "masih dipakai" saat menghapus kode klasifikasi arsip hanya
+membaca peta GLOBAL, padahal `peta_klasifikasi` kini juga per satker.
+
+Uji: 747 unit test hijau (+2 uji baru: PATCH field list vs operator NoSQL,
+`kunci_idem` terikat pemilik), `yarn build` sukses.
+
+---
+
 ## [#618] Audit REVIEW-9 (10–14): tinjauan-atas-tinjauan — 4 celah berat + 3 regresi sendiri — 2026-07-25
 
 Setelah `[#617]`, dua verifikasi independen dijalankan atas hasilnya sendiri:

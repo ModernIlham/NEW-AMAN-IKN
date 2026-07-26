@@ -18,13 +18,34 @@ jobs_router = APIRouter()
 
 
 def _boleh_akses(job: dict, user: dict) -> bool:
-    """Hanya PEMILIK job atau admin/super-admin. FAIL-CLOSED: job tanpa pemilik
-    (dibuat_oleh kosong) TIDAK terbuka untuk user biasa (cegah unduh silang)."""
-    if str(user.get("role") or "") in ("admin", "super_admin"):
-        return True
+    """Hanya PEMILIK job, atau admin DARI SATKER YANG SAMA. FAIL-CLOSED: job
+    tanpa pemilik (dibuat_oleh kosong) TIDAK terbuka untuk user biasa.
+
+    ISOLASI SATKER (REVIEW-9 R15): dulu SEMUA admin lolos tanpa cek satker,
+    sehingga admin satker A dapat mengunduh artifact ekspor satker B — berisi
+    register aset lengkap milik B. Kini bypass admin dibatasi satkernya
+    sendiri; job era-lama tanpa stempel tetap terbuka bagi admin (konvensi
+    dokumen tanpa kode_satker), pemiliknya sendiri selalu boleh.
+    """
+    from shared_utils import kode_satker_user
+
     pemilik = str(job.get("dibuat_oleh") or "").strip()
     username = str(user.get("username") or "").strip()
-    return bool(pemilik) and bool(username) and pemilik == username
+    if bool(pemilik) and bool(username) and pemilik == username:
+        return True
+    if str(user.get("role") or "") in ("admin", "super_admin"):
+        milik = str(job.get("kode_satker") or "").strip()
+        kode = kode_satker_user(user)
+        if not kode:
+            return True          # super-admin pusat: lintas satker
+        # FAIL-CLOSED untuk job TANPA stempel (REVIEW-9 R15b). Pada dokumen
+        # biasa kode kosong berarti "era lama, terbuka"; pada JOB artinya
+        # pembuatnya super-admin pusat — dan artifact ekspornya justru berisi
+        # register LINTAS SATKER. Membukanya untuk admin satker persis
+        # membalikkan maksud isolasi. Job lama tanpa stempel pun ikut tertutup;
+        # pemiliknya sendiri tetap bisa mengunduh lewat cabang di atas.
+        return bool(milik) and milik == kode
+    return False
 
 
 @jobs_router.get("/jobs/{job_id}")
