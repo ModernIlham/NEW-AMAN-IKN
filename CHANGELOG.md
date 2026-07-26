@@ -53,6 +53,54 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#627] Spasial Fase 5: impor denah dari Shapefile / KML / KMZ / GeoJSON — 2026-07-26
+
+Fase 5 program Spasial & IoT: denah yang sudah digambar di QGIS/ArcGIS/Google
+Earth kini bisa DIIMPOR — memenuhi bagian "sistem dapat menerima membaca hasil
+impor misalkan shp, kml, kmz" dari mandat awal.
+
+**Alur dua langkah** (tombol Impor di Hierarki Spasial):
+1. **Pratinjau sinkron** — file diperiksa tanpa menulis apa pun: format, cacah
+   fitur, CRS terdeteksi, daftar field atribut + SAMPEL nilainya. Sampel ini
+   krusial: nama ber-mojibake (encoding DBF salah — jebakan #3 riset Fase 0)
+   harus terlihat SEBELUM tersimpan, bukan sesudahnya.
+2. **Impor via job latar** — operator memetakan tingkat/induk/field nama+kode
+   dan saklar perbaikan topologi; worker mem-parse penuh, membersihkan tiap
+   fitur, lalu menulis node ber-status **DRAFT** (badge kuning di pohon). Draft
+   sengaja tak ikut deteksi lokasi maupun lapisan denah — hasil impor diperiksa
+   manusia dulu, baru diaktifkan.
+
+**Parser (`impor_geo_utils.py`, murni & teruji):**
+- **SHP-zip** via pyshp (`__geo_interface__` menangani pengelompokan cincin/
+  lubang); encoding dari `.cpg`, fallback UTF-8 → CP1252 dengan peringatan.
+- **CRS dari `.prj`**: WGS84 geografis langsung; **UTM (semua zona) dikonversi**
+  via paket `utm` — keluaran SELALU [bujur, lintang] (jebakan #2). Proyeksi lain
+  DITOLAK dengan menyebut namanya: menebak CRS = denah di lokasi salah tanpa
+  satu pun galat. Tanpa `.prj`: koordinat rentang derajat → diasumsikan WGS84
+  ber-peringatan; rentang meter → ditolak tegas.
+- **KML/KMZ**: parser namespace-agnostik; `<!DOCTYPE`/`<!ENTITY` ditolak dini
+  (billion-laughs/XXE); cincin KML yang tak tertutup DITUTUP (RFC 7946);
+  ExtendedData/SimpleData jadi atribut; Placemark titik/garis dilewati.
+- **Pembersihan per fitur**: struktur → topologi → (opsional) `make_valid`
+  ber-**pagar-luas**: perubahan luas > 1% TIDAK diterapkan otomatis (jebakan #1
+  riset — `buffer(0)` memangkas separuh poligon tanpa galat, dilarang di repo
+  ini). Pagar hanya berlaku bila luas asal BERMAKNA: shoelace pada poligon
+  menyilang-diri saling meniadakan (bow-tie simetris "berluas 0", terukur 0 vs
+  61,8 juta m²), dan menerapkan pagar pada angka artefak akan menolak justru
+  kasus perbaikan utama.
+
+**Keamanan & ketahanan**: plafon 20 MB + 2.000 fitur; seluruh atribut sumber
+tersimpan di `properties.impor` (jejak audit); kode ganda otomatis dikosongkan
+ber-peringatan; keunikan kode dicek SATU fetch untuk seluruh batch; parsing +
+shapely di thread; rate-limit pratinjau 12/menit & mulai 6/menit; satu impor
+berjalan pada satu waktu (semaphore); laporan job memuat daftar fitur yang
+dilewati BESERTA alasannya — plafon tampilan 50, jumlah asli tetap dilaporkan.
+Dependensi baru: `utm==0.8.1` (27 KB, sesuai rencana arsitektur Fase 0).
+
+Uji: +18 backend (889 total) — fixture dibangun DI DALAM uji (KML string, SHP
+via pyshp Writer in-memory, KMZ zip) sehingga tak ada file biner di repo;
+termasuk uji konversi UTM→WGS84 yang menuntut hasil mendarat di kotak IKN.
+
 ## [#626] Spasial Fase 4: gambar poligon denah di aplikasi + validasi topologi — 2026-07-26
 
 Fase 4 program Spasial & IoT: poligon denah kini bisa DIGAMBAR langsung di
