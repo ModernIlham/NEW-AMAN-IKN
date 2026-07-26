@@ -108,8 +108,31 @@ overlay (metadata + blob satu paket), dan form pohon mendapat kontrol Status
 eksplisit (aktivasi draft kini keputusan sadar) — dropdown
 Aktif / Draft / Nonaktif.
 
-Uji: +20 backend (926 total; sudut/bom-dekompresi/semantik-None) +4 jest
-(konversi sudut); eslint bersih; build produksi sukses.
+Uji: +23 backend (929 total; sudut/bom-dekompresi/semantik-None/regresi
+tinjauan) +4 jest (konversi sudut); eslint bersih; build produksi sukses.
+
+**Tinjauan adversarial: 16 temuan, 11 bertahan refutasi — semuanya
+diperbaiki** (semuanya lolos CI; CI tak menjalankan endpoint/renderer):
+- (HIGH) String desimal-koma "116,70" (format Excel/lapangan Indonesia) LOLOS
+  validasi tetapi meledakkan pembersih ber-`float()` mentah → 500. Validator
+  dan pembersih kini memakai parser yang sama.
+- (HIGH) Gagal muat gambar overlay 100% senyap — `<img>` `display:none` tanpa
+  `onerror`; kini plugin vendored memancarkan event `error` dan editor
+  menampilkannya.
+- (MEDIUM) Gambar berheader sah tapi piksel terpotong/rusak lolos, tersimpan,
+  gagal render diam-diam — kini `verify()` (susur chunk+CRC tanpa dekode
+  piksel, tetap aman dari bom).
+- (MEDIUM) Balapan PUT node vs unggah/hapus overlay bisa membuat node menunjuk
+  blob GridFS yang sudah dihapus — `properties` kini di-$set per-kunci dan
+  `denah_overlay` TAK PERNAH disentuh PUT node.
+- (MEDIUM) Pewarisan overlay tak menyaring satker/status moyang — metadata
+  bisa bocor lewat data ancestors korup; kini disaring.
+- (MEDIUM) Geser marker Atur Posisi lalu klik di luar dialog membuang
+  penempatan tanpa peringatan — kini dicegah seperti goresan belum tersimpan.
+- (LOW ×5) Guard atomik anti "overlay hantu" pasca-DELETE; penempatan bawaan
+  bbox raksasa dijepit agar selalu sah; opasitas tersimpan saat slider
+  dilepas; hapus overlay jatuh kembali ke warisan moyang; fitBounds ber-
+  `maxZoom` untuk geometri titik (asumsi "fitBounds melempar" ternyata salah).
 
 ## [#628] Spasial Fase 6: ekspor denah ke SHP / KML / KMZ / GeoJSON + template QGIS/Google Earth — 2026-07-26
 

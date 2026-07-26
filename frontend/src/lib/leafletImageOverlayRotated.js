@@ -75,6 +75,12 @@ L.ImageOverlay.Rotated = L.ImageOverlay.extend({
       img.style.display = "block";
       this.fire("load");
     }.bind(this);
+    // Tambahan dari vendoring: tanpa onerror, gambar 404/rusak tinggal
+    // display:none selamanya — overlay kosong TANPA satu pun sinyal
+    // (temuan tinjauan). Pemakai layer menangkap event "error" ini.
+    img.onerror = function () {
+      this.fire("error");
+    }.bind(this);
     img.alt = this.options.alt;
   },
 

@@ -362,16 +362,23 @@ async def ubah_node(node_id: str, payload: NodeIn,
     # None = tak diubah: klien yang tak mengirim properties/status (form pohon)
     # tak boleh menghapus jejak impor + overlay atau MENGAKTIFKAN draft
     # diam-diam (temuan Fase 7 — dua-duanya sempat terjadi lewat default lama).
-    if doc["properties"] is None:
-        doc["properties"] = dict(lama.get("properties") or {})
+    #
+    # `properties` TIDAK di-$set utuh melainkan per-kunci (dotted), dan kunci
+    # `denah_overlay` TAK PERNAH disentuh PUT ini — menulis balik snapshot
+    # `lama` kalah balapan dengan unggah/hapus overlay yang mendarat di
+    # sela baca-tulis: node bisa menunjuk blob GridFS yang sudah dihapus
+    # (temuan tinjauan). Field itu eksklusif milik endpoint overlay.
+    props_klien = doc.pop("properties")
+    props_set, props_unset = {}, {}
+    if props_klien is not None:
+        props_klien.pop("denah_overlay", None)
+        for k, v in props_klien.items():
+            props_set[f"properties.{k}"] = v
+        for k in (lama.get("properties") or {}):
+            if k != "denah_overlay" and k not in props_klien:
+                props_unset[f"properties.{k}"] = ""
     if doc["status"] is None:
         doc["status"] = lama.get("status") or "aktif"
-    # denah_overlay dikelola HANYA oleh endpoint overlay (metadata + blob
-    # GridFS satu paket) — nilai kiriman klien dibuang, nilai tersimpan dijaga.
-    doc["properties"].pop("denah_overlay", None)
-    ov_lama = (lama.get("properties") or {}).get("denah_overlay")
-    if ov_lama:
-        doc["properties"]["denah_overlay"] = ov_lama
 
     parent_baru = doc["parent_id"]
     pindah = parent_baru != lama.get("parent_id")
@@ -393,8 +400,10 @@ async def ubah_node(node_id: str, payload: NodeIn,
     doc.update(deriv)
     doc.update({"ordinal_level": su.ordinal_level(doc["tipe"]),
                 "updated_at": now, "updated_by": _user.get("username", "system")})
-    await db.spasial_node.update_one(
-        {"id": node_id}, {"$set": doc, "$inc": {"versi": 1}})
+    update = {"$set": {**doc, **props_set}, "$inc": {"versi": 1}}
+    if props_unset:
+        update["$unset"] = props_unset
+    await db.spasial_node.update_one({"id": node_id}, update)
 
     # Keturunan menyimpan salinan ancestors/jalur/ancestors_nama node ini. Pindah
     # induk mengubah jalur & ancestors mereka; GANTI NAMA saja mengubah
@@ -1217,15 +1226,23 @@ async def _sudut_bawaan_node(node: dict) -> dict:
 
 async def _overlay_efektif(node: dict):
     """Overlay node ini, atau milik moyang TERDEKAT yang punya — plus asal-nya
-    (`dari_node`) supaya klien tahu penempatan boleh diubah dari editor mana."""
+    (`dari_node`) supaya klien tahu penempatan boleh diubah dari editor mana.
+
+    Moyang disaring ke SATKER node sendiri dan status hidup: id di `ancestors`
+    adalah data (bisa korup/warisan lama menunjuk lintas-satker), dan tanpa
+    saringan itu metadata overlay satker lain — koordinat denah interior,
+    nama file, username — bocor lewat pewarisan (temuan tinjauan)."""
     ov = (node.get("properties") or {}).get("denah_overlay")
     if ov:
         return {**ov, "dari_node": node.get("id"), "dari_nama": node.get("nama")}
     anc = [a for a in (node.get("ancestors") or []) if a]
     if not anc:
         return None
+    satker = str(node.get("kode_satker") or "").strip()
     docs = await db.spasial_node.find(
-        {"id": {"$in": anc}, "properties.denah_overlay": {"$exists": True}},
+        {"id": {"$in": anc}, "properties.denah_overlay": {"$exists": True},
+         "kode_satker": {"$in": [satker, "", None]},
+         "status": {"$ne": "dihapus"}},
         {"_id": 0, "id": 1, "nama": 1, "properties.denah_overlay": 1}).to_list(64)
     peta = {d["id"]: d for d in docs}
     for aid in reversed(anc):                     # ancestors akar→daun; terdekat = belakang
@@ -1312,8 +1329,12 @@ async def atur_overlay(node_id: str, payload: OverlayPosisiIn,
     if galat:
         raise HTTPException(status_code=400, detail=galat)
     now = datetime.now(timezone.utc).isoformat()
-    await db.spasial_node.update_one(
-        {"id": node_id},
+    # Filter menyertakan file_id ($exists) — tanpa itu, DELETE overlay yang
+    # mendarat di sela cek-atas dan $set dotted ini MENCIPTAKAN ULANG
+    # denah_overlay parsial tanpa file_id: "overlay hantu" yang memblokir
+    # pewarisan dan tampil kosong diam-diam (temuan tinjauan).
+    r = await db.spasial_node.update_one(
+        {"id": node_id, "properties.denah_overlay.file_id": {"$exists": True}},
         {"$set": {"properties.denah_overlay.sudut":
                       su.rapikan_sudut_overlay(payload.sudut),
                   "properties.denah_overlay.opasitas":
@@ -1322,6 +1343,9 @@ async def atur_overlay(node_id: str, payload: OverlayPosisiIn,
                   "properties.denah_overlay.updated_by":
                       _user.get("username", ""),
                   "updated_at": now}})
+    if r.matched_count == 0:
+        raise HTTPException(status_code=404,
+                            detail="Gambar denah sudah dihapus — muat ulang editor")
     return {"ok": True}
 
 

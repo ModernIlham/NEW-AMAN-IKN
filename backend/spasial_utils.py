@@ -832,8 +832,20 @@ def validasi_sudut_overlay(sudut) -> Optional[str]:
 
 
 def rapikan_sudut_overlay(sudut) -> dict:
-    """Salinan bersih {tl,tr,bl} ber-float murni (buang elevasi/kunci asing)."""
-    return {k: [float(sudut[k][0]), float(sudut[k][1])] for k in SUDUT_OVERLAY}
+    """Salinan bersih {tl,tr,bl} ber-float murni (buang elevasi/kunci asing).
+
+    WAJIB memakai parser yang SAMA dengan validasi_sudut_overlay: string
+    desimal-koma "116,70" (format Excel/lapangan Indonesia) LOLOS validasi
+    (parse_koordinat menormalkan koma→titik) tetapi float() mentah melempar —
+    validator dan pembersih yang tak sepakat = 500 pada input yang justru
+    diiklankan didukung (temuan tinjauan)."""
+    hasil = {}
+    for k in SUDUT_OVERLAY:
+        lon, lat = parse_bujur(sudut[k][0]), parse_lintang(sudut[k][1])
+        if lon is None or lat is None:      # defensif — validator harusnya menahan
+            raise ValueError(f"sudut '{k}' di luar rentang koordinat dunia")
+        hasil[k] = [lon, lat]
+    return hasil
 
 
 def opasitas_overlay_sah(nilai) -> float:
@@ -850,7 +862,12 @@ def opasitas_overlay_sah(nilai) -> float:
 
 def sudut_overlay_bawaan(bbox) -> Optional[dict]:
     """Penempatan awal dari bbox [barat, selatan, timur, utara] — gambar
-    memenuhi kotak itu, utara di atas. None bila bbox tak layak."""
+    memenuhi kotak itu, utara di atas. None bila bbox tak layak.
+
+    Bentang dijepit ke bawah plafon MAKS_BENTANG_OVERLAY (dipotong simetris
+    dari pusat): bbox kawasan raksasa tak boleh menghasilkan penempatan awal
+    yang API-nya sendiri akan TOLAK saat operator menggeser lalu menyimpan
+    (temuan tinjauan — keadaan tersimpan harus selalu sah menurut validator)."""
     if not isinstance(bbox, (list, tuple)) or len(bbox) < 4:
         return None
     try:
@@ -858,8 +875,15 @@ def sudut_overlay_bawaan(bbox) -> Optional[dict]:
                       float(bbox[2]), float(bbox[3]))
     except (TypeError, ValueError):
         return None
-    if not (b < t and s < u):
+    if not (b < t and s < u) or not all(map(math.isfinite, (b, s, t, u))):
         return None
+    plafon = MAKS_BENTANG_OVERLAY * 0.9        # sisakan ruang geser operator
+    if t - b > plafon:
+        tengah = (b + t) / 2
+        b, t = tengah - plafon / 2, tengah + plafon / 2
+    if u - s > plafon:
+        tengah = (s + u) / 2
+        s, u = tengah - plafon / 2, tengah + plafon / 2
     return {"tl": [b, u], "tr": [t, u], "bl": [b, s]}
 
 
@@ -886,4 +910,14 @@ def periksa_gambar_overlay(data: bytes):
         raise ValueError(f"Gambar {lebar}×{tinggi} piksel terlalu besar "
                          f"(> {MAKS_PIKSEL_OVERLAY // 1_000_000} MP) — "
                          "perkecil resolusinya")
+    # verify() menyusuri chunk + CRC TANPA mendekode piksel (aman dari bom,
+    # murah) — tanpa ini file terpotong/rusak berheader sah LOLOS, tersimpan,
+    # lalu gagal render DIAM-DIAM di peramban; saat mengganti overlay, blob
+    # lama yang berfungsi ikut terhapus demi file rusak (temuan tinjauan).
+    # Urutan disengaja: plafon piksel dicek DULU sebelum menyusuri chunk.
+    try:
+        img.verify()
+    except Exception:
+        raise ValueError("File gambar rusak/terpotong — ekspor ulang lalu "
+                         "unggah kembali")
     return fmt, lebar, tinggi

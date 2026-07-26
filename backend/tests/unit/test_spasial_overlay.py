@@ -147,3 +147,34 @@ def test_bersih_node_status_liar_jadi_none_bukan_aktif():
     from routes.spasial import NodeIn, _bersih_node
     assert _bersih_node(NodeIn(tipe="G", nama="X", status="dihapus"))["status"] is None
     assert _bersih_node(NodeIn(tipe="G", nama="X", status="ngawur"))["status"] is None
+
+
+# ── Regresi temuan tinjauan Fase 7 ──────────────────────────────────────────
+
+def test_desimal_koma_lolos_validasi_dan_rapikan_sepakat():
+    """Format Excel/lapangan Indonesia "116,70" lolos validasi (parse_koordinat
+    menormalkan koma) — dulu rapikan memakai float() mentah dan meledak jadi
+    500 pada input yang justru diiklankan didukung (temuan tinjauan)."""
+    s = {"tl": ["116,70", "-1,39"], "tr": ["116,71", "-1,39"],
+         "bl": ["116,70", "-1,40"]}
+    assert su.validasi_sudut_overlay(s) is None
+    assert su.rapikan_sudut_overlay(s) == {
+        "tl": [116.70, -1.39], "tr": [116.71, -1.39], "bl": [116.70, -1.40]}
+
+
+def test_gambar_terpotong_ditolak_bukan_tersimpan_diam():
+    """Header sah + piksel terpotong dulu LOLOS (hanya header dibaca) lalu
+    gagal render diam-diam di peramban; verify() menyusuri chunk+CRC tanpa
+    mendekode piksel dan menangkapnya (temuan tinjauan)."""
+    utuh = _png(64, 64)
+    with pytest.raises(ValueError, match="rusak/terpotong"):
+        su.periksa_gambar_overlay(utuh[:-30])
+
+
+def test_sudut_bawaan_bbox_raksasa_tetap_sah():
+    """bbox kawasan selebar provinsi dijepit — penempatan awal tak boleh
+    berupa keadaan yang validator API-nya sendiri tolak (temuan tinjauan)."""
+    s = su.sudut_overlay_bawaan([110.0, -5.0, 118.0, 1.0])
+    assert s is not None
+    assert su.validasi_sudut_overlay(s) is None
+    assert su.sudut_overlay_bawaan([116.0, -1.0, float("inf"), 1.0]) is None

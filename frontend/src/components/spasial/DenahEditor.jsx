@@ -167,6 +167,10 @@ export default function DenahEditor({ node, onClose, onSaved }) {
       authMediaUrl(`${API}/spasial/overlay/${ov.file_id}`),
       ll.tl, ll.tr, ll.bl,
       { opacity: ov.opasitas ?? 0.7, interactive: false, pane: "denah-gambar" });
+    // Gagal muat (404 / file rusak) tak boleh senyap — tanpa ini alas jiplak
+    // kosong dan operator mengira fiturnya mati (temuan tinjauan).
+    layer.on("error", () => toast.error(
+      "Gambar denah gagal dimuat — file mungkin rusak; coba unggah ulang"));
     layer.addTo(map);
     overlayLayerRef.current = layer;
     sudutKiniRef.current = ov.sudut;
@@ -232,8 +236,14 @@ export default function DenahEditor({ node, onClose, onSaved }) {
         if (detail?.geometry && !batal) {
           const lyr = L.geoJSON({ type: "Feature", geometry: detail.geometry });
           lyr.eachLayer((l) => grupGambarRef.current?.addLayer(l));
-          try { map.fitBounds(grupGambarRef.current.getBounds().pad(0.3)); }
-          catch { /* geometri titik tunggal */ }
+          // maxZoom WAJIB: untuk geometri TITIK, getBounds() sah (kotak
+          // nol-luas) dan fitBounds TIDAK melempar — tanpa plafon, peta
+          // melompat ke zoom 22 dan alas overlay bisa di luar bingkai
+          // (temuan tinjauan; try/catch lama salah asumsi).
+          try {
+            map.fitBounds(grupGambarRef.current.getBounds().pad(0.3),
+                          { maxZoom: 19 });
+          } catch { /* grup kosong */ }
         }
       } catch {
         if (!batal) toast.error("Gagal memuat data node");
@@ -340,23 +350,48 @@ export default function DenahEditor({ node, onClose, onSaved }) {
         try { overlayLayerRef.current.remove(); } catch { /* sudah lepas */ }
         overlayLayerRef.current = null;
       }
-      setOverlay(null);
+      // Jatuh kembali ke overlay WARISAN moyang (bila ada) — server yang
+      // menghitung; tanpa ini state sesi menyimpang dari kondisi tersimpan
+      // sampai editor dibuka ulang (temuan tinjauan).
+      let waris = null;
+      try {
+        waris = (await axios.get(`${API}/spasial/node/${nodeId}`))
+          .data?.overlay_efektif || null;
+      } catch { /* jaringan goyah — biarkan kosong */ }
+      setOverlay(waris);
+      if (waris) {
+        setOpasitas(waris.opasitas ?? 0.7);
+        pasangOverlay(waris);
+      }
       toast.success("Gambar denah dihapus");
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Gagal menghapus gambar denah");
     } finally {
       setSibukOverlay(false);
     }
-  }, [nodeId, confirm, batalPosisi]);
+  }, [nodeId, confirm, batalPosisi, pasangOverlay]);
 
-  // Slider opasitas: visual seketika; tersimpan bersama "Simpan Posisi" (node
-  // sendiri) — untuk overlay warisan hanya berlaku sesi ini.
+  // Slider opasitas: visual seketika; nilai dipersistkan saat slider DILEPAS
+  // (overlay milik node ini) — dulu hanya tersimpan lewat "Simpan Posisi",
+  // jadi menggeser opasitas saja diam-diam kembali ke nilai lama saat editor
+  // dibuka lagi (temuan tinjauan). Overlay warisan: sesi ini saja.
   const ubahOpasitas = useCallback((v) => {
     setOpasitas(v);
     overlayLayerRef.current?.setOpacity(v);
   }, []);
 
   const overlayMilikSendiri = overlay?.dari_node === nodeId;
+
+  const simpanOpasitas = useCallback(async () => {
+    if (!overlayMilikSendiri || !sudutKiniRef.current) return;
+    try {
+      await axios.put(`${API}/spasial/node/${nodeId}/overlay`,
+                      { sudut: sudutKiniRef.current, opasitas });
+      setOverlay((o) => (o ? { ...o, opasitas } : o));
+    } catch {
+      toast.error("Opasitas gagal tersimpan — periksa koneksi");
+    }
+  }, [overlayMilikSendiri, nodeId, opasitas]);
 
   const kumpulkanGeometri = useCallback(() => {
     const fitur = [];
@@ -436,9 +471,10 @@ export default function DenahEditor({ node, onClose, onSaved }) {
         // membiarkan Radix ikut menutup dialog berarti satu tekan Escape
         // membuang seluruh pekerjaan. Tutup lewat tombol Batal/X saja.
         onEscapeKeyDown={(e) => e.preventDefault()}
-        // Klik di luar saat ada perubahan belum tersimpan = kehilangan gambar
-        // tanpa peringatan — cegah; tanpa perubahan, tutup seperti biasa.
-        onInteractOutside={(e) => { if (kotor) e.preventDefault(); }}
+        // Klik di luar saat ada perubahan belum tersimpan (goresan ATAU
+        // penempatan gambar yang sedang diatur) = kehilangan kerja tanpa
+        // peringatan — cegah; tanpa perubahan, tutup seperti biasa.
+        onInteractOutside={(e) => { if (kotor || aturPosisi) e.preventDefault(); }}
       >
         <DialogHeader className="px-4 pt-3 pb-2 border-b border-border">
           <DialogTitle className="text-sm flex items-center gap-2">
@@ -486,6 +522,7 @@ export default function DenahEditor({ node, onClose, onSaved }) {
                 <span className="text-muted-foreground">Opasitas</span>
                 <input type="range" min="0.1" max="1" step="0.05" value={opasitas}
                        onChange={(e) => ubahOpasitas(Number(e.target.value))}
+                       onMouseUp={simpanOpasitas} onTouchEnd={simpanOpasitas}
                        className="w-24 accent-teal-600" data-testid="denah-overlay-opasitas" />
               </label>
               {overlayMilikSendiri && !aturPosisi && (
