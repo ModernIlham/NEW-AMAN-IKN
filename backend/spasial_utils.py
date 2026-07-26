@@ -921,3 +921,28 @@ def periksa_gambar_overlay(data: bytes):
         raise ValueError("File gambar rusak/terpotong — ekspor ulang lalu "
                          "unggah kembali")
     return fmt, lebar, tinggi
+
+
+def snapshot_lokasi_temuan(node, lon, lat) -> dict:
+    """Snapshot lokasi spasial untuk DOKUMEN LAIN (tiket wasdal, dst.).
+
+    Seluruh nama diambil dari dokumen node milik SERVER — string kiriman klien
+    tak pernah dipercaya (klien hanya mengirim node_id + koordinat; server
+    membaca ulang nama/jalur dari DB). `node` boleh None: titik di luar
+    kawasan terpetakan tetap layak disimpan sebagai penanda koordinat.
+    """
+    hasil = {"titik": [float(lon), float(lat)],
+             "node_id": "", "node_nama": "", "node_tipe": "", "jalur_nama": ""}
+    if node:
+        nama = str(node.get("nama") or "")
+        # `if x` (bukan `if str(x)`): str(None) == "None" itu truthy dan akan
+        # menyusup ke jalur sebagai nama moyang palsu.
+        rantai = [str(x) for x in (node.get("ancestors_nama") or [])
+                  if x] + [nama]
+        hasil.update({
+            "node_id": str(node.get("id") or ""),
+            "node_nama": nama,
+            "node_tipe": str(node.get("tipe") or ""),
+            "jalur_nama": " / ".join(x for x in rantai if x)[:300],
+        })
+    return hasil
