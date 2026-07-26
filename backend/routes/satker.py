@@ -98,8 +98,15 @@ async def daftar_satker(_user: dict = Depends(require_user)):
     # Isolasi satker (REVIEW-9 R10): user terikat hanya melihat barisnya
     # sendiri; super-admin pusat tetap melihat seluruh master (dipakai untuk
     # mengelola & mengikat akun antar satker).
+    #
+    # SATKER AKTIF (temuan tinjauan): saat super-admin ber-"act-as" satker X,
+    # kode_satker-nya tersuntik X sehingga daftar ini akan menciut jadi HANYA X
+    # — padahal bilah pemilih satker justru butuh daftar PENUH agar bisa pindah
+    # X→Y langsung. `is_super_admin` menghormati penanda `_super_admin_asli`,
+    # jadi super-admin asli tetap melihat seluruh master meski sedang act-as.
     _milik = kode_satker_user(_user)
-    _q_master = {"kode_satker": _milik} if _milik else {}
+    _lihat_semua = is_super_admin(_user)
+    _q_master = {} if _lihat_semua else ({"kode_satker": _milik} if _milik else {})
     master = {m["kode_satker"]: m async for m in db.satker.find(_q_master, _PROJ)}
     pakai = {}
     pipeline = [
@@ -114,7 +121,7 @@ async def daftar_satker(_user: dict = Depends(require_user)):
         items.append({**m, "jumlah_kegiatan": pakai.get(kode, {}).get("n", 0),
                       "terdaftar": True})
     for kode, g in pakai.items():
-        if _milik and kode != _milik:
+        if not _lihat_semua and _milik and kode != _milik:
             continue
         if kode not in master:
             items.append({"kode_satker": kode, "nama_satker": g.get("nama") or "",

@@ -6,6 +6,7 @@ import { getApiError } from "../lib/utils";
 import { checkReachable, REACHABILITY_RETRY_MS } from "../lib/connectivity";
 import { summarizeSyncStatuses } from "../lib/syncStatus";
 import { resolveBaseVersion } from "../lib/occ";
+import { terapkanHeaderSatker, getSatkerAktif } from "../lib/satkerAktif";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -21,6 +22,18 @@ axiosLargeUpload.interceptors.request.use((config) => {
   if (token && !config.headers?.Authorization) {
     config.headers = config.headers || {};
     config.headers.Authorization = `Bearer ${token}`;
+  }
+  // "Satker Aktif" saat REPLAY (temuan tinjauan): simpanan offline yang dibuat
+  // saat super-admin ber-act-as satker A HARUS di-replay sebagai A — bukan
+  // satker yang kebetulan aktif saat antrean flush (bisa berubah antara enqueue
+  // dan sinkron → 403 "milik satker lain"). `config.saOverride` membawa satker
+  // saat di-enqueue (bisa "" = Semua Satker); bila ada, pakai persis itu.
+  if (config.saOverride !== undefined) {
+    config.headers = config.headers || {};
+    if (config.saOverride) config.headers["X-Satker-Aktif"] = config.saOverride;
+    else delete config.headers["X-Satker-Aktif"];
+  } else {
+    config = terapkanHeaderSatker(config);
   }
   return config;
 });
@@ -70,7 +83,7 @@ function getQueueDB() {
 
 // Strip non-serializable fields (resolve/reject) before storing/persisting
 function toPlainItem(item, statusKey) {
-  const { tempId, payload, isEdit, editId, usePatch, baseVersion, idempotencyKey, hadConflict, locked, queuedAt, nama_kegiatan } = item;
+  const { tempId, payload, isEdit, editId, usePatch, baseVersion, idempotencyKey, hadConflict, locked, queuedAt, nama_kegiatan, satkerAktif } = item;
   return {
     statusKey,
     tempId,
@@ -81,6 +94,9 @@ function toPlainItem(item, statusKey) {
     baseVersion: baseVersion ?? null,
     idempotencyKey: idempotencyKey ?? null,
     nama_kegiatan: nama_kegiatan || "",
+    // Satker aktif SAAT di-enqueue — direplay apa adanya agar simpanan tak
+    // salah dikirim ke satker lain yang aktif saat sinkron (temuan tinjauan).
+    satkerAktif: satkerAktif ?? "",
     hadConflict: !!hadConflict,
     // 423 Locked (kegiatan disahkan): retry otomatis tidak akan pernah
     // berhasil — auto-flush melewati item ini; hanya retry/dismiss manual.
@@ -218,16 +234,18 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
       headers["If-Match"] = String(item.baseVersion);
     }
 
+    // Replay dengan satker SAAT enqueue (bukan yang aktif kini) — lihat interceptor.
+    const _sa = item.satkerAktif ?? "";
     try {
       let result;
       if (item.isEdit && item.editId) {
         if (item.usePatch) {
-          result = await axiosLargeUpload.patch(`${API}/assets/${item.editId}`, item.payload, { headers });
+          result = await axiosLargeUpload.patch(`${API}/assets/${item.editId}`, item.payload, { headers, saOverride: _sa });
         } else {
-          result = await axiosLargeUpload.put(`${API}/assets/${item.editId}`, item.payload, { headers });
+          result = await axiosLargeUpload.put(`${API}/assets/${item.editId}`, item.payload, { headers, saOverride: _sa });
         }
       } else {
-        result = await axiosLargeUpload.post(`${API}/assets`, item.payload, { headers });
+        result = await axiosLargeUpload.post(`${API}/assets`, item.payload, { headers, saOverride: _sa });
       }
 
       updateStatus(statusKey, "saved");
@@ -302,7 +320,7 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
         try {
           const params = new URLSearchParams({ activity_id: item.payload.activity_id || "" });
           if (item.payload.asset_code) params.set("asset_code", item.payload.asset_code);
-          const r = await axiosLargeUpload.get(`${API}/assets/next-nup?${params}`, { headers: getAuditHeaders() });
+          const r = await axiosLargeUpload.get(`${API}/assets/next-nup?${params}`, { headers: getAuditHeaders(), saOverride: item.satkerAktif ?? "" });
           const nextNup = r?.data?.next_nup;
           if (nextNup && String(nextNup) !== String(item.payload.NUP)) {
             const newItem = {
@@ -376,7 +394,7 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
     }
   }, [updateStatus, clearStatus, onItemSaved, onItemFailed, onRowSynced, onConflict]);
 
-  const enqueue = useCallback(({ tempId, payload, isEdit, editId, usePatch, baseVersion, idempotencyKey, nama_kegiatan }) => {
+  const enqueue = useCallback(({ tempId, payload, isEdit, editId, usePatch, baseVersion, idempotencyKey, nama_kegiatan, satkerAktif }) => {
     const statusKey = isEdit ? editId : tempId;
     // One idempotency key per logical save — REUSED on network-failure retry so
     // the server dedupes. Conflict retries pass none, so a fresh key is minted
@@ -387,6 +405,9 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
       // Nama kegiatan HANYA untuk pesan gagal (identitas aset) — TIDAK dikirim
       // ke server (yang dikirim hanya item.payload).
       nama_kegiatan: nama_kegiatan || "",
+      // Bekukan satker aktif SAAT enqueue (super-admin act-as). Retry membawa
+      // nilai tersimpan agar tak ter-recapture ke satker yang aktif kini.
+      satkerAktif: satkerAktif !== undefined ? satkerAktif : getSatkerAktif(),
       queuedAt: new Date().toISOString(),
     };
 

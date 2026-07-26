@@ -548,19 +548,30 @@ async def satker_lookup(kode: str = "", nama: str = "", _user: dict = Depends(re
 @activities_router.post("/inventory-activities")
 async def create_inventory_activity(activity: InventoryActivityCreate, _user: dict = Depends(require_writer)):
     """Create a new inventory activity"""
+    # ISOLASI SATKER: user terikat satker hanya boleh membuat kegiatan untuk
+    # satkernya sendiri. Bila kode kegiatan KOSONG, ambil dari satker user
+    # (termasuk "Satker Aktif" super-admin) agar tak perlu diketik ulang. WAJIB
+    # dilakukan SEBELUM validasi "kode wajib" di bawah — bila ditaruh sesudah,
+    # 400 memicu lebih dulu dan auto-isi jadi kode mati (temuan tinjauan).
+    _kode_user = kode_satker_user(_user)
+    if _kode_user and not activity.kode_satker.strip():
+        activity.kode_satker = _kode_user
+
     # Validate required satker fields
     if not activity.kode_satker.strip():
         raise HTTPException(status_code=400, detail="Kode Satker wajib diisi")
     if not activity.nama_satker.strip():
         raise HTTPException(status_code=400, detail="Nama Satker wajib diisi")
 
-    # ISOLASI SATKER: user terikat satker hanya boleh membuat kegiatan
-    # untuk satkernya sendiri.
-    _kode_user = kode_satker_user(_user)
     if _kode_user and activity.kode_satker.strip() != _kode_user:
-        raise HTTPException(
-            status_code=403,
-            detail=f"Akun Anda terikat satker {_kode_user} — tidak dapat membuat kegiatan satker lain")
+        # Pesan sadar-konteks: super-admin yang sedang bertindak sebagai satu
+        # satker BUKAN "terikat" — beri tahu ia harus memakai satker aktifnya.
+        _pesan = (f"Anda sedang bertindak sebagai satker {_kode_user} — kegiatan "
+                  "harus untuk satker itu (atau beralih ke 'Semua Satker')."
+                  if _user.get("_satker_aktif")
+                  else f"Akun Anda terikat satker {_kode_user} — tidak dapat "
+                       "membuat kegiatan satker lain.")
+        raise HTTPException(status_code=403, detail=_pesan)
 
     # Enforce max file counts
     if activity.photos is not None and len(activity.photos) > MAX_ACTIVITY_PHOTOS:

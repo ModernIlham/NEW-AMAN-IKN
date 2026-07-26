@@ -7,6 +7,7 @@ import {
   Clock,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import MarqueeOnTap from "@/components/ui/MarqueeOnTap";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
@@ -209,9 +210,9 @@ export default function PelaporanPage({ user, onBack }) {
           </span>
           <div className="min-w-0 flex-1">
             <h1 className="text-sm sm:text-base font-bold text-foreground leading-tight truncate">Arsip Pelaporan</h1>
-            <p className="text-[11px] sm:text-xs text-muted-foreground truncate">
-              Laporan resmi lintas kegiatan + laporan persediaan — satu pintu
-            </p>
+            <MarqueeOnTap
+              text="Laporan resmi lintas kegiatan + laporan persediaan — satu pintu"
+              className="text-[11px] sm:text-xs text-muted-foreground" />
           </div>
           {isAdmin && (
             <Button variant="outline" size="sm" className="gap-1.5" data-testid="pelaporan-reklas"
@@ -413,10 +414,14 @@ export default function PelaporanPage({ user, onBack }) {
                     {it.tipe}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-[12px] font-semibold truncate">{it.judul}</p>
-                    <p className="text-[10px] text-muted-foreground truncate">
-                      {it.nomor ? `${it.nomor} · ` : ""}{it.sub}{it.tanggal ? ` · ${it.tanggal}` : ""}
-                    </p>
+                    {/* Judul & baris meta di-marquee saat DITAP — di HP judul
+                        panjang ("BAST Penggunaan Barang Milik Negara (...")
+                        ter-truncate dan informasinya tak terbaca penuh. */}
+                    <MarqueeOnTap text={it.judul}
+                      className="text-[12px] font-semibold" />
+                    <MarqueeOnTap
+                      text={`${it.nomor ? `${it.nomor} · ` : ""}${it.sub}${it.tanggal ? ` · ${it.tanggal}` : ""}`}
+                      className="text-[10px] text-muted-foreground" />
                   </div>
                   <span className="px-1.5 py-0.5 rounded-full bg-muted text-[9px] font-bold text-muted-foreground flex-shrink-0 uppercase">
                     {it.status || "-"}

@@ -16,6 +16,8 @@ import { startUpdateCheck } from "@/lib/updateCheck";
 import BackgroundTaskBar from "@/components/BackgroundTaskBar";
 import { clearAllSnapshots, ensureSnapshotOwner } from "@/lib/offlineSnapshot";
 import axios from "axios";
+import { terapkanHeaderSatker } from "./lib/satkerAktif";
+import SatkerAktifBar from "@/components/SatkerAktifBar";
 
 // ============================================================================
 // LAZY LOADED PAGES - Code Splitting
@@ -98,6 +100,8 @@ function App() {
     const hadSession = !!localStorage.getItem('token');
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    // Satker Aktif jangan bocor ke sesi berikutnya di peramban bersama.
+    localStorage.removeItem('satker_aktif');
     setUser(null);
     if (hadSession && message) toast.error(message, { duration: 6000 });
   }, []);
@@ -112,7 +116,9 @@ function App() {
       if (token && !config.headers.Authorization) {
         config.headers.Authorization = `Bearer ${token}`;
       }
-      return config;
+      // "Satker Aktif" super-admin (act-as): backend menyuntikkan kode ini
+      // sehingga stempel & scoping data mengikuti satker terpilih.
+      return terapkanHeaderSatker(config);
     });
     // Global 401 handler: an expired/invalid session logs the user out and
     // routes to /login (via the user-state redirect). Skips /auth/ requests
@@ -199,6 +205,7 @@ function App() {
         console.error("Error parsing user data:", error);
         localStorage.removeItem('token');
         localStorage.removeItem('user');
+        localStorage.removeItem('satker_aktif');
       }
     }
     setLoading(false);
@@ -337,6 +344,7 @@ function App() {
   if (window.location.pathname.startsWith('/ttd/')) {
     return (
       <div className="App">
+      <SatkerAktifBar user={user} />
         <Suspense fallback={<PageLoader />}>
           <TtdPublikPage />
         </Suspense>
@@ -351,6 +359,7 @@ function App() {
   if (window.location.pathname.startsWith('/peta/kolaborasi/')) {
     return (
       <div className="App">
+      <SatkerAktifBar user={user} />
         <Suspense fallback={<PageLoader />}>
           <PetaKolaborasiPage />
         </Suspense>
@@ -366,6 +375,7 @@ function App() {
   if (showInfo) {
     return (
       <div className="App">
+      <SatkerAktifBar user={user} />
         <Suspense fallback={<PageLoader />}>
           <InfoPage onBack={() => setShowInfo(false)} />
         </Suspense>
@@ -378,6 +388,7 @@ function App() {
   if (user && showKodefikasi) {
     return (
       <div className="App">
+      <SatkerAktifBar user={user} />
         <Suspense fallback={<PageLoader />}>
           <KodefikasiPage user={user} onBack={() => setShowKodefikasi(false)} />
         </Suspense>
@@ -390,6 +401,7 @@ function App() {
   if (user && showPejabat) {
     return (
       <div className="App">
+      <SatkerAktifBar user={user} />
         <Suspense fallback={<PageLoader />}>
           <PejabatPage user={user} onBack={() => setShowPejabat(false)} />
         </Suspense>
@@ -402,6 +414,7 @@ function App() {
   if (user && showRuangan) {
     return (
       <div className="App">
+      <SatkerAktifBar user={user} />
         <Suspense fallback={<PageLoader />}>
           <RuanganPage user={user} onBack={() => setShowRuangan(false)} />
         </Suspense>
@@ -414,6 +427,7 @@ function App() {
   if (user && showReferensiAkun) {
     return (
       <div className="App">
+      <SatkerAktifBar user={user} />
         <Suspense fallback={<PageLoader />}>
           <ReferensiAkunPage user={user} onBack={() => kembaliSubHalaman(() => setShowReferensiAkun(false))} />
         </Suspense>
@@ -426,6 +440,7 @@ function App() {
   if (user && showPegawai) {
     return (
       <div className="App">
+      <SatkerAktifBar user={user} />
         <Suspense fallback={<PageLoader />}>
           <PegawaiPage user={user} onBack={() => setShowPegawai(false)} />
         </Suspense>
@@ -438,6 +453,7 @@ function App() {
   if (user && showPersediaan) {
     return (
       <div className="App">
+      <SatkerAktifBar user={user} />
         <Suspense fallback={<PageLoader />}>
           <PersediaanPage user={user} onBack={() => setShowPersediaan(false)} />
         </Suspense>
@@ -450,6 +466,7 @@ function App() {
   if (user && showPersuratan) {
     return (
       <div className="App">
+      <SatkerAktifBar user={user} />
         <Suspense fallback={<PageLoader />}>
           <PersuratanPage user={user} onBack={() => kembaliSubHalaman(() => setShowPersuratan(false))} />
         </Suspense>
@@ -462,6 +479,7 @@ function App() {
   if (user && showPelaporan) {
     return (
       <div className="App">
+      <SatkerAktifBar user={user} />
         <Suspense fallback={<PageLoader />}>
           <PelaporanPage user={user} onBack={() => kembaliSubHalaman(() => setShowPelaporan(false))} />
         </Suspense>
@@ -474,6 +492,7 @@ function App() {
   if (user && showPenggunaan) {
     return (
       <div className="App">
+      <SatkerAktifBar user={user} />
         <Suspense fallback={<PageLoader />}>
           <PenggunaanPage user={user} onBack={() => setShowPenggunaan(false)} />
         </Suspense>
@@ -486,6 +505,7 @@ function App() {
   if (user && showPengamanan) {
     return (
       <div className="App">
+      <SatkerAktifBar user={user} />
         <Suspense fallback={<PageLoader />}>
           <PengamananPage user={user} onBack={() => setShowPengamanan(false)} />
         </Suspense>
@@ -498,6 +518,7 @@ function App() {
   if (user && showPemeliharaan) {
     return (
       <div className="App">
+      <SatkerAktifBar user={user} />
         <Suspense fallback={<PageLoader />}>
           <PemeliharaanPage user={user} onBack={() => setShowPemeliharaan(false)} />
         </Suspense>
@@ -510,6 +531,7 @@ function App() {
   if (user && showPerencanaan) {
     return (
       <div className="App">
+      <SatkerAktifBar user={user} />
         <Suspense fallback={<PageLoader />}>
           <PerencanaanPage user={user} onBack={() => setShowPerencanaan(false)} />
         </Suspense>
@@ -522,6 +544,7 @@ function App() {
   if (user && showPenilaian) {
     return (
       <div className="App">
+      <SatkerAktifBar user={user} />
         <Suspense fallback={<PageLoader />}>
           <PenilaianPage user={user} onBack={() => setShowPenilaian(false)} />
         </Suspense>
@@ -534,6 +557,7 @@ function App() {
   if (user && showPenghapusan) {
     return (
       <div className="App">
+      <SatkerAktifBar user={user} />
         <Suspense fallback={<PageLoader />}>
           <PenghapusanPage user={user} onBack={() => setShowPenghapusan(false)} />
         </Suspense>
@@ -546,6 +570,7 @@ function App() {
   if (user && showPemanfaatan) {
     return (
       <div className="App">
+      <SatkerAktifBar user={user} />
         <Suspense fallback={<PageLoader />}>
           <PemanfaatanPage user={user} onBack={() => setShowPemanfaatan(false)} />
         </Suspense>
@@ -558,6 +583,7 @@ function App() {
   if (user && showPemusnahan) {
     return (
       <div className="App">
+      <SatkerAktifBar user={user} />
         <Suspense fallback={<PageLoader />}>
           <PemusnahanPage user={user} onBack={() => setShowPemusnahan(false)} />
         </Suspense>
@@ -570,6 +596,7 @@ function App() {
   if (user && showPemindahtanganan) {
     return (
       <div className="App">
+      <SatkerAktifBar user={user} />
         <Suspense fallback={<PageLoader />}>
           <PemindahtangananPage user={user} onBack={() => setShowPemindahtanganan(false)} />
         </Suspense>
@@ -582,6 +609,7 @@ function App() {
   if (user && showWasdal) {
     return (
       <div className="App">
+      <SatkerAktifBar user={user} />
         <Suspense fallback={<PageLoader />}>
           <WasdalPage user={user} onBack={() => setShowWasdal(false)} />
         </Suspense>
@@ -594,6 +622,7 @@ function App() {
   if (user && showPenganggaran) {
     return (
       <div className="App">
+      <SatkerAktifBar user={user} />
         <Suspense fallback={<PageLoader />}>
           <PenganggaranPage user={user} onBack={() => setShowPenganggaran(false)} />
         </Suspense>
@@ -606,6 +635,7 @@ function App() {
   if (user && showPengadaan) {
     return (
       <div className="App">
+      <SatkerAktifBar user={user} />
         <Suspense fallback={<PageLoader />}>
           <PengadaanPage user={user} onBack={() => setShowPengadaan(false)} />
         </Suspense>
@@ -618,6 +648,7 @@ function App() {
   if (user && showTtd) {
     return (
       <div className="App">
+      <SatkerAktifBar user={user} />
         <Suspense fallback={<PageLoader />}>
           <TtdPermintaanPage user={user} onBack={() => setShowTtd(false)} />
         </Suspense>
@@ -630,6 +661,7 @@ function App() {
   if (user && showPengaturan) {
     return (
       <div className="App">
+      <SatkerAktifBar user={user} />
         <Suspense fallback={<PageLoader />}>
           <PengaturanPage
             user={user}
@@ -651,6 +683,7 @@ function App() {
   if (user && showPembukuan) {
     return (
       <div className="App">
+      <SatkerAktifBar user={user} />
         <Suspense fallback={<PageLoader />}>
           <PembukuanPage user={user} onBack={() => setShowPembukuan(false)} />
         </Suspense>
@@ -663,6 +696,7 @@ function App() {
   if (user && showSatker) {
     return (
       <div className="App">
+      <SatkerAktifBar user={user} />
         <Suspense fallback={<PageLoader />}>
           <SatkerPage user={user} onBack={() => kembaliSubHalaman(() => setShowSatker(false))} />
         </Suspense>
@@ -677,6 +711,7 @@ function App() {
   if (user && !moduleChosen) {
     return (
       <div className="App">
+      <SatkerAktifBar user={user} />
         <Suspense fallback={<PageLoader />}>
           <ModuleHomePage
             user={user}
@@ -718,6 +753,7 @@ function App() {
 
   return (
     <div className="App">
+      <SatkerAktifBar user={user} />
       {/* S1 — Skip link for keyboard/screen-reader users (WCAG 2.4.1 Bypass Blocks) */}
       <a href="#main-content" className="skip-link">
         Lewati ke konten utama
