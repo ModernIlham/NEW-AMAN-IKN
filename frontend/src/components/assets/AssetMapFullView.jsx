@@ -1087,9 +1087,18 @@ const AssetMapFullView = memo(function AssetMapFullView({
     const shouldStart = (e) => selectModeRef.current && (e.shiftKey || drawAreaRef.current);
     // Jangan mulai kotak bila menekan PIN/popup/kontrol (biarkan klik pin =
     // pilih/lepas). Kotak hanya dari area kosong peta.
+    //
+    // `[data-peta-panel]` menutup panel React kita sendiri (Lapis Denah &
+    // pemilih lantai). Keduanya anak DOM dari `wrap` — elemen yang SAMA yang
+    // dipasangi listener ini — sehingga tanpa pengecualian ini menyentuh
+    // tombolnya ikut memulai kotak seleksi: `setPointerCapture` di bawah
+    // membuat Chrome menelan `click` pada keturunan `wrap`, jadi tombolnya
+    // tak bereaksi, sementara mode "Pilih Area" mati sendiri tanpa penjelasan.
+    // Selektor Leaflet di bawah tak menolongnya — panel ini memakai kelas
+    // Tailwind, bukan `.leaflet-*` (temuan tinjauan).
     const onControlOrMarker = (e) => {
       const t = e.target;
-      return !!(t && t.closest && (t.closest(".leaflet-marker-icon") || t.closest(".leaflet-popup") || t.closest(".leaflet-control") || t.closest(".leaflet-marker-pane")));
+      return !!(t && t.closest && (t.closest("[data-peta-panel]") || t.closest(".leaflet-marker-icon") || t.closest(".leaflet-popup") || t.closest(".leaflet-control") || t.closest(".leaflet-marker-pane")));
     };
     const rectOf = () => wrap.getBoundingClientRect();
     const onDown = (e) => {
@@ -1466,6 +1475,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
         {denahOn && (
           <div
             className="absolute right-2 bottom-10 z-[500] w-[9.5rem] sm:w-44 max-w-[55%] rounded-lg border border-border bg-background/95 backdrop-blur shadow-lg overflow-hidden"
+            data-peta-panel="denah"
             data-testid="asset-map-denah-panel"
           >
             <div className="px-2 py-1.5 border-b border-border flex items-center gap-1.5">
@@ -1516,6 +1526,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
         {denahOn && denah.gedung && (
           <div
             className="absolute right-2 top-12 z-[500] w-32 sm:w-36 rounded-lg border border-border bg-background/95 backdrop-blur shadow-lg overflow-hidden"
+            data-peta-panel="lantai"
             data-testid="asset-map-lantai-switcher"
           >
             <div className="px-2 py-1.5 border-b border-border flex items-center gap-1">

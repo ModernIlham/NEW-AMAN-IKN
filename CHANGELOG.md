@@ -53,6 +53,21 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#625] Spasial Fase 3 (susulan): panel denah tak lagi memicu kotak seleksi — 2026-07-26
+
+Temuan terakhir dari fase refutasi tinjauan #624, yang sempat saya tolak dengan
+alasan yang KELIRU. Saya menyimpulkan panel denah aman karena ia "bersebelahan
+dengan container Leaflet"; kenyataannya listener kotak seleksi dipasang pada
+**pembungkus** (`mapWrapRef`), dan kedua panel adalah ANAK dari pembungkus itu.
+
+Akibatnya, saat tiga saklar menyala bersamaan — Denah + Mode Seleksi + "Pilih
+Area" — menyentuh tombol lapis atau pemilih lantai justru memulai kotak seleksi:
+`setPointerCapture` membuat Chrome menelan `click` pada keturunan pembungkus
+sehingga tombolnya tak bereaksi, sementara mode "Pilih Area" mati sendiri tanpa
+penjelasan. Penjaga `onControlOrMarker` hanya mengenali kelas `.leaflet-*`,
+sedangkan panel ini memakai kelas Tailwind. Ditutup dengan penanda
+`[data-peta-panel]` pada kedua panel + pengecualian di penjaga tersebut.
+
 ## [#624] Spasial Fase 3: geometri, deteksi lokasi otomatis dari titik, peta berlapis — 2026-07-26
 
 Fase 3 program Spasial & IoT: pohon Fase 2 kini punya BENTUK. Inilah fase yang
