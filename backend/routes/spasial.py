@@ -580,7 +580,8 @@ BATAS_FITUR_PETA = 3000
 @spasial_router.get("/spasial/geojson")
 async def geojson_viewport(bbox: str = Query("", description="lon_min,lat_min,lon_maks,lat_maks"),
                            level_maks: int = Query(100),
-                           induk: str = Query("", description="hanya anak langsung node ini"),
+                           induk: str = Query("", description="hanya anak LANGSUNG node ini"),
+                           dalam: str = Query("", description="seluruh keturunan node ini"),
                            _user: dict = Depends(require_user)):
     """FeatureCollection untuk render peta, dibatasi viewport & tingkat.
 
@@ -588,11 +589,15 @@ async def geojson_viewport(bbox: str = Query("", description="lon_min,lat_min,lo
     tetap wajar saat denah kawasan lengkap. `level_maks` memungkinkan klien
     meminta hanya tingkat besar saat zoom jauh.
 
-    `induk` menyaring ke anak LANGSUNG satu node — dipakai peta untuk memuat
-    ruangan SATU lantai saja. Tanpa itu semua lantai gedung akan bertumpuk di
-    tempat yang sama (mereka memang berbagi jejak 2D yang sama). Isolasi satker
-    tetap dari `scope_query_field_satker`, jadi menebak id lantai satker lain
-    hanya menghasilkan koleksi kosong.
+    `induk` menyaring ke anak LANGSUNG satu node; `dalam` ke SELURUH keturunannya
+    (lewat indeks multikey `ancestors`). Peta memakai `dalam` untuk memuat ruangan
+    satu lantai: tanpa penyaringan itu semua lantai gedung bertumpuk di tempat
+    yang sama (mereka memang berbagi jejak 2D yang sama), dan dengan `induk` saja
+    ruangan yang bersarang di bawah SAYAP — Lantai → Sayap → Ruangan, jalur yang
+    sah menurut registry — tak akan pernah ikut terambil.
+
+    Isolasi satker tetap dari `scope_query_field_satker`, jadi menebak id lantai
+    milik satker lain hanya menghasilkan koleksi kosong.
     """
     # level_maks dijepit ke rentang registry: nilai liar (mis. 10**9) tak boleh
     # jadi jalan pintas menarik seluruh denah satker dalam satu GET.
@@ -601,6 +606,8 @@ async def geojson_viewport(bbox: str = Query("", description="lon_min,lat_min,lo
          "ordinal_level": {"$lte": lv}}
     if induk:
         q["parent_id"] = induk
+    if dalam:
+        q["ancestors"] = dalam          # indeks multikey spasial_node_ancestors
     if bbox:
         # Tiga hasil; lihat su.kotak_dari_bbox. `kotak` None TANPA galat berarti
         # bbox sah tapi terlalu lebar untuk disaring (jebakan komplemen MongoDB)

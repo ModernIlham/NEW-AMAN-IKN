@@ -23,7 +23,7 @@ import { downloadFileWithProgress } from "../../lib/downloadFile";
 import { authMediaUrl } from "../../lib/mediaUrl";
 import { useBackGuard } from "../../hooks/useBackGuard";
 import { useDenahSpasial } from "../../hooks/useDenahSpasial";
-import { warnaLevel } from "../../lib/spasialDenah";
+import { warnaLevel, ordinalLantai } from "../../lib/spasialDenah";
 import Lightbox from "./PhotoLightbox";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -1507,10 +1507,15 @@ const AssetMapFullView = memo(function AssetMapFullView({
         )}
 
         {/* ── Pemilih lantai (muncul saat sebuah gedung diketuk) ──
-            Urutan MENURUN seperti panel lift: rooftop di atas, basement di bawah. */}
+            Urutan MENURUN seperti panel lift: rooftop di atas, basement di bawah.
+
+            Ditempatkan di KANAN, di bawah kompas. Sisi kiri-atas dipakai kontrol
+            zoom + tombol "Lokasi Saya" milik Leaflet; panel ini (z-500, di atas
+            container peta ber-z-0) akan menutupinya sehingga zoom & GPS tak bisa
+            ditekan selama denah gedung terbuka. */}
         {denahOn && denah.gedung && (
           <div
-            className="absolute left-2 top-2 z-[500] w-32 sm:w-36 rounded-lg border border-border bg-background/95 backdrop-blur shadow-lg overflow-hidden"
+            className="absolute right-2 top-12 z-[500] w-32 sm:w-36 rounded-lg border border-border bg-background/95 backdrop-blur shadow-lg overflow-hidden"
             data-testid="asset-map-lantai-switcher"
           >
             <div className="px-2 py-1.5 border-b border-border flex items-center gap-1">
@@ -1544,7 +1549,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
                     data-testid={`denah-lantai-${lt.id}`}
                   >
                     <span className="w-6 text-[10px] font-mono font-bold text-center flex-shrink-0 tabular-nums">
-                      {Number.isFinite(Number(lt?.lantai?.ordinal)) ? Number(lt.lantai.ordinal) : "–"}
+                      {ordinalLantai(lt) ?? "–"}
                     </span>
                     <span className="text-[10px] font-medium truncate flex-1">{lt.nama}</span>
                   </button>

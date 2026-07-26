@@ -151,7 +151,39 @@ antimeridian (bujur ±180) membuat bbox/titik wakil/luas kacau. Menanganinya ber
 memecah geometri dan mengubah semua turunan — biaya besar untuk kasus yang tak bisa
 terjadi di sini (Indonesia 95°BT–141°BT).
 
-Uji: +39 backend (849 total) & +35 frontend, seluruhnya logika murni tanpa Mongo.
+Gelombang ketiga (dimensi siklus-hidup Leaflet & kontrak klien-server):
+
+- **bbox dijepit SETELAH cek degenerasi.** Leaflet `getBounds()` mengembalikan
+  bujur yang tak dibungkus setelah peta digeser melewati antimeridian (mis.
+  `{barat:190, timur:195}`). Rentang mentahnya wajar, tetapi kedua tepi menjepit
+  ke 180 sehingga kotaknya pipih — server balas 400, cache viewport dikosongkan,
+  lalu **setiap** geser peta menembak request gagal berikutnya. Kini dicek ulang
+  setelah penjepitan dan permintaannya dilewatkan sama sekali.
+- **Lapis yang di-unhide mencuri klik & tooltip.** Renderer canvas menggambar
+  sesuai urutan penambahan dan uji-klik dimenangkan layer yang digambar TERAKHIR,
+  jadi `addTo` polos menaruh Kawasan di atas segalanya. Seluruh grup kini disusun
+  ulang menurut ordinal menaik setiap kali visibilitas berubah.
+- **Pemilih lantai menutupi kontrol zoom & tombol Lokasi Saya.** Panel ber-z-500
+  di atas container peta ber-z-0; selama denah gedung terbuka, zoom dan GPS tak
+  bisa ditekan. Dipindah ke kanan, di bawah kompas.
+- **Ruangan di bawah SAYAP tak pernah tampil.** Registry mengizinkan
+  Lantai → Sayap → Ruangan, tetapi klien meminta anak LANGSUNG saja. Ditambah
+  parameter `dalam=` (seluruh keturunan lewat indeks multikey `ancestors`), dan
+  klien beralih memakainya.
+- **`lantai.ordinal: null` terbaca sebagai 0.** `Number(null)` = 0 dan 0 itu
+  ordinal yang sah (lantai akses utama), jadi lantai yang ordinalnya belum diisi
+  menyamar sebagai lantai dasar dan menyusup ke tengah urutan lift. Diangkat ke
+  helper tunggal `ordinalLantai` yang dipakai pengurutan maupun penampilan.
+- Efek Leaflet dikeluarkan dari updater `setState` (updater wajib murni; React
+  memanggilnya dua kali di StrictMode); request dibatalkan saat unmount agar
+  respons tak menulis ke peta yang sudah dihancurkan; ganti Satker Aktif kini
+  mengosongkan layer SEKETIKA alih-alih menyisakan denah satker lama di layar
+  selama request berjalan; hook melewati fetch saat offline (peta aset memang
+  dirancang jalan dari snapshot lokal); klik ulang gedung yang sama tak lagi
+  membuang lantai terpilih; ruangan lantai terpilih digambar sebagai sorotan.
+
+Uji: +39 backend (849 total) & +41 frontend (117 total), seluruhnya logika murni
+tanpa Mongo maupun Leaflet.
 
 ## [#623] Spasial Fase 2: registry level + pohon `spasial_node` (hierarki berlapis) — 2026-07-26
 

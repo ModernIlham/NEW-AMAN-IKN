@@ -109,7 +109,10 @@ export function useDenahSpasial(peta, { aktif = false } = {}) {
     for (const f of urutFitur(fitur)) {
       const props = f?.properties || {};
       const ordinal = Number(props.ordinal_level) || 0;
-      const gaya = gayaFitur(ordinal);
+      // Ruangan lantai terpilih digambar sebagai SOROTAN — itu yang sedang
+      // dicari pengguna, dan tanpa penebalan ia tenggelam di antara poligon
+      // gedung/tapak yang warnanya berdekatan.
+      const gaya = gayaFitur(ordinal, { terpilih: keRuangan });
       let layer;
       try {
         layer = L.geoJSON(f, {
@@ -130,7 +133,11 @@ export function useDenahSpasial(peta, { aktif = false } = {}) {
       // Klik GEDUNG membuka pemilih lantai — satu-satunya jalan masuk ke denah
       // dalam ruangan, karena lantai tak bisa disimpulkan dari koordinat 2D.
       if (ordinal === ORDINAL_GEDUNG && props.id) {
-        layer.on("click", () => setGedung({ id: props.id, nama }));
+        // Identitas objek dijaga bila gedung yang SAMA diklik lagi — kalau tidak,
+        // setiap klik ulang membuat objek baru, memicu efek pemuatan lantai, dan
+        // membuang lantai yang sedang dipilih beserta denah ruangannya.
+        layer.on("click", () => setGedung(
+          (lama) => (lama && lama.id === props.id ? lama : { id: props.id, nama })));
       }
       const grup = keRuangan ? grupRuanganRef.current : ambilGrup(ordinal);
       if (grup) grup.addLayer(layer);
@@ -140,6 +147,11 @@ export function useDenahSpasial(peta, { aktif = false } = {}) {
   // ── Muat per-viewport ─────────────────────────────────────────────────────
   const muat = useCallback(async (paksa = false) => {
     if (!peta || !aktif) return;
+    // Peta aset SENGAJA bisa dipakai offline (pin dari snapshot lokal). Denah
+    // tak punya snapshot, jadi offline cukup dilewati diam-diam — menembak
+    // request yang pasti gagal hanya menghasilkan toast galat di lapangan,
+    // tempat sinyal memang sering hilang.
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return;
     const batas = batasPeta(peta);
     const viewport = bboxDariBatas(batas, 0); // yang BENAR-BENAR terlihat
     if (!viewport) return;
@@ -239,7 +251,17 @@ export function useDenahSpasial(peta, { aktif = false } = {}) {
   useEffect(() => {
     if (!aktif) return undefined;
     const onGanti = () => {
+      // Kosongkan layer SEKARANG, jangan tunggu respons. Denah satker lama yang
+      // masih tergambar selama request berjalan itu menyesatkan, dan bila
+      // request-nya gagal ia akan bertahan di layar tanpa batas waktu.
+      try { batalRef.current?.abort(); } catch { /* sudah selesai */ }
+      seqRef.current += 1;
+      for (const g of grupRef.current.values()) g.clearLayers();
+      grupRuanganRef.current?.clearLayers();
       termuatRef.current = null;
+      galatRef.current = false;      // satker baru berhak atas pesan galatnya sendiri
+      setCacahPerLevel([]);
+      setInfo({ jumlah: 0, jumlah_total: 0, terpotong: false, level_maks: 0 });
       setGedung(null); setLantai([]); setLantaiId("");
       muatRef.current(true);
     };
@@ -247,23 +269,48 @@ export function useDenahSpasial(peta, { aktif = false } = {}) {
     return () => window.removeEventListener(SATKER_AKTIF_EVENT, onGanti);
   }, [aktif]);
 
-  useEffect(() => bersihkanSemua, [bersihkanSemua]);
+  // Lepas SEMUA saat komponen dibongkar — termasuk membatalkan request yang
+  // masih terbang. Tanpa itu responsnya kembali setelah peta dihancurkan dan
+  // `render` menulis ke instance Leaflet yang sudah mati.
+  useEffect(() => () => {
+    try { batalRef.current?.abort(); } catch { /* sudah selesai */ }
+    seqRef.current += 1;
+    bersihkanSemua();
+  }, [bersihkanSemua]);
 
   // ── Toggle lapis ──────────────────────────────────────────────────────────
-  const toggleLapis = useCallback((ordinal) => {
-    setLevelSembunyi((lama) => {
-      const baru = new Set(lama);
-      const g = grupRef.current.get(ordinal);
-      if (baru.has(ordinal)) {
-        baru.delete(ordinal);
-        if (g && peta) g.addTo(peta);
-      } else {
-        baru.add(ordinal);
-        if (g && peta) { try { peta.removeLayer(g); } catch { /* sudah lepas */ } }
-      }
-      return baru;
-    });
+  // Pasang ulang SEMUA grup yang tampil menurut ordinal MENAIK. Renderer canvas
+  // Leaflet menggambar sesuai urutan penambahan, dan uji-klik memenangkan layer
+  // yang digambar TERAKHIR. Jadi `addTo` polos saat me-unhide menaruh (misal)
+  // Kawasan di paling atas — poligon raksasa itu lalu mencuri tooltip & klik
+  // gedung di bawahnya. Menyusun ulang mengembalikan aturan "besar di bawah".
+  const susunUlangUrutan = useCallback((sembunyi) => {
+    if (!peta) return;
+    const ordinalNaik = Array.from(grupRef.current.keys()).sort((a, b) => a - b);
+    for (const o of ordinalNaik) {
+      const g = grupRef.current.get(o);
+      if (!g) continue;
+      try { peta.removeLayer(g); } catch { /* memang belum terpasang */ }
+      if (!sembunyi.has(o)) g.addTo(peta);
+    }
+    // Ruangan lantai terpilih selalu paling atas — itu fokus pengguna.
+    if (grupRuanganRef.current) {
+      try { peta.removeLayer(grupRuanganRef.current); } catch { /* belum terpasang */ }
+      grupRuanganRef.current.addTo(peta);
+    }
   }, [peta]);
+
+  const toggleLapis = useCallback((ordinal) => {
+    // Efek Leaflet TIDAK boleh dijalankan di dalam updater setState: updater
+    // wajib murni, dan React memanggilnya dua kali di StrictMode — yang membuat
+    // layer di-pasang-lepas dua kali dan status visual jadi terbalik.
+    const sembunyiBaru = new Set(levelSembunyiRef.current);
+    if (sembunyiBaru.has(ordinal)) sembunyiBaru.delete(ordinal);
+    else sembunyiBaru.add(ordinal);
+    levelSembunyiRef.current = sembunyiBaru;
+    setLevelSembunyi(sembunyiBaru);
+    susunUlangUrutan(sembunyiBaru);
+  }, [susunUlangUrutan]);
 
   // ── Lantai & ruangan ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -288,15 +335,20 @@ export function useDenahSpasial(peta, { aktif = false } = {}) {
   // Ruangan dimuat per LANTAI TERPILIH (bukan lewat LOD viewport): semua lantai
   // berbagi jejak 2D yang sama, jadi menampilkan semuanya sekaligus hanya
   // menghasilkan tumpukan poligon yang tak terbaca.
+  //
+  // Memakai `dalam` (seluruh keturunan), BUKAN `induk` (anak langsung): registry
+  // mengizinkan Lantai → Sayap → Ruangan, sehingga gedung yang memakai sayap
+  // akan tampil KOSONG bila hanya anak langsung yang diambil.
   useEffect(() => {
     if (!peta || !aktif) return undefined;
     if (!lantaiId) {
       if (grupRuanganRef.current) grupRuanganRef.current.clearLayers();
       return undefined;
     }
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return undefined;
     let batal = false;
     const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
-    axios.get(`${API}/spasial/geojson`, { params: { induk: lantaiId }, signal: ctrl?.signal })
+    axios.get(`${API}/spasial/geojson`, { params: { dalam: lantaiId }, signal: ctrl?.signal })
       .then((r) => { if (!batal) render(r.data?.features || [], { keRuangan: true }); })
       .catch((e) => {
         if (batal || axios.isCancel?.(e) || e?.name === "CanceledError" || e?.code === "ERR_CANCELED") return;

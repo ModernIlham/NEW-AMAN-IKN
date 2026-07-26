@@ -104,12 +104,21 @@ export function bboxDariBatas(batas, padding = PADDING_BBOX) {
   if (lebar <= 0 || tinggi <= 0) return null;
   const px = lebar * padding;
   const py = tinggi * padding;
-  return {
+  const hasil = {
     barat: jepit(barat - px, -180, 180),
     selatan: jepit(selatan - py, -LAT_MAKS, LAT_MAKS),
     timur: jepit(timur + px, -180, 180),
     utara: jepit(utara + py, -LAT_MAKS, LAT_MAKS),
   };
+  // Cek degenerasi WAJIB diulang SETELAH penjepitan. Leaflet `getBounds()`
+  // mengembalikan bujur yang TAK dibungkus setelah peta digeser melewati
+  // antimeridian — mis. {barat:190, timur:195}. Rentang mentahnya masuk akal
+  // (lebar 5°), tetapi kedua tepi menjepit ke 180 sehingga kotaknya jadi pipih.
+  // Kotak pipih ditolak server dengan HTTP 400, dan karena kegagalan membuat
+  // cache viewport dikosongkan, SETIAP geser peta menembak request gagal lagi.
+  // Kembalikan null → penelepon melewatkan permintaan sama sekali.
+  if (hasil.timur <= hasil.barat || hasil.utara <= hasil.selatan) return null;
+  return hasil;
 }
 
 /** bbox → string parameter server "lon_min,lat_min,lon_maks,lat_maks". */
@@ -178,10 +187,26 @@ export function labelLevel(ordinal, daftarLevel) {
  * jadi daftar ditampilkan MENURUN (ordinal besar dulu) seperti panel lift.
  * Lantai tanpa ordinal ditaruh paling akhir agar tak mengacaukan urutan.
  */
+/**
+ * Ordinal lantai, atau null bila memang belum diisi.
+ *
+ * `Number(null)` = 0 — dan 0 itu ordinal yang SAH (lantai akses utama). Tanpa
+ * pemeriksaan null/"" eksplisit, lantai yang ordinalnya belum diisi menyamar
+ * sebagai lantai dasar: ia menyusup ke tengah urutan lift dan tampil bernomor
+ * "0". Server memang menyimpan `ordinal: null` bila operator mengosongkannya.
+ * Satu sumber kebenaran untuk pengurutan MAUPUN penampilan.
+ */
+export function ordinalLantai(l) {
+  const o = l?.lantai?.ordinal;
+  if (o === null || o === undefined || o === "") return null;
+  const n = Number(o);
+  return Number.isFinite(n) ? n : null;
+}
+
 export function urutLantaiTampilan(lantai) {
-  const punya = (l) => Number.isFinite(Number(l?.lantai?.ordinal));
+  const punya = (l) => ordinalLantai(l) !== null;
   const berordinal = (lantai || []).filter(punya)
-    .sort((a, b) => Number(b.lantai.ordinal) - Number(a.lantai.ordinal));
+    .sort((a, b) => ordinalLantai(b) - ordinalLantai(a));
   const tanpa = (lantai || []).filter((l) => !punya(l))
     .sort((a, b) => String(a?.nama || "").localeCompare(String(b?.nama || ""), "id"));
   return [...berordinal, ...tanpa];

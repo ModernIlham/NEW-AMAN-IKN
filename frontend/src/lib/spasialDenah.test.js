@@ -1,7 +1,7 @@
 import {
   ORDINAL_GEDUNG, bboxDariBatas, bboxKeParam, bboxTermuat, gayaFitur,
-  kelompokPerLevel, labelLevel, levelMaksUntukZoom, perluMuatUlang, urutFitur,
-  urutLantaiTampilan, warnaLevel,
+  kelompokPerLevel, labelLevel, levelMaksUntukZoom, ordinalLantai,
+  perluMuatUlang, urutFitur, urutLantaiTampilan, warnaLevel,
 } from "./spasialDenah";
 
 const fitur = (ordinal, nama, extra = {}) => ({
@@ -100,6 +100,27 @@ describe("bboxDariBatas", () => {
     expect(bboxDariBatas({ barat: 1, selatan: 1, timur: 1, utara: 2 })).toBeNull(); // lebar 0
     expect(bboxDariBatas({ barat: 1, selatan: 1, timur: 2, utara: NaN })).toBeNull();
   });
+  test("bujur di luar ±180 (geser lewat antimeridian) → null, BUKAN kotak pipih", () => {
+    // Leaflet getBounds() mengembalikan bujur tak-dibungkus setelah peta digeser
+    // melewati antimeridian. Rentang mentahnya wajar, tapi kedua tepi menjepit ke
+    // nilai yang sama → kotak pipih → server balas 400 pada SETIAP geser peta.
+    expect(bboxDariBatas({ barat: 190, selatan: -1.5, timur: 195, utara: -1.0 })).toBeNull();
+    expect(bboxDariBatas({ barat: -195, selatan: -1.5, timur: -190, utara: -1.0 })).toBeNull();
+  });
+  test("hasil penjepitan SELALU non-degenerat bila tidak null", () => {
+    const contoh = [
+      { barat: 116, selatan: -1.5, timur: 117, utara: -1.0 },
+      { barat: -400, selatan: -89, timur: 400, utara: 89 },
+      { barat: 179, selatan: 84, timur: 179.9, utara: 84.9 },
+      { barat: -179.9, selatan: -84.9, timur: -179, utara: -84 },
+    ];
+    for (const b of contoh) {
+      const r = bboxDariBatas(b);
+      if (r === null) continue;
+      expect(r.timur).toBeGreaterThan(r.barat);
+      expect(r.utara).toBeGreaterThan(r.selatan);
+    }
+  });
 });
 
 describe("bboxKeParam", () => {
@@ -185,8 +206,36 @@ describe("labelLevel", () => {
   });
 });
 
+describe("ordinalLantai", () => {
+  test("0 adalah ordinal SAH (lantai akses utama), bukan 'kosong'", () => {
+    expect(ordinalLantai({ lantai: { ordinal: 0 } })).toBe(0);
+    expect(ordinalLantai({ lantai: { ordinal: -2 } })).toBe(-2);
+  });
+  test("null/undefined/'' dari server BUKAN 0 — server memang menyimpan null", () => {
+    // `Number(null)` = 0 dan 0 itu finite, jadi cek naif memperlakukan lantai
+    // tanpa ordinal sebagai lantai dasar: ia menyusup ke tengah urutan lift dan
+    // tampil bernomor "0".
+    expect(ordinalLantai({ lantai: { ordinal: null } })).toBeNull();
+    expect(ordinalLantai({ lantai: { ordinal: "" } })).toBeNull();
+    expect(ordinalLantai({ lantai: {} })).toBeNull();
+    expect(ordinalLantai({})).toBeNull();
+    expect(ordinalLantai(null)).toBeNull();
+    expect(ordinalLantai({ lantai: { ordinal: "abc" } })).toBeNull();
+  });
+  test("angka berbentuk string tetap terbaca", () => {
+    expect(ordinalLantai({ lantai: { ordinal: "3" } })).toBe(3);
+  });
+});
+
 describe("urutLantaiTampilan", () => {
   const lt = (nama, ordinal) => ({ id: nama, nama, lantai: ordinal === undefined ? {} : { ordinal } });
+
+  test("lantai ber-ordinal null ditaruh di akhir, tidak menyamar jadi lantai 0", () => {
+    const urut = urutLantaiTampilan([
+      lt("Belum diisi", null), lt("Lantai 1", 0), lt("Basement", -1), lt("Lantai 2", 1),
+    ]);
+    expect(urut.map((l) => l.nama)).toEqual(["Lantai 2", "Lantai 1", "Basement", "Belum diisi"]);
+  });
 
   test("seperti panel lift — rooftop di atas, basement di bawah", () => {
     const urut = urutLantaiTampilan([lt("Lantai 1", 0), lt("Basement 2", -2), lt("Rooftop", 8), lt("Basement 1", -1)]);
