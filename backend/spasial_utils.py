@@ -315,6 +315,30 @@ def rewrite_ancestors(ancestors_lama: list, pindah_id: str, pindah_ancestors_bar
     return [*pindah_ancestors_baru, *ancestors_lama[idx:]]
 
 
+def susun_ulang_keturunan(anc_lama: list, anc_nama_lama: list, node_id: str,
+                          anc_baru: list, anc_nama_baru: list, nama_node: str,
+                          id_keturunan: str) -> dict:
+    """Field pohon turunan sebuah KETURUNAN setelah leluhurnya `node_id` dipindah
+    dan/atau diganti nama.
+
+    `anc_baru`/`anc_nama_baru` = rantai leluhur BARU si node yang dipindah, TANPA
+    node itu sendiri (keduanya sejajar posisi). `nama_node` = namanya (bisa baru).
+
+    Mengembalikan {ancestors, ancestors_nama, jalur, kedalaman} yang SELALU
+    sejajar posisi. Menyimpan node_id TEPAT SEKALI: bug sebelumnya menggandakan
+    node_id karena memasukkannya ke `anc_baru` padahal rewrite_ancestors sudah
+    mempertahankannya lewat ekor `ancestors_lama[idx:]`.
+    """
+    anc = rewrite_ancestors(anc_lama, node_id, anc_baru)
+    if node_id in anc_lama:
+        idx = anc_lama.index(node_id)
+        anc_nama = [*anc_nama_baru, nama_node, *(anc_nama_lama or [])[idx + 1:]]
+    else:
+        anc_nama = list(anc_nama_lama or [])
+    return {"ancestors": anc, "ancestors_nama": anc_nama,
+            "jalur": bangun_jalur(anc, id_keturunan), "kedalaman": len(anc)}
+
+
 def ada_siklus(node_id: str, calon_parent_id, peta_parent: dict) -> bool:
     """True bila menjadikan `calon_parent_id` induk akan membentuk siklus.
 

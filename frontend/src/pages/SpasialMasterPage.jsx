@@ -54,23 +54,31 @@ export default function SpasialMasterPage({ user, onBack }) {
     return m;
   }, [levels]);
 
-  const load = useCallback(async () => {
+  // Registry tingkat dipisah dari pohon: ganti preset hanya mengubah LABEL, jadi
+  // cukup ambil ulang level (tanpa spinner layar-penuh & tanpa memuat ulang node).
+  const loadLevels = useCallback(async () => {
+    try {
+      const rl = await axios.get(`${API}/spasial/level?preset=${preset}`);
+      setLevels(rl.data?.items || []);
+    } catch (err) {
+      toast.error(getApiError(err, "Gagal memuat daftar tingkat"));
+    }
+  }, [preset]);
+
+  const loadNodes = useCallback(async () => {
     setLoading(true);
     try {
-      const [rl, rn] = await Promise.all([
-        axios.get(`${API}/spasial/level?preset=${preset}`),
-        axios.get(`${API}/spasial/node`),
-      ]);
-      setLevels(rl.data?.items || []);
+      const rn = await axios.get(`${API}/spasial/node`);
       setNodes(rn.data?.items || []);
     } catch (err) {
       toast.error(getApiError(err, "Gagal memuat hierarki spasial"));
     } finally {
       setLoading(false);
     }
-  }, [preset]);
+  }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { loadNodes(); }, [loadNodes]);
+  useEffect(() => { loadLevels(); }, [loadLevels]);
 
   // Pohon dari daftar datar: anak per parent_id (null = akar).
   const anakDari = useMemo(() => {
@@ -94,12 +102,28 @@ export default function SpasialMasterPage({ user, onBack }) {
       .sort((a, b) => (a.ordinal_level - b.ordinal_level) || String(a.nama).localeCompare(b.nama));
   }, [nodes, ordinalLevel]);
 
-  const cocokCari = useCallback((n) => {
+  // Id node yang TAMPIL saat pencarian: node yang cocok + SELURUH leluhurnya
+  // (agar hasil di tingkat dalam terlihat & jalurnya terbuka). Dihitung SEKALI
+  // per (nodes, search) dalam satu lintasan — bukan memindai subtree per baris
+  // (yang jadi O(n²) tiap ketikan). null = tanpa pencarian, semua tampil.
+  const idTampil = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return true;
-    return [n.nama, n.kode, ...(n.nama_alias || [])]
+    if (!q) return null;
+    const cocok = (n) => [n.nama, n.kode, ...(n.nama_alias || [])]
       .some((v) => String(v || "").toLowerCase().includes(q));
-  }, [search]);
+    const byId = {};
+    nodes.forEach((n) => { byId[n.id] = n; });
+    const set = new Set();
+    nodes.forEach((n) => {
+      if (!cocok(n)) return;
+      set.add(n.id);
+      // Naikkan ke leluhur; `set.has(p)` menghentikan jalur yang sudah ditandai
+      // → total O(n) dan aman terhadap data bersiklus (tak berputar).
+      let p = n.parent_id;
+      while (p && !set.has(p) && byId[p]) { set.add(p); p = byId[p].parent_id; }
+    });
+    return set;
+  }, [nodes, search]);
 
   const simpan = async () => {
     if (!form.nama.trim()) { toast.error("Nama wajib diisi"); return; }
@@ -128,7 +152,7 @@ export default function SpasialMasterPage({ user, onBack }) {
         toast.success("Node diperbarui");
       }
       setForm(null);
-      await load();
+      await loadNodes();
     } catch (err) {
       toast.error(getApiError(err, "Gagal menyimpan"));
     } finally {
@@ -146,7 +170,7 @@ export default function SpasialMasterPage({ user, onBack }) {
     try {
       await axios.delete(`${API}/spasial/node/${n.id}`);
       toast.success("Node dihapus");
-      await load();
+      await loadNodes();
     } catch (err) {
       toast.error(getApiError(err, "Gagal menghapus"));
     }
@@ -178,10 +202,10 @@ export default function SpasialMasterPage({ user, onBack }) {
   const toggle = (id) => setBuka((b) => ({ ...b, [id]: !b[id] }));
 
   const Baris = ({ node, level }) => {
+    if (idTampil && !idTampil.has(node.id)) return null;   // pencarian: sembunyikan
     const anak = anakDari[node.id] || [];
-    const terbuka = buka[node.id] ?? level < 1;
-    const tampil = cocokCari(node) || anakTampil(node);
-    if (!tampil) return null;
+    // Saat mencari, PAKSA terbuka agar jalur menuju hasil ikut terbentang.
+    const terbuka = idTampil ? true : (buka[node.id] ?? level < 1);
     return (
       <div>
         <div
@@ -191,8 +215,9 @@ export default function SpasialMasterPage({ user, onBack }) {
         >
           <button
             type="button" onClick={() => toggle(node.id)}
-            className={`shrink-0 p-0.5 rounded ${anak.length ? "" : "invisible"}`}
+            className={`tap-expand shrink-0 p-0.5 rounded ${anak.length ? "" : "invisible"}`}
             aria-label={terbuka ? "Tutup" : "Buka"}
+            data-testid={`spasial-toggle-${node.id}`}
           >
             {terbuka ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
           </button>
@@ -204,18 +229,22 @@ export default function SpasialMasterPage({ user, onBack }) {
             {node.kode ? <span className="text-muted-foreground font-mono text-xs"> · {node.kode}</span> : null}
           </span>
           {isWriter && (
-            <span className="flex items-center gap-0.5 shrink-0">
+            <span className="flex items-center gap-1.5 shrink-0">
+              {/* tap-expand: ikon kecil, area sentuh ~44px (lihat index.css) */}
               <button type="button" onClick={() => bukaTambah(node)}
-                className="p-1.5 rounded hover:bg-muted min-w-0 min-h-0" title="Tambah anak">
-                <Plus className="w-3.5 h-3.5 text-emerald-600" />
+                className="tap-expand p-0.5 rounded hover:bg-muted" title="Tambah anak"
+                data-testid={`spasial-tambah-anak-${node.id}`}>
+                <Plus className="w-4 h-4 text-emerald-600" />
               </button>
               <button type="button" onClick={() => bukaUbah(node)}
-                className="p-1.5 rounded hover:bg-muted min-w-0 min-h-0" title="Ubah">
-                <Pencil className="w-3.5 h-3.5 text-sky-600" />
+                className="tap-expand p-0.5 rounded hover:bg-muted" title="Ubah"
+                data-testid={`spasial-ubah-${node.id}`}>
+                <Pencil className="w-4 h-4 text-sky-600" />
               </button>
               <button type="button" onClick={() => hapus(node)}
-                className="p-1.5 rounded hover:bg-muted min-w-0 min-h-0" title="Hapus">
-                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                className="tap-expand p-0.5 rounded hover:bg-muted" title="Hapus"
+                data-testid={`spasial-hapus-${node.id}`}>
+                <Trash2 className="w-4 h-4 text-rose-600" />
               </button>
             </span>
           )}
@@ -224,17 +253,6 @@ export default function SpasialMasterPage({ user, onBack }) {
       </div>
     );
   };
-
-  // Node tampil bila ia / salah satu keturunannya cocok pencarian.
-  const anakTampil = useCallback((node) => {
-    const stack = [...(anakDari[node.id] || [])];
-    while (stack.length) {
-      const n = stack.pop();
-      if (cocokCari(n)) return true;
-      (anakDari[n.id] || []).forEach((c) => stack.push(c));
-    }
-    return false;
-  }, [anakDari, cocokCari]);
 
   const akar = anakDari["__root__"] || [];
 
@@ -392,7 +410,7 @@ export default function SpasialMasterPage({ user, onBack }) {
               )}
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setForm(null)} disabled={saving}>Batal</Button>
+              <Button variant="outline" onClick={() => setForm(null)} disabled={saving} data-testid="spasial-form-batal">Batal</Button>
               <Button onClick={simpan} disabled={saving} data-testid="spasial-form-simpan">
                 {saving && <Loader2 className="w-4 h-4 mr-1 animate-spin" />} Simpan
               </Button>

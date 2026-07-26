@@ -350,3 +350,45 @@ def test_rewrite_lalu_jalur_konsisten():
     baru = su.rewrite_ancestors(lama, "gedung", ["ikn", "tapakBARU"])
     assert baru == ["ikn", "tapakBARU", "gedung", "lantai"]
     assert su.bangun_jalur(baru, "ruang") == ",ikn,tapakBARU,gedung,lantai,ruang,"
+
+
+# ── cascade keturunan (regresi bug penggandaan node_id) ─────────────────────
+
+def test_susun_ulang_keturunan_node_id_tepat_sekali():
+    """REGRESI: bug lama menggandakan node_id di ancestors keturunan."""
+    d = su.susun_ulang_keturunan(
+        ["R", "A"], ["R-nama", "A-nama"], "A",
+        ["Y", "X"], ["Y-nama", "X-nama"], "A-baru", "B")
+    assert d["ancestors"] == ["Y", "X", "A"]
+    assert d["ancestors"].count("A") == 1
+    assert d["ancestors_nama"] == ["Y-nama", "X-nama", "A-baru"]
+    assert len(d["ancestors"]) == len(d["ancestors_nama"])
+    assert d["kedalaman"] == 3
+    assert d["jalur"] == ",Y,X,A,B,"
+
+
+def test_susun_ulang_keturunan_cucu_ikut_konsisten():
+    d = su.susun_ulang_keturunan(
+        ["R", "A", "B"], ["Rn", "An", "Bn"], "A",
+        ["Y", "X"], ["Yn", "Xn"], "An2", "C")
+    assert d["ancestors"] == ["Y", "X", "A", "B"]
+    assert d["ancestors_nama"] == ["Yn", "Xn", "An2", "Bn"]
+    assert len(d["ancestors"]) == len(d["ancestors_nama"]) == 4
+    assert d["jalur"] == ",Y,X,A,B,C,"
+
+
+def test_susun_ulang_keturunan_ganti_nama_saja():
+    d = su.susun_ulang_keturunan(
+        ["R", "A"], ["Rn", "An-lama"], "A",
+        ["R"], ["Rn"], "An-baru", "B")
+    assert d["ancestors"] == ["R", "A"]
+    assert d["ancestors_nama"] == ["Rn", "An-baru"]
+    assert d["jalur"] == ",R,A,B,"
+
+
+def test_susun_ulang_keturunan_pindah_ke_akar():
+    d = su.susun_ulang_keturunan(
+        ["R", "A"], ["Rn", "An"], "A", [], [], "An", "B")
+    assert d["ancestors"] == ["A"]
+    assert d["ancestors_nama"] == ["An"]
+    assert d["jalur"] == ",A,B,"

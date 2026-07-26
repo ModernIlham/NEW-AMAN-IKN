@@ -53,6 +53,47 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#623] Spasial Fase 2: registry level + pohon `spasial_node` (hierarki berlapis) — 2026-07-26
+
+Fase 2 program Spasial & IoT: menyusun POHON denah kawasan berlapis. Belum ada
+geometri (gambar poligon + deteksi lokasi otomatis menyusul di Fase 3).
+
+**Hierarki 13 tingkat** — Kawasan → Zona(WP) → Distrik(SWP) → Blok → Sub-Blok →
+Persil → Tapak → Gedung → Lantai → Sayap → **Ruangan** (jangkar KIR/DBR,
+PMK 181/2016), dengan Wilayah sebagai akar opsional. Registry di-seed sekali;
+`preset` memilih label operator ("Zona (WP)"/"Distrik (Sub-WP)") sementara kode
+baku WP/SWP tetap benar untuk ekspor & dokumen resmi. Ordinal berjarak 10 agar
+tingkat baru bisa disisipkan tanpa migrasi; tingkat boleh dilompati.
+
+**Koleksi & endpoint** — `spasial_level` (registry global) + `spasial_node`
+(pohon polimorfik, ISOLASI SATKER 5 titik). Pola pohon hybrid: `parent_id`
+satu-satunya yang boleh diedit; `ancestors[]` + `jalur` diturunkan darinya. Pindah
+induk menulis ulang seluruh keturunan dalam satu bulk_write; guard siklus; hapus
+ditolak bila punya anak (cegah sub-pohon yatim). Keunikan kode per-satker-per-tipe
+ditegakkan di aplikasi (bukan indeks unik global). `spasial_level` + `spasial_node`
+masuk RESET_KEEP — denah = hasil survei lapangan yang tak bisa dibuat ulang mudah.
+
+**Halaman Hierarki Spasial** — pohon collapsible, pencarian (menyorot & membentang
+jalur ke hasil), tambah/ubah/hapus dengan dropdown tingkat + induk berjenjang;
+tipe Lantai memunculkan input ordinal (gaya IMDF), tipe Blok memunculkan kode Zona
+RDTR. Saklar preset penamaan. Viewer read-only.
+
+**Perbaikan temuan tinjauan adversarial** (26 agen; 16 dikonfirmasi):
+- **HIGH** — cascade pindah-induk menggandakan id node di `ancestors` keturunan
+  (jalur/kedalaman salah, `ancestors_nama` tak sejajar). Diekstrak ke helper murni
+  `susun_ulang_keturunan` + 4 uji regresi.
+- **MEDIUM** — node yatim ber-`kode_satker ""` merosotkan helper turunan
+  (peta-parent, cek-unik, cascade) jadi lintas-satker → di-scope ke satker USER.
+- Ganti nama node non-daun kini ikut memperbarui `ancestors_nama` keturunan.
+- Status `dihapus` tak bisa lagi dikirim klien (whitelist); `_susun_derivasi`
+  menolak induk ber-status dihapus; `lantai_ordinal` dibersihkan saat tipe berubah;
+  `log_audit` menyertakan `kode_satker` agar admin satker melihat jejaknya.
+- Frontend: pencarian membentang leluhur hasil + dihitung O(n) (bukan O(n²)/ketik);
+  target sentuh 44px (`.tap-expand`) + `data-testid`; ganti preset tak memuat ulang
+  seluruh pohon.
+
+Uji: +25 (810 total, seluruhnya logika murni tanpa Mongo).
+
 ## [#622] Spasial Fase 1: field `geo` + indeks 2dsphere pertama + tutup kebocoran KIR — 2026-07-26
 
 Fase 1 dari program Spasial & IoT (arsitektur: `docs/ARSITEKTUR-SPASIAL-IOT.md`).

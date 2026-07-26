@@ -115,7 +115,9 @@ def _bersih_node(p: NodeIn) -> dict:
         "subzona_kode": str(p.subzona_kode or "").strip(),
         "fungsi_kawasan": str(p.fungsi_kawasan or "").strip(),
         "properties": dict(p.properties or {}),
-        "status": str(p.status or "aktif").strip() or "aktif",
+        # Whitelist status — klien TAK boleh menyetel "dihapus" (lihat STATUS_SAH).
+        "status": (lambda s: s if s in STATUS_SAH else "aktif")(
+            str(p.status or "aktif").strip().lower()),
     }
     # Data lantai hanya bermakna untuk tipe LANTAI.
     if tipe == "LANTAI" and p.lantai is not None:
@@ -129,41 +131,40 @@ def _bersih_node(p: NodeIn) -> dict:
         doc["lantai_ordinal"] = doc["lantai"]["ordinal"]
     else:
         doc["lantai"] = None
+        # Buang turunan basi bila tipe diubah dari LANTAI ke tipe lain.
+        doc["lantai_ordinal"] = None
     return doc
 
 
-def scope_query_field_satker_kode(kode_satker: str, q=None) -> dict:
-    """Varian scope untuk kode satker mentah (bukan dokumen user) — dipakai saat
-    kita sudah memegang kode_satker dan hanya butuh filter isolasi + era lama.
-    Cermin `scope_query_field_satker` yang menerima dokumen user."""
-    query = dict(q or {})
-    kode = str(kode_satker or "").strip()
-    if kode:
-        query["kode_satker"] = {"$in": [kode, "", None]}
-    return query
+# Status yang boleh diset klien. "dihapus" TIDAK termasuk — hapus adalah operasi
+# DELETE yang menghapus dokumen, bukan status yang bisa dikirim lewat form (kalau
+# tidak, klien bisa menyembunyikan node sambil meyatimkan anaknya — temuan tinjauan).
+STATUS_SAH = {"aktif", "draft", "nonaktif"}
 
 
-async def _peta_parent_satker(kode_satker: str) -> dict:
-    """{id: parent_id} untuk seluruh node satker — dipakai deteksi siklus &
-    penurunan ulang keturunan. Ringan: hanya dua field."""
+async def _peta_parent_satker(_user: dict) -> dict:
+    """{id: parent_id} untuk node dalam JANGKAUAN USER — dipakai deteksi siklus &
+    penurunan ulang keturunan. DI-SCOPE ke satker user (bukan satker node): tanpa
+    ini, mengedit node yatim ber-kode "" akan memuat pohon SEMUA satker dan cascade
+    dapat menulis ulang node satker lain (temuan tinjauan). Ringan: dua field."""
     return {n["id"]: n.get("parent_id")
             async for n in db.spasial_node.find(
-                scope_query_field_satker_kode(kode_satker), {"_id": 0, "id": 1, "parent_id": 1})}
+                scope_query_field_satker(_user), {"_id": 0, "id": 1, "parent_id": 1})}
 
 
-async def _susun_derivasi(node_id: str, parent_id, kode_satker: str) -> dict:
+async def _susun_derivasi(node_id: str, parent_id, _user: dict) -> dict:
     """Field pohon turunan + validasi induk. Melempar HTTPException(400/403)
     bila induk tak sah."""
     if not parent_id:
         return {"parent_id": None, "ancestors": [], "ancestors_nama": [],
                 "jalur": su.bangun_jalur([], node_id), "kedalaman": 0}
     induk = await db.spasial_node.find_one(
-        {"id": parent_id},
+        {"id": parent_id, "status": {"$ne": "dihapus"}},
         {"_id": 0, "id": 1, "tipe": 1, "nama": 1, "ancestors": 1,
          "ancestors_nama": 1, "kode_satker": 1})
     if not induk:
         raise HTTPException(status_code=400, detail="Induk tidak ditemukan")
-    await pastikan_akses_dok_satker({"kode_satker": kode_satker}, induk)  # isolasi
+    await pastikan_akses_dok_satker(_user, induk)  # isolasi satker
     anc = [*(induk.get("ancestors") or []), parent_id]
     anc_nama = [*(induk.get("ancestors_nama") or []), induk.get("nama", "")]
     return {"parent_id": parent_id, "ancestors": anc, "ancestors_nama": anc_nama,
@@ -183,12 +184,13 @@ def _validasi_level(tipe: str, tipe_induk: Optional[str]):
                    f"induk '{lv['label']}' — induk harus tingkat yang lebih luas.")
 
 
-async def _cek_kode_unik(kode: str, tipe: str, kode_satker: str, kecuali_id=None):
+async def _cek_kode_unik(kode: str, tipe: str, _user: dict, kecuali_id=None):
+    """Keunikan kode DALAM JANGKAUAN USER (scope by user, bukan satker node) —
+    supaya cek tak bocor ke satker lain saat menyunting node yatim ber-kode ""."""
     if not kode:
         return
-    q = scope_query_field_satker_kode(kode_satker,
-                                      {"kode": kode, "tipe": tipe,
-                                       "status": {"$ne": "dihapus"}})
+    q = scope_query_field_satker(_user, {"kode": kode, "tipe": tipe,
+                                         "status": {"$ne": "dihapus"}})
     if kecuali_id:
         q["id"] = {"$ne": kecuali_id}
     if await db.spasial_node.find_one(q, {"_id": 1}):
@@ -231,9 +233,9 @@ async def buat_node(payload: NodeIn, _user: dict = Depends(require_writer)):
         raise HTTPException(status_code=400, detail="Nama wajib diisi")
     kode_satker = kode_satker_user(_user)
     node_id = "sn_" + str(uuid.uuid4())
-    deriv = await _susun_derivasi(node_id, doc["parent_id"], kode_satker)
+    deriv = await _susun_derivasi(node_id, doc["parent_id"], _user)
     _validasi_level(doc["tipe"], deriv.pop("_tipe_induk", None))
-    await _cek_kode_unik(doc["kode"], doc["tipe"], kode_satker)
+    await _cek_kode_unik(doc["kode"], doc["tipe"], _user)
     now = datetime.now(timezone.utc).isoformat()
     doc.update(deriv)
     doc.update({
@@ -245,7 +247,7 @@ async def buat_node(payload: NodeIn, _user: dict = Depends(require_writer)):
     })
     await db.spasial_node.insert_one(dict(doc))
     await log_audit("buat_spasial_node", "", node_id,
-                    username=_user.get("username", "system"),
+                    username=_user.get("username", "system"), kode_satker=kode_satker,
                     detail=f"Tambah {doc['tipe']} — {doc['nama']}")
     return {"ok": True, "id": node_id}
 
@@ -257,24 +259,24 @@ async def ubah_node(node_id: str, payload: NodeIn,
     if not lama or lama.get("status") == "dihapus":
         raise HTTPException(status_code=404, detail="Node tidak ditemukan")
     await pastikan_akses_dok_satker(_user, lama)  # isolasi satker
-    kode_satker = str(lama.get("kode_satker") or "").strip()
     doc = _bersih_node(payload)
     if not doc["nama"]:
         raise HTTPException(status_code=400, detail="Nama wajib diisi")
 
     parent_baru = doc["parent_id"]
     pindah = parent_baru != lama.get("parent_id")
+    nama_berubah = doc["nama"] != lama.get("nama")
     if pindah and parent_baru:
         # Cegah menjadikan diri sendiri / keturunan sebagai induk (subtree hilang).
-        peta = await _peta_parent_satker(kode_satker)
+        peta = await _peta_parent_satker(_user)
         if su.ada_siklus(node_id, parent_baru, peta):
             raise HTTPException(
                 status_code=400,
                 detail="Node tidak dapat dipindah ke bawah dirinya sendiri.")
 
-    deriv = await _susun_derivasi(node_id, parent_baru, kode_satker)
+    deriv = await _susun_derivasi(node_id, parent_baru, _user)
     _validasi_level(doc["tipe"], deriv.pop("_tipe_induk", None))
-    await _cek_kode_unik(doc["kode"], doc["tipe"], kode_satker, kecuali_id=node_id)
+    await _cek_kode_unik(doc["kode"], doc["tipe"], _user, kecuali_id=node_id)
 
     now = datetime.now(timezone.utc).isoformat()
     doc.update(deriv)
@@ -283,12 +285,16 @@ async def ubah_node(node_id: str, payload: NodeIn,
     await db.spasial_node.update_one(
         {"id": node_id}, {"$set": doc, "$inc": {"versi": 1}})
 
-    if pindah:
+    # Keturunan menyimpan salinan ancestors/jalur/ancestors_nama node ini. Pindah
+    # induk mengubah jalur & ancestors mereka; GANTI NAMA saja mengubah
+    # ancestors_nama mereka. Keduanya butuh penurunan ulang.
+    if pindah or nama_berubah:
         await _turunkan_ulang_keturunan(node_id, deriv["ancestors"],
-                                        deriv["ancestors_nama"], doc["nama"], kode_satker)
+                                        deriv["ancestors_nama"], doc["nama"], _user)
 
     await log_audit("ubah_spasial_node", "", node_id,
                     username=_user.get("username", "system"),
+                    kode_satker=str(lama.get("kode_satker") or "").strip(),
                     detail=f"Ubah {doc['tipe']} — {doc['nama']}"
                            + (" (pindah induk)" if pindah else ""))
     return {"ok": True, "id": node_id}
@@ -296,32 +302,28 @@ async def ubah_node(node_id: str, payload: NodeIn,
 
 async def _turunkan_ulang_keturunan(node_id: str, anc_baru: list,
                                     anc_nama_baru: list, nama_node: str,
-                                    kode_satker: str):
-    """Tulis ulang ancestors/jalur SELURUH keturunan setelah node dipindah.
+                                    _user: dict):
+    """Tulis ulang ancestors/jalur/ancestors_nama SELURUH keturunan setelah node
+    dipindah dan/atau diganti nama.
 
-    Node punya banyak keturunan; dikerjakan di memori lalu satu bulk_write agar
-    tak menembak DB per keturunan. Jalur keturunan yang MEMUAT `,node_id,`
-    dijadikan penyaring.
+    Dikerjakan di memori lalu satu bulk_write agar tak menembak DB per keturunan.
+    Penyaring: keturunan yang jalurnya MEMUAT `,node_id,`. DI-SCOPE ke satker USER
+    (bukan node) — mencegah menulis ulang keturunan milik satker lain saat node
+    yatim disunting (temuan tinjauan). Derivasi per-keturunan memakai helper murni
+    `susun_ulang_keturunan` (teruji) — bug lama menggandakan node_id di ancestors.
     """
     from pymongo import UpdateOne
-    prefix_baru = [*anc_baru, node_id]
-    prefix_nama_baru = [*anc_nama_baru, nama_node]
     ops = []
     cursor = db.spasial_node.find(
-        scope_query_field_satker_kode(kode_satker,
-                                      {"jalur": {"$regex": f",{re.escape(node_id)},"},
-                                       "id": {"$ne": node_id}}),
+        scope_query_field_satker(_user,
+                                 {"jalur": {"$regex": f",{re.escape(node_id)},"},
+                                  "id": {"$ne": node_id}}),
         {"_id": 0, "id": 1, "ancestors": 1, "ancestors_nama": 1})
     async for k in cursor:
-        anc = su.rewrite_ancestors(k.get("ancestors") or [], node_id, prefix_baru)
-        # ancestors_nama sejajar posisi dengan ancestors: potong di node_id lalu
-        # sambung prefix nama baru + sisa nama dari node_id ke bawah.
-        anc_nama_lama = k.get("ancestors_nama") or []
-        idx = (k.get("ancestors") or []).index(node_id) if node_id in (k.get("ancestors") or []) else len(anc_nama_lama)
-        anc_nama = [*prefix_nama_baru, *anc_nama_lama[idx + 1:]]
-        ops.append(UpdateOne({"id": k["id"]}, {"$set": {
-            "ancestors": anc, "ancestors_nama": anc_nama,
-            "jalur": su.bangun_jalur(anc, k["id"]), "kedalaman": len(anc)}}))
+        d = su.susun_ulang_keturunan(
+            k.get("ancestors") or [], k.get("ancestors_nama") or [],
+            node_id, anc_baru, anc_nama_baru, nama_node, k["id"])
+        ops.append(UpdateOne({"id": k["id"]}, {"$set": d}))
     if ops:
         await db.spasial_node.bulk_write(ops, ordered=False)
 
@@ -337,8 +339,8 @@ async def hapus_node(node_id: str, _user: dict = Depends(require_writer)):
     # bisa dipastikan kepemilikannya lagi (konsisten dengan fail-closed
     # pastikan_akses_kegiatan_id). Pengguna hapus dari daun ke atas.
     anak = await db.spasial_node.find_one(
-        scope_query_field_satker_kode(node.get("kode_satker"),
-                                      {"parent_id": node_id, "status": {"$ne": "dihapus"}}),
+        scope_query_field_satker(_user,
+                                 {"parent_id": node_id, "status": {"$ne": "dihapus"}}),
         {"_id": 1})
     if anak:
         raise HTTPException(
@@ -347,5 +349,6 @@ async def hapus_node(node_id: str, _user: dict = Depends(require_writer)):
     await db.spasial_node.delete_one({"id": node_id})
     await log_audit("hapus_spasial_node", "", node_id,
                     username=_user.get("username", "system"),
+                    kode_satker=str(node.get("kode_satker") or "").strip(),
                     detail=f"Hapus {node.get('tipe')} — {node.get('nama')}")
     return {"ok": True, "id": node_id}
