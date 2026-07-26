@@ -771,8 +771,36 @@ _IMPOR_TASKS = set()                      # pegang referensi task agar tak di-GC
 _IMPOR_SEM = asyncio.Semaphore(1)
 
 
+async def _baca_terbatas(file: "UploadFile") -> bytes:
+    """Baca UploadFile BERTAHAP dan berhenti begitu melewati plafon — sehingga
+    file 200 MB tak lebih dulu ditahan penuh di memori sebelum ditolak (temuan
+    tinjauan). `file.read()` polos memuat seluruh body dulu, baru mengecek."""
+    potong, total = [], 0
+    while True:
+        chunk = await file.read(1024 * 1024)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > MAKS_UKURAN_IMPOR:
+            raise HTTPException(
+                status_code=400,
+                detail=f"File melebihi {MAKS_UKURAN_IMPOR // (1024*1024)} MB")
+        potong.append(chunk)
+    return b"".join(potong)
+
+
 def _potong_teks(nilai, batas=120) -> str:
     return str(nilai or "").strip()[:batas]
+
+
+def _potong_atribut(atribut: dict) -> dict:
+    """Batasi jumlah kunci & panjang nilai atribut impor agar dokumen node tak
+    membengkak melewati batas 16 MB Mongo (temuan tinjauan). 60 kolom × 500 char
+    jauh cukup untuk atribut denah wajar, dan node ditolak DB bila melampaui."""
+    hasil = {}
+    for k, v in list(atribut.items())[:60]:
+        hasil[str(k)[:40]] = str(v)[:500]
+    return hasil
 
 
 @spasial_router.post("/spasial/impor/pratinjau")
@@ -783,10 +811,7 @@ async def impor_pratinjau(request: Request, file: UploadFile = File(...),
     atribut, CRS terdeteksi, sampel nama, dan peringatan (mojibake/CRS tebakan).
     Dipakai dialog impor untuk mengisi dropdown "field nama" sebelum mulai."""
     import impor_geo_utils as ig
-    data = await file.read()
-    if len(data) > MAKS_UKURAN_IMPOR:
-        raise HTTPException(status_code=400,
-                            detail=f"File melebihi {MAKS_UKURAN_IMPOR // (1024*1024)} MB")
+    data = await _baca_terbatas(file)
     try:
         hasil = await asyncio.to_thread(ig.parse_file, file.filename or "", data)
     except ValueError as e:
@@ -832,10 +857,7 @@ async def impor_mulai(request: Request,
     hanya mengerjakan yang sudah pasti boleh."""
     from jobs import buat_job
 
-    data = await file.read()
-    if len(data) > MAKS_UKURAN_IMPOR:
-        raise HTTPException(status_code=400,
-                            detail=f"File melebihi {MAKS_UKURAN_IMPOR // (1024*1024)} MB")
+    data = await _baca_terbatas(file)
     tipe = str(tipe or "").strip().upper()
     parent_id = str(parent_id or "").strip()
     deriv = await _susun_derivasi("__impor__", parent_id or None, _user)
@@ -858,6 +880,20 @@ async def impor_mulai(request: Request,
                     kode_satker=kode_satker_user(_user),
                     detail=f"Impor {file.filename} → {tipe}")
     return {"job_id": job_id}
+
+
+async def _sisip_batch(dok_batch: list) -> int:
+    """insert_many yang mengembalikan JUMLAH NYATA tertulis, tak melempar bila
+    sebagian gagal. `ordered=False` melanjutkan sisa dokumen saat satu ditolak
+    (mis. dokumen kelewat besar); tanpa penanganan ini satu fitur cacat membuat
+    seluruh impor 'failed' padahal ratusan node draft yang sah SUDAH tertulis —
+    yatim tanpa laporan (temuan tinjauan)."""
+    from pymongo.errors import BulkWriteError
+    try:
+        r = await db.spasial_node.insert_many(dok_batch, ordered=False)
+        return len(r.inserted_ids)
+    except BulkWriteError as e:
+        return int((e.details or {}).get("nInserted", 0))
 
 
 async def _jalankan_impor(job_id, data, nama_file, tipe, deriv,
@@ -931,9 +967,12 @@ async def _jalankan_impor(job_id, data, nama_file, tipe, deriv,
                     "ordinal_level": su.ordinal_level(tipe),
                     "nama_alias": [], "zona_kode": "", "subzona_kode": "",
                     "fungsi_kawasan": "",
-                    # Seluruh atribut sumber ikut tersimpan — jejak audit impor.
+                    # Atribut sumber tersimpan sebagai jejak audit, TAPI dipotong:
+                    # DBF/KML bisa punya field teks raksasa dan dokumen node yang
+                    # membengkak > 16 MB akan DITOLAK Mongo saat insert (temuan
+                    # tinjauan). Batasi jumlah kunci & panjang nilai.
                     "properties": {"impor": {"file": nama_file,
-                                             "atribut": f["atribut"]}},
+                                             "atribut": _potong_atribut(f["atribut"])}},
                     "status": "draft",
                     "geometry": geom,
                     "bbox": su.hitung_bbox(geom),
@@ -944,16 +983,17 @@ async def _jalankan_impor(job_id, data, nama_file, tipe, deriv,
                     "versi": 1, "created_at": now, "updated_at": now,
                     "created_by": username, "updated_by": username,
                 })
-                dibuat += 1
                 if len(dok_batch) >= 100:
-                    await db.spasial_node.insert_many(dok_batch)
+                    dibuat += await _sisip_batch(dok_batch)
                     dok_batch = []
-                if (i + 1) % 25 == 0:
+                # `total` bisa < 25; perbarui progres di kelipatan 25 ATAU pada
+                # fitur terakhir supaya file kecil pun bergerak dari 5%.
+                if (i + 1) % 25 == 0 or (i + 1) == total:
                     await update_job(
                         job_id, progress=5 + int(90 * (i + 1) / total),
                         message=f"Memproses fitur {i + 1}/{total}…")
             if dok_batch:
-                await db.spasial_node.insert_many(dok_batch)
+                dibuat += await _sisip_batch(dok_batch)
 
             await update_job(
                 job_id, status="done", done=True, progress=100,

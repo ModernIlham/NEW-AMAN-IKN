@@ -97,9 +97,50 @@ berjalan pada satu waktu (semaphore); laporan job memuat daftar fitur yang
 dilewati BESERTA alasannya — plafon tampilan 50, jumlah asli tetap dilaporkan.
 Dependensi baru: `utm==0.8.1` (27 KB, sesuai rencana arsitektur Fase 0).
 
-Uji: +18 backend (889 total) — fixture dibangun DI DALAM uji (KML string, SHP
+**Perbaikan temuan tinjauan adversarial** (13 temuan bertahan refutasi):
+
+- **Zip-bomb (HIGH)** — `z.read()` dipanggil sebelum ukuran isi diperiksa: zip
+  199 KB mengembang jadi 200 MB dan meng-OOM proses SEBELUM parser sempat
+  berjalan; plafon unggah 20 MB tak menolongnya sama sekali. `_buka_zip_aman()`
+  kini menjumlahkan `ZipInfo.file_size` dari infolist (metadata, tanpa
+  dekompresi) dan menolak di atas 80 MB atau 200 anggota — dipakai jalur KMZ
+  maupun SHP-zip. Terukur: zip 200 MB ditolak tanpa dibuka.
+- **KML berspasi setelah koma** — QGIS/Google Earth lazim menulis
+  `"116.70, -1.40, 0"`; parser berbasis `.split()` memecah `"116.70,"` dari
+  `"-1.40"` sehingga SELURUH Placemark hilang tanpa satu pun galat (impor 0
+  fitur, senyap — kelas jebakan yang sama dengan tiga jebakan riset Fase 0).
+  Diganti pemindaian regex pasangan bujur-lintang.
+- **Nama field DBF kembar** — DBF memotong nama kolom di 10 karakter, jadi
+  `NAMA_BANGUNAN` dan `NAMA_BANGUN_LAMA` sama-sama menjadi `NAMA_BANGU` dan
+  dict atribut menelan salah satunya. Kini di-dedup (`NAMA_BANGU__2`) dengan
+  peringatan di pratinjau.
+- **`insert_many` gagal sebagian** — satu dokumen ditolak membuat seluruh job
+  berstatus `failed` padahal ratusan node draft yang sah SUDAH tertulis (yatim,
+  tanpa laporan). Kini `ordered=False` + `BulkWriteError` dibaca untuk
+  melaporkan jumlah yang benar-benar tertulis.
+- **Pembacaan unggahan** — `file.read()` memuat seluruh badan ke memori sebelum
+  plafon diperiksa; diganti pembacaan bertahap 1 MB yang berhenti di plafon.
+- **Atribut sumber raksasa** — `properties.impor.atribut` disalin apa adanya
+  dari DBF/KML; dokumen node bisa melewati batas 16 MB Mongo dan ditolak saat
+  insert. Kini dipotong 60 kolom × 500 karakter.
+- **Progres macet di 5%** untuk file < 25 fitur (kelipatan 25 tak pernah
+  tercapai) — pembaruan kini juga terjadi pada fitur terakhir.
+- **Kosakata status job** — worker menulis `failed`, penyapu job macet
+  (`jobs.bersihkan_job_basi`) menulis `error`; dialog hanya mengenali `failed`
+  sehingga job yang di-relabel penyapu di-poll selamanya. Dialog kini memakai
+  penanda universal `done: true` plus ketiga nama status.
+- **Dialog impor**: balasan pratinjau file lama tak lagi menimpa pratinjau file
+  baru (penjaga nomor urut); polling berhenti setelah 8 kegagalan beruntun atau
+  15 menit alih-alih memanggil `/jobs` tanpa batas; polling berhenti saat dialog
+  ditutup (tak ada `setState` pasca-unmount); dialog **boleh ditutup** selagi
+  impor berjalan — job hidup di server, mengunci dialog hanya menyandera
+  operator; berkas > 20 MB ditolak di klien sebelum diunggah; `value` input file
+  dikosongkan agar memilih berkas bernama sama lagi tetap memicu pembacaan.
+
+Uji: +22 backend (893 total) — fixture dibangun DI DALAM uji (KML string, SHP
 via pyshp Writer in-memory, KMZ zip) sehingga tak ada file biner di repo;
-termasuk uji konversi UTM→WGS84 yang menuntut hasil mendarat di kotak IKN.
+termasuk uji konversi UTM→WGS84 yang menuntut hasil mendarat di kotak IKN, dan
+uji regresi untuk zip-bomb, KML berspasi, serta dedup nama field DBF.
 
 ## [#626] Spasial Fase 4: gambar poligon denah di aplikasi + validasi topologi — 2026-07-26
 

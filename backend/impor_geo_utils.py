@@ -34,6 +34,33 @@ import topologi_utils as tu
 # Plafon impor. File kecamatan penuh pun ribuan fitur; di atas ini pengalaman
 # menggambar ulang lebih buruk daripada memecah filenya.
 MAKS_FITUR_IMPOR = 2000
+# Plafon DEKOMPRESI zip (bukan ukuran file terkompresi). Zip-bomb 200 KB bisa
+# mengembang jadi 200 MB nol dan meng-OOM VPS SEBELUM parsing apa pun — plafon
+# 20 MB pada byte terkompresi tak menahannya (temuan tinjauan HIGH). Angka ini
+# = MAKS_UKURAN_IMPOR × ~4: file GIS sah memampat wajar; rasio di atas ~4×
+# yang melewati batas mutlak ini nyaris pasti bom, bukan denah.
+MAKS_DEKOMPRESI = 80 * 1024 * 1024
+MAKS_ANGGOTA_ZIP = 200            # shapefile sah = segelintir file, bukan ribuan
+
+
+def _buka_zip_aman(data: bytes) -> "zipfile.ZipFile":
+    """Buka zip lalu TOLAK bila total ukuran dekompresi (atau cacah anggota)
+    melebihi plafon — SEBELUM satu byte pun didekompres. ZipInfo.file_size dari
+    header sentral, jadi cek ini murah dan mendahului `z.read`."""
+    try:
+        z = zipfile.ZipFile(io.BytesIO(data))
+    except zipfile.BadZipFile:
+        raise ValueError("File bukan arsip zip yang sah")
+    info = z.infolist()
+    if len(info) > MAKS_ANGGOTA_ZIP:
+        raise ValueError(f"Arsip berisi terlalu banyak file ({len(info)})")
+    total = sum(i.file_size for i in info)
+    if total > MAKS_DEKOMPRESI:
+        raise ValueError(
+            f"Isi arsip terlalu besar setelah dibuka "
+            f"({total // (1024*1024)} MB > {MAKS_DEKOMPRESI // (1024*1024)} MB) "
+            "— kemungkinan file rusak atau berbahaya")
+    return z
 # Rasio perubahan luas maksimum yang boleh diterapkan otomatis oleh make_valid
 # (jebakan #1 riset: buffer(0) memangkas separuh poligon TANPA galat — pagar
 # ini memastikan make_valid pun tak pernah mengubah bentuk secara diam-diam).
@@ -79,18 +106,23 @@ def deteksi_format(nama_file: str, data: bytes) -> Optional[str]:
 
 # ── KML / KMZ ───────────────────────────────────────────────────────────────
 
+# KML membolehkan spasi di sekitar KOMA ("lon, lat, alt") — Google Earth & GDAL
+# menghasilkannya, dan file hasil edit tangan lazim begitu. `.split()` polos
+# memecah "116.70," dan "-1.40" jadi token terpisah → seluruh Placemark dibuang
+# SENYAP (temuan tinjauan). Tangkap tiap tuple angka lewat regex, tak peduli
+# spasi di antaranya — sekaligus tetap menolak isi yang benar-benar tak berangka.
+_RX_KOOR = re.compile(
+    r"(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)(?:\s*,\s*-?\d+(?:\.\d+)?)?")
+
+
 def _teks_koordinat_ke_cincin(teks: str):
-    """"lon,lat[,alt] lon,lat…" (KML) → cincin [[lon,lat], …] atau None."""
+    """"lon,lat[,alt] …" (spasi di sekitar koma ditoleransi) → cincin, atau None."""
     cincin = []
-    for token in str(teks or "").split():
-        bagian = token.split(",")
-        if len(bagian) < 2:
-            continue
+    for m in _RX_KOOR.finditer(str(teks or "")):
         try:
-            lon, lat = float(bagian[0]), float(bagian[1])
+            cincin.append([float(m.group(1)), float(m.group(2))])
         except ValueError:
             continue
-        cincin.append([lon, lat])
     return cincin or None
 
 
@@ -169,16 +201,18 @@ def parse_kml(data: bytes) -> list:
 
 
 def parse_kmz(data: bytes) -> list:
-    """KMZ = zip berisi .kml (lazim doc.kml). Ambil KML pertama."""
-    try:
-        with zipfile.ZipFile(io.BytesIO(data)) as z:
-            nama_kml = next((n for n in z.namelist()
-                             if n.lower().endswith(".kml")), None)
-            if not nama_kml:
-                raise ValueError("KMZ tidak berisi file .kml")
-            return parse_kml(z.read(nama_kml))
-    except zipfile.BadZipFile:
-        raise ValueError("File KMZ rusak (bukan arsip zip yang sah)")
+    """KMZ = zip berisi .kml (lazim doc.kml). Ambil KML pertama.
+
+    Lewat `_buka_zip_aman`: KMZ 540 KB bisa mengembang jadi KML 181 MB dan
+    meng-OOM parser XML (temuan tinjauan). Plafon dekompresi menahannya sebelum
+    `z.read` dijalankan.
+    """
+    with _buka_zip_aman(data) as z:
+        nama_kml = next((n for n in z.namelist()
+                         if n.lower().endswith(".kml")), None)
+        if not nama_kml:
+            raise ValueError("KMZ tidak berisi file .kml")
+        return parse_kml(z.read(nama_kml))
 
 
 # ── GeoJSON ─────────────────────────────────────────────────────────────────
@@ -242,6 +276,15 @@ def baca_crs_prj(teks_prj: str):
             "nama": (m_nama.group(1) if m_nama else t[:80])}
 
 
+def _dedup_fields(nama_list):
+    """Beri akhiran unik pada nama kolom kembar: ["A","A","B"] → ["A","A__2","B"]."""
+    hasil, kali = [], {}
+    for n in nama_list:
+        kali[n] = kali.get(n, 0) + 1
+        hasil.append(n if kali[n] == 1 else f"{n}__{kali[n]}")
+    return hasil
+
+
 def _konversi_titik_utm(x, y, zona, utara):
     import utm
     lat, lon = utm.to_latlon(x, y, zona, northern=utara, strict=False)
@@ -268,10 +311,7 @@ def parse_shp_zip(data: bytes) -> dict:
     sendiri adalah sumber bug klasik.
     """
     import shapefile as pyshp                  # pyshp — sudah di requirements
-    try:
-        z = zipfile.ZipFile(io.BytesIO(data))
-    except zipfile.BadZipFile:
-        raise ValueError("File SHP harus berupa zip berisi .shp + .dbf")
+    z = _buka_zip_aman(data)                    # plafon dekompresi: cegah zip-bomb
     nama_shp = next((n for n in z.namelist() if n.lower().endswith(".shp")), None)
     if not nama_shp:
         raise ValueError("Zip tidak berisi file .shp")
@@ -307,7 +347,16 @@ def parse_shp_zip(data: bytes) -> dict:
                           "periksa nama-nama pada pratinjau")
 
     crs = baca_crs_prj((_baca(".prj") or b"").decode("utf-8", "ignore"))
-    fields = [f[0] for f in r.fields[1:]]      # buang DeletionFlag
+    # DBF membatasi nama field 10 karakter, jadi "NAMA_BANGUNAN_UTAMA" dan
+    # "NAMA_BANGUNAN_KODE" sama-sama terpotong jadi "NAMA_BANGU". Tanpa dedup,
+    # dict atribut menimpa kunci kembar → nilai HILANG senyap, dan dropdown
+    # pratinjau menampilkan dua entri identik (temuan tinjauan). Beri sufiks
+    # unik dan bangun atribut memakainya.
+    fields = _dedup_fields([f[0] for f in r.fields[1:]])  # buang DeletionFlag
+    if any(f.endswith("__2") or "__" in f for f in fields):
+        peringatan.append("Ada nama kolom kembar (dipotong 10 karakter oleh "
+                          "format DBF) — diberi akhiran unik; periksa pemetaan "
+                          "field nama/kode")
 
     fitur = []
     for sr in r.iterShapeRecords():

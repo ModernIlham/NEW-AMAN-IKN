@@ -19,6 +19,22 @@ import { Button } from "@/components/ui/button";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const JEDA_POLL_MS = 1500;
+// Cermin plafon server (MAKS_UKURAN_IMPOR): ditolak di sini agar file 200 MB tak
+// diunggah dulu baru ditolak — hemat kuota data operator lapangan.
+const MAKS_UKURAN_MB = 20;
+// Polling berhenti setelah 15 menit ATAU 8 kegagalan jaringan BERURUTAN. Tanpa
+// batas ini satu server mati membuat dialog memanggil /jobs selamanya (temuan
+// tinjauan). Berhenti polling ≠ impor gagal: job tetap jalan di server.
+const BATAS_POLL_MS = 15 * 60 * 1000;
+const MAKS_GAGAL_BERUNTUN = 8;
+
+// Semua penulis job di repo ini memakai `done: true` saat berakhir, tetapi kosakata
+// status-nya campur: worker impor menulis 'failed', sedangkan penyapu job macet
+// (jobs.bersihkan_job_basi) menulis 'error'. Cek ketiganya supaya job yang
+// di-relabel penyapu tak dipoll selamanya (temuan tinjauan).
+const selesaiJob = (j) =>
+  !!j && (j.done === true || ["done", "failed", "error"].includes(j.status));
+const suksesJob = (j) => !!j && j.status === "done";
 
 export default function ImporDenahDialog({ levels, nodes, labelLevel, onClose, onSaved }) {
   const [file, setFile] = useState(null);
@@ -32,8 +48,13 @@ export default function ImporDenahDialog({ levels, nodes, labelLevel, onClose, o
   const [job, setJob] = useState(null);          // dokumen job terakhir dari polling
   const [berjalan, setBerjalan] = useState(false);
   const pollRef = useRef(null);
+  const hidupRef = useRef(true);   // false setelah unmount — hentikan polling & setState
+  const reqRef = useRef(0);        // nomor urut permintaan pratinjau (anti balapan)
 
-  useEffect(() => () => clearTimeout(pollRef.current), []);
+  useEffect(() => {
+    hidupRef.current = true;
+    return () => { hidupRef.current = false; clearTimeout(pollRef.current); };
+  }, []);
 
   const ordinalTipe = useMemo(() => {
     const l = (levels || []).find((x) => x.kode_baku === tipe);
@@ -49,41 +70,69 @@ export default function ImporDenahDialog({ levels, nodes, labelLevel, onClose, o
 
   const pilihFile = useCallback(async (f) => {
     if (!f) return;
+    if (f.size > MAKS_UKURAN_MB * 1024 * 1024) {
+      toast.error(`File melebihi ${MAKS_UKURAN_MB} MB — pecah dulu per kawasan`);
+      return;
+    }
+    // Pilih file A lalu cepat pilih file B: balasan A bisa mendarat SETELAH B dan
+    // menimpa pratinjau B (field/sampel milik file yang salah). Hanya balasan
+    // dari permintaan TERAKHIR yang boleh menulis state (temuan tinjauan).
+    const seq = ++reqRef.current;
     setFile(f); setPratinjau(null); setJob(null);
     setMemuat(true);
     try {
       const fd = new FormData();
       fd.append("file", f);
       const r = await axios.post(`${API}/spasial/impor/pratinjau`, fd);
+      if (!hidupRef.current || seq !== reqRef.current) return;
       setPratinjau(r.data);
       // Prapilih field nama yang paling mungkin benar.
       const fields = r.data?.fields || [];
       const tebakan = fields.find((x) => /nama|name|label/i.test(x)) || "";
       setFieldNama(tebakan);
     } catch (e) {
+      if (!hidupRef.current || seq !== reqRef.current) return;
       setFile(null);
       toast.error(e?.response?.data?.detail || "File tidak dapat dibaca");
     } finally {
-      setMemuat(false);
+      if (hidupRef.current && seq === reqRef.current) setMemuat(false);
     }
   }, []);
 
-  const poll = useCallback(async (jobId) => {
+  const poll = useCallback(async (jobId, mulaiPada = 0, gagal = 0) => {
+    if (!hidupRef.current) return;             // dialog sudah ditutup
+    const t0 = mulaiPada || Date.now();
     try {
       const r = await axios.get(`${API}/jobs/${jobId}`);
+      if (!hidupRef.current) return;
       setJob(r.data);
-      if (r.data?.status === "done" || r.data?.status === "failed") {
+      if (selesaiJob(r.data)) {
         setBerjalan(false);
-        if (r.data.status === "done") {
+        if (suksesJob(r.data)) {
           toast.success(r.data.message || "Impor selesai");
           onSaved?.();                       // muat ulang pohon — draft baru tampil
         } else {
-          toast.error(r.data.message || "Impor gagal");
+          toast.error(r.data.message || r.data.error_message || "Impor gagal");
         }
         return;
       }
-    } catch { /* jaringan goyah — coba lagi pada tick berikutnya */ }
-    pollRef.current = setTimeout(() => poll(jobId), JEDA_POLL_MS);
+      gagal = 0;                              // satu balasan sehat menyetel ulang
+    } catch {
+      if (!hidupRef.current) return;
+      if (++gagal >= MAKS_GAGAL_BERUNTUN) {
+        setBerjalan(false);
+        toast.error("Koneksi ke server terputus — impor mungkin masih berjalan; "
+                    + "tutup dialog dan muat ulang pohon nanti");
+        return;
+      }
+    }
+    if (Date.now() - t0 > BATAS_POLL_MS) {
+      setBerjalan(false);
+      toast.warning("Impor berjalan lebih lama dari perkiraan — pantau lewat "
+                    + "pohon spasial; node draft muncul bertahap");
+      return;
+    }
+    pollRef.current = setTimeout(() => poll(jobId, t0, gagal), JEDA_POLL_MS);
   }, [onSaved]);
 
   const mulai = useCallback(async () => {
@@ -106,16 +155,28 @@ export default function ImporDenahDialog({ levels, nodes, labelLevel, onClose, o
     }
   }, [file, tipe, parentId, fieldNama, fieldKode, perbaiki, poll]);
 
-  const selesai = job && (job.status === "done" || job.status === "failed");
+  const selesai = selesaiJob(job);
+
+  // Menutup saat job berjalan BOLEH: job hidup di server (bukan di tab ini), jadi
+  // mengunci dialog hanya menyandera operator tanpa melindungi apa pun. Muat ulang
+  // pohon supaya draft yang SUDAH tertulis langsung terlihat (temuan tinjauan).
+  const tutup = useCallback(() => {
+    if (berjalan) {
+      toast.info("Impor berlanjut di latar belakang — node draft muncul "
+                 + "bertahap di pohon spasial");
+      onSaved?.();
+    }
+    onClose?.();
+  }, [berjalan, onClose, onSaved]);
 
   return (
-    <Dialog open onOpenChange={(o) => !o && !berjalan && onClose?.()}>
+    <Dialog open onOpenChange={(o) => !o && tutup()}>
       <DialogContent className="max-w-lg" data-testid="impor-denah-dialog">
         <DialogHeader>
           <DialogTitle className="text-sm">Impor Denah dari File GIS</DialogTitle>
           <DialogDescription className="text-xs">
-            Shapefile (zip .shp+.dbf), KML, KMZ, atau GeoJSON. Hasil impor masuk
-            sebagai <b>draft</b> — periksa dulu, baru aktifkan.
+            Shapefile (zip .shp+.dbf), KML, KMZ, atau GeoJSON — maks {MAKS_UKURAN_MB} MB.
+            Hasil impor masuk sebagai <b>draft</b> — periksa dulu, baru aktifkan.
           </DialogDescription>
         </DialogHeader>
 
@@ -126,9 +187,11 @@ export default function ImporDenahDialog({ levels, nodes, labelLevel, onClose, o
             {file ? file.name : "Pilih file… (.zip / .kml / .kmz / .geojson)"}
           </span>
           {memuat && <Loader2 className="w-4 h-4 animate-spin shrink-0" />}
+          {/* value dikosongkan agar memilih file BERNAMA SAMA lagi tetap memicu
+              onChange — mis. setelah memperbaiki .cpg lalu men-zip ulang. */}
           <input type="file" className="hidden" accept=".zip,.kml,.kmz,.geojson,.json"
                  disabled={berjalan}
-                 onChange={(e) => pilihFile(e.target.files?.[0])}
+                 onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; pilihFile(f); }}
                  data-testid="impor-file" />
         </label>
 
@@ -226,7 +289,11 @@ export default function ImporDenahDialog({ levels, nodes, labelLevel, onClose, o
                 </div>
               </div>
             )}
-            {selesai && <p className={job.status === "failed" ? "text-red-600" : "font-medium"}>{job.message}</p>}
+            {selesai && (
+              <p className={suksesJob(job) ? "font-medium" : "text-red-600"}>
+                {job.message || job.error_message || "Impor berakhir tanpa keterangan"}
+              </p>
+            )}
             {(job.peringatan || []).map((p, i) => (
               <p key={i} className="text-amber-700 dark:text-amber-300">⚠ {p}</p>
             ))}
@@ -243,9 +310,10 @@ export default function ImporDenahDialog({ levels, nodes, labelLevel, onClose, o
 
         <div className="flex items-center gap-2 pt-1">
           <div className="flex-1" />
-          <Button variant="outline" size="sm" onClick={() => onClose?.()}
-                  disabled={berjalan} data-testid="impor-tutup">
-            <X className="w-3.5 h-3.5 mr-1" />{selesai ? "Tutup" : "Batal"}
+          <Button variant="outline" size="sm" onClick={tutup}
+                  data-testid="impor-tutup">
+            <X className="w-3.5 h-3.5 mr-1" />
+            {selesai ? "Tutup" : berjalan ? "Tutup (lanjut di latar)" : "Batal"}
           </Button>
           {!selesai && (
             <Button size="sm" onClick={mulai}

@@ -269,3 +269,60 @@ def test_deteksi_mojibake():
     assert ig.deteksi_mojibake("CafÃ© Timur") is True
     assert ig.deteksi_mojibake("Café Timur") is False
     assert ig.deteksi_mojibake("") is False
+
+
+# ── regresi temuan tinjauan Fase 5 ──────────────────────────────────────────
+
+KML_SPASI_SETELAH_KOMA = b"""<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"><Document>
+ <Placemark><name>Blok Spasi</name>
+  <Polygon><outerBoundaryIs><LinearRing><coordinates>
+   116.70, -1.40, 0
+   116.71, -1.40, 0
+   116.71, -1.39, 0
+   116.70, -1.40, 0
+  </coordinates></LinearRing></outerBoundaryIs></Polygon>
+ </Placemark>
+</Document></kml>"""
+
+
+def test_kml_spasi_setelah_koma_tetap_terbaca():
+    """QGIS/Google Earth kerap menulis "bujur, lintang, tinggi" BERSPASI. Parser
+    berbasis .split() memecah "116.70," dari "-1.40" → seluruh Placemark hilang
+    TANPA galat (impor 0 fitur, senyap). Regresi temuan tinjauan."""
+    fitur = ig.parse_kml(KML_SPASI_SETELAH_KOMA)
+    assert len(fitur) == 1
+    luar = fitur[0]["geometry"]["coordinates"][0]
+    assert luar[0] == [116.70, -1.40]           # bujur dulu, bukan tertukar
+    assert su.validasi_geometri(fitur[0]["geometry"]) is None
+
+
+def test_zip_bom_ditolak_sebelum_dibuka():
+    """Zip 199 KB yang mengembang jadi 200 MB harus DITOLAK dari infolist
+    (file_size), bukan setelah z.read() meng-OOM proses. Regresi temuan
+    tinjauan (HIGH)."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("data.shp", b"\0" * (200 * 1024 * 1024))
+    bom = buf.getvalue()
+    assert len(bom) < 1024 * 1024               # mampat ekstrem — itu intinya
+    with pytest.raises(ValueError, match="terlalu besar"):
+        ig.parse_shp_zip(bom)
+
+
+def test_zip_terlalu_banyak_anggota_ditolak():
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        for i in range(ig.MAKS_ANGGOTA_ZIP + 5):
+            z.writestr(f"f{i}.txt", b"x")
+    with pytest.raises(ValueError, match="terlalu banyak"):
+        ig.parse_shp_zip(buf.getvalue())
+
+
+def test_dedup_nama_field_dbf_kembar():
+    """DBF memotong nama kolom di 10 karakter, jadi "NAMA_BANGUNAN" dan
+    "NAMA_BANGUN_LAMA" sama-sama jadi "NAMA_BANGU" — tanpa dedup, dict atribut
+    menelan salah satunya diam-diam. Regresi temuan tinjauan."""
+    assert ig._dedup_fields(["NAMA_BANGU", "NAMA_BANGU", "KODE"]) == \
+        ["NAMA_BANGU", "NAMA_BANGU__2", "KODE"]
+    assert ig._dedup_fields(["A", "B"]) == ["A", "B"]
