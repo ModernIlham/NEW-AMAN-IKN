@@ -333,6 +333,27 @@ async def create_indexes() -> None:
         # masuk indeks sama sekali. Itu memang yang diinginkan: mayoritas aset
         # belum berkoordinat, dan memaksanya masuk indeks hanya memboroskan RAM.
         await db.assets.create_index([("geo", "2dsphere")], name="assets_geo_2dsphere")
+
+        # SPASIAL (Fase 2): hierarki level & pohon. Indeks geometri (2dsphere pada
+        # spasial_node) menyusul di Fase 3 saat geometri masuk.
+        await db.spasial_level.create_index("id", unique=True, name="spasial_level_id")
+        await db.spasial_level.create_index("ordinal_level", name="spasial_level_ordinal")
+        await db.spasial_node.create_index("id", unique=True, name="spasial_node_id")
+        await db.spasial_node.create_index(
+            [("kode_satker", 1), ("ordinal_level", 1), ("status", 1)],
+            name="spasial_node_satker_level")
+        await db.spasial_node.create_index("parent_id", name="spasial_node_parent")
+        await db.spasial_node.create_index("ancestors", name="spasial_node_ancestors")  # subtree 1-hop
+        await db.spasial_node.create_index("jalur", name="spasial_node_jalur")           # breadcrumb & prefix
+        # Indeks pencarian kode (mendukung cek keunikan di aplikasi). SENGAJA tidak
+        # unik — keunikan ditegakkan PER SATKER PER TIPE di rute (konvensi REVIEW-9
+        # R9): dua satker boleh punya "GD-A", dan indeks unik global akan menolak
+        # satker kedua sekaligus membocorkan eksistensi kode milik satker lain.
+        # Konsisten dengan pola koleksi `ruangan`. Partial: node tanpa kode diabaikan.
+        await db.spasial_node.create_index(
+            [("kode_satker", 1), ("tipe", 1), ("kode", 1)],
+            partialFilterExpression={"kode": {"$exists": True, "$gt": ""}},
+            name="spasial_node_kode_per_satker_tipe")
         logger.info("Database indexes created successfully")
     except Exception as e:
         logger.error(f"Error creating indexes: {e}")
