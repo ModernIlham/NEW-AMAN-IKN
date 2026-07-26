@@ -100,6 +100,8 @@ function App() {
     const hadSession = !!localStorage.getItem('token');
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    // Satker Aktif jangan bocor ke sesi berikutnya di peramban bersama.
+    localStorage.removeItem('satker_aktif');
     setUser(null);
     if (hadSession && message) toast.error(message, { duration: 6000 });
   }, []);
@@ -203,6 +205,7 @@ function App() {
         console.error("Error parsing user data:", error);
         localStorage.removeItem('token');
         localStorage.removeItem('user');
+        localStorage.removeItem('satker_aktif');
       }
     }
     setLoading(false);

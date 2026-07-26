@@ -555,12 +555,20 @@ async def create_inventory_activity(activity: InventoryActivityCreate, _user: di
         raise HTTPException(status_code=400, detail="Nama Satker wajib diisi")
 
     # ISOLASI SATKER: user terikat satker hanya boleh membuat kegiatan
-    # untuk satkernya sendiri.
+    # untuk satkernya sendiri. Bila kode kegiatan kosong, ambil dari satker
+    # user (termasuk "Satker Aktif" super-admin) agar tak perlu diketik ulang.
     _kode_user = kode_satker_user(_user)
+    if _kode_user and not activity.kode_satker.strip():
+        activity.kode_satker = _kode_user
     if _kode_user and activity.kode_satker.strip() != _kode_user:
-        raise HTTPException(
-            status_code=403,
-            detail=f"Akun Anda terikat satker {_kode_user} — tidak dapat membuat kegiatan satker lain")
+        # Pesan sadar-konteks: super-admin yang sedang bertindak sebagai satu
+        # satker BUKAN "terikat" — beri tahu ia harus memakai satker aktifnya.
+        _pesan = (f"Anda sedang bertindak sebagai satker {_kode_user} — kegiatan "
+                  "harus untuk satker itu (atau beralih ke 'Semua Satker')."
+                  if _user.get("_satker_aktif")
+                  else f"Akun Anda terikat satker {_kode_user} — tidak dapat "
+                       "membuat kegiatan satker lain.")
+        raise HTTPException(status_code=403, detail=_pesan)
 
     # Enforce max file counts
     if activity.photos is not None and len(activity.photos) > MAX_ACTIVITY_PHOTOS:

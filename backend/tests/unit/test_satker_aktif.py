@@ -72,3 +72,19 @@ def test_is_super_admin_hormati_penanda_asli():
     # Penanda _super_admin_asli MENANG (sesi act-as).
     assert au.is_super_admin(
         {"role": "admin", "kode_satker": "527", "_super_admin_asli": True}) is True
+
+
+def test_field_efemeral_dibuang(monkeypatch):
+    """KEAMANAN (temuan tinjauan): dokumen user dari DB (mis. hasil restore
+    backup pihak luar) TAK BOLEH menyelundupkan `_super_admin_asli`.
+    `_buang_efemeral` membuangnya sehingga is_super_admin tak teracuni."""
+    poisoned = {
+        "id": "x", "role": "viewer", "kode_satker": "A",
+        "_super_admin_asli": True, "_satker_aktif": "Z", "_kode_satker_asli": "",
+    }
+    bersih = au._buang_efemeral(dict(poisoned))
+    assert "_super_admin_asli" not in bersih
+    assert "_satker_aktif" not in bersih
+    assert "_kode_satker_asli" not in bersih
+    # Tanpa penanda, viewer bukan super-admin — backdoor gagal.
+    assert au.is_super_admin(bersih) is False

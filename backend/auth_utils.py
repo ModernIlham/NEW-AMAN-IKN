@@ -227,6 +227,19 @@ async def require_user_or_map_token(
     return {"guest": True, "peta": tok, "username": "tamu-peta", "role": "tamu"}
 
 
+# Kunci EFEMERAL yang HANYA sah diset di dalam request (oleh
+# _terapkan_satker_aktif) — bukan dari dokumen user di DB.
+_KUNCI_EFEMERAL = ("_super_admin_asli", "_satker_aktif", "_kode_satker_asli")
+
+
+def _buang_efemeral(user: dict) -> dict:
+    """Buang kunci efemeral dari dokumen user yang baru dibaca dari DB, supaya
+    `_super_admin_asli` dsb. tak bisa diselundupkan lewat data tersimpan."""
+    for k in _KUNCI_EFEMERAL:
+        user.pop(k, None)
+    return user
+
+
 async def _decode_bearer(authorization: str, allow_media_scope: bool = False,
                          allow_docfile_scope: bool = False) -> dict:
     """Decode an Authorization header value and return the user document.
@@ -258,6 +271,10 @@ async def _decode_bearer(authorization: str, allow_media_scope: bool = False,
     user = await db.users.find_one({"id": payload.get("user_id")}, {"_id": 0, "password": 0, "password_hash": 0})
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
+    # Field EFEMERAL "Satker Aktif" hanya boleh diset DALAM request oleh
+    # `_terapkan_satker_aktif` — jangan pernah dipercaya dari dokumen DB
+    # (backdoor via restore backup pihak luar; temuan tinjauan).
+    _buang_efemeral(user)
     if not user.get("is_active", True):
         raise HTTPException(status_code=403, detail="Akun Anda telah dinonaktifkan. Hubungi administrator.")
     # Revokasi sesi (AUTH-C): token membawa `sesi_epoch`. Bila lebih kecil dari

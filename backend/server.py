@@ -448,6 +448,16 @@ async def reset_all_data(data: ResetConfirmation, _admin: dict = Depends(require
     admin_user = await db.users.find_one({"id": data.admin_id})
     if not admin_user or not is_super_admin(admin_user):
         raise HTTPException(status_code=403, detail="Hanya super-admin pusat yang dapat melakukan reset sistem")
+    # Footgun "Satker Aktif" (temuan tinjauan): bila super-admin sedang
+    # bertindak sebagai satu satker, SELURUH UI-nya ter-scope satker itu —
+    # namun reset ini menghapus SEMUA satker. Tolak agar model mentalnya tak
+    # keliru; ia harus beralih ke "Semua Satker" dulu secara sadar.
+    if _admin.get("_satker_aktif"):
+        raise HTTPException(
+            status_code=400,
+            detail=("Anda sedang bertindak sebagai satker "
+                    f"{_admin['_satker_aktif']}. Reset menghapus SELURUH satker "
+                    "— beralih ke 'Semua Satker' dulu."))
     if data.confirmation != "HAPUS SEMUA":
         raise HTTPException(status_code=400, detail="Kata konfirmasi tidak valid")
 
