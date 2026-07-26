@@ -178,3 +178,29 @@ def test_sudut_bawaan_bbox_raksasa_tetap_sah():
     assert s is not None
     assert su.validasi_sudut_overlay(s) is None
     assert su.sudut_overlay_bawaan([116.0, -1.0, float("inf"), 1.0]) is None
+
+
+# ── snapshot_lokasi_temuan (integrasi Wasdal — Fase 8) ──────────────────────
+
+def test_snapshot_lokasi_dari_node_server():
+    node = {"id": "sn_1", "nama": "Ruang Rapat 3", "tipe": "RUANGAN",
+            "ancestors_nama": ["Kawasan Inti", "Menara A", "Lantai 2"]}
+    s = su.snapshot_lokasi_temuan(node, 116.705, -1.395)
+    assert s["titik"] == [116.705, -1.395]          # lon-first, konsisten repo
+    assert s["node_id"] == "sn_1"
+    assert s["jalur_nama"] == "Kawasan Inti / Menara A / Lantai 2 / Ruang Rapat 3"
+
+
+def test_snapshot_lokasi_tanpa_node_tetap_sah():
+    """Titik di luar kawasan terpetakan tetap layak jadi penanda koordinat."""
+    s = su.snapshot_lokasi_temuan(None, 116.7, -1.4)
+    assert s["titik"] == [116.7, -1.4]
+    assert s["node_id"] == "" and s["jalur_nama"] == ""
+
+
+def test_snapshot_lokasi_jalur_dipotong_dan_nama_kosong_dilewati():
+    node = {"id": "x", "nama": "N" * 400, "tipe": "GEDUNG",
+            "ancestors_nama": ["", None, "A"]}
+    s = su.snapshot_lokasi_temuan(node, 116.7, -1.4)
+    assert len(s["jalur_nama"]) <= 300
+    assert s["jalur_nama"].startswith("A / ")

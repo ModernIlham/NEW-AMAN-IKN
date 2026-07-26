@@ -1008,3 +1008,84 @@ async def laporan_tahunan_wasdal_pdf(
         buffer, media_type="application/pdf",
         headers={"Content-Disposition":
                  f'attachment; filename="Laporan_Tahunan_Wasdal_{th}.pdf"'})
+
+
+# ── Lokasi spasial temuan (integrasi denah — Spasial Fase 8) ────────────────
+#
+# Tiket penertiban & pemantauan insidentil bisa MENUNJUK LOKASI di denah:
+# operator menancapkan titik di peta, klien memanggil deteksi Fase 3
+# (POST /spasial/lokasi-di-titik) untuk MENAMPILKAN rantai wilayah + pilihan
+# lantai, lalu mengirim node_id pilihannya ke sini. Server TIDAK memercayai
+# string klien: nama/tipe/jalur di-snapshot ulang dari dokumen node milik DB
+# (ter-scope satker), dan koordinat dilewatkan parser yang sama dengan seluruh
+# modul spasial (menerima desimal-koma format lapangan Indonesia).
+
+import spasial_utils as su
+
+
+class LokasiTemuanIn(BaseModel):
+    lat: object = None
+    lon: object = None
+    node_id: str = ""
+    hapus: bool = False
+
+
+async def _set_lokasi_temuan(koleksi, jenis: str, tiket_id: str,
+                             payload: LokasiTemuanIn, user: dict):
+    tiket = await koleksi.find_one(
+        {"id": tiket_id}, {"_id": 0, "id": 1, "kode_satker": 1, "uraian": 1})
+    if not tiket:
+        raise HTTPException(status_code=404, detail="Tiket tidak ditemukan")
+    await pastikan_akses_dok_satker(user, tiket)
+    now = datetime.now(timezone.utc).isoformat()
+
+    if payload.hapus:
+        await koleksi.update_one({"id": tiket_id},
+                                 {"$unset": {"lokasi_spasial": ""},
+                                  "$set": {"updated_at": now}})
+        await log_audit(f"{jenis}_lokasi_hapus", "", tiket_id,
+                        username=user.get("username", "system"),
+                        kode_satker=kode_satker_user(user),
+                        detail=str(tiket.get("uraian") or "")[:80])
+        return {"ok": True, "lokasi_spasial": None}
+
+    lat = su.parse_lintang(payload.lat)
+    lon = su.parse_bujur(payload.lon)
+    if lat is None or lon is None:
+        raise HTTPException(status_code=400, detail="Koordinat tidak valid")
+    node = None
+    nid = str(payload.node_id or "").strip()
+    if nid:
+        node = await db.spasial_node.find_one(
+            scope_query_field_satker(user, {"id": nid,
+                                            "status": {"$ne": "dihapus"}}),
+            {"_id": 0, "id": 1, "nama": 1, "tipe": 1, "ancestors_nama": 1})
+        if not node:
+            raise HTTPException(status_code=404,
+                                detail="Node denah tidak ditemukan")
+    lok = su.snapshot_lokasi_temuan(node, lon, lat)
+    lok.update({"ditandai_oleh": user.get("username", ""),
+                "ditandai_pada": now})
+    await koleksi.update_one({"id": tiket_id},
+                             {"$set": {"lokasi_spasial": lok,
+                                       "updated_at": now}})
+    await log_audit(f"{jenis}_lokasi_tandai", "", tiket_id,
+                    username=user.get("username", "system"),
+                    kode_satker=kode_satker_user(user),
+                    detail=(lok.get("jalur_nama")
+                            or f"{lat:.6f}, {lon:.6f}")[:120])
+    return {"ok": True, "lokasi_spasial": lok}
+
+
+@wasdal_router.put("/wasdal/penertiban/{tiket_id}/lokasi")
+async def lokasi_penertiban(tiket_id: str, payload: LokasiTemuanIn,
+                            user: dict = Depends(require_writer)):
+    return await _set_lokasi_temuan(db.penertiban, "penertiban",
+                                    tiket_id, payload, user)
+
+
+@wasdal_router.put("/wasdal/insidentil/{tiket_id}/lokasi")
+async def lokasi_insidentil(tiket_id: str, payload: LokasiTemuanIn,
+                            user: dict = Depends(require_writer)):
+    return await _set_lokasi_temuan(db.pemantauan_insidentil, "insidentil",
+                                    tiket_id, payload, user)

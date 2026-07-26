@@ -53,6 +53,38 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#630] Spasial Fase 8: temuan Wasdal menunjuk lokasi di denah — 2026-07-26
+
+Tiket **penertiban** dan **pemantauan insidentil** kini bisa menunjuk lokasi
+fisik: operator menancapkan titik di peta, rantai wilayah (Kawasan → … →
+Gedung, plus pilihan lantai) terdeteksi otomatis lewat mesin deteksi Fase 3,
+dan lokasi tersimpan pada tiket sebagai `lokasi_spasial`.
+
+**Backend** — `PUT /api/wasdal/{penertiban|insidentil}/{id}/lokasi` (writer,
+ter-scope satker):
+- Klien hanya mengirim `{lat, lon, node_id}` — nama/tipe/jalur di-**snapshot
+  ulang server dari dokumen node DB** (string klien tak pernah dipercaya;
+  node lintas-satker → 404).
+- Koordinat lewat parser modul spasial yang sama — desimal-koma format
+  lapangan Indonesia ("116,70") diterima (pelajaran temuan Fase 7).
+- `hapus: true` mencabut penanda; kedua aksi tercatat di log audit.
+- Titik di LUAR kawasan terpetakan tetap sah sebagai penanda koordinat murni.
+- Helper murni `snapshot_lokasi_temuan` di spasial_utils + 3 uji unit —
+  termasuk regresi `str(None) == "None"` yang truthy dan sempat menyusup
+  sebagai nama moyang palsu (tertangkap uji sebelum commit).
+
+**Frontend (WasdalPage)**:
+- Tombol 📍 di tiap baris tiket (menyala teal bila sudah ditandai) membuka
+  dialog peta lazy: klik → titik tertancap → rantai wilayah tampil → opsi
+  "persempit ke lantai" bila titik jatuh di gedung → Simpan.
+- Chip `📍 jalur lokasi` menyatu di baris metadata tiket; hasil simpan/hapus
+  langsung disalin ke baris tanpa muat ulang register.
+- Deteksi ber-guard urutan (klik beruntun tak menimpa hasil terbaru); titik
+  tersimpan yang korup jatuh ke "belum ada", bukan meledakkan render.
+
+Landasan Fase 12+ (geofence IoT): temuan kini punya koordinat + node denah
+yang sama dengan yang akan dipakai pelacakan aset bergerak.
+
 ## [#629] Spasial Fase 7: georeferensi denah dalam-gedung — gambar denah sebagai alas jiplak — 2026-07-26
 
 Interior gedung tidak terlihat di citra satelit, jadi menggambar ruangan

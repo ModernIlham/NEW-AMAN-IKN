@@ -1,12 +1,16 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, Eye, RefreshCw, ChevronDown, BadgeCheck,
   UserCheck, Handshake, ArrowLeftRight, BookOpen, ShieldCheck, FileText,
   Gavel, Plus, Trash2, AlertTriangle, Siren, FileDown, Paperclip, Upload,
-  BarChart3,
+  BarChart3, MapPin,
 } from "lucide-react";
+
+// Picker lokasi denah dimuat LAZY — Leaflet berat dan mayoritas kunjungan
+// halaman wasdal tak pernah menandai lokasi.
+const LokasiTemuanDialog = lazy(() => import("@/components/wasdal/LokasiTemuanDialog"));
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -58,7 +62,10 @@ const LABEL_TENGGAT = {
  */
 export default function WasdalPage({ user, onBack }) {
   const isAdmin = user?.role === "admin";
+  const isWriter = user?.role !== "viewer";
   const [data, setData] = useState(null);
+  // Dialog penanda lokasi denah (Spasial Fase 8): {jenis, tiket}
+  const [lokasiDialog, setLokasiDialog] = useState(null);
   const [loading, setLoading] = useState(true);
   const [buka, setBuka] = useState(null); // kunci objek yang dibentangkan
   // Register penertiban: {items, ringkasan, label_sumber, label_status, ...}
@@ -580,6 +587,16 @@ export default function WasdalPage({ user, onBack }) {
                               sisa {t.info_tenggat?.sisa_hari_kerja ?? "-"} hari kerja (tenggat {t.tenggat})
                             </span>
                           )}
+                          {isWriter && (
+                            <button type="button" aria-label="Tandai lokasi di denah"
+                              title={t.lokasi_spasial ? `Lokasi: ${t.lokasi_spasial.jalur_nama || "titik koordinat"}` : "Tandai lokasi temuan di denah"}
+                              onClick={() => setLokasiDialog({ jenis: "penertiban", tiket: t })}
+                              className={`h-7 w-7 rounded-lg border border-border flex items-center justify-center hover:bg-muted min-h-0 min-w-0 ${
+                                t.lokasi_spasial ? "text-teal-600" : "text-foreground/50"}`}
+                              data-testid={`wasdal-penertiban-lokasi-${t.id}`}>
+                              <MapPin className="w-3 h-3" />
+                            </button>
+                          )}
                           {isAdmin && t.status === "berjalan" && (
                             <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0"
                               onClick={() => setSelesaiPen({ tiket: t, tindak_lanjut: "", tanggal_selesai: new Date().toISOString().slice(0, 10), saving: false })}
@@ -598,6 +615,7 @@ export default function WasdalPage({ user, onBack }) {
                           {[pen.label_sumber?.[t.sumber] || t.sumber,
                             t.objek && (pen.label_objek?.[t.objek] || t.objek),
                             t.asset_name && `${t.asset_name}${t.asset_code ? ` (${t.asset_code} · ${t.NUP})` : ""}`,
+                            t.lokasi_spasial && `📍 ${t.lokasi_spasial.jalur_nama || "titik koordinat"}`,
                             `dasar ${t.tanggal_dasar}`,
                             t.status === "selesai" && `selesai ${t.tanggal_selesai}: ${t.tindak_lanjut}`,
                             `oleh ${t.created_by}`].filter(Boolean).join(" · ")}
@@ -669,6 +687,16 @@ export default function WasdalPage({ user, onBack }) {
                               {t.info_tenggat.tahap}: sisa {t.info_tenggat.sisa_hari_kerja ?? "-"} hari kerja
                             </span>
                           )}
+                          {isWriter && (
+                            <button type="button" aria-label="Tandai lokasi di denah"
+                              title={t.lokasi_spasial ? `Lokasi: ${t.lokasi_spasial.jalur_nama || "titik koordinat"}` : "Tandai lokasi temuan di denah"}
+                              onClick={() => setLokasiDialog({ jenis: "insidentil", tiket: t })}
+                              className={`h-7 w-7 rounded-lg border border-border flex items-center justify-center hover:bg-muted min-h-0 min-w-0 ${
+                                t.lokasi_spasial ? "text-teal-600" : "text-foreground/50"}`}
+                              data-testid={`wasdal-insidentil-lokasi-${t.id}`}>
+                              <MapPin className="w-3 h-3" />
+                            </button>
+                          )}
                           <button type="button" aria-label="Lampiran tiket" title="Lampiran tiket (scan BA/foto)"
                             onClick={() => setLampInsi({ tiket: t, uploading: false })}
                             className="h-7 w-7 rounded-lg border border-border text-foreground/70 flex items-center justify-center hover:bg-muted min-h-0 min-w-0"
@@ -711,6 +739,7 @@ export default function WasdalPage({ user, onBack }) {
                           {[insi.label_pemicu?.[t.pemicu] || t.pemicu,
                             t.objek && (insi.label_objek?.[t.objek] || t.objek),
                             t.lokasi,
+                            t.lokasi_spasial && `📍 ${t.lokasi_spasial.jalur_nama || "titik koordinat"}`,
                             `mulai ${t.tanggal_mulai}`,
                             t.nomor_ba && `BA ${t.nomor_ba} (${t.tanggal_ba})`,
                             t.tanggal_lapor && `dilaporkan ${t.tanggal_lapor}`,
@@ -992,6 +1021,27 @@ export default function WasdalPage({ user, onBack }) {
           </div>
         </DialogContent>
       </Dialog>
+      {/* Penanda lokasi denah (Spasial Fase 8) — hasil simpan/hapus langsung
+          disalin ke baris tiket di state, tanpa muat ulang seluruh register. */}
+      {lokasiDialog && (
+        <Suspense fallback={null}>
+          <LokasiTemuanDialog
+            judul={(lokasiDialog.tiket.uraian || "").slice(0, 80)}
+            submitUrl={`${API}/wasdal/${lokasiDialog.jenis}/${lokasiDialog.tiket.id}/lokasi`}
+            lokasiAwal={lokasiDialog.tiket.lokasi_spasial || null}
+            onClose={() => setLokasiDialog(null)}
+            onSaved={(lok) => {
+              const upd = (d) => (d ? {
+                ...d,
+                items: (d.items || []).map((x) =>
+                  x.id === lokasiDialog.tiket.id ? { ...x, lokasi_spasial: lok } : x),
+              } : d);
+              if (lokasiDialog.jenis === "penertiban") setPen(upd);
+              else setInsi(upd);
+            }}
+          />
+        </Suspense>
+      )}
       {confirmDialog}
     </div>
   );
