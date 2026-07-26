@@ -53,6 +53,152 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#624] Spasial Fase 3: geometri, deteksi lokasi otomatis dari titik, peta berlapis — 2026-07-26
+
+Fase 3 program Spasial & IoT: pohon Fase 2 kini punya BENTUK. Inilah fase yang
+menghidupkan permintaan inti — tancapkan koordinat, wilayahnya terdeteksi sendiri.
+
+**Deteksi lokasi dari satu titik** — `POST /api/spasial/lokasi-di-titik`
+mengembalikan SELURUH rantai yang memuat titik itu (Kawasan → Zona → Distrik →
+Blok → … → Gedung) lewat **satu** kueri `$geoIntersects`; itulah alasan pohon
+disimpan dalam satu koleksi polimorfik. Rantai selalu mengikuti `ancestors` pohon,
+bukan gabungan hasil geo — bila keduanya berbeda (poligon tumpang tindih milik
+cabang lain) hasil geo yang menyimpang ditandai `alternatif` dan diberi catatan,
+bukan diam-diam dipakai. Di luar semua poligon BUKAN galat: dikembalikan tetangga
+terdekat dalam radius 500 m sebagai tawaran.
+
+**Berhenti di Gedung, lantai dipilih manusia** — lantai tak bisa disimpulkan dari
+koordinat 2D (semua lantai berbagi jejak yang sama). Gedung berlantai satu langsung
+terpilih; sisanya memunculkan pemilih lantai. Setelah lantai dipilih,
+`GET /api/spasial/ruangan-di-titik` menentukan ruangannya. Nol hasil juga bukan
+galat — titik bisa berada di koridor, sehingga daftar ruangan lantai itu
+dikembalikan untuk dipilih. Auto-pilih ruangan hanya diizinkan bila akurasi GPS
+≤ 30 m (`boleh_auto_ruangan`); pin manual dianggap paling akurat.
+
+**Denah berlapis di Peta Aset** — saklar "Denah" merender poligon di atas ubin peta
+dengan renderer **canvas** (bukan SVG: ribuan node DOM membuat peramban HP
+tersendat) pada pane sendiri di BAWAH pin aset, sehingga pin tetap bisa diklik.
+Dimuat **per-viewport** dengan bbox berpadding — geser kecil tak menembak request
+baru — dan **LOD per zoom**: zoom jauh hanya Kawasan/Zona, gedung baru diminta pada
+zoom rapat. Plafon keras 3.000 fitur; di atas itu klien menerima titik pusat saja
+plus penanda `terpotong`. Tiap tingkat bisa disembunyikan sendiri lewat panel lapis
+(batas administratif digambar putus-putus, batas fisik utuh). Ketuk gedung →
+pemilih lantai bergaya panel lift (rooftop di atas, basement di bawah) → ruangan
+lantai itu tampil, dimuat lewat parameter `induk` agar lantai lain tak bertumpuk.
+
+**Indeks** — `spasial_node.geometry` 2dsphere + majemuk `(parent_id, lantai.ordinal)`
+supaya urutan lantai datang dari indeks, bukan SORT di memori.
+
+**Catatan verifikasi rencana kueri** — `$geoIntersects` tetap memberi jawaban BENAR
+tanpa indeks; ia hanya memindai seluruh koleksi. Bug "indeks tak terpakai" karena
+itu takkan pernah muncul sebagai hasil salah, hanya sebagai endpoint yang melambat
+seiring denah bertambah. Ditambahkan `tests/test_spasial_indeks.py` yang membaca
+rencana kueri (`explain`) dan menuntut IXSCAN, bukan COLLSCAN, memakai koleksi
+sementara yang di-drop setelahnya. Butuh MongoDB hidup → ber-marker `integration`,
+tidak ikut CI. Jalankan di server: `pytest -m integration tests/test_spasial_indeks.py`.
+
+**Perbaikan temuan tinjauan adversarial:**
+
+- **HIGH — gerbang akurasi GPS TERBALIK di atas 100 km.** `boleh_auto_ruangan`
+  memakai `parse_koordinat(akurasi_m, 100000.0)`, padahal argumen kedua fungsi
+  itu adalah BATAS RENTANG: nilai di luar batas keluar sebagai `None`, dan baris
+  berikutnya menafsirkan `None` sebagai "akurasi tak dilaporkan = cukup". Akibatnya
+  30,1 m ditolak (benar) tetapi 150.000 m diterima. Ini persis kasus yang ambang
+  30 m dibuat untuk memblokir: peramban yang jatuh ke penentuan posisi berbasis
+  IP/menara lazim melaporkan akurasi ratusan kilometer, sehingga RUANGAN — jangkar
+  KIR & DBR — bisa ditetapkan otomatis dari titik yang berada di mana saja dalam
+  radius 150 km. Kini "tak dilaporkan", "dilaporkan & masuk akal", dan "dilaporkan
+  tapi rusak (negatif/NaN/inf)" dibedakan tegas; ditambah uji monotonisitas agar
+  celah pembalik serupa tak bisa muncul lagi diam-diam.
+- **MEDIUM — `alternatif` ikut dihitung `diabaikan`, sehingga `konsisten` palsu-False.**
+  Dua gedung berimpit dinding itu lumrah, dan `$geoIntersects` memang memuat titik
+  di batas untuk KEDUA poligon. Node yang sama lalu dilaporkan di `alternatif` DAN
+  `diabaikan` dengan makna berlawanan, dan `catatan` mengaku rantai ditambal dari
+  ancestors padahal tak ada tingkat yang ditambal. Alternatif sesama tingkat kini
+  dikecualikan; kandidat di tingkat lain yang bukan leluhur tetap tertangkap.
+
+Gelombang kedua temuan (dimensi endpoint & geometri):
+
+- **Pemotongan kandidat membuang tingkat TERDALAM.** `lokasi-di-titik` mengurut
+  `ordinal_level` MENAIK lalu `to_list(50)` — jadi bila plafon kena, yang terbuang
+  justru gedung yang dicari, menyisakan kawasan. Kini diurut MENURUN (plafon
+  membuang tingkat terluas, yang toh disusun ulang dari `ancestors`) dan plafonnya
+  dinaikkan ke 200.
+- **bbox selebar dunia → MongoDB memakai KOMPLEMEN.** Poligon GeoJSON biasa yang
+  luasnya melebihi setengah bola ditafsirkan sebagai kebalikannya; pada zoom sangat
+  jauh viewport berpadding mencapai ukuran itu dan denah hilang **tanpa pesan galat
+  apa pun**. Kotak selebar itu kini sengaja tidak dipakai menyaring.
+- **bbox terbalik/pipih → HTTP 500.** Menghasilkan cincin berverteks kembar yang
+  dijawab MongoDB dengan `OperationFailure`. Kini ditolak 400 dengan pesan jelas.
+  Logikanya diangkat jadi helper murni `kotak_dari_bbox` agar teruji unit.
+- **Validator geometri jatuh sendiri.** `{"type":"Point","coordinates":{"lon":1}}`
+  melempar `KeyError` → HTTP 500, bukan 400 berisi penjelasan. Validator yang crash
+  lebih buruk daripada tidak ada validator. Kini semua bentuk `coordinates` cacat
+  ditolak dengan pesan, diuji parametrik agar tak pernah melempar lagi.
+- **Cincin degenerat lolos.** Cincin tanpa 3 titik berbeda lolos cek "tertutup &
+  4 titik" tetapi ditolak MongoDB saat indeks dibangun — dan satu dokumen rusak
+  bisa menggagalkan pembangunan indeks untuk SELURUH koleksi.
+- **Auto-pilih lantai mengabaikan status.** Gedung dengan satu lantai *draft*
+  (masih digambar) langsung terpilih. Kini hanya lantai `aktif` yang boleh
+  ditetapkan otomatis; lantai draft/nonaktif tetap ditampilkan agar operator sadar.
+- `level_maks` dijepit ke rentang registry (bukan jalan pintas menarik seluruh
+  denah satker); proyeksi `lantai/{gedung_id}` dilengkapi agar respons tak separuh
+  `None`; namespace cache `spasial` yang tak pernah dipakai dihapus — komentarnya
+  menyatakan aturan wajib yang tak ditegakkan apa pun.
+
+Batasan yang **sengaja tidak** diperbaiki, kini didokumentasikan di kode:
+antimeridian (bujur ±180) membuat bbox/titik wakil/luas kacau. Menanganinya berarti
+memecah geometri dan mengubah semua turunan — biaya besar untuk kasus yang tak bisa
+terjadi di sini (Indonesia 95°BT–141°BT).
+
+Gelombang ketiga (dimensi siklus-hidup Leaflet & kontrak klien-server):
+
+- **bbox dijepit SETELAH cek degenerasi.** Leaflet `getBounds()` mengembalikan
+  bujur yang tak dibungkus setelah peta digeser melewati antimeridian (mis.
+  `{barat:190, timur:195}`). Rentang mentahnya wajar, tetapi kedua tepi menjepit
+  ke 180 sehingga kotaknya pipih — server balas 400, cache viewport dikosongkan,
+  lalu **setiap** geser peta menembak request gagal berikutnya. Kini dicek ulang
+  setelah penjepitan dan permintaannya dilewatkan sama sekali.
+- **Lapis yang di-unhide mencuri klik & tooltip.** Renderer canvas menggambar
+  sesuai urutan penambahan dan uji-klik dimenangkan layer yang digambar TERAKHIR,
+  jadi `addTo` polos menaruh Kawasan di atas segalanya. Seluruh grup kini disusun
+  ulang menurut ordinal menaik setiap kali visibilitas berubah.
+- **Pemilih lantai menutupi kontrol zoom & tombol Lokasi Saya.** Panel ber-z-500
+  di atas container peta ber-z-0; selama denah gedung terbuka, zoom dan GPS tak
+  bisa ditekan. Dipindah ke kanan, di bawah kompas.
+- **Ruangan di bawah SAYAP tak pernah tampil.** Registry mengizinkan
+  Lantai → Sayap → Ruangan, tetapi klien meminta anak LANGSUNG saja. Ditambah
+  parameter `dalam=` (seluruh keturunan lewat indeks multikey `ancestors`), dan
+  klien beralih memakainya.
+- **`lantai.ordinal: null` terbaca sebagai 0.** `Number(null)` = 0 dan 0 itu
+  ordinal yang sah (lantai akses utama), jadi lantai yang ordinalnya belum diisi
+  menyamar sebagai lantai dasar dan menyusup ke tengah urutan lift. Diangkat ke
+  helper tunggal `ordinalLantai` yang dipakai pengurutan maupun penampilan.
+- Efek Leaflet dikeluarkan dari updater `setState` (updater wajib murni; React
+  memanggilnya dua kali di StrictMode); request dibatalkan saat unmount agar
+  respons tak menulis ke peta yang sudah dihancurkan; ganti Satker Aktif kini
+  mengosongkan layer SEKETIKA alih-alih menyisakan denah satker lama di layar
+  selama request berjalan; hook melewati fetch saat offline (peta aset memang
+  dirancang jalan dari snapshot lokal); klik ulang gedung yang sama tak lagi
+  membuang lantai terpilih; ruangan lantai terpilih digambar sebagai sorotan.
+
+Sisa temuan bernilai rendah ikut ditutup: `prioritas` berisi teks (dari impor data
+lama) melempar `ValueError` dan menjatuhkan seluruh endpoint deteksi jadi 500;
+peredam toast galat direset saat lapisan dihidupkan ulang; opsi gaya `redup` yang
+tak pernah dipanggil siapa pun dihapus. Ditambah uji **kontrak klien↔server** yang
+mengikat nama field respons ke pembacaan klien — salah nama field tak akan pernah
+menggagalkan eslint, build, maupun uji lain; ia hanya membuat peta tampil kosong
+tanpa satu pun pesan galat.
+
+Batasan yang didokumentasikan (bukan diperbaiki): `validasi_geometri` bersifat
+STRUKTURAL, bukan topologis. Poligon menyilang-diri (bow-tie), cincin dalam yang
+keluar dari cincin luar, dan cincin bertumpang-tindih belum diperiksa — itu butuh
+operasi geometri sungguhan (shapely) yang memang dijadwalkan masuk pada fase
+menggambar & impor. Sampai saat itu MongoDB tetap jaring terakhirnya.
+
+Uji: +40 backend (850 total) & +44 frontend (120 total), seluruhnya logika murni
+tanpa Mongo maupun Leaflet.
+
 ## [#623] Spasial Fase 2: registry level + pohon `spasial_node` (hierarki berlapis) — 2026-07-26
 
 Fase 2 program Spasial & IoT: menyusun POHON denah kawasan berlapis. Belum ada

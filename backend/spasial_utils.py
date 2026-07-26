@@ -413,3 +413,374 @@ def ordinal_rapat(ordinals: list) -> list:
     urut = sorted(set(int(o) for o in ordinals))
     jangkar = urut.index(0) if 0 in urut else 0
     return [i - jangkar for i in range(len(urut))]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# GEOMETRI (Fase 3) — validasi GeoJSON, bbox, luas kasar, deteksi lokasi
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Point-in-polygon jalur PANAS dikerjakan MongoDB (indeks 2dsphere, server-side).
+# Helper di sini untuk: (a) memvalidasi geometri SEBELUM disimpan agar tak
+# meracuni indeks, (b) menurunkan bbox/titik wakil/luas, (c) ray casting murni
+# untuk klien offline & uji unit tanpa Mongo.
+
+TIPE_GEOMETRI_SAH = ("Polygon", "MultiPolygon", "Point")
+
+# Jari-jari bumi rata-rata (IUGG mean radius) — untuk luas & jarak kasar.
+RADIUS_BUMI_M = 6371008.8
+
+
+def _cincin_sah(cincin) -> Optional[str]:
+    """None bila cincin poligon sah; selain itu PESAN galat berbahasa manusia."""
+    if not isinstance(cincin, (list, tuple)) or len(cincin) < 4:
+        return "cincin poligon butuh minimal 4 titik (titik akhir mengulang titik awal)"
+    for t in cincin:
+        if isinstance(t, (str, bytes, dict)) or not isinstance(t, (list, tuple)) or len(t) < 2:
+            return "setiap titik harus berupa pasangan [bujur, lintang]"
+        lon, lat = t[0], t[1]
+        # bool adalah subclass int di Python — [True, False] BUKAN koordinat.
+        if isinstance(lon, bool) or isinstance(lat, bool):
+            return "koordinat harus angka"
+        if not isinstance(lon, (int, float)) or not isinstance(lat, (int, float)):
+            return "koordinat harus angka"
+        if not (math.isfinite(lon) and math.isfinite(lat)):
+            return "koordinat tak boleh NaN/tak berhingga"
+        if abs(lon) > BATAS_BUJUR or abs(lat) > BATAS_LINTANG:
+            return f"koordinat di luar rentang WGS84 ({lon}, {lat})"
+    if list(cincin[0][:2]) != list(cincin[-1][:2]):
+        return "cincin poligon harus TERTUTUP (titik akhir sama dengan titik awal)"
+    # Cincin DEGENERAT (semua titik sama, atau hanya 2 titik berbeda) lolos
+    # semua cek di atas tetapi ditolak MongoDB saat indeks 2dsphere dibangun —
+    # dengan pesan yang tak terbaca operator, dan satu dokumen rusak bisa
+    # menggagalkan pembangunan indeks untuk SELURUH koleksi. Tolak di sini.
+    unik = {(t[0], t[1]) for t in cincin}
+    if len(unik) < 3:
+        return ("cincin poligon degenerat — butuh minimal 3 titik BERBEDA "
+                f"(hanya ada {len(unik)})")
+    return None
+
+
+def validasi_geometri(geom) -> Optional[str]:
+    """None bila geometri layak diindeks 2dsphere; selain itu PESAN galat.
+
+    Menolak SEBELUM menyentuh MongoDB, karena geometri rusak membuat
+    `create_index`/insert gagal dengan pesan yang tak terbaca operator — dan
+    satu dokumen rusak dapat menggagalkan pembangunan indeks untuk semuanya.
+
+    CAKUPAN — ini validasi STRUKTURAL, bukan topologis. Yang diperiksa: bentuk
+    larik, tipe & rentang angka, cincin tertutup, dan cincin degenerat. Yang
+    BELUM diperiksa: poligon menyilang-diri (bow-tie), cincin dalam yang keluar
+    dari cincin luar, dan cincin yang saling tumpang tindih. Memeriksanya butuh
+    operasi geometri sungguhan (shapely) yang sengaja belum ditarik sebagai
+    dependensi di fase ini; ia sudah dijadwalkan untuk validasi topologi pada
+    fase menggambar & impor. Sampai saat itu MongoDB tetap menjadi penjaring
+    terakhir untuk kasus-kasus itu — hanya saja pesannya kurang ramah.
+    """
+    if not isinstance(geom, dict):
+        return "geometri harus objek GeoJSON"
+    tipe = geom.get("type")
+    if tipe not in TIPE_GEOMETRI_SAH:
+        return f"tipe geometri '{tipe}' tidak didukung (pakai {', '.join(TIPE_GEOMETRI_SAH)})"
+    koor = geom.get("coordinates")
+    if koor is None:
+        return "geometri tanpa 'coordinates'"
+    # `coordinates` WAJIB list/tuple sebelum diindeks. Tanpa cek ini, payload
+    # seperti {"type":"Point","coordinates":{"lon":1}} melempar KeyError sehingga
+    # validator sendiri yang jatuh — pengguna menerima HTTP 500, bukan pesan 400
+    # yang menjelaskan salahnya di mana (temuan tinjauan).
+    if isinstance(koor, (str, bytes, dict)) or not isinstance(koor, (list, tuple)):
+        return "'coordinates' harus berupa larik angka bersarang"
+    if tipe == "Point":
+        return None if bangun_geo_point(
+            koor[1] if len(koor) > 1 else None,
+            koor[0] if koor else None) else "titik tidak valid"
+    poligon = [koor] if tipe == "Polygon" else koor
+    if not poligon:
+        return "poligon kosong"
+    for i, pol in enumerate(poligon):
+        if not pol:
+            return f"poligon ke-{i + 1} kosong"
+        if isinstance(pol, (str, bytes, dict)) or not isinstance(pol, (list, tuple)):
+            return f"poligon ke-{i + 1} harus berupa larik cincin"
+        for j, cincin in enumerate(pol):
+            galat = _cincin_sah(cincin)
+            if galat:
+                sebutan = f"poligon ke-{i + 1}" if tipe == "MultiPolygon" else "poligon"
+                cincin_ke = "cincin luar" if j == 0 else f"cincin dalam ke-{j}"
+                return f"{sebutan} {cincin_ke}: {galat}"
+    return None
+
+
+def _semua_titik(geom) -> list:
+    """Seluruh pasangan (lon, lat) dari sebuah geometri, datar."""
+    if not isinstance(geom, dict):
+        return []
+    tipe, koor = geom.get("type"), geom.get("coordinates") or []
+    if tipe == "Point":
+        return [(koor[0], koor[1])] if len(koor) >= 2 else []
+    poligon = [koor] if tipe == "Polygon" else koor
+    return [(t[0], t[1]) for pol in poligon for cincin in pol for t in cincin
+            if isinstance(t, (list, tuple)) and len(t) >= 2]
+
+
+def hitung_bbox(geom) -> Optional[list]:
+    """[lon_min, lat_min, lon_maks, lat_maks] — dipakai pemuatan peta per-viewport.
+
+    BATASAN SADAR — antimeridian (bujur ±180) TIDAK ditangani. Poligon yang
+    melintasi garis itu menghasilkan bbox selebar dunia (dan `titik_wakil`
+    mendarat di sisi bumi yang salah, `luas_kasar_m2` ikut kacau). Menanganinya
+    dengan benar berarti memecah geometri jadi dua dan mengubah semua turunan —
+    biaya besar untuk kasus yang TAK BISA terjadi di sini: seluruh wilayah
+    Indonesia berada di 95°BT–141°BT, dan denah ini melayani satker Indonesia.
+    Bila suatu hari dipakai lintas-antimeridian (mis. Pasifik), yang harus
+    ditinjau adalah fungsi ini, `titik_wakil`, dan `luas_kasar_m2` sekaligus.
+    """
+    titik = _semua_titik(geom)
+    if not titik:
+        return None
+    lons = [t[0] for t in titik]
+    lats = [t[1] for t in titik]
+    return [min(lons), min(lats), max(lons), max(lats)]
+
+
+def titik_wakil(geom) -> Optional[dict]:
+    """Titik wakil (pusat bbox) sebagai GeoJSON Point.
+
+    SENGAJA pusat bbox, bukan centroid sejati: untuk label peta & pengurutan
+    jarak, pusat bbox sudah memadai dan tak butuh pustaka geometri. Catatan:
+    untuk poligon berbentuk L, titik ini bisa jatuh DI LUAR poligon — jadi
+    jangan dipakai sebagai "titik di dalam" (gunakan kueri geo untuk itu).
+    """
+    bb = hitung_bbox(geom)
+    if not bb:
+        return None
+    return {"type": "Point", "coordinates": [(bb[0] + bb[2]) / 2.0, (bb[1] + bb[3]) / 2.0]}
+
+
+def luas_kasar_m2(geom) -> float:
+    """Luas KASAR dalam m² (shoelace pada proyeksi lokal setara-persegi).
+
+    Cukup untuk PERINGKAT ("poligon terkecil = paling spesifik" saat titik jatuh
+    di beberapa area bertumpuk) dan tampilan informatif. BUKAN luas geodetik
+    resmi — untuk angka yang dipakai dokumen, hitung dengan pustaka geodesi.
+    Cincin dalam (lubang) dikurangkan.
+    """
+    if not isinstance(geom, dict) or geom.get("type") not in ("Polygon", "MultiPolygon"):
+        return 0.0
+    koor = geom.get("coordinates") or []
+    poligon = [koor] if geom["type"] == "Polygon" else koor
+    titik = _semua_titik(geom)
+    if not titik:
+        return 0.0
+    lat0 = sum(t[1] for t in titik) / len(titik)          # lintang acuan
+    m_per_deg_lat = math.pi * RADIUS_BUMI_M / 180.0
+    m_per_deg_lon = m_per_deg_lat * math.cos(math.radians(lat0))
+    total = 0.0
+    for pol in poligon:
+        for j, cincin in enumerate(pol):
+            s = 0.0
+            for k in range(len(cincin) - 1):
+                x1 = cincin[k][0] * m_per_deg_lon
+                y1 = cincin[k][1] * m_per_deg_lat
+                x2 = cincin[k + 1][0] * m_per_deg_lon
+                y2 = cincin[k + 1][1] * m_per_deg_lat
+                s += x1 * y2 - x2 * y1
+            luas = abs(s) / 2.0
+            total += luas if j == 0 else -luas       # cincin dalam = lubang
+    return max(0.0, total)
+
+
+def titik_di_dalam(lon: float, lat: float, geom) -> bool:
+    """Ray casting murni — untuk klien OFFLINE & uji unit tanpa Mongo.
+
+    Server memakai MongoDB `$geoIntersects` (terindeks). Fungsi ini sengaja
+    sederhana: cukup untuk poligon berukuran gedung/ruangan pada bidang datar
+    lokal; TIDAK menangani poligon yang melintasi antimeridian.
+    """
+    if not isinstance(geom, dict) or geom.get("type") not in ("Polygon", "MultiPolygon"):
+        return False
+    koor = geom.get("coordinates") or []
+    poligon = [koor] if geom["type"] == "Polygon" else koor
+    for pol in poligon:
+        if not pol:
+            continue
+        if not _dalam_cincin(lon, lat, pol[0]):
+            continue
+        # Di dalam cincin luar — pastikan tidak berada di salah satu lubang.
+        if any(_dalam_cincin(lon, lat, lubang) for lubang in pol[1:]):
+            continue
+        return True
+    return False
+
+
+def _dalam_cincin(lon: float, lat: float, cincin) -> bool:
+    dalam = False
+    n = len(cincin)
+    for i in range(n - 1):
+        x1, y1 = cincin[i][0], cincin[i][1]
+        x2, y2 = cincin[i + 1][0], cincin[i + 1][1]
+        if (y1 > lat) != (y2 > lat):
+            x_potong = x1 + (lat - y1) * (x2 - x1) / (y2 - y1)
+            if lon < x_potong:
+                dalam = not dalam
+    return dalam
+
+
+# ── Deteksi lokasi dari titik: pemeringkatan & konsistensi rantai ───────────
+
+def peringkat_kandidat(kandidat: list) -> list:
+    """Urutkan area yang SAMA-SAMA memuat sebuah titik, paling spesifik dahulu.
+
+    Titik bisa jatuh di beberapa poligon sesama tingkat (batas berimpit, area
+    fungsi ganda). Urutan: `prioritas` DESC (kurasi manusia menang) → luas
+    TERKECIL (paling spesifik) → nama, agar hasilnya stabil/deterministik.
+
+    Memakai `metrik.luas_m2` yang TERSIMPAN, bukan menghitung dari geometri:
+    kueri deteksi sengaja tidak memproyeksikan `geometry` demi SLA.
+    """
+    def kunci(n):
+        luas = ((n.get("metrik") or {}).get("luas_m2"))
+        luas = luas if isinstance(luas, (int, float)) and luas > 0 else float("inf")
+        # `prioritas` bisa berisi apa saja setelah impor data lama; `int("tinggi")`
+        # melempar ValueError dan menjatuhkan SELURUH endpoint deteksi jadi HTTP
+        # 500. Nilai tak terbaca diperlakukan sebagai "tanpa prioritas".
+        try:
+            prio = int(n.get("prioritas") or 0)
+        except (TypeError, ValueError):
+            prio = 0
+        return (-prio, luas, str(n.get("nama") or ""))
+    return sorted(kandidat or [], key=kunci)
+
+
+def pilih_rantai(kandidat: list) -> dict:
+    """Susun rantai lokasi yang KONSISTEN dari hasil kueri geo.
+
+    Kenyataan lapangan: poligon digambar orang berbeda pada waktu berbeda,
+    sehingga sebuah titik bisa jatuh di dalam Gedung A tetapi TIDAK di dalam
+    poligon Kawasan yang seharusnya memuatnya (batas kawasan digambar kasar).
+    Bila rantai disusun apa adanya dari hasil geo, breadcrumb jadi bolong dan
+    berbeda dari pohon — dua sumber kebenaran yang bertengkar.
+
+    Aturan: **percayai fitur TERDALAM**, lalu isi tingkat di atasnya dari
+    `ancestors` miliknya (pohon), bukan dari hasil geo. Hasilnya selalu
+    konsisten dengan hierarki yang tersimpan.
+
+    Mengembalikan:
+      terdalam    — node terpilih (paling dalam; bila seri, paling spesifik)
+      ancestors   — id leluhur menurut POHON (nama dilengkapi oleh pemanggil)
+      alternatif  — kandidat lain di tingkat terdalam yang sama (untuk dropdown)
+      diabaikan   — id hasil geo yang TIDAK berada di rantai terdalam
+      konsisten   — True bila seluruh hasil geo memang sejalur
+      catatan     — penanda mesin bila rantai dilengkapi dari pohon
+    """
+    if not kandidat:
+        return {"terdalam": None, "ancestors": [], "alternatif": [],
+                "diabaikan": [], "konsisten": True, "catatan": ""}
+    ordinal_maks = max(int(n.get("ordinal_level") or 0) for n in kandidat)
+    terdalam_set = peringkat_kandidat(
+        [n for n in kandidat if int(n.get("ordinal_level") or 0) == ordinal_maks])
+    terdalam = terdalam_set[0]
+    rantai_id = set(terdalam.get("ancestors") or []) | {terdalam.get("id")}
+    # Kandidat SEJAJAR di tingkat terdalam sudah sengaja dikembalikan lewat
+    # `alternatif` — mereka BUKAN tanda poligon bertentangan. Dua gedung yang
+    # berimpit dinding itu lumrah, dan $geoIntersects memang memuat titik di
+    # batas untuk KEDUA poligon. Tanpa pengecualian ini setiap titik di dinding
+    # bersama membuat `konsisten` palsu-False dan `catatan` mengaku rantai
+    # ditambal dari ancestors padahal tak ada tingkat yang ditambal — node yang
+    # sama pun dilaporkan dua kali dengan makna berlawanan (temuan tinjauan).
+    id_alternatif = {n.get("id") for n in terdalam_set[1:]}
+    diabaikan = [n.get("id") for n in kandidat
+                 if n.get("id") not in rantai_id and n.get("id") not in id_alternatif]
+    konsisten = not diabaikan
+    return {
+        "terdalam": terdalam,
+        "ancestors": list(terdalam.get("ancestors") or []),
+        "alternatif": terdalam_set[1:],
+        "diabaikan": diabaikan,
+        "konsisten": konsisten,
+        "catatan": "" if konsisten else "rantai_dilengkapi_dari_ancestors",
+    }
+
+
+# Ambang akurasi GPS (meter) — di atas ini ruangan TIDAK di-commit otomatis.
+# Ruangan kantor lazim berukuran 3-8 m; akurasi 30 m berarti titik bisa berada
+# di ruangan mana pun dalam radius itu, jadi menebak justru menyesatkan.
+# Ambang "kotak terlalu lebar untuk disaring" — lihat kotak_dari_bbox.
+LEBAR_BBOX_MAKS_DERAJAT = 180.0
+TINGGI_BBOX_MAKS_DERAJAT = 170.0
+
+
+def kotak_dari_bbox(bbox: str):
+    """Ubah "lon_min,lat_min,lon_maks,lat_maks" menjadi poligon kotak GeoJSON.
+
+    Mengembalikan `(kotak, galat)` dengan TIGA hasil yang bermakna:
+      (kotak, None) — saring dengan $geoIntersects memakai kotak ini
+      (None, pesan) — bbox tak sah, pemanggil balas HTTP 400
+      (None, None)  — bbox SAH tetapi terlalu lebar untuk disaring; pemanggil
+                      WAJIB melewatkan $geoIntersects dan mengandalkan LOD +
+                      plafon fitur.
+
+    Hasil ketiga itu ada karena JEBAKAN MONGODB: poligon GeoJSON biasa yang
+    luasnya melebihi setengah bola ditafsirkan sebagai KOMPLEMEN-nya. Pada zoom
+    sangat jauh viewport berpadding bisa mencakup hampir seluruh dunia, dan
+    kueri lalu mencari di sisi bumi yang SALAH — denah hilang tanpa satu pun
+    pesan galat. Menyaring pada kotak selebar itu memang tak ada gunanya.
+    """
+    if not bbox:
+        return None, None
+    try:
+        bagian = [float(v) for v in str(bbox).split(",")]
+    except (ValueError, TypeError):
+        return None, "bbox harus 'lon_min,lat_min,lon_maks,lat_maks'"
+    if len(bagian) != 4:
+        return None, "bbox harus berisi TEPAT 4 angka: lon_min,lat_min,lon_maks,lat_maks"
+    x1, y1, x2, y2 = bagian
+    if not all(math.isfinite(v) for v in bagian):
+        return None, "bbox mengandung nilai tak berhingga"
+    # Terbalik atau pipih menghasilkan cincin berverteks kembar / berputar
+    # terbalik; MongoDB menjawabnya dengan OperationFailure (HTTP 500), bukan
+    # hasil kosong yang wajar.
+    if x2 <= x1 or y2 <= y1:
+        return None, "bbox harus lon_min < lon_maks dan lat_min < lat_maks"
+    if abs(x1) > BATAS_BUJUR or abs(x2) > BATAS_BUJUR:
+        return None, "bujur bbox di luar rentang WGS84"
+    if abs(y1) > BATAS_LINTANG or abs(y2) > BATAS_LINTANG:
+        return None, "lintang bbox di luar rentang WGS84"
+    if (x2 - x1) >= LEBAR_BBOX_MAKS_DERAJAT or (y2 - y1) >= TINGGI_BBOX_MAKS_DERAJAT:
+        return None, None                      # sah, tapi jangan disaring
+    kotak = {"type": "Polygon", "coordinates": [[
+        [x1, y1], [x2, y1], [x2, y2], [x1, y2], [x1, y1]]]}
+    galat = validasi_geometri(kotak)
+    return (None, f"bbox tidak valid: {galat}") if galat else (kotak, None)
+
+
+AMBANG_AKURASI_RUANGAN_M = 30.0
+
+
+def boleh_auto_ruangan(akurasi_m) -> bool:
+    """True bila akurasi GPS cukup baik untuk menetapkan RUANGAN otomatis.
+
+    TIGA keadaan yang WAJIB dibedakan — menggabungkannya pernah MEMBALIK gerbang
+    ini (temuan tinjauan adversarial):
+
+      1. Tak dilaporkan (None / "")            -> CUKUP. Banyak sumber tak
+         melaporkan akurasi, dan titik yang ditancapkan manual di peta justru
+         yang paling akurat; menolak semuanya membuat fitur ini tak terpakai.
+      2. Dilaporkan & masuk akal               -> bandingkan dengan ambang.
+      3. Dilaporkan tapi TAK masuk akal
+         (negatif, NaN, inf, bukan angka)      -> TOLAK. Nilai rusak bukan
+         alasan untuk menebak ruangan.
+
+    JANGAN memakai `parse_koordinat` dengan batas berhingga di sini. Semantik
+    fungsi itu "rentang koordinat": nilai di LUAR batas keluar sebagai None —
+    yang di sini berarti "tak dilaporkan = cukup". Peramban yang jatuh ke
+    penentuan posisi berbasis IP/menara melaporkan akurasi ratusan KILOMETER,
+    jadi justru nilai TERBURUK yang lolos. Batas 100 km sebelumnya membuat
+    150000 m (radius 150 km) dianggap layak meng-commit ruangan 3-8 m.
+    """
+    if akurasi_m is None or str(akurasi_m).strip() == "":
+        return True
+    a = parse_koordinat(akurasi_m, math.inf)   # inf = tanpa batas rentang
+    if a is None or a < 0:
+        return False
+    return a <= AMBANG_AKURASI_RUANGAN_M
