@@ -297,6 +297,24 @@ def turunkan_pohon(node_id: str, parent_id, peta_parent: dict) -> dict:
             "kedalaman": len(anc)}
 
 
+def rewrite_ancestors(ancestors_lama: list, pindah_id: str, pindah_ancestors_baru: list) -> list:
+    """Ancestors keturunan setelah salah satu leluhurnya (`pindah_id`) dipindah.
+
+    Saat sebuah node dipindah ke induk lain, SELURUH keturunannya ikut berpindah
+    dan `ancestors`/`jalur` mereka basi. Bagian rantai leluhur dari `pindah_id`
+    ke bawah tetap sama; yang berubah hanya bagian DI ATAS `pindah_id`, yang kini
+    digantikan oleh rantai leluhur baru si node yang dipindah.
+
+    Mengembalikan `ancestors_lama` apa adanya bila `pindah_id` tak ada di dalamnya
+    (keturunan itu tak terpengaruh) — pemanggil memfilter lewat prefix jalur, jadi
+    ini hanya jaring pengaman.
+    """
+    if pindah_id not in ancestors_lama:
+        return list(ancestors_lama)
+    idx = ancestors_lama.index(pindah_id)
+    return [*pindah_ancestors_baru, *ancestors_lama[idx:]]
+
+
 def ada_siklus(node_id: str, calon_parent_id, peta_parent: dict) -> bool:
     """True bila menjadikan `calon_parent_id` induk akan membentuk siklus.
 

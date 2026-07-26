@@ -328,3 +328,25 @@ def test_ordinal_rapat_menutup_celah_tanpa_menggeser_urutan():
     assert su.ordinal_rapat([0, 1, 2]) == [0, 1, 2]        # sudah rapat
     assert su.ordinal_rapat([]) == []
     assert su.ordinal_rapat([3, 3, 4]) == [0, 1]           # duplikat diciutkan
+
+
+def test_rewrite_ancestors_saat_leluhur_dipindah():
+    """Saat Gedung dipindah ke Tapak lain, keturunannya (Lantai, Ruangan) ikut:
+    bagian rantai leluhur DI ATAS gedung diganti rantai baru gedung, bagian dari
+    gedung ke bawah tetap."""
+    lama = ["ikn", "kikn", "tapakLAMA", "gedung"]
+    baru = su.rewrite_ancestors(lama, "gedung", ["ikn", "kikn2", "tapakBARU"])
+    assert baru == ["ikn", "kikn2", "tapakBARU", "gedung"]
+
+
+def test_rewrite_ancestors_node_tak_terpengaruh():
+    """Keturunan yang tak memuat node yang dipindah dikembalikan apa adanya."""
+    lama = ["ikn", "kikn", "tapakX", "gedungLAIN"]
+    assert su.rewrite_ancestors(lama, "gedung", ["a", "b"]) == lama
+
+
+def test_rewrite_lalu_jalur_konsisten():
+    lama = ["ikn", "tapakLAMA", "gedung", "lantai"]
+    baru = su.rewrite_ancestors(lama, "gedung", ["ikn", "tapakBARU"])
+    assert baru == ["ikn", "tapakBARU", "gedung", "lantai"]
+    assert su.bangun_jalur(baru, "ruang") == ",ikn,tapakBARU,gedung,lantai,ruang,"

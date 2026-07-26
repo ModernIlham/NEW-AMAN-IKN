@@ -50,6 +50,11 @@ RESET_KEEP_COLLECTIONS = {
     # Kalender penganggaran (jadwal siklus yang disusun manual) = konfigurasi
     # perencanaan, bukan data transaksi — REVIEW-9 R6.
     "penganggaran_kalender",
+    # Hierarki spasial (Fase 2): registry level + denah kawasan berlapis.
+    # Denah adalah hasil survei lapangan + impor SHP yang TIDAK bisa dibuat ulang
+    # dengan mudah — memperlakukannya seperti master referensi (ruangan), bukan
+    # data transaksi yang boleh direset.
+    "spasial_level", "spasial_node",
 }
 
 # Legacy name → canonical (untuk membaca backup lama; mis. activities.json).
