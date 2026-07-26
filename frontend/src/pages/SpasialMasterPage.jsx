@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Plus, Pencil, Trash2, Loader2, Layers, ChevronRight, ChevronDown,
-  Search, MapPinned, LandPlot, Upload,
+  Search, MapPinned, LandPlot, Upload, Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,7 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 // halaman pohon tak pernah membuka editor.
 const DenahEditor = lazy(() => import("@/components/spasial/DenahEditor"));
 const ImporDenahDialog = lazy(() => import("@/components/spasial/ImporDenahDialog"));
+const EksporDenahDialog = lazy(() => import("@/components/spasial/EksporDenahDialog"));
 
 function getApiError(err, fallback) {
   return err?.response?.data?.detail || fallback;
@@ -46,6 +47,7 @@ export default function SpasialMasterPage({ user, onBack }) {
   const [saving, setSaving] = useState(false);
   const [editorNode, setEditorNode] = useState(null);  // node yang denahnya digambar
   const [imporBuka, setImporBuka] = useState(false);   // dialog impor file GIS
+  const [eksporBuka, setEksporBuka] = useState(false); // dialog ekspor + template
   const { confirm, confirmDialog } = useConfirm();
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
@@ -329,6 +331,15 @@ export default function SpasialMasterPage({ user, onBack }) {
           />
         </Suspense>
       )}
+      {eksporBuka && (
+        <Suspense fallback={null}>
+          <EksporDenahDialog
+            nodes={nodes}
+            labelLevel={labelLevel}
+            onClose={() => setEksporBuka(false)}
+          />
+        </Suspense>
+      )}
       <div className="max-w-4xl mx-auto p-3 sm:p-4">
         <div className="flex items-center gap-2 mb-3">
           <Button variant="ghost" size="icon" onClick={onBack} aria-label="Kembali">
@@ -355,6 +366,12 @@ export default function SpasialMasterPage({ user, onBack }) {
             <option value="ikn_akrab">Label akrab (Zona/Distrik)</option>
             <option value="rdtr_baku">Kode baku (WP/SWP)</option>
           </select>
+          {/* Ekspor = operasi BACA — viewer pun boleh (server require_user). */}
+          <Button variant="outline" onClick={() => setEksporBuka(true)} size="sm"
+                  title="Ekspor denah ke GeoJSON / KML / KMZ / Shapefile + template QGIS/Google Earth"
+                  data-testid="spasial-ekspor">
+            <Download className="w-4 h-4 mr-1" /> Ekspor
+          </Button>
           {isWriter && (
             <Button variant="outline" onClick={() => setImporBuka(true)} size="sm"
                     title="Impor denah dari Shapefile / KML / KMZ / GeoJSON"
