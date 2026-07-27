@@ -131,12 +131,21 @@ async def list_perangkat(_user: dict = Depends(require_user)):
         scope_query_field_satker(_user), {**_PROJ, "token_hash": 0})
         .sort("created_at", -1).to_list(_MAKS_PERANGKAT))
     sekarang = datetime.now(timezone.utc)
+    # Observasi TERAKHIR seluruh perangkat dalam SATU kueri. Versi per-perangkat
+    # (find_one di dalam loop) berarti satu bolak-balik jaringan per baris —
+    # daftar 200 perangkat = 200 round-trip untuk halaman yang sama. `$sort`
+    # mengikuti indeks (device_id, ts_server) sehingga `$first` mengambil yang
+    # terbaru tanpa memindai riwayat penuh.
+    terakhir = {}
+    if items:
+        async for r in db.iot_observasi.aggregate([
+            {"$match": {"device_id": {"$in": [d["id"] for d in items]}}},
+            {"$sort": {"device_id": 1, "ts_server": -1}},
+            {"$group": {"_id": "$device_id", "doc": {"$first": "$$ROOT"}}},
+        ]):
+            terakhir[r["_id"]] = r.get("doc") or {}
     for d in items:
-        terakhir = await db.iot_observasi.find_one(
-            {"device_id": d["id"]}, {"_id": 0, "ts_server": 1,
-                                     "baterai_persen": 1, "ts_ragu": 1},
-            sort=[("ts_server", -1)])
-        d["kesehatan"] = iu.ringkas_kesehatan(terakhir, sekarang)
+        d["kesehatan"] = iu.ringkas_kesehatan(terakhir.get(d["id"]), sekarang)
         d["kebijakan"] = pu.profil_privasi(d.get("profil_privasi"))["label"]
     return {"items": items, "jumlah": len(items),
             "profil_tersedia": pu.ringkas_kebijakan()}
