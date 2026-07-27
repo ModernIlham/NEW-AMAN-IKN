@@ -53,6 +53,69 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#652] Audit adversarial gelombang C — sepuluh uji yang tak menjaga apa pun — 2026-07-27
+
+Dimensi "kualitas uji" pada audit adversarial mengerjakan satu hal yang tak
+dilakukan gelombang lain: ia **menjalankan mutasi** atas kode yang sudah hijau,
+lalu melaporkan mana yang LULUS. Sepuluh mutasi lolos 1.167/1.167 — artinya
+sepuluh jaminan yang selama ini saya kira terkunci sebenarnya tidak.
+
+Gelombang ini menutup semuanya, dan tiap perbaikan dibuktikan dengan menjalankan
+ULANG mutasi yang persis sama.
+
+### Uji yang lulus karena datanya tak pernah menjebak
+
+- **`$inc version` ubah massal** hanya diuji pada 1 dari 5 jalur tulis.
+  Mencabutnya dari jalur checklist atau clear tetap hijau. Kini keempat jalur
+  lain punya ujinya sendiri.
+- **`idem_key`** — uji replay MENANAM stempelnya sendiri lalu hanya membuktikan
+  sisi BACA. Mencabut stempel di jalur tulis tetap hijau, padahal tanpa itu tak
+  ada satu pun aset baru yang bisa di-dedup. Kini jalur tulisnya diuji langsung.
+- **`gabungPatch`** — semua kasus hanya punya `photo_ops` di SATU sisi, sehingga
+  `{...lama, ...baru}` polos sudah cukup meluluskannya. Justru skenario yang
+  menjadi ALASAN modul itu ada tak pernah diuji.
+- **`_KATA_UMUM`** — fixture tak memuat satu pun peruntukan yang beririsan pada
+  kata umum, jadi daftar hentiannya mati total; `set()` pun lulus.
+- **"token terpanjang"** — datanya cuma punya satu token ≥4 huruf, jadi
+  `token[0]` dan `token[-1]` sama-sama lulus.
+- **`dalam=False`** — node seed tak punya `parent_id` sama sekali, sehingga
+  cabang itu SELALU mengembalikan 0 apa pun implementasinya. Ditambah uji
+  pasangan yang justru HARUS berisi.
+- **`sebaran_per_induk`** — jumlah aset per keranjang kebetulan sama dengan
+  cacah barisnya, jadi `+= 1` tak terbedakan dari `+= jumlah_aset`.
+
+### Penjaga yang tak pernah dijalankan bukan penjaga
+
+`/opname/terapkan` punya DUA penjaga: pembacaan `if s.get("diterapkan")` dan
+update bersyarat `klaim`. Yang pertama selalu menghentikan panggilan kedua lebih
+dulu, sehingga penjaga LOMBA — yang komentarnya menjelaskan panjang lebar
+mengapa ia ada — tak pernah dievaluasi sekali pun. Audit membuktikannya dengan
+mengubahnya jadi `if False:` tanpa satu uji pun gagal. Pembacaannya **dibuang**;
+yang tersisa adalah penjaga yang benar-benar memutuskan, dan kini ia diuji.
+
+### Cabang yang tak pernah dijalankan siapa pun
+
+- **`DuplicateKeyError` pada create_asset** kini diuji dengan menyuntikkan
+  galatnya. Cabang ini HANYA aktif saat produksi mengalami lomba antar-replay —
+  persis saat kesalahan paling mahal, dan justru di situlah ia tak pernah
+  dicoba.
+
+### Berkas uji yang namanya berbohong
+
+`hooks/useOptimisticQueue.test.js` tak pernah mengimpor hook itu — ia menguji
+`lib/syncStatus`. Namanya membuat seolah perkabelan antrean sudah berujikan,
+padahal ~140 baris logika integritas dari PR #642/#643 tak tersentuh sama
+sekali. Berkas itu **diganti nama** menjadi `lib/syncStatus.test.js`, dan aturan
+gabungnya diekstrak ke **`lib/gabungAntrean.js`** (repo tak memasang
+@testing-library, jadi hook-nya memang tak bisa dirender — tetapi KEPUTUSANNYA
+bisa dipisahkan, persis pola gabungPatch/pemilikAntrean/sekaliJalan).
+
+- Uji: **+4 backend (1.179), +11 frontend (225)**. **Delapan mutasi yang
+  sebelumnya LULUS kini semuanya tertangkap** — itulah satu-satunya bukti yang
+  berarti untuk gelombang ini.
+
+---
+
 ## [#650] Audit adversarial gelombang B — opname menyambung ke dokumen resmi — 2026-07-27
 
 Lima temuan SEDANG dari audit adversarial, semuanya berkumpul di sekitar satu

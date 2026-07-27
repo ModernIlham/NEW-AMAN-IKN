@@ -14,6 +14,18 @@ describe("gabungPatch", () => {
     expect(hasil.koordinat_latitude).toBe("-1.400000");
   });
 
+  test("photo_ops di KEDUA sisi dilebur, bukan ditimpa sebaran objek", () => {
+    // Audit adversarial: semua kasus lama hanya punya photo_ops di SATU sisi,
+    // sehingga `{...lama, ...baru}` polos sudah cukup meluluskannya —
+    // mencabut seluruh penanganan khusus photo_ops tetap membuat uji hijau.
+    // Padahal justru inilah skenario yang menjadi ALASAN modul ini ada.
+    const hasil = gabungPatch(
+      { photo_ops: { keep: [0, 1], add: ["FOTO_LAMA"], thumbnail_index: 1 } },
+      { photo_ops: { keep: [0, 1], add: ["FOTO_BARU"] } });
+    expect(hasil.photo_ops.add).toEqual(["FOTO_LAMA", "FOTO_BARU"]);
+    expect(hasil.photo_ops.thumbnail_index).toBe(1);
+  });
+
   test("kehendak terakhir menang untuk field yang sama", () => {
     expect(gabungPatch({ condition: "Baik" }, { condition: "Rusak Ringan" }).condition)
       .toBe("Rusak Ringan");

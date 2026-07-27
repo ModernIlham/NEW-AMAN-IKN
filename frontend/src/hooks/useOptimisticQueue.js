@@ -7,7 +7,8 @@ import { checkReachable, REACHABILITY_RETRY_MS } from "../lib/connectivity";
 import { summarizeSyncStatuses } from "../lib/syncStatus";
 import { resolveBaseVersion } from "../lib/occ";
 import { terapkanHeaderSatker, getSatkerAktif } from "../lib/satkerAktif";
-import { gabungPatch, bolehGabung } from "../lib/gabungPatch";
+import { gabungPatch } from "../lib/gabungPatch";
+import { tertundaUntukEnqueue, tertundaUntukKegagalan } from "../lib/gabungAntrean";
 import { idPenggunaAktif, bolehReplay } from "../lib/pemilikAntrean";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -426,13 +427,12 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
       // yang belakangan menghapus muatan yang pertama beserta fotonya, senyap.
       // Di titik ini penggabungan justru aman DAN wajib — keduanya dihitung
       // terhadap keadaan server yang sama dan sama-sama belum diterapkan.
-      const sebelumnya = failedItemsRef.current[statusKey];
+      // Aturannya dipisah ke lib/gabungAntrean.js agar bisa diuji (hook ini
+      // tak dapat dirender — repo tak memasang @testing-library).
+      const sebelumnya = tertundaUntukKegagalan(
+        failedItemsRef.current[statusKey], item);
       const itemSimpan = { ...item, locked: isLocked };
-      // antreanId beda = benar-benar simpanan LAIN. Kunci ini penting: tanpa
-      // itu, percobaan ulang simpanan yang SAMA akan menggabung muatannya
-      // dengan dirinya sendiri (add dua kali).
-      if (sebelumnya && sebelumnya.antreanId !== item.antreanId
-          && bolehGabung(sebelumnya, item)) {
+      if (sebelumnya) {
         itemSimpan.payload = gabungPatch(sebelumnya.payload, item.payload);
         // Patokan versi ikut yang TERTUNDA lebih dulu — patch gabungan ini
         // dihitung terhadap keadaan server itu, bukan yang lebih baru.
@@ -496,11 +496,12 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
     // keduanya berjalan sendiri-sendiri: processNext memang sudah menderetkan
     // simpanan atas aset yang sama (inFlightEditsRef), jadi urutannya terjaga.
     const sedangTerbang = !!(isEdit && editId && inFlightEditsRef.current.has(editId));
-    const tertunda = sedangTerbang ? null : failedItemsRef.current[statusKey];
     const calon = { isEdit, usePatch, editId };
+    const tertunda = tertundaUntukEnqueue(failedItemsRef.current, statusKey,
+                                          calon, sedangTerbang);
     let payloadEfektif = payload;
     let baseVersionEfektif = baseVersion;
-    if (tertunda && bolehGabung(tertunda, calon)) {
+    if (tertunda) {
       payloadEfektif = gabungPatch(tertunda.payload, payload);
       // Patokan versi tetap milik simpanan TERTUNDA: patch gabungan ini
       // dihitung terhadap keadaan server yang itu, bukan yang lebih baru.

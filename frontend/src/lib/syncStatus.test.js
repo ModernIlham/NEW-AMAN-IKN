@@ -1,5 +1,9 @@
 /* eslint-env jest */
-import { summarizeSyncStatuses } from "../lib/syncStatus";
+// (Dulu bernama `hooks/useOptimisticQueue.test.js` padahal tak pernah
+// mengimpor hook itu — nama yang menyesatkan membuat seolah perkabelan
+// antrean sudah berujikan. Aturan gabungnya kini diuji di
+// lib/gabungAntrean.test.js; ringkasan statusnya di sini.)
+import { summarizeSyncStatuses } from "./syncStatus";
 
 // Ringkasan status antrian sinkron. Inti perbaikan bug "tanda sinkron tetap
 // menyala walau sudah online & sudah ditekan Sinkronkan, lalu muncul lagi tiap

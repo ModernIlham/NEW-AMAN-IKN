@@ -213,3 +213,144 @@ def test_rotasi_menstempel_updated_at(dbx, monkeypatch):
         assert a.get("updated_at") and a["updated_at"] != stempel_lama, (
             "updated_at tak terstempel — rotasi tak akan pernah ikut delta sinkron")
     _jalan(skenario())
+
+
+# ── C: uji yang menutup CABANG, bukan sekadar jalur pertama ─────────────────
+#
+# Audit adversarial membuktikan uji-uji di bawah tak ada sebelumnya dengan
+# menjalankan mutasi yang LULUS 1167/1167: mencabut `$inc version` dari jalur
+# checklist & clear, mencabut stempel `idem_key` di jalur tulis, dan mencabut
+# jaring DuplicateKeyError. Uji yang hanya menutup jalur pertama dari lima
+# memberi rasa aman yang tak dibayar apa pun.
+
+def _kelas_data(asset_ids, updates):
+    class Data:
+        pass
+    Data.asset_ids = asset_ids
+    Data.updates = updates
+    return Data()
+
+
+def test_semua_jalur_tulis_ubah_massal_menaikkan_version(dbx, monkeypatch):
+    """LIMA jalur tulis, bukan satu. `$inc version` yang hilang di salah satunya
+    membuat penjaga OCC buta persis di jalur itu — dan diamnya sempurna."""
+    async def skenario():
+        monkeypatch.setattr(rb, "log_audit", _diam, raising=False)
+        await dbx.inventory_activities.insert_one(
+            {"id": "keg1", "status_pengesahan": "draft"})
+        fn = _unwrap(rb.batch_update_assets)
+
+        async def versi(aid):
+            return (await dbx.assets.find_one({"id": aid}, {"_id": 0}))["version"]
+
+        # (b) checklist dokumen — bulk_write
+        await dbx.assets.insert_one(
+            {"id": "b1", "activity_id": "keg1", "version": 1,
+             "document_checklist": []})
+        await fn(_kelas_data(["b1"], {"document_checklist_items": [
+            {"nama": "BAST", "ada": True}]}), _Req(), None, None, None, USER)
+        assert await versi("b1") == 2, "jalur checklist tak menaikkan version"
+
+        # (c) clear_photos — update_many
+        await dbx.assets.insert_one(
+            {"id": "c1", "activity_id": "keg1", "version": 4,
+             "photo_gridfs_ids": []})
+        await fn(_kelas_data(["c1"], {"clear_photos": True}),
+                 _Req(), None, None, None, USER)
+        assert await versi("c1") == 5, "jalur clear_photos tak menaikkan version"
+
+        # (d) clear_document_checklist — update_many
+        await dbx.assets.insert_one(
+            {"id": "d1", "activity_id": "keg1", "version": 9,
+             "document_checklist": [{"nama": "BAST"}]})
+        await fn(_kelas_data(["d1"], {"clear_document_checklist": True}),
+                 _Req(), None, None, None, USER)
+        assert await versi("d1") == 10, "jalur clear_checklist tak menaikkan version"
+    _jalan(skenario())
+
+
+def test_create_asset_MENSTEMPEL_idem_key_ke_dokumennya(dbx, monkeypatch):
+    """Uji replay yang lama menanam `idem_key` SENDIRI lalu hanya membuktikan
+    sisi BACA-nya — mencabut stempelnya di jalur tulis tetap lulus. Padahal
+    tanpa stempel itu tak ada satu pun aset baru yang bisa di-dedup."""
+    async def skenario():
+        await dbx.inventory_activities.insert_one(
+            {"id": "keg1", "status_pengesahan": "draft"})
+        for nama in ("notify_asset_change", "sinkron_meili_aset",
+                     "catat_timeline", "invalidate_asset_caches"):
+            if hasattr(ra, nama):
+                monkeypatch.setattr(ra, nama, _diam, raising=False)
+
+        class AsetMasuk:
+            asset_code, NUP, asset_name = "3100102001", "9", "Kursi"
+            category, activity_id, kode_register = "Dummy", "keg1", ""
+
+            # Model Pydantic asli punya puluhan field opsional; uji ini hanya
+            # peduli pada stempel idem_key, jadi sisanya dijawab None.
+            def __getattr__(self, nama):
+                return None
+
+            def model_dump(self):
+                return {"asset_code": self.asset_code, "NUP": self.NUP,
+                        "asset_name": self.asset_name, "category": self.category,
+                        "activity_id": self.activity_id}
+
+        fn = _unwrap(ra.create_asset)
+        await fn(AsetMasuk(), _Req(headers={"Idempotency-Key": "kunci-baru"}), USER)
+        dok = await dbx.assets.find_one({"asset_name": "Kursi"}, {"_id": 0})
+        kunci = ra.kunci_idem("kunci-baru", USER)
+        assert dok.get("idem_key") == kunci, "aset baru tak menyandang idem_key"
+    _jalan(skenario())
+
+
+def test_jaring_DuplicateKeyError_create_mengembalikan_aset_pemenang(dbx, monkeypatch):
+    """mongomock tak menegakkan indeks unik, jadi cabang ini tak pernah
+    dijalankan uji mana pun — padahal ia HANYA aktif saat produksi mengalami
+    lomba antar-replay, persis saat kesalahan paling mahal."""
+    from pymongo.errors import DuplicateKeyError
+
+    async def skenario():
+        await dbx.inventory_activities.insert_one(
+            {"id": "keg1", "status_pengesahan": "draft"})
+        for nama in ("notify_asset_change", "sinkron_meili_aset",
+                     "catat_timeline", "invalidate_asset_caches"):
+            if hasattr(ra, nama):
+                monkeypatch.setattr(ra, nama, _diam, raising=False)
+        kunci = ra.kunci_idem("kunci-lomba", USER)
+        # PEMENANG lomba sudah tersimpan lebih dulu oleh permintaan kembarannya.
+        await dbx.assets.insert_one({
+            "id": "pemenang", "asset_code": "3100102001", "NUP": "1",
+            "asset_name": "Meja Pemenang", "category": "Dummy",
+            "activity_id": "keg1", "version": 1, "idem_key": kunci,
+            "created_at": "2026-07-27T00:00:00+00:00",
+            "updated_at": "2026-07-27T00:00:00+00:00"})
+
+        asli = dbx.assets.insert_one
+
+        async def insert_menabrak(dok, *a, **k):
+            if dok.get("idem_key") == kunci:
+                raise DuplicateKeyError("E11000 duplicate key: idem_key_unik")
+            return await asli(dok, *a, **k)
+        monkeypatch.setattr(dbx.assets, "insert_one", insert_menabrak,
+                            raising=False)
+
+        class AsetMasuk:
+            asset_code, NUP, asset_name = "3100102001", "1", "Meja Kalah"
+            category, activity_id, kode_register = "Dummy", "keg1", ""
+
+            # Model Pydantic asli punya puluhan field opsional; uji ini hanya
+            # peduli pada stempel idem_key, jadi sisanya dijawab None.
+            def __getattr__(self, nama):
+                return None
+
+            def model_dump(self):
+                return {"asset_code": self.asset_code, "NUP": self.NUP,
+                        "asset_name": self.asset_name, "category": self.category,
+                        "activity_id": self.activity_id}
+
+        fn = _unwrap(ra.create_asset)
+        hasil = await fn(AsetMasuk(),
+                         _Req(headers={"Idempotency-Key": "kunci-lomba"}), USER)
+        assert hasil.id == "pemenang", "yang kalah harus menerima aset pemenang"
+        assert await dbx.assets.count_documents({}) == 1
+    _jalan(skenario())
