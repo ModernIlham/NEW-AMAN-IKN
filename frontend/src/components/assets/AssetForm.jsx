@@ -29,6 +29,7 @@ import { acquireAccuratePosition } from "../../lib/geolocation";
 import { lebihAkurat } from "../../lib/gpsAkurasi";
 import { bolehSalinKoordinat } from "../../lib/salinKonteks";
 import { buatSesiAset, fotoNyasar } from "../../lib/sesiAset";
+import { simpanGpsTerakhir, ambilGpsTerakhir } from "../../lib/gpsCache";
 import { compressImageFile, compressDataUrl, generateThumbnailFromDataUrl, dataUrlBytes } from "../../lib/imageCompression";
 import { reserveDummyNup as reserveDummyNupLib } from "../../lib/dummyNup";
 import { statusInventarisasiOtomatis, autoInventarisasiEnabled } from "../../lib/inventoryStatus";
@@ -841,19 +842,53 @@ const AssetForm = memo(({
     setBastUploading(false);
   }, [emptyForm]);
 
+  // Jumlah aset tersimpan selama sesi Kamera Penuh (indikator alur beruntun).
+  const [cameraSavedCount, setCameraSavedCount] = useState(0);
+
+  // IDENTITAS "ASET YANG SEDANG DIKERJAKAN" — penanda gerbong. Dua peristiwa
+  // yang berarti gerbong berganti: pindah ke aset lain, atau
+  // simpan-lalu-siapkan-aset-baru. Dipakai SEMUA jalur asinkron di berkas ini
+  // (kamera penuh, unggah galeri/kamera OS, dan permintaan GPS) untuk menolak
+  // hasil yang datang terlambat ke aset yang keliru.
+  //
+  // Deklarasinya sengaja DI SINI, di atas fetchGPS dan seluruh pemakainya,
+  // supaya urutan bacanya jelas: penanda dulu, baru yang memakainya.
+  const sesiAset = buatSesiAset(editAsset?.id, cameraSavedCount);
+  // Ditulis SAAT RENDER, bukan lewat useEffect. Efek baru berjalan setelah
+  // paint, sehingga tepat setelah form berpindah aset ref-nya masih memegang
+  // aset LAMA sementara layar sudah menampilkan yang BARU — hasil pertama aset
+  // baru justru akan ditolak sebagai "asing". Nilainya murni turunan state dan
+  // penulisannya idempoten, jadi aman diulang pada render berulang.
+  const sesiAsetRef = useRef(sesiAset);
+  sesiAsetRef.current = sesiAset;
+
   // Auto-fill GPS coordinates from device location
   const [gpsLoading, setGpsLoading] = useState(false);
   const fetchGPS = useCallback(() => {
     if (!navigator.geolocation) { toast.error("GPS tidak didukung di browser ini"); return; }
     setGpsLoading(true);
+    // PENANDA GERBONG untuk KOORDINAT. acquireAccuratePosition menunggu akurasi
+    // membaik — bisa belasan detik — dan menulis lewat DUA jalur: onUpdate tiap
+    // fix, dan .then() di akhir. Tanpa penanda ini, koordinat yang diminta
+    // untuk aset A bisa mendarat di aset B yang keburu dibuka pengguna, dan
+    // tak ada apa pun di layar yang memberi tahu bahwa titiknya salah barang.
+    const sesiSaatMinta = sesiAsetRef.current;
+    const masihAsetIni = () => !fotoNyasar(sesiSaatMinta, sesiAsetRef.current);
     // Realtime: koordinat diperbarui tiap fix yang lebih akurat, lalu diambil
     // yang paling tepat. maximumAge:0 memastikan bukan koordinat lama (ter-cache).
     acquireAccuratePosition({
-      onUpdate: ({ lat, lng }) => setFormData(p => ({ ...p, koordinat_latitude: lat, koordinat_longitude: lng })),
+      onUpdate: ({ lat, lng }) => {
+        if (!masihAsetIni()) return;
+        setFormData(p => ({ ...p, koordinat_latitude: lat, koordinat_longitude: lng }));
+      },
     }).then(({ lat, lng, accuracy }) => {
-      try { localStorage.setItem("aman_last_gps", JSON.stringify({ lat, lng, ts: Date.now() })); } catch {}
-      setFormData(p => ({ ...p, koordinat_latitude: lat, koordinat_longitude: lng }));
+      simpanGpsTerakhir(lat, lng, accuracy);
       setGpsLoading(false);
+      if (!masihAsetIni()) {
+        toast.error("Koordinat tidak diterapkan — form sudah berpindah aset saat GPS didapat");
+        return;
+      }
+      setFormData(p => ({ ...p, koordinat_latitude: lat, koordinat_longitude: lng }));
       toast.success(`Koordinat GPS diperbarui${Number.isFinite(accuracy) ? ` (±${Math.round(accuracy)} m)` : ""}`);
     }).catch(err => {
       setGpsLoading(false);
@@ -955,20 +990,33 @@ const AssetForm = memo(({
     const asetSudahBerkoordinat = !!(editAsset?.koordinat_latitude && editAsset?.koordinat_longitude);
     if (isOpen && isEditing && inventoryMode && !asetSudahBerkoordinat
         && !formData.koordinat_latitude && !formData.koordinat_longitude) {
-      let cached = null;
-      try { cached = JSON.parse(localStorage.getItem("aman_last_gps") || "null"); } catch {}
-      if (cached?.lat && cached?.lng && Date.now() - (cached.ts || 0) < 5 * 60 * 1000) {
-        const { lat, lng } = cached;
+      // Fix pinjaman dari aset SEBELUMNYA hanya boleh dipakai bila ia memang
+      // layak: akurasinya diketahui, cukup sempit, dan belum basi (lihat
+      // lib/gpsCache.js). Dulu setiap fix ikut tersimpan tanpa gerbang, jadi
+      // titik ±800 m di dalam gedung pun bisa mendarat di aset lain seolah
+      // hasil survei — melewati gerbang ±8 m yang dipatuhi rana kamera.
+      const pinjaman = ambilGpsTerakhir();
+      if (pinjaman) {
+        const { lat, lng } = pinjaman;
         setFormData(p => (!p.koordinat_latitude && !p.koordinat_longitude) ? { ...p, koordinat_latitude: lat, koordinat_longitude: lng } : p);
         if (navigator.geolocation) {
           navigator.geolocation.getCurrentPosition(
             pos => {
               const freshLat = pos.coords.latitude.toFixed(6);
               const freshLng = pos.coords.longitude.toFixed(6);
-              try { localStorage.setItem("aman_last_gps", JSON.stringify({ lat: freshLat, lng: freshLng, ts: Date.now() })); } catch {}
+              simpanGpsTerakhir(freshLat, freshLng, pos.coords.accuracy);
               setFormData(p => (p.koordinat_latitude === lat && p.koordinat_longitude === lng) ? { ...p, koordinat_latitude: freshLat, koordinat_longitude: freshLng } : p);
             },
-            () => {}, // fix baru gagal — nilai cache tetap dipakai
+            () => {
+              // Fix segar GAGAL. Dulu nilai pinjaman dibiarkan menetap di
+              // kolom lalu ikut tersimpan — aset ini tercatat di titik aset
+              // lain. Sekarang dibersihkan kembali (hanya bila memang masih
+              // nilai pinjaman itu, bukan yang sudah diketik pengguna) dan
+              // surveyor diberi tahu supaya menekan "Ambil GPS" sendiri.
+              setFormData(p => (p.koordinat_latitude === lat && p.koordinat_longitude === lng)
+                ? { ...p, koordinat_latitude: "", koordinat_longitude: "" } : p);
+              toast.warning("Belum dapat sinyal GPS — tekan \"Ambil GPS\" saat sudah di lokasi aset");
+            },
             { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
           );
         }
@@ -1000,22 +1048,6 @@ const AssetForm = memo(({
 
   // Back HP saat dialog pilihan kamera terbuka → tutup dialognya saja
   useBackGuard(useCallback(() => setCameraPromptOpen(false), []), cameraPromptOpen);
-
-  // Jumlah aset tersimpan selama sesi Kamera Penuh (indikator alur beruntun).
-  const [cameraSavedCount, setCameraSavedCount] = useState(0);
-
-  // IDENTITAS "ASET YANG SEDANG DI DEPAN KAMERA" — penanda gerbong. Sinyalnya
-  // SAMA dengan reset GPS per-aset di bawah, karena memang persis dua peristiwa
-  // itulah yang berarti "gerbong berganti": pindah ke aset lain, atau
-  // simpan-lalu-siapkan-aset-baru.
-  const sesiAset = buatSesiAset(editAsset?.id, cameraSavedCount);
-  // Ditulis SAAT RENDER, bukan lewat useEffect. Efek baru berjalan setelah
-  // paint, sehingga tepat setelah form berpindah aset ref-nya masih memegang
-  // aset LAMA sementara kamera sudah menampilkan yang BARU — foto pertama aset
-  // baru justru akan ditolak sebagai "asing". Nilainya murni turunan state dan
-  // penulisannya idempoten, jadi aman diulang pada render berulang.
-  const sesiAsetRef = useRef(sesiAset);
-  sesiAsetRef.current = sesiAset;
 
   // Foto dari Mode Kamera Penuh: dataURL sudah ≤1920px q0.85 (setara pipeline
   // kompresi form) + sudah distempel waktu/GPS — langsung masuk daftar foto.
@@ -1072,12 +1104,21 @@ const AssetForm = memo(({
   const handleCameraGpsFix = useCallback((fix) => {
     const lat = fix?.lat, lng = fix?.lng;
     if (lat == null || lng == null) return;
-    try { localStorage.setItem("aman_last_gps", JSON.stringify({ lat, lng, ts: Date.now() })); } catch {}
+    simpanGpsTerakhir(lat, lng, fix?.accuracy);
+    // JANGAN menimpa koordinat aset yang SUDAH tersurvei. Tombol ◀/▶ di Mode
+    // Kamera Penuh membuka aset lama untuk ditinjau tanpa surveyor harus
+    // kembali ke tempatnya — dan GPS live yang terus mengalir dulu diam-diam
+    // mengganti titik tersimpan aset itu dengan posisi surveyor saat ini.
+    // Aturan ini bukan kebijakan baru: efek auto-GPS di berkas yang sama sudah
+    // memakai penjaga `asetSudahBerkoordinat`; jalur kamera kini mematuhinya
+    // juga. Untuk survei ulang yang memang disengaja, tombol "Ambil GPS" tetap
+    // tersedia dan bersifat eksplisit.
+    if (editAsset?.koordinat_latitude && editAsset?.koordinat_longitude) return;
     const best = bestGpsAccuracyRef.current;
     if (best && !lebihAkurat(fix, best)) return; // sudah punya yang lebih akurat
     bestGpsAccuracyRef.current = fix;
     setFormData(p => (p.koordinat_latitude === lat && p.koordinat_longitude === lng ? p : { ...p, koordinat_latitude: lat, koordinat_longitude: lng }));
-  }, []);
+  }, [editAsset?.koordinat_latitude, editAsset?.koordinat_longitude]);
 
   // Clear a single field's inline error (used on change so the red state
   // disappears as soon as the user starts correcting the field).
@@ -1354,6 +1395,9 @@ const AssetForm = memo(({
   const handleImageChange = useCallback(async e => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
+    // Dicatat SEBELUM kompresi dimulai — inilah aset yang dimaksud pengguna
+    // saat ia memilih berkasnya, bukan aset yang kebetulan terbuka nanti.
+    const sesiSaatPilih = sesiAsetRef.current;
     photosModifiedRef.current = true;
     const max = 6;
 
@@ -1388,6 +1432,16 @@ const AssetForm = memo(({
         const savedPct = totalOrig > 0 ? Math.round(((totalOrig - totalComp) / totalOrig) * 100) : 0;
         if (savedPct > 5) toast.success(`Foto dikompresi: hemat ${savedPct}% bandwidth`, { duration: 2500 });
 
+        // PENANDA GERBONG juga di jalur ini. Kompresi enam foto bisa memakan
+        // detik-detikan di HP low-end, dan selama penantian itu form bisa sudah
+        // berpindah aset (navigasi ◀/▶, simpan-lalu-aset-baru). Bentuk
+        // fungsional `prev =>` melindungi dari lost-update, TAPI tidak
+        // melindungi dari foto yang mendarat di aset yang KELIRU — `prev`-nya
+        // sudah milik aset lain.
+        if (fotoNyasar(sesiSaatPilih, sesiAsetRef.current)) {
+          toast.error("Foto tidak disimpan — form sudah berpindah aset saat foto diproses");
+          return;
+        }
         setPhotoItems(prev => [...prev, ...processed.map(p => ({ type: 'new', thumbnail: p.thumb, newData: p.compressed }))]);
         setFormData(p => ({
           ...p,
@@ -1409,6 +1463,13 @@ const AssetForm = memo(({
       try {
         const compressedList = await Promise.all(allowed.map((file) => compressImageFile(file)));
         toast.dismiss(toastId);
+        // Penanda gerbong — sama alasannya dengan jalur edit di atas. Di mode
+        // aset baru justru lebih sering terjadi: "Simpan & Aset Baru" mereset
+        // form persis saat kompresi masih berjalan.
+        if (fotoNyasar(sesiSaatPilih, sesiAsetRef.current)) {
+          toast.error("Foto tidak disimpan — form sudah berpindah aset saat foto diproses");
+          return;
+        }
         setFormData(p => ({
           ...p,
           photos: [...p.photos, ...compressedList],

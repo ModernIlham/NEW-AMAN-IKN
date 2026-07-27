@@ -53,6 +53,99 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#644] Gerbong data gelombang 2 — audit adversarial jalur luring, 6 kebocoran ditutup — 2026-07-27
+
+Dua cacat "tertukar gerbong" di entri sebelumnya ditemukan dengan menelusuri
+**dua** jalur memakai tangan. Mandat pemilik menuntut lebih: *"teliti terhadap
+semua data yang masuk agar sesuai dengan gerbongnya masing-masing"*. Maka
+seluruh permukaan data luring disapu audit adversarial — 6 dimensi ditelusuri
+paralel (kunci antrean, pasangan foto, koordinat, snapshot vs antrean, konteks
+replay, idempotensi server), tiap dugaan lalu dibantah pembaca kode yang
+tugasnya justru **menggugurkan**, bukan menyetujui.
+
+Hasilnya 24 dugaan. Delapan lolos sanggahan, dan **enam di antaranya
+diverifikasi ulang langsung di kode** sebelum disentuh — 0 dari 8 yang gugur
+adalah angka yang mencurigakan, jadi laporan agen tidak diterima begitu saja.
+
+### 1. Satu aset hanya punya SATU slot antrean — dan yang kedua menimpa
+
+`statusKey` untuk EDIT adalah `editId`, yang memang sengaja berulang, sementara
+`failedItemsRef` dan IndexedDB (`keyPath: "statusKey"`) sama-sama peta berkunci.
+Menulis dua kali ke kunci yang sama = yang pertama lenyap tanpa satu pesan pun.
+
+Akibat nyata: surveyor luring menambah **foto** (patch berisi `photo_ops`) →
+gagal kirim → lalu menggeser pin aset itu di peta (patch ramping berisi
+koordinat saja). Saat sinyal pulih **hanya patch koordinat yang terkirim**.
+Fotonya tak pernah sampai, chip berakhir "saved", dan byte fotonya sudah tak ada
+di perangkat karena snapshot luring memang membuang foto. Jalur peta bahkan tak
+perlu luring — `handleMapCoordsSave` tak memeriksa status sinkron sama sekali.
+
+`lib/gabungPatch.js` menggabung keduanya alih-alih menimpa. Ini sah **justru
+karena** yang pertama belum diterapkan: kedua patch dihitung terhadap keadaan
+server yang sama. `photo_ops.add` disatukan (kalaupun kembar, itu kelihatan dan
+bisa dihapus — jauh lebih baik daripada hilang yang tak kelihatan), `keep`
+mengikuti kehendak terakhir.
+
+Penggabungan **tidak** dilakukan bila simpanan lama sedang terbang: ia akan
+diterapkan server sebentar lagi, dan menggabungnya berarti foto yang sama masuk
+dua kali. Item lama yang masih mengantre dikeluarkan agar tak terkirim dengan
+muatan usang lalu menaikkan versi dan menolak patch gabungan kita sendiri.
+
+### 2. Simpanan yang BERHASIL menghapus rekaman simpanan lain
+
+Jalur sukses memanggil `removePersistedItem(statusKey)` tanpa memeriksa siapa
+pemilik rekaman itu. Bila sementara itu ada simpanan lain atas aset yang sama
+yang baru gagal dan mendaftar, rekamannya ikut terhapus. Tiap simpanan kini
+membawa `antreanId` sendiri, dan hanya boleh membuang rekaman **miliknya**.
+
+### 3. Unggah beberapa foto checklist — hanya yang terakhir tersimpan
+
+`handleFileUpload` menyalin `[...checklist]` **di dalam** loop `await`, padahal
+`checklist` adalah prop yang beku selama callback berjalan. Tiap iterasi
+membangun dari daftar yang sama, lalu `onChange` terakhir menang. Pilih 3 foto →
+2 terbuang senyap, dan batas "maks 3" pun dihitung dari cacah basi. Kini satu
+salinan kerja diakumulasi sepanjang loop, `onChange` sekali di akhir.
+
+### 4. Penanda gerbong menjangkau jalur foto & GPS non-kamera
+
+Penanda yang dibangun untuk Mode Kamera Penuh belum dipakai jalur lain yang
+sama-sama asinkron: unggah galeri/kamera OS (menunggu kompresi hingga 6 foto),
+dan tombol "Ambil GPS" (`acquireAccuratePosition` menunggu akurasi membaik —
+belasan detik, dan menulis lewat **dua** jalur: `onUpdate` tiap fix serta
+`.then()` di akhir). Keduanya kini menolak hasil yang datang ke aset yang keliru.
+
+### 5. Koordinat aset yang SUDAH tersurvei tak lagi tertimpa diam-diam
+
+Tombol ◀/▶ di Mode Kamera Penuh membuka aset lama untuk ditinjau tanpa surveyor
+harus kembali ke tempatnya — dan GPS live yang terus mengalir dulu mengganti
+titik tersimpan aset itu dengan posisi surveyor saat ini. Ini bukan kebijakan
+baru: efek auto-GPS di berkas yang **sama** sudah memakai penjaga
+`asetSudahBerkoordinat`; jalur kamera kini mematuhinya juga. Survei ulang yang
+disengaja tetap bisa lewat tombol "Ambil GPS".
+
+### 6. Cache fix GPS kini bergerbang akurasi
+
+`aman_last_gps` ditulis pada **setiap** fix tanpa gerbang, lalu dipinjamkan ke
+aset lain yang koordinatnya kosong. Fix ±800 m (A-GPS belum mengunci di dalam
+gedung) ikut tersimpan dan diterapkan seolah setara fix ±5 m — melewati gerbang
+±8 m yang dipatuhi rana kamera. Lebih buruk: bila fix segar gagal, nilai
+pinjaman itu **menetap** dan ikut tersimpan, sehingga aset tercatat di titik
+aset lain. `lib/gpsCache.js` menyimpan akurasi dan menolak yang tak layak; bila
+fix segar gagal, nilai pinjaman dibersihkan dan surveyor diberi tahu.
+
+- Uji: +24 → **175 frontend**. Tiga jaminan terpenting diverifikasi dengan
+  MUTASI: mengembalikan perilaku timpa, memutus penyatuan foto, dan mencabut
+  gerbang akurasi masing-masing menggagalkan tepat uji yang menjaganya.
+
+> **Belum tergarap.** Delapan dugaan berkeparahan tinggi lain belum sempat
+> disanggah (batas fan-out audit), antara lain: `photo_ops.keep` diperlakukan
+> sebagai indeks posisional sementara `If-Match` hanya opsional; Ubah Massal
+> menulis tanpa menaikkan `version` sehingga penjaga OCC lewat; catatan
+> idempotensi CREATE hanya berumur 24 jam padahal antrean luring bisa lebih tua.
+> Dicatat apa adanya, bukan didiamkan.
+
+---
+
 ## [#643] Integritas foto↔koordinat di antrean luring + toolbar satu baris — 2026-07-27
 
 Laporan lapangan: *"perbaiki antara informasi utuh satu kesatuan titik koordinat

@@ -7,6 +7,7 @@ import { checkReachable, REACHABILITY_RETRY_MS } from "../lib/connectivity";
 import { summarizeSyncStatuses } from "../lib/syncStatus";
 import { resolveBaseVersion } from "../lib/occ";
 import { terapkanHeaderSatker, getSatkerAktif } from "../lib/satkerAktif";
+import { gabungPatch, bolehGabung } from "../lib/gabungPatch";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -83,9 +84,13 @@ function getQueueDB() {
 
 // Strip non-serializable fields (resolve/reject) before storing/persisting
 function toPlainItem(item, statusKey) {
-  const { tempId, payload, isEdit, editId, usePatch, baseVersion, idempotencyKey, hadConflict, locked, queuedAt, nama_kegiatan, satkerAktif } = item;
+  const { tempId, payload, isEdit, editId, usePatch, baseVersion, idempotencyKey, hadConflict, locked, queuedAt, nama_kegiatan, satkerAktif, antreanId } = item;
   return {
     statusKey,
+    // Identitas SATU simpanan (beda dari statusKey, yang dipakai bersama oleh
+    // semua simpanan atas aset yang sama). Dipakai memastikan sebuah simpanan
+    // hanya menghapus rekamannya SENDIRI — lihat processNext.
+    antreanId: antreanId ?? null,
     tempId,
     payload,
     isEdit: !!isEdit,
@@ -117,9 +122,18 @@ async function persistQueueItem(item, statusKey) {
   }
 }
 
-async function removePersistedItem(statusKey) {
+async function removePersistedItem(statusKey, antreanId) {
   try {
     const db = await getQueueDB();
+    // Kunci rekaman adalah statusKey, yang dipakai BERSAMA oleh semua simpanan
+    // atas aset yang sama. Menghapus tanpa memeriksa pemiliknya berarti sebuah
+    // simpanan yang berhasil bisa membuang rekaman simpanan LAIN atas aset itu
+    // yang baru saja gagal — muatannya lenyap dari perangkat, dan chip-nya
+    // terlanjur berubah "saved" sehingga tak ada yang tahu.
+    if (antreanId != null) {
+      const ada = await db.get(QUEUE_STORE, statusKey);
+      if (ada && ada.antreanId != null && ada.antreanId !== antreanId) return;
+    }
     await db.delete(QUEUE_STORE, statusKey);
   } catch {
     // ignore — TTL-less store, an orphan is re-deduped by idempotency key
@@ -276,8 +290,14 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
         clearTimeout(failTimersRef.current[statusKey]);
         delete failTimersRef.current[statusKey];
       }
-      delete failedItemsRef.current[statusKey];
-      removePersistedItem(statusKey); // confirmed by server — drop the persisted copy
+      // Hanya buang rekaman milik SIMPANAN INI. Bila sementara itu sudah ada
+      // simpanan lain atas aset yang sama yang mendaftar (mis. yang tadi gagal
+      // lalu didaftarkan ulang), rekamannya harus tetap hidup agar bisa
+      // di-replay — bukan ikut terhapus oleh keberhasilan kita.
+      if (failedItemsRef.current[statusKey]?.antreanId === item.antreanId) {
+        delete failedItemsRef.current[statusKey];
+      }
+      removePersistedItem(statusKey, item.antreanId); // confirmed by server
 
       item.resolve?.(result);
     } catch (err) {
@@ -396,11 +416,63 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
 
   const enqueue = useCallback(({ tempId, payload, isEdit, editId, usePatch, baseVersion, idempotencyKey, nama_kegiatan, satkerAktif }) => {
     const statusKey = isEdit ? editId : tempId;
+
+    // SATU ASET BISA PUNYA LEBIH DARI SATU SIMPANAN TERTUNDA — dan dulu yang
+    // kedua MENIMPA yang pertama. statusKey untuk EDIT adalah editId, yang
+    // memang sengaja berulang, sedangkan failedItemsRef dan IndexedDB
+    // (keyPath: "statusKey") sama-sama peta berkunci: menulis dua kali ke kunci
+    // yang sama berarti yang pertama lenyap tanpa satu pesan pun.
+    //
+    // Akibat nyatanya: surveyor luring menambah FOTO (patch berisi photo_ops)
+    // → gagal kirim → lalu menggeser pin aset itu di peta (patch ramping berisi
+    // koordinat saja). Saat sinyal pulih hanya patch koordinat yang terkirim;
+    // fotonya tak pernah sampai, chip tetap berakhir "saved", dan byte fotonya
+    // sudah tak ada di perangkat karena snapshot luring memang membuang foto.
+    //
+    // Menggabung keduanya SAH justru karena yang pertama BELUM diterapkan:
+    // kedua patch dihitung terhadap keadaan server yang sama.
+    //
+    // TAPI HANYA BILA YANG LAMA BELUM TERBANG. Kalau simpanan pertama sedang
+    // dikirim, ia akan diterapkan server sebentar lagi; menggabung isinya ke
+    // simpanan kedua berarti perubahan yang sama diterapkan DUA KALI — untuk
+    // `photo_ops.add` artinya foto kembar. Saat sedang terbang, biarkan
+    // keduanya berjalan sendiri-sendiri: processNext memang sudah menderetkan
+    // simpanan atas aset yang sama (inFlightEditsRef), jadi urutannya terjaga.
+    const sedangTerbang = !!(isEdit && editId && inFlightEditsRef.current.has(editId));
+    const tertunda = sedangTerbang ? null : failedItemsRef.current[statusKey];
+    const calon = { isEdit, usePatch, editId };
+    let payloadEfektif = payload;
+    let baseVersionEfektif = baseVersion;
+    if (tertunda && bolehGabung(tertunda, calon)) {
+      payloadEfektif = gabungPatch(tertunda.payload, payload);
+      // Patokan versi tetap milik simpanan TERTUNDA: patch gabungan ini
+      // dihitung terhadap keadaan server yang itu, bukan yang lebih baru.
+      if (tertunda.baseVersion != null) baseVersionEfektif = tertunda.baseVersion;
+      // Kunci idempotensi lama menempel pada muatan yang kini sudah berubah —
+      // dipakai ulang, server bisa memutar balik respons untuk isi yang keliru.
+      idempotencyKey = null;
+      // Item lama yang MASIH mengantre (belum sempat terbang) kini sudah
+      // terwakili sepenuhnya oleh patch gabungan. Kalau dibiarkan, ia terkirim
+      // lebih dulu dengan muatan usang lalu menaikkan versi server sehingga
+      // patch gabungan justru ditolak 409 oleh perubahan kita sendiri.
+      const sisa = [];
+      for (const it of queueRef.current) {
+        if (it.isEdit && it.editId === editId) {
+          it.resolve?.(null); // janji lamanya ditutup, bukan digantung
+          continue;
+        }
+        sisa.push(it);
+      }
+      queueRef.current = sisa;
+      setQueueLength(queueRef.current.length);
+    }
+
     // One idempotency key per logical save — REUSED on network-failure retry so
     // the server dedupes. Conflict retries pass none, so a fresh key is minted
     // (the stale key sits reserved server-side without a stored response).
     const item = {
-      tempId, payload, isEdit, editId, usePatch, baseVersion,
+      tempId, payload: payloadEfektif, isEdit, editId, usePatch,
+      baseVersion: baseVersionEfektif,
       idempotencyKey: idempotencyKey || genIdempotencyKey(),
       // Nama kegiatan HANYA untuk pesan gagal (identitas aset) — TIDAK dikirim
       // ke server (yang dikirim hanya item.payload).
@@ -409,6 +481,7 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
       // nilai tersimpan agar tak ter-recapture ke satker yang aktif kini.
       satkerAktif: satkerAktif !== undefined ? satkerAktif : getSatkerAktif(),
       queuedAt: new Date().toISOString(),
+      antreanId: genIdempotencyKey(),
     };
 
     failedItemsRef.current[statusKey] = toPlainItem(item, statusKey);
@@ -450,6 +523,8 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
     }
     const item = failedItemsRef.current[id];
     delete failedItemsRef.current[id];
+    // Tanpa antreanId: pembuangan oleh PENGGUNA memang disengaja atas baris itu,
+    // jadi rekaman siapa pun di kunci itu ikut dibuang.
     removePersistedItem(id); // user explicitly discarded the change
     clearStatus(id);
     if (item?.isEdit && item?.editId) {
