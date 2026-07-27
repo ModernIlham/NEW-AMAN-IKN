@@ -53,6 +53,65 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#648] Audit adversarial gelombang A — 4 temuan TINGGI + 2 kebocoran laporan SBSK — 2026-07-27
+
+Audit adversarial 17 agen atas PR #641–#645 mengajukan **66 temuan**; penyanggah
+menggugurkan 17, menyisakan 49. Gelombang ini menutup empat yang berkeparahan
+TINGGI plus dua cacat SEDANG yang paling berbahaya.
+
+> **Catatan metodologi.** Keluaran awal workflow melapor "61 bertahan, 0 gugur".
+> Itu SALAH — logika penjodohan vonis→temuan di skripnya gagal sehingga semua
+> temuan tampak tak tersanggah. Angka sebenarnya diambil ulang dari jurnal
+> mentah. Rasio gugur 0% adalah tanda bahaya, bukan tanda sukses.
+
+### Data tertukar & data hilang
+
+- **Scan luring tercatat di RUANGAN YANG SALAH.** `kirim()` di OpnameDialog
+  selalu menulis `node_id: node.id` — node dialog **yang sedang dibuka** —
+  sementara `kirimUlangSemua()` tak pernah memakai `node_id` yang tersimpan di
+  antrean. Petugas memindai 30 barang luring di Ruang 305, naik ke lantai atas,
+  membuka Ruang 307, menekan "Kirim ulang": **ketiga puluhnya tercatat di Ruang
+  307.** Antrean yang dibangun di #644 untuk melindungi data justru menjadi
+  jalur data tertukar. Node **dan** waktu kejadian kini datang dari baris
+  antreannya sendiri.
+- **"Batalkan scan ini" kini benar-benar membatalkan** — sebelumnya barisnya
+  tetap di antrean lalu terkirim lagi nanti, tanpa `asset_id`, jadi ambigu lagi.
+- **Pembatalan menelan simpanan berikutnya.** `dismissedRef` (perbaikan #643)
+  menahan kunci 5 menit dan tak pernah dibersihkan `enqueue`: mengedit ulang
+  aset yang sama dalam 5 menit setelah membatalkan membuat jalur sukses keluar
+  lebih awal — baris tak pernah diperbarui, chip tak pernah bersih.
+- **Muatan foto simpanan pertama tertimpa.** Saat simpanan lama masih TERBANG,
+  penggabungan sengaja dilewati (cegah foto kembar). Bila keduanya lalu gagal,
+  `failedItemsRef[statusKey]` ditimpa dan foto yang pertama lenyap. Kini
+  digabung di jalur kegagalan — aman justru karena keduanya terbukti belum
+  diterapkan server.
+
+### Laporan SBSK yang menyesatkan
+
+- **`$limit` dipindah ke SETELAH `$group`.** Sebelumnya ia memotong ASET sebelum
+  pengelompokan, sehingga ruangan yang asetnya berada di luar potongan hilang
+  utuh dari peta isi lalu dilaporkan **MENGANGGUR** — bukti palsu untuk
+  menghentikan pengadaan, persis kebalikan dari tujuan laporan ini.
+- **Agregasi isi ruangan kini ter-scope satker** (`scope_query_aset`). `ids`
+  memang ter-scope, tetapi node ERA LAMA tanpa `kode_satker` terbuka untuk semua
+  satker — sehingga jumlah aset dan **nama pemegang** satker lain ikut terhitung.
+  Agregasi gampang lolos penjagaan justru karena ia tak melewati `find()`.
+
+### UI
+
+- **Baris pohon Master Denah tak lagi meluber di HP.** Aturan global 44px
+  memaksa tujuh tombol ikon menjadi 7×44px; di layar 360px nama node menyusut
+  habis. `min-h-0 min-w-0` membatalkannya (pola baku repo, lihat QrScanButton)
+  sementara halo `tap-expand` tetap menjaga area sentuh.
+
+- Uji: **+3 backend (1.170), +5 frontend (214)**. Tiga jaminan diverifikasi
+  MUTASI. Satu uji plafon yang saya tulis mula-mula **tidak menjaga apa pun**
+  (datanya jauh di bawah plafon sehingga posisi `$limit` tak berpengaruh) —
+  persis jenis uji-bohong yang ditemukan audit; plafonnya diturunkan lewat
+  monkeypatch agar ujinya benar-benar diskriminatif, lalu mutasinya tertangkap.
+
+---
+
 ## [#647] Spasial Fase 15: SBSK berbasis luas ruangan NYATA dari poligon denah — 2026-07-27
 
 Sampai sekarang tabel SBSK berdiri sendiri: angka "247 m² untuk pimpinan" tanpa

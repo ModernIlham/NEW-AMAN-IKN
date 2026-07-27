@@ -417,7 +417,31 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
       // `locked` mengikuti kegagalan TERAKHIR: item 423 tidak ikut auto-flush
       // (lihat flushPending) agar antrian offline tidak me-replay + toast
       // berulang setiap reconnect terhadap kegiatan yang sudah terkunci.
-      const stored = toPlainItem({ ...item, locked: isLocked }, statusKey);
+      // SIMPANAN PERTAMA YANG JUGA GAGAL TAK BOLEH TERTIMPA (temuan audit
+      // adversarial). Saat simpanan lama masih TERBANG, enqueue sengaja
+      // MELEWATI penggabungan — kalau yang lama ternyata sampai ke server,
+      // menggabungnya berarti `photo_ops.add` diterapkan dua kali (foto kembar).
+      // Tetapi begitu yang lama akhirnya GAGAL juga, ia terbukti TIDAK pernah
+      // diterapkan, dan kini dua rekaman berebut satu kunci `statusKey`:
+      // yang belakangan menghapus muatan yang pertama beserta fotonya, senyap.
+      // Di titik ini penggabungan justru aman DAN wajib — keduanya dihitung
+      // terhadap keadaan server yang sama dan sama-sama belum diterapkan.
+      const sebelumnya = failedItemsRef.current[statusKey];
+      const itemSimpan = { ...item, locked: isLocked };
+      // antreanId beda = benar-benar simpanan LAIN. Kunci ini penting: tanpa
+      // itu, percobaan ulang simpanan yang SAMA akan menggabung muatannya
+      // dengan dirinya sendiri (add dua kali).
+      if (sebelumnya && sebelumnya.antreanId !== item.antreanId
+          && bolehGabung(sebelumnya, item)) {
+        itemSimpan.payload = gabungPatch(sebelumnya.payload, item.payload);
+        // Patokan versi ikut yang TERTUNDA lebih dulu — patch gabungan ini
+        // dihitung terhadap keadaan server itu, bukan yang lebih baru.
+        if (sebelumnya.baseVersion != null) itemSimpan.baseVersion = sebelumnya.baseVersion;
+        // Kunci idempotensi lama menempel pada muatan yang kini sudah berubah;
+        // dipakai ulang, server bisa memutar balik respons untuk isi yang keliru.
+        itemSimpan.idempotencyKey = null;
+      }
+      const stored = toPlainItem(itemSimpan, statusKey);
       failedItemsRef.current[statusKey] = stored;
       persistQueueItem(stored, statusKey);
 
@@ -439,6 +463,16 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
 
   const enqueue = useCallback(({ tempId, payload, isEdit, editId, usePatch, baseVersion, idempotencyKey, nama_kegiatan, satkerAktif }) => {
     const statusKey = isEdit ? editId : tempId;
+
+    // PEMBATALAN HANYA BERLAKU UNTUK SIMPANAN YANG SEDANG TERBANG SAAT ITU.
+    // `dismissedRef` menahan kunci selama 5 menit agar penyelesaian permintaan
+    // yang tak bisa ditarik dari jaringan tak menghidupkan kembali baris yang
+    // sudah dibuang. Tetapi simpanan BARU atas aset yang sama adalah kehendak
+    // pengguna yang baru — tanpa pembersihan ini, mengedit ulang aset itu dalam
+    // 5 menit setelah membatalkan membuat jalur sukses/gagal keluar lebih awal:
+    // baris tak pernah diperbarui, chip tak pernah bersih, dan pengguna mengira
+    // simpanannya hilang (temuan audit adversarial atas perbaikan G3 sendiri).
+    dismissedRef.current.delete(statusKey);
 
     // SATU ASET BISA PUNYA LEBIH DARI SATU SIMPANAN TERTUNDA — dan dulu yang
     // kedua MENIMPA yang pertama. statusKey untuk EDIT adalah editId, yang

@@ -84,9 +84,20 @@ export default function OpnameDialog({ node, labelLevel, isWriter, onClose }) {
    * memakainya sebagai kunci idempotensi, sehingga tiga kali coba tetap
    * menghasilkan satu catatan.
    */
-  const kirim = useCallback(async (kode, scanId, assetId) => {
-    const muatan = { kode, node_id: node.id, scan_id: scanId,
-                     ts_scan: new Date().toISOString() };
+  const kirim = useCallback(async (kode, scanId, assetId, nodeId, tsScan) => {
+    // NODE & WAKTU DATANG DARI PEMANGGIL, BUKAN DARI DIALOG YANG SEDANG TERBUKA.
+    // Ini temuan audit paling serius atas fase ini: dulu `kirim` selalu menulis
+    // `node_id: node.id`, sehingga tiga puluh scan yang dilakukan luring di
+    // Ruang 305 lalu dikirim ulang saat petugas sudah membuka Ruang 307
+    // tercatat SELURUHNYA di Ruang 307. Antrean luring yang dibangun untuk
+    // melindungi data justru menjadi jalur data tertukar — persis yang dilarang
+    // mandat "satu gerbong satu aset".
+    //
+    // `ts_scan` mengikuti alasan yang sama: waktu KEJADIAN, bukan waktu tiba.
+    // Membuat stempel baru saat kirim ulang membuat bukti opname bertanggal
+    // hari sinyal pulih, bukan hari barang benar-benar dilihat petugas.
+    const muatan = { kode, node_id: nodeId || node.id, scan_id: scanId,
+                     ts_scan: tsScan || new Date().toISOString() };
     if (assetId) muatan.asset_id = assetId;
     try {
       const r = await axios.post(`${API}/opname/scan`, muatan, { timeout: 20000 });
@@ -102,16 +113,18 @@ export default function OpnameDialog({ node, labelLevel, isWriter, onClose }) {
       if (st === 409 && e?.response?.data?.detail?.kandidat) {
         // Ambigu: simpan dulu supaya tak hilang bila petugas menutup layar,
         // lalu minta ia memilih.
-        simpanTertunda({ scan_id: scanId, kode, node_id: node.id });
+        simpanTertunda({ scan_id: scanId, kode, node_id: muatan.node_id,
+                         ts_scan: muatan.ts_scan });
         segarkanTertunda();
-        setKandidat({ ...e.response.data.detail, scan_id: scanId });
+        setKandidat({ ...e.response.data.detail, scan_id: scanId,
+                      node_id: muatan.node_id, ts_scan: muatan.ts_scan });
         return false;
       }
       if (!e?.response) {
         // Tak ada respons sama sekali = jaringan, bukan penolakan server.
         // Barangnya sudah dilihat petugas; yang gagal hanya pengirimannya.
-        simpanTertunda({ scan_id: scanId, kode, node_id: node.id,
-                         asset_id: assetId || "" });
+        simpanTertunda({ scan_id: scanId, kode, node_id: muatan.node_id,
+                         ts_scan: muatan.ts_scan, asset_id: assetId || "" });
         segarkanTertunda();
         toast.warning("Tak ada sinyal — scan disimpan, kirim ulang nanti");
         return false;
@@ -127,17 +140,18 @@ export default function OpnameDialog({ node, labelLevel, isWriter, onClose }) {
     setSibuk(true);
     setKandidat(null);
     try {
-      await kirim(kode, buatScanId());
+      await kirim(kode, buatScanId(), "", node.id, new Date().toISOString());
       setKodeManual("");
       inputRef.current?.focus();
     } finally { setSibuk(false); }
-  }, [kirim]);
+  }, [kirim, node.id]);
 
   const pilihKandidat = useCallback(async (asetId) => {
     if (!kandidat) return;
     setSibuk(true);
     try {
-      const ok = await kirim(kandidat.kode, kandidat.scan_id, asetId);
+      const ok = await kirim(kandidat.kode, kandidat.scan_id, asetId,
+                             kandidat.node_id, kandidat.ts_scan);
       if (ok) setKandidat(null);
     } finally { setSibuk(false); }
   }, [kandidat, kirim]);
@@ -151,7 +165,8 @@ export default function OpnameDialog({ node, labelLevel, isWriter, onClose }) {
       for (const item of antre) {
         // Berurutan, bukan serentak: antrean lapangan biasanya puluhan baris di
         // jaringan yang baru saja pulih — membanjirinya justru memicu gagal lagi.
-        if (await kirim(item.kode, item.scan_id, item.asset_id)) berhasil += 1;
+        if (await kirim(item.kode, item.scan_id, item.asset_id,
+                        item.node_id, item.ts_scan)) berhasil += 1;
       }
       toast.success(`${berhasil} dari ${antre.length} scan terkirim`);
     } finally { setSibuk(false); }
@@ -240,8 +255,11 @@ export default function OpnameDialog({ node, labelLevel, isWriter, onClose }) {
                 </li>
               ))}
             </ul>
-            <button type="button" onClick={() => setKandidat(null)}
-                    className="text-[11px] underline text-muted-foreground mt-1.5">
+            <button type="button"
+                    onClick={() => { hapusTertunda(kandidat.scan_id);
+                                     segarkanTertunda(); setKandidat(null); }}
+                    className="text-[11px] underline text-muted-foreground mt-1.5"
+                    data-testid="opname-kandidat-batal">
               Batalkan scan ini
             </button>
           </div>

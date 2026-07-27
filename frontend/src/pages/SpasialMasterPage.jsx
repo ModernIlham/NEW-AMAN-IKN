@@ -303,7 +303,7 @@ export default function SpasialMasterPage({ user, onBack }) {
           {/* Isi lokasi = operasi BACA (viewer boleh): "aset apa saja di sini",
               bentuk yang dibutuhkan opname fisik. Fase 9. */}
           <button type="button" onClick={() => setIsiNode(node)}
-            className="tap-expand p-0.5 rounded hover:bg-muted shrink-0"
+            className="tap-expand p-0.5 rounded hover:bg-muted shrink-0 min-h-0 min-w-0"
             title="Lihat aset yang menempati lokasi ini"
             data-testid={`spasial-isi-${node.id}`}>
             <Boxes className="w-4 h-4 text-sky-600" />
@@ -311,7 +311,7 @@ export default function SpasialMasterPage({ user, onBack }) {
           {/* Opname lewat scan stiker (Fase 11). BACA juga boleh: viewer berhak
               melihat rekonsiliasi; tombol Terapkan-lah yang dibatasi penulis. */}
           <button type="button" onClick={() => setOpnameNode(node)}
-            className="tap-expand p-0.5 rounded hover:bg-muted shrink-0"
+            className="tap-expand p-0.5 rounded hover:bg-muted shrink-0 min-h-0 min-w-0"
             title="Opname: pindai stiker QR & sanding dengan catatan lokasi"
             data-testid={`spasial-opname-${node.id}`}>
             <ClipboardCheck className="w-4 h-4 text-emerald-600" />
@@ -320,23 +320,23 @@ export default function SpasialMasterPage({ user, onBack }) {
             <span className="flex items-center gap-1.5 shrink-0">
               {/* tap-expand: ikon kecil, area sentuh ~44px (lihat index.css) */}
               <button type="button" onClick={() => bukaTambah(node)}
-                className="tap-expand p-0.5 rounded hover:bg-muted" title="Tambah anak"
+                className="tap-expand p-0.5 rounded hover:bg-muted min-h-0 min-w-0" title="Tambah anak"
                 data-testid={`spasial-tambah-anak-${node.id}`}>
                 <Plus className="w-4 h-4 text-emerald-600" />
               </button>
               <button type="button" onClick={() => bukaUbah(node)}
-                className="tap-expand p-0.5 rounded hover:bg-muted" title="Ubah"
+                className="tap-expand p-0.5 rounded hover:bg-muted min-h-0 min-w-0" title="Ubah"
                 data-testid={`spasial-ubah-${node.id}`}>
                 <Pencil className="w-4 h-4 text-sky-600" />
               </button>
               <button type="button" onClick={() => setEditorNode(node)}
-                className="tap-expand p-0.5 rounded hover:bg-muted"
+                className="tap-expand p-0.5 rounded hover:bg-muted min-h-0 min-w-0"
                 title={node.bbox ? "Ubah denah (gambar poligon)" : "Gambar denah (poligon)"}
                 data-testid={`spasial-gambar-${node.id}`}>
                 <LandPlot className="w-4 h-4 text-teal-600" />
               </button>
               <button type="button" onClick={() => hapus(node)}
-                className="tap-expand p-0.5 rounded hover:bg-muted" title="Hapus"
+                className="tap-expand p-0.5 rounded hover:bg-muted min-h-0 min-w-0" title="Hapus"
                 data-testid={`spasial-hapus-${node.id}`}>
                 <Trash2 className="w-4 h-4 text-rose-600" />
               </button>

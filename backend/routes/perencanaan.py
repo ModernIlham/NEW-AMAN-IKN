@@ -15,7 +15,8 @@ from pydantic import BaseModel, Field
 from auth_utils import require_admin, require_user, require_writer
 from db import db
 from pemeliharaan_utils import rekap_pemeliharaan
-from shared_utils import kode_satker_user, scope_query_field_satker, pastikan_akses_dok_satker
+from shared_utils import (kode_satker_user, scope_query_aset,
+                          scope_query_field_satker, pastikan_akses_dok_satker)
 from perencanaan_utils import (
     JENIS_USULAN_RKBMN, STATUS_USULAN_RKBMN, TRANSISI_USULAN_RKBMN,
     rekap_rkbmn, rekap_usulan_rkbmn, validate_transisi_rkbmn,
@@ -406,7 +407,9 @@ async def sanding_usulan(usulan_id: str, kode_barang: str = "",
 # ═══════════════════════════════════════════════════════════════════════════
 
 _MAKS_RUANGAN_SBSK = 800
-_MAKS_ASET_SBSK = 5000
+# Nama pemegang yang ditampilkan per ruangan. Gudang bisa punya ratusan; yang
+# dibaca petugas di layar cuma beberapa.
+_MAKS_PEMEGANG_SBSK = 20
 
 
 @perencanaan_router.get("/perencanaan/sbsk-ruang")
@@ -447,19 +450,42 @@ async def sbsk_ruang(node_id: str = Query(...), dalam: bool = Query(True),
     # Isi ruangan (jumlah aset + pemegang) dalam SATU agregasi, bukan satu
     # kueri per ruangan: gedung berisi 200 ruangan akan berarti 200 bolak-balik
     # jaringan untuk satu halaman yang sama.
+    #
+    # DUA HAL YANG DIPERBAIKI SETELAH AUDIT ADVERSARIAL:
+    #
+    # 1. ISOLASI SATKER. `ids` memang ter-scope satker, tetapi node ERA LAMA
+    #    tanpa `kode_satker` terbuka untuk semua satker (lihat
+    #    scope_query_field_satker) — sehingga aset satker LAIN yang menempati
+    #    node semacam itu ikut terhitung, lengkap dengan NAMA PEMEGANGNYA.
+    #    `scope_query_aset` menutupnya lewat kegiatan induk, jalur guard baku
+    #    modul aset. Agregasi tak bisa memakai `pastikan_akses_aset` per dokumen,
+    #    dan justru karena itu ia gampang lolos dari penjagaan — filternya harus
+    #    ikut masuk ke `$match`.
+    #
+    # 2. `$limit` DIPINDAH KE SETELAH `$group`. Sebelumnya ia memotong ASET
+    #    sebelum pengelompokan, sehingga ruangan yang asetnya kebetulan berada
+    #    di luar potongan HILANG UTUH dari peta `isi` — lalu dilaporkan
+    #    "menganggur" karena jumlah asetnya 0. Persis kebalikan dari tujuan
+    #    laporan ini: bukti palsu untuk menghentikan pengadaan. Setelah `$group`,
+    #    plafonnya membatasi jumlah RUANGAN (yang sudah ≤ len(ids)), bukan aset.
     ids = [r["id"] for r in rows_node]
     isi = {}
     if ids:
+        q_isi = await scope_query_aset(
+            _user, {"lokasi_spasial.node_id": {"$in": ids}})
         async for g in db.assets.aggregate([
-            {"$match": {"lokasi_spasial.node_id": {"$in": ids}}},
-            {"$limit": _MAKS_ASET_SBSK},
+            {"$match": q_isi},
             {"$group": {"_id": "$lokasi_spasial.node_id",
                         "jumlah": {"$sum": 1},
                         "pemegang": {"$addToSet": "$user"}}},
+            {"$limit": _MAKS_RUANGAN_SBSK},
         ]):
             isi[g["_id"]] = {
                 "jumlah": int(g.get("jumlah") or 0),
-                "pemegang": [p for p in (g.get("pemegang") or []) if p],
+                # Daftar pemegang dipotong di Python, bukan di pipeline: ruangan
+                # gudang bisa punya ratusan pemegang berbeda dan seluruhnya tak
+                # berguna di layar — yang dibaca petugas cuma beberapa nama.
+                "pemegang": [p for p in (g.get("pemegang") or []) if p][:_MAKS_PEMEGANG_SBSK],
             }
 
     standar = await db.sbsk_standar.find({}, {"_id": 0}).to_list(1000)
