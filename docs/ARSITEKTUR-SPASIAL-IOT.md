@@ -1552,6 +1552,25 @@ Tiap fase = **SATU PR yang bisa di-merge sendiri** dan memberi nilai nyata. CI h
 | 15 | SBSK berbasis luas ruangan nyata + laporan peta sebaran | kecil | 7 |
 | 16 | (Opsional) Gerbang RFID UHF + BLE tag kelas A | sedang | 12 |
 
+**Status per Juli 2026 [V]:** Fase 1–13 dan 16 **sudah jalan di produksi**.
+Fase 11 (scan stiker) dibangun sedikit berbeda dari sketsa `/iot/scan` di §7:
+endpoint-nya `/api/opname/*` dan datanya duduk di koleksi `opname_scan`
+tersendiri. BENTUK dokumennya tetap seragam dengan pipeline observasi
+(`sumber` + `akurasi_m` + `kepercayaan`), sehingga prinsip "satu pipeline untuk
+semua sumber" di §8.1 tidak dilanggar — yang **tidak** diwarisi hanyalah TTL
+retensinya. Alasannya tegas: TTL `iot_observasi` ada karena isinya jejak
+keberadaan ORANG yang wajib kedaluwarsa (§10), sedangkan hasil opname adalah
+bukti penatausahaan BMN yang justru harus bertahan. Menumpangkannya berarti
+catatan opname terhapus diam-diam beberapa bulan setelah dibuat — tepat saat
+diperiksa. **Sisa yang belum dibangun: Fase 14 (Traccar + agen laptop + peta
+BSSID) dan Fase 15 (SBSK dari luas poligon).**
+
+**Satu keputusan Fase 11 yang layak diketahui sebelum memakainya:** memindai
+stiker **tidak** memindahkan catatan lokasi. Opname adalah pemeriksaan; menulis
+ulang buku di setiap pindaian menghapus selisih yang justru dicari, dan salah
+pindai akan mengubah custody tanpa jejak keberatan. Perpindahan diterapkan
+terpisah lewat `POST /api/opname/terapkan`.
+
 **Mengapa Fase 1 bukan yang paling rumit:** ia menyentuh 3 berkas, nol dependensi baru, memperbaiki **kebocoran lintas-satker nyata**, dan memasang **indeks 2dsphere pertama di repo** — yang menjadi prasyarat teknis semua fase berikutnya. Nilai langsung: kueri peta per-bbox dan validasi koordinat Wasdal.
 
 **Jalur paralel yang aman:** Fase 9 (kustodian) hanya bergantung pada Fase 2, sehingga bisa dikerjakan bersamaan dengan Fase 3–4 oleh orang berbeda. Fase 15 kecil dan bisa disisipkan kapan pun setelah Fase 7.

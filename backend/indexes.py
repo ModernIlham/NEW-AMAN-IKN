@@ -460,6 +460,29 @@ async def create_indexes() -> None:
             [("aturan_id", 1), ("sejak", 1)], unique=True,
             partialFilterExpression={"jenis": "dwell_terlampaui"},
             name="geofence_event_dwell_unik")
+
+        # OPNAME LEWAT SCAN STIKER (Fase 11).
+        #
+        # UNIK scan_id = penegak idempotensi antrean luring. Petugas memindai di
+        # ruangan tanpa sinyal; antrean PWA mengirim ulang isi yang sama saat
+        # sinyal berkedip. Tanpa indeks ini satu pemindaian melahirkan beberapa
+        # baris, dan rekap opname melaporkan lebih banyak "terpindai" daripada
+        # barang yang benar-benar dilihat petugas. Partial pada tipe string:
+        # dokumen era-lama tanpa scan_id tak boleh saling bertabrakan sebagai
+        # null kembar.
+        await db.opname_scan.create_index(
+            "scan_id", unique=True, name="opname_scan_idem",
+            partialFilterExpression={"scan_id": {"$type": "string"}})
+        await db.opname_scan.create_index("id", unique=True, name="opname_scan_id")
+        # Rekonsiliasi membaca "scan di lingkup node ini sejak tanggal X" —
+        # bentuk kueri tetap halaman itu.
+        await db.opname_scan.create_index([("node_id", 1), ("pada", -1)],
+                                          name="opname_scan_node_waktu")
+        # Riwayat pemindaian per aset (terbaru dulu) di panel detail aset.
+        await db.opname_scan.create_index([("asset_id", 1), ("pada", -1)],
+                                          name="opname_scan_aset_waktu")
+        await db.opname_scan.create_index([("kode_satker", 1), ("pada", -1)],
+                                          name="opname_scan_satker_waktu")
         logger.info("Database indexes created successfully")
     except Exception as e:
         logger.error(f"Error creating indexes: {e}")
