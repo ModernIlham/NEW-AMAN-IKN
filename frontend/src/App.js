@@ -31,6 +31,7 @@ const KodefikasiPage = lazy(() => import("./pages/KodefikasiPage"));
 const PejabatPage = lazy(() => import("./pages/PejabatPage"));
 const RuanganPage = lazy(() => import("./pages/RuanganPage"));
 const SpasialMasterPage = lazy(() => import("./pages/SpasialMasterPage"));
+const PelacakanPage = lazy(() => import("./pages/PelacakanPage"));
 const ReferensiAkunPage = lazy(() => import("./pages/ReferensiAkunPage"));
 const PegawaiPage = lazy(() => import("./pages/PegawaiPage"));
 const PersediaanPage = lazy(() => import("./pages/PersediaanPage"));
@@ -281,6 +282,7 @@ function App() {
   const [showPejabat, setShowPejabat] = useState(false);
   const [showRuangan, setShowRuangan] = useState(false);
   const [showSpasial, setShowSpasial] = useState(false);
+  const [showPelacakan, setShowPelacakan] = useState(false);
   // Referensi Akun BAS gabungan (segmen akun + pemetaan aset & persediaan)
   const [showReferensiAkun, setShowReferensiAkun] = useState(false);
   const [showPegawai, setShowPegawai] = useState(false);
@@ -419,6 +421,19 @@ function App() {
       <SatkerAktifBar user={user} />
         <Suspense fallback={<PageLoader />}>
           <SpasialMasterPage user={user} onBack={() => setShowSpasial(false)} />
+        </Suspense>
+        <Toaster position="top-right" richColors />
+      </div>
+    );
+  }
+
+  // Pelacakan Aset — muka pipeline IoT (Fase 11) + geofence (Fase 12).
+  if (user && showPelacakan) {
+    return (
+      <div className="App">
+      <SatkerAktifBar user={user} />
+        <Suspense fallback={<PageLoader />}>
+          <PelacakanPage user={user} onBack={() => setShowPelacakan(false)} />
         </Suspense>
         <Toaster position="top-right" richColors />
       </div>
@@ -739,6 +754,7 @@ function App() {
             onOpenPejabat={() => setShowPejabat(true)}
             onOpenRuangan={() => setShowRuangan(true)}
             onOpenSpasial={() => setShowSpasial(true)}
+            onOpenPelacakan={() => setShowPelacakan(true)}
             onOpenReferensiAkun={() => setShowReferensiAkun(true)}
             onOpenPegawai={() => setShowPegawai(true)}
             onOpenPersediaan={() => setShowPersediaan(true)}

@@ -265,9 +265,19 @@ async def daftar_node(parent_id: str = Query(""), tipe: str = Query(""),
     if q:
         rx = {"$regex": re.escape(q.strip()), "$options": "i"}
         query["$or"] = [{"nama": rx}, {"kode": rx}, {"nama_alias": rx}]
-    items = await (db.spasial_node.find(query, {**_PROJ, "geometry": 0})
-                   .sort([("ordinal_level", 1), ("kode", 1), ("nama", 1)])
-                   .to_list(_MAKS_NODE))
+    # `tipe_geometri` diturunkan, geometrinya sendiri TETAP dibuang: poligon
+    # kawasan bisa ribuan verteks dan tak satu pun pemanggil daftar ini
+    # membutuhkannya. Tetapi mereka perlu tahu node mana yang PUNYA batas —
+    # tanpa itu, pemilih area geofence menawarkan node yang pasti ditolak, dan
+    # pengguna baru tahu setelah menabraknya.
+    pipeline = [
+        {"$match": query},
+        {"$sort": {"ordinal_level": 1, "kode": 1, "nama": 1}},
+        {"$limit": _MAKS_NODE},
+        {"$addFields": {"tipe_geometri": {"$ifNull": ["$geometry.type", ""]}}},
+        {"$project": {"_id": 0, "geometry": 0}},
+    ]
+    items = [n async for n in db.spasial_node.aggregate(pipeline)]
     return {"items": items, "jumlah": len(items)}
 
 
