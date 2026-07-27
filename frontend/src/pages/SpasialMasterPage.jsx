@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Plus, Pencil, Trash2, Loader2, Layers, ChevronRight, ChevronDown,
-  Search, MapPinned, LandPlot, Upload, Download, Boxes,
+  Search, MapPinned, LandPlot, Upload, Download, Boxes, ClipboardCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,7 @@ const DenahEditor = lazy(() => import("@/components/spasial/DenahEditor"));
 const ImporDenahDialog = lazy(() => import("@/components/spasial/ImporDenahDialog"));
 const EksporDenahDialog = lazy(() => import("@/components/spasial/EksporDenahDialog"));
 const IsiNodeDialog = lazy(() => import("@/components/spasial/IsiNodeDialog"));
+const OpnameDialog = lazy(() => import("@/components/spasial/OpnameDialog"));
 
 function getApiError(err, fallback) {
   return err?.response?.data?.detail || fallback;
@@ -50,6 +51,7 @@ export default function SpasialMasterPage({ user, onBack }) {
   const [imporBuka, setImporBuka] = useState(false);   // dialog impor file GIS
   const [eksporBuka, setEksporBuka] = useState(false); // dialog ekspor + template
   const [isiNode, setIsiNode] = useState(null);        // node yang dilihat isinya (Fase 9)
+  const [opnameNode, setOpnameNode] = useState(null);  // node yang di-opname via scan (Fase 11)
   const { confirm, confirmDialog } = useConfirm();
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
@@ -299,6 +301,14 @@ export default function SpasialMasterPage({ user, onBack }) {
             data-testid={`spasial-isi-${node.id}`}>
             <Boxes className="w-4 h-4 text-sky-600" />
           </button>
+          {/* Opname lewat scan stiker (Fase 11). BACA juga boleh: viewer berhak
+              melihat rekonsiliasi; tombol Terapkan-lah yang dibatasi penulis. */}
+          <button type="button" onClick={() => setOpnameNode(node)}
+            className="tap-expand p-0.5 rounded hover:bg-muted shrink-0"
+            title="Opname: pindai stiker QR & sanding dengan catatan lokasi"
+            data-testid={`spasial-opname-${node.id}`}>
+            <ClipboardCheck className="w-4 h-4 text-emerald-600" />
+          </button>
           {isWriter && (
             <span className="flex items-center gap-1.5 shrink-0">
               {/* tap-expand: ikon kecil, area sentuh ~44px (lihat index.css) */}
@@ -362,6 +372,16 @@ export default function SpasialMasterPage({ user, onBack }) {
             node={isiNode}
             labelLevel={labelLevel}
             onClose={() => setIsiNode(null)}
+          />
+        </Suspense>
+      )}
+      {opnameNode && (
+        <Suspense fallback={null}>
+          <OpnameDialog
+            node={opnameNode}
+            labelLevel={labelLevel}
+            isWriter={isWriter}
+            onClose={() => setOpnameNode(null)}
           />
         </Suspense>
       )}

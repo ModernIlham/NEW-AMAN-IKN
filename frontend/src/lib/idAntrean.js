@@ -62,6 +62,15 @@ function acakBase36(panjang) {
  * masih dalam antrean dari aset nyata lewat awalan ini (lihat apakahTempId).
  */
 export function buatTempId() {
+  return idUnik(AWALAN);
+}
+
+/**
+ * ID unik berawalan bebas — inti keunikan yang sama dengan buatTempId, dipakai
+ * ulang oleh antrean lain yang menghadapi jam-mundur yang persis sama (mis.
+ * `scan_id` opname). Keunikannya TIDAK pernah bersandar pada jam.
+ */
+export function idUnik(awalan = "") {
   penghitung += 1;
   let unik;
   try {
@@ -73,7 +82,7 @@ export function buatTempId() {
   }
   // Stempel waktu di DEPAN supaya urutan pembuatan terbaca saat menelusuri
   // antrean — tetapi keunikan TIDAK bergantung padanya.
-  return `${AWALAN}${Date.now().toString(36)}_${unik}`;
+  return `${awalan}${Date.now().toString(36)}_${unik}`;
 }
 
 /** Baris ini masih di antrean (belum punya id nyata dari server)? */

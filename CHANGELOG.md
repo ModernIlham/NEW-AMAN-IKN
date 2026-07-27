@@ -53,6 +53,81 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#646] Spasial Fase 11: scan stiker QR jadi sumber lokasi + rekonsiliasi opname — 2026-07-27
+
+Stiker QR sudah tercetak dan tertempel sejak PR #397. Fase ini menjadikan
+pemindaiannya **sumber lokasi kelas satu**: biaya Rp 0, tanpa isu privasi (yang
+direkam BARANG, bukan orang), dan akurasi ruangannya sempurna — persis mengisi
+lubang yang tak bisa diisi GPS, yang justru mati di dalam gedung.
+
+### Opname sebagai PEMERIKSAAN, bukan penulisan ulang
+
+Keputusan terpenting fase ini adalah apa yang **tidak** dilakukan: memindai
+TIDAK memindahkan catatan lokasi. Opname yang serta-merta menulis ulang buku
+menghapus satu-satunya hal yang dicarinya — SELISIH — dan salah pindai (stiker
+tetangga, barang yang sedang dijinjing petugas) akan diam-diam mengubah custody
+tanpa seorang pun sempat berkeberatan. Scan **mencatat + mengklasifikasi**;
+perpindahan menyusul lewat `POST /opname/terapkan` yang memakai jalur riwayat
+yang sama dengan Fase 9 (`riwayat_lokasi_aset`), tercatat di audit, dan
+idempoten (tombol ditekan dua kali tak melahirkan dua baris riwayat).
+
+### Backend
+
+- **`backend/opname_utils.py`** (murni): penguraian isi QR yang mengembar
+  `extractScannedCode` di frontend, klasifikasi scan, dan tiga keranjang
+  rekonsiliasi.
+- **`POST /api/opname/scan`** — resolusi kode → aset, klasifikasi, catat.
+  Kode **ambigu tidak pernah ditebak**: `kode_register` hanya unik di dalam satu
+  kegiatan, jadi satu isi QR bisa menunjuk beberapa aset → **409 berisi daftar
+  kandidat** untuk dipilih petugas. Pilihan yang dikirim balik wajib berasal
+  dari kandidat kode itu, supaya `asset_id` tak menjadi jalan mencatat scan
+  palsu tanpa pernah menyentuh stikernya.
+- **Scan di level yang lebih KASAR mengukuhkan, bukan memindahkan.** Buku
+  mencatat Ruang 305; petugas memindai di pintu Gedung A yang memuatnya.
+  Menganggapnya "pindah" lalu menerapkannya akan MENURUNKAN presisi ruangan
+  menjadi gedung — informasi termahal yang justru hilang.
+- **Stiker ber-NUP kosong tetap terpindai.** Pencetak menulis `nup or '0'`,
+  sehingga aset tanpa NUP tercetak `-0`; tanpa cabang khusus, stiker itu abadi
+  tak terbaca.
+- **`GET /api/opname/rekonsiliasi`** — sanding buku vs lapangan per lingkup
+  node (opsional sampai seluruh keturunannya): *cocok*, *belum terpindai*
+  (daftar kerja yang tersisa), *ditemukan di sini* + persen terkonfirmasi.
+  Rekap menyembuhkan diri sendiri: tak menyimpan status yang bisa basi.
+- **`GET /api/opname/riwayat-aset/{id}`** — kapan & di mana barang terakhir
+  benar-benar terlihat, terlepas dari apa yang tercatat di buku.
+- **Koleksi `opname_scan` berdiri sendiri, TANPA TTL.** Bentuk dokumennya sama
+  dengan pipeline observasi Fase 10 (`sumber`/`akurasi_m`/`kepercayaan`), tetapi
+  retensinya tidak diwarisi: TTL `iot_observasi` ada karena isinya jejak
+  keberadaan ORANG yang wajib kedaluwarsa, sementara hasil opname adalah BUKTI
+  penatausahaan yang harus bertahan. Menumpangkannya berarti catatan opname
+  terhapus diam-diam beberapa bulan setelah dibuat.
+- Indeks: `opname_scan_idem` (UNIK `scan_id` — penegak idempotensi antrean
+  luring), `opname_scan_node_waktu`, `opname_scan_aset_waktu`,
+  `opname_scan_satker_waktu`. Terbentuk otomatis saat backend berikutnya start.
+
+### Frontend
+
+- **`components/spasial/OpnameDialog.jsx`** — panel opname per lokasi di
+  halaman Master Denah: tombol scan QR + isian kode manual (untuk stiker yang
+  rusak), pemilih kandidat saat kode ambigu, tiga keranjang dengan
+  *Belum terpindai* di paling atas, bar persen terkonfirmasi, dan tombol
+  Terapkan (khusus penulis; viewer tetap boleh melihat rekonsiliasi).
+- **`lib/antreanScan.js`** — antrean luring untuk pemindaian. Opname justru
+  dikerjakan di tempat sinyal paling buruk; scan yang gagal terkirim disimpan
+  dan bisa dikirim ulang saat sinyal pulih. Yang membuat pengiriman ulang aman
+  adalah `scan_id` (kunci idempotensi sisi server), jadi tiga kali coba tetap
+  menghasilkan SATU catatan.
+- **`lib/idAntrean.js`** mengekspor `idUnik(awalan)` — inti keunikan yang sama
+  (tak pernah bersandar pada jam yang bisa mundur) kini dipakai ulang `scan_id`.
+
+- Uji: **+48 backend (1.127) dan +14 frontend (209)** — 28 uji helper murni,
+  20 uji endpoint dengan mongomock (resolusi kode, 409 ambigu, penolakan
+  `asset_id` di luar kandidat, replay antrean, janji "scan tidak memindahkan",
+  terapkan + riwayat + idempotensinya, tiga keranjang rekonsiliasi), dan 14
+  uji antrean luring.
+
+---
+
 ## [#645] Gerbong data TUNTAS — 15 temuan sisa audit ditutup semua (4 backend + 11 frontend) — 2026-07-27
 
 Perintah pemilik: *"lakukan perbaikan hingga tuntas"*. Lima belas dugaan sisa

@@ -324,6 +324,7 @@ from routes.ruangan import ruangan_router
 from routes.spasial import spasial_router
 from routes.iot import iot_router
 from routes.geofence import geofence_router
+from routes.opname import opname_router
 from routes.akun_bas import akun_bas_router
 from routes.persediaan_akun import persediaan_akun_router
 from routes.pegawai import pegawai_router
@@ -382,6 +383,7 @@ api_router.include_router(ruangan_router)
 api_router.include_router(spasial_router)
 api_router.include_router(iot_router)          # ingest posisi perangkat (Fase 11)
 api_router.include_router(geofence_router)     # pagar area & peringatan (Fase 12)
+api_router.include_router(opname_router)       # scan stiker → rekonsiliasi opname
 api_router.include_router(akun_bas_router)
 api_router.include_router(persediaan_akun_router)
 api_router.include_router(pegawai_router)
