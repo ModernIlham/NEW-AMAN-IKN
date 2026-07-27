@@ -53,6 +53,23 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#633] Perbaikan: peta editor denah putih polos di dalam modal (HP) — 2026-07-26
+
+Bukti dari screenshot HP: area peta editor PUTIH POLOS — tanpa ubin, tanpa
+tombol zoom, tanpa toolbar gambar, tanpa atribusi Leaflet; console tanpa
+galat. Artinya peta Leaflet tak pernah mendapat ukuran benar.
+
+**Akar (klasik "Leaflet blank di dalam modal")**: peta dibuat saat DIALOG
+MASIH BERANIMASI membuka → kontainer berukuran 0 px → Leaflet memuat 0 ubin →
+peta tetap kosong. `invalidateSize()` 80 ms yang ada terlalu dini di HP
+(animasi dialog lebih lambat) dan tak ada pemanggilan susulan.
+
+**Perbaikan**: pasang **ResizeObserver** pada kontainer peta yang memanggil
+`invalidateSize()` tiap kontainer berubah ukuran — termasuk saat dialog
+selesai membuka — plus beberapa `invalidateSize` terjadwal (80/250/500/900 ms)
+sebagai cadangan. Diterapkan di DenahEditor dan LokasiTemuanDialog (Wasdal),
+keduanya menaruh peta di dalam modal.
+
 ## [#632] Perbaikan lanjut: editor & halaman denah tak pernah macet di spinner — 2026-07-26
 
 Tindak lanjut #631 yang belum tuntas: pengguna masih melaporkan "loading
