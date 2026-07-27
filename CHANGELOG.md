@@ -53,6 +53,60 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#650] Audit adversarial gelombang B — opname menyambung ke dokumen resmi — 2026-07-27
+
+Lima temuan SEDANG dari audit adversarial, semuanya berkumpul di sekitar satu
+pertanyaan: **apakah hasil opname benar-benar sampai ke tempat yang membacanya?**
+
+### Perpindahan di dalam gedung tak lagi lenyap dari semua keranjang
+
+Buka Opname di level GEDUNG — nilai bawaannya — lalu barang yang berpindah dari
+Ruang 305 ke Ruang 307 punya node buku DAN node scan yang sama-sama berada di
+dalam lingkup itu. Dulu ia langsung masuk `sesuai`: layar melaporkan gedung
+**100% terkonfirmasi tanpa selisih**, scan berstatus "pindah" tak pernah muncul
+untuk dicentang, dan buku tetap menyebut Ruang 305 selamanya. Penentu keranjang
+kini `status_rekonsiliasi` scan itu sendiri — yang memang sudah tersimpan,
+sehingga tak ada kueri tambahan. Penjaga `diterapkan` menyertainya: tanpa itu
+keranjang usulan tak pernah kosong karena status scan tetap "pindah" selamanya.
+
+### Hasil opname kini sampai ke KIR & DBR
+
+`/opname/terapkan` dulu hanya memperbarui `lokasi_spasial`. Padahal KIR dan DBR —
+**dokumen resmi yang dipegang pemeriksa** — membaca `location` (teks bebas,
+dicocokkan string di `reports.py`). Akibatnya peta dan kertas saling
+bertentangan, dan yang menang di ruang audit justru kertasnya. `location` kini
+ikut berpindah, dan nilai lamanya disimpan ke `riwayat_lokasi_aset` sebelum
+ditimpa.
+
+### Tiga perbaikan penyerta
+
+- **Koordinat presisi tak lagi terhapus.** Pemindaian dari aplikasi memilih
+  RUANGAN, tak mengukur titik — menuliskan `titik: None` apa adanya menghapus
+  koordinat yang dikumpulkan lewat jalur Fase 9, yang justru MENOLAK koordinat
+  kosong. Kini titik lama dipertahankan bila scan tak membawa yang baru.
+- **Ruangan yang belum digambar** tak lagi divonis "di bawah standar −247 m²".
+  0 m² memang selalu lebih kecil dari standar apa pun, tetapi yang kurang adalah
+  GAMBARNYA, bukan luasnya. Status baru `belum_digambar` mendahului semuanya.
+- **N+1 dihapus dari rekonsiliasi.** `pastikan_akses_aset` dipanggil per baris —
+  ruangan berisi 1.000 aset berarti 1.000 `find_one` berurutan untuk satu
+  halaman. Diganti satu kueri kegiatan-satker yang dipakai bersama, yang
+  sekaligus menutup kebocoran keranjang "Ditemukan di sini" (dokumen scan
+  distempel satker PEMINDAI, bukan satker aset).
+
+### Jejak petugas: diungkapkan, bukan dihapus
+
+Auditor benar bahwa `opname_scan` menyimpan nama petugas + ruangan + waktu, dan
+klaim "yang direkam barang, bukan orang" hanya benar untuk MAKSUDNYA. Tetapi
+menghapusnya merusak bukti penatausahaan. Kewajiban UU 27/2022 di sini adalah
+**transparansi**: `/api/iot/kebijakan-privasi` kini menyatakan apa yang disimpan,
+berapa lama, mengapa berbeda dari `iot_observasi` (perbuatan sadar dalam tugas
+resmi vs aliran pasif), dan bahwa larangan penggunaan sekunder tetap berlaku.
+
+- Uji: **+8 backend (1.175)**. Lima jaminan diverifikasi MUTASI, semuanya
+  tertangkap tepat oleh uji penjaganya.
+
+---
+
 ## [#648] Audit adversarial gelombang A — 4 temuan TINGGI + 2 kebocoran laporan SBSK — 2026-07-27
 
 Audit adversarial 17 agen atas PR #641–#645 mengajukan **66 temuan**; penyanggah

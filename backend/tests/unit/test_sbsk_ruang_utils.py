@@ -112,8 +112,19 @@ class TestBarisRuang:
         assert b["menganggur"] is False
 
     def test_node_kosong_tak_meledak(self):
+        # Tanpa luas = BELUM DIGAMBAR, bukan "tanpa acuan standar": yang kurang
+        # adalah gambarnya, bukan standarnya.
         b = sru.baris_ruang(None, None, None, None)
-        assert b["luas_m2"] == 0.0 and b["status"] == "tanpa_standar"
+        assert b["luas_m2"] == 0.0 and b["status"] == "belum_digambar"
+
+    def test_ruangan_belum_digambar_tak_dituduh_kekurangan_luas(self):
+        # 0 m² selalu < standar apa pun. Dulu ruangan yang poligonnya belum ada
+        # dilaporkan "di bawah standar −40 m²" — menuduh ruangan kekurangan
+        # luas padahal yang kurang justru gambarnya.
+        b = sru.baris_ruang({**self.NODE}, 0.0, None, STANDAR)
+        assert b["status"] == "belum_digambar"
+        assert b["selisih_m2"] is None
+        assert b["standar_m2"] == 40        # acuannya tetap ditampilkan
 
 
 class TestRekapSbskRuang:

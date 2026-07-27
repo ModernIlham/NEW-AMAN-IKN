@@ -11,6 +11,7 @@ import pytest
 from mongomock_motor import AsyncMongoMockClient
 
 import routes.opname as ro
+import routes.perencanaan as rp  # noqa: F401 (fixture db bersama)
 
 # kode_satker "" = super-admin lintas satker → guard akses no-op, sehingga uji
 # ini fokus pada logika opname (isolasi satker punya uji sendiri di modul lain).
@@ -34,6 +35,11 @@ def _jalan(coro):
 
 async def _diam(*a, **k):
     return None
+
+
+def rp_rekon():
+    """Handler rekonsiliasi — dibungkus fungsi agar unwrap terjadi saat uji."""
+    return ro.rekonsiliasi
 
 
 @pytest.fixture()
@@ -327,3 +333,66 @@ class TestRekonsiliasi:
         with pytest.raises(HTTPException) as ex:
             _jalan(jalan())
         assert ex.value.status_code == 404
+
+
+class TestPerpindahanDalamLingkupTakHilang:
+    """Temuan audit: buka Opname di level GEDUNG (nilai bawaan `dalam=true`),
+    lalu barang yang pindah ANTAR RUANGAN di dalam gedung itu punya node buku
+    DAN node scan yang sama-sama di dalam lingkup — dulu ia langsung masuk
+    keranjang `sesuai` dan tak pernah bisa di-Terapkan."""
+
+    def test_pindah_antar_ruangan_muncul_sebagai_usulan_bukan_cocok(self, dbx):
+        async def jalan():
+            await _seed(dbx)
+            # a1 tercatat di r305; petugas memindainya di r307.
+            await _scan(kode="#3.05.01.05.007-12", node_id="r307", scan_id="d1")
+            return await _unwrap(rp_rekon())("gedA", True, "", USER)
+        r = _jalan(jalan())
+        assert [x["asset_id"] for x in r["pindah_masuk"]] == ["a1"]
+        assert r["sesuai"] == []
+        assert r["ringkas"]["persen_terkonfirmasi"] == 0.0
+
+    def test_setelah_diterapkan_barulah_dihitung_cocok(self, dbx):
+        # Rekap harus MENYEMBUHKAN DIRI: tanpa memeriksa `diterapkan`, keranjang
+        # usulan tak pernah kosong karena status scan tetap "pindah" selamanya.
+        async def jalan():
+            await _seed(dbx)
+            s = await _scan(kode="#3.05.01.05.007-12", node_id="r307", scan_id="d2")
+            await _unwrap(ro.terapkan_perpindahan)(
+                _Req(), ro.TerapkanIn(scan_ids=[s["scan"]["id"]]), USER)
+            return await _unwrap(rp_rekon())("gedA", True, "", USER)
+        r = _jalan(jalan())
+        assert r["pindah_masuk"] == []
+        assert [x["id"] for x in r["sesuai"]] == ["a1"]
+        assert r["ringkas"]["persen_terkonfirmasi"] == 100.0
+
+
+class TestTerapkanTidakMerusak:
+    def test_location_ikut_berpindah_agar_KIR_DBR_tak_tertinggal(self, dbx):
+        # reports.py mencocokkan ruangan lewat STRING `location`; tanpa ini,
+        # denah diperbarui tetapi DOKUMEN RESMI menyebut ruangan lama.
+        async def jalan():
+            await _seed(dbx)
+            await dbx.assets.update_one({"id": "a1"},
+                                        {"$set": {"location": "Ruang 305"}})
+            s = await _scan(kode="#3.05.01.05.007-12", node_id="r307", scan_id="l1")
+            await _unwrap(ro.terapkan_perpindahan)(
+                _Req(), ro.TerapkanIn(scan_ids=[s["scan"]["id"]]), USER)
+            aset = await dbx.assets.find_one({"id": "a1"}, {"_id": 0})
+            riwayat = await dbx.riwayat_lokasi_aset.find_one({}, {"_id": 0})
+            return aset, riwayat
+        aset, riwayat = _jalan(jalan())
+        assert aset["location"] == "Ruang 307"
+        # Nilai lama tak boleh lenyap tanpa jejak.
+        assert riwayat["location_lama"] == "Ruang 305"
+
+    def test_koordinat_presisi_tak_dihapus_oleh_scan_tanpa_lat_lon(self, dbx):
+        # Pemindaian dari aplikasi memilih RUANGAN, tak mengukur titik. Menulis
+        # `titik: None` apa adanya menghapus koordinat yang dikumpulkan Fase 9.
+        async def jalan():
+            await _seed(dbx)
+            s = await _scan(kode="#3.05.01.05.007-12", node_id="r307", scan_id="k1")
+            await _unwrap(ro.terapkan_perpindahan)(
+                _Req(), ro.TerapkanIn(scan_ids=[s["scan"]["id"]]), USER)
+            return await dbx.assets.find_one({"id": "a1"}, {"_id": 0})
+        assert _jalan(jalan())["lokasi_spasial"]["titik"] == [116.7, -1.4]

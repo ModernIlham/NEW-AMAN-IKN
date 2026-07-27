@@ -59,7 +59,11 @@ KEPERCAYAAN_SCAN = 0.99
 
 _PROJ_ASET = {"_id": 0, "id": 1, "activity_id": 1, "asset_code": 1, "NUP": 1,
               "asset_name": 1, "category": 1, "condition": 1, "status": 1,
-              "user": 1, "kode_register": 1, "lokasi_spasial": 1}
+              "user": 1, "kode_register": 1, "lokasi_spasial": 1,
+              # `location` (teks bebas) ikut dibaca karena /opname/terapkan
+              # memindahkannya juga — dan nilai LAMANYA harus tersimpan ke
+              # riwayat sebelum ditimpa.
+              "location": 1}
 _PROJ_NODE = {"_id": 0, "id": 1, "nama": 1, "tipe": 1, "ancestors": 1,
               "ancestors_nama": 1, "status": 1}
 
@@ -309,21 +313,34 @@ async def rekonsiliasi(node_id: str = Query(...), dalam: bool = Query(True),
     if not batas:
         batas = (_sekarang() - timedelta(days=ou.MAKS_UMUR_SCAN_HARI)).isoformat()
 
-    rows = await (db.assets.find({"lokasi_spasial.node_id": {"$in": ids}},
-                                 _PROJ_ASET)
-                  .sort("asset_name", 1).to_list(_MAKS_ISI))
-    harapan = []
-    for r in rows:
-        try:
-            await pastikan_akses_aset(_user, r)
-        except HTTPException:
-            continue
-        harapan.append(_ringkas_aset(r))
+    # SATU kueri kegiatan-satker untuk KEDUA daftar, bukan satu guard per baris.
+    # Versi lama memanggil `pastikan_akses_aset` di dalam loop: ruangan berisi
+    # 1.000 aset berarti 1.000 find_one BERURUTAN untuk satu halaman.
+    #
+    # Filter yang sama dipakai untuk SCAN — dan itu sekaligus menutup kebocoran
+    # yang ditemukan audit: dokumen scan distempel satker PEMINDAI, bukan satker
+    # aset, sehingga scan yang dibuat super-admin atas aset satker lain (di node
+    # era-lama tanpa kode_satker) muncul di keranjang "Ditemukan di sini" milik
+    # satker mana pun — lengkap dengan kode & nama barangnya.
+    q_aset = {"lokasi_spasial.node_id": {"$in": ids}}
+    q_scan = scope_query_field_satker(
+        _user, {"node_id": {"$in": ids}, "pada": {"$gte": batas}})
+    kode_satker = kode_satker_user(_user)
+    if kode_satker:
+        from shared_utils import id_kegiatan_satker
+        keg_boleh = await id_kegiatan_satker(kode_satker)
+        q_aset["activity_id"] = {"$in": keg_boleh}
+        # Scan YATIM (kegiatan induknya sudah dihapus) sengaja TIDAK ikut:
+        # kepemilikan satkernya tak dapat dipastikan, dan menampilkannya berarti
+        # menebak — pola fail-closed yang sama dengan pastikan_akses_kegiatan_id.
+        q_scan["activity_id"] = {"$in": keg_boleh}
 
-    scans = await (db.opname_scan.find(
-        scope_query_field_satker(_user, {"node_id": {"$in": ids},
-                                         "pada": {"$gte": batas}}), _PROJ)
-        .sort("pada", -1).to_list(_MAKS_SCAN))
+    rows = await (db.assets.find(q_aset, _PROJ_ASET)
+                  .sort("asset_name", 1).to_list(_MAKS_ISI))
+    harapan = [_ringkas_aset(r) for r in rows]
+
+    scans = await (db.opname_scan.find(q_scan, _PROJ)
+                   .sort("pada", -1).to_list(_MAKS_SCAN))
 
     hasil = ou.rekap_rekonsiliasi(harapan, scans)
     hasil["ringkas"]["persen_terkonfirmasi"] = ou.persen_terkonfirmasi(
@@ -406,15 +423,32 @@ async def terapkan_perpindahan(request: Request, payload: TerapkanIn,
 
         lokasi_lama = aset.get("lokasi_spasial")
         lokasi_baru = dict(s.get("lokasi_spasial") or {})
+        # Koordinat presisi TIDAK DITURUNKAN. Pemindaian dari aplikasi tak
+        # membawa lat/lon (ruangan dipilih, bukan diukur), sehingga `titik`
+        # bernilai None — dan menuliskannya apa adanya MENGHAPUS koordinat yang
+        # dikumpulkan lewat jalur Fase 9, yang justru menolak koordinat kosong.
+        if lokasi_baru.get("titik") is None and (lokasi_lama or {}).get("titik"):
+            lokasi_baru["titik"] = lokasi_lama["titik"]
         lokasi_baru.update({"ditandai_oleh": username, "ditandai_pada": now,
                             "sumber": "scan_qr", "scan_id": s.get("scan_id")})
+        nama_ruang = str(lokasi_baru.get("node_nama") or "").strip()
+        lokasi_teks_lama = str(aset.get("location") or "")
         if su.pindah_lokasi_berarti(lokasi_lama, lokasi_baru):
-            await db.riwayat_lokasi_aset.insert_one(
-                su.entri_riwayat_lokasi(aset["id"], lokasi_lama, lokasi_baru,
-                                        username, now))
-        await db.assets.update_one(
-            {"id": aset["id"]},
-            {"$set": {"lokasi_spasial": lokasi_baru, "updated_at": now}})
+            baris = su.entri_riwayat_lokasi(aset["id"], lokasi_lama, lokasi_baru,
+                                            username, now)
+            # Nilai `location` LAMA ikut disimpan: ia akan ditimpa di bawah, dan
+            # riwayat custody adalah satu-satunya tempat ia masih bisa dibaca.
+            baris["location_lama"] = lokasi_teks_lama
+            await db.riwayat_lokasi_aset.insert_one(baris)
+        set_aset = {"lokasi_spasial": lokasi_baru, "updated_at": now}
+        # `location` (teks bebas) IKUT BERPINDAH — inilah yang dibaca KIR & DBR
+        # (reports.py `cocok_ruangan_master` mencocokkan STRING, bukan node_id).
+        # Tanpa ini, menerapkan hasil opname memperbarui denah tetapi membiarkan
+        # DOKUMEN RESMI menyebut ruangan lama: peta dan kertas saling
+        # bertentangan, dan yang dipegang pemeriksa justru kertasnya.
+        if nama_ruang and nama_ruang != lokasi_teks_lama:
+            set_aset["location"] = nama_ruang
+        await db.assets.update_one({"id": aset["id"]}, {"$set": set_aset})
         await log_audit("opname_terapkan", aset.get("activity_id") or "",
                         aset["id"], asset_code=aset.get("asset_code") or "",
                         asset_name=aset.get("asset_name") or "",
