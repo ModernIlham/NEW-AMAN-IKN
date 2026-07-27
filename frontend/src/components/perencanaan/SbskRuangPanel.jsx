@@ -23,10 +23,13 @@ const WARNA_STATUS = {
   di_bawah: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
   melebihi: "bg-sky-500/15 text-sky-700 dark:text-sky-300",
   tanpa_standar: "bg-muted text-muted-foreground",
+  // Belum digambar BUKAN penyimpangan — warnanya netral, bukan peringatan.
+  belum_digambar: "bg-slate-500/15 text-slate-700 dark:text-slate-300",
 };
 const LABEL_STATUS = {
   sesuai: "sesuai", di_bawah: "di bawah", melebihi: "melebihi",
   tanpa_standar: "tanpa acuan",
+  belum_digambar: "belum digambar",
 };
 
 const angka = (n) => Number(n || 0).toLocaleString("id-ID",
@@ -193,7 +196,9 @@ export default function SbskRuangPanel() {
                           <span className="text-xs font-semibold block truncate">
                             {b.nama}
                             <span className="font-normal text-muted-foreground">
-                              {" "}· {angka(b.luas_m2)} m²
+                              {" "}· {b.status === "belum_digambar"
+                                ? "luas belum diketahui"
+                                : `${angka(b.luas_m2)} m²`}
                             </span>
                           </span>
                           <span className="text-[11px] text-muted-foreground block truncate">

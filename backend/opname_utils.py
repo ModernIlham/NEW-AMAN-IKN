@@ -149,6 +149,19 @@ def scan_terakhir_per_aset(scans) -> dict:
     return hasil
 
 
+def perlu_dipindahkan(scan) -> bool:
+    """Scan ini masih menunggu keputusan perpindahan?
+
+    Dua syarat, dan keduanya wajib. `status_rekonsiliasi` dihitung SAAT SCAN
+    terhadap catatan yang berlaku waktu itu, jadi ia tetap "pindah" selamanya
+    walau perpindahannya sudah diterapkan — tanpa memeriksa `diterapkan`,
+    keranjang usulan tak pernah kosong dan rekap tak pernah selesai.
+    """
+    s = scan or {}
+    return (str(s.get("status_rekonsiliasi") or "") == "pindah"
+            and not s.get("diterapkan"))
+
+
 def rekap_rekonsiliasi(harapan, scans) -> dict:
     """Tiga keranjang hasil opname untuk satu lingkup lokasi.
 
@@ -163,16 +176,33 @@ def rekap_rekonsiliasi(harapan, scans) -> dict:
                           lain (atau belum di mana pun). Inilah calon
                           perpindahan yang menunggu keputusan petugas.
 
+    KEANGGOTAAN LINGKUP SAJA TIDAK CUKUP UNTUK MENYATAKAN "COCOK" (temuan audit
+    adversarial). Buka Opname pada level GEDUNG — nilai bawaannya — lalu barang
+    yang berpindah dari Ruang 305 ke Ruang 307 punya node buku DAN node scan
+    yang sama-sama berada di dalam lingkup itu. Dulu ia langsung masuk `sesuai`:
+    layar melaporkan gedung 100% terkonfirmasi tanpa selisih, scan berstatus
+    "pindah" tak pernah muncul untuk dicentang, dan buku tetap menyebut Ruang
+    305 selamanya. Perpindahannya hanya terlihat bila kebetulan ada yang membuka
+    rekonsiliasi tepat pada Ruang 307.
+    Karena itu penentu keranjang adalah `status_rekonsiliasi` scan itu sendiri —
+    yang memang sudah tersimpan, jadi tak ada kueri tambahan.
+
     Aset yang sudah diterapkan perpindahannya otomatis berpindah keranjang ke
     `sesuai` pada pembacaan berikutnya — rekap ini menyembuhkan diri sendiri
     dan tak menyimpan status apa pun yang bisa basi.
     """
     peta_scan = scan_terakhir_per_aset(scans)
     id_harapan = {str(a.get("id") or "") for a in (harapan or []) if a}
-    sesuai, belum = [], []
+    sesuai, belum, pindah = [], [], []
     for a in harapan or []:
-        (sesuai if str(a.get("id") or "") in peta_scan else belum).append(a)
-    pindah = [s for aid, s in peta_scan.items() if aid not in id_harapan]
+        s = peta_scan.get(str(a.get("id") or ""))
+        if s is None:
+            belum.append(a)
+        elif perlu_dipindahkan(s):
+            pindah.append(s)          # pindah DI DALAM lingkup — tetap usulan
+        else:
+            sesuai.append(a)
+    pindah += [s for aid, s in peta_scan.items() if aid not in id_harapan]
     pindah.sort(key=lambda s: str(s.get("pada") or ""), reverse=True)
     return {
         "sesuai": sesuai,

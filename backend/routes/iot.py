@@ -599,4 +599,28 @@ async def kebijakan_privasi(_user: dict = Depends(require_user)):
             "maks_jam_izin_darurat": pu.MAKS_JAM_DARURAT,
             "catatan": ("Sistem melacak BARANG NEGARA, bukan ORANG. Perangkat "
                         "pegangan perorangan hanya menyimpan level wilayah dan "
-                        "hanya pada jam kerja.")}
+                        "hanya pada jam kerja."),
+            # DIUNGKAPKAN, bukan disembunyikan (temuan audit adversarial).
+            # Pernyataan "yang direkam barang, bukan orang" benar untuk MAKSUD
+            # scan opname, tetapi dokumennya memang memuat nama petugas + node +
+            # waktu. Kewajiban UU 27/2022 di sini adalah TRANSPARANSI, bukan
+            # penghapusan: menghapusnya justru merusak bukti penatausahaan.
+            "catatan_opname": {
+                "koleksi": "opname_scan",
+                "memuat": ["nama petugas pemindai", "ruangan", "waktu pindai",
+                           "aset yang dipindai"],
+                "retensi": ("TANPA batas waktu — sama seperti audit_logs. "
+                            "Ini catatan KERJA yang episodik (terjadi saat "
+                            "opname), bukan pemantauan terus-menerus, dan ia "
+                            "adalah bukti penatausahaan BMN yang harus "
+                            "bertahan sampai barangnya dihapuskan."),
+                "beda_dengan_iot": ("Observasi perangkat (`iot_observasi`) "
+                                    "mengalir terus tanpa perbuatan sadar "
+                                    "pemegangnya, sehingga ia ber-TTL 30/90 "
+                                    "hari dan dikeluarkan dari arsip backup. "
+                                    "Scan opname adalah perbuatan sadar "
+                                    "petugas dalam tugas resminya."),
+                "larangan_sama": ("Dilarang dipakai menilai kehadiran, "
+                                  "kedisiplinan, atau kinerja pegawai — "
+                                  "kebijakan #9 berlaku penuh di sini."),
+            }}

@@ -82,12 +82,19 @@ def _angka(nilai):
 
 
 def status_kesesuaian(luas_m2, standar_m2, toleransi_persen=TOLERANSI_PERSEN) -> str:
-    """`sesuai` / `di_bawah` / `melebihi` / `tanpa_standar`.
+    """`belum_digambar` / `sesuai` / `di_bawah` / `melebihi` / `tanpa_standar`.
 
     Toleransi dipakai DUA arah supaya ruangan yang praktis pas tidak dilaporkan
     menyimpang hanya karena pembulatan jiplakan denah.
+
+    `belum_digambar` mendahului semuanya (temuan audit adversarial). Ruangan
+    yang poligonnya belum ada berluas 0 m², dan 0 < standar apa pun — dulu ia
+    dilaporkan "di bawah standar −247 m²", yaitu MENUDUH ruangan kekurangan
+    luas padahal yang kurang justru gambarnya. Tak diketahui bukan nol.
     """
     l, s = _angka(luas_m2), _angka(standar_m2)
+    if l is not None and l <= 0:
+        return "belum_digambar"
     if s is None or s <= 0 or l is None:
         return "tanpa_standar"
     batas = s * (float(toleransi_persen or 0) / 100.0)
@@ -121,7 +128,8 @@ def baris_ruang(node, luas_m2, isi, standar) -> dict:
         "luas_m2": round(luas, 2),
         "standar_m2": standar_m2,
         "standar_peruntukan": str((baris_standar or {}).get("peruntukan") or ""),
-        "selisih_m2": (None if standar_m2 is None
+        # Selisih hanya bermakna bila luasnya memang sudah diketahui.
+        "selisih_m2": (None if standar_m2 is None or status == "belum_digambar"
                        else round(luas - standar_m2, 2)),
         "status": status,
         "jumlah_aset": jumlah_aset,
@@ -141,7 +149,8 @@ def rekap_sbsk_ruang(rows) -> dict:
     akan melaporkan gedung yang sibuk sebagai gedung kosong.
     """
     rows = [r for r in (rows or []) if r]
-    hitung = {"sesuai": 0, "di_bawah": 0, "melebihi": 0, "tanpa_standar": 0}
+    hitung = {"sesuai": 0, "di_bawah": 0, "melebihi": 0, "tanpa_standar": 0,
+              "belum_digambar": 0}
     luas_total = luas_menganggur = 0.0
     berperuntukan = menganggur = 0
     lebih = kurang = 0.0
