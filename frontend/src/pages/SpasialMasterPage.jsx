@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Plus, Pencil, Trash2, Loader2, Layers, ChevronRight, ChevronDown,
-  Search, MapPinned, LandPlot, Upload, Download,
+  Search, MapPinned, LandPlot, Upload, Download, Boxes,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,7 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const DenahEditor = lazy(() => import("@/components/spasial/DenahEditor"));
 const ImporDenahDialog = lazy(() => import("@/components/spasial/ImporDenahDialog"));
 const EksporDenahDialog = lazy(() => import("@/components/spasial/EksporDenahDialog"));
+const IsiNodeDialog = lazy(() => import("@/components/spasial/IsiNodeDialog"));
 
 function getApiError(err, fallback) {
   return err?.response?.data?.detail || fallback;
@@ -48,6 +49,7 @@ export default function SpasialMasterPage({ user, onBack }) {
   const [editorNode, setEditorNode] = useState(null);  // node yang denahnya digambar
   const [imporBuka, setImporBuka] = useState(false);   // dialog impor file GIS
   const [eksporBuka, setEksporBuka] = useState(false); // dialog ekspor + template
+  const [isiNode, setIsiNode] = useState(null);        // node yang dilihat isinya (Fase 9)
   const { confirm, confirmDialog } = useConfirm();
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
@@ -289,6 +291,14 @@ export default function SpasialMasterPage({ user, onBack }) {
           >
             {node.bbox ? "denah" : "—"}
           </span>
+          {/* Isi lokasi = operasi BACA (viewer boleh): "aset apa saja di sini",
+              bentuk yang dibutuhkan opname fisik. Fase 9. */}
+          <button type="button" onClick={() => setIsiNode(node)}
+            className="tap-expand p-0.5 rounded hover:bg-muted shrink-0"
+            title="Lihat aset yang menempati lokasi ini"
+            data-testid={`spasial-isi-${node.id}`}>
+            <Boxes className="w-4 h-4 text-sky-600" />
+          </button>
           {isWriter && (
             <span className="flex items-center gap-1.5 shrink-0">
               {/* tap-expand: ikon kecil, area sentuh ~44px (lihat index.css) */}
@@ -343,6 +353,15 @@ export default function SpasialMasterPage({ user, onBack }) {
             labelLevel={labelLevel}
             onClose={() => setImporBuka(false)}
             onSaved={loadNodes}
+          />
+        </Suspense>
+      )}
+      {isiNode && (
+        <Suspense fallback={null}>
+          <IsiNodeDialog
+            node={isiNode}
+            labelLevel={labelLevel}
+            onClose={() => setIsiNode(null)}
           />
         </Suspense>
       )}

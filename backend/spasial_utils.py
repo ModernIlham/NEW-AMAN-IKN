@@ -946,3 +946,36 @@ def snapshot_lokasi_temuan(node, lon, lat) -> dict:
             "jalur_nama": " / ".join(x for x in rantai if x)[:300],
         })
     return hasil
+
+
+def entri_riwayat_lokasi(asset_id, lokasi_lama, lokasi_baru, oleh, pada) -> dict:
+    """Satu baris riwayat perpindahan aset antar node denah.
+
+    Menyimpan SNAPSHOT nama kedua sisi (bukan sekadar id): node bisa diganti
+    nama atau dihapus bertahun kemudian, dan riwayat custody harus tetap
+    terbaca apa adanya saat kejadian — itu inti nilai buktinya.
+    """
+    def _ringkas(lok):
+        lok = lok or {}
+        return {"node_id": str(lok.get("node_id") or ""),
+                "nama": str(lok.get("node_nama") or ""),
+                "jalur": str(lok.get("jalur_nama") or "")}
+    return {"asset_id": str(asset_id or ""),
+            "dari": _ringkas(lokasi_lama), "ke": _ringkas(lokasi_baru),
+            "oleh": str(oleh or ""), "pada": str(pada or "")}
+
+
+def pindah_lokasi_berarti(lokasi_lama, lokasi_baru) -> bool:
+    """True bila perpindahan LAYAK dicatat sebagai riwayat.
+
+    Menyimpan ulang lokasi yang SAMA (mis. operator menggeser pin beberapa
+    meter di ruangan yang sama, atau menekan Simpan dua kali) tak boleh
+    menggelembungkan riwayat custody dengan baris tanpa makna — riwayat yang
+    penuh derau justru tak terbaca saat dibutuhkan sebagai bukti.
+    """
+    lama = str((lokasi_lama or {}).get("node_id") or "")
+    baru = str((lokasi_baru or {}).get("node_id") or "")
+    if lama != baru:
+        return True
+    # node sama: titik koordinat pun sama persis → bukan perpindahan
+    return (lokasi_lama or {}).get("titik") != (lokasi_baru or {}).get("titik")

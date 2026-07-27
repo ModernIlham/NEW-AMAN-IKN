@@ -1402,3 +1402,166 @@ async def gambar_overlay(file_id: str, request: Request,
                                          "application/octet-stream"),
         headers={"Cache-Control": "private, max-age=604800", "ETag": etag,
                  "X-Content-Type-Options": "nosniff"})
+
+
+# ── Custody berlokasi: aset menempati node denah (Fase 9) ───────────────────
+#
+# Aset bergerak (laptop, meja, kendaraan) MENEMPATI node denah — biasanya
+# Ruangan. Snapshot lokasi disimpan DI DOKUMEN ASET (`lokasi_spasial`, format
+# sama dengan tiket wasdal Fase 8) supaya daftar/ekspor aset tak perlu join,
+# sedangkan RIWAYAT perpindahan masuk koleksi terpisah `riwayat_lokasi_aset`:
+# menaruhnya sebagai array di dokumen aset akan tumbuh tanpa batas seumur
+# pakai barang dan menyeret setiap pembacaan aset.
+
+_MAKS_ISI_NODE = 500
+
+
+class LokasiAsetIn(BaseModel):
+    lat: object = None
+    lon: object = None
+    node_id: str = ""
+    hapus: bool = False
+
+
+@spasial_router.put("/assets/{asset_id}/lokasi-spasial")
+async def set_lokasi_aset(asset_id: str, payload: LokasiAsetIn,
+                          _user: dict = Depends(require_writer)):
+    """Tempatkan aset pada node denah (atau cabut penempatannya).
+
+    Guard aset memakai jalur BAKU modul aset — lewat kegiatan induknya
+    (`pastikan_akses_aset`), bukan kode_satker di dokumen aset, supaya aturan
+    akses tetap satu sumber. Node divalidasi terpisah dengan scope satker
+    user: menempatkan aset ke ruangan milik satker lain harus mustahil.
+    """
+    from shared_utils import pastikan_akses_aset
+
+    aset = await db.assets.find_one(
+        {"id": asset_id},
+        {"_id": 0, "id": 1, "activity_id": 1, "asset_name": 1,
+         "asset_code": 1, "NUP": 1, "lokasi_spasial": 1})
+    if not aset:
+        raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    await pastikan_akses_aset(_user, aset)
+
+    now = datetime.now(timezone.utc).isoformat()
+    lokasi_lama = aset.get("lokasi_spasial")
+    username = _user.get("username", "")
+
+    if payload.hapus:
+        if lokasi_lama:
+            await db.riwayat_lokasi_aset.insert_one(
+                su.entri_riwayat_lokasi(asset_id, lokasi_lama, None,
+                                        username, now))
+        await db.assets.update_one({"id": asset_id},
+                                   {"$unset": {"lokasi_spasial": ""},
+                                    "$set": {"updated_at": now}})
+        await log_audit("aset_lokasi_hapus", aset.get("activity_id") or "",
+                        asset_id, asset_code=aset.get("asset_code") or "",
+                        asset_name=aset.get("asset_name") or "",
+                        username=username or "system",
+                        kode_satker=kode_satker_user(_user),
+                        detail="Penempatan denah dicabut")
+        return {"ok": True, "lokasi_spasial": None}
+
+    lat = su.parse_lintang(payload.lat)
+    lon = su.parse_bujur(payload.lon)
+    if lat is None or lon is None:
+        raise HTTPException(status_code=400, detail="Koordinat tidak valid")
+    node = None
+    nid = str(payload.node_id or "").strip()
+    if nid:
+        node = await db.spasial_node.find_one(
+            scope_query_field_satker(_user, {"id": nid,
+                                             "status": {"$ne": "dihapus"}}),
+            {"_id": 0, "id": 1, "nama": 1, "tipe": 1, "ancestors_nama": 1})
+        if not node:
+            raise HTTPException(status_code=404,
+                                detail="Node denah tidak ditemukan")
+    lokasi = su.snapshot_lokasi_temuan(node, lon, lat)
+    lokasi.update({"ditandai_oleh": username, "ditandai_pada": now})
+
+    # Riwayat HANYA saat benar-benar berpindah — menyimpan ulang lokasi yang
+    # sama tak boleh menggelembungkan jejak custody (lihat helper).
+    if su.pindah_lokasi_berarti(lokasi_lama, lokasi):
+        await db.riwayat_lokasi_aset.insert_one(
+            su.entri_riwayat_lokasi(asset_id, lokasi_lama, lokasi,
+                                    username, now))
+    await db.assets.update_one({"id": asset_id},
+                               {"$set": {"lokasi_spasial": lokasi,
+                                         "updated_at": now}})
+    await log_audit("aset_lokasi_tandai", aset.get("activity_id") or "",
+                    asset_id, asset_code=aset.get("asset_code") or "",
+                    asset_name=aset.get("asset_name") or "",
+                    username=username or "system",
+                    kode_satker=kode_satker_user(_user),
+                    detail=(lokasi.get("jalur_nama")
+                            or f"{lat:.6f}, {lon:.6f}")[:120])
+    return {"ok": True, "lokasi_spasial": lokasi}
+
+
+@spasial_router.get("/assets/{asset_id}/riwayat-lokasi")
+async def riwayat_lokasi_aset(asset_id: str,
+                              _user: dict = Depends(require_user)):
+    """Jejak perpindahan aset antar node denah (terbaru dulu)."""
+    from shared_utils import pastikan_akses_aset
+
+    aset = await db.assets.find_one({"id": asset_id},
+                                    {"_id": 0, "id": 1, "activity_id": 1})
+    if not aset:
+        raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
+    await pastikan_akses_aset(_user, aset)
+    items = await (db.riwayat_lokasi_aset.find({"asset_id": asset_id},
+                                               {"_id": 0})
+                   .sort("pada", -1).to_list(200))
+    return {"items": items, "jumlah": len(items)}
+
+
+@spasial_router.get("/spasial/node/{node_id}/isi")
+async def isi_node(node_id: str, dalam: bool = Query(True),
+                   _user: dict = Depends(require_user)):
+    """Aset yang menempati node ini — `dalam=true` (bawaan) termasuk SELURUH
+    keturunannya, sehingga membuka Gedung memperlihatkan isi tiap ruangannya.
+
+    Node divalidasi ter-scope satker lebih dulu; daftar aset lalu disaring
+    lewat `lokasi_spasial.node_id`. Ini kebalikan Fase 3 (titik → wilayah):
+    di sini wilayah → daftar barang, yaitu bentuk yang dibutuhkan opname.
+    """
+    node = await db.spasial_node.find_one(
+        scope_query_field_satker(_user, {"id": node_id}),
+        {"_id": 0, "id": 1, "nama": 1, "tipe": 1, "ordinal_level": 1,
+         "kode": 1, "status": 1})
+    if not node or node.get("status") == "dihapus":
+        raise HTTPException(status_code=404, detail="Node tidak ditemukan")
+
+    ids = [node_id]
+    if dalam:
+        # Keturunan lewat indeks multikey `ancestors` (satu kueri, bukan
+        # rekursi per tingkat).
+        anak = await db.spasial_node.find(
+            scope_query_field_satker(_user, {"ancestors": node_id,
+                                             "status": {"$ne": "dihapus"}}),
+            {"_id": 0, "id": 1}).to_list(_MAKS_NODE)
+        ids.extend(d["id"] for d in anak)
+
+    rows = await (db.assets.find(
+        {"lokasi_spasial.node_id": {"$in": ids}},
+        {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
+         "category": 1, "condition": 1, "user": 1, "status": 1,
+         "lokasi_spasial": 1, "activity_id": 1})
+        .sort("asset_name", 1).to_list(_MAKS_ISI_NODE))
+
+    # Isolasi satker aset mengikuti KEGIATAN induknya (aturan baku modul aset),
+    # jadi hasil disaring dengan guard yang sama — bukan sekadar percaya bahwa
+    # node ter-scope sudah cukup (aset satker lain bisa saja menunjuk node
+    # era-lama tanpa stempel satker).
+    from shared_utils import pastikan_akses_aset
+    hasil = []
+    for r in rows:
+        try:
+            await pastikan_akses_aset(_user, r)
+        except HTTPException:
+            continue
+        hasil.append(r)
+    return {"node": _ringkas(node), "items": hasil, "jumlah": len(hasil),
+            "termasuk_keturunan": bool(dalam),
+            "terpotong": len(rows) >= _MAKS_ISI_NODE}
