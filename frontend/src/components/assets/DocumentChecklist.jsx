@@ -70,6 +70,16 @@ const DocumentChecklist = memo(({ checklist, onChange, assetId, assetVersion = 1
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
 
+    // SATU salinan kerja untuk SELURUH loop, bukan `[...checklist]` baru tiap
+    // iterasi. `checklist` adalah prop yang nilainya BEKU selama callback ini
+    // berjalan — ia tidak ikut berubah walau onChange sudah dipanggil. Dulu
+    // tiap iterasi menyalin daftar yang sama (tanpa hasil iterasi sebelumnya)
+    // lalu memanggil onChange, sehingga memilih 3 foto sekaligus hanya
+    // menyisakan yang TERAKHIR — dua lainnya lenyap tanpa satu pesan pun, dan
+    // batas "maks 3 foto" pun dihitung dari cacah yang basi.
+    let kerja = [...checklist];
+    let berubah = false;
+
     for (const file of files) {
       if (file.size > 25 * 1024 * 1024) { toast.error(`${file.name} terlalu besar (maks 25MB)`); continue; }
       try {
@@ -90,23 +100,25 @@ const DocumentChecklist = memo(({ checklist, onChange, assetId, assetVersion = 1
           } else {
             toast.success(`${file.name} berhasil diupload`, { id: tId });
           }
-          const u = [...checklist];
-          if ((u[idx].documents || []).length >= 1) { toast.error("Maksimal 1 dokumen PDF"); continue; }
-          u[idx] = { ...u[idx], documents: [...(u[idx].documents || []), { name: file.name, data }] };
-          onChange(u);
+          if ((kerja[idx].documents || []).length >= 1) { toast.error("Maksimal 1 dokumen PDF"); continue; }
+          kerja[idx] = { ...kerja[idx], documents: [...(kerja[idx].documents || []), { name: file.name, data }] };
+          berubah = true;
         } else if (file.type.startsWith('image/')) {
           // Images: compress client-side (10x smaller payload)
           data = await compressImageFile(file);
-          const u = [...checklist];
-          if ((u[idx].photos || []).length >= 3) { toast.error("Maksimal 3 foto per item"); continue; }
-          u[idx] = { ...u[idx], photos: [...(u[idx].photos || []), data] };
-          onChange(u);
+          if ((kerja[idx].photos || []).length >= 3) { toast.error("Maksimal 3 foto per item"); continue; }
+          kerja[idx] = { ...kerja[idx], photos: [...(kerja[idx].photos || []), data] };
+          berubah = true;
           toast.success(`${file.name} berhasil diupload`);
         }
       } catch (err) {
         toast.error(`Gagal memproses ${file.name}: ${err.message || err}`);
       }
     }
+    // Satu kali di akhir, membawa SEMUA berkas yang lolos. Berkas yang gagal
+    // atau melebihi batas tetap dilewati satu per satu di atas — yang berhasil
+    // tidak ikut jadi korbannya.
+    if (berubah) onChange(kerja);
     e.target.value = "";
   };
   
