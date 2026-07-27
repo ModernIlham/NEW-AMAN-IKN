@@ -272,10 +272,16 @@ async def terima_observasi(request: Request, payload: BatchIn,
     # ini, dan satu koordinat kacau yang melompat 40 km lalu kembali akan
     # melahirkan sepasang peringatan keluar-masuk yang sepenuhnya palsu.
     if dok:
-        dok.sort(key=lambda d: str(d.get("ts_device") or ""))
+        dok.sort(key=lambda d: gf.kunci_urut(d.get("ts_device")))
+        # Diurutkan `ts_server` (TERINDEKS), bukan `ts_device`: mengurutkan
+        # field tak berindeks memaksa Mongo memindai SELURUH riwayat perangkat
+        # dan menyortirnya di memori — tiap batch masuk, selamanya.
+        # `outlier` DIKECUALIKAN: memakai titik kacau sebagai acuan membuat
+        # observasi waras berikutnya tampak melompat balik, dan kesalahan itu
+        # merambat — satu koordinat rusak membutakan geofence berkepanjangan.
         acuan = await db.iot_observasi.find_one(
-            {"device_id": dev["id"]}, {"_id": 0, "geo": 1, "ts_device": 1},
-            sort=[("ts_device", -1)])
+            {"device_id": dev["id"], "outlier": {"$ne": True}},
+            {"_id": 0, "geo": 1, "ts_device": 1}, sort=[("ts_server", -1)])
         for d in dok:
             if acuan and gf.lompatan_mustahil(acuan, d):
                 d["outlier"] = True

@@ -126,7 +126,43 @@ sistem ini.
   per satker + partial `dibaca:false` untuk badge.
 - Backup: `iot_geofence_state` di-SKIP (derivable & menyesatkan bila dipulihkan);
   `iot_geofence_aturan` masuk RESET_KEEP (konfigurasi pengawasan).
-- Uji: +36 unit, seluruhnya pada mesin status & geometri. 1.021 lulus.
+**Tinjauan adversarial menemukan 3 cacat lagi yang lolos 36 uji itu** — para
+penyanggah menjalankan endpoint sungguhan, bukan membaca kode:
+
+- **Batch backfill MEMUNDURKAN mesin status.** Mengurutkan observasi di dalam
+  satu batch ternyata tidak cukup: urutan ANTAR batch tak bisa dijamin siapa
+  pun. Antrean offline yang tiba belakangan menggeser `sejak` ke masa lalu, lalu
+  observasi berikutnya menghitung selisih raksasa dan mematangkan dwell
+  SEKETIKA — melahirkan `keluar` palsu untuk aset yang justru sedang di dalam.
+  Kini ada pagar monoton: observasi yang lebih tua dari yang sudah diproses
+  diabaikan.
+- **Cooldown memakai selisih BERTANDA.** Observasi ber-`ts` mundur menghasilkan
+  angka negatif — yang selalu lebih kecil dari ambang — sehingga peringatan
+  NYATA teredam tanpa jejak apa pun.
+- **Invarian histeresis hanya dijepit di lapis rute, bukan di mesinnya.**
+  `buffer_masuk_m > buffer_keluar_m` menciptakan pita jarak yang sekaligus "di
+  dalam" dan "jauh di luar"; perangkat DIAM di pita itu berayun selamanya. Uji
+  yang membuktikannya justru gagal pada perbaikan pertama saya — pagar yang
+  hanya berdiri di pintu depan bukan pagar.
+
+Plus: geometri **Point** diterima sebagai area pagar (jarak selalu tak-hingga →
+aturan bisu selamanya, dan `Infinity` meledakkan serialisasi JSON seluruh daftar
+aturan); kueri acuan outlier menyortir field **tak berindeks** sehingga memindai
+seluruh riwayat perangkat tiap batch; titik ber-`outlier` dipakai sebagai acuan
+berikutnya sehingga satu koordinat rusak merambat; indeks bernama `…_unik`
+ternyata **tidak** unique padahal sapuan berjalan di setiap worker; eskalasi
+penertiban memakai cek-lalu-tulis sehingga dua klik melahirkan dua tiket
+bertenggat di register PMK 207/2021; `kode_satker` aturan tak ikut berpindah
+saat perangkatnya diganti; dan pengurutan `ts_device` sebagai **teks** salah
+untuk perangkat yang menulis offset zona waktu berbeda.
+
+Tinjauan juga menemukan **uji yang hijau tanpa menguji apa pun**: `dwell_keluar_dtk`
+boleh diubah jadi 0 dan 36/36 tetap lulus; regresi transisi-vs-cooldown yang
+komentarnya mengaku sudah diperbaiki tak punya uji sama sekali; `sampel_min`
+tak pernah diuji secara perilaku; muatan event tak pernah diperiksa. Semuanya
+kini terkunci.
+
+- Uji: +36 lalu +18 dari temuan tinjauan = **1.039 lulus**.
 
 ---
 

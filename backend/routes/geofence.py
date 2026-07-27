@@ -25,6 +25,7 @@ TIGA KEPUTUSAN YANG MENENTUKAN BENTUK MODUL INI:
    register yang bisa dikueri, ber-scope satker; kanal dorong khusus adalah
    pekerjaan tersendiri, bukan tumpangan.
 """
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -38,10 +39,12 @@ from shared_utils import (kode_satker_user, log_audit, pastikan_akses_dok_satker
                           scope_query_field_satker)
 import geofence_utils as gf
 
+logger = logging.getLogger(__name__)
 geofence_router = APIRouter()
 
 _PROJ = {"_id": 0}
 _MAKS_ATURAN = 200          # aturan per perangkat; di atas ini pasti salah pakai
+_MAKS_SAPU = 5000           # plafon GLOBAL sapuan berkala (seluruh satker)
 _MAKS_EVENT = 500
 _JENIS_EVENT = ("masuk", "keluar", "dwell_terlampaui")
 
@@ -75,7 +78,8 @@ async def _pastikan_area(user, node_id: str) -> dict:
     if not node:
         raise HTTPException(status_code=404, detail="Area denah tidak ditemukan")
     await pastikan_akses_dok_satker(user, node)
-    if not node.get("geometry"):
+    geom = node.get("geometry") or {}
+    if not geom:
         # Node tanpa geometri (baru disusun strukturnya) TAK BISA jadi pagar.
         # Menerimanya berarti aturan yang diam selamanya tanpa pernah memberi
         # tahu pemiliknya bahwa ia tak pernah berfungsi.
@@ -83,6 +87,16 @@ async def _pastikan_area(user, node_id: str) -> dict:
             status_code=400,
             detail=(f"Area '{node.get('nama')}' belum punya geometri — gambar "
                     "atau impor batasnya dulu di Hierarki Spasial"))
+    if geom.get("type") not in ("Polygon", "MultiPolygon"):
+        # Node BOLEH bergeometri Point (mis. titik penanda) dan itu sah sebagai
+        # data spasial — tetapi sebuah PAGAR menuntut luasan. Titik tak punya
+        # dalam/luar: jaraknya selalu tak-hingga, aturannya bisu selamanya, dan
+        # kebisuan itu tak bisa dibedakan dari "aset memang tak pernah keluar".
+        raise HTTPException(
+            status_code=400,
+            detail=(f"Area '{node.get('nama')}' bergeometri {geom.get('type')} "
+                    "— pagar membutuhkan poligon (area berluas), bukan titik "
+                    "atau garis"))
     return node
 
 
@@ -156,6 +170,12 @@ async def ubah_aturan(aturan_id: str, payload: AturanIn,
             "maks_di_luar_jam": max(0.0, float(payload.maks_di_luar_jam or 0)),
             "param": dict(payload.param or {}),
             "aktif": bool(payload.aktif if payload.aktif is not None else True),
+            # kode_satker IKUT perangkat barunya. Membiarkannya menempel pada
+            # nilai lama membuat peringatan aset satker B mendarat di register
+            # satker A — terlihat oleh mata yang tak berhak, dan luput dari mata
+            # yang berhak.
+            "kode_satker": (dev.get("kode_satker") or lama.get("kode_satker")
+                            or kode_satker_user(user)),
             "updated_at": datetime.now(timezone.utc).isoformat()}
     await db.iot_geofence_aturan.update_one({"id": aturan_id}, {"$set": ubah})
     if (lama.get("device_id") != ubah["device_id"]
@@ -166,7 +186,10 @@ async def ubah_aturan(aturan_id: str, payload: AturanIn,
         await db.iot_geofence_state.delete_many({"aturan_id": aturan_id})
     await log_audit("geofence_aturan_ubah", "", aturan_id,
                     username=user.get("username", "system"),
-                    kode_satker=kode_satker_user(user),
+                    # Satker DOKUMEN, bukan satker pemanggil: super-admin yang
+                    # mengubah pagar satker A tak boleh membuat jejaknya hilang
+                    # dari log satker A.
+                    kode_satker=ubah["kode_satker"],
                     detail=str(ubah["nama"])[:80])
     return {"ok": True, "param_efektif": gf.ringkas_aturan(ubah)}
 
@@ -184,7 +207,7 @@ async def hapus_aturan(aturan_id: str, user: dict = Depends(require_admin)):
     # lenyap hanya karena pemantauannya dihentikan hari ini.
     await log_audit("geofence_aturan_hapus", "", aturan_id,
                     username=user.get("username", "system"),
-                    kode_satker=kode_satker_user(user),
+                    kode_satker=a.get("kode_satker") or kode_satker_user(user),
                     detail=str(a.get("nama") or aturan_id)[:80])
     return {"ok": True}
 
@@ -207,44 +230,70 @@ async def evaluasi_perangkat(dev: dict, observasi: list,
     if not aturan:
         return {"event": 0, "aturan": 0}
 
-    # URUT WAKTU — lihat catatan #2 di docstring modul. Observasi tanpa
-    # ts_device yang terbaca diletakkan di awal secara stabil.
-    urut = sorted(observasi, key=lambda o: str(o.get("ts_device") or ""))
+    # URUT WAKTU — lihat catatan #2 di docstring modul. Diurutkan lewat waktu
+    # yang SUDAH DIURAI, bukan perbandingan string: "…T10:00+07:00" dan
+    # "…T04:00Z" menunjuk instan yang sama tetapi berbeda jauh sebagai teks,
+    # dan perangkat berbeda merek memang menulis offset berbeda.
+    urut = sorted(observasi, key=lambda o: gf.kunci_urut(o.get("ts_device")))
 
+    # Geometri seluruh area diambil dalam SATU kueri, bukan satu per aturan.
+    nid_set = {a.get("area_node_id") for a in aturan if a.get("area_node_id")}
     geom_area = {}
-    for a in aturan:
-        nid = a.get("area_node_id")
-        if nid and nid not in geom_area:
-            node = await db.spasial_node.find_one({"id": nid},
-                                                  {"_id": 0, "geometry": 1})
-            geom_area[nid] = (node or {}).get("geometry")
+    if nid_set:
+        async for n in db.spasial_node.find({"id": {"$in": list(nid_set)}},
+                                            {"_id": 0, "id": 1, "geometry": 1}):
+            geom_area[n["id"]] = n.get("geometry")
 
     jumlah = 0
     for a in aturan:
-        geom = geom_area.get(a.get("area_node_id"))
-        if not geom:
-            continue                     # area kehilangan geometri → lewati
-        param = gf.ringkas_aturan(a)
-        kunci = {"aturan_id": a["id"], "device_id": dev["id"]}
-        st = await db.iot_geofence_state.find_one(kunci, _PROJ)
-        if not st:
-            st = gf.status_awal(dev["id"], a.get("area_node_id") or "")
-            st["aturan_id"] = a["id"]
-        baru = []
-        for obs in urut:
-            hasil = gf.evaluasi(st, obs, geom, sekarang, param)
-            st = hasil["state"]
-            st["aturan_id"] = a["id"]
-            ev = hasil["event"]
-            if ev and ev["jenis"] in (a.get("jenis") or []):
-                baru.append(_dok_event(a, dev, ev))
-        # Status ditulis SEKALI per aturan, bukan per observasi: batch 500 titik
-        # kalau tidak akan menghasilkan 500 tulis untuk satu baris yang sama.
-        await db.iot_geofence_state.update_one(kunci, {"$set": st}, upsert=True)
-        if baru:
-            await db.iot_geofence_event.insert_many(baru, ordered=False)
-            jumlah += len(baru)
+        try:
+            jumlah += await _evaluasi_satu_aturan(
+                a, dev, urut, geom_area.get(a.get("area_node_id")), sekarang)
+        except Exception as e:      # noqa: BLE001
+            # Satu aturan yang gagal TIDAK BOLEH membatalkan sisanya: aturan
+            # ke-3 yang bermasalah akan membuat aturan ke-4 dan seterusnya
+            # tak pernah dievaluasi, dan diamnya terlihat persis seperti
+            # "tak ada yang perlu dilaporkan".
+            logger.warning("Aturan geofence %s gagal dievaluasi: %s",
+                           a.get("id"), e)
     return {"event": jumlah, "aturan": len(aturan)}
+
+
+async def _evaluasi_satu_aturan(a: dict, dev: dict, urut: list, geom,
+                                sekarang: datetime) -> int:
+    if not geom:
+        # Area kehilangan geometri (node dihapus/diubah) — dicatat, tidak
+        # dilewati diam-diam. Pagar yang mati tanpa suara adalah pagar yang
+        # dikira masih menjaga.
+        logger.warning("Aturan geofence %s menunjuk area %s yang tak "
+                       "bergeometri — tidak dievaluasi",
+                       a.get("id"), a.get("area_node_id"))
+        return 0
+    param = gf.ringkas_aturan(a)
+    kunci = {"aturan_id": a["id"], "device_id": dev["id"]}
+    st = await db.iot_geofence_state.find_one(kunci, _PROJ)
+    if not st:
+        st = gf.status_awal(dev["id"], a.get("area_node_id") or "")
+        st["aturan_id"] = a["id"]
+    baru = []
+    for obs in urut:
+        hasil = gf.evaluasi(st, obs, geom, sekarang, param)
+        st = hasil["state"]
+        st["aturan_id"] = a["id"]
+        ev = hasil["event"]
+        if ev and ev["jenis"] in (a.get("jenis") or []):
+            baru.append(_dok_event(a, dev, ev))
+    # PERINGATAN ditulis SEBELUM status. Urutan sebaliknya berarti: status
+    # sudah bilang "sudah keluar" sementara peringatannya gagal tersimpan —
+    # dan karena status tak akan berpindah lagi, peringatan itu hilang
+    # PERMANEN. Dengan urutan ini, kegagalan menyimpan status hanya membuat
+    # batch berikutnya menghitung ulang, dan cooldown menelan duplikatnya.
+    if baru:
+        await db.iot_geofence_event.insert_many(baru, ordered=False)
+    # Status ditulis SEKALI per aturan, bukan per observasi: batch 500 titik
+    # kalau tidak akan menghasilkan 500 tulis untuk satu baris yang sama.
+    await db.iot_geofence_state.update_one(kunci, {"$set": st}, upsert=True)
+    return len(baru)
 
 
 def _dok_event(aturan: dict, dev: dict, ev: dict) -> dict:
@@ -275,10 +324,16 @@ async def sapu_dwell(sekarang: Optional[datetime] = None) -> int:
     sehingga peringatan yang hanya lahir dari data masuk tak akan pernah terbit
     untuk kasus yang paling perlu diketahui.
     """
+    from pymongo.errors import DuplicateKeyError
+
     kini = sekarang or datetime.now(timezone.utc)
     terbit = 0
-    aturan = await db.iot_geofence_aturan.find(
-        {"aktif": True, "maks_di_luar_jam": {"$gt": 0}}, _PROJ).to_list(_MAKS_ATURAN)
+    # Plafon GLOBAL (bukan per perangkat) + urutan pasti. Memakai plafon
+    # per-perangkat di sini berarti aturan ke-201 dan seterusnya tak pernah
+    # tersapu sama sekali — diam yang tak bisa dibedakan dari "tak ada temuan".
+    aturan = await (db.iot_geofence_aturan.find(
+        {"aktif": True, "maks_di_luar_jam": {"$gt": 0}}, _PROJ)
+        .sort("created_at", 1).to_list(_MAKS_SAPU))
     for a in aturan:
         if "dwell_terlampaui" not in (a.get("jenis") or []):
             continue
@@ -287,13 +342,6 @@ async def sapu_dwell(sekarang: Optional[datetime] = None) -> int:
         if not st or gf.jatuh_tempo_dwell(st, a, kini) is None:
             continue
         sejak = (st.get("transisi") or {}).get("keluar") or ""
-        # Idempoten: satu peringatan per KEPERGIAN, bukan per sapuan. Tanpa ini
-        # aset yang hilang akan melahirkan satu peringatan tiap jam selamanya.
-        sudah = await db.iot_geofence_event.find_one(
-            {"aturan_id": a["id"], "jenis": "dwell_terlampaui", "sejak": sejak},
-            {"_id": 1})
-        if sudah:
-            continue
         dev = await db.iot_perangkat.find_one({"id": a.get("device_id")},
                                               {**_PROJ, "token_hash": 0})
         if not dev:
@@ -303,8 +351,16 @@ async def sapu_dwell(sekarang: Optional[datetime] = None) -> int:
                                   "jarak_m": st.get("jarak_m"), "retro": False,
                                   "titik": []})
         dok["sejak"] = sejak
-        await db.iot_geofence_event.insert_one(dok)
-        terbit += 1
+        try:
+            # Idempoten: satu peringatan per KEPERGIAN, bukan per sapuan —
+            # ditegakkan INDEKS UNIK, bukan cek-lalu-tulis. Loop pemeliharaan
+            # berjalan di SETIAP worker uvicorn, jadi dua sapuan nyaris serempak
+            # akan sama-sama lolos pemeriksaan "sudah ada?" lalu menyisipkan
+            # dua peringatan untuk kepergian yang sama.
+            await db.iot_geofence_event.insert_one(dok)
+            terbit += 1
+        except DuplicateKeyError:
+            continue                # worker lain sudah menerbitkannya
     return terbit
 
 
@@ -362,9 +418,6 @@ async def jadikan_penertiban(event_id: str, payload: EskalasiIn,
     if not ev:
         raise HTTPException(status_code=404, detail="Peringatan tidak ditemukan")
     await pastikan_akses_dok_satker(user, ev)
-    if ev.get("penertiban_id"):
-        raise HTTPException(status_code=409,
-                            detail="Peringatan ini sudah pernah dinaikkan")
 
     hari_ini = datetime.now(timezone.utc).date().isoformat()
     now = datetime.now(timezone.utc).isoformat()
@@ -392,9 +445,19 @@ async def jadikan_penertiban(event_id: str, payload: EskalasiIn,
                                    "node_id": ev.get("area_node_id") or "",
                                    "node_nama": ev.get("area_nama") or "",
                                    "node_tipe": "", "jalur_nama": ""}
+    # KLAIM ATOMIK sebelum menyisipkan tiket. Cek-lalu-tulis (`if
+    # ev["penertiban_id"]` lalu insert) bisa dilewati dua klik beruntun atau dua
+    # operator sekaligus, dan hasilnya DUA tiket bertenggat di register wajib
+    # PMK 207/2021 untuk satu peristiwa yang sama — dokumen resmi ganda yang
+    # harus ditutup manual satu per satu.
+    klaim = await db.iot_geofence_event.find_one_and_update(
+        {"id": event_id, "$or": [{"penertiban_id": ""},
+                                 {"penertiban_id": {"$exists": False}}]},
+        {"$set": {"penertiban_id": tiket["id"], "dibaca": True}})
+    if not klaim:
+        raise HTTPException(status_code=409,
+                            detail="Peringatan ini sudah pernah dinaikkan")
     await db.penertiban.insert_one(dict(tiket))
-    await db.iot_geofence_event.update_one(
-        {"id": event_id}, {"$set": {"penertiban_id": tiket["id"], "dibaca": True}})
     await log_audit("geofence_eskalasi_penertiban", "", tiket["id"],
                     username=user.get("username", "system"),
                     kode_satker=tiket["kode_satker"],

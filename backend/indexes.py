@@ -431,10 +431,15 @@ async def create_indexes() -> None:
             partialFilterExpression={"dibaca": False},
             name="geofence_event_belum_dibaca")
         # Penjaga idempotensi sapuan `dwell_terlampaui`: satu peringatan per
-        # KEPERGIAN, bukan satu per jam selama aset masih hilang.
-        await db.iot_geofence_event.create_index([("aturan_id", 1), ("jenis", 1),
-                                                  ("sejak", 1)],
-                                                 name="geofence_event_dwell_unik")
+        # KEPERGIAN, bukan satu per jam selama aset masih hilang. WAJIB unique —
+        # loop pemeliharaan berjalan di SETIAP worker uvicorn, jadi cek-lalu-
+        # tulis di aplikasi bisa dilewati dua sapuan yang nyaris serempak.
+        # Partial: hanya event dwell yang punya `sejak`; jenis lain tak
+        # tersentuh aturan keunikan ini.
+        await db.iot_geofence_event.create_index(
+            [("aturan_id", 1), ("sejak", 1)], unique=True,
+            partialFilterExpression={"jenis": "dwell_terlampaui"},
+            name="geofence_event_dwell_unik")
         logger.info("Database indexes created successfully")
     except Exception as e:
         logger.error(f"Error creating indexes: {e}")

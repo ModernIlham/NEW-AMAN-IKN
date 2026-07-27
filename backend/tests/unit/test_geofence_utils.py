@@ -336,3 +336,213 @@ def test_dwell_tidak_berlaku_saat_masih_di_dalam():
 def test_dwell_tanpa_aturan_batas_tidak_pernah_jatuh_tempo():
     st = {"status": gf.LUAR, "transisi": {"keluar": T0.isoformat()}}
     assert gf.jatuh_tempo_dwell(st, {}, T0 + timedelta(days=30)) is None
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# TEMUAN TINJAUAN ADVERSARIAL — tiap uji di bawah ini mengunci satu cacat yang
+# LOLOS uji gelombang pertama. Semuanya gagal pada kode sebelum perbaikan.
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ── Pagar monoton: batch backfill tak boleh memundurkan mesin ───────────────
+
+def test_observasi_lebih_tua_dari_yang_diproses_diabaikan():
+    """Batch backfill bisa tiba SETELAH batch yang lebih baru. Tanpa pagar ini
+    `sejak` mundur ke masa lalu, lalu observasi berikutnya menghitung selisih
+    raksasa dan mematangkan dwell SEKETIKA."""
+    st, _ = _jalankan([(116.701, -1.400, t) for t in (0, 60, 120)])
+    assert st["status"] == gf.DALAM
+    r = gf.evaluasi(st, _obs(116.7050, -1.400, -600), KOTAK,
+                    T0 + timedelta(seconds=200))
+    assert r["event"] is None and "lebih tua" in r["abai"]
+    assert r["state"]["status"] == gf.DALAM      # tak tergoyahkan
+
+
+def test_backfill_tidak_melahirkan_keluar_palsu():
+    """Skenario penuh: aset mapan DI DALAM, lalu antrean offline berisi titik
+    lama di luar area tiba belakangan. Sistem harus DIAM."""
+    st, _ = _jalankan([(116.701, -1.400, t) for t in (0, 60, 120)])
+    events = []
+    for dt in (-900, -840, -780, -720):          # jauh di luar, TAPI masa lalu
+        r = gf.evaluasi(st, _obs(116.7050, -1.400, dt), KOTAK,
+                        T0 + timedelta(seconds=300))
+        st = r["state"]
+        if r["event"]:
+            events.append(r["event"])
+    assert events == [] and st["status"] == gf.DALAM
+
+
+def test_observasi_ber_ts_sama_persis_diabaikan():
+    """Duplikat ber-ts identik tak boleh menaikkan hitungan sampel dua kali."""
+    st = gf.status_awal("d", "a")
+    r1 = gf.evaluasi(st, _obs(*TENGAH, 0), KOTAK, T0)
+    r2 = gf.evaluasi(r1["state"], _obs(*TENGAH, 0), KOTAK, T0)
+    assert r2["state"]["sampel"] == 1 and "lebih tua" in r2["abai"]
+
+
+# ── Cooldown: selisih bertanda ─────────────────────────────────────────────
+
+def test_cooldown_tidak_meredam_karena_selisih_negatif():
+    """Selisih BERTANDA membuat ts mundur menghasilkan angka negatif — selalu
+    lebih kecil dari cooldown — sehingga peringatan NYATA teredam tanpa jejak."""
+    p = dict(gf.GEO_PARAM)
+    # Peringatan tercatat 5 jam DI DEPAN ts observasi (jam perangkat kacau).
+    # Selisih bertanda = -18000 dtk, yang selalu < 600 → SEBELUM perbaikan ini
+    # dianggap "masih cooldown" dan peringatan nyata ditelan diam-diam.
+    st = {"redam": {"keluar": (T0 + timedelta(hours=5)).isoformat()}}
+    assert gf._dalam_cooldown(st, "keluar", T0, p) is False
+    # Jarak yang benar-benar dekat (30 dtk, arah mana pun) tetap diredam.
+    dekat = {"redam": {"keluar": (T0 + timedelta(seconds=30)).isoformat()}}
+    assert gf._dalam_cooldown(dekat, "keluar", T0, p) is True
+
+
+# ── Invarian histeresis ────────────────────────────────────────────────────
+
+def test_buffer_masuk_dijepit_agar_tak_melebihi_buffer_keluar():
+    """Bila terbalik, ada pita jarak yang sekaligus 'di dalam' dan 'jauh di
+    luar' — perangkat DIAM di pita itu berayun selamanya."""
+    p = gf.ringkas_aturan({"param": {"buffer_masuk_m": 90,
+                                     "buffer_keluar_m": 25}})
+    assert p["buffer_masuk_m"] == 25
+
+
+def test_buffer_terbalik_tidak_melahirkan_badai_peringatan():
+    """Bukti perilaku, bukan sekadar angka: perangkat DIAM 50 m di luar batas
+    dengan param terbalik harus tetap menghasilkan nol peringatan."""
+    urut = [(116.7025, -1.400, i * 60) for i in range(40)]
+    _, events = _jalankan(urut, param={"buffer_masuk_m": 90,
+                                       "buffer_keluar_m": 25})
+    assert events == []
+
+
+# ── inf tak boleh masuk state (JSON tak mengenal Infinity) ─────────────────
+
+def test_jarak_tak_terukur_tidak_menaruh_inf_di_state():
+    """`inf` di state akan meledakkan SELURUH daftar aturan saat diserialisasi,
+    jauh dari tempat kejadiannya."""
+    garis = {"type": "LineString", "coordinates": [[116.70, -1.40], [116.71, -1.40]]}
+    r = gf.evaluasi(gf.status_awal("d", "a"), _obs(*TENGAH), garis, T0)
+    import json
+    assert r["state"]["jarak_m"] is None
+    json.dumps(r["state"])           # tak boleh melempar
+
+
+# ── Pengurutan lintas zona waktu ───────────────────────────────────────────
+
+def test_kunci_urut_memakai_instan_bukan_teks():
+    """'10:00+07:00' dan '03:00Z' adalah instan yang SAMA tetapi berjauhan
+    sebagai string; perangkat beda merek memang menulis offset berbeda."""
+    a = "2026-07-27T10:00:00+07:00"
+    b = "2026-07-27T03:00:00+00:00"
+    assert gf.kunci_urut(a) == gf.kunci_urut(b)
+    assert a > b                      # sebagai TEKS urutannya justru terbalik
+
+
+def test_kunci_urut_menaruh_ts_rusak_di_awal_secara_deterministik():
+    urut = sorted(["bukan-tanggal", "2026-07-27T03:00:00Z",
+                   "2026-07-27T01:00:00Z"], key=gf.kunci_urut)
+    assert urut[0] == "bukan-tanggal"
+
+
+# ── Celah uji yang ditemukan tinjauan (perilaku sudah benar, kuncinya hilang)
+
+def test_dwell_keluar_benar_benar_ditegakkan():
+    """dwell_keluar_dtk sebelumnya tak teruji: nilainya boleh 0 dan 36 uji tetap
+    hijau. Di sini 4 sampel jauh di luar dalam 90 dtk (< 180) TIDAK boleh
+    menghasilkan keluar; menambah waktu barulah menghasilkannya."""
+    mapan = [(116.701, -1.400, t) for t in (0, 60, 120)]
+    cepat = mapan + [(116.7050, -1.400, t) for t in (150, 180, 210)]
+    _, e1 = _jalankan(cepat)
+    assert [x["jenis"] for x in e1] == ["masuk"]          # 60 dtk < 180
+    lambat = mapan + [(116.7050, -1.400, t) for t in (150, 240, 330)]
+    _, e2 = _jalankan(lambat)
+    assert [x["jenis"] for x in e2] == ["masuk", "keluar"]  # 180 dtk ≥ 180
+
+
+def test_sampel_min_benar_benar_ditegakkan():
+    """Waktu SUDAH cukup tetapi sampel kurang → belum boleh matang."""
+    _, events = _jalankan([(116.701, -1.400, 0), (116.701, -1.400, 300)])
+    assert events == []                     # 2 sampel < 3, walau 300 dtk
+
+
+def test_jam_di_luar_tetap_berjalan_meski_peringatan_teredam():
+    """Regresi yang diperbaiki: keluar yang peringatannya teredam TETAP keluar,
+    dan `dwell_terlampaui` harus tetap bisa jatuh tempo."""
+    st = gf.status_awal("d", "a")
+    st.update({"status": gf.DALAM,
+               "redam": {"keluar": (T0 - timedelta(seconds=60)).isoformat()},
+               "transisi": {"keluar": (T0 - timedelta(seconds=60)).isoformat()}})
+    events = []
+    for dt in (60, 240, 420, 600):
+        r = gf.evaluasi(st, _obs(116.7050, -1.400, dt), KOTAK,
+                        T0 + timedelta(seconds=dt))
+        st = r["state"]
+        if r["event"]:
+            events.append(r["event"])
+    assert events == []                                  # peringatan teredam
+    assert st["status"] == gf.LUAR                       # TAPI status berpindah
+    assert st["transisi"]["keluar"] != ""                # dan jamnya dicatat
+    assert gf.jatuh_tempo_dwell(st, {"maks_di_luar_jam": 1},
+                                T0 + timedelta(hours=3)) is not None
+
+
+def test_muatan_event_lengkap_dan_masuk_akal():
+    """Muatan event sebelumnya tak pernah diperiksa: `pada`, `titik`, `jarak_m`
+    bebas berubah tanpa satu uji pun gagal."""
+    _, events = _jalankan([(116.701, -1.400, t) for t in (0, 60, 120)])
+    ev = events[0]
+    assert ev["jenis"] == "masuk"
+    assert ev["titik"] == [116.701, -1.400]
+    assert ev["jarak_m"] == 0.0
+    assert ev["pada"] == (T0 + timedelta(seconds=120)).isoformat()
+
+
+def test_state_masukan_tak_dimutasi_pada_jalur_BER_EVENT():
+    """Uji lama hanya melewati jalur TANPA event, jadi mutasi `transisi`/`redam`
+    (dict bersarang) tak akan ketahuan."""
+    st = gf.status_awal("d", "a")
+    st.update({"status": gf.KANDIDAT_MASUK, "sampel": 2,
+               "sejak": T0.isoformat()})
+    import copy
+    salinan = copy.deepcopy(st)
+    r = gf.evaluasi(st, _obs(*TENGAH, 300), KOTAK, T0 + timedelta(seconds=300))
+    assert r["event"] is not None            # jalur ber-event sungguhan
+    assert st == salinan                     # asli utuh, termasuk dict bersarang
+
+
+def test_dwell_tanpa_catatan_keluar_tidak_jatuh_tempo():
+    """Perangkat yang baru terdaftar berstatus LUAR tanpa pernah 'keluar' —
+    tanpa penjaga ini setiap perangkat baru jadi alarm palsu."""
+    assert gf.jatuh_tempo_dwell({"status": gf.LUAR, "transisi": {}},
+                                {"maks_di_luar_jam": 1},
+                                T0 + timedelta(days=9)) is None
+    assert gf.jatuh_tempo_dwell(gf.status_awal("d", "a"),
+                                {"maks_di_luar_jam": 1},
+                                T0 + timedelta(days=9)) is None
+
+
+def test_param_nan_dan_infinity_ditolak():
+    p = gf.ringkas_aturan({"param": {"buffer_keluar_m": float("nan"),
+                                     "dwell_masuk_dtk": float("inf")}})
+    assert p["buffer_keluar_m"] == 25 and p["dwell_masuk_dtk"] == 120
+
+
+def test_ambang_retro_benar_benar_dipakai():
+    """AMBANG_RETRO_DTK sebelumnya tak tersentuh: 200 dtk maupun 20000 dtk
+    sama-sama hijau."""
+    urut = [(116.701, -1.400, t) for t in (0, 60, 120)]
+    st = gf.status_awal("d", "a")
+    ev = None
+    for lon, lat, dt in urut:                 # tiba TEPAT di bawah ambang
+        r = gf.evaluasi(st, _obs(lon, lat, dt), KOTAK,
+                        T0 + timedelta(seconds=gf.AMBANG_RETRO_DTK - 100))
+        st = r["state"]; ev = r["event"] or ev
+    assert ev and ev["retro"] is False
+
+
+def test_teleport_tepat_di_bawah_dan_di_atas_ambang():
+    """Pita 250–3300 km/jam sebelumnya tak teruji sama sekali."""
+    a = _obs(116.700, -1.400, 0)
+    # 0.010° bujur ≈ 1113 m dalam 60 dtk ≈ 67 km/jam → wajar
+    assert gf.lompatan_mustahil(a, _obs(116.710, -1.400, 60)) is False
+    # 0.060° ≈ 6678 m dalam 60 dtk ≈ 400 km/jam → mustahil untuk darat
+    assert gf.lompatan_mustahil(a, _obs(116.760, -1.400, 60)) is True

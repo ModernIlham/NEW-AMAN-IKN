@@ -128,6 +128,19 @@ def _waktu(nilai):
         return None
 
 
+def kunci_urut(ts_device):
+    """Kunci pengurutan observasi menurut WAKTU SESUNGGUHNYA.
+
+    Mengurutkan `ts_device` sebagai teks itu menggoda dan salah: "10:00+07:00"
+    dan "03:00Z" menunjuk instan yang sama tetapi berjauhan sebagai string, dan
+    perangkat berbeda merek memang menulis offset berbeda. Observasi yang tak
+    terbaca waktunya diletakkan di AWAL (bukan diabaikan) agar urutannya
+    deterministik.
+    """
+    t = _waktu(ts_device)
+    return (1, t) if t is not None else (0, datetime.min.replace(tzinfo=timezone.utc))
+
+
 def layak_geofence(obs: dict, param: dict = None) -> str:
     """'' bila observasi boleh menggerakkan mesin status, atau ALASAN penolakan.
 
@@ -137,7 +150,7 @@ def layak_geofence(obs: dict, param: dict = None) -> str:
     berada, dan peringatan yang lahir dari data seperti itu adalah tebakan yang
     berpakaian sebagai fakta.
     """
-    p = {**GEO_PARAM, **(param or {})}
+    p = ringkas_aturan({"param": dict(param or {})})
     if not isinstance(obs, dict):
         return "observasi tidak sah"
     geo = obs.get("geo") or {}
@@ -178,7 +191,11 @@ def evaluasi(state: dict, obs: dict, geom, sekarang: datetime,
     `event` bila tidak None. Fungsi tidak memutasi `state` masukan — pemanggil
     yang gagal menyimpan tak boleh meninggalkan status setengah berubah.
     """
-    p = {**GEO_PARAM, **(param or {})}
+    # Dinormalkan lewat jalur yang SAMA dengan konfigurasi. Menjepit invarian
+    # hanya di lapis rute berarti mesinnya tetap bisa dijalankan dengan
+    # parameter terbalik oleh pemanggil mana pun — pagar yang hanya berdiri di
+    # pintu depan bukan pagar.
+    p = ringkas_aturan({"param": {**{k: v for k, v in (param or {}).items()}}})
     st = dict(state or {})
     st.setdefault("status", LUAR)
     st.setdefault("sampel", 0)
@@ -198,6 +215,19 @@ def evaluasi(state: dict, obs: dict, geom, sekarang: datetime,
     jauh_di_luar = jarak > p["buffer_keluar_m"]
 
     ts = _waktu(obs.get("ts_device")) or sekarang
+
+    # PAGAR MONOTON — observasi yang lebih tua dari yang terakhir diproses
+    # DIABAIKAN. Batch backfill dari antrean offline bisa tiba SETELAH batch
+    # yang lebih baru; tanpa pagar ini `sejak` mundur ke masa lalu, lalu
+    # observasi berikutnya menghitung selisih raksasa dan mematangkan dwell
+    # SEKETIKA — melahirkan `keluar` palsu untuk aset yang justru sedang di
+    # dalam. Mengurutkan di dalam satu batch (routes/geofence) tidak cukup:
+    # urutan ANTAR batch tak bisa dijamin siapa pun.
+    ts_terakhir = _waktu(st.get("ts_terakhir"))
+    if ts_terakhir is not None and ts <= ts_terakhir:
+        return {"state": st, "event": None,
+                "abai": "observasi lebih tua dari yang sudah diproses"}
+
     retro = (sekarang - ts).total_seconds() > AMBANG_RETRO_DTK
     status = st["status"]
     event = None
@@ -242,7 +272,11 @@ def evaluasi(state: dict, obs: dict, geom, sekarang: datetime,
     else:
         st["status"] = LUAR                     # status rusak → jatuh ke aman
 
-    st["jarak_m"] = round(jarak, 1)
+    # `inf` (geometri tak bisa diukur) TIDAK boleh masuk state: JSON tak
+    # mengenal Infinity, dan nilai itu akan meledakkan SELURUH daftar aturan
+    # saat diserialisasi — jauh dari tempat kejadiannya.
+    st["jarak_m"] = round(jarak, 1) if math.isfinite(jarak) else None
+    st["ts_terakhir"] = ts.isoformat()
     st["diperiksa_pada"] = sekarang.isoformat()
 
     if not event:
@@ -283,7 +317,11 @@ def _dalam_cooldown(st: dict, jenis: str, ts: datetime, p: dict) -> bool:
     lalu = _waktu((st.get("redam") or {}).get(jenis))
     if lalu is None:
         return False
-    return (ts - lalu).total_seconds() < p["cooldown_dtk"]
+    # abs(): selisih BERTANDA membuat observasi ber-ts mundur menghasilkan angka
+    # negatif — yang selalu lebih kecil dari cooldown — sehingga peringatan
+    # NYATA teredam tanpa jejak apa pun. Pagar monoton di `evaluasi` sudah
+    # menangkal sebagian besar kasus; ini lapis keduanya.
+    return abs((ts - lalu).total_seconds()) < p["cooldown_dtk"]
 
 
 def lompatan_mustahil(sebelum: dict, sesudah: dict,
@@ -331,6 +369,14 @@ def ringkas_aturan(aturan: dict) -> dict:
         if nilai < 0 or not math.isfinite(nilai):
             continue
         p[k] = int(nilai) if isinstance(GEO_PARAM[k], int) else nilai
+    # INVARIAN histeresis: ambang masuk tak boleh MELEBIHI ambang keluar.
+    # Bila terbalik, ada pita jarak yang sekaligus dianggap "di dalam" (untuk
+    # masuk) dan "jauh di luar" (untuk keluar) — perangkat yang DIAM di pita
+    # itu akan berayun masuk-keluar selamanya. Dijepit, bukan ditolak: aturan
+    # yang mati karena satu salah ketik lebih berbahaya daripada aturan yang
+    # berjalan dengan angka yang dirapikan.
+    if p["buffer_masuk_m"] > p["buffer_keluar_m"]:
+        p["buffer_masuk_m"] = p["buffer_keluar_m"]
     return p
 
 
