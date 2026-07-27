@@ -53,6 +53,37 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#655] Hierarki Spasial: nama node yang hilang di HP dikembalikan — 2026-07-27
+
+Umpan balik lapangan berupa tangkapan layar HP: baris pohon hanya menampilkan
+badge **Wilayah** dan **denah** lalu deretan ikon yang meluber keluar layar.
+Nama node — satu-satunya isi yang penting — **tidak terlihat sama sekali.**
+
+### Akar masalahnya flexbox, bukan kekurangan ruang
+
+Baris itu satu `flex` dengan sembilan anak. Nama memakai `flex-1 min-w-0`;
+delapan tetangganya (tiga badge + enam tombol) `shrink-0`. Ketika lebar kurang,
+flexbox mengecilkan satu-satunya item yang boleh menyusut — sampai **nol** —
+lalu sisanya tetap meluber. Jadi bukan nama yang "terpotong": nama yang
+dikorbankan lebih dulu, dan barisnya tetap tak muat.
+
+### Perbaikannya: baris dua tingkat
+
+- **Tingkat atas** — nama node, penuh, sendirian, dengan `title` untuk yang panjang.
+- **Tingkat bawah** — tipe, kode, status draft/nonaktif, dan penanda denah;
+  semuanya `flex-wrap`, jadi turun baris alih-alih mendorong.
+- **Aksi** — *Isi lokasi* dan *Opname* tetap terlihat (keduanya operasi baca yang
+  sering dipakai). Empat aksi tulis dilipat ke menu **⋮** di bawah 640px, dan
+  tetap sebaris di layar lebar tempat ruangnya memang cukup.
+- **Indentasi lebih rapat di HP** (9px/tingkat, dibatasi 6 tingkat) lewat kelas
+  `.spasial-baris`. Pada 16px/tingkat, node di kedalaman tujuh membuang 112px —
+  lebih dari sepertiga layar 360px — sebelum satu huruf pun sempat digambar.
+
+Penanda geometri kosong juga berhenti menulis `—` yang tak bermakna; kini
+tertulis **"belum digambar"**.
+
+---
+
 ## [#654] Audit adversarial gelombang D — layar yang bisa dipakai & janji yang jujur — 2026-07-27
 
 Gelombang terakhir: 14 temuan sisa yang tak mengancam data, tetapi menentukan

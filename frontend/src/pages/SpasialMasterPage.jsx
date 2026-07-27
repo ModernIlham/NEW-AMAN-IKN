@@ -4,9 +4,13 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Plus, Pencil, Trash2, Loader2, Layers, ChevronRight, ChevronDown,
   Search, MapPinned, LandPlot, Upload, Download, Boxes, ClipboardCheck,
+  MoreVertical,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
@@ -248,100 +252,154 @@ export default function SpasialMasterPage({ user, onBack }) {
     const anak = anakDari[node.id] || [];
     // Saat mencari, PAKSA terbuka agar jalur menuju hasil ikut terbentang.
     const terbuka = idTampil ? true : (buka[node.id] ?? level < 1);
+    const labelTipe = labelLevel[node.tipe] || node.tipe;
     return (
       <div>
+        {/* DUA TINGKAT, bukan satu baris (umpan balik lapangan: di HP nama node
+            HILANG sama sekali). Dulu nama memakai `flex-1 min-w-0` sementara
+            enam tombol + tiga badge di sisinya `shrink-0`: flexbox mengecilkan
+            satu-satunya item yang boleh menyusut sampai NOL, lalu sisanya tetap
+            meluber keluar layar. Kini nama berdiri sendiri di tingkat atas dan
+            badge turun ke tingkat bawah — tak ada lagi yang berebut lebar
+            dengannya. Indentasi juga lebih rapat di HP (lihat .spasial-baris). */}
         <div
-          className="flex items-center gap-1 py-1.5 border-b border-border/60 hover:bg-muted/50 rounded"
-          style={{ paddingLeft: `${level * 16 + 4}px` }}
+          className="spasial-baris flex items-start gap-1.5 py-2 border-b border-border/60 hover:bg-muted/50 rounded"
+          style={{ "--lvl": String(level) }}
           data-testid={`spasial-node-${node.id}`}
         >
           <button
             type="button" onClick={() => toggle(node.id)}
-            className={`tap-expand shrink-0 p-0.5 rounded ${anak.length ? "" : "invisible"}`}
+            className={`tap-expand shrink-0 p-0.5 mt-0.5 rounded ${anak.length ? "" : "invisible"}`}
             aria-label={terbuka ? "Tutup" : "Buka"}
             data-testid={`spasial-toggle-${node.id}`}
           >
             {terbuka ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
           </button>
-          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-muted text-muted-foreground shrink-0">
-            {labelLevel[node.tipe] || node.tipe}
-          </span>
-          {/* Hasil impor & gambar setengah-jadi berstatus DRAFT: tak ikut
-              deteksi lokasi maupun lapisan denah sampai diaktifkan manusia. */}
-          {node.status === "draft" && (
-            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 shrink-0"
-                  title="Draft — belum aktif; periksa lalu ubah status jadi Aktif"
-                  data-testid={`spasial-draft-${node.id}`}>
-              draft
-            </span>
-          )}
-          {node.status === "nonaktif" && (
-            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-muted text-muted-foreground/70 shrink-0"
-                  data-testid={`spasial-nonaktif-${node.id}`}>
-              nonaktif
-            </span>
-          )}
-          <span className="min-w-0 flex-1 truncate text-sm">
-            {node.nama}
-            {node.kode ? <span className="text-muted-foreground font-mono text-xs"> · {node.kode}</span> : null}
-          </span>
-          {/* Sudah punya bentuk di peta? `bbox` ada HANYA bila geometri terisi —
-              dipakai sebagai penanda ringan karena `geometry` sengaja tak ikut
-              dikirim ke daftar pohon (poligon bisa ribuan verteks). */}
-          <span
-            className={`text-[9px] font-semibold px-1.5 py-0.5 rounded shrink-0 ${
-              node.bbox
-                ? "bg-teal-500/15 text-teal-700 dark:text-teal-300"
-                : "bg-muted text-muted-foreground/70"}`}
-            title={node.bbox
-              ? "Sudah punya bentuk (poligon) — tampil di lapisan Denah pada Peta Aset"
-              : "Belum digambar — node ini tak akan muncul di peta"}
-            data-testid={`spasial-geo-${node.id}`}
-          >
-            {node.bbox ? "denah" : "—"}
-          </span>
-          {/* Isi lokasi = operasi BACA (viewer boleh): "aset apa saja di sini",
-              bentuk yang dibutuhkan opname fisik. Fase 9. */}
-          <button type="button" onClick={() => setIsiNode(node)}
-            className="tap-expand p-0.5 rounded hover:bg-muted shrink-0 min-h-0 min-w-0"
-            title="Lihat aset yang menempati lokasi ini"
-            data-testid={`spasial-isi-${node.id}`}>
-            <Boxes className="w-4 h-4 text-sky-600" />
-          </button>
-          {/* Opname lewat scan stiker (Fase 11). BACA juga boleh: viewer berhak
-              melihat rekonsiliasi; tombol Terapkan-lah yang dibatasi penulis. */}
-          <button type="button" onClick={() => setOpnameNode(node)}
-            className="tap-expand p-0.5 rounded hover:bg-muted shrink-0 min-h-0 min-w-0"
-            title="Opname: pindai stiker QR & sanding dengan catatan lokasi"
-            data-testid={`spasial-opname-${node.id}`}>
-            <ClipboardCheck className="w-4 h-4 text-emerald-600" />
-          </button>
-          {isWriter && (
-            <span className="flex items-center gap-1.5 shrink-0">
-              {/* tap-expand: ikon kecil, area sentuh ~44px (lihat index.css) */}
-              <button type="button" onClick={() => bukaTambah(node)}
-                className="tap-expand p-0.5 rounded hover:bg-muted min-h-0 min-w-0" title="Tambah anak"
-                data-testid={`spasial-tambah-anak-${node.id}`}>
-                <Plus className="w-4 h-4 text-emerald-600" />
-              </button>
-              <button type="button" onClick={() => bukaUbah(node)}
-                className="tap-expand p-0.5 rounded hover:bg-muted min-h-0 min-w-0" title="Ubah"
-                data-testid={`spasial-ubah-${node.id}`}>
-                <Pencil className="w-4 h-4 text-sky-600" />
-              </button>
-              <button type="button" onClick={() => setEditorNode(node)}
-                className="tap-expand p-0.5 rounded hover:bg-muted min-h-0 min-w-0"
-                title={node.bbox ? "Ubah denah (gambar poligon)" : "Gambar denah (poligon)"}
-                data-testid={`spasial-gambar-${node.id}`}>
-                <LandPlot className="w-4 h-4 text-teal-600" />
-              </button>
-              <button type="button" onClick={() => hapus(node)}
-                className="tap-expand p-0.5 rounded hover:bg-muted min-h-0 min-w-0" title="Hapus"
-                data-testid={`spasial-hapus-${node.id}`}>
-                <Trash2 className="w-4 h-4 text-rose-600" />
-              </button>
-            </span>
-          )}
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-medium" title={node.nama}>
+              {node.nama || <span className="text-muted-foreground italic">(tanpa nama)</span>}
+            </div>
+            <div className="flex flex-wrap items-center gap-1 mt-1">
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                {labelTipe}
+              </span>
+              {node.kode ? (
+                <span className="text-[10px] font-mono text-muted-foreground">{node.kode}</span>
+              ) : null}
+              {/* Hasil impor & gambar setengah-jadi berstatus DRAFT: tak ikut
+                  deteksi lokasi maupun lapisan denah sampai diaktifkan manusia. */}
+              {node.status === "draft" && (
+                <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                      title="Draft — belum aktif; periksa lalu ubah status jadi Aktif"
+                      data-testid={`spasial-draft-${node.id}`}>
+                  draft
+                </span>
+              )}
+              {node.status === "nonaktif" && (
+                <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-muted text-muted-foreground/70"
+                      data-testid={`spasial-nonaktif-${node.id}`}>
+                  nonaktif
+                </span>
+              )}
+              {/* Sudah punya bentuk di peta? `bbox` ada HANYA bila geometri terisi —
+                  dipakai sebagai penanda ringan karena `geometry` sengaja tak ikut
+                  dikirim ke daftar pohon (poligon bisa ribuan verteks). */}
+              <span
+                className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${
+                  node.bbox
+                    ? "bg-teal-500/15 text-teal-700 dark:text-teal-300"
+                    : "bg-muted text-muted-foreground/70"}`}
+                title={node.bbox
+                  ? "Sudah punya bentuk (poligon) — tampil di lapisan Denah pada Peta Aset"
+                  : "Belum digambar — node ini tak akan muncul di peta"}
+                data-testid={`spasial-geo-${node.id}`}
+              >
+                {node.bbox ? "denah" : "belum digambar"}
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* Isi lokasi = operasi BACA (viewer boleh): "aset apa saja di sini",
+                bentuk yang dibutuhkan opname fisik. Fase 9. */}
+            <button type="button" onClick={() => setIsiNode(node)}
+              className="tap-expand p-0.5 rounded hover:bg-muted min-h-0 min-w-0"
+              title="Lihat aset yang menempati lokasi ini"
+              aria-label={`Isi lokasi ${node.nama || labelTipe}`}
+              data-testid={`spasial-isi-${node.id}`}>
+              <Boxes className="w-4 h-4 text-sky-600" />
+            </button>
+            {/* Opname lewat scan stiker (Fase 11). BACA juga boleh: viewer berhak
+                melihat rekonsiliasi; tombol Terapkan-lah yang dibatasi penulis. */}
+            <button type="button" onClick={() => setOpnameNode(node)}
+              className="tap-expand p-0.5 rounded hover:bg-muted min-h-0 min-w-0"
+              title="Opname: pindai stiker QR & sanding dengan catatan lokasi"
+              aria-label={`Opname ${node.nama || labelTipe}`}
+              data-testid={`spasial-opname-${node.id}`}>
+              <ClipboardCheck className="w-4 h-4 text-emerald-600" />
+            </button>
+            {isWriter && (
+              <>
+                {/* HP: empat aksi tulis dilipat ke menu ⋮ — di layar 360px
+                    enam ikon sebaris tak muat bersama nama node. */}
+                <div className="sm:hidden">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button type="button"
+                        className="tap-expand p-0.5 rounded hover:bg-muted min-h-0 min-w-0"
+                        title="Aksi lain" aria-label={`Aksi untuk ${node.nama || labelTipe}`}
+                        data-testid={`spasial-menu-${node.id}`}>
+                        <MoreVertical className="w-4 h-4 text-muted-foreground" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-52">
+                      <DropdownMenuItem className="min-h-[42px]" onClick={() => bukaTambah(node)}
+                        data-testid={`spasial-menu-tambah-${node.id}`}>
+                        <Plus className="w-4 h-4 mr-2 text-emerald-600" />Tambah anak
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className="min-h-[42px]" onClick={() => bukaUbah(node)}
+                        data-testid={`spasial-menu-ubah-${node.id}`}>
+                        <Pencil className="w-4 h-4 mr-2 text-sky-600" />Ubah
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className="min-h-[42px]" onClick={() => setEditorNode(node)}
+                        data-testid={`spasial-menu-gambar-${node.id}`}>
+                        <LandPlot className="w-4 h-4 mr-2 text-teal-600" />
+                        {node.bbox ? "Ubah denah" : "Gambar denah"}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className="min-h-[42px]" onClick={() => hapus(node)}
+                        data-testid={`spasial-menu-hapus-${node.id}`}>
+                        <Trash2 className="w-4 h-4 mr-2 text-rose-600" />Hapus
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+                {/* ≥sm: tetap sebaris — di sana lebarnya memang cukup. */}
+                <span className="hidden sm:flex items-center gap-1.5">
+                  {/* tap-expand: ikon kecil, area sentuh ~44px (lihat index.css) */}
+                  <button type="button" onClick={() => bukaTambah(node)}
+                    className="tap-expand p-0.5 rounded hover:bg-muted min-h-0 min-w-0" title="Tambah anak"
+                    data-testid={`spasial-tambah-anak-${node.id}`}>
+                    <Plus className="w-4 h-4 text-emerald-600" />
+                  </button>
+                  <button type="button" onClick={() => bukaUbah(node)}
+                    className="tap-expand p-0.5 rounded hover:bg-muted min-h-0 min-w-0" title="Ubah"
+                    data-testid={`spasial-ubah-${node.id}`}>
+                    <Pencil className="w-4 h-4 text-sky-600" />
+                  </button>
+                  <button type="button" onClick={() => setEditorNode(node)}
+                    className="tap-expand p-0.5 rounded hover:bg-muted min-h-0 min-w-0"
+                    title={node.bbox ? "Ubah denah (gambar poligon)" : "Gambar denah (poligon)"}
+                    data-testid={`spasial-gambar-${node.id}`}>
+                    <LandPlot className="w-4 h-4 text-teal-600" />
+                  </button>
+                  <button type="button" onClick={() => hapus(node)}
+                    className="tap-expand p-0.5 rounded hover:bg-muted min-h-0 min-w-0" title="Hapus"
+                    data-testid={`spasial-hapus-${node.id}`}>
+                    <Trash2 className="w-4 h-4 text-rose-600" />
+                  </button>
+                </span>
+              </>
+            )}
+          </div>
         </div>
         {terbuka && anak.map((c) => <Baris key={c.id} node={c} level={level + 1} />)}
       </div>
