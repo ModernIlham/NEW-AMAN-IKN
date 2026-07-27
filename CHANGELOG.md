@@ -53,6 +53,84 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#643] Integritas foto↔koordinat di antrean luring + toolbar satu baris — 2026-07-27
+
+Laporan lapangan: *"perbaiki antara informasi utuh satu kesatuan titik koordinat
+dengan foto yang terambil oleh kamera agar tidak saling tertukar … terutama pada
+saat PWA offline sedang berjalan karena sinyal yang buruk"*. Ditelusuri sampai
+ke kodenya, dan ada **dua** cara data benar-benar bisa tertukar. Keduanya
+bekerja DIAM-DIAM: tidak ada pesan galat, tidak ada baris merah — ketahuannya
+baru nanti, saat jumlah aset di server lebih sedikit daripada yang difoto
+surveyor, atau saat foto sebuah aset menampilkan barang milik aset lain.
+
+### 1. Dua aset bisa berbagi satu gerbong antrean
+
+Setiap simpanan yang belum tersinkron dikunci oleh `statusKey`; untuk aset baru
+kuncinya `tempId`, yang dibuat dengan `` `temp_${Date.now()}` ``. Kunci itu
+dipakai di TIGA peta sekaligus — payload yang akan di-replay, salinan IndexedDB
+(`keyPath: "statusKey"`), dan chip status di daftar. Karena semuanya PETA
+berkunci, dua aset ber-`tempId` sama tidak bentrok dengan berisik: yang kedua
+**menimpa** yang pertama. Foto beserta koordinat aset pertama lenyap.
+
+Yang membuatnya nyata di lapangan bukan tabrakan satu milidetik, melainkan hal
+lain: **`Date.now()` bukan jam monotonik.** Selama survei luring berjam-jam, HP
+menyinkronkan waktu ke jaringan begitu sinyal sempat menyentuh; koreksi ke
+BELAKANG beberapa detik sudah cukup membuat aset baru memakai id yang masih
+dipegang aset lain di antrean. Dan karena antrean bertahan lintas reload,
+jendela tabrakannya bukan satu milidetik melainkan **sepanjang umur antrean**.
+
+`lib/idAntrean.js` menggantinya dengan id yang keunikannya tak pernah bersandar
+pada jam: UUID acak, atau — untuk WebView Android lawas tanpa `crypto` —
+garam sesi acak + penghitung monoton. Stempel waktu tetap disertakan, tapi
+hanya agar antrean enak ditelusuri manusia. Awalan `temp_` dipertahankan
+(beberapa guard bergantung padanya) dan kini punya satu pemilik, `apakahTempId`.
+
+### 2. Foto bisa mendarat di aset berikutnya
+
+Tombol rana di Mode Kamera Penuh TIDAK ikut `busy` — padahal semua tombol aksi
+lain ikut. Selama simpan berjalan, form menunggu `await compressPhotos(...)`
+yang di HP low-end dengan 6 foto memakan detik-detikan. Foto yang diambil pada
+jendela itu masuk ke state SETELAH payload dibekukan, lalu ikut terhapus
+`resetForm` — atau, lebih buruk, menempel ke aset **berikutnya** padahal
+watermark di badan fotonya mencantumkan kode & NUP aset **sebelumnya**. Bukti
+visual dan data induknya jadi bercerita berbeda.
+
+Menambal jendela itu saja tidak cukup — masih ada jendela kedua saat thumbnail
+dibuat. Jadi solusinya di tingkat yang lebih dalam: **foto membawa identitas
+aset yang dituju sejak rana ditekan**. `lib/sesiAset.js` menyusun penanda
+gerbong dari (id aset, jumlah aset tersimpan di sesi kamera) — hitungannya ikut
+karena dalam alur "Simpan & Aset Baru" id-nya sama-sama kosong, sehingga tanpa
+itu dua aset berturut-turut berpenanda identik. Penanda diperiksa dua kali:
+sebelum dan sesudah `await`. Foto dari jalur lama tanpa penanda (unggah galeri)
+tetap diterima — menolaknya akan mematikan jalur yang tak bermasalah.
+
+Rana juga kini ikut `busy`, dengan penjaga di DALAM fungsi `capture`, bukan
+hanya atribut `disabled` — atribut itu urusan tampilan, yang menjaga
+satu-kesatuan foto↔aset adalah penjaganya.
+
+### 3. Toolbar tak pernah pecah baris
+
+- **Gaya Marker (Pin ↔ Foto sampul) hilang di tablet & desktop.** Selama ini
+  hanya ada di menu gabungan HP, padahal justru di layar lebar tampilan foto
+  paling berguna. Kini tombolnya berdiri sendiri mulai `sm`.
+- **Tombol "X tutup" peta dihapus di semua ukuran.** Tombol "Peta" di toolbar
+  sudah berperan sebagai saklar dan tombol Back HP sudah dijaga `useBackGuard`
+  — satu pintu keluar cukup, dan ruangnya berharga.
+- **`flex-wrap` dibuang** di bar peta DAN di toolbar desktop. Dulu tombol yang
+  tak muat turun membentuk baris kedua-ketiga yang mendorong peta/daftar ke
+  bawah; makin banyak kontrol, makin sempit isinya. Kini yang menyusut adalah
+  LABEL: teks baru muncul di `xl` ke atas, di bawahnya semua kontrol jadi
+  ikon-saja (judul tetap terbaca lewat tooltip). Tampilan HP tak berubah.
+  `overflow-x-auto` jadi katup pengaman terakhir — kalaupun ada kombinasi
+  ekstrem yang tetap tak muat, bar-nya menggeser mendatar, bukan pecah ke bawah.
+
+- Uji: +13 → **151 frontend**. Yang diuji bukan "id berupa string", melainkan
+  justru dua cara gagalnya: 1.000 id dalam satu milidetik, dan jam yang MUNDUR
+  di tengah survei. Ketiganya diverifikasi dengan MUTASI — implementasi lama
+  `` `temp_${Date.now()}` `` menggagalkan 4 dari 5 uji.
+
+---
+
 ## [#642] Spasial Fase 16: belah wilayah dengan garis — memecah, bukan mengurangi — 2026-07-27
 
 Laporan lapangan: *"tombol edit seperti cutting tidak bisa memotong garis lurus

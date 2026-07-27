@@ -123,25 +123,31 @@ const DashboardToolbar = memo(function DashboardToolbar({
           </Button>
         </div>
 
-        {/* Desktop toolbar (lg+ only) */}
-        <div className="hidden lg:flex gap-1.5 flex-wrap items-center">
+        {/* Desktop toolbar (lg+ only) — SATU BARIS.
+            `flex-wrap` dibuang: dengan 11 kontrol, di lg (1024px) barisnya pecah
+            jadi dua-tiga tumpuk sehingga toolbar memakan tinggi yang seharusnya
+            jadi milik daftar aset. Sebagai gantinya LABEL tombol aksi baru
+            muncul di xl ke atas; di lg semuanya ikon-saja (judulnya tetap
+            terbaca lewat tooltip). `overflow-x-auto` katup pengaman terakhir. */}
+        <div className="hidden lg:flex gap-1.5 flex-nowrap items-center overflow-x-auto">
           <CategorySelect
             categories={categories}
             value={filterCategory}
             onValueChange={v => { setFilterCategory(v); refreshData(1); }}
             placeholder="Semua Kategori"
-            className="w-40"
+            className="w-32 xl:w-40 flex-shrink-0"
           />
 
           <Button
             variant={activeFilterCount > 0 ? "default" : "outline"}
             size="sm"
-            className={`h-8 text-xs ${activeFilterCount > 0 ? "bg-blue-600" : ""}`}
+            className={`h-8 text-xs flex-shrink-0 ${activeFilterCount > 0 ? "bg-blue-600" : ""}`}
             onClick={() => setShowAdvancedFilter(!showAdvancedFilter)}
+            title="Filter Lanjutan"
             data-testid="advanced-filter-btn"
           >
-            <Filter className="w-3 h-3 mr-1" />
-            Filter Lanjutan
+            <Filter className="w-3 h-3 xl:mr-1" />
+            <span className="hidden xl:inline">Filter Lanjutan</span>
             {activeFilterCount > 0 && (
               <span className="ml-1.5 bg-white text-blue-600 rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold">
                 {activeFilterCount}
@@ -150,7 +156,7 @@ const DashboardToolbar = memo(function DashboardToolbar({
           </Button>
 
           <Select value={sortBy} onValueChange={v => { setSortBy(v); refreshData(1); }}>
-            <SelectTrigger className="w-32 h-8 text-xs"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-24 xl:w-32 h-8 text-xs flex-shrink-0"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="newest">Terbaru</SelectItem>
               <SelectItem value="oldest">Terlama</SelectItem>
@@ -172,14 +178,14 @@ const DashboardToolbar = memo(function DashboardToolbar({
                 onClick={() => setViewMode('list')}
                 data-testid="view-mode-list"
               >
-                <List className="w-3.5 h-3.5" /> List
+                <List className="w-3.5 h-3.5" /><span className="hidden xl:inline">List</span>
               </button>
               <button
                 className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${viewMode === 'gallery' ? 'bg-card text-blue-600 shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
                 onClick={() => setViewMode('gallery')}
                 data-testid="view-mode-gallery"
               >
-                <LayoutGrid className="w-3.5 h-3.5" /> Galeri
+                <LayoutGrid className="w-3.5 h-3.5" /><span className="hidden xl:inline">Galeri</span>
               </button>
             </div>
           )}
@@ -190,8 +196,8 @@ const DashboardToolbar = memo(function DashboardToolbar({
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" disabled={exporting} className="h-8 text-xs">
-                {exporting ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Download className="w-3 h-3 mr-1" />}Export
+              <Button variant="outline" size="sm" disabled={exporting} className="h-8 text-xs flex-shrink-0" title="Export data">
+                {exporting ? <Loader2 className="w-3 h-3 xl:mr-1 animate-spin" /> : <Download className="w-3 h-3 xl:mr-1" />}<span className="hidden xl:inline">Export</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent>
@@ -207,27 +213,29 @@ const DashboardToolbar = memo(function DashboardToolbar({
             </DropdownMenuContent>
           </DropdownMenu>
           {perms.canImport && (
-            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => openDialog('import')}>
-              <Upload className="w-3 h-3 mr-1" />Import
+            <Button variant="outline" size="sm" className="h-8 text-xs flex-shrink-0" onClick={() => openDialog('import')} title="Import data">
+              <Upload className="w-3 h-3 xl:mr-1" /><span className="hidden xl:inline">Import</span>
             </Button>
           )}
           {perms.canBulkDelete && (
             <Button
               variant="outline"
               size="sm"
-              className="h-8 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 border-red-200 hover:border-red-300"
+              className="h-8 text-xs flex-shrink-0 text-red-500 hover:text-red-700 hover:bg-red-50 border-red-200 hover:border-red-300"
               onClick={() => openDialog('bulkDelete')}
               disabled={assetsCount === 0}
+              title="Hapus Semua aset yang terfilter"
             >
-              <Trash2 className="w-3 h-3 mr-1" />Hapus Semua
+              <Trash2 className="w-3 h-3 xl:mr-1" /><span className="hidden xl:inline">Hapus Semua</span>
             </Button>
           )}
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={handlePrintBulkCards} disabled={assetsCount === 0}>
-            <CreditCard className="w-3 h-3 mr-1" />Cetak Kartu ({assetsCount})
+          <Button variant="outline" size="sm" className="h-8 text-xs flex-shrink-0" onClick={handlePrintBulkCards} disabled={assetsCount === 0}
+            title={`Cetak Kartu (${assetsCount})`}>
+            <CreditCard className="w-3 h-3 xl:mr-1" /><span className="hidden xl:inline">Cetak Kartu ({assetsCount})</span>
           </Button>
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onCetakStiker} disabled={assetsCount === 0}
-            data-testid="toolbar-cetak-stiker">
-            <Tags className="w-3 h-3 mr-1" />Stiker
+          <Button variant="outline" size="sm" className="h-8 text-xs flex-shrink-0" onClick={onCetakStiker} disabled={assetsCount === 0}
+            title="Cetak Stiker Label BMN" data-testid="toolbar-cetak-stiker">
+            <Tags className="w-3 h-3 xl:mr-1" /><span className="hidden xl:inline">Stiker</span>
           </Button>
         </div>
 

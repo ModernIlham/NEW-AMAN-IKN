@@ -17,6 +17,7 @@ import { downloadFileWithProgress, makeDownloadProgress } from "@/lib/downloadFi
 import { authMediaUrl } from "@/lib/mediaUrl";
 import { exportViaJob } from "@/lib/jobExport";
 import { reserveDummyNup, cariKategoriDummy } from "@/lib/dummyNup";
+import { buatTempId, apakahTempId } from "@/lib/idAntrean";
 import { useDragSelect } from "@/lib/useDragSelect";
 import { syncSnapshot, getSnapshotAssets, snapshotMeta, isSnapshotExpired, upsertSnapshotAsset, removeSnapshotAsset } from "@/lib/offlineSnapshot";
 
@@ -1070,7 +1071,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   const petaAddRef = useRef(new Map());
 
   const handleOptimisticSubmit = useCallback((payload, isEdit, editId, usePatch = false) => {
-    const assetId = isEdit ? editId : `temp_${Date.now()}`;
+    const assetId = isEdit ? editId : buatTempId();
     // Capture the version the user started editing from (for OCC / If-Match).
     // Aset hasil scan QR bisa TIDAK ada di halaman list saat ini — pakai versi
     // dari baris edit yang terbuka sebagai fallback agar If-Match tetap terkirim.
@@ -1211,7 +1212,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
 
   // Save current asset in background + navigate to next/prev row
   const handleSaveAndNavigate = useCallback(async (payload, isEdit, editId, direction, usePatch = false) => {
-    const assetId = isEdit ? editId : `temp_${Date.now()}`;
+    const assetId = isEdit ? editId : buatTempId();
     const baseVersion = isEdit
       ? (mobileAssets.find(a => a.id === editId)?.version
          ?? assets.find(a => a.id === editId)?.version
@@ -1377,7 +1378,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     // navigateOnly = pindah ke aset sebelumnya TANPA menyimpan aset saat ini
     // (dipakai saat aset baru masih kosong — hindari validasi/simpan).
     if (!navigateOnly) {
-      const assetId = isEdit ? editId : `temp_${Date.now()}`;
+      const assetId = isEdit ? editId : buatTempId();
       const baseVersion = isEdit ? (assets.find(a => a.id === editId)?.version ?? null) : null;
       if (isEdit && editId) {
         setAssets(prev => prev.map(a => a.id === editId ? { ...a, ...payload, thumbnail: payload.photo || a.thumbnail } : a));
@@ -1397,7 +1398,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     // Aset sebelumnya masih PROSES PENYIMPANAN (antrean/temp) → belum bisa
     // dibuka untuk diedit; beri notifikasi yang sesuai.
     const st = syncStatuses[target.id]?.status;
-    if (String(target.id).startsWith("temp_") || st === "queued" || st === "saving" || st === "failed") {
+    if (apakahTempId(String(target.id)) || st === "queued" || st === "saving" || st === "failed") {
       toast.info("Aset sebelumnya masih dalam proses penyimpanan — tunggu sebentar lalu coba lagi.");
       return;
     }
@@ -1413,7 +1414,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     // JANGAN kirim DELETE (id itu tak ada di server) — itu gagal lalu CREATE-nya
     // tetap lolos belakangan → "aset hantu". dismissSync membuang baris temp +
     // item antrean + salinan persist sekaligus.
-    if (String(id).startsWith("temp_")) {
+    if (apakahTempId(String(id))) {
       const ok = await confirm({
         title: "Batalkan Aset", description: "Aset ini belum tersimpan ke server. Batalkan penambahannya?",
         confirmLabel: "Batalkan", variant: "danger",
