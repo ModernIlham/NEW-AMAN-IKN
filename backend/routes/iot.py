@@ -26,13 +26,13 @@ import hashlib
 import logging
 import secrets
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel
 
-from auth_utils import require_admin, require_user
+from auth_utils import require_admin, require_user, require_writer
 from db import db
 from shared_utils import (kode_satker_user, limiter, log_audit,
                           pastikan_akses_dok_satker, scope_query_field_satker)
@@ -214,6 +214,186 @@ async def _node_di_titik(lon: float, lat: float, kode_satker: str, memo: dict):
     return node
 
 
+# ── Izin darurat pembukaan presisi (Fase 14) ────────────────────────────────
+#
+# Fase 10 menuliskan janji: "presisi penuh dibuka HANYA saat barang dilaporkan
+# hilang, dengan persetujuan pejabat, beralasan tertulis, berbatas waktu, dan
+# tercatat." Sampai sekarang janji itu punya penjaga (`izin_darurat_sah`)
+# tetapi tak punya pintu — artinya ia MUSTAHIL dijalankan, dan kepatuhan yang
+# mustahil dijalankan bukan kepatuhan.
+#
+# SATU HAL YANG WAJIB DIPAHAMI SEBELUM MEMAKAINYA — izin ini berlaku MAJU saja.
+# Observasi profil `personal` yang sudah terlanjur masuk SUDAH kehilangan
+# koordinatnya di jalur tulis (Fase 10 sengaja tak menyimpan, bukan menyimpan
+# lalu menyembunyikan). Tak ada izin, tanda tangan, atau perintah apa pun yang
+# bisa memulihkannya. Yang dibuka izin ini hanyalah observasi BERIKUTNYA.
+# Konsekuensi praktis: izin harus diterbitkan SEGERA setelah barang dilaporkan
+# hilang — menundanya berarti kehilangan jejak yang tak bisa diambil kembali.
+
+class IzinIn(BaseModel):
+    device_id: str
+    alasan: str
+    berlaku_jam: Optional[float] = 24
+
+
+@iot_router.post("/iot/izin-darurat")
+async def ajukan_izin(payload: IzinIn, user: dict = Depends(require_writer)):
+    """Ajukan pembukaan presisi penuh untuk satu perangkat (barang hilang).
+
+    Pengajuan TIDAK langsung berlaku — ia menunggu persetujuan pejabat yang
+    BUKAN pemohon. Pemisahan peran itu ditegakkan saat menyetujui, bukan
+    diserahkan pada kebiasaan.
+    """
+    dev = await db.iot_perangkat.find_one({"id": str(payload.device_id or "").strip()},
+                                          {**_PROJ, "token_hash": 0})
+    if not dev:
+        raise HTTPException(status_code=404, detail="Perangkat tidak ditemukan")
+    await pastikan_akses_dok_satker(user, dev)
+
+    alasan = str(payload.alasan or "").strip()
+    if len(alasan) < pu.ALASAN_DARURAT_MIN:
+        raise HTTPException(
+            status_code=400,
+            detail=(f"Alasan wajib diisi minimal {pu.ALASAN_DARURAT_MIN} karakter — "
+                    "pembukaan presisi lokasi harus dapat dipertanggungjawabkan"))
+    jam = max(0.5, min(float(payload.berlaku_jam or 24), pu.MAKS_JAM_DARURAT))
+
+    now = datetime.now(timezone.utc)
+    doc = {
+        "id": "iz_" + uuid.uuid4().hex[:16],
+        "kode_satker": dev.get("kode_satker") or kode_satker_user(user),
+        "device_id": dev["id"], "device_nama": dev.get("nama") or "",
+        "asset_id": dev.get("asset_id") or "",
+        "asset_name": dev.get("asset_name") or "",
+        "profil_privasi": dev.get("profil_privasi") or "",
+        "alasan": alasan[:1000],
+        "diminta_oleh": user.get("username", ""),
+        "diminta_pada": now.isoformat(),
+        "berlaku_jam": jam,
+        # Diisi HANYA saat disetujui — pengajuan yang belum disetujui tak boleh
+        # punya masa berlaku sama sekali.
+        "disetujui_oleh": "", "disetujui_pada": "", "berlaku_sampai": "",
+        "status": "diusulkan",
+    }
+    await db.iot_izin_darurat.insert_one(dict(doc))
+    await log_audit("iot_izin_darurat_ajukan", "", doc["id"],
+                    username=user.get("username", "system"),
+                    kode_satker=doc["kode_satker"],
+                    detail=f"{dev.get('nama')}: {alasan[:80]}")
+    return {**doc,
+            "catatan": ("Izin BELUM berlaku. Presisi baru terbuka setelah "
+                        "disetujui pejabat yang bukan pemohon.")}
+
+
+@iot_router.post("/iot/izin-darurat/{izin_id}/setujui")
+async def setujui_izin(izin_id: str, user: dict = Depends(require_admin)):
+    """Setujui pengajuan — di sinilah tiga syarat Fase 10 benar-benar diuji."""
+    izin = await db.iot_izin_darurat.find_one({"id": izin_id}, _PROJ)
+    if not izin:
+        raise HTTPException(status_code=404, detail="Pengajuan tidak ditemukan")
+    await pastikan_akses_dok_satker(user, izin)
+    if izin.get("status") != "diusulkan":
+        raise HTTPException(status_code=409,
+                            detail=f"Pengajuan sudah berstatus '{izin.get('status')}'")
+
+    now = datetime.now(timezone.utc)
+    calon = {
+        **izin,
+        "disetujui_oleh": user.get("username", ""),
+        "berlaku_sampai": (now + timedelta(hours=float(izin.get("berlaku_jam") or 24))
+                           ).isoformat(),
+    }
+    # Penjaga Fase 10 dipanggil APA ADANYA — bukan diduplikasi di sini. Aturan
+    # yang ditulis dua kali akan menyimpang cepat atau lambat.
+    galat = pu.izin_darurat_sah(calon, sekarang=now)
+    if galat:
+        raise HTTPException(status_code=400, detail=galat)
+
+    await db.iot_izin_darurat.update_one(
+        {"id": izin_id, "status": "diusulkan"},
+        {"$set": {"disetujui_oleh": calon["disetujui_oleh"],
+                  "disetujui_pada": now.isoformat(),
+                  "berlaku_sampai": calon["berlaku_sampai"],
+                  "status": "aktif"}})
+    await log_audit("iot_izin_darurat_setujui", "", izin_id,
+                    username=user.get("username", "system"),
+                    kode_satker=izin.get("kode_satker") or "",
+                    detail=(f"{izin.get('device_nama')} — berlaku sampai "
+                            f"{calon['berlaku_sampai']}"))
+    return {"ok": True, "berlaku_sampai": calon["berlaku_sampai"],
+            "catatan": ("Presisi penuh terbuka untuk observasi BERIKUTNYA. "
+                        "Data lama yang sudah didegradasi tidak dapat dipulihkan.")}
+
+
+@iot_router.post("/iot/izin-darurat/{izin_id}/cabut")
+async def cabut_izin(izin_id: str, user: dict = Depends(require_admin)):
+    """Tutup lebih awal — barang ketemu sebelum masa berlaku habis."""
+    izin = await db.iot_izin_darurat.find_one({"id": izin_id}, _PROJ)
+    if not izin:
+        raise HTTPException(status_code=404, detail="Izin tidak ditemukan")
+    await pastikan_akses_dok_satker(user, izin)
+    res = await db.iot_izin_darurat.update_one(
+        {"id": izin_id, "status": {"$in": ["aktif", "diusulkan"]}},
+        {"$set": {"status": "dicabut",
+                  "dicabut_oleh": user.get("username", ""),
+                  "dicabut_pada": datetime.now(timezone.utc).isoformat()}})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=409, detail="Izin sudah tidak berjalan")
+    await log_audit("iot_izin_darurat_cabut", "", izin_id,
+                    username=user.get("username", "system"),
+                    kode_satker=izin.get("kode_satker") or "",
+                    detail=str(izin.get("device_nama") or izin_id)[:80])
+    return {"ok": True}
+
+
+@iot_router.get("/iot/izin-darurat")
+async def daftar_izin(_user: dict = Depends(require_user)):
+    """Register izin — SELURUH riwayat, bukan hanya yang aktif.
+
+    Izin yang sudah lewat tetap ditampilkan: nilai utama mekanisme ini justru
+    pada jejaknya. Pembukaan presisi yang tak bisa ditelusuri belakangan sama
+    saja dengan tak ada pagar.
+    """
+    kini = datetime.now(timezone.utc)
+    items = await (db.iot_izin_darurat.find(scope_query_field_satker(_user), _PROJ)
+                   .sort("diminta_pada", -1).to_list(200))
+    for z in items:
+        z["sedang_berlaku"] = _izin_berlaku(z, kini)
+        z["sisa_menit"] = _sisa_menit(z, kini)
+    return {"items": items, "jumlah": len(items),
+            "maks_jam": pu.MAKS_JAM_DARURAT,
+            "alasan_min_karakter": pu.ALASAN_DARURAT_MIN,
+            "catatan": ("Izin berlaku MAJU saja — observasi yang sudah "
+                        "didegradasi tak dapat dipulihkan oleh izin apa pun.")}
+
+
+def _izin_berlaku(z: dict, kini: datetime) -> bool:
+    if (z or {}).get("status") != "aktif":
+        return False
+    batas = iu._parse_ts(z.get("berlaku_sampai"))
+    return batas is not None and batas > kini
+
+
+def _sisa_menit(z: dict, kini: datetime):
+    batas = iu._parse_ts((z or {}).get("berlaku_sampai"))
+    if batas is None or (z or {}).get("status") != "aktif":
+        return None
+    return max(0, int((batas - kini).total_seconds() // 60))
+
+
+async def _darurat_aktif(device_id: str, kini: datetime) -> bool:
+    """True bila perangkat sedang punya izin sah yang belum kedaluwarsa.
+
+    Dicek per BATCH, bukan per observasi: izin tak berubah dalam hitungan detik,
+    dan satu kueri per batch jauh lebih murah daripada satu per titik.
+    """
+    z = await db.iot_izin_darurat.find_one(
+        {"device_id": device_id, "status": "aktif"},
+        {"_id": 0, "berlaku_sampai": 1, "status": 1},
+        sort=[("berlaku_sampai", -1)])
+    return _izin_berlaku(z, kini) if z else False
+
+
 class BatchIn(BaseModel):
     observasi: list
 
@@ -242,6 +422,9 @@ async def terima_observasi(request: Request, payload: BatchIn,
     # kebijakan (Fase 10); TTL index memakai field turunannya, jadi retensi tak
     # bisa menyimpang diam-diam antara indeks dan kebijakan tertulis.
     umur = sekarang - pu.batas_retensi(profil_nama, sekarang)
+    # Izin darurat (Fase 14) membuka presisi penuh + mengabaikan jam aktif untuk
+    # observasi yang masuk SELAMA masa berlakunya. Dicek sekali per batch.
+    darurat = await _darurat_aktif(dev["id"], sekarang)
 
     disimpan, ditolak_privasi, duplikat, tanpa_kawasan = 0, 0, 0, 0
     memo_node, dok = {}, []
@@ -250,12 +433,13 @@ async def terima_observasi(request: Request, payload: BatchIn,
         node = await _node_di_titik(lon, lat, satker, memo_node)
         obs["lokasi_spasial"] = su.snapshot_lokasi_temuan(node, lon, lat)
 
-        hasil = pu.saring_observasi(obs, profil_nama, sekarang=sekarang)
+        hasil = pu.saring_observasi(obs, profil_nama, sekarang=sekarang,
+                                    darurat=darurat)
         if not hasil["simpan"]:
             ditolak_privasi += 1
             continue
         d = hasil["observasi"]
-        if profil.get("presisi") == "wilayah" and not node:
+        if profil.get("presisi") == "wilayah" and not darurat and not node:
             # Koordinat sudah dibuang penyaring dan tak ada node yang tersisa —
             # dokumen ini tak memuat lokasi apa pun, jadi menyimpannya hanya
             # menambah baris kosong. Efek sampingnya justru diinginkan: laptop
@@ -333,6 +517,7 @@ async def terima_observasi(request: Request, payload: BatchIn,
     return {"diterima": len(siap["terima"]), "disimpan": disimpan,
             "duplikat": duplikat, "ditolak_privasi": ditolak_privasi,
             "di_luar_kawasan": tanpa_kawasan, "peringatan_geofence": peringatan,
+            "akses_darurat": darurat,
             "ditolak_validasi": siap["tolak"][:20],
             "melebihi_plafon": siap["plafon"],
             "profil": profil_nama}
