@@ -68,7 +68,10 @@ export default function DenahEditor({ node, onClose, onSaved }) {
   // jalan TEPAT saat node terpasang. Dengan useRef + dep [], node yang belum
   // siap membuat effect return diam SELAMANYA (lihat catatan di effect init).
   const [wadahEl, setWadahEl] = useState(null);
-  const [galatInit, setGalatInit] = useState("");   // kegagalan init terlihat
+  const [galatInit, setGalatInit] = useState("");
+  // Pesan tahap yang SEDANG dikerjakan — spinner tanpa keterangan
+  // membuat pemuatan berat terbaca sebagai aplikasi macet.
+  const [tahap, setTahap] = useState("");
   const mapRef = useRef(null);
   const grupGambarRef = useRef(null);    // layer yang BOLEH diedit (bentuk node ini)
   // Renderer CANVAS khusus KONTEKS (batas induk + tetangga). Poligon kawasan
@@ -258,6 +261,7 @@ export default function DenahEditor({ node, onClose, onSaved }) {
     (async () => {
       setMemuat(true);
       try {
+        setTahap("Mengambil batas wilayah…");
         const detail = (await axios.get(`${API}/spasial/node/${nodeId}`, OPS)).data;
         if (batal) return;
         setDetailNode(detail);
@@ -267,14 +271,21 @@ export default function DenahEditor({ node, onClose, onSaved }) {
           setOpasitas(detail.overlay_efektif.opasitas ?? 0.7);
           pasangOverlay(detail.overlay_efektif);
         }
-        let induk = null;
-        if (detail?.parent_id) {
-          try {
-            induk = (await axios.get(`${API}/spasial/node/${detail.parent_id}`, OPS)).data;
-          } catch { /* induk lintas-hak/terhapus — konteks saja, bukan galat */ }
-        }
+        // Batas INDUK diambil PARALEL dengan penempatan peta di bawah, bukan
+        // berurutan. Versi lama menunggu dua poligon besar selesai satu per
+        // satu sebelum apa pun tampil — untuk kawasan berverteks ribuan itulah
+        // "peta lambat lalu akhirnya muncul" yang dilaporkan lapangan. Kini
+        // peta terpasang setelah permintaan PERTAMA; induk menyusul.
+        const janjiInduk = detail?.parent_id
+          ? axios.get(`${API}/spasial/node/${detail.parent_id}`, OPS)
+              .then((r) => r.data)
+              .catch(() => null)   // lintas-hak/terhapus — konteks, bukan galat
+          : Promise.resolve(null);
         if (batal) return;
 
+        setTahap("Menempatkan peta…");
+        const induk = await janjiInduk;
+        if (batal) return;
         // Batas INDUK sebagai panduan (garis tebal, tak bisa diedit).
         if (induk?.geometry) {
           // TETAP interaktif — `interactive:false` membuat renderer tak pernah
@@ -306,7 +317,7 @@ export default function DenahEditor({ node, onClose, onSaved }) {
           } catch { /* grup kosong / titik tunggal */ }
         }
         clearTimeout(jagaWaktu);
-        if (!batal) setMemuat(false);          // ← peta siap; konteks async
+        if (!batal) { setMemuat(false); setTahap("Memuat kawasan sekitar…"); }
 
         // Tetangga di sekitar sebagai konteks redup (best-effort, canvas).
         try {
@@ -331,11 +342,12 @@ export default function DenahEditor({ node, onClose, onSaved }) {
             }).addTo(map);
           }
         } catch { /* konteks gagal — editor tetap berfungsi */ }
+        if (!batal) setTahap("");        // konteks selesai; penanda latar padam
       } catch {
         if (!batal) { toast.error("Gagal memuat data node"); }
       } finally {
         clearTimeout(jagaWaktu);
-        if (!batal) setMemuat(false);
+        if (!batal) { setMemuat(false); setTahap(""); }
       }
     })();
     return () => { batal = true; clearTimeout(jagaWaktu); };
@@ -664,9 +676,32 @@ export default function DenahEditor({ node, onClose, onSaved }) {
         <div className="relative">
           {/* callback ref: effect init jalan TEPAT saat node terpasang */}
           <div ref={setWadahEl} className="h-[52vh] min-h-[320px] w-full" data-testid="denah-editor-peta" />
+          {/* Spinner BERKETERANGAN. Denah kawasan bisa berverteks puluhan ribu
+              dan pemuatannya memang lama; lingkaran berputar tanpa kata membuat
+              operator menyimpulkan aplikasi macet lalu menutup dialog tepat saat
+              prosesnya hampir selesai (laporan lapangan). */}
           {memuat && (
-            <div className="absolute inset-0 z-[500] bg-background/60 flex items-center justify-center">
+            <div className="absolute inset-0 z-[500] bg-background/70 flex flex-col
+                            items-center justify-center gap-2"
+                 data-testid="denah-memuat">
               <Loader2 className="w-6 h-6 animate-spin text-teal-600" />
+              <p className="text-xs font-medium text-foreground">
+                {tahap || "Menyiapkan peta…"}
+              </p>
+              <p className="text-[10px] text-muted-foreground max-w-[16rem] text-center">
+                Denah kawasan besar butuh beberapa detik. Proses berjalan di
+                latar — jangan tutup jendela ini.
+              </p>
+            </div>
+          )}
+          {/* Konteks sekitar masih menyusul SETELAH peta bisa dipakai — ditandai
+              tipis di pojok agar terlihat bekerja tanpa memblokir menggambar. */}
+          {!memuat && tahap && (
+            <div className="absolute bottom-2 left-2 z-[500] rounded-md bg-background/85
+                            border border-border px-2 py-1 flex items-center gap-1.5"
+                 data-testid="denah-tahap-latar">
+              <Loader2 className="w-3 h-3 animate-spin text-teal-600" />
+              <span className="text-[10px] text-muted-foreground">{tahap}</span>
             </div>
           )}
         </div>
