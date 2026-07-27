@@ -5,6 +5,7 @@ import {
 } from "../ui/tooltip";
 import { authMediaUrl } from "../../lib/mediaUrl";
 import { sisaGaransi } from "../../lib/garansi";
+import { apakahTempId } from "../../lib/idAntrean";
 import { useSinkronSiman } from "../../lib/simanSync";
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -47,7 +48,7 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
   // streaming gagal (mis. offline tanpa cache).
   const [streamErr, setStreamErr] = useState(false);
   const legacyThumb = asset.gallery_thumbnail || asset.thumbnail;
-  const streamThumb = photoCount > 0 && !String(asset.id).startsWith("temp_")
+  const streamThumb = photoCount > 0 && !apakahTempId(String(asset.id))
     ? authMediaUrl(`${API}/assets/${asset.id}/photos/${asset.thumbnail_index || 0}?v=${asset.version || 1}&w=256`)
     : null;
   const galleryThumb = (!streamErr && streamThumb) || legacyThumb;

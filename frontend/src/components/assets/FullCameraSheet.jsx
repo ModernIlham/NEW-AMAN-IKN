@@ -117,9 +117,13 @@ const FullCameraSheet = memo(function FullCameraSheet({
   totalAssetsInView = 0,
   hasMoreToLoad = false,
   savedCount = 0,
+  // Penanda GERBONG: aset mana yang sedang di depan kamera. Dikirim balik apa
+  // adanya bersama setiap foto agar induk bisa menolak foto yang jepretannya
+  // ternyata milik aset sebelumnya (lihat addCameraPhoto).
+  sesiAset,
   busy = false,
   onClose,
-  onCapture,       // (dataUrl) => void — foto baru (sudah distempel + terkompresi)
+  onCapture,       // (dataUrl, sesiAset) => void — foto baru (sudah distempel + terkompresi)
   onRemovePhoto,   // (index) => void
   onSetField,      // (name, value) => void — edit info aset dari panel
   onGpsFix,        // ({lat, lng}) => void — tiap fix GPS baru (update form + cache)
@@ -475,6 +479,13 @@ const FullCameraSheet = memo(function FullCameraSheet({
   // Ambil foto: gambar frame video ke canvas, stempel watermark ala Timemark,
   // hasilkan JPEG (sisi terpanjang ≤1920, q0.85 — setara pipeline kompresi form).
   const capture = useCallback(() => {
+    // Penjaga di DALAM fungsi, bukan hanya atribut `disabled`. Atribut itu
+    // urusan tampilan; yang menjaga satu-kesatuan foto↔aset adalah ini. Saat
+    // simpan berjalan, foto baru akan mendarat di aset yang keliru.
+    if (busy) {
+      toast.info("Sedang menyimpan aset ini — tunggu sebentar sebelum memotret lagi");
+      return;
+    }
     const video = videoRef.current;
     // Track harus 'live' — cegah memotret frame BEKU saat kamera terputus
     // (background/lock) padahal watermark akan mencap waktu & GPS terbaru.
@@ -535,8 +546,11 @@ const FullCameraSheet = memo(function FullCameraSheet({
 
     const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
     playShutterSound(); // klik rana (best-effort; hormati toggle bunyi)
-    onCapture(dataUrl);
-  }, [photos.length, maxPhotos, formData, onCapture, suspended]);
+    // Penanda gerbong dibaca TEPAT saat rana ditekan — bukan saat foto sampai
+    // di induk. Watermark di badan foto (kode & NUP di atas) berasal dari
+    // formData yang sama, jadi keduanya pasti bercerita tentang aset yang sama.
+    onCapture(dataUrl, sesiAset);
+  }, [photos.length, maxPhotos, formData, onCapture, suspended, busy, sesiAset]);
 
   // Getar SEKALI saat akurasi GPS mencapai SANGAT presisi (≤4 m) — "kunci
   // akurat" terasa tanpa harus melihat cincin. Rising-edge via ref agar tidak
@@ -829,12 +843,25 @@ const FullCameraSheet = memo(function FullCameraSheet({
             <span className={`w-11 h-11 rounded-full flex items-center justify-center ${!nameFilled ? "bg-amber-400/30 ring-2 ring-amber-300 animate-pulse" : "bg-white/15"}`}><Pencil className="w-5 h-5" /></span>
             Edit Info{!nameFilled ? " *" : ""}
           </button>
-          <button type="button" onClick={capture} disabled={!ready || photos.length >= maxPhotos || !nameFilled || gpsBlocked}
-            aria-label="Ambil foto" data-testid="full-camera-shutter"
-            title={gpsBlocked ? (gpsAcc == null ? "Menunggu sinyal GPS akurat…" : `Akurasi GPS ±${gpsAcc} m terlalu lebar (maks ±8 m)`) : undefined}
+          {/* Rana IKUT `busy` — bukan sekadar konsistensi dengan tombol lain.
+              Selama simpan berjalan, form MENUNGGU kompresi foto (bisa
+              berdetik-detik di HP low-end dengan 6 foto). Foto yang terambil di
+              jendela itu masuk ke state SETELAH payload dibekukan, lalu ikut
+              terhapus oleh resetForm — atau, lebih buruk, menempel ke aset
+              BERIKUTNYA padahal watermark-nya mencantumkan kode & NUP aset
+              sebelumnya. Keduanya memutus satu-kesatuan foto↔aset. */}
+          <button type="button" onClick={capture} disabled={!ready || busy || photos.length >= maxPhotos || !nameFilled || gpsBlocked}
+            aria-label={busy ? "Menyimpan — rana terkunci sementara" : "Ambil foto"}
+            aria-busy={busy}
+            data-testid="full-camera-shutter"
+            title={busy
+              ? "Menyimpan aset ini — tunggu sebentar agar foto tidak tertukar dengan aset berikutnya"
+              : gpsBlocked ? (gpsAcc == null ? "Menunggu sinyal GPS akurat…" : `Akurasi GPS ±${gpsAcc} m terlalu lebar (maks ±8 m)`) : undefined}
             className="w-[72px] h-[72px] rounded-full border-4 border-white flex items-center justify-center disabled:opacity-40">
             <span className="w-14 h-14 rounded-full bg-white flex items-center justify-center">
-              <Camera className="w-6 h-6 text-black/70" />
+              {busy
+                ? <Loader2 className="w-6 h-6 text-black/70 animate-spin" />
+                : <Camera className="w-6 h-6 text-black/70" />}
             </span>
           </button>
           <button type="button" onClick={() => setFacing(f => (f === "environment" ? "user" : "environment"))}

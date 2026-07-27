@@ -28,6 +28,7 @@ import { authMediaUrl } from "../../lib/mediaUrl";
 import { acquireAccuratePosition } from "../../lib/geolocation";
 import { lebihAkurat } from "../../lib/gpsAkurasi";
 import { bolehSalinKoordinat } from "../../lib/salinKonteks";
+import { buatSesiAset, fotoNyasar } from "../../lib/sesiAset";
 import { compressImageFile, compressDataUrl, generateThumbnailFromDataUrl, dataUrlBytes } from "../../lib/imageCompression";
 import { reserveDummyNup as reserveDummyNupLib } from "../../lib/dummyNup";
 import { statusInventarisasiOtomatis, autoInventarisasiEnabled } from "../../lib/inventoryStatus";
@@ -1000,9 +1001,40 @@ const AssetForm = memo(({
   // Back HP saat dialog pilihan kamera terbuka → tutup dialognya saja
   useBackGuard(useCallback(() => setCameraPromptOpen(false), []), cameraPromptOpen);
 
+  // Jumlah aset tersimpan selama sesi Kamera Penuh (indikator alur beruntun).
+  const [cameraSavedCount, setCameraSavedCount] = useState(0);
+
+  // IDENTITAS "ASET YANG SEDANG DI DEPAN KAMERA" — penanda gerbong. Sinyalnya
+  // SAMA dengan reset GPS per-aset di bawah, karena memang persis dua peristiwa
+  // itulah yang berarti "gerbong berganti": pindah ke aset lain, atau
+  // simpan-lalu-siapkan-aset-baru.
+  const sesiAset = buatSesiAset(editAsset?.id, cameraSavedCount);
+  // Ditulis SAAT RENDER, bukan lewat useEffect. Efek baru berjalan setelah
+  // paint, sehingga tepat setelah form berpindah aset ref-nya masih memegang
+  // aset LAMA sementara kamera sudah menampilkan yang BARU — foto pertama aset
+  // baru justru akan ditolak sebagai "asing". Nilainya murni turunan state dan
+  // penulisannya idempoten, jadi aman diulang pada render berulang.
+  const sesiAsetRef = useRef(sesiAset);
+  sesiAsetRef.current = sesiAset;
+
   // Foto dari Mode Kamera Penuh: dataURL sudah ≤1920px q0.85 (setara pipeline
   // kompresi form) + sudah distempel waktu/GPS — langsung masuk daftar foto.
-  const addCameraPhoto = useCallback(async (dataUrl) => {
+  //
+  // SATU GERBONG SATU ASET. Foto tidak diterima begitu saja: ia membawa penanda
+  // aset MANA yang sedang di depan kamera saat rana ditekan (`sesiJepret`), dan
+  // ditolak bila form sudah berpindah aset sejak itu. Tanpa penanda ini, foto
+  // yang jepretannya bersamaan dengan penyimpanan bisa mendarat di aset
+  // BERIKUTNYA — padahal watermark di badan fotonya mencantumkan kode & NUP
+  // aset sebelumnya, sehingga bukti visual dan data induknya bercerita berbeda.
+  // Perhatikan jalur `isEditing` yang menunggu pembuatan thumbnail: penantian
+  // itulah celah yang membuat penanda ini perlu diperiksa DUA KALI — sebelum
+  // dan sesudah await.
+  const addCameraPhoto = useCallback(async (dataUrl, sesiJepret) => {
+    const asing = () => fotoNyasar(sesiJepret, sesiAsetRef.current);
+    if (asing()) {
+      toast.error("Foto tidak disimpan — form sudah berpindah aset saat foto diambil");
+      return;
+    }
     photosModifiedRef.current = true;
     if (isEditing) {
       // Saat edit OFFLINE, foto server yang sudah ada belum dimuat ke photoItems
@@ -1010,6 +1042,12 @@ const AssetForm = memo(({
       const existingUnloaded = mediaLoadedRef.current ? 0 : (originalDataRef.current?._photoCount || 0);
       if (photoItems.length + existingUnloaded >= 6) { toast.error("Maks 6 foto"); return; }
       const thumb = await generateThumbnailFromDataUrl(dataUrl, 100, 0.7).catch(() => dataUrl);
+      // Periksa ULANG: pembuatan thumbnail di atas bisa memakan waktu, dan
+      // selama itu surveyor mungkin sudah berpindah aset.
+      if (asing()) {
+        toast.error("Foto tidak disimpan — form sudah berpindah aset saat foto diproses");
+        return;
+      }
       setPhotoItems(prev => (prev.length + existingUnloaded >= 6 ? prev : [...prev, { type: "new", thumbnail: thumb, newData: dataUrl }]));
       return;
     }
@@ -1124,9 +1162,6 @@ const AssetForm = memo(({
     const nup = await reserveDummyNup(dummy.kode_aset, dummy.label);
     setFormData(p => ({ ...p, NUP: nup }));
   }, [categories, reserveDummyNup, clearFieldError]);
-
-  // Jumlah aset tersimpan selama sesi Kamera Penuh (indikator alur beruntun).
-  const [cameraSavedCount, setCameraSavedCount] = useState(0);
 
   // GPS PINTAR: reset "fix terbaik" tiap ganti aset (edit) atau simpan-lalu-baru
   // (cameraSavedCount naik) → tiap aset memilih koordinat GPS terakuratnya sendiri.
@@ -1865,6 +1900,7 @@ const AssetForm = memo(({
           totalAssetsInView={totalAssetsInView}
           hasMoreToLoad={hasMoreToLoad}
           savedCount={cameraSavedCount}
+          sesiAset={sesiAset}
           busy={isSubmitting || isFormLoading}
           preparing={isFormLoading || isSubmitting || (!isEditing && !!formData.category && !formData.NUP)}
           onClose={closeFullCamera}

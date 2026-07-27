@@ -1160,11 +1160,22 @@ const AssetMapFullView = memo(function AssetMapFullView({
 
   return (
     <div className="space-y-2" data-testid="asset-map-fullview">
-      {/* ── Bar peta: info + filter kelompok + unduh + tutup ──
-          HP: SATU baris — [ikon · judul · menu gabungan · tutup]; filter
-          Barang Serupa + Unduh + Muat Ulang dilebur ke SATU tombol ber-menu
-          (ikonnya menandai filter aktif). sm+ tetap kontrol terpisah. */}
-      <div className="bg-card rounded-xl border border-border shadow-sm p-1.5 sm:p-2 flex items-center gap-1.5 sm:gap-2 flex-wrap">
+      {/* ── Bar peta: info + filter kelompok + unduh ──
+          HP: SATU baris — [ikon · judul · menu gabungan]; filter Barang Serupa
+          + Unduh + Muat Ulang dilebur ke SATU tombol ber-menu (ikonnya menandai
+          filter aktif). sm+ tetap kontrol terpisah.
+
+          SATU BARIS DI SEGALA UKURAN. `flex-wrap` dibuang: dulu tombol yang tak
+          muat turun membentuk baris kedua yang mendorong peta ke bawah — makin
+          banyak kontrol, makin sempit petanya. Sebagai gantinya LABEL yang
+          menyusut: teks baru muncul di xl ke atas, di bawah itu semua kontrol
+          jadi ikon-saja sehingga selalu cukup dalam satu baris. `overflow-x-auto`
+          adalah katup pengaman terakhir — kalaupun ada kombinasi ekstrem yang
+          tetap tak muat, bar-nya menggeser mendatar, bukan pecah ke baris baru.
+          Tombol "X tutup" dihapus di semua ukuran: tombol "Peta" di toolbar
+          sudah berperan sebagai saklar, dan tombol Back HP sudah dijaga
+          useBackGuard — satu pintu keluar sudah cukup, dan ruangnya berharga. */}
+      <div className="bg-card rounded-xl border border-border shadow-sm p-1.5 sm:p-2 flex items-center gap-1.5 sm:gap-2 flex-nowrap overflow-x-auto">
         <span className="w-8 h-8 rounded-lg bg-teal-600 flex items-center justify-center flex-shrink-0">
           <MapPinned className="w-4 h-4 text-white" />
         </span>
@@ -1267,14 +1278,14 @@ const AssetMapFullView = memo(function AssetMapFullView({
             title={dragUnlocked
               ? "Geser marker AKTIF — ketuk untuk MENGUNCI (cegah geser tak sengaja)"
               : "Marker terkunci (aman dilihat) — ketuk untuk membuka & geser koordinat"}
-            className={`h-9 w-9 lg:w-auto lg:px-2.5 rounded-lg border flex items-center justify-center lg:justify-start gap-1 flex-shrink-0 ${
+            className={`h-9 w-9 xl:w-auto xl:px-2.5 rounded-lg border flex items-center justify-center xl:justify-start gap-1 flex-shrink-0 ${
               dragUnlocked
                 ? "border-amber-400 dark:border-amber-700 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40"
                 : "border-border text-foreground/80 hover:bg-muted"}`}
             data-testid="asset-map-drag-lock"
           >
             {dragUnlocked ? <LockOpen className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
-            <span className="hidden lg:inline text-xs font-semibold">{dragUnlocked ? "Geser: Aktif" : "Terkunci"}</span>
+            <span className="hidden xl:inline text-xs font-semibold">{dragUnlocked ? "Geser: Aktif" : "Terkunci"}</span>
           </button>
         )}
         {onShare && (
@@ -1283,21 +1294,12 @@ const AssetMapFullView = memo(function AssetMapFullView({
             onClick={onShare}
             aria-label="Bagikan peta kolaboratif"
             title="Bagikan peta kolaboratif (link publik)"
-            className="h-9 w-9 lg:w-auto lg:px-2.5 rounded-lg border border-blue-300 dark:border-blue-800 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950 flex items-center justify-center lg:justify-start gap-1 flex-shrink-0"
+            className="h-9 w-9 xl:w-auto xl:px-2.5 rounded-lg border border-blue-300 dark:border-blue-800 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950 flex items-center justify-center xl:justify-start gap-1 flex-shrink-0"
             data-testid="asset-map-share"
           >
-            <Share2 className="w-4 h-4" /><span className="hidden lg:inline text-xs font-semibold">Bagikan</span>
+            <Share2 className="w-4 h-4" /><span className="hidden xl:inline text-xs font-semibold">Bagikan</span>
           </button>
         )}
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Tutup peta"
-          className="h-9 w-9 rounded-lg border border-border text-foreground/80 flex items-center justify-center hover:bg-muted flex-shrink-0 sm:order-last"
-          data-testid="asset-map-close"
-        >
-          <X className="w-4 h-4" />
-        </button>
         {activeFilterCount > 0 && (
           <span className="hidden md:flex items-center gap-1 px-2 h-7 rounded-full bg-blue-600/10 text-blue-600 dark:text-blue-400 text-[11px] font-semibold flex-shrink-0" data-testid="asset-map-filter-badge">
             <Filter className="w-3 h-3" />{activeFilterCount} filter
@@ -1306,7 +1308,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
         {/* Filter Barang Serupa (≥sm) — di HP menyatu ke menu gabungan */}
         {groups.length > 0 && (
           <Select value={groupKey} onValueChange={changeGroup}>
-            <SelectTrigger className="hidden sm:flex h-9 w-auto max-w-[240px] px-2 text-[11px] gap-1 flex-shrink-0" aria-label="Filter barang serupa" data-testid="asset-map-group-filter">
+            <SelectTrigger className="hidden sm:flex h-9 w-auto max-w-[120px] xl:max-w-[240px] px-2 text-[11px] gap-1 flex-shrink-0" aria-label="Filter barang serupa" data-testid="asset-map-group-filter">
               <Layers className="w-3.5 h-3.5 text-violet-500 flex-shrink-0" />
               <SelectValue />
             </SelectTrigger>
@@ -1328,11 +1330,11 @@ const AssetMapFullView = memo(function AssetMapFullView({
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="h-9 px-2.5 rounded-lg border border-border text-xs font-medium text-foreground/80 hidden sm:flex items-center gap-1 hover:bg-muted flex-shrink-0"
+              className="h-9 w-9 xl:w-auto px-0 xl:px-2.5 rounded-lg border border-border text-xs font-medium text-foreground/80 hidden sm:flex items-center justify-center xl:justify-start gap-1 hover:bg-muted flex-shrink-0"
               data-testid="asset-map-download"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>Unduh</span>
+              <span className="hidden xl:inline">Unduh</span>
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-44">
@@ -1352,7 +1354,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
             type="button"
             onClick={() => setSelectMode((v) => { if (v) setDrawArea(false); return !v; })}
             aria-pressed={selectMode}
-            className={`h-9 px-2.5 rounded-lg border text-xs font-semibold hidden sm:flex items-center justify-center gap-1 flex-shrink-0 transition-colors ${
+            className={`h-9 w-9 xl:w-auto px-0 xl:px-2.5 rounded-lg border text-xs font-semibold hidden sm:flex items-center justify-center xl:justify-start gap-1 flex-shrink-0 transition-colors ${
               selectMode
                 ? "border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400"
                 : "border-border text-foreground/80 hover:bg-muted"
@@ -1362,14 +1364,14 @@ const AssetMapFullView = memo(function AssetMapFullView({
             data-testid="asset-map-select-toggle"
           >
             <MousePointerClick className="w-3.5 h-3.5" />
-            <span>{selectMode ? "Mode Seleksi: Aktif" : "Mode Seleksi"}</span>
+            <span className="hidden xl:inline">{selectMode ? "Mode Seleksi: Aktif" : "Mode Seleksi"}</span>
           </button>
         )}
         <button
           type="button"
           onClick={() => setDenahOn((v) => !v)}
           aria-pressed={denahOn}
-          className={`h-9 w-9 sm:w-auto sm:px-2.5 rounded-lg border text-xs font-medium flex items-center justify-center sm:justify-start gap-1 flex-shrink-0 transition-colors ${
+          className={`h-9 w-9 xl:w-auto xl:px-2.5 rounded-lg border text-xs font-medium flex items-center justify-center xl:justify-start gap-1 flex-shrink-0 transition-colors ${
             denahOn
               ? "border-teal-500 bg-teal-500/10 text-teal-600 dark:text-teal-400"
               : "border-border text-foreground/80 hover:bg-muted"
@@ -1381,13 +1383,13 @@ const AssetMapFullView = memo(function AssetMapFullView({
           data-testid="asset-map-denah-toggle"
         >
           <LandPlot className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">Denah: {denahOn ? "Aktif" : "Mati"}</span>
+          <span className="hidden xl:inline">Denah: {denahOn ? "Aktif" : "Mati"}</span>
         </button>
         <button
           type="button"
           onClick={toggleCluster}
           aria-pressed={clusterOn}
-          className={`h-9 px-2.5 rounded-lg border text-xs font-medium hidden sm:flex items-center justify-center gap-1 flex-shrink-0 transition-colors ${
+          className={`h-9 w-9 xl:w-auto px-0 xl:px-2.5 rounded-lg border text-xs font-medium hidden sm:flex items-center justify-center xl:justify-start gap-1 flex-shrink-0 transition-colors ${
             clusterOn
               ? "border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400"
               : "border-border text-foreground/80 hover:bg-muted"
@@ -1397,18 +1399,40 @@ const AssetMapFullView = memo(function AssetMapFullView({
           data-testid="asset-map-cluster-toggle"
         >
           <Boxes className="w-3.5 h-3.5" />
-          <span>Cluster: {clusterOn ? "Aktif" : "Mati"}</span>
+          <span className="hidden xl:inline">Cluster: {clusterOn ? "Aktif" : "Mati"}</span>
+        </button>
+        {/* Gaya Marker (Pin ↔ Foto sampul). Sebelumnya HANYA ada di menu
+            gabungan HP — di tablet & desktop pemakai tak punya jalan sama
+            sekali untuk menggantinya, padahal justru di layar lebar tampilan
+            foto paling berguna. */}
+        <button
+          type="button"
+          onClick={() => setMarkerStyle((s) => (s === "photo" ? "pin" : "photo"))}
+          aria-pressed={markerStyle === "photo"}
+          className={`h-9 w-9 xl:w-auto px-0 xl:px-2.5 rounded-lg border text-xs font-medium hidden sm:flex items-center justify-center xl:justify-start gap-1 flex-shrink-0 transition-colors ${
+            markerStyle === "photo"
+              ? "border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400"
+              : "border-border text-foreground/80 hover:bg-muted"
+          }`}
+          aria-label={markerStyle === "photo" ? "Ganti marker ke pin" : "Ganti marker ke foto sampul"}
+          title={markerStyle === "photo"
+            ? "Marker menampilkan FOTO sampul aset — klik untuk kembali ke pin"
+            : "Marker berupa pin warna — klik untuk menampilkan foto sampul aset"}
+          data-testid="asset-map-marker-style"
+        >
+          <ImageIcon className="w-3.5 h-3.5" />
+          <span className="hidden xl:inline">Marker: {markerStyle === "photo" ? "Foto" : "Pin"}</span>
         </button>
         <button
           type="button"
           onClick={() => { didFitRef.current = false; load(); if (denahOn) denah.muatUlang(); }}
           disabled={loading}
-          className="h-9 px-2.5 rounded-lg border border-border text-xs font-medium text-foreground/80 hidden sm:flex items-center justify-center gap-1 hover:bg-muted disabled:opacity-50 flex-shrink-0"
+          className="h-9 w-9 xl:w-auto px-0 xl:px-2.5 rounded-lg border border-border text-xs font-medium text-foreground/80 hidden sm:flex items-center justify-center xl:justify-start gap-1 hover:bg-muted disabled:opacity-50 flex-shrink-0"
           aria-label="Muat ulang peta"
           data-testid="asset-map-refresh"
         >
           {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-          <span>Muat Ulang</span>
+          <span className="hidden xl:inline">Muat Ulang</span>
         </button>
       </div>
 
