@@ -53,6 +53,71 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#654] Audit adversarial gelombang D — layar yang bisa dipakai & janji yang jujur — 2026-07-27
+
+Gelombang terakhir: 14 temuan sisa yang tak mengancam data, tetapi menentukan
+apakah fitur-fitur baru benar-benar BISA DIPAKAI di HP lapangan.
+
+### Dialog Opname yang tak bisa digulir
+
+`DialogContent` bawaan membawa `overflow-hidden`. Di layar HP, panel Opname
+lebih tinggi daripada viewport sehingga tombol **Terapkan** dan **Tutup**
+terpotong di luar layar — dan tak ada cara menggulirnya. Fitur inti fase 11
+praktis tak bisa diselesaikan dari HP. Kini `max-h-[92vh] overflow-y-auto`.
+
+### Layar yang tak lagi menyesatkan atau membuang kerja
+
+- **Viewer diberi tahu SEBELUM memindai.** `POST /opname/scan` menolak akun
+  baca-saja dengan 403, tetapi barisan pindainya tetap disuguhkan — pengguna
+  baru tahu setelah pindaian pertama (atau ketiga puluh) gagal.
+- **Centang Terapkan tak lagi lenyap tiap kali memindai.** Pemuatan ulang dulu
+  mengosongkan seluruh pilihan tanpa pemberitahuan; kini yang masih ada
+  dipertahankan.
+- **Penjaga urutan respons** pada `muat()` — mengetuk saklar "termasuk isi di
+  bawahnya" dua kali cepat bisa menampilkan lingkup yang tak cocok dengan
+  posisi centangnya.
+- **Panel SBSK & Opname tak lagi jadi kotak kosong permanen** setelah gagal
+  memuat: ada pesan + tombol "Coba lagi".
+- **Tombol CSV punya nama aksesibel** (labelnya disembunyikan di <640px).
+
+### Berhenti membuang jaringan yang justru sedang buruk
+
+- **Kirim ulang antrean: satu penyegaran, bukan enam puluh.** Mengosongkan
+  antrean 60 scan dulu memicu 60 GET rekonsiliasi berat BERURUTAN, tepat saat
+  sinyal baru pulih.
+- **Balasan REPLAY tak lagi membawa base64 foto.** Dua cabang idempotensi
+  mengembalikan dokumen MENTAH tanpa `_strip_media`, padahal jalur sukses tepat
+  di bawahnya membuangnya. Replay lazim terjadi persis saat sinyal buruk —
+  keadaan yang paling tak sanggup menanggung respons multi-MB.
+- **`clear_photos`/`clear_document_checklist` hanya menyentuh aset yang memang
+  BERISI.** URL media memakai `?v=<version>` sebagai cache-buster, jadi
+  menaikkan version aset yang fotonya tak berubah membuat SETIAP perangkat
+  lapangan mengunduh ulang foto yang sama. Predikat memakai `.0 $exists`, bukan
+  `$nin: [None, []]` — yang terakhir ditafsirkan BERBEDA oleh mongomock dan
+  MongoDB asli, sehingga uji bisa hijau sementara produksi berperilaku lain.
+- **Panel SBSK tak lagi menarik seluruh pohon denah** (bisa puluhan ribu node)
+  hanya untuk mengisi satu dropdown.
+
+### Dokumentasi yang mengaku lebih dari kenyataannya
+
+Baris status di `docs/ARSITEKTUR-SPASIAL-IOT.md` menyatakan Fase 7 dan 9 utuh.
+Keduanya **baru sebagian**, dan kini dinyatakan apa adanya: Fase 7 tanpa migrasi
+master `ruangan` (KIR/DBR masih bersumber `assets.location`); Fase 9 tanpa
+`asset_custody` dan tanpa integrasi BAST/sertijab — yang tercatat perpindahan
+LOKASI, bukan pergantian PEMEGANG.
+
+- Uji: **+1 backend (1.180)**, 225 frontend. Satu mutasi diverifikasi.
+
+### Yang SENGAJA tidak dikerjakan
+
+Auditor menyarankan memisahkan `media_version` dari `version` agar cache foto
+tak terbatalkan oleh perubahan non-foto. **Tidak dilakukan**: itu memperkenalkan
+penghitung kedua yang harus dirawat di setiap jalur tulis foto — risiko baru
+demi kenyamanan. Yang diambil adalah pangkalnya: berhenti menaikkan version
+tanpa perubahan nyata.
+
+---
+
 ## [#652] Audit adversarial gelombang C — sepuluh uji yang tak menjaga apa pun — 2026-07-27
 
 Dimensi "kualitas uji" pada audit adversarial mengerjakan satu hal yang tak

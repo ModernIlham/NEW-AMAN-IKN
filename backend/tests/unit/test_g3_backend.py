@@ -251,10 +251,13 @@ def test_semua_jalur_tulis_ubah_massal_menaikkan_version(dbx, monkeypatch):
             {"nama": "BAST", "ada": True}]}), _Req(), None, None, None, USER)
         assert await versi("b1") == 2, "jalur checklist tak menaikkan version"
 
-        # (c) clear_photos — update_many
+        # (c) clear_photos — update_many. Asetnya WAJIB benar-benar berfoto:
+        # sejak gelombang D, aset yang memang sudah kosong sengaja TIDAK
+        # disentuh (menaikkan version tanpa perubahan akan membatalkan cache
+        # foto di seluruh perangkat lewat cache-buster `?v=<version>`).
         await dbx.assets.insert_one(
             {"id": "c1", "activity_id": "keg1", "version": 4,
-             "photo_gridfs_ids": []})
+             "photo_gridfs_ids": ["gid-1"], "thumbnail": "data:image/jpeg;x"})
         await fn(_kelas_data(["c1"], {"clear_photos": True}),
                  _Req(), None, None, None, USER)
         assert await versi("c1") == 5, "jalur clear_photos tak menaikkan version"
@@ -266,6 +269,30 @@ def test_semua_jalur_tulis_ubah_massal_menaikkan_version(dbx, monkeypatch):
         await fn(_kelas_data(["d1"], {"clear_document_checklist": True}),
                  _Req(), None, None, None, USER)
         assert await versi("d1") == 10, "jalur clear_checklist tak menaikkan version"
+
+
+def test_clear_tak_menyentuh_aset_yang_memang_sudah_kosong(dbx, monkeypatch):
+    """URL media memakai `?v=<version>` sebagai cache-buster. Menaikkan version
+    aset yang fotonya TAK berubah sedikit pun membuat setiap perangkat lapangan
+    mengunduh ulang foto yang sama — di jaringan buruk, ongkosnya nyata."""
+    async def skenario():
+        monkeypatch.setattr(rb, "log_audit", _diam, raising=False)
+        await dbx.inventory_activities.insert_one(
+            {"id": "keg1", "status_pengesahan": "draft"})
+        fn = _unwrap(rb.batch_update_assets)
+        await dbx.assets.insert_many([
+            {"id": "isi", "activity_id": "keg1", "version": 1,
+             "document_checklist": [{"nama": "BAST"}]},
+            {"id": "kosong", "activity_id": "keg1", "version": 1,
+             "document_checklist": []},
+        ])
+        await fn(_kelas_data(["isi", "kosong"], {"clear_document_checklist": True}),
+                 _Req(), None, None, None, USER)
+        isi = await dbx.assets.find_one({"id": "isi"}, {"_id": 0})
+        kosong = await dbx.assets.find_one({"id": "kosong"}, {"_id": 0})
+        assert isi["version"] == 2, "aset berisi harus dibersihkan & naik version"
+        assert kosong["version"] == 1, "aset kosong tak boleh disentuh sama sekali"
+    _jalan(skenario())
     _jalan(skenario())
 
 

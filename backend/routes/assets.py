@@ -849,7 +849,12 @@ async def create_asset(asset: AssetCreate, request: Request, _user: dict = Depen
         _sudah = await db.assets.find_one({"idem_key": idem_key}, {"_id": 0})
         if _sudah:
             logger.info(f"Idempotent replay (via asset doc) for key {idem_key[:8]}...")
-            return AssetResponse(**{k: v for k, v in _sudah.items() if k in AssetResponse.model_fields})
+            # _strip_media WAJIB di sini juga: tanpa itu balasan REPLAY membawa
+            # base64 seluruh foto aset, sementara jalur sukses tepat di bawah
+            # justru membuangnya. Replay lazim terjadi persis saat sinyal buruk —
+            # keadaan yang paling tak sanggup menanggung respons multi-MB.
+            return AssetResponse(**_strip_media(
+                {k: v for k, v in _sudah.items() if k in AssetResponse.model_fields}))
         # Atomically claim the key so concurrent duplicates can't both run.
         _idem = await reserve_idempotency_key(idem_key)
         if _idem == "done":
@@ -947,7 +952,8 @@ async def create_asset(asset: AssetCreate, request: Request, _user: dict = Depen
                 pass
         _menang = await db.assets.find_one({"idem_key": idem_key}, {"_id": 0}) if idem_key else None
         if _menang:
-            return AssetResponse(**{k: v for k, v in _menang.items() if k in AssetResponse.model_fields})
+            return AssetResponse(**_strip_media(
+                {k: v for k, v in _menang.items() if k in AssetResponse.model_fields}))
         raise HTTPException(status_code=409, detail="Aset dengan kunci idempotensi ini sudah tersimpan")
     except Exception as e:
         # Rollback GridFS photos on DB insert failure
