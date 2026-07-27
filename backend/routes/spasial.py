@@ -102,6 +102,11 @@ class NodeIn(BaseModel):
     zona_kode: Optional[str] = ""
     subzona_kode: Optional[str] = ""
     fungsi_kawasan: Optional[str] = ""
+    # PERUNTUKAN ruangan (Fase 15) — jabatan/fungsi yang menjadi acuan standar
+    # SBSK. None = "tak diubah" pada PUT, sama seperti geometry/properties;
+    # string kosong = dikosongkan dengan sengaja. Sengaja DITETAPKAN manusia,
+    # bukan disimpulkan dari isi asetnya (lihat sbsk_ruang_utils keputusan 1).
+    peruntukan: Optional[str] = None
     properties: Optional[dict] = None
     # None = "tak diubah" pada PUT (dan "aktif" pada POST) — default "aktif"
     # di sini dulunya membuat status yang TAK dikirim klien tak terbedakan
@@ -123,6 +128,10 @@ def _bersih_node(p: NodeIn) -> dict:
         "zona_kode": str(p.zona_kode or "").strip(),
         "subzona_kode": str(p.subzona_kode or "").strip(),
         "fungsi_kawasan": str(p.fungsi_kawasan or "").strip(),
+        # None dipertahankan apa adanya (semantik "tak diubah"); pemanggil
+        # create/update yang memutuskan nilai akhirnya.
+        "peruntukan": (None if p.peruntukan is None
+                       else str(p.peruntukan).strip()[:160]),
         # None = "tak diubah" (semantik yang sama dengan geometry) — pemanggil
         # create/update yang memutuskan nilai akhirnya. Dulu None dipetakan ke
         # {}/"aktif" di sini, dan itu dua bug senyap sekaligus: klien yang tak
@@ -334,6 +343,7 @@ async def buat_node(payload: NodeIn, _user: dict = Depends(require_writer)):
     doc["properties"] = doc["properties"] or {}
     doc["properties"].pop("denah_overlay", None)
     doc["status"] = doc["status"] or "aktif"
+    doc["peruntukan"] = doc["peruntukan"] or ""
     kode_satker = kode_satker_user(_user)
     node_id = "sn_" + str(uuid.uuid4())
     deriv = await _susun_derivasi(node_id, doc["parent_id"], _user)
@@ -389,6 +399,12 @@ async def ubah_node(node_id: str, payload: NodeIn,
                 props_unset[f"properties.{k}"] = ""
     if doc["status"] is None:
         doc["status"] = lama.get("status") or "aktif"
+    # Sama seperti status: klien lama (form pohon sebelum Fase 15) tak mengirim
+    # `peruntukan` sama sekali. Tanpa penjaga ini, mengedit nama sebuah ruangan
+    # lewat form itu akan MENGHAPUS peruntukan yang sudah ditetapkan — dan
+    # laporan SBSK ruang diam-diam kehilangan acuan standarnya.
+    if doc["peruntukan"] is None:
+        doc["peruntukan"] = str(lama.get("peruntukan") or "")
 
     parent_baru = doc["parent_id"]
     pindah = parent_baru != lama.get("parent_id")

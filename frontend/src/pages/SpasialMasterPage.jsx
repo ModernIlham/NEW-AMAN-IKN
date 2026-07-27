@@ -154,6 +154,13 @@ export default function SpasialMasterPage({ user, onBack }) {
           ? form.nama_alias.split(",").map((s) => s.trim()).filter(Boolean) : [],
         zona_kode: form.zona_kode.trim(),
       };
+      // Peruntukan hanya dikirim untuk tingkat tempat standar SBSK ruang kerja
+      // bermakna. Untuk tipe lain field ini SENGAJA absen dari body: server
+      // memperlakukan "tak dikirim" sebagai "tak diubah", sehingga mengubah
+      // sebuah gedung tak menyentuh peruntukan ruangan mana pun.
+      if (form.tipe === "RUANGAN" || form.tipe === "SAYAP") {
+        body.peruntukan = (form.peruntukan || "").trim();
+      }
       // Mode ubah membawa status EKSPLISIT (aktivasi draft = keputusan sadar);
       // mode tambah membiarkan server men-default "aktif". properties sengaja
       // TIDAK dikirim — server mempertahankan yang tersimpan (jejak impor,
@@ -210,14 +217,14 @@ export default function SpasialMasterPage({ user, onBack }) {
     mode: "tambah", id: null,
     tipe: parent ? tipeAnakDefault(parent) : (levels[0]?.kode_baku || "KAWASAN"),
     nama: "", kode: "", parent_id: parent?.id || "",
-    nama_alias: "", zona_kode: "",
+    nama_alias: "", zona_kode: "", peruntukan: "",
     lantai_ordinal: "", lantai_label: "", lantai_pendek: "", lantai_kategori: "reguler",
   });
 
   const bukaUbah = (n) => setForm({
     mode: "ubah", id: n.id, tipe: n.tipe, nama: n.nama || "", kode: n.kode || "",
     parent_id: n.parent_id || "", nama_alias: (n.nama_alias || []).join(", "),
-    zona_kode: n.zona_kode || "",
+    zona_kode: n.zona_kode || "", peruntukan: n.peruntukan || "",
     // Status EKSPLISIT — dulu form tak mengirim status dan server men-default
     // "aktif", sehingga sekadar mengganti nama draft impor MENGAKTIFKANNYA
     // diam-diam (temuan Fase 7). Kini server "None = tak diubah" + form ini
@@ -518,6 +525,21 @@ export default function SpasialMasterPage({ user, onBack }) {
                   <label className="text-xs font-medium">Kode Zona RDTR <span className="text-muted-foreground">(mis. R.2, K.3)</span></label>
                   <Input value={form.zona_kode} onChange={(e) => setForm((f) => ({ ...f, zona_kode: e.target.value }))}
                     className="mt-1 font-mono" />
+                </div>
+              )}
+              {(form.tipe === "RUANGAN" || form.tipe === "SAYAP") && (
+                <div>
+                  <label className="text-xs font-medium">
+                    Peruntukan <span className="text-muted-foreground">(acuan standar SBSK ruang kerja)</span>
+                  </label>
+                  <Input value={form.peruntukan}
+                    onChange={(e) => setForm((f) => ({ ...f, peruntukan: e.target.value }))}
+                    className="mt-1" placeholder="mis. Ruang kerja Kepala Biro Umum"
+                    data-testid="spasial-peruntukan" />
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Ditetapkan manusia, bukan ditebak dari isi asetnya. Dikosongkan =
+                    ruangan belum ditetapkan peruntukannya (muncul di laporan SBSK Ruang).
+                  </p>
                 </div>
               )}
               {form.tipe === "LANTAI" && (

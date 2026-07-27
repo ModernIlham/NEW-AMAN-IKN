@@ -387,3 +387,102 @@ async def sanding_usulan(usulan_id: str, kode_barang: str = "",
     return {"usulan": {k: usulan.get(k) for k in
                        ("id", "uraian", "jenis", "volume", "satuan", "tahun_rkbmn")},
             "kode_barang": prefix, **hasil}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SBSK BERBASIS RUANG NYATA (Spasial Fase 15)
+#
+# Sampai fase ini, standar "247 m² untuk pimpinan" tak punya lawan bicara:
+# tak ada satu pun luas ruangan NYATA di sistem untuk dibandingkan. Denah
+# poligon Fase 3–7 menyediakannya — luas dihitung DARI GAMBARNYA, bukan dari
+# angka yang diketik ulang seseorang ke dalam formulir.
+#
+# LUAS DIHITUNG ULANG DI SINI, tidak membaca `metrik.luas_m2` yang tersimpan.
+# Nilai tersimpan itu ditulis saat geometri terakhir disimpan, bisa jadi oleh
+# RUMUS VERSI LAMA (proyeksi bola, yang melebihkan luas ~0,45% di lintang IKN).
+# Untuk peringkat area bias seragam tak berpengaruh; untuk angka yang masuk
+# dokumen perencanaan, membaca nilai basi berarti melaporkan luas yang tak bisa
+# dipertanggungjawabkan asal-usulnya.
+# ═══════════════════════════════════════════════════════════════════════════
+
+_MAKS_RUANGAN_SBSK = 800
+_MAKS_ASET_SBSK = 5000
+
+
+@perencanaan_router.get("/perencanaan/sbsk-ruang")
+async def sbsk_ruang(node_id: str = Query(...), dalam: bool = Query(True),
+                     tipe: str = Query("RUANGAN"),
+                     _user: dict = Depends(require_user)):
+    """Sanding LUAS RUANGAN NYATA (dari poligon denah) vs standar SBSK.
+
+    Yang paling berguna di sini bukan kolom "sesuai", melainkan dua kolom yang
+    biasanya tak ada di mana pun: ruangan yang sudah tergambar tetapi BELUM
+    ditetapkan peruntukannya, dan ruangan yang tak berperuntukan SEKALIGUS tak
+    berisi aset apa pun — ruang menganggur. Itulah bukti yang menahan usulan
+    pengadaan ruang baru.
+    """
+    import spasial_utils as su
+    import sbsk_ruang_utils as sru
+
+    node = await db.spasial_node.find_one(
+        scope_query_field_satker(_user, {"id": str(node_id or "").strip()}),
+        {"_id": 0, "id": 1, "nama": 1, "tipe": 1, "status": 1})
+    if not node or node.get("status") == "dihapus":
+        raise HTTPException(status_code=404, detail="Node denah tidak ditemukan")
+
+    lingkup = {"status": {"$ne": "dihapus"}}
+    if dalam:
+        lingkup["$or"] = [{"id": node["id"]}, {"ancestors": node["id"]}]
+    else:
+        lingkup["parent_id"] = node["id"]
+    tipe_pilih = str(tipe or "").strip().upper()
+    if tipe_pilih:
+        lingkup["tipe"] = tipe_pilih
+
+    rows_node = await db.spasial_node.find(
+        scope_query_field_satker(_user, lingkup),
+        {"_id": 0, "id": 1, "nama": 1, "tipe": 1, "peruntukan": 1,
+         "ancestors_nama": 1, "geometry": 1}).to_list(_MAKS_RUANGAN_SBSK)
+
+    # Isi ruangan (jumlah aset + pemegang) dalam SATU agregasi, bukan satu
+    # kueri per ruangan: gedung berisi 200 ruangan akan berarti 200 bolak-balik
+    # jaringan untuk satu halaman yang sama.
+    ids = [r["id"] for r in rows_node]
+    isi = {}
+    if ids:
+        async for g in db.assets.aggregate([
+            {"$match": {"lokasi_spasial.node_id": {"$in": ids}}},
+            {"$limit": _MAKS_ASET_SBSK},
+            {"$group": {"_id": "$lokasi_spasial.node_id",
+                        "jumlah": {"$sum": 1},
+                        "pemegang": {"$addToSet": "$user"}}},
+        ]):
+            isi[g["_id"]] = {
+                "jumlah": int(g.get("jumlah") or 0),
+                "pemegang": [p for p in (g.get("pemegang") or []) if p],
+            }
+
+    standar = await db.sbsk_standar.find({}, {"_id": 0}).to_list(1000)
+    baris = []
+    for n in rows_node:
+        jalur = " / ".join([str(x) for x in (n.get("ancestors_nama") or []) if x]
+                           + [str(n.get("nama") or "")])
+        luas = su.luas_kasar_m2(n.get("geometry"))
+        baris.append(sru.baris_ruang({**n, "jalur_nama": jalur}, luas,
+                                     isi.get(n["id"]), standar))
+    baris.sort(key=lambda b: (-(b.get("luas_m2") or 0), b.get("nama") or ""))
+
+    return {
+        "node": {"id": node["id"], "nama": node.get("nama"),
+                 "tipe": node.get("tipe")},
+        "termasuk_keturunan": bool(dalam),
+        "tipe": tipe_pilih,
+        "items": baris,
+        "rekap": sru.rekap_sbsk_ruang(baris),
+        "sebaran": sru.sebaran_per_induk(baris),
+        "toleransi_persen": sru.TOLERANSI_PERSEN,
+        "terpotong": len(rows_node) >= _MAKS_RUANGAN_SBSK,
+        "catatan": ("Luas dihitung dari poligon denah (proyeksi lokal WGS84), "
+                    "bukan angka ketikan. Untuk poligon seluas kawasan, "
+                    "gunakan pustaka geodesi bila angkanya masuk dokumen resmi."),
+    }
