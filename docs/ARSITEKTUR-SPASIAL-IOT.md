@@ -1271,6 +1271,56 @@ GEO_PARAM = {
 
 **Evaluasi tanpa round-trip DB per observasi:** cache poligon aktif di memori worker (refresh via `event_bus`), **bbox prefilter → ray casting pure-Python** (±40 baris, nol dependensi, teruji unit). Deteksi geofence **harus di jalur TULIS (ingest)**, bukan saat baca — time-series hanya mendukung `$geoNear` (aggregation), **tidak** `$near`/`$nearSphere`. Ini justru arsitektur yang benar.
 
+#### 8.6.1 Apa yang BENAR-BENAR dibangun (Fase 12) — dan bedanya dari rancangan di atas
+
+Terlaksana sesuai rancangan: mesin status lima-status dengan histeresis, dwell,
+sampel minimum, cooldown; gerbang kualitas (akurasi > 100 m dan `outlier`
+teleport tidak memicu); evaluasi di jalur tulis; ray casting pure-Python.
+
+**Buffer keluar diterapkan sebagai JARAK, bukan poligon yang diperbesar.**
+`geofence_utils.jarak_ke_poligon_m()` mengembalikan 0.0 di dalam dan jarak
+meter di luar; `jarak > buffer_keluar_m` setara persis dengan "di luar poligon
+yang diperbesar". Memperbesar poligon (`shapely.buffer`) pada bentuk **cekung**
+— gedung berbentuk L atau U itu lazim — bisa melahirkan self-intersection dan
+mengubah jumlah verteks. Jaraknya sendiri eksak, murah, dan tak berstatus.
+
+**Yang BEDA dari rancangan, dan alasannya:**
+
+| Rancangan | Yang dibangun | Alasan |
+|---|---|---|
+| Publish ke `event_bus` → WebSocket | **Tidak.** Peringatan masuk register `iot_geofence_event` yang bisa dikueri | Bus realtime repo ini ber-*room* `activity_id` (kegiatan inventarisasi) dan **siapa pun yang membuka kegiatan itu menerima seluruh isi room**; perangkat pelacak pun tak selalu terikat kegiatan mana pun. Menyalurkan posisi aset ke sana = menyiarkannya ke penonton yang tak seharusnya. Kanal dorong khusus adalah pekerjaan tersendiri, bukan tumpangan |
+| Temuan Wasdal otomatis | **Eskalasi manual** satu klik → tiket `penertiban` | Tiket penertiban bertenggat 15 hari kerja dan masuk register wajib PMK 207/2021. Membuatnya otomatis dari pembacaan GPS = membanjiri register resmi dengan tiket yang mungkin hanya akibat pagar salah pasang |
+| Cache poligon di memori worker | Dibaca per batch, **di-memo per node dalam batch** | Cache lintas-permintaan menuntut invalidasi saat denah diubah; belum sepadan pada skala saat ini. Satu batch tetap hanya sekali baca per area |
+
+**Dua perangkap yang baru terlihat saat menyambungkan, bukan saat merancang:**
+
+1. **Observasi WAJIB diurutkan waktu sebelum dievaluasi.** Perangkat yang
+   menumpahkan antrean offline mengirim batch yang urutannya tak dijamin, dan
+   mesin berdwell yang menerima observasi terbalik menghitung durasi negatif
+   lalu memutuskan salah — tanpa gejala apa pun.
+2. **Idempotensi penyimpanan ≠ idempotensi peringatan.** Kirim-ulang adalah
+   perilaku NORMAL at-least-once. Indeks unik `obs_id` menolak duplikatnya,
+   tetapi mesin status akan tetap memutar ulang observasi yang sama bila
+   diberi seluruh isi batch. Hanya observasi yang **benar-benar baru tersimpan**
+   (indeks yang tak muncul di `writeErrors`) yang boleh masuk mesin.
+
+**Cooldown dihitung PER JENIS event.** Versi pertama membandingkan dengan event
+terakhir apa pun jenisnya, sehingga deret masuk→keluar→masuk tak pernah teredam
+sama sekali — tiap event selalu berbeda jenis dari pendahulunya. Selain itu
+**waktu transisi dan waktu peringatan disimpan terpisah**: keluar yang
+peringatannya teredam tetap keluar, dan jam "sudah berapa lama di luar" tetap
+berjalan — kalau tidak, aset yang keluar lalu perangkatnya MATI tak akan pernah
+memicu `dwell_terlampaui`, persis kasus yang paling perlu diketahui.
+
+**`dwell_terlampaui` disapu berkala (menumpang loop pemeliharaan per jam di
+`jobs.py`), bukan dipicu data masuk** — dengan alasan yang sama: aset yang
+hilang tak mengirim observasi.
+
+**Batas yang diketahui:** dua batch dari perangkat yang SAMA yang tiba
+bersamaan bisa saling menimpa status (baca–ubah–tulis tanpa kunci); akibatnya
+peringatan yang terlewat, bukan data rusak. Perangkat nyata mengirim berurutan,
+jadi ini dibiarkan sadar — bukan tak terlihat.
+
 ---
 
 ## BAGIAN 9 — MATRIKS TEKNOLOGI PELACAKAN

@@ -403,6 +403,43 @@ async def create_indexes() -> None:
                                             name="iot_perangkat_token_hash")
         await db.iot_perangkat.create_index([("kode_satker", 1), ("created_at", -1)],
                                             name="iot_perangkat_satker_waktu")
+
+        # GEOFENCE (Fase 12). Aturan dibaca pada SETIAP batch masuk — jalur
+        # terpanas kedua setelah autentikasi perangkat.
+        await db.iot_geofence_aturan.create_index("id", unique=True,
+                                                  name="geofence_aturan_id")
+        await db.iot_geofence_aturan.create_index([("device_id", 1), ("aktif", 1)],
+                                                  name="geofence_aturan_device")
+        await db.iot_geofence_aturan.create_index([("kode_satker", 1), ("created_at", -1)],
+                                                  name="geofence_aturan_satker")
+        # UNIK (aturan, perangkat): status histeresis harus TUNGGAL per pagar.
+        # Dua baris untuk pasangan yang sama berarti dua mesin status berjalan
+        # bergantian, saling menimpa, dan dwell tak pernah matang — geofence
+        # yang tampak berjalan tetapi tak pernah memberi peringatan.
+        await db.iot_geofence_state.create_index([("aturan_id", 1), ("device_id", 1)],
+                                                 unique=True,
+                                                 name="geofence_state_kunci")
+        await db.iot_geofence_event.create_index("id", unique=True,
+                                                 name="geofence_event_id")
+        # Register peringatan: daftar per satker terbaru dulu + hitung yang
+        # belum dibaca (badge). Partial pada `dibaca:false` menjaga indeks tetap
+        # kecil — yang sudah dibaca tak pernah dikueri lewat jalur ini.
+        await db.iot_geofence_event.create_index(
+            [("kode_satker", 1), ("dibuat_pada", -1)], name="geofence_event_satker")
+        await db.iot_geofence_event.create_index(
+            [("kode_satker", 1), ("dibaca", 1)],
+            partialFilterExpression={"dibaca": False},
+            name="geofence_event_belum_dibaca")
+        # Penjaga idempotensi sapuan `dwell_terlampaui`: satu peringatan per
+        # KEPERGIAN, bukan satu per jam selama aset masih hilang. WAJIB unique —
+        # loop pemeliharaan berjalan di SETIAP worker uvicorn, jadi cek-lalu-
+        # tulis di aplikasi bisa dilewati dua sapuan yang nyaris serempak.
+        # Partial: hanya event dwell yang punya `sejak`; jenis lain tak
+        # tersentuh aturan keunikan ini.
+        await db.iot_geofence_event.create_index(
+            [("aturan_id", 1), ("sejak", 1)], unique=True,
+            partialFilterExpression={"jenis": "dwell_terlampaui"},
+            name="geofence_event_dwell_unik")
         logger.info("Database indexes created successfully")
     except Exception as e:
         logger.error(f"Error creating indexes: {e}")

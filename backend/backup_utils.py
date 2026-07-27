@@ -27,6 +27,12 @@ SKIP_COLLECTIONS = {
     # telemetri yang terus mengalir, bukan catatan penatausahaan yang wajib
     # dipulihkan. Registry perangkatnya (`iot_perangkat`) tetap di-backup.
     "iot_observasi",
+    # Status mesin histeresis geofence (Fase 12) — DERIVABLE: ia hanya cermin
+    # posisi terkini, dan observasi yang membentuknya pun tak ikut arsip. Yang
+    # dipulihkan hanya akan menyatakan "aset ada di dalam area" berdasarkan
+    # keadaan berbulan lalu — lebih menyesatkan daripada mulai dari nol.
+    # ATURAN dan RIWAYAT PERINGATAN tetap di-backup (keduanya bukan transien).
+    "iot_geofence_state",
 }
 
 # Koleksi yang _id-nya BERMAKNA (bukan ObjectId acak) → wajib dipertahankan saat
@@ -69,6 +75,10 @@ RESET_KEEP_COLLECTIONS = {
     # lapangan satu per satu — biaya yang tak sebanding dengan "membersihkan
     # data". Observasinya sendiri tetap ikut terhapus (bukan RESET_KEEP).
     "iot_perangkat",
+    # Aturan geofence = konfigurasi pengawasan yang disusun manual (perangkat
+    # mana dipagari area mana), sekelas master referensi. Peringatan yang sudah
+    # terbit TIDAK ikut dipertahankan — itu data transaksi.
+    "iot_geofence_aturan",
 }
 
 # Legacy name → canonical (untuk membaca backup lama; mis. activities.json).

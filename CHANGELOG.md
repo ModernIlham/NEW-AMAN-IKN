@@ -53,6 +53,132 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#638] Spasial Fase 12: geofence — peringatan yang bisa dipercaya karena ia tahu kapan harus DIAM — 2026-07-27
+
+Aset yang keluar dari kawasannya sekarang memberi tahu. Bagian sulitnya bukan
+"apakah titik ada di dalam poligon" — itu sudah ada sejak Fase 3. Bagian
+sulitnya adalah **flapping**: perangkat yang diam persis di garis batas akan
+dilaporkan GPS-nya sedikit di dalam, lalu sedikit di luar, lalu di dalam lagi,
+puluhan kali per jam. Uji point-in-polygon polos akan memuntahkan puluhan
+peringatan "aset keluar area" untuk aset yang tak bergerak sesenti pun — dan
+peringatan yang meleset seperti itu membuat SELURUH sistem peringatan diabaikan
+orang. Ada satu uji yang khusus mengunci sifat ini: perangkat diam di tepi
+selama sejam harus menghasilkan **nol** peringatan.
+
+**Tiga pagar bekerja bersama.** *Histeresis* — ambang masuk dan keluar sengaja
+tidak sama: masuk dinilai pada poligon apa adanya, keluar baru diakui bila titik
+sudah lebih dari 25 m DI LUAR. Titik yang menggantung 10 m di luar batas masih
+dihitung di dalam. *Dwell* — perubahan harus bertahan (120 dtk masuk, 180 dtk
+keluar). *Sampel minimum* — satu pembacaan liar tak bisa memicu peringatan
+sendirian. Dwell saja tidak cukup: perangkat diam di batas bisa bertahan "di
+luar" bermenit-menit sebelum melompat balik.
+
+Buffer keluar diterapkan sebagai **jarak ke poligon**, bukan dengan memperbesar
+poligonnya. Memperbesar bentuk **cekung** — gedung berbentuk L atau U itu lazim
+— bisa melahirkan self-intersection dan mengubah jumlah verteks; jaraknya
+sendiri eksak, murah, dan tak berstatus.
+
+**Tiga cacat yang baru terlihat saat menyambungkan, bukan saat merancang:**
+
+- **Cooldown hanya membandingkan event TERAKHIR**, sehingga deret
+  masuk→keluar→masuk tak pernah teredam sama sekali — tiap event selalu berbeda
+  jenis dari pendahulunya. Kini dihitung per jenis. Ketahuan karena satu uji
+  yang deretnya sengaja dirapatkan sampai jatuh di dalam jendela peredam.
+- **Waktu transisi dan waktu peringatan tercampur.** Keluar yang peringatannya
+  teredam tetap keluar — tetapi jam "sudah berapa lama di luar" ikut teredam,
+  sehingga aset yang keluar lalu perangkatnya MATI TOTAL tak akan pernah memicu
+  `dwell_terlampaui`. Itu persis kasus yang paling perlu diketahui. Keduanya
+  kini disimpan terpisah.
+- **Idempotensi penyimpanan ≠ idempotensi peringatan.** Kirim-ulang adalah
+  perilaku NORMAL at-least-once; indeks unik `obs_id` menolak duplikatnya,
+  tetapi mesin status tetap memutar ulang observasi yang sama bila diberi
+  seluruh isi batch — sampel dan dwell terhitung dua kali. Kini hanya observasi
+  yang benar-benar baru tersimpan yang masuk mesin.
+
+**Dua keputusan yang sengaja MENOLAK rancangan awal**, keduanya dicatat di
+`docs/ARSITEKTUR-SPASIAL-IOT.md` §8.6.1:
+
+- **Peringatan TIDAK didorong ke WebSocket yang ada.** Bus realtime repo ini
+  ber-*room* `activity_id` dan siapa pun yang membuka kegiatan itu menerima
+  seluruh isi room; perangkat pelacak pun tak selalu terikat kegiatan mana pun.
+  Menyalurkan posisi aset ke sana = menyiarkannya ke penonton yang tak
+  seharusnya. Peringatan masuk register ber-scope satker yang bisa dikueri.
+- **Tiket penertiban Wasdal dibuat MANUAL satu klik, bukan otomatis.** Tiket itu
+  bertenggat 15 hari kerja dan masuk register wajib PMK 207/2021; membuatnya
+  otomatis dari pembacaan GPS berarti membanjiri register resmi dengan tiket
+  yang mungkin hanya akibat pagar salah pasang. Manusia memutuskan mana yang
+  naik jadi perkara; sistem menyiapkan bahannya.
+
+Observasi **diurutkan waktu** sebelum dievaluasi — perangkat yang menumpahkan
+antrean offline mengirim batch tak berurutan, dan mesin berdwell yang menerima
+observasi terbalik menghitung durasi negatif lalu memutuskan salah tanpa gejala.
+Gerbang kualitas menolak akurasi > 100 m (fix 500 m di dekat batas tak memberi
+tahu apa pun tentang sisi mana titik berada) dan lompatan > 250 km/jam.
+Perangkat berprofil privasi `personal` tak pernah dipagar-geo sama sekali —
+koordinatnya memang sudah dibuang Fase 10, dan memagari ORANG bukan tujuan
+sistem ini.
+
+- Backend baru: `geofence_utils.py` (mesin murni), `routes/geofence.py`
+  (aturan, evaluasi dari ingest, register, eskalasi).
+- Sapuan `dwell_terlampaui` menumpang loop pemeliharaan per jam di `jobs.py`,
+  idempoten per KEPERGIAN — bukan satu peringatan per jam selama aset hilang.
+- Indeks: aturan per perangkat, **status unik per (aturan, perangkat)**, register
+  per satker + partial `dibaca:false` untuk badge.
+- Backup: `iot_geofence_state` di-SKIP (derivable & menyesatkan bila dipulihkan);
+  `iot_geofence_aturan` masuk RESET_KEEP (konfigurasi pengawasan).
+**Tinjauan adversarial menemukan 3 cacat lagi yang lolos 36 uji itu** — para
+penyanggah menjalankan endpoint sungguhan, bukan membaca kode:
+
+- **Batch backfill MEMUNDURKAN mesin status.** Mengurutkan observasi di dalam
+  satu batch ternyata tidak cukup: urutan ANTAR batch tak bisa dijamin siapa
+  pun. Antrean offline yang tiba belakangan menggeser `sejak` ke masa lalu, lalu
+  observasi berikutnya menghitung selisih raksasa dan mematangkan dwell
+  SEKETIKA — melahirkan `keluar` palsu untuk aset yang justru sedang di dalam.
+  Kini ada pagar monoton: observasi yang lebih tua dari yang sudah diproses
+  diabaikan.
+- **Cooldown memakai selisih BERTANDA.** Observasi ber-`ts` mundur menghasilkan
+  angka negatif — yang selalu lebih kecil dari ambang — sehingga peringatan
+  NYATA teredam tanpa jejak apa pun.
+- **Invarian histeresis hanya dijepit di lapis rute, bukan di mesinnya.**
+  `buffer_masuk_m > buffer_keluar_m` menciptakan pita jarak yang sekaligus "di
+  dalam" dan "jauh di luar"; perangkat DIAM di pita itu berayun selamanya. Uji
+  yang membuktikannya justru gagal pada perbaikan pertama saya — pagar yang
+  hanya berdiri di pintu depan bukan pagar.
+
+Plus: geometri **Point** diterima sebagai area pagar (jarak selalu tak-hingga →
+aturan bisu selamanya, dan `Infinity` meledakkan serialisasi JSON seluruh daftar
+aturan); kueri acuan outlier menyortir field **tak berindeks** sehingga memindai
+seluruh riwayat perangkat tiap batch; titik ber-`outlier` dipakai sebagai acuan
+berikutnya sehingga satu koordinat rusak merambat; indeks bernama `…_unik`
+ternyata **tidak** unique padahal sapuan berjalan di setiap worker; eskalasi
+penertiban memakai cek-lalu-tulis sehingga dua klik melahirkan dua tiket
+bertenggat di register PMK 207/2021; `kode_satker` aturan tak ikut berpindah
+saat perangkatnya diganti; dan pengurutan `ts_device` sebagai **teks** salah
+untuk perangkat yang menulis offset zona waktu berbeda.
+
+Tinjauan juga menemukan **uji yang hijau tanpa menguji apa pun**: `dwell_keluar_dtk`
+boleh diubah jadi 0 dan 36/36 tetap lulus; regresi transisi-vs-cooldown yang
+komentarnya mengaku sudah diperbaiki tak punya uji sama sekali; `sampel_min`
+tak pernah diuji secara perilaku; muatan event tak pernah diperiksa. Semuanya
+kini terkunci.
+
+Gelombang kedua tinjauan menutup 4 sisanya: **tulis status kini bersyarat**
+(dua batch perangkat sama dari dua worker tak lagi saling menimpa — dibuktikan
+penyanggah dengan MongoDB 8.0 sungguhan); **`retro` diwariskan** ke
+`dwell_terlampaui` alih-alih di-hardcode `False`, karena alarm paling keras di
+sistem ini justru yang paling tak boleh terbaca segar padahal berasal dari
+antrean offline; plus dua celah uji (ambang retro yang memakai konstantanya
+sendiri sebagai acuan sehingga kebal mutasi, dan jarak lubang yang hanya diuji
+tandanya).
+
+Hasil akhir tinjauan: **32 dugaan diperiksa, 16 terkonfirmasi** — para
+penyanggah menjalankan mongod sungguhan dan memanggil fungsi endpoint asli,
+bukan membaca kode.
+
+- Uji: +36, +18, +4 = **1.043 lulus**.
+
+---
+
 ## [#637] Spasial Fase 11: ingest posisi IoT — perangkat mengirim, pagar privasi menyaring — 2026-07-27
 
 Data posisi pertama akhirnya boleh masuk sistem, lewat satu jalur yang tak punya
