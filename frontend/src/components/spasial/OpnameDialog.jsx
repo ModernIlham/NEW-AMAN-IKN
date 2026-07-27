@@ -52,22 +52,37 @@ export default function OpnameDialog({ node, labelLevel, isWriter, onClose }) {
   const [tertunda, setTertunda] = useState([]);
   const [terpilih, setTerpilih] = useState(() => new Set());
   const inputRef = useRef(null);
+  const reqRef = useRef(0);          // penjaga urutan respons muat()
+  const [galat, setGalat] = useState("");
 
   const segarkanTertunda = useCallback(() => setTertunda(bacaTertunda()), []);
 
   const muat = useCallback(async (termasuk) => {
+    // PENJAGA URUTAN. Mengetuk saklar "termasuk isi di bawahnya" dua kali cepat
+    // melahirkan dua permintaan; yang tiba BELAKANGAN belum tentu yang terakhir
+    // diminta, sehingga layar bisa menampilkan lingkup yang tak sesuai dengan
+    // posisi centangnya. Hanya respons termuda yang boleh menulis state.
+    const seq = (reqRef.current += 1);
+    setGalat("");
     setMemuat(true);
     try {
       const r = await axios.get(`${API}/opname/rekonsiliasi`, {
         params: { node_id: node.id, dalam: String(termasuk) }, timeout: 25000,
       });
+      if (seq !== reqRef.current) return;
       setData(r.data);
-      setTerpilih(new Set());
+      // Pilihan yang MASIH ADA dipertahankan — mengosongkannya di tiap muat
+      // ulang membuat centang Terapkan lenyap setiap kali petugas memindai
+      // barang berikutnya, tanpa satu pun pemberitahuan (temuan audit).
+      const idAda = new Set((r.data?.pindah_masuk || []).map((x) => x.id));
+      setTerpilih((lama) => new Set([...lama].filter((id) => idAda.has(id))));
     } catch (e) {
+      if (seq !== reqRef.current) return;
       setData(null);
+      setGalat(e?.response?.data?.detail || "Gagal memuat rekonsiliasi opname");
       toast.error(e?.response?.data?.detail || "Gagal memuat rekonsiliasi opname");
     } finally {
-      setMemuat(false);
+      if (seq === reqRef.current) setMemuat(false);
     }
   }, [node.id]);
 
@@ -84,7 +99,8 @@ export default function OpnameDialog({ node, labelLevel, isWriter, onClose }) {
    * memakainya sebagai kunci idempotensi, sehingga tiga kali coba tetap
    * menghasilkan satu catatan.
    */
-  const kirim = useCallback(async (kode, scanId, assetId, nodeId, tsScan) => {
+  const kirim = useCallback(async (kode, scanId, assetId, nodeId, tsScan,
+                                  segarkan = true) => {
     // NODE & WAKTU DATANG DARI PEMANGGIL, BUKAN DARI DIALOG YANG SEDANG TERBUKA.
     // Ini temuan audit paling serius atas fase ini: dulu `kirim` selalu menulis
     // `node_id: node.id`, sehingga tiga puluh scan yang dilakukan luring di
@@ -106,7 +122,10 @@ export default function OpnameDialog({ node, labelLevel, isWriter, onClose }) {
       const s = r.data?.scan || {};
       if (r.data?.duplikat) toast.info(`${s.asset_name} — sudah tercatat`);
       else toast.success(`${s.asset_name} — ${LABEL[s.status_rekonsiliasi] || s.status_rekonsiliasi}`);
-      await muat(dalam);
+      // Saat MENGOSONGKAN ANTREAN, penyegaran ditunda sampai seluruh baris
+      // terkirim: enam puluh scan tertunda dulu berarti enam puluh GET
+      // rekonsiliasi berat berurutan, tepat saat sinyal baru pulih.
+      if (segarkan) await muat(dalam);
       return true;
     } catch (e) {
       const st = e?.response?.status;
@@ -166,11 +185,12 @@ export default function OpnameDialog({ node, labelLevel, isWriter, onClose }) {
         // Berurutan, bukan serentak: antrean lapangan biasanya puluhan baris di
         // jaringan yang baru saja pulih — membanjirinya justru memicu gagal lagi.
         if (await kirim(item.kode, item.scan_id, item.asset_id,
-                        item.node_id, item.ts_scan)) berhasil += 1;
+                        item.node_id, item.ts_scan, false)) berhasil += 1;
       }
       toast.success(`${berhasil} dari ${antre.length} scan terkirim`);
+      await muat(dalam);          // satu penyegaran, setelah semuanya selesai
     } finally { setSibuk(false); }
-  }, [kirim]);
+  }, [kirim, dalam, muat]);
 
   const terapkan = useCallback(async () => {
     const ids = [...terpilih];
@@ -199,7 +219,11 @@ export default function OpnameDialog({ node, labelLevel, isWriter, onClose }) {
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose?.()}>
-      <DialogContent className="max-w-lg" data-testid="opname-dialog">
+      {/* max-h + overflow-y WAJIB: DialogContent bawaan membawa `overflow-hidden`,
+          sehingga di layar HP tombol Terapkan & Tutup terpotong di luar viewport
+          dan tak ada cara menggulirnya (temuan audit). */}
+      <DialogContent className="max-w-lg max-h-[92vh] overflow-y-auto"
+                     data-testid="opname-dialog">
         <DialogHeader>
           <DialogTitle className="text-sm flex items-center gap-1.5">
             <ClipboardCheck className="w-4 h-4 text-emerald-600" />
@@ -213,6 +237,13 @@ export default function OpnameDialog({ node, labelLevel, isWriter, onClose }) {
         </DialogHeader>
 
         {/* Baris pindai — ikon di HP, melebar di layar besar; tak pernah pecah baris. */}
+        {!isWriter ? (
+          <p className="text-[11px] text-muted-foreground rounded-lg border border-border px-2 py-1.5"
+             data-testid="opname-viewer">
+            Akun baca-saja: rekonsiliasi boleh dilihat, tetapi memindai butuh
+            akses tulis — server akan menolak setiap pindaian dari akun ini.
+          </p>
+        ) : (
         <div className="flex items-center gap-1.5">
           <QrScanButton onDetected={tanganiKode} />
           <Input
@@ -231,6 +262,7 @@ export default function OpnameDialog({ node, labelLevel, isWriter, onClose }) {
             {sibuk ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Catat"}
           </Button>
         </div>
+        )}
 
         {kandidat && (
           <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-2"

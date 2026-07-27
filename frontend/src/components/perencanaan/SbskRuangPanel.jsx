@@ -53,6 +53,7 @@ export default function SbskRuangPanel() {
   const [pilih, setPilih] = useState("");
   const [data, setData] = useState(null);
   const [memuat, setMemuat] = useState(false);
+  const [galat, setGalat] = useState("");
 
   // Node yang LAYAK jadi lingkup: yang punya keturunan ruangan. Menawarkan
   // seluruh pohon (termasuk ruangan itu sendiri) hanya membuat pengguna
@@ -61,10 +62,19 @@ export default function SbskRuangPanel() {
     let batal = false;
     (async () => {
       try {
-        const r = await axios.get(`${API}/spasial/node`, { timeout: 20000 });
+        // Hanya tipe yang benar-benar dipakai dropdown. Memuat SELURUH pohon
+        // (bisa puluhan ribu node pada denah kawasan) lalu membuang 90%-nya di
+        // klien adalah ongkos yang dibayar SETIAP kali halaman Perencanaan
+        // dibuka — padahal kebanyakan kunjungan tak menyentuh panel ini.
+        const tipe = ["TAPAK", "GEDUNG", "LANTAI", "SAYAP"];
+        const hasil = await Promise.all(tipe.map((t) =>
+          axios.get(`${API}/spasial/node`, { params: { tipe: t }, timeout: 20000 })
+            .then((r) => r.data?.items || []).catch(() => [])));
         if (batal) return;
-        const items = (r.data?.items || []).filter(
-          (n) => ["TAPAK", "GEDUNG", "LANTAI", "SAYAP"].includes(n.tipe));
+        const urut = Object.fromEntries(tipe.map((t, i) => [t, i]));
+        const items = hasil.flat().sort(
+          (a, b) => (urut[a.tipe] - urut[b.tipe])
+            || String(a.nama || "").localeCompare(String(b.nama || "")));
         setGedung(items);
         if (items.length) setPilih((p) => p || items[0].id);
       } catch {
@@ -79,6 +89,7 @@ export default function SbskRuangPanel() {
   const muat = useCallback(async (nodeId) => {
     if (!nodeId) { setData(null); return; }
     setMemuat(true);
+    setGalat("");
     try {
       const r = await axios.get(`${API}/perencanaan/sbsk-ruang`, {
         params: { node_id: nodeId, dalam: "true", tipe: "RUANGAN" },
@@ -87,6 +98,9 @@ export default function SbskRuangPanel() {
       setData(r.data);
     } catch (e) {
       setData(null);
+      // Tanpa ini panel jadi KOTAK KOSONG PERMANEN: `!data ? null` menyembunyikan
+      // segalanya dan tak ada jalan mencoba lagi selain memuat ulang halaman.
+      setGalat(e?.response?.data?.detail || "Gagal memuat SBSK ruang — periksa sinyal");
       toast.error(e?.response?.data?.detail || "Gagal memuat SBSK ruang");
     } finally { setMemuat(false); }
   }, []);
@@ -125,8 +139,11 @@ export default function SbskRuangPanel() {
             Luas dihitung dari poligon denah, bukan angka ketikan (PMK 138/2024).
           </p>
         </div>
-        <Button variant="outline" size="sm" className="h-8 px-2 text-[11px] shrink-0"
+        <Button variant="outline" size="sm"
+                className="h-8 px-2 text-[11px] shrink-0 min-h-0 min-w-0"
                 disabled={!items.length} onClick={unduhCsv}
+                title="Unduh tabel SBSK ruang (CSV)"
+                aria-label="Unduh tabel SBSK ruang (CSV)"
                 data-testid="sbsk-ruang-csv">
           <Download className="w-3.5 h-3.5 sm:mr-1" />
           <span className="hidden sm:inline">CSV</span>
@@ -153,6 +170,12 @@ export default function SbskRuangPanel() {
           {memuat ? (
             <div className="flex items-center justify-center py-8 text-muted-foreground">
               <Loader2 className="w-5 h-5 animate-spin mr-2" /> Memuat…
+            </div>
+          ) : galat ? (
+            <div className="py-6 text-center" data-testid="sbsk-ruang-galat">
+              <p className="text-[11px] text-muted-foreground mb-2">{galat}</p>
+              <Button variant="outline" size="sm" className="h-8 text-xs"
+                      onClick={() => muat(pilih)}>Coba lagi</Button>
             </div>
           ) : !data ? null : (
             <>

@@ -1552,7 +1552,19 @@ Tiap fase = **SATU PR yang bisa di-merge sendiri** dan memberi nilai nyata. CI h
 | 15 | SBSK berbasis luas ruangan nyata + laporan peta sebaran | kecil | 7 |
 | 16 | (Opsional) Gerbang RFID UHF + BLE tag kelas A | sedang | 12 |
 
-**Status per Juli 2026 [V]:** Fase 1–13, 15, dan 16 **sudah jalan di produksi**.
+**Status per Juli 2026 [V]:** Fase 1–13, 15, dan 16 sudah jalan di produksi —
+tetapi **DUA di antaranya baru SEBAGIAN**, dan audit adversarial menemukan
+baris status lama menyatakannya utuh:
+
+- **Fase 7 (indoor)** — georeferensi denah & level switcher jalan, tetapi
+  **migrasi master `ruangan` BELUM**. KIR & DBR masih bersumber pada
+  `assets.location` (teks bebas, dicocokkan string di `reports.py`), bukan
+  `ruangan_id`. Sejak PR #647 hasil opname ikut memutakhirkan `location`
+  sehingga keduanya tak lagi bertentangan — tetapi itu jembatan, bukan
+  penggantian FK yang dijanjikan §14.
+- **Fase 9 (custody temporal)** — `riwayat_lokasi_aset` jalan, tetapi koleksi
+  `asset_custody` dan integrasi BAST/sertijab **belum ada**. Yang tercatat
+  adalah perpindahan LOKASI, bukan pergantian PEMEGANG.
 Fase 11 (scan stiker) dibangun sedikit berbeda dari sketsa `/iot/scan` di §7:
 endpoint-nya `/api/opname/*` dan datanya duduk di koleksi `opname_scan`
 tersendiri. BENTUK dokumennya tetap seragam dengan pipeline observasi

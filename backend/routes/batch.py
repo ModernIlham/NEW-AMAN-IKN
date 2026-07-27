@@ -391,8 +391,20 @@ async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user
             {"_id": 0, "photo_gridfs_ids": 1},
         ):
             gids_to_delete.extend(g for g in (doc.get("photo_gridfs_ids") or []) if g)
+        # HANYA aset yang benar-benar punya foto. Menyentuh yang lain menaikkan
+        # `version` tanpa perubahan apa pun — dan karena URL media memakai
+        # `?v=<version>` sebagai cache-buster, itu MEMBATALKAN cache foto di
+        # SELURUH perangkat lapangan untuk aset yang fotonya tak berubah
+        # sedikit pun. Di jaringan yang buruk, ongkosnya nyata.
         await db.assets.update_many(
-            {"id": {"$in": data.asset_ids}},
+            {"id": {"$in": data.asset_ids},
+             # `.0 $exists` dipakai alih-alih `$nin: [None, []]`: yang terakhir
+             # ditafsirkan BERBEDA oleh mongomock dan MongoDB asli, sehingga uji
+             # bisa hijau sementara produksi berperilaku lain. Predikat ini
+             # tunggal artinya di keduanya — "array berisi minimal satu elemen".
+             "$or": [{"photo_gridfs_ids.0": {"$exists": True}},
+                     {"photos.0": {"$exists": True}},
+                     {"thumbnail": {"$nin": [None, ""]}}]},
             {"$set": {"photos": [], "photo": None, "photo_gridfs_ids": [], "photo_thumbnails": [],
                       "thumbnail": None, "gallery_thumbnail": None, "updated_at": now_str},
              "$inc": {"version": 1}}
@@ -405,8 +417,11 @@ async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user
 
     # 5. Clear all document checklist from selected assets
     if should_clear_doc_checklist:
+        # Alasan yang sama: jangan menaikkan version aset yang checklist-nya
+        # memang sudah kosong.
         await db.assets.update_many(
-            {"id": {"$in": data.asset_ids}},
+            {"id": {"$in": data.asset_ids},
+             "document_checklist.0": {"$exists": True}},
             {"$set": {"document_checklist": [], "updated_at": now_str}, "$inc": {"version": 1}}
         )
 
