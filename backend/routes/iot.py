@@ -23,6 +23,7 @@ HASH (pola password): kebocoran basis data tak memberi penyerang token yang
 bisa dipakai mengirim posisi palsu.
 """
 import hashlib
+import logging
 import secrets
 import uuid
 from datetime import datetime, timezone
@@ -35,10 +36,12 @@ from auth_utils import require_admin, require_user
 from db import db
 from shared_utils import (kode_satker_user, limiter, log_audit,
                           pastikan_akses_dok_satker, scope_query_field_satker)
+import geofence_utils as gf
 import iot_utils as iu
 import privasi_utils as pu
 import spasial_utils as su
 
+logger = logging.getLogger(__name__)
 iot_router = APIRouter()
 
 _PROJ = {"_id": 0}
@@ -265,6 +268,21 @@ async def terima_observasi(request: Request, payload: BatchIn,
                   "kedaluwarsa_pada": sekarang + umur})
         dok.append(d)
 
+    # OUTLIER ditandai SEBELUM disimpan — geofence menolak observasi bertanda
+    # ini, dan satu koordinat kacau yang melompat 40 km lalu kembali akan
+    # melahirkan sepasang peringatan keluar-masuk yang sepenuhnya palsu.
+    if dok:
+        dok.sort(key=lambda d: str(d.get("ts_device") or ""))
+        acuan = await db.iot_observasi.find_one(
+            {"device_id": dev["id"]}, {"_id": 0, "geo": 1, "ts_device": 1},
+            sort=[("ts_device", -1)])
+        for d in dok:
+            if acuan and gf.lompatan_mustahil(acuan, d):
+                d["outlier"] = True
+            else:
+                acuan = d          # hanya titik waras yang jadi acuan berikutnya
+
+    gagal_idx = set()
     if dok:
         try:
             r = await db.iot_observasi.insert_many(dok, ordered=False)
@@ -277,14 +295,38 @@ async def terima_observasi(request: Request, payload: BatchIn,
             duplikat = sum(1 for w in rincian.get("writeErrors", [])
                            if w.get("code") == 11000)
             lain = len(rincian.get("writeErrors", [])) - duplikat
+            # Indeks dokumen yang DITOLAK — dipakai menjaga idempotensi geofence
+            # di bawah. `index` menunjuk ke posisi dalam `dok` (sudah terurut).
+            gagal_idx = {w.get("index") for w in rincian.get("writeErrors", [])}
             if lain:
                 raise HTTPException(
                     status_code=500,
                     detail=f"{lain} observasi gagal disimpan")
 
+    # GEOFENCE dievaluasi di jalur TULIS: status histeresis butuh melihat setiap
+    # observasi berurutan, dan menghitungnya belakangan dari data yang sudah
+    # dipadatkan mustahil. Kegagalannya SENGAJA tidak menggagalkan penerimaan —
+    # posisi yang sudah tersimpan lebih berharga daripada peringatan yang gagal
+    # dihitung, dan perangkat yang menerima 500 akan mengirim ulang batch yang
+    # sebenarnya sudah aman (lalu ditolak indeks unik, lalu mencoba lagi).
+    #
+    # HANYA observasi yang BENAR-BENAR baru tersimpan yang diputar. Pengiriman
+    # ulang adalah perilaku NORMAL at-least-once (seluruh Fase 11 dibangun di
+    # sekitar kenyataan itu), dan memutar ulang observasi yang sudah pernah
+    # dievaluasi berarti mesin histeresis menghitung sampel & dwell dua kali —
+    # penyimpanannya idempoten, peringatannya tidak.
+    peringatan = 0
+    segar = [d for i, d in enumerate(dok) if i not in gagal_idx]
+    if segar:
+        try:
+            from routes.geofence import evaluasi_perangkat
+            peringatan = (await evaluasi_perangkat(dev, segar, sekarang))["event"]
+        except Exception as e:            # noqa: BLE001 — sengaja menelan
+            logger.warning("Evaluasi geofence gagal untuk %s: %s", dev["id"], e)
+
     return {"diterima": len(siap["terima"]), "disimpan": disimpan,
             "duplikat": duplikat, "ditolak_privasi": ditolak_privasi,
-            "di_luar_kawasan": tanpa_kawasan,
+            "di_luar_kawasan": tanpa_kawasan, "peringatan_geofence": peringatan,
             "ditolak_validasi": siap["tolak"][:20],
             "melebihi_plafon": siap["plafon"],
             "profil": profil_nama}

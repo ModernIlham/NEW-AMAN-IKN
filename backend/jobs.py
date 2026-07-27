@@ -144,6 +144,18 @@ async def _job_maintenance_loop():
             if n1 or n2:
                 logger.info("Pemeliharaan job: %s job macet di-relabel, %s "
                             "artifact yatim dihapus", n1, n2)
+            # Sapuan geofence (Fase 12) menumpang loop yang sudah ada. Ia HARUS
+            # berkala, bukan dipicu data masuk: aset yang keluar area lalu
+            # perangkatnya mati tak akan pernah mengirim observasi lagi, jadi
+            # peringatan "tak kunjung kembali" tak akan pernah terbit kalau
+            # hanya lahir dari ingest.
+            try:
+                from routes.geofence import sapu_dwell
+                n3 = await sapu_dwell()
+                if n3:
+                    logger.info("Geofence: %s peringatan tak-kunjung-kembali", n3)
+            except Exception as e:      # noqa: BLE001
+                logger.warning("Sapuan geofence (non-fatal): %s", e)
         except asyncio.CancelledError:
             raise
         except Exception as e:
