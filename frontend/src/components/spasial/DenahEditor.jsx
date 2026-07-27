@@ -56,6 +56,7 @@ const TERJEMAHAN_ID = {
   },
   buttonTitles: {
     drawPolyButton: "Gambar poligon",
+    drawPolylineButton: "Gambar garis pembelah",
     editButton: "Ubah verteks",
     dragButton: "Geser bentuk",
     cutButton: "Potong lubang",
@@ -106,6 +107,10 @@ export default function DenahEditor({ node, onClose, onSaved }) {
   const sudutKiniRef = useRef(null);     // sudut mengikuti drag marker (tanpa re-render)
   const sudutAsliRef = useRef(null);     // untuk Batal saat mengatur posisi
   const fileOverlayRef = useRef(null);
+  // Pemicu belah dipegang REF: handler geoman dipasang sekali saat init,
+  // sedangkan fungsinya perlu membaca state terbaru tiap dipanggil.
+  const belahRef = useRef(null);
+  const [belah, setBelah] = useState(null);   // {bagian, garis} pratinjau
   const { confirm, confirmDialog } = useConfirm();
 
   const nodeId = node?.id;
@@ -165,7 +170,10 @@ export default function DenahEditor({ node, onClose, onSaved }) {
       drawPolygon: true, cutPolygon: true,
       editMode: true, dragMode: true, removalMode: true,
       // Bentuk lain tak bermakna untuk denah — sembunyikan agar tak membingungkan.
-      drawMarker: false, drawCircleMarker: false, drawPolyline: false,
+      drawMarker: false, drawCircleMarker: false,
+      // Garis diaktifkan KHUSUS sebagai alat belah (Fase 16) — bukan
+      // untuk menggambar bentuk node, yang selalu poligon.
+      drawPolyline: true,
       drawRectangle: true, drawCircle: false, drawText: false, rotateMode: false,
     });
     // Dengan setGlobalOptions({layerGroup}) di atas, geoman sendiri yang
@@ -173,7 +181,21 @@ export default function DenahEditor({ node, onClose, onSaved }) {
     // "ada perubahan" dan membatalkan hasil validasi lama. `removeLayer`
     // defensif tetap dipasang untuk jalur yang melewatkan layerGroup
     // (mis. Edit.remove saat verteks tersisa di bawah minimum).
-    map.on("pm:create", () => { setKotor(true); setCek(null); });
+    // Garis yang digambar BUKAN bentuk node — ia perintah BELAH (Fase 16).
+    // Bentuk node selalu poligon, jadi tipe layer sudah cukup membedakannya
+    // tanpa mode/tombol tambahan yang harus diingat operator.
+    map.on("pm:create", (e) => {
+      const lyr = e?.layer;
+      const garis = lyr instanceof L.Polyline && !(lyr instanceof L.Polygon);
+      if (garis) {
+        let gj = null;
+        try { gj = lyr.toGeoJSON()?.geometry || null; } catch { gj = null; }
+        try { grup.removeLayer(lyr); lyr.remove(); } catch { /* sudah lepas */ }
+        if (gj) belahRef.current?.(gj);
+        return;                       // garis TIDAK ikut jadi bentuk node
+      }
+      setKotor(true); setCek(null);
+    });
     map.on("pm:cut", (e) => {
       try { grup.removeLayer(e.originalLayer); } catch { /* sudah lepas */ }
       setKotor(true); setCek(null);
@@ -352,6 +374,33 @@ export default function DenahEditor({ node, onClose, onSaved }) {
     })();
     return () => { batal = true; clearTimeout(jagaWaktu); };
   }, [nodeId, petaSiap, pasangOverlay]);
+
+  // ── Belah wilayah dengan garis (Fase 16) ──────────────────────────────────
+  const mintaBelah = useCallback(async (garis, terapkan) => {
+    if (!nodeId) return;
+    setMenyimpan(true);
+    try {
+      const r = await axios.post(`${API}/spasial/node/${nodeId}/belah`,
+                                 { garis, terapkan });
+      if (terapkan) {
+        toast.success(`Wilayah dibelah menjadi ${r.data?.jumlah} bagian`);
+        setBelah(null);
+        onSaved?.();
+        onClose?.();          // pohon dimuat ulang; editor node ini sudah basi
+      } else {
+        setBelah({ garis, bagian: r.data?.bagian || [] });
+      }
+    } catch (e) {
+      // Pesan server sengaja berupa kalimat yang bisa ditindaklanjuti
+      // ("tarik garis melintas penuh…"), jadi ditampilkan apa adanya.
+      toast.error(e?.response?.data?.detail || "Pembelahan gagal", { duration: 8000 });
+      setBelah(null);
+    } finally { setMenyimpan(false); }
+  }, [nodeId, onSaved, onClose]);
+
+  // Handler geoman dipasang SEKALI saat init, jadi ia harus memanggil versi
+  // TERBARU lewat ref — bukan closure yang membeku pada render pertama.
+  useEffect(() => { belahRef.current = (g) => mintaBelah(g, false); }, [mintaBelah]);
 
   // ── Overlay gambar denah (Fase 7) ─────────────────────────────────────────
   const lepasMarkerSudut = useCallback(() => {
@@ -705,6 +754,42 @@ export default function DenahEditor({ node, onClose, onSaved }) {
             </div>
           )}
         </div>
+        {/* Konfirmasi belah — membelah wilayah mahal dibatalkan, jadi hasilnya
+            ditunjukkan lebih dulu berikut luas tiap bagian. Bagian pertama
+            MEMPERTAHANKAN node asal (beserta aset & riwayatnya); sisanya lahir
+            sebagai draft yang masih harus diperiksa. */}
+        {belah && (
+          <div className="px-4 py-2 border-t border-border bg-teal-500/10"
+               data-testid="denah-belah-konfirmasi">
+            <p className="text-xs font-semibold">
+              Belah wilayah ini menjadi {belah.bagian.length} bagian?
+            </p>
+            <div className="mt-1 space-y-0.5">
+              {belah.bagian.map((b) => (
+                <p key={b.urutan} className="text-[11px] text-muted-foreground">
+                  {b.urutan}. <b>{b.nama}</b> — {Math.round(b.luas_m2).toLocaleString("id-ID")} m²
+                  {b.urutan === 1 && " (tetap memakai node ini)"}
+                </p>
+              ))}
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Bagian ke-2 dan seterusnya dibuat sebagai <b>draft</b> — periksa
+              dulu, baru aktifkan.
+            </p>
+            <div className="flex gap-2 mt-2">
+              <Button size="sm" className="min-h-0" disabled={menyimpan}
+                      onClick={() => mintaBelah(belah.garis, true)}
+                      data-testid="denah-belah-terapkan">
+                {menyimpan && <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />}
+                Ya, belah
+              </Button>
+              <Button size="sm" variant="outline" className="min-h-0"
+                      onClick={() => setBelah(null)}
+                      data-testid="denah-belah-batal">Batal</Button>
+            </div>
+          </div>
+        )}
+
         {/* Kegagalan init peta TAMPIL — bukan spinner tanpa akhir di atas area
             kosong. Pesan ini juga jadi bahan diagnosis bila terulang. */}
         {galatInit && (
