@@ -158,9 +158,26 @@ export default function DenahEditor({ node, onClose, onSaved }) {
     grup.on("pm:edit pm:dragend", () => { setKotor(true); setCek(null); });
 
     mapRef.current = map;
-    setTimeout(() => map.invalidateSize(), 80);
+
+    // "Leaflet blank di dalam modal": peta dibuat saat DIALOG MASIH BERANIMASI
+    // → kontainer berukuran 0 → 0 ubin dimuat → peta putih polos (tanpa ubin,
+    // tombol zoom, maupun toolbar gambar), tampak seperti loading selamanya.
+    // Di HP animasi lebih lambat sehingga invalidateSize 80 ms saja terlalu
+    // dini (bug lapangan — screenshot: area peta putih tanpa chrome). PENAWAR
+    // yang andal: ResizeObserver memanggil invalidateSize TIAP kontainer
+    // berubah ukuran (termasuk saat dialog selesai membuka), plus beberapa
+    // pemanggilan terjadwal sebagai cadangan bila ResizeObserver tak ada.
+    const invalidasi = () => { try { map.invalidateSize(false); } catch { /* peta dibuang */ } };
+    const jamInval = [80, 250, 500, 900].map((ms) => setTimeout(invalidasi, ms));
+    let ro = null;
+    if (typeof ResizeObserver !== "undefined" && containerRef.current) {
+      ro = new ResizeObserver(invalidasi);
+      ro.observe(containerRef.current);
+    }
     setPetaSiap(true);
     return () => {
+      jamInval.forEach(clearTimeout);
+      if (ro) ro.disconnect();
       map.remove();
       mapRef.current = null;
       grupGambarRef.current = null;

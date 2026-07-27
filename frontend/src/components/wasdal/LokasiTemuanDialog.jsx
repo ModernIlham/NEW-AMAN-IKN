@@ -83,8 +83,21 @@ export default function LokasiTemuanDialog({ judul, submitUrl, lokasiAwal, onClo
       deteksiTitik(lat, lng);
     });
     petaRef.current = map;
-    setTimeout(() => map.invalidateSize(), 80);
-    return () => { map.remove(); petaRef.current = null; markerRef.current = null; };
+    // "Leaflet blank di dalam modal": peta dibuat saat dialog masih beranimasi
+    // → kontainer 0 px → peta putih polos. ResizeObserver + beberapa invalidate
+    // terjadwal menjamin peta tampil setelah dialog terbuka (lihat DenahEditor).
+    const invalidasi = () => { try { map.invalidateSize(false); } catch { /* dibuang */ } };
+    const jamInval = [80, 250, 500, 900].map((ms) => setTimeout(invalidasi, ms));
+    let ro = null;
+    if (typeof ResizeObserver !== "undefined" && wadahRef.current) {
+      ro = new ResizeObserver(invalidasi);
+      ro.observe(wadahRef.current);
+    }
+    return () => {
+      jamInval.forEach(clearTimeout);
+      if (ro) ro.disconnect();
+      map.remove(); petaRef.current = null; markerRef.current = null;
+    };
     // lokasiAwal hanya dibaca saat init — dialog di-mount ulang per tiket.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deteksiTitik]);
