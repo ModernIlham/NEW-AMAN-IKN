@@ -53,6 +53,76 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#647] Spasial Fase 15: SBSK berbasis luas ruangan NYATA dari poligon denah — 2026-07-27
+
+Sampai sekarang tabel SBSK berdiri sendiri: angka "247 m² untuk pimpinan" tanpa
+satu pun ruangan nyata untuk dibandingkan. Denah poligon yang dibangun Fase 3–7
+mengubah itu — **luas dihitung dari GAMBARNYA**, bukan dari angka yang diketik
+ulang seseorang ke dalam formulir.
+
+### Peruntukan DITETAPKAN, bukan disimpulkan
+
+Godaannya besar: tebak penghuni ruangan dari pemegang aset yang ada di dalamnya.
+Tetapi ruang rapat berisi kursi ber-pemegang satu orang akan terbaca sebagai
+ruang kerja orang itu, lalu dibandingkan dengan standar jabatannya, lalu
+dilaporkan "melebihi standar 300%". **Angka yang salah tetapi rapi jauh lebih
+berbahaya daripada kolom kosong.** Karena itu `peruntukan` adalah field pada node
+denah yang diisi manusia; isi aset hanya ditampilkan di sebelahnya sebagai
+INDIKASI okupansi.
+
+### Ruang menganggur = bukti untuk menahan pengadaan
+
+Yang paling berguna di layar ini bukan kolom "sesuai", melainkan dua angka yang
+biasanya tak ada di mana pun: ruangan yang sudah tergambar tetapi **belum
+ditetapkan peruntukannya**, dan ruangan yang tak berperuntukan **sekaligus** tak
+berisi aset apa pun — ruang menganggur. Keduanya sengaja dipisah: ruangan tanpa
+peruntukan yang penuh aset jelas terpakai (ia kekurangan administrasi, bukan
+penghuni), dan menyatukannya akan melaporkan gedung yang sibuk sebagai gedung
+kosong.
+
+### Backend
+
+- **`sbsk_ruang_utils.py`** (murni): pencocokan peruntukan ruangan ke baris SBSK
+  `ruang_kerja` (**irisan kata terbanyak yang menang, bukan yang pertama
+  ketemu** — kalau tidak, "Kepala Seksi" menyambar ruang kepala biro dan seluruh
+  laporan mengukur terhadap standar yang salah), status kesesuaian bertoleransi
+  ±5% dua arah, tiga keranjang rekap, dan sebaran per lokasi.
+- **`GET /api/perencanaan/sbsk-ruang?node_id=&dalam=&tipe=`** — sanding luas
+  nyata vs standar untuk satu lingkup denah, lengkap dengan rekap dan sebaran.
+  Isi ruangan (jumlah aset + pemegang) diambil dalam SATU agregasi, bukan satu
+  kueri per ruangan.
+- **Luas DIHITUNG ULANG dari geometri**, tidak membaca `metrik.luas_m2` yang
+  tersimpan: nilai itu ditulis saat geometri terakhir disimpan, bisa jadi oleh
+  rumus versi lama. Untuk peringkat area bias seragam tak berpengaruh; untuk
+  angka yang masuk dokumen perencanaan, membaca nilai basi berarti melaporkan
+  luas yang tak bisa dipertanggungjawabkan asal-usulnya.
+- **`spasial_utils.luas_kasar_m2` memakai deret skala WGS84**
+  (`meter_per_derajat`) menggantikan pendekatan BOLA. Bedanya bukan akademis: di
+  lintang IKN bola **melebihkan luas ~0,45%**, karena jari-jari bola rata-rata
+  lebih besar daripada jari-jari kelengkungan meridian di dekat khatulistiwa.
+- **Field `peruntukan` pada node denah** dengan semantik "None = tak diubah"
+  yang sama dengan `status`/`properties`: klien lama yang tak mengirim field ini
+  (form pohon pra-Fase-15) TIDAK menghapus peruntukan yang sudah ditetapkan.
+
+### Frontend
+
+- **`components/perencanaan/SbskRuangPanel.jsx`** — pemilih lingkup
+  (tapak/gedung/lantai/sayap), empat kartu rekap, kartu peringatan ruang
+  menganggur, daftar ruangan berlencana status, sebaran per lokasi, dan unduh
+  CSV (dibuat di klien; pemisah titik-koma + BOM agar Excel Indonesia tak
+  memecah angka desimal ke kolom berikutnya). Dimuat lazy.
+- **Field Peruntukan** di form node Master Denah, muncul untuk tingkat RUANGAN
+  dan SAYAP saja — dan untuk tipe lain field itu SENGAJA absen dari body PUT,
+  sehingga mengubah sebuah gedung tak menyentuh peruntukan ruangan mana pun.
+
+- Uji: **+37 backend (1.203)**. Enam jaminan diuji MUTASI. Satu di antaranya
+  **lolos pada percobaan pertama** — uji "irisan terbanyak menang" ternyata tak
+  benar-benar mengujinya karena data ujinya tak pernah membuat baris yang salah
+  cocok lebih dulu; ujinya diperbaiki dengan tabel berurut yang memang
+  menjebak, lalu mutasi yang sama tertangkap.
+
+---
+
 ## [#646] Spasial Fase 11: scan stiker QR jadi sumber lokasi + rekonsiliasi opname — 2026-07-27
 
 Stiker QR sudah tercetak dan tertempel sejak PR #397. Fase ini menjadikan

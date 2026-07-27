@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import {
@@ -20,6 +20,9 @@ import { downloadFileWithProgress } from "@/lib/downloadFile";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 import TanggalanButton from "@/components/ui/TanggalanButton";
 import StatKartu from "@/components/ui/StatKartu";
+// Panel SBSK-ruang dimuat LAZY: ia menarik seluruh pohon denah, dan mayoritas
+// kunjungan halaman Perencanaan tak menyentuh perencanaan ruang.
+const SbskRuangPanel = lazy(() => import("@/components/perencanaan/SbskRuangPanel"));
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -410,6 +413,11 @@ export default function PerencanaanPage({ user, onBack }) {
                 </ul>
               )}
             </div>
+
+            {/* ── SBSK berbasis RUANG NYATA dari poligon denah (Spasial Fase 15) ── */}
+            <Suspense fallback={null}>
+              <SbskRuangPanel />
+            </Suspense>
 
             {/* ── Tabel standar SBSK (PMK 138/2024) ── */}
             <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden" data-testid="perencanaan-sbsk">

@@ -1552,7 +1552,7 @@ Tiap fase = **SATU PR yang bisa di-merge sendiri** dan memberi nilai nyata. CI h
 | 15 | SBSK berbasis luas ruangan nyata + laporan peta sebaran | kecil | 7 |
 | 16 | (Opsional) Gerbang RFID UHF + BLE tag kelas A | sedang | 12 |
 
-**Status per Juli 2026 [V]:** Fase 1–13 dan 16 **sudah jalan di produksi**.
+**Status per Juli 2026 [V]:** Fase 1–13, 15, dan 16 **sudah jalan di produksi**.
 Fase 11 (scan stiker) dibangun sedikit berbeda dari sketsa `/iot/scan` di §7:
 endpoint-nya `/api/opname/*` dan datanya duduk di koleksi `opname_scan`
 tersendiri. BENTUK dokumennya tetap seragam dengan pipeline observasi
@@ -1562,8 +1562,19 @@ retensinya. Alasannya tegas: TTL `iot_observasi` ada karena isinya jejak
 keberadaan ORANG yang wajib kedaluwarsa (§10), sedangkan hasil opname adalah
 bukti penatausahaan BMN yang justru harus bertahan. Menumpangkannya berarti
 catatan opname terhapus diam-diam beberapa bulan setelah dibuat — tepat saat
-diperiksa. **Sisa yang belum dibangun: Fase 14 (Traccar + agen laptop + peta
-BSSID) dan Fase 15 (SBSK dari luas poligon).**
+diperiksa. **Sisa yang belum dibangun: HANYA Fase 14** (Traccar + agen laptop + peta
+BSSID) — satu-satunya yang menuntut perangkat/agen di luar aplikasi.
+
+**Fase 15 (SBSK dari luas poligon)** dibangun dengan satu keputusan yang layak
+diketahui: peruntukan ruangan adalah FIELD yang ditetapkan manusia
+(`spasial_node.peruntukan`), **bukan** disimpulkan dari pemegang aset yang
+kebetulan ada di dalamnya. Menyimpulkannya akan membuat ruang rapat berisi
+kursi ber-pemegang satu orang terbaca sebagai ruang kerja orang itu, lalu
+dibandingkan dengan standar jabatannya, lalu dilaporkan "melebihi standar
+300%" — angka salah yang rapi jauh lebih berbahaya daripada kolom kosong.
+Isi aset tetap ditampilkan di sebelahnya sebagai INDIKASI okupansi. Luas
+dihitung ulang dari poligon pada setiap pembacaan laporan, bukan dibaca dari
+`metrik.luas_m2` tersimpan yang bisa ditulis rumus versi lama.
 
 **Satu keputusan Fase 11 yang layak diketahui sebelum memakainya:** memindai
 stiker **tidak** memindahkan catatan lokasi. Opname adalah pemeriksaan; menulis

@@ -557,13 +557,40 @@ def titik_wakil(geom) -> Optional[dict]:
     return {"type": "Point", "coordinates": [(bb[0] + bb[2]) / 2.0, (bb[1] + bb[3]) / 2.0]}
 
 
-def luas_kasar_m2(geom) -> float:
-    """Luas KASAR dalam m² (shoelace pada proyeksi lokal setara-persegi).
+def meter_per_derajat(lat_deg: float):
+    """(meter per derajat lintang, meter per derajat bujur) pada suatu lintang.
 
-    Cukup untuk PERINGKAT ("poligon terkecil = paling spesifik" saat titik jatuh
-    di beberapa area bertumpuk) dan tampilan informatif. BUKAN luas geodetik
-    resmi — untuk angka yang dipakai dokumen, hitung dengan pustaka geodesi.
-    Cincin dalam (lubang) dikurangkan.
+    Deret baku WGS84 (galat ~1 cm) — menggantikan pendekatan BOLA yang dipakai
+    sebelumnya. Bedanya bukan akademis: di lintang IKN (±1°) bola MELEBIHKAN
+    luas sekitar 0,45%, karena jari-jari bola rata-rata lebih besar daripada
+    jari-jari kelengkungan meridian di dekat khatulistiwa. Untuk peringkat
+    "poligon terkecil menang" bias seragam itu tak berpengaruh; untuk angka
+    yang MASUK DOKUMEN PERENCANAAN (luas ruang kerja disandingkan dengan
+    standar SBSK) bias sistematis 0,45% adalah hal yang tak boleh dipanggang
+    diam-diam ke dalam laporan.
+    """
+    f = math.radians(lat_deg)
+    m_lat = (111132.92 - 559.82 * math.cos(2 * f) + 1.175 * math.cos(4 * f)
+             - 0.0023 * math.cos(6 * f))
+    m_lon = (111412.84 * math.cos(f) - 93.5 * math.cos(3 * f)
+             + 0.118 * math.cos(5 * f))
+    return m_lat, max(0.0, m_lon)
+
+
+def luas_kasar_m2(geom) -> float:
+    """Luas dalam m² (shoelace pada proyeksi lokal setara-persegi WGS84).
+
+    Dipakai DUA hal dengan tuntutan berbeda: PERINGKAT area saat titik jatuh di
+    beberapa poligon bertumpuk (hanya butuh urutan) dan LUAS RUANGAN yang
+    disandingkan dengan standar SBSK (butuh angka). Karena itu faktor skalanya
+    memakai deret WGS84 (lihat `meter_per_derajat`), bukan bola.
+
+    Yang masih TIDAK ditangani, dan sengaja dinyatakan: ini bukan integral
+    geodetik penuh. Untuk poligon seukuran gedung/ruangan galatnya jauh di
+    bawah ketelitian gambar denah itu sendiri; untuk poligon seluas kawasan
+    (kilometer) pakailah pustaka geodesi bila angkanya masuk dokumen resmi.
+    Poligon yang melintasi antimeridian juga di luar cakupan. Cincin dalam
+    (lubang) dikurangkan.
     """
     if not isinstance(geom, dict) or geom.get("type") not in ("Polygon", "MultiPolygon"):
         return 0.0
@@ -573,8 +600,7 @@ def luas_kasar_m2(geom) -> float:
     if not titik:
         return 0.0
     lat0 = sum(t[1] for t in titik) / len(titik)          # lintang acuan
-    m_per_deg_lat = math.pi * RADIUS_BUMI_M / 180.0
-    m_per_deg_lon = m_per_deg_lat * math.cos(math.radians(lat0))
+    m_per_deg_lat, m_per_deg_lon = meter_per_derajat(lat0)
     total = 0.0
     for pol in poligon:
         for j, cincin in enumerate(pol):
