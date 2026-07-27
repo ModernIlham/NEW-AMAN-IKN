@@ -396,10 +396,21 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       // server, jadi dedup kode+NUP saja tak cukup — di sinilah kepastiannya.
       const serverId = serverData.id;
       if (serverId) {
+        // CREATE luring milik kegiatan A bisa baru sukses saat pengguna sudah
+        // membuka kegiatan B (temuan audit G3). Baris temp-nya memang tak ada
+        // di daftar B (disaring per kegiatan), tetapi cabang fallback-sisip di
+        // bawah dulu menyisipkannya TANPA memeriksa kegiatan — aset A muncul
+        // di daftar B, ikut terhitung, dan membingungkan operator. Snapshot
+        // tetap benar (di-upsert per activity_id di atas); yang dijaga di sini
+        // hanya DAFTAR yang sedang tampil.
+        const kegiatanCocok = !serverData.activity_id
+          || !activityIdRef.current
+          || serverData.activity_id === activityIdRef.current;
         const dedupeReplace = (prev) => {
           const withoutDupServer = prev.filter(a => a.id !== serverId || a.id === assetKey);
           const mapped = withoutDupServer.map(a => a.id === assetKey ? { ...a, ...serverData, id: serverId } : a);
-          return mapped.some(a => a.id === serverId) ? mapped : [{ ...serverData }, ...mapped];
+          if (mapped.some(a => a.id === serverId)) return mapped;
+          return kegiatanCocok ? [{ ...serverData }, ...mapped] : mapped;
         };
         setAssets(dedupeReplace);
         setMobileAssets(dedupeReplace);
@@ -411,6 +422,10 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   // saves must send the freshest If-Match, not the version captured at submit.
   const assetsStateRef = useRef([]);
   assetsStateRef.current = assets;
+  // Kegiatan yang SEDANG tampil — dibaca callback antrean yang hidup lebih
+  // lama daripada render (handleRowSynced ber-deps []), jadi lewat ref.
+  const activityIdRef = useRef(null);
+  activityIdRef.current = activity?.id || null;
   const getLatestVersion = useCallback((assetId) => assetsStateRef.current.find(a => a.id === assetId)?.version ?? null, []);
 
   // Throttle toast konflik per-aset: tanpa ini, flush berulang / beberapa antrian
@@ -459,8 +474,27 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       });
     },
     onItemDismissed: (tempId, item) => {
+      // EDIT yang di-"Abaikan" (temuan audit G3): nilai optimistis yang
+      // dibatalkan masih menempel di baris daftar DAN di snapshot luring —
+      // pulihkan dari kebenaran server. Jalur yang sama dengan pemulihan
+      // konflik di atas; snapshot ikut dibetulkan karena merge-write
+      // upsertSnapshotAsset kini aman untuk baris parsial.
+      if (item?.isEdit) {
+        const assetId = item.editId || tempId;
+        if (navigator.onLine) {
+          axios.get(`${API}/assets/${assetId}?exclude_media=true`).then(res => {
+            if (!res?.data) return;
+            setAssets(prev => prev.map(a => a.id === assetId ? { ...a, ...res.data } : a));
+            setMobileAssets(prev => prev.map(a => a.id === assetId ? { ...a, ...res.data } : a));
+            if (activity?.id) upsertSnapshotAsset(activity.id, res.data);
+          }).catch(() => { /* offline mendadak / aset terhapus — refresh berikutnya membereskan */ });
+        }
+        // Luring: payload hanya berisi patch, kebenaran server tak tersedia —
+        // baris terpaksa menampilkan nilai yang dibatalkan sampai sinkron
+        // berikutnya. needsRefresh sudah ditandai oleh dismiss().
+        return;
+      }
       // User discarded a failed CREATE — remove its optimistic temp row
-      if (item?.isEdit) return;
       setAssets(prev => prev.filter(a => a.id !== tempId));
       setMobileAssets(prev => prev.filter(a => a.id !== tempId));
       setTotalItems(prev => Math.max(0, prev - 1));

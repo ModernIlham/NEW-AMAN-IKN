@@ -8,6 +8,7 @@ import { summarizeSyncStatuses } from "../lib/syncStatus";
 import { resolveBaseVersion } from "../lib/occ";
 import { terapkanHeaderSatker, getSatkerAktif } from "../lib/satkerAktif";
 import { gabungPatch, bolehGabung } from "../lib/gabungPatch";
+import { idPenggunaAktif, bolehReplay } from "../lib/pemilikAntrean";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -84,9 +85,14 @@ function getQueueDB() {
 
 // Strip non-serializable fields (resolve/reject) before storing/persisting
 function toPlainItem(item, statusKey) {
-  const { tempId, payload, isEdit, editId, usePatch, baseVersion, idempotencyKey, hadConflict, locked, queuedAt, nama_kegiatan, satkerAktif, antreanId } = item;
+  const { tempId, payload, isEdit, editId, usePatch, baseVersion, idempotencyKey, hadConflict, locked, queuedAt, nama_kegiatan, satkerAktif, antreanId, pemilik } = item;
   return {
     statusKey,
+    // Stempel PEMILIK (temuan audit G3): IndexedDB hidup per-origin, bukan
+    // per-akun. Tanpa stempel ini, rehidrasi di perangkat dinas bersama
+    // memutar ulang simpanan akun LAIN memakai token & identitas audit akun
+    // yang sedang login. Lihat lib/pemilikAntrean.js.
+    pemilik: pemilik ?? idPenggunaAktif(),
     // Identitas SATU simpanan (beda dari statusKey, yang dipakai bersama oleh
     // semua simpanan atas aset yang sama). Dipakai memastikan sebuah simpanan
     // hanya menghapus rekamannya SENDIRI — lihat processNext.
@@ -171,6 +177,8 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
   // Last confirmed server version per editId (from a completed save's response)
   const lastSavedVersionsRef = useRef({});
   const flushGuardRef = useRef(false);
+  // statusKey yang baru saja di-"Abaikan" — penyelesaian in-flight-nya diabaikan
+  const dismissedRef = useRef(new Set());
   const rehydratedRef = useRef(false);
 
   // Parent callbacks that may be recreated each render — read via refs
@@ -262,6 +270,14 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
         result = await axiosLargeUpload.post(`${API}/assets`, item.payload, { headers, saOverride: _sa });
       }
 
+      if (dismissedRef.current.has(statusKey)) {
+        // Pengguna sudah membuang baris ini saat permintaan terbang — jangan
+        // hidupkan lagi status/registrasinya. removePersistedItem tetap aman
+        // (ber-antreanId).
+        removePersistedItem(statusKey, item.antreanId);
+        item.resolve?.(result);
+        return;
+      }
       updateStatus(statusKey, "saved");
       // Clear only if still 'saved' — a follow-up save of the same row may have
       // set a newer status (queued/saving/failed) that this timer must not wipe
@@ -301,6 +317,13 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
 
       item.resolve?.(result);
     } catch (err) {
+      if (dismissedRef.current.has(statusKey)) {
+        // Baris sudah dibuang pengguna saat permintaan terbang — kegagalan ini
+        // tak boleh mendaftarkan ulang item (failedItemsRef/persist) ataupun
+        // menghidupkan chip-nya. Janji ditutup dan selesai.
+        item.reject?.(err);
+        return;
+      }
       // --- Handle 409 Conflict (OCC) separately ---
       const isConflict = err?.response?.status === 409;
       if (isConflict && item.isEdit && item.editId) {
@@ -523,12 +546,33 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
     }
     const item = failedItemsRef.current[id];
     delete failedItemsRef.current[id];
+    // "Abaikan" harus benar-benar MEMBATALKAN (temuan audit G3). Dulu item
+    // yang masih MENGANTRE tetap di queueRef dan terkirim pada flush
+    // berikutnya — aset yang pengguna buang tetap tercipta di server.
+    const sisa = [];
+    for (const it of queueRef.current) {
+      const kunci = it.isEdit ? it.editId : it.tempId;
+      if (kunci === id) { it.resolve?.(null); continue; }
+      sisa.push(it);
+    }
+    queueRef.current = sisa;
+    setQueueLength(queueRef.current.length);
+    // Permintaan yang SEDANG TERBANG tak bisa ditarik kembali dari jaringan —
+    // tandai supaya penyelesaiannya nanti tak menghidupkan status/baris yang
+    // sudah dibuang. (Server mungkin tetap menulis; refresh berikutnya yang
+    // menampilkan kebenaran — itu batas jujur pembatalan sisi klien.)
+    dismissedRef.current.add(id);
+    setTimeout(() => dismissedRef.current.delete(id), 5 * 60 * 1000);
     // Tanpa antreanId: pembuangan oleh PENGGUNA memang disengaja atas baris itu,
     // jadi rekaman siapa pun di kunci itu ikut dibuang.
     removePersistedItem(id); // user explicitly discarded the change
     clearStatus(id);
     if (item?.isEdit && item?.editId) {
       onItemSaved?.(item.editId);
+      // Induk juga diberi tahu untuk EDIT (temuan audit G3): nilai optimistis
+      // yang dibatalkan masih menempel di baris daftar & snapshot luring —
+      // induk memulihkannya dari kebenaran server (lihat DashboardPage).
+      onItemDismissed?.(id, item);
     } else if (item) {
       // Failed CREATE rows stay visible until dismissed — parent drops the temp row
       onItemDismissed?.(id, item);
@@ -606,8 +650,15 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
     (async () => {
       const items = await loadPersistedItems();
       if (cancelled || items.length === 0) return;
+      // Hanya rekaman MILIK AKUN INI yang di-replay (temuan audit G3):
+      // IndexedDB per-origin, dan perangkat dinas dipakai bergantian —
+      // tanpa saringan ini simpanan akun lain dikirim memakai token &
+      // identitas audit akun yang sedang login. Rekaman era lama tanpa
+      // stempel tetap lolos (lihat lib/pemilikAntrean.js).
+      const idAktif = idPenggunaAktif();
       const toRegister = items.filter(rec =>
-        rec?.statusKey && rec?.payload && !failedItemsRef.current[rec.statusKey] && !statusesRef.current[rec.statusKey]
+        rec?.statusKey && rec?.payload && bolehReplay(rec, idAktif)
+        && !failedItemsRef.current[rec.statusKey] && !statusesRef.current[rec.statusKey]
       );
       if (toRegister.length === 0) return;
       toRegister.forEach((rec) => {

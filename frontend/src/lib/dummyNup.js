@@ -1,4 +1,5 @@
 import axios from "axios";
+import { sekaliJalan } from "./sekaliJalan";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -10,25 +11,37 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 // Dipakai bersama AssetForm (Mode Kamera Penuh) dan tambah-cepat di peta —
 // SATU sumber urutan (map modul + localStorage key sama) agar tak kembar.
 const nupSeq = {};
+// Janji seeding yang sedang terbang, per kunci — lihat sekaliJalan.js.
+const seedTerbang = {};
 
 export async function reserveDummyNup(activityId, assetCode, categoryLabel) {
   const key = `${activityId || ""}|${assetCode || categoryLabel || ""}`;
   const lsKey = `aman_nupseq_${key}`;
   if (nupSeq[key] == null) {
-    let seed = 0;
-    try {
-      const c = parseInt(localStorage.getItem(lsKey) || "", 10);
-      if (Number.isFinite(c)) seed = c;
-    } catch { /* storage tak tersedia */ }
-    try {
-      const params = new URLSearchParams({ activity_id: activityId || "" });
-      if (assetCode) params.set("asset_code", assetCode);
-      else params.set("category", categoryLabel || "");
-      const res = await axios.get(`${API}/assets/next-nup?${params}`);
-      const serverNext = parseInt(res?.data?.next_nup, 10);
-      if (Number.isFinite(serverNext)) seed = Math.max(seed, serverNext - 1);
-    } catch { /* offline: pakai seed lokal */ }
-    nupSeq[key] = seed;
+    // SINGLE-FLIGHT (temuan audit G3): dua panggilan serentak dulu sama-sama
+    // melihat nupSeq[key] == null, sama-sama menunggu fetch, dan yang selesai
+    // BELAKANGAN menimpa balik urutan yang sudah naik — dua aset lahir dengan
+    // NUP yang persis sama. Kini seeding hanya terbang sekali; pemanggil kedua
+    // menumpang janjinya, dan penerbitan nomor (blok sinkron di bawah) berjalan
+    // berurutan setelahnya.
+    await sekaliJalan(seedTerbang, key, async () => {
+      if (nupSeq[key] != null) return; // sudah di-seed penumpang sebelumnya
+      let seed = 0;
+      try {
+        const c = parseInt(localStorage.getItem(lsKey) || "", 10);
+        if (Number.isFinite(c)) seed = c;
+      } catch { /* storage tak tersedia */ }
+      try {
+        const params = new URLSearchParams({ activity_id: activityId || "" });
+        if (assetCode) params.set("asset_code", assetCode);
+        else params.set("category", categoryLabel || "");
+        const res = await axios.get(`${API}/assets/next-nup?${params}`);
+        const serverNext = parseInt(res?.data?.next_nup, 10);
+        if (Number.isFinite(serverNext)) seed = Math.max(seed, serverNext - 1);
+      } catch { /* offline: pakai seed lokal */ }
+      // Jangan pernah MENURUNKAN urutan yang sudah berjalan.
+      nupSeq[key] = Math.max(nupSeq[key] ?? 0, seed);
+    });
   }
   const issued = (nupSeq[key] || 0) + 1;
   nupSeq[key] = issued;

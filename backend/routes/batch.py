@@ -248,7 +248,12 @@ async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user
 
     # 1. Simple field updates — single update_many (fast)
     if len(clean_updates) > 1:
-        _ops = {"$set": clean_updates}
+        # $inc version pada SEMUA tulisan ubah-massal (temuan audit G3): tanpa
+        # ini penjaga OCC/If-Match buta terhadap perubahan massal — klien yang
+        # membawa If-Match versi lama masih lolos CAS lalu menimpa hasil ubah
+        # massal tanpa satu pun 409. Konsisten dengan jalur tulis tunggal di
+        # assets.py yang selalu menaikkan version.
+        _ops = {"$set": clean_updates, "$inc": {"version": 1}}
         if _geo_unset:
             _ops["$unset"] = _geo_unset
         await db.assets.update_many({"id": {"$in": data.asset_ids}}, _ops)
@@ -321,7 +326,7 @@ async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user
                 if current_count == 0:
                     update_fields["thumbnail"] = cover_thumbnail
                     update_fields["gallery_thumbnail"] = cover_gallery
-                ops.append(UpdateOne({"id": aid}, {"$set": update_fields}))
+                ops.append(UpdateOne({"id": aid}, {"$set": update_fields, "$inc": {"version": 1}}))
             if ops:
                 await db.assets.bulk_write(ops, ordered=False)
 
@@ -365,7 +370,7 @@ async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user
                             "name": item_name, "checked": item_checked, "notes": "",
                             "photos": item_photos[:3], "documents": item_documents[:1],
                         })
-                ops.append(UpdateOne({"id": aid}, {"$set": {"document_checklist": updated_checklist, "updated_at": now_str}}))
+                ops.append(UpdateOne({"id": aid}, {"$set": {"document_checklist": updated_checklist, "updated_at": now_str}, "$inc": {"version": 1}}))
             if ops:
                 await db.assets.bulk_write(ops, ordered=False)
 
@@ -389,7 +394,8 @@ async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user
         await db.assets.update_many(
             {"id": {"$in": data.asset_ids}},
             {"$set": {"photos": [], "photo": None, "photo_gridfs_ids": [], "photo_thumbnails": [],
-                      "thumbnail": None, "gallery_thumbnail": None, "updated_at": now_str}}
+                      "thumbnail": None, "gallery_thumbnail": None, "updated_at": now_str},
+             "$inc": {"version": 1}}
         )
         for gid in gids_to_delete:
             try:
@@ -401,7 +407,7 @@ async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user
     if should_clear_doc_checklist:
         await db.assets.update_many(
             {"id": {"$in": data.asset_ids}},
-            {"$set": {"document_checklist": [], "updated_at": now_str}}
+            {"$set": {"document_checklist": [], "updated_at": now_str}, "$inc": {"version": 1}}
         )
 
     # 6. Audit log — batch insert (limit to 20 entries max for large batches)

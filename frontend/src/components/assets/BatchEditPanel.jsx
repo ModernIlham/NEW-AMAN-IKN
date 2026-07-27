@@ -875,9 +875,17 @@ const BatchEditPanel = memo(function BatchEditPanel({
 
       {/* Action Buttons */}
       <div className="flex items-center gap-2 mt-3">
-        <Button onClick={handleApply} disabled={!hasUpdates || updating} className="bg-blue-600 hover:bg-blue-700 text-white h-8 text-xs" data-testid="batch-apply-btn">
+        {/* Ditahan juga selama AKUISISI GPS berjalan (temuan audit G3): selama
+            jendela itu updates.koordinat_* berisi nilai SEMENTARA dari onUpdate
+            yang belum lolos gerbang ±8 m. Menerapkan saat itu menulis titik
+            kasar ke BANYAK aset sekaligus — lalu gerbang selesai, koordinatnya
+            dibuang dari form, dan muncul pesan "koordinat tidak disimpan" yang
+            keliru: sudah terlanjur tersimpan. */}
+        <Button onClick={handleApply} disabled={!hasUpdates || updating || gpsLoading}
+          title={gpsLoading ? "Menunggu GPS mengunci — koordinat sementara belum lolos gerbang akurasi ±8 m" : undefined}
+          className="bg-blue-600 hover:bg-blue-700 text-white h-8 text-xs" data-testid="batch-apply-btn">
           {updating ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <CheckSquare className="w-3 h-3 mr-1" />}
-          Terapkan ke {selectedCount} aset
+          {gpsLoading ? "Menunggu GPS…" : `Terapkan ke ${selectedCount} aset`}
         </Button>
         <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onClose}>Batal</Button>
         <span className="text-[10px] text-muted-foreground ml-auto">

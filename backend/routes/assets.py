@@ -9,6 +9,8 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, HTTPException, Request, Depends, UploadFile, File
 from fastapi.responses import Response
 
+from pymongo.errors import DuplicateKeyError
+
 from db import db, fs_bucket
 from asset_fields import SCALAR_FIELD_NAMES
 from spasial_utils import terapkan_geo, sisip_geo_ke_update
@@ -839,6 +841,15 @@ async def create_asset(asset: AssetCreate, request: Request, _user: dict = Depen
         if cached and cached.get("response"):
             logger.info(f"Idempotent replay for key {idem_key[:8]}...")
             return AssetResponse(**cached["response"])
+        # DEDUP PERMANEN (temuan audit G3): cache respons di atas ber-TTL 24
+        # jam, sedangkan antrean luring bisa jauh lebih tua. Dokumen aset
+        # sendiri menyimpan idem_key sejak dibuat, jadi replay yang datang
+        # SETELAH cache kedaluwarsa tetap terdeteksi di sini — dikembalikan
+        # aset yang sudah ada, bukan menciptakan kembarannya.
+        _sudah = await db.assets.find_one({"idem_key": idem_key}, {"_id": 0})
+        if _sudah:
+            logger.info(f"Idempotent replay (via asset doc) for key {idem_key[:8]}...")
+            return AssetResponse(**{k: v for k, v in _sudah.items() if k in AssetResponse.model_fields})
         # Atomically claim the key so concurrent duplicates can't both run.
         _idem = await reserve_idempotency_key(idem_key)
         if _idem == "done":
@@ -913,6 +924,11 @@ async def create_asset(asset: AssetCreate, request: Request, _user: dict = Depen
         "created_at": now,
         "updated_at": now,  # delta cursor for /assets/offline-snapshot
         "version": 1,  # OCC: initial version
+        # PENANDA IDEMPOTENSI PERMANEN (temuan audit G3): kunci distempel ke
+        # dokumen aset SENDIRI — dokumen tak kedaluwarsa, jadi dedup-nya juga
+        # tidak. Diperiksa sebelum insert dan dijaga indeks unik parsial
+        # idem_key_unik (indexes.py) + DuplicateKeyError sebagai jaring terakhir.
+        **({"idem_key": idem_key} if idem_key else {}),
     }
 
     # SPASIAL: turunkan `geo` untuk indeks 2dsphere (lihat spasial_utils.py).
@@ -920,6 +936,19 @@ async def create_asset(asset: AssetCreate, request: Request, _user: dict = Depen
 
     try:
         await db.assets.insert_one(asset_doc)
+    except DuplicateKeyError:
+        # Dua replay berpacu melewati pemeriksaan di atas — indeks unik parsial
+        # idem_key_unik menghentikan yang kalah. Kembalikan aset yang menang:
+        # bagi klien keduanya adalah SATU simpanan yang sama.
+        for gid in photo_gridfs_ids:
+            try:
+                await delete_photo_from_gridfs(gid)
+            except Exception:
+                pass
+        _menang = await db.assets.find_one({"idem_key": idem_key}, {"_id": 0}) if idem_key else None
+        if _menang:
+            return AssetResponse(**{k: v for k, v in _menang.items() if k in AssetResponse.model_fields})
+        raise HTTPException(status_code=409, detail="Aset dengan kunci idempotensi ini sudah tersimpan")
     except Exception as e:
         # Rollback GridFS photos on DB insert failure
         for gid in photo_gridfs_ids:
@@ -1539,6 +1568,12 @@ async def rotate_asset_photo(asset_id: str, photo_index: int, request: Request,
         set_fields["thumbnail"] = await asyncio.to_thread(create_thumbnail, rotated_uri)
         set_fields["gallery_thumbnail"] = await asyncio.to_thread(create_gallery_thumbnail, rotated_uri)
 
+    # Stempel updated_at WAJIB ikut (temuan audit G3): delta sinkron luring
+    # memfilter pada updated_at, bukan version. Tanpa stempel ini rotasi tak
+    # pernah sampai ke cache perangkat lapangan — HP surveyor terus menampilkan
+    # foto dengan orientasi lama sambil memegang version yang sudah usang.
+    set_fields["updated_at"] = datetime.now(timezone.utc).isoformat()
+
     # Tulis ber-OCC (CAS pada version) + $inc version → etag preview lama basi
     cas_filter = _build_cas_filter(asset_id, current_version)
     result = await db.assets.update_one(cas_filter, {"$set": set_fields, "$inc": {"version": 1}})
@@ -2070,6 +2105,29 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
     # Handle photo_ops: server-side photo manipulation without frontend needing full photos
     if has_photo_ops:
         ops = body["photo_ops"]
+        # IKAT KEEP PADA VERSINYA (temuan audit G3). `keep` adalah indeks
+        # POSISIONAL pada array foto TERKINI, padahal ia dihitung klien dari
+        # array pada versi tertentu. Bila array sudah bergeser, keep yang sama
+        # menunjuk foto yang BERBEDA — foto terhapus hidup lagi atau foto lain
+        # terbuang, tanpa satu galat pun. If-Match header sudah menjaga bila
+        # dikirim; `base_version` di badan photo_ops adalah jaring untuk jalur
+        # tanpa header (antrean luring lama). Versi beda → 409.
+        _po_base = ops.get("base_version")
+        if not if_match and _po_base is not None:
+            try:
+                if int(_po_base) != current_version:
+                    raise HTTPException(
+                        status_code=409,
+                        detail={
+                            "message": ("Susunan foto aset telah berubah sejak "
+                                        "perangkat Anda membacanya. Muat ulang "
+                                        "lalu ulangi perubahan foto."),
+                            "current_version": current_version,
+                            "your_version": int(_po_base),
+                        },
+                    )
+            except (TypeError, ValueError):
+                pass  # base_version bukan angka → abaikan (kompat payload lama)
         # Dedup indeks keep (duplikat = satu blob dirujuk dua entri → penghapusan
         # salah satu ikut membunuh rujukan lainnya); None-guard thumbnail_index.
         keep_indices = list(dict.fromkeys(ops.get("keep", []) or []))

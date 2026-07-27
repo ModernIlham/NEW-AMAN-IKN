@@ -48,6 +48,13 @@ export function gabungPhotoOps(lama, baru) {
     // Sampul mengikuti kehendak terakhir; bila patch baru tak menyebutkannya,
     // pertahankan pilihan sebelumnya alih-alih diam-diam jatuh ke foto 0.
     thumbnail_index: baru.thumbnail_index != null ? baru.thumbnail_index : lama.thumbnail_index,
+    // Ikatan versi ikut terbawa. Kedua patch dihitung terhadap keadaan server
+    // yang SAMA (tak satu pun sudah diterapkan), jadi base_version keduanya
+    // semestinya identik — ambil milik yang LAMA karena If-Match patch
+    // gabungan juga memakai baseVersion simpanan tertunda (lihat enqueue).
+    ...(lama.base_version != null || baru.base_version != null
+      ? { base_version: lama.base_version != null ? lama.base_version : baru.base_version }
+      : {}),
   };
 }
 
