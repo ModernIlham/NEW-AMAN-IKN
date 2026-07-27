@@ -84,7 +84,9 @@ Setiap pembukaan tercatat di `audit_logs`.
 | Perangkat lupa dikonfigurasi → rekam penuh | Gagal-tertutup ke profil terketat | **Ditegakkan kode** |
 | Izin darurat jadi permanen | Plafon 72 jam + wajib pejabat berbeda | **Ditegakkan kode** |
 | Data menumpuk melewati kebutuhan | Retensi per profil + TTL index dari sumber angka yang sama | **Ditegakkan kode** |
-| **Posisi bocor ke Peta Kolaborasi publik** | Filter eksplisit di `routes/peta_kolaborasi.py` | **Wajib saat Fase 11** |
+| **Posisi bocor ke Peta Kolaborasi publik** | Posisi IoT disimpan TERPISAH (`iot_observasi`) & tak pernah menimpa `koordinat_*` aset; payload publik memakai **allowlist** `KUNCI_PUBLIK_TITIK` + uji regresi | **Ditegakkan kode** |
+| Koordinat menyelinap lewat `lokasi_spasial.titik` | `saring_observasi` membuang kunci titik mentah di dalam snapshot lokasi | **Ditegakkan kode** |
+| Retensi benar di DB tapi bocor lewat arsip backup | `iot_observasi` masuk `SKIP_COLLECTIONS` — observasi tak pernah ikut arsip | **Ditegakkan kode** |
 | Akses lintas satker | `scope_query_field_satker` + guard aset (pola Fase 8–9) | Sudah berlaku |
 | Kebocoran insiden | Runbook pemberitahuan sesuai UU PDP | **Perlu disusun** |
 
@@ -98,12 +100,24 @@ melaporkan keberadaan **barang**. Kewajiban yang menyusul:
 - **Penghapusan**: otomatis lewat retensi; permintaan lebih awal ditangani
   sepanjang tak bertentangan dengan kewajiban penatausahaan BMN.
 
-## 8. Yang BELUM dikerjakan (jujur, agar tak dianggap selesai)
+## 8. Sifat yang muncul dari desain (bukan kebetulan)
+
+Perangkat profil `personal` menyimpan **hanya node denah**, dan node hanya ada di
+dalam kawasan yang dipetakan satker. Konsekuensinya: laptop dinas **di rumah
+pemegangnya** berada di luar seluruh poligon → tak ada node → **tidak ada satu
+baris pun yang tersimpan**. Rumah, klinik, dan tempat ibadah tak perlu
+di-blacklist satu per satu; bentuk sistemnya yang membuat mereka tak terekam.
+
+## 9. Yang BELUM dikerjakan (jujur, agar tak dianggap selesai)
 
 - Runbook notifikasi insiden kebocoran (butuh keputusan pejabat, bukan kode).
-- Teks pemberitahuan di BAST — menunggu Fase 11 saat pelacakan benar-benar aktif.
-- Filter eksplisit Peta Kolaborasi publik — **wajib** dikerjakan bersamaan
-  dengan endpoint ingest pertama, bukan sesudahnya.
+- Teks pemberitahuan di BAST — naskahnya keputusan pejabat; kaitnya ke dokumen
+  BAST menyusul di fase berikutnya.
+- Alur permohonan & persetujuan izin darurat sebagai **endpoint**;
+  `izin_darurat_sah()` sudah menegakkan syaratnya, tetapi pembukaan presisi
+  belum punya antarmuka — untuk sekarang tak ada jalur yang bisa memakainya.
+- Antarmuka pengelolaan perangkat di frontend (registry & ingest sudah jalan
+  lewat API).
 
 ---
 

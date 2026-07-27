@@ -58,6 +58,10 @@ PROFIL_BAWAAN = "personal"        # gagal-tertutup: paling ketat bila tak jelas
 MAKS_JAM_DARURAT = 72
 ALASAN_DARURAT_MIN = 10           # alasan wajib bermakna, bukan "." atau "x"
 
+# Kunci yang menyimpan koordinat mentah DI DALAM snapshot lokasi. Dibuang untuk
+# profil berpresisi "wilayah" — lihat `saring_observasi`.
+_KUNCI_TITIK_MENTAH = ("titik", "koordinat", "lon", "lat")
+
 
 def profil_privasi(nama) -> dict:
     """Profil terdaftar, atau profil TERKETAT bila nama tak dikenal.
@@ -130,6 +134,16 @@ def saring_observasi(obs: dict, profil_nama, sekarang: Optional[datetime] = None
         # tak cukup untuk merekonstruksi pergerakan seseorang.
         for k in ("geo", "akurasi_m", "kecepatan_kmh", "arah_deg", "hdop"):
             hasil.pop(k, None)
+        # `lokasi_spasial` SENGAJA bertahan — itulah "level wilayah" yang boleh
+        # disimpan. Tetapi snapshot lokasi membawa serta koordinat mentahnya
+        # (`titik`), dan membiarkannya berarti presisi penuh tetap tersimpan
+        # lewat pintu belakang setelah `geo` susah payah dibuang.
+        lok = hasil.get("lokasi_spasial")
+        if isinstance(lok, dict):
+            # Dibangun ulang, bukan di-pop: `hasil` hanya salinan DANGKAL, jadi
+            # memutasi dict bersarang akan merusak dokumen milik pemanggil.
+            hasil["lokasi_spasial"] = {k: v for k, v in lok.items()
+                                       if k not in _KUNCI_TITIK_MENTAH}
         hasil["presisi_didegradasi"] = True
     hasil["profil_privasi"] = str(profil_nama or PROFIL_BAWAAN).strip().lower()
     if darurat:

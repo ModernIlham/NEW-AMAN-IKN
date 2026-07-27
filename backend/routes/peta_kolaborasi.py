@@ -403,6 +403,38 @@ async def hapus_kontribusi(share_id: str, kontrib_id: str,
 
 
 # ── Endpoint PUBLIK / HIBRIDA (tamu via token ATAU user login) ─────────────
+#
+# KONTRAK payload publik: SATU-SATUNYA kunci yang boleh keluar ke pemegang link.
+# Ditulis sebagai konstanta agar dapat DIUJI, bukan sekadar dijanjikan komentar
+# — sejak Fase 11 aplikasi menyimpan posisi perangkat yang dipegang perorangan,
+# dan satu field tambahan yang lolos ke sini akan membocorkan keberadaan
+# pemegangnya ke siapa pun yang punya tautan (DPIA §6).
+KUNCI_PUBLIK_TITIK = frozenset({
+    "id", "lat", "lng", "kode", "nup", "nama", "kategori", "status",
+    "kondisi", "merk", "tipe", "lokasi", "jumlah_foto", "thumbnail_index",
+})
+
+
+def baris_titik_publik(a: dict, lat: float, lng: float) -> dict:
+    """Satu titik aset untuk peta PUBLIK — dibangun kunci-per-kunci (allowlist).
+
+    Disusun eksplisit, bukan `dict(a)` dikurangi field terlarang: daftar-larangan
+    mensyaratkan seseorang mengingat untuk memperbaruinya setiap kali field baru
+    lahir, dan justru field BARU-lah yang paling mungkin sensitif. Dengan
+    allowlist, field yang tak dikenal otomatis tidak ikut keluar.
+    """
+    return {"id": a.get("id"), "lat": lat, "lng": lng,
+            "kode": a.get("asset_code") or "", "nup": a.get("NUP") or "",
+            "nama": a.get("asset_name") or "",
+            "kategori": a.get("category") or "",
+            "status": a.get("inventory_status") or "",
+            "kondisi": a.get("condition") or "",
+            "merk": a.get("brand") or "", "tipe": a.get("model") or "",
+            "lokasi": a.get("location") or "",
+            "jumlah_foto": int(a.get("jumlah_foto") or 0),
+            "thumbnail_index": int(a.get("thumbnail_index") or 0)}
+
+
 async def _titik_aset(share: dict) -> list:
     """Titik aset kegiatan (koordinat valid) — HANYA field DESKRIPTIF aman untuk
     publik (identitas + kategori/status + merk/tipe/lokasi/kondisi untuk verifikasi
@@ -432,16 +464,7 @@ async def _titik_aset(share: dict) -> list:
             continue
         if not (-90 <= lat <= 90 and -180 <= lng <= 180):
             continue
-        out.append({"id": a["id"], "lat": lat, "lng": lng,
-                    "kode": a.get("asset_code") or "", "nup": a.get("NUP") or "",
-                    "nama": a.get("asset_name") or "",
-                    "kategori": a.get("category") or "",
-                    "status": a.get("inventory_status") or "",
-                    "kondisi": a.get("condition") or "",
-                    "merk": a.get("brand") or "", "tipe": a.get("model") or "",
-                    "lokasi": a.get("location") or "",
-                    "jumlah_foto": int(a.get("jumlah_foto") or 0),
-                    "thumbnail_index": int(a.get("thumbnail_index") or 0)})
+        out.append(baris_titik_publik(a, lat, lng))
     return out
 
 
