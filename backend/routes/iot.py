@@ -394,6 +394,44 @@ async def _darurat_aktif(device_id: str, kini: datetime) -> bool:
     return _izin_berlaku(z, kini) if z else False
 
 
+@iot_router.get("/iot/perangkat/saya")
+@limiter.limit("30/minute")
+async def perangkat_saya(request: Request, x_device_token: str = Header(default="")):
+    """Identitas + KEBIJAKAN yang berlaku bagi perangkat pemegang token.
+
+    Dipakai aplikasi pendamping (Fase 15) untuk menampilkan kepada PEMEGANG
+    BARANG apa yang sebenarnya direkam tentang dirinya. Ini bukan basa-basi UI:
+    UU PDP mewajibkan pemberitahuan kepada subjek data, dan pemberitahuan yang
+    paling sulit dibantah adalah yang muncul di layar orangnya sendiri, dibaca
+    dari kode penegaknya, tepat sebelum ia menekan "Mulai".
+
+    Tak ada data POSISI yang dikembalikan di sini — token perangkat cukup untuk
+    MENGIRIM, tak cukup untuk MEMBACA riwayat. Perangkat yang jatuh ke tangan
+    orang lain tak boleh berubah jadi jendela ke jejak pemegangnya.
+    """
+    dev = await _perangkat_dari_token(x_device_token)
+    kini = datetime.now(timezone.utc)
+    profil = pu.profil_privasi(dev.get("profil_privasi"))
+    return {
+        "id": dev["id"], "nama": dev.get("nama") or "",
+        "asset_name": dev.get("asset_name") or "",
+        "profil_privasi": dev.get("profil_privasi") or "",
+        "kebijakan": {
+            "label": profil["label"],
+            "presisi": profil["presisi"],
+            "jam_aktif": (f"{profil['jam_aktif'][0]:02d}:00–{profil['jam_aktif'][1]:02d}:00"
+                          if profil["jam_aktif"] else "24 jam"),
+            "hari_kerja_saja": profil["hari_kerja_saja"],
+            "retensi_hari": profil["retensi_hari"],
+        },
+        # Perangkat perlu tahu izin darurat sedang aktif — pemegang barang
+        # berhak tahu bahwa presisi penuh sedang terbuka atas dirinya, bukan
+        # mengetahuinya belakangan dari orang lain.
+        "akses_darurat_aktif": await _darurat_aktif(dev["id"], kini),
+        "maks_observasi_per_batch": iu.MAKS_OBSERVASI_PER_BATCH,
+    }
+
+
 class BatchIn(BaseModel):
     observasi: list
 
