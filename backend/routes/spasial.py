@@ -1575,3 +1575,110 @@ async def isi_node(node_id: str, dalam: bool = Query(True),
     return {"node": _ringkas(node), "items": hasil, "jumlah": len(hasil),
             "termasuk_keturunan": bool(dalam),
             "terpotong": len(rows) >= _MAKS_ISI_NODE}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# BELAH WILAYAH DENGAN GARIS (Fase 16)
+#
+# Alat "potong" geoman hanya bisa MENGURANGI — irisan dibuang dari bentuk asal.
+# Yang dibutuhkan penataan denah adalah MEMECAH: satu kawasan jadi dua kawasan
+# bersebelahan yang keduanya tetap ada. Menggambar ulang dua poligon dari nol
+# selalu menyisakan celah atau tumpang tindih beberapa meter di batas bersamanya;
+# membelah menyelesaikannya dari sumbernya — kedua bagian berbagi PERSIS deret
+# verteks yang sama di sisi potongnya.
+# ═══════════════════════════════════════════════════════════════════════════
+
+class BelahIn(BaseModel):
+    garis: dict
+    terapkan: Optional[bool] = False
+
+
+@spasial_router.post("/spasial/node/{node_id}/belah")
+@limiter.limit("30/minute")
+async def belah_node(node_id: str, payload: BelahIn, request: Request,
+                     _user: dict = Depends(require_writer)):
+    """Belah poligon node dengan garis.
+
+    `terapkan=false` → PRATINJAU saja (hitung bagian + luasnya), tak menulis
+    apa pun. Operator melihat hasilnya lebih dulu; membelah wilayah adalah
+    tindakan yang mahal dibatalkan, jadi tak boleh terjadi karena salah klik.
+    """
+    import belah_utils as bl
+
+    node = await db.spasial_node.find_one({"id": node_id}, _PROJ)
+    if not node or node.get("status") == "dihapus":
+        raise HTTPException(status_code=404, detail="Node tidak ditemukan")
+    await pastikan_akses_dok_satker(_user, node)
+    if not node.get("geometry"):
+        raise HTTPException(status_code=400,
+                            detail="Node ini belum punya bentuk untuk dibelah")
+
+    hasil = await asyncio.to_thread(bl.belah_poligon, node["geometry"],
+                                    payload.garis)
+    if hasil["galat"]:
+        raise HTTPException(status_code=400, detail=hasil["galat"])
+
+    bagian = hasil["bagian"]
+    ringkas = [{"urutan": i + 1,
+                "nama": bl.nama_bagian(node.get("nama"), i + 1),
+                "luas_m2": round(su.luas_kasar_m2(g), 2)}
+               for i, g in enumerate(bagian)]
+    if not payload.terapkan:
+        return {"pratinjau": True, "jumlah": len(bagian), "bagian": ringkas,
+                "geometri": bagian}
+
+    now = datetime.now(timezone.utc).isoformat()
+    username = _user.get("username", "system")
+
+    # Bagian TERBESAR mewarisi node asal: id, kode, aset yang menempatinya, dan
+    # seluruh riwayat tetap menempel pada wilayah yang secara praktis masih
+    # "wilayah itu". Membuat DUA node baru dan menghapus yang lama akan
+    # memutus tautan aset serta jejak audit tanpa alasan.
+    utama = bagian[0]
+    await db.spasial_node.update_one({"id": node_id}, {"$set": {
+        "geometry": utama,
+        "bbox": su.hitung_bbox(utama),
+        "titik_wakil": su.titik_wakil(utama),
+        "metrik": {"luas_m2": round(su.luas_kasar_m2(utama), 2),
+                   "dihitung_pada": now},
+        "updated_at": now, "updated_by": username,
+    }, "$inc": {"versi": 1}})
+
+    # Sisanya jadi SAUDARA (induk & tingkat sama), berstatus DRAFT — pola sama
+    # dengan impor: hasil otomatis diperiksa manusia dulu, baru diaktifkan.
+    baru = []
+    for i, g in enumerate(bagian[1:], start=2):
+        nid = "sn_" + str(uuid.uuid4())
+        anc = list(node.get("ancestors") or [])
+        baru.append({
+            "id": nid, "kode_satker": node.get("kode_satker") or "",
+            "tipe": node.get("tipe"), "nama": bl.nama_bagian(node.get("nama"), i),
+            "kode": "",                       # kode tak boleh kembar
+            "parent_id": node.get("parent_id"),
+            "ancestors": anc,
+            "ancestors_nama": list(node.get("ancestors_nama") or []),
+            "jalur": su.bangun_jalur(anc, nid),
+            "kedalaman": node.get("kedalaman", 0),
+            "ordinal_level": node.get("ordinal_level"),
+            "nama_alias": [], "zona_kode": "", "subzona_kode": "",
+            "fungsi_kawasan": node.get("fungsi_kawasan") or "",
+            "properties": {"belah": {"dari": node_id, "pada": now}},
+            "status": "draft",
+            "geometry": g,
+            "bbox": su.hitung_bbox(g),
+            "titik_wakil": su.titik_wakil(g),
+            "metrik": {"luas_m2": round(su.luas_kasar_m2(g), 2),
+                       "dihitung_pada": now},
+            "lantai": None, "lantai_ordinal": None,
+            "versi": 1, "created_at": now, "updated_at": now,
+            "created_by": username, "updated_by": username,
+        })
+    if baru:
+        await _sisip_batch(baru)
+
+    await log_audit("spasial_node_belah", "", node_id, username=username,
+                    kode_satker=node.get("kode_satker") or "",
+                    detail=(f"{node.get('nama')} dibelah jadi {len(bagian)} "
+                            f"bagian ({len(baru)} node draft baru)"))
+    return {"pratinjau": False, "jumlah": len(bagian), "bagian": ringkas,
+            "node_baru": [d["id"] for d in baru]}

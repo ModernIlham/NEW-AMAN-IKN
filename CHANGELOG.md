@@ -53,6 +53,89 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#642] Spasial Fase 16: belah wilayah dengan garis — memecah, bukan mengurangi — 2026-07-27
+
+Laporan lapangan: *"tombol edit seperti cutting tidak bisa memotong garis lurus
+wilayah"*. Setelah ditelusuri ini **bukan bug**: alat potong bawaan geoman hanya
+bisa MENGURANGI — Anda menggambar poligon, dan irisannya dibuang dari bentuk
+asal. Itu tepat untuk melubangi, tetapi bukan yang dibutuhkan penataan denah,
+yaitu MEMECAH satu kawasan jadi dua kawasan bersebelahan yang keduanya tetap ada.
+
+Menggambar ulang dua poligon dari nol bukan jalan keluar: batas bersamanya tak
+pernah benar-benar berimpit, selalu tersisa celah atau tumpang tindih beberapa
+meter yang lalu ditangkap validasi topologi. Membelah menyelesaikannya dari
+sumbernya — kedua bagian berbagi PERSIS deret verteks yang sama di sisi potongnya.
+
+Alurnya: gambar **garis** melintasi wilayah → server membelah → pratinjau
+menampilkan jumlah bagian berikut luas masing-masing → konfirmasi. Garis
+sengaja dibedakan dari poligon lewat tipe layer-nya, jadi tak ada mode atau
+tombol tambahan yang harus diingat operator.
+
+**Bagian TERBESAR mewarisi node asal** — id, kode, aset yang menempatinya, dan
+seluruh riwayat tetap menempel pada wilayah yang secara praktis masih "wilayah
+itu". Membuat dua node baru lalu menghapus yang lama akan memutus tautan aset
+dan jejak audit tanpa alasan. Sisanya lahir sebagai **draft**, pola sama dengan
+impor: hasil otomatis diperiksa manusia dulu.
+
+**Tiga pagar yang tak terlihat sampai dibutuhkan:**
+
+- **Garis yang berhenti di dalam wilayah** adalah kegagalan paling sering, dan
+  pesan pustaka ("split failed") tak menolong siapa pun. shapely hanya membelah
+  bila garis melintas PENUH — kedua ujungnya wajib di luar poligon. Pesannya
+  kini memberi tahu apa yang harus dilakukan: *"Tarik garis melintas penuh dari
+  sisi satu ke sisi seberang."*
+- **Kekekalan luas diperiksa.** Bila jumlah luas bagian tak sepadan dengan asal,
+  pembelahan DIBATALKAN — lebih baik menolak daripada diam-diam memangkas
+  wilayah.
+- **Serpihan mikro dibuang.** Garis yang menyerempet sudut menyisakan pecahan
+  beberapa cm² yang tak pernah dimaksudkan siapa pun.
+
+- Backend: `belah_utils.py` (murni) + `POST /spasial/node/{id}/belah`
+  (`terapkan=false` = pratinjau, tak menulis apa pun). Ber-audit.
+- Uji: +15 → **1.063 backend**. Yang diuji bukan "berhasil membelah kotak",
+  melainkan justru kasus gagalnya.
+
+### Tiga temuan lapangan lain dalam PR yang sama
+
+Ikut dalam PR ini karena berasal dari satu sesi uji coba yang sama, satu di
+antaranya berakar jauh dari gejalanya.
+
+**Dialog impor meluber.** Lebar tetap tanpa plafon tinggi: file dengan banyak
+kolom atribut mendorong tombol "Mulai Impor" keluar layar, dan teks sampel
+terpotong di tepi kanan. Kini `max-w-2xl`, tinggi dibatasi `90vh` dan bisa
+digulir, sampel MEMBUNGKUS (bukan `truncate`) di area bergulir sendiri.
+Memotong sampel justru menyembunyikan nilai yang dipakai operator untuk
+memilih field yang benar.
+
+**"Impor SHP banyak wilayah hanya terbaca baris pertama" — parser tidak
+bersalah.** Dibuktikan dengan shapefile 6 poligon: parser membaca 6 fitur dan
+worker membuat 6 node. Akarnya di PENAMAAN. Tebakan field nama hanya
+mencocokkan `/nama|name|label/`, sementara file GIS instansi kerap tak memakai
+kata itu sama sekali — shapefile BWP IKN berkolom `OBJECTID/BWP/ROMAWI/
+KETERANGAN`, tak satu pun cocok, sehingga keenam node lahir bernama "Kawasan
+impor 1…6". Enam node memang terbentuk, tetapi di pohon terbaca sebagai sampah
+generik, dan operator wajar menyimpulkan hanya baris pertama yang terbaca.
+
+Tebakan kini melihat ISI, bukan hanya nama kolom: kolom seragam tak membedakan
+apa pun, kolom seluruhnya angka hampir pasti id internal, kolom terlalu panjang
+adalah deskripsi. Panel pratinjau juga menyatakan terang bahwa setiap baris
+menjadi satu node tersendiri, berikut jumlahnya.
+
+**Peta kawasan ber-induk lambat lalu akhirnya muncul.** Batas node dan batas
+INDUK diambil BERURUTAN — dua poligon berverteks ribuan harus selesai satu per
+satu sebelum apa pun tampil. Kini induk diambil paralel dan peta terpasang
+setelah permintaan pertama. Spinner juga diberi KETERANGAN TAHAP ("Mengambil
+batas wilayah…", "Menempatkan peta…") plus penanda latar saat konteks sekitar
+masih menyusul; lingkaran berputar tanpa kata membuat operator menyimpulkan
+aplikasi macet lalu menutup dialog tepat saat prosesnya hampir selesai.
+
+> Satu butir laporan lapangan belum tergarap: *"tampilannya juga tolong
+> betulkan"* baru diperbaiki untuk layar yang terlihat di tangkapan layar
+> (dialog impor). Layar lain menunggu tangkapan layarnya — menebak berisiko
+> merombak yang sudah benar.
+
+---
+
 ## [#641] Spasial Fase 15: pendamping pelacakan — HP yang sudah ada jadi pelacak, biaya Rp 0 — 2026-07-27
 
 Sampai fase ini seluruh pipeline posisi sudah lengkap tetapi **tak ada satu pun

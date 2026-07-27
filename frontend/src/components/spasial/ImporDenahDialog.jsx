@@ -11,7 +11,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
-import { AlertTriangle, FileUp, Loader2, Play, X } from "lucide-react";
+import { AlertTriangle, FileUp, Info, Loader2, Play, X } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
@@ -35,6 +35,44 @@ const MAKS_GAGAL_BERUNTUN = 8;
 const selesaiJob = (j) =>
   !!j && (j.done === true || ["done", "failed", "error"].includes(j.status));
 const suksesJob = (j) => !!j && j.status === "done";
+
+/**
+ * Tebak kolom mana yang paling layak jadi NAMA node, dari sampel pratinjau.
+ *
+ * Versi pertama hanya mencocokkan /nama|name|label/ — dan file GIS instansi
+ * kerap sama sekali tak memakai kata itu. Shapefile BWP IKN, misalnya, berkolom
+ * OBJECTID / BWP / ROMAWI / KETERANGAN: tak satu pun cocok, sehingga SELURUH
+ * baris jatuh ke nama bawaan "Kawasan impor 1…6". Enam node memang terbentuk,
+ * tetapi di pohon semuanya terbaca sebagai sampah generik — dan operator wajar
+ * menyimpulkan "hanya baris pertama yang terbaca" (laporan lapangan).
+ *
+ * Karena itu tebakan kini melihat ISI, bukan hanya nama kolom:
+ * kolom yang nilainya SERAGAM tak membedakan apa pun, kolom yang seluruhnya
+ * angka hampir pasti id internal, dan kolom yang terlalu panjang adalah
+ * deskripsi — bukan nama.
+ */
+export function tebakFieldNama(pratinjau) {
+  const sampel = (pratinjau || {}).sampel || {};
+  const fields = (pratinjau || {}).fields || [];
+  let terbaik = "";
+  let skorTerbaik = 0;
+  for (const f of fields) {
+    const nilai = (sampel[f] || []).map((v) => String(v || "").trim()).filter(Boolean);
+    if (!nilai.length) continue;
+    const unik = new Set(nilai).size;
+    const rerata = nilai.reduce((a, v) => a + v.length, 0) / nilai.length;
+    // Seluruhnya angka → hampir pasti OBJECTID/FID, bukan nama.
+    if (nilai.every((v) => /^-?\d+([.,]\d+)?$/.test(v))) continue;
+    // Terlalu panjang = kalimat deskripsi; terlalu pendek = kode satu huruf.
+    if (rerata > 60) continue;
+    let skor = unik / nilai.length;            // makin membedakan, makin baik
+    if (/nama|name|label|judul|title/i.test(f)) skor += 1.0;   // isyarat kuat
+    if (rerata >= 4) skor += 0.3;              // bukan kode 1–2 huruf
+    if (/^(id|fid|objectid|gid|kode|code)$/i.test(f)) skor -= 0.8;
+    if (skor > skorTerbaik) { skorTerbaik = skor; terbaik = f; }
+  }
+  return terbaik;
+}
 
 export default function ImporDenahDialog({ levels, nodes, labelLevel, onClose, onSaved }) {
   const [file, setFile] = useState(null);
@@ -86,10 +124,7 @@ export default function ImporDenahDialog({ levels, nodes, labelLevel, onClose, o
       const r = await axios.post(`${API}/spasial/impor/pratinjau`, fd);
       if (!hidupRef.current || seq !== reqRef.current) return;
       setPratinjau(r.data);
-      // Prapilih field nama yang paling mungkin benar.
-      const fields = r.data?.fields || [];
-      const tebakan = fields.find((x) => /nama|name|label/i.test(x)) || "";
-      setFieldNama(tebakan);
+      setFieldNama(tebakFieldNama(r.data));
     } catch (e) {
       if (!hidupRef.current || seq !== reqRef.current) return;
       setFile(null);
@@ -178,7 +213,13 @@ export default function ImporDenahDialog({ levels, nodes, labelLevel, onClose, o
 
   return (
     <Dialog open onOpenChange={(o) => !o && tutup()}>
-      <DialogContent className="max-w-lg" data-testid="impor-denah-dialog">
+      {/* Lebar naik + tinggi dibatasi layar & bisa digulir. Sebelumnya dialog
+          memakai lebar tetap tanpa plafon tinggi: file dengan banyak kolom
+          atribut membuat panel pratinjau mendorong tombol "Mulai Impor" keluar
+          layar, dan teks panjang terpotong di tepi kanan (laporan lapangan). */}
+      <DialogContent
+        className="max-w-2xl w-[calc(100vw-2rem)] max-h-[90vh] overflow-y-auto"
+        data-testid="impor-denah-dialog">
         <DialogHeader>
           <DialogTitle className="text-sm">Impor Denah dari File GIS</DialogTitle>
           <DialogDescription className="text-xs">
@@ -211,16 +252,33 @@ export default function ImporDenahDialog({ levels, nodes, labelLevel, onClose, o
                 <> · UTM zona {pratinjau.crs.zona}{pratinjau.crs.utara ? "U" : "S"} → WGS84</>
               )}
             </p>
-            {Object.entries(pratinjau.sampel || {}).slice(0, 4).map(([k, v]) => (
-              <p key={k} className="text-muted-foreground truncate">
-                <span className="font-mono">{k}</span>: {v.join(", ")}
-              </p>
-            ))}
+            {/* `truncate` DIGANTI pembungkusan: memotong sampel di tepi kanan
+                menyembunyikan justru nilai yang dipakai operator memutuskan
+                field mana yang benar. Daftar panjang digulir, bukan dipotong. */}
+            <div className="max-h-32 overflow-y-auto space-y-1 pr-1">
+              {Object.entries(pratinjau.sampel || {}).slice(0, 8).map(([k, v]) => (
+                <p key={k} className="text-muted-foreground break-words">
+                  <span className="font-mono">{k}</span>: {v.join(", ")}
+                </p>
+              ))}
+            </div>
             {(pratinjau.peringatan || []).map((p, i) => (
               <p key={i} className="flex items-start gap-1 text-amber-700 dark:text-amber-300">
-                <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />{p}
+                <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                <span className="break-words min-w-0">{p}</span>
               </p>
             ))}
+            {pratinjau.jumlah_fitur > 1 && (
+              <p className="flex items-start gap-1 text-teal-700 dark:text-teal-300 pt-0.5">
+                <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                <span className="break-words min-w-0">
+                  Setiap baris menjadi <b>satu node tersendiri</b> — file ini akan
+                  membentuk <b>{pratinjau.jumlah_fitur}</b> node sekaligus di bawah
+                  induk yang dipilih. Pilih <b>Field nama</b> di bawah agar
+                  masing-masing bernama sesuai atributnya.
+                </span>
+              </p>
+            )}
           </div>
         )}
 
