@@ -39,6 +39,9 @@ def dbx(monkeypatch):
         monkeypatch.setattr(mod, "db", fake)
         if hasattr(mod, "log_audit"):
             monkeypatch.setattr(mod, "log_audit", _diam)
+    # `scope_query_aset` membaca kegiatan lewat db milik shared_utils sendiri.
+    import shared_utils as su_mod
+    monkeypatch.setattr(su_mod, "db", fake)
     return fake
 
 
@@ -196,3 +199,82 @@ class TestPeruntukanTidakLenyap:
             await _unwrap(rs.ubah_node)("r305", payload, USER)
             return await dbx.spasial_node.find_one({"id": "r305"}, {"_id": 0})
         assert len(_jalan(jalan())["peruntukan"]) == 160
+
+
+class TestIsolasiSatkerAgregasi:
+    """Agregasi gampang lolos dari penjagaan karena tak melewati find() —
+    dan `ids` yang ter-scope satker TIDAK cukup: node ERA LAMA tanpa
+    `kode_satker` terbuka untuk semua satker."""
+
+    async def _seed_dua_satker(self, dbx):
+        await dbx.inventory_activities.insert_many([
+            {"id": "keg_a", "kode_satker": "SATA"},
+            {"id": "keg_b", "kode_satker": "SATB"},
+        ])
+        await dbx.spasial_node.insert_many([
+            {"id": "gedA", "nama": "Gedung A", "tipe": "GEDUNG",
+             "status": "aktif", "kode_satker": "", "ancestors": [],
+             "ancestors_nama": []},
+            # Node ERA LAMA: kode_satker kosong → terlihat oleh SEMUA satker.
+            {"id": "r305", "nama": "Ruang 305", "tipe": "RUANGAN",
+             "status": "aktif", "kode_satker": "", "ancestors": ["gedA"],
+             "ancestors_nama": ["Gedung A"], "peruntukan": "",
+             "geometry": _kotak(-1.0, 116.7, 10.0, 5.0)},
+        ])
+        await dbx.assets.insert_many([
+            {"id": "a1", "activity_id": "keg_a", "asset_name": "Meja SATA",
+             "user": "Ani (SATA)", "lokasi_spasial": {"node_id": "r305"}},
+            {"id": "b1", "activity_id": "keg_b", "asset_name": "Meja SATB",
+             "user": "Budi (SATB)", "lokasi_spasial": {"node_id": "r305"}},
+        ])
+
+    def test_pemegang_dan_jumlah_aset_satker_lain_tak_ikut_terhitung(self, dbx):
+        async def jalan():
+            await self._seed_dua_satker(dbx)
+            user_a = {"username": "u", "role": "admin", "kode_satker": "SATA"}
+            return await _unwrap(rp.sbsk_ruang)("gedA", True, "RUANGAN", user_a)
+        b = next(x for x in _jalan(jalan())["items"] if x["nama"] == "Ruang 305")
+        assert b["jumlah_aset"] == 1
+        assert b["pemegang"] == ["Ani (SATA)"]
+        assert "Budi (SATB)" not in b["pemegang"]
+
+    def test_super_admin_tetap_melihat_keduanya(self, dbx):
+        # Penjaga tak boleh berubah jadi terlalu ketat: pusat memang lintas satker.
+        async def jalan():
+            await self._seed_dua_satker(dbx)
+            return await _unwrap(rp.sbsk_ruang)("gedA", True, "RUANGAN", USER)
+        b = next(x for x in _jalan(jalan())["items"] if x["nama"] == "Ruang 305")
+        assert b["jumlah_aset"] == 2
+        assert sorted(b["pemegang"]) == ["Ani (SATA)", "Budi (SATB)"]
+
+
+class TestPlafonTakMenghapusRuangan:
+    def test_plafon_membatasi_RUANGAN_bukan_ASET(self, dbx, monkeypatch):
+        # Dulu `$limit` dipasang SEBELUM `$group`, sehingga ia memotong ASET:
+        # ruangan yang asetnya berada di luar potongan HILANG UTUH dari peta
+        # isi lalu dilaporkan MENGANGGUR — bukti palsu untuk menghentikan
+        # pengadaan, persis kebalikan dari tujuan laporan ini.
+        #
+        # Plafon DITURUNKAN ke 2 selama uji. Tanpa itu, uji ini tak menjaga
+        # apa pun: dengan plafon 800 dan 20 aset, posisi `$limit` tak
+        # berpengaruh sama sekali dan implementasi yang salah pun lulus.
+        # Dengan plafon 2: setelah `$group` → 2 grup (kedua ruangan utuh);
+        # sebelum `$group` → hanya 2 ASET yang terbaca, dan hitungan kedua
+        # ruangan runtuh dari 10 menjadi ≤1.
+        monkeypatch.setattr(rp, "_MAKS_RUANGAN_SBSK", 2)
+
+        async def jalan():
+            await _seed(dbx)
+            await dbx.assets.insert_many([
+                {"id": f"x{i}", "activity_id": "keg1", "asset_name": f"Kursi {i}",
+                 "user": f"Peg {i}",
+                 "lokasi_spasial": {"node_id": "r305" if i % 2 else "r307"}}
+                for i in range(20)
+            ])
+            return await _panggil()
+        r = _jalan(jalan())
+        for nama in ("Ruang 305", "Ruang 307"):
+            b = next(x for x in r["items"] if x["nama"] == nama)
+            assert b["jumlah_aset"] == 10, f"{nama} kehilangan hitungan asetnya"
+            assert b["menganggur"] is False
+        assert r["rekap"]["menganggur"] == 0
