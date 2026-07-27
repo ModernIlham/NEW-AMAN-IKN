@@ -269,9 +269,14 @@ async def _evaluasi_satu_aturan(a: dict, dev: dict, urut: list, geom,
                        "bergeometri — tidak dievaluasi",
                        a.get("id"), a.get("area_node_id"))
         return 0
+    from pymongo.errors import DuplicateKeyError
+
     param = gf.ringkas_aturan(a)
     kunci = {"aturan_id": a["id"], "device_id": dev["id"]}
     st = await db.iot_geofence_state.find_one(kunci, _PROJ)
+    # Nilai penjaga untuk tulis bersyarat di bawah — direkam SEBELUM mesin
+    # mengubah `st`.
+    ts_saat_dibaca = (st or {}).get("ts_terakhir")
     if not st:
         st = gf.status_awal(dev["id"], a.get("area_node_id") or "")
         st["aturan_id"] = a["id"]
@@ -292,7 +297,22 @@ async def _evaluasi_satu_aturan(a: dict, dev: dict, urut: list, geom,
         await db.iot_geofence_event.insert_many(baru, ordered=False)
     # Status ditulis SEKALI per aturan, bukan per observasi: batch 500 titik
     # kalau tidak akan menghasilkan 500 tulis untuk satu baris yang sama.
-    await db.iot_geofence_state.update_one(kunci, {"$set": st}, upsert=True)
+    #
+    # TULIS BERSYARAT (konkurensi optimistis): dua batch dari perangkat yang
+    # SAMA bisa diproses bersamaan oleh dua worker uvicorn — baca–ubah–tulis
+    # polos akan membuat yang menang menimpa seluruh kemajuan yang kalah,
+    # termasuk memundurkan status. Dengan menjadikan `ts_terakhir` saat dibaca
+    # sebagai syarat, tulis yang basi tak menemukan dokumen; `upsert` lalu
+    # menabrak indeks unik (aturan_id, device_id) dan melempar — itu SINYAL,
+    # bukan kegagalan. Peringatannya sendiri sudah tersimpan di atas.
+    penjaga = dict(kunci)
+    penjaga["ts_terakhir"] = (ts_saat_dibaca if ts_saat_dibaca is not None
+                              else {"$exists": False})
+    try:
+        await db.iot_geofence_state.update_one(penjaga, {"$set": st}, upsert=True)
+    except DuplicateKeyError:
+        logger.warning("Status geofence %s/%s ditulis batch lain lebih dulu — "
+                       "hasil evaluasi ini dilewati", a.get("id"), dev["id"])
     return len(baru)
 
 
@@ -346,9 +366,15 @@ async def sapu_dwell(sekarang: Optional[datetime] = None) -> int:
                                               {**_PROJ, "token_hash": 0})
         if not dev:
             continue
+        # `retro` DIWARISI dari kepergian yang memicunya, bukan di-hardcode
+        # False. Kepergian yang berasal dari antrean offline melahirkan
+        # peringatan "tak kunjung kembali" yang, bila ditandai segar, terbaca
+        # operator sebagai kejadian yang sedang berlangsung — alarm paling
+        # keras di sistem ini justru yang paling tak boleh menyesatkan.
         dok = _dok_event(a, dev, {"jenis": "dwell_terlampaui",
                                   "pada": kini.isoformat(),
-                                  "jarak_m": st.get("jarak_m"), "retro": False,
+                                  "jarak_m": st.get("jarak_m"),
+                                  "retro": bool(st.get("keluar_retro")),
                                   "titik": []})
         dok["sejak"] = sejak
         try:

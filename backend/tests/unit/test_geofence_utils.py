@@ -546,3 +546,69 @@ def test_teleport_tepat_di_bawah_dan_di_atas_ambang():
     assert gf.lompatan_mustahil(a, _obs(116.710, -1.400, 60)) is False
     # 0.060° ≈ 6678 m dalam 60 dtk ≈ 400 km/jam → mustahil untuk darat
     assert gf.lompatan_mustahil(a, _obs(116.760, -1.400, 60)) is True
+
+
+# ── Gelombang kedua temuan tinjauan ────────────────────────────────────────
+
+def test_retro_kepergian_diwariskan_untuk_dwell():
+    """`dwell_terlampaui` adalah alarm paling keras di sistem ini. Kepergian
+    yang berasal dari antrean offline tak boleh melahirkan alarm yang terbaca
+    seolah sedang berlangsung."""
+    st = gf.status_awal("d", "a")
+    st["status"] = gf.DALAM
+    for dt in (60, 240, 420, 600):
+        r = gf.evaluasi(st, _obs(116.7050, -1.400, dt), KOTAK,
+                        T0 + timedelta(hours=9))      # tiba 9 jam kemudian
+        st = r["state"]
+    assert st["keluar_retro"] is True
+
+    st2 = gf.status_awal("d2", "a")
+    st2["status"] = gf.DALAM
+    for dt in (60, 240, 420, 600):
+        r = gf.evaluasi(st2, _obs(116.7050, -1.400, dt), KOTAK,
+                        T0 + timedelta(seconds=dt))   # segar
+        st2 = r["state"]
+    assert st2["keluar_retro"] is False
+
+
+def test_ambang_retro_dijepit_pada_nilai_yang_dipatok():
+    """Uji sebelumnya memakai AMBANG_RETRO_DTK sendiri sebagai acuan, jadi
+    mengubah konstantanya tak pernah menggagalkan apa pun. Di sini ambangnya
+    dijepit dengan angka HARFIAH di kedua sisi 3600 dtk."""
+    def _retro_pada(jeda_detik):
+        st = gf.status_awal("d", "a")
+        ev = None
+        for dt in (0, 60, 120):
+            r = gf.evaluasi(st, _obs(116.701, -1.400, dt), KOTAK,
+                            T0 + timedelta(seconds=jeda_detik))
+            st = r["state"]; ev = r["event"] or ev
+        return ev["retro"]
+    assert _retro_pada(1800) is False     # 30 menit → masih segar
+    assert _retro_pada(7200) is True      # 2 jam   → backfill
+
+
+def test_lubang_jarak_diukur_ke_tepi_lubang_bukan_tepi_luar():
+    """Uji sebelumnya hanya memeriksa TANDA (>0). Yang diklaim komentar kode
+    adalah tepi lubang IKUT jadi batas yang sah diukur — dan itu yang
+    menentukan apakah histeresis bekerja di dalam lubang."""
+    donat = {"type": "Polygon", "coordinates": [
+        [[116.690, -1.410], [116.712, -1.410], [116.712, -1.390],
+         [116.690, -1.390], [116.690, -1.410]],
+        [[116.700, -1.402], [116.704, -1.402], [116.704, -1.398],
+         [116.700, -1.398], [116.700, -1.402]]]}
+    # Titik di TENGAH lubang: ke tepi lubang ±222 m, ke tepi luar ±1100 m.
+    d = gf.jarak_ke_poligon_m(116.702, -1.400, donat)
+    assert 180 < d < 260, d
+
+
+def test_flapping_saat_sudah_DALAM_juga_diam():
+    """Uji anti-flapping unggulan bermula dari LUAR sehingga cabang keluar tak
+    pernah tersentuh. Di sini perangkat SUDAH mapan di dalam lalu bergoyang di
+    tepi — cabang DALAM/KANDIDAT_KELUAR yang diuji."""
+    urut = [(116.701, -1.400, t) for t in (0, 60, 120)]        # mapan DALAM
+    for i in range(60):                                        # goyang di tepi
+        lon = 116.70195 if i % 2 else 116.70205
+        urut.append((lon, -1.400, 180 + i * 60))
+    st, events = _jalankan(urut)
+    assert [e["jenis"] for e in events] == ["masuk"]
+    assert st["status"] == gf.DALAM

@@ -162,7 +162,20 @@ komentarnya mengaku sudah diperbaiki tak punya uji sama sekali; `sampel_min`
 tak pernah diuji secara perilaku; muatan event tak pernah diperiksa. Semuanya
 kini terkunci.
 
-- Uji: +36 lalu +18 dari temuan tinjauan = **1.039 lulus**.
+Gelombang kedua tinjauan menutup 4 sisanya: **tulis status kini bersyarat**
+(dua batch perangkat sama dari dua worker tak lagi saling menimpa — dibuktikan
+penyanggah dengan MongoDB 8.0 sungguhan); ** diwariskan** ke
+ alih-alih di-hardcode , karena alarm paling keras di
+sistem ini justru yang paling tak boleh terbaca segar padahal berasal dari
+antrean offline; plus dua celah uji (ambang retro yang memakai konstantanya
+sendiri sebagai acuan sehingga kebal mutasi, dan jarak lubang yang hanya diuji
+tandanya).
+
+Hasil akhir tinjauan: **32 dugaan diperiksa, 16 terkonfirmasi** — para
+penyanggah menjalankan mongod sungguhan dan memanggil fungsi endpoint asli,
+bukan membaca kode.
+
+- Uji: +36, +18, +4 = **1.043 lulus**.
 
 ---
 

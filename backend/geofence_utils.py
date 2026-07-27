@@ -289,6 +289,10 @@ def evaluasi(state: dict, obs: dict, geom, sekarang: datetime,
     transisi = dict(st.get("transisi") or {})
     transisi[event] = ts.isoformat()
     st["transisi"] = transisi
+    if event == "keluar":
+        # Diwariskan ke `dwell_terlampaui` yang lahir dari kepergian ini —
+        # peringatan turunan tak boleh tampak segar bila asalnya backfill.
+        st["keluar_retro"] = retro
 
     if _dalam_cooldown(st, event, ts, p):
         # Peristiwa nyata, tetapi peringatan sejenis baru saja terbit. Status
