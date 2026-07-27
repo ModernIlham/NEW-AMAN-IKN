@@ -257,7 +257,18 @@ export async function upsertSnapshotAsset(activityId, row) {
     const db = await getDB();
     const meta = await db.get(META_STORE, activityId);
     if (!meta) return; // no snapshot for this activity — nothing to keep fresh
-    const clean = toSnapshotRow({ ...row, activity_id: activityId });
+    // BACA-GABUNG-TULIS, bukan ganti-buta (temuan audit G3 — tiga cacat
+    // berakar di sini): (1) pemanggil sering hanya membawa POTONGAN baris
+    // (PATCH edit luring; baris tak ketemu di daftar state karena galeri &
+    // kartu HP memakai daftar berbeda) → ganti-buta menjadikan potongan itu
+    // seluruh baris, field lain lenyap dari data luring; (2) respons tulis
+    // server tak memuat field turunan proyeksi list (doc_total/doc_checked/
+    // doc_summary/siman) → ganti-buta menghapus nilainya yang sudah benar.
+    // Menggabung dengan rekaman lama membuat potongan tetap potongan.
+    let lama = null;
+    try { lama = await db.get(ASSET_STORE, row.id); } catch { /* baca gagal → tanpa dasar */ }
+    const dasar = lama && lama.activity_id === activityId ? lama : {};
+    const clean = toSnapshotRow({ ...dasar, ...row, activity_id: activityId });
     await db.put(ASSET_STORE, clean);
   } catch {
     // Best-effort cache maintenance — the queue still holds the real change.

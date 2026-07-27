@@ -71,6 +71,19 @@ describe("gabungPhotoOps", () => {
     expect(gabungPhotoOps(null, { keep: [1], add: ["B"] })).toEqual({ keep: [1], add: ["B"] });
     expect(gabungPhotoOps({ keep: [1], add: ["A"] }, null)).toEqual({ keep: [1], add: ["A"] });
   });
+
+  test("base_version ikut terbawa — patch gabungan tetap terikat versinya", () => {
+    // Kedua patch dihitung terhadap keadaan server yang sama; ikatan versi
+    // milik yang LAMA yang dipertahankan (selaras If-Match patch gabungan).
+    const r = gabungPhotoOps(
+      { keep: [0], add: ["A"], base_version: 4 },
+      { keep: [0], add: ["B"], base_version: 4 }
+    );
+    expect(r.base_version).toBe(4);
+    // Patch baru tanpa ikatan (payload lama) → ikatan lama tetap dipakai.
+    const r2 = gabungPhotoOps({ keep: [0], add: [], base_version: 4 }, { keep: [0], add: [] });
+    expect(r2.base_version).toBe(4);
+  });
 });
 
 describe("bolehGabung", () => {

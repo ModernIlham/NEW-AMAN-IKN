@@ -111,6 +111,15 @@ async def create_indexes() -> None:
         await db.idempotency_keys.create_index(
             "created_at", expireAfterSeconds=86400, name="idem_created_at_ttl_24h"
         )
+        # DEDUP IDEMPOTENSI PERMANEN (temuan audit G3): dokumen aset menyimpan
+        # idem_key sejak dibuat, dan indeks unik PARSIAL ini menjadikannya
+        # penanda anti-kembar yang tak pernah kedaluwarsa — cache respons 24 jam
+        # di atas hanyalah jalur cepat. Parsial (hanya dokumen ber-idem_key
+        # string) agar jutaan aset lama tanpa field itu tidak dianggap kembar.
+        await db.assets.create_index(
+            "idem_key", unique=True, name="idem_key_unik",
+            partialFilterExpression={"idem_key": {"$type": "string"}},
+        )
         # Inventory activity indexes — required for fast list sort and satker filters
         # (without these the /inventory-activities and /satker-list calls do full COLLSCAN,
         # which is why the activity list page loaded slowly on deployed data).

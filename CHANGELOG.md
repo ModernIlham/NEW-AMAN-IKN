@@ -53,6 +53,72 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#645] Gerbong data TUNTAS — 15 temuan sisa audit ditutup semua (4 backend + 11 frontend) — 2026-07-27
+
+Perintah pemilik: *"lakukan perbaikan hingga tuntas"*. Lima belas dugaan sisa
+audit gelombang 2 disanggah ulang terhadap kode TERKINI oleh 15 skeptis
+independen (4 di antaranya saya verifikasi sendiri di kode lebih dulu — semua
+cocok), lalu SEMUANYA diperbaiki. Tidak ada yang tersisa di daftar.
+
+### Backend
+
+- **Ubah Massal kini menaikkan `version`** pada KELIMA titik tulisnya. Dulu
+  penjaga OCC/If-Match buta terhadap perubahan massal: klien luring yang
+  membawa versi lama tetap lolos CAS lalu menimpanya tanpa satu pun 409.
+- **Idempotensi CREATE jadi permanen.** Cache respons ber-TTL 24 jam, antrean
+  luring tidak: simpanan yang percobaan pertamanya SAMPAI tetapi responsnya
+  hilang, di-replay setelah survei berhari-hari, menciptakan aset KEMBAR.
+  Kuncinya kini distempel ke dokumen aset sendiri (`idem_key` + indeks unik
+  parsial `idem_key_unik`) — dokumen tak kedaluwarsa, dedup-nya pun tidak.
+  Balapan dua replay ditangkap `DuplicateKeyError` dan keduanya menerima aset
+  yang SAMA.
+- **`photo_ops` terikat versinya.** `keep` adalah indeks POSISIONAL; bila array
+  foto bergeser sejak dihitung, keep yang sama menunjuk foto yang BERBEDA —
+  foto terhapus hidup lagi, foto lain terbuang, tanpa galat. Klien kini
+  menyertakan `base_version`, server menolak 409 bila versi sudah bergeser
+  (If-Match tetap jalur utama; ini jaring untuk payload antrean tanpa header).
+- **Rotasi foto menstempel `updated_at`** — delta sinkron luring memfilter pada
+  stempel itu, jadi rotasi kini benar-benar sampai ke cache perangkat lapangan.
+
+### Frontend
+
+- **`upsertSnapshotAsset` kini baca-gabung-tulis** — satu perbaikan menutup
+  TIGA temuan sekaligus: potongan PATCH tak lagi menghapus seluruh baris
+  snapshot; respons tulis (yang tak memuat `doc_total/doc_checked/siman`) tak
+  lagi menghapus badge dokumen & SIMAN dari tampilan luring; baris yang tak
+  ketemu di daftar state tak lagi menjadi stub.
+- **Sampul & foto stiker tak salah foto saat edit luring.** Strip hanya
+  menampilkan foto BARU padahal susunan akhir server = [foto lama] + [baru];
+  indeks strip kini digeser saat pengguna MENGETUK (`lib/indeksFotoLuring.js`),
+  sehingga `thumbnail_index`/`stiker_photo_index` selalu indeks final. Daring
+  dan mode-create tak berubah (offset 0).
+- **Antrean terikat pemiliknya** (`lib/pemilikAntrean.js`): rekaman distempel
+  akun pembuatnya, dan rehidrasi di perangkat dinas bersama tak lagi memutar
+  ulang simpanan akun LAIN memakai token & identitas audit akun yang login.
+  Rekaman era lama tanpa stempel tetap di-replay.
+- **"Abaikan" benar-benar membatalkan**: item ber-kunci sama dikeluarkan dari
+  antrean memori (bukan hanya rekamannya), penyelesaian permintaan yang sedang
+  terbang tak menghidupkan kembali baris yang dibuang, dan EDIT yang dibuang
+  kini memulihkan baris daftar + snapshot dari kebenaran server.
+- **`reserveDummyNup` single-flight** (`lib/sekaliJalan.js`): dua panggilan
+  serentak dulu sama-sama menyemai lalu yang belakangan menimpa balik urutan —
+  dua aset ber-NUP sama. Kini seeding terbang sekali; pemanggil kedua menumpang.
+- **Dropdown kategori dummy memakai urutan lokal bersama** — bukan `next-nup`
+  mentah yang hanya menghitung aset tersimpan (dan mengulang nomor yang baru
+  saja diterbitkan lokal).
+- **Ubah Massal ditahan selama akuisisi GPS** — koordinat sementara yang belum
+  lolos gerbang ±8 m tak bisa lagi diterapkan ke banyak aset sekaligus.
+- **CREATE kegiatan A yang sukses saat kegiatan B terbuka** tak lagi disisipkan
+  ke daftar B (penjaga `activity_id` pada cabang fallback-sisip).
+
+- Uji: **+30 → 195 frontend, 1.079 backend** (5 uji endpoint baru dengan
+  mongomock — batch version, replay idem via dokumen, photo_ops 409/diterima,
+  stempel rotasi). Empat jaminan diverifikasi MUTASI: mencabut `$inc`,
+  mencabut pemeriksaan `base_version`, mengembalikan timpa-buta snapshot, dan
+  mencabut single-flight masing-masing menggagalkan tepat uji penjaganya.
+
+---
+
 ## [#644] Gerbong data gelombang 2 — audit adversarial jalur luring, 6 kebocoran ditutup — 2026-07-27
 
 Dua cacat "tertukar gerbong" di entri sebelumnya ditemukan dengan menelusuri

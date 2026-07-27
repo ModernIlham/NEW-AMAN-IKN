@@ -30,6 +30,7 @@ import { lebihAkurat } from "../../lib/gpsAkurasi";
 import { bolehSalinKoordinat } from "../../lib/salinKonteks";
 import { buatSesiAset, fotoNyasar } from "../../lib/sesiAset";
 import { simpanGpsTerakhir, ambilGpsTerakhir } from "../../lib/gpsCache";
+import { keIndeksFinal } from "../../lib/indeksFotoLuring";
 import { compressImageFile, compressDataUrl, generateThumbnailFromDataUrl, dataUrlBytes } from "../../lib/imageCompression";
 import { reserveDummyNup as reserveDummyNupLib } from "../../lib/dummyNup";
 import { statusInventarisasiOtomatis, autoInventarisasiEnabled } from "../../lib/inventoryStatus";
@@ -1392,6 +1393,15 @@ const AssetForm = memo(({
   // In edit mode, photo count comes from photoItems. In create mode, from formData.photos
   const currentPhotoCount = isEditing ? photoItems.length : formData.photos.length;
 
+  // INDEKS STRIP → INDEKS FINAL (temuan audit G3). Saat edit LURING, foto
+  // server tak dimuat ke strip (mediaLoaded false) padahal backend menyusun
+  // final = [foto lama] + [foto baru]; indeks strip yang disimpan mentah
+  // membuat sampul/foto-stiker menunjuk FOTO LAMA yang tak terlihat. Offset
+  // diterapkan saat pengguna MENGETUK, jadi thumbnail_index/stiker_photo_index
+  // selalu indeks final; daring & mode-create offsetnya 0 (perilaku lama utuh).
+  const indeksFinal = (i) => keIndeksFinal(
+    i, !isEditing || mediaLoadedRef.current, originalDataRef.current?._photoCount);
+
   const handleImageChange = useCallback(async e => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
@@ -1487,17 +1497,22 @@ const AssetForm = memo(({
   const removePhoto = useCallback(index => {
     photosModifiedRef.current = true;
     if (isEditing) {
-      // Edit mode: remove from photoItems
+      // Edit mode: remove from photoItems. Perbandingan memakai indeks FINAL:
+      // thumbnail_index/stiker_photo_index kini selalu indeks susunan akhir,
+      // sedangkan `index` adalah posisi strip — saat luring keduanya berbeda
+      // sebesar jumlah foto server yang tak terlihat.
+      const idxFinal = keIndeksFinal(
+        index, mediaLoadedRef.current, originalDataRef.current?._photoCount);
       setPhotoItems(prev => prev.filter((_, i) => i !== index));
       setFormData(p => {
         const newPhotos = p.photos.filter((_, i) => i !== index);
         let newThumbIdx = p.thumbnail_index;
         let newStikerIdx = p.stiker_photo_index;
-        if (index === p.thumbnail_index) newThumbIdx = 0;
-        else if (index < p.thumbnail_index) newThumbIdx = Math.max(0, p.thumbnail_index - 1);
+        if (idxFinal === p.thumbnail_index) newThumbIdx = 0;
+        else if (idxFinal < p.thumbnail_index) newThumbIdx = Math.max(0, p.thumbnail_index - 1);
         if (p.stiker_photo_index !== null) {
-          if (index === p.stiker_photo_index) newStikerIdx = null;
-          else if (index < p.stiker_photo_index) newStikerIdx = p.stiker_photo_index - 1;
+          if (idxFinal === p.stiker_photo_index) newStikerIdx = null;
+          else if (idxFinal < p.stiker_photo_index) newStikerIdx = p.stiker_photo_index - 1;
         }
         return { ...p, photos: newPhotos, thumbnail_index: newThumbIdx, stiker_photo_index: newStikerIdx };
       });
@@ -1694,6 +1709,12 @@ const AssetForm = memo(({
             keep: keepIndices,
             add: newPhotosToAdd,
             thumbnail_index: formData.thumbnail_index || 0,
+            // `keep` adalah indeks POSISIONAL pada array foto versi INI —
+            // sertakan versinya supaya server bisa menolak (409) bila array
+            // sudah bergeser saat patch akhirnya tiba (antrean luring bisa
+            // menahan patch berjam-jam). Tanpa ikatan ini, keep yang sama
+            // menunjuk foto yang berbeda tanpa satu galat pun.
+            base_version: assetVersion,
           };
         }
 
@@ -1853,7 +1874,7 @@ const AssetForm = memo(({
       else if (err.code === 'ECONNABORTED') errorMsg = "Koneksi timeout. Coba kurangi ukuran file.";
       toast.error(errorMsg);
     } finally { setIsSubmitting(false); }
-  }, [formData, isEditing, editId, isFormLoading, resetForm, onSubmitSuccess, onOptimisticSubmit, onSaveAndNavigate, onCameraReviewSaved, onExitToNewAsset, onClose, focusFieldError]);
+  }, [formData, isEditing, editId, assetVersion, isFormLoading, resetForm, onSubmitSuccess, onOptimisticSubmit, onSaveAndNavigate, onCameraReviewSaved, onExitToNewAsset, onClose, focusFieldError]);
 
   // — Aksi alur beruntun Mode Kamera Penuh (semua lewat handleSubmit agar
   //   validasi + kompresi + payload tetap konsisten) —
@@ -2271,16 +2292,19 @@ const AssetForm = memo(({
                           <DropdownMenuItem key={c.id} onClick={() => {
                             handleSelectChange("category", c.label);
                             if (c.kode_aset) { setFormData(p => ({ ...p, asset_code: c.kode_aset })); clearFieldError("asset_code"); }
-                            // Kategori "dummy": NUP dinomori otomatis (max+1 dalam
-                            // lingkup kode aset + kegiatan, sesuai kunci unik backend).
+                            // Kategori "dummy": NUP dari URUTAN LOKAL BERSAMA
+                            // (temuan audit G3). Dulu jalur ini memanggil
+                            // next-nup mentah — melewati (dan tidak menaikkan)
+                            // reserveDummyNup yang dipakai Kamera Penuh &
+                            // tambah-cepat peta. Server hanya menghitung aset
+                            // yang SUDAH tersimpan, jadi saat masih ada aset
+                            // dummy di antrean, nomor yang dikembalikan sama
+                            // dengan yang baru saja diterbitkan lokal → aset
+                            // kembar. Satu sumber urutan untuk SEMUA jalur.
                             if (/dummy/i.test(c.label || "")) {
-                              const params = new URLSearchParams({ activity_id: activity?.id || "" });
-                              if (c.kode_aset) params.set("asset_code", c.kode_aset);
-                              else params.set("category", c.label);
-                              axios.get(`${API}/assets/next-nup?${params}`)
-                                .then(res => {
-                                  const next = res?.data?.next_nup;
-                                  if (next) setFormData(p => p.NUP ? p : { ...p, NUP: next });
+                              reserveDummyNup(c.kode_aset, c.label)
+                                .then(nup => {
+                                  if (nup) setFormData(p => p.NUP ? p : { ...p, NUP: nup });
                                 })
                                 .catch(() => {});
                             }
@@ -2530,15 +2554,15 @@ const AssetForm = memo(({
                         return (
                           <div key={i}
                             data-testid={`stiker-photo-option-${i}`}
-                            onClick={() => setFormData(prev => ({ ...prev, stiker_photo_index: prev.stiker_photo_index === i ? null : i }))}
+                            onClick={() => setFormData(prev => ({ ...prev, stiker_photo_index: prev.stiker_photo_index === indeksFinal(i) ? null : indeksFinal(i) }))}
                             className={`relative w-12 h-12 rounded cursor-pointer border-2 transition-all ${
-                              i === formData.stiker_photo_index
+                              indeksFinal(i) === formData.stiker_photo_index
                                 ? 'border-emerald-500 ring-1 ring-emerald-300 shadow-sm'
                                 : 'border-border hover:border-emerald-300 opacity-60 hover:opacity-100'
                             }`}
                           >
                             <img src={src} alt="" loading="lazy" className="w-full h-full object-cover rounded bg-muted" />
-                            {i === formData.stiker_photo_index && (
+                            {indeksFinal(i) === formData.stiker_photo_index && (
                               <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-emerald-500 text-white text-[7px] px-1 rounded whitespace-nowrap">Stiker</div>
                             )}
                           </div>
@@ -2739,10 +2763,10 @@ const AssetForm = memo(({
                     /* Edit mode: render from photoItems (thumbnails) */
                     photoItems.map((item, i) => (
                       <div key={i} className="relative group">
-                        <img src={item.thumbnail} alt="" loading="lazy" className={`w-14 h-14 object-cover rounded cursor-pointer border-2 bg-muted ${i === formData.thumbnail_index ? 'border-blue-500' : i === formData.stiker_photo_index ? 'border-emerald-500' : 'border-border'}`} onClick={() => setFormData(prev => ({ ...prev, thumbnail_index: i }))} data-testid={`photo-thumb-${i}`} />
+                        <img src={item.thumbnail} alt="" loading="lazy" className={`w-14 h-14 object-cover rounded cursor-pointer border-2 bg-muted ${indeksFinal(i) === formData.thumbnail_index ? 'border-blue-500' : indeksFinal(i) === formData.stiker_photo_index ? 'border-emerald-500' : 'border-border'}`} onClick={() => setFormData(prev => ({ ...prev, thumbnail_index: indeksFinal(i) }))} data-testid={`photo-thumb-${i}`} />
                         <button type="button" onClick={() => removePhoto(i)} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-5 h-5 min-w-0 min-h-0 flex items-center justify-center opacity-0 group-hover:opacity-100" title="Hapus foto" aria-label="Hapus foto"><X className="w-3 h-3" /></button>
-                        {i === formData.thumbnail_index && <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-blue-500 text-white text-[8px] px-1 rounded">Cover</div>}
-                        {i === formData.stiker_photo_index && i !== formData.thumbnail_index && <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-emerald-500 text-white text-[8px] px-1 rounded">Stiker</div>}
+                        {indeksFinal(i) === formData.thumbnail_index && <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-blue-500 text-white text-[8px] px-1 rounded">Cover</div>}
+                        {indeksFinal(i) === formData.stiker_photo_index && indeksFinal(i) !== formData.thumbnail_index && <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-emerald-500 text-white text-[8px] px-1 rounded">Stiker</div>}
                       </div>
                     ))
                   ) : (
