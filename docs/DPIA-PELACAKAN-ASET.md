@@ -116,7 +116,10 @@ dijalankan, dan kepatuhan yang mustahil dijalankan bukan kepatuhan.
 Pemegang barang berhak mengetahui bahwa perangkat dinas yang dipegangnya
 melaporkan keberadaan **barang**. Kewajiban yang menyusul:
 
-- **Pemberitahuan** saat serah-terima BMN (dicantumkan pada BAST).
+- **Pemberitahuan** ditampilkan di layar pemegang barang sendiri, di halaman
+  pendamping `/lacak`, **sebelum** ia menekan Mulai (Fase 15) — dibaca dari
+  `privasi_utils`, jadi isinya dijamin sama dengan yang dijalankan mesin.
+  Naskah untuk BAST masih perlu disusun sebagai pelengkap tertulis.
 - **Akses**: pemegang dapat meminta rekap data lokasi perangkat yang dipegangnya.
 - **Penghapusan**: otomatis lewat retensi; permintaan lebih awal ditangani
   sepanjang tak bertentangan dengan kewajiban penatausahaan BMN.

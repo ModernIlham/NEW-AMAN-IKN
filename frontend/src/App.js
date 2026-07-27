@@ -50,6 +50,7 @@ const WasdalPage = lazy(() => import("./pages/WasdalPage"));
 const PenganggaranPage = lazy(() => import("./pages/PenganggaranPage"));
 const PengadaanPage = lazy(() => import("./pages/PengadaanPage"));
 const TtdPublikPage = lazy(() => import("./pages/TtdPublikPage"));
+const LacakPage = lazy(() => import("./pages/LacakPage"));
 const PetaKolaborasiPage = lazy(() => import("./pages/PetaKolaborasiPage"));
 const TtdPermintaanPage = lazy(() => import("./pages/TtdPermintaanPage"));
 const SatkerPage = lazy(() => import("./pages/SatkerPage"));
@@ -351,6 +352,21 @@ function App() {
       <SatkerAktifBar user={user} />
         <Suspense fallback={<PageLoader />}>
           <TtdPublikPage />
+        </Suspense>
+        <Toaster position="top-right" richColors />
+      </div>
+    );
+  }
+
+  // ── HALAMAN PUBLIK PENDAMPING PELACAKAN ────────────────────────────────
+  // /lacak dibuka pemegang barang TANPA LOGIN — token perangkat yang jadi
+  // kredensialnya. Sengaja diperiksa sebelum gate auth: pemegang barang
+  // umumnya bukan pengguna aplikasi ini sama sekali.
+  if (window.location.pathname.startsWith('/lacak')) {
+    return (
+      <div className="App">
+        <Suspense fallback={<PageLoader />}>
+          <LacakPage />
         </Suspense>
         <Toaster position="top-right" richColors />
       </div>

@@ -53,6 +53,61 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#641] Spasial Fase 15: pendamping pelacakan — HP yang sudah ada jadi pelacak, biaya Rp 0 — 2026-07-27
+
+Sampai fase ini seluruh pipeline posisi sudah lengkap tetapi **tak ada satu pun
+perangkat yang bisa mengisinya** tanpa membeli pelacak GPS. Dokumen arsitektur
+§9.1 sudah menandai jalannya sejak awal: aplikasi pendamping PWA, "paling
+direkomendasikan, biaya **Rp 0**" — karena HP-nya sudah ada di tangan orangnya.
+
+Halaman publik `/lacak` dibuka pemegang barang **tanpa akun**: tempel token (atau
+buka tautan yang dikirim admin), baca pemberitahuan, tekan Mulai. Admin
+mendapatkan tautan siap-kirim langsung di dialog token.
+
+### Pemberitahuan ke pemegang barang adalah bagian dari fitur, bukan hiasan
+
+UU PDP mewajibkan subjek data diberi tahu. Kewajiban itu paling sulit dibantah
+bila pemberitahuannya muncul **di layar orangnya sendiri**, dibaca dari kode
+penegaknya, **tepat sebelum** ia menekan Mulai — bukan terkubur di lampiran BAST
+yang ditandatangani setahun lalu. Karena itu tombol Mulai tak muncul sebelum
+kebijakan berhasil dimuat, dan isinya menyebut tiga hal dengan kalimat manusia:
+apa yang direkam ("hanya nama gedung — titik koordinat Anda dibuang sebelum
+disimpan"), kapan, dan berapa lama disimpan.
+
+Bila izin darurat sedang aktif, pemegang **diberi tahu di layar yang sama** —
+ia berhak mengetahuinya saat itu, bukan belakangan dari orang lain.
+
+### Batas yang dinyatakan terus terang, bukan disembunyikan
+
+**Peramban menghentikan JavaScript saat layar mati atau pengguna berpindah
+aplikasi.** Itu batasan peramban, bukan setelan yang bisa diakali. Halaman ini
+karena itu berguna untuk perjalanan dinas yang diawasi, kendaraan bertablet
+terpasang, dan pencarian barang hilang — **bukan** pengganti pelacak khusus
+untuk pemantauan 24 jam. Dinyatakan di panel tersendiri di layar, bukan catatan
+kaki: menjanjikan lebih hanya akan membuat orang mengandalkan sesuatu yang
+diam-diam berhenti bekerja.
+
+`Wake Lock` dipakai agar layar tak mati selama merekam, tetapi kegagalannya
+(ditolak peramban atau mode hemat baterai) tak menghentikan perekaman.
+
+### Keputusan kecil yang menentukan
+
+- **Kadensi adaptif** — bergerak 60 detik, diam 15 menit (arsitektur §8.4 #20).
+  Perangkat diam tak perlu dilaporkan tiap menit; kuota data di lapangan mahal.
+- **Antrean luring di `localStorage`**, dibuang **hanya setelah** server mengaku
+  menerima. Membuang lebih dulu berarti kehilangan posisi saat jaringan putus di
+  tengah kirim — dan duplikatnya toh sudah aman ditolak indeks unik (Fase 11
+  dibangun persis untuk ini). Saat penuh, yang dibuang **yang paling tua**.
+- **Token di `?token=` segera dihapus dari address bar** (`history.replaceState`).
+  URL menetap di riwayat peramban, ikut terkirim sebagai `Referer`, dan gampang
+  ter-screenshot; token yang tinggal di sana sama saja dengan token yang ditempel
+  di badan barang.
+- **`GET /iot/perangkat/saya` tidak mengembalikan data posisi apa pun.** Token
+  perangkat cukup untuk MENGIRIM, tak cukup untuk MEMBACA riwayat — HP yang
+  jatuh ke tangan orang lain tak boleh berubah jadi jendela ke jejak pemegangnya.
+
+---
+
 ## [#640] Spasial Fase 14: izin darurat — janji kepatuhan yang selama ini mustahil dijalankan — 2026-07-27
 
 Fase 10 menuliskan janji: *"presisi penuh dibuka HANYA saat barang dilaporkan

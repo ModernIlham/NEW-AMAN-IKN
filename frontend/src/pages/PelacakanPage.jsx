@@ -767,15 +767,33 @@ export default function PelacakanPage({ user, onBack }) {
             <p className="text-[10px] text-muted-foreground mb-1">{tokenBaru?.nama}</p>
             <code className="block text-[11px] break-all font-mono">{tokenBaru?.token}</code>
           </div>
-          <DialogFooter>
-            <Button size="sm" onClick={() => {
+          <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/5 p-2">
+            <p className="text-[10px] text-muted-foreground">
+              <b>Untuk HP/tablet:</b> kirim tautan ini ke pemegang barang. Ia
+              membukanya di peramban, membaca pemberitahuan privasi, lalu menekan
+              Mulai — tanpa perlu akun aplikasi ini.
+            </p>
+            <code className="block text-[10px] break-all font-mono mt-1">
+              {`${window.location.origin}/lacak?token=${tokenBaru?.token || ""}`}
+            </code>
+          </div>
+          <DialogFooter className="flex-col sm:flex-row gap-1">
+            <Button size="sm" variant="outline" onClick={() => {
               navigator.clipboard?.writeText(tokenBaru?.token || "")
                 .then(() => toast.success("Token disalin"))
                 .catch(() => toast.error("Gagal menyalin — salin manual dari kotak di atas"));
             }} data-testid="pelacakan-salin-token">
               <Copy className="w-3.5 h-3.5 mr-1" />Salin token
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setTokenBaru(null)}>
+            <Button size="sm" onClick={() => {
+              const tautan = `${window.location.origin}/lacak?token=${tokenBaru?.token || ""}`;
+              navigator.clipboard?.writeText(tautan)
+                .then(() => toast.success("Tautan pendamping disalin"))
+                .catch(() => toast.error("Gagal menyalin — salin manual dari kotak di atas"));
+            }} data-testid="pelacakan-salin-tautan">
+              <Copy className="w-3.5 h-3.5 mr-1" />Salin tautan HP
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setTokenBaru(null)}>
               Sudah disimpan
             </Button>
           </DialogFooter>
