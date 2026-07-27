@@ -95,6 +95,45 @@ impor: hasil otomatis diperiksa manusia dulu.
 - Uji: +15 → **1.063 backend**. Yang diuji bukan "berhasil membelah kotak",
   melainkan justru kasus gagalnya.
 
+### Tiga temuan lapangan lain dalam PR yang sama
+
+Ikut dalam PR ini karena berasal dari satu sesi uji coba yang sama, satu di
+antaranya berakar jauh dari gejalanya.
+
+**Dialog impor meluber.** Lebar tetap tanpa plafon tinggi: file dengan banyak
+kolom atribut mendorong tombol "Mulai Impor" keluar layar, dan teks sampel
+terpotong di tepi kanan. Kini `max-w-2xl`, tinggi dibatasi `90vh` dan bisa
+digulir, sampel MEMBUNGKUS (bukan `truncate`) di area bergulir sendiri.
+Memotong sampel justru menyembunyikan nilai yang dipakai operator untuk
+memilih field yang benar.
+
+**"Impor SHP banyak wilayah hanya terbaca baris pertama" — parser tidak
+bersalah.** Dibuktikan dengan shapefile 6 poligon: parser membaca 6 fitur dan
+worker membuat 6 node. Akarnya di PENAMAAN. Tebakan field nama hanya
+mencocokkan `/nama|name|label/`, sementara file GIS instansi kerap tak memakai
+kata itu sama sekali — shapefile BWP IKN berkolom `OBJECTID/BWP/ROMAWI/
+KETERANGAN`, tak satu pun cocok, sehingga keenam node lahir bernama "Kawasan
+impor 1…6". Enam node memang terbentuk, tetapi di pohon terbaca sebagai sampah
+generik, dan operator wajar menyimpulkan hanya baris pertama yang terbaca.
+
+Tebakan kini melihat ISI, bukan hanya nama kolom: kolom seragam tak membedakan
+apa pun, kolom seluruhnya angka hampir pasti id internal, kolom terlalu panjang
+adalah deskripsi. Panel pratinjau juga menyatakan terang bahwa setiap baris
+menjadi satu node tersendiri, berikut jumlahnya.
+
+**Peta kawasan ber-induk lambat lalu akhirnya muncul.** Batas node dan batas
+INDUK diambil BERURUTAN — dua poligon berverteks ribuan harus selesai satu per
+satu sebelum apa pun tampil. Kini induk diambil paralel dan peta terpasang
+setelah permintaan pertama. Spinner juga diberi KETERANGAN TAHAP ("Mengambil
+batas wilayah…", "Menempatkan peta…") plus penanda latar saat konteks sekitar
+masih menyusul; lingkaran berputar tanpa kata membuat operator menyimpulkan
+aplikasi macet lalu menutup dialog tepat saat prosesnya hampir selesai.
+
+> Satu butir laporan lapangan belum tergarap: *"tampilannya juga tolong
+> betulkan"* baru diperbaiki untuk layar yang terlihat di tangkapan layar
+> (dialog impor). Layar lain menunggu tangkapan layarnya — menebak berisiko
+> merombak yang sudah benar.
+
 ---
 
 ## [#641] Spasial Fase 15: pendamping pelacakan — HP yang sudah ada jadi pelacak, biaya Rp 0 — 2026-07-27
