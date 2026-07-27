@@ -363,6 +363,14 @@ async def create_indexes() -> None:
         # Ordinal lantai per gedung: level switcher basement -> rooftop.
         await db.spasial_node.create_index([("parent_id", 1), ("lantai.ordinal", 1)],
                                            name="spasial_node_lantai_ordinal")
+        # Custody berlokasi (Fase 9): "aset apa saja di ruangan ini" — tanpa
+        # indeks ini, membuka isi satu ruangan memindai SELURUH koleksi aset.
+        # Sparse: hanya aset yang sudah ditempatkan yang masuk indeks.
+        await db.assets.create_index("lokasi_spasial.node_id", sparse=True,
+                                     name="asset_lokasi_spasial_node")
+        # Riwayat perpindahan per aset, terbaru dulu.
+        await db.riwayat_lokasi_aset.create_index(
+            [("asset_id", 1), ("pada", -1)], name="riwayat_lokasi_aset_waktu")
         logger.info("Database indexes created successfully")
     except Exception as e:
         logger.error(f"Error creating indexes: {e}")

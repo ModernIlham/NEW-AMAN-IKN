@@ -204,3 +204,43 @@ def test_snapshot_lokasi_jalur_dipotong_dan_nama_kosong_dilewati():
     s = su.snapshot_lokasi_temuan(node, 116.7, -1.4)
     assert len(s["jalur_nama"]) <= 300
     assert s["jalur_nama"].startswith("A / ")
+
+
+# ── Custody berlokasi (Fase 9) ──────────────────────────────────────────────
+
+LOK_A = {"node_id": "sn_a", "node_nama": "Ruang 101",
+         "jalur_nama": "Menara A / Lantai 1 / Ruang 101", "titik": [116.7, -1.4]}
+LOK_B = {"node_id": "sn_b", "node_nama": "Ruang 202",
+         "jalur_nama": "Menara A / Lantai 2 / Ruang 202", "titik": [116.71, -1.41]}
+
+
+def test_entri_riwayat_menyimpan_snapshot_kedua_sisi():
+    """Nama di-snapshot, bukan hanya id: node bisa diganti nama/dihapus
+    bertahun kemudian dan riwayat custody harus tetap terbaca apa adanya."""
+    e = su.entri_riwayat_lokasi("as-1", LOK_A, LOK_B, "budi", "2026-07-27T00:00:00Z")
+    assert e["asset_id"] == "as-1"
+    assert e["dari"]["nama"] == "Ruang 101" and e["dari"]["node_id"] == "sn_a"
+    assert e["ke"]["jalur"].endswith("Ruang 202")
+    assert e["oleh"] == "budi"
+
+
+def test_entri_riwayat_sisi_kosong_saat_pertama_kali_dan_dicabut():
+    awal = su.entri_riwayat_lokasi("as-1", None, LOK_A, "budi", "t")
+    assert awal["dari"] == {"node_id": "", "nama": "", "jalur": ""}
+    cabut = su.entri_riwayat_lokasi("as-1", LOK_A, None, "budi", "t")
+    assert cabut["ke"]["node_id"] == ""
+
+
+def test_pindah_berarti_hanya_saat_benar_benar_pindah():
+    assert su.pindah_lokasi_berarti(None, LOK_A)          # penempatan pertama
+    assert su.pindah_lokasi_berarti(LOK_A, LOK_B)         # ganti ruangan
+    assert su.pindah_lokasi_berarti(LOK_A, None)          # dicabut
+    assert not su.pindah_lokasi_berarti(LOK_A, dict(LOK_A))   # simpan ulang sama
+
+
+def test_geser_pin_dalam_ruangan_sama_tetap_tercatat():
+    """Node sama tapi titik bergeser = tetap perpindahan (posisi dalam ruangan
+    besar bermakna); node sama + titik identik = derau, tak dicatat."""
+    geser = dict(LOK_A, titik=[116.7001, -1.4001])
+    assert su.pindah_lokasi_berarti(LOK_A, geser)
+    assert not su.pindah_lokasi_berarti(LOK_A, dict(LOK_A))

@@ -53,6 +53,40 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#635] Spasial Fase 9: custody berlokasi — aset menempati node denah — 2026-07-27
+
+Aset bergerak kini **menempati** node denah (biasanya Ruangan), dengan jejak
+perpindahan dan pertanyaan balik yang dibutuhkan opname: *"aset apa saja yang
+ada di ruangan ini?"*
+
+**Backend**:
+- `PUT /api/assets/{id}/lokasi-spasial` — tempatkan/cabut penempatan. Guard
+  aset lewat jalur BAKU modul aset (`pastikan_akses_aset` via kegiatan induk),
+  sementara node divalidasi ter-scope satker user: menempatkan aset ke ruangan
+  satker lain harus mustahil. Snapshot nama/jalur dibuat SERVER (pola Fase 8).
+- `GET /api/assets/{id}/riwayat-lokasi` — jejak perpindahan, terbaru dulu.
+- `GET /api/spasial/node/{id}/isi?dalam=true` — daftar aset di node **dan
+  seluruh keturunannya** (via indeks multikey `ancestors`), sehingga membuka
+  Gedung memperlihatkan isi tiap lantai & ruangannya. Hasil disaring ulang
+  dengan guard aset yang sama — bukan sekadar mengandalkan node ter-scope,
+  karena aset satker lain bisa menunjuk node era-lama tanpa stempel satker.
+- **Riwayat di koleksi terpisah** (`riwayat_lokasi_aset`), bukan array di
+  dokumen aset: array akan tumbuh tanpa batas seumur pakai barang dan menyeret
+  setiap pembacaan aset.
+- Riwayat mencatat **snapshot nama kedua sisi**, bukan sekadar id — node bisa
+  diganti nama/dihapus bertahun kemudian, dan nilai bukti custody justru pada
+  keterbacaan apa adanya saat kejadian.
+- `pindah_lokasi_berarti`: simpan-ulang lokasi yang sama tak dicatat (riwayat
+  penuh derau tak terbaca saat dibutuhkan); menggeser pin dalam ruangan yang
+  sama TETAP dicatat (posisi di ruangan besar bermakna).
+- Indeks baru: `assets.lokasi_spasial.node_id` (sparse) + riwayat per aset.
+
+**Frontend**: tombol 📦 di tiap baris pohon spasial (viewer pun boleh — operasi
+baca) membuka daftar isi lokasi, dengan saklar "termasuk seluruh isi di
+bawahnya"; saat melihat isi Gedung, ruangan tepat tiap aset ikut ditampilkan.
+
+Uji: +4 backend (936 total), eslint bersih, 138 jest, build sukses.
+
 ## [#634] Perbaikan: init peta editor denah tak bisa gagal senyap lagi — 2026-07-27
 
 Laporan lanjutan: editor masih putih polos + spinner berputar, console tanpa
