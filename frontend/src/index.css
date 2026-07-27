@@ -305,6 +305,21 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   /* invisible but captures clicks */
 }
 
+/* Indentasi pohon Hierarki Spasial — RAPAT di HP, lega di layar lebar.
+   Kedalaman bisa 7 tingkat (Kawasan → … → Ruangan); pada 16px/tingkat, node
+   terdalam kehilangan 112px lebar di layar 360px dan nama node terperas habis.
+   Kelipatan dibatasi 6 tingkat supaya cabang yang sangat dalam tak pernah
+   mendorong isi baris keluar layar — kedalaman tetap terbaca dari garis
+   indentasi tingkat-tingkat di atasnya. */
+.spasial-baris {
+  padding-left: calc(min(var(--lvl, 0), 6) * 9px + 4px);
+}
+@media (min-width: 640px) {
+  .spasial-baris {
+    padding-left: calc(min(var(--lvl, 0), 6) * 16px + 4px);
+  }
+}
+
 /* Input states — multi-modal error/success/warning */
 .input-error {
   border-color: #ef4444 !important;
