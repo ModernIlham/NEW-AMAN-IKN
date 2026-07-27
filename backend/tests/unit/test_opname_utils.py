@@ -25,6 +25,10 @@ class TestNormalisasiKode:
             "https://aman.example.id/aset/3.05.01.05.007") == "3.05.01.05.007"
 
     def test_teks_multi_bagian_ambil_token_terpanjang(self):
+        # Datanya WAJIB punya lebih dari satu token ≥4 huruf, dan yang
+        # terpanjang bukan yang pertama — kalau tidak, `token[0]` dan
+        # `token[-1]` sama-sama meluluskan uji ini (temuan audit).
+        assert ou.normalisasi_kode("ABCD;3.05.01.05.007") == "3.05.01.05.007"
         assert ou.normalisasi_kode("3.05.01.05.007|12") == "3.05.01.05.007"
 
     def test_kosong_dan_sampah(self):

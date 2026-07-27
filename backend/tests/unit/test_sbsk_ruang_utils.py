@@ -57,6 +57,15 @@ class TestCocokkanStandarRuang:
         assert sru.cocokkan_standar_ruang("Kepala Biro", []) is None
 
     def test_kata_umum_saja_tak_cukup_untuk_mencocokkan(self):
+        # Fixture WAJIB memuat peruntukan yang beririsan pada kata umum saja,
+        # kalau tidak daftar hentian sepenuhnya mati bagi uji ini —
+        # `_KATA_UMUM = set()` pun tetap lulus (temuan audit). Tabel SBSK nyata
+        # memang menulis "Ruang kerja pejabat eselon II" / "Ruang kerja staf".
+        standar_nyata = [
+            {"kategori": "ruang_kerja", "peruntukan": "Ruang kerja staf",
+             "satuan": "m²", "standar": 6},
+        ]
+        assert sru.cocokkan_standar_ruang("ruang kerja", standar_nyata) is None
         assert sru.cocokkan_standar_ruang("ruang kerja", STANDAR) is None
 
 
@@ -161,18 +170,20 @@ class TestRekapSbskRuang:
 
 class TestSebaranPerInduk:
     def test_dikelompokkan_per_induk_terdekat_dan_diurut_luas(self):
+        # Jumlah aset per keranjang WAJIB berbeda dari CACAH BARISNYA, kalau
+        # tidak `+= 1` dan `+= jumlah_aset` tak terbedakan (temuan audit).
         rows = [
             {"jalur_nama": "Gedung A / Lantai 1 / R101", "luas_m2": 10,
              "jumlah_aset": 1},
             {"jalur_nama": "Gedung A / Lantai 3 / R305", "luas_m2": 50,
-             "jumlah_aset": 2, "menganggur": True},
+             "jumlah_aset": 7, "menganggur": True},
             {"jalur_nama": "Gedung A / Lantai 3 / R307", "luas_m2": 20,
-             "jumlah_aset": 0},
+             "jumlah_aset": 4},
         ]
         s = sru.sebaran_per_induk(rows)
         assert [e["induk"] for e in s] == ["Lantai 3", "Lantai 1"]
         assert s[0]["luas_m2"] == 70 and s[0]["menganggur"] == 1
-        assert s[0]["jumlah_aset"] == 2
+        assert s[0]["jumlah_aset"] == 11        # 7+4, bukan 2 baris
 
     def test_jalur_kosong_tetap_punya_keranjang(self):
         s = sru.sebaran_per_induk([{"jalur_nama": "", "luas_m2": 5}])

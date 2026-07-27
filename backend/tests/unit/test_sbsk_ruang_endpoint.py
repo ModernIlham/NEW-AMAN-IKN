@@ -58,17 +58,19 @@ async def _seed(dbx, peruntukan_305="Kepala Biro Umum"):
         {"id": "gedA", "nama": "Gedung A", "tipe": "GEDUNG", "status": "aktif",
          "kode_satker": "", "ancestors": [], "ancestors_nama": []},
         {"id": "lt3", "nama": "Lantai 3", "tipe": "LANTAI", "status": "aktif",
-         "kode_satker": "", "ancestors": ["gedA"], "ancestors_nama": ["Gedung A"]},
+         "kode_satker": "", "parent_id": "gedA",
+         "ancestors": ["gedA"], "ancestors_nama": ["Gedung A"]},
         {"id": "r305", "nama": "Ruang 305", "tipe": "RUANGAN", "status": "aktif",
          "kode_satker": "", "ancestors": ["gedA", "lt3"],
          "ancestors_nama": ["Gedung A", "Lantai 3"],
-         "peruntukan": peruntukan_305,
+         "parent_id": "lt3", "peruntukan": peruntukan_305,
          # Sengaja SALAH & basi: bukti bahwa endpoint tak membacanya.
          "metrik": {"luas_m2": 999.0},
          "geometry": _kotak(-1.0, 116.7, 10.0, 5.0)},           # 50 m²
         {"id": "r307", "nama": "Ruang 307", "tipe": "RUANGAN", "status": "aktif",
          "kode_satker": "", "ancestors": ["gedA", "lt3"],
-         "ancestors_nama": ["Gedung A", "Lantai 3"], "peruntukan": "",
+         "ancestors_nama": ["Gedung A", "Lantai 3"], "parent_id": "lt3",
+         "peruntukan": "",
          "geometry": _kotak(-1.0, 116.71, 6.0, 5.0)},           # 30 m²
     ])
     await dbx.sbsk_standar.insert_many([
@@ -140,10 +142,20 @@ class TestSandingStandar:
 class TestLingkup:
     def test_dalam_false_hanya_anak_langsung(self, dbx):
         # Anak langsung Gedung A adalah LANTAI, bukan RUANGAN → kosong.
+        # Node seed WAJIB punya `parent_id`; tanpa itu cabang dalam=False selalu
+        # mengembalikan 0 apa pun implementasinya (temuan audit).
         async def jalan():
             await _seed(dbx)
             return await _panggil(dalam=False)
         assert _jalan(jalan())["rekap"]["jumlah_ruangan"] == 0
+
+    def test_dalam_false_pada_LANTAI_memuat_ruangan_anaknya(self, dbx):
+        # Pasangan penjebaknya: di sini cabang dalam=False HARUS mengembalikan
+        # isi, sehingga filter parent_id yang rusak langsung ketahuan.
+        async def jalan():
+            await _seed(dbx)
+            return await _panggil(node_id="lt3", dalam=False)
+        assert _jalan(jalan())["rekap"]["jumlah_ruangan"] == 2
 
     def test_lingkup_lantai_memuat_ruangannya(self, dbx):
         async def jalan():

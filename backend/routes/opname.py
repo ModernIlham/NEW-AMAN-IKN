@@ -390,9 +390,6 @@ async def terapkan_perpindahan(request: Request, payload: TerapkanIn,
     diterapkan, dilewati = [], []
 
     for s in scans:
-        if s.get("diterapkan"):
-            dilewati.append({"id": s["id"], "alasan": "sudah diterapkan"})
-            continue
         if s.get("status_rekonsiliasi") not in ("pindah", "baru"):
             dilewati.append({"id": s["id"],
                              "alasan": f"status {s.get('status_rekonsiliasi')}"})
@@ -407,6 +404,14 @@ async def terapkan_perpindahan(request: Request, payload: TerapkanIn,
             dilewati.append({"id": s["id"], "alasan": "di luar akses satker"})
             continue
 
+        # SATU penjaga saja, dan itu update BERSYARAT — bukan pembacaan.
+        # Dulu ada cek `if s.get("diterapkan")` di atas yang selalu menghentikan
+        # panggilan kedua lebih dulu, sehingga penjaga lomba di bawah TAK PERNAH
+        # dievaluasi satu kali pun: audit membuktikannya dengan mengubahnya jadi
+        # `if False:` tanpa satu uji pun gagal. Penjaga yang tak pernah berjalan
+        # bukan penjaga. Cek pembacaannya dibuang; yang tersisa inilah yang
+        # benar-benar memutuskan, dan kini ia yang diuji.
+        #
         # KLAIM DULU, baru tulis. Penanda `diterapkan` diambil lewat update
         # bersyarat: yang menang menulis riwayat, yang kalah berhenti di sini.
         # Urutan sebaliknya (tulis dulu, tandai belakangan) menyisakan jendela
