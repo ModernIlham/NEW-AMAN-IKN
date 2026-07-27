@@ -191,3 +191,59 @@ def test_ringkas_kebijakan_bisa_ditampilkan():
     personal = next(x for x in r if x["profil"] == "personal")
     assert personal["jam_aktif"] == "07:00–18:00"
     assert personal["presisi"] == "wilayah"
+
+
+# ── Izin darurat sebagai ALUR (Fase 14), bukan sekadar validator ────────────
+
+def test_pengajuan_tanpa_penyetuju_belum_sah():
+    """Pengajuan yang baru dibuat SENGAJA tak punya penyetuju maupun masa
+    berlaku — jadi ia harus gagal validasi selama masih berstatus usulan."""
+    usulan = {"alasan": "Laptop dilaporkan hilang di Blok A3",
+              "diminta_oleh": "operator1", "disetujui_oleh": "",
+              "berlaku_sampai": ""}
+    assert pu.izin_darurat_sah(usulan) is not None
+
+
+def test_persetujuan_lengkap_membuka_presisi_penuh():
+    """Bukti bahwa validator dan penyaring benar-benar tersambung: izin sah →
+    observasi personal di luar jam kerja tetap tersimpan DENGAN koordinat."""
+    izin = _izin()
+    assert pu.izin_darurat_sah(izin) is None
+    r = pu.saring_observasi(OBS, "personal", sekarang=_wita(2026, 7, 27, 23),
+                            darurat=True)
+    assert r["simpan"] is True and r["observasi"]["geo"] == OBS["geo"]
+
+
+def test_darurat_juga_mempertahankan_titik_di_lokasi_spasial():
+    """Pagar `lokasi_spasial.titik` (temuan tinjauan Fase 11) tak boleh ikut
+    menutup jalur darurat — kalau ikut, izin yang sah tetap kehilangan titik."""
+    obs = dict(OBS, lokasi_spasial={"node_id": "sn_g1",
+                                    "titik": [116.71, -1.40]})
+    r = pu.saring_observasi(obs, "personal", sekarang=_wita(2026, 7, 27, 23),
+                            darurat=True)
+    assert r["observasi"]["lokasi_spasial"]["titik"] == [116.71, -1.40]
+
+
+def test_izin_TIDAK_memulihkan_data_yang_sudah_didegradasi():
+    """SIFAT PALING PENTING dan paling mudah disalahpahami: izin berlaku MAJU
+    saja. Observasi yang sudah tersimpan tanpa koordinat tetap tanpa koordinat
+    — Fase 10 sengaja TIDAK MENYIMPAN, bukan menyimpan lalu menyembunyikan.
+    Kalau uji ini suatu saat gagal, artinya ada yang mulai menyimpan data
+    mentah 'untuk berjaga-jaga', dan seluruh janji DPIA runtuh."""
+    tersimpan = pu.saring_observasi(OBS, "personal",
+                                    sekarang=_wita(2026, 7, 27, 10))["observasi"]
+    assert "geo" not in tersimpan
+    # Menyaring ULANG dokumen yang sudah didegradasi — bahkan dengan darurat —
+    # tak bisa memunculkan kembali apa yang tak pernah tersimpan.
+    lagi = pu.saring_observasi(tersimpan, "personal",
+                               sekarang=_wita(2026, 7, 27, 23), darurat=True)
+    assert "geo" not in lagi["observasi"]
+
+
+def test_maks_jam_darurat_dijepit_angka_harfiah():
+    """Plafon 72 jam adalah komitmen DPIA, bukan angka bebas."""
+    assert pu.MAKS_JAM_DARURAT == 72
+    tepat = (datetime.now(timezone.utc) + timedelta(hours=71)).isoformat()
+    assert pu.izin_darurat_sah(_izin(berlaku_sampai=tepat)) is None
+    lewat = (datetime.now(timezone.utc) + timedelta(hours=73)).isoformat()
+    assert "maksimal" in pu.izin_darurat_sah(_izin(berlaku_sampai=lewat))

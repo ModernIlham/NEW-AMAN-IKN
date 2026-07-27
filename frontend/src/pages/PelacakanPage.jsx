@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Plus, Trash2, Loader2, RadioTower, ShieldAlert, Fence,
   KeyRound, Copy, Check, BellRing, MapPin, BatteryLow, Clock, Pencil,
-  ShieldCheck, ArrowUpRight, Info, RefreshCw,
+  ShieldCheck, ArrowUpRight, Info, RefreshCw, Unlock, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +24,7 @@ const TABS = [
   ["perangkat", "Perangkat", RadioTower],
   ["pagar", "Pagar Area", Fence],
   ["peringatan", "Peringatan", BellRing],
+  ["izin", "Izin Darurat", Unlock],
 ];
 
 const JENIS_LABEL = {
@@ -73,6 +74,10 @@ export default function PelacakanPage({ user, onBack }) {
   const [belumDibaca, setBelumDibaca] = useState(0);
   const [hanyaBelum, setHanyaBelum] = useState(false);
   const [nodes, setNodes] = useState([]);
+  const [izin, setIzin] = useState([]);
+  const [izinMaksJam, setIzinMaksJam] = useState(72);
+  const [izinMinAlasan, setIzinMinAlasan] = useState(10);
+  const [formIzin, setFormIzin] = useState(null);
   const { confirm, confirmDialog } = useConfirm();
 
   // Dialog
@@ -88,10 +93,11 @@ export default function PelacakanPage({ user, onBack }) {
   const muat = useCallback(async () => {
     setMemuat(true);
     try {
-      const [rp, ra, re] = await Promise.all([
+      const [rp, ra, re, rz] = await Promise.all([
         axios.get(`${API}/iot/perangkat`),
         axios.get(`${API}/geofence/aturan`),
         axios.get(`${API}/geofence/event`, { params: { batas: 100 } }),
+        axios.get(`${API}/iot/izin-darurat`),
       ]);
       setPerangkat(rp.data?.items || []);
       setProfilTersedia(rp.data?.profil_tersedia || []);
@@ -100,6 +106,9 @@ export default function PelacakanPage({ user, onBack }) {
       setJenisTersedia(ra.data?.jenis_tersedia || []);
       setEvent(re.data?.items || []);
       setBelumDibaca(re.data?.belum_dibaca || 0);
+      setIzin(rz.data?.items || []);
+      setIzinMaksJam(rz.data?.maks_jam || 72);
+      setIzinMinAlasan(rz.data?.alasan_min_karakter || 10);
     } catch (e) {
       toast.error(getApiError(e, "Gagal memuat data pelacakan"));
     } finally {
@@ -226,6 +235,58 @@ export default function PelacakanPage({ user, onBack }) {
     } catch (e) {
       toast.error(getApiError(e, "Gagal menaikkan jadi penertiban"));
     } finally { setMenyimpan(false); }
+  };
+
+  // ── Aksi izin darurat ─────────────────────────────────────────────────────
+
+  const ajukanIzin = async () => {
+    const f = formIzin;
+    if (!f?.device_id) { toast.error("Pilih perangkat"); return; }
+    if ((f.alasan || "").trim().length < izinMinAlasan) {
+      toast.error(`Alasan wajib minimal ${izinMinAlasan} karakter`); return;
+    }
+    setMenyimpan(true);
+    try {
+      await axios.post(`${API}/iot/izin-darurat`, {
+        device_id: f.device_id, alasan: f.alasan.trim(),
+        berlaku_jam: Number(f.berlaku_jam) || 24,
+      });
+      toast.success("Pengajuan dikirim — menunggu persetujuan pejabat");
+      setFormIzin(null);
+      muat();
+    } catch (e) {
+      toast.error(getApiError(e, "Gagal mengajukan izin"));
+    } finally { setMenyimpan(false); }
+  };
+
+  const setujuiIzin = async (z) => {
+    const ok = await confirm({
+      title: "Setujui pembukaan presisi penuh?",
+      description: `Perangkat "${z.device_nama}" akan menyimpan koordinat penuh `
+        + `selama ${z.berlaku_jam} jam, termasuk di luar jam kerja. Tindakan ini `
+        + "tercatat atas nama Anda dan tak dapat dihapus dari register.",
+      confirmText: "Setujui",
+    });
+    if (!ok) return;
+    try {
+      await axios.post(`${API}/iot/izin-darurat/${z.id}/setujui`);
+      toast.success("Izin aktif — berlaku untuk observasi berikutnya");
+      muat();
+    } catch (e) { toast.error(getApiError(e, "Gagal menyetujui")); }
+  };
+
+  const cabutIzin = async (z) => {
+    const ok = await confirm({
+      title: "Cabut izin sekarang?",
+      description: "Presisi kembali ke profil normal mulai observasi berikutnya.",
+      confirmText: "Cabut", variant: "destructive",
+    });
+    if (!ok) return;
+    try {
+      await axios.post(`${API}/iot/izin-darurat/${z.id}/cabut`);
+      toast.success("Izin dicabut");
+      muat();
+    } catch (e) { toast.error(getApiError(e, "Gagal mencabut izin")); }
   };
 
   return (
@@ -502,7 +563,149 @@ export default function PelacakanPage({ user, onBack }) {
             ))}
           </div>
         )}
+
+        {/* ── IZIN DARURAT ──────────────────────────────────────────────── */}
+        {tab === "izin" && (
+          <div className="space-y-2">
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 flex items-start gap-2">
+              <ShieldAlert className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold text-foreground">
+                  Izin ini berlaku MAJU saja.
+                </p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  Posisi perangkat perorangan yang sudah terlanjur masuk SUDAH
+                  kehilangan koordinatnya di jalur tulis — sistem sengaja tak
+                  menyimpannya, bukan menyimpan lalu menyembunyikan. Tak ada izin
+                  yang bisa memulihkannya. Karena itu ajukan <b>segera</b> setelah
+                  barang dilaporkan hilang; menunda berarti kehilangan jejak yang
+                  tak bisa diambil kembali.
+                </p>
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Syarat: alasan tertulis (min. {izinMinAlasan} karakter),
+                  disetujui pejabat yang <b>bukan pemohon</b>, maksimal{" "}
+                  {izinMaksJam} jam. Setiap langkah tercatat di log audit.
+                </p>
+              </div>
+            </div>
+            {isWriter && (
+              <Button size="sm" className="w-full sm:w-auto min-h-0"
+                      disabled={!perangkat.length}
+                      onClick={() => setFormIzin({ berlaku_jam: 24, alasan: "" })}
+                      data-testid="pelacakan-ajukan-izin">
+                <Plus className="w-3.5 h-3.5 mr-1" />Ajukan pembukaan presisi
+              </Button>
+            )}
+            {!izin.length && !memuat && (
+              <p className="text-xs text-muted-foreground text-center py-8">
+                Belum pernah ada pembukaan presisi darurat.
+              </p>
+            )}
+            {izin.map((z) => (
+              <div key={z.id}
+                   className={`rounded-xl border p-3 ${z.sedang_berlaku ? "border-amber-500/40 bg-amber-500/5" : "border-border bg-card"}`}
+                   data-testid={`pelacakan-izin-${z.id}`}>
+                <div className="flex items-start gap-2 min-w-0">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold truncate">
+                      {z.device_nama}{z.asset_name ? ` · ${z.asset_name}` : ""}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground break-words">
+                      {z.alasan}
+                    </p>
+                    <div className="mt-1 flex flex-wrap gap-1 text-[10px]">
+                      <span className="rounded-md bg-muted px-1.5 py-0.5">
+                        {z.status === "diusulkan" ? "Menunggu persetujuan"
+                          : z.status === "aktif"
+                            ? (z.sedang_berlaku
+                                ? `Aktif — sisa ${Math.floor((z.sisa_menit || 0) / 60)} jam ${(z.sisa_menit || 0) % 60} mnt`
+                                : "Masa berlaku habis")
+                            : z.status}
+                      </span>
+                      <span className="rounded-md bg-muted px-1.5 py-0.5">
+                        diminta {z.diminta_oleh} · {waktuSingkat(z.diminta_pada)}
+                      </span>
+                      {z.disetujui_oleh && (
+                        <span className="rounded-md bg-muted px-1.5 py-0.5">
+                          disetujui {z.disetujui_oleh}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {isAdmin && (
+                    <div className="flex flex-col gap-1 flex-shrink-0">
+                      {z.status === "diusulkan" && (
+                        <Button variant="outline" size="sm"
+                                className="min-w-0 min-h-0 px-2 h-7 text-[10px]"
+                                onClick={() => setujuiIzin(z)}
+                                data-testid={`pelacakan-setujui-izin-${z.id}`}>
+                          <Check className="w-3 h-3 sm:mr-1" />
+                          <span className="hidden sm:inline">Setujui</span>
+                        </Button>
+                      )}
+                      {(z.status === "aktif" || z.status === "diusulkan") && (
+                        <Button variant="outline" size="sm"
+                                className="min-w-0 min-h-0 px-2 h-7 text-[10px] text-red-600"
+                                onClick={() => cabutIzin(z)}
+                                data-testid={`pelacakan-cabut-izin-${z.id}`}>
+                          <X className="w-3 h-3 sm:mr-1" />
+                          <span className="hidden sm:inline">Cabut</span>
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </main>
+
+      {/* ── Dialog: ajukan izin darurat ───────────────────────────────────── */}
+      <Dialog open={!!formIzin} onOpenChange={(o) => !o && setFormIzin(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-sm">Ajukan pembukaan presisi</DialogTitle>
+            <DialogDescription className="text-[11px]">
+              Pengajuan <b>belum</b> membuka apa pun — presisi baru terbuka
+              setelah disetujui pejabat yang bukan Anda sendiri.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <select className="w-full rounded-md border border-border bg-background px-2 py-2 text-xs"
+                    value={formIzin?.device_id || ""}
+                    onChange={(e) => setFormIzin((f) => ({ ...f, device_id: e.target.value }))}
+                    data-testid="pelacakan-izin-perangkat">
+              <option value="">— pilih perangkat —</option>
+              {perangkat.map((d) => (
+                <option key={d.id} value={d.id}>{d.nama} ({d.profil_privasi})</option>
+              ))}
+            </select>
+            <textarea
+              className="w-full rounded-md border border-border bg-background px-2 py-2 text-xs min-h-24"
+              placeholder={`Alasan tertulis, minimal ${izinMinAlasan} karakter (mis. "Laptop dinas dilaporkan hilang di Blok A3 pada 27 Juli")`}
+              value={formIzin?.alasan || ""}
+              onChange={(e) => setFormIzin((f) => ({ ...f, alasan: e.target.value }))}
+              data-testid="pelacakan-izin-alasan" />
+            <div>
+              <p className="text-[10px] text-muted-foreground mb-1">
+                Masa berlaku (jam, maksimal {izinMaksJam}):
+              </p>
+              <Input type="number" min="0.5" max={izinMaksJam} step="0.5" className="text-xs"
+                     value={formIzin?.berlaku_jam ?? 24}
+                     onChange={(e) => setFormIzin((f) => ({ ...f, berlaku_jam: e.target.value }))}
+                     data-testid="pelacakan-izin-jam" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setFormIzin(null)}>Batal</Button>
+            <Button size="sm" onClick={ajukanIzin} disabled={menyimpan}
+                    data-testid="pelacakan-izin-simpan">
+              {menyimpan && <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />}Ajukan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Dialog: daftar perangkat ──────────────────────────────────────── */}
       <Dialog open={!!formPerangkat} onOpenChange={(o) => !o && setFormPerangkat(null)}>

@@ -79,6 +79,11 @@ RESET_KEEP_COLLECTIONS = {
     # mana dipagari area mana), sekelas master referensi. Peringatan yang sudah
     # terbit TIDAK ikut dipertahankan — itu data transaksi.
     "iot_geofence_aturan",
+    # Register izin darurat (Fase 14) = JEJAK AKUNTABILITAS pembukaan presisi
+    # atas data perorangan. Justru catatan seperti inilah yang paling tak boleh
+    # lenyap saat reset: kehilangannya menghapus bukti siapa membuka apa, kapan,
+    # atas persetujuan siapa — sementara datanya sendiri sudah terlanjur dibuka.
+    "iot_izin_darurat",
 }
 
 # Legacy name → canonical (untuk membaca backup lama; mis. activities.json).

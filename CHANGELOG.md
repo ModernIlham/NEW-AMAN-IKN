@@ -53,6 +53,50 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#640] Spasial Fase 14: izin darurat — janji kepatuhan yang selama ini mustahil dijalankan — 2026-07-27
+
+Fase 10 menuliskan janji: *"presisi penuh dibuka HANYA saat barang dilaporkan
+hilang, dengan persetujuan pejabat, beralasan tertulis, berbatas waktu, dan
+tercatat."* Janji itu punya penjaga sejak awal — `izin_darurat_sah()` dengan 18
+uji — tetapi **tak punya pintu**. Tak ada endpoint, tak ada tombol, tak ada
+jalur apa pun yang memanggilnya. Artinya sepanjang Fase 10–13, pembukaan
+presisi untuk barang hilang **mustahil dilakukan**, dan kepatuhan yang mustahil
+dijalankan bukan kepatuhan — ia dekorasi.
+
+Alurnya kini utuh: operator mengajukan (alasan tertulis wajib) → pejabat yang
+**bukan pemohon** menyetujui → presisi terbuka → dicabut manual atau habis
+sendiri, maksimal 72 jam. Validasinya memanggil `izin_darurat_sah()` **apa
+adanya**, tidak menyalin aturannya — aturan yang ditulis dua kali akan
+menyimpang cepat atau lambat.
+
+### Sifat yang paling mudah disalahpahami, dan paling mahal bila baru diketahui saat darurat
+
+**Izin ini berlaku MAJU saja.** Observasi profil `personal` yang sudah terlanjur
+masuk SUDAH kehilangan koordinatnya di jalur tulis — Fase 10 sengaja **tidak
+menyimpan**, bukan menyimpan lalu menyembunyikan. Tak ada izin, tanda tangan,
+atau perintah apa pun yang bisa memulihkannya.
+
+Konsekuensi operasionalnya keras: izin harus terbit **segera** setelah barang
+dilaporkan hilang; menunda berarti kehilangan jejak yang tak bisa diambil
+kembali. Ini bukan kekurangan yang akan ditambal nanti — ia harga langsung dari
+kebijakan minimisasi. Karena itu dinyatakan di tiga tempat sekaligus: DPIA §5
+dalam kotak peringatan, docstring modul, dan panel di layar tempat izin
+diajukan. Ada uji khusus yang menguncinya:
+`test_izin_TIDAK_memulihkan_data_yang_sudah_didegradasi` — kalau uji itu suatu
+saat gagal, artinya ada yang mulai menyimpan data mentah "untuk berjaga-jaga",
+dan seluruh janji DPIA runtuh.
+
+- Backend: `iot_izin_darurat` + 4 endpoint (ajukan/setujui/cabut/daftar), semua
+  ber-audit. Jalur ingest mengecek izin aktif **sekali per batch**.
+- Register menampilkan **seluruh riwayat**, bukan hanya yang aktif — nilai utama
+  mekanisme ini justru pada jejaknya. Ia juga masuk `RESET_KEEP`: catatan siapa
+  membuka apa atas persetujuan siapa adalah hal yang paling tak boleh lenyap
+  saat reset, sementara datanya sendiri sudah terlanjur dibuka.
+- Frontend: tab keempat di halaman Pelacakan Aset.
+- Uji: +5 (alur izin & sifat maju-saja) → **1.048 backend**, 138 frontend.
+
+---
+
 ## [#639] Spasial Fase 13: halaman Pelacakan Aset — dua fase yang tadinya hanya bisa dipakai mesin — 2026-07-27
 
 Fase 11 (ingest posisi) dan Fase 12 (geofence) sudah berjalan penuh, tetapi

@@ -74,7 +74,28 @@ Tiga syarat kumulatif, ditegakkan `izin_darurat_sah()`:
 3. **Masa berlaku ≤ 72 jam** — izin permanen sama dengan kebijakan yang
    dibatalkan diam-diam.
 
-Setiap pembukaan tercatat di `audit_logs`.
+Setiap pembukaan tercatat di `audit_logs` **dan** di register permanen
+`iot_izin_darurat` (ikut dipertahankan saat reset — lihat §8).
+
+**Alurnya (Fase 14):** operator mengajukan (`POST /iot/izin-darurat`) → pejabat
+menyetujui (`POST …/setujui`, di sinilah `izin_darurat_sah()` benar-benar
+dipanggil) → presisi terbuka → dicabut manual atau habis sendiri. Sampai Fase 13
+mekanisme ini punya penjaga tetapi **tak punya pintu** — artinya ia mustahil
+dijalankan, dan kepatuhan yang mustahil dijalankan bukan kepatuhan.
+
+> ### ⚠ Izin berlaku MAJU saja
+>
+> Observasi profil `personal` yang sudah terlanjur masuk **sudah kehilangan
+> koordinatnya di jalur tulis**. Kebijakan §4 sengaja **tidak menyimpan**, bukan
+> menyimpan lalu menyembunyikan — jadi tak ada izin, tanda tangan, atau perintah
+> apa pun yang bisa memulihkannya. Yang dibuka izin ini hanyalah observasi
+> **berikutnya**.
+>
+> **Konsekuensi operasional:** izin harus diterbitkan **segera** setelah barang
+> dilaporkan hilang. Menundanya berarti kehilangan jejak yang tak bisa diambil
+> kembali. Ini bukan kekurangan yang akan ditambal nanti — ia harga langsung
+> dari kebijakan minimisasi, dan disebutkan di sini agar tak ditemukan pada
+> saat terburuk.
 
 ## 6. Risiko & mitigasi
 
@@ -113,11 +134,11 @@ di-blacklist satu per satu; bentuk sistemnya yang membuat mereka tak terekam.
 - Runbook notifikasi insiden kebocoran (butuh keputusan pejabat, bukan kode).
 - Teks pemberitahuan di BAST — naskahnya keputusan pejabat; kaitnya ke dokumen
   BAST menyusul di fase berikutnya.
-- Alur permohonan & persetujuan izin darurat sebagai **endpoint**;
-  `izin_darurat_sah()` sudah menegakkan syaratnya, tetapi pembukaan presisi
-  belum punya antarmuka — untuk sekarang tak ada jalur yang bisa memakainya.
-- Antarmuka pengelolaan perangkat di frontend (registry & ingest sudah jalan
-  lewat API).
+- Peta armada satu layar (posisi terakhir seluruh perangkat sekaligus).
+- Notifikasi dorong saat izin darurat diajukan — untuk sekarang pejabat harus
+  membuka halaman Pelacakan untuk melihat antrean persetujuan. Pada kasus
+  barang hilang, keterlambatan persetujuan = jejak yang hilang permanen (§5),
+  jadi ini bukan sekadar kenyamanan.
 
 ---
 

@@ -404,6 +404,17 @@ async def create_indexes() -> None:
         await db.iot_perangkat.create_index([("kode_satker", 1), ("created_at", -1)],
                                             name="iot_perangkat_satker_waktu")
 
+        # Izin darurat (Fase 14) — dibaca pada SETIAP batch masuk untuk perangkat
+        # yang sedang dibuka presisinya, dan dijadikan register jejak permanen.
+        await db.iot_izin_darurat.create_index("id", unique=True,
+                                               name="iot_izin_darurat_id")
+        await db.iot_izin_darurat.create_index(
+            [("device_id", 1), ("status", 1), ("berlaku_sampai", -1)],
+            name="iot_izin_darurat_aktif")
+        await db.iot_izin_darurat.create_index(
+            [("kode_satker", 1), ("diminta_pada", -1)],
+            name="iot_izin_darurat_satker")
+
         # GEOFENCE (Fase 12). Aturan dibaca pada SETIAP batch masuk — jalur
         # terpanas kedua setelah autentikasi perangkat.
         await db.iot_geofence_aturan.create_index("id", unique=True,
