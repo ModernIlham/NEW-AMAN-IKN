@@ -64,7 +64,11 @@ const TERJEMAHAN_ID = {
 };
 
 export default function DenahEditor({ node, onClose, onSaved }) {
-  const containerRef = useRef(null);
+  // Node DOM peta sebagai STATE (callback ref), bukan useRef: effect init harus
+  // jalan TEPAT saat node terpasang. Dengan useRef + dep [], node yang belum
+  // siap membuat effect return diam SELAMANYA (lihat catatan di effect init).
+  const [wadahEl, setWadahEl] = useState(null);
+  const [galatInit, setGalatInit] = useState("");   // kegagalan init terlihat
   const mapRef = useRef(null);
   const grupGambarRef = useRef(null);    // layer yang BOLEH diedit (bentuk node ini)
   // Renderer CANVAS khusus KONTEKS (batas induk + tetangga). Poligon kawasan
@@ -104,15 +108,30 @@ export default function DenahEditor({ node, onClose, onSaved }) {
   const nodeId = node?.id;
 
   // ── Init peta + geoman ────────────────────────────────────────────────────
+  // DIGERBANG `wadahEl` (callback ref), BUKAN containerRef.current. Dulu effect
+  // memeriksa `if (!containerRef.current) return` dengan dep array [] — bila
+  // node DOM belum terpasang saat effect pertama jalan, effect RETURN DIAM dan
+  // TAK PERNAH DIULANG: peta tak pernah dibuat (tanpa tombol zoom/toolbar) dan
+  // `memuat` tetap true selamanya → spinner berputar di atas area putih polos,
+  // TANPA galat di console. Callback ref membuat effect jalan TEPAT saat node
+  // tersedia (bug lapangan, dibuktikan screenshot: nol chrome Leaflet).
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return undefined;
-    const map = L.map(containerRef.current, {
-      zoomControl: true, attributionControl: true, maxZoom: 22,
-    });
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 22, maxNativeZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    }).addTo(map);
+    if (!wadahEl || mapRef.current) return undefined;
+    let map;
+    try {
+      map = L.map(wadahEl, {
+        zoomControl: true, attributionControl: true, maxZoom: 22,
+      });
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 22, maxNativeZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      }).addTo(map);
+    } catch (e) {
+      // Kegagalan init HARUS terlihat operator — bukan spinner tanpa akhir.
+      setGalatInit(String(e?.message || e || "Peta gagal dimuat"));
+      setMemuat(false);
+      return undefined;
+    }
 
     // Pane khusus gambar denah: DI ATAS ubin (200), DI BAWAH vektor gambar
     // (overlayPane 400) — alas jiplak tak boleh menutupi poligon, dan tak
@@ -125,6 +144,11 @@ export default function DenahEditor({ node, onClose, onSaved }) {
     grupGambarRef.current = grup;
     rendererKonteksRef.current = L.canvas({ padding: 0.5 });
 
+    // Geoman DIPASANG TERPISAH ber-try/catch: bila plugin gagal (versi tak
+    // cocok / bundel rusak), peta + ubin TETAP tampil dan node lama tetap
+    // terlihat — hanya alat gambar yang absen, dengan pesan jelas. Sebelumnya
+    // satu exception di sini membatalkan seluruh init secara senyap.
+    try {
     map.pm.setLang("id_kustom", TERJEMAHAN_ID, "en");
     // WAJIB: tanpa ini `_getContainingLayer()` geoman mengembalikan MAP, sehingga
     // "Hapus bentuk" hanya melepas layer dari PETA — registry `_layers` milik
@@ -156,6 +180,10 @@ export default function DenahEditor({ node, onClose, onSaved }) {
       setKotor(true); setCek(null);
     });
     grup.on("pm:edit pm:dragend", () => { setKotor(true); setCek(null); });
+    } catch (e) {
+      setGalatInit("Alat gambar (geoman) gagal dimuat: "
+                   + String(e?.message || e) + " — peta tetap bisa dilihat.");
+    }
 
     mapRef.current = map;
 
@@ -170,9 +198,9 @@ export default function DenahEditor({ node, onClose, onSaved }) {
     const invalidasi = () => { try { map.invalidateSize(false); } catch { /* peta dibuang */ } };
     const jamInval = [80, 250, 500, 900].map((ms) => setTimeout(invalidasi, ms));
     let ro = null;
-    if (typeof ResizeObserver !== "undefined" && containerRef.current) {
+    if (typeof ResizeObserver !== "undefined") {
       ro = new ResizeObserver(invalidasi);
-      ro.observe(containerRef.current);
+      ro.observe(wadahEl);
     }
     setPetaSiap(true);
     return () => {
@@ -184,7 +212,7 @@ export default function DenahEditor({ node, onClose, onSaved }) {
       rendererKonteksRef.current = null;
       setPetaSiap(false);
     };
-  }, []);
+  }, [wadahEl]);
 
   // Pasang/ganti layer gambar denah di peta. Dideklarasikan SEBELUM effect
   // pemuat yang memakainya (dependency array dievaluasi saat render).
@@ -634,13 +662,23 @@ export default function DenahEditor({ node, onClose, onSaved }) {
         </div>
 
         <div className="relative">
-          <div ref={containerRef} className="h-[52vh] min-h-[320px] w-full" data-testid="denah-editor-peta" />
+          {/* callback ref: effect init jalan TEPAT saat node terpasang */}
+          <div ref={setWadahEl} className="h-[52vh] min-h-[320px] w-full" data-testid="denah-editor-peta" />
           {memuat && (
             <div className="absolute inset-0 z-[500] bg-background/60 flex items-center justify-center">
               <Loader2 className="w-6 h-6 animate-spin text-teal-600" />
             </div>
           )}
         </div>
+        {/* Kegagalan init peta TAMPIL — bukan spinner tanpa akhir di atas area
+            kosong. Pesan ini juga jadi bahan diagnosis bila terulang. */}
+        {galatInit && (
+          <div className="px-4 py-2 border-t border-border bg-red-500/10 flex items-start gap-2"
+               data-testid="denah-galat-init">
+            <AlertTriangle className="w-4 h-4 text-red-600 mt-0.5 shrink-0" />
+            <p className="text-xs text-red-700 dark:text-red-300 break-words">{galatInit}</p>
+          </div>
+        )}
 
         {/* Panel hasil validasi — galat MEMBLOKIR, peringatan tidak. */}
         {cek && !cek.valid && (

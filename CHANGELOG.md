@@ -53,6 +53,36 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#634] Perbaikan: init peta editor denah tak bisa gagal senyap lagi — 2026-07-27
+
+Laporan lanjutan: editor masih putih polos + spinner berputar, console tanpa
+galat, SETELAH #631 (ResizeObserver). Bukti kunci dari screenshot: **nol
+elemen Leaflet** — tanpa tombol zoom, toolbar geoman, maupun atribusi. Kalau
+peta berhasil dibuat, kontrol zoom muncul SEKETIKA (sinkron) bahkan sebelum
+ubin termuat. Jadi `L.map()` memang tak pernah berhasil dijalankan.
+
+**Akar**: effect init memeriksa `if (!containerRef.current) return undefined`
+dengan dep array `[]`. Bila node DOM belum terpasang saat effect pertama
+jalan, effect **return diam dan TAK PERNAH diulang** — peta tak pernah dibuat,
+`petaSiap` tetap false, efek pemuat tak pernah jalan, dan `memuat` (initial
+`true`) tak pernah dibereskan. Hasilnya persis: area kosong + spinner abadi,
+tanpa satu pun galat.
+
+**Perbaikan**:
+- Node peta jadi **callback ref (state)**, bukan `useRef` — effect init jalan
+  TEPAT saat node terpasang, sehingga tak ada lagi jalur "return diam
+  selamanya".
+- `L.map()` + tile layer dibungkus **try/catch**; kegagalan menyetel
+  `galatInit` yang **DITAMPILKAN di UI** (panel merah) dan mematikan spinner —
+  kegagalan init tak bisa lagi menyamar sebagai loading.
+- Pemasangan **geoman dipisah ber-try/catch**: bila plugin gagal, peta + ubin
+  + bentuk tersimpan TETAP tampil (hanya alat gambar absen) dengan pesan
+  jelas — sebelumnya satu exception membatalkan seluruh init secara senyap.
+
+Catatan lapangan: aplikasi memakai service worker ber-strategi *cache-first*
+untuk aset statis. Bila peramban menahan chunk JS lama, perbaikan tak akan
+terlihat sampai data situs dibersihkan / SW diperbarui.
+
 ## [#633] Perbaikan: peta editor denah putih polos di dalam modal (HP) — 2026-07-26
 
 Bukti dari screenshot HP: area peta editor PUTIH POLOS — tanpa ubin, tanpa
