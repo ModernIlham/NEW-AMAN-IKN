@@ -53,6 +53,68 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#637] Spasial Fase 11: ingest posisi IoT — perangkat mengirim, pagar privasi menyaring — 2026-07-27
+
+Data posisi pertama akhirnya boleh masuk sistem, lewat satu jalur yang tak punya
+jalan pintas: **token perangkat → normalisasi → resolusi node denah → gerbang
+`saring_observasi()` → simpan**.
+
+**Dua sifat bawaan IoT yang menentukan bentuk kode ini.** Pertama, pengiriman
+bersifat *at-least-once*: perangkat lapangan kehilangan sinyal, mengirim ulang
+batch yang sebenarnya sudah tiba, lalu menyala kembali dan menumpahkan antrean
+offline-nya. **Duplikat itu normal, bukan anomali** — jadi penangkalnya bukan
+"jangan kirim dua kali" (mustahil dijamin perangkat), melainkan `obs_id` yang
+dihitung dari ISI observasi + indeks unik. Waktu terima server sengaja TIDAK
+ikut di-hash: memasukkannya akan membuat tiap pengiriman ulang tampak sebagai
+observasi baru — persis kegagalan yang hendak dicegah. Kedua, **jam perangkat
+tak bisa dipercaya**: GPS murah menyala dengan jam 1970 atau melompat setelah
+sinkronisasi. Waktu perangkat tetap disimpan sebagai bahan diagnosis, tetapi
+ditandai `ts_ragu` dan tak pernah jadi satu-satunya sumber urutan.
+
+**Resolusi node dijalankan SEBELUM penyaringan, dan itu bukan urutan yang
+sembarang.** Profil `personal` membuang koordinat; kalau node baru dicari
+sesudahnya, yang tersimpan adalah dokumen tanpa lokasi apa pun — kebijakan
+"simpan level gedung saja" berubah diam-diam jadi "simpan yang tak berguna".
+Efek sampingnya justru yang paling diinginkan: **laptop dinas di rumah
+pemegangnya berada di luar semua poligon → tak ada node → tak ada satu baris pun
+yang tersimpan.** Rumah, klinik, dan tempat ibadah tak perlu di-blacklist satu
+per satu; bentuk sistemnya yang membuatnya tak terekam.
+
+**Tiga kebocoran ditutup, dua di antaranya baru terlihat saat jalur ingest
+disambung:**
+
+- `lokasi_spasial.titik` — snapshot lokasi (Fase 8) MEMBAWA koordinat mentahnya.
+  Membuang `geo` saja menyisakan presisi penuh di field yang justru sengaja
+  dipertahankan. `saring_observasi()` kini ikut membuangnya, dengan membangun
+  ulang dict bersarang (bukan `pop`) agar dokumen milik pemanggil tak termutasi.
+- **Arsip backup** — retensi 30/90/365 hari ditegakkan TTL index, tetapi kalau
+  observasi ikut masuk arsip yang disimpan bertahun, jejak lokasi bertahan jauh
+  melewati batas yang dijanjikan DPIA: kepatuhan yang benar di database dan
+  bocor lewat pintu backup. `iot_observasi` masuk `SKIP_COLLECTIONS`.
+- **Peta Kolaborasi publik** — posisi IoT sengaja TIDAK menimpa
+  `koordinat_latitude/longitude` aset (field itu memang mengalir ke peta yang
+  bisa dibuka siapa pun pemegang tautan). Payload publiknya kini dibangun lewat
+  allowlist `KUNCI_PUBLIK_TITIK` **plus uji regresi** — daftar-larangan
+  mensyaratkan seseorang ingat memperbaruinya setiap kali field baru lahir, dan
+  justru field baru yang paling mungkin sensitif.
+
+Retensi memakai `privasi_utils.batas_retensi()` sebagai satu-satunya sumber
+angka, mengisi `kedaluwarsa_pada` yang dieksekusi **TTL index MongoDB** — bukan
+job terjadwal yang bisa mati tanpa disadari. Registry perangkat menyimpan token
+sebagai **hash** (kebocoran DB tak memberi penyerang token untuk memalsukan
+posisi), token ditampilkan sekali, dan token salah vs perangkat nonaktif
+mengembalikan pesan yang SAMA agar penyerang tak bisa membedakannya.
+
+- Backend baru: `iot_utils.py` (helper murni), `routes/iot.py` (registry, batch
+  ingest ber-rate-limit, rotasi token, riwayat posisi, endpoint kebijakan).
+- Indeks: `obs_id` unik (penegak idempotensi), TTL `kedaluwarsa_pada`,
+  `(device_id, ts_server)`, `token_hash`, `(kode_satker, created_at)`.
+- Reset: `iot_perangkat` masuk `RESET_KEEP` — tokennya tak bisa dilihat ulang,
+  jadi menghapusnya memaksa provisioning ulang setiap perangkat di lapangan.
+- Uji: +24 unit `iot_utils`, +3 pagar `lokasi_spasial.titik`, +3 payload publik.
+
+---
+
 ## [#636] Spasial Fase 10: DPIA privasi pelacakan — kebijakan jadi KODE — 2026-07-27
 
 Gerbang kepatuhan **sebelum** satu baris data posisi pertama masuk sistem.

@@ -19,6 +19,14 @@ SKIP_COLLECTIONS = {
     # Progress job latar bersama (ekspor async dll.) — sama transiennya dengan
     # backup_jobs; membawanya ke DB hasil restore = job "running" hantu.
     "background_jobs",
+    # Observasi posisi IoT (Fase 11) — DIKECUALIKAN demi RETENSI, bukan demi
+    # ukuran arsip. Retensi 30/90/365 hari ditegakkan TTL index; kalau observasi
+    # ikut masuk arsip backup yang disimpan bertahun, jejak lokasi perangkat
+    # perorangan bertahan jauh melewati batas yang dijanjikan DPIA — kepatuhan
+    # yang benar di database tetapi bocor lewat pintu backup. Data ini juga
+    # telemetri yang terus mengalir, bukan catatan penatausahaan yang wajib
+    # dipulihkan. Registry perangkatnya (`iot_perangkat`) tetap di-backup.
+    "iot_observasi",
 }
 
 # Koleksi yang _id-nya BERMAKNA (bukan ObjectId acak) → wajib dipertahankan saat
@@ -55,6 +63,12 @@ RESET_KEEP_COLLECTIONS = {
     # dengan mudah — memperlakukannya seperti master referensi (ruangan), bukan
     # data transaksi yang boleh direset.
     "spasial_level", "spasial_node",
+    # Registry perangkat pelacak (Fase 11) = konfigurasi lapangan, bukan
+    # transaksi. Token hanya ada sebagai HASH dan tak bisa dilihat ulang, jadi
+    # reset yang menghapusnya memaksa provisioning ulang SETIAP perangkat di
+    # lapangan satu per satu — biaya yang tak sebanding dengan "membersihkan
+    # data". Observasinya sendiri tetap ikut terhapus (bukan RESET_KEEP).
+    "iot_perangkat",
 }
 
 # Legacy name → canonical (untuk membaca backup lama; mis. activities.json).

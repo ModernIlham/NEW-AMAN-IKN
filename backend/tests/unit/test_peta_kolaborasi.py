@@ -131,3 +131,42 @@ def test_token_peta_tolak_typ_lain():
     with pytest.raises(HTTPException) as ei:
         asyncio.run(require_map_token(token=sign_tok))
     assert ei.value.status_code == 401
+
+
+# ── Payload publik: pagar terhadap kebocoran posisi (DPIA §6, Fase 11) ──────
+
+def test_titik_publik_hanya_kunci_yang_diizinkan():
+    """Sejak Fase 11 aplikasi menyimpan posisi perangkat yang dipegang
+    PERORANGAN. Payload peta publik dapat dibuka siapa pun yang memegang tautan,
+    jadi kunci yang keluar diuji EKSPLISIT — bukan diserahkan pada ingatan orang
+    yang menambah field berikutnya."""
+    from routes.peta_kolaborasi import KUNCI_PUBLIK_TITIK, baris_titik_publik
+    aset = {"id": "a1", "asset_code": "3.05.01", "NUP": "7",
+            "asset_name": "Laptop", "category": "Peralatan", "brand": "X",
+            # Field yang TIDAK boleh menembus keluar:
+            "lokasi_spasial": {"node_id": "sn_g1", "titik": [116.71, -1.40]},
+            "pengguna": "Budi", "nip_pengguna": "1990...", "harga": 15000000,
+            "photos": ["base64..."], "device_id": "dev_1",
+            "koordinat_latitude": "-1.40", "koordinat_longitude": "116.71"}
+    baris = baris_titik_publik(aset, -1.40, 116.71)
+    assert set(baris) == set(KUNCI_PUBLIK_TITIK)
+    bocor = {"lokasi_spasial", "pengguna", "nip_pengguna", "harga", "photos",
+             "device_id", "koordinat_latitude", "koordinat_longitude"}
+    assert not (set(baris) & bocor)
+
+
+def test_titik_publik_tetap_membawa_data_verifikasi_lapangan():
+    """Pagar privasi tak boleh mengosongkan peta — kode/NUP/kondisi memang
+    tujuan berbagi tautan ini."""
+    from routes.peta_kolaborasi import baris_titik_publik
+    b = baris_titik_publik({"id": "a1", "asset_code": "3.05", "NUP": 7,
+                            "asset_name": "Laptop", "condition": "Baik"},
+                           -1.40, 116.71)
+    assert b["kode"] == "3.05" and b["nama"] == "Laptop"
+    assert b["kondisi"] == "Baik" and (b["lat"], b["lng"]) == (-1.40, 116.71)
+
+
+def test_titik_publik_aset_minim_tak_meledak():
+    from routes.peta_kolaborasi import baris_titik_publik
+    b = baris_titik_publik({"id": "a1"}, 0.5, 100.0)
+    assert b["nama"] == "" and b["jumlah_foto"] == 0

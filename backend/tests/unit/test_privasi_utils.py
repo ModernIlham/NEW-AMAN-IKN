@@ -62,6 +62,36 @@ def test_personal_koordinat_dibuang_hanya_wilayah_tersisa():
     assert o["presisi_didegradasi"] is True
 
 
+def test_personal_koordinat_di_dalam_lokasi_spasial_ikut_dibuang():
+    """Pintu belakang: snapshot lokasi (Fase 8) MEMBAWA koordinat mentahnya di
+    `lokasi_spasial.titik`. Membuang `geo` saja akan menyisakan presisi penuh
+    di field yang justru sengaja dipertahankan."""
+    obs = dict(OBS, lokasi_spasial={"node_id": "sn_g1", "node_nama": "Gedung A",
+                                    "jalur_nama": "Kawasan / Gedung A",
+                                    "titik": [116.71, -1.40]})
+    r = pu.saring_observasi(obs, "personal", sekarang=_wita(2026, 7, 27, 10))
+    lok = r["observasi"]["lokasi_spasial"]
+    assert "titik" not in lok
+    assert lok["node_id"] == "sn_g1" and lok["jalur_nama"]   # wilayah bertahan
+
+
+def test_saring_tak_memutasi_lokasi_spasial_milik_pemanggil():
+    """`hasil = dict(obs)` hanya salinan DANGKAL — membuang `titik` dengan pop
+    akan merusak dokumen asli dan membuat pemanggil kehilangan koordinat yang
+    masih dibutuhkannya (mis. untuk profil lain di batch yang sama)."""
+    lok = {"node_id": "sn_g1", "titik": [116.71, -1.40]}
+    obs = dict(OBS, lokasi_spasial=lok)
+    pu.saring_observasi(obs, "personal", sekarang=_wita(2026, 7, 27, 10))
+    assert lok["titik"] == [116.71, -1.40]
+
+
+def test_kendaraan_mempertahankan_titik_di_lokasi_spasial():
+    obs = dict(OBS, lokasi_spasial={"node_id": "sn_g1",
+                                    "titik": [116.71, -1.40]})
+    r = pu.saring_observasi(obs, "kendaraan", sekarang=_wita(2026, 7, 27, 10))
+    assert r["observasi"]["lokasi_spasial"]["titik"] == [116.71, -1.40]
+
+
 def test_personal_di_luar_jam_tidak_disimpan_sama_sekali():
     """Bukan 'disimpan lalu disembunyikan': data yang tak pernah ada tak bisa
     bocor, disalahgunakan, atau diminta lewat jalur hukum."""

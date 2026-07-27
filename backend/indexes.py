@@ -371,6 +371,38 @@ async def create_indexes() -> None:
         # Riwayat perpindahan per aset, terbaru dulu.
         await db.riwayat_lokasi_aset.create_index(
             [("asset_id", 1), ("pada", -1)], name="riwayat_lokasi_aset_waktu")
+
+        # IoT (Fase 11) — ingest posisi perangkat.
+        #
+        # UNIK obs_id = penegak IDEMPOTENSI, bukan sekadar optimasi. Pengiriman
+        # IoT bersifat at-least-once: perangkat yang kehilangan sinyal MENGIRIM
+        # ULANG batch yang sebenarnya sudah tiba. Tanpa indeks ini setiap
+        # pengiriman ulang menggandakan jejak posisi, dan rute ingest yang
+        # mengandalkan galat 11000 untuk menghitung duplikat akan diam-diam
+        # melaporkan semuanya "tersimpan".
+        await db.iot_observasi.create_index("obs_id", unique=True,
+                                            name="iot_observasi_obs_id")
+        # TTL: penghapusan retensi dijalankan MongoDB sendiri, bukan job yang
+        # bisa mati tanpa disadari — kepatuhan retensi UU PDP tak boleh
+        # bergantung pada proses yang perlu diawasi manusia. `kedaluwarsa_pada`
+        # diisi rute ingest dari privasi_utils.batas_retensi(), jadi angka
+        # retensi hanya hidup di SATU tempat.
+        await db.iot_observasi.create_index("kedaluwarsa_pada",
+                                            expireAfterSeconds=0,
+                                            name="iot_observasi_ttl")
+        # Riwayat posisi per perangkat, terbaru dulu (dipakai daftar perangkat
+        # untuk membaca observasi TERAKHIR tiap perangkat — tanpa ini, membuka
+        # daftar berisi N perangkat memindai seluruh koleksi observasi N kali).
+        await db.iot_observasi.create_index([("device_id", 1), ("ts_server", -1)],
+                                            name="iot_observasi_device_waktu")
+        await db.iot_perangkat.create_index("id", unique=True,
+                                            name="iot_perangkat_id")
+        # Autentikasi perangkat mencari lewat HASH token pada tiap batch masuk —
+        # jalur terpanas di modul ini.
+        await db.iot_perangkat.create_index("token_hash",
+                                            name="iot_perangkat_token_hash")
+        await db.iot_perangkat.create_index([("kode_satker", 1), ("created_at", -1)],
+                                            name="iot_perangkat_satker_waktu")
         logger.info("Database indexes created successfully")
     except Exception as e:
         logger.error(f"Error creating indexes: {e}")
