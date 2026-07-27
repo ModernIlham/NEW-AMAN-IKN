@@ -53,6 +53,50 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#636] Spasial Fase 10: DPIA privasi pelacakan — kebijakan jadi KODE — 2026-07-27
+
+Gerbang kepatuhan **sebelum** satu baris data posisi pertama masuk sistem.
+Melacak perangkat yang dipegang perorangan = memproses data pribadi orang itu
+(UU 27/2022 PDP) — bukan sekadar data barang.
+
+**Kenapa sekarang, bukan setelah ingest jalan**: kebijakan privasi yang hanya
+hidup di dokumen akan dilewati kode yang menyusul — bukan karena niat buruk,
+tetapi karena tak ada yang memaksanya. Dengan pagar di jalur tulis SEBELUM
+data pertama ada, "lupa" jadi mustahil.
+
+**`backend/privasi_utils.py`** — §10 dokumen arsitektur diterjemahkan jadi
+helper murni yang WAJIB dilewati jalur tulis posisi (Fase 11+):
+
+| Profil | Presisi | Jendela | Retensi |
+|---|---|---|---|
+| `aset_tetap` | penuh | 24 jam | 365 hari |
+| `kendaraan` | penuh | 24 jam | 90 hari |
+| **`personal`** | **wilayah/gedung — koordinat DIBUANG** | **07:00–18:00 hari kerja** | **30 hari** |
+
+- **Gagal-tertutup**: profil tak dikenal (salah ketik / perangkat baru belum
+  dikonfigurasi) jatuh ke `personal`, bukan merekam penuh 24/7.
+- **Tidak disimpan ≠ disimpan lalu disembunyikan**: observasi personal di luar
+  jam kerja DITOLAK sebelum penulisan — data yang tak pernah ada tak bisa
+  bocor, disalahgunakan, atau diminta lewat jalur hukum.
+- Zona waktu dihormati (WITA, dapat dikonfigurasi) — menghitung jam kerja dari
+  UTC mentah akan menolak observasi pagi yang sah.
+- `ts_device` dipakai, bukan waktu tiba di server: batch tertunda dinilai pada
+  waktu OBSERVASI-nya.
+- **Izin darurat** (barang hilang) ber-tiga syarat kumulatif: alasan tertulis
+  bermakna, pejabat penyetuju yang BUKAN pemohon, dan masa berlaku ≤ 72 jam —
+  izin permanen sama dengan kebijakan yang dibatalkan diam-diam.
+- `batas_retensi()` jadi sumber tunggal angka retensi untuk penyapu terjadwal
+  DAN TTL index, agar kepatuhan tak hanya benar di atas kertas.
+
+**`docs/DPIA-PELACAKAN-ASET.md`** — kajian dampak formal yang bisa ditunjukkan
+ke auditor: dasar pemrosesan per kategori data, tabel risiko-mitigasi dengan
+status penegakan, hak subjek data, dan **daftar jujur yang BELUM dikerjakan**
+(runbook insiden, teks pemberitahuan BAST, filter Peta Kolaborasi publik yang
+wajib menyertai endpoint ingest pertama).
+
+Uji: +18 backend (954 total) — termasuk gagal-tertutup, penolakan di luar jam,
+degradasi presisi, zona waktu, dan keempat penolakan izin darurat.
+
 ## [#635] Spasial Fase 9: custody berlokasi — aset menempati node denah — 2026-07-27
 
 Aset bergerak kini **menempati** node denah (biasanya Ruangan), dengan jejak
