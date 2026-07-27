@@ -53,6 +53,52 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#639] Spasial Fase 13: halaman Pelacakan Aset — dua fase yang tadinya hanya bisa dipakai mesin — 2026-07-27
+
+Fase 11 (ingest posisi) dan Fase 12 (geofence) sudah berjalan penuh, tetapi
+seluruhnya hidup di API: tak ada satu pun layar yang menampilkannya. Fitur yang
+hanya bisa dipanggil `curl` bukan fitur yang selesai — halaman ini yang
+menjadikannya bisa dipakai orang.
+
+Satu halaman, tiga tab. **Perangkat**: daftar pelacak dengan kesehatan yang bisa
+dibaca sekilas (terakhir terdengar, baterai, jam perangkat meragukan),
+pendaftaran, dan rotasi token. **Pagar Area**: pasang/ubah/hapus aturan geofence.
+**Peringatan**: register dengan lencana belum-dibaca, tandai sudah dilihat, dan
+tombol tindak lanjut.
+
+**Kebijakan privasi ditaruh di ATAS layar, bukan disembunyikan di dokumen.**
+Angkanya dibaca dari endpoint yang membacanya dari `privasi_utils` — kode yang
+MENEGAKKANNYA — jadi yang dilihat pengguna dijamin sama dengan yang dijalankan
+mesin. Kebijakan yang tak terlihat tak bisa diperiksa siapa pun, dan salinan
+dokumen yang basi lebih buruk daripada tak ada dokumen.
+
+Beberapa keputusan tampilan yang menjelaskan sistemnya, bukan sekadar
+menghiasinya:
+
+- **Token ditampilkan sekali dengan kalimat yang jujur**: server hanya menyimpan
+  sidiknya, jadi menutup jendela itu berarti satu-satunya jalan adalah rotasi.
+  Pengguna berhak tahu itu SEBELUM menutup, bukan sesudah.
+- **Panel pagar menjelaskan histeresis dalam satu kalimat** — kenapa "keluar"
+  butuh 25 m dan beberapa menit. Tanpa itu, penundaan peringatan terbaca sebagai
+  sistem yang lambat, padahal justru itu yang membuatnya layak dipercaya.
+- **Dialog tindak lanjut menyebut tenggat 15 hari kerja PMK 207/2021** dan
+  menyatakan terang-terangan bahwa langkah ini sengaja manual.
+- **Peringatan dari antrean offline berlabel "Data susulan"**, supaya operator
+  tak mengejar aset yang sudah kembali kemarin.
+- **Riwayat posisi menyebutkan bahwa datanya sudah tersaring saat MASUK**, bukan
+  saat ditampilkan — yang tak boleh disimpan memang tak pernah tersimpan.
+
+Backend ikut berubah kecil tapi perlu: `GET /spasial/node` kini menurunkan
+`tipe_geometri` (geometrinya sendiri tetap dibuang — poligon kawasan bisa ribuan
+verteks). Tanpa itu pemilih area menawarkan node yang **pasti ditolak** backend,
+dan pengguna baru tahu setelah menabraknya.
+
+- Frontend baru: `pages/PelacakanPage.jsx`, masuk Beranda Modul grup Referensi.
+- Verifikasi: eslint 0 error, 138 uji frontend lulus, build produksi sukses,
+  1.043 uji backend lulus.
+
+---
+
 ## [#638] Spasial Fase 12: geofence — peringatan yang bisa dipercaya karena ia tahu kapan harus DIAM — 2026-07-27
 
 Aset yang keluar dari kawasannya sekarang memberi tahu. Bagian sulitnya bukan
