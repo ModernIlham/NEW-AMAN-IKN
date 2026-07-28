@@ -213,7 +213,7 @@ export default function SatkerAktifBar({ user }) {
           Ruang yang dulu ia rampas dari setiap halaman kini kembali utuh. */}
       <div
         ref={ref}
-        className="fixed top-0 left-0 right-0 z-[60] select-none pointer-events-none"
+        className="fixed top-0 left-0 right-0 z-[110] select-none pointer-events-none"
         data-testid="satker-aktif-bar"
         data-tahap={tahap}
       >
@@ -319,24 +319,19 @@ export default function SatkerAktifBar({ user }) {
                         focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600/70
                         ${terbuka
                           ? "w-[5.5rem] h-5 -mt-px items-end rounded-b-xl bg-teal-800 text-white shadow-md"
-                          : "w-11 h-6 bg-transparent"}`}
+                          : "w-16 h-4 -mt-px items-center rounded-b-lg bg-teal-800/90 text-white shadow-sm"}`}
             data-testid="satker-aktif-pegangan"
           >
-            {terbuka ? (
-              <GripHorizontal className="w-4 h-4 mb-0.5 opacity-70 rotate-180" />
-            ) : (
-              <span
-                aria-hidden="true"
-                className="mt-0.5 w-8 h-1 rounded-b-full bg-teal-800/40 dark:bg-teal-400/40"
-              />
-            )}
+            <GripHorizontal
+              className={`opacity-70 transition-transform
+                          ${terbuka ? "w-4 h-4 mb-0.5 rotate-180" : "w-3.5 h-3.5"}`}
+            />
             {/* Umpan balik kemajuan. Tanpa ini redaman berbalik jadi kejam:
                 operator menarik jauh, tirai nyaris tak bergerak, lalu
                 menyimpulkan bilahnya macet. Garis ini berkata "tarikanmu
                 terbaca" tanpa meringankannya. */}
             <span
-              className={`absolute left-0 h-0.5 transition-opacity
-                          ${terbuka ? "bottom-0 bg-white" : "top-0 bg-teal-700"}`}
+              className="absolute left-0 bottom-0 h-0.5 bg-white transition-opacity"
               style={{ width: `${maju * 100}%`, opacity: maju > 0 ? 1 : 0 }}
               data-testid="satker-aktif-kemajuan"
             />
