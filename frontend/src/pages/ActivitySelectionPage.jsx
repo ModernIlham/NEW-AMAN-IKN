@@ -623,7 +623,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
           <div className="flex items-center gap-3">
             {/* Klik logo = buka halaman Info/PRD aplikasi */}
             <div
-              className={`w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-blue-500 flex items-center justify-center shadow-elev-1 ${onShowInfo ? "cursor-pointer" : ""}`}
+              className={`w-10 h-10 rounded-xl bg-gradient-to-br from-teal-600 to-teal-500 flex items-center justify-center shadow-elev-1 ${onShowInfo ? "cursor-pointer" : ""}`}
               {...(onShowInfo ? {
                 role: "button", tabIndex: 0, onClick: activateInfo,
                 onKeyDown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activateInfo(); } },
@@ -663,7 +663,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
         {canManageActivities && (
           <Button
             onClick={() => { setEditingActivity(null); setForm({...emptyForm}); setFormErrors({}); setShowCreate(true); }}
-            className="w-full mb-6 h-14 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white text-lg font-semibold rounded-xl shadow-elev-2 hover:shadow-elev-3 transition-all duration-180 active:scale-[0.98]"
+            className="w-full mb-6 h-14 bg-gradient-to-r from-teal-600 to-teal-500 hover:from-teal-700 hover:to-teal-600 text-white text-lg font-semibold rounded-xl shadow-elev-2 hover:shadow-elev-3 transition-all duration-180 active:scale-[0.98]"
           >
             <Plus className="w-6 h-6 mr-2" />Buat Kegiatan Inventarisasi Baru
           </Button>

@@ -391,7 +391,7 @@ const InventoryFieldSheet = ({
                 onClick={onOpenFullCamera}
                 disabled={photoCount >= 6}
                 data-testid="sheet-full-camera-btn"
-                className="w-full h-11 mb-2 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                className="w-full h-11 mb-2 rounded-lg bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 disabled:pointer-events-none"
               >
                 <Camera className="w-4 h-4" />Mode Kamera Penuh (Jam + GPS Live)
               </button>

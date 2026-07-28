@@ -256,7 +256,7 @@ export default function LoginPage({ onLogin, onShowInfo }) {
       <div className="hidden lg:flex lg:w-1/2 bg-slate-900 login-pattern relative overflow-hidden">
         <div className="relative z-10 flex flex-col justify-between p-12 w-full">
           <div className={`flex items-center gap-3 ${onShowInfo ? "cursor-pointer" : ""}`} data-testid="login-logo" {...logoProps}>
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center shadow-elev-2">
+            <div className="w-10 h-10 bg-gradient-to-br from-teal-600 to-teal-700 rounded-lg flex items-center justify-center shadow-elev-2">
               <Package className="w-6 h-6 text-white" />
             </div>
             <div className="flex flex-col leading-tight">

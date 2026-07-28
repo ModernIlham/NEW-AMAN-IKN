@@ -1724,10 +1724,10 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
         {/* MAIN CONTENT */}
         <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden" ref={mainContentRef} style={{ contain: 'layout style', willChange: 'width' }} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
           {/* Pull-to-refresh indicator - Mobile only */}
-          <div className="sm:hidden flex items-center justify-center overflow-hidden transition-all duration-200 bg-gradient-to-b from-blue-50 to-transparent" style={{ height: pull.pullDistance > 0 ? pull.pullDistance : 0, opacity: pull.pullDistance > 0 ? 1 : 0 }}>
+          <div className="sm:hidden flex items-center justify-center overflow-hidden transition-all duration-200 bg-gradient-to-b from-teal-50 to-transparent dark:from-teal-950/40" style={{ height: pull.pullDistance > 0 ? pull.pullDistance : 0, opacity: pull.pullDistance > 0 ? 1 : 0 }}>
             <div className="flex flex-col items-center gap-1">
-              <div className={`w-8 h-8 rounded-full border-2 border-blue-500 flex items-center justify-center transition-transform duration-200 ${pull.isRefreshing ? 'animate-spin' : ''}`} style={{ transform: `rotate(${Math.min(pull.pullDistance * 3, 360)}deg)` }}>
-                {pull.isRefreshing ? <Loader2 className="w-4 h-4 text-blue-500" /> : <ChevronDown className={`w-4 h-4 text-blue-500 transition-transform ${pull.pullDistance >= 80 ? 'rotate-180' : ''}`} />}
+              <div className={`w-8 h-8 rounded-full border-2 border-teal-600 flex items-center justify-center transition-transform duration-200 ${pull.isRefreshing ? 'animate-spin' : ''}`} style={{ transform: `rotate(${Math.min(pull.pullDistance * 3, 360)}deg)` }}>
+                {pull.isRefreshing ? <Loader2 className="w-4 h-4 text-teal-600" /> : <ChevronDown className={`w-4 h-4 text-teal-600 transition-transform ${pull.pullDistance >= 80 ? 'rotate-180' : ''}`} />}
               </div>
               <span className="text-xs text-blue-600 font-medium">{pull.isRefreshing ? 'Memperbarui...' : pull.pullDistance >= 80 ? 'Lepaskan untuk refresh' : 'Tarik ke bawah'}</span>
             </div>

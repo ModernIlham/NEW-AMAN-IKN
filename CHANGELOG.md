@@ -53,6 +53,29 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#666] Sapu merek — logo & tombol aksi utama ikut keluarga teal — 2026-07-28
+
+Pelengkap `[#665]`. Setelah token dan komponen dasar satu keluarga, yang tersisa
+adalah gradien-gradien dekoratif tingkat halaman:
+
+- **Logo aplikasi** di Login, pemilih Kegiatan, header Dasbor, dan Beranda
+  Modul — dulu empat-empatnya gradien biru; kini teal, karena kotak logo adalah
+  merek itu sendiri.
+- **Tombol aksi utama bergradien**: CTA masuk kegiatan, "Mode Kamera Penuh",
+  "Download LHI Lengkap" (dulu tiga warna indigo→biru→cyan sekaligus).
+- **Pita dekoratif** dialog Data Sistem, judul gradien InfoPage, dan indikator
+  tarik-untuk-menyegarkan di dasbor.
+
+Dua hal yang SENGAJA tidak disentuh, dan itu keputusan desain: gradien
+**identitas per-modul** di Beranda Modul (13 modul BMN dibedakan lewat warna —
+menyeragamkannya justru menghapus fungsinya), dan **ungu status "Berlebih"** —
+itu warna semantik data, sekeluarga dengan biru=informasi, amber=peringatan,
+merah=galat.
+
+**Uji:** 281 frontend, lint & build bersih.
+
+---
+
 ## [#665] Satu bahasa desain — font dibundel, satu aksen teal, komponen dasar yang merespons — 2026-07-28
 
 Perombakan tema menyeluruh memakai metode audit *redesign-existing-projects*

@@ -28,7 +28,7 @@ const DashboardHeader = memo(({
         <div className="flex items-center gap-2 min-w-0 overflow-hidden">
           {/* Klik logo 3x beruntun = buka halaman Info/PRD tersembunyi */}
           <div
-            className={`w-9 h-9 rounded-lg bg-gradient-to-br from-blue-600 to-blue-500 flex items-center justify-center flex-shrink-0 shadow-elev-1 ${onShowInfo ? "cursor-pointer" : ""}`}
+            className={`w-9 h-9 rounded-lg bg-gradient-to-br from-teal-600 to-teal-500 flex items-center justify-center flex-shrink-0 shadow-elev-1 ${onShowInfo ? "cursor-pointer" : ""}`}
             {...(onShowInfo ? {
               role: "button", tabIndex: 0, onClick: activateInfo,
               onKeyDown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activateInfo(); } },

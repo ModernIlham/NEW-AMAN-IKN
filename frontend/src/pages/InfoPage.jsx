@@ -330,7 +330,7 @@ export default function InfoPage({ onBack }) {
           </div>
           <h1 className="text-4xl md:text-5xl font-bold text-white mb-4 leading-tight">
             AMAN<br />
-            <span className="bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">Aplikasi Manajemen Aset Negara</span>
+            <span className="bg-gradient-to-r from-teal-300 to-cyan-400 bg-clip-text text-transparent">Aplikasi Manajemen Aset Negara</span>
           </h1>
           <p className="text-lg text-slate-400 max-w-2xl mx-auto mb-5">
             Satu aplikasi untuk SELURUH SIKLUS pengelolaan Barang Milik Negara — perencanaan,
