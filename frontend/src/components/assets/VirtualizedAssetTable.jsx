@@ -172,7 +172,7 @@ const VirtualizedAssetTable = memo(({ assets, editId, onEdit, onDelete, onPrintC
                     if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onEdit(a); }
                   },
                 } : {})}
-                className={`absolute left-0 right-0 flex items-center border-b border-border/50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 ${
+                className={`absolute left-0 right-0 flex items-center border-b border-border/50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${
                   isConflict ? 'bg-orange-50 dark:bg-orange-900/20 border-l-2 border-l-orange-400 cursor-pointer'
                   : isFailed ? 'bg-rose-50 dark:bg-rose-900/20 border-l-2 border-l-rose-400 cursor-not-allowed opacity-70'
                   : isSyncing ? 'bg-blue-50/50 dark:bg-blue-900/20 border-l-2 border-l-blue-400 cursor-not-allowed opacity-70'

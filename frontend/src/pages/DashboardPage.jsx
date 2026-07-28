@@ -79,7 +79,7 @@ function PanelSegment({ active, onClick, testid, icon: Icon, label, badge, activ
     >
       {badge != null && (
         <span
-          className={`absolute -top-2 left-1/2 -translate-x-1/2 z-10 text-[9px] leading-none px-1.5 py-0.5 rounded-full font-bold shadow-sm ring-2 ring-card whitespace-nowrap pointer-events-none ${badgeCls || "bg-blue-600 text-white"}`}
+          className={`absolute -top-2 left-1/2 -translate-x-1/2 z-10 text-[9px] leading-none px-1.5 py-0.5 rounded-full font-bold shadow-sm ring-2 ring-card whitespace-nowrap pointer-events-none ${badgeCls || "bg-teal-700 text-white"}`}
           data-testid={`${testid}-badge`}
         >
           {badge}
@@ -1662,7 +1662,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     >
       {/* Drag & Drop Overlay */}
       {isDragOverImport && perms.canImport && !dialogs.categoryManager && (
-        <div className="fixed inset-0 z-[90] bg-blue-600/20 backdrop-blur-sm flex items-center justify-center pointer-events-none" data-testid="drag-drop-overlay">
+        <div className="fixed inset-0 z-[90] bg-teal-700/20 backdrop-blur-sm flex items-center justify-center pointer-events-none" data-testid="drag-drop-overlay">
           <div className="bg-card rounded-2xl shadow-2xl border-4 border-dashed border-blue-500 px-12 py-10 flex flex-col items-center gap-3">
             <div className="w-16 h-16 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
               <Package className="w-8 h-8 text-blue-600 animate-bounce" />
@@ -1784,15 +1784,15 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
                 <PanelSegment
                   active={analyticsOpen} onClick={handleAnalyticsToggle} testid="chip-analytics"
                   icon={BarChart3} label="Analytics" roundedL
-                  activeCls="bg-blue-600 text-white" iconCls="text-blue-600" />
+                  activeCls="bg-teal-700 text-white" iconCls="text-blue-600" />
               )}
               {!inventoryMode && (
                 <PanelSegment
                   active={rekapOpen} onClick={() => setRekapOpen(p => !p)} testid="chip-rekap"
                   icon={ClipboardList} label="Rekapitulasi"
                   badge={rekapTotal != null ? `${rekapTotal} BMN` : null}
-                  badgeCls="bg-blue-600 text-white"
-                  activeCls="bg-blue-600 text-white" iconCls="text-blue-600" />
+                  badgeCls="bg-teal-700 text-white"
+                  activeCls="bg-teal-700 text-white" iconCls="text-blue-600" />
               )}
               <PanelSegment
                 active={groupsOpen} onClick={() => setGroupsOpen(p => !p)} testid="chip-groups"
@@ -1862,7 +1862,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
                   <p className="text-xs text-muted-foreground mb-3">Tambah aset pertama untuk kegiatan ini.</p>
                   {perms.canEdit && (
                     <Button
-                      size="sm" className="bg-blue-600 hover:bg-blue-700 text-white gap-1"
+                      size="sm" className="bg-teal-700 hover:bg-teal-800 text-white gap-1"
                       onClick={() => { setEditAssetForForm(null); setIsSidebarOpen(true); }}
                       data-testid="empty-add-asset-btn"
                     >
@@ -1897,7 +1897,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
                     <button onClick={clearSelection} title="Kosongkan seleksi" className="h-7 px-2 rounded-md border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 text-xs font-medium flex items-center gap-1 flex-shrink-0 transition-colors" data-testid="clear-selection-btn">
                       <X className="w-3.5 h-3.5" /><span className="hidden sm:inline">Kosongkan</span>
                     </button>
-                    <button onClick={() => setShowBatchPanel(v => !v)} className="ml-auto h-7 px-2.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1 flex-shrink-0 transition-colors" data-testid="toggle-batch-panel-btn">
+                    <button onClick={() => setShowBatchPanel(v => !v)} className="ml-auto h-7 px-2.5 rounded-md bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold flex items-center gap-1 flex-shrink-0 transition-colors" data-testid="toggle-batch-panel-btn">
                       <Pen className="w-3.5 h-3.5" />{showBatchPanel ? "Tutup" : "Ubah Massal"}
                     </button>
                   </div>
@@ -1967,7 +1967,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
         <div className="fixed bottom-6 right-6 z-30 lg:hidden print:hidden">
           <Button
             onClick={() => { setEditAssetForForm(null); setIsSidebarOpen(true); }}
-            className="h-14 w-14 rounded-full shadow-xl bg-blue-600 hover:bg-blue-700 p-0"
+            className="h-14 w-14 rounded-full shadow-xl bg-teal-700 hover:bg-teal-800 p-0"
             aria-label="Tambah Aset"
             data-testid="mobile-add-asset-fab"
           >

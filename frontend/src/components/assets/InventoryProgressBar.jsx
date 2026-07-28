@@ -164,7 +164,7 @@ const InventoryProgressBar = memo(({ activityId, inventoryStatusFilter, onFilter
                 onClick={() => onFilterChange("inventoryStatus", c.value)}
                 aria-pressed={active}
                 className={`min-h-0 min-w-0 h-6 px-2.5 rounded-full text-[10px] font-semibold border transition-colors ${
-                  active ? "bg-blue-600 border-blue-600 text-white" : "bg-card border-border text-muted-foreground hover:text-foreground hover:border-blue-300"
+                  active ? "bg-teal-700 border-teal-700 text-white" : "bg-card border-border text-muted-foreground hover:text-foreground hover:border-teal-400"
                 }`}
                 data-testid={`inventory-chip-${c.label.toLowerCase()}-lg`}
               >

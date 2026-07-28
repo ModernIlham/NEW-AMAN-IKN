@@ -423,7 +423,7 @@ export default function TtdPermintaanPage({ user, onBack }) {
                 {form.signers.map((s, i) => (
                   <div key={i} className="rounded-xl border border-border p-2.5 space-y-1.5">
                     <div className="flex items-center gap-1.5">
-                      <span className="w-5 h-5 rounded-full bg-blue-600/10 text-blue-600 text-[10px] font-bold flex items-center justify-center flex-shrink-0">{i + 1}</span>
+                      <span className="w-5 h-5 rounded-full bg-teal-600/10 text-teal-700 text-[10px] font-bold flex items-center justify-center flex-shrink-0">{i + 1}</span>
                       <Input value={s.nama} list="ttd-pegawai-list"
                         onChange={(e) => { ubahSigner(i, "nama", e.target.value); isiDariPegawai(i, e.target.value); }}
                         placeholder="Nama lengkap *" className="h-9 text-sm" data-testid={`ttd-form-nama-${i}`} />

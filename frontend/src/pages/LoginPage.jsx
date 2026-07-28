@@ -112,7 +112,7 @@ function OTPVerification({ email, debugOtp, onVerified, onBack, onDebugOtp }) {
             onChange={e => handleChange(idx, e.target.value)}
             onKeyDown={e => handleKeyDown(idx, e)}
             data-testid={`otp-input-${idx}`}
-            className="w-12 h-14 text-center text-xl font-bold border-2 border-border rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all bg-background text-foreground"
+            className="w-12 h-14 text-center text-xl font-bold border-2 border-border rounded-lg focus:border-ring focus:ring-2 focus:ring-blue-200 outline-none transition-all bg-background text-foreground"
           />
         ))}
       </div>
@@ -325,7 +325,7 @@ export default function LoginPage({ onLogin, onShowInfo }) {
                     <Input id="name" name="name" type="text"
                       placeholder="Tulis Namamu disini"
                       value={formData.name} onChange={handleChange}
-                      className="pl-10 h-11 border-border focus:border-blue-500 focus:ring-blue-500"
+                      className="pl-10 h-11 border-border focus:border-ring focus:ring-ring"
                       data-testid="name-input"
                     />
                   </div>
@@ -339,7 +339,7 @@ export default function LoginPage({ onLogin, onShowInfo }) {
                   <Input id="username" name="username" type={isLogin ? "text" : "email"}
                     placeholder={isLogin ? "Email atau username" : "example@gmail.com"}
                     value={formData.username} onChange={handleChange} required
-                    className="pl-10 h-11 border-border focus:border-blue-500 focus:ring-blue-500"
+                    className="pl-10 h-11 border-border focus:border-ring focus:ring-ring"
                     data-testid="username-input"
                   />
                 </div>
@@ -353,7 +353,7 @@ export default function LoginPage({ onLogin, onShowInfo }) {
                     type={showPassword ? "text" : "password"}
                     placeholder="********"
                     value={formData.password} onChange={handleChange} required
-                    className="pl-10 pr-10 h-11 border-border focus:border-blue-500 focus:ring-blue-500"
+                    className="pl-10 pr-10 h-11 border-border focus:border-ring focus:ring-ring"
                     data-testid="password-input"
                   />
                   <button type="button" onClick={() => setShowPassword(!showPassword)}
@@ -374,7 +374,7 @@ export default function LoginPage({ onLogin, onShowInfo }) {
                       type={showPassword ? "text" : "password"}
                       placeholder="Ketik ulang password"
                       value={formData.confirmPassword} onChange={handleChange} required
-                      className={`pl-10 h-11 border-border focus:border-blue-500 focus:ring-blue-500 ${formData.confirmPassword && formData.password !== formData.confirmPassword ? 'border-red-400 focus:border-red-500 focus:ring-red-200' : formData.confirmPassword && formData.password === formData.confirmPassword ? 'border-emerald-400 focus:border-emerald-500 focus:ring-emerald-200' : ''}`}
+                      className={`pl-10 h-11 border-border focus:border-ring focus:ring-ring ${formData.confirmPassword && formData.password !== formData.confirmPassword ? 'border-red-400 focus:border-red-500 focus:ring-red-200' : formData.confirmPassword && formData.password === formData.confirmPassword ? 'border-emerald-400 focus:border-emerald-500 focus:ring-emerald-200' : ''}`}
                       data-testid="confirm-password-input"
                     />
                   </div>

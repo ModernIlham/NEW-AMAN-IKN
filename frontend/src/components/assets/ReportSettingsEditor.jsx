@@ -158,7 +158,7 @@ export default function ReportSettingsEditor({ onClose }) {
         data-testid="save-settings-btn"
         onClick={handleSave}
         disabled={saving}
-        className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-lg text-xs font-medium transition-colors"
+        className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-teal-700 hover:bg-teal-800 disabled:bg-teal-300 text-white rounded-lg text-xs font-medium transition-colors"
       >
         {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
         Simpan Pengaturan

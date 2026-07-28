@@ -157,7 +157,7 @@ function PriceTier({ name, price, unit, tagline, features, highlight = false }) 
   return (
     <div className={`rounded-xl p-5 border flex flex-col ${
       highlight
-        ? "bg-blue-600/15 border-blue-500/50 shadow-lg shadow-blue-500/10"
+        ? "bg-teal-600/15 border-teal-500/50 shadow-lg shadow-teal-500/10"
         : "bg-slate-800/50 border-slate-700/50"
     }`}>
       {highlight && (
@@ -208,7 +208,7 @@ function RABTable() {
     <div className="overflow-x-auto">
       <table className="w-full min-w-[640px] text-sm">
         <thead>
-          <tr className="bg-blue-600/20 text-blue-300">
+          <tr className="bg-teal-700/20 text-blue-300">
             <th className="px-3 py-2.5 text-left rounded-tl-lg">No</th>
             <th className="px-3 py-2.5 text-left">Komponen Biaya</th>
             <th className="px-3 py-2.5 text-center">Vol</th>
@@ -242,7 +242,7 @@ function RABTable() {
               </React.Fragment>
             );
           })}
-          <tr className="bg-blue-600/30">
+          <tr className="bg-teal-700/30">
             <td colSpan={5} className="px-3 py-3 text-right text-white font-bold rounded-bl-lg">TOTAL KESELURUHAN</td>
             <td className="px-3 py-3 text-right text-blue-300 font-bold text-base rounded-br-lg whitespace-nowrap tabular-nums">Rp {fmt(grandTotal)}</td>
           </tr>
@@ -319,7 +319,7 @@ export default function InfoPage({ onBack }) {
 
       <div className="relative max-w-7xl mx-auto px-6 py-10 overflow-x-clip">
         {/* Cahaya latar hero — dekoratif saja */}
-        <div className="pointer-events-none absolute -top-28 left-1/2 -translate-x-1/2 w-[720px] h-[420px] bg-blue-600/15 blur-[120px] rounded-full" aria-hidden="true" />
+        <div className="pointer-events-none absolute -top-28 left-1/2 -translate-x-1/2 w-[720px] h-[420px] bg-teal-600/15 blur-[120px] rounded-full" aria-hidden="true" />
         <div className="pointer-events-none absolute top-24 right-[-120px] w-[380px] h-[280px] bg-cyan-500/10 blur-[100px] rounded-full" aria-hidden="true" />
 
         {/* ── HERO ── */}
@@ -368,7 +368,7 @@ export default function InfoPage({ onBack }) {
             { href: "#timeline", label: "Timeline" },
             { href: "#peran", label: "Peran Pengguna" },
           ].map((s) => (
-            <a key={s.href} href={s.href} className="min-h-0 min-w-0 px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700 text-slate-300 text-[11px] hover:border-blue-500/50 hover:text-blue-300 transition-colors">{s.label}</a>
+            <a key={s.href} href={s.href} className="min-h-0 min-w-0 px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700 text-slate-300 text-[11px] hover:border-teal-500/50 hover:text-blue-300 transition-colors">{s.label}</a>
           ))}
         </nav>
 

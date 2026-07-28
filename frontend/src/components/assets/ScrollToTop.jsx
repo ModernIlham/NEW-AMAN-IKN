@@ -66,7 +66,7 @@ const ScrollToTop = memo(({ scrollRef }) => {
       {visible && (
         <button
           onClick={scrollToTop}
-          className="fixed bottom-20 right-6 z-40 w-10 h-10 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl flex items-center justify-center transition-all duration-200 group print:hidden"
+          className="fixed bottom-20 right-6 z-40 w-10 h-10 rounded-full bg-teal-700 hover:bg-teal-800 text-white shadow-lg hover:shadow-xl flex items-center justify-center transition-all duration-200 group print:hidden"
           title={`Kembali ke atas (${scrollPercent}%)`}
           aria-label="Scroll ke atas"
         >

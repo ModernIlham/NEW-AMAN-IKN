@@ -13,7 +13,7 @@ import React, { useRef } from "react";
  * - title, testid: aksesibilitas & uji
  */
 export default function TanggalanButton({
-  value, onChange, warna = "bg-blue-600", title = "Pilih tanggal",
+  value, onChange, warna = "bg-teal-700", title = "Pilih tanggal",
   testid = "tanggalan",
 }) {
   const ref = useRef(null);

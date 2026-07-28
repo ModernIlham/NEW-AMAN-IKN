@@ -109,14 +109,14 @@ const DashboardToolbar = memo(function DashboardToolbar({
           <Button
             variant={activeFilterCount > 0 ? "default" : "outline"}
             size="sm"
-            className={`lg:hidden h-9 w-9 p-0 min-h-0 min-w-0 relative flex-shrink-0 ${activeFilterCount > 0 ? "bg-blue-600" : ""}`}
+            className={`lg:hidden h-9 w-9 p-0 min-h-0 min-w-0 relative flex-shrink-0 ${activeFilterCount > 0 ? "bg-teal-700" : ""}`}
             onClick={() => setShowAdvancedFilter(!showAdvancedFilter)}
             aria-label="Filter lanjutan"
             data-testid="mobile-advanced-filter-btn"
           >
             <Filter className="w-4 h-4" />
             {activeFilterCount > 0 && (
-              <span className="absolute -top-1 -right-1 bg-white text-blue-600 rounded-full w-4 h-4 flex items-center justify-center text-[9px] font-bold border border-blue-600">
+              <span className="absolute -top-1 -right-1 bg-white text-blue-600 rounded-full w-4 h-4 flex items-center justify-center text-[9px] font-bold border border-teal-700">
                 {activeFilterCount}
               </span>
             )}
@@ -141,7 +141,7 @@ const DashboardToolbar = memo(function DashboardToolbar({
           <Button
             variant={activeFilterCount > 0 ? "default" : "outline"}
             size="sm"
-            className={`h-8 text-xs flex-shrink-0 ${activeFilterCount > 0 ? "bg-blue-600" : ""}`}
+            className={`h-8 text-xs flex-shrink-0 ${activeFilterCount > 0 ? "bg-teal-700" : ""}`}
             onClick={() => setShowAdvancedFilter(!showAdvancedFilter)}
             title="Filter Lanjutan"
             data-testid="advanced-filter-btn"

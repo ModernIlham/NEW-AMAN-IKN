@@ -51,7 +51,7 @@ const officialReports = [
   { key: "rhi", label: "RHI (Rekapitulasi)", icon: BarChart3, docx: true,
     btn: "bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 dark:bg-indigo-700 dark:hover:bg-indigo-600 dark:disabled:bg-indigo-900/50 dark:disabled:text-indigo-400" },
   { key: "bahi", label: "BAHI (Berita Acara)", icon: BookOpen, docx: true,
-    btn: "bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 dark:bg-blue-700 dark:hover:bg-blue-600 dark:disabled:bg-blue-900/50 dark:disabled:text-blue-400" },
+    btn: "bg-teal-700 hover:bg-teal-800 disabled:bg-teal-300 dark:bg-blue-700 dark:hover:bg-teal-700 dark:disabled:bg-teal-900/50 dark:disabled:text-blue-400" },
   { key: "sp-hasil", label: "SP Hasil", icon: Shield, docx: true,
     btn: "bg-teal-600 hover:bg-teal-700 disabled:bg-teal-300 dark:bg-teal-700 dark:hover:bg-teal-600 dark:disabled:bg-teal-900/50 dark:disabled:text-teal-400" },
   { key: "sp-pelaksanaan", label: "SP Pelaksanaan", icon: FileText, docx: true,
@@ -110,7 +110,7 @@ const batchGroupColors = {
     inactive: "bg-card border-border text-muted-foreground hover:bg-muted",
   },
   resmi: {
-    active: "bg-blue-100 border-blue-300 text-blue-800 dark:bg-blue-900/40 dark:border-blue-600 dark:text-blue-300",
+    active: "bg-blue-100 border-blue-300 text-blue-800 dark:bg-blue-900/40 dark:border-teal-700 dark:text-blue-300",
     inactive: "bg-card border-border text-muted-foreground hover:bg-muted",
   },
   dbhi: {
@@ -267,7 +267,7 @@ export default function ReportDownloads({
                   title={`Unduh DBHI ${label} format Word yang bisa disunting`}
                   className={`flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold transition-colors min-w-0 min-h-0 ${
                     count > 0
-                      ? "bg-blue-700 hover:bg-blue-800 dark:bg-blue-800 dark:hover:bg-blue-700 text-white"
+                      ? "bg-blue-700 hover:bg-blue-800 dark:bg-blue-800 dark:hover:bg-teal-800 text-white"
                       : "bg-muted border border-border text-muted-foreground cursor-not-allowed"
                   }`}>
                   {downloading === `${type}-docx` ? <Loader2 className="w-3 h-3 animate-spin" /> : <FileType2 className="w-3 h-3" />}
@@ -299,7 +299,7 @@ export default function ReportDownloads({
             {officialReports.filter(r => r.docx).map(({ key, label }) => (
               <button key={key} data-testid={`download-docx-${key}`} onClick={() => onDownloadDocx(key)} disabled={!!downloading}
                 title={`Unduh ${label} format Word yang bisa disunting`}
-                className="flex items-center gap-1 px-2 py-1 bg-blue-700 hover:bg-blue-800 disabled:bg-blue-300 dark:bg-blue-800 dark:hover:bg-blue-700 dark:disabled:bg-blue-900/50 dark:disabled:text-blue-400 text-white rounded-md text-[11px] font-semibold transition-colors min-w-0 min-h-0">
+                className="flex items-center gap-1 px-2 py-1 bg-blue-700 hover:bg-blue-800 disabled:bg-teal-300 dark:bg-blue-800 dark:hover:bg-teal-800 dark:disabled:bg-teal-900/50 dark:disabled:text-blue-400 text-white rounded-md text-[11px] font-semibold transition-colors min-w-0 min-h-0">
                 {downloading === `${key}-docx` ? <Loader2 className="w-3 h-3 animate-spin" /> : <FileType2 className="w-3 h-3" />}
                 {label.split(" (")[0]}
               </button>
@@ -379,7 +379,7 @@ export default function ReportDownloads({
                   title="Unduh versi Word (.docx) yang bisa disunting"
                   aria-label={`Unduh ${label} format Word`}
                   data-testid={`download-docx-${key}`}
-                  className="flex items-center gap-1 px-2 py-2 bg-blue-700 hover:bg-blue-800 disabled:bg-blue-300 dark:bg-blue-800 dark:hover:bg-blue-700 dark:disabled:bg-blue-900/50 dark:disabled:text-blue-400 text-white rounded-lg text-[11px] font-semibold transition-colors">
+                  className="flex items-center gap-1 px-2 py-2 bg-blue-700 hover:bg-blue-800 disabled:bg-teal-300 dark:bg-blue-800 dark:hover:bg-teal-800 dark:disabled:bg-teal-900/50 dark:disabled:text-blue-400 text-white rounded-lg text-[11px] font-semibold transition-colors">
                   {downloading === `${key}-docx` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileType2 className="w-3.5 h-3.5" />}
                   Word
                 </button>

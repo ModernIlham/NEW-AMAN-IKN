@@ -218,7 +218,7 @@ export default function SatkerAktifBar({ user }) {
         data-tahap={tahap}
       >
         <div
-          className="pointer-events-auto bg-indigo-600 text-white shadow-lg
+          className="pointer-events-auto bg-teal-800 text-white shadow-lg
                      transition-[max-height] duration-200 ease-out overflow-hidden"
           style={{
             transform: `translateY(${geser}px)`,
@@ -250,7 +250,7 @@ export default function SatkerAktifBar({ user }) {
               >
                 <Globe className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
                 <span className="flex-1 text-sm">Semua Satker (lintas)</span>
-                {!aktif && <Check className="w-4 h-4 text-indigo-600 flex-shrink-0" />}
+                {!aktif && <Check className="w-4 h-4 text-primary flex-shrink-0" />}
               </button>
               <div className="my-1 border-t border-border" />
               {daftar.length === 0 ? (
@@ -276,7 +276,7 @@ export default function SatkerAktifBar({ user }) {
                       </span>
                     </span>
                     {aktif === s.kode_satker && (
-                      <Check className="w-4 h-4 text-indigo-600 flex-shrink-0" />
+                      <Check className="w-4 h-4 text-primary flex-shrink-0" />
                     )}
                   </button>
                 ))
@@ -308,7 +308,7 @@ export default function SatkerAktifBar({ user }) {
             onKeyDown={tombolTarik}
             style={{ touchAction: "none", transform: `translateY(${geser}px)` }}
             className="pointer-events-auto relative w-[5.5rem] h-5 -mt-px flex items-end justify-center
-                       rounded-b-xl bg-indigo-600 text-white shadow-md
+                       rounded-b-xl bg-teal-800 text-white shadow-md
                        cursor-grab active:cursor-grabbing min-w-0 min-h-0
                        focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
             data-testid="satker-aktif-pegangan"

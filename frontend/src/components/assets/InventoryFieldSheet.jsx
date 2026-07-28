@@ -78,7 +78,7 @@ const SegButton = ({ selected, selectedClass, onClick, children, testId }) => (
   </button>
 );
 
-const CardHeader = ({ badge, title, hint, badgeClass = "bg-blue-600/10 text-blue-600" }) => (
+const CardHeader = ({ badge, title, hint, badgeClass = "bg-teal-600/10 text-teal-700" }) => (
   <div className="flex items-center gap-2 mb-2.5">
     <span className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0 ${badgeClass}`}>
       {badge}
@@ -366,7 +366,7 @@ const InventoryFieldSheet = ({
               badge="3"
               title="Foto"
               hint={
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold flex-shrink-0 ${photoCount > 0 ? "bg-blue-600/10 text-blue-600" : "bg-muted text-muted-foreground"}`}>
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold flex-shrink-0 ${photoCount > 0 ? "bg-teal-600/10 text-teal-700" : "bg-muted text-muted-foreground"}`}>
                   {photoCount}/6
                 </span>
               }
@@ -412,7 +412,7 @@ const InventoryFieldSheet = ({
                 onClick={onOpenCamera}
                 disabled={photoCount >= 6}
                 data-testid="sheet-camera-btn"
-                className="h-11 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                className="h-11 rounded-lg bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 disabled:pointer-events-none"
               >
                 <Camera className="w-4 h-4" />Kamera
               </button>
@@ -443,7 +443,7 @@ const InventoryFieldSheet = ({
                     <SegButton
                       key={o}
                       selected={formData.pengguna_melekat_ke === o}
-                      selectedClass="bg-blue-600 border-blue-600 text-white"
+                      selectedClass="bg-teal-700 border-teal-700 text-white"
                       onClick={() => onPenggunaMelekatChange(o)}
                       testId={`sheet-melekat-${o}`}
                     >
@@ -460,7 +460,7 @@ const InventoryFieldSheet = ({
                       <SegButton
                         key={o}
                         selected={formData.operasional_jenis === o}
-                        selectedClass="bg-blue-600 border-blue-600 text-white"
+                        selectedClass="bg-teal-700 border-teal-700 text-white"
                         onClick={() => onOperasionalJenisChange(o)}
                         testId={`sheet-operasional-${o}`}
                       >
@@ -516,7 +516,7 @@ const InventoryFieldSheet = ({
                   onClick={onApplyLastCtx}
                   data-testid="copy-last-ctx-btn"
                   title={`Salin lokasi/pengguna${lastCtx?.koordinat_latitude ? " + koordinat GPS" : ""} dari aset terakhir (hanya mengisi yang kosong)`}
-                  className="inline-flex items-center gap-1.5 rounded-full px-2.5 h-8 text-[11px] font-medium text-blue-600 hover:bg-blue-600/10 transition-colors"
+                  className="inline-flex items-center gap-1.5 rounded-full px-2.5 h-8 text-[11px] font-medium text-blue-600 hover:bg-teal-700/10 transition-colors"
                 >
                   <Copy className="w-3.5 h-3.5" />Salin dari aset sebelumnya
                 </button>
@@ -530,7 +530,7 @@ const InventoryFieldSheet = ({
             <div className="grid grid-cols-2 gap-1.5">
               <SegButton
                 selected={formData.stiker_status === "Sudah Terpasang"}
-                selectedClass="bg-blue-600 border-blue-600 text-white"
+                selectedClass="bg-teal-700 border-teal-700 text-white"
                 onClick={() => onStikerStatusChange("Sudah Terpasang")}
                 testId="sheet-stiker-sudah"
               >
@@ -538,7 +538,7 @@ const InventoryFieldSheet = ({
               </SegButton>
               <SegButton
                 selected={formData.stiker_status === "Belum Terpasang"}
-                selectedClass="bg-blue-600 border-blue-600 text-white"
+                selectedClass="bg-teal-700 border-teal-700 text-white"
                 onClick={() => onStikerStatusChange("Belum Terpasang")}
                 testId="sheet-stiker-belum"
               >
@@ -569,9 +569,9 @@ const InventoryFieldSheet = ({
               data-testid="sheet-notes-toggle"
               className="w-full flex items-center gap-2 p-3 text-left"
             >
-              <span className="w-6 h-6 rounded-full bg-blue-600/10 text-blue-600 text-xs font-bold flex items-center justify-center flex-shrink-0">6</span>
+              <span className="w-6 h-6 rounded-full bg-teal-600/10 text-teal-700 text-xs font-bold flex items-center justify-center flex-shrink-0">6</span>
               <span className="uppercase tracking-wide text-[11px] font-semibold text-muted-foreground flex-1 truncate">Catatan</span>
-              {!notesOpen && formData.notes && <span className="w-1.5 h-1.5 rounded-full bg-blue-600 flex-shrink-0" aria-hidden="true" />}
+              {!notesOpen && formData.notes && <span className="w-1.5 h-1.5 rounded-full bg-teal-700 flex-shrink-0" aria-hidden="true" />}
               <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform flex-shrink-0 ${notesOpen ? "rotate-180" : ""}`} />
             </button>
             {notesOpen && (
@@ -596,7 +596,7 @@ const InventoryFieldSheet = ({
           onClick={onQueueNextIntent}
           disabled={isSubmitting}
           data-testid="sheet-submit-next"
-          className="w-full h-12 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-60 disabled:pointer-events-none"
+          className="w-full h-12 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-bold text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-60 disabled:pointer-events-none"
         >
           {isSubmitting ? (
             <><Loader2 className="w-4 h-4 animate-spin" />Menyimpan...</>

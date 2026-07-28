@@ -230,7 +230,7 @@ export default function PerencanaanPage({ user, onBack }) {
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
-          <span className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
+          <span className="w-9 h-9 rounded-lg bg-teal-700 flex items-center justify-center flex-shrink-0">
             <ClipboardList className="w-4 h-4 text-white" />
           </span>
           <div className="min-w-0 flex-1">
@@ -341,7 +341,7 @@ export default function PerencanaanPage({ user, onBack }) {
                     {usulan.ringkasan.berjalan} berjalan
                   </span>
                 )}
-                <Button size="sm" className="h-7 text-[11px] min-h-0 flex-shrink-0 bg-blue-600 hover:bg-blue-700 text-white"
+                <Button size="sm" className="h-7 text-[11px] min-h-0 flex-shrink-0 bg-teal-700 hover:bg-teal-800 text-white"
                   onClick={() => { setCari(""); setHasilCari([]); setFormUsulan({ data: { tahun_rkbmn: String(th + 2), jenis: "pemeliharaan", unit_pengusul: "", uraian: "", volume: "1", satuan: "unit", keterangan: "" }, aset: null, saving: false }); }}
                   title="Buat usulan RKBMN baru" aria-label="Buat usulan RKBMN baru"
                   data-testid="perencanaan-usulan-tambah">
@@ -385,7 +385,7 @@ export default function PerencanaanPage({ user, onBack }) {
                           return (
                             <Button key={ke} size="sm" variant={majuPertama ? "default" : "outline"}
                               className={`h-7 text-[11px] min-h-0 ${majuPertama
-                                ? "bg-blue-600 hover:bg-blue-700 text-white"
+                                ? "bg-teal-700 hover:bg-teal-800 text-white"
                                 : TRANSISI_MUNDUR.includes(ke)
                                   ? "border-red-500/40 text-red-600 dark:text-red-400 hover:bg-red-500/10"
                                   : ""}`}
@@ -430,7 +430,7 @@ export default function PerencanaanPage({ user, onBack }) {
                   </p>
                 </div>
                 {isAdmin && (
-                  <Button size="sm" className="h-7 text-[11px] min-h-0 bg-blue-600 hover:bg-blue-700 text-white"
+                  <Button size="sm" className="h-7 text-[11px] min-h-0 bg-teal-700 hover:bg-teal-800 text-white"
                     onClick={() => setFormSbsk({ kategori: "barang", peruntukan: "", satuan: "unit", standar: "1", keterangan: "" })}
                     data-testid="sbsk-tambah">
                     <Plus className="w-3.5 h-3.5 mr-1" />Tambah Standar
@@ -445,7 +445,7 @@ export default function PerencanaanPage({ user, onBack }) {
                     Belum ada baris standar — angka batas tertinggi diambil admin dari Lampiran PMK 138/2024 lewat tombol &quot;Tambah Standar&quot;.
                   </p>
                   {isAdmin && (
-                    <Button size="sm" className="mt-3 bg-blue-600 hover:bg-blue-700 text-white"
+                    <Button size="sm" className="mt-3 bg-teal-700 hover:bg-teal-800 text-white"
                       onClick={() => setFormSbsk({ kategori: "barang", peruntukan: "", satuan: "unit", standar: "1", keterangan: "" })}
                       data-testid="sbsk-tambah-kosong">
                       <Plus className="w-3.5 h-3.5 mr-1" />Tambah Standar
@@ -642,7 +642,7 @@ export default function PerencanaanPage({ user, onBack }) {
               </div>
               <div className="flex flex-wrap justify-end gap-2">
                 <Button variant="outline" size="sm" onClick={() => setFormUsulan(null)}>Batal</Button>
-                <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white"
+                <Button size="sm" className="bg-teal-700 hover:bg-teal-800 text-white"
                   disabled={formUsulan.saving || !formUsulan.data.unit_pengusul.trim() || !formUsulan.data.uraian.trim() || !formUsulan.data.satuan.trim()}
                   onClick={simpanUsulan} data-testid="usulan-simpan">
                   {formUsulan.saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Simpan Draft"}
@@ -686,7 +686,7 @@ export default function PerencanaanPage({ user, onBack }) {
                 className="h-9" />
               <div className="flex flex-wrap justify-end gap-1.5 pt-1">
                 <Button variant="outline" size="sm" className="h-9 text-xs" onClick={() => setFormSbsk(null)}>Batal</Button>
-                <Button size="sm" className="h-9 text-xs bg-blue-600 hover:bg-blue-700 text-white" onClick={simpanSbsk} data-testid="sbsk-simpan">Simpan</Button>
+                <Button size="sm" className="h-9 text-xs bg-teal-700 hover:bg-teal-800 text-white" onClick={simpanSbsk} data-testid="sbsk-simpan">Simpan</Button>
               </div>
             </div>
           )}

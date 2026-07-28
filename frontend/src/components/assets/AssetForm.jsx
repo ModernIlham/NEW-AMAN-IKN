@@ -1947,7 +1947,7 @@ const AssetForm = memo(({
         <div className="fixed inset-0 z-[115] bg-black/60 flex items-center justify-center p-6" data-testid="camera-choice-dialog">
           <div className="bg-card rounded-2xl p-5 w-full max-w-sm space-y-3 shadow-2xl">
             <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center flex-shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-teal-700 flex items-center justify-center flex-shrink-0">
                 <Camera className="w-5 h-5 text-white" />
               </div>
               <div>
@@ -1958,7 +1958,7 @@ const AssetForm = memo(({
             <div className="grid grid-cols-1 gap-2">
               <button type="button" data-testid="camera-choice-full"
                 onClick={() => { setCameraPromptOpen(false); openFullCamera(); }}
-                className="h-11 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors">
+                className="h-11 rounded-lg bg-teal-700 hover:bg-teal-800 text-white text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors">
                 <Camera className="w-4 h-4" />Mode Kamera Penuh
               </button>
               <button type="button" data-testid="camera-choice-form"
@@ -2004,7 +2004,7 @@ const AssetForm = memo(({
         {/* Header */}
         <div className={`p-3 border-b-2 flex justify-between items-center flex-shrink-0 ${isEditing ? "bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-700" : "bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-700"}`}>
           <div className="flex items-center gap-2">
-            <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${isEditing ? "bg-amber-500" : "bg-blue-600"}`}>
+            <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${isEditing ? "bg-amber-500" : "bg-teal-700"}`}>
               {isEditing ? <Edit3 className="w-3.5 h-3.5 text-white" /> : <Plus className="w-3.5 h-3.5 text-white" />}
             </div>
             <div>
@@ -2057,7 +2057,7 @@ const AssetForm = memo(({
           ].map(t => (
             <button key={t.key} type="button" onClick={() => setFormSection(t.key)}
               className={`flex-1 flex items-center justify-center gap-1 py-2 text-xs font-medium border-b-2 ${
-                formSection === t.key ? 'border-blue-600 text-blue-700 bg-card' : 'border-transparent text-muted-foreground hover:text-foreground'
+                formSection === t.key ? 'border-teal-700 text-blue-700 bg-card' : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
             >
               <t.icon className="w-3.5 h-3.5" /><span className="hidden sm:inline">{t.label}</span>
@@ -2379,7 +2379,7 @@ const AssetForm = memo(({
                         data-testid={`pengguna-melekat-${o}`}
                         className={`h-7 rounded-md border text-[10px] font-semibold leading-tight px-1 transition-colors ${
                           formData.pengguna_melekat_ke === o
-                            ? "bg-blue-600 border-blue-600 text-white"
+                            ? "bg-teal-700 border-teal-700 text-white"
                             : "bg-card border-border text-foreground/80 hover:bg-accent"
                         }`}
                       >
@@ -2407,7 +2407,7 @@ const AssetForm = memo(({
                           data-testid={`operasional-jenis-${o}`}
                           className={`h-7 rounded-md border text-[10px] font-semibold leading-tight px-1 transition-colors ${
                             formData.operasional_jenis === o
-                              ? "bg-blue-600 border-blue-600 text-white"
+                              ? "bg-teal-700 border-teal-700 text-white"
                               : "bg-card border-border text-foreground/80 hover:bg-accent"
                           }`}
                         >
@@ -2589,7 +2589,7 @@ const AssetForm = memo(({
                     className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-medium transition-all duration-200 border ${
                       showGuide 
                         ? 'bg-blue-500 text-white border-blue-500 shadow-sm shadow-blue-200' 
-                        : 'bg-card text-muted-foreground border-border hover:border-blue-300 hover:text-blue-500'
+                        : 'bg-card text-muted-foreground border-border hover:border-teal-400 hover:text-blue-500'
                     }`}
                     title={showGuide ? "Sembunyikan panduan" : "Tampilkan panduan"}
                   >
@@ -2785,7 +2785,7 @@ const AssetForm = memo(({
                       <Plus className="w-4 h-4 text-muted-foreground" />
                       <span className="text-[7px] text-muted-foreground">File</span>
                     </button>
-                    <button type="button" onClick={() => cameraInputRef.current?.click()} className="w-14 h-14 border-2 border-dashed border-blue-300 dark:border-blue-600 rounded flex flex-col items-center justify-center hover:border-blue-500 bg-blue-50/50 dark:bg-blue-900/30 gap-0.5" title="Ambil Foto" data-testid="camera-capture-btn">
+                    <button type="button" onClick={() => cameraInputRef.current?.click()} className="w-14 h-14 border-2 border-dashed border-blue-300 dark:border-teal-700 rounded flex flex-col items-center justify-center hover:border-blue-500 bg-blue-50/50 dark:bg-blue-900/30 gap-0.5" title="Ambil Foto" data-testid="camera-capture-btn">
                       <Camera className="w-4 h-4 text-blue-500 dark:text-blue-400" />
                       <span className="text-[7px] text-blue-500 dark:text-blue-400">Kamera</span>
                     </button>

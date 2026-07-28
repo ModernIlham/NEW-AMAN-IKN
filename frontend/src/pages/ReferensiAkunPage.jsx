@@ -641,7 +641,7 @@ export default function ReferensiAkunPage({ user, onBack }) {
               <div className="flex items-center gap-1 flex-wrap">
                 {[["", "Semua"], ...Object.entries(GOL_BELANJA).map(([p, v]) => [p, `${p} ${v.label}`])].map(([p, label]) => (
                   <button key={p || "semua"} type="button" onClick={() => setGolBelanja(p)}
-                    className={`h-7 px-2 rounded-full border text-[10px] font-medium min-w-0 min-h-0 transition-colors ${golBelanja === p ? "bg-blue-600 border-blue-600 text-white" : "border-border text-muted-foreground hover:bg-muted"}`}
+                    className={`h-7 px-2 rounded-full border text-[10px] font-medium min-w-0 min-h-0 transition-colors ${golBelanja === p ? "bg-teal-700 border-teal-700 text-white" : "border-border text-muted-foreground hover:bg-muted"}`}
                     data-testid={`belanja-gol-${p || "semua"}`}>
                     {label}
                   </button>
