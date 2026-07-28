@@ -233,6 +233,32 @@ def test_ekspor_optimize_tak_melubangi_node_yang_belum_dioptimalkan(dbx):
     _jalan(skenario())
 
 
+# ── Daftar node tak boleh membawa geometri apa pun ─────────────────────────
+
+def test_daftar_node_tak_membawa_geometri_ringan(dbx):
+    """Daftar node sengaja membuang `geometry` demi SLA — dan `geometry_opt`
+    tunduk pada alasan yang sama.
+
+    Per node ia memang jauh lebih ringan, tetapi daftar ini memuat sampai
+    20.000 node sekaligus. Ratusan verteks dikali puluhan ribu baris tetap
+    payload raksasa, dan tak satu pun layar daftar menggambar poligon. Yang
+    dibutuhkan hanya "sudah diringankan atau belum".
+    """
+    async def skenario():
+        await _seed(dbx, 2)
+        await _unwrap(rs.optimasi_massal)(
+            None, rs.OptimasiMassalIn(dalam="n0"), user=USER)
+        hasil = await _unwrap(rs.daftar_node)(
+            parent_id="", tipe="", q="", _user=USER)
+        for n in hasil["items"]:
+            assert "geometry" not in n
+            assert "geometry_opt" not in n, "versi ringan ikut terbawa daftar"
+        by_id = {n["id"]: n for n in hasil["items"]}
+        assert by_id["n0"]["dioptimalkan"] is True
+        assert by_id["n1"]["dioptimalkan"] is False
+    _jalan(skenario())
+
+
 # ── Editor selalu menyunting yang ASLI ─────────────────────────────────────
 
 def test_detail_node_tak_pernah_menyerahkan_versi_ringan(dbx):

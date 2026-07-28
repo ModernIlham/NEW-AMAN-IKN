@@ -354,6 +354,24 @@ export default function SpasialMasterPage({ user, onBack }) {
               >
                 {node.bbox ? "denah" : "belum digambar"}
               </span>
+              {/* Status optimasi per node. Tanpa ini, "Ringankan Peta" adalah
+                  tombol yang hasilnya hanya tampak sebagai angka di toast —
+                  tak ada cara melihat denah MANA yang masih berat, dan
+                  operator tak tahu apakah ada yang perlu ditekan lagi. */}
+              {node.bbox && (
+                <span
+                  className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${
+                    node.dioptimalkan
+                      ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                      : "bg-amber-500/15 text-amber-700 dark:text-amber-300"}`}
+                  title={node.dioptimalkan
+                    ? "Sudah punya salinan ringan — peta memakainya; geometri asli tetap utuh"
+                    : "Belum diringankan — peta menggambar geometri penuh. Tekan “Ringankan Peta”"}
+                  data-testid={`spasial-opt-${node.id}`}
+                >
+                  {node.dioptimalkan ? "ringan" : "belum ringan"}
+                </span>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">

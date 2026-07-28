@@ -299,12 +299,21 @@ async def daftar_node(parent_id: str = Query(""), tipe: str = Query(""),
     # membutuhkannya. Tetapi mereka perlu tahu node mana yang PUNYA batas —
     # tanpa itu, pemilih area geofence menawarkan node yang pasti ditolak, dan
     # pengguna baru tahu setelah menabraknya.
+    #
+    # `geometry_opt` dibuang dengan alasan yang SAMA PERSIS. Ia memang jauh
+    # lebih ringan per node, tetapi daftar ini memuat sampai _MAKS_NODE node
+    # sekaligus — ratusan verteks dikali puluhan ribu baris tetap berarti
+    # payload raksasa. Yang dibutuhkan layar hanya "sudah diringankan atau
+    # belum", dan itu satu boolean.
     pipeline = [
         {"$match": query},
         {"$sort": {"ordinal_level": 1, "kode": 1, "nama": 1}},
         {"$limit": _MAKS_NODE},
-        {"$addFields": {"tipe_geometri": {"$ifNull": ["$geometry.type", ""]}}},
-        {"$project": {"_id": 0, "geometry": 0}},
+        {"$addFields": {
+            "tipe_geometri": {"$ifNull": ["$geometry.type", ""]},
+            "dioptimalkan": {"$ne": [{"$ifNull": ["$geometry_opt", None]}, None]},
+        }},
+        {"$project": {"_id": 0, "geometry": 0, "geometry_opt": 0}},
     ]
     items = [n async for n in db.spasial_node.aggregate(pipeline)]
     return {"items": items, "jumlah": len(items)}
