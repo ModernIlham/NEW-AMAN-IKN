@@ -44,7 +44,7 @@ GOLONGAN_BARANG = {
 # hanya bermakna untuk BMN) dan judul dokumennya.
 KATEGORI_LPB = {
     "persediaan": "Persediaan",
-    "aset": "XXXX",
+    "aset": "Barang Milik Negara (Aset Tetap)",
 }
 
 

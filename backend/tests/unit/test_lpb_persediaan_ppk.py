@@ -122,6 +122,35 @@ def test_tanpa_ppk_sama_sekali_lpb_tetap_terbit(dbx):
     _jalan(skenario())
 
 
+def test_bast_satker_lain_tak_bisa_ditautkan(dbx):
+    """Temuan audit adversarial: `_ambil_snapshot_perolehan` tak ter-scope.
+
+    Tanpa scope, writer satker A yang memegang uuid BAST satker B dapat
+    MENYALIN identitas dokumen B — nomor BAST, penyedia, dan (sejak PR ini)
+    nama + NIP PPK — ke jurnal dan LPB satker A. Bukan sekadar terbaca:
+    tersimpan permanen di dokumen resmi, lengkap dengan data pribadi.
+    """
+    from fastapi import HTTPException
+
+    async def skenario():
+        await _seed(dbx)
+        # BAST di atas ber-`kode_satker: ""` (era lama, terbuka). Ganti jadi
+        # milik satker lain supaya penjaganya benar-benar diuji.
+        await dbx.pengadaan.update_one({"id": "perol-1"},
+                                       {"$set": {"kode_satker": "999999"}})
+        await dbx.persediaan.update_one({"id": "psd-1"},
+                                        {"$set": {"kode_satker": "111111"}})
+        user_a = {"username": "gudang-a", "role": "admin",
+                  "kode_satker": "111111"}
+        with pytest.raises(HTTPException) as e:
+            await _unwrap(rps.transaksi_massal)(_massal(), user=user_a)
+        assert e.value.status_code == 404
+        # Penolakan terjadi DI MUKA — tak ada stok yang terlanjur bergerak.
+        assert await dbx.transaksi_persediaan.count_documents({}) == 0
+        assert await dbx.lpb.count_documents({}) == 0
+    _jalan(skenario())
+
+
 def test_lpb_persediaan_berkategori_persediaan_dan_tampil_di_filter(dbx):
     """Dokumen lama tanpa field `kategori` tak boleh lenyap dari filter."""
     async def skenario():

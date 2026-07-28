@@ -855,7 +855,7 @@ async def transaksi_massal(payload: TransaksiMassalIn, user: dict = Depends(requ
     # mutasi stok barang mana pun); snapshot per baris diambil transaksi_masuk.
     snap_asal = {}
     if payload.arah == "masuk" and str(payload.perolehan_id or "").strip():
-        snap_asal = await _ambil_snapshot_perolehan(payload.perolehan_id)
+        snap_asal = await _ambil_snapshot_perolehan(payload.perolehan_id, user)
 
     # Nomor LPB: pakai no_bukti; atau pesan otomatis dari Persuratan.
     import uuid as _uuid
@@ -1459,14 +1459,23 @@ class TransaksiMasukIn(BaseModel):
     keterangan: str = ""
 
 
-async def _ambil_snapshot_perolehan(perolehan_id: str) -> dict:
+async def _ambil_snapshot_perolehan(perolehan_id: str, user=None) -> dict:
     """Cari perolehan Pengadaan (bila id diisi) → snapshot FK dokumen sumber;
-    404 bila hilang (tiru `_ambil_snapshot_penganggaran` #199/#258)."""
+    404 bila hilang (tiru `_ambil_snapshot_penganggaran` #199/#258).
+
+    ISOLASI SATKER (temuan audit adversarial): pencarian di-scope ke satker
+    pemanggil. Tanpa itu, writer satker A yang menebak/mendapat uuid BAST
+    satker B dapat MENYALIN identitas dokumen B — nomor BAST, tanggal,
+    penyedia, dan sejak PR ini juga NAMA & NIP PPK-nya — ke dalam jurnal
+    persediaan dan LPB satker A. Bukan sekadar terbaca: tersimpan permanen di
+    dokumen resmi satker lain, lengkap dengan data pribadi pejabatnya.
+    """
     pid = str(perolehan_id or "").strip()
     if not pid:
         return snapshot_perolehan(None)
+    from shared_utils import scope_query_field_satker
     p = await db.pengadaan.find_one(
-        {"id": pid},
+        scope_query_field_satker(user, {"id": pid}),
         # `ppk_*` WAJIB ikut diproyeksikan — `snapshot_perolehan` membaca
         # keduanya, dan proyeksi yang tak memuatnya membuat nama PPK selalu
         # kosong di jurnal persediaan tanpa satu pun galat yang terlihat.
@@ -1519,7 +1528,7 @@ async def transaksi_masuk(item_id: str, data: TransaksiMasukIn,
 
     # FK dokumen sumber (§5A gap #2): 404 dulu SEBELUM mutasi stok agar tak ada
     # layer masuk tanpa perolehan valid.
-    snap_perolehan = await _ambil_snapshot_perolehan(data.perolehan_id)
+    snap_perolehan = await _ambil_snapshot_perolehan(data.perolehan_id, user)
 
     now = datetime.now(timezone.utc)
     batch_id = str(uuid.uuid4())

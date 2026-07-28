@@ -305,22 +305,36 @@ async def buat_permintaan(payload: PermintaanIn, user: dict = Depends(require_wr
         raise HTTPException(status_code=400, detail="Minimal satu penanda tangan")
     if payload.mode not in ("berurutan", "paralel"):
         raise HTTPException(status_code=400, detail="Mode harus berurutan/paralel")
-    # Bila menaut BAST terstruktur (doc_type='bast' + doc_ref=id BAST), PASTIKAN
-    # BAST itu milik satker pemohon. Ini gerbang tunggal: back-link penyelesaian
-    # (menulis signature_request_id ke BAST) dan cascade pembatalan sama-sama
-    # digerakkan doc_ref — validasi kepemilikan di sini mencegah SR palsu
-    # menunjuk BAST satker lain (uuid bocor) lalu men-tamper dokumennya.
-    # doc_ref bagi doc_type lain (surat/register) adalah teks bebas → tak divalidasi.
-    if str(payload.doc_type or "") == "bast" and str(payload.doc_ref or "").strip():
+    # Bila menaut dokumen TERSTRUKTUR (doc_type ber-koleksi + doc_ref = id-nya),
+    # PASTIKAN dokumen itu milik satker pemohon. Ini GERBANG TUNGGAL: back-link
+    # penyelesaian (menulis signature_request_id ke dokumen) dan cascade
+    # pembatalan sama-sama digerakkan doc_ref — validasi kepemilikan di sini
+    # mencegah SR palsu menunjuk dokumen satker lain (uuid bocor) lalu
+    # men-tamper-nya.
+    #
+    # SETIAP doc_type baru yang punya back-link WAJIB terdaftar di sini. LPB
+    # ditambahkan bersamaan dengan back-link-nya; tanpa itu `POST /ttd/permintaan`
+    # yang dipanggil langsung (melewati /persediaan/lpb/{id}/kirim-ttd yang
+    # memang ber-guard) bisa menulis ke LPB satker lain saat tandatangan selesai.
+    #
+    # doc_ref bagi doc_type lain (surat/register/dokumen unggahan) adalah teks
+    # bebas tanpa back-link → tak divalidasi.
+    _KOLEKSI_BER_BACKLINK = {
+        "bast": (db.bast_serah_terima, "BAST"),
+        "lpb": (db.lpb, "LPB"),
+    }
+    _dt = str(payload.doc_type or "")
+    if _dt in _KOLEKSI_BER_BACKLINK and str(payload.doc_ref or "").strip():
         from shared_utils import scope_query_field_satker
-        pemilik = await db.bast_serah_terima.find_one(
+        _koleksi, _label = _KOLEKSI_BER_BACKLINK[_dt]
+        pemilik = await _koleksi.find_one(
             scope_query_field_satker(
                 user, {"id": str(payload.doc_ref).strip()}),
             {"_id": 0, "id": 1})
         if not pemilik:
             raise HTTPException(
                 status_code=403,
-                detail="BAST rujukan tidak ditemukan pada satker Anda")
+                detail=f"{_label} rujukan tidak ditemukan pada satker Anda")
     # Penanda tangan yang sudah MENINGGAL DUNIA → tolak sejak awal. Mengirim
     # link TTD ke almarhum mustahil dipenuhi dan hanya menggantung dokumen di
     # status "menunggu". Satu query untuk semua NIP (hindari N kueri).

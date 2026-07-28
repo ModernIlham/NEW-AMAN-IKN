@@ -124,11 +124,31 @@ Pemeriksa LPB → KPB, berurutan). Tautan balik dan cascade pembatalan mengikuti
 pola BAST yang sudah ada, lengkap dengan penjaga scope satker dan pencocokan
 `signature_request_id`.
 
+### Dua kebocoran lintas-satker yang ditemukan audit adversarial atas PR ini
+
+**Gerbang `doc_ref` pada permintaan TTD hanya mengenal BAST.** `kirim_tandatangan`
+menulis back-link ke dokumen yang ditunjuk `doc_ref` **tanpa** memeriksa satker —
+itu memang disengaja, karena pemeriksaannya dilakukan sekali di muka saat
+permintaan dibuat. Konsekuensinya: setiap `doc_type` ber-back-link **wajib**
+terdaftar di gerbang itu. `lpb` sempat tidak. `/persediaan/lpb/{id}/kirim-ttd`
+memang ber-guard, tetapi `POST /ttd/permintaan` bisa dipanggil langsung dengan id
+LPB satker lain — dan saat tanda tangan selesai, servernya sendiri yang menulis
+ke dokumen satker itu. Gerbangnya kini bertabel, dengan catatan tegas bahwa
+doc_type baru harus didaftarkan.
+
+**`_ambil_snapshot_perolehan` tak pernah ter-scope satker.** Cacat lama yang
+diperburuk PR ini: writer satker A yang memegang uuid BAST satker B dapat
+menyalin identitas dokumen B — nomor BAST, tanggal, penyedia, dan **sejak PR ini
+juga nama + NIP PPK** — ke jurnal persediaan dan LPB satker A. Bukan sekadar
+terbaca: tersimpan permanen di dokumen resmi, lengkap dengan data pribadi
+pejabatnya.
+
 ### Verifikasi
 
-1.211 uji backend (33 baru), eslint 0 galat, build kompilasi. Dua mutasi
+1.220 uji backend (42 baru), eslint 0 galat, build kompilasi. **Empat mutasi**
 dibuktikan tertangkap: membuang penjaga golongan → 4 uji gagal; mempersempit
-proyeksi `ppk_*` → 2 uji gagal.
+proyeksi `ppk_*` → 2 uji gagal; mencabut `lpb` dari gerbang `doc_ref` → 2 uji
+gagal; mencabut scope satker dari lookup perolehan → 1 uji gagal.
 
 ---
 
