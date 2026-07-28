@@ -53,6 +53,36 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#669] Kotak putih misterius di kiri-atas HP: tautan "lompat ke konten" yang mencuat — 2026-07-28
+
+Laporan lapangan tiga ronde akhirnya terpecahkan dengan MENJALANKAN aplikasi di
+viewport HP (Playwright) dan menyelidiki elemen di titik yang dilaporkan:
+pelakunya `.skip-link` — tautan aksesibilitas "lompat ke konten".
+
+Cacatnya berlapis, dan baru muncul justru di HP:
+
+- Ia disembunyikan dengan `top: -40px` — offset piksel TEBAKAN atas tingginya.
+  Di layar sempit aturan sentuh global memaksa semua `<a>` minimal 44 px, dan
+  skala huruf Android bisa menambahnya lagi: ujung bawahnya SELALU mencuat di
+  kiri-atas, dengan `z-index: 9999` — di atas segalanya, termasuk pegangan
+  tirai satker.
+- Ujung yang mencuat itu bisa TERKETUK; ketukan memberi `:focus`, dan gayanya
+  memunculkan seluruh kotak putih bersudut-bundar tepat di depan pegangan —
+  persis tangkapan layar lapangan.
+
+Perbaikan: sembunyikan dengan `transform: translateY(-110%)` (relatif terhadap
+tinggi dirinya sendiri, berapa pun itu) dan muncul hanya pada `:focus-visible`
+(navigasi papan ketik — satu-satunya pengguna yang membutuhkannya; ketukan jari
+tak lagi memunculkannya). Fungsi aksesibilitasnya utuh.
+
+Diverifikasi dua arah di viewport HP: sebelum — `elementFromPoint` di kiri-atas
+mengembalikan `.skip-link`; sesudah — bersih, dan pegangan tirai berdiri tanpa
+terhalang.
+
+**Uji:** 281 frontend, lint & build bersih + verifikasi visual Playwright.
+
+---
+
 ## [#668] Pegangan tirai naik ke lapisan teratas + kembali kasatmata — 2026-07-28
 
 Dua koreksi atas `[#667]`, dari umpan balik lapangan yang sama:
