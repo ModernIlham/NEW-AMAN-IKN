@@ -150,7 +150,116 @@ def layak_dipakai(asli: bytes, hasil: Optional[bytes]) -> bool:
     return 0 < len(hasil) < len(asli)
 
 
+# ── Ambang kompresi gambar tersemat ────────────────────────────────────────
+# Angka-angka ini adalah keputusan sadar, bukan selera. Dokumen BMN adalah
+# bukti hukum: nomor seri pada foto dan teks pada hasil scan WAJIB tetap
+# terbaca. Semua ambang di bawah dipilih agar itu terjaga.
+
+SISI_MAKS_FOTO = 1700     # px — pada lebar A4 ≈ 200 DPI; foto BMN tetap tajam
+SISI_MIN_SENTUH = 700     # px — di bawah ini JANGAN disentuh: itu wilayah
+                          # logo, stempel, QR, dan spesimen tanda tangan
+SISI_MAKS_SCAN = 2200     # px — halaman hasil scan berisi TEKS: ≈265 DPI,
+                          # sengaja lebih longgar daripada foto biasa
+MUTU_FOTO = 75
+MUTU_SCAN = 85            # scan lebih tinggi: artefak JPEG pada huruf tipis
+                          # jauh lebih merusak daripada pada foto
+UNTUNG_MIN = 0.03         # < 3% tak sepadan dengan risikonya — kembalikan asli
+TOLERANSI_TEKS = 0.98     # teks hasil ekstraksi wajib >= 98% panjang aslinya
+
+
+def _pdf_bertanda_tangan(pembaca) -> bool:
+    """Deteksi tanda tangan digital pada PDF.
+
+    Dokumen ber-TTD digital TIDAK BOLEH disentuh sama sekali: menulis ulang
+    strukturnya membatalkan tanda tangannya, dan dokumen BMN yang tanda
+    tangannya batal lebih buruk daripada dokumen yang besar.
+    """
+    try:
+        akar = pembaca.trailer["/Root"]
+        acro = akar.get("/AcroForm")
+        if not acro:
+            return False
+        acro = acro.get_object()
+        if acro.get("/SigFlags"):
+            return True
+        for f in (acro.get("/Fields") or []):
+            try:
+                if f.get_object().get("/FT") == "/Sig":
+                    return True
+            except Exception:
+                continue
+    except Exception:
+        # Ragu = anggap bertanda tangan. Salah menolak hanya berarti berkas
+        # tak terkompresi; salah menerima berarti tanda tangan batal.
+        return True
+    return False
+
+
+def _teks_pdf(pembaca) -> str:
+    potong = []
+    for h in pembaca.pages:
+        try:
+            potong.append(h.extract_text() or "")
+        except Exception:
+            pass
+    return "".join(potong)
+
+
 # ── Jaring pengaman LOKAL ──────────────────────────────────────────────────
+
+def _kecilkan_gambar_halaman(halaman) -> int:
+    """Turunkan resolusi gambar tersemat pada satu halaman. Kembalikan cacah
+    gambar yang benar-benar diganti."""
+    from PIL import Image
+
+    diganti = 0
+    try:
+        daftar = list(halaman.images)
+    except Exception:
+        return 0
+    for berkas_gambar in daftar:
+        try:
+            gbr = berkas_gambar.image
+            if gbr is None:
+                continue
+            w, h = gbr.size
+            # Gambar kecil TIDAK disentuh: itu logo, stempel, QR, spesimen
+            # tanda tangan. Mengecilkannya merusak tanpa menghemat berarti.
+            if max(w, h) < SISI_MIN_SENTUH:
+                continue
+            # Bitonal (hasil fotokopi) dilewati: JPEG justru MEMBESARKANNYA
+            # dan menambah artefak pada teks.
+            if gbr.mode in ("1", "P"):
+                continue
+
+            # Halaman yang gambarnya sangat besar dan berbentuk potret
+            # umumnya hasil SCAN dokumen — isinya teks, jadi diperlakukan
+            # lebih hati-hati daripada foto biasa.
+            adalah_scan = max(w, h) >= 2000 and (h >= w)
+            sisi_maks = SISI_MAKS_SCAN if adalah_scan else SISI_MAKS_FOTO
+            mutu = MUTU_SCAN if adalah_scan else MUTU_FOTO
+
+            baru = gbr
+            if max(w, h) > sisi_maks:
+                skala = sisi_maks / float(max(w, h))
+                baru = gbr.resize((max(1, int(w * skala)), max(1, int(h * skala))),
+                                  Image.LANCZOS)
+            if baru.mode not in ("RGB", "L"):
+                baru = baru.convert("RGB")
+
+            keluar = io.BytesIO()
+            baru.save(keluar, format="JPEG", quality=mutu, optimize=True)
+            calon = keluar.getvalue()
+            # Hanya ganti bila benar-benar lebih kecil. PDF yang gambarnya
+            # sudah optimal akan MEMBESAR bila di-encode ulang.
+            if len(calon) < len(berkas_gambar.data):
+                berkas_gambar.replace(baru, quality=mutu, optimize=True)
+                diganti += 1
+        except Exception:
+            # Satu gambar rewel tak boleh menggagalkan seluruh dokumen.
+            continue
+    return diganti
+
 
 def kompres_pdf_lokal(pdf_bytes: bytes) -> Optional[bytes]:
     """Kompresi PDF tanpa jaringan memakai pypdf — sepadan peran Pillow di
@@ -180,14 +289,24 @@ def kompres_pdf_lokal(pdf_bytes: bytes) -> Optional[bytes]:
         # dokumen tanpa proteksi yang aslinya memang diproteksi.
         if getattr(pembaca, "is_encrypted", False):
             return None
+        # PDF ber-TTD digital: menulis ulang strukturnya MEMBATALKAN tanda
+        # tangannya. Dokumen besar jauh lebih baik daripada dokumen yang
+        # tanda tangannya batal.
+        if _pdf_bertanda_tangan(pembaca):
+            return None
         jumlah_halaman = len(pembaca.pages)
         if jumlah_halaman == 0:
             return None
+        teks_asli = _teks_pdf(pembaca)
 
         penulis = PdfWriter()
         for hal in pembaca.pages:
             penulis.add_page(hal)
         for hal in penulis.pages:
+            # Turunkan resolusi gambar tersemat (ambang aman di atas), lalu
+            # padatkan content stream. Urutan ini penting: memadatkan dulu
+            # lalu mengganti gambar akan meninggalkan stream lama.
+            _kecilkan_gambar_halaman(hal)
             try:
                 hal.compress_content_streams()
             except Exception:
@@ -202,9 +321,20 @@ def kompres_pdf_lokal(pdf_bytes: bytes) -> Optional[bytes]:
         penulis.write(keluar)
         hasil = keluar.getvalue()
 
-        # Verifikasi hasilnya masih dokumen yang SAMA sebelum dipakai.
+        # ── Gerbang keselamatan: hasilnya WAJIB dokumen yang sama ──────────
         ulang = PdfReader(io.BytesIO(hasil))
         if len(ulang.pages) != jumlah_halaman:
+            return None
+        # Teks tak boleh menyusut. Ini penjaga terpenting bagi dokumen bukti:
+        # kalau ekstraksi teks tiba-tiba jauh lebih pendek, ada yang rusak —
+        # dan kerusakan pada BAST/kontrak jauh lebih mahal daripada berkas
+        # yang besar.
+        if teks_asli:
+            teks_baru = _teks_pdf(ulang)
+            if len(teks_baru) < len(teks_asli) * TOLERANSI_TEKS:
+                return None
+        # Penghematan sepele tak sepadan dengan risiko encode ulang lossy.
+        if len(hasil) >= len(pdf_bytes) * (1 - UNTUNG_MIN):
             return None
         return hasil if layak_dipakai(pdf_bytes, hasil) else None
     except Exception:

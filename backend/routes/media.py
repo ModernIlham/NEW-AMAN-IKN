@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from PIL import Image as PILImage
+from PIL import Image as PILImage, ImageOps
 import httpx
 
 from db import db
@@ -75,19 +75,57 @@ async def is_quota_available(service: str) -> bool:
 
 
 # ============================================================================
+# Plafon piksel: 50 MP didekode Pillow ~150 MB RGB. Tanpa plafon, satu
+# unggahan bisa menahan ratusan MB per permintaan.
+MAKS_PIKSEL = 40_000_000
+
+# ============================================================================
 # COMPRESSION METHODS
 # ============================================================================
 def compress_with_pillow(image_bytes: bytes, max_size_kb: int = 500) -> bytes:
-    """Local compression using Pillow (always available)."""
+    """Kompresi lokal dengan Pillow (selalu tersedia).
+
+    Tiga cacat yang dulu merusak foto bukti inventarisasi, kini ditutup:
+
+    1.  **Orientasi EXIF dibuang.** Kamera HP menyimpan foto dalam orientasi
+        sensor lalu menandai putarannya di tag EXIF `Orientation`. Karena
+        blok EXIF tak ikut disimpan, foto tersimpan MIRING permanen — dan
+        tanpa tag itu tak ada lagi informasi untuk membetulkannya otomatis.
+        `exif_transpose` memutar pikselnya lebih dulu, sehingga hasilnya
+        benar tanpa bergantung pada tag apa pun.
+    2.  **PNG transparan dipaksa JPEG.** Pindaian dokumen, tangkapan layar
+        SIMAN, dan spesimen tanda tangan potong kehilangan transparansi dan
+        mendapat artefak JPEG pada garis tipis serta huruf kecil. Kini PNG
+        tetap PNG.
+    3.  **Tanpa plafon piksel.** Berkas 50 megapiksel didekode utuh ke RAM
+        (~150 MB RGB) sebelum apa pun diperiksa.
+    """
     try:
         img = PILImage.open(io.BytesIO(image_bytes))
-        if img.mode in ('RGBA', 'LA', 'P'):
-            background = PILImage.new('RGB', img.size, (255, 255, 255))
-            if img.mode == 'RGBA':
-                background.paste(img, mask=img.split()[-1])
-            else:
-                background.paste(img)
-            img = background
+        # Plafon piksel SEBELUM dekode penuh — pertahanan terhadap
+        # "decompression bomb" sekaligus penjaga memori.
+        if (img.width * img.height) > MAKS_PIKSEL:
+            raise ValueError(f"Gambar {img.width}x{img.height} melebihi plafon piksel")
+        # Putar dulu menurut EXIF, SEBELUM konversi mode apa pun.
+        try:
+            img = ImageOps.exif_transpose(img) or img
+        except Exception:
+            pass
+
+        # PNG/GIF ber-transparansi tetap PNG. Meratakannya ke putih adalah
+        # kerusakan yang tak bisa dibatalkan pada dokumen pindaian.
+        punya_alfa = img.mode in ("RGBA", "LA") or (
+            img.mode == "P" and "transparency" in img.info)
+        if punya_alfa:
+            keluar_png = io.BytesIO()
+            img.save(keluar_png, format="PNG", optimize=True)
+            hasil_png = keluar_png.getvalue()
+            # Hanya dipakai bila memang lebih kecil; kalau tidak, kembalikan
+            # yang asli daripada membengkakkannya.
+            return hasil_png if len(hasil_png) < len(image_bytes) else image_bytes
+
+        if img.mode != "RGB":
+            img = img.convert("RGB")
 
         current_size = len(image_bytes) / 1024
         if current_size > max_size_kb:
@@ -118,7 +156,18 @@ async def compress_with_tinify(image_bytes: bytes) -> Optional[bytes]:
         return None
     try:
         import tinify
-        compressed = await asyncio.to_thread(tinify.from_buffer(image_bytes).to_buffer)
+
+        def _kirim():
+            # SELURUH panggilan dijalankan di thread — termasuk `from_buffer`.
+            # Sebelumnya hanya `.to_buffer` yang dilempar ke thread, padahal
+            # `tinify.from_buffer(...)` ITU SENDIRI melakukan POST /shrink
+            # secara sinkron. Akibatnya event loop terhenti selama tiap
+            # unggahan foto: simpan aset, sinkronisasi luring, dan permintaan
+            # pengguna lain ikut membeku — gejalanya tampak seperti "server
+            # lambat", bukan seperti kompresi yang memblokir.
+            return tinify.from_buffer(image_bytes).to_buffer()
+
+        compressed = await asyncio.to_thread(_kirim)
         await increment_quota("tinify")
         return compressed
     except Exception as e:
