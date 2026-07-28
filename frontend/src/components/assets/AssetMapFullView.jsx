@@ -284,6 +284,16 @@ const AssetMapFullView = memo(function AssetMapFullView({
   // Instance Leaflet baru ada SETELAH efek init berjalan; state ini yang
   // memberi tahu hook denah bahwa peta siap dipasangi layer.
   const [petaSiap, setPetaSiap] = useState(false);
+  // Panel Lapis Denah & legenda DILIPAT secara bawaan di layar sempit.
+  //
+  // Keduanya melayang/menempel di sekitar peta dan, digabung dengan toolbar,
+  // memakan lebih banyak ruang daripada petanya sendiri di HP — padahal isinya
+  // rujukan yang dibaca sekali-sekali, bukan kendali yang dipakai terus. Di
+  // layar >= sm keduanya tetap terbuka apa adanya.
+  const [panelDenahBuka, setPanelDenahBuka] = useState(() => {
+    try { return window.matchMedia("(min-width: 640px)").matches; } catch { return true; }
+  });
+  const [legendaBuka, setLegendaBuka] = useState(false);
   const denah = useDenahSpasial(petaSiap ? mapRef.current : null, { aktif: denahOn });
   // Kunci geser marker: default TERKUNCI agar sekadar melihat peta (di layar
   // sentuh maupun mouse) tak sengaja menggeser koordinat aset yang sudah ada.
@@ -1502,12 +1512,30 @@ const AssetMapFullView = memo(function AssetMapFullView({
             data-peta-panel="denah"
             data-testid="asset-map-denah-panel"
           >
-            <div className="px-2 py-1.5 border-b border-border flex items-center gap-1.5">
+            {/* Kepala = tombol lipat. Di HP panel ini bawaannya TERTUTUP,
+                menyisakan satu pita setinggi ~26 px alih-alih kotak setinggi
+                sepertiga peta. */}
+            <button
+              type="button"
+              onClick={() => setPanelDenahBuka((v) => !v)}
+              aria-expanded={panelDenahBuka}
+              className="w-full px-2 py-1.5 flex items-center gap-1.5 text-left min-h-0 hover:bg-muted transition-colors"
+              data-testid="denah-panel-lipat"
+            >
               <LandPlot className="w-3.5 h-3.5 text-teal-600 flex-shrink-0" />
-              <span className="text-[11px] font-bold truncate">Lapis Denah</span>
-              {denah.memuat && <Loader2 className="w-3 h-3 animate-spin text-teal-600 ml-auto flex-shrink-0" />}
-            </div>
-            <div className="max-h-40 overflow-y-auto py-0.5">
+              <span className="text-[11px] font-bold truncate flex-1">Lapis Denah</span>
+              {/* Saat terlipat, cacah lapis tetap terbaca — itulah satu-satunya
+                  informasi yang benar-benar dibutuhkan sekilas. */}
+              {!panelDenahBuka && denah.lapis.length > 0 && (
+                <span className="text-[9px] text-muted-foreground tabular-nums flex-shrink-0">
+                  {denah.lapis.length} lapis
+                </span>
+              )}
+              {denah.memuat && <Loader2 className="w-3 h-3 animate-spin text-teal-600 flex-shrink-0" />}
+              <ChevronDown className={`w-3 h-3 text-muted-foreground flex-shrink-0 transition-transform ${panelDenahBuka ? "rotate-180" : ""}`} />
+            </button>
+            {panelDenahBuka && (
+            <><div className="border-t border-border max-h-40 overflow-y-auto py-0.5">
               {denah.lapis.length === 0 && !denah.memuat && (
                 <p className="px-2 py-2 text-[10px] text-muted-foreground leading-snug">
                   Belum ada denah di area ini. Gambar dari menu Referensi → Denah Kawasan.
@@ -1560,6 +1588,8 @@ const AssetMapFullView = memo(function AssetMapFullView({
                 </span>
               )}
             </button>
+            </>
+            )}
           </div>
         )}
 
@@ -1623,8 +1653,25 @@ const AssetMapFullView = memo(function AssetMapFullView({
         )}
       </div>
 
-      {/* ── Legenda + petunjuk ── */}
-      <div className="bg-card rounded-xl border border-border shadow-sm px-3 py-1.5 flex items-center justify-between gap-2 flex-wrap">
+      {/* ── Legenda + petunjuk ──
+          DILIPAT di layar sempit. Isinya rujukan warna yang dibaca sekali lalu
+          diingat, tetapi terbuka penuh ia memakan lima baris tepat di bawah
+          peta — di HP itu kira-kira setinggi petanya sendiri. Di >= sm ia tetap
+          terbuka apa adanya, karena di sana ruangnya memang ada. */}
+      <div className="bg-card rounded-xl border border-border shadow-sm px-3 py-1.5">
+        <button
+          type="button"
+          onClick={() => setLegendaBuka((v) => !v)}
+          aria-expanded={legendaBuka}
+          className="sm:hidden w-full flex items-center gap-1.5 text-[10px] text-muted-foreground min-h-0"
+          data-testid="peta-legenda-lipat"
+        >
+          <Layers className="w-3 h-3 flex-shrink-0" />
+          <span className="flex-1 text-left">Legenda warna & petunjuk</span>
+          <ChevronDown className={`w-3 h-3 transition-transform ${legendaBuka ? "rotate-180" : ""}`} />
+        </button>
+        <div className={`${legendaBuka ? "flex" : "hidden"} sm:flex items-center justify-between gap-2 flex-wrap
+                        ${legendaBuka ? "pt-1.5 mt-1.5 border-t border-border sm:pt-0 sm:mt-0 sm:border-t-0" : ""}`}>
         <div className="flex items-center gap-3 flex-wrap">
           {Object.entries(STATUS_COLORS).map(([label, color]) => (
             <span key={label} className="flex items-center gap-1 text-[10px] text-muted-foreground">
@@ -1650,6 +1697,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
             <Lock className="w-3 h-3" />Marker terkunci (aman dilihat) — ketuk 🔒 di toolbar untuk menggeser koordinat.
           </span>
         ))}
+        </div>
       </div>
 
       {/* Lightbox foto — sama seperti mode galeri; dibuka dari popup marker */}

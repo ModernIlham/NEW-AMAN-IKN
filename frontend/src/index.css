@@ -226,6 +226,34 @@ aside .overflow-x-auto::-webkit-scrollbar-thumb:hover, .category-dropdown-scroll
   button, a { min-height: 44px; min-width: 44px; }
 }
 
+/* ── Kontrol Leaflet DIKECUALIKAN dari aturan 44px di layar sempit ──────────
+   Tombol kontrol Leaflet & geoman adalah <a> di dalam .leaflet-bar, jadi
+   aturan global di atas ikut memaksanya jadi 44x44. Di editor denah itu berarti
+   tujuh tombol bertumpuk vertikal (zoom +/- lalu lima alat gambar) menjadi
+   kolom setinggi ~308 px yang menutupi sepertiga kanvas pada layar 360 px —
+   tepat pada layar yang paling butuh ruang gambar.
+
+   36 px masih nyaman disentuh (bawaan Leaflet sendiri 30 px) dan mengembalikan
+   ~56 px lebar sekaligus ~56 px tinggi kepada peta. Tak menyentuh tombol
+   aplikasi mana pun: selektornya khusus di dalam kontrol peta. */
+@media (max-width: 1023px) {
+  .leaflet-container .leaflet-bar a,
+  .leaflet-container .leaflet-control a,
+  .leaflet-container .leaflet-buttons-control-button {
+    min-height: 36px;
+    min-width: 36px;
+    width: 36px;
+    height: 36px;
+    line-height: 36px;
+  }
+  /* Toolbar geoman merapat supaya kolomnya tak lagi sepanjang layar. */
+  .leaflet-container .leaflet-pm-toolbar .button-container { margin-bottom: 2px; }
+  /* Atribusi & skala dikecilkan — di HP keduanya memakan satu baris penuh
+     di tepi bawah, tempat yang lebih berguna untuk peta itu sendiri. */
+  .leaflet-container .leaflet-control-attribution { font-size: 9px; padding: 0 4px; }
+  .leaflet-container .leaflet-control-scale-line { font-size: 9px; padding: 0 4px; }
+}
+
 /* Tablet */
 @media (min-width: 768px) and (max-width: 1023px) {
   .container { max-width: 100%; padding-left: 1.5rem; padding-right: 1.5rem; }

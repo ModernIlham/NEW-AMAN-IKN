@@ -35,6 +35,15 @@ const PANE_Z = 380;
 // satu request. 300 ms terasa seketika tapi memangkas request drastis.
 const JEDA_MUAT_MS = 300;
 
+// Penanda "sedang memuat" baru DIPERLIHATKAN setelah ambang ini.
+//
+// Pemuatan denah per-viewport umumnya selesai jauh di bawah setengah detik, dan
+// menyalakan pemintal untuk itu membuat panel Lapis Denah tampak berkedip-kedip
+// tiap kali peta digeser — dibaca operator sebagai "ada yang tak beres" padahal
+// petanya sudah lengkap. Pemintal kini hanya muncul bila pemuatannya memang
+// terasa lama; yang cepat berlalu tanpa satu kedipan pun.
+const AMBANG_TAMPIL_MEMUAT_MS = 450;
+
 /** Ambil batas viewport Leaflet → bentuk polos {barat,selatan,timur,utara}. */
 function batasPeta(map) {
   try {
@@ -54,7 +63,11 @@ export function useDenahSpasial(peta, { aktif = false } = {}) {
   const batalRef = useRef(null);
   const galatRef = useRef(false);         // cegah toast beruntun saat gagal berulang
 
+  // `memuat` = benar-benar sedang ada request. `memuatTampak` = yang dilihat
+  // pengguna, tertunda AMBANG_TAMPIL_MEMUAT_MS. Dipisah supaya logika muat tak
+  // perlu tahu apa pun soal kapan pemintal pantas tampil.
   const [memuat, setMemuat] = useState(false);
+  const [memuatTampak, setMemuatTampak] = useState(false);
   const [info, setInfo] = useState({ jumlah: 0, jumlah_total: 0, terpotong: false, level_maks: 0 });
   const [cacahPerLevel, setCacahPerLevel] = useState([]);  // [{ordinal, jumlah}]
   const [levelSembunyi, setLevelSembunyi] = useState(() => new Set());
@@ -70,6 +83,12 @@ export function useDenahSpasial(peta, { aktif = false } = {}) {
 
   const levelSembunyiRef = useRef(levelSembunyi);
   useEffect(() => { levelSembunyiRef.current = levelSembunyi; }, [levelSembunyi]);
+
+  useEffect(() => {
+    if (!memuat) { setMemuatTampak(false); return undefined; }
+    const t = setTimeout(() => setMemuatTampak(true), AMBANG_TAMPIL_MEMUAT_MS);
+    return () => clearTimeout(t);
+  }, [memuat]);
 
   // Registry level dipakai untuk LABEL toggle lapis — sekali saja, jarang berubah.
   useEffect(() => {
@@ -183,7 +202,14 @@ export function useDenahSpasial(peta, { aktif = false } = {}) {
       if (seq !== seqRef.current) return; // hasil basi
       const fitur = r.data?.features || [];
       const terpotong = !!r.data?.terpotong;
-      termuatRef.current = { bbox: diminta, level_maks: levelMaks, terpotong };
+      // Wilayah sah menyempit saat hasilnya TERPOTONG. Pemotongan server
+      // bergantung pada area yang diminta, jadi berpindah area memang harus
+      // menarik ulang — tetapi DIAM DI TEMPAT tidak. Menyimpan viewport apa
+      // adanya (bukan yang dipadding) memberi keduanya sekaligus, menggantikan
+      // `if (terpotong) return true` lama yang menembak ulang tiap gerakan.
+      termuatRef.current = {
+        bbox: terpotong ? viewport : diminta, level_maks: levelMaks, terpotong,
+      };
       render(fitur);
       const kelompok = kelompokPerLevel(fitur);
       setCacahPerLevel(Array.from(kelompok.entries())
@@ -260,6 +286,7 @@ export function useDenahSpasial(peta, { aktif = false } = {}) {
     bersihkanSemua();
     termuatRef.current = null;
     setMemuat(false);
+    setMemuatTampak(false);
     setInfo({ jumlah: 0, jumlah_total: 0, terpotong: false, level_maks: 0 });
     setHemat({ sumber: "optimize", hemat_persen: 0 });
     setCacahPerLevel([]);
@@ -405,7 +432,8 @@ export function useDenahSpasial(peta, { aktif = false } = {}) {
   })), [cacahPerLevel, daftarLevel, levelSembunyi]);
 
   return {
-    memuat, info, lapis, toggleLapis,
+    // Yang diekspor ke layar adalah versi TERTUNDA — lihat AMBANG_TAMPIL_MEMUAT_MS.
+    memuat: memuatTampak, info, lapis, toggleLapis,
     gedung, lantai, lantaiId, setLantaiId, memuatLantai, tutupGedung,
     asli, toggleAsli, hemat,
     muatUlang: useCallback(() => muatRef.current(true), []),
