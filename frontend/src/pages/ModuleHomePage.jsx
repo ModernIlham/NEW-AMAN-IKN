@@ -385,7 +385,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
               Ikuti alurnya dari perolehan sampai pengakhiran; semua tercatat di poros Penatausahaan.
             </p>
             <div className="flex items-center gap-2 flex-wrap mt-3">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-600 text-white text-[11px] font-bold shadow-sm">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-700 text-white text-[11px] font-bold shadow-sm">
                 <CheckCircle2 className="w-3.5 h-3.5" />16 modul aktif penuh
               </span>
               {stat && stat.aset > 0 && (
@@ -467,7 +467,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
                     type="button"
                     onClick={() => openModule(mod)}
                     data-testid={`module-card-${mod.id}`}
-                    className="peta-kotak text-left rounded-2xl border border-border bg-background p-3 hover:shadow-md hover:border-blue-500/50 hover:-translate-y-0.5 transition-all group"
+                    className="peta-kotak text-left rounded-2xl border border-border bg-background p-3 hover:shadow-md hover:border-teal-500/50 hover:-translate-y-0.5 transition-all group"
                   >
                     <div className="flex items-center justify-between gap-2 mb-2">
                       <span className={`w-9 h-9 rounded-xl bg-gradient-to-br ${MODULE_TILE[mod.id] || "from-slate-500 to-slate-600"} flex items-center justify-center flex-shrink-0 shadow-sm group-hover:scale-105 transition-transform`}>

@@ -147,7 +147,7 @@ export default function BagikanPetaDialog({ open, onClose, activity }) {
             <div className="flex flex-wrap gap-1.5">
               {PRESET.map((p) => (
                 <button key={p.jam} type="button" onClick={() => setDurasiJam(p.jam)}
-                  className={`px-2.5 h-8 rounded-full text-[11px] font-semibold border min-w-0 min-h-0 ${durasiJam === p.jam ? "bg-blue-600 border-blue-600 text-white" : "border-border text-muted-foreground hover:bg-muted"}`}
+                  className={`px-2.5 h-8 rounded-full text-[11px] font-semibold border min-w-0 min-h-0 ${durasiJam === p.jam ? "bg-teal-700 border-teal-700 text-white" : "border-border text-muted-foreground hover:bg-muted"}`}
                   data-testid={`bagikan-durasi-${p.jam}`}>{p.label}</button>
               ))}
             </div>
@@ -162,7 +162,7 @@ export default function BagikanPetaDialog({ open, onClose, activity }) {
               <MessageSquare className="w-3 h-3 text-blue-600" />Tamu boleh berkomentar
             </label>
           </div>
-          <Button onClick={buat} disabled={creating} size="sm" className="w-full h-9 gap-1.5 bg-blue-600 hover:bg-blue-700 text-white" data-testid="bagikan-buat">
+          <Button onClick={buat} disabled={creating} size="sm" className="w-full h-9 gap-1.5 bg-teal-700 hover:bg-teal-800 text-white" data-testid="bagikan-buat">
             {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}Buat & salin link
           </Button>
         </div>

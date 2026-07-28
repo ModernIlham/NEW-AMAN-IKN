@@ -108,7 +108,7 @@ const DashboardHeader = memo(({
             <Users className="w-3.5 h-3.5" /><span className="hidden md:inline">Pengguna</span>
           </Button>
         )}
-        <Button variant={auditOpen ? "default" : "ghost"} size="sm" onClick={onAuditToggle} className={`h-7 gap-1 text-xs hidden sm:flex ${auditOpen ? 'bg-blue-600 text-white hover:bg-blue-700' : ''}`} data-testid="audit-toggle-btn">
+        <Button variant={auditOpen ? "default" : "ghost"} size="sm" onClick={onAuditToggle} className={`h-7 gap-1 text-xs hidden sm:flex ${auditOpen ? 'bg-teal-700 text-white hover:bg-teal-800' : ''}`} data-testid="audit-toggle-btn">
           <History className="w-3 h-3" /><span className="hidden sm:inline">Riwayat</span>
         </Button>
         <span className={`text-[9px] px-1 py-0.5 rounded font-bold hidden sm:inline ${

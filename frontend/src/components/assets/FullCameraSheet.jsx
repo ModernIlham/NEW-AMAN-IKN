@@ -684,7 +684,7 @@ const FullCameraSheet = memo(function FullCameraSheet({
             {supported && (
               <button type="button" onClick={() => { setCamError(null); setCamNonce((n) => n + 1); }}
                 data-testid="full-camera-retry"
-                className="h-11 px-4 rounded-lg bg-blue-600 text-white text-sm font-semibold flex items-center gap-1.5">
+                className="h-11 px-4 rounded-lg bg-teal-700 text-white text-sm font-semibold flex items-center gap-1.5">
                 <RotateCcw className="w-4 h-4" />Coba Lagi
               </button>
             )}
@@ -700,7 +700,7 @@ const FullCameraSheet = memo(function FullCameraSheet({
           <Camera className="w-9 h-9 text-white/70" />
           <p className="text-sm text-white/90">Kamera terputus. Sambungkan kembali untuk melanjutkan.</p>
           <button type="button" onClick={() => { setSuspended(false); setCamNonce((n) => n + 1); }}
-            className="h-11 px-4 rounded-lg bg-blue-600 text-white text-sm font-semibold flex items-center gap-1.5">
+            className="h-11 px-4 rounded-lg bg-teal-700 text-white text-sm font-semibold flex items-center gap-1.5">
             <RotateCcw className="w-4 h-4" />Sambungkan
           </button>
         </div>
@@ -890,7 +890,7 @@ const FullCameraSheet = memo(function FullCameraSheet({
             </button>
           ) : (
             <button type="button" onClick={saveAndNew} disabled={busy} data-testid="full-camera-savenew"
-              className="h-11 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center justify-center gap-1 transition-colors disabled:opacity-60 disabled:pointer-events-none">
+              className="h-11 rounded-lg bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold flex items-center justify-center gap-1 transition-colors disabled:opacity-60 disabled:pointer-events-none">
               {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}Simpan & Baru
             </button>
           )}
@@ -1077,9 +1077,9 @@ const FullCameraSheet = memo(function FullCameraSheet({
                 <div className="space-y-1">
                   <p className="text-[11px] font-bold text-foreground">Stiker</p>
                   <div className="grid grid-cols-2 gap-1.5">
-                    <CamChip selected={formData?.stiker_status === "Sudah Terpasang"} cls="bg-blue-600 border-blue-600 text-white"
+                    <CamChip selected={formData?.stiker_status === "Sudah Terpasang"} cls="bg-teal-700 border-teal-700 text-white"
                       onClick={() => onSetField("stiker_status", "Sudah Terpasang")} testId="cam-stiker-sudah">Sudah Terpasang</CamChip>
-                    <CamChip selected={formData?.stiker_status === "Belum Terpasang"} cls="bg-blue-600 border-blue-600 text-white"
+                    <CamChip selected={formData?.stiker_status === "Belum Terpasang"} cls="bg-teal-700 border-teal-700 text-white"
                       onClick={() => onSetField("stiker_status", "Belum Terpasang")} testId="cam-stiker-belum">Belum</CamChip>
                   </div>
                   {formData?.stiker_status === "Sudah Terpasang" && (
@@ -1124,7 +1124,7 @@ const FullCameraSheet = memo(function FullCameraSheet({
 
             <div className={`grid gap-2 ${isEditing && onScanAsset && onSaveAndScanNext ? "grid-cols-2" : "grid-cols-1"}`}>
               <button type="button" onClick={() => setEditOpen(false)} data-testid="full-camera-edit-done"
-                className="h-11 rounded-lg bg-blue-600 text-white text-sm font-semibold flex items-center justify-center gap-1.5">
+                className="h-11 rounded-lg bg-teal-700 text-white text-sm font-semibold flex items-center justify-center gap-1.5">
                 <Check className="w-4 h-4" />Selesai
               </button>
               {isEditing && onScanAsset && onSaveAndScanNext && (

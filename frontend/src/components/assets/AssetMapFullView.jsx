@@ -1311,7 +1311,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
           </button>
         )}
         {activeFilterCount > 0 && (
-          <span className="hidden md:flex items-center gap-1 px-2 h-7 rounded-full bg-blue-600/10 text-blue-600 dark:text-blue-400 text-[11px] font-semibold flex-shrink-0" data-testid="asset-map-filter-badge">
+          <span className="hidden md:flex items-center gap-1 px-2 h-7 rounded-full bg-teal-600/10 text-teal-700 dark:text-teal-400 text-[11px] font-semibold flex-shrink-0" data-testid="asset-map-filter-badge">
             <Filter className="w-3 h-3" />{activeFilterCount} filter
           </span>
         )}

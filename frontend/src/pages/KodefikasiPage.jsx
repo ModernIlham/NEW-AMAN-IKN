@@ -224,7 +224,7 @@ export default function KodefikasiPage({ user, onBack }) {
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
-          <span className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
+          <span className="w-9 h-9 rounded-lg bg-teal-700 flex items-center justify-center flex-shrink-0">
             <ListTree className="w-4 h-4 text-white" />
           </span>
           <div className="min-w-0 flex-1">
@@ -295,7 +295,7 @@ export default function KodefikasiPage({ user, onBack }) {
                 onClick={() => changeLevel(f.value)}
                 className={`flex-1 h-9 px-0.5 sm:px-2 text-[10px] sm:text-xs font-medium leading-none whitespace-nowrap border-l first:border-l-0 border-border min-w-0 min-h-0 transition-colors ${
                   level === f.value
-                    ? "bg-blue-600 text-white"
+                    ? "bg-teal-700 text-white"
                     : "text-muted-foreground hover:bg-muted"
                 }`}
                 data-testid={`kodefikasi-level-${f.value}`}

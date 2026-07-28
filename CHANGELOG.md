@@ -53,6 +53,61 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#665] Satu bahasa desain — font dibundel, satu aksen teal, komponen dasar yang merespons — 2026-07-28
+
+Perombakan tema menyeluruh memakai metode audit *redesign-existing-projects*
+(paket taste-skill): pindai → diagnosis → perbaiki DI LAPIS TOKEN, supaya satu
+perubahan mengalir ke seluruh 33 halaman sekaligus — bukan mengecat 33 halaman
+satu per satu.
+
+### Diagnosis yang ditemukan audit
+
+1. **Empat keluarga font dari CDN Google** — Inter (persis font yang ditandai
+   "sidik jari AI" oleh skill), Manrope, IBM Plex Sans, JetBrains Mono — lewat
+   `@import` yang memblokir render pertama. Dan ini PWA lapangan: saat luring,
+   CDN gagal dan wajah aplikasi berubah.
+2. **Tiga aksen bersaing** — biru jenuh di token (`--accent 217 91% 60%`), teal
+   tersebar hardcoded di halaman-halaman, indigo di bilah satker. Akibat paling
+   terasa: hover SETIAP tombol outline/ghost berkilat biru menyala berteks
+   putih, di samping ikon teal.
+3. **Tombol utama hampir-hitam** (`--primary 222 47% 11%`) yang tak berhubungan
+   dengan identitas teal aplikasi.
+4. **76 tombol aksi `bg-blue-600`** tersebar di 29 berkas — sisa aksen lama.
+
+### Yang dikerjakan
+
+- **Font dibundel, satu keluarga.** `Plus Jakarta Sans` variabel (dirancang
+  Tokotype — perancang Indonesia — untuk instansi pemerintah; masuk daftar
+  font premium skill) untuk seluruh teks, `JetBrains Mono` untuk kode/NUP.
+  Self-host via @fontsource: hidup saat luring, tanpa render-blocking, tanpa
+  preconnect ke Google. `font-variant-numeric: tabular-nums` global — aplikasi
+  ini 80% angka, dan kini semuanya sejajar kolom.
+- **Satu aksen: teal.** `--primary` = teal dalam (teks putih 6,4:1),
+  `--accent` dikembalikan ke maksud shadcn yang sebenarnya: permukaan hover
+  lembut (sapuan teal pucat), `--ring` teal. Mode gelap mendapat teal terang
+  ber-teks gelap (7,2:1). Merah destruktif diturunkan dari 84% ke 72% jenuh.
+  76 tombol `bg-blue-600` dipetakan mekanis ke keluarga teal; bilah satker
+  indigo → teal-800. **Biru DIPERTAHANKAN sebagai warna semantik informasi**
+  (banner ber-ikon Info) — sejajar amber=peringatan, merah=galat.
+- **Komponen dasar merespons.** Tombol: transisi 200 ms ber-kurva spring,
+  mengecil 2% saat ditekan (rasa klik fisik), cincin fokus tegas, bayangan
+  elev ber-rona slate. Input/textarea/select: cincin fokus 2 px + transisi.
+  Dialog/sheet: sudut wadah lebih lembut daripada isi (radius bervariasi,
+  bukan seragam), bayangan elev dalam. Kartu: bayangan slate lembut
+  menggantikan bayangan hitam pabrikan.
+- **Tipografi:** judul dirapatkan (−0,015 em) + `text-wrap: balance` (tak ada
+  kata yatim), paragraf `text-wrap: pretty`, `::selection` teal.
+- Kelas warisan App.css (biru keras) disatukan ke keluarga token.
+
+**Uji:** 281 frontend, lint & build bersih; font terbundel diverifikasi di
+`build/static/media`. Ukuran JS praktis tak berubah; CSS +1,2 KB.
+
+**Batas jujur:** hasil visual belum terverifikasi mata di perangkat nyata —
+yang terkunci adalah kontras (dihitung), konsistensi token, dan bahwa 281 uji
+tetap lulus. 149 pemakaian biru semantik-informasi sengaja tidak disentuh.
+
+---
+
 ## [#664] Bilah satker jadi tirai tarik-turun, denah muat di layar HP, dan pemintal Lapis Denah berhenti berputar sia-sia — 2026-07-28
 
 Empat keluhan lapangan atas tampilan, ditutup sekaligus.

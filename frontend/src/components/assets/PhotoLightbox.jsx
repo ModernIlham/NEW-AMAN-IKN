@@ -652,7 +652,7 @@ const Lightbox = memo(({ asset, onClose, onEdit, siblings = null, onSelectAsset 
             </div>
             {onEdit && (
               <button
-                className="flex-shrink-0 text-xs bg-blue-500/80 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg transition-colors"
+                className="flex-shrink-0 text-xs bg-teal-600/80 hover:bg-teal-700 text-white px-3 py-1.5 rounded-lg transition-colors"
                 onClick={(e) => { e.stopPropagation(); onClose(); onEdit(a); }}
               >
                 Edit

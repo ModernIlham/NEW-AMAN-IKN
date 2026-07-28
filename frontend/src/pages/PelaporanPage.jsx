@@ -229,7 +229,7 @@ export default function PelaporanPage({ user, onBack }) {
       <main className="max-w-5xl mx-auto px-3 sm:px-6 py-4 space-y-3">
         {/* ── Pembukuan satker-wide: Posisi BMN di Neraca (komponen LBKP) ── */}
         <div className="bg-card rounded-xl border border-border shadow-sm p-2.5 sm:p-3 flex items-center gap-2 flex-wrap">
-          <span className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
+          <span className="w-8 h-8 rounded-lg bg-teal-700 flex items-center justify-center flex-shrink-0">
             <Scale className="w-4 h-4 text-white" />
           </span>
           <div className="flex-1 min-w-[140px]">

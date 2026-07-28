@@ -188,12 +188,12 @@ export default function SignatureCapture({ onSave, saving = false, tokenQuery = 
     <div className="space-y-3" data-testid="signature-capture">
       <div className="grid grid-cols-2 gap-1 p-1 rounded-xl border border-border bg-card">
         <button type="button" onClick={() => setMode("gambar")}
-          className={`h-9 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 min-h-0 ${mode === "gambar" ? "bg-blue-600 text-white" : "text-muted-foreground"}`}
+          className={`h-9 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 min-h-0 ${mode === "gambar" ? "bg-teal-700 text-white" : "text-muted-foreground"}`}
           data-testid="ttd-mode-gambar">
           <PenLine className="w-3.5 h-3.5" />Gambar langsung
         </button>
         <button type="button" onClick={() => setMode("foto")}
-          className={`h-9 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 min-h-0 ${mode === "foto" ? "bg-blue-600 text-white" : "text-muted-foreground"}`}
+          className={`h-9 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 min-h-0 ${mode === "foto" ? "bg-teal-700 text-white" : "text-muted-foreground"}`}
           data-testid="ttd-mode-foto">
           <Camera className="w-3.5 h-3.5" />Foto (hapus BG)
         </button>

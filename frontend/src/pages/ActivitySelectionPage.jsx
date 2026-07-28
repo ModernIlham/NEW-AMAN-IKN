@@ -702,7 +702,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                 <select
                   value={selectedSatker}
                   onChange={e => setSelectedSatker(e.target.value)}
-                  className="flex-1 max-w-xs h-9 px-3 rounded-lg border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer"
+                  className="flex-1 max-w-xs h-9 px-3 rounded-lg border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring cursor-pointer"
                   data-testid="satker-filter-select"
                 >
                   <option value="all">Semua Satker ({activities.length} kegiatan)</option>
@@ -846,7 +846,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
               <div
                 key={act.id}
                 onClick={() => onSelectActivity(act)}
-                className="bg-card rounded-xl border border-border p-4 hover:border-blue-300 hover:shadow-md transition-all cursor-pointer group relative overflow-hidden"
+                className="bg-card rounded-xl border border-border p-4 hover:border-teal-400 hover:shadow-md transition-all cursor-pointer group relative overflow-hidden"
                 data-testid={`activity-card-${act.id}`}
               >
                 {/* Status Ribbon - clickable to validate completion */}
@@ -1281,7 +1281,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
             <Button
               onClick={editingActivity ? handleUpdate : handleCreate}
               disabled={saving}
-              className={`w-full ${editingActivity ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'} text-white`}
+              className={`w-full ${editingActivity ? 'bg-amber-600 hover:bg-amber-700' : 'bg-teal-700 hover:bg-teal-800'} text-white`}
             >
               {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
               {editingActivity ? 'Simpan Perubahan' : 'Buat Kegiatan'}
@@ -1383,7 +1383,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                   <div className="flex gap-2">
                     <Button variant="outline" className="flex-1" onClick={() => setCompletionDialog(null)} data-testid="completion-close-btn">Tutup</Button>
                     {completionDialog?.activity && (
-                      <Button className="flex-1 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => { onSelectActivity(completionDialog.activity); setCompletionDialog(null); }} data-testid="completion-open-activity-btn">
+                      <Button className="flex-1 bg-teal-700 hover:bg-teal-800 text-white" onClick={() => { onSelectActivity(completionDialog.activity); setCompletionDialog(null); }} data-testid="completion-open-activity-btn">
                         Buka Kegiatan
                       </Button>
                     )}

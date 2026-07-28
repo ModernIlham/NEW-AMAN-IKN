@@ -13,7 +13,7 @@ const LoadingIndicator = memo(({ message, totalItems, pageSize, currentPage }) =
       {/* Animated spinner */}
       <div className="relative">
         <div className="w-16 h-16 border-4 border-blue-100 rounded-full"></div>
-        <div className="absolute top-0 left-0 w-16 h-16 border-4 border-blue-600 rounded-full border-t-transparent animate-spin"></div>
+        <div className="absolute top-0 left-0 w-16 h-16 border-4 border-teal-700 rounded-full border-t-transparent animate-spin"></div>
         <Package className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-6 text-blue-600" />
       </div>
       
@@ -31,7 +31,7 @@ const LoadingIndicator = memo(({ message, totalItems, pageSize, currentPage }) =
       {totalItems > 0 && (
         <div className="w-48 bg-muted rounded-full h-1.5 overflow-hidden">
           <div 
-            className="h-full bg-blue-600 rounded-full transition-all duration-300"
+            className="h-full bg-teal-700 rounded-full transition-all duration-300"
             style={{ width: `${Math.min((endItem / totalItems) * 100, 100)}%` }}
           ></div>
         </div>

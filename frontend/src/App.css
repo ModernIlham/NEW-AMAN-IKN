@@ -14,7 +14,7 @@
 .sidebar-form textarea {
   @apply w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm 
          text-slate-900 shadow-sm transition-all duration-200
-         focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none;
+         focus:border-primary focus:ring-2 focus:ring-ring/25 focus:outline-none;
 }
 
 .sidebar-form select {
@@ -27,7 +27,7 @@
 /* Photo upload area */
 .photo-upload-area {
   @apply relative border-2 border-dashed border-slate-300 rounded-lg 
-         bg-slate-50 hover:bg-slate-100 hover:border-blue-400 
+         bg-slate-50 hover:bg-slate-100 hover:border-primary/50 
          transition-all duration-200 cursor-pointer;
 }
 
@@ -49,7 +49,7 @@
 }
 
 .data-table tbody tr {
-  @apply border-b border-slate-100 hover:bg-blue-50/50 transition-colors;
+  @apply border-b border-slate-100 hover:bg-accent/60 transition-colors;
 }
 
 .data-table td {
@@ -105,7 +105,7 @@
 }
 
 .btn-accent {
-  @apply bg-blue-600 text-white hover:bg-blue-700 
+  @apply bg-primary text-primary-foreground hover:bg-primary/90 
          shadow-sm rounded-md px-4 py-2 font-medium text-sm 
          transition-all duration-200 active:scale-95;
 }
@@ -127,7 +127,7 @@
 }
 
 .app-card-hover {
-  @apply hover:border-blue-500/50 hover:shadow-md transition-all duration-200;
+  @apply hover:border-primary/40 hover:shadow-elev-2 transition-all duration-200;
 }
 
 /* Edit mode highlight */
@@ -142,17 +142,17 @@
 }
 
 .dropdown-item {
-  @apply w-full text-left px-3 py-2 text-sm hover:bg-blue-50 
+  @apply w-full text-left px-3 py-2 text-sm hover:bg-accent 
          cursor-pointer transition-colors;
 }
 
 .dropdown-item.selected {
-  @apply bg-blue-50 text-blue-700;
+  @apply bg-accent text-accent-foreground;
 }
 
 /* Loading spinner */
 .spinner {
-  @apply animate-spin rounded-full border-2 border-slate-200 border-t-blue-600;
+  @apply animate-spin rounded-full border-2 border-slate-200 border-t-primary;
 }
 
 /* Empty state */

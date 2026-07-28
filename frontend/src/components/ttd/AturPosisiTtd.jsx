@@ -201,7 +201,7 @@ export default function AturPosisiTtd({ srId, token, jumlahHalaman = 1, pngTtd, 
             <img src={pngTtd} alt="Tanda tangan" draggable={false}
               className="w-full h-full object-contain pointer-events-none" />
             <span
-              className="absolute right-0 bottom-0 w-7 h-7 rounded-tl-lg rounded-br-md bg-blue-600 text-white flex items-center justify-center cursor-nwse-resize shadow-md"
+              className="absolute right-0 bottom-0 w-7 h-7 rounded-tl-lg rounded-br-md bg-teal-700 text-white flex items-center justify-center cursor-nwse-resize shadow-md"
               onMouseDown={mulai("ukur", "ttd")} onTouchStart={mulai("ukur", "ttd")}
               aria-label="Ubah ukuran tanda tangan"
               data-testid="posisi-pegangan"

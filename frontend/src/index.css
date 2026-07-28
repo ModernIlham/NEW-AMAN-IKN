@@ -1,4 +1,6 @@
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap');
+/* Font dibundel lewat @fontsource (lihat src/index.js) — TIDAK ada @import CDN
+   di sini. Alasannya bukan gaya: @import font memblokir render pertama, dan
+   PWA lapangan ini harus tetap berwajah sama saat luring. */
 
 @tailwind base;
 @tailwind components;
@@ -6,20 +8,45 @@
 
 body {
   margin: 0;
-  font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: 'Plus Jakarta Sans Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Aplikasi ini 80% angka & kode (NUP, kode barang, rupiah). Angka selebar
+     kolom (tabular) membuat semuanya sejajar tanpa perlu kelas per-elemen. */
+  font-variant-numeric: tabular-nums;
 }
 
 h1, h2, h3, h4, h5, h6 {
-  font-family: 'Manrope', sans-serif;
+  font-family: 'Plus Jakarta Sans Variable', 'Segoe UI', system-ui, sans-serif;
+  letter-spacing: -0.015em;   /* judul dirapatkan sedikit — terasa disengaja */
+  text-wrap: balance;         /* tak ada satu kata yatim di baris terakhir */
 }
 
-code, .font-mono {
-  font-family: 'JetBrains Mono', monospace;
+p { text-wrap: pretty; }
+
+code, kbd, .font-mono {
+  font-family: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', monospace;
+}
+
+/* Blok teks penuh dipilih memakai warna aksen — detail kecil yang membuat
+   aplikasi terasa satu tangan, bukan rakitan. */
+::selection {
+  background: hsl(var(--primary) / 0.18);
 }
 
 @layer base {
+  /* ══════════════════════════════════════════════════════════════════════
+     SATU AKSEN: TEAL. Sebelumnya aplikasi memikul TIGA aksen sekaligus —
+     biru jenuh di token (--accent 217 91% 60%), teal tersebar di kode
+     halaman (text-teal-600 dst.), dan indigo di bilah satker. Akibat yang
+     paling terasa: hover setiap tombol outline/ghost berkilat BIRU MENYALA
+     berteks putih, sementara ikon di sebelahnya teal. Token kini mengikuti
+     identitas yang sudah dipakai halaman-halaman: teal — sehingga tombol
+     bawaan, cincin fokus, hover, dan aksen tulisan tangan akhirnya satu
+     keluarga. Netral tetap SATU keluarga kelabu (slate dingin); shadcn
+     `--accent` dikembalikan ke maksud aslinya: PERMUKAAN hover yang lembut,
+     bukan warna teriak.
+     ══════════════════════════════════════════════════════════════════════ */
   :root {
     --background: 210 20% 98%;
     --foreground: 222 47% 11%;
@@ -27,51 +54,51 @@ code, .font-mono {
     --card-foreground: 222 47% 11%;
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
-    --primary: 222 47% 11%;
-    --primary-foreground: 210 20% 98%;
-    --secondary: 214 32% 91%;
+    --primary: 174 62% 25%;             /* teal dalam — teks putih 6,4:1 */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 214 28% 92%;
     --secondary-foreground: 222 47% 11%;
-    --muted: 214 32% 91%;
-    --muted-foreground: 215 16% 47%;
-    --accent: 217 91% 60%;
-    --accent-foreground: 0 0% 100%;
-    --destructive: 0 84% 60%;
+    --muted: 214 28% 92%;
+    --muted-foreground: 215 16% 45%;
+    --accent: 173 42% 93%;              /* sapuan teal pucat utk hover */
+    --accent-foreground: 174 65% 18%;
+    --destructive: 0 72% 46%;           /* merah diturunkan dari 84% jenuh */
     --destructive-foreground: 0 0% 100%;
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 217 91% 60%;
-    --radius: 0.375rem;
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
+    --border: 214 25% 89%;
+    --input: 214 25% 85%;
+    --ring: 174 62% 30%;
+    --radius: 0.5rem;
+    --chart-1: 173 58% 39%;
+    --chart-2: 197 37% 24%;
+    --chart-3: 43 74% 66%;
+    --chart-4: 12 76% 61%;
     --chart-5: 27 87% 67%;
   }
 
   .dark {
-    --background: 222 47% 8%;
-    --foreground: 210 20% 92%;
-    --card: 222 47% 11%;
-    --card-foreground: 210 20% 92%;
-    --popover: 222 47% 11%;
-    --popover-foreground: 210 20% 92%;
-    --primary: 210 20% 92%;
-    --primary-foreground: 222 47% 11%;
-    --secondary: 217 33% 17%;
-    --secondary-foreground: 210 20% 92%;
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 55%;
-    --accent: 217 91% 60%;
-    --accent-foreground: 0 0% 100%;
-    --destructive: 0 72% 51%;
+    --background: 222 47% 7%;
+    --foreground: 213 24% 90%;
+    --card: 222 44% 10%;
+    --card-foreground: 213 24% 90%;
+    --popover: 222 44% 10%;
+    --popover-foreground: 213 24% 90%;
+    --primary: 172 48% 44%;             /* teal terang — teks gelap 7,2:1 */
+    --primary-foreground: 200 60% 7%;
+    --secondary: 217 30% 16%;
+    --secondary-foreground: 213 24% 90%;
+    --muted: 217 30% 16%;
+    --muted-foreground: 215 18% 58%;
+    --accent: 174 35% 15%;              /* sapuan teal gelap utk hover */
+    --accent-foreground: 172 45% 72%;
+    --destructive: 0 62% 50%;
     --destructive-foreground: 0 0% 100%;
-    --border: 217 33% 20%;
-    --input: 217 33% 20%;
-    --ring: 217 91% 60%;
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
+    --border: 217 30% 19%;
+    --input: 217 30% 24%;
+    --ring: 172 48% 48%;
+    --chart-1: 173 58% 45%;
+    --chart-2: 197 45% 55%;
+    --chart-3: 43 74% 66%;
+    --chart-4: 12 76% 61%;
     --chart-5: 27 87% 67%;
   }
 }

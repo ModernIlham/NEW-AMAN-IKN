@@ -641,7 +641,7 @@ export default function PetaKolaborasiPage() {
         <WifiOff className="w-10 h-10 text-amber-500 mx-auto mb-3" />
         <p className="font-semibold text-foreground">Koneksi bermasalah</p>
         <p className="text-sm text-muted-foreground mt-1">Link Anda mungkin masih berlaku — periksa internet lalu coba lagi.</p>
-        <button onClick={() => { setLoading(true); muat(); }} className="mt-4 inline-flex items-center gap-1.5 px-4 h-10 rounded-lg bg-blue-600 text-white text-sm font-semibold">
+        <button onClick={() => { setLoading(true); muat(); }} className="mt-4 inline-flex items-center gap-1.5 px-4 h-10 rounded-lg bg-teal-700 text-white text-sm font-semibold">
           <RefreshCcw className="w-4 h-4" />Coba lagi
         </button>
       </div>
@@ -667,7 +667,7 @@ export default function PetaKolaborasiPage() {
     <div className="fixed inset-0 flex flex-col bg-background text-foreground">
       {/* Header */}
       <header className="bg-card border-b border-border px-3 py-2 flex items-center gap-2 z-[500] shadow-sm">
-        <span className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
+        <span className="w-9 h-9 rounded-lg bg-teal-700 flex items-center justify-center flex-shrink-0">
           <MapPin className="w-5 h-5 text-white" />
         </span>
         <div className="min-w-0 flex-1">
@@ -905,10 +905,10 @@ export default function PetaKolaborasiPage() {
               <textarea
                 value={komentarTeks} onChange={(e) => setKomentarTeks(e.target.value)}
                 rows={1} maxLength={1000} placeholder="Tulis komentar…"
-                className="flex-1 resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 max-h-24"
+                className="flex-1 resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring max-h-24"
                 data-testid="peta-komentar-input"
               />
-              <button onClick={kirimKomentar} disabled={kirim} className="h-10 w-10 rounded-lg bg-blue-600 text-white flex items-center justify-center flex-shrink-0 disabled:opacity-50" data-testid="peta-komentar-kirim">
+              <button onClick={kirimKomentar} disabled={kirim} className="h-10 w-10 rounded-lg bg-teal-700 text-white flex items-center justify-center flex-shrink-0 disabled:opacity-50" data-testid="peta-komentar-kirim">
                 {kirim ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
               </button>
             </div>
@@ -986,12 +986,12 @@ export default function PetaKolaborasiPage() {
               onChange={(e) => setNamaDraf(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") simpanNama(); }}
               placeholder="Nama Anda"
-              className="w-full rounded-lg border border-border bg-background px-3 h-10 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full rounded-lg border border-border bg-background px-3 h-10 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               data-testid="peta-nama-input"
             />
             <div className="flex flex-wrap gap-2 justify-end">
               <button onClick={() => { setNamaDialog(false); aksiSetelahNama.current = null; }} className="px-3 h-10 rounded-lg border border-border text-sm text-foreground/80">Batal</button>
-              <button onClick={simpanNama} className="px-4 h-10 rounded-lg bg-blue-600 text-white text-sm font-semibold" data-testid="peta-nama-simpan">Lanjut</button>
+              <button onClick={simpanNama} className="px-4 h-10 rounded-lg bg-teal-700 text-white text-sm font-semibold" data-testid="peta-nama-simpan">Lanjut</button>
             </div>
           </div>
         </div>

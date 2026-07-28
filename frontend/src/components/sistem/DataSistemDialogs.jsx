@@ -317,7 +317,7 @@ export function RestoreDialog({ open, onClose, token, onSuccess }) {
             </div>
 
             <div className="flex gap-3">
-              <button onClick={() => file && setStep(2)} disabled={!file} className={`flex-1 flex items-center justify-center gap-2 font-medium py-2.5 px-4 rounded-lg transition-all ${file ? 'bg-blue-600 hover:bg-blue-700 text-white cursor-pointer' : 'bg-blue-900/30 text-blue-800 cursor-not-allowed'}`} data-testid="restore-next-btn">
+              <button onClick={() => file && setStep(2)} disabled={!file} className={`flex-1 flex items-center justify-center gap-2 font-medium py-2.5 px-4 rounded-lg transition-all ${file ? 'bg-teal-700 hover:bg-teal-800 text-white cursor-pointer' : 'bg-blue-900/30 text-blue-800 cursor-not-allowed'}`} data-testid="restore-next-btn">
                 <Shield className="w-4 h-4" />Lanjutkan
               </button>
               <button onClick={onClose} className="flex items-center justify-center gap-1 bg-gray-700 hover:bg-gray-600 text-gray-300 font-medium py-2.5 px-4 rounded-lg transition-colors">Batal</button>
@@ -354,13 +354,13 @@ export function RestoreDialog({ open, onClose, token, onSuccess }) {
               ref={inputRef} type="text" value={confirmText}
               onChange={e => setConfirmText(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && isConfirmed && !submitting) handleRestore(); }}
-              className="w-full bg-[#0d0d1a] border border-gray-700 focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 rounded-lg px-4 py-3 text-white placeholder-gray-600 text-sm outline-none transition-colors mb-4"
+              className="w-full bg-[#0d0d1a] border border-gray-700 focus:border-ring focus:ring-1 focus:ring-ring/30 rounded-lg px-4 py-3 text-white placeholder-gray-600 text-sm outline-none transition-colors mb-4"
               placeholder="Ketik di sini..." autoComplete="off" spellCheck="false" data-testid="restore-confirm-input"
             />
             <div className="flex gap-3">
               <button
                 onClick={handleRestore} disabled={!isConfirmed || submitting}
-                className={`flex-1 flex items-center justify-center gap-2 font-medium py-2.5 px-4 rounded-lg transition-all ${isConfirmed && !submitting ? 'bg-blue-600 hover:bg-blue-700 text-white cursor-pointer' : 'bg-blue-900/30 text-blue-800 cursor-not-allowed'}`}
+                className={`flex-1 flex items-center justify-center gap-2 font-medium py-2.5 px-4 rounded-lg transition-all ${isConfirmed && !submitting ? 'bg-teal-700 hover:bg-teal-800 text-white cursor-pointer' : 'bg-blue-900/30 text-blue-800 cursor-not-allowed'}`}
                 data-testid="restore-confirm-btn"
               >
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}

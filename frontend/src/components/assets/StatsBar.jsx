@@ -30,7 +30,7 @@ export const InventoryModeSwitch = memo(({ inventoryMode, setInventoryMode, clas
       aria-label="Mode Dashboard"
       title="Mode Dashboard"
       data-testid="inventory-mode-toggle-dashboard"
-      className={`min-h-0 min-w-0 flex items-center justify-center gap-1.5 h-8 ${iconOnly ? 'px-2.5' : 'px-2'} rounded-lg text-xs font-semibold transition-colors ${!inventoryMode ? 'bg-blue-600 text-white shadow-sm' : 'text-muted-foreground'}`}
+      className={`min-h-0 min-w-0 flex items-center justify-center gap-1.5 h-8 ${iconOnly ? 'px-2.5' : 'px-2'} rounded-lg text-xs font-semibold transition-colors ${!inventoryMode ? 'bg-teal-700 text-white shadow-sm' : 'text-muted-foreground'}`}
     >
       <LayoutDashboard className="w-4 h-4 flex-shrink-0" />
       {mobileLabel && <span className="sm:hidden truncate">Dashboard</span>}

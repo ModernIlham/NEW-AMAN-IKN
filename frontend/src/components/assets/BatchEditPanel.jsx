@@ -641,7 +641,7 @@ const BatchEditPanel = memo(function BatchEditPanel({
                   <div className="grid grid-cols-3 gap-1">
                     {PENGGUNA_MELEKAT_OPTIONS.map(o => (
                       <button key={o} type="button" onClick={() => setPenggunaMelekat(o)}
-                        className={`h-7 rounded-md border text-[10px] font-semibold leading-tight px-1 transition-colors ${updates.pengguna_melekat_ke === o ? 'bg-blue-600 border-blue-600 text-white' : 'bg-background border-border text-foreground/80 hover:bg-accent'}`}>
+                        className={`h-7 rounded-md border text-[10px] font-semibold leading-tight px-1 transition-colors ${updates.pengguna_melekat_ke === o ? 'bg-teal-700 border-teal-700 text-white' : 'bg-background border-border text-foreground/80 hover:bg-accent'}`}>
                         {o}
                       </button>
                     ))}
@@ -672,7 +672,7 @@ const BatchEditPanel = memo(function BatchEditPanel({
                     <div className="grid grid-cols-2 gap-1">
                       {OPERASIONAL_JENIS_OPTIONS.map(o => (
                         <button key={o} type="button" onClick={() => setOperasionalJenis(o)}
-                          className={`h-7 rounded-md border text-[9px] font-semibold leading-tight px-1 transition-colors ${updates.operasional_jenis === o ? 'bg-blue-600 border-blue-600 text-white' : 'bg-background border-border text-foreground/80 hover:bg-accent'}`}>
+                          className={`h-7 rounded-md border text-[9px] font-semibold leading-tight px-1 transition-colors ${updates.operasional_jenis === o ? 'bg-teal-700 border-teal-700 text-white' : 'bg-background border-border text-foreground/80 hover:bg-accent'}`}>
                           {o}
                         </button>
                       ))}
@@ -798,7 +798,7 @@ const BatchEditPanel = memo(function BatchEditPanel({
                 <div className="space-y-1.5 max-h-[300px] overflow-y-auto">
                   {docItems.map((item, idx) => (
                     <div key={idx}
-                      className={`rounded-md border transition-all ${item._active ? 'border-blue-400 dark:border-blue-600 bg-blue-50 dark:bg-blue-900/30' : 'border-border bg-card hover:bg-muted/50'}`}
+                      className={`rounded-md border transition-all ${item._active ? 'border-blue-400 dark:border-teal-700 bg-blue-50 dark:bg-blue-900/30' : 'border-border bg-card hover:bg-muted/50'}`}
                       data-testid={`batch-doc-item-${idx}`}
                     >
                       {/* Toggle row */}
@@ -883,7 +883,7 @@ const BatchEditPanel = memo(function BatchEditPanel({
             keliru: sudah terlanjur tersimpan. */}
         <Button onClick={handleApply} disabled={!hasUpdates || updating || gpsLoading}
           title={gpsLoading ? "Menunggu GPS mengunci — koordinat sementara belum lolos gerbang akurasi ±8 m" : undefined}
-          className="bg-blue-600 hover:bg-blue-700 text-white h-8 text-xs" data-testid="batch-apply-btn">
+          className="bg-teal-700 hover:bg-teal-800 text-white h-8 text-xs" data-testid="batch-apply-btn">
           {updating ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <CheckSquare className="w-3 h-3 mr-1" />}
           {gpsLoading ? "Menunggu GPS…" : `Terapkan ke ${selectedCount} aset`}
         </Button>

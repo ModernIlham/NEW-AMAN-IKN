@@ -64,7 +64,7 @@ module.exports = {
                     'elev-3': '0 4px 8px -2px rgba(15, 23, 42, 0.10), 0 8px 16px -4px rgba(15, 23, 42, 0.06)',
                     'elev-4': '0 8px 16px -4px rgba(15, 23, 42, 0.12), 0 16px 32px -8px rgba(15, 23, 42, 0.08)',
                     'elev-5': '0 16px 32px -8px rgba(15, 23, 42, 0.14), 0 32px 64px -16px rgba(15, 23, 42, 0.10)',
-                    'focus-ring': '0 0 0 4px rgba(59, 130, 246, 0.15)',
+                    'focus-ring': '0 0 0 4px hsl(174 62% 30% / 0.18)',
                     'focus-ring-error': '0 0 0 4px rgba(239, 68, 68, 0.15)',
                     'focus-ring-success': '0 0 0 4px rgba(16, 185, 129, 0.15)',
                 },

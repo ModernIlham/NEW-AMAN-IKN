@@ -50,7 +50,7 @@ function Cangkang({ children }) {
     <div className="min-h-screen bg-background text-foreground flex items-start sm:items-center justify-center p-3 sm:p-6">
       <div className="w-full max-w-xl md:max-w-2xl">
         <div className="flex items-center gap-2.5 mb-4 justify-center">
-          <span className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center">
+          <span className="w-9 h-9 rounded-xl bg-teal-700 flex items-center justify-center">
             <FileSignature className="w-5 h-5 text-white" />
           </span>
           <div className="text-left">
