@@ -16,6 +16,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { TENGGAT_BAKA, TENGGAT_BERAT } from "@/lib/muatAndal";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const JEDA_POLL_MS = 1500;
@@ -121,7 +122,8 @@ export default function ImporDenahDialog({ levels, nodes, labelLevel, onClose, o
     try {
       const fd = new FormData();
       fd.append("file", f);
-      const r = await axios.post(`${API}/spasial/impor/pratinjau`, fd);
+      const r = await axios.post(`${API}/spasial/impor/pratinjau`, fd,
+                                 { timeout: TENGGAT_BERAT });
       if (!hidupRef.current || seq !== reqRef.current) return;
       setPratinjau(r.data);
       setFieldNama(tebakFieldNama(r.data));
@@ -147,7 +149,13 @@ export default function ImporDenahDialog({ levels, nodes, labelLevel, onClose, o
     if (!hidupRef.current) return;             // dialog sudah ditutup
     const t0 = mulaiPada || Date.now();
     try {
-      const r = await axios.get(`${API}/jobs/${jobId}`);
+      // TENGGAT WAJIB di sini. Kedua pagar di bawah — MAKS_GAGAL_BERUNTUN dan
+      // BATAS_POLL_MS — hanya dievaluasi SETELAH permintaan ini selesai. Tanpa
+      // tenggat, server yang menggantung membuat `await` ini tak pernah kembali,
+      // sehingga kedua pagar itu tak pernah dijangkau: rantai polling berhenti
+      // diam-diam, spinner berputar selamanya, dan pesan "berhenti memantau"
+      // yang sudah disiapkan tak pernah muncul.
+      const r = await axios.get(`${API}/jobs/${jobId}`, { timeout: TENGGAT_BAKA });
       if (!hidupRef.current) return;
       setJob(r.data);
       if (selesaiJob(r.data)) {
@@ -189,7 +197,8 @@ export default function ImporDenahDialog({ levels, nodes, labelLevel, onClose, o
       fd.append("field_nama", fieldNama === "(nama bawaan)" ? "" : fieldNama);
       fd.append("field_kode", fieldKode);
       fd.append("perbaiki", perbaiki ? "true" : "false");
-      const r = await axios.post(`${API}/spasial/impor`, fd);
+      const r = await axios.post(`${API}/spasial/impor`, fd,
+                                 { timeout: TENGGAT_BERAT });
       poll(r.data.job_id);
     } catch (e) {
       setBerjalan(false);

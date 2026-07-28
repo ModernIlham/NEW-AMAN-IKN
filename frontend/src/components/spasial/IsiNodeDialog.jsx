@@ -6,10 +6,10 @@
 //
 // Saklar `dalam` menentukan cakupan: membuka Gedung dengan `dalam` menyala
 // memperlihatkan isi SELURUH lantai & ruangannya sekaligus.
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
-import { toast } from "sonner";
-import { Boxes, Loader2, X } from "lucide-react";
+import { AlertTriangle, Boxes, Loader2, RefreshCw, X } from "lucide-react";
+import { TENGGAT_BAKA, muatAndal, pesanGalat } from "@/lib/muatAndal";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
@@ -21,19 +21,35 @@ export default function IsiNodeDialog({ node, labelLevel, onClose }) {
   const [data, setData] = useState(null);
   const [dalam, setDalam] = useState(true);
   const [memuat, setMemuat] = useState(true);
+  const [galat, setGalat] = useState(null);
+  const reqRef = useRef(0);
 
   const muat = useCallback(async (termasukKeturunan) => {
+    // PENJAGA URUTAN. Saklar "termasuk isi di bawahnya" dapat diklik cepat
+    // bolak-balik, dan permintaan `dalam=true` (isi SELURUH gedung) jauh lebih
+    // lama daripada `dalam=false`. Tanpa penjaga ini balasan yang lama bisa
+    // mendarat BELAKANGAN dan menampilkan isi seluruh gedung sebagai isi satu
+    // ruangan — angka yang salah untuk opname fisik, bukan sekadar layar keliru.
+    const seq = ++reqRef.current;
     setMemuat(true);
+    setGalat(null);
     try {
-      const r = await axios.get(`${API}/spasial/node/${node.id}/isi`, {
-        params: { dalam: String(termasukKeturunan) }, timeout: 20000,
-      });
+      const r = await muatAndal(() => axios.get(
+        `${API}/spasial/node/${node.id}/isi`,
+        { params: { dalam: String(termasukKeturunan) }, timeout: TENGGAT_BAKA }));
+      if (seq !== reqRef.current) return;
       setData(r.data);
     } catch (e) {
-      setData({ items: [], jumlah: 0 });
-      toast.error(e?.response?.data?.detail || "Gagal memuat isi lokasi");
+      if (seq !== reqRef.current) return;
+      // JANGAN memalsukan hasil kosong. Versi lama menulis {items: [], jumlah: 0}
+      // di sini, sehingga kegagalan jaringan terbaca sebagai "Belum ada aset
+      // yang ditempatkan di sini · 0 aset" — pernyataan yang layar ini tidak
+      // punya dasar untuk membuatnya, dan yang bisa membuat petugas opname
+      // menyimpulkan ruangan memang kosong.
+      setData(null);
+      setGalat(pesanGalat(e, "Gagal memuat isi lokasi"));
     } finally {
-      setMemuat(false);
+      if (seq === reqRef.current) setMemuat(false);
     }
   }, [node.id]);
 
@@ -67,6 +83,18 @@ export default function IsiNodeDialog({ node, labelLevel, onClose }) {
             <div className="flex items-center justify-center py-10 text-muted-foreground">
               <Loader2 className="w-5 h-5 animate-spin mr-2" /> Memuat…
             </div>
+          ) : galat ? (
+            <div className="text-center py-10 px-4" data-testid="isi-node-galat">
+              <AlertTriangle className="w-7 h-7 mx-auto mb-2 text-amber-500" />
+              <p className="text-xs text-foreground break-words">{galat}</p>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Isi lokasi ini <b>tidak diketahui</b> — bukan berarti kosong.
+              </p>
+              <Button variant="outline" size="sm" className="mt-3 h-7 text-[11px]"
+                      onClick={() => muat(dalam)} data-testid="isi-node-coba-lagi">
+                <RefreshCw className="w-3 h-3 mr-1" />Coba lagi
+              </Button>
+            </div>
           ) : items.length === 0 ? (
             <p className="text-xs text-muted-foreground text-center py-10 px-4">
               Belum ada aset yang ditempatkan di sini. Tempatkan lewat detail
@@ -92,8 +120,9 @@ export default function IsiNodeDialog({ node, labelLevel, onClose }) {
 
         <div className="flex items-center gap-2 pt-1">
           <p className="text-xs text-muted-foreground flex-1">
-            {memuat ? "" : `${data?.jumlah ?? 0} aset`}
-            {data?.terpotong && " (dipotong pada plafon tampilan)"}
+            {/* Jangan mencetak "0 aset" saat yang terjadi adalah GAGAL memuat. */}
+            {memuat || galat ? "" : `${data?.jumlah ?? 0} aset`}
+            {!galat && data?.terpotong && " (dipotong pada plafon tampilan)"}
           </p>
           <Button variant="outline" size="sm" onClick={() => onClose?.()}
                   data-testid="isi-node-tutup">

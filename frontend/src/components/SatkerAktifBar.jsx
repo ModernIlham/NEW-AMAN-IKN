@@ -13,6 +13,7 @@ import {
   majuTarik,
   redamTarik,
 } from "@/lib/tarikBerat";
+import { TENGGAT_BAKA, muatAndal } from "@/lib/muatAndal";
 
 // Keadaan buka/tutup bertahan selama satu sesi tab. SENGAJA sessionStorage,
 // bukan localStorage: tiap sesi baru mulai dari keadaan rapi (tertutup), tetapi
@@ -37,6 +38,7 @@ const API = process.env.REACT_APP_BACKEND_URL
  */
 export default function SatkerAktifBar({ user }) {
   const [daftar, setDaftar] = useState([]);
+  const [gagalDaftar, setGagalDaftar] = useState(false);
   const [aktif, setAktif] = useState(getSatkerAktif());
   const [buka, setBuka] = useState(false);
   const ref = useRef(null);
@@ -117,14 +119,18 @@ export default function SatkerAktifBar({ user }) {
   useEffect(() => {
     if (!superAdmin) return;
     let batal = false;
-    axios
-      .get(`${API}/satker`)
+    // Kegagalan di sini dulu ditelan `catch(() => {})`, dan daftar kosong itu
+    // dirender sebagai "Belum ada satker di Master Satker" — pernyataan yang
+    // KELIRU dan menyesatkan: super-admin bisa menyimpulkan master satkernya
+    // hilang, padahal jaringannya yang sedang buruk. Kini dibedakan.
+    muatAndal(() => axios.get(`${API}/satker`, { timeout: TENGGAT_BAKA }))
       .then((r) => {
         if (batal) return;
         const items = (r.data?.items || []).filter((s) => s.kode_satker);
         setDaftar(items);
+        setGagalDaftar(false);
       })
-      .catch(() => {});
+      .catch(() => { if (!batal) setGagalDaftar(true); });
     return () => {
       batal = true;
     };
@@ -258,7 +264,9 @@ export default function SatkerAktifBar({ user }) {
           <div className="my-1 border-t border-border" />
           {daftar.length === 0 ? (
             <p className="px-3 py-2 text-[11px] text-muted-foreground">
-              Belum ada satker di Master Satker.
+              {gagalDaftar
+                ? "Daftar satker gagal dimuat — periksa sinyal lalu buka lagi bilah ini."
+                : "Belum ada satker di Master Satker."}
             </p>
           ) : (
             daftar.map((s) => (

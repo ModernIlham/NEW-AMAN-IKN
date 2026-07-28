@@ -1,10 +1,11 @@
-import React, { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
+import { TENGGAT_BAKA, muatAndal, pesanGalat } from "@/lib/muatAndal";
 import {
   ArrowLeft, Plus, Pencil, Trash2, Loader2, Layers, ChevronRight, ChevronDown,
   Search, MapPinned, LandPlot, Upload, Download, Boxes, ClipboardCheck,
-  MoreVertical, Gauge,
+  MoreVertical, Gauge, AlertTriangle, RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,6 +58,11 @@ export default function SpasialMasterPage({ user, onBack }) {
   const [isiNode, setIsiNode] = useState(null);        // node yang dilihat isinya (Fase 9)
   const [opnameNode, setOpnameNode] = useState(null);  // node yang di-opname via scan (Fase 11)
   const [optimasi, setOptimasi] = useState(false);     // tombol optimasi sedang berjalan
+  // Pemuatan pohon: pesan gagal DISIMPAN (bukan cuma toast) supaya layar bisa
+  // membedakan "belum ada data" dari "gagal memuat", plus penjaga urutan.
+  const [galatMuat, setGalatMuat] = useState(null);
+  const [mencobaUlang, setMencobaUlang] = useState(false);
+  const reqNodeRef = useRef(0);
   const { confirm, confirmDialog } = useConfirm();
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
@@ -88,15 +94,36 @@ export default function SpasialMasterPage({ user, onBack }) {
     }
   }, [preset]);
 
+  // Pemuatan pohon TAHAN kedip jaringan. Tiga hal yang dulu tidak ada:
+  //
+  // 1. COBA-ULANG. Satu kedip sinyal — hal paling biasa di lapangan — dulu
+  //    berakhir sebagai layar kosong, dan satu-satunya pemulihan adalah keluar
+  //    lalu masuk lagi ke halaman (efeknya `loadNodes` stabil, jadi useEffect
+  //    tak pernah menjalankannya ulang).
+  // 2. BEDA "KOSONG" vs "GAGAL". Dulu keduanya merender kalimat yang sama —
+  //    "Belum ada data. Mulai dari tingkat teratas" — sehingga operator satker
+  //    yang pohonnya PENUH disuruh mulai dari nol saat jaringannya sedang buruk.
+  // 3. PENJAGA URUTAN. Menyimpan lalu memuat ulang sementara muatan sebelumnya
+  //    masih di jalan membuat pohon melompat balik ke keadaan lama.
   const loadNodes = useCallback(async () => {
+    const seq = ++reqNodeRef.current;
     setLoading(true);
+    setGalatMuat(null);
     try {
-      const rn = await axios.get(`${API}/spasial/node`, { timeout: 20000 });
+      const rn = await muatAndal(
+        () => axios.get(`${API}/spasial/node`, { timeout: TENGGAT_BAKA }),
+        { padaUlang: () => {
+          if (seq === reqNodeRef.current) setMencobaUlang(true);
+        } });
+      if (seq !== reqNodeRef.current) return;      // muatan lain sudah menyusul
       setNodes(rn.data?.items || []);
     } catch (err) {
-      toast.error(getApiError(err, "Gagal memuat hierarki spasial"));
+      if (seq !== reqNodeRef.current) return;
+      // Disimpan di state, BUKAN sekadar toast: toast hilang setelah beberapa
+      // detik dan meninggalkan layar yang tampak seperti "memang kosong".
+      setGalatMuat(pesanGalat(err, "Gagal memuat hierarki spasial"));
     } finally {
-      setLoading(false);
+      if (seq === reqNodeRef.current) { setLoading(false); setMencobaUlang(false); }
     }
   }, []);
 
@@ -573,7 +600,24 @@ export default function SpasialMasterPage({ user, onBack }) {
 
         {loading ? (
           <div className="flex items-center justify-center py-16 text-muted-foreground">
-            <Loader2 className="w-5 h-5 animate-spin mr-2" /> Memuat…
+            <Loader2 className="w-5 h-5 animate-spin mr-2" />
+            {mencobaUlang ? "Jaringan tersendat — mencoba lagi…" : "Memuat…"}
+          </div>
+        ) : galatMuat ? (
+          /* GAGAL ≠ KOSONG. Dulu cabang ini tidak ada: kegagalan jaringan jatuh
+             ke cabang "Belum ada data. Mulai dari tingkat teratas" — menyuruh
+             operator yang pohonnya PENUH membangun ulang dari nol. Layar tak
+             boleh menyatakan sesuatu yang tidak diketahuinya. */
+          <div className="text-center py-16" data-testid="spasial-galat-muat">
+            <AlertTriangle className="w-10 h-10 mx-auto mb-2 text-amber-500" />
+            <p className="text-sm text-foreground max-w-md mx-auto break-words">{galatMuat}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Data Anda aman — yang gagal hanya menampilkannya.
+            </p>
+            <Button onClick={loadNodes} size="sm" variant="outline" className="mt-3"
+                    data-testid="spasial-coba-lagi">
+              <RefreshCw className="w-4 h-4 mr-1" /> Coba lagi
+            </Button>
           </div>
         ) : akar.length === 0 ? (
           <div className="text-center py-16 text-muted-foreground">

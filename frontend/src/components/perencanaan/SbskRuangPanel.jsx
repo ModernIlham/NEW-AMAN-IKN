@@ -12,6 +12,7 @@
 // disembunyikan di kolom tabel.
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
+import { TENGGAT_BAKA, muatAndal } from "@/lib/muatAndal";
 import { toast } from "sonner";
 import { Ruler, Loader2, Download, DoorOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -53,6 +54,8 @@ export default function SbskRuangPanel() {
   const [pilih, setPilih] = useState("");
   const [data, setData] = useState(null);
   const [memuat, setMemuat] = useState(false);
+  // Bedakan "daftar memang kosong" dari "gagal memuat daftar".
+  const [gagalDaftar, setGagalDaftar] = useState(false);
   const [galat, setGalat] = useState("");
 
   // Node yang LAYAK jadi lingkup: yang punya keturunan ruangan. Menawarkan
@@ -67,10 +70,18 @@ export default function SbskRuangPanel() {
         // klien adalah ongkos yang dibayar SETIAP kali halaman Perencanaan
         // dibuka — padahal kebanyakan kunjungan tak menyentuh panel ini.
         const tipe = ["TAPAK", "GEDUNG", "LANTAI", "SAYAP"];
+        // `.catch(() => [])` yang lama menyamarkan kegagalan jaringan sebagai
+        // "tidak ada gedung", dan panel lalu menyuruh operator menggambar denah
+        // yang SUDAH ada. Kegagalan kini dicatat terpisah supaya kalimat ajakan
+        // itu hanya muncul saat memang benar-benar kosong.
+        let adaGagal = false;
         const hasil = await Promise.all(tipe.map((t) =>
-          axios.get(`${API}/spasial/node`, { params: { tipe: t }, timeout: 20000 })
-            .then((r) => r.data?.items || []).catch(() => [])));
+          muatAndal(() => axios.get(`${API}/spasial/node`,
+                                    { params: { tipe: t }, timeout: TENGGAT_BAKA }))
+            .then((r) => r.data?.items || [])
+            .catch(() => { adaGagal = true; return []; })));
         if (batal) return;
+        setGagalDaftar(adaGagal);
         const urut = Object.fromEntries(tipe.map((t, i) => [t, i]));
         const items = hasil.flat().sort(
           (a, b) => (urut[a.tipe] - urut[b.tipe])
@@ -80,7 +91,8 @@ export default function SbskRuangPanel() {
       } catch {
         // Denah belum dibangun bukan galat yang perlu diteriakkan di halaman
         // Perencanaan — panel cukup menampilkan ajakan membuka Master Denah.
-        if (!batal) setGedung([]);
+        // Tetapi kegagalan MEMUAT tetap harus dibedakan dari "memang kosong".
+        if (!batal) { setGedung([]); setGagalDaftar(true); }
       }
     })();
     return () => { batal = true; };
@@ -152,8 +164,11 @@ export default function SbskRuangPanel() {
 
       {gedung.length === 0 ? (
         <p className="text-[11px] text-muted-foreground px-3 py-6 text-center">
-          Belum ada gedung/lantai bergeometri. Gambar denahnya lebih dulu di
-          Master Denah (Referensi &amp; Master Data → Hierarki Spasial).
+          {gagalDaftar
+            ? "Daftar gedung/lantai gagal dimuat — periksa sinyal lalu buka ulang "
+              + "halaman ini. Denah Anda tidak hilang."
+            : "Belum ada gedung/lantai bergeometri. Gambar denahnya lebih dulu di "
+              + "Master Denah (Referensi & Master Data → Hierarki Spasial)."}
         </p>
       ) : (
         <div className="p-3 space-y-3">

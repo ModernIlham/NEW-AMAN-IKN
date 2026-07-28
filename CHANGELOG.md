@@ -53,6 +53,79 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#661] Keandalan pemuatan node & konteks — tenggat, coba-ulang, dan layar yang berhenti berbohong — 2026-07-28
+
+Pemilik bertanya: *"bagaimana cara membuat handal saat memuat data node agar tidak
+sering terjadi gagal, dan juga saat memuat konteks."*
+
+Analisis lima dimensi (frontend node, backend spasial, konteks, lapisan jaringan,
+pola baku) mengajukan **79 temuan**; **57 lolos** verifikasi dua penilai berlensa
+berbeda. Gelombang pertama ini menutup akar terbesarnya.
+
+### Akar #1 — satu baris yang tidak pernah ada
+
+```
+axios.defaults.timeout  →  tidak pernah dipasang di mana pun
+axios.get di seluruh aplikasi: 227 panggilan — hanya 14 menyebut timeout
+```
+
+Di jaringan lapangan, bentuk kegagalan yang paling sering **bukan** "koneksi
+ditolak" — itu cepat dan tertangkap `catch`. Yang paling sering adalah koneksi
+**menggantung**. Tanpa tenggat, `await` tak pernah selesai: `catch` tak jalan,
+`finally` tak membereskan spinner, operator menatap loading tanpa akhir.
+
+Efek berantainya lebih buruk lagi — **penjaga yang sudah ada ikut mandul.**
+`ImporDenahDialog` punya pagar "8 kegagalan beruntun / 15 menit", tetapi keduanya
+hanya dievaluasi setelah permintaan **selesai**. Server yang menggantung membuat
+rantai polling berhenti diam-diam tanpa pernah menyentuh pagar itu, dan pesan
+"berhenti memantau ≠ berhenti mengimpor" yang sudah disiapkan tak pernah muncul.
+
+Ditutup dengan lantai tenggat global (`TENGGAT_BAKA`, tetap bisa dinaikkan
+per-request untuk unggahan) + `lib/muatAndal.js`.
+
+### Akar #2 — kegagalan dirender sebagai kekosongan
+
+Ini yang membuat gejalanya membingungkan, bukan sekadar mengganggu:
+
+| Berkas | Yang dilihat operator saat jaringan gagal |
+|---|---|
+| `IsiNodeDialog` | "Belum ada aset yang ditempatkan di sini" · **0 aset** |
+| `SbskRuangPanel` | "Belum ada gedung/lantai bergeometri — gambar denahnya dulu" |
+| `SatkerAktifBar` | "Belum ada satker di Master Satker" |
+| `SpasialMasterPage` | "Belum ada data. Mulai dari tingkat teratas" |
+
+Semuanya **pernyataan yang layar itu tak punya dasar untuk membuatnya**. Yang
+paling berbahaya `IsiNodeDialog`: ia menulis `{items: [], jumlah: 0}` di blok
+`catch`, sehingga petugas opname bisa menyimpulkan ruangan memang kosong.
+
+Kini tiap layar membedakan "kosong" dari "gagal", menyebut sebabnya (sinyal /
+server lambat / kuota / sesi), dan menyediakan **Coba lagi**.
+
+### Akar #3 — tak ada coba-ulang, dan balapan permintaan
+
+Satu kedip sinyal dulu berakhir sebagai layar kosong, dan satu-satunya pemulihan
+adalah keluar-masuk halaman. `muatAndal` mengulang **hanya** kegagalan sementara
+(jaringan/tenggat/5xx/429) dengan backoff ber-jitter — jitter itu wajib: saat
+sinyal pulih di satu lokasi, seluruh regu mencoba ulang pada detik yang sama.
+4xx dan 401 tidak diulang: mengulang tak akan menolong dan hanya menunda pesan
+galat (atau menunda logout).
+
+Penjaga urutan ditambahkan di `SpasialMasterPage` dan `IsiNodeDialog`. Yang
+kedua nyata akibatnya: saklar "termasuk isi di bawahnya" bisa membuat balasan
+`dalam=true` (isi SELURUH gedung) mendarat belakangan dan tampil sebagai isi
+satu ruangan — angka yang salah untuk opname fisik.
+
+**Uji:** 258 frontend (+19), lint & build bersih. Dua mutasi diperiksa pada
+logika coba-ulang (4xx ikut diulang; jeda antar percobaan dihapus) — keduanya
+tertangkap.
+
+**Yang sengaja belum dikerjakan** (gelombang berikutnya): paginasi/lazy-expand
+`/spasial/node` (backend sudah mendukung `parent_id`), `.limit()` sebelum
+`.sort()` di `/spasial/geojson`, N+1 pada `/spasial/node/{id}/isi`, penanda
+`terpotong` di plafon 20.000 node, dan `max_time_ms` sisi server.
+
+---
+
 ## [#660] Impor GIS multi-node, kanvas terpotong, rekap SIMAN per kegiatan, bilah satker bertahan — 2026-07-28
 
 Empat laporan lapangan dari satu layar dan satu keluhan alur. Tiga di antaranya
