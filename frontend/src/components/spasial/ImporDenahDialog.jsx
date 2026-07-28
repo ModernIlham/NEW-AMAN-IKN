@@ -216,9 +216,19 @@ export default function ImporDenahDialog({ levels, nodes, labelLevel, onClose, o
       {/* Lebar naik + tinggi dibatasi layar & bisa digulir. Sebelumnya dialog
           memakai lebar tetap tanpa plafon tinggi: file dengan banyak kolom
           atribut membuat panel pratinjau mendorong tombol "Mulai Impor" keluar
-          layar, dan teks panjang terpotong di tepi kanan (laporan lapangan). */}
+          layar, dan teks panjang terpotong di tepi kanan (laporan lapangan).
+
+          `[&>*]:min-w-0` ITU WAJIB, bukan hiasan. DialogContent adalah CSS
+          `grid` ber-`overflow-hidden`. Anak sebuah grid ber-`min-width:auto`,
+          jadi anak yang isinya tak bisa menyusut (teks `nowrap`, tabel, kata
+          panjang tanpa spasi) MELEBARKAN trek grid melewati lebar dialog — dan
+          `overflow-x: hidden` lalu MEMOTONGNYA tanpa menyisakan bilah gulir
+          untuk menjangkaunya lagi. Itulah "informasi terpotong" yang dilaporkan
+          setelah impor selesai. Membolehkan anak menyusut menutup seluruh kelas
+          bug itu sekaligus, bukan hanya satu barisnya. */}
       <DialogContent
-        className="max-w-2xl w-[calc(100vw-2rem)] max-h-[90vh] overflow-y-auto"
+        className="max-w-2xl w-[calc(100vw-2rem)] max-h-[90vh] overflow-y-auto
+                   [&>*]:min-w-0"
         data-testid="impor-denah-dialog">
         <DialogHeader>
           <DialogTitle className="text-sm">Impor Denah dari File GIS</DialogTitle>
@@ -355,20 +365,34 @@ export default function ImporDenahDialog({ levels, nodes, labelLevel, onClose, o
               </div>
             )}
             {selesai && (
-              <p className={suksesJob(job) ? "font-medium" : "text-red-600"}>
+              <p className={`break-words ${suksesJob(job) ? "font-medium" : "text-red-600"}`}>
                 {job.message || job.error_message || "Impor berakhir tanpa keterangan"}
               </p>
             )}
             {(job.peringatan || []).map((p, i) => (
-              <p key={i} className="text-amber-700 dark:text-amber-300">⚠ {p}</p>
+              <p key={i} className="text-amber-700 dark:text-amber-300 break-words">⚠ {p}</p>
             ))}
-            {(job.dilewati || []).slice(0, 8).map((d, i) => (
-              <p key={i} className="text-muted-foreground truncate">
-                dilewati: <b>{d.nama}</b> — {d.alasan}
-              </p>
-            ))}
-            {Number(job.jumlah_dilewati) > 8 && (
-              <p className="text-muted-foreground">…dan {job.jumlah_dilewati - 8} lainnya</p>
+            {/* ALASAN DILEWATI ADALAH INTI PANEL INI — JANGAN DIPOTONG.
+                Dulu baris ini ber-`truncate` (white-space:nowrap + ellipsis),
+                sehingga justru keterangan yang menjelaskan KENAPA sebuah node
+                gagal terpangkas di tepi kanan; yang tersisa di layar operator
+                hanyalah "dilewati: BWP 2 — topologi: geometri terl…".
+                Alasannya kini dibungkus penuh, dan daftar panjang DIGULIR
+                (bukan dipotong) supaya tinggi dialog tetap terkendali. */}
+            {(job.dilewati || []).length > 0 && (
+              <div className="max-h-40 overflow-y-auto space-y-1 pr-1
+                              border-t border-border/60 pt-1.5">
+                {(job.dilewati || []).map((d, i) => (
+                  <p key={i} className="text-muted-foreground break-words">
+                    dilewati: <b>{d.nama}</b> — {d.alasan}
+                  </p>
+                ))}
+                {Number(job.jumlah_dilewati) > (job.dilewati || []).length && (
+                  <p className="text-muted-foreground">
+                    …dan {job.jumlah_dilewati - job.dilewati.length} lainnya
+                  </p>
+                )}
+              </div>
             )}
           </div>
         )}

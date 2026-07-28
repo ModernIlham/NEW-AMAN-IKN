@@ -262,6 +262,49 @@ def test_bersihkan_fitur_struktur_rusak_dilewati():
     assert g is None and "struktur" in alasan
 
 
+def test_poligon_besar_yang_SAH_ikut_terimpor_bukan_dilewati():
+    """REGRESI LAPANGAN (GIS-1). Satu berkas berisi 6 poligon BWP IKN: hanya 1
+    yang jadi node, 5 dilewati dengan "geometri terlalu besar (> 20.000 titik)".
+
+    Poligon-poligon itu SAH; yang salah adalah plafonnya. Uji ini mengimpor
+    poligon sah 50.000 verteks dan menuntut ia LOLOS.
+    """
+    import math
+    n = 50_000
+    cincin = [[116.75 + math.cos(2 * math.pi * i / n) * 0.01,
+               -1.35 + math.sin(2 * math.pi * i / n) * 0.01] for i in range(n)]
+    besar = {"type": "Polygon", "coordinates": [cincin + [cincin[0]]]}
+    g, alasan = ig.bersihkan_fitur(besar, perbaiki=True)
+    assert alasan is None, f"poligon sah 50.000 verteks dilewati: {alasan}"
+    assert g is besar
+
+
+def test_alasan_dilewati_tak_menempelkan_perbaikan_gagal_pada_penolakan_ukuran(
+        monkeypatch):
+    """REGRESI LAPANGAN (GIS-1). Kalimat yang dilihat operator dulu berbunyi:
+
+        topologi: geometri terlalu besar (> 20,000 titik) — sederhanakan
+        bentuknya atau pakai jalur impor file (perbaikan otomatis gagal)
+
+    Dua kesalahan sekaligus: menyuruh "pakai jalur impor file" kepada orang
+    yang SEDANG mengimpor file, dan menempelkan "(perbaikan otomatis gagal)"
+    padahal perbaikan memang tak pernah dicoba. Keduanya dikunci di sini.
+    """
+    monkeypatch.setattr(tu, "MAKS_TITIK_VALIDASI", 3)
+    galat = tu.validasi_topologi(KOTAK_SAH)                    # 5 titik → ditolak
+    assert tu.perlu_disederhanakan(galat)
+
+    g, alasan = ig.bersihkan_fitur(KOTAK_SAH, perbaiki=True)
+    assert g is None
+    # Kontrak KETAT, bukan sekadar "tak memuat frasa X": alasan harus PERSIS
+    # pesan penolakannya, tanpa embel-embel apa pun. Tanpa ketegasan ini, jalur
+    # tanpa-pagar lolos begitu saja — ia hanya menempelkan embel-embel LAIN
+    # ("hasil perbaikan tetap tak sah") yang sama membingungkannya.
+    assert alasan == f"topologi: {galat}"
+    assert "jalur impor file" not in alasan
+    assert "Simplify" in alasan          # saran yang benar-benar bisa dikerjakan
+
+
 # ── mojibake ────────────────────────────────────────────────────────────────
 
 def test_deteksi_mojibake():

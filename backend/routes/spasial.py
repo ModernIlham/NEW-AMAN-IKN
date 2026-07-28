@@ -192,7 +192,7 @@ def _terapkan_geometri(doc: dict, geometry, *, optimalkan: bool = True) -> None:
     # BLOKIR, bukan peringatan: geometri begini merusak pembangunan indeks
     # 2dsphere untuk SELURUH koleksi. Bila shapely absen, cek ini melewati
     # dirinya sendiri dan MongoDB kembali jadi jaring terakhir (perilaku Fase 3).
-    galat_topo = tu.validasi_topologi(geometry)   # dijaga plafon MAKS_TITIK_TOPOLOGI
+    galat_topo = tu.validasi_topologi(geometry)   # berpagar tenggat waktu sendiri
     if galat_topo:
         raise HTTPException(status_code=400,
                             detail=f"Topologi tidak valid: {galat_topo}")
@@ -642,10 +642,11 @@ async def validasi_geometri_pratinjau(request: Request,
                 "topologi_aktif": tu.topologi_aktif()}
     galat_topo = await asyncio.to_thread(tu.validasi_topologi, geom)
     if galat_topo:
-        # `perbaiki_topologi` menjaga plafon ukurannya sendiri, tetapi bentuk
-        # yang ditolak KARENA terlalu besar jelas tak perlu dicoba diperbaiki.
+        # Bentuk yang ditolak KARENA terlalu besar/rumit untuk diperiksa jelas
+        # tak perlu dicoba diperbaiki: `perbaiki_topologi` dipagari hal yang
+        # sama dan pasti menolak juga.
         usul = None
-        if "terlalu besar" not in galat_topo:
+        if not tu.perlu_disederhanakan(galat_topo):
             usul = await asyncio.to_thread(tu.perbaiki_topologi, geom)
             # Usulan hanya dikirim bila BENAR-BENAR lolos seluruh validasi —
             # menawarkan perbaikan yang akan ditolak saat disimpan itu menyesatkan.

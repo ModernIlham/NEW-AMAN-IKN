@@ -53,6 +53,94 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#660] Impor GIS multi-node, kanvas terpotong, rekap SIMAN per kegiatan, bilah satker bertahan — 2026-07-28
+
+Empat laporan lapangan dari satu layar dan satu keluhan alur. Tiga di antaranya
+berakar pada hal yang sama: **penjaga yang dipasang di tempat yang salah.**
+
+### 1. Impor 6 poligon, 1 jadi, 5 dilewati (`topologi_utils.py`)
+
+Pesannya berbunyi *"geometri terlalu besar (> 20.000 titik) — sederhanakan
+bentuknya atau pakai jalur impor file (perbaikan otomatis gagal)"* — disampaikan
+kepada operator yang **sedang memakai jalur impor file**.
+
+Plafon 20.000 verteks itu dipasang untuk melindungi `make_valid`. Pengukuran
+ulang di repo ini menunjukkan ia memagari sumbu yang keliru: biaya GEOS nyaris
+tak ditentukan jumlah verteks, melainkan **jumlah persilangan-diri**.
+
+| bentuk | `is_valid` | `make_valid` |
+|---|---|---|
+| poligon sah 200.000 verteks | 1,3 ms | 3,2 ms |
+| poligon sah 500.000 verteks | 3,9 ms | 10,8 ms |
+| bintang patologis **201** verteks | ~1 ms | **1.650 ms** |
+| bintang patologis **501** verteks | — | **> 20 detik (dibunuh)** |
+| bintang patologis 20.001 verteks | 126 ms | — |
+| bintang patologis 100.001 verteks | 7.644 ms | — |
+
+Dua akibatnya nyata sekaligus: plafon itu **menolak data sah yang murah**
+(poligon batas wilayah 500.000 verteks divalidasi dalam 3,9 ms), dan
+**tidak memagari `make_valid` sama sekali** (bintang 501 verteks — jauh di bawah
+plafon — berjalan tanpa batas). Ia memberi rasa aman palsu justru pada operasi
+yang paling berbahaya.
+
+Perbaikan: plafon verteks diturunkan perannya menjadi batas kewarasan **memori**,
+dan yang memagari **biaya** kini **tenggat waktu keras** di proses terpisah.
+Prosesnya harus dibunuh, bukan di-`signal`: percobaan pertama memakai
+`signal.setitimer` gagal total — penangan sinyal Python tak pernah dapat giliran
+selama eksekusi berada di dalam panggilan C GEOS, dan benchmark-nya sendiri yang
+harus dibunuh dari luar. (GEOS sendiri MELEPAS GIL — terukur: thread lain tetap
+berdetak tiap 11 ms — jadi `asyncio.to_thread` memang menyelamatkan event loop,
+tetapi kerjanya tetap membakar satu inti tanpa batas.)
+
+Pesan galatnya ditulis ulang agar menyebut angka sebenarnya dan memberi saran
+yang bisa dikerjakan (QGIS ▸ Simplify), dan jalur impor berhenti menempelkan
+"(perbaikan otomatis gagal)" pada penolakan ukuran — perbaikan memang tak pernah
+dicoba di kasus itu.
+
+### 2. Informasi kanvas terpotong setelah impor (`ImporDenahDialog.jsx`)
+
+Baris "dilewati" memakai `truncate` (`white-space: nowrap`), sementara
+`DialogContent` adalah CSS **`grid`** ber-**`overflow-hidden`**. Anak grid
+ber-`min-width: auto`, jadi baris yang tak bisa menyusut melebarkan trek grid
+melewati lebar dialog dan `overflow-x: hidden` memotongnya **tanpa menyisakan
+bilah gulir**. Terukur di Chromium: isi 956 px di dalam kotak 440 px — 516 px
+keterangan hilang, persis pada bagian yang menjelaskan KENAPA node gagal.
+
+Alasan kini dibungkus penuh, daftar panjang digulir, dan `[&>*]:min-w-0` menutup
+seluruh kelas bug itu — bukan hanya satu barisnya.
+
+### 3. Sinkronisasi SIMAN V2 tanpa pembagian per kegiatan
+
+Angka global ("12 selisih") benar tetapi tak bisa ditindaklanjuti begitu satker
+punya banyak kegiatan inventarisasi: operator tahu ada selisih, tak tahu
+kegiatan mana yang harus dibuka. Ditambah rekap per kegiatan (satu pipeline
+agregasi, bukan N kueri), penyaring `activity_id` pada daftar selisih, dan nama
+kegiatan di tiap baris.
+
+> **Temuan keamanan saat mengerjakannya.** Versi pertama penyaring menulis
+> `{**q, "activity_id": pilih}` — dan `scope_query_aset` menegakkan isolasi
+> satker JUSTRU dengan kunci itu, sehingga penyaring tampilan berubah menjadi
+> **IDOR**: pengguna satker A cukup menyebut id kegiatan satker B untuk membaca
+> asetnya. Ditangkap oleh uji yang ditulis bersamaan
+> (`test_penyaring_tak_bisa_menembus_batas_satker`) dan ditutup dengan
+> menggabungkan lewat `$and`, sehingga penyaring hanya bisa MEMPERSEMPIT.
+
+### 4. Bilah Satker Aktif dirapikan + hanya bisa ditarik dari header
+
+Bilah ini menyatakan sebagai satker mana seluruh aplikasi sedang bekerja, jadi
+membukanya harus disengaja. Kini tertutup rapi secara bawaan dan hanya terbuka
+lewat **tarikan berat pada pitanya** — teredam asimtotik (tarikan 72 px hanya
+menggerakkan ±14 px) dengan ambang dinilai dari jarak **mentah**. Satu jalur
+Pointer Events, jadi tetikus dan layar sentuh berperilaku sama persis;
+`touch-action: none` pada pegangan supaya usapan vertikal di HP tidak diserobot
+gulir halaman. Indikator kemajuan mencegah redaman terasa seperti macet, dan
+Enter/Space tetap tersedia agar pengguna papan ketik tak terkunci keluar.
+
+**Uji:** 1.322 backend (+9), 239 frontend (+14). Tiga mutasi diperiksa pada
+pagar topologi dan satu pada pesan impor — semuanya tertangkap.
+
+---
+
 ## [#659] Kompresi PDF yang tak pernah berjalan — dan foto bukti yang diam-diam rusak — 2026-07-28
 
 Pemilik bertanya sederhana: *"apakah kompresi Compresto, Uploadcare, iLoveAPI,
