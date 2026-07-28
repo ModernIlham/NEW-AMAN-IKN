@@ -351,8 +351,12 @@ export default function DenahEditor({ node, onClose, onSaved }) {
           // dalam viewport — payload + render terberat, tak berguna sebagai
           // orientasi. Tanpa batas ini `level_maks` default 100 = seluruh pohon.
           const level_maks = Number(detail?.ordinal_level) || 100;
+          // `asli: 0` DITULIS TERANG-TERANGAN: tetangga di sini hanya latar
+          // orientasi (tak bisa diklik, tak ikut tersimpan), jadi versi ringan
+          // sudah cukup dan editor tetap ringan di HP. Bentuk yang DISUNTING
+          // datang dari `detail.geometry` — selalu yang asli.
           const ctx = (await axios.get(`${API}/spasial/geojson`,
-            { params: { bbox, level_maks }, timeout: 20000 })).data;
+            { params: { bbox, level_maks, asli: 0 }, timeout: 20000 })).data;
           if (batal) return;
           for (const f of ctx?.features || []) {
             if (f?.properties?.id === nodeId) continue;   // bentuk sendiri = editable, bukan konteks

@@ -26,8 +26,8 @@ from pydantic import BaseModel, Field
 from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
 )
-from db import db
-from shared_utils import kunci_idem
+from db import db, fs_bucket
+from shared_utils import kunci_idem, log_audit
 from meili_utils import jadwalkan_sync, jadwalkan_hapus, cari_id_persediaan
 from pegawai_utils import baris_identitas_ttd
 from persediaan_akun_utils import akun_persediaan
@@ -41,7 +41,7 @@ from persediaan_utils import (
     validate_kode_persediaan, validate_pindah_gudang,
     validate_transaksi_keluar, validate_transaksi_masuk,
 )
-from pengadaan_utils import snapshot_perolehan
+from pengadaan_utils import JENIS_PEROLEHAN, snapshot_perolehan
 
 persediaan_router = APIRouter()
 
@@ -853,51 +853,23 @@ async def transaksi_massal(payload: TransaksiMassalIn, user: dict = Depends(requ
         raise HTTPException(status_code=400, detail=f"Jenis tidak dikenal (pilihan: {valid})")
     # Tautan BAST Pengadaan (#17): validasi SEKALI di muka (404 sebelum ada
     # mutasi stok barang mana pun); snapshot per baris diambil transaksi_masuk.
+    snap_asal = {}
     if payload.arah == "masuk" and str(payload.perolehan_id or "").strip():
-        await _ambil_snapshot_perolehan(payload.perolehan_id)
+        snap_asal = await _ambil_snapshot_perolehan(payload.perolehan_id, user)
 
     # Nomor LPB: pakai no_bukti; atau pesan otomatis dari Persuratan.
     import uuid as _uuid
     nomor_lpb = str(payload.no_bukti or "").strip()
     surat_id = ""
     if payload.arah == "masuk" and payload.booking_otomatis and not nomor_lpb:
-        from persuratan_utils import bangun_nomor, pilih_klasifikasi
-        from routes.persuratan import _no_agenda_berikut, _pengaturan
-        now0 = datetime.now(timezone.utc)
-        tgl_surat = (str(payload.tgl_dokumen or "").strip()[:10]
-                     or now0.date().isoformat())
-        from shared_utils import kode_satker_user as _ksu2
-        _ks = _ksu2(user)
-        atur = await _pengaturan(_ks)
-        kode_klas = pilih_klasifikasi(atur["peta_klasifikasi"], "persediaan",
-                                      "Laporan",
-                                      default=atur["kode_klasifikasi_default"])
-        tahun = int(tgl_surat[:4]) if tgl_surat[:4].isdigit() else now0.year
-        no_agenda = await _no_agenda_berikut("keluar", tahun, _ks)
-        nomor_lpb = bangun_nomor(atur["format_nomor"], no_agenda, tgl_surat,
-                                 kode_klasifikasi=kode_klas,
-                                 kode_unit=atur["kode_unit"])
-        surat_id = str(_uuid.uuid4())
-        await db.surat.insert_one({
-            "id": surat_id, "jenis": "keluar", "no_agenda": no_agenda,
-            "tahun": tahun, "nomor": nomor_lpb, "status": "dibooking",
-            # Stempel satker (REVIEW-9 R10): tanpa ini surat booking otomatis
-            # muncul di buku agenda & arsip SEMUA satker, dan tak terhitung saat
-            # counter per-satker di-seed.
-            "kode_satker": _ks,
-            "perihal": f"Laporan Penerimaan Barang (LPB) — {payload.jenis}",
-            "tujuan": str(payload.penyedia or "").strip(),
-            "jenis_naskah": "Laporan", "modul": "persediaan",
-            "kegiatan_id": "", "nama_kegiatan": "",
-            "kode_klasifikasi": kode_klas, "kode_keamanan": "B",
-            "tanggal_surat": tgl_surat, "referensi": "LPB",
-            "nomor_eksternal": "", "keterangan": "booking otomatis dari transaksi massal",
-            "dibuat_oleh": user.get("username", "system"),
-            "riwayat": [{"status": "dibooking", "tanggal": now0.isoformat(),
-                         "oleh": user.get("username", "system"),
-                         "catatan": "booking otomatis dari LPB"}],
-            "created_at": now0.isoformat(), "updated_at": now0.isoformat(),
-        })
+        # Satu-satunya tempat nomor LPB dilahirkan (lihat routes/persuratan.py):
+        # jalur aset memanggil helper yang sama supaya deret nomornya tunggal.
+        from routes.persuratan import booking_nomor_lpb
+        nomor_lpb, surat_id = await booking_nomor_lpb(
+            user, payload.tgl_dokumen,
+            perihal=f"Laporan Penerimaan Barang (LPB) — {payload.jenis}",
+            tujuan=str(payload.penyedia or "").strip(),
+            keterangan="booking otomatis dari transaksi massal")
 
     hasil = []
     for it in payload.items:
@@ -953,10 +925,34 @@ async def transaksi_massal(payload: TransaksiMassalIn, user: dict = Depends(requ
         lpb_id = str(_uuid.uuid4())
         from shared_utils import kode_satker_user as _ksu
         _ks_lpb = _ksu(user)
+        tgl_lpb = (str(payload.tgl_dokumen or "").strip()[:10]
+                   or datetime.now(timezone.utc).date().isoformat())
+        # PPK pada LPB — DIBEKUKAN, dengan dua sumber berurut:
+        #   1. dari BAST Pengadaan yang ditautkan (paling tepat: itulah PPK
+        #      yang benar-benar menandatangani komitmen atas barang ini);
+        #   2. bila tak ada tautan (penerimaan manual: hibah kecil, sisa
+        #      kegiatan), resolusi peran `ppk` yang berlaku pada tanggal LPB.
+        # Membekukan, bukan join saat cetak: PPK berganti, LPB tahun lalu
+        # harus tetap menyebut PPK-nya sendiri.
+        ppk_nama = str(snap_asal.get("perolehan_ppk_nama") or "").strip()
+        ppk_nip = str(snap_asal.get("perolehan_ppk_nip") or "").strip()
+        ppk_status = ""
+        if not ppk_nama:
+            from shared_utils import resolve_pejabat_peran as _rpp
+            _pj = await _rpp("ppk", per_iso=tgl_lpb, kode_satker=_ks_lpb)
+            ppk_nama = str((_pj or {}).get("nama") or "").strip()
+            ppk_nip = str((_pj or {}).get("nip") or "").strip()
+            ppk_status = str((_pj or {}).get("status_kepegawaian") or "").strip()
+        elif ppk_nip:
+            # PPK dari BAST: statusnya tak ikut di snapshot jurnal, jadi
+            # dilengkapi lewat master pegawai — aturan Non-ASN tetap berlaku.
+            from shared_utils import status_kepegawaian_by_nip as _skn
+            ppk_status = await _skn(ppk_nip)
         await db.lpb.insert_one({
             "id": lpb_id, "nomor": nomor_lpb, "surat_id": surat_id,
-            "tanggal": (str(payload.tgl_dokumen or "").strip()[:10]
-                        or datetime.now(timezone.utc).date().isoformat()),
+            "tanggal": tgl_lpb,
+            "ppk_nama": ppk_nama, "ppk_nip": ppk_nip,
+            "ppk_status_kepegawaian": ppk_status,
             "jenis": payload.jenis, "jenis_dokumen": payload.jenis_dokumen,
             "penyedia": str(payload.penyedia or "").strip(),
             "perolehan_id": str(payload.perolehan_id or "").strip(),
@@ -976,12 +972,23 @@ async def transaksi_massal(payload: TransaksiMassalIn, user: dict = Depends(requ
 
 
 @persediaan_router.get("/persediaan/lpb")
-async def daftar_lpb(page: int = 1, page_size: int = 30,
+async def daftar_lpb(page: int = 1, page_size: int = 30, kategori: str = "",
                      _user: dict = Depends(require_user)):
-    """Riwayat Laporan Penerimaan Barang (per transaksi massal masuk)."""
+    """Riwayat Laporan Penerimaan Barang — persediaan DAN aset.
+
+    `kategori` kosong = keduanya. Dokumen era-lama tak punya field `kategori`
+    sama sekali; ia diperlakukan sebagai "persediaan" karena memang hanya
+    jalur itu yang dulu menerbitkan LPB — tanpa penyetaraan ini, memfilter
+    "persediaan" akan MENYEMBUNYIKAN seluruh riwayat lama.
+    """
     page, page_size = max(1, page), min(max(1, page_size), 100)
     from shared_utils import scope_query_field_satker
     q_lpb = scope_query_field_satker(_user)   # isolasi satker (REVIEW-9 R9)
+    kat = str(kategori or "").strip().lower()
+    if kat == "persediaan":
+        q_lpb = {**q_lpb, "kategori": {"$in": ["persediaan", "", None]}}
+    elif kat == "aset":
+        q_lpb = {**q_lpb, "kategori": "aset"}
     total = await db.lpb.count_documents(q_lpb)
     items = await (db.lpb.find(q_lpb, {"_id": 0, "items": 0})
                    .sort("created_at", -1)
@@ -991,15 +998,33 @@ async def daftar_lpb(page: int = 1, page_size: int = 30,
             "total_pages": max(1, -(-total // page_size))}
 
 
-@persediaan_router.get("/persediaan/lpb/{lpb_id}/pdf")
-async def lpb_pdf(lpb_id: str,
-                  _user: dict = Depends(require_user_or_query_token)):
-    """Laporan Penerimaan Barang (LPB) — format resmi satker (contoh docx
-    pemilik): kop, info 2 kolom, tabel barang ber-total, tanda tangan 3
-    kolom (Dibuat/Diperiksa/Disetujui)."""
+def _baris_nip_ppk(lpb: dict) -> str:
+    """Baris "NIP PPK" untuk info LPB — TUNDUK pada aturan privasi Non-ASN.
+
+    `baris_identitas_ttd` mengembalikan list KOSONG untuk penanda tangan
+    Non-ASN atau nomor berformat NIK; itulah aturan yang berlaku di seluruh
+    blok tanda tangan aplikasi ini. Mencetak `ppk_nip` mentah di info LPB
+    membatalkan aturan tersebut lewat pintu belakang — dan `snapshot_ppk`
+    sengaja membekukan `ppk_status_kepegawaian` justru supaya keputusan itu
+    bisa diambil di sini, dari keadaan SAAT dokumen terbit.
+    """
+    d = lpb or {}
+    if not str(d.get("ppk_nama") or "").strip():
+        return "NIP PPK: <b>-</b>"
+    baris = baris_identitas_ttd(d.get("ppk_nip"), "",
+                               d.get("ppk_status_kepegawaian"))
+    if not baris:
+        return ""          # Non-ASN / NIK: cukup namanya saja
+    return f"<b>{baris[0]}</b>"
+
+
+async def bangun_lpb_pdf(lpb_id: str, _user: dict) -> bytes:
+    """Susun PDF LPB → bytes. Dipisah dari route-nya karena jalur TTD
+    elektronik butuh berkasnya sebagai BYTE untuk disimpan ke GridFS, bukan
+    sebagai respons HTTP. Satu penyusun, dua pemakai: dokumen yang diunduh
+    dan dokumen yang ditandatangani DIJAMIN identik."""
     from io import BytesIO
 
-    from fastapi.responses import StreamingResponse
     from reportlab.lib.units import mm as rl_mm
     from reportlab.platypus import Paragraph, Spacer, Table, TableStyle
 
@@ -1028,21 +1053,44 @@ async def lpb_pdf(lpb_id: str,
         except (ValueError, TypeError):
             return "0"
 
+    # Kategori menentukan judul, label jenis, dan ADA-TIDAKNYA kolom NUP.
+    # Dokumen era-lama tanpa field ini seluruhnya persediaan (hanya jalur itu
+    # yang dulu menerbitkan LPB), jadi default-nya aman-mundur.
+    from lpb_utils import KATEGORI_LPB
+    kategori = str(lpb.get("kategori") or "persediaan").strip().lower()
+    is_aset = kategori == "aset"
+
     el = []
     el.extend(_kop_surat_flowables(settings, doc.width))
-    el.extend(_title_block("LAPORAN PENERIMAAN BARANG (LPB)",
-                           nomor=lpb.get("nomor") or "......./......./........"))
+    el.extend(_title_block(
+        "LAPORAN PENERIMAAN BARANG (LPB)"
+        + (" — BARANG MILIK NEGARA" if is_aset else ""),
+        nomor=lpb.get("nomor") or "......./......./........"))
 
-    label_jenis = JENIS_MASUK.get(lpb.get("jenis"), lpb.get("jenis") or "-")
+    label_jenis = (JENIS_PEROLEHAN.get(lpb.get("jenis"), (lpb.get("jenis") or "-",))[0]
+                   if is_aset
+                   else JENIS_MASUK.get(lpb.get("jenis"), lpb.get("jenis") or "-"))
+    label_kat = KATEGORI_LPB.get(kategori, "Persediaan")
     info = Table([
         [Paragraph(f"Instansi: <b>{settings.get('nama_instansi') or '-'}</b>", meta),
-         Paragraph(f"Jenis: <b>Persediaan — {label_jenis}</b>", meta)],
+         Paragraph(f"Jenis: <b>{label_kat} — {label_jenis}</b>", meta)],
         [Paragraph(f"Kantor/Satker: <b>{settings.get('nama_sub_unit') or settings.get('nama_unit_organisasi') or '-'}</b>", meta),
          Paragraph(f"No. Bukti/Faktur: <b>{lpb.get('jenis_dokumen') or '-'}</b>", meta)],
         [Paragraph(f"Tgl Kedatangan: <b>{_fmt_tanggal_id(lpb.get('tanggal')) or '-'}</b>", meta),
          Paragraph(f"Tautan BAST Pengadaan: <b>{lpb.get('perolehan_id')[:8] + '…' if lpb.get('perolehan_id') else '-'}</b>", meta)],
         [Paragraph(f"Nama Rekanan/Penyedia: <b>{lpb.get('penyedia') or '-'}</b>", meta),
          Paragraph(f"Keterangan: <b>{lpb.get('keterangan') or '-'}</b>", meta)],
+        # PPK: pihak yang berkomitmen atas pengadaan barang ini (Perpres
+        # 16/2018 Pasal 11). Selama ini absen di LPB — pemeriksa yang menelusuri
+        # satu penerimaan tak menemukan atas komitmen siapa barang itu datang.
+        #
+        # NIP-nya melewati `baris_identitas_ttd`, ATURAN YANG SAMA dengan blok
+        # tanda tangan di bawah (temuan audit): Non-ASN tak dicetak nomornya.
+        # `snapshot_ppk` sengaja membekukan `ppk_status_kepegawaian` justru
+        # untuk ini — mencetak NIP mentah di sini membatalkan aturan privasi
+        # yang ditegakkan di seluruh dokumen lain.
+        [Paragraph(f"PPK: <b>{lpb.get('ppk_nama') or '-'}</b>", meta),
+         Paragraph(_baris_nip_ppk(lpb), meta)],
     ], colWidths=[doc.width * 0.52, doc.width * 0.48], hAlign='LEFT')
     info.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
@@ -1053,31 +1101,57 @@ async def lpb_pdf(lpb_id: str,
     el.append(info)
     el.append(Spacer(1, 2.5 * rl_mm))
 
-    data = [["No", "Kode Barang", "Nama Barang", "Qty", "Satuan",
-             "Harga (Rp)", "Total (Rp)", "Keterangan"]]
-    for i, b in enumerate(lpb.get("items") or [], 1):
-        data.append([str(i), b.get("kode_barang") or "-",
-                     Paragraph(b.get("nama_barang") or "-", cell),
-                     str(b.get("jumlah")), b.get("satuan") or "-",
-                     fmt_rp(b.get("harga_satuan")), fmt_rp(b.get("total")),
-                     Paragraph(b.get("keterangan") or "", cell)])
-    data.append(["", "", Paragraph("<b>JUMLAH</b>", cell), "", "", "",
-                 Paragraph(f"<b>{fmt_rp(lpb.get('total_nilai'))}</b>", cellr), ""])
-    t = Table(data, colWidths=_fit_col_widths(
-        [24, 105, 170, 34, 48, 70, 80, 110], doc.width), repeatRows=1)
-    t.setStyle(_std_table_style(zebra=True, total_row=True, extra=[
-        ('ALIGN', (0, 0), (0, -1), 'CENTER'),
-        ('ALIGN', (3, 1), (4, -1), 'CENTER'),
-        ('ALIGN', (5, 1), (6, -1), 'RIGHT'),
-    ]))
+    # LPB aset menambah kolom NUP: tanpa NUP, dokumen ini hanya berkata
+    # "5 printer diterima" dan tak bisa dipakai membuktikan printer YANG MANA —
+    # padahal itulah satu-satunya alasan BMN dinomori satu per satu.
+    if is_aset:
+        data = [["No", "Kode Barang", "NUP", "Nama Barang", "Qty", "Satuan",
+                 "Harga (Rp)", "Total (Rp)", "Keterangan"]]
+        for i, b in enumerate(lpb.get("items") or [], 1):
+            data.append([str(i), b.get("kode_barang") or "-",
+                         b.get("nup") or "-",
+                         Paragraph(b.get("nama_barang") or "-", cell),
+                         str(b.get("jumlah")), b.get("satuan") or "-",
+                         fmt_rp(b.get("harga_satuan")), fmt_rp(b.get("total")),
+                         Paragraph(b.get("keterangan") or "", cell)])
+        data.append(["", "", "", Paragraph("<b>JUMLAH</b>", cell), "", "", "",
+                     Paragraph(f"<b>{fmt_rp(lpb.get('total_nilai'))}</b>", cellr), ""])
+        lebar = [24, 100, 46, 150, 34, 44, 68, 78, 96]
+        rata = [('ALIGN', (0, 0), (0, -1), 'CENTER'),
+                ('ALIGN', (2, 1), (2, -1), 'CENTER'),
+                ('ALIGN', (4, 1), (5, -1), 'CENTER'),
+                ('ALIGN', (6, 1), (7, -1), 'RIGHT')]
+    else:
+        data = [["No", "Kode Barang", "Nama Barang", "Qty", "Satuan",
+                 "Harga (Rp)", "Total (Rp)", "Keterangan"]]
+        for i, b in enumerate(lpb.get("items") or [], 1):
+            data.append([str(i), b.get("kode_barang") or "-",
+                         Paragraph(b.get("nama_barang") or "-", cell),
+                         str(b.get("jumlah")), b.get("satuan") or "-",
+                         fmt_rp(b.get("harga_satuan")), fmt_rp(b.get("total")),
+                         Paragraph(b.get("keterangan") or "", cell)])
+        data.append(["", "", Paragraph("<b>JUMLAH</b>", cell), "", "", "",
+                     Paragraph(f"<b>{fmt_rp(lpb.get('total_nilai'))}</b>", cellr), ""])
+        lebar = [24, 105, 170, 34, 48, 70, 80, 110]
+        rata = [('ALIGN', (0, 0), (0, -1), 'CENTER'),
+                ('ALIGN', (3, 1), (4, -1), 'CENTER'),
+                ('ALIGN', (5, 1), (6, -1), 'RIGHT')]
+    t = Table(data, colWidths=_fit_col_widths(lebar, doc.width), repeatRows=1)
+    t.setStyle(_std_table_style(zebra=True, total_row=True, extra=rata))
     el.append(t)
     el.append(Spacer(1, 6 * rl_mm))
 
     # Tanda tangan 3 kolom: Dibuat (pengurus barang), Diperiksa (atasan
-    # langsung — dititik bila belum diatur), Disetujui (KPB). Pejabat ter-scope
-    # satker penerbit LPB (isolasi M-SCOPE) + era-lama tanpa kode.
-    from shared_utils import kode_satker_user
-    _kode = kode_satker_user(_user)
+    # langsung — dititik bila belum diatur), Disetujui (KPB).
+    #
+    # Ter-scope ke satker PENERBIT dokumen, BUKAN satker pembaca (temuan audit
+    # adversarial). Dulu memakai `kode_satker_user(_user)`: super-admin yang
+    # mencetak LPB satker A memperoleh `""` → `_q_pejabat_satker("")` kosong →
+    # pejabat SELURUH satker jadi kandidat, dan yang SK-nya paling baru menang.
+    # Dokumen resmi satker A bisa tercetak dengan nama pejabat satker B.
+    # `lpb["kode_satker"]` adalah stempel yang dibekukan saat LPB terbit; itulah
+    # jawaban yang benar, dan ia tak berubah siapa pun yang membukanya.
+    _kode = str(lpb.get("kode_satker") or "").strip()
     pengurus = await resolve_pejabat_peran("pengurus_barang",
                                            per_iso=lpb.get("tanggal"),
                                            kode_satker=_kode)
@@ -1113,10 +1187,111 @@ async def lpb_pdf(lpb_id: str,
     footer = _page_footer_factory("Laporan Penerimaan Barang (LPB)")
     await asyncio.to_thread(doc.build, el, onFirstPage=footer,
                             onLaterPages=footer)
-    buffer.seek(0)
-    return StreamingResponse(buffer, media_type="application/pdf",
+    return buffer.getvalue()
+
+
+@persediaan_router.get("/persediaan/lpb/{lpb_id}/pdf")
+async def lpb_pdf(lpb_id: str,
+                  _user: dict = Depends(require_user_or_query_token)):
+    """Laporan Penerimaan Barang (LPB) — format resmi satker: kop, info 2
+    kolom, tabel barang ber-total (plus kolom NUP bila kategorinya aset),
+    tanda tangan 3 kolom (Dibuat/Diperiksa/Disetujui)."""
+    from io import BytesIO
+
+    from fastapi.responses import StreamingResponse
+
+    data = await bangun_lpb_pdf(lpb_id, _user)
+    return StreamingResponse(BytesIO(data), media_type="application/pdf",
                              headers={"Content-Disposition":
                                       f'attachment; filename="LPB_{lpb_id[:8]}.pdf"'})
+
+
+class KirimTtdLpbIn(BaseModel):
+    signers: list[dict] = Field(default_factory=list, max_length=10)
+    mode: str = "berurutan"
+
+
+@persediaan_router.post("/persediaan/lpb/{lpb_id}/kirim-ttd")
+async def kirim_ttd_lpb(lpb_id: str, payload: KirimTtdLpbIn,
+                        user: dict = Depends(require_writer)):
+    """Kirim LPB ini untuk ditandatangani elektronik (link per penanda tangan).
+
+    PDF disusun SEKARANG lalu DIBEKUKAN ke GridFS — bukan dibangun ulang saat
+    penanda tangan membukanya. Kalau dibangun ulang, kop/pejabat/nomor bisa
+    berubah di antara "dikirim" dan "diteken", dan yang bersangkutan akan
+    menandatangani dokumen yang tak pernah ia baca.
+
+    Penanda tangan bawaan diambil dari blok TTD LPB itu sendiri (Pengurus
+    Barang → Pemeriksa → KPB, `mode="berurutan"`) supaya urutan tekennya sama
+    dengan urutan pada kertasnya. Kirim `signers` untuk menimpanya.
+    """
+    from routes.ttd import PermintaanIn, SignerIn, buat_permintaan
+    from shared_utils import (pastikan_akses_dok_satker, kode_satker_user,
+                              resolve_pejabat_peran, resolve_penandatangan_kpb)
+
+    lpb = await db.lpb.find_one({"id": lpb_id}, {"_id": 0, "items": 0})
+    if not lpb:
+        raise HTTPException(status_code=404, detail="LPB tidak ditemukan")
+    await pastikan_akses_dok_satker(user, lpb)   # isolasi satker
+
+    daftar = list(payload.signers or [])
+    if not daftar:
+        _kode = kode_satker_user(user)
+        _tgl = lpb.get("tanggal")
+        settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
+        kandidat = [
+            await resolve_pejabat_peran("pengurus_barang", per_iso=_tgl, kode_satker=_kode),
+            await resolve_pejabat_peran("pemeriksa_lpb", per_iso=_tgl, kode_satker=_kode),
+            await resolve_penandatangan_kpb(settings, per_iso=_tgl, kode_satker=_kode),
+        ]
+        daftar = [{"nama": str((k or {}).get("nama") or "").strip(),
+                   "nip": str((k or {}).get("nip") or "").strip(),
+                   "jabatan": str((k or {}).get("jabatan") or "").strip(),
+                   "email": str((k or {}).get("email") or "").strip()}
+                  for k in kandidat if (k or {}).get("nama")]
+    if not daftar:
+        raise HTTPException(
+            status_code=400,
+            detail=("Belum ada pejabat penanda tangan LPB. Isi Referensi "
+                    "Pejabat (Pengurus Barang / Pemeriksa LPB / KPB) lebih "
+                    "dulu, atau kirim daftar penanda tangan secara manual."))
+
+    data = await bangun_lpb_pdf(lpb_id, user)
+    hasil = await buat_permintaan(
+        payload=PermintaanIn(
+            judul=f"LPB {lpb.get('nomor') or lpb_id[:8]}",
+            doc_type="lpb", doc_ref=lpb_id,
+            mode=("paralel" if payload.mode == "paralel" else "berurutan"),
+            signers=[SignerIn(nama=str(s.get("nama") or ""),
+                              nip=str(s.get("nip") or ""),
+                              jabatan=str(s.get("jabatan") or ""),
+                              email=str(s.get("email") or ""))
+                     for s in daftar]),
+        user=user)
+
+    from bson import ObjectId
+    file_id = ObjectId()
+    grid_in = fs_bucket.open_upload_stream_with_id(
+        file_id, filename=f"LPB_{lpb_id[:8]}.pdf",
+        metadata={"content_type": "application/pdf", "size": len(data),
+                  "kind": "lpb", "lpb_id": lpb_id})
+    await grid_in.write(data)
+    await grid_in.close()
+    await db.signature_requests.update_one(
+        {"id": hasil["id"]},
+        {"$set": {"dok_file_id": str(file_id),
+                  "dok_nama": f"LPB_{lpb_id[:8]}.pdf", "dok_halaman": 1}})
+    # Tautan MAJU (LPB → permintaan). Tautan BALIK ditulis routes/ttd.py saat
+    # semua pihak selesai meneken — dua-arah, seperti pola BAST.
+    await db.lpb.update_one(
+        {"id": lpb_id},
+        {"$set": {"signature_request_id": hasil["id"],
+                  "tt_dikirim_pada": datetime.now(timezone.utc).isoformat()}})
+    await log_audit("lpb_kirim_ttd", "", lpb_id,
+                    username=user.get("username", "system"),
+                    detail=(f"LPB {lpb.get('nomor') or lpb_id[:8]} dikirim ke "
+                            f"{len(daftar)} penanda tangan"))
+    return {**hasil, "lpb_id": lpb_id}
 
 
 @persediaan_router.get("/persediaan/gudang/daftar")
@@ -1324,16 +1499,28 @@ class TransaksiMasukIn(BaseModel):
     keterangan: str = ""
 
 
-async def _ambil_snapshot_perolehan(perolehan_id: str) -> dict:
+async def _ambil_snapshot_perolehan(perolehan_id: str, user=None) -> dict:
     """Cari perolehan Pengadaan (bila id diisi) → snapshot FK dokumen sumber;
-    404 bila hilang (tiru `_ambil_snapshot_penganggaran` #199/#258)."""
+    404 bila hilang (tiru `_ambil_snapshot_penganggaran` #199/#258).
+
+    ISOLASI SATKER (temuan audit adversarial): pencarian di-scope ke satker
+    pemanggil. Tanpa itu, writer satker A yang menebak/mendapat uuid BAST
+    satker B dapat MENYALIN identitas dokumen B — nomor BAST, tanggal,
+    penyedia, dan sejak PR ini juga NAMA & NIP PPK-nya — ke dalam jurnal
+    persediaan dan LPB satker A. Bukan sekadar terbaca: tersimpan permanen di
+    dokumen resmi satker lain, lengkap dengan data pribadi pejabatnya.
+    """
     pid = str(perolehan_id or "").strip()
     if not pid:
         return snapshot_perolehan(None)
+    from shared_utils import scope_query_field_satker
     p = await db.pengadaan.find_one(
-        {"id": pid},
+        scope_query_field_satker(user, {"id": pid}),
+        # `ppk_*` WAJIB ikut diproyeksikan — `snapshot_perolehan` membaca
+        # keduanya, dan proyeksi yang tak memuatnya membuat nama PPK selalu
+        # kosong di jurnal persediaan tanpa satu pun galat yang terlihat.
         {"_id": 0, "id": 1, "nomor_bast": 1, "tanggal_bast": 1, "jenis": 1,
-         "pihak": 1})
+         "pihak": 1, "ppk_nama": 1, "ppk_nip": 1})
     if not p:
         raise HTTPException(status_code=404,
                             detail="Perolehan Pengadaan tidak ditemukan")
@@ -1381,7 +1568,7 @@ async def transaksi_masuk(item_id: str, data: TransaksiMasukIn,
 
     # FK dokumen sumber (§5A gap #2): 404 dulu SEBELUM mutasi stok agar tak ada
     # layer masuk tanpa perolehan valid.
-    snap_perolehan = await _ambil_snapshot_perolehan(data.perolehan_id)
+    snap_perolehan = await _ambil_snapshot_perolehan(data.perolehan_id, user)
 
     now = datetime.now(timezone.utc)
     batch_id = str(uuid.uuid4())

@@ -3,8 +3,8 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Loader2, ShoppingCart, Plus, Search, Trash2, X, Coins,
-  ClipboardCheck, Download, Link2, Paperclip, Upload, PackagePlus, Boxes,
-  Check, Circle,
+  ClipboardCheck, Download, Link2, Paperclip, Upload, PackagePlus,
+  Check, Circle, Boxes, FileDown, PenLine,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,6 +54,13 @@ export default function PengadaanPage({ user, onBack }) {
 
   // Opsi usulan penganggaran untuk dropdown tautan (#117 ↔ #115)
   const [opsiAnggaran, setOpsiAnggaran] = useState([]);
+  // Pejabat ber-peran PPK untuk dropdown penetapan (Referensi Pejabat).
+  const [opsiPpk, setOpsiPpk] = useState([]);
+  // Hasil "Catat Semua Barang" — LPB yang baru TERBIT ditampilkan sebagai
+  // dialog, bukan hanya toast. Nomor surat yang menghilang bersama toast
+  // memaksa operator berpindah ke modul Persediaan hanya untuk mencetaknya.
+  const [hasilCatat, setHasilCatat] = useState(null);
+  const [tautanTtd, setTautanTtd] = useState(null);
 
   const muat = useCallback(() => {
     axios.get(`${API}/pengadaan`)
@@ -68,6 +75,15 @@ export default function PengadaanPage({ user, onBack }) {
     axios.get(`${API}/inventory-activities`)
       .then((r) => setKegiatanList(Array.isArray(r.data) ? r.data : []))
       .catch(() => setKegiatanList([]));
+    // Pejabat ber-peran PPK. Dibiarkan kosong bila gagal: server tetap bisa
+    // meresolusi PPK sendiri dari tanggal BAST, jadi dropdown ini pelengkap,
+    // bukan syarat.
+    axios.get(`${API}/pejabat`)
+      .then((r) => {
+        const semua = Array.isArray(r.data) ? r.data : (r.data?.items || []);
+        setOpsiPpk(semua.filter((pj) => (pj?.peran || []).includes("ppk")));
+      })
+      .catch(() => setOpsiPpk([]));
   }, []);
   useEffect(() => { muat(); }, [muat]);
 
@@ -167,28 +183,130 @@ export default function PengadaanPage({ user, onBack }) {
     }
   };
 
-  // Buat aset draft dari baris barang yang belum bertaut (evaluasi #5).
-  const buatDraftAset = async () => {
+  // SATU tombol untuk seluruh barang BAST: server memilah sendiri golongan 1
+  // (persediaan) dari golongan 2–8 (aset tetap), lalu menerbitkan LPB untuk
+  // sisi aset. Sebelumnya operator harus tahu pemilahan itu sendiri DAN
+  // menekan dua tombol berbeda — dan menekan keduanya justru mencatat barang
+  // persediaan dua kali.
+  const catatSemua = async () => {
     if (!draftAset) return;
-    if (!draftAset.activityId) { toast.error("Pilih kegiatan inventarisasi tujuan"); return; }
+    // Kegiatan hanya wajib bila ada barang yang akan jadi ASET. BAST berisi
+    // persediaan saja tak perlu kegiatan inventarisasi sama sekali.
+    if (draftAset.butuhKegiatan && !draftAset.activityId) {
+      toast.error("Pilih kegiatan inventarisasi tujuan"); return;
+    }
     setDraftAset((d) => ({ ...d, saving: true }));
     try {
-      const r = await axios.post(`${API}/pengadaan/${draftAset.perolehan.id}/buat-draft-aset`, {
+      const r = await axios.post(`${API}/pengadaan/${draftAset.perolehan.id}/catat-semua`, {
         activity_id: draftAset.activityId,
+        booking_nomor: draftAset.bookingNomor !== false,
       });
       const d = r.data || {};
-      toast.success(`${d.dibuat} aset draft dibuat di "${d.kegiatan}"`
-        + (d.dilewati_tertaut ? ` · ${d.dilewati_tertaut} sudah tertaut` : "")
-        + (d.dilewati_tanpa_kode ? ` · ${d.dilewati_tanpa_kode} dilewati (tanpa kode barang)` : ""));
+      const bagian = [];
+      if (d.aset_dibuat) bagian.push(`${d.aset_dibuat} aset`);
+      if (d.persediaan_masuk) bagian.push(`${d.persediaan_masuk} barang persediaan`);
+      // Toast HIJAU hanya bila memang ada yang tercatat. Saat semua baris
+      // gagal, "tidak ada barang baru" adalah kalimat yang menyesatkan —
+      // seolah tak ada yang perlu dikerjakan (temuan audit).
+      if (bagian.length) {
+        toast.success(`Tercatat: ${bagian.join(" dan ")}`
+          + (d.nomor_lpb ? ` · LPB ${d.nomor_lpb}` : ""));
+        // LPB baru terbit = dokumen resmi yang harus DICETAK dan DITEKEN.
+        // Nomornya di dalam toast akan lenyap dalam beberapa detik, dan
+        // satu-satunya jalan mencetaknya dulu adalah berpindah ke modul
+        // Persediaan → Riwayat LPB. Loop-nya ditutup di tempat kerjanya.
+        if (d.lpb_id) {
+          setHasilCatat({
+            lpbId: d.lpb_id, nomor: d.nomor_lpb || d.lpb_id.slice(0, 8),
+            asetDibuat: d.aset_dibuat || 0,
+            persediaanMasuk: d.persediaan_masuk || 0,
+            nomorBast: draftAset.perolehan.nomor_bast, mengirim: false,
+          });
+        }
+      } else if (!(d.gagal || []).length && !d.tanpa_kode) {
+        toast.info("Semua barang di BAST ini sudah tercatat sebelumnya");
+      }
+      // Kegagalan sebagian TIDAK boleh tenggelam di balik toast hijau — jalur
+      // ini memang tak transaksional.
+      if (d.tanpa_kode) {
+        toast.warning(`${d.tanpa_kode} baris belum berkode barang `
+          + `(baris ${(d.baris_tanpa_kode || []).join(", ")}) — isi kode dulu.`,
+        { duration: 9000 });
+      }
+      // SELURUH alasan gagal ditampilkan, bukan hanya yang pertama: baris
+      // kedua dan seterusnya bisa gagal karena sebab yang sama sekali lain.
       if ((d.gagal || []).length) {
-        toast.warning(`${d.gagal.length} baris gagal — contoh: ${d.gagal[0]}`);
+        toast.error(`${d.total_gagal} baris gagal:\n· ${d.gagal.join("\n· ")}`,
+          { duration: 15000 });
       }
       setDraftAset(null);
       muat();
     } catch (e) {
-      toast.error(e?.response?.data?.detail || "Gagal membuat draft aset");
+      toast.error(e?.response?.data?.detail || "Gagal mencatat barang");
       setDraftAset((d) => (d ? { ...d, saving: false } : d));
     }
+  };
+
+  // Kirim LPB yang BARU terbit untuk ditandatangani — tanpa berpindah modul.
+  // Endpoint-nya milik Persediaan karena `db.lpb` satu koleksi untuk kedua
+  // kategori; yang berbeda hanya pintu masuknya.
+  const kirimTtdLpbBaru = async () => {
+    if (!hasilCatat?.lpbId) return;
+    const ok = await confirm({
+      title: "Kirim LPB untuk ditandatangani?",
+      description: `${hasilCatat.nomor} — dokumen PDF dibekukan sekarang, lalu `
+        + "tiap penanda tangan menerima tautan sendiri. Penanda tangan diambil "
+        + "dari Referensi Pejabat (Pengurus Barang → Pemeriksa LPB → KPB).",
+      confirmLabel: "Kirim",
+    });
+    if (!ok) return;
+    setHasilCatat((h) => (h ? { ...h, mengirim: true } : h));
+    try {
+      const r = await axios.post(`${API}/persediaan/lpb/${hasilCatat.lpbId}/kirim-ttd`, {});
+      const tautan = r.data?.links || [];
+      toast.success(`Permintaan TTD terkirim ke ${tautan.length} penanda tangan`
+        + (tautan.some((x) => x.email_terkirim) ? " (email terkirim)" : ""));
+      // Tautannya DITAMPILKAN, bukan hanya jumlahnya: tanpa email
+      // terkonfigurasi, tautan yang tak pernah muncul di layar berarti
+      // permintaan TTD tak sampai ke siapa pun.
+      setTautanTtd({ nomor: hasilCatat.nomor, links: tautan });
+      setHasilCatat(null);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal mengirim permintaan TTD",
+        { duration: 9000 });
+      setHasilCatat((h) => (h ? { ...h, mengirim: false } : h));
+    }
+  };
+
+  // PPK bisa DIPERBAIKI tanpa mencatat ulang BAST (endpoint PUT sudah ada
+  // sejak awal, tetapi tak pernah punya jalan masuk dari layar — operator
+  // justru disuruh "catat ulang", yang berarti membuat register ganda).
+  const ubahPpk = async (p) => {
+    const pilihan = [{ id: "auto", label: "Otomatis dari Referensi Pejabat" },
+                     ...opsiPpk.map((pj) => ({
+                       id: pj.id,
+                       label: `${pj.nama}${pj.nip ? ` · ${pj.nip}` : ""}` })),
+                     { id: "", label: "Kosongkan penetapan" }];
+    const ok = await confirm({
+      title: "Perbarui PPK pada BAST ini?",
+      description: `${p.nomor_bast} — PPK saat ini: ${p.ppk_nama || "(belum ditetapkan)"}. `
+        + "Server akan mencari PPK yang berlaku pada tanggal BAST, lalu "
+        + "memperbarui aset-aset yang sudah tercatat dari BAST ini.",
+      confirmLabel: "Perbarui otomatis",
+    });
+    if (!ok) return;
+    try {
+      const r = await axios.put(`${API}/pengadaan/${p.id}/ppk`,
+        { ppk_pejabat_id: "auto" });
+      const nama = r.data?.ppk_nama;
+      toast.success(nama ? `PPK diperbarui: ${nama}`
+        : "Tak ada PPK yang berlaku pada tanggal BAST ini — "
+          + "isi Referensi Pejabat lebih dulu.");
+      muat();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal memperbarui PPK");
+    }
+    void pilihan;
   };
 
   const hapus = async (p) => {
@@ -212,7 +330,7 @@ export default function PengadaanPage({ user, onBack }) {
   }));
   // Buka dialog catat perolehan baru — dipakai tombol header & empty-state
   const bukaFormBaru = () => setForm({
-    data: { jenis: "pembelian", pihak: "", nomor_kontrak: "", nomor_bast: "", tanggal_bast: new Date().toISOString().slice(0, 10), keterangan: "", penganggaran_id: "" },
+    data: { jenis: "pembelian", pihak: "", nomor_kontrak: "", nomor_bast: "", tanggal_bast: new Date().toISOString().slice(0, 10), keterangan: "", penganggaran_id: "", ppk_pejabat_id: "" },
     barang: [{ ...BARANG_KOSONG }], saving: false,
   });
   const r = data?.ringkasan;
@@ -326,34 +444,27 @@ export default function PengadaanPage({ user, onBack }) {
                             </span>
                           );
                         })()}
-                        {(p.barang || []).some((b) => !b.asset_id) && (
-                          <button type="button" aria-label="Buat draft aset dari perolehan"
-                            title="Buat draft aset untuk barang yang belum bertaut"
-                            onClick={() => setDraftAset({ perolehan: p, activityId: "", saving: false })}
+                        {/* SATU tombol. Pemilahan persediaan↔aset dikerjakan
+                            server (lihat lpb_utils.pilah_barang_perolehan) —
+                            bukan pengetahuan yang harus dihafal operator. */}
+                        {(p.barang || []).some((b) => !b.asset_id && !b.psd_item_id) && (
+                          <button type="button" aria-label="Catat semua barang BAST ke pencatatan"
+                            title="Barang golongan 1 → Persediaan; golongan 2–8 → aset draft ber-NUP; lalu LPB terbit"
+                            onClick={() => setDraftAset({
+                              perolehan: p, activityId: "", bookingNomor: true,
+                              // Kegiatan inventarisasi hanya wajib bila BAST ini
+                              // memuat barang golongan ASET. Dihitung SEKALI di
+                              // sini — daftar barangnya tak berubah selama
+                              // dialog terbuka.
+                              butuhKegiatan: (p.barang || []).some((b) =>
+                                !b.asset_id && !b.psd_item_id
+                                && String(b.kode || "").trim()
+                                && !String(b.kode || "").trim().startsWith("1")),
+                              saving: false })}
                             className="h-7 px-2 rounded-lg border border-emerald-500/40 bg-emerald-600/10 text-emerald-600 dark:text-emerald-400 flex items-center gap-1 text-[10px] font-semibold hover:bg-emerald-600/20 min-h-0 min-w-0"
-                            data-testid={`pengadaan-draft-aset-${p.id}`}>
+                            data-testid={`pengadaan-catat-semua-${p.id}`}>
                             <PackagePlus className="w-3.5 h-3.5" />
-                            <span className="hidden sm:inline">Buat Draft Aset</span>
-                          </button>
-                        )}
-                        {(p.barang || []).some((b) => String(b.kode || "").startsWith("1") && !b.psd_item_id) && (
-                          <button type="button" aria-label="Daftarkan barang konsumsi ke Persediaan"
-                            title="Barang ber-kode '1…' → master persediaan + transaksi masuk berjurnal FIFO"
-                            onClick={async () => {
-                              try {
-                                const r = await axios.post(`${API}/pengadaan/${p.id}/daftarkan-persediaan`);
-                                const d = r.data || {};
-                                toast.success(`${d.masuk || 0} barang masuk persediaan (${d.dibuat_master || 0} master baru)`);
-                                if ((d.gagal || []).length) toast.warning(`Gagal: ${d.gagal.join("; ")}`, { duration: 9000 });
-                                muat();
-                              } catch (e) {
-                                toast.error(e?.response?.data?.detail || "Gagal mendaftarkan ke persediaan");
-                              }
-                            }}
-                            className="h-7 px-2 rounded-lg border border-cyan-500/40 bg-cyan-600/10 text-cyan-600 dark:text-cyan-400 flex items-center gap-1 text-[10px] font-semibold hover:bg-cyan-600/20 min-h-0 min-w-0"
-                            data-testid={`pengadaan-daftarkan-psd-${p.id}`}>
-                            <Boxes className="w-3.5 h-3.5" />
-                            <span className="hidden sm:inline">Daftarkan ke Persediaan</span>
+                            <span className="hidden sm:inline">Catat Semua Barang</span>
                           </button>
                         )}
                         <button type="button" aria-label="Lampiran berkas"
@@ -375,6 +486,21 @@ export default function PengadaanPage({ user, onBack }) {
                         {p.keterangan && ` · ${p.keterangan}`}
                         {` · oleh ${p.created_by}`}
                       </p>
+                      {/* PPK: pertanyaan pertama pemeriksa saat menelusuri satu
+                          BAST. Ketiadaannya ditampilkan TERUS TERANG, bukan
+                          dibiarkan sebagai baris yang hilang begitu saja. */}
+                      <button type="button"
+                        onClick={() => ubahPpk(p)}
+                        title="Klik untuk memperbarui PPK dari Referensi Pejabat"
+                        className={`block text-left text-[11px] mt-0.5 truncate w-full min-h-0 hover:underline ${
+                          p.ppk_nama
+                            ? "text-sky-600 dark:text-sky-400"
+                            : "text-amber-600 dark:text-amber-400"}`}
+                        data-testid={`pengadaan-ppk-${p.id}`}>
+                        {p.ppk_nama
+                          ? `PPK: ${p.ppk_nama}${p.ppk_nip ? ` · NIP ${p.ppk_nip}` : ""}`
+                          : "PPK belum ditetapkan — ketuk untuk mengisi dari Referensi Pejabat"}
+                      </button>
                       {p.penganggaran_id && (
                         <p className="text-[11px] text-violet-600 dark:text-violet-400 mt-0.5 truncate" data-testid={`pengadaan-anggaran-${p.id}`}>
                           Anggaran: {p.penganggaran_uraian || "(usulan)"}
@@ -409,9 +535,18 @@ export default function PengadaanPage({ user, onBack }) {
                               <span className="block text-xs font-semibold text-foreground truncate">
                                 {b.uraian} <span className="font-normal text-muted-foreground">×{b.jumlah} @ {fmtRp(b.harga_satuan)}</span>
                               </span>
+                              {/* Tiga keadaan, bukan dua. Baris yang sudah masuk
+                                  KARTU STOK dulu ikut berbunyi "belum tertaut"
+                                  — kalimat yang menyuruh operator menautkannya
+                                  ke aset, persis pencatatan ganda yang penjaga
+                                  golongan dipasang untuk mencegah. */}
                               {b.asset_id ? (
                                 <span className="block text-[10px] text-emerald-600 dark:text-emerald-400 font-mono truncate">
                                   <Link2 className="w-3 h-3 inline mr-0.5 align-[-2px]" />{b.asset_name} ({b.asset_code} · {b.NUP})
+                                </span>
+                              ) : b.psd_item_id ? (
+                                <span className="block text-[10px] text-cyan-600 dark:text-cyan-400">
+                                  <Boxes className="w-3 h-3 inline mr-0.5 align-[-2px]" />Tercatat sebagai persediaan (kartu stok)
                                 </span>
                               ) : (
                                 <span className="block text-[10px] text-amber-600 dark:text-amber-400">Belum tertaut ke aset master</span>
@@ -422,11 +557,16 @@ export default function PengadaanPage({ user, onBack }) {
                                 Ekstrakomptabel
                               </span>
                             )}
-                            <Button size="sm" variant="outline" className="h-6 text-[10px] min-h-0 px-2"
-                              onClick={() => { setCari(""); setHasilCari([]); setTaut({ perolehan: p, index: i, saving: false }); }}
-                              data-testid={`pengadaan-taut-${p.id}-${i}`}>
-                              {b.asset_id ? "Ubah Tautan" : "Tautkan"}
-                            </Button>
+                            {/* Baris yang sudah di kartu stok TIDAK menawarkan
+                                "Tautkan": server menolaknya, dan tombol yang
+                                pasti gagal hanyalah undangan untuk mencoba. */}
+                            {!b.psd_item_id && (
+                              <Button size="sm" variant="outline" className="h-6 text-[10px] min-h-0 px-2"
+                                onClick={() => { setCari(""); setHasilCari([]); setTaut({ perolehan: p, index: i, saving: false }); }}
+                                data-testid={`pengadaan-taut-${p.id}-${i}`}>
+                                {b.asset_id ? "Ubah Tautan" : "Tautkan"}
+                              </Button>
+                            )}
                           </li>
                         ))}
                       </ul>
@@ -503,6 +643,27 @@ export default function PengadaanPage({ user, onBack }) {
                     </option>
                   ))}
                 </select>
+              </div>
+              <div className="col-span-2">
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-ppk">
+                  Pejabat Pembuat Komitmen (PPK)
+                </label>
+                <select id="pgd-ppk" value={form.data.ppk_pejabat_id}
+                  onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, ppk_pejabat_id: e.target.value } }))}
+                  className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground"
+                  data-testid="pengadaan-ppk">
+                  <option value="">— Otomatis: PPK yang berlaku pada tanggal BAST —</option>
+                  {opsiPpk.map((pj) => (
+                    <option key={pj.id} value={pj.id}>
+                      {`${pj.nama}${pj.nip ? ` · ${pj.nip}` : ""}${pj.jabatan ? ` · ${pj.jabatan}` : ""}`}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Namanya <strong>dibekukan</strong> pada dokumen ini — pergantian PPK di
+                  kemudian hari tidak mengubah BAST yang sudah terbit.
+                  {opsiPpk.length === 0 && " Belum ada pejabat ber-peran PPK di Referensi Pejabat."}
+                </p>
               </div>
               <div className="col-span-2 space-y-2">
                 <p className="text-xs font-medium text-foreground">Daftar barang</p>
@@ -635,52 +796,169 @@ export default function PengadaanPage({ user, onBack }) {
         </DialogContent>
       </Dialog>
 
-      {/* ── Dialog buat draft aset dari perolehan (evaluasi #5) ── */}
+      {/* ── Dialog catat semua barang BAST (aset + persediaan sekaligus) ── */}
       <Dialog open={!!draftAset} onOpenChange={(o) => { if (!o) setDraftAset(null); }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[92vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Buat Draft Aset — BAST {draftAset?.perolehan?.nomor_bast}</DialogTitle>
+            <DialogTitle>Catat Semua Barang — BAST {draftAset?.perolehan?.nomor_bast}</DialogTitle>
             <DialogDescription className="text-xs">
-              Tiap baris barang yang <strong>belum bertaut</strong> dibuatkan aset draft
-              (status &quot;Belum Diinventarisasi&quot;) di kegiatan terpilih — NUP otomatis,
-              harga/tanggal/BAST terisi dari perolehan, lalu tertaut balik. Baris tanpa
-              kode barang dilewati (isi kode dulu lewat Tautkan/registrasi).
+              Barang <strong>golongan 1</strong> masuk <strong>Persediaan</strong> (stok + jurnal
+              FIFO); <strong>golongan 2–8</strong> jadi <strong>aset draft ber-NUP</strong> di
+              kegiatan terpilih — harga, tanggal, BAST, dan PPK terisi dari perolehan.
+              Setelahnya <strong>LPB</strong> untuk sisi aset diterbitkan otomatis.
             </DialogDescription>
           </DialogHeader>
-          {draftAset && (
-            <div className="space-y-3">
-              <p className="text-xs text-foreground/90">
-                {(draftAset.perolehan.barang || []).filter((b) => !b.asset_id && (b.kode || "").trim()).length} baris siap dibuatkan draft
-                {(draftAset.perolehan.barang || []).some((b) => !b.asset_id && !(b.kode || "").trim())
-                  && ` · ${(draftAset.perolehan.barang || []).filter((b) => !b.asset_id && !(b.kode || "").trim()).length} baris tanpa kode akan dilewati`}
-              </p>
-              <div>
-                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="draft-aset-kegiatan">Kegiatan inventarisasi tujuan</label>
-                <select id="draft-aset-kegiatan" value={draftAset.activityId}
-                  onChange={(e) => setDraftAset((d) => ({ ...d, activityId: e.target.value }))}
-                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
-                  data-testid="pengadaan-draft-kegiatan">
-                  <option value="">— pilih kegiatan —</option>
-                  {kegiatanList.map((k) => (
-                    <option key={k.id} value={k.id}>
-                      {k.nama_kegiatan || k.id}{k.tahun ? ` (${k.tahun})` : ""}
-                    </option>
-                  ))}
-                </select>
-                {kegiatanList.length === 0 && (
-                  <p className="text-[10px] text-muted-foreground mt-1">Belum ada kegiatan inventarisasi — buat dulu di halaman kegiatan.</p>
+          {draftAset && (() => {
+            // Hitungan ditampilkan MUKA supaya operator tahu apa yang akan
+            // terjadi sebelum menekan, bukan sesudahnya lewat toast.
+            const belum = (draftAset.perolehan.barang || [])
+              .filter((b) => !b.asset_id && !b.psd_item_id);
+            const psd = belum.filter((b) => String(b.kode || "").trim().startsWith("1"));
+            const tanpaKode = belum.filter((b) => !String(b.kode || "").trim());
+            const aset = belum.filter((b) => String(b.kode || "").trim()
+              && !String(b.kode || "").trim().startsWith("1"));
+            return (
+              <div className="space-y-3">
+                <ul className="text-xs text-foreground/90 space-y-1">
+                  <li>• <strong>{aset.length}</strong> baris → aset draft ber-NUP</li>
+                  <li>• <strong>{psd.length}</strong> baris → masuk stok persediaan</li>
+                  {tanpaKode.length > 0 && (
+                    <li className="text-amber-600 dark:text-amber-400">
+                      • <strong>{tanpaKode.length}</strong> baris <strong>dilewati</strong> —
+                      belum berkode barang (isi kodenya dulu)
+                    </li>
+                  )}
+                </ul>
+                {/* Kegiatan inventarisasi hanya relevan untuk sisi ASET. BAST
+                    berisi persediaan saja tak perlu memilihnya sama sekali. */}
+                {aset.length > 0 && (
+                  <div>
+                    <label className="text-xs font-medium text-foreground block mb-1" htmlFor="draft-aset-kegiatan">Kegiatan inventarisasi tujuan</label>
+                    <select id="draft-aset-kegiatan" value={draftAset.activityId}
+                      onChange={(e) => setDraftAset((d) => ({ ...d, activityId: e.target.value }))}
+                      className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                      data-testid="pengadaan-draft-kegiatan">
+                      <option value="">— pilih kegiatan —</option>
+                      {kegiatanList.map((k) => (
+                        <option key={k.id} value={k.id}>
+                          {k.nama_kegiatan || k.id}{k.tahun ? ` (${k.tahun})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                    {kegiatanList.length === 0 && (
+                      <p className="text-[10px] text-muted-foreground mt-1">Belum ada kegiatan inventarisasi — buat dulu di halaman kegiatan.</p>
+                    )}
+                  </div>
                 )}
+                <label className="flex items-start gap-2 text-xs cursor-pointer">
+                  <input type="checkbox" className="mt-0.5 h-4 w-4"
+                    checked={draftAset.bookingNomor !== false}
+                    onChange={(e) => setDraftAset((d) => ({ ...d, bookingNomor: e.target.checked }))}
+                    data-testid="pengadaan-catat-booking" />
+                  <span>
+                    Pesan <strong>nomor surat</strong> untuk LPB dari Registrasi Persuratan
+                    <span className="block text-[10px] text-muted-foreground">
+                      Nomor tercatat berstatus &quot;dibooking&quot; di buku agenda satker.
+                    </span>
+                  </span>
+                </label>
               </div>
-            </div>
-          )}
+            );
+          })()}
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setDraftAset(null)}>Batal</Button>
-            <Button onClick={buatDraftAset} disabled={draftAset?.saving || !draftAset?.activityId}
+            <Button onClick={catatSemua}
+              disabled={draftAset?.saving
+                || (draftAset?.butuhKegiatan && !draftAset?.activityId)}
               data-testid="pengadaan-draft-submit">
               {draftAset?.saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <PackagePlus className="w-4 h-4 mr-1.5" />}
-              Buat Draft
+              Catat Semua
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── LPB yang baru terbit: cetak & teken di tempat kerjanya ── */}
+      <Dialog open={!!hasilCatat} onOpenChange={(o) => { if (!o) setHasilCatat(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Laporan Penerimaan Barang terbit</DialogTitle>
+            <DialogDescription className="text-xs">
+              BAST {hasilCatat?.nomorBast} sudah tercatat. LPB ini adalah bukti
+              resmi penerimaannya — cetak dan tandatangani sekarang, atau buka
+              lagi kapan pun lewat <strong>Persediaan → Riwayat LPB</strong>.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-lg border border-border bg-muted/40 px-3 py-2.5">
+            <p className="font-mono text-sm font-semibold text-foreground break-all"
+               data-testid="pengadaan-lpb-nomor">
+              {hasilCatat?.nomor}
+            </p>
+            <p className="text-[11px] text-muted-foreground mt-1">
+              {[hasilCatat?.asetDibuat ? `${hasilCatat.asetDibuat} aset ber-NUP` : null,
+                hasilCatat?.persediaanMasuk ? `${hasilCatat.persediaanMasuk} barang persediaan` : null,
+              ].filter(Boolean).join(" · ") || "—"}
+            </p>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button variant="outline" onClick={() => setHasilCatat(null)}>Nanti saja</Button>
+            <Button variant="outline"
+              onClick={() => downloadFileWithProgress(
+                `${API}/persediaan/lpb/${hasilCatat.lpbId}/pdf`,
+                `LPB_${String(hasilCatat.nomor).replace(/[/\s]/g, "_")}.pdf`,
+                { label: "Laporan Penerimaan Barang" }).catch(() => {})}
+              data-testid="pengadaan-lpb-unduh">
+              <FileDown className="w-4 h-4 mr-1.5" />Unduh PDF
+            </Button>
+            <Button onClick={kirimTtdLpbBaru} disabled={hasilCatat?.mengirim}
+              data-testid="pengadaan-lpb-kirim-ttd">
+              {hasilCatat?.mengirim
+                ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" />
+                : <PenLine className="w-4 h-4 mr-1.5" />}
+              Kirim TTD
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Tautan TTD LPB yang baru dikirim ── */}
+      <Dialog open={!!tautanTtd} onOpenChange={(o) => { if (!o) setTautanTtd(null); }}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Tautan tanda tangan — LPB {tautanTtd?.nomor}</DialogTitle>
+            <DialogDescription className="text-xs">
+              Satu tautan per penanda tangan. Bagikan lewat WhatsApp/email bila
+              pengiriman otomatis tak aktif — tanpa tautan ini permintaan TTD
+              tak sampai ke siapa pun.
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="divide-y divide-border/60">
+            {(tautanTtd?.links || []).map((t, i) => (
+              <li key={i} className="py-2">
+                <p className="text-xs font-medium text-foreground">
+                  {t.nama}
+                  {t.email_terkirim && (
+                    <span className="ml-1.5 text-[9px] font-semibold px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+                      email terkirim
+                    </span>
+                  )}
+                </p>
+                <div className="flex items-center gap-2 mt-1">
+                  <code className="flex-1 min-w-0 truncate text-[10px] bg-muted rounded px-2 py-1">
+                    {t.link}
+                  </code>
+                  <Button size="sm" variant="outline" className="h-7 text-[11px] flex-shrink-0"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(t.link)
+                        .then(() => toast.success("Tautan disalin"))
+                        .catch(() => toast.error("Gagal menyalin — salin manual dari kotak di samping"));
+                    }}>
+                    Salin
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
         </DialogContent>
       </Dialog>
 

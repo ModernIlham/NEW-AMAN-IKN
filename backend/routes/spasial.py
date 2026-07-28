@@ -15,6 +15,7 @@ Pola pohon HYBRID: `parent_id` satu-satunya yang boleh diedit pengguna;
 """
 import asyncio
 import re
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -27,6 +28,7 @@ from auth_utils import require_user, require_user_or_query_token, require_writer
 from db import db
 from shared_utils import (kode_satker_user, limiter, log_audit,
                           pastikan_akses_dok_satker, scope_query_field_satker)
+import spasial_optimize as so
 import spasial_utils as su
 import topologi_utils as tu
 
@@ -161,7 +163,7 @@ def _bersih_node(p: NodeIn) -> dict:
     return doc
 
 
-def _terapkan_geometri(doc: dict, geometry) -> None:
+def _terapkan_geometri(doc: dict, geometry, *, optimalkan: bool = True) -> None:
     """Sisipkan geometri + field TURUNANNYA (bbox, titik wakil, luas) ke `doc`.
 
     `geometry` None berarti "tidak diubah" (PUT parsial); dict kosong berarti
@@ -180,6 +182,8 @@ def _terapkan_geometri(doc: dict, geometry) -> None:
         doc["bbox"] = None
         doc["titik_wakil"] = None
         doc["metrik"] = None
+        doc["geometry_opt"] = None        # ikut dibuang: salinannya jadi yatim
+        doc["optimasi"] = None
         return
     galat = su.validasi_geometri(geometry)
     if galat:
@@ -197,6 +201,50 @@ def _terapkan_geometri(doc: dict, geometry) -> None:
     doc["titik_wakil"] = su.titik_wakil(geometry)
     doc["metrik"] = {"luas_m2": round(su.luas_kasar_m2(geometry), 2),
                      "dihitung_pada": datetime.now(timezone.utc).isoformat()}
+
+    # SALINAN RINGAN untuk ditampilkan — geometri ASLI di atas tak tersentuh.
+    # Dihitung di sini supaya berlaku untuk SEMUA pintu masuk sekaligus:
+    # gambar sendiri lewat DenahEditor, impor SHP/KML, maupun belah wilayah.
+    # Luas SBSK, deteksi lokasi, dan ekspor tetap membaca `geometry`.
+    #
+    # `optimalkan=False` dipakai `_terapkan_geometri_async`, yang menghitungnya
+    # sendiri di thread. Ia BUKAN saklar "lewati optimasi" — pemanggil yang
+    # mematikannya wajib memanggil `_pasang_optimasi` sesudahnya, kalau tidak
+    # dokumen membawa `geometry_opt` warisan geometri LAMA.
+    if optimalkan:
+        _pasang_optimasi(doc, so.optimalkan(geometry))
+
+
+def _pasang_optimasi(doc: dict, hasil: dict) -> None:
+    """Tuliskan hasil `so.optimalkan` ke dokumen.
+
+    Dipisah supaya jalur async bisa melempar perhitungannya ke thread tanpa
+    menyalin logika penulisannya — dua salinan akan berbeda diam-diam.
+    """
+    doc["optimasi"] = {**hasil["metrik"],
+                       "pada": datetime.now(timezone.utc).isoformat()}
+    # Tak ada gunanya dioptimalkan (poligon sederhana / bbox tak terhitung) →
+    # field DIBERSIHKAN, bukan dibiarkan: sisa dari geometri LAMA akan
+    # ditampilkan sebagai bentuk yang sudah tak ada lagi.
+    doc["geometry_opt"] = hasil["geometry"] or None
+
+
+async def _terapkan_geometri_async(doc: dict, geometry) -> None:
+    """Versi untuk HANDLER: penyederhanaan dilempar ke thread.
+
+    `so.optimalkan` menaiki sembilan anak tangga toleransi, dan tiap anak
+    tangga menjalankan `simplify` + jarak Hausdorff shapely. Untuk poligon
+    hasil impor SHP yang berverteks puluhan ribu itu bukan pekerjaan ringan,
+    dan dijalankan langsung di event loop ia membekukan SELURUH server —
+    termasuk permintaan pengguna lain yang tak ada urusannya dengan peta.
+    Endpoint optimasi massal sudah memakai thread sejak awal; jalur simpan
+    tak boleh jadi pengecualian hanya karena poligonnya "cuma satu".
+    """
+    if geometry is None or not geometry:
+        _terapkan_geometri(doc, geometry)     # tak ada yang perlu dihitung
+        return
+    _terapkan_geometri(doc, geometry, optimalkan=False)
+    _pasang_optimasi(doc, await asyncio.to_thread(so.optimalkan, geometry))
 
 
 # Status yang boleh diset klien. "dihapus" TIDAK termasuk — hapus adalah operasi
@@ -279,12 +327,21 @@ async def daftar_node(parent_id: str = Query(""), tipe: str = Query(""),
     # membutuhkannya. Tetapi mereka perlu tahu node mana yang PUNYA batas —
     # tanpa itu, pemilih area geofence menawarkan node yang pasti ditolak, dan
     # pengguna baru tahu setelah menabraknya.
+    #
+    # `geometry_opt` dibuang dengan alasan yang SAMA PERSIS. Ia memang jauh
+    # lebih ringan per node, tetapi daftar ini memuat sampai _MAKS_NODE node
+    # sekaligus — ratusan verteks dikali puluhan ribu baris tetap berarti
+    # payload raksasa. Yang dibutuhkan layar hanya "sudah diringankan atau
+    # belum", dan itu satu boolean.
     pipeline = [
         {"$match": query},
         {"$sort": {"ordinal_level": 1, "kode": 1, "nama": 1}},
         {"$limit": _MAKS_NODE},
-        {"$addFields": {"tipe_geometri": {"$ifNull": ["$geometry.type", ""]}}},
-        {"$project": {"_id": 0, "geometry": 0}},
+        {"$addFields": {
+            "tipe_geometri": {"$ifNull": ["$geometry.type", ""]},
+            "dioptimalkan": {"$ne": [{"$ifNull": ["$geometry_opt", None]}, None]},
+        }},
+        {"$project": {"_id": 0, "geometry": 0, "geometry_opt": 0}},
     ]
     items = [n async for n in db.spasial_node.aggregate(pipeline)]
     return {"items": items, "jumlah": len(items)}
@@ -292,7 +349,11 @@ async def daftar_node(parent_id: str = Query(""), tipe: str = Query(""),
 
 @spasial_router.get("/spasial/node/{node_id}")
 async def detail_node(node_id: str, _user: dict = Depends(require_user)):
-    node = await db.spasial_node.find_one({"id": node_id}, _PROJ)
+    # `geometry_opt` sengaja TIDAK dikirim: detail dipakai EDITOR, dan editor
+    # wajib menyunting bentuk ASLI — menyimpan hasil suntingan atas versi ringan
+    # akan menjadikan penyederhanaan permanen tanpa ada yang menyadari. Ringkasan
+    # `optimasi` tetap ikut (kecil) supaya layar bisa menyebut status optimasinya.
+    node = await db.spasial_node.find_one({"id": node_id}, {**_PROJ, "geometry_opt": 0})
     if not node or node.get("status") == "dihapus":
         raise HTTPException(status_code=404, detail="Node tidak ditemukan")
     await pastikan_akses_dok_satker(_user, node)  # isolasi satker
@@ -349,7 +410,7 @@ async def buat_node(payload: NodeIn, _user: dict = Depends(require_writer)):
     deriv = await _susun_derivasi(node_id, doc["parent_id"], _user)
     _validasi_level(doc["tipe"], deriv.pop("_tipe_induk", None))
     await _cek_kode_unik(doc["kode"], doc["tipe"], _user)
-    _terapkan_geometri(doc, payload.geometry)
+    await _terapkan_geometri_async(doc, payload.geometry)
     now = datetime.now(timezone.utc).isoformat()
     doc.update(deriv)
     doc.update({
@@ -421,7 +482,7 @@ async def ubah_node(node_id: str, payload: NodeIn,
     _validasi_level(doc["tipe"], deriv.pop("_tipe_induk", None))
     await _cek_kode_unik(doc["kode"], doc["tipe"], _user, kecuali_id=node_id)
 
-    _terapkan_geometri(doc, payload.geometry)
+    await _terapkan_geometri_async(doc, payload.geometry)
     now = datetime.now(timezone.utc).isoformat()
     doc.update(deriv)
     doc.update({"ordinal_level": su.ordinal_level(doc["tipe"]),
@@ -764,6 +825,7 @@ async def geojson_viewport(bbox: str = Query("", description="lon_min,lat_min,lo
                            level_maks: int = Query(100),
                            induk: str = Query("", description="hanya anak LANGSUNG node ini"),
                            dalam: str = Query("", description="seluruh keturunan node ini"),
+                           asli: bool = Query(False, description="paksa geometri ASLI (saklar 'lihat file asli')"),
                            _user: dict = Depends(require_user)):
     """FeatureCollection untuk render peta, dibatasi viewport & tingkat.
 
@@ -808,21 +870,40 @@ async def geojson_viewport(bbox: str = Query("", description="lon_min,lat_min,lo
                 if terpotong else
                 {"_id": 0, "id": 1, "tipe": 1, "nama": 1, "kode": 1,
                  "ordinal_level": 1, "geometry": 1, "bbox": 1, "parent_id": 1})
+    if not terpotong and not asli:
+        # `geometry_opt` HANYA ditarik saat memang akan dipakai. Pada `asli=1`
+        # ia tak pernah dikirim maupun dibaca, dan menariknya berarti menambah
+        # ±13% pada payload yang justru paling berat — di endpoint yang seluruh
+        # alasan keberadaannya adalah memangkas berat itu.
+        proyeksi["geometry_opt"] = 1
     rows = await db.spasial_node.find(query, proyeksi).sort(
         "ordinal_level", 1).to_list(BATAS_FITUR_PETA)
 
     fitur = []
+    titik_kirim = titik_asli_total = 0
     for r in rows:
-        geom = r.get("geometry") or r.get("titik_wakil")
+        # BAWAAN: versi optimize. Peta adalah satu-satunya tempat yang boleh
+        # memakai salinan ringan; luas SBSK, deteksi lokasi, dan ekspor tetap
+        # membaca `geometry` asli. `asli=1` adalah saklar "lihat file asli".
+        geom = so.pilih_geometri_tampil(r, pakai_asli=asli) or r.get("titik_wakil")
         if not geom:
             continue
+        titik_kirim += so._titik_geom(geom)
+        titik_asli_total += so._titik_geom(r.get("geometry") or geom)
         fitur.append({"type": "Feature", "geometry": geom, "properties": {
             "id": r.get("id"), "tipe": r.get("tipe"), "nama": r.get("nama"),
             "kode": r.get("kode"), "ordinal_level": r.get("ordinal_level"),
-            "parent_id": r.get("parent_id")}})
+            "parent_id": r.get("parent_id"),
+            "dioptimalkan": bool(r.get("geometry_opt")) and not asli}})
     return {"type": "FeatureCollection", "features": fitur,
             "jumlah": len(fitur), "jumlah_total": jumlah,
-            "terpotong": terpotong, "batas": BATAS_FITUR_PETA}
+            "terpotong": terpotong, "batas": BATAS_FITUR_PETA,
+            # Bukti hemat yang bisa dilihat operator di layar, bukan klaim.
+            "sumber": "asli" if asli else "optimize",
+            "titik_dikirim": titik_kirim, "titik_asli": titik_asli_total,
+            "hemat_persen": (round(100.0 * (titik_asli_total - titik_kirim)
+                                   / titik_asli_total, 1)
+                             if titik_asli_total else 0.0)}
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -838,6 +919,20 @@ async def geojson_viewport(bbox: str = Query("", description="lon_min,lat_min,lo
 # File TIDAK disimpan di GridFS: byte-nya dipegang closure task (≤ plafon
 # ukuran). Server restart di tengah job → bersihkan_job_basi menandai failed.
 # ═══════════════════════════════════════════════════════════════════════════
+
+# Plafon node per panggilan optimasi massal. shapely CPU-berat; satker besar
+# menekan tombolnya berkali-kali (sisanya tetap terjaring karena `geometry_opt`
+# yang sudah terisi tak ikut dipilih lagi).
+BATAS_OPTIMASI = 500
+
+# ...dan plafon WAKTU, yang justru lebih menentukan. Biaya per poligon berbeda
+# satu orde besaran menurut jumlah verteksnya — diukur di mesin pengembangan:
+# 34 ms untuk 1.000 verteks, 155 ms untuk 5.000, 613 ms untuk 20.000. Dengan
+# plafon cacah saja, 500 node hasil impor SHP berarti permintaan HTTP selama
+# 77-307 detik: jauh melewati batas waktu proxy lazim, sehingga operator
+# melihat galat 504 sementara servernya justru masih bekerja dan sebagian
+# pekerjaannya sudah tersimpan tanpa pernah dilaporkan.
+ANGGARAN_OPTIMASI_DETIK = 20.0
 
 MAKS_UKURAN_IMPOR = 20 * 1024 * 1024      # 20 MB — kecamatan penuh pun cukup
 _IMPOR_TASKS = set()                      # pegang referensi task agar tak di-GC
@@ -1129,12 +1224,111 @@ def _bangun_ekspor(fmt: str, rows: list, label_level: dict) -> bytes:
     return eg.ke_shp_zip(rows)
 
 
+class OptimasiMassalIn(BaseModel):
+    dalam: str = ""          # batasi ke subtree; kosong = seluruh satker
+    paksa_ulang: bool = False  # hitung ulang node yang sudah punya versi optimize
+
+
+@spasial_router.post("/spasial/optimasi")
+@limiter.limit("4/minute")
+async def optimasi_massal(request: Request, payload: OptimasiMassalIn,
+                          user: dict = Depends(require_writer)):
+    """Hitung versi ringan untuk denah yang SUDAH tersimpan.
+
+    Node baru dioptimalkan otomatis saat disimpan (`_terapkan_geometri`);
+    endpoint ini untuk denah yang terlanjur masuk sebelum fitur ini ada —
+    lazimnya hasil impor SHP kawasan yang justru paling berat.
+
+    GEOMETRI ASLI TIDAK DISENTUH. Yang ditulis hanya `geometry_opt` +
+    `optimasi`; `geometry`, `bbox`, `titik_wakil`, dan `metrik.luas_m2` sama
+    sekali tak diubah, sehingga luas SBSK dan deteksi lokasi tetap memakai
+    angka survei yang sama persis seperti sebelum tombol ini ditekan.
+
+    Ber-rate-limit: shapely CPU-berat dan satu satker bisa punya ribuan node.
+    """
+    q = {"geometry": {"$ne": None}}
+    if str(payload.dalam or "").strip():
+        q["$or"] = [{"id": payload.dalam}, {"ancestors": payload.dalam}]
+    if not payload.paksa_ulang:
+        # Hanya yang BELUM PERNAH DICOBA — menekan tombol dua kali tak membakar
+        # CPU mengulang pekerjaan yang sama.
+        #
+        # Saringannya `optimasi`, BUKAN `geometry_opt`. Poligon sederhana (kotak
+        # lima titik) memang tak menghasilkan versi ringan; menyaring dengan
+        # `geometry_opt: None` membuat mereka terpilih lagi pada SETIAP tekanan,
+        # selamanya. Satker yang denahnya digambar tangan akan terus disuruh
+        # "tekan sekali lagi" tanpa satu pun kemajuan yang terlihat.
+        q["optimasi"] = None
+    rows = await db.spasial_node.find(
+        scope_query_field_satker(user, q),
+        {"_id": 0, "id": 1, "nama": 1, "geometry": 1}).to_list(BATAS_OPTIMASI)
+
+    diproses = dilewati = 0
+    titik_sebelum = titik_sesudah = 0
+    kehabisan_waktu = False
+    mulai = time.monotonic()
+    now = datetime.now(timezone.utc).isoformat()
+    for i, r in enumerate(rows):
+        geom = r.get("geometry")
+        # shapely memblokir event loop; dilempar ke thread supaya satu satker
+        # ber-2.000 poligon tak membekukan seluruh server.
+        hasil = await asyncio.to_thread(so.optimalkan, geom)
+        titik_sebelum += int(hasil["metrik"].get("titik_asli") or 0)
+        if not hasil["geometry"]:
+            dilewati += 1
+            titik_sesudah += int(hasil["metrik"].get("titik_asli") or 0)
+            # Percobaannya TETAP DICATAT meski tak ada yang bisa dihemat —
+            # itulah yang membuat node ini tak terpilih lagi pada tekanan
+            # berikutnya. `geometry_opt` sengaja tidak disentuh.
+            await db.spasial_node.update_one(
+                {"id": r["id"]},
+                {"$set": {"optimasi": {**hasil["metrik"], "pada": now}}})
+        else:
+            titik_sesudah += int(hasil["metrik"].get("titik_hasil") or 0)
+            await db.spasial_node.update_one(
+                {"id": r["id"]},
+                {"$set": {"geometry_opt": hasil["geometry"],
+                          "optimasi": {**hasil["metrik"], "pada": now}}})
+            diproses += 1
+        # ANGGARAN WAKTU, bukan sekadar cacah node. Biaya per poligon berbeda
+        # satu orde besaran menurut jumlah verteksnya (diukur: 34 ms untuk
+        # 1.000 verteks, 613 ms untuk 20.000), jadi plafon berupa ANGKA node
+        # akan aman bagi denah gambar-sendiri dan menghasilkan permintaan
+        # bermenit-menit bagi hasil impor SHP — melewati batas waktu proxy,
+        # dan operator melihat galat padahal pekerjaannya justru sedang jalan.
+        #
+        # Diperiksa SESUDAH satu node selesai: anggaran sekecil apa pun tetap
+        # menghasilkan kemajuan, kalau tidak "tekan sekali lagi" jadi lingkaran
+        # yang tak pernah maju.
+        if (time.monotonic() - mulai) >= ANGGARAN_OPTIMASI_DETIK and i + 1 < len(rows):
+            kehabisan_waktu = True
+            break
+
+    await log_audit("spasial_optimasi_massal", "", payload.dalam or "semua",
+                    username=user.get("username", "system"),
+                    detail=(f"{diproses} node dioptimalkan, {dilewati} dilewati; "
+                            f"{titik_sebelum} → {titik_sesudah} titik"))
+    return {
+        "diproses": diproses, "dilewati": dilewati,
+        "kandidat": len(rows),
+        "terpotong": len(rows) >= BATAS_OPTIMASI or kehabisan_waktu,
+        "titik_sebelum": titik_sebelum, "titik_sesudah": titik_sesudah,
+        "hemat_persen": (round(100.0 * (titik_sebelum - titik_sesudah)
+                               / titik_sebelum, 1) if titik_sebelum else 0.0),
+        "catatan": ("Geometri ASLI tidak diubah sama sekali — yang dihitung "
+                    "hanya salinan ringan untuk ditampilkan di peta. Luas SBSK "
+                    "dan deteksi lokasi tetap memakai geometri asli."),
+    }
+
+
 @spasial_router.get("/spasial/ekspor")
 @limiter.limit("10/minute")
 async def ekspor_denah(request: Request,
                        format: str = Query("geojson"),
                        dalam: str = Query("", description="subtree node ini (node + seluruh keturunan)"),
                        sertakan_draft: bool = Query(True),
+                       geometri: str = Query("asli", pattern="^(asli|optimize)$",
+                                             description="'asli' (bawaan) atau 'optimize' (ringan)"),
                        _user: dict = Depends(require_user)):
     """Unduh denah satker sebagai file GIS — kebalikan endpoint impor Fase 5.
 
@@ -1143,6 +1337,13 @@ async def ekspor_denah(request: Request,
     `dalam` membatasi ke satu subtree via indeks multikey `ancestors` — node
     akarnya sendiri ikut. Node tanpa geometri tak diekspor KECUALI di KML,
     tempat moyang tanpa geometri tetap dibutuhkan sebagai Folder hierarki.
+
+    `geometri` memilih ISI berkasnya. **Bawaannya `asli`, dan itu disengaja**:
+    berkas ekspor dipakai membuka denah di QGIS/Google Earth dan menjadi arsip
+    cadangan. Diam-diam memberi versi yang sudah disederhanakan berarti presisi
+    survei hilang di setiap putaran ekspor–impor, dan tak seorang pun tahu
+    kapan hilangnya. `optimize` tersedia untuk keperluan berbagi cepat dan
+    ditandai jelas pada nama berkasnya.
     """
     from fastapi.responses import Response
 
@@ -1159,6 +1360,14 @@ async def ekspor_denah(request: Request,
     rows = await (db.spasial_node.find(scope_query_field_satker(_user, q), _PROJ)
                   .sort([("ordinal_level", 1), ("kode", 1), ("nama", 1)])
                   .to_list(_MAKS_NODE))
+    pakai_opt = (geometri == "optimize")
+    if pakai_opt:
+        # Tukar HANYA untuk berkas yang dibangun — dokumen di DB tak disentuh.
+        # Node yang belum punya versi optimize tetap memakai aslinya, bukan
+        # dilewati: berkas ekspor yang bolong lebih berbahaya daripada berkas
+        # yang sebagian poligonnya belum diringankan.
+        rows = [{**r, "geometry": (r.get("geometry_opt") or r.get("geometry"))}
+                for r in rows]
     # KML memakai node tanpa geometri sebagai Folder; format lain hanya fitur.
     if fmt not in ("kml", "kmz"):
         rows = [r for r in rows if r.get("geometry")]
@@ -1178,11 +1387,14 @@ async def ekspor_denah(request: Request,
     # kode_satker dikutip di header Content-Disposition — saring ke aman-header
     # (nilai wajarnya 6 digit, tapi header rusak bukan cara menemukan itu).
     satker = re.sub(r"[^A-Za-z0-9_-]", "", kode_satker_user(_user)) or "aman"
-    nama_file = f"denah-{satker}-{stamp}.{ext}"
+    # Penanda pada NAMA BERKAS, bukan hanya di layar: berkas berpindah tangan,
+    # dan penerima harus bisa tahu ia memegang yang mana tanpa bertanya.
+    tanda = "-optimize" if pakai_opt else ""
+    nama_file = f"denah-{satker}-{stamp}{tanda}.{ext}"
     await log_audit("ekspor_spasial", "", nama_file,
                     username=_user.get("username", "system"),
                     kode_satker=kode_satker_user(_user),
-                    detail=f"Ekspor {fmt} ({len(rows)} node)")
+                    detail=f"Ekspor {fmt} ({len(rows)} node, geometri {geometri})")
     return Response(content=data, media_type=media, headers={
         "Content-Disposition": f'attachment; filename="{nama_file}"'})
 

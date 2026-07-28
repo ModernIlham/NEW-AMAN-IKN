@@ -1598,6 +1598,30 @@ terpisah lewat `POST /api/opname/terapkan`.
 
 **Jalur paralel yang aman:** Fase 9 (kustodian) hanya bergantung pada Fase 2, sehingga bisa dikerjakan bersamaan dengan Fase 3–4 oleh orang berbeda. Fase 15 kecil dan bisa disisipkan kapan pun setelah Fase 7.
 
+**Optimalisasi peta (gaya mapshaper) — keputusan yang layak diketahui:**
+penyederhanaan ditulis ke field **baru** `spasial_node.geometry_opt`; `geometry`
+tidak pernah disentuh, begitu pula `bbox`, `titik_wakil`, dan `metrik.luas_m2`.
+Tiga hal bergantung pada geometri asli dan tak boleh ikut bergeser: luas SBSK
+(§Fase 15), deteksi lokasi otomatis dari titik, dan berkas ekspor QGIS. Karena
+sumber penyederhanaan selalu yang asli, menekan tombolnya berkali-kali tidak
+menggerus peta sedikit demi sedikit — sifat yang hilang begitu hasilnya ditulis
+menimpa masukannya.
+
+Toleransinya **dinaikkan bertangga sampai anggaran hampir habis**, bukan
+dipatok: pergeseran garis (jarak Hausdorff) ≤ 0,35 m atau 0,005% diagonal objek
+— mana yang lebih longgar — dan Δ luas ≤ 0,5%. Angka tetap tidak bisa dipakai
+karena skala objeknya berbeda tiga orde besaran: nilai yang aman bagi kawasan
+27 km akan melenyapkan ruangan 10 m. Δ luas dipakai **bersama** Hausdorff,
+bukan menggantikannya — dua sisi poligon bisa bergeser berlawanan puluhan meter
+sementara luasnya tetap persis sama.
+
+Bawaan dipilih per-tempat, bukan seragam: **peta selalu memakai versi ringan**
+(dengan saklar `?asli=1`), **ekspor selalu memakai yang asli** (dengan pilihan
+`optimize` yang ditandai pada nama berkas), dan **editor selalu menyunting yang
+asli** — detail node sengaja tidak menyerahkan `geometry_opt` sama sekali,
+sebab layar yang memakai "geometri mana pun yang tersedia" akan menuliskan
+versi sederhana ke atas aslinya pada penyimpanan berikutnya.
+
 **Kunci pengurutan:** **privasi (Fase 10) datang SEBELUM pengumpulan GPS massal (Fase 13)** — degradasi presisi harus dipaksakan di ingest sejak hari pertama, bukan ditambal belakangan. Ini bukan preferensi, melainkan konsekuensi kebijakan #2 di §10.2: koordinat presisi **dibuang di ingest**, sehingga tidak ada jalan mundur bila datanya terlanjur tersimpan.
 
 ---

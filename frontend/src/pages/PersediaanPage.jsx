@@ -62,6 +62,10 @@ function getApiError(err, fallback) {
  */
 export default function PersediaanPage({ user, onBack }) {
   const isAdmin = user?.role === "admin";
+  // Mengirim LPB ke TTD adalah operasi TULIS (server: require_writer) —
+  // menyembunyikan tombolnya dari viewer mencegah 403 yang baru ketahuan
+  // setelah dialog konfirmasi dijawab.
+  const isWriter = user?.role !== "viewer";
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -105,6 +109,9 @@ export default function PersediaanPage({ user, onBack }) {
   const [riwayatLpb, setRiwayatLpb] = useState(null);
   const massalTimer = useRef(null);
   const { confirm, confirmDialog } = useConfirm();
+  // Tautan TTD yang baru terbit: {nomor, links[]} — ditampilkan agar bisa
+  // disalin/dibagikan manual saat email tak terkonfigurasi.
+  const [tautanTtd, setTautanTtd] = useState(null);
   const searchTimer = useRef(null);
 
   useBackGuard(useCallback(() => onBack?.(), [onBack]));
@@ -357,6 +364,34 @@ export default function PersediaanPage({ user, onBack }) {
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Gagal memuat riwayat LPB");
       setRiwayatLpb(null);
+    }
+  };
+
+  // Kirim LPB ini untuk ditandatangani elektronik. Penanda tangan bawaan
+  // diambil server dari Referensi Pejabat (Pengurus Barang → Pemeriksa LPB →
+  // KPB) supaya urutan tekennya sama dengan urutan pada kertasnya.
+  const kirimTtdLpb = async (l) => {
+    const ok = await confirm({
+      title: "Kirim LPB untuk ditandatangani?",
+      description: `${l.nomor || l.id.slice(0, 8)} — dokumen PDF dibekukan sekarang, `
+        + "lalu tiap penanda tangan menerima tautan sendiri. "
+        + "Penanda tangan diambil dari Referensi Pejabat.",
+      confirmLabel: "Kirim",
+    });
+    if (!ok) return;
+    try {
+      const r = await axios.post(`${API}/persediaan/lpb/${l.id}/kirim-ttd`, {});
+      const tautan = r.data?.links || [];
+      toast.success(`Permintaan TTD terkirim ke ${tautan.length} penanda tangan`
+        + (tautan.some((x) => x.email_terkirim) ? " (email terkirim)" : ""));
+      // TAUTANNYA DITAMPILKAN, bukan hanya jumlahnya (temuan audit): tanpa
+      // email terkonfigurasi, tautan yang tak pernah muncul di layar berarti
+      // permintaan TTD tak bisa disampaikan ke siapa pun.
+      setTautanTtd({ nomor: l.nomor || l.id.slice(0, 8), links: tautan });
+      bukaRiwayatLpb();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gagal mengirim permintaan TTD",
+        { duration: 9000 });
     }
   };
 
@@ -1695,33 +1730,112 @@ export default function PersediaanPage({ user, onBack }) {
           <DialogHeader>
             <DialogTitle>Riwayat Laporan Penerimaan Barang</DialogTitle>
             <DialogDescription className="text-xs">
-              Setiap transaksi massal masuk ber-LPB tercatat di sini — unduh ulang kapan pun.
+              LPB <strong>persediaan</strong> (dari transaksi massal masuk) dan
+              LPB <strong>aset/BMN</strong> (dari &quot;Catat Semua Barang&quot; di Pengadaan)
+              tercatat di sini — unduh ulang atau kirim untuk ditandatangani kapan pun.
             </DialogDescription>
           </DialogHeader>
           {riwayatLpb?.loading ? (
             <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-emerald-600" /></div>
           ) : (riwayatLpb?.items || []).length === 0 ? (
-            <p className="text-center text-xs text-muted-foreground py-6">Belum ada LPB — buat lewat "Transaksi Massal" arah masuk.</p>
+            <p className="text-center text-xs text-muted-foreground py-6">Belum ada LPB — buat lewat &quot;Transaksi Massal&quot; arah masuk, atau &quot;Catat Semua Barang&quot; di Pengadaan.</p>
           ) : (
             <ul className="divide-y divide-border/60">
-              {riwayatLpb.items.map((l) => (
-                <li key={l.id} className="py-2 flex items-center justify-between gap-2" data-testid={`lpb-riwayat-${l.id}`}>
-                  <div className="min-w-0">
-                    <p className="font-mono text-xs text-foreground break-all">{l.nomor || "(tanpa nomor)"}</p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {[String(l.tanggal || "").slice(0, 10), l.penyedia].filter(Boolean).join(" · ")}
-                    </p>
-                  </div>
-                  <Button size="sm" variant="outline" className="h-7 text-[11px] flex-shrink-0"
-                    onClick={() => downloadFileWithProgress(`${API}/persediaan/lpb/${l.id}/pdf`,
-                      `LPB_${(l.nomor || l.id.slice(0, 8)).replace(/[\/\s]/g, "_")}.pdf`,
-                      { label: "Laporan Penerimaan Barang" }).catch(() => {})}>
-                    Unduh
-                  </Button>
-                </li>
-              ))}
+              {riwayatLpb.items.map((l) => {
+                const isAset = String(l.kategori || "") === "aset";
+                return (
+                  <li key={l.id} className="py-2 flex items-start justify-between gap-2" data-testid={`lpb-riwayat-${l.id}`}>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-mono text-xs text-foreground break-all">{l.nomor || "(tanpa nomor)"}</p>
+                      <div className="flex flex-wrap items-center gap-1 mt-0.5">
+                        <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${
+                          isAset
+                            ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                            : "bg-cyan-500/15 text-cyan-700 dark:text-cyan-300"}`}>
+                          {isAset ? "aset/BMN" : "persediaan"}
+                        </span>
+                        {/* Status TTD dibaca dari tautan balik yang ditulis
+                            routes/ttd.py saat semua pihak selesai meneken. */}
+                        {l.tt_dicabut ? (
+                          <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-700 dark:text-rose-300">
+                            TTD dicabut
+                          </span>
+                        ) : l.tt_esign_selesai_pada ? (
+                          <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+                            ber-TTD
+                          </span>
+                        ) : l.signature_request_id ? (
+                          <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300">
+                            menunggu TTD
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        {[String(l.tanggal || "").slice(0, 10), l.penyedia,
+                          l.ppk_nama && `PPK ${l.ppk_nama}`].filter(Boolean).join(" · ")}
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-1 flex-shrink-0">
+                      <Button size="sm" variant="outline" className="h-7 text-[11px]"
+                        onClick={() => downloadFileWithProgress(`${API}/persediaan/lpb/${l.id}/pdf`,
+                          `LPB_${(l.nomor || l.id.slice(0, 8)).replace(/[\/\s]/g, "_")}.pdf`,
+                          { label: "Laporan Penerimaan Barang" }).catch(() => {})}>
+                        Unduh
+                      </Button>
+                      {isWriter && !l.signature_request_id && (
+                        <Button size="sm" variant="outline" className="h-7 text-[11px]"
+                          onClick={() => kirimTtdLpb(l)}
+                          data-testid={`lpb-kirim-ttd-${l.id}`}>
+                          Kirim TTD
+                        </Button>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog tautan TTD LPB yang baru dikirim ── */}
+      <Dialog open={!!tautanTtd} onOpenChange={(o) => { if (!o) setTautanTtd(null); }}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Tautan tanda tangan — LPB {tautanTtd?.nomor}</DialogTitle>
+            <DialogDescription className="text-xs">
+              Satu tautan per penanda tangan. Bagikan lewat WhatsApp/email bila
+              pengiriman otomatis tak aktif — tanpa tautan ini permintaan TTD
+              tak sampai ke siapa pun.
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="divide-y divide-border/60">
+            {(tautanTtd?.links || []).map((t, i) => (
+              <li key={i} className="py-2">
+                <p className="text-xs font-medium text-foreground">
+                  {t.nama}
+                  {t.email_terkirim && (
+                    <span className="ml-1.5 text-[9px] font-semibold px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+                      email terkirim
+                    </span>
+                  )}
+                </p>
+                <div className="flex items-center gap-2 mt-1">
+                  <code className="flex-1 min-w-0 truncate text-[10px] bg-muted rounded px-2 py-1">
+                    {t.link}
+                  </code>
+                  <Button size="sm" variant="outline" className="h-7 text-[11px] flex-shrink-0"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(t.link)
+                        .then(() => toast.success("Tautan disalin"))
+                        .catch(() => toast.error("Gagal menyalin — salin manual dari kotak di samping"));
+                    }}>
+                    Salin
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
         </DialogContent>
       </Dialog>
 

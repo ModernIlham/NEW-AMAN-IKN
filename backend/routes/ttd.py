@@ -305,22 +305,36 @@ async def buat_permintaan(payload: PermintaanIn, user: dict = Depends(require_wr
         raise HTTPException(status_code=400, detail="Minimal satu penanda tangan")
     if payload.mode not in ("berurutan", "paralel"):
         raise HTTPException(status_code=400, detail="Mode harus berurutan/paralel")
-    # Bila menaut BAST terstruktur (doc_type='bast' + doc_ref=id BAST), PASTIKAN
-    # BAST itu milik satker pemohon. Ini gerbang tunggal: back-link penyelesaian
-    # (menulis signature_request_id ke BAST) dan cascade pembatalan sama-sama
-    # digerakkan doc_ref — validasi kepemilikan di sini mencegah SR palsu
-    # menunjuk BAST satker lain (uuid bocor) lalu men-tamper dokumennya.
-    # doc_ref bagi doc_type lain (surat/register) adalah teks bebas → tak divalidasi.
-    if str(payload.doc_type or "") == "bast" and str(payload.doc_ref or "").strip():
+    # Bila menaut dokumen TERSTRUKTUR (doc_type ber-koleksi + doc_ref = id-nya),
+    # PASTIKAN dokumen itu milik satker pemohon. Ini GERBANG TUNGGAL: back-link
+    # penyelesaian (menulis signature_request_id ke dokumen) dan cascade
+    # pembatalan sama-sama digerakkan doc_ref — validasi kepemilikan di sini
+    # mencegah SR palsu menunjuk dokumen satker lain (uuid bocor) lalu
+    # men-tamper-nya.
+    #
+    # SETIAP doc_type baru yang punya back-link WAJIB terdaftar di sini. LPB
+    # ditambahkan bersamaan dengan back-link-nya; tanpa itu `POST /ttd/permintaan`
+    # yang dipanggil langsung (melewati /persediaan/lpb/{id}/kirim-ttd yang
+    # memang ber-guard) bisa menulis ke LPB satker lain saat tandatangan selesai.
+    #
+    # doc_ref bagi doc_type lain (surat/register/dokumen unggahan) adalah teks
+    # bebas tanpa back-link → tak divalidasi.
+    _KOLEKSI_BER_BACKLINK = {
+        "bast": (db.bast_serah_terima, "BAST"),
+        "lpb": (db.lpb, "LPB"),
+    }
+    _dt = str(payload.doc_type or "")
+    if _dt in _KOLEKSI_BER_BACKLINK and str(payload.doc_ref or "").strip():
         from shared_utils import scope_query_field_satker
-        pemilik = await db.bast_serah_terima.find_one(
+        _koleksi, _label = _KOLEKSI_BER_BACKLINK[_dt]
+        pemilik = await _koleksi.find_one(
             scope_query_field_satker(
                 user, {"id": str(payload.doc_ref).strip()}),
             {"_id": 0, "id": 1})
         if not pemilik:
             raise HTTPException(
                 status_code=403,
-                detail="BAST rujukan tidak ditemukan pada satker Anda")
+                detail=f"{_label} rujukan tidak ditemukan pada satker Anda")
     # Penanda tangan yang sudah MENINGGAL DUNIA → tolak sejak awal. Mengirim
     # link TTD ke almarhum mustahil dipenuhi dan hanya menggantung dokumen di
     # status "menunggu". Satu query untuk semua NIP (hindari N kueri).
@@ -904,6 +918,30 @@ async def batal_permintaan(sr_id: str, user: dict = Depends(require_writer)):
                 bast_dicabut = 1
         except Exception:
             bast_dicabut = 0  # cascade best-effort — batal & audit tetap jalan
+    # Cascade setara untuk LPB, dengan penjaga yang sama persis: scope satker
+    # (doc_ref mentah tak dipercaya) + `signature_request_id == sr_id` (hanya
+    # permintaan yang BENAR menandatangani LPB ini yang boleh mencabutnya).
+    if sr.get("doc_type") == "lpb" and str(sr.get("doc_ref") or "").strip():
+        try:
+            from shared_utils import scope_query_field_satker
+            milik = await db.lpb.find_one(
+                scope_query_field_satker(
+                    user, {"id": str(sr["doc_ref"]).strip(),
+                           "signature_request_id": sr_id}),
+                {"_id": 0, "id": 1})
+            if milik:
+                await db.lpb.update_one(
+                    {"id": milik["id"]},
+                    # `signature_request_id` DIKOSONGKAN: layar memakainya
+                    # sebagai penanda "sudah dikirim", jadi membiarkannya
+                    # terisi setelah dibatalkan membuat tombol "Kirim TTD"
+                    # hilang SELAMANYA — LPB yang tandatangannya dicabut tak
+                    # akan pernah bisa dikirim ulang.
+                    {"$set": {"tt_dicabut": True,
+                              "signature_request_id": "",
+                              "tt_dicabut_pada": datetime.now(timezone.utc).isoformat()}})
+        except Exception:
+            pass  # best-effort, seperti cascade BAST di atas
     await log_audit("batal_ttd", "", sr_id,
                     username=user.get("username", "system"),
                     detail=(f"Permintaan TTD '{sr.get('judul') or sr_id}' dibatalkan"
@@ -1111,6 +1149,15 @@ async def kirim_tandatangan(sr_id: str, payload: SpesimenIn, request: Request,
         await db.assets.update_many(
             {"bast_terakhir.id": doc_ref, "bast_terakhir.tt_dicabut": True},
             {"$set": {"bast_terakhir.tt_dicabut": False}})
+    # Pola yang sama untuk LPB (doc_type='lpb'): tanpa tautan balik ini, layar
+    # Riwayat LPB tak punya cara menjawab "yang mana yang sudah lengkap
+    # tandatangannya" selain membuka satu per satu.
+    if semua and sr.get("doc_type") == "lpb" and str(sr.get("doc_ref") or "").strip():
+        await db.lpb.update_one(
+            {"id": str(sr["doc_ref"]).strip()},
+            {"$set": {"signature_request_id": sr_id,
+                      "tt_esign_selesai_pada": datetime.now(timezone.utc).isoformat(),
+                      "tt_dicabut": False}})
     await log_audit("kirim_ttd", "", sr_id, username=sg.get("nama") or "tamu",
                     detail=f"E-sign '{sr.get('judul')}' oleh {sg.get('nama')}")
     return {"ok": True, "status_dokumen": status_dok,

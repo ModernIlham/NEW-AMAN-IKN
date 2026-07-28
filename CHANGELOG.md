@@ -53,6 +53,377 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#658] Audit alur lintas-modul — pintu belakang, dokumen yatim, muatan siluman — 2026-07-28
+
+Pemeriksaan menyeluruh atas rantai **Pengadaan → Pencatatan → LPB → TTD**
+dan atas optimalisasi peta yang baru dipasang, mencari alur yang terlewat,
+langkah yang ambigu, dan janji yang tak ditepati.
+
+### Penjaga yang bisa dilangkahi bukan penjaga
+
+Penjaga golongan yang dipasang di jalur otomatis ternyata punya **pintu
+kedua**. `tautkan_barang` menulis `asset_id` ke baris `barang[]` yang sama —
+tanpa memeriksa apa pun, termasuk ke baris yang sudah memegang `psd_item_id`.
+Satu rim kertas HVS lalu berdiri di kartu stok **dan** sebagai BMN ber-NUP
+sekaligus, keduanya berjurnal ke Neraca. Persis kerusakan yang penjaga itu
+dipasang untuk mencegah, lewat tombol di sebelahnya.
+
+Baris yang sudah di kartu stok, dan baris berkode golongan 1, kini ditolak
+dengan pesan yang bisa ditindaklanjuti. **Melepas** tautan tetap boleh: data
+lama yang telanjur salah harus bisa dibetulkan, bukan dikunci permanen.
+
+Layarnya ikut berhenti mengundang. Baris yang sudah tercatat sebagai
+persediaan dulu berbunyi *"Belum tertaut ke aset master"* — kalimat yang
+menyuruh operator melakukan persis pencatatan ganda itu — dan menyodorkan
+tombol "Tautkan" yang kini pasti gagal. Keduanya diganti keadaan **ketiga**
+yang jujur: *"Tercatat sebagai persediaan (kartu stok)"*.
+
+### LPB yang terbit lalu hilang
+
+"Catat Semua Barang" menerbitkan LPB, menyebut nomornya di dalam toast, dan
+selesai. Beberapa detik kemudian nomor itu lenyap, dan satu-satunya jalan
+mencetak dokumen resmi tersebut adalah berpindah ke **Persediaan → Riwayat
+LPB** — modul lain, untuk dokumen yang baru saja Anda buat.
+
+Kini alurnya berakhir dengan dialog ber-tombol **Unduh PDF** dan **Kirim
+TTD**, lengkap dengan tautan penanda tangan yang ditampilkan apa adanya.
+Loop-nya ditutup di tempat pekerjaannya terjadi; Riwayat LPB tetap ada
+sebagai pintu masuk kedua, bukan satu-satunya.
+
+### Muatan siluman di daftar node — regresi dari perbaikan sendiri
+
+Daftar node sengaja membuang `geometry` karena poligon kawasan bisa ribuan
+verteks dan daftar itu memuat sampai 20.000 node sekaligus. **`geometry_opt`
+lolos dari proyeksi itu.** Per node ia memang jauh lebih ringan, tetapi
+ratusan verteks dikali puluhan ribu baris tetap payload raksasa — di daftar
+yang tak satu pun layarnya menggambar poligon.
+
+Yang dibutuhkan layar hanya satu boolean, jadi itulah yang diturunkan:
+`dioptimalkan`. Ia sekaligus menutup lubang alur — "Ringankan Peta" dulu
+hanya melaporkan angka di toast, tanpa cara melihat denah **mana** yang
+masih berat. Kini tiap baris berbadge "ringan" / "belum ringan".
+
+Hal yang sama berlaku di peta: pada mode `asli=1`, `geometry_opt` tak pernah
+dikirim maupun dibaca, jadi ia berhenti ditarik dari basis data sama sekali.
+Menambah ±13% pada payload terberat, di endpoint yang seluruh alasan
+keberadaannya memangkas berat itu, adalah lelucon yang mahal.
+
+### Editor selalu menyunting yang asli
+
+`GET /spasial/node/{id}` berhenti menyerahkan `geometry_opt`. Bila ikut
+terkirim, cepat atau lambat ada layar yang memakai "geometri mana pun yang
+tersedia", dan penyimpanan berikutnya menuliskan versi sederhana ke atas
+geometri asli — penyederhanaan yang seharusnya bisa dibatalkan berubah jadi
+permanen, tanpa satu pun galat.
+
+### Jalur simpan tak boleh membekukan server
+
+Endpoint optimasi massal melempar shapely ke thread sejak awal, dengan alasan
+yang ditulis terang-terangan: *"satu satker ber-2.000 poligon tak boleh
+membekukan seluruh server"*. Jalur **simpan** menjalankan pekerjaan yang sama
+langsung di event loop — sembilan anak tangga toleransi, masing-masing
+`simplify` + jarak Hausdorff — hanya karena poligonnya "cuma satu". Untuk
+hasil impor SHP berverteks puluhan ribu, satu penyimpanan menahan setiap
+permintaan pengguna lain yang tak ada urusannya dengan peta.
+
+`_terapkan_geometri_async` kini dipakai kedua handler simpan node. Logika
+penulisannya dipisah ke `_pasang_optimasi` agar jalur sinkron dan jalur thread
+tak punya dua salinan yang bisa berbeda diam-diam.
+
+### Plafon yang salah satuannya
+
+`POST /spasial/optimasi` dibatasi **500 node per panggilan** — plafon yang
+mengabaikan bahwa biaya per poligon berbeda satu orde besaran menurut jumlah
+verteksnya. Diukur: **34 ms** untuk 1.000 verteks, **155 ms** untuk 5.000,
+**613 ms** untuk 20.000. Untuk denah gambar-sendiri, 500 node adalah 17 detik;
+untuk hasil impor SHP, **77–307 detik** — jauh melewati batas waktu proxy
+lazim. Operator melihat galat 504 sementara servernya justru masih bekerja,
+dan sebagian pekerjaan sudah tersimpan tanpa pernah dilaporkan.
+
+Plafonnya kini **anggaran waktu** (20 detik), dengan cacah node tinggal
+sebagai pagar terluar. Ia menyesuaikan diri: poligon kecil → banyak per
+tekan, poligon raksasa → sedikit. Anggaran diperiksa **sesudah** satu node
+selesai, sehingga anggaran sekecil apa pun tetap menghasilkan kemajuan —
+kalau tidak, "tekan sekali lagi" menjadi lingkaran yang tak pernah maju.
+
+Satu lubang lagi di saringan kandidatnya: ia memilih node ber-`geometry_opt`
+kosong, padahal **poligon sederhana memang tak pernah menghasilkan versi
+ringan** — kotak lima titik tak punya apa pun untuk dihemat. Node semacam itu
+terpilih lagi pada setiap tekanan, selamanya; satker yang denahnya digambar
+tangan akan terus disuruh "tekan sekali lagi" tanpa satu pun kemajuan yang
+terlihat. Saringannya kini `optimasi` — "sudah pernah dicoba" — dan percobaan
+yang tak menghasilkan apa-apa tetap dicatat.
+
+### Verifikasi
+
+1.287 uji backend, eslint 0 galat, build kompilasi. **Empat mutasi**
+dibuktikan tertangkap: membuang penjaga `tautkan_barang` → 2 uji gagal;
+mengembalikan `geometry_opt` ke proyeksi daftar node → 1 uji gagal;
+mengembalikan `geometry_opt` ke detail node → 1 uji gagal; jalur thread lupa
+memasang hasil optimasinya → 3 uji gagal; anggaran waktu diabaikan → 1 uji
+gagal; anggaran diperiksa SEBELUM node pertama (tak pernah maju) → 1 uji
+gagal; saringan kandidat kembali memakai `geometry_opt` → 1 uji gagal;
+percobaan yang tak menghasilkan apa-apa tak dicatat → 1 uji gagal. Tiga uji lain (`baris aset tetap boleh ditautkan`, `melepas tautan
+tetap boleh`, `pekerjaan tuntas tak mengaku terpotong`) menjaga agar
+penjaganya tak diam-diam membunuh alur yang benar.
+
+---
+
+## [#657] Optimalisasi peta gaya mapshaper — ringan di layar, asli tetap utuh — 2026-07-28
+
+Denah kawasan hasil impor SHP membawa ribuan verteks per poligon. Di HP
+lapangan itu berarti peta yang tersendat setiap kali digeser. Pendekatan
+mapshaper.org diadopsi — **sederhanakan geometri**, **kurangi presisi desimal**,
+**muat per bounding box** — dengan satu syarat mutlak dari pemilik: **berkas
+asli tidak pernah dihapus.**
+
+### Salinan, bukan penggantian
+
+Penyederhanaan ditulis ke field **baru** `geometry_opt`; `geometry` tak pernah
+disentuh. Begitu pula `bbox`, `titik_wakil`, dan `metrik.luas_m2` — luas SBSK,
+deteksi lokasi otomatis, dan bahan ekspor QGIS tetap dihitung dari bentuk asli.
+Menekan tombol optimasi dua kali tidak menggerus peta sedikit demi sedikit,
+karena sumbernya selalu yang asli.
+
+Yang mendasari seluruh berkas uji: **optimasi yang bocor ke `geometry` berarti
+presisi survei terbuang tanpa bisa dipulihkan — dan tanpa satu pun galat.**
+
+### Sweet spot: dicari, bukan ditebak
+
+Toleransi tetap tidak bisa dipakai. Angka yang aman untuk kawasan 27 km akan
+melenyapkan ruangan 10 m. Maka `optimalkan()` **menaiki tangga toleransi** dan
+berhenti di anak tangga terbesar yang masih di bawah anggaran:
+
+- **Pergeseran garis** (jarak Hausdorff) ≤ **0,35 m**, atau 0,005% diagonal
+  objek untuk kawasan besar — mana yang lebih longgar.
+- **Perubahan luas** ≤ **0,5%**.
+- Poligon di bawah 12 titik **tidak disentuh**: tak ada yang bisa dihemat, dan
+  penyederhanaan justru bisa merusaknya.
+
+Hasil terukur pada tiga skala:
+
+| Objek | Verteks | Hemat | Geser garis | Δ luas |
+|---|---|---|---|---|
+| Kawasan ±890 m | 1.001 → 129 | 87,1% | 0,144 m | 0,04% |
+| Kawasan 27 km | 2.001 → 257 | 87,2% | 2,188 m | 0,01% |
+| Ruangan ±11 m | 201 → 41 | 79,6% | 0,025 m | 0,42% |
+
+Delta luas dipakai **bersama** jarak Hausdorff, bukan menggantikannya: dua sisi
+poligon bisa bergeser berlawanan arah puluhan meter sementara luasnya persis
+sama. Selisih luas saja akan menyatakan itu aman.
+
+Metrik yang dilaporkan **diukur ulang setelah pembulatan presisi**, sebab
+pembulatan terjadi sesudah penyederhanaan dan dapat menggeser garis lagi.
+Melaporkan angka pra-pembulatan berarti menjanjikan ketelitian yang tidak
+dimiliki geometri yang benar-benar tersimpan.
+
+### Yang tampil di web selalu yang ringan — dengan saklar ke yang asli
+
+- `GET /spasial/geojson` mengirim `geometry_opt` secara bawaan dan melaporkan
+  `sumber`, `titik_dikirim`, `titik_asli`, serta `hemat_persen`. Node yang belum
+  dioptimalkan **tetap muncul** dengan bentuk aslinya — peta tak boleh kosong
+  hanya karena tombolnya belum ditekan.
+- `?asli=1` adalah saklarnya. Di layar: tombol **Bentuk ringan / Bentuk asli**
+  pada panel Lapis Denah, lengkap dengan angka penghematan yang sedang berlaku.
+  Pilihannya sengaja **tidak** disimpan antar sesi — peta harus selalu terbuka
+  dalam keadaan ringan.
+- **Poligon yang digambar sendiri lewat web pun ikut**: `_terapkan_geometri`
+  membuat versi ringannya pada setiap penyimpanan, tanpa operator perlu tahu
+  tombol optimasi ada. Mengosongkan geometri ikut membuang salinannya — salinan
+  yatim akan tergambar sebagai bentuk yang sudah tak ada.
+- `POST /spasial/optimasi` (**Ringankan Peta**) memproses denah yang belum punya
+  salinan; `paksa_ulang` untuk menghitung ulang semuanya. Ter-scope satker,
+  ber-rate-limit, dan shapely dijalankan di thread agar event loop tak tertahan.
+
+### Ekspor: bawaannya ASLI, dan itu disengaja
+
+Berkas ekspor menjadi arsip cadangan dan bahan olah di QGIS. Diam-diam memberi
+versi sederhana berarti presisi terkikis setiap putaran ekspor–impor. Maka
+`geometri=asli` adalah bawaannya; pilihan **"Versi ringan (optimize)"** ada di
+dialog ekspor, dan berkasnya diberi tanda `-optimize` **pada nama berkas** —
+berkas berpindah tangan, sementara pilihan di layar tidak ikut berpindah.
+
+Node yang belum dioptimalkan tetap ikut terekspor dengan bentuk aslinya:
+berkas bolong lebih berbahaya daripada berkas yang sebagian berat.
+
+### Editor selalu menyunting yang asli
+
+`GET /spasial/node/{id}` **tidak** lagi menyerahkan `geometry_opt`. Bila ikut
+terkirim, cepat atau lambat ada layar yang memakai "geometri mana pun yang
+tersedia", dan penyimpanan berikutnya menuliskan versi sederhana ke atas
+geometri asli — penyederhanaan yang seharusnya bisa dibatalkan berubah jadi
+permanen. Konteks tetangga di DenahEditor memang memakai versi ringan (latar
+orientasi, tak bisa diklik, tak ikut tersimpan), dan itu kini ditulis
+terang-terangan sebagai `asli: 0`.
+
+### Verifikasi
+
+1.275 uji backend (39 baru), eslint 0 galat, build kompilasi. **Empat mutasi**
+dibuktikan tertangkap: menulis hasil optimasi ke `geometry` → 3 uji gagal;
+membuat ekspor diam-diam memakai versi ringan → 1 uji gagal; mengabaikan
+saklar `asli` → 1 uji gagal; mengembalikan `geometry_opt` di detail node →
+1 uji gagal.
+
+---
+
+## [#656] Rantai penerimaan barang: PPK, satu tombol catat, LPB aset ber-TTD — 2026-07-28
+
+Tiga permintaan pemilik yang ternyata satu rantai: nama **PPK** tak pernah
+tercantum, pencatatan dari Pengadaan menuntut operator memilah sendiri, dan
+**LPB** hanya ada untuk persediaan — bukan untuk aset.
+
+### Bug integritas yang ditemukan saat menyatukan dua jalur
+
+Menekan **Daftarkan ke Persediaan** lalu **Buat Draft Aset** atas BAST yang
+sama membuat satu rim kertas HVS **tercatat dua kali**: sekali di kartu stok,
+sekali sebagai BMN ber-NUP — dan **keduanya berjurnal ke Neraca**.
+
+`buat_draft_aset_dari_perolehan` menerima kode barang apa pun; ia hanya
+melewati baris yang sudah punya `asset_id`, dan `psd_item_id` dari jalur
+persediaan bukan `asset_id`. Jadi tak ada yang menahannya. Penjaga golongan
+kini dipasang di **kedua** jalur, dan urutan penekanan tak lagi menentukan.
+
+### PPK — dibekukan, bukan di-join saat baca
+
+Peran `ppk` sudah lama ada di Referensi Pejabat tetapi tak pernah dipakai
+Pengadaan maupun Persediaan. Kini:
+
+- Register perolehan menyimpan snapshot **nama, NIP, jabatan, dan status
+  kepegawaian** PPK. Kosong = server meresolusi sendiri peran `ppk` yang
+  berlaku **pada tanggal BAST** — bukan hari ini, karena register sering diisi
+  belakangan dan PPK hari ini belum tentu yang menandatangani.
+- Snapshot ikut turun ke **aset** yang lahir dari BAST itu, ke **jurnal
+  persediaan**, dan ke **LPB**. Menelusuri "atas komitmen siapa barang ini
+  datang" tak lagi menuntut kueri balik.
+- `PUT /pengadaan/{id}/ppk` melengkapi register lama tanpa membuat ulang
+  dokumen, dan **memproyeksikan ulang** ke aset yang sudah tercatat.
+- Pergantian PPK di kemudian hari **tidak** mengubah dokumen yang sudah terbit.
+
+### Satu tombol: "Catat Semua Barang"
+
+`POST /pengadaan/{id}/catat-semua` memilah sendiri berdasarkan digit pertama
+kode barang (kodefikasi BMN): **golongan 1 → Persediaan**, **golongan 2–8 →
+aset draft ber-NUP**. Baris **tanpa kode** jadi keranjang ketiga yang eksplisit
+dan dilaporkan balik — bukan ditelan diam-diam.
+
+Dialognya menampilkan hitungan **sebelum** ditekan, dan kegagalan sebagian
+tetap muncul sebagai peringatan tersendiri: jalur ini memang tak transaksional
+(Mongo standalone), dan toast hijau di atas separuh kegagalan adalah kebohongan
+yang paling mahal di sini.
+
+### LPB untuk aset, bukan hanya persediaan
+
+- `db.lpb` kini ber-`kategori` (`persediaan` | `aset`). Dokumen lama tanpa
+  field itu tetap terhitung persediaan — memfilter tak boleh menyembunyikan
+  riwayat.
+- LPB aset memuat **kolom NUP**: tanpa itu dokumen hanya berkata "5 printer
+  diterima" dan tak bisa membuktikan printer **yang mana** — padahal itulah
+  seluruh alasan BMN dinomori satu per satu.
+- Nomor surat dipesan lewat helper **bersama** `booking_nomor_lpb` yang
+  diekstrak dari transaksi massal persediaan, sehingga kedua jalur memakai
+  **satu deret nomor**. Dua salinan logika penomoran adalah cara paling pasti
+  melahirkan dua deret yang diam-diam berbeda.
+
+### LPB ber-tanda tangan elektronik
+
+`POST /persediaan/lpb/{id}/kirim-ttd` menyusun PDF **sekarang** lalu
+membekukannya ke GridFS — bukan membangunnya ulang saat penanda tangan membuka
+tautan. Kalau dibangun ulang, kop/pejabat/nomor bisa berubah di antara
+"dikirim" dan "diteken", dan yang bersangkutan menandatangani dokumen yang tak
+pernah ia baca.
+
+Penanda tangan bawaan diambil dari blok TTD LPB sendiri (Pengurus Barang →
+Pemeriksa LPB → KPB, berurutan). Tautan balik dan cascade pembatalan mengikuti
+pola BAST yang sudah ada, lengkap dengan penjaga scope satker dan pencocokan
+`signature_request_id`.
+
+### Dua kebocoran lintas-satker yang ditemukan audit adversarial atas PR ini
+
+**Gerbang `doc_ref` pada permintaan TTD hanya mengenal BAST.** `kirim_tandatangan`
+menulis back-link ke dokumen yang ditunjuk `doc_ref` **tanpa** memeriksa satker —
+itu memang disengaja, karena pemeriksaannya dilakukan sekali di muka saat
+permintaan dibuat. Konsekuensinya: setiap `doc_type` ber-back-link **wajib**
+terdaftar di gerbang itu. `lpb` sempat tidak. `/persediaan/lpb/{id}/kirim-ttd`
+memang ber-guard, tetapi `POST /ttd/permintaan` bisa dipanggil langsung dengan id
+LPB satker lain — dan saat tanda tangan selesai, servernya sendiri yang menulis
+ke dokumen satker itu. Gerbangnya kini bertabel, dengan catatan tegas bahwa
+doc_type baru harus didaftarkan.
+
+**`_ambil_snapshot_perolehan` tak pernah ter-scope satker.** Cacat lama yang
+diperburuk PR ini: writer satker A yang memegang uuid BAST satker B dapat
+menyalin identitas dokumen B — nomor BAST, tanggal, penyedia, dan **sejak PR ini
+juga nama + NIP PPK** — ke jurnal persediaan dan LPB satker A. Bukan sekadar
+terbaca: tersimpan permanen di dokumen resmi, lengkap dengan data pribadi
+pejabatnya.
+
+### Gelombang kedua audit: 39 dugaan → 18 bertahan, 21 gugur
+
+Lima TINGGI, **satu di antaranya regresi yang lahir dari perbaikan gelombang
+pertama**:
+
+- **`POST /pengadaan/{id}/buat-draft-aset` jadi 500.** `buat_aset_draft`
+  mengembalikan dict YANG SAMA yang dioper ke `insert_one()`, dan Motor
+  menyisipkan `_id: ObjectId` ke dalamnya *in-place*. Menyalinnya ke respons
+  membuat FastAPI gagal membuat serial — **setelah** aset, jurnal, dan audit
+  tertulis. Kini hanya field ber-daftar-putih yang disalin.
+- **Pencocokan per-awalan membuang stok ke kartu yang SALAH.** Perbaikan
+  gelombang pertama ("cocokkan awalan") ternyata lebih berbahaya daripada
+  penyakitnya: enam digit terakhir justru yang **membedakan** "Kertas HVS A4"
+  dari "Kertas HVS F4". Kini awalan **dan nama** harus cocok.
+- **Jalan buntu untuk BAST setengah-jalan.** `pilah_barang_perolehan`
+  menghitung baris yang **sudah** jadi aset, sehingga gerbang `activity_id`
+  menuntut kegiatan untuk pekerjaan yang selesai — sementara layar tak merender
+  dropdown-nya. Sisi persediaannya macet permanen, dan tombol lamanya sudah
+  dihapus. Kini pemilahan mengabaikan baris yang sudah punya tujuan.
+- **Klaim "PPK ter-scope satker" tak diuji sama sekali** — dua mutasi lolos
+  1.213 uji karena seluruh fixture memakai satker kosong.
+- Pembatalan TTD LPB kini **mengosongkan** `signature_request_id`; tanpa itu
+  tombol "Kirim TTD" hilang selamanya.
+
+Toast hijau juga berhenti berbunyi "tidak ada barang baru" saat semua baris
+gagal, dan seluruh alasan gagal ditampilkan — bukan hanya yang pertama.
+
+### Gelombang ketiga: delapan temuan SEDANG/RENDAH sisanya
+
+- **Blok tanda tangan LPB di-scope ke satker PENERBIT, bukan pembaca.**
+  Dulu memakai satker pengguna yang membuka: super-admin (`kode_satker == ""`)
+  mendapat kandidat pejabat dari SELURUH satker, dan yang SK-nya terbaru
+  menang — dokumen resmi satker A bisa tercetak dengan nama pejabat satker B.
+  Kini dibaca dari stempel `lpb.kode_satker` yang dibekukan saat LPB terbit.
+- **NIP PPK tunduk pada aturan privasi Non-ASN.** `snapshot_ppk` sengaja
+  membekukan `ppk_status_kepegawaian` untuk keputusan ini, lalu status itu tak
+  pernah dipakai dan NIP tercetak mentah — membatalkan lewat pintu belakang
+  aturan yang ditegakkan di seluruh blok tanda tangan.
+- **`PUT /pengadaan/{id}/ppk` akhirnya punya jalan masuk.** Endpointnya ada
+  sejak awal, tetapi layar justru menyuruh operator "catat ulang" BAST — yang
+  berarti membuat register ganda. Kini baris PPK bisa diketuk.
+- **Tautan tanda tangan ditampilkan, bukan hanya jumlahnya.** Tanpa email
+  terkonfigurasi, tautan yang tak pernah muncul di layar berarti permintaan
+  TTD tak sampai ke siapa pun.
+- **Penomoran LPB akhirnya diuji.** Seluruh uji sebelumnya mematikan
+  `booking_otomatis`; jalur yang tak pernah dijalankan uji apa pun adalah
+  jalur yang tak pernah dijamin bekerja. Kini dijaga sampai ke buku agenda,
+  termasuk jaminan nomor tak pernah terpakai dua kali.
+
+### Verifikasi
+
+1.236 uji backend (53 baru), eslint 0 galat, build kompilasi. **Enam mutasi**
+dibuktikan tertangkap: membuang penjaga golongan → 4 uji gagal; mempersempit
+proyeksi `ppk_*` → 2 uji gagal; mencabut `lpb` dari gerbang `doc_ref` → 2 uji
+gagal; mencabut scope satker dari lookup perolehan → 1 uji gagal; mematok
+kembali `jumlah: 1` di baris LPB → 2 uji gagal; membuang penyaring
+"sudah tercatat" dari pemilahan → 1 uji gagal; mencocokkan awalan tanpa nama
+→ 1 uji gagal.
+
+**Batas yang dinyatakan terus terang:** kebocoran `_id` dijaga dengan
+memeriksa DAFTAR PUTIH field pada nilai balik, bukan dengan memancing galat
+serialisasinya. `mongomock` tidak menyisipkan `_id` ke dict yang dioper seperti
+Motor sungguhan, jadi mode gagal aslinya **tak bisa direproduksi** di uji unit —
+yang bisa dijaga hanyalah aturannya: jangan pernah menyalin dokumen aset mentah
+ke respons.
+
+---
+
 ## [#655] Hierarki Spasial: nama node yang hilang di HP dikembalikan — 2026-07-27
 
 Umpan balik lapangan berupa tangkapan layar HP: baris pohon hanya menampilkan

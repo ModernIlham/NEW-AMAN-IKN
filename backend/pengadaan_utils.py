@@ -163,6 +163,39 @@ def snapshot_penganggaran(usulan) -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# PEJABAT PEMBUAT KOMITMEN (PPK) — snapshot pada dokumen perolehan.
+#
+# PPK-lah yang MENANDATANGANI kontrak dan MENERIMA hasil pekerjaan dari
+# penyedia (Perpres 16/2018 Pasal 11); tanpa namanya, register perolehan
+# menyebut "dari siapa" barang datang tetapi bukan "atas komitmen siapa" —
+# justru pertanyaan pertama pemeriksa saat menelusuri satu BAST.
+#
+# DIBEKUKAN, bukan di-join saat baca. Pejabat berganti (mutasi, pensiun,
+# Plt/Plh); dokumen yang terbit tahun lalu harus tetap menyebut PPK yang
+# menandatanganinya waktu itu. Pola sama dengan snapshot penandatangan BAST.
+# ---------------------------------------------------------------------------
+
+def snapshot_ppk(pejabat) -> dict:
+    """Ringkas identitas PPK untuk dibekukan di dokumen perolehan.
+
+    `pejabat` None/kosong → snapshot kosong (belum ditetapkan). Field kosong
+    disimpan APA ADANYA — bentuk yang stabil membuat pembaca dokumen tak perlu
+    membedakan "belum pernah diisi" dari "kunci hilang".
+    """
+    p = pejabat or {}
+    return {
+        "ppk_pejabat_id": str(p.get("id") or "").strip(),
+        "ppk_nama": str(p.get("nama") or "").strip(),
+        "ppk_nip": str(p.get("nip") or "").strip(),
+        "ppk_jabatan": str(p.get("jabatan") or "").strip(),
+        # Status kepegawaian ikut dibekukan: blok TTD menyembunyikan baris
+        # NIP untuk Non-ASN (privasi — lihat baris_identitas_ttd), dan status
+        # itu harus dinilai dari keadaan SAAT dokumen terbit.
+        "ppk_status_kepegawaian": str(p.get("status_kepegawaian") or "").strip(),
+    }
+
+
 def build_asset_perolehan_projection(perolehan, now_iso) -> dict:
     """Proyeksi BALIK 'dokumen sumber' pada aset (§5A gap #6 — Prinsip 4).
 
@@ -186,6 +219,11 @@ def build_asset_perolehan_projection(perolehan, now_iso) -> dict:
             "nomor_bast": str(perolehan.get("nomor_bast") or "").strip(),
             "tanggal_bast": str(perolehan.get("tanggal_bast") or "").strip()[:10],
             "nomor_kontrak": str(perolehan.get("nomor_kontrak") or "").strip(),
+            # PPK ikut turun ke aset: menelusuri "siapa yang berkomitmen atas
+            # barang ini" tak boleh menuntut satu kueri balik ke register.
+            "ppk_nama": str(perolehan.get("ppk_nama") or "").strip(),
+            "ppk_nip": str(perolehan.get("ppk_nip") or "").strip(),
+            "ppk_jabatan": str(perolehan.get("ppk_jabatan") or "").strip(),
             "diproyeksikan_pada": now_iso,
         },
     }
@@ -201,11 +239,17 @@ def snapshot_perolehan(perolehan) -> dict:
     if not perolehan:
         return {"perolehan_id": "", "perolehan_nomor_bast": "",
                 "perolehan_tanggal_bast": "", "perolehan_jenis": "",
-                "perolehan_pihak": ""}
+                "perolehan_pihak": "", "perolehan_ppk_nama": "",
+                "perolehan_ppk_nip": ""}
     return {
         "perolehan_id": str(perolehan.get("id") or "").strip(),
         "perolehan_nomor_bast": str(perolehan.get("nomor_bast") or "").strip(),
         "perolehan_tanggal_bast": str(perolehan.get("tanggal_bast") or "").strip()[:10],
         "perolehan_jenis": str(perolehan.get("jenis") or "").strip(),
         "perolehan_pihak": str(perolehan.get("pihak") or "").strip(),
+        # PPK menyertai jurnal persediaan juga: LPB persediaan pembelian
+        # menyebut nama PPK, dan jurnalnya harus bisa membuktikan dari mana
+        # nama itu berasal tanpa join ke register perolehan.
+        "perolehan_ppk_nama": str(perolehan.get("ppk_nama") or "").strip(),
+        "perolehan_ppk_nip": str(perolehan.get("ppk_nip") or "").strip(),
     }

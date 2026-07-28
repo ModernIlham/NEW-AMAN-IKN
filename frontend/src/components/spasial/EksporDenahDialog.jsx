@@ -46,6 +46,10 @@ export default function EksporDenahDialog({ nodes, labelLevel, onClose }) {
   const [format, setFormat] = useState("geojson");
   const [dalam, setDalam] = useState("");         // "" = seluruh pohon satker
   const [sertakanDraft, setSertakanDraft] = useState(true);
+  // "asli" (bawaan) atau "optimize". Bawaan ASLI disengaja: berkas ekspor jadi
+  // arsip cadangan dan bahan QGIS — memberi versi sederhana diam-diam membuat
+  // presisi survei hilang sedikit demi sedikit di tiap putaran ekspor–impor.
+  const [geometri, setGeometri] = useState("asli");
   const [sibuk, setSibuk] = useState("");         // kunci tombol yang sedang mengunduh
 
   const pilihanSubtree = useMemo(
@@ -73,10 +77,12 @@ export default function EksporDenahDialog({ nodes, labelLevel, onClose }) {
   }, []);
 
   const ekspor = useCallback(() => {
-    const q = new URLSearchParams({ format, sertakan_draft: String(sertakanDraft) });
+    const q = new URLSearchParams({
+      format, sertakan_draft: String(sertakanDraft), geometri });
     if (dalam) q.set("dalam", dalam);
-    unduh(`${API}/spasial/ekspor?${q}`, "ekspor", `denah.${format}`);
-  }, [format, dalam, sertakanDraft, unduh]);
+    unduh(`${API}/spasial/ekspor?${q}`, "ekspor",
+      `denah${geometri === "optimize" ? "-optimize" : ""}.${format}`);
+  }, [format, dalam, sertakanDraft, geometri, unduh]);
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose?.()}>
@@ -112,6 +118,21 @@ export default function EksporDenahDialog({ nodes, labelLevel, onClose }) {
                 </option>
               ))}
             </select>
+          </label>
+          <label className="space-y-1 block">
+            <span className="font-medium">Isi geometri</span>
+            <select value={geometri} onChange={(e) => setGeometri(e.target.value)}
+                    className="w-full h-8 rounded-md border border-border bg-background px-2"
+                    data-testid="ekspor-geometri">
+              <option value="asli">Asli — presisi survei penuh (disarankan)</option>
+              <option value="optimize">Optimize — ringan, untuk berbagi cepat</option>
+            </select>
+            <span className="block text-[10px] text-muted-foreground">
+              {geometri === "asli"
+                ? "Berkas arsip & bahan QGIS. Pakai ini bila hasilnya akan diimpor balik."
+                : "Verteks disederhanakan (bentuk hampir sama, berkas jauh lebih kecil). "
+                  + "Nama berkas ditandai \u201coptimize\u201d agar penerima tahu."}
+            </span>
           </label>
           <label className="flex items-center gap-2 pt-0.5">
             <input type="checkbox" checked={sertakanDraft}
