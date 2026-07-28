@@ -116,14 +116,29 @@ tersedia", dan penyimpanan berikutnya menuliskan versi sederhana ke atas
 geometri asli — penyederhanaan yang seharusnya bisa dibatalkan berubah jadi
 permanen, tanpa satu pun galat.
 
+### Jalur simpan tak boleh membekukan server
+
+Endpoint optimasi massal melempar shapely ke thread sejak awal, dengan alasan
+yang ditulis terang-terangan: *"satu satker ber-2.000 poligon tak boleh
+membekukan seluruh server"*. Jalur **simpan** menjalankan pekerjaan yang sama
+langsung di event loop — sembilan anak tangga toleransi, masing-masing
+`simplify` + jarak Hausdorff — hanya karena poligonnya "cuma satu". Untuk
+hasil impor SHP berverteks puluhan ribu, satu penyimpanan menahan setiap
+permintaan pengguna lain yang tak ada urusannya dengan peta.
+
+`_terapkan_geometri_async` kini dipakai kedua handler simpan node. Logika
+penulisannya dipisah ke `_pasang_optimasi` agar jalur sinkron dan jalur thread
+tak punya dua salinan yang bisa berbeda diam-diam.
+
 ### Verifikasi
 
-1.281 uji backend, eslint 0 galat, build kompilasi. **Tiga mutasi**
+1.284 uji backend, eslint 0 galat, build kompilasi. **Empat mutasi**
 dibuktikan tertangkap: membuang penjaga `tautkan_barang` → 2 uji gagal;
 mengembalikan `geometry_opt` ke proyeksi daftar node → 1 uji gagal;
-mengembalikan `geometry_opt` ke detail node → 1 uji gagal. Dua uji lain
-(`baris aset tetap boleh ditautkan`, `melepas tautan tetap boleh`) menjaga
-agar penjaganya tak diam-diam membunuh alur yang benar.
+mengembalikan `geometry_opt` ke detail node → 1 uji gagal; jalur thread lupa
+memasang hasil optimasinya → 3 uji gagal. Dua uji lain (`baris aset tetap
+boleh ditautkan`, `melepas tautan tetap boleh`) menjaga agar penjaganya tak
+diam-diam membunuh alur yang benar.
 
 ---
 

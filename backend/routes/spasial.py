@@ -162,7 +162,7 @@ def _bersih_node(p: NodeIn) -> dict:
     return doc
 
 
-def _terapkan_geometri(doc: dict, geometry) -> None:
+def _terapkan_geometri(doc: dict, geometry, *, optimalkan: bool = True) -> None:
     """Sisipkan geometri + field TURUNANNYA (bbox, titik wakil, luas) ke `doc`.
 
     `geometry` None berarti "tidak diubah" (PUT parsial); dict kosong berarti
@@ -205,18 +205,45 @@ def _terapkan_geometri(doc: dict, geometry) -> None:
     # Dihitung di sini supaya berlaku untuk SEMUA pintu masuk sekaligus:
     # gambar sendiri lewat DenahEditor, impor SHP/KML, maupun belah wilayah.
     # Luas SBSK, deteksi lokasi, dan ekspor tetap membaca `geometry`.
-    hasil = so.optimalkan(geometry)
-    if hasil["geometry"]:
-        doc["geometry_opt"] = hasil["geometry"]
-        doc["optimasi"] = {**hasil["metrik"],
-                           "pada": datetime.now(timezone.utc).isoformat()}
-    else:
-        # Tak ada gunanya dioptimalkan (poligon sederhana / bbox tak terhitung).
-        # Field DIBERSIHKAN, bukan dibiarkan: sisa dari geometri LAMA akan
-        # ditampilkan sebagai bentuk yang sudah tak ada lagi.
-        doc["geometry_opt"] = None
-        doc["optimasi"] = {**hasil["metrik"],
-                           "pada": datetime.now(timezone.utc).isoformat()}
+    #
+    # `optimalkan=False` dipakai `_terapkan_geometri_async`, yang menghitungnya
+    # sendiri di thread. Ia BUKAN saklar "lewati optimasi" — pemanggil yang
+    # mematikannya wajib memanggil `_pasang_optimasi` sesudahnya, kalau tidak
+    # dokumen membawa `geometry_opt` warisan geometri LAMA.
+    if optimalkan:
+        _pasang_optimasi(doc, so.optimalkan(geometry))
+
+
+def _pasang_optimasi(doc: dict, hasil: dict) -> None:
+    """Tuliskan hasil `so.optimalkan` ke dokumen.
+
+    Dipisah supaya jalur async bisa melempar perhitungannya ke thread tanpa
+    menyalin logika penulisannya — dua salinan akan berbeda diam-diam.
+    """
+    doc["optimasi"] = {**hasil["metrik"],
+                       "pada": datetime.now(timezone.utc).isoformat()}
+    # Tak ada gunanya dioptimalkan (poligon sederhana / bbox tak terhitung) →
+    # field DIBERSIHKAN, bukan dibiarkan: sisa dari geometri LAMA akan
+    # ditampilkan sebagai bentuk yang sudah tak ada lagi.
+    doc["geometry_opt"] = hasil["geometry"] or None
+
+
+async def _terapkan_geometri_async(doc: dict, geometry) -> None:
+    """Versi untuk HANDLER: penyederhanaan dilempar ke thread.
+
+    `so.optimalkan` menaiki sembilan anak tangga toleransi, dan tiap anak
+    tangga menjalankan `simplify` + jarak Hausdorff shapely. Untuk poligon
+    hasil impor SHP yang berverteks puluhan ribu itu bukan pekerjaan ringan,
+    dan dijalankan langsung di event loop ia membekukan SELURUH server —
+    termasuk permintaan pengguna lain yang tak ada urusannya dengan peta.
+    Endpoint optimasi massal sudah memakai thread sejak awal; jalur simpan
+    tak boleh jadi pengecualian hanya karena poligonnya "cuma satu".
+    """
+    if geometry is None or not geometry:
+        _terapkan_geometri(doc, geometry)     # tak ada yang perlu dihitung
+        return
+    _terapkan_geometri(doc, geometry, optimalkan=False)
+    _pasang_optimasi(doc, await asyncio.to_thread(so.optimalkan, geometry))
 
 
 # Status yang boleh diset klien. "dihapus" TIDAK termasuk — hapus adalah operasi
@@ -382,7 +409,7 @@ async def buat_node(payload: NodeIn, _user: dict = Depends(require_writer)):
     deriv = await _susun_derivasi(node_id, doc["parent_id"], _user)
     _validasi_level(doc["tipe"], deriv.pop("_tipe_induk", None))
     await _cek_kode_unik(doc["kode"], doc["tipe"], _user)
-    _terapkan_geometri(doc, payload.geometry)
+    await _terapkan_geometri_async(doc, payload.geometry)
     now = datetime.now(timezone.utc).isoformat()
     doc.update(deriv)
     doc.update({
@@ -454,7 +481,7 @@ async def ubah_node(node_id: str, payload: NodeIn,
     _validasi_level(doc["tipe"], deriv.pop("_tipe_induk", None))
     await _cek_kode_unik(doc["kode"], doc["tipe"], _user, kecuali_id=node_id)
 
-    _terapkan_geometri(doc, payload.geometry)
+    await _terapkan_geometri_async(doc, payload.geometry)
     now = datetime.now(timezone.utc).isoformat()
     doc.update(deriv)
     doc.update({"ordinal_level": su.ordinal_level(doc["tipe"]),

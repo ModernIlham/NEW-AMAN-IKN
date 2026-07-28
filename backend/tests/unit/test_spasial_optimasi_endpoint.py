@@ -305,6 +305,56 @@ def test_detail_node_tak_pernah_menyerahkan_versi_ringan(dbx):
 
 # ── Simpan node: optimasi otomatis ─────────────────────────────────────────
 
+def test_jalur_simpan_menghitung_di_thread_dengan_hasil_yang_sama():
+    """`so.optimalkan` menaiki sembilan anak tangga toleransi, tiap anak tangga
+    menjalankan simplify + Hausdorff shapely. Dijalankan langsung di event loop
+    ia membekukan SELURUH server saat poligon impor SHP disimpan — termasuk
+    permintaan pengguna lain yang tak ada urusannya dengan peta.
+
+    Yang dijaga di sini: jalur thread menghasilkan dokumen yang SAMA. Optimasi
+    yang dipindah ke thread lalu diam-diam berbeda isinya adalah kerusakan yang
+    lebih halus daripada event loop yang tersendat.
+    """
+    async def skenario():
+        g = _lingkaran()
+        sinkron, lewat_thread = {}, {}
+        rs._terapkan_geometri(sinkron, g)
+        await rs._terapkan_geometri_async(lewat_thread, g)
+        assert lewat_thread["geometry"] == sinkron["geometry"]
+        assert lewat_thread["geometry_opt"] == sinkron["geometry_opt"]
+        assert lewat_thread["optimasi"]["hemat_persen"] == sinkron["optimasi"]["hemat_persen"]
+    _jalan(skenario())
+
+
+def test_jalur_simpan_mengganti_geometri_tak_menyisakan_salinan_lama():
+    """`optimalkan=False` BUKAN saklar "lewati optimasi".
+
+    Bila pemanggil mematikannya lalu lupa memasang hasilnya, dokumen membawa
+    `geometry_opt` warisan geometri LAMA — peta menggambar bentuk yang sudah
+    tak ada, dan tak ada galat yang memberi tahu siapa pun.
+    """
+    async def skenario():
+        doc = {}
+        await rs._terapkan_geometri_async(doc, _lingkaran(n=800))
+        lama = doc["geometry_opt"]
+        await rs._terapkan_geometri_async(doc, _lingkaran(lon0=117.2, n=600))
+        assert doc["geometry_opt"] != lama
+        # Dan salinannya memang milik geometri yang SEKARANG tersimpan.
+        assert so.ukur_penyimpangan(doc["geometry"], doc["geometry_opt"])["geser_m"] \
+            <= so.MAKS_GESER_M
+    _jalan(skenario())
+
+
+def test_jalur_simpan_mengosongkan_geometri_ikut_membuang_salinannya():
+    async def skenario():
+        doc = {}
+        await rs._terapkan_geometri_async(doc, _lingkaran())
+        assert doc["geometry_opt"] is not None
+        await rs._terapkan_geometri_async(doc, {})
+        assert doc["geometry"] is None and doc["geometry_opt"] is None
+    _jalan(skenario())
+
+
 def test_menyimpan_geometri_langsung_menghasilkan_versi_ringan():
     """Gambar sendiri lewat DenahEditor pun langsung punya versi ringan —
     tanpa operator perlu tahu tombol optimasi ada."""
