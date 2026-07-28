@@ -390,7 +390,20 @@ export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onC
         } catch { /* gagal ambil NUP baru → jatuh ke penanganan gagal biasa */ }
       }
 
-      const _baseErr = getApiError(err, err.code === "ECONNABORTED" ? "Koneksi timeout" : "Gagal menyimpan");
+      // 401 SAJA: token kedaluwarsa / sesi dicabut. Pesan mentah server untuk
+      // ini ("Invalid authorization header", "Not authenticated") terbaca
+      // seperti kerusakan aplikasi, padahal obatnya sederhana — masuk lagi.
+      // Yang paling perlu dikatakan justru bagian keduanya: data yang belum
+      // terkirim TIDAK hilang, ia menunggu di perangkat (antrean ini memang
+      // bertahan melintasi logout → login, lihat catatan rehidrasi di atas).
+      //
+      // 403 SENGAJA TIDAK ikut: itu bukan sesi habis melainkan hak akses
+      // (viewer read-only, satker lain). Masuk ulang tak akan menolongnya, dan
+      // detail dari server justru pesan yang benar untuk kasus itu.
+      const _sesiHabis = err?.response?.status === 401;
+      const _baseErr = _sesiHabis
+        ? "Sesi berakhir — masuk kembali lalu tekan Sinkronkan. Data Anda masih tersimpan di perangkat."
+        : getApiError(err, err.code === "ECONNABORTED" ? "Koneksi timeout" : "Gagal menyimpan");
       // Identitas aset agar mudah dicari di antara puluhan ribu aset & banyak
       // kegiatan (Kode Aset · NUP · Kegiatan). nama_kegiatan di-stamp ke payload
       // saat enqueue (DashboardPage) karena hook tak tahu nama kegiatan.

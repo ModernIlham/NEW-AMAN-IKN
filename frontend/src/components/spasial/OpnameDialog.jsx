@@ -32,6 +32,7 @@ import {
   buatScanId, simpanTertunda, hapusTertunda, bacaTertunda,
   bersihkanKedaluwarsa,
 } from "@/lib/antreanScan";
+import { checkReachable } from "@/lib/connectivity";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -100,7 +101,7 @@ export default function OpnameDialog({ node, labelLevel, isWriter, onClose }) {
    * menghasilkan satu catatan.
    */
   const kirim = useCallback(async (kode, scanId, assetId, nodeId, tsScan,
-                                  segarkan = true) => {
+                                  segarkan = true, dititipPada = undefined) => {
     // NODE & WAKTU DATANG DARI PEMANGGIL, BUKAN DARI DIALOG YANG SEDANG TERBUKA.
     // Ini temuan audit paling serius atas fase ini: dulu `kirim` selalu menulis
     // `node_id: node.id`, sehingga tiga puluh scan yang dilakukan luring di
@@ -132,18 +133,24 @@ export default function OpnameDialog({ node, labelLevel, isWriter, onClose }) {
       if (st === 409 && e?.response?.data?.detail?.kandidat) {
         // Ambigu: simpan dulu supaya tak hilang bila petugas menutup layar,
         // lalu minta ia memilih.
+        // `dititip_pada` DIBAWA dari entri lama. Tanpa itu tiap penyimpanan
+        // ulang me-reset umur entri, sehingga `bersihkanKedaluwarsa` 7 hari tak
+        // pernah menggigit selama rekonek terus terjadi — dan sejak pengosongan
+        // antrean berjalan OTOMATIS, rekonek memang terjadi terus.
         simpanTertunda({ scan_id: scanId, kode, node_id: muatan.node_id,
-                         ts_scan: muatan.ts_scan });
+                         ts_scan: muatan.ts_scan, dititip_pada: dititipPada });
         segarkanTertunda();
         setKandidat({ ...e.response.data.detail, scan_id: scanId,
-                      node_id: muatan.node_id, ts_scan: muatan.ts_scan });
+                      node_id: muatan.node_id, ts_scan: muatan.ts_scan,
+                      dititip_pada: dititipPada });
         return false;
       }
       if (!e?.response) {
         // Tak ada respons sama sekali = jaringan, bukan penolakan server.
         // Barangnya sudah dilihat petugas; yang gagal hanya pengirimannya.
         simpanTertunda({ scan_id: scanId, kode, node_id: muatan.node_id,
-                         ts_scan: muatan.ts_scan, asset_id: assetId || "" });
+                         ts_scan: muatan.ts_scan, asset_id: assetId || "",
+                         dititip_pada: dititipPada });
         segarkanTertunda();
         toast.warning("Tak ada sinyal — scan disimpan, kirim ulang nanti");
         return false;
@@ -170,14 +177,21 @@ export default function OpnameDialog({ node, labelLevel, isWriter, onClose }) {
     setSibuk(true);
     try {
       const ok = await kirim(kandidat.kode, kandidat.scan_id, asetId,
-                             kandidat.node_id, kandidat.ts_scan);
+                             kandidat.node_id, kandidat.ts_scan, true,
+                             kandidat.dititip_pada);
       if (ok) setKandidat(null);
     } finally { setSibuk(false); }
   }, [kandidat, kirim]);
 
+  // Penjaga satu-aliran: melindungi dari klik ganda DAN dari pemicu otomatis
+  // "online" yang datang saat aliran sebelumnya masih jalan.
+  const mengalirRef = useRef(false);
+
   const kirimUlangSemua = useCallback(async () => {
+    if (mengalirRef.current) return;
     const antre = bacaTertunda();
     if (!antre.length) return;
+    mengalirRef.current = true;
     setSibuk(true);
     let berhasil = 0;
     try {
@@ -185,12 +199,61 @@ export default function OpnameDialog({ node, labelLevel, isWriter, onClose }) {
         // Berurutan, bukan serentak: antrean lapangan biasanya puluhan baris di
         // jaringan yang baru saja pulih — membanjirinya justru memicu gagal lagi.
         if (await kirim(item.kode, item.scan_id, item.asset_id,
-                        item.node_id, item.ts_scan, false)) berhasil += 1;
+                        item.node_id, item.ts_scan, false,
+                        item.dititip_pada)) berhasil += 1;
       }
-      toast.success(`${berhasil} dari ${antre.length} scan terkirim`);
-      await muat(dalam);          // satu penyegaran, setelah semuanya selesai
-    } finally { setSibuk(false); }
+      // NADA MENGIKUTI HASIL. `toast.success` untuk "0 dari 30 scan terkirim"
+      // adalah layar sukses untuk kegagalan total: petugas membacanya sebagai
+      // "opname sudah masuk" padahal ketiga puluh baris masih di perangkat.
+      const pesan = `${berhasil} dari ${antre.length} scan terkirim`;
+      if (berhasil === 0) toast.error(pesan);
+      else if (berhasil < antre.length) toast.warning(pesan);
+      else toast.success(pesan);
+      // Menyegarkan rekonsiliasi hanya berguna bila ADA yang berubah di server.
+      // Bila nol terkirim, jaringannya memang sedang buruk: GET berat ini akan
+      // ikut gagal, dan `catch`-nya menyetel data=null — daftar "Belum
+      // terpindai" (satu-satunya penunjuk barang yang belum ditemukan di
+      // ruangan ini) LENYAP dari layar tanpa petugas menyentuh apa pun.
+      if (berhasil > 0) await muat(dalam);
+    } finally { mengalirRef.current = false; setSibuk(false); }
   }, [kirim, dalam, muat]);
+
+  // KOSONGKAN ANTREAN SENDIRI BEGITU SINYAL PULIH.
+  //
+  // Antrean ini lahir tepat ketika jaringan mati di lapangan. Dulu satu-satunya
+  // cara mengosongkannya adalah menekan "Kirim ulang" — artinya petugas harus
+  // INGAT melakukannya, sambil dialog ini kebetulan masih terbuka. Yang tak
+  // terkirim tak pernah masuk rekonsiliasi: barang tercatat "tidak ditemukan"
+  // padahal sudah dipindai.
+  //
+  // Aman diotomatiskan karena `scan_id` dibuat sekali dan dipakai ulang sebagai
+  // kunci idempotensi server (lihat catatan di `kirim`) — terkirim dua kali
+  // tetap satu catatan. Lewat ref supaya pemasangan listener tak ikut berganti
+  // tiap kali `kirimUlangSemua` dibuat ulang.
+  //
+  // TAPI EVENT `online` SAJA TAK CUKUP JADI ALASAN MENGIRIM. Peramban
+  // memancarkannya begitu antarmuka jaringan naik — captive portal hotel, satu
+  // bar sinyal, Wi-Fi yang tersambung tapi tak mengantar apa-apa. Tanpa
+  // pemeriksaan, tiga puluh baris antrean berarti tiga puluh POST BERURUTAN yang
+  // masing-masing menunggu tenggat 20 dtk: sepuluh menit `sibuk === true`,
+  // tombol Catat/Terapkan mati, dan badai tiga puluh toast — semuanya tanpa
+  // petugas menyentuh apa pun. Repo ini sudah punya obatnya dan dipakai
+  // useOptimisticQueue: `checkReachable()` menembak GET /api/health lebih dulu,
+  // plus peredam agar kedip online/offline tak memicu berulang.
+  const kirimUlangRef = useRef(kirimUlangSemua);
+  kirimUlangRef.current = kirimUlangSemua;
+  const redamRef = useRef(false);
+  useEffect(() => {
+    const pulih = async () => {
+      if (redamRef.current || !bacaTertunda().length) return;
+      redamRef.current = true;
+      setTimeout(() => { redamRef.current = false; }, 3000);
+      if (!(await checkReachable())) return;   // sinyal naik ≠ server terjangkau
+      kirimUlangRef.current?.();
+    };
+    window.addEventListener("online", pulih);
+    return () => window.removeEventListener("online", pulih);
+  }, []);
 
   const terapkan = useCallback(async () => {
     const ids = [...terpilih];
