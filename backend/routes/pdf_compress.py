@@ -1,8 +1,19 @@
 """Kompresi PDF — rantai: iLovePDF → pypdf lokal.
 
 RIWAYAT YANG PENTING DIKETAHUI. Versi sebelumnya memanggil dua host yang
-**tidak ada**: `api.iloveapi.com` dan `api.whipdoc.com` (keduanya gagal
-resolusi DNS). Akibatnya seluruh rantai mati, tetapi endpoint tetap menjawab
+**tidak ada**: `api.iloveapi.com` dan `api.whipdoc.com`.
+
+Cara temuan itu diperoleh, supaya bisa diperiksa ulang alih-alih dipercaya:
+resolusi DNS dijalankan atas enam host sekaligus (`getent hosts` dan
+`socket.gethostbyname`). Empat berhasil — termasuk domain telanjang
+`iloveapi.com` dan `whipdoc.com`, jadi mereknya memang ada — sementara
+persis kedua subdomain `api.*` di atas gagal. Host API v1 yang benar,
+`api.ilovepdf.com`, teresolusi normal. Perhatikan bahwa panggilan HTTP tak
+bisa dipakai sebagai bukti di sini: kebijakan jaringan CI menolak CONNECT ke
+SEMUA host penyedia dengan 403, sehingga kegagalan HTTP tidak membedakan
+apa pun. Yang membedakan hanyalah DNS.
+
+Akibatnya seluruh rantai mati, tetapi endpoint tetap menjawab
 200 dengan PDF ASLI dan header `X-Compression-Method: none` — kegagalan yang
 tak pernah terlihat siapa pun kecuali di log server. Tiga pelajaran dipasang
 permanen di berkas ini:
