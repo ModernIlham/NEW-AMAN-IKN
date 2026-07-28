@@ -53,6 +53,23 @@ jadi override-nya pasti berlaku tanpa `!important`. Gunakan ini untuk:
 
 ---
 
+## [#668] Pegangan tirai naik ke lapisan teratas + kembali kasatmata — 2026-07-28
+
+Dua koreksi atas `[#667]`, dari umpan balik lapangan yang sama:
+
+- **Yang mengganggu ternyata BUKAN pegangannya, melainkan elemen yang berdiri
+  DI DEPANNYA** dan menutupinya. Pegangan adalah pintu satu-satunya ke pemilih
+  satker — tak boleh ada yang menghalanginya. Tirai kini di lapisan teratas
+  antarmuka (`z-[110]`, di atas lightbox 100 dan bilah tugas 90); apa pun yang
+  kemarin berdiri di depannya kini berada di belakang.
+- **Garis 32×4 px terlalu sulit ditemukan.** Jalan tengahnya: pil kompak
+  64×16 px ber-ikon genggam — jelas terlihat, tapi separuh tinggi pil lama yang
+  dulu menimpa judul halaman.
+
+**Uji:** 281 frontend, lint & build bersih.
+
+---
+
 ## [#667] Pegangan tirai satker mengecil jadi seutas garis — 2026-07-28
 
 Laporan lapangan (tangkapan layar HP): pegangan tirai satker — pil teal gelap
